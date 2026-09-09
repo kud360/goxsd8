@@ -146,9 +146,13 @@ import (
 //     xsd:group (named definition), xsd:defaultOpenContent (in every shape, as
 //     of #352: the two its declaration forbids are rejected by the producer for
 //     any document that declares one, so they are real verdicts rather than
-//     content-dependent ones) or xsd:notation or xsd:redefine — anything else at
-//     top level (a non-xsd element, or an out-of-set local name) closes the
-//     false-accept gap above by DECLINING the whole case. Within the allowed
+//     content-dependent ones) or xsd:notation or xsd:redefine. A NON-XSD element
+//     at top level closes the false-accept gap above by DECLINING the whole
+//     case: the producer passes over it unreported and unrejected, the open gap
+//     #1036 owns. An XSD-namespace name outside that list is admitted instead
+//     (#1380), those thirteen being exactly what <schema>'s content model admits
+//     and rejectUnmappedTopLevel charging every other — the same permanence
+//     argument the misplaced <notation> is admitted on. Within the allowed
 //     kinds:
 //     - include: always admitted (#242). Its own content model is (annotation?),
 //       so it contributes nothing the producer could silently skip; the
@@ -702,11 +706,11 @@ func decideAgreement(observed, expected bool) Status {
 
 // schemaShapeDecidable reports whether this document contributes no false-accept
 // hazard to the assembly that read it: either it is UNCONDITIONALLY REJECTED
-// (holdsMisplacedNotation), or every top-level child lies within the producer's
-// decidable subset (the step-3 allowlist documented above). A single
-// out-of-subset child declines the whole case, since Produce would silently skip
-// it (or reject it for a not-yet-supported reason) rather than decide it
-// genuinely.
+// (holdsMisplacedNotation, or the default arm's own grammar verdict below), or
+// every top-level child lies within the producer's decidable subset (the step-3
+// allowlist documented above). A single out-of-subset child declines the whole
+// case, since Produce would silently skip it (or reject it for a not-yet-
+// supported reason) rather than decide it genuinely.
 //
 // The misplaced-<notation> short-circuit comes FIRST because it makes every
 // other question moot: a document carrying one is rejected before any producer
@@ -800,9 +804,15 @@ func schemaShapeDecidable(doc *parser.Document) bool {
 				return false
 			}
 		default:
-			// Any other local name: silently skipped by the producer, so a nil
-			// verdict there would be vacuous — decline the whole case.
-			return false
+			// Any other local name: REJECTED by the producer (#1380), on the same
+			// permanence argument the misplaced-<notation> short-circuit above
+			// stands on. <schema>'s content model (xmlschema11-1.md:4554) admits
+			// the thirteen names cased above and no other, with no wildcard arm and
+			// no lax position, so rejectUnmappedTopLevel charges every name that
+			// reaches here — a §5.1 first-bullet grammar verdict the spec licenses,
+			// not a limitation awaiting a slice, so the "invalid" it buys cannot
+			// flip. It was declined until then, when the producer skipped the child
+			// and a nil verdict would have been vacuous.
 		}
 	}
 	return true

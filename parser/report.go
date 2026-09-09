@@ -122,15 +122,37 @@ type AssembledDocument struct {
 	Unmapped []UnmappedConstruct
 }
 
-// UnmappedConstruct is one element of a schema document that the producer maps
-// to no component and does not reject either — a construct whose contribution
-// to the assembled schema, whatever §3 says it should be, is silently absent.
+// UnmappedConstruct is one element of a schema document that the producer's
+// dispatch at that element's position maps to no component — a construct whose
+// contribution to the assembled schema, whatever §3 says it should be, is
+// absent. Whether some pass also REJECTS the document over it is not consulted
+// (parser/census.go), so an entry is a silence only on a document the assembly
+// ACCEPTED.
 //
 // It is the positive form of the question a consumer gating on this processor's
 // coverage otherwise has to answer by re-walking the document against a
 // hand-kept allowlist of what the producer happens to read (the conformance
 // harness's schemaShapeDecidable), which is a second implementation of this
 // package's own dispatch.
+//
+// # What the TOP-LEVEL arm is for
+//
+// Nothing a gating consumer can act on: since #1380 run rejects every <schema>
+// child name topLevelMapped declines (rejectUnmappedTopLevel), so a top-level
+// entry rides only on a document whose assembly FAILED — and
+// [AssembledDocument.Unmapped] is complete only when [ParseReport] returned a
+// nil error, which is why the harness's soundness hold exempts the documents of
+// a rejected assembly outright. The arm stays because the census states the
+// dispatch vocabulary at EVERY position uniformly, off the same predicate run
+// consults: that identity is the drift this census exists to prevent, and
+// retiring one position of it would put the two lists back out of step. Read a
+// top-level entry as corroboration of the verdict beside it, never as coverage
+// lost. The population a coverage gate acts on is the NESTED one.
+//
+// The CLI reports no census at all, and that stands: goxsd8 parse answers the
+// top-level axis with its exit code now that the construct is a verdict, and
+// surfacing the nested arms belongs to whoever gives the CLI a coverage flag,
+// which no consumer has asked for.
 type UnmappedConstruct struct {
 	// Name is the expanded name of the ELEMENT that went unmapped — never the
 	// {name} of a component, there being none.
