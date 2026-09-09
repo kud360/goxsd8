@@ -10,8 +10,9 @@
 // # The s4s-grammar class
 //
 // A schema document that is simply not valid against the schema for schema
-// documents — a prohibited or missing attribute, a child its content model
-// does not admit, one repeated past its maxOccurs, one out of order —
+// documents — a prohibited or missing attribute, an unprefixed one the
+// element's grammar declares nowhere, a child its content model does not
+// admit, one repeated past its maxOccurs, one out of order —
 // violates §2.4 clause 1 (sd-valid, xmlschema11-1.md:615). That clause is
 // anchored but uncataloged: it is absent from Appendix B's three tables
 // (B.1 cvc-*, B.3 src-*, B.4 cos-*), which are the spec's own exhaustive

@@ -64,13 +64,33 @@ func TestConditionalInclusionVersionBand(t *testing.T) {
 		{"an integral lexical is a legal decimal", `vc:minVersion="2"`, false},
 		{"whitespace around the value is collapsed away", `vc:minVersion="  1.2  "`, false},
 		{"an unrecognized vc: attribute is not one of the six", `vc:minversion="9.9"`, true},
-		{"an attribute of the same local name in no namespace is not one either", `minVersion="9.9"`, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := declarationRetained(t, markedDeclaration(tc.marked)); got != tc.retained {
 				t.Fatalf("declaration retained = %v, want %v", got, tc.retained)
 			}
 		})
+	}
+}
+
+// TestConditionalInclusionNoNamespaceNameIsNotVersioning pins the other half of
+// the namespace discrimination the band table above ends on: an attribute whose
+// LOCAL name is one of §4.2.2's six but which stands in NO namespace is not a
+// versioning attribute, so the declaration carrying it is never pruned.
+//
+// The evidence is a REJECTION and is the same evidence retention always was: a
+// pruned element reaches no producer and no s4s guard at all, so the
+// undeclared-attribute fault can only be charged over an element §4.2.2 kept.
+// This case cannot be written as a retained-declaration row any more, because an
+// unprefixed minVersion is admitted by no production of <element> and the
+// document is now rejected rather than produced (#1369).
+func TestConditionalInclusionNoNamespaceNameIsNotVersioning(t *testing.T) {
+	_, err := produce(t, markedDeclaration(`minVersion="9.9"`))
+	if err == nil {
+		t.Fatal("the declaration was produced, so nothing here shows whether §4.2.2 pruned it")
+	}
+	if !strings.Contains(err.Error(), "carries a minVersion attribute") {
+		t.Fatalf("error = %v, want the s4s fault charged over the retained <element>", err)
 	}
 }
 
