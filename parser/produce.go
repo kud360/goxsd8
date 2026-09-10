@@ -290,13 +290,25 @@ type symbols struct {
 	// builtComplex is the same memo + cycle guard for COMPLEX-type construction,
 	// with the identical tri-state (absent unstarted, present-nil on the build
 	// stack, present-non-nil done) so "started but unrecorded" stays
-	// unrepresentable (STYLE T1/D3). The pre-seeded xs:anyType starts out done, so
-	// <extension base="xs:anyType"> resolves without a special case. The on-stack
-	// state is what terminates demand-driven base construction on a circular
-	// chain, charged ct-props-correct clause 3 (§3.4.6.1) — the SAME rule
-	// xsd/resolve.go's checkComplexBaseAcyclic charges for the programmatic
-	// SchemaBuilder path; see buildComplexType.
-	builtComplex map[xsd.QName]*xsd.ComplexType
+	// unrepresentable (STYLE T1/D3). The on-stack state is what terminates
+	// demand-driven base construction on a circular chain, charged
+	// ct-props-correct clause 3 (§3.4.6.1) — the SAME rule xsd/resolve.go's
+	// checkComplexBaseAcyclic charges for the programmatic SchemaBuilder path; see
+	// buildComplexType.
+	//
+	// It is keyed by DECLARATION and not by expanded name, for the reason
+	// builtGroups states in full: a name addresses one component only in an
+	// assembly sch-props-correct (§3.17.6.1) clause 2 accepts, and a <redefine>
+	// whose redefined document ALSO contributes the name is exactly the assembly
+	// where it addresses two.
+	builtComplex map[*Element]*xsd.ComplexType
+
+	// anyType is the ur-type component (§3.4.7) the builder was seeded with, held
+	// so a derivation naming it resolves to that very component rather than to a
+	// rebuilt twin (resolveBaseType). It is no part of builtComplex because that
+	// memo is keyed by the declaration built and xs:anyType is declared by no
+	// document.
+	anyType xsd.ComplexType
 
 	// builtGroups is the memo + on-stack guard for MODEL GROUP DEFINITION
 	// construction, with the same tri-state as built/builtComplex (absent
@@ -310,6 +322,20 @@ type symbols struct {
 	// document-order position — would register it twice and fabricate a
 	// sch-props-correct (§3.17.6.1) clause 2 duplicate-name collision against the
 	// very definition it duplicates.
+	//
+	// That requirement is about one DECLARATION, which is why this map and
+	// builtComplex are keyed by *Element and not by expanded name. An expanded
+	// name addresses one declaration only in an assembly clause 2 accepts, and
+	// §4.2.4 clause 4.1.2 leaves that routinely false: a document reached BOTH
+	// plainly and through a <redefine> excepts nothing (redefinitions.excepts is
+	// the intersection of the readings), so its original and the redefinition both
+	// claim the name. Keyed by name, the memo hands produceRedefinition the
+	// ORIGINAL for a redefining <group>/<complexType>, which then registers a
+	// second copy of the original: clause 2 charges the collision against one
+	// location twice, and src-redefine (§4.2.4) clause 6.2.2 compares the pair
+	// (original, original) instead of (redefinition, original) (#1361). Keyed by
+	// declaration the two are distinct, and where no two declarations share a name
+	// the two keyings agree entry for entry.
 	//
 	// The on-stack half is a TERMINATION guard only, never a verdict: its sole
 	// reader is resolveModelGroup, which reports an in-progress definition as
@@ -330,16 +356,15 @@ type symbols struct {
 	// regardless, since the memo cannot be filled before the definition exists,
 	// so reading it here costs one branch always and stops a real infinite
 	// recursion now.
-	builtGroups map[xsd.QName]*xsd.ModelGroupDefinition
+	builtGroups map[*Element]*xsd.ModelGroupDefinition
 
 	// redefineOriginals is the ON-STACK set of the <redefine>d documents'
 	// declarations currently being built as src-expredef clause 1.1 ·original·s.
 	// It is a set and not a memo: an original's {name} is ·absent·, so nothing can
 	// name it and there is nothing to build once and hand back (see
-	// buildComplexType on why the anonymous hop stays out of the name-keyed
-	// memos).
+	// redefinedComplexBase on why the anonymous hop stays out of the build memos).
 	//
-	// It is the guard for the one cycle those name-keyed sentinels cannot see:
+	// It is the guard for the one cycle those build sentinels cannot see:
 	// §4.2.4 clause 4.1.1 makes each level's redefining child the "top-level
 	// definition item" the next level pairs with, so a cycle of <redefine>s closed
 	// on one (kind, name) builds a {base type definition} chain of anonymous hops
@@ -446,13 +471,12 @@ func newSymbols(builder *xsd.SchemaBuilder, backend value.Backend) (*symbols, er
 		identityConstraints: make(map[xsd.QName]identityConstraintSource),
 		builtins:            builtins,
 		built:               maps.Clone(builtins),
-		builtGroups:         make(map[xsd.QName]*xsd.ModelGroupDefinition),
+		builtGroups:         make(map[*Element]*xsd.ModelGroupDefinition),
 		builtIC:             make(map[xsd.QName]xsd.IdentityConstraint),
 		redefineOriginals:   make(map[*Element]struct{}),
-		// xs:anyType is seeded DONE so a derivation naming it resolves to the very
-		// component AddType registered, rather than to a rebuilt twin.
-		builtComplex: map[xsd.QName]*xsd.ComplexType{anyTypeName: &anyType},
-		backend:      backend,
+		builtComplex:        make(map[*Element]*xsd.ComplexType),
+		anyType:             anyType,
+		backend:             backend,
 	}, nil
 }
 
@@ -1469,57 +1493,65 @@ func (p *producer) buildSimpleType(name xsd.QName, elem *Element) (*xsd.SimpleTy
 //
 // It is the single entry point for a NAMED complex type: run's top-level
 // dispatch, produceRedefinition's redefining <complexType>, and
-// resolveBaseType's on-demand construction all go through it, so a named type is
-// mapped exactly once. That is what makes a reference to a redefined name
-// resolve to the REDEFINITION from both documents, as src-expredef's note
-// requires: the redefining declaration is what prescanRedefine registered under
-// that name, so every route ends at this one memo entry. It populates the memo
-// only — registering the component with the builder is run's or
-// produceRedefinition's job, at the type's own document-order position.
+// resolveBaseType's on-demand construction all go through it, so a named
+// DECLARATION is mapped exactly once. That is what makes a reference to a
+// redefined name resolve to the REDEFINITION from both documents, as
+// src-expredef's note requires: the redefining declaration is what
+// prescanRedefine registered under that name, so every by-name route ends at its
+// memo entry. It populates the memo only — registering the component with the
+// builder is run's or produceRedefinition's job, at the type's own
+// document-order position.
+//
+// The memo is keyed by the DECLARATION, so name and elem are not two encodings
+// of one fact: elem says WHICH <complexType> is mapped and name is the {name} the
+// component is minted with, and the two come apart exactly where §4.2.4 makes
+// two declarations claim one expanded name (see symbols.builtComplex). Keyed by
+// name, produceRedefinition's own call handed back the ORIGINAL of a name the
+// redefined document also contributes (#1361).
 //
 // An ANONYMOUS <complexType> deliberately does NOT come through here: it calls
 // produceComplexType directly (produceElement and produceLocalElement for an
 // inline child, redefinedComplexBase for src-expredef clause 1.1's original).
-// The memo is keyed by name and an anonymous type has none, so it would have
-// nothing to key on.
+// Nothing can NAME it, so no by-name route could reach it and it would share a
+// memo entry with nothing.
 //
 // Nor can it MEMBER a cycle this function's guard would catch — but the reason
 // is narrower than it once was, and the difference is load-bearing. Nothing can
-// NAME an anonymous type, so it can be no cycle's entry point and this
-// name-keyed sentinel would never see it. It can nonetheless sit ON a chain that
-// closes: src-expredef clause 1.1's original is an anonymous type whose own base=
-// names a top-level type again, so a cycle can run THROUGH it. PRINCIPLES 9's
-// "construction order makes one impossible" therefore does NOT discharge the
-// anonymous hop, and the blanket claim that it did was false the moment #505
-// landed. The rejection for such a chain is the on-stack sentinel below, reached
-// at the named type the chain comes back to, and its finalize-side twin
-// xsd/resolve.go's checkComplexBaseAcyclic, which descends the anonymous hop for
-// exactly this reason.
+// NAME an anonymous type, so it can be no cycle's entry point and this sentinel
+// would never see it. It can nonetheless sit ON a chain that closes: src-expredef
+// clause 1.1's original is an anonymous type whose own base= names a top-level
+// type again, so a cycle can run THROUGH it. PRINCIPLES 9's "construction order
+// makes one impossible" therefore does NOT discharge the anonymous hop, and the
+// blanket claim that it did was false the moment #505 landed. The rejection for
+// such a chain is the on-stack sentinel below, reached at the named type the
+// chain comes back to, and its finalize-side twin xsd/resolve.go's
+// checkComplexBaseAcyclic, which descends the anonymous hop for exactly this
+// reason.
 //
-// A name already on the build stack (the PRESENT-nil memo state) is a circular
-// {base type definition} chain, charged ct-props-correct clause 3 (§3.4.6.1).
-// That is the SAME rule, with the same verdict, that xsd/resolve.go's
-// checkComplexBaseAcyclic charges: two entry points on one rule for the two
-// construction paths — this one for the producer, whose demand-driven recursion
-// would otherwise not terminate, and that one for the programmatic
+// A declaration already on the build stack (the PRESENT-nil memo state) is a
+// circular {base type definition} chain, charged ct-props-correct clause 3
+// (§3.4.6.1). That is the SAME rule, with the same verdict, that
+// xsd/resolve.go's checkComplexBaseAcyclic charges: two entry points on one rule
+// for the two construction paths — this one for the producer, whose demand-driven
+// recursion would otherwise not terminate, and that one for the programmatic
 // SchemaBuilder, which has no producer and must stay self-defending. Neither
 // substitutes for the other (PRINCIPLES 9's "detect once at construction" applies
 // per construction path).
 func (p *producer) buildComplexType(name xsd.QName, elem *Element) (xsd.ComplexType, error) {
-	if ct, started := p.symbols.builtComplex[name]; started {
+	if ct, started := p.symbols.builtComplex[elem]; started {
 		if ct != nil {
 			return *ct, nil
 		}
 		return xsd.ComplexType{}, xsderr.New(ruleCTPropsCorr, elem.Loc(),
 			"circular complex type definition: %s derives ultimately from itself, but ct-props-correct clause 3 forbids a circular {base type definition} chain (only xs:anyType may be its own base)", name)
 	}
-	p.symbols.builtComplex[name] = nil // mark on-stack
+	p.symbols.builtComplex[elem] = nil // mark on-stack
 
 	ct, err := p.produceComplexType(p.namedComplexTypeIdentity(name, elem), elem)
 	if err != nil {
 		return xsd.ComplexType{}, err
 	}
-	p.symbols.builtComplex[name] = &ct // replace the on-stack sentinel with the finished node
+	p.symbols.builtComplex[elem] = &ct // replace the on-stack sentinel with the finished node
 	return ct, nil
 }
 
@@ -1532,7 +1564,7 @@ func (p *producer) buildComplexType(name xsd.QName, elem *Element) (xsd.ComplexT
 // prescanRedefine registers it under its own expanded name, so a reference to
 // the redefined name from either document arrives through resolveBaseType and
 // buildComplexType instead. Deciding by element makes every route agree, which
-// is what keeps the memo holding ONE component for that name (see
+// is what keeps the memo holding ONE component per DECLARATION (see
 // buildComplexType).
 //
 // The redefining arm mints the identity src-expredef clause 1.1 needs for the
@@ -1576,11 +1608,14 @@ func (p *producer) resolveBaseType(id complexTypeIdentity, at *Element, name xsd
 		}
 		return orig, xsd.InlineTypeDefinition{Definition: orig}, nil
 	}
-	if ct, done := p.symbols.builtComplex[name]; done && ct != nil {
-		return *ct, xsd.TypeDefinitionRef{Name: name}, nil
+	if name == anyTypeName {
+		// The ur-type is declared by no document, so it is in no symbol table and
+		// in no build memo: symbols.anyType holds the very component the builder
+		// was seeded with (§3.4.7).
+		return p.symbols.anyType, xsd.TypeDefinitionRef{Name: name}, nil
 	}
 	if src, ok := p.symbols.complexTypes[name]; ok {
-		// Unbuilt or on-stack: buildComplexType handles the memo hit and the
+		// Unbuilt, built or on-stack: buildComplexType handles the memo hit and the
 		// ct-props-correct clause 3 cycle rejection alike.
 		ct, err := src.owner.buildComplexType(name, src.elem)
 		if err != nil {
@@ -1623,8 +1658,12 @@ func (p *producer) resolveBaseType(id complexTypeIdentity, at *Element, name xsd
 //     no symbol table, is registered with no builder, and takes its own
 //     document's target namespace and schema-level defaults;
 //   - it goes to produceComplexType DIRECTLY rather than through
-//     buildComplexType, because that memo is keyed by name and this component
-//     has none (see buildComplexType).
+//     buildComplexType, because that memo is keyed by the declaration being
+//     mapped and this declaration maps to TWO components: the ordinary named one
+//     the redefined document contributes when no reading excepts it, and this
+//     one, whose {name} clause 1.1 makes ·absent· and whose {context} is the
+//     redefining component. Sharing the declaration's memo entry would hand one
+//     of them out for the other (see buildComplexType).
 //
 // The identity it is built with carries the OWNING type's minted
 // xsd.ComponentID, which is what makes the original's {context} point back at
@@ -1659,34 +1698,37 @@ func (p *producer) redefinedComplexBase(id complexTypeIdentity, at *Element, nam
 	return orig, true, nil
 }
 
-// buildModelGroupDefinition returns the Model Group Definition named name,
-// building it on demand with memoization — the model-group twin of
-// buildComplexType, and like it the SINGLE entry point for mapping a top-level
-// named <group>: run's document-order dispatch and resolveModelGroup's
-// demand-driven resolution both go through it, so one <group> is mapped exactly
-// ONCE. That is a correctness requirement here, not a saving — see
-// symbols.builtGroups for the duplicate identity-constraint registration a second
-// mapping would fabricate. It populates the memo only; registering the component
-// with the builder is run's job.
+// buildModelGroupDefinition returns the Model Group Definition el declares under
+// the name name, building it on demand with memoization — the model-group twin
+// of buildComplexType, and like it the SINGLE entry point for mapping a
+// top-level named <group>: run's document-order dispatch, produceRedefinition's
+// redefining <group> and resolveModelGroup's demand-driven resolution all go
+// through it, so one <group> ELEMENT is mapped exactly ONCE. That is a
+// correctness requirement here, not a saving — see symbols.builtGroups for the
+// duplicate identity-constraint registration a second mapping would fabricate,
+// and for why the memo is keyed by that element rather than by name. It
+// populates the memo only; registering the component with the builder is run's
+// or produceRedefinition's job.
 //
 // Unlike buildComplexType it charges no cycle rejection of its own. It WRITES the
 // on-stack sentinel, but the reader that makes a circular <group ref> graph
-// terminate is resolveModelGroup — the only caller re-enterable for a name still
-// being built — and the REJECTION stays mg-props-correct clause 2's at finalize,
-// where the whole graph is visible. A name therefore arrives here either unstarted
-// or done, never on-stack: run is not re-entrant, and resolveModelGroup answers
-// "does not resolve" for an on-stack name rather than calling in.
+// terminate is resolveModelGroup — the only caller re-enterable for a definition
+// still being built — and the REJECTION stays mg-props-correct clause 2's at
+// finalize, where the whole graph is visible. A declaration therefore arrives
+// here either unstarted or done, never on-stack: run is not re-entrant, and
+// resolveModelGroup answers "does not resolve" for an on-stack one rather than
+// calling in.
 func (p *producer) buildModelGroupDefinition(name xsd.QName, el *Element) (xsd.ModelGroupDefinition, error) {
-	if mgd := p.symbols.builtGroups[name]; mgd != nil {
+	if mgd := p.symbols.builtGroups[el]; mgd != nil {
 		return *mgd, nil
 	}
-	p.symbols.builtGroups[name] = nil // mark on-stack
+	p.symbols.builtGroups[el] = nil // mark on-stack
 
 	mgd, err := p.produceModelGroupDefinition(name, el)
 	if err != nil {
 		return xsd.ModelGroupDefinition{}, err
 	}
-	p.symbols.builtGroups[name] = &mgd // replace the on-stack sentinel with the finished node
+	p.symbols.builtGroups[el] = &mgd // replace the on-stack sentinel with the finished node
 	return mgd, nil
 }
 
@@ -1710,21 +1752,29 @@ func (p *producer) buildModelGroupDefinition(name xsd.QName, el *Element) (xsd.M
 //   - name matches no top-level <group> of the assembly. A dangling <group ref>
 //     is charged src-resolve clause 1.5 at finalize, against the retained
 //     ModelGroupRef; anticipating that verdict here would be a second encoding.
-//   - name is already on the build stack, i.e. the reference closes a
-//     <group ref> cycle. mg-props-correct clause 2 rejects that at finalize; this
-//     function must only terminate, never reject (see buildModelGroupDefinition).
-//     No schema reaches that branch today — see symbols.builtGroups for why, and
-//     for why the branch is kept rather than left to the stack.
+//   - the declaration name resolves to is already on the build stack, i.e. the
+//     reference closes a <group ref> cycle. mg-props-correct clause 2 rejects
+//     that at finalize; this function must only terminate, never reject (see
+//     buildModelGroupDefinition). No schema reaches that branch today — see
+//     symbols.builtGroups for why, and for why the branch is kept rather than
+//     left to the stack.
+//
+// The symbol table is consulted BEFORE the memo, unlike its complex-type twin:
+// the memo is keyed by declaration (symbols.builtGroups), and this function is
+// handed a name, so the declaration that name addresses is what has to be found
+// first. There is nothing the memo holds that the symbol table does not name —
+// every element reaching buildModelGroupDefinition is a top-level <group> some
+// prescan recorded.
 func (p *producer) resolveModelGroup(name xsd.QName) (xsd.ModelGroup, bool, error) {
-	if mgd, started := p.symbols.builtGroups[name]; started {
+	src, ok := p.symbols.modelGroups[name]
+	if !ok {
+		return xsd.ModelGroup{}, false, nil
+	}
+	if mgd, started := p.symbols.builtGroups[src.elem]; started {
 		if mgd == nil {
 			return xsd.ModelGroup{}, false, nil // PRESENT-nil: on the build stack
 		}
 		return mgd.ModelGroup(), true, nil
-	}
-	src, ok := p.symbols.modelGroups[name]
-	if !ok {
-		return xsd.ModelGroup{}, false, nil
 	}
 	mgd, err := src.owner.buildModelGroupDefinition(name, src.elem)
 	if err != nil {

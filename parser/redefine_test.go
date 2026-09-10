@@ -1020,11 +1020,14 @@ func TestParseRedefineAttributeGroupClause722Accepts(t *testing.T) {
 // finalize over the pairing produceRedefinition records.
 //
 // The widening cases are also the regression test for the pairing's own hazard:
-// the original is built through the UNMEMOISED produceModelGroupDefinition,
-// because produceRedefinition has already filled symbols.builtGroups[{urn:a}g]
-// with the redefinition. Fetched through the memo instead, B would BE R, every
-// case below would decide V(R) ⊆ V(R), and the widening rows would pass as
-// "valid" with nothing else in the suite noticing.
+// B and R must be two components. Were the original fetched from a memo that
+// produceRedefinition had already filled for this name, B would BE R, every case
+// below would decide V(R) ⊆ V(R), and the widening rows would pass as "valid"
+// with nothing else in the suite noticing. The memo is keyed by declaration
+// (symbols.builtGroups) so it no longer confuses the two, and the original is
+// built through the UNMEMOISED produceModelGroupDefinition regardless — see
+// redefinedGroupRestricted for what a memo entry from that throwaway build would
+// hand run.
 func TestParseRedefineGroupClause622(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
@@ -1341,6 +1344,145 @@ func TestParseRedefineTargetAlsoReadPlainlyComposesOnce(t *testing.T) {
 				t.Fatalf("error %q charges {urn:a}ct, which nothing redefines: the untouched definition must be minted once", err)
 			}
 		})
+	}
+}
+
+// mergedPlainAndRedefine is the assembly #1361 is about: root.xsd includes
+// lib.xsd plainly AND includes r.xsd, which redefines lib.xsd. Every reading of
+// lib.xsd must except a definition for §4.2.4 clause 4.1.2 to withhold it
+// (redefinitions.excepts is the INTERSECTION of the readings), so the plain
+// reading makes lib.xsd contribute the ORIGINAL while the <redefine> contributes
+// its replacement, and both claim the one expanded name.
+//
+// The layout is load-bearing: each document's body opens with a newline, so the
+// original stands at lib.xsd:2:3 and the redefining declaration at r.xsd:3:5.
+func mergedPlainAndRedefine(original, redefining string) map[string]string {
+	return map[string]string{
+		"root.xsd": wrap("urn:t", `<xs:include schemaLocation="lib.xsd"/>`+
+			`<xs:include schemaLocation="r.xsd"/>`),
+		"lib.xsd": wrap("urn:t", "\n  "+original),
+		"r.xsd": wrap("urn:t", "\n<xs:redefine schemaLocation=\"lib.xsd\">\n    "+
+			redefining+"</xs:redefine>"),
+	}
+}
+
+// TestParseRedefineMergedWithPlainIncludeRegistersTheRedefinition pins WHICH
+// component produceRedefinition registers under a redefined name when the
+// redefined document also contributes that name plainly. The verdict —
+// sch-props-correct (§3.17.6.1) clause 2 — is the same either way and is not
+// what is at issue; the two POSITIONS the charge carries are, because they are
+// the only observable of the component's provenance in an assembly clause 2
+// rejects before anything else can read it.
+//
+// A name-keyed build memo answered produceRedefinition's own build with the
+// ORIGINAL, which then went to the builder as the redefinition: the charge named
+// lib.xsd twice and, for <group>, the pairing handed
+// xsd.SchemaBuilder.AddRedefiningModelGroup was (original, original), so
+// src-redefine (§4.2.4) clause 6.2.2 would have decided V(R) ⊆ V(R) (#1361).
+// <attributeGroup> is the control: buildAttributeGroup memoises nothing
+// (redefinedAttributeGroupRestricted), and it named both positions throughout.
+//
+// Each position is pinned as ONE contiguous substring, the offending one as the
+// message's own prefix through the property name (#1048), so a message that
+// swapped its two locations satisfies neither.
+//
+// Clause 6.2.2 itself cannot be the charged rule in this shape, and no shape
+// exposes it: the memo answers with a component built from another declaration
+// only when that declaration contributes a component of the same expanded name,
+// which is exactly when clause 2 fires — and indexByName charges clause 2 in
+// SchemaBuilder.finalize, before Schema.resolve reaches
+// checkModelGroupRedefinitions. The clause 6.2.2 pairing is exercised where it
+// is reachable instead, by TestParseRedefineGroupClause622.
+func TestParseRedefineMergedWithPlainIncludeRegistersTheRedefinition(t *testing.T) {
+	for _, c := range []struct {
+		name, property     string
+		original, redefine string
+	}{
+		{
+			name:     "group",
+			property: "{model group definitions}",
+			original: `<xs:group name="g"><xs:sequence>` +
+				`<xs:element name="a" type="xs:string"/></xs:sequence></xs:group>`,
+			redefine: `<xs:group name="g"><xs:sequence>` +
+				`<xs:element name="a" type="xs:token"/></xs:sequence></xs:group>`,
+		},
+		{
+			// A redefining <group> that WIDENS its original: the body clause
+			// 6.2.2 rejects wherever the pairing is real, so registering the
+			// original in its place would make the pair (original, original)
+			// and the obligation vacuous.
+			name:     "group that does not restrict its original",
+			property: "{model group definitions}",
+			original: `<xs:group name="g"><xs:sequence>` +
+				`<xs:element name="a" type="xs:string"/></xs:sequence></xs:group>`,
+			redefine: `<xs:group name="g"><xs:sequence>` +
+				`<xs:element name="a" type="xs:string"/>` +
+				`<xs:element name="c" type="xs:string"/></xs:sequence></xs:group>`,
+		},
+		{
+			name:     "complexType",
+			property: "{type definitions}",
+			original: `<xs:complexType name="ct"><xs:sequence>` +
+				`<xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>`,
+			redefine: `<xs:complexType name="ct"><xs:complexContent>` +
+				`<xs:restriction base="tns:ct"><xs:sequence>` +
+				`<xs:element name="a" type="xs:string"/></xs:sequence>` +
+				`</xs:restriction></xs:complexContent></xs:complexType>`,
+		},
+		{
+			name:     "attributeGroup",
+			property: "{attribute group definitions}",
+			original: `<xs:attributeGroup name="ag">` +
+				`<xs:attribute name="a" type="xs:string"/></xs:attributeGroup>`,
+			redefine: `<xs:attributeGroup name="ag">` +
+				`<xs:attribute name="a" type="xs:token"/></xs:attributeGroup>`,
+		},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			_, err := parseMap(t, "root.xsd", mergedPlainAndRedefine(c.original, c.redefine))
+			mustRule(t, err, "sch-props-correct")
+			offending := "r.xsd:3:5: [sch-props-correct] schema " + c.property
+			if !strings.Contains(err.Error(), offending) {
+				t.Fatalf("error %q does not open %q: the component registered under the redefined name is the ORIGINAL, not the redefining declaration", err, offending)
+			}
+			if !strings.Contains(err.Error(), "(first declared at lib.xsd:2:3)") {
+				t.Fatalf("error %q does not cite the original at lib.xsd:2:3 as the first declaration", err)
+			}
+		})
+	}
+}
+
+// TestParseRedefineComplexTypeRestrictionPairsWithOriginal is src-expredef
+// clause 1.2 on the RESTRICTION alternant: the component registered under the
+// redefined name derives by restriction from the clause-1.1 original — the
+// anonymous, {name}-·absent· component built from the redefined document's own
+// declaration — and never carries that original's own ordinary xs:anyType base
+// in its place. It is TestParseRedefineComplexTypePairsWithOriginal's sibling,
+// which pins the extension alternant.
+func TestParseRedefineComplexTypeRestrictionPairsWithOriginal(t *testing.T) {
+	s, err := parseMap(t, "main.xsd", map[string]string{
+		"main.xsd": wrap("urn:a", `<xs:redefine schemaLocation="lib.xsd">`+
+			`<xs:complexType name="ct"><xs:complexContent><xs:restriction base="tns:ct">`+
+			`<xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>`+
+			`</xs:restriction></xs:complexContent></xs:complexType>`+
+			`</xs:redefine>`),
+		"lib.xsd": wrap("urn:a", `<xs:complexType name="ct">`+
+			`<xs:sequence><xs:element name="a" type="xs:string"/>`+
+			`<xs:element name="b" type="xs:string" minOccurs="0"/></xs:sequence></xs:complexType>`),
+	})
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	ct := mustComplexType(t, s, xsd.QName{Space: "urn:a", Local: "ct"})
+	if ct.DerivationMethod() != xsd.DerivationRestriction {
+		t.Fatalf("{derivation method} = %s, want restriction", ct.DerivationMethod())
+	}
+	base := mustOwnedBase(t, ct)
+	if got := elementNamesOf(t, base); !slices.Equal(got, []string{"a", "b"}) {
+		t.Fatalf("the clause-1.1 original's content model declares %v, want the redefined document's [a b]", got)
+	}
+	if got := elementNamesOf(t, ct); !slices.Equal(got, []string{"a"}) {
+		t.Fatalf("the redefinition's content model declares %v, want its own [a]", got)
 	}
 }
 
