@@ -611,7 +611,8 @@ func (s *Schema) contentTypeRestricts(tct, bct ContentType, scope contentRestric
 	if rc.OpenContent != nil || bc.OpenContent != nil {
 		// GAP(xsd): a content type carrying an {open content} on either side is
 		// provisionally accepted rather than decided, and that is a RULED
-		// deferral rather than a fold in progress (#413).
+		// deferral rather than a fold in progress. The ruling below landed with
+		// #413, now closed; #1374 owns what retires it.
 		//
 		// The licence leaned on is §3.4.6.3's, quoted whole because the option
 		// carrying the weight is its last: "It is ·implementation-defined·
@@ -640,22 +641,23 @@ func (s *Schema) contentTypeRestricts(tct, bct ContentType, scope contentRestric
 		//
 		// What retires the deferral is a construction, not a correction. §3.4.4.3
 		// (cvc-complex-content) states ·locally valid· under a present {open
-		// content} extensionally too, and per {mode}, with ONE designated
-		// exclusion per S2 element rather than a condition on every split point.
-		// Clause 2, suffix: S = S1 + S2, S1 ·valid· against {particle}, every
-		// element of S2 ·valid· against {wildcard}, and — S2 non-empty — S1 + E
-		// without a ·path· in {particle} for E the FIRST element of S2, S1 taken
-		// whole. Clause 3, interleave: S a member of S1 × S2 under §3.8.4.1.3's
-		// interleave operator, S1 and S2 as before, and for every E in S2, S3 + E
-		// without a ·path· where S3 is the LONGEST prefix of S1 whose members
-		// precede E in S. Quantifying over every prefix instead states a strictly
-		// stronger condition: (a?, b) under a wildcard admitting a accepts b a,
-		// since S3 there is b and b a has no ·path·, where the empty prefix plus a
-		// would reject it. An existential decomposition with that per-E designated
-		// exclusion is a new automaton carrying its own soundness argument — the
-		// shape addAll needed for ·all· — and no algorithm for it is given:
-		// §3.4.6.3/.4 state only the containment, and Appendix J's construction
-		// guidance is scoped by its own text to cos-nonambig.
+		// content} extensionally too, and per {mode}, with designated exclusions —
+		// ONE in total for suffix, one per S2 element for interleave — rather than
+		// a condition on every split point. Clause 2, suffix: S = S1 + S2, S1
+		// ·valid· against {particle}, every element of S2 ·valid· against
+		// {wildcard}, and — S2 non-empty — S1 + E without a ·path· in {particle}
+		// for E the FIRST element of S2, S1 taken whole. Clause 3, interleave: S a
+		// member of S1 × S2 under §3.8.4.1.3's interleave operator, S1 and S2 as
+		// before, and for every E in S2, S3 + E without a ·path· where S3 is the
+		// LONGEST prefix of S1 whose members precede E in S. Quantifying over
+		// every prefix instead states a strictly stronger condition: (a?, b) under
+		// a wildcard admitting a accepts b a, since S3 there is b and b a has no
+		// ·path·, where the empty prefix plus a would reject it. An existential
+		// decomposition with that per-E designated exclusion is a new automaton
+		// carrying its own soundness argument — the shape addAll needed for ·all·
+		// — and no algorithm for it is given: §3.4.6.3/.4 state only the
+		// containment, and Appendix J's construction guidance is scoped by its own
+		// text to cos-nonambig.
 		//
 		// The arm is live rather than latent: since #230 the producer emits {open
 		// content} from <openContent>/<defaultOpenContent> (§3.4.2.3.3 clauses

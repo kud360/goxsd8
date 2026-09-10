@@ -431,16 +431,16 @@ func openContentModeLabel(oc *OpenContent) string {
 // position, with the re-ordering explained in the message.
 //
 // GAP(xsd): the CONTENT half of the second charge is undecided for a chain
-// carrying {open content} — a ruled deferral owned by #413, which owns the same
+// carrying {open content} — a ruled deferral owned by #1374, which owns the same
 // skip for real restrictions and states what retires it, along with the §3.4.6.3
 // licence for its clause-2.4.2 caller, a licence that names 2.4.2 and so does not
-// reach the charge made here. checkDerivationOKRestriction reaches the content
-// models through clause 2.4.2's contentTypeRestricts, which early-accepts the
-// moment either side carries an {open content} record (contentrestricts.go), and
-// M inherits whatever the §3.4.2.3.3 clause 4.2 merge propagated. The direction
-// is fail-open — clause 1.5's content half is skipped, never falsely charged —
-// and the clause's attribute halves (both charges above) still decide such a
-// chain.
+// reach the charge made here. The ruling itself landed with #413, now closed.
+// checkDerivationOKRestriction reaches the content models through clause 2.4.2's
+// contentTypeRestricts, which early-accepts the moment either side carries an
+// {open content} record (contentrestricts.go), and M inherits whatever the
+// §3.4.2.3.3 clause 4.2 merge propagated. The direction is fail-open — clause
+// 1.5's content half is skipped, never falsely charged — and the clause's
+// attribute halves (both charges above) still decide such a chain.
 func (s *Schema) checkExtensionTwoStepDerivable(t ComplexType) error {
 	if s.pureExtensionChain(t) {
 		return nil // clause 1.5 holds; see the proof above
