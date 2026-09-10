@@ -1518,9 +1518,12 @@ func TestParseRedefineSameDocumentTwiceDiffers(t *testing.T) {
 // document" the other one pairs with, so the base chain src-expredef clause 1.1
 // builds runs a.ct ⊳ b.ct ⊳ a.ct ⊳ … and never reaches xs:anyType.
 //
-// Every hop of that chain is an ANONYMOUS original, so it passes through no
-// named build and neither buildComplexType's name-keyed sentinel nor
-// buildSimpleType's ever sees it; enterOriginal is what bounds it, and the
+// Every hop of that chain is a clause 1.1 original, built by a direct call to
+// produceComplexType or constructSimpleType rather than through a named build
+// (buildComplexType's memo is keyed by the declaration, which contributes the
+// ordinary named component too, and the original's ·absent· {name} gives
+// buildSimpleType's by-name memo nothing to hold), so buildComplexType's
+// on-stack sentinel never sees a hop; enterOriginal is what bounds it, and the
 // verdict is the acyclicity rule for the kind — the same rule the finalize-side
 // walks charge. Without the bound the walk recurses until the stack dies, which
 // is what the W3C suite's ibmData/schema_invalid/S4_2_4 cyclic-redefine cases
