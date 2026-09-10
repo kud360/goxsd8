@@ -880,10 +880,19 @@ func compositionDirective(el *Element) bool {
 // anywhere at all.
 //
 // It is the one statement of that vocabulary: run's dispatch below is exhaustive
-// over it and consults it as a guard rather than carrying a default arm of its
-// own, and census (census.go) reports exactly its complement. Neither can
-// therefore disagree with the other about what is mapped (STYLE D3) — a name
-// added to run's switch alone is dropped by the guard, which its own test sees.
+// over it and consults it through rejectUnmappedTopLevel rather than carrying a
+// default arm of its own, and census (census.go) reports exactly its complement.
+// Neither can therefore disagree with the other about what is mapped (STYLE D3) —
+// a name added to run's switch alone is rejected by that guard before the switch
+// is reached, which its own test sees.
+//
+// The thirteen names are also exactly the children the schema for schema
+// documents admits under <schema>, which is what lets rejectUnmappedTopLevel
+// charge their complement as a grammar fault: xs:composition (:4442) and
+// xs:schemaTop (:4451, through xs:redefinable :4465) hold twelve of them and
+// <schema>'s own sequence holds <defaultOpenContent> (:4557). A name mapped here
+// but inadmissible there — or admissible there and unmapped here — would break
+// that identity, and rejectUnmappedTopLevel's doc states what it costs.
 //
 // Two of the names have no arm in run, for DIFFERENT reasons.
 // <defaultOpenContent> is mapped by another pass of this producer:
@@ -960,6 +969,45 @@ func (p *producer) topLevelDecls(yield func(decl *Element) bool) {
 	}
 }
 
+// rejectUnmappedTopLevel rejects a <schema> child in the XSD namespace whose
+// local name no particle of <schema>'s content model admits (#1380).
+//
+// The content model is "(xs:composition*, (defaultOpenContent, annotation*)?,
+// (xs:schemaTop, annotation*)*)" (xmlschema11-1.md:4554, the prose summary at
+// §3.1.2 :3781), and it has no wildcard arm and no lax position — xs:openAttrs,
+// which <schema>'s type extends, opens ATTRIBUTES alone (:4415). xs:composition
+// (:4442) is the five §4.2.1 directives and <annotation>; xs:schemaTop (:4451),
+// through xs:redefinable (:4465), is the seven declaration and definition forms.
+// So the thirteen names the model admits are exactly topLevelMapped's thirteen,
+// and this guard reads the mapping vocabulary instead of transcribing the model
+// a second time (STYLE D3/T4): the two are the same list, and the diagnostic
+// below quotes the model the identity rests on.
+//
+// It charges the NAME and nothing else. Order and cardinality are not judged
+// here and no checkS4SChildOrder model exists for <schema>: <annotation> fills
+// three positions of that model — the composition group's own branch (:4448) and
+// the trailing repeat of each of the other two — and s4sModel's slots admit no
+// name twice, so a transcription would reject annotations the grammar admits.
+//
+// The fault carries NO rule ID. It is the s4s-grammar class outright (§5.1's
+// first bullet, :4296, restating §2.4 clause 1 sd-valid, :615, which Appendix
+// B's three tables do not list), the footing rejectMisplacedNotation and
+// rejectNotationContent already stand on; borrowing the cvc-* chain a processor
+// would reach by validating the schema document as an ordinary instance against
+// a materialized s4s schema would misstate the mechanism, which is this
+// producer's direct reading of Appendix A (STYLE E2, xsderr/doc.go).
+//
+// A child outside the XSD namespace never reaches here: topLevelDecls does not
+// yield one, and which of rejection or census it becomes is #1036's, not this
+// guard's.
+func rejectUnmappedTopLevel(schemaElem, decl *Element) error {
+	if topLevelMapped(decl.Name().Local()) {
+		return nil
+	}
+	return fmt.Errorf("parser: <%s> at %s fills no position of the content model the schema for schema documents gives the <schema> at %s: that model (xmlschema11-1.md:4554) is (xs:composition*, (defaultOpenContent, annotation*)?, (xs:schemaTop, annotation*)*), where xs:composition is include|import|redefine|override|annotation and xs:schemaTop is simpleType|complexType|group|attributeGroup|element|attribute|notation, so it admits no <%s> in any position",
+		decl.Name().Local(), decl.Loc(), schemaElem.Loc(), decl.Name().Local())
+}
+
 // run produces each in-scope top-level declaration of the document into the
 // shared builder, over topLevelDecls' walk and in its order. prescan must
 // already have run — for every document of the assembly, not just this one.
@@ -978,16 +1026,14 @@ func (p *producer) topLevelDecls(yield func(decl *Element) bool) {
 // instead (xs:localComplexType prohibits name, abstract, final and block,
 // :4816).
 //
-// A child topLevelMapped declines is skipped before the switch is reached, which
-// is why the switch has no default arm: the vocabulary lives in that predicate
-// alone, and census (census.go) reports its complement.
+// A child topLevelMapped declines is REJECTED before the switch is reached
+// (rejectUnmappedTopLevel), which is why the switch has no default arm: the
+// vocabulary lives in that predicate alone, and census (census.go) reports its
+// complement beside the rejection.
 func (p *producer) run() error {
 	for decl := range p.topLevelDecls {
-		if !topLevelMapped(decl.Name().Local()) {
-			// Mapped by no pass of this producer, and not rejected here either
-			// (§5.1 grammar faults are rejectS4SFaults's): census (census.go)
-			// records it as UnmappedNoDispatch, keyed by this same predicate.
-			continue
+		if err := rejectUnmappedTopLevel(p.schemaElem, decl); err != nil {
+			return err
 		}
 		switch decl.Name().Local() {
 		case "simpleType":

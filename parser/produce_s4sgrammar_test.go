@@ -82,6 +82,14 @@ func TestS4SGrammarFaultsNameTheirProduction(t *testing.T) {
 			wantFault:   "has no name attribute",
 		},
 		{
+			// <schema>'s own model is anonymous, so the productions its two groups
+			// are named by are the citation this row demands (#1380).
+			name:        "unmapped name at the top level",
+			docs:        map[string]string{"main.xsd": wrap("urn:a", `<xs:field xpath="."/>`)},
+			wantGrammar: "xs:schemaTop",
+			wantFault:   "fills no position of the content model",
+		},
+		{
 			name: "<annotation> nested in <annotation>",
 			docs: map[string]string{"main.xsd": wrap("urn:a",
 				`<xs:annotation><xs:annotation><xs:appinfo>a</xs:appinfo></xs:annotation></xs:annotation>`)},

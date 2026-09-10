@@ -65,14 +65,20 @@ type s4sAttrRoster struct {
 // facet tables). Each entry names the production and the line it is quoted from,
 // so an entry is diffable against the spec text one lookup away.
 //
-// A name absent from this table has NO roster and is never charged: an element in
-// the XSD namespace whose local name Appendix A declares nothing for is a fault of
-// its own — the element-side hole #1380 and #1036 own — and the precisionDecimal
-// extension facets <maxScale> and <minScale> (xsd-precisionDecimal.md §4.2, §4.3)
-// have an XML Representation Summary and no Appendix A production at all, so they
-// are transcribed nowhere here and their attributes go unchecked. That is the
+// A name absent from this table has NO roster and is never charged, and for an
+// element in the XSD namespace whose local name Appendix A declares nothing for
+// that is correct: the element is itself the fault, and the charge for it is on
+// the element side rather than here — at the top level of <schema> by
+// rejectUnmappedTopLevel (produce.go, #1380), and under an owner carrying an
+// s4sModel by checkS4SChildOrder's fills-no-position fault (produce_s4sorder.go).
+// #1036 owns the remaining top-level arm, a child OUTSIDE the XSD namespace.
+//
+// What this table is itself silent on is the precisionDecimal extension facets
+// <maxScale> and <minScale> (xsd-precisionDecimal.md §4.2, §4.3): they have an XML
+// Representation Summary and no Appendix A production at all, so they are
+// transcribed nowhere here and their attributes go unchecked. That is the
 // direction this check may err in, and it is the same one s4sFacetElement's own
-// over-admission of the pair takes.
+// over-admission of the pair takes (#1389).
 var s4sAttrRosters = map[string]s4sAttrRoster{
 	// xs:schema extends xs:openAttrs DIRECTLY rather than through xs:annotated —
 	// the carve-out xs:annotated's own documentation states, "extended by all types

@@ -98,19 +98,26 @@ type AssembledDocument struct {
 	Location string
 
 	// Unmapped is every element of THIS discovery of the document that the
-	// producer maps to no component and does not reject either, in document
-	// order. The census covers several regions of the vocabulary and not all of
-	// it — parser/census.go's "Scope" states which, and what each region left out
+	// producer maps to no component, in document order. Whether some pass also
+	// REJECTS the document over that same element is independent of its being
+	// here: an entry can ride beside a verdict naming its own construct, and
+	// [UnmappedConstruct] states which of the two a consumer may act on. The
+	// census covers several regions of the vocabulary and not all of it —
+	// parser/census.go's "Scope" states which, and what each region left out
 	// costs — so empty is never a statement about the whole document, only about
 	// the regions censused. A top-level child outside the XSD namespace is passed
 	// over unreported at every depth, an open gap marked and owned at
 	// producer.topLevelDecls (#1036).
 	//
-	// It is populated exactly as far as assembly got, which is complete only when
-	// [ParseReport] returned a NIL ERROR: a discovery is recorded when the
-	// document is read, before any census is taken, so a document reached by an
-	// assembly that then failed carries an empty Unmapped meaning NOT COMPUTED
-	// rather than "nothing unmapped".
+	// It is populated for every discovery whose CENSUS RAN, and a census that ran
+	// is complete over those regions: the walk precedes the first pass of its own
+	// document that can fail (assembly.compile), so a document the assembly went
+	// on to REJECT still carries its whole census — which is how a top-level
+	// entry reaches a consumer at all. What an assembly failure costs is the
+	// discoveries it never censused: a discovery is recorded when the document is
+	// READ, before any census is taken, so one the failure preempted carries an
+	// empty Unmapped meaning NOT COMPUTED rather than "nothing unmapped". Only a
+	// NIL ERROR from [ParseReport] says every discovery was censused.
 	//
 	// It is a property of the DISCOVERY, not of the document: the ·override
 	// pre-processing· in force over one discovery substitutes for declarations
@@ -122,15 +129,37 @@ type AssembledDocument struct {
 	Unmapped []UnmappedConstruct
 }
 
-// UnmappedConstruct is one element of a schema document that the producer maps
-// to no component and does not reject either — a construct whose contribution
-// to the assembled schema, whatever §3 says it should be, is silently absent.
+// UnmappedConstruct is one element of a schema document that the producer's
+// dispatch at that element's position maps to no component — a construct whose
+// contribution to the assembled schema, whatever §3 says it should be, is
+// absent. Whether some pass also REJECTS the document over it is not consulted
+// (parser/census.go), so an entry is a silence only on a document the assembly
+// ACCEPTED.
 //
 // It is the positive form of the question a consumer gating on this processor's
 // coverage otherwise has to answer by re-walking the document against a
 // hand-kept allowlist of what the producer happens to read (the conformance
 // harness's schemaShapeDecidable), which is a second implementation of this
 // package's own dispatch.
+//
+// # What the TOP-LEVEL arm is for
+//
+// Nothing a gating consumer can act on: since #1380 run rejects every <schema>
+// child name topLevelMapped declines (rejectUnmappedTopLevel), so a top-level
+// entry rides only on a document whose assembly FAILED — and
+// [AssembledDocument.Unmapped] is complete only when [ParseReport] returned a
+// nil error, which is why the harness's soundness hold exempts the documents of
+// a rejected assembly outright. The arm stays because the census states the
+// dispatch vocabulary at EVERY position uniformly, off the same predicate run
+// consults: that identity is the drift this census exists to prevent, and
+// retiring one position of it would put the two lists back out of step. Read a
+// top-level entry as corroboration of the verdict beside it, never as coverage
+// lost. The population a coverage gate acts on is the NESTED one.
+//
+// The CLI reports no census at all, and that stands: goxsd8 parse answers the
+// top-level axis with its exit code now that the construct is a verdict, and
+// surfacing the nested arms belongs to whoever gives the CLI a coverage flag,
+// which no consumer has asked for.
 type UnmappedConstruct struct {
 	// Name is the expanded name of the ELEMENT that went unmapped — never the
 	// {name} of a component, there being none.

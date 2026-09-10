@@ -56,20 +56,23 @@ func closureGateIn(t *testing.T, root string, docs map[string]string) (declined,
 	return !closureDecidable(report) || fabricatedRejection(report, perr), unfollowed
 }
 
-// undecidable is a top-level <xs:sequence>, an XSD-namespace name no arm of
-// xs:schemaTop admits (xmlschema11-1.md:4462). The producer SILENTLY SKIPS a
-// top-level child it has no dispatch for and returns no error at all, so a
-// verdict on this document would be scored against a schema that never saw it —
-// which is the false accept schemaShapeDecidable's top-level default arm
-// refuses. It sits at the LAST-RESORT arm on purpose: every narrower decline
-// this const stood on has since been measured conservative and widened away.
+// undecidable is a top-level element OUTSIDE the XSD namespace. <schema>'s
+// content model has no wildcard arm — xs:openAttrs opens attributes, not element
+// children (xmlschema11-1.md:4415) — yet producer.topLevelDecls neither yields
+// such a child nor censuses it, the gap #1036 owns, so the producer returns no
+// error at all and a verdict on this document would be scored against a schema
+// that never saw it. That is the false accept schemaShapeDecidable's
+// foreign-namespace arm refuses, and it is the LAST-RESORT arm now: every
+// narrower decline this const stood on has since been measured conservative and
+// widened away.
 //
-// It replaced a <complexType> whose <simpleContent> <extension> carried a
-// particle, which schemaShapeDecidable admits since #1181 because the s4s order
-// check REJECTS that shape rather than dropping it; that one had in turn
-// replaced a <simpleType> naming none of §3.16.2.1's three alternatives, which
-// #786 admitted on the same footing.
-const undecidable = `<xs:sequence/>`
+// It replaced a top-level <xs:sequence>, which the gate's default arm admits
+// since #1380 because rejectUnmappedTopLevel now REJECTS every XSD-namespace
+// name outside <schema>'s content model rather than skipping it; that one had
+// replaced a <complexType> whose <simpleContent> <extension> carried a particle,
+// admitted since #1181 on the same footing, which had in turn replaced a
+// <simpleType> naming none of §3.16.2.1's three alternatives, admitted by #786.
+const undecidable = `<z:extra xmlns:z="urn:z"/>`
 
 // decidableType is a top-level restriction-only simpleType — squarely inside the
 // producer's decidable subset.

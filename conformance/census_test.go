@@ -63,16 +63,18 @@ const maxCensusViolationsLogged = 10
 // much census is left to write.
 //
 // Documents of a REJECTED assembly are exempt, and counted rather than asserted
-// about: no unmapped construct can make a rejected case accept anything. Two
+// about: no unmapped construct can make a rejected case accept anything. Three
 // admissions land there. schemaShapeDecidable's FIRST answer is not an allowlist
 // verdict at all but the unconditional-rejection short-circuit
 // (holdsMisplacedNotation), which admits a document precisely because the
 // producer rejects it whatever it holds — msData/notations/notatF005, notatF029
 // and notatF039 hang their misplaced <notation> off a top-level <xs:any>,
-// <xs:key> and <xs:keyref> the census duly flags. And the allowlist admits every
-// child a complex-type derivation alternant's own content model does not admit
-// (#1181), because checkS4SChildOrder rejects the document over it while the
-// census goes on reporting it beside that rejection.
+// <xs:key> and <xs:keyref> the census duly flags. Its default arm admits every
+// other top-level name outside <schema>'s content model on that same footing
+// (#1380), the census flagging each beside rejectUnmappedTopLevel's verdict. And
+// the allowlist admits every child a complex-type derivation alternant's own
+// content model does not admit (#1181), because checkS4SChildOrder rejects the
+// document over it while the census goes on reporting it beside that rejection.
 func TestUnmappedCensusSoundAgainstShapeGate(t *testing.T) {
 	skipWithoutSuite(t)
 	found, err := parseSuite(suitePath())
