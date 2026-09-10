@@ -64,6 +64,21 @@ const (
 </xsd:schema>`
 )
 
+// ns is the XML Schema namespace in the Clark notation the report renders
+// every name in.
+const ns = "{http://www.w3.org/2001/XMLSchema}"
+
+// attrPairs renders one hit's matched attributes as "local=value" in the
+// order the hit records them, which is what the assertions below compare: a
+// []attrHit prints as a wall of struct fields.
+func attrPairs(h hit) string {
+	var pairs []string
+	for _, a := range h.Attrs {
+		pairs = append(pairs, a.Name.Local+"="+a.Value)
+	}
+	return strings.Join(pairs, " ")
+}
+
 // mustQuery parses a query or fails the test; the queries below are all
 // literals this package's own parser must accept.
 func mustQuery(t *testing.T, s string) query {
@@ -103,7 +118,7 @@ func TestScanFixtureMatchesEveryPrefixSpelling(t *testing.T) {
 			if tc.want == 0 {
 				return
 			}
-			if got := scan.Hits[0].Values[0]; got != "urn:b" {
+			if got := scan.Hits[0].Attrs[0].Value; got != "urn:b" {
 				t.Errorf("targetNamespace = %q, want urn:b", got)
 			}
 		})
@@ -123,7 +138,7 @@ func TestScanFixtureDecodesUTF16(t *testing.T) {
 	if len(scan.Hits) != 1 {
 		t.Fatalf("got %d hit(s), want 1: %+v", len(scan.Hits), scan.Hits)
 	}
-	if got := scan.Hits[0].Values[0]; got != "urn:b" {
+	if got := scan.Hits[0].Attrs[0].Value; got != "urn:b" {
 		t.Errorf("targetNamespace = %q, want urn:b", got)
 	}
 	if scan.Hits[0].Line != 5 {
@@ -161,7 +176,7 @@ func TestScanFixtureRecordsTheParent(t *testing.T) {
 	}
 	for i, w := range want {
 		if scan.Hits[i].Parent != w {
-			t.Errorf("Hits[%d] (%s) Parent = %+v, want %+v", i, scan.Hits[i].Values[0], scan.Hits[i].Parent, w)
+			t.Errorf("Hits[%d] (%s) Parent = %+v, want %+v", i, scan.Hits[i].Attrs[0].Value, scan.Hits[i].Parent, w)
 		}
 	}
 }
@@ -294,7 +309,7 @@ func TestScanFixtureRecordsDirectChildren(t *testing.T) {
 	})
 	for i, h := range scan.Hits {
 		if h.ChildrenUnclosed {
-			t.Errorf("Hits[%d] (%s) is marked unclosed, but the fixture reads to the end", i, h.Values[0])
+			t.Errorf("Hits[%d] (%s) is marked unclosed, but the fixture reads to the end", i, h.Attrs[0].Value)
 		}
 	}
 }
@@ -381,7 +396,6 @@ func TestReportNamesEachHitsChildren(t *testing.T) {
 	if err := printReport(&out, rep); err != nil {
 		t.Fatalf("printReport: %v", err)
 	}
-	const ns = "{http://www.w3.org/2001/XMLSchema}"
 	for _, want := range []string{
 		"cut.xsd:2:3 parent=" + ns + "schema children=[" + ns + "annotation, (unclosed)]",
 		"full.xsd:2:3 parent=" + ns + "schema children=[" + ns + "complexType, " + ns + "complexType]",
@@ -408,9 +422,170 @@ func TestScanFixtureRequiresEveryQueriedAttribute(t *testing.T) {
 	if len(scan.Hits) != 1 {
 		t.Fatalf("got %d hit(s), want 1: %+v", len(scan.Hits), scan.Hits)
 	}
-	want := []string{"urn:b", "qualified"}
-	if got := scan.Hits[0].Values; len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
-		t.Errorf("Values = %q, want %q (query order)", got, want)
+	want := "targetNamespace=urn:b form=qualified"
+	if got := attrPairs(scan.Hits[0]); got != want {
+		t.Errorf("matched attributes = %q, want %q (query order)", got, want)
+	}
+}
+
+// axisDoc carries every case the wildcard forms turn on: an element with no
+// attribute at all, one whose only attributes are in a namespace, two
+// carrying one of the queried names each, and one carrying two of them.
+const axisDoc = `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:o="urn:o" o:keep="x">
+  <xs:complexType name="ct" mixed="true" abstract="false"/>
+  <xs:element name="a" nillable="true" o:extra="y"/>
+  <xs:sequence/>
+</xs:schema>`
+
+// TestScanFixtureMatchesEveryElement pins the wildcard element: a census over
+// an attribute axis is anchored to no element name, which the query language
+// had no spelling for at all before #1391. The impostor namespace still does
+// not answer — `*` widens the local name, never the namespace.
+func TestScanFixtureMatchesEveryElement(t *testing.T) {
+	scan := scanFixture("t.xsd", strings.NewReader(axisDoc), mustQuery(t, "*@name"))
+	if scan.Err != nil {
+		t.Fatalf("scanFixture: %v", scan.Err)
+	}
+	want := []xsd.QName{xsdName("complexType"), xsdName("element")}
+	if len(scan.Hits) != len(want) {
+		t.Fatalf("got %d hit(s), want %d: %+v", len(scan.Hits), len(want), scan.Hits)
+	}
+	for i, w := range want {
+		if scan.Hits[i].Element != w {
+			t.Errorf("Hits[%d].Element = %+v, want %+v", i, scan.Hits[i].Element, w)
+		}
+	}
+	if impostor := scanFixture("i.xsd", strings.NewReader(impostorDoc), mustQuery(t, "*@name")); len(impostor.Hits) != 0 {
+		t.Errorf("got %d hit(s) in another namespace, want 0: %+v", len(impostor.Hits), impostor.Hits)
+	}
+}
+
+// TestScanFixtureAnyOfTheQueriedAttributes pins the "|" join against the ","
+// join above: an element carrying ANY one of the names is an occurrence, and
+// the hit records the names it actually carried rather than the query's.
+// #456's population is a disjunction over six names, and the "," spelling of
+// it is their intersection — a different census, and here an empty one.
+func TestScanFixtureAnyOfTheQueriedAttributes(t *testing.T) {
+	scan := scanFixture("t.xsd", strings.NewReader(axisDoc), mustQuery(t, "*@mixed|abstract|nillable"))
+	if scan.Err != nil {
+		t.Fatalf("scanFixture: %v", scan.Err)
+	}
+	want := []string{"mixed=true abstract=false", "nillable=true"}
+	if len(scan.Hits) != len(want) {
+		t.Fatalf("got %d hit(s), want %d: %+v", len(scan.Hits), len(want), scan.Hits)
+	}
+	for i, w := range want {
+		if got := attrPairs(scan.Hits[i]); got != w {
+			t.Errorf("Hits[%d] matched %q, want %q", i, got, w)
+		}
+	}
+	and := scanFixture("t.xsd", strings.NewReader(axisDoc), mustQuery(t, "*@mixed,abstract,nillable"))
+	if len(and.Hits) != 0 {
+		t.Errorf("the \",\" spelling found %d hit(s), want 0 — it is the intersection: %+v", len(and.Hits), and.Hits)
+	}
+}
+
+// TestScanFixtureCensusesEveryAttributeName pins `@*`: every attribute in the
+// wildcard's namespace, in the order the tag spells them. A namespace
+// declaration is not an attribute and never appears; an element carrying no
+// attribute in that namespace is not an occurrence at all.
+func TestScanFixtureCensusesEveryAttributeName(t *testing.T) {
+	cases := []struct {
+		query string
+		want  []string
+	}{
+		{query: "*@*", want: []string{"name=ct mixed=true abstract=false", "name=a nillable=true"}},
+		{query: "*@{urn:o}*", want: []string{"keep=x", "extra=y"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.query, func(t *testing.T) {
+			scan := scanFixture("t.xsd", strings.NewReader(axisDoc), mustQuery(t, tc.query))
+			if scan.Err != nil {
+				t.Fatalf("scanFixture: %v", scan.Err)
+			}
+			if len(scan.Hits) != len(tc.want) {
+				t.Fatalf("got %d hit(s), want %d: %+v", len(scan.Hits), len(tc.want), scan.Hits)
+			}
+			for i, w := range tc.want {
+				if got := attrPairs(scan.Hits[i]); got != w {
+					t.Errorf("Hits[%d] matched %q, want %q", i, got, w)
+				}
+			}
+		})
+	}
+}
+
+// TestReportGroupsTheNameAxis pins the shape `@*` reports in, which is the
+// one thing #1391 changed about the output: the pairs with their counts, then
+// each pair's fixtures, and no per-occurrence section at all. One line per
+// occurrence is what the corpus makes unreadable at 172,565 of them.
+func TestReportGroupsTheNameAxis(t *testing.T) {
+	root := t.TempDir()
+	writeFixture(t, root, "a/one.xsd", xsPrefixDoc)
+	writeFixture(t, root, "b/two.xsd", utf16LEDoc(unprefixedDoc))
+	// Two occurrences of one pair in one fixture: the pair's fixture list
+	// names it once and its occurrence count still counts both.
+	writeFixture(t, root, "c/three.xsd", `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="p"/>
+  <xs:element name="q"/>
+</xs:schema>`)
+
+	rep, err := census(root, mustQuery(t, "*@*"))
+	if err != nil {
+		t.Fatalf("census: %v", err)
+	}
+	var out strings.Builder
+	if err := printReport(&out, rep); err != nil {
+		t.Fatalf("printReport: %v", err)
+	}
+	for _, want := range []string{
+		"=== Attribute-name axis: 3 (element, attribute) pair(s), 8 attribute occurrence(s) ===",
+		"  " + ns + "complexType @name — 2 occurrence(s) in 2 fixture(s)",
+		"  " + ns + "element @name — 4 occurrence(s) in 3 fixture(s)",
+		"  " + ns + "element @targetNamespace — 2 occurrence(s) in 2 fixture(s)",
+		"=== Fixtures per pair (path order) ===",
+		"  " + ns + "element @name\n      a/one.xsd\n      b/two.xsd\n      c/three.xsd\n",
+		"  " + ns + "element @targetNamespace\n      a/one.xsd\n      b/two.xsd\n",
+	} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("axis report does not carry %q:\n%s", want, out.String())
+		}
+	}
+	if strings.Contains(out.String(), "=== Matches") {
+		t.Errorf("the axis report also printed the per-occurrence section:\n%s", out.String())
+	}
+}
+
+// TestReportNamesTheMatchedElementOnlyForAWildcard pins the one thing the
+// match line gained: a query that leaves the element open says which element
+// each hit was, and one that fixed it does not repeat itself.
+func TestReportNamesTheMatchedElementOnlyForAWildcard(t *testing.T) {
+	root := t.TempDir()
+	writeFixture(t, root, "one.xsd", xsPrefixDoc)
+
+	cases := []struct {
+		query string
+		want  bool
+	}{
+		{query: "*@targetNamespace", want: true},
+		{query: "element@targetNamespace", want: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.query, func(t *testing.T) {
+			rep, err := census(root, mustQuery(t, tc.query))
+			if err != nil {
+				t.Fatalf("census: %v", err)
+			}
+			var out strings.Builder
+			if err := printReport(&out, rep); err != nil {
+				t.Fatalf("printReport: %v", err)
+			}
+			if got := strings.Contains(out.String(), "element="+ns+"element"); got != tc.want {
+				t.Errorf("report names the matched element = %v, want %v:\n%s", got, tc.want, out.String())
+			}
+		})
 	}
 }
 
@@ -540,8 +715,11 @@ func TestCensusIsDeterministic(t *testing.T) {
 
 // TestRunCorpusAbsent pins the supported degraded mode: a fresh container has
 // no suite submodule (#659), so the tool says the corpus is not there and
-// exits 0 rather than failing.
+// exits 0 rather than failing. Every query form is driven through the guard,
+// the axis forms included: the mode is a property of the root and must not
+// depend on which report the query would have printed.
 func TestRunCorpusAbsent(t *testing.T) {
+	queries := []string{"element@targetNamespace", "*@*", "*@mixed|abstract"}
 	cases := []struct {
 		name string
 		root func(t *testing.T) string
@@ -559,53 +737,83 @@ func TestRunCorpusAbsent(t *testing.T) {
 		},
 	}
 	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			var out strings.Builder
-			if err := run(&out, []string{"element@targetNamespace", tc.root(t)}); err != nil {
-				t.Fatalf("run: %v, want a clean exit", err)
-			}
-			if !strings.Contains(out.String(), tc.want) {
-				t.Errorf("output does not say %q:\n%s", tc.want, out.String())
-			}
-			if !strings.Contains(out.String(), "git submodule update --init") {
-				t.Errorf("output does not name the command that initializes the suite:\n%s", out.String())
-			}
-		})
+		for _, q := range queries {
+			t.Run(tc.name+" "+q, func(t *testing.T) {
+				var out strings.Builder
+				if err := run(&out, []string{q, tc.root(t)}); err != nil {
+					t.Fatalf("run: %v, want a clean exit", err)
+				}
+				if !strings.Contains(out.String(), tc.want) {
+					t.Errorf("output does not say %q:\n%s", tc.want, out.String())
+				}
+				if !strings.Contains(out.String(), "git submodule update --init") {
+					t.Errorf("output does not name the command that initializes the suite:\n%s", out.String())
+				}
+			})
+		}
 	}
 }
 
 // TestParseQuery pins the query grammar, including the two defaults that make
 // a braceless query mean what a reader expects: an element name is in the XML
-// Schema namespace, an attribute name is in none.
+// Schema namespace, an attribute name is in none. The wildcard and the two
+// joins are pinned here too — the axis forms (#1391) turn on both.
 func TestParseQuery(t *testing.T) {
 	cases := []struct {
 		in    string
-		elem  xsd.QName
-		attrs []xsd.QName
+		elem  namePat
+		attrs []namePat
+		join  attrJoin
 	}{
 		{
 			in:   "element",
-			elem: xsd.QName{Space: xsd.XMLSchemaNS, Local: "element"},
+			elem: namePat{Space: xsd.XMLSchemaNS, Local: "element"},
+			join: joinAll,
 		},
 		{
 			in:    "attribute@targetNamespace,form",
-			elem:  xsd.QName{Space: xsd.XMLSchemaNS, Local: "attribute"},
-			attrs: []xsd.QName{{Local: "targetNamespace"}, {Local: "form"}},
+			elem:  namePat{Space: xsd.XMLSchemaNS, Local: "attribute"},
+			attrs: []namePat{{Local: "targetNamespace"}, {Local: "form"}},
+			join:  joinAll,
 		},
 		{
 			in:   "{urn:x}thing",
-			elem: xsd.QName{Space: "urn:x", Local: "thing"},
+			elem: namePat{Space: "urn:x", Local: "thing"},
+			join: joinAll,
 		},
 		{
 			// A namespace may hold the separators; the brace ends the URI.
-			in:    "{urn:a@b,c}thing@{urn:d@e}attr",
-			elem:  xsd.QName{Space: "urn:a@b,c", Local: "thing"},
-			attrs: []xsd.QName{{Space: "urn:d@e", Local: "attr"}},
+			in:    "{urn:a@b,c|d}thing@{urn:d@e}attr",
+			elem:  namePat{Space: "urn:a@b,c|d", Local: "thing"},
+			attrs: []namePat{{Space: "urn:d@e", Local: "attr"}},
+			join:  joinAll,
 		},
 		{
 			in:    "{}bare@x",
-			elem:  xsd.QName{Local: "bare"},
-			attrs: []xsd.QName{{Local: "x"}},
+			elem:  namePat{Local: "bare"},
+			attrs: []namePat{{Local: "x"}},
+			join:  joinAll,
+		},
+		{
+			// The name axis: every element in the XSD namespace, every
+			// attribute in none.
+			in:    "*@*",
+			elem:  namePat{Space: xsd.XMLSchemaNS, Local: wildcard},
+			attrs: []namePat{{Local: wildcard}},
+			join:  joinAll,
+		},
+		{
+			// The value axis: any of six names, on any element.
+			in:    "*@mixed|abstract",
+			elem:  namePat{Space: xsd.XMLSchemaNS, Local: wildcard},
+			attrs: []namePat{{Local: "mixed"}, {Local: "abstract"}},
+			join:  joinAny,
+		},
+		{
+			in:    "{urn:x}*@{urn:y}*",
+			elem:  namePat{Space: "urn:x", Local: wildcard},
+			attrs: []namePat{{Space: "urn:y", Local: wildcard}},
+			join:  joinAll,
 		},
 	}
 	for _, tc := range cases {
@@ -616,6 +824,9 @@ func TestParseQuery(t *testing.T) {
 			}
 			if q.Element != tc.elem {
 				t.Errorf("Element = %+v, want %+v", q.Element, tc.elem)
+			}
+			if q.Join != tc.join {
+				t.Errorf("Join = %q, want %q", q.Join, tc.join)
 			}
 			if len(q.Attrs) != len(tc.attrs) {
 				t.Fatalf("Attrs = %+v, want %+v", q.Attrs, tc.attrs)
@@ -630,9 +841,14 @@ func TestParseQuery(t *testing.T) {
 }
 
 // TestParseQueryRejects pins the malformed queries that must exit 2 rather
-// than censusing something the caller did not ask for.
+// than censusing something the caller did not ask for. The last three are the
+// axis grammar's own rejections: one query means one join, and `@*` already
+// names every attribute, so a name beside it says nothing under either join.
 func TestParseQueryRejects(t *testing.T) {
-	for _, in := range []string{"", "{urn:x", "@attr", "element@", "element@a@b", "element,a", "{urn:x}a}b"} {
+	for _, in := range []string{
+		"", "{urn:x", "@attr", "element@", "element@a@b", "element,a", "{urn:x}a}b",
+		"element@a,b|c", "element@a|b,c", "element@*,name", "element@name|*",
+	} {
 		t.Run(in, func(t *testing.T) {
 			if _, err := parseQuery(in); err == nil {
 				t.Errorf("parseQuery(%q) = nil error, want a rejection", in)
@@ -642,12 +858,21 @@ func TestParseQueryRejects(t *testing.T) {
 }
 
 // TestQueryString pins the canonical echo: the report names the namespace
-// that was matched, never the prefix a fixture spelled it with.
+// that was matched, never the prefix a fixture spelled it with, and echoes
+// the join it was given so the two readings are never confused in a report
+// header.
 func TestQueryString(t *testing.T) {
-	got := mustQuery(t, "attribute@targetNamespace,form").String()
-	want := "{http://www.w3.org/2001/XMLSchema}attribute@targetNamespace,form"
-	if got != want {
-		t.Errorf("String() = %q, want %q", got, want)
+	cases := []struct{ in, want string }{
+		{"attribute@targetNamespace,form", "{http://www.w3.org/2001/XMLSchema}attribute@targetNamespace,form"},
+		{"*@*", "{http://www.w3.org/2001/XMLSchema}*@*"},
+		{"*@mixed|abstract", "{http://www.w3.org/2001/XMLSchema}*@mixed|abstract"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.in, func(t *testing.T) {
+			if got := mustQuery(t, tc.in).String(); got != tc.want {
+				t.Errorf("String() = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }
 
@@ -843,5 +1068,113 @@ func TestSuiteAcceptanceCases(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestSuiteAttributeNameAxis re-derives #1369's census FROM THE TOOL. That
+// census walked all 15,470 schema documents from a DIAG-gated test written for
+// the one landing and deleted with it — the second hand-rolled corpus
+// instrument in four days (#1391).
+//
+// The figures pinned here are the axis itself, roster-free. #1369's own
+// 22/16/21 is this census MINUS the 49-entry Appendix A roster that landing
+// added, and the subtraction stays the reader's: the roster is
+// `parser/produce_s4sattrs.go`'s data, and a copy of it here would be a second
+// encoding of one fact (STYLE D3). What this test pins on that side is that
+// the pairs the subtraction turns on are IN the census with their fixtures —
+// three attribute names Appendix A declares nowhere on the element carrying
+// them, one of them a case-mangled `substitutionGroup`.
+func TestSuiteAttributeNameAxis(t *testing.T) {
+	root := suiteRoot(t)
+	rep, err := census(root, mustQuery(t, "*@*"))
+	if err != nil {
+		t.Fatalf("census: %v", err)
+	}
+	groups := groupPairs(rep.Hits)
+	occurrences := 0
+	for _, g := range groups {
+		occurrences += g.Occurrences
+	}
+	// The second figure below is why the axis report is grouped and the first
+	// is what it is grouped into: one line per occurrence is not a report.
+	if len(groups) != 185 || occurrences != 172565 {
+		t.Errorf("axis = %d pair(s), %d attribute occurrence(s); want 185, 172565", len(groups), occurrences)
+	}
+
+	want := map[pairName]pairGroup{
+		{Element: xsdName("element"), Attr: xsd.QName{Local: "nullable"}}: {
+			Occurrences: 1, Fixtures: []string{"msData/element/elemK007.xsd"},
+		},
+		{Element: xsdName("element"), Attr: xsd.QName{Local: "SubstitutionGroup"}}: {
+			Occurrences: 1, Fixtures: []string{"msData/schema/78029c.xsd"},
+		},
+		{Element: xsdName("attribute"), Attr: xsd.QName{Local: "value"}}: {
+			Occurrences: 5, Fixtures: []string{
+				"msData/attribute/attH001.xsd",
+				"msData/attribute/attJ017.xsd",
+				"msData/simpleType/stB007.xsd",
+				"msData/simpleType/stC027.xsd",
+				"msData/simpleType/stC028.xsd",
+			},
+		},
+	}
+	for _, g := range groups {
+		w, ok := want[g.pairName]
+		if !ok {
+			continue
+		}
+		delete(want, g.pairName)
+		if g.Occurrences != w.Occurrences {
+			t.Errorf("%s = %d occurrence(s), want %d", renderPair(g), g.Occurrences, w.Occurrences)
+		}
+		if strings.Join(g.Fixtures, " ") != strings.Join(w.Fixtures, " ") {
+			t.Errorf("%s in %v, want %v", renderPair(g), g.Fixtures, w.Fixtures)
+		}
+	}
+	for p := range want {
+		t.Errorf("the axis missed %s@%s, which the corpus carries", p.Element, p.Attr)
+	}
+}
+
+// TestSuiteBooleanAttributeValueCensus re-derives #456's census FROM THE TOOL:
+// every occurrence of six boolean-valued attributes in the corpus, partitioned
+// on the value's lexical space (xmlschema11-2.md §3.2.2.1 — the boolean
+// lexical space is exactly true, false, 1 and 0, and Appendix A fixes
+// whiteSpace to collapse, so a padded literal is VALID and the set #456
+// improved is the out-of-space partition alone).
+//
+// The population is a DISJUNCTION over the six names, which is the "|" join;
+// the "," join is their intersection and a different census entirely. #456
+// hand-rolled this one, reported 10 occurrences in 8 fixtures against 20 out
+// of the lexical space, and deleted the script. The occurrence figures
+// reproduce; the fixture count does NOT, and the corpus says the tool is
+// right — `saxonData/CTA/cta0010.xsd` carries two padded `inheritable`
+// attributes, so the padded partition falls in NINE fixtures, not eight.
+func TestSuiteBooleanAttributeValueCensus(t *testing.T) {
+	root := suiteRoot(t)
+	rep, err := census(root, mustQuery(t,
+		"*@mixed|abstract|nillable|inheritable|appliesToEmpty|defaultAttributesApply"))
+	if err != nil {
+		t.Fatalf("census: %v", err)
+	}
+	lexical := map[string]bool{"true": true, "false": true, "1": true, "0": true}
+	padded, outside := 0, 0
+	paddedFixtures := map[string]bool{}
+	for _, h := range rep.Hits {
+		for _, a := range h.Attrs {
+			if lexical[a.Value] {
+				continue
+			}
+			if !lexical[strings.TrimSpace(a.Value)] {
+				outside++
+				continue
+			}
+			padded++
+			paddedFixtures[h.File] = true
+		}
+	}
+	if padded != 10 || len(paddedFixtures) != 9 || outside != 20 {
+		t.Errorf("census = %d padded-but-valid occurrence(s) in %d fixture(s), %d out of the lexical space;"+
+			" want 10 in 9, and 20", padded, len(paddedFixtures), outside)
 	}
 }
