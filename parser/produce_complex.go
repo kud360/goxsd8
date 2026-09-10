@@ -574,8 +574,8 @@ func (p *producer) produceImplicitContent(id complexTypeIdentity, el *Element) (
 	// does not need to be: the base is unconditionally xs:anyType, whose
 	// {assertions} is the empty sequence (§3.4.7, seedAnyType), so the fold is
 	// PROVABLY the identity — and it is the seeded xs:anyType that any lookup
-	// would find, since builtComplex holds it before any document is produced and
-	// a name already in that memo is never rebuilt.
+	// would find, since resolveBaseType answers that name from symbols.anyType
+	// and reaches no document.
 	return p.newComplexType(id, el.Loc(), xsd.TypeDefinitionRef{Name: anyTypeName}, p.complexTypeFinal(el),
 		xsd.DerivationRestriction, abstract, uses, prohibited, wildcard, content, p.complexTypeProhibitedSubstitutions(el), p.assertionsOf(el), nil)
 }
@@ -1809,14 +1809,16 @@ func (p *producer) produceGroupRefParticle(el *Element) (*xsd.Particle, error) {
 }
 
 // produceModelGroupDefinition maps a top-level named <group> (§3.7.2, xr.mgd1)
-// into a Model Group Definition. It is reached only through
-// buildModelGroupDefinition, which memoizes it so one <group> is mapped exactly
-// once however many demand-driven lookups reach it. The named form has exactly
-// one <all>/<choice>/<sequence> child, whose Model Group becomes {model group};
-// any other body is rejected as the s4s-grammar fault it is, by
-// rejectNamedGroupBody, before a component is built. Occurrence on the child is
-// irrelevant here — a model group definition carries no {min occurs}/{max occurs}
-// (§3.7.2 note); those live solely on a <group ref> particle.
+// into a Model Group Definition. Every route that CONTRIBUTES a component
+// reaches it through buildModelGroupDefinition, which memoizes it so one <group>
+// element is mapped exactly once however many demand-driven lookups reach it;
+// redefinedGroupRestricted calls it directly, for a value that reaches no
+// builder. The named form has exactly one <all>/<choice>/<sequence> child, whose
+// Model Group becomes {model group}; any other body is rejected as the
+// s4s-grammar fault it is, by rejectNamedGroupBody, before a component is built.
+// Occurrence on the child is irrelevant here — a model group definition carries
+// no {min occurs}/{max occurs} (§3.7.2 note); those live solely on a <group ref>
+// particle.
 //
 // name is also the {scope}.{parent} of every local element declaration in the
 // body: §3.3.2.3 dcl.elt.local's "otherwise" branch — an <element> within a

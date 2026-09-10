@@ -431,9 +431,10 @@ func TestProduceExtensionDanglingBase(t *testing.T) {
 }
 
 // TestProduceExtensionOfAnyType proves xs:anyType is reachable as a base: it is
-// seeded DONE in the build memo, so <extension base="xs:anyType"> resolves to the
-// very ur-type component the builder registered, and clause 4.2.3.3 wraps its
-// mixed ##any content with the derivation's own.
+// declared by no document and so sits in no build memo, and resolveBaseType
+// answers its name from symbols.anyType, so <extension base="xs:anyType">
+// resolves to the very ur-type component the builder was seeded with, and clause
+// 4.2.3.3 wraps its mixed ##any content with the derivation's own.
 //
 // D is mixed="true" because it must be: xs:anyType's own {content type}.{variety}
 // is mixed (§3.4.7), and cos-ct-extends (#264) grants the ur-type NO exemption

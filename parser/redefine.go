@@ -77,9 +77,10 @@ import (
 // The pairing is built at buildComplexType, not here, because the redefining
 // declaration is reachable by NAME as well: prescanRedefine registers it under
 // its own expanded name, so a reference from either document arrives through
-// resolveBaseType. One decision point means one component per name, which is
-// what makes src-expredef's note ("references … in both the <redefine>ing and
-// <redefine>d schema documents ·resolve· to the redefined component") hold.
+// resolveBaseType. One decision point means one component per DECLARATION, and
+// the declaration that name reaches is the redefining one; together those make
+// src-expredef's note ("references … in both the <redefine>ing and <redefine>d
+// schema documents ·resolve· to the redefined component") hold.
 //
 // src-redefine clause 5 is charged BEFORE the pairing is attempted, so a
 // redefining complex type that does not derive from itself is rejected for that
@@ -535,10 +536,16 @@ func (p *producer) originalFor(decl *Element, qn xsd.QName, kinds ...string) (ty
 // §4.2.4 clause 4.1.1 makes each level's redefining child the "top-level
 // definition item of that name and kind in the <redefine>d schema document" the
 // next level pairs with, so a cycle of <redefine>s over one name makes the
-// pairing's own base chain re-enter itself. Every hop of that chain is anonymous
-// (clause 1.1 gives the original an ·absent· {name}), so neither
-// buildComplexType's name-keyed sentinel nor buildSimpleType's ever sees it. Its
-// two callers charge the acyclicity rule for the kind they build.
+// pairing's own base chain re-enter itself. No hop of that chain passes through
+// a named build: redefinedComplexBase goes DIRECT to produceComplexType, since
+// buildComplexType's memo is keyed by the declaration mapped and this one maps
+// to two components — the ordinary named one and clause 1.1's original — that a
+// single entry cannot hold (see redefinedComplexBase); resolveBase goes direct
+// to constructSimpleType, the original's ·absent· {name} leaving
+// buildSimpleType's by-name memo nothing to hold. buildComplexType's on-stack
+// sentinel, the only other guard that could bound this chain, therefore never
+// sees a hop of it. Its two callers charge the acyclicity rule for the kind they
+// build.
 //
 // Every caller must pair it with leaveOriginal: the same declaration is a
 // legitimate original of two DIFFERENT redefinitions, one after the other, and
@@ -823,8 +830,9 @@ func (p *producer) produceRedefinition(rs *redefineSet, e redefineEntry) error {
 		return nil
 	case "complexType":
 		// src-expredef clause 1.2. buildComplexType selects the redefining
-		// identity from decl itself, so this path and a by-name reference to qn
-		// reach the same memoised component; the clause-1.1 original is built
+		// identity from decl itself and memoises under decl, so this path and a
+		// by-name reference to qn — which prescanRedefine points at this same
+		// declaration — reach one component; the clause-1.1 original is built
 		// under it (see this file's header).
 		ct, err := p.buildComplexType(qn, decl)
 		if err != nil {
@@ -1069,15 +1077,17 @@ func (p *producer) redefinedAttributeGroupRestricted(decl *Element, qn xsd.QName
 // It differs from its attributeGroup twin (redefinedAttributeGroupRestricted) in
 // two ways, each of which would otherwise be silent:
 //
-//   - it calls produceModelGroupDefinition, never buildModelGroupDefinition.
-//     That memo is keyed by name in the ASSEMBLY-SHARED symbol table
-//     (symbols.builtGroups), and produceRedefinition has already filled it under
-//     this very expanded name with the REDEFINITION, so the memoised builder
-//     would hand back R as B and 6.2.2 would decide V(R) ⊆ V(R) — true always,
-//     fail-open permanently, with a green suite. It is the unmemoised layer #505
-//     drops to for its own clause-1.1 original, and it writes no memo entry.
 //   - it produces the original through discardingComponents, so the body's
 //     registrations reach a throwaway builder.
+//   - it calls produceModelGroupDefinition, never buildModelGroupDefinition, so
+//     that throwaway build writes no entry to the ASSEMBLY-SHARED memo
+//     (symbols.builtGroups). The memo is keyed by declaration, so an entry
+//     written here would be keyed by S2's OWN top-level <group> — the very
+//     declaration run dispatches whenever some reading does not except it
+//     (§4.2.4 clause 4.1.2) — and run would then register a component whose
+//     named <key>/<unique>/<keyref> children reached the throwaway builder and
+//     nothing else. It is the unmemoised layer #505 drops to for its own
+//     clause-1.1 original.
 func (p *producer) redefinedGroupRestricted(decl *Element, qn xsd.QName) (xsd.ModelGroupDefinition, bool, error) {
 	refs, err := p.selfReferences(decl, qn, "group", true)
 	if err != nil {
