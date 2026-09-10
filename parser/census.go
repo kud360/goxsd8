@@ -78,8 +78,12 @@ import (
 // Since #1047 those five complex-type vocabularies report only names
 // checkS4SChildOrder rejects as well, save the ONE name s4sFacetElement admits
 // and mappedFacetElement does not — <assertions> under a <simpleContent>
-// <restriction>. The reports are kept: retiring a region is a census change with
-// a measurement of its own.
+// <restriction>. Since #1380 the top level of <schema> is in that condition too:
+// rejectUnmappedTopLevel (produce.go) charges every name topLevelMapped
+// declines, so a top-level report now only ever rides on a document run went on
+// to reject. The reports are kept: retiring a region is a census change with a
+// measurement of its own, and [UnmappedConstruct] states what the top-level arm
+// is for once no accepted document can carry one.
 //
 // NOT censused, each a widening of its own and each a region with its own
 // dispatch — the first three covered by a rejection at the position, the fourth
