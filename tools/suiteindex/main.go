@@ -36,8 +36,8 @@
 // Attribute names are joined by `,` (an element must carry EVERY one to count
 // as an occurrence) or by `|` (ANY one of them is enough). One query uses one
 // join, never both, and `@*` stands alone: it already names the whole
-// attribute axis. The report prints the matched attributes' values, in query
-// order — in document order for `@*`, which fixes no order of its own.
+// attribute axis. A query that names its attributes prints the values it
+// matched, in query order.
 //
 // # Encoding
 //

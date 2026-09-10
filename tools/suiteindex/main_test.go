@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 	"unicode/utf16"
@@ -1131,7 +1132,15 @@ func TestSuiteAttributeNameAxis(t *testing.T) {
 			t.Errorf("%s in %v, want %v", renderPair(g), g.Fixtures, w.Fixtures)
 		}
 	}
+	// The leftovers are drained and sorted before they are reported, because
+	// the failure text is output and a map order would spell the same fault
+	// differently on every run (STYLE D2).
+	missed := make([]pairName, 0, len(want))
 	for p := range want {
+		missed = append(missed, p)
+	}
+	sort.Slice(missed, func(i, j int) bool { return lessPair(missed[i], missed[j]) })
+	for _, p := range missed {
 		t.Errorf("the axis missed %s@%s, which the corpus carries", p.Element, p.Attr)
 	}
 }
