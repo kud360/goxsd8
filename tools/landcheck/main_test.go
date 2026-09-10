@@ -2,9 +2,13 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"testing"
+	"time"
 )
 
 // Regression fixtures are real commits from this repo's own history, not
@@ -13,37 +17,122 @@ import (
 // real landing produces. Each pair below is a historical commit and its own
 // parent, so `checkLanding` runs the identical git invocation it would have
 // run at that landing.
+//
+// The SHAs are pinned in full 40-character form because `git fetch origin`
+// takes a hash and not a prefix: #813's pair sits on a wip branch that was
+// deleted, no ref reaches it at any depth, and a fetch by full hash is the
+// only way to get it back — which an abbreviated constant denies even to a
+// reader sitting in the checkout (#1359).
 const (
 	// fixtureNoLogPath is #924's squash (`53bf113`): eight files changed,
 	// no docs/LOG/ path at all. Its parent is `738db7a`.
-	fixtureNoLogPathBase = "738db7a"
-	fixtureNoLogPathHead = "53bf113"
+	fixtureNoLogPathBase = "738db7a6caa56d501858d18b6445d415eafabeef"
+	fixtureNoLogPathHead = "53bf1130f18811b9fd83586805135f1eb381656c"
 
 	// fixtureWrongIssue is #813's mid-branch forward merge (`2d0a38d`): the
 	// docs/LOG/ diff against its own pre-merge parent (`0e49fff`) is +161
 	// lines, entirely #716's entry forward-merged in — none of it #813's.
-	fixtureWrongIssueBase = "0e49fff"
-	fixtureWrongIssueHead = "2d0a38d"
+	fixtureWrongIssueBase = "0e49ffffe999a5718decc047d4e49630e32f6079"
+	fixtureWrongIssueHead = "2d0a38dcc9e164c22bd5e5e6917c1e2e94bd90c7"
 
 	// fixtureOwnEntry is #820's own squash (`311ada8`): the entry is
 	// present and names #820. Its diff against its own parent (`e3d866f`)
 	// also contains a literal `#8201` alongside `#820` on the same line,
 	// which is what makes this fixture double as the substring-rejection
 	// case, not just the pass case.
-	fixtureOwnEntryBase = "e3d866f"
-	fixtureOwnEntryHead = "311ada8"
+	fixtureOwnEntryBase = "e3d866f93454ea59010852f8fa5090022e70f726"
+	fixtureOwnEntryHead = "311ada8b900f27bdf934bd5d0856993f48058b8f"
 )
 
-// requireFixtures skips the test if this checkout cannot see the fixture
-// commits — a shallow clone hides them (docs/ROUTINES.md), and a test that
-// silently no-ops on a shallow clone is worse than one that says so.
-func requireFixtures(t *testing.T, dir string, shas ...string) {
+// fixtureFetchTimeout bounds each fetch below. Without it an unreachable
+// origin costs the whole `go test` timeout and reports a panic rather than a
+// diagnosis.
+const fixtureFetchTimeout = 60 * time.Second
+
+// requireFixtures makes one fixture pair usable in this checkout, fetching
+// the two commits from origin by full hash when it is not, and fails the
+// calling test when it still cannot. It never skips: a skip leaves the gate
+// reading `ok` over cases that did not run. Shallowness is no exception — a
+// fetch by full hash recovers these commits in a shallow checkout as readily
+// as in a complete one, so a shallow escape hatch would restore that silence
+// in the containers that most need the check (#1359).
+//
+// Call it inside the subtest that needs the pair, never once over every
+// fixture: one unreachable pair must not take down the cases whose commits
+// are already in the object store.
+func requireFixtures(t *testing.T, dir, base, head string) {
 	t.Helper()
-	for _, sha := range shas {
-		if err := exec.Command("git", "-C", dir, "cat-file", "-e", sha).Run(); err != nil {
-			t.Skipf("fixture commit %s not reachable in this checkout (shallow clone? run: git fetch --unshallow): %v", sha, err)
+	unusable := fixtureUsable(dir, base, head)
+	if unusable == nil {
+		return
+	}
+	out, err := fetchCommits(dir, base, head)
+	if err != nil {
+		t.Fatalf("fixture pair %s..%s cannot run here: %v\ngit fetch origin %s %s: %v\n%s%s"+
+			"every recovery path here goes through origin, so check this environment's access to it first",
+			base, head, unusable, base, head, err, out, recoveryHint(dir))
+	}
+	if remaining := fixtureUsable(dir, base, head); remaining != nil {
+		t.Fatalf("fixture pair %s..%s is still unusable after git fetch origin reported success: %v\n%s%s"+
+			"origin served these objects but not the history linking them; re-run, or fetch the two hashes by hand",
+			base, head, remaining, out, recoveryHint(dir))
+	}
+}
+
+// fixtureUsable reports what stops checkLanding from running against the
+// pair, or nil when nothing does. Object presence is not the bar: a commit
+// fetched at --depth=1 resolves while its parent links do not, and the pair
+// then fails precondition 2 as a stale base — a defect verdict pinned on
+// what is really a fixture problem.
+func fixtureUsable(dir, base, head string) error {
+	for _, sha := range []string{base, head} {
+		if err := exec.Command("git", "-C", dir, "rev-parse", "--verify", "--quiet", sha+"^{commit}").Run(); err != nil {
+			return fmt.Errorf("commit %s does not resolve in this checkout: %w", sha, err)
 		}
 	}
+	if err := exec.Command("git", "-C", dir, "merge-base", "--is-ancestor", base, head).Run(); err != nil {
+		return fmt.Errorf("commit %s is not visible as an ancestor of %s, so the history between them is truncated here: %w", base, head, err)
+	}
+	return nil
+}
+
+// fetchCommits asks origin for these two commits by hash. The fetch carries
+// no --depth on purpose: --depth=1 returns the objects without their parent
+// links, leaving the pair resolvable and still unusable, and on a complete
+// clone any --depth would newly truncate history the developer had (#1359).
+func fetchCommits(dir, base, head string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), fixtureFetchTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", "-C", dir, "fetch", "origin", base, head)
+	// A credential prompt would block on a stdin no test is watching.
+	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		return string(out), nil
+	}
+	if ctx.Err() != nil {
+		return string(out), fmt.Errorf("timed out after %s: %w", fixtureFetchTimeout, err)
+	}
+	return string(out), err
+}
+
+// recoveryHint states what this checkout is, measured now rather than
+// assumed. Truncated depth and absence-from-every-ref are different faults
+// with different remedies, and a message naming only the first misdiagnoses
+// the pair that trips this guard most often (#1359).
+func recoveryHint(dir string) string {
+	out, err := exec.Command("git", "-C", dir, "rev-parse", "--is-shallow-repository").Output()
+	if err != nil {
+		return fmt.Sprintf("observed: could not measure whether this checkout is shallow: %v\n", err)
+	}
+	if strings.TrimSpace(string(out)) == "true" {
+		return "observed: this checkout IS shallow (git rev-parse --is-shallow-repository = true). " +
+			"`git fetch --unshallow origin` deepens along the refs that exist, so it recovers a commit still " +
+			"on a live branch and never one whose branch was deleted.\n"
+	}
+	return "observed: this checkout is NOT shallow (git rev-parse --is-shallow-repository = false), so depth " +
+		"is not the mechanism and `git fetch --unshallow origin` has nothing to deepen: the commit is " +
+		"reachable from no ref here.\n"
 }
 
 func TestCheckLandingRealHistory(t *testing.T) {
@@ -51,12 +140,6 @@ func TestCheckLandingRealHistory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("repoRoot: %v", err)
 	}
-	requireFixtures(t, dir,
-		fixtureNoLogPathBase, fixtureNoLogPathHead,
-		fixtureWrongIssueBase, fixtureWrongIssueHead,
-		fixtureOwnEntryBase, fixtureOwnEntryHead,
-	)
-
 	tests := []struct {
 		name       string
 		base, head string
@@ -88,6 +171,8 @@ func TestCheckLandingRealHistory(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			requireFixtures(t, dir, tc.base, tc.head)
+
 			var buf bytes.Buffer
 			code, err := checkLanding(dir, tc.base, tc.head, tc.issue, &buf)
 			if err != nil {
