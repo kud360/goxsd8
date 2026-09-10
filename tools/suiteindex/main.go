@@ -22,9 +22,22 @@
 //
 // Attribute names match by local name in no namespace, which is what an
 // unprefixed attribute resolves to — XSD's own vocabulary attributes
-// (targetNamespace, form, ref) are always written unprefixed. An element
-// must carry EVERY attribute a query names to count as an occurrence, and
-// the report prints their values.
+// (targetNamespace, form, ref) are always written unprefixed. A namespace
+// declaration (xmlns, xmlns:p) is not an attribute and never matches
+// ([xmltree.StartElement.Attributes]).
+//
+// A local name may be written `*`, which stands for every local name in its
+// namespace: `*` is every element in the XML Schema namespace and `@*` is
+// every attribute in no namespace. The wildcard is what makes a census
+// UNANCHORED — an axis over every element, or over every attribute name,
+// rather than a lookup of one construct — and it needs no escape, since `*`
+// is not an NCName and no document can spell a name that collides with it.
+//
+// Attribute names are joined by `,` (an element must carry EVERY one to count
+// as an occurrence) or by `|` (ANY one of them is enough). One query uses one
+// join, never both, and `@*` stands alone: it already names the whole
+// attribute axis. A query that names its attributes prints the values it
+// matched, in query order.
 //
 // # Encoding
 //
@@ -36,18 +49,31 @@
 //
 // # What it reports
 //
-// Matches, sorted by path with document order preserved within each file,
-// then every file the census could not read all the way through as XML: the
+// A query that names the attributes it looks for reports its MATCHES, sorted
+// by path with document order preserved within each file. A query that
+// wildcards them (`@*`) reports the attribute-NAME AXIS instead: the
+// (element, attribute) pairs, then the fixtures carrying each pair. Both end
+// with every file the census could not read all the way through as XML: the
 // ones that broke off partway, and the ones that held no element at all.
 //
-// A match line carries its position, then `parent=` naming the element it is
-// a direct child of — `(none)` for a document element — then `children=[…]`
-// listing the elements directly under it, then the queried attributes'
-// values. The parent is what separates a local occurrence from a top-level
-// one, which no query over an element's OWN attributes can express (#1282).
-// It is the parent the document actually spells, never one corrected against
-// the grammar: an `xs:element` under `xs:redefine` is reported there, wrong
-// though that document is, and its children are reported the same way.
+// The axis is grouped because ungrouped it is not a report anyone reads:
+// `*@*` over the suite is 172,565 attribute occurrences, which one line each
+// renders unreadable, and 185 pairs, which a table renders in a screenful
+// (#1391). Its first section is that table — pair, occurrence count, fixture
+// count, in name order — and its second lists each pair's fixtures in path
+// order, deduplicated, so a pair's own fixtures are read off the section
+// rather than by re-querying it.
+//
+// A match line carries its position, then the matched element's name where
+// the query left it open with a wildcard and never where the query already
+// fixed it, then `parent=` naming the element it is a direct child of —
+// `(none)` for a document element — then `children=[…]` listing the elements
+// directly under it, then the matched attributes' values. The parent is what
+// separates a local occurrence from a top-level one, which no query over an
+// element's OWN attributes can express (#1282). It is the parent the
+// document actually spells, never one corrected against the grammar: an
+// `xs:element` under `xs:redefine` is reported there, wrong though that
+// document is, and its children are reported the same way.
 //
 // The child list is in document order and keeps repeats, because a
 // content-model census turns on multiplicity: "no child outside
@@ -73,14 +99,17 @@
 //	go tool suiteindex element@targetNamespace
 //	go tool suiteindex attribute@targetNamespace,form
 //	go tool suiteindex '{http://www.w3.org/1999/XSL/Transform}stylesheet'
+//	go tool suiteindex '*@*'
+//	go tool suiteindex '*@mixed|abstract|nillable'
 //	go tool suiteindex element@targetNamespace testdata/xsdtests/ibmData
 //
-// The query is `local[@attr[,attr…]]`. Any name may be written in Clark
-// notation (`{uri}local`) to name its namespace outright; a braceless
-// element name is in the XML Schema namespace and a braceless attribute name
-// is in no namespace. The second argument is the tree to walk, defaulting to
-// the suite at [defaultRoot]; narrowing it is for reading one directory's
-// output, never for taking the census the whole corpus answers.
+// The query is `local[@attr[,attr…]]` with `|` in place of `,` for the ANY
+// join, and any local part may be `*`. Any name may be written in Clark
+// notation (`{uri}local`) to name its namespace outright; a braceless element
+// name is in the XML Schema namespace and a braceless attribute name is in no
+// namespace. The second argument is the tree to walk, defaulting to the suite
+// at [defaultRoot]; narrowing it is for reading one directory's output, never
+// for taking the census the whole corpus answers.
 //
 // An absent or fixture-free root is a supported mode, not a failure: the
 // submodule is absent in a fresh container (#659), so the tool says the
@@ -110,7 +139,7 @@ import (
 const defaultRoot = "testdata/xsdtests"
 
 // usage is printed for any argument the tool cannot act on.
-const usage = "usage: suiteindex <local[@attr,...]> [dir]"
+const usage = `usage: suiteindex <local[@attr[,attr...]]> [dir]; "," joins the names as all, "|" as any, and any local name may be "*"`
 
 func main() {
 	if err := run(os.Stdout, os.Args[1:]); err != nil {
@@ -149,11 +178,66 @@ func parseArgs(args []string) (query, string, error) {
 	return q, defaultRoot, nil
 }
 
-// query is one construct census: the element to look for, and the attribute
-// names an occurrence must all carry.
+// wildcard is the local part that stands for every local name in its
+// namespace. It needs no escape and can never be ambiguous: "*" is not an
+// NCName (Namespaces in XML §4), so no name a document spells collides with
+// it.
+const wildcard = "*"
+
+// namePat is one name a query matches: a namespace URI, and either a local
+// name or [wildcard]. The wildcard is the local part itself rather than a
+// second field beside it — one fact, one encoding (STYLE D3), and an illegal
+// "wildcard named foo" is unrepresentable.
+type namePat struct {
+	Space string
+	Local string
+}
+
+// isAny reports whether p stands for every local name in its namespace, which
+// is what makes a census an axis rather than a lookup.
+func (p namePat) isAny() bool {
+	return p.Local == wildcard
+}
+
+// matches reports whether n is one of the names p stands for. The comparison
+// is on namespace URI and local part, never on the prefix a document spelled —
+// that equivalence is the tool's whole point.
+func (p namePat) matches(n xsd.QName) bool {
+	return p.Space == n.Space && (p.isAny() || p.Local == n.Local)
+}
+
+// String renders p in the Clark notation the report echoes, wildcard and all
+// (`{uri}*`), so the reader sees the namespace that was matched.
+func (p namePat) String() string {
+	return xsd.QName{Space: p.Space, Local: p.Local}.String()
+}
+
+// attrJoin is what a query's attribute list means. Each constant IS its own
+// separator, so the query language, the parser and [query.String] hold one
+// spelling of it between them rather than a mapping table.
+type attrJoin string
+
+const (
+	// joinAll admits only an element carrying EVERY name in the list.
+	joinAll attrJoin = ","
+	// joinAny admits one carrying at least one of them.
+	joinAny attrJoin = "|"
+)
+
+// query is one census: the elements to look for, the attribute names an
+// occurrence carries, and how that list is read.
 type query struct {
-	Element xsd.QName
-	Attrs   []xsd.QName
+	Element namePat
+	Attrs   []namePat
+	Join    attrJoin
+}
+
+// anyAttr reports whether the query censuses the attribute-NAME axis — every
+// attribute in a namespace rather than named ones. It is derived from the
+// attribute list, which parsing has already restricted to a lone wildcard
+// (STYLE D3): `@*` names the whole axis and cannot be joined with anything.
+func (q query) anyAttr() bool {
+	return len(q.Attrs) == 1 && q.Attrs[0].isAny()
 }
 
 // String renders the query in the canonical form the report echoes: every
@@ -163,7 +247,7 @@ func (q query) String() string {
 	var b strings.Builder
 	b.WriteString(q.Element.String())
 	for i, a := range q.Attrs {
-		sep := ","
+		sep := string(q.Join)
 		if i == 0 {
 			sep = "@"
 		}
@@ -173,9 +257,10 @@ func (q query) String() string {
 	return b.String()
 }
 
-// parseQuery parses `local[@attr[,attr…]]`, where any name may carry a Clark
-// `{uri}` wrapper. A braceless element name is in the XML Schema namespace —
-// the vocabulary every schema fixture in this corpus is written in — and a
+// parseQuery parses `local[@attr[,attr…]]` — `|` in place of `,` for the ANY
+// join — where any name may carry a Clark `{uri}` wrapper and any local part
+// may be [wildcard]. A braceless element name is in the XML Schema namespace
+// — the vocabulary every schema fixture in this corpus is written in — and a
 // braceless attribute name is in no namespace, which is what an unprefixed
 // attribute resolves to.
 func parseQuery(s string) (query, error) {
@@ -183,7 +268,7 @@ func parseQuery(s string) (query, error) {
 	if err != nil {
 		return query{}, fmt.Errorf("query %q: %w", s, err)
 	}
-	q := query{Element: elem}
+	q := query{Element: elem, Join: joinAll}
 	if rest == "" {
 		return q, nil
 	}
@@ -198,40 +283,70 @@ func parseQuery(s string) (query, error) {
 		}
 		q.Attrs = append(q.Attrs, attr)
 		if more == "" {
-			return q, nil
+			return closeAttrs(s, q)
 		}
-		if !strings.HasPrefix(more, ",") {
-			return query{}, fmt.Errorf("query %q: expected \",\" between attribute names, found %q", s, more)
+		join := attrJoin(more[:1])
+		if join != joinAll && join != joinAny {
+			return query{}, fmt.Errorf("query %q: expected %q or %q between attribute names, found %q", s, joinAll, joinAny, more)
 		}
+		if len(q.Attrs) > 1 && join != q.Join {
+			return query{}, fmt.Errorf("query %q: attribute names are joined by %q (every one) or by %q (any one), never both", s, joinAll, joinAny)
+		}
+		q.Join = join
 		rest = more[1:]
 	}
+}
+
+// closeAttrs finishes a parsed attribute list, rejecting the one combination
+// the grammar admits and the matcher cannot mean: a wildcard beside another
+// name. `@*` already stands for every attribute, so joining it to a second
+// name says nothing under either join.
+func closeAttrs(s string, q query) (query, error) {
+	if len(q.Attrs) == 1 {
+		return q, nil
+	}
+	for _, a := range q.Attrs {
+		if a.isAny() {
+			return query{}, fmt.Errorf("query %q: %q names the whole attribute axis and stands alone", s, "@"+wildcard)
+		}
+	}
+	return q, nil
 }
 
 // splitName consumes one name from the head of s — an optional Clark
 // `{uri}` wrapper, then a local part — and returns it with whatever follows.
 // The URI is taken as everything up to the closing brace, so a namespace
-// containing "@" or "," survives the separators around it.
-func splitName(s, defaultSpace string) (n xsd.QName, rest string, err error) {
+// containing a separator survives the separators around it.
+func splitName(s, defaultSpace string) (p namePat, rest string, err error) {
 	space := defaultSpace
 	if strings.HasPrefix(s, "{") {
 		end := strings.Index(s, "}")
 		if end < 0 {
-			return xsd.QName{}, "", fmt.Errorf("unterminated \"{\" in %q", s)
+			return namePat{}, "", fmt.Errorf("unterminated \"{\" in %q", s)
 		}
 		space = s[1:end]
 		s = s[end+1:]
 	}
 	local := s
-	if i := strings.IndexAny(s, "@,"); i >= 0 {
+	if i := strings.IndexAny(s, "@"+string(joinAll)+string(joinAny)); i >= 0 {
 		local, rest = s[:i], s[i:]
 	}
 	if local == "" {
-		return xsd.QName{}, "", errors.New("empty local name")
+		return namePat{}, "", errors.New("empty local name")
 	}
 	if strings.ContainsAny(local, "{}") {
-		return xsd.QName{}, "", fmt.Errorf("local name %q contains a brace: write a namespace as a leading {uri}", local)
+		return namePat{}, "", fmt.Errorf("local name %q contains a brace: write a namespace as a leading {uri}", local)
 	}
-	return xsd.QName{Space: space, Local: local}, rest, nil
+	return namePat{Space: space, Local: local}, rest, nil
+}
+
+// attrHit is one attribute an occurrence carried and the query matched: the
+// name as the document resolved it, and its value. The name is the hit's own
+// and not the query's, because a query can leave it open — `@*` names no
+// attribute at all and the `|` join names more than the element carries.
+type attrHit struct {
+	Name  xsd.QName
+	Value string
 }
 
 // hit is one occurrence of the queried construct.
@@ -240,6 +355,10 @@ type hit struct {
 	File string
 	Line int
 	Col  int
+	// Element is the resolved name of the matched element itself. It repeats
+	// the query for a query that names one element, and is the only record of
+	// which element was hit for a wildcard one — the axis report groups on it.
+	Element xsd.QName
 	// Parent is the resolved name of the element this match is a direct child
 	// of, taken from the document as written and never reconciled with the
 	// grammar. The zero QName means the match is the document element and has
@@ -259,8 +378,9 @@ type hit struct {
 	// matches that all closed cleanly, and a file-level flag would report
 	// their complete child lists as unread.
 	ChildrenUnclosed bool
-	// Values holds the queried attributes' values, in query order.
-	Values []string
+	// Attrs holds the attributes the query matched, in query order — in
+	// document order for `@*`, which fixes no order of its own.
+	Attrs []attrHit
 }
 
 // fileNote is one file the census could not read all the way through as XML,
@@ -296,6 +416,61 @@ type report struct {
 	// images, stylesheets and prose, plus any fixture that faulted ahead of
 	// its root element.
 	NoElement []fileNote
+}
+
+// pairName is the attribute-name axis's unit: one element name and one
+// attribute name found on it.
+type pairName struct {
+	Element xsd.QName
+	Attr    xsd.QName
+}
+
+// pairGroup is what the census found for one pair — how many occurrences, and
+// the fixtures they fall in, each named once and in path order.
+type pairGroup struct {
+	pairName
+	Occurrences int
+	Fixtures    []string
+}
+
+// groupPairs collects the axis from the hits, in name order. Hits arrive in
+// path order, so a pair's fixture list is deduplicated by comparing with the
+// last path appended to it and needs no set, exactly as [countFiles] does.
+//
+// The map is an index into the slice being built and is never ranged over;
+// the report's order is the sort below (STYLE D2).
+func groupPairs(hits []hit) []pairGroup {
+	at := map[pairName]int{}
+	var groups []pairGroup
+	for _, h := range hits {
+		for _, a := range h.Attrs {
+			name := pairName{Element: h.Element, Attr: a.Name}
+			i, ok := at[name]
+			if !ok {
+				groups = append(groups, pairGroup{pairName: name})
+				i = len(groups) - 1
+				at[name] = i
+			}
+			g := &groups[i]
+			g.Occurrences++
+			if len(g.Fixtures) == 0 || g.Fixtures[len(g.Fixtures)-1] != h.File {
+				g.Fixtures = append(g.Fixtures, h.File)
+			}
+		}
+	}
+	sort.Slice(groups, func(i, j int) bool { return lessPair(groups[i].pairName, groups[j].pairName) })
+	return groups
+}
+
+// lessPair orders the axis by element name and then attribute name, each
+// namespace before local part, which is the order the pairs are printed in.
+func lessPair(a, b pairName) bool {
+	if a.Element != b.Element {
+		return a.Element.Space < b.Element.Space ||
+			(a.Element.Space == b.Element.Space && a.Element.Local < b.Element.Local)
+	}
+	return a.Attr.Space < b.Attr.Space ||
+		(a.Attr.Space == b.Attr.Space && a.Attr.Local < b.Attr.Local)
 }
 
 // census walks root and matches q against every file under it. Files are
@@ -454,12 +629,12 @@ func scanFixture(uri string, r io.Reader, q query) fixtureScan {
 		recordChild(scan.Hits, open, name)
 		open = append(open, openElem{Name: name, Hit: noHit})
 		scan.Elems++
-		values, ok := match(start, q)
+		attrs, ok := match(start, q)
 		if !ok {
 			continue
 		}
 		loc := start.Loc()
-		scan.Hits = append(scan.Hits, hit{File: uri, Line: loc.Line, Col: loc.Col, Parent: parent, Values: values})
+		scan.Hits = append(scan.Hits, hit{File: uri, Line: loc.Line, Col: loc.Col, Element: name, Parent: parent, Attrs: attrs})
 		open[len(open)-1].Hit = len(scan.Hits) - 1
 	}
 }
@@ -512,40 +687,61 @@ func markUnclosed(hits []hit, open []openElem) {
 }
 
 // match reports whether start is an occurrence of q's construct — its
-// resolved name equals q's and it carries every attribute q names — and
-// those attributes' values in query order.
-func match(start *xmltree.StartElement, q query) ([]string, bool) {
-	if !sameName(q.Element, start.Name()) {
+// resolved name is one q's element pattern stands for, and its attributes
+// satisfy q's list under q's join — and the attributes that matched.
+//
+// An element carrying none of the names a `|` query lists is not an
+// occurrence, and neither is one carrying no attribute at all under `@*`: an
+// attribute census has nothing to say about an element with no attribute.
+func match(start *xmltree.StartElement, q query) ([]attrHit, bool) {
+	if !q.Element.matches(qnameOf(start.Name())) {
 		return nil, false
 	}
-	values := make([]string, len(q.Attrs))
-	for i, want := range q.Attrs {
+	if q.anyAttr() {
+		return axisAttrs(start, q.Attrs[0])
+	}
+	var got []attrHit
+	for _, want := range q.Attrs {
 		v, ok := attrValue(start, want)
-		if !ok {
+		if !ok && q.Join == joinAll {
 			return nil, false
 		}
-		values[i] = v
+		if !ok {
+			continue
+		}
+		got = append(got, attrHit{Name: xsd.QName{Space: want.Space, Local: want.Local}, Value: v})
 	}
-	return values, true
+	if q.Join == joinAny && len(got) == 0 {
+		return nil, false
+	}
+	return got, true
+}
+
+// axisAttrs is the attribute-name axis at one start tag: every attribute in
+// the wildcard's namespace, in the order the tag spells them, which is the
+// only order a query naming no attribute leaves.
+func axisAttrs(start *xmltree.StartElement, want namePat) ([]attrHit, bool) {
+	var got []attrHit
+	for _, a := range start.Attributes() {
+		name := qnameOf(a.Name())
+		if !want.matches(name) {
+			continue
+		}
+		got = append(got, attrHit{Name: name, Value: a.Value()})
+	}
+	return got, len(got) > 0
 }
 
 // attrValue returns the value of start's want attribute. The attribute list
 // is a document-ordered slice, so the first match is the only one a
 // well-formed document can have.
-func attrValue(start *xmltree.StartElement, want xsd.QName) (string, bool) {
+func attrValue(start *xmltree.StartElement, want namePat) (string, bool) {
 	for _, a := range start.Attributes() {
-		if sameName(want, a.Name()) {
+		if want.matches(qnameOf(a.Name())) {
 			return a.Value(), true
 		}
 	}
 	return "", false
-}
-
-// sameName compares a queried name with a name the reader resolved. The
-// comparison is on namespace URI and local part, never on the prefix the
-// document spelled — that equivalence is the tool's whole point.
-func sameName(want xsd.QName, got xmltree.Name) bool {
-	return want == qnameOf(got)
 }
 
 // qnameOf restates a name the reader resolved in the form the query language
@@ -583,18 +779,67 @@ func printReportTo(w io.Writer, rep report) {
 	_, _ = fmt.Fprintf(w, "  walked %d file(s): %d read to the end, %d read only partly, %d with no XML element\n",
 		rep.Walked, rep.Walked-len(rep.NoElement)-len(rep.Partial), len(rep.Partial), len(rep.NoElement))
 
+	printBody(w, rep)
+
+	printNotes(w, "Read only partly: a match behind the fault is invisible to this census", rep.Partial)
+	printNotes(w, "No XML element: the corpus's images, prose and stylesheets, and any"+
+		" fixture that faulted ahead of its root", rep.NoElement)
+}
+
+// printBody renders the half of the report the query's shape chooses: the
+// attribute-name axis for a query that wildcards its attributes, the matches
+// themselves for one that names them.
+func printBody(w io.Writer, rep report) {
+	if rep.Query.anyAttr() {
+		printAxis(w, groupPairs(rep.Hits))
+		return
+	}
+	printMatches(w, rep)
+}
+
+// printMatches renders one line per occurrence, which is the whole report for
+// every query that names the attributes it looks for.
+func printMatches(w io.Writer, rep report) {
 	_, _ = fmt.Fprintln(w, "\n=== Matches (path order, document order within a file) ===")
 	if len(rep.Hits) == 0 {
 		_, _ = fmt.Fprintln(w, "(none)")
 	}
 	for _, h := range rep.Hits {
-		_, _ = fmt.Fprintf(w, "  %s:%d:%d parent=%s children=%s%s\n",
-			h.File, h.Line, h.Col, renderName(h.Parent), renderChildren(h), renderValues(rep.Query.Attrs, h.Values))
+		_, _ = fmt.Fprintf(w, "  %s:%d:%d %sparent=%s children=%s%s\n",
+			h.File, h.Line, h.Col, renderMatched(rep.Query.Element, h), renderName(h.Parent),
+			renderChildren(h), renderAttrs(h.Attrs))
+	}
+}
+
+// printAxis renders the attribute-name axis in its two sections: the pairs
+// with their counts, then each pair's fixtures. The counts come first because
+// that section is the one that fits on a screen; the listing under it runs to
+// a line per (pair, fixture), 101,897 of them over the suite (#1391).
+func printAxis(w io.Writer, groups []pairGroup) {
+	occurrences := 0
+	for _, g := range groups {
+		occurrences += g.Occurrences
+	}
+	_, _ = fmt.Fprintf(w, "\n=== Attribute-name axis: %d (element, attribute) pair(s), %d attribute occurrence(s) ===\n",
+		len(groups), occurrences)
+	if len(groups) == 0 {
+		_, _ = fmt.Fprintln(w, "(none)")
+	}
+	for _, g := range groups {
+		_, _ = fmt.Fprintf(w, "  %s — %d occurrence(s) in %d fixture(s)\n",
+			renderPair(g), g.Occurrences, len(g.Fixtures))
 	}
 
-	printNotes(w, "Read only partly: a match behind the fault is invisible to this census", rep.Partial)
-	printNotes(w, "No XML element: the corpus's images, prose and stylesheets, and any"+
-		" fixture that faulted ahead of its root", rep.NoElement)
+	_, _ = fmt.Fprintln(w, "\n=== Fixtures per pair (path order) ===")
+	if len(groups) == 0 {
+		_, _ = fmt.Fprintln(w, "(none)")
+	}
+	for _, g := range groups {
+		_, _ = fmt.Fprintf(w, "  %s\n", renderPair(g))
+		for _, f := range g.Fixtures {
+			_, _ = fmt.Fprintf(w, "      %s\n", f)
+		}
+	}
 }
 
 // printAbsent renders the corpus-absent mode: why there was nothing to
@@ -668,17 +913,33 @@ func renderChildren(h hit) string {
 	return "[" + strings.Join(names, ", ") + "]"
 }
 
-// renderValues formats a hit's attribute values against the names that
-// selected them, in query order.
-func renderValues(attrs []xsd.QName, values []string) string {
+// renderAttrs formats the attributes a hit matched, each named as the hit
+// records it. The local part alone is what a reader recognizes, and no
+// ambiguity follows it: a query naming two attributes of one local name in
+// different namespaces is not one anybody writes.
+func renderAttrs(attrs []attrHit) string {
 	var b strings.Builder
-	for i, a := range attrs {
-		if i >= len(values) {
-			break
-		}
-		fmt.Fprintf(&b, " %s=%q", a.Local, values[i])
+	for _, a := range attrs {
+		fmt.Fprintf(&b, " %s=%q", a.Name.Local, a.Value)
 	}
 	return b.String()
+}
+
+// renderMatched names the element a hit matched, for a query that left the
+// element open with a wildcard — and nothing at all for one that fixed it,
+// since the report's own header already echoes the query. The trailing space
+// belongs to the field, so the line closes up when there is none.
+func renderMatched(want namePat, h hit) string {
+	if !want.isAny() {
+		return ""
+	}
+	return "element=" + renderName(h.Element) + " "
+}
+
+// renderPair names one axis pair in the form the two axis sections share, so
+// a pair's heading in the second is greppable from its line in the first.
+func renderPair(g pairGroup) string {
+	return renderName(g.Element) + " @" + renderName(g.Attr)
 }
 
 // latchWriter is an [io.Writer] that remembers its first failure and drops
