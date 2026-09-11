@@ -45,6 +45,13 @@ with the grounding as step 3's `ACCEPTANCE:` block, never as a `VERDICT:`
 block: an `unsatisfiable` read as a verdict is one of the two rejections the
 cap counts (#1087).
 
+When a ruled bullet predicts ratchet movement, ruling it means re-deriving
+the prediction against the current tree — run `go tool suiteindex
+<construct>` (CLAUDE.md's surveys block) and state either that the
+candidate set is unchanged or that the submodule is absent and no census
+was taken. This applies however long ago the issue was filed, not only
+when `main` has moved (#1332).
+
 A landing may carry work beyond the issue body under docs/WORKFLOW.md's
 scope rule. Mason names what it absorbed; judge that on its merits, as
 part of the diff, not as a scope violation.
