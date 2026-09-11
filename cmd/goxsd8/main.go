@@ -47,10 +47,14 @@ Usage (contract; subcommands land with their milestones):
       stops there, so a rejected schema is one error line); 2 when an
       argument cannot be read, which is never a verdict about a
       schema. The exit code is the worst of those outcomes.
-      A document whose root is not <xs:schema>, and a rejection in
-      the s4s-grammar class (xsderr/doc.go), have no rule to cite:
-      each prints the bare <message> instead, carrying what location
-      it has inside the sentence rather than as the <loc>: prefix.
+      Some errors have no rule to cite and print the bare <message>
+      instead, carrying what location they have inside the sentence
+      rather than as the <loc>: prefix. A document whose root is not
+      <xs:schema> and a rejection in the s4s-grammar class
+      (xsderr/doc.go) are examples, not the whole class: an I/O fault
+      reading a document the argument REFERENCES prints the same way
+      and is charged 1 like a rejection, though nothing about the
+      schema was decided.
       An <xs:include>, <xs:import>, <xs:override> or empty
       <xs:redefine> whose schemaLocation resolves to no document is
       named on stderr at its own position, with no rule ID and no

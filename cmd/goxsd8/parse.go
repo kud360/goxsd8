@@ -97,9 +97,13 @@ func parseOne(location string, quiet bool, log *slog.Logger, stdout, stderr io.W
 		// that could not be read returns an empty report, so that third error
 		// shape still prints nothing here.
 		reportUnfollowed(stderr, "parse", assemblyRejected, report)
-		// A schema verdict, not an IO fault: rootLocation already opened the
-		// document. Errors reach stderr whatever -q says, so a script can
-		// grep them.
+		// Exit 1 covers more than a schema verdict. rootLocation already opened
+		// the ARGUMENT, so an argument that cannot be read is charged 2 and
+		// never reaches here; an I/O fault reading a document that argument
+		// REFERENCES does reach here and is charged 1 like a rejection, though
+		// nothing about the schema was decided. Whether that should be 2
+		// instead is #1419 and is not settled here. Errors reach stderr
+		// whatever -q says, so a script can grep them.
 		_, _ = fmt.Fprintln(stderr, violationLine(err))
 		return exitInvalid
 	}
@@ -145,10 +149,19 @@ func rootLocation(location string) (string, error) {
 // the parser wraps some rejections in assembly context that would otherwise
 // prefix the line.
 //
-// An error carrying no *xsderr.Error prints its own message instead: a
-// document whose root is not <xs:schema>, and the s4s-grammar class the spec
-// catalogs no rule for (xsderr/doc.go), are real rejections with no rule ID to
-// cite, and inventing one for them would read as a citation (STYLE E2).
+// An error carrying no *xsderr.Error prints its own message instead. That is
+// the whole membership rule, and the class it admits is open: nothing here
+// invents a rule ID for a member, because an invented one would read as a
+// citation (STYLE E2). Two kinds arrive, named as examples rather than
+// enumerated. A rejection the spec catalogs no rule for — a document whose
+// root is not <xs:schema>, or the s4s-grammar class (xsderr/doc.go) — is a
+// real verdict with no rule ID to cite. An I/O or transport fault reading a
+// REFERENCED document is no spec class at all: parser's fetch wraps every
+// resolver error other than loader.ErrNotFound in plain assembly context and
+// each hop back returns it unwrapped, so it lands here with nothing charged
+// (parser/parse.go). A schemaLocation that merely resolves to no document is
+// the ErrNotFound arm instead — a legal skip under src-include clause 2.4,
+// reported by reportUnfollowed and never reaching this function.
 func violationLine(err error) string {
 	var e *xsderr.Error
 	if errors.As(err, &e) {

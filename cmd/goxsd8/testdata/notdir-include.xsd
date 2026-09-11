@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- An <xs:include> whose schemaLocation runs THROUGH this very file as if it
+     were a directory. The resolver reaches os.Open and the operating system
+     answers ENOTDIR, which is neither a not-found (so loader.ErrNotFound is
+     false and the skip src-include clause 2.4 makes legal does not apply) nor
+     a schema-validity verdict: it is an I/O fault on a referenced document,
+     and it leaves the parser unwrapped and rule-less. The <xs:include> sits on
+     line 12, which the test cites. -->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="http://example.com/notdir">
+
+  <xs:include schemaLocation="notdir-include.xsd/inner.xsd"/>
+
+  <xs:element name="present" type="xs:int"/>
+
+</xs:schema>
