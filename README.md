@@ -152,21 +152,24 @@ with what `types` and `model groups` each cover. A rejected
 schema prints its first error on stderr as `<loc>: [<rule>] <message>` and
 assembly stops there, so that is one error line per rejected argument; the exit
 code is the worst outcome over the arguments: 0 when every one compiles, 1 when
-any is rejected, 2 when any cannot be read. A document whose root is not
-`<xs:schema>`, and a rejection in the **s4s-grammar** class
-(`go doc github.com/kud360/goxsd8/xsderr`), have no rule to cite: each prints
-the bare `<message>` instead, carrying what location it has inside the sentence
-rather than as the `<loc>:` prefix. An `<xs:include>`, `<xs:import>`,
-`<xs:override>` or empty `<xs:redefine>` whose `schemaLocation` resolves to no
-document is named on stderr at its own position — no rule ID, no change of
-exit code, and `-q` does not silence it — so a summary printed off a set
-**short** of a document it named is distinguishable from one printed off a
-complete set. `src-include` clause 2.4 and `src-import` make that skip legal,
-which is why it is a line and not an error; a bare `<xs:import>`, naming no
-document to fail to reach, is not reported at all. A **rejected** schema is
-named the same way, for the directives assembly reached before it stopped, in a
-line that says the assembly was rejected rather than compiled and says nothing
-about whether the unread document had a part in that.
+any is rejected, 2 when any cannot be read. Some errors have no rule to cite
+and print the bare `<message>` instead, carrying what location they have inside
+the sentence rather than as the `<loc>:` prefix. A document whose root is not
+`<xs:schema>` and a rejection in the **s4s-grammar** class
+(`go doc github.com/kud360/goxsd8/xsderr`) are examples, not the whole class:
+an I/O fault reading a document the argument **references** prints the same way
+and is charged 1 like a rejection, though nothing about the schema was decided.
+An `<xs:include>`, `<xs:import>`, `<xs:override>` or empty `<xs:redefine>`
+whose `schemaLocation` resolves to no document is named on stderr at its own
+position — no rule ID, no change of exit code, and `-q` does not silence it —
+so a summary printed off a set **short** of a document it named is
+distinguishable from one printed off a complete set. `src-include` clause 2.4
+and `src-import` make that skip legal, which is why it is a line and not an
+error; a bare `<xs:import>`, naming no document to fail to reach, is not
+reported at all. A **rejected** schema is named the same way, for the
+directives assembly reached before it stopped, in a line that says the assembly
+was rejected rather than compiled and says nothing about whether the unread
+document had a part in that.
 
 Beyond `-schema` and `-out`, the contract carries `-format xml|json|ber`
 (force the instance source format instead of deriving it from the
