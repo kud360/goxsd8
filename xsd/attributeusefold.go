@@ -66,14 +66,12 @@ type attributeUseFold struct {
 // to charge its derivations, so leaving it partial rejects legal schemas — see
 // baseAttributeUses and storeFoldedAttributeUses (#505).
 //
-// PHASE ORDER IS LOAD-BEARING. It must run after Phase A (existence), so a base
-// name that misses in position is a simple base or an absent one and never a
-// dangling reference, and after Phase B (circularity), which is what licenses the
-// recursion below to carry no visited set: the {base type definition} graph is
-// known acyclic apart from ·xs:anyType·'s self-derivation (§3.4.7,
-// any-type-itself), the one edge foldTypeAttributeUses excludes by position
-// rather than by a guard (PRINCIPLES 9, STYLE D4). It must run before Phase D,
-// which is the first phase to read {attribute uses}.
+// PHASE ORDER IS LOAD-BEARING. It must run after Phase B (circularity), which
+// is what licenses the recursion below to carry no visited set: the {base type
+// definition} graph is known acyclic apart from ·xs:anyType·'s self-derivation
+// (§3.4.7, any-type-itself), the one edge foldTypeAttributeUses excludes by
+// position rather than by a guard (PRINCIPLES 9, STYLE D4). It must run before
+// Phase D, which is the first phase to read {attribute uses}.
 //
 // Clause 3.2.2 — the <attribute use="prohibited"> child, which BLOCKS the
 // same-named inherited use — is applied here too, from the prohibited names the

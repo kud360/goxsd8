@@ -125,7 +125,7 @@ var allowedCollisionCitations = []citationAllowance{
 	// <attributeGroup ref> at producer mapping time, so a definition holds no
 	// edge to another one and the group a complex type also inlined is re-walked
 	// a bounded number of times rather than guarded — the first half again.
-	{file: "xsd/resolve.go", number: 9, count: 11},
+	{file: "xsd/resolve.go", number: 9, count: 12},
 	{file: "xsd/simpletype.go", number: 9, count: 1},
 	{file: "xsd/substitutiongroup.go", number: 9, count: 1},
 	{file: "xsd/substitutiongrouptypes.go", number: 9, count: 1},

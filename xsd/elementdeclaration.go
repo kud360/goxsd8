@@ -372,13 +372,13 @@ func (s Scope) Parent() (ElementScopeParent, bool) {
 // inline <simpleType>/<complexType> child, or a reference to the OWNING HEAD for
 // clause 3's anonymous-head case (SubstitutionGroupHeadTypeRef, #342, the one
 // arm whose name lives in the ELEMENT symbol space rather than the type one).
-// Finalize (resolve.go, #173) VALIDATES that every by-name reference resolves
-// against the schema indexes (src-resolve clauses 1.1 and 1.3) and that the
-// substitution-group graph is acyclic (e-props-correct clause 5), but does NOT
-// rewrite the references into resolved components: the QNames are retained, and
-// a consumer follows them by read-time schema.Type/schema.Element lookups. Of
-// the cross-component clauses that need resolved components, clauses 2 (#463)
-// and 4 (#395) are charged by finalize's later phases; clause 7 stays deferred.
+// Finalize (resolve.go, #173) validates that the substitution-group graph is
+// acyclic (e-props-correct clause 5) and does NOT rewrite the references into
+// resolved components: the QNames are retained, and a consumer follows them by
+// read-time schema.Type/schema.Element lookups, either of which may MISS on an
+// accepted schema — §5.3's ·absent· value (#434). Of the cross-component clauses
+// that need resolved components, clauses 2 (#463) and 4 (#395) are charged by
+// finalize's later phases; clause 7 stays deferred.
 //
 // The whole {scope} record is carried, {parent} included (a Scope value, not a
 // bare ScopeVariety): a local declaration names the Complex Type Definition or
@@ -748,15 +748,14 @@ func (e ElementDeclaration) Loc() xsderr.Loc {
 // 3, anonymous-head case). It is nil only for a declaration built with an absent
 // {type definition}.
 //
-// Neither reference arm is resolved into a component here. Finalize (#173)
-// validates that a TypeDefinitionRef's name resolves to a type definition
-// (src-resolve clause 1.1) but adds no resolved-component accessor: the QName is
-// retained, and a consumer obtains the component by a read-time
-// schema.Type(name) lookup. A SubstitutionGroupHeadTypeRef is followed instead
-// through schema.Element(head) — a different symbol space — and then one read of
-// that head's own {type definition}; a dangling head is an ·absent· member under
-// §5.3 and is not a finalize failure. The inline arm needs no lookup at all — it
-// carries the component.
+// Neither reference arm is resolved into a component here, and finalize (#173)
+// adds no resolved-component accessor: the QName is retained, and a consumer
+// obtains the component by a read-time schema.Type(name) lookup. A
+// SubstitutionGroupHeadTypeRef is followed instead through schema.Element(head) —
+// a different symbol space — and then one read of that head's own {type
+// definition}. Either lookup missing is an ·absent· value under §5.3 and not a
+// finalize failure (#434). The inline arm needs no lookup at all — it carries the
+// component.
 func (e ElementDeclaration) TypeDefinition() TypeDefinitionOrRef {
 	return e.typeDefinition
 }
@@ -815,8 +814,8 @@ func (e ElementDeclaration) IdentityConstraints() []IdentityConstraint {
 // #395), but adds no resolved-component accessor: the QNames are retained,
 // followed by read-time schema.Element lookups. A name that resolves to no
 // declaration at all is not rejected — it is an ·absent· member under §5.3
-// (Missing Sub-components), which resolveElementDecl records as the one
-// reference slot deliberately exempt from src-resolve.
+// (Missing Sub-components), the reading resolveElementDecl states for this and
+// every other reference slot.
 func (e ElementDeclaration) SubstitutionGroupAffiliationNames() []QName {
 	if len(e.substitutionGroupAffiliations) == 0 {
 		return nil

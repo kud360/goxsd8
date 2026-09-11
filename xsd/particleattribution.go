@@ -431,10 +431,27 @@ func unfoldCopies(o Occurs) (copies, mandatory int, loop bool) {
 
 // addTerm emits the fragment for a particle's {term}. A <group ref> is followed
 // through modelGroupIndex, and an <element ref> through elementIndex, exactly as
-// wildcardadmit.go and resolve.go read them, so no Schema.ModelGroup accessor is
+// wildcardadmit.go reads them, so no Schema.ModelGroup accessor is
 // minted for an in-package reader (STYLE T5). A ref that resolves to nothing
-// contributes nothing: Phase A already rejected a dangling reference
-// (src-resolve), so that arm is unreachable on a *Schema that exists.
+// contributes an EMPTY, emptiable fragment, and that arm is reached on an
+// accepted schema: §5.3 retains such a name as an ·absent· {term} (resolve.go,
+// #434), which denotes no declaration and no group, so it matches only the empty
+// sequence at that position.
+//
+// GAP(xsd): that empty fragment is not direction-neutral across this automaton's
+// consumers, and the direction is established for two of the three. On
+// cos-nonambig (checkParticleAttribution, this file) it withholds positions, so
+// an ·absent· term can only remove an ambiguity and never add one — fail-open.
+// On cos-content-act-restrict read over R (contentModelRestricts,
+// contentrestricts.go) it shrinks the language that must be a subset — fail-open
+// again. On the SAME constraint read over B, and over the B side of src-redefine
+// clause 6.2.2 (checkModelGroupRedefinitions, redefinition.go), it shrinks the
+// language R must be a subset OF, which can turn an accept into a reject: §5.3
+// asks construction to charge nothing for an ·absent· value, and this can charge
+// derivation-ok-restriction instead. No shape producing it has been exhibited —
+// an <element ref> that names nothing on the B side names nothing on the R side
+// either, so the two normally shrink together — so the direction there is
+// UNESTABLISHED rather than shown safe. It rides with the rest of §5.3 on #250.
 func (b *automaton) addTerm(t TermOrRef) ([]int, []int, bool, error) {
 	switch t := t.(type) {
 	case ResolvedTerm:

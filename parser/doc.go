@@ -220,25 +220,23 @@
 //     A namespace an <xs:import> declares but no document of the
 //     assembly supplies — a bare import, or one whose schemaLocation
 //     does not resolve — leaves that namespace's components genuinely
-//     missing, and the only way that surfaces is an actual QName
-//     reference into it failing src-resolve at finalize (which this
-//     package hard-fails, see [xsd.SchemaBuilder.Finalize]); an assembly
-//     that makes no such reference is accepted, which under-rejects.
+//     missing, and nothing says so: a QName reference into it now
+//     resolves to §5.3's ·absent· value and is retained rather than
+//     rejected (see xsd/resolve.go's resolveElementDecl), and an
+//     assembly that makes no such reference was always accepted. Either
+//     way the missing namespace is never reported, which under-rejects.
 //     The src-resolve clause 4 licensing above does NOT close this gap
 //     and cannot: clause 4 judges whether the document ASKED for the
 //     namespace, §5.3 what follows when a namespace it did ask for
 //     supplies no such component — §4.2.6.1 holds the two apart in as
 //     many words ("references … not imported by that schema document …
 //     are not handled as if they referred to missing components").
-//     That hard-fail is itself the deviation from §5.3, which makes an
-//     unresolved reference an ·absent· value and defers the consequence
-//     to ·assessment·, never rejecting the schema. One slot is already
-//     aligned: a {substitution group affiliations} member naming no
-//     declaration is retained as ·absent· rather than rejected (see
-//     xsd/resolve.go's resolveElementDecl). The remaining slots — {type
-//     definition}, <element ref>, <attribute ref>, <group ref>, keyref —
-//     are #434, which must also supply the ·lax assessment· fallback
-//     §5.3 requires on the validation side.
+//     Schema construction now does what §5.3 asks of it: every
+//     reference slot retains its ·QName· and charges nothing (#434).
+//     What is still owed is the ·assessment·-time half — the cvc
+//     clause-1 failure and the ·lax assessment· fallback §5.3 mandates
+//     for an item validated against a component carrying an ·absent·
+//     value — which needs the validator, and is #250.
 //   - GAP(xsd): two DISTINCT <xs:redefine> elements whose children are
 //     textually equivalent each contribute their own replacement
 //     components, so redefining one document the same way down two paths

@@ -151,8 +151,8 @@ func (s *Schema) affiliationChainReaches(m ElementDeclaration, head QName) bool 
 // predicate is deliberately SILENT — reading clause 2.3 as requiring the chain
 // would be legislating a different rule. The same reading covers an absent or
 // unresolvable {type definition} on either side, which declaredTypeRestricts
-// (defaultbinding.go) skips identically: there is no component to walk, and a
-// dangling name was already charged src-resolve by resolve.go's Phase A.
+// (defaultbinding.go) skips identically: there is no component to walk, whether
+// the slot is absent or holds §5.3's ·absent· name (resolve.go, #434).
 //
 // Requiring the chain to exist at all belongs to e-props-correct clause 4
 // (§3.3.6.1, c-vs-sg: "For each member M of E.{substitution group affiliations},
@@ -214,8 +214,8 @@ walk:
 			// conservative refusal (#505).
 			next, ok := s.ResolvedType(c.Base())
 			if !ok {
-				// An absent base ends the chain short of H.{type definition}; a
-				// dangling one was already charged src-resolve by Phase A.
+				// An absent base ends the chain short of H.{type definition}, and
+				// an ·absent· one (§5.3) ends it the same way: no step to take.
 				return true
 			}
 			if sameTypeDefinition(next, headType) {
@@ -231,10 +231,10 @@ walk:
 			base, err := c.Base(s)
 			if err != nil || base == nil {
 				// An absent base is xs:anySimpleType topping the chain short of
-				// H.{type definition}. An unresolvable one is the same non-answer
-				// here: Phase A already charged src-resolve for it, and this
-				// predicate has no error to return, so it takes the accepting
-				// branch rather than inventing a blocking verdict.
+				// H.{type definition}. An ·absent· one (§5.3) is the same
+				// non-answer here, and reaches this arm on an ACCEPTED schema:
+				// this predicate has no error to return, so it takes the
+				// accepting branch rather than inventing a blocking verdict.
 				return true
 			}
 			if sameTypeDefinition(base, headType) {

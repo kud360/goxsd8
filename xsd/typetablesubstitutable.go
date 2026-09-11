@@ -20,11 +20,11 @@ import (
 // quantifier — Type Alternatives rather than substitution group affiliations or
 // complex types.
 //
-// IT CANNOT RUN IN PHASE A, where resolveTypeTable resolves the same
-// alternatives' QNames (src-resolve clause 1.1). ValidlySubstitutable walks
-// {base type definition} chains and a union's transitive membership with NO
-// visited set, which resolve.go's invariant licenses only for a phase running
-// after Phase B's checkComplexBaseAcyclic, checkSimpleBaseAcyclic and
+// IT CANNOT RUN IN PHASE A, where resolveTypeTable descends the same
+// alternatives. ValidlySubstitutable walks {base type definition} chains and a
+// union's transitive membership with NO visited set, which resolve.go's
+// invariant licenses only for a phase running after Phase B's
+// checkComplexBaseAcyclic, checkSimpleBaseAcyclic and
 // checkUnionMembershipAcyclic. A circular base chain is fully representable
 // while Phase A runs, so charging clause 7 there would not walk a cycle once and
 // answer wrongly — it would not terminate.
@@ -73,7 +73,7 @@ var errorTypeName = QName{Space: XMLSchemaNS, Local: "error"}
 // cosmetic: §3.3.2.1's {type table} row is a COMMON mapping rule that
 // parser/produce_typetable.go serves from the global <element> path and both
 // local ones, so a local declaration carries a table exactly as a top-level one
-// does, and Phase A's resolveTypeTable already reaches both. This is the same
+// does, and Phase A's resolveTypeTable descends both. This is the same
 // conclusion checkComponentValueConstraints reaches for clause 2 and the
 // opposite of checkSubstitutionGroupTypes' for clause 4, whose s.elements-only
 // quantifier rests on clause 3 confining a {substitution group affiliations} to
@@ -127,11 +127,11 @@ func (s *Schema) checkElementTypeTable(e ElementDeclaration) error {
 //
 // An ABSENT or unresolvable E.{type definition} skips the whole table rather
 // than charging it: clause 7.1 predicates over that component, so there is
-// nothing for T to be ·validly substitutable· FOR. A dangling type name was
-// already charged src-resolve by Phase A, so reaching this point with one means
-// a genuinely absent slot (§5.3), which checkElementSubstitutableForHeads and
-// declaredTypeRestricts skip identically. The skip is fail-open — it withholds a
-// rejection, never invents one.
+// nothing for T to be ·validly substitutable· FOR. Both reach this point on an
+// accepted schema — §5.3 retains an unresolvable name as an ·absent· {type
+// definition} (#434) — and checkElementSubstitutableForHeads and
+// declaredTypeRestricts skip both identically. The skip is fail-open — it
+// withholds a rejection, never invents one.
 //
 // The blocking-keyword set is read off the unexported field rather than through
 // DisallowedSubstitutions(), whose defensive copy would be allocated only to be
@@ -224,9 +224,10 @@ func isDeclaredTypeItself(declared, dflt TypeDefinitionOrRef) bool {
 // isDeclaredTypeItself discharges before the call.
 //
 // An alternative whose {type definition} reaches no component is SKIPPED. A
-// present name that resolves to nothing was already charged src-resolve by Phase
-// A's resolveTypeTable; an ABSENT slot — nil, which a SchemaBuilder caller may
-// leave — has no T for the clause to quantify over. Both are fail-open.
+// present name that resolves to nothing is §5.3's ·absent· {type definition}
+// (resolve.go, #434) and reaches this on an accepted schema; an ABSENT slot —
+// nil, which a SchemaBuilder caller may leave — has no T for the clause to
+// quantify over. Both are fail-open.
 func (s *Schema) checkTypeAlternativeSubstitutable(e ElementDeclaration, declared TypeDefinition, alt TypeAlternative, slot string) error {
 	t, ok := s.ResolvedType(alt.TypeDefinition())
 	if !ok {

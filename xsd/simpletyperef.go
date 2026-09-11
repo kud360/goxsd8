@@ -183,10 +183,15 @@ func checkSimpleTypeOrRefPresent(loc xsderr.Loc, ref SimpleTypeOrRef, slot strin
 // exactly the silently short chain a resolver-threaded reader must never
 // produce: a caller that read a missing base as "the chain ended" would compute
 // {variety}, {primitive type definition} or {facets} off a truncated chain and
-// ACCEPT what the full chain forbids. The complex-type precedent (ResolvedType's
-// comma-ok) discharges that with "Phase A already rejected a dangling one", an
-// argument that does not transfer here because these readers are also called
-// from outside finalize, where no phase has run.
+// ACCEPT what the full chain forbids. That is also why §5.3's ·absent· may not be
+// folded into the nil arm above, which already spends that encoding on a
+// different fact (STYLE D3): "unusable" is not "the type IS xs:anySimpleType".
+//
+// It is the SINGLE error source of the six readers built over it — SimpleType's
+// Variety, Primitive, Item, Members, Base and EffectiveFacets — and that is a
+// contract, not an observation: finalize's usable predicate (resolve.go) decides
+// §5.3 ·absent· by swallowing this error and nothing else, and carries the
+// GAP(xsd) markers for what that leaves owed to #250.
 //
 // loc positions a rejection at the REFERRING component — the type whose base=
 // names nothing — following resolveReferences' referrer-Loc convention; the

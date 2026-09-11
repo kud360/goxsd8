@@ -25,14 +25,13 @@ type Term interface{ term() }
 // The split exists because two XML mappings — <element ref="..."> (§3.3.2.4,
 // ref.elt.global) and <group ref="..."> (§3.7.2, declare-namedModelGroup) — may
 // forward-reference a top-level declaration not yet parsed, so only the ref
-// QName is available at shape-construction time. Finalize (#173) VALIDATES that
-// each ref variant resolves against the schema indexes — an ElementDeclarationRef
-// to a top-level Element Declaration (src-resolve clause 1.3), a ModelGroupRef to
-// a top-level Model Group Definition (clause 1.5) — and rejects an unresolvable
-// or circular target. It does NOT rewrite the slot: the ref is retained and a
-// consumer follows it by a read-time lookup through the schema (for a
-// ModelGroupRef, the referenced definition's {model group} per §3.7.2). There is
-// no WildcardRef: a wildcard is never referenced by QName, only declared inline.
+// QName is available at shape-construction time. Finalize (#173) rejects a
+// CIRCULAR <group ref> graph (mg-props-correct clause 2) but not an unresolvable
+// ref of either kind — §5.3 retains that as an ·absent· {term} (#434) — and it
+// does NOT rewrite the slot: the ref is retained and a consumer follows it by a
+// read-time lookup through the schema (for a ModelGroupRef, the referenced
+// definition's {model group} per §3.7.2). There is no WildcardRef: a wildcard is
+// never referenced by QName, only declared inline.
 type TermOrRef interface{ termOrRef() }
 
 // ResolvedTerm is the TermOrRef variant wrapping an already-known Term: an
@@ -44,9 +43,10 @@ type ResolvedTerm struct{ Term Term }
 // ElementDeclarationRef is the TermOrRef variant for the <element ref="...">
 // mapping (§3.3.2.4, ref.elt.global): a pre-resolution QName reference to a
 // possibly-forward-referenced top-level Element Declaration. Finalize (#173)
-// validates it resolves (src-resolve clause 1.3) but retains it; a consumer
-// follows it by a read-time schema.Element(Name) lookup. The field is read-only
-// by convention; do not mutate it after construction.
+// retains it and charges nothing when it names nothing (§5.3); a consumer
+// follows it by a read-time schema.Element(Name) lookup, whose miss is that
+// ·absent· answer. The field is read-only by convention; do not mutate it
+// after construction.
 //
 // Name is a PRESENT reference, never the absent (zero) QName: this variant
 // exists only for the mapping branch whose precondition is "the ref attribute is
@@ -56,11 +56,11 @@ type ElementDeclarationRef struct{ Name QName }
 // ModelGroupRef is the TermOrRef variant for the <group ref="..."> mapping
 // (§3.7.2, declare-namedModelGroup): a pre-resolution QName reference to a
 // possibly-forward-referenced top-level Model Group Definition. Finalize (#173)
-// validates it resolves (src-resolve clause 1.5) and that the group-reference
-// graph is acyclic (mg-props-correct clause 2), but retains it; a consumer
-// follows it by a read-time lookup, reading the referenced definition's {model
-// group} (§3.7.2). The field is read-only by convention; do not mutate it after
-// construction.
+// validates that the group-reference graph is acyclic (mg-props-correct clause
+// 2) but retains the ref, charging nothing when it names nothing (§5.3); a
+// consumer follows it by a read-time lookup, reading the referenced
+// definition's {model group} (§3.7.2). The field is read-only by convention; do
+// not mutate it after construction.
 //
 // Name is a PRESENT reference, never the absent (zero) QName: a <group> inside a
 // content model is always the reference form (§3.7.2, whose named branch xr.mgd1

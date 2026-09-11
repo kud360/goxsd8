@@ -88,14 +88,13 @@ type attributeWildcardFold struct {
 // order carries no verdict. Both must complete before Phase D's constraints, which
 // read both.
 //
-// PHASE ORDER IS LOAD-BEARING, exactly as for foldAttributeUses. It must run after
-// Phase A (existence), so a base name that misses in position is a simple base or
-// an absent one and never a dangling reference, and after Phase B (circularity),
-// which is what licenses the recursion below to carry no visited set: the {base
-// type definition} graph is known acyclic apart from ·xs:anyType·'s
-// self-derivation (§3.4.7, any-type-itself), the one edge foldTypeAttributeWildcard
-// excludes by position rather than by a guard (PRINCIPLES 9, STYLE D4). It must run
-// before Phase D, the first phase to read {attribute wildcard}.
+// PHASE ORDER IS LOAD-BEARING, exactly as for foldAttributeUses. It must run
+// after Phase B (circularity), which is what licenses the recursion below to
+// carry no visited set: the {base type definition} graph is known acyclic apart
+// from ·xs:anyType·'s self-derivation (§3.4.7, any-type-itself), the one edge
+// foldTypeAttributeWildcard excludes by position rather than by a guard
+// (PRINCIPLES 9, STYLE D4). It must run before Phase D, the first phase to read
+// {attribute wildcard}.
 //
 // It folds the DECLARATION-OWNED anonymous complex types too, in a second walk
 // over the roots ownedtypefold.go enumerates; §3.4.2.5's own Note makes the rule

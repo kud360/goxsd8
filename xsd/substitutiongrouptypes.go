@@ -26,18 +26,18 @@ import "github.com/kud360/goxsd8/xsderr"
 // affiliations}.
 //
 // PHASE PLACEMENT. The check reads RESOLVED type definitions on both sides and
-// walks their {base type definition} chains through validlyDerived, so it
-// needs Phase A's resolvability (a dangling type name is charged src-resolve
-// there, and the ResolvedType lookups here are hits rather than silent skips) and
+// walks their {base type definition} chains through validlyDerived, so it needs
 // Phase B's checkComplexBaseAcyclic (the walk inside derivedOKComplex carries NO
 // visited set — PRINCIPLES 9 — and terminates only because a circular base chain
-// was already rejected). Those are the same two dependencies checkComplexDerivations
-// records, which is why this runs as a step of Phase D rather than as a phase of
-// its own: Phase D is where every ·validly derived·/·validly substitutable·
-// verdict in this package is charged, over the one cos-ct-derived-ok /
-// cos-st-derived-ok engine pair, and clause 4 is that same engine reached
-// through a different quantifier — element declarations rather than complex
-// types. One engine, one phase.
+// was already rejected). It needs nothing from Phase A: a type name that resolves
+// to nothing is §5.3's ·absent· value on an accepted schema, so the ResolvedType
+// lookups here are genuine comma-oks whose false arm skips the clause. That is
+// the same dependency checkComplexDerivations records, which is why this runs as
+// a step of Phase D rather than as a phase of its own: Phase D is where every
+// ·validly derived·/·validly substitutable· verdict in this package is charged,
+// over the one cos-ct-derived-ok / cos-st-derived-ok engine pair, and clause 4 is
+// that same engine reached through a different quantifier — element declarations
+// rather than complex types. One engine, one phase.
 //
 // It runs AFTER the complex-type walk, not inside it: the loop below quantifies
 // over s.elements, and folding an element-declaration constraint into a
@@ -130,12 +130,11 @@ func (s *Schema) checkSubstitutionGroupTypes() error {
 //     that a substitutionGroup naming nothing is a VALID schema — and clause 1's
 //     own "modulo the impact of Missing Sub-components (§5.3)" carries the same
 //     licence into this tableau. Charging it here would reject the schema §5.3
-//     says stands, and would double-report what Phase A already decided to allow;
-//   - an absent or unresolvable {type definition} on either side. A dangling type
-//     name was already charged src-resolve by Phase A, so reaching this point
-//     with one is possible only for a genuinely ABSENT slot, which
-//     derivationAdmitsSubstitution and declaredTypeRestricts (defaultbinding.go)
-//     skip identically.
+//     says stands;
+//   - an absent or unresolvable {type definition} on either side. Both reach this
+//     point on an accepted schema — §5.3 retains an unresolvable name as an
+//     ·absent· {type definition} (#434) — and derivationAdmitsSubstitution and
+//     declaredTypeRestricts (defaultbinding.go) skip both identically.
 //
 // Both skips are fail-open — they withhold a rejection, never invent one — and
 // neither can mask a failure the spec states, since clause 4 quantifies over

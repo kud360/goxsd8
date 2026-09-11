@@ -135,10 +135,11 @@ import "github.com/kud360/goxsd8/xsderr"
 // each type referencing it. An UNREFERENCED group, and any group a SchemaBuilder
 // caller adds directly, holds Attribute Use components the spec constrains all
 // the same, and a folded use is simply re-tested with the same verdict. Phase A
-// roots them for that reason too (#725), so an <attribute ref> reaching this
-// phase has been vetted for resolvability like any other: the
-// ResolvedAttributeDeclaration miss below is unreachable for a schema that
-// survived Phase A, not a fail-open.
+// roots them for that reason too (#725). The ResolvedAttributeDeclaration miss
+// below IS reachable on an accepted schema — §5.3 retains an <attribute ref>
+// naming nothing as an ·absent· {attribute declaration} (resolve.go, #434) — and
+// skipping is this phase's §5.3 answer: au-props-correct clauses 2 and 3 both
+// predicate over a declaration that must be there to be read.
 func (s *Schema) checkComponentValueConstraints() error {
 	w := componentWalk{
 		attributeUse:       s.checkAttributeUseValueConstraint,
@@ -198,9 +199,9 @@ func (s *Schema) checkComponentValueConstraints() error {
 // handed to ValueSpace.Identical on both sides.
 //
 // Every non-decision is fail-open and never a false reject: an unresolvable
-// declaration (a dangling Ref, which Phase A already charged src-resolve at
-// every root this walk enters), a {type definition} that is absent,
-// unresolvable, or complex, and an undecided ValueSpace verdict all accept.
+// declaration (a Ref naming nothing, which §5.3 retains as ·absent·), a {type
+// definition} that is absent, unresolvable, or complex, and an undecided
+// ValueSpace verdict all accept.
 func (s *Schema) checkAttributeUseValueConstraint(u AttributeUse, loc xsderr.Loc, owner string) error {
 	d, ok := s.ResolvedAttributeDeclaration(u)
 	if !ok {

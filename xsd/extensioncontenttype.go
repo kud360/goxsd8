@@ -183,17 +183,16 @@ func extensionParticle(loc xsderr.Loc, baseParticle, effective Particle, explici
 // group's {compositor} is all (§3.8.1), reporting false for every other {term}:
 // an element declaration, a wildcard, a choice/sequence group, or an <element
 // ref>. A <group ref> {term} is followed through the injected lookup (see
-// ExtensionContentType); a ref that resolves to nothing simply reports false,
-// leaving src-resolve clause 1.5 and mg-props-correct clause 2 to their own
-// phases.
+// ExtensionContentType); a ref that resolves to nothing simply reports false —
+// an ·absent· {term} denotes no Model Group (§5.3) — leaving mg-props-correct
+// clause 2 to its own phase.
 //
 // It is the error-carrying twin of resolveTermGroup (effectivetotalrange.go),
-// which answers the same question for an already-finalized *Schema, where a
-// lookup cannot fail. The two are not merged because this one exists precisely
-// to serve a caller whose lookup CAN fail — the producer's on-demand build of a
-// referenced model group definition — and folding that error channel into
-// resolveTermGroup would put it on every in-package reader that has no use for
-// it.
+// which answers the same question for an already-finalized *Schema. The two are
+// not merged because this one exists precisely to serve a caller whose lookup
+// CAN fail — the producer's on-demand build of a referenced model group
+// definition — and folding that error channel into resolveTermGroup would put
+// it on every in-package reader that has no use for it.
 func allGroupOfParticle(part Particle, allGroup func(QName) (ModelGroup, bool, error)) (ModelGroup, bool, error) {
 	switch t := part.Term().(type) {
 	case ResolvedTerm:

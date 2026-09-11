@@ -75,9 +75,9 @@ const ruleCosValidDefault xsderr.Rule = "cos-valid-default"
 //     never reached-and-vacuously-satisfied, which is why the value space must not
 //     be consulted either;
 //   - a {type definition} that is absent or unresolvable: ResolvedType's documented "not
-//     decidable by this clause". A dangling name was already charged src-resolve
-//     by Phase A, so reaching here with one means a genuinely absent slot, and
-//     cos-valid-default predicates over a T that must be there to be read.
+//     decidable by this clause". Both reach here on an accepted schema — an
+//     unresolvable name is §5.3's ·absent· {type definition} (resolve.go, #434) —
+//     and cos-valid-default predicates over a T that must be there to be read.
 //
 // Both are fail-open and neither can mask a failure the spec states.
 func (s *Schema) checkElementDefaultValid(e ElementDeclaration) error {

@@ -79,8 +79,8 @@
 // the schema document, retained from the constructor so a finalize-time
 // rejection can cite file:line:column instead of "?" — sch-props-correct
 // clause 2 (schema.go) was the first such consumer, resolve.go's Phase
-// A/B rejections (src-resolve, c-props-correct, ct-props-correct,
-// mg-props-correct, e-props-correct) the second, defaultbinding.go's
+// A/B rejections (c-props-correct, ct-props-correct, mg-props-correct,
+// e-props-correct) the second, defaultbinding.go's
 // derivation-ok-restriction clause 3 rejections the third, and
 // complexderivation.go's derivation-ok-restriction, ct-props-correct and
 // cos-ct-extends rejections the fourth, and allgrouplimited.go's
@@ -90,9 +90,9 @@
 // clause that is the RESTRICTING complex type, the spec's T, which the
 // constraint is stated against and every one of its messages already
 // names, and for ct-props-correct the complex type whose properties it
-// checks. cos-ct-extends clause 1.6 (c-vs-ctd-e) is positioned by the
-// same two charge sites: derivation-ok-restriction clause 4's attribute
-// and element halves are parameterized by locallyDeclaredTypeCheck, whose
+// checks. cos-ct-extends clause 1.6 (c-vs-ctd-e) is positioned by the same
+// two charge sites: derivation-ok-restriction clause 4's attribute and
+// element halves are parameterized by locallyDeclaredTypeCheck, whose
 // second literal is checkExtensionLocallyDeclaredTypes' — so a c-vs-ctd-e
 // rejection carries the EXTENDING type's Loc, charged from
 // complexderivation.go and NOT from any of complexextension.go's own

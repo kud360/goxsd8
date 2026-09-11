@@ -137,11 +137,18 @@ const (
 //     they would get them from nowhere, deciding cases against types the schema
 //     does not define.
 //
-// An unresolvable base is returned VERBATIM as the src-resolve clause 1.1 error
-// SimpleType.Base produces, not folded into one of the clauses below: the
-// clauses each presuppose a base that exists, and charging "no such type" as,
-// say, cos-st-restricts clause 1.1 would name a constraint with nothing to say
+// An unresolvable base is returned VERBATIM as the error SimpleType.Base
+// produces, not folded into one of the clauses below: the clauses each
+// presuppose a base that exists, and charging "no such type" as, say,
+// cos-st-restricts clause 1.1 would name a constraint with nothing to say
 // about it (STYLE E2).
+//
+// A CALLER INSIDE FINALIZE MUST NOT PROPAGATE THAT ERROR AS A REJECTION. It is
+// §5.3's ·absent· reference, which construction charges nothing for, and
+// checkSimpleTypeGraph's usable gate (resolve.go) is what keeps this function
+// from ever seeing one. A caller OUTSIDE finalize — the datatypes lane, a
+// Schema-less graph — has no such gate and gets the error, which for it is the
+// honest answer: it asked about a type its own resolver does not define.
 //
 // It charges, per clause:
 //

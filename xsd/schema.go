@@ -8,8 +8,9 @@ import "github.com/kud360/goxsd8/xsderr"
 // same kind (the same {…definitions}/{…declarations} property) share an expanded
 // name (target namespace + local name), locally decidable without any
 // cross-reference resolution — and then runs the resolution pass (resolve.go,
-// #173) that discharges cross-component QName resolution (src-resolve, §3.17.6.2)
-// and the named-circularity rejections. Clause 1's remaining cross-reference-
+// #173) that discharges the named-circularity rejections and the verdicts that
+// need a resolved target. A QName that resolves to nothing is not among them:
+// §5.3 retains it as an ·absent· value (#434). Clause 1's remaining cross-reference-
 // dependent requirements stay deferred; the instance-time cvc-resolve-instance
 // (§3.17.6.3) lookups the Query views serve are a still-later consumer's concern.
 const ruleSchPropsCorrect xsderr.Rule = "sch-props-correct"
@@ -123,9 +124,12 @@ func (b *SchemaBuilder) AddNotation(n Notation) {
 // against the very definition it reuses.
 //
 // A producer that instead registers only its top-level definitions leaves the
-// nested ones out of the property src-resolve (§3.17.6.2) clause 1.7 resolves
-// identity-constraint QNames against: a nested <keyref>'s refer= target becomes
-// unfindable and a valid schema is false-rejected at Finalize.
+// nested ones out of the property a keyref's refer= is resolved against
+// (§3.17.6.2 clause 1.7): the target becomes unfindable, so §5.3 reads the
+// {referenced key} as ·absent· and BOTH c-props-correct clauses go uncharged
+// against a keyref the schema fully defines. The direction is under-rejection
+// rather than the false reject it used to be (#434), which is harder to notice,
+// not easier.
 func (b *SchemaBuilder) AddIdentityConstraint(c IdentityConstraint) {
 	b.identityConstraints = append(b.identityConstraints, c)
 }
@@ -160,13 +164,15 @@ func (b *SchemaBuilder) AddAnnotation(a Annotation) {
 // lookup — they never determine iteration order (STYLE D2/D3; see xsd/doc.go's
 // "Maps exist only as internal lookup indexes and never determine order").
 //
-// Cross-reference resolution (src-resolve §3.17.6.2) is a VALIDATION pass run at
-// Finalize (resolve.go, #173): it verifies every retained QName reference
-// resolves against these indexes and that no spec-forbidden circularity exists,
-// but it stores no resolved-component pointer — a consumer follows a reference by
-// a read-time index lookup (schema.Type/Element/Attribute), because a stored
-// pointer would be state derivable from the QName plus the index (STYLE D3). The
-// remaining sch-props-correct clause-1 requirements stay deferred; Finalize's own
+// Cross-reference resolution is a VALIDATION pass run at Finalize (resolve.go,
+// #173): it reads every retained QName reference against these indexes to charge
+// the verdicts that need the target, and rejects any spec-forbidden circularity,
+// but a reference resolving to NOTHING is §5.3's ·absent· value and is charged
+// nothing (#434). It stores no resolved-component pointer either — a consumer
+// follows a reference by a read-time index lookup
+// (schema.Type/Element/Attribute), because a stored pointer would be state
+// derivable from the QName plus the index (STYLE D3). The remaining
+// sch-props-correct clause-1 requirements stay deferred; Finalize's own
 // duplicate-name check is sch-props-correct §3.17.6.1 clause 2, locally decidable
 // without any cross-reference resolution.
 type Schema struct {
@@ -182,13 +188,13 @@ type Schema struct {
 	// attributeGroupRedefinitions carries the builder's <attributeGroup> pairings
 	// across finalize; checkAttributeGroupRedefinitions (redefinition.go) charges
 	// clause 7.2.2 over them and resolveReferences (resolve.go) walks each
-	// original's {attribute uses} for src-resolve.
+	// original's {attribute uses} for Phase A's own charges.
 	attributeGroupRedefinitions []attributeGroupRedefinition
 
 	// modelGroupRedefinitions carries the builder's <group> pairings across
 	// finalize; checkModelGroupRedefinitions (redefinition.go) charges clause
 	// 6.2.2 over them and resolveReferences (resolve.go) walks each original's
-	// {model group} for src-resolve.
+	// {model group} for Phase A's own charges.
 	modelGroupRedefinitions []modelGroupRedefinition
 
 	typeIndex           map[QName]TypeDefinition
@@ -246,13 +252,23 @@ type Schema struct {
 // may be added and none is reachable through Type.
 //
 // After the indexes are built, Finalize runs the resolution pass (resolve.go):
-// it walks the assembled components in document order and rejects any
-// unresolvable QName reference (src-resolve, §3.17.6.2) or spec-forbidden named
-// circularity. HARD-FAIL POLICY: §5.3 (Missing Sub-components) permits an
-// unresolved *required* reference to degrade assessment to lax rather than
-// reject the schema; goxsd8 deliberately hard-fails instead, as the right stance
-// for a conformance processor validated against the W3C test suite. That is an
-// implementation policy choice, not something §5.3 mandates.
+// it walks the assembled components in document order and rejects spec-forbidden
+// named circularity, the derivation and content-model constraints that need a
+// resolved target, and the representation invariants this package owns.
+//
+// AN UNRESOLVABLE QNAME REFERENCE IS NOT A REJECTION. §5.3 (Missing
+// Sub-components) makes it an ·absent· value and defers the consequence to
+// ·assessment·, and §4.2.3 requires the ·QName· to be retained meanwhile:
+// "During schema construction, implementations must retain ·QName· values for
+// such references." So a schema naming a type, element, attribute, model group,
+// keyref target, list item or union member that no component of the assembly
+// supplies FINALIZES, and every accessor answering for such a slot reports it
+// absent instead — see [Schema.ResolvedType],
+// [Schema.ResolvedAttributeDeclaration] and [Schema.ResolvedSimpleType]. Nothing
+// in this module yet turns that absence into the cvc clause-1 failure and ·lax
+// assessment· fallback §5.3 mandates at validation time; until it does, an
+// ·absent· value withholds every verdict predicated on the component it stands
+// for (see xsd/resolve.go's resolveElementDecl).
 //
 // Every OTHER sch-props-correct clause (in particular clause 1's remaining
 // cross-reference-dependent requirements) stays deferred to later passes.

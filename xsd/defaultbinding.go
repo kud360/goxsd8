@@ -112,9 +112,10 @@ func (s *Schema) attributeDefaultBinding(side attributeRestrictionSide, n QName)
 // ResolvedAttributeDeclaration resolves the Attribute Declaration behind an
 // attribute use for both variants of the AttributeDeclarationOrRef sum: the
 // sibling declaration a LocalAttributeDeclaration owns by value, or the
-// top-level declaration an AttributeDeclarationRef names. ok is false only for
-// a dangling Ref, which Phase A already rejected (src-resolve clause 1.2), so
-// it is unreachable on a *Schema that exists.
+// top-level declaration an AttributeDeclarationRef names. ok is false only for a
+// dangling Ref — §5.3's ·absent· {attribute declaration}, which finalize retains
+// and charges nothing for (resolve.go, #434), so it is an ordinary answer about
+// an ACCEPTED schema and not a fault a caller may assume away.
 //
 // It is exported for the instance validator, which needs the declaration behind
 // a use it matched an attribute information item to — its {type definition} for
@@ -434,9 +435,11 @@ func disallowedSubstitutionsSuperset(specific, general ElementDeclaration) bool 
 // — it sits inside loc-testSubP's bool chain, which runs all the way down into
 // contentrestricts.go's automaton because cos-content-act-restrict clause 2 is one conjunct
 // of a DISJUNCTION and so has no error to return until the single site that charges the
-// rule — and it already folds exactly this class of fault into "accept". A schema reaching
-// here has survived Phase A, which charges src-resolve for every unresolvable base a Schema
-// reaches, so the case is unreachable rather than merely benign.
+// rule — and it already folds exactly this class of fault into "accept". The case is
+// REACHED on an accepted schema, since §5.3 retains an unresolvable base rather
+// than rejecting it (resolve.go, #434), so the accept above is this clause's §5.3
+// answer and not a formality: with no component to compare there is nothing for
+// clause 4 to charge.
 func (s *Schema) declaredTypeRestricts(specific, general ElementDeclaration) bool {
 	sub, ok := s.ResolvedType(specific.TypeDefinition())
 	if !ok {
@@ -493,16 +496,22 @@ func (s *Schema) checkAttributeUseSubsumes(n QName, r attributeRestriction, gene
 // (derivation.go) is used unchanged.
 //
 // An unresolvable or non-simple {type definition} on either side is SKIPPED
-// rather than rejected: a dangling type name was already charged src-resolve by
-// Phase A, and a name resolving to a complex type is not a fact this clause is
-// competent to charge. Skipping is fail-open, never a false reject. Both sides
+// rather than rejected: an unresolvable name is §5.3's ·absent· type, which is no
+// component to compare, and a name resolving to a complex type is not a fact this
+// clause is competent to charge. Skipping is fail-open, never a false reject. Both sides
 // are resolved through attributeUseType, the one encoding of "the simple type
 // governing this use" clause 5.2.2 also reads (STYLE T4).
 //
 // An unresolvable {base type definition} INSIDE either chain is a different
 // thing and is returned as the src-resolve error rather than skipped: this frame
 // charges an error already, so there is no bool to fold it into (see
-// validlyDerived). It is unreachable for a schema that survived Phase A.
+// validlyDerived). That error is §5.3's ·absent· reference reaching a caller
+// that has no ·absent· answer to give — the simple-type readers' one error source
+// (simpletyperef.go) — and it IS reachable: finalize's usable gate stands in
+// front of the simple-type charges (resolve.go) and nowhere else, so a
+// complex-side clause reading a chain through an ·absent· base still surfaces it
+// as a rejection. It is the residue the GAP(xsd) markers at usable record for
+// #250.
 func (s *Schema) checkAttributeTypeDerivedOK(n QName, r attributeRestriction, general, specific AttributeUse) error {
 	gt, ok := s.attributeUseType(general)
 	if !ok {
@@ -603,7 +612,9 @@ func (s *Schema) attributeUseType(u AttributeUse) (*SimpleType, bool) {
 // ResolvedSimpleType narrows [Schema.ResolvedType] to a Simple Type Definition. ok
 // is false for an absent slot, an unresolvable name, and a {type definition} that
 // is a complex type — the three cases every caller treats as "not decidable by
-// this clause", never as a violation.
+// this clause", never as a violation. All three are reachable on an ACCEPTED
+// schema, the unresolvable name because finalize retains it as §5.3's ·absent·
+// value rather than rejecting it; see [Schema.ResolvedType].
 //
 // It is exported for the instance validator, which reaches a Simple Type
 // Definition through two different slots and must not write the *SimpleType

@@ -60,7 +60,7 @@ const styleCitationsGuardFile = "stylecitations_test.go"
 // T5, D3) and renumbered every site.
 var allowedBadStyleCitations = []styleCitationAllowance{
 	{file: "conformance/datatypes.go", token: "10", count: 1},
-	{file: "xsd/resolve.go", token: "8", count: 2},
+	{file: "xsd/resolve.go", token: "8", count: 1},
 }
 
 // The vacuity floors, sitting safely below the counts at the time of

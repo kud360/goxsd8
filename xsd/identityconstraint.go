@@ -158,12 +158,12 @@ func (c IdentityConstraint) Fields() []XPathExpression {
 // the category is "keyref"); when false the first result is not meaningful.
 //
 // This is NOT the resolved {referenced key} component (§3.11.1). Finalize
-// validates that the name resolves to an identity-constraint definition
-// (src-resolve clause 1.7) that is a key or unique, not another keyref
+// validates that a name it CAN resolve names a key or unique, not another keyref
 // (c-props-correct clause 1), and that this constraint's {fields} cardinality
-// equals that resolved target's (c-props-correct clause 2). It adds no
-// resolved-component accessor: the QName is retained, and a consumer follows it
-// by a read-time lookup.
+// equals that resolved target's (c-props-correct clause 2); a name that resolves
+// to nothing is §5.3's ·absent· {referenced key} and is charged neither clause
+// (#434). It adds no resolved-component accessor: the QName is retained, and a
+// consumer follows it by a read-time lookup.
 func (c IdentityConstraint) ReferencedKeyName() (QName, bool) {
 	return c.referencedKey, c.category == IdentityConstraintKeyref
 }

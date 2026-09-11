@@ -49,13 +49,13 @@ var restrictionBlockingKeywords = []DerivationMethod{DerivationExtension, Deriva
 // rather than derivation-ok-restriction clause 1's coarser "B is a complex type
 // definition" (STYLE E2, charge precision).
 //
-// PHASE ORDER IS LOAD-BEARING, three ways — this must run after Phases A, B and
-// C, and the reasons are recorded here the way resolve.go:51-59 records Phase
-// C's:
+// PHASE ORDER IS LOAD-BEARING, two ways — this must run after Phases B and C,
+// and the reasons are recorded here the way resolve.go records Phase C's. It does
+// NOT depend on Phase A: a {base type definition} or {attribute declaration}
+// reference that resolves to nothing is §5.3's ·absent· value on an accepted
+// schema (resolve.go, #434), so every lookup below is a genuine comma-ok whose
+// false arm skips the clause rather than a hit assumed in advance.
 //
-//   - after Phase A (existence): every {base type definition} and every
-//     {attribute declaration} reference is known to resolve, so the lookups below
-//     are hits rather than silent skips.
 //   - after Phase B (circularity): derivedOKComplex and
 //     locallyDeclaredAttributeType walk {base type definition} chains, and
 //     effectivetotalrange.go follows <group ref> edges, with NO visited set. That
@@ -148,11 +148,12 @@ func (s *Schema) checkCTPropsCorrectResolved(c ComplexType) error {
 }
 
 // checkSimpleBaseIsExtension is ct-props-correct clause 2. An absent or
-// unresolvable base is skipped: the reference was already charged src-resolve by
-// Phase A, and an absent one has no variety to read. The base is reached through
-// ResolvedType, so an anonymous inline base is decided rather than skipped — skipping
-// it would wave the clause through unchecked for every redefining complex type
-// (STYLE T4, #505).
+// unresolvable base is skipped: neither has a variety to read, and an
+// unresolvable one is §5.3's ·absent· value, which clause 1's own "modulo the
+// impact of Missing Sub-components" licences this tableau to hold without. The base
+// is reached through ResolvedType, so an anonymous inline base is decided rather than
+// skipped — skipping it would wave the clause through unchecked for every redefining
+// complex type (STYLE T4, #505).
 func (s *Schema) checkSimpleBaseIsExtension(c ComplexType) error {
 	base, ok := s.ResolvedType(c.Base())
 	if !ok {
@@ -238,7 +239,7 @@ func (s *Schema) checkComplexTypeRestriction(t ComplexType) error {
 	}
 	base, ok := s.ResolvedType(t.Base())
 	if !ok {
-		return nil // an absent base, or a dangling one Phase A already charged src-resolve
+		return nil // an absent base, or an ·absent· one (§5.3): no component to judge
 	}
 	b, ok := base.(ComplexType)
 	if !ok {
@@ -731,11 +732,14 @@ func (s *Schema) ValidlySubstitutable(sub, super TypeDefinition, blocked []Deriv
 // restriction that types an element the base left untyped (a bare <element>
 // defaults to xs:anyType, §3.3.2.1 case 4). The error result is the src-resolve
 // clause 1.1 rejection an unresolvable simple-type {base type definition}
-// produces (simpletyperef.go). It is UNREACHABLE for any schema that survived
-// finalize's earlier phases — Phase A charges that rule for every base a Schema
-// reaches — and is propagated rather than folded into the verdict because
-// folding it either way would be a made-up answer: false is a false reject, true
-// a false accept.
+// produces (simpletyperef.go). It is REACHABLE on a schema finalize accepts —
+// §5.3 retains such a reference rather than rejecting it (resolve.go, #434), and
+// the usable gate guards the simple-type charges alone, not this complex-side
+// walk — and it is propagated rather than folded into the verdict because folding
+// it either way would be a made-up answer: false is a false reject, true a false
+// accept. Propagating it means the schema is rejected under a §5.3 reference this
+// landing meant to retain, which is the residue the GAP(xsd) markers at usable
+// record for #250.
 func (s *Schema) validlyDerived(sub, super TypeDefinition, blocked []DerivationMethod) (bool, error) {
 	switch sup := super.(type) {
 	case ComplexType:
@@ -797,7 +801,7 @@ func (s *Schema) derivedOKComplex(d ComplexType, b TypeDefinition, blocked []Der
 		}
 		base, ok := s.ResolvedType(d.Base())
 		if !ok {
-			return false, nil // an absent base, or a dangling one Phase A already charged
+			return false, nil // an absent base, or an ·absent· one (§5.3): the chain ends
 		}
 		if sameTypeDefinition(base, b) {
 			return true, nil // clause 2.2

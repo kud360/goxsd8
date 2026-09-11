@@ -335,15 +335,17 @@ func checkComplexTypeContext(loc xsderr.Loc, context ComplexTypeContext) error {
 // TypeDefinitionRef naming a top-level type, and for the one mapping rule that
 // needs an already-resolved anonymous base — §4.2.4 src-expredef clause 1.1's
 // redefine pairing — an InlineTypeDefinition owning it outright. Finalize
-// (resolve.go, #173) VALIDATES that a named reference resolves to a type
-// definition (src-resolve clause 1.1) and that the complex-type base chain is
-// acyclic except xs:anyType's self-derivation (ct-props-correct clause 3), but
+// (resolve.go, #173) validates that the complex-type base chain is
+// acyclic except xs:anyType's self-derivation (ct-props-correct clause 3), and
 // does NOT rewrite a name into a resolved component: the QName is retained, and
-// a consumer follows the slot with Base. Finalize also charges ct-props-correct
-// clauses 2 and 4 and, against the resolved base, derivation-ok-restriction
-// (§3.4.6.3) for a restriction and cos-ct-extends (§3.4.6.2) for an extension
-// (Phase D, complexderivation.go and complexextension.go, #262/#264). Clause 1's
-// remaining resolved parts stay deferred.
+// a consumer follows the slot with Base. A name that resolves to NOTHING is not
+// rejected either — §5.3 makes it an ·absent· {base type definition} (#434) —
+// so Base's caller must handle a miss as an ordinary answer. Finalize also
+// charges ct-props-correct clauses 2 and 4 and, against the resolved base,
+// derivation-ok-restriction (§3.4.6.3) for a restriction and cos-ct-extends
+// (§3.4.6.2) for an extension (Phase D, complexderivation.go and
+// complexextension.go, #262/#264). Clause 1's remaining resolved parts stay
+// deferred.
 //
 // {attribute uses} and {attribute wildcard} are the TWO properties Finalize
 // completes rather than merely checks, because each has a mapping clause that
@@ -937,11 +939,12 @@ func (c ComplexType) Loc() xsderr.Loc {
 // TypeDefinitionOrRef sum, which a consumer switches exhaustively over:
 //
 //   - TypeDefinitionRef is the ordinary case, a PRE-RESOLUTION reference by
-//     name. Finalize (#173) validates that it resolves to a type definition
-//     (src-resolve clause 1.1) and that the base chain is acyclic
-//     (ct-props-correct clause 3), but does not rewrite it: the QName is
-//     retained, and a consumer obtains the component by a read-time
+//     name. Finalize (#173) validates that the base chain is acyclic
+//     (ct-props-correct clause 3) but does not rewrite the reference: the QName
+//     is retained, and a consumer obtains the component by a read-time
 //     schema.Type(name) lookup, exactly as for ElementDeclaration.TypeDefinition.
+//     That lookup may MISS on a schema finalize accepted — §5.3's ·absent· {base
+//     type definition} (#434) — which is what Schema.ResolvedType's ok reports.
 //   - InlineTypeDefinition is the ALREADY-RESOLVED anonymous component §4.2.4
 //     src-expredef clause 1.1 pairs a redefining <complexType> with; it is in no
 //     symbol table, so it is reachable only through this slot, and no lookup

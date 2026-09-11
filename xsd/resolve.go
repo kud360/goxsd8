@@ -1,10 +1,6 @@
 package xsd
 
-import (
-	"fmt"
-
-	"github.com/kud360/goxsd8/xsderr"
-)
+import "github.com/kud360/goxsd8/xsderr"
 
 // ruleSrcResolve is Schema Representation Constraint: QName resolution (Schema
 // Document) (Structures §3.17.6.2, id="src-resolve"): for a QName to resolve to
@@ -35,12 +31,19 @@ var anyTypeName = QName{Space: XMLSchemaNS, Local: "anyType"}
 // lookups, never ranged to walk or to pick which failure to report, so the first
 // reported failure is deterministic):
 //
-//   - Phase A (existence): walk every in-scope QName reference site and reject an
-//     unresolvable target with src-resolve. At the keyref site it also folds in
-//     the two c-props-correct checks that only the resolved target makes
-//     decidable — clause 1 for a keyref pointing at another keyref, and clause 2,
-//     which is not an existence check at all but the {fields} cardinality match
-//     between keyref and {referenced key} (resolveKeyref).
+//   - Phase A (resolved-target verdicts): walk every in-scope QName reference
+//     site and charge the verdicts that need the target IN HAND. It charges
+//     NOTHING for a target that is absent: §5.3 (Missing Sub-components) makes an
+//     unresolvable reference an ·absent· value rather than a schema error, and
+//     §4.2.3 requires the ·QName· to be retained through construction, so this
+//     phase resolves in order to judge and never in order to reject (#434; the
+//     residue §5.3 still owes is #250's, recorded at resolveElementDecl). What it
+//     does charge: the owner-of-owner representation invariant on a
+//     SubstitutionGroupHeadTypeRef slot (resolveTypeDefinitionSlot), and at the
+//     keyref site the two c-props-correct checks that only the resolved target
+//     makes decidable — clause 1 for a keyref pointing at another keyref, and
+//     clause 2, the {fields} cardinality match between keyref and {referenced
+//     key} (resolveKeyref).
 //   - Phase B (circularity): reject the spec-forbidden named circularities that
 //     become representable only across the assembled set — the complex-type base
 //     chain (ct-props-correct clause 3), the SIMPLE-type base chain
@@ -64,45 +67,41 @@ var anyTypeName = QName{Space: XMLSchemaNS, Local: "anyType"}
 //     holds — to SimpleType.CheckDerivation and then to the installed
 //     SimpleTypeRestrictionChecker, charging between them the graph half and the
 //     facet-VALUE half of Derivation Valid (Restriction, Simple) (§3.16.6.2,
-//     cos-st-restricts) plus st-props-correct clauses 1, 3 and 5. That step
-//     needs Phase A's resolvability and Phase B's simple-type acyclicity, and
-//     nothing else; it runs first within the phase so a schema whose simple
+//     cos-st-restricts) plus st-props-correct clauses 1, 3 and 5, against every
+//     type the usable gate admits. That step needs Phase B's simple-type
+//     acyclicity and nothing else; it runs first within the phase so a schema whose simple
 //     types are themselves invalid says so before any complex-type derivation
 //     verdict computed over them, and so that the four steps after it may treat
 //     every simple-type base chain as already resolved. Its walk carries no
 //     visited set, for the reason its own doc records. It then MATERIALISES the
 //     two attribute-side properties whose mapping rules a producer cannot
-//     finish, because each needs the resolved base: {attribute
-//     uses}, whose §3.4.2.4 clause 3 folds the {base type definition}'s uses
-//     into every complex type's own (attributeusefold.go, #401), and {attribute
-//     wildcard}, whose §3.4.2.5 clause 2.2 unions an EXTENSION's own ·complete
-//     wildcard· with its ·base wildcard· (attributewildcardfold.go, #265). The
-//     two are independent properties, so their relative order carries no
-//     verdict; both precede the checks. It then rejects the derivation-relative
-//     constraints that need that resolved base — the ct-props-correct (§3.4.6.1)
-//     clauses 2 and 4, derivation-ok-restriction (§3.4.6.3) for every
+//     finish, because each needs the resolved base: {attribute uses}, whose §3.4.2.4
+//     clause 3 folds the {base type definition}'s uses into every complex type's own
+//     (attributeusefold.go, #401), and {attribute wildcard}, whose §3.4.2.5 clause 2.2
+//     unions an EXTENSION's own ·complete wildcard· with its ·base wildcard·
+//     (attributewildcardfold.go, #265). The two are independent properties, so their
+//     relative order carries no verdict; both precede the checks. It then rejects the
+//     derivation-relative constraints that need that resolved base — the ct-props-correct
+//     (§3.4.6.1) clauses 2 and 4, derivation-ok-restriction (§3.4.6.3) for every
 //     restriction-derived complex type, and cos-ct-extends (§3.4.6.2) for every
-//     extension-derived one (complexderivation.go, complexextension.go,
-//     defaultbinding.go, effectivetotalrange.go). Immediately after those, over
-//     the same c-ran clause 3 apparatus, it charges the one constraint that
-//     compares two ATTRIBUTE GROUP definitions — src-redefine (§4.2.4) clause
-//     7.2.2, which requires a redefining <attributeGroup> carrying no
-//     self-reference to RESTRICT the definition it redefines (redefinition.go).
-//     It finishes on the one derivation verdict quantified over ELEMENT
-//     declarations rather than types — e-props-correct (§3.3.6.1) clause 4
-//     (c-vs-sg), which requires a declaration's {type definition} to be ·validly
-//     substitutable· for that of each member of its {substitution group
-//     affiliations}, subject to that member's {substitution group exclusions}
-//     (substitutiongrouptypes.go). It shares the phase because it is the same
-//     cos-ct-derived-ok/cos-st-derived-ok engine pair under a different
-//     quantifier; see checkSubstitutionGroupTypes for the ordering argument. It
-//     CLOSES on that engine's third quantifier — e-props-correct clause 7, which
-//     requires each Type Alternative's {type definition} in a declaration's
-//     {type table}, and the {default type definition}'s, to be ·validly
-//     substitutable· for the declaration's own {type definition} subject to its
-//     {disallowed substitutions}, unless it is ·xs:error·
-//     (typetablesubstitutable.go). Clause 7 runs after clause 4 so a declaration
-//     failing both reports the failure that does not depend on its type table.
+//     extension-derived one (complexderivation.go, complexextension.go, defaultbinding.go,
+//     effectivetotalrange.go). Immediately after those, over the same c-ran clause 3
+//     apparatus, it charges the one constraint that compares two ATTRIBUTE GROUP
+//     definitions — src-redefine (§4.2.4) clause 7.2.2, which requires a redefining
+//     <attributeGroup> carrying no self-reference to RESTRICT the definition it redefines
+//     (redefinition.go). It finishes on the one derivation verdict quantified over ELEMENT
+//     declarations rather than types — e-props-correct (§3.3.6.1) clause 4 (c-vs-sg),
+//     which requires a declaration's {type definition} to be ·validly substitutable· for
+//     that of each member of its {substitution group affiliations}, subject to that
+//     member's {substitution group exclusions} (substitutiongrouptypes.go). It shares the
+//     phase because it is the same cos-ct-derived-ok/cos-st-derived-ok engine pair under a
+//     different quantifier; see checkSubstitutionGroupTypes for the ordering argument. It
+//     CLOSES on that engine's third quantifier — e-props-correct clause 7, which requires
+//     each Type Alternative's {type definition} in a declaration's {type table}, and the
+//     {default type definition}'s, to be ·validly substitutable· for the declaration's own
+//     {type definition} subject to its {disallowed substitutions}, unless it is ·xs:error·
+//     (typetablesubstitutable.go). Clause 7 runs after clause 4 so a declaration failing
+//     both reports the failure that does not depend on its type table.
 //   - Phase E (value-constraint validity), in two walks over the same file
 //     (valueconstraintvalid.go). The DESCENDING walk rejects an Attribute Use whose
 //     own {value constraint} contradicts its resolved {attribute declaration}'s
@@ -146,23 +145,28 @@ var anyTypeName = QName{Space: XMLSchemaNS, Local: "anyType"}
 // can supply (substitutiongroup.go).
 //
 // Phase D runs last, and its position after each earlier phase is load-bearing
-// too — its COMPLEX-type steps need Phase A's resolvability, Phase B's
-// acyclicity (they walk {base type definition} chains and <group ref> edges with
-// no visited set), and Phase C's cos-element-consistent (which is what makes the
-// ·locally declared type· of an element name within one content model a function
-// rather than a relation, without which derivation-ok-restriction clause 4 and
-// its cos-ct-extends clause-1.6 twin would not be statable). See
-// checkComplexDerivations' own doc for the full statement. Its SIMPLE-type step
-// is exempt from Phase C alone: it needs Phase A's resolvability (it follows a
-// deferred {base type definition}) and Phase B's simple-type acyclicity (it
-// follows it with no visited set), but decides nothing about content models.
+// too — its COMPLEX-type steps need Phase B's acyclicity (they walk {base type
+// definition} chains and <group ref> edges with no visited set) and Phase C's
+// cos-element-consistent (which is what makes the ·locally declared type· of an
+// element name within one content model a function rather than a relation,
+// without which derivation-ok-restriction clause 4 and its cos-ct-extends
+// clause-1.6 twin would not be statable). See checkComplexDerivations' own doc
+// for the full statement. Its SIMPLE-type step is exempt from Phase C alone: it
+// needs Phase B's simple-type acyclicity (it follows a deferred {base type
+// definition} with no visited set), but decides nothing about content models.
+//
+// NO PHASE DEPENDS ON PHASE A FOR RESOLVABILITY, and none may be written to.
+// Phase A charges nothing for an unresolvable reference (§5.3), so every later
+// reader reaches an ·absent· target on a schema that will be ACCEPTED: the
+// complex side reads through the ok-checked accessors ResolvedType,
+// ResolvedSimpleType, ResolvedAttributeDeclaration and the modelGroupIndex/
+// s.Element lookups, each of which skips and contributes nothing, and the simple
+// side is gated by usable before anything is charged against it.
 //
 // Phase E runs LAST. Its position is not load-bearing the way Phase D's is — it
 // reads one component at a time and follows no chain, apart from the ·emptiable·
-// verdict cos-valid-default clause 2.2 takes over a particle's own subtree — but
-// it needs Phase A's resolvability (an <attribute ref> must name a real
-// declaration, and a TypeDefinitionRef a real type, before either can be read)
-// and it charges the narrowest, most component-local failure of the five, so
+// verdict cos-valid-default clause 2.2 takes over a particle's own subtree — and
+// it charges the narrowest, most component-local failure of the five, so
 // reporting it after the structural phases keeps the first reported failure the
 // most structural one. Its two walks run descending first, declaration-side
 // second, which is arbitrary — no verdict depends on the order, only which of two
@@ -181,35 +185,34 @@ var anyTypeName = QName{Space: XMLSchemaNS, Local: "anyType"}
 // from each — because a folded type is observable only through the slot holding
 // it (ownedtypefold.go).
 //
-// An absent reference is skipped, not treated as dangling: absence — a zero
-// QName in a bare-QName slot, a nil TypeDefinitionOrRef in a {type definition}
-// slot — means "no reference", which src-resolve has nothing to resolve. Only a
-// present-but-unresolvable reference is a failure. That skip is reachable only
-// from the genuinely OPTIONAL reference slots (a ComplexType with no {base type
-// definition} name, an ElementDeclaration with no {type definition}, for
-// instance); it can never mask a mandatory reference, because the four ref-only
-// sum variants — AttributeDeclarationRef, ElementDeclarationRef, ModelGroupRef,
-// TypeDefinitionRef — cannot hold a zero QName in the first place:
-// NewAttributeUse, NewParticle, NewElementDeclaration and
-// NewAttributeDeclaration reject one at construction (STYLE T1).
+// An absent reference and a present-but-unresolvable one are BOTH skipped, and
+// they are different facts reaching the same verdict, not one fact. Absence — a
+// zero QName in a bare-QName slot, a nil TypeDefinitionOrRef in a {type
+// definition} slot — means "no reference", which src-resolve has nothing to
+// resolve, and it is reachable only from the genuinely OPTIONAL reference slots
+// (a ComplexType with no {base type definition} name, an ElementDeclaration with
+// no {type definition}, for instance); it can never mask a mandatory reference,
+// because the four ref-only sum variants — AttributeDeclarationRef,
+// ElementDeclarationRef, ModelGroupRef, TypeDefinitionRef — cannot hold a zero
+// QName in the first place: NewAttributeUse, NewParticle, NewElementDeclaration
+// and NewAttributeDeclaration reject one at construction (STYLE T1). A
+// MANDATORY reference that resolves to nothing is §5.3's ·absent· value, which
+// the retained ·QName· records and ·assessment· answers for; construction
+// charges nothing either way.
 //
-// FOLLOW-COST ASYMMETRY (recorded deliberately, not silently): Phase A wires
-// present-tense readers for the three Query views (Type/Element/Attribute
-// Resolvers) and for modelGroupIndex + idcIndex. It reads NEITHER
-// attributeGroupIndex NOR notationIndex — no in-scope reference resolves into
-// them yet (an <attributeGroup ref> is inlined at producer mapping time with no
-// persistent ref component, §3.6.2.1; nothing carries a NOTATION reference).
-// Schema.ModelGroup(QName) (#307) closed the modelGroupIndex half of the
-// asymmetry this paragraph used to record: a ModelGroupRef, like a
-// ModelGroupScopeParent (elementdeclaration.go), is followable today the same
-// read-time-lookup way the three Query views are, and needed no new Resolver
-// interface (no consumer takes one, unlike Type/Element/Attribute). Because
-// resolution is still validation-only, this package exposes no
-// Schema.IdentityConstraint(name) accessor (STYLE 8 — export nothing without a
-// consumer): the cost of following a keyref at read time is shifted onto the
-// future Walker/Matcher and instance validator, which will need exactly that
-// accessor. That remaining asymmetry is intentional, discharged by the
-// consumer issue that adds it.
+// FOLLOW-COST ASYMMETRY (recorded deliberately, not silently): every reference
+// is followed by a read-time lookup, never by a resolved pointer some pass
+// stored, so the cost of following one falls on each reader. The three Query
+// views (Type/Element/Attribute Resolvers) and Schema.ModelGroup(QName) (#307)
+// serve four of the five kinds; a ModelGroupRef, like a ModelGroupScopeParent
+// (elementdeclaration.go), needed no new Resolver interface (no consumer takes
+// one, unlike Type/Element/Attribute). Because resolution is still
+// validation-only, this package exposes no Schema.IdentityConstraint(name)
+// accessor (STYLE 8 — export nothing without a consumer): the cost of
+// following a keyref at read time is shifted onto the future Walker/Matcher
+// and instance validator, which will need exactly that accessor. That
+// remaining asymmetry is intentional, discharged by the consumer issue that
+// adds it.
 func (s *Schema) resolve() error {
 	if err := s.resolveReferences(); err != nil {
 		return err
@@ -268,25 +271,26 @@ func (s *Schema) resolve() error {
 	return s.checkAttributeDeclarationDefaults()
 }
 
-// resolveReferences is Phase A: it walks every reference site in document order,
-// rejecting the first unresolvable one. The three narrow-view resolvers below
-// take a Resolver interface (STYLE T3) so they are testable against a fake; the
-// model-group and keyref resolvers read the internal indexes directly, since no
-// external consumer justifies minting a capability interface for them (STYLE 8).
+// resolveReferences is Phase A: it walks every reference site in document order
+// and charges the first verdict that needs the resolved target. An unresolvable
+// target is NOT one of those verdicts — §5.3 retains the ·QName· and defers the
+// consequence to ·assessment· — so the walk carries exactly two charges: the
+// owner-of-owner representation invariant (resolveTypeDefinitionSlot) and the
+// keyref's two c-props-correct clauses (resolveKeyref).
 //
-// REFERRER-LOC CONVENTION. Every src-resolve rejection here is charged to the
-// REFERRING component's position, never to the target's — the target is exactly
-// what does not exist, so it has none. Each helper therefore takes a loc
-// alongside its ctx phrase, and the descent threads down the position of the
-// nearest ENCLOSING component that retains one: a ComplexType, ElementDeclaration,
-// AttributeDeclaration or ModelGroupDefinition re-roots it at its own Loc() as the
-// walk enters it, while a Particle, AttributeUse, ModelGroup, TypeTable or
-// TypeAlternative inherits the enclosing component's, because none of those five
-// retains a position or exposes an accessor for one — nothing consumed their
-// positions when they were built, so none was minted (xsd doc.go, STYLE T5).
-// Inheriting is not an approximation of the wrong thing: an inline particle tree or
-// attribute use belongs to exactly one such enclosing component, so its position
-// names the declaration a reader must open, one enclosing element out.
+// REFERRER-LOC CONVENTION. Every rejection here is charged to the REFERRING
+// component's position, never to the target's — where the target is missing
+// outright it has none. Each helper therefore takes a loc alongside its ctx phrase,
+// and the descent threads down the position of the nearest ENCLOSING component that
+// retains one: a ComplexType, ElementDeclaration, AttributeDeclaration or
+// ModelGroupDefinition re-roots it at its own Loc() as the walk enters it, while a
+// Particle, AttributeUse, ModelGroup, TypeTable or TypeAlternative inherits the
+// enclosing component's, because none of those five retains a position or exposes
+// an accessor for one — nothing consumed their positions when they were built, so
+// none was minted (xsd doc.go, STYLE T5). Inheriting is not an approximation of the
+// wrong thing: an inline particle tree or attribute use belongs to exactly one such
+// enclosing component, so its position names the declaration a reader must open,
+// one enclosing element out.
 func (s *Schema) resolveReferences() error {
 	w := s.referenceWalk()
 	for _, t := range s.types {
@@ -322,12 +326,8 @@ func (s *Schema) resolveReferences() error {
 	// The S2 originals of the <attributeGroup> redefinitions, in pairing order,
 	// for the reason the <group> originals below are walked: they are in no
 	// property and no index (§4.2.4 clause 4.1.2), so the loop above reaches none
-	// of them — yet checkAttributeGroupRedefinitions walks each as the B side of
-	// src-redefine clause 7.2.2, where an unresolvable <attribute ref> or type=
-	// leaves checkAttributeTypeDerivedOK (defaultbinding.go) with no type to put to
-	// loc-testSubP clause 5.1 and the clause undecided. A dangling name here is
-	// charged src-resolve as its own error rather than silently deciding someone
-	// else's clause.
+	// of them, and this phase's owner-of-owner invariant would go uncharged on the
+	// {type definition} slot of every local <attribute> inside one.
 	for _, r := range s.attributeGroupRedefinitions {
 		if err := w.walkAttributeGroupDefinition(r.original); err != nil {
 			return err
@@ -338,14 +338,10 @@ func (s *Schema) resolveReferences() error {
 			return err
 		}
 	}
-	// The S2 originals of the <group> redefinitions, in pairing order. They are in
-	// no property and no index (§4.2.4 clause 4.1.2), so the loop above reaches
-	// none of them — yet checkModelGroupRedefinitions walks each as the B side of
-	// src-redefine clause 6.2.2, and addTerm (particleattribution.go) answers an
-	// unresolved <element ref>/<group ref> with an empty fragment. On B that
-	// SHRINKS the language the redefinition must be a subset of and manufactures a
-	// rejection, so a dangling name here is charged src-resolve as its own error
-	// rather than silently deciding someone else's clause.
+	// The S2 originals of the <group> redefinitions, in pairing order, for the same
+	// reason: they are in no property and no index (§4.2.4 clause 4.1.2), so the
+	// loop above reaches none of them and the inline <complexType>s their local
+	// <element> children own would go unvisited.
 	for _, r := range s.modelGroupRedefinitions {
 		if err := w.walkModelGroup(r.original.ModelGroup(), r.original.Loc()); err != nil {
 			return err
@@ -360,39 +356,25 @@ func (s *Schema) resolveReferences() error {
 }
 
 // referenceWalk is Phase A's set of charges for the shared component descent
-// (componentwalk.go): a src-resolve verdict at every BY-NAME arm the descent
-// reaches, and the two slots the descent does not itself enter — an element
-// declaration's {type table} and its keyrefs (resolveElementDecl), and a simple
-// type's own graph (resolveSimpleType).
+// (componentwalk.go): the owner-of-owner representation invariant at a {type
+// definition}/{base type definition} slot (resolveTypeDefinitionSlot), and the
+// two slots the descent does not itself enter — an element declaration's {type
+// table} and its keyrefs (resolveElementDecl).
 //
-// It is the only one of the four phases that charges anything at a by-name arm.
-// The other three read a name as a leaf owned by the component it names; this
-// phase is what proves that component exists in the first place, so every arm is
-// a site here.
+// The hooks NOT wired are the point of this landing (#434). A particle's by-name
+// {term}, an <attribute ref> and a simple type's three SimpleTypeOrRef slots each
+// used to carry a src-resolve verdict here; §5.3 makes an unresolvable one an
+// ·absent· value rather than a schema error, so with the charge gone each hook
+// had nothing left to do and is not wired. The descent still enters every
+// component they used to be charged on, through the arms componentWalk follows
+// on its own — a LocalAttributeDeclaration through walkAttributeUse, an inline
+// simple type through the InlineTypeDefinition arm — so no slot lost its
+// owner-of-owner verdict along with its src-resolve one.
 func (s *Schema) referenceWalk() componentWalk {
 	return componentWalk{
 		typeDefinitionSlot: s.resolveTypeDefinitionSlot,
-		attributeUse:       s.resolveAttributeUse,
 		elementDeclaration: s.resolveElementDecl,
-		simpleType:         s.resolveSimpleType,
-		termRef:            s.resolveTermRef,
 	}
-}
-
-// resolveTypeName resolves a {type definition}/{base type definition} reference
-// (src-resolve clause 1.1). A zero ref is absent and resolves to (nil, nil); a
-// present-but-missing ref is rejected. ctx names the referring site for the
-// message and loc positions it at the referring component (resolveReferences).
-func resolveTypeName(r TypeResolver, ref QName, loc xsderr.Loc, ctx string) (TypeDefinition, error) {
-	if ref == (QName{}) {
-		return nil, nil
-	}
-	t, ok := r.Type(ref)
-	if !ok {
-		return nil, xsderr.New(ruleSrcResolve, loc,
-			"%s references type %s, but no type definition with that expanded name is present in the schema (src-resolve clause 1.1)", ctx, ref)
-	}
-	return t, nil
 }
 
 // resolveTypeDefinitionSlot charges the {type definition}/{base type definition}
@@ -401,48 +383,51 @@ func resolveTypeName(r TypeResolver, ref QName, loc xsderr.Loc, ctx string) (Typ
 // TypeDefinitionOrRef's three arms. ctx names the referring site for the message
 // and loc positions it at the component holding the slot.
 //
-//   - nil is an absent {type definition}: src-resolve has nothing to resolve.
-//   - TypeDefinitionRef is the by-name arm: the src-resolve clause 1.1 lookup.
+//   - nil is an absent {type definition}: there is nothing to resolve.
+//   - TypeDefinitionRef is the by-name arm. It is NOT charged src-resolve clause
+//     1.1 when it names nothing — §5.3 retains the ·QName· as an ·absent· {type
+//     definition} and defers the consequence to ·assessment·, the same reading
+//     the head arm below already got — so the arm charges nothing at all and the
+//     miss surfaces at every read through ResolvedType's ok.
 //   - InlineTypeDefinition is already the component, reached through no symbol
-//     table, so the SLOT itself needs no resolution. Its own internal references
-//     still do, and both variants have them: a *SimpleType carries a
-//     SimpleTypeOrRef {base type definition} that may name a top-level type
-//     (resolveSimpleType), and a ComplexType carries a by-name {base type
-//     definition} and a particle tree. The shared descent enters that component
-//     and this phase's charges are applied inside it exactly as at a top-level
-//     one — which is what reaches the src-expredef clause 1.1 original of a
-//     <redefine>, an anonymous component held by no index and named by nothing.
+//     table, so the SLOT itself needs no resolution, and neither do the
+//     references inside it: a *SimpleType's three SimpleTypeOrRef slots and a
+//     ComplexType's by-name {base type definition} are §5.3 slots like this one.
+//     The shared descent still enters the component, so this phase's remaining
+//     charges are applied inside it exactly as at a top-level one — which is what
+//     reaches the src-expredef clause 1.1 original of a <redefine>, an anonymous
+//     component held by no index and named by nothing.
 //   - SubstitutionGroupHeadTypeRef names the element declaration that OWNS the
 //     inherited anonymous type. It is NOT charged src-resolve clause 1.3 when it
 //     names nothing — see below — and the descent does not enter it either: the
 //     head is itself an entry of s.elements, so its own inline type is walked
 //     when its turn comes, exactly once.
 //
-// TWO §5.3 READINGS OF ONE NAME, and they must not be mixed up. That head name
-// reaches this component through {substitution group affiliations}, the ONE
-// reference slot Phase A deliberately does not hard-fail: a substitutionGroup
-// naming nothing is a VALID schema whose members are ·absent· (§5.3 Missing
-// Sub-components; W3C saxonData/Missing missing002 pins it, and resolveElementDecl
-// carries the full argument). Charging src-resolve clause 1.3 HERE, on the
-// {type definition} the same absent name induced, would reject exactly the
-// schema Phase A just decided to allow, so the miss returns nil and clause 3
-// simply contributes no type — which is also what ResolvedType answers, and what
-// checkElementSubstitutableForHeads skips on.
+// The head name reaches this component through {substitution group
+// affiliations}, which #281 aligned with §5.3 first; the by-name arm above now
+// reads the same way, so the two no longer need telling apart. A
+// substitutionGroup naming nothing is a VALID schema whose members are ·absent·
+// (§5.3 Missing Sub-components; W3C saxonData/Missing missing002 pins it, and
+// resolveElementDecl carries the full argument), the miss returns nil and clause
+// 3 simply contributes no type — which is also what ResolvedType answers, and
+// what checkElementSubstitutableForHeads skips on.
 //
-// The ONE rejection this arm does carry is a representation invariant, not a
+// The ONE rejection this function carries is a representation invariant, not a
 // spec clause: an OWNER-OF-OWNER chain, where the named head's own {type
 // definition} is itself a SubstitutionGroupHeadTypeRef. The producer walks to
 // the TERMINAL head precisely so that never happens, and ResolvedType's read is
-// DEPTH-1 on the strength of it; rejecting the chain here is what makes ResolvedType's
-// not-ok branch unreachable for any schema that survived finalize, rather than a
-// silent fail-open (STYLE P3).
+// DEPTH-1 on the strength of it; rejecting the chain here is what keeps that
+// read one hop rather than a silent fail-open (STYLE P3). It is also the whole
+// reason this hook is still wired into referenceWalk at all.
+//
+// ctx is retained for that one rejection's message and is unused by the other
+// arms, which charge nothing.
 func (s *Schema) resolveTypeDefinitionSlot(ref TypeDefinitionOrRef, loc xsderr.Loc, ctx string) error {
 	switch r := ref.(type) {
 	case nil:
 		return nil
 	case TypeDefinitionRef:
-		_, err := resolveTypeName(s, r.Name, loc, ctx)
-		return err
+		return nil // an ·absent· {type definition} (§5.3); ResolvedType answers ok=false
 	case InlineTypeDefinition:
 		return nil // the descent enters it; the slot itself resolves nothing
 	case SubstitutionGroupHeadTypeRef:
@@ -460,68 +445,32 @@ func (s *Schema) resolveTypeDefinitionSlot(ref TypeDefinitionOrRef, loc xsderr.L
 	}
 }
 
-// resolveElementName resolves an element-declaration reference (src-resolve
-// clause 1.3): an <element ref> {term}. A zero ref is absent and skipped; loc
-// positions a rejection at the component enclosing the particle. The other
-// clause-1.3 site, a {substitution group affiliations} member, is deliberately
-// NOT routed here — see resolveElementDecl for the §5.3 reason.
-func resolveElementName(r ElementResolver, ref QName, loc xsderr.Loc, ctx string) error {
-	if ref == (QName{}) {
-		return nil
-	}
-	if _, ok := r.Element(ref); !ok {
-		return xsderr.New(ruleSrcResolve, loc,
-			"%s references element declaration %s, but no element declaration with that expanded name is present in the schema (src-resolve clause 1.3)", ctx, ref)
-	}
-	return nil
-}
-
-// resolveAttributeName resolves an <attribute ref> {attribute declaration}
-// reference (src-resolve clause 1.2). A zero ref is absent and skipped; loc
-// positions a rejection at the component enclosing the attribute use.
-func resolveAttributeName(r AttributeResolver, ref QName, loc xsderr.Loc, ctx string) error {
-	if ref == (QName{}) {
-		return nil
-	}
-	if _, ok := r.Attribute(ref); !ok {
-		return xsderr.New(ruleSrcResolve, loc,
-			"%s references attribute declaration %s, but no attribute declaration with that expanded name is present in the schema (src-resolve clause 1.2)", ctx, ref)
-	}
-	return nil
-}
-
-// resolveModelGroupName resolves a <group ref> {term} reference (src-resolve
-// clause 1.5) against modelGroupIndex directly. A zero ref is absent and
-// skipped; loc positions a rejection at the component enclosing the particle.
-func (s *Schema) resolveModelGroupName(ref QName, loc xsderr.Loc, ctx string) error {
-	if ref == (QName{}) {
-		return nil
-	}
-	if _, ok := s.modelGroupIndex[ref]; !ok {
-		return xsderr.New(ruleSrcResolve, loc,
-			"%s references model group definition %s, but no model group definition with that expanded name is present in the schema (src-resolve clause 1.5)", ctx, ref)
-	}
-	return nil
-}
-
-// resolveKeyref resolves an identity constraint's {referenced key} (src-resolve
-// clause 1.7) against idcIndex directly, but only for a keyref (a key/unique
-// carries no reference). Beyond existence it enforces both c-props-correct
-// (§3.11.6.1) requirements that need the RESOLVED target — the split with
-// NewIdentityConstraint is: the constructor owns clause 1's LOCAL
-// presence-iff-keyref shape only, and finalize (here) owns clause 1's
-// resolvability plus category and clause 2's cardinality.
+// resolveKeyref resolves an identity constraint's {referenced key} against
+// idcIndex directly, but only for a keyref (a key/unique carries no reference),
+// and charges the two c-props-correct (§3.11.6.1) requirements that need the
+// RESOLVED target. The split with NewIdentityConstraint is: the constructor owns
+// clause 1's LOCAL presence-iff-keyref shape only, and finalize (here) owns
+// clause 1's category and clause 2's cardinality.
 //
 //   - clause 1 (category): the referenced constraint must be a key or unique, NOT
-//     another keyref. A same-kind lookup passes src-resolve (both are IDCs), so
-//     the keyref→keyref mismatch is charged c-props-correct, not src-resolve.
+//     another keyref. A same-kind lookup resolves (both are IDCs), so the
+//     keyref→keyref mismatch is a c-props-correct fault about a target that IS
+//     there, not a resolution failure.
 //   - clause 2 (cardinality): the keyref's {fields} count must equal the
 //     {referenced key}'s.
 //
-// All three rejections are positioned at the KEYREF (ic.Loc()), never at the
-// target: the keyref is the component whose {referenced key} is wrong, it is the
-// one the schema author must edit, and for clause 1.7 the target does not exist
-// to have a position. resolveKeyref therefore needs no threaded loc — an
+// A refer= naming NOTHING is charged nothing. §3.11.2 declare-key maps
+// {referenced key} through the ordinary ·resolution· convention, so a miss is
+// §5.3's ·absent· value under c-props-correct clause 1's own "modulo the impact
+// of Missing Sub-components (§5.3)"; the ·QName· is retained (§4.2.3) and
+// ·assessment· answers for it (#434, and see resolveElementDecl). The two
+// clauses below are the half §5.3 does NOT forgive — clause 2 carries no modulo
+// qualifier at all — and they stay, which is why the existence test and the two
+// checks had to be told apart rather than dropped together.
+//
+// Both rejections are positioned at the KEYREF (ic.Loc()), never at the target:
+// the keyref is the component whose {referenced key} is wrong and the one the
+// schema author must edit. resolveKeyref therefore needs no threaded loc — an
 // IdentityConstraint retains its own, top-level or nested alike.
 //
 // The category check runs first, so a target that is both the wrong category and
@@ -536,8 +485,7 @@ func (s *Schema) resolveKeyref(ic IdentityConstraint) error {
 	}
 	target, ok := s.idcIndex[ref]
 	if !ok {
-		return xsderr.New(ruleSrcResolve, ic.Loc(),
-			"keyref %s references identity constraint %s, but no identity-constraint definition with that expanded name is present in the schema (src-resolve clause 1.7)", ic.Name(), ref)
+		return nil // an ·absent· {referenced key} (§5.3); neither clause is competent
 	}
 	if target.Category() == IdentityConstraintKeyref {
 		return xsderr.New(ruleICProps, ic.Loc(),
@@ -550,143 +498,42 @@ func (s *Schema) resolveKeyref(ic IdentityConstraint) error {
 	return nil
 }
 
-// resolveSimpleType descends a simple type's reference sites. There is exactly
-// one KIND of them — a SimpleTypeOrRef slot, whose by-name arm is the
-// src-resolve clause 1.1 lookup (simpletyperef.go) — sitting in three PLACES:
-// t's own {base type definition}, ListDerivation.Item, and each
-// UnionDerivation.Members entry. Every one goes through resolveSimpleTypeSlot,
-// which RESOLVES a by-name arm without following it and follows an owned one
-// (STYLE T4 — one encoding of the split, not one per slot).
-//
-// Resolving without following is what keeps the item and member edges from being
-// a fail-open: an itemType= or memberTypes= entry naming nothing is charged
-// src-resolve clause 1.1 here, in the same phase and by the same helper as a
-// dangling base=, rather than surfacing only if some later pass happened to read
-// the property.
-//
-// It carries no visited set (STYLE D4) and needs none: every edge it FOLLOWS is
-// an owned pointer, and an owned component must pre-exist the slot holding it,
-// so the owned graph is finite and acyclic. The by-name edges — the ones that
-// can close a cycle — are not followed here at all; each names a top-level type
-// this pass reaches in its own right, and Phase B's checkSimpleBaseAcyclic
-// rejects a cycle among the base ones.
-//
-// A rejection is positioned at the referring type's own Loc, which simpleTypeOfRef
-// takes from t — the referrer-Loc convention, with the simple type as its own
-// nearest position-bearing component.
-func (s *Schema) resolveSimpleType(t *SimpleType) error {
-	if t == nil {
-		return nil
-	}
-	if err := s.resolveSimpleTypeSlot(t, t.base, "{base type definition}"); err != nil {
-		return err
-	}
-	switch d := t.derivation.(type) {
-	case ListDerivation:
-		return s.resolveSimpleTypeSlot(t, d.Item, "{item type definition}")
-	case UnionDerivation:
-		for i, m := range d.Members {
-			if err := s.resolveSimpleTypeSlot(t, m, fmt.Sprintf("{member type definitions}[%d]", i)); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-// resolveSimpleTypeSlot resolves one SimpleTypeOrRef slot of t — charging
-// src-resolve clause 1.1 for a by-name arm that names nothing — and then
-// descends only its OWNED arm.
-//
-// The owned arm IS descended, for the reason checkComplexBaseAcyclic records for
-// its own inline hop: an anonymous inline component is in no index, so this is
-// the only place ITS reference slots are reached — a redefining <simpleType>'s
-// anonymous src-expredef original has a by-name base of its own, and an inline
-// <list><simpleType> item has whatever its body declares.
-//
-// slot names the property for a rejection message ("{item type definition}").
-func (s *Schema) resolveSimpleTypeSlot(t *SimpleType, ref SimpleTypeOrRef, slot string) error {
-	if _, err := simpleTypeOfRef(s, ref, t.loc, simpleTypeLabel(t)+" "+slot); err != nil {
-		return err
-	}
-	return s.resolveSimpleType(ownedSimpleType(ref))
-}
-
-// resolveTermRef resolves a particle's BY-NAME {term} — an <element ref>
-// (src-resolve clause 1.3) or a <group ref> (clause 1.5). Neither is descended:
-// that would cross into another component's own resolution. An inline
-// ResolvedTerm never reaches here — the shared descent enters it instead — so
-// the default arm asserts the sealed-sum invariant over the two ref variants and
-// an absent slot.
-//
-// loc is the enclosing component's position, since a Particle retains none of
-// its own.
-func (s *Schema) resolveTermRef(t TermOrRef, loc xsderr.Loc) error {
-	switch t := t.(type) {
-	case ElementDeclarationRef:
-		return resolveElementName(s, t.Name, loc, "particle {term} <element ref>")
-	case ModelGroupRef:
-		return s.resolveModelGroupName(t.Name, loc, "particle {term} <group ref>")
-	default:
-		panic("xsd: resolveTermRef: non-exhaustive TermOrRef switch")
-	}
-}
-
-// resolveAttributeUse resolves an attribute use's <attribute ref> {attribute
-// declaration} by lookup (clause 1.2). A sibling LOCAL declaration resolves
-// nothing here: the shared descent enters it, and its own {type definition} slot
-// is charged there, at the declaration's own Loc.
-//
-// loc is the enclosing complex type's or attribute group definition's position,
-// because an AttributeUse retains none of its own. The owner phrase the descent
-// also supplies names that component for a rejection this arm does not make, and
-// is ignored.
-func (s *Schema) resolveAttributeUse(u AttributeUse, loc xsderr.Loc, _ string) error {
-	switch d := u.AttributeDeclaration().(type) {
-	case LocalAttributeDeclaration:
-		return nil
-	case AttributeDeclarationRef:
-		return resolveAttributeName(s, d.Name, loc, "attribute use <attribute ref>")
-	default:
-		panic("xsd: resolveAttributeUse: non-exhaustive AttributeDeclarationOrRef switch")
-	}
-}
-
-// resolveElementDecl resolves the two reference-bearing slots of an element
+// resolveElementDecl reaches the two reference-bearing slots of an element
 // declaration that the shared descent does not itself enter: each type-table
-// alternative's {type definition} (clause 1.1) and each nested
-// {identity-constraint definitions} keyref (clause 1.7). Its own {type
-// definition} is charged by the descent, before this runs
-// (resolveTypeDefinitionSlot).
+// alternative's {type definition} and each nested {identity-constraint
+// definitions} keyref. Its own {type definition} is reached by the descent,
+// before this runs (resolveTypeDefinitionSlot).
 //
-// {substitution group affiliations} is the ONE reference slot this pass does NOT
-// hard-fail, and the exemption is §5.3's (Missing Sub-components), not a
-// convenience: "the ·resolution· of such QNames can fail, resulting in one or
-// more values of or containing ·absent· where a component is mandated", and §5.3
-// then defers the consequence to ·assessment· — an element item validated against
-// a component with an ·absent· value fails cvc-elt clause 1 and the processor
-// falls back to ·lax assessment·. It is not a schema-construction error, which is
-// why e-props-correct clause 1 reads "as described in the property tableau ...
-// modulo the impact of Missing Sub-components (§5.3)". W3C saxonData/Missing
-// missing002 pins exactly this: substitutionGroup="rotten" with no `rotten`
-// declared is a VALID schema whose only invalid instance is the one that uses the
-// affected declaration.
+// THIS IS THE PACKAGE'S §5.3 STATEMENT, and every reference slot now reads the
+// same way. Resolution failure is not a schema-construction error: "the
+// ·resolution· of such QNames can fail, resulting in one or more values of or
+// containing ·absent· where a component is mandated", and §5.3 then defers the
+// consequence to ·assessment· — an element item validated against a component
+// with an ·absent· value fails cvc-elt clause 1 and the processor falls back to
+// ·lax assessment·; an attribute item fails cvc-attribute clause 1 with no
+// fallback. §4.2.3 makes the construction-time half mandatory in as many words:
+// "During schema construction, implementations must retain ·QName· values for
+// such references". It is why e-props-correct clause 1 — and the a-, ct-, mgd-,
+// c- and st-props-correct clause 1s with it — reads "as described in the property
+// tableau ... modulo the impact of Missing Sub-components (§5.3)". W3C
+// saxonData/Missing missing002 pins it for {substitution group affiliations}:
+// substitutionGroup="rotten" with no `rotten` declared is a VALID schema whose
+// only invalid instance is the one that uses the affected declaration.
 //
-// So a dangling affiliation stays in the property as an ·absent· member, and the
-// two walks that read it already behave as §5.3 requires: affiliationChainReaches
-// (substitutiongroup.go) skips a member it cannot look up, so no chain runs
-// through an absent component, and checkSubstitutionGroupsAcyclic contributes no
-// edges for one.
+// #281 aligned {substitution group affiliations} and #434 the rest: a dangling
+// {type definition}, <element ref>, <attribute ref>, <group ref>, keyref refer=,
+// simple-type base=, itemType= or memberTypes= entry is retained and charged
+// nothing. The reader pattern this slot established is what every one of them
+// now follows — affiliationChainReaches (substitutiongroup.go) skips a member it
+// cannot look up, so no chain runs through an absent component, and
+// checkSubstitutionGroupsAcyclic contributes no edges for one.
 //
-// GAP(xsd): the OTHER reference slots are not yet §5.3-aligned — a dangling
-// {type definition}, <element ref>, <attribute ref>, <group ref> or keyref is
-// still charged src-resolve by this phase and rejects the whole schema, which is why W3C
-// Missing/missing001 and missing003/006 sit at fail. That deviation is recorded
-// in parser/doc.go; this slot is aligned rather than joining it because #281 is
-// what first put data in the slot, and extending an unimplemented-§5.3 rejection
-// to a new site would have LOST a case the suite says must pass. Aligning the
-// rest is #434: it needs ·absent· to be representable in every slot plus a
-// lax-assessment fallback at validation time, neither of which exists.
+// GAP(xsd): §5.3's ·assessment·-time half does not exist. A schema now CONSTRUCTS
+// with ·absent· values in it, and nothing yet turns one into the cvc clause-1
+// failure and ·lax assessment· fallback quoted above — there is no validator to
+// charge them from. Until there is, an ·absent· value simply withholds every
+// verdict predicated on the component it stands for. #250 owns that half, and
+// the two GAP(xsd) markers at usable record what it owes on the simple-type side.
 func (s *Schema) resolveElementDecl(e ElementDeclaration) error {
 	if tt, ok := e.TypeTable(); ok {
 		if err := s.resolveTypeTable(tt, e.Loc()); err != nil {
@@ -701,18 +548,17 @@ func (s *Schema) resolveElementDecl(e ElementDeclaration) error {
 	return nil
 }
 
-// resolveTypeTable resolves each Type Alternative's {type definition} slot
-// (src-resolve clause 1.1; §3.12.2 declare-ta maps the type/@type of an
-// <alternative> via [·resolved·]). Both the {alternatives} members and the
-// {default type definition} carry the same TypeDefinitionOrRef slot, so both go
-// through the shared descent's walkTypeDefinition — the one implementation that
-// is total over the sum. It charges src-resolve clause 1.1 for a by-name arm
-// only: declare-ta's INLINE arm is "the type definition corresponding to the
-// complexType or simpleType among the children", a direct structural mapping
-// with no QName to resolve, and the same call enters that anonymous type's OWN
-// references instead. A {default type definition} §3.3.2.1 case 2 synthesized carries the
-// declaring element's own slot, so resolveElementDecl reaches that component
-// twice; the descent writes nothing and answers the same either way.
+// resolveTypeTable reaches each Type Alternative's {type definition} slot
+// (§3.12.2 declare-ta maps the type/@type of an <alternative> via [·resolved·]). Both the
+// {alternatives} members and the {default type definition} carry the same
+// TypeDefinitionOrRef slot, so both go through the shared descent's walkTypeDefinition —
+// the one implementation that is total over the sum. A by-name arm naming nothing is
+// §5.3's ·absent· {type definition} and is charged nothing; declare-ta's INLINE arm is
+// "the type definition corresponding to the complexType or simpleType among the
+// children", a direct structural mapping, and the same call enters that anonymous type's
+// OWN references instead. A {default type definition} §3.3.2.1 case 2 synthesized carries
+// the declaring element's own slot, so resolveElementDecl reaches that component twice;
+// the descent writes nothing and answers the same either way.
 //
 // loc is the owning element declaration's position: neither TypeTable nor
 // TypeAlternative retains one, and both live inside the <element> the position
@@ -778,22 +624,20 @@ func (s *Schema) resolveTypeTable(tt TypeTable, loc xsderr.Loc) error {
 //     reaches through slot 1 in its own right, so following it would re-charge
 //     the same component once per type deriving from it.
 //  3. SimpleContent.{simple type definition} (complextype.go). The shared
-//     descent hands this slot to Phase A too, so the two passes must be told
-//     apart by what each TAKES it for: that simple type carries a SimpleTypeOrRef
-//     {base type definition} like any other, so Phase A descends it to LOOK UP
-//     a by-name base (src-resolve clause 1.1), and this pass descends it to
-//     CHARGE the two derivation halves. Neither visit substitutes for the
-//     other. On the <simpleContent> <extension> alternant the slot holds an
-//     EXISTING component (parser/produce_complex.go's simpleContentSimpleType,
-//     tableau cases 3-5), usually a named one, so this descent re-charges a
-//     component slot 1 also reaches — harmless, and already licensed by the NO
-//     VISITED SET paragraph below. On the <restriction> alternant it holds the
-//     ANONYMOUS type §3.4.2.2 cases 1-2 synthesize from that restriction's facet
-//     children, which no index reaches at all, so dropping this hop would be a
-//     false accept for every one of them — including the case-2 shape with no
-//     inline <simpleType>, whose whole rejection is the CheckDerivation charged
-//     from here (§3.4.2.2's own Note: it "fails to obey the constraints on
-//     simple type definitions").
+//     descent hands this slot to Phase A too, which enters it to reach the
+//     owner-of-owner invariant on any {type definition} slot below; this pass
+//     descends it to CHARGE the two derivation halves. Neither visit substitutes
+//     for the other. On the <simpleContent> <extension> alternant the slot holds
+//     an EXISTING component (parser/produce_complex.go's
+//     simpleContentSimpleType, tableau cases 3-5), usually a named one, so this
+//     descent re-charges a component slot 1 also reaches — harmless, and already
+//     licensed by the NO VISITED SET paragraph below. On the <restriction>
+//     alternant it holds the ANONYMOUS type §3.4.2.2 cases 1-2 synthesize from
+//     that restriction's facet children, which no index reaches at all, so
+//     dropping this hop would be a false accept for every one of them —
+//     including the case-2 shape with no inline <simpleType>, whose whole
+//     rejection is the CheckDerivation charged from here (§3.4.2.2's own Note:
+//     it "fails to obey the constraints on simple type definitions").
 //  4. ListDerivation.Item (simpletype.go). An anonymous item type is in no index.
 //  5. UnionDerivation.Members (simpletype.go). Ditto, for every member, walked in
 //     the declared order the property preserves (STYLE D2).
@@ -881,6 +725,12 @@ func (s *Schema) checkSimpleTypeDerivations() error {
 // itemType= names the very list declaring it, a shape CheckDerivation rejects
 // under cos-st-restricts clause 2.1 without descending at all.
 //
+// THE OWNED-CHILD DESCENT RUNS BEFORE THE usable GATE, and the order is the
+// whole point of the gate's position: an unusable type is charged nothing (§5.3),
+// but the components it OWNS are separate Simple Type Definitions that the schema
+// reaches, and each is judged on its own usability when the descent hands it
+// here. Gating the descent too would lose every verdict below an unusable type.
+//
 // A nil t is an owned arm that was absent, not a fault: only the base slot may be
 // absent, and st-props-correct clause 1 owns that verdict inside CheckDerivation,
 // so re-charging it here would name a rule this pass does not own (STYLE E2).
@@ -902,6 +752,9 @@ func (s *Schema) checkSimpleTypeGraph(t *SimpleType) error {
 				return err
 			}
 		}
+	}
+	if !usable(s, t) {
+		return nil // §5.3: an unusable simple type is charged nothing at construction
 	}
 	if err := t.CheckDerivation(s); err != nil {
 		return err
@@ -966,7 +819,7 @@ func (s *Schema) checkComplexBaseAcyclic() error {
 			}
 			next, ok := s.ResolvedType(cur.Base())
 			if !ok {
-				break // absent base ends the chain; a dangling one Phase A reported
+				break // an absent base ends the chain, and an ·absent· one (§5.3) too
 			}
 			nextCT, ok := next.(ComplexType)
 			if !ok {
@@ -1021,9 +874,10 @@ func (s *Schema) checkComplexBaseAcyclic() error {
 // one the walk RE-ENTERS, which is on the cycle by construction and is the node
 // already in hand.
 //
-// A resolution failure ends the walk rather than being charged again: Phase A
-// already charged src-resolve for it, and re-charging would report the same
-// fault twice under this function's rule (STYLE E2).
+// A resolution failure ends the walk rather than being charged: it is §5.3's
+// ·absent· {base type definition}, which nothing charges (usable), and charging
+// it under THIS function's rule would report a missing component as a
+// circularity (STYLE E2).
 func (s *Schema) checkSimpleBaseAcyclic() error {
 	for _, t := range s.types {
 		st, ok := t.(*SimpleType)
@@ -1039,7 +893,7 @@ func (s *Schema) checkSimpleBaseAcyclic() error {
 			path[cur] = true
 			next, err := cur.Base(s)
 			if err != nil {
-				break // a dangling base ends the chain; Phase A reported it
+				break // an ·absent· base (§5.3) ends the chain; no cycle runs through it
 			}
 			cur = next
 		}
@@ -1123,10 +977,11 @@ func (s *Schema) checkUnionMembershipAcyclic() error {
 // {variety} test gates the call (STYLE D3).
 //
 // A resolution failure ends that branch of the walk rather than being charged
-// again (membersOrNone): Phase A already charged src-resolve clause 1.1 against
-// the very slot, and re-charging it would report one fault twice under a second
-// rule (STYLE E2). The base-chain walk needs no guard of its own —
-// checkSimpleBaseAcyclic has already rejected a circular chain.
+// again (membersOrNone): an unresolvable member is §5.3's ·absent· value, which
+// nothing charges (usable), and charging it under THIS function's rule would
+// report a missing component as a membership cycle (STYLE E2). The base-chain
+// walk needs no guard of its own — checkSimpleBaseAcyclic has already rejected
+// a circular chain.
 func (s *Schema) checkOwnTransitiveMembership(d *SimpleType) error {
 	visited := map[*SimpleType]bool{}
 	var walk func(t *SimpleType) error
@@ -1148,12 +1003,79 @@ func (s *Schema) checkOwnTransitiveMembership(d *SimpleType) error {
 	return walk(d)
 }
 
+// usable reports whether every by-name reference reachable from t's {base type
+// definition}, {item type definition} and {member type definitions} resolves
+// against r. A false answer is §5.3 ·absent· — "unusable" is §5.3's own word —
+// and NOT a schema error: the ·QName· is retained (§4.2.3) and the consequence is
+// deferred to ·assessment· (#250).
+//
+// REACHABLE MEANS EXACTLY WHAT THE SIX READERS REACH, which is what makes this
+// predicate decide their error and not something adjacent to it. Variety,
+// Primitive, Base and EffectiveFacets follow the {base type definition} chain;
+// Item and Members follow that chain to the nearest list or union alternative and
+// then read that alternative's own slot, without following IT. So the walk below
+// is the base chain, testing each level's own item and member slots as it passes,
+// and nothing else. It is the same "resolve the slot without following it" split
+// the rest of this file makes, in predicate form.
+//
+// It needs no visited set (STYLE D4, PRINCIPLES 9): the one edge it FOLLOWS is
+// the base chain, which Phase B's checkSimpleBaseAcyclic has already made
+// acyclic, and the item and member slots are tested in place. A transitive
+// reading — following a resolved item or member and asking whether IT is usable —
+// would have neither property, because no phase makes the ITEM edge acyclic: a
+// list whose itemType= names itself is representable right up to
+// CheckDerivation's cos-st-restricts clause 2.1 verdict, which is charged after
+// this gate, not before it.
+//
+// GAP(xsd): a simple type whose item or member RESOLVES to a type that is itself
+// unusable is still charged here, where §5.3's closing paragraph puts "any types
+// derived or constructed from them" in the same ·absent· class. The residue is
+// the transitive reading above, and closing it needs the item edge proved acyclic
+// first; it rides with the rest of §5.3 on #250.
+//
+// GAP(xsd): the six readers this predicate is defined over still return an
+// `error` for a state that is not one. At construction the gate below answers for
+// it — an unusable type is charged nothing — but an out-of-package consumer
+// reaching one gets that error where §5.3 mandates a cvc clause-1 failure
+// (Attribute Locally Valid §3.2.4.1 clause 1, Element Locally Valid (Element)
+// §3.3.4.3 clause 1) and, for an element item, a fallback to ·lax assessment·.
+// Those cvc clauses do not exist in this module yet, so there is nothing for such
+// a consumer to be judged against; #250 owns both the clauses and the signature
+// question they reopen.
+//
+// The one-error-source invariant the six readers document is what this predicate
+// rests on: their only non-nil error is simpleTypeOfRef's, so a false answer here
+// can only ever be a §5.3 ·absent· reference and never a swallowed rule failure.
+// TestSimpleTypeReadersHaveOneErrorSource pins it.
+func usable(r TypeResolver, t *SimpleType) bool {
+	for cur := t; cur != nil; {
+		switch d := cur.derivation.(type) {
+		case ListDerivation:
+			if _, err := simpleTypeOfRef(r, d.Item, cur.loc, ""); err != nil {
+				return false
+			}
+		case UnionDerivation:
+			for _, m := range d.Members {
+				if _, err := simpleTypeOfRef(r, m, cur.loc, ""); err != nil {
+					return false
+				}
+			}
+		}
+		next, err := simpleTypeOfRef(r, cur.base, cur.loc, "")
+		if err != nil {
+			return false
+		}
+		cur = next
+	}
+	return true
+}
+
 // membersOrNone returns t's {member type definitions}, or none when one of them
 // cannot be resolved; baseOrNone is its {base type definition} twin. Neither
-// swallows a verdict: Phase A rejects an unresolvable member or base before this
-// phase runs, so a Schema reaching either has none, and the branch exists so the
-// walk ENDS rather than charging a second rule against a slot src-resolve clause
-// 1.1 already answered for (STYLE E2).
+// swallows a verdict: an unresolvable member or base is §5.3's ·absent· value,
+// which no phase charges (usable), so the branch exists to END the walk rather
+// than to decide anything — charging a rule of this function's own against a slot
+// that holds no component would name a rule it does not own (STYLE E2).
 func membersOrNone(r TypeResolver, t *SimpleType) []*SimpleType {
 	members, err := t.Members(r)
 	if err != nil {

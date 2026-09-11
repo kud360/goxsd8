@@ -102,14 +102,12 @@ func (b *SchemaBuilder) AddRedefiningAttributeGroup(g, original AttributeGroupDe
 // the pairing is a single edge from a named definition to an off-index
 // component, and §3.6.2.1 has already inlined every <attributeGroup ref> at
 // mapping time, so an AttributeGroupDefinition holds no edge to another one and
-// no visited set belongs here (PRINCIPLES 9). It draws Phase A's resolvability
-// guarantee on BOTH sides: resolveReferences roots {attribute group
-// definitions} for the redefinition, which sits there like any other component,
-// and the recorded pairings for the original, which §4.2.4 clause 4.1.2 keeps
-// out of every property and index (#725). So a use whose <attribute ref> or
-// whose local <attribute>'s type= names NOTHING is rejected src-resolve before
-// this check runs, on the same footing as one inside a complex type; what still
-// reaches attributeUseType's not-ok arm (defaultbinding.go) is a type= naming a
+// no visited set belongs here (PRINCIPLES 9). It draws NO resolvability
+// guarantee from Phase A, which charges nothing for an unresolvable reference
+// (§5.3, resolve.go): a use whose <attribute ref> or whose local <attribute>'s
+// type= names NOTHING reaches this check on an accepted schema, on the same
+// footing as one inside a complex type, and joins what already
+// reaches attributeUseType's not-ok arm (defaultbinding.go) — a type= naming a
 // COMPLEX type, which is no more this comparison's to charge here than there.
 func (s *Schema) checkAttributeGroupRedefinitions() error {
 	for _, r := range s.attributeGroupRedefinitions {
@@ -225,12 +223,17 @@ func (b *SchemaBuilder) AddRedefiningModelGroup(d, original ModelGroupDefinition
 // same sequences satisfies 6.2.2 and clause 2 would reject it.
 //
 // PHASE ORDER: it runs immediately after checkAttributeGroupRedefinitions, its
-// clause-7.2.2 twin, and needs both Phase A (every <element ref>/<group ref> on
-// EITHER side resolves — resolveReferences walks the originals for exactly this
-// reason) and Phase B's checkModelGroupsAcyclic, since the automaton construction
-// follows <group ref> edges with no visited set (PRINCIPLES 9). It follows no
-// chain of its own: the pairing is a single edge from a named definition to an
-// off-index component.
+// clause-7.2.2 twin, and needs Phase B's checkModelGroupsAcyclic, since the
+// automaton construction follows <group ref> edges with no visited set
+// (PRINCIPLES 9). It follows no chain of its own: the pairing is a single edge
+// from a named definition to an off-index component.
+//
+// It draws NO resolvability guarantee from Phase A, which charges nothing for an
+// unresolvable reference (§5.3, resolve.go). An <element ref>/<group ref> naming
+// nothing on EITHER side contributes an empty fragment to that side's automaton
+// (addTerm, particleattribution.go), and on the B side that shrinks the language
+// R must be a subset of — see addTerm's GAP(xsd), which records the direction
+// this call site is the second consumer of.
 //
 // GAP(xsd): contentTypeRestricts provisionally accepts whenever an ·all· group is
 // reachable in R's content model, on a licence §3.4.6.3 grants

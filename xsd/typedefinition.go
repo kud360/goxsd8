@@ -261,8 +261,12 @@ func (SubstitutionGroupHeadTypeRef) typeDefinitionOrRef() {}
 // SubstitutionGroupHeadTypeRef is a Schema.ELEMENT lookup followed by a single
 // read of that head's own {type definition} slot. ok is false for an absent
 // (nil) slot and for an unresolvable name — the cases every caller treats as
-// "not decidable by this clause", never as a violation (a dangling name was
-// already charged src-resolve by resolve.go's Phase A).
+// "not decidable by this clause", never as a violation.
+//
+// BOTH not-ok cases are reachable on an ACCEPTED schema. A name that resolves to
+// nothing is §5.3's ·absent· {type definition}, which finalize retains and
+// charges nothing for (resolve.go, #434), so a caller must handle ok == false as
+// an ordinary answer about a valid schema and not as a fault it may assume away.
 //
 // It is exported for the instance validator, which reads an element
 // declaration's {type definition} slot to reach the ·selected type definition·

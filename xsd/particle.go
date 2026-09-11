@@ -11,11 +11,12 @@ import "github.com/kud360/goxsd8/xsderr"
 //
 // {term} is a TermOrRef (term.go), NOT a resolved Term: it is either an inline
 // component (ResolvedTerm) or a deferred <element ref>/<group ref> QName
-// (ElementDeclarationRef/ModelGroupRef). Finalize (#173) VALIDATES that each
-// such ref resolves against the schema indexes — rejecting an unresolvable or
-// circular target with src-resolve (or a named-circularity rule) — but it does
-// not rewrite the slot: Term() keeps returning the ref, and a consumer follows
-// it by a read-time lookup through the schema (e.g. schema.Element(ref.Name)).
+// (ElementDeclarationRef/ModelGroupRef). Finalize (#173) rejects a CIRCULAR
+// target under a named-circularity rule, but not an unresolvable one — §5.3
+// retains that as an ·absent· {term} (#434) — and it does not rewrite the
+// slot: Term() keeps returning the ref, and a consumer follows it by a
+// read-time lookup through the schema (e.g. schema.Element(ref.Name)), whose
+// miss IS the ·absent· answer.
 //
 // A max occurs of 0 is representable through Occurs{0,0} and NOT rejected here:
 // occurs.go (#29) documents {0,0} as a legal vacuous range and enforces

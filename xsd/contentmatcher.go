@@ -183,10 +183,10 @@ func (s *Schema) ContentMatcher(t ComplexType) (*Matcher, bool) {
 
 // flatten appends the node for p and, for a model group {term}, its whole
 // subtree, returning p's node index. It reports false for a reference that
-// resolves to nothing — unreachable on a *Schema, whose Phase A rejected a
-// dangling <element ref>/<group ref> (src-resolve clauses 1.3 and 1.5), and a
-// decline rather than a skipped particle so an unresolved name can never widen
-// the accepted language.
+// resolves to nothing — §5.3's ·absent· {term}, which a finalized schema may
+// legitimately hold (resolve.go, #434). The answer is a DECLINE of the whole
+// matcher rather than a skipped particle, so an ·absent· name can never widen
+// the accepted language; NewMatcher's ok=false is what a caller sees.
 func (m *Matcher) flatten(p Particle) (int, bool) {
 	t, ok := m.resolveTerm(p.Term())
 	if !ok {

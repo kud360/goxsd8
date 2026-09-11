@@ -123,7 +123,7 @@ func (s *Schema) checkTermConsistent(t TermOrRef, containing ComplexType, oc *Op
 	case ModelGroupRef:
 		mgd, ok := s.modelGroupIndex[t.Name]
 		if !ok {
-			return nil // a dangling <group ref> was already rejected by Phase A
+			return nil // an ·absent· <group ref> (§5.3) crosses into no definition
 		}
 		// Crossing into a definition re-roots the identity path, so the same inline
 		// declaration reached through two <group ref>s keys identically.
@@ -465,13 +465,13 @@ func (s *Schema) gatherTermContents(t TermOrRef, root QName, path string, c *gro
 	case ElementDeclarationRef:
 		d, ok := s.Element(t.Name)
 		if !ok {
-			return // a dangling <element ref> was already rejected by Phase A
+			return // an ·absent· <element ref> (§5.3) contributes no declaration
 		}
 		c.add(d, topLevelKey(t.Name))
 	case ModelGroupRef:
 		mgd, ok := s.modelGroupIndex[t.Name]
 		if !ok {
-			return // a dangling <group ref> was already rejected by Phase A
+			return // an ·absent· <group ref> (§5.3) contributes no declaration
 		}
 		s.gatherGroupContents(mgd.ModelGroup(), t.Name, "", c)
 	default:

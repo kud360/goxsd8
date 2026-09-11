@@ -818,6 +818,15 @@ func (t *SimpleType) Loc() xsderr.Loc {
 // not be found would hand every caller st-props-correct clause 1's shape for a
 // type that does not have it.
 //
+// ONE ERROR SOURCE. This method reports a non-nil error for exactly one reason —
+// an unresolvable SimpleTypeRef, which is a §5.3 ·absent· reference — and no
+// other fault may ever be reported through it. The five sibling readers
+// Primitive, Item, Members, Base and EffectiveFacets carry the identical
+// contract, and finalize's usable predicate (resolve.go) rests on it: it swallows
+// this error to decide "unusable", so a second source added here would silently
+// widen that into swallowing a real rule failure. Charge any new fault as its own
+// rejection from the pass that owns the rule, never through this return.
+//
 // TERMINATION: the walk carries no visited set (STYLE D4). Every base chain a
 // finalized Schema holds is acyclic, which Schema.checkSimpleBaseAcyclic
 // establishes in Phase B before any pass that walks one runs (resolve.go,
@@ -852,7 +861,8 @@ func (t *SimpleType) Variety(r TypeResolver) (Variety, error) {
 // type definition} is itself, and st-restrict-facets clause 2 gives a
 // restriction the same one as its base, so the answer is the nearest primitive
 // ancestor on the {base type definition} chain. r resolves that chain and an
-// unresolvable base is an error, for the reasons Variety's godoc states.
+// unresolvable base is an error, for the reasons Variety's godoc states — and it
+// is this method's ONE error source, under the invariant stated there.
 func (t *SimpleType) Primitive(r TypeResolver) (*SimpleType, error) {
 	switch t.derivation.(type) {
 	case primitiveDerivation:
@@ -882,7 +892,8 @@ func (t *SimpleType) Primitive(r TypeResolver) (*SimpleType, error) {
 // a ·restriction· of a named list reaches its item only THROUGH a base that may
 // be a SimpleTypeRef too. Either hop failing is an ERROR, never a nil answer:
 // that would report an absent {item type definition} for a list that has one,
-// which checkListGraph turns into a false reject.
+// which checkListGraph turns into a false reject. Those two hops are this
+// method's ONLY error source, under the invariant Variety's godoc states.
 func (t *SimpleType) Item(r TypeResolver) (*SimpleType, error) {
 	switch d := t.derivation.(type) {
 	case ListDerivation:
@@ -904,7 +915,8 @@ func (t *SimpleType) Item(r TypeResolver) (*SimpleType, error) {
 // It is DERIVED, never stored (STYLE D3): the ·union· alternative mints it and
 // a ·restriction· takes its base's (§3.16.2.1). It takes a resolver for exactly
 // the reason Item does, and not for symmetry — see there. No entry it returns is
-// ever nil: the slot admits no absent member.
+// ever nil: the slot admits no absent member. Its ONE error source is an
+// unresolvable member or base, under the invariant Variety's godoc states.
 func (t *SimpleType) Members(r TypeResolver) ([]*SimpleType, error) {
 	switch d := t.derivation.(type) {
 	case UnionDerivation:
@@ -945,7 +957,9 @@ func (t *SimpleType) Members(r TypeResolver) ([]*SimpleType, error) {
 // A base that r cannot resolve is an ERROR, never (nil, nil): a caller reading a
 // missing base as the end of the chain would compute {variety}, {primitive type
 // definition} or {facets} off a truncated chain and accept what the full chain
-// forbids.
+// forbids. It is also this method's ONE error source — and, through this method,
+// the one error source of all five readers that walk the chain through it — under
+// the invariant Variety's godoc states.
 func (t *SimpleType) Base(r TypeResolver) (*SimpleType, error) {
 	return simpleTypeOfRef(r, t.base, t.loc, simpleTypeLabel(t)+" {base type definition}")
 }
@@ -1088,6 +1102,8 @@ func (f EffectiveFacet) Declaring() QName {
 // SimpleTypeRef; an unresolvable one is returned as an error rather than ending
 // the chain, because a truncated overlay silently DROPS every inherited facet
 // above the break, which is a false accept of any literal those facets exclude.
+// That hop is this method's ONE error source, under the invariant Variety's
+// godoc states.
 func (t *SimpleType) EffectiveFacets(r TypeResolver) ([]EffectiveFacet, error) {
 	// Collect the base chain most-derived first (t, then its base, ...).
 	var chain []*SimpleType

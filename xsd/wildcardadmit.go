@@ -127,12 +127,14 @@ func (s *Schema) particleContainsName(p Particle, name QName) bool {
 
 // termContainsName descends a particle's {term}. A <group ref> is followed
 // through modelGroupIndex to the referenced definition's {model group} (§3.7.2,
-// declare-namedModelGroup) — the index is read directly, as resolve.go's
-// resolveModelGroupName and checkModelGroupsAcyclic do, so no
-// Schema.ModelGroup accessor is minted for an in-package reader (STYLE T5).
-// A ref that resolves to nothing contributes nothing: Finalize already rejected
-// a dangling ModelGroupRef (src-resolve clause 1.5), so this is unreachable on
-// a *Schema that exists, not a silent skip.
+// declare-namedModelGroup) — the index is read directly, as
+// checkModelGroupsAcyclic does, so no Schema.ModelGroup accessor is minted for
+// an in-package reader (STYLE T5). A ref that resolves to nothing CONTAINS no
+// name, and that arm is reached on an accepted schema: §5.3 retains such a name
+// as an ·absent· {term} (resolve.go, #434). Reporting false is the §5.3 answer —
+// an ·absent· group contains no declaration, so it contributes no name to
+// ·contains· — and it is the same contribute-no-edge reading every other reader
+// of the slot takes.
 func (s *Schema) termContainsName(t TermOrRef, name QName) bool {
 	switch t := t.(type) {
 	case ResolvedTerm:

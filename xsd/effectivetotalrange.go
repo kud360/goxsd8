@@ -212,9 +212,12 @@ func particleOwnRange(p Particle) effectiveRange {
 // resolveTermGroup returns the Model Group a particle's {term} denotes — written
 // inline (ResolvedTerm) or reached through a <group ref> — and false when the
 // {term} is an element declaration or a wildcard. A <group ref> that resolves to
-// nothing yields false: Phase A already rejected a dangling one (src-resolve
-// clause 1.5), so this is unreachable on a *Schema that exists, not a silent
-// skip.
+// nothing yields false as well, and that arm IS reached on an accepted schema:
+// §5.3 retains such a name as an ·absent· {term} (resolve.go, #434). False is the
+// §5.3 answer rather than a skipped case — an ·absent· group denotes no Model
+// Group, so the caller's ·effective total range· takes the leaf reading and the
+// group contributes nothing, exactly as the same term contributes no edge to
+// every other walk that reads it (addTerm, termContainsName, gatherTermContents).
 func (s *Schema) resolveTermGroup(t TermOrRef) (ModelGroup, bool) {
 	switch t := t.(type) {
 	case ResolvedTerm:

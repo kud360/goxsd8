@@ -704,9 +704,9 @@ func (s *Schema) contentTypeRestricts(tct, bct ContentType, scope contentRestric
 	if err != nil {
 		// addParticle's error slot is not reachable on a *Schema that exists:
 		// every arm of addTerm/addResolvedTerm either returns nil or panics on a
-		// broken sealed sum, and a dangling <element ref>/<group ref> was already
-		// charged src-resolve by Phase A. Should a future term kind make it
-		// reachable, provisionally accepting is the fail-open direction
+		// broken sealed sum, and an ·absent· <element ref>/<group ref> (§5.3)
+		// contributes an empty fragment rather than an error. Should a future
+		// term kind make it reachable, provisionally accepting is the fail-open direction
 		// contentModelRestricts' giveup site states the actual, narrower licence
 		// for; the argument is not restated here. The error is not silently
 		// discarded — it decides this verdict (STYLE S3).

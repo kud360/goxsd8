@@ -79,12 +79,10 @@ const ruleAPropsCorrect xsderr.Rule = "a-props-correct"
 // an AttributeAnonymousComplexTypeScopeParent on the ID→component resolver
 // ComponentID's doc describes, which no consumer justifies yet either.
 //
-// Unlike those reference slots, this one is NOT checked by finalize: resolve.go
-// adds no src-resolve (§3.17.6.2) clause for it. src-resolve governs QNames
-// supplied by a schema document; {scope}.{parent} is synthesized by the producer
+// Unlike those reference slots, this one cannot dangle at all, so §5.3 never
+// reaches it: {scope}.{parent} is synthesized by the producer
 // from the ancestor axis of the very item it is producing (§3.2.2.2
-// dcl.att.local), so its target exists by construction and there is nothing to
-// dangle.
+// dcl.att.local), so its target exists by construction.
 type AttributeScopeParent interface{ attributeScopeParent() }
 
 // AttributeComplexTypeScopeParent is the AttributeScopeParent variant naming the
@@ -313,11 +311,11 @@ func (s AttributeScope) Parent() (AttributeScopeParent, bool) {
 // none, and the producer populates the reference from the ancestor axis
 // (§3.2.2.2 dcl.att.local / §3.2.2.1 dcl.att.global). {parent} is a SECOND
 // pre-resolution reference alongside {type definition}'s by-name arm, but unlike
-// it, it is producer-synthesized rather than schema-document-supplied, so
-// finalize adds no src-resolve check for it — see AttributeScopeParent. Only the
-// {variety} closed set is shared with element declarations (ScopeVariety, per
-// closedsets.go); the sc_a record itself is this file's own AttributeScope,
-// because sc_a's and sc_e's {parent} alternations differ in their second member.
+// it, it is producer-synthesized rather than schema-document-supplied, so it
+// cannot dangle — see AttributeScopeParent. Only the {variety} closed set is
+// shared with element declarations (ScopeVariety, per closedsets.go); the sc_a
+// record itself is this file's own AttributeScope, because sc_a's and sc_e's
+// {parent} alternations differ in their second member.
 //
 // The {value constraint} is deliberately an INDEPENDENTLY-optional slot: under
 // the local mapping dcl.att.local (§3.2.2.2) a locally-declared attribute's own

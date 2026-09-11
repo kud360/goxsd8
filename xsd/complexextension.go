@@ -85,7 +85,7 @@ func (s *Schema) checkComplexTypeExtension(t ComplexType) error {
 	}
 	base, ok := s.ResolvedType(t.Base())
 	if !ok {
-		return nil // an absent base, or a dangling one Phase A already charged src-resolve
+		return nil // an absent base, or an ·absent· one (§5.3): no component to judge
 	}
 	if t.Name() == anyTypeName && typeDefinitionName(base) == anyTypeName {
 		return nil
@@ -856,8 +856,10 @@ func (s *Schema) localAttributeDeclarationsIdentical(a, b AttributeDeclaration) 
 // Two cases answer TRUE without deciding anything, and both are deliberate
 // fail-open:
 //
-//   - either side is absent or unresolvable. Nothing is decidable, and Phase A
-//     already charged a dangling reference src-resolve.
+//   - either side is absent or unresolvable. Nothing is decidable: an
+//     unresolvable name is §5.3's ·absent· {type definition}, which finalize
+//     retains rather than rejecting, so this arm answers for an ACCEPTED schema
+//     and the fail-open is the verdict, not a formality.
 //   - either side is ANONYMOUS. sameTypeDefinition reports two anonymous types
 //     as different (§3.4.6.5's no-identity Note), which is the right reading for
 //     cos-ct-derived-ok but the WRONG direction here: c-cte routinely compares a
