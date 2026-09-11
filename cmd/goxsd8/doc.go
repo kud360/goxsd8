@@ -26,9 +26,13 @@
 //	    stops there, so a rejected schema is one error line); 2 when
 //	    an argument cannot be read, which is never a verdict about a
 //	    schema. The exit code is the worst of those outcomes.
-//	    Some errors have no rule to cite and print the bare
-//	    <message> instead, carrying what location they have inside
-//	    the sentence rather than as the <loc>: prefix. A document
+//	    Some errors have no rule to cite and print the producing
+//	    component's own message instead, carrying what location they
+//	    have inside the sentence rather than as the <loc>: prefix.
+//	    Nothing is stamped on that message — not a rule ID, and not
+//	    the goxsd8: <subcommand>: lead-in this binary's own diagnoses
+//	    open with — so the line opens however that component wrote
+//	    it, which for some is an internal package name. A document
 //	    whose root is not <xs:schema> and a rejection in the
 //	    s4s-grammar class (xsderr/doc.go) are examples, not the
 //	    whole class: an I/O fault reading a document the argument

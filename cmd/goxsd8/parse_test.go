@@ -209,12 +209,12 @@ func TestParseWrappedSchemaError(t *testing.T) {
 // TestParseS4SGrammarRejectionCarriesNoRule pins the exception the contract
 // states beside the "<loc>: [<rule>] <message>" shape (#1313): a document not
 // valid against the schema for schema documents is rejected with no rule to
-// cite (xsderr/doc.go), so its line is the bare message and its location sits
-// inside the sentence rather than as the <loc>: prefix.
+// cite (xsderr/doc.go), so its line is the producing component's own message
+// and its location sits inside the sentence rather than as the <loc>: prefix.
 //
 // Both fixtures are asserted in the one test, because the claim is a
 // DIFFERENCE between two rejections that both exit 1 with one stderr line —
-// asserting the bare shape alone would pass against a renderer that had
+// asserting the no-rule shape alone would pass against a renderer that had
 // dropped brackets from every line.
 //
 // The opening "parser: <redefine> at <loc>" is pinned as a prefix, which is
@@ -270,8 +270,8 @@ func TestParseS4SGrammarRejectionCarriesNoRule(t *testing.T) {
 // class the contract names beside the "<loc>: [<rule>] <message>" shape
 // (#1313): a well-formed document whose root is not <xs:schema> is a caller
 // precondition fault rather than a schema-validity verdict (parser/produce.go),
-// so no rule governs it and its line is the bare message — the likeliest
-// operator mistake, pointing parse at an instance document.
+// so no rule governs it and its line is the producing component's own message —
+// the likeliest operator mistake, pointing parse at an instance document.
 //
 // It is exit 1 and not exit 2: rootLocation has already proved the file
 // readable, so the rejection is a verdict about what the document IS.
@@ -309,7 +309,7 @@ func TestParseNonSchemaRootCarriesNoRule(t *testing.T) {
 }
 
 // TestParseIOFaultOnReferencedDocumentCarriesNoRule pins the third kind
-// violationLine's bare branch admits (#1354), and the one that is no spec
+// violationLine's own-message branch admits (#1354), and the one that is no spec
 // class at all: an I/O fault reading a document the argument REFERENCES.
 // parser's fetch wraps every resolver error other than loader.ErrNotFound in
 // plain assembly context, every hop back returns it unwrapped, and it reaches

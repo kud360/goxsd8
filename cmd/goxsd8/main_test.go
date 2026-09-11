@@ -276,8 +276,17 @@ func TestUsageCoversContract(t *testing.T) {
 		// examples, and the third kind with the exit code it earns — an I/O
 		// fault on a referenced document, which is no spec class at all.
 		// Dropping the marker row would let the sentence close again silently.
-		"Some errors have no rule to cite and print the bare <message>",
-		"A document whose root is not\n      <xs:schema>",
+		//
+		// #1367 split the first of those rows in three, the last of them new:
+		// the membership rule, what the line prints, and what it OPENS with —
+		// which the copies called bare while every demonstrated member opened
+		// with an internal package name. That third fact is negative, the CLI
+		// stamping nothing on the producer's message, so it cannot be read out
+		// of a row that says only what the message is.
+		"Some errors have no rule to cite",
+		"component's own message instead",
+		"Nothing is stamped on that message",
+		"A document whose root is\n      not <xs:schema>",
 		"s4s-grammar class\n      (xsderr/doc.go)",
 		"are examples, not the whole class",
 		"an I/O fault\n      reading a document the argument REFERENCES",
