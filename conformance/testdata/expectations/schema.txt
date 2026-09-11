@@ -800,8 +800,8 @@ MS-Additional2006-07-15/addB018/schema/addB018 pass
 MS-Additional2006-07-15/addB019/schema/addB019 pass
 MS-Additional2006-07-15/addB020/schema/addB020 pass
 MS-Additional2006-07-15/addB021/schema/addB021 pass
-MS-Additional2006-07-15/addB021a/schema/addB021a fail
-MS-Additional2006-07-15/addB022/schema/addB022 fail
+MS-Additional2006-07-15/addB021a/schema/addB021a pass
+MS-Additional2006-07-15/addB022/schema/addB022 pass
 MS-Additional2006-07-15/addB023/schema/addB023 pass
 MS-Additional2006-07-15/addB024/schema/addB024 pass
 MS-Additional2006-07-15/addB025/schema/addB025 pass
@@ -2597,7 +2597,7 @@ MS-DataTypes2006-07-15/byte_minExclusive003_794/schema/byte_minExclusive003_794 
 MS-DataTypes2006-07-15/byte_minExclusive004_1701/schema/byte_minExclusive004_1701 pass
 MS-DataTypes2006-07-15/byte_minExclusive004_795/schema/byte_minExclusive004_795 pass
 MS-DataTypes2006-07-15/byte_minExclusive005_1702/schema/byte_minExclusive005_1702 pass
-MS-DataTypes2006-07-15/byte_minExclusive005_796/schema/byte_minExclusive005_796 fail
+MS-DataTypes2006-07-15/byte_minExclusive005_796/schema/byte_minExclusive005_796 pass
 MS-DataTypes2006-07-15/byte_minInclusive001_1693/schema/byte_minInclusive001_1693 pass
 MS-DataTypes2006-07-15/byte_minInclusive001_787/schema/byte_minInclusive001_787 pass
 MS-DataTypes2006-07-15/byte_minInclusive002_1694/schema/byte_minInclusive002_1694 pass
@@ -2607,7 +2607,7 @@ MS-DataTypes2006-07-15/byte_minInclusive003_789/schema/byte_minInclusive003_789 
 MS-DataTypes2006-07-15/byte_minInclusive004_1696/schema/byte_minInclusive004_1696 pass
 MS-DataTypes2006-07-15/byte_minInclusive004_790/schema/byte_minInclusive004_790 pass
 MS-DataTypes2006-07-15/byte_minInclusive005_1697/schema/byte_minInclusive005_1697 pass
-MS-DataTypes2006-07-15/byte_minInclusive005_791/schema/byte_minInclusive005_791 fail
+MS-DataTypes2006-07-15/byte_minInclusive005_791/schema/byte_minInclusive005_791 pass
 MS-DataTypes2006-07-15/byte_pattern001_1682/schema/byte_pattern001_1682 pass
 MS-DataTypes2006-07-15/byte_pattern001_775/schema/byte_pattern001_775 pass
 MS-DataTypes2006-07-15/byte_totalDigits001_1703/schema/byte_totalDigits001_1703 pass
@@ -2664,7 +2664,7 @@ MS-DataTypes2006-07-15/dateTime_minExclusive001_110/schema/dateTime_minExclusive
 MS-DataTypes2006-07-15/dateTime_minExclusive001_1142/schema/dateTime_minExclusive001_1142 pass
 MS-DataTypes2006-07-15/dateTime_minExclusive002_111/schema/dateTime_minExclusive002_111 pass
 MS-DataTypes2006-07-15/dateTime_minExclusive002_1143/schema/dateTime_minExclusive002_1143 pass
-MS-DataTypes2006-07-15/dateTime_minExclusive003_112/schema/dateTime_minExclusive003_112 fail
+MS-DataTypes2006-07-15/dateTime_minExclusive003_112/schema/dateTime_minExclusive003_112 pass
 MS-DataTypes2006-07-15/dateTime_minExclusive003_1144/schema/dateTime_minExclusive003_1144 pass
 MS-DataTypes2006-07-15/dateTime_minExclusive004_1145/schema/dateTime_minExclusive004_1145 pass
 MS-DataTypes2006-07-15/dateTime_minExclusive005_1146/schema/dateTime_minExclusive005_1146 pass
@@ -2672,7 +2672,7 @@ MS-DataTypes2006-07-15/dateTime_minInclusive001_107/schema/dateTime_minInclusive
 MS-DataTypes2006-07-15/dateTime_minInclusive001_1137/schema/dateTime_minInclusive001_1137 pass
 MS-DataTypes2006-07-15/dateTime_minInclusive002_108/schema/dateTime_minInclusive002_108 pass
 MS-DataTypes2006-07-15/dateTime_minInclusive002_1138/schema/dateTime_minInclusive002_1138 pass
-MS-DataTypes2006-07-15/dateTime_minInclusive003_109/schema/dateTime_minInclusive003_109 fail
+MS-DataTypes2006-07-15/dateTime_minInclusive003_109/schema/dateTime_minInclusive003_109 pass
 MS-DataTypes2006-07-15/dateTime_minInclusive003_1139/schema/dateTime_minInclusive003_1139 pass
 MS-DataTypes2006-07-15/dateTime_minInclusive004_1140/schema/dateTime_minInclusive004_1140 pass
 MS-DataTypes2006-07-15/dateTime_minInclusive005_1141/schema/dateTime_minInclusive005_1141 pass
@@ -2703,7 +2703,7 @@ MS-DataTypes2006-07-15/date_minExclusive001_142/schema/date_minExclusive001_142 
 MS-DataTypes2006-07-15/date_minExclusive002_1186/schema/date_minExclusive002_1186 pass
 MS-DataTypes2006-07-15/date_minExclusive002_143/schema/date_minExclusive002_143 pass
 MS-DataTypes2006-07-15/date_minExclusive003_1187/schema/date_minExclusive003_1187 pass
-MS-DataTypes2006-07-15/date_minExclusive003_144/schema/date_minExclusive003_144 fail
+MS-DataTypes2006-07-15/date_minExclusive003_144/schema/date_minExclusive003_144 pass
 MS-DataTypes2006-07-15/date_minExclusive004_1188/schema/date_minExclusive004_1188 pass
 MS-DataTypes2006-07-15/date_minExclusive005_1189/schema/date_minExclusive005_1189 pass
 MS-DataTypes2006-07-15/date_minInclusive001_1180/schema/date_minInclusive001_1180 pass
@@ -2711,7 +2711,7 @@ MS-DataTypes2006-07-15/date_minInclusive001_139/schema/date_minInclusive001_139 
 MS-DataTypes2006-07-15/date_minInclusive002_1181/schema/date_minInclusive002_1181 pass
 MS-DataTypes2006-07-15/date_minInclusive002_140/schema/date_minInclusive002_140 pass
 MS-DataTypes2006-07-15/date_minInclusive003_1182/schema/date_minInclusive003_1182 pass
-MS-DataTypes2006-07-15/date_minInclusive003_141/schema/date_minInclusive003_141 fail
+MS-DataTypes2006-07-15/date_minInclusive003_141/schema/date_minInclusive003_141 pass
 MS-DataTypes2006-07-15/date_minInclusive004_1183/schema/date_minInclusive004_1183 pass
 MS-DataTypes2006-07-15/date_minInclusive005_1184/schema/date_minInclusive005_1184 pass
 MS-DataTypes2006-07-15/date_pattern001_1169/schema/date_pattern001_1169 pass
@@ -2771,7 +2771,7 @@ MS-DataTypes2006-07-15/decimal_minExclusive001_34/schema/decimal_minExclusive001
 MS-DataTypes2006-07-15/decimal_minExclusive002_1053/schema/decimal_minExclusive002_1053 pass
 MS-DataTypes2006-07-15/decimal_minExclusive002_35/schema/decimal_minExclusive002_35 pass
 MS-DataTypes2006-07-15/decimal_minExclusive003_1054/schema/decimal_minExclusive003_1054 pass
-MS-DataTypes2006-07-15/decimal_minExclusive003_36/schema/decimal_minExclusive003_36 fail
+MS-DataTypes2006-07-15/decimal_minExclusive003_36/schema/decimal_minExclusive003_36 pass
 MS-DataTypes2006-07-15/decimal_minExclusive004_1055/schema/decimal_minExclusive004_1055 pass
 MS-DataTypes2006-07-15/decimal_minExclusive005_1056/schema/decimal_minExclusive005_1056 pass
 MS-DataTypes2006-07-15/decimal_minInclusive001_1047/schema/decimal_minInclusive001_1047 pass
@@ -2779,7 +2779,7 @@ MS-DataTypes2006-07-15/decimal_minInclusive001_31/schema/decimal_minInclusive001
 MS-DataTypes2006-07-15/decimal_minInclusive002_1048/schema/decimal_minInclusive002_1048 pass
 MS-DataTypes2006-07-15/decimal_minInclusive002_32/schema/decimal_minInclusive002_32 pass
 MS-DataTypes2006-07-15/decimal_minInclusive003_1049/schema/decimal_minInclusive003_1049 pass
-MS-DataTypes2006-07-15/decimal_minInclusive003_33/schema/decimal_minInclusive003_33 fail
+MS-DataTypes2006-07-15/decimal_minInclusive003_33/schema/decimal_minInclusive003_33 pass
 MS-DataTypes2006-07-15/decimal_minInclusive004_1050/schema/decimal_minInclusive004_1050 pass
 MS-DataTypes2006-07-15/decimal_minInclusive005_1051/schema/decimal_minInclusive005_1051 pass
 MS-DataTypes2006-07-15/decimal_pattern001_1036/schema/decimal_pattern001_1036 pass
@@ -2847,7 +2847,7 @@ MS-DataTypes2006-07-15/double_minExclusive001_77/schema/double_minExclusive001_7
 MS-DataTypes2006-07-15/double_minExclusive002_1099/schema/double_minExclusive002_1099 pass
 MS-DataTypes2006-07-15/double_minExclusive002_78/schema/double_minExclusive002_78 pass
 MS-DataTypes2006-07-15/double_minExclusive003_1100/schema/double_minExclusive003_1100 pass
-MS-DataTypes2006-07-15/double_minExclusive003_79/schema/double_minExclusive003_79 fail
+MS-DataTypes2006-07-15/double_minExclusive003_79/schema/double_minExclusive003_79 pass
 MS-DataTypes2006-07-15/double_minExclusive004_1101/schema/double_minExclusive004_1101 pass
 MS-DataTypes2006-07-15/double_minExclusive005_1102/schema/double_minExclusive005_1102 pass
 MS-DataTypes2006-07-15/double_minInclusive001_1093/schema/double_minInclusive001_1093 pass
@@ -2855,7 +2855,7 @@ MS-DataTypes2006-07-15/double_minInclusive001_74/schema/double_minInclusive001_7
 MS-DataTypes2006-07-15/double_minInclusive002_1094/schema/double_minInclusive002_1094 pass
 MS-DataTypes2006-07-15/double_minInclusive002_75/schema/double_minInclusive002_75 pass
 MS-DataTypes2006-07-15/double_minInclusive003_1095/schema/double_minInclusive003_1095 pass
-MS-DataTypes2006-07-15/double_minInclusive003_76/schema/double_minInclusive003_76 fail
+MS-DataTypes2006-07-15/double_minInclusive003_76/schema/double_minInclusive003_76 pass
 MS-DataTypes2006-07-15/double_minInclusive004_1096/schema/double_minInclusive004_1096 pass
 MS-DataTypes2006-07-15/double_minInclusive005_1097/schema/double_minInclusive005_1097 pass
 MS-DataTypes2006-07-15/double_pattern001_1082/schema/double_pattern001_1082 pass
@@ -2919,7 +2919,7 @@ MS-DataTypes2006-07-15/duration_minExclusive001_94/schema/duration_minExclusive0
 MS-DataTypes2006-07-15/duration_minExclusive002_1120/schema/duration_minExclusive002_1120 pass
 MS-DataTypes2006-07-15/duration_minExclusive002_95/schema/duration_minExclusive002_95 pass
 MS-DataTypes2006-07-15/duration_minExclusive003_1121/schema/duration_minExclusive003_1121 pass
-MS-DataTypes2006-07-15/duration_minExclusive003_96/schema/duration_minExclusive003_96 fail
+MS-DataTypes2006-07-15/duration_minExclusive003_96/schema/duration_minExclusive003_96 pass
 MS-DataTypes2006-07-15/duration_minExclusive004_1122/schema/duration_minExclusive004_1122 pass
 MS-DataTypes2006-07-15/duration_minExclusive005_1123/schema/duration_minExclusive005_1123 pass
 MS-DataTypes2006-07-15/duration_minInclusive001_1114/schema/duration_minInclusive001_1114 pass
@@ -2927,7 +2927,7 @@ MS-DataTypes2006-07-15/duration_minInclusive001_90/schema/duration_minInclusive0
 MS-DataTypes2006-07-15/duration_minInclusive002_1115/schema/duration_minInclusive002_1115 pass
 MS-DataTypes2006-07-15/duration_minInclusive002_91/schema/duration_minInclusive002_91 pass
 MS-DataTypes2006-07-15/duration_minInclusive003_1116/schema/duration_minInclusive003_1116 pass
-MS-DataTypes2006-07-15/duration_minInclusive003_92/schema/duration_minInclusive003_92 fail
+MS-DataTypes2006-07-15/duration_minInclusive003_92/schema/duration_minInclusive003_92 pass
 MS-DataTypes2006-07-15/duration_minInclusive004_1117/schema/duration_minInclusive004_1117 pass
 MS-DataTypes2006-07-15/duration_minInclusive004_93/schema/duration_minInclusive004_93 pass
 MS-DataTypes2006-07-15/duration_minInclusive005_1118/schema/duration_minInclusive005_1118 pass
@@ -2994,7 +2994,7 @@ MS-DataTypes2006-07-15/float_minExclusive001_63/schema/float_minExclusive001_63 
 MS-DataTypes2006-07-15/float_minExclusive002_1078/schema/float_minExclusive002_1078 pass
 MS-DataTypes2006-07-15/float_minExclusive002_64/schema/float_minExclusive002_64 pass
 MS-DataTypes2006-07-15/float_minExclusive003_1079/schema/float_minExclusive003_1079 pass
-MS-DataTypes2006-07-15/float_minExclusive003_65/schema/float_minExclusive003_65 fail
+MS-DataTypes2006-07-15/float_minExclusive003_65/schema/float_minExclusive003_65 pass
 MS-DataTypes2006-07-15/float_minExclusive004_1080/schema/float_minExclusive004_1080 pass
 MS-DataTypes2006-07-15/float_minExclusive005_1081/schema/float_minExclusive005_1081 pass
 MS-DataTypes2006-07-15/float_minInclusive001_1072/schema/float_minInclusive001_1072 pass
@@ -3002,7 +3002,7 @@ MS-DataTypes2006-07-15/float_minInclusive001_60/schema/float_minInclusive001_60 
 MS-DataTypes2006-07-15/float_minInclusive002_1073/schema/float_minInclusive002_1073 pass
 MS-DataTypes2006-07-15/float_minInclusive002_61/schema/float_minInclusive002_61 pass
 MS-DataTypes2006-07-15/float_minInclusive003_1074/schema/float_minInclusive003_1074 pass
-MS-DataTypes2006-07-15/float_minInclusive003_62/schema/float_minInclusive003_62 fail
+MS-DataTypes2006-07-15/float_minInclusive003_62/schema/float_minInclusive003_62 pass
 MS-DataTypes2006-07-15/float_minInclusive004_1075/schema/float_minInclusive004_1075 pass
 MS-DataTypes2006-07-15/float_minInclusive005_1076/schema/float_minInclusive005_1076 pass
 MS-DataTypes2006-07-15/float_pattern001_1061/schema/float_pattern001_1061 pass
@@ -3034,7 +3034,7 @@ MS-DataTypes2006-07-15/gDay_minExclusive001_198/schema/gDay_minExclusive001_198 
 MS-DataTypes2006-07-15/gDay_minExclusive002_1270/schema/gDay_minExclusive002_1270 pass
 MS-DataTypes2006-07-15/gDay_minExclusive002_199/schema/gDay_minExclusive002_199 pass
 MS-DataTypes2006-07-15/gDay_minExclusive003_1271/schema/gDay_minExclusive003_1271 pass
-MS-DataTypes2006-07-15/gDay_minExclusive003_200/schema/gDay_minExclusive003_200 fail
+MS-DataTypes2006-07-15/gDay_minExclusive003_200/schema/gDay_minExclusive003_200 pass
 MS-DataTypes2006-07-15/gDay_minExclusive004_1272/schema/gDay_minExclusive004_1272 pass
 MS-DataTypes2006-07-15/gDay_minExclusive005_1273/schema/gDay_minExclusive005_1273 pass
 MS-DataTypes2006-07-15/gDay_minInclusive001_1264/schema/gDay_minInclusive001_1264 pass
@@ -3042,7 +3042,7 @@ MS-DataTypes2006-07-15/gDay_minInclusive001_195/schema/gDay_minInclusive001_195 
 MS-DataTypes2006-07-15/gDay_minInclusive002_1265/schema/gDay_minInclusive002_1265 pass
 MS-DataTypes2006-07-15/gDay_minInclusive002_196/schema/gDay_minInclusive002_196 pass
 MS-DataTypes2006-07-15/gDay_minInclusive003_1266/schema/gDay_minInclusive003_1266 pass
-MS-DataTypes2006-07-15/gDay_minInclusive003_197/schema/gDay_minInclusive003_197 fail
+MS-DataTypes2006-07-15/gDay_minInclusive003_197/schema/gDay_minInclusive003_197 pass
 MS-DataTypes2006-07-15/gDay_minInclusive004_1267/schema/gDay_minInclusive004_1267 pass
 MS-DataTypes2006-07-15/gDay_minInclusive005_1268/schema/gDay_minInclusive005_1268 pass
 MS-DataTypes2006-07-15/gDay_pattern001_1253/schema/gDay_pattern001_1253 pass
@@ -3082,7 +3082,7 @@ MS-DataTypes2006-07-15/gMonthDay_minExclusive001_184/schema/gMonthDay_minExclusi
 MS-DataTypes2006-07-15/gMonthDay_minExclusive002_1249/schema/gMonthDay_minExclusive002_1249 pass
 MS-DataTypes2006-07-15/gMonthDay_minExclusive002_185/schema/gMonthDay_minExclusive002_185 pass
 MS-DataTypes2006-07-15/gMonthDay_minExclusive003_1250/schema/gMonthDay_minExclusive003_1250 pass
-MS-DataTypes2006-07-15/gMonthDay_minExclusive003_186/schema/gMonthDay_minExclusive003_186 fail
+MS-DataTypes2006-07-15/gMonthDay_minExclusive003_186/schema/gMonthDay_minExclusive003_186 pass
 MS-DataTypes2006-07-15/gMonthDay_minExclusive004_1251/schema/gMonthDay_minExclusive004_1251 pass
 MS-DataTypes2006-07-15/gMonthDay_minExclusive005_1252/schema/gMonthDay_minExclusive005_1252 pass
 MS-DataTypes2006-07-15/gMonthDay_minInclusive001_1243/schema/gMonthDay_minInclusive001_1243 pass
@@ -3090,7 +3090,7 @@ MS-DataTypes2006-07-15/gMonthDay_minInclusive001_181/schema/gMonthDay_minInclusi
 MS-DataTypes2006-07-15/gMonthDay_minInclusive002_1244/schema/gMonthDay_minInclusive002_1244 pass
 MS-DataTypes2006-07-15/gMonthDay_minInclusive002_182/schema/gMonthDay_minInclusive002_182 pass
 MS-DataTypes2006-07-15/gMonthDay_minInclusive003_1245/schema/gMonthDay_minInclusive003_1245 pass
-MS-DataTypes2006-07-15/gMonthDay_minInclusive003_183/schema/gMonthDay_minInclusive003_183 fail
+MS-DataTypes2006-07-15/gMonthDay_minInclusive003_183/schema/gMonthDay_minInclusive003_183 pass
 MS-DataTypes2006-07-15/gMonthDay_minInclusive004_1246/schema/gMonthDay_minInclusive004_1246 pass
 MS-DataTypes2006-07-15/gMonthDay_minInclusive005_1247/schema/gMonthDay_minInclusive005_1247 pass
 MS-DataTypes2006-07-15/gMonthDay_pattern001_1232/schema/gMonthDay_pattern001_1232 pass
@@ -3161,7 +3161,7 @@ MS-DataTypes2006-07-15/gYearMonth_minExclusive001_156/schema/gYearMonth_minExclu
 MS-DataTypes2006-07-15/gYearMonth_minExclusive002_1207/schema/gYearMonth_minExclusive002_1207 pass
 MS-DataTypes2006-07-15/gYearMonth_minExclusive002_157/schema/gYearMonth_minExclusive002_157 pass
 MS-DataTypes2006-07-15/gYearMonth_minExclusive003_1208/schema/gYearMonth_minExclusive003_1208 pass
-MS-DataTypes2006-07-15/gYearMonth_minExclusive003_158/schema/gYearMonth_minExclusive003_158 fail
+MS-DataTypes2006-07-15/gYearMonth_minExclusive003_158/schema/gYearMonth_minExclusive003_158 pass
 MS-DataTypes2006-07-15/gYearMonth_minExclusive004_1209/schema/gYearMonth_minExclusive004_1209 pass
 MS-DataTypes2006-07-15/gYearMonth_minExclusive005_1210/schema/gYearMonth_minExclusive005_1210 pass
 MS-DataTypes2006-07-15/gYearMonth_minInclusive001_1201/schema/gYearMonth_minInclusive001_1201 pass
@@ -3169,7 +3169,7 @@ MS-DataTypes2006-07-15/gYearMonth_minInclusive001_153/schema/gYearMonth_minInclu
 MS-DataTypes2006-07-15/gYearMonth_minInclusive002_1202/schema/gYearMonth_minInclusive002_1202 pass
 MS-DataTypes2006-07-15/gYearMonth_minInclusive002_154/schema/gYearMonth_minInclusive002_154 pass
 MS-DataTypes2006-07-15/gYearMonth_minInclusive003_1203/schema/gYearMonth_minInclusive003_1203 pass
-MS-DataTypes2006-07-15/gYearMonth_minInclusive003_155/schema/gYearMonth_minInclusive003_155 fail
+MS-DataTypes2006-07-15/gYearMonth_minInclusive003_155/schema/gYearMonth_minInclusive003_155 pass
 MS-DataTypes2006-07-15/gYearMonth_minInclusive004_1204/schema/gYearMonth_minInclusive004_1204 pass
 MS-DataTypes2006-07-15/gYearMonth_minInclusive005_1205/schema/gYearMonth_minInclusive005_1205 pass
 MS-DataTypes2006-07-15/gYearMonth_pattern001_1190/schema/gYearMonth_pattern001_1190 pass
@@ -3196,7 +3196,7 @@ MS-DataTypes2006-07-15/gYear_minExclusive001_170/schema/gYear_minExclusive001_17
 MS-DataTypes2006-07-15/gYear_minExclusive002_1228/schema/gYear_minExclusive002_1228 pass
 MS-DataTypes2006-07-15/gYear_minExclusive002_171/schema/gYear_minExclusive002_171 pass
 MS-DataTypes2006-07-15/gYear_minExclusive003_1229/schema/gYear_minExclusive003_1229 pass
-MS-DataTypes2006-07-15/gYear_minExclusive003_172/schema/gYear_minExclusive003_172 fail
+MS-DataTypes2006-07-15/gYear_minExclusive003_172/schema/gYear_minExclusive003_172 pass
 MS-DataTypes2006-07-15/gYear_minExclusive004_1230/schema/gYear_minExclusive004_1230 pass
 MS-DataTypes2006-07-15/gYear_minExclusive005_1231/schema/gYear_minExclusive005_1231 pass
 MS-DataTypes2006-07-15/gYear_minInclusive001_1222/schema/gYear_minInclusive001_1222 pass
@@ -3204,7 +3204,7 @@ MS-DataTypes2006-07-15/gYear_minInclusive001_167/schema/gYear_minInclusive001_16
 MS-DataTypes2006-07-15/gYear_minInclusive002_1223/schema/gYear_minInclusive002_1223 pass
 MS-DataTypes2006-07-15/gYear_minInclusive002_168/schema/gYear_minInclusive002_168 pass
 MS-DataTypes2006-07-15/gYear_minInclusive003_1224/schema/gYear_minInclusive003_1224 pass
-MS-DataTypes2006-07-15/gYear_minInclusive003_169/schema/gYear_minInclusive003_169 fail
+MS-DataTypes2006-07-15/gYear_minInclusive003_169/schema/gYear_minInclusive003_169 pass
 MS-DataTypes2006-07-15/gYear_minInclusive004_1225/schema/gYear_minInclusive004_1225 pass
 MS-DataTypes2006-07-15/gYear_minInclusive005_1226/schema/gYear_minInclusive005_1226 pass
 MS-DataTypes2006-07-15/gYear_pattern001_1211/schema/gYear_pattern001_1211 pass
@@ -3309,7 +3309,7 @@ MS-DataTypes2006-07-15/int_minExclusive003_714/schema/int_minExclusive003_714 pa
 MS-DataTypes2006-07-15/int_minExclusive004_1652/schema/int_minExclusive004_1652 pass
 MS-DataTypes2006-07-15/int_minExclusive004_715/schema/int_minExclusive004_715 pass
 MS-DataTypes2006-07-15/int_minExclusive005_1653/schema/int_minExclusive005_1653 pass
-MS-DataTypes2006-07-15/int_minExclusive005_716/schema/int_minExclusive005_716 fail
+MS-DataTypes2006-07-15/int_minExclusive005_716/schema/int_minExclusive005_716 pass
 MS-DataTypes2006-07-15/int_minExclusive006a_717/schema/int_minExclusive006a_717 pass
 MS-DataTypes2006-07-15/int_minExclusive006c_718/schema/int_minExclusive006c_718 pass
 MS-DataTypes2006-07-15/int_minExclusive006e_719/schema/int_minExclusive006e_719 pass
@@ -3327,7 +3327,7 @@ MS-DataTypes2006-07-15/int_minInclusive003_701/schema/int_minInclusive003_701 pa
 MS-DataTypes2006-07-15/int_minInclusive004_1647/schema/int_minInclusive004_1647 pass
 MS-DataTypes2006-07-15/int_minInclusive004_702/schema/int_minInclusive004_702 pass
 MS-DataTypes2006-07-15/int_minInclusive005_1648/schema/int_minInclusive005_1648 pass
-MS-DataTypes2006-07-15/int_minInclusive005_703/schema/int_minInclusive005_703 fail
+MS-DataTypes2006-07-15/int_minInclusive005_703/schema/int_minInclusive005_703 pass
 MS-DataTypes2006-07-15/int_minInclusive006a_704/schema/int_minInclusive006a_704 pass
 MS-DataTypes2006-07-15/int_minInclusive006b_705/schema/int_minInclusive006b_705 pass
 MS-DataTypes2006-07-15/int_minInclusive006c_706/schema/int_minInclusive006c_706 pass
@@ -3393,18 +3393,18 @@ MS-DataTypes2006-07-15/integer_minExclusive001_554/schema/integer_minExclusive00
 MS-DataTypes2006-07-15/integer_minExclusive002_1554/schema/integer_minExclusive002_1554 pass
 MS-DataTypes2006-07-15/integer_minExclusive002_555/schema/integer_minExclusive002_555 pass
 MS-DataTypes2006-07-15/integer_minExclusive003_1555/schema/integer_minExclusive003_1555 pass
-MS-DataTypes2006-07-15/integer_minExclusive003_556/schema/integer_minExclusive003_556 fail
+MS-DataTypes2006-07-15/integer_minExclusive003_556/schema/integer_minExclusive003_556 pass
 MS-DataTypes2006-07-15/integer_minExclusive004_1556/schema/integer_minExclusive004_1556 pass
-MS-DataTypes2006-07-15/integer_minExclusive004_557/schema/integer_minExclusive004_557 fail
+MS-DataTypes2006-07-15/integer_minExclusive004_557/schema/integer_minExclusive004_557 pass
 MS-DataTypes2006-07-15/integer_minExclusive005_1557/schema/integer_minExclusive005_1557 pass
 MS-DataTypes2006-07-15/integer_minInclusive001_1548/schema/integer_minInclusive001_1548 pass
 MS-DataTypes2006-07-15/integer_minInclusive001_550/schema/integer_minInclusive001_550 pass
 MS-DataTypes2006-07-15/integer_minInclusive002_1549/schema/integer_minInclusive002_1549 pass
 MS-DataTypes2006-07-15/integer_minInclusive002_551/schema/integer_minInclusive002_551 pass
 MS-DataTypes2006-07-15/integer_minInclusive003_1550/schema/integer_minInclusive003_1550 pass
-MS-DataTypes2006-07-15/integer_minInclusive003_552/schema/integer_minInclusive003_552 fail
+MS-DataTypes2006-07-15/integer_minInclusive003_552/schema/integer_minInclusive003_552 pass
 MS-DataTypes2006-07-15/integer_minInclusive004_1551/schema/integer_minInclusive004_1551 pass
-MS-DataTypes2006-07-15/integer_minInclusive004_553/schema/integer_minInclusive004_553 fail
+MS-DataTypes2006-07-15/integer_minInclusive004_553/schema/integer_minInclusive004_553 pass
 MS-DataTypes2006-07-15/integer_minInclusive005_1552/schema/integer_minInclusive005_1552 pass
 MS-DataTypes2006-07-15/integer_pattern001_1537/schema/integer_pattern001_1537 pass
 MS-DataTypes2006-07-15/integer_pattern001_542/schema/integer_pattern001_542 pass
@@ -3512,7 +3512,7 @@ MS-DataTypes2006-07-15/long_minExclusive003_655/schema/long_minExclusive003_655 
 MS-DataTypes2006-07-15/long_minExclusive004_1628/schema/long_minExclusive004_1628 pass
 MS-DataTypes2006-07-15/long_minExclusive004_656/schema/long_minExclusive004_656 pass
 MS-DataTypes2006-07-15/long_minExclusive005_1629/schema/long_minExclusive005_1629 pass
-MS-DataTypes2006-07-15/long_minExclusive005_657/schema/long_minExclusive005_657 fail
+MS-DataTypes2006-07-15/long_minExclusive005_657/schema/long_minExclusive005_657 pass
 MS-DataTypes2006-07-15/long_minInclusive001_1620/schema/long_minInclusive001_1620 pass
 MS-DataTypes2006-07-15/long_minInclusive001_648/schema/long_minInclusive001_648 pass
 MS-DataTypes2006-07-15/long_minInclusive002_1621/schema/long_minInclusive002_1621 pass
@@ -3522,7 +3522,7 @@ MS-DataTypes2006-07-15/long_minInclusive003_650/schema/long_minInclusive003_650 
 MS-DataTypes2006-07-15/long_minInclusive004_1623/schema/long_minInclusive004_1623 pass
 MS-DataTypes2006-07-15/long_minInclusive004_651/schema/long_minInclusive004_651 pass
 MS-DataTypes2006-07-15/long_minInclusive005_1624/schema/long_minInclusive005_1624 pass
-MS-DataTypes2006-07-15/long_minInclusive005_652/schema/long_minInclusive005_652 fail
+MS-DataTypes2006-07-15/long_minInclusive005_652/schema/long_minInclusive005_652 pass
 MS-DataTypes2006-07-15/long_pattern001_1609/schema/long_pattern001_1609 pass
 MS-DataTypes2006-07-15/long_pattern001_636/schema/long_pattern001_636 pass
 MS-DataTypes2006-07-15/long_totalDigits001_1630/schema/long_totalDigits001_1630 pass
@@ -3582,7 +3582,7 @@ MS-DataTypes2006-07-15/negativeInteger_minInclusive002_615/schema/negativeIntege
 MS-DataTypes2006-07-15/negativeInteger_minInclusive003_1598/schema/negativeInteger_minInclusive003_1598 pass
 MS-DataTypes2006-07-15/negativeInteger_minInclusive003_616/schema/negativeInteger_minInclusive003_616 pass
 MS-DataTypes2006-07-15/negativeInteger_minInclusive004_1599/schema/negativeInteger_minInclusive004_1599 pass
-MS-DataTypes2006-07-15/negativeInteger_minInclusive004_617/schema/negativeInteger_minInclusive004_617 fail
+MS-DataTypes2006-07-15/negativeInteger_minInclusive004_617/schema/negativeInteger_minInclusive004_617 pass
 MS-DataTypes2006-07-15/negativeInteger_minInclusive005_1600/schema/negativeInteger_minInclusive005_1600 pass
 MS-DataTypes2006-07-15/negativeInteger_pattern001_1585/schema/negativeInteger_pattern001_1585 pass
 MS-DataTypes2006-07-15/negativeInteger_pattern001_604/schema/negativeInteger_pattern001_604 pass
@@ -3634,7 +3634,7 @@ MS-DataTypes2006-07-15/nonNegativeInteger_minExclusive002_826/schema/nonNegative
 MS-DataTypes2006-07-15/nonNegativeInteger_minExclusive003_1724/schema/nonNegativeInteger_minExclusive003_1724 pass
 MS-DataTypes2006-07-15/nonNegativeInteger_minExclusive003_827/schema/nonNegativeInteger_minExclusive003_827 pass
 MS-DataTypes2006-07-15/nonNegativeInteger_minExclusive004_1725/schema/nonNegativeInteger_minExclusive004_1725 pass
-MS-DataTypes2006-07-15/nonNegativeInteger_minExclusive004_828/schema/nonNegativeInteger_minExclusive004_828 fail
+MS-DataTypes2006-07-15/nonNegativeInteger_minExclusive004_828/schema/nonNegativeInteger_minExclusive004_828 pass
 MS-DataTypes2006-07-15/nonNegativeInteger_minExclusive005_1726/schema/nonNegativeInteger_minExclusive005_1726 pass
 MS-DataTypes2006-07-15/nonNegativeInteger_minInclusive001_1717/schema/nonNegativeInteger_minInclusive001_1717 pass
 MS-DataTypes2006-07-15/nonNegativeInteger_minInclusive001_821/schema/nonNegativeInteger_minInclusive001_821 pass
@@ -3643,7 +3643,7 @@ MS-DataTypes2006-07-15/nonNegativeInteger_minInclusive002_822/schema/nonNegative
 MS-DataTypes2006-07-15/nonNegativeInteger_minInclusive003_1719/schema/nonNegativeInteger_minInclusive003_1719 pass
 MS-DataTypes2006-07-15/nonNegativeInteger_minInclusive003_823/schema/nonNegativeInteger_minInclusive003_823 pass
 MS-DataTypes2006-07-15/nonNegativeInteger_minInclusive004_1720/schema/nonNegativeInteger_minInclusive004_1720 pass
-MS-DataTypes2006-07-15/nonNegativeInteger_minInclusive004_824/schema/nonNegativeInteger_minInclusive004_824 fail
+MS-DataTypes2006-07-15/nonNegativeInteger_minInclusive004_824/schema/nonNegativeInteger_minInclusive004_824 pass
 MS-DataTypes2006-07-15/nonNegativeInteger_minInclusive005_1721/schema/nonNegativeInteger_minInclusive005_1721 pass
 MS-DataTypes2006-07-15/nonNegativeInteger_pattern001_1706/schema/nonNegativeInteger_pattern001_1706 pass
 MS-DataTypes2006-07-15/nonNegativeInteger_pattern001_811/schema/nonNegativeInteger_pattern001_811 pass
@@ -3695,7 +3695,7 @@ MS-DataTypes2006-07-15/nonPositiveInteger_minExclusive002_587/schema/nonPositive
 MS-DataTypes2006-07-15/nonPositiveInteger_minExclusive003_1579/schema/nonPositiveInteger_minExclusive003_1579 pass
 MS-DataTypes2006-07-15/nonPositiveInteger_minExclusive003_588/schema/nonPositiveInteger_minExclusive003_588 pass
 MS-DataTypes2006-07-15/nonPositiveInteger_minExclusive004_1580/schema/nonPositiveInteger_minExclusive004_1580 pass
-MS-DataTypes2006-07-15/nonPositiveInteger_minExclusive004_589/schema/nonPositiveInteger_minExclusive004_589 fail
+MS-DataTypes2006-07-15/nonPositiveInteger_minExclusive004_589/schema/nonPositiveInteger_minExclusive004_589 pass
 MS-DataTypes2006-07-15/nonPositiveInteger_minExclusive005_1581/schema/nonPositiveInteger_minExclusive005_1581 pass
 MS-DataTypes2006-07-15/nonPositiveInteger_minInclusive001_1572/schema/nonPositiveInteger_minInclusive001_1572 pass
 MS-DataTypes2006-07-15/nonPositiveInteger_minInclusive001_582/schema/nonPositiveInteger_minInclusive001_582 pass
@@ -3704,7 +3704,7 @@ MS-DataTypes2006-07-15/nonPositiveInteger_minInclusive002_583/schema/nonPositive
 MS-DataTypes2006-07-15/nonPositiveInteger_minInclusive003_1574/schema/nonPositiveInteger_minInclusive003_1574 pass
 MS-DataTypes2006-07-15/nonPositiveInteger_minInclusive003_584/schema/nonPositiveInteger_minInclusive003_584 pass
 MS-DataTypes2006-07-15/nonPositiveInteger_minInclusive004_1575/schema/nonPositiveInteger_minInclusive004_1575 pass
-MS-DataTypes2006-07-15/nonPositiveInteger_minInclusive004_585/schema/nonPositiveInteger_minInclusive004_585 fail
+MS-DataTypes2006-07-15/nonPositiveInteger_minInclusive004_585/schema/nonPositiveInteger_minInclusive004_585 pass
 MS-DataTypes2006-07-15/nonPositiveInteger_minInclusive005_1576/schema/nonPositiveInteger_minInclusive005_1576 pass
 MS-DataTypes2006-07-15/nonPositiveInteger_pattern001_1561/schema/nonPositiveInteger_pattern001_1561 pass
 MS-DataTypes2006-07-15/nonPositiveInteger_pattern001_572/schema/nonPositiveInteger_pattern001_572 pass
@@ -3805,7 +3805,7 @@ MS-DataTypes2006-07-15/positiveInteger_minInclusive002_1838/schema/positiveInteg
 MS-DataTypes2006-07-15/positiveInteger_minInclusive002_998/schema/positiveInteger_minInclusive002_998 pass
 MS-DataTypes2006-07-15/positiveInteger_minInclusive003_1839/schema/positiveInteger_minInclusive003_1839 pass
 MS-DataTypes2006-07-15/positiveInteger_minInclusive003_999/schema/positiveInteger_minInclusive003_999 pass
-MS-DataTypes2006-07-15/positiveInteger_minInclusive004_1000/schema/positiveInteger_minInclusive004_1000 fail
+MS-DataTypes2006-07-15/positiveInteger_minInclusive004_1000/schema/positiveInteger_minInclusive004_1000 pass
 MS-DataTypes2006-07-15/positiveInteger_minInclusive004_1840/schema/positiveInteger_minInclusive004_1840 pass
 MS-DataTypes2006-07-15/positiveInteger_minInclusive005_1841/schema/positiveInteger_minInclusive005_1841 pass
 MS-DataTypes2006-07-15/positiveInteger_pattern001_1826/schema/positiveInteger_pattern001_1826 pass
@@ -3866,7 +3866,7 @@ MS-DataTypes2006-07-15/short_minExclusive003_758/schema/short_minExclusive003_75
 MS-DataTypes2006-07-15/short_minExclusive004_1677/schema/short_minExclusive004_1677 pass
 MS-DataTypes2006-07-15/short_minExclusive004_759/schema/short_minExclusive004_759 pass
 MS-DataTypes2006-07-15/short_minExclusive005_1678/schema/short_minExclusive005_1678 pass
-MS-DataTypes2006-07-15/short_minExclusive005_760/schema/short_minExclusive005_760 fail
+MS-DataTypes2006-07-15/short_minExclusive005_760/schema/short_minExclusive005_760 pass
 MS-DataTypes2006-07-15/short_minInclusive001_1669/schema/short_minInclusive001_1669 pass
 MS-DataTypes2006-07-15/short_minInclusive001_751/schema/short_minInclusive001_751 pass
 MS-DataTypes2006-07-15/short_minInclusive002_1670/schema/short_minInclusive002_1670 pass
@@ -3876,7 +3876,7 @@ MS-DataTypes2006-07-15/short_minInclusive003_753/schema/short_minInclusive003_75
 MS-DataTypes2006-07-15/short_minInclusive004_1672/schema/short_minInclusive004_1672 pass
 MS-DataTypes2006-07-15/short_minInclusive004_754/schema/short_minInclusive004_754 pass
 MS-DataTypes2006-07-15/short_minInclusive005_1673/schema/short_minInclusive005_1673 pass
-MS-DataTypes2006-07-15/short_minInclusive005_755/schema/short_minInclusive005_755 fail
+MS-DataTypes2006-07-15/short_minInclusive005_755/schema/short_minInclusive005_755 pass
 MS-DataTypes2006-07-15/short_pattern001_1658/schema/short_pattern001_1658 pass
 MS-DataTypes2006-07-15/short_pattern001_739/schema/short_pattern001_739 pass
 MS-DataTypes2006-07-15/short_totalDigits001_1679/schema/short_totalDigits001_1679 pass
@@ -3978,7 +3978,7 @@ MS-DataTypes2006-07-15/time_minExclusive001_125/schema/time_minExclusive001_125 
 MS-DataTypes2006-07-15/time_minExclusive002_1165/schema/time_minExclusive002_1165 pass
 MS-DataTypes2006-07-15/time_minExclusive002_126/schema/time_minExclusive002_126 pass
 MS-DataTypes2006-07-15/time_minExclusive003_1166/schema/time_minExclusive003_1166 pass
-MS-DataTypes2006-07-15/time_minExclusive003_127/schema/time_minExclusive003_127 fail
+MS-DataTypes2006-07-15/time_minExclusive003_127/schema/time_minExclusive003_127 pass
 MS-DataTypes2006-07-15/time_minExclusive004_1167/schema/time_minExclusive004_1167 pass
 MS-DataTypes2006-07-15/time_minExclusive005_1168/schema/time_minExclusive005_1168 pass
 MS-DataTypes2006-07-15/time_minInclusive001_1158/schema/time_minInclusive001_1158 pass
@@ -3986,7 +3986,7 @@ MS-DataTypes2006-07-15/time_minInclusive001_122/schema/time_minInclusive001_122 
 MS-DataTypes2006-07-15/time_minInclusive002_1159/schema/time_minInclusive002_1159 pass
 MS-DataTypes2006-07-15/time_minInclusive002_123/schema/time_minInclusive002_123 pass
 MS-DataTypes2006-07-15/time_minInclusive003_1160/schema/time_minInclusive003_1160 pass
-MS-DataTypes2006-07-15/time_minInclusive003_124/schema/time_minInclusive003_124 fail
+MS-DataTypes2006-07-15/time_minInclusive003_124/schema/time_minInclusive003_124 pass
 MS-DataTypes2006-07-15/time_minInclusive004_1161/schema/time_minInclusive004_1161 pass
 MS-DataTypes2006-07-15/time_minInclusive005_1162/schema/time_minInclusive005_1162 pass
 MS-DataTypes2006-07-15/time_minInclusive006_1163/schema/time_minInclusive006_1163 pass
@@ -4080,7 +4080,7 @@ MS-DataTypes2006-07-15/unsignedByte_minExclusive003_970/schema/unsignedByte_minE
 MS-DataTypes2006-07-15/unsignedByte_minExclusive004_1821/schema/unsignedByte_minExclusive004_1821 pass
 MS-DataTypes2006-07-15/unsignedByte_minExclusive004_971/schema/unsignedByte_minExclusive004_971 pass
 MS-DataTypes2006-07-15/unsignedByte_minExclusive005_1822/schema/unsignedByte_minExclusive005_1822 pass
-MS-DataTypes2006-07-15/unsignedByte_minExclusive005_972/schema/unsignedByte_minExclusive005_972 fail
+MS-DataTypes2006-07-15/unsignedByte_minExclusive005_972/schema/unsignedByte_minExclusive005_972 pass
 MS-DataTypes2006-07-15/unsignedByte_minInclusive001_1813/schema/unsignedByte_minInclusive001_1813 pass
 MS-DataTypes2006-07-15/unsignedByte_minInclusive001_963/schema/unsignedByte_minInclusive001_963 pass
 MS-DataTypes2006-07-15/unsignedByte_minInclusive002_1814/schema/unsignedByte_minInclusive002_1814 pass
@@ -4090,7 +4090,7 @@ MS-DataTypes2006-07-15/unsignedByte_minInclusive003_965/schema/unsignedByte_minI
 MS-DataTypes2006-07-15/unsignedByte_minInclusive004_1816/schema/unsignedByte_minInclusive004_1816 pass
 MS-DataTypes2006-07-15/unsignedByte_minInclusive004_966/schema/unsignedByte_minInclusive004_966 pass
 MS-DataTypes2006-07-15/unsignedByte_minInclusive005_1817/schema/unsignedByte_minInclusive005_1817 pass
-MS-DataTypes2006-07-15/unsignedByte_minInclusive005_967/schema/unsignedByte_minInclusive005_967 fail
+MS-DataTypes2006-07-15/unsignedByte_minInclusive005_967/schema/unsignedByte_minInclusive005_967 pass
 MS-DataTypes2006-07-15/unsignedByte_pattern001_1802/schema/unsignedByte_pattern001_1802 pass
 MS-DataTypes2006-07-15/unsignedByte_pattern001_951/schema/unsignedByte_pattern001_951 pass
 MS-DataTypes2006-07-15/unsignedByte_totalDigits001_1823/schema/unsignedByte_totalDigits001_1823 pass
@@ -4147,7 +4147,7 @@ MS-DataTypes2006-07-15/unsignedInt_minExclusive003_898/schema/unsignedInt_minExc
 MS-DataTypes2006-07-15/unsignedInt_minExclusive004_1773/schema/unsignedInt_minExclusive004_1773 pass
 MS-DataTypes2006-07-15/unsignedInt_minExclusive004_899/schema/unsignedInt_minExclusive004_899 pass
 MS-DataTypes2006-07-15/unsignedInt_minExclusive005_1774/schema/unsignedInt_minExclusive005_1774 pass
-MS-DataTypes2006-07-15/unsignedInt_minExclusive005_900/schema/unsignedInt_minExclusive005_900 fail
+MS-DataTypes2006-07-15/unsignedInt_minExclusive005_900/schema/unsignedInt_minExclusive005_900 pass
 MS-DataTypes2006-07-15/unsignedInt_minInclusive001_1765/schema/unsignedInt_minInclusive001_1765 pass
 MS-DataTypes2006-07-15/unsignedInt_minInclusive001_891/schema/unsignedInt_minInclusive001_891 pass
 MS-DataTypes2006-07-15/unsignedInt_minInclusive002_1766/schema/unsignedInt_minInclusive002_1766 pass
@@ -4157,7 +4157,7 @@ MS-DataTypes2006-07-15/unsignedInt_minInclusive003_893/schema/unsignedInt_minInc
 MS-DataTypes2006-07-15/unsignedInt_minInclusive004_1768/schema/unsignedInt_minInclusive004_1768 pass
 MS-DataTypes2006-07-15/unsignedInt_minInclusive004_894/schema/unsignedInt_minInclusive004_894 pass
 MS-DataTypes2006-07-15/unsignedInt_minInclusive005_1769/schema/unsignedInt_minInclusive005_1769 pass
-MS-DataTypes2006-07-15/unsignedInt_minInclusive005_895/schema/unsignedInt_minInclusive005_895 fail
+MS-DataTypes2006-07-15/unsignedInt_minInclusive005_895/schema/unsignedInt_minInclusive005_895 pass
 MS-DataTypes2006-07-15/unsignedInt_pattern001_1754/schema/unsignedInt_pattern001_1754 pass
 MS-DataTypes2006-07-15/unsignedInt_pattern001_879/schema/unsignedInt_pattern001_879 pass
 MS-DataTypes2006-07-15/unsignedInt_totalDigits001_1775/schema/unsignedInt_totalDigits001_1775 pass
@@ -4214,7 +4214,7 @@ MS-DataTypes2006-07-15/unsignedLong_minExclusive003_862/schema/unsignedLong_minE
 MS-DataTypes2006-07-15/unsignedLong_minExclusive004_1749/schema/unsignedLong_minExclusive004_1749 pass
 MS-DataTypes2006-07-15/unsignedLong_minExclusive004_863/schema/unsignedLong_minExclusive004_863 pass
 MS-DataTypes2006-07-15/unsignedLong_minExclusive005_1750/schema/unsignedLong_minExclusive005_1750 pass
-MS-DataTypes2006-07-15/unsignedLong_minExclusive005_864/schema/unsignedLong_minExclusive005_864 fail
+MS-DataTypes2006-07-15/unsignedLong_minExclusive005_864/schema/unsignedLong_minExclusive005_864 pass
 MS-DataTypes2006-07-15/unsignedLong_minInclusive001_1741/schema/unsignedLong_minInclusive001_1741 pass
 MS-DataTypes2006-07-15/unsignedLong_minInclusive001_855/schema/unsignedLong_minInclusive001_855 pass
 MS-DataTypes2006-07-15/unsignedLong_minInclusive002_1742/schema/unsignedLong_minInclusive002_1742 pass
@@ -4224,7 +4224,7 @@ MS-DataTypes2006-07-15/unsignedLong_minInclusive003_857/schema/unsignedLong_minI
 MS-DataTypes2006-07-15/unsignedLong_minInclusive004_1744/schema/unsignedLong_minInclusive004_1744 pass
 MS-DataTypes2006-07-15/unsignedLong_minInclusive004_858/schema/unsignedLong_minInclusive004_858 pass
 MS-DataTypes2006-07-15/unsignedLong_minInclusive005_1745/schema/unsignedLong_minInclusive005_1745 pass
-MS-DataTypes2006-07-15/unsignedLong_minInclusive005_859/schema/unsignedLong_minInclusive005_859 fail
+MS-DataTypes2006-07-15/unsignedLong_minInclusive005_859/schema/unsignedLong_minInclusive005_859 pass
 MS-DataTypes2006-07-15/unsignedLong_pattern001_1730/schema/unsignedLong_pattern001_1730 pass
 MS-DataTypes2006-07-15/unsignedLong_pattern001_843/schema/unsignedLong_pattern001_843 pass
 MS-DataTypes2006-07-15/unsignedLong_totalDigits001_1751/schema/unsignedLong_totalDigits001_1751 pass
@@ -4281,7 +4281,7 @@ MS-DataTypes2006-07-15/unsignedShort_minExclusive003_934/schema/unsignedShort_mi
 MS-DataTypes2006-07-15/unsignedShort_minExclusive004_1797/schema/unsignedShort_minExclusive004_1797 pass
 MS-DataTypes2006-07-15/unsignedShort_minExclusive004_935/schema/unsignedShort_minExclusive004_935 pass
 MS-DataTypes2006-07-15/unsignedShort_minExclusive005_1798/schema/unsignedShort_minExclusive005_1798 pass
-MS-DataTypes2006-07-15/unsignedShort_minExclusive005_936/schema/unsignedShort_minExclusive005_936 fail
+MS-DataTypes2006-07-15/unsignedShort_minExclusive005_936/schema/unsignedShort_minExclusive005_936 pass
 MS-DataTypes2006-07-15/unsignedShort_minInclusive001_1789/schema/unsignedShort_minInclusive001_1789 pass
 MS-DataTypes2006-07-15/unsignedShort_minInclusive001_927/schema/unsignedShort_minInclusive001_927 pass
 MS-DataTypes2006-07-15/unsignedShort_minInclusive002_1790/schema/unsignedShort_minInclusive002_1790 pass
@@ -4291,7 +4291,7 @@ MS-DataTypes2006-07-15/unsignedShort_minInclusive003_929/schema/unsignedShort_mi
 MS-DataTypes2006-07-15/unsignedShort_minInclusive004_1792/schema/unsignedShort_minInclusive004_1792 pass
 MS-DataTypes2006-07-15/unsignedShort_minInclusive004_930/schema/unsignedShort_minInclusive004_930 pass
 MS-DataTypes2006-07-15/unsignedShort_minInclusive005_1793/schema/unsignedShort_minInclusive005_1793 pass
-MS-DataTypes2006-07-15/unsignedShort_minInclusive005_931/schema/unsignedShort_minInclusive005_931 fail
+MS-DataTypes2006-07-15/unsignedShort_minInclusive005_931/schema/unsignedShort_minInclusive005_931 pass
 MS-DataTypes2006-07-15/unsignedShort_pattern001_1778/schema/unsignedShort_pattern001_1778 pass
 MS-DataTypes2006-07-15/unsignedShort_pattern001_915/schema/unsignedShort_pattern001_915 pass
 MS-DataTypes2006-07-15/unsignedShort_totalDigits001_1799/schema/unsignedShort_totalDigits001_1799 pass
@@ -14561,8 +14561,8 @@ PrecisionDecimalTests/d3_3_4ii01/schema/d3_3_4ii01s pass
 PrecisionDecimalTests/d3_3_4ii02/schema/d3_3_4ii02s pass
 PrecisionDecimalTests/d3_3_4si09/schema/d3_3_4si09s pass
 PrecisionDecimalTests/d3_3_4si10/schema/d3_3_4si10s pass
-PrecisionDecimalTests/d3_3_4si11/schema/d3_3_4si11s fail
-PrecisionDecimalTests/d3_3_4si12/schema/d3_3_4si12s fail
+PrecisionDecimalTests/d3_3_4si11/schema/d3_3_4si11s pass
+PrecisionDecimalTests/d3_3_4si12/schema/d3_3_4si12s pass
 PrecisionDecimalTests/d3_3_4si13/schema/d3_3_4si13s fail
 PrecisionDecimalTests/d3_3_4si14/schema/d3_3_4si14s pass
 PrecisionDecimalTests/d3_3_4si15/schema/d3_3_4si15s pass
@@ -15162,8 +15162,8 @@ constraintsOnAttribute/s3_2_3v04/schema/s3_2_3v04s pass
 date/d3_3_10v01/schema/d3_3_10v01s pass
 dateTimeStamp/d3_4_28ii01/schema/d3_4_28ii01s pass
 dateTimeStamp/d3_4_28si01/schema/d3_4_28si01s pass
-dateTimeStamp/d3_4_28si02/schema/d3_4_28si02s fail
-dateTimeStamp/d3_4_28si03/schema/d3_4_28si03s fail
+dateTimeStamp/d3_4_28si02/schema/d3_4_28si02s pass
+dateTimeStamp/d3_4_28si03/schema/d3_4_28si03s pass
 dateTimeStamp/d3_4_28si04/schema/d3_4_28si04s fail
 dateTimeStamp/d3_4_28si05/schema/d3_4_28si05s pass
 dateTimeStamp/d3_4_28si06/schema/d3_4_28si06s pass
@@ -15380,7 +15380,7 @@ yearMonthDuration/d3_4_26ii06/schema/d3_4_26ii06s pass
 yearMonthDuration/d3_4_26ii07/schema/d3_4_26ii07s pass
 yearMonthDuration/d3_4_26si01/schema/d3_4_26si01s pass
 yearMonthDuration/d3_4_26si02/schema/d3_4_26si02s pass
-yearMonthDuration/d3_4_26si03/schema/d3_4_26si03s fail
+yearMonthDuration/d3_4_26si03/schema/d3_4_26si03s pass
 yearMonthDuration/d3_4_26si04/schema/d3_4_26si04s fail
 yearMonthDuration/d3_4_26si05/schema/d3_4_26si05s pass
 yearMonthDuration/d3_4_26si06/schema/d3_4_26si06s pass
@@ -15389,7 +15389,7 @@ yearMonthDuration/d3_4_26si08/schema/d3_4_26si08s pass
 yearMonthDuration/d3_4_26si09/schema/d3_4_26si09s pass
 yearMonthDuration/d3_4_26si10/schema/d3_4_26si10s pass
 yearMonthDuration/d3_4_26si11/schema/d3_4_26si11s fail
-yearMonthDuration/d3_4_26si12/schema/d3_4_26si12s fail
+yearMonthDuration/d3_4_26si12/schema/d3_4_26si12s pass
 yearMonthDuration/d3_4_26v01/schema/d3_4_26v01s pass
 yearMonthDuration/d3_4_26v02/schema/d3_4_26v02s pass
 yearMonthDuration/d3_4_26v03/schema/d3_4_26v03s pass
