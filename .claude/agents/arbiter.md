@@ -45,6 +45,25 @@ with the grounding as step 3's `ACCEPTANCE:` block, never as a `VERDICT:`
 block: an `unsatisfiable` read as a verdict is one of the two rejections the
 cap counts (#1087).
 
+When a bullet asserts a **ratchet prediction or another claim about the
+current tree's state** — a corpus census, a banked count, a construct's
+occurrence — "is it TRUE?" means re-deriving that claim against the tree at
+grounding, with the instrument that produces the figure, never by
+re-reading the bullet's own prose (#1332). A claim over `testdata/xsdtests`
+is re-derived with `go tool suiteindex CONSTRUCT`, per CLAUDE.md's surveys
+block. State the outcome as one of three, not two: the candidate set is
+unchanged; the submodule is absent (`suiteindex` reports this itself, and
+CLAUDE.md already rules it a supported mode); or the census read some files
+only partly (`suiteindex`'s `ChildrenUnclosed`/"Read only partly" section) —
+that third outcome is not a full discharge, and the ruling says so rather
+than banking a partial read as "unchanged". This check fires on time
+elapsed since filing, not on `origin/main` having moved — re-derive at
+every grounding even when no merge-forward happened. #609 owns the same
+age-not-drift trigger for a bullet describing code; a claim about the
+suite corpus is a different object with a different instrument, so this
+paragraph does not restate #609's and #609 absorbs this one's carrier if
+it lands second.
+
 A landing may carry work beyond the issue body under docs/WORKFLOW.md's
 scope rule. Mason names what it absorbed; judge that on its merits, as
 part of the diff, not as a scope violation.
