@@ -153,9 +153,12 @@ schema prints its first error on stderr as `<loc>: [<rule>] <message>` and
 assembly stops there, so that is one error line per rejected argument; the exit
 code is the worst outcome over the arguments: 0 when every one compiles, 1 when
 any is rejected, 2 when any cannot be read. Some errors have no rule to cite
-and print the bare `<message>` instead, carrying what location they have inside
-the sentence rather than as the `<loc>:` prefix. A document whose root is not
-`<xs:schema>` and a rejection in the **s4s-grammar** class
+and print the producing component's own message instead, carrying what location
+they have inside the sentence rather than as the `<loc>:` prefix. Nothing is
+stamped on that message — not a rule ID, and not the `goxsd8: <subcommand>:`
+lead-in this binary's own diagnoses open with — so the line opens however that
+component wrote it, which for some is an internal package name. A document
+whose root is not `<xs:schema>` and a rejection in the **s4s-grammar** class
 (`go doc github.com/kud360/goxsd8/xsderr`) are examples, not the whole class:
 an I/O fault reading a document the argument **references** prints the same way
 and is charged 1 like a rejection, though nothing about the schema was decided.
@@ -196,7 +199,7 @@ the help flag are recognized, whether `help` and `-version` are names, what
 
 `validate`'s violations print one per line on stdout as
 `<loc>: [<rule>] <message>` — the same rendering `parse` gives a schema
-error on stderr, bare-`<message>` exception and all, which on this path is
+error on stderr, no-rule-to-cite exception and all, which on this path is
 the line naming the source fault that stopped the walk — where `<loc>` is
 `<file>:<line>:<col>` (`?` when unknown) and `<rule>` is the spec validation
 rule ID:
