@@ -915,9 +915,10 @@ func renderIn(n xsd.QName, defaultSpace string) string {
 	return n.String()
 }
 
-// renderName names one element around a hit — its parent, or one of its
-// children — in the spelling an element position of a query takes, so the
-// name re-enters as a query naming it.
+// renderName names one element QName — a hit's parent, one of its children,
+// the element a wildcard query matched, or an axis pair's element half — in
+// the spelling an element position of a query takes, so the name re-enters
+// as a query naming it.
 //
 // The zero QName is the parent of a document element, which has none; a child
 // is never zero. "(none)" can never collide with a name: parentheses are not
