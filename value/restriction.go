@@ -246,8 +246,9 @@ func (rc restrictionCheck) checkBoundConsistency() error {
 //
 // The four pairings are four DISTINCT rules, they are NOT filed under matching
 // section numbers, and they do not agree on whether an EQUAL pair is an error —
-// two inclusive bounds meeting leave a one-value space, whereas either bound
-// being exclusive leaves an empty one. Verbatim:
+// the two same-kind pairings (§4.3.7.4, §4.3.8.4) test "greater than" and
+// accept an equal pair, while the two cross pairings (§4.3.9.4, §4.3.10.4)
+// test "greater than or equal to" and reject one. Verbatim:
 //
 //   - §4.3.7.4, minInclusive <= maxInclusive: "It is an ·error· for the value
 //     specified for ·minInclusive· to be greater than the value specified for
