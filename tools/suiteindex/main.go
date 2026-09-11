@@ -75,6 +75,11 @@
 // `xs:element` under `xs:redefine` is reported there, wrong though that
 // document is, and its children are reported the same way.
 //
+// An element name the report prints is spelled so that it re-enters as a
+// query naming that same element, which is why a parent or child in NO
+// namespace prints as `{}name` rather than bare: bare is the XML Schema
+// namespace on the way back in (#1297).
+//
 // The child list is in document order and keeps repeats, because a
 // content-model census turns on multiplicity: "no child outside
 // `annotation | simpleType | complexType`" survives deduplication and "nor a
@@ -184,6 +189,17 @@ func parseArgs(args []string) (query, string, error) {
 // it.
 const wildcard = "*"
 
+// elementSpace and attrSpace are the namespace a braceless name means in each
+// position of a query: the vocabulary every schema fixture in this corpus is
+// written in for an element, and no namespace for an attribute, which is what
+// an unprefixed attribute resolves to. The parser and the renderers read the
+// same two constants, so the report cannot drift into spelling a name the way
+// the other position reads it (STYLE D3, #1297).
+const (
+	elementSpace = xsd.XMLSchemaNS
+	attrSpace    = ""
+)
+
 // namePat is one name a query matches: a namespace URI, and either a local
 // name or [wildcard]. The wildcard is the local part itself rather than a
 // second field beside it — one fact, one encoding (STYLE D3), and an illegal
@@ -206,10 +222,11 @@ func (p namePat) matches(n xsd.QName) bool {
 	return p.Space == n.Space && (p.isAny() || p.Local == n.Local)
 }
 
-// String renders p in the Clark notation the report echoes, wildcard and all
-// (`{uri}*`), so the reader sees the namespace that was matched.
-func (p namePat) String() string {
-	return xsd.QName{Space: p.Space, Local: p.Local}.String()
+// render spells p for a query position whose braceless names mean
+// defaultSpace, wildcard and all (`{uri}*`), so the reader sees the namespace
+// that was matched ([renderIn]).
+func (p namePat) render(defaultSpace string) string {
+	return renderIn(xsd.QName{Space: p.Space, Local: p.Local}, defaultSpace)
 }
 
 // attrJoin is what a query's attribute list means. Each constant IS its own
@@ -242,17 +259,19 @@ func (q query) anyAttr() bool {
 
 // String renders the query in the canonical form the report echoes: every
 // name in Clark notation, so the reader sees the namespace that was matched
-// rather than the prefix some fixture happened to spell it with.
+// rather than the prefix some fixture happened to spell it with. The echo is
+// itself a query — [parseQuery] takes it back to this query, whatever
+// namespaces it names (#1297).
 func (q query) String() string {
 	var b strings.Builder
-	b.WriteString(q.Element.String())
+	b.WriteString(q.Element.render(elementSpace))
 	for i, a := range q.Attrs {
 		sep := string(q.Join)
 		if i == 0 {
 			sep = "@"
 		}
 		b.WriteString(sep)
-		b.WriteString(a.String())
+		b.WriteString(a.render(attrSpace))
 	}
 	return b.String()
 }
@@ -264,7 +283,7 @@ func (q query) String() string {
 // braceless attribute name is in no namespace, which is what an unprefixed
 // attribute resolves to.
 func parseQuery(s string) (query, error) {
-	elem, rest, err := splitName(s, xsd.XMLSchemaNS)
+	elem, rest, err := splitName(s, elementSpace)
 	if err != nil {
 		return query{}, fmt.Errorf("query %q: %w", s, err)
 	}
@@ -277,7 +296,7 @@ func parseQuery(s string) (query, error) {
 	}
 	rest = rest[1:]
 	for {
-		attr, more, err := splitName(rest, "")
+		attr, more, err := splitName(rest, attrSpace)
 		if err != nil {
 			return query{}, fmt.Errorf("query %q: %w", s, err)
 		}
@@ -882,10 +901,23 @@ func countFiles(hits []hit) int {
 	return n
 }
 
+// renderIn spells n for a query position whose braceless names mean
+// defaultSpace: Clark notation, except that a name in NO namespace printed
+// where braceless means something else carries the empty wrapper `{}` that
+// [splitName] already reads as no namespace. Without it the report's `root`
+// and a query's `root` are two different elements, since Clark notation
+// leaves a no-namespace name bare and an element position of a query reads
+// bare as the XML Schema namespace (#1297).
+func renderIn(n xsd.QName, defaultSpace string) string {
+	if n.Space == "" && defaultSpace != "" {
+		return "{}" + n.Local
+	}
+	return n.String()
+}
+
 // renderName names one element around a hit — its parent, or one of its
-// children — in the same Clark notation [query.String] echoes. Both sides go
-// through this one renderer, so however #1297 settles the spelling of a name
-// in no namespace, one fix reaches both.
+// children — in the spelling an element position of a query takes, so the
+// name re-enters as a query naming it.
 //
 // The zero QName is the parent of a document element, which has none; a child
 // is never zero. "(none)" can never collide with a name: parentheses are not
@@ -894,7 +926,7 @@ func renderName(n xsd.QName) string {
 	if n.Local == "" {
 		return "(none)"
 	}
-	return n.String()
+	return renderIn(n, elementSpace)
 }
 
 // renderChildren lists the elements directly under a hit, in document order
@@ -938,8 +970,11 @@ func renderMatched(want namePat, h hit) string {
 
 // renderPair names one axis pair in the form the two axis sections share, so
 // a pair's heading in the second is greppable from its line in the first.
+// Each half is spelled for its own position: an attribute in no namespace
+// stays bare, because that is already what an attribute position of a query
+// means by a bare name.
 func renderPair(g pairGroup) string {
-	return renderName(g.Element) + " @" + renderName(g.Attr)
+	return renderName(g.Element) + " @" + renderIn(g.Attr, attrSpace)
 }
 
 // latchWriter is an [io.Writer] that remembers its first failure and drops
