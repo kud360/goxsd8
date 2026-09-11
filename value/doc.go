@@ -118,10 +118,15 @@
 // (maxInclusive/maxExclusive/minInclusive/minExclusive valid restriction
 // §4.3.7.4–§4.3.10.4, enumeration valid restriction §4.3.5.5) — the half of
 // cos-st-restricts that package xsd, a pure leaf with no value spaces, cannot
-// reach. Reach it through builtin.NewRestrictionChecker, the
-// xsd.SimpleTypeRestrictionChecker installed at xsd.SchemaBuilder.FinalizeWith:
-// that implementation charges facet APPLICABILITY first and then delegates here.
-// A schema finalized without it gets neither check.
+// reach — and, from the same four sections, the opposite-bound constraints
+// relating a lower bound facet to an upper bound facet declared at the SAME
+// derivation step (minInclusive <= maxInclusive, minExclusive <= maxExclusive,
+// minExclusive < maxInclusive, minInclusive < maxExclusive), which are
+// standalone §4.3 SCCs rather than a clause of cos-st-restricts. Reach it
+// through builtin.NewRestrictionChecker, the xsd.SimpleTypeRestrictionChecker
+// installed at xsd.SchemaBuilder.FinalizeWith: that implementation charges facet
+// APPLICABILITY first and then delegates here. A schema finalized without it
+// gets neither check.
 //
 // # The resolver, threaded and never stored
 //

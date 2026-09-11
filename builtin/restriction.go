@@ -71,11 +71,13 @@ func (c restrictionChecker) CheckRestriction(r xsd.TypeResolver, t *xsd.SimpleTy
 //   - the value-space constraints of clause 1.3.2 / 2.2.2.5 / 3.2.2.5 — the four
 //     bound facets and enumeration — by delegating to value.CheckFacetRestriction.
 //     Applicability runs FIRST so that delegate can assume a bound facet's value
-//     space really is ordered.
+//     space really is ordered. That delegate also charges the four §4.3.7.4–
+//     §4.3.10.4 opposite-bound consistency SCCs, which need the same value space
+//     and so cannot live with the count-valued ones below.
 //
 // The count- and token-valued constraints of those same clauses (length,
 // minLength, maxLength, totalDigits, fractionDigits, whiteSpace,
-// explicitTimezone, and the same-type consistency SCCs) are charged by
+// explicitTimezone, and the COUNT-valued consistency SCCs) are charged by
 // xsd.SimpleType.CheckDerivation, which the same finalize pass runs against t
 // immediately BEFORE this one, so t reaching this function has passed them.
 //

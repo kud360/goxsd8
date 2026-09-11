@@ -259,6 +259,121 @@ func TestBoundRestrictionViolatesIncomparable(t *testing.T) {
 	}
 }
 
+// TestBoundConsistencySameStep is the heart of the four opposite-bound SCCs
+// (§4.3.7.4, §4.3.8.4, §4.3.9.4, §4.3.10.4): a lower bound facet and an upper
+// bound facet declared at the SAME derivation step, over a base that carries no
+// bound facet of its own, so the valid-restriction family has nothing to say and
+// only this check can reject.
+//
+// The EQUAL rows are what separate the four rules from one another: two
+// inclusive bounds may meet, and every pairing involving an exclusive bound may
+// not. A single shared "lower <= upper" predicate fails all three exclusive
+// EQUAL rows; an inverted comparison fails every accepted row.
+func TestBoundConsistencySameStep(t *testing.T) {
+	cases := []struct {
+		name     string
+		lowKind  xsd.FacetKind
+		lowVal   string
+		upKind   xsd.FacetKind
+		upVal    string
+		wantRule xsderr.Rule
+	}{
+		{"minInc over maxInc", xsd.FacetMinInclusive, "9", xsd.FacetMaxInclusive, "1", ruleMinInclusiveLEMaxInclusive},
+		{"minInc equals maxInc", xsd.FacetMinInclusive, "5", xsd.FacetMaxInclusive, "5", ""},
+		{"minInc under maxInc", xsd.FacetMinInclusive, "1", xsd.FacetMaxInclusive, "9", ""},
+
+		{"minExc over maxExc", xsd.FacetMinExclusive, "9", xsd.FacetMaxExclusive, "1", ruleMinExclusiveLEMaxExclusive},
+		{"minExc equals maxExc", xsd.FacetMinExclusive, "5", xsd.FacetMaxExclusive, "5", ""},
+		{"minExc under maxExc", xsd.FacetMinExclusive, "1", xsd.FacetMaxExclusive, "9", ""},
+
+		{"minExc over maxInc", xsd.FacetMinExclusive, "9", xsd.FacetMaxInclusive, "1", ruleMinExclusiveLTMaxInclusive},
+		{"minExc equals maxInc", xsd.FacetMinExclusive, "5", xsd.FacetMaxInclusive, "5", ruleMinExclusiveLTMaxInclusive},
+		{"minExc under maxInc", xsd.FacetMinExclusive, "1", xsd.FacetMaxInclusive, "9", ""},
+
+		{"minInc over maxExc", xsd.FacetMinInclusive, "9", xsd.FacetMaxExclusive, "1", ruleMinInclusiveLTMaxExclusive},
+		{"minInc equals maxExc", xsd.FacetMinInclusive, "5", xsd.FacetMaxExclusive, "5", ruleMinInclusiveLTMaxExclusive},
+		{"minInc under maxExc", xsd.FacetMinInclusive, "1", xsd.FacetMaxExclusive, "9", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			base, b := restrictionBase(t)
+			err := restrict(t, b, base, bound(c.lowKind, c.lowVal), bound(c.upKind, c.upVal))
+			if c.wantRule == "" {
+				if err != nil {
+					t.Fatalf("accepted bound pair rejected: %v", err)
+				}
+				return
+			}
+			rule, ok := xsderr.RuleOf(err)
+			if !ok {
+				t.Fatalf("want a rejection, got %v", err)
+			}
+			if rule != c.wantRule {
+				t.Fatalf("rejection charges %q, want %q; err=%v", rule, c.wantRule, err)
+			}
+			want := c.lowKind.String() + " {value} \"" + c.lowVal + "\" and " + c.upKind.String() + " {value} \"" + c.upVal + "\""
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("message %q does not name the pair as %q", err.Error(), want)
+			}
+		})
+	}
+}
+
+// TestBoundConsistencyDeclarationOrder proves the check is on the PAIR, not on
+// the order the two facets were written in: a <maxExclusive> preceding its
+// <minInclusive> is charged under the same rule.
+func TestBoundConsistencyDeclarationOrder(t *testing.T) {
+	base, b := restrictionBase(t)
+	err := restrict(t, b, base, bound(xsd.FacetMaxExclusive, "1"), bound(xsd.FacetMinInclusive, "9"))
+	rule, ok := xsderr.RuleOf(err)
+	if !ok || rule != ruleMinInclusiveLTMaxExclusive {
+		t.Fatalf("rule = %q (ok=%v), want %q; err=%v", rule, ok, ruleMinInclusiveLTMaxExclusive, err)
+	}
+}
+
+// TestBoundConsistencyInheritedUpperBoundKeepsItsOwnRule pins the scope of
+// checkBoundConsistency: it walks OWN facets only, because a pair whose upper
+// bound is INHERITED is already charged by the valid-restriction family — here
+// minInclusive-valid-restriction clause 2, "{value} is greater than the {value}
+// of that maxInclusive". Widening this check to effective facets would silently
+// re-attribute that rejection.
+func TestBoundConsistencyInheritedUpperBoundKeepsItsOwnRule(t *testing.T) {
+	base, b := restrictionBase(t, bound(xsd.FacetMaxInclusive, "1"))
+	err := restrict(t, b, base, bound(xsd.FacetMinInclusive, "9"))
+	rule, ok := xsderr.RuleOf(err)
+	if !ok || rule != ruleMinInclusiveValidRestriction {
+		t.Fatalf("rule = %q (ok=%v), want %q; err=%v", rule, ok, ruleMinInclusiveValidRestriction, err)
+	}
+}
+
+// TestBoundConsistencyNoBackendMappingFailsOpen extends the fail-open decision
+// to the new check: an inconsistent bound pair on a base no backend maps is a
+// BACKEND gap, so it is skipped rather than rejected.
+func TestBoundConsistencyNoBackendMappingFailsOpen(t *testing.T) {
+	base, _ := restrictionBase(t)
+	unmapped := intBackend{mapped: xsd.QName{Space: xsd.XMLSchemaNS, Local: "somethingElse"}}
+	err := restrict(t, unmapped, base, bound(xsd.FacetMinInclusive, "9"), bound(xsd.FacetMaxInclusive, "1"))
+	if err != nil {
+		t.Fatalf("unmapped base must fail open, got: %v", err)
+	}
+}
+
+// TestBoundConsistencyViolatesIncomparable pins the Incomparable reading for the
+// opposite-bound family, as TestBoundRestrictionViolatesIncomparable does for
+// the valid-restriction one: every clause is an order test, so a pair no order
+// relates satisfies none of them.
+func TestBoundConsistencyViolatesIncomparable(t *testing.T) {
+	lowers := []xsd.FacetKind{xsd.FacetMinInclusive, xsd.FacetMinExclusive}
+	uppers := []xsd.FacetKind{xsd.FacetMaxInclusive, xsd.FacetMaxExclusive}
+	for _, low := range lowers {
+		for _, up := range uppers {
+			if _, violates := boundConsistencyViolates(low, up, Incomparable); violates {
+				t.Errorf("boundConsistencyViolates(%s, %s, Incomparable) = true, want false", low, up)
+			}
+		}
+	}
+}
+
 // TestWhiteSpaceInForceNoUsableMode covers the non-panicking mode resolution
 // facet-{value} parsing needs, including the three states effectiveWhiteSpace
 // turns into a panic: a nil type, no whiteSpace facet in force at all

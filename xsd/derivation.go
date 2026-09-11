@@ -217,13 +217,16 @@ const (
 //
 //   - cos-st-restricts clause 1.3.1 (a facet is applicable to an ATOMIC D) and
 //     the value-space half of 1.3.2 / 2.2.2.5 / 3.2.2.5 — the four bound facets
-//     and enumeration, which need a lexical→value mapping. Both live above this
-//     pure leaf: applicability against the generated per-primitive table, the
-//     value-space comparisons in value.CheckFacetRestriction. They are taken
-//     back as a finalize-time capability, SimpleTypeRestrictionChecker
-//     (restrictionchecker.go), which checkSimpleTypeDerivations puts every simple
-//     type an assembled Schema reaches to; builtin.NewRestrictionChecker is the
-//     implementation that wires the two halves together.
+//     and enumeration, which need a lexical→value mapping — and, for the same
+//     reason, the §4.3.7.4–§4.3.10.4 opposite-bound consistency SCCs, the
+//     value-typed counterpart of the count-valued minLength ≤ maxLength charged
+//     here. All live above this pure leaf: applicability against the generated
+//     per-primitive table, the value-space comparisons in
+//     value.CheckFacetRestriction. They are taken back as a finalize-time
+//     capability, SimpleTypeRestrictionChecker (restrictionchecker.go), which
+//     checkSimpleTypeDerivations puts every simple type an assembled Schema
+//     reaches to; builtin.NewRestrictionChecker is the implementation that wires
+//     the two halves together.
 //
 // The two constructed-variety facet-shape clauses — 2.2.1.2 for a list and its
 // union sibling 3.2.1.2 — are BOTH charged here, in checkListGraph and
@@ -840,8 +843,8 @@ func checkScaleConsistency(r TypeResolver, t *SimpleType) error {
 // EFFECTIVE ones: an inherited-only facet equals the base's effective value and
 // cannot cross it. base — t's already-resolved {base type definition} — is nil
 // only for xs:anySimpleType, which carries no facets, so the base-relative SCCs
-// are vacuous there; the same-type consistency SCCs are not restriction-specific
-// and run on every type's own effective {facets}.
+// are vacuous there; the count-facet consistency SCCs are not
+// restriction-specific and run on every type's own effective {facets}.
 func checkFacetRestrictions(r TypeResolver, t, base *SimpleType) error {
 	if base != nil {
 		loc := t.loc
