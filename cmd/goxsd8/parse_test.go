@@ -308,6 +308,81 @@ func TestParseNonSchemaRootCarriesNoRule(t *testing.T) {
 	}
 }
 
+// TestParseIOFaultOnReferencedDocumentCarriesNoRule pins the third kind
+// violationLine's bare branch admits (#1354), and the one that is no spec
+// class at all: an I/O fault reading a document the argument REFERENCES.
+// parser's fetch wraps every resolver error other than loader.ErrNotFound in
+// plain assembly context, every hop back returns it unwrapped, and it reaches
+// stderr with no rule charged. Removing that member from the doc, or closing
+// the enumeration around the two rejections again, leaves this unaccounted
+// for.
+//
+// The trigger is a non-directory path segment — an <xs:include> whose
+// schemaLocation runs through the including document itself as if it were a
+// directory, so os.Open answers ENOTDIR. A permission bit would not do: this
+// suite runs as root often enough that a mode-0000 fixture opens anyway and
+// the test would pass without ever entering the branch. The probe below is
+// what makes the trigger's PLATFORM assumption explicit rather than assumed:
+// a system that answers a path-through-a-file with ENOENT maps it to
+// loader.ErrNotFound, which is the legal-skip arm and a different test.
+//
+// Two stderr lines, not one, and the order is the contract's: reportUnfollowed
+// names the shortfall first (fetch records UnfollowedLocationUnresolved before
+// returning), then the violation line. It is the LAST line that is pinned.
+//
+// Exit 1, not 2 — the code the contract reserves for a schema verdict, though
+// nothing here was decided about the schema. That is #1419's question, not
+// this test's: this pins what the binary does today.
+//
+// The pin stops where the operating system's own words begin. Everything
+// through `under "<root>": ` is goxsd8's, and pinning it as a PREFIX pins the
+// subject, both wrapper layers and the location together, so a line that had
+// lost its directive or its position could not pass (#1048).
+func TestParseIOFaultOnReferencedDocumentCarriesNoRule(t *testing.T) {
+	abs, err := filepath.Abs("testdata/notdir-include.xsd")
+	if err != nil {
+		t.Fatal(err)
+	}
+	inner := filepath.Join(abs, "inner.xsd")
+	probe, probeErr := os.Open(inner)
+	if probeErr == nil {
+		_ = probe.Close()
+	}
+	if probeErr == nil || os.IsNotExist(probeErr) {
+		t.Skipf("open %q = %v, want a non-not-exist error: this platform does not answer a path through a regular file with ENOTDIR", inner, probeErr)
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"parse", "testdata/notdir-include.xsd"}, &stdout, &stderr)
+	if code != 1 {
+		t.Errorf("parse of a schema whose <xs:include> cannot be opened = %d, want 1", code)
+	}
+	if stdout.Len() != 0 {
+		t.Errorf("stdout = %q, want empty — a rejected assembly has no summary", stdout.String())
+	}
+	lines := strings.Split(strings.TrimSuffix(stderr.String(), "\n"), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("stderr = %q, want two lines: the unfollowed-directive shortfall, then the violation", stderr.String())
+	}
+	if !strings.Contains(lines[0], "this schemaLocation resolved to no document") {
+		t.Errorf("stderr line 1 = %q, want reportUnfollowed's shortfall line", lines[0])
+	}
+	line := lines[1]
+	if strings.Contains(line, "[") {
+		t.Errorf("stderr = %q, want no [<rule>]: no XSD rule governs a document that could not be read, and inventing one would read as a citation", line)
+	}
+	// The location is inside the sentence: a line opening with abs+":" would
+	// be the contract's <loc>: prefix, which this fault does not print.
+	prefix := fmt.Sprintf("parser: resolving <include> schemaLocation %q at %s:12:3: loader: opening %q under %q: ",
+		inner, abs, inner, filesystemRoot(abs))
+	if !strings.HasPrefix(line, prefix) {
+		t.Errorf("stderr = %q, want prefix %q", line, prefix)
+	}
+	if len(line) <= len(prefix) {
+		t.Errorf("stderr = %q, want the operating system's own words after %q", line, prefix)
+	}
+}
+
 // TestParseNamesAnUnresolvedDirective is #1260's acceptance: a schema argument
 // whose own directive names a document that is not there compiles — src-include
 // clause 2.4 makes the skip legal — so nothing about the summary or the exit

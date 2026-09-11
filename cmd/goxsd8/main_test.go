@@ -266,13 +266,22 @@ func TestUsageCoversContract(t *testing.T) {
 		// them.
 		"that a help request carries a value",
 		// #1313's exception to the line shape above, which the copies must
-		// carry together or the shape reads as unconditional in whichever
-		// one drops it: BOTH members violationLine's own doc enumerates,
-		// where the class's taxonomy lives, and what their line prints
-		// instead.
-		"A document whose root is not <xs:schema>",
-		"s4s-grammar class (xsderr/doc.go)",
-		"the bare <message>",
+		// carry together or the shape reads as unconditional in whichever one
+		// drops it: what the line prints instead, where the class's taxonomy
+		// lives, and the two rejections violationLine's own doc names.
+		//
+		// #1354 widened it from those two to the membership rule itself, so
+		// the rows pin the OPEN reading and not an enumeration: the rule
+		// ("have no rule to cite"), the marker that keeps the named ones
+		// examples, and the third kind with the exit code it earns — an I/O
+		// fault on a referenced document, which is no spec class at all.
+		// Dropping the marker row would let the sentence close again silently.
+		"Some errors have no rule to cite and print the bare <message>",
+		"A document whose root is not\n      <xs:schema>",
+		"s4s-grammar class\n      (xsderr/doc.go)",
+		"are examples, not the whole class",
+		"an I/O fault\n      reading a document the argument REFERENCES",
+		"charged 1 like a rejection",
 	}
 	for _, w := range want {
 		if !strings.Contains(usage, w) {
