@@ -63,6 +63,17 @@ const (
 <xsd:schema xmlns:xsd="urn:not-the-schema-namespace">
   <xsd:element name="a" targetNamespace="urn:b"/>
 </xsd:schema>`
+
+	// noNamespaceDoc is written in NO namespace throughout, the shape the
+	// corpus carries wherever a wrapper declaring no default xmlns holds a
+	// schema (msData/additional/test93490_14.xml). Every element in it is the
+	// case #1297 turns on, and its one namespaced attribute is the control.
+	noNamespaceDoc = `<?xml version="1.0"?>
+<root>
+  <wrapper xmlns:o="urn:o" id="w" o:keep="x">
+    <inner/>
+  </wrapper>
+</root>`
 )
 
 // ns is the XML Schema namespace in the Clark notation the report renders
@@ -243,6 +254,82 @@ func TestReportNamesEachHitsParent(t *testing.T) {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("report does not carry %q:\n%s", want, out.String())
 		}
+	}
+}
+
+// TestReportSpellsANoNamespaceElementForReEntry pins #1297 at every element
+// position a match report prints — the summary line, the `element=` field, the
+// parent and the children: a name in no namespace carries an explicit `{}`,
+// because a braceless element name re-enters the query language as the XML
+// Schema namespace and would name a different element.
+func TestReportSpellsANoNamespaceElementForReEntry(t *testing.T) {
+	root := t.TempDir()
+	writeFixture(t, root, "bare.xml", noNamespaceDoc)
+
+	cases := []struct {
+		query string
+		want  []string
+	}{
+		{
+			query: "{}wrapper@id",
+			want: []string{
+				"suiteindex: 1 occurrence(s) of {}wrapper@id in 1 fixture(s) under ",
+				`bare.xml:3:3 parent={}root children=[{}inner] id="w"`,
+			},
+		},
+		{
+			query: "{}*@id",
+			want: []string{
+				"suiteindex: 1 occurrence(s) of {}*@id in 1 fixture(s) under ",
+				`bare.xml:3:3 element={}wrapper parent={}root children=[{}inner] id="w"`,
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.query, func(t *testing.T) {
+			rep, err := census(root, mustQuery(t, tc.query))
+			if err != nil {
+				t.Fatalf("census: %v", err)
+			}
+			var out strings.Builder
+			if err := printReport(&out, rep); err != nil {
+				t.Fatalf("printReport: %v", err)
+			}
+			for _, want := range tc.want {
+				if !strings.Contains(out.String(), want) {
+					t.Errorf("report does not carry %q:\n%s", want, out.String())
+				}
+			}
+		})
+	}
+}
+
+// TestAxisPairSpellsEachHalfForItsOwnPosition pins where #1297's fix stops:
+// the element half of a pair takes the `{}`, the attribute half does not,
+// since an attribute position of a query already reads a bare name as no
+// namespace. Each half re-enters as the query that reported the pair.
+func TestAxisPairSpellsEachHalfForItsOwnPosition(t *testing.T) {
+	root := t.TempDir()
+	writeFixture(t, root, "bare.xml", noNamespaceDoc)
+
+	cases := []struct{ query, want string }{
+		{query: "{}*@*", want: "  {}wrapper @id — 1 occurrence(s) in 1 fixture(s)"},
+		{query: "{}*@{urn:o}*", want: "  {}wrapper @{urn:o}keep — 1 occurrence(s) in 1 fixture(s)"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.query, func(t *testing.T) {
+			rep, err := census(root, mustQuery(t, tc.query))
+			if err != nil {
+				t.Fatalf("census: %v", err)
+			}
+			var out strings.Builder
+			if err := printReport(&out, rep); err != nil {
+				t.Fatalf("printReport: %v", err)
+			}
+			if !strings.Contains(out.String(), tc.want) {
+				t.Errorf("axis report does not carry %q:\n%s", tc.want, out.String())
+			}
+		})
 	}
 }
 
@@ -867,11 +954,50 @@ func TestQueryString(t *testing.T) {
 		{"attribute@targetNamespace,form", "{http://www.w3.org/2001/XMLSchema}attribute@targetNamespace,form"},
 		{"*@*", "{http://www.w3.org/2001/XMLSchema}*@*"},
 		{"*@mixed|abstract", "{http://www.w3.org/2001/XMLSchema}*@mixed|abstract"},
+		// An element name in no namespace keeps the wrapper it was written
+		// with: bare, it would echo as a name in the XML Schema namespace
+		// (#1297). The attribute half is bare because that position reads a
+		// bare name as no namespace already.
+		{"{}bare@x", "{}bare@x"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.in, func(t *testing.T) {
 			if got := mustQuery(t, tc.in).String(); got != tc.want {
 				t.Errorf("String() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestQueryStringReEntersAsItself pins what the echo is FOR: the canonical
+// form a report prints parses back to the query that produced it, so a reader
+// re-runs a census from the line naming it. The no-namespace element name is
+// the case that fails without an explicit `{}` — it re-enters as a name in
+// the XML Schema namespace, which is a different census (#1297).
+func TestQueryStringReEntersAsItself(t *testing.T) {
+	for _, in := range []string{
+		"element", "{}bare", "{}bare@x", "{urn:x}thing@{urn:y}attr",
+		"{}*@*", "*@mixed|abstract", "{}*@{urn:y}*",
+	} {
+		t.Run(in, func(t *testing.T) {
+			q := mustQuery(t, in)
+			back, err := parseQuery(q.String())
+			if err != nil {
+				t.Fatalf("parseQuery(%q): %v", q.String(), err)
+			}
+			if back.Element != q.Element {
+				t.Errorf("%q re-entered as element %+v, want %+v", q.String(), back.Element, q.Element)
+			}
+			if back.Join != q.Join {
+				t.Errorf("%q re-entered with join %q, want %q", q.String(), back.Join, q.Join)
+			}
+			if len(back.Attrs) != len(q.Attrs) {
+				t.Fatalf("%q re-entered with attrs %+v, want %+v", q.String(), back.Attrs, q.Attrs)
+			}
+			for i, want := range q.Attrs {
+				if back.Attrs[i] != want {
+					t.Errorf("%q re-entered with Attrs[%d] = %+v, want %+v", q.String(), i, back.Attrs[i], want)
+				}
 			}
 		})
 	}
