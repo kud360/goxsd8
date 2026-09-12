@@ -19,6 +19,15 @@ var anyTypeName = xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"}
 // so symbols.built holds it before any document is produced.
 var anySimpleTypeName = xsd.QName{Space: xsd.XMLSchemaNS, Local: "anySimpleType"}
 
+// qNameName, booleanName and anyURIName are the expanded names of the three
+// builtin simple types §3.2.7's four attribute declarations take their
+// {type definition} from. [builtin.Seed] always seeds all three.
+var (
+	qNameName   = xsd.QName{Space: xsd.XMLSchemaNS, Local: "QName"}
+	booleanName = xsd.QName{Space: xsd.XMLSchemaNS, Local: "boolean"}
+	anyURIName  = xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyURI"}
+)
+
 // seedAnyType builds the ur-type Complex Type Definition xs:anyType (§3.4.7): a
 // mixed complex type whose {content type} is a 1..1 sequence wrapping a single
 // 0..unbounded lax ##any element wildcard, with a lax ##any attribute wildcard
@@ -63,6 +72,74 @@ func seedAnyType() (xsd.ComplexType, error) {
 	content := xsd.ElementContent{Mixed: true, Particle: topParticle}
 	return xsd.NewComplexType(xsderr.Loc{}, anyTypeName, anyTypeName, nil,
 		xsd.DerivationRestriction, false, nil, nil, &wildcard, content, nil, nil, nil)
+}
+
+// seedInstanceAttributes builds the four Attribute Declarations §3.2.7 states are
+// "present in every schema by definition", in its own §3.2.7.1–.4 order: xsi:type,
+// xsi:nil, xsi:schemaLocation and xsi:noNamespaceSchemaLocation. Each carries the
+// property table its section gives verbatim — {target namespace} the instance
+// namespace, {scope} global with {parent} ·absent·, {value constraint} ·absent· —
+// and differs only in {type definition}.
+//
+// §1.3.2 is why they are seeded UNCONDITIONALLY rather than when a reference asks
+// for them: the four sit on the same footing as the builtin datatypes, "by
+// definition part of every schema". They are seeded as COMPONENTS and never by
+// composing an XMLSchema-instance schema document, which would put four
+// declarations through sch-props-correct (§3.17.6.1) clause 2 against any user
+// schema that declares them too.
+//
+// Every {type definition} is filled with a by-NAME reference rather than a
+// resolved builtin: finalize's src-resolve ladder already walks the schema's
+// {attribute declarations} and resolves exactly this slot, so threading pointers
+// in from symbols.builtins would mint a second resolution mechanism beside it
+// (STYLE T4).
+func seedInstanceAttributes() ([]xsd.AttributeDeclaration, error) {
+	// §3.2.7.3's {type definition} is an ANONYMOUS list type over anyURI, not a
+	// reference to anyURI itself — the one shape among the four that has to be
+	// built rather than named.
+	//
+	// Its property table gives {facets} ·absent·, and this deliberately diverges:
+	// cos-st-restricts clause 2.2.1.2 admits exactly one {facets} set for a list
+	// constructed directly on xs:anySimpleType — whiteSpace = collapse with
+	// {fixed} = true — and finalize reaches this type through the ordinary
+	// attribute-declaration walk, so an absent set is refused by xsd's
+	// checkConstructedListFacets. §3.16.2.1 map.std.common case 3 manufactures
+	// that same one-member set for every <list> a document writes, which is why
+	// constructListType mints it too.
+	//
+	// Its {name} is the zero QName, absence's encoding here, so the {target
+	// namespace} §3.2.7.3 pairs with it is unrepresentable: a QName carrying only
+	// a Space would read as NAMED to every predicate testing for absence while
+	// naming nothing. The property is unobservable either way — the type is
+	// inline, in no by-name index.
+	whiteSpace := xsd.NewFacet(xsd.FacetWhiteSpace, []string{"collapse"}, true)
+	schemaLocationType, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{},
+		xsd.ListDerivation{Item: xsd.SimpleTypeRef{Name: anyURIName}},
+		xsd.OwnedSimpleType{Definition: xsd.AnySimpleType()}, []xsd.Facet{whiteSpace}, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	seeds := []struct {
+		local    string
+		typeSlot xsd.TypeDefinitionOrRef
+	}{
+		{"type", xsd.TypeDefinitionRef{Name: qNameName}},
+		{"nil", xsd.TypeDefinitionRef{Name: booleanName}},
+		{"schemaLocation", xsd.InlineTypeDefinition{Definition: schemaLocationType}},
+		{"noNamespaceSchemaLocation", xsd.TypeDefinitionRef{Name: anyURIName}},
+	}
+	decls := make([]xsd.AttributeDeclaration, 0, len(seeds))
+	for _, s := range seeds {
+		name := xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: s.local}
+		a, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, name, s.typeSlot,
+			xsd.NewAttributeGlobalScope(), nil, false, nil)
+		if err != nil {
+			return nil, err
+		}
+		decls = append(decls, a)
+	}
+	return decls, nil
 }
 
 // complexTypeIdentity is what a <complexType> under production is identified by.
