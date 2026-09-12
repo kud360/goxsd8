@@ -93,11 +93,15 @@ Post your handoff summary to the issue thread as a comment prefixed
 `MASON:` before you report — one artifact, not two: what the arbiter reads
 and what the thread keeps are the same text (#565).
 
-Name the destination `wip/` branch — never your local worktree one — and
-every commit SHA on it, the shape you chose and the alternative it beats,
-the spec rules implemented, the cases that moved, what you absorbed beyond
-the issue body, the gate result, expected ratchet movement, and what you
-want scrutinized hardest.
+Name your own worktree branch and every commit SHA on it — the history
+you can observe — plus the destination `wip/issue-<N>` branch by name and
+no SHA of its own, the shape you chose and the alternative it beats, the
+spec rules implemented, the cases that moved, what you absorbed beyond the
+issue body, the gate result, expected ratchet movement, and what you want
+scrutinized hardest. You never push and never switch branches, so how your
+commits arrive on the destination — fast-forward or merge — and under what
+SHA is the orchestrator's checkpoint comment to state, never yours to
+predict (#1099).
 
 **On a repair round, disposition every numbered item of the verdict** —
 delivered with its evidence, or not delivered with the reason. Withdrawing

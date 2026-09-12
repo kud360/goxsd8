@@ -133,13 +133,13 @@ Invariants:
   number — re-planning supersedes it with a new issue, and the fresh
   attempt starts as `wip/issue-<M>` from `origin/main`.
 - **Freshly-fetched `origin/main` is the only base.** Every diff, merge
-  and branch point is taken against `origin/main` after an explicit
-  `git fetch origin main` in THIS session; a local `main` in an ephemeral
-  container is stale, and diffing against it invents changes that are not
-  there while hiding ones that are. `git diff origin/main...HEAD` is the
-  shape that works. Equally: judge the COMMITTED tree — if
-  `git status --porcelain` is non-empty, what was verified is not what
-  will land.
+  and branch point that names `main` is taken against `origin/main` after
+  an explicit `git fetch origin main` in THIS session; a local `main` in
+  an ephemeral container is stale, and diffing against it invents changes
+  that are not there while hiding ones that are.
+  `git diff origin/main...HEAD` is the shape that works. Equally: judge
+  the COMMITTED tree — if `git status --porcelain` is non-empty, what was
+  verified is not what will land.
 
 ## Checkpointing and hand-off
 
@@ -184,8 +184,18 @@ chooses (#350).
   reason — including a stop-hook "uncommitted changes" warning, which
   fires on an in-progress edit exactly as readily as a finished one
   (#296). A subagent's tree is commit-ready only once it reports.
-- After that report, fast-forward-merge the isolated branch into
-  `wip/issue-<N>` and discard the worktree, then checkpoint.
+- **After that report the isolated branch's own commits go onto
+  `wip/issue-<N>`, never a replay of them.** `git merge --ff-only` where
+  it applies; where it does not — the ordinary shape after a takeover,
+  whose mandatory heartbeat is a commit `wip/issue-<N>` has and the
+  worktree, cut from `origin/main`, does not — `git merge --no-ff`. No
+  cherry-pick, no rebase, no re-edit by hand: each rewrites the SHAs
+  mason's account names, so a reader checking that account against the
+  branch finds nothing (#1099). Then discard the worktree and checkpoint,
+  naming the resulting SHA — the fast-forwarded tip, or the merge
+  commit — in that checkpoint's `RESUME:` comment, which this step posts
+  whether or not the next action is obvious: a commit message on
+  `wip/issue-<N>` does not survive the squash at landing.
 
 The orchestrator holds the pen itself only when the edit carries no design
 content and its scope is provable: a change a review verdict specifies
@@ -279,7 +289,7 @@ is anyone else's to volunteer:
    thread's comments read back over the GitHub channel, not "mason
    reported". The set to iterate is what
    `git log --no-merges --format='%h %s' origin/main..HEAD -- ':(top,exclude)docs/LOG/'`
-   yields; merge-forwards, the chronicler's LOG-only commit and
+   yields; merge commits, the chronicler's LOG-only commit and
    `--allow-empty` lease heartbeats fall out of it and owe nothing, and the
    `(top)` magic is what holds that answer steady from a subdirectory.
    Every commit it does yield is covered by some `MASON:` comment on the
