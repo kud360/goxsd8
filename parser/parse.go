@@ -873,6 +873,11 @@ type fetched struct {
 // Default Valid checks (a-props-correct clause 2, au-props-correct clause
 // 2) decide rather than fail open — see [Produce] for the full statement.
 //
+// The XML namespace's built-in declarations are added once beside those
+// builtins, by addXMLNamespace, and only HERE rather than at the <import> that
+// asks for them: whether they are supplied at all turns on the FINISHED
+// document set (supplyXMLNamespace), which no single <import> element knows.
+//
 // Each document's coverage census (producer.census) is taken in that same
 // pre-produce pass, so [AssemblyReport] carries what every discovery holds that
 // no dispatch maps whether or not the assembly went on to reject it.
@@ -880,6 +885,9 @@ func (a *assembly) compile(backend value.Backend) (*xsd.Schema, error) {
 	builder := xsd.NewSchemaBuilder()
 	sym, err := newSymbols(builder, backend)
 	if err != nil {
+		return nil, err
+	}
+	if err := addXMLNamespace(builder, a.composedDocuments()); err != nil {
 		return nil, err
 	}
 	producers := make([]*producer, 0, len(a.docs))

@@ -99,10 +99,12 @@
 // twenty charges. The zero xsderr.Loc means the position is unknown, and
 // is the correct value for a component with no schema document behind it —
 // parser.Produce's synthesized xs:anyType and §3.2.7 xsi: attribute
-// declarations, and package builtin's seeded built-in datatypes, are the
-// legitimate zero-Loc producers. Other constructors take a loc to charge
-// their own rejections but do not retain it: nothing consumes those
-// positions yet, so no accessor is exported for them (T5).
+// declarations, the four xml: attribute declarations the parser supplies
+// for an <import> of the §1.3.2 XML namespace it cannot fetch, and package
+// builtin's seeded built-in datatypes, are the legitimate zero-Loc
+// producers. Other constructors take a loc to charge their own rejections
+// but do not retain it: nothing consumes those positions yet, so no
+// accessor is exported for them (T5).
 //
 // # Query API
 //
