@@ -965,7 +965,7 @@ MS-Additional2006-07-15/addB200c/schema/addB200c pass
 MS-Additional2006-07-15/addB201/schema/addB201 pass
 MS-Additional2006-07-15/addB31/schema/addB31 pass
 MS-Additional2006-07-15/addB32/schema/addB32 fail
-MS-Additional2006-07-15/addC001/schema/addC001 fail
+MS-Additional2006-07-15/addC001/schema/addC001 pass
 MS-Additional2006-07-15/addC002/schema/addC002 fail
 MS-Additional2006-07-15/addD001/schema/addD001 pass
 MS-Additional2006-07-15/addD002/schema/addD002 pass
@@ -1018,7 +1018,7 @@ MS-Additional2006-07-15/isDefault074/schema/isDefault074 pass
 MS-Additional2006-07-15/isDefault075/schema/isDefault075 pass
 MS-Additional2006-07-15/isDefault076/schema/isDefault076 pass
 MS-Additional2006-07-15/isDefault077/schema/isDefault077 pass
-MS-Additional2006-07-15/isDefault078/schema/isDefault078 fail
+MS-Additional2006-07-15/isDefault078/schema/isDefault078 pass
 MS-Additional2006-07-15/isDefault079/schema/isDefault079 pass
 MS-Additional2006-07-15/memberType001/schema/memberType001 pass
 MS-Additional2006-07-15/memberType002/schema/memberType002 pass
