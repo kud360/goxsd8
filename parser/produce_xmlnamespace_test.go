@@ -209,6 +209,7 @@ func TestProduceXMLNamespaceRefResolves(t *testing.T) {
 // <attributeGroup ref="xml:specialAttrs"/> is still charged src-resolve clause
 // 1.4 and the property holds no such definition. The gap is pinned rather than
 // left to be noticed, so the landing that closes it has to come through here.
+// Owned by #1458.
 func TestProduceXMLNamespaceGroupWithheld(t *testing.T) {
 	_, err := produce(t, importsXML(
 		`<xs:complexType name="ct"><xs:attributeGroup ref="xml:specialAttrs"/></xs:complexType>`))

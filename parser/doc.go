@@ -224,21 +224,27 @@
 //     reference into it failing src-resolve at finalize (which this
 //     package hard-fails, see [xsd.SchemaBuilder.Finalize]); an assembly
 //     that makes no such reference is accepted, which under-rejects.
-//     The src-resolve clause 4 licensing above does NOT close this gap
-//     and cannot: clause 4 judges whether the document ASKED for the
-//     namespace, §5.3 what follows when a namespace it did ask for
-//     supplies no such component — §4.2.6.1 holds the two apart in as
-//     many words ("references … not imported by that schema document …
-//     are not handled as if they referred to missing components").
-//     That hard-fail is itself the deviation from §5.3, which makes an
-//     unresolved reference an ·absent· value and defers the consequence
-//     to ·assessment·, never rejecting the schema. One slot is already
-//     aligned: a {substitution group affiliations} member naming no
-//     declaration is retained as ·absent· rather than rejected (see
-//     xsd/resolve.go's resolveElementDecl). The remaining slots — {type
-//     definition}, <element ref>, <attribute ref>, <group ref>, keyref —
-//     are #434, which must also supply the ·lax assessment· fallback
-//     §5.3 requires on the validation side.
+//     The XML namespace is the one namespace that clause is NARROWER
+//     for: an explicit <xs:import> of it is served the four built-in
+//     attribute declarations, so what is genuinely missing there is
+//     xml:specialAttrs alone — the GAP(parser) marker on
+//     parser/produce_xmlnamespace.go's addXMLNamespace records why a
+//     seeded component cannot close that residual, and names its owner.
+//     The src-resolve clause 4 licensing above does NOT
+//     close this gap and cannot: clause 4 judges whether the document
+//     ASKED for the namespace, §5.3 what follows when a namespace it did
+//     ask for supplies no such component — §4.2.6.1 holds the two apart
+//     in as many words ("references … not imported by that schema
+//     document … are not handled as if they referred to missing
+//     components"). That hard-fail is itself the deviation from §5.3,
+//     which makes an unresolved reference an ·absent· value and defers
+//     the consequence to ·assessment·, never rejecting the schema. One
+//     slot is already aligned: a {substitution group affiliations}
+//     member naming no declaration is retained as ·absent· rather than
+//     rejected (see xsd/resolve.go's resolveElementDecl). The remaining
+//     slots — {type definition}, <element ref>, <attribute ref>, <group
+//     ref>, keyref — are #434, which must also supply the ·lax
+//     assessment· fallback §5.3 requires on the validation side.
 //   - GAP(xsd): two DISTINCT <xs:redefine> elements whose children are
 //     textually equivalent each contribute their own replacement
 //     components, so redefining one document the same way down two paths
