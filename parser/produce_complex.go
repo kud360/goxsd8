@@ -3607,6 +3607,12 @@ func rejectAttributeTypeAndSimpleType(el *Element) error {
 // localTargetNS alone, which mints the name in whatever namespace it declares
 // without asking whether the clause admits it.
 //
+// no-xsi (§3.2.6.4) follows the name, by rejectXSITargetNamespace, because the
+// namespace it tests is the one localTargetNS resolves from this attribute's own
+// form/targetNamespace and the <schema>'s attributeFormDefault (§3.2.2.2) — an
+// unqualified local attribute lands in no namespace and is admitted however the
+// enclosing document is namespaced (#1446).
+//
 // scopeParent is the containing <complexType>'s or <attributeGroup>'s component,
 // supplied by the caller and never recomputed from the element here: the ancestor
 // axis reaches that ancestor's ELEMENT, as nearestComplexTypeAndRestriction walks
@@ -3626,6 +3632,9 @@ func (p *producer) produceLocalAttribute(el *Element, scopeParent xsd.AttributeS
 	}
 	qname, err := declarationName(el, tns)
 	if err != nil {
+		return xsd.AttributeDeclaration{}, err
+	}
+	if err := rejectXSITargetNamespace(qname, el); err != nil {
 		return xsd.AttributeDeclaration{}, err
 	}
 	typeDef, err := p.declaredType(el, anySimpleTypeName)

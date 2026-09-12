@@ -1205,7 +1205,7 @@ MS-Attribute2006-07-15/attKa011/schema/attKa011 pass
 MS-Attribute2006-07-15/attKa012/schema/attKa012 pass
 MS-Attribute2006-07-15/attKa013/schema/attKa013 pass
 MS-Attribute2006-07-15/attKa014/schema/attKa014 pass
-MS-Attribute2006-07-15/attKa015/schema/attKa015 fail
+MS-Attribute2006-07-15/attKa015/schema/attKa015 pass
 MS-Attribute2006-07-15/attKb001/schema/attKb001 pass
 MS-Attribute2006-07-15/attKb002/schema/attKb002 pass
 MS-Attribute2006-07-15/attKb003/schema/attKb003 pass
@@ -1224,7 +1224,7 @@ MS-Attribute2006-07-15/attKb015/schema/attKb015 fail
 MS-Attribute2006-07-15/attKb016/schema/attKb016 pass
 MS-Attribute2006-07-15/attKb017/schema/attKb017 pass
 MS-Attribute2006-07-15/attKb018/schema/attKb018 pass
-MS-Attribute2006-07-15/attKb018a/schema/attKb018a fail
+MS-Attribute2006-07-15/attKb018a/schema/attKb018a pass
 MS-Attribute2006-07-15/attKc001/schema/attKc001 pass
 MS-Attribute2006-07-15/attKc002/schema/attKc002 pass
 MS-Attribute2006-07-15/attKc003/schema/attKc003 pass
@@ -14933,7 +14933,7 @@ Wild/wild037/schema/wild037.xsd pass
 Wild/wild038/schema/wild038.xsd pass
 Wild/wild039/schema/wild039.xsd pass
 Wild/wild040/schema/wild040.xsd pass
-Wild/wild041/schema/wild041.xsd fail
+Wild/wild041/schema/wild041.xsd pass
 Wild/wild042/schema/wild042.xsd pass
 Wild/wild043/schema/wild043.xsd pass
 Wild/wild044/schema/wild044.xsd pass
