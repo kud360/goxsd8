@@ -417,6 +417,46 @@ type AttributeDeclaration struct {
 // element's, say) — it is observable, not merely an error-charging convenience.
 // A caller with no real parser position — a synthesized or programmatically
 // built declaration — passes the zero xsderr.Loc{}, which reads as "unknown".
+//
+// GAP(xsd): no-xsi (§3.2.6.4, xmlschema11-1.md:990) is charged neither here nor
+// anywhere else in this package, so BOTH arms of it are accepted through this
+// constructor: the four RESERVED names of §3.2.7 — xsi:type, xsi:nil,
+// xsi:schemaLocation, xsi:noNamespaceSchemaLocation — and every other name in
+// that namespace, {xsi}foo as much as any. The two arms are unfinished for
+// different reasons. The reserved arm is unstateable on this footing: parser's
+// seedInstanceAttributes builds those four through THIS constructor, because
+// §3.2.7 makes them present in every schema by definition, so a check here
+// would have to exempt them by name and would thereby admit exactly the four
+// names a schema document may not declare. The non-reserved arm is merely
+// unchecked — nothing seeds {xsi}foo, so a check confined to it would be sound
+// here and is not written.
+//
+// The readers of the {attribute declarations} member this admits, and the
+// direction each charges (STYLE P3a):
+//   - parser's rejectXSITargetNamespace, from produceAttribute and
+//     produceLocalAttribute — the ONLY reader that charges no-xsi, and reachable
+//     only from a schema DOCUMENT. Everything built through this constructor
+//     bypasses it, which is why no suite case turns on this gap.
+//   - indexByName, at SchemaBuilder.Finalize — charges sch-props-correct clause
+//     2 on a repeated expanded name and nothing about the namespace. This
+//     package seeds nothing in the xsi namespace (XMLSchemaInstanceNS is read
+//     nowhere in it outside namespace.go), so even a programmatic {xsi}type
+//     meets no first declaration to collide with: Finalize reports the schema
+//     valid.
+//   - (*Schema).Attribute and (*Schema).ResolvedAttributeDeclaration — resolve
+//     the component and charge nothing, so validate's cvc-attribute and cvc-id
+//     read it as a ·governing attribute declaration· and assess an instance's
+//     xsi:foo against it.
+//   - (*Schema).allowsAttributeWildcardName (wildcardadmit.go), whose ##defined
+//     rejection condition IS the component's presence. For an attribute wildcard
+//     carrying notQName="##defined" the admitted member therefore fails CLOSED,
+//     rejecting an instance xsi:foo the wildcard would otherwise admit. The gap
+//     is fail-open on the SCHEMA verdict, which is what no-xsi is stated over,
+//     and is NOT uniformly fail-open downstream of it.
+//
+// validate's isInstanceAttribute (assess.go) and instanceAttribute (cvcelt.go)
+// match the four reserved names against INSTANCE items and never read
+// {attribute declarations}, so neither is perturbed in either direction.
 func NewAttributeDeclaration(loc xsderr.Loc, name QName, typeDefinition TypeDefinitionOrRef, scope AttributeScope, valueConstraint *ValueConstraint, inheritable bool, annotations []Annotation) (AttributeDeclaration, error) {
 	if name.Local == "" {
 		return AttributeDeclaration{}, xsderr.New(ruleAPropsCorrect, loc,

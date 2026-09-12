@@ -162,6 +162,7 @@ var ruleCatalog = map[Rule]struct{}{
 	"minScale-totalDigits": {},
 	"minScale-valid-restriction": {},
 	"n-props-correct": {},
+	"no-xsi": {},
 	"p-props-correct": {},
 	"sch-props-correct": {},
 	"sic-a-outcome": {},

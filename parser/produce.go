@@ -32,6 +32,13 @@ const (
 	ruleSrcCT                 xsderr.Rule = "src-ct"
 	ruleSrcWildcard           xsderr.Rule = "src-wildcard"
 	ruleSrcIdentityConstraint xsderr.Rule = "src-identity-constraint"
+	// ruleNoXSI is the "xsi: Not Allowed" Schema Component Constraint
+	// (§3.2.6.4), charged by rejectXSITargetNamespace over both attribute
+	// declaration productions. It is a Schema COMPONENT Constraint charged
+	// nowhere but here, unlike every other one this producer shares with xsd:
+	// see rejectXSITargetNamespace for why the component footing cannot carry
+	// it.
+	ruleNoXSI xsderr.Rule = "no-xsi"
 	// ruleEPropsCorrect is the Element Declaration Properties Correct Schema
 	// Component Constraint (§3.3.6.1). The producer charges only clause 3 ("If
 	// E.{substitution group affiliations} is non-empty, then E.{scope}.{variety}
@@ -1525,6 +1532,56 @@ func declarationName(el *Element, ns string) (xsd.QName, error) {
 	return xsd.QName{Space: ns, Local: name}, nil
 }
 
+// rejectXSITargetNamespace charges no-xsi (§3.2.6.4, xmlschema11-1.md:990): "The
+// {target namespace} of an attribute declaration, whether local or top-level,
+// must not match http://www.w3.org/2001/XMLSchema-instance (unless it is one of
+// the four built-in declarations given in the next section)." Both attribute
+// declaration productions call it — produceAttribute for the top-level form and
+// produceLocalAttribute for the local one — reading the pair each has already
+// mapped rather than re-deriving it (STYLE T4).
+//
+// name is the declaration's OWN resolved {name}/{target namespace} pair, and the
+// two productions resolve the namespace half by disjoint rules: §3.2.2.1 makes a
+// top-level declaration's {target namespace} the ancestor <schema>'s
+// targetNamespace, while §3.2.2.2 decides a local one from its own
+// targetNamespace attribute, its form, and the <schema>'s attributeFormDefault
+// (localTargetNS) — leaving an UNQUALIFIED local attribute in no namespace at
+// all however the enclosing document is namespaced. So a document whose own
+// targetNamespace is the xsi namespace may legally declare local unqualified
+// attributes in it, and reading that attribute here as a stand-in for every
+// declaration in the document would reject them.
+//
+// The "unless" needs no encoding: the four §3.2.7 declarations are SEEDED as
+// components (seedInstanceAttributes) and reach no production, so every name
+// that arrives here was written by a schema document and is forbidden whatever
+// it is — xsi:type as squarely as xsi:foo, since the parenthetical exempts the
+// four DECLARATIONS rather than their names.
+//
+// That is also why this Schema Component Constraint is charged at the mapping
+// and not on the component, where xsd charges the others: at finalize the four
+// seeded declarations are ordinary components, so a check there would have to
+// exempt them by name — admitting exactly the four names a schema document may
+// not declare. So a declaration built through xsd.NewAttributeDeclaration
+// directly carries no such check — unstateable there only for the RESERVED
+// four, since on that footing a seeded declaration and a schema's own are the
+// same component, and simply unchecked for every other name in the namespace.
+// xsd.NewAttributeDeclaration's own GAP(xsd) marker tracks that residue and
+// enumerates what reads the component it admits.
+//
+// Each production charges it as soon as its pair exists, so the verdict does not
+// depend on unrelated later mappings succeeding (#206). In the local form that
+// point is BEHIND src-attribute clause 6, which gates the targetNamespace
+// attribute the resolution reads (rejectLocalAttributeTargetNamespace, #1243).
+// A use="prohibited" local <attribute> is charged nothing: it maps to no
+// component at all (§3.2.2), and this constraint is stated over declarations.
+func rejectXSITargetNamespace(name xsd.QName, el *Element) error {
+	if name.Space != xsd.XMLSchemaInstanceNS {
+		return nil
+	}
+	return xsderr.New(ruleNoXSI, el.Loc(),
+		"attribute declaration %s has the XML Schema Instance namespace as its {target namespace}, which no-xsi (§3.2.6.4) forbids whether the declaration is local or top-level: the only attribute declarations in that namespace are the four Built-in Attribute Declarations of §3.2.7 — xsi:type, xsi:nil, xsi:schemaLocation, xsi:noNamespaceSchemaLocation — which every schema holds by definition and no schema document may declare", name)
+}
+
 // buildSimpleType returns the compiled simple type named name, building it once
 // and memoizing the result. name is the zero QName only via constructSimpleType
 // for anonymous inline types, which never enter this memoized path.
@@ -2981,6 +3038,11 @@ func rejectNotationContent(elem *Element) error {
 // produceElement takes for src-element clause 3, the both-present fault of the
 // element side (#1246).
 //
+// no-xsi (§3.2.6.4) is charged behind that walk too and ahead of everything
+// else, by rejectXSITargetNamespace: qname already carries the {target
+// namespace} §3.2.2.1 gives this form — the ancestor <schema>'s targetNamespace
+// — so nothing else need be mapped to decide it (#1446).
+//
 // It charges the two src-attribute clauses (§3.2.3) this form can reach: 4
 // (type= and an inline <simpleType> mutually exclusive) and 1 (default and fixed
 // mutually exclusive, via valueConstraintOf). Clause 3 is guarded by "if the
@@ -2998,6 +3060,9 @@ func rejectNotationContent(elem *Element) error {
 // over the local and ref= forms; this function no longer calls it.
 func (p *producer) produceAttribute(qname xsd.QName, elem *Element) (xsd.AttributeDeclaration, error) {
 	if err := checkS4SChildOrder(elem, s4sAttribute); err != nil {
+		return xsd.AttributeDeclaration{}, err
+	}
+	if err := rejectXSITargetNamespace(qname, elem); err != nil {
 		return xsd.AttributeDeclaration{}, err
 	}
 	_, hasType := elem.Attr("type")
