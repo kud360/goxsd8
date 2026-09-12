@@ -14,9 +14,13 @@ import (
 //
 // It is the construction-time complement of facets.go: the same four bound
 // facets and the same enumeration facet, but comparing a RESTRICTION's facet
-// {value}s against its {base type definition} ONCE, when the type is built,
-// rather than comparing an instance's value against those facets on every
-// validated literal.
+// {value}s ONCE, when the type is built, rather than comparing an instance's
+// value against those facets on every validated literal. Two SCC families are
+// charged here, and they differ in what the derived facet is compared AGAINST:
+// the "valid restriction" family compares it against the {base type
+// definition}'s facets ACROSS the restriction step, while the "opposite bound"
+// family (checkBoundConsistency) compares a lower bound against an upper bound
+// declared at the SAME step.
 //
 // cos-pattern-restriction (§4.3.4.5, "it is an error if there is any member of
 // the {value} of the pattern facet on the {base type definition} which is not
@@ -31,8 +35,9 @@ import (
 // {value} is trivially still a member of {facets}. There is no reachable
 // violating state to reject.
 
-// The construction-time Schema Component Constraints this file charges — the
-// §4.3 "valid restriction" siblings of facets.go's instance-time cvc-* rules.
+// The construction-time Schema Component Constraints this file charges: the
+// §4.3 "valid restriction" siblings of facets.go's instance-time cvc-* rules,
+// then the four same-step "opposite bound" constraints of §4.3.7.4–§4.3.10.4.
 // Each string is a live entry in xsderr's generated catalog.
 const (
 	// ruleEnumerationValidRestriction is enumeration valid restriction (§4.3.5.5,
@@ -52,6 +57,18 @@ const (
 	// ruleMinInclusiveValidRestriction is minInclusive valid restriction
 	// (§4.3.10.4, id="minInclusive-valid-restriction").
 	ruleMinInclusiveValidRestriction xsderr.Rule = "minInclusive-valid-restriction"
+	// ruleMinInclusiveLEMaxInclusive is minInclusive <= maxInclusive (§4.3.7.4,
+	// id="minInclusive-less-than-equal-to-maxInclusive").
+	ruleMinInclusiveLEMaxInclusive xsderr.Rule = "minInclusive-less-than-equal-to-maxInclusive"
+	// ruleMinExclusiveLEMaxExclusive is minExclusive <= maxExclusive (§4.3.8.4,
+	// id="minExclusive-less-than-equal-to-maxExclusive").
+	ruleMinExclusiveLEMaxExclusive xsderr.Rule = "minExclusive-less-than-equal-to-maxExclusive"
+	// ruleMinExclusiveLTMaxInclusive is minExclusive < maxInclusive (§4.3.9.4,
+	// id="minExclusive-less-than-maxInclusive").
+	ruleMinExclusiveLTMaxInclusive xsderr.Rule = "minExclusive-less-than-maxInclusive"
+	// ruleMinInclusiveLTMaxExclusive is minInclusive < maxExclusive (§4.3.10.4,
+	// id="minInclusive-less-than-maxExclusive").
+	ruleMinInclusiveLTMaxExclusive xsderr.Rule = "minInclusive-less-than-maxExclusive"
 )
 
 // CheckFacetRestriction charges the value-space Schema Component Constraints
@@ -67,6 +84,13 @@ const (
 //   - enumeration valid restriction (§4.3.5.5): every member of a derived
 //     enumeration facet's {value} must be in the ·value space· of the {base type
 //     definition}.
+//
+// It also charges the four same-step opposite-bound SCCs of the same sections —
+// minInclusive <= maxInclusive, minExclusive <= maxExclusive, minExclusive <
+// maxInclusive, minInclusive < maxExclusive (boundConsistencyViolates). Those
+// relate two of t's OWN facets to each other rather than to the base, so they
+// are the one charge here that would still have work to do if the base carried
+// no facets at all.
 //
 // It is the value-aware second half of a two-part charge whose entry point is the
 // installed xsd.SimpleTypeRestrictionChecker (builtin.NewRestrictionChecker):
@@ -114,6 +138,9 @@ func CheckFacetRestriction(b Backend, r xsd.TypeResolver, t *xsd.SimpleType) err
 		return err
 	}
 	rc := restrictionCheck{mapping: m, whiteSpace: ws, base: base, owner: t}
+	if err := rc.checkBoundConsistency(); err != nil {
+		return err
+	}
 	if err := rc.checkBoundRestrictions(r); err != nil {
 		return err
 	}
@@ -151,6 +178,107 @@ type restrictionCheck struct {
 	// absent (owner IS xs:anySimpleType).
 	base  *xsd.SimpleType
 	owner *xsd.SimpleType
+}
+
+// checkBoundConsistency charges the four same-step opposite-bound SCCs of
+// §4.3.7.4–§4.3.10.4: a lower bound facet and an upper bound facet declared "for
+// the same datatype" must leave the value space non-empty.
+//
+// It walks owner's OWN facets only, and that is the whole check rather than a
+// narrowing of it. A pair in which the upper bound is INHERITED is already
+// charged, by the valid-restriction family beside this one, as the derived lower
+// bound failing against the base's upper bound; a pair in which BOTH are
+// inherited was charged when the base itself was constructed, against the base's
+// own facets. What is left over — both bounds declared at this step, where the
+// base has nothing to say — is exactly what this pass adds.
+//
+// Both operands are parsed through the BASE type's mapping, the same one
+// checkBoundRestrictions uses, so the two values are members of one space and
+// their Cmp is meaningful; a malformed {value} is charged under the offending
+// facet's own valid-restriction rule, not under the pairing's, so which pass
+// notices it first does not change what it is reported as (STYLE E2).
+//
+// The loops walk owner's own facets in document order, outer over lower bounds
+// and inner over upper bounds, so which pairing is reported first is
+// deterministic (STYLE D2).
+func (rc restrictionCheck) checkBoundConsistency() error {
+	own := rc.owner.OwnFacets()
+	for _, low := range own {
+		if !isLowerBoundKind(low.Kind()) {
+			continue
+		}
+		lowV, ordered, err := rc.boundLimit(low, boundRestrictionRule(low.Kind()))
+		if err != nil {
+			return err
+		}
+		if !ordered {
+			continue
+		}
+		for _, up := range own {
+			if !isUpperBoundKind(up.Kind()) {
+				continue
+			}
+			upV, ordered, err := rc.boundLimit(up, boundRestrictionRule(up.Kind()))
+			if err != nil {
+				return err
+			}
+			if !ordered {
+				continue
+			}
+			rule, violates := boundConsistencyViolates(low.Kind(), up.Kind(), lowV.Cmp(upV))
+			if !violates {
+				continue
+			}
+			return xsderr.New(rule, rc.owner.Loc(),
+				"simple type restriction's own %s {value} %q and %s {value} %q leave an empty value space (%s)",
+				low.Kind(), boundLexical(low), up.Kind(), boundLexical(up), rule)
+		}
+	}
+	return nil
+}
+
+// boundConsistencyViolates names the same-step opposite-bound Schema Component
+// Constraint governing a lower bound facet of kind lower paired with an upper
+// bound facet of kind upper, and reports whether ord — the ·ordering· of the
+// LOWER {value} relative to the UPPER {value} — violates it. The first result is
+// the zero Rule exactly when the pair is not a lower/upper pairing at all, which
+// the callers already exclude.
+//
+// The four pairings are four DISTINCT rules, they are NOT filed under matching
+// section numbers, and they do not agree on whether an EQUAL pair is an error —
+// the two same-kind pairings (§4.3.7.4, §4.3.8.4) test "greater than" and
+// accept an equal pair, while the two cross pairings (§4.3.9.4, §4.3.10.4)
+// test "greater than or equal to" and reject one. Verbatim:
+//
+//   - §4.3.7.4, minInclusive <= maxInclusive: "It is an ·error· for the value
+//     specified for ·minInclusive· to be greater than the value specified for
+//     ·maxInclusive· for the same datatype."
+//   - §4.3.8.4, minExclusive <= maxExclusive: "It is an ·error· for the value
+//     specified for ·minExclusive· to be greater than the value specified for
+//     ·maxExclusive· for the same datatype."
+//   - §4.3.9.4, minExclusive < maxInclusive: "It is an ·error· for the value
+//     specified for ·minExclusive· to be greater than or equal to the value
+//     specified for ·maxInclusive· for the same datatype."
+//   - §4.3.10.4, minInclusive < maxExclusive: "It is an ·error· for the value
+//     specified for ·minInclusive· to be greater than or equal to the value
+//     specified for ·maxExclusive· for the same datatype."
+//
+// Incomparable never violates, for the reason boundRestrictionViolates gives:
+// every clause is a "greater than" test, which an incomparable pair on a
+// partially ordered primitive (float/double, duration) does not satisfy.
+func boundConsistencyViolates(lower, upper xsd.FacetKind, ord Ordering) (xsderr.Rule, bool) {
+	switch {
+	case lower == xsd.FacetMinInclusive && upper == xsd.FacetMaxInclusive:
+		return ruleMinInclusiveLEMaxInclusive, ord == Greater
+	case lower == xsd.FacetMinExclusive && upper == xsd.FacetMaxExclusive:
+		return ruleMinExclusiveLEMaxExclusive, ord == Greater
+	case lower == xsd.FacetMinExclusive && upper == xsd.FacetMaxInclusive:
+		return ruleMinExclusiveLTMaxInclusive, ord == Greater || ord == Equal
+	case lower == xsd.FacetMinInclusive && upper == xsd.FacetMaxExclusive:
+		return ruleMinInclusiveLTMaxExclusive, ord == Greater || ord == Equal
+	default:
+		return "", false
+	}
 }
 
 // checkBoundRestrictions charges the four bound-facet valid-restriction SCCs
@@ -426,8 +554,25 @@ func (rc restrictionCheck) checkEnumerationRestriction(b Backend, r xsd.TypeReso
 // (§4.3.7–§4.3.10) — the kinds whose {value} is a member of the type's value
 // space and is compared through the ·ordering· relation.
 func isBoundKind(kind xsd.FacetKind) bool {
+	return isLowerBoundKind(kind) || isUpperBoundKind(kind)
+}
+
+// isLowerBoundKind reports whether kind is one of the two LOWER bound
+// Constraining Facets (§4.3.9, §4.3.10).
+func isLowerBoundKind(kind xsd.FacetKind) bool {
 	switch kind {
-	case xsd.FacetMaxInclusive, xsd.FacetMaxExclusive, xsd.FacetMinInclusive, xsd.FacetMinExclusive:
+	case xsd.FacetMinInclusive, xsd.FacetMinExclusive:
+		return true
+	default:
+		return false
+	}
+}
+
+// isUpperBoundKind reports whether kind is one of the two UPPER bound
+// Constraining Facets (§4.3.7, §4.3.8).
+func isUpperBoundKind(kind xsd.FacetKind) bool {
+	switch kind {
+	case xsd.FacetMaxInclusive, xsd.FacetMaxExclusive:
 		return true
 	default:
 		return false
