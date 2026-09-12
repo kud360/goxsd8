@@ -423,6 +423,9 @@ func indexByName[T namedComponent](items []T, kind string) (map[QName]T, error) 
 		if n == (QName{}) {
 			continue // absent {name}: anonymous, exempt from clause 2 (§3.4.1/§3.16.1)
 		}
+		// GAP(xsd): no-xsi (§3.2.6.4) is charged nowhere, so a schema declaring one
+		// of the four §3.2.7 names collides here and is charged sch-props-correct
+		// clause 2 instead of the rule that governs it (#1446).
 		if first, dup := index[n]; dup {
 			return nil, xsderr.New(ruleSchPropsCorrect, item.Loc(),
 				"schema {%s}[%d] repeats the expanded name %s (first declared at %s), but sch-props-correct clause 2 forbids two components of the same kind sharing an expanded name", kind, i, n, first.Loc())
@@ -570,6 +573,13 @@ func (s *Schema) Elements() []ElementDeclaration {
 // The slice is copied: mutating the result does not affect s. The declarations
 // in it are shared with s and immutable. An empty {attribute declarations}
 // yields nil.
+//
+// For a schema obtained from parser.Parse, the leading four entries are
+// declarations no schema document declares: parser.Produce (parser/produce.go)
+// calls AddAttribute for each of §3.2.7's built-in xsi: declarations — xsi:type,
+// xsi:nil, xsi:schemaLocation and xsi:noNamespaceSchemaLocation, "present in
+// every schema by definition" — BEFORE any document declaration, so the order is
+// those four, then each document's top-level attributes in document order.
 func (s *Schema) Attributes() []AttributeDeclaration {
 	return cloneSlice(s.attributes)
 }
