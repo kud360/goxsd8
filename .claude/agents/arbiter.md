@@ -45,6 +45,20 @@ with the grounding as step 3's `ACCEPTANCE:` block, never as a `VERDICT:`
 block: an `unsatisfiable` read as a verdict is one of the two rejections the
 cap counts (#1087).
 
+Extend this ruling to any claim a body makes about the current tree — a
+ratchet prediction, a marker's location, a citation's continued truth — not
+only the bullet's own bar: elapsed time between filing and grounding decays
+all of them alike (#1332). Match the instrument to the claim's lane. A
+`schema`-lane corpus claim is settled by `go tool suiteindex CONSTRUCT`;
+quote its own stated outcome for the empty and submodule-absent cases
+rather than invent wording, and treat a partly-read corpus
+(`ChildrenUnclosed`) as an incomplete discharge, not silence. An
+`instance`-lane claim needs the case run end-to-end instead of censused,
+because a decline anywhere between the producer and `Result.Violations` —
+a missing content matcher, an unresolved import — can leave a correct
+premise banking the same score. `CLAUDE.md`'s surveys block is the one
+copy of the `suiteindex` rule; cite it, never restate it.
+
 A landing may carry work beyond the issue body under docs/WORKFLOW.md's
 scope rule. Mason names what it absorbed; judge that on its merits, as
 part of the diff, not as a scope violation.
