@@ -429,7 +429,7 @@ type AttributeDeclaration struct {
 // would have to exempt them by name and would thereby admit exactly the four
 // names a schema document may not declare. The non-reserved arm is merely
 // unchecked — nothing seeds {xsi}foo, so a check confined to it would be sound
-// here and is not written.
+// here and is not written. Owned by #1462.
 //
 // The readers of the {attribute declarations} member this admits, and the
 // direction each charges (STYLE P3a):
