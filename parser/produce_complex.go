@@ -21,7 +21,8 @@ var anySimpleTypeName = xsd.QName{Space: xsd.XMLSchemaNS, Local: "anySimpleType"
 
 // qNameName, booleanName and anyURIName are the expanded names of the three
 // builtin simple types §3.2.7's four attribute declarations take their
-// {type definition} from. [builtin.Seed] always seeds all three.
+// {type definition} from. [builtin.Seed] always seeds all three. anyURIName is
+// also xml:base's {type definition} (produce_xmlnamespace.go).
 var (
 	qNameName   = xsd.QName{Space: xsd.XMLSchemaNS, Local: "QName"}
 	booleanName = xsd.QName{Space: xsd.XMLSchemaNS, Local: "boolean"}

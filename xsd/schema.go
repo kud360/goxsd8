@@ -574,12 +574,21 @@ func (s *Schema) Elements() []ElementDeclaration {
 // in it are shared with s and immutable. An empty {attribute declarations}
 // yields nil.
 //
-// For a schema obtained from parser.Parse, the leading four entries are
-// declarations no schema document declares: parser.Produce (parser/produce.go)
+// For a schema obtained from parser.Parse, the LEADING entries are declarations
+// no schema document declares, and there are four or eight of them. The parser
 // calls AddAttribute for each of §3.2.7's built-in xsi: declarations — xsi:type,
 // xsi:nil, xsi:schemaLocation and xsi:noNamespaceSchemaLocation, "present in
-// every schema by definition" — BEFORE any document declaration, so the order is
-// those four, then each document's top-level attributes in document order.
+// every schema by definition" — BEFORE any document declaration, always. It
+// then adds the four the schema document for the XML namespace declares —
+// xml:lang, xml:space, xml:base and xml:id — for a schema that <import>s
+// http://www.w3.org/XML/1998/namespace and composes no document under it, which
+// is the §1.3.2 namespace this processor supplies rather than fetches. So the
+// order is those four, then those four when they are supplied, then each
+// document's top-level attributes in document order.
+//
+// Tell the supplied ones from a document's by their Loc, which is the zero Loc
+// for a component no schema document is behind (see this package's doc);
+// counting on their PRESENCE is what the condition above forbids.
 func (s *Schema) Attributes() []AttributeDeclaration {
 	return cloneSlice(s.attributes)
 }

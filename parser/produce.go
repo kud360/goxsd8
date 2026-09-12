@@ -91,7 +91,11 @@ const (
 // <import> children are still READ, though never followed: src-resolve clause 4
 // licenses this document's QName references from them (see parser/doc.go's
 // Composition section), so a type= into a foreign namespace needs an <import>
-// element naming it here as much as it does under [Parse].
+// element naming it here as much as it does under [Parse]. One of them also
+// SUPPLIES components: an <import> of the §1.3.2 XML namespace is answered with
+// that namespace's four built-in attribute declarations
+// (parser/produce_xmlnamespace.go), a construction rather than a fetch
+// (§4.2.6.1) and so as available here as under [Parse].
 //
 // backend is passed explicitly rather than defaulted to a builtin/strict policy
 // here: that default belongs to [Parse], keeping this leaf free of a
@@ -138,7 +142,14 @@ func Produce(doc *Document, backend value.Backend) (*xsd.Schema, error) {
 	// A lone document is its own assembly, so its effective target namespace is
 	// its own targetNamespace and it is never a chameleon (§4.2.3 clause 2.3
 	// needs an including document to borrow a namespace from).
-	p := newProducer(doc, attrOr(doc.Root(), "targetNamespace"), nil, nil, nil, builder, sym)
+	target := attrOr(doc.Root(), "targetNamespace")
+	// Being the whole assembly, it is also the only document that could have
+	// composed components under the XML namespace, which is the other half of
+	// what supplyXMLNamespace reads.
+	if err := addXMLNamespace(builder, []composedDocument{{schema: doc.Root(), target: target}}); err != nil {
+		return nil, err
+	}
+	p := newProducer(doc, target, nil, nil, nil, builder, sym)
 	if err := p.prescan(); err != nil {
 		return nil, err
 	}
@@ -454,6 +465,11 @@ type identityConstraintSource struct {
 // set a document's own top-level <attribute> declarations reach, so an
 // <attribute ref="xsi:type"/> resolves at finalize instead of being charged
 // src-resolve clause 1.2.
+//
+// The XML namespace's declarations are NOT seeded here, and the asymmetry is
+// src-resolve clause 4.2's: they are supplied CONDITIONALLY, by addXMLNamespace
+// (produce_xmlnamespace.go), from each caller of this function once the whole
+// document set is known. Nothing seeded here is conditional on anything.
 func newSymbols(builder *xsd.SchemaBuilder, backend value.Backend) (*symbols, error) {
 	seeded, err := builtin.Seed(backend)
 	if err != nil {
