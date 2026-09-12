@@ -98,11 +98,11 @@
 // complexderivation.go and NOT from any of complexextension.go's own
 // twenty charges. The zero xsderr.Loc means the position is unknown, and
 // is the correct value for a component with no schema document behind it —
-// parser.Produce's synthesized xs:anyType and package builtin's seeded
-// built-in datatypes are the legitimate zero-Loc producers. Other
-// constructors take a loc to charge their own rejections but do not retain
-// it: nothing consumes those positions yet, so no accessor is exported for
-// them (T5).
+// parser.Produce's synthesized xs:anyType and §3.2.7 xsi: attribute
+// declarations, and package builtin's seeded built-in datatypes, are the
+// legitimate zero-Loc producers. Other constructors take a loc to charge
+// their own rejections but do not retain it: nothing consumes those
+// positions yet, so no accessor is exported for them (T5).
 //
 // # Query API
 //

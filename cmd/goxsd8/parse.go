@@ -346,11 +346,13 @@ type component interface {
 //
 // The zero Loc is the discriminator, and xsd's package doc fixes its meaning:
 // it "is the correct value for a component with no schema document behind it —
-// parser.Produce's synthesized xs:anyType and package builtin's seeded
-// built-in datatypes are the legitimate zero-Loc producers". Those are exactly
-// what every parse seeds into {type definitions} before reading a document, so
-// counting them would report the same fifty-odd types for every schema and
-// bury what the schema itself declares.
+// parser.Produce's synthesized xs:anyType and §3.2.7 xsi: attribute
+// declarations, and package builtin's seeded built-in datatypes, are the
+// legitimate zero-Loc producers". Those are exactly what every parse seeds
+// into {type definitions} and {attribute declarations} before reading a
+// document, so counting them would report the same fifty-odd types and the
+// same four xsi: attributes for every schema and bury what the schema itself
+// declares.
 func declaredNames[T component](components []T) []xsd.QName {
 	names := make([]xsd.QName, 0, len(components))
 	for _, c := range components {

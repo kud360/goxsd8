@@ -435,11 +435,12 @@ type identityConstraintSource struct {
 }
 
 // newSymbols returns the empty assembly-wide symbol table, having seeded the
-// builtin datatypes and xs:anyType into builder — EXACTLY ONCE for the whole
-// assembly, which is why seeding lives here and not in the per-document
-// producer: seeding per document would add xs:string (and every other builtin)
-// once per <include>d document and trip sch-props-correct (§3.17.6.1) clause 2
-// on any schema assembled from two or more documents.
+// builtin datatypes, xs:anyType and §3.2.7's four xsi: attribute declarations
+// into builder — EXACTLY ONCE for the whole assembly, which is why seeding lives
+// here and not in the per-document producer: seeding per document would add
+// xs:string (and every other builtin) once per <include>d document and trip
+// sch-props-correct (§3.17.6.1) clause 2 on any schema assembled from two or more
+// documents.
 //
 // xs:anyType is the ur-type Complex Type Definition (§3.4.7). [builtin.Seed]
 // yields only simple types (its doc defers anyType to M4 as "a parser-level
@@ -447,6 +448,12 @@ type identityConstraintSource struct {
 // which defaults to xs:anyType (§3.3.2.1 case 4) — would fail src-resolve at
 // finalize. It is added to {type definitions} exactly like a produced complex
 // type, so a type= reference to it resolves.
+//
+// seedInstanceAttributes is the {attribute declarations} counterpart, and the
+// same duplication argument governs it: the four are added once, into the same
+// set a document's own top-level <attribute> declarations reach, so an
+// <attribute ref="xsi:type"/> resolves at finalize instead of being charged
+// src-resolve clause 1.2.
 func newSymbols(builder *xsd.SchemaBuilder, backend value.Backend) (*symbols, error) {
 	seeded, err := builtin.Seed(backend)
 	if err != nil {
@@ -462,6 +469,13 @@ func newSymbols(builder *xsd.SchemaBuilder, backend value.Backend) (*symbols, er
 		return nil, err
 	}
 	builder.AddType(anyType)
+	instanceAttrs, err := seedInstanceAttributes()
+	if err != nil {
+		return nil, err
+	}
+	for _, a := range instanceAttrs {
+		builder.AddAttribute(a)
+	}
 	return &symbols{
 		simpleTypes:         make(map[xsd.QName]typeSource),
 		complexTypes:        make(map[xsd.QName]typeSource),
