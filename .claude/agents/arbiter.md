@@ -45,6 +45,20 @@ with the grounding as step 3's `ACCEPTANCE:` block, never as a `VERDICT:`
 block: an `unsatisfiable` read as a verdict is one of the two rejections the
 cap counts (#1087).
 
+A bullet asserting a **ratchet prediction over the conformance corpus** —
+candidate fixtures a change is expected to flip — decays with elapsed time
+between filing and grounding, not with base drift (#1332): it needs no step
+of its own, because ruling it here already runs once per issue regardless of
+whether `origin/main` moved since filing. Re-derive it against the current
+tree with `go tool suiteindex CONSTRUCT` (CLAUDE.md's surveys block owns
+that rule; cite it, do not restate it) rather than trusting the filed body.
+State the discharge: *"ran `suiteindex`, the body's candidate set is
+unchanged"* is a full discharge; *"the submodule is absent, so no census was
+taken"* is a stated outcome, not silence (CLAUDE.md already rules that mode
+supported); and a corpus reported partly read (`suiteindex`'s
+*"=== Read only partly ==="* section) makes *"unchanged"* incomplete unless
+said in the same sentence.
+
 A landing may carry work beyond the issue body under docs/WORKFLOW.md's
 scope rule. Mason names what it absorbed; judge that on its merits, as
 part of the diff, not as a scope violation.
