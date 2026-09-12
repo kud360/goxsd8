@@ -1532,7 +1532,7 @@ func declarationName(el *Element, ns string) (xsd.QName, error) {
 	return xsd.QName{Space: ns, Local: name}, nil
 }
 
-// rejectXSITargetNamespace charges no-xsi (§3.2.6.4, xmlschema11-1.md:989): "The
+// rejectXSITargetNamespace charges no-xsi (§3.2.6.4, xmlschema11-1.md:990): "The
 // {target namespace} of an attribute declaration, whether local or top-level,
 // must not match http://www.w3.org/2001/XMLSchema-instance (unless it is one of
 // the four built-in declarations given in the next section)." Both attribute
@@ -1562,8 +1562,11 @@ func declarationName(el *Element, ns string) (xsd.QName, error) {
 // seeded declarations are ordinary components, so a check there would have to
 // exempt them by name — admitting exactly the four names a schema document may
 // not declare. So a declaration built through xsd.NewAttributeDeclaration
-// directly carries no such check: on that footing a seeded declaration and a
-// schema's own are the same component, and the rule cannot be stated at all.
+// directly carries no such check — unstateable there only for the RESERVED
+// four, since on that footing a seeded declaration and a schema's own are the
+// same component, and simply unchecked for every other name in the namespace.
+// xsd.NewAttributeDeclaration's own GAP(xsd) marker tracks that residue and
+// enumerates what reads the component it admits.
 //
 // Each production charges it as soon as its pair exists, so the verdict does not
 // depend on unrelated later mappings succeeding (#206). In the local form that
