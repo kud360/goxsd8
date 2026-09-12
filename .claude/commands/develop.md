@@ -82,9 +82,11 @@ heartbeat.
    cheapest before they are built. `go tool surface` answers the signature
    question alone and is not that ruling. Then delegate to **mason**,
    always with worktree isolation. Only once mason reports completion,
-   fast-forward-merge its local branch into `wip/issue-<N>`. If the change
-   added or altered public API, warden reviews the diff too. Post both
-   verdicts on the issue.
+   bring its local branch onto `wip/issue-<N>` under WORKFLOW's **One
+   writer per checkout** hand-off clause — fast-forward or merge, never a
+   replay — and name the resulting SHA in that checkpoint's comment. If
+   the change added or altered public API, warden reviews the diff too.
+   Post both verdicts on the issue.
 
    Mason may absorb adjacent work under docs/WORKFLOW.md's scope rule.
    Absorbed items belong in the commit body, not in a new issue.
