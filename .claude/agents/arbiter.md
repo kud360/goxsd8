@@ -45,19 +45,19 @@ with the grounding as step 3's `ACCEPTANCE:` block, never as a `VERDICT:`
 block: an `unsatisfiable` read as a verdict is one of the two rejections the
 cap counts (#1087).
 
-Extend this ruling to any claim a body makes about the current tree — a
-ratchet prediction, a marker's location, a citation's continued truth — not
-only the bullet's own bar: elapsed time between filing and grounding decays
-all of them alike (#1332). Match the instrument to the claim's lane. A
-`schema`-lane corpus claim is settled by `go tool suiteindex CONSTRUCT`;
-quote its own stated outcome for the empty and submodule-absent cases
-rather than invent wording, and treat a partly-read corpus
-(`ChildrenUnclosed`) as an incomplete discharge, not silence. An
-`instance`-lane claim needs the case run end-to-end instead of censused,
-because a decline anywhere between the producer and `Result.Violations` —
-a missing content matcher, an unresolved import — can leave a correct
-premise banking the same score. `CLAUDE.md`'s surveys block is the one
-copy of the `suiteindex` rule; cite it, never restate it.
+A bullet asserting a **ratchet prediction over the conformance corpus** —
+candidate fixtures a change is expected to flip — decays with elapsed time
+between filing and grounding, not with base drift (#1332): it needs no step
+of its own, because ruling it here already runs once per issue regardless of
+whether `origin/main` moved since filing. Re-derive it against the current
+tree with `go tool suiteindex CONSTRUCT` (CLAUDE.md's surveys block owns
+that rule; cite it, do not restate it) rather than trusting the filed body.
+State the discharge: *"ran `suiteindex`, the body's candidate set is
+unchanged"* is a full discharge; *"the submodule is absent, so no census was
+taken"* is a stated outcome, not silence (CLAUDE.md already rules that mode
+supported); and a corpus reported partly read (`suiteindex`'s
+*"=== Read only partly ==="* section) makes *"unchanged"* incomplete unless
+said in the same sentence.
 
 A landing may carry work beyond the issue body under docs/WORKFLOW.md's
 scope rule. Mason names what it absorbed; judge that on its merits, as
