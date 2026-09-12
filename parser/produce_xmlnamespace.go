@@ -113,7 +113,7 @@ func supplyXMLNamespace(docs []composedDocument) bool {
 // reference and teaching that path to accept one would mint a second resolution
 // mechanism beside it (STYLE T4). No suite schema case turns on it: the one
 // fixture naming the group, msData/additional/test264908_1a.xsd, declares the
-// group itself.
+// group itself. Owned by #1458.
 func addXMLNamespace(builder *xsd.SchemaBuilder, docs []composedDocument) error {
 	if !supplyXMLNamespace(docs) {
 		return nil
