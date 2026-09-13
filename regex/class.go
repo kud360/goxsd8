@@ -255,12 +255,16 @@ func isCategoryName(name string) bool {
 // Datatypes Appendix G but does not implement, as opposed to one Appendix G's
 // grammar genuinely excludes. The two are indistinguishable in a translation
 // FAILURE — both stop the translation — but not in a verdict about the pattern
-// AUTHOR: only the second is a src-pattern-value defect. [CheckSyntax] tells
-// them apart through this sentinel, so a schema-construction pass can reject
-// malformed patterns eagerly without false-rejecting a spec-valid one this
-// module cannot yet compile. Unexported: the distinction is CheckSyntax's to
-// make, and a caller reaching past it would be asserting the classification
-// itself.
+// AUTHOR: only the second is a src-pattern-value defect. §G.4.2.4 is explicit
+// about which side the block table falls on — "any string of hyphens, digits,
+// and Basic Latin characters beginning with 'Is' will match the non-terminal
+// IsBlock and thus be allowed in a regular expression", with rejecting an
+// unrecognized one an ·at user option· deviation this module takes (propSet)
+// rather than a grammar verdict. [CheckSyntax] tells the two apart through this
+// sentinel, so a schema-construction pass rejects malformed patterns eagerly
+// without false-rejecting one the spec allows. Unexported: the distinction is
+// CheckSyntax's to make, and a caller reaching past it would be asserting the
+// classification itself.
 var errUnsupported = errors.New("not supported by this implementation")
 
 // blockSet returns the code points of the Unicode block whose normalized name
@@ -274,10 +278,18 @@ var errUnsupported = errors.New("not supported by this implementation")
 //
 // GAP(regex): unicodeBlocks covers a fraction of the blocks Appendix G admits,
 // so a pattern naming any other block — \p{IsThai}, \p{IsOgham}, \p{IsRunic}
-// and some 130 more across testdata/xsdtests — fails to translate even though
-// the spec defines it. Owned by #1473.
+// and 71 further names across testdata/xsdtests — fails to translate even
+// though the spec defines it. Owned by #1473.
 func blockSet(nm string) (runeSet, error) {
 	key := normalizeBlockName(nm)
+	if key == "" {
+		// IsBlock ::= 'Is' [a-zA-Z0-9#x2D]+ (production [96]) needs at least one
+		// character after the 'Is', so "\p{Is}" matches neither IsBlock nor
+		// IsCategory and is no regExp at all (§G.4.2.4). It names no block, so it
+		// is outside what §G.4.2.4 allows an unrecognized name and outside what
+		// errUnsupported covers: a defect, not this table's gap.
+		return nil, fmt.Errorf("empty Unicode block name in \\p{Is%s}", nm)
+	}
 	r, ok := unicodeBlocks[key]
 	if !ok {
 		return nil, fmt.Errorf("unrecognized or unsupported Unicode block %q: %w", nm, errUnsupported)

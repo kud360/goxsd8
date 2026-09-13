@@ -369,6 +369,11 @@ func TestCheckSyntaxRejectsAppendixGDefects(t *testing.T) {
 		// unsupported-block exit below.
 		{`\p{Zork}`, "unrecognized Unicode category"},
 		{`[\p{Zork}]`, "unrecognized Unicode category"},
+		// IsBlock ::= 'Is' [a-zA-Z0-9#x2D]+ (production [96]) requires at least
+		// one character, so "\p{Is}" names no block and matches no charProp. It
+		// must take the defect path, not the unsupported-block one, even though
+		// both run through blockSet.
+		{`\p{Is}`, "empty Unicode block name"},
 	}
 	for _, c := range cases {
 		t.Run(c.pattern, func(t *testing.T) {
