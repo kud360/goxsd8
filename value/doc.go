@@ -111,6 +111,15 @@
 // # Construction-time facet checks
 //
 //	func CheckFacetRestriction(b Backend, r xsd.TypeResolver, t *xsd.SimpleType) error
+//	func CheckPatternSyntax(t *xsd.SimpleType) error
+//
+// [CheckPatternSyntax] charges src-pattern-value (§4.3.4.3) on the <pattern>
+// facets a type DECLARES: each value must be a regular expression per Datatypes
+// Appendix G. The facet pipeline charges the same rule when it compiles those
+// patterns, but only for a type some literal is validated against — so a schema
+// nobody validates an instance against was never checked at all. It takes
+// neither a [Backend] nor a resolver: a pattern's syntax is a property of the
+// lexical value alone.
 //
 // [CheckFacetRestriction] is the once-per-type counterpart of that pipeline: it
 // charges the value-space Schema Component Constraints relating a simple type's
@@ -123,10 +132,11 @@
 // derivation step (minInclusive <= maxInclusive, minExclusive <= maxExclusive,
 // minExclusive < maxInclusive, minInclusive < maxExclusive), which are
 // standalone §4.3 SCCs rather than a clause of cos-st-restricts. Reach it
-// through builtin.NewRestrictionChecker, the xsd.SimpleTypeRestrictionChecker
-// installed at xsd.SchemaBuilder.FinalizeWith: that implementation charges facet
-// APPLICABILITY first and then delegates here. A schema finalized without it
-// gets neither check.
+// Reach BOTH through builtin.NewRestrictionChecker, the
+// xsd.SimpleTypeRestrictionChecker installed at xsd.SchemaBuilder.FinalizeWith:
+// that implementation delegates pattern syntax first, then charges facet
+// APPLICABILITY, then delegates the restriction constraints here. A schema
+// finalized without it gets none of the three.
 //
 // # The resolver, threaded and never stored
 //

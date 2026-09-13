@@ -36,8 +36,12 @@ const ruleCosSTRestricts xsderr.Rule = "cos-st-restricts"
 // table — and then delegates the value-space constraints of clauses 1.3.2 /
 // 2.2.2.5 / 3.2.2.5 to [value.CheckFacetRestriction], for which b supplies the
 // value space. Applicability runs FIRST so the delegate may assume a bound
-// facet's value space really is ordered. See [xsd.SimpleTypeRestrictionChecker]
-// for the reject-capable contract this satisfies.
+// facet's value space really is ordered. Ahead of both it delegates
+// src-pattern-value (Datatypes §4.3.4.3) to [value.CheckPatternSyntax] — not a
+// cos-st-restricts clause, but the one charge that a <pattern> facet's value is
+// a regular expression at all, and reachable at construction time only from
+// here. See [xsd.SimpleTypeRestrictionChecker] for the reject-capable contract
+// this satisfies.
 func NewRestrictionChecker(b value.Backend) xsd.SimpleTypeRestrictionChecker {
 	return restrictionChecker{backend: b}
 }
@@ -54,13 +58,24 @@ func (c restrictionChecker) CheckRestriction(r xsd.TypeResolver, t *xsd.SimpleTy
 	return checkSimpleTypeRestriction(c.backend, r, t)
 }
 
-// checkSimpleTypeRestriction charges the facet-VALUE half of Derivation Valid
-// (Restriction, Simple) (cos-st-restricts, Structures §3.16.6.2) on an
-// already-constructed Simple Type Definition: the sub-clauses package xsd cannot
-// reach from a pure leaf with no applicability table and no value spaces.
+// checkSimpleTypeRestriction charges, on an already-constructed Simple Type
+// Definition, the facet constraints package xsd cannot reach from a pure leaf
+// with no applicability table and no value spaces. Those are the facet-VALUE
+// sub-clauses of Derivation Valid (Restriction, Simple) (cos-st-restricts,
+// Structures §3.16.6.2), plus one Schema Representation Constraint that needs a
+// regular-expression parser and so lands on the same side of that line.
 //
 // It charges, in order:
 //
+//   - src-pattern-value (Datatypes §4.3.4.3) on the <pattern> facets t itself
+//     declares, by delegating to value.CheckPatternSyntax. It runs FIRST
+//     because it decides whether a facet the author wrote is a facet at all:
+//     the constraints below read pattern facets as given, and a value that is
+//     no regular expression has nothing for them to read. This is the ONLY
+//     schema-construction-time charge of that rule — the facet-compile path
+//     value/facets.go charges it from is lazy, reached once per validated
+//     instance literal, so a schema no instance is validated against reaches it
+//     never.
 //   - clause 1.3.1 for an ATOMIC t: every facet in t's {facets} must be
 //     applicable to t's {primitive type definition} per cos-applicable-facets
 //     (§4.1.5), answered against the generated table through TypeSpec.Applies —
@@ -93,6 +108,9 @@ func (c restrictionChecker) CheckRestriction(r xsd.TypeResolver, t *xsd.SimpleTy
 // direct entry point would be an exported identifier with no consumer (STYLE T5)
 // growing callers against the function the capability seam is meant to own.
 func checkSimpleTypeRestriction(b value.Backend, r xsd.TypeResolver, t *xsd.SimpleType) error {
+	if err := value.CheckPatternSyntax(t); err != nil {
+		return err
+	}
 	if err := checkAtomicApplicableFacets(r, t); err != nil {
 		return err
 	}

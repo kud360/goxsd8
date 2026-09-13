@@ -243,3 +243,76 @@ func stringFacetValue(name builtin.FacetName) string {
 		return "1"
 	}
 }
+
+// TestRestrictionCheckerPatternSyntax pins the eager half of src-pattern-value
+// (§4.3.4.3): the restriction-checking capability charges a malformed <pattern>
+// value when the TYPE is built, with no literal ever validated against it. The
+// three rejected patterns are the ones the W3C suite's simple041, simple042 and
+// elemE007/8/9 fixtures carry.
+func TestRestrictionCheckerPatternSyntax(t *testing.T) {
+	cases := []struct {
+		name     string
+		pattern  string
+		rejected bool
+	}{
+		{"hyphen opens a range", `[--z]*`, true},
+		{"hyphen ends a range", `[!--]*`, true},
+		{"omitted lower bound", `[0-9]{,5}`, true},
+		{"well-formed", `[0-9]{1,5}`, false},
+		// A block name this module's curated table omits is a gap here
+		// (GAP(regex), #1473), not a defect in the schema: rejecting it would
+		// false-reject a pattern Appendix G defines. The lazy facet-compile path
+		// still surfaces it when a literal is actually validated.
+		{"unsupported Unicode block", `\p{IsThai}*`, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			err := restrictBuiltin(t, "string", xsd.NewFacet(xsd.FacetPattern, []string{c.pattern}, false))
+			if !c.rejected {
+				if err != nil {
+					t.Fatalf("pattern %q rejected: %v", c.pattern, err)
+				}
+				return
+			}
+			rule, ok := xsderr.RuleOf(err)
+			if !ok || rule != "src-pattern-value" {
+				t.Fatalf("rule = %q (ok=%v), want src-pattern-value; err=%v", rule, ok, err)
+			}
+			if !strings.Contains(err.Error(), c.pattern) {
+				t.Errorf("message %q does not quote the offending value %q", err.Error(), c.pattern)
+			}
+		})
+	}
+}
+
+// TestRestrictionCheckerPatternSyntaxOwnFacetsOnly pins the operand choice:
+// CheckPatternSyntax reads the type's OWN facets, never the accumulated
+// {facets}. A malformed pattern belongs to the ONE type that declares it, and
+// the same finalize walk visits that type itself; charging it again on every
+// descendant would report one author's mistake N times, each at the wrong
+// position.
+func TestRestrictionCheckerPatternSyntaxOwnFacetsOnly(t *testing.T) {
+	idx, backend := seededIndex(t)
+	// A base carrying the bad pattern. NewSimpleType does not check pattern
+	// syntax — the finalize walk does — so this base is constructible, and in a
+	// real schema the SAME walk would reject it in its own right.
+	bad, err := newCheckedSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "bad"},
+		xsd.RestrictionDerivation{}, idx["string"],
+		[]xsd.Facet{xsd.NewFacet(xsd.FacetPattern, []string{`[--z]*`}, false)}, nil)
+	if err != nil {
+		t.Fatalf("NewSimpleType(base): %v", err)
+	}
+	derived, err := newCheckedSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "derived"},
+		xsd.RestrictionDerivation{}, bad,
+		[]xsd.Facet{xsd.NewFacet(xsd.FacetMaxLength, []string{"4"}, false)}, nil)
+	if err != nil {
+		t.Fatalf("NewSimpleType(derived): %v", err)
+	}
+	checker := builtin.NewRestrictionChecker(backend)
+	if err := checker.CheckRestriction(noSchema{}, derived); err != nil {
+		t.Fatalf("the DERIVED type was charged for a pattern it inherits: %v", err)
+	}
+	if err := checker.CheckRestriction(noSchema{}, bad); err == nil {
+		t.Fatal("the DECLARING type was not charged — the check reaches nothing at all")
+	}
+}

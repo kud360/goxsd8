@@ -53,8 +53,12 @@ const (
 	ruleCvcDatatypeValid xsderr.Rule = "cvc-datatype-valid"
 	// ruleSrcPatternValue is the Schema Representation Constraint on a pattern
 	// facet's {value} (§4.3.4.3, id="src-pattern-value"): the value must be a
-	// valid regular expression. Charged at facet-compile time, so a bad pattern
-	// surfaces when the type is built, never mid-validation.
+	// valid regular expression. Charged from two places, for two different
+	// reaches: [CheckPatternSyntax], eagerly on every simple type the finalize
+	// walk visits, which is the charge a schema-only caller gets; and
+	// newPatternFacet below, lazily, when a type's facets are first compiled to
+	// validate a literal, which additionally catches what the finalize charge
+	// deliberately passes over (see regex.CheckSyntax).
 	ruleSrcPatternValue xsderr.Rule = "src-pattern-value"
 	// ruleCvcPatternValid is pattern Valid (§4.3.4.4, id="cvc-pattern-valid"): the
 	// whiteSpace-normalized literal must match at least one member of the pattern

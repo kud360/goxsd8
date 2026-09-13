@@ -1,6 +1,9 @@
 package value
 
 import (
+	"errors"
+
+	"github.com/kud360/goxsd8/regex"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
 )
@@ -597,6 +600,64 @@ func boundRestrictionRule(k xsd.FacetKind) xsderr.Rule {
 	default:
 		panic("value: boundRestrictionRule: " + k.String() + " is not a bound facet")
 	}
+}
+
+// CheckPatternSyntax charges src-pattern-value (§4.3.4.3) on the <pattern>
+// facets t DECLARES: each value must be a regular expression as Datatypes
+// Appendix G defines one. It is the EAGER counterpart of facets.go's
+// newPatternFacet, which charges the same rule off the same translation but
+// only when an instance literal is first validated against t — so a schema
+// nothing validates against, which is every schema-only conformance fixture,
+// never reached it and a malformed pattern passed silently. Reach this the way
+// CheckFacetRestriction is reached, from the xsd.SimpleTypeRestrictionChecker
+// installed at xsd.SchemaBuilder.FinalizeWith: that walk visits every simple
+// type a schema contains, anonymous inline ones included.
+//
+// t.OwnFacets is the operand, not EffectiveFacets, for the reason
+// CheckFacetRestriction takes the same side: an INHERITED pattern is the very
+// facet component the base carries, and the same walk already charged it there.
+// Passing the accumulated overlay instead would re-charge one author's mistake
+// once per type derived from it, attributing it to each derived type's
+// position in turn.
+//
+// A pattern this module recognizes but cannot compile is NOT charged — see
+// regex.CheckSyntax, which owns that distinction. Neither is a translated
+// pattern RE2 then rejects: that failure has no reproduction in the corpus and
+// stays where newPatternFacet already charges it, rather than widening a
+// construction-time rejection past what Appendix G's grammar decides.
+//
+// No xsd.TypeResolver and no Backend: a pattern's syntax is a property of the
+// lexical value alone, so nothing here walks the base chain or touches a value
+// space.
+func CheckPatternSyntax(t *xsd.SimpleType) error {
+	for _, f := range t.OwnFacets() {
+		if f.Kind() != xsd.FacetPattern {
+			continue
+		}
+		for _, p := range f.Values() {
+			err := regex.CheckSyntax(p, regex.FlavorXSD, "")
+			if err == nil {
+				continue
+			}
+			return xsderr.New(ruleSrcPatternValue, t.Loc(),
+				"pattern facet value %q is not a regular expression: %s (src-pattern-value, §4.3.4.3 via Datatypes Appendix G)",
+				p, patternDetail(err))
+		}
+	}
+	return nil
+}
+
+// patternDetail renders what regex.CheckSyntax reported, without the "loc:
+// [rule]" prefix *xsderr.Error.Error adds. The regex translator charges
+// src-pattern-value itself but at the zero Loc — it parses a bare string and
+// has no document to point at — so CheckPatternSyntax re-charges the same rule
+// at the type's own position and quotes only the explanation.
+func patternDetail(err error) string {
+	var e *xsderr.Error
+	if errors.As(err, &e) {
+		return e.Msg
+	}
+	return err.Error()
 }
 
 // boundLexical renders a bound facet's lexical {value} for an error message.
