@@ -1,6 +1,7 @@
 package regex
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -81,6 +82,36 @@ func Translate(pattern string, flavor Flavor, flags string) (string, error) {
 	default:
 		panic(fmt.Sprintf("regex: invalid Flavor %d", flavor))
 	}
+}
+
+// CheckSyntax reports whether pattern is well-formed in the given flavor,
+// discarding the translation [Translate] would produce. A SYNTAX defect —
+// anything the Datatypes Appendix G grammar and its disambiguation rules
+// exclude — comes back as the same *xsderr.Error Translate returns. A construct
+// this module recognizes as well-formed but does not implement returns nil
+// instead: today that is a Unicode block name outside class.go's curated
+// unicodeBlocks table, whose GAP(regex) marker owns the limitation.
+//
+// That asymmetry is the whole point of the function, and it is why a
+// schema-construction pass calls this rather than Translate. Such a pass
+// charges src-pattern-value (Datatypes §4.3.4.3) on every <pattern> facet a
+// schema declares, exercised or not, so anything it rejects is a rejection of
+// the SCHEMA — and a pattern that is valid per Appendix G and merely beyond
+// this module's block table is a gap here, not a defect there. Translate keeps
+// reporting both classes identically, because a caller that actually needs the
+// compiled regex cannot proceed either way.
+//
+// A pattern carrying both classes of fault is classified by whichever the
+// left-to-right parse reaches first, so an unsupported block name earlier in
+// the pattern masks a syntax defect later in it. That errs toward accepting a
+// schema this module cannot fully check, which is the direction the gap already
+// errs in.
+func CheckSyntax(pattern string, flavor Flavor, flags string) error {
+	_, err := Translate(pattern, flavor, flags)
+	if err != nil && !errors.Is(err, errUnsupported) {
+		return err
+	}
+	return nil
 }
 
 // foFlags validates an F&O $flags string and returns the RE2 inline-flag prefix
@@ -194,6 +225,15 @@ func (p *parser) rule() xsderr.Rule {
 
 func (p *parser) errf(off int, format string, args ...any) error {
 	return xsderr.New(p.rule(), xsderr.Loc{}, "regex: %s (offset %d)", fmt.Sprintf(format, args...), off)
+}
+
+// errCause is errf for a failure that already has a cause worth keeping: it
+// renders the same "regex: <msg> (offset N)" text but PRESERVES err's identity,
+// so errors.Is reaches through to whatever sentinel err carries. Use it
+// wherever the classification of the failure — not just its wording — travels
+// up to the caller; [CheckSyntax] reads exactly that.
+func (p *parser) errCause(off int, err error) error {
+	return xsderr.Wrap(p.rule(), xsderr.Loc{}, fmt.Errorf("regex: %w (offset %d)", err, off))
 }
 
 // regExp ::= branch ( '|' branch )* (Datatypes production [64]).
@@ -344,7 +384,7 @@ func (p *parser) atomCategoryEscape(negate bool, start int) error {
 	if strings.HasPrefix(name, "Is") {
 		set, err := blockSet(strings.TrimPrefix(name, "Is"))
 		if err != nil {
-			return p.errf(start, "%v", err)
+			return p.errCause(start, err)
 		}
 		emitClass(&p.out, set, negate)
 		return nil

@@ -177,7 +177,7 @@ func (p *parser) parseClassEscape(open int) (rune, bool, runeSet, error) {
 		}
 		set, err := propSet(name)
 		if err != nil {
-			return 0, false, nil, p.errf(start, "%v", err)
+			return 0, false, nil, p.errCause(start, err)
 		}
 		if c == 'P' {
 			set = set.complement()

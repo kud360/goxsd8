@@ -345,3 +345,75 @@ func TestPropertyClassKeepsStrideGaps(t *testing.T) {
 		}
 	}
 }
+
+// TestCheckSyntaxRejectsAppendixGDefects pins the half of CheckSyntax's
+// contract that a schema-construction pass rejects on: a pattern Appendix G's
+// grammar or its disambiguation rules exclude. The first two are §G.4.1's
+// hyphen cases (the spec names "[--z]" itself as excluded); the third is §G.2's
+// quantity grammar, which has no omitted-lower-bound form and says so in a Note.
+func TestCheckSyntaxRejectsAppendixGDefects(t *testing.T) {
+	cases := []struct {
+		pattern string
+		detail  string
+	}{
+		{`[--z]*`, "cannot start a character range"},
+		{`[!--]*`, "cannot end a character range"},
+		{`[0-9]{,5}`, "expected a repetition count"},
+		{`[0-9]{5,2}`, "out of order"},
+		{`(abc`, "unclosed group"},
+		{`[abc`, "unclosed character class"},
+		{`abc\`, "trailing backslash"},
+		// An unrecognized Unicode CATEGORY is a syntax defect, not a gap in this
+		// module: Appendix G §G.4.2.2 enumerates the category names, and one
+		// outside that enumeration names nothing. It must NOT take the
+		// unsupported-block exit below.
+		{`\p{Zork}`, "unrecognized Unicode category"},
+		{`[\p{Zork}]`, "unrecognized Unicode category"},
+	}
+	for _, c := range cases {
+		t.Run(c.pattern, func(t *testing.T) {
+			err := CheckSyntax(c.pattern, FlavorXSD, "")
+			if err == nil {
+				t.Fatalf("CheckSyntax(%q) = nil, want a src-pattern-value error", c.pattern)
+			}
+			rule, ok := xsderr.RuleOf(err)
+			if !ok || rule != ruleXSDPattern {
+				t.Fatalf("rule = %q (ok=%v), want %q", rule, ok, ruleXSDPattern)
+			}
+			if !strings.Contains(err.Error(), c.detail) {
+				t.Errorf("message %q does not name the defect %q", err.Error(), c.detail)
+			}
+		})
+	}
+}
+
+// TestCheckSyntaxPassesUnsupportedBlocks pins the other half, the half that is
+// CheckSyntax's whole reason to exist: a block name outside class.go's curated
+// unicodeBlocks table is a gap in THIS module (GAP(regex), #1473), not a defect
+// in the pattern, so CheckSyntax reports nothing — while Translate, whose caller
+// needs the compiled regex and cannot proceed, keeps failing on it unchanged.
+func TestCheckSyntaxPassesUnsupportedBlocks(t *testing.T) {
+	// Both the standalone atom path (regex.go's atomCategoryEscape) and the
+	// inside-a-class path (classparse.go's parseClassEscape) reach blockSet, and
+	// the sentinel has to survive each one's error wrapping.
+	for _, pat := range []string{`\p{IsThai}*`, `[\p{IsOgham}]+`, `[\p{IsRunic}a-z]`, `\P{IsTibetan}`} {
+		t.Run(pat, func(t *testing.T) {
+			if err := CheckSyntax(pat, FlavorXSD, ""); err != nil {
+				t.Fatalf("CheckSyntax(%q) = %v, want nil: the block table is this module's gap, not the pattern's defect", pat, err)
+			}
+			if _, err := Translate(pat, FlavorXSD, ""); err == nil {
+				t.Fatalf("Translate(%q) = nil error — the premise of this test is gone; Translate must keep surfacing the gap", pat)
+			}
+		})
+	}
+}
+
+// TestCheckSyntaxAcceptsValidPatterns guards the direction a too-wide
+// classification would break: an ordinary pattern must report nothing.
+func TestCheckSyntaxAcceptsValidPatterns(t *testing.T) {
+	for _, pat := range []string{`[0-9]{1,5}`, `[a-z-[m]]`, `\p{Lu}+`, `\i\c*`, `a|b|`, `[-a-z]`, `[a-z-]`} {
+		if err := CheckSyntax(pat, FlavorXSD, ""); err != nil {
+			t.Errorf("CheckSyntax(%q) = %v, want nil", pat, err)
+		}
+	}
+}

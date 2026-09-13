@@ -1,6 +1,7 @@
 package regex
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -250,18 +251,36 @@ func isCategoryName(name string) bool {
 	return ok
 }
 
+// errUnsupported marks a construct this module RECOGNIZES as well-formed per
+// Datatypes Appendix G but does not implement, as opposed to one Appendix G's
+// grammar genuinely excludes. The two are indistinguishable in a translation
+// FAILURE — both stop the translation — but not in a verdict about the pattern
+// AUTHOR: only the second is a src-pattern-value defect. [CheckSyntax] tells
+// them apart through this sentinel, so a schema-construction pass can reject
+// malformed patterns eagerly without false-rejecting a spec-valid one this
+// module cannot yet compile. Unexported: the distinction is CheckSyntax's to
+// make, and a caller reaching past it would be asserting the classification
+// itself.
+var errUnsupported = errors.New("not supported by this implementation")
+
 // blockSet returns the code points of the Unicode block whose normalized name
 // (Datatypes §G.4.2.3: whitespace and underbars stripped, hyphens and case
 // retained) matches nm. Go's standard library exposes categories and scripts
 // but not blocks, and the block ranges are drawn from the Unicode database
 // rather than from the local goxsd8 specs, so unicodeBlocks is a curated,
 // hand-authored subset of high-frequency Appendix G blocks. An unrecognized
-// block name is an error (see propSet).
+// block name is an error (see propSet) wrapping [errUnsupported], because the
+// name may well be an Appendix G block this table simply omits.
+//
+// GAP(regex): unicodeBlocks covers a fraction of the blocks Appendix G admits,
+// so a pattern naming any other block — \p{IsThai}, \p{IsOgham}, \p{IsRunic}
+// and some 130 more across testdata/xsdtests — fails to translate even though
+// the spec defines it. Owned by #1473.
 func blockSet(nm string) (runeSet, error) {
 	key := normalizeBlockName(nm)
 	r, ok := unicodeBlocks[key]
 	if !ok {
-		return nil, fmt.Errorf("unrecognized or unsupported Unicode block %q", nm)
+		return nil, fmt.Errorf("unrecognized or unsupported Unicode block %q: %w", nm, errUnsupported)
 	}
 	return runeSet{r}, nil
 }
