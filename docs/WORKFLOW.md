@@ -183,9 +183,11 @@ chooses (#350).
 - The orchestrator never commits on a live subagent's behalf, for any
   reason — including a stop-hook "uncommitted changes" warning, which
   fires on an in-progress edit exactly as readily as a finished one
-  (#296). A subagent's tree is commit-ready only once it reports.
-- **The subagent commits each self-contained step as it reaches it, not
-  once at the end.** Its container can go away mid-round, and a commit on
+  (#296). A subagent's tree is commit-ready for hand-off only once it
+  reports.
+- **The subagent follows a commit-as-you-go discipline: it commits each
+  self-contained step as it reaches it, not once at the end.** Its
+  container can go away mid-round, and a commit on
   its worktree branch is the only part of an interrupted round a later
   session can read — the clause above forbids anyone else rescuing what
   it left uncommitted. A mason still breaks lines deliberately, and
