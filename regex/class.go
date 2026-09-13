@@ -1,6 +1,7 @@
 package regex
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -250,20 +251,71 @@ func isCategoryName(name string) bool {
 	return ok
 }
 
+// errUnsupported marks a construct this module RECOGNIZES as well-formed per
+// Datatypes Appendix G but does not implement, as opposed to one Appendix G's
+// grammar genuinely excludes. The two are indistinguishable in a translation
+// FAILURE — both stop the translation — but not in a verdict about the pattern
+// AUTHOR: only the second is a src-pattern-value defect. §G.4.2.4 is explicit
+// about which side the block table falls on — "any string of hyphens, digits,
+// and Basic Latin characters beginning with 'Is' will match the non-terminal
+// IsBlock and thus be allowed in a regular expression", with rejecting an
+// unrecognized one an ·at user option· deviation this module takes (propSet)
+// rather than a grammar verdict. regex.go's maxRepeat ceiling is the sentinel's
+// other producer, and production [71]'s uncapped QuantExact puts it on the same
+// side. [CheckSyntax] tells the two classes apart through this sentinel, so a
+// schema-construction pass rejects malformed patterns eagerly without
+// false-rejecting one the spec allows. Unexported: the distinction is
+// CheckSyntax's to make, and a caller reaching past it would be asserting the
+// classification itself.
+var errUnsupported = errors.New("not supported by this implementation")
+
 // blockSet returns the code points of the Unicode block whose normalized name
 // (Datatypes §G.4.2.3: whitespace and underbars stripped, hyphens and case
 // retained) matches nm. Go's standard library exposes categories and scripts
 // but not blocks, and the block ranges are drawn from the Unicode database
 // rather than from the local goxsd8 specs, so unicodeBlocks is a curated,
 // hand-authored subset of high-frequency Appendix G blocks. An unrecognized
-// block name is an error (see propSet).
+// block name is an error (see propSet) wrapping [errUnsupported], because the
+// name may well be an Appendix G block this table simply omits.
+//
+// GAP(regex): unicodeBlocks covers a fraction of the blocks Appendix G admits,
+// so a pattern naming any other block — \p{IsThai}, \p{IsOgham}, \p{IsRunic}
+// and 71 further names across testdata/xsdtests — fails to translate even
+// though the spec defines it. Owned by #1473.
 func blockSet(nm string) (runeSet, error) {
 	key := normalizeBlockName(nm)
+	if !matchesIsBlock(key) {
+		// A name outside production [96] matches neither IsBlock nor IsCategory,
+		// so "\p{Is}", "\p{IsThai$}" and "\p{Is.}" are no regExp at all
+		// (§G.4.2.4). Such a name denotes no block, which puts it outside both
+		// what §G.4.2.4 allows an unrecognized name and what errUnsupported
+		// covers: a defect, not this table's gap.
+		return nil, fmt.Errorf("malformed Unicode block name in \\p{Is%s}", nm)
+	}
 	r, ok := unicodeBlocks[key]
 	if !ok {
-		return nil, fmt.Errorf("unrecognized or unsupported Unicode block %q", nm)
+		return nil, fmt.Errorf("unrecognized or unsupported Unicode block %q: %w", nm, errUnsupported)
 	}
 	return runeSet{r}, nil
+}
+
+// matchesIsBlock reports whether name is admissible as the tail of an IsBlock:
+// production [96] is IsBlock ::= 'Is' [a-zA-Z0-9#x2D]+, so one or more hyphens,
+// digits and Basic Latin letters follow the 'Is' and nothing else. Applied to
+// the name AFTER normalizeBlockName, so a whitespace or underbar this module
+// strips per §G.4.2.3 does not itself make the pattern a defect.
+func matchesIsBlock(name string) bool {
+	const blockNameChars = "abcdefghijklmnopqrstuvwxyz" +
+		"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-"
+	if name == "" {
+		return false
+	}
+	for _, r := range name {
+		if !strings.ContainsRune(blockNameChars, r) {
+			return false
+		}
+	}
+	return true
 }
 
 // normalizeBlockName strips whitespace (#x9/#xA/#xD/#x20) and underbars while

@@ -40,7 +40,11 @@
 // subtraction ([a-z-[m]], including name-escape bases like [\i-[:]]) — is
 // shared between flavors. Go RE2's counted-repeat limit (1000) is a
 // documented deviation surfaced as a translation error, not a silent
-// truncation.
+// truncation. Block names resolve against a curated table that omits most of
+// the blocks Appendix G admits, so a spec-valid \p{IsX} can be a translation
+// error too. Neither refusal is a verdict on the pattern: each carries its own
+// GAP(regex) marker — regex.go's on maxRepeat, class.go's on blockSet — and
+// they are the two failures CheckSyntax below reports as no failure at all.
 //
 // # Contract (implemented from M3)
 //
@@ -52,6 +56,17 @@
 //	    instead re-translates per validateLexical call and caches nothing:
 //	    its profiled cost was inside Translate and was fixed there rather
 //	    than amortized behind a cache (#913).
+//
+//	func CheckSyntax(pattern string, flavor Flavor, flags string) error
+//	    Translate's verdict without its output, for a caller deciding
+//	    whether a pattern is WELL-FORMED rather than one that needs the
+//	    regex: a schema-construction pass charging src-pattern-value on
+//	    every <pattern> facet a schema declares. It differs from Translate
+//	    in exactly one way, and that difference is its reason to exist —
+//	    an unimplemented-but-recognized construct (a Unicode block outside
+//	    the curated table, a repeat count above the RE2 ceiling) is nil,
+//	    not an error, so such a schema is not rejected for a gap on this
+//	    side of the line.
 //
 // Callers: the pattern facet uses flavor XSD; xpath's fn:matches/
 // fn:replace/fn:tokenize use flavor FO. Never cross them. The one pattern

@@ -97,11 +97,16 @@
 // of cos-st-restricts (§3.16.6.2): it charges clause 1.3.1 — facet applicability
 // for an ATOMIC type, answered against Types/TypeSpec.Applies rather than a
 // second hand-typed table — and then delegates the bound and enumeration
-// value-space constraints to value.CheckFacetRestriction. It lives here because
-// this is the only package holding both the generated applicability table and an
-// edge to package value; package xsd, a pure leaf, can depend on neither, so it
-// charges only the count- and token-valued facet constraints and the list/union
-// applicable-facet sets itself, and takes the rest as a capability.
+// value-space constraints to value.CheckFacetRestriction. Ahead of both it
+// delegates src-pattern-value (§4.3.4.3) to value.CheckPatternSyntax, the one
+// construction-time charge that a <pattern> facet's value is a regular
+// expression at all: not a cos-st-restricts clause, but a check that needs the
+// same edge to package value and would otherwise run only when an instance
+// literal is validated. It lives here because this is the only package holding
+// both the generated applicability table and an edge to package value; package
+// xsd, a pure leaf, can depend on neither, so it charges only the count- and
+// token-valued facet constraints and the list/union applicable-facet sets
+// itself, and takes the rest as a capability.
 //
 // A caller installs one at xsd.SchemaBuilder.FinalizeWith, which is what the
 // parser does; xsd's finalize pass then charges every simple type the assembled

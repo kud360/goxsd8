@@ -345,3 +345,127 @@ func TestPropertyClassKeepsStrideGaps(t *testing.T) {
 		}
 	}
 }
+
+// TestCheckSyntaxRejectsAppendixGDefects pins the half of CheckSyntax's
+// contract that a schema-construction pass rejects on: a pattern Appendix G's
+// grammar or its disambiguation rules exclude. The first two are §G.4.1's
+// hyphen cases (the spec names "[--z]" itself as excluded); the third is §G.2's
+// quantity grammar, which has no omitted-lower-bound form and says so in a Note.
+func TestCheckSyntaxRejectsAppendixGDefects(t *testing.T) {
+	cases := []struct {
+		pattern string
+		detail  string
+	}{
+		{`[--z]*`, "cannot start a character range"},
+		{`[!--]*`, "cannot end a character range"},
+		{`[0-9]{,5}`, "expected a repetition count"},
+		{`[0-9]{5,2}`, "out of order"},
+		{`(abc`, "unclosed group"},
+		{`[abc`, "unclosed character class"},
+		{`abc\`, "trailing backslash"},
+		// An unrecognized Unicode CATEGORY is a syntax defect, not a gap in this
+		// module: Appendix G §G.4.2.2 enumerates the category names, and one
+		// outside that enumeration names nothing. It must NOT take the
+		// unsupported-block exit below.
+		{`\p{Zork}`, "unrecognized Unicode category"},
+		{`[\p{Zork}]`, "unrecognized Unicode category"},
+		// IsBlock ::= 'Is' [a-zA-Z0-9#x2D]+ (production [96]) admits one or more
+		// hyphens, digits and Basic Latin letters and nothing else, so each of
+		// these names no block and matches no charProp. They must take the defect
+		// path, not the unsupported-block one, even though both run through
+		// blockSet — so each detail pins the offending name, not just the kind of
+		// defect. "\p{Is-}" below is the boundary on the other side: a hyphen IS
+		// production [96] material, so it stays the unsupported-block gap.
+		{`\p{Is}`, `malformed Unicode block name in \p{Is}`},
+		{`\p{IsThai$}`, `malformed Unicode block name in \p{IsThai$}`},
+		{`[\p{IsThai$}]`, `malformed Unicode block name in \p{IsThai$}`},
+		{`\p{Is.}`, `malformed Unicode block name in \p{Is.}`},
+		// The message quotes the name the AUTHOR wrote, not the normalized one the
+		// production is applied to: this name loses its space to §G.4.2.3 before
+		// the '$' disqualifies it, and the report still has to be findable in the
+		// schema document.
+		{`\p{IsThai Extra$}`, `malformed Unicode block name in \p{IsThai Extra$}`},
+	}
+	for _, c := range cases {
+		t.Run(c.pattern, func(t *testing.T) {
+			err := CheckSyntax(c.pattern, FlavorXSD, "")
+			if err == nil {
+				t.Fatalf("CheckSyntax(%q) = nil, want a src-pattern-value error", c.pattern)
+			}
+			rule, ok := xsderr.RuleOf(err)
+			if !ok || rule != ruleXSDPattern {
+				t.Fatalf("rule = %q (ok=%v), want %q", rule, ok, ruleXSDPattern)
+			}
+			if !strings.Contains(err.Error(), c.detail) {
+				t.Errorf("message %q does not name the defect %q", err.Error(), c.detail)
+			}
+		})
+	}
+}
+
+// TestCheckSyntaxPassesUnsupportedBlocks pins the other half, the half that is
+// CheckSyntax's whole reason to exist: a block name outside class.go's curated
+// unicodeBlocks table is a gap in THIS module (GAP(regex), #1473), not a defect
+// in the pattern, so CheckSyntax reports nothing — while Translate, whose caller
+// needs the compiled regex and cannot proceed, keeps failing on it unchanged.
+func TestCheckSyntaxPassesUnsupportedBlocks(t *testing.T) {
+	// Both the standalone atom path (regex.go's atomCategoryEscape) and the
+	// inside-a-class path (classparse.go's parseClassEscape) reach blockSet, and
+	// the sentinel has to survive each one's error wrapping. "\p{Is-}" and
+	// "\p{IsThai Extra}" are the boundary against the defect cases in
+	// TestCheckSyntaxRejectsAppendixGDefects: a hyphen is production [96]
+	// material outright, and a space is stripped by §G.4.2.3 normalization before
+	// the production is applied, so neither name is malformed — each is merely
+	// absent from the table.
+	for _, pat := range []string{`\p{IsThai}*`, `[\p{IsOgham}]+`, `[\p{IsRunic}a-z]`, `\P{IsTibetan}`, `\p{Is-}`, `\p{IsThai Extra}`} {
+		t.Run(pat, func(t *testing.T) {
+			if err := CheckSyntax(pat, FlavorXSD, ""); err != nil {
+				t.Fatalf("CheckSyntax(%q) = %v, want nil: the block table is this module's gap, not the pattern's defect", pat, err)
+			}
+			if _, err := Translate(pat, FlavorXSD, ""); err == nil {
+				t.Fatalf("Translate(%q) = nil error — the premise of this test is gone; Translate must keep surfacing the gap", pat)
+			}
+		})
+	}
+}
+
+// TestCheckSyntaxPassesCountedRepeatOverLimit pins the sentinel's second
+// producer. Production [71] is QuantExact ::= [0-9]+ and [69] is quantRange ::=
+// QuantExact ',' QuantExact, neither capped, so each of these is a regExp and
+// the 1000 that stops it is maxRepeat's (GAP(regex), #1474) — the same
+// classification the block table gets, reached through a different path, and
+// the boundary case {1000} must stay translatable on the other side of it.
+func TestCheckSyntaxPassesCountedRepeatOverLimit(t *testing.T) {
+	for _, pat := range []string{"a{1001}", "a{0,2000}", "a{1001,2000}", "[0-9]{5000}", "(ab){2,1500}"} {
+		t.Run(pat, func(t *testing.T) {
+			if err := CheckSyntax(pat, FlavorXSD, ""); err != nil {
+				t.Fatalf("CheckSyntax(%q) = %v, want nil: the RE2 repeat ceiling is this module's gap, not the pattern's defect", pat, err)
+			}
+			if _, err := Translate(pat, FlavorXSD, ""); err == nil {
+				t.Fatalf("Translate(%q) = nil error — the premise of this test is gone; Translate must keep surfacing the gap", pat)
+			}
+		})
+	}
+	// quantity reaches the ceiling before it compares the two bounds, so a range
+	// that is BOTH over the ceiling and out of order — §G.2's piece table admits
+	// S{n,m} only "for … non-negative integers n, m such that n <= m" — is passed
+	// over as the gap rather than reported as the defect. That is the masking
+	// CheckSyntax documents, in the direction it documents; below the ceiling the
+	// defect is still reported.
+	if err := CheckSyntax("a{2000,1500}", FlavorXSD, ""); err != nil {
+		t.Errorf(`CheckSyntax("a{2000,1500}") = %v, want nil: the ceiling is reached first`, err)
+	}
+	if err := CheckSyntax("a{1000,999}", FlavorXSD, ""); err == nil {
+		t.Error(`CheckSyntax("a{1000,999}") = nil, want the out-of-order defect`)
+	}
+}
+
+// TestCheckSyntaxAcceptsValidPatterns guards the direction a too-wide
+// classification would break: an ordinary pattern must report nothing.
+func TestCheckSyntaxAcceptsValidPatterns(t *testing.T) {
+	for _, pat := range []string{`[0-9]{1,5}`, `[a-z-[m]]`, `\p{Lu}+`, `\i\c*`, `a|b|`, `[-a-z]`, `[a-z-]`, `a{1000}`, `a{0,1000}`} {
+		if err := CheckSyntax(pat, FlavorXSD, ""); err != nil {
+			t.Errorf("CheckSyntax(%q) = %v, want nil", pat, err)
+		}
+	}
+}

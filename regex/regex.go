@@ -1,6 +1,7 @@
 package regex
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -44,6 +45,11 @@ const (
 // too-large count never silently truncates into a false accept (a truncated
 // bound would admit literals the pattern as written rejects). Not spec-mandated
 // (see .agent/grounding-issue-12.md §4).
+//
+// GAP(regex): production [71] QuantExact ::= [0-9]+ caps no bound, so a{0,2000}
+// is a regExp this module cannot translate. quantity reports an over-ceiling
+// bound wrapping errUnsupported, so [CheckSyntax] passes the pattern over and
+// only a caller that needs the translated regex is refused. Owned by #1474.
 const maxRepeat = 1000
 
 // Translate converts a pattern in the given flavor to an equivalent Go RE2
@@ -81,6 +87,37 @@ func Translate(pattern string, flavor Flavor, flags string) (string, error) {
 	default:
 		panic(fmt.Sprintf("regex: invalid Flavor %d", flavor))
 	}
+}
+
+// CheckSyntax reports whether pattern is well-formed in the given flavor,
+// discarding the translation [Translate] would produce. A SYNTAX defect —
+// anything the Datatypes Appendix G grammar and its disambiguation rules
+// exclude — comes back as the same *xsderr.Error Translate returns. A construct
+// this module recognizes as well-formed but does not implement returns nil
+// instead: today that is a Unicode block name outside class.go's curated
+// unicodeBlocks table, or a counted repetition whose bound is above maxRepeat's
+// RE2 ceiling of 1000. A GAP(regex) marker owns each of the two.
+//
+// That asymmetry is the whole point of the function, and it is why a
+// schema-construction pass calls this rather than Translate. Such a pass
+// charges src-pattern-value (Datatypes §4.3.4.3) on every <pattern> facet a
+// schema declares, exercised or not, so anything it rejects is a rejection of
+// the SCHEMA — and a pattern that is valid per Appendix G and merely beyond
+// what this module implements is a gap here, not a defect there. Translate
+// keeps reporting both classes identically, because a caller that actually
+// needs the compiled regex cannot proceed either way.
+//
+// A pattern carrying both classes of fault is classified by whichever the
+// left-to-right parse reaches first, so an unimplemented construct earlier in
+// the pattern masks a syntax defect later in it. That errs toward accepting a
+// schema this module cannot fully check, which is the direction the gaps
+// already err in.
+func CheckSyntax(pattern string, flavor Flavor, flags string) error {
+	_, err := Translate(pattern, flavor, flags)
+	if err != nil && !errors.Is(err, errUnsupported) {
+		return err
+	}
+	return nil
 }
 
 // foFlags validates an F&O $flags string and returns the RE2 inline-flag prefix
@@ -194,6 +231,24 @@ func (p *parser) rule() xsderr.Rule {
 
 func (p *parser) errf(off int, format string, args ...any) error {
 	return xsderr.New(p.rule(), xsderr.Loc{}, "regex: %s (offset %d)", fmt.Sprintf(format, args...), off)
+}
+
+// errCause is errf for a failure that already has a cause worth keeping: it
+// renders the same "regex: <msg> (offset N)" text but PRESERVES err's identity,
+// so errors.Is reaches through to whatever sentinel err carries. Use it
+// wherever the classification of the failure — not just its wording — travels
+// up to the caller; [CheckSyntax] reads exactly that.
+func (p *parser) errCause(off int, err error) error {
+	return xsderr.Wrap(p.rule(), xsderr.Loc{}, fmt.Errorf("regex: %w (offset %d)", err, off))
+}
+
+// errUnsupportedf is errf for a failure that is a limitation of THIS
+// implementation rather than an Appendix G verdict (see errUnsupported): the
+// text renders exactly as errf's, and the sentinel rides in the chain where
+// [CheckSyntax] reads it. The %.0w wraps without printing, because the reader
+// of the message needs the limit named and not the sentinel's generic wording.
+func (p *parser) errUnsupportedf(off int, format string, args ...any) error {
+	return p.errCause(off, fmt.Errorf("%s%.0w", fmt.Sprintf(format, args...), errUnsupported))
 }
 
 // regExp ::= branch ( '|' branch )* (Datatypes production [64]).
@@ -344,7 +399,7 @@ func (p *parser) atomCategoryEscape(negate bool, start int) error {
 	if strings.HasPrefix(name, "Is") {
 		set, err := blockSet(strings.TrimPrefix(name, "Is"))
 		if err != nil {
-			return p.errf(start, "%v", err)
+			return p.errCause(start, err)
 		}
 		emitClass(&p.out, set, negate)
 		return nil
@@ -418,7 +473,7 @@ func (p *parser) quantity() error {
 		return p.errf(start, "expected a repetition count after '{'")
 	}
 	if n > maxRepeat {
-		return p.errf(start, "repetition count %d exceeds the RE2 limit of %d", n, maxRepeat)
+		return p.errUnsupportedf(start, "repetition count %d exceeds the RE2 limit of %d", n, maxRepeat)
 	}
 	p.out.WriteByte('{')
 	p.out.WriteString(strconv.Itoa(n))
@@ -428,7 +483,7 @@ func (p *parser) quantity() error {
 		if p.peek() >= '0' && p.peek() <= '9' {
 			m, _ := p.readInt()
 			if m > maxRepeat {
-				return p.errf(start, "repetition count %d exceeds the RE2 limit of %d", m, maxRepeat)
+				return p.errUnsupportedf(start, "repetition count %d exceeds the RE2 limit of %d", m, maxRepeat)
 			}
 			if m < n {
 				return p.errf(start, "repetition range {%d,%d} is out of order", n, m)
