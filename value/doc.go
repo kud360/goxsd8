@@ -131,7 +131,8 @@
 // relating a lower bound facet to an upper bound facet declared at the SAME
 // derivation step (minInclusive <= maxInclusive, minExclusive <= maxExclusive,
 // minExclusive < maxInclusive, minInclusive < maxExclusive), which are
-// standalone §4.3 SCCs rather than a clause of cos-st-restricts. Reach it
+// standalone §4.3 SCCs rather than a clause of cos-st-restricts.
+//
 // Reach BOTH through builtin.NewRestrictionChecker, the
 // xsd.SimpleTypeRestrictionChecker installed at xsd.SchemaBuilder.FinalizeWith:
 // that implementation delegates pattern syntax first, then charges facet
