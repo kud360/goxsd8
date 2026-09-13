@@ -282,19 +282,38 @@ var errUnsupported = errors.New("not supported by this implementation")
 // though the spec defines it. Owned by #1473.
 func blockSet(nm string) (runeSet, error) {
 	key := normalizeBlockName(nm)
-	if key == "" {
-		// IsBlock ::= 'Is' [a-zA-Z0-9#x2D]+ (production [96]) needs at least one
-		// character after the 'Is', so "\p{Is}" matches neither IsBlock nor
-		// IsCategory and is no regExp at all (§G.4.2.4). It names no block, so it
-		// is outside what §G.4.2.4 allows an unrecognized name and outside what
-		// errUnsupported covers: a defect, not this table's gap.
-		return nil, fmt.Errorf("empty Unicode block name in \\p{Is%s}", nm)
+	if !matchesIsBlock(key) {
+		// A name outside production [96] matches neither IsBlock nor IsCategory,
+		// so "\p{Is}", "\p{IsThai$}" and "\p{Is.}" are no regExp at all
+		// (§G.4.2.4). Such a name denotes no block, which puts it outside both
+		// what §G.4.2.4 allows an unrecognized name and what errUnsupported
+		// covers: a defect, not this table's gap.
+		return nil, fmt.Errorf("malformed Unicode block name in \\p{Is%s}", nm)
 	}
 	r, ok := unicodeBlocks[key]
 	if !ok {
 		return nil, fmt.Errorf("unrecognized or unsupported Unicode block %q: %w", nm, errUnsupported)
 	}
 	return runeSet{r}, nil
+}
+
+// matchesIsBlock reports whether name is admissible as the tail of an IsBlock:
+// production [96] is IsBlock ::= 'Is' [a-zA-Z0-9#x2D]+, so one or more hyphens,
+// digits and Basic Latin letters follow the 'Is' and nothing else. Applied to
+// the name AFTER normalizeBlockName, so a whitespace or underbar this module
+// strips per §G.4.2.3 does not itself make the pattern a defect.
+func matchesIsBlock(name string) bool {
+	const blockNameChars = "abcdefghijklmnopqrstuvwxyz" +
+		"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-"
+	if name == "" {
+		return false
+	}
+	for _, r := range name {
+		if !strings.ContainsRune(blockNameChars, r) {
+			return false
+		}
+	}
+	return true
 }
 
 // normalizeBlockName strips whitespace (#x9/#xA/#xD/#x20) and underbars while

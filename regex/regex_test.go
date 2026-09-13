@@ -369,11 +369,22 @@ func TestCheckSyntaxRejectsAppendixGDefects(t *testing.T) {
 		// unsupported-block exit below.
 		{`\p{Zork}`, "unrecognized Unicode category"},
 		{`[\p{Zork}]`, "unrecognized Unicode category"},
-		// IsBlock ::= 'Is' [a-zA-Z0-9#x2D]+ (production [96]) requires at least
-		// one character, so "\p{Is}" names no block and matches no charProp. It
-		// must take the defect path, not the unsupported-block one, even though
-		// both run through blockSet.
-		{`\p{Is}`, "empty Unicode block name"},
+		// IsBlock ::= 'Is' [a-zA-Z0-9#x2D]+ (production [96]) admits one or more
+		// hyphens, digits and Basic Latin letters and nothing else, so each of
+		// these names no block and matches no charProp. They must take the defect
+		// path, not the unsupported-block one, even though both run through
+		// blockSet — so each detail pins the offending name, not just the kind of
+		// defect. "\p{Is-}" below is the boundary on the other side: a hyphen IS
+		// production [96] material, so it stays the unsupported-block gap.
+		{`\p{Is}`, `malformed Unicode block name in \p{Is}`},
+		{`\p{IsThai$}`, `malformed Unicode block name in \p{IsThai$}`},
+		{`[\p{IsThai$}]`, `malformed Unicode block name in \p{IsThai$}`},
+		{`\p{Is.}`, `malformed Unicode block name in \p{Is.}`},
+		// The message quotes the name the AUTHOR wrote, not the normalized one the
+		// production is applied to: this name loses its space to §G.4.2.3 before
+		// the '$' disqualifies it, and the report still has to be findable in the
+		// schema document.
+		{`\p{IsThai Extra$}`, `malformed Unicode block name in \p{IsThai Extra$}`},
 	}
 	for _, c := range cases {
 		t.Run(c.pattern, func(t *testing.T) {
@@ -400,8 +411,13 @@ func TestCheckSyntaxRejectsAppendixGDefects(t *testing.T) {
 func TestCheckSyntaxPassesUnsupportedBlocks(t *testing.T) {
 	// Both the standalone atom path (regex.go's atomCategoryEscape) and the
 	// inside-a-class path (classparse.go's parseClassEscape) reach blockSet, and
-	// the sentinel has to survive each one's error wrapping.
-	for _, pat := range []string{`\p{IsThai}*`, `[\p{IsOgham}]+`, `[\p{IsRunic}a-z]`, `\P{IsTibetan}`} {
+	// the sentinel has to survive each one's error wrapping. "\p{Is-}" and
+	// "\p{IsThai Extra}" are the boundary against the defect cases in
+	// TestCheckSyntaxRejectsAppendixGDefects: a hyphen is production [96]
+	// material outright, and a space is stripped by §G.4.2.3 normalization before
+	// the production is applied, so neither name is malformed — each is merely
+	// absent from the table.
+	for _, pat := range []string{`\p{IsThai}*`, `[\p{IsOgham}]+`, `[\p{IsRunic}a-z]`, `\P{IsTibetan}`, `\p{Is-}`, `\p{IsThai Extra}`} {
 		t.Run(pat, func(t *testing.T) {
 			if err := CheckSyntax(pat, FlavorXSD, ""); err != nil {
 				t.Fatalf("CheckSyntax(%q) = %v, want nil: the block table is this module's gap, not the pattern's defect", pat, err)
