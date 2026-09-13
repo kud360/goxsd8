@@ -55,19 +55,26 @@ func TestParsePatternSyntaxRejectedWithoutAnyInstance(t *testing.T) {
 	}
 }
 
-// TestParseUnsupportedUnicodeBlockPatternAccepted is the false-rejection guard
-// on the same walk, and the reason regex.CheckSyntax exists rather than
-// regex.Translate being called directly: \p{IsThai} is a perfectly good
-// Appendix G pattern that this module cannot yet compile (GAP(regex), #1473),
-// and 208 of the pattern values in testdata/xsdtests are of that shape. A check
-// that rejected on any translation failure would newly reject every one of
-// those schemas.
-func TestParseUnsupportedUnicodeBlockPatternAccepted(t *testing.T) {
-	body := `<xs:simpleType name="t">
-		<xs:restriction base="xs:string"><xs:pattern value="\p{IsThai}*"/></xs:restriction>
-	 </xs:simpleType>`
-	if _, err := parseMap(t, "main.xsd", map[string]string{"main.xsd": wrap("urn:a", body)}); err != nil {
-		t.Fatalf("Parse rejected a spec-valid pattern for a gap in this module: %v", err)
+// TestParseUnimplementedButValidPatternAccepted is the false-rejection guard on
+// the same walk, and the reason regex.CheckSyntax exists rather than
+// regex.Translate being called directly. Each pattern here is a perfectly good
+// Appendix G regExp that this module cannot yet compile, and a check that
+// rejected on any translation failure would newly reject every schema carrying
+// one: \p{IsThai} names a block outside the curated table (GAP(regex), #1473),
+// which 208 of the pattern values in testdata/xsdtests do, and a{0,2000} is
+// production [71]'s uncapped QuantExact meeting the RE2 repeat ceiling
+// (GAP(regex), #1474). A rejection here would tell the schema author their
+// document violates src-pattern-value because goxsd8 cannot compile it.
+func TestParseUnimplementedButValidPatternAccepted(t *testing.T) {
+	for _, pat := range []string{`\p{IsThai}*`, `a{0,2000}`} {
+		t.Run(pat, func(t *testing.T) {
+			body := `<xs:simpleType name="t">
+				<xs:restriction base="xs:string"><xs:pattern value="` + pat + `"/></xs:restriction>
+			 </xs:simpleType>`
+			if _, err := parseMap(t, "main.xsd", map[string]string{"main.xsd": wrap("urn:a", body)}); err != nil {
+				t.Fatalf("Parse rejected a spec-valid pattern for a gap in this module: %v", err)
+			}
+		})
 	}
 }
 

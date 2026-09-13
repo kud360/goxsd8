@@ -429,10 +429,41 @@ func TestCheckSyntaxPassesUnsupportedBlocks(t *testing.T) {
 	}
 }
 
+// TestCheckSyntaxPassesCountedRepeatOverLimit pins the sentinel's second
+// producer. Production [71] is QuantExact ::= [0-9]+ and [69] is quantRange ::=
+// QuantExact ',' QuantExact, neither capped, so each of these is a regExp and
+// the 1000 that stops it is maxRepeat's (GAP(regex), #1474) — the same
+// classification the block table gets, reached through a different path, and
+// the boundary case {1000} must stay translatable on the other side of it.
+func TestCheckSyntaxPassesCountedRepeatOverLimit(t *testing.T) {
+	for _, pat := range []string{"a{1001}", "a{0,2000}", "a{1001,2000}", "[0-9]{5000}", "(ab){2,1500}"} {
+		t.Run(pat, func(t *testing.T) {
+			if err := CheckSyntax(pat, FlavorXSD, ""); err != nil {
+				t.Fatalf("CheckSyntax(%q) = %v, want nil: the RE2 repeat ceiling is this module's gap, not the pattern's defect", pat, err)
+			}
+			if _, err := Translate(pat, FlavorXSD, ""); err == nil {
+				t.Fatalf("Translate(%q) = nil error — the premise of this test is gone; Translate must keep surfacing the gap", pat)
+			}
+		})
+	}
+	// quantity reaches the ceiling before it compares the two bounds, so a range
+	// that is BOTH over the ceiling and out of order — §G.2's piece table admits
+	// S{n,m} only "for … non-negative integers n, m such that n <= m" — is passed
+	// over as the gap rather than reported as the defect. That is the masking
+	// CheckSyntax documents, in the direction it documents; below the ceiling the
+	// defect is still reported.
+	if err := CheckSyntax("a{2000,1500}", FlavorXSD, ""); err != nil {
+		t.Errorf(`CheckSyntax("a{2000,1500}") = %v, want nil: the ceiling is reached first`, err)
+	}
+	if err := CheckSyntax("a{1000,999}", FlavorXSD, ""); err == nil {
+		t.Error(`CheckSyntax("a{1000,999}") = nil, want the out-of-order defect`)
+	}
+}
+
 // TestCheckSyntaxAcceptsValidPatterns guards the direction a too-wide
 // classification would break: an ordinary pattern must report nothing.
 func TestCheckSyntaxAcceptsValidPatterns(t *testing.T) {
-	for _, pat := range []string{`[0-9]{1,5}`, `[a-z-[m]]`, `\p{Lu}+`, `\i\c*`, `a|b|`, `[-a-z]`, `[a-z-]`} {
+	for _, pat := range []string{`[0-9]{1,5}`, `[a-z-[m]]`, `\p{Lu}+`, `\i\c*`, `a|b|`, `[-a-z]`, `[a-z-]`, `a{1000}`, `a{0,1000}`} {
 		if err := CheckSyntax(pat, FlavorXSD, ""); err != nil {
 			t.Errorf("CheckSyntax(%q) = %v, want nil", pat, err)
 		}

@@ -260,9 +260,11 @@ func isCategoryName(name string) bool {
 // and Basic Latin characters beginning with 'Is' will match the non-terminal
 // IsBlock and thus be allowed in a regular expression", with rejecting an
 // unrecognized one an ·at user option· deviation this module takes (propSet)
-// rather than a grammar verdict. [CheckSyntax] tells the two apart through this
-// sentinel, so a schema-construction pass rejects malformed patterns eagerly
-// without false-rejecting one the spec allows. Unexported: the distinction is
+// rather than a grammar verdict. regex.go's maxRepeat ceiling is the sentinel's
+// other producer, and production [71]'s uncapped QuantExact puts it on the same
+// side. [CheckSyntax] tells the two classes apart through this sentinel, so a
+// schema-construction pass rejects malformed patterns eagerly without
+// false-rejecting one the spec allows. Unexported: the distinction is
 // CheckSyntax's to make, and a caller reaching past it would be asserting the
 // classification itself.
 var errUnsupported = errors.New("not supported by this implementation")
