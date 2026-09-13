@@ -184,6 +184,14 @@ chooses (#350).
   reason — including a stop-hook "uncommitted changes" warning, which
   fires on an in-progress edit exactly as readily as a finished one
   (#296). A subagent's tree is commit-ready only once it reports.
+- **The subagent commits each self-contained step as it reaches it, not
+  once at the end.** Its container can go away mid-round, and a commit on
+  its worktree branch is the only part of an interrupted round a later
+  session can read — the clause above forbids anyone else rescuing what
+  it left uncommitted. A mason still breaks lines deliberately, and
+  commits once it has put them back; the hand-off below takes the
+  branch's commits as they stand, so there is nothing to tidy into one
+  (#1443).
 - **After that report the isolated branch's own commits go onto
   `wip/issue-<N>`, never a replay of them.** `git merge --ff-only` where
   it applies; where it does not — the ordinary shape after a takeover,
@@ -408,15 +416,19 @@ entry is silently dropped. (#600 tracks the single-append-point layout.)
 
 ## Parking
 
-On a second arbiter rejection, or a resume whose merge will not resolve:
+On a second arbiter rejection, a third subagent round lost to a container
+restart on one issue, or a resume whose merge will not resolve:
 checkpoint the branch one final time, **relabel** the issue
 `needs-replan` and clear `ready`, and comment the findings that killed
 the attempt. Nothing is renamed or deleted — the label alone retires the
 branch in place as re-planning evidence. **Two rejections is the hard
-cap** (PRINCIPLES 30); never solicit a third round. After re-planning,
-the cartographer files the replacement, names it on the parked thread,
-and closes the `needs-replan` issue `not_planned` — never `completed`,
-which marks work that landed (#493).
+cap** (PRINCIPLES 30); never solicit a third round. **Three lost rounds
+is the hard cap on the other trigger**: nothing is known to be wrong with
+the change, so the finding to comment is that the round does not fit a
+container's life, and the replacement issue is a smaller one (#1443).
+After re-planning, the cartographer files the replacement, names it on
+the parked thread, and closes the `needs-replan` issue `not_planned` —
+never `completed`, which marks work that landed (#493).
 
 ## GitHub conventions
 
