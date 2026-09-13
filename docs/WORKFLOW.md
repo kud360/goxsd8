@@ -185,15 +185,14 @@ chooses (#350).
   fires on an in-progress edit exactly as readily as a finished one
   (#296). A subagent's tree is commit-ready for hand-off only once it
   reports.
-- **The subagent follows a commit-as-you-go discipline: it commits each
-  self-contained step as it reaches it, not once at the end.** Its
-  container can go away mid-round, and a commit on
-  its worktree branch is the only part of an interrupted round a later
-  session can read — the clause above forbids anyone else rescuing what
-  it left uncommitted. A mason still breaks lines deliberately, and
-  commits once it has put them back; the hand-off below takes the
-  branch's commits as they stand, so there is nothing to tidy into one
-  (#1443).
+- **Commit-as-you-go: the subagent commits each self-contained step as it
+  reaches it, not once at the end.** Its container can go away mid-round,
+  and a commit on its worktree branch is the only part of an interrupted
+  round a later session can read — the clause above forbids anyone else
+  rescuing what it left uncommitted. A mason still breaks lines
+  deliberately, and commits once it has put them back; the hand-off below
+  takes the branch's commits as they stand, so there is nothing to tidy
+  into one (#1443).
 - **After that report the isolated branch's own commits go onto
   `wip/issue-<N>`, never a replay of them.** `git merge --ff-only` where
   it applies; where it does not — the ordinary shape after a takeover,

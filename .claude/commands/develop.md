@@ -85,9 +85,9 @@ heartbeat.
    clause in its prompt. Only once mason reports completion, bring its
    local branch onto `wip/issue-<N>` under WORKFLOW's **One writer per
    checkout** hand-off clause — fast-forward or merge, never a replay —
-   and name the resulting SHA in that checkpoint's comment. If the
-   change added or altered public API, warden reviews the diff too. Post
-   both verdicts on the issue.
+   and name the resulting SHA in that checkpoint's comment. If the change
+   added or altered public API, warden reviews the diff too. Post both
+   verdicts on the issue.
 
    Mason may absorb adjacent work under docs/WORKFLOW.md's scope rule.
    Absorbed items belong in the commit body, not in a new issue.
@@ -101,10 +101,7 @@ heartbeat.
    round resumes from them instead of from nothing. **Say in your
    `TAKEOVER:`/`RESUME:` comment that the previous delegation was lost**
    — such comments are the only record of the loss, and their count on
-   the thread is what WORKFLOW's **Parking** cap reads. This signature
-   is empty-diff: a branch that already carries an earlier round's
-   commits and then loses one is not caught by it, and the cap does not
-   see that loss.
+   the thread is what WORKFLOW's **Parking** cap reads.
 
 5. **Judge.** `git fetch origin main` first and merge it forward if it
    moved — before the arbiter, per WORKFLOW's **After the verdict**, where
