@@ -2365,11 +2365,10 @@ func rejectOutOfModelFacetChildren(restriction *Element) error {
 // xmlschema11-1.md:3658-3659) over a <simpleType>'s <restriction>: "No two
 // elements among the children of <restriction> have the same expanded name in
 // the Schema (xs) namespace, unless that expanded name is one of xs:enumeration,
-// xs:pattern, or xs:assertion." Those three names are what makes
-// restrictionFacets' three folds reachable on a legal schema, and they are the
-// clause's only exceptions — the Note narrowing the common case to facets is
-// informative, so <annotation> and the inline base <simpleType> are inside the
-// clause's reach no less than a repeated <length>.
+// xs:pattern, or xs:assertion." Those three are the clause's ONLY exceptions —
+// the Note narrowing the common case to facets is informative — so <annotation>
+// and the inline base <simpleType> are inside its reach no less than a repeated
+// <length>.
 //
 // This is a NAMED Schema Representation Constraint and so an xsderr.Error, not
 // the plain §5.1 grammar fault rejectOutOfModelFacetChildren charges over the
