@@ -71,8 +71,7 @@ type XPathExpression struct {
 // the caller's backing array is not aliased. A nil defaultNamespace or
 // baseURI means the corresponding property is absent; a non-nil pointer
 // (including to "") means it is present, because "" is a legal anyURI and
-// cannot double as an absence sentinel (mirrors AppInfo's {source}
-// discipline).
+// cannot double as an absence sentinel.
 //
 // There is no rejectable state at this structural layer: {expression}'s
 // "Required" is a presence requirement satisfied by the parameter existing,
