@@ -82,7 +82,7 @@ func TestNewNotationRejectsAbsentName(t *testing.T) {
 func TestNewNotationRejectsBothAbsent(t *testing.T) {
 	_, err := xsd.NewNotation(xsderr.Loc{}, xsd.QName{Local: "n"}, nil, nil)
 	if err == nil {
-		t.Fatal("NewNotation(nil) succeeded, want n-props-correct error")
+		t.Fatal("NewNotation(nil, nil) succeeded, want n-props-correct error")
 	}
 	assertRule(t, err, "n-props-correct")
 }

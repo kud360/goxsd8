@@ -3228,8 +3228,7 @@ func (p *producer) spliceAttributeGroup(qn xsd.QName, loc xsderr.Loc, construct 
 // fold of IntersectNamespaceConstraint over every member (§3.10.6.4
 // cos-aw-intersect — combination at one container is always intersection), and
 // its {process contents} comes from the first member (L if the container had its
-// own <anyAttribute>, else the first referenced group's wildcard). {annotations}
-// is absent, matching the producer's uniform nil-annotation mapping.
+// own <anyAttribute>, else the first referenced group's wildcard).
 func combineAttributeWildcards(loc xsderr.Loc, wildcards []xsd.Wildcard) (*xsd.Wildcard, error) {
 	if len(wildcards) == 0 {
 		return nil, nil

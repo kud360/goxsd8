@@ -532,7 +532,7 @@ func (w *censusWalk) container(parent *Element, mapped func(local string) bool) 
 // produce_complex.go); <assert> by assertionsOf (§3.4.2.1 clause 2,
 // produce_xpath.go). <annotation> is read by NO pass, and is admitted for
 // topLevelMapped's reason: §3.15.1 puts annotations outside ·validation·
-// altogether, so no verdict is short by the Annotation that is never built.
+// altogether, so no verdict is short by the component that is never built.
 //
 // The tail is one vocabulary and is stated once, so a site that gains a child
 // kind cannot quietly disagree with the others about what it holds — the shape
