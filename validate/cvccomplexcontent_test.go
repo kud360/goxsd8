@@ -26,7 +26,7 @@ func cLocal(t *testing.T, local string) xsd.ElementDeclaration {
 		t.Fatalf("NewLocalScope: %v", err)
 	}
 	d, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: local}, nil, nil, scope,
-		nil, false, nil, nil, nil, false, nil, nil)
+		nil, false, nil, nil, nil, false, nil)
 	if err != nil {
 		t.Fatalf("building the %s element declaration: %v", local, err)
 	}
@@ -41,7 +41,7 @@ func cParticle(t *testing.T, local string, minOccurs, maxOccurs int) xsd.Particl
 	if err != nil {
 		t.Fatalf("NewOccurs(%d,%d): %v", minOccurs, maxOccurs, err)
 	}
-	p, err := xsd.NewParticle(xsderr.Loc{}, o, xsd.ResolvedTerm{Term: cLocal(t, local)}, nil)
+	p, err := xsd.NewParticle(xsderr.Loc{}, o, xsd.ResolvedTerm{Term: cLocal(t, local)})
 	if err != nil {
 		t.Fatalf("NewParticle: %v", err)
 	}
@@ -52,7 +52,7 @@ func cParticle(t *testing.T, local string, minOccurs, maxOccurs int) xsd.Particl
 // the given particles.
 func cSequence(t *testing.T, mixed bool, particles ...xsd.Particle) xsd.ContentType {
 	t.Helper()
-	g, err := xsd.NewModelGroup(xsderr.Loc{}, xsd.CompositorSequence, particles, nil)
+	g, err := xsd.NewModelGroup(xsderr.Loc{}, xsd.CompositorSequence, particles)
 	if err != nil {
 		t.Fatalf("NewModelGroup: %v", err)
 	}
@@ -60,7 +60,7 @@ func cSequence(t *testing.T, mixed bool, particles ...xsd.Particle) xsd.ContentT
 	if err != nil {
 		t.Fatalf("NewOccurs: %v", err)
 	}
-	p, err := xsd.NewParticle(xsderr.Loc{}, o, xsd.ResolvedTerm{Term: g}, nil)
+	p, err := xsd.NewParticle(xsderr.Loc{}, o, xsd.ResolvedTerm{Term: g})
 	if err != nil {
 		t.Fatalf("NewParticle: %v", err)
 	}
@@ -73,7 +73,7 @@ func cSchema(t *testing.T, content xsd.ContentType) *xsd.Schema {
 	t.Helper()
 	name := xsd.QName{Local: "RootType"}
 	ct, err := xsd.NewComplexType(xsderr.Loc{}, name, xsd.QName{}, nil,
-		xsd.DerivationRestriction, false, nil, nil, nil, content, nil, nil, nil)
+		xsd.DerivationRestriction, false, nil, nil, nil, content, nil, nil)
 	if err != nil {
 		t.Fatalf("building the governing type: %v", err)
 	}
@@ -86,7 +86,7 @@ func cSchemaFrom(t *testing.T, ct xsd.ComplexType, extra func(*xsd.SchemaBuilder
 	t.Helper()
 	e, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "root"},
 		xsd.TypeDefinitionRef{Name: ct.Name()}, nil,
-		xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil, nil)
+		xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil)
 	if err != nil {
 		t.Fatalf("building the root element declaration: %v", err)
 	}
@@ -255,7 +255,7 @@ func simpleContentSchema(t *testing.T, typ xsd.QName) *xsd.Schema {
 	}
 	ct, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Local: "RootType"}, xsd.QName{}, nil,
 		xsd.DerivationRestriction, false, nil, nil, nil,
-		xsd.SimpleContent{SimpleType: st}, nil, nil, nil)
+		xsd.SimpleContent{SimpleType: st}, nil, nil)
 	if err != nil {
 		t.Fatalf("building the governing type: %v", err)
 	}
@@ -372,12 +372,12 @@ func nillableSchema(t *testing.T, content xsd.ContentType, vc *xsd.ValueConstrai
 	t.Helper()
 	name := xsd.QName{Local: "RootType"}
 	ct, err := xsd.NewComplexType(xsderr.Loc{}, name, xsd.QName{}, nil,
-		xsd.DerivationRestriction, false, nil, nil, nil, content, nil, nil, nil)
+		xsd.DerivationRestriction, false, nil, nil, nil, content, nil, nil)
 	if err != nil {
 		t.Fatalf("building the governing type: %v", err)
 	}
 	e, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "root"},
-		xsd.TypeDefinitionRef{Name: name}, nil, xsd.NewGlobalScope(), vc, true, nil, nil, nil, false, nil, nil)
+		xsd.TypeDefinitionRef{Name: name}, nil, xsd.NewGlobalScope(), vc, true, nil, nil, nil, false, nil)
 	if err != nil {
 		t.Fatalf("building the root element declaration: %v", err)
 	}
@@ -413,12 +413,12 @@ func TestAnonymousGoverningTypeStillDecidesContent(t *testing.T) {
 		ct, err := xsd.NewAnonymousComplexType(xsderr.Loc{},
 			xsd.ElementDeclarationContext{Component: id}, xsd.QName{}, nil,
 			xsd.DerivationRestriction, false, nil, nil, nil,
-			cSequence(t, false, cParticle(t, "a", 1, 1)), nil, nil, nil)
+			cSequence(t, false, cParticle(t, "a", 1, 1)), nil, nil)
 		if err != nil {
 			t.Fatalf("building the anonymous governing type: %v", err)
 		}
 		e, err := xsd.NewElementDeclarationOwningTypes(xsderr.Loc{}, id, xsd.QName{Local: "root"}, xsd.InlineTypeDefinition{Definition: ct},
-			nil, xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil, nil)
+			nil, xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil)
 		if err != nil {
 			t.Fatalf("building the owning root element declaration: %v", err)
 		}

@@ -27,14 +27,14 @@ func sgType(t *testing.T, name, base QName, method DerivationMethod, prohibited 
 	t.Helper()
 	if name.Local == "" {
 		ct, err := NewAnonymousComplexType(xsderr.Loc{}, ElementDeclarationContext{Component: NewComponentID()},
-			base, nil, method, false, nil, nil, nil, EmptyContent{}, prohibited, nil, nil)
+			base, nil, method, false, nil, nil, nil, EmptyContent{}, prohibited, nil)
 		if err != nil {
 			t.Fatalf("NewAnonymousComplexType: %v", err)
 		}
 		return ct
 	}
 	ct, err := NewComplexType(xsderr.Loc{}, name, base, nil, method, false,
-		nil, nil, nil, EmptyContent{}, prohibited, nil, nil)
+		nil, nil, nil, EmptyContent{}, prohibited, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType(%s): %v", name, err)
 	}
@@ -59,7 +59,7 @@ func sgSimple(t *testing.T, name QName, base *SimpleType) *SimpleType {
 func sgSimpleContentType(t *testing.T, name QName, base *SimpleType) ComplexType {
 	t.Helper()
 	ct, err := NewComplexType(xsderr.Loc{}, name, base.Name(), nil, DerivationExtension, false,
-		nil, nil, nil, SimpleContent{SimpleType: base}, nil, nil, nil)
+		nil, nil, nil, SimpleContent{SimpleType: base}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType(%s): %v", name, err)
 	}
@@ -72,7 +72,7 @@ func sgSimpleContentType(t *testing.T, name QName, base *SimpleType) ComplexType
 func sgElement(t *testing.T, name QName, typeDef TypeDefinitionOrRef, disallowed []DerivationMethod, affiliations ...QName) ElementDeclaration {
 	t.Helper()
 	e, err := NewElementDeclaration(xsderr.Loc{}, name, typeDef, nil, NewGlobalScope(), nil, false, nil,
-		affiliations, nil, false, disallowed, nil)
+		affiliations, nil, false, disallowed)
 	if err != nil {
 		t.Fatalf("NewElementDeclaration(%s): %v", name, err)
 	}

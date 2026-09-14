@@ -33,7 +33,7 @@ func eDecl(t *testing.T, local string, typeName QName, vc *ValueConstraint) Elem
 func eScoped(t *testing.T, local string, typeName QName, vc *ValueConstraint, scope Scope) ElementDeclaration {
 	t.Helper()
 	e, err := NewElementDeclaration(vcLoc, uq(local), TypeDefinitionRef{Name: typeName}, nil, scope, vc,
-		false, nil, nil, nil, false, nil, nil)
+		false, nil, nil, nil, false, nil)
 	if err != nil {
 		t.Fatalf("NewElementDeclaration(%s): %v", local, err)
 	}
@@ -226,7 +226,7 @@ func TestEPropsCorrectClause2ReachesEveryElementSite(t *testing.T) {
 			b.AddElement(dOwnInline(t, uq("outer"), ct, NewGlobalScope()))
 		}},
 		{"a local declaration in a top-level model group definition", func(b *SchemaBuilder) {
-			mgd, err := NewModelGroupDefinition(xsderr.Loc{}, uq("mg"), uGroup(t, CompositorSequence, local("nested")), nil)
+			mgd, err := NewModelGroupDefinition(xsderr.Loc{}, uq("mg"), uGroup(t, CompositorSequence, local("nested")))
 			if err != nil {
 				t.Fatalf("NewModelGroupDefinition: %v", err)
 			}
@@ -255,7 +255,7 @@ func TestEPropsCorrectClause2FailsOpen(t *testing.T) {
 		vs := vcOnly("7")
 		_, err := vcSchema(t, vs, func(b *SchemaBuilder) {
 			e, err := NewElementDeclaration(vcLoc, uq("e"), nil, nil, NewGlobalScope(), &bad,
-				false, nil, nil, nil, false, nil, nil)
+				false, nil, nil, nil, false, nil)
 			if err != nil {
 				t.Fatalf("NewElementDeclaration: %v", err)
 			}

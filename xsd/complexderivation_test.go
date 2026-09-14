@@ -23,7 +23,7 @@ func dAnyType(t *testing.T) ComplexType {
 	inner := uParticle(t, uUnbounded(t, 0), ResolvedTerm{Term: w})
 	seq := uGroup(t, CompositorSequence, inner)
 	ct, err := NewComplexType(xsderr.Loc{}, anyTypeName, anyTypeName, nil, DerivationRestriction, false,
-		nil, nil, &w, ElementContent{Mixed: true, Particle: uOne(t, ResolvedTerm{Term: seq})}, nil, nil, nil)
+		nil, nil, &w, ElementContent{Mixed: true, Particle: uOne(t, ResolvedTerm{Term: seq})}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType(xs:anyType): %v", err)
 	}
@@ -44,7 +44,7 @@ func dOwnInline(t *testing.T, name QName, ct ComplexType, scope Scope, affiliati
 		t.Fatalf("dOwnInline(%s): the complex type is NAMED (%s), so it is not owned by a declaration", name, ct.Name())
 	}
 	e, err := NewElementDeclarationOwningTypes(xsderr.Loc{}, context.ID(), name, InlineTypeDefinition{Definition: ct}, nil, scope,
-		nil, false, nil, affiliations, nil, false, nil, nil)
+		nil, false, nil, affiliations, nil, false, nil)
 	if err != nil {
 		t.Fatalf("NewElementDeclarationOwningTypes(%s): %v", name, err)
 	}
@@ -68,14 +68,14 @@ func dTypeAt(t *testing.T, loc xsderr.Loc, name, base QName, content ContentType
 	t.Helper()
 	if name.Local == "" {
 		ct, err := NewAnonymousComplexType(loc, ElementDeclarationContext{Component: NewComponentID()},
-			base, nil, DerivationRestriction, false, uses, nil, wildcard, content, nil, nil, nil)
+			base, nil, DerivationRestriction, false, uses, nil, wildcard, content, nil, nil)
 		if err != nil {
 			t.Fatalf("NewAnonymousComplexType: %v", err)
 		}
 		return ct
 	}
 	ct, err := NewComplexType(loc, name, base, nil, DerivationRestriction, false,
-		uses, nil, wildcard, content, nil, nil, nil)
+		uses, nil, wildcard, content, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType(%s): %v", name, err)
 	}
@@ -87,7 +87,7 @@ func dTypeAt(t *testing.T, loc xsderr.Loc, name, base QName, content ContentType
 func dFinal(t *testing.T, name, base QName, final []DerivationMethod) ComplexType {
 	t.Helper()
 	ct, err := NewComplexType(xsderr.Loc{}, name, base, final, DerivationRestriction, false,
-		nil, nil, nil, EmptyContent{}, nil, nil, nil)
+		nil, nil, nil, EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType(%s): %v", name, err)
 	}
@@ -103,7 +103,7 @@ func dFinal(t *testing.T, name, base QName, final []DerivationMethod) ComplexTyp
 func dAssertType(t *testing.T, name, base QName, method DerivationMethod, assertions []Assertion) ComplexType {
 	t.Helper()
 	ct, err := NewComplexType(xsderr.Loc{}, name, base, nil, method, false,
-		nil, nil, nil, EmptyContent{}, nil, assertions, nil)
+		nil, nil, nil, EmptyContent{}, nil, assertions)
 	if err != nil {
 		t.Fatalf("NewComplexType(%s): %v", name, err)
 	}
@@ -113,7 +113,7 @@ func dAssertType(t *testing.T, name, base QName, method DerivationMethod, assert
 // dAssert builds an Assertion over the given XPath text, the only property that
 // distinguishes two Assertions for the prefix relation (assertionprefix.go).
 func dAssert(test string) Assertion {
-	return NewAssertion(NewXPathExpression(test, nil, nil, nil), nil)
+	return NewAssertion(NewXPathExpression(test, nil, nil, nil))
 }
 
 // dSimple builds a named atomic simple type restricting base. It declares a
@@ -155,11 +155,11 @@ func dAttr(t *testing.T, name, typeName QName) AttributeUse {
 // given {required} and the declaration's {value constraint}.
 func dAttrUse(t *testing.T, name, typeName QName, required bool, vc *ValueConstraint) AttributeUse {
 	t.Helper()
-	decl, err := NewAttributeDeclaration(xsderr.Loc{}, name, TypeDefinitionRef{Name: typeName}, aLocalScope(t), vc, false, nil)
+	decl, err := NewAttributeDeclaration(xsderr.Loc{}, name, TypeDefinitionRef{Name: typeName}, aLocalScope(t), vc, false)
 	if err != nil {
 		t.Fatalf("NewAttributeDeclaration(%s): %v", name, err)
 	}
-	u, err := NewAttributeUse(xsderr.Loc{}, required, LocalAttributeDeclaration{Declaration: decl}, nil, false, nil)
+	u, err := NewAttributeUse(xsderr.Loc{}, required, LocalAttributeDeclaration{Declaration: decl}, nil, false)
 	if err != nil {
 		t.Fatalf("NewAttributeUse(%s): %v", name, err)
 	}

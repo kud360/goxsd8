@@ -61,7 +61,7 @@ func TestRestrictionCheckerRejectsAnonymousInlineSimpleType(t *testing.T) {
 				t.Helper()
 				e, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "e"},
 					xsd.InlineTypeDefinition{Definition: anon}, nil, xsd.NewGlobalScope(),
-					nil, false, nil, nil, nil, false, nil, nil)
+					nil, false, nil, nil, nil, false, nil)
 				if err != nil {
 					t.Fatalf("NewElementDeclaration: %v", err)
 				}

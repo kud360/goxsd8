@@ -30,7 +30,7 @@ func eType(t *testing.T, name, base string, method xsd.DerivationMethod, content
 		baseName = xsd.QName{Local: base}
 	}
 	ct, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Local: name}, baseName, nil,
-		method, false, nil, nil, nil, content, nil, nil, nil)
+		method, false, nil, nil, nil, content, nil, nil)
 	if err != nil {
 		t.Fatalf("building the %s complex type: %v", name, err)
 	}
@@ -56,7 +56,7 @@ func eSchema(t *testing.T, nillable bool, vc *xsd.ValueConstraint, blocked ...xs
 		cSequence(t, false, cParticle(t, "a", 1, 1))))
 	d, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "root"},
 		xsd.TypeDefinitionRef{Name: xsd.QName{Local: "Base"}}, nil, xsd.NewGlobalScope(),
-		vc, nillable, nil, nil, nil, false, blocked, nil)
+		vc, nillable, nil, nil, nil, false, blocked)
 	if err != nil {
 		t.Fatalf("building the root element declaration: %v", err)
 	}
@@ -274,7 +274,7 @@ func simpleTypedSchema(t *testing.T, typ xsd.QName, vc *xsd.ValueConstraint, nil
 	}
 	d, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "root"},
 		xsd.TypeDefinitionRef{Name: typ}, nil, xsd.NewGlobalScope(),
-		vc, nillable, nil, nil, nil, false, nil, nil)
+		vc, nillable, nil, nil, nil, false, nil)
 	if err != nil {
 		t.Fatalf("building the root element declaration: %v", err)
 	}
@@ -307,7 +307,7 @@ func nillableFixedMixedSchema(t *testing.T, content xsd.ContentType, vc *xsd.Val
 	b.AddType(eType(t, "MixedType", "", xsd.DerivationRestriction, content))
 	d, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "root"},
 		xsd.TypeDefinitionRef{Name: xsd.QName{Local: "MixedType"}}, nil, xsd.NewGlobalScope(),
-		vc, false, nil, nil, nil, false, nil, nil)
+		vc, false, nil, nil, nil, false, nil)
 	if err != nil {
 		t.Fatalf("building the root element declaration: %v", err)
 	}
@@ -426,7 +426,7 @@ func eOverrideSchema(t *testing.T, vc *xsd.ValueConstraint) *xsd.Schema {
 	b.AddType(eType(t, "Tight", "Loose", xsd.DerivationRestriction, xsd.EmptyContent{}))
 	d, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "root"},
 		xsd.TypeDefinitionRef{Name: xsd.QName{Local: "Loose"}}, nil, xsd.NewGlobalScope(),
-		vc, false, nil, nil, nil, false, nil, nil)
+		vc, false, nil, nil, nil, false, nil)
 	if err != nil {
 		t.Fatalf("building the root element declaration: %v", err)
 	}

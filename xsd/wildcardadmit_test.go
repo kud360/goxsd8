@@ -25,7 +25,7 @@ func wOccurs(t *testing.T) Occurs {
 
 func wParticle(t *testing.T, term TermOrRef) Particle {
 	t.Helper()
-	p, err := NewParticle(xsderr.Loc{}, wOccurs(t), term, nil)
+	p, err := NewParticle(xsderr.Loc{}, wOccurs(t), term)
 	if err != nil {
 		t.Fatalf("NewParticle: %v", err)
 	}
@@ -34,7 +34,7 @@ func wParticle(t *testing.T, term TermOrRef) Particle {
 
 func wGroup(t *testing.T, compositor Compositor, particles ...Particle) ModelGroup {
 	t.Helper()
-	g, err := NewModelGroup(xsderr.Loc{}, compositor, particles, nil)
+	g, err := NewModelGroup(xsderr.Loc{}, compositor, particles)
 	if err != nil {
 		t.Fatalf("NewModelGroup: %v", err)
 	}
@@ -45,7 +45,7 @@ func wGroup(t *testing.T, compositor Compositor, particles ...Particle) ModelGro
 func wCT(t *testing.T, name QName, term TermOrRef) ComplexType {
 	t.Helper()
 	ct, err := NewComplexType(xsderr.Loc{}, name, QName{}, nil, DerivationRestriction, false,
-		nil, nil, nil, ElementContent{Particle: wParticle(t, term)}, nil, nil, nil)
+		nil, nil, nil, ElementContent{Particle: wParticle(t, term)}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType: %v", err)
 	}
@@ -57,7 +57,7 @@ func wCT(t *testing.T, name QName, term TermOrRef) ComplexType {
 func wElement(t *testing.T, name QName, scope Scope, affiliations []QName, disallowedSubstitutions []DerivationMethod) ElementDeclaration {
 	t.Helper()
 	e, err := NewElementDeclaration(xsderr.Loc{}, name, nil, nil, scope, nil, false, nil,
-		affiliations, nil, false, disallowedSubstitutions, nil)
+		affiliations, nil, false, disallowedSubstitutions)
 	if err != nil {
 		t.Fatalf("NewElementDeclaration: %v", err)
 	}
@@ -72,7 +72,7 @@ func wWildcard(t *testing.T, keywords ...DisallowedNameKeyword) Wildcard {
 	if err != nil {
 		t.Fatalf("NewNamespaceConstraint: %v", err)
 	}
-	w, err := NewWildcard(xsderr.Loc{}, nc, ProcessStrict, nil)
+	w, err := NewWildcard(xsderr.Loc{}, nc, ProcessStrict)
 	if err != nil {
 		t.Fatalf("NewWildcard: %v", err)
 	}
@@ -157,7 +157,7 @@ func TestAllowsElementWildcardNameClause1(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewNamespaceConstraint: %v", err)
 	}
-	w, err := NewWildcard(xsderr.Loc{}, nc, ProcessStrict, nil)
+	w, err := NewWildcard(xsderr.Loc{}, nc, ProcessStrict)
 	if err != nil {
 		t.Fatalf("NewWildcard: %v", err)
 	}
@@ -176,7 +176,7 @@ func TestAllowsElementWildcardNameSibling(t *testing.T) {
 
 	// A model group definition referenced by <group ref>, holding element "g".
 	groupDef, err := NewModelGroupDefinition(xsderr.Loc{}, wq("grp"),
-		wGroup(t, CompositorSequence, wParticle(t, ResolvedTerm{Term: wElement(t, wq("g"), uLocalScope(t), nil, nil)})), nil)
+		wGroup(t, CompositorSequence, wParticle(t, ResolvedTerm{Term: wElement(t, wq("g"), uLocalScope(t), nil, nil)})))
 	if err != nil {
 		t.Fatalf("NewModelGroupDefinition: %v", err)
 	}
@@ -265,7 +265,7 @@ func TestSiblingAbstractHeadStillContains(t *testing.T) {
 	ct := wCT(t, wq("ct"), ElementDeclarationRef{Name: wq("head")})
 
 	abstractHead, err := NewElementDeclaration(xsderr.Loc{}, wq("head"), nil, nil, NewGlobalScope(), nil, false, nil,
-		nil, nil, true /* abstract */, nil, nil)
+		nil, nil, true /* abstract */, nil)
 	if err != nil {
 		t.Fatalf("NewElementDeclaration: %v", err)
 	}
@@ -339,7 +339,7 @@ func TestSiblingIsNotMemoizedPerWildcard(t *testing.T) {
 func TestSiblingIgnoresNonElementContent(t *testing.T) {
 	w := wWildcard(t, DisallowedNameSibling)
 	empty, err := NewComplexType(xsderr.Loc{}, wq("empty"), QName{}, nil, DerivationRestriction, false,
-		nil, nil, nil, EmptyContent{}, nil, nil, nil)
+		nil, nil, nil, EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType: %v", err)
 	}
@@ -362,7 +362,7 @@ func TestSiblingIgnoresNonElementContent(t *testing.T) {
 // tests.
 func mustAttributeDecl(t *testing.T, name QName) AttributeDeclaration {
 	t.Helper()
-	a, err := NewAttributeDeclaration(xsderr.Loc{}, name, nil, NewAttributeGlobalScope(), nil, false, nil)
+	a, err := NewAttributeDeclaration(xsderr.Loc{}, name, nil, NewAttributeGlobalScope(), nil, false)
 	if err != nil {
 		t.Fatalf("NewAttributeDeclaration: %v", err)
 	}

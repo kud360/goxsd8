@@ -191,9 +191,9 @@ import (
 //     descends into an <annotation> or reports one: topLevel, container and
 //     namedGroup each admit the name and hold no arm for it, and element,
 //     attributeDecl, simpleType and modelGroup report nothing of their own at any
-//     position. Nothing maps one either — this producer builds an xsd.Annotation
-//     nowhere, which is why topLevelMapped admits <annotation> for §3.15.1's
-//     reason rather than for a dispatch's — and no s4sModel orders one.
+//     position. Nothing maps one either — an <annotation> corresponds to no
+//     component this producer builds, which is why topLevelMapped admits it for
+//     §3.15.1's reason rather than for a dispatch's — and no s4sModel orders one.
 //     xs:annotation is "(appinfo | documentation)*" (§3.15.2, :3480; Appendix A
 //     :5747), and rejectRepeatedAnnotations charges the two shapes it owns, a
 //     nested <annotation> at any cardinality and a second <annotation> under one
@@ -532,7 +532,7 @@ func (w *censusWalk) container(parent *Element, mapped func(local string) bool) 
 // produce_complex.go); <assert> by assertionsOf (§3.4.2.1 clause 2,
 // produce_xpath.go). <annotation> is read by NO pass, and is admitted for
 // topLevelMapped's reason: §3.15.1 puts annotations outside ·validation·
-// altogether, so no verdict is short by the Annotation that is never built.
+// altogether, so no verdict is short by the component that is never built.
 //
 // The tail is one vocabulary and is stated once, so a site that gains a child
 // kind cannot quietly disagree with the others about what it holds — the shape

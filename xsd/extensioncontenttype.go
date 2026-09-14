@@ -157,7 +157,7 @@ func extensionParticle(loc xsderr.Loc, baseParticle, effective Particle, explici
 	if baseIsAll && effectiveIsAll {
 		// 4.2.3.2: one all group over both {particles} lists, base's first.
 		merged := append(baseGroup.Particles(), effectiveGroup.Particles()...)
-		mg, err := NewModelGroup(loc, CompositorAll, merged, nil)
+		mg, err := NewModelGroup(loc, CompositorAll, merged)
 		if err != nil {
 			return Particle{}, err
 		}
@@ -165,10 +165,10 @@ func extensionParticle(loc xsderr.Loc, baseParticle, effective Particle, explici
 		if err != nil {
 			return Particle{}, err
 		}
-		return NewParticle(loc, occ, ResolvedTerm{Term: mg}, nil)
+		return NewParticle(loc, occ, ResolvedTerm{Term: mg})
 	}
 	// 4.2.3.3: a 1..1 sequence, base particle then effective content.
-	seq, err := NewModelGroup(loc, CompositorSequence, []Particle{baseParticle, effective}, nil)
+	seq, err := NewModelGroup(loc, CompositorSequence, []Particle{baseParticle, effective})
 	if err != nil {
 		return Particle{}, err
 	}
@@ -176,7 +176,7 @@ func extensionParticle(loc xsderr.Loc, baseParticle, effective Particle, explici
 	if err != nil {
 		return Particle{}, err
 	}
-	return NewParticle(loc, oneOne, ResolvedTerm{Term: seq}, nil)
+	return NewParticle(loc, oneOne, ResolvedTerm{Term: seq})
 }
 
 // allGroupOfParticle returns the Model Group a particle's {term} is when that
@@ -396,7 +396,7 @@ func (s *Schema) recoverAllGroupSuffix(loc xsderr.Loc, merged Particle, baseGrou
 			return nil, false, nil
 		}
 	}
-	g, err := NewModelGroup(loc, CompositorAll, mergedGroup.particles[len(baseGroup.particles):], nil)
+	g, err := NewModelGroup(loc, CompositorAll, mergedGroup.particles[len(baseGroup.particles):])
 	if err != nil {
 		return nil, false, err
 	}
@@ -404,7 +404,7 @@ func (s *Schema) recoverAllGroupSuffix(loc xsderr.Loc, merged Particle, baseGrou
 	if err != nil {
 		return nil, false, err
 	}
-	p, err := NewParticle(loc, occ, ResolvedTerm{Term: g}, nil)
+	p, err := NewParticle(loc, occ, ResolvedTerm{Term: g})
 	if err != nil {
 		return nil, false, err
 	}
@@ -439,7 +439,7 @@ func (s *Schema) recoverSequenceTail(merged, baseParticle Particle) (*Particle, 
 // builds the same value at produce time; this one is built at finalize, by
 // clause 4.2.3.1's inverse, for a step whose source is long gone.
 func emptySequenceParticle(loc xsderr.Loc) (Particle, error) {
-	seq, err := NewModelGroup(loc, CompositorSequence, nil, nil)
+	seq, err := NewModelGroup(loc, CompositorSequence, nil)
 	if err != nil {
 		return Particle{}, err
 	}
@@ -447,5 +447,5 @@ func emptySequenceParticle(loc xsderr.Loc) (Particle, error) {
 	if err != nil {
 		return Particle{}, err
 	}
-	return NewParticle(loc, oneOne, ResolvedTerm{Term: seq}, nil)
+	return NewParticle(loc, oneOne, ResolvedTerm{Term: seq})
 }

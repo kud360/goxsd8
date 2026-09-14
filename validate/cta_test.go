@@ -37,7 +37,7 @@ const (
 func ctaFallbackType(t *testing.T) xsd.ComplexType {
 	t.Helper()
 	ct, err := xsd.NewComplexType(xsderr.Loc{}, local("Fallback"), xsd.QName{}, nil,
-		xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+		xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("building the Fallback complex type: %v", err)
 	}
@@ -52,7 +52,7 @@ func ctaCandidateType(t *testing.T, name string) xsd.ComplexType {
 	t.Helper()
 	uses := []xsd.AttributeUse{aUse(t, "kind", false, nil), aUse(t, "need"+name, true, nil)}
 	ct, err := xsd.NewComplexType(xsderr.Loc{}, local(name), local("Fallback"), nil,
-		xsd.DerivationExtension, false, uses, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+		xsd.DerivationExtension, false, uses, nil, nil, xsd.EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("building the %s complex type: %v", name, err)
 	}
@@ -96,7 +96,7 @@ func ctaSchema(t *testing.T, alts ...ctaAlt) *xsd.Schema {
 	}
 	d, err := xsd.NewElementDeclaration(xsderr.Loc{}, local("root"),
 		xsd.TypeDefinitionRef{Name: local("Fallback")}, &table, xsd.NewGlobalScope(),
-		nil, false, nil, nil, nil, false, nil, nil)
+		nil, false, nil, nil, nil, false, nil)
 	if err != nil {
 		t.Fatalf("building the root element declaration: %v", err)
 	}
@@ -340,7 +340,7 @@ func TestXSITypeOverridesTheConditionallySelectedType(t *testing.T) {
 // arm is the parser's to construct and is exercised there.
 func namedTypeAlternative(t *testing.T, test *xsd.XPathExpression, typeName xsd.QName) xsd.TypeAlternative {
 	t.Helper()
-	ta, err := xsd.NewTypeAlternative(xsderr.Loc{}, test, xsd.TypeDefinitionRef{Name: typeName}, nil)
+	ta, err := xsd.NewTypeAlternative(xsderr.Loc{}, test, xsd.TypeDefinitionRef{Name: typeName})
 	if err != nil {
 		t.Fatalf("NewTypeAlternative(%v): %v", typeName, err)
 	}

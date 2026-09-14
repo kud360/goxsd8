@@ -23,12 +23,12 @@ func sghOwner(t *testing.T, name QName, affiliations ...QName) (ElementDeclarati
 	t.Helper()
 	id := NewComponentID()
 	ct, err := NewAnonymousComplexType(xsderr.Loc{}, ElementDeclarationContext{Component: id},
-		QName{}, nil, DerivationRestriction, false, nil, nil, nil, EmptyContent{}, nil, nil, nil)
+		QName{}, nil, DerivationRestriction, false, nil, nil, nil, EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAnonymousComplexType(%s): %v", name, err)
 	}
 	e, err := NewElementDeclarationOwningTypes(xsderr.Loc{}, id, name, InlineTypeDefinition{Definition: ct}, nil, NewGlobalScope(), nil,
-		false, nil, affiliations, nil, false, nil, nil)
+		false, nil, affiliations, nil, false, nil)
 	if err != nil {
 		t.Fatalf("NewElementDeclarationOwningTypes(%s): %v", name, err)
 	}
@@ -228,6 +228,6 @@ func TestSubstitutionGroupHeadTypeRefSlotLegality(t *testing.T) {
 // wired up.
 func TestAttributeDeclarationRejectsSubstitutionGroupHeadTypeRef(t *testing.T) {
 	_, err := NewAttributeDeclaration(xsderr.Loc{}, sq("a"), SubstitutionGroupHeadTypeRef{Head: sq("head")},
-		NewAttributeGlobalScope(), nil, false, nil)
+		NewAttributeGlobalScope(), nil, false)
 	expectRule(t, err, xsderr.RuleComponentInvariant)
 }

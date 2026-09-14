@@ -231,14 +231,14 @@ func TestEffectiveValueConstraintFallback(t *testing.T) {
 	declFixed := NewValueConstraint(ValueFixed, "7", nil, nil)
 	useDefault := NewValueConstraint(ValueDefault, "9", nil, nil)
 	s := bSchema(t, func(b *SchemaBuilder) {
-		global, err := NewAttributeDeclaration(xsderr.Loc{}, uq("g"), TypeDefinitionRef{Name: uq("str")}, NewAttributeGlobalScope(), &declFixed, false, nil)
+		global, err := NewAttributeDeclaration(xsderr.Loc{}, uq("g"), TypeDefinitionRef{Name: uq("str")}, NewAttributeGlobalScope(), &declFixed, false)
 		if err != nil {
 			t.Fatalf("NewAttributeDeclaration: %v", err)
 		}
 		b.AddAttribute(global)
 	})
 
-	own, err := NewAttributeUse(xsderr.Loc{}, false, AttributeDeclarationRef{Name: uq("g")}, &useDefault, false, nil)
+	own, err := NewAttributeUse(xsderr.Loc{}, false, AttributeDeclarationRef{Name: uq("g")}, &useDefault, false)
 	if err != nil {
 		t.Fatalf("NewAttributeUse: %v", err)
 	}
@@ -246,7 +246,7 @@ func TestEffectiveValueConstraintFallback(t *testing.T) {
 		t.Fatalf("the use's OWN {value constraint} must win: got %+v ok=%t", vc, ok)
 	}
 
-	inherited, err := NewAttributeUse(xsderr.Loc{}, false, AttributeDeclarationRef{Name: uq("g")}, nil, false, nil)
+	inherited, err := NewAttributeUse(xsderr.Loc{}, false, AttributeDeclarationRef{Name: uq("g")}, nil, false)
 	if err != nil {
 		t.Fatalf("NewAttributeUse: %v", err)
 	}
@@ -265,7 +265,7 @@ func TestEffectiveValueConstraintFallback(t *testing.T) {
 func vcElem(t *testing.T, local string, typeName QName, vc *ValueConstraint) ElementDeclaration {
 	t.Helper()
 	e, err := NewElementDeclaration(xsderr.Loc{}, uq(local), TypeDefinitionRef{Name: typeName}, nil,
-		NewGlobalScope(), vc, false, nil, nil, nil, false, nil, nil)
+		NewGlobalScope(), vc, false, nil, nil, nil, false, nil)
 	if err != nil {
 		t.Fatalf("NewElementDeclaration(%s): %v", local, err)
 	}

@@ -229,7 +229,7 @@ func xmlNamespaceAttributes() ([]xsd.AttributeDeclaration, error) {
 	for _, s := range seeds {
 		d, err := xsd.NewAttributeDeclaration(xsderr.Loc{},
 			xsd.QName{Space: xmltree.XMLNamespaceURI, Local: s.local}, s.typeSlot,
-			xsd.NewAttributeGlobalScope(), nil, false, nil)
+			xsd.NewAttributeGlobalScope(), nil, false)
 		if err != nil {
 			return nil, err
 		}

@@ -33,12 +33,12 @@ func integerType() xsd.QName { return xsd.QName{Space: xsd.XMLSchemaNS, Local: "
 func typedUse(t *testing.T, local string, typ xsd.QName, required bool, declVC, useVC *xsd.ValueConstraint) xsd.AttributeUse {
 	t.Helper()
 	decl, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, xsd.QName{Local: local},
-		xsd.TypeDefinitionRef{Name: typ}, xsd.NewAttributeGlobalScope(), declVC, false, nil)
+		xsd.TypeDefinitionRef{Name: typ}, xsd.NewAttributeGlobalScope(), declVC, false)
 	if err != nil {
 		t.Fatalf("building the %s attribute declaration: %v", local, err)
 	}
 	u, err := xsd.NewAttributeUse(xsderr.Loc{}, required,
-		xsd.LocalAttributeDeclaration{Declaration: decl}, useVC, false, nil)
+		xsd.LocalAttributeDeclaration{Declaration: decl}, useVC, false)
 	if err != nil {
 		t.Fatalf("building the %s attribute use: %v", local, err)
 	}
@@ -57,13 +57,13 @@ func typedUse(t *testing.T, local string, typ xsd.QName, required bool, declVC, 
 func typedSchema(t *testing.T, uses []xsd.AttributeUse) *xsd.Schema {
 	t.Helper()
 	ct, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Local: "RootType"}, xsd.QName{}, nil,
-		xsd.DerivationRestriction, false, uses, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+		xsd.DerivationRestriction, false, uses, nil, nil, xsd.EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("building RootType: %v", err)
 	}
 	e, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "root"},
 		xsd.TypeDefinitionRef{Name: xsd.QName{Local: "RootType"}}, nil, xsd.NewGlobalScope(),
-		nil, false, nil, nil, nil, false, nil, nil)
+		nil, false, nil, nil, nil, false, nil)
 	if err != nil {
 		t.Fatalf("building the root element declaration: %v", err)
 	}

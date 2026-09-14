@@ -236,7 +236,7 @@ func dUnion(t *testing.T, name QName, members ...*SimpleType) *SimpleType {
 func dInlineElement(t *testing.T, name QName, inline *SimpleType) ElementDeclaration {
 	t.Helper()
 	e, err := NewElementDeclaration(xsderr.Loc{}, name, InlineTypeDefinition{Definition: inline},
-		nil, NewGlobalScope(), nil, false, nil, nil, nil, false, nil, nil)
+		nil, NewGlobalScope(), nil, false, nil, nil, nil, false, nil)
 	if err != nil {
 		t.Fatalf("NewElementDeclaration(%s): %v", name, err)
 	}

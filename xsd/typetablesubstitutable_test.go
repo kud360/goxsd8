@@ -45,7 +45,7 @@ func ttTable(t *testing.T, defaultType QName, altTypes ...QName) *TypeTable {
 func ttElement(t *testing.T, name, typeName QName, tt *TypeTable, disallowed ...DerivationMethod) ElementDeclaration {
 	t.Helper()
 	e, err := NewElementDeclaration(ttLoc, name, TypeDefinitionRef{Name: typeName}, tt, NewGlobalScope(), nil, false, nil,
-		nil, nil, false, disallowed, nil)
+		nil, nil, false, disallowed)
 	if err != nil {
 		t.Fatalf("NewElementDeclaration(%s): %v", name, err)
 	}
@@ -266,7 +266,7 @@ func TestEPropsCorrectClause7ReachesLocalDeclarations(t *testing.T) {
 		b.AddType(sgType(t, sq("Base"), QName{}, DerivationRestriction))
 		b.AddType(sgType(t, sq("Other"), QName{}, DerivationRestriction))
 		local, lerr := NewElementDeclaration(ttLoc, sq("inner"), TypeDefinitionRef{Name: sq("Base")},
-			ttTable(t, sq("Base"), sq("Other")), uLocalScope(t), nil, false, nil, nil, nil, false, nil, nil)
+			ttTable(t, sq("Base"), sq("Other")), uLocalScope(t), nil, false, nil, nil, nil, false, nil)
 		if lerr != nil {
 			t.Fatalf("NewElementDeclaration(inner): %v", lerr)
 		}
@@ -283,7 +283,7 @@ func TestEPropsCorrectClause7SkipsAnAbsentDeclaredType(t *testing.T) {
 	err := ttFinalize(t, func(b *SchemaBuilder) {
 		b.AddType(sgType(t, sq("Other"), QName{}, DerivationRestriction))
 		e, eerr := NewElementDeclaration(ttLoc, sq("e"), nil, ttTable(t, sq("Other"), sq("Other")),
-			NewGlobalScope(), nil, false, nil, nil, nil, false, nil, nil)
+			NewGlobalScope(), nil, false, nil, nil, nil, false, nil)
 		if eerr != nil {
 			t.Fatalf("NewElementDeclaration(e): %v", eerr)
 		}

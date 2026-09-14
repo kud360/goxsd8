@@ -46,7 +46,7 @@ func seedAnyType() (xsd.ComplexType, error) {
 	if err != nil {
 		return xsd.ComplexType{}, err
 	}
-	wildcard, err := xsd.NewWildcard(xsderr.Loc{}, anyNS, xsd.ProcessLax, nil)
+	wildcard, err := xsd.NewWildcard(xsderr.Loc{}, anyNS, xsd.ProcessLax)
 	if err != nil {
 		return xsd.ComplexType{}, err
 	}
@@ -54,11 +54,11 @@ func seedAnyType() (xsd.ComplexType, error) {
 	if err != nil {
 		return xsd.ComplexType{}, err
 	}
-	wildcardParticle, err := xsd.NewParticle(xsderr.Loc{}, inner, xsd.ResolvedTerm{Term: wildcard}, nil)
+	wildcardParticle, err := xsd.NewParticle(xsderr.Loc{}, inner, xsd.ResolvedTerm{Term: wildcard})
 	if err != nil {
 		return xsd.ComplexType{}, err
 	}
-	seq, err := xsd.NewModelGroup(xsderr.Loc{}, xsd.CompositorSequence, []xsd.Particle{wildcardParticle}, nil)
+	seq, err := xsd.NewModelGroup(xsderr.Loc{}, xsd.CompositorSequence, []xsd.Particle{wildcardParticle})
 	if err != nil {
 		return xsd.ComplexType{}, err
 	}
@@ -66,13 +66,13 @@ func seedAnyType() (xsd.ComplexType, error) {
 	if err != nil {
 		return xsd.ComplexType{}, err
 	}
-	topParticle, err := xsd.NewParticle(xsderr.Loc{}, oneOne, xsd.ResolvedTerm{Term: seq}, nil)
+	topParticle, err := xsd.NewParticle(xsderr.Loc{}, oneOne, xsd.ResolvedTerm{Term: seq})
 	if err != nil {
 		return xsd.ComplexType{}, err
 	}
 	content := xsd.ElementContent{Mixed: true, Particle: topParticle}
 	return xsd.NewComplexType(xsderr.Loc{}, anyTypeName, anyTypeName, nil,
-		xsd.DerivationRestriction, false, nil, nil, &wildcard, content, nil, nil, nil)
+		xsd.DerivationRestriction, false, nil, nil, &wildcard, content, nil, nil)
 }
 
 // seedInstanceAttributes builds the four Attribute Declarations §3.2.7 states are
@@ -134,7 +134,7 @@ func seedInstanceAttributes() ([]xsd.AttributeDeclaration, error) {
 	for _, s := range seeds {
 		name := xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: s.local}
 		a, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, name, s.typeSlot,
-			xsd.NewAttributeGlobalScope(), nil, false, nil)
+			xsd.NewAttributeGlobalScope(), nil, false)
 		if err != nil {
 			return nil, err
 		}
@@ -434,32 +434,32 @@ func attributeScopeParentOf(id complexTypeIdentity) xsd.AttributeScopeParent {
 //
 // The switch is exhaustive over the sealed sum; see topLevelComplexTypeName for
 // why the default arm is unreachable.
-func (p *producer) newComplexType(id complexTypeIdentity, loc xsderr.Loc, base xsd.TypeDefinitionOrRef, final []xsd.DerivationMethod, derivationMethod xsd.DerivationMethod, abstract bool, attributeUses []xsd.AttributeUse, prohibitedAttributeNames []xsd.QName, attributeWildcard *xsd.Wildcard, contentType xsd.ContentType, prohibitedSubstitutions []xsd.DerivationMethod, assertions []xsd.Assertion, annotations []xsd.Annotation) (xsd.ComplexType, error) {
+func (p *producer) newComplexType(id complexTypeIdentity, loc xsderr.Loc, base xsd.TypeDefinitionOrRef, final []xsd.DerivationMethod, derivationMethod xsd.DerivationMethod, abstract bool, attributeUses []xsd.AttributeUse, prohibitedAttributeNames []xsd.QName, attributeWildcard *xsd.Wildcard, contentType xsd.ContentType, prohibitedSubstitutions []xsd.DerivationMethod, assertions []xsd.Assertion) (xsd.ComplexType, error) {
 	switch i := id.(type) {
 	case namedComplexType:
 		return xsd.NewComplexType(loc, i.name, baseTypeName(base), final,
-			derivationMethod, abstract, attributeUses, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions, annotations)
+			derivationMethod, abstract, attributeUses, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions)
 	case redefiningComplexType:
 		original, owns := ownedComplexBase(base)
 		if !owns {
 			return xsd.ComplexType{}, fmt.Errorf("parser: the redefining <complexType> %s at %s did not resolve its own name as its {base type definition}, so src-expredef clause 1.2 has no clause-1.1 original to pair it with; src-redefine clause 5 requires that self-derivation and checkRedefinedComplexType charges it before production", i.name, loc)
 		}
 		return xsd.NewComplexTypeOwningBase(loc, i.owner, i.name, original, final,
-			derivationMethod, abstract, attributeUses, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions, annotations)
+			derivationMethod, abstract, attributeUses, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions)
 	case elementOwnedComplexType:
 		return xsd.NewAnonymousComplexType(loc, xsd.ElementDeclarationContext{Component: i.owner}, baseTypeName(base), final,
-			derivationMethod, abstract, attributeUses, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions, annotations)
+			derivationMethod, abstract, attributeUses, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions)
 	case typeAlternativeOwnedComplexType:
 		return xsd.NewAnonymousComplexType(loc, xsd.ElementDeclarationContext{Component: i.owner}, baseTypeName(base), final,
-			derivationMethod, abstract, attributeUses, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions, annotations)
+			derivationMethod, abstract, attributeUses, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions)
 	case redefineOriginalComplexType:
 		context := xsd.ComplexTypeDefinitionContext{Component: i.owner}
 		if original, owns := ownedComplexBase(base); owns {
 			return xsd.NewAnonymousComplexTypeOwningBase(loc, i.ownedOriginal, context, original, final,
-				derivationMethod, abstract, attributeUses, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions, annotations)
+				derivationMethod, abstract, attributeUses, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions)
 		}
 		return xsd.NewAnonymousComplexType(loc, context, baseTypeName(base), final,
-			derivationMethod, abstract, attributeUses, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions, annotations)
+			derivationMethod, abstract, attributeUses, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions)
 	default:
 		panic("parser: newComplexType: non-exhaustive complexTypeIdentity switch")
 	}
@@ -655,7 +655,7 @@ func (p *producer) produceImplicitContent(id complexTypeIdentity, el *Element) (
 	// would find, since resolveBaseType answers that name from symbols.anyType
 	// and reaches no document.
 	return p.newComplexType(id, el.Loc(), xsd.TypeDefinitionRef{Name: anyTypeName}, p.complexTypeFinal(el),
-		xsd.DerivationRestriction, abstract, uses, prohibited, wildcard, content, p.complexTypeProhibitedSubstitutions(el), p.assertionsOf(el), nil)
+		xsd.DerivationRestriction, abstract, uses, prohibited, wildcard, content, p.complexTypeProhibitedSubstitutions(el), p.assertionsOf(el))
 }
 
 // produceSimpleContent maps a <complexType><simpleContent> (§3.4.2.2) into a
@@ -775,7 +775,7 @@ func (p *producer) produceSimpleContent(id complexTypeIdentity, ctElem, sc *Elem
 	// in silence.
 	return p.newComplexType(id, ctElem.Loc(), baseRef, p.complexTypeFinal(ctElem),
 		method, abstract, uses, prohibited, wildcard, xsd.SimpleContent{SimpleType: simple},
-		p.complexTypeProhibitedSubstitutions(ctElem), assertionsWithBase(base, p.assertionsOf(derivation)), nil)
+		p.complexTypeProhibitedSubstitutions(ctElem), assertionsWithBase(base, p.assertionsOf(derivation)))
 }
 
 // repeatedFacetChild returns the SECOND facet-specifying child of one kind under
@@ -1071,7 +1071,7 @@ func (p *producer) produceComplexContent(id complexTypeIdentity, ctElem, cc *Ele
 	// {assertions}, then clause 2's <assert> children of the derivation alternant
 	// — not of the enclosing <complexType> — in this explicit complex-content form.
 	return p.newComplexType(id, ctElem.Loc(), baseRef, p.complexTypeFinal(ctElem),
-		method, abstract, uses, prohibited, wildcard, content, p.complexTypeProhibitedSubstitutions(ctElem), assertionsWithBase(base, p.assertionsOf(derivation)), nil)
+		method, abstract, uses, prohibited, wildcard, content, p.complexTypeProhibitedSubstitutions(ctElem), assertionsWithBase(base, p.assertionsOf(derivation)))
 }
 
 // derivationAlternant returns the <restriction> or <extension> child of a
@@ -1572,8 +1572,8 @@ func (p *producer) openContentOf(we *Element, explicit xsd.ContentType) (*xsd.Op
 // openContentWildcard computes clause 6.2's {wildcard}: the wildcard W
 // corresponding to the ·wildcard element·'s <any> child when the ·explicit
 // content type· carries no {open content}, and otherwise a wildcard whose
-// {process contents} and {annotations} are W's and whose {namespace constraint}
-// is the §3.10.6.3 wildcard union (xsd.UnionNamespaceConstraint) of W's with
+// {process contents} is W's and whose {namespace constraint} is the §3.10.6.3
+// wildcard union (xsd.UnionNamespaceConstraint) of W's with
 // that of ·explicit content type·.{open content}.{wildcard}.
 //
 // The second arm is live for an <extension> whose base already has an Open
@@ -1589,7 +1589,7 @@ func openContentWildcard(loc xsderr.Loc, w xsd.Wildcard, explicit xsd.ContentTyp
 	if err != nil {
 		return xsd.Wildcard{}, err
 	}
-	return xsd.NewWildcard(loc, unioned, w.ProcessContents(), w.Annotations())
+	return xsd.NewWildcard(loc, unioned, w.ProcessContents())
 }
 
 // wrapOpenContent folds oc into the ·explicit content type· per §3.4.2.3.3
@@ -1666,7 +1666,7 @@ func openContentModeOf(we *Element) (xsd.OpenContentMode, error) {
 // {particle} when an ***empty*** ·explicit content type· has to carry an Open
 // Content. One encoding for both (STYLE T4).
 func emptySequenceParticle(loc xsderr.Loc) (xsd.Particle, error) {
-	seq, err := xsd.NewModelGroup(loc, xsd.CompositorSequence, nil, nil)
+	seq, err := xsd.NewModelGroup(loc, xsd.CompositorSequence, nil)
 	if err != nil {
 		return xsd.Particle{}, err
 	}
@@ -1674,7 +1674,7 @@ func emptySequenceParticle(loc xsderr.Loc) (xsd.Particle, error) {
 	if err != nil {
 		return xsd.Particle{}, err
 	}
-	return xsd.NewParticle(loc, oneOne, xsd.ResolvedTerm{Term: seq}, nil)
+	return xsd.NewParticle(loc, oneOne, xsd.ResolvedTerm{Term: seq})
 }
 
 // explicitContent maps the model-group child to the {explicit content} particle
@@ -1805,11 +1805,11 @@ func (p *producer) produceGroupParticle(group *Element, scopeParent xsd.ElementS
 	if occErr != nil {
 		return nil, occErr
 	}
-	mg, err := xsd.NewModelGroup(group.Loc(), compositor, particles, nil)
+	mg, err := xsd.NewModelGroup(group.Loc(), compositor, particles)
 	if err != nil {
 		return nil, err
 	}
-	part, err := xsd.NewParticle(group.Loc(), occ, xsd.ResolvedTerm{Term: mg}, nil)
+	part, err := xsd.NewParticle(group.Loc(), occ, xsd.ResolvedTerm{Term: mg})
 	if err != nil {
 		return nil, err
 	}
@@ -1873,13 +1873,13 @@ func (p *producer) produceGroupRefParticle(el *Element) (*xsd.Particle, error) {
 		if err != nil {
 			return nil, err
 		}
-		part, err := xsd.NewParticle(el.Loc(), occ, xsd.ResolvedTerm{Term: mg}, nil)
+		part, err := xsd.NewParticle(el.Loc(), occ, xsd.ResolvedTerm{Term: mg})
 		if err != nil {
 			return nil, err
 		}
 		return &part, nil
 	}
-	part, err := xsd.NewParticle(el.Loc(), occ, xsd.ModelGroupRef{Name: qn}, nil)
+	part, err := xsd.NewParticle(el.Loc(), occ, xsd.ModelGroupRef{Name: qn})
 	if err != nil {
 		return nil, err
 	}
@@ -1931,7 +1931,7 @@ func (p *producer) produceModelGroupDefinition(name xsd.QName, el *Element) (xsd
 	if err != nil {
 		return xsd.ModelGroupDefinition{}, err
 	}
-	return xsd.NewModelGroupDefinition(el.Loc(), name, mg, nil)
+	return xsd.NewModelGroupDefinition(el.Loc(), name, mg)
 }
 
 // buildDefinitionModelGroup builds the {model group} of a top-level <group>
@@ -1975,7 +1975,7 @@ func (p *producer) buildDefinitionModelGroup(el *Element, scopeParent xsd.Elemen
 	if err != nil {
 		return xsd.ModelGroup{}, err
 	}
-	return xsd.NewModelGroup(group.Loc(), compositor, particles, nil)
+	return xsd.NewModelGroup(group.Loc(), compositor, particles)
 }
 
 // rejectNamedGroupBody rejects a named <group> whose body is not the one
@@ -2213,7 +2213,7 @@ func (p *producer) produceElementParticle(el *Element, scopeParent xsd.ElementSc
 	if occErr != nil {
 		return nil, occErr
 	}
-	part, err := xsd.NewParticle(el.Loc(), occ, term, nil)
+	part, err := xsd.NewParticle(el.Loc(), occ, term)
 	if err != nil {
 		return nil, err
 	}
@@ -2695,7 +2695,7 @@ func (p *producer) produceLocalElement(el *Element, scopeParent xsd.ElementScope
 		return xsd.ElementDeclaration{}, err
 	}
 	return xsd.NewElementDeclarationOwningTypes(el.Loc(), edID, qname, typeDef, typeTable, scope, vc,
-		nillable, constraints, nil, nil, false, p.disallowedSubstitutions(el), nil)
+		nillable, constraints, nil, nil, false, p.disallowedSubstitutions(el))
 }
 
 // localDeclaredType maps §3.3.2.1 dcl.elt.common's tier chain for a LOCAL
@@ -2817,7 +2817,7 @@ func (p *producer) produceAnyParticle(el *Element) (*xsd.Particle, error) {
 	if elided {
 		return nil, nil
 	}
-	part, err := xsd.NewParticle(el.Loc(), occ, xsd.ResolvedTerm{Term: wildcard}, nil)
+	part, err := xsd.NewParticle(el.Loc(), occ, xsd.ResolvedTerm{Term: wildcard})
 	if err != nil {
 		return nil, err
 	}
@@ -3065,7 +3065,7 @@ func (p *producer) buildAttributeGroup(name xsd.QName, elem *Element) (xsd.Attri
 	if err != nil {
 		return xsd.AttributeGroupDefinition{}, err
 	}
-	return xsd.NewAttributeGroupDefinition(elem.Loc(), name, uses, wildcard, nil)
+	return xsd.NewAttributeGroupDefinition(elem.Loc(), name, uses, wildcard)
 }
 
 // collectAttributeContent appends container's own <attribute> uses and its own
@@ -3228,8 +3228,7 @@ func (p *producer) spliceAttributeGroup(qn xsd.QName, loc xsderr.Loc, construct 
 // fold of IntersectNamespaceConstraint over every member (§3.10.6.4
 // cos-aw-intersect — combination at one container is always intersection), and
 // its {process contents} comes from the first member (L if the container had its
-// own <anyAttribute>, else the first referenced group's wildcard). {annotations}
-// is absent, matching the producer's uniform nil-annotation mapping.
+// own <anyAttribute>, else the first referenced group's wildcard).
 func combineAttributeWildcards(loc xsderr.Loc, wildcards []xsd.Wildcard) (*xsd.Wildcard, error) {
 	if len(wildcards) == 0 {
 		return nil, nil
@@ -3242,7 +3241,7 @@ func combineAttributeWildcards(loc xsderr.Loc, wildcards []xsd.Wildcard) (*xsd.W
 		}
 		nc = combined
 	}
-	result, err := xsd.NewWildcard(loc, nc, wildcards[0].ProcessContents(), nil)
+	result, err := xsd.NewWildcard(loc, nc, wildcards[0].ProcessContents())
 	if err != nil {
 		return nil, err
 	}
@@ -3397,7 +3396,7 @@ func (p *producer) produceAttributeUse(el *Element, scopeParent xsd.AttributeSco
 		if err != nil {
 			return nil, err
 		}
-		au, err := xsd.NewAttributeUse(el.Loc(), required, xsd.AttributeDeclarationRef{Name: qn}, vc, inheritable, nil)
+		au, err := xsd.NewAttributeUse(el.Loc(), required, xsd.AttributeDeclarationRef{Name: qn}, vc, inheritable)
 		if err != nil {
 			return nil, err
 		}
@@ -3407,7 +3406,7 @@ func (p *producer) produceAttributeUse(el *Element, scopeParent xsd.AttributeSco
 	if err != nil {
 		return nil, err
 	}
-	au, err := xsd.NewAttributeUse(el.Loc(), required, xsd.LocalAttributeDeclaration{Declaration: decl}, vc, inheritable, nil)
+	au, err := xsd.NewAttributeUse(el.Loc(), required, xsd.LocalAttributeDeclaration{Declaration: decl}, vc, inheritable)
 	if err != nil {
 		return nil, err
 	}
@@ -3649,7 +3648,7 @@ func (p *producer) produceLocalAttribute(el *Element, scopeParent xsd.AttributeS
 	if err != nil {
 		return xsd.AttributeDeclaration{}, err
 	}
-	return xsd.NewAttributeDeclaration(el.Loc(), qname, typeDef, scope, nil, inheritable, nil)
+	return xsd.NewAttributeDeclaration(el.Loc(), qname, typeDef, scope, nil, inheritable)
 }
 
 // produceWildcard maps an <any>/<anyAttribute> to a Wildcard (§3.10.2.2). It
@@ -3667,7 +3666,7 @@ func (p *producer) produceWildcard(el *Element) (xsd.Wildcard, error) {
 			return xsd.Wildcard{}, err
 		}
 	}
-	return xsd.NewWildcard(el.Loc(), nc, process, nil)
+	return xsd.NewWildcard(el.Loc(), nc, process)
 }
 
 // namespaceConstraint maps the namespace/notNamespace/notQName attributes of an

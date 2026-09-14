@@ -292,8 +292,7 @@ func (s AttributeScope) Parent() (AttributeScopeParent, bool) {
 // §3.2.1, id="Attribute_Declaration_details"): a kind of Annotated Component
 // with {name} (bundled with {target namespace} as an xsd.QName per this
 // package's "Names are expanded QNames" convention — doc.go), {type
-// definition}, {scope}, {value constraint} (Optional), {inheritable}, and
-// {annotations}.
+// definition}, {scope}, {value constraint} (Optional), and {inheritable}.
 //
 // Like the other §3 component shapes in this package, AttributeDeclaration is a
 // STRUCTURAL holder built before resolution. Its {type definition} is carried as
@@ -342,7 +341,6 @@ type AttributeDeclaration struct {
 	valueConstraint    ValueConstraint
 	hasValueConstraint bool
 	inheritable        bool
-	annotations        []Annotation
 }
 
 // NewAttributeDeclaration builds an AttributeDeclaration, rejecting the states
@@ -408,8 +406,7 @@ type AttributeDeclaration struct {
 // record (mirroring elementdeclaration.go's *ValueConstraint handling); when
 // non-nil the pointed-to value is COPIED into the struct and hasValueConstraint
 // is set — the pointer itself is never stored, so the caller's value is not
-// aliased. annotations is copied; the caller's backing array is not aliased, and
-// an empty input is held as nil.
+// aliased.
 //
 // loc is the source position charged to any rejection AND retained: Loc reports
 // it back as the declaration's provenance. Pass the position of this
@@ -457,7 +454,7 @@ type AttributeDeclaration struct {
 // validate's isInstanceAttribute (assess.go) and instanceAttribute (cvcelt.go)
 // match the four reserved names against INSTANCE items and never read
 // {attribute declarations}, so neither is perturbed in either direction.
-func NewAttributeDeclaration(loc xsderr.Loc, name QName, typeDefinition TypeDefinitionOrRef, scope AttributeScope, valueConstraint *ValueConstraint, inheritable bool, annotations []Annotation) (AttributeDeclaration, error) {
+func NewAttributeDeclaration(loc xsderr.Loc, name QName, typeDefinition TypeDefinitionOrRef, scope AttributeScope, valueConstraint *ValueConstraint, inheritable bool) (AttributeDeclaration, error) {
 	if name.Local == "" {
 		return AttributeDeclaration{}, xsderr.New(ruleAPropsCorrect, loc,
 			"attribute declaration has an absent {name}, but the §3.2.1 tableau types it as a Required xs:NCName, whose value space excludes the empty string (a-props-correct clause 1)")
@@ -486,9 +483,6 @@ func NewAttributeDeclaration(loc xsderr.Loc, name QName, typeDefinition TypeDefi
 	}
 	if valueConstraint != nil {
 		a.valueConstraint, a.hasValueConstraint = *valueConstraint, true
-	}
-	if len(annotations) > 0 {
-		a.annotations = append([]Annotation(nil), annotations...)
 	}
 	return a, nil
 }
@@ -550,14 +544,4 @@ func (a AttributeDeclaration) ValueConstraint() (ValueConstraint, bool) {
 // Inheritable returns the {inheritable} property (Required).
 func (a AttributeDeclaration) Inheritable() bool {
 	return a.inheritable
-}
-
-// Annotations returns the {annotations} property in document order. It returns
-// a copy: mutating the result does not affect a. An empty {annotations} yields
-// nil.
-func (a AttributeDeclaration) Annotations() []Annotation {
-	if len(a.annotations) == 0 {
-		return nil
-	}
-	return append([]Annotation(nil), a.annotations...)
 }
