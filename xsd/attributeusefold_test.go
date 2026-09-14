@@ -181,7 +181,7 @@ func TestDerivationOKRestrictionRequiredInheritedTwoLevels(t *testing.T) {
 func dProhibiting(t *testing.T, name, base QName, uses []AttributeUse, prohibited []QName) ComplexType {
 	t.Helper()
 	ct, err := NewComplexType(xsderr.Loc{}, name, base, nil, DerivationRestriction, false,
-		uses, prohibited, nil, EmptyContent{}, nil, nil, nil)
+		uses, prohibited, nil, EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType(%s): %v", name, err)
 	}
@@ -227,7 +227,7 @@ func TestAttributeUsesFoldProhibitedIgnoredOnExtension(t *testing.T) {
 		b.AddType(dType(t, uq("A"), anyTypeName, EmptyContent{},
 			[]AttributeUse{dAttr(t, uq("x"), uq("str"))}, nil))
 		ext, err := NewComplexType(xsderr.Loc{}, uq("E"), uq("A"), nil, DerivationExtension, false,
-			nil, []QName{uq("x")}, nil, EmptyContent{}, nil, nil, nil)
+			nil, []QName{uq("x")}, nil, EmptyContent{}, nil, nil)
 		if err != nil {
 			t.Fatalf("NewComplexType(E): %v", err)
 		}

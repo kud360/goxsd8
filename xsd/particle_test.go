@@ -13,7 +13,7 @@ func TestNewParticleValidWithResolvedTerm(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewOccurs: %v", err)
 	}
-	p, err := xsd.NewParticle(xsderr.Loc{}, occ, xsd.ResolvedTerm{Term: w}, nil)
+	p, err := xsd.NewParticle(xsderr.Loc{}, occ, xsd.ResolvedTerm{Term: w})
 	if err != nil {
 		t.Fatalf("NewParticle unexpected error: %v", err)
 	}
@@ -39,7 +39,7 @@ func TestNewParticleValidWithRefTerms(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			p, err := xsd.NewParticle(xsderr.Loc{}, xsd.Occurs{}, c.term, nil)
+			p, err := xsd.NewParticle(xsderr.Loc{}, xsd.Occurs{}, c.term)
 			if err != nil {
 				t.Fatalf("NewParticle unexpected error: %v", err)
 			}
@@ -51,7 +51,7 @@ func TestNewParticleValidWithRefTerms(t *testing.T) {
 }
 
 func TestNewParticleRejectsAbsentTerm(t *testing.T) {
-	_, err := xsd.NewParticle(xsderr.Loc{}, xsd.Occurs{}, nil, nil)
+	_, err := xsd.NewParticle(xsderr.Loc{}, xsd.Occurs{}, nil)
 	if err == nil {
 		t.Fatal("NewParticle accepted a nil {term}, want p-props-correct error")
 	}
@@ -86,7 +86,7 @@ func TestNewParticleRejectsAbsentRefName(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := xsd.NewParticle(xsderr.Loc{}, xsd.Occurs{}, tc.term, nil)
+			_, err := xsd.NewParticle(xsderr.Loc{}, xsd.Occurs{}, tc.term)
 			if !tc.wantErr {
 				if err != nil {
 					t.Fatalf("NewParticle(%v) unexpected error: %v", tc.term, err)
@@ -106,7 +106,7 @@ func TestNewParticleAcceptsVacuousOccurs(t *testing.T) {
 	// Occurs{0,0} is a legal vacuous range at the component level (occurs.go);
 	// Particle must not reject it — the min=max=0 "no component" rule is a
 	// producer concern, not a Particle-constructor invariant.
-	p, err := xsd.NewParticle(xsderr.Loc{}, xsd.Occurs{}, xsd.ElementDeclarationRef{Name: xsd.QName{Local: "e"}}, nil)
+	p, err := xsd.NewParticle(xsderr.Loc{}, xsd.Occurs{}, xsd.ElementDeclarationRef{Name: xsd.QName{Local: "e"}})
 	if err != nil {
 		t.Fatalf("NewParticle rejected Occurs{0,0}: %v", err)
 	}

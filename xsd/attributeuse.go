@@ -232,4 +232,3 @@ func (u AttributeUse) ValueConstraint() (ValueConstraint, bool) {
 func (u AttributeUse) Inheritable() bool {
 	return u.inheritable
 }
-

@@ -22,7 +22,7 @@ func mustModelGroup(t *testing.T, c xsd.Compositor, ps []xsd.Particle, anns []xs
 // declaration reference, for populating model groups.
 func elementRefParticle(t *testing.T, local string) xsd.Particle {
 	t.Helper()
-	p, err := xsd.NewParticle(xsderr.Loc{}, xsd.Occurs{}, xsd.ElementDeclarationRef{Name: xsd.QName{Local: local}}, nil)
+	p, err := xsd.NewParticle(xsderr.Loc{}, xsd.Occurs{}, xsd.ElementDeclarationRef{Name: xsd.QName{Local: local}})
 	if err != nil {
 		t.Fatalf("NewParticle: %v", err)
 	}
@@ -44,7 +44,7 @@ func TestNewModelGroupValidCompositors(t *testing.T) {
 }
 
 func TestNewModelGroupRejectsZeroCompositor(t *testing.T) {
-	_, err := xsd.NewModelGroup(xsderr.Loc{}, xsd.Compositor(0), nil, nil)
+	_, err := xsd.NewModelGroup(xsderr.Loc{}, xsd.Compositor(0), nil)
 	if err == nil {
 		t.Fatal("NewModelGroup accepted a zero Compositor, want mg-props-correct error")
 	}
@@ -52,7 +52,7 @@ func TestNewModelGroupRejectsZeroCompositor(t *testing.T) {
 }
 
 func TestNewModelGroupRejectsUnknownCompositor(t *testing.T) {
-	_, err := xsd.NewModelGroup(xsderr.Loc{}, xsd.Compositor(99), nil, nil)
+	_, err := xsd.NewModelGroup(xsderr.Loc{}, xsd.Compositor(99), nil)
 	if err == nil {
 		t.Fatal("NewModelGroup accepted an out-of-range Compositor, want mg-props-correct error")
 	}

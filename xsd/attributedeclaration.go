@@ -547,4 +547,3 @@ func (a AttributeDeclaration) ValueConstraint() (ValueConstraint, bool) {
 func (a AttributeDeclaration) Inheritable() bool {
 	return a.inheritable
 }
-

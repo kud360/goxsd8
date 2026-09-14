@@ -22,7 +22,7 @@ func mustSimpleType(t *testing.T) *xsd.SimpleType {
 // mustParticleWithTerm builds a valid Particle carrying a present {term}.
 func mustParticleWithTerm(t *testing.T) xsd.Particle {
 	t.Helper()
-	p, err := xsd.NewParticle(xsderr.Loc{}, xsd.Occurs{}, xsd.ElementDeclarationRef{Name: xsd.QName{Local: "e"}}, nil)
+	p, err := xsd.NewParticle(xsderr.Loc{}, xsd.Occurs{}, xsd.ElementDeclarationRef{Name: xsd.QName{Local: "e"}})
 	if err != nil {
 		t.Fatalf("NewParticle unexpected error: %v", err)
 	}
@@ -33,7 +33,7 @@ func mustParticleWithTerm(t *testing.T) xsd.Particle {
 // declaration by name.
 func mustAttributeUse(t *testing.T) xsd.AttributeUse {
 	t.Helper()
-	u, err := xsd.NewAttributeUse(xsderr.Loc{}, false, xsd.AttributeDeclarationRef{Name: xsd.QName{Local: "a"}}, nil, false, nil)
+	u, err := xsd.NewAttributeUse(xsderr.Loc{}, false, xsd.AttributeDeclarationRef{Name: xsd.QName{Local: "a"}}, nil, false)
 	if err != nil {
 		t.Fatalf("NewAttributeUse unexpected error: %v", err)
 	}
@@ -42,7 +42,7 @@ func mustAttributeUse(t *testing.T) xsd.AttributeUse {
 
 func TestNewComplexTypeEmptyContent(t *testing.T) {
 	c, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Local: "ct"}, xsd.QName{Local: "base"}, nil,
-		xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+		xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType unexpected error: %v", err)
 	}
@@ -60,7 +60,7 @@ func TestNewComplexTypeEmptyContent(t *testing.T) {
 func TestNewComplexTypeSimpleContent(t *testing.T) {
 	st := mustSimpleType(t)
 	c, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Local: "ct"}, xsd.QName{Local: "base"}, nil,
-		xsd.DerivationExtension, false, nil, nil, nil, xsd.SimpleContent{SimpleType: st}, nil, nil, nil)
+		xsd.DerivationExtension, false, nil, nil, nil, xsd.SimpleContent{SimpleType: st}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType unexpected error: %v", err)
 	}
@@ -89,7 +89,7 @@ func TestNewComplexTypeElementContentVarietyDerivation(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ec := xsd.ElementContent{Mixed: tc.mixed, Particle: mustParticleWithTerm(t)}
 			c, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Local: "ct"}, xsd.QName{Local: "base"}, nil,
-				xsd.DerivationRestriction, false, nil, nil, nil, ec, nil, nil, nil)
+				xsd.DerivationRestriction, false, nil, nil, nil, ec, nil, nil)
 			if err != nil {
 				t.Fatalf("NewComplexType unexpected error: %v", err)
 			}
@@ -108,7 +108,7 @@ func TestNewComplexTypeElementContentWithOpenContent(t *testing.T) {
 	}
 	ec := xsd.ElementContent{Mixed: true, Particle: mustParticleWithTerm(t), OpenContent: &oc}
 	c, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Local: "ct"}, xsd.QName{Local: "base"}, nil,
-		xsd.DerivationExtension, false, nil, nil, nil, ec, nil, nil, nil)
+		xsd.DerivationExtension, false, nil, nil, nil, ec, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType unexpected error: %v", err)
 	}
@@ -123,7 +123,7 @@ func TestNewComplexTypeElementContentWithOpenContent(t *testing.T) {
 
 func TestNewComplexTypeRejectsNilContentType(t *testing.T) {
 	_, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Local: "ct"}, xsd.QName{Local: "base"}, nil,
-		xsd.DerivationRestriction, false, nil, nil, nil, nil, nil, nil, nil)
+		xsd.DerivationRestriction, false, nil, nil, nil, nil, nil, nil)
 	if err == nil {
 		t.Fatal("NewComplexType accepted a nil {content type}, want ct-props-correct error")
 	}
@@ -132,7 +132,7 @@ func TestNewComplexTypeRejectsNilContentType(t *testing.T) {
 
 func TestNewComplexTypeRejectsNilSimpleType(t *testing.T) {
 	_, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Local: "ct"}, xsd.QName{Local: "base"}, nil,
-		xsd.DerivationExtension, false, nil, nil, nil, xsd.SimpleContent{SimpleType: nil}, nil, nil, nil)
+		xsd.DerivationExtension, false, nil, nil, nil, xsd.SimpleContent{SimpleType: nil}, nil, nil)
 	if err == nil {
 		t.Fatal("NewComplexType accepted a nil {simple type definition}, want ct-props-correct error")
 	}
@@ -144,7 +144,7 @@ func TestNewComplexTypeRejectsElementContentAbsentTerm(t *testing.T) {
 	// ElementContent built around it (bypassing NewParticle's own check).
 	ec := xsd.ElementContent{Mixed: false, Particle: xsd.Particle{}}
 	_, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Local: "ct"}, xsd.QName{Local: "base"}, nil,
-		xsd.DerivationRestriction, false, nil, nil, nil, ec, nil, nil, nil)
+		xsd.DerivationRestriction, false, nil, nil, nil, ec, nil, nil)
 	if err == nil {
 		t.Fatal("NewComplexType accepted an ElementContent with an absent {term}, want ct-props-correct error")
 	}
@@ -154,7 +154,7 @@ func TestNewComplexTypeRejectsElementContentAbsentTerm(t *testing.T) {
 func TestNewComplexTypeRejectsInvalidDerivationMethod(t *testing.T) {
 	for _, m := range []xsd.DerivationMethod{xsd.DerivationSubstitution, xsd.DerivationList, xsd.DerivationUnion, 0} {
 		_, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Local: "ct"}, xsd.QName{Local: "base"}, nil,
-			m, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+			m, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil)
 		if err == nil {
 			t.Fatalf("NewComplexType accepted {derivation method} = %s, want ct-props-correct error", m)
 		}
@@ -165,7 +165,7 @@ func TestNewComplexTypeRejectsInvalidDerivationMethod(t *testing.T) {
 func TestNewComplexTypeRejectsInvalidFinal(t *testing.T) {
 	_, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Local: "ct"}, xsd.QName{Local: "base"},
 		[]xsd.DerivationMethod{xsd.DerivationSubstitution},
-		xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+		xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil)
 	if err == nil {
 		t.Fatal("NewComplexType accepted an invalid {final} member, want ct-props-correct error")
 	}
@@ -175,7 +175,7 @@ func TestNewComplexTypeRejectsInvalidFinal(t *testing.T) {
 func TestNewComplexTypeRejectsInvalidProhibitedSubstitutions(t *testing.T) {
 	_, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Local: "ct"}, xsd.QName{Local: "base"}, nil,
 		xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{},
-		[]xsd.DerivationMethod{xsd.DerivationUnion}, nil, nil)
+		[]xsd.DerivationMethod{xsd.DerivationUnion}, nil)
 	if err == nil {
 		t.Fatal("NewComplexType accepted an invalid {prohibited substitutions} member, want ct-props-correct error")
 	}
@@ -196,7 +196,7 @@ func TestComplexTypeSlicesDoNotAlias(t *testing.T) {
 	prohibited := []xsd.DerivationMethod{xsd.DerivationRestriction}
 	uses := []xsd.AttributeUse{mustAttributeUse(t)}
 	c, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Local: "ct"}, xsd.QName{Local: "base"}, final,
-		xsd.DerivationRestriction, false, uses, nil, nil, xsd.EmptyContent{}, prohibited, nil, nil)
+		xsd.DerivationRestriction, false, uses, nil, nil, xsd.EmptyContent{}, prohibited, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType unexpected error: %v", err)
 	}
@@ -216,7 +216,7 @@ func TestComplexTypeSlicesDoNotAlias(t *testing.T) {
 
 func TestComplexTypeAttributeWildcardOptional(t *testing.T) {
 	c, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Local: "ct"}, xsd.QName{Local: "base"}, nil,
-		xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+		xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType unexpected error: %v", err)
 	}
@@ -225,7 +225,7 @@ func TestComplexTypeAttributeWildcardOptional(t *testing.T) {
 	}
 	w := mustWildcard(t, mustConstraint(t, xsd.NamespaceConstraintAny, nil, nil), xsd.ProcessStrict, nil)
 	c, err = xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Local: "ct"}, xsd.QName{Local: "base"}, nil,
-		xsd.DerivationRestriction, false, nil, nil, &w, xsd.EmptyContent{}, nil, nil, nil)
+		xsd.DerivationRestriction, false, nil, nil, &w, xsd.EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType unexpected error: %v", err)
 	}
@@ -243,7 +243,7 @@ func TestNewComplexTypeRejectsAbsentName(t *testing.T) {
 	// would otherwise pass as a NAMED type.
 	for _, name := range []xsd.QName{{}, {Space: "urn:x"}, {Space: "urn:x", Local: ""}} {
 		_, err := xsd.NewComplexType(xsderr.Loc{}, name, xsd.QName{Local: "base"}, nil,
-			xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+			xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil)
 		if err == nil {
 			t.Fatalf("NewComplexType accepted {name} = %v, want ct-props-correct error", name)
 		}
@@ -253,7 +253,7 @@ func TestNewComplexTypeRejectsAbsentName(t *testing.T) {
 
 func TestNewComplexTypeNamedHasAbsentContext(t *testing.T) {
 	c, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Local: "ct"}, xsd.QName{Local: "base"}, nil,
-		xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+		xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType unexpected error: %v", err)
 	}
@@ -268,7 +268,7 @@ func TestNewComplexTypeNamedHasAbsentContext(t *testing.T) {
 
 func TestNewAnonymousComplexTypeRejectsNilContext(t *testing.T) {
 	_, err := xsd.NewAnonymousComplexType(xsderr.Loc{}, nil, xsd.QName{Local: "base"}, nil,
-		xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+		xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil)
 	if err == nil {
 		t.Fatal("NewAnonymousComplexType accepted a nil {context}, want ct-props-correct error")
 	}
@@ -283,7 +283,7 @@ func TestNewAnonymousComplexTypeRejectsUnmintedIdentity(t *testing.T) {
 		xsd.ComplexTypeDefinitionContext{},
 	} {
 		_, err := xsd.NewAnonymousComplexType(xsderr.Loc{}, ctx, xsd.QName{Local: "base"}, nil,
-			xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+			xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil)
 		if err == nil {
 			t.Fatalf("NewAnonymousComplexType accepted %T with an unminted identity, want component-invariant error", ctx)
 		}
@@ -306,7 +306,7 @@ func TestNewAnonymousComplexTypeContext(t *testing.T) {
 		id := xsd.NewComponentID()
 		ctx := tc.make(id)
 		c, err := xsd.NewAnonymousComplexType(xsderr.Loc{}, ctx, xsd.QName{Local: "base"}, nil,
-			xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+			xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil)
 		if err != nil {
 			t.Fatalf("%s: NewAnonymousComplexType unexpected error: %v", tc.name, err)
 		}
@@ -337,7 +337,7 @@ func TestComplexTypeContextSurvivesCopy(t *testing.T) {
 	id := xsd.NewComponentID()
 	c, err := xsd.NewAnonymousComplexType(xsderr.Loc{}, xsd.ElementDeclarationContext{Component: id},
 		xsd.QName{Local: "base"}, nil, xsd.DerivationRestriction, false, nil, nil, nil,
-		xsd.EmptyContent{}, nil, nil, nil)
+		xsd.EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAnonymousComplexType unexpected error: %v", err)
 	}

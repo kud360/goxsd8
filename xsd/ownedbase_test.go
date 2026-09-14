@@ -25,12 +25,12 @@ func oPair(t *testing.T, name, originalBase QName, method DerivationMethod, ownU
 	t.Helper()
 	id := NewComponentID()
 	original, err := NewAnonymousComplexType(xsderr.Loc{}, ComplexTypeDefinitionContext{Component: id},
-		originalBase, nil, DerivationRestriction, false, originalUses, nil, originalWildcard, EmptyContent{}, nil, nil, nil)
+		originalBase, nil, DerivationRestriction, false, originalUses, nil, originalWildcard, EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAnonymousComplexType (the clause-1.1 original of %s): %v", name, err)
 	}
 	ct, err := NewComplexTypeOwningBase(xsderr.Loc{}, id, name, original, nil, method, false,
-		ownUses, nil, ownWildcard, EmptyContent{}, nil, nil, nil)
+		ownUses, nil, ownWildcard, EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexTypeOwningBase(%s): %v", name, err)
 	}
@@ -43,7 +43,7 @@ func oPair(t *testing.T, name, originalBase QName, method DerivationMethod, ownU
 // context-tracking hazard, and no shape check downstream could reach it.
 func TestOwnedBaseContextMustNameTheOwner(t *testing.T) {
 	stranger, err := NewAnonymousComplexType(xsderr.Loc{}, ComplexTypeDefinitionContext{Component: NewComponentID()},
-		anyTypeName, nil, DerivationRestriction, false, nil, nil, nil, EmptyContent{}, nil, nil, nil)
+		anyTypeName, nil, DerivationRestriction, false, nil, nil, nil, EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAnonymousComplexType: %v", err)
 	}
@@ -57,7 +57,7 @@ func TestOwnedBaseContextMustNameTheOwner(t *testing.T) {
 	} {
 		t.Run(tc.what, func(t *testing.T) {
 			if _, err := NewComplexTypeOwningBase(xsderr.Loc{}, tc.id, uq("T"), tc.base, nil,
-				DerivationRestriction, false, nil, nil, nil, EmptyContent{}, nil, nil, nil); err == nil {
+				DerivationRestriction, false, nil, nil, nil, EmptyContent{}, nil, nil); err == nil {
 				t.Fatalf("NewComplexTypeOwningBase accepted %s", tc.what)
 			}
 		})
@@ -71,12 +71,12 @@ func TestOwnedBaseContextMustNameTheOwner(t *testing.T) {
 func TestOwnedBaseRejectsElementDeclarationContext(t *testing.T) {
 	id := NewComponentID()
 	wrongArm, err := NewAnonymousComplexType(xsderr.Loc{}, ElementDeclarationContext{Component: id},
-		anyTypeName, nil, DerivationRestriction, false, nil, nil, nil, EmptyContent{}, nil, nil, nil)
+		anyTypeName, nil, DerivationRestriction, false, nil, nil, nil, EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAnonymousComplexType: %v", err)
 	}
 	if _, err := NewComplexTypeOwningBase(xsderr.Loc{}, id, uq("T"), wrongArm, nil,
-		DerivationRestriction, false, nil, nil, nil, EmptyContent{}, nil, nil, nil); err == nil {
+		DerivationRestriction, false, nil, nil, nil, EmptyContent{}, nil, nil); err == nil {
 		t.Fatal("NewComplexTypeOwningBase accepted an owned base contexted in an ELEMENT DECLARATION")
 	}
 }
@@ -95,12 +95,12 @@ func TestOwnedBaseRejectsElementDeclarationContext(t *testing.T) {
 func TestAnonymousOwnedBaseChain(t *testing.T) {
 	outer, middle := NewComponentID(), NewComponentID()
 	inner, err := NewAnonymousComplexType(xsderr.Loc{}, ComplexTypeDefinitionContext{Component: middle},
-		anyTypeName, nil, DerivationRestriction, false, nil, nil, nil, EmptyContent{}, nil, nil, nil)
+		anyTypeName, nil, DerivationRestriction, false, nil, nil, nil, EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAnonymousComplexType (the innermost clause-1.1 original): %v", err)
 	}
 	mid, err := NewAnonymousComplexTypeOwningBase(xsderr.Loc{}, middle, ComplexTypeDefinitionContext{Component: outer},
-		inner, nil, DerivationExtension, false, nil, nil, nil, EmptyContent{}, nil, nil, nil)
+		inner, nil, DerivationExtension, false, nil, nil, nil, EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAnonymousComplexTypeOwningBase: %v", err)
 	}
@@ -138,12 +138,12 @@ func TestAnonymousOwnedBaseChain(t *testing.T) {
 func TestAnonymousOwnedBaseRejectsCollapsedIdentity(t *testing.T) {
 	collapsed := NewComponentID()
 	inner, err := NewAnonymousComplexType(xsderr.Loc{}, ComplexTypeDefinitionContext{Component: collapsed},
-		anyTypeName, nil, DerivationRestriction, false, nil, nil, nil, EmptyContent{}, nil, nil, nil)
+		anyTypeName, nil, DerivationRestriction, false, nil, nil, nil, EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAnonymousComplexType (the innermost clause-1.1 original): %v", err)
 	}
 	_, err = NewAnonymousComplexTypeOwningBase(xsderr.Loc{}, collapsed, ComplexTypeDefinitionContext{Component: collapsed},
-		inner, nil, DerivationExtension, false, nil, nil, nil, EmptyContent{}, nil, nil, nil)
+		inner, nil, DerivationExtension, false, nil, nil, nil, EmptyContent{}, nil, nil)
 	if err == nil {
 		t.Fatal("NewAnonymousComplexTypeOwningBase accepted ONE identity for both ownership edges, so the owning and owned containers are indistinguishable")
 	}
@@ -162,12 +162,12 @@ func TestAnonymousOwnedBaseRejectsCollapsedIdentity(t *testing.T) {
 func TestAnonymousOwnedBaseRejections(t *testing.T) {
 	id := NewComponentID()
 	good, err := NewAnonymousComplexType(xsderr.Loc{}, ComplexTypeDefinitionContext{Component: id},
-		anyTypeName, nil, DerivationRestriction, false, nil, nil, nil, EmptyContent{}, nil, nil, nil)
+		anyTypeName, nil, DerivationRestriction, false, nil, nil, nil, EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAnonymousComplexType: %v", err)
 	}
 	stranger, err := NewAnonymousComplexType(xsderr.Loc{}, ComplexTypeDefinitionContext{Component: NewComponentID()},
-		anyTypeName, nil, DerivationRestriction, false, nil, nil, nil, EmptyContent{}, nil, nil, nil)
+		anyTypeName, nil, DerivationRestriction, false, nil, nil, nil, EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAnonymousComplexType: %v", err)
 	}
@@ -184,7 +184,7 @@ func TestAnonymousOwnedBaseRejections(t *testing.T) {
 	} {
 		t.Run(tc.what, func(t *testing.T) {
 			if _, err := NewAnonymousComplexTypeOwningBase(xsderr.Loc{}, tc.id, tc.context, tc.base, nil,
-				DerivationRestriction, false, nil, nil, nil, EmptyContent{}, nil, nil, nil); err == nil {
+				DerivationRestriction, false, nil, nil, nil, EmptyContent{}, nil, nil); err == nil {
 				t.Fatalf("NewAnonymousComplexTypeOwningBase accepted %s", tc.what)
 			}
 		})
@@ -197,7 +197,7 @@ func TestAnonymousOwnedBaseRejections(t *testing.T) {
 func TestOwnedBaseRejectsNamedBase(t *testing.T) {
 	named := dType(t, uq("named"), anyTypeName, EmptyContent{}, nil, nil)
 	if _, err := NewComplexTypeOwningBase(xsderr.Loc{}, NewComponentID(), uq("T"), named, nil,
-		DerivationRestriction, false, nil, nil, nil, EmptyContent{}, nil, nil, nil); err == nil {
+		DerivationRestriction, false, nil, nil, nil, EmptyContent{}, nil, nil); err == nil {
 		t.Fatal("NewComplexTypeOwningBase accepted a NAMED owned base")
 	}
 }
@@ -342,7 +342,7 @@ func dWildcard(t *testing.T) Wildcard {
 	if err != nil {
 		t.Fatalf("NewNamespaceConstraint: %v", err)
 	}
-	w, err := NewWildcard(xsderr.Loc{}, nc, ProcessLax, nil)
+	w, err := NewWildcard(xsderr.Loc{}, nc, ProcessLax)
 	if err != nil {
 		t.Fatalf("NewWildcard: %v", err)
 	}
@@ -427,7 +427,7 @@ func mustComplex(t *testing.T, s *Schema, name QName) ComplexType {
 func oHead(t *testing.T, name, typeName QName, blocked []DerivationMethod) ElementDeclaration {
 	t.Helper()
 	e, err := NewElementDeclaration(xsderr.Loc{}, name, TypeDefinitionRef{Name: typeName}, nil, NewGlobalScope(),
-		nil, false, nil, nil, nil, false, blocked, nil)
+		nil, false, nil, nil, nil, false, blocked)
 	if err != nil {
 		t.Fatalf("NewElementDeclaration(%s): %v", name, err)
 	}
@@ -438,7 +438,7 @@ func oHead(t *testing.T, name, typeName QName, blocked []DerivationMethod) Eleme
 func oMember(t *testing.T, name, typeName, head QName) ElementDeclaration {
 	t.Helper()
 	e, err := NewElementDeclaration(xsderr.Loc{}, name, TypeDefinitionRef{Name: typeName}, nil, NewGlobalScope(),
-		nil, false, nil, []QName{head}, nil, false, nil, nil)
+		nil, false, nil, []QName{head}, nil, false, nil)
 	if err != nil {
 		t.Fatalf("NewElementDeclaration(%s): %v", name, err)
 	}

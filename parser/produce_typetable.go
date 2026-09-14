@@ -150,7 +150,7 @@ func (p *producer) typeTableOf(el *Element, edID xsd.ComponentID, declaredType x
 	if _, lastTested := alternatives[last].Attr("test"); lastTested {
 		defaultType = declaredType // §3.3.2.1 case 2
 	}
-	dflt, err := xsd.NewTypeAlternative(el.Loc(), nil, defaultType, nil)
+	dflt, err := xsd.NewTypeAlternative(el.Loc(), nil, defaultType)
 	if err != nil {
 		return nil, err
 	}
@@ -180,7 +180,7 @@ func (p *producer) typeTableOf(el *Element, edID xsd.ComponentID, declaredType x
 			charge.Err = serr
 			return nil, charge
 		}
-		ta, terr := xsd.NewTypeAlternative(alt.Loc(), &test, types[i], nil)
+		ta, terr := xsd.NewTypeAlternative(alt.Loc(), &test, types[i])
 		if terr != nil {
 			return nil, terr
 		}

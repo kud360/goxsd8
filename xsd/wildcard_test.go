@@ -50,7 +50,7 @@ func TestNewWildcardValid(t *testing.T) {
 
 func TestNewWildcardRejectsInvalidProcessContents(t *testing.T) {
 	any := mustConstraint(t, xsd.NamespaceConstraintAny, nil, nil)
-	_, err := xsd.NewWildcard(xsderr.Loc{}, any, xsd.ProcessContents(0), nil)
+	_, err := xsd.NewWildcard(xsderr.Loc{}, any, xsd.ProcessContents(0))
 	if err == nil {
 		t.Fatal("NewWildcard accepted a zero ProcessContents, want w-props-correct error")
 	}
@@ -61,7 +61,7 @@ func TestNewWildcardRejectsZeroNamespaceConstraint(t *testing.T) {
 	// A zero NamespaceConstraint{} was never built through
 	// NewNamespaceConstraint; its {variety} is the invalid zero, which
 	// NewWildcard must reject to keep an illegal Wildcard unrepresentable.
-	_, err := xsd.NewWildcard(xsderr.Loc{}, xsd.NamespaceConstraint{}, xsd.ProcessStrict, nil)
+	_, err := xsd.NewWildcard(xsderr.Loc{}, xsd.NamespaceConstraint{}, xsd.ProcessStrict)
 	if err == nil {
 		t.Fatal("NewWildcard accepted a zero NamespaceConstraint, want w-props-correct error")
 	}
@@ -183,11 +183,11 @@ func TestWPropsCorrectClause5(t *testing.T) {
 
 	newCT := func(w *xsd.Wildcard) error {
 		_, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Space: "urn:t", Local: "ct"}, xsd.QName{}, nil,
-			xsd.DerivationRestriction, false, nil, nil, w, xsd.EmptyContent{}, nil, nil, nil)
+			xsd.DerivationRestriction, false, nil, nil, w, xsd.EmptyContent{}, nil, nil)
 		return err
 	}
 	newAG := func(w *xsd.Wildcard) error {
-		_, err := xsd.NewAttributeGroupDefinition(xsderr.Loc{}, xsd.QName{Space: "urn:t", Local: "ag"}, nil, w, nil)
+		_, err := xsd.NewAttributeGroupDefinition(xsderr.Loc{}, xsd.QName{Space: "urn:t", Local: "ag"}, nil, w)
 		return err
 	}
 
@@ -227,7 +227,7 @@ func TestWPropsCorrectClause5(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewOccurs: %v", err)
 	}
-	if _, err := xsd.NewParticle(xsderr.Loc{}, occ, xsd.ResolvedTerm{Term: sibling}, nil); err != nil {
+	if _, err := xsd.NewParticle(xsderr.Loc{}, occ, xsd.ResolvedTerm{Term: sibling}); err != nil {
 		t.Errorf("NewParticle rejected an element wildcard carrying sibling: %v", err)
 	}
 }

@@ -16,7 +16,7 @@ package xsd
 // Construct only through NewAssertion. Assertion is immutable after
 // construction.
 type Assertion struct {
-	test        XPathExpression
+	test XPathExpression
 }
 
 // NewAssertion builds an Assertion. annotations is copied; the caller's
@@ -33,4 +33,3 @@ func NewAssertion(test XPathExpression) Assertion {
 func (a Assertion) Test() XPathExpression {
 	return a.test
 }
-

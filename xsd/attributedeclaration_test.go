@@ -22,7 +22,7 @@ func adLocalScope(t *testing.T) xsd.AttributeScope {
 func TestNewAttributeDeclarationValidGlobalNoValueConstraint(t *testing.T) {
 	name := xsd.QName{Space: "urn:ns", Local: "lang"}
 	typ := xsd.QName{Space: "urn:t", Local: "LangType"}
-	a, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, name, xsd.TypeDefinitionRef{Name: typ}, xsd.NewAttributeGlobalScope(), nil, false, nil)
+	a, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, name, xsd.TypeDefinitionRef{Name: typ}, xsd.NewAttributeGlobalScope(), nil, false)
 	if err != nil {
 		t.Fatalf("NewAttributeDeclaration unexpected error: %v", err)
 	}
@@ -48,7 +48,7 @@ func TestNewAttributeDeclarationValidGlobalNoValueConstraint(t *testing.T) {
 
 func TestNewAttributeDeclarationValueConstraintAndInheritablePresent(t *testing.T) {
 	vc := xsd.NewValueConstraint(xsd.ValueFixed, "en", nil, nil)
-	a, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, xsd.QName{Local: "a"}, xsd.TypeDefinitionRef{Name: xsd.QName{Local: "T"}}, adLocalScope(t), &vc, true, nil)
+	a, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, xsd.QName{Local: "a"}, xsd.TypeDefinitionRef{Name: xsd.QName{Local: "T"}}, adLocalScope(t), &vc, true)
 	if err != nil {
 		t.Fatalf("NewAttributeDeclaration: %v", err)
 	}
@@ -85,7 +85,7 @@ func TestNewAttributeDeclarationRejectsAbsentName(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, tc.qname, xsd.TypeDefinitionRef{Name: xsd.QName{Local: "T"}}, xsd.NewAttributeGlobalScope(), nil, false, nil)
+			_, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, tc.qname, xsd.TypeDefinitionRef{Name: xsd.QName{Local: "T"}}, xsd.NewAttributeGlobalScope(), nil, false)
 			if !tc.wantErr {
 				if err != nil {
 					t.Fatalf("NewAttributeDeclaration(%v) unexpected error: %v", tc.qname, err)
@@ -186,11 +186,11 @@ func TestNewAttributeLocalScopeRejectsUnusableParent(t *testing.T) {
 // global declaration alongside it carries no {parent} at all (§3.2.2.1).
 func TestAttributeDeclarationScopeRoundTrip(t *testing.T) {
 	container, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Space: "urn:ns", Local: "AddressType"},
-		xsd.QName{Local: "anyType"}, nil, xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+		xsd.QName{Local: "anyType"}, nil, xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType: %v", err)
 	}
-	groupDef, err := xsd.NewAttributeGroupDefinition(xsderr.Loc{}, xsd.QName{Space: "urn:ns", Local: "addressAttrs"}, nil, nil, nil)
+	groupDef, err := xsd.NewAttributeGroupDefinition(xsderr.Loc{}, xsd.QName{Space: "urn:ns", Local: "addressAttrs"}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAttributeGroupDefinition: %v", err)
 	}
@@ -209,7 +209,7 @@ func TestAttributeDeclarationScopeRoundTrip(t *testing.T) {
 				t.Fatalf("NewAttributeLocalScope: %v", err)
 			}
 			a, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, xsd.QName{Space: "urn:ns", Local: "country"},
-				xsd.TypeDefinitionRef{Name: xsd.QName{Local: "T"}}, scope, nil, false, nil)
+				xsd.TypeDefinitionRef{Name: xsd.QName{Local: "T"}}, scope, nil, false)
 			if err != nil {
 				t.Fatalf("NewAttributeDeclaration: %v", err)
 			}
@@ -239,7 +239,7 @@ func TestAttributeDeclarationScopeRoundTrip(t *testing.T) {
 	}
 
 	global, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, xsd.QName{Space: "urn:ns", Local: "top"},
-		xsd.TypeDefinitionRef{Name: xsd.QName{Local: "T"}}, xsd.NewAttributeGlobalScope(), nil, false, nil)
+		xsd.TypeDefinitionRef{Name: xsd.QName{Local: "T"}}, xsd.NewAttributeGlobalScope(), nil, false)
 	if err != nil {
 		t.Fatalf("NewAttributeDeclaration(global): %v", err)
 	}
@@ -254,7 +254,7 @@ func TestAttributeDeclarationScopeRoundTrip(t *testing.T) {
 func TestNewAttributeDeclarationRejectsUnknownValueConstraintKind(t *testing.T) {
 	// A zero ValueConstraint carries the invalid zero ValueConstraintKind.
 	bad := xsd.ValueConstraint{}
-	_, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, xsd.QName{Local: "a"}, xsd.TypeDefinitionRef{Name: xsd.QName{Local: "T"}}, xsd.NewAttributeGlobalScope(), &bad, false, nil)
+	_, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, xsd.QName{Local: "a"}, xsd.TypeDefinitionRef{Name: xsd.QName{Local: "T"}}, xsd.NewAttributeGlobalScope(), &bad, false)
 	if err == nil {
 		t.Fatal("NewAttributeDeclaration(zero value constraint) succeeded, want a-props-correct error")
 	}

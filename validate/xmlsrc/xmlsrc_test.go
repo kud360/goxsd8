@@ -39,7 +39,7 @@ func validatorFor(t *testing.T, roots ...xsd.QName) *validate.Validator {
 	b := xsd.NewSchemaBuilder()
 	for _, name := range roots {
 		e, err := xsd.NewElementDeclaration(xsderr.Loc{}, name, nil, nil, xsd.NewGlobalScope(),
-			nil, false, nil, nil, nil, false, nil, nil)
+			nil, false, nil, nil, nil, false, nil)
 		if err != nil {
 			t.Fatalf("building the %s element declaration: %v", name, err)
 		}

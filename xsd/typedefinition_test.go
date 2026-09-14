@@ -60,9 +60,9 @@ func TestTypeDefinitionOrRefInvariants(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			_, elemErr := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "e"}, tc.ref(t), nil,
-				xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil, nil)
+				xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil)
 			_, attrErr := xsd.NewAttributeDeclaration(xsderr.Loc{}, xsd.QName{Local: "a"}, tc.ref(t),
-				xsd.NewAttributeGlobalScope(), nil, false, nil)
+				xsd.NewAttributeGlobalScope(), nil, false)
 			// A slice, not a map: which constructor's failure is reported must not
 			// depend on iteration order (STYLE D1/D2).
 			for _, got := range []struct {
@@ -114,10 +114,10 @@ func TestInlineTypeDefinitionVarietyBySlot(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			_, attrErr := xsd.NewAttributeDeclaration(xsderr.Loc{}, xsd.QName{Local: "a"}, tc.ref(t),
-				xsd.NewAttributeGlobalScope(), nil, false, nil)
+				xsd.NewAttributeGlobalScope(), nil, false)
 			assertConstructorRule(t, "NewAttributeDeclaration", attrErr, tc.wantAttrRule)
 			_, elemErr := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "e"}, tc.ref(t), nil,
-				xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil, nil)
+				xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil)
 			assertConstructorRule(t, "NewElementDeclaration", elemErr, tc.wantElemRule)
 		})
 	}
@@ -144,7 +144,7 @@ func assertConstructorRule(t *testing.T, who string, err error, want xsderr.Rule
 func TestTypeDefinitionRoundTrip(t *testing.T) {
 	st := anonSimpleType(t)
 	e, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "e"},
-		xsd.InlineTypeDefinition{Definition: st}, nil, xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil, nil)
+		xsd.InlineTypeDefinition{Definition: st}, nil, xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil)
 	if err != nil {
 		t.Fatalf("NewElementDeclaration: %v", err)
 	}
@@ -157,7 +157,7 @@ func TestTypeDefinitionRoundTrip(t *testing.T) {
 	}
 
 	ref := xsd.TypeDefinitionRef{Name: xsd.QName{Space: "urn:t", Local: "T"}}
-	a, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, xsd.QName{Local: "a"}, ref, adLocalScope(t), nil, false, nil)
+	a, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, xsd.QName{Local: "a"}, ref, adLocalScope(t), nil, false)
 	if err != nil {
 		t.Fatalf("NewAttributeDeclaration: %v", err)
 	}
@@ -173,7 +173,7 @@ func TestTypeDefinitionRoundTrip(t *testing.T) {
 func TestInlineTypeDefinitionNeedsNoSymbolTableEntry(t *testing.T) {
 	st := anonSimpleType(t)
 	e, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "e"},
-		xsd.InlineTypeDefinition{Definition: st}, nil, xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil, nil)
+		xsd.InlineTypeDefinition{Definition: st}, nil, xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil)
 	if err != nil {
 		t.Fatalf("NewElementDeclaration: %v", err)
 	}

@@ -127,7 +127,7 @@ func TestEffectiveTotalRangeUnbounded(t *testing.T) {
 func TestEffectiveTotalRangeThroughGroupRef(t *testing.T) {
 	s := rSchema(t, func(b *SchemaBuilder) {
 		inner := uGroup(t, CompositorSequence, rElem(t, 1, 1), rElem(t, 1, 1))
-		mgd, err := NewModelGroupDefinition(xsderr.Loc{}, uq("g"), inner, nil)
+		mgd, err := NewModelGroupDefinition(xsderr.Loc{}, uq("g"), inner)
 		if err != nil {
 			t.Fatalf("NewModelGroupDefinition: %v", err)
 		}

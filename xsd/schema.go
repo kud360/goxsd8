@@ -642,4 +642,3 @@ func (s *Schema) Notations() []Notation {
 func (s *Schema) IdentityConstraints() []IdentityConstraint {
 	return cloneSlice(s.identityConstraints)
 }
-

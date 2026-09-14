@@ -163,4 +163,3 @@ func (c IdentityConstraint) Fields() []XPathExpression {
 func (c IdentityConstraint) ReferencedKeyName() (QName, bool) {
 	return c.referencedKey, c.category == IdentityConstraintKeyref
 }
-

@@ -31,8 +31,8 @@ import "github.com/kud360/goxsd8/xsderr"
 // carrying the absent (zero) QName so an unresolvable reference is unbuildable.
 // Particle is immutable after construction.
 type Particle struct {
-	occurs      Occurs
-	term        TermOrRef
+	occurs Occurs
+	term   TermOrRef
 }
 
 // NewParticle builds a Particle, rejecting the state Particle Correct (§3.9.6.1,
@@ -106,4 +106,3 @@ func (p Particle) Occurs() Occurs {
 func (p Particle) Term() TermOrRef {
 	return p.term
 }
-

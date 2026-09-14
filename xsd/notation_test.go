@@ -27,7 +27,7 @@ func TestNewNotationValid(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			n, err := xsd.NewNotation(xsderr.Loc{}, name, c.system, c.public, nil)
+			n, err := xsd.NewNotation(xsderr.Loc{}, name, c.system, c.public)
 			if err != nil {
 				t.Fatalf("NewNotation unexpected error: %v", err)
 			}
@@ -64,7 +64,7 @@ func TestNewNotationRejectsAbsentName(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := xsd.NewNotation(xsderr.Loc{}, tc.qname, strptr("http://sys"), nil, nil)
+			_, err := xsd.NewNotation(xsderr.Loc{}, tc.qname, strptr("http://sys"), nil)
 			if !tc.wantErr {
 				if err != nil {
 					t.Fatalf("NewNotation(%v) unexpected error: %v", tc.qname, err)
@@ -80,9 +80,9 @@ func TestNewNotationRejectsAbsentName(t *testing.T) {
 }
 
 func TestNewNotationRejectsBothAbsent(t *testing.T) {
-	_, err := xsd.NewNotation(xsderr.Loc{}, xsd.QName{Local: "n"}, nil, nil, nil)
+	_, err := xsd.NewNotation(xsderr.Loc{}, xsd.QName{Local: "n"}, nil, nil)
 	if err == nil {
-		t.Fatal("NewNotation(nil, nil) succeeded, want n-props-correct error")
+		t.Fatal("NewNotation(nil) succeeded, want n-props-correct error")
 	}
 	assertRule(t, err, "n-props-correct")
 }
@@ -106,7 +106,7 @@ func TestNotationAnnotationsRoundTrip(t *testing.T) {
 }
 
 func TestNotationAnnotationsNilWhenEmpty(t *testing.T) {
-	n, err := xsd.NewNotation(xsderr.Loc{}, xsd.QName{Local: "n"}, strptr("sys"), nil, nil)
+	n, err := xsd.NewNotation(xsderr.Loc{}, xsd.QName{Local: "n"}, strptr("sys"), nil)
 	if err != nil {
 		t.Fatalf("NewNotation: %v", err)
 	}

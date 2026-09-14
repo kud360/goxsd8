@@ -8,7 +8,7 @@ import (
 
 func TestNewAssertionTestRoundTrip(t *testing.T) {
 	test := xsd.NewXPathExpression("@a > 0", []xsd.NamespaceBinding{xsd.NewNamespaceBinding("p", "urn:ns")}, strptr("urn:dflt"), nil)
-	a := xsd.NewAssertion(test, nil)
+	a := xsd.NewAssertion(test)
 
 	got := a.Test()
 	if got.Expression() != "@a > 0" {
@@ -40,7 +40,7 @@ func TestNewAssertionAnnotationsRoundTrip(t *testing.T) {
 }
 
 func TestAssertionAnnotationsNilWhenEmpty(t *testing.T) {
-	if got := xsd.NewAssertion(xsd.NewXPathExpression("t", nil, nil, nil), nil).Annotations(); got != nil {
+	if got := xsd.NewAssertion(xsd.NewXPathExpression("t", nil, nil, nil)).Annotations(); got != nil {
 		t.Errorf("Annotations() = %v, want nil for nil input", got)
 	}
 	if got := xsd.NewAssertion(xsd.NewXPathExpression("t", nil, nil, nil), []xsd.Annotation{}).Annotations(); got != nil {

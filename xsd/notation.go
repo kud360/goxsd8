@@ -25,12 +25,12 @@ const ruleNotationCorrect xsderr.Rule = "n-props-correct"
 // forbids (an absent {name}; both identifiers absent) so they are
 // unrepresentable (STYLE T1). Notation is immutable after construction.
 type Notation struct {
-	loc         xsderr.Loc // source position; provenance, not a §3.14.1 property
-	name        QName
-	systemID    string
-	hasSystem   bool
-	publicID    string
-	hasPublic   bool
+	loc       xsderr.Loc // source position; provenance, not a §3.14.1 property
+	name      QName
+	systemID  string
+	hasSystem bool
+	publicID  string
+	hasPublic bool
 }
 
 // NewNotation builds a Notation, rejecting the two states Notation Declaration
@@ -108,4 +108,3 @@ func (n Notation) SystemIdentifier() (string, bool) {
 func (n Notation) PublicIdentifier() (string, bool) {
 	return n.publicID, n.hasPublic
 }
-

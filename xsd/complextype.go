@@ -501,7 +501,7 @@ func NewComplexType(loc xsderr.Loc, name QName, baseTypeDefinitionName QName, fi
 		return ComplexType{}, xsderr.New(ruleCTPropsCorrect, loc,
 			"complex type definition has an absent {name}, but the §3.4.1 tableau makes {context} Required when {name} is absent; build an anonymous complex type through NewAnonymousComplexType (ct-props-correct clause 1)")
 	}
-	return newComplexType(loc, name, nil, baseTypeDefinitionRef(baseTypeDefinitionName), final, derivationMethod, abstract, attributeUses, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions, annotations)
+	return newComplexType(loc, name, nil, baseTypeDefinitionRef(baseTypeDefinitionName), final, derivationMethod, abstract, attributeUses, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions)
 }
 
 // baseTypeDefinitionRef lifts a pre-resolution base QName into the {base type
@@ -577,7 +577,7 @@ func NewComplexTypeOwningBase(loc xsderr.Loc, id ComponentID, name QName, base C
 	if err := checkOwnedBaseContext(loc, id, complexTypeLabel(name), base); err != nil {
 		return ComplexType{}, err
 	}
-	return newComplexType(loc, name, nil, InlineTypeDefinition{Definition: base}, final, derivationMethod, abstract, attributeUses, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions, annotations)
+	return newComplexType(loc, name, nil, InlineTypeDefinition{Definition: base}, final, derivationMethod, abstract, attributeUses, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions)
 }
 
 // NewAnonymousComplexTypeOwningBase builds an ANONYMOUS ComplexType that itself
@@ -617,7 +617,7 @@ func NewAnonymousComplexTypeOwningBase(loc xsderr.Loc, id ComponentID, context C
 	if err := checkOwnedBaseContext(loc, id, complexTypeLabel(QName{}), base); err != nil {
 		return ComplexType{}, err
 	}
-	return newComplexType(loc, QName{}, context, InlineTypeDefinition{Definition: base}, final, derivationMethod, abstract, attributeUses, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions, annotations)
+	return newComplexType(loc, QName{}, context, InlineTypeDefinition{Definition: base}, final, derivationMethod, abstract, attributeUses, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions)
 }
 
 // checkOwnedBaseContext rejects an owning type whose identity id is unminted, and
@@ -690,7 +690,7 @@ func NewAnonymousComplexType(loc xsderr.Loc, context ComplexTypeContext, baseTyp
 	if err := checkAnonymousComplexTypeContext(loc, context); err != nil {
 		return ComplexType{}, err
 	}
-	return newComplexType(loc, QName{}, context, baseTypeDefinitionRef(baseTypeDefinitionName), final, derivationMethod, abstract, attributeUses, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions, annotations)
+	return newComplexType(loc, QName{}, context, baseTypeDefinitionRef(baseTypeDefinitionName), final, derivationMethod, abstract, attributeUses, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions)
 }
 
 // checkAnonymousComplexTypeContext charges the two rejections every anonymous
@@ -756,7 +756,7 @@ func checkAnonymousComplexTypeContext(loc xsderr.Loc, context ComplexTypeContext
 func newCollapsedExtension(loc xsderr.Loc, a ComplexType, p collapsedProperties) (ComplexType, error) {
 	context, _ := a.Context()
 	return newComplexType(loc, a.Name(), context, collapsedExtensionBase(a), nil, DerivationExtension, false,
-		p.uses, nil, p.wildcard, p.content, nil, a.assertions, nil)
+		p.uses, nil, p.wildcard, p.content, nil, a.assertions)
 }
 
 // collapsedExtensionBase is M's {base type definition}: a reference to A, in
@@ -1066,4 +1066,3 @@ func (c ComplexType) Assertions() []Assertion {
 	}
 	return append([]Assertion(nil), c.assertions...)
 }
-

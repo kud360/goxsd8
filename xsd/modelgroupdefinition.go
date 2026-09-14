@@ -28,9 +28,9 @@ const ruleMgdPropsCorrect xsderr.Rule = "mgd-props-correct"
 // unrepresentable (STYLE T1). ModelGroupDefinition is immutable after
 // construction.
 type ModelGroupDefinition struct {
-	loc         xsderr.Loc // source position; provenance, not a §3.7.1 property
-	name        QName
-	modelGroup  ModelGroup
+	loc        xsderr.Loc // source position; provenance, not a §3.7.1 property
+	name       QName
+	modelGroup ModelGroup
 }
 
 // NewModelGroupDefinition builds a ModelGroupDefinition, rejecting the two
@@ -98,4 +98,3 @@ func (d ModelGroupDefinition) Loc() xsderr.Loc {
 func (d ModelGroupDefinition) ModelGroup() ModelGroup {
 	return d.modelGroup
 }
-

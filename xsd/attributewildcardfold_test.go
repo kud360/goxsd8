@@ -25,7 +25,7 @@ var (
 // NewComplexType's Optional slot takes.
 func wWild(t *testing.T, nc NamespaceConstraint, pc ProcessContents) *Wildcard {
 	t.Helper()
-	w, err := NewWildcard(xsderr.Loc{}, nc, pc, nil)
+	w, err := NewWildcard(xsderr.Loc{}, nc, pc)
 	if err != nil {
 		t.Fatalf("NewWildcard: %v", err)
 	}

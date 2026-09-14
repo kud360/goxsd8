@@ -480,7 +480,7 @@ func NewElementDeclaration(loc xsderr.Loc, name QName, typeDefinition TypeDefini
 				"element declaration %s %s is an InlineTypeDefinition wrapping a ComplexType, but a declaration that OWNS an anonymous complex type must be built through NewElementDeclarationOwningTypes, the only entry point that can check the type's {context} back-pointer (§3.4.2.1 dcl.ctd.common) against the declaration's own identity", name, slot.property)
 		}
 	}
-	return newElementDeclaration(loc, name, typeDefinition, typeTable, scope, valueConstraint, nillable, identityConstraints, substitutionGroupAffiliations, substitutionGroupExclusions, abstract, disallowedSubstitutions, annotations)
+	return newElementDeclaration(loc, name, typeDefinition, typeTable, scope, valueConstraint, nillable, identityConstraints, substitutionGroupAffiliations, substitutionGroupExclusions, abstract, disallowedSubstitutions)
 }
 
 // NewElementDeclarationOwningTypes builds an ElementDeclaration that OWNS one or
@@ -537,7 +537,7 @@ func NewElementDeclarationOwningTypes(loc xsderr.Loc, id ComponentID, name QName
 	if err := checkOwnedTypeContexts(loc, id, name, typeDefinition, typeTable); err != nil {
 		return ElementDeclaration{}, err
 	}
-	return newElementDeclaration(loc, name, typeDefinition, typeTable, scope, valueConstraint, nillable, identityConstraints, substitutionGroupAffiliations, substitutionGroupExclusions, abstract, disallowedSubstitutions, annotations)
+	return newElementDeclaration(loc, name, typeDefinition, typeTable, scope, valueConstraint, nillable, identityConstraints, substitutionGroupAffiliations, substitutionGroupExclusions, abstract, disallowedSubstitutions)
 }
 
 // ownedTypeSlot is one TypeDefinitionOrRef slot an element declaration may own
@@ -845,4 +845,3 @@ func (e ElementDeclaration) DisallowedSubstitutions() []DerivationMethod {
 	}
 	return append([]DerivationMethod(nil), e.disallowedSubstitutions...)
 }
-

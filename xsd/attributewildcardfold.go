@@ -316,11 +316,11 @@ func attributeWildcardProperty(c ComplexType) *Wildcard {
 //
 //   - 2.2.2.1: the ·base wildcard· is ·absent· -> the ·complete wildcard·;
 //   - 2.2.2.2: the ·complete wildcard· is ·absent· -> the ·base wildcard·;
-//   - 2.2.2.3: otherwise a NEW Wildcard whose {process contents} and {annotations}
-//     are the ·complete wildcard·'s — the extension's OWN declarations, never the
-//     base's — and whose {namespace constraint} is the wildcard union of the two,
-//     as defined in Attribute Wildcard Union (§3.10.6.3, cos-aw-union). Only
-//     {namespace constraint} is combined; the other two properties are copied.
+//   - 2.2.2.3: otherwise a NEW Wildcard whose {process contents} is the ·complete
+//     wildcard·'s — the extension's OWN declaration, never the base's — and whose
+//     {namespace constraint} is the wildcard union of the two, as defined in
+//     Attribute Wildcard Union (§3.10.6.3, cos-aw-union). Only {namespace
+//     constraint} is combined; {process contents} is copied.
 //
 // Cases 2.2.2.1 and 2.2.2.2 hand back an operand unchanged, which is what the
 // spec says: the value IS that wildcard, not a copy of it, and no union is formed.
@@ -342,7 +342,7 @@ func unionExtensionAttributeWildcard(loc xsderr.Loc, own, base *Wildcard) (*Wild
 	if err != nil {
 		return nil, err
 	}
-	w, err := NewWildcard(loc, nc, own.ProcessContents(), own.Annotations())
+	w, err := NewWildcard(loc, nc, own.ProcessContents())
 	if err != nil {
 		return nil, err
 	}

@@ -10,7 +10,7 @@ import (
 func TestNewModelGroupDefinitionValid(t *testing.T) {
 	name := xsd.QName{Space: "urn:ns", Local: "g"}
 	mg := mustModelGroup(t, xsd.CompositorSequence, []xsd.Particle{elementRefParticle(t, "a")}, nil)
-	d, err := xsd.NewModelGroupDefinition(xsderr.Loc{}, name, mg, nil)
+	d, err := xsd.NewModelGroupDefinition(xsderr.Loc{}, name, mg)
 	if err != nil {
 		t.Fatalf("NewModelGroupDefinition unexpected error: %v", err)
 	}
@@ -44,7 +44,7 @@ func TestNewModelGroupDefinitionRejectsAbsentName(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := xsd.NewModelGroupDefinition(xsderr.Loc{}, tc.qname, mg, nil)
+			_, err := xsd.NewModelGroupDefinition(xsderr.Loc{}, tc.qname, mg)
 			if !tc.wantErr {
 				if err != nil {
 					t.Fatalf("NewModelGroupDefinition(%v) unexpected error: %v", tc.qname, err)
@@ -63,7 +63,7 @@ func TestNewModelGroupDefinitionRejectsZeroModelGroup(t *testing.T) {
 	// A zero ModelGroup{} was never built through NewModelGroup; its {compositor}
 	// is the invalid zero, which the constructor must reject to keep the Required
 	// {model group} present.
-	_, err := xsd.NewModelGroupDefinition(xsderr.Loc{}, xsd.QName{Local: "g"}, xsd.ModelGroup{}, nil)
+	_, err := xsd.NewModelGroupDefinition(xsderr.Loc{}, xsd.QName{Local: "g"}, xsd.ModelGroup{})
 	if err == nil {
 		t.Fatal("NewModelGroupDefinition accepted a zero ModelGroup, want mgd-props-correct error")
 	}
@@ -77,7 +77,7 @@ func TestModelGroupDefinitionIsNotATerm(t *testing.T) {
 	// definition's {model group} is a Term, the definition itself is not returned
 	// as one anywhere.
 	mg := mustModelGroup(t, xsd.CompositorAll, nil, nil)
-	d, err := xsd.NewModelGroupDefinition(xsderr.Loc{}, xsd.QName{Local: "g"}, mg, nil)
+	d, err := xsd.NewModelGroupDefinition(xsderr.Loc{}, xsd.QName{Local: "g"}, mg)
 	if err != nil {
 		t.Fatalf("NewModelGroupDefinition: %v", err)
 	}

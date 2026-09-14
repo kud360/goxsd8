@@ -99,4 +99,3 @@ func (t TypeAlternative) Test() (XPathExpression, bool) {
 func (t TypeAlternative) TypeDefinition() TypeDefinitionOrRef {
 	return t.typeDefinition
 }
-

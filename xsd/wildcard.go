@@ -89,7 +89,6 @@ func (w Wildcard) NamespaceConstraint() NamespaceConstraint {
 	return w.namespaceConstraint
 }
 
-
 // AllowsName reports whether the expanded name is admitted by w's {namespace
 // constraint}, delegating to NamespaceConstraint.AllowsName — this is the ONE
 // canonical wildcard-admission entry point (xsd/doc.go); callers must never

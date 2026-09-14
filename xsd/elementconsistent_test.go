@@ -31,7 +31,7 @@ func eTypeTable(t *testing.T, expression string, altType, defaultType QName) *Ty
 // cannot see.
 func iTypeAlternative(t *testing.T, test *XPathExpression, typeDefinition TypeDefinitionOrRef) TypeAlternative {
 	t.Helper()
-	ta, err := NewTypeAlternative(xsderr.Loc{}, test, typeDefinition, nil)
+	ta, err := NewTypeAlternative(xsderr.Loc{}, test, typeDefinition)
 	if err != nil {
 		t.Fatalf("NewTypeAlternative(%+v): %v", typeDefinition, err)
 	}
@@ -42,7 +42,7 @@ func iTypeAlternative(t *testing.T, test *XPathExpression, typeDefinition TypeDe
 func eLocalWithTable(t *testing.T, name, typeName QName, tt *TypeTable) ElementDeclaration {
 	t.Helper()
 	e, err := NewElementDeclaration(xsderr.Loc{}, name, TypeDefinitionRef{Name: typeName}, tt, uLocalScope(t), nil, false, nil,
-		nil, nil, false, nil, nil)
+		nil, nil, false, nil)
 	if err != nil {
 		t.Fatalf("NewElementDeclaration: %v", err)
 	}
@@ -53,7 +53,7 @@ func eLocalWithTable(t *testing.T, name, typeName QName, tt *TypeTable) ElementD
 func eGlobalWithTable(t *testing.T, name, typeName QName, tt *TypeTable) ElementDeclaration {
 	t.Helper()
 	e, err := NewElementDeclaration(xsderr.Loc{}, name, TypeDefinitionRef{Name: typeName}, tt, NewGlobalScope(), nil, false, nil,
-		nil, nil, false, nil, nil)
+		nil, nil, false, nil)
 	if err != nil {
 		t.Fatalf("NewElementDeclaration: %v", err)
 	}
@@ -73,7 +73,7 @@ func eAnonymous(t *testing.T, name QName, scope Scope) ElementDeclaration {
 		t.Fatalf("NewSimpleType: %v", err)
 	}
 	e, err := NewElementDeclaration(xsderr.Loc{}, name, InlineTypeDefinition{Definition: st}, nil, scope, nil, false, nil,
-		nil, nil, false, nil, nil)
+		nil, nil, false, nil)
 	if err != nil {
 		t.Fatalf("NewElementDeclaration: %v", err)
 	}
@@ -86,7 +86,7 @@ func eAnonymous(t *testing.T, name QName, scope Scope) ElementDeclaration {
 func eAbsentType(t *testing.T, name QName, scope Scope) ElementDeclaration {
 	t.Helper()
 	e, err := NewElementDeclaration(xsderr.Loc{}, name, nil, nil, scope, nil, false, nil,
-		nil, nil, false, nil, nil)
+		nil, nil, false, nil)
 	if err != nil {
 		t.Fatalf("NewElementDeclaration: %v", err)
 	}
@@ -163,7 +163,7 @@ func TestEDCSameInlineDeclarationViaTwoGroupRefsPasses(t *testing.T) {
 	inner := uGroup(t, CompositorSequence,
 		uOne(t, ResolvedTerm{Term: eAnonymous(t, uq("x"), uLocalScope(t))}),
 	)
-	mgd, err := NewModelGroupDefinition(xsderr.Loc{}, uq("g"), inner, nil)
+	mgd, err := NewModelGroupDefinition(xsderr.Loc{}, uq("g"), inner)
 	if err != nil {
 		t.Fatalf("NewModelGroupDefinition: %v", err)
 	}
@@ -249,7 +249,7 @@ func TestEDCOpenContentWildcard(t *testing.T) {
 		uOne(t, ResolvedTerm{Term: uLocal(t, uq("q"), uq("T"))}),
 	)
 	ct, err := NewComplexType(xsderr.Loc{}, uq("ct"), QName{}, nil, DerivationRestriction, false,
-		nil, nil, nil, ElementContent{Particle: uOne(t, ResolvedTerm{Term: g}), OpenContent: &oc}, nil, nil, nil)
+		nil, nil, nil, ElementContent{Particle: uOne(t, ResolvedTerm{Term: g}), OpenContent: &oc}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType: %v", err)
 	}
@@ -288,7 +288,7 @@ func TestEDCUnreferencedModelGroupDefinition(t *testing.T) {
 		uOne(t, ResolvedTerm{Term: uLocal(t, uq("a"), uq("T"))}),
 		uOne(t, ResolvedTerm{Term: uLocal(t, uq("a"), uq("U"))}),
 	)
-	mgd, err := NewModelGroupDefinition(xsderr.Loc{}, uq("orphan"), inner, nil)
+	mgd, err := NewModelGroupDefinition(xsderr.Loc{}, uq("orphan"), inner)
 	if err != nil {
 		t.Fatalf("NewModelGroupDefinition: %v", err)
 	}
@@ -321,7 +321,7 @@ func TestEDCNestedGroupScope(t *testing.T) {
 // schema document keeps distinct read as agreeing under key-equiv-tt.
 func TestTypeDefinitionsEquivalentArms(t *testing.T) {
 	anon, err := NewAnonymousComplexType(xsderr.Loc{}, ElementDeclarationContext{Component: NewComponentID()},
-		QName{}, nil, DerivationRestriction, false, nil, nil, nil, EmptyContent{}, nil, nil, nil)
+		QName{}, nil, DerivationRestriction, false, nil, nil, nil, EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAnonymousComplexType: %v", err)
 	}

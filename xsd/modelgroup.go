@@ -28,8 +28,8 @@ const ruleMgPropsCorrect xsderr.Rule = "mg-props-correct"
 // an ill-formed record is unrepresentable (STYLE T1). ModelGroup is immutable
 // after construction.
 type ModelGroup struct {
-	compositor  Compositor
-	particles   []Particle
+	compositor Compositor
+	particles  []Particle
 }
 
 // NewModelGroup builds a ModelGroup, rejecting the state Model Group Correct
@@ -79,4 +79,3 @@ func (g ModelGroup) Particles() []Particle {
 	}
 	return append([]Particle(nil), g.particles...)
 }
-

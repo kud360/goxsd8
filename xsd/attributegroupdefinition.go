@@ -160,4 +160,3 @@ func (g AttributeGroupDefinition) AttributeUses() []AttributeUse {
 func (g AttributeGroupDefinition) AttributeWildcard() (Wildcard, bool) {
 	return g.wildcard, g.hasWildcard
 }
-

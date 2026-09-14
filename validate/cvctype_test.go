@@ -180,7 +180,7 @@ func descendantSimpleTypeSchema(t *testing.T) *xsd.Schema {
 	}
 	amount, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "amount"},
 		xsd.TypeDefinitionRef{Name: icBuiltin("decimal")}, nil, scope,
-		nil, false, nil, nil, nil, false, nil, nil)
+		nil, false, nil, nil, nil, false, nil)
 	if err != nil {
 		t.Fatalf("building the amount element declaration: %v", err)
 	}
@@ -188,12 +188,12 @@ func descendantSimpleTypeSchema(t *testing.T) *xsd.Schema {
 	if err != nil {
 		t.Fatalf("NewOccurs: %v", err)
 	}
-	p, err := xsd.NewParticle(xsderr.Loc{}, occurs, xsd.ResolvedTerm{Term: amount}, nil)
+	p, err := xsd.NewParticle(xsderr.Loc{}, occurs, xsd.ResolvedTerm{Term: amount})
 	if err != nil {
 		t.Fatalf("NewParticle: %v", err)
 	}
 	ct, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Local: "RootType"}, xsd.QName{}, nil,
-		xsd.DerivationRestriction, false, nil, nil, nil, cSequence(t, false, p), nil, nil, nil)
+		xsd.DerivationRestriction, false, nil, nil, nil, cSequence(t, false, p), nil, nil)
 	if err != nil {
 		t.Fatalf("building the governing type: %v", err)
 	}

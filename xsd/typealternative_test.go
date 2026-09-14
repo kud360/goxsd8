@@ -73,7 +73,7 @@ func TestTypeAlternativeTypeDefinitionRoundTrip(t *testing.T) {
 // anonymous type, so the slot carries the component itself.
 func TestTypeAlternativeTypeDefinitionInlineRoundTrip(t *testing.T) {
 	st := anonymousSimpleType(t)
-	ta, err := xsd.NewTypeAlternative(xsderr.Loc{}, nil, xsd.InlineTypeDefinition{Definition: st}, nil)
+	ta, err := xsd.NewTypeAlternative(xsderr.Loc{}, nil, xsd.InlineTypeDefinition{Definition: st})
 	if err != nil {
 		t.Fatalf("NewTypeAlternative with an inline type: %v", err)
 	}
@@ -94,7 +94,7 @@ func TestTypeAlternativeTypeDefinitionInlineRoundTrip(t *testing.T) {
 // <alternative> would be unrepresentable.
 func TestTypeAlternativeTypeDefinitionHeadInherited(t *testing.T) {
 	head := xsd.QName{Space: "urn:t", Local: "base"}
-	ta, err := xsd.NewTypeAlternative(xsderr.Loc{}, nil, xsd.SubstitutionGroupHeadTypeRef{Head: head}, nil)
+	ta, err := xsd.NewTypeAlternative(xsderr.Loc{}, nil, xsd.SubstitutionGroupHeadTypeRef{Head: head})
 	if err != nil {
 		t.Fatalf("NewTypeAlternative with a head-inherited type: %v", err)
 	}
@@ -106,7 +106,7 @@ func TestTypeAlternativeTypeDefinitionHeadInherited(t *testing.T) {
 // TestNewTypeAlternativeRejectsAbsentType pins §3.12.1's Required {type
 // definition}: nil is the sum's ABSENT encoding and has no place in this slot.
 func TestNewTypeAlternativeRejectsAbsentType(t *testing.T) {
-	if _, err := xsd.NewTypeAlternative(xsderr.Loc{}, nil, nil, nil); err == nil {
+	if _, err := xsd.NewTypeAlternative(xsderr.Loc{}, nil, nil); err == nil {
 		t.Fatal("NewTypeAlternative(nil type) succeeded, want a component-invariant rejection")
 	}
 }
@@ -123,7 +123,7 @@ func TestNewTypeAlternativeRejectsIllegalArms(t *testing.T) {
 		{"zero-named head", xsd.SubstitutionGroupHeadTypeRef{}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if _, err := xsd.NewTypeAlternative(xsderr.Loc{}, nil, tc.ref, nil); err == nil {
+			if _, err := xsd.NewTypeAlternative(xsderr.Loc{}, nil, tc.ref); err == nil {
 				t.Fatalf("NewTypeAlternative(%+v) succeeded, want a component-invariant rejection", tc.ref)
 			}
 		})
