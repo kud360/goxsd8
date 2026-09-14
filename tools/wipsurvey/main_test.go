@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -290,6 +291,38 @@ func TestClassify(t *testing.T) {
 			wantCell: "4h18m0s",
 		},
 		{
+			// Two takeovers are still a plain takeable claim: below the
+			// threshold the reason is what it has always been.
+			name:        "zero-commit branch taken over twice reads as any other takeable claim",
+			branch:      "wip/issue-1437",
+			tip:         tip(1),
+			anc:         ancestryNoCommits,
+			issue:       &issueState{number: 1437, commentsRead: true, heartbeat: heartbeat(258), takeovers: 2},
+			wantVerdict: expired,
+			wantReason:  "past the 2h0m0s claim TTL -- takeable",
+		},
+		{
+			name:        "zero-commit branch at the takeover threshold names the remedy",
+			branch:      "wip/issue-1437",
+			tip:         tip(1),
+			anc:         ancestryNoCommits,
+			issue:       &issueState{number: 1437, commentsRead: true, heartbeat: heartbeat(258), takeovers: 3},
+			wantVerdict: expired,
+			wantReason:  "already TAKEOVER: comment #3 with no diff ever produced -- relabel the issue needs-replan instead of resuming",
+		},
+		{
+			// The count printed is the live one, so the reason reads the same
+			// at cycle 3 and at cycle 10 rather than freezing at the
+			// threshold.
+			name:        "zero-commit branch past the takeover threshold names the live count",
+			branch:      "wip/issue-1437",
+			tip:         tip(1),
+			anc:         ancestryNoCommits,
+			issue:       &issueState{number: 1437, commentsRead: true, heartbeat: heartbeat(258), takeovers: 5},
+			wantVerdict: expired,
+			wantReason:  "already TAKEOVER: comment #5 with no diff ever produced",
+		},
+		{
 			// /develop pushes the claim before it posts anything, so this is
 			// also the shape of an issue being grounded right now: only an
 			// AGED heartbeat may demote a claim (#981).
@@ -422,6 +455,40 @@ func TestClassifyEmptyClaimIgnoresTheBorrowedTip(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestClassifyEmptyClaimRemedyThreshold pins both halves of #1437's rule
+// on one takeable claim: below the threshold the reason is byte-identical
+// to what it was before the count existed, and at or past it the same
+// reason carries the remedy with the LIVE takeover count, so it answers
+// cycle 3 and cycle 10 identically instead of only firing in hindsight.
+func TestClassifyEmptyClaimRemedyThreshold(t *testing.T) {
+	heartbeat := fixedNow.Add(-258 * time.Minute)
+	tip := fixedNow.Add(-1 * time.Minute)
+	const takeable = "wip/issue-1437: no commits of its own; newest RESUME:/TAKEOVER: comment posted 4h18m0s ago, past the 2h0m0s claim TTL -- takeable"
+
+	for _, takeovers := range []int{0, 1, 2} {
+		issue := &issueState{number: 1437, commentsRead: true, heartbeat: &heartbeat, takeovers: takeovers}
+		got, _, reason := classify("wip/issue-1437", &tip, ancestryNoCommits, fixedNow, issue)
+		if got != expired {
+			t.Errorf("%d takeovers: verdict = %s, want EXPIRED (reason: %s)", takeovers, got, reason)
+		}
+		if reason != takeable {
+			t.Errorf("%d takeovers: reason = %q, want the unchanged %q", takeovers, reason, takeable)
+		}
+	}
+
+	for _, takeovers := range []int{3, 4, 5, 10} {
+		issue := &issueState{number: 1437, commentsRead: true, heartbeat: &heartbeat, takeovers: takeovers}
+		got, _, reason := classify("wip/issue-1437", &tip, ancestryNoCommits, fixedNow, issue)
+		if got != expired {
+			t.Errorf("%d takeovers: verdict = %s, want EXPIRED, not a new verdict (reason: %s)", takeovers, got, reason)
+		}
+		want := takeable + fmt.Sprintf(", already TAKEOVER: comment #%d with no diff ever produced -- relabel the issue needs-replan instead of resuming", takeovers)
+		if reason != want {
+			t.Errorf("%d takeovers: reason = %q, want %q", takeovers, reason, want)
+		}
 	}
 }
 
@@ -683,6 +750,34 @@ func TestReadIssues(t *testing.T) {
 		got := issues[3]
 		if got.heartbeat == nil || !got.heartbeat.Equal(want) {
 			t.Errorf("issue 3 heartbeat = %v, want the 08:22:50Z takeover (the newer grounding dates nothing)", got.heartbeat)
+		}
+	})
+
+	t.Run("only TAKEOVER: comments count toward the takeover count", func(t *testing.T) {
+		in := `[{"number":4,"state":"OPEN","labels":[],"comments":[
+			{"body":"TAKEOVER: taking the claim.","createdAt":"2026-08-26T06:00:00Z"},
+			{"body":"RESUME: picking my own work back up.","createdAt":"2026-08-26T07:00:00Z"},
+			{"body":"  TAKEOVER: leading whitespace is not a marker change.","createdAt":"2026-08-26T08:00:00Z"},
+			{"body":"GROUNDING: no XSD rule is in scope.","createdAt":"2026-08-26T09:00:00Z"},
+			{"body":"I will TAKEOVER: this later.","createdAt":"2026-08-26T10:00:00Z"},
+			{"body":"takeover: lowercase is not the marker.","createdAt":"2026-08-26T11:00:00Z"}
+		]},
+		{"number":5,"state":"OPEN","labels":[],"comments":[
+			{"body":"RESUME: next action is the gate.","createdAt":"2026-08-26T06:00:00Z"}
+		]},
+		{"number":6,"state":"OPEN","labels":[]}]`
+		issues, err := readIssues(strings.NewReader(in))
+		if err != nil {
+			t.Fatalf("readIssues: %v", err)
+		}
+		if got := issues[4].takeovers; got != 2 {
+			t.Errorf("issue 4 takeovers = %d, want 2: only the two comments opening TAKEOVER: count", got)
+		}
+		if got := issues[5].takeovers; got != 0 {
+			t.Errorf("issue 5 takeovers = %d, want 0: a RESUME: is not a takeover", got)
+		}
+		if got := issues[6].takeovers; got != 0 {
+			t.Errorf("issue 6 takeovers = %d, want 0: its comments were never supplied", got)
 		}
 	})
 }

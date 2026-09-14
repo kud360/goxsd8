@@ -58,6 +58,14 @@
 // a reader to settle by hand. Only an aged heartbeat makes an empty claim
 // EXPIRED; an absent one is not a lapsed one.
 //
+// A claim taken over again and again that still carries no commits is
+// EXPIRED every cycle, and EXPIRED is the verdict /develop prefers to
+// pick, so such a branch is routed back to the next session forever.
+// From takeoverRemedyThreshold TAKEOVER: comments on, the EXPIRED reason
+// names the remedy — relabel the issue needs-replan — inline, the way the
+// UNKNOWN reason names `git fetch origin`. Counting those cycles by eye
+// across sessions is the work PRINCIPLES 27 turns into a tool (#1437).
+//
 // That ancestry test needs main's commit object in this checkout, while
 // the SHA it tests against comes live from ls-remote, so a checkout that
 // last fetched before the most recent landing cannot decide it. Such a row
@@ -96,6 +104,15 @@ import (
 // wip/ branch before another session may resume it: "tip newer than the
 // claim TTL (2 hours) -> LIVE ... tip older than the TTL -> EXPIRED."
 const claimTTL = 2 * time.Hour
+
+// takeoverRemedyThreshold is how many TAKEOVER: comments a still-empty
+// claim's thread must carry before its EXPIRED reason stops reporting the
+// branch as merely takeable and names the remedy instead. Three: one or
+// two cycles are explained by a container restart or a grounding that ran
+// long, and WORKFLOW.md's Parking section already parks on a third
+// subagent round lost to a restart, so both empty-diff failure modes fire
+// on the same count (#1437).
+const takeoverRemedyThreshold = 3
 
 func main() {
 	if err := run(os.Stdout, os.Stderr, os.Stdin, time.Now()); err != nil {
@@ -378,6 +395,11 @@ type issueState struct {
 	// heartbeat is the creation time of the newest comment asserting a
 	// session still holds the branch, or nil when the thread carries none.
 	heartbeat *time.Time
+	// takeovers is how many TAKEOVER: comments the thread carries, which
+	// classifyEmptyClaim reads against takeoverRemedyThreshold. It is zero
+	// when no comments were supplied for this issue, the same as for a
+	// thread that carries none — commentsRead is what tells those apart.
+	takeovers int
 }
 
 // heartbeatPrefixes are the comment markers WORKFLOW.md's lease invariant
@@ -385,7 +407,14 @@ type issueState struct {
 // Matching is against the body's first non-whitespace characters and is
 // case-sensitive, because every marker in this corpus is shouted and a
 // lease is not a thing to settle on a fuzzy match.
-var heartbeatPrefixes = []string{"RESUME:", "TAKEOVER:"}
+var heartbeatPrefixes = []string{"RESUME:", takeoverPrefix}
+
+// takeoverPrefix is the marker a session posts when it takes a claim over
+// from a previous holder. It is named apart from its fellow prefix
+// because the repetition count keys on it alone: a thread that ever
+// earned a RESUME: has commits of its own behind it, so its branch is not
+// the empty-claim case that count is about.
+const takeoverPrefix = "TAKEOVER:"
 
 // heartbeatMarkers names the prefixes in report text, from the one list
 // that defines them.
@@ -395,13 +424,33 @@ var heartbeatMarkers = strings.Join(heartbeatPrefixes, "/")
 // marker. It is pure text matching, so tests exercise it directly against
 // the comment shapes the threads actually carry.
 func isHeartbeat(body string) bool {
-	body = strings.TrimLeft(body, " \t\r\n")
 	for _, prefix := range heartbeatPrefixes {
-		if strings.HasPrefix(body, prefix) {
+		if hasMarker(body, prefix) {
 			return true
 		}
 	}
 	return false
+}
+
+// hasMarker reports whether a comment body opens with marker, on
+// heartbeatPrefixes' terms: leading whitespace is skipped, and the match
+// is otherwise exact.
+func hasMarker(body, marker string) bool {
+	return strings.HasPrefix(strings.TrimLeft(body, " \t\r\n"), marker)
+}
+
+// countTakeovers counts the thread's TAKEOVER: comments — how many times
+// a session has claimed this branch from a previous holder. RESUME:
+// comments do not count: a session that resumes its own work has commits
+// to resume, which is not the branch this count is asked about.
+func countTakeovers(comments []ghComment) int {
+	n := 0
+	for _, c := range comments {
+		if hasMarker(c.Body, takeoverPrefix) {
+			n++
+		}
+	}
+	return n
 }
 
 // newestHeartbeat returns the creation time of the newest heartbeat
@@ -454,6 +503,7 @@ func readIssues(r io.Reader) (map[int]issueState, error) {
 		if gi.Comments != nil {
 			state.commentsRead = true
 			state.heartbeat = newestHeartbeat(*gi.Comments)
+			state.takeovers = countTakeovers(*gi.Comments)
 		}
 		issues[gi.Number] = state
 	}
@@ -557,6 +607,12 @@ func classify(branch string, tip *time.Time, anc ancestry, now time.Time, issue 
 // claim. With none ever posted, and equally without this issue's comments
 // in the input, the branch stays CLAIMED, the verdict that asks a reader
 // to settle it from the thread rather than on age.
+//
+// A takeable claim whose thread has reached takeoverRemedyThreshold
+// TAKEOVER: comments with the branch still empty is not merely takeable:
+// that take has already been made that many times and produced nothing,
+// so the reason names the remedy — relabel the issue needs-replan —
+// beside the verdict (#1437).
 func classifyEmptyClaim(branch string, now time.Time, issue *issueState, leaseNote string) (verdict, *time.Duration, string) {
 	if issue == nil || !issue.commentsRead {
 		return claimed, nil, fmt.Sprintf("%s: no commits of its own; tip age is main's, not the claim's -- do not retire on age; supply this issue's comments to date the lease, or settle it from the issue thread%s", branch, leaseNote)
@@ -568,7 +624,11 @@ func classifyEmptyClaim(branch string, now time.Time, issue *issueState, leaseNo
 	if age <= claimTTL {
 		return live, &age, fmt.Sprintf("%s: no commits of its own; lease dated by its newest %s comment, posted %s ago, within the %s claim TTL", branch, heartbeatMarkers, formatAge(age), formatAge(claimTTL))
 	}
-	return expired, &age, fmt.Sprintf("%s: no commits of its own; newest %s comment posted %s ago, past the %s claim TTL -- takeable", branch, heartbeatMarkers, formatAge(age), formatAge(claimTTL))
+	reason := fmt.Sprintf("%s: no commits of its own; newest %s comment posted %s ago, past the %s claim TTL -- takeable", branch, heartbeatMarkers, formatAge(age), formatAge(claimTTL))
+	if issue.takeovers >= takeoverRemedyThreshold {
+		reason += fmt.Sprintf(", already %s comment #%d with no diff ever produced -- relabel the issue needs-replan instead of resuming", takeoverPrefix, issue.takeovers)
+	}
+	return expired, &age, reason
 }
 
 // retiredLease is a retired branch's lease age: its tip's, or nil when the
