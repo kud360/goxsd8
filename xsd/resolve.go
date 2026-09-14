@@ -682,19 +682,19 @@ func (s *Schema) resolveAttributeUse(u AttributeUse, loc xsderr.Loc, _ string) e
 // {type definition}, <element ref>, <attribute ref>, <group ref> or keyref is
 // still charged src-resolve by this phase and rejects the whole schema, which is why W3C
 // Missing/missing001 and missing003/006 sit at fail. That deviation is recorded
-// in parser/doc.go; this slot is aligned rather than joining it because #281 is
-// what first put data in the slot, and extending an unimplemented-§5.3 rejection
-// to a new site would have LOST a case the suite says must pass. Aligning the
-// rest needs ·absent· representable in every slot plus a lax-assessment fallback
-// at validation time, neither of which exists, and NO issue owns building them.
-// #434 implemented it in full, measured 35 regressed schema cases, and is closed
-// not_planned; the spec question behind it was ruled with #1426 and closed by
-// that ruling: §5.3 does govern a failed ·resolution·, so the rejection here is a
-// deliberate policy choice rather than a spec requirement, which is what the
-// HARD-FAIL POLICY paragraph on [SchemaBuilder.Finalize] already says of it.
+// in parser/doc.go; this slot is aligned rather than joining it because
+// extending an unimplemented-§5.3 rejection to a newly populated slot would
+// have LOST missing002, which the suite says must pass. Aligning the rest needs
+// ·absent· representable in every slot plus a lax-assessment fallback at
+// validation time, neither of which exists, and NO issue owns building them.
+// The deferral has been implemented in full once and measured 35 regressed
+// schema cases; that attempt was declined not_planned on the measurement. The
+// spec question behind it is settled, and §5.3 DOES govern a failed ·resolution· — so
+// the rejection here is a deliberate policy choice rather than a spec requirement, which
+// is what the HARD-FAIL POLICY paragraph on [SchemaBuilder.Finalize] already says of it.
 // Reversing it means accepting that measured loss with no ratchet mechanism able to
-// record it, and CLAUDE.md reserves both calls to a human-filed issue — so this marker
-// names no live owner, deliberately.
+// record it, and CLAUDE.md reserves both calls to a human-filed issue. This marker
+// therefore cites no tracking issue, deliberately and not by omission.
 func (s *Schema) resolveElementDecl(e ElementDeclaration) error {
 	if tt, ok := e.TypeTable(); ok {
 		if err := s.resolveTypeTable(tt, e.Loc()); err != nil {
