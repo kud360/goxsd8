@@ -9872,7 +9872,7 @@ MS-SimpleType2006-07-15/stC007/schema/stC007 pass
 MS-SimpleType2006-07-15/stC008/schema/stC008 fail
 MS-SimpleType2006-07-15/stC009/schema/stC009 fail
 MS-SimpleType2006-07-15/stC010/schema/stC010 pass
-MS-SimpleType2006-07-15/stC011/schema/stC011 fail
+MS-SimpleType2006-07-15/stC011/schema/stC011 pass
 MS-SimpleType2006-07-15/stC012/schema/stC012 pass
 MS-SimpleType2006-07-15/stC013/schema/stC013 pass
 MS-SimpleType2006-07-15/stC014/schema/stC014 pass
