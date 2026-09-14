@@ -418,18 +418,20 @@ entry is silently dropped. (#600 tracks the single-append-point layout.)
 ## Parking
 
 On a second arbiter rejection, a third subagent round lost to a container
-restart on one issue, or a resume whose merge will not resolve:
-checkpoint the branch one final time, **relabel** the issue
-`needs-replan` and clear `ready`, and comment the findings that killed
-the attempt. Nothing is renamed or deleted — the label alone retires the
-branch in place as re-planning evidence. **Two rejections is the hard
-cap** (PRINCIPLES 30); never solicit a third round. **Three lost rounds
-is the hard cap on the other trigger**: nothing is known to be wrong with
-the change, so the finding to comment is that the round does not fit a
-container's life, and the replacement issue is a smaller one (#1443).
-After re-planning, the cartographer files the replacement, names it on
-the parked thread, and closes the `needs-replan` issue `not_planned` —
-never `completed`, which marks work that landed (#493).
+restart on one issue, a `wip/` branch whose `go tool wipsurvey` reason
+names its repeated empty-diff `TAKEOVER:` count (#1437), or a resume
+whose merge will not resolve: checkpoint the branch one final time,
+**relabel** the issue `needs-replan` and clear `ready`, and comment the
+findings that killed the attempt. Nothing is renamed or deleted — the
+label alone retires the branch in place as re-planning evidence. **Two
+rejections is the hard cap** (PRINCIPLES 30); never solicit a third
+round. **Three lost rounds is the hard cap on the other trigger**:
+nothing is known to be wrong with the change, so the finding to comment
+is that the round does not fit a container's life, and the replacement
+issue is a smaller one (#1443). After re-planning, the cartographer files
+the replacement, names it on the parked thread, and closes the
+`needs-replan` issue `not_planned` — never `completed`, which marks work
+that landed (#493).
 
 ## GitHub conventions
 

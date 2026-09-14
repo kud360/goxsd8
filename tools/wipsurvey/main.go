@@ -58,12 +58,27 @@
 // a reader to settle by hand. Only an aged heartbeat makes an empty claim
 // EXPIRED; an absent one is not a lapsed one.
 //
-// That ancestry test needs main's commit object in this checkout, while
-// the SHA it tests against comes live from ls-remote, so a checkout that
-// last fetched before the most recent landing cannot decide it. Such a row
-// falls back to its tip age and its reason says the ancestry was
-// undecided, which is what makes a LIVE or EXPIRED there provisional
-// rather than settled (#806).
+// A claim taken over again and again that still adds nothing to main is
+// EXPIRED every cycle, and EXPIRED is the verdict /develop prefers to
+// pick, so such a branch is routed back to the next session forever.
+// What "adds nothing" means is the net `origin/main...tip` diff, not the
+// commit count: WORKFLOW.md's lease invariant has each takeover push a
+// heartbeat commit, so a branch that has been taken over even once has
+// commits of its own and an empty diff, and a rule keyed on the commit
+// count would fire only where that invariant was breached. From
+// takeoverRemedyThreshold TAKEOVER: comments on, the EXPIRED reason of a
+// branch whose diff is empty names the remedy — relabel the issue
+// needs-replan — inline, the way the UNKNOWN reason names `git fetch
+// origin`. Counting those cycles by eye across sessions is the work
+// PRINCIPLES 27 turns into a tool (#1437).
+//
+// Both the ancestry test and the diff test need main's commit object in
+// this checkout, while the SHA they test against comes live from
+// ls-remote, so a checkout that last fetched before the most recent
+// landing cannot decide either. A row whose ancestry is undecided falls
+// back to its tip age and its reason says so, which is what makes a LIVE
+// or EXPIRED there provisional rather than settled (#806); a row whose
+// diff is undecided simply names no remedy.
 //
 // Usage:
 //
@@ -96,6 +111,16 @@ import (
 // wip/ branch before another session may resume it: "tip newer than the
 // claim TTL (2 hours) -> LIVE ... tip older than the TTL -> EXPIRED."
 const claimTTL = 2 * time.Hour
+
+// takeoverRemedyThreshold is how many TAKEOVER: comments the thread of a
+// claim whose branch still shows no net diff against main must carry
+// before its EXPIRED reason stops reporting the branch as merely takeable
+// and names the remedy instead. Three: one or two cycles are explained by
+// a container restart or a grounding that ran long, and WORKFLOW.md's
+// Parking section already parks on a third subagent round lost to a
+// restart, so both empty-diff failure modes fire on the same count
+// (#1437).
+const takeoverRemedyThreshold = 3
 
 func main() {
 	if err := run(os.Stdout, os.Stderr, os.Stdin, time.Now()); err != nil {
@@ -145,11 +170,15 @@ func run(stdout, stderr io.Writer, stdin io.Reader, now time.Time) error {
 		if err != nil {
 			return fmt.Errorf("resolving ancestry for %s: %w", br.branch, err)
 		}
+		diff, err := gitEmptyDiff(br.sha, mainSHA)
+		if err != nil {
+			return fmt.Errorf("resolving net diff for %s: %w", br.branch, err)
+		}
 		var issue *issueState
 		if state, ok := issues[br.issue]; ok {
 			issue = &state
 		}
-		got, lease, reason := classify(br.branch, tip, anc, now, issue)
+		got, lease, reason := classify(br.branch, tip, anc, diff, now, issue)
 		rows = append(rows, row{issue: br.issue, branch: br.branch, lease: lease, anc: anc, verdict: got, reason: reason})
 	}
 	sortRows(rows)
@@ -337,6 +366,68 @@ func ancestryFromExit(code int) ancestry {
 	return ancestryUnresolved
 }
 
+// netDiff is what this checkout could establish about what a branch adds
+// to main: whether the three-dot `origin/main...tip` diff is empty. It is
+// a separate question from ancestry, and the gap between them is where
+// #1437 lives — a branch of nothing but heartbeat commits and
+// merge-forwards has commits of its own (ancestryOwnCommits) and an empty
+// diff (diffEmpty). Its zero value is diffUnresolved, so a caller with no
+// answer carries none.
+type netDiff int
+
+const (
+	// diffUnresolved means git could not decide — the objects are not in
+	// this checkout, or the remote reported no main. Callers name no
+	// remedy on it: a claim is accused of having produced nothing only on
+	// evidence, never on a guess (#806).
+	diffUnresolved netDiff = iota
+	// diffNonEmpty means the branch changes something against main,
+	// whatever its commit count.
+	diffNonEmpty
+	// diffEmpty means the branch's whole history nets out to no change
+	// against main: an unstarted claim, or one whose every commit is a
+	// heartbeat or a merge-forward.
+	diffEmpty
+)
+
+// gitEmptyDiff asks whether the branch at sha adds anything to mainSHA —
+// whether `git diff --quiet <mainSHA>...<sha>` finds a net change. It
+// returns diffUnresolved, with no error, when the question cannot be
+// answered here: mainSHA is empty, or git cannot resolve one of the two
+// objects (an unfetched tip, which exits 128). That mirrors gitAncestry's
+// posture — report what is not known rather than guess, since guessing
+// "empty" would have the survey tell a session to retire an issue whose
+// branch may hold real work.
+func gitEmptyDiff(sha, mainSHA string) (netDiff, error) {
+	if mainSHA == "" {
+		return diffUnresolved, nil
+	}
+	err := exec.Command("git", "diff", "--quiet", mainSHA+"..."+sha).Run()
+	if err == nil {
+		return netDiffFromExit(0), nil
+	}
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		return netDiffFromExit(exitErr.ExitCode()), nil
+	}
+	return diffUnresolved, fmt.Errorf("running git diff --quiet %s...%s: %w", mainSHA, sha, err)
+}
+
+// netDiffFromExit maps `git diff --quiet`'s exit status: 0 is "no
+// differences", 1 is "differences found", and every other status (128 for
+// an object this checkout does not have) is git declining to answer. It
+// is pure — no git or process calls — so tests exercise each status
+// directly.
+func netDiffFromExit(code int) netDiff {
+	switch code {
+	case 0:
+		return diffEmpty
+	case 1:
+		return diffNonEmpty
+	}
+	return diffUnresolved
+}
+
 // ghLabel is one label object in `gh issue list --json labels`'s shape.
 type ghLabel struct {
 	Name string `json:"name"`
@@ -378,6 +469,11 @@ type issueState struct {
 	// heartbeat is the creation time of the newest comment asserting a
 	// session still holds the branch, or nil when the thread carries none.
 	heartbeat *time.Time
+	// takeovers is how many TAKEOVER: comments the thread carries, which
+	// remedyClause reads against takeoverRemedyThreshold. It is zero
+	// when no comments were supplied for this issue, the same as for a
+	// thread that carries none — commentsRead is what tells those apart.
+	takeovers int
 }
 
 // heartbeatPrefixes are the comment markers WORKFLOW.md's lease invariant
@@ -385,7 +481,14 @@ type issueState struct {
 // Matching is against the body's first non-whitespace characters and is
 // case-sensitive, because every marker in this corpus is shouted and a
 // lease is not a thing to settle on a fuzzy match.
-var heartbeatPrefixes = []string{"RESUME:", "TAKEOVER:"}
+var heartbeatPrefixes = []string{"RESUME:", takeoverPrefix}
+
+// takeoverPrefix is the marker a session posts when it takes a claim over
+// from a previous holder. It is named apart from its fellow prefix
+// because the repetition count keys on it alone: what that count measures
+// is how many times the claim has changed hands, and a RESUME: is one
+// session picking its own claim back up.
+const takeoverPrefix = "TAKEOVER:"
 
 // heartbeatMarkers names the prefixes in report text, from the one list
 // that defines them.
@@ -395,13 +498,33 @@ var heartbeatMarkers = strings.Join(heartbeatPrefixes, "/")
 // marker. It is pure text matching, so tests exercise it directly against
 // the comment shapes the threads actually carry.
 func isHeartbeat(body string) bool {
-	body = strings.TrimLeft(body, " \t\r\n")
 	for _, prefix := range heartbeatPrefixes {
-		if strings.HasPrefix(body, prefix) {
+		if hasMarker(body, prefix) {
 			return true
 		}
 	}
 	return false
+}
+
+// hasMarker reports whether a comment body opens with marker, on
+// heartbeatPrefixes' terms: leading whitespace is skipped, and the match
+// is otherwise exact.
+func hasMarker(body, marker string) bool {
+	return strings.HasPrefix(strings.TrimLeft(body, " \t\r\n"), marker)
+}
+
+// countTakeovers counts the thread's TAKEOVER: comments — how many times
+// a session has claimed this branch from a previous holder. RESUME:
+// comments do not count: they are the holder returning to its own claim,
+// which is not a hand-off.
+func countTakeovers(comments []ghComment) int {
+	n := 0
+	for _, c := range comments {
+		if hasMarker(c.Body, takeoverPrefix) {
+			n++
+		}
+	}
+	return n
 }
 
 // newestHeartbeat returns the creation time of the newest heartbeat
@@ -454,6 +577,7 @@ func readIssues(r io.Reader) (map[int]issueState, error) {
 		if gi.Comments != nil {
 			state.commentsRead = true
 			state.heartbeat = newestHeartbeat(*gi.Comments)
+			state.takeovers = countTakeovers(*gi.Comments)
 		}
 		issues[gi.Number] = state
 	}
@@ -474,9 +598,10 @@ const (
 
 // classify decides one branch's verdict, the age of the evidence dating
 // its lease, and a short reason, from its remote tip time, its ancestry
-// against main, and, optionally, the GitHub issue it implements. It is
-// pure — no git or process calls — so tests exercise it directly without a
-// repository or network access.
+// against main, whether its net diff against main is empty, and,
+// optionally, the GitHub issue it implements. It is pure — no git or
+// process calls — so tests exercise it directly without a repository or
+// network access; run computes anc and diff and hands them in.
 //
 // The lease age is the tip's age for a branch with commits of its own and
 // the newest heartbeat comment's age for one with none. It is nil where
@@ -511,7 +636,13 @@ const (
 //     evidence this tool reported before it could ask about ancestry — but
 //     its reason says the ancestry was undecided, so the verdict reads as
 //     provisional rather than settled (#806).
-func classify(branch string, tip *time.Time, anc ancestry, now time.Time, issue *issueState) (verdict, *time.Duration, string) {
+//
+// Both paths that return EXPIRED end their reason with remedyClause,
+// which is where #1437's repeated-takeover remedy is named. The tip-age
+// path is the one a branch of heartbeat commits and merge-forwards takes,
+// so leaving the clause off it would leave the rule silent on exactly the
+// branches WORKFLOW.md's lease invariant produces.
+func classify(branch string, tip *time.Time, anc ancestry, diff netDiff, now time.Time, issue *issueState) (verdict, *time.Duration, string) {
 	if issue != nil && issue.closed {
 		return retired, retiredLease(tip, anc, now), fmt.Sprintf("%s: issue #%d is closed", branch, issue.number)
 	}
@@ -527,7 +658,7 @@ func classify(branch string, tip *time.Time, anc ancestry, now time.Time, issue 
 		leaseNote = "; no issue data for this branch, lease-only"
 	}
 	if anc == ancestryNoCommits {
-		return classifyEmptyClaim(branch, now, issue, leaseNote)
+		return classifyEmptyClaim(branch, diff, now, issue, leaseNote)
 	}
 	ancestryNote := ""
 	if anc == ancestryUnresolved {
@@ -537,7 +668,30 @@ func classify(branch string, tip *time.Time, anc ancestry, now time.Time, issue 
 	if age <= claimTTL {
 		return live, &age, fmt.Sprintf("%s: tip pushed %s ago, within the %s claim TTL%s%s", branch, formatAge(age), formatAge(claimTTL), ancestryNote, leaseNote)
 	}
-	return expired, &age, fmt.Sprintf("%s: tip pushed %s ago, past the %s claim TTL%s%s", branch, formatAge(age), formatAge(claimTTL), ancestryNote, leaseNote)
+	return expired, &age, fmt.Sprintf("%s: tip pushed %s ago, past the %s claim TTL%s%s%s", branch, formatAge(age), formatAge(claimTTL), ancestryNote, leaseNote, remedyClause(anc, diff, issue))
+}
+
+// remedyClause is the sentence an EXPIRED reason carries when the claim
+// has already been taken over takeoverRemedyThreshold times and the
+// branch still nets out to nothing: that take has been made that many
+// times and produced nothing, so the reason names the remedy — relabel
+// the issue needs-replan — beside the verdict (#1437). It names the live
+// count rather than the threshold, so it reads the same at cycle 3 and at
+// cycle 10 instead of only firing in hindsight.
+//
+// It is the empty string on every other row, including the two kinds of
+// row where the question is open rather than answered no: a diff git
+// could not decide, and an ancestry git could not decide, whose tip age
+// is already provisional (#806). A remedy is named on evidence or not at
+// all.
+func remedyClause(anc ancestry, diff netDiff, issue *issueState) string {
+	if anc == ancestryUnresolved || diff != diffEmpty {
+		return ""
+	}
+	if issue == nil || issue.takeovers < takeoverRemedyThreshold {
+		return ""
+	}
+	return fmt.Sprintf(", already %s comment #%d with no diff ever produced -- relabel the issue needs-replan instead of resuming", takeoverPrefix, issue.takeovers)
 }
 
 // classifyEmptyClaim dates a branch that has pushed no commits of its own.
@@ -557,7 +711,11 @@ func classify(branch string, tip *time.Time, anc ancestry, now time.Time, issue 
 // claim. With none ever posted, and equally without this issue's comments
 // in the input, the branch stays CLAIMED, the verdict that asks a reader
 // to settle it from the thread rather than on age.
-func classifyEmptyClaim(branch string, now time.Time, issue *issueState, leaseNote string) (verdict, *time.Duration, string) {
+//
+// Its EXPIRED reason ends with remedyClause, the same one classify's
+// tip-age EXPIRED carries: this path is the zero-commit end of the
+// empty-diff population, not a population of its own.
+func classifyEmptyClaim(branch string, diff netDiff, now time.Time, issue *issueState, leaseNote string) (verdict, *time.Duration, string) {
 	if issue == nil || !issue.commentsRead {
 		return claimed, nil, fmt.Sprintf("%s: no commits of its own; tip age is main's, not the claim's -- do not retire on age; supply this issue's comments to date the lease, or settle it from the issue thread%s", branch, leaseNote)
 	}
@@ -568,7 +726,7 @@ func classifyEmptyClaim(branch string, now time.Time, issue *issueState, leaseNo
 	if age <= claimTTL {
 		return live, &age, fmt.Sprintf("%s: no commits of its own; lease dated by its newest %s comment, posted %s ago, within the %s claim TTL", branch, heartbeatMarkers, formatAge(age), formatAge(claimTTL))
 	}
-	return expired, &age, fmt.Sprintf("%s: no commits of its own; newest %s comment posted %s ago, past the %s claim TTL -- takeable", branch, heartbeatMarkers, formatAge(age), formatAge(claimTTL))
+	return expired, &age, fmt.Sprintf("%s: no commits of its own; newest %s comment posted %s ago, past the %s claim TTL -- takeable%s", branch, heartbeatMarkers, formatAge(age), formatAge(claimTTL), remedyClause(ancestryNoCommits, diff, issue))
 }
 
 // retiredLease is a retired branch's lease age: its tip's, or nil when the

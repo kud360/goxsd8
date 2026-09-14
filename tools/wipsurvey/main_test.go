@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -25,12 +26,14 @@ func TestClassify(t *testing.T) {
 	// A case that omits anc gets ancestryUnresolved — git declined to
 	// answer — which reaches the same verdict it did before this tool could
 	// ask about ancestry at all, with a reason that says the ancestry was
-	// undecided (#806).
+	// undecided (#806). A case that omits diff likewise gets
+	// diffUnresolved, which names no remedy.
 	cases := []struct {
 		name        string
 		branch      string
 		tip         *time.Time
 		anc         ancestry
+		diff        netDiff
 		issue       *issueState
 		wantVerdict verdict
 		wantReason  string // substring the reason must contain
@@ -290,6 +293,69 @@ func TestClassify(t *testing.T) {
 			wantCell: "4h18m0s",
 		},
 		{
+			// Two takeovers are still a plain takeable claim: below the
+			// threshold the reason is what it has always been.
+			name:        "zero-commit branch taken over twice reads as any other takeable claim",
+			branch:      "wip/issue-1437",
+			tip:         tip(1),
+			anc:         ancestryNoCommits,
+			diff:        diffEmpty,
+			issue:       &issueState{number: 1437, commentsRead: true, heartbeat: heartbeat(258), takeovers: 2},
+			wantVerdict: expired,
+			wantReason:  "past the 2h0m0s claim TTL -- takeable",
+		},
+		{
+			name:        "zero-commit branch at the takeover threshold names the remedy",
+			branch:      "wip/issue-1437",
+			tip:         tip(1),
+			anc:         ancestryNoCommits,
+			diff:        diffEmpty,
+			issue:       &issueState{number: 1437, commentsRead: true, heartbeat: heartbeat(258), takeovers: 3},
+			wantVerdict: expired,
+			wantReason:  "already TAKEOVER: comment #3 with no diff ever produced -- relabel the issue needs-replan instead of resuming",
+		},
+		{
+			// The count printed is the live one, so the reason reads the same
+			// at cycle 3 and at cycle 10 rather than freezing at the
+			// threshold.
+			name:        "zero-commit branch past the takeover threshold names the live count",
+			branch:      "wip/issue-1437",
+			tip:         tip(1),
+			anc:         ancestryNoCommits,
+			diff:        diffEmpty,
+			issue:       &issueState{number: 1437, commentsRead: true, heartbeat: heartbeat(258), takeovers: 5},
+			wantVerdict: expired,
+			wantReason:  "already TAKEOVER: comment #5 with no diff ever produced",
+		},
+		{
+			// wip/issue-1332's measured shape: heartbeat commits and
+			// merge-forwards, so the branch has commits of its own and takes
+			// the tip-age path, and a net diff of nothing.
+			name:        "branch of heartbeat commits with an empty diff names the remedy on the tip-age path",
+			branch:      "wip/issue-1332",
+			tip:         tip(240),
+			anc:         ancestryOwnCommits,
+			diff:        diffEmpty,
+			issue:       &issueState{number: 1332, commentsRead: true, heartbeat: heartbeat(240), takeovers: 12},
+			wantVerdict: expired,
+			wantReason:  "past the 2h0m0s claim TTL, already TAKEOVER: comment #12 with no diff ever produced -- relabel the issue needs-replan instead of resuming",
+		},
+		{
+			// A LIVE tip-age verdict never carries the remedy: the claim is
+			// someone's right now, whatever its history of hand-offs. The
+			// verdict is what this row pins; TestClassifyRemedyThreshold
+			// pins the reason byte for byte, which wantReason's substring
+			// match cannot do.
+			name:        "fresh tip with an empty diff and many takeovers stays a plain LIVE",
+			branch:      "wip/issue-1332",
+			tip:         tip(5),
+			anc:         ancestryOwnCommits,
+			diff:        diffEmpty,
+			issue:       &issueState{number: 1332, commentsRead: true, heartbeat: heartbeat(5), takeovers: 12},
+			wantVerdict: live,
+			wantReason:  "wip/issue-1332: tip pushed 5m0s ago, within the 2h0m0s claim TTL",
+		},
+		{
 			// /develop pushes the claim before it posts anything, so this is
 			// also the shape of an issue being grounded right now: only an
 			// AGED heartbeat may demote a claim (#981).
@@ -338,7 +404,7 @@ func TestClassify(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			gotVerdict, gotLease, gotReason := classify(c.branch, c.tip, c.anc, fixedNow, c.issue)
+			gotVerdict, gotLease, gotReason := classify(c.branch, c.tip, c.anc, c.diff, fixedNow, c.issue)
 			if gotVerdict != c.wantVerdict {
 				t.Errorf("classify(%q) verdict = %s, want %s (reason: %s)", c.branch, gotVerdict, c.wantVerdict, gotReason)
 			}
@@ -361,7 +427,7 @@ func TestClassify(t *testing.T) {
 // silently read as EXPIRED, because EXPIRED means resumable and that is
 // the dangerous direction for a branch this tool has no age data for.
 func TestClassifyNeverFallsThroughToExpired(t *testing.T) {
-	got, _, _ := classify("wip/issue-99", nil, ancestryUnresolved, fixedNow, nil)
+	got, _, _ := classify("wip/issue-99", nil, ancestryUnresolved, diffUnresolved, fixedNow, nil)
 	if got == expired {
 		t.Fatalf("classify with a nil tip returned EXPIRED; an absent tip must never be treated as an old one")
 	}
@@ -382,7 +448,7 @@ func TestClassifyNeverExpiresABorrowedTip(t *testing.T) {
 	for _, agoMinutes := range []int{0, 1, 119, 120, 121, 600, 100000} {
 		tip := fixedNow.Add(-time.Duration(agoMinutes) * time.Minute)
 		for _, issue := range []*issueState{nil, {number: 98}, {number: 98, commentsRead: true}} {
-			got, lease, reason := classify("wip/issue-98", &tip, ancestryNoCommits, fixedNow, issue)
+			got, lease, reason := classify("wip/issue-98", &tip, ancestryNoCommits, diffEmpty, fixedNow, issue)
 			if got != claimed {
 				t.Errorf("classify with a %dm-old borrowed tip = %s, want CLAIMED (reason: %s)", agoMinutes, got, reason)
 			}
@@ -413,7 +479,7 @@ func TestClassifyEmptyClaimIgnoresTheBorrowedTip(t *testing.T) {
 			for _, tipAgoMinutes := range []int{0, 1, 119, 120, 121, 600, 100000} {
 				tip := fixedNow.Add(-time.Duration(tipAgoMinutes) * time.Minute)
 				issue := &issueState{number: 97, commentsRead: true, heartbeat: &c.heartbeat}
-				got, lease, reason := classify("wip/issue-97", &tip, ancestryNoCommits, fixedNow, issue)
+				got, lease, reason := classify("wip/issue-97", &tip, ancestryNoCommits, diffEmpty, fixedNow, issue)
 				if got != c.want {
 					t.Errorf("tip %dm old, %s: verdict = %s, want %s (reason: %s)", tipAgoMinutes, c.name, got, c.want, reason)
 				}
@@ -422,6 +488,122 @@ func TestClassifyEmptyClaimIgnoresTheBorrowedTip(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// remedy is the clause #1437's rule appends to an EXPIRED reason, built
+// the way the test expects to read it rather than the way classify builds
+// it, so a reworded clause fails rather than following along.
+func remedy(takeovers int) string {
+	return fmt.Sprintf(", already TAKEOVER: comment #%d with no diff ever produced -- relabel the issue needs-replan instead of resuming", takeovers)
+}
+
+// TestClassifyRemedyThreshold pins #1437's rule on BOTH paths that return
+// EXPIRED, with full-string reasons so the clause's absence is pinned as
+// hard as its presence — TestClassify's wantReason is a substring match
+// and cannot do that.
+//
+// The tip-age path is the load-bearing one: WORKFLOW.md's lease invariant
+// has every takeover push a heartbeat commit, so a branch taken over even
+// once has commits of its own and never reaches classifyEmptyClaim again.
+// wip/issue-1332, this issue's own evidence branch, is that shape —
+// commits present, diff empty, twelve takeovers — and a rule that fired
+// only on the zero-commit path said nothing on it at any cycle.
+func TestClassifyRemedyThreshold(t *testing.T) {
+	heartbeat := fixedNow.Add(-258 * time.Minute)
+	borrowedTip := fixedNow.Add(-1 * time.Minute)
+	ownTip := fixedNow.Add(-258 * time.Minute)
+	const emptyClaim = "wip/issue-1437: no commits of its own; newest RESUME:/TAKEOVER: comment posted 4h18m0s ago, past the 2h0m0s claim TTL -- takeable"
+	const tipAge = "wip/issue-1437: tip pushed 4h18m0s ago, past the 2h0m0s claim TTL"
+	const undecided = "wip/issue-1437: tip pushed 4h18m0s ago, past the 2h0m0s claim TTL; ancestry against main undecided, so this age may be main's rather than the claim's -- run `git fetch origin`"
+
+	paths := []struct {
+		name string
+		tip  time.Time
+		anc  ancestry
+		diff netDiff
+		// base is the reason with no remedy clause on it — what this path
+		// printed before #1437 and what it must still print below the
+		// threshold. wantRemedy says whether the clause is appended at and
+		// above the threshold.
+		base       string
+		wantRemedy bool
+	}{
+		{
+			name:       "zero commits, empty diff",
+			tip:        borrowedTip,
+			anc:        ancestryNoCommits,
+			diff:       diffEmpty,
+			base:       emptyClaim,
+			wantRemedy: true,
+		},
+		{
+			name:       "own commits, empty diff",
+			tip:        ownTip,
+			anc:        ancestryOwnCommits,
+			diff:       diffEmpty,
+			base:       tipAge,
+			wantRemedy: true,
+		},
+		{
+			// The remedy is about producing nothing, not about being
+			// contended: a branch holding real work keeps the plain reason
+			// however often it has changed hands.
+			name:       "own commits, non-empty diff",
+			tip:        ownTip,
+			anc:        ancestryOwnCommits,
+			diff:       diffNonEmpty,
+			base:       tipAge,
+			wantRemedy: false,
+		},
+		{
+			// git could not resolve the diff — an unfetched object, or no
+			// main on the remote. Undecided is not "produced nothing".
+			name:       "own commits, undecided diff",
+			tip:        ownTip,
+			anc:        ancestryOwnCommits,
+			diff:       diffUnresolved,
+			base:       tipAge,
+			wantRemedy: false,
+		},
+		{
+			// The age itself is already provisional here (#806), so no
+			// remedy is named on top of it.
+			name:       "undecided ancestry, empty diff",
+			tip:        ownTip,
+			anc:        ancestryUnresolved,
+			diff:       diffEmpty,
+			base:       undecided,
+			wantRemedy: false,
+		},
+	}
+
+	for _, p := range paths {
+		t.Run(p.name, func(t *testing.T) {
+			for _, takeovers := range []int{0, 1, 2, 3, 4, 5, 10} {
+				issue := &issueState{number: 1437, commentsRead: true, heartbeat: &heartbeat, takeovers: takeovers}
+				got, _, reason := classify("wip/issue-1437", &p.tip, p.anc, p.diff, fixedNow, issue)
+				if got != expired {
+					t.Errorf("%d takeovers: verdict = %s, want EXPIRED, not a new verdict (reason: %s)", takeovers, got, reason)
+				}
+				want := p.base
+				if p.wantRemedy && takeovers >= 3 {
+					want += remedy(takeovers)
+				}
+				if reason != want {
+					t.Errorf("%d takeovers: reason = %q, want %q", takeovers, reason, want)
+				}
+			}
+		})
+	}
+}
+
+// TestRemedyClauseNeedsIssueData pins the clause off a row with no issue
+// data at all: stdin was empty or carried no entry for this branch, so
+// nothing has been counted and nothing may be concluded from the count.
+func TestRemedyClauseNeedsIssueData(t *testing.T) {
+	if got := remedyClause(ancestryOwnCommits, diffEmpty, nil); got != "" {
+		t.Fatalf("remedyClause with no issue data = %q, want the empty string", got)
 	}
 }
 
@@ -448,12 +630,12 @@ func TestClassifyMarksOnlyUndecidedAncestry(t *testing.T) {
 	}
 
 	for _, tc := range tips {
-		got, _, reason := classify("wip/issue-1", &tc.tip, ancestryUnresolved, fixedNow, nil)
+		got, _, reason := classify("wip/issue-1", &tc.tip, ancestryUnresolved, diffUnresolved, fixedNow, nil)
 		if !strings.Contains(reason, marker) {
 			t.Errorf("classify(%s tip, unresolved) = %s, reason %q lacks %q", tc.name, got, reason, marker)
 		}
 		for _, d := range decided {
-			got, _, reason := classify("wip/issue-1", &tc.tip, d.anc, fixedNow, nil)
+			got, _, reason := classify("wip/issue-1", &tc.tip, d.anc, diffUnresolved, fixedNow, nil)
 			if strings.Contains(reason, marker) {
 				t.Errorf("classify(%s tip, %s) = %s, reason %q calls an ancestry git decided undecided", tc.name, d.name, got, reason)
 			}
@@ -492,6 +674,54 @@ func TestGitAncestryWithoutMain(t *testing.T) {
 	}
 	if got != ancestryUnresolved {
 		t.Fatalf("gitAncestry with no main SHA = %v, want ancestryUnresolved", got)
+	}
+}
+
+// TestNetDiffFromExit pins the exit-status mapping `git diff --quiet`
+// defines, including the 128 that means git declined to answer: mapping
+// that to "empty" would have the survey tell a session to retire an issue
+// whose branch this checkout simply has not fetched.
+func TestNetDiffFromExit(t *testing.T) {
+	cases := []struct {
+		code int
+		want netDiff
+	}{
+		{0, diffEmpty},
+		{1, diffNonEmpty},
+		{128, diffUnresolved},
+		{129, diffUnresolved},
+	}
+	for _, c := range cases {
+		if got := netDiffFromExit(c.code); got != c.want {
+			t.Errorf("netDiffFromExit(%d) = %v, want %v", c.code, got, c.want)
+		}
+	}
+}
+
+// TestGitEmptyDiffWithoutMain checks the no-main-on-the-remote path
+// resolves to unresolved without running git at all — the survey still
+// reports, naming no remedy.
+func TestGitEmptyDiffWithoutMain(t *testing.T) {
+	got, err := gitEmptyDiff("aaaa111", "")
+	if err != nil {
+		t.Fatalf("gitEmptyDiff with no main SHA: unexpected error: %v", err)
+	}
+	if got != diffUnresolved {
+		t.Fatalf("gitEmptyDiff with no main SHA = %v, want diffUnresolved", got)
+	}
+}
+
+// TestGitEmptyDiffUnfetchedObject shells git for real against a SHA no
+// checkout has: git exits 128, and the mapping must report that as
+// undecided rather than as an error that aborts the whole survey.
+func TestGitEmptyDiffUnfetchedObject(t *testing.T) {
+	const absent = "0000000000000000000000000000000000000001"
+	got, err := gitEmptyDiff(absent, absent)
+	if err != nil {
+		t.Fatalf("gitEmptyDiff on an unfetched object: unexpected error: %v", err)
+	}
+	if got != diffUnresolved {
+		t.Fatalf("gitEmptyDiff on an unfetched object = %v, want diffUnresolved", got)
 	}
 }
 
@@ -685,6 +915,34 @@ func TestReadIssues(t *testing.T) {
 			t.Errorf("issue 3 heartbeat = %v, want the 08:22:50Z takeover (the newer grounding dates nothing)", got.heartbeat)
 		}
 	})
+
+	t.Run("only TAKEOVER: comments count toward the takeover count", func(t *testing.T) {
+		in := `[{"number":4,"state":"OPEN","labels":[],"comments":[
+			{"body":"TAKEOVER: taking the claim.","createdAt":"2026-08-26T06:00:00Z"},
+			{"body":"RESUME: picking my own work back up.","createdAt":"2026-08-26T07:00:00Z"},
+			{"body":"  TAKEOVER: leading whitespace is not a marker change.","createdAt":"2026-08-26T08:00:00Z"},
+			{"body":"GROUNDING: no XSD rule is in scope.","createdAt":"2026-08-26T09:00:00Z"},
+			{"body":"I will TAKEOVER: this later.","createdAt":"2026-08-26T10:00:00Z"},
+			{"body":"takeover: lowercase is not the marker.","createdAt":"2026-08-26T11:00:00Z"}
+		]},
+		{"number":5,"state":"OPEN","labels":[],"comments":[
+			{"body":"RESUME: next action is the gate.","createdAt":"2026-08-26T06:00:00Z"}
+		]},
+		{"number":6,"state":"OPEN","labels":[]}]`
+		issues, err := readIssues(strings.NewReader(in))
+		if err != nil {
+			t.Fatalf("readIssues: %v", err)
+		}
+		if got := issues[4].takeovers; got != 2 {
+			t.Errorf("issue 4 takeovers = %d, want 2: only the two comments opening TAKEOVER: count", got)
+		}
+		if got := issues[5].takeovers; got != 0 {
+			t.Errorf("issue 5 takeovers = %d, want 0: a RESUME: is not a takeover", got)
+		}
+		if got := issues[6].takeovers; got != 0 {
+			t.Errorf("issue 6 takeovers = %d, want 0: its comments were never supplied", got)
+		}
+	})
 }
 
 // TestIsHeartbeat pins the criterion Acceptance item 1 asked to be
@@ -800,7 +1058,7 @@ func TestEmptyClaimLeaseFixtures(t *testing.T) {
 				t.Fatalf("readIssues: %v", err)
 			}
 			state := issues[884]
-			got, _, reason := classify("wip/issue-884", &borrowed, ancestryNoCommits, now, &state)
+			got, _, reason := classify("wip/issue-884", &borrowed, ancestryNoCommits, diffEmpty, now, &state)
 			if got != c.want {
 				t.Fatalf("verdict = %s, want %s (reason: %s)", got, c.want, reason)
 			}
@@ -864,7 +1122,7 @@ func TestSortRowsAndRenderTable(t *testing.T) {
 // could never produce.
 func TestRenderTableClaimedAge(t *testing.T) {
 	borrowedTip := fixedNow.Add(-10 * time.Hour)
-	got, lease, reason := classify("wip/issue-1", &borrowedTip, ancestryNoCommits, fixedNow, nil)
+	got, lease, reason := classify("wip/issue-1", &borrowedTip, ancestryNoCommits, diffEmpty, fixedNow, nil)
 	if got != claimed {
 		t.Fatalf("classify with a 10h borrowed tip = %s, want CLAIMED", got)
 	}
@@ -894,7 +1152,7 @@ func TestRenderTableClaimedAge(t *testing.T) {
 func TestRenderTableRetiredBorrowedAge(t *testing.T) {
 	borrowedTip := fixedNow.Add(-10 * time.Hour)
 	issue := &issueState{number: 1, closed: true}
-	got, lease, reason := classify("wip/issue-1", &borrowedTip, ancestryNoCommits, fixedNow, issue)
+	got, lease, reason := classify("wip/issue-1", &borrowedTip, ancestryNoCommits, diffEmpty, fixedNow, issue)
 	if got != retired {
 		t.Fatalf("classify with a closed issue = %s, want RETIRED", got)
 	}
