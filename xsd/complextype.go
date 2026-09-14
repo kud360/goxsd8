@@ -434,7 +434,6 @@ type ComplexType struct {
 	contentType              ContentType
 	prohibitedSubstitutions  []DerivationMethod
 	assertions               []Assertion
-	annotations              []Annotation
 }
 
 // NewComplexType builds a NAMED ComplexType — one whose {context} is ·absent·
@@ -497,7 +496,7 @@ type ComplexType struct {
 // element's, say) — it is observable, not merely an error-charging convenience.
 // A caller with no real parser position — a synthesized or programmatically
 // built definition — passes the zero xsderr.Loc{}, which reads as "unknown".
-func NewComplexType(loc xsderr.Loc, name QName, baseTypeDefinitionName QName, final []DerivationMethod, derivationMethod DerivationMethod, abstract bool, attributeUses []AttributeUse, prohibitedAttributeNames []QName, attributeWildcard *Wildcard, contentType ContentType, prohibitedSubstitutions []DerivationMethod, assertions []Assertion, annotations []Annotation) (ComplexType, error) {
+func NewComplexType(loc xsderr.Loc, name QName, baseTypeDefinitionName QName, final []DerivationMethod, derivationMethod DerivationMethod, abstract bool, attributeUses []AttributeUse, prohibitedAttributeNames []QName, attributeWildcard *Wildcard, contentType ContentType, prohibitedSubstitutions []DerivationMethod, assertions []Assertion) (ComplexType, error) {
 	if name.Local == "" {
 		return ComplexType{}, xsderr.New(ruleCTPropsCorrect, loc,
 			"complex type definition has an absent {name}, but the §3.4.1 tableau makes {context} Required when {name} is absent; build an anonymous complex type through NewAnonymousComplexType (ct-props-correct clause 1)")
@@ -570,7 +569,7 @@ func baseTypeDefinitionRef(name QName) TypeDefinitionOrRef {
 // make this one case expressible would fork the §3.4.1 sum in two for a single
 // mapping rule, and every exhaustive switch over it would grow a case that means
 // the same thing as an existing one (STYLE T4).
-func NewComplexTypeOwningBase(loc xsderr.Loc, id ComponentID, name QName, base ComplexType, final []DerivationMethod, derivationMethod DerivationMethod, abstract bool, attributeUses []AttributeUse, prohibitedAttributeNames []QName, attributeWildcard *Wildcard, contentType ContentType, prohibitedSubstitutions []DerivationMethod, assertions []Assertion, annotations []Annotation) (ComplexType, error) {
+func NewComplexTypeOwningBase(loc xsderr.Loc, id ComponentID, name QName, base ComplexType, final []DerivationMethod, derivationMethod DerivationMethod, abstract bool, attributeUses []AttributeUse, prohibitedAttributeNames []QName, attributeWildcard *Wildcard, contentType ContentType, prohibitedSubstitutions []DerivationMethod, assertions []Assertion) (ComplexType, error) {
 	if name.Local == "" {
 		return ComplexType{}, xsderr.New(ruleCTPropsCorrect, loc,
 			"complex type definition has an absent {name}, but the §3.4.1 tableau makes {context} Required when {name} is absent; build an anonymous complex type through NewAnonymousComplexType (ct-props-correct clause 1)")
@@ -607,7 +606,7 @@ func NewComplexTypeOwningBase(loc xsderr.Loc, id ComponentID, name QName, base C
 // is the only constructor holding both edges of a chain at once: the owner-side
 // token and the {context} the same component takes from the level above it.
 // It is not stored, for the reason NewComplexTypeOwningBase's doc gives.
-func NewAnonymousComplexTypeOwningBase(loc xsderr.Loc, id ComponentID, context ComplexTypeContext, base ComplexType, final []DerivationMethod, derivationMethod DerivationMethod, abstract bool, attributeUses []AttributeUse, prohibitedAttributeNames []QName, attributeWildcard *Wildcard, contentType ContentType, prohibitedSubstitutions []DerivationMethod, assertions []Assertion, annotations []Annotation) (ComplexType, error) {
+func NewAnonymousComplexTypeOwningBase(loc xsderr.Loc, id ComponentID, context ComplexTypeContext, base ComplexType, final []DerivationMethod, derivationMethod DerivationMethod, abstract bool, attributeUses []AttributeUse, prohibitedAttributeNames []QName, attributeWildcard *Wildcard, contentType ContentType, prohibitedSubstitutions []DerivationMethod, assertions []Assertion) (ComplexType, error) {
 	if err := checkAnonymousComplexTypeContext(loc, context); err != nil {
 		return ComplexType{}, err
 	}
@@ -687,7 +686,7 @@ func checkOwnedBaseContext(loc xsderr.Loc, id ComponentID, label string, base Co
 // The parser calls this for the inline anonymous <complexType> of a local or a
 // global <element> (#340), always with an ElementDeclarationContext naming the
 // declaration it is building; see ComplexTypeContext.
-func NewAnonymousComplexType(loc xsderr.Loc, context ComplexTypeContext, baseTypeDefinitionName QName, final []DerivationMethod, derivationMethod DerivationMethod, abstract bool, attributeUses []AttributeUse, prohibitedAttributeNames []QName, attributeWildcard *Wildcard, contentType ContentType, prohibitedSubstitutions []DerivationMethod, assertions []Assertion, annotations []Annotation) (ComplexType, error) {
+func NewAnonymousComplexType(loc xsderr.Loc, context ComplexTypeContext, baseTypeDefinitionName QName, final []DerivationMethod, derivationMethod DerivationMethod, abstract bool, attributeUses []AttributeUse, prohibitedAttributeNames []QName, attributeWildcard *Wildcard, contentType ContentType, prohibitedSubstitutions []DerivationMethod, assertions []Assertion) (ComplexType, error) {
 	if err := checkAnonymousComplexTypeContext(loc, context); err != nil {
 		return ComplexType{}, err
 	}
@@ -812,7 +811,7 @@ func collapsedExtensionBase(a ComplexType) TypeDefinitionOrRef {
 // anonymous base it may pass is A itself, already constructed and already
 // context-checked against its real owner, and M is never a component a consumer
 // can reach.
-func newComplexType(loc xsderr.Loc, name QName, context ComplexTypeContext, base TypeDefinitionOrRef, final []DerivationMethod, derivationMethod DerivationMethod, abstract bool, attributeUses []AttributeUse, prohibitedAttributeNames []QName, attributeWildcard *Wildcard, contentType ContentType, prohibitedSubstitutions []DerivationMethod, assertions []Assertion, annotations []Annotation) (ComplexType, error) {
+func newComplexType(loc xsderr.Loc, name QName, context ComplexTypeContext, base TypeDefinitionOrRef, final []DerivationMethod, derivationMethod DerivationMethod, abstract bool, attributeUses []AttributeUse, prohibitedAttributeNames []QName, attributeWildcard *Wildcard, contentType ContentType, prohibitedSubstitutions []DerivationMethod, assertions []Assertion) (ComplexType, error) {
 	if err := checkTypeDefinitionOrRef(loc, base, baseTypeSlot, complexTypeLabel(name)); err != nil {
 		return ComplexType{}, err
 	}
@@ -870,9 +869,6 @@ func newComplexType(loc xsderr.Loc, name QName, context ComplexTypeContext, base
 	}
 	if len(assertions) > 0 {
 		c.assertions = append([]Assertion(nil), assertions...)
-	}
-	if len(annotations) > 0 {
-		c.annotations = append([]Annotation(nil), annotations...)
 	}
 	return c, nil
 }
@@ -1071,12 +1067,3 @@ func (c ComplexType) Assertions() []Assertion {
 	return append([]Assertion(nil), c.assertions...)
 }
 
-// Annotations returns the {annotations} property in document order. It returns a
-// copy: mutating the result does not affect c. An empty {annotations} yields
-// nil.
-func (c ComplexType) Annotations() []Annotation {
-	if len(c.annotations) == 0 {
-		return nil
-	}
-	return append([]Annotation(nil), c.annotations...)
-}

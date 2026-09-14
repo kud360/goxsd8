@@ -37,7 +37,6 @@ type TypeAlternative struct {
 	test           XPathExpression
 	hasTest        bool
 	typeDefinition TypeDefinitionOrRef
-	annotations    []Annotation
 }
 
 // NewTypeAlternative builds a TypeAlternative. test == nil means {test} is
@@ -64,7 +63,7 @@ type TypeAlternative struct {
 // loc is the source position charged to a rejection. A caller with no real
 // parser position — a synthesized or programmatically built alternative — may
 // legitimately pass the zero xsderr.Loc{}.
-func NewTypeAlternative(loc xsderr.Loc, test *XPathExpression, typeDefinition TypeDefinitionOrRef, annotations []Annotation) (TypeAlternative, error) {
+func NewTypeAlternative(loc xsderr.Loc, test *XPathExpression, typeDefinition TypeDefinitionOrRef) (TypeAlternative, error) {
 	if typeDefinition == nil {
 		return TypeAlternative{}, xsderr.New(xsderr.RuleComponentInvariant, loc,
 			"type alternative {type definition} is absent, but the §3.12.1 tableau types it as Required and §3.12.2 declare-ta populates it from the type attribute or from the <complexType>/<simpleType> child")
@@ -75,9 +74,6 @@ func NewTypeAlternative(loc xsderr.Loc, test *XPathExpression, typeDefinition Ty
 	t := TypeAlternative{typeDefinition: typeDefinition}
 	if test != nil {
 		t.test, t.hasTest = *test, true
-	}
-	if len(annotations) > 0 {
-		t.annotations = append([]Annotation(nil), annotations...)
 	}
 	return t, nil
 }
@@ -104,12 +100,3 @@ func (t TypeAlternative) TypeDefinition() TypeDefinitionOrRef {
 	return t.typeDefinition
 }
 
-// Annotations returns the {annotations} property in document order. It returns
-// a copy: mutating the result does not affect t. An empty {annotations} yields
-// nil.
-func (t TypeAlternative) Annotations() []Annotation {
-	if len(t.annotations) == 0 {
-		return nil
-	}
-	return append([]Annotation(nil), t.annotations...)
-}

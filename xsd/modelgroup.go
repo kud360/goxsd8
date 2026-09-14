@@ -30,7 +30,6 @@ const ruleMgPropsCorrect xsderr.Rule = "mg-props-correct"
 type ModelGroup struct {
 	compositor  Compositor
 	particles   []Particle
-	annotations []Annotation
 }
 
 // NewModelGroup builds a ModelGroup, rejecting the state Model Group Correct
@@ -48,7 +47,7 @@ type ModelGroup struct {
 // loc is the source position charged to any rejection. A caller with no real
 // parser position — a synthesized or programmatically built group — may
 // legitimately pass the zero xsderr.Loc{}.
-func NewModelGroup(loc xsderr.Loc, compositor Compositor, particles []Particle, annotations []Annotation) (ModelGroup, error) {
+func NewModelGroup(loc xsderr.Loc, compositor Compositor, particles []Particle) (ModelGroup, error) {
 	switch compositor {
 	case CompositorAll, CompositorChoice, CompositorSequence:
 	default:
@@ -58,9 +57,6 @@ func NewModelGroup(loc xsderr.Loc, compositor Compositor, particles []Particle, 
 	g := ModelGroup{compositor: compositor}
 	if len(particles) > 0 {
 		g.particles = append([]Particle(nil), particles...)
-	}
-	if len(annotations) > 0 {
-		g.annotations = append([]Annotation(nil), annotations...)
 	}
 	return g, nil
 }
@@ -84,12 +80,3 @@ func (g ModelGroup) Particles() []Particle {
 	return append([]Particle(nil), g.particles...)
 }
 
-// Annotations returns the {annotations} property in document order. It returns a
-// copy: mutating the result does not affect g. An empty {annotations} yields
-// nil.
-func (g ModelGroup) Annotations() []Annotation {
-	if len(g.annotations) == 0 {
-		return nil
-	}
-	return append([]Annotation(nil), g.annotations...)
-}

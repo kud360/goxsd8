@@ -43,7 +43,6 @@ type SchemaBuilder struct {
 	modelGroups         []ModelGroupDefinition
 	notations           []Notation
 	identityConstraints []IdentityConstraint
-	annotations         []Annotation
 
 	// attributeGroupRedefinitions holds the (redefinition, S2 original) pairings
 	// AddRedefiningAttributeGroup records, in the order they were added, for
@@ -130,11 +129,6 @@ func (b *SchemaBuilder) AddIdentityConstraint(c IdentityConstraint) {
 	b.identityConstraints = append(b.identityConstraints, c)
 }
 
-// AddAnnotation appends a schema-level annotation in document order.
-func (b *SchemaBuilder) AddAnnotation(a Annotation) {
-	b.annotations = append(b.annotations, a)
-}
-
 // Schema is the finalized, immutable compiled schema set (Structures §3.17.1,
 // assembled per §4.2.1's "schema(D)"). It is constructible ONLY via
 // SchemaBuilder.Finalize or SchemaBuilder.FinalizeWith: its fields are
@@ -149,9 +143,9 @@ func (b *SchemaBuilder) AddAnnotation(a Annotation) {
 // Attribute methods. Go's structural typing leaves that unprinted by go doc, so
 // it is stated here — a consumer needing only one of the three takes the
 // matching capability view rather than the whole *Schema (STYLE T3). Those
-// three by-name lookups copy nothing; the eight document-order enumerators
+// three by-name lookups copy nothing; the seven document-order enumerators
 // (Types, Elements, Attributes, AttributeGroups, ModelGroups, Notations,
-// IdentityConstraints, Annotations) each return a COPY of their slice, so no
+// IdentityConstraints) each return a COPY of their slice, so no
 // caller holds an aliasing handle with which to mutate a source-of-truth slice
 // out of step with the index derived from it (STYLE T1).
 //
@@ -177,7 +171,6 @@ type Schema struct {
 	modelGroups         []ModelGroupDefinition
 	notations           []Notation
 	identityConstraints []IdentityConstraint
-	annotations         []Annotation
 
 	// attributeGroupRedefinitions carries the builder's <attributeGroup> pairings
 	// across finalize; checkAttributeGroupRedefinitions (redefinition.go) charges
@@ -360,7 +353,6 @@ func (b *SchemaBuilder) finalize(vs ValueSpace, rc SimpleTypeRestrictionChecker)
 		modelGroups:         cloneSlice(b.modelGroups),
 		notations:           cloneSlice(b.notations),
 		identityConstraints: cloneSlice(b.identityConstraints),
-		annotations:         cloneSlice(b.annotations),
 
 		attributeGroupRedefinitions: cloneSlice(b.attributeGroupRedefinitions),
 		modelGroupRedefinitions:     cloneSlice(b.modelGroupRedefinitions),
@@ -564,8 +556,7 @@ func (s *Schema) Elements() []ElementDeclaration {
 // top-level attribute declarations, in the order they were added to the
 // builder. That order is a guaranteed stable part of this method's contract,
 // even though §3.17.1 words the property as an unordered "A set of Attribute
-// Declaration components". It is unrelated to [Annotation.Attributes], which
-// reports the XML attribute items on one annotation.
+// Declaration components".
 //
 // The slice is copied: mutating the result does not affect s. The declarations
 // in it are shared with s and immutable. An empty {attribute declarations}
@@ -652,20 +643,3 @@ func (s *Schema) IdentityConstraints() []IdentityConstraint {
 	return cloneSlice(s.identityConstraints)
 }
 
-// Annotations returns the {annotations} property (§3.17.1): the schema-level
-// annotations, in the order they were added to the builder. Alone among the
-// eight §3.17.1 properties, {annotations} is worded as "A sequence of
-// Annotation components" rather than a set, so here the order is
-// spec-significant as well as guaranteed stable.
-//
-// The slice is copied: mutating the result does not affect s. The annotations
-// in it are shared with s and immutable. An empty {annotations} yields nil.
-//
-// A schema built by parser.Parse has NO schema-level annotations today: the
-// parser wires no producer call to [SchemaBuilder.AddAnnotation] for a
-// <xs:schema> element's own <xs:annotation> children (§3.17.2), so this returns
-// nil for every parsed schema until that gap closes. Only a producer calling
-// AddAnnotation directly populates it.
-func (s *Schema) Annotations() []Annotation {
-	return cloneSlice(s.annotations)
-}

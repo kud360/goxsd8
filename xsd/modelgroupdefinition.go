@@ -31,7 +31,6 @@ type ModelGroupDefinition struct {
 	loc         xsderr.Loc // source position; provenance, not a §3.7.1 property
 	name        QName
 	modelGroup  ModelGroup
-	annotations []Annotation
 }
 
 // NewModelGroupDefinition builds a ModelGroupDefinition, rejecting the two
@@ -67,7 +66,7 @@ type ModelGroupDefinition struct {
 // element's, say) — it is observable, not merely an error-charging convenience.
 // A caller with no real parser position — a synthesized or programmatically
 // built definition — passes the zero xsderr.Loc{}, which reads as "unknown".
-func NewModelGroupDefinition(loc xsderr.Loc, name QName, modelGroup ModelGroup, annotations []Annotation) (ModelGroupDefinition, error) {
+func NewModelGroupDefinition(loc xsderr.Loc, name QName, modelGroup ModelGroup) (ModelGroupDefinition, error) {
 	if name.Local == "" {
 		return ModelGroupDefinition{}, xsderr.New(ruleMgdPropsCorrect, loc,
 			"model group definition has an absent {name}, but the §3.7.1 tableau types it as a Required xs:NCName, whose value space excludes the empty string (mgd-props-correct)")
@@ -79,9 +78,6 @@ func NewModelGroupDefinition(loc xsderr.Loc, name QName, modelGroup ModelGroup, 
 			"model group definition has an absent {model group} (a zero ModelGroup not built through NewModelGroup), but it is Required (mgd-props-correct)")
 	}
 	d := ModelGroupDefinition{loc: loc, name: name, modelGroup: modelGroup}
-	if len(annotations) > 0 {
-		d.annotations = append([]Annotation(nil), annotations...)
-	}
 	return d, nil
 }
 
@@ -103,12 +99,3 @@ func (d ModelGroupDefinition) ModelGroup() ModelGroup {
 	return d.modelGroup
 }
 
-// Annotations returns the {annotations} property in document order. It returns a
-// copy: mutating the result does not affect d. An empty {annotations} yields
-// nil.
-func (d ModelGroupDefinition) Annotations() []Annotation {
-	if len(d.annotations) == 0 {
-		return nil
-	}
-	return append([]Annotation(nil), d.annotations...)
-}

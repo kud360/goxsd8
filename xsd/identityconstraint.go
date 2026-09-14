@@ -51,7 +51,6 @@ type IdentityConstraint struct {
 	selector      XPathExpression
 	fields        []XPathExpression
 	referencedKey QName // zero value when category != IdentityConstraintKeyref
-	annotations   []Annotation
 }
 
 // NewIdentityConstraint builds an IdentityConstraint, rejecting the states
@@ -86,7 +85,7 @@ type IdentityConstraint struct {
 // element's, say) — it is observable, not merely an error-charging convenience.
 // A caller with no real parser position — a synthesized or programmatically
 // built definition — passes the zero xsderr.Loc{}, which reads as "unknown".
-func NewIdentityConstraint(loc xsderr.Loc, name QName, category IdentityConstraintCategory, selector XPathExpression, fields []XPathExpression, referencedKey *QName, annotations []Annotation) (IdentityConstraint, error) {
+func NewIdentityConstraint(loc xsderr.Loc, name QName, category IdentityConstraintCategory, selector XPathExpression, fields []XPathExpression, referencedKey *QName) (IdentityConstraint, error) {
 	if name.Local == "" {
 		return IdentityConstraint{}, xsderr.New(ruleICProps, loc,
 			"identity-constraint definition has an absent {name}, but the §3.11.1 tableau types it as a Required xs:NCName, whose value space excludes the empty string (c-props-correct clause 1)")
@@ -114,9 +113,6 @@ func NewIdentityConstraint(loc xsderr.Loc, name QName, category IdentityConstrai
 	}
 	if referencedKey != nil {
 		ic.referencedKey = *referencedKey
-	}
-	if len(annotations) > 0 {
-		ic.annotations = append([]Annotation(nil), annotations...)
 	}
 	return ic, nil
 }
@@ -168,12 +164,3 @@ func (c IdentityConstraint) ReferencedKeyName() (QName, bool) {
 	return c.referencedKey, c.category == IdentityConstraintKeyref
 }
 
-// Annotations returns the {annotations} property in document order. It
-// returns a copy: mutating the result does not affect c. An empty
-// {annotations} yields nil.
-func (c IdentityConstraint) Annotations() []Annotation {
-	if len(c.annotations) == 0 {
-		return nil
-	}
-	return append([]Annotation(nil), c.annotations...)
-}

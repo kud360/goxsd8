@@ -342,7 +342,6 @@ type AttributeDeclaration struct {
 	valueConstraint    ValueConstraint
 	hasValueConstraint bool
 	inheritable        bool
-	annotations        []Annotation
 }
 
 // NewAttributeDeclaration builds an AttributeDeclaration, rejecting the states
@@ -457,7 +456,7 @@ type AttributeDeclaration struct {
 // validate's isInstanceAttribute (assess.go) and instanceAttribute (cvcelt.go)
 // match the four reserved names against INSTANCE items and never read
 // {attribute declarations}, so neither is perturbed in either direction.
-func NewAttributeDeclaration(loc xsderr.Loc, name QName, typeDefinition TypeDefinitionOrRef, scope AttributeScope, valueConstraint *ValueConstraint, inheritable bool, annotations []Annotation) (AttributeDeclaration, error) {
+func NewAttributeDeclaration(loc xsderr.Loc, name QName, typeDefinition TypeDefinitionOrRef, scope AttributeScope, valueConstraint *ValueConstraint, inheritable bool) (AttributeDeclaration, error) {
 	if name.Local == "" {
 		return AttributeDeclaration{}, xsderr.New(ruleAPropsCorrect, loc,
 			"attribute declaration has an absent {name}, but the §3.2.1 tableau types it as a Required xs:NCName, whose value space excludes the empty string (a-props-correct clause 1)")
@@ -486,9 +485,6 @@ func NewAttributeDeclaration(loc xsderr.Loc, name QName, typeDefinition TypeDefi
 	}
 	if valueConstraint != nil {
 		a.valueConstraint, a.hasValueConstraint = *valueConstraint, true
-	}
-	if len(annotations) > 0 {
-		a.annotations = append([]Annotation(nil), annotations...)
 	}
 	return a, nil
 }
@@ -552,12 +548,3 @@ func (a AttributeDeclaration) Inheritable() bool {
 	return a.inheritable
 }
 
-// Annotations returns the {annotations} property in document order. It returns
-// a copy: mutating the result does not affect a. An empty {annotations} yields
-// nil.
-func (a AttributeDeclaration) Annotations() []Annotation {
-	if len(a.annotations) == 0 {
-		return nil
-	}
-	return append([]Annotation(nil), a.annotations...)
-}

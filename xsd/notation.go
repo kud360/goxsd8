@@ -31,7 +31,6 @@ type Notation struct {
 	hasSystem   bool
 	publicID    string
 	hasPublic   bool
-	annotations []Annotation
 }
 
 // NewNotation builds a Notation, rejecting the two states Notation Declaration
@@ -65,7 +64,7 @@ type Notation struct {
 // element's, say) — it is observable, not merely an error-charging convenience.
 // A caller with no real parser position — a synthesized or programmatically
 // built declaration — passes the zero xsderr.Loc{}, which reads as "unknown".
-func NewNotation(loc xsderr.Loc, name QName, systemID, publicID *string, annotations []Annotation) (Notation, error) {
+func NewNotation(loc xsderr.Loc, name QName, systemID, publicID *string) (Notation, error) {
 	if name.Local == "" {
 		return Notation{}, xsderr.New(ruleNotationCorrect, loc,
 			"notation declaration has an absent {name}, but the §3.14.1 tableau types it as a Required xs:NCName, whose value space excludes the empty string (n-props-correct)")
@@ -80,9 +79,6 @@ func NewNotation(loc xsderr.Loc, name QName, systemID, publicID *string, annotat
 	}
 	if publicID != nil {
 		n.publicID, n.hasPublic = *publicID, true
-	}
-	if len(annotations) > 0 {
-		n.annotations = append([]Annotation(nil), annotations...)
 	}
 	return n, nil
 }
@@ -113,12 +109,3 @@ func (n Notation) PublicIdentifier() (string, bool) {
 	return n.publicID, n.hasPublic
 }
 
-// Annotations returns the {annotations} property in document order. It returns
-// a copy: mutating the result does not affect n. An empty {annotations}
-// yields nil.
-func (n Notation) Annotations() []Annotation {
-	if len(n.annotations) == 0 {
-		return nil
-	}
-	return append([]Annotation(nil), n.annotations...)
-}

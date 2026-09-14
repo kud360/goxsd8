@@ -47,7 +47,6 @@ type AttributeGroupDefinition struct {
 	attributeUses []AttributeUse
 	wildcard      Wildcard
 	hasWildcard   bool
-	annotations   []Annotation
 }
 
 // NewAttributeGroupDefinition builds an AttributeGroupDefinition, rejecting the
@@ -103,7 +102,7 @@ type AttributeGroupDefinition struct {
 // element's, say) — it is observable, not merely an error-charging convenience.
 // A caller with no real parser position — a synthesized or programmatically
 // built definition — passes the zero xsderr.Loc{}, which reads as "unknown".
-func NewAttributeGroupDefinition(loc xsderr.Loc, name QName, attributeUses []AttributeUse, wildcard *Wildcard, annotations []Annotation) (AttributeGroupDefinition, error) {
+func NewAttributeGroupDefinition(loc xsderr.Loc, name QName, attributeUses []AttributeUse, wildcard *Wildcard) (AttributeGroupDefinition, error) {
 	if name.Local == "" {
 		return AttributeGroupDefinition{}, xsderr.New(ruleAgPropsCorrect, loc,
 			"attribute group definition has an absent {name}, but the §3.6.1 tableau types it as a Required xs:NCName, whose value space excludes the empty string (ag-props-correct clause 1)")
@@ -126,9 +125,6 @@ func NewAttributeGroupDefinition(loc xsderr.Loc, name QName, attributeUses []Att
 	}
 	if wildcard != nil {
 		g.wildcard, g.hasWildcard = *wildcard, true
-	}
-	if len(annotations) > 0 {
-		g.annotations = append([]Annotation(nil), annotations...)
 	}
 	return g, nil
 }
@@ -165,12 +161,3 @@ func (g AttributeGroupDefinition) AttributeWildcard() (Wildcard, bool) {
 	return g.wildcard, g.hasWildcard
 }
 
-// Annotations returns the {annotations} property in document order. It returns
-// a copy: mutating the result does not affect g. An empty {annotations} yields
-// nil.
-func (g AttributeGroupDefinition) Annotations() []Annotation {
-	if len(g.annotations) == 0 {
-		return nil
-	}
-	return append([]Annotation(nil), g.annotations...)
-}

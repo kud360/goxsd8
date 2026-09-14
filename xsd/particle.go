@@ -33,7 +33,6 @@ import "github.com/kud360/goxsd8/xsderr"
 type Particle struct {
 	occurs      Occurs
 	term        TermOrRef
-	annotations []Annotation
 }
 
 // NewParticle builds a Particle, rejecting the state Particle Correct (§3.9.6.1,
@@ -69,7 +68,7 @@ type Particle struct {
 // loc is the source position charged to any rejection. A caller with no real
 // parser position — a synthesized or programmatically built particle — may
 // legitimately pass the zero xsderr.Loc{}.
-func NewParticle(loc xsderr.Loc, occurs Occurs, term TermOrRef, annotations []Annotation) (Particle, error) {
+func NewParticle(loc xsderr.Loc, occurs Occurs, term TermOrRef) (Particle, error) {
 	if term == nil {
 		return Particle{}, xsderr.New(ruleParticleCorrect, loc,
 			"particle has an absent {term}, but it is Required (p-props-correct clause 1)")
@@ -91,9 +90,6 @@ func NewParticle(loc xsderr.Loc, occurs Occurs, term TermOrRef, annotations []An
 		}
 	}
 	p := Particle{occurs: occurs, term: term}
-	if len(annotations) > 0 {
-		p.annotations = append([]Annotation(nil), annotations...)
-	}
 	return p, nil
 }
 
@@ -111,12 +107,3 @@ func (p Particle) Term() TermOrRef {
 	return p.term
 }
 
-// Annotations returns the {annotations} property in document order. It returns a
-// copy: mutating the result does not affect p. An empty {annotations} yields
-// nil.
-func (p Particle) Annotations() []Annotation {
-	if len(p.annotations) == 0 {
-		return nil
-	}
-	return append([]Annotation(nil), p.annotations...)
-}

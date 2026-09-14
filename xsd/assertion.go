@@ -17,18 +17,14 @@ package xsd
 // construction.
 type Assertion struct {
 	test        XPathExpression
-	annotations []Annotation
 }
 
 // NewAssertion builds an Assertion. annotations is copied; the caller's
 // backing array is not aliased. There is no rejectable state at this
 // structural layer (see XPathExpression's NewXPathExpression doc) — hence
 // no loc/error, mirroring NewAnnotation.
-func NewAssertion(test XPathExpression, annotations []Annotation) Assertion {
+func NewAssertion(test XPathExpression) Assertion {
 	a := Assertion{test: test}
-	if len(annotations) > 0 {
-		a.annotations = append([]Annotation(nil), annotations...)
-	}
 	return a
 }
 
@@ -38,12 +34,3 @@ func (a Assertion) Test() XPathExpression {
 	return a.test
 }
 
-// Annotations returns the {annotations} property in document order. It
-// returns a copy: mutating the result does not affect a. An empty
-// {annotations} yields nil.
-func (a Assertion) Annotations() []Annotation {
-	if len(a.annotations) == 0 {
-		return nil
-	}
-	return append([]Annotation(nil), a.annotations...)
-}

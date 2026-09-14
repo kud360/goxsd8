@@ -23,7 +23,6 @@ import "github.com/kud360/goxsd8/xsderr"
 type Wildcard struct {
 	namespaceConstraint NamespaceConstraint
 	processContents     ProcessContents
-	annotations         []Annotation
 }
 
 // NewWildcard builds a Wildcard, rejecting the states Wildcard Properties
@@ -49,7 +48,7 @@ type Wildcard struct {
 // loc is the source position charged to any rejection. A caller with no real
 // parser position — a synthesized or programmatically built wildcard — may
 // legitimately pass the zero xsderr.Loc{}.
-func NewWildcard(loc xsderr.Loc, namespaceConstraint NamespaceConstraint, processContents ProcessContents, annotations []Annotation) (Wildcard, error) {
+func NewWildcard(loc xsderr.Loc, namespaceConstraint NamespaceConstraint, processContents ProcessContents) (Wildcard, error) {
 	switch processContents {
 	case ProcessSkip, ProcessStrict, ProcessLax:
 	default:
@@ -63,9 +62,6 @@ func NewWildcard(loc xsderr.Loc, namespaceConstraint NamespaceConstraint, proces
 			"wildcard {namespace constraint} is not a validly constructed NamespaceConstraint (w-props-correct clause 1)")
 	}
 	w := Wildcard{namespaceConstraint: namespaceConstraint, processContents: processContents}
-	if len(annotations) > 0 {
-		w.annotations = append([]Annotation(nil), annotations...)
-	}
 	return w, nil
 }
 
@@ -93,15 +89,6 @@ func (w Wildcard) NamespaceConstraint() NamespaceConstraint {
 	return w.namespaceConstraint
 }
 
-// Annotations returns the {annotations} property in document order. It
-// returns a copy: mutating the result does not affect w. An empty
-// {annotations} yields nil.
-func (w Wildcard) Annotations() []Annotation {
-	if len(w.annotations) == 0 {
-		return nil
-	}
-	return append([]Annotation(nil), w.annotations...)
-}
 
 // AllowsName reports whether the expanded name is admitted by w's {namespace
 // constraint}, delegating to NamespaceConstraint.AllowsName — this is the ONE

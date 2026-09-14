@@ -115,7 +115,6 @@ type AttributeUse struct {
 	valueConstraint      ValueConstraint
 	hasValueConstraint   bool
 	inheritable          bool
-	annotations          []Annotation
 }
 
 // NewAttributeUse builds an AttributeUse, rejecting the states Attribute Use
@@ -147,7 +146,7 @@ type AttributeUse struct {
 // loc is the source position charged to any rejection. A caller with no real
 // parser position — a synthesized or programmatically built use — may
 // legitimately pass the zero xsderr.Loc{}.
-func NewAttributeUse(loc xsderr.Loc, required bool, attributeDeclaration AttributeDeclarationOrRef, valueConstraint *ValueConstraint, inheritable bool, annotations []Annotation) (AttributeUse, error) {
+func NewAttributeUse(loc xsderr.Loc, required bool, attributeDeclaration AttributeDeclarationOrRef, valueConstraint *ValueConstraint, inheritable bool) (AttributeUse, error) {
 	if attributeDeclaration == nil {
 		return AttributeUse{}, xsderr.New(ruleAuPropsCorrect, loc,
 			"attribute use has an absent {attribute declaration}, but it is Required (au-props-correct clause 1)")
@@ -174,9 +173,6 @@ func NewAttributeUse(loc xsderr.Loc, required bool, attributeDeclaration Attribu
 	}
 	if valueConstraint != nil {
 		u.valueConstraint, u.hasValueConstraint = *valueConstraint, true
-	}
-	if len(annotations) > 0 {
-		u.annotations = append([]Annotation(nil), annotations...)
 	}
 	return u, nil
 }
@@ -237,12 +233,3 @@ func (u AttributeUse) Inheritable() bool {
 	return u.inheritable
 }
 
-// Annotations returns the {annotations} property in document order. It returns
-// a copy: mutating the result does not affect u. An empty {annotations} yields
-// nil.
-func (u AttributeUse) Annotations() []Annotation {
-	if len(u.annotations) == 0 {
-		return nil
-	}
-	return append([]Annotation(nil), u.annotations...)
-}

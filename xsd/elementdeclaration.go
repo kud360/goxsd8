@@ -417,7 +417,6 @@ type ElementDeclaration struct {
 	substitutionGroupExclusions   []DerivationMethod
 	abstract                      bool
 	disallowedSubstitutions       []DerivationMethod
-	annotations                   []Annotation
 }
 
 // NewElementDeclaration builds an ElementDeclaration, rejecting the states
@@ -474,7 +473,7 @@ type ElementDeclaration struct {
 // element's, say) — it is observable, not merely an error-charging convenience.
 // A caller with no real parser position — a synthesized or programmatically
 // built declaration — passes the zero xsderr.Loc{}, which reads as "unknown".
-func NewElementDeclaration(loc xsderr.Loc, name QName, typeDefinition TypeDefinitionOrRef, typeTable *TypeTable, scope Scope, valueConstraint *ValueConstraint, nillable bool, identityConstraints []IdentityConstraint, substitutionGroupAffiliations []QName, substitutionGroupExclusions []DerivationMethod, abstract bool, disallowedSubstitutions []DerivationMethod, annotations []Annotation) (ElementDeclaration, error) {
+func NewElementDeclaration(loc xsderr.Loc, name QName, typeDefinition TypeDefinitionOrRef, typeTable *TypeTable, scope Scope, valueConstraint *ValueConstraint, nillable bool, identityConstraints []IdentityConstraint, substitutionGroupAffiliations []QName, substitutionGroupExclusions []DerivationMethod, abstract bool, disallowedSubstitutions []DerivationMethod) (ElementDeclaration, error) {
 	for _, slot := range ownedTypeSlots(typeDefinition, typeTable) {
 		if _, isComplex := ownedComplexType(slot.ref); isComplex {
 			return ElementDeclaration{}, xsderr.New(xsderr.RuleComponentInvariant, loc,
@@ -530,7 +529,7 @@ func NewElementDeclaration(loc xsderr.Loc, name QName, typeDefinition TypeDefini
 // construction-time comparison, and a field written but never read is dead state
 // (STYLE D3); the landing that adds an ID→component resolver adds the field
 // together with its reader (see ComponentID).
-func NewElementDeclarationOwningTypes(loc xsderr.Loc, id ComponentID, name QName, typeDefinition TypeDefinitionOrRef, typeTable *TypeTable, scope Scope, valueConstraint *ValueConstraint, nillable bool, identityConstraints []IdentityConstraint, substitutionGroupAffiliations []QName, substitutionGroupExclusions []DerivationMethod, abstract bool, disallowedSubstitutions []DerivationMethod, annotations []Annotation) (ElementDeclaration, error) {
+func NewElementDeclarationOwningTypes(loc xsderr.Loc, id ComponentID, name QName, typeDefinition TypeDefinitionOrRef, typeTable *TypeTable, scope Scope, valueConstraint *ValueConstraint, nillable bool, identityConstraints []IdentityConstraint, substitutionGroupAffiliations []QName, substitutionGroupExclusions []DerivationMethod, abstract bool, disallowedSubstitutions []DerivationMethod) (ElementDeclaration, error) {
 	if id == (ComponentID{}) {
 		return ElementDeclaration{}, xsderr.New(xsderr.RuleComponentInvariant, loc,
 			"element declaration %s owns an anonymous complex type but carries an unminted identity, which that type's {context} back-pointer could not name; mint one with NewComponentID", name)
@@ -661,7 +660,7 @@ func checkOwnedTypeContext(loc xsderr.Loc, id ComponentID, name QName, property 
 // NewElementDeclarationOwningTypes, so its {context} has been checked against the
 // owner's identity. This layer cannot express that check — it takes no identity
 // — and does not attempt one. Any third caller added here must re-establish it.
-func newElementDeclaration(loc xsderr.Loc, name QName, typeDefinition TypeDefinitionOrRef, typeTable *TypeTable, scope Scope, valueConstraint *ValueConstraint, nillable bool, identityConstraints []IdentityConstraint, substitutionGroupAffiliations []QName, substitutionGroupExclusions []DerivationMethod, abstract bool, disallowedSubstitutions []DerivationMethod, annotations []Annotation) (ElementDeclaration, error) {
+func newElementDeclaration(loc xsderr.Loc, name QName, typeDefinition TypeDefinitionOrRef, typeTable *TypeTable, scope Scope, valueConstraint *ValueConstraint, nillable bool, identityConstraints []IdentityConstraint, substitutionGroupAffiliations []QName, substitutionGroupExclusions []DerivationMethod, abstract bool, disallowedSubstitutions []DerivationMethod) (ElementDeclaration, error) {
 	if name.Local == "" {
 		return ElementDeclaration{}, xsderr.New(ruleEPropsCorrect, loc,
 			"element declaration has an absent {name}, but the §3.3.1 tableau types it as a Required xs:NCName, whose value space excludes the empty string (e-props-correct clause 1)")
@@ -714,9 +713,6 @@ func newElementDeclaration(loc xsderr.Loc, name QName, typeDefinition TypeDefini
 	}
 	if len(disallowedSubstitutions) > 0 {
 		e.disallowedSubstitutions = append([]DerivationMethod(nil), disallowedSubstitutions...)
-	}
-	if len(annotations) > 0 {
-		e.annotations = append([]Annotation(nil), annotations...)
 	}
 	return e, nil
 }
@@ -850,12 +846,3 @@ func (e ElementDeclaration) DisallowedSubstitutions() []DerivationMethod {
 	return append([]DerivationMethod(nil), e.disallowedSubstitutions...)
 }
 
-// Annotations returns the {annotations} property in document order. It returns
-// a copy: mutating the result does not affect e. An empty {annotations} yields
-// nil.
-func (e ElementDeclaration) Annotations() []Annotation {
-	if len(e.annotations) == 0 {
-		return nil
-	}
-	return append([]Annotation(nil), e.annotations...)
-}
