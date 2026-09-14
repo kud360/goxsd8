@@ -37,9 +37,9 @@ func (b NamespaceBinding) Namespace() string {
 // {expression} (the raw XPath 2.0 expression text, Required).
 //
 // {expression} is held VERBATIM — not parsed, not compiled, not evaluated.
-// Like Annotation, this package preserves the XPath text but never
-// interprets it; no dependency on package xpath. Compilation/evaluation is
-// deferred to the M6/M7 XPath engine.
+// This package preserves the XPath text but never interprets it; no
+// dependency on package xpath. Compilation/evaluation is deferred to the
+// M6/M7 XPath engine.
 //
 // {default namespace} is the ALREADY-RESOLVED value, not a raw local
 // attribute: §3.13.2's mapping defines it as the result of a two-level
@@ -71,8 +71,7 @@ type XPathExpression struct {
 // the caller's backing array is not aliased. A nil defaultNamespace or
 // baseURI means the corresponding property is absent; a non-nil pointer
 // (including to "") means it is present, because "" is a legal anyURI and
-// cannot double as an absence sentinel (mirrors AppInfo's {source}
-// discipline).
+// cannot double as an absence sentinel.
 //
 // There is no rejectable state at this structural layer: {expression}'s
 // "Required" is a presence requirement satisfied by the parameter existing,

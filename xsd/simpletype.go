@@ -574,8 +574,7 @@ func (m EnumerationMember) DefaultNamespace() (string, bool) {
 // Datatypes §4.1.1), the datatypes-facing subset: {name} (bundled with {target
 // namespace} as a QName), {variety}, {base type definition}, the type's own
 // contribution to {facets}, and {final}. Full complex-type breadth
-// (union-of-complex, {context}, {annotations}) is out of this component's
-// scope.
+// (union-of-complex, {context}) is out of this component's scope.
 //
 // What it STORES is narrower than what it reports: the declared
 // SimpleTypeDerivation, not {variety}. That property, and {primitive type

@@ -19,7 +19,7 @@ import (
 // parsed or evaluated by anything this file drives; it is there so a fixture's
 // assertions are distinguishable when a message names one.
 func aAssertion(expr string) xsd.Assertion {
-	return xsd.NewAssertion(xsd.NewXPathExpression(expr, nil, nil, nil), nil)
+	return xsd.NewAssertion(xsd.NewXPathExpression(expr, nil, nil, nil))
 }
 
 // aAssertions turns test expressions into an assertions facet's {value}.
@@ -97,7 +97,7 @@ func aVarietyTypes(t *testing.T) []*xsd.SimpleType {
 func aComplexType(t *testing.T, uses []xsd.AttributeUse, content xsd.ContentType, assertions []xsd.Assertion) xsd.ComplexType {
 	t.Helper()
 	ct, err := xsd.NewComplexType(xsderr.Loc{}, local("RootType"), xsd.QName{}, nil,
-		xsd.DerivationRestriction, false, uses, nil, nil, content, nil, assertions, nil)
+		xsd.DerivationRestriction, false, uses, nil, nil, content, nil, assertions)
 	if err != nil {
 		t.Fatalf("building RootType: %v", err)
 	}
@@ -314,12 +314,12 @@ func TestBothRulesRecordAtOneElement(t *testing.T) {
 // the reason [walk.wildcardAttributeAssertions] gives.
 func TestWildcardAttributeAssertionsAreRecorded(t *testing.T) {
 	ct, err := xsd.NewComplexType(xsderr.Loc{}, local("RootType"), xsd.QName{}, nil,
-		xsd.DerivationRestriction, false, nil, nil, anyWildcard(t, xsd.ProcessStrict), xsd.EmptyContent{}, nil, nil, nil)
+		xsd.DerivationRestriction, false, nil, nil, anyWildcard(t, xsd.ProcessStrict), xsd.EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("building RootType: %v", err)
 	}
 	d, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, local("n"),
-		xsd.TypeDefinitionRef{Name: local("AssertedInt")}, xsd.NewAttributeGlobalScope(), nil, false, nil)
+		xsd.TypeDefinitionRef{Name: local("AssertedInt")}, xsd.NewAttributeGlobalScope(), nil, false)
 	if err != nil {
 		t.Fatalf("building the top-level n declaration: %v", err)
 	}

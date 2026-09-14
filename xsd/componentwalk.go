@@ -260,7 +260,7 @@ func (w componentWalk) walkModelGroup(g ModelGroup, loc xsderr.Loc) error {
 
 // walkAttributeGroupDefinition enters one Attribute Group Definition, whose
 // only nesting slot is its {attribute uses} (§3.6.1) — {attribute wildcard}
-// nests no component this tree reaches and {annotations} is a leaf.
+// nests no component this tree reaches.
 //
 // It is a ROOT entry point and is reached from no referring site: §3.6.2.1
 // inlines every <attributeGroup ref> at producer mapping time, so no component

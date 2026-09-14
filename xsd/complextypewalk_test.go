@@ -103,7 +103,7 @@ func cwTableElement(t *testing.T, name QName, owned ComplexType, inAlternatives 
 	}
 	e, err := NewElementDeclarationOwningTypes(xsderr.Loc{}, context.ID(), name,
 		TypeDefinitionRef{Name: uq("T")}, &tt, NewGlobalScope(),
-		nil, false, nil, nil, nil, false, nil, nil)
+		nil, false, nil, nil, nil, false, nil)
 	if err != nil {
 		t.Fatalf("NewElementDeclarationOwningTypes(%s): %v", name, err)
 	}
@@ -118,7 +118,7 @@ func cwUnreferencedGroup(t *testing.T, ct ComplexType) ModelGroupDefinition {
 	t.Helper()
 	local := dOwnInline(t, uq("child"), ct, uLocalScope(t))
 	d, err := NewModelGroupDefinition(xsderr.Loc{}, uq("G"),
-		uGroup(t, CompositorSequence, uOne(t, ResolvedTerm{Term: local})), nil)
+		uGroup(t, CompositorSequence, uOne(t, ResolvedTerm{Term: local})))
 	if err != nil {
 		t.Fatalf("NewModelGroupDefinition(G): %v", err)
 	}
@@ -139,12 +139,12 @@ func cwRedefinePair(t *testing.T, g ModelGroup) ComplexType {
 	id := NewComponentID()
 	original, err := NewAnonymousComplexType(xsderr.Loc{}, ComplexTypeDefinitionContext{Component: id},
 		QName{}, nil, DerivationRestriction, false, nil, nil, nil,
-		ElementContent{Particle: uParticle(t, uOccurs(t, 0, 1), ResolvedTerm{Term: g})}, nil, nil, nil)
+		ElementContent{Particle: uParticle(t, uOccurs(t, 0, 1), ResolvedTerm{Term: g})}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAnonymousComplexType (the clause-1.1 original of R): %v", err)
 	}
 	ct, err := NewComplexTypeOwningBase(xsderr.Loc{}, id, uq("R"), original, nil, DerivationRestriction, false,
-		nil, nil, nil, EmptyContent{}, nil, nil, nil)
+		nil, nil, nil, EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexTypeOwningBase(R): %v", err)
 	}
@@ -302,7 +302,7 @@ func TestWalkEntersAnOwnedBaseWithoutChargingIt(t *testing.T) {
 func cwAnonymousExtension(t *testing.T, base QName) ComplexType {
 	t.Helper()
 	ct, err := NewAnonymousComplexType(xsderr.Loc{}, ElementDeclarationContext{Component: NewComponentID()},
-		base, nil, DerivationExtension, false, nil, nil, nil, EmptyContent{}, nil, nil, nil)
+		base, nil, DerivationExtension, false, nil, nil, nil, EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAnonymousComplexType: %v", err)
 	}

@@ -30,7 +30,7 @@ func exampleParticle(term xsd.TermOrRef) xsd.Particle {
 	if err != nil {
 		panic(err)
 	}
-	p, err := xsd.NewParticle(xsderr.Loc{}, occurs, term, nil)
+	p, err := xsd.NewParticle(xsderr.Loc{}, occurs, term)
 	if err != nil {
 		panic(err)
 	}
@@ -40,7 +40,7 @@ func exampleParticle(term xsd.TermOrRef) xsd.Particle {
 // exampleModelGroup builds a model group with the given compositor over
 // particles in document order.
 func exampleModelGroup(compositor xsd.Compositor, particles ...xsd.Particle) xsd.ModelGroup {
-	g, err := xsd.NewModelGroup(xsderr.Loc{}, compositor, particles, nil)
+	g, err := xsd.NewModelGroup(xsderr.Loc{}, compositor, particles)
 	if err != nil {
 		panic(err)
 	}
@@ -53,7 +53,7 @@ func exampleAnyWildcard() xsd.Wildcard {
 	if err != nil {
 		panic(err)
 	}
-	w, err := xsd.NewWildcard(xsderr.Loc{}, nc, xsd.ProcessLax, nil)
+	w, err := xsd.NewWildcard(xsderr.Loc{}, nc, xsd.ProcessLax)
 	if err != nil {
 		panic(err)
 	}
@@ -64,7 +64,7 @@ func exampleAnyWildcard() xsd.Wildcard {
 // definition} is a by-name reference to typeName (the xsd.TypeDefinitionRef arm
 // of the slot's sealed sum; the other arm owns an inline anonymous type).
 func exampleElement(name, typeName xsd.QName, scope xsd.Scope) xsd.ElementDeclaration {
-	e, err := xsd.NewElementDeclaration(xsderr.Loc{}, name, xsd.TypeDefinitionRef{Name: typeName}, nil, scope, nil, false, nil, nil, nil, false, nil, nil)
+	e, err := xsd.NewElementDeclaration(xsderr.Loc{}, name, xsd.TypeDefinitionRef{Name: typeName}, nil, scope, nil, false, nil, nil, nil, false, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -86,7 +86,7 @@ func exampleLocalElement(container xsd.QName, local string) xsd.ElementDeclarati
 // {content type} is a {1,1} particle over term.
 func exampleElementOnlyType(name xsd.QName, term xsd.TermOrRef) xsd.ComplexType {
 	ct, err := xsd.NewComplexType(xsderr.Loc{}, name, xsd.QName{}, nil, xsd.DerivationRestriction, false,
-		nil, nil, nil, xsd.ElementContent{Particle: exampleParticle(term)}, nil, nil, nil)
+		nil, nil, nil, xsd.ElementContent{Particle: exampleParticle(term)}, nil, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -169,7 +169,7 @@ func Example_buildFinalizeQuery() {
 			exampleParticle(xsd.ResolvedTerm{Term: exampleLocalElement(addressType, "city")}),
 		)}))
 	b.AddElement(exampleElement(exampleQName("shipTo"), addressType, xsd.NewGlobalScope()))
-	country, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, exampleQName("country"), xsd.TypeDefinitionRef{Name: anySimpleTypeName}, xsd.NewAttributeGlobalScope(), nil, false, nil)
+	country, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, exampleQName("country"), xsd.TypeDefinitionRef{Name: anySimpleTypeName}, xsd.NewAttributeGlobalScope(), nil, false)
 	if err != nil {
 		panic(err)
 	}
@@ -207,7 +207,7 @@ func Example_buildFinalizeQuery() {
 // exampleAttribute builds a global attribute declaration of type
 // xs:anySimpleType.
 func exampleAttribute(name xsd.QName) xsd.AttributeDeclaration {
-	a, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, name, xsd.TypeDefinitionRef{Name: anySimpleTypeName}, xsd.NewAttributeGlobalScope(), nil, false, nil)
+	a, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, name, xsd.TypeDefinitionRef{Name: anySimpleTypeName}, xsd.NewAttributeGlobalScope(), nil, false)
 	if err != nil {
 		panic(err)
 	}
@@ -216,7 +216,7 @@ func exampleAttribute(name xsd.QName) xsd.AttributeDeclaration {
 
 // exampleAttributeGroup builds an empty named attribute group definition.
 func exampleAttributeGroup(name xsd.QName) xsd.AttributeGroupDefinition {
-	g, err := xsd.NewAttributeGroupDefinition(xsderr.Loc{}, name, nil, nil, nil)
+	g, err := xsd.NewAttributeGroupDefinition(xsderr.Loc{}, name, nil, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -225,7 +225,7 @@ func exampleAttributeGroup(name xsd.QName) xsd.AttributeGroupDefinition {
 
 // exampleModelGroupDefinition builds a named group over an empty sequence.
 func exampleModelGroupDefinition(name xsd.QName) xsd.ModelGroupDefinition {
-	d, err := xsd.NewModelGroupDefinition(xsderr.Loc{}, name, exampleModelGroup(xsd.CompositorSequence), nil)
+	d, err := xsd.NewModelGroupDefinition(xsderr.Loc{}, name, exampleModelGroup(xsd.CompositorSequence))
 	if err != nil {
 		panic(err)
 	}
@@ -234,7 +234,7 @@ func exampleModelGroupDefinition(name xsd.QName) xsd.ModelGroupDefinition {
 
 // exampleNotation builds a notation declaration with a system identifier.
 func exampleNotation(name xsd.QName, systemID string) xsd.Notation {
-	n, err := xsd.NewNotation(xsderr.Loc{}, name, &systemID, nil, nil)
+	n, err := xsd.NewNotation(xsderr.Loc{}, name, &systemID, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -246,7 +246,7 @@ func exampleNotation(name xsd.QName, systemID string) xsd.Notation {
 func exampleIdentityConstraint(name xsd.QName) xsd.IdentityConstraint {
 	c, err := xsd.NewIdentityConstraint(xsderr.Loc{}, name, xsd.IdentityConstraintUnique,
 		xsd.NewXPathExpression(".", nil, nil, nil),
-		[]xsd.XPathExpression{xsd.NewXPathExpression("@sku", nil, nil, nil)}, nil, nil)
+		[]xsd.XPathExpression{xsd.NewXPathExpression("@sku", nil, nil, nil)}, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -254,10 +254,9 @@ func exampleIdentityConstraint(name xsd.QName) xsd.IdentityConstraint {
 }
 
 // Example_schemaEnumeration lists a finalized schema's §3.17.1 properties. Next
-// to the by-QName Query views, *Schema enumerates all eight properties in
+// to the by-QName Query views, *Schema enumerates all seven properties in
 // document order — the order components were added, which is a guarantee even
-// though §3.17.1 words seven of the eight as unordered sets ({annotations},
-// alone, is a sequence there too.)
+// though §3.17.1 words every one of the seven as an unordered set.
 //
 // Each enumerator returns a COPY of its slice, so writing through the result
 // cannot reach the compiled set; the components inside are shared and
@@ -277,9 +276,6 @@ func Example_schemaEnumeration() {
 	b.AddModelGroup(exampleModelGroupDefinition(exampleQName("nameGroup")))
 	b.AddNotation(exampleNotation(exampleQName("jpeg"), "image/jpeg"))
 	b.AddIdentityConstraint(exampleIdentityConstraint(exampleQName("skuKey")))
-	// parser.Parse wires no schema-level annotation today; a producer calling
-	// AddAnnotation itself is what Annotations() reports.
-	b.AddAnnotation(xsd.NewAnnotation(nil, []xsd.Documentation{xsd.NewDocumentation(nil, nil, "purchase orders")}, nil))
 
 	s, err := b.Finalize()
 	if err != nil {
@@ -307,9 +303,6 @@ func Example_schemaEnumeration() {
 	for _, d := range s.IdentityConstraints() {
 		fmt.Println("identity constraint:", d.Name().Local)
 	}
-	for _, a := range s.Annotations() {
-		fmt.Println("annotation:", a.Documentation()[0].Content())
-	}
 
 	elements := s.Elements()
 	elements[0] = xsd.ElementDeclaration{}
@@ -324,7 +317,6 @@ func Example_schemaEnumeration() {
 	// model group: nameGroup
 	// notation: jpeg
 	// identity constraint: skuKey
-	// annotation: purchase orders
 	// after clearing the returned slice, element: shipTo
 }
 
@@ -444,7 +436,7 @@ func Example_modelGroupScopeParent() {
 	street := exampleElement(exampleQName("street"), anySimpleTypeName, scope)
 
 	group := exampleModelGroup(xsd.CompositorSequence, exampleParticle(xsd.ResolvedTerm{Term: street}))
-	def, err := xsd.NewModelGroupDefinition(xsderr.Loc{}, groupName, group, nil)
+	def, err := xsd.NewModelGroupDefinition(xsderr.Loc{}, groupName, group)
 	if err != nil {
 		panic(err)
 	}

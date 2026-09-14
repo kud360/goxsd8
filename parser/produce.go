@@ -934,14 +934,14 @@ func compositionDirective(el *Element) bool {
 // Two of the names have no arm in run, for DIFFERENT reasons.
 // <defaultOpenContent> is mapped by another pass of this producer:
 // checkDefaultOpenContent reads it, as does every complex type that reaches
-// §3.4.2.3.3 clause 5.2 (produce_complex.go). <annotation> is mapped by NO pass
-// — this producer builds an [xsd.Annotation] nowhere, and rejectS4SFaults only
-// judges where the element stands. It is admitted here because §3.15.1 puts
-// annotations outside ·validation· altogether — "Annotations do not participate
-// in ·validation· as such. Provided an annotation itself satisfies all relevant
+// §3.4.2.3.3 clause 5.2 (produce_complex.go). <annotation> maps to NO component
+// at all — this producer builds nothing from it, and rejectS4SFaults only judges
+// where the element stands. It is admitted here because §3.15.1 puts annotations
+// outside ·validation· altogether — "Annotations do not participate in
+// ·validation· as such. Provided an annotation itself satisfies all relevant
 // ·Schema Component Constraints· it cannot affect the ·validation· of element
 // information items" (:3465) — so no verdict this processor reaches can be short
-// by the Annotation that is never built.
+// by the component it never builds.
 func topLevelMapped(local string) bool {
 	switch local {
 	case "simpleType", "complexType", "element", "attribute", "group", "attributeGroup", "notation",
@@ -2508,7 +2508,7 @@ func (p *producer) restrictionFacets(restriction *Element) ([]xsd.Facet, error) 
 			if len(assertions) == 0 {
 				assertionsAt = len(facets)
 			}
-			assertions = append(assertions, xsd.NewAssertion(p.buildXPathExpression(el, "test"), nil))
+			assertions = append(assertions, xsd.NewAssertion(p.buildXPathExpression(el, "test")))
 			continue
 		}
 		kind, ok := facetKindOf(local)
@@ -2668,7 +2668,7 @@ func (p *producer) produceElement(qname xsd.QName, elem *Element) (xsd.ElementDe
 	}
 	// §3.3.2.2 dcl.elt.global: {scope} is {variety} global, {parent} ·absent·.
 	return xsd.NewElementDeclarationOwningTypes(elem.Loc(), edID, qname, typeDef, typeTable, xsd.NewGlobalScope(), vc,
-		nillable, constraints, affiliations, p.substitutionGroupExclusions(elem), abstract, p.disallowedSubstitutions(elem), nil)
+		nillable, constraints, affiliations, p.substitutionGroupExclusions(elem), abstract, p.disallowedSubstitutions(elem))
 }
 
 // substitutionGroupAffiliations maps the substitutionGroup attribute of a
@@ -3033,7 +3033,7 @@ func (p *producer) produceNotation(elem *Element) (xsd.Notation, error) {
 	if v, ok := elem.Attr("public"); ok {
 		publicID = &v
 	}
-	return xsd.NewNotation(elem.Loc(), qname, systemID, publicID, nil)
+	return xsd.NewNotation(elem.Loc(), qname, systemID, publicID)
 }
 
 // rejectNotationContent rejects content under a <notation> that its schema for
@@ -3137,7 +3137,7 @@ func (p *producer) produceAttribute(qname xsd.QName, elem *Element) (xsd.Attribu
 	if err != nil {
 		return xsd.AttributeDeclaration{}, err
 	}
-	return xsd.NewAttributeDeclaration(elem.Loc(), qname, typeDef, xsd.NewAttributeGlobalScope(), vc, false, nil)
+	return xsd.NewAttributeDeclaration(elem.Loc(), qname, typeDef, xsd.NewAttributeGlobalScope(), vc, false)
 }
 
 // valueConstraintOf maps the default/fixed attributes of an <element>/<attribute>

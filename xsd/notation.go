@@ -15,7 +15,7 @@ const ruleNotationCorrect xsderr.Rule = "n-props-correct"
 // Notation is the Notation Declaration component (Structures §3.14.1): {name}
 // (bundled with {target namespace} as an xsd.QName, per this package's "Names
 // are expanded QNames" convention — doc.go), {system identifier} (an anyURI,
-// optional), {public identifier} (a publicID, optional), and {annotations}.
+// optional), and {public identifier} (a publicID, optional).
 // At least one of {system identifier}/{public identifier} must be present
 // (§3.14.1 tableau, enforced via the generic Notation Declaration Correct
 // constraint, §3.14.6 — §3.14.3/§3.14.4 define no dedicated SCC or validation
@@ -25,13 +25,12 @@ const ruleNotationCorrect xsderr.Rule = "n-props-correct"
 // forbids (an absent {name}; both identifiers absent) so they are
 // unrepresentable (STYLE T1). Notation is immutable after construction.
 type Notation struct {
-	loc         xsderr.Loc // source position; provenance, not a §3.14.1 property
-	name        QName
-	systemID    string
-	hasSystem   bool
-	publicID    string
-	hasPublic   bool
-	annotations []Annotation
+	loc       xsderr.Loc // source position; provenance, not a §3.14.1 property
+	name      QName
+	systemID  string
+	hasSystem bool
+	publicID  string
+	hasPublic bool
 }
 
 // NewNotation builds a Notation, rejecting the two states Notation Declaration
@@ -57,15 +56,13 @@ type Notation struct {
 //     anyURI/publicID value, which is why presence is signalled by a non-nil
 //     pointer rather than a "" sentinel.
 //
-// annotations is copied; the caller's slice is not aliased.
-//
 // loc is the source position charged to any rejection AND retained: Loc reports
 // it back as the declaration's provenance. Pass the position of this
 // declaration's own declaring element, never a convenient nearby one (a parent
 // element's, say) — it is observable, not merely an error-charging convenience.
 // A caller with no real parser position — a synthesized or programmatically
 // built declaration — passes the zero xsderr.Loc{}, which reads as "unknown".
-func NewNotation(loc xsderr.Loc, name QName, systemID, publicID *string, annotations []Annotation) (Notation, error) {
+func NewNotation(loc xsderr.Loc, name QName, systemID, publicID *string) (Notation, error) {
 	if name.Local == "" {
 		return Notation{}, xsderr.New(ruleNotationCorrect, loc,
 			"notation declaration has an absent {name}, but the §3.14.1 tableau types it as a Required xs:NCName, whose value space excludes the empty string (n-props-correct)")
@@ -80,9 +77,6 @@ func NewNotation(loc xsderr.Loc, name QName, systemID, publicID *string, annotat
 	}
 	if publicID != nil {
 		n.publicID, n.hasPublic = *publicID, true
-	}
-	if len(annotations) > 0 {
-		n.annotations = append([]Annotation(nil), annotations...)
 	}
 	return n, nil
 }
@@ -111,14 +105,4 @@ func (n Notation) SystemIdentifier() (string, bool) {
 // not meaningful.
 func (n Notation) PublicIdentifier() (string, bool) {
 	return n.publicID, n.hasPublic
-}
-
-// Annotations returns the {annotations} property in document order. It returns
-// a copy: mutating the result does not affect n. An empty {annotations}
-// yields nil.
-func (n Notation) Annotations() []Annotation {
-	if len(n.annotations) == 0 {
-		return nil
-	}
-	return append([]Annotation(nil), n.annotations...)
 }

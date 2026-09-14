@@ -10,7 +10,9 @@
 // The model covers the component kinds of Structures §2.2: simple and
 // complex type definitions, element and attribute declarations, attribute
 // and model groups, particles, wildcards, identity constraints, type
-// alternatives (CTA), assertions, notations, and annotations.
+// alternatives (CTA), assertions, and notations. Structures §3.15
+// {annotation} is not modelled: no cvc-/src-/cos- rule consumes it, so no
+// component carries it and no accessor reports it (#407).
 //
 // Design rules (see docs/STYLE.md, docs/PRINCIPLES.md):
 //
@@ -120,9 +122,9 @@
 // itself may have other implementations: parser answers a TypeResolver
 // over the built-in datatypes alone, before any *Schema exists.
 //
-// Alongside them *Schema enumerates each of the eight §3.17.1 properties
-// in document order — Types, Elements, Attributes, AttributeGroups,
-// ModelGroups, Notations, IdentityConstraints, Annotations. Unlike the
+// Alongside them *Schema enumerates each of the seven §3.17.1 properties
+// it models in document order — Types, Elements, Attributes,
+// AttributeGroups, ModelGroups, Notations, IdentityConstraints. Unlike the
 // by-QName views these DO copy: each returns a fresh slice (the
 // components in it are shared and immutable), so a caller cannot mutate
 // through the result and desync a source-of-truth slice from the index

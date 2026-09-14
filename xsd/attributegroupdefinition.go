@@ -28,8 +28,8 @@ const ruleAgPropsCorrect xsderr.Rule = "ag-props-correct"
 // AttributeGroupDefinition is the Attribute Group Definition component
 // (Structures §3.6.1, id="agd"): a kind of Annotated Component with {name}
 // (bundled with {target namespace} as an xsd.QName per this package's "Names are
-// expanded QNames" convention — doc.go), {attribute uses}, {attribute wildcard}
-// (Optional), and {annotations}.
+// expanded QNames" convention — doc.go), {attribute uses}, and {attribute
+// wildcard} (Optional).
 //
 // {attribute uses} is spec-worded a SET of Attribute Use components (§3.6.1
 // tableau, §3.6.2.1 "union of ... sets"); this package represents it as a
@@ -47,7 +47,6 @@ type AttributeGroupDefinition struct {
 	attributeUses []AttributeUse
 	wildcard      Wildcard
 	hasWildcard   bool
-	annotations   []Annotation
 }
 
 // NewAttributeGroupDefinition builds an AttributeGroupDefinition, rejecting the
@@ -90,8 +89,8 @@ type AttributeGroupDefinition struct {
 // carries the sibling keyword. This slot is one of the two places an attribute
 // wildcard is identifiable as such; see rejectSiblingOnAttributeWildcard.
 //
-// attributeUses and annotations are copied; the caller's backing arrays are not
-// aliased, and an empty input is held as nil. wildcard is a pointer so absence
+// attributeUses is copied; the caller's backing array is not aliased, and an
+// empty input is held as nil. wildcard is a pointer so absence
 // (nil) is distinct from a present zero record (mirroring elementdeclaration.go's
 // *TypeTable and the wildcard.go optional-slot pattern); when non-nil the
 // pointed-to value is COPIED into the struct and hasWildcard is set — the pointer
@@ -103,7 +102,7 @@ type AttributeGroupDefinition struct {
 // element's, say) — it is observable, not merely an error-charging convenience.
 // A caller with no real parser position — a synthesized or programmatically
 // built definition — passes the zero xsderr.Loc{}, which reads as "unknown".
-func NewAttributeGroupDefinition(loc xsderr.Loc, name QName, attributeUses []AttributeUse, wildcard *Wildcard, annotations []Annotation) (AttributeGroupDefinition, error) {
+func NewAttributeGroupDefinition(loc xsderr.Loc, name QName, attributeUses []AttributeUse, wildcard *Wildcard) (AttributeGroupDefinition, error) {
 	if name.Local == "" {
 		return AttributeGroupDefinition{}, xsderr.New(ruleAgPropsCorrect, loc,
 			"attribute group definition has an absent {name}, but the §3.6.1 tableau types it as a Required xs:NCName, whose value space excludes the empty string (ag-props-correct clause 1)")
@@ -126,9 +125,6 @@ func NewAttributeGroupDefinition(loc xsderr.Loc, name QName, attributeUses []Att
 	}
 	if wildcard != nil {
 		g.wildcard, g.hasWildcard = *wildcard, true
-	}
-	if len(annotations) > 0 {
-		g.annotations = append([]Annotation(nil), annotations...)
 	}
 	return g, nil
 }
@@ -163,14 +159,4 @@ func (g AttributeGroupDefinition) AttributeUses() []AttributeUse {
 // not meaningful.
 func (g AttributeGroupDefinition) AttributeWildcard() (Wildcard, bool) {
 	return g.wildcard, g.hasWildcard
-}
-
-// Annotations returns the {annotations} property in document order. It returns
-// a copy: mutating the result does not affect g. An empty {annotations} yields
-// nil.
-func (g AttributeGroupDefinition) Annotations() []Annotation {
-	if len(g.annotations) == 0 {
-		return nil
-	}
-	return append([]Annotation(nil), g.annotations...)
 }

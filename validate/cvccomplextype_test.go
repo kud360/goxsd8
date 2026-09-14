@@ -26,12 +26,12 @@ import (
 func aUse(t *testing.T, local string, required bool, vc *xsd.ValueConstraint) xsd.AttributeUse {
 	t.Helper()
 	decl, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, xsd.QName{Local: local}, nil,
-		xsd.NewAttributeGlobalScope(), nil, false, nil)
+		xsd.NewAttributeGlobalScope(), nil, false)
 	if err != nil {
 		t.Fatalf("building the %s attribute declaration: %v", local, err)
 	}
 	u, err := xsd.NewAttributeUse(xsderr.Loc{}, required,
-		xsd.LocalAttributeDeclaration{Declaration: decl}, vc, false, nil)
+		xsd.LocalAttributeDeclaration{Declaration: decl}, vc, false)
 	if err != nil {
 		t.Fatalf("building the %s attribute use: %v", local, err)
 	}
@@ -50,7 +50,7 @@ func anyWildcard(t *testing.T, pc xsd.ProcessContents) *xsd.Wildcard {
 	if err != nil {
 		t.Fatalf("building the namespace constraint: %v", err)
 	}
-	w, err := xsd.NewWildcard(xsderr.Loc{}, c, pc, nil)
+	w, err := xsd.NewWildcard(xsderr.Loc{}, c, pc)
 	if err != nil {
 		t.Fatalf("building the %s wildcard: %v", pc, err)
 	}
@@ -64,13 +64,13 @@ func anyWildcard(t *testing.T, pc xsd.ProcessContents) *xsd.Wildcard {
 func governedSchema(t *testing.T, uses []xsd.AttributeUse, wildcard *xsd.Wildcard) *xsd.Schema {
 	t.Helper()
 	ct, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Local: "RootType"}, xsd.QName{}, nil,
-		xsd.DerivationRestriction, false, uses, nil, wildcard, xsd.EmptyContent{}, nil, nil, nil)
+		xsd.DerivationRestriction, false, uses, nil, wildcard, xsd.EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("building RootType: %v", err)
 	}
 	e, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "root"},
 		xsd.TypeDefinitionRef{Name: xsd.QName{Local: "RootType"}}, nil, xsd.NewGlobalScope(),
-		nil, false, nil, nil, nil, false, nil, nil)
+		nil, false, nil, nil, nil, false, nil)
 	if err != nil {
 		t.Fatalf("building the root element declaration: %v", err)
 	}
@@ -315,13 +315,13 @@ func TestUnevaluableTypeTableDeclinesTheAttributeHalf(t *testing.T) {
 	}
 	ct, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Local: "RootType"}, xsd.QName{}, nil,
 		xsd.DerivationRestriction, false, []xsd.AttributeUse{aUse(t, "id", true, nil)}, nil, nil,
-		xsd.EmptyContent{}, nil, nil, nil)
+		xsd.EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("building RootType: %v", err)
 	}
 	e, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "root"},
 		xsd.TypeDefinitionRef{Name: xsd.QName{Local: "RootType"}}, &table, xsd.NewGlobalScope(),
-		nil, false, nil, nil, nil, false, nil, nil)
+		nil, false, nil, nil, nil, false, nil)
 	if err != nil {
 		t.Fatalf("building the root element declaration: %v", err)
 	}
@@ -355,7 +355,7 @@ func TestSimpleTypedRootReachesNoComplexTypeClause(t *testing.T) {
 	}
 	e, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "root"},
 		xsd.TypeDefinitionRef{Name: xsd.QName{Local: "RootType"}}, nil, xsd.NewGlobalScope(),
-		nil, false, nil, nil, nil, false, nil, nil)
+		nil, false, nil, nil, nil, false, nil)
 	if err != nil {
 		t.Fatalf("building the root element declaration: %v", err)
 	}
@@ -465,18 +465,18 @@ func anonymousRootSchema(t *testing.T, base xsd.QName, derivation xsd.Derivation
 	t.Helper()
 	id := xsd.NewComponentID()
 	ct, err := xsd.NewAnonymousComplexType(xsderr.Loc{}, xsd.ElementDeclarationContext{Component: id},
-		base, nil, derivation, false, uses, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+		base, nil, derivation, false, uses, nil, nil, xsd.EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("building the anonymous root type: %v", err)
 	}
 	e, err := xsd.NewElementDeclarationOwningTypes(xsderr.Loc{}, id, xsd.QName{Local: "root"}, xsd.InlineTypeDefinition{Definition: ct}, nil,
-		xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil, nil)
+		xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil)
 	if err != nil {
 		t.Fatalf("building the root element declaration: %v", err)
 	}
 	baseType, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Local: "Base"}, xsd.QName{}, nil,
 		xsd.DerivationRestriction, false, []xsd.AttributeUse{aUse(t, "fromBase", false, nil)}, nil,
-		anyWildcard(t, xsd.ProcessStrict), xsd.EmptyContent{}, nil, nil, nil)
+		anyWildcard(t, xsd.ProcessStrict), xsd.EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("building Base: %v", err)
 	}
@@ -486,7 +486,7 @@ func anonymousRootSchema(t *testing.T, base xsd.QName, derivation xsd.Derivation
 	// here cannot be what makes the assessed case below silent.
 	anyType, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"},
 		xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"}, nil, xsd.DerivationRestriction, false,
-		nil, nil, anyWildcard(t, xsd.ProcessStrict), xsd.EmptyContent{}, nil, nil, nil)
+		nil, nil, anyWildcard(t, xsd.ProcessStrict), xsd.EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("building xs:anyType: %v", err)
 	}

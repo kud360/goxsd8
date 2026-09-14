@@ -72,11 +72,11 @@ func icUse(t *testing.T, name xsd.QName, typ string) xsd.AttributeUse {
 func icUseOf(t *testing.T, name, typ xsd.QName) xsd.AttributeUse {
 	t.Helper()
 	d, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, name,
-		xsd.TypeDefinitionRef{Name: typ}, xsd.NewAttributeGlobalScope(), nil, false, nil)
+		xsd.TypeDefinitionRef{Name: typ}, xsd.NewAttributeGlobalScope(), nil, false)
 	if err != nil {
 		t.Fatalf("building the %s attribute declaration: %v", name, err)
 	}
-	u, err := xsd.NewAttributeUse(xsderr.Loc{}, false, xsd.LocalAttributeDeclaration{Declaration: d}, nil, false, nil)
+	u, err := xsd.NewAttributeUse(xsderr.Loc{}, false, xsd.LocalAttributeDeclaration{Declaration: d}, nil, false)
 	if err != nil {
 		t.Fatalf("building the %s attribute use: %v", name, err)
 	}
@@ -127,7 +127,7 @@ func icLocal(t *testing.T, parent string, name xsd.QName, typ xsd.QName, nillabl
 		t.Fatalf("NewLocalScope: %v", err)
 	}
 	d, err := xsd.NewElementDeclaration(xsderr.Loc{}, name, xsd.TypeDefinitionRef{Name: typ}, nil, scope,
-		nil, nillable, ics, nil, nil, false, nil, nil)
+		nil, nillable, ics, nil, nil, false, nil)
 	if err != nil {
 		t.Fatalf("building the %s element declaration: %v", name, err)
 	}
@@ -147,7 +147,7 @@ func icDefaulted(t *testing.T, parent string, name xsd.QName, typ xsd.QName, lex
 	}
 	vc := xsd.NewValueConstraint(xsd.ValueDefault, lexical, nil, nil)
 	d, err := xsd.NewElementDeclaration(xsderr.Loc{}, name, xsd.TypeDefinitionRef{Name: typ}, nil, scope,
-		&vc, false, nil, nil, nil, false, nil, nil)
+		&vc, false, nil, nil, nil, false, nil)
 	if err != nil {
 		t.Fatalf("building the %s element declaration: %v", name, err)
 	}
@@ -175,7 +175,7 @@ func icTabled(t *testing.T, parent string, name xsd.QName) xsd.ElementDeclaratio
 	}
 	d, err := xsd.NewElementDeclaration(xsderr.Loc{}, name,
 		xsd.TypeDefinitionRef{Name: icBuiltin("string")}, &table, scope,
-		nil, false, nil, nil, nil, false, nil, nil)
+		nil, false, nil, nil, nil, false, nil)
 	if err != nil {
 		t.Fatalf("building the %s element declaration: %v", name, err)
 	}
@@ -189,7 +189,7 @@ func icRepeated(t *testing.T, d xsd.ElementDeclaration) xsd.Particle {
 	if err != nil {
 		t.Fatalf("NewUnboundedOccurs: %v", err)
 	}
-	p, err := xsd.NewParticle(xsderr.Loc{}, o, xsd.ResolvedTerm{Term: d}, nil)
+	p, err := xsd.NewParticle(xsderr.Loc{}, o, xsd.ResolvedTerm{Term: d})
 	if err != nil {
 		t.Fatalf("NewParticle: %v", err)
 	}
@@ -203,7 +203,7 @@ func icOptional(t *testing.T, d xsd.ElementDeclaration) xsd.Particle {
 	if err != nil {
 		t.Fatalf("NewOccurs: %v", err)
 	}
-	p, err := xsd.NewParticle(xsderr.Loc{}, o, xsd.ResolvedTerm{Term: d}, nil)
+	p, err := xsd.NewParticle(xsderr.Loc{}, o, xsd.ResolvedTerm{Term: d})
 	if err != nil {
 		t.Fatalf("NewParticle: %v", err)
 	}
@@ -213,7 +213,7 @@ func icOptional(t *testing.T, d xsd.ElementDeclaration) xsd.Particle {
 // icContent is an element-only {content type} over a <sequence>.
 func icContent(t *testing.T, particles ...xsd.Particle) xsd.ContentType {
 	t.Helper()
-	g, err := xsd.NewModelGroup(xsderr.Loc{}, xsd.CompositorSequence, particles, nil)
+	g, err := xsd.NewModelGroup(xsderr.Loc{}, xsd.CompositorSequence, particles)
 	if err != nil {
 		t.Fatalf("NewModelGroup: %v", err)
 	}
@@ -221,7 +221,7 @@ func icContent(t *testing.T, particles ...xsd.Particle) xsd.ContentType {
 	if err != nil {
 		t.Fatalf("NewOccurs: %v", err)
 	}
-	p, err := xsd.NewParticle(xsderr.Loc{}, o, xsd.ResolvedTerm{Term: g}, nil)
+	p, err := xsd.NewParticle(xsderr.Loc{}, o, xsd.ResolvedTerm{Term: g})
 	if err != nil {
 		t.Fatalf("NewParticle: %v", err)
 	}
@@ -232,7 +232,7 @@ func icContent(t *testing.T, particles ...xsd.Particle) xsd.ContentType {
 func icComplex(t *testing.T, name string, uses []xsd.AttributeUse, content xsd.ContentType) xsd.ComplexType {
 	t.Helper()
 	ct, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Local: name}, xsd.QName{}, nil,
-		xsd.DerivationRestriction, false, uses, nil, nil, content, nil, nil, nil)
+		xsd.DerivationRestriction, false, uses, nil, nil, content, nil, nil)
 	if err != nil {
 		t.Fatalf("building %s: %v", name, err)
 	}
@@ -256,7 +256,7 @@ func icDef(t *testing.T, name string, cat xsd.IdentityConstraintCategory, select
 		key = &xsd.QName{Local: refer}
 	}
 	ic, err := xsd.NewIdentityConstraint(xsderr.Loc{}, xsd.QName{Local: name}, cat,
-		xsd.NewXPathExpression(selector, bindings, def, nil), exprs, key, nil)
+		xsd.NewXPathExpression(selector, bindings, def, nil), exprs, key)
 	if err != nil {
 		t.Fatalf("building the %s identity constraint: %v", name, err)
 	}
@@ -336,7 +336,7 @@ func icSchema(t *testing.T, ns string, nillable bool, rootICs, boxICs []xsd.Iden
 
 	root, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "root"},
 		xsd.TypeDefinitionRef{Name: xsd.QName{Local: "RootType"}}, nil, xsd.NewGlobalScope(),
-		nil, false, rootICs, nil, nil, false, nil, nil)
+		nil, false, rootICs, nil, nil, false, nil)
 	if err != nil {
 		t.Fatalf("building the root element declaration: %v", err)
 	}
@@ -371,7 +371,7 @@ func icSchema(t *testing.T, ns string, nillable bool, rootICs, boxICs []xsd.Iden
 func icTopAttribute(t *testing.T, local, typ string) xsd.AttributeDeclaration {
 	t.Helper()
 	d, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, xsd.QName{Local: local},
-		xsd.TypeDefinitionRef{Name: icBuiltin(typ)}, xsd.NewAttributeGlobalScope(), nil, false, nil)
+		xsd.TypeDefinitionRef{Name: icBuiltin(typ)}, xsd.NewAttributeGlobalScope(), nil, false)
 	if err != nil {
 		t.Fatalf("building the top-level %s attribute declaration: %v", local, err)
 	}
@@ -410,7 +410,7 @@ func icAnonymousSchema(t *testing.T, kidAid, topAid string, rootICs []xsd.Identi
 		xsd.DerivationExtension, false, []xsd.AttributeUse{
 			icUse(t, xsd.QName{Local: "aid"}, kidAid),
 			icUse(t, xsd.QName{Local: "ref"}, "IDREF"),
-		}, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+		}, nil, nil, xsd.EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("building the anonymous kid type: %v", err)
 	}
@@ -419,14 +419,14 @@ func icAnonymousSchema(t *testing.T, kidAid, topAid string, rootICs []xsd.Identi
 		t.Fatalf("NewLocalScope: %v", err)
 	}
 	kid, err := xsd.NewElementDeclarationOwningTypes(xsderr.Loc{}, kidID, xsd.QName{Local: "kid"}, xsd.InlineTypeDefinition{Definition: kidType},
-		nil, scope, nil, false, nil, nil, nil, false, nil, nil)
+		nil, scope, nil, false, nil, nil, nil, false, nil)
 	if err != nil {
 		t.Fatalf("building the kid element declaration: %v", err)
 	}
 	rootType := icComplex(t, "RootType", nil, icContent(t, icRepeated(t, kid)))
 	root, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "root"},
 		xsd.TypeDefinitionRef{Name: xsd.QName{Local: "RootType"}}, nil, xsd.NewGlobalScope(),
-		nil, false, rootICs, nil, nil, false, nil, nil)
+		nil, false, rootICs, nil, nil, false, nil)
 	if err != nil {
 		t.Fatalf("building the root element declaration: %v", err)
 	}
@@ -468,7 +468,7 @@ func icWildcardSchema(t *testing.T, pc xsd.ProcessContents, rootICs []xsd.Identi
 	seeded := icSeeded(t)
 
 	itemType, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Local: "WildType"}, xsd.QName{}, nil,
-		xsd.DerivationRestriction, false, nil, nil, anyWildcard(t, pc), xsd.EmptyContent{}, nil, nil, nil)
+		xsd.DerivationRestriction, false, nil, nil, anyWildcard(t, pc), xsd.EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("building WildType: %v", err)
 	}
@@ -476,7 +476,7 @@ func icWildcardSchema(t *testing.T, pc xsd.ProcessContents, rootICs []xsd.Identi
 	rootType := icComplex(t, "RootType", nil, icContent(t, icRepeated(t, item)))
 	root, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "root"},
 		xsd.TypeDefinitionRef{Name: xsd.QName{Local: "RootType"}}, nil, xsd.NewGlobalScope(),
-		nil, false, rootICs, nil, nil, false, nil, nil)
+		nil, false, rootICs, nil, nil, false, nil)
 	if err != nil {
 		t.Fatalf("building the root element declaration: %v", err)
 	}

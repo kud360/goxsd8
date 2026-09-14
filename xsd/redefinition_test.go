@@ -11,7 +11,7 @@ import (
 // {attribute uses} and {attribute wildcard}.
 func dGroup(t *testing.T, name QName, uses []AttributeUse, wildcard *Wildcard) AttributeGroupDefinition {
 	t.Helper()
-	g, err := NewAttributeGroupDefinition(xsderr.Loc{}, name, uses, wildcard, nil)
+	g, err := NewAttributeGroupDefinition(xsderr.Loc{}, name, uses, wildcard)
 	if err != nil {
 		t.Fatalf("NewAttributeGroupDefinition(%s): %v", name, err)
 	}
@@ -112,7 +112,7 @@ func TestSrcRedefineClause722NoInheritance(t *testing.T) {
 // dMGD builds a top-level model group definition over the given {model group}.
 func dMGD(t *testing.T, name QName, g ModelGroup) ModelGroupDefinition {
 	t.Helper()
-	d, err := NewModelGroupDefinition(xsderr.Loc{}, name, g, nil)
+	d, err := NewModelGroupDefinition(xsderr.Loc{}, name, g)
 	if err != nil {
 		t.Fatalf("NewModelGroupDefinition(%s): %v", name, err)
 	}

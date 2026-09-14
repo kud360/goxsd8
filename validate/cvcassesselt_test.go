@@ -27,7 +27,7 @@ func dType(t *testing.T, name, base string, method xsd.DerivationMethod, uses []
 		baseName = xsd.QName{Local: base}
 	}
 	ct, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Local: name}, baseName, nil,
-		method, false, uses, nil, nil, content, nil, nil, nil)
+		method, false, uses, nil, nil, content, nil, nil)
 	if err != nil {
 		t.Fatalf("building the %s complex type: %v", name, err)
 	}
@@ -44,7 +44,7 @@ func dTyped(t *testing.T, parent, local, typ string) xsd.Particle {
 	}
 	d, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: local},
 		xsd.TypeDefinitionRef{Name: xsd.QName{Local: typ}}, nil, scope,
-		nil, false, nil, nil, nil, false, nil, nil)
+		nil, false, nil, nil, nil, false, nil)
 	if err != nil {
 		t.Fatalf("building the %s element declaration: %v", local, err)
 	}
@@ -60,7 +60,7 @@ func dWildcard(t *testing.T, pc xsd.ProcessContents) xsd.Particle {
 	if err != nil {
 		t.Fatalf("building the namespace constraint: %v", err)
 	}
-	w, err := xsd.NewWildcard(xsderr.Loc{}, c, pc, nil)
+	w, err := xsd.NewWildcard(xsderr.Loc{}, c, pc)
 	if err != nil {
 		t.Fatalf("building the %s wildcard: %v", pc, err)
 	}
@@ -74,7 +74,7 @@ func dParticleOver(t *testing.T, term xsd.TermOrRef) xsd.Particle {
 	if err != nil {
 		t.Fatalf("NewOccurs: %v", err)
 	}
-	p, err := xsd.NewParticle(xsderr.Loc{}, o, term, nil)
+	p, err := xsd.NewParticle(xsderr.Loc{}, o, term)
 	if err != nil {
 		t.Fatalf("NewParticle: %v", err)
 	}
@@ -87,7 +87,7 @@ func dTopLevel(t *testing.T, local, typ string, affiliations ...xsd.QName) xsd.E
 	t.Helper()
 	d, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: local},
 		xsd.TypeDefinitionRef{Name: xsd.QName{Local: typ}}, nil, xsd.NewGlobalScope(),
-		nil, false, nil, affiliations, nil, false, nil, nil)
+		nil, false, nil, affiliations, nil, false, nil)
 	if err != nil {
 		t.Fatalf("building the top-level %s element declaration: %v", local, err)
 	}

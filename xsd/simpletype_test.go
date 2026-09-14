@@ -71,8 +71,8 @@ func TestNewFacetAssertionsPanics(t *testing.T) {
 // {fixed} property, and with defensive-copy semantics on both the input slice
 // and the returned slice.
 func TestNewAssertionsFacetRoundTrip(t *testing.T) {
-	a0 := NewAssertion(NewXPathExpression("@a > 0", nil, nil, nil), nil)
-	a1 := NewAssertion(NewXPathExpression("@b < 10", nil, nil, nil), nil)
+	a0 := NewAssertion(NewXPathExpression("@a > 0", nil, nil, nil))
+	a1 := NewAssertion(NewXPathExpression("@b < 10", nil, nil, nil))
 	in := []Assertion{a0, a1}
 	f := NewAssertionsFacet(in)
 
@@ -619,7 +619,7 @@ func mustSimple(t *testing.T, name string, derivation SimpleTypeDerivation, base
 // mkAssertion builds a bare Assertion carrying only the given XPath test, the
 // shape the assertions-accumulation tests below exercise.
 func mkAssertion(expr string) Assertion {
-	return NewAssertion(NewXPathExpression(expr, nil, nil, nil), nil)
+	return NewAssertion(NewXPathExpression(expr, nil, nil, nil))
 }
 
 // assertionsFacet returns the single FacetAssertions EffectiveFacet in eff (and
