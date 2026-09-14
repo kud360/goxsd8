@@ -1976,8 +1976,10 @@ func rejectLocalSimpleTypeAttrs(elem *Element) error {
 // element's body chooses — <list> to constructListType, <union> to
 // constructUnionType, <restriction> to the code below, which rejects the
 // XSD-namespace children §4.1.2's content model has no position for
-// (rejectOutOfModelFacetChildren), resolves the base, maps the own facets and
-// {final} (simpleTypeFinal), and constructs. It does NOT memoize — the
+// (rejectOutOfModelFacetChildren) and then the two children sharing one expanded
+// name that src-simple-type clause 1 forbids
+// (rejectDuplicateRestrictionChildren), resolves the base, maps the own facets
+// and {final} (simpleTypeFinal), and constructs. It does NOT memoize — the
 // memo/cycle bookkeeping lives in buildSimpleType; an anonymous inline type has
 // no name to key on and is unreferenceable, so it is built here directly, once.
 //
@@ -2012,6 +2014,9 @@ func (p *producer) constructSimpleType(name xsd.QName, elem *Element) (*xsd.Simp
 	// an s4s-invalid <restriction> does not depend on whether its base= happens to
 	// resolve — the content-independence discipline rejectProhibitedAttrs records.
 	if err := rejectOutOfModelFacetChildren(body); err != nil {
+		return nil, err
+	}
+	if err := rejectDuplicateRestrictionChildren(body); err != nil {
 		return nil, err
 	}
 	base, err := p.resolveBase(body)
@@ -2352,6 +2357,59 @@ func rejectOutOfModelFacetChildren(restriction *Element) error {
 		}
 		return fmt.Errorf("parser: <%s> at %s is a child the schema for schema documents does not admit under the <restriction> at %s: a <simpleType>'s <restriction> extends xs:annotated with the group xs:simpleRestrictionModel (xmlschema11-2.md:3929, §4.1.2), giving the content model (annotation?, (simpleType?, (minExclusive | minInclusive | maxExclusive | maxInclusive | totalDigits | fractionDigits | length | minLength | maxLength | enumeration | whiteSpace | pattern | assertion | explicitTimezone | {any with namespace: ##other})*)), whose wildcard position excludes the XSD namespace",
 			local, el.Loc(), restriction.Loc())
+	}
+	return nil
+}
+
+// rejectDuplicateRestrictionChildren charges src-simple-type clause 1 (§3.16.3,
+// xmlschema11-1.md:3658-3659) over a <simpleType>'s <restriction>: "No two
+// elements among the children of <restriction> have the same expanded name in
+// the Schema (xs) namespace, unless that expanded name is one of xs:enumeration,
+// xs:pattern, or xs:assertion." Those three are the clause's ONLY exceptions —
+// the Note narrowing the common case to facets is informative — so <annotation>
+// and the inline base <simpleType> are inside its reach no less than a repeated
+// <length>.
+//
+// This is a NAMED Schema Representation Constraint and so an xsderr.Error, not
+// the plain §5.1 grammar fault rejectOutOfModelFacetChildren charges over the
+// same children (STYLE E2): the clause's own preamble scopes it "in addition to
+// the conditions imposed … by the schema for schema documents". It runs BEHIND
+// that grammar check, the run order checkS4SChildOrder's doc fixes for every
+// src-* charge (#1246).
+//
+// Two shapes inside clause 1's reach are answered before this charge is, and
+// neither is a reason to narrow it. A second <annotation> is answered by
+// rejectRepeatedAnnotations, whose prescan walk reaches every element of the
+// document rather than only the <restriction>s a producer descends into (#928);
+// and two facet children of one kind reach st-props-correct clause 4 at
+// construction (xsd.NewSimpleType) for the programmatic path that never sees a
+// schema document at all. Whichever fires first, the document is rejected, and
+// the clause is implemented here as the spec states it rather than as the
+// remainder those two leave.
+//
+// Children outside the XSD namespace are skipped: the clause is scoped to "the
+// same expanded name in the Schema (xs) namespace", and they are what
+// xs:simpleRestrictionModel's "{any with namespace: ##other}" position admits.
+// The first duplicate in document order is the one reported (STYLE D2).
+func rejectDuplicateRestrictionChildren(restriction *Element) error {
+	// A slice, scanned linearly: the names surviving the three exceptions are the
+	// facet vocabulary plus <annotation> and <simpleType>, counted in tens (STYLE
+	// D3), and s4sNames records the same reuse.
+	var seen []string
+	for _, child := range restriction.Children() {
+		el, ok := child.(*Element)
+		if !ok || el.Name().Space() != xsd.XMLSchemaNS {
+			continue
+		}
+		local := el.Name().Local()
+		if local == "enumeration" || local == "pattern" || local == "assertion" {
+			continue
+		}
+		if slices.Contains(seen, local) {
+			return xsderr.New(ruleSrcSimpleType, el.Loc(),
+				"restriction has a second <%s> child, but src-simple-type clause 1 admits no two children with the same expanded name in the xs namespace unless that name is <enumeration>, <pattern> or <assertion>", local)
+		}
+		seen = append(seen, local)
 	}
 	return nil
 }

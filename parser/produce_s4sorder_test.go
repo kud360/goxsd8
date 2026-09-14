@@ -318,6 +318,23 @@ func TestProduceS4SChildOrderRejected(t *testing.T) {
 			wantKind:  "out of the child order",
 		},
 		{
+			// xs:element opens "annotation?" AHEAD of the "(simpleType | complexType)?"
+			// choice (:5090-5094 topLevelElement, :5114-5118 localElement), so an
+			// <annotation> written behind the inline type is late, not repeated and
+			// not unadmitted.
+			name:     "annotation after the inline simpleType of a top-level element (elemQ004)",
+			topLevel: true,
+			lines: []string{
+				`<xs:element name="myElem">`,
+				`<xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType>`,
+				`<xs:annotation/>`,
+				`</xs:element>`,
+			},
+			wantChild: "<annotation> at " + produceURI + ":4:1",
+			wantOwner: "<element> at " + produceURI + ":2:1",
+			wantKind:  "out of the child order",
+		},
+		{
 			// The same walk one level in, on a LOCAL <element>: one model serves both
 			// forms, so the local one is ordered exactly as the top-level one is.
 			name: "annotation after the inline type of a local element",

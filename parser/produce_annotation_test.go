@@ -19,7 +19,7 @@ const twoAnnotations = "\n" +
 // TestProduceRepeatedAnnotationRejected pins that an element carrying a second
 // <annotation> child is REJECTED: xs:annotated declares <annotation> with the
 // default maxOccurs="1" (xmlschema11-1.md:4436) and "is extended by all types
-// which allow annotation other than <schema> itself" (:4429). Nine rows carry
+// which allow annotation other than <schema> itself" (:4429). Most rows carry
 // the shape of the MS-Annotations2006-07-15 fixture each names; <override> is
 // there because its own particle (:5576) gives it the same cardinality even
 // though it bypasses xs:annotated, and <element> because it is the plainest
@@ -30,12 +30,13 @@ const twoAnnotations = "\n" +
 //
 // The fault is a plain grammar fault, never a rule verdict: §3.15.3, §3.15.4 and
 // §3.15.5 each answer "None as such" (:3499, :3503, :3507), so charging any
-// src-*/cos-* rule would be fabricated (STYLE E2). Each row asserts the
-// diagnostic is positioned at the SECOND <annotation>'s own line rather than at
-// the parent's or the first's (STYLE E3, carried in the message text since a
-// plain error holds no xsderr.Loc), and that it names the parent — so a guard
-// that reported the parent's position, or the enclosing declaration, would not
-// pass.
+// src-*/cos-* rule would be fabricated (STYLE E2). That a NAMED rule also reaches
+// one row's shape from another direction is no exception to it — see the
+// <restriction> row. Each row asserts the diagnostic is positioned at the SECOND
+// <annotation>'s own line rather than at the parent's or the first's (STYLE E3,
+// carried in the message text since a plain error holds no xsderr.Loc), and that
+// it names the parent — so a guard that reported the parent's position, or the
+// enclosing declaration, would not pass.
 func TestProduceRepeatedAnnotationRejected(t *testing.T) {
 	// A slice, not a map: subtest order is output (STYLE D2).
 	cases := []struct {
@@ -75,6 +76,16 @@ func TestProduceRepeatedAnnotationRejected(t *testing.T) {
 			close:  `</xs:notation>`,
 		},
 		{
+			// A <simpleType>'s <restriction>, whose second <annotation> is inside
+			// src-simple-type clause 1's reach as well —
+			// rejectDuplicateRestrictionChildren's doc records which charge answers
+			// this shape and why.
+			name:   "<restriction> (annotB026)",
+			parent: "restriction",
+			open:   `<xs:simpleType name="st"><xs:restriction base="xs:integer">`,
+			close:  `</xs:restriction></xs:simpleType>`,
+		},
+		{
 			name:   "<selector> (annotB028)",
 			parent: "selector",
 			open:   `<xs:element name="foo"><xs:unique name="u"><xs:selector xpath="*">`,
@@ -85,6 +96,12 @@ func TestProduceRepeatedAnnotationRejected(t *testing.T) {
 			parent: "sequence",
 			open:   `<xs:complexType name="ct"><xs:sequence>`,
 			close:  `</xs:sequence></xs:complexType>`,
+		},
+		{
+			name:   "<simpleType> (annotB031)",
+			parent: "simpleType",
+			open:   `<xs:simpleType name="st">`,
+			close:  `<xs:restriction base="xs:integer"/></xs:simpleType>`,
 		},
 		{
 			name:   "<union> (annotB032)",
