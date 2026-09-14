@@ -422,12 +422,11 @@ func resolveTypeName(r TypeResolver, ref QName, loc xsderr.Loc, ctx string) (Typ
 // reaches this component through {substitution group affiliations}, the ONE
 // reference slot Phase A deliberately does not hard-fail: a substitutionGroup
 // naming nothing is a VALID schema whose members are ·absent· (§5.3 Missing
-// Sub-components; W3C saxonData/Missing missing002 pins it, and resolveElementDecl
-// carries the full argument). Charging src-resolve clause 1.3 HERE, on the
-// {type definition} the same absent name induced, would reject exactly the
-// schema Phase A just decided to allow, so the miss returns nil and clause 3
-// simply contributes no type — which is also what ResolvedType answers, and what
-// checkElementSubstitutableForHeads skips on.
+// Sub-components; resolveElementDecl carries the full argument). Charging
+// src-resolve clause 1.3 HERE, on the {type definition} the same absent name
+// induced, would reject exactly the schema Phase A just decided to allow, so the
+// miss returns nil and clause 3 simply contributes no type — which is also what
+// ResolvedType answers, and what checkElementSubstitutableForHeads skips on.
 //
 // The ONE rejection this arm does carry is a representation invariant, not a
 // spec clause: an OWNER-OF-OWNER chain, where the named head's own {type
@@ -668,9 +667,10 @@ func (s *Schema) resolveAttributeUse(u AttributeUse, loc xsderr.Loc, _ string) e
 // falls back to ·lax assessment·. It is not a schema-construction error, which is
 // why e-props-correct clause 1 reads "as described in the property tableau ...
 // modulo the impact of Missing Sub-components (§5.3)". W3C saxonData/Missing
-// missing002 pins exactly this: substitutionGroup="rotten" with no `rotten`
-// declared is a VALID schema whose only invalid instance is the one that uses the
-// affected declaration.
+// missing002 is written to exactly this reading: substitutionGroup="rotten" with
+// no `rotten` declared is a VALID schema whose only invalid instance is the one
+// that uses the affected declaration. It documents the reading without scoring
+// it — see the GAP below.
 //
 // So a dangling affiliation stays in the property as an ·absent· member, and the
 // two walks that read it already behave as §5.3 requires: affiliationChainReaches
@@ -679,14 +679,20 @@ func (s *Schema) resolveAttributeUse(u AttributeUse, loc xsderr.Loc, _ string) e
 // edges for one.
 //
 // GAP(xsd): the OTHER reference slots are not yet §5.3-aligned — a dangling
-// {type definition}, <element ref>, <attribute ref>, <group ref> or keyref is
-// still charged src-resolve by this phase and rejects the whole schema, which is why W3C
-// Missing/missing001 and missing003/006 sit at fail. That deviation is recorded
-// in parser/doc.go; this slot is aligned rather than joining it because #281 is
-// what first put data in the slot, and extending an unimplemented-§5.3 rejection
-// to a new site would have LOST a case the suite says must pass. Aligning the
-// rest is #434: it needs ·absent· to be representable in every slot plus a
-// lax-assessment fallback at validation time, neither of which exists.
+// {type definition}, <element ref>, <attribute ref>, <group ref>, keyref, or a
+// simple type's base=, itemType= or memberTypes=, is still charged src-resolve
+// by this phase and rejects the whole schema. That deviation is recorded in
+// parser/doc.go, whose Composition-gaps §5.3 bullet is also the one encoding of
+// the ruling behind it and of what reversing it would cost; no issue owns the
+// gap, so this marker names none. The suite scores nothing on the slot aligned
+// here: saxonMeta/Missing.testSet carries version="1.0" on the testSet and on
+// all six of its testGroups, so conformance/runner.go's supportedVersionTokens
+// withholds missing001 through missing006 as inapplicable and this alignment
+// stands unscored. A scored case runs the other way — W3C Simple/simple006,
+// whose schema document lists an itemType naming no type, is expected invalid
+// and passes only because that slot still rejects (src-resolve clause 1.1),
+// with the suite's own annotation on it recording that "one could argue for
+// 'valid' under section 5.3, missing components".
 func (s *Schema) resolveElementDecl(e ElementDeclaration) error {
 	if tt, ok := e.TypeTable(); ok {
 		if err := s.resolveTypeTable(tt, e.Loc()); err != nil {
