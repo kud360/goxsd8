@@ -77,7 +77,7 @@ func TestProduceNestedSimpleTypeAttrsProhibited(t *testing.T) {
 			wantLine: 3,
 		},
 		{
-			name: `top-level <element>`,
+			name: `top-level <element> (stA012)`,
 			body: "\n" + `<xs:element name="parent">` +
 				fmt.Sprintf(nested, `name="fooType"`) +
 				`</xs:element>`,

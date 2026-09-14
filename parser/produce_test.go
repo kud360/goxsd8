@@ -2407,6 +2407,32 @@ func TestProduceElementSubstitutionGroupSingleHead(t *testing.T) {
 	}
 }
 
+// TestProduceElementEmptySubstitutionGroupAccepted pins that an EMPTY
+// substitutionGroup on a top-level <element> (elemE007) is accepted and maps to
+// the empty set, so no later session files a rejection for it. The attribute's
+// declared type is an anonymous `<xs:list itemType="xs:QName"/>` with no
+// minLength facet (§A, xmlschema11-1.md:5068-5072) and a list type's value space
+// is "the set of finite-length sequences of zero or more atomic values"
+// (xmlschema11-2.md:333), so "" is a well-formed zero-length list rather than a
+// QName-lexical fault, and §3.3.2.1's {substitution group affiliations} has no
+// item to ·resolve· (:1144). xs:localElement prohibits the attribute outright
+// (:5124), which is why the declaration here is a <schema> child.
+func TestProduceElementEmptySubstitutionGroupAccepted(t *testing.T) {
+	body := `<xs:element name="foo" type="xs:string" abstract="true"/>` +
+		`<xs:element name="myElem" type="xs:string" substitutionGroup=""/>`
+	s, err := produce(t, wrap("", body))
+	if err != nil {
+		t.Fatalf("Produce: %v, want an empty substitutionGroup accepted as a zero-length list", err)
+	}
+	member, ok := s.Element(xsd.QName{Local: "myElem"})
+	if !ok {
+		t.Fatalf("element myElem not found")
+	}
+	if got := member.SubstitutionGroupAffiliationNames(); len(got) != 0 {
+		t.Fatalf("{substitution group affiliations} = %v, want the empty set", got)
+	}
+}
+
 // TestProduceElementSubstitutionGroupUnknownHeadAccepted pins §5.3 (Missing
 // Sub-components) for this one slot: a substitutionGroup naming no declaration
 // resolves to ·absent·, which is NOT a schema-construction error — the schema
