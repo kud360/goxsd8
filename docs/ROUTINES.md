@@ -191,9 +191,9 @@ the fullness check and the reshape both read.
 carries neither: an empty claim's lease date, without which such a branch
 reports CLAIMED — undated — and the thread's `TAKEOVER:` count, without
 which an EXPIRED branch whose diff against main is empty reads as merely
-takeable instead of naming its remedy. Its full shape is `gh issue list
---json number,state,labels,comments`; the fourth field is optional and per
-issue, and its elements need only `{body, createdAt}`.
+takeable instead of naming its remedy. The full shape of that stdin JSON is
+`gh issue list --json number,state,labels,comments`; the fourth field is
+optional and per issue, and its elements need only `{body, createdAt}`.
 
 Fetch it for the issues the first run printed CLAIMED or EXPIRED — the set
 is small, and `repos/{owner}/{repo}/issues` carries no bodies, only a
