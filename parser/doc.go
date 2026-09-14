@@ -243,8 +243,16 @@
 //     member naming no declaration is retained as ·absent· rather than
 //     rejected (see xsd/resolve.go's resolveElementDecl). The remaining
 //     slots — {type definition}, <element ref>, <attribute ref>, <group
-//     ref>, keyref — are #434, which must also supply the ·lax
-//     assessment· fallback §5.3 requires on the validation side.
+//     ref>, keyref — are owned by NO issue, and closing them must also
+//     supply the ·lax assessment· fallback §5.3 requires on the
+//     validation side. #434 implemented it in full, measured 35
+//     regressed schema cases, and is closed not_planned; the spec
+//     question behind it was ruled with #1426 and closed by that ruling:
+//     §5.3 does govern a failed ·resolution·, so the hard-fail here is a
+//     deliberate policy choice rather than a spec requirement. Reversing
+//     it means accepting that measured loss with no ratchet mechanism
+//     able to record it, and CLAUDE.md reserves both calls to a
+//     human-filed issue.
 //   - GAP(xsd): two DISTINCT <xs:redefine> elements whose children are
 //     textually equivalent each contribute their own replacement
 //     components, so redefining one document the same way down two paths

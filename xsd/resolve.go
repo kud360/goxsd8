@@ -685,8 +685,16 @@ func (s *Schema) resolveAttributeUse(u AttributeUse, loc xsderr.Loc, _ string) e
 // in parser/doc.go; this slot is aligned rather than joining it because #281 is
 // what first put data in the slot, and extending an unimplemented-§5.3 rejection
 // to a new site would have LOST a case the suite says must pass. Aligning the
-// rest is #434: it needs ·absent· to be representable in every slot plus a
-// lax-assessment fallback at validation time, neither of which exists.
+// rest needs ·absent· representable in every slot plus a lax-assessment fallback
+// at validation time, neither of which exists, and NO issue owns building them.
+// #434 implemented it in full, measured 35 regressed schema cases, and is closed
+// not_planned; the spec question behind it was ruled with #1426 and closed by
+// that ruling: §5.3 does govern a failed ·resolution·, so the rejection here is a
+// deliberate policy choice rather than a spec requirement, which is what the
+// HARD-FAIL POLICY paragraph on [SchemaBuilder.Finalize] already says of it.
+// Reversing it means accepting that measured loss with no ratchet mechanism able to
+// record it, and CLAUDE.md reserves both calls to a human-filed issue — so this marker
+// names no live owner, deliberately.
 func (s *Schema) resolveElementDecl(e ElementDeclaration) error {
 	if tt, ok := e.TypeTable(); ok {
 		if err := s.resolveTypeTable(tt, e.Loc()); err != nil {
