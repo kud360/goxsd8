@@ -49,9 +49,6 @@ func TestNewAttributeUseValidLocalDeclaration(t *testing.T) {
 	if got.Declaration.Name() != (xsd.QName{Space: "urn:ns", Local: "a"}) {
 		t.Errorf("declaration name = %v, want {urn:ns}a", got.Declaration.Name())
 	}
-	if u.Annotations() != nil {
-		t.Errorf("Annotations() = %v, want nil", u.Annotations())
-	}
 	if _, ok := u.ValueConstraint(); ok {
 		t.Error("ValueConstraint() ok = true for a nil-valueConstraint use, want false")
 	}
@@ -165,27 +162,5 @@ func TestNewAttributeUseClause3(t *testing.T) {
 				t.Fatalf("NewAttributeUse unexpected error: %v", err)
 			}
 		})
-	}
-}
-
-func TestAttributeUseAnnotationsRoundTripAndAlias(t *testing.T) {
-	anns := []xsd.Annotation{
-		xsd.NewAnnotation(nil, []xsd.Documentation{xsd.NewDocumentation(nil, nil, "u")}, nil),
-	}
-	u, err := xsd.NewAttributeUse(xsderr.Loc{}, false, localDecl(t, xsd.QName{Local: "a"}), nil, false, anns)
-	if err != nil {
-		t.Fatalf("NewAttributeUse: %v", err)
-	}
-	if got := u.Annotations(); len(got) != 1 || got[0].Documentation()[0].Content() != "u" {
-		t.Errorf("Annotations() = %+v, want one with content u", got)
-	}
-	anns[0] = xsd.NewAnnotation(nil, nil, nil)
-	if got := u.Annotations(); got[0].Documentation()[0].Content() != "u" {
-		t.Error("AttributeUse aliased the constructor annotations slice")
-	}
-	first := u.Annotations()
-	first[0] = xsd.NewAnnotation(nil, nil, nil)
-	if got := u.Annotations(); got[0].Documentation()[0].Content() != "u" {
-		t.Error("Annotations() returned an aliased slice")
 	}
 }

@@ -82,7 +82,7 @@ func (AttributeDeclarationRef) attributeDeclarationRef()   {}
 
 // AttributeUse is the Attribute Use component (Structures §3.5.1, id="au"): a
 // kind of Annotated Component with {required}, {attribute declaration}, {value
-// constraint} (Optional), {inheritable}, and {annotations}.
+// constraint} (Optional), and {inheritable}.
 //
 // The {value constraint} property (§3.5.1 vc_au) is modeled as an
 // INDEPENDENTLY-optional slot (mirroring attributedeclaration.go): under the
@@ -140,8 +140,7 @@ type AttributeUse struct {
 // record (mirroring attributedeclaration.go's *ValueConstraint handling); when
 // non-nil the pointed-to value is COPIED into the struct and hasValueConstraint
 // is set — the pointer itself is never stored, so the caller's value is not
-// aliased. annotations is copied; the caller's backing array is not aliased, and
-// an empty input is held as nil.
+// aliased.
 //
 // loc is the source position charged to any rejection. A caller with no real
 // parser position — a synthesized or programmatically built use — may

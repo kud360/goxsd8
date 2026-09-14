@@ -322,7 +322,7 @@ func checkComplexTypeContext(loc xsderr.Loc, context ComplexTypeContext) error {
 
 // ComplexType is the Complex Type Definition component (Structures §3.4.1,
 // id="Complex_Type_Definition_details"): a kind of Type Definition with
-// {annotations}, {name} (bundled with {target namespace} as an xsd.QName per
+// {name} (bundled with {target namespace} as an xsd.QName per
 // this package's "Names are expanded QNames" convention — doc.go; the zero
 // QName is an anonymous complex type), {context}, {base type definition},
 // {final}, {derivation method}, {abstract}, {attribute uses}, {attribute
@@ -1027,12 +1027,11 @@ func (c ComplexType) AttributeUses() []AttributeUse {
 // property. For a restriction that is the ·complete wildcard· the caller supplied
 // (clause 2.1); for an EXTENSION it is that wildcard's {namespace constraint}
 // unioned with the {base type definition}'s per cos-aw-union, under the
-// extension's own {process contents} and {annotations} (clause 2.2), because
-// Finalize materialises the fold (attributewildcardfold.go, #265). The §3.4.2.5
-// mapping rule is likewise "the same for all complex type definitions", and an
-// anonymous type gets it at the slots AttributeUses names, by the two routes
-// that entry distinguishes (ownedtypefold.go, #414; baseAttributeWildcard,
-// #505).
+// extension's own {process contents} (clause 2.2), because Finalize materialises
+// the fold (attributewildcardfold.go, #265). The §3.4.2.5 mapping rule is
+// likewise "the same for all complex type definitions", and an anonymous type
+// gets it at the slots AttributeUses names, by the two routes that entry
+// distinguishes (ownedtypefold.go, #414; baseAttributeWildcard, #505).
 //
 // On a ComplexType a caller built with [NewComplexType] and has not yet
 // finalized, it is only what that caller passed in: clause 2.2 needs the base

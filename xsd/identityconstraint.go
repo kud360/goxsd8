@@ -23,8 +23,7 @@ const ruleICProps xsderr.Rule = "c-props-correct"
 // "Names are expanded QNames" convention — doc.go), {identity-constraint
 // category} ("key"/"keyref"/"unique"), {selector} (an XPath Expression
 // property record), {fields} (a non-empty sequence of XPath Expression
-// property records), {referenced key} (present only for "keyref"), and
-// {annotations}.
+// property records), and {referenced key} (present only for "keyref").
 //
 // {selector} and {fields} reuse xsd.XPathExpression verbatim: §3.13.1
 // (id="x") defines the XPath Expression property record once, and §3.11.2's
@@ -76,8 +75,8 @@ type IdentityConstraint struct {
 // NewElementDeclaration's e-props-correct clause 1 check.
 //
 // referencedKey is a pointer so that its absence (nil) is distinct from a
-// present zero/absent QName. fields and annotations are copied; the caller's
-// backing arrays are not aliased.
+// present zero/absent QName. fields is copied; the caller's backing array is
+// not aliased.
 //
 // loc is the source position charged to any rejection AND retained: Loc reports
 // it back as the definition's provenance. Pass the position of this

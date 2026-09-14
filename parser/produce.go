@@ -934,14 +934,14 @@ func compositionDirective(el *Element) bool {
 // Two of the names have no arm in run, for DIFFERENT reasons.
 // <defaultOpenContent> is mapped by another pass of this producer:
 // checkDefaultOpenContent reads it, as does every complex type that reaches
-// §3.4.2.3.3 clause 5.2 (produce_complex.go). <annotation> is mapped by NO pass
-// — this producer builds an [xsd.Annotation] nowhere, and rejectS4SFaults only
-// judges where the element stands. It is admitted here because §3.15.1 puts
-// annotations outside ·validation· altogether — "Annotations do not participate
-// in ·validation· as such. Provided an annotation itself satisfies all relevant
+// §3.4.2.3.3 clause 5.2 (produce_complex.go). <annotation> maps to NO component
+// at all — this producer builds nothing from it, and rejectS4SFaults only judges
+// where the element stands. It is admitted here because §3.15.1 puts annotations
+// outside ·validation· altogether — "Annotations do not participate in
+// ·validation· as such. Provided an annotation itself satisfies all relevant
 // ·Schema Component Constraints· it cannot affect the ·validation· of element
 // information items" (:3465) — so no verdict this processor reaches can be short
-// by the Annotation that is never built.
+// by the component it never builds.
 func topLevelMapped(local string) bool {
 	switch local {
 	case "simpleType", "complexType", "element", "attribute", "group", "attributeGroup", "notation",

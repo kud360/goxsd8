@@ -792,8 +792,7 @@ func (s *Schema) extensionAllGroupPrefix(e, b Particle) bool {
 // attributeUsesIdentical decides property identity between two Attribute Uses
 // (§3.5.1): {required}, {value constraint} (presence, {variety} and {lexical
 // form} — sameRecord, which omits the namespace context deliberately), and
-// {inheritable}, plus the {attribute declaration} slot. {annotations} is not
-// compared — it carries no schema-significant content.
+// {inheritable}, plus the {attribute declaration} slot.
 func (s *Schema) attributeUsesIdentical(a, b AttributeUse) bool {
 	if a.required != b.required || a.inheritable != b.inheritable {
 		return false
@@ -810,8 +809,8 @@ func (s *Schema) attributeUsesIdentical(a, b AttributeUse) bool {
 // LocalAttributeDeclarations own distinct components with no name to be resolved
 // by, so their properties are compared: {name}, {scope}.{variety}, {value
 // constraint}, {inheritable}, and the {type definition} at component identity.
-// {annotations} is not compared. The two variants are never identical to each
-// other: one names a global declaration, the other owns a local one.
+// The two variants are never identical to each other: one names a global
+// declaration, the other owns a local one.
 func (s *Schema) attributeDeclarationsIdentical(a, b AttributeDeclarationOrRef) bool {
 	switch ad := a.(type) {
 	case AttributeDeclarationRef:
@@ -878,7 +877,7 @@ func (s *Schema) typeDefinitionSlotsIdentical(a, b TypeDefinitionOrRef) bool {
 }
 
 // particlesIdentical decides property identity between two Particles (§3.9.1):
-// {min occurs}, {max occurs}, and {term}. {annotations} is not compared.
+// {min occurs}, {max occurs}, and {term}.
 func (s *Schema) particlesIdentical(a, b Particle) bool {
 	if a.Occurs() != b.Occurs() {
 		return false
@@ -931,8 +930,7 @@ func (s *Schema) resolvedTermsIdentical(a, b Term) bool {
 // (§3.8.1): {compositor} and {particles}, position by position — the property is
 // spec-worded a SEQUENCE, so order is significant (modelgroup.go). This is the
 // one descending recursion, and it descends only into an inline value tree that
-// follows no reference, so it terminates without a visited set. {annotations} is
-// not compared.
+// follows no reference, so it terminates without a visited set.
 func (s *Schema) modelGroupsIdentical(a, b ModelGroup) bool {
 	if a.Compositor() != b.Compositor() || len(a.particles) != len(b.particles) {
 		return false
@@ -954,7 +952,7 @@ func (s *Schema) modelGroupsIdentical(a, b ModelGroup) bool {
 // NOT compared, each omission making the relation looser and so fail-open:
 // {scope} (a copied particle keeps the {parent} of the type it was copied FROM,
 // so comparing it would reject the very shape §3.4.2.3.3 clause 4.2.3.3 builds),
-// {identity-constraint definitions}, {type table}, and {annotations}.
+// {identity-constraint definitions}, and {type table}.
 func (s *Schema) elementDeclarationsIdentical(a, b ElementDeclaration) bool {
 	if a.Name() != b.Name() || a.Nillable() != b.Nillable() || a.Abstract() != b.Abstract() {
 		return false
@@ -975,7 +973,7 @@ func (s *Schema) elementDeclarationsIdentical(a, b ElementDeclaration) bool {
 }
 
 // wildcardsIdentical decides property identity between two Wildcards (§3.10.1):
-// {namespace constraint} and {process contents}. {annotations} is not compared.
+// {namespace constraint} and {process contents}.
 func wildcardsIdentical(a, b Wildcard) bool {
 	if a.ProcessContents() != b.ProcessContents() {
 		return false

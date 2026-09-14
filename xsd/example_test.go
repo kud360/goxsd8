@@ -254,10 +254,9 @@ func exampleIdentityConstraint(name xsd.QName) xsd.IdentityConstraint {
 }
 
 // Example_schemaEnumeration lists a finalized schema's §3.17.1 properties. Next
-// to the by-QName Query views, *Schema enumerates all eight properties in
+// to the by-QName Query views, *Schema enumerates all seven properties in
 // document order — the order components were added, which is a guarantee even
-// though §3.17.1 words seven of the eight as unordered sets ({annotations},
-// alone, is a sequence there too.)
+// though §3.17.1 words every one of the seven as an unordered set.
 //
 // Each enumerator returns a COPY of its slice, so writing through the result
 // cannot reach the compiled set; the components inside are shared and
@@ -277,9 +276,6 @@ func Example_schemaEnumeration() {
 	b.AddModelGroup(exampleModelGroupDefinition(exampleQName("nameGroup")))
 	b.AddNotation(exampleNotation(exampleQName("jpeg"), "image/jpeg"))
 	b.AddIdentityConstraint(exampleIdentityConstraint(exampleQName("skuKey")))
-	// parser.Parse wires no schema-level annotation today; a producer calling
-	// AddAnnotation itself is what Annotations() reports.
-	b.AddAnnotation(xsd.NewAnnotation(nil, []xsd.Documentation{xsd.NewDocumentation(nil, nil, "purchase orders")}, nil))
 
 	s, err := b.Finalize()
 	if err != nil {
@@ -307,9 +303,6 @@ func Example_schemaEnumeration() {
 	for _, d := range s.IdentityConstraints() {
 		fmt.Println("identity constraint:", d.Name().Local)
 	}
-	for _, a := range s.Annotations() {
-		fmt.Println("annotation:", a.Documentation()[0].Content())
-	}
 
 	elements := s.Elements()
 	elements[0] = xsd.ElementDeclaration{}
@@ -324,7 +317,6 @@ func Example_schemaEnumeration() {
 	// model group: nameGroup
 	// notation: jpeg
 	// identity constraint: skuKey
-	// annotation: purchase orders
 	// after clearing the returned slice, element: shipTo
 }
 

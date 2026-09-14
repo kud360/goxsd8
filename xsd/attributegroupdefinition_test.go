@@ -48,9 +48,6 @@ func TestNewAttributeGroupDefinitionValid(t *testing.T) {
 	if _, ok := g.AttributeWildcard(); ok {
 		t.Error("AttributeWildcard() ok = true, want false for absent wildcard")
 	}
-	if got := g.Annotations(); got != nil {
-		t.Errorf("Annotations() = %v, want nil", got)
-	}
 }
 
 func TestNewAttributeGroupDefinitionEmptyUsesYieldsNil(t *testing.T) {

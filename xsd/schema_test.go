@@ -523,10 +523,10 @@ func notationNamed(t *testing.T, name xsd.QName) xsd.Notation {
 	return n
 }
 
-// TestAddWrappersAcceptedByFinalize exercises the four append-only builder
-// wrappers (AddAttributeGroup/AddModelGroup/AddNotation/AddAnnotation): each
-// component a wrapper adds must survive Finalize (the resolution pass must not
-// reject a well-formed one). None of these four kinds has an exported by-name
+// TestAddWrappersAcceptedByFinalize exercises the three append-only builder
+// wrappers (AddAttributeGroup/AddModelGroup/AddNotation): each component a
+// wrapper adds must survive Finalize (the resolution pass must not reject a
+// well-formed one). None of these three kinds has an exported by-name
 // *Schema lookup accessor, so observability here is: Finalize succeeds
 // (TestSchemaEnumeratorsDocumentOrder covers the document-order enumerators).
 func TestAddWrappersAcceptedByFinalize(t *testing.T) {
@@ -538,7 +538,6 @@ func TestAddWrappersAcceptedByFinalize(t *testing.T) {
 		{"AddAttributeGroup", func(b *xsd.SchemaBuilder) { b.AddAttributeGroup(attributeGroupNamed(t, name)) }},
 		{"AddModelGroup", func(b *xsd.SchemaBuilder) { b.AddModelGroup(modelGroupNamed(t, name)) }},
 		{"AddNotation", func(b *xsd.SchemaBuilder) { b.AddNotation(notationNamed(t, name)) }},
-		{"AddAnnotation", func(b *xsd.SchemaBuilder) { b.AddAnnotation(xsd.NewAnnotation(nil, nil, nil)) }},
 	}
 	for _, c := range cases {
 		t.Run(c.label, func(t *testing.T) {
@@ -689,13 +688,6 @@ func mustOccurs11(t *testing.T) xsd.Occurs {
 	return o
 }
 
-// annotationDoc builds a schema-level annotation carrying one <documentation>
-// whose content identifies it: an Annotation has no {name}, so that content is
-// how the enumeration tests tell two of them apart.
-func annotationDoc(content string) xsd.Annotation {
-	return xsd.NewAnnotation(nil, []xsd.Documentation{xsd.NewDocumentation(nil, nil, content)}, nil)
-}
-
 // enumerationSchema finalizes a Schema holding two components of every §3.17.1
 // property, added in the order the document-order enumerators must report.
 func enumerationSchema(t *testing.T) *xsd.Schema {
@@ -715,8 +707,6 @@ func enumerationSchema(t *testing.T) *xsd.Schema {
 	b.AddNotation(notationNamed(t, qn("n2")))
 	b.AddIdentityConstraint(idcNamed(t, qn("c1")))
 	b.AddIdentityConstraint(idcNamed(t, qn("c2")))
-	b.AddAnnotation(annotationDoc("first"))
-	b.AddAnnotation(annotationDoc("second"))
 
 	s, err := b.Finalize()
 	if err != nil {
@@ -761,14 +751,6 @@ func TestSchemaEnumeratorsDocumentOrder(t *testing.T) {
 	assertOrder(t, "ModelGroups", enumeratedNames(s.ModelGroups(), xsd.ModelGroupDefinition.Name), []string{"mg1", "mg2"})
 	assertOrder(t, "Notations", enumeratedNames(s.Notations(), xsd.Notation.Name), []string{"n1", "n2"})
 	assertOrder(t, "IdentityConstraints", enumeratedNames(s.IdentityConstraints(), xsd.IdentityConstraint.Name), []string{"c1", "c2"})
-
-	annotations := s.Annotations()
-	if len(annotations) != 2 {
-		t.Fatalf("Annotations() length = %d, want 2", len(annotations))
-	}
-	assertOrder(t, "Annotations",
-		[]string{annotations[0].Documentation()[0].Content(), annotations[1].Documentation()[0].Content()},
-		[]string{"first", "second"})
 }
 
 // assertEnumeratorCopies proves an enumerator hands back a fresh slice: zeroing
@@ -791,8 +773,8 @@ func assertEnumeratorCopies[T any](t *testing.T, label string, get func() []T, k
 func TestSchemaEnumeratorsReturnCopies(t *testing.T) {
 	s := enumerationSchema(t)
 
-	// The Types/Annotations keys tolerate the zero value this helper writes back,
-	// so a broken copy reports a mismatch rather than panicking.
+	// The Types key tolerates the zero value this helper writes back, so a broken
+	// copy reports a mismatch rather than panicking.
 	assertEnumeratorCopies(t, "Types", s.Types, func(d xsd.TypeDefinition) string {
 		if d == nil {
 			return "<nil>"
@@ -805,13 +787,6 @@ func TestSchemaEnumeratorsReturnCopies(t *testing.T) {
 	assertEnumeratorCopies(t, "ModelGroups", s.ModelGroups, func(d xsd.ModelGroupDefinition) string { return d.Name().Local })
 	assertEnumeratorCopies(t, "Notations", s.Notations, func(d xsd.Notation) string { return d.Name().Local })
 	assertEnumeratorCopies(t, "IdentityConstraints", s.IdentityConstraints, func(d xsd.IdentityConstraint) string { return d.Name().Local })
-	assertEnumeratorCopies(t, "Annotations", s.Annotations, func(a xsd.Annotation) string {
-		docs := a.Documentation()
-		if len(docs) == 0 {
-			return "<none>"
-		}
-		return docs[0].Content()
-	})
 }
 
 // TestSchemaTypesIncludesAnonymous pins the half of Types()'s contract the
@@ -862,9 +837,6 @@ func TestSchemaEnumeratorsEmptyAreNil(t *testing.T) {
 	}
 	if got := s.IdentityConstraints(); got != nil {
 		t.Errorf("IdentityConstraints() = %v, want nil", got)
-	}
-	if got := s.Annotations(); got != nil {
-		t.Errorf("Annotations() = %v, want nil", got)
 	}
 }
 

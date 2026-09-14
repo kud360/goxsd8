@@ -361,7 +361,7 @@ func (s Scope) Parent() (ElementScopeParent, bool) {
 // QNames" convention — doc.go), {type definition}, {type table} (Optional),
 // {scope}, {value constraint} (Optional), {nillable}, {identity-constraint
 // definitions}, {substitution group affiliations}, {substitution group
-// exclusions}, {disallowed substitutions}, {abstract}, and {annotations}.
+// exclusions}, {disallowed substitutions}, and {abstract}.
 //
 // Like the other §3 component shapes in this package, ElementDeclaration is a
 // STRUCTURAL holder built before resolution. {substitution group affiliations}

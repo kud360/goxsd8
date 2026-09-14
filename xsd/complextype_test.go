@@ -101,7 +101,7 @@ func TestNewComplexTypeElementContentVarietyDerivation(t *testing.T) {
 }
 
 func TestNewComplexTypeElementContentWithOpenContent(t *testing.T) {
-	w := mustWildcard(t, mustConstraint(t, xsd.NamespaceConstraintAny, nil, nil), xsd.ProcessLax, nil)
+	w := mustWildcard(t, mustConstraint(t, xsd.NamespaceConstraintAny, nil, nil), xsd.ProcessLax)
 	oc, err := xsd.NewOpenContent(xsderr.Loc{}, xsd.OpenContentInterleave, w)
 	if err != nil {
 		t.Fatalf("NewOpenContent unexpected error: %v", err)
@@ -183,7 +183,7 @@ func TestNewComplexTypeRejectsInvalidProhibitedSubstitutions(t *testing.T) {
 }
 
 func TestNewOpenContentRejectsInvalidMode(t *testing.T) {
-	w := mustWildcard(t, mustConstraint(t, xsd.NamespaceConstraintAny, nil, nil), xsd.ProcessStrict, nil)
+	w := mustWildcard(t, mustConstraint(t, xsd.NamespaceConstraintAny, nil, nil), xsd.ProcessStrict)
 	_, err := xsd.NewOpenContent(xsderr.Loc{}, 0, w)
 	if err == nil {
 		t.Fatal("NewOpenContent accepted an invalid {mode}, want ct-props-correct error")
@@ -223,7 +223,7 @@ func TestComplexTypeAttributeWildcardOptional(t *testing.T) {
 	if _, ok := c.AttributeWildcard(); ok {
 		t.Error("AttributeWildcard() present, want absent")
 	}
-	w := mustWildcard(t, mustConstraint(t, xsd.NamespaceConstraintAny, nil, nil), xsd.ProcessStrict, nil)
+	w := mustWildcard(t, mustConstraint(t, xsd.NamespaceConstraintAny, nil, nil), xsd.ProcessStrict)
 	c, err = xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Local: "ct"}, xsd.QName{Local: "base"}, nil,
 		xsd.DerivationRestriction, false, nil, nil, &w, xsd.EmptyContent{}, nil, nil)
 	if err != nil {

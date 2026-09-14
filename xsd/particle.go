@@ -3,7 +3,7 @@ package xsd
 import "github.com/kud360/goxsd8/xsderr"
 
 // Particle is the Particle component (Structures §3.9.1, id="p"): {min occurs},
-// {max occurs}, {term}, and {annotations}. The {min occurs}/{max occurs} pair is
+// {max occurs}, and {term}. The {min occurs}/{max occurs} pair is
 // composed directly as an xsd.Occurs (occurs.go), which already enforces Particle
 // Correct (§3.9.6.1, p-props-correct) clause 2.1 (min ≤ a numeric max) — so this
 // file does not restate the occurrence-range invariants, one fact in one
@@ -61,9 +61,6 @@ type Particle struct {
 // The occurrence-range invariants (p-props-correct clauses 1 and 2.1) are
 // already enforced by the Occurs constructors, so occurs is trusted here; a
 // vacuous Occurs{0,0} is accepted (see the type doc comment).
-//
-// annotations is copied; the caller's backing array is not aliased, and an empty
-// input is held as nil.
 //
 // loc is the source position charged to any rejection. A caller with no real
 // parser position — a synthesized or programmatically built particle — may

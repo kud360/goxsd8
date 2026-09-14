@@ -28,8 +28,8 @@ const ruleAgPropsCorrect xsderr.Rule = "ag-props-correct"
 // AttributeGroupDefinition is the Attribute Group Definition component
 // (Structures §3.6.1, id="agd"): a kind of Annotated Component with {name}
 // (bundled with {target namespace} as an xsd.QName per this package's "Names are
-// expanded QNames" convention — doc.go), {attribute uses}, {attribute wildcard}
-// (Optional), and {annotations}.
+// expanded QNames" convention — doc.go), {attribute uses}, and {attribute
+// wildcard} (Optional).
 //
 // {attribute uses} is spec-worded a SET of Attribute Use components (§3.6.1
 // tableau, §3.6.2.1 "union of ... sets"); this package represents it as a
@@ -89,8 +89,8 @@ type AttributeGroupDefinition struct {
 // carries the sibling keyword. This slot is one of the two places an attribute
 // wildcard is identifiable as such; see rejectSiblingOnAttributeWildcard.
 //
-// attributeUses and annotations are copied; the caller's backing arrays are not
-// aliased, and an empty input is held as nil. wildcard is a pointer so absence
+// attributeUses is copied; the caller's backing array is not aliased, and an
+// empty input is held as nil. wildcard is a pointer so absence
 // (nil) is distinct from a present zero record (mirroring elementdeclaration.go's
 // *TypeTable and the wildcard.go optional-slot pattern); when non-nil the
 // pointed-to value is COPIED into the struct and hasWildcard is set — the pointer

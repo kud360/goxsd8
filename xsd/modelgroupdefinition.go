@@ -12,10 +12,10 @@ import "github.com/kud360/goxsd8/xsderr"
 const ruleMgdPropsCorrect xsderr.Rule = "mgd-props-correct"
 
 // ModelGroupDefinition is the Model Group Definition component (Structures
-// §3.7.1, id="mgd"): a kind of Annotated Component with {annotations}, {name}
-// (bundled with {target namespace} as an xsd.QName per this package's "Names are
-// expanded QNames" convention — doc.go), and {model group} (a Required Model
-// Group component).
+// §3.7.1, id="mgd"): a kind of Annotated Component with {name} (bundled with
+// {target namespace} as an xsd.QName per this package's "Names are expanded
+// QNames" convention — doc.go) and {model group} (a Required Model Group
+// component).
 //
 // It is NOT a Term: only its {model group} is (see term.go). A <group ref>
 // resolves to that shared {model group}, never to the definition itself (§3.7.2).
@@ -56,9 +56,6 @@ type ModelGroupDefinition struct {
 //     ModelGroup — one never built through NewModelGroup, carrying the invalid
 //     zero {compositor} — is illegal, mirroring NewWildcard's rejection of a
 //     zero NamespaceConstraint.
-//
-// annotations is copied; the caller's backing array is not aliased, and an empty
-// input is held as nil.
 //
 // loc is the source position charged to any rejection AND retained: Loc reports
 // it back as the definition's provenance. Pass the position of this

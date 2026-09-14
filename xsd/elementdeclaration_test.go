@@ -23,10 +23,10 @@ func edLocalScope(t *testing.T) xsd.Scope {
 func typeAlt(t *testing.T, test string, typeName xsd.QName) xsd.TypeAlternative {
 	t.Helper()
 	if test == "" {
-		return mustTypeAlternative(t, nil, typeName, nil)
+		return mustTypeAlternative(t, nil, typeName)
 	}
 	x := xp(test)
-	return mustTypeAlternative(t, &x, typeName, nil)
+	return mustTypeAlternative(t, &x, typeName)
 }
 
 func TestNewTypeTableValid(t *testing.T) {
@@ -431,27 +431,6 @@ func TestElementDeclarationDoesNotAliasConstructorSlices(t *testing.T) {
 	affs[0] = xsd.QName{Local: "tampered"}
 	if got := e.SubstitutionGroupAffiliationNames(); got[0] != (xsd.QName{Local: "head"}) {
 		t.Errorf("ElementDeclaration aliased the constructor slice: got %v", got[0])
-	}
-}
-
-func TestElementDeclarationAnnotationsRoundTripAndNil(t *testing.T) {
-	anns := []xsd.Annotation{
-		xsd.NewAnnotation(nil, []xsd.Documentation{xsd.NewDocumentation(nil, nil, "first")}, nil),
-	}
-	e, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "e"}, xsd.TypeDefinitionRef{Name: xsd.QName{Local: "T"}}, nil, xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil, anns)
-	if err != nil {
-		t.Fatalf("NewElementDeclaration: %v", err)
-	}
-	if got := e.Annotations(); len(got) != 1 || got[0].Documentation()[0].Content() != "first" {
-		t.Errorf("Annotations() = %+v, want one with content first", got)
-	}
-
-	bare, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "e"}, xsd.TypeDefinitionRef{Name: xsd.QName{Local: "T"}}, nil, xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil)
-	if err != nil {
-		t.Fatalf("NewElementDeclaration: %v", err)
-	}
-	if got := bare.Annotations(); got != nil {
-		t.Errorf("Annotations() = %v, want nil for empty {annotations}", got)
 	}
 }
 

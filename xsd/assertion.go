@@ -1,9 +1,8 @@
 package xsd
 
 // Assertion is the Assertion component (Structures §3.13.1, id="as"):
-// a kind of Annotated Component with {annotations} (a sequence of
-// Annotation) and {test} (an XPathExpression property record, Required —
-// unlike TypeAlternative's {test}, which is Optional).
+// a kind of Annotated Component with {test} (an XPathExpression property
+// record, Required — unlike TypeAlternative's {test}, which is Optional).
 //
 // Assertion is a STRUCTURAL, opaque holder: {test} is preserved verbatim by
 // the embedded XPathExpression (see its doc), never compiled or evaluated
@@ -19,10 +18,9 @@ type Assertion struct {
 	test XPathExpression
 }
 
-// NewAssertion builds an Assertion. annotations is copied; the caller's
-// backing array is not aliased. There is no rejectable state at this
+// NewAssertion builds an Assertion. There is no rejectable state at this
 // structural layer (see XPathExpression's NewXPathExpression doc) — hence
-// no loc/error, mirroring NewAnnotation.
+// no loc/error.
 func NewAssertion(test XPathExpression) Assertion {
 	a := Assertion{test: test}
 	return a

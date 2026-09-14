@@ -14,9 +14,8 @@ import "github.com/kud360/goxsd8/xsderr"
 const ruleMgPropsCorrect xsderr.Rule = "mg-props-correct"
 
 // ModelGroup is the Model Group component (Structures §3.8.1, id="mg"): a kind
-// of Term with {annotations} (a sequence of Annotation), {compositor} (one of
-// all/choice/sequence — the xsd.Compositor enum, closedsets.go), and {particles}
-// (a sequence of Particle components).
+// of Term with {compositor} (one of all/choice/sequence — the xsd.Compositor
+// enum, closedsets.go) and {particles} (a sequence of Particle components).
 //
 // {particles} is spec-worded a SEQUENCE (§3.8.1 tableau), so document order is
 // spec-significant, not merely a determinism convention: UPA (cos-nonambig,
@@ -41,8 +40,8 @@ type ModelGroup struct {
 // (resolve.go, #173); it is deliberately NOT checked here — the constructor
 // performs no traversal of nested particles.
 //
-// particles and annotations are copied; the caller's backing arrays are not
-// aliased, and an empty input is held as nil.
+// particles is copied; the caller's backing array is not aliased, and an empty
+// input is held as nil.
 //
 // loc is the source position charged to any rejection. A caller with no real
 // parser position — a synthesized or programmatically built group — may

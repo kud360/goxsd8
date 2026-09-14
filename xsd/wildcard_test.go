@@ -9,9 +9,9 @@ import (
 
 // mustWildcard fails the test if construction errors; construction-rejection
 // cases use NewWildcard directly.
-func mustWildcard(t *testing.T, nc xsd.NamespaceConstraint, pc xsd.ProcessContents, anns []xsd.Annotation) xsd.Wildcard {
+func mustWildcard(t *testing.T, nc xsd.NamespaceConstraint, pc xsd.ProcessContents) xsd.Wildcard {
 	t.Helper()
-	w, err := xsd.NewWildcard(xsderr.Loc{}, nc, pc, anns)
+	w, err := xsd.NewWildcard(xsderr.Loc{}, nc, pc)
 	if err != nil {
 		t.Fatalf("NewWildcard(%s, %s) unexpected error: %v", nc.Variety(), pc, err)
 	}
@@ -39,7 +39,7 @@ func TestNewWildcardValid(t *testing.T) {
 	for _, v := range varieties {
 		for _, p := range processes {
 			t.Run(v.name+"/"+p.name, func(t *testing.T) {
-				w := mustWildcard(t, v.c, p.p, nil)
+				w := mustWildcard(t, v.c, p.p)
 				if w.ProcessContents() != p.p {
 					t.Errorf("ProcessContents() = %s, want %s", w.ProcessContents(), p.p)
 				}
@@ -71,42 +71,10 @@ func TestNewWildcardRejectsZeroNamespaceConstraint(t *testing.T) {
 func TestWildcardProcessContentsRoundTrip(t *testing.T) {
 	any := mustConstraint(t, xsd.NamespaceConstraintAny, nil, nil)
 	for _, p := range []xsd.ProcessContents{xsd.ProcessSkip, xsd.ProcessStrict, xsd.ProcessLax} {
-		w := mustWildcard(t, any, p, nil)
+		w := mustWildcard(t, any, p)
 		if got := w.ProcessContents(); got != p {
 			t.Errorf("ProcessContents() = %s, want %s", got, p)
 		}
-	}
-}
-
-func TestWildcardAnnotationsRoundTrip(t *testing.T) {
-	any := mustConstraint(t, xsd.NamespaceConstraintAny, nil, nil)
-	anns := []xsd.Annotation{
-		xsd.NewAnnotation(nil, []xsd.Documentation{xsd.NewDocumentation(nil, nil, "first")}, nil),
-		xsd.NewAnnotation(nil, []xsd.Documentation{xsd.NewDocumentation(nil, nil, "second")}, nil),
-	}
-	w := mustWildcard(t, any, xsd.ProcessStrict, anns)
-
-	got := w.Annotations()
-	if len(got) != 2 {
-		t.Fatalf("Annotations() len = %d, want 2", len(got))
-	}
-	if docs := got[0].Documentation(); len(docs) != 1 || docs[0].Content() != "first" {
-		t.Errorf("Annotations()[0] documentation = %+v, want content %q", docs, "first")
-	}
-
-	// Defensive copy: mutating the caller's input after construction must not
-	// be observable through the Wildcard.
-	anns[0] = xsd.NewAnnotation(nil, []xsd.Documentation{xsd.NewDocumentation(nil, nil, "tampered")}, nil)
-	if docs := w.Annotations()[0].Documentation(); docs[0].Content() != "first" {
-		t.Errorf("Wildcard aliased the constructor slice: got content %q, want %q", docs[0].Content(), "first")
-	}
-}
-
-func TestWildcardAnnotationsNilWhenEmpty(t *testing.T) {
-	any := mustConstraint(t, xsd.NamespaceConstraintAny, nil, nil)
-	w := mustWildcard(t, any, xsd.ProcessStrict, nil)
-	if got := w.Annotations(); got != nil {
-		t.Errorf("Annotations() = %v, want nil for empty {annotations}", got)
 	}
 }
 
@@ -116,7 +84,7 @@ func TestWildcardAllowsNameDelegates(t *testing.T) {
 	// NamespaceConstraint.AllowsNamespace's doc comment.
 	target := xsd.NamespaceName("http://example.com/t")
 	nc := mustConstraint(t, xsd.NamespaceConstraintNot, []xsd.Namespace{{}, target}, nil)
-	w := mustWildcard(t, nc, xsd.ProcessStrict, nil)
+	w := mustWildcard(t, nc, xsd.ProcessStrict)
 
 	cases := []xsd.QName{
 		{Space: "http://example.com/t", Local: "x"},   // target rejected
@@ -149,7 +117,7 @@ func TestWildcardAllowsNameRespectsDisallowedNames(t *testing.T) {
 	disallowed := xsd.QName{Space: "http://example.com/t", Local: "secret"}
 	permitted := xsd.QName{Space: "http://example.com/t", Local: "public"}
 	nc := mustConstraint(t, xsd.NamespaceConstraintEnumeration, []xsd.Namespace{target}, []xsd.QName{disallowed})
-	w := mustWildcard(t, nc, xsd.ProcessLax, nil)
+	w := mustWildcard(t, nc, xsd.ProcessLax)
 
 	if w.AllowsName(disallowed) {
 		t.Errorf("AllowsName(%s) = true, want false (literal disallowed-name member)", disallowed)
@@ -171,7 +139,7 @@ func keywordWildcard(t *testing.T, keywords ...xsd.DisallowedNameKeyword) xsd.Wi
 	if err != nil {
 		t.Fatalf("NewNamespaceConstraint: %v", err)
 	}
-	return mustWildcard(t, nc, xsd.ProcessStrict, nil)
+	return mustWildcard(t, nc, xsd.ProcessStrict)
 }
 
 // TestWPropsCorrectClause5 pins w-props-correct (§3.10.6.1) clause 5 at the two

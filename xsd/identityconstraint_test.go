@@ -126,34 +126,6 @@ func TestNewIdentityConstraintRejectsReferKeyMismatch(t *testing.T) {
 	}
 }
 
-func TestIdentityConstraintAnnotationsRoundTrip(t *testing.T) {
-	anns := []xsd.Annotation{
-		xsd.NewAnnotation(nil, []xsd.Documentation{xsd.NewDocumentation(nil, nil, "first")}, nil),
-		xsd.NewAnnotation(nil, []xsd.Documentation{xsd.NewDocumentation(nil, nil, "second")}, nil),
-	}
-	ic, err := xsd.NewIdentityConstraint(xsderr.Loc{}, xsd.QName{Local: "k"}, xsd.IdentityConstraintKey, xp("."), []xsd.XPathExpression{xp("@a")}, nil, anns)
-	if err != nil {
-		t.Fatalf("NewIdentityConstraint: %v", err)
-	}
-	got := ic.Annotations()
-	if len(got) != 2 {
-		t.Fatalf("Annotations() len = %d, want 2", len(got))
-	}
-	if docs := got[0].Documentation(); len(docs) != 1 || docs[0].Content() != "first" {
-		t.Errorf("Annotations()[0] documentation = %+v, want content %q", docs, "first")
-	}
-}
-
-func TestIdentityConstraintAnnotationsNilWhenEmpty(t *testing.T) {
-	ic, err := xsd.NewIdentityConstraint(xsderr.Loc{}, xsd.QName{Local: "k"}, xsd.IdentityConstraintKey, xp("."), []xsd.XPathExpression{xp("@a")}, nil)
-	if err != nil {
-		t.Fatalf("NewIdentityConstraint: %v", err)
-	}
-	if got := ic.Annotations(); got != nil {
-		t.Errorf("Annotations() = %v, want nil for empty {annotations}", got)
-	}
-}
-
 func TestIdentityConstraintFieldsAccessorDoesNotAlias(t *testing.T) {
 	ic, err := xsd.NewIdentityConstraint(xsderr.Loc{}, xsd.QName{Local: "k"}, xsd.IdentityConstraintKey, xp("."), []xsd.XPathExpression{xp("@a")}, nil)
 	if err != nil {

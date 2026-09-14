@@ -185,10 +185,10 @@ func (s *Schema) collapsedAttributeUses(own, acc []AttributeUse) []AttributeUse 
 // the collapse through §3.4.2.5 clause 2.2.2 — unionExtensionAttributeWildcard,
 // this tree's one encoding of cos-aw-union (§3.10.6.3, attributewildcardfold.go)
 // — so M's wildcard is the left fold of that union over A's folded value and each
-// extension step's, in chain order. {process contents} and {annotations} come
-// from the last operand folded in, i.e. from T, exactly as they would in the real
-// collapse: clause 2.2.2.3 takes them from the ·complete wildcard· side, and T is
-// always the topmost extension step.
+// extension step's, in chain order. {process contents} comes from the last
+// operand folded in, i.e. from T, exactly as it would in the real collapse:
+// clause 2.2.2.3 takes it from the ·complete wildcard· side, and T is always the
+// topmost extension step.
 //
 // GAP(xsd): the step's OWN <anyAttribute> is not recoverable, and what is folded
 // in is its FOLDED {attribute wildcard} instead — owned by #586. cos-aw-union is

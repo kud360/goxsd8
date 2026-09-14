@@ -3,12 +3,12 @@ package xsd
 import "github.com/kud360/goxsd8/xsderr"
 
 // Wildcard is the Wildcard component (Structures §3.10.1, id="w"): a kind of
-// Term with {annotations} (a sequence of Annotation), {namespace constraint}
-// (a NamespaceConstraint, §3.10.1 "nc" — see namespaceconstraint.go), and
-// {process contents} (one of skip/strict/lax — see closedsets.go). It is the
-// thin composition wiring an element/attribute wildcard's admission to the
-// §3.10.4 allowance algorithm: AllowsName is the one canonical entry point
-// (xsd/doc.go's "wildcard admission ... one canonical implementation").
+// Term with {namespace constraint} (a NamespaceConstraint, §3.10.1 "nc" — see
+// namespaceconstraint.go) and {process contents} (one of skip/strict/lax — see
+// closedsets.go). It is the thin composition wiring an element/attribute
+// wildcard's admission to the §3.10.4 allowance algorithm: AllowsName is the
+// one canonical entry point (xsd/doc.go's "wildcard admission ... one
+// canonical implementation").
 //
 // The zero value is NOT a valid Wildcard (its NamespaceConstraint and
 // ProcessContents are both the invalid zero); construct only through
@@ -42,8 +42,6 @@ type Wildcard struct {
 // because a Wildcard does not know which tableau slot holds it — element
 // wildcard, {attribute wildcard}, or open content {wildcard}. It is enforced by
 // rejectSiblingOnAttributeWildcard at the two attribute-wildcard slots.
-//
-// annotations is copied; the caller's backing array is not aliased.
 //
 // loc is the source position charged to any rejection. A caller with no real
 // parser position — a synthesized or programmatically built wildcard — may

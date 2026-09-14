@@ -678,7 +678,7 @@ func TestProduceSimpleContentRestrictionIsNoGrammarFault(t *testing.T) {
 // base's {open content} through into the ·explicit content type·: the derived
 // type's own <openContent> does NOT replace it but widens it, the {namespace
 // constraint} being the §3.10.6.3 wildcard union of the two, with {process
-// contents} and {annotations} taken from the derivation's own W alone.
+// contents} taken from the derivation's own W alone.
 func TestProduceExtensionOpenContentUnionsWithBase(t *testing.T) {
 	s, err := produce(t, wrap("urn:x", `
 		<xs:complexType name="B">

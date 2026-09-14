@@ -41,9 +41,6 @@ func TestNewAttributeDeclarationValidGlobalNoValueConstraint(t *testing.T) {
 	if _, ok := a.ValueConstraint(); ok {
 		t.Error("ValueConstraint() ok = true, want false for absent value constraint")
 	}
-	if got := a.Annotations(); got != nil {
-		t.Errorf("Annotations() = %v, want nil", got)
-	}
 }
 
 func TestNewAttributeDeclarationValueConstraintAndInheritablePresent(t *testing.T) {
@@ -259,28 +256,4 @@ func TestNewAttributeDeclarationRejectsUnknownValueConstraintKind(t *testing.T) 
 		t.Fatal("NewAttributeDeclaration(zero value constraint) succeeded, want a-props-correct error")
 	}
 	assertRule(t, err, "a-props-correct")
-}
-
-func TestAttributeDeclarationAnnotationsRoundTripAndAlias(t *testing.T) {
-	anns := []xsd.Annotation{
-		xsd.NewAnnotation(nil, []xsd.Documentation{xsd.NewDocumentation(nil, nil, "doc")}, nil),
-	}
-	a, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, xsd.QName{Local: "a"}, xsd.TypeDefinitionRef{Name: xsd.QName{Local: "T"}}, xsd.NewAttributeGlobalScope(), nil, false, anns)
-	if err != nil {
-		t.Fatalf("NewAttributeDeclaration: %v", err)
-	}
-	if got := a.Annotations(); len(got) != 1 || got[0].Documentation()[0].Content() != "doc" {
-		t.Errorf("Annotations() = %+v, want one with content doc", got)
-	}
-	// The constructor must not alias the caller's backing array.
-	anns[0] = xsd.NewAnnotation(nil, nil, nil)
-	if got := a.Annotations(); got[0].Documentation()[0].Content() != "doc" {
-		t.Error("AttributeDeclaration aliased the constructor annotations slice")
-	}
-	// The accessor must not alias the stored slice.
-	first := a.Annotations()
-	first[0] = xsd.NewAnnotation(nil, nil, nil)
-	if got := a.Annotations(); got[0].Documentation()[0].Content() != "doc" {
-		t.Error("Annotations() returned an aliased slice")
-	}
 }

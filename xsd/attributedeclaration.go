@@ -292,8 +292,7 @@ func (s AttributeScope) Parent() (AttributeScopeParent, bool) {
 // §3.2.1, id="Attribute_Declaration_details"): a kind of Annotated Component
 // with {name} (bundled with {target namespace} as an xsd.QName per this
 // package's "Names are expanded QNames" convention — doc.go), {type
-// definition}, {scope}, {value constraint} (Optional), {inheritable}, and
-// {annotations}.
+// definition}, {scope}, {value constraint} (Optional), and {inheritable}.
 //
 // Like the other §3 component shapes in this package, AttributeDeclaration is a
 // STRUCTURAL holder built before resolution. Its {type definition} is carried as
@@ -407,8 +406,7 @@ type AttributeDeclaration struct {
 // record (mirroring elementdeclaration.go's *ValueConstraint handling); when
 // non-nil the pointed-to value is COPIED into the struct and hasValueConstraint
 // is set — the pointer itself is never stored, so the caller's value is not
-// aliased. annotations is copied; the caller's backing array is not aliased, and
-// an empty input is held as nil.
+// aliased.
 //
 // loc is the source position charged to any rejection AND retained: Loc reports
 // it back as the declaration's provenance. Pass the position of this

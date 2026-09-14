@@ -15,7 +15,7 @@ const ruleNotationCorrect xsderr.Rule = "n-props-correct"
 // Notation is the Notation Declaration component (Structures §3.14.1): {name}
 // (bundled with {target namespace} as an xsd.QName, per this package's "Names
 // are expanded QNames" convention — doc.go), {system identifier} (an anyURI,
-// optional), {public identifier} (a publicID, optional), and {annotations}.
+// optional), and {public identifier} (a publicID, optional).
 // At least one of {system identifier}/{public identifier} must be present
 // (§3.14.1 tableau, enforced via the generic Notation Declaration Correct
 // constraint, §3.14.6 — §3.14.3/§3.14.4 define no dedicated SCC or validation
@@ -55,8 +55,6 @@ type Notation struct {
 //     identifier, or both, may be present; an empty string is a legal (present)
 //     anyURI/publicID value, which is why presence is signalled by a non-nil
 //     pointer rather than a "" sentinel.
-//
-// annotations is copied; the caller's slice is not aliased.
 //
 // loc is the source position charged to any rejection AND retained: Loc reports
 // it back as the declaration's provenance. Pass the position of this

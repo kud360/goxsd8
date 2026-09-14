@@ -191,9 +191,9 @@ import (
 //     descends into an <annotation> or reports one: topLevel, container and
 //     namedGroup each admit the name and hold no arm for it, and element,
 //     attributeDecl, simpleType and modelGroup report nothing of their own at any
-//     position. Nothing maps one either — this producer builds an xsd.Annotation
-//     nowhere, which is why topLevelMapped admits <annotation> for §3.15.1's
-//     reason rather than for a dispatch's — and no s4sModel orders one.
+//     position. Nothing maps one either — an <annotation> corresponds to no
+//     component this producer builds, which is why topLevelMapped admits it for
+//     §3.15.1's reason rather than for a dispatch's — and no s4sModel orders one.
 //     xs:annotation is "(appinfo | documentation)*" (§3.15.2, :3480; Appendix A
 //     :5747), and rejectRepeatedAnnotations charges the two shapes it owns, a
 //     nested <annotation> at any cardinality and a second <annotation> under one

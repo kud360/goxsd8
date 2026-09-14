@@ -3,9 +3,9 @@ package xsd
 import "github.com/kud360/goxsd8/xsderr"
 
 // TypeAlternative is the Type Alternative component (Structures §3.12.1,
-// id="tac"): a kind of Annotated Component with {annotations} (a sequence of
-// Annotation), {test} (an XPathExpression property record, Optional — unlike
-// Assertion's {test}, which is Required) and {type definition} (Required).
+// id="tac"): a kind of Annotated Component with {test} (an XPathExpression
+// property record, Optional — unlike Assertion's {test}, which is Required)
+// and {type definition} (Required).
 //
 // A Type Alternative is one entry of the ordered {alternatives} list on an
 // element declaration's {type table} (§3.3.2.1): §3.12.4's conditional type
@@ -47,8 +47,7 @@ type TypeAlternative struct {
 // to a (possibly empty) XPathExpression means {test} is present, because an
 // empty {expression} is a legal present value (see NewXPathExpression's doc) —
 // so absence cannot collapse into a zero record and needs its own flag,
-// mirroring hasDefaultNamespace/hasBaseURI. annotations is copied; the
-// caller's backing array is not aliased.
+// mirroring hasDefaultNamespace/hasBaseURI.
 //
 // typeDefinition is Required by the §3.12.1 tableau, so a nil slot — the sum's
 // encoding of an ABSENT property — is rejected, charged to

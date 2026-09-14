@@ -8,7 +8,7 @@ import (
 )
 
 func TestNewParticleValidWithResolvedTerm(t *testing.T) {
-	w := mustWildcard(t, mustConstraint(t, xsd.NamespaceConstraintAny, nil, nil), xsd.ProcessStrict, nil)
+	w := mustWildcard(t, mustConstraint(t, xsd.NamespaceConstraintAny, nil, nil), xsd.ProcessStrict)
 	occ, err := xsd.NewOccurs(xsderr.Loc{}, 1, 5)
 	if err != nil {
 		t.Fatalf("NewOccurs: %v", err)
@@ -115,19 +115,5 @@ func TestNewParticleAcceptsVacuousOccurs(t *testing.T) {
 	}
 	if max, ok := p.Occurs().Max(); !ok || max != 0 {
 		t.Errorf("Occurs().Max() = (%d, %v), want (0, true)", max, ok)
-	}
-}
-
-func TestParticleAnnotationsDoNotAlias(t *testing.T) {
-	anns := []xsd.Annotation{
-		xsd.NewAnnotation(nil, []xsd.Documentation{xsd.NewDocumentation(nil, nil, "first")}, nil),
-	}
-	p, err := xsd.NewParticle(xsderr.Loc{}, xsd.Occurs{}, xsd.ElementDeclarationRef{Name: xsd.QName{Local: "e"}}, anns)
-	if err != nil {
-		t.Fatalf("NewParticle: %v", err)
-	}
-	anns[0] = xsd.NewAnnotation(nil, []xsd.Documentation{xsd.NewDocumentation(nil, nil, "tampered")}, nil)
-	if docs := p.Annotations()[0].Documentation(); docs[0].Content() != "first" {
-		t.Errorf("Particle aliased the constructor annotations slice: got %q", docs[0].Content())
 	}
 }
