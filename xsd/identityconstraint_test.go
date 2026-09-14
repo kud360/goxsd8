@@ -29,7 +29,7 @@ func TestNewIdentityConstraintValid(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			sel := xp(".//foo")
 			fields := []xsd.XPathExpression{xp("@a"), xp("@b")}
-			ic, err := xsd.NewIdentityConstraint(xsderr.Loc{}, name, c.category, sel, fields, c.refer, nil)
+			ic, err := xsd.NewIdentityConstraint(xsderr.Loc{}, name, c.category, sel, fields, c.refer)
 			if err != nil {
 				t.Fatalf("NewIdentityConstraint unexpected error: %v", err)
 			}
@@ -72,7 +72,7 @@ func TestNewIdentityConstraintRejectsAbsentName(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := xsd.NewIdentityConstraint(xsderr.Loc{}, tc.qname, xsd.IdentityConstraintKey, xp("."), []xsd.XPathExpression{xp("@a")}, nil, nil)
+			_, err := xsd.NewIdentityConstraint(xsderr.Loc{}, tc.qname, xsd.IdentityConstraintKey, xp("."), []xsd.XPathExpression{xp("@a")}, nil)
 			if !tc.wantErr {
 				if err != nil {
 					t.Fatalf("NewIdentityConstraint(%v) unexpected error: %v", tc.qname, err)
@@ -88,7 +88,7 @@ func TestNewIdentityConstraintRejectsAbsentName(t *testing.T) {
 }
 
 func TestNewIdentityConstraintRejectsUnknownCategory(t *testing.T) {
-	_, err := xsd.NewIdentityConstraint(xsderr.Loc{}, xsd.QName{Local: "k"}, 0, xp("."), []xsd.XPathExpression{xp("@a")}, nil, nil)
+	_, err := xsd.NewIdentityConstraint(xsderr.Loc{}, xsd.QName{Local: "k"}, 0, xp("."), []xsd.XPathExpression{xp("@a")}, nil)
 	if err == nil {
 		t.Fatal("NewIdentityConstraint(category=0) succeeded, want c-props-correct error")
 	}
@@ -97,7 +97,7 @@ func TestNewIdentityConstraintRejectsUnknownCategory(t *testing.T) {
 
 func TestNewIdentityConstraintRejectsEmptyFields(t *testing.T) {
 	for _, fields := range [][]xsd.XPathExpression{nil, {}} {
-		_, err := xsd.NewIdentityConstraint(xsderr.Loc{}, xsd.QName{Local: "k"}, xsd.IdentityConstraintKey, xp("."), fields, nil, nil)
+		_, err := xsd.NewIdentityConstraint(xsderr.Loc{}, xsd.QName{Local: "k"}, xsd.IdentityConstraintKey, xp("."), fields, nil)
 		if err == nil {
 			t.Fatalf("NewIdentityConstraint(fields=%v) succeeded, want c-props-correct error", fields)
 		}
@@ -110,7 +110,7 @@ func TestNewIdentityConstraintRejectsReferKeyMismatch(t *testing.T) {
 	fields := []xsd.XPathExpression{xp("@a")}
 
 	// keyref WITHOUT a {referenced key}.
-	_, err := xsd.NewIdentityConstraint(xsderr.Loc{}, xsd.QName{Local: "k"}, xsd.IdentityConstraintKeyref, xp("."), fields, nil, nil)
+	_, err := xsd.NewIdentityConstraint(xsderr.Loc{}, xsd.QName{Local: "k"}, xsd.IdentityConstraintKeyref, xp("."), fields, nil)
 	if err == nil {
 		t.Fatal("keyref without {referenced key} succeeded, want c-props-correct error")
 	}
@@ -118,7 +118,7 @@ func TestNewIdentityConstraintRejectsReferKeyMismatch(t *testing.T) {
 
 	// non-keyref WITH a {referenced key}.
 	for _, cat := range []xsd.IdentityConstraintCategory{xsd.IdentityConstraintKey, xsd.IdentityConstraintUnique} {
-		_, err := xsd.NewIdentityConstraint(xsderr.Loc{}, xsd.QName{Local: "k"}, cat, xp("."), fields, &refer, nil)
+		_, err := xsd.NewIdentityConstraint(xsderr.Loc{}, xsd.QName{Local: "k"}, cat, xp("."), fields, &refer)
 		if err == nil {
 			t.Fatalf("%v with {referenced key} succeeded, want c-props-correct error", cat)
 		}
@@ -126,36 +126,8 @@ func TestNewIdentityConstraintRejectsReferKeyMismatch(t *testing.T) {
 	}
 }
 
-func TestIdentityConstraintAnnotationsRoundTrip(t *testing.T) {
-	anns := []xsd.Annotation{
-		xsd.NewAnnotation(nil, []xsd.Documentation{xsd.NewDocumentation(nil, nil, "first")}, nil),
-		xsd.NewAnnotation(nil, []xsd.Documentation{xsd.NewDocumentation(nil, nil, "second")}, nil),
-	}
-	ic, err := xsd.NewIdentityConstraint(xsderr.Loc{}, xsd.QName{Local: "k"}, xsd.IdentityConstraintKey, xp("."), []xsd.XPathExpression{xp("@a")}, nil, anns)
-	if err != nil {
-		t.Fatalf("NewIdentityConstraint: %v", err)
-	}
-	got := ic.Annotations()
-	if len(got) != 2 {
-		t.Fatalf("Annotations() len = %d, want 2", len(got))
-	}
-	if docs := got[0].Documentation(); len(docs) != 1 || docs[0].Content() != "first" {
-		t.Errorf("Annotations()[0] documentation = %+v, want content %q", docs, "first")
-	}
-}
-
-func TestIdentityConstraintAnnotationsNilWhenEmpty(t *testing.T) {
-	ic, err := xsd.NewIdentityConstraint(xsderr.Loc{}, xsd.QName{Local: "k"}, xsd.IdentityConstraintKey, xp("."), []xsd.XPathExpression{xp("@a")}, nil, nil)
-	if err != nil {
-		t.Fatalf("NewIdentityConstraint: %v", err)
-	}
-	if got := ic.Annotations(); got != nil {
-		t.Errorf("Annotations() = %v, want nil for empty {annotations}", got)
-	}
-}
-
 func TestIdentityConstraintFieldsAccessorDoesNotAlias(t *testing.T) {
-	ic, err := xsd.NewIdentityConstraint(xsderr.Loc{}, xsd.QName{Local: "k"}, xsd.IdentityConstraintKey, xp("."), []xsd.XPathExpression{xp("@a")}, nil, nil)
+	ic, err := xsd.NewIdentityConstraint(xsderr.Loc{}, xsd.QName{Local: "k"}, xsd.IdentityConstraintKey, xp("."), []xsd.XPathExpression{xp("@a")}, nil)
 	if err != nil {
 		t.Fatalf("NewIdentityConstraint: %v", err)
 	}
@@ -169,7 +141,7 @@ func TestIdentityConstraintFieldsAccessorDoesNotAlias(t *testing.T) {
 
 func TestIdentityConstraintDoesNotAliasConstructorFields(t *testing.T) {
 	fields := []xsd.XPathExpression{xp("@a")}
-	ic, err := xsd.NewIdentityConstraint(xsderr.Loc{}, xsd.QName{Local: "k"}, xsd.IdentityConstraintKey, xp("."), fields, nil, nil)
+	ic, err := xsd.NewIdentityConstraint(xsderr.Loc{}, xsd.QName{Local: "k"}, xsd.IdentityConstraintKey, xp("."), fields, nil)
 	if err != nil {
 		t.Fatalf("NewIdentityConstraint: %v", err)
 	}

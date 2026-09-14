@@ -76,7 +76,7 @@ func emptySchema(t *testing.T) *xsd.Schema {
 func topLevelElement(t *testing.T, local string, abstract bool) xsd.ElementDeclaration {
 	t.Helper()
 	e, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: local}, nil, nil,
-		xsd.NewGlobalScope(), nil, false, nil, nil, nil, abstract, nil, nil)
+		xsd.NewGlobalScope(), nil, false, nil, nil, nil, abstract, nil)
 	if err != nil {
 		t.Fatalf("building the %s element declaration: %v", local, err)
 	}
@@ -92,7 +92,7 @@ func rootSchema(t *testing.T) *xsd.Schema {
 	t.Helper()
 	b := xsd.NewSchemaBuilder()
 	ct, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Local: "T"}, xsd.QName{}, nil,
-		xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+		xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("building the T complex type: %v", err)
 	}

@@ -122,12 +122,12 @@ func TestSimpleBaseWrongKindRejected(t *testing.T) {
 	// xs:anyType is its own base (§3.4.7), the one self-derivation the complex
 	// side permits; C restricts it so the schema resolves on the complex side too.
 	anyType, err := NewComplexType(xsderr.Loc{}, anyTypeName, anyTypeName, nil,
-		DerivationRestriction, false, nil, nil, nil, EmptyContent{}, nil, nil, nil)
+		DerivationRestriction, false, nil, nil, nil, EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType(xs:anyType): %v", err)
 	}
 	ct, err := NewComplexType(xsderr.Loc{}, QName{Local: "C"}, anyTypeName, nil,
-		DerivationRestriction, false, nil, nil, nil, EmptyContent{}, nil, nil, nil)
+		DerivationRestriction, false, nil, nil, nil, EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType: %v", err)
 	}

@@ -50,7 +50,7 @@ func TestValueConstraintSameRecordIgnoresNamespaceContext(t *testing.T) {
 func xType(t *testing.T, name, base QName, content ContentType, uses []AttributeUse, wildcard *Wildcard) ComplexType {
 	t.Helper()
 	ct, err := NewComplexType(xsderr.Loc{}, name, base, nil, DerivationExtension, false,
-		uses, nil, wildcard, content, nil, nil, nil)
+		uses, nil, wildcard, content, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType(%s): %v", name, err)
 	}
@@ -62,7 +62,7 @@ func xType(t *testing.T, name, base QName, content ContentType, uses []Attribute
 func xFinal(t *testing.T, name, base QName, final []DerivationMethod) ComplexType {
 	t.Helper()
 	ct, err := NewComplexType(xsderr.Loc{}, name, base, final, DerivationRestriction, false,
-		nil, nil, nil, EmptyContent{}, nil, nil, nil)
+		nil, nil, nil, EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType(%s): %v", name, err)
 	}
@@ -528,13 +528,13 @@ func TestCosCTExtendsFoldBackedClauses(t *testing.T) {
 	baseAssert := dAssert("true()")
 	err := dFinalize(t, func(b *SchemaBuilder) {
 		base, err := NewComplexType(xsderr.Loc{}, uq("base"), anyTypeName, nil, DerivationRestriction, false,
-			nil, nil, &anyW, EmptyContent{}, nil, []Assertion{baseAssert}, nil)
+			nil, nil, &anyW, EmptyContent{}, nil, []Assertion{baseAssert})
 		if err != nil {
 			t.Fatalf("NewComplexType(base): %v", err)
 		}
 		b.AddType(base)
 		derived, err := NewComplexType(xsderr.Loc{}, uq("derived"), uq("base"), nil, DerivationExtension, false,
-			nil, nil, &narrowW, EmptyContent{}, nil, []Assertion{baseAssert, dAssert("@a > 0")}, nil)
+			nil, nil, &narrowW, EmptyContent{}, nil, []Assertion{baseAssert, dAssert("@a > 0")})
 		if err != nil {
 			t.Fatalf("NewComplexType(derived): %v", err)
 		}
@@ -811,12 +811,12 @@ func oRedefiningRestriction(t *testing.T, name QName, originalUses []AttributeUs
 	t.Helper()
 	id := NewComponentID()
 	original, err := NewAnonymousComplexType(xsderr.Loc{}, ComplexTypeDefinitionContext{Component: id},
-		anyTypeName, nil, DerivationRestriction, false, originalUses, nil, nil, EmptyContent{}, nil, nil, nil)
+		anyTypeName, nil, DerivationRestriction, false, originalUses, nil, nil, EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAnonymousComplexType (the clause-1.1 original of %s): %v", name, err)
 	}
 	ct, err := NewComplexTypeOwningBase(xsderr.Loc{}, id, name, original, nil, DerivationRestriction, false,
-		nil, prohibited, nil, EmptyContent{}, nil, nil, nil)
+		nil, prohibited, nil, EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexTypeOwningBase(%s): %v", name, err)
 	}

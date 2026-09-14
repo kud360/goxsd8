@@ -27,7 +27,7 @@ var cvsLoc = xsderr.Loc{URI: "cvs.xsd", Line: 7, Col: 3}
 func cvsElement(t *testing.T, name QName, typeDef TypeDefinitionOrRef, exclusions []DerivationMethod, affiliations ...QName) ElementDeclaration {
 	t.Helper()
 	e, err := NewElementDeclaration(cvsLoc, name, typeDef, nil, NewGlobalScope(), nil, false, nil,
-		affiliations, exclusions, false, nil, nil)
+		affiliations, exclusions, false, nil)
 	if err != nil {
 		t.Fatalf("NewElementDeclaration(%s): %v", name, err)
 	}

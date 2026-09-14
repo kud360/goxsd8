@@ -9,9 +9,9 @@ import (
 
 // mustModelGroup fails the test if construction errors; construction-rejection
 // cases use NewModelGroup directly.
-func mustModelGroup(t *testing.T, c xsd.Compositor, ps []xsd.Particle, anns []xsd.Annotation) xsd.ModelGroup {
+func mustModelGroup(t *testing.T, c xsd.Compositor, ps []xsd.Particle) xsd.ModelGroup {
 	t.Helper()
-	g, err := xsd.NewModelGroup(xsderr.Loc{}, c, ps, anns)
+	g, err := xsd.NewModelGroup(xsderr.Loc{}, c, ps)
 	if err != nil {
 		t.Fatalf("NewModelGroup(%s) unexpected error: %v", c, err)
 	}
@@ -22,7 +22,7 @@ func mustModelGroup(t *testing.T, c xsd.Compositor, ps []xsd.Particle, anns []xs
 // declaration reference, for populating model groups.
 func elementRefParticle(t *testing.T, local string) xsd.Particle {
 	t.Helper()
-	p, err := xsd.NewParticle(xsderr.Loc{}, xsd.Occurs{}, xsd.ElementDeclarationRef{Name: xsd.QName{Local: local}}, nil)
+	p, err := xsd.NewParticle(xsderr.Loc{}, xsd.Occurs{}, xsd.ElementDeclarationRef{Name: xsd.QName{Local: local}})
 	if err != nil {
 		t.Fatalf("NewParticle: %v", err)
 	}
@@ -32,7 +32,7 @@ func elementRefParticle(t *testing.T, local string) xsd.Particle {
 func TestNewModelGroupValidCompositors(t *testing.T) {
 	for _, c := range []xsd.Compositor{xsd.CompositorAll, xsd.CompositorChoice, xsd.CompositorSequence} {
 		t.Run(c.String(), func(t *testing.T) {
-			g := mustModelGroup(t, c, nil, nil)
+			g := mustModelGroup(t, c, nil)
 			if g.Compositor() != c {
 				t.Errorf("Compositor() = %s, want %s", g.Compositor(), c)
 			}
@@ -44,7 +44,7 @@ func TestNewModelGroupValidCompositors(t *testing.T) {
 }
 
 func TestNewModelGroupRejectsZeroCompositor(t *testing.T) {
-	_, err := xsd.NewModelGroup(xsderr.Loc{}, xsd.Compositor(0), nil, nil)
+	_, err := xsd.NewModelGroup(xsderr.Loc{}, xsd.Compositor(0), nil)
 	if err == nil {
 		t.Fatal("NewModelGroup accepted a zero Compositor, want mg-props-correct error")
 	}
@@ -52,7 +52,7 @@ func TestNewModelGroupRejectsZeroCompositor(t *testing.T) {
 }
 
 func TestNewModelGroupRejectsUnknownCompositor(t *testing.T) {
-	_, err := xsd.NewModelGroup(xsderr.Loc{}, xsd.Compositor(99), nil, nil)
+	_, err := xsd.NewModelGroup(xsderr.Loc{}, xsd.Compositor(99), nil)
 	if err == nil {
 		t.Fatal("NewModelGroup accepted an out-of-range Compositor, want mg-props-correct error")
 	}
@@ -65,7 +65,7 @@ func TestNewModelGroupPreservesParticleOrder(t *testing.T) {
 		elementRefParticle(t, "b"),
 		elementRefParticle(t, "c"),
 	}
-	g := mustModelGroup(t, xsd.CompositorSequence, ps, nil)
+	g := mustModelGroup(t, xsd.CompositorSequence, ps)
 	got := g.Particles()
 	want := []string{"a", "b", "c"}
 	if len(got) != len(want) {
@@ -80,7 +80,7 @@ func TestNewModelGroupPreservesParticleOrder(t *testing.T) {
 
 func TestModelGroupParticlesAccessorDoesNotAlias(t *testing.T) {
 	ps := []xsd.Particle{elementRefParticle(t, "a")}
-	g := mustModelGroup(t, xsd.CompositorChoice, ps, nil)
+	g := mustModelGroup(t, xsd.CompositorChoice, ps)
 
 	// The accessor returns a copy.
 	first := g.Particles()
@@ -98,16 +98,9 @@ func TestModelGroupParticlesAccessorDoesNotAlias(t *testing.T) {
 func TestModelGroupIsATerm(t *testing.T) {
 	// Compile-time-style assertion that ModelGroup satisfies Term, checked at
 	// runtime via a ResolvedTerm slot.
-	g := mustModelGroup(t, xsd.CompositorAll, nil, nil)
+	g := mustModelGroup(t, xsd.CompositorAll, nil)
 	var tr xsd.Term = g
 	if _, ok := tr.(xsd.ModelGroup); !ok {
 		t.Fatal("ModelGroup does not satisfy Term")
-	}
-}
-
-func TestModelGroupAnnotationsNilWhenEmpty(t *testing.T) {
-	g := mustModelGroup(t, xsd.CompositorSequence, nil, nil)
-	if got := g.Annotations(); got != nil {
-		t.Errorf("Annotations() = %v, want nil for empty {annotations}", got)
 	}
 }

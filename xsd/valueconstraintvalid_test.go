@@ -89,7 +89,7 @@ func vcGlobalFixed(t *testing.T, lexical string) func(*SchemaBuilder) {
 	t.Helper()
 	return func(b *SchemaBuilder) {
 		vc := NewValueConstraint(ValueFixed, lexical, nil, nil)
-		d, err := NewAttributeDeclaration(xsderr.Loc{}, uq("g"), TypeDefinitionRef{Name: uq("str")}, NewAttributeGlobalScope(), &vc, false, nil)
+		d, err := NewAttributeDeclaration(xsderr.Loc{}, uq("g"), TypeDefinitionRef{Name: uq("str")}, NewAttributeGlobalScope(), &vc, false)
 		if err != nil {
 			t.Fatalf("NewAttributeDeclaration: %v", err)
 		}
@@ -102,7 +102,7 @@ func vcGlobalFixed(t *testing.T, lexical string) func(*SchemaBuilder) {
 func vcRefUse(t *testing.T, kind ValueConstraintKind, lexical string) AttributeUse {
 	t.Helper()
 	vc := NewValueConstraint(kind, lexical, nil, nil)
-	u, err := NewAttributeUse(xsderr.Loc{}, false, AttributeDeclarationRef{Name: uq("g")}, &vc, false, nil)
+	u, err := NewAttributeUse(xsderr.Loc{}, false, AttributeDeclarationRef{Name: uq("g")}, &vc, false)
 	if err != nil {
 		t.Fatalf("NewAttributeUse: %v", err)
 	}
@@ -178,12 +178,12 @@ func TestPhaseEClause3ValueHalf(t *testing.T) {
 // text draws no variant distinction and neither does the check.
 func TestPhaseEClause3LocalVariant(t *testing.T) {
 	declVC := NewValueConstraint(ValueFixed, "7", nil, nil)
-	decl, err := NewAttributeDeclaration(xsderr.Loc{}, uq("a"), TypeDefinitionRef{Name: uq("str")}, aLocalScope(t), &declVC, false, nil)
+	decl, err := NewAttributeDeclaration(xsderr.Loc{}, uq("a"), TypeDefinitionRef{Name: uq("str")}, aLocalScope(t), &declVC, false)
 	if err != nil {
 		t.Fatalf("NewAttributeDeclaration: %v", err)
 	}
 	useVC := NewValueConstraint(ValueFixed, "07", nil, nil)
-	use, err := NewAttributeUse(xsderr.Loc{}, false, LocalAttributeDeclaration{Declaration: decl}, &useVC, false, nil)
+	use, err := NewAttributeUse(xsderr.Loc{}, false, LocalAttributeDeclaration{Declaration: decl}, &useVC, false)
 	if err != nil {
 		t.Fatalf("NewAttributeUse: %v", err)
 	}
@@ -200,7 +200,7 @@ func TestPhaseEClause3LocalVariant(t *testing.T) {
 // fixed. A use with no own constraint is the ·effective value constraint· case
 // (key-evc) — clause 3 is not about that.
 func TestPhaseEClause3AntecedentNotMet(t *testing.T) {
-	bare, err := NewAttributeUse(xsderr.Loc{}, false, AttributeDeclarationRef{Name: uq("g")}, nil, false, nil)
+	bare, err := NewAttributeUse(xsderr.Loc{}, false, AttributeDeclarationRef{Name: uq("g")}, nil, false)
 	if err != nil {
 		t.Fatalf("NewAttributeUse: %v", err)
 	}
@@ -216,7 +216,7 @@ func TestPhaseEClause3AntecedentNotMet(t *testing.T) {
 			vs := &stubValueSpace{same: false, decided: true}
 			declVC := NewValueConstraint(tc.declKind, "7", nil, nil)
 			_, err := vcSchema(t, vs, func(b *SchemaBuilder) {
-				d, err := NewAttributeDeclaration(xsderr.Loc{}, uq("g"), TypeDefinitionRef{Name: uq("str")}, NewAttributeGlobalScope(), &declVC, false, nil)
+				d, err := NewAttributeDeclaration(xsderr.Loc{}, uq("g"), TypeDefinitionRef{Name: uq("str")}, NewAttributeGlobalScope(), &declVC, false)
 				if err != nil {
 					t.Fatalf("NewAttributeDeclaration: %v", err)
 				}
@@ -259,14 +259,14 @@ func TestPhaseEReachesEveryAttributeUseSite(t *testing.T) {
 		}},
 		{"an inline complex type inside a top-level model group definition", func(b *SchemaBuilder) {
 			inner := uOne(t, ResolvedTerm{Term: inlineType("nested")})
-			mgd, err := NewModelGroupDefinition(xsderr.Loc{}, uq("mg"), uGroup(t, CompositorSequence, inner), nil)
+			mgd, err := NewModelGroupDefinition(xsderr.Loc{}, uq("mg"), uGroup(t, CompositorSequence, inner))
 			if err != nil {
 				t.Fatalf("NewModelGroupDefinition: %v", err)
 			}
 			b.AddModelGroup(mgd)
 		}},
 		{"a top-level attribute group definition", func(b *SchemaBuilder) {
-			g, err := NewAttributeGroupDefinition(xsderr.Loc{}, uq("ag"), bad(), nil, nil)
+			g, err := NewAttributeGroupDefinition(xsderr.Loc{}, uq("ag"), bad(), nil)
 			if err != nil {
 				t.Fatalf("NewAttributeGroupDefinition: %v", err)
 			}
@@ -375,7 +375,7 @@ func vcOnly(valid string) *stubValueSpace {
 func vcGlobalDecl(t *testing.T, vc *ValueConstraint) func(*SchemaBuilder) {
 	t.Helper()
 	return func(b *SchemaBuilder) {
-		d, err := NewAttributeDeclaration(vcLoc, uq("g"), TypeDefinitionRef{Name: uq("str")}, NewAttributeGlobalScope(), vc, false, nil)
+		d, err := NewAttributeDeclaration(vcLoc, uq("g"), TypeDefinitionRef{Name: uq("str")}, NewAttributeGlobalScope(), vc, false)
 		if err != nil {
 			t.Fatalf("NewAttributeDeclaration: %v", err)
 		}
@@ -446,11 +446,11 @@ func TestPhaseEAPropsCorrectClause2Accepts(t *testing.T) {
 // own Loc.
 func TestPhaseEAPropsCorrectClause2LocalDeclaration(t *testing.T) {
 	declVC := NewValueConstraint(ValueDefault, "not a value of str", nil, nil)
-	decl, err := NewAttributeDeclaration(vcLoc, uq("a"), TypeDefinitionRef{Name: uq("str")}, aLocalScope(t), &declVC, false, nil)
+	decl, err := NewAttributeDeclaration(vcLoc, uq("a"), TypeDefinitionRef{Name: uq("str")}, aLocalScope(t), &declVC, false)
 	if err != nil {
 		t.Fatalf("NewAttributeDeclaration: %v", err)
 	}
-	use, err := NewAttributeUse(xsderr.Loc{}, false, LocalAttributeDeclaration{Declaration: decl}, nil, false, nil)
+	use, err := NewAttributeUse(xsderr.Loc{}, false, LocalAttributeDeclaration{Declaration: decl}, nil, false)
 	if err != nil {
 		t.Fatalf("NewAttributeUse: %v", err)
 	}

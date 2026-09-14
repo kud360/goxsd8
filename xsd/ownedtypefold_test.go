@@ -25,7 +25,7 @@ import (
 func oInline(t *testing.T, base QName, uses []AttributeUse, wildcard *Wildcard, content ContentType) ComplexType {
 	t.Helper()
 	ct, err := NewAnonymousComplexType(xsderr.Loc{}, ElementDeclarationContext{Component: NewComponentID()},
-		base, nil, DerivationExtension, false, uses, nil, wildcard, content, nil, nil, nil)
+		base, nil, DerivationExtension, false, uses, nil, wildcard, content, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAnonymousComplexType: %v", err)
 	}
@@ -178,7 +178,7 @@ func TestOwnedFoldAlternativeInlineType(t *testing.T) {
 		context, _ := inline.Context()
 		e, err := NewElementDeclarationOwningTypes(xsderr.Loc{}, context.ID(), uq("g"),
 			TypeDefinitionRef{Name: uq("Base")}, &tt, NewGlobalScope(),
-			nil, false, nil, nil, nil, false, nil, nil)
+			nil, false, nil, nil, nil, false, nil)
 		if err != nil {
 			t.Fatalf("NewElementDeclarationOwningTypes(g): %v", err)
 		}
@@ -227,7 +227,7 @@ func TestOwnedFoldModelGroupDefinition(t *testing.T) {
 		inline := oInline(t, uq("Base"), []AttributeUse{dAttr(t, uq("own"), uq("str"))}, nil, EmptyContent{})
 		local := dOwnInline(t, uq("child"), inline, uLocalScope(t))
 		d, err := NewModelGroupDefinition(xsderr.Loc{}, uq("G"),
-			uGroup(t, CompositorSequence, uOne(t, ResolvedTerm{Term: local})), nil)
+			uGroup(t, CompositorSequence, uOne(t, ResolvedTerm{Term: local})))
 		if err != nil {
 			t.Fatalf("NewModelGroupDefinition: %v", err)
 		}
@@ -282,7 +282,7 @@ func TestOwnedFoldLeavesTheCallersSlicesAlone(t *testing.T) {
 			context, _ := inline.Context()
 			e, err := NewElementDeclarationOwningTypes(xsderr.Loc{}, context.ID(), uq("g"),
 				TypeDefinitionRef{Name: uq("Base")}, &retained, NewGlobalScope(),
-				nil, false, nil, nil, nil, false, nil, nil)
+				nil, false, nil, nil, nil, false, nil)
 			if err != nil {
 				t.Fatalf("NewElementDeclarationOwningTypes(g): %v", err)
 			}

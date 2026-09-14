@@ -388,7 +388,7 @@ func TestContentMatcherDeclinesOpenContent(t *testing.T) {
 	}
 	p := cmGroup(t, uOccurs(t, 1, 1), CompositorSequence, cmLeaf(t, "a", uOccurs(t, 1, 1)))
 	ct, err := NewComplexType(xsderr.Loc{}, uq("ct"), QName{}, nil, DerivationRestriction, false,
-		nil, nil, nil, ElementContent{Particle: p, OpenContent: &oc}, nil, nil, nil)
+		nil, nil, nil, ElementContent{Particle: p, OpenContent: &oc}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType: %v", err)
 	}

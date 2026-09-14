@@ -78,7 +78,7 @@ func TestComplexTypeIdentityNewComplexTypeArms(t *testing.T) {
 	anyTypeRef := xsd.TypeDefinitionRef{Name: anyTypeName}
 
 	named, err := p.newComplexType(namedComplexType{name: name}, xsderr.Loc{}, anyTypeRef, nil,
-		xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+		xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("named newComplexType: %v", err)
 	}
@@ -91,7 +91,7 @@ func TestComplexTypeIdentityNewComplexTypeArms(t *testing.T) {
 
 	owner := xsd.NewComponentID()
 	anon, err := p.newComplexType(elementOwnedComplexType{owner: owner}, xsderr.Loc{}, anyTypeRef, nil,
-		xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+		xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("element-owned newComplexType: %v", err)
 	}
@@ -123,7 +123,7 @@ func TestComplexTypeIdentityTypeAlternativeOwnedArm(t *testing.T) {
 	id := newTypeAlternativeOwned(owner)
 
 	ct, err := p.newComplexType(id, xsderr.Loc{}, xsd.TypeDefinitionRef{Name: anyTypeName}, nil,
-		xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+		xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("type-alternative-owned newComplexType: %v", err)
 	}
@@ -178,7 +178,7 @@ func TestComplexTypeIdentityRedefineArms(t *testing.T) {
 	owner := xsd.NewComponentID()
 
 	original, err := p.newComplexType(newRedefineOriginal(owner), xsderr.Loc{}, xsd.TypeDefinitionRef{Name: anyTypeName}, nil,
-		xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+		xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("redefine-original newComplexType: %v", err)
 	}
@@ -197,7 +197,7 @@ func TestComplexTypeIdentityRedefineArms(t *testing.T) {
 	}
 
 	redefining, err := p.newComplexType(redefiningComplexType{name: name, owner: owner}, xsderr.Loc{}, xsd.InlineTypeDefinition{Definition: original}, nil,
-		xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+		xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("redefining newComplexType: %v", err)
 	}
@@ -230,12 +230,12 @@ func TestComplexTypeIdentityChainedRedefineOriginal(t *testing.T) {
 		t.Fatal("a redefine original cannot own a further original, so a chained <redefine> has nothing to pair with")
 	}
 	inner, err := p.newComplexType(newRedefineOriginal(innerOwner), xsderr.Loc{}, xsd.TypeDefinitionRef{Name: anyTypeName}, nil,
-		xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+		xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("inner redefine-original newComplexType: %v", err)
 	}
 	chained, err := p.newComplexType(outer, xsderr.Loc{}, xsd.InlineTypeDefinition{Definition: inner}, nil,
-		xsd.DerivationExtension, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+		xsd.DerivationExtension, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("chained redefine-original newComplexType: %v", err)
 	}
@@ -261,7 +261,7 @@ func TestComplexTypeIdentityRedefiningArmWithoutOriginal(t *testing.T) {
 	p := &producer{}
 	name := xsd.QName{Space: "urn:po", Local: "T"}
 	_, err := p.newComplexType(redefiningComplexType{name: name, owner: xsd.NewComponentID()}, xsderr.Loc{}, xsd.TypeDefinitionRef{Name: name}, nil,
-		xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+		xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil)
 	if err == nil {
 		t.Fatal("a redefining identity with a by-name base built a component, want the producer fault")
 	}

@@ -14,9 +14,8 @@ import "github.com/kud360/goxsd8/xsderr"
 const ruleMgPropsCorrect xsderr.Rule = "mg-props-correct"
 
 // ModelGroup is the Model Group component (Structures §3.8.1, id="mg"): a kind
-// of Term with {annotations} (a sequence of Annotation), {compositor} (one of
-// all/choice/sequence — the xsd.Compositor enum, closedsets.go), and {particles}
-// (a sequence of Particle components).
+// of Term with {compositor} (one of all/choice/sequence — the xsd.Compositor
+// enum, closedsets.go) and {particles} (a sequence of Particle components).
 //
 // {particles} is spec-worded a SEQUENCE (§3.8.1 tableau), so document order is
 // spec-significant, not merely a determinism convention: UPA (cos-nonambig,
@@ -28,9 +27,8 @@ const ruleMgPropsCorrect xsderr.Rule = "mg-props-correct"
 // an ill-formed record is unrepresentable (STYLE T1). ModelGroup is immutable
 // after construction.
 type ModelGroup struct {
-	compositor  Compositor
-	particles   []Particle
-	annotations []Annotation
+	compositor Compositor
+	particles  []Particle
 }
 
 // NewModelGroup builds a ModelGroup, rejecting the state Model Group Correct
@@ -42,13 +40,13 @@ type ModelGroup struct {
 // (resolve.go, #173); it is deliberately NOT checked here — the constructor
 // performs no traversal of nested particles.
 //
-// particles and annotations are copied; the caller's backing arrays are not
-// aliased, and an empty input is held as nil.
+// particles is copied; the caller's backing array is not aliased, and an empty
+// input is held as nil.
 //
 // loc is the source position charged to any rejection. A caller with no real
 // parser position — a synthesized or programmatically built group — may
 // legitimately pass the zero xsderr.Loc{}.
-func NewModelGroup(loc xsderr.Loc, compositor Compositor, particles []Particle, annotations []Annotation) (ModelGroup, error) {
+func NewModelGroup(loc xsderr.Loc, compositor Compositor, particles []Particle) (ModelGroup, error) {
 	switch compositor {
 	case CompositorAll, CompositorChoice, CompositorSequence:
 	default:
@@ -58,9 +56,6 @@ func NewModelGroup(loc xsderr.Loc, compositor Compositor, particles []Particle, 
 	g := ModelGroup{compositor: compositor}
 	if len(particles) > 0 {
 		g.particles = append([]Particle(nil), particles...)
-	}
-	if len(annotations) > 0 {
-		g.annotations = append([]Annotation(nil), annotations...)
 	}
 	return g, nil
 }
@@ -82,14 +77,4 @@ func (g ModelGroup) Particles() []Particle {
 		return nil
 	}
 	return append([]Particle(nil), g.particles...)
-}
-
-// Annotations returns the {annotations} property in document order. It returns a
-// copy: mutating the result does not affect g. An empty {annotations} yields
-// nil.
-func (g ModelGroup) Annotations() []Annotation {
-	if len(g.annotations) == 0 {
-		return nil
-	}
-	return append([]Annotation(nil), g.annotations...)
 }

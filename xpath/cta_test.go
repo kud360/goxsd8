@@ -352,7 +352,7 @@ func ctaFixtureTypes(t *testing.T) ctaTestTypes {
 	}
 	types[kind.Name()] = kind
 	box, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Space: ctaUserNS, Local: "Box"},
-		xsd.QName{}, nil, xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+		xsd.QName{}, nil, xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("building the complex type: %v", err)
 	}

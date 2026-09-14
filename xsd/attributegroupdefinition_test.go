@@ -11,7 +11,7 @@ import (
 // local declaration with the given expanded name.
 func useWithLocalName(t *testing.T, name xsd.QName) xsd.AttributeUse {
 	t.Helper()
-	u, err := xsd.NewAttributeUse(xsderr.Loc{}, false, localDecl(t, name), nil, false, nil)
+	u, err := xsd.NewAttributeUse(xsderr.Loc{}, false, localDecl(t, name), nil, false)
 	if err != nil {
 		t.Fatalf("NewAttributeUse: %v", err)
 	}
@@ -22,7 +22,7 @@ func useWithLocalName(t *testing.T, name xsd.QName) xsd.AttributeUse {
 // deferred reference with the given expanded name.
 func useWithRefName(t *testing.T, name xsd.QName) xsd.AttributeUse {
 	t.Helper()
-	u, err := xsd.NewAttributeUse(xsderr.Loc{}, false, xsd.AttributeDeclarationRef{Name: name}, nil, false, nil)
+	u, err := xsd.NewAttributeUse(xsderr.Loc{}, false, xsd.AttributeDeclarationRef{Name: name}, nil, false)
 	if err != nil {
 		t.Fatalf("NewAttributeUse: %v", err)
 	}
@@ -35,7 +35,7 @@ func TestNewAttributeGroupDefinitionValid(t *testing.T) {
 		useWithLocalName(t, xsd.QName{Space: "urn:ns", Local: "a"}),
 		useWithRefName(t, xsd.QName{Space: "urn:ns", Local: "b"}),
 	}
-	g, err := xsd.NewAttributeGroupDefinition(xsderr.Loc{}, name, uses, nil, nil)
+	g, err := xsd.NewAttributeGroupDefinition(xsderr.Loc{}, name, uses, nil)
 	if err != nil {
 		t.Fatalf("NewAttributeGroupDefinition unexpected error: %v", err)
 	}
@@ -48,13 +48,10 @@ func TestNewAttributeGroupDefinitionValid(t *testing.T) {
 	if _, ok := g.AttributeWildcard(); ok {
 		t.Error("AttributeWildcard() ok = true, want false for absent wildcard")
 	}
-	if got := g.Annotations(); got != nil {
-		t.Errorf("Annotations() = %v, want nil", got)
-	}
 }
 
 func TestNewAttributeGroupDefinitionEmptyUsesYieldsNil(t *testing.T) {
-	g, err := xsd.NewAttributeGroupDefinition(xsderr.Loc{}, xsd.QName{Local: "g"}, nil, nil, nil)
+	g, err := xsd.NewAttributeGroupDefinition(xsderr.Loc{}, xsd.QName{Local: "g"}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAttributeGroupDefinition: %v", err)
 	}
@@ -82,7 +79,7 @@ func TestNewAttributeGroupDefinitionRejectsAbsentName(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := xsd.NewAttributeGroupDefinition(xsderr.Loc{}, tc.qname, nil, nil, nil)
+			_, err := xsd.NewAttributeGroupDefinition(xsderr.Loc{}, tc.qname, nil, nil)
 			if !tc.wantErr {
 				if err != nil {
 					t.Fatalf("NewAttributeGroupDefinition(%v) unexpected error: %v", tc.qname, err)
@@ -103,7 +100,7 @@ func TestNewAttributeGroupDefinitionRejectsDuplicateExpandedNameLocalLocal(t *te
 		useWithLocalName(t, dup),
 		useWithLocalName(t, dup),
 	}
-	_, err := xsd.NewAttributeGroupDefinition(xsderr.Loc{}, xsd.QName{Local: "g"}, uses, nil, nil)
+	_, err := xsd.NewAttributeGroupDefinition(xsderr.Loc{}, xsd.QName{Local: "g"}, uses, nil)
 	if err == nil {
 		t.Fatal("NewAttributeGroupDefinition(duplicate names) succeeded, want ag-props-correct error")
 	}
@@ -118,7 +115,7 @@ func TestNewAttributeGroupDefinitionRejectsDuplicateExpandedNameLocalRef(t *test
 		useWithLocalName(t, dup),
 		useWithRefName(t, dup),
 	}
-	_, err := xsd.NewAttributeGroupDefinition(xsderr.Loc{}, xsd.QName{Local: "g"}, uses, nil, nil)
+	_, err := xsd.NewAttributeGroupDefinition(xsderr.Loc{}, xsd.QName{Local: "g"}, uses, nil)
 	if err == nil {
 		t.Fatal("NewAttributeGroupDefinition(duplicate across variants) succeeded, want ag-props-correct error")
 	}
@@ -131,7 +128,7 @@ func TestNewAttributeGroupDefinitionDistinctNamespacesNotDuplicate(t *testing.T)
 		useWithLocalName(t, xsd.QName{Space: "urn:x", Local: "a"}),
 		useWithLocalName(t, xsd.QName{Space: "urn:y", Local: "a"}),
 	}
-	if _, err := xsd.NewAttributeGroupDefinition(xsderr.Loc{}, xsd.QName{Local: "g"}, uses, nil, nil); err != nil {
+	if _, err := xsd.NewAttributeGroupDefinition(xsderr.Loc{}, xsd.QName{Local: "g"}, uses, nil); err != nil {
 		t.Fatalf("NewAttributeGroupDefinition(distinct namespaces) error: %v", err)
 	}
 }
@@ -141,11 +138,11 @@ func TestNewAttributeGroupDefinitionWildcardPresent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewNamespaceConstraint: %v", err)
 	}
-	w, err := xsd.NewWildcard(xsderr.Loc{}, nc, xsd.ProcessLax, nil)
+	w, err := xsd.NewWildcard(xsderr.Loc{}, nc, xsd.ProcessLax)
 	if err != nil {
 		t.Fatalf("NewWildcard: %v", err)
 	}
-	g, err := xsd.NewAttributeGroupDefinition(xsderr.Loc{}, xsd.QName{Local: "g"}, nil, &w, nil)
+	g, err := xsd.NewAttributeGroupDefinition(xsderr.Loc{}, xsd.QName{Local: "g"}, nil, &w)
 	if err != nil {
 		t.Fatalf("NewAttributeGroupDefinition: %v", err)
 	}
@@ -160,7 +157,7 @@ func TestNewAttributeGroupDefinitionWildcardPresent(t *testing.T) {
 
 func TestAttributeGroupDefinitionUsesAccessorDoesNotAlias(t *testing.T) {
 	uses := []xsd.AttributeUse{useWithLocalName(t, xsd.QName{Local: "a"})}
-	g, err := xsd.NewAttributeGroupDefinition(xsderr.Loc{}, xsd.QName{Local: "g"}, uses, nil, nil)
+	g, err := xsd.NewAttributeGroupDefinition(xsderr.Loc{}, xsd.QName{Local: "g"}, uses, nil)
 	if err != nil {
 		t.Fatalf("NewAttributeGroupDefinition: %v", err)
 	}

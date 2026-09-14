@@ -31,13 +31,13 @@ func concurrencySchema(t *testing.T) *xsd.Schema {
 	uses := []xsd.AttributeUse{typedUse(t, "n", integerType(), true, nil, nil)}
 	content := cSequence(t, false, cParticle(t, "item", 0, 3))
 	ct, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Local: "RootType"}, xsd.QName{}, nil,
-		xsd.DerivationRestriction, false, uses, nil, nil, content, nil, nil, nil)
+		xsd.DerivationRestriction, false, uses, nil, nil, content, nil, nil)
 	if err != nil {
 		t.Fatalf("building RootType: %v", err)
 	}
 	e, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "root"},
 		xsd.TypeDefinitionRef{Name: xsd.QName{Local: "RootType"}}, nil, xsd.NewGlobalScope(),
-		nil, false, nil, nil, nil, false, nil, nil)
+		nil, false, nil, nil, nil, false, nil)
 	if err != nil {
 		t.Fatalf("building the root element declaration: %v", err)
 	}

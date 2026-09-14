@@ -31,13 +31,13 @@ func complexTypeNamed(t *testing.T, name xsd.QName) xsd.ComplexType {
 	t.Helper()
 	if name.Local == "" {
 		ct, err := xsd.NewAnonymousComplexType(xsderr.Loc{}, xsd.ElementDeclarationContext{Component: xsd.NewComponentID()},
-			xsd.QName{}, nil, xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+			xsd.QName{}, nil, xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil)
 		if err != nil {
 			t.Fatalf("NewAnonymousComplexType: %v", err)
 		}
 		return ct
 	}
-	ct, err := xsd.NewComplexType(xsderr.Loc{}, name, xsd.QName{}, nil, xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+	ct, err := xsd.NewComplexType(xsderr.Loc{}, name, xsd.QName{}, nil, xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType(%v): %v", name, err)
 	}
@@ -55,7 +55,7 @@ func elementNamed(t *testing.T, name xsd.QName) xsd.ElementDeclaration {
 // position, for the tests that assert on the position a rejection cites.
 func elementNamedAt(t *testing.T, loc xsderr.Loc, name xsd.QName) xsd.ElementDeclaration {
 	t.Helper()
-	e, err := xsd.NewElementDeclaration(loc, name, nil, nil, xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil, nil)
+	e, err := xsd.NewElementDeclaration(loc, name, nil, nil, xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil)
 	if err != nil {
 		t.Fatalf("NewElementDeclaration(%v): %v", name, err)
 	}
@@ -66,7 +66,7 @@ func elementNamedAt(t *testing.T, loc xsderr.Loc, name xsd.QName) xsd.ElementDec
 // tests.
 func attributeNamed(t *testing.T, name xsd.QName) xsd.AttributeDeclaration {
 	t.Helper()
-	a, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, name, nil, xsd.NewAttributeGlobalScope(), nil, false, nil)
+	a, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, name, nil, xsd.NewAttributeGlobalScope(), nil, false)
 	if err != nil {
 		t.Fatalf("NewAttributeDeclaration(%v): %v", name, err)
 	}
@@ -79,7 +79,7 @@ func idcNamed(t *testing.T, name xsd.QName) xsd.IdentityConstraint {
 	t.Helper()
 	sel := xsd.NewXPathExpression(".", nil, nil, nil)
 	field := xsd.NewXPathExpression("@x", nil, nil, nil)
-	c, err := xsd.NewIdentityConstraint(xsderr.Loc{}, name, xsd.IdentityConstraintUnique, sel, []xsd.XPathExpression{field}, nil, nil)
+	c, err := xsd.NewIdentityConstraint(xsderr.Loc{}, name, xsd.IdentityConstraintUnique, sel, []xsd.XPathExpression{field}, nil)
 	if err != nil {
 		t.Fatalf("NewIdentityConstraint(%v): %v", name, err)
 	}
@@ -321,14 +321,14 @@ func TestTopLevelComponentsRetainLoc(t *testing.T) {
 	}{
 		{"ElementDeclaration", func(t *testing.T, l xsderr.Loc) xsderr.Loc { return elementNamedAt(t, l, name).Loc() }},
 		{"AttributeDeclaration", func(t *testing.T, l xsderr.Loc) xsderr.Loc {
-			a, err := xsd.NewAttributeDeclaration(l, name, nil, xsd.NewAttributeGlobalScope(), nil, false, nil)
+			a, err := xsd.NewAttributeDeclaration(l, name, nil, xsd.NewAttributeGlobalScope(), nil, false)
 			if err != nil {
 				t.Fatalf("NewAttributeDeclaration: %v", err)
 			}
 			return a.Loc()
 		}},
 		{"ComplexType", func(t *testing.T, l xsderr.Loc) xsderr.Loc {
-			c, err := xsd.NewComplexType(l, name, xsd.QName{}, nil, xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+			c, err := xsd.NewComplexType(l, name, xsd.QName{}, nil, xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil)
 			if err != nil {
 				t.Fatalf("NewComplexType: %v", err)
 			}
@@ -344,18 +344,18 @@ func TestTopLevelComponentsRetainLoc(t *testing.T) {
 		}},
 		{"PrimitiveType", func(t *testing.T, l xsderr.Loc) xsderr.Loc { return primitiveAt(t, l).Loc() }},
 		{"ModelGroupDefinition", func(t *testing.T, l xsderr.Loc) xsderr.Loc {
-			g, err := xsd.NewModelGroup(xsderr.Loc{}, xsd.CompositorSequence, nil, nil)
+			g, err := xsd.NewModelGroup(xsderr.Loc{}, xsd.CompositorSequence, nil)
 			if err != nil {
 				t.Fatalf("NewModelGroup: %v", err)
 			}
-			d, err := xsd.NewModelGroupDefinition(l, name, g, nil)
+			d, err := xsd.NewModelGroupDefinition(l, name, g)
 			if err != nil {
 				t.Fatalf("NewModelGroupDefinition: %v", err)
 			}
 			return d.Loc()
 		}},
 		{"AttributeGroupDefinition", func(t *testing.T, l xsderr.Loc) xsderr.Loc {
-			g, err := xsd.NewAttributeGroupDefinition(l, name, nil, nil, nil)
+			g, err := xsd.NewAttributeGroupDefinition(l, name, nil, nil)
 			if err != nil {
 				t.Fatalf("NewAttributeGroupDefinition: %v", err)
 			}
@@ -363,7 +363,7 @@ func TestTopLevelComponentsRetainLoc(t *testing.T) {
 		}},
 		{"Notation", func(t *testing.T, l xsderr.Loc) xsderr.Loc {
 			sys := "urn:sys"
-			n, err := xsd.NewNotation(l, name, &sys, nil, nil)
+			n, err := xsd.NewNotation(l, name, &sys, nil)
 			if err != nil {
 				t.Fatalf("NewNotation: %v", err)
 			}
@@ -372,7 +372,7 @@ func TestTopLevelComponentsRetainLoc(t *testing.T) {
 		{"IdentityConstraint", func(t *testing.T, l xsderr.Loc) xsderr.Loc {
 			sel := xsd.NewXPathExpression(".", nil, nil, nil)
 			field := xsd.NewXPathExpression("@x", nil, nil, nil)
-			c, err := xsd.NewIdentityConstraint(l, name, xsd.IdentityConstraintUnique, sel, []xsd.XPathExpression{field}, nil, nil)
+			c, err := xsd.NewIdentityConstraint(l, name, xsd.IdentityConstraintUnique, sel, []xsd.XPathExpression{field}, nil)
 			if err != nil {
 				t.Fatalf("NewIdentityConstraint: %v", err)
 			}
@@ -404,7 +404,7 @@ func TestTypeDefinitionSumPromotesLoc(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSimpleType: %v", err)
 	}
-	ct, err := xsd.NewComplexType(ctLoc, xsd.QName{Space: "urn:ns", Local: "ct"}, xsd.QName{}, nil, xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+	ct, err := xsd.NewComplexType(ctLoc, xsd.QName{Space: "urn:ns", Local: "ct"}, xsd.QName{}, nil, xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType: %v", err)
 	}
@@ -490,7 +490,7 @@ func TestFinalizeDecouplesBuilderFromSchema(t *testing.T) {
 // wrapper tests.
 func attributeGroupNamed(t *testing.T, name xsd.QName) xsd.AttributeGroupDefinition {
 	t.Helper()
-	g, err := xsd.NewAttributeGroupDefinition(xsderr.Loc{}, name, nil, nil, nil)
+	g, err := xsd.NewAttributeGroupDefinition(xsderr.Loc{}, name, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAttributeGroupDefinition(%v): %v", name, err)
 	}
@@ -501,11 +501,11 @@ func attributeGroupNamed(t *testing.T, name xsd.QName) xsd.AttributeGroupDefinit
 // the Add* wrapper tests.
 func modelGroupNamed(t *testing.T, name xsd.QName) xsd.ModelGroupDefinition {
 	t.Helper()
-	g, err := xsd.NewModelGroup(xsderr.Loc{}, xsd.CompositorSequence, nil, nil)
+	g, err := xsd.NewModelGroup(xsderr.Loc{}, xsd.CompositorSequence, nil)
 	if err != nil {
 		t.Fatalf("NewModelGroup: %v", err)
 	}
-	d, err := xsd.NewModelGroupDefinition(xsderr.Loc{}, name, g, nil)
+	d, err := xsd.NewModelGroupDefinition(xsderr.Loc{}, name, g)
 	if err != nil {
 		t.Fatalf("NewModelGroupDefinition(%v): %v", name, err)
 	}
@@ -516,17 +516,17 @@ func modelGroupNamed(t *testing.T, name xsd.QName) xsd.ModelGroupDefinition {
 func notationNamed(t *testing.T, name xsd.QName) xsd.Notation {
 	t.Helper()
 	sys := "urn:sys"
-	n, err := xsd.NewNotation(xsderr.Loc{}, name, &sys, nil, nil)
+	n, err := xsd.NewNotation(xsderr.Loc{}, name, &sys, nil)
 	if err != nil {
 		t.Fatalf("NewNotation(%v): %v", name, err)
 	}
 	return n
 }
 
-// TestAddWrappersAcceptedByFinalize exercises the four append-only builder
-// wrappers (AddAttributeGroup/AddModelGroup/AddNotation/AddAnnotation): each
-// component a wrapper adds must survive Finalize (the resolution pass must not
-// reject a well-formed one). None of these four kinds has an exported by-name
+// TestAddWrappersAcceptedByFinalize exercises the three append-only builder
+// wrappers (AddAttributeGroup/AddModelGroup/AddNotation): each component a
+// wrapper adds must survive Finalize (the resolution pass must not reject a
+// well-formed one). None of these three kinds has an exported by-name
 // *Schema lookup accessor, so observability here is: Finalize succeeds
 // (TestSchemaEnumeratorsDocumentOrder covers the document-order enumerators).
 func TestAddWrappersAcceptedByFinalize(t *testing.T) {
@@ -538,7 +538,6 @@ func TestAddWrappersAcceptedByFinalize(t *testing.T) {
 		{"AddAttributeGroup", func(b *xsd.SchemaBuilder) { b.AddAttributeGroup(attributeGroupNamed(t, name)) }},
 		{"AddModelGroup", func(b *xsd.SchemaBuilder) { b.AddModelGroup(modelGroupNamed(t, name)) }},
 		{"AddNotation", func(b *xsd.SchemaBuilder) { b.AddNotation(notationNamed(t, name)) }},
-		{"AddAnnotation", func(b *xsd.SchemaBuilder) { b.AddAnnotation(xsd.NewAnnotation(nil, nil, nil)) }},
 	}
 	for _, c := range cases {
 		t.Run(c.label, func(t *testing.T) {
@@ -557,15 +556,15 @@ func TestAddWrappersAcceptedByFinalize(t *testing.T) {
 // dangle and be rejected.
 func TestAddModelGroupObservableViaResolution(t *testing.T) {
 	target := xsd.QName{Space: "urn:ns", Local: "target"}
-	refParticle, err := xsd.NewParticle(xsderr.Loc{}, mustOccurs11(t), xsd.ModelGroupRef{Name: target}, nil)
+	refParticle, err := xsd.NewParticle(xsderr.Loc{}, mustOccurs11(t), xsd.ModelGroupRef{Name: target})
 	if err != nil {
 		t.Fatalf("NewParticle: %v", err)
 	}
-	refGroup, err := xsd.NewModelGroup(xsderr.Loc{}, xsd.CompositorSequence, []xsd.Particle{refParticle}, nil)
+	refGroup, err := xsd.NewModelGroup(xsderr.Loc{}, xsd.CompositorSequence, []xsd.Particle{refParticle})
 	if err != nil {
 		t.Fatalf("NewModelGroup: %v", err)
 	}
-	referrer, err := xsd.NewModelGroupDefinition(xsderr.Loc{}, xsd.QName{Space: "urn:ns", Local: "referrer"}, refGroup, nil)
+	referrer, err := xsd.NewModelGroupDefinition(xsderr.Loc{}, xsd.QName{Space: "urn:ns", Local: "referrer"}, refGroup)
 	if err != nil {
 		t.Fatalf("NewModelGroupDefinition: %v", err)
 	}
@@ -594,19 +593,19 @@ func TestModelGroupScopeParentResolvesViaAccessor(t *testing.T) {
 		t.Fatalf("NewLocalScope: %v", err)
 	}
 	el, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Space: "urn:ns", Local: "street"},
-		nil, nil, scope, nil, false, nil, nil, nil, false, nil, nil)
+		nil, nil, scope, nil, false, nil, nil, nil, false, nil)
 	if err != nil {
 		t.Fatalf("NewElementDeclaration: %v", err)
 	}
-	particle, err := xsd.NewParticle(xsderr.Loc{}, mustOccurs11(t), xsd.ResolvedTerm{Term: el}, nil)
+	particle, err := xsd.NewParticle(xsderr.Loc{}, mustOccurs11(t), xsd.ResolvedTerm{Term: el})
 	if err != nil {
 		t.Fatalf("NewParticle: %v", err)
 	}
-	group, err := xsd.NewModelGroup(xsderr.Loc{}, xsd.CompositorSequence, []xsd.Particle{particle}, nil)
+	group, err := xsd.NewModelGroup(xsderr.Loc{}, xsd.CompositorSequence, []xsd.Particle{particle})
 	if err != nil {
 		t.Fatalf("NewModelGroup: %v", err)
 	}
-	mgd, err := xsd.NewModelGroupDefinition(xsderr.Loc{}, mgdName, group, nil)
+	mgd, err := xsd.NewModelGroupDefinition(xsderr.Loc{}, mgdName, group)
 	if err != nil {
 		t.Fatalf("NewModelGroupDefinition: %v", err)
 	}
@@ -689,13 +688,6 @@ func mustOccurs11(t *testing.T) xsd.Occurs {
 	return o
 }
 
-// annotationDoc builds a schema-level annotation carrying one <documentation>
-// whose content identifies it: an Annotation has no {name}, so that content is
-// how the enumeration tests tell two of them apart.
-func annotationDoc(content string) xsd.Annotation {
-	return xsd.NewAnnotation(nil, []xsd.Documentation{xsd.NewDocumentation(nil, nil, content)}, nil)
-}
-
 // enumerationSchema finalizes a Schema holding two components of every §3.17.1
 // property, added in the order the document-order enumerators must report.
 func enumerationSchema(t *testing.T) *xsd.Schema {
@@ -715,8 +707,6 @@ func enumerationSchema(t *testing.T) *xsd.Schema {
 	b.AddNotation(notationNamed(t, qn("n2")))
 	b.AddIdentityConstraint(idcNamed(t, qn("c1")))
 	b.AddIdentityConstraint(idcNamed(t, qn("c2")))
-	b.AddAnnotation(annotationDoc("first"))
-	b.AddAnnotation(annotationDoc("second"))
 
 	s, err := b.Finalize()
 	if err != nil {
@@ -761,14 +751,6 @@ func TestSchemaEnumeratorsDocumentOrder(t *testing.T) {
 	assertOrder(t, "ModelGroups", enumeratedNames(s.ModelGroups(), xsd.ModelGroupDefinition.Name), []string{"mg1", "mg2"})
 	assertOrder(t, "Notations", enumeratedNames(s.Notations(), xsd.Notation.Name), []string{"n1", "n2"})
 	assertOrder(t, "IdentityConstraints", enumeratedNames(s.IdentityConstraints(), xsd.IdentityConstraint.Name), []string{"c1", "c2"})
-
-	annotations := s.Annotations()
-	if len(annotations) != 2 {
-		t.Fatalf("Annotations() length = %d, want 2", len(annotations))
-	}
-	assertOrder(t, "Annotations",
-		[]string{annotations[0].Documentation()[0].Content(), annotations[1].Documentation()[0].Content()},
-		[]string{"first", "second"})
 }
 
 // assertEnumeratorCopies proves an enumerator hands back a fresh slice: zeroing
@@ -791,8 +773,8 @@ func assertEnumeratorCopies[T any](t *testing.T, label string, get func() []T, k
 func TestSchemaEnumeratorsReturnCopies(t *testing.T) {
 	s := enumerationSchema(t)
 
-	// The Types/Annotations keys tolerate the zero value this helper writes back,
-	// so a broken copy reports a mismatch rather than panicking.
+	// The Types key tolerates the zero value this helper writes back, so a broken
+	// copy reports a mismatch rather than panicking.
 	assertEnumeratorCopies(t, "Types", s.Types, func(d xsd.TypeDefinition) string {
 		if d == nil {
 			return "<nil>"
@@ -805,13 +787,6 @@ func TestSchemaEnumeratorsReturnCopies(t *testing.T) {
 	assertEnumeratorCopies(t, "ModelGroups", s.ModelGroups, func(d xsd.ModelGroupDefinition) string { return d.Name().Local })
 	assertEnumeratorCopies(t, "Notations", s.Notations, func(d xsd.Notation) string { return d.Name().Local })
 	assertEnumeratorCopies(t, "IdentityConstraints", s.IdentityConstraints, func(d xsd.IdentityConstraint) string { return d.Name().Local })
-	assertEnumeratorCopies(t, "Annotations", s.Annotations, func(a xsd.Annotation) string {
-		docs := a.Documentation()
-		if len(docs) == 0 {
-			return "<none>"
-		}
-		return docs[0].Content()
-	})
 }
 
 // TestSchemaTypesIncludesAnonymous pins the half of Types()'s contract the
@@ -862,9 +837,6 @@ func TestSchemaEnumeratorsEmptyAreNil(t *testing.T) {
 	}
 	if got := s.IdentityConstraints(); got != nil {
 		t.Errorf("IdentityConstraints() = %v, want nil", got)
-	}
-	if got := s.Annotations(); got != nil {
-		t.Errorf("Annotations() = %v, want nil", got)
 	}
 }
 

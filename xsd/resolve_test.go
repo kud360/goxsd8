@@ -26,7 +26,7 @@ func occurs11(t *testing.T) xsd.Occurs {
 // termParticle wraps a TermOrRef in a {1,1} particle.
 func termParticle(t *testing.T, term xsd.TermOrRef) xsd.Particle {
 	t.Helper()
-	p, err := xsd.NewParticle(xsderr.Loc{}, occurs11(t), term, nil)
+	p, err := xsd.NewParticle(xsderr.Loc{}, occurs11(t), term)
 	if err != nil {
 		t.Fatalf("NewParticle: %v", err)
 	}
@@ -36,7 +36,7 @@ func termParticle(t *testing.T, term xsd.TermOrRef) xsd.Particle {
 // seqGroup builds a sequence model group over the given particles.
 func seqGroup(t *testing.T, particles ...xsd.Particle) xsd.ModelGroup {
 	t.Helper()
-	g, err := xsd.NewModelGroup(xsderr.Loc{}, xsd.CompositorSequence, particles, nil)
+	g, err := xsd.NewModelGroup(xsderr.Loc{}, xsd.CompositorSequence, particles)
 	if err != nil {
 		t.Fatalf("NewModelGroup: %v", err)
 	}
@@ -47,7 +47,7 @@ func seqGroup(t *testing.T, particles ...xsd.Particle) xsd.ModelGroup {
 // a sequence of the given particles.
 func modelGroupDefAt(t *testing.T, loc xsderr.Loc, name xsd.QName, particles ...xsd.Particle) xsd.ModelGroupDefinition {
 	t.Helper()
-	d, err := xsd.NewModelGroupDefinition(loc, name, seqGroup(t, particles...), nil)
+	d, err := xsd.NewModelGroupDefinition(loc, name, seqGroup(t, particles...))
 	if err != nil {
 		t.Fatalf("NewModelGroupDefinition: %v", err)
 	}
@@ -65,7 +65,7 @@ func modelGroupDef(t *testing.T, name xsd.QName, particles ...xsd.Particle) xsd.
 func elementContentCTAt(t *testing.T, loc xsderr.Loc, name xsd.QName, term xsd.TermOrRef) xsd.ComplexType {
 	t.Helper()
 	ct, err := xsd.NewComplexType(loc, name, xsd.QName{}, nil, xsd.DerivationRestriction, false,
-		nil, nil, nil, xsd.ElementContent{Particle: termParticle(t, term)}, nil, nil, nil)
+		nil, nil, nil, xsd.ElementContent{Particle: termParticle(t, term)}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType: %v", err)
 	}
@@ -84,7 +84,7 @@ func elementContentCT(t *testing.T, name xsd.QName, term xsd.TermOrRef) xsd.Comp
 func baseCTAt(t *testing.T, loc xsderr.Loc, name, base xsd.QName) xsd.ComplexType {
 	t.Helper()
 	ct, err := xsd.NewComplexType(loc, name, base, nil, xsd.DerivationRestriction, false,
-		nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+		nil, nil, nil, xsd.EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType: %v", err)
 	}
@@ -101,7 +101,7 @@ func elementTypedAt(t *testing.T, loc xsderr.Loc, name, typeName xsd.QName) xsd.
 	if typeName != (xsd.QName{}) {
 		typeDef = xsd.TypeDefinitionRef{Name: typeName}
 	}
-	e, err := xsd.NewElementDeclaration(loc, name, typeDef, nil, xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil, nil)
+	e, err := xsd.NewElementDeclaration(loc, name, typeDef, nil, xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil)
 	if err != nil {
 		t.Fatalf("NewElementDeclaration: %v", err)
 	}
@@ -119,7 +119,7 @@ func elementTyped(t *testing.T, name, typeName xsd.QName) xsd.ElementDeclaration
 func elementAffiliatedAt(t *testing.T, loc xsderr.Loc, name, aff xsd.QName) xsd.ElementDeclaration {
 	t.Helper()
 	e, err := xsd.NewElementDeclaration(loc, name, nil, nil, xsd.NewGlobalScope(), nil, false, nil,
-		[]xsd.QName{aff}, nil, false, nil, nil)
+		[]xsd.QName{aff}, nil, false, nil)
 	if err != nil {
 		t.Fatalf("NewElementDeclaration: %v", err)
 	}
@@ -146,7 +146,7 @@ func keyOrRefFieldsAt(t *testing.T, loc xsderr.Loc, name xsd.QName, category xsd
 	if category == xsd.IdentityConstraintKeyref {
 		referPtr = &refer
 	}
-	c, err := xsd.NewIdentityConstraint(loc, name, category, sel, fields, referPtr, nil)
+	c, err := xsd.NewIdentityConstraint(loc, name, category, sel, fields, referPtr)
 	if err != nil {
 		t.Fatalf("NewIdentityConstraint: %v", err)
 	}
@@ -165,7 +165,7 @@ func keyOrRef(t *testing.T, name xsd.QName, category xsd.IdentityConstraintCateg
 // component's (the referrer-Loc convention, resolveReferences).
 func agRefUse(t *testing.T, name xsd.QName) xsd.AttributeUse {
 	t.Helper()
-	u, err := xsd.NewAttributeUse(xsderr.Loc{}, false, xsd.AttributeDeclarationRef{Name: name}, nil, false, nil)
+	u, err := xsd.NewAttributeUse(xsderr.Loc{}, false, xsd.AttributeDeclarationRef{Name: name}, nil, false)
 	if err != nil {
 		t.Fatalf("NewAttributeUse(ref %v): %v", name, err)
 	}
@@ -181,11 +181,11 @@ func agLocalUse(t *testing.T, loc xsderr.Loc, name, typeName xsd.QName) xsd.Attr
 	if err != nil {
 		t.Fatalf("NewAttributeLocalScope: %v", err)
 	}
-	d, err := xsd.NewAttributeDeclaration(loc, name, xsd.TypeDefinitionRef{Name: typeName}, scope, nil, false, nil)
+	d, err := xsd.NewAttributeDeclaration(loc, name, xsd.TypeDefinitionRef{Name: typeName}, scope, nil, false)
 	if err != nil {
 		t.Fatalf("NewAttributeDeclaration(%v): %v", name, err)
 	}
-	u, err := xsd.NewAttributeUse(xsderr.Loc{}, false, xsd.LocalAttributeDeclaration{Declaration: d}, nil, false, nil)
+	u, err := xsd.NewAttributeUse(xsderr.Loc{}, false, xsd.LocalAttributeDeclaration{Declaration: d}, nil, false)
 	if err != nil {
 		t.Fatalf("NewAttributeUse(local %v): %v", name, err)
 	}
@@ -196,7 +196,7 @@ func agLocalUse(t *testing.T, loc xsderr.Loc, name, typeName xsd.QName) xsd.Attr
 // given {attribute uses}.
 func attributeGroupAt(t *testing.T, loc xsderr.Loc, name xsd.QName, uses ...xsd.AttributeUse) xsd.AttributeGroupDefinition {
 	t.Helper()
-	g, err := xsd.NewAttributeGroupDefinition(loc, name, uses, nil, nil)
+	g, err := xsd.NewAttributeGroupDefinition(loc, name, uses, nil)
 	if err != nil {
 		t.Fatalf("NewAttributeGroupDefinition(%v): %v", name, err)
 	}
@@ -210,7 +210,7 @@ func attributeGroupAt(t *testing.T, loc xsderr.Loc, name xsd.QName, uses ...xsd.
 func attributeCTAt(t *testing.T, loc xsderr.Loc, name xsd.QName, uses ...xsd.AttributeUse) xsd.ComplexType {
 	t.Helper()
 	ct, err := xsd.NewComplexType(loc, name, xsd.QName{}, nil, xsd.DerivationRestriction, false,
-		uses, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+		uses, nil, nil, xsd.EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType(%v): %v", name, err)
 	}
@@ -354,12 +354,12 @@ func TestResolveDanglingType(t *testing.T) {
 func TestResolveAnonymousComplexTypeDanglingBase(t *testing.T) {
 	id := xsd.NewComponentID()
 	ct, err := xsd.NewAnonymousComplexType(xsderr.Loc{}, xsd.ElementDeclarationContext{Component: id},
-		qn("nope"), nil, xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+		qn("nope"), nil, xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAnonymousComplexType: %v", err)
 	}
 	e, err := xsd.NewElementDeclarationOwningTypes(xsderr.Loc{}, id, qn("doc"), xsd.InlineTypeDefinition{Definition: ct},
-		nil, xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil, nil)
+		nil, xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil)
 	if err != nil {
 		t.Fatalf("NewElementDeclarationOwningTypes: %v", err)
 	}
@@ -385,12 +385,12 @@ func TestResolveDanglingElementRef(t *testing.T) {
 
 func TestResolveDanglingAttributeRef(t *testing.T) {
 	// A complex type's attribute use is an <attribute ref> to a missing attribute.
-	use, err := xsd.NewAttributeUse(xsderr.Loc{}, false, xsd.AttributeDeclarationRef{Name: qn("nope")}, nil, false, nil)
+	use, err := xsd.NewAttributeUse(xsderr.Loc{}, false, xsd.AttributeDeclarationRef{Name: qn("nope")}, nil, false)
 	if err != nil {
 		t.Fatalf("NewAttributeUse: %v", err)
 	}
 	ct, err := xsd.NewComplexType(xsderr.Loc{}, qn("ct"), xsd.QName{}, nil, xsd.DerivationRestriction, false,
-		[]xsd.AttributeUse{use}, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+		[]xsd.AttributeUse{use}, nil, nil, xsd.EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType: %v", err)
 	}
@@ -505,7 +505,7 @@ func TestResolveKeyrefReachedByBothWalks(t *testing.T) {
 	k := keyOrRefFields(t, qn("k"), xsd.IdentityConstraintKey, xsd.QName{}, 2)
 	kr := keyOrRefFields(t, qn("kr"), xsd.IdentityConstraintKeyref, qn("k"), 2)
 	e, err := xsd.NewElementDeclaration(xsderr.Loc{}, qn("e"), nil, nil, xsd.NewGlobalScope(), nil, false,
-		[]xsd.IdentityConstraint{k, kr}, nil, nil, false, nil, nil)
+		[]xsd.IdentityConstraint{k, kr}, nil, nil, false, nil)
 	if err != nil {
 		t.Fatalf("NewElementDeclaration: %v", err)
 	}
@@ -524,7 +524,7 @@ func TestResolveKeyrefReachedByBothWalks(t *testing.T) {
 	// (leaving the top-level pair matched) must still be rejected.
 	wide := keyOrRefFields(t, qn("kr"), xsd.IdentityConstraintKeyref, qn("k"), 5)
 	eWide, err := xsd.NewElementDeclaration(xsderr.Loc{}, qn("e"), nil, nil, xsd.NewGlobalScope(), nil, false,
-		[]xsd.IdentityConstraint{wide}, nil, nil, false, nil, nil)
+		[]xsd.IdentityConstraint{wide}, nil, nil, false, nil)
 	if err != nil {
 		t.Fatalf("NewElementDeclaration (wide): %v", err)
 	}
@@ -542,7 +542,7 @@ func TestResolveSelfCircularComplexBase(t *testing.T) {
 	// A complex type whose {base type definition} is itself (and is not
 	// xs:anyType) is a forbidden derivation cycle.
 	ct, err := xsd.NewComplexType(xsderr.Loc{}, qn("T"), qn("T"), nil, xsd.DerivationRestriction, false,
-		nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+		nil, nil, nil, xsd.EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType: %v", err)
 	}
@@ -558,12 +558,12 @@ func TestResolveSelfCircularComplexBase(t *testing.T) {
 func TestResolveMutualCircularComplexBase(t *testing.T) {
 	// A -> B -> A base chain across two named types.
 	a, err := xsd.NewComplexType(xsderr.Loc{}, qn("A"), qn("B"), nil, xsd.DerivationRestriction, false,
-		nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+		nil, nil, nil, xsd.EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType A: %v", err)
 	}
 	bt, err := xsd.NewComplexType(xsderr.Loc{}, qn("B"), qn("A"), nil, xsd.DerivationRestriction, false,
-		nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+		nil, nil, nil, xsd.EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType B: %v", err)
 	}
@@ -581,7 +581,7 @@ func TestResolveAnyTypeSelfBaseAccepted(t *testing.T) {
 	// xs:anyType is the one complex type permitted to be its own base (§3.4.7).
 	anyType, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"},
 		xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"}, nil, xsd.DerivationRestriction, false,
-		nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+		nil, nil, nil, xsd.EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType anyType: %v", err)
 	}
@@ -624,12 +624,12 @@ func TestResolveValidGraph(t *testing.T) {
 	//   - group g1 referencing group g2 (acyclic)
 	//   - keyref kr referring to key k
 	base, err := xsd.NewComplexType(xsderr.Loc{}, qn("base"), xsd.QName{}, nil, xsd.DerivationRestriction, false,
-		nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+		nil, nil, nil, xsd.EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType base: %v", err)
 	}
 	derived, err := xsd.NewComplexType(xsderr.Loc{}, qn("derived"), qn("base"), nil, xsd.DerivationExtension, false,
-		nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+		nil, nil, nil, xsd.EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType derived: %v", err)
 	}
@@ -732,12 +732,12 @@ func TestResolveRejectionsCiteTheOffendingComponent(t *testing.T) {
 			name: "src-resolve dangling attribute ref cites the enclosing complex type",
 			rule: "src-resolve",
 			build: func(t *testing.T) (*xsd.SchemaBuilder, xsderr.Loc) {
-				use, err := xsd.NewAttributeUse(xsderr.Loc{}, false, xsd.AttributeDeclarationRef{Name: qn("nope")}, nil, false, nil)
+				use, err := xsd.NewAttributeUse(xsderr.Loc{}, false, xsd.AttributeDeclarationRef{Name: qn("nope")}, nil, false)
 				if err != nil {
 					t.Fatalf("NewAttributeUse: %v", err)
 				}
 				ct, err := xsd.NewComplexType(resolveLoc(31), qn("ct"), xsd.QName{}, nil, xsd.DerivationRestriction, false,
-					[]xsd.AttributeUse{use}, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+					[]xsd.AttributeUse{use}, nil, nil, xsd.EmptyContent{}, nil, nil)
 				if err != nil {
 					t.Fatalf("NewComplexType: %v", err)
 				}
@@ -838,7 +838,7 @@ func TestResolveRejectionsCiteTheOffendingComponent(t *testing.T) {
 func TestNewParticleRejectsResolvedTermNilInner(t *testing.T) {
 	// ResolvedTerm{Term: nil} is a representable absent {term} that the outer
 	// nil-TermOrRef check misses; NewParticle must reject it.
-	_, err := xsd.NewParticle(xsderr.Loc{}, occurs11(t), xsd.ResolvedTerm{Term: nil}, nil)
+	_, err := xsd.NewParticle(xsderr.Loc{}, occurs11(t), xsd.ResolvedTerm{Term: nil})
 	if err == nil {
 		t.Fatal("NewParticle(ResolvedTerm{Term: nil}) succeeded, want p-props-correct error")
 	}

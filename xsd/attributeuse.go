@@ -82,7 +82,7 @@ func (AttributeDeclarationRef) attributeDeclarationRef()   {}
 
 // AttributeUse is the Attribute Use component (Structures §3.5.1, id="au"): a
 // kind of Annotated Component with {required}, {attribute declaration}, {value
-// constraint} (Optional), {inheritable}, and {annotations}.
+// constraint} (Optional), and {inheritable}.
 //
 // The {value constraint} property (§3.5.1 vc_au) is modeled as an
 // INDEPENDENTLY-optional slot (mirroring attributedeclaration.go): under the
@@ -115,7 +115,6 @@ type AttributeUse struct {
 	valueConstraint      ValueConstraint
 	hasValueConstraint   bool
 	inheritable          bool
-	annotations          []Annotation
 }
 
 // NewAttributeUse builds an AttributeUse, rejecting the states Attribute Use
@@ -141,13 +140,12 @@ type AttributeUse struct {
 // record (mirroring attributedeclaration.go's *ValueConstraint handling); when
 // non-nil the pointed-to value is COPIED into the struct and hasValueConstraint
 // is set — the pointer itself is never stored, so the caller's value is not
-// aliased. annotations is copied; the caller's backing array is not aliased, and
-// an empty input is held as nil.
+// aliased.
 //
 // loc is the source position charged to any rejection. A caller with no real
 // parser position — a synthesized or programmatically built use — may
 // legitimately pass the zero xsderr.Loc{}.
-func NewAttributeUse(loc xsderr.Loc, required bool, attributeDeclaration AttributeDeclarationOrRef, valueConstraint *ValueConstraint, inheritable bool, annotations []Annotation) (AttributeUse, error) {
+func NewAttributeUse(loc xsderr.Loc, required bool, attributeDeclaration AttributeDeclarationOrRef, valueConstraint *ValueConstraint, inheritable bool) (AttributeUse, error) {
 	if attributeDeclaration == nil {
 		return AttributeUse{}, xsderr.New(ruleAuPropsCorrect, loc,
 			"attribute use has an absent {attribute declaration}, but it is Required (au-props-correct clause 1)")
@@ -174,9 +172,6 @@ func NewAttributeUse(loc xsderr.Loc, required bool, attributeDeclaration Attribu
 	}
 	if valueConstraint != nil {
 		u.valueConstraint, u.hasValueConstraint = *valueConstraint, true
-	}
-	if len(annotations) > 0 {
-		u.annotations = append([]Annotation(nil), annotations...)
 	}
 	return u, nil
 }
@@ -235,14 +230,4 @@ func (u AttributeUse) ValueConstraint() (ValueConstraint, bool) {
 // Inheritable returns the {inheritable} property (Required).
 func (u AttributeUse) Inheritable() bool {
 	return u.inheritable
-}
-
-// Annotations returns the {annotations} property in document order. It returns
-// a copy: mutating the result does not affect u. An empty {annotations} yields
-// nil.
-func (u AttributeUse) Annotations() []Annotation {
-	if len(u.annotations) == 0 {
-		return nil
-	}
-	return append([]Annotation(nil), u.annotations...)
 }

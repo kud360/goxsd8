@@ -303,7 +303,7 @@ func (p *producer) constructIdentityConstraint(name xsd.QName, el *Element, cate
 		}
 		referencedKey = &qn
 	}
-	return xsd.NewIdentityConstraint(el.Loc(), name, category, selector, fields, referencedKey, nil)
+	return xsd.NewIdentityConstraint(el.Loc(), name, category, selector, fields, referencedKey)
 }
 
 // identityConstraintCategoryOf maps an identity-constraint element's local name
@@ -360,7 +360,7 @@ func (p *producer) assertionsOf(parent *Element) []xsd.Assertion {
 		if !ok || !isXSD(el, "assert") {
 			continue
 		}
-		assertions = append(assertions, xsd.NewAssertion(p.buildXPathExpression(el, "test"), nil))
+		assertions = append(assertions, xsd.NewAssertion(p.buildXPathExpression(el, "test")))
 	}
 	return assertions
 }

@@ -39,9 +39,7 @@ func assertionsPrefix(base, derived []Assertion) bool {
 
 // assertionsIdentical decides property identity between two Assertions
 // (§3.13.1) by their one schema-significant property, {test}, an XPathExpression
-// property record compared field for field. {annotations} is not compared — it
-// carries no schema-significant content, the same omission attributeUsesIdentical
-// makes for the same reason.
+// property record compared field for field.
 func assertionsIdentical(a, b Assertion) bool {
 	return xpathExpressionsIdentical(a.test, b.test)
 }

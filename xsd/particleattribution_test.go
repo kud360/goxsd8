@@ -36,7 +36,7 @@ func uUnbounded(t *testing.T, minOccurs int) Occurs {
 
 func uParticle(t *testing.T, o Occurs, term TermOrRef) Particle {
 	t.Helper()
-	p, err := NewParticle(xsderr.Loc{}, o, term, nil)
+	p, err := NewParticle(xsderr.Loc{}, o, term)
 	if err != nil {
 		t.Fatalf("NewParticle: %v", err)
 	}
@@ -51,7 +51,7 @@ func uOne(t *testing.T, term TermOrRef) Particle {
 
 func uGroup(t *testing.T, compositor Compositor, particles ...Particle) ModelGroup {
 	t.Helper()
-	g, err := NewModelGroup(xsderr.Loc{}, compositor, particles, nil)
+	g, err := NewModelGroup(xsderr.Loc{}, compositor, particles)
 	if err != nil {
 		t.Fatalf("NewModelGroup: %v", err)
 	}
@@ -77,7 +77,7 @@ func uLocalScope(t *testing.T) Scope {
 func uLocal(t *testing.T, name QName, typeName QName) ElementDeclaration {
 	t.Helper()
 	e, err := NewElementDeclaration(xsderr.Loc{}, name, TypeDefinitionRef{Name: typeName}, nil, uLocalScope(t), nil, false, nil,
-		nil, nil, false, nil, nil)
+		nil, nil, false, nil)
 	if err != nil {
 		t.Fatalf("NewElementDeclaration: %v", err)
 	}
@@ -89,7 +89,7 @@ func uLocal(t *testing.T, name QName, typeName QName) ElementDeclaration {
 func uGlobal(t *testing.T, name QName, typeName QName, affiliations ...QName) ElementDeclaration {
 	t.Helper()
 	e, err := NewElementDeclaration(xsderr.Loc{}, name, TypeDefinitionRef{Name: typeName}, nil, NewGlobalScope(), nil, false, nil,
-		affiliations, nil, false, nil, nil)
+		affiliations, nil, false, nil)
 	if err != nil {
 		t.Fatalf("NewElementDeclaration: %v", err)
 	}
@@ -104,7 +104,7 @@ func uGlobal(t *testing.T, name QName, typeName QName, affiliations ...QName) El
 func uUntyped(t *testing.T, name QName, head QName) ElementDeclaration {
 	t.Helper()
 	e, err := NewElementDeclaration(xsderr.Loc{}, name, nil, nil, NewGlobalScope(), nil, false, nil,
-		[]QName{head}, nil, false, nil, nil)
+		[]QName{head}, nil, false, nil)
 	if err != nil {
 		t.Fatalf("NewElementDeclaration: %v", err)
 	}
@@ -117,7 +117,7 @@ func uWildcard(t *testing.T, variety NamespaceConstraintVariety, namespaces []Na
 	if err != nil {
 		t.Fatalf("NewNamespaceConstraint: %v", err)
 	}
-	w, err := NewWildcard(xsderr.Loc{}, nc, pc, nil)
+	w, err := NewWildcard(xsderr.Loc{}, nc, pc)
 	if err != nil {
 		t.Fatalf("NewWildcard: %v", err)
 	}
@@ -128,7 +128,7 @@ func uWildcard(t *testing.T, variety NamespaceConstraintVariety, namespaces []Na
 func uCT(t *testing.T, name QName, p Particle) ComplexType {
 	t.Helper()
 	ct, err := NewComplexType(xsderr.Loc{}, name, QName{}, nil, DerivationRestriction, false,
-		nil, nil, nil, ElementContent{Particle: p}, nil, nil, nil)
+		nil, nil, nil, ElementContent{Particle: p}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType: %v", err)
 	}
@@ -140,7 +140,7 @@ func uCT(t *testing.T, name QName, p Particle) ComplexType {
 func uNamedType(t *testing.T, name QName) ComplexType {
 	t.Helper()
 	ct, err := NewComplexType(xsderr.Loc{}, name, QName{}, nil, DerivationRestriction, false,
-		nil, nil, nil, EmptyContent{}, nil, nil, nil)
+		nil, nil, nil, EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType: %v", err)
 	}
@@ -156,7 +156,7 @@ func uNamedType(t *testing.T, name QName) ComplexType {
 func uSubOfT(t *testing.T) ComplexType {
 	t.Helper()
 	ct, err := NewComplexType(xsderr.Loc{}, uq("TSub"), uq("T"), nil, DerivationRestriction, false,
-		nil, nil, nil, EmptyContent{}, nil, nil, nil)
+		nil, nil, nil, EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType(TSub): %v", err)
 	}
@@ -373,7 +373,7 @@ func TestUPAUnrelatedGlobalsPass(t *testing.T) {
 // still ·overlap· and cos-nonambig fires.
 func TestUPAUnrelatedProhibitedSubstitutionsStillOverlap(t *testing.T) {
 	blocking, err := NewComplexType(xsderr.Loc{}, uq("Blocking"), QName{}, nil, DerivationRestriction, false,
-		nil, nil, nil, EmptyContent{}, []DerivationMethod{DerivationExtension}, nil, nil)
+		nil, nil, nil, EmptyContent{}, []DerivationMethod{DerivationExtension}, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType: %v", err)
 	}
@@ -400,12 +400,12 @@ func TestUPAUnrelatedProhibitedSubstitutionsStillOverlap(t *testing.T) {
 // cos-nonambig does with a schema that stands.
 func TestUPASubstitutionBlockedByClause23(t *testing.T) {
 	head, err := NewComplexType(xsderr.Loc{}, uq("Head"), QName{}, nil, DerivationRestriction, false,
-		nil, nil, nil, EmptyContent{}, []DerivationMethod{DerivationExtension}, nil, nil)
+		nil, nil, nil, EmptyContent{}, []DerivationMethod{DerivationExtension}, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType: %v", err)
 	}
 	derived, err := NewComplexType(xsderr.Loc{}, uq("Derived"), uq("Head"), nil, DerivationExtension, false,
-		nil, nil, nil, EmptyContent{}, nil, nil, nil)
+		nil, nil, nil, EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType: %v", err)
 	}
@@ -627,7 +627,7 @@ func TestUPAGroupRefExpansion(t *testing.T) {
 	inner := uGroup(t, CompositorSequence,
 		uOne(t, ResolvedTerm{Term: uLocal(t, uq("a"), uq("T"))}),
 	)
-	mgd, err := NewModelGroupDefinition(xsderr.Loc{}, uq("g"), inner, nil)
+	mgd, err := NewModelGroupDefinition(xsderr.Loc{}, uq("g"), inner)
 	if err != nil {
 		t.Fatalf("NewModelGroupDefinition: %v", err)
 	}
@@ -648,7 +648,7 @@ func TestUPAUnreferencedModelGroupDefinition(t *testing.T) {
 		uOne(t, ResolvedTerm{Term: uLocal(t, uq("a"), uq("T"))}),
 		uOne(t, ResolvedTerm{Term: uLocal(t, uq("a"), uq("T"))}),
 	)
-	mgd, err := NewModelGroupDefinition(xsderr.Loc{}, uq("orphan"), inner, nil)
+	mgd, err := NewModelGroupDefinition(xsderr.Loc{}, uq("orphan"), inner)
 	if err != nil {
 		t.Fatalf("NewModelGroupDefinition: %v", err)
 	}

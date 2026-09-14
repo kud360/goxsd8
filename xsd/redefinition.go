@@ -281,7 +281,7 @@ func modelGroupContent(g ModelGroup, loc xsderr.Loc) (ElementContent, error) {
 	if err != nil {
 		return ElementContent{}, err
 	}
-	p, err := NewParticle(loc, once, ResolvedTerm{Term: g}, nil)
+	p, err := NewParticle(loc, once, ResolvedTerm{Term: g})
 	if err != nil {
 		return ElementContent{}, err
 	}
