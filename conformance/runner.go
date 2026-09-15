@@ -228,9 +228,9 @@ func selectsKind(k string) func(caseSpec) bool {
 }
 
 // defaultLanes is the committed lane table, one lane per expectation file in
-// conformance/doc.go order. Only schema and instance claim cases at M1; the
-// remaining lanes are inert (selectsNone) until their milestone gives them a
-// selector and executor here.
+// conformance/doc.go order. datatypes, schema and instance claim cases today;
+// xpath, json and ber stay inert (selectsNone) until their milestone gives
+// them a selector and executor here.
 //
 // Lane order carries no routing meaning: every lane is offered the full case
 // list, so inserting a narrower lane ADDS a second scoring of its cases rather
