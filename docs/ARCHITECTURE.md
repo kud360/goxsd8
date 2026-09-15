@@ -669,9 +669,11 @@ compiles, is documented, and has **zero** callers module-wide.
   module-wide. `Permits` answers a closed `min <= n <= max` question no
   caller asks, every occurrence site reading `Min`/`Max` for a one-sided
   bound instead; `IsAbsent` is `URI`'s second result spelled a second way
-  (D3); `AllowsNamespace` is exported beneath `NamespaceConstraint.AllowsName`
-  by a `doc.go` that tells a caller admitting a name to reach for
-  `Schema.ContentMatcher` or `Schema.AllowsAttributeWildcardName` instead.
+  (D3); `AllowsNamespace` sits, like `NamespaceConstraint.AllowsName` beside
+  it, beneath the wildcard-admission entry points as the {namespace
+  constraint} property's own accessor — `xsd/doc.go`'s Walk API section
+  redirects a caller admitting a name to `Schema.ContentMatcher` or
+  `Schema.AllowsAttributeWildcardName` instead of either.
   Filed at the 2026-09-06 audit as #1287. `Notation.SystemIdentifier`,
   `Notation.PublicIdentifier` and `xmltree.CharData.Offset` are callerless
   too and are NOT filed: the first two are §3.14.1 component properties the

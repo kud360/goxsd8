@@ -415,6 +415,16 @@ func (w *walk) childGoverning(e Element, a xsd.Attribution) (governance, bool) {
 // e-validity clause 2, "otherwise", an item not ·strictly assessed· having no
 // clause 1 to reach.
 //
+// The guard below (g.hasDecl || g.typ != nil) rules out [governance]'s other
+// two shapes alongside the genuine unresolved-name one: hasDecl true is this
+// package declining a type it could not determine, not an unresolved-name
+// story at all, and typ non-nil with hasDecl false is clause 1.2's xsi:type-
+// driven ·strict assessment· (key-governing-type-elem clause 8) — a ·governing
+// type definition· WAS determined there, from xsi:type rather than from
+// ·resolution·, so neither clause 3.3's lax path nor this clause is live. Only
+// the zero value — no declaration, no type at all — is the unresolved-name
+// shape this function charges.
+//
 // notKnown is read off the governance the descent just determined, and no
 // subtree state is kept: clause 1.1.3 quantifies over E.[[children]] and
 // E.[[attributes]], one generation and no further. A deeper descendant reaches
