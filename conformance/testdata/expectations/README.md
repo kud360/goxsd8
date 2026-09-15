@@ -10,6 +10,12 @@ One lane per file (`datatypes.txt`, `schema.txt`, `instance.txt`,
 Sorted by case ID. `#` starts a comment. `pass` = this processor agrees
 with the suite's declared outcome; `fail` = a recorded known gap.
 
+Read one case ID appearing in two files as two engines' results, not a
+conflict: lane populations overlap and each lane scores the case under its
+own executor, so a `pass` in `datatypes.txt` beside a `fail` in
+`instance.txt` records the second engine's gap (issue #1507; the `lane` type
+in `conformance/runner.go` is normative).
+
 **Rules (constitutional — see CLAUDE.md):**
 
 - Files are written only by the ratchet
