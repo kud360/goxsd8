@@ -210,18 +210,76 @@ func TestDescendantAttributedToAResolvingWildcardIsAssessed(t *testing.T) {
 // A name that ·resolves· to no top-level declaration leaves the child with no
 // ·governing element declaration·, which is cvc-assess-elt clause 3.3 — ·laxly
 // assessed· against xs:anyType — and no charge of its own, under a STRICT
-// wildcard as much as under a lax one: what an unresolved name under a strict
-// wildcard costs is the parent's [validity] (§3.3.5.1 clause 1.1.3), a property
-// this package computes for no item.
-func TestDescendantAttributedToAWildcardDeclinesAnUnresolvedName(t *testing.T) {
-	for _, pc := range []xsd.ProcessContents{xsd.ProcessStrict, xsd.ProcessLax} {
-		t.Run(pc.String(), func(t *testing.T) {
-			schema := dSchema(t, nil, dWildcard(t, pc))
+// wildcard as much as under a lax one. What an unresolved name under a strict
+// wildcard costs is the ENCLOSING element's [validity] (§3.3.5.1, e-validity
+// clause 1.1.3), which is charged against <root> here and at the CHILD's
+// location, that being where the unresolved name is.
+//
+// Under LAX the same document charges nothing anywhere: clause 1.1.3 names a
+// ***strict*** ·wildcard particle· and no other, and the child is ·laxly
+// assessed· either way. The lax row is what shows the strict charge comes from
+// {process contents} and not from the shape of the document (#717).
+func TestUnresolvedNameUnderAStrictWildcardChargesTheEnclosingElement(t *testing.T) {
+	doc := func() Element {
+		return dElem("root", 1, ElementChild(dElem("stranger", 2, ElementChild(dElem("anything", 3)))))
+	}
 
-			wantSilence(t, cAssess(t, schema, dElem("root", 1,
-				ElementChild(dElem("stranger", 2, ElementChild(dElem("anything", 3)))))),
-				"an unresolved name is not a charge against the child")
-		})
+	got := cAssess(t, dSchema(t, nil, dWildcard(t, xsd.ProcessStrict)), doc())
+	if len(got) != 1 {
+		t.Fatalf("Violations() = %v, want exactly one", got)
+	}
+	if got[0].Rule != "cvc-assess-elt" {
+		t.Errorf("Rule = %q, want cvc-assess-elt — e-validity has no catalog ID of its own", got[0].Rule)
+	}
+	if got[0].Loc != loc(2, 1) {
+		t.Errorf("Loc = %s, want the CHILD's position %s", got[0].Loc, loc(2, 1))
+	}
+	// The clause is named against the rule that STATES it and not against the
+	// Rule the error carries: cvc-assess-elt has a clause 1.1.3 of its own
+	// (key-sva's) and this is not it.
+	for _, want := range []string{"e-validity clause 1.1.3", "notKnown", "the enclosing element root"} {
+		if !strings.Contains(got[0].Msg, want) {
+			t.Errorf("Msg = %q, want it to name %s", got[0].Msg, want)
+		}
+	}
+	// Pinned as a PREFIX, not as a substring: the two names this message
+	// interpolates are both present whichever order they are passed in, so only
+	// the opening subject tells the ·attributed· child from the element the
+	// clause charges (#1048).
+	if !strings.HasPrefix(got[0].Msg, "the element information item stranger is ·attributed to·") {
+		t.Errorf("Msg = %q, want it to OPEN by naming the child as the ·attributed· item", got[0].Msg)
+	}
+
+	wantSilence(t, cAssess(t, dSchema(t, nil, dWildcard(t, xsd.ProcessLax)), doc()),
+		"e-validity clause 1.1.3 names a strict wildcard particle alone")
+}
+
+// The ·laxly assessed· child is still recursed, unlike a ·skipped· one: its own
+// [[children]] and [[attributes]] are assessed in their turn (cvc-assess-elt
+// clause 3.3 over key-lva clause 2), against xs:anyType, whose {content type}
+// and {attribute uses} reject none of them. The clause 1.1.3 charge above is
+// the enclosing element's and is not repeated down the subtree: <anything>
+// under <stranger> is ·attributed to· nothing, since a ·laxly assessed· element
+// determines no {content type} to attribute against.
+func TestALaxlyAssessedChildIsWalkedAndChargesNothingBelowItself(t *testing.T) {
+	log, visits := recordingLogger()
+	v, err := New(dSchema(t, nil, dWildcard(t, xsd.ProcessStrict)), testBackend(), WithLogger(log))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	res := v.Assess(dElem("root", 1, ElementChild(dElem("stranger", 2, ElementChild(dElem("anything", 3))))))
+
+	if n := len(res.Violations()); n != 1 {
+		t.Fatalf("Violations() = %v, want exactly the one clause 1.1.3 charge", res.Violations())
+	}
+	for _, want := range []string{
+		"assessing element validate.name=stranger validate.loc=instance.xml:2:1",
+		"assessing element validate.name=anything validate.loc=instance.xml:3:1",
+	} {
+		if !slices.Contains(*visits, want) {
+			t.Errorf("walk visited\n\t%s\nwant it to include\n\t%s", strings.Join(*visits, "\n\t"), want)
+		}
 	}
 }
 

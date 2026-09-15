@@ -19,6 +19,23 @@ import (
 // ·validation root· "to be declared and valid" and otherwise reporting "an
 // error to its environment"; cvc-assess-elt is the rule that policy is
 // stated against, and the catalog carries the bare name.
+//
+// Assessment Outcome (Element) (§3.3.5.1, e-validity) clause 1.1.3 is charged
+// under this Rule too ([walk.unresolvedStrictWildcardChild]), and the clause
+// goes in the message on ruleCvcElt's terms. e-validity is a PSVI contribution
+// with no cvc-* ID of its own, and no Rule is MINTED for it: xsderr/doc.go's
+// s4s-grammar section rules that a Rule invented for a verdict the spec
+// declines to catalog "would be read as a citation of a rule the spec does not
+// state". It folds here rather than into cvc-complex-content because the clause
+// is a property of ·assessment· — it reads a child's [validity] and the
+// ·attribution· cvc-assess-elt clause 3 dispatched on, not the element
+// sequence's validity against a {content type} (#717).
+//
+// That message names "e-validity clause 1.1.3" and never "cvc-assess-elt
+// clause 1.1.3": ·strictly assessed· (key-sva) has a clause 1.1.3 of its own,
+// a different condition entirely, so spelling the carried Rule beside the
+// borrowed clause number would cite the wrong sentence. STYLE E4's grep is
+// served by the rule that STATES the clause.
 const ruleCvcAssessElt xsderr.Rule = "cvc-assess-elt"
 
 // ruleCvcElt is Element Locally Valid (Element) (Structures §3.3.4.3,
@@ -357,9 +374,10 @@ func typeName(t xsd.TypeDefinition) string {
 //     declarations, which is the resolution [Validator.Assess] makes for the
 //     root. The two {process contents} share it exactly — §3.10.4.1 draws no
 //     distinction in the resolution step itself — and what they differ in is
-//     what an UNRESOLVED name under a strict wildcard costs the PARENT's
-//     [validity] (§3.3.5.1 clause 1.1.3), a property this package computes for
-//     no item at all.
+//     what an UNRESOLVED name costs the ENCLOSING element's [validity]: under
+//     strict, e-validity clause 1.1.3, charged by
+//     [walk.unresolvedStrictWildcardChild]; under lax, nothing, at the child or
+//     anywhere else.
 //
 // A nil attribution is a parent that attributed the child to nothing: no
 // ·governing type definition· of its own, an element already charged, or a
@@ -382,13 +400,66 @@ func (w *walk) childGoverning(e Element, a xsd.Attribution) (governance, bool) {
 	}
 }
 
+// unresolvedStrictWildcardChild settles Assessment Outcome (Element) (§3.3.5.1,
+// e-validity) clause 1.1.3 for one child of the element content is checking: a
+// [[children]] member ·attributed to· a ***strict*** ·wildcard particle· whose
+// own [validity] is ***notKnown*** takes the ENCLOSING element off clause 1.1's
+// arm, and clause 1.2 makes its [validity] invalid.
+//
+// The child itself is charged NOTHING and is not halted. An unresolved name
+// under a strict wildcard has neither a ·governing element declaration· nor a
+// ·governing type definition·, which is cvc-assess-elt clause 3.3's ·lax
+// assessment· against xs:anyType: [walk.element] still runs over it, so its
+// [[attributes]] and its [[children]] are assessed in their turn — unlike the
+// ·skipped· child clause 3.2 stops at. Its [validity] is notKnown by
+// e-validity clause 2, "otherwise", an item not ·strictly assessed· having no
+// clause 1 to reach.
+//
+// notKnown is read off the governance the descent just determined, and no
+// subtree state is kept: clause 1.1.3 quantifies over E.[[children]] and
+// E.[[attributes]], one generation and no further. A deeper descendant reaches
+// an ancestor through clause 1.1.2 instead — the intervening parent is invalid
+// by THIS clause, and invalidity climbs by 1.1.2 — which in this package is the
+// violation already on [Result].
+//
+// The ATTRIBUTE half of clause 1.1.3 charges nothing and withholds nothing: a
+// ·wildcard particle· (§3.9.1, key-wp) is a Particle whose {term} is a
+// Wildcard, §3.4.4.4 ·attributes· an attribute information item to the
+// {attribute wildcard} itself and never to a particle, and no particle holds an
+// attribute wildcard. The clause's "(element or attribute respectively)" has no
+// attribute case that can hold.
+//
+// The enclosing element is ·strictly assessed· wherever this is reached, which
+// clause 1 requires before 1.1.3 is live, and the condition is therefore not
+// re-tested: an [xsd.Attribution] exists only where that element's ·governing
+// type definition· was determined and an [xsd.Matcher] was built over it, and a
+// determined ·governing type definition· is cvc-assess-elt clause 1's own
+// antecedent.
+//
+// The charge carries the CHILD's location, which is where the unresolved name
+// is; the element whose [validity] it decides is named in the message.
+func (w *walk) unresolvedStrictWildcardChild(content *contentCheck, child Element, a xsd.Attribution, g governance) {
+	wild, wildcard := a.(xsd.Wildcard)
+	if !wildcard || wild.ProcessContents() != xsd.ProcessStrict {
+		return
+	}
+	if g.hasDecl || g.typ != nil {
+		return
+	}
+	w.res.violations = append(w.res.violations, xsderr.New(ruleCvcAssessElt, child.Loc(),
+		"the element information item %s is ·attributed to· a ***strict*** ·wildcard particle· but ·resolves· to no top-level element declaration, so it is ·laxly assessed· and its [validity] is ***notKnown***, which e-validity clause 1.1.3 (§3.3.5.1) makes the enclosing element %s invalid for",
+		child.Name(), content.e.Name()))
+	content.log(w, child.Name(), child.Loc(), ruleCvcAssessElt, "1.1.3", "charged")
+}
+
 // resolvedGovernance is the ·governing element declaration· of an element that
 // is the one its ·expanded name· ·resolves· to among the schema's top-level
 // element declarations (cvc-resolve-instance, §3.17.6.3), together with the
 // type that declaration supplies. A name that resolves to nothing leaves the
 // element with no declaration to read a type off, which is cvc-assess-elt
-// clause 3.3 and no charge of its own: an unresolved name is the PARENT's
-// business where it is anyone's (§3.3.5.1 clause 1.1.3) and never the child's —
+// clause 3.3 and no charge of its own: an unresolved name is the enclosing
+// element's business where it is anyone's (§3.3.5.1 clause 1.1.3,
+// [walk.unresolvedStrictWildcardChild]) and never the child's —
 // unless the element's own xsi:type supplies a ·governing type definition·
 // (instanceGovernance), which makes it clause 1.2's ·strictly assessed· rather
 // than clause 3.3's ·laxly assessed·.
@@ -858,6 +929,7 @@ func (w *walk) child(c Child, content *contentCheck, id *icCheck) {
 			w.logSkipped(e)
 			return
 		}
+		w.unresolvedStrictWildcardChild(content, e, a, g)
 		if a == nil {
 			// GAP(validate): a child its parent ·attributed to· nothing is one
 			// this package gave up typing and not one §3.3.4.6 leaves untyped,
