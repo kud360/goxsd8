@@ -669,8 +669,9 @@ compiles, is documented, and has **zero** callers module-wide.
   module-wide. `Permits` answers a closed `min <= n <= max` question no
   caller asks, every occurrence site reading `Min`/`Max` for a one-sided
   bound instead; `IsAbsent` is `URI`'s second result spelled a second way
-  (D3); `AllowsNamespace` is exported beneath `AllowsName` by a `doc.go`
-  that tells a caller admitting a name to reach for `AllowsName` instead.
+  (D3); `AllowsNamespace` is exported beneath `NamespaceConstraint.AllowsName`
+  by a `doc.go` that tells a caller admitting a name to reach for
+  `Schema.ContentMatcher` or `Schema.AllowsAttributeWildcardName` instead.
   Filed at the 2026-09-06 audit as #1287. `Notation.SystemIdentifier`,
   `Notation.PublicIdentifier` and `xmltree.CharData.Offset` are callerless
   too and are NOT filed: the first two are §3.14.1 component properties the
