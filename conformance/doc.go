@@ -47,6 +47,11 @@
 //	json.txt        JSON-adapter cases (curated)         (from M8)
 //	ber.txt         BER-adapter cases (curated)          (from M11)
 //
+// A case may appear in more than one lane file: lane populations overlap, and
+// each lane scores the case under its own executor (see the lane type in
+// conformance/runner.go). Every datatypes.txt case is also scored by the
+// instance lane.
+//
 // File format: one case per line, `<case-id> <pass|fail>`, sorted by case
 // ID; `#` starts a comment. `pass` means this processor agrees with the
 // suite's declared outcome; `fail` records a known gap so a regression is

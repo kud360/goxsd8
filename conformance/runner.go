@@ -189,10 +189,25 @@ type executor func(caseSpec) Status
 
 // lane is one conformance lane: the subset of suite cases its selector claims,
 // executed by exec and ratcheted against
-// conformance/testdata/expectations/<name>.txt. Lanes are ordered and a case
-// routes to the first lane that claims it, so lanes are disjoint. A later
-// milestone activates a lane by giving it a real selector and exec in
-// defaultLanes; the runner never changes (issue #6 seam, STYLE T2).
+// conformance/testdata/expectations/<name>.txt. A later milestone activates a
+// lane by giving it a real selector and exec in defaultLanes; the runner never
+// changes (issue #6 seam, STYLE T2).
+//
+// Lane populations OVERLAP by design (issue #1507). runLane applies only this
+// lane's selector to the full case list, so one case may be scored by several
+// lanes, each under its own executor, and carry a committed expectation in each
+// of their files. datatypes and instance overlap in full today: selectsDatatypes
+// claims a subset of the kindInstance cases selectsKind(kindInstance) claims
+// entirely.
+//
+// Such a case carries one outcome per lane because the lanes ask different
+// questions of it — whether the specialized datatypes executor agrees with the
+// suite, and whether the general instance-validity engine does. Those answers
+// differ wherever the two engines differ in maturity, in both directions, and a
+// `pass` in datatypes.txt beside a `fail` in instance.txt is that gap recorded
+// rather than a contradiction to resolve. Scoring the case in one lane only
+// would delete the other engine's recorded gap and make its progress
+// unharvestable.
 type lane struct {
 	name    string
 	selects func(caseSpec) bool
@@ -215,9 +230,11 @@ func selectsKind(k string) func(caseSpec) bool {
 // defaultLanes is the committed lane table, one lane per expectation file in
 // conformance/doc.go order. Only schema and instance claim cases at M1; the
 // remaining lanes are inert (selectsNone) until their milestone gives them a
-// selector and executor here. Routing is first-match, so a milestone that
-// inserts a narrower lane ahead of schema/instance reroutes those cases
-// without editing the runner.
+// selector and executor here.
+//
+// Lane order carries no routing meaning: every lane is offered the full case
+// list, so inserting a narrower lane ADDS a second scoring of its cases rather
+// than rerouting them away from schema/instance (issue #1507).
 func defaultLanes() []lane {
 	return []lane{
 		{name: "datatypes", selects: selectsDatatypes, exec: newDatatypesExec()},

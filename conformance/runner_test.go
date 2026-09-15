@@ -392,6 +392,36 @@ func TestRunLaneSelectsOnlyClaimedCases(t *testing.T) {
 	}
 }
 
+// TestDatatypesLaneIsASubsetOfInstanceLane pins the lane overlap the lane type
+// documents (issue #1507) against the real discovered case list: every case
+// selectsDatatypes claims is claimed by the instance lane too, so every
+// datatypes.txt case also carries an independently executed expectation in
+// instance.txt. The claimed count is asserted non-empty — a selector that
+// regressed to claiming nothing would satisfy the subset vacuously — but never
+// against a literal figure, which moves with the submodule revision. Skips when
+// the submodule is absent.
+func TestDatatypesLaneIsASubsetOfInstanceLane(t *testing.T) {
+	skipWithoutSuite(t)
+	found, err := parseSuite(suitePath())
+	if err != nil {
+		t.Fatalf("parsing suite: %v", err)
+	}
+	selectsInstance := selectsKind(kindInstance)
+	claimed := 0
+	for _, c := range found.cases {
+		if !selectsDatatypes(c) {
+			continue
+		}
+		claimed++
+		if !selectsInstance(c) {
+			t.Errorf("case %s is claimed by the datatypes lane but not by the instance lane", c.id)
+		}
+	}
+	if claimed == 0 {
+		t.Fatalf("the datatypes lane claimed none of the %d discovered cases, so the subset holds vacuously", len(found.cases))
+	}
+}
+
 // TestRunLaneRatchetRoundTrip exercises the runner's integration of runLane
 // with Ratchet + WriteExpectations against a temp-dir lane file (never the
 // real committed path): a fresh lane starts empty, records observed New cases,
