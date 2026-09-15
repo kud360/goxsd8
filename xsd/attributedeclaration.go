@@ -455,7 +455,7 @@ type AttributeDeclaration struct {
 // match the four reserved names against INSTANCE items and never read
 // {attribute declarations}, so neither is perturbed in either direction.
 //
-// GAP(xsd): no-xmlns (§3.2.6.3, xmlschema11-1.md:985) — "The {name} of an
+// GAP(xsd): no-xmlns (§3.2.6.3, xmlschema11-1.md:986) — "The {name} of an
 // attribute declaration must not match xmlns" — is charged neither here nor
 // anywhere else in this package either, so a declaration named "xmlns" is
 // accepted through this constructor whatever its {target namespace}. Unlike its
@@ -464,7 +464,8 @@ type AttributeDeclaration struct {
 // comparison on name.Local would be sound here. It is simply not written.
 // parser's rejectXmlnsName charges the rule at both mapping productions, so a
 // schema DOCUMENT cannot reach this constructor with that name and no suite case
-// turns on the gap; only a programmatically built declaration does.
+// turns on the gap; only a programmatically built declaration does. Owned by
+// #1511.
 //
 // The readers of the {attribute declarations} member this admits, and the
 // direction each charges (STYLE P3a):
