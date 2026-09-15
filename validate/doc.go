@@ -91,12 +91,13 @@
 // walk finished, not whether the document is valid. An empty Violations means
 // NOT PROVEN INVALID rather than valid: [Validator.Assess] decides local
 // validity alone, which is clause 1.1.1 of the [validity] property
-// (§3.3.5.1), and evaluates neither clause 1.1.2 nor clause 1.1.3 — an
-// invalid descendant or attribute, and one ·attributed· to a strict
-// ·wildcard particle· whose own validity is notKnown — nor clause 2, which
-// makes an item that was not ·strictly assessed· notKnown rather than valid.
-// A consumer that may accept only what has been shown valid cannot read an
-// empty result as that showing.
+// (§3.3.5.1), plus clause 1.1.3 for an element [[child]] ·attributed· to a
+// strict ·wildcard particle· whose own validity is notKnown, charged at the
+// ENCLOSING element (assess.go). It evaluates neither clause 1.1.2 — an
+// invalid descendant or attribute — nor clause 2, which makes an item that was
+// not ·strictly assessed· notKnown rather than valid. A consumer that may
+// accept only what has been shown valid cannot read an empty result as that
+// showing.
 //
 // An empty [Result.Violations] with a non-empty [Result.Unevaluated] is not a
 // pass either: each entry there is a check the assessment REACHED and did not
@@ -125,7 +126,12 @@
 // Two come from [Validator.Assess]'s dispatch on the root's ·governing
 // element declaration·: cvc-assess-elt (§3.3.4.6) for a root that determines
 // neither a declaration nor a ·governing type definition·, and cvc-elt
-// (§3.3.4.3) clause 2 for one whose declaration is abstract.
+// (§3.3.4.3) clause 2 for one whose declaration is abstract. cvc-assess-elt
+// carries one charge more, at every element the descent types: e-validity
+// (§3.3.5.1) clause 1.1.3, for an element [[child]] ·attributed to· a strict
+// ·wildcard particle· that ·resolves· to no declaration. e-validity has no
+// catalog ID of its own and none is minted for it, so the message names the
+// clause against e-validity while the error carries cvc-assess-elt.
 //
 // cvc-elt carries three more clauses, at the root and at every descendant the
 // descent types. Clause 3 decides xsi:nil: an xsi:nil attribute on a

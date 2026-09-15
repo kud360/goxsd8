@@ -104,13 +104,13 @@ func TestDefaultAttributesFoldsTheGroupWildcard(t *testing.T) {
 	if !ok {
 		t.Fatal("complex type T has no {attribute wildcard}, want the intersection with the default group's")
 	}
-	if !w.AllowsName(xsd.QName{Space: "urn:b", Local: "z"}) {
+	if !w.NamespaceConstraint().AllowsName(xsd.QName{Space: "urn:b", Local: "z"}) {
 		t.Error("intersection must admit urn:b (in both the type's wildcard and the default group's)")
 	}
-	if w.AllowsName(xsd.QName{Space: "urn:a", Local: "z"}) {
+	if w.NamespaceConstraint().AllowsName(xsd.QName{Space: "urn:a", Local: "z"}) {
 		t.Error("intersection must reject urn:a (the default group's alone)")
 	}
-	if w.AllowsName(xsd.QName{Space: "urn:c", Local: "z"}) {
+	if w.NamespaceConstraint().AllowsName(xsd.QName{Space: "urn:c", Local: "z"}) {
 		t.Error("intersection must reject urn:c (the type's own alone) — §3.4.2.5 carries §3.4.2.4's precondition, so the default group's wildcard is combined here")
 	}
 	// {process contents} comes from the FIRST member of the §3.6.2.2 pre-order,

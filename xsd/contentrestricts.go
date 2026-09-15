@@ -1015,7 +1015,7 @@ func coveringWildcardUnion(sub NamespaceConstraint, b contentAutomaton, live liv
 // membership is not one of them: inSubstitutionGroupOf decides
 // cos-equiv-derived-ok-rec exactly (substitutiongroup.go), so this clause reads
 // the true ·substitution group· whichever way membership pushes the verdict. And
-// the base's wildcard is asked through Wildcard.AllowsName (cvc-wildcard-name)
+// the base's wildcard is asked through Wildcard.allowsName (cvc-wildcard-name)
 // rather than through allowsElementWildcardName's defined/sibling keyword
 // exclusions, for the same reason: the narrower test would shrink B and could
 // only add rejections.
@@ -1027,7 +1027,7 @@ func (s *Schema) positionAdmits(general, specific position) bool {
 	case Wildcard:
 		switch sp := specific.term.(type) {
 		case ElementDeclaration:
-			return g.AllowsName(sp.Name())
+			return g.allowsName(sp.Name())
 		case Wildcard:
 			return wildcardSubset(sp.NamespaceConstraint(), g.NamespaceConstraint())
 		default:

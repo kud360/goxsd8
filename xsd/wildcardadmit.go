@@ -22,12 +22,23 @@ package xsd
 // resolved set on the Wildcard would answer the second query with the first's
 // content model. The containing type is therefore always a parameter.
 //
+// The attribute path is no index either, measured at the instance-side wiring
+// (#717): its defined arm is a single Schema.Attribute lookup and reaches no
+// substitution-group walk, so per-attribute admission is one map read past the
+// {namespace constraint} test and there is no hot path to cache (STYLE D3).
+//
 // The two entry points return bool, not error, because cvc-wildcard is a LOCAL
 // validity rule: in a content-model matcher "this wildcard does not admit this
 // name" is a non-match (try the next particle), not a reportable fault — the
 // reported fault is the enclosing cvc-complex-type clause. The rule ID each
-// eventual M5 caller must cite is named in the doc comments below so the
-// mapping from bool to error is not lost.
+// caller must cite is named in the doc comments below so the mapping from bool
+// to error is not lost.
+//
+// Only the ATTRIBUTE entry point is exported. Element-wildcard admission is
+// reached through Schema.ContentMatcher, which asks it as the wildcard arm of
+// cvc-accept and hands the answer back as an Attribution, so an exported second
+// spelling of it would be a second caller-driven copy of a decision Matcher has
+// already made (STYLE T4).
 
 // allowsElementWildcardName reports whether the expanded name is admitted by the
 // ELEMENT wildcard w occurring in containing's {content type} particle tree,
@@ -35,7 +46,7 @@ package xsd
 // element-wildcard case:
 //
 //   - clause 1: the name is ·valid· with respect to w.{namespace constraint},
-//     delegated to Wildcard.AllowsName — the one canonical implementation of
+//     delegated to Wildcard.allowsName — the one canonical implementation of
 //     cvc-wildcard-name (§3.10.4.2), never re-derived here;
 //   - clause 2.1: if {disallowed names} contains defined, the name must not
 //     ·resolve· to a top-level element declaration (§3.17.6.3,
@@ -55,7 +66,7 @@ package xsd
 // is the assertion that 3.6 holds. This method does not and cannot check them —
 // it sees no instance item.
 func (s *Schema) allowsElementWildcardName(w Wildcard, containing ComplexType, name QName) bool {
-	if !w.AllowsName(name) {
+	if !w.allowsName(name) {
 		return false
 	}
 	c := w.namespaceConstraint
@@ -70,10 +81,10 @@ func (s *Schema) allowsElementWildcardName(w Wildcard, containing ComplexType, n
 	return true
 }
 
-// allowsAttributeWildcardName reports whether the expanded name is admitted by
+// AllowsAttributeWildcardName reports whether the expanded name is admitted by
 // the ATTRIBUTE wildcard w, implementing Item Valid (Wildcard) (§3.10.4.1,
 // cvc-wildcard) in full for the attribute-wildcard case: clause 1 (delegated to
-// Wildcard.AllowsName, §3.10.4.2) and clause 2.2 (if {disallowed names} contains
+// Wildcard.allowsName, §3.10.4.2) and clause 2.2 (if {disallowed names} contains
 // defined, the name must not ·resolve· to a top-level attribute declaration).
 //
 // A caller reporting a rejection cites cvc-wildcard clause 2 — not
@@ -84,8 +95,8 @@ func (s *Schema) allowsElementWildcardName(w Wildcard, containing ComplexType, n
 // wildcard from carrying it at all (rejectSiblingOnAttributeWildcard enforces
 // that at construction), so the sibling path is not merely unreached here — it
 // is unrepresentable in this signature (STYLE T1). Nothing below re-checks it.
-func (s *Schema) allowsAttributeWildcardName(w Wildcard, name QName) bool {
-	if !w.AllowsName(name) {
+func (s *Schema) AllowsAttributeWildcardName(w Wildcard, name QName) bool {
+	if !w.allowsName(name) {
 		return false
 	}
 	if !w.namespaceConstraint.hasDisallowedNameKeyword(DisallowedNameDefined) {

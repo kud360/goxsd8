@@ -1725,10 +1725,10 @@ func TestProduceAnyAttributeWildcard(t *testing.T) {
 	}
 	// ##other in a no-target-namespace schema admits any present namespace but not
 	// ·absent· (unqualified) names.
-	if wc.AllowsName(xsd.QName{Local: "x"}) {
+	if wc.NamespaceConstraint().AllowsName(xsd.QName{Local: "x"}) {
 		t.Fatalf("##other should reject an unqualified (absent-namespace) name")
 	}
-	if !wc.AllowsName(xsd.QName{Space: "urn:z", Local: "x"}) {
+	if !wc.NamespaceConstraint().AllowsName(xsd.QName{Space: "urn:z", Local: "x"}) {
 		t.Fatalf("##other should admit a foreign-namespace name")
 	}
 }
@@ -1744,7 +1744,7 @@ func TestProduceAnyElementWildcardParticle(t *testing.T) {
 	if !ok {
 		t.Fatalf("term = %T, want Wildcard", ps[0].Term().(xsd.ResolvedTerm).Term)
 	}
-	if !wc.AllowsName(xsd.QName{Space: "urn:z", Local: "x"}) {
+	if !wc.NamespaceConstraint().AllowsName(xsd.QName{Space: "urn:z", Local: "x"}) {
 		t.Fatalf("##any wildcard should admit any name")
 	}
 }
@@ -1861,10 +1861,10 @@ func TestProduceNotQNameKeywords(t *testing.T) {
 	// the keywords are resolved by cvc-wildcard (§3.10.4.1) clauses 2-3, a
 	// different rule at the declaration-graph layer, so they leave AllowsName
 	// alone.
-	if wc.AllowsName(xsd.QName{Space: "urn:x", Local: "foo"}) {
+	if wc.NamespaceConstraint().AllowsName(xsd.QName{Space: "urn:x", Local: "foo"}) {
 		t.Errorf("AllowsName admitted the literal notQName member {urn:x}foo")
 	}
-	if !wc.AllowsName(xsd.QName{Space: "urn:x", Local: "bar"}) {
+	if !wc.NamespaceConstraint().AllowsName(xsd.QName{Space: "urn:x", Local: "bar"}) {
 		t.Errorf("AllowsName rejected a name in no half of {disallowed names}")
 	}
 }
@@ -1927,11 +1927,11 @@ func TestProduceNotQNameLiteralMembers(t *testing.T) {
 			{Space: "urn:x", Local: "bar"},
 			{Space: xsdNS, Local: "string"},
 		} {
-			if wc.AllowsName(name) {
+			if wc.NamespaceConstraint().AllowsName(name) {
 				t.Errorf("AllowsName admitted the literal notQName member %v", name)
 			}
 		}
-		if !wc.AllowsName(xsd.QName{Space: "urn:x", Local: "other"}) {
+		if !wc.NamespaceConstraint().AllowsName(xsd.QName{Space: "urn:x", Local: "other"}) {
 			t.Errorf("AllowsName rejected a name in no half of {disallowed names}")
 		}
 	})

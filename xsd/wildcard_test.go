@@ -78,7 +78,13 @@ func TestWildcardProcessContentsRoundTrip(t *testing.T) {
 	}
 }
 
-func TestWildcardAllowsNameDelegates(t *testing.T) {
+// The exported path from a Wildcard to cvc-wildcard-name (§3.10.4.2) is
+// NamespaceConstraint.AllowsName through the {namespace constraint} accessor:
+// the accessor hands back the constraint the wildcard was built with, so the
+// two decide one name alike. cvc-wildcard entire — clause 1 and the
+// defined/sibling keyword clauses together — is Schema's, not a bare
+// Wildcard's (wildcardadmit.go).
+func TestWildcardNamespaceConstraintDecidesTheName(t *testing.T) {
 	// ##other in a schema whose targetNamespace is "http://example.com/t" maps
 	// (§3.10.2.2) to not { absent, target }, mirroring the worked example in
 	// NamespaceConstraint.AllowsNamespace's doc comment.
@@ -94,8 +100,8 @@ func TestWildcardAllowsNameDelegates(t *testing.T) {
 	sawTrue, sawFalse := false, false
 	for _, name := range cases {
 		want := nc.AllowsName(name)
-		if got := w.AllowsName(name); got != want {
-			t.Errorf("Wildcard.AllowsName(%s) = %v, want %v (must agree with NamespaceConstraint.AllowsName)", name, got, want)
+		if got := w.NamespaceConstraint().AllowsName(name); got != want {
+			t.Errorf("w.NamespaceConstraint().AllowsName(%s) = %v, want %v (the accessor must hand back the constraint the wildcard carries)", name, got, want)
 		}
 		if want {
 			sawTrue = true
@@ -109,7 +115,7 @@ func TestWildcardAllowsNameDelegates(t *testing.T) {
 	}
 }
 
-func TestWildcardAllowsNameRespectsDisallowedNames(t *testing.T) {
+func TestWildcardNamespaceConstraintRespectsDisallowedNames(t *testing.T) {
 	// enumeration over the target namespace, with one literal name disallowed:
 	// the wildcard must reject that exact QName even though its namespace is
 	// otherwise admitted (cvc-wildcard-name clause 2).
@@ -119,15 +125,16 @@ func TestWildcardAllowsNameRespectsDisallowedNames(t *testing.T) {
 	nc := mustConstraint(t, xsd.NamespaceConstraintEnumeration, []xsd.Namespace{target}, []xsd.QName{disallowed})
 	w := mustWildcard(t, nc, xsd.ProcessLax)
 
-	if w.AllowsName(disallowed) {
+	c := w.NamespaceConstraint()
+	if c.AllowsName(disallowed) {
 		t.Errorf("AllowsName(%s) = true, want false (literal disallowed-name member)", disallowed)
 	}
-	if !w.AllowsName(permitted) {
+	if !c.AllowsName(permitted) {
 		t.Errorf("AllowsName(%s) = false, want true (namespace allowed, not disallowed)", permitted)
 	}
-	// Delegation must match the underlying constraint on both.
-	if w.AllowsName(disallowed) != nc.AllowsName(disallowed) || w.AllowsName(permitted) != nc.AllowsName(permitted) {
-		t.Errorf("Wildcard.AllowsName disagrees with NamespaceConstraint.AllowsName")
+	// The accessor must hand back the constraint the wildcard carries.
+	if c.AllowsName(disallowed) != nc.AllowsName(disallowed) || c.AllowsName(permitted) != nc.AllowsName(permitted) {
+		t.Errorf("w.NamespaceConstraint() disagrees with the constraint the wildcard was built with")
 	}
 }
 

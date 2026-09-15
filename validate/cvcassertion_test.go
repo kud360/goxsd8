@@ -305,32 +305,42 @@ func TestBothRulesRecordAtOneElement(t *testing.T) {
 	}
 }
 
-// An attribute matching no {attribute use} is left to an {attribute wildcard}
-// this package does not evaluate, so [walk.matchedAttribute] never runs for it
-// — but under a strict or a lax wildcard cvcid.go and cvcidentityconstraint.go
-// decide its lexical against the type of the top-level declaration its name
-// ·resolves· to, which is a site with no other recording path. The recording
-// runs under skip too, where nothing decides that lexical any more (#1043), for
-// the reason [walk.wildcardAttributeAssertions] gives.
+// An attribute matching no {attribute use} is ·attributed to· the {attribute
+// wildcard} instead, so [walk.matchedAttribute] never runs for it — but under a
+// strict or a lax wildcard cvcid.go and cvcidentityconstraint.go decide its
+// lexical against the type of the top-level declaration its name ·resolves· to,
+// which is a site with no other recording path.
+//
+// Under ***skip*** nothing is recorded: the item is ·skipped·, no facet of any
+// type is reached over its lexical (#1043), and there is no unevaluated
+// assertion to report. The recording ran under skip as well while the
+// ·attribution· could only be inferred from the wildcard's presence; #717
+// decides it, so the over-report is gone.
 func TestWildcardAttributeAssertionsAreRecorded(t *testing.T) {
-	ct, err := xsd.NewComplexType(xsderr.Loc{}, local("RootType"), xsd.QName{}, nil,
-		xsd.DerivationRestriction, false, nil, nil, anyWildcard(t, xsd.ProcessStrict), xsd.EmptyContent{}, nil, nil)
-	if err != nil {
-		t.Fatalf("building RootType: %v", err)
-	}
 	d, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, local("n"),
 		xsd.TypeDefinitionRef{Name: local("AssertedInt")}, xsd.NewAttributeGlobalScope(), nil, false)
 	if err != nil {
 		t.Fatalf("building the top-level n declaration: %v", err)
 	}
-	schema := cSchemaFrom(t, ct, func(b *xsd.SchemaBuilder) {
-		aTypes(t, b, aVarietyTypes(t)...)
-		b.AddAttribute(d)
-	})
+	assess := func(pc xsd.ProcessContents) *Result {
+		t.Helper()
+		ct, err := xsd.NewComplexType(xsderr.Loc{}, local("RootType"), xsd.QName{}, nil,
+			xsd.DerivationRestriction, false, nil, nil, anyWildcard(t, pc), xsd.EmptyContent{}, nil, nil)
+		if err != nil {
+			t.Fatalf("building RootType: %v", err)
+		}
+		schema := cSchemaFrom(t, ct, func(b *xsd.SchemaBuilder) {
+			aTypes(t, b, aVarietyTypes(t)...)
+			b.AddAttribute(d)
+		})
+		return aAssess(t, schema, valuedRoot("n", "42"))
+	}
 
-	res := aAssess(t, schema, valuedRoot("n", "42"))
-
-	wantRecords(t, res, "cvc-assertions-valid", loc(1, 10), "AssertedInt")
+	wantRecords(t, assess(xsd.ProcessStrict), "cvc-assertions-valid", loc(1, 10), "AssertedInt")
+	wantRecords(t, assess(xsd.ProcessLax), "cvc-assertions-valid", loc(1, 10), "AssertedInt")
+	if got := assess(xsd.ProcessSkip).Unevaluated(); len(got) != 0 {
+		t.Errorf("Unevaluated() = %v, want none: a ·skipped· attribute reaches no assertion site", messages(got))
+	}
 }
 
 // cvc-complex-type clause 4 validates a ·defaulted attribute·'s {lexical form}
