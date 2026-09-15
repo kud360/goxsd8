@@ -96,14 +96,17 @@ own output; neither exits non-zero.
 `suiteindex` censuses `testdata/xsdtests` by construct — namespace URI plus
 local name, in whatever encoding and prefix each fixture spells it with — so
 predict ratchet movement from its output rather than from a grep, which
-under-predicted three landings running (#1239). Census a population defined by
-an ATTRIBUTE rather than an element with the wildcard `*`, which stands for any
-local name: `'*@*'` reports every (element, attribute) name pair with its
-fixtures, and `'*@mixed|abstract'` every occurrence of either attribute with its
-value. A `,` between attribute names means AND, a `|` means OR, and the `@*`
-form reports pairs in place of the per-occurrence lines every other query
-prints (#1391). An absent submodule is a supported mode there too: it says so
-and exits 0.
+under-predicted three landings running (#1239). Join that census through
+`conformance/testdata/expectations/<lane>.txt`, the lane whose score the
+prediction is about, and count only the cases carrying a line there: a case
+the suite withholds as inapplicable has no line there and cannot flip
+(#1412). Census a population defined by an ATTRIBUTE rather than an element
+with the wildcard `*`, which stands for any local name: `'*@*'` reports every
+(element, attribute) name pair with its fixtures, and `'*@mixed|abstract'`
+every occurrence of either attribute with its value. A `,` between attribute
+names means AND, a `|` means OR, and the `@*` form reports pairs in place of
+the per-occurrence lines every other query prints (#1391). An absent
+submodule is a supported mode there too: it says so and exits 0.
 
 ## Style headlines
 
