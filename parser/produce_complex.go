@@ -3606,6 +3606,10 @@ func rejectAttributeTypeAndSimpleType(el *Element) error {
 // localTargetNS alone, which mints the name in whatever namespace it declares
 // without asking whether the clause admits it.
 //
+// no-xmlns (§3.2.6.3) follows the name too, by rejectXmlnsName, and precedes
+// no-xsi: it reads the {name} declarationName just minted and nothing else, so
+// the local form gives it no namespace resolution to wait behind (#1465).
+//
 // no-xsi (§3.2.6.4) follows the name, by rejectXSITargetNamespace, because the
 // namespace it tests is the one localTargetNS resolves from this attribute's own
 // form/targetNamespace and the <schema>'s attributeFormDefault (§3.2.2.2) — an
@@ -3631,6 +3635,9 @@ func (p *producer) produceLocalAttribute(el *Element, scopeParent xsd.AttributeS
 	}
 	qname, err := declarationName(el, tns)
 	if err != nil {
+		return xsd.AttributeDeclaration{}, err
+	}
+	if err := rejectXmlnsName(qname.Local, el); err != nil {
 		return xsd.AttributeDeclaration{}, err
 	}
 	if err := rejectXSITargetNamespace(qname, el); err != nil {
