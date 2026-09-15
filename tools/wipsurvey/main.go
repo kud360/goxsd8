@@ -70,7 +70,9 @@
 // branch whose diff is empty names the remedy — relabel the issue
 // needs-replan — inline, the way the UNKNOWN reason names `git fetch
 // origin`. Counting those cycles by eye across sessions is the work
-// PRINCIPLES 27 turns into a tool (#1437).
+// PRINCIPLES 27 turns into a tool (#1437). That count is zero for an
+// input that carried no comments, so such a row says so rather than
+// reading as a thread with no takeovers on it (#1493).
 //
 // Both the ancestry test and the diff test need main's commit object in
 // this checkout, while the SHA they test against comes live from
@@ -642,6 +644,12 @@ const (
 // path is the one a branch of heartbeat commits and merge-forwards takes,
 // so leaving the clause off it would leave the rule silent on exactly the
 // branches WORKFLOW.md's lease invariant produces.
+//
+// The tip-age EXPIRED reason also carries missingCommentsClause, which
+// names the input remedyClause is reading a zero from when the input
+// carried no comments (#1493). classifyEmptyClaim needs no such clause:
+// it answers CLAIMED, naming the same missing input, before it can reach
+// its own EXPIRED.
 func classify(branch string, tip *time.Time, anc ancestry, diff netDiff, now time.Time, issue *issueState) (verdict, *time.Duration, string) {
 	if issue != nil && issue.closed {
 		return retired, retiredLease(tip, anc, now), fmt.Sprintf("%s: issue #%d is closed", branch, issue.number)
@@ -668,7 +676,7 @@ func classify(branch string, tip *time.Time, anc ancestry, diff netDiff, now tim
 	if age <= claimTTL {
 		return live, &age, fmt.Sprintf("%s: tip pushed %s ago, within the %s claim TTL%s%s", branch, formatAge(age), formatAge(claimTTL), ancestryNote, leaseNote)
 	}
-	return expired, &age, fmt.Sprintf("%s: tip pushed %s ago, past the %s claim TTL%s%s%s", branch, formatAge(age), formatAge(claimTTL), ancestryNote, leaseNote, remedyClause(anc, diff, issue))
+	return expired, &age, fmt.Sprintf("%s: tip pushed %s ago, past the %s claim TTL%s%s%s%s", branch, formatAge(age), formatAge(claimTTL), ancestryNote, leaseNote, missingCommentsClause(anc, diff, issue), remedyClause(anc, diff, issue))
 }
 
 // remedyClause is the sentence an EXPIRED reason carries when the claim
@@ -692,6 +700,30 @@ func remedyClause(anc ancestry, diff netDiff, issue *issueState) string {
 		return ""
 	}
 	return fmt.Sprintf(", already %s comment #%d with no diff ever produced -- relabel the issue needs-replan instead of resuming", takeoverPrefix, issue.takeovers)
+}
+
+// missingCommentsClause is the sentence a tip-age EXPIRED reason carries
+// when its branch nets out to nothing and the input carried no comments
+// for the issue: remedyClause's takeover count is then zero for want of
+// input, and a thread that was never fetched would otherwise print
+// exactly what a thread carrying no takeovers prints (#1493). It names
+// what is missing and what to supply, as classifyEmptyClaim's
+// comment-less CLAIMED reason already does in the same position.
+//
+// Its first condition is remedyClause's: a row where the diff or the
+// ancestry is undecided declines a remedy on the evidence, and declines
+// this note for the same reason — the reader is not owed a note about an
+// input whose answer would change nothing there. The two clauses are
+// mutually exclusive, since a count that reaches the threshold can only
+// have been read from comments.
+func missingCommentsClause(anc ancestry, diff netDiff, issue *issueState) string {
+	if anc == ancestryUnresolved || diff != diffEmpty {
+		return ""
+	}
+	if issue != nil && issue.commentsRead {
+		return ""
+	}
+	return fmt.Sprintf("; no comments supplied for this issue, so its %s count is zero because nothing was counted, not because nothing happened -- supply them before taking the claim over", takeoverPrefix)
 }
 
 // classifyEmptyClaim dates a branch that has pushed no commits of its own.

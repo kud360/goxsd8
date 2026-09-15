@@ -607,6 +607,138 @@ func TestRemedyClauseNeedsIssueData(t *testing.T) {
 	}
 }
 
+// missingComments is the clause #1493's rule appends to a tip-age EXPIRED
+// reason, written out here rather than read from the code, so a reworded
+// clause fails instead of following along.
+const missingComments = "; no comments supplied for this issue, so its TAKEOVER: count is zero because nothing was counted, not because nothing happened -- supply them before taking the claim over"
+
+// TestClassifyExpiredNamesMissingComments pins #1493's rule with
+// full-string reasons, so the clause's absence is pinned as hard as its
+// presence.
+//
+// The rule fires where remedyClause reads a takeover count of zero that
+// nothing was counted into, and declines where remedyClause declines on
+// evidence: an undecided ancestry or an undecided diff leaves the question
+// open rather than answered no, and a row whose comments WERE supplied is
+// reporting a real absence of takeovers, not a missing input.
+func TestClassifyExpiredNamesMissingComments(t *testing.T) {
+	tip := fixedNow.Add(-258 * time.Minute)
+	const tipAge = "wip/issue-1493: tip pushed 4h18m0s ago, past the 2h0m0s claim TTL"
+	const leaseOnly = "; no issue data for this branch, lease-only"
+	const undecided = "; ancestry against main undecided, so this age may be main's rather than the claim's -- run `git fetch origin`"
+
+	cases := []struct {
+		name  string
+		anc   ancestry
+		diff  netDiff
+		issue *issueState
+		want  string
+	}{
+		{
+			// stdin was empty, or carried no entry for this branch: the row
+			// already says the verdict is lease-only, which names missing
+			// issue data without saying what to supply.
+			name: "no issue data at all",
+			anc:  ancestryOwnCommits,
+			diff: diffEmpty,
+			want: tipAge + leaseOnly + missingComments,
+		},
+		{
+			// The input ROUTINES.md's closing caveat admits as supported: an
+			// issue with no `comments` key. Before #1493 this row was
+			// byte-identical to the one below it, which is the whole defect.
+			name:  "issue supplied, comments key absent",
+			anc:   ancestryOwnCommits,
+			diff:  diffEmpty,
+			issue: &issueState{number: 1493},
+			want:  tipAge + missingComments,
+		},
+		{
+			name:  "comments supplied, thread carries no takeover",
+			anc:   ancestryOwnCommits,
+			diff:  diffEmpty,
+			issue: &issueState{number: 1493, commentsRead: true},
+			want:  tipAge,
+		},
+		{
+			name:  "comments supplied, takeovers below the threshold",
+			anc:   ancestryOwnCommits,
+			diff:  diffEmpty,
+			issue: &issueState{number: 1493, commentsRead: true, takeovers: 2},
+			want:  tipAge,
+		},
+		{
+			// The age is already provisional here (#806), so no note about
+			// an input that would not settle it is added on top.
+			name: "undecided ancestry with no issue data",
+			anc:  ancestryUnresolved,
+			diff: diffEmpty,
+			want: tipAge + undecided + leaseOnly,
+		},
+		{
+			name:  "undecided ancestry with the comments key absent",
+			anc:   ancestryUnresolved,
+			diff:  diffEmpty,
+			issue: &issueState{number: 1493},
+			want:  tipAge + undecided,
+		},
+		{
+			name:  "undecided diff with the comments key absent",
+			anc:   ancestryOwnCommits,
+			diff:  diffUnresolved,
+			issue: &issueState{number: 1493},
+			want:  tipAge,
+		},
+		{
+			// A branch holding real work is not waiting on a takeover count
+			// at all, so its missing comments change no verdict here.
+			name:  "non-empty diff with the comments key absent",
+			anc:   ancestryOwnCommits,
+			diff:  diffNonEmpty,
+			issue: &issueState{number: 1493},
+			want:  tipAge,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, _, reason := classify("wip/issue-1493", &tip, c.anc, c.diff, fixedNow, c.issue)
+			if got != expired {
+				t.Fatalf("verdict = %s, want EXPIRED (reason: %s)", got, reason)
+			}
+			if reason != c.want {
+				t.Errorf("reason = %q, want %q", reason, c.want)
+			}
+		})
+	}
+}
+
+// TestClassifyCommentsReadChangesTheExpiredRow pins the distinction the
+// clause exists to draw: the row whose comments were supplied and the row
+// whose comments were not must not print the same bytes (#1493), and a
+// LIVE claim carries no such note whatever its input, because nothing is
+// being concluded from the count there.
+func TestClassifyCommentsReadChangesTheExpiredRow(t *testing.T) {
+	stale := fixedNow.Add(-258 * time.Minute)
+	fresh := fixedNow.Add(-5 * time.Minute)
+	unread := &issueState{number: 1493}
+	read := &issueState{number: 1493, commentsRead: true}
+
+	_, _, unreadReason := classify("wip/issue-1493", &stale, ancestryOwnCommits, diffEmpty, fixedNow, unread)
+	_, _, readReason := classify("wip/issue-1493", &stale, ancestryOwnCommits, diffEmpty, fixedNow, read)
+	if unreadReason == readReason {
+		t.Errorf("comments-unread and comments-read EXPIRED rows are identical: %q", unreadReason)
+	}
+
+	got, _, reason := classify("wip/issue-1493", &fresh, ancestryOwnCommits, diffEmpty, fixedNow, unread)
+	if got != live {
+		t.Fatalf("verdict = %s, want LIVE (reason: %s)", got, reason)
+	}
+	if strings.Contains(reason, "no comments supplied") {
+		t.Errorf("LIVE reason = %q, names a missing input nothing is being concluded from", reason)
+	}
+}
+
 // TestClassifyMarksOnlyUndecidedAncestry pins the marker to the rows it
 // belongs on. An age-based verdict earns it when git could not place the
 // branch against main, because the age it rests on may then be the
