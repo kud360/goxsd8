@@ -185,20 +185,22 @@ believes the second. The empty page that ends the loop is deleted for the same
 reason: every file left in `pages/` is a page with issues on it, which is what
 the fullness check and the reshape both read.
 
-### Dating an empty claim
+### Supplying the thread's comments
 
-`wipsurvey` reports a `wip/` branch with no commits of its own CLAIMED —
-undated — unless the input carries that issue's comments, because
-WORKFLOW.md dates such a claim from the thread and `{number, state, labels}`
-holds no comment. Its full shape is `gh issue list --json
-number,state,labels,comments`; the fourth field is optional and per issue,
-and its elements need only `{body, createdAt}`.
+`wipsurvey` reads two things off a thread, and `{number, state, labels}`
+carries neither: an empty claim's lease date, without which such a branch
+reports CLAIMED — undated — and the thread's `TAKEOVER:` count, without
+which an EXPIRED branch whose diff against main is empty reads as merely
+takeable instead of naming its remedy. The full shape of that stdin JSON is
+`gh issue list --json number,state,labels,comments`; the fourth field is
+optional and per issue, and its elements need only `{body, createdAt}`.
 
-Fetch it for the issues the first run printed CLAIMED — the set is small,
-and `repos/{owner}/{repo}/issues` carries no bodies, only a count:
+Fetch it for the issues the first run printed CLAIMED or EXPIRED — the set
+is small, and `repos/{owner}/{repo}/issues` carries no bodies, only a
+count:
 
 ```sh
-for n in $(go tool wipsurvey < issues.json | awk '$4 == "CLAIMED" {print $1}'); do
+for n in $(go tool wipsurvey < issues.json | awk '$4 ~ /^(CLAIMED|EXPIRED)$/ {print $1}'); do
   gh api "repos/kud360/goxsd8/issues/$n/comments?per_page=100" \
     | jq --argjson n "$n" '{number: $n, comments: [.[] | {body, createdAt: .created_at}]}' > c$n.json
 done
@@ -212,7 +214,8 @@ go tool wipsurvey < issues-dated.json
 
 REST spells the field `created_at` where the tools want `createdAt`, so that
 rename is not optional either. An issue with no `comments` key keeps every
-other verdict it would have had; only its empty claim goes undated.
+other verdict it would have had; only its empty claim goes undated and its
+`TAKEOVER:` count reads zero.
 
 A claim whose thread carries no `RESUME:`/`TAKEOVER:` comment at all stays
 CLAIMED through the second pass. That is the answer, not a failed fetch:
