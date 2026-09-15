@@ -147,7 +147,7 @@ type Matcher struct {
 //   - GAP(xsd): a present {open content}. cvc-complex-content clauses 2 and 3
 //     split the sequence into a part matched against {particle} and a part
 //     matched against the {open content} wildcard, which this walk does not do
-//     (#717). The withheld value is the whole element-sequence verdict, whose
+//     (#1516). The withheld value is the whole element-sequence verdict, whose
 //     consumer set is validate's Result.violations and its one reader
 //     Result.Violations: both carry violations PRESENT, so withholding the
 //     verdict costs a rejection and manufactures none.

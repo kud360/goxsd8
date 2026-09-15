@@ -196,8 +196,8 @@ func (w *walk) ownAssertionSites(st *xsd.SimpleType, loc xsderr.Loc) []Unevaluat
 }
 
 // wildcardAttributeAssertions records the sites of an attribute information
-// item that matches no {attribute use} and is left to an {attribute wildcard}
-// this package does not evaluate (cvc-complex-type clause 2.2, assess.go's
+// item that matches no {attribute use} and is ·attributed to· the {attribute
+// wildcard} wild instead (cvc-complex-type clause 2.2, assess.go's
 // unmatchedAttribute). Under a ***strict*** or ***lax*** wildcard — and under
 // those two only — the spec's ·attribute assessment· of such an item runs
 // cvc-attribute clause 3 against the top-level declaration its ·expanded name·
@@ -206,25 +206,25 @@ func (w *walk) ownAssertionSites(st *xsd.SimpleType, loc xsderr.Loc) []Unevaluat
 // site is reached here even though [walk.matchedAttribute], the ordinary
 // clause-3 recording site, never runs for it.
 //
-// Under ***skip*** none of that holds: §3.10.4.1's Note performs QName
-// resolution only for an item ·attributed to· a strict or lax wildcard, so a
-// skipped item has NO ·governing· declaration, cvc-assess-elt (§3.3.4.6)
-// clause 2.2 leaves its schema-validity unassessed, and no facet of any type is
-// reached over its lexical. [walk.attributeType] declines such an attribute for
-// exactly that reason (#1043), so under skip cvcid.go and
-// cvcidentityconstraint.go no longer decide its lexical against anything. This
-// call is DELIBERATELY NOT GATED on {process contents} all the same: a complex
-// type carries at most one {attribute wildcard} (§3.4.1), so the open question
-// is never which wildcard admitted the item but WHETHER that one matched it,
-// which is cvc-wildcard's and one this package does not evaluate at all (#717,
-// assess.go's unmatchedAttribute) — dropping the record would answer it. Under
-// skip the record is therefore an over-report, in the direction this file's
-// header states — a decline, never a charge.
+// Under ***skip*** none of that holds and nothing is recorded: §3.10.4.1's Note
+// performs QName resolution only for an item ·attributed to· a strict or lax
+// wildcard, so a ·skipped· item has NO ·governing· declaration, cvc-assess-elt
+// (§3.3.4.6) clause 2.2 leaves its schema-validity unassessed, and no facet of
+// any type is reached over its lexical. [walk.attributeType] declines such an
+// attribute for exactly that reason (#1043), so under skip cvcid.go and
+// cvcidentityconstraint.go decide its lexical against nothing and there is no
+// unevaluated facet to report. The gate is sound because the ·attribution· is
+// now decided rather than inferred: the caller reaches this only for an item
+// cvc-wildcard admits, and a complex type carries at most one {attribute
+// wildcard} (§3.4.1), so wild is the one that admitted it.
 //
 // An attribute the schema resolves no top-level declaration for records
 // nothing: it has no ·governing type definition·, so §3.17.5.2 clause 3
 // excludes it and no facet of any type is reached over its lexical.
-func (w *walk) wildcardAttributeAssertions(a Attribute) {
+func (w *walk) wildcardAttributeAssertions(a Attribute, wild xsd.Wildcard) {
+	if wild.ProcessContents() == xsd.ProcessSkip {
+		return
+	}
 	st, typed := w.topLevelAttributeType(a)
 	if !typed {
 		return

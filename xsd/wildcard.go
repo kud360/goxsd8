@@ -6,9 +6,11 @@ import "github.com/kud360/goxsd8/xsderr"
 // Term with {namespace constraint} (a NamespaceConstraint, §3.10.1 "nc" — see
 // namespaceconstraint.go) and {process contents} (one of skip/strict/lax — see
 // closedsets.go). It is the thin composition wiring an element/attribute
-// wildcard's admission to the §3.10.4 allowance algorithm: AllowsName is the
-// one canonical entry point (xsd/doc.go's "wildcard admission ... one
-// canonical implementation").
+// wildcard's admission to the §3.10.4 allowance algorithm. cvc-wildcard
+// admission itself is decided over the declaration graph, by
+// Schema.ContentMatcher for an element wildcard and by
+// Schema.AllowsAttributeWildcardName for an attribute one (xsd/doc.go's
+// "Walk API"), and by nothing on this type.
 //
 // The zero value is NOT a valid Wildcard (its NamespaceConstraint and
 // ProcessContents are both the invalid zero); construct only through
@@ -17,9 +19,9 @@ import "github.com/kud360/goxsd8/xsderr"
 // unrepresentable (STYLE T1). Wildcard is immutable after construction.
 //
 // {process contents} controls what the VALIDATOR does with an item AFTER
-// AllowsName admits it (skip/lax/strict, §3.10.1); it plays no role in
+// cvc-wildcard admits it (skip/lax/strict, §3.10.1); it plays no role in
 // admission itself — cvc-wildcard (§3.10.4.1) does not test it. Do not fold
-// ProcessContents into AllowsName.
+// ProcessContents into the admission predicates.
 type Wildcard struct {
 	namespaceConstraint NamespaceConstraint
 	processContents     ProcessContents
@@ -82,32 +84,32 @@ func (w Wildcard) ProcessContents() ProcessContents {
 // folds a base content model's live wildcards through UnionNamespaceConstraint
 // and relates the result by wildcardSubset (contentrestricts.go). It mirrors the
 // inspection getters NamespaceConstraint.Variety/Namespaces; to decide whether a
-// name is admitted, call AllowsName rather than inspecting this.
+// name is admitted, call NamespaceConstraint.AllowsName on the result — or, for
+// cvc-wildcard entire, Schema.AllowsAttributeWildcardName / Schema.ContentMatcher
+// — rather than inspecting this.
 func (w Wildcard) NamespaceConstraint() NamespaceConstraint {
 	return w.namespaceConstraint
 }
 
-// AllowsName reports whether the expanded name is admitted by w's {namespace
-// constraint}, delegating to NamespaceConstraint.AllowsName — this is the ONE
-// canonical wildcard-admission entry point (xsd/doc.go); callers must never
-// re-derive the allowance algorithm by reaching past this method.
+// allowsName reports whether the expanded name is admitted by w's {namespace
+// constraint}, delegating to NamespaceConstraint.AllowsName. It is
+// cvc-wildcard (§3.10.4.1) clause 1 alone — clause 1's delegate
+// cvc-wildcard-name (§3.10.4.2), in full — and so is NECESSARY but not
+// SUFFICIENT for wildcard admission: clauses 2-3, the defined/sibling keyword
+// exclusions, need the live declaration graph and are answered over it by
+// (*Schema).allowsElementWildcardName and (*Schema).AllowsAttributeWildcardName
+// (wildcardadmit.go), the two entry points a caller admitting a name reaches
+// for.
 //
-// GAP(xsd): this implements cvc-wildcard (§3.10.4.1) clause 1 ONLY (expanded
-// name ·valid· per cvc-wildcard-name, §3.10.4.2). Clauses 2-3 — the
-// defined/sibling keyword exclusions, which need the live declaration graph —
-// are answered in-package by (*Schema).allowsElementWildcardName and
-// (*Schema).allowsAttributeWildcardName (wildcardadmit.go), which this method
-// cannot reach from a bare Wildcard value. So for a wildcard whose {namespace
-// constraint} carries a keyword, AllowsName answers true for names cvc-wildcard
-// rejects: it is NECESSARY but not SUFFICIENT for wildcard admission, and an
-// external caller using it alone can false-accept. The marker is retired when
-// M5 ships a cvc-wildcard-complete exported entry point over the declaration
-// graph; #248 owns that retirement and the export of the resolution half.
+// It is unexported for that reason: no exported path answers true for a name
+// cvc-wildcard rejects. An external caller wanting clause 1 on its own asks
+// NamespaceConstraint.AllowsName through w.NamespaceConstraint(), which names
+// the rule it decides.
 //
 // {process contents} plays no part in this decision: even a skip wildcard
 // admits everything {namespace constraint} admits; ProcessContents tells the
 // validator what to do with an admitted item, not whether to admit it.
-func (w Wildcard) AllowsName(name QName) bool {
+func (w Wildcard) allowsName(name QName) bool {
 	return w.namespaceConstraint.AllowsName(name)
 }
 

@@ -267,20 +267,23 @@ func TestFieldOverAnAnonymousTypeReadsItsOwnTypeAndNotTheTopLevelOne(t *testing.
 // A `@NameTest` field reads the same ·governing type definition· cvc-id does
 // (icCheck.fieldAttributes over walk.attributeType), so an attribute a
 // ***skip*** {attribute wildcard} admits lengthens no ·key-sequence· either
-// (#1043): the two ·target nodes· below share no key-sequence to be charged
-// clause 4.2.2 for, since neither has one at all.
+// (#1043): neither ·target node· below has a key-sequence to be charged clause
+// 4.2.2 for.
 //
-// The silence under skip is WIDER than the spec's, and deliberately: a
-// ·target node· whose ·key-sequence· is short is out of the ·qualified node
-// set·, which for a key is clause 4.2.1's charge (§3.11.4 clause 3's Note names
-// ·skipped· nodes as the case), so the spec charges 4.2.1 twice on this
-// document and the whole-frame decline withholds both. The GAP marker on
-// icCheck.fieldAttributes states that, on the nilled sibling's terms.
+// Each is charged clause 4.2.1 instead, and that is the whole difference #717
+// made here. A ·target node· whose ·key-sequence· is short is out of the
+// ·qualified node set·, which for a key is clause 4.2.1's charge (§3.11.4
+// clause 3's Note names ·skipped· nodes as the case). The charge was withheld
+// while ·skipped· was inferred from the wildcard's PRESENCE, since an attribute
+// the wildcard did not admit arrived indistinguishably; cvc-wildcard now
+// decides the ·attribution· ([walk.skippedAttribute]), so the absence read here
+// is the spec's and the charge is made.
 func TestSkipWildcardAttributeLengthensNoKeySequence(t *testing.T) {
 	key := icDef(t, "K", xsd.IdentityConstraintKey, "item", nil, "", "@wid")
 	twice := icRoot(idItem(2, "wid", "a"), idItem(3, "wid", "a"))
 
-	icWantCharges(t, icAssess(t, icWildcardSchema(t, xsd.ProcessSkip, []xsd.IdentityConstraint{key}), twice))
+	icWantCharges(t, icAssess(t, icWildcardSchema(t, xsd.ProcessSkip, []xsd.IdentityConstraint{key}), twice),
+		icCharge(ruleCvcIdentityConstraint, 2), icCharge(ruleCvcIdentityConstraint, 3))
 
 	// Under lax the same field DOES read the top-level declaration and the two
 	// key-sequences collide, which is the charge the skip case withholds. The

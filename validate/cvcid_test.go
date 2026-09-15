@@ -317,6 +317,25 @@ func TestSkipWildcardAttributeBindsNoID(t *testing.T) {
 	}
 }
 
+// An attribute a ***skip*** {attribute wildcard} does NOT admit is not
+// ·skipped·: §3.4.4.4 ·attributes· an item to the wildcard only where the
+// wildcard MATCHES it, so this one is ·attributed to· nothing and
+// key-governing-ad (§3.2.4.2) clause 3 ·resolves· it by name after all. It
+// therefore binds its ·ID value· exactly as the strict and lax arms above do,
+// and the duplicate is charged cvc-id clause 2 (#717).
+//
+// The same non-match is a cvc-complex-type clause 2.2.2 charge at each <item>,
+// which is what an attribute matching neither a use nor the wildcard costs; the
+// id charge lands after both, at the ·validation root·.
+func TestSkipWildcardBindsAnIDItDoesNotAdmit(t *testing.T) {
+	twice := icRoot(idItem(2, "wid", "a"), idItem(3, "wid", "a"))
+	elsewhere := icWildcardSchemaWith(t, nsWildcard(t, xsd.ProcessSkip, "urn:elsewhere"), nil)
+
+	icWantCharges(t, icAssess(t, elsewhere, twice),
+		icChargeAttr(ruleCvcComplexType, 2), icChargeAttr(ruleCvcComplexType, 3),
+		icChargeAttr(ruleCvcID, 3))
+}
+
 // idDefaulted is <item><dtag/></item>, whose EMPTY ID-governed element takes its
 // ·initial value· from cvc-elt clause 5.1's substitution rather than from its own
 // (absent) character content, so the id it declares is the {lexical form} of its

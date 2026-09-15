@@ -289,8 +289,9 @@ func (c NamespaceConstraint) hasNamespace(v Namespace) bool {
 // D2/D3). It is the in-package membership test for the keywords: the resolution
 // of what a member MEANS is cvc-wildcard's (§3.10.4.1 clauses 2-3), and lives in
 // wildcardadmit.go, not here — this record has no declaration graph. No exported
-// accessor for the keyword slice exists: every reader is in-package (STYLE T5);
-// M5 adds one with its caller.
+// accessor for the keyword slice exists and none is owed: M5's caller landed and
+// reads the admission ANSWER (Schema.AllowsAttributeWildcardName), never the
+// keyword set, so every reader of these keywords is in-package (STYLE T5).
 func (c NamespaceConstraint) hasDisallowedNameKeyword(k DisallowedNameKeyword) bool {
 	for _, m := range c.disallowedNameKeywords {
 		if m == k {
@@ -355,6 +356,10 @@ func (c NamespaceConstraint) withoutDisallowedNames(names []QName) NamespaceCons
 // (§3.10.4.1, cvc-wildcard) clauses 2-3 — against the live declaration graph,
 // at the *Schema layer that owns it (wildcardadmit.go). Do not fold the two
 // rule IDs together.
+//
+// So this is the narrower question, and a caller deciding whether a WILDCARD
+// admits a name asks cvc-wildcard entire instead: Schema.ContentMatcher for an
+// element wildcard, Schema.AllowsAttributeWildcardName for an attribute one.
 func (c NamespaceConstraint) AllowsName(name QName) bool {
 	if !c.AllowsNamespace(NamespaceName(name.Space)) {
 		return false

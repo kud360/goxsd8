@@ -444,7 +444,7 @@ type AttributeDeclaration struct {
 //     the component and charge nothing, so validate's cvc-attribute and cvc-id
 //     read it as a ·governing attribute declaration· and assess an instance's
 //     xsi:foo against it.
-//   - (*Schema).allowsAttributeWildcardName (wildcardadmit.go), whose ##defined
+//   - (*Schema).AllowsAttributeWildcardName (wildcardadmit.go), whose ##defined
 //     rejection condition IS the component's presence. For an attribute wildcard
 //     carrying notQName="##defined" the admitted member therefore fails CLOSED,
 //     rejecting an instance xsi:foo the wildcard would otherwise admit. The gap
@@ -485,7 +485,7 @@ type AttributeDeclaration struct {
 //     [[namespace attributes]] property, so an ABSENT-namespace declaration
 //     named "xmlns" governs nothing an instance can carry, while a NAMESPACED
 //     one governs the ordinary attribute p:xmlns and is assessed against it.
-//   - (*Schema).allowsAttributeWildcardName (wildcardadmit.go), whose ##defined
+//   - (*Schema).AllowsAttributeWildcardName (wildcardadmit.go), whose ##defined
 //     rejection condition IS the component's presence, so for an attribute
 //     wildcard carrying notQName="##defined" the admitted member fails CLOSED on
 //     that same namespaced p:xmlns. The gap is fail-open on the SCHEMA verdict,

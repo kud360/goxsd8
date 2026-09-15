@@ -57,11 +57,56 @@ func anyWildcard(t *testing.T, pc xsd.ProcessContents) *xsd.Wildcard {
 	return &w
 }
 
+// nsWildcard is a wildcard whose {namespace constraint} admits the listed
+// namespace names and nothing else ({variety} enumeration), so cvc-wildcard
+// clause 1 rejects every other ·expanded name·.
+func nsWildcard(t *testing.T, pc xsd.ProcessContents, uris ...string) *xsd.Wildcard {
+	t.Helper()
+	spaces := make([]xsd.Namespace, 0, len(uris))
+	for _, u := range uris {
+		spaces = append(spaces, xsd.NamespaceName(u))
+	}
+	c, err := xsd.NewNamespaceConstraint(xsderr.Loc{}, xsd.NamespaceConstraintEnumeration, spaces, nil, nil)
+	if err != nil {
+		t.Fatalf("building the enumeration namespace constraint: %v", err)
+	}
+	w, err := xsd.NewWildcard(xsderr.Loc{}, c, pc)
+	if err != nil {
+		t.Fatalf("building the %s wildcard: %v", pc, err)
+	}
+	return &w
+}
+
+// definedKeywordWildcard is the ·complete wildcard· carrying ##defined in its
+// {disallowed names}, which cvc-wildcard clause 2.2 resolves against the
+// finalized schema's top-level {attribute declarations}.
+func definedKeywordWildcard(t *testing.T, pc xsd.ProcessContents) *xsd.Wildcard {
+	t.Helper()
+	c, err := xsd.NewNamespaceConstraint(xsderr.Loc{}, xsd.NamespaceConstraintAny, nil, nil,
+		[]xsd.DisallowedNameKeyword{xsd.DisallowedNameDefined})
+	if err != nil {
+		t.Fatalf("building the ##defined namespace constraint: %v", err)
+	}
+	w, err := xsd.NewWildcard(xsderr.Loc{}, c, pc)
+	if err != nil {
+		t.Fatalf("building the %s wildcard: %v", pc, err)
+	}
+	return &w
+}
+
 // governedSchema declares "root" governed by a complex type carrying uses and
 // wildcard. The type's {base type definition} is left ·absent·: the fold that
 // would inherit a base's uses is finalize's, and a type with no base carries
 // exactly the uses named here.
 func governedSchema(t *testing.T, uses []xsd.AttributeUse, wildcard *xsd.Wildcard) *xsd.Schema {
+	t.Helper()
+	return governedSchemaDeclaring(t, uses, wildcard)
+}
+
+// governedSchemaDeclaring is governedSchema plus a top-level Attribute
+// Declaration for each name, which is what cvc-wildcard clause 2.2's ##defined
+// keyword ·resolves· against.
+func governedSchemaDeclaring(t *testing.T, uses []xsd.AttributeUse, wildcard *xsd.Wildcard, declared ...xsd.QName) *xsd.Schema {
 	t.Helper()
 	ct, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Local: "RootType"}, xsd.QName{}, nil,
 		xsd.DerivationRestriction, false, uses, nil, wildcard, xsd.EmptyContent{}, nil, nil)
@@ -77,6 +122,13 @@ func governedSchema(t *testing.T, uses []xsd.AttributeUse, wildcard *xsd.Wildcar
 	b := xsd.NewSchemaBuilder()
 	b.AddType(ct)
 	b.AddElement(e)
+	for _, n := range declared {
+		d, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, n, nil, xsd.NewAttributeGlobalScope(), nil, false)
+		if err != nil {
+			t.Fatalf("building the top-level %s attribute declaration: %v", n, err)
+		}
+		b.AddAttribute(d)
+	}
 	schema, err := b.Finalize()
 	if err != nil {
 		t.Fatalf("finalizing the governed schema: %v", err)
@@ -100,7 +152,14 @@ func local(name string) xsd.QName { return xsd.QName{Local: name} }
 // wildcard, and returns the violations charged.
 func assessRoot(t *testing.T, root Element, uses []xsd.AttributeUse, wildcard *xsd.Wildcard) []*xsderr.Error {
 	t.Helper()
-	v, err := New(governedSchema(t, uses, wildcard), testBackend())
+	return assessSchema(t, governedSchema(t, uses, wildcard), root)
+}
+
+// assessSchema is assessRoot over a schema the caller built, for the fixtures
+// that need more in it than governedSchema's element and type.
+func assessSchema(t *testing.T, schema *xsd.Schema, root Element) []*xsderr.Error {
+	t.Helper()
+	v, err := New(schema, testBackend())
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -213,24 +272,59 @@ func TestUndeclaredAttributeWithNoWildcardChargesClauseTwo(t *testing.T) {
 	wantCharge(t, got, "clause 2", loc(1, 10), "stray")
 }
 
-// The same attribute against a type carrying an {attribute wildcard} is
-// DECLINED, not charged: clause 2.2 is a conjunction whose second half sends
-// the attribute to cvc-wildcard (§3.10.4.1), which this package does not
-// evaluate (#717). The control row is what keeps the decline honest — the
-// identical document IS charged when the wildcard is gone, so silence here
-// comes from the wildcard and not from an accidental match.
-func TestUndeclaredAttributeWithWildcardIsDeclined(t *testing.T) {
+// The same attribute against a type carrying an {attribute wildcard} that
+// ADMITS its ·expanded name· satisfies clause 2.2 and is not charged: clause 2.2
+// is a conjunction, 2.2.1 holds on the wildcard's presence and 2.2.2 on
+// cvc-wildcard (§3.10.4.1), which the ·complete wildcard· here passes for every
+// name. The control row is what keeps the silence honest — the identical
+// document IS charged when the wildcard is gone, so silence here comes from the
+// wildcard and not from an accidental match.
+func TestUndeclaredAttributeAdmittedByWildcardIsNotCharged(t *testing.T) {
 	uses := []xsd.AttributeUse{aUse(t, "id", false, nil)}
 	got := assessRoot(t, attributedRoot(local("stray")), uses, anyWildcard(t, xsd.ProcessStrict))
-	wantSilence(t, got, "clause 2.2.2 needs cvc-wildcard, so clause 2 is undecided")
-	if outcomes := assessOutcomes(t, attributedRoot(local("stray")), uses, anyWildcard(t, xsd.ProcessStrict)); !slices.Equal(outcomes, []string{"2.2/declined"}) {
-		t.Errorf("assessed %v, want the attribute DECLINED under clause 2.2 — not matched to a use", outcomes)
+	wantSilence(t, got, "clause 2.2 is satisfied: the wildcard admits the name")
+	if outcomes := assessOutcomes(t, attributedRoot(local("stray")), uses, anyWildcard(t, xsd.ProcessStrict)); !slices.Equal(outcomes, []string{"2.2/satisfied"}) {
+		t.Errorf("assessed %v, want the attribute SATISFIED under clause 2.2 — not matched to a use", outcomes)
 	}
 
 	control := assessRoot(t, attributedRoot(local("stray")), uses, nil)
 	if len(control) != 1 {
-		t.Fatalf("the control charged %v, want exactly one: the decline above proves nothing otherwise", control)
+		t.Fatalf("the control charged %v, want exactly one: the silence above proves nothing otherwise", control)
 	}
+}
+
+// An attribute the {attribute wildcard} does NOT admit is charged clause 2:
+// 2.2.1 holds on the wildcard's presence and 2.2.2 fails on cvc-wildcard
+// (§3.10.4.1) clause 1, the ·expanded name· being outside the {namespace
+// constraint}. The charge cites the attribute's own position and names 2.2.2, so
+// it is distinguishable from the no-wildcard charge, which names 2.2.1 (#717).
+func TestUndeclaredAttributeOutsideTheWildcardChargesClauseTwoTwoTwo(t *testing.T) {
+	uses := []xsd.AttributeUse{aUse(t, "id", false, nil)}
+	wild := nsWildcard(t, xsd.ProcessStrict, "urn:elsewhere")
+	stray := xsd.QName{Space: "urn:here", Local: "stray"}
+
+	got := assessRoot(t, attributedRoot(stray), uses, wild)
+	wantCharge(t, got, "clause 2.2.2", loc(1, 10), "stray")
+
+	// The same wildcard admits the name it was built for, so the charge above
+	// comes from the ·expanded name· and not from the wildcard's mere shape.
+	wantSilence(t, assessRoot(t, attributedRoot(xsd.QName{Space: "urn:elsewhere", Local: "stray"}), uses, wild),
+		"the wildcard's {namespace constraint} admits this name")
+}
+
+// cvc-wildcard clause 2.2 is decided too, not only clause 1: an attribute
+// wildcard whose {disallowed names} carries the ##defined keyword does not admit
+// a name that ·resolves· to a top-level attribute declaration, so clause 2.2.2
+// of cvc-complex-type fails for exactly the names the schema declares
+// (xsd.Schema.AllowsAttributeWildcardName).
+func TestWildcardWithDefinedKeywordExcludesADeclaredAttributeName(t *testing.T) {
+	uses := []xsd.AttributeUse{aUse(t, "id", false, nil)}
+	wild := definedKeywordWildcard(t, xsd.ProcessStrict)
+	schema := governedSchemaDeclaring(t, uses, wild, local("top"))
+
+	wantCharge(t, assessSchema(t, schema, attributedRoot(local("top"))), "clause 2.2.2", loc(1, 10), "top")
+	wantSilence(t, assessSchema(t, schema, attributedRoot(local("undeclared"))),
+		"##defined excludes only the names the schema declares at the top level")
 }
 
 // A wildcard does not silence clause 3: the missing required use is charged
