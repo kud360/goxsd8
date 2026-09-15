@@ -1539,7 +1539,7 @@ func declarationName(el *Element, ns string) (xsd.QName, error) {
 	return xsd.QName{Space: ns, Local: name}, nil
 }
 
-// rejectXmlnsName charges no-xmlns (§3.2.6.3, xmlschema11-1.md:985): "The
+// rejectXmlnsName charges no-xmlns (§3.2.6.3, xmlschema11-1.md:986): "The
 // {name} of an attribute declaration must not match xmlns." The constraint is
 // one flat clause over one property, stated by §3.2.6 over "All attribute
 // declarations", so both productions call it — produceAttribute for the
