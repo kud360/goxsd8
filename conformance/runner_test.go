@@ -392,6 +392,92 @@ func TestRunLaneSelectsOnlyClaimedCases(t *testing.T) {
 	}
 }
 
+// TestRunLaneScoresAnOverlappingCaseInEveryClaimingLane pins the mechanism the
+// lane type documents (issue #1507): runLane applies ONLY its own lane's
+// selector to the full case list, so a case two lanes both claim is executed and
+// recorded once per lane, under that lane's own executor. First-match routing —
+// a case leaving the list once some lane claimed it — drops the shared case from
+// whichever lane ran later and deletes that lane's recorded outcome, and its
+// expectation-file line with it, which no gate command short of a ratchet run
+// surfaces.
+//
+// The two executors disagree on the shared case deliberately: presence in both
+// maps alone is equally satisfied by a runner that scored the case once and
+// copied the answer across lanes, so the per-lane STATUS is what pins one
+// outcome per lane. Presence is asserted before status because the zero Status
+// is a fail, which a missing key would satisfy on its own.
+func TestRunLaneScoresAnOverlappingCaseInEveryClaimingLane(t *testing.T) {
+	const shared = "set/g/instance/shared"
+	cases := []caseSpec{
+		{id: "set/g/schema/unshared", kind: kindSchema, expect: expectValid()},
+		{id: shared, kind: kindInstance, expect: expectValid()},
+	}
+	wideLane := lane{
+		name:    "wide",
+		selects: func(caseSpec) bool { return true },
+		exec:    func(caseSpec) Status { return Pass() },
+	}
+	narrowLane := lane{
+		name:    "narrow",
+		selects: selectsKind(kindInstance),
+		exec:    func(caseSpec) Status { return Fail() },
+	}
+
+	wide := runLane(wideLane, cases)
+	narrow := runLane(narrowLane, cases)
+
+	wideStatus, inWide := wide[shared]
+	if !inWide {
+		t.Fatalf("lane %s did not score %s: every lane is offered the full case list", wideLane.name, shared)
+	}
+	narrowStatus, inNarrow := narrow[shared]
+	if !inNarrow {
+		t.Fatalf("lane %s did not score %s: a case an earlier lane claimed must stay claimable by a later one", narrowLane.name, shared)
+	}
+	if !wideStatus.IsPass() {
+		t.Errorf("lane %s recorded %v for %s, want its own executor's pass", wideLane.name, wideStatus, shared)
+	}
+	if narrowStatus.IsPass() {
+		t.Errorf("lane %s recorded %v for %s, want its own executor's fail: the two lanes score the shared case independently", narrowLane.name, narrowStatus, shared)
+	}
+}
+
+// TestDatatypesLaneIsASubsetOfInstanceLane checks against the real discovered
+// case list that selectsDatatypes claims some cases and none but kindInstance
+// ones. It does NOT pin the lane overlap (issue #1507): the subset holds by
+// construction, because selectsDatatypes' own kind guard IS the instance lane's
+// whole selector, and its doc-path regexes anchor on `\.xml$` besides while every
+// schema-kind case carries a `.xsd` document. The per-case assertion can fire
+// only if a later edit drops that guard AND admits a schema document.
+// TestRunLaneScoresAnOverlappingCaseInEveryClaimingLane is what makes the overlap
+// executable, at runLane where the mechanism lives.
+//
+// The live assertion here is the non-empty count: a datatypes selector that
+// regressed to claiming nothing is invisible to the rest of the read-only gate.
+// It is never asserted against a literal figure, which moves with the submodule
+// revision. Skips when the submodule is absent.
+func TestDatatypesLaneIsASubsetOfInstanceLane(t *testing.T) {
+	skipWithoutSuite(t)
+	found, err := parseSuite(suitePath())
+	if err != nil {
+		t.Fatalf("parsing suite: %v", err)
+	}
+	selectsInstance := selectsKind(kindInstance)
+	claimed := 0
+	for _, c := range found.cases {
+		if !selectsDatatypes(c) {
+			continue
+		}
+		claimed++
+		if !selectsInstance(c) {
+			t.Errorf("case %s is claimed by the datatypes lane but not by the instance lane", c.id)
+		}
+	}
+	if claimed == 0 {
+		t.Fatalf("the datatypes lane claimed none of the %d discovered cases: its selector matches nothing", len(found.cases))
+	}
+}
+
 // TestRunLaneRatchetRoundTrip exercises the runner's integration of runLane
 // with Ratchet + WriteExpectations against a temp-dir lane file (never the
 // real committed path): a fresh lane starts empty, records observed New cases,
