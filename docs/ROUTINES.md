@@ -158,12 +158,43 @@ for f in pages/p*.json; do
   exit 1
 done
 
+seen=
+i=1
+while [ "$i" -lt "$p" ]; do
+  f=pages/p$i.json
+  nums=$(jq -r '.[].number' "$f")
+  dup=$(printf '%s\n%s\n' "$nums" "$seen" | sort | uniq -d | head -n 1)
+  if [ -n "$dup" ]; then
+    echo "$f repeats #$dup from an earlier page — re-run the loop" >&2
+    exit 1
+  fi
+  seen=$(printf '%s\n%s' "$nums" "$seen")
+  i=$((i + 1))
+done
+
+jq -sr 'add | map(.number) as $n | ($n | unique) as $u
+        | "rows \($n | length) distinct \($u | length)"
+          + " min \($u[0]) max \($u[-1])"
+          + (if ($u | length) == ($u[-1] - $u[0] + 1)
+             then " no gaps"
+             else " missing numbers \($u[-1] - $u[0] + 1 - ($u | length))"
+             end)' pages/*.json >&2
+
 jq -s 'add | map(select(.pull_request == null))
        | map({number, state, labels: [.labels[] | {name}]})' pages/*.json > issues.json
 
 jq -s 'add | map(select(.pull_request == null))
        | map({number, title, state, body, labels: [.labels[] | {name}]})' pages/*.json > gapissues.json
 ```
+
+**Quote the distinct-number stamp wherever a survey's figures are quoted**, and
+re-run the whole walk when the check aborts. A page can come back the right
+SIZE with the wrong CONTENTS — served from another page's offset, repeating a
+range already collected and dropping its own — which the fullness check cannot
+see, `jq -s add` accepts, and the reshape turns into well-formed JSON at exit 0
+(#1520). Nothing else records that a walk was verified: `issues.json`,
+`gapissues.json` and `pages/` are untracked and nothing in `.gitignore` covers
+them, so the stamp on stderr is the only evidence there is.
 
 No part of the reshape is optional: **pull requests share the issues endpoint**
 and every survey miscounts unless `select(.pull_request == null)` drops them,
@@ -183,7 +214,7 @@ happens to match — and a page left over from a longer earlier run is read back
 in as current. `jq -s add` fails outright on the first of those and silently
 believes the second. The empty page that ends the loop is deleted for the same
 reason: every file left in `pages/` is a page with issues on it, which is what
-the fullness check and the reshape both read.
+the fullness check, the distinct-number check and the reshape all read.
 
 ### Supplying the thread's comments
 
