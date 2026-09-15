@@ -6,8 +6,11 @@ import "github.com/kud360/goxsd8/xsderr"
 // Term with {namespace constraint} (a NamespaceConstraint, §3.10.1 "nc" — see
 // namespaceconstraint.go) and {process contents} (one of skip/strict/lax — see
 // closedsets.go). It is the thin composition wiring an element/attribute
-// wildcard's admission to the §3.10.4 allowance algorithm, whose entry points
-// are the *Schema methods of wildcardadmit.go (xsd/doc.go's "Walk API").
+// wildcard's admission to the §3.10.4 allowance algorithm. cvc-wildcard
+// admission itself is decided over the declaration graph, by
+// Schema.ContentMatcher for an element wildcard and by
+// Schema.AllowsAttributeWildcardName for an attribute one (xsd/doc.go's
+// "Walk API"), and by nothing on this type.
 //
 // The zero value is NOT a valid Wildcard (its NamespaceConstraint and
 // ProcessContents are both the invalid zero); construct only through
