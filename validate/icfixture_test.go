@@ -465,10 +465,19 @@ func icAnonymousSchema(t *testing.T, kidAid, topAid string, rootICs []xsd.Identi
 // observable.
 func icWildcardSchema(t *testing.T, pc xsd.ProcessContents, rootICs []xsd.IdentityConstraint) *xsd.Schema {
 	t.Helper()
+	return icWildcardSchemaWith(t, anyWildcard(t, pc), rootICs)
+}
+
+// icWildcardSchemaWith is icWildcardSchema over a caller-built {attribute
+// wildcard}, for the fixtures that vary the {namespace constraint} rather than
+// the {process contents} — a wildcard that does not ADMIT @wid leaves the
+// attribute ·attributed to· nothing (§3.4.4.4) whatever its {process contents}.
+func icWildcardSchemaWith(t *testing.T, wild *xsd.Wildcard, rootICs []xsd.IdentityConstraint) *xsd.Schema {
+	t.Helper()
 	seeded := icSeeded(t)
 
 	itemType, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Local: "WildType"}, xsd.QName{}, nil,
-		xsd.DerivationRestriction, false, nil, nil, anyWildcard(t, pc), xsd.EmptyContent{}, nil, nil)
+		xsd.DerivationRestriction, false, nil, nil, wild, xsd.EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("building WildType: %v", err)
 	}

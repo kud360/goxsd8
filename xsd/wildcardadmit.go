@@ -26,8 +26,14 @@ package xsd
 // validity rule: in a content-model matcher "this wildcard does not admit this
 // name" is a non-match (try the next particle), not a reportable fault — the
 // reported fault is the enclosing cvc-complex-type clause. The rule ID each
-// eventual M5 caller must cite is named in the doc comments below so the
-// mapping from bool to error is not lost.
+// caller must cite is named in the doc comments below so the mapping from bool
+// to error is not lost.
+//
+// Only the ATTRIBUTE entry point is exported. Element-wildcard admission is
+// reached through Schema.ContentMatcher, which asks it as the wildcard arm of
+// cvc-accept and hands the answer back as an Attribution, so an exported second
+// spelling of it would be a second caller-driven copy of a decision Matcher has
+// already made (STYLE T4).
 
 // allowsElementWildcardName reports whether the expanded name is admitted by the
 // ELEMENT wildcard w occurring in containing's {content type} particle tree,
@@ -70,7 +76,7 @@ func (s *Schema) allowsElementWildcardName(w Wildcard, containing ComplexType, n
 	return true
 }
 
-// allowsAttributeWildcardName reports whether the expanded name is admitted by
+// AllowsAttributeWildcardName reports whether the expanded name is admitted by
 // the ATTRIBUTE wildcard w, implementing Item Valid (Wildcard) (§3.10.4.1,
 // cvc-wildcard) in full for the attribute-wildcard case: clause 1 (delegated to
 // Wildcard.AllowsName, §3.10.4.2) and clause 2.2 (if {disallowed names} contains
@@ -84,7 +90,7 @@ func (s *Schema) allowsElementWildcardName(w Wildcard, containing ComplexType, n
 // wildcard from carrying it at all (rejectSiblingOnAttributeWildcard enforces
 // that at construction), so the sibling path is not merely unreached here — it
 // is unrepresentable in this signature (STYLE T1). Nothing below re-checks it.
-func (s *Schema) allowsAttributeWildcardName(w Wildcard, name QName) bool {
+func (s *Schema) AllowsAttributeWildcardName(w Wildcard, name QName) bool {
 	if !w.AllowsName(name) {
 		return false
 	}

@@ -96,7 +96,7 @@ func (w Wildcard) NamespaceConstraint() NamespaceConstraint {
 // name ·valid· per cvc-wildcard-name, §3.10.4.2). Clauses 2-3 — the
 // defined/sibling keyword exclusions, which need the live declaration graph —
 // are answered in-package by (*Schema).allowsElementWildcardName and
-// (*Schema).allowsAttributeWildcardName (wildcardadmit.go), which this method
+// (*Schema).AllowsAttributeWildcardName (wildcardadmit.go), which this method
 // cannot reach from a bare Wildcard value. So for a wildcard whose {namespace
 // constraint} carries a keyword, AllowsName answers true for names cvc-wildcard
 // rejects: it is NECESSARY but not SUFFICIENT for wildcard admission, and an

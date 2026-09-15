@@ -320,17 +320,16 @@ func (c *icCheck) pendElement(t *icTarget, i int) {
 // clause 3 reads is that type's, and comparing the member under the wrong
 // simple type decides clause 4.1 by the wrong ·value space·.
 //
-// GAP(validate): that decline reaches [icFrame.qualify], which settles no
-// clause for the WHOLE frame, so a key's clause 4.2.1 charge goes with it.
-// §3.11.4 clause 3's Note names a field evaluating to "a sequence consisting
-// only of ·skipped· or ·nilled· nodes" as leaving the ·key-sequence· short, and
-// a short one keeps its ·target node· out of the ·qualified node set·, which
-// for a key is [icFrame.keyOnly]'s charge — so where the attribute really is
-// ·skipped· ([walk.attributeType]'s own GAP, #717) the spec charges 4.2.1 and
-// this package does not. It is withheld on the terms [icCheck.fill] withholds
-// the same clause for a ·nilled· node: the absence read here is this
-// processor's own decline, and charging 4.2.1 off it would widen the clause on
-// the strength of that reading.
+// A ·skipped· attribute is the OTHER absence and leaves the slot simply
+// unfilled: §3.11.4 clause 3's Note names a field evaluating to "a sequence
+// consisting only of ·skipped· or ·nilled· nodes" as leaving the ·key-sequence·
+// short, and a short one keeps its ·target node· out of the ·qualified node
+// set·, which for a key is [icFrame.keyOnly]'s clause 4.2.1 charge. The charge
+// is made and not withheld because the absence is the SPEC's and not this
+// processor's: [walk.skippedAttribute] decides the ·attribution· through
+// cvc-wildcard rather than inferring it from the wildcard's presence, so an
+// attribute that wildcard does not admit is typed by key-governing-ad clause 3
+// instead and never arrives here as ·skipped·.
 func (c *icCheck) fieldAttributes(w *walk, t *icTarget, i int, tests []icNameTest) {
 	for _, a := range c.e.Attributes() {
 		if !icMatchesAny(tests, a.Name()) {
@@ -338,6 +337,9 @@ func (c *icCheck) fieldAttributes(w *walk, t *icTarget, i int, tests []icNameTes
 		}
 		st, typed := w.attributeType(c.e, c.g, a)
 		if !typed {
+			if w.skippedAttribute(c.g, a) {
+				continue
+			}
 			t.slots[i].declined = true
 			continue
 		}

@@ -646,30 +646,39 @@ func (w *walk) attribute(a Attribute, e Element, governing *xsd.ComplexType) {
 // Definition and xsd.NewAttributeDeclaration enforces it, so no unfolded complex
 // type exists on that side to reach here.
 //
-// The wildcard arm records the item's assertion sites before it declines
+// Clause 2.2 is a conjunction and both conjuncts are decided here: 2.2.1, that
+// the ·governing type definition· has an {attribute wildcard} at all, and
+// 2.2.2, that the item is ·valid· with respect to it as Item Valid (Wildcard)
+// (§3.10.4.1, cvc-wildcard) defines — the {namespace constraint} and the
+// ##defined keyword together ([xsd.Schema.AllowsAttributeWildcardName]). Each
+// failing conjunct charges clause 2 in its own message, there being no third
+// arm of clause 2 to fall to.
+//
+// An admitted item records its assertion sites before the arm returns
 // ([walk.wildcardAttributeAssertions]): under a ***strict*** or ***lax***
-// wildcard the spec's ·attribute assessment· of such an item reaches
-// cvc-attribute clause 3 against the top-level declaration its ·expanded name·
-// ·resolves· to, and [walk.matchedAttribute] never sees it. Under ***skip***
-// §3.10.4.1's Note leaves the item with no ·governing· declaration and nothing
-// is assessed, which [walk.attributeType] acts on (#1043); the recording call
-// is deliberately not gated on {process contents} all the same, for the reason
-// its own doc gives.
+// wildcard the spec's ·attribute assessment· of it reaches cvc-attribute clause
+// 3 against the top-level declaration its ·expanded name· ·resolves· to, and
+// [walk.matchedAttribute] never sees it. A NON-admitted item records none: it is
+// ·attributed to· nothing (§3.4.4.4), so no wildcard sends it to any
+// declaration, and its own charge is the whole of what this element owes for it.
 func (w *walk) unmatchedAttribute(a Attribute, governing xsd.ComplexType) {
-	if _, wild := governing.AttributeWildcard(); wild {
-		// GAP(validate): clause 2.2.1 holds, but clause 2.2 is a conjunction
-		// and 2.2.2 sends the attribute to cvc-wildcard (§3.10.4.1), which
-		// this package does not evaluate. Charging on 2.2.1 alone would reject
-		// every attribute a wildcard admits, so clause 2 is left undecided for
-		// an element whose type carries one (#717).
-		w.wildcardAttributeAssertions(a)
-		w.logAttribute(a, ruleCvcComplexType, "2.2", "declined")
+	wild, has := governing.AttributeWildcard()
+	if !has {
+		w.res.violations = append(w.res.violations, xsderr.New(ruleCvcComplexType, a.Loc(),
+			"the attribute %s matches no attribute use among the {attribute uses} of its element's ·governing type definition· (cvc-complex-type clause 2.1), which has no {attribute wildcard} for it to be ·valid· with respect to either (clause 2.2.1), and clause 2 has no third arm",
+			a.Name()))
+		w.logAttribute(a, ruleCvcComplexType, "2", "charged")
 		return
 	}
-	w.res.violations = append(w.res.violations, xsderr.New(ruleCvcComplexType, a.Loc(),
-		"the attribute %s matches no attribute use among the {attribute uses} of its element's ·governing type definition· (cvc-complex-type clause 2.1), which has no {attribute wildcard} for it to be ·valid· with respect to either (clause 2.2.1), and clause 2 has no third arm",
-		a.Name()))
-	w.logAttribute(a, ruleCvcComplexType, "2", "charged")
+	if !w.schema.AllowsAttributeWildcardName(wild, a.Name()) {
+		w.res.violations = append(w.res.violations, xsderr.New(ruleCvcComplexType, a.Loc(),
+			"the attribute %s matches no attribute use among the {attribute uses} of its element's ·governing type definition· (cvc-complex-type clause 2.1), and the {attribute wildcard} of that type does not admit its ·expanded name· either, so it is not ·valid· with respect to that wildcard as cvc-complex-type clause 2.2.2 requires (Item Valid (Wildcard), §3.10.4.1)",
+			a.Name()))
+		w.logAttribute(a, ruleCvcComplexType, "2.2.2", "charged")
+		return
+	}
+	w.wildcardAttributeAssertions(a, wild)
+	w.logAttribute(a, ruleCvcComplexType, "2.2", "satisfied")
 }
 
 // requiredAttributeUses charges clause 3 for each {required} attribute use
