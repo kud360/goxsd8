@@ -120,10 +120,6 @@ func (t ctaStaticTypes) Type(name xsd.QName) (xsd.TypeDefinition, bool) {
 // EVALUATE is no fault at all and passes straight through, on the terms
 // xpath/cta.go argues (PRINCIPLES 20). The type knowledge it is asked against
 // is ctaStaticTypes, clause 2.2.5's set and not this schema's.
-//
-// {annotations} is the empty sequence on every Type Alternative built here,
-// matching every other component this producer emits: no <annotation> is mapped
-// anywhere in this package yet.
 func (p *producer) typeTableOf(el *Element, edID xsd.ComponentID, declaredType xsd.TypeDefinitionOrRef) (*xsd.TypeTable, error) {
 	alternatives := childElements(el, xsd.XMLSchemaNS, "alternative")
 	if len(alternatives) == 0 {

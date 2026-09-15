@@ -107,19 +107,22 @@ func (e *Element) Loc() xsderr.Loc { return e.src.Loc() }
 
 // Children returns the element's child nodes — elements and character-data runs
 // — in document order (STYLE D2: a slice, never a map). Character data is
-// retained as first-class Text nodes so mixed content (annotations) is not
-// lost: the streaming reader discards the document as it advances, so text not
-// captured here is unrecoverable for later phases.
+// retained as first-class Text nodes for the two readers [Text] names: the
+// streaming reader discards the document as it advances, so text not captured
+// here is unrecoverable for later phases.
 func (e *Element) Children() []Node { return e.children }
 
 func (e *Element) node() {}
 
 // Text is a run of character data (text or CDATA) retained as a first-class
-// child node, so mixed content — notably <xs:documentation> text inside
-// <xs:annotation> — round-trips through the tree. Whitespace is preserved
-// verbatim; stripping or normalization is a later phase's decision, not this
-// raw layer's (STYLE D3: no concatenating Text() convenience until a real
-// consumer needs it).
+// child node, because two later phases read it back: writeCanonicalNode
+// (parser/override.go) feeds it into the ·canonical content· serialization that
+// keys §4.2.5 override-set equivalence, and rejectNotationContent
+// (parser/produce.go) reads it to reject non-whitespace character data between
+// an <xs:notation>'s tags, an s4s content-model fault carrying no numbered rule
+// ID. Whitespace is preserved verbatim; stripping or normalization is a later
+// phase's decision, not this raw layer's (STYLE D3: no concatenating Text()
+// convenience until a real consumer needs it).
 type Text struct {
 	data string
 	loc  xsderr.Loc
