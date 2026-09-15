@@ -333,8 +333,9 @@ Two access styles over the compiled model, one shared core:
   admission, attribute-use lookup) — **mostly unexported, with four
   deliberate entry points M5 needed**: `Schema.ValidlySubstitutable` (the
   derivation half, for `cvc-elt` clause 4), `Schema.ElementDefaultValid`
-  (`cos-valid-default`, for `cvc-elt` clause 5.1.1), `Wildcard.AllowsName`
-  (the one canonical admission entry point) and
+  (`cos-valid-default`, for `cvc-elt` clause 5.1.1),
+  `Schema.AllowsAttributeWildcardName` (`cvc-wildcard` for an attribute
+  wildcard; the element half is decided inside `Matcher` below) and
   `NamespaceConstraint.AllowsName`/`AllowsNamespace` beneath it.
   `xsd/doc.go`'s "Walk API" section is authoritative on which. Of the two
   drivers over it one ships and one does not:
@@ -668,8 +669,11 @@ compiles, is documented, and has **zero** callers module-wide.
   module-wide. `Permits` answers a closed `min <= n <= max` question no
   caller asks, every occurrence site reading `Min`/`Max` for a one-sided
   bound instead; `IsAbsent` is `URI`'s second result spelled a second way
-  (D3); `AllowsNamespace` is exported beneath `AllowsName` by a `doc.go`
-  that tells a caller admitting a name to reach for `AllowsName` instead.
+  (D3); `AllowsNamespace` sits, like `NamespaceConstraint.AllowsName` beside
+  it, beneath the wildcard-admission entry points as the {namespace
+  constraint} property's own accessor — `xsd/doc.go`'s Walk API section
+  redirects a caller admitting a name to `Schema.ContentMatcher` or
+  `Schema.AllowsAttributeWildcardName` instead of either.
   Filed at the 2026-09-06 audit as #1287. `Notation.SystemIdentifier`,
   `Notation.PublicIdentifier` and `xmltree.CharData.Offset` are callerless
   too and are NOT filed: the first two are §3.14.1 component properties the

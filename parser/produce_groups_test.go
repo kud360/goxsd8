@@ -95,13 +95,13 @@ func TestProduceAttributeWildcardIntersection(t *testing.T) {
 	if !ok {
 		t.Fatalf("complex type T has no {attribute wildcard}, want the intersection")
 	}
-	if !w.AllowsName(xsd.QName{Space: "urn:b", Local: "z"}) {
+	if !w.NamespaceConstraint().AllowsName(xsd.QName{Space: "urn:b", Local: "z"}) {
 		t.Error("intersection must admit urn:b (in both L and W)")
 	}
-	if w.AllowsName(xsd.QName{Space: "urn:a", Local: "z"}) {
+	if w.NamespaceConstraint().AllowsName(xsd.QName{Space: "urn:a", Local: "z"}) {
 		t.Error("intersection must reject urn:a (only in W)")
 	}
-	if w.AllowsName(xsd.QName{Space: "urn:c", Local: "z"}) {
+	if w.NamespaceConstraint().AllowsName(xsd.QName{Space: "urn:c", Local: "z"}) {
 		t.Error("intersection must reject urn:c (only in L)")
 	}
 }

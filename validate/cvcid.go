@@ -554,11 +554,13 @@ var (
 // attributes an item to the wildcard only where the item MATCHES it, and an
 // item matching neither a use nor the wildcard is ·attributed· to nothing,
 // hence not ·skipped·, hence resolved by name after all under key-governing-ad
-// (§3.2.4.2) clause 3. The guard below decides ·skipped· by the wildcard's
-// presence and so covers that item too, which is the GAP marked at its site.
-// [walk.childGoverning] is no precedent for it (assess.go): that one switches
-// on the [xsd.Attribution] the content model produced, so it reads an
-// attribution this one can only infer.
+// (§3.2.4.2) clause 3. The guard below therefore tests skippedAttribute, which
+// asks cvc-wildcard for the ·attribution· itself, and declines only the
+// attribute that is genuinely ·skipped·. It is the attribute-side counterpart
+// of [walk.childGoverning] (assess.go), which switches on the
+// [xsd.Attribution] the content model produced; there is no attribute-side
+// Attribution to switch on, a complex type carrying at most one {attribute
+// wildcard} (§3.4.1), so the match is asked at the item instead.
 //
 // The wildcard arm is otherwise taken WITHOUT checking that a wildcard is
 // present, and that is deliberate rather than an omission: key-governing-ad
@@ -589,33 +591,43 @@ func (w *walk) attributeType(e Element, g governance, a Attribute) (*xsd.SimpleT
 			}
 			return w.schema.ResolvedSimpleType(d.TypeDefinition())
 		}
-		// GAP(validate): the test is the PRESENCE of a skip {attribute
-		// wildcard}, not the attribute's ·attribution· to it. Attribution needs
-		// cvc-wildcard, which this package does not evaluate (#717), so an
-		// attribute the wildcard does NOT match — ·attributed· to nothing
-		// (§3.4.4.4), therefore not ·skipped·, therefore resolved by name under
-		// key-governing-ad (§3.2.4.2) clause 3 — is declined here along with the
-		// genuinely ·skipped· one. #717 retires this by deciding the match.
-		//
-		// Direction over the consumers of the withheld type (STYLE P3a), which
-		// is NOT uniformly fail-open. [walk.idAttributes] reaches
-		// [idTable.charge]: its clause 2 charges on an EXTRA binding member, so
-		// a withheld ·ID value· can only withdraw a charge, while its clause 1
-		// charges on the ABSENCE of a declaration, so a withheld one can charge
-		// an IDREF the document does declare a target for — fail-CLOSED, and no
-		// ids.declined flag covers it: [walk.idAttributes] records the decline
-		// of no attribute it could not type. That shape is bounded
-		// to a document the spec rejects anyway: the same unmatched attribute
-		// fails cvc-complex-type clause 2, which [walk.unmatchedAttribute]
-		// declines under the same #717 rather than charging.
-		// [icCheck.fieldAttributes] declines its slot, which [icFrame.qualify]
-		// turns into a whole-frame decline — clauses 3, 4.1, 4.2.2 and 4.2.3
-		// uncharged, and clause 4.2.1 with them, per the GAP that site carries.
-		if wild, has := ct.AttributeWildcard(); has && wild.ProcessContents() == xsd.ProcessSkip {
+		if w.skippedAttribute(g, a) {
 			return nil, false
 		}
 	}
 	return w.topLevelAttributeType(a)
+}
+
+// skippedAttribute reports whether a is ·skipped· (§3.10.4.1, key-skipped): it
+// matches no {attribute use} of the element's ·governing type definition· and is
+// ·attributed to· (§3.4.4.4) a ***skip*** {attribute wildcard} of that type.
+// Both halves are required — an attribute the wildcard does not ADMIT is
+// ·attributed to· nothing and so is not ·skipped· — and cvc-wildcard
+// (§3.10.4.1) decides the second ([xsd.Schema.AllowsAttributeWildcardName]).
+//
+// It is the ONE encoding of ·skipped· on the attribute side (STYLE T4). Its two
+// readers ask it for different reasons and must not drift: [walk.attributeType]
+// withholds a ·governing type definition· for such an item, and
+// [icCheck.fieldAttributes] leaves a field slot UNFILLED rather than declined
+// for it, which is §3.11.4 clause 3's Note — a field evaluating to a ·skipped·
+// node leaves the ·key-sequence· short.
+//
+// An element whose ·governing type definition· is not complex — or is not
+// determinable at all — skips nothing: there is no {attribute wildcard} to be
+// ·attributed to·, and §3.4.7 makes the one on xs:anyType ***lax***.
+func (w *walk) skippedAttribute(g governance, a Attribute) bool {
+	ct := g.complexType()
+	if ct == nil {
+		return false
+	}
+	if _, matched := attributeUseNamed(ct.AttributeUses(), a.Name()); matched {
+		return false
+	}
+	wild, has := ct.AttributeWildcard()
+	if !has || wild.ProcessContents() != xsd.ProcessSkip {
+		return false
+	}
+	return w.schema.AllowsAttributeWildcardName(wild, a.Name())
 }
 
 // topLevelAttributeType is the wildcard arm of [walk.attributeType] on its own:

@@ -103,7 +103,7 @@ func (s *Schema) attributeDefaultBinding(side attributeRestrictionSide, n QName)
 	if u, ok := findAttributeUse(side.uses, n); ok {
 		return attributeUseBinding{use: u}, true // case 2
 	}
-	if !side.hasWildcard || !s.allowsAttributeWildcardName(side.wildcard, n) {
+	if !side.hasWildcard || !s.AllowsAttributeWildcardName(side.wildcard, n) {
 		return nil, false
 	}
 	return wildcardKeywordBinding{keyword: side.wildcard.ProcessContents()}, true // cases 4/5/6

@@ -6,9 +6,12 @@ import (
 	"github.com/kud360/goxsd8/xsderr"
 )
 
-// These tests are package-internal: allowsElementWildcardName and
-// allowsAttributeWildcardName stay unexported until M5 supplies the caller
-// (STYLE T5), so only an in-package test can reach them.
+// These tests are package-internal because one of the two entry points is:
+// allowsElementWildcardName stays unexported, its one caller being Matcher.admits
+// in this package (contentmatcher.go, STYLE T5), so only an in-package test can
+// reach it. AllowsAttributeWildcardName is exported for validate's
+// cvc-complex-type clause 2.2 caller and is tested beside its sibling, the two
+// halves of cvc-wildcard being one file's.
 
 const wns = "urn:wildcardadmit"
 
@@ -134,17 +137,17 @@ func TestAllowsAttributeWildcardNameDefined(t *testing.T) {
 	b.AddAttribute(mustAttributeDecl(t, wq("attr")))
 	s := wFinalize(t, b)
 
-	if s.allowsAttributeWildcardName(w, wq("attr")) {
+	if s.AllowsAttributeWildcardName(w, wq("attr")) {
 		t.Error("defined admitted a name resolving to a top-level attribute declaration (cvc-wildcard clause 2.2)")
 	}
-	if !s.allowsAttributeWildcardName(w, wq("undeclared")) {
+	if !s.AllowsAttributeWildcardName(w, wq("undeclared")) {
 		t.Error("defined rejected a name resolving to no attribute declaration")
 	}
 	// Clause 2.2 is the ATTRIBUTE table: an element's name is not consulted.
-	if !s.allowsAttributeWildcardName(w, wq("top")) {
+	if !s.AllowsAttributeWildcardName(w, wq("top")) {
 		t.Error("defined on an attribute wildcard consulted {element declarations} (clauses 2.1 and 2.2 conflated)")
 	}
-	if !s.allowsAttributeWildcardName(plain, wq("attr")) {
+	if !s.AllowsAttributeWildcardName(plain, wq("attr")) {
 		t.Error("a keyword-free attribute wildcard rejected a top-level attribute name")
 	}
 }
