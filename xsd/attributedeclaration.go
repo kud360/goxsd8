@@ -454,6 +454,42 @@ type AttributeDeclaration struct {
 // validate's isInstanceAttribute (assess.go) and instanceAttribute (cvcelt.go)
 // match the four reserved names against INSTANCE items and never read
 // {attribute declarations}, so neither is perturbed in either direction.
+//
+// GAP(xsd): no-xmlns (§3.2.6.3, xmlschema11-1.md:985) — "The {name} of an
+// attribute declaration must not match xmlns" — is charged neither here nor
+// anywhere else in this package either, so a declaration named "xmlns" is
+// accepted through this constructor whatever its {target namespace}. Unlike its
+// no-xsi sibling above, it is fully stateable on this footing: the constraint
+// exempts nothing, and this package seeds no attribute declaration at all, so a
+// comparison on name.Local would be sound here. It is simply not written.
+// parser's rejectXmlnsName charges the rule at both mapping productions, so a
+// schema DOCUMENT cannot reach this constructor with that name and no suite case
+// turns on the gap; only a programmatically built declaration does.
+//
+// The readers of the {attribute declarations} member this admits, and the
+// direction each charges (STYLE P3a):
+//   - parser's rejectXmlnsName, from produceAttribute and produceLocalAttribute
+//     — the ONLY reader that charges no-xmlns, and reachable only from a schema
+//     document, as above.
+//   - indexByName, at SchemaBuilder.Finalize — charges sch-props-correct clause
+//     2 on a repeated expanded name and nothing about the name itself. Nothing
+//     named "xmlns" is seeded here, so a programmatic one meets no first
+//     declaration to collide with: Finalize reports the schema valid.
+//   - (*Schema).Attribute and (*Schema).ResolvedAttributeDeclaration — resolve
+//     the component and charge nothing, so validate's cvc-attribute and cvc-id
+//     read it as a ·governing attribute declaration·. WHAT it then governs turns
+//     on the {target namespace} the illegal declaration carries: Element.
+//     Attributes (validate/infoset.go) excludes namespace declarations by
+//     contract, since Appendix D holds xmlns and xmlns:p in the separate
+//     [[namespace attributes]] property, so an ABSENT-namespace declaration
+//     named "xmlns" governs nothing an instance can carry, while a NAMESPACED
+//     one governs the ordinary attribute p:xmlns and is assessed against it.
+//   - (*Schema).allowsAttributeWildcardName (wildcardadmit.go), whose ##defined
+//     rejection condition IS the component's presence, so for an attribute
+//     wildcard carrying notQName="##defined" the admitted member fails CLOSED on
+//     that same namespaced p:xmlns. The gap is fail-open on the SCHEMA verdict,
+//     which is what no-xmlns is stated over, and is NOT uniformly fail-open
+//     downstream of it.
 func NewAttributeDeclaration(loc xsderr.Loc, name QName, typeDefinition TypeDefinitionOrRef, scope AttributeScope, valueConstraint *ValueConstraint, inheritable bool) (AttributeDeclaration, error) {
 	if name.Local == "" {
 		return AttributeDeclaration{}, xsderr.New(ruleAPropsCorrect, loc,

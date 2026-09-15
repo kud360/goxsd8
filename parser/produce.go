@@ -32,6 +32,13 @@ const (
 	ruleSrcCT                 xsderr.Rule = "src-ct"
 	ruleSrcWildcard           xsderr.Rule = "src-wildcard"
 	ruleSrcIdentityConstraint xsderr.Rule = "src-identity-constraint"
+	// ruleNoXmlns is the "xmlns Not Allowed" Schema Component Constraint
+	// (§3.2.6.3), charged by rejectXmlnsName over both attribute declaration
+	// productions. Like its §3.2.6.4 sibling below it is a Schema COMPONENT
+	// Constraint charged nowhere but here; see rejectXmlnsName's GAP(xsd)
+	// counterpart at xsd.NewAttributeDeclaration for the component-footing
+	// residue.
+	ruleNoXmlns xsderr.Rule = "no-xmlns"
 	// ruleNoXSI is the "xsi: Not Allowed" Schema Component Constraint
 	// (§3.2.6.4), charged by rejectXSITargetNamespace over both attribute
 	// declaration productions. It is a Schema COMPONENT Constraint charged
@@ -1530,6 +1537,57 @@ func declarationName(el *Element, ns string) (xsd.QName, error) {
 			el.Name().Local(), name)
 	}
 	return xsd.QName{Space: ns, Local: name}, nil
+}
+
+// rejectXmlnsName charges no-xmlns (§3.2.6.3, xmlschema11-1.md:985): "The
+// {name} of an attribute declaration must not match xmlns." The constraint is
+// one flat clause over one property, stated by §3.2.6 over "All attribute
+// declarations", so both productions call it — produceAttribute for the
+// top-level form (§3.2.2.1) and produceLocalAttribute for the local one
+// (§3.2.2.2), which serves <attributeGroup> and <complexType> alike. Neither
+// production's namespace machinery is involved: {name} is "the ·actual value· of
+// the name [attribute]" word for word in both mapping summaries, so the two call
+// sites pass the same thing and there is no local/top-level difference to
+// encode, as there is for no-xsi's {target namespace} below.
+//
+// name is the {name} declarationName has already mapped, never the name
+// attribute re-read here (STYLE T4), and that ordering is what keeps the
+// COLONIZED forms on their existing charge: declarationName rejects a name
+// outside NCName's ·lexical space· first, so xmlns: and xmlns:a never reach this
+// function at all and stay charged cvc-datatype-valid, one fault to one rule
+// (STYLE E2). §3.2.6.3's Note — "The {name} of an attribute is an ·NCName·,
+// which implicitly prohibits attribute declarations of the form xmlns:*" —
+// DERIVES that prohibition from the NCName constraint rather than stating a
+// second clause, so nothing here need cover it.
+//
+// The comparison is against the WHOLE name, and what that protects is NOT those
+// colonized forms — the lexical rejection holds them whether the comparison here
+// is exact or a prefix, which is why the NCName ruling's test cannot see the
+// difference. It is the ordinary NCName that merely begins with those five
+// letters: xmlnsx and xmlns-1 are names this constraint says nothing about, and
+// TestProduceXmlnsPrefixedAttributeNameAccepted is what a prefix comparison
+// fails.
+//
+// It is charged ahead of no-xsi at both sites, being the constraint over the
+// less derived property: {name} is decided the moment declarationName returns,
+// while {target namespace} takes the whole form/targetNamespace/
+// attributeFormDefault resolution of §3.2.2.2 behind it. Each site charges as
+// soon as its own name exists, so the verdict does not depend on unrelated later
+// mappings succeeding (#206) — a dangling ref elsewhere in the document no
+// longer decides which rule a declaration named xmlns is charged.
+//
+// §3.3.6.1 e-props-correct carries no equivalent clause, so an ELEMENT
+// declaration named xmlns is not an error: this constraint is attribute-only,
+// which is why it is not in declarationName, the one helper every declaration
+// form shares. A use="prohibited" local <attribute> is charged nothing either —
+// it maps to no component at all (§3.2.2), and the constraint is stated over
+// declarations.
+func rejectXmlnsName(name string, el *Element) error {
+	if name != "xmlns" {
+		return nil
+	}
+	return xsderr.New(ruleNoXmlns, el.Loc(),
+		"attribute declaration has %q as its {name}, which no-xmlns (§3.2.6.3) forbids whether the declaration is local or top-level: [XML Infoset] identifies an attribute so named as a namespace attribute rather than an ordinary one, so a schema neither need nor may declare it (§3.2.1)", name)
 }
 
 // rejectXSITargetNamespace charges no-xsi (§3.2.6.4, xmlschema11-1.md:990): "The
@@ -3096,10 +3154,11 @@ func rejectNotationContent(elem *Element) error {
 // produceElement takes for src-element clause 3, the both-present fault of the
 // element side (#1246).
 //
-// no-xsi (§3.2.6.4) is charged behind that walk too and ahead of everything
-// else, by rejectXSITargetNamespace: qname already carries the {target
-// namespace} §3.2.2.1 gives this form — the ancestor <schema>'s targetNamespace
-// — so nothing else need be mapped to decide it (#1446).
+// no-xmlns (§3.2.6.3) and no-xsi (§3.2.6.4) are charged behind that walk too and
+// ahead of everything else, by rejectXmlnsName and rejectXSITargetNamespace:
+// qname already carries both the {name} and the {target namespace} §3.2.2.1
+// gives this form — the ancestor <schema>'s targetNamespace — so nothing else
+// need be mapped to decide either (#1446, #1465).
 //
 // It charges the two src-attribute clauses (§3.2.3) this form can reach: 4
 // (type= and an inline <simpleType> mutually exclusive) and 1 (default and fixed
@@ -3118,6 +3177,9 @@ func rejectNotationContent(elem *Element) error {
 // over the local and ref= forms; this function no longer calls it.
 func (p *producer) produceAttribute(qname xsd.QName, elem *Element) (xsd.AttributeDeclaration, error) {
 	if err := checkS4SChildOrder(elem, s4sAttribute); err != nil {
+		return xsd.AttributeDeclaration{}, err
+	}
+	if err := rejectXmlnsName(qname.Local, elem); err != nil {
 		return xsd.AttributeDeclaration{}, err
 	}
 	if err := rejectXSITargetNamespace(qname, elem); err != nil {

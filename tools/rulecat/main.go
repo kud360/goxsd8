@@ -59,9 +59,10 @@ const (
 // names no rule for it.
 var irregularRules = []string{
 	"derivation-ok-restriction",
-	// The Structures §3.2.6.4 SCC on an attribute declaration's {target
-	// namespace}. Its §3.2.6.3 sibling no-xmlns is deliberately absent: the
-	// catalog admits an ID when a call site cites it, and no-xmlns has none.
+	// The two Structures §3.2.6 SCCs on an attribute declaration's own name:
+	// §3.2.6.3 on the {name} and §3.2.6.4 on the {target namespace}. Both are
+	// charged by parser's attribute declaration productions.
+	"no-xmlns",
 	"no-xsi",
 	"length-valid-restriction",
 	"minLength-valid-restriction",
