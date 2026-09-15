@@ -1220,7 +1220,7 @@ MS-Attribute2006-07-15/attKb011/schema/attKb011 pass
 MS-Attribute2006-07-15/attKb012/schema/attKb012 pass
 MS-Attribute2006-07-15/attKb013/schema/attKb013 pass
 MS-Attribute2006-07-15/attKb014/schema/attKb014 pass
-MS-Attribute2006-07-15/attKb015/schema/attKb015 fail
+MS-Attribute2006-07-15/attKb015/schema/attKb015 pass
 MS-Attribute2006-07-15/attKb016/schema/attKb016 pass
 MS-Attribute2006-07-15/attKb017/schema/attKb017 pass
 MS-Attribute2006-07-15/attKb018/schema/attKb018 pass
@@ -1239,7 +1239,7 @@ MS-Attribute2006-07-15/attKc011/schema/attKc011 pass
 MS-Attribute2006-07-15/attKc012/schema/attKc012 pass
 MS-Attribute2006-07-15/attKc013/schema/attKc013 pass
 MS-Attribute2006-07-15/attKc014/schema/attKc014 pass
-MS-Attribute2006-07-15/attKc015/schema/attKc015 fail
+MS-Attribute2006-07-15/attKc015/schema/attKc015 pass
 MS-Attribute2006-07-15/attKc016/schema/attKc016 pass
 MS-Attribute2006-07-15/attKc017/schema/attKc017 pass
 MS-Attribute2006-07-15/attKc018/schema/attKc018 pass
