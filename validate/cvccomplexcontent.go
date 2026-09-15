@@ -103,6 +103,13 @@ const ruleCvcComplexContent xsderr.Rule = "cvc-complex-content"
 // a shape [xsd.Schema.ContentMatcher] does not decide — while clauses 1.1 to 1.3
 // still hold, since they read the {variety} and not the particle.
 //
+// GAP(validate): a {content type} whose {open content} is PRESENT is one of
+// those declines, and the whole element-sequence verdict goes with it —
+// cvc-complex-content clauses 2 and 3 split the sequence into a {particle} part
+// and an open-content part, which neither this file nor the matcher decides.
+// #1516 owns the retirement, and the matching marker on the matcher's own
+// decline list (xsd/contentmatcher.go) names it too.
+//
 // nilled is whether E is ·nilled· (§3.3.4.3, key-nilled), decided before any
 // child arrives ([walk.nilCheck]). It turns cvc-complex-type clause 1 off
 // wholesale, which governing is the one reading of, and cvc-elt clause 3.2.3.1

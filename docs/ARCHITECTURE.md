@@ -333,8 +333,9 @@ Two access styles over the compiled model, one shared core:
   admission, attribute-use lookup) — **mostly unexported, with four
   deliberate entry points M5 needed**: `Schema.ValidlySubstitutable` (the
   derivation half, for `cvc-elt` clause 4), `Schema.ElementDefaultValid`
-  (`cos-valid-default`, for `cvc-elt` clause 5.1.1), `Wildcard.AllowsName`
-  (the one canonical admission entry point) and
+  (`cos-valid-default`, for `cvc-elt` clause 5.1.1),
+  `Schema.AllowsAttributeWildcardName` (`cvc-wildcard` for an attribute
+  wildcard; the element half is decided inside `Matcher` below) and
   `NamespaceConstraint.AllowsName`/`AllowsNamespace` beneath it.
   `xsd/doc.go`'s "Walk API" section is authoritative on which. Of the two
   drivers over it one ships and one does not:
