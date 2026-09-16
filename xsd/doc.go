@@ -248,12 +248,11 @@
 // walk carries one cursor per live partition and widens the set only at a
 // particle that repeats inside a particle that repeats (contentmatcher.go
 // for the bound that keeps that set a constant of the schema). It decides
-// once, at construction, whether it
-// decides at all: ContentMatcher reports false for a {content type} holding
-// no particle and for the shapes contentmatcher.go declines, and a Matcher
-// that exists never declines a name mid-sequence. Substitution groups are
-// not expanded at construction — Next resolves membership per name, as
-// cvc-accept clause 2.3.2 states it.
+// once, at construction, whether it decides at all: ContentMatcher reports
+// false for a {content type} holding no particle and for the shapes
+// contentmatcher.go declines, and a Matcher that exists never declines a
+// name mid-sequence. Substitution groups are not expanded at construction —
+// Next resolves membership per name, as cvc-accept clause 2.3.2 states it.
 //
 // A consumer that wants the whole model rather than one sequence still
 // traverses it by hand, switching Particle.Term over the TermOrRef sealed
