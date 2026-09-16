@@ -33,6 +33,18 @@
 // rather than a lookup of one construct — and it needs no escape, since `*`
 // is not an NCName and no document can spell a name that collides with it.
 //
+// A NAMESPACE may be written `{*}`, which stands for every namespace at once,
+// none included: `{*}root` is every `root` element in the corpus whatever
+// namespace it sits in, and `{*}*` is every element there is. The element
+// position needs it because a braceless element name means the XML Schema
+// namespace — right for a schema document, wrong for an INSTANCE one, whose
+// elements sit in whatever namespace its test targets — so an instance-side
+// census was inexpressible and answered `0 occurrence(s)` rather than saying
+// so (#1495). It cannot be confused with `{}local`, which is the one
+// namespace that has no name, and it costs no census that worked before:
+// `{*}local` parsed as the namespace literally named `*`, which nothing in
+// this corpus declares.
+//
 // Attribute names are joined by `,` (an element must carry EVERY one to count
 // as an occurrence) or by `|` (ANY one of them is enough). One query uses one
 // join, never both, and `@*` stands alone: it already names the whole
@@ -65,15 +77,16 @@
 // rather than by re-querying it.
 //
 // A match line carries its position, then the matched element's name where
-// the query left it open with a wildcard and never where the query already
-// fixed it, then `parent=` naming the element it is a direct child of —
-// `(none)` for a document element — then `children=[…]` listing the elements
-// directly under it, then the matched attributes' values. The parent is what
-// separates a local occurrence from a top-level one, which no query over an
-// element's OWN attributes can express (#1282). It is the parent the
-// document actually spells, never one corrected against the grammar: an
-// `xs:element` under `xs:redefine` is reported there, wrong though that
-// document is, and its children are reported the same way.
+// the query left either axis of it open — a wildcard local part, or the `{*}`
+// namespace axis — and never where the query fixed both, then `parent=`
+// naming the element it is a direct child of — `(none)` for a document
+// element — then `children=[…]` listing the elements directly under it, then
+// the matched attributes' values. The parent is what separates a local
+// occurrence from a top-level one, which no query over an element's OWN
+// attributes can express (#1282). It is the parent the document actually
+// spells, never one corrected against the grammar: an `xs:element` under
+// `xs:redefine` is reported there, wrong though that document is, and its
+// children are reported the same way.
 //
 // An element name the report prints is spelled so that it re-enters as a
 // query naming that same element, which is why a parent or child in NO
@@ -106,14 +119,16 @@
 //	go tool suiteindex '{http://www.w3.org/1999/XSL/Transform}stylesheet'
 //	go tool suiteindex '*@*'
 //	go tool suiteindex '*@mixed|abstract|nillable'
+//	go tool suiteindex '{*}*@{http://www.w3.org/2001/XMLSchema-instance}type'
 //	go tool suiteindex element@targetNamespace testdata/xsdtests/ibmData
 //
 // The query is `local[@attr[,attr…]]` with `|` in place of `,` for the ANY
 // join, and any local part may be `*`. Any name may be written in Clark
-// notation (`{uri}local`) to name its namespace outright; a braceless element
-// name is in the XML Schema namespace and a braceless attribute name is in no
-// namespace. The second argument is the tree to walk, defaulting to the suite
-// at [defaultRoot]; narrowing it is for reading one directory's output, never
+// notation (`{uri}local`) to name its namespace outright, or `{*}local` to
+// census every namespace at once; a braceless element name is in the XML
+// Schema namespace and a braceless attribute name is in no namespace. The
+// second argument is the tree to walk, defaulting to the suite at
+// [defaultRoot]; narrowing it is for reading one directory's output, never
 // for taking the census the whole corpus answers.
 //
 // An absent or fixture-free root is a supported mode, not a failure: the
@@ -144,7 +159,7 @@ import (
 const defaultRoot = "testdata/xsdtests"
 
 // usage is printed for any argument the tool cannot act on.
-const usage = `usage: suiteindex <local[@attr[,attr...]]> [dir]; "," joins the names as all, "|" as any, and any local name may be "*"`
+const usage = `usage: suiteindex <local[@attr[,attr...]]> [dir]; "," joins the names as all, "|" as any, any local name may be "*", and "{uri}" before one fixes its namespace — "{*}" censuses every namespace, "{}" the one that has none`
 
 func main() {
 	if err := run(os.Stdout, os.Args[1:]); err != nil {
@@ -183,16 +198,23 @@ func parseArgs(args []string) (query, string, error) {
 	return q, defaultRoot, nil
 }
 
-// wildcard is the local part that stands for every local name in its
-// namespace. It needs no escape and can never be ambiguous: "*" is not an
-// NCName (Namespaces in XML §4), so no name a document spells collides with
-// it.
+// wildcard is what stands for every name on the axis it is written on: as a
+// local part, every local name in its namespace; inside a Clark wrapper
+// (`{*}`), every namespace at once. It needs no escape and can never be
+// ambiguous on the local axis: "*" is not an NCName (Namespaces in XML §4),
+// so no name a document spells collides with it. On the namespace axis it is
+// reserved rather than impossible — `{*}name` parsed before as the namespace
+// literally named "*", a query no fixture in this corpus could ever answer
+// (#1495) — so a namespace URI of "*" is the one URI this query language
+// cannot name.
 const wildcard = "*"
 
 // elementSpace and attrSpace are the namespace a braceless name means in each
 // position of a query: the vocabulary every schema fixture in this corpus is
 // written in for an element, and no namespace for an attribute, which is what
-// an unprefixed attribute resolves to. The parser and the renderers read the
+// an unprefixed attribute resolves to. Neither default fits an INSTANCE
+// document, whose elements sit in whatever namespace its test targets, which
+// is what `{*}` is for ([wildcard]). The parser and the renderers read the
 // same two constants, so the report cannot drift into spelling a name the way
 // the other position reads it (STYLE D3, #1297).
 const (
@@ -200,10 +222,10 @@ const (
 	attrSpace    = ""
 )
 
-// namePat is one name a query matches: a namespace URI, and either a local
-// name or [wildcard]. The wildcard is the local part itself rather than a
-// second field beside it — one fact, one encoding (STYLE D3), and an illegal
-// "wildcard named foo" is unrepresentable.
+// namePat is one name a query matches: a namespace URI or [wildcard], and a
+// local name or [wildcard]. Each axis carries its wildcard in the field
+// itself rather than in a flag beside it — one fact, one encoding (STYLE D3),
+// and an illegal "wildcard named foo" is unrepresentable.
 type namePat struct {
 	Space string
 	Local string
@@ -215,17 +237,37 @@ func (p namePat) isAny() bool {
 	return p.Local == wildcard
 }
 
+// anySpace reports whether p stands for its local name in EVERY namespace,
+// no namespace included. It is the axis an instance-side census runs on: the
+// namespaces the fixtures use are what such a census is trying to discover,
+// so it cannot name one (#1495).
+func (p namePat) anySpace() bool {
+	return p.Space == wildcard
+}
+
+// isOpen reports whether p leaves either axis of the name open, so a hit's
+// own name is not derivable from the query and the report must print it
+// ([renderMatched]).
+func (p namePat) isOpen() bool {
+	return p.isAny() || p.anySpace()
+}
+
 // matches reports whether n is one of the names p stands for. The comparison
 // is on namespace URI and local part, never on the prefix a document spelled —
 // that equivalence is the tool's whole point.
 func (p namePat) matches(n xsd.QName) bool {
-	return p.Space == n.Space && (p.isAny() || p.Local == n.Local)
+	return (p.anySpace() || p.Space == n.Space) && (p.isAny() || p.Local == n.Local)
 }
 
 // render spells p for a query position whose braceless names mean
-// defaultSpace, wildcard and all (`{uri}*`), so the reader sees the namespace
-// that was matched ([renderIn]).
+// defaultSpace, wildcards and all (`{uri}*`, `{*}name`), so the reader sees
+// the axis that was censused ([renderIn]). The namespace wildcard is written
+// out here rather than left to [xsd.QName], which would spell the sentinel as
+// though it were a URI by coincidence of its own rules.
 func (p namePat) render(defaultSpace string) string {
+	if p.anySpace() {
+		return "{" + wildcard + "}" + p.Local
+	}
 	return renderIn(xsd.QName{Space: p.Space, Local: p.Local}, defaultSpace)
 }
 
@@ -277,11 +319,12 @@ func (q query) String() string {
 }
 
 // parseQuery parses `local[@attr[,attr…]]` — `|` in place of `,` for the ANY
-// join — where any name may carry a Clark `{uri}` wrapper and any local part
-// may be [wildcard]. A braceless element name is in the XML Schema namespace
-// — the vocabulary every schema fixture in this corpus is written in — and a
-// braceless attribute name is in no namespace, which is what an unprefixed
-// attribute resolves to.
+// join — where any name may carry a Clark `{uri}` wrapper and either part of
+// it may be [wildcard]: `{*}` in the wrapper's place is every namespace, `*`
+// in the local part's is every local name. A braceless element name is in the
+// XML Schema namespace — the vocabulary every schema fixture in this corpus
+// is written in — and a braceless attribute name is in no namespace, which is
+// what an unprefixed attribute resolves to.
 func parseQuery(s string) (query, error) {
 	elem, rest, err := splitName(s, elementSpace)
 	if err != nil {
@@ -335,7 +378,8 @@ func closeAttrs(s string, q query) (query, error) {
 // splitName consumes one name from the head of s — an optional Clark
 // `{uri}` wrapper, then a local part — and returns it with whatever follows.
 // The URI is taken as everything up to the closing brace, so a namespace
-// containing a separator survives the separators around it.
+// containing a separator survives the separators around it, and a wrapper
+// holding [wildcard] alone is the namespace axis rather than a URI.
 func splitName(s, defaultSpace string) (p namePat, rest string, err error) {
 	space := defaultSpace
 	if strings.HasPrefix(s, "{") {
@@ -362,7 +406,8 @@ func splitName(s, defaultSpace string) (p namePat, rest string, err error) {
 // attrHit is one attribute an occurrence carried and the query matched: the
 // name as the document resolved it, and its value. The name is the hit's own
 // and not the query's, because a query can leave it open — `@*` names no
-// attribute at all and the `|` join names more than the element carries.
+// attribute at all, `{*}` leaves its namespace open, and the `|` join names
+// more than the element carries.
 type attrHit struct {
 	Name  xsd.QName
 	Value string
@@ -721,14 +766,14 @@ func match(start *xmltree.StartElement, q query) ([]attrHit, bool) {
 	}
 	var got []attrHit
 	for _, want := range q.Attrs {
-		v, ok := attrValue(start, want)
+		a, ok := attrOn(start, want)
 		if !ok && q.Join == joinAll {
 			return nil, false
 		}
 		if !ok {
 			continue
 		}
-		got = append(got, attrHit{Name: xsd.QName{Space: want.Space, Local: want.Local}, Value: v})
+		got = append(got, a)
 	}
 	if q.Join == joinAny && len(got) == 0 {
 		return nil, false
@@ -751,16 +796,18 @@ func axisAttrs(start *xmltree.StartElement, want namePat) ([]attrHit, bool) {
 	return got, len(got) > 0
 }
 
-// attrValue returns the value of start's want attribute. The attribute list
-// is a document-ordered slice, so the first match is the only one a
-// well-formed document can have.
-func attrValue(start *xmltree.StartElement, want namePat) (string, bool) {
+// attrOn returns start's want attribute as the hit records it — the name the
+// document resolved, never the pattern that admitted it, which can be open on
+// either axis. The attribute list is a document-ordered slice, so the first
+// match is the only one a well-formed document can have.
+func attrOn(start *xmltree.StartElement, want namePat) (attrHit, bool) {
 	for _, a := range start.Attributes() {
-		if want.matches(qnameOf(a.Name())) {
-			return a.Value(), true
+		name := qnameOf(a.Name())
+		if want.matches(name) {
+			return attrHit{Name: name, Value: a.Value()}, true
 		}
 	}
-	return "", false
+	return attrHit{}, false
 }
 
 // qnameOf restates a name the reader resolved in the form the query language
@@ -958,12 +1005,14 @@ func renderAttrs(attrs []attrHit) string {
 	return b.String()
 }
 
-// renderMatched names the element a hit matched, for a query that left the
-// element open with a wildcard — and nothing at all for one that fixed it,
-// since the report's own header already echoes the query. The trailing space
-// belongs to the field, so the line closes up when there is none.
+// renderMatched names the element a hit matched, for a query that left either
+// axis of that name open — a wildcard local part or the `{*}` namespace axis —
+// and nothing at all for one that fixed both, since the report's own header
+// already echoes the query. A namespace-open query without this prints every
+// namespace's hits as one undifferentiated run of lines (#1495). The trailing
+// space belongs to the field, so the line closes up when there is none.
 func renderMatched(want namePat, h hit) string {
-	if !want.isAny() {
+	if !want.isOpen() {
 		return ""
 	}
 	return "element=" + renderName(h.Element) + " "
