@@ -973,7 +973,7 @@ MS-Additional2006-07-15/addB115/instance/addB115.i fail
 MS-Additional2006-07-15/addB116/instance/addB116.v fail
 MS-Additional2006-07-15/addB120/instance/addB120.i fail
 MS-Additional2006-07-15/addB122/instance/addB122.v fail
-MS-Additional2006-07-15/addB123/instance/addB123.i fail
+MS-Additional2006-07-15/addB123/instance/addB123.i pass
 MS-Additional2006-07-15/addB124/instance/addB124.i fail
 MS-Additional2006-07-15/addB125/instance/addB125.v fail
 MS-Additional2006-07-15/addB129/instance/addB129.v fail
@@ -1526,7 +1526,7 @@ MS-ComplexType2006-07-15/ctZ008/instance/ctZ008.v fail
 MS-ComplexType2006-07-15/ctZ009/instance/ctZ009.v fail
 MS-ComplexType2006-07-15/ctZ009_a/instance/ctZ009_a.v fail
 MS-ComplexType2006-07-15/ctZ009_b/instance/ctZ009_b.v fail
-MS-ComplexType2006-07-15/ctZ009_c/instance/ctZ009_c.i fail
+MS-ComplexType2006-07-15/ctZ009_c/instance/ctZ009_c.i pass
 MS-ComplexType2006-07-15/ctZ009_d/instance/ctZ009_d.v fail
 MS-ComplexType2006-07-15/ctZ011_a/instance/ctZ011_a.v fail
 MS-ComplexType2006-07-15/ctZ011_b/instance/ctZ011_b.v fail
@@ -3230,13 +3230,13 @@ MS-IdentityConstraint2006-07-15/idL087/instance/idL087.i pass
 MS-IdentityConstraint2006-07-15/idL088/instance/idL088.v fail
 MS-IdentityConstraint2006-07-15/idL089/instance/idL089.i pass
 MS-IdentityConstraint2006-07-15/idL090/instance/idL090.v fail
-MS-IdentityConstraint2006-07-15/idL091/instance/idL091.i fail
+MS-IdentityConstraint2006-07-15/idL091/instance/idL091.i pass
 MS-IdentityConstraint2006-07-15/idL092/instance/idL092.v fail
-MS-IdentityConstraint2006-07-15/idL093/instance/idL093.i fail
+MS-IdentityConstraint2006-07-15/idL093/instance/idL093.i pass
 MS-IdentityConstraint2006-07-15/idL094/instance/idL094.v fail
-MS-IdentityConstraint2006-07-15/idL095/instance/idL095.i fail
+MS-IdentityConstraint2006-07-15/idL095/instance/idL095.i pass
 MS-IdentityConstraint2006-07-15/idL096/instance/idL096.v fail
-MS-IdentityConstraint2006-07-15/idL097/instance/idL097.i fail
+MS-IdentityConstraint2006-07-15/idL097/instance/idL097.i pass
 MS-IdentityConstraint2006-07-15/idL098/instance/idL098.v fail
 MS-IdentityConstraint2006-07-15/idL099/instance/idL099.i pass
 MS-IdentityConstraint2006-07-15/idL100/instance/idL100.v pass
@@ -3975,7 +3975,7 @@ MS-Particles2006-07-15/particlesZ034_a2/instance/particlesZ034_a2.i fail
 MS-Particles2006-07-15/particlesZ034_a3/instance/particlesZ034_a3.i fail
 MS-Particles2006-07-15/particlesZ034_b/instance/particlesZ034_b.i fail
 MS-Particles2006-07-15/particlesZ035_a/instance/particlesZ035_a.i fail
-MS-Particles2006-07-15/particlesZ036_a/instance/particlesZ036_a.i fail
+MS-Particles2006-07-15/particlesZ036_a/instance/particlesZ036_a.i pass
 MS-Particles2006-07-15/particlesZ036_b1/instance/particlesZ036_b1.i fail
 MS-Particles2006-07-15/particlesZ036_b2/instance/particlesZ036_b2.i fail
 MS-Particles2006-07-15/particlesZ036_c/instance/particlesZ036_c.v fail
@@ -4492,7 +4492,7 @@ MS-Regex2006-07-15/reDH4/instance/reDH4.v fail
 MS-Regex2006-07-15/reDH5/instance/reDH5.v fail
 MS-Regex2006-07-15/reDH6/instance/reDH6.v fail
 MS-Regex2006-07-15/reDH7/instance/reDH7.v fail
-MS-Regex2006-07-15/reDH7a/instance/reDH7a.i fail
+MS-Regex2006-07-15/reDH7a/instance/reDH7a.i pass
 MS-Regex2006-07-15/reDI1/instance/reDI1.v fail
 MS-Regex2006-07-15/reDI10/instance/reDI10.v fail
 MS-Regex2006-07-15/reDI11/instance/reDI11.v fail
