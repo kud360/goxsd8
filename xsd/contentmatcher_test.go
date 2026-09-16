@@ -377,16 +377,16 @@ func TestContentMatcherDeclinesAParticlelessContentType(t *testing.T) {
 	}
 }
 
-// {open content} splits the sequence in two (cvc-complex-content clauses 2 and
-// 3), which this walk does not do: it declines rather than matching the
-// {particle} half alone and rejecting every item the open wildcard would take.
-func TestContentMatcherDeclinesOpenContent(t *testing.T) {
-	oc, err := NewOpenContent(xsderr.Loc{}, OpenContentInterleave,
-		uWildcard(t, NamespaceConstraintAny, nil, ProcessLax))
+// cmOpenMatcher is cmMatcher over a {content type} whose {open content} is
+// PRESENT, carrying mode and the wildcard w. The type is built here rather than
+// through uCT because that fixture takes no {open content}, and the schema is
+// FINALIZED on cmSchema's terms.
+func cmOpenMatcher(t *testing.T, mode OpenContentMode, w Wildcard, p Particle) *Matcher {
+	t.Helper()
+	oc, err := NewOpenContent(xsderr.Loc{}, mode, w)
 	if err != nil {
 		t.Fatalf("NewOpenContent: %v", err)
 	}
-	p := cmGroup(t, uOccurs(t, 1, 1), CompositorSequence, cmLeaf(t, "a", uOccurs(t, 1, 1)))
 	ct, err := NewComplexType(xsderr.Loc{}, uq("ct"), QName{}, nil, DerivationRestriction, false,
 		nil, nil, nil, ElementContent{Particle: p, OpenContent: &oc}, nil, nil)
 	if err != nil {
@@ -397,10 +397,159 @@ func TestContentMatcherDeclinesOpenContent(t *testing.T) {
 	b.AddType(ct)
 	s, err := b.Finalize()
 	if err != nil {
-		t.Fatalf("finalizing: %v", err)
+		t.Fatalf("finalizing the fixture schema: %v", err)
 	}
-	if _, ok := s.ContentMatcher(ct); ok {
-		t.Error("ContentMatcher decided a {content type} with {open content}")
+	m, ok := s.ContentMatcher(ct)
+	if !ok {
+		t.Fatalf("ContentMatcher declined a {content type} whose {open content} is present")
+	}
+	return m
+}
+
+// cmNext takes one name and asserts it was taken, returning what it was
+// ·attributed to·.
+func cmNext(t *testing.T, m *Matcher, local string) Attribution {
+	t.Helper()
+	a, ok := m.Next(uq(local))
+	if !ok {
+		t.Fatalf("Next(%s) rejected a name the model admits", local)
+	}
+	return a
+}
+
+// cmWantDeclaration asserts the item was ·attributed to· the element
+// declaration named local — the {particle} half, S1.
+func cmWantDeclaration(t *testing.T, a Attribution, local string) {
+	t.Helper()
+	d, isDecl := a.(ElementDeclaration)
+	if !isDecl {
+		t.Fatalf("attributed to %T, want the ElementDeclaration %s", a, local)
+	}
+	if d.Name() != uq(local) {
+		t.Errorf("attributed to %s, want %s", d.Name(), uq(local))
+	}
+}
+
+// cmWantWildcard asserts the item was ·attributed to· a Wildcard whose
+// {process contents} is pc, which is how these fixtures tell the {open
+// content}'s wildcard from a ·wildcard particle·'s: the two are separate
+// ·attributions· (§3.4.4.4) that [Attribution] spells with one variant.
+func cmWantWildcard(t *testing.T, a Attribution, pc ProcessContents) {
+	t.Helper()
+	w, isWild := a.(Wildcard)
+	if !isWild {
+		t.Fatalf("attributed to %T, want a Wildcard", a)
+	}
+	if w.ProcessContents() != pc {
+		t.Errorf("attributed to a %s wildcard, want the %s one", w.ProcessContents(), pc)
+	}
+}
+
+// cmOpenWildcard is the {open content} wildcard these fixtures share: it admits
+// every name, so what a test's items are ·attributed to· turns on the
+// {particle} alone. Its {process contents} is skip, which no fixture below
+// gives a ·wildcard particle·.
+func cmOpenWildcard(t *testing.T) Wildcard {
+	t.Helper()
+	return uWildcard(t, NamespaceConstraintAny, nil, ProcessSkip)
+}
+
+// Under {mode} suffix, S1 is the longest prefix the {particle} takes and S2 is
+// everything after it, ·attributed to· the {open content} (cvc-complex-content
+// clause 2, §3.4.4.4). S1 still has to satisfy the {particle}, which
+// Accepting reports.
+func TestMatcherTakesASuffixOfOpenContent(t *testing.T) {
+	m := cmOpenMatcher(t, OpenContentSuffix, cmOpenWildcard(t),
+		cmGroup(t, uOccurs(t, 1, 1), CompositorSequence,
+			cmLeaf(t, "a", uOccurs(t, 1, 1)),
+			cmLeaf(t, "b", uOccurs(t, 1, 1))))
+
+	cmWantDeclaration(t, cmNext(t, m, "a"), "a")
+	cmWantDeclaration(t, cmNext(t, m, "b"), "b")
+	cmWantWildcard(t, cmNext(t, m, "x"), ProcessSkip)
+	cmWantWildcard(t, cmNext(t, m, "y"), ProcessSkip)
+	if !m.Accepting() {
+		t.Error("Accepting() = false for an S1 the {particle} took whole")
+	}
+}
+
+// Clause 2.1's S = S1 + S2 is a CONCATENATION, so suffix mode never offers the
+// {particle} another item once an open-content item has started S2: the b here
+// goes to the {open content} and the {particle} is left owing it, which
+// Accepting charges. Interleave mode takes the same sequence (the test below),
+// which is the whole difference between the two {mode}s.
+func TestMatcherSuffixOpenContentNeverReturnsToTheParticle(t *testing.T) {
+	m := cmOpenMatcher(t, OpenContentSuffix, cmOpenWildcard(t),
+		cmGroup(t, uOccurs(t, 1, 1), CompositorSequence,
+			cmLeaf(t, "a", uOccurs(t, 1, 1)),
+			cmLeaf(t, "b", uOccurs(t, 1, 1))))
+
+	cmWantDeclaration(t, cmNext(t, m, "a"), "a")
+	cmWantWildcard(t, cmNext(t, m, "x"), ProcessSkip)
+	cmWantWildcard(t, cmNext(t, m, "b"), ProcessSkip)
+	if m.Accepting() {
+		t.Error("Accepting() = true with the b particle left unsatisfied by S1")
+	}
+}
+
+// Clause 3.1's S1 × S2 is the interleave operator, so an open-content item is
+// not a suffix of anything: the {particle} takes the item after it exactly as
+// if the item had not arrived (clause 3.3 evaluated against S3, the part of S1
+// before it). This sequence is the minimum discriminator between the two
+// {mode}s — clause 2 rejects it, clause 3 accepts it.
+func TestMatcherInterleavesOpenContentWithTheParticle(t *testing.T) {
+	m := cmOpenMatcher(t, OpenContentInterleave, cmOpenWildcard(t),
+		cmGroup(t, uOccurs(t, 1, 1), CompositorSequence,
+			cmLeaf(t, "a", uOccurs(t, 1, 1)),
+			cmLeaf(t, "b", uOccurs(t, 1, 1))))
+
+	cmWantDeclaration(t, cmNext(t, m, "a"), "a")
+	cmWantWildcard(t, cmNext(t, m, "x"), ProcessSkip)
+	cmWantDeclaration(t, cmNext(t, m, "b"), "b")
+	if !m.Accepting() {
+		t.Error("Accepting() = false after the {particle} took the whole of S1")
+	}
+}
+
+// The {open content} is the LAST tier, under both kinds of ·basic particle·:
+// clause 3.3 licenses it only where the {particle} has no ·path· for the item,
+// so a name an ·element particle· admits goes to the declaration and a name
+// only a ·wildcard particle· admits goes to that particle's wildcard
+// (PRINCIPLES 14).
+func TestMatcherPrefersTheParticleToTheOpenContentWildcard(t *testing.T) {
+	m := cmOpenMatcher(t, OpenContentInterleave, cmOpenWildcard(t),
+		cmGroup(t, uOccurs(t, 1, 1), CompositorSequence,
+			cmLeaf(t, "a", uOccurs(t, 1, 1)),
+			uParticle(t, uOccurs(t, 1, 1), ResolvedTerm{
+				Term: uWildcard(t, NamespaceConstraintNot, []Namespace{NamespaceName(uns)}, ProcessLax)})))
+
+	cmWantDeclaration(t, cmNext(t, m, "a"), "a")
+	got, ok := m.Next(QName{Space: "urn:other", Local: "wp"})
+	if !ok {
+		t.Fatal("Next rejected a name the ·wildcard particle· admits")
+	}
+	cmWantWildcard(t, got, ProcessLax)
+	cmWantWildcard(t, cmNext(t, m, "x"), ProcessSkip)
+}
+
+// An item the {particle} cannot take and {open content}.{wildcard} does not
+// admit (cvc-wildcard §3.10.4.1) satisfies neither clause 2 nor clause 3 and is
+// rejected — and rejecting it leaves the walk where it stood, so the item the
+// {particle} was waiting for is still taken.
+func TestMatcherRejectsANameNeitherTheParticleNorTheOpenWildcardAdmits(t *testing.T) {
+	m := cmOpenMatcher(t, OpenContentInterleave,
+		uWildcard(t, NamespaceConstraintNot, []Namespace{NamespaceName(uns)}, ProcessSkip),
+		cmGroup(t, uOccurs(t, 1, 1), CompositorSequence,
+			cmLeaf(t, "a", uOccurs(t, 1, 1)),
+			cmLeaf(t, "b", uOccurs(t, 1, 1))))
+
+	cmWantDeclaration(t, cmNext(t, m, "a"), "a")
+	if _, ok := m.Next(uq("zzz")); ok {
+		t.Fatal("Next took a name neither the {particle} nor the {open content} wildcard admits")
+	}
+	cmWantDeclaration(t, cmNext(t, m, "b"), "b")
+	if !m.Accepting() {
+		t.Error("Accepting() = false after a rejected name that should have changed nothing")
 	}
 }
 

@@ -188,12 +188,16 @@
 // the sequence of element information items to cvc-complex-content
 // (§3.4.4.3) over xsd.Schema.ContentMatcher, which charges an item no
 // particle admits at its position against that item's own Loc, and a
-// sequence ending short of a {min occurs} against the root's. Clause 1.2
-// additionally reads a VALUE, through the same backend the attribute charges
-// use: a simple {content type} has the root's ·initial value· — every
-// character information item [[child]] concatenated in order — validated
-// against its {simple type definition} per String Valid, charged against the
-// root's own Loc.
+// sequence ending short of a {min occurs} against the root's. Where the
+// {content type}'s {open content} is present, an item the {particle}
+// cannot take goes to that record's {wildcard} instead and is charged
+// only where the wildcard does not admit it either — clause 2 for {mode}
+// suffix and clause 3 for interleave, which is the clause each charge
+// names. Clause 1.2 additionally reads a VALUE, through the same backend the
+// attribute charges use: a simple {content type} has the root's ·initial
+// value· — every character information item [[child]] concatenated in order
+// — validated against its {simple type definition} per String Valid, charged
+// against the root's own Loc.
 //
 // Everything not decidable is left undecided rather than guessed at: an
 // {attribute wildcard} to evaluate, a ·governing type definition· that is
