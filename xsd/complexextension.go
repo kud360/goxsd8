@@ -860,10 +860,12 @@ func (s *Schema) localAttributeDeclarationsIdentical(a, b AttributeDeclaration) 
 //   - either side is ANONYMOUS. sameTypeDefinition reports two anonymous types
 //     as different (§3.4.6.5's no-identity Note), which is the right reading for
 //     cos-ct-derived-ok but the WRONG direction here: c-cte routinely compares a
-//     base's own attribute use with itself — foldedAttributeUse returns exactly
-//     that whenever T does not re-declare the name — and an inline anonymous
-//     attribute type would then make a type identical to itself report as
-//     different, false-rejecting an entirely ordinary schema.
+//     base's own attribute use with itself — §3.4.2.4 clause 3.1 inherits the
+//     base's uses into an extension's {attribute uses} verbatim, and
+//     inheritAttributeUses (attributeusefold.go) materialises them there, so the
+//     extension's copy IS the base's own use — and an inline anonymous attribute
+//     type would then make a type identical to itself report as different,
+//     false-rejecting an entirely ordinary schema.
 func (s *Schema) typeDefinitionSlotsIdentical(a, b TypeDefinitionOrRef) bool {
 	ta, aOK := s.ResolvedType(a)
 	tb, bOK := s.ResolvedType(b)
