@@ -417,10 +417,12 @@ func repeatable(o Occurs) bool {
 const maxPartitionStates = 256
 
 // partitionsBounded reports whether the live set provably stays inside
-// maxPartitionStates. Cursors differ only in the counters an ·ambiguous· node's
-// iteration boundary moves — its own and its subtree's — and a clamped counter
-// takes counterCap+1 values, so the product of those over the widened subtrees
-// is a bound on the distinct cursors that can ever be live at once.
+// maxPartitionStates. Every live cursor stands at the same ·basic particle· —
+// two that did not would ·compete· for the name that put them there, which
+// cos-nonambig has already rejected — so they differ only in the counters an
+// ·ambiguous· node's iteration boundary moves, which are its own and its
+// subtree's. A clamped counter takes counterCap+1 values, so the product of
+// those over the widened subtrees bounds the cursors that can be live at once.
 //
 // The product is of {max occurs} values and would overflow for a model that
 // combines large ones, so it is never formed: each factor is checked against
