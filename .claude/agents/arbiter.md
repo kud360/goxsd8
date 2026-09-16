@@ -54,10 +54,14 @@ is re-derived with `go tool suiteindex CONSTRUCT`, per CLAUDE.md's surveys
 block — but only a `schema`-lane claim is fully discharged that way. An
 `instance`-lane claim needs the case run end-to-end, before and after: any
 layer between the producer and `Result.Violations` can decline, and a
-census cannot see that. State the outcome as one of three, not two: the
-candidate set is unchanged; the submodule is absent (`suiteindex` reports
-this itself, and CLAUDE.md already rules it a supported mode); or the
-census read some files only partly (`suiteindex`'s
+census cannot see that. Either way the census yields candidates and not a
+prediction, so apply that block's join here too: count only the candidates
+carrying a line in `conformance/testdata/expectations/<lane>.txt` for the
+lane whose score the bullet predicts, since a case the suite withholds as
+inapplicable has no line there to flip (#1412). State the outcome as one
+of three, not two: the candidate set is unchanged; the submodule is absent
+(`suiteindex` reports this itself, and CLAUDE.md already rules it a
+supported mode); or the census read some files only partly (`suiteindex`'s
 `ChildrenUnclosed`/"Read only partly" section) — that third outcome is not
 a full discharge, and the ruling says so rather than banking a partial
 read as "unchanged". This check fires on time elapsed since filing, not on
