@@ -130,7 +130,9 @@
 //	    Lists the withheld case IDs no lane's committed file carries, sorted.
 //	    Deliberately not the whole withheld set: the suite-wide total is
 //	    logged every run, and the withheld IDs that DO carry a line are
-//	    already printed per lane as sanctioned removals (issue #1514).
+//	    already printed per lane as sanctioned removals on the read-only
+//	    path (issue #1514) — the ratchet path banks them instead of
+//	    printing them.
 //
 // # Running
 //
