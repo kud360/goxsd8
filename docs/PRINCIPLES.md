@@ -84,10 +84,13 @@ codified as rules in docs/STYLE.md.
     particle can never match an element admits NO character content, not
     even whitespace (element-only allows whitespace).
 
-14. **Content matching is greedy and deterministic.** Unique Particle
-    Attribution makes the content model unambiguous, so the matcher never
-    backtracks — and explicit content always beats an open-content
-    wildcard at the current state.
+14. **Content matching never backtracks.** Unique Particle Attribution
+    fixes which particle takes each item, so the matcher never re-reads
+    one and never undoes one — and explicit content always beats an
+    open-content wildcard at the current state. It does not fix which
+    ITERATION of a repeated ancestor an item falls in, which `cvc-accept`
+    clause 3.1 asks existentially: the matcher carries a bounded set of
+    live partitions there rather than picking one greedily (#782).
 
 15. **Identity-constraint matching is namespace-stateful.** Selector and
     field XPaths resolve prefixes — and the default element namespace from

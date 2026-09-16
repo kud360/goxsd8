@@ -240,14 +240,19 @@
 // A present {open content} is DECIDED, in both {mode}s: cvc-complex-content
 // clauses 2 and 3 split the sequence into the part {particle} takes and the
 // part the open wildcard does, and the split each clause admits is unique
-// (contentmatcher.go). The walk is greedy and never backtracks, which
-// cos-nonambig licenses (see contentmatcher.go), and it COUNTS occurrences
-// rather than unfolding them. It decides once, at construction, whether it
-// decides at all: ContentMatcher reports false for a {content type} holding
-// no particle and for the shapes contentmatcher.go declines, and a Matcher
-// that exists never declines a name mid-sequence. Substitution groups are
-// not expanded at construction — Next resolves membership per name, as
-// cvc-accept clause 2.3.2 states it.
+// (contentmatcher.go). The walk never backtracks and never re-reads an
+// item, and it COUNTS occurrences rather than unfolding them. WHICH
+// particle takes each item is fixed by cos-nonambig; WHICH ITERATION of a
+// repeated ancestor the item falls in is the non-determinism cvc-accept's
+// closing Note leaves open, and clause 3.1 asks it existentially, so the
+// walk carries one cursor per live partition and widens the set only at a
+// particle that repeats inside a particle that repeats (contentmatcher.go
+// for the bound that keeps that set a constant of the schema). It decides
+// once, at construction, whether it decides at all: ContentMatcher reports
+// false for a {content type} holding no particle and for the shapes
+// contentmatcher.go declines, and a Matcher that exists never declines a
+// name mid-sequence. Substitution groups are not expanded at construction —
+// Next resolves membership per name, as cvc-accept clause 2.3.2 states it.
 //
 // A consumer that wants the whole model rather than one sequence still
 // traverses it by hand, switching Particle.Term over the TermOrRef sealed

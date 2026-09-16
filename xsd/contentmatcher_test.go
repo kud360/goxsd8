@@ -274,11 +274,12 @@ func TestMatcherAdmitsASubstitutionGroupMember(t *testing.T) {
 	}
 }
 
-// A repeated group is greedy: it fills its open iteration before starting the
-// next one. That is only a verdict where the iterations still owed can be
-// empty, and cvc-accept counts an ·emptiable· body's unstarted iterations as
-// satisfying {min occurs} — so (a?, b?){2,2} takes "a b" as one iteration and
-// still accepts, while (a?, b){2,2}, whose body is not ·emptiable·, does not.
+// A repeated group whose body holds no repeating particle fills its open
+// iteration before starting the next, and carries one cursor doing it: no other
+// partition of the items accepts what that one rejects. cvc-accept counts an
+// ·emptiable· body's unstarted iterations as satisfying {min occurs} — so
+// (a?, b?){2,2} takes "a b" as one iteration and still accepts, while
+// (a?, b){2,2}, whose body is not ·emptiable·, does not.
 func TestMatcherFillsAnIterationBeforeStartingTheNext(t *testing.T) {
 	emptiable := cmMatcher(t, cmGroup(t, uOccurs(t, 1, 1), CompositorSequence,
 		cmGroup(t, uOccurs(t, 2, 2), CompositorSequence,
@@ -553,18 +554,142 @@ func TestMatcherRejectsANameNeitherTheParticleNorTheOpenWildcardAdmits(t *testin
 	}
 }
 
-// Two nested particles with a {max occurs} above 1 are cvc-accept's own named
-// non-determinism, where a greedy walk can reject a sequence another partition
-// accepts — (a{1,2}, b?){2,2} accepts "a a b" as (a)(a b). The construction
-// declines rather than answering it wrongly.
-func TestContentMatcherDeclinesNestedRepetition(t *testing.T) {
-	p := cmGroup(t, uOccurs(t, 1, 1), CompositorSequence,
+// cmNested is (a{1,2}, b?){2,2}, cvc-accept's own named non-determinism and the
+// file comment's worked counter-example: L(a{1,2}, b?) is {(a), (a b), (a a),
+// (a a b)} and the outer particle's fixed n = 2 makes L(P) the concatenation of
+// two of them.
+func cmNested(t *testing.T) Particle {
+	t.Helper()
+	return cmGroup(t, uOccurs(t, 1, 1), CompositorSequence,
 		cmGroup(t, uOccurs(t, 2, 2), CompositorSequence,
 			cmLeaf(t, "a", uOccurs(t, 1, 2)),
 			cmLeaf(t, "b", uOccurs(t, 0, 1))))
+}
+
+// cvc-accept clause 3.1 asks whether SOME partition of the sequence into
+// iterations is valid, and the greedy one is not always it: (a{1,2}, b?){2,2}
+// admits "a a b" as (a)(a b), while filling the open iteration first consumes
+// the whole of it as one iteration and leaves the second owing a mandatory a.
+// "a a a b" is (a a)(a b), where the greedy partition is the one that works, so
+// the two run side by side.
+func TestMatcherAcceptsAPartitionTheGreedyWalkMisses(t *testing.T) {
+	cmAccept(t, cmMatcher(t, cmNested(t), nil), "a", "a", "b")
+	cmAccept(t, cmMatcher(t, cmNested(t), nil), "a", "a", "a", "b")
+}
+
+// No partition is not every partition. "a a b b" needs an iteration ending in
+// two b's and "a a a a a" a fifth a with both iterations full, and neither is a
+// word of the body's language, so widening the walk over partitions accepts
+// nothing L(P) does not.
+func TestMatcherRejectsASequenceNoPartitionAdmits(t *testing.T) {
+	over := cmMatcher(t, cmNested(t), nil)
+	if i := cmFeed(t, over, "a", "a", "b", "b"); i != 3 {
+		t.Errorf("the second b was rejected at position %d, want position 3", i)
+	}
+
+	full := cmMatcher(t, cmNested(t), nil)
+	if i := cmFeed(t, full, "a", "a", "a", "a", "a"); i != 4 {
+		t.Errorf("the fifth a was rejected at position %d, want position 4", i)
+	}
+
+	short := cmMatcher(t, cmNested(t), nil)
+	if i := cmFeed(t, short, "a"); i != 1 {
+		t.Fatalf("Next rejected a at position %d", i)
+	}
+	if short.Accepting() {
+		t.Error("Accepting() = true with the second iteration's mandatory a still owed")
+	}
+}
+
+// An iteration a partition closes has to be a whole word of the group's
+// language: (a{1,2}, b){2,2} cannot draw a boundary after the second a, b being
+// mandatory, so "a a b" is outside L(P) even though both the greedy partition
+// and the one that starts a second iteration at that a can consume every item
+// of it. Widening the walk over partitions must not manufacture that boundary.
+func TestMatcherClosesAnIterationOnlyOnAWholeWordOfTheBody(t *testing.T) {
+	model := func() Particle {
+		return cmGroup(t, uOccurs(t, 1, 1), CompositorSequence,
+			cmGroup(t, uOccurs(t, 2, 2), CompositorSequence,
+				cmLeaf(t, "a", uOccurs(t, 1, 2)),
+				cmLeaf(t, "b", uOccurs(t, 1, 1))))
+	}
+	cmAccept(t, cmMatcher(t, model(), nil), "a", "b", "a", "b")
+	cmAccept(t, cmMatcher(t, model(), nil), "a", "a", "b", "a", "b")
+
+	short := cmMatcher(t, model(), nil)
+	if i := cmFeed(t, short, "a", "a", "b"); i != 3 {
+		t.Fatalf("Next rejected position %d of a a b, want all three taken", i)
+	}
+	if short.Accepting() {
+		t.Error("Accepting() = true for a a b, which no partition into two iterations of (a{1,2}, b) covers")
+	}
+}
+
+// The FIRST viable partition is not the greedy one here, and no later item
+// rescues it: (a{2,3}){2,2} takes "a a a a" only as (a a)(a a), while a walk
+// that fills the open iteration draws (a a a)(a) and leaves the second
+// iteration one occurrence short of a's {min occurs}. One a fewer and one a
+// more are outside L(P) either way.
+func TestMatcherSplitsIterationsAgainstTheGreedyBoundary(t *testing.T) {
+	model := func() Particle {
+		return cmGroup(t, uOccurs(t, 1, 1), CompositorSequence,
+			cmGroup(t, uOccurs(t, 2, 2), CompositorSequence,
+				cmLeaf(t, "a", uOccurs(t, 2, 3))))
+	}
+	cmAccept(t, cmMatcher(t, model(), nil), "a", "a", "a", "a")
+	cmAccept(t, cmMatcher(t, model(), nil), "a", "a", "a", "a", "a")
+	cmAccept(t, cmMatcher(t, model(), nil), "a", "a", "a", "a", "a", "a")
+
+	short := cmMatcher(t, model(), nil)
+	if i := cmFeed(t, short, "a", "a", "a"); i != 3 {
+		t.Fatalf("Next rejected position %d of three a's, want all three taken", i)
+	}
+	if short.Accepting() {
+		t.Error("Accepting() = true for three a's, which no partition into two iterations of a{2,3} covers")
+	}
+
+	over := cmMatcher(t, model(), nil)
+	if i := cmFeed(t, over, "a", "a", "a", "a", "a", "a", "a"); i != 6 {
+		t.Errorf("the seventh a was rejected at position %d, want position 6 (2 × 3)", i)
+	}
+}
+
+// Widening the walk over partitions is not a search over the items already
+// taken: the cursor set is CLAMPED and collapsed, so it stays inside
+// maxPartitionStates however long the instance is. This model's partitions of n
+// a's into iterations of one to three number tribonacci(n) — about 1.8^n, which
+// is 10^5000 here — and a walk holding one live state per partition boundary it
+// had drawn would not return.
+func TestMatcherBoundsTheCursorSetOverANestedRepetition(t *testing.T) {
+	const items = 20000
+	m := cmMatcher(t, cmGroup(t, uOccurs(t, 1, 1), CompositorSequence,
+		cmGroup(t, uUnbounded(t, 1), CompositorSequence,
+			cmLeaf(t, "a", uOccurs(t, 1, 3)))), nil)
+
+	for i := 0; i < items; i++ {
+		if _, ok := m.Next(uq("a")); !ok {
+			t.Fatalf("Next(a) rejected occurrence %d of %d", i+1, items)
+		}
+		if len(m.live) > maxPartitionStates {
+			t.Fatalf("after %d items the walk carries %d cursors, want at most %d", i+1, len(m.live), maxPartitionStates)
+		}
+	}
+	if !m.Accepting() {
+		t.Error("Accepting() = false after a whole number of iterations")
+	}
+}
+
+// The cursor set is bounded at CONSTRUCTION, not pruned mid-sequence: a nested
+// repetition whose occurrence ranges could put more partitions in flight than
+// maxPartitionStates is declined outright, so a Matcher that exists still
+// decides every name put to it.
+func TestContentMatcherDeclinesANestedRepetitionTooWideToCarry(t *testing.T) {
+	p := cmGroup(t, uOccurs(t, 1, 1), CompositorSequence,
+		cmGroup(t, uOccurs(t, 1, 500), CompositorSequence,
+			cmLeaf(t, "a", uOccurs(t, 1, 500))))
 	s, ct := cmSchema(t, p, nil)
 	if _, ok := s.ContentMatcher(ct); ok {
-		t.Error("ContentMatcher decided a model with nested repeated particles")
+		t.Error("ContentMatcher decided a model whose partitions outnumber maxPartitionStates")
 	}
 }
 

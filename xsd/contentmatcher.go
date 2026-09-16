@@ -24,10 +24,11 @@ package xsd
 // constraint and a false accept for an instance one, and its unfolding bound
 // changes the accepted language outright (e{3,6} reads as e{2,4}).
 //
-// # Why one path, and never a second
+// # One particle per item, and more than one partition
 //
-// The walk commits to one particle per item and never reconsiders (PRINCIPLES
-// 14). Two facts license that, and neither is an assumption a comment makes:
+// The walk never re-reads an item and never undoes one it has taken
+// (PRINCIPLES 14). Two facts fix WHICH PARTICLE each item goes to, and neither
+// is an assumption a comment makes:
 //
 //   - cos-nonambig (§3.8.6.4) has run. A Matcher is reachable only through a
 //     *Schema, which only SchemaBuilder.Finalize produces, and Phase C rejects
@@ -45,15 +46,22 @@ package xsd
 //     search fails, which is PRINCIPLES 14's "explicit content beats a
 //     wildcard" stated as a search order.
 //
-// The one non-determinism those two do not settle is the third the same Note
-// names: "nested particles each of which has {max occurs} greater than 1, where
-// the input sequence can be partitioned in multiple ways ... there is no fixed
-// rule for eliminating the non-determinism". A greedy walk resolves that
-// partition by staying in the innermost open iteration for as long as it can,
-// and for THAT shape the choice is observable — (a{1,2}, b?){2,2} accepts "aab"
-// as (a)(ab) and greedily consumes it as one iteration and then rejects. So the
-// shape is DECLINED at construction (supported below) rather than answered
-// wrongly, and the greedy walk is exact on everything that is not declined:
+// Neither settles WHICH ITERATION of a repeated ancestor an item falls in, the
+// third non-determinism the same Note names: "nested particles each of which
+// has {max occurs} greater than 1, where the input sequence can be partitioned
+// in multiple ways ... there is no fixed rule for eliminating the
+// non-determinism". cvc-accept clause 3.1 asks that question EXISTENTIALLY —
+// "there is a partition of the sequence into n sub-sequences" — so a sequence
+// is ·accepted· where SOME partition validates, and picking one partition and
+// walking it answers a different question than the rule asks. A greedy pick —
+// stay in the innermost open iteration for as long as it can — gets "a a b"
+// wrong against (a{1,2}, b?){2,2}, which L(P) admits as the partition (a)(a b)
+// and the greedy walk consumes as one iteration and then rejects.
+//
+// So the walk carries a SET of cursors, one per partition of the items so far
+// that is still live, and a name is taken where any of them takes it. That is
+// not a search: no cursor re-reads an item, no cursor is revisited, and the set
+// is widened only where the greedy order is not already exact —
 //
 //   - a differing partition needs one particle P reachable both later in the
 //     open iteration of some repeatable ancestor R and at the start of R's next
@@ -63,14 +71,26 @@ package xsd
 //     skippable, so the shorter iteration the alternative closes before P holds
 //     no mandatory particle of the body — and is a word of the body's language
 //     only where the body has none at all, which is to say where it is
-//     ·emptiable·. The one way that iteration can hold a mandatory particle is P
-//     ITSELF, taken again, which needs a repeating particle inside a repeating
-//     one: the declined shape, and (a{1,2}, b?){2,2} is exactly it;
-//   - the greedy walk's iteration count is therefore never ABOVE the
-//     alternative's, so no {max occurs} it satisfies is one the greedy walk
-//     exceeds; and wherever the two counts differ the body is ·emptiable·, so
-//     canExit lets the iterations still owed be empty and {min occurs} is met
-//     as well.
+//     ·emptiable·, where the greedy pick is exact: its iteration count is never
+//     ABOVE the alternative's, so no {max occurs} it satisfies is one the greedy
+//     pick exceeds, and canExit lets the iterations still owed be empty, so
+//     {min occurs} is met as well. The one way that iteration can hold a
+//     mandatory particle is P ITSELF, taken again, which needs a repeating
+//     particle inside a repeating one;
+//   - so a cursor splits at a node that repeats and holds a particle that
+//     repeats (contentNode.ambiguous) and nowhere else. A model with no such
+//     node carries one cursor for the whole sequence and costs exactly what the
+//     greedy walk cost.
+//
+// The set is bounded by the SCHEMA, never by the instance. A counter stops at
+// its node's {max occurs}, or at its {min occurs} where {max occurs} is
+// unbounded (cursor), because canRepeat and canExit are its only readers and
+// neither can tell a larger value from the clamp — so two partitions that
+// differ in nothing else are one cursor, and the set cannot outgrow the product
+// of the clamped ranges over the widened subtrees. ContentMatcher computes that
+// product and declines the models whose product is too large
+// (maxPartitionStates), which is what makes one item's cost a constant of the
+// schema rather than a function of the items already taken.
 //
 // # The {open content} split, and why it needs no search either
 //
@@ -148,10 +168,75 @@ func (Wildcard) attribution() {}
 // the element index and a <group ref> through the model group index, so no walk
 // step re-resolves anything. Nodes are appended in preorder, so a node's index
 // is less than every index in its subtree.
+//
+// ambiguous marks the one shape the greedy iteration boundary is not exact on
+// (see the file comment): this node's {max occurs} is greater than 1 and so is
+// that of a particle beneath it, so an item the walk can take later in the open
+// iteration can also start the next one. A cursor splits at such a node and at
+// no other, which is why markAmbiguous computes it once here rather than the
+// walk re-deriving it per item.
 type contentNode struct {
-	occurs   Occurs
-	term     Term
-	children []int
+	occurs    Occurs
+	term      Term
+	children  []int
+	ambiguous bool
+}
+
+// cursor is one live partition of the items taken so far (cvc-accept clause
+// 3.1): the occurrence counter of every node of the flattened model, and the
+// path of nodes the last item was ·attributed to·, outermost first. A Matcher
+// holds every cursor those items can have reached, and [Matcher.Accepting] asks
+// its question of the set rather than of a chosen member.
+//
+// Counters are CLAMPED at counterCap, so a cursor records how a partition
+// stands and not how it got there. Two partitions that differ only in counts
+// neither canRepeat nor canExit can tell apart are the same cursor, and equal
+// is what collapses them.
+type cursor struct {
+	counts []int
+	path   []int
+}
+
+// clone copies the mutable walk state, so a search pass that fails leaves
+// nothing behind and two cursors split from one share no array.
+func (c *cursor) clone() cursor {
+	return cursor{
+		counts: append([]int(nil), c.counts...),
+		path:   append([]int(nil), c.path...),
+	}
+}
+
+// equal reports whether two cursors of one Matcher stand in the same place.
+// Their counts slices are one per node of the same flattened model and so are
+// the same length.
+func (c *cursor) equal(o cursor) bool {
+	if len(c.path) != len(o.path) {
+		return false
+	}
+	for d, i := range c.path {
+		if o.path[d] != i {
+			return false
+		}
+	}
+	for i, n := range c.counts {
+		if o.counts[i] != n {
+			return false
+		}
+	}
+	return true
+}
+
+// addCursor appends t to cs unless cs already holds an equal cursor. Collapsing
+// equal partitions is what holds the live set inside the product ContentMatcher
+// bounded: without it two partitions that have converged would each go on
+// splitting, and the set would grow with the instance.
+func addCursor(cs []cursor, t cursor) []cursor {
+	for _, c := range cs {
+		if c.equal(t) {
+			return cs
+		}
+	}
+	return append(cs, t)
 }
 
 // Matcher advances one complex type's {content type} particle over an
@@ -159,20 +244,19 @@ type contentNode struct {
 // sequence one item at a time. Obtain one from [Schema.ContentMatcher]; the
 // zero value is not usable.
 //
-// A Matcher is single-use and stateful: it holds the position the items so far
-// reached in the content model and, under a {mode} suffix {open content},
-// whether the sequence has left clause 2's S1 for its S2 — so the caller feeds
-// it one element's [[children]] in document order and drops it. It is not safe
-// for concurrent use, and nothing in it is shared with the schema beyond the
-// immutable components the flattening read.
+// A Matcher is single-use and stateful: it holds every position in the content
+// model the items so far can have reached (cursor) and, under a {mode} suffix
+// {open content}, whether the sequence has left clause 2's S1 for its S2 — so
+// the caller feeds it one element's [[children]] in document order and drops
+// it. It is not safe for concurrent use, and nothing in it is shared with the
+// schema beyond the immutable components the flattening read.
 type Matcher struct {
-	s      *Schema
-	ct     ComplexType
-	open   *OpenContent
-	nodes  []contentNode
-	counts []int
-	path   []int
-	inS2   bool
+	s     *Schema
+	ct    ComplexType
+	open  *OpenContent
+	nodes []contentNode
+	live  []cursor
+	inS2  bool
 }
 
 // ContentMatcher returns a [Matcher] over t's {content type} particle, or (nil,
@@ -196,11 +280,18 @@ type Matcher struct {
 //     particle at all. cvc-complex-type clauses 1.1 and 1.2 govern those
 //     directly and need no matcher.
 //   - GAP(xsd): a particle with {max occurs} greater than 1 holding another
-//     such particle. That is cvc-accept's own named non-determinism, where the
-//     greedy walk can reject a sequence some other partition accepts (see the
-//     file comment); declining is what keeps this file free of false rejects.
-//     #782 owns its retirement: deciding it needs a walk over a SET of
-//     live partitions, which is a different engine, not a wider case here.
+//     such particle, where the clamped occurrence ranges of the widened
+//     subtrees admit more than maxPartitionStates partitions at once. The SHAPE
+//     is decided — (a{1,2}, b?){2,2} takes "a a b" — and what stays declined is
+//     the width: (a{1,500}){1,500} would put a quarter of a million cursors in
+//     flight, and the walk carries one cursor per live partition. Declining
+//     withholds the whole element-sequence verdict, whose consumers are
+//     validate's Result.violations and its one reader Result.Violations, both
+//     of which carry violations PRESENT — so the decline costs a rejection and
+//     manufactures none. No issue owns its retirement: raising the ceiling
+//     needs the partitions represented as counter INTERVALS rather than one
+//     cursor each, which is a different state encoding and not a wider bound
+//     here.
 //   - GAP(xsd): an <all> group with a model group among its {particles}, which
 //     cos-all-limited clause 2 admits only as a nested all group. Interleaving
 //     two all groups' members needs per-member positions this walk does not
@@ -215,10 +306,14 @@ func (s *Schema) ContentMatcher(t ComplexType) (*Matcher, bool) {
 	if _, ok := m.flatten(ec.Particle); !ok {
 		return nil, false
 	}
-	if !m.supported(0, false) {
+	m.markAmbiguous(0)
+	if !m.supported(0) {
 		return nil, false
 	}
-	m.counts = make([]int, len(m.nodes))
+	if !m.partitionsBounded() {
+		return nil, false
+	}
+	m.live = []cursor{{counts: make([]int, len(m.nodes))}}
 	return m, true
 }
 
@@ -273,31 +368,39 @@ func (m *Matcher) resolveTerm(t TermOrRef) (Term, bool) {
 	}
 }
 
-// supported reports whether the greedy walk is exact on the subtree at i.
-// repeating says whether some ancestor of i has a {max occurs} greater than 1,
-// which makes a second such particle beneath it the partition-ambiguous shape
-// the file comment declines.
-func (m *Matcher) supported(i int, repeating bool) bool {
-	n := m.nodes[i]
-	repeats := repeatable(n.occurs)
-	if repeats && repeating {
-		return false
-	}
-	g, isGroup := n.term.(ModelGroup)
+// supported reports whether the walk decides the subtree at i. The one shape it
+// does not is an <all> group holding a model group, which ContentMatcher's doc
+// comment states.
+func (m *Matcher) supported(i int) bool {
+	g, isGroup := m.nodes[i].term.(ModelGroup)
 	if !isGroup {
 		return true
 	}
-	for _, c := range n.children {
+	for _, c := range m.nodes[i].children {
 		if g.Compositor() == CompositorAll {
 			if _, nested := m.nodes[c].term.(ModelGroup); nested {
 				return false
 			}
 		}
-		if !m.supported(c, repeating || repeats) {
+		if !m.supported(c) {
 			return false
 		}
 	}
 	return true
+}
+
+// markAmbiguous sets contentNode.ambiguous over the subtree at i and reports
+// whether that subtree, i INCLUDED, holds a particle that repeats.
+func (m *Matcher) markAmbiguous(i int) bool {
+	below := false
+	for _, c := range m.nodes[i].children {
+		if m.markAmbiguous(c) {
+			below = true
+		}
+	}
+	repeats := repeatable(m.nodes[i].occurs)
+	m.nodes[i].ambiguous = repeats && below
+	return repeats || below
 }
 
 // repeatable reports whether an occurrence range admits more than one
@@ -307,18 +410,86 @@ func repeatable(o Occurs) bool {
 	return !bounded || max > 1
 }
 
+// maxPartitionStates is the ceiling on the cursors one Matcher will carry, and
+// so on what one item of the instance costs: a name is put to every live cursor
+// in turn. ContentMatcher declines a model that could exceed it rather than a
+// Matcher declining a name mid-sequence.
+const maxPartitionStates = 256
+
+// partitionsBounded reports whether the live set provably stays inside
+// maxPartitionStates. Every live cursor stands at the same ·basic particle· —
+// two that did not would ·compete· for the name that put them there, which
+// cos-nonambig has already rejected — so they differ only in the counters an
+// ·ambiguous· node's iteration boundary moves, which are its own and its
+// subtree's. A clamped counter takes counterCap+1 values, so the product of
+// those over the widened subtrees bounds the cursors that can be live at once.
+//
+// The product is of {max occurs} values and would overflow for a model that
+// combines large ones, so it is never formed: each factor is checked against
+// the room the running product leaves, and a factor with no room ends the count
+// at once.
+func (m *Matcher) partitionsBounded() bool {
+	widened := make([]bool, len(m.nodes))
+	m.markWidened(0, false, widened)
+	states := 1
+	for i, w := range widened {
+		if !w {
+			continue
+		}
+		values := m.counterCap(i) + 1
+		if values > maxPartitionStates || states > maxPartitionStates/values {
+			return false
+		}
+		states *= values
+	}
+	return true
+}
+
+// markWidened marks every node of the subtree at i that lies inside an
+// ·ambiguous· node's subtree, i's own ambiguity included. inside says whether an
+// ancestor of i is one.
+func (m *Matcher) markWidened(i int, inside bool, widened []bool) {
+	inside = inside || m.nodes[i].ambiguous
+	widened[i] = inside
+	for _, c := range m.nodes[i].children {
+		m.markWidened(c, inside, widened)
+	}
+}
+
+// counterCap is the occurrence count beyond which canRepeat and canExit stop
+// changing their answers: {max occurs} where it is a number, and {min occurs}
+// where it is unbounded and only the {min occurs} half of cvc-accept clauses
+// 1.1, 2.1 and 3.1 is left to decide.
+func (m *Matcher) counterCap(i int) int {
+	if max, bounded := m.nodes[i].occurs.Max(); bounded {
+		return max
+	}
+	return m.nodes[i].occurs.Min()
+}
+
+// count records one more occurrence of the node at i in c, clamped at
+// counterCap so that a partition's cursor records where it stands rather than
+// how far it has gone (cursor).
+func (m *Matcher) count(c *cursor, i int) {
+	if c.counts[i] < m.counterCap(i) {
+		c.counts[i]++
+	}
+}
+
 // Next advances the content model over one element information item whose
 // ·expanded name· is name, reporting what the item is ·attributed to·
-// (§3.4.4.4). It reports (nil, false) when no particle live at the current
-// position admits the name, which is the cvc-accept (§3.9.4.3) rejection its
-// caller charges against that item's own location; the Matcher is unchanged by
-// a rejected name, so a caller may stop at the first one or keep feeding.
+// (§3.4.4.4). It reports (nil, false) when no particle live under any partition
+// of the items already taken admits the name, which is the cvc-accept
+// (§3.9.4.3) rejection its caller charges against that item's own location; the
+// Matcher is unchanged by a rejected name, so a caller may stop at the first one
+// or keep feeding.
 //
 // The first two searches are cvc-accept's element/wildcard precedence: every
-// live particle is offered the name as an ·element particle· first (clause
-// 2.3.1's expanded-name match, then clause 2.3.2's ·substitution group·
-// membership), and only a name no element particle admits is offered to the
-// wildcard particles (clause 1, cvc-wildcard §3.10.4.1 in full).
+// live particle of every live partition is offered the name as an ·element
+// particle· first (clause 2.3.1's expanded-name match, then clause 2.3.2's
+// ·substitution group· membership), and only a name no element particle
+// admits is offered to the wildcard particles (clause 1, cvc-wildcard
+// §3.10.4.1 in full).
 //
 // A third search follows them where the {content type}'s {open content} is
 // present, and is reachable only once both have failed — which is exactly
@@ -375,12 +546,28 @@ func (m *Matcher) openNext(name QName) (Attribution, bool) {
 // item fed: cvc-complex-content clauses 2.2 and 3.2 put S1 alone to
 // cvc-particle, and the items the open wildcard took are S2, which clauses 2.4
 // and 3.4 have already decided one at a time.
+//
+// SOME partition has to close, not every one: cvc-accept clause 3.1 asks for
+// the existence of one, so a sequence the greedy partition leaves owing a
+// particle is still ·accepted· where another live partition owes nothing.
 func (m *Matcher) Accepting() bool {
-	if len(m.path) == 0 {
+	for i := range m.live {
+		if m.accepts(&m.live[i]) {
+			return true
+		}
+	}
+	return false
+}
+
+// accepts reports whether one partition closes where the sequence stopped:
+// every node on its path can be left (canExit), or it took no item at all and
+// the model is ·emptiable·.
+func (m *Matcher) accepts(c *cursor) bool {
+	if len(c.path) == 0 {
 		return m.emptiable(0)
 	}
-	for d := len(m.path) - 1; d >= 0; d-- {
-		if !m.canExit(d) {
+	for d := len(c.path) - 1; d >= 0; d-- {
+		if !m.canExit(c, d) {
 			return false
 		}
 	}
@@ -398,82 +585,136 @@ const (
 	admitWildcards
 )
 
-// step runs one search pass, committing the walk state only if it matched.
+// step runs one search pass over every live cursor, replacing the live set with
+// the cursors that took the name and leaving it untouched where none did.
+//
+// Every cursor that takes the name ·attributes· it to the same ·basic
+// particle·: two different ones live for one name would ·compete·, which
+// cos-nonambig has already rejected, so the first attribution is the
+// attribution and the partitions differ in nothing the caller can see.
 func (m *Matcher) step(name QName, kind admitKind) (Attribution, bool) {
-	t := m.clone()
-	a, ok := t.advance(name, kind)
-	if !ok {
+	var taken Attribution
+	var next []cursor
+	for i := range m.live {
+		a, cs := m.advance(&m.live[i], name, kind)
+		if len(cs) == 0 {
+			continue
+		}
+		if taken == nil {
+			taken = a
+		}
+		for _, c := range cs {
+			next = addCursor(next, c)
+		}
+	}
+	if taken == nil {
 		return nil, false
 	}
-	m.counts, m.path = t.counts, t.path
-	return a, true
+	m.live = next
+	return taken, true
 }
 
-// clone copies the walk state and shares the immutable rest, so a search pass
-// that fails leaves nothing behind.
-func (m *Matcher) clone() *Matcher {
-	return &Matcher{
-		s:      m.s,
-		ct:     m.ct,
-		open:   m.open,
-		nodes:  m.nodes,
-		counts: append([]int(nil), m.counts...),
-		path:   append([]int(nil), m.path...),
-		inS2:   m.inS2,
-	}
-}
-
-// advance consumes name at the innermost position that admits it, working
-// outward: the particle the last item was attributed to, then the rest of the
-// iteration containing it, then a further iteration of that particle's group,
-// then the same three questions one level out. Moving out is legal only while
-// the level being left can be closed (canExit), which is where an unsatisfied
-// {min occurs} stops the search rather than being noticed later.
-func (m *Matcher) advance(name QName, kind admitKind) (Attribution, bool) {
-	if len(m.path) == 0 {
-		return m.enter(0, name, kind)
-	}
-	for d := len(m.path) - 1; d >= 0; d-- {
-		t := m.clone()
-		if a, ok := t.continueAt(d, name, kind); ok {
-			m.counts, m.path = t.counts, t.path
-			return a, true
+// advance collects every cursor reachable from c by consuming name. It works
+// outward exactly as one greedy walk does — the particle the last item was
+// attributed to, then the rest of the iteration containing it, then a further
+// iteration of that particle's group, then the same three questions one level
+// out — and moving out is legal only while the level being left can be closed
+// (canExit), which is where an unsatisfied {min occurs} stops the search rather
+// than being noticed later.
+//
+// What the set adds to that walk is confined to an ·ambiguous· node, where BOTH
+// answers are kept: the cursor that stays in the open iteration and the cursor
+// that closes it and starts the next. Everywhere else the first answer is the
+// only one (see the file comment), and the search ends as soon as no ·ambiguous·
+// node is left to widen at.
+func (m *Matcher) advance(c *cursor, name QName, kind admitKind) (Attribution, []cursor) {
+	if len(c.path) == 0 {
+		t := c.clone()
+		a, ok := m.enter(&t, 0, name, kind)
+		if !ok {
+			return nil, nil
 		}
-		if !m.canExit(d) {
-			return nil, false
+		return a, []cursor{t}
+	}
+	var taken Attribution
+	var out []cursor
+	for d := len(c.path) - 1; d >= 0; d-- {
+		t := c.clone()
+		if a, ok := m.continueIn(&t, d, name, kind); ok {
+			taken, out = a, append(out, t)
+		}
+		if len(out) == 0 || m.nodes[c.path[d]].ambiguous {
+			r := c.clone()
+			if a, ok := m.repeat(&r, d, name, kind); ok {
+				taken, out = a, append(out, r)
+			}
+		}
+		if len(out) > 0 && !m.widensAbove(c, d) {
+			return taken, out
+		}
+		if !m.canExit(c, d) {
+			return taken, out
 		}
 	}
-	return nil, false
+	return taken, out
 }
 
-// continueAt consumes name inside the node at depth d of the path, whose own
-// deeper position has already failed to consume it and been closed.
-func (m *Matcher) continueAt(d int, name QName, kind admitKind) (Attribution, bool) {
-	i := m.path[d]
+// widensAbove reports whether c's path holds an ·ambiguous· node shallower than
+// depth d. Where it does not, a cursor already found is the only one the rest of
+// the path can reach, so a model with no nested repetition costs one cursor and
+// one pass out through its path, which is what the walk cost when this shape was
+// declined.
+func (m *Matcher) widensAbove(c *cursor, d int) bool {
+	for _, i := range c.path[:d] {
+		if m.nodes[i].ambiguous {
+			return true
+		}
+	}
+	return false
+}
+
+// continueIn consumes name inside the OPEN occurrence of the node at depth d of
+// c's path, whose own deeper position has already failed to consume it and been
+// closed: one more occurrence of a leaf, or a later member of a group's open
+// iteration.
+func (m *Matcher) continueIn(c *cursor, d int, name QName, kind admitKind) (Attribution, bool) {
+	i := c.path[d]
 	g, isGroup := m.nodes[i].term.(ModelGroup)
 	if !isGroup {
-		a, ok := m.admits(i, name, kind)
+		a, ok := m.admits(c, i, name, kind)
 		if !ok {
 			return nil, false
 		}
-		m.counts[i]++
+		m.count(c, i)
 		return a, true
 	}
-	slot := m.slotOf(i, m.path[d+1])
-	complete := m.iterationComplete(i, g, slot)
-	if a, ok := m.continueIteration(d, g, slot, name, kind); ok {
-		return a, true
-	}
-	if !complete || !m.canRepeat(i) {
+	return m.continueIteration(c, d, g, m.slotOf(i, c.path[d+1]), name, kind)
+}
+
+// repeat consumes name as the first item of a FRESH iteration of the group at
+// depth d of c's path, which needs that group's open iteration to be a whole
+// word of its language already (iterationComplete) and its {max occurs} to admit
+// another (cvc-accept clause 3.2). A leaf has no iteration to close — its
+// occurrences are continueIn's counter — so it never repeats this way.
+func (m *Matcher) repeat(c *cursor, d int, name QName, kind admitKind) (Attribution, bool) {
+	i := c.path[d]
+	g, isGroup := m.nodes[i].term.(ModelGroup)
+	if !isGroup {
 		return nil, false
 	}
-	m.clearSubtree(i)
-	m.path = m.path[:d+1]
-	a, ok := m.enterBody(i, g, name, kind)
+	if !m.iterationComplete(c, i, g, m.slotOf(i, c.path[d+1])) {
+		return nil, false
+	}
+	if !m.canRepeat(c, i) {
+		return nil, false
+	}
+	m.clearSubtree(c, i)
+	c.path = c.path[:d+1]
+	a, ok := m.enterBody(c, i, g, name, kind)
 	if !ok {
 		return nil, false
 	}
-	m.counts[i]++
+	m.count(c, i)
 	return a, true
 }
 
@@ -484,27 +725,26 @@ func (m *Matcher) continueAt(d int, name QName, kind admitKind) (Attribution, bo
 // iteration of a choice is one member (§3.8.4.1.2), and an all group any member
 // that has not reached its {max occurs}, since S1 × … × Sn interleaves them
 // (§3.8.4.1.3).
-func (m *Matcher) continueIteration(d int, g ModelGroup, slot int, name QName, kind admitKind) (Attribution, bool) {
-	i := m.path[d]
-	children := m.nodes[i].children
+func (m *Matcher) continueIteration(c *cursor, d int, g ModelGroup, slot int, name QName, kind admitKind) (Attribution, bool) {
+	children := m.nodes[c.path[d]].children
 	switch g.Compositor() {
 	case CompositorChoice:
 		return nil, false
 	case CompositorAll:
-		m.path = m.path[:d+1]
-		for _, c := range children {
-			if a, ok := m.enter(c, name, kind); ok {
+		c.path = c.path[:d+1]
+		for _, ch := range children {
+			if a, ok := m.enter(c, ch, name, kind); ok {
 				return a, true
 			}
 		}
 		return nil, false
 	case CompositorSequence:
-		m.path = m.path[:d+1]
-		for _, c := range children[slot+1:] {
-			if a, ok := m.enter(c, name, kind); ok {
+		c.path = c.path[:d+1]
+		for _, ch := range children[slot+1:] {
+			if a, ok := m.enter(c, ch, name, kind); ok {
 				return a, true
 			}
-			if !m.emptiable(c) {
+			if !m.emptiable(ch) {
 				return nil, false
 			}
 		}
@@ -518,27 +758,27 @@ func (m *Matcher) continueIteration(d int, g ModelGroup, slot int, name QName, k
 // appending the nodes it descended through to the path. It leaves the walk
 // state untouched when the name is not admitted, so a caller may try members in
 // turn.
-func (m *Matcher) enter(i int, name QName, kind admitKind) (Attribution, bool) {
+func (m *Matcher) enter(c *cursor, i int, name QName, kind admitKind) (Attribution, bool) {
 	g, isGroup := m.nodes[i].term.(ModelGroup)
 	if !isGroup {
-		a, ok := m.admits(i, name, kind)
+		a, ok := m.admits(c, i, name, kind)
 		if !ok {
 			return nil, false
 		}
-		m.counts[i]++
-		m.path = append(m.path, i)
+		m.count(c, i)
+		c.path = append(c.path, i)
 		return a, true
 	}
-	if !m.canRepeat(i) {
+	if !m.canRepeat(c, i) {
 		return nil, false
 	}
-	m.path = append(m.path, i)
-	a, ok := m.enterBody(i, g, name, kind)
+	c.path = append(c.path, i)
+	a, ok := m.enterBody(c, i, g, name, kind)
 	if !ok {
-		m.path = m.path[:len(m.path)-1]
+		c.path = c.path[:len(c.path)-1]
 		return nil, false
 	}
-	m.counts[i]++
+	m.count(c, i)
 	return a, true
 }
 
@@ -548,12 +788,12 @@ func (m *Matcher) enter(i int, name QName, kind admitKind) (Attribution, bool) {
 // or an all group (§3.8.4.1.3). Members are tried in document order, which
 // decides nothing a second member could have decided differently — cos-nonambig
 // has already rejected a group where two of them admit one name.
-func (m *Matcher) enterBody(i int, g ModelGroup, name QName, kind admitKind) (Attribution, bool) {
-	for _, c := range m.nodes[i].children {
-		if a, ok := m.enter(c, name, kind); ok {
+func (m *Matcher) enterBody(c *cursor, i int, g ModelGroup, name QName, kind admitKind) (Attribution, bool) {
+	for _, ch := range m.nodes[i].children {
+		if a, ok := m.enter(c, ch, name, kind); ok {
 			return a, true
 		}
-		if g.Compositor() == CompositorSequence && !m.emptiable(c) {
+		if g.Compositor() == CompositorSequence && !m.emptiable(ch) {
 			return nil, false
 		}
 	}
@@ -574,8 +814,8 @@ func (m *Matcher) enterBody(i int, g ModelGroup, name QName, kind admitKind) (At
 // The wildcard case is cvc-wildcard (§3.10.4.1) in full, including the
 // defined/sibling {disallowed names} keywords, which need the containing
 // complex type — the reason ContentMatcher takes one.
-func (m *Matcher) admits(i int, name QName, kind admitKind) (Attribution, bool) {
-	if !m.canRepeat(i) {
+func (m *Matcher) admits(c *cursor, i int, name QName, kind admitKind) (Attribution, bool) {
+	if !m.canRepeat(c, i) {
 		return nil, false
 	}
 	switch t := m.nodes[i].term.(type) {
@@ -607,9 +847,9 @@ func (m *Matcher) admits(i int, name QName, kind admitKind) (Attribution, bool) 
 
 // canRepeat reports whether the node at i may take one more occurrence
 // (cvc-accept clauses 1.2, 2.2 and 3.2, the {max occurs} half).
-func (m *Matcher) canRepeat(i int) bool {
+func (m *Matcher) canRepeat(c *cursor, i int) bool {
 	max, bounded := m.nodes[i].occurs.Max()
-	return !bounded || m.counts[i] < max
+	return !bounded || c.counts[i] < max
 }
 
 // canExit reports whether the node at depth d of the path can be left where the
@@ -623,29 +863,29 @@ func (m *Matcher) canRepeat(i int) bool {
 // finished when the next item belongs to a sibling; what the member owes is
 // owed to the group, and iterationComplete is where the group collects it from
 // every member at once.
-func (m *Matcher) canExit(d int) bool {
-	i := m.path[d]
+func (m *Matcher) canExit(c *cursor, d int) bool {
+	i := c.path[d]
 	if g, isGroup := m.nodes[i].term.(ModelGroup); isGroup {
-		if !m.iterationComplete(i, g, m.slotOf(i, m.path[d+1])) {
+		if !m.iterationComplete(c, i, g, m.slotOf(i, c.path[d+1])) {
 			return false
 		}
 	}
-	if m.inAllGroup(d) {
+	if m.inAllGroup(c, d) {
 		return true
 	}
-	if m.counts[i] >= m.nodes[i].occurs.Min() {
+	if c.counts[i] >= m.nodes[i].occurs.Min() {
 		return true
 	}
 	return m.bodyEmptiable(i)
 }
 
-// inAllGroup reports whether the node at depth d of the path is a member of an
+// inAllGroup reports whether the node at depth d of c's path is a member of an
 // all group.
-func (m *Matcher) inAllGroup(d int) bool {
+func (m *Matcher) inAllGroup(c *cursor, d int) bool {
 	if d == 0 {
 		return false
 	}
-	g, isGroup := m.nodes[m.path[d-1]].term.(ModelGroup)
+	g, isGroup := m.nodes[c.path[d-1]].term.(ModelGroup)
 	return isGroup && g.Compositor() == CompositorAll
 }
 
@@ -654,12 +894,12 @@ func (m *Matcher) inAllGroup(d int) bool {
 // group's language: for a sequence every later member is skippable, for a
 // choice the one member taken is the whole of it, and for an all group every
 // member has reached its own {min occurs}.
-func (m *Matcher) iterationComplete(i int, g ModelGroup, slot int) bool {
+func (m *Matcher) iterationComplete(c *cursor, i int, g ModelGroup, slot int) bool {
 	children := m.nodes[i].children
 	switch g.Compositor() {
 	case CompositorSequence:
-		for _, c := range children[slot+1:] {
-			if !m.emptiable(c) {
+		for _, ch := range children[slot+1:] {
+			if !m.emptiable(ch) {
 				return false
 			}
 		}
@@ -667,8 +907,8 @@ func (m *Matcher) iterationComplete(i int, g ModelGroup, slot int) bool {
 	case CompositorChoice:
 		return true
 	case CompositorAll:
-		for _, c := range children {
-			if m.counts[c] < m.nodes[c].occurs.Min() {
+		for _, ch := range children {
+			if c.counts[ch] < m.nodes[ch].occurs.Min() {
 				return false
 			}
 		}
@@ -712,12 +952,13 @@ func (m *Matcher) bodyEmptiable(i int) bool {
 	return true
 }
 
-// clearSubtree resets the occurrence counters beneath i, which a new iteration
-// of i starts over. i's own counter is the iteration count and is not touched.
-func (m *Matcher) clearSubtree(i int) {
-	for _, c := range m.nodes[i].children {
-		m.counts[c] = 0
-		m.clearSubtree(c)
+// clearSubtree resets the occurrence counters beneath i in c, which a new
+// iteration of i starts over. i's own counter is the iteration count and is not
+// touched.
+func (m *Matcher) clearSubtree(c *cursor, i int) {
+	for _, ch := range m.nodes[i].children {
+		c.counts[ch] = 0
+		m.clearSubtree(c, ch)
 	}
 }
 

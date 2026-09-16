@@ -157,13 +157,13 @@ import (
 // an arm of the rule unevaluated. The content half adds its own: an element
 // that is ·nilled· (clause 1 applies only where it is not, and cvc-elt clause
 // 3.2.3.1 decides its [[children]] instead), and a {content type} whose shape
-// xsd.Schema.ContentMatcher declines — the nested repetition cvc-accept's own
-// Note leaves non-deterministic, an all group holding an all group — each of
-// which withholds clause 1.4 entirely rather than matching part
-// of a sequence, and a root with no character information item [[child]] at
-// all, whose ·initial value· cvc-elt clause 5.1 may take from a {value
-// constraint} instead — a decline case 9's clause 3.1.3 shares, over the same
-// ·initial value· and for the same reason. The value charges add their own: a
+// xsd.Schema.ContentMatcher declines — a nested repetition whose occurrence
+// ranges admit more partitions than the walk carries cursors, an all group
+// holding an all group — each of which withholds clause 1.4 entirely rather than
+// matching part of a sequence, and a root with no character information item
+// [[child]] at all, whose ·initial value· cvc-elt clause 5.1 may take from a
+// {value constraint} instead — a decline case 9's clause 3.1.3 shares, over the
+// same ·initial value· and for the same reason. The value charges add their own: a
 // declaration whose {type definition} does not resolve to a simple type, and — the
 // one that would otherwise reject every typeless attribute — a
 // value.ValidateLexical error that is a fault of the type or of the backend rather
