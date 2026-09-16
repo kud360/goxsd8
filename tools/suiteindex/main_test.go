@@ -64,6 +64,23 @@ const (
   <xsd:element name="a" targetNamespace="urn:b"/>
 </xsd:schema>`
 
+	// instanceNSDoc is an INSTANCE document in the namespace its test targets,
+	// which is the shape no default of the element position reaches: not the
+	// XML Schema namespace a braceless name means, and not the no-namespace
+	// one `{}` means (#1495). boeingData/ipo1/ipo_1.xml is the corpus's own.
+	instanceNSDoc = `<?xml version="1.0"?>
+<order xmlns="urn:target" xmlns:t="urn:target" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <shipTo xsi:type="t:USAddress"/>
+</order>`
+
+	// instanceBareDoc carries the same instance construct in NO namespace —
+	// the slice the `{}` form reaches, and the reason its count reads as a
+	// population when it is a part of one.
+	instanceBareDoc = `<?xml version="1.0"?>
+<order xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <shipTo xsi:type="USAddress"/>
+</order>`
+
 	// noNamespaceDoc is written in NO namespace throughout, the shape the
 	// corpus carries wherever a wrapper declaring no default xmlns holds a
 	// schema (msData/additional/test93490_14.xml). Every element in it is the
@@ -79,6 +96,16 @@ const (
 // ns is the XML Schema namespace in the Clark notation the report renders
 // every name in.
 const ns = "{http://www.w3.org/2001/XMLSchema}"
+
+// xsiNS is the XML Schema instance namespace, and xsiType the attribute half
+// of every query below that censuses `xsi:type` — the instance-side construct
+// #1494 wanted a population for and #1495 found inexpressible.
+const (
+	xsiNS   = "http://www.w3.org/2001/XMLSchema-instance"
+	xsiType = "@{" + xsiNS + "}type"
+	// anyNS is the namespace axis as a query writes it.
+	anyNS = "{" + wildcard + "}"
+)
 
 // attrPairs renders one hit's matched attributes as "local=value" in the
 // order the hit records them, which is what the assertions below compare: a
@@ -677,6 +704,112 @@ func TestReportNamesTheMatchedElementOnlyForAWildcard(t *testing.T) {
 	}
 }
 
+// TestReportCensusesEveryNamespaceInTheElementPosition pins the four readings
+// of one instance-side census over a tree holding the same construct in a
+// target namespace and in none (#1495). Three of them are namespace-RESTRICTED
+// and each answers for its own slice — the braceless one for a namespace an
+// instance document never uses, which is the reading that printed
+// `0 occurrence(s)` as though it were a measurement. The fourth is the axis,
+// and it is the only shape whose count is the population's.
+//
+// Every case asserts the echoed header too: a restricted census names its
+// restriction in Clark notation, and the axis names itself as the axis, so the
+// two cannot be read for each other off a report line.
+func TestReportCensusesEveryNamespaceInTheElementPosition(t *testing.T) {
+	root := t.TempDir()
+	writeFixture(t, root, "bare.xml", instanceBareDoc)
+	writeFixture(t, root, "ns.xml", instanceNSDoc)
+
+	bareHit := `bare.xml:3:3 element={}shipTo parent={}order children=[] type="USAddress"`
+	nsHit := `ns.xml:3:3 element={urn:target}shipTo parent={urn:target}order children=[] type="t:USAddress"`
+	cases := []struct {
+		name   string
+		query  string
+		want   []string
+		absent []string
+	}{
+		{
+			name:   "braceless, so the XML Schema namespace an instance document never carries",
+			query:  "*" + xsiType,
+			want:   []string{"suiteindex: 0 occurrence(s) of " + ns + "*" + xsiType + " in 0 fixture(s) under "},
+			absent: []string{"bare.xml", "ns.xml"},
+		},
+		{
+			name:   "no namespace, a slice of the population and not the whole of it",
+			query:  "{}*" + xsiType,
+			want:   []string{"suiteindex: 1 occurrence(s) of {}*" + xsiType + " in 1 fixture(s) under ", bareHit},
+			absent: []string{"ns.xml"},
+		},
+		{
+			name:   "one named namespace, the other slice",
+			query:  "{urn:target}*" + xsiType,
+			want:   []string{"suiteindex: 1 occurrence(s) of {urn:target}*" + xsiType + " in 1 fixture(s) under ", nsHit},
+			absent: []string{"bare.xml"},
+		},
+		{
+			name:  "the namespace axis, which is the only shape that finds both",
+			query: anyNS + "*" + xsiType,
+			want: []string{
+				"suiteindex: 2 occurrence(s) of " + anyNS + "*" + xsiType + " in 2 fixture(s) under ",
+				bareHit,
+				nsHit,
+			},
+		},
+		{
+			// The axis with the local name FIXED: nothing about the query is a
+			// wildcard local part, so a report that keyed its `element=` field
+			// on that alone would print these two lines identically (#1495).
+			name:  "the namespace axis under a fixed local name",
+			query: anyNS + "shipTo" + xsiType,
+			want: []string{
+				"suiteindex: 2 occurrence(s) of " + anyNS + "shipTo" + xsiType + " in 2 fixture(s) under ",
+				bareHit,
+				nsHit,
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rep, err := census(root, mustQuery(t, tc.query))
+			if err != nil {
+				t.Fatalf("census: %v", err)
+			}
+			var out strings.Builder
+			if err := printReport(&out, rep); err != nil {
+				t.Fatalf("printReport: %v", err)
+			}
+			for _, want := range tc.want {
+				if !strings.Contains(out.String(), want) {
+					t.Errorf("report does not carry %q:\n%s", want, out.String())
+				}
+			}
+			for _, absent := range tc.absent {
+				if strings.Contains(out.String(), absent) {
+					t.Errorf("report names %q, which this query's namespace excludes:\n%s", absent, out.String())
+				}
+			}
+		})
+	}
+}
+
+// TestScanFixtureRecordsTheResolvedAttributeName pins that a hit's attribute
+// name is the document's and never the pattern that admitted it: the namespace
+// axis is available in the attribute position too, and a pattern open there
+// names no namespace for the hit to borrow.
+func TestScanFixtureRecordsTheResolvedAttributeName(t *testing.T) {
+	scan := scanFixture("ns.xml", strings.NewReader(instanceNSDoc), mustQuery(t, anyNS+"shipTo@"+anyNS+"type"))
+	if scan.Err != nil {
+		t.Fatalf("scanFixture: %v", scan.Err)
+	}
+	if len(scan.Hits) != 1 {
+		t.Fatalf("got %d hit(s), want 1: %+v", len(scan.Hits), scan.Hits)
+	}
+	want := xsd.QName{Space: xsiNS, Local: "type"}
+	if got := scan.Hits[0].Attrs[0].Name; got != want {
+		t.Errorf("Attrs[0].Name = %+v, want %+v (the name the document resolved)", got, want)
+	}
+}
+
 // TestScanFixtureKeepsHitsAheadOfAFault pins the malformed-fixture contract:
 // the suite ships documents that are not well-formed on purpose, and the
 // constructs before the fault are evidence, not collateral.
@@ -903,6 +1036,19 @@ func TestParseQuery(t *testing.T) {
 			attrs: []namePat{{Space: "urn:y", Local: wildcard}},
 			join:  joinAll,
 		},
+		{
+			// The namespace axis, in either position and on either axis of
+			// the name: `{*}` is a wildcard and never the URI "*" (#1495).
+			in:   "{*}thing",
+			elem: namePat{Space: wildcard, Local: "thing"},
+			join: joinAll,
+		},
+		{
+			in:    "{*}*@{*}type",
+			elem:  namePat{Space: wildcard, Local: wildcard},
+			attrs: []namePat{{Space: wildcard, Local: "type"}},
+			join:  joinAll,
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.in, func(t *testing.T) {
@@ -959,6 +1105,10 @@ func TestQueryString(t *testing.T) {
 		// (#1297). The attribute half is bare because that position reads a
 		// bare name as no namespace already.
 		{"{}bare@x", "{}bare@x"},
+		// The namespace axis echoes AS the axis, so a reader cannot take the
+		// corpus-wide count for a namespace-restricted one (#1495).
+		{"{*}*" + xsiType, "{*}*" + xsiType},
+		{"{*}shipTo@{*}type", "{*}shipTo@{*}type"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.in, func(t *testing.T) {
@@ -978,6 +1128,7 @@ func TestQueryStringReEntersAsItself(t *testing.T) {
 	for _, in := range []string{
 		"element", "{}bare", "{}bare@x", "{urn:x}thing@{urn:y}attr",
 		"{}*@*", "*@mixed|abstract", "{}*@{urn:y}*",
+		"{*}thing", "{*}*@{urn:y}*", "{*}shipTo@{*}type",
 	} {
 		t.Run(in, func(t *testing.T) {
 			q := mustQuery(t, in)
