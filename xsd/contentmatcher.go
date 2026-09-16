@@ -105,9 +105,10 @@ package xsd
 // [Matcher.Next] advanced over, or the {wildcard} of a present {open content}.
 // It is a sealed sum (STYLE T2's closed-sum exception) with exactly two
 // variants, [ElementDeclaration] (cvc-accept clause 2) and [Wildcard]
-// (cvc-accept clause 1), because those are the two kinds of ·basic particle· an
-// item can be attributed to — a Model Group is not one, and returning [Term]
-// would make an attribution to one representable (STYLE T1).
+// (cvc-accept clause 1): those are the two kinds of ·basic particle· an item
+// can be attributed to — a Model Group is not one, and returning [Term] would
+// make an attribution to one representable (STYLE T1) — and the {open content},
+// which is no particle at all, reuses the second rather than adding a third.
 //
 // An [ElementDeclaration] result is the particle's own declaration D, which is
 // the answer to "which particle consumed this item". For an item admitted
