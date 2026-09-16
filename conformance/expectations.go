@@ -324,6 +324,56 @@ func ratchetAll(dir string, runs []laneRun, withheld []string, removals map[stri
 	return nil
 }
 
+// withheldEnv names the opt-in that lists the withheld case IDs no lane's
+// committed expectations carry — the slice of discovery's withheld set that
+// classifies as nothing, so no other line a run prints names it (issue #1514).
+// It is opt-in rather than always logged because the set is a standing property
+// of the corpus, read when a session predicts ratchet movement, not a figure
+// that moves at a landing.
+const withheldEnv = "GOXSD_WITHHELD"
+
+// unbankedWithheld lists the case IDs discovery withheld that carry no committed
+// expectation in ANY lane's file, sorted and de-duplicated (STYLE D1/D2).
+//
+// It is the withheld set with the part every run already reports taken out. A
+// withheld ID that DOES carry a line classifies as Delta.Removed and is printed
+// per lane by reportLaneReadOnly; an ID with no line anywhere classifies as
+// nothing at all — Compare's no-op row — so nothing else a run prints names it.
+// That remainder is what a ratchet prediction must exclude, because a case no
+// lane banked has no line anywhere to flip.
+//
+// "Banked" is read as the UNION over lanes: an ID is banked when ANY lane's file
+// carries it. A per-lane difference would report an ID that is Removed in one
+// lane while dark in another, which is the already-printed half this listing
+// exists to leave out.
+//
+// runs supplies each lane's committed map, read by key and never iterated
+// (STYLE D2); the result's order is imposed here rather than inherited from
+// withheld, which parseSuite sorts but a caller need not.
+func unbankedWithheld(withheld []string, runs []laneRun) []string {
+	var unbanked []string
+	for _, id := range withheld {
+		if bankedInAnyLane(id, runs) {
+			continue
+		}
+		unbanked = append(unbanked, id)
+	}
+	slices.Sort(unbanked)
+	return slices.Compact(unbanked)
+}
+
+// bankedInAnyLane reports whether any lane's committed expectations carry id. It
+// is unbankedWithheld's union reading, named so that the per-lane alternative is
+// a visible choice rather than an inlined loop.
+func bankedInAnyLane(id string, runs []laneRun) bool {
+	for _, r := range runs {
+		if _, banked := r.expected[id]; banked {
+			return true
+		}
+	}
+	return false
+}
+
 // WriteExpectations writes a lane's expectations to path, one case per line as
 // `<case-id> <pass|fail>`, always sorted by case ID so identical inputs produce
 // byte-identical files (STYLE D1/D2). The write is atomic: it renders to a temp

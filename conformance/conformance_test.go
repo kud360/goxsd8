@@ -23,7 +23,10 @@ import (
 //     rather than trusted. GOXSD_DECLINES=1 also lists their IDs.
 //   - Sanctioned applicability removals — cases discovery withheld because the
 //     suite's own metadata scopes them away from this processor (issue #576) —
-//     are logged on the read-only path and never fail it.
+//     are logged on the read-only path and never fail it. GOXSD_WITHHELD=1
+//     additionally lists, on either path, the withheld IDs no lane banked at
+//     all: the remainder that classifies as nothing and so reaches no other
+//     line of the run (issue #1514).
 //   - GOXSD_RATCHET=1: additionally Ratchet each lane and rewrite its file;
 //     a Ratchet refusal (regression, vanished, or a removal count the run did not
 //     assert) fails the test. Arbiter only. Writing is all-or-nothing across
@@ -62,6 +65,7 @@ func TestConformance(t *testing.T) {
 	for _, l := range lanes {
 		runs = append(runs, observeConformanceLane(t, l, cases))
 	}
+	reportWithheld(t, found.withheld, runs)
 
 	if !ratcheting {
 		for _, r := range runs {
@@ -239,6 +243,26 @@ func reportDeclines(t *testing.T, l lane, cases []caseSpec, actual map[string]St
 		return
 	}
 	t.Logf("lane %s: decline candidates: %v", l.name, census.candidates)
+}
+
+// reportWithheld lists the withheld case IDs no lane banked (withheldEnv, issue
+// #1514). It is the one slice of discovery's withheld set no other line of a run
+// names: the suite-wide total is logged unconditionally where the cases are
+// discovered, and the withheld IDs that DO carry a committed line are printed
+// per lane by reportLaneReadOnly as sanctioned removals. Re-stating either here
+// would bury the remainder inside a set already reported.
+//
+// Like the decline census this reports only — it scores no case and writes no
+// expectation — so it runs on the ratcheting path too, and the count is logged
+// beside the list because the opt-in asked for both.
+func reportWithheld(t *testing.T, withheld []string, runs []laneRun) {
+	t.Helper()
+	if os.Getenv(withheldEnv) != "1" {
+		return
+	}
+	unbanked := unbankedWithheld(withheld, runs)
+	t.Logf("%d of %d withheld case(s) carry no committed expectation in any lane: %v",
+		len(unbanked), len(withheld), unbanked)
 }
 
 // narrowToCase keeps only the case whose ID equals only, failing clearly if no

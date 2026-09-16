@@ -517,3 +517,46 @@ func assertSlice(t *testing.T, name string, got, want []string) {
 		t.Errorf("%s: got %v, want %v", name, got, want)
 	}
 }
+
+// TestUnbankedWithheldListsOnlyWhatNoLaneBanked pins the population
+// GOXSD_WITHHELD=1 exists to surface (issue #1514): the withheld case IDs that
+// carry no committed expectation in ANY lane. The two slices a run already
+// prints are exactly what it must NOT re-report — the whole withheld set, logged
+// as a count every run, and the withheld IDs that DO carry a line, printed per
+// lane as Delta.Removed.
+//
+// The fixture therefore SPLITS the withheld set between banked and never-banked,
+// and asserts the remainder by value rather than by count. That split is what
+// makes the assertion load-bearing: an arm returning the whole withheld set
+// passes a count-only or an all-never-banked fixture and fails here, and so does
+// a per-lane reading, because banked-in-instance is dark in the schema lane.
+func TestUnbankedWithheldListsOnlyWhatNoLaneBanked(t *testing.T) {
+	runs := []laneRun{
+		{
+			name:     "schema",
+			expected: map[string]Status{"banked-in-schema": Fail(), "scored": Pass()},
+			actual:   map[string]Status{"scored": Pass()},
+		},
+		{
+			name:     "instance",
+			expected: map[string]Status{"banked-in-instance": Pass()},
+			actual:   map[string]Status{},
+		},
+	}
+	withheld := []string{
+		"never-banked-b",
+		"banked-in-instance", // banked by the OTHER lane; the union reading excludes it
+		"never-banked-a",
+		"banked-in-schema",
+		"never-banked-b", // one case may be named by two discovery levels
+	}
+
+	assertSlice(t, "unbanked", unbankedWithheld(withheld, runs),
+		[]string{"never-banked-a", "never-banked-b"})
+
+	// Control: with no lane banking anything, every withheld ID is in the
+	// remainder, sorted and de-duplicated. The exclusions above are the lanes'
+	// doing and not a filter on the IDs themselves.
+	assertSlice(t, "unbanked with no lane", unbankedWithheld(withheld, nil),
+		[]string{"banked-in-instance", "banked-in-schema", "never-banked-a", "never-banked-b"})
+}
