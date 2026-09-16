@@ -107,11 +107,12 @@ every occurrence of either attribute with its value. A `,` between attribute
 names means AND, a `|` means OR, and the `@*` form reports pairs in place of
 the per-occurrence lines every other query prints (#1391). Census an
 INSTANCE-side construct, whose element sits in whatever namespace its test
-targets, by writing `{*}` for that namespace — every namespace at once, none
-included: `'{*}*@{http://www.w3.org/2001/XMLSchema-instance}type'` is every
-`xsi:type` in the corpus, where a braceless element name means the XSD
-namespace and answers 0 (#1495). An absent submodule is a supported mode
-there too: it says so and exits 0.
+targets, by writing `{*}` for that namespace — every namespace at once, the
+no-namespace one included:
+`'{*}*@{http://www.w3.org/2001/XMLSchema-instance}type'` is every `xsi:type`
+in the corpus, where a braceless element name means the XSD namespace and
+answers 0 (#1495). An absent submodule is a supported mode there too: it says
+so and exits 0.
 
 ## Style headlines
 

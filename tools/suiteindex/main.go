@@ -34,16 +34,16 @@
 // is not an NCName and no document can spell a name that collides with it.
 //
 // A NAMESPACE may be written `{*}`, which stands for every namespace at once,
-// none included: `{*}root` is every `root` element in the corpus whatever
-// namespace it sits in, and `{*}*` is every element there is. The element
-// position needs it because a braceless element name means the XML Schema
-// namespace — right for a schema document, wrong for an INSTANCE one, whose
-// elements sit in whatever namespace its test targets — so an instance-side
-// census was inexpressible and answered `0 occurrence(s)` rather than saying
-// so (#1495). It cannot be confused with `{}local`, which is the one
-// namespace that has no name, and it costs no census that worked before:
-// `{*}local` parsed as the namespace literally named `*`, which nothing in
-// this corpus declares.
+// the no-namespace one included: `{*}root` is every `root` element in the
+// corpus whatever namespace it sits in, and `{*}*` is every element there is.
+// The element position needs it because a braceless element name means the
+// XML Schema namespace — right for a schema document, wrong for an INSTANCE
+// one, whose elements sit in whatever namespace its test targets — so an
+// instance-side census was inexpressible and answered `0 occurrence(s)`
+// rather than saying so (#1495). It cannot be confused with `{}local`, which
+// is the one namespace that has no name, and it costs no census that worked
+// before: `{*}local` parsed as the namespace literally named `*`, which
+// nothing in this corpus declares.
 //
 // Attribute names are joined by `,` (an element must carry EVERY one to count
 // as an occurrence) or by `|` (ANY one of them is enough). One query uses one
