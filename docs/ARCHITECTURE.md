@@ -342,8 +342,11 @@ Two access styles over the compiled model, one shared core:
   - a **pull** driver — `Matcher`, the instance-guided advance of the
     content model one child at a time (the validation consumer) —
     **ships**, as `Schema.ContentMatcher`/`Matcher`/`Attribution`; it
-    counts occurrences rather than unfolding them and never backtracks,
-    which `cos-nonambig` licenses.
+    counts occurrences rather than unfolding them and never backtracks.
+    `cos-nonambig` licenses that for which particle takes an item;
+    `cvc-accept` clause 3.1's existential over partitions is why the walk
+    carries a cursor per live partition where a repeating particle sits
+    inside a repeating one.
   - a **push** driver — `Walker`, the exhaustive, schema-only visitor of
     every particle reachable through sequences/choices/all-groups and
     named-group references (the codegen consumer) — **M9**, not yet.
@@ -512,9 +515,9 @@ design contract.
     decode).
   The engine never imports a source's decoder; adapters build infoset
   values and hand them over.
-- Content-model matching is greedy and deterministic (UPA makes
-  backtracking unnecessary); explicit content beats open-content
-  wildcards at the current state.
+- Content-model matching never backtracks (UPA fixes which particle takes
+  an item; a set of live partitions decides which iteration it falls in);
+  explicit content beats open-content wildcards at the current state.
 - Streaming-oriented; parent element context is threaded from day one
   (ID/IDREF harvesting, EDC's post-`xsi:type` governing type, namespace
   context for identity constraints).

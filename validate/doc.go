@@ -35,10 +35,11 @@
 //
 // # Assessment semantics designed in from the start
 //
-//   - Content-model matching is GREEDY and deterministic — UPA makes the
-//     model unambiguous, so the matcher never backtracks — and explicit
-//     content beats an open-content wildcard at the current state
-//     (PRINCIPLES 14). The matcher is xsd's pull walk driver.
+//   - Content-model matching NEVER BACKTRACKS — UPA fixes which particle
+//     takes each item, and a bounded set of live partitions decides which
+//     iteration of a repeated ancestor it falls in — and explicit content
+//     beats an open-content wildcard at the current state (PRINCIPLES 14).
+//     The matcher is xsd's pull walk driver.
 //   - Empty content is stricter than element-only: a type whose particle
 //     can never match an element admits no character content at all, not
 //     even whitespace (PRINCIPLES 13).
