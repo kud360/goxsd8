@@ -11,10 +11,13 @@ import (
 )
 
 // ruleCvcComplexContent is Element Sequence Locally Valid (Complex Content)
-// (Structures §3.4.4.3, cvc-complex-content). Its clause 1 — the whole rule
-// where {open content} is ·absent· — sends the sequence to cvc-particle
-// (§3.9.4.2), which [xsd.Matcher] decides; the clause charged goes in the
-// message on ruleCvcElt's terms, since the catalog carries the bare name.
+// (Structures §3.4.4.3, cvc-complex-content). It is a "the appropriate case"
+// construct over the {open content}: clause 1 — the whole rule where it is
+// ·absent· — sends the sequence to cvc-particle (§3.9.4.2), clause 2 splits it
+// for {mode} suffix and clause 3 for {mode} interleave, and [xsd.Matcher]
+// decides all three. The clause charged goes in the message on ruleCvcElt's
+// terms, since the catalog carries the bare name, and it is the one that was
+// LIVE ([contentCheck.contentClause]) rather than clause 1 by default.
 const ruleCvcComplexContent xsderr.Rule = "cvc-complex-content"
 
 // This file decides one element's [[children]] against whichever arm of cvc-type
@@ -99,16 +102,11 @@ const ruleCvcComplexContent xsderr.Rule = "cvc-complex-content"
 // the whole subtree below such an element is walked against no type in its turn
 // ([walk.childGoverning]). The two cvc-elt clauses below still apply — they read
 // the DECLARATION and not the type. A nil matcher beside a non-nil governing is
-// none of those states: it is clause 1.4 alone declining — an {open content} or
-// a shape [xsd.Schema.ContentMatcher] does not decide — while clauses 1.1 to 1.3
-// still hold, since they read the {variety} and not the particle.
-//
-// GAP(validate): a {content type} whose {open content} is PRESENT is one of
-// those declines, and the whole element-sequence verdict goes with it —
-// cvc-complex-content clauses 2 and 3 split the sequence into a {particle} part
-// and an open-content part, which neither this file nor the matcher decides.
-// #1516 owns the retirement, and the matching marker on the matcher's own
-// decline list (xsd/contentmatcher.go) names it too.
+// none of those states: it is clause 1.4 alone declining — a shape
+// [xsd.Schema.ContentMatcher] does not decide — while clauses 1.1 to 1.3 still
+// hold, since they read the {variety} and not the particle. A present {open
+// content} is no longer one of those shapes: the matcher decides both {mode}s,
+// and every charge below names the clause that decided it.
 //
 // nilled is whether E is ·nilled· (§3.3.4.3, key-nilled), decided before any
 // child arrives ([walk.nilCheck]). It turns cvc-complex-type clause 1 off
@@ -160,6 +158,42 @@ func (c *contentCheck) governing() *xsd.ComplexType {
 		return nil
 	}
 	return c.g.complexType()
+}
+
+// openContent is the {open content} of the ·governing type definition·'s
+// {content type} (§3.4.1), and nil where it is ·absent· — including for a
+// {variety} that carries no such property at all and for a check with no
+// governing complex type.
+func (c *contentCheck) openContent() *xsd.OpenContent {
+	ct := c.governing()
+	if ct == nil {
+		return nil
+	}
+	ec, elementOnlyOrMixed := ct.ContentType().(xsd.ElementContent)
+	if !elementOnlyOrMixed {
+		return nil
+	}
+	return ec.OpenContent
+}
+
+// contentClause is the cvc-complex-content clause this element's [[children]]
+// are decided under: clause 1 where {open content} is ·absent·, clause 2 for
+// {mode} suffix and clause 3 for {mode} interleave (§3.4.4.3). Every charge and
+// every log line from the sequence match reads it, so the "appropriate case"
+// the rule selects is named once and not restated per message.
+//
+// The two {mode}s are [xsd.OpenContentMode]'s whole value space (§3.4.1, and
+// there is no third for mode="none" — that is the ·absent· record above), so
+// interleave is the remaining case rather than a default.
+func (c *contentCheck) contentClause() string {
+	oc := c.openContent()
+	if oc == nil {
+		return "1"
+	}
+	if oc.Mode() == xsd.OpenContentSuffix {
+		return "2"
+	}
+	return "3"
 }
 
 // empty reports that E has neither element nor character information item
@@ -383,16 +417,30 @@ func (c *contentCheck) element(w *walk, child Element) xsd.Attribution {
 // 1.4), reporting what the item is ·attributed to· and charging
 // cvc-complex-content against the item's OWN location where no particle live at
 // that position admits it.
+//
+// An item the {open content} took is ·attributed to· it (§3.4.4.4) and charges
+// nothing, exactly as one a particle took: clauses 2.4 and 3.4 make it a member
+// of S2, which the rule admits. The charge is reached only where the item
+// satisfies NEITHER half — no ·path· in {particle} at its position and not
+// ·valid· with respect to {open content}.{wildcard} — which is clause 2 or
+// clause 3 failing as a whole.
 func (c *contentCheck) match(w *walk, child Element) xsd.Attribution {
+	clause := c.contentClause()
 	if c.matcher == nil {
-		c.log(w, child.Name(), child.Loc(), ruleCvcComplexContent, "1", "declined")
+		c.log(w, child.Name(), child.Loc(), ruleCvcComplexContent, clause, "declined")
 		return nil
 	}
 	if a, ok := c.matcher.Next(child.Name()); ok {
 		if w.log.Enabled(context.Background(), slog.LevelDebug) {
-			c.log(w, child.Name(), child.Loc(), ruleCvcComplexContent, "1", "attributed to "+attributedTo(a))
+			c.log(w, child.Name(), child.Loc(), ruleCvcComplexContent, clause, "attributed to "+attributedTo(a))
 		}
 		return a
+	}
+	if c.openContent() != nil {
+		c.charge(w, ruleCvcComplexContent, clause, child.Loc(),
+			"the element information item %s is ·attributed to· no particle of the {content type} of %s at its position in the [[children]], and its ·expanded name· is not ·valid· with respect to that {content type}'s {open content} wildcard either, so the sequence is not ·valid· with respect to that {content type} as cvc-complex-content clause %s requires (Item Valid (Wildcard), §3.10.4.1)",
+			child.Name(), c.e.Name(), clause)
+		return nil
 	}
 	c.charge(w, ruleCvcComplexContent, "1", child.Loc(),
 		"the element information item %s is ·attributed to· no particle of the {content type} of %s at its position in the [[children]], so the sequence is not ·valid· with respect to that {content type} as cvc-complex-content clause 1 requires (Element Sequence Accepted (Particle), §3.9.4.3)",
@@ -652,17 +700,24 @@ func (c *contentCheck) initialValue(w *walk, st *xsd.SimpleType) {
 // ·attributed to· a particle, but the particles left open cannot all be closed.
 // The charge carries the CONTAINING element's location, there being no child at
 // the offending position to carry one.
+//
+// Under a present {open content} the question is asked of S1 alone
+// ([xsd.Matcher.Accepting]) and is still asked: clauses 2.2 and 3.2 require S1
+// to be ·valid· with respect to {particle}, so a sequence whose open-content
+// items were all admitted still fails where the particle they were interleaved
+// with is left short of its {min occurs}.
 func (c *contentCheck) sequenceEnd(w *walk) {
 	if c.matcher == nil {
 		return
 	}
+	clause := c.contentClause()
 	if c.matcher.Accepting() {
-		c.log(w, c.e.Name(), c.e.Loc(), ruleCvcComplexContent, "1", "accepted")
+		c.log(w, c.e.Name(), c.e.Loc(), ruleCvcComplexContent, clause, "accepted")
 		return
 	}
-	c.charge(w, ruleCvcComplexContent, "1", c.e.Loc(),
-		"the [[children]] of %s end before every particle of the {content type} of its ·governing type definition· has taken the occurrences its {min occurs} requires, so the sequence is not ·valid· with respect to that {content type} as cvc-complex-content clause 1 requires (Element Sequence Accepted (Particle), §3.9.4.3)",
-		c.e.Name())
+	c.charge(w, ruleCvcComplexContent, clause, c.e.Loc(),
+		"the [[children]] of %s end before every particle of the {content type} of its ·governing type definition· has taken the occurrences its {min occurs} requires, so the sequence is not ·valid· with respect to that {content type} as cvc-complex-content clause %s requires (Element Sequence Accepted (Particle), §3.9.4.3)",
+		c.e.Name(), clause)
 }
 
 // charge records one violation and closes the element to any further content

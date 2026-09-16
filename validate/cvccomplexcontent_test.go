@@ -1,6 +1,7 @@
 package validate
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -453,4 +454,140 @@ func TestRejectedChildAttributesItsSubtreeToNothing(t *testing.T) {
 	got := cAssess(t, schema, root)
 
 	wantContentCharge(t, got, "cvc-complex-content", "1", loc(3, 1))
+}
+
+// cOpenContent is cSequence over an element-only {content type} plus a PRESENT
+// {open content} (§3.4.1) of the given {mode}, whose {wildcard} carries nc and
+// {process contents} skip. Skip keeps the open half's own children out of the
+// charges under test: an item ·attributed to· a skip wildcard is not ·assessed·
+// (cvc-assess-elt clause 3.2), which is cvcassesselt_test.go's subject and not
+// this file's.
+func cOpenContent(t *testing.T, mode xsd.OpenContentMode, pc xsd.ProcessContents, nc xsd.NamespaceConstraint, particles ...xsd.Particle) xsd.ContentType {
+	t.Helper()
+	w, err := xsd.NewWildcard(xsderr.Loc{}, nc, pc)
+	if err != nil {
+		t.Fatalf("NewWildcard: %v", err)
+	}
+	oc, err := xsd.NewOpenContent(xsderr.Loc{}, mode, w)
+	if err != nil {
+		t.Fatalf("NewOpenContent: %v", err)
+	}
+	ec, elementOnly := cSequence(t, false, particles...).(xsd.ElementContent)
+	if !elementOnly {
+		t.Fatal("cSequence stopped producing an ElementContent")
+	}
+	ec.OpenContent = &oc
+	return ec
+}
+
+// cNamespaceConstraint builds the {namespace constraint} an open wildcard
+// carries, with neither half of {disallowed names}.
+func cNamespaceConstraint(t *testing.T, variety xsd.NamespaceConstraintVariety, uris ...string) xsd.NamespaceConstraint {
+	t.Helper()
+	var namespaces []xsd.Namespace
+	for _, uri := range uris {
+		namespaces = append(namespaces, xsd.NamespaceName(uri))
+	}
+	nc, err := xsd.NewNamespaceConstraint(xsderr.Loc{}, variety, namespaces, nil, nil)
+	if err != nil {
+		t.Fatalf("NewNamespaceConstraint: %v", err)
+	}
+	return nc
+}
+
+// cWantLogged fails unless the walk logged every one of want.
+func cWantLogged(t *testing.T, visits *[]string, want ...string) {
+	t.Helper()
+	for _, line := range want {
+		if !slices.Contains(*visits, line) {
+			t.Errorf("walk logged\n\t%s\nwant it to include\n\t%s", strings.Join(*visits, "\n\t"), line)
+		}
+	}
+}
+
+// cAssessLogged is cAssess with the walk's log recorded, for the tests that pin
+// an ·attribution· rather than a charge — the verdict alone cannot say WHICH
+// half of cvc-complex-content took an item.
+func cAssessLogged(t *testing.T, schema *xsd.Schema, root Element) ([]*xsderr.Error, *[]string) {
+	t.Helper()
+	log, visits := recordingLogger()
+	v, err := New(schema, testBackend(), WithLogger(log))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	res := v.Assess(root)
+	if res.Err() != nil {
+		t.Fatalf("Err() = %v, want nil", res.Err())
+	}
+	return res.Violations(), visits
+}
+
+// Under {mode} interleave the {particle} takes every item it can and the {open
+// content} takes the rest, wherever they sit in the sequence
+// (cvc-complex-content clause 3, and §3.4.4.4 for the ·attribution·). The x
+// between a and b is the case clause 3.1's S1 × S2 admits and clause 2.1's S1 +
+// S2 does not, and neither half is charged.
+func TestOpenContentInterleavesWithTheParticle(t *testing.T) {
+	schema := cSchema(t, cOpenContent(t, xsd.OpenContentInterleave, xsd.ProcessSkip,
+		cNamespaceConstraint(t, xsd.NamespaceConstraintAny),
+		cParticle(t, "a", 1, 1), cParticle(t, "b", 1, 1)))
+
+	got, visits := cAssessLogged(t, schema, cRoot("a", "x", "b"))
+
+	wantSilence(t, got, "the {particle} took a and b and the {open content} took x")
+	cWantLogged(t, visits,
+		"assessing content validate.name=a validate.loc=instance.xml:2:1 validate.rule=cvc-complex-content validate.clause=3 validate.outcome=attributed to element declaration a",
+		"assessing content validate.name=x validate.loc=instance.xml:3:1 validate.rule=cvc-complex-content validate.clause=3 validate.outcome=attributed to wildcard any",
+		"assessing content validate.name=b validate.loc=instance.xml:4:1 validate.rule=cvc-complex-content validate.clause=3 validate.outcome=attributed to element declaration b",
+		"assessing content validate.name=root validate.loc=instance.xml:1:1 validate.rule=cvc-complex-content validate.clause=3 validate.outcome=accepted")
+}
+
+// Clause 2.1's S = S1 + S2 is a CONCATENATION, so under {mode} suffix the b
+// after an open-content item is an open-content item too, and the {particle} is
+// left owing it: the same sequence clause 3 accepts above is charged here, at
+// the CONTAINING element, and the clause named is 2 rather than 1.
+func TestOpenContentSuffixNeverReturnsToTheParticle(t *testing.T) {
+	schema := cSchema(t, cOpenContent(t, xsd.OpenContentSuffix, xsd.ProcessSkip,
+		cNamespaceConstraint(t, xsd.NamespaceConstraintAny),
+		cParticle(t, "a", 1, 1), cParticle(t, "b", 1, 1)))
+
+	got, visits := cAssessLogged(t, schema, cRoot("a", "x", "b"))
+
+	wantContentCharge(t, got, "cvc-complex-content", "2", loc(1, 1))
+	cWantLogged(t, visits,
+		"assessing content validate.name=b validate.loc=instance.xml:4:1 validate.rule=cvc-complex-content validate.clause=2 validate.outcome=attributed to wildcard any")
+}
+
+// An item satisfying NEITHER half — no ·path· in the {particle} at its position
+// and not ·valid· with respect to {open content}.{wildcard} (cvc-wildcard
+// §3.10.4.1) — is charged against its OWN location, under the clause the {mode}
+// selects and never under clause 1.
+func TestOpenContentChargesAnItemNeitherHalfAdmits(t *testing.T) {
+	schema := cSchema(t, cOpenContent(t, xsd.OpenContentInterleave, xsd.ProcessSkip,
+		cNamespaceConstraint(t, xsd.NamespaceConstraintEnumeration, "urn:open"),
+		cParticle(t, "a", 1, 1), cParticle(t, "b", 1, 1)))
+
+	got := cAssess(t, schema, cRoot("a", "zzz"))
+
+	wantContentCharge(t, got, "cvc-complex-content", "3", loc(3, 1))
+	if !strings.HasPrefix(got[0].Msg, "the element information item zzz is ") {
+		t.Errorf("Msg = %q, want the offending CHILD as its subject and not the containing element", got[0].Msg)
+	}
+	if !strings.Contains(got[0].Msg, "{open content} wildcard") {
+		t.Errorf("Msg = %q, want it to say the open wildcard did not admit the item either", got[0].Msg)
+	}
+}
+
+// A present {open content} does not excuse the {particle}: clauses 2.2 and 3.2
+// still require S1 — the items the {particle} took — to be ·valid· with respect
+// to it, so a sequence whose open-content items were all admitted is still
+// charged at its end for a {min occurs} left owing.
+func TestOpenContentStillChargesAParticleLeftShort(t *testing.T) {
+	schema := cSchema(t, cOpenContent(t, xsd.OpenContentInterleave, xsd.ProcessSkip,
+		cNamespaceConstraint(t, xsd.NamespaceConstraintAny),
+		cParticle(t, "a", 1, 1), cParticle(t, "b", 2, 2)))
+
+	got := cAssess(t, schema, cRoot("a", "x", "b"))
+
+	wantContentCharge(t, got, "cvc-complex-content", "3", loc(1, 1))
 }

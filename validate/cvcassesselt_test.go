@@ -254,6 +254,24 @@ func TestUnresolvedNameUnderAStrictWildcardChargesTheEnclosingElement(t *testing
 		"e-validity clause 1.1.3 names a strict wildcard particle alone")
 }
 
+// The same clause is WITHHELD where a strict {open content} wildcard could have
+// been the admitting one: an item cvc-complex-content clause 2.4 or 3.4 took is
+// ·attributed to· the {open content} (§3.4.4.4) and not to a ·wildcard
+// particle·, which is what clause 1.1.3 quantifies over, and [xsd.Attribution]
+// spells the two the same way. Charging here would reject a document
+// key-governing-ed clause 4 leaves merely without a ·governing element
+// declaration· — see the GAP(validate) on [walk.unresolvedStrictWildcardChild].
+func TestOpenContentSuppressesTheStrictWildcardParticleCharge(t *testing.T) {
+	schema := cSchema(t, cOpenContent(t, xsd.OpenContentInterleave, xsd.ProcessStrict,
+		cNamespaceConstraint(t, xsd.NamespaceConstraintAny), cParticle(t, "a", 1, 1)))
+
+	got, visits := cAssessLogged(t, schema, cRoot("a", "stranger"))
+
+	wantSilence(t, got, "the open-content item's ·attribution· is not a ·wildcard particle·")
+	cWantLogged(t, visits,
+		"assessing content validate.name=stranger validate.loc=instance.xml:3:1 validate.rule=cvc-assess-elt validate.clause=1.1.3 validate.outcome=declined")
+}
+
 // The ·laxly assessed· child is still recursed, unlike a ·skipped· one: its own
 // [[children]] and [[attributes]] are assessed in their turn (cvc-assess-elt
 // clause 3.3 over key-lva clause 2), against xs:anyType, whose {content type}

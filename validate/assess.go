@@ -425,6 +425,22 @@ func (w *walk) childGoverning(e Element, a xsd.Attribution) (governance, bool) {
 // the zero value — no declaration, no type at all — is the unresolved-name
 // shape this function charges.
 //
+// GAP(validate): the charge is withheld entirely where the ·governing type
+// definition·'s {open content} is present and its {wildcard}'s {process
+// contents} is ***strict***. Clause 1.1.3 quantifies over items ·attributed
+// to· a strict ·wildcard particle· (§3.9.1, key-wp), and an item
+// cvc-complex-content clause 2.4 or 3.4 admitted is ·attributed to· the {open
+// content} instead (§3.4.4.4) — a component the clause does not name, and one
+// whose unresolved name key-governing-ed clause 4 leaves simply without a
+// ·governing element declaration·. [xsd.Attribution] spells both as a
+// Wildcard, so the two are not distinguishable here (see that type's doc). The
+// withheld value is this one violation, whose consumer set is
+// [Result].violations and its one reader [Result.Violations]: both carry
+// violations PRESENT, so withholding costs a rejection of the enclosing
+// element and manufactures none — and charging instead would REJECT a document
+// the spec leaves valid, this clause being the only reader that turns a
+// notKnown child into an invalid parent.
+//
 // notKnown is read off the governance the descent just determined, and no
 // subtree state is kept: clause 1.1.3 quantifies over E.[[children]] and
 // E.[[attributes]], one generation and no further. A deeper descendant reaches
@@ -454,6 +470,10 @@ func (w *walk) unresolvedStrictWildcardChild(content *contentCheck, child Elemen
 		return
 	}
 	if g.hasDecl || g.typ != nil {
+		return
+	}
+	if oc := content.openContent(); oc != nil && oc.Wildcard().ProcessContents() == xsd.ProcessStrict {
+		content.log(w, child.Name(), child.Loc(), ruleCvcAssessElt, "1.1.3", "declined")
 		return
 	}
 	w.res.violations = append(w.res.violations, xsderr.New(ruleCvcAssessElt, child.Loc(),
