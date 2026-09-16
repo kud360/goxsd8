@@ -119,6 +119,21 @@
 // unchanged — scores still only move up, and genuine Regressed and Vanished
 // cases still abort the merge whatever the assertion says.
 //
+// A withheld case that carries no committed expectation in ANY lane is not a
+// removal — no lane has a line to delete — and classifies as nothing, so
+// nothing else a run prints names it. That remainder is what a ratchet
+// PREDICTION must exclude: a case no lane banked cannot flip a lane's score
+// (issue #1412). It is listed on demand, on both the read-only and ratchet
+// paths:
+//
+//	GOXSD_WITHHELD=1
+//	    Lists the withheld case IDs no lane's committed file carries, sorted.
+//	    Deliberately not the whole withheld set: the suite-wide total is
+//	    logged every run, and the withheld IDs that DO carry a line are
+//	    already printed per lane as sanctioned removals on the read-only
+//	    path (issue #1514) — the ratchet path banks them instead of
+//	    printing them.
+//
 // # Running
 //
 //	go test ./conformance -run TestConformance -count=1
