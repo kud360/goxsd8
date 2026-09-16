@@ -148,7 +148,7 @@ package xsd
 // against {open content}.{wildcard} and an equal one is not the same one. A
 // consumer needing it — a PSVI [element attribution] or a §3.4.6.4 default
 // binding, neither of which this module builds — needs a third variant here
-// (#1516).
+// (#1553).
 type Attribution interface{ attribution() }
 
 // attribution marks ElementDeclaration as an Attribution (cvc-accept clause
@@ -288,10 +288,9 @@ type Matcher struct {
 //     withholds the whole element-sequence verdict, whose consumers are
 //     validate's Result.violations and its one reader Result.Violations, both
 //     of which carry violations PRESENT — so the decline costs a rejection and
-//     manufactures none. No issue owns its retirement: raising the ceiling
-//     needs the partitions represented as counter INTERVALS rather than one
-//     cursor each, which is a different state encoding and not a wider bound
-//     here.
+//     manufactures none. #1557 owns its retirement: raising the ceiling needs
+//     the partitions represented as counter INTERVALS rather than one cursor
+//     each, which is a different state encoding and not a wider bound here.
 //   - GAP(xsd): an <all> group with a model group among its {particles}, which
 //     cos-all-limited clause 2 admits only as a nested all group. Interleaving
 //     two all groups' members needs per-member positions this walk does not
