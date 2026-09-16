@@ -71,20 +71,63 @@ package xsd
 //     exceeds; and wherever the two counts differ the body is ·emptiable·, so
 //     canExit lets the iterations still owed be empty and {min occurs} is met
 //     as well.
+//
+// # The {open content} split, and why it needs no search either
+//
+// Where the {content type}'s {open content} is PRESENT, cvc-complex-content
+// (§3.4.4.3) clauses 2 and 3 decide the sequence S as two subsequences: an S1
+// ·valid· with respect to {particle} (cvc-particle §3.9.4.2, clauses 2.2 and
+// 3.2) and an S2 every member of which is ·valid· with respect to
+// {open content}.{wildcard} (cvc-wildcard §3.10.4.1, clauses 2.4 and 3.4).
+// Neither clause leaves the split open, so neither needs a search:
+//
+//   - clause 2.3 ({mode} suffix) admits an S2 only where S1 + E has no ·path·
+//     in {particle} for S2's first element E (§3.8.4.1, key-path). Having a
+//     path is prefix-closed, so exactly one S1 satisfies that: the longest
+//     prefix of S that has one. A shorter prefix leaves 2.3 false for its own
+//     first S2 item, and a longer one has no path.
+//   - clause 3.3 ({mode} interleave) says the same of EVERY member E of S2,
+//     against S3, the part of S1 preceding E. Each item's side is therefore
+//     fixed by the items before it: {particle} takes the item wherever it can
+//     extend, and the wildcard takes it only where {particle} provably cannot.
+//
+// That is PRINCIPLES 14's "explicit content beats an open-content wildcard at
+// the current state" arriving as the clauses' own condition rather than as a
+// tie-break this file invents. Next asks the two particle searches first and
+// the open wildcard last, and an item the open wildcard takes leaves the walk
+// state untouched, S2 being matched against that wildcard and nothing else.
+// Clause 2.1's S = S1 + S2 is a concatenation, so suffix mode never offers
+// {particle} another item once it has left it; clause 3.1's S1 × S2 is the
+// interleave operator (§3.8.4.1.3), so interleave mode offers every item.
 
 // Attribution is what one element information item of a matched child sequence
 // is ·attributed to· (§3.4.4.4, key-att-to): the {term} of the particle
-// [Matcher.Next] advanced over. It is a sealed sum (STYLE T2's closed-sum
-// exception) with exactly two variants, [ElementDeclaration] (cvc-accept clause
-// 2) and [Wildcard] (cvc-accept clause 1), because those are the two kinds of
-// ·basic particle· an item can be attributed to — a Model Group is not one, and
-// returning [Term] would make an attribution to one representable (STYLE T1).
+// [Matcher.Next] advanced over, or the {wildcard} of a present {open content}.
+// It is a sealed sum (STYLE T2's closed-sum exception) with exactly two
+// variants, [ElementDeclaration] (cvc-accept clause 2) and [Wildcard]
+// (cvc-accept clause 1), because those are the two kinds of ·basic particle· an
+// item can be attributed to — a Model Group is not one, and returning [Term]
+// would make an attribution to one representable (STYLE T1).
 //
 // An [ElementDeclaration] result is the particle's own declaration D, which is
 // the answer to "which particle consumed this item". For an item admitted
 // through cvc-accept clause 2.3.2 the ·context-determined declaration· is the
 // ·substituting declaration· S and not D; resolving S is the recursive
 // assessment's job (§3.3.4.6), not this one's.
+//
+// A [Wildcard] result is the {term} of a ·wildcard particle· (§3.9.1, key-wp)
+// OR the {wildcard} of the {open content}, for an item cvc-complex-content
+// clause 2.4 or 3.4 admitted and §3.4.4.4 therefore ·attributes to· the {open
+// content} itself. The spec keeps those two apart — §3.4.5.2 gives the second
+// the [match information] keyword open where the first takes
+// strict/lax/skip, and §3.4.6.4's key-dft-binding clauses 4-6 name them as
+// alternative cases — and this sum does not. The distinction is also NOT
+// recoverable from the returned value: a Wildcard is a value holding a
+// NamespaceConstraint, which holds slices, so there is no identity to compare
+// against {open content}.{wildcard} and an equal one is not the same one. A
+// consumer needing it — a PSVI [element attribution] or a §3.4.6.4 default
+// binding, neither of which this module builds — needs a third variant here
+// (#1516).
 type Attribution interface{ attribution() }
 
 // attribution marks ElementDeclaration as an Attribution (cvc-accept clause
@@ -116,16 +159,19 @@ type contentNode struct {
 // zero value is not usable.
 //
 // A Matcher is single-use and stateful: it holds the position the items so far
-// reached in the content model, so the caller feeds it one element's
-// [[children]] in document order and drops it. It is not safe for concurrent
-// use, and nothing in it is shared with the schema beyond the immutable
-// components the flattening read.
+// reached in the content model and, under a {mode} suffix {open content},
+// whether the sequence has left clause 2's S1 for its S2 — so the caller feeds
+// it one element's [[children]] in document order and drops it. It is not safe
+// for concurrent use, and nothing in it is shared with the schema beyond the
+// immutable components the flattening read.
 type Matcher struct {
 	s      *Schema
 	ct     ComplexType
+	open   *OpenContent
 	nodes  []contentNode
 	counts []int
 	path   []int
+	inS2   bool
 }
 
 // ContentMatcher returns a [Matcher] over t's {content type} particle, or (nil,
@@ -139,18 +185,15 @@ type Matcher struct {
 // <group ref> acyclicity that lets the flattening carry no visited set (STYLE
 // D4) — and a *Schema is the one thing that cannot exist before they ran.
 //
-// The four declines, none of them a violation:
+// A present {open content} is DECIDED rather than declined: the Matcher holds
+// it and [Matcher.Next] offers the open wildcard whatever {particle} cannot
+// take, per cvc-complex-content clauses 2 and 3 (see the file comment).
+//
+// The three declines, none of them a violation:
 //
 //   - a {content type} whose {variety} is empty or simple, which holds no
 //     particle at all. cvc-complex-type clauses 1.1 and 1.2 govern those
 //     directly and need no matcher.
-//   - GAP(xsd): a present {open content}. cvc-complex-content clauses 2 and 3
-//     split the sequence into a part matched against {particle} and a part
-//     matched against the {open content} wildcard, which this walk does not do
-//     (#1516). The withheld value is the whole element-sequence verdict, whose
-//     consumer set is validate's Result.violations and its one reader
-//     Result.Violations: both carry violations PRESENT, so withholding the
-//     verdict costs a rejection and manufactures none.
 //   - GAP(xsd): a particle with {max occurs} greater than 1 holding another
 //     such particle. That is cvc-accept's own named non-determinism, where the
 //     greedy walk can reject a sequence some other partition accepts (see the
@@ -167,10 +210,7 @@ func (s *Schema) ContentMatcher(t ComplexType) (*Matcher, bool) {
 	if !ok {
 		return nil, false
 	}
-	if ec.OpenContent != nil {
-		return nil, false
-	}
-	m := &Matcher{s: s, ct: t}
+	m := &Matcher{s: s, ct: t, open: ec.OpenContent}
 	if _, ok := m.flatten(ec.Particle); !ok {
 		return nil, false
 	}
@@ -273,16 +313,54 @@ func repeatable(o Occurs) bool {
 // caller charges against that item's own location; the Matcher is unchanged by
 // a rejected name, so a caller may stop at the first one or keep feeding.
 //
-// The two searches are cvc-accept's element/wildcard precedence: every live
-// particle is offered the name as an ·element particle· first (clause 2.3.1's
-// expanded-name match, then clause 2.3.2's ·substitution group· membership),
-// and only a name no element particle admits is offered to the wildcard
-// particles (clause 1, cvc-wildcard §3.10.4.1 in full).
+// The first two searches are cvc-accept's element/wildcard precedence: every
+// live particle is offered the name as an ·element particle· first (clause
+// 2.3.1's expanded-name match, then clause 2.3.2's ·substitution group·
+// membership), and only a name no element particle admits is offered to the
+// wildcard particles (clause 1, cvc-wildcard §3.10.4.1 in full).
+//
+// A third search follows them where the {content type}'s {open content} is
+// present, and is reachable only once both have failed — which is exactly
+// cvc-complex-content clause 2.3's and 3.3's "has no ·path· in {particle}"
+// (openNext, and the file comment for why the resulting split is the only one
+// those clauses admit).
 func (m *Matcher) Next(name QName) (Attribution, bool) {
+	if m.inS2 {
+		return m.openNext(name)
+	}
 	if a, ok := m.step(name, admitElements); ok {
 		return a, true
 	}
-	return m.step(name, admitWildcards)
+	if a, ok := m.step(name, admitWildcards); ok {
+		return a, true
+	}
+	return m.openNext(name)
+}
+
+// openNext offers name to {open content}.{wildcard}, the third tier
+// cvc-complex-content clauses 2.4 and 3.4 add over cvc-accept's two, and
+// reports the admitted item as ·attributed to· the {open content} (§3.4.4.4) —
+// for which the value is that record's own {wildcard}, on [Attribution]'s
+// terms.
+//
+// The walk is not advanced: an S2 member is matched against the wildcard alone,
+// so {particle} stands where S1 left it and [Matcher.Accepting] still asks
+// clause 2.2's and 3.2's question of S1 and of nothing else. In {mode} suffix
+// an admitted item also closes S1 for good (clause 2.1's S = S1 + S2 being a
+// concatenation), which is the one thing an admitted name changes beyond the
+// answer. A REJECTED name changes nothing at all, on [Matcher.Next]'s terms.
+func (m *Matcher) openNext(name QName) (Attribution, bool) {
+	if m.open == nil {
+		return nil, false
+	}
+	w := m.open.Wildcard()
+	if !m.s.allowsElementWildcardName(w, m.ct, name) {
+		return nil, false
+	}
+	if m.open.Mode() == OpenContentSuffix {
+		m.inS2 = true
+	}
+	return w, true
 }
 
 // Accepting reports whether the sequence fed so far is ·accepted· by the
@@ -291,6 +369,11 @@ func (m *Matcher) Next(name QName) (Attribution, bool) {
 // satisfy" half of cvc-accept, which the caller charges against the containing
 // element rather than any child, there being no child at the offending
 // position.
+//
+// Under a present {open content} the sequence asked about is S1 and not every
+// item fed: cvc-complex-content clauses 2.2 and 3.2 put S1 alone to
+// cvc-particle, and the items the open wildcard took are S2, which clauses 2.4
+// and 3.4 have already decided one at a time.
 func (m *Matcher) Accepting() bool {
 	if len(m.path) == 0 {
 		return m.emptiable(0)
@@ -331,9 +414,11 @@ func (m *Matcher) clone() *Matcher {
 	return &Matcher{
 		s:      m.s,
 		ct:     m.ct,
+		open:   m.open,
 		nodes:  m.nodes,
 		counts: append([]int(nil), m.counts...),
 		path:   append([]int(nil), m.path...),
+		inS2:   m.inS2,
 	}
 }
 
