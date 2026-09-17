@@ -223,8 +223,8 @@ func TestOnlyANilledFieldNodeWithholdsItsKeySequenceMember(t *testing.T) {
 }
 
 // An identity constraint whose {selector} or {fields} fall outside the
-// §3.11.6.2/§3.11.6.3 subset charges nothing at all (icpath.go's GAP), and
-// neither does a keyref referring to a key that declined.
+// §3.11.6.2/§3.11.6.3 subset charges nothing at all (icFrame.declined's GAP),
+// and neither does a keyref referring to a key that declined.
 func TestUnreadablePathDeclinesTheWholeConstraint(t *testing.T) {
 	key := icDef(t, "K", xsd.IdentityConstraintKey, "item[1]", nil, "", "@id")
 	keyref := icDef(t, "R", xsd.IdentityConstraintKeyref, "ref", nil, "K", "@r")

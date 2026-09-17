@@ -1,8 +1,10 @@
 package parser_test
 
 import (
+	"errors"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/kud360/goxsd8/xsd"
@@ -25,13 +27,16 @@ func idcOf(t *testing.T, doc string, name xsd.QName) []xsd.IdentityConstraint {
 }
 
 func TestProduceIdentityConstraints(t *testing.T) {
-	constraints := idcOf(t, wrap("", `<xs:element name="root">
+	// The target namespace is what binds the selector's tns prefix. Without it
+	// the {selector} carries an unbound prefix, which c-selector-xpath clause 1
+	// now charges (TestProduceIdentityConstraintPathViolations).
+	constraints := idcOf(t, wrap("urn:t", `<xs:element name="root">
 	  <xs:unique name="u">
 	    <xs:selector xpath="tns:a"/>
 	    <xs:field xpath="@x"/>
 	    <xs:field xpath="@y"/>
 	  </xs:unique>
-	</xs:element>`), xsd.QName{Local: "root"})
+	</xs:element>`), xsd.QName{Space: "urn:t", Local: "root"})
 	if len(constraints) != 1 {
 		t.Fatalf("got %d identity constraints, want 1", len(constraints))
 	}
@@ -39,8 +44,8 @@ func TestProduceIdentityConstraints(t *testing.T) {
 	if ic.Category() != xsd.IdentityConstraintUnique {
 		t.Errorf("category = %s, want unique", ic.Category())
 	}
-	if got := ic.Name(); got != (xsd.QName{Local: "u"}) {
-		t.Errorf("name = %s, want {}u", got)
+	if got := ic.Name(); got != (xsd.QName{Space: "urn:t", Local: "u"}) {
+		t.Errorf("name = %s, want {urn:t}u", got)
 	}
 	if got := ic.Selector().Expression(); got != "tns:a" {
 		t.Errorf("selector = %q, want %q", got, "tns:a")
@@ -865,4 +870,131 @@ func TestProduceNotation(t *testing.T) {
 func TestProduceNotationWithoutIdentifiers(t *testing.T) {
 	_, err := produce(t, wrap("", `<xs:notation name="n"/>`))
 	assertRule(t, err, "n-props-correct")
+}
+
+// icPathDoc is a schema whose one identity constraint carries selector and field
+// on their OWN LINES, so the line a charge is positioned at says which element
+// it named: 1 <schema><element>, 2 <unique>, 3 <selector>, 4 <field>.
+func icPathDoc(selector, field string) string {
+	return wrap("", "<xs:element name=\"root\">\n"+
+		"<xs:unique name=\"u\">\n"+
+		`<xs:selector xpath="`+selector+`"/>`+"\n"+
+		`<xs:field xpath="`+field+`"/>`+"\n"+
+		"</xs:unique>\n"+
+		"</xs:element>")
+}
+
+// The two lines of icPathDoc a charge can be positioned at.
+const (
+	icSelectorLine = 3
+	icFieldLine    = 4
+)
+
+// TestProduceIdentityConstraintPathViolations pins c-selector-xpath (§3.11.6.2)
+// and c-fields-xpaths (§3.11.6.3) at the four shapes a recognizer for clause
+// 2.1's BNF can prove against clause 2 WHOLE. Clause 2 is a disjunction, so an
+// {expression} failing 2.1's grammar may still satisfy 2.2's "XPath expression
+// involving the child axis whose abbreviated form is as given above"; each shape
+// below is a fault the unabbreviated spelling carries too, which is why charging
+// it cannot reject a conforming schema. TestProduceIdentityConstraintPathFailsOpen
+// pins the other side.
+//
+// The charge is positioned at the offending <selector>/<field> and never at the
+// <unique> above it (STYLE E3), which is what the line assertion proves.
+func TestProduceIdentityConstraintPathViolations(t *testing.T) {
+	tests := []struct {
+		name     string
+		selector string
+		field    string
+		rule     xsderr.Rule
+		line     int
+		msg      string
+	}{{
+		name:     "an unbound prefix",
+		selector: "q:a",
+		field:    "@x",
+		rule:     "c-selector-xpath", // clause 1: xpath-valid clause 2 admits no static error
+		line:     icSelectorLine,
+		msg:      `the {selector} "q:a" has an XPath static error`,
+	}, {
+		name:     "a predicate",
+		selector: "a",
+		field:    "b[c]",
+		rule:     "c-fields-xpaths", // clause 2: production [3] Step is '.' or a NameTest
+		line:     icFieldLine,
+		msg:      `the {fields} member "b[c]" carries a predicate`,
+	}, {
+		name:     "an attribute before a field's final step",
+		selector: "a",
+		field:    "@x/b",
+		rule:     "c-fields-xpaths", // clause 2: production [7]'s final step alone
+		line:     icFieldLine,
+		msg:      `the {fields} member "@x/b" names an attribute before its final step`,
+	}, {
+		name:     "a selector naming an attribute",
+		selector: "@x",
+		field:    "@y",
+		rule:     "c-selector-xpath", // clause 2: production [2] has no '@'
+		line:     icSelectorLine,
+		msg:      `the {selector} "@x" names an attribute`,
+	}}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := produce(t, icPathDoc(tt.selector, tt.field))
+			assertRule(t, err, tt.rule)
+			var e *xsderr.Error
+			if !errors.As(err, &e) {
+				t.Fatalf("error %v is no *xsderr.Error", err)
+			}
+			// HasPrefix and not Contains: the subject and the {expression} are
+			// two %-verbs of one message, and only their ORDER distinguishes a
+			// charge naming the offending construct from one naming the other.
+			if !strings.HasPrefix(e.Msg, tt.msg) {
+				t.Errorf("message = %q, want it to open %q", e.Msg, tt.msg)
+			}
+			if e.Loc.Line != tt.line {
+				t.Errorf("charged at line %d, want the offending element's own line %d", e.Loc.Line, tt.line)
+			}
+		})
+	}
+}
+
+// An unbound prefix is the one charged shape with a vocabulary of its own, so
+// err:XPST0081 travels as the wrapped cause one errors.Unwrap below the SCC and
+// is read with xsderr.RuleOf — never scraped out of the message.
+func TestProduceIdentityConstraintUnboundPrefixWrapsTheXPathCode(t *testing.T) {
+	_, err := produce(t, icPathDoc("q:a", "@x"))
+	assertRule(t, err, "c-selector-xpath")
+	cause := errors.Unwrap(err)
+	if cause == nil {
+		t.Fatal("the c-selector-xpath charge wraps no cause; want err:XPST0081")
+	}
+	got, ok := xsderr.RuleOf(cause)
+	if !ok || got != xsderr.Rule("err:XPST0081") {
+		t.Errorf("cause rule = %q (ok=%v), want err:XPST0081", got, ok)
+	}
+}
+
+// TestProduceIdentityConstraintPathFailsOpen is the other side of clause 2's
+// disjunction: an {expression} this processor cannot READ is not an
+// {expression} the SCC rejects, and charging one would reject a conforming
+// schema before validation ever ran. Each row assembles, and its path is
+// declined later, at validate time, under cvc-identity-constraint (§3.11.4).
+func TestProduceIdentityConstraintPathFailsOpen(t *testing.T) {
+	for _, tt := range []struct{ name, selector, why string }{
+		{"an unabbreviated axis", "child::a", "clause 2.2 admits the unabbreviated form of an abbreviated path"},
+		{"self steps under .//", ".//.", "production [3]'s bare '.' Step derives it, so clause 2.1 holds outright"},
+		{"a numeric predicate", "a[1]", "'1' opens no token, and a stream this lexer cannot read is declined and never charged"},
+		{"a quoted predicate", "a[b='c']", "the quotes open no token either, so the '[' is not read as a predicate"},
+		{"a descendant step mid-path", "a//b", "outside production [2], but clause 2.2 may still spell it"},
+		{"an absolute path", "/a", "outside production [2], but clause 2.2 may still spell it"},
+		{"an unbound prefix under an unreadable axis", "child::q:a", "unsupported dominates: the prefix is not read in isolation"},
+		{"an unbound prefix on a path outside the subset", "q:a//b", "unsupported dominates: the stream lexes whole and still parses to nothing, so clause 1 is never reached"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := produce(t, icPathDoc(tt.selector, "@x")); err != nil {
+				t.Errorf("Produce charged %v; want the schema to assemble — %s", err, tt.why)
+			}
+		})
+	}
 }
