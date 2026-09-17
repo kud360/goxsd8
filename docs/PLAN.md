@@ -136,10 +136,14 @@ row**: **69 markers, 9 areas, group 1 at 19, group 2 at 31.** Down from 71 —
 
 ### Milestones and queue
 
-**TWO full page-numbered `state=all` REST walks, both clean on the first
-request**, taken before and after this pass's writes. Both stamped
-**`rows 1566 distinct 1566 min 1 max 1566 no gaps`**: **1566 rows, 703 PRs
-excluded, 863 issues — 335 open, 528 closed.**
+**THREE full page-numbered `state=all` REST walks, all clean on the first
+request** — before this pass's writes, after them, and after the persona fold.
+The third is the one quoted here, stamped
+**`rows 1571 distinct 1571 min 1 max 1571 no gaps`**: **1571 rows, 704 PRs
+excluded, 867 issues — 339 open, 528 closed.** The first two read
+`rows 1566 distinct 1566 … no gaps` and **335 open**; the difference is this
+pass's own four filings plus one landing, and it is stated rather than smoothed
+over so a reader can see which walk any figure below came from.
 
 | milestone | open | closed | state |
 |---|---:|---:|---|
@@ -151,16 +155,16 @@ excluded, 863 issues — 335 open, 528 closed.**
 | M6 — XPath required subset | 1 | 0 | not started |
 | M7–M12 | 0 | 0 | not started |
 
-Queue labels, open only: **321 `ready`, 12 `blocked`, 0 `needs-replan`,
-2 `epic`** — summing to 335, and **every open issue carries exactly one,
-verified over all 335 by grouping each issue's own label set rather than by
+Queue labels, open only: **325 `ready`, 12 `blocked`, 0 `needs-replan`,
+2 `epic`** — summing to 339, and **every open issue carries exactly one,
+verified over all 339 by grouping each issue's own label set rather than by
 summing counts**. #779 owns the mechanical check.
 
 By kind: `kind/refactor` 81, `kind/process` 67, `kind/gap` 59, `kind/tooling`
-45, `kind/story` 35, `kind/bug` 33, `kind/docs` 30, `kind/feature` 3. By area:
-`meta` 96, `parser` 83, `xsd` 64, `docs` 44, `conformance` 37, `cmd` 30,
+45, `kind/story` 37, `kind/bug` 34, `kind/docs` 31, `kind/feature` 3. By area:
+`meta` 96, `parser` 83, `xsd` 64, `docs` 46, `conformance` 37, `cmd` 33,
 `validate` 28, `value` 17, `builtin` 11, `xsderr` 9, `regex` 6, `xpath` 6,
-`model` 4, `loader` 2, `cli` 1. **263 of 335 open issues carry no milestone at
+`model` 4, `loader` 2, `cli` 1. **267 of 339 open issues carry no milestone at
 all**, so read the `area/` census, not the milestone counts.
 
 **M4 did not move at all this window** — 54 open, 134 closed, byte-identical to
@@ -170,10 +174,10 @@ most **23 are lane-visible** (15 `gap`, 7 `bug`, 1 `feature`) against 31 that
 move no lane by construction; of M5's 17, at most **11** (8 `gap`, 2 `bug`,
 1 `feature`).
 
-**`ready` 317 → 321.** Four closed with the landings and eight were filed by
-their post-land passes (#1552, #1553, #1554, #1557, #1560, #1561, #1564, #1565).
-A net of +4 on a turnover of twelve is #347's shape: `ready` is an output, not a
-target.
+**`ready` 317 → 325.** Four closed with the landings; eight were filed by their
+post-land passes (#1552, #1553, #1554, #1557, #1560, #1561, #1564, #1565) and
+**four by this pass's persona fold** (#1568, #1569, #1570, #1571). A net of +8 on
+a turnover of sixteen is #347's shape: `ready` is an output, not a target.
 
 **The unblock sweep measured ZERO**, over all twelve `blocked` bodies'
 `## Depends on` sections read byte-faithfully from REST. **No entry names #1516,
@@ -185,7 +189,10 @@ their own bodies why every closed dependency is not a discharge** (#16, #1051);
 `ready` today** — #593←#591, #731←#1414, #871←#831, #1344←#1324, #1458←#479.
 **The graph is depth-1, no cycles, and no `blocked` body names an epic.**
 
-**The `ready` audit found ZERO queue mislabels and EIGHT defective bodies.** All
+**The `ready` audit found ZERO queue mislabels and EIGHT defective bodies.** It
+was run over the **321** `ready` issues standing at the second walk, before this
+pass's four filings — which is why its denominator is 321 and not the 325 above,
+and the four new bodies were checked separately and carry all six sections. All
 321 carry a `## Depends on`; 63 name an open `#N` inside it under an explicit
 "none"/"n/a" opener with a not-gating clause, and the nine that appeared to name
 one otherwise were all bodies quoting `` `## Depends on` `` in prose — checked
@@ -199,14 +206,66 @@ absent section reads exactly like a ruled `none`. **Filed as a sixth and seventh
 class on #779** rather than beside it, with the table. **#773 and #774 were
 repaired here** — they are the M5 carve's whole remainder and will be picked.
 
-### Persona consultations — NOT RUN by this pass, deliberately
+### Persona consultations — the TWENTY-SEVENTH, and TWO findings in eleven had a FALSE premise
 
 The cartographer role-plays no persona and does not spawn one (#416): it has read
 the source, so a verdict it produced would launder an insider's opinion as an
-outsider's. **This pass was handed no persona report, so it folded nothing**, and
-that is the rule working rather than a step skipped. The API- and CLI-facing
-surface this pass identified for an orchestrating session to run the personas
-against is:
+outsider's. **The orchestrating session ran both personas fresh against the
+published surface** — `libuser` on README plus `go doc` only, `cliuser` on README
+plus `-help` plus a binary built from the tree — and handed the reports here.
+**Every finding was re-derived against the tree before disposition.**
+
+**Eleven findings: FOUR filed, SEVEN folded into the issue that already owned
+them.** Filed: **#1568** (README invites an application author without a schema
+document to the component-model constructors and fences it one sentence later),
+**#1569** (a repeated identical `-schema` is silently collapsed while two
+byte-identical files under different names collide at `sch-props-correct`),
+**#1570** (rule on subcommand-scoped help), **#1571** (`-help` describes exit 4
+abstractly and names no construct class, so a binary-only operator cannot predict
+permanent exit 4 on `xs:assert`). Folded: **#1005**, **#1283**, **#1315**,
+**#1292**, **#405**, **#1381**, **#1521**, plus a design-input comment on
+**#1553** and reciprocal cross-references on **#1434**, **#1433**, **#1089**,
+**#1407** and **#405**.
+
+**The finding of this consultation is that TWO findings rested on premises that
+are false against the tree, and both were corrected rather than filed as
+reported.** This is new in this record and it is the reason a persona report is
+re-derived rather than transcribed:
+
+- `libuser` reported that README *"explicitly tells a plain library consumer to
+  reach for `SchemaBuilder`"*. **README says the opposite** — *"That builder is
+  PRODUCER surface, not application surface"*, `README.md:292`. **#1568 states
+  the contradiction is not there** and files the defect that IS: the invitation
+  is sentence 1, the fence is sentence 2, and the reader the invitation catches
+  is addressed by no sentence after it. The persona is first-hand evidence for
+  the arrival order, which is the one thing an insider cannot supply.
+- `cliuser` reported that the `xs:assert` fail-open pointer *"lives only in the
+  library README section, not in `-help`/`doc.go`'s validate section"*.
+  **`cmd/goxsd8/doc.go:177-182` names it directly.** **#1571 corrects the premise
+  and keeps the real defect**, which is narrower and is #1279's shape: `doc.go`
+  names the construct classes, `main.go`'s `usage` — what the binary prints — does
+  not.
+
+**That is the THIRD consecutive consultation whose real finding was a SITING
+error rather than a wrong statement** (#1521's arm (a), #1549's *"not
+well-formed"* sentence, now #1571), and a **fourth** consecutive one finding no
+accuracy bug in the CLI contract: `cliuser` verified `-help`, `go doc
+./cmd/goxsd8` and README's CLI section **word-for-word identical**, and every
+exit code, stream and message shape it probed matched. **Whether the persona
+trigger should change is `/retro`'s to decide**, and the datum to decide it on is
+now the *repair* rate — seven folds, of which #405, #1381, #1521 and #1292 each
+had a scope or a premise corrected by what the outside view saw.
+
+**One fold is a correction of a WARDEN ruling, not of a body.** #405 carried the
+warden's cleared rationale that *"the mis-order hazard is same-typed adjacency,
+and there is none"*, and its roster lists only adjacent pairs. The persona
+tripped on **same-typed NON-ADJACENT `bool` parameters** —
+`NewElementDeclaration` positions 7 and 11 (`nillable`, `abstract`) and
+`NewAttributeUse` positions 2 and 5 (`required`, `inheritable`), both read from
+`go doc ./xsd` — which transpose and type-check. #405's fence against
+pre-emptive conversion is untouched; what changed is what its comment must say.
+
+### API- and CLI-facing routing, for the next consultation
 
 - **M5 — Instance validation (XML)** is the one milestone that is BOTH. Its own
   `## Surface` names `validate.Validator`, `Result`, `Option`, the abstract
@@ -215,12 +274,13 @@ against is:
   #1224, #1250, #1257, #1346, #1494).
 - **M4 — Schema parsing** is API-facing only: the exported `parser`/`xsd`
   surface, 54 open.
-- **The CLI-facing work is NOT a milestone.** 31 open issues carry `area/cmd` or
-  `area/cli` and **25 of them carry no milestone at all**, so milestone counts
-  cannot route a `cliuser` run. The `cmd` contract family — #1407, #1549, #1521,
-  #1381, #1368, #1419, #1421 — all edit `cmd/goxsd8/doc.go` and README's CLI
-  section and should be taken as one or two sittings, not seven.
-- **40 open issues in a library area carry a non-empty `## Surface`**, and 35
+- **The CLI-facing work is NOT a milestone.** 33 open issues carry `area/cmd` or
+  `area/cli` and most carry no milestone at all, so milestone counts cannot route
+  a `cliuser` run. **The `cmd` contract family is now ELEVEN issues over two
+  files** — #1407, #1549, #1521, #1381, #1368, #1419, #1421, #1318, #1569, #1570,
+  #1571 — and #1407's five-row exit-code table is the structure three of the
+  others want to hang a clause on.
+- **40 open issues in a library area carry a non-empty `## Surface`**, and 37
   carry `kind/story`. Those two sets are where a `libuser` report lands.
 
 ### Working band
@@ -286,15 +346,20 @@ own scope ruling. **#1560**, **#1502**, **#1531**, **#1546**, **#1548**,
    stamp.
 4. **The survey channel's failure rate has a THIRD data point and the question
    is closed.** The twenty-fifth stamp took four walks and two came back
-   corrupt; the twenty-sixth took four clean; this one took **two, both clean on
+   corrupt; the twenty-sixth took four clean; this one took **three, all clean on
    the first request**, with #1520's page-content assertion in the recipe
    throughout. **Read the 25th as an incident, not a rate**, and keep quoting the
    distinct-number stamp wherever a survey figure is quoted.
-5. **The persona trigger is `/retro`'s to decide and this pass adds one datum to
-   it**: the consultation did not run here, and the routing list under *Persona
-   consultations* above is what an orchestrating session needs to run it — M5
-   for both personas, M4 for `libuser`, and the 31 milestone-less `area/cmd`
-   issues for `cliuser`.
+5. **The persona trigger is `/retro`'s to decide, and this pass changes the
+   datum it should be decided on.** Four stamps have now measured the
+   filed-versus-re-found ratio; this one measured something better. **TWO of
+   eleven findings rested on premises that are FALSE against the tree** (README
+   does say "PRODUCER surface, not application surface"; `doc.go:180` does name
+   `xs:assert`), and both produced a real, narrower issue once re-derived — so
+   **a persona report is an input to be checked, never a filing to be
+   transcribed**, and the value of the consultation is not measurable by how many
+   findings were new. **Decide the trigger against the REPAIR rate**: seven folds,
+   four of which corrected a scope or a premise in the issue they re-found.
 6. **The human decision blocking #1002 is unchanged and is carried for a
    TWENTY-THIRD stamp.** It waits on a ruling between (a) a constitutional
    "superseded pass" ratchet class alongside `GOXSD_RATCHET_REMOVALS`, enumerated
@@ -308,25 +373,49 @@ own scope ruling. **#1560**, **#1502**, **#1531**, **#1546**, **#1548**,
    container can read whether the routine fired.
 
 **What this pass did, so the next one can tell a completed run from a skipped
-one:** **ZERO issues filed and ZERO closed** — the surveys turned up no untracked
-gap, no stale issue and no duplicate; every defect found had a live owner.
-**FIVE body PATCHes**: **#779** widened with a sixth and seventh hygiene class
-and the measured table; **#773** and **#774** each given the `## Surface` and the
-`Ratchet:` bar they were filed without (and #774 a `## Spec`); **#250**'s three
-stale premises corrected — its "five unlanded slices" list named three issues
-that landed this window, its milestone count, and a present-tense `instance`
-figure of 1337; **#1553** given the `## Notes` bullet recording why `gapaudit`
-reports it in two groups at once. **ONE thread comment** — #1522, corroborating
-its own scope ruling with fourteen stamps of section-length data. **ZERO label
-changes**: the unblock sweep measured zero and the queue audit found no mislabel.
+one.**
+
+**FOUR issues filed, ZERO closed, ZERO label changes** — and all four came from
+the persona fold, not from the surveys. **The surveys themselves turned up no
+untracked gap, no stale issue and no duplicate**: every defect the marker census,
+the branch sweep and the queue audit found already had a live owner, the unblock
+sweep measured zero, and the queue audit found no mislabel. The four are
+**#1568**, **#1569**, **#1570** and **#1571**, all `ready`, all carrying the six
+required sections, and each naming its adjacent issues with the reciprocal
+cross-reference posted.
+
+**TWELVE body PATCHes.** From the surveys: **#779** widened with a sixth and
+seventh hygiene class and the measured table; **#773** and **#774** each given
+the `## Surface` and the `Ratchet:` bar they were filed without (and #774 a
+`## Spec`); **#250**'s three stale premises corrected — its "five unlanded
+slices" list named three issues that landed this window, its milestone count, and
+a present-tense `instance` figure of 1337; **#1553** given the `## Notes` bullet
+recording why `gapaudit` reports it in two groups at once. From the persona fold:
+**#1005**, **#1283**, **#1315**, **#1292**, **#405**, **#1381**, **#1521** and
+**#1318**, of which **#405**, **#1381**, **#1521** and **#1292** each had a scope
+or a premise corrected by what the outside view saw.
+
+**SEVEN thread comments** — **#1522** (fourteen stamps of section-length data
+corroborating its own scope ruling), **#1553** (design input for the third arm),
+and reciprocal cross-references on **#1434**, **#1433**, **#1089**, **#1407** and
+**#405**.
+
+**Two statements in this section were FALSE when first written and are corrected
+here rather than left standing**: it said the persona consultation had not run
+and that zero issues were filed, both true at the moment the section was drafted
+and both false once the reports arrived. **A stamp that misreports its own
+actions is the #400 failure mode**, and the queue counts above were re-read from
+a THIRD walk rather than carried forward.
 
 **Every body PATCH and comment went through `gh api -F body=@FILE`** and is
 byte-faithful; every body READ came from repository-scoped REST rather than the
 MCP channel (#764). GraphQL is still a 403, exactly as `docs/ROUTINES.md`
 records. **`gapaudit` was run twice and is identical row for row; `wipsurvey`
-twice; two `state=all` walks, both clean.** **`testdata/xsdtests` was NOT
-initialized**, so no suite figure here is this pass's own measurement — the lane
-table is the committed expectations census, which needs no submodule.
+twice; THREE `state=all` walks, all three clean on the first request.**
+**`testdata/xsdtests` was NOT initialized**, so no suite figure here is this
+pass's own measurement — the lane table is the committed expectations census,
+which needs no submodule, and every CLI behaviour quoted from the `cliuser`
+report is marked as that persona's reproduction rather than this pass's.
 
 ## Milestones
 
