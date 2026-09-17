@@ -254,14 +254,14 @@ func TestUnresolvedNameUnderAStrictWildcardChargesTheEnclosingElement(t *testing
 		"e-validity clause 1.1.3 names a strict wildcard particle alone")
 }
 
-// The same clause is WITHHELD where a strict {open content} wildcard could have
-// been the admitting one: an item cvc-complex-content clause 2.4 or 3.4 took is
-// ·attributed to· the {open content} (§3.4.4.4) and not to a ·wildcard
-// particle·, which is what clause 1.1.3 quantifies over, and [xsd.Attribution]
-// spells the two the same way. Charging here would reject a document
-// key-governing-ed clause 4 leaves merely without a ·governing element
-// declaration· — see the GAP(validate) on [walk.unresolvedStrictWildcardChild].
-func TestOpenContentSuppressesTheStrictWildcardParticleCharge(t *testing.T) {
+// The same clause is WITHHELD for an item the {open content} took: an item
+// cvc-complex-content clause 2.4 or 3.4 admitted is ·attributed to· the {open
+// content} (§3.4.4.4) and not to a ·wildcard particle·, which is what clause
+// 1.1.3 quantifies over. Charging here would reject a document key-governing-ed
+// clause 4 leaves merely without a ·governing element declaration·. The log is
+// what tells this from a charge that never became live: the attribution line
+// names the {open content} wildcard, so the item DID reach the clause.
+func TestOpenContentAttributionWithholdsTheStrictWildcardParticleCharge(t *testing.T) {
 	schema := cSchema(t, cOpenContent(t, xsd.OpenContentInterleave, xsd.ProcessStrict,
 		cNamespaceConstraint(t, xsd.NamespaceConstraintAny), cParticle(t, "a", 1, 1)))
 
@@ -269,7 +269,95 @@ func TestOpenContentSuppressesTheStrictWildcardParticleCharge(t *testing.T) {
 
 	wantSilence(t, got, "the open-content item's ·attribution· is not a ·wildcard particle·")
 	cWantLogged(t, visits,
-		"assessing content validate.name=stranger validate.loc=instance.xml:3:1 validate.rule=cvc-assess-elt validate.clause=1.1.3 validate.outcome=declined")
+		"assessing content validate.name=stranger validate.loc=instance.xml:3:1 validate.rule=cvc-complex-content validate.clause=3 validate.outcome=attributed to open content wildcard any")
+}
+
+// A type carrying BOTH a strict {open content} wildcard and a strict ·wildcard
+// particle· charges clause 1.1.3 for the child the PARTICLE took and withholds
+// it for the child the {open content} took, in one assessment: the two are told
+// apart by the ·attribution· each child carries (§3.4.4.4) and never by the
+// type's shape, which is the same for both of them here.
+//
+// PRINCIPLES 14 is what puts one child on each arm: the ·wildcard particle· is
+// offered first and its {max occurs} is 1, so "p" goes to the particle and "o",
+// for which {particle} then has no ·path·, goes to the {open content}. Neither
+// name ·resolves· to a top-level element declaration, so both are ·laxly
+// assessed· with [validity] notKnown and differ in nothing but the arm.
+func TestBothWildcardKindsStrictChargeOnlyTheParticleAttributedChild(t *testing.T) {
+	schema := cSchema(t, cOpenContent(t, xsd.OpenContentInterleave, xsd.ProcessStrict,
+		cNamespaceConstraint(t, xsd.NamespaceConstraintAny), dWildcard(t, xsd.ProcessStrict)))
+
+	got, visits := cAssessLogged(t, schema, cRoot("p", "o"))
+
+	if len(got) != 1 {
+		t.Fatalf("Violations() = %v, want exactly the particle-attributed child's clause 1.1.3 charge", got)
+	}
+	if got[0].Loc != loc(2, 1) {
+		t.Errorf("Loc = %s, want the particle-attributed child's position %s", got[0].Loc, loc(2, 1))
+	}
+	if !strings.HasPrefix(got[0].Msg, "the element information item p is ·attributed to·") {
+		t.Errorf("Msg = %q, want the PARTICLE-attributed child p as its subject, not the open-attributed o", got[0].Msg)
+	}
+	cWantLogged(t, visits,
+		"assessing content validate.name=p validate.loc=instance.xml:2:1 validate.rule=cvc-complex-content validate.clause=3 validate.outcome=attributed to wildcard any",
+		"assessing content validate.name=o validate.loc=instance.xml:3:1 validate.rule=cvc-complex-content validate.clause=3 validate.outcome=attributed to open content wildcard any")
+}
+
+// Withholding clause 1.1.3 for the {open content} arm is not the same as
+// assessing that child against nothing: key-governing-ed clause 4 still
+// ·resolves· its ·expanded name· among the top-level element declarations, so a
+// child the {open content} took IS assessed against the type its declaration
+// supplies, and a defect in the child's own [[children]] is charged at the
+// child's position.
+func TestOpenContentAttributedChildIsAssessedAgainstItsResolvedDeclaration(t *testing.T) {
+	schema := cSchemaFrom(t, dType(t, "RootType", "", xsd.DerivationRestriction, nil,
+		cOpenContent(t, xsd.OpenContentInterleave, xsd.ProcessStrict,
+			cNamespaceConstraint(t, xsd.NamespaceConstraintAny), cParticle(t, "a", 1, 1))),
+		func(b *xsd.SchemaBuilder) {
+			b.AddType(dType(t, "OType", "", xsd.DerivationRestriction, nil,
+				cSequence(t, false, cParticle(t, "needed", 1, 1))))
+			b.AddElement(dTopLevel(t, "o", "OType"))
+		})
+
+	// <o> resolves to the top-level declaration, whose OType wants a <needed> it
+	// does not carry.
+	got := cAssess(t, schema, dElem("root", 1,
+		ElementChild(dElem("a", 2)), ElementChild(dElem("o", 3))))
+
+	wantContentCharge(t, got, "cvc-complex-content", "1", loc(3, 1))
+}
+
+// A skip {open content} wildcard ends the descent exactly as a skip ·wildcard
+// particle· does: the child is ·skipped· (§3.10.4.1, key-skipped), so neither it
+// nor anything below it is ·assessed· (cvc-assess-elt clause 3.2). The visit log
+// is what says so — a child assessed against nothing charges nothing either, and
+// only one of the two leaves the subtree unvisited.
+func TestOpenContentAttributedChildUnderASkipWildcardIsNotAssessed(t *testing.T) {
+	schema := cSchemaFrom(t, dType(t, "RootType", "", xsd.DerivationRestriction, nil,
+		cOpenContent(t, xsd.OpenContentInterleave, xsd.ProcessSkip,
+			cNamespaceConstraint(t, xsd.NamespaceConstraintAny), cParticle(t, "a", 1, 1))), nil)
+
+	log, visits := recordingLogger()
+	v, err := New(schema, testBackend(), WithLogger(log))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	res := v.Assess(dElem("root", 1,
+		ElementChild(dElem("a", 2)),
+		ElementChild(dElem("x", 3, ElementChild(dElem("junk", 4))))))
+
+	wantSilence(t, res.Violations(), "a ·skipped· item's schema-validity is not assessed")
+	for _, unwanted := range []string{
+		"assessing element validate.name=x validate.loc=instance.xml:3:1",
+		"assessing element validate.name=junk validate.loc=instance.xml:4:1",
+	} {
+		if slices.Contains(*visits, unwanted) {
+			t.Errorf("walk visited\n\t%s\nwant it NOT to include\n\t%s", strings.Join(*visits, "\n\t"), unwanted)
+		}
+	}
+	cWantLogged(t, visits,
+		"assessing element validate.name=x validate.loc=instance.xml:3:1 validate.rule=cvc-assess-elt validate.clause=3.2 validate.outcome=skipped")
 }
 
 // The ·laxly assessed· child is still recursed, unlike a ·skipped· one: its own

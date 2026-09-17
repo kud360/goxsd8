@@ -458,10 +458,10 @@ func TestRejectedChildAttributesItsSubtreeToNothing(t *testing.T) {
 
 // cOpenContent is cSequence over an element-only {content type} plus a PRESENT
 // {open content} (§3.4.1) of the given {mode}, whose {wildcard} carries nc and
-// {process contents} skip. Skip keeps the open half's own children out of the
-// charges under test: an item ·attributed to· a skip wildcard is not ·assessed·
-// (cvc-assess-elt clause 3.2), which is cvcassesselt_test.go's subject and not
-// this file's.
+// {process contents} pc. This file passes skip throughout, which keeps the open
+// half's own children out of the charges under test: an item ·attributed to· a
+// skip wildcard is not ·assessed· (cvc-assess-elt clause 3.2), which is
+// cvcassesselt_test.go's subject and not this file's.
 func cOpenContent(t *testing.T, mode xsd.OpenContentMode, pc xsd.ProcessContents, nc xsd.NamespaceConstraint, particles ...xsd.Particle) xsd.ContentType {
 	t.Helper()
 	w, err := xsd.NewWildcard(xsderr.Loc{}, nc, pc)
@@ -537,7 +537,7 @@ func TestOpenContentInterleavesWithTheParticle(t *testing.T) {
 	wantSilence(t, got, "the {particle} took a and b and the {open content} took x")
 	cWantLogged(t, visits,
 		"assessing content validate.name=a validate.loc=instance.xml:2:1 validate.rule=cvc-complex-content validate.clause=3 validate.outcome=attributed to element declaration a",
-		"assessing content validate.name=x validate.loc=instance.xml:3:1 validate.rule=cvc-complex-content validate.clause=3 validate.outcome=attributed to wildcard any",
+		"assessing content validate.name=x validate.loc=instance.xml:3:1 validate.rule=cvc-complex-content validate.clause=3 validate.outcome=attributed to open content wildcard any",
 		"assessing content validate.name=b validate.loc=instance.xml:4:1 validate.rule=cvc-complex-content validate.clause=3 validate.outcome=attributed to element declaration b",
 		"assessing content validate.name=root validate.loc=instance.xml:1:1 validate.rule=cvc-complex-content validate.clause=3 validate.outcome=accepted")
 }
@@ -555,7 +555,7 @@ func TestOpenContentSuffixNeverReturnsToTheParticle(t *testing.T) {
 
 	wantContentCharge(t, got, "cvc-complex-content", "2", loc(1, 1))
 	cWantLogged(t, visits,
-		"assessing content validate.name=b validate.loc=instance.xml:4:1 validate.rule=cvc-complex-content validate.clause=2 validate.outcome=attributed to wildcard any")
+		"assessing content validate.name=b validate.loc=instance.xml:4:1 validate.rule=cvc-complex-content validate.clause=2 validate.outcome=attributed to open content wildcard any")
 }
 
 // An item satisfying NEITHER half — no ·path· in the {particle} at its position
