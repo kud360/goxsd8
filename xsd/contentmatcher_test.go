@@ -83,6 +83,27 @@ func cmGroup(t *testing.T, o Occurs, compositor Compositor, particles ...Particl
 	return uParticle(t, o, ResolvedTerm{Term: uGroup(t, compositor, particles...)})
 }
 
+// cmPermutations returns every ordering of names, each a fresh slice, in a
+// deterministic order (STYLE D2) so a failure names the same permutation on
+// every run. It is what an all group's tests enumerate: §3.8.4.1.3 makes the
+// group's language the interleave of its members' own, and for single-item
+// members that is exactly the permutations.
+func cmPermutations(names ...string) [][]string {
+	if len(names) <= 1 {
+		return [][]string{append([]string(nil), names...)}
+	}
+	var out [][]string
+	for i := range names {
+		rest := make([]string, 0, len(names)-1)
+		rest = append(rest, names[:i]...)
+		rest = append(rest, names[i+1:]...)
+		for _, p := range cmPermutations(rest...) {
+			out = append(out, append([]string{names[i]}, p...))
+		}
+	}
+	return out
+}
+
 // A sequence takes its members in order, and each item is ·attributed to· the
 // particle that consumed it (§3.8.4.1.1, cvc-accept clause 2.3.1).
 func TestMatcherTakesASequenceInOrder(t *testing.T) {
@@ -693,15 +714,137 @@ func TestContentMatcherDeclinesANestedRepetitionTooWideToCarry(t *testing.T) {
 	}
 }
 
-// An all group nested in an all group interleaves two member sets at once,
-// which the per-member counters cannot express; cos-all-limited clause 1.3 is
-// the only shape that reaches it, and it declines.
-func TestContentMatcherDeclinesAnAllGroupInsideAnAllGroup(t *testing.T) {
-	p := uParticle(t, uOccurs(t, 1, 1), ResolvedTerm{Term: uGroup(t, CompositorAll,
+// cmNestedAll is the shape cos-all-limited (§3.8.6.2) clause 2 admits inside an
+// all group and nothing else admits: an all group among another all group's
+// {particles}, through a {min occurs} = {max occurs} = 1 particle (clause 1.3).
+//
+// The nested group sits BETWEEN two leaf members rather than last, so every
+// sequence below puts some name to a sibling AFTER the suspended group has been
+// offered that name and refused it. That is the order a resume which fails
+// without unwinding the path it appended to gets wrong, and it is invisible
+// where the group is the last member tried.
+func cmNestedAll(t *testing.T) Particle {
+	t.Helper()
+	return cmGroup(t, uOccurs(t, 1, 1), CompositorAll,
 		cmLeaf(t, "a", uOccurs(t, 1, 1)),
-		cmGroup(t, uOccurs(t, 1, 1), CompositorAll, cmLeaf(t, "b", uOccurs(t, 1, 1))))})
-	s, ct := cmSchema(t, p, nil)
-	if _, ok := s.ContentMatcher(ct); ok {
-		t.Error("ContentMatcher decided an all group holding an all group")
+		cmGroup(t, uOccurs(t, 1, 1), CompositorAll,
+			cmLeaf(t, "c", uOccurs(t, 1, 1)),
+			cmLeaf(t, "d", uOccurs(t, 1, 1))),
+		cmLeaf(t, "b", uOccurs(t, 1, 1)))
+}
+
+// §3.8.4.1.3 folds a nested all group's language into the SAME interleave as
+// its parent's: L(M) is S1 × … × Sn, where Si is any word of Pi's own language,
+// and nothing there requires one member's items to be contiguous. So every
+// permutation of the outer group's members and the inner group's is a word of
+// the outer group.
+func TestMatcherInterleavesANestedAllGroupWithItsParentsMembers(t *testing.T) {
+	// a c b d alternates between the two groups and is the order an
+	// implementation that validated the nested group as one contiguous block
+	// would wrongly reject.
+	cmAccept(t, cmMatcher(t, cmNestedAll(t), nil), "a", "c", "b", "d")
+
+	for _, p := range cmPermutations("a", "b", "c", "d") {
+		cmAccept(t, cmMatcher(t, cmNestedAll(t), nil), p...)
 	}
+}
+
+// What a suspended member of an all group owes is owed to the group, and a
+// member that is itself an all group owes what its OWN members owe: a sequence
+// short of any of them is not ·accepted·, though every item in it was taken
+// (cvc-accept clauses 2.1 and 3.1, applied at both nesting levels).
+func TestMatcherRejectsAnAllGroupLeftIncompleteAtEitherNestingLevel(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		feed []string
+	}{
+		{"the inner group is short a member", []string{"a", "b", "c"}},
+		{"the outer group is short a member", []string{"c", "a", "d"}},
+		{"the inner group was never entered", []string{"a", "b"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := cmMatcher(t, cmNestedAll(t), nil)
+			if i := cmFeed(t, m, tc.feed...); i != len(tc.feed) {
+				t.Fatalf("Next rejected %s at position %d of %v, want every item taken", tc.feed[i], i, tc.feed)
+			}
+			if m.Accepting() {
+				t.Errorf("Accepting() = true after %v, which leaves a member of an all group owed", tc.feed)
+			}
+		})
+	}
+}
+
+// Clause 1.3 permits an all group inside an all group inside an all group, and
+// the interleave folds at every level, so the walk recurses rather than
+// handling one level of nesting.
+func TestMatcherInterleavesAllGroupsNestedThreeDeep(t *testing.T) {
+	model := func() Particle {
+		return cmGroup(t, uOccurs(t, 1, 1), CompositorAll,
+			cmLeaf(t, "a", uOccurs(t, 1, 1)),
+			cmGroup(t, uOccurs(t, 1, 1), CompositorAll,
+				cmLeaf(t, "b", uOccurs(t, 1, 1)),
+				cmGroup(t, uOccurs(t, 1, 1), CompositorAll,
+					cmLeaf(t, "c", uOccurs(t, 1, 1)),
+					cmLeaf(t, "d", uOccurs(t, 1, 1)))))
+	}
+	for _, p := range cmPermutations("a", "b", "c", "d") {
+		cmAccept(t, cmMatcher(t, model(), nil), p...)
+	}
+
+	m := cmMatcher(t, model(), nil)
+	if i := cmFeed(t, m, "c", "a", "b"); i != 3 {
+		t.Fatalf("Next rejected position %d, want all three taken", i)
+	}
+	if m.Accepting() {
+		t.Error("Accepting() = true with the innermost group's d still owed")
+	}
+}
+
+// {min occurs} and {max occurs} bound a member of a nested all group exactly as
+// they bound one of the outer group — cvc-accept clauses 2.1 and 2.2, reached
+// through clause 3 at every nesting depth. A singleton taken twice is rejected
+// at both levels, and a zero-minimum member is optional at both.
+func TestMatcherBoundsOccurrencesAtBothAllNestingLevels(t *testing.T) {
+	model := func() Particle {
+		return cmGroup(t, uOccurs(t, 1, 1), CompositorAll,
+			cmLeaf(t, "a", uOccurs(t, 1, 1)),
+			cmLeaf(t, "b", uOccurs(t, 0, 1)),
+			cmGroup(t, uOccurs(t, 1, 1), CompositorAll,
+				cmLeaf(t, "c", uOccurs(t, 1, 1)),
+				cmLeaf(t, "d", uOccurs(t, 0, 1))))
+	}
+	cmAccept(t, cmMatcher(t, model(), nil), "a", "c")
+	cmAccept(t, cmMatcher(t, model(), nil), "d", "a", "c")
+
+	for _, tc := range []struct {
+		name string
+		feed []string
+		at   int
+	}{
+		{"an outer member twice", []string{"a", "c", "a"}, 2},
+		{"an inner member twice", []string{"c", "a", "c"}, 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := cmMatcher(t, model(), nil)
+			if i := cmFeed(t, m, tc.feed...); i != tc.at {
+				t.Fatalf("Next stopped at position %d of %v, want the repeat rejected at %d", i, tc.feed, tc.at)
+			}
+		})
+	}
+}
+
+// A nested all group occurs exactly once (clause 1.3) but need not contribute
+// an item: where every one of its own members is ·emptiable· the occurrence it
+// owes can be the empty sequence, and the outer group collects nothing from it
+// (cos-group-emptiable §3.9.6.3, cvc-accept clause 3.1).
+func TestMatcherAcceptsAnEmptyNestedAllGroup(t *testing.T) {
+	model := func() Particle {
+		return cmGroup(t, uOccurs(t, 1, 1), CompositorAll,
+			cmLeaf(t, "a", uOccurs(t, 1, 1)),
+			cmGroup(t, uOccurs(t, 1, 1), CompositorAll,
+				cmLeaf(t, "c", uOccurs(t, 0, 1)),
+				cmLeaf(t, "d", uOccurs(t, 0, 1))))
+	}
+	cmAccept(t, cmMatcher(t, model(), nil), "a")
+	cmAccept(t, cmMatcher(t, model(), nil), "d", "a")
 }
