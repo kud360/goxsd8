@@ -562,8 +562,9 @@ const (
 // reported separately; contentModelRestricts records which one failed only in
 // the comments at its two rejection sites.
 //
-// Four shapes are provisionally accepted rather than decided, each licensed and
-// each fail-open:
+// Four shapes are provisionally accepted rather than decided, each fail-open.
+// The first three lean on a licence; the fourth is a ruled resource
+// approximation carrying none:
 //
 //   - a non-element {content type} on either side. 2.4.1 (restrictionVarietyPairOK)
 //     has already established both are element-only or mixed before this is
@@ -596,9 +597,11 @@ const (
 //     either side. This one alone is a RESOURCE ceiling rather than a modelling
 //     gap — it bounds the automaton's size, see maxContentPositions for what that
 //     does and does not bound — and it is the only path on which a declared
-//     occurrence range does not reach the walk; the licence it leans on is the
-//     one contentModelRestricts' giveup site states, and the marker is at the
-//     branch itself.
+//     occurrence range does not reach the walk. It claims no spec licence:
+//     §3.4.6.3's is gated on the ·all· compositor the bullet above has already
+//     claimed, so the sequence/choice models that reach it are unlicensed and it
+//     stands as a ruled permanent approximation instead. The marker at the branch
+//     itself states the ruling and what reopens it.
 func (s *Schema) contentTypeRestricts(tct, bct ContentType, scope contentRestrictionScope) bool {
 	rc, ok := tct.(ElementContent)
 	if !ok {
@@ -680,24 +683,56 @@ func (s *Schema) contentTypeRestricts(tct, bct ContentType, scope contentRestric
 	if s.unfoldedPositions(rc.Particle) > maxContentPositions || s.unfoldedPositions(bc.Particle) > maxContentPositions {
 		// GAP(xsd): a content model whose exact unfolding would exceed
 		// maxContentPositions is not unfolded at all, and the derivation is
-		// provisionally accepted undecided. The alternative is not a smaller
-		// automaton but a WRONG one: truncating the copies of an occurrence range
-		// rewrites the range, which is monotone in neither direction and
-		// false-rejects conforming schemas (see this file's header, #501). The
-		// ceiling therefore declines the whole question, which is fail-open — a
-		// missed rejection, never a fabricated one — and rests on exactly the
-		// §3.4.6.3 reading contentModelRestricts' giveup site sets out, including
-		// how narrowly that reading is licensed. Unlike this file's other
-		// ceilings the branch is REACHED — six of the W3C suite's 1538 candidate
-		// content models land here, each carrying a maxOccurs in the thousands to
-		// millions (the measurement is recorded on maxContentPositions) — so the
-		// incompleteness is live rather than latent, and it is retired only by a
-		// construction that decides containment without materializing an
-		// automaton per occurrence, never by raising the constant. No issue owns
-		// that retirement: the landing this file's header records introduced the
-		// ceiling rather than owning its removal, the product walk's own ceiling
-		// is a different constant in a later phase, and the open issue on this
-		// boundary owns its construction COST rather than this declined verdict.
+		// provisionally accepted undecided. This is a RULED permanent
+		// approximation rather than a fold in progress: #1378 owns the ruling and
+		// carries it in full, and it rests on the bounded-resource argument below
+		// rather than on a spec licence. The landing this file's header records
+		// (#501, now closed) introduced the ceiling; it licensed nothing.
+		//
+		// The alternative is not a smaller automaton but a WRONG one: truncating
+		// the copies of an occurrence range rewrites the range, which is monotone
+		// in neither direction and false-rejects conforming schemas (see this
+		// file's header). The ceiling therefore declines the whole question
+		// instead of answering a different one.
+		//
+		// No spec licence covers this branch, and this marker claims none.
+		// §3.4.6.3's provisional-acceptance sentence is gated by a two-conjunct
+		// antecedent — "If (1) the type definition being checked has T.{content
+		// type}.{particle}.{term}.{compositor} = all and (2) an implementation is
+		// unable to determine by examination of the schema in isolation whether or
+		// not clause 2.4.2 is satisfied" — and condition (1) cannot hold here, by
+		// construction: usesAllCompositor above claims every genuine ·all· case
+		// before this line is reached, so what remains is exactly the
+		// sequence/choice population that antecedent does not reach. Neither
+		// §3.4.6.3 nor §3.4.6.4 grants fail-open for that population anywhere.
+		// What the branch does guarantee is direction: it abandons the WHOLE walk
+		// rather than truncating one into a verdict, so it is fail-open — a missed
+		// rejection, never a fabricated one — carrying the caveat
+		// contentModelRestricts' giveup site states, that a schema accepted
+		// provisionally with no runtime cross-check can be non-conforming with
+		// nothing left to say so.
+		//
+		// What makes the approximation permanent is measured cost against a
+		// constant pinned from both sides. maxContentPositions' own doc records
+		// what its present value already costs — 78 s and 180 GB allocated for one
+		// n = 4096 pair — and records the suite pinning it from below at 2970
+		// positions, so every step DOWN starts declining derivations decided
+		// today. A step UP buys nothing: the narrowest model that lands here is
+		// 30001 positions, seven times the ceiling, and the widest past 16777216.
+		// Unlike this file's other ceilings the branch is REACHED — six of the
+		// W3C suite's 1538 candidate content models, each carrying a maxOccurs in
+		// the thousands to millions — so the incompleteness is live rather than
+		// latent, and it is retired by a construction that decides containment
+		// without materializing an automaton per occurrence, never by moving the
+		// constant.
+		//
+		// Two findings reopen the ruling, and a case merely arriving here is
+		// neither, since six already do. One is a containment procedure that
+		// decides §3.4.6.4 clause 1 in bounded or sub-exponential space being
+		// identified, which retires the ceiling outright. The other is a suite
+		// case past the ceiling shown to be provisionally accepted where the exact
+		// unfolding would REJECT, which prices the missed rejections instead of
+		// leaving them merely counted.
 		return true
 	}
 	r, err := s.contentAutomatonOf(rc)
