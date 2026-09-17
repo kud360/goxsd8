@@ -1285,10 +1285,11 @@ func suiteRoot(t *testing.T) string {
 
 // TestSuiteTopLevelCensusOfFinalAndAbstract pins #1205's census, which two
 // agents in one session each hand-wrote a namespace-aware walk to take
-// because the tool could not answer it (#1282). The query language is a
-// conjunction over one element's own attributes, so "final= OR abstract=" is
-// two censuses deduped by position — that composition is the whole method,
-// and the figures below are the pin it reproduces.
+// because the tool could not answer it (#1282). This predates the query
+// language's own `|` join (#1391, #1554); "final= OR abstract=" is still two
+// censuses deduped by position here rather than one `element@final|abstract`
+// query — that composition is the whole method, and the figures below are
+// the pin it reproduces.
 func TestSuiteTopLevelCensusOfFinalAndAbstract(t *testing.T) {
 	root := suiteRoot(t)
 	type where struct {
