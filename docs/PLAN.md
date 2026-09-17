@@ -22,12 +22,14 @@ one — appending is what this replaces.
 **The twenty-sixth stamp's band made a falsifiable claim and the window
 CONFIRMED it.** That band was rebuilt around the ten `ready` issues whose
 `Ratchet:` clause could move a lane, after a seven-landing window in which none
-moved. Its rows 1–4 — #1516, #782, #783, #1378 — **were all taken and all
-landed**, in four landings, and `instance` banked **11151 → 11203 (+52)**. Row 5
-(#812) is the only LIVE claim on the remote as this is written. The preceding
-window had rows containing zero lane-movers and moved zero; this one had four at
-the top and moved all four. **That is the strongest evidence this record holds
-that the band's ORDERING is the deliverable and not decoration.**
+moved. **Its top FIVE rows were taken in order and all five landed.** Rows 1–4 —
+#1516, #782, #783, #1378 — banked `instance` **11151 → 11203 (+52)**, and **row
+5, #812, landed as `141f198` while this pass was running**, banking `schema`
+**14692 → 14697 (+5)**. The preceding window had rows containing zero lane-movers
+and moved zero; this one had five at the top, took all five, and moved **both**
+active lanes. **That is the strongest evidence this record holds that the band's
+ORDERING is the deliverable and not decoration**, and it is now a two-lane result
+rather than a one-lane one.
 
 **The counter-finding is the same window's filings, and it outranks the first.**
 Four consecutive post-land passes filed **five issues all against one thing: the
@@ -47,16 +49,23 @@ the sessions it costs, and this is friction the log records in four consecutive
 sessions — so rows 2, 3 and 5 below are that bundle, interleaved with the lane
 slices that pay the tax.
 
-**This section is deliberately about a third the length of the one it replaces.**
-Its reader is a `/develop` session choosing an issue. Provenance belongs in
-`docs/LOG`; the measurement that the replacement rule bounds this section and
-nothing else in this file is on #1522's thread, where the issue that owns the
-unbounded part can use it.
+**This section is shorter than the one it replaces — roughly two-thirds by
+weight, against the twenty-sixth stamp's exact 500 lines / 43976 bytes.** The
+comparison is deliberately approximate on this side and exact on the other: an
+earlier draft claimed *"about a third"*, which was wrong when written and got
+wronger twice as the persona fold and then a correction round grew the section
+under a sentence nobody re-measured. **An exact self-count cannot survive its own
+edit** — writing it changes it — so the rule this paragraph now follows is that a
+claim about THIS section is stated loosely enough to stay true, and a claim about
+any other measurable thing is stated exactly and re-derived from its instrument. Its reader is a `/develop` session
+choosing an issue. Provenance belongs in `docs/LOG`; the measurement that the
+replacement rule bounds this section and nothing else in this file is on #1522's
+thread, where the issue that owns the unbounded part can use it.
 
 ### Conformance lanes
 
 **Paste `go tool lanestatus` verbatim, never a hand-count.** This table is
-`main` at `e064471`, and it is the committed expectations census —
+`main` at `141f198`, and it is the committed expectations census —
 `conformance/testdata/expectations/<lane>.txt`'s `pass`/`fail` line counts —
 which `docs/WORKFLOW.md` names as the lane score (#1120) and which is the only
 lane figure a later session can re-derive from the committed tree alone.
@@ -67,14 +76,23 @@ lane figure a later session can re-derive from the committed tree alone.
 | `datatypes` | 1161 | 12 | 1173 |
 | `instance` | 11203 | 15158 | 26361 |
 | `json` | — | — | 0 |
-| `schema` | 14692 | 706 | 15398 |
+| `schema` | 14697 | 701 | 15398 |
 | `xpath` | — | — | 0 |
 
-`instance` **11151 → 11203 (+52)** this window: #1516 +41, #782 +8, #783 +3.
-`schema` **14692, unchanged** — #1378 ruled a ceiling a permanent documented
-approximation and moved nothing by construction. `datatypes` unchanged.
-`datatypes ⊆ instance` is INTENDED (#1507 ruled arm A against outright), so
-`instance` 11203/26361 is a figure to quote and not to hedge.
+**FIVE landings this window, and both active lanes moved.** `instance`
+**11151 → 11203 (+52)**: #1516 +41, #782 +8, #783 +3. `schema`
+**14692 → 14697 (+5)**: all of it **#812**, which landed as `141f198` at
+14:43:16Z while this pass was running — the five flips are `idI010`, `idI149`,
+`idI152`, `idJ011` and `idJ210`, verified as the only `fail`→`pass` lines in
+`expectations/schema.txt` between `e064471` and `141f198`. #1378 moved nothing
+and correctly so: it ruled a ceiling a permanent documented approximation.
+`datatypes` unchanged. `datatypes ⊆ instance` is INTENDED (#1507 ruled arm A
+against outright), so `instance` 11203/26361 is a figure to quote and not to
+hedge.
+
+**A landing arrived mid-pass for the THIRD consecutive stamp**, and this one
+invalidated a band row and a lane figure rather than only a count. The table
+above was re-pulled on the merged tree carrying `141f198`, not carried forward.
 
 **An em dash is a lane with no cases yet, which is a different claim from a lane
 scoring zero.** `datatypes` is M3 and complete; `schema` is M4 and active;
@@ -94,12 +112,15 @@ than off a checkout.
 
 ### Branch namespace, `origin` — report-only; a session never deletes a ref
 
-`go tool wipsurvey` after `git fetch --unshallow origin`, run twice, second run
-after this pass's writes. **Thirteen `wip/*` refs, zero `parked/*`.**
+`go tool wipsurvey` after `git fetch --unshallow origin`, run twice during the
+pass and re-read after #812 landed. **TWELVE `wip/*` refs, zero `parked/*`, and
+NO LIVE CLAIM.**
 
-- **ONE LIVE claim: `wip/issue-812`**, heartbeat 3 minutes old at the second run.
-  #812 and its branch are off-limits, which is why #812 is not banded below
-  although it was row 5 last stamp.
+- **`wip/issue-812` was LIVE for most of this pass and is GONE.** #812 closed
+  `completed` at 14:43:16Z and GitHub auto-deleted the branch at merge, which is
+  the lifecycle working exactly as `docs/WORKFLOW.md` describes. **#812 is
+  startable by nobody because it is closed**, and the band below no longer holds
+  it back.
 - **TWELVE RETIRED**: #434, #732, #822, #846, #872, #933, #968, #993, #1332,
   #1356, #1426, #1451 — the same twelve as the last two stamps, no new ones.
 - **Every retired branch's content is accounted for and NOTHING is owed.**
@@ -286,8 +307,10 @@ pre-emptive conversion is untouched; what changed is what its comment must say.
 ### Working band
 
 Ordered for a `/develop` session: take the highest row you can start.
-**`wip/issue-812` is LIVE** — re-run `wipsurvey` before starting anything, and do
-not take #812.
+**NO claim stands anywhere on the remote** — `wip/issue-812` was LIVE for most of
+this pass and vanished when #812 merged, so every row below is startable. **Re-run
+`wipsurvey` before starting anything anyway**: this is a snapshot, and a landing
+has now arrived mid-pass in three consecutive stamps.
 
 **The ordering principle this stamp:** the lane-first rebuild worked and is kept,
 but the prediction chain that every lane slice depends on is measurably broken,
@@ -366,9 +389,14 @@ own scope ruling. **#1560**, **#1502**, **#1531**, **#1546**, **#1548**,
    by case ID, and (b) holding §4.2.2's `vc:maxVersion` arm until real assertion
    evaluation lands. CLAUDE.md puts (a) beyond any agent, so no `/backlog` can
    move it and none should try.
-7. **No `/retro` has landed since 2026-09-06 and that is now TWO missed cycles.**
-   2026-09-06, 09-13 and — as this stamp is written — the 09-20 run is still
-   ahead. Items 3 and 5 are both routed there. This is an observation about the
+7. **No `/retro` has landed since 2026-09-06 and that is ONE missed cycle, not
+   two.** The 09-06 run DID land (`f97c317`, *"retro 2026-09-06 (weekly,
+   eighth)"*, plus its Part 2 architecture audit) and must not be counted as
+   missed; 09-13 is the one that did not; 09-20 is three days ahead of this
+   stamp. **An earlier draft of this item said "TWO", which regressed a
+   correction the twenty-sixth stamp had already made** — the count is
+   re-derived here from `git log -- docs/LOG/` rather than carried from prose.
+   Items 3 and 5 are both routed there. This is an observation about the
    schedule, not a filing: `docs/ROUTINES.md` owns the cron and nothing in this
    container can read whether the routine fired.
 
@@ -384,7 +412,8 @@ sweep measured zero, and the queue audit found no mislabel. The four are
 required sections, and each naming its adjacent issues with the reciprocal
 cross-reference posted.
 
-**TWELVE body PATCHes.** From the surveys: **#779** widened with a sixth and
+**THIRTEEN body PATCHes, across thirteen issues, and ZERO title PATCHes.** From
+the surveys: **#779** widened with a sixth and
 seventh hygiene class and the measured table; **#773** and **#774** each given
 the `## Surface` and the `Ratchet:` bar they were filed without (and #774 a
 `## Spec`); **#250**'s three stale premises corrected — its "five unlanded
