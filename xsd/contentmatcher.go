@@ -122,13 +122,18 @@ package xsd
 
 // Attribution is what one element information item of a matched child sequence
 // is ·attributed to· (§3.4.4.4, key-att-to): the {term} of the particle
-// [Matcher.Next] advanced over, or the {wildcard} of a present {open content}.
-// It is a sealed sum (STYLE T2's closed-sum exception) with exactly two
-// variants, [ElementDeclaration] (cvc-accept clause 2) and [Wildcard]
-// (cvc-accept clause 1): those are the two kinds of ·basic particle· an item
-// can be attributed to — a Model Group is not one, and returning [Term] would
-// make an attribution to one representable (STYLE T1) — and the {open content},
-// which is no particle at all, reuses the second rather than adding a third.
+// [Matcher.Next] advanced over, or a present {open content} itself. It is a
+// sealed sum (STYLE T2's closed-sum exception) with exactly three variants.
+// [ElementDeclaration] (cvc-accept clause 2) and [Wildcard] (cvc-accept clause
+// 1) are the two kinds of ·basic particle· an item can be attributed to — a
+// Model Group is not one, and returning [Term] would make an attribution to one
+// representable (STYLE T1). [*OpenContent] is the third, for an item
+// cvc-complex-content clause 2.4 or 3.4 admitted, which §3.4.4.4 ·attributes
+// to· the {open content} and not to any particle: the spec keeps the two apart
+// throughout — §3.4.5.2 gives this case the [match information] keyword open
+// where a ·wildcard particle· takes strict/lax/skip, and §3.4.6.4's
+// key-dft-binding clauses 4-6 name them as alternative cases — so a consumer
+// deciding a rule that quantifies over particles alone can decide it here.
 //
 // An [ElementDeclaration] result is the particle's own declaration D, which is
 // the answer to "which particle consumed this item". For an item admitted
@@ -137,18 +142,15 @@ package xsd
 // assessment's job (§3.3.4.6), not this one's.
 //
 // A [Wildcard] result is the {term} of a ·wildcard particle· (§3.9.1, key-wp)
-// OR the {wildcard} of the {open content}, for an item cvc-complex-content
-// clause 2.4 or 3.4 admitted and §3.4.4.4 therefore ·attributes to· the {open
-// content} itself. The spec keeps those two apart — §3.4.5.2 gives the second
-// the [match information] keyword open where the first takes
-// strict/lax/skip, and §3.4.6.4's key-dft-binding clauses 4-6 name them as
-// alternative cases — and this sum does not. The distinction is also NOT
-// recoverable from the returned value: a Wildcard is a value holding a
-// NamespaceConstraint, which holds slices, so there is no identity to compare
-// against {open content}.{wildcard} and an equal one is not the same one. A
-// consumer needing it — a PSVI [element attribution] or a §3.4.6.4 default
-// binding, neither of which this module builds — needs a third variant here
-// (#1553).
+// and never the {wildcard} of an {open content}. That is what e-validity clause
+// 1.1.3 (§3.3.5.1) quantifies over and what §3.10.4.1's key-skipped reads
+// {process contents} off, and both are decided by this arm alone.
+//
+// An [*OpenContent] result is the {open content} record of the {content type}
+// being matched — never nil, and the same pointer [ElementContent] carries, so
+// a consumer may compare it by identity as well as read {mode} and {wildcard}
+// off it. A switch arm may therefore dereference it without a nil check:
+// [Matcher.Next] reports no match at all where the {open content} is ·absent·.
 type Attribution interface{ attribution() }
 
 // attribution marks ElementDeclaration as an Attribution (cvc-accept clause
@@ -158,6 +160,15 @@ func (ElementDeclaration) attribution() {}
 // attribution marks Wildcard as an Attribution (cvc-accept clause 1); see the
 // Attribution doc comment.
 func (Wildcard) attribution() {}
+
+// attribution marks *OpenContent as an Attribution (§3.4.4.4: an item
+// cvc-complex-content clause 2.4 or 3.4 admitted is ·attributed to· the {open
+// content}, which is no particle); see the Attribution doc comment. The
+// receiver is a POINTER so the arm has exactly one spelling — a value receiver
+// would put the marker in both OpenContent's and *OpenContent's method sets,
+// making two representations of one variant (STYLE T1) — and so that the arm
+// carries the record's identity, which a copy would lose.
+func (*OpenContent) attribution() {}
 
 // contentNode is one particle of a flattened content model. children holds the
 // node indices of a model group's {particles} in document order, and is nil for
@@ -482,8 +493,7 @@ func (m *Matcher) Next(name QName) (Attribution, bool) {
 // openNext offers name to {open content}.{wildcard}, the third tier
 // cvc-complex-content clauses 2.4 and 3.4 add over cvc-accept's two, and
 // reports the admitted item as ·attributed to· the {open content} (§3.4.4.4) —
-// for which the value is that record's own {wildcard}, on [Attribution]'s
-// terms.
+// the record itself, on [Attribution]'s terms, and not its {wildcard}.
 //
 // The walk is not advanced: an S2 member is matched against the wildcard alone,
 // so {particle} stands where S1 left it and [Matcher.Accepting] still asks
@@ -495,14 +505,13 @@ func (m *Matcher) openNext(name QName) (Attribution, bool) {
 	if m.open == nil {
 		return nil, false
 	}
-	w := m.open.Wildcard()
-	if !m.s.allowsElementWildcardName(w, m.ct, name) {
+	if !m.s.allowsElementWildcardName(m.open.Wildcard(), m.ct, name) {
 		return nil, false
 	}
 	if m.open.Mode() == OpenContentSuffix {
 		m.inS2 = true
 	}
-	return w, true
+	return m.open, true
 }
 
 // Accepting reports whether the sequence fed so far is ·accepted· by the

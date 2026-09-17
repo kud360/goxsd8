@@ -233,10 +233,10 @@
 // complex type's {content type} particle, and Matcher.Next advances it one
 // child at a time, reporting what that child is ·attributed to· as an
 // Attribution — the sealed sum of ElementDeclaration and Wildcard, the two
-// kinds of particle §3.4.4.4 attributes an item to, the second of which
-// doubles as the {open content}.{wildcard} for an item ·attributed to· the
-// {open content} itself (Attribution's doc carries what that conflation
-// costs). Matcher.Accepting asks whether the sequence so far can end there.
+// kinds of particle §3.4.4.4 attributes an item to, and *OpenContent, the
+// {open content} record itself, which §3.4.4.4 attributes an item to in
+// place of any particle (Attribution's doc carries what turns on the
+// difference). Matcher.Accepting asks whether the sequence so far can end there.
 // A present {open content} is DECIDED, in both {mode}s: cvc-complex-content
 // clauses 2 and 3 split the sequence into the part {particle} takes and the
 // part the open wildcard does, and the split each clause admits is unique
