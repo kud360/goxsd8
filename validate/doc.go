@@ -223,14 +223,15 @@
 // The eighth is cvc-identity-constraint (§3.11.4), over the {identity-constraint
 // definitions} of the ·governing element declaration· of every element the
 // descent types. Its {selector} and {fields} are evaluated as the restricted
-// path subset §3.11.6.2 and §3.11.6.3 define, directly and never through the
-// XPath engine, and its clause 4 charges a duplicate ·key-sequence· (clauses
-// 4.1 and 4.2.2), a key whose ·target node set· is wider than its ·qualified
-// node set· (4.2.1), an element member from a {nillable} declaration (4.2.3),
-// and a keyref matching no entry of its {referenced key}'s node table (4.3),
-// with clause 3 charging a field that selects more than one valued node. The
-// node tables clause 4.3 reads are §3.11.5's, assembled bottom-up as the walk
-// leaves each element and conflict-resolved on the way.
+// path subset §3.11.6.2 and §3.11.6.3 define — the icpath package's grammar,
+// directly and never through the XPath engine — and its clause 4 charges a
+// duplicate ·key-sequence· (clauses 4.1 and 4.2.2), a key whose ·target node
+// set· is wider than its ·qualified node set· (4.2.1), an element member from a
+// {nillable} declaration (4.2.3), and a keyref matching no entry of its
+// {referenced key}'s node table (4.3), with clause 3 charging a field that
+// selects more than one valued node. The node tables clause 4.3 reads are
+// §3.11.5's, assembled bottom-up as the walk leaves each element and
+// conflict-resolved on the way.
 //
 // The ninth is cvc-id (§3.3.4.5), charged at the ·validation root· alone
 // (cvc-elt clause 7): the [ID/IDREF table] of §3.17.5.2 is assembled across the

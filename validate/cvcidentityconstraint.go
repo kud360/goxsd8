@@ -3,6 +3,7 @@ package validate
 import (
 	"strings"
 
+	"github.com/kud360/goxsd8/icpath"
 	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
@@ -16,7 +17,8 @@ const ruleCvcIdentityConstraint xsderr.Rule = "cvc-identity-constraint"
 
 // This file decides cvc-identity-constraint (§3.11.4) for every element the
 // walk assesses, and builds the [identity-constraint table] of §3.11.5 for
-// every element it visits. The path evaluation the two rest on is icpath.go's.
+// every element it visits. The path evaluation the two rest on is the icpath
+// package's.
 //
 // The whole design follows from one sentence of §3.11.5: an element's node
 // tables are "assembled strictly recursively from the node tables of
@@ -31,7 +33,7 @@ const ruleCvcIdentityConstraint xsderr.Rule = "cvc-identity-constraint"
 // cursor):
 //
 //   - ENTERING an element, [walk.identityCheck] advances every live selector
-//     and field path one level ([icExpr.advance]), opens a frame for each
+//     and field path one level ([icpath.Live.Advance]), opens a frame for each
 //     identity constraint its own ·governing element declaration· declares, and
 //     registers the element as a ·target node· or as a field node wherever a
 //     path completed.
@@ -101,7 +103,7 @@ type icPending struct {
 // icSelCursor is one constraint's {selector} evaluation, live at one element.
 type icSelCursor struct {
 	frame *icFrame
-	live  icLive
+	live  icpath.Live
 }
 
 // icFieldCursor is one ·target node·'s evaluation of one {fields} member, live
@@ -111,7 +113,7 @@ type icSelCursor struct {
 type icFieldCursor struct {
 	target *icTarget
 	index  int
-	live   icLive
+	live   icpath.Live
 }
 
 // icFrame is one identity constraint being evaluated against the element it is
@@ -120,14 +122,28 @@ type icFieldCursor struct {
 // because a ·target node·'s ·key-sequence· is complete only once its own
 // subtree has been walked.
 //
-// declined marks a constraint whose {selector} or {fields} icpath.go could not
-// compile. It charges nothing, and — through icTable's own declined flag — no
-// keyref referring to it charges either, so a path this processor cannot read
-// costs a rejection in neither direction.
+// declined marks a constraint whose {selector} or {fields} the icpath package
+// could not compile. It charges nothing, and — through icTable's own declined
+// flag — no keyref referring to it charges either, so a path this processor
+// cannot read costs a rejection in neither direction.
+//
+// GAP(xpath): an {expression} outside the ·selector subset· (§3.11.6.2) or the
+// ·field subset· (§3.11.6.3) — a legal XPath 2.0 path neither admits, an
+// unbound prefix, a `.//` with no element step left once the self steps are
+// removed — is DECLINED by [icpath.CompileSelector] and [icpath.CompileField],
+// and the identity constraint carrying it charges nothing at all. Charging on a
+// path this processor cannot read would reject a document for a gap in the
+// processor. The withheld value's whole consumer set is Result.violations,
+// reached through icCheck.open setting this flag, and its one reader
+// Result.Violations; both carry violations PRESENT, so withholding one can only
+// cost a rejection and never manufacture one. c-selector-xpath and
+// c-fields-xpaths are the schema-side rules that would reject SOME — not all —
+// of those {expression}s at assembly, and neither is charged anywhere yet. #812
+// owns its retirement.
 type icFrame struct {
 	ic       xsd.IdentityConstraint
-	sel      icExpr
-	fields   []icExpr
+	sel      icpath.Expr
+	fields   []icpath.Expr
 	targets  []*icTarget
 	declined bool
 }
@@ -217,21 +233,20 @@ func (w *walk) identityCheck(e Element, g governance, parent *icCheck) *icCheck 
 // (or one of its [[attributes]]) that target's field node.
 func (c *icCheck) inherit(w *walk, parent *icCheck) {
 	for _, cur := range parent.sels {
-		live, selected, _ := cur.frame.sel.advance(cur.live, c.e.Name())
+		live, sel := cur.live.Advance(c.e.Name())
 		c.sels = append(c.sels, icSelCursor{frame: cur.frame, live: live})
-		if selected {
+		if sel.SelectsElement() {
 			c.addTarget(w, cur.frame)
 		}
 	}
 	for _, cur := range parent.flds {
-		x := cur.target.field(cur.index)
-		live, selected, attrs := x.advance(cur.live, c.e.Name())
+		live, sel := cur.live.Advance(c.e.Name())
 		c.flds = append(c.flds, icFieldCursor{target: cur.target, index: cur.index, live: live})
-		if selected {
+		if sel.SelectsElement() {
 			c.pendElement(cur.target, cur.index)
 		}
-		if len(attrs) > 0 {
-			c.fieldAttributes(w, cur.target, cur.index, attrs)
+		if sel.SelectsAttributes() {
+			c.fieldAttributes(w, cur.target, cur.index, sel)
 		}
 	}
 }
@@ -252,13 +267,13 @@ func (c *icCheck) open(w *walk, g governance) {
 	for _, ic := range g.decl.IdentityConstraints() {
 		f := &icFrame{ic: ic}
 		c.frames = append(c.frames, f)
-		sel, ok := icCompile(ic.Selector(), false)
+		sel, ok := icpath.CompileSelector(ic.Selector())
 		if !ok {
 			f.declined = true
 			continue
 		}
 		for _, x := range ic.Fields() {
-			fx, ok := icCompile(x, true)
+			fx, ok := icpath.CompileField(x)
 			if !ok {
 				f.declined = true
 				break
@@ -269,8 +284,8 @@ func (c *icCheck) open(w *walk, g governance) {
 			continue
 		}
 		f.sel = sel
-		c.sels = append(c.sels, icSelCursor{frame: f, live: sel.start()})
-		if self, _ := sel.self(); self {
+		c.sels = append(c.sels, icSelCursor{frame: f, live: sel.Start()})
+		if sel.Self().SelectsElement() {
 			c.addTarget(w, f)
 		}
 	}
@@ -284,13 +299,13 @@ func (c *icCheck) addTarget(w *walk, f *icFrame) {
 	t := &icTarget{e: c.e, node: c.node, slots: make([]icSlot, len(f.fields)), frame: f}
 	f.targets = append(f.targets, t)
 	for i := range f.fields {
-		c.flds = append(c.flds, icFieldCursor{target: t, index: i, live: f.fields[i].start()})
-		self, attrs := f.fields[i].self()
-		if self {
+		c.flds = append(c.flds, icFieldCursor{target: t, index: i, live: f.fields[i].Start()})
+		sel := f.fields[i].Self()
+		if sel.SelectsElement() {
 			c.pendElement(t, i)
 		}
-		if len(attrs) > 0 {
-			c.fieldAttributes(w, t, i, attrs)
+		if sel.SelectsAttributes() {
+			c.fieldAttributes(w, t, i, sel)
 		}
 	}
 }
@@ -330,9 +345,9 @@ func (c *icCheck) pendElement(t *icTarget, i int) {
 // cvc-wildcard rather than inferring it from the wildcard's presence, so an
 // attribute that wildcard does not admit is typed by key-governing-ad clause 3
 // instead and never arrives here as ·skipped·.
-func (c *icCheck) fieldAttributes(w *walk, t *icTarget, i int, tests []icNameTest) {
+func (c *icCheck) fieldAttributes(w *walk, t *icTarget, i int, sel icpath.Selection) {
 	for _, a := range c.e.Attributes() {
-		if !icMatchesAny(tests, a.Name()) {
+		if !sel.SelectsAttribute(a.Name()) {
 			continue
 		}
 		st, typed := w.attributeType(c.e, c.g, a)
@@ -346,16 +361,6 @@ func (c *icCheck) fieldAttributes(w *walk, t *icTarget, i int, tests []icNameTes
 		m, present, decided := w.keyMember(st, a.Value(), c.e, false, false)
 		t.slots[i].record(m, present, decided, a.Loc())
 	}
-}
-
-// icMatchesAny reports whether any of the NameTests admits n.
-func icMatchesAny(tests []icNameTest, n xsd.QName) bool {
-	for _, t := range tests {
-		if t.matches(n) {
-			return true
-		}
-	}
-	return false
 }
 
 // text gathers one run of character information items into the ·initial value·
@@ -510,10 +515,6 @@ func (s *icSlot) record(m icKeyMember, present, decided bool, loc xsderr.Loc) {
 	}
 	s.filled, s.member, s.loc = true, m, loc
 }
-
-// field is the compiled {fields} member at index i of the frame this target
-// belongs to.
-func (t *icTarget) field(i int) icExpr { return t.frame.fields[i] }
 
 // sequence is the target's ·key-sequence·: the values of its filled slots, in
 // {fields} order. It is only meaningful for a member of the ·qualified node

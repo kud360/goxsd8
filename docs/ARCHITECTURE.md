@@ -29,6 +29,9 @@ Value implementations, parsing, validation, and generation live above them.
                                   schema pipeline, not of the error currency)
                  loader          (schema resolution interfaces)
                  xpath           (XPath 2.0 engine; imports xsd, value, regex, xsderr)
+                 icpath          (the §3.11.6.2/§3.11.6.3 identity-constraint path
+                                  subset: its grammar and its streaming matcher;
+                                  imports xsd, xsderr, regex)
                  parser          (schema docs -> xsd components; imports xmltree, loader,
                                   xsd, value, builtin, regex, xpath — and builtin/strict, as
                                   the DEFAULT backend Parse seeds when the caller supplies
@@ -52,8 +55,9 @@ statically-check entry points and imports `xsd`, `value`, `regex` and
 **[2] The infoset seam, the assessment skeleton and the XML adapter ship;
 the other two adapters do not.** `validate` exports the infoset views and
 `New`/`Validator`/`Result` and imports `xsd`, `xsderr`, `value`, `xpath` and
-`regex` (the last for the NCName class its path lexer scans with, and behind
-`value` for the pattern facets it compiles) — but never a
+`icpath` — no longer `regex` directly, whose NCName class left with the
+identity-constraint path lexer for `icpath`, though it stays in the closure
+behind `value` for the pattern facets validate compiles — but never a
 backend: `New` takes the `value.Backend` as a required parameter, so
 `builtin/strict` stays outside the closure exactly as it does for `parser`'s
 `Produce` (see its section);
@@ -64,8 +68,8 @@ backend: `New` takes the `value.Backend` as a required parameter, so
 
 Only `xsderr`, `xsd`, `internal/schemaloc`, `value`,
 `value/backendtest`, `regex`, `builtin`, `builtin/strict`, `loader`, `parser`,
-`parser/xmltree`, `xpath`, `validate`, `validate/xmlsrc`, `conformance` and
-`cmd/goxsd8` carry code today.
+`parser/xmltree`, `xpath`, `icpath`, `validate`, `validate/xmlsrc`,
+`conformance` and `cmd/goxsd8` carry code today.
 
 **The module has two tiers, and the dependency rules govern the first.**
 The **library** is what a consumer imports — the packages above plus
@@ -493,10 +497,9 @@ source once, charging `cvc-assess-elt`, `cvc-elt`, `cvc-type`,
 `cvc-identity-constraint` and `cvc-id`. Which clauses of each, and which are
 declined, is `validate/doc.go`'s and is not restated here. A union-governed
 value is classified by its ·validating type· (#813). Identity-constraint
-`{selector}`/`{fields}` are evaluated directly as the restricted path
-subsets of §3.11.6.2/§3.11.6.3
-(`validate/icpath.go`) and deliberately NOT through the future XPath
-engine. **`validate/doc.go` is the authoritative per-rule statement and is
+`{selector}`/`{fields}` are compiled and evaluated directly as the
+restricted path subsets of §3.11.6.2/§3.11.6.3 (`icpath`) and deliberately
+NOT through the future XPath engine. **`validate/doc.go` is the authoritative per-rule statement and is
 current; do not restate it here beyond this list.** The value-space
 charges reach a `value.Backend` through `New`'s required second parameter,
 which must be the backend the schema was compiled with.
