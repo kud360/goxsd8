@@ -439,7 +439,19 @@ func (w *walk) wildcardGoverning(e Element, wild xsd.Wildcard) (governance, bool
 // e-validity clause 2, "otherwise", an item not ·strictly assessed· having no
 // clause 1 to reach.
 //
-// The guard below (g.hasDecl || g.typ != nil) rules out [governance]'s other
+// The [xsd.Wildcard] assertion below is the whole of "·attributed to· a
+// ·wildcard particle·" and is exact by itself: an item cvc-complex-content
+// clause 2.4 or 3.4 admitted is ·attributed to· the {open content} (§3.4.4.4),
+// which is no particle and which clause 1.1.3 does not name, and
+// [xsd.Attribution] spells that with its own variant. Such a child charges
+// nothing here however strict the {open content}'s {wildcard} is —
+// key-governing-ed clause 4 leaves its unresolved name simply without a
+// ·governing element declaration· — and a type carrying BOTH kinds of strict
+// wildcard charges for its particle-attributed children and withholds for its
+// open-attributed ones, the two being told apart by the ·attribution· and never
+// by the type's shape.
+//
+// The guard after it (g.hasDecl || g.typ != nil) rules out [governance]'s other
 // two shapes alongside the genuine unresolved-name one: hasDecl true is this
 // package declining a type it could not determine, not an unresolved-name
 // story at all, and typ non-nil with hasDecl false is clause 1.2's xsi:type-
@@ -448,17 +460,6 @@ func (w *walk) wildcardGoverning(e Element, wild xsd.Wildcard) (governance, bool
 // ·resolution·, so neither clause 3.3's lax path nor this clause is live. Only
 // the zero value — no declaration, no type at all — is the unresolved-name
 // shape this function charges.
-//
-// The [xsd.Wildcard] assertion is the whole of "·attributed to· a ·wildcard
-// particle·" and is exact by itself: an item cvc-complex-content clause 2.4 or
-// 3.4 admitted is ·attributed to· the {open content} (§3.4.4.4), which is no
-// particle and which clause 1.1.3 does not name, and [xsd.Attribution] spells
-// that with its own variant. Such a child charges nothing here however strict
-// the {open content}'s {wildcard} is — key-governing-ed clause 4 leaves its
-// unresolved name simply without a ·governing element declaration· — and a type
-// carrying BOTH kinds of strict wildcard charges for its particle-attributed
-// children and withholds for its open-attributed ones, the two being told apart
-// by the ·attribution· and never by the type's shape.
 //
 // notKnown is read off the governance the descent just determined, and no
 // subtree state is kept: clause 1.1.3 quantifies over E.[[children]] and
