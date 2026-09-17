@@ -18,14 +18,23 @@ type Expr struct{ paths []path }
 // reporting ok false for an {expression} outside the ·selector subset· —
 // productions [1] through [4], with no attribute step anywhere.
 //
-// ok false is the fail-open direction (PRINCIPLES 20) and is not a verdict about
+// ok false is the WITHHOLD direction (PRINCIPLES 20) and is not a verdict about
 // the schema: a legal XPath 2.0 path this subset does not admit looks exactly
 // like an illegal one to a restricted-subset parser. Its consequence — the
 // constraint charging nothing at all — is argued at the caller
 // (validate/cvcidentityconstraint.go's icFrame.declined), which carries the GAP
 // marker for it.
+//
+// It covers the four shapes [SelectorViolation] CHARGES as well, under the same
+// one encoding: a tree built over a name that did not resolve is not matchable
+// whatever the schema's fate, and a component assembled directly through
+// [xsd.NewIdentityConstraint] reaches no assembler and so no charge.
 func CompileSelector(x xsd.XPathExpression) (Expr, bool) {
-	return compile(x, false)
+	expr, d := compile(x, false)
+	if d.kind != noDefect {
+		return Expr{}, false
+	}
+	return expr, true
 }
 
 // CompileField compiles one member of an identity-constraint definition's
@@ -36,7 +45,11 @@ func CompileSelector(x xsd.XPathExpression) (Expr, bool) {
 //
 // ok false carries what [CompileSelector]'s does, on the same terms.
 func CompileField(x xsd.XPathExpression) (Expr, bool) {
-	return compile(x, true)
+	expr, d := compile(x, true)
+	if d.kind != noDefect {
+		return Expr{}, false
+	}
+	return expr, true
 }
 
 // Live is one [Expr]'s live match state at one level of a descent: the step
@@ -179,10 +192,19 @@ type nameTest struct {
 	local    string
 	anyLocal bool // 'NCName:*'
 	anySpace bool // bare '*', which is any namespace AND any local name
+	// unresolved marks a NameTest whose prefix had no binding in the record's
+	// {namespace bindings}. It matches NOTHING and is never evaluated — compile
+	// discards the tree it sits in — and it is a field rather than a reserved
+	// space/local pair because no namespace URI and no local name is uninhabited,
+	// so neither can stand in for a name that resolved to none.
+	unresolved bool
 }
 
 // matches reports whether the test admits the ·expanded name· n.
 func (t nameTest) matches(n xsd.QName) bool {
+	if t.unresolved {
+		return false
+	}
 	if t.anySpace {
 		return true
 	}

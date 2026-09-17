@@ -31,16 +31,16 @@
 // carrying them.
 //
 // It is its own package rather than validate's private file because the two
-// Schema Component Constraints over this grammar belong at schema ASSEMBLY
+// Schema Component Constraints over this grammar are charged at schema ASSEMBLY
 // (parser) while the paths themselves are evaluated at instance time
 // (validate). One grammar with two consumers in different layers is the shape
 // xpath already has for §3.12.6's ta-Test grammar (STYLE T4).
 //
-// # What ships
+// # The matcher
 //
-// The compiler and the streaming matcher: [CompileSelector] and [CompileField]
-// turn one [xsd.XPathExpression] property record into an [Expr], and [Expr.Start],
-// [Expr.Self] and [Live.Advance] carry one down a descent.
+// [CompileSelector] and [CompileField] turn one [xsd.XPathExpression] property
+// record into an [Expr], and [Expr.Start], [Expr.Self] and [Live.Advance] carry
+// one down a descent.
 //
 // Evaluation is incremental, because the walk that drives it is streaming: an
 // [Expr] never sees a tree. [Expr.Start] opens an expression at its context node,
@@ -55,6 +55,31 @@
 // and a consumer holding the tree could violate each of them. [Selection]
 // answers about what one level selects; it hands back no NameTest.
 //
-// The two Schema Component Constraints themselves are NOT charged here yet; the
-// schema-side hole they leave is #812's.
+// # The two Schema Component Constraints
+//
+// [SelectorViolation] and [FieldViolation] are the assembler's entry points, and
+// they charge FOUR shapes: an unbound prefix, a predicate, an attribute step
+// before a field's final step, and an attribute named anywhere in a selector.
+// Every other {expression} is nil there — above all one this package simply
+// cannot read — because clause 2 of each SCC is a disjunction whose second arm
+// ("an XPath expression involving the child axis whose abbreviated form is as
+// given above") no recognizer of clause 2.1's BNF can see. "Does not match
+// production [1]" is therefore never evidence of a violation, and
+// [SelectorViolation]'s doc carries the argument for each of the four.
+//
+// THE PREDICATES IT RECOGNIZES are the ones whose whole {expression} lexes as
+// tokens of production [5] plus the two brackets: `a[b]` and `a[@b]` are
+// charged, `a[1]` and `a[b='c']` are not, because a digit and a quote open no
+// token and a stream this package cannot read whole is declined whatever it
+// holds. Under-charging is a rejection the processor can still make at validate
+// time; over-charging rejects a conforming schema before any instance exists.
+//
+// One sub-shape inside those four is declined rather than charged, under
+// shapeFault's own GAP marker: an '@' with no NameTest after it, in a FIELD.
+//
+// An unbound prefix is the one charged shape with a vocabulary of its own:
+// err:XPST0081 travels as the wrapped cause under the SCC charge, reached with
+// one errors.Unwrap and read with [xsderr.RuleOf]. The other three have no
+// second vocabulary and wrap nothing, so the SCC's rule is never on two layers
+// of one error (STYLE E2).
 package icpath

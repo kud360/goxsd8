@@ -128,18 +128,24 @@ type icFieldCursor struct {
 // cannot read costs a rejection in neither direction.
 //
 // GAP(xpath): an {expression} outside the ·selector subset· (§3.11.6.2) or the
-// ·field subset· (§3.11.6.3) — a legal XPath 2.0 path neither admits, an
-// unbound prefix, a `.//` with no element step left once the self steps are
-// removed — is DECLINED by [icpath.CompileSelector] and [icpath.CompileField],
-// and the identity constraint carrying it charges nothing at all. Charging on a
-// path this processor cannot read would reject a document for a gap in the
-// processor. The withheld value's whole consumer set is Result.violations,
-// reached through icCheck.open setting this flag, and its one reader
-// Result.Violations; both carry violations PRESENT, so withholding one can only
-// cost a rejection and never manufacture one. c-selector-xpath and
-// c-fields-xpaths are the schema-side rules that would reject SOME — not all —
-// of those {expression}s at assembly, and neither is charged anywhere yet. #812
-// owns its retirement.
+// ·field subset· (§3.11.6.3) is DECLINED by [icpath.CompileSelector] and
+// [icpath.CompileField], and the identity constraint carrying it charges
+// nothing at all. Charging on a path this processor cannot read would reject a
+// document for a gap in the processor. The withheld value's whole consumer set
+// is Result.violations, reached through icCheck.open setting this flag, and its
+// one reader Result.Violations; both carry violations PRESENT, so withholding
+// one can only cost a rejection and never manufacture one.
+//
+// WHAT STILL ARRIVES HERE, now that parser charges c-selector-xpath and
+// c-fields-xpaths over the four shapes those rules prove
+// ([icpath.SelectorViolation]): a legal XPath 2.0 path neither subset admits,
+// including an unabbreviated spelling clause 2.2 licenses; a predicate whose
+// {expression} icpath's lexer cannot read whole; a `.//` with no element step
+// left once the self steps are removed, which production [3]'s bare `.` Step
+// makes assembly-LEGAL and only this matcher cannot represent; and — because a
+// component assembled directly through [xsd.NewIdentityConstraint] reaches no
+// assembler — any of the four as well. Nothing owns the retirement of the
+// first.
 type icFrame struct {
 	ic       xsd.IdentityConstraint
 	sel      icpath.Expr

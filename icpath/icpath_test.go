@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/kud360/goxsd8/xsd"
+	"github.com/kud360/goxsd8/xsderr"
 )
 
 // These fixtures drive the compiler and the matcher directly, so a production of
@@ -237,5 +238,114 @@ func TestPathSubsetFollowsTheXMLNameClass(t *testing.T) {
 	}
 	if _, ok := compileOf("µ", false, nil); ok {
 		t.Error(`compiling "µ" succeeded; want a decline — U+00B5 opens no NCName`)
+	}
+}
+
+// A charged {expression} is also a DECLINE. The two answers are independent:
+// parser charges over a schema DOCUMENT, and a component assembled directly
+// through xsd.NewIdentityConstraint reaches no assembler at all, so the matcher
+// must still refuse what the SCC rejects rather than match a tree built over a
+// name that did not resolve.
+func TestChargedExpressionsAlsoDecline(t *testing.T) {
+	for _, tc := range []struct {
+		expr  string
+		field bool
+	}{
+		{"q:a", false}, {"q:a", true}, {"a[b]", true}, {"@x/b", true}, {"@x", false},
+	} {
+		if _, ok := compileOf(tc.expr, tc.field, nil); ok {
+			t.Errorf("compiling %q (field=%v) succeeded; a charged {expression} must decline too", tc.expr, tc.field)
+		}
+	}
+}
+
+// The '@' scan is PER UNION MEMBER, because production [1] is a union of Paths
+// and a member's final step is its own. `a/@b|c/@d` is two legal field Paths and
+// reads as one illegal one if the '|' is ignored — which is the shape the W3C
+// suite's own field expressions are written in.
+func TestFieldSubsetJudgesEachUnionMemberSFinalStep(t *testing.T) {
+	legal := xsd.NewXPathExpression("a/@b|c/@d", nil, nil, nil)
+	if err := FieldViolation(xsderr.Loc{}, legal); err != nil {
+		t.Errorf("FieldViolation(%q) = %v, want nil — each member ends in its own attribute step", legal.Expression(), err)
+	}
+	illegal := xsd.NewXPathExpression("a/@b/e|c", nil, nil, nil)
+	if err := FieldViolation(xsderr.Loc{}, illegal); err == nil {
+		t.Errorf("FieldViolation(%q) = nil, want a charge — the '@' is not that member's final step", illegal.Expression())
+	}
+}
+
+// UNSUPPORTED DOMINATES: an {expression} that does not reach the end of a
+// complete production is declined however it continues, so neither a bracket nor
+// an unbound prefix inside one is charged. Under-charging is a rejection
+// validate can still make; over-charging rejects a conforming schema before any
+// instance exists.
+func TestPathSubsetUnsupportedDominates(t *testing.T) {
+	for _, tc := range []struct {
+		expr  string
+		field bool
+		why   string
+	}{
+		{"a[1]", true, "'1' opens no token, so the '[' is not read as a predicate"},
+		{"a[b='c']", true, "nor do '=' and the quotes"},
+		{"child::q:a", false, "'::' does not lex, so the unbound q is not read in isolation"},
+		{"q:a//b", false, "the stream lexes whole but parses to nothing, so the recorded unbound prefix is discarded"},
+		{".//.", false, "production [3]'s bare '.' Step derives it — assembly-legal, only unmatchable"},
+		{"child::a", false, "clause 2.2 admits the unabbreviated form of an abbreviated path"},
+		{"a//b", true, "outside production [7], but clause 2.2 may still spell it"},
+		{"", false, "an absent xpath attribute is no SCC violation"},
+	} {
+		if err := violationOf(tc.expr, tc.field); err != nil {
+			t.Errorf("charging %q (field=%v) = %v, want nil — %s", tc.expr, tc.field, err, tc.why)
+		}
+	}
+}
+
+// violationOf routes one expression through the charging façade its kind names.
+func violationOf(expr string, field bool) error {
+	x := xsd.NewXPathExpression(expr, nil, nil, nil)
+	if field {
+		return FieldViolation(xsderr.Loc{}, x)
+	}
+	return SelectorViolation(xsderr.Loc{}, x)
+}
+
+// An '@' with no NameTest after it splits the two arms. A SELECTOR is charged
+// whatever follows the '@', because what clause 2.2 withholds from a selector is
+// the attribute axis itself. A FIELD is not: the field claim is about POSITION,
+// which a dangling '@' has none of, and the clause it really breaks — xpath-valid
+// clause 1 — is not one this package reads (shapeFault's GAP). The suite's own
+// idJ002 is the case that stays failing because of it.
+func TestBareAttributeAxisSplitsTheTwoArms(t *testing.T) {
+	if err := violationOf("@", false); err == nil {
+		t.Error(`SelectorViolation("@") = nil, want a charge — a selector may not name the attribute axis at all`)
+	}
+	if err := violationOf("@", true); err != nil {
+		t.Errorf(`FieldViolation("@") = %v, want nil — xpath-valid clause 1 is not this package's`, err)
+	}
+	for _, field := range []bool{false, true} {
+		if _, ok := compileOf("@", field, nil); ok {
+			t.Errorf(`compiling "@" (field=%v) succeeded; want a decline`, field)
+		}
+	}
+}
+
+// A NameTest whose prefix did not resolve matches NOTHING. No compiled tree
+// holds one today — compile discards the tree an unbound prefix sits in and
+// reports a violation over it instead — so this is the unit-level proof that the
+// defence behind that stands on its own.
+func TestUnresolvedNameTestMatchesNothing(t *testing.T) {
+	var r names
+	got := r.test("q:a", false)
+	if !got.unresolved {
+		t.Fatalf(`test("q:a") = %#v, want an unresolved NameTest`, got)
+	}
+	if !r.hasUnbound || r.unbound != "q" {
+		t.Errorf("recorded unbound prefix %q (present=%v), want q", r.unbound, r.hasUnbound)
+	}
+	if got.matches(xsd.QName{Local: "a"}) {
+		t.Error("an unresolved NameTest matched the no-namespace a; it must match nothing")
+	}
+	if got.matches(xsd.QName{Space: "urn:q", Local: "a"}) {
+		t.Error("an unresolved NameTest matched {urn:q}a; it must match nothing")
 	}
 }
