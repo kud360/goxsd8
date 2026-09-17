@@ -51,6 +51,15 @@
 // attribute axis. A query that names its attributes prints the values it
 // matched, in query order.
 //
+// ELEMENT names take the `|` join only, which is how a FEATURE spelled by
+// more than one element is censused in one query:
+// `openContent|defaultOpenContent` is the `{open content}` population, whose
+// halves counted apart under-predicted a landing's ratchet movement (#1554).
+// The `,` join is refused in that position rather than matching nothing — no
+// element carries two names at once — and a query naming more than one of
+// them always prints the element each hit was, since the query no longer
+// fixes it.
+//
 // # Encoding
 //
 // Encoding is this tool's problem, not the caller's. Every fixture is read
@@ -77,16 +86,16 @@
 // rather than by re-querying it.
 //
 // A match line carries its position, then the matched element's name where
-// the query left either axis of it open — a wildcard local part, or the `{*}`
-// namespace axis — and never where the query fixed both, then `parent=`
-// naming the element it is a direct child of — `(none)` for a document
-// element — then `children=[…]` listing the elements directly under it, then
-// the matched attributes' values. The parent is what separates a local
-// occurrence from a top-level one, which no query over an element's OWN
-// attributes can express (#1282). It is the parent the document actually
-// spells, never one corrected against the grammar: an `xs:element` under
-// `xs:redefine` is reported there, wrong though that document is, and its
-// children are reported the same way.
+// the query does not already fix it — a wildcard local part, the `{*}`
+// namespace axis, or more than one element alternative — and never where it
+// does, then `parent=` naming the element it is a direct child of — `(none)`
+// for a document element — then `children=[…]` listing the elements directly
+// under it, then the matched attributes' values. The parent is what
+// separates a local occurrence from a top-level one, which no query over an
+// element's OWN attributes can express (#1282). It is the parent the
+// document actually spells, never one corrected against the grammar: an
+// `xs:element` under `xs:redefine` is reported there, wrong though that
+// document is, and its children are reported the same way.
 //
 // An element name the report prints is spelled so that it re-enters as a
 // query naming that same element, which is why a parent or child in NO
@@ -119,17 +128,18 @@
 //	go tool suiteindex '{http://www.w3.org/1999/XSL/Transform}stylesheet'
 //	go tool suiteindex '*@*'
 //	go tool suiteindex '*@mixed|abstract|nillable'
+//	go tool suiteindex 'openContent|defaultOpenContent'
 //	go tool suiteindex '{*}*@{http://www.w3.org/2001/XMLSchema-instance}type'
 //	go tool suiteindex element@targetNamespace testdata/xsdtests/ibmData
 //
-// The query is `local[@attr[,attr…]]` with `|` in place of `,` for the ANY
-// join, and any local part may be `*`. Any name may be written in Clark
-// notation (`{uri}local`) to name its namespace outright, or `{*}local` to
-// census every namespace at once; a braceless element name is in the XML
-// Schema namespace and a braceless attribute name is in no namespace. The
-// second argument is the tree to walk, defaulting to the suite at
-// [defaultRoot]; narrowing it is for reading one directory's output, never
-// for taking the census the whole corpus answers.
+// The query is `local[|local…][@attr[,attr…]]` with `|` in place of `,` for
+// the ANY join over attributes, and any local part may be `*`. Any name may
+// be written in Clark notation (`{uri}local`) to name its namespace
+// outright, or `{*}local` to census every namespace at once; a braceless
+// element name is in the XML Schema namespace and a braceless attribute
+// name is in no namespace. The second argument is the tree to walk,
+// defaulting to the suite at [defaultRoot]; narrowing it is for reading one
+// directory's output, never for taking the census the whole corpus answers.
 //
 // An absent or fixture-free root is a supported mode, not a failure: the
 // submodule is absent in a fresh container (#659), so the tool says the
@@ -159,7 +169,7 @@ import (
 const defaultRoot = "testdata/xsdtests"
 
 // usage is printed for any argument the tool cannot act on.
-const usage = `usage: suiteindex <local[@attr[,attr...]]> [dir]; "," joins the names as all, "|" as any, any local name may be "*", and "{uri}" before one fixes its namespace — "{*}" censuses every namespace, "{}" the one that has none`
+const usage = `usage: suiteindex <local[|local...][@attr[,attr...]]> [dir]; "," joins attribute names as all, "|" joins either position's names as any, any local name may be "*", and "{uri}" before one fixes its namespace — "{*}" censuses every namespace, "{}" the one that has none`
 
 func main() {
 	if err := run(os.Stdout, os.Args[1:]); err != nil {
@@ -245,9 +255,8 @@ func (p namePat) anySpace() bool {
 	return p.Space == wildcard
 }
 
-// isOpen reports whether p leaves either axis of the name open, so a hit's
-// own name is not derivable from the query and the report must print it
-// ([renderMatched]).
+// isOpen reports whether p leaves either axis of the name open, so a hit p
+// admitted is not named by p alone ([query.elementOpen]).
 func (p namePat) isOpen() bool {
 	return p.isAny() || p.anySpace()
 }
@@ -286,9 +295,36 @@ const (
 // query is one census: the elements to look for, the attribute names an
 // occurrence carries, and how that list is read.
 type query struct {
-	Element namePat
+	// Element holds the element names an occurrence may carry, each an
+	// alternative: a feature spelled by more than one element is one census
+	// and not two to be added up by hand (#1554). It is never empty, and
+	// alternatives are held in the order the query wrote them so the echo
+	// re-enters as itself.
+	Element []namePat
 	Attrs   []namePat
 	Join    attrJoin
+}
+
+// matchesElement reports whether n is one of the element names q censuses.
+func (q query) matchesElement(n xsd.QName) bool {
+	for _, p := range q.Element {
+		if p.matches(n) {
+			return true
+		}
+	}
+	return false
+}
+
+// elementOpen reports whether a hit's own element name is NOT derivable from
+// q, so the report must print it ([renderMatched]). Anything but exactly one
+// alternative leaves it open, however tightly each alternative is written:
+// two elements' hits are one undifferentiated run of lines otherwise, which
+// is the whole point of censusing them together (#1554).
+func (q query) elementOpen() bool {
+	if len(q.Element) != 1 {
+		return true
+	}
+	return q.Element[0].isOpen()
 }
 
 // anyAttr reports whether the query censuses the attribute-NAME axis — every
@@ -306,7 +342,12 @@ func (q query) anyAttr() bool {
 // namespaces it names (#1297).
 func (q query) String() string {
 	var b strings.Builder
-	b.WriteString(q.Element.render(elementSpace))
+	for i, e := range q.Element {
+		if i > 0 {
+			b.WriteString(string(joinAny))
+		}
+		b.WriteString(e.render(elementSpace))
+	}
 	for i, a := range q.Attrs {
 		sep := string(q.Join)
 		if i == 0 {
@@ -318,19 +359,20 @@ func (q query) String() string {
 	return b.String()
 }
 
-// parseQuery parses `local[@attr[,attr…]]` — `|` in place of `,` for the ANY
-// join — where any name may carry a Clark `{uri}` wrapper and either part of
-// it may be [wildcard]: `{*}` in the wrapper's place is every namespace, `*`
-// in the local part's is every local name. A braceless element name is in the
-// XML Schema namespace — the vocabulary every schema fixture in this corpus
-// is written in — and a braceless attribute name is in no namespace, which is
-// what an unprefixed attribute resolves to.
+// parseQuery parses `local[|local…][@attr[,attr…]]` — `|` in place of `,` for
+// the ANY join over attributes — where any name may carry a Clark `{uri}`
+// wrapper and either part of it may be [wildcard]: `{*}` in the wrapper's
+// place is every namespace, `*` in the local part's is every local name. A
+// braceless element name is in the XML Schema namespace — the vocabulary
+// every schema fixture in this corpus is written in — and a braceless
+// attribute name is in no namespace, which is what an unprefixed attribute
+// resolves to.
 func parseQuery(s string) (query, error) {
-	elem, rest, err := splitName(s, elementSpace)
+	elems, rest, err := parseElements(s)
 	if err != nil {
-		return query{}, fmt.Errorf("query %q: %w", s, err)
+		return query{}, err
 	}
-	q := query{Element: elem, Join: joinAll}
+	q := query{Element: elems, Join: joinAll}
 	if rest == "" {
 		return q, nil
 	}
@@ -355,6 +397,33 @@ func parseQuery(s string) (query, error) {
 			return query{}, fmt.Errorf("query %q: attribute names are joined by %q (every one) or by %q (any one), never both", s, joinAll, joinAny)
 		}
 		q.Join = join
+		rest = more[1:]
+	}
+}
+
+// parseElements consumes the query's element position — one name, or several
+// joined by [joinAny] — and returns them with whatever follows, the `@` of an
+// attribute list included.
+//
+// [joinAll] is REFUSED here rather than parsed or left to the attribute
+// list's own error: it means every name at once, which no single element
+// carries, and the position's old error reported it as a missing `@`, which
+// says nothing about why the census cannot be taken.
+func parseElements(s string) ([]namePat, string, error) {
+	var elems []namePat
+	rest := s
+	for {
+		p, more, err := splitName(rest, elementSpace)
+		if err != nil {
+			return nil, "", fmt.Errorf("query %q: %w", s, err)
+		}
+		elems = append(elems, p)
+		if strings.HasPrefix(more, string(joinAll)) {
+			return nil, "", fmt.Errorf("query %q: element names are joined by %q (any one of them), never by %q: no element carries two names at once", s, joinAny, joinAll)
+		}
+		if !strings.HasPrefix(more, string(joinAny)) {
+			return elems, more, nil
+		}
 		rest = more[1:]
 	}
 }
@@ -420,8 +489,10 @@ type hit struct {
 	Line int
 	Col  int
 	// Element is the resolved name of the matched element itself. It repeats
-	// the query for a query that names one element, and is the only record of
-	// which element was hit for a wildcard one — the axis report groups on it.
+	// the query for a query that fixes one element name, and is the only
+	// record of which element was hit for one that leaves it open — a
+	// wildcard, the `{*}` axis, or several alternatives ([query.elementOpen])
+	// — which is what the axis report groups on.
 	Element xsd.QName
 	// Parent is the resolved name of the element this match is a direct child
 	// of, taken from the document as written and never reconciled with the
@@ -751,14 +822,14 @@ func markUnclosed(hits []hit, open []openElem) {
 }
 
 // match reports whether start is an occurrence of q's construct — its
-// resolved name is one q's element pattern stands for, and its attributes
+// resolved name is one its element patterns stand for, and its attributes
 // satisfy q's list under q's join — and the attributes that matched.
 //
 // An element carrying none of the names a `|` query lists is not an
 // occurrence, and neither is one carrying no attribute at all under `@*`: an
 // attribute census has nothing to say about an element with no attribute.
 func match(start *xmltree.StartElement, q query) ([]attrHit, bool) {
-	if !q.Element.matches(qnameOf(start.Name())) {
+	if !q.matchesElement(qnameOf(start.Name())) {
 		return nil, false
 	}
 	if q.anyAttr() {
@@ -872,7 +943,7 @@ func printMatches(w io.Writer, rep report) {
 	}
 	for _, h := range rep.Hits {
 		_, _ = fmt.Fprintf(w, "  %s:%d:%d %sparent=%s children=%s%s\n",
-			h.File, h.Line, h.Col, renderMatched(rep.Query.Element, h), renderName(h.Parent),
+			h.File, h.Line, h.Col, renderMatched(rep.Query, h), renderName(h.Parent),
 			renderChildren(h), renderAttrs(h.Attrs))
 	}
 }
@@ -1005,14 +1076,15 @@ func renderAttrs(attrs []attrHit) string {
 	return b.String()
 }
 
-// renderMatched names the element a hit matched, for a query that left either
-// axis of that name open — a wildcard local part or the `{*}` namespace axis —
-// and nothing at all for one that fixed both, since the report's own header
-// already echoes the query. A namespace-open query without this prints every
-// namespace's hits as one undifferentiated run of lines (#1495). The trailing
-// space belongs to the field, so the line closes up when there is none.
-func renderMatched(want namePat, h hit) string {
-	if !want.isOpen() {
+// renderMatched names the element a hit matched, for a query that does not
+// already fix that name — a wildcard local part, the `{*}` namespace axis, or
+// more than one element alternative — and nothing at all for one that fixes
+// it, since the report's own header echoes the query. Without this a query
+// whose element is open prints every element's hits as one undifferentiated
+// run of lines (#1495, #1554). The trailing space belongs to the field, so
+// the line closes up when there is none.
+func renderMatched(q query, h hit) string {
+	if !q.elementOpen() {
 		return ""
 	}
 	return "element=" + renderName(h.Element) + " "

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -673,10 +674,13 @@ func TestReportGroupsTheNameAxis(t *testing.T) {
 	}
 }
 
-// TestReportNamesTheMatchedElementOnlyForAWildcard pins the one thing the
-// match line gained: a query that leaves the element open says which element
-// each hit was, and one that fixed it does not repeat itself.
-func TestReportNamesTheMatchedElementOnlyForAWildcard(t *testing.T) {
+// TestReportNamesTheMatchedElementOnlyWhenTheQueryLeavesItOpen pins the one
+// thing the match line gained: a query that leaves the element open says
+// which element each hit was, and one that fixed it does not repeat itself.
+// A union query leaves it open however tightly each alternative is written —
+// both names below fix both axes, and the hit's own is still not derivable
+// from the query (#1554).
+func TestReportNamesTheMatchedElementOnlyWhenTheQueryLeavesItOpen(t *testing.T) {
 	root := t.TempDir()
 	writeFixture(t, root, "one.xsd", xsPrefixDoc)
 
@@ -686,6 +690,7 @@ func TestReportNamesTheMatchedElementOnlyForAWildcard(t *testing.T) {
 	}{
 		{query: "*@targetNamespace", want: true},
 		{query: "element@targetNamespace", want: false},
+		{query: "element|complexType@targetNamespace", want: true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.query, func(t *testing.T) {
@@ -701,6 +706,37 @@ func TestReportNamesTheMatchedElementOnlyForAWildcard(t *testing.T) {
 				t.Errorf("report names the matched element = %v, want %v:\n%s", got, tc.want, out.String())
 			}
 		})
+	}
+}
+
+// TestReportUnionCensusIsAttributablePerElement pins what makes a union
+// census readable: its hits are one run of lines in path order, and the
+// `element=` field is the only record of which alternative each line answers.
+// Without it the two halves of a feature are counted together and can never
+// be told apart again (#1554).
+func TestReportUnionCensusIsAttributablePerElement(t *testing.T) {
+	root := t.TempDir()
+	writeFixture(t, root, "one.xsd", xsPrefixDoc)
+
+	rep, err := census(root, mustQuery(t, "element|complexType@name"))
+	if err != nil {
+		t.Fatalf("census: %v", err)
+	}
+	if len(rep.Hits) != 2 {
+		t.Fatalf("Hits = %+v, want the one element and the one complexType", rep.Hits)
+	}
+	var out strings.Builder
+	if err := printReport(&out, rep); err != nil {
+		t.Fatalf("printReport: %v", err)
+	}
+	for _, want := range []string{
+		"2 occurrence(s) of " + ns + "element|" + ns + "complexType@name in 1 fixture(s)",
+		`one.xsd:3:3 element=` + ns + `complexType parent=` + ns + `schema children=[` + ns + `sequence] name="ct"`,
+		`one.xsd:5:7 element=` + ns + `element parent=` + ns + `sequence children=[] name="a"`,
+	} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("union report does not carry %q:\n%s", want, out.String())
+		}
 	}
 }
 
@@ -978,61 +1014,85 @@ func TestRunCorpusAbsent(t *testing.T) {
 // TestParseQuery pins the query grammar, including the two defaults that make
 // a braceless query mean what a reader expects: an element name is in the XML
 // Schema namespace, an attribute name is in none. The wildcard and the two
-// joins are pinned here too — the axis forms (#1391) turn on both.
+// joins are pinned here too — the axis forms (#1391) turn on both, and the
+// element position takes the ANY join so a feature spelled by two elements is
+// one census (#1554).
 func TestParseQuery(t *testing.T) {
 	cases := []struct {
 		in    string
-		elem  namePat
+		elem  []namePat
 		attrs []namePat
 		join  attrJoin
 	}{
 		{
 			in:   "element",
-			elem: namePat{Space: xsd.XMLSchemaNS, Local: "element"},
+			elem: []namePat{{Space: xsd.XMLSchemaNS, Local: "element"}},
 			join: joinAll,
 		},
 		{
 			in:    "attribute@targetNamespace,form",
-			elem:  namePat{Space: xsd.XMLSchemaNS, Local: "attribute"},
+			elem:  []namePat{{Space: xsd.XMLSchemaNS, Local: "attribute"}},
 			attrs: []namePat{{Local: "targetNamespace"}, {Local: "form"}},
 			join:  joinAll,
 		},
 		{
 			in:   "{urn:x}thing",
-			elem: namePat{Space: "urn:x", Local: "thing"},
+			elem: []namePat{{Space: "urn:x", Local: "thing"}},
 			join: joinAll,
 		},
 		{
 			// A namespace may hold the separators; the brace ends the URI.
 			in:    "{urn:a@b,c|d}thing@{urn:d@e}attr",
-			elem:  namePat{Space: "urn:a@b,c|d", Local: "thing"},
+			elem:  []namePat{{Space: "urn:a@b,c|d", Local: "thing"}},
 			attrs: []namePat{{Space: "urn:d@e", Local: "attr"}},
 			join:  joinAll,
 		},
 		{
 			in:    "{}bare@x",
-			elem:  namePat{Local: "bare"},
+			elem:  []namePat{{Local: "bare"}},
 			attrs: []namePat{{Local: "x"}},
+			join:  joinAll,
+		},
+		{
+			// The feature axis: the two elements that spell `{open content}`,
+			// each an alternative, in the order the query wrote them (#1554).
+			in: "openContent|defaultOpenContent",
+			elem: []namePat{
+				{Space: xsd.XMLSchemaNS, Local: "openContent"},
+				{Space: xsd.XMLSchemaNS, Local: "defaultOpenContent"},
+			},
+			join: joinAll,
+		},
+		{
+			// An element alternative carries its own namespace and its own
+			// wildcards, and the attribute list reads the same beside it.
+			in: "{urn:x}thing|{*}*|other@name",
+			elem: []namePat{
+				{Space: "urn:x", Local: "thing"},
+				{Space: wildcard, Local: wildcard},
+				{Space: xsd.XMLSchemaNS, Local: "other"},
+			},
+			attrs: []namePat{{Local: "name"}},
 			join:  joinAll,
 		},
 		{
 			// The name axis: every element in the XSD namespace, every
 			// attribute in none.
 			in:    "*@*",
-			elem:  namePat{Space: xsd.XMLSchemaNS, Local: wildcard},
+			elem:  []namePat{{Space: xsd.XMLSchemaNS, Local: wildcard}},
 			attrs: []namePat{{Local: wildcard}},
 			join:  joinAll,
 		},
 		{
 			// The value axis: any of six names, on any element.
 			in:    "*@mixed|abstract",
-			elem:  namePat{Space: xsd.XMLSchemaNS, Local: wildcard},
+			elem:  []namePat{{Space: xsd.XMLSchemaNS, Local: wildcard}},
 			attrs: []namePat{{Local: "mixed"}, {Local: "abstract"}},
 			join:  joinAny,
 		},
 		{
 			in:    "{urn:x}*@{urn:y}*",
-			elem:  namePat{Space: "urn:x", Local: wildcard},
+			elem:  []namePat{{Space: "urn:x", Local: wildcard}},
 			attrs: []namePat{{Space: "urn:y", Local: wildcard}},
 			join:  joinAll,
 		},
@@ -1040,12 +1100,12 @@ func TestParseQuery(t *testing.T) {
 			// The namespace axis, in either position and on either axis of
 			// the name: `{*}` is a wildcard and never the URI "*" (#1495).
 			in:   "{*}thing",
-			elem: namePat{Space: wildcard, Local: "thing"},
+			elem: []namePat{{Space: wildcard, Local: "thing"}},
 			join: joinAll,
 		},
 		{
 			in:    "{*}*@{*}type",
-			elem:  namePat{Space: wildcard, Local: wildcard},
+			elem:  []namePat{{Space: wildcard, Local: wildcard}},
 			attrs: []namePat{{Space: wildcard, Local: "type"}},
 			join:  joinAll,
 		},
@@ -1056,7 +1116,7 @@ func TestParseQuery(t *testing.T) {
 			if err != nil {
 				t.Fatalf("parseQuery: %v", err)
 			}
-			if q.Element != tc.elem {
+			if !slices.Equal(q.Element, tc.elem) {
 				t.Errorf("Element = %+v, want %+v", q.Element, tc.elem)
 			}
 			if q.Join != tc.join {
@@ -1075,19 +1135,41 @@ func TestParseQuery(t *testing.T) {
 }
 
 // TestParseQueryRejects pins the malformed queries that must exit 2 rather
-// than censusing something the caller did not ask for. The last three are the
-// axis grammar's own rejections: one query means one join, and `@*` already
-// names every attribute, so a name beside it says nothing under either join.
+// than censusing something the caller did not ask for. The four
+// attribute-list rows are the axis grammar's own rejections: one query means
+// one join, and `@*` already names every attribute, so a name beside it says
+// nothing under either join. The element-position rows close the `|` join's
+// own edges — a join with no name behind it, and the `,` whose refusal
+// [TestParseQueryRefusesTheAllJoinOnElementNames] pins by its message.
 func TestParseQueryRejects(t *testing.T) {
 	for _, in := range []string{
 		"", "{urn:x", "@attr", "element@", "element@a@b", "element,a", "{urn:x}a}b",
 		"element@a,b|c", "element@a|b,c", "element@*,name", "element@name|*",
+		"element|", "element|@name", "openContent|defaultOpenContent,form",
 	} {
 		t.Run(in, func(t *testing.T) {
 			if _, err := parseQuery(in); err == nil {
 				t.Errorf("parseQuery(%q) = nil error, want a rejection", in)
 			}
 		})
+	}
+}
+
+// TestParseQueryRefusesTheAllJoinOnElementNames pins WHY `,` between element
+// names is refused and not merely THAT it is: the join means every name at
+// once, which no single element carries. The message it replaces reported the
+// query as a missing `@` and sent the reader to an attribute list they had
+// not written (#1554). The whole message is pinned, both joins in their own
+// halves of it, because swapping the two inside it changes no branch and
+// leaves every shorter substring in place (#1048).
+func TestParseQueryRefusesTheAllJoinOnElementNames(t *testing.T) {
+	_, err := parseQuery("openContent,defaultOpenContent")
+	if err == nil {
+		t.Fatalf("parseQuery = nil error, want a refusal")
+	}
+	want := `query "openContent,defaultOpenContent": element names are joined by "|" (any one of them), never by ",": no element carries two names at once`
+	if err.Error() != want {
+		t.Errorf("refusal = %q, want %q", err, want)
 	}
 }
 
@@ -1100,6 +1182,9 @@ func TestQueryString(t *testing.T) {
 		{"attribute@targetNamespace,form", "{http://www.w3.org/2001/XMLSchema}attribute@targetNamespace,form"},
 		{"*@*", "{http://www.w3.org/2001/XMLSchema}*@*"},
 		{"*@mixed|abstract", "{http://www.w3.org/2001/XMLSchema}*@mixed|abstract"},
+		// A union over element names echoes every alternative, in the order
+		// it was written: the echo of a feature census is the census (#1554).
+		{"openContent|defaultOpenContent", ns + "openContent|" + ns + "defaultOpenContent"},
 		// An element name in no namespace keeps the wrapper it was written
 		// with: bare, it would echo as a name in the XML Schema namespace
 		// (#1297). The attribute half is bare because that position reads a
@@ -1129,6 +1214,11 @@ func TestQueryStringReEntersAsItself(t *testing.T) {
 		"element", "{}bare", "{}bare@x", "{urn:x}thing@{urn:y}attr",
 		"{}*@*", "*@mixed|abstract", "{}*@{urn:y}*",
 		"{*}thing", "{*}*@{urn:y}*", "{*}shipTo@{*}type",
+		// A union over element names re-enters as the union, both joins in
+		// one query included: the element position's `|` and the attribute
+		// list's are read apart (#1554).
+		"openContent|defaultOpenContent", "{}bare|{*}thing|{urn:x}*",
+		"openContent|defaultOpenContent@mode|appliesToEmpty",
 	} {
 		t.Run(in, func(t *testing.T) {
 			q := mustQuery(t, in)
@@ -1136,7 +1226,7 @@ func TestQueryStringReEntersAsItself(t *testing.T) {
 			if err != nil {
 				t.Fatalf("parseQuery(%q): %v", q.String(), err)
 			}
-			if back.Element != q.Element {
+			if !slices.Equal(back.Element, q.Element) {
 				t.Errorf("%q re-entered as element %+v, want %+v", q.String(), back.Element, q.Element)
 			}
 			if back.Join != q.Join {
@@ -1164,8 +1254,8 @@ func TestParseArgs(t *testing.T) {
 	if root != defaultRoot {
 		t.Errorf("root = %q, want %q", root, defaultRoot)
 	}
-	if q.Element.Local != "element" {
-		t.Errorf("Element.Local = %q, want element", q.Element.Local)
+	if len(q.Element) != 1 || q.Element[0].Local != "element" {
+		t.Errorf("Element = %+v, want the one name element", q.Element)
 	}
 	if _, root, err = parseArgs([]string{"element", "some/dir"}); err != nil || root != "some/dir" {
 		t.Errorf("parseArgs with a dir = %q, %v; want some/dir, nil", root, err)
@@ -1195,10 +1285,11 @@ func suiteRoot(t *testing.T) string {
 
 // TestSuiteTopLevelCensusOfFinalAndAbstract pins #1205's census, which two
 // agents in one session each hand-wrote a namespace-aware walk to take
-// because the tool could not answer it (#1282). The query language is a
-// conjunction over one element's own attributes, so "final= OR abstract=" is
-// two censuses deduped by position — that composition is the whole method,
-// and the figures below are the pin it reproduces.
+// because the tool could not answer it (#1282). This predates the query
+// language's own `|` join (#1391, #1554); "final= OR abstract=" is still two
+// censuses deduped by position here rather than one `element@final|abstract`
+// query — that composition is the whole method, and the figures below are
+// the pin it reproduces.
 func TestSuiteTopLevelCensusOfFinalAndAbstract(t *testing.T) {
 	root := suiteRoot(t)
 	type where struct {
