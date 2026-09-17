@@ -29,10 +29,15 @@ Value implementations, parsing, validation, and generation live above them.
                                   schema pipeline, not of the error currency)
                  loader          (schema resolution interfaces)
                  xpath           (XPath 2.0 engine; imports xsd, value, regex, xsderr)
+                 icpath          (the §3.11.6.2/§3.11.6.3 identity-constraint path
+                                  subset whole: the grammar, the two SCCs over it
+                                  and the streaming matcher; imports xsd, xsderr,
+                                  regex. Two consumers in two layers — parser
+                                  charges, validate matches)
                  parser          (schema docs -> xsd components; imports xmltree, loader,
-                                  xsd, value, builtin, regex, xpath — and builtin/strict, as
-                                  the DEFAULT backend Parse seeds when the caller supplies
-                                  none)
+                                  xsd, value, builtin, regex, xpath, icpath — and
+                                  builtin/strict, as the DEFAULT backend Parse seeds when
+                                  the caller supplies none)
                  validate        (instance validation; adapters xmlsrc, jsonsrc, bersrc) [2]
                  codegen  codec  (generation; dataset ser/de)               [1]
                  conformance     (harness + ratchet; test-only)
@@ -52,8 +57,9 @@ statically-check entry points and imports `xsd`, `value`, `regex` and
 **[2] The infoset seam, the assessment skeleton and the XML adapter ship;
 the other two adapters do not.** `validate` exports the infoset views and
 `New`/`Validator`/`Result` and imports `xsd`, `xsderr`, `value`, `xpath` and
-`regex` (the last for the NCName class its path lexer scans with, and behind
-`value` for the pattern facets it compiles) — but never a
+`icpath` — no longer `regex` directly, whose NCName class left with the
+identity-constraint path lexer for `icpath`, though it stays in the closure
+behind `value` for the pattern facets validate compiles — but never a
 backend: `New` takes the `value.Backend` as a required parameter, so
 `builtin/strict` stays outside the closure exactly as it does for `parser`'s
 `Produce` (see its section);
@@ -64,8 +70,8 @@ backend: `New` takes the `value.Backend` as a required parameter, so
 
 Only `xsderr`, `xsd`, `internal/schemaloc`, `value`,
 `value/backendtest`, `regex`, `builtin`, `builtin/strict`, `loader`, `parser`,
-`parser/xmltree`, `xpath`, `validate`, `validate/xmlsrc`, `conformance` and
-`cmd/goxsd8` carry code today.
+`parser/xmltree`, `xpath`, `icpath`, `validate`, `validate/xmlsrc`,
+`conformance` and `cmd/goxsd8` carry code today.
 
 **The module has two tiers, and the dependency rules govern the first.**
 The **library** is what a consumer imports — the packages above plus
@@ -478,6 +484,33 @@ clause 2) — they are NOT fail-open (PRINCIPLES 20). `$value` binds a typed
 atom `{Lexical, Kind}`. F&O regex functions use `regex`'s F&O flavor,
 never the pattern-facet flavor.
 
+## Identity-constraint paths (`icpath`)
+
+**Status: ships whole — the grammar, the two SCCs over it and the streaming
+matcher.** `go doc` renders thirteen identifiers: `CompileSelector` /
+`CompileField` and the opaque `Expr`, `Live` and `Selection` the matcher runs
+on, plus `SelectorViolation` / `FieldViolation`. It owns §3.11.6.2 and
+§3.11.6.3 — the ·selector subset· and the ·field subset·, a path grammar over
+the child and attribute axes — and imports `xsd`, `xsderr` and `regex` (the
+NCName class its lexer scans with).
+
+Two consumers in two phases, the shape `xpath` has for §3.12.6's `ta-Test`:
+`parser` calls the two `Violation` entry points at schema construction,
+charging `c-selector-xpath` / `c-fields-xpaths` at the offending
+`<selector>`/`<field>`, and `validate` compiles and advances the same
+`{expression}` at ·assessment· time for `cvc-identity-constraint`. It is NOT
+part of `xpath`: this grammar shares no production with XPath 2.0, and
+`validate/doc.go` states these paths are evaluated "directly and never through
+the XPath engine".
+
+**Fail-open, in both phases.** Clause 2 of each SCC is a disjunction whose
+second arm admits any unabbreviated XPath spelling of an admitted path, which
+no recognizer of the first arm's BNF can see — so a `Violation` entry point
+charges only the shapes no spelling excuses and is nil for everything else,
+`icpath/doc.go` enumerating which. A path the matcher cannot represent is
+declined at compile time and the identity constraint carrying it charges
+nothing, under the `GAP(xpath)` marker on `validate`'s `icFrame.declined`.
+
 ## Validation (`validate`)
 
 **Status: the engine ships the seam and charges nine rules, at the
@@ -493,10 +526,9 @@ source once, charging `cvc-assess-elt`, `cvc-elt`, `cvc-type`,
 `cvc-identity-constraint` and `cvc-id`. Which clauses of each, and which are
 declined, is `validate/doc.go`'s and is not restated here. A union-governed
 value is classified by its ·validating type· (#813). Identity-constraint
-`{selector}`/`{fields}` are evaluated directly as the restricted path
-subsets of §3.11.6.2/§3.11.6.3
-(`validate/icpath.go`) and deliberately NOT through the future XPath
-engine. **`validate/doc.go` is the authoritative per-rule statement and is
+`{selector}`/`{fields}` are compiled and evaluated directly as the
+restricted path subsets of §3.11.6.2/§3.11.6.3 (`icpath`) and deliberately
+NOT through the future XPath engine. **`validate/doc.go` is the authoritative per-rule statement and is
 current; do not restate it here beyond this list.** The value-space
 charges reach a `value.Backend` through `New`'s required second parameter,
 which must be the backend the schema was compiled with.

@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"github.com/kud360/goxsd8/icpath"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
 )
@@ -268,6 +269,20 @@ func (p *producer) buildIdentityConstraint(name xsd.QName, el *Element, category
 // definition form: 2 (a <selector> child is present) and 3 (a <keyref> carries a
 // refer attribute). It does NOT memoize — that bookkeeping lives in
 // buildIdentityConstraint.
+//
+// It also charges c-selector-xpath (§3.11.6.2) and c-fields-xpaths (§3.11.6.3)
+// over each XPath Expression record as it is built, which is the one altitude
+// holding the offending <selector>/<field> element's own Loc — xsd's constructor
+// carries the <unique>/<key>/<keyref>'s (STYLE E3) — and the altitude the twin
+// SCC over an XPath Expression record, ta-props-correct, is charged at
+// (produce_typetable.go). icpath answers about the FOUR shapes clause 2 proves
+// whichever of its two arms the author wrote under and declines everything else,
+// so a conforming schema written in unabbreviated XPath is never rejected here;
+// its paths are declined at validate time instead (icpath.SelectorViolation).
+//
+// A consumer assembling components directly through xsd.NewIdentityConstraint
+// gets no charge, which is this rule family's existing norm — xsd.NewTypeAlternative
+// does not charge ta-props-correct clause 2 either — and not a new hole.
 func (p *producer) constructIdentityConstraint(name xsd.QName, el *Element, category xsd.IdentityConstraintCategory) (xsd.IdentityConstraint, error) {
 	local := el.Name().Local()
 	selectorEl := childElement(el, xsd.XMLSchemaNS, "selector")
@@ -276,16 +291,26 @@ func (p *producer) constructIdentityConstraint(name xsd.QName, el *Element, cate
 			"<%s> has no <selector> child, but src-identity-constraint clause 2 requires one when name is present", local)
 	}
 	selector := p.buildXPathExpression(selectorEl, "xpath")
+	if err := icpath.SelectorViolation(selectorEl.Loc(), selector); err != nil {
+		return xsd.IdentityConstraint{}, err
+	}
 
 	// {fields} in document order; an empty sequence is rejected by
 	// NewIdentityConstraint (c-props-correct clause 1), not pre-checked here.
+	// c-fields-xpaths quantifies over the members one at a time ("For each member
+	// of the {fields}"), so each is charged as it is mapped and the first
+	// violation in document order is the one reported (STYLE D1).
 	var fields []xsd.XPathExpression
 	for _, child := range el.Children() {
 		fieldEl, ok := child.(*Element)
 		if !ok || !isXSD(fieldEl, "field") {
 			continue
 		}
-		fields = append(fields, p.buildXPathExpression(fieldEl, "xpath"))
+		field := p.buildXPathExpression(fieldEl, "xpath")
+		if err := icpath.FieldViolation(fieldEl.Loc(), field); err != nil {
+			return xsd.IdentityConstraint{}, err
+		}
+		fields = append(fields, field)
 	}
 
 	var referencedKey *xsd.QName
