@@ -213,9 +213,10 @@
 // Every one of those charges reaches a DESCENDANT on the same terms, against
 // the ·governing type definition· the particle its parent's {content type}
 // ·attributes· it to supplies (§3.3.4.6 clause 3.1): an element particle's
-// {term}, or — for a strict or lax wildcard particle, and for an item admitted
-// as a member of a ·substitution group· — the top-level declaration its
-// ·expanded name· ·resolves· to. Two shapes stop it: a child ·attributed to· a
+// {term}, or — for a strict or lax wildcard, a ·wildcard particle·'s or a
+// present {open content}'s alike, and for an item admitted as a member of a
+// ·substitution group· — the top-level declaration its ·expanded name·
+// ·resolves· to. Two shapes stop it: a child ·attributed to· a
 // skip wildcard, which is ·skipped· along with every element beneath it (clause
 // 3.2), and a child whose declaration is not determinable, whose own subtree is
 // then assessed against nothing in its turn.

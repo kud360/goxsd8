@@ -161,6 +161,11 @@ func (e ElementContent) Variety() ContentTypeVariety {
 // OpenContentMode); construct only through NewOpenContent, which rejects an
 // out-of-range {mode}, so an ill-formed record is unrepresentable (STYLE T1).
 // OpenContent is immutable after construction.
+//
+// A *OpenContent is also one arm of the Attribution sealed sum
+// (contentmatcher.go): Matcher.Next hands back this record, not its {wildcard},
+// for an item cvc-complex-content clause 2.4 or 3.4 admitted, because §3.4.4.4
+// ·attributes· such an item to the {open content} and to no particle.
 type OpenContent struct {
 	mode     OpenContentMode
 	wildcard Wildcard

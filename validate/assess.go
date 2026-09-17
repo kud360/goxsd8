@@ -378,7 +378,7 @@ func typeName(t xsd.TypeDefinition) string {
 //     strict, e-validity clause 1.1.3, charged by
 //     [walk.unresolvedStrictWildcardChild]; under lax, nothing, at the child or
 //     anywhere else.
-//   - clause 4, "otherwise", for an [xsd.OpenContent]: the same ·resolution·,
+//   - clause 4, "otherwise", for an [*xsd.OpenContent]: the same ·resolution·,
 //     decided off the {open content}'s own {wildcard} (wildcardGoverning). An
 //     item cvc-complex-content clause 2.4 or 3.4 admitted is ·attributed to·
 //     the {open content} and to no particle (§3.4.4.4), so clause 3 never names

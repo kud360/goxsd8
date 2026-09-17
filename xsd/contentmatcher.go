@@ -142,9 +142,10 @@ package xsd
 // assessment's job (§3.3.4.6), not this one's.
 //
 // A [Wildcard] result is the {term} of a ·wildcard particle· (§3.9.1, key-wp)
-// and never the {wildcard} of an {open content}. That is what e-validity clause
-// 1.1.3 (§3.3.5.1) quantifies over and what §3.10.4.1's key-skipped reads
-// {process contents} off, and both are decided by this arm alone.
+// and never the {wildcard} of an {open content}. That is the distinction
+// e-validity clause 1.1.3 (§3.3.5.1) turns on: it quantifies over an item
+// ·attributed to· a ***strict*** ·wildcard particle· and names no other
+// component, so this arm decides it and the [*OpenContent] one does not.
 //
 // An [*OpenContent] result is the {open content} record of the {content type}
 // being matched — never nil, and the same pointer [ElementContent] carries, so
