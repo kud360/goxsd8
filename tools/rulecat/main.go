@@ -64,6 +64,11 @@ var irregularRules = []string{
 	// charged by parser's attribute declaration productions.
 	"no-xmlns",
 	"no-xsi",
+	// The two Structures §3.11.6 SCCs on an identity-constraint definition's
+	// {selector} and {fields}: §3.11.6.2 Selector Value OK and §3.11.6.3 Fields
+	// Value OK. Both are charged by parser over icpath's recognizer.
+	"c-selector-xpath",
+	"c-fields-xpaths",
 	"length-valid-restriction",
 	"minLength-valid-restriction",
 	"maxLength-valid-restriction",
