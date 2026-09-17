@@ -30,9 +30,9 @@ All/all006/instance/all006.n02.xml pass
 All/all006/instance/all006.n03.xml pass
 All/all006/instance/all006.n04.xml pass
 All/all006/instance/all006.v01.xml fail
-All/all007/instance/all007.n01.xml fail
-All/all007/instance/all007.n02.xml fail
-All/all007/instance/all007.n03.xml fail
+All/all007/instance/all007.n01.xml pass
+All/all007/instance/all007.n02.xml pass
+All/all007/instance/all007.n03.xml pass
 All/all007/instance/all007.v01.xml fail
 All/all301/instance/all301.n01.xml pass
 All/all301/instance/all301.n02.xml pass
