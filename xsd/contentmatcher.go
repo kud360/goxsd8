@@ -274,7 +274,7 @@ type Matcher struct {
 // it and [Matcher.Next] offers the open wildcard whatever {particle} cannot
 // take, per cvc-complex-content clauses 2 and 3 (see the file comment).
 //
-// The three declines, none of them a violation:
+// The two declines, none of them a violation:
 //
 //   - a {content type} whose {variety} is empty or simple, which holds no
 //     particle at all. cvc-complex-type clauses 1.1 and 1.2 govern those
@@ -291,11 +291,6 @@ type Matcher struct {
 //     manufactures none. #1557 owns its retirement: raising the ceiling needs
 //     the partitions represented as counter INTERVALS rather than one cursor
 //     each, which is a different state encoding and not a wider bound here.
-//   - GAP(xsd): an <all> group with a model group among its {particles}, which
-//     cos-all-limited clause 2 admits only as a nested all group. Interleaving
-//     two all groups' members needs per-member positions this walk does not
-//     keep, and it keeps only counters because every other all group's members
-//     are leaves. #783 owns its retirement.
 func (s *Schema) ContentMatcher(t ComplexType) (*Matcher, bool) {
 	ec, ok := t.ContentType().(ElementContent)
 	if !ok {
@@ -306,9 +301,6 @@ func (s *Schema) ContentMatcher(t ComplexType) (*Matcher, bool) {
 		return nil, false
 	}
 	m.markAmbiguous(0)
-	if !m.supported(0) {
-		return nil, false
-	}
 	if !m.partitionsBounded() {
 		return nil, false
 	}
@@ -365,27 +357,6 @@ func (m *Matcher) resolveTerm(t TermOrRef) (Term, bool) {
 	default:
 		panic("xsd: Matcher.resolveTerm: non-exhaustive TermOrRef switch")
 	}
-}
-
-// supported reports whether the walk decides the subtree at i. The one shape it
-// does not is an <all> group holding a model group, which ContentMatcher's doc
-// comment states.
-func (m *Matcher) supported(i int) bool {
-	g, isGroup := m.nodes[i].term.(ModelGroup)
-	if !isGroup {
-		return true
-	}
-	for _, c := range m.nodes[i].children {
-		if g.Compositor() == CompositorAll {
-			if _, nested := m.nodes[c].term.(ModelGroup); nested {
-				return false
-			}
-		}
-		if !m.supported(c) {
-			return false
-		}
-	}
-	return true
 }
 
 // markAmbiguous sets contentNode.ambiguous over the subtree at i and reports
@@ -722,21 +693,18 @@ func (m *Matcher) repeat(c *cursor, d int, name QName, kind admitKind) (Attribut
 // what §3.8.4.1 says follows: a sequence its remaining members while each
 // skipped one is ·emptiable· (§3.8.4.1.1), a choice nothing at all, since an
 // iteration of a choice is one member (§3.8.4.1.2), and an all group any member
-// that has not reached its {max occurs}, since S1 × … × Sn interleaves them
-// (§3.8.4.1.3).
+// that can still take the item — one short of its {max occurs}, or a nested all
+// group with an occurrence open to resume (offerAllMembers) — since
+// S1 × … × Sn interleaves them (§3.8.4.1.3).
 func (m *Matcher) continueIteration(c *cursor, d int, g ModelGroup, slot int, name QName, kind admitKind) (Attribution, bool) {
 	children := m.nodes[c.path[d]].children
 	switch g.Compositor() {
 	case CompositorChoice:
 		return nil, false
 	case CompositorAll:
+		i := c.path[d]
 		c.path = c.path[:d+1]
-		for _, ch := range children {
-			if a, ok := m.enter(c, ch, name, kind); ok {
-				return a, true
-			}
-		}
-		return nil, false
+		return m.offerAllMembers(c, i, name, kind)
 	case CompositorSequence:
 		c.path = c.path[:d+1]
 		for _, ch := range children[slot+1:] {
@@ -751,6 +719,49 @@ func (m *Matcher) continueIteration(c *cursor, d int, g ModelGroup, slot int, na
 	default:
 		panic("xsd: Matcher.continueIteration: non-exhaustive Compositor switch")
 	}
+}
+
+// offerAllMembers offers name to each member of the all group at i in turn,
+// which §3.8.4.1.3 licenses whatever member the last item went to: L(M) is
+// S1 × … × Sn, the INTERLEAVE of the members' own sequences, so nothing
+// requires one member's items to be contiguous.
+//
+// A member that is itself a model group — cos-all-limited (§3.8.6.2) clause 2
+// admits an all group there and nothing else — is RESUMED where it already has
+// an occurrence open and entered where it does not, and its occurrence counter
+// is the whole of that discriminator: clause 1.3 pins the member to
+// {min occurs} = {max occurs} = 1, so a non-zero count is the one open
+// occurrence it will ever have.
+func (m *Matcher) offerAllMembers(c *cursor, i int, name QName, kind admitKind) (Attribution, bool) {
+	for _, ch := range m.nodes[i].children {
+		if _, isGroup := m.nodes[ch].term.(ModelGroup); isGroup && c.counts[ch] > 0 {
+			if a, ok := m.resumeAll(c, ch, name, kind); ok {
+				return a, true
+			}
+			continue
+		}
+		if a, ok := m.enter(c, ch, name, kind); ok {
+			return a, true
+		}
+	}
+	return nil, false
+}
+
+// resumeAll consumes name inside the occurrence of the nested all group at i
+// that an earlier item already opened, putting i back on the path with its
+// counters as they stand and offering the name to its own members — to whatever
+// depth clause 1.3's exactly-once nesting reaches. Neither the occurrence
+// counter nor the subtree beneath it moves: this is the same occurrence
+// suspended by an item that went to a sibling, not a new one. It leaves the
+// path untouched when the name is not admitted, as enter does.
+func (m *Matcher) resumeAll(c *cursor, i int, name QName, kind admitKind) (Attribution, bool) {
+	c.path = append(c.path, i)
+	a, ok := m.offerAllMembers(c, i, name, kind)
+	if !ok {
+		c.path = c.path[:len(c.path)-1]
+		return nil, false
+	}
+	return a, true
 }
 
 // enter consumes name as the FIRST item of a fresh occurrence of the node at i,
@@ -856,21 +867,21 @@ func (m *Matcher) canRepeat(c *cursor, i int) bool {
 // {min occurs} — or short of it with an ·emptiable· body, since the iterations
 // still owed can then each be empty (cvc-accept clauses 1.1, 2.1 and 3.1).
 //
-// A member of an ALL group is left without its {min occurs} being consulted at
-// all. §3.8.4.1.3 makes an all group's language S1 × … × Sn, the INTERLEAVE of
-// its members' own sequences, so a member is suspended and resumed rather than
-// finished when the next item belongs to a sibling; what the member owes is
-// owed to the group, and iterationComplete is where the group collects it from
-// every member at once.
+// A member of an ALL group is left without its {min occurs} or its own open
+// iteration being consulted at all. §3.8.4.1.3 makes an all group's language
+// S1 × … × Sn, the INTERLEAVE of its members' own sequences, so a member is
+// suspended and resumed rather than finished when the next item belongs to a
+// sibling; what the member owes is owed to the group, and iterationComplete is
+// where the group collects it from every member at once.
 func (m *Matcher) canExit(c *cursor, d int) bool {
 	i := c.path[d]
+	if m.inAllGroup(c, d) {
+		return true
+	}
 	if g, isGroup := m.nodes[i].term.(ModelGroup); isGroup {
 		if !m.iterationComplete(c, i, g, m.slotOf(i, c.path[d+1])) {
 			return false
 		}
-	}
-	if m.inAllGroup(c, d) {
-		return true
 	}
 	if c.counts[i] >= m.nodes[i].occurs.Min() {
 		return true
@@ -907,7 +918,7 @@ func (m *Matcher) iterationComplete(c *cursor, i int, g ModelGroup, slot int) bo
 		return true
 	case CompositorAll:
 		for _, ch := range children {
-			if c.counts[ch] < m.nodes[ch].occurs.Min() {
+			if !m.memberSatisfied(c, ch) {
 				return false
 			}
 		}
@@ -915,6 +926,29 @@ func (m *Matcher) iterationComplete(c *cursor, i int, g ModelGroup, slot int) bo
 	default:
 		panic("xsd: Matcher.iterationComplete: non-exhaustive Compositor switch")
 	}
+}
+
+// memberSatisfied reports whether the member at i of an all group owes that
+// group nothing where the sequence stands: its occurrence count is at
+// {min occurs}, or short of it with an ·emptiable· body so the occurrences
+// still owed can each be empty (cvc-accept clauses 1.1, 2.1 and 3.1).
+//
+// A member that is itself an all group — cos-all-limited (§3.8.6.2) clause 2
+// admits no other kind there — owes what its OWN members owe as well, since
+// §3.8.4.1.3 folds its language into the same interleave rather than closing it
+// where the last of its items fell. That is the debt canExit declines to
+// collect from a member of an all group, recursively over whatever depth clause
+// 1.3 permits. A leaf has no members, so the recursion ends there.
+func (m *Matcher) memberSatisfied(c *cursor, i int) bool {
+	if c.counts[i] < m.nodes[i].occurs.Min() && !m.bodyEmptiable(i) {
+		return false
+	}
+	for _, ch := range m.nodes[i].children {
+		if !m.memberSatisfied(c, ch) {
+			return false
+		}
+	}
+	return true
 }
 
 // emptiable reports whether the particle at i ·accepts· the empty sequence
