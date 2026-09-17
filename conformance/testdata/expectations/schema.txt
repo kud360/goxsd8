@@ -5250,7 +5250,7 @@ MS-IdentityConstraint2006-07-15/idI006/schema/idI006 fail
 MS-IdentityConstraint2006-07-15/idI007/schema/idI007 fail
 MS-IdentityConstraint2006-07-15/idI008/schema/idI008 pass
 MS-IdentityConstraint2006-07-15/idI009/schema/idI009 pass
-MS-IdentityConstraint2006-07-15/idI010/schema/idI010 fail
+MS-IdentityConstraint2006-07-15/idI010/schema/idI010 pass
 MS-IdentityConstraint2006-07-15/idI011/schema/idI011 pass
 MS-IdentityConstraint2006-07-15/idI012/schema/idI012 pass
 MS-IdentityConstraint2006-07-15/idI013/schema/idI013 pass
@@ -5389,10 +5389,10 @@ MS-IdentityConstraint2006-07-15/idI145/schema/idI145 fail
 MS-IdentityConstraint2006-07-15/idI146/schema/idI146 fail
 MS-IdentityConstraint2006-07-15/idI147/schema/idI147 fail
 MS-IdentityConstraint2006-07-15/idI148/schema/idI148 fail
-MS-IdentityConstraint2006-07-15/idI149/schema/idI149 fail
+MS-IdentityConstraint2006-07-15/idI149/schema/idI149 pass
 MS-IdentityConstraint2006-07-15/idI150/schema/idI150 fail
 MS-IdentityConstraint2006-07-15/idI151/schema/idI151 fail
-MS-IdentityConstraint2006-07-15/idI152/schema/idI152 fail
+MS-IdentityConstraint2006-07-15/idI152/schema/idI152 pass
 MS-IdentityConstraint2006-07-15/idJ001/schema/idJ001 fail
 MS-IdentityConstraint2006-07-15/idJ002/schema/idJ002 fail
 MS-IdentityConstraint2006-07-15/idJ003/schema/idJ003 fail
@@ -5403,7 +5403,7 @@ MS-IdentityConstraint2006-07-15/idJ007/schema/idJ007 fail
 MS-IdentityConstraint2006-07-15/idJ008/schema/idJ008 fail
 MS-IdentityConstraint2006-07-15/idJ009/schema/idJ009 pass
 MS-IdentityConstraint2006-07-15/idJ010/schema/idJ010 pass
-MS-IdentityConstraint2006-07-15/idJ011/schema/idJ011 fail
+MS-IdentityConstraint2006-07-15/idJ011/schema/idJ011 pass
 MS-IdentityConstraint2006-07-15/idJ012/schema/idJ012 pass
 MS-IdentityConstraint2006-07-15/idJ013/schema/idJ013 pass
 MS-IdentityConstraint2006-07-15/idJ014/schema/idJ014 pass
@@ -5602,7 +5602,7 @@ MS-IdentityConstraint2006-07-15/idJ206/schema/idJ206 fail
 MS-IdentityConstraint2006-07-15/idJ207/schema/idJ207 fail
 MS-IdentityConstraint2006-07-15/idJ208/schema/idJ208 fail
 MS-IdentityConstraint2006-07-15/idJ209/schema/idJ209 fail
-MS-IdentityConstraint2006-07-15/idJ210/schema/idJ210 fail
+MS-IdentityConstraint2006-07-15/idJ210/schema/idJ210 pass
 MS-IdentityConstraint2006-07-15/idK001/schema/idK001 pass
 MS-IdentityConstraint2006-07-15/idK002/schema/idK002 pass
 MS-IdentityConstraint2006-07-15/idK003/schema/idK003 pass
