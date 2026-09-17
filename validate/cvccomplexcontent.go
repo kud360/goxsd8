@@ -747,13 +747,16 @@ func (c *contentCheck) log(w *walk, name xsd.QName, loc xsderr.Loc, rule xsderr.
 		slog.String("clause", clause), slog.String("outcome", outcome))
 }
 
-// attributedTo names the particle {term} an item was ·attributed to·
-// (§3.4.4.4) for the log, switching over the two variants [xsd.Attribution]
-// seals (STYLE T2's closed-sum exception). What the descent reads off the same
-// Attribution — the child's ·governing element declaration·, including the
-// ·substituting declaration· a substituting item carries rather than the
-// particle's own — is [walk.childGoverning]'s, and the two are deliberately
-// separate: a log line names the particle that consumed the item, which is a
+// attributedTo names what an item was ·attributed to· (§3.4.4.4) for the log,
+// switching over the three variants [xsd.Attribution] seals (STYLE T2's
+// closed-sum exception). The {open content} arm is spelled apart from the
+// ·wildcard particle· one because that is the distinction the log exists to
+// show: a reader asking why e-validity clause 1.1.3 charged one unresolvable
+// child and not another reads the answer off these two lines. What the descent
+// reads off the same Attribution — the child's ·governing element declaration·,
+// including the ·substituting declaration· a substituting item carries rather
+// than the particle's own — is [walk.childGoverning]'s, and the two are
+// deliberately separate: a log line names what consumed the item, which is a
 // fact about the PARENT's content model.
 func attributedTo(a xsd.Attribution) string {
 	switch t := a.(type) {
@@ -761,6 +764,8 @@ func attributedTo(a xsd.Attribution) string {
 		return "element declaration " + t.Name().String()
 	case xsd.Wildcard:
 		return "wildcard " + t.NamespaceConstraint().Variety().String()
+	case *xsd.OpenContent:
+		return "open content wildcard " + t.Wildcard().NamespaceConstraint().Variety().String()
 	default:
 		return "particle"
 	}
