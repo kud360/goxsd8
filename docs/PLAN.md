@@ -136,9 +136,12 @@ NO LIVE CLAIM.**
 
 ### Marker census
 
-`go tool gapaudit` over the whole repository feed, run twice, **identical row for
-row**: **69 markers, 9 areas, group 1 at 19, group 2 at 31.** Down from 71 —
-#1516, #782 and #783 deleted declines as they landed.
+`go tool gapaudit` over the whole repository feed, run three times — twice at
+`e064471` (**identical row for row**: 69 markers, group 1 at 19, group 2 at 31)
+and again on the merged tree after #812 landed. **The census MOVED with that
+landing and the current reading is the one quoted: 70 markers, 9 areas, group 1
+at 21, group 2 at 32.** The window's arithmetic: 71 at the last stamp, minus the
+declines #1516, #782 and #783 deleted, plus what #812 added.
 
 - **ONE dead-end row, and it now cites TWO closed issues**:
   `xsd/contentrestricts.go:684` names CLOSED #501 and now also CLOSED
@@ -153,7 +156,13 @@ row**: **69 markers, 9 areas, group 1 at 19, group 2 at 31.** Down from 71 —
   half names no number. So one gap appears in group 1 and in group 2 at once.
   **Recorded in #1553's own `## Notes` by this pass** so the next one does not
   re-investigate it; both rows retire when the arm lands.
-- No other group-1 row is newly untracked, and no new `kind/gap` issue is owed.
+- **#812 added THREE group-1 rows and they are already owned.** The new
+  `icpath` package carries `icpath/grammar.go:235`, and
+  `validate/cvcidentityconstraint.go:434` became `:130` and `:445` when that file
+  was rewritten. **#1572** — filed by #812's own post-land pass (`70e720c`) —
+  owns both `GAP(xpath)` markers. The `xpath` area census moves 6 → 7 with them.
+- No other group-1 row is newly untracked, and **no new `kind/gap` issue is owed
+  by this pass**: every row the census turned up already has a live tracker.
 
 ### Milestones and queue
 
@@ -183,10 +192,12 @@ summing counts**. #779 owns the mechanical check.
 
 By kind: `kind/refactor` 81, `kind/process` 67, `kind/gap` 59, `kind/tooling`
 45, `kind/story` 37, `kind/bug` 34, `kind/docs` 31, `kind/feature` 3. By area:
-`meta` 96, `parser` 83, `xsd` 64, `docs` 46, `conformance` 37, `cmd` 33,
+`meta` 96, `parser` 83, `xsd` 63, `docs` 46, `conformance` 37, `cmd` 33,
 `validate` 28, `value` 17, `builtin` 11, `xsderr` 9, `regex` 6, `xpath` 6,
-`model` 4, `loader` 2, `cli` 1. **267 of 339 open issues carry no milestone at
-all**, so read the `area/` census, not the milestone counts.
+`model` 4, `loader` 2, `cli` 1, **`icpath` 1 — a SIXTEENTH area label, minted by
+#812's landing and named in no document**, which is #1019's subject exactly.
+**267 of 339 open issues carry no milestone at all**, so read the `area/` census,
+not the milestone counts.
 
 **M4 did not move at all this window** — 54 open, 134 closed, byte-identical to
 the last two stamps — because none of the four landings carried it. **M5 took
@@ -348,7 +359,11 @@ machinery that does not exist. **#1522** (the 400-line M4/M5 prose) and
 untouched for three stamps; #1522 gained a measurement this pass confirming its
 own scope ruling. **#1560**, **#1502**, **#1531**, **#1546**, **#1548**,
 **#1429**, **#1539**, **#1518**, **#1452**, **#1496**, **#1497**, **#1508**,
-**#1454** and **#1291** are each real and each one session.
+**#1454** and **#1291** are each real and each one session. **#1572 arrived
+after this band was ordered** — #812's post-land pass filed it for the two
+unowned `GAP(xpath)` markers that landing left in the new `icpath` package — and
+it is the same class as row 8: a marker-ownership fix in freshly-landed code,
+cheapest while the landing is still warm.
 
 ### Next planning action
 
@@ -369,7 +384,7 @@ own scope ruling. **#1560**, **#1502**, **#1531**, **#1546**, **#1548**,
    stamp.
 4. **The survey channel's failure rate has a THIRD data point and the question
    is closed.** The twenty-fifth stamp took four walks and two came back
-   corrupt; the twenty-sixth took four clean; this one took **three, all clean on
+   corrupt; the twenty-sixth took four clean; this one took **four, all clean on
    the first request**, with #1520's page-content assertion in the recipe
    throughout. **Read the 25th as an incident, not a rate**, and keep quoting the
    distinct-number stamp wherever a survey figure is quoted.
@@ -439,8 +454,11 @@ a THIRD walk rather than carried forward.
 **Every body PATCH and comment went through `gh api -F body=@FILE`** and is
 byte-faithful; every body READ came from repository-scoped REST rather than the
 MCP channel (#764). GraphQL is still a 403, exactly as `docs/ROUTINES.md`
-records. **`gapaudit` was run twice and is identical row for row; `wipsurvey`
-twice; THREE `state=all` walks, all three clean on the first request.**
+records. **`gapaudit` was run THREE times — twice at `e064471`, identical row for
+row, and again on the merged tree once #812 landed, where it MOVED; `wipsurvey`
+three times; FOUR `state=all` walks, all four clean on the first request.** The
+last walk and the last census were taken after #812 and its post-land pass
+merged, and they are the ones quoted above.
 **`testdata/xsdtests` was NOT initialized**, so no suite figure here is this
 pass's own measurement — the lane table is the committed expectations census,
 which needs no submodule, and every CLI behaviour quoted from the `cliuser`
