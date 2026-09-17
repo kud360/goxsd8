@@ -452,10 +452,10 @@ func cmWantDeclaration(t *testing.T, a Attribution, local string) {
 	}
 }
 
-// cmWantWildcard asserts the item was ·attributed to· a Wildcard whose
-// {process contents} is pc, which is how these fixtures tell the {open
-// content}'s wildcard from a ·wildcard particle·'s: the two are separate
-// ·attributions· (§3.4.4.4) that [Attribution] spells with one variant.
+// cmWantWildcard asserts the item was ·attributed to· a ·wildcard particle·
+// (§3.9.1, key-wp) whose {process contents} is pc. The variant alone settles
+// which of the two ·attributions· (§3.4.4.4) this is, so pc pins the particle
+// and nothing else.
 func cmWantWildcard(t *testing.T, a Attribution, pc ProcessContents) {
 	t.Helper()
 	w, isWild := a.(Wildcard)
@@ -467,10 +467,26 @@ func cmWantWildcard(t *testing.T, a Attribution, pc ProcessContents) {
 	}
 }
 
+// cmWantOpenContent asserts the item was ·attributed to· the {open content}
+// record itself, whose {mode} is mode — the variant [Attribution] keeps apart
+// from a ·wildcard particle· (§3.4.4.4), never nil on this arm.
+func cmWantOpenContent(t *testing.T, a Attribution, mode OpenContentMode) {
+	t.Helper()
+	oc, isOpen := a.(*OpenContent)
+	if !isOpen {
+		t.Fatalf("attributed to %T, want the *OpenContent", a)
+	}
+	if oc == nil {
+		t.Fatal("attributed to a nil *OpenContent, which Matcher.Next never reports")
+	}
+	if oc.Mode() != mode {
+		t.Errorf("attributed to an {open content} in {mode} %s, want %s", oc.Mode(), mode)
+	}
+}
+
 // cmOpenWildcard is the {open content} wildcard these fixtures share: it admits
 // every name, so what a test's items are ·attributed to· turns on the
-// {particle} alone. Its {process contents} is skip, which no fixture below
-// gives a ·wildcard particle·.
+// {particle} alone.
 func cmOpenWildcard(t *testing.T) Wildcard {
 	t.Helper()
 	return uWildcard(t, NamespaceConstraintAny, nil, ProcessSkip)
@@ -488,8 +504,8 @@ func TestMatcherTakesASuffixOfOpenContent(t *testing.T) {
 
 	cmWantDeclaration(t, cmNext(t, m, "a"), "a")
 	cmWantDeclaration(t, cmNext(t, m, "b"), "b")
-	cmWantWildcard(t, cmNext(t, m, "x"), ProcessSkip)
-	cmWantWildcard(t, cmNext(t, m, "y"), ProcessSkip)
+	cmWantOpenContent(t, cmNext(t, m, "x"), OpenContentSuffix)
+	cmWantOpenContent(t, cmNext(t, m, "y"), OpenContentSuffix)
 	if !m.Accepting() {
 		t.Error("Accepting() = false for an S1 the {particle} took whole")
 	}
@@ -507,8 +523,8 @@ func TestMatcherSuffixOpenContentNeverReturnsToTheParticle(t *testing.T) {
 			cmLeaf(t, "b", uOccurs(t, 1, 1))))
 
 	cmWantDeclaration(t, cmNext(t, m, "a"), "a")
-	cmWantWildcard(t, cmNext(t, m, "x"), ProcessSkip)
-	cmWantWildcard(t, cmNext(t, m, "b"), ProcessSkip)
+	cmWantOpenContent(t, cmNext(t, m, "x"), OpenContentSuffix)
+	cmWantOpenContent(t, cmNext(t, m, "b"), OpenContentSuffix)
 	if m.Accepting() {
 		t.Error("Accepting() = true with the b particle left unsatisfied by S1")
 	}
@@ -526,7 +542,7 @@ func TestMatcherInterleavesOpenContentWithTheParticle(t *testing.T) {
 			cmLeaf(t, "b", uOccurs(t, 1, 1))))
 
 	cmWantDeclaration(t, cmNext(t, m, "a"), "a")
-	cmWantWildcard(t, cmNext(t, m, "x"), ProcessSkip)
+	cmWantOpenContent(t, cmNext(t, m, "x"), OpenContentInterleave)
 	cmWantDeclaration(t, cmNext(t, m, "b"), "b")
 	if !m.Accepting() {
 		t.Error("Accepting() = false after the {particle} took the whole of S1")
@@ -551,7 +567,50 @@ func TestMatcherPrefersTheParticleToTheOpenContentWildcard(t *testing.T) {
 		t.Fatal("Next rejected a name the ·wildcard particle· admits")
 	}
 	cmWantWildcard(t, got, ProcessLax)
-	cmWantWildcard(t, cmNext(t, m, "x"), ProcessSkip)
+	cmWantOpenContent(t, cmNext(t, m, "x"), OpenContentInterleave)
+}
+
+// The {open content} arm carries the record's IDENTITY and not a copy of it:
+// the pointer Next reports is the one ElementContent.OpenContent holds, so a
+// consumer holding the ·governing type definition· can ask whether THIS item
+// went to THIS type's {open content} rather than comparing {wildcard} values —
+// which a Wildcard, holding slices, cannot answer.
+func TestMatcherAttributesAnOpenContentItemToTheRecordItself(t *testing.T) {
+	oc, err := NewOpenContent(xsderr.Loc{}, OpenContentInterleave, cmOpenWildcard(t))
+	if err != nil {
+		t.Fatalf("NewOpenContent: %v", err)
+	}
+	content := ElementContent{Particle: cmLeaf(t, "a", uOccurs(t, 1, 1)), OpenContent: &oc}
+	ct, err := NewComplexType(xsderr.Loc{}, uq("ct"), QName{}, nil, DerivationRestriction, false,
+		nil, nil, nil, content, nil, nil)
+	if err != nil {
+		t.Fatalf("NewComplexType: %v", err)
+	}
+	b := NewSchemaBuilder()
+	b.AddType(uNamedType(t, uq("T")))
+	b.AddType(ct)
+	s, err := b.Finalize()
+	if err != nil {
+		t.Fatalf("finalizing the fixture schema: %v", err)
+	}
+	m, ok := s.ContentMatcher(ct)
+	if !ok {
+		t.Fatal("ContentMatcher declined a {content type} whose {open content} is present")
+	}
+
+	a := cmNext(t, m, "x")
+
+	held, elementOnly := ct.ContentType().(ElementContent)
+	if !elementOnly {
+		t.Fatalf("{content type} is %T, want the ElementContent built above", ct.ContentType())
+	}
+	took, isOpen := a.(*OpenContent)
+	if !isOpen {
+		t.Fatalf("attributed to %T, want the *OpenContent", a)
+	}
+	if took != held.OpenContent {
+		t.Errorf("attributed to the {open content} at %p, want the one the type holds at %p", took, held.OpenContent)
+	}
 }
 
 // An item the {particle} cannot take and {open content}.{wildcard} does not
