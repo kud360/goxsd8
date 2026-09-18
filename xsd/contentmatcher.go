@@ -472,8 +472,8 @@ func repeatable(o Occurs) bool {
 // set was 441 regions, 477µs and 687KB, so the cost is linear in the ceiling
 // and a model pays it only by standing at the ceiling.
 //
-// Nothing between 40804 and 10^8 buys another case: those are the products of
-// the next models the suite declines, so every ceiling in that span decides the
+// Nothing between 40804 and 10^8 buys another case — the models the suite
+// declines next product past 10^8 — so every ceiling in that span decides the
 // same four instance cases (#1601). 65536 is the least power of two clearing
 // 40804, and a ceiling past the headroom it leaves buys slower items and no
 // verdicts.
