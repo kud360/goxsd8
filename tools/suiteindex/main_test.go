@@ -285,6 +285,199 @@ func TestReportNamesEachHitsParent(t *testing.T) {
 	}
 }
 
+// nestDoc carries every case the containment shape turns on: a match whose
+// qualifying ancestor is its PARENT, one whose qualifying ancestor is its
+// GRANDparent, a match with no qualifying ancestor at all, and an element
+// answering both sides of the query at once — the choice, which is an
+// ancestor for what stands under it and is not one for itself.
+const nestDoc = `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:choice maxOccurs="unbounded">
+    <xs:sequence>
+      <xs:element name="deep" maxOccurs="20"/>
+    </xs:sequence>
+    <xs:element name="shallow" maxOccurs="3"/>
+  </xs:choice>
+  <xs:element name="lone" maxOccurs="7"/>
+</xs:schema>`
+
+// TestScanFixtureMatchesOnlyInsideAMatchingAncestor pins the shape #1585
+// added, the way [TestScanFixtureRecordsTheParent] pins the parent field: a
+// match counts only when an element matching the ancestor pattern encloses
+// it, at ANY depth, and the hit names the innermost such element.
+//
+// The first case is the one the parent field cannot answer — its qualifying
+// ancestor is a grandparent, so an implementation reading only
+// `open[len(open)-1]` or `hit.Parent` finds nothing there. The two elements
+// the census excludes are the other half: `lone` has no qualifying ancestor,
+// and `choice` answers both patterns but is not its own ancestor.
+func TestScanFixtureMatchesOnlyInsideAMatchingAncestor(t *testing.T) {
+	scan := scanFixture("t.xsd", strings.NewReader(nestDoc), mustQuery(t, "*@maxOccurs//*@maxOccurs"))
+	if scan.Err != nil {
+		t.Fatalf("scanFixture: %v", scan.Err)
+	}
+	want := []struct {
+		value    string
+		parent   xsd.QName
+		ancestor xsd.QName
+	}{
+		{"20", xsdName("sequence"), xsdName("choice")},
+		{"3", xsdName("choice"), xsdName("choice")},
+	}
+	if len(scan.Hits) != len(want) {
+		t.Fatalf("got %d hit(s), want %d: %+v", len(scan.Hits), len(want), scan.Hits)
+	}
+	for i, w := range want {
+		h := scan.Hits[i]
+		if got := attrPairs(h); got != "maxOccurs="+w.value {
+			t.Errorf("Hits[%d] matched %q, want maxOccurs=%s", i, got, w.value)
+		}
+		if h.Parent != w.parent {
+			t.Errorf("Hits[%d] (maxOccurs=%s) Parent = %+v, want %+v", i, w.value, h.Parent, w.parent)
+		}
+		if h.Ancestor != w.ancestor {
+			t.Errorf("Hits[%d] (maxOccurs=%s) Ancestor = %+v, want %+v", i, w.value, h.Ancestor, w.ancestor)
+		}
+	}
+}
+
+// TestScanFixtureCountsNoElementAsItsOwnAncestor pins the exclusion on its
+// own, against the query that cannot tell the two readings apart any other
+// way: `A//A` over a document holding ONE A answers nothing, where `A` answers
+// once. An implementation that consulted the whole open chain including the
+// element itself reports the same figure for both.
+func TestScanFixtureCountsNoElementAsItsOwnAncestor(t *testing.T) {
+	doc := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:choice maxOccurs="unbounded"/>
+</xs:schema>`
+	nested := scanFixture("t.xsd", strings.NewReader(doc), mustQuery(t, "*@maxOccurs//*@maxOccurs"))
+	if nested.Err != nil {
+		t.Fatalf("scanFixture: %v", nested.Err)
+	}
+	if len(nested.Hits) != 0 {
+		t.Errorf("`A//A` found %d hit(s) over one A, want 0 — an element is not its own ancestor: %+v",
+			len(nested.Hits), nested.Hits)
+	}
+	plain := scanFixture("t.xsd", strings.NewReader(doc), mustQuery(t, "*@maxOccurs"))
+	if len(plain.Hits) != 1 {
+		t.Fatalf("`A` found %d hit(s), want 1 — the containment test is what excludes it: %+v",
+			len(plain.Hits), plain.Hits)
+	}
+}
+
+// TestScanFixtureAncestorPatternIsReadOnItsOwn pins that the two sides of
+// `//` are separate patterns: the ancestor here carries an attribute the
+// match does not, and neither side admits the other's element.
+func TestScanFixtureAncestorPatternIsReadOnItsOwn(t *testing.T) {
+	doc := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="ct" mixed="true">
+    <xs:sequence>
+      <xs:element name="in" maxOccurs="2"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:element name="out" maxOccurs="2"/>
+</xs:schema>`
+	scan := scanFixture("t.xsd", strings.NewReader(doc), mustQuery(t, "complexType@mixed//element@maxOccurs"))
+	if scan.Err != nil {
+		t.Fatalf("scanFixture: %v", scan.Err)
+	}
+	if len(scan.Hits) != 1 {
+		t.Fatalf("got %d hit(s), want the one element inside the mixed complexType: %+v", len(scan.Hits), scan.Hits)
+	}
+	if got := scan.Hits[0].Attrs[0].Value; got != "2" || scan.Hits[0].Line != 4 {
+		t.Errorf("hit = line %d maxOccurs=%q, want line 4 maxOccurs=\"2\"", scan.Hits[0].Line, got)
+	}
+	if got := scan.Hits[0].Ancestor; got != xsdName("complexType") {
+		t.Errorf("Ancestor = %+v, want the complexType that matched the ancestor pattern", got)
+	}
+}
+
+// TestReportNamesTheQualifyingAncestorAndSaysWhatTheFigureIs pins what the
+// containment census prints: the `ancestor=` field beside `parent=` — they
+// name different elements on the grandparent line, which is why the field
+// exists — and the caveat, whose two directions are the whole reason the
+// figure may be quoted at all (#1585).
+func TestReportNamesTheQualifyingAncestorAndSaysWhatTheFigureIs(t *testing.T) {
+	root := t.TempDir()
+	writeFixture(t, root, "nest.xsd", nestDoc)
+
+	rep, err := census(root, mustQuery(t, "*@maxOccurs//*@maxOccurs"))
+	if err != nil {
+		t.Fatalf("census: %v", err)
+	}
+	var out strings.Builder
+	if err := printReport(&out, rep); err != nil {
+		t.Fatalf("printReport: %v", err)
+	}
+	for _, want := range []string{
+		"suiteindex: 2 occurrence(s) of " + ns + "*@maxOccurs//" + ns + "*@maxOccurs in 1 fixture(s) under ",
+		`nest.xsd:5:7 element=` + ns + `element parent=` + ns + `sequence ancestor=` + ns +
+			`choice children=[] maxOccurs="20"`,
+		`nest.xsd:7:5 element=` + ns + `element parent=` + ns + `choice ancestor=` + ns +
+			`choice children=[] maxOccurs="3"`,
+		// Both directions, because a figure qualified in one of them is a
+		// false statement in the other.
+		"bound from above of a LEXICAL nesting population, never as a count",
+		"it over-counts, because an ancestor in the document is not a",
+		"MISSES a nest that only",
+		"this census never resolves a ref",
+	} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("containment report does not carry %q:\n%s", want, out.String())
+		}
+	}
+}
+
+// TestReportPrintsNoContainmentFieldsWithoutTheShape pins the other half of
+// that rendering, and it is the stronger bar: every query shape that existed
+// before #1585 renders the report it always did, so neither the caveat nor
+// the `ancestor=` field may appear anywhere in one. A field printed
+// unconditionally passes every assertion above and changes the bytes of all
+// eight (#1585).
+func TestReportPrintsNoContainmentFieldsWithoutTheShape(t *testing.T) {
+	root := t.TempDir()
+	writeFixture(t, root, "a/pfx.xsd", xsPrefixDoc)
+	writeFixture(t, root, "b/axis.xsd", axisDoc)
+	writeFixture(t, root, "c/bare.xml", noNamespaceDoc)
+	writeFixture(t, root, "d/ns.xml", instanceNSDoc)
+	writeFixture(t, root, "e/attr.xsd", `<schema xmlns="http://www.w3.org/2001/XMLSchema">
+  <attribute name="c" targetNamespace="urn:b" form="qualified"/>
+</schema>`)
+
+	// The eight shapes that predate the containment axis, each over a fixture
+	// that answers it.
+	for _, q := range []string{
+		"element@targetNamespace",
+		"attribute@targetNamespace,form",
+		"*@mixed|abstract",
+		"*@name",
+		"{http://www.w3.org/2001/XMLSchema}element@name",
+		anyNS + "*" + xsiType,
+		"{}wrapper@id",
+		"*@*",
+	} {
+		t.Run(q, func(t *testing.T) {
+			rep, err := census(root, mustQuery(t, q))
+			if err != nil {
+				t.Fatalf("census: %v", err)
+			}
+			if len(rep.Hits) == 0 {
+				t.Fatalf("no hit, so this shape's report says nothing to compare")
+			}
+			var out strings.Builder
+			if err := printReport(&out, rep); err != nil {
+				t.Fatalf("printReport: %v", err)
+			}
+			for _, absent := range []string{"ancestor=", "bound from above", "never resolves a ref"} {
+				if strings.Contains(out.String(), absent) {
+					t.Errorf("report carries %q, which belongs to the containment shape alone:\n%s",
+						absent, out.String())
+				}
+			}
+		})
+	}
+}
+
 // TestReportSpellsANoNamespaceElementForReEntry pins #1297 at every element
 // position a match report prints — the summary line, the `element=` field, the
 // parent and the children: a name in no namespace carries an explicit `{}`,
@@ -1244,6 +1437,167 @@ func TestQueryStringReEntersAsItself(t *testing.T) {
 	}
 }
 
+// TestParseQueryAncestorPattern pins the containment grammar: the pattern
+// ahead of `//` parses exactly as the one behind it, both sides keep their
+// own attribute list and join, and a query without the separator carries no
+// ancestor at all. The Clark case is the one the separator's spelling turns
+// on — the XML Schema namespace contains `//`, and it is inside the wrapper,
+// which [splitName] consumes before it looks for a separator.
+func TestParseQueryAncestorPattern(t *testing.T) {
+	cases := []struct {
+		in       string
+		ancestor *pattern
+		elem     []namePat
+		attrs    []namePat
+		join     attrJoin
+	}{
+		{
+			in: "*@maxOccurs//*@maxOccurs",
+			ancestor: &pattern{
+				Element: []namePat{{Space: xsd.XMLSchemaNS, Local: wildcard}},
+				Attrs:   []namePat{{Local: "maxOccurs"}},
+				Join:    joinAll,
+			},
+			elem:  []namePat{{Space: xsd.XMLSchemaNS, Local: wildcard}},
+			attrs: []namePat{{Local: "maxOccurs"}},
+			join:  joinAll,
+		},
+		{
+			// Each side reads its own join, and the element alternatives of
+			// one say nothing about the other's.
+			in: "choice|sequence@maxOccurs|minOccurs//element@name,type",
+			ancestor: &pattern{
+				Element: []namePat{
+					{Space: xsd.XMLSchemaNS, Local: "choice"},
+					{Space: xsd.XMLSchemaNS, Local: "sequence"},
+				},
+				Attrs: []namePat{{Local: "maxOccurs"}, {Local: "minOccurs"}},
+				Join:  joinAny,
+			},
+			elem:  []namePat{{Space: xsd.XMLSchemaNS, Local: "element"}},
+			attrs: []namePat{{Local: "name"}, {Local: "type"}},
+			join:  joinAll,
+		},
+		{
+			in: "{" + xsd.XMLSchemaNS + "}complexType//{*}*@*",
+			ancestor: &pattern{
+				Element: []namePat{{Space: xsd.XMLSchemaNS, Local: "complexType"}},
+				Join:    joinAll,
+			},
+			elem:  []namePat{{Space: wildcard, Local: wildcard}},
+			attrs: []namePat{{Local: wildcard}},
+			join:  joinAll,
+		},
+		{
+			// No separator, no ancestor: the shape every query before #1585
+			// had, and the nil is what keeps its report unchanged.
+			in:   "element@name",
+			elem: []namePat{{Space: xsd.XMLSchemaNS, Local: "element"}},
+
+			attrs: []namePat{{Local: "name"}},
+			join:  joinAll,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.in, func(t *testing.T) {
+			q, err := parseQuery(tc.in)
+			if err != nil {
+				t.Fatalf("parseQuery: %v", err)
+			}
+			if !slices.Equal(q.Element, tc.elem) {
+				t.Errorf("Element = %+v, want %+v", q.Element, tc.elem)
+			}
+			if !slices.Equal(q.Attrs, tc.attrs) {
+				t.Errorf("Attrs = %+v, want %+v", q.Attrs, tc.attrs)
+			}
+			if q.Join != tc.join {
+				t.Errorf("Join = %q, want %q", q.Join, tc.join)
+			}
+			if tc.ancestor == nil {
+				if q.Ancestor != nil {
+					t.Fatalf("Ancestor = %+v, want none", q.Ancestor)
+				}
+				return
+			}
+			if q.Ancestor == nil {
+				t.Fatalf("Ancestor = none, want %+v", tc.ancestor)
+			}
+			if !slices.Equal(q.Ancestor.Element, tc.ancestor.Element) {
+				t.Errorf("Ancestor.Element = %+v, want %+v", q.Ancestor.Element, tc.ancestor.Element)
+			}
+			if !slices.Equal(q.Ancestor.Attrs, tc.ancestor.Attrs) {
+				t.Errorf("Ancestor.Attrs = %+v, want %+v", q.Ancestor.Attrs, tc.ancestor.Attrs)
+			}
+			if q.Ancestor.Join != tc.ancestor.Join {
+				t.Errorf("Ancestor.Join = %q, want %q", q.Ancestor.Join, tc.ancestor.Join)
+			}
+		})
+	}
+}
+
+// TestParseQueryRejectsAMalformedAncestor pins the containment separator's
+// own rejections: a side with no name on it, a lone `/`, and the chain.
+func TestParseQueryRejectsAMalformedAncestor(t *testing.T) {
+	for _, in := range []string{
+		"//", "//element", "element//", "element/element", "element//element//element",
+		"element//element,other", "element//element@a,b|c", "element@//element",
+	} {
+		t.Run(in, func(t *testing.T) {
+			if _, err := parseQuery(in); err == nil {
+				t.Errorf("parseQuery(%q) = nil error, want a rejection", in)
+			}
+		})
+	}
+}
+
+// TestParseQueryRefusesASecondAncestor pins WHY the chain is refused and not
+// merely THAT it is: one query names one ancestor, so the reader is told what
+// to write instead of being sent to the element position's error. The whole
+// message is pinned, because the remainder and the separator swapped inside
+// it change no branch and leave every shorter substring in place (#1048).
+func TestParseQueryRefusesASecondAncestor(t *testing.T) {
+	_, err := parseQuery("choice//sequence//element")
+	if err == nil {
+		t.Fatalf("parseQuery = nil error, want a refusal")
+	}
+	want := `query "choice//sequence//element": "//" separates one ancestor from the construct` +
+		` it encloses and appears at most once, found a second one at "//element"`
+	if err.Error() != want {
+		t.Errorf("refusal = %q, want %q", err, want)
+	}
+}
+
+// TestQueryStringContainmentReEntersAsItself pins the echo for the new shape:
+// a containment census's header names both patterns and the separator, and
+// parses back to the query that printed it — including the case whose
+// namespace holds a `//` of its own.
+func TestQueryStringContainmentReEntersAsItself(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"*@maxOccurs//*@maxOccurs", ns + "*@maxOccurs//" + ns + "*@maxOccurs"},
+		{"{}outer//{*}*@{urn:y}*", "{}outer//{*}*@{urn:y}*"},
+		{"choice|sequence@maxOccurs|minOccurs//element@name,type",
+			ns + "choice|" + ns + "sequence@maxOccurs|minOccurs//" + ns + "element@name,type"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.in, func(t *testing.T) {
+			q := mustQuery(t, tc.in)
+			if got := q.String(); got != tc.want {
+				t.Errorf("String() = %q, want %q", got, tc.want)
+			}
+			back, err := parseQuery(q.String())
+			if err != nil {
+				t.Fatalf("parseQuery(%q): %v", q.String(), err)
+			}
+			if back.String() != q.String() {
+				t.Errorf("%q re-entered as %q", q.String(), back.String())
+			}
+			if back.Ancestor == nil || !slices.Equal(back.Ancestor.Element, q.Ancestor.Element) {
+				t.Errorf("%q re-entered with ancestor %+v, want %+v", q.String(), back.Ancestor, q.Ancestor)
+			}
+		})
+	}
+}
+
 // TestParseArgs pins the command line: query alone censuses the suite, a
 // second argument narrows the tree, anything else is a usage error.
 func TestParseArgs(t *testing.T) {
@@ -1553,5 +1907,49 @@ func TestSuiteBooleanAttributeValueCensus(t *testing.T) {
 	if padded != 10 || len(paddedFixtures) != 9 || outside != 20 {
 		t.Errorf("census = %d padded-but-valid occurrence(s) in %d fixture(s), %d out of the lexical space;"+
 			" want 10 in 9, and 20", padded, len(paddedFixtures), outside)
+	}
+}
+
+// TestSuiteMaxOccursInsideMaxOccurs re-derives #1557's candidate census FROM
+// THE TOOL — the population two consecutive grounding rounds answered
+// `not derived` for, because no query shape composed an ancestor predicate
+// (#1585). The figure bounds a LEXICAL nesting population from above and the
+// report says so in its own output; this test pins the census, and the two
+// named fixtures pin each direction it is wrong in.
+//
+// particlesZ015.xsd is the schema of the case arm (b) flipped:
+// `<xsd:choice maxOccurs="unbounded">` over two `<xsd:element ref …
+// maxOccurs="20"/>`, which this census returns. groupH020.xsd is the other
+// direction — a repeating `<xsd:group ref>` over a group that itself holds
+// one, repeating inside repeating only AFTER resolution and carrying no
+// lexical nest at all, which this census cannot see.
+func TestSuiteMaxOccursInsideMaxOccurs(t *testing.T) {
+	root := suiteRoot(t)
+	rep, err := census(root, mustQuery(t, "*@maxOccurs//*@maxOccurs"))
+	if err != nil {
+		t.Fatalf("census: %v", err)
+	}
+	if len(rep.Hits) != 787 || countFiles(rep.Hits) != 196 {
+		t.Errorf("census = %d occurrence(s) in %d fixture(s); want 787 in 196",
+			len(rep.Hits), countFiles(rep.Hits))
+	}
+	matched := map[string]bool{}
+	named := 0
+	for _, h := range rep.Hits {
+		matched[h.File] = true
+		if h.Ancestor != h.Parent {
+			named++
+		}
+	}
+	if !matched["msData/particles/particlesZ015.xsd"] {
+		t.Error("the census missed msData/particles/particlesZ015.xsd, whose maxOccurs nests lexically")
+	}
+	if matched["msData/group/groupH020.xsd"] {
+		t.Error("the census claims msData/group/groupH020.xsd, whose nest exists only after ref resolution")
+	}
+	// Each of these qualifies on an element the parent field does not even
+	// name, so a census reading only `hit.Parent` reports none of them.
+	if named != 94 {
+		t.Errorf("%d hit(s) name an ancestor their parent field does not, want 94", named)
 	}
 }
