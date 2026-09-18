@@ -351,8 +351,9 @@ Two access styles over the compiled model, one shared core:
     counts occurrences rather than unfolding them and never backtracks.
     `cos-nonambig` licenses that for which particle takes an item;
     `cvc-accept` clause 3.1's existential over partitions is why the walk
-    carries a cursor per live partition where a repeating particle can take
-    an item on either side of a repeating ancestor's iteration boundary.
+    carries the live partitions — as runs of occurrence counts, not one
+    entry each — where a repeating particle can take an item on either side
+    of a repeating ancestor's iteration boundary.
   - a **push** driver — `Walker`, the exhaustive, schema-only visitor of
     every particle reachable through sequences/choices/all-groups and
     named-group references (the codegen consumer) — **M9**, not yet.

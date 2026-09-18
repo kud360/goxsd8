@@ -245,15 +245,16 @@
 // particle takes each item is fixed by cos-nonambig; WHICH ITERATION of a
 // repeated ancestor the item falls in is the non-determinism cvc-accept's
 // closing Note leaves open, and clause 3.1 asks it existentially, so the
-// walk carries one cursor per live partition and widens the set only where
-// a repeating particle can take an item on either side of a repeating
-// ancestor's iteration boundary (contentmatcher.go for that condition and
-// for the bound that keeps the set a constant of the schema). It decides
-// once, at construction, whether it decides at all: ContentMatcher reports
-// false for a {content type} holding no particle and for the shapes
-// contentmatcher.go declines, and a Matcher that exists never declines a
-// name mid-sequence. Substitution groups are not expanded at construction —
-// Next resolves membership per name, as cvc-accept clause 2.3.2 states it.
+// walk carries the live partitions as runs of occurrence counts rather
+// than one entry each, and widens the set only where a repeating particle
+// can take an item on either side of a repeating ancestor's iteration
+// boundary (contentmatcher.go for that condition and for the bound that
+// keeps the set a constant of the schema). It decides once, at construction,
+// whether it decides at all: ContentMatcher reports false for a {content type}
+// holding no particle and for the shapes contentmatcher.go declines, and a
+// Matcher that exists never declines a name mid-sequence. Substitution groups
+// are not expanded at construction — Next resolves membership per name, as
+// cvc-accept clause 2.3.2 states it.
 //
 // A consumer that wants the whole model rather than one sequence still
 // traverses it by hand, switching Particle.Term over the TermOrRef sealed

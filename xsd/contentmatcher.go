@@ -1,5 +1,10 @@
 package xsd
 
+import (
+	"cmp"
+	"slices"
+)
+
 // This file is the M5 pull driver xsd/doc.go names: Matcher, the
 // instance-guided advance of one complex type's {content type} particle, one
 // child at a time. It decides Element Sequence Locally Valid (Particle)
@@ -58,10 +63,10 @@ package xsd
 // wrong against (a{1,2}, b?){2,2}, which L(P) admits as the partition (a)(a b)
 // and the greedy walk consumes as one iteration and then rejects.
 //
-// So the walk carries a SET of cursors, one per partition of the items so far
-// that is still live, and a name is taken where any of them takes it. That is
-// not a search: no cursor re-reads an item, no cursor is revisited, and the set
-// is widened only where the greedy order is not already exact —
+// So the walk carries a SET of the partitions of the items so far that are
+// still live, and a name is taken where any of them takes it. That is not a
+// search: no partition re-reads an item, none is revisited, and the set is
+// widened only where the greedy order is not already exact —
 //
 //   - a differing partition needs one particle P reachable both later in the
 //     open iteration of some repeatable ancestor R and at the start of R's next
@@ -77,7 +82,7 @@ package xsd
 //     {min occurs} is met as well. The one way that iteration can hold a
 //     mandatory particle is P ITSELF, taken again, which needs a repeating
 //     particle inside a repeating one;
-//   - so a cursor splits at a node R that repeats and holds such a P
+//   - so the set splits at a node R that repeats and holds such a P
 //     (contentNode.ambiguous) and nowhere else. P has to stand at BOTH ends of
 //     R's iteration boundary at once — reachable as the first item of a fresh
 //     iteration, which needs every particle before it skippable, and reachable
@@ -85,18 +90,28 @@ package xsd
 //     every particle after it skippable — so a body holding a mandatory
 //     particle on either side of each of its repeating particles never splits,
 //     however wide R's own occurrence range. A model with no such node carries
-//     one cursor for the whole sequence and costs exactly what the greedy walk
-//     cost.
+//     one partition for the whole sequence and costs exactly what the greedy
+//     walk cost.
 //
-// The set is bounded by the SCHEMA, never by the instance. A counter stops at
-// its node's {max occurs}, or at its {min occurs} where {max occurs} is
-// unbounded (cursor), because canRepeat and canExit are its only readers and
-// neither can tell a larger value from the clamp — so two partitions that
-// differ in nothing else are one cursor, and the set cannot outgrow the product
-// of the clamped ranges over the widened subtrees. ContentMatcher computes that
-// product and declines the models whose product is too large
-// (maxPartitionStates), which is what makes one item's cost a constant of the
-// schema rather than a function of the items already taken.
+// # What the walk carries the set AS
+//
+// The live partitions differ in their occurrence counters and in nothing else
+// (partitionsBounded), and a counter stops at its node's {max occurs}, or at
+// its {min occurs} where {max occurs} is unbounded (counterCap), because
+// canRepeat, canExit and offerAllMembers are its only readers and none can tell
+// a larger value from the clamp. So the set is a set of counter TUPLES, bounded
+// by the SCHEMA and never by the instance.
+//
+// One entry per tuple is not enough. (a{1,500}){1,500} puts a quarter of a
+// million partitions in flight at once — every (iterations so far, items in the
+// open iteration) pair a prefix admits — and that is not an artefact of the
+// bound: each pair really is reachable. The walk therefore carries a run of
+// adjacent counts as one span and a tuple of spans as one region, which covers
+// that width in about a thousand entries and costs one walk step each. region
+// carries why one step decides a whole run at once, and partitionsBounded what
+// a model's cover costs; ContentMatcher declines the models whose cover would
+// outgrow maxPartitionStates, which is what makes one item's cost a constant of
+// the schema rather than a function of the items already taken.
 //
 // # The {open content} split, and why it needs no search either
 //
@@ -192,7 +207,7 @@ func (*OpenContent) attribution() {}
 // body holds a particle whose own {max occurs} is too and which the walk can
 // reach both as the first item of a fresh iteration and with the open iteration
 // already complete, so an item that particle takes can fall either side of the
-// boundary. A cursor splits at such a node and at no other, which is why
+// boundary. The live set splits at such a node and at no other, which is why
 // markAmbiguous computes it once here rather than the walk re-deriving it per
 // item.
 type contentNode struct {
@@ -202,61 +217,54 @@ type contentNode struct {
 	ambiguous bool
 }
 
-// cursor is one live partition of the items taken so far (cvc-accept clause
-// 3.1): the occurrence counter of every node of the flattened model, and the
-// path of nodes the last item was ·attributed to·, outermost first. A Matcher
-// holds every cursor those items can have reached, and [Matcher.Accepting] asks
-// its question of the set rather than of a chosen member.
+// span is a RUN of occurrence counts one region carries for one node: every
+// count from lo through hi, lo <= hi. A single count is the span whose ends are
+// equal, so a region over spans of one count each is the cursor-per-partition
+// encoding this walk carried before.
+type span struct{ lo, hi int }
+
+// region is a set of live partitions of the items taken so far (cvc-accept
+// clause 3.1) that differ in NOTHING the walk can see but the occurrence
+// counters inside them: a span of counts for every node of the flattened model,
+// and the one path of nodes the last item was ·attributed to·, outermost first.
+// It denotes the cartesian product of its spans. A Matcher holds regions
+// covering every partition those items can have reached, and
+// [Matcher.Accepting] asks its question of the whole cover rather than of a
+// chosen member.
 //
-// Counters are CLAMPED at counterCap, so a cursor records how a partition
-// stands and not how it got there. Two partitions that differ only in counts
-// neither canRepeat nor canExit can tell apart are the same cursor, and equal
-// is what collapses them.
-type cursor struct {
-	counts []int
+// Counters are CLAMPED at counterCap, so a region records how its partitions
+// stand and not how they got there.
+//
+// # The band invariant, and why one walk step serves a whole region
+//
+// Every span lies inside one BAND of its node — a run of counts over which the
+// three questions the walk ever asks a counter give one answer each. Those
+// questions are all thresholds: canRepeat asks count < {max occurs},
+// canExit and memberSatisfied ask count >= {min occurs}, and offerAllMembers
+// asks count > 0, so the answers change only at 1, at {min occurs} and at
+// counterCap (bandEnd). A band-uniform region therefore drives advance
+// identically for every partition it denotes: one walk step decides them all,
+// and the step's result is again a region, because count moves a whole span by
+// one and clearSubtree pins one to zero.
+//
+// normalize is what restores the invariant after count carries a span past a
+// band edge, splitting the region in two rather than letting one walk step
+// answer for partitions that disagree.
+type region struct {
+	counts []span
 	path   []int
 }
 
 // clone copies the mutable walk state, so a search pass that fails leaves
-// nothing behind and two cursors split from one share no array.
-func (c *cursor) clone() cursor {
-	return cursor{
-		counts: append([]int(nil), c.counts...),
-		path:   append([]int(nil), c.path...),
+// nothing behind and two regions split from one share no array.
+func (c *region) clone() region {
+	t := region{
+		counts: make([]span, len(c.counts)),
+		path:   make([]int, len(c.path), len(c.counts)),
 	}
-}
-
-// equal reports whether two cursors of one Matcher stand in the same place.
-// Their counts slices are one per node of the same flattened model and so are
-// the same length.
-func (c *cursor) equal(o cursor) bool {
-	if len(c.path) != len(o.path) {
-		return false
-	}
-	for d, i := range c.path {
-		if o.path[d] != i {
-			return false
-		}
-	}
-	for i, n := range c.counts {
-		if o.counts[i] != n {
-			return false
-		}
-	}
-	return true
-}
-
-// addCursor appends t to cs unless cs already holds an equal cursor. Collapsing
-// equal partitions is what holds the live set inside the product ContentMatcher
-// bounded: without it two partitions that have converged would each go on
-// splitting, and the set would grow with the instance.
-func addCursor(cs []cursor, t cursor) []cursor {
-	for _, c := range cs {
-		if c.equal(t) {
-			return cs
-		}
-	}
-	return append(cs, t)
+	copy(t.counts, c.counts)
+	copy(t.path, c.path)
+	return t
 }
 
 // Matcher advances one complex type's {content type} particle over an
@@ -265,7 +273,7 @@ func addCursor(cs []cursor, t cursor) []cursor {
 // zero value is not usable.
 //
 // A Matcher is single-use and stateful: it holds every position in the content
-// model the items so far can have reached (cursor) and, under a {mode} suffix
+// model the items so far can have reached (region) and, under a {mode} suffix
 // {open content}, whether the sequence has left clause 2's S1 for its S2 — so
 // the caller feeds it one element's [[children]] in document order and drops
 // it. It is not safe for concurrent use, and nothing in it is shared with the
@@ -275,7 +283,7 @@ type Matcher struct {
 	ct    ComplexType
 	open  *OpenContent
 	nodes []contentNode
-	live  []cursor
+	live  []region
 	inS2  bool
 }
 
@@ -299,18 +307,18 @@ type Matcher struct {
 //   - a {content type} whose {variety} is empty or simple, which holds no
 //     particle at all. cvc-complex-type clauses 1.1 and 1.2 govern those
 //     directly and need no matcher.
-//   - GAP(xsd): an ·ambiguous· node whose widened subtrees' clamped occurrence
-//     ranges admit more than maxPartitionStates partitions at once. The SHAPE
-//     is decided — (a{1,2}, b?){2,2} takes "a a b" — and what stays declined is
-//     the width: (a{1,500}){1,500} really does reach a quarter of a million
-//     live partitions, within a percent of the product that bounds it, so no
-//     tighter ESTIMATE reaches this shape. Only a state encoding carrying the
-//     partitions as counter INTERVALS rather than one cursor each does, and
-//     even that wants a ceiling above 500. Declining withholds the whole
+//   - GAP(xsd): an ·ambiguous· node whose widened subtrees need more than
+//     maxPartitionStates regions to cover the partitions they put in flight at
+//     once. The SHAPE is decided — (a{1,2}, b?){2,2} takes "a a b" — and so now
+//     is the WIDTH a partition-per-cursor encoding could not carry:
+//     (a{1,500}){1,500} reaches a quarter of a million live partitions and the
+//     spans of a region cover them in about a thousand. What stays declined is
+//     what outgrows THAT, a nest of repeating groups whose iteration counts
+//     multiply (partitionsBounded). Declining withholds the whole
 //     element-sequence verdict, whose consumers are validate's
 //     Result.violations and its one reader Result.Violations, both of which
 //     carry violations PRESENT — so the decline costs a rejection and
-//     manufactures none. #1557 owns its retirement.
+//     manufactures none.
 func (s *Schema) ContentMatcher(t ComplexType) (*Matcher, bool) {
 	ec, ok := t.ContentType().(ElementContent)
 	if !ok {
@@ -324,7 +332,7 @@ func (s *Schema) ContentMatcher(t ComplexType) (*Matcher, bool) {
 	if !m.partitionsBounded() {
 		return nil, false
 	}
-	m.live = []cursor{{counts: make([]int, len(m.nodes))}}
+	m.live = []region{{counts: make([]span, len(m.nodes))}}
 	return m, true
 }
 
@@ -449,19 +457,57 @@ func repeatable(o Occurs) bool {
 	return !bounded || max > 1
 }
 
-// maxPartitionStates is the ceiling on the cursors one Matcher will carry, and
-// so on what one item of the instance costs: a name is put to every live cursor
+// maxPartitionStates is the ceiling on the regions one Matcher will carry, and
+// so on what one item of the instance costs: a name is put to every live region
 // in turn. ContentMatcher declines a model that could exceed it rather than a
 // Matcher declining a name mid-sequence.
-const maxPartitionStates = 256
+//
+// It is 2048 and not 256 because a region carries a RUN of partitions rather
+// than one each, so the same per-item budget reaches models that put three
+// orders of magnitude more partitions in flight: (a{1,500}){1,500}'s quarter of
+// a million live partitions cover in 1503 regions by partitionsBounded's
+// estimate and in about a thousand measured. A ceiling below 1503 would leave
+// that width declined for the sake of an encoding the walk no longer uses.
+const maxPartitionStates = 2048
 
-// partitionsBounded reports whether the live set provably stays inside
-// maxPartitionStates. Every live cursor stands at the same ·basic particle· —
-// two that did not would ·compete· for the name that put them there, which
-// cos-nonambig has already rejected — so they differ only in the counters an
-// ·ambiguous· node's iteration boundary moves, which are its own and its
-// subtree's. A clamped counter takes counterCap+1 values, so the product of
-// those over the widened subtrees bounds the cursors that can be live at once.
+// partitionsBounded reports whether the regions covering the live partitions
+// stay inside maxPartitionStates.
+//
+// # Why the counters are the whole of what varies
+//
+// Every live partition stands at the same ·basic particle·. Two that did not
+// would ·compete· for the name that put them there — key-compete (§3.8.4.2)
+// calls two particles competing when one sequence has two ·paths· identical but
+// for their last item, which is exactly two live partitions taking one name to
+// different particles — and cos-nonambig (§3.8.6.4) forbids a content model to
+// contain two ·element particles· or two ·wildcard particles· that compete.
+// Finalize has already decided cos-nonambig, so live partitions differ ONLY in
+// the occurrence counters an ·ambiguous· node's iteration boundary moves, which
+// are its own and its subtree's (markWidened). The flattened model is a tree,
+// so the same particle is reached by one path; a whole live set therefore shares
+// one path and is covered by regions over counters alone.
+//
+// # What a widened counter costs in regions
+//
+// Both factors below are an ESTIMATE of the cover, not a bound on the
+// partitions: the walk's verdicts do not depend on either being tight, only on
+// the budget one item is allowed to spend (maxPartitionStates).
+//
+//   - A model group's counter is an ITERATION count, and repeat clears the
+//     subtree beneath it, so two live partitions that differ in it stand in
+//     unrelated positions of the body and no span merges them. It costs its
+//     whole clamped range, counterCap+1, as it did when every partition carried
+//     its own cursor.
+//   - A leaf's counter advances by ONE per item inside the open iteration, so
+//     the partitions that differ only in where the last iteration boundary fell
+//     inside that leaf's own run of items cover in one span. The boundary can
+//     only fall where the items after it are still a word of the body, which
+//     pins it to a run per leaf and not to a position per item — so the leaf
+//     costs its band count (bandCount), which is at most four however wide its
+//     occurrence range.
+//
+// Both factors are at most counterCap+1, the cursor-per-partition count this
+// walk bounded before, so no model that was carried then is declined now.
 //
 // The product is of {max occurs} values and would overflow for a model that
 // combines large ones, so it is never formed: each factor is checked against
@@ -475,13 +521,24 @@ func (m *Matcher) partitionsBounded() bool {
 		if !w {
 			continue
 		}
-		values := m.counterCap(i) + 1
+		values := m.regionFactor(i)
 		if values > maxPartitionStates || states > maxPartitionStates/values {
 			return false
 		}
 		states *= values
 	}
 	return true
+}
+
+// regionFactor is what the node at i contributes to partitionsBounded's
+// estimate: its band count where it is a leaf, whose counter a span covers, and
+// its clamped range where it is a model group, whose iteration count a span
+// never spans across.
+func (m *Matcher) regionFactor(i int) int {
+	if _, isGroup := m.nodes[i].term.(ModelGroup); isGroup {
+		return m.counterCap(i) + 1
+	}
+	return m.bandCount(i)
 }
 
 // markWidened marks every node of the subtree at i that lies inside an
@@ -506,13 +563,153 @@ func (m *Matcher) counterCap(i int) int {
 	return m.nodes[i].occurs.Min()
 }
 
-// count records one more occurrence of the node at i in c, clamped at
-// counterCap so that a partition's cursor records where it stands rather than
-// how far it has gone (cursor).
-func (m *Matcher) count(c *cursor, i int) {
-	if c.counts[i] < m.counterCap(i) {
-		c.counts[i]++
+// bandEnd reports the largest count w for which every count from v through w
+// answers the walk's three counter questions alike — canRepeat's
+// count < {max occurs}, canExit's and memberSatisfied's count >= {min occurs},
+// and offerAllMembers' count > 0. Those answers change only where a count
+// reaches 1, {min occurs} or counterCap, so the bands of the node at i are the
+// runs between those edges (region).
+func (m *Matcher) bandEnd(i, v int) int {
+	top := m.counterCap(i)
+	end := top
+	for _, e := range [...]int{1, m.nodes[i].occurs.Min(), top} {
+		if e > v && e-1 < end {
+			end = e - 1
+		}
 	}
+	return end
+}
+
+// bandCount is how many bands the node at i has, which is how many spans it
+// takes to cover its whole clamped range. It is at most four: the edges are 0,
+// 1, {min occurs} and counterCap, whatever the occurrence range between them.
+func (m *Matcher) bandCount(i int) int {
+	n := 0
+	for v := 0; v <= m.counterCap(i); v = m.bandEnd(i, v) + 1 {
+		n++
+	}
+	return n
+}
+
+// count records one more occurrence of the node at i in c, moving the whole
+// span and clamping it at counterCap so that a region records where its
+// partitions stand rather than how far they have gone (region). It is the one
+// operation that can carry a span past a band edge, which normalize splits.
+func (m *Matcher) count(c *region, i int) {
+	top := m.counterCap(i)
+	if c.counts[i].lo < top {
+		c.counts[i].lo++
+	}
+	if c.counts[i].hi < top {
+		c.counts[i].hi++
+	}
+}
+
+// normalize appends the band-uniform regions covering t to rs, splitting t at
+// the first band edge a span crosses and recurring on both halves. Only a node
+// whose count has just moved can cross an edge, so one item taken costs at most
+// one split per level of its path (region).
+func (m *Matcher) normalize(rs []region, t region) []region {
+	for i := range t.counts {
+		end := m.bandEnd(i, t.counts[i].lo)
+		if t.counts[i].hi <= end {
+			continue
+		}
+		tail := t.clone()
+		tail.counts[i].lo = end + 1
+		t.counts[i].hi = end
+		return m.normalize(m.normalize(rs, t), tail)
+	}
+	return append(rs, t)
+}
+
+// collapse folds rs into the fewest regions that cover the same partitions,
+// which is what holds the live set inside the estimate partitionsBounded
+// checked: without it two partitions that have converged would each go on
+// splitting, and the set would grow with the instance. Sorting first puts the
+// regions that differ in one node's span next to each other, so one pass over a
+// stack merges every run of them (mergeInto), and the result is in one order
+// whatever order advance produced them in (STYLE D2).
+func (m *Matcher) collapse(rs []region) []region {
+	slices.SortFunc(rs, compareRegions)
+	out := rs[:0]
+	for _, t := range rs {
+		for len(out) > 0 && m.mergeInto(&out[len(out)-1], t) {
+			t = out[len(out)-1]
+			out = out[:len(out)-1]
+		}
+		out = append(out, t)
+	}
+	return out
+}
+
+// mergeInto widens a to cover b's partitions too and reports whether it could,
+// which is where a and b stand at the same particle and their spans differ at
+// no more than one node, that node is a LEAF, and there the two runs meet or
+// overlap without leaving the band both lie in. Two equal regions merge either
+// way, which is how a duplicate is dropped.
+//
+// Only a LEAF's span widens, so the live set holds one region per assignment of
+// the model groups' ITERATION counts and one span per band inside it, which is
+// the shape partitionsBounded estimates. Widening an iteration count too leaves
+// regions OVERLAPPING — one covering a body position another already covers —
+// and an overlapping cover takes more entries, not fewer.
+func (m *Matcher) mergeInto(a *region, b region) bool {
+	if len(a.path) != len(b.path) {
+		return false
+	}
+	for d, i := range a.path {
+		if b.path[d] != i {
+			return false
+		}
+	}
+	j := -1
+	for i := range a.counts {
+		if a.counts[i] == b.counts[i] {
+			continue
+		}
+		if j >= 0 {
+			return false
+		}
+		j = i
+	}
+	if j < 0 {
+		return true
+	}
+	if _, isGroup := m.nodes[j].term.(ModelGroup); isGroup {
+		return false
+	}
+	lo, hi := min(a.counts[j].lo, b.counts[j].lo), max(a.counts[j].hi, b.counts[j].hi)
+	if min(a.counts[j].hi, b.counts[j].hi)+1 < max(a.counts[j].lo, b.counts[j].lo) {
+		return false
+	}
+	if m.bandEnd(j, lo) < hi {
+		return false
+	}
+	a.counts[j] = span{lo, hi}
+	return true
+}
+
+// compareRegions orders regions by path and then by span, outermost node first,
+// so that collapse sees every pair differing in one node's span adjacently.
+func compareRegions(a, b region) int {
+	if c := cmp.Compare(len(a.path), len(b.path)); c != 0 {
+		return c
+	}
+	for d, i := range a.path {
+		if c := cmp.Compare(i, b.path[d]); c != 0 {
+			return c
+		}
+	}
+	for i, s := range a.counts {
+		if c := cmp.Compare(s.lo, b.counts[i].lo); c != 0 {
+			return c
+		}
+		if c := cmp.Compare(s.hi, b.counts[i].hi); c != 0 {
+			return c
+		}
+	}
+	return 0
 }
 
 // Next advances the content model over one element information item whose
@@ -599,7 +796,7 @@ func (m *Matcher) Accepting() bool {
 // accepts reports whether one partition closes where the sequence stopped:
 // every node on its path can be left (canExit), or it took no item at all and
 // the model is ·emptiable·.
-func (m *Matcher) accepts(c *cursor) bool {
+func (m *Matcher) accepts(c *region) bool {
 	if len(c.path) == 0 {
 		return m.emptiable(0)
 	}
@@ -622,16 +819,19 @@ const (
 	admitWildcards
 )
 
-// step runs one search pass over every live cursor, replacing the live set with
-// the cursors that took the name and leaving it untouched where none did.
+// step runs one search pass over every live region, replacing the live set with
+// the regions that took the name and leaving it untouched where none did. What
+// advance produces is normalized back inside the band invariant and collapsed,
+// so the set the next item is put to is the fewest regions covering the
+// partitions still live (region).
 //
-// Every cursor that takes the name ·attributes· it to the same ·basic
+// Every partition that takes the name ·attributes· it to the same ·basic
 // particle·: two different ones live for one name would ·compete·, which
 // cos-nonambig has already rejected, so the first attribution is the
 // attribution and the partitions differ in nothing the caller can see.
 func (m *Matcher) step(name QName, kind admitKind) (Attribution, bool) {
 	var taken Attribution
-	var next []cursor
+	next := make([]region, 0, 2*len(m.live))
 	for i := range m.live {
 		a, cs := m.advance(&m.live[i], name, kind)
 		if len(cs) == 0 {
@@ -641,17 +841,17 @@ func (m *Matcher) step(name QName, kind admitKind) (Attribution, bool) {
 			taken = a
 		}
 		for _, c := range cs {
-			next = addCursor(next, c)
+			next = m.normalize(next, c)
 		}
 	}
 	if taken == nil {
 		return nil, false
 	}
-	m.live = next
+	m.live = m.collapse(next)
 	return taken, true
 }
 
-// advance collects every cursor reachable from c by consuming name. It works
+// advance collects every region reachable from c by consuming name. It works
 // outward exactly as one greedy walk does — the particle the last item was
 // attributed to, then the rest of the iteration containing it, then a further
 // iteration of that particle's group, then the same three questions one level
@@ -660,21 +860,25 @@ func (m *Matcher) step(name QName, kind admitKind) (Attribution, bool) {
 // than being noticed later.
 //
 // What the set adds to that walk is confined to an ·ambiguous· node, where BOTH
-// answers are kept: the cursor that stays in the open iteration and the cursor
+// answers are kept: the region that stays in the open iteration and the region
 // that closes it and starts the next. Everywhere else the first answer is the
 // only one (see the file comment), and the search ends as soon as no ·ambiguous·
 // node is left to widen at.
-func (m *Matcher) advance(c *cursor, name QName, kind admitKind) (Attribution, []cursor) {
+//
+// The regions it returns may straddle a band edge, count having just moved a
+// whole span; normalize is what puts them back inside the band invariant, and
+// no guard reads one in between.
+func (m *Matcher) advance(c *region, name QName, kind admitKind) (Attribution, []region) {
 	if len(c.path) == 0 {
 		t := c.clone()
 		a, ok := m.enter(&t, 0, name, kind)
 		if !ok {
 			return nil, nil
 		}
-		return a, []cursor{t}
+		return a, []region{t}
 	}
 	var taken Attribution
-	var out []cursor
+	var out []region
 	for d := len(c.path) - 1; d >= 0; d-- {
 		t := c.clone()
 		if a, ok := m.continueIn(&t, d, name, kind); ok {
@@ -697,11 +901,11 @@ func (m *Matcher) advance(c *cursor, name QName, kind admitKind) (Attribution, [
 }
 
 // widensAbove reports whether c's path holds an ·ambiguous· node shallower than
-// depth d. Where it does not, a cursor already found is the only one the rest of
-// the path can reach, so a model with no nested repetition costs one cursor and
+// depth d. Where it does not, a region already found is the only one the rest of
+// the path can reach, so a model with no nested repetition costs one region and
 // one pass out through its path, which is what the walk cost when this shape was
 // declined.
-func (m *Matcher) widensAbove(c *cursor, d int) bool {
+func (m *Matcher) widensAbove(c *region, d int) bool {
 	for _, i := range c.path[:d] {
 		if m.nodes[i].ambiguous {
 			return true
@@ -714,7 +918,7 @@ func (m *Matcher) widensAbove(c *cursor, d int) bool {
 // c's path, whose own deeper position has already failed to consume it and been
 // closed: one more occurrence of a leaf, or a later member of a group's open
 // iteration.
-func (m *Matcher) continueIn(c *cursor, d int, name QName, kind admitKind) (Attribution, bool) {
+func (m *Matcher) continueIn(c *region, d int, name QName, kind admitKind) (Attribution, bool) {
 	i := c.path[d]
 	g, isGroup := m.nodes[i].term.(ModelGroup)
 	if !isGroup {
@@ -733,7 +937,7 @@ func (m *Matcher) continueIn(c *cursor, d int, name QName, kind admitKind) (Attr
 // word of its language already (iterationComplete) and its {max occurs} to admit
 // another (cvc-accept clause 3.2). A leaf has no iteration to close — its
 // occurrences are continueIn's counter — so it never repeats this way.
-func (m *Matcher) repeat(c *cursor, d int, name QName, kind admitKind) (Attribution, bool) {
+func (m *Matcher) repeat(c *region, d int, name QName, kind admitKind) (Attribution, bool) {
 	i := c.path[d]
 	g, isGroup := m.nodes[i].term.(ModelGroup)
 	if !isGroup {
@@ -763,7 +967,7 @@ func (m *Matcher) repeat(c *cursor, d int, name QName, kind admitKind) (Attribut
 // that can still take the item — one short of its {max occurs}, or a nested all
 // group with an occurrence open to resume (offerAllMembers) — since
 // S1 × … × Sn interleaves them (§3.8.4.1.3).
-func (m *Matcher) continueIteration(c *cursor, d int, g ModelGroup, slot int, name QName, kind admitKind) (Attribution, bool) {
+func (m *Matcher) continueIteration(c *region, d int, g ModelGroup, slot int, name QName, kind admitKind) (Attribution, bool) {
 	children := m.nodes[c.path[d]].children
 	switch g.Compositor() {
 	case CompositorChoice:
@@ -799,9 +1003,9 @@ func (m *Matcher) continueIteration(c *cursor, d int, g ModelGroup, slot int, na
 // is the whole of that discriminator: clause 1.3 pins the member to
 // {min occurs} = {max occurs} = 1, so a non-zero count is the one open
 // occurrence it will ever have.
-func (m *Matcher) offerAllMembers(c *cursor, i int, name QName, kind admitKind) (Attribution, bool) {
+func (m *Matcher) offerAllMembers(c *region, i int, name QName, kind admitKind) (Attribution, bool) {
 	for _, ch := range m.nodes[i].children {
-		if _, isGroup := m.nodes[ch].term.(ModelGroup); isGroup && c.counts[ch] > 0 {
+		if _, isGroup := m.nodes[ch].term.(ModelGroup); isGroup && c.counts[ch].lo > 0 {
 			if a, ok := m.resumeAll(c, ch, name, kind); ok {
 				return a, true
 			}
@@ -821,7 +1025,7 @@ func (m *Matcher) offerAllMembers(c *cursor, i int, name QName, kind admitKind) 
 // counter nor the subtree beneath it moves: this is the same occurrence
 // suspended by an item that went to a sibling, not a new one. It leaves the
 // path untouched when the name is not admitted, as enter does.
-func (m *Matcher) resumeAll(c *cursor, i int, name QName, kind admitKind) (Attribution, bool) {
+func (m *Matcher) resumeAll(c *region, i int, name QName, kind admitKind) (Attribution, bool) {
 	c.path = append(c.path, i)
 	a, ok := m.offerAllMembers(c, i, name, kind)
 	if !ok {
@@ -835,7 +1039,7 @@ func (m *Matcher) resumeAll(c *cursor, i int, name QName, kind admitKind) (Attri
 // appending the nodes it descended through to the path. It leaves the walk
 // state untouched when the name is not admitted, so a caller may try members in
 // turn.
-func (m *Matcher) enter(c *cursor, i int, name QName, kind admitKind) (Attribution, bool) {
+func (m *Matcher) enter(c *region, i int, name QName, kind admitKind) (Attribution, bool) {
 	g, isGroup := m.nodes[i].term.(ModelGroup)
 	if !isGroup {
 		a, ok := m.admits(c, i, name, kind)
@@ -865,7 +1069,7 @@ func (m *Matcher) enter(c *cursor, i int, name QName, kind admitKind) (Attributi
 // or an all group (§3.8.4.1.3). Members are tried in document order, which
 // decides nothing a second member could have decided differently — cos-nonambig
 // has already rejected a group where two of them admit one name.
-func (m *Matcher) enterBody(c *cursor, i int, g ModelGroup, name QName, kind admitKind) (Attribution, bool) {
+func (m *Matcher) enterBody(c *region, i int, g ModelGroup, name QName, kind admitKind) (Attribution, bool) {
 	for _, ch := range m.nodes[i].children {
 		if a, ok := m.enter(c, ch, name, kind); ok {
 			return a, true
@@ -891,7 +1095,7 @@ func (m *Matcher) enterBody(c *cursor, i int, g ModelGroup, name QName, kind adm
 // The wildcard case is cvc-wildcard (§3.10.4.1) in full, including the
 // defined/sibling {disallowed names} keywords, which need the containing
 // complex type — the reason ContentMatcher takes one.
-func (m *Matcher) admits(c *cursor, i int, name QName, kind admitKind) (Attribution, bool) {
+func (m *Matcher) admits(c *region, i int, name QName, kind admitKind) (Attribution, bool) {
 	if !m.canRepeat(c, i) {
 		return nil, false
 	}
@@ -924,9 +1128,9 @@ func (m *Matcher) admits(c *cursor, i int, name QName, kind admitKind) (Attribut
 
 // canRepeat reports whether the node at i may take one more occurrence
 // (cvc-accept clauses 1.2, 2.2 and 3.2, the {max occurs} half).
-func (m *Matcher) canRepeat(c *cursor, i int) bool {
+func (m *Matcher) canRepeat(c *region, i int) bool {
 	max, bounded := m.nodes[i].occurs.Max()
-	return !bounded || c.counts[i] < max
+	return !bounded || c.counts[i].lo < max
 }
 
 // canExit reports whether the node at depth d of the path can be left where the
@@ -940,7 +1144,7 @@ func (m *Matcher) canRepeat(c *cursor, i int) bool {
 // suspended and resumed rather than finished when the next item belongs to a
 // sibling; what the member owes is owed to the group, and iterationComplete is
 // where the group collects it from every member at once.
-func (m *Matcher) canExit(c *cursor, d int) bool {
+func (m *Matcher) canExit(c *region, d int) bool {
 	i := c.path[d]
 	if m.inAllGroup(c, d) {
 		return true
@@ -950,7 +1154,7 @@ func (m *Matcher) canExit(c *cursor, d int) bool {
 			return false
 		}
 	}
-	if c.counts[i] >= m.nodes[i].occurs.Min() {
+	if c.counts[i].lo >= m.nodes[i].occurs.Min() {
 		return true
 	}
 	return m.bodyEmptiable(i)
@@ -958,7 +1162,7 @@ func (m *Matcher) canExit(c *cursor, d int) bool {
 
 // inAllGroup reports whether the node at depth d of c's path is a member of an
 // all group.
-func (m *Matcher) inAllGroup(c *cursor, d int) bool {
+func (m *Matcher) inAllGroup(c *region, d int) bool {
 	if d == 0 {
 		return false
 	}
@@ -971,7 +1175,7 @@ func (m *Matcher) inAllGroup(c *cursor, d int) bool {
 // group's language: for a sequence every later member is skippable, for a
 // choice the one member taken is the whole of it, and for an all group every
 // member has reached its own {min occurs}.
-func (m *Matcher) iterationComplete(c *cursor, i int, g ModelGroup, slot int) bool {
+func (m *Matcher) iterationComplete(c *region, i int, g ModelGroup, slot int) bool {
 	children := m.nodes[i].children
 	switch g.Compositor() {
 	case CompositorSequence:
@@ -1006,8 +1210,8 @@ func (m *Matcher) iterationComplete(c *cursor, i int, g ModelGroup, slot int) bo
 // where the last of its items fell. That is the debt canExit declines to
 // collect from a member of an all group, recursively over whatever depth clause
 // 1.3 permits. A leaf has no members, so the recursion ends there.
-func (m *Matcher) memberSatisfied(c *cursor, i int) bool {
-	if c.counts[i] < m.nodes[i].occurs.Min() && !m.bodyEmptiable(i) {
+func (m *Matcher) memberSatisfied(c *region, i int) bool {
+	if c.counts[i].lo < m.nodes[i].occurs.Min() && !m.bodyEmptiable(i) {
 		return false
 	}
 	for _, ch := range m.nodes[i].children {
@@ -1055,9 +1259,9 @@ func (m *Matcher) bodyEmptiable(i int) bool {
 // clearSubtree resets the occurrence counters beneath i in c, which a new
 // iteration of i starts over. i's own counter is the iteration count and is not
 // touched.
-func (m *Matcher) clearSubtree(c *cursor, i int) {
+func (m *Matcher) clearSubtree(c *region, i int) {
 	for _, ch := range m.nodes[i].children {
-		c.counts[ch] = 0
+		c.counts[ch] = span{}
 		m.clearSubtree(c, ch)
 	}
 }
