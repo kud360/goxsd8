@@ -323,6 +323,10 @@ this pass and vanished when #812 merged, so every row below is startable. **Re-r
 `wipsurvey` before starting anything anyway**: this is a snapshot, and a landing
 has now arrived mid-pass in three consecutive stamps.
 
+**Rows 1–4 (#1553, #1554, #1552, #1557) have LANDED and are CLOSED — start at
+row 5**; the rest of this section is the 2026-09-17 stamp and is the next
+`/backlog` run's to replace whole.
+
 **The ordering principle this stamp:** the lane-first rebuild worked and is kept,
 but the prediction chain that every lane slice depends on is measurably broken,
 so rows 2, 3 and 5 are that bundle and are ranked on the sessions they cost
