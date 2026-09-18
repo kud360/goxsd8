@@ -480,8 +480,11 @@ func parsePattern(whole, s string) (pattern, string, error) {
 		}
 		p.Attrs = append(p.Attrs, attr)
 		if more == "" || strings.HasPrefix(more, containment) {
-			p, err := closeAttrs(whole, p)
-			return p, more, err
+			closed, err := closeAttrs(whole, p)
+			if err != nil {
+				return pattern{}, "", err
+			}
+			return closed, more, nil
 		}
 		join := attrJoin(more[:1])
 		if join != joinAll && join != joinAny {
