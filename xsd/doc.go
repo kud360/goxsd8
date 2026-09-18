@@ -245,9 +245,10 @@
 // particle takes each item is fixed by cos-nonambig; WHICH ITERATION of a
 // repeated ancestor the item falls in is the non-determinism cvc-accept's
 // closing Note leaves open, and clause 3.1 asks it existentially, so the
-// walk carries one cursor per live partition and widens the set only at a
-// particle that repeats inside a particle that repeats (contentmatcher.go
-// for the bound that keeps that set a constant of the schema). It decides
+// walk carries one cursor per live partition and widens the set only where
+// a repeating particle can take an item on either side of a repeating
+// ancestor's iteration boundary (contentmatcher.go for that condition and
+// for the bound that keeps the set a constant of the schema). It decides
 // once, at construction, whether it decides at all: ContentMatcher reports
 // false for a {content type} holding no particle and for the shapes
 // contentmatcher.go declines, and a Matcher that exists never declines a

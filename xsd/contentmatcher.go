@@ -77,10 +77,16 @@ package xsd
 //     {min occurs} is met as well. The one way that iteration can hold a
 //     mandatory particle is P ITSELF, taken again, which needs a repeating
 //     particle inside a repeating one;
-//   - so a cursor splits at a node that repeats and holds a particle that
-//     repeats (contentNode.ambiguous) and nowhere else. A model with no such
-//     node carries one cursor for the whole sequence and costs exactly what the
-//     greedy walk cost.
+//   - so a cursor splits at a node R that repeats and holds such a P
+//     (contentNode.ambiguous) and nowhere else. P has to stand at BOTH ends of
+//     R's iteration boundary at once — reachable as the first item of a fresh
+//     iteration, which needs every particle before it skippable, and reachable
+//     with the open iteration already a whole word of the body, which needs
+//     every particle after it skippable — so a body holding a mandatory
+//     particle on either side of each of its repeating particles never splits,
+//     however wide R's own occurrence range. A model with no such node carries
+//     one cursor for the whole sequence and costs exactly what the greedy walk
+//     cost.
 //
 // The set is bounded by the SCHEMA, never by the instance. A counter stops at
 // its node's {max occurs}, or at its {min occurs} where {max occurs} is
@@ -182,11 +188,13 @@ func (*OpenContent) attribution() {}
 // is less than every index in its subtree.
 //
 // ambiguous marks the one shape the greedy iteration boundary is not exact on
-// (see the file comment): this node's {max occurs} is greater than 1 and so is
-// that of a particle beneath it, so an item the walk can take later in the open
-// iteration can also start the next one. A cursor splits at such a node and at
-// no other, which is why markAmbiguous computes it once here rather than the
-// walk re-deriving it per item.
+// (see the file comment): this node's {max occurs} is greater than 1, and its
+// body holds a particle whose own {max occurs} is too and which the walk can
+// reach both as the first item of a fresh iteration and with the open iteration
+// already complete, so an item that particle takes can fall either side of the
+// boundary. A cursor splits at such a node and at no other, which is why
+// markAmbiguous computes it once here rather than the walk re-deriving it per
+// item.
 type contentNode struct {
 	occurs    Occurs
 	term      Term
@@ -291,18 +299,18 @@ type Matcher struct {
 //   - a {content type} whose {variety} is empty or simple, which holds no
 //     particle at all. cvc-complex-type clauses 1.1 and 1.2 govern those
 //     directly and need no matcher.
-//   - GAP(xsd): a particle with {max occurs} greater than 1 holding another
-//     such particle, where the clamped occurrence ranges of the widened
-//     subtrees admit more than maxPartitionStates partitions at once. The SHAPE
+//   - GAP(xsd): an ·ambiguous· node whose widened subtrees' clamped occurrence
+//     ranges admit more than maxPartitionStates partitions at once. The SHAPE
 //     is decided — (a{1,2}, b?){2,2} takes "a a b" — and what stays declined is
-//     the width: (a{1,500}){1,500} would put a quarter of a million cursors in
-//     flight, and the walk carries one cursor per live partition. Declining
-//     withholds the whole element-sequence verdict, whose consumers are
-//     validate's Result.violations and its one reader Result.Violations, both
-//     of which carry violations PRESENT — so the decline costs a rejection and
-//     manufactures none. #1557 owns its retirement: raising the ceiling needs
-//     the partitions represented as counter INTERVALS rather than one cursor
-//     each, which is a different state encoding and not a wider bound here.
+//     the width: (a{1,500}){1,500} really does reach a quarter of a million
+//     live partitions, within a percent of the product that bounds it, so no
+//     tighter ESTIMATE reaches this shape. Only a state encoding carrying the
+//     partitions as counter INTERVALS rather than one cursor each does, and
+//     even that wants a ceiling above 500. Declining withholds the whole
+//     element-sequence verdict, whose consumers are validate's
+//     Result.violations and its one reader Result.Violations, both of which
+//     carry violations PRESENT — so the decline costs a rejection and
+//     manufactures none. #1557 owns its retirement.
 func (s *Schema) ContentMatcher(t ComplexType) (*Matcher, bool) {
 	ec, ok := t.ContentType().(ElementContent)
 	if !ok {
@@ -371,18 +379,67 @@ func (m *Matcher) resolveTerm(t TermOrRef) (Term, bool) {
 	}
 }
 
-// markAmbiguous sets contentNode.ambiguous over the subtree at i and reports
-// whether that subtree, i INCLUDED, holds a particle that repeats.
-func (m *Matcher) markAmbiguous(i int) bool {
-	below := false
+// markAmbiguous sets contentNode.ambiguous over the subtree at i.
+func (m *Matcher) markAmbiguous(i int) {
 	for _, c := range m.nodes[i].children {
-		if m.markAmbiguous(c) {
-			below = true
+		m.markAmbiguous(c)
+	}
+	m.nodes[i].ambiguous = repeatable(m.nodes[i].occurs) && m.splitsInBody(i)
+}
+
+// splitsInBody reports whether one iteration of the group at i holds the
+// particle P the file comment's first bullet asks for: one that repeats and
+// stands at BOTH ends of i's iteration boundary, so that an item it takes can
+// be the next one of the open iteration or the first of a fresh one. Those are
+// exactly repeat's two conditions — enterBody reaching P, and iterationComplete
+// holding where P stands — so a node whose body holds no such particle never
+// widens the live set, however large its occurrence range.
+func (m *Matcher) splitsInBody(i int) bool {
+	g, isGroup := m.nodes[i].term.(ModelGroup)
+	if !isGroup {
+		return false
+	}
+	return m.splitsAmong(i, g, true, true)
+}
+
+// splitsAmong searches the {particles} of the group g at i for that particle.
+// first and last say whether the walk can still reach this group's own members
+// as the first item of the enclosing iteration and with that iteration already
+// complete; a sequence narrows both by what it puts before and after each
+// member (§3.8.4.1.1), while a choice takes one member whole (§3.8.4.1.2) and
+// an all group interleaves them (§3.8.4.1.3), so neither narrows either.
+//
+// An all group's iterationComplete asks more than the members after the open
+// one — it collects every member's own {min occurs} — so leaving last alone
+// there over-counts the nodes that widen and never undercounts them.
+func (m *Matcher) splitsAmong(i int, g ModelGroup, first, last bool) bool {
+	children := m.nodes[i].children
+	for k, ch := range children {
+		f, l := first, last
+		if g.Compositor() == CompositorSequence {
+			f = f && m.allEmptiable(children[:k])
+			l = l && m.allEmptiable(children[k+1:])
+		}
+		if f && l && repeatable(m.nodes[ch].occurs) {
+			return true
+		}
+		if cg, isGroup := m.nodes[ch].term.(ModelGroup); isGroup && m.splitsAmong(ch, cg, f, l) {
+			return true
 		}
 	}
-	repeats := repeatable(m.nodes[i].occurs)
-	m.nodes[i].ambiguous = repeats && below
-	return repeats || below
+	return false
+}
+
+// allEmptiable reports whether every particle of ps ·accepts· the empty
+// sequence, which is what makes the ones before a member skippable on the way
+// in and the ones after it skippable on the way out.
+func (m *Matcher) allEmptiable(ps []int) bool {
+	for _, p := range ps {
+		if !m.emptiable(p) {
+			return false
+		}
+	}
+	return true
 }
 
 // repeatable reports whether an occurrence range admits more than one
