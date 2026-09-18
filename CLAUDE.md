@@ -117,8 +117,13 @@ targets, by writing `{*}` for that namespace — every namespace at once, the
 no-namespace one included:
 `'{*}*@{http://www.w3.org/2001/XMLSchema-instance}type'` is every `xsi:type`
 in the corpus, where a braceless element name means the XSD namespace and
-answers 0 (#1495). An absent submodule is a supported mode there too: it says
-so and exits 0.
+answers 0 (#1495). Census a population defined by NESTING with `//`, which
+admits a match only inside an element matching the pattern before it, at any
+depth: `'*@maxOccurs//*@maxOccurs'` is every `maxOccurs` inside another one.
+Read the caveat that census prints with its figure before quoting the figure —
+it resolves no `<element ref>` or `<group ref>`, so it is wrong in both
+directions against a population of resolved components (#1585). An absent
+submodule is a supported mode there too: it says so and exits 0.
 
 ## Style headlines
 
