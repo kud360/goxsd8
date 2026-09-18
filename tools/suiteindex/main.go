@@ -60,6 +60,33 @@
 // them always prints the element each hit was, since the query no longer
 // fixes it.
 //
+// # Containment
+//
+// A query may require its occurrences to lie INSIDE another matching element,
+// at any depth, by writing that element's pattern ahead of `//`:
+// `*@maxOccurs//*@maxOccurs` is every element carrying `maxOccurs` that
+// stands inside another one carrying it. A population defined by nesting had
+// no spelling at all before, so two grounding rounds running answered
+// `not derived` and measured their landing by hand instead (#1585). Both
+// sides of `//` are whole patterns — element alternatives, an attribute list
+// and its join each — and each side is read on its own, so `A//B` finds a B
+// under an A and never a B under a B.
+//
+// An element is not its own ancestor: a start tag answering both patterns
+// qualifies nothing but its own descendants, which is the entire difference
+// between `A//A` and `A`. A hit records the INNERMOST enclosing element that
+// matched, since that is the one a reader checks the nest against first.
+//
+// One query names one ancestor. A second `//` is refused rather than read as
+// a chain: the ancestor side is a pattern and takes no ancestor of its own, so
+// a chain is unrepresentable rather than silently half-applied.
+//
+// Containment is the DOCUMENT's own nesting. This census never resolves an
+// `<element ref>` or a `<group ref>`, so a containment figure answers for a
+// lexical population and not for a population of resolved components; the
+// report says so in its own output, in both directions it can be wrong
+// ([printCaveat]).
+//
 // # Encoding
 //
 // Encoding is this tool's problem, not the caller's. Every fixture is read
@@ -97,6 +124,14 @@
 // `xs:element` under `xs:redefine` is reported there, wrong though that
 // document is, and its children are reported the same way.
 //
+// A containment query prints its caveat ahead of the body, and each match
+// line carries an `ancestor=` field naming the innermost enclosing element
+// that matched the ancestor pattern. That is not the `parent=` field: a
+// qualifying ancestor stands any number of levels up, and the two name
+// different elements as soon as the nest is deeper than one. Neither the
+// caveat nor the field appears for a query without an ancestor pattern, whose
+// report is the same bytes it always was.
+//
 // An element name the report prints is spelled so that it re-enters as a
 // query naming that same element, which is why a parent or child in NO
 // namespace prints as `{}name` rather than bare: bare is the XML Schema
@@ -130,10 +165,13 @@
 //	go tool suiteindex '*@mixed|abstract|nillable'
 //	go tool suiteindex 'openContent|defaultOpenContent'
 //	go tool suiteindex '{*}*@{http://www.w3.org/2001/XMLSchema-instance}type'
+//	go tool suiteindex '*@maxOccurs//*@maxOccurs'
 //	go tool suiteindex element@targetNamespace testdata/xsdtests/ibmData
 //
-// The query is `local[|local…][@attr[,attr…]]` with `|` in place of `,` for
-// the ANY join over attributes, and any local part may be `*`. Any name may
+// The query is `[pattern//]local[|local…][@attr[,attr…]]` with `|` in place
+// of `,` for the ANY join over attributes, and any local part may be `*`. The
+// pattern before `//` has that same shape and names the ancestor an
+// occurrence lies inside. Any name may
 // be written in Clark notation (`{uri}local`) to name its namespace
 // outright, or `{*}local` to census every namespace at once; a braceless
 // element name is in the XML Schema namespace and a braceless attribute
@@ -169,7 +207,7 @@ import (
 const defaultRoot = "testdata/xsdtests"
 
 // usage is printed for any argument the tool cannot act on.
-const usage = `usage: suiteindex <local[|local...][@attr[,attr...]]> [dir]; "," joins attribute names as all, "|" joins either position's names as any, any local name may be "*", and "{uri}" before one fixes its namespace — "{*}" censuses every namespace, "{}" the one that has none`
+const usage = `usage: suiteindex <[pattern//]local[|local...][@attr[,attr...]]> [dir]; "," joins attribute names as all, "|" joins either position's names as any, "//" admits a match only inside an element the pattern before it matches, at any depth, any local name may be "*", and "{uri}" before one fixes its namespace — "{*}" censuses every namespace, "{}" the one that has none`
 
 func main() {
 	if err := run(os.Stdout, os.Args[1:]); err != nil {
@@ -218,6 +256,15 @@ func parseArgs(args []string) (query, string, error) {
 // (#1495) — so a namespace URI of "*" is the one URI this query language
 // cannot name.
 const wildcard = "*"
+
+// containment separates the ancestor pattern from the construct that must lie
+// inside it, and is the only axis this query language has. The spelling is
+// available because `/` is not an NCName character (Namespaces in XML §4), so
+// no local name a document writes collides with it, and a namespace URI
+// carrying slashes is safe too: [splitName] consumes the Clark wrapper whole
+// before it scans for a separator, so the `//` in `{http://…}element` is
+// inside the URI and never a separator.
+const containment = "//"
 
 // elementSpace and attrSpace are the namespace a braceless name means in each
 // position of a query: the vocabulary every schema fixture in this corpus is
@@ -292,9 +339,10 @@ const (
 	joinAny attrJoin = "|"
 )
 
-// query is one census: the elements to look for, the attribute names an
-// occurrence carries, and how that list is read.
-type query struct {
+// pattern is one element test: the element names it admits, the attribute
+// names an occurrence carries, and how that list is read. A query is one
+// pattern, plus the ancestor pattern an occurrence must lie inside.
+type pattern struct {
 	// Element holds the element names an occurrence may carry, each an
 	// alternative: a feature spelled by more than one element is one census
 	// and not two to be added up by hand (#1554). It is never empty, and
@@ -305,10 +353,22 @@ type query struct {
 	Join    attrJoin
 }
 
-// matchesElement reports whether n is one of the element names q censuses.
-func (q query) matchesElement(n xsd.QName) bool {
-	for _, p := range q.Element {
-		if p.matches(n) {
+// query is one census: the construct to look for, and the ancestor an
+// occurrence of it must lie inside.
+type query struct {
+	pattern
+	// Ancestor is the pattern an occurrence must lie INSIDE, at any depth, or
+	// nil for a census that asks no containment question. It is a [pattern]
+	// and not a second query, so a chained `A//B//C` cannot be built at all
+	// (STYLE T1) — the parser refuses it, and nothing downstream carries a
+	// branch for a chain it might have admitted.
+	Ancestor *pattern
+}
+
+// matchesElement reports whether n is one of the element names p admits.
+func (p pattern) matchesElement(n xsd.QName) bool {
+	for _, e := range p.Element {
+		if e.matches(n) {
 			return true
 		}
 	}
@@ -316,40 +376,38 @@ func (q query) matchesElement(n xsd.QName) bool {
 }
 
 // elementOpen reports whether a hit's own element name is NOT derivable from
-// q, so the report must print it ([renderMatched]). Anything but exactly one
+// p, so the report must print it ([renderMatched]). Anything but exactly one
 // alternative leaves it open, however tightly each alternative is written:
 // two elements' hits are one undifferentiated run of lines otherwise, which
 // is the whole point of censusing them together (#1554).
-func (q query) elementOpen() bool {
-	if len(q.Element) != 1 {
+func (p pattern) elementOpen() bool {
+	if len(p.Element) != 1 {
 		return true
 	}
-	return q.Element[0].isOpen()
+	return p.Element[0].isOpen()
 }
 
-// anyAttr reports whether the query censuses the attribute-NAME axis — every
-// attribute in a namespace rather than named ones. It is derived from the
-// attribute list, which parsing has already restricted to a lone wildcard
+// anyAttr reports whether the pattern censuses the attribute-NAME axis —
+// every attribute in a namespace rather than named ones. It is derived from
+// the attribute list, which parsing has already restricted to a lone wildcard
 // (STYLE D3): `@*` names the whole axis and cannot be joined with anything.
-func (q query) anyAttr() bool {
-	return len(q.Attrs) == 1 && q.Attrs[0].isAny()
+func (p pattern) anyAttr() bool {
+	return len(p.Attrs) == 1 && p.Attrs[0].isAny()
 }
 
-// String renders the query in the canonical form the report echoes: every
-// name in Clark notation, so the reader sees the namespace that was matched
-// rather than the prefix some fixture happened to spell it with. The echo is
-// itself a query — [parseQuery] takes it back to this query, whatever
-// namespaces it names (#1297).
-func (q query) String() string {
+// String renders one pattern in the canonical form: every name in Clark
+// notation, so the reader sees the namespace that was matched rather than the
+// prefix some fixture happened to spell it with.
+func (p pattern) String() string {
 	var b strings.Builder
-	for i, e := range q.Element {
+	for i, e := range p.Element {
 		if i > 0 {
 			b.WriteString(string(joinAny))
 		}
 		b.WriteString(e.render(elementSpace))
 	}
-	for i, a := range q.Attrs {
-		sep := string(q.Join)
+	for i, a := range p.Attrs {
+		sep := string(p.Join)
 		if i == 0 {
 			sep = "@"
 		}
@@ -359,49 +417,85 @@ func (q query) String() string {
 	return b.String()
 }
 
-// parseQuery parses `local[|local…][@attr[,attr…]]` — `|` in place of `,` for
-// the ANY join over attributes — where any name may carry a Clark `{uri}`
-// wrapper and either part of it may be [wildcard]: `{*}` in the wrapper's
-// place is every namespace, `*` in the local part's is every local name. A
-// braceless element name is in the XML Schema namespace — the vocabulary
-// every schema fixture in this corpus is written in — and a braceless
-// attribute name is in no namespace, which is what an unprefixed attribute
-// resolves to.
+// String renders the query in the canonical form the report echoes, the
+// ancestor pattern and its separator included. The echo is itself a query —
+// [parseQuery] takes it back to this query, whatever namespaces it names
+// (#1297).
+func (q query) String() string {
+	if q.Ancestor == nil {
+		return q.pattern.String()
+	}
+	return q.Ancestor.String() + containment + q.pattern.String()
+}
+
+// parseQuery parses `[pattern//]local[|local…][@attr[,attr…]]` — `|` in place
+// of `,` for the ANY join over attributes — where any name may carry a Clark
+// `{uri}` wrapper and either part of it may be [wildcard]: `{*}` in the
+// wrapper's place is every namespace, `*` in the local part's is every local
+// name. A braceless element name is in the XML Schema namespace — the
+// vocabulary every schema fixture in this corpus is written in — and a
+// braceless attribute name is in no namespace, which is what an unprefixed
+// attribute resolves to. A [containment] separator makes the pattern ahead of
+// it the ancestor an occurrence must lie inside.
 func parseQuery(s string) (query, error) {
-	elems, rest, err := parseElements(s)
+	first, rest, err := parsePattern(s, s)
 	if err != nil {
 		return query{}, err
 	}
-	q := query{Element: elems, Join: joinAll}
 	if rest == "" {
-		return q, nil
+		return query{pattern: first}, nil
 	}
+	if !strings.HasPrefix(rest, containment) {
+		return query{}, fmt.Errorf("query %q: the ancestor separator is %q, found %q", s, containment, rest)
+	}
+	inner, rest, err := parsePattern(s, rest[len(containment):])
+	if err != nil {
+		return query{}, err
+	}
+	if rest != "" {
+		return query{}, fmt.Errorf("query %q: %q separates one ancestor from the construct it encloses and appears at most once, found a second one at %q", s, containment, rest)
+	}
+	return query{pattern: inner, Ancestor: &first}, nil
+}
+
+// parsePattern consumes one pattern from the head of s — an element position,
+// then an attribute list if an `@` follows — and returns it with whatever is
+// left, which is the [containment] separator or nothing at all. whole is the
+// query the caller was given, which every message names, so a rejection reads
+// against what was typed rather than against the fragment that failed.
+func parsePattern(whole, s string) (pattern, string, error) {
+	elems, rest, err := parseElements(whole, s)
+	if err != nil {
+		return pattern{}, "", err
+	}
+	p := pattern{Element: elems, Join: joinAll}
 	if !strings.HasPrefix(rest, "@") {
-		return query{}, fmt.Errorf("query %q: expected \"@\" before the attribute list, found %q", s, rest)
+		return p, rest, nil
 	}
 	rest = rest[1:]
 	for {
 		attr, more, err := splitName(rest, attrSpace)
 		if err != nil {
-			return query{}, fmt.Errorf("query %q: %w", s, err)
+			return pattern{}, "", fmt.Errorf("query %q: %w", whole, err)
 		}
-		q.Attrs = append(q.Attrs, attr)
-		if more == "" {
-			return closeAttrs(s, q)
+		p.Attrs = append(p.Attrs, attr)
+		if more == "" || strings.HasPrefix(more, containment) {
+			p, err := closeAttrs(whole, p)
+			return p, more, err
 		}
 		join := attrJoin(more[:1])
 		if join != joinAll && join != joinAny {
-			return query{}, fmt.Errorf("query %q: expected %q or %q between attribute names, found %q", s, joinAll, joinAny, more)
+			return pattern{}, "", fmt.Errorf("query %q: expected %q or %q between attribute names, found %q", whole, joinAll, joinAny, more)
 		}
-		if len(q.Attrs) > 1 && join != q.Join {
-			return query{}, fmt.Errorf("query %q: attribute names are joined by %q (every one) or by %q (any one), never both", s, joinAll, joinAny)
+		if len(p.Attrs) > 1 && join != p.Join {
+			return pattern{}, "", fmt.Errorf("query %q: attribute names are joined by %q (every one) or by %q (any one), never both", whole, joinAll, joinAny)
 		}
-		q.Join = join
+		p.Join = join
 		rest = more[1:]
 	}
 }
 
-// parseElements consumes the query's element position — one name, or several
+// parseElements consumes a pattern's element position — one name, or several
 // joined by [joinAny] — and returns them with whatever follows, the `@` of an
 // attribute list included.
 //
@@ -409,17 +503,17 @@ func parseQuery(s string) (query, error) {
 // list's own error: it means every name at once, which no single element
 // carries, and the position's old error reported it as a missing `@`, which
 // says nothing about why the census cannot be taken.
-func parseElements(s string) ([]namePat, string, error) {
+func parseElements(whole, s string) ([]namePat, string, error) {
 	var elems []namePat
 	rest := s
 	for {
 		p, more, err := splitName(rest, elementSpace)
 		if err != nil {
-			return nil, "", fmt.Errorf("query %q: %w", s, err)
+			return nil, "", fmt.Errorf("query %q: %w", whole, err)
 		}
 		elems = append(elems, p)
 		if strings.HasPrefix(more, string(joinAll)) {
-			return nil, "", fmt.Errorf("query %q: element names are joined by %q (any one of them), never by %q: no element carries two names at once", s, joinAny, joinAll)
+			return nil, "", fmt.Errorf("query %q: element names are joined by %q (any one of them), never by %q: no element carries two names at once", whole, joinAny, joinAll)
 		}
 		if !strings.HasPrefix(more, string(joinAny)) {
 			return elems, more, nil
@@ -432,23 +526,24 @@ func parseElements(s string) ([]namePat, string, error) {
 // the grammar admits and the matcher cannot mean: a wildcard beside another
 // name. `@*` already stands for every attribute, so joining it to a second
 // name says nothing under either join.
-func closeAttrs(s string, q query) (query, error) {
-	if len(q.Attrs) == 1 {
-		return q, nil
+func closeAttrs(whole string, p pattern) (pattern, error) {
+	if len(p.Attrs) == 1 {
+		return p, nil
 	}
-	for _, a := range q.Attrs {
+	for _, a := range p.Attrs {
 		if a.isAny() {
-			return query{}, fmt.Errorf("query %q: %q names the whole attribute axis and stands alone", s, "@"+wildcard)
+			return pattern{}, fmt.Errorf("query %q: %q names the whole attribute axis and stands alone", whole, "@"+wildcard)
 		}
 	}
-	return q, nil
+	return p, nil
 }
 
 // splitName consumes one name from the head of s — an optional Clark
 // `{uri}` wrapper, then a local part — and returns it with whatever follows.
 // The URI is taken as everything up to the closing brace, so a namespace
-// containing a separator survives the separators around it, and a wrapper
-// holding [wildcard] alone is the namespace axis rather than a URI.
+// containing a separator survives the separators around it — the `//` of
+// `{http://…}element` included — and a wrapper holding [wildcard] alone is
+// the namespace axis rather than a URI.
 func splitName(s, defaultSpace string) (p namePat, rest string, err error) {
 	space := defaultSpace
 	if strings.HasPrefix(s, "{") {
@@ -460,7 +555,7 @@ func splitName(s, defaultSpace string) (p namePat, rest string, err error) {
 		s = s[end+1:]
 	}
 	local := s
-	if i := strings.IndexAny(s, "@"+string(joinAll)+string(joinAny)); i >= 0 {
+	if i := strings.IndexAny(s, "@"+string(joinAll)+string(joinAny)+containment); i >= 0 {
 		local, rest = s[:i], s[i:]
 	}
 	if local == "" {
@@ -500,6 +595,12 @@ type hit struct {
 	// no parent at all — a distinct value rather than a second field, because
 	// no name has an empty local part ([xsd.QName]).
 	Parent xsd.QName
+	// Ancestor is the resolved name of the innermost enclosing element that
+	// matched the query's ancestor pattern, and the zero QName for a query
+	// that has none. It is not derivable from Parent: a qualifying ancestor
+	// stands any number of levels up, and the pattern that admitted it can be
+	// open on either axis of the name.
+	Ancestor xsd.QName
 	// Children are the resolved names of the elements directly under this
 	// match, in document order and with repeats kept. The multiplicity is the
 	// point: a content-model census asks whether a second xs:simpleType stands
@@ -726,6 +827,12 @@ func scanFile(path, uri string, q query) (scan fixtureScan, err error) {
 // at its START tag, which is what keeps the report in document order, and its
 // child list fills in as the children arrive.
 //
+// The containment test reads that same chain, which is why it needs no second
+// pass over the fixture: each entry also remembers whether it matched the
+// ancestor pattern, recorded at its own start tag because its attributes are
+// gone by the time a descendant arrives, and a match qualifies when any entry
+// STRICTLY outside it says yes.
+//
 // The pop cannot underflow: xmltree emits an end tag only for an element it
 // holds open under a matching name, and any other end tag is a fault that
 // returns above.
@@ -762,24 +869,32 @@ func scanFixture(uri string, r io.Reader, q query) fixtureScan {
 		name := qnameOf(start.Name())
 		parent := innermost(open)
 		recordChild(scan.Hits, open, name)
-		open = append(open, openElem{Name: name, Hit: noHit})
+		open = append(open, openElem{Name: name, Hit: noHit, Ancestor: matchesAncestor(start, q)})
 		scan.Elems++
-		attrs, ok := match(start, q)
+		attrs, ok := match(start, q.pattern)
+		if !ok {
+			continue
+		}
+		ancestor, ok := enclosingMatch(open[:len(open)-1], q)
 		if !ok {
 			continue
 		}
 		loc := start.Loc()
-		scan.Hits = append(scan.Hits, hit{File: uri, Line: loc.Line, Col: loc.Col, Element: name, Parent: parent, Attrs: attrs})
+		scan.Hits = append(scan.Hits, hit{File: uri, Line: loc.Line, Col: loc.Col, Element: name, Parent: parent, Ancestor: ancestor, Attrs: attrs})
 		open[len(open)-1].Hit = len(scan.Hits) - 1
 	}
 }
 
 // openElem is one element the walk is inside: the name a child of it reports
-// as its parent, and where its own hit lives in [fixtureScan.Hits] so that
-// child can be recorded against it.
+// as its parent, where its own hit lives in [fixtureScan.Hits] so that child
+// can be recorded against it, and whether it matched the query's ancestor
+// pattern so a match under it qualifies.
 type openElem struct {
 	Name xsd.QName
 	Hit  int
+	// Ancestor is false throughout a census that asks no containment
+	// question, which is what [enclosingMatch] reads it against.
+	Ancestor bool
 }
 
 // noHit is [openElem.Hit] for an element that is not itself a match, so
@@ -793,6 +908,40 @@ func innermost(open []openElem) xsd.QName {
 		return xsd.QName{}
 	}
 	return open[len(open)-1].Name
+}
+
+// matchesAncestor reports whether start is an occurrence of q's ancestor
+// pattern, so matches found under it qualify. A query that asks no
+// containment question marks nothing: its matches stand wherever they like.
+func matchesAncestor(start *xmltree.StartElement, q query) bool {
+	if q.Ancestor == nil {
+		return false
+	}
+	_, ok := match(start, *q.Ancestor)
+	return ok
+}
+
+// enclosingMatch reports whether q's containment test admits a match whose
+// enclosing chain is open, and names the innermost element of that chain
+// which matched the ancestor pattern.
+//
+// open is the chain STRICTLY outside the match — an element is not its own
+// ancestor, which is the whole difference between `A//A` and `A` when one
+// start tag answers both patterns.
+//
+// A query with no ancestor pattern admits every match and names no element,
+// so the hit's zero QName is the record of a census that asked no containment
+// question rather than of one that found no ancestor.
+func enclosingMatch(open []openElem, q query) (xsd.QName, bool) {
+	if q.Ancestor == nil {
+		return xsd.QName{}, true
+	}
+	for i := len(open) - 1; i >= 0; i-- {
+		if open[i].Ancestor {
+			return open[i].Name, true
+		}
+	}
+	return xsd.QName{}, false
 }
 
 // recordChild writes name into the child list of the match the open chain
@@ -821,24 +970,26 @@ func markUnclosed(hits []hit, open []openElem) {
 	}
 }
 
-// match reports whether start is an occurrence of q's construct — its
-// resolved name is one its element patterns stand for, and its attributes
-// satisfy q's list under q's join — and the attributes that matched.
+// match reports whether start is an occurrence of p's construct — its
+// resolved name is one of p's element names, and its attributes satisfy p's
+// list under p's join — and the attributes that matched. Both a query's own
+// pattern and its ancestor pattern are tested with it, which is what makes
+// `A//B`'s two sides read alike (STYLE T4).
 //
 // An element carrying none of the names a `|` query lists is not an
 // occurrence, and neither is one carrying no attribute at all under `@*`: an
 // attribute census has nothing to say about an element with no attribute.
-func match(start *xmltree.StartElement, q query) ([]attrHit, bool) {
-	if !q.matchesElement(qnameOf(start.Name())) {
+func match(start *xmltree.StartElement, p pattern) ([]attrHit, bool) {
+	if !p.matchesElement(qnameOf(start.Name())) {
 		return nil, false
 	}
-	if q.anyAttr() {
-		return axisAttrs(start, q.Attrs[0])
+	if p.anyAttr() {
+		return axisAttrs(start, p.Attrs[0])
 	}
 	var got []attrHit
-	for _, want := range q.Attrs {
+	for _, want := range p.Attrs {
 		a, ok := attrOn(start, want)
-		if !ok && q.Join == joinAll {
+		if !ok && p.Join == joinAll {
 			return nil, false
 		}
 		if !ok {
@@ -846,7 +997,7 @@ func match(start *xmltree.StartElement, q query) ([]attrHit, bool) {
 		}
 		got = append(got, a)
 	}
-	if q.Join == joinAny && len(got) == 0 {
+	if p.Join == joinAny && len(got) == 0 {
 		return nil, false
 	}
 	return got, true
@@ -915,12 +1066,32 @@ func printReportTo(w io.Writer, rep report) {
 		len(rep.Hits), rep.Query, countFiles(rep.Hits), rep.Root)
 	_, _ = fmt.Fprintf(w, "  walked %d file(s): %d read to the end, %d read only partly, %d with no XML element\n",
 		rep.Walked, rep.Walked-len(rep.NoElement)-len(rep.Partial), len(rep.Partial), len(rep.NoElement))
+	printCaveat(w, rep.Query)
 
 	printBody(w, rep)
 
 	printNotes(w, "Read only partly: a match behind the fault is invisible to this census", rep.Partial)
 	printNotes(w, "No XML element: the corpus's images, prose and stylesheets, and any"+
 		" fixture that faulted ahead of its root", rep.NoElement)
+}
+
+// printCaveat states which directions a containment figure is wrong in, and
+// prints nothing at all for a query that asked no containment question. The
+// census walks the document's own nesting and resolves nothing, so the figure
+// is a ceiling of a lexical population and neither a count nor a ceiling of
+// the resolved-component population a reader is usually after; unqualified,
+// it would be a false statement shipped in the tool's own output (#1585).
+//
+// It sits under the header rather than in a section of its own because that
+// is where the reader holding the figure arrives (#1279).
+func printCaveat(w io.Writer, q query) {
+	if q.Ancestor == nil {
+		return
+	}
+	_, _ = fmt.Fprintln(w, "  read this as a bound from above of a LEXICAL nesting population, never as a count")
+	_, _ = fmt.Fprintln(w, "  of a resolved one: it over-counts, because an ancestor in the document is not a")
+	_, _ = fmt.Fprintln(w, "  particle after <element ref>/<group ref> resolution, and it MISSES a nest that only")
+	_, _ = fmt.Fprintln(w, "  that resolution creates, because this census never resolves a ref")
 }
 
 // printBody renders the half of the report the query's shape chooses: the
@@ -942,9 +1113,9 @@ func printMatches(w io.Writer, rep report) {
 		_, _ = fmt.Fprintln(w, "(none)")
 	}
 	for _, h := range rep.Hits {
-		_, _ = fmt.Fprintf(w, "  %s:%d:%d %sparent=%s children=%s%s\n",
+		_, _ = fmt.Fprintf(w, "  %s:%d:%d %sparent=%s %schildren=%s%s\n",
 			h.File, h.Line, h.Col, renderMatched(rep.Query, h), renderName(h.Parent),
-			renderChildren(h), renderAttrs(h.Attrs))
+			renderAncestor(rep.Query, h), renderChildren(h), renderAttrs(h.Attrs))
 	}
 }
 
@@ -1088,6 +1259,18 @@ func renderMatched(q query, h hit) string {
 		return ""
 	}
 	return "element=" + renderName(h.Element) + " "
+}
+
+// renderAncestor names the enclosing element that qualified a hit, for a
+// containment query and for no other: a census that asked no containment
+// question has nothing to say in this field, and its absence is what leaves
+// every other query's report the bytes it always was (#1585). The trailing
+// space belongs to the field, so the line closes up when there is none.
+func renderAncestor(q query, h hit) string {
+	if q.Ancestor == nil {
+		return ""
+	}
+	return "ancestor=" + renderName(h.Ancestor) + " "
 }
 
 // renderPair names one axis pair in the form the two axis sections share, so
