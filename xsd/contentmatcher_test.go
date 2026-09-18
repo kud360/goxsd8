@@ -759,10 +759,77 @@ func TestMatcherBoundsTheCursorSetOverANestedRepetition(t *testing.T) {
 	}
 }
 
+// A repeated body that puts a MANDATORY particle after each of its repeating
+// particles pins its own iteration boundary: an item can extend the open
+// iteration or start the next, never both, so no cursor ever splits and the
+// occurrence ranges may be as wide as they like. The model below products
+// 20001×4×4×4 over the subtree the old rule widened and was declined for it,
+// while its live set is the one cursor a model with no ·ambiguous· node at all
+// carries.
+func TestContentMatcherCarriesAWideRepetitionWhoseBodyPinsTheBoundary(t *testing.T) {
+	m := cmMatcher(t, cmWideBody(t), nil)
+
+	cmAccept(t, m, "a", "b", "c")
+	cmAccept(t, m, "a", "a", "b", "c", "c")
+
+	short := cmMatcher(t, cmWideBody(t), nil)
+	if i := cmFeed(t, short, "a", "b"); i != 2 {
+		t.Fatalf("Next rejected %d items of the body's own prefix, want both taken", 2-i)
+	}
+	if short.Accepting() {
+		t.Error("Accepting() = true for an iteration owing its mandatory c")
+	}
+	skipped := cmMatcher(t, cmWideBody(t), nil)
+	if i := cmFeed(t, skipped, "a", "c"); i != 1 {
+		t.Errorf("Next took c over the mandatory b at position %d, want a rejection at 1", i)
+	}
+}
+
+// cmWideBody is (a{1,3}, b{1,3}, c{1,3}){1,20000}: every repeating member is
+// followed by a mandatory one, so b and c can never start a fresh iteration
+// while the open one could still take them, and a is never the item after a
+// complete iteration and a candidate to extend one at the same time.
+func cmWideBody(t *testing.T) Particle {
+	t.Helper()
+	return cmGroup(t, uOccurs(t, 1, 1), CompositorSequence,
+		cmGroup(t, uOccurs(t, 1, 20000), CompositorSequence,
+			cmLeaf(t, "a", uOccurs(t, 1, 3)),
+			cmLeaf(t, "b", uOccurs(t, 1, 3)),
+			cmLeaf(t, "c", uOccurs(t, 1, 3))))
+}
+
+// The width that model carries is carried at CONSTANT cost per item, which is
+// what the decline was protecting: the walk holds one cursor over a sequence
+// long enough that a set growing with the instance would be visible.
+func TestMatcherBoundsTheCursorSetOverAWidePinnedRepetition(t *testing.T) {
+	const iterations = 6667 // 20001 items
+	m := cmMatcher(t, cmWideBody(t), nil)
+
+	for i := 0; i < iterations; i++ {
+		for _, n := range []string{"a", "b", "c"} {
+			if _, ok := m.Next(uq(n)); !ok {
+				t.Fatalf("Next(%s) rejected iteration %d of %d", n, i+1, iterations)
+			}
+			if len(m.live) > maxPartitionStates {
+				t.Fatalf("after iteration %d the walk carries %d cursors, want at most %d", i+1, len(m.live), maxPartitionStates)
+			}
+		}
+	}
+	if !m.Accepting() {
+		t.Error("Accepting() = false after a whole number of iterations")
+	}
+}
+
 // The cursor set is bounded at CONSTRUCTION, not pruned mid-sequence: a nested
 // repetition whose occurrence ranges could put more partitions in flight than
 // maxPartitionStates is declined outright, so a Matcher that exists still
 // decides every name put to it.
+//
+// This width is the one no ESTIMATE reaches. The model below really does put a
+// quarter of a million partitions in flight at once — the product that declines
+// it over-counts them by under a percent — so it is the state ENCODING and not
+// the bound that stands between it and a Matcher (the GAP(xsd) marker in
+// ContentMatcher).
 func TestContentMatcherDeclinesANestedRepetitionTooWideToCarry(t *testing.T) {
 	p := cmGroup(t, uOccurs(t, 1, 1), CompositorSequence,
 		cmGroup(t, uOccurs(t, 1, 500), CompositorSequence,
