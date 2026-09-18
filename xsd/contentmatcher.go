@@ -464,19 +464,22 @@ func repeatable(o Occurs) bool {
 // in turn. ContentMatcher declines a model that could exceed it rather than a
 // Matcher declining a name mid-sequence.
 //
-// It is 65536 and not 2048 because 2048 declined the widest model the W3C
-// suite actually holds — a sequence over two SIBLING groups of {1,100}, whose
-// widened nodes product to 40804 — and what that raise costs is one item at
-// BenchmarkMatcherNext's widest live set: 16129 regions, 17ms and 25MB, about a
-// microsecond and 1.5KB per region held. At 2048 the same benchmark's widest
-// set was 441 regions, 477µs and 687KB, so the cost is linear in the ceiling
-// and a model pays it only by standing at the ceiling.
+// It is 65536 and not 2048 because 2048 declined the widest model a ceiling of
+// defensible cost reaches — a sequence over two SIBLING groups of {1,100},
+// whose widened nodes product to 40804 — and what that raise costs is one item
+// at BenchmarkMatcherNext's widest live set: 16129 regions, 17ms and 25MB,
+// about a microsecond and 1.5KB per region held. At 2048 the same benchmark's
+// widest set was 441 regions, 477µs and 687KB, so the cost is linear in the
+// ceiling and a model pays it only by standing at the ceiling.
 //
-// Nothing between 40804 and 10^8 buys another case — the models the suite
-// declines next product past 10^8 — so every ceiling in that span decides the
-// same four instance cases (#1601). 65536 is the least power of two clearing
-// 40804, and a ceiling past the headroom it leaves buys slower items and no
-// verdicts.
+// 40804 is NOT the widest model the W3C suite holds, and 65536 does not decide
+// the suite: particlesZ036_c products past 10^8, particlesZ036_b past 10^13,
+// and particlesZ035_a carries a single {1,100000000000}. That tail declines at
+// 65536 exactly as it did at 2048, and only a ceiling past 10^13 — one no cost
+// measured here justifies — would decide it. No ceiling between 40804 and that
+// tail buys another case, so every one of them decides the same four instance
+// cases (#1601). 65536 is the least power of two clearing 40804, and a ceiling
+// past the headroom it leaves buys slower items and no verdicts.
 const maxPartitionStates = 65536
 
 // partitionsBounded reports whether the regions covering the live partitions

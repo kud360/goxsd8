@@ -1110,10 +1110,11 @@ func BenchmarkMatcherNext(b *testing.B) {
 
 // The ceiling is reached by BREADTH as readily as by depth. The two {1,100}
 // groups below are SIBLINGS under a sequence that never repeats, and
-// partitionsBounded products over both all the same, for the 40804 the widest
-// model the W3C suite holds puts in flight (particlesZ034_a). ContentMatcher
-// decides it — a ceiling under 40804 does not — and decides it in both
-// directions.
+// partitionsBounded products over both all the same, for the 40804
+// particlesZ034_a puts in flight — the widest model maxPartitionStates
+// decides, not the widest the suite holds, which products past 10^8 and stays
+// declined. ContentMatcher decides it — a ceiling under 40804 does not — and
+// decides it in both directions.
 func TestContentMatcherCarriesTwoSiblingRepetitionsWhoseCountsMultiply(t *testing.T) {
 	m := cmMatcher(t, cmSiblings(t, 100), nil)
 
