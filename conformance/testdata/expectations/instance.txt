@@ -3968,7 +3968,7 @@ MS-Particles2006-07-15/particlesZ007/instance/particlesZ007.i fail
 MS-Particles2006-07-15/particlesZ008/instance/particlesZ008.v fail
 MS-Particles2006-07-15/particlesZ012/instance/particlesZ012.v fail
 MS-Particles2006-07-15/particlesZ015/instance/particlesZ015.i fail
-MS-Particles2006-07-15/particlesZ016/instance/particlesZ016.i fail
+MS-Particles2006-07-15/particlesZ016/instance/particlesZ016.i pass
 MS-Particles2006-07-15/particlesZ025/instance/particlesZ025.v fail
 MS-Particles2006-07-15/particlesZ034_a1/instance/particlesZ034_a1.v fail
 MS-Particles2006-07-15/particlesZ034_a2/instance/particlesZ034_a2.i fail
