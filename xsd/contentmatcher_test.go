@@ -826,7 +826,10 @@ func cmWideBody(t *testing.T) Particle {
 // what the decline was protecting: the walk holds one cursor over a sequence
 // long enough that a set growing with the instance would be visible.
 func TestMatcherBoundsTheCursorSetOverAWidePinnedRepetition(t *testing.T) {
-	const iterations = 6667 // 20001 items
+	// The ceiling asserted is a small constant and NOT maxPartitionStates,
+	// which a set growing by one entry per item would stay under for the whole
+	// of this instance.
+	const iterations, ceiling = 6667, 1 // 20001 items
 	m := cmMatcher(t, cmWideBody(t), nil)
 
 	for i := 0; i < iterations; i++ {
@@ -834,8 +837,8 @@ func TestMatcherBoundsTheCursorSetOverAWidePinnedRepetition(t *testing.T) {
 			if _, ok := m.Next(uq(n)); !ok {
 				t.Fatalf("Next(%s) rejected iteration %d of %d", n, i+1, iterations)
 			}
-			if len(m.live) > maxPartitionStates {
-				t.Fatalf("after iteration %d the walk carries %d cursors, want at most %d", i+1, len(m.live), maxPartitionStates)
+			if len(m.live) > ceiling {
+				t.Fatalf("after iteration %d the walk carries %d cursors, want at most %d", i+1, len(m.live), ceiling)
 			}
 		}
 	}
@@ -1102,6 +1105,21 @@ func BenchmarkMatcherNext(b *testing.B) {
 				}
 			}
 		})
+	}
+}
+
+// The ceiling is reached by BREADTH as readily as by depth. The two {1,100}
+// groups below are SIBLINGS under a sequence that never repeats, and
+// partitionsBounded products over both all the same, for the 40804 the widest
+// model the W3C suite holds puts in flight (particlesZ034_a). ContentMatcher
+// decides it — a ceiling under 40804 does not — and decides it in both
+// directions.
+func TestContentMatcherCarriesTwoSiblingRepetitionsWhoseCountsMultiply(t *testing.T) {
+	m := cmMatcher(t, cmSiblings(t, 100), nil)
+
+	cmAccept(t, m, "a", "a", "b", "c", "c")
+	if _, ok := m.Next(uq("d")); ok {
+		t.Error("Next(d) took a name no particle of the model admits")
 	}
 }
 

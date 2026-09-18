@@ -462,13 +462,20 @@ func repeatable(o Occurs) bool {
 // in turn. ContentMatcher declines a model that could exceed it rather than a
 // Matcher declining a name mid-sequence.
 //
-// It is 2048 and not 256 because a region carries a RUN of partitions rather
-// than one each, so the same per-item budget reaches models that put three
-// orders of magnitude more partitions in flight: (a{1,500}){1,500}'s quarter of
-// a million live partitions cover in 1503 regions by partitionsBounded's
-// estimate and in about a thousand measured. A ceiling below 1503 would leave
-// that width declined for the sake of an encoding the walk no longer uses.
-const maxPartitionStates = 2048
+// It is 65536 and not 2048 because 2048 declined the widest model the W3C
+// suite actually holds — a sequence over two SIBLING groups of {1,100}, whose
+// widened nodes product to 40804 — and what that raise costs is one item at
+// BenchmarkMatcherNext's widest live set: 16129 regions, 17ms and 25MB, about a
+// microsecond and 1.5KB per region held. At 2048 the same benchmark's widest
+// set was 441 regions, 477µs and 687KB, so the cost is linear in the ceiling
+// and a model pays it only by standing at the ceiling.
+//
+// Nothing between 40804 and 10^8 buys another case: those are the products of
+// the next models the suite declines, so every ceiling in that span decides the
+// same four instance cases (#1601). 65536 is the least power of two clearing
+// 40804, and a ceiling past the headroom it leaves buys slower items and no
+// verdicts.
+const maxPartitionStates = 65536
 
 // partitionsBounded reports whether the regions covering the live partitions
 // stay inside maxPartitionStates.
