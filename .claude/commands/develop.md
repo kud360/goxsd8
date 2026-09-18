@@ -75,6 +75,25 @@ heartbeat.
    — the issue whose scope is least understood is the one most likely to
    read `none` (#484).
 
+   **Turn the `Ratchet:` claim into a PREDICTION in the same comment**,
+   before step 4 delegates to mason — not in the eventual commit trailer.
+   A `## Acceptance` bullet that measures a population and disclaims a
+   prediction is this round's input, not an exemption from it. Census the
+   construct with `go tool suiteindex` and take the excluded remainder
+   with `GOXSD_WITHHELD=1`, then join through
+   `conformance/testdata/expectations/<lane>.txt` and count as CLAUDE.md's
+   surveys block states — `conformance/doc.go` owns what that remainder
+   is. State the outcome as one of three: a lane and a figure;
+   `unchanged`, which is a prediction and carries the same derivation; or
+   the join could not be completed with the tools in the tree — name what
+   stopped it.
+
+   ```
+   PREDICTION:
+   <lane>: +N | unchanged | not derived — <what stopped it>
+   <the invocations run, and what each returned>
+   ```
+
 4. **Implement.** Where step 3's `## Surface` ruling found an exported
    contract added or altered — a new identifier, or a change to what an
    existing one accepts, returns or promises in its doc — have **warden**
