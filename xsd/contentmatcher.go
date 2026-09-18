@@ -309,16 +309,18 @@ type Matcher struct {
 //     directly and need no matcher.
 //   - GAP(xsd): an ·ambiguous· node whose widened subtrees need more than
 //     maxPartitionStates regions to cover the partitions they put in flight at
-//     once. The SHAPE is decided — (a{1,2}, b?){2,2} takes "a a b" — and so now
-//     is the WIDTH a partition-per-cursor encoding could not carry:
+//     once (#1601). The SHAPE is decided — (a{1,2}, b?){2,2} takes "a a b" —
+//     and so now is the WIDTH a partition-per-cursor encoding could not carry:
 //     (a{1,500}){1,500} reaches a quarter of a million live partitions and the
 //     spans of a region cover them in about a thousand. What stays declined is
-//     what outgrows THAT, a nest of repeating groups whose iteration counts
-//     multiply (partitionsBounded). Declining withholds the whole
-//     element-sequence verdict, whose consumers are validate's
-//     Result.violations and its one reader Result.Violations, both of which
-//     carry violations PRESENT — so the decline costs a rejection and
-//     manufactures none.
+//     what outgrows the ceiling, and a model gets there by BREADTH as readily
+//     as by depth: partitionsBounded products over EVERY widened node of the
+//     flattened tree, so sibling repeating groups under a non-repeating one,
+//     and a row of repeating leaves under one repeating group, reach it with no
+//     nesting at all. Declining withholds the whole element-sequence verdict,
+//     whose consumers are validate's Result.violations and its one reader
+//     Result.Violations, both of which carry violations PRESENT — so the
+//     decline costs a rejection and manufactures none.
 func (s *Schema) ContentMatcher(t ComplexType) (*Matcher, bool) {
 	ec, ok := t.ContentType().(ElementContent)
 	if !ok {
