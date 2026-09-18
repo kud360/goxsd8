@@ -171,13 +171,13 @@
 // The query is `[pattern//]local[|local…][@attr[,attr…]]` with `|` in place
 // of `,` for the ANY join over attributes, and any local part may be `*`. The
 // pattern before `//` has that same shape and names the ancestor an
-// occurrence lies inside. Any name may
-// be written in Clark notation (`{uri}local`) to name its namespace
-// outright, or `{*}local` to census every namespace at once; a braceless
-// element name is in the XML Schema namespace and a braceless attribute
-// name is in no namespace. The second argument is the tree to walk,
-// defaulting to the suite at [defaultRoot]; narrowing it is for reading one
-// directory's output, never for taking the census the whole corpus answers.
+// occurrence lies inside. Any name may be written in Clark notation
+// (`{uri}local`) to name its namespace outright, or `{*}local` to census
+// every namespace at once; a braceless element name is in the XML Schema
+// namespace and a braceless attribute name is in no namespace. The second
+// argument is the tree to walk, defaulting to the suite at [defaultRoot];
+// narrowing it is for reading one directory's output, never for taking the
+// census the whole corpus answers.
 //
 // An absent or fixture-free root is a supported mode, not a failure: the
 // submodule is absent in a fresh container (#659), so the tool says the
