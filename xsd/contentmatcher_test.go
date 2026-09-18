@@ -735,27 +735,50 @@ func TestMatcherSplitsIterationsAgainstTheGreedyBoundary(t *testing.T) {
 }
 
 // Widening the walk over partitions is not a search over the items already
-// taken: the cursor set is CLAMPED and collapsed, so it stays inside
-// maxPartitionStates however long the instance is. This model's partitions of n
-// a's into iterations of one to three number tribonacci(n) — about 1.8^n, which
-// is 10^5000 here — and a walk holding one live state per partition boundary it
-// had drawn would not return.
+// taken: the live set is CLAMPED and collapsed into spans, so it stays a
+// constant of the schema however long the instance is.
+//
+// Both models below put a number of partitions in flight that grows with the
+// instance, and neither puts a live entry in flight per partition. The first
+// model's partitions of n a's into iterations of one to three number
+// tribonacci(n) — about 1.8^n, which is 10^5000 here. The second draws its one
+// iteration boundary anywhere in the items so far, so it has n of them after n
+// items and is the shape one entry per partition could not carry at all: the
+// clamped product that declined it is 3 × 20001.
+//
+// The ceiling asserted is a small constant and NOT maxPartitionStates, which
+// 20000 live entries would also sit under.
 func TestMatcherBoundsTheCursorSetOverANestedRepetition(t *testing.T) {
-	const items = 20000
-	m := cmMatcher(t, cmGroup(t, uOccurs(t, 1, 1), CompositorSequence,
-		cmGroup(t, uUnbounded(t, 1), CompositorSequence,
-			cmLeaf(t, "a", uOccurs(t, 1, 3)))), nil)
-
-	for i := 0; i < items; i++ {
-		if _, ok := m.Next(uq("a")); !ok {
-			t.Fatalf("Next(a) rejected occurrence %d of %d", i+1, items)
-		}
-		if len(m.live) > maxPartitionStates {
-			t.Fatalf("after %d items the walk carries %d cursors, want at most %d", i+1, len(m.live), maxPartitionStates)
-		}
-	}
-	if !m.Accepting() {
-		t.Error("Accepting() = false after a whole number of iterations")
+	const items, ceiling = 20000, 16
+	for _, tc := range []struct {
+		name  string
+		model func() Particle
+	}{
+		{"an unbounded outer range", func() Particle {
+			return cmGroup(t, uOccurs(t, 1, 1), CompositorSequence,
+				cmGroup(t, uUnbounded(t, 1), CompositorSequence,
+					cmLeaf(t, "a", uOccurs(t, 1, 3))))
+		}},
+		{"an inner range as wide as the instance", func() Particle {
+			return cmGroup(t, uOccurs(t, 1, 1), CompositorSequence,
+				cmGroup(t, uOccurs(t, 1, 2), CompositorSequence,
+					cmLeaf(t, "a", uOccurs(t, 1, items))))
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := cmMatcher(t, tc.model(), nil)
+			for i := 0; i < items; i++ {
+				if _, ok := m.Next(uq("a")); !ok {
+					t.Fatalf("Next(a) rejected occurrence %d of %d", i+1, items)
+				}
+				if len(m.live) > ceiling {
+					t.Fatalf("after %d items the walk carries %d live entries, want at most %d", i+1, len(m.live), ceiling)
+				}
+			}
+			if !m.Accepting() {
+				t.Error("Accepting() = false after a whole number of iterations")
+			}
+		})
 	}
 }
 
@@ -820,23 +843,104 @@ func TestMatcherBoundsTheCursorSetOverAWidePinnedRepetition(t *testing.T) {
 	}
 }
 
-// The cursor set is bounded at CONSTRUCTION, not pruned mid-sequence: a nested
-// repetition whose occurrence ranges could put more partitions in flight than
-// maxPartitionStates is declined outright, so a Matcher that exists still
-// decides every name put to it.
-//
-// This width is the one no ESTIMATE reaches. The model below really does put a
-// quarter of a million partitions in flight at once — the product that declines
-// it over-counts them by under a percent — so it is the state ENCODING and not
-// the bound that stands between it and a Matcher (the GAP(xsd) marker in
-// ContentMatcher).
-func TestContentMatcherDeclinesANestedRepetitionTooWideToCarry(t *testing.T) {
-	p := cmGroup(t, uOccurs(t, 1, 1), CompositorSequence,
+// The width no ESTIMATE reaches is carried by the ENCODING. (a{1,500}){1,500}
+// really does put a quarter of a million partitions in flight at once — every
+// (iterations closed, items in the open iteration) pair a prefix of a's admits,
+// and the product that used to decline it over-counts them by under a percent —
+// so one live entry per partition cannot hold it and a span of adjacent counts
+// per iteration can. ContentMatcher decides the model, and decides it in both
+// directions: a run of a's L(P) admits is taken and accepted, and a name no
+// particle of the model admits is still rejected.
+func TestContentMatcherCarriesANestedRepetitionNoCursorPerPartitionCouldHold(t *testing.T) {
+	const items = 1000
+	s, ct := cmSchema(t, cmGroup(t, uOccurs(t, 1, 1), CompositorSequence,
 		cmGroup(t, uOccurs(t, 1, 500), CompositorSequence,
-			cmLeaf(t, "a", uOccurs(t, 1, 500))))
-	s, ct := cmSchema(t, p, nil)
-	if _, ok := s.ContentMatcher(ct); ok {
-		t.Error("ContentMatcher decided a model whose partitions outnumber maxPartitionStates")
+			cmLeaf(t, "a", uOccurs(t, 1, 500)))), nil)
+
+	m, ok := s.ContentMatcher(ct)
+	if !ok {
+		t.Fatal("ContentMatcher declined (a{1,500}){1,500}, whose partitions a span per iteration covers")
+	}
+	if m.Accepting() {
+		t.Error("Accepting() = true for the empty sequence, which no iteration of a{1,500} is a word of")
+	}
+	for i := 0; i < items; i++ {
+		if _, ok := m.Next(uq("a")); !ok {
+			t.Fatalf("Next(a) rejected occurrence %d of %d", i+1, items)
+		}
+		if len(m.live) > maxPartitionStates {
+			t.Fatalf("after %d items the walk carries %d live entries, want at most %d", i+1, len(m.live), maxPartitionStates)
+		}
+	}
+	if !m.Accepting() {
+		t.Errorf("Accepting() = false after %d a's, which L(P) partitions into two iterations and more", items)
+	}
+	if _, ok := m.Next(uq("b")); ok {
+		t.Error("Next(b) took a name no particle of the model admits")
+	}
+}
+
+// A live entry covers a RUN of occurrence counts, and every count in one run
+// has to answer {min occurs} alike or one walk step decides for partitions that
+// disagree. (a{3,4}){1,2} is the shortest model where a run straddles that
+// answer: L(P) is a^3, a^4, a^6, a^7 and a^8, so after five a's the partitions
+// standing at three in the open iteration can close it and the ones standing at
+// two cannot, and a walk that read the run's lowest count for both would reject
+// "a a a a a a", which is (a a a)(a a a).
+func TestMatcherClosesAnIterationOnlyForTheCountsThatReachedMinOccurs(t *testing.T) {
+	model := func() Particle {
+		return cmGroup(t, uOccurs(t, 1, 1), CompositorSequence,
+			cmGroup(t, uOccurs(t, 1, 2), CompositorSequence,
+				cmLeaf(t, "a", uOccurs(t, 3, 4))))
+	}
+	for _, n := range []int{3, 4, 6, 7, 8} {
+		cmAccept(t, cmMatcher(t, model(), nil), cmRepeat("a", n)...)
+	}
+
+	short := cmMatcher(t, model(), nil)
+	if i := cmFeed(t, short, cmRepeat("a", 5)...); i != 5 {
+		t.Fatalf("Next rejected a at position %d of five, want all five taken", i)
+	}
+	if short.Accepting() {
+		t.Error("Accepting() = true for five a's, which no partition into iterations of a{3,4} covers")
+	}
+
+	over := cmMatcher(t, model(), nil)
+	if i := cmFeed(t, over, cmRepeat("a", 9)...); i != 8 {
+		t.Errorf("the ninth a was rejected at position %d, want position 8 (2 × 4)", i)
+	}
+}
+
+// cmRepeat is one name n times, the sequence an occurrence-range test feeds.
+func cmRepeat(name string, n int) []string {
+	out := make([]string, n)
+	for i := range out {
+		out[i] = name
+	}
+	return out
+}
+
+// The {max occurs} arithmetic survives the span: (a{1,20}){1,20} — a nested
+// repetition the old ceiling declined for its product of 441 — takes four
+// hundred a's and not the four hundred and first. A cover that dropped a
+// partition would cut the run short, and one that invented a partition would
+// run past the boundary.
+func TestMatcherDecidesTheOccurrenceBoundaryOfANestedRepetition(t *testing.T) {
+	const wide, items = 20, 400
+	m := cmMatcher(t, cmGroup(t, uOccurs(t, 1, 1), CompositorSequence,
+		cmGroup(t, uOccurs(t, 1, wide), CompositorSequence,
+			cmLeaf(t, "a", uOccurs(t, 1, wide)))), nil)
+
+	for i := 0; i < items; i++ {
+		if _, ok := m.Next(uq("a")); !ok {
+			t.Fatalf("Next(a) rejected occurrence %d of %d, which %d iterations of a{1,%d} cover", i+1, items, wide, wide)
+		}
+	}
+	if !m.Accepting() {
+		t.Errorf("Accepting() = false after %d a's, the whole of the model's language", items)
+	}
+	if _, ok := m.Next(uq("a")); ok {
+		t.Errorf("Next(a) took occurrence %d, past %d × %d", items+1, wide, wide)
 	}
 }
 
