@@ -258,18 +258,24 @@ survives, re-scoped and `blocked` on row 5's **#1565**. The `GAP(xsd)` at
 the 2026-09-18 stamp and is the next `/backlog` run's to replace whole — no
 number, table row or date is touched here.
 
-**Row 3 (#1102) is CONSUMED and stale in four respects — read the issue, not the
-row.** Its ruling landed at `bdf49f8` (PR #1606): `ownAttributeUses` is renamed
-`extensionStepAttributeUses`, the `GAP(xsd)` in `xsd/attributeusefold.go` is
-OWNED and cites #1102, the over-report is **RULED PERMANENT for that function**,
-and the fail-closed reader is `checkAttributeRestriction`'s ·subsumption· arm —
-not `checkAttributeRestrictionRequired`, which the landing proved fail-OPEN. Of
-the three routes the row promises, two are disposed of: route 2 is taken, route 3
-is measured dead. **#1102 stays open on route 1 alone** — the step's
-clause-1-and-2 value retained past `foldAttributeUses`, warden pre-flight gated —
-so the row is still startable, for a smaller and different question than it
-describes. Rewriting the row is the next `/backlog` run's, with the rest of this
-section; no number, table row or date is touched here either.
+**Row 3 (#1102) is DEAD — start elsewhere, and do not read this row's successor
+paragraph either.** #1102 is **closed**, at `e0e3c46` (PR #1612). Route 1 landed:
+`ComplexType.ownAttributeUses` retains the producer's §3.4.2.4 clause-1-and-2
+value past `foldAttributeUses` and `extensionStepAttributeUses` returns it, so
+the collapsed intermediate carries each extension step's OWN contribution
+**exactly** and the `GAP(xsd)` in `xsd/attributeusefold.go` is **RETIRED
+OUTRIGHT** — no marker in the tree cites #1102. Both the row and the 2026-09-19
+paragraph it replaces are now falsified on the same two points: the marker is
+neither unowned nor owned but **gone**, and the over-report is not RULED
+PERMANENT but **fixed** (that ruling was scoped to INVERSION, and this is a read
+of a retained value). `checkAttributeRestriction`'s ·subsumption· arm was the
+fail-closed reader and the valid schema it rejected is now accepted. **Two live
+successors**: **#1613** renames the three `OverReport` test identifiers, which
+now name an over-report that no longer happens; **#586 §1** retires on the same
+component-shape change this landing made precedent. Rewriting the row and this
+paragraph together is the next `/backlog` run's, with the rest of this section —
+**locate the row by content, not by line number** — and no number, table row,
+lane figure or date is touched here.
 
 **Row 4 (#499) is CONSUMED and the row's whole framing is spent — read the issue,
 not the row.** Route (b) landed at `84dda95`: the `maxProductStates` ceiling is a
