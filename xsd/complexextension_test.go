@@ -730,15 +730,16 @@ func TestCosCTExtendsClause15CollapsedIntermediate(t *testing.T) {
 	}
 }
 
-// TestOwnAttributeUsesMixedChain pins what the collapse rests on, over the chain
-// shape that would break a set-difference reading: four steps, ext-restr-ext,
-// with a restriction step that PROHIBITS a name an earlier extension inherited.
+// TestExtensionStepAttributeUsesMixedChain pins what the collapse rests on, over
+// the chain shape that would break a set-difference reading: four steps,
+// ext-restr-ext, with a restriction step that PROHIBITS a name an earlier
+// extension inherited.
 //
 // The rows assert the OVER-approximation, not a recovery. §3.4.2.4 clause 3.1's
-// fold is not invertible (ownAttributeUses, attributeusefold.go), so each step
-// answers its whole folded set — its own uses AND the base members it cannot
-// separate from them — and collapsedAttributeUses filters the base members back
-// out by name. TestCosCTExtendsClause15CollapsedIntermediate is where that
+// fold is not invertible (extensionStepAttributeUses, attributeusefold.go), so
+// each step answers its whole folded set — its own uses AND the base members it
+// cannot separate from them — and collapsedAttributeUses filters the base
+// members back out by name. TestCosCTExtendsClause15CollapsedIntermediate is where that
 // filtering is pinned, and its M is unchanged by the over-report.
 //
 // Before #1082 these rows read [b] and [c], recovered as the leading
@@ -748,7 +749,7 @@ func TestCosCTExtendsClause15CollapsedIntermediate(t *testing.T) {
 //
 // The verification is pinned too: handed a base that is not the type's own, the
 // step DECLINES rather than answering a set that means nothing.
-func TestOwnAttributeUsesMixedChain(t *testing.T) {
+func TestExtensionStepAttributeUsesMixedChain(t *testing.T) {
 	s := xSchema(t, func(b *SchemaBuilder) {
 		b.AddType(dPrimitive(t, uq("str")))
 		b.AddType(dType(t, uq("oA"), anyTypeName, EmptyContent{}, []AttributeUse{dAttr(t, uq("a"), uq("str"))}, nil))
@@ -760,9 +761,10 @@ func TestOwnAttributeUsesMixedChain(t *testing.T) {
 		t.Helper()
 		d, _ := s.Type(derived)
 		b, _ := s.Type(base)
-		uses, ok := s.ownAttributeUses(d.(ComplexType), b.(ComplexType))
+		uses, ok := s.extensionStepAttributeUses(d.(ComplexType), b.(ComplexType))
 		if !ok {
-			t.Fatalf("ownAttributeUses(%s, %s) declined a step whose fold it replays", derived, base)
+			t.Fatalf("extensionStepAttributeUses(%s, %s) declined a step whose fold it replays",
+				derived, base)
 		}
 		var names []string
 		for _, u := range uses {
@@ -780,8 +782,9 @@ func TestOwnAttributeUsesMixedChain(t *testing.T) {
 	}
 	d, _ := s.Type(uq("oE2"))
 	wrong, _ := s.Type(uq("oE1"))
-	if _, ok := s.ownAttributeUses(d.(ComplexType), wrong.(ComplexType)); ok {
-		t.Fatalf("ownAttributeUses accepted a base whose @a it carries no member for, so the verification is not guarding the replay")
+	if _, ok := s.extensionStepAttributeUses(d.(ComplexType), wrong.(ComplexType)); ok {
+		t.Fatalf("extensionStepAttributeUses accepted a base whose @a it carries no member for, " +
+			"so the verification is not guarding the replay")
 	}
 }
 

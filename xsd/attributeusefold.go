@@ -293,13 +293,13 @@ func (s *Schema) inheritAttributeUses(own, base []AttributeUse, method Derivatio
 	return folded
 }
 
-// ownAttributeUses answers what ONE extension step contributes to the collapsed
-// intermediate cos-ct-extends clause 1.5 needs: given an extension-derived
-// Complex Type Definition c and its resolved {base type definition} b, both with
-// §3.4.2.4 clause 3 already folded into them, it returns the uses the collapse
-// re-applies for c over a DIFFERENT base (collapsedintermediate.go). false is
-// the caller's decline: c's folded set is not one clause 3.1 could have built
-// over b's.
+// extensionStepAttributeUses answers what ONE extension step contributes to the
+// collapsed intermediate cos-ct-extends clause 1.5 needs: given an
+// extension-derived Complex Type Definition c and its resolved {base type
+// definition} b, both with §3.4.2.4 clause 3 already folded into them, it
+// returns the uses the collapse re-applies for c over a DIFFERENT base
+// (collapsedintermediate.go). false is the caller's decline: c's folded set is
+// not one clause 3.1 could have built over b's.
 //
 // It returns c's WHOLE folded set, OVER-APPROXIMATING the uses clauses 1 and 2
 // gave c itself, because clause 3.1's fold
@@ -325,33 +325,74 @@ func (s *Schema) inheritAttributeUses(own, base []AttributeUse, method Derivatio
 // len(folded(b)) prefix this replaced compared names, and returned the EMPTY set
 // for own [x] over base [x] — the shape #1082's dedup makes reachable.
 //
-// GAP(xsd): taking the largest of the family is a CHOICE, not a recovery, and it
-// is not fail-open against every reader. What it over-reports is members of
-// folded(b), and collapsedAttributeUses drops each one whose expanded name the
-// collapse already carries — so an over-report survives into M only for a name
-// that reached b through a step the re-ordering dropped, which is the case
-// taking the SMALLEST would lose. Over M's readers, all reached through
-// checkDerivationOKRestriction(t, M):
+// GAP(xsd): taking the largest of the family is a RULED PERMANENT
+// approximation, not a fold in progress. #1102 owns the ruling and the one
+// thing that retires it.
+//
+// What makes it permanent is the proof above. own(c) is not a function of the
+// two folded sets, so no choice made HERE is a recovery, and the two candidate
+// choices are both fail-closed, at the two arms of one function: the largest
+// displaces a binding (TestCollapsedIntermediateOverReportFalseReject,
+// attributeusefold_test.go), and the smallest drops an own member an extension
+// restated identically to its base's, leaving the collapse no use for that name
+// at all, which is #1082's ruling and is not reproduced here. Retiring it needs
+// NEW INPUT rather than a better inversion: the clause-1-and-2 value the
+// producer computed, retained on the component past the fold that overwrites it
+// (foldAttributeUses). That is a second encoding of a property beside the folded
+// one every other reader takes, so it is a component-shape change with its own
+// review and not an edit to this function.
+//
+// No spec licence covers the approximation and this marker claims none.
+// §3.4.6.3's ·implementation-defined· latitude names derivation-ok-restriction
+// clause 2.4.2 alone; clause 3 (c-ran) and cos-ct-extends clauses 1.2 and 1.5
+// are stated as unqualified conditions a processor is expected to decide.
+//
+// THE PRICE IS A VALID SCHEMA REJECTED, at one arm. What is over-reported is
+// members of folded(b), and collapsedAttributeUses drops each one whose expanded
+// name the collapse already carries — so an over-report survives into M only for
+// a name that reached b through a step the re-ordering dropped. Over M's
+// readers, all reached through checkDerivationOKRestriction(t, M):
 //
 //   - checkAttributeRestriction (attributerestriction.go) looks each of T's uses
-//     up in M: an extra member can only turn a "neither declares nor admits"
-//     rejection into a binding, and then compares that binding for ·subsumption·,
-//     which an extra member CAN fail where M's wildcard would have satisfied it.
+//     up in M. An extra member can only turn a "neither declares nor admits"
+//     rejection into a binding: fail-open. It then compares that binding for
+//     ·subsumption·, and that is where the price is paid — the extra member's
+//     use binding displaces the WILDCARD binding the true intermediate would
+//     have bound the name to, and loc-testSubP clause 5 charges a {type
+//     definition}, {value constraint} or {inheritable} mismatch that a lax
+//     wildcard binding subsumes outright under clause 2 (keywordSubsumes):
+//     FAIL-CLOSED.
 //   - checkAttributeRestrictionWildcard exempts the names BOTH sides carry
 //     (sharedAttributeUseNames), so an extra member exempts more: fail-open.
-//   - checkAttributeRestrictionRequired charges a REQUIRED member of M that T
-//     carries no use for, so an extra required member T lacks is a false
-//     reject — fail-CLOSED, and the price of the choice.
-//   - duplicateAttributeUseName and restrictionFromCollapseIsVacuous
-//     (complexextension.go) read M's set too. The first cannot see an extra
+//   - checkAttributeRestrictionRequired charges a {required} member of M that T
+//     carries no required use for, and no VALID schema reaches that charge:
+//     fail-open. An over-reported member is a member of folded(b), so folded(c)
+//     carries a use for its name with its {required} — clause 3.1 inherits it,
+//     and an own member that displaced it is identical to it. Below c an
+//     extension inherits it unchanged and a restriction may drop or relax it
+//     only by failing this same check against its OWN base, so a required
+//     over-report means a chain step already rejected. Where that step is the
+//     <redefine> original an owned {base type definition} seats, #584's gap
+//     leaves it uncharged and the rejection lands here instead — a rule charged
+//     in the wrong place, still not a conforming schema rejected.
+//     TestCollapsedIntermediateOverReportRequiredIsOpen pins both halves.
+//   - duplicateAttributeUseName (complexderivation.go) cannot see an extra
 //     member: collapsedAttributeUses drops every own member whose name the
-//     collapse holds, so M stays name-unique. The second only declines the
-//     vacuous shortcut, which decides nothing on its own.
+//     collapse holds, and folded(c) is name-unique under ct-props-correct clause
+//     4, so M stays name-unique.
+//   - restrictionFromCollapseIsVacuous (complexextension.go) compares M with T
+//     member for member, so an extra member makes it DECLINE the vacuous
+//     shortcut and hands the verdict to the whole of derivation-ok-restriction —
+//     including the {content type} readers this list does not quantify over,
+//     where its own doc records a false reject on an anonymous ·locally declared
+//     type·. The direction of that path is UNESTABLISHED: no fixture here
+//     reaches it.
 //
-// Taking the smallest is fail-closed at the same checkAttributeRestriction arm
-// instead, on a use that reached b through a re-ordered-away restriction step,
-// so neither direction is uniformly open; the largest is the one this tree takes.
-func (s *Schema) ownAttributeUses(c, b ComplexType) ([]AttributeUse, bool) {
+// Two findings reopen the ruling, and a further shape of either false reject is
+// neither. One is a reading of clause 3.1 under which own(c) is a function of
+// the two folded sets after all. The other is the retained clause-1-and-2 value
+// above, which makes the question moot rather than answering it.
+func (s *Schema) extensionStepAttributeUses(c, b ComplexType) ([]AttributeUse, bool) {
 	for _, u := range b.attributeUses {
 		if !s.hasAttributeUseIdentical(c.attributeUses, u) {
 			return nil, false
