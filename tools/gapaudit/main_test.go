@@ -1014,9 +1014,9 @@ func TestFileMentionDoesNotRetireATracker(t *testing.T) {
 // tool silenced. It must now surface, with #1102 printed beside it as the
 // candidate owner.
 //
-// The marker cites #1102 in the tree today (#1102's ruling landed), so the
-// fixture below is a transcript of that state and not a reading of the file.
-// It pins the TOOL's bar, which is what would regress.
+// No marker stands in that file today (#1102's route-1 retirement landed), so
+// the fixture below is a transcript of a state the file once held and not a
+// reading of it. It pins the TOOL's bar, which is what would regress.
 func TestFileMentionDoesNotSuppressAnUncitedMarker(t *testing.T) {
 	m := marker{Area: "xsd", File: "xsd/attributeusefold.go", Line: 296,
 		Text: "taking the largest of the family is a CHOICE, not a recovery, and it is not " +

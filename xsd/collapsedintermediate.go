@@ -21,12 +21,14 @@ import "github.com/kud360/goxsd8/xsderr"
 // stores only the FOLDED value of each property — the §3.4.2.4 clause 3
 // {attribute uses}, the §3.4.2.5 clause 2 {attribute wildcard}, the §3.4.2.3.3
 // clause 4 {content type} — each already merged with its immediate base's. So
-// each property is recovered by inverting its own fold, and each inversion states
-// its exactness or its approximation where it is written:
+// each property is recovered from what that graph holds — by inverting its own
+// fold, or by reading a value retained past it — and each recovery states its
+// exactness or its approximation where it is written:
 //
-//   - {attribute uses}: OVER-approximated, deliberately —
-//     extensionStepAttributeUses (attributeusefold.go), whose fold is not
-//     invertible.
+//   - {attribute uses}: EXACT, and by retention rather than inversion —
+//     extensionStepAttributeUses (attributeusefold.go) reads back the
+//     clause-1-and-2 value the fold kept (ownAttributeUses, complextype.go),
+//     because clause 3.1's fold is not invertible.
 //   - {content type}: EXACT for every source-derived component, by
 //     recoverExtensionStepContent's structural inverse (extensioncontenttype.go),
 //     which DECLINES rather than guesses on a shape the merge does not build.
@@ -136,12 +138,6 @@ func (s *Schema) applyExtensionStep(loc xsderr.Loc, acc collapsedProperties, c C
 // meets: an own use for a name the collapse ALREADY carries is dropped, and the
 // inherited one stands.
 //
-// That drop carries a second load: own is extensionStepAttributeUses'
-// OVER-approximation, which holds the step's own uses and the base members it
-// cannot separate from them, and the names the collapse already carries are how
-// the base members that reached the step through an extension are filtered back
-// out.
-//
 // It is dropped because no legal intermediate can hold both. Clause 3.1 inherits
 // every base use unconditionally, so an extension of the collapse-so-far that
 // re-declared the name would give the intermediate two uses for it, which
@@ -211,11 +207,7 @@ func (s *Schema) collapsedAttributeUses(own, acc []AttributeUse) []AttributeUse 
 //   - Schema.attributeDefaultBinding, reached from checkRestrictionAttributes,
 //     consults M.{attribute uses} FIRST and falls back to the wildcard only for a
 //     name no use covers. Where the fallback is reached, more admitted names
-//     means ok and no charge: FAIL-OPEN. M's uses are over-reported rather than
-//     exact (extensionStepAttributeUses, attributeusefold.go), so the fallback is
-//     reached for FEWER names than the true collapse would reach it for — the
-//     price of that is charged to the uses gap's own marker, and no widening
-//     here can add to it. Its {process contents} half is unaffected in any
+//     means ok and no charge: FAIL-OPEN. Its {process contents} half is unaffected in any
 //     direction — the value is T's own, the same one the true collapse would
 //     carry, not a widened one, so wildcardKeywordBinding sees no substitute.
 //   - checkAttributeRestrictionRequired (attributerestriction.go) reads
