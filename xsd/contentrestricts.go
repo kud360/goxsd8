@@ -514,14 +514,27 @@ func positionsKey(states []int) string {
 // turning schema assembly into an exponential walk. It is a ceiling on WORK,
 // never on the verdict of a walk that finishes.
 //
-// The constant is MEASURED headroom rather than an unexamined guess (#282).
-// Instrumenting both the giveup branch and every insertion into the visited set,
-// then running the full W3C suite — 41858 cases over 6 lanes, which reach this
-// product walk 688 times — recorded ZERO walks that hit the ceiling and a
-// high-water mark of 15 product states, two orders of magnitude below 4096. The
-// bound is therefore inert on every content model the suite contains; it is kept
-// for the worst case the powerset admits, which nothing measures, not because
-// any known schema approaches it.
+// The constant is MEASURED headroom rather than an unexamined guess, and the
+// headroom is NARROWING. Three counters — entries into contentModelRestricts,
+// the giveup branch below, and every insertion into the visited set so the
+// high-water mark comes from walks that finish — run over the full W3C suite
+// record walkEntries=1987 ceilingHits=0 maxVisited=1002 (#499). The same three
+// counters over the same suite submodule recorded walkEntries=688 ceilingHits=0
+// maxVisited=15 six and a half weeks earlier (#282).
+//
+// Read both halves of that. No walk has ever reached the ceiling, so the bound
+// is inert on every content model the suite contains and the incompleteness it
+// guards is latent. But the deepest walk now visits 1002 of the 4096 states it
+// is allowed — a factor of 4.1 below the ceiling where it was a factor of 273 —
+// and maxVisited grew 66.8× while the walk entries grew only 2.9×, so the walks
+// that reach this code are going DEEPER rather than merely happening more often.
+// A single future content model, not a wider population, is now enough to cross.
+// What drove the growth is not established here: the window holds lane-widening
+// landings, and no causal claim is made from a correlation nobody checked.
+//
+// A margin that moved that far since it was last measured is not evidence for an
+// unexamined constant, which is why the ruling at contentModelRestricts' giveup
+// site names a re-measurement threshold instead of waiting for a breach.
 const maxProductStates = 4096
 
 // contentRestrictionScope names WHICH of cos-content-act-restrict's two
