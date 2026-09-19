@@ -258,6 +258,19 @@ survives, re-scoped and `blocked` on row 5's **#1565**. The `GAP(xsd)` at
 the 2026-09-18 stamp and is the next `/backlog` run's to replace whole — no
 number, table row or date is touched here.
 
+**Row 3 (#1102) is CONSUMED and stale in four respects — read the issue, not the
+row.** Its ruling landed at `bdf49f8` (PR #1606): `ownAttributeUses` is renamed
+`extensionStepAttributeUses`, the `GAP(xsd)` in `xsd/attributeusefold.go` is
+OWNED and cites #1102, the over-report is **RULED PERMANENT for that function**,
+and the fail-closed reader is `checkAttributeRestriction`'s ·subsumption· arm —
+not `checkAttributeRestrictionRequired`, which the landing proved fail-OPEN. Of
+the three routes the row promises, two are disposed of: route 2 is taken, route 3
+is measured dead. **#1102 stays open on route 1 alone** — the step's
+clause-1-and-2 value retained past `foldAttributeUses`, warden pre-flight gated —
+so the row is still startable, for a smaller and different question than it
+describes. Rewriting the row is the next `/backlog` run's, with the rest of this
+section; no number, table row or date is touched here either.
+
 **The ordering principle this stamp:** the lane-first rebuild is KEPT and is not
 re-argued — the last two windows took nine rows in order and landed all nine. But
 the window that followed it exactly moved +2, and the one row that could not
