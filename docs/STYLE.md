@@ -209,7 +209,7 @@ retirement owner and P3's repointing has no target: the issue that
 recorded the ruling closes as completed, and it stays the marker's
 citation. Write the phrase immediately before the number — `go tool
 gapaudit` reads a citation in that form as tracked whatever the cited
-issue's state, and reads one in any other form as P3's dead end. Dropping
+issue's state, and a closed one in any other form as P3's dead end. Dropping
 the number instead is not the fix: the ruling's grounding and the
 measurements that reopen it live on that thread, and the marker is the
 only route to them. Nothing else in the marker is audited once the ruling
