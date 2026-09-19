@@ -250,6 +250,14 @@ Ordered for a `/develop` session: take the highest row you can start.
 starting anything anyway**: this is a snapshot, and a landing arrived mid-pass in
 three of the last four stamps.
 
+**Row 2 (#1588) is DEAD — start elsewhere.** #1588 is closed `not_planned`; its
+third route landed as **#1601** at `46dc042` (`maxPartitionStates` 2048 → 65536,
+`instance` +4), and #1601 stays open only as the owner of the decline that
+survives, re-scoped and `blocked` on row 5's **#1565**. The `GAP(xsd)` at
+`xsd/contentmatcher.go:310` is owned, not unowned. The rest of this section is
+the 2026-09-18 stamp and is the next `/backlog` run's to replace whole — no
+number, table row or date is touched here.
+
 **The ordering principle this stamp:** the lane-first rebuild is KEPT and is not
 re-argued — the last two windows took nine rows in order and landed all nine. But
 the window that followed it exactly moved +2, and the one row that could not
