@@ -846,42 +846,42 @@ func (s *Schema) contentModelRestricts(r, b contentAutomaton, scope contentRestr
 				// but latent is not licensed, and the licence is narrower than it
 				// looks.
 				//
-				// §3.4.6.3's leniency for an undecidable clause 2.4.2 is textually
-				// anchored to a condition this branch does not test: "If (1) the type
-				// definition being checked has T.{content
-				// type}.{particle}.{term}.{compositor} = all and (2) an implementation
-				// is unable to determine by examination of the schema in isolation
-				// whether or not clause 2.4.2 is satisfied, then the implementation
-				// may provisionally accept the derivation". The sentence that follows
-				// — "It is ·implementation-defined· whether a processor (a) always
-				// detects violations of clause 2.4.2 by examination of the schema in
-				// isolation, (b) detects them only when some element information item
-				// in the input document is valid against T but not against T.{base
-				// type definition}, or (c) sometimes detects such violations by
-				// examination of the schema in isolation and sometimes not" — states
-				// no condition of its own, and the all-compositor condition appears
-				// nowhere else in the document. A genuine {compositor} = all never
-				// reaches here in any case: contentTypeRestricts takes the narrow,
-				// correctly scoped allowance through usesAllCompositor before an
-				// automaton is built. This ceiling applies uniformly to sequence and
-				// choice models too, and for those it rests on reading (c) as a
-				// RESIDUAL CATCH-ALL detached from condition (1) — defensible, since
-				// nothing in the local specs forecloses it, but not textually
-				// guaranteed. Naming that stretch is half of why this marker exists.
+				// No spec licence covers this branch, and this marker claims none.
+				// §3.4.6.3's leniency for an undecidable clause 2.4.2 is gated by a
+				// two-conjunct antecedent — "If (1) the type definition being checked
+				// has T.{content type}.{particle}.{term}.{compositor} = all and (2) an
+				// implementation is unable to determine by examination of the schema in
+				// isolation whether or not clause 2.4.2 is satisfied, then the
+				// implementation may provisionally accept the derivation" — and the
+				// ·implementation-defined· sentence after it, "whether a processor (a)
+				// always detects violations of clause 2.4.2 by examination of the
+				// schema in isolation, (b) detects them only when some element
+				// information item in the input document is valid against T but not
+				// against T.{base type definition}, or (c) sometimes detects such
+				// violations by examination of the schema in isolation and sometimes
+				// not", says WHEN a processor already inside that antecedent detects
+				// them. It states no condition of its own and grants nothing outside
+				// it, and the all-compositor condition appears nowhere else in the
+				// document. Condition (1) cannot hold here, by construction:
+				// contentTypeRestricts claims every genuine ·all· case through
+				// usesAllCompositor before an automaton is built, so what reaches this
+				// line is exactly the sequence/choice population the antecedent does
+				// not cover. Reading (c) as a RESIDUAL CATCH-ALL detached from
+				// condition (1) was this marker's own earlier position; it is ruled
+				// out, not merely unproved (#1378).
 				//
-				// The other half is that "provisionally accept" is not a
-				// spec-guaranteed-safe resting state. §3.4.6.3 continues: "If any
-				// instance encountered in the ·assessment· episode is valid against T
-				// but not against T.{base type definition}, then the derivation of T
-				// does not satisfy this constraint, the schema does not conform to
-				// this specification, and no ·assessment· can be performed using that
-				// schema." (b) and (c) as worded describe processors that perform that
-				// runtime cross-check; this ceiling gives up permanently with no
-				// runtime fallback, so a schema accepted here can be non-conforming
-				// with nothing left to say so. What the ceiling does guarantee is
-				// direction: it abandons the WHOLE walk rather than truncating one
-				// into a verdict, so it is fail-open — a missed rejection, never a
-				// false one.
+				// "Provisionally accept" is not a spec-guaranteed-safe resting state
+				// either. §3.4.6.3 continues: "If any instance encountered in the
+				// ·assessment· episode is valid against T but not against T.{base type
+				// definition}, then the derivation of T does not satisfy this
+				// constraint, the schema does not conform to this specification, and
+				// no ·assessment· can be performed using that schema." (b) and (c) as
+				// worded describe processors that perform that runtime cross-check;
+				// this ceiling gives up permanently with no runtime fallback, so a
+				// schema accepted here can be non-conforming with nothing left to say
+				// so. What the ceiling does guarantee is direction: it abandons the
+				// WHOLE walk rather than truncating one into a verdict, so it is
+				// fail-open — a missed rejection, never a false one.
 				//
 				// It is retired by a construction that decides containment without
 				// materializing the product, never by raising the constant; #499
