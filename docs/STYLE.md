@@ -203,6 +203,19 @@ fail-open claim that was fail-closed; both died in seconds under
 reproduction, and neither the gate nor the ratchet could see them —
 the corpus does not contain the shapes.)
 
+**P3b. A gap RULED permanent cites the ruling, as `RULED permanent by
+#N`.** A ruling is the finding that the gap stays, so it is not a
+retirement owner and P3's repointing has no target: the issue that
+recorded the ruling closes as completed, and it stays the marker's
+citation. Write the phrase immediately before the number — `go tool
+gapaudit` reads a citation in that form as tracked whatever the cited
+issue's state, and reads one in any other form as P3's dead end. Dropping
+the number instead is not the fix: the ruling's grounding and the
+measurements that reopen it live on that thread, and the marker is the
+only route to them. Nothing else in the marker is audited once the ruling
+retires it, so a second number there is provenance and must read as
+provenance (#1376).
+
 **P4. Stream from the start.** Bounded memory on every input path: no
 `io.ReadAll`, no whole-document buffering. Position tracking uses an
 offset index over the stream, not retained content.
