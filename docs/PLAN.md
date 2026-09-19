@@ -271,6 +271,21 @@ so the row is still startable, for a smaller and different question than it
 describes. Rewriting the row is the next `/backlog` run's, with the rest of this
 section; no number, table row or date is touched here either.
 
+**Row 4 (#499) is CONSUMED and the row's whole framing is spent — read the issue,
+not the row.** Route (b) landed at `84dda95`: the `maxProductStates` ceiling is a
+RULED permanent documented approximation, the `GAP(xsd)` marker states the ruling
+at the site and rests it on the bounded-resource argument, and the review trigger
+is named (`ceilingHits > 0` OR `maxVisited` at 2048). Route (a) was ruled **out of
+scope rather than unsatisfiable** — research-shaped algorithmic work adjacent to
+#578 — so **#499 is now `blocked`, not `ready`**, re-scoped in place onto #1565
+plus a trigger, in the same shape row 2's #1601 took. The row's *"cheapest ceiling
+ruling the queue will ever hold"* was right and has been collected. Its residue is
+filed: **#1610** (four sites in one file now disagree about §3.4.6.3's (a)/(b)/(c)
+sentence, one of them citing text this landing deleted) and **#1609** (nothing
+schedules the re-measurement the trigger is stated in). Rewriting the row is the
+next `/backlog` run's, with the rest of this section; no number, table row or date
+is touched here.
+
 **The ordering principle this stamp:** the lane-first rebuild is KEPT and is not
 re-argued — the last two windows took nine rows in order and landed all nine. But
 the window that followed it exactly moved +2, and the one row that could not
