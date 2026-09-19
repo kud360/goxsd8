@@ -1,6 +1,7 @@
 package xsd
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/kud360/goxsd8/xsderr"
@@ -16,7 +17,7 @@ import (
 
 // cmSchema finalizes a schema whose complex type {urn:upa}ct has p as its
 // {content type} particle, and returns it with that type.
-func cmSchema(t *testing.T, p Particle, extra func(*SchemaBuilder)) (*Schema, ComplexType) {
+func cmSchema(t testing.TB, p Particle, extra func(*SchemaBuilder)) (*Schema, ComplexType) {
 	t.Helper()
 	ct := uCT(t, uq("ct"), p)
 	b := NewSchemaBuilder()
@@ -36,7 +37,7 @@ func cmSchema(t *testing.T, p Particle, extra func(*SchemaBuilder)) (*Schema, Co
 // cmMatcher is cmSchema plus the matcher over the type, failing when
 // ContentMatcher declines — a decline is a distinct outcome every test that
 // wants one asserts on its own.
-func cmMatcher(t *testing.T, p Particle, extra func(*SchemaBuilder)) *Matcher {
+func cmMatcher(t testing.TB, p Particle, extra func(*SchemaBuilder)) *Matcher {
 	t.Helper()
 	s, ct := cmSchema(t, p, extra)
 	m, ok := s.ContentMatcher(ct)
@@ -72,13 +73,13 @@ func cmAccept(t *testing.T, m *Matcher, names ...string) {
 // cmLeaf is a particle over a LOCAL element declaration named local, all of
 // whose fixtures share the named type T so that two same-named declarations in
 // one model do not trip cos-element-consistent.
-func cmLeaf(t *testing.T, local string, o Occurs) Particle {
+func cmLeaf(t testing.TB, local string, o Occurs) Particle {
 	t.Helper()
 	return uParticle(t, o, ResolvedTerm{Term: uLocal(t, uq(local), uq("T"))})
 }
 
 // cmGroup wraps a model group in a particle with the given occurrence range.
-func cmGroup(t *testing.T, o Occurs, compositor Compositor, particles ...Particle) Particle {
+func cmGroup(t testing.TB, o Occurs, compositor Compositor, particles ...Particle) Particle {
 	t.Helper()
 	return uParticle(t, o, ResolvedTerm{Term: uGroup(t, compositor, particles...)})
 }
@@ -825,7 +826,10 @@ func cmWideBody(t *testing.T) Particle {
 // what the decline was protecting: the walk holds one cursor over a sequence
 // long enough that a set growing with the instance would be visible.
 func TestMatcherBoundsTheCursorSetOverAWidePinnedRepetition(t *testing.T) {
-	const iterations = 6667 // 20001 items
+	// The ceiling asserted is a small constant and NOT maxPartitionStates,
+	// which a set growing by one entry per item would stay under for the whole
+	// of this instance.
+	const iterations, ceiling = 6667, 1 // 20001 items
 	m := cmMatcher(t, cmWideBody(t), nil)
 
 	for i := 0; i < iterations; i++ {
@@ -833,8 +837,8 @@ func TestMatcherBoundsTheCursorSetOverAWidePinnedRepetition(t *testing.T) {
 			if _, ok := m.Next(uq(n)); !ok {
 				t.Fatalf("Next(%s) rejected iteration %d of %d", n, i+1, iterations)
 			}
-			if len(m.live) > maxPartitionStates {
-				t.Fatalf("after iteration %d the walk carries %d cursors, want at most %d", i+1, len(m.live), maxPartitionStates)
+			if len(m.live) > ceiling {
+				t.Fatalf("after iteration %d the walk carries %d cursors, want at most %d", i+1, len(m.live), ceiling)
 			}
 		}
 	}
@@ -1077,4 +1081,112 @@ func TestMatcherAcceptsAnEmptyNestedAllGroup(t *testing.T) {
 	}
 	cmAccept(t, cmMatcher(t, model(), nil), "a")
 	cmAccept(t, cmMatcher(t, model(), nil), "d", "a")
+}
+
+// BenchmarkMatcherNext puts a number to the budget maxPartitionStates is the
+// ceiling on: what ONE item of an instance costs in wall time and in
+// allocation while the walk carries a live set as wide as that ceiling admits.
+// Read its two widths together — the cost is per live region, so the slope
+// between them is what a change to the constant multiplies.
+//
+// The model is cmSiblings and not a nested repetition because its live set
+// reaches w regions after O(√w) items where a nest needs w of them: the widest
+// live set the ceiling admits is out of a nest's reach in any runnable time.
+func BenchmarkMatcherNext(b *testing.B) {
+	widest := cmWidestIteration(b)
+	for _, iter := range [...]int{widest / 4, widest} {
+		b.Run(fmt.Sprintf("live=%d", iter*iter), func(b *testing.B) {
+			m := cmSaturated(b, iter)
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				if _, ok := m.Next(uq("c")); !ok {
+					b.Fatalf("Next(c) rejected item %d, which c's unbounded {max occurs} admits", i+1)
+				}
+			}
+		})
+	}
+}
+
+// The ceiling is reached by BREADTH as readily as by depth. The two {1,100}
+// groups below are SIBLINGS under a sequence that never repeats, and
+// partitionsBounded products over both all the same, for the 40804
+// particlesZ034_a puts in flight — the widest model maxPartitionStates
+// decides, not the widest the suite holds, which products past 10^8 and stays
+// declined. ContentMatcher decides it — a ceiling under 40804 does not — and
+// decides it in both directions.
+func TestContentMatcherCarriesTwoSiblingRepetitionsWhoseCountsMultiply(t *testing.T) {
+	m := cmMatcher(t, cmSiblings(t, 100), nil)
+
+	cmAccept(t, m, "a", "a", "b", "c", "c")
+	if _, ok := m.Next(uq("d")); ok {
+		t.Error("Next(d) took a name no particle of the model admits")
+	}
+}
+
+// cmSiblings is particlesZ034_a's shape at a given iteration cap: a
+// non-repeating sequence over two REPEATING sibling groups, each holding one
+// leaf of unbounded occurrence, with a mandatory leaf between them.
+// partitionsBounded products over every widened node of the flattened tree, so
+// two sibling groups multiply exactly as a nested pair does.
+func cmSiblings(t testing.TB, iter int) Particle {
+	t.Helper()
+	return cmGroup(t, uOccurs(t, 1, 1), CompositorSequence,
+		cmGroup(t, uOccurs(t, 1, iter), CompositorSequence,
+			cmLeaf(t, "a", uUnbounded(t, 1))),
+		cmLeaf(t, "b", uOccurs(t, 1, 1)),
+		cmGroup(t, uOccurs(t, 1, iter), CompositorSequence,
+			cmLeaf(t, "c", uUnbounded(t, 1))))
+}
+
+// cmWidestIteration is the largest iteration cap at which ContentMatcher still
+// admits cmSiblings' model. It asks ContentMatcher rather than restating
+// partitionsBounded's arithmetic, so it follows maxPartitionStates wherever
+// that goes.
+func cmWidestIteration(t testing.TB) int {
+	t.Helper()
+	lo, hi := 1, 2
+	for cmAdmits(t, hi) {
+		lo, hi = hi, 2*hi
+	}
+	for lo+1 < hi {
+		mid := (lo + hi) / 2
+		if cmAdmits(t, mid) {
+			lo = mid
+			continue
+		}
+		hi = mid
+	}
+	return lo
+}
+
+// cmAdmits reports whether ContentMatcher decides cmSiblings' model at the
+// given iteration cap, which cmMatcher cannot answer because a decline is a
+// test failure there.
+func cmAdmits(t testing.TB, iter int) bool {
+	t.Helper()
+	s, ct := cmSchema(t, cmSiblings(t, iter), nil)
+	_, ok := s.ContentMatcher(ct)
+	return ok
+}
+
+// cmSaturated drives cmSiblings' model to its widest live set and returns it
+// standing there. Each group widens the set by one region per item until its
+// counter clamps at its {max occurs}, so the set plateaus at iter × iter and
+// every further c holds it there — which is what lets a timed loop measure one
+// width rather than a ramp.
+func cmSaturated(t testing.TB, iter int) *Matcher {
+	t.Helper()
+	m := cmMatcher(t, cmSiblings(t, iter), nil)
+	feed := append(cmRepeat("a", 2*iter), "b")
+	feed = append(feed, cmRepeat("c", 2*iter)...)
+	for i, n := range feed {
+		if _, ok := m.Next(uq(n)); !ok {
+			t.Fatalf("Next(%s) rejected item %d of the saturating feed", n, i+1)
+		}
+	}
+	if len(m.live) != iter*iter {
+		t.Fatalf("the saturating feed left %d live regions, want %d", len(m.live), iter*iter)
+	}
+	return m
 }

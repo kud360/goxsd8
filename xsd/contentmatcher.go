@@ -309,16 +309,18 @@ type Matcher struct {
 //     directly and need no matcher.
 //   - GAP(xsd): an ·ambiguous· node whose widened subtrees need more than
 //     maxPartitionStates regions to cover the partitions they put in flight at
-//     once. The SHAPE is decided — (a{1,2}, b?){2,2} takes "a a b" — and so now
-//     is the WIDTH a partition-per-cursor encoding could not carry:
+//     once (#1601). The SHAPE is decided — (a{1,2}, b?){2,2} takes "a a b" —
+//     and so now is the WIDTH a partition-per-cursor encoding could not carry:
 //     (a{1,500}){1,500} reaches a quarter of a million live partitions and the
 //     spans of a region cover them in about a thousand. What stays declined is
-//     what outgrows THAT, a nest of repeating groups whose iteration counts
-//     multiply (partitionsBounded). Declining withholds the whole
-//     element-sequence verdict, whose consumers are validate's
-//     Result.violations and its one reader Result.Violations, both of which
-//     carry violations PRESENT — so the decline costs a rejection and
-//     manufactures none.
+//     what outgrows the ceiling, and a model gets there by BREADTH as readily
+//     as by depth: partitionsBounded products over EVERY widened node of the
+//     flattened tree, so sibling repeating groups under a non-repeating one,
+//     and a row of repeating leaves under one repeating group, reach it with no
+//     nesting at all. Declining withholds the whole element-sequence verdict,
+//     whose consumers are validate's Result.violations and its one reader
+//     Result.Violations, both of which carry violations PRESENT — so the
+//     decline costs a rejection and manufactures none.
 func (s *Schema) ContentMatcher(t ComplexType) (*Matcher, bool) {
 	ec, ok := t.ContentType().(ElementContent)
 	if !ok {
@@ -462,13 +464,23 @@ func repeatable(o Occurs) bool {
 // in turn. ContentMatcher declines a model that could exceed it rather than a
 // Matcher declining a name mid-sequence.
 //
-// It is 2048 and not 256 because a region carries a RUN of partitions rather
-// than one each, so the same per-item budget reaches models that put three
-// orders of magnitude more partitions in flight: (a{1,500}){1,500}'s quarter of
-// a million live partitions cover in 1503 regions by partitionsBounded's
-// estimate and in about a thousand measured. A ceiling below 1503 would leave
-// that width declined for the sake of an encoding the walk no longer uses.
-const maxPartitionStates = 2048
+// It is 65536 and not 2048 because 2048 declined the widest model a ceiling of
+// defensible cost reaches — a sequence over two SIBLING groups of {1,100},
+// whose widened nodes product to 40804 — and what that raise costs is one item
+// at BenchmarkMatcherNext's widest live set: 16129 regions, 17ms and 25MB,
+// about a microsecond and 1.5KB per region held. At 2048 the same benchmark's
+// widest set was 441 regions, 477µs and 687KB, so the cost is linear in the
+// ceiling and a model pays it only by standing at the ceiling.
+//
+// 40804 is NOT the widest model the W3C suite holds, and 65536 does not decide
+// the suite: particlesZ036_c products past 10^8, particlesZ036_b past 10^13,
+// and particlesZ035_a carries a single {1,100000000000}. That tail declines at
+// 65536 exactly as it did at 2048, and only a ceiling past 10^13 — one no cost
+// measured here justifies — would decide it. No ceiling between 40804 and that
+// tail buys another case, so every one of them decides the same four instance
+// cases (#1601). 65536 is the least power of two clearing 40804, and a ceiling
+// past the headroom it leaves buys slower items and no verdicts.
+const maxPartitionStates = 65536
 
 // partitionsBounded reports whether the regions covering the live partitions
 // stay inside maxPartitionStates.

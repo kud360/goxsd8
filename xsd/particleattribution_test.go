@@ -16,7 +16,7 @@ const uns = "urn:upa"
 
 func uq(local string) QName { return QName{Space: uns, Local: local} }
 
-func uOccurs(t *testing.T, minOccurs, maxOccurs int) Occurs {
+func uOccurs(t testing.TB, minOccurs, maxOccurs int) Occurs {
 	t.Helper()
 	o, err := NewOccurs(xsderr.Loc{}, minOccurs, maxOccurs)
 	if err != nil {
@@ -25,7 +25,7 @@ func uOccurs(t *testing.T, minOccurs, maxOccurs int) Occurs {
 	return o
 }
 
-func uUnbounded(t *testing.T, minOccurs int) Occurs {
+func uUnbounded(t testing.TB, minOccurs int) Occurs {
 	t.Helper()
 	o, err := NewUnboundedOccurs(xsderr.Loc{}, minOccurs)
 	if err != nil {
@@ -34,7 +34,7 @@ func uUnbounded(t *testing.T, minOccurs int) Occurs {
 	return o
 }
 
-func uParticle(t *testing.T, o Occurs, term TermOrRef) Particle {
+func uParticle(t testing.TB, o Occurs, term TermOrRef) Particle {
 	t.Helper()
 	p, err := NewParticle(xsderr.Loc{}, o, term)
 	if err != nil {
@@ -49,7 +49,7 @@ func uOne(t *testing.T, term TermOrRef) Particle {
 	return uParticle(t, uOccurs(t, 1, 1), term)
 }
 
-func uGroup(t *testing.T, compositor Compositor, particles ...Particle) ModelGroup {
+func uGroup(t testing.TB, compositor Compositor, particles ...Particle) ModelGroup {
 	t.Helper()
 	g, err := NewModelGroup(xsderr.Loc{}, compositor, particles)
 	if err != nil {
@@ -62,7 +62,7 @@ func uGroup(t *testing.T, compositor Compositor, particles ...Particle) ModelGro
 // complex type. It is shared by every package-internal test that needs a
 // non-global element declaration; those tests read only {scope}.{variety}, never
 // which container the declaration is scoped to.
-func uLocalScope(t *testing.T) Scope {
+func uLocalScope(t testing.TB) Scope {
 	t.Helper()
 	s, err := NewLocalScope(xsderr.Loc{}, ComplexTypeScopeParent{Name: uq("container")})
 	if err != nil {
@@ -74,7 +74,7 @@ func uLocalScope(t *testing.T) Scope {
 // uLocal builds a LOCAL element declaration with a named (non-anonymous) {type
 // definition}, so that a model group holding two same-named ones exercises
 // cos-nonambig without also tripping cos-element-consistent.
-func uLocal(t *testing.T, name QName, typeName QName) ElementDeclaration {
+func uLocal(t testing.TB, name QName, typeName QName) ElementDeclaration {
 	t.Helper()
 	e, err := NewElementDeclaration(xsderr.Loc{}, name, TypeDefinitionRef{Name: typeName}, nil, uLocalScope(t), nil, false, nil,
 		nil, nil, false, nil)
@@ -125,7 +125,7 @@ func uWildcard(t *testing.T, variety NamespaceConstraintVariety, namespaces []Na
 }
 
 // uCT builds an element-only complex type whose {content type} is the particle p.
-func uCT(t *testing.T, name QName, p Particle) ComplexType {
+func uCT(t testing.TB, name QName, p Particle) ComplexType {
 	t.Helper()
 	ct, err := NewComplexType(xsderr.Loc{}, name, QName{}, nil, DerivationRestriction, false,
 		nil, nil, nil, ElementContent{Particle: p}, nil, nil)
@@ -137,7 +137,7 @@ func uCT(t *testing.T, name QName, p Particle) ComplexType {
 
 // uNamedType builds a trivial empty-content complex type to serve as a named
 // {type definition} target.
-func uNamedType(t *testing.T, name QName) ComplexType {
+func uNamedType(t testing.TB, name QName) ComplexType {
 	t.Helper()
 	ct, err := NewComplexType(xsderr.Loc{}, name, QName{}, nil, DerivationRestriction, false,
 		nil, nil, nil, EmptyContent{}, nil, nil)
