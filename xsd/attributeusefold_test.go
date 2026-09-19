@@ -336,10 +336,10 @@ func TestDerivationOKRestrictionProhibitedRequired(t *testing.T) {
 	expectRule(t, err, ruleDerivationOKRestriction)
 }
 
-// oOverReportChain is the ONE chain that makes extensionStepAttributeUses'
-// documented over-approximation observable end to end (#1102), five derivation
-// steps of alternating method under an ancestor whose ##any {attribute wildcard}
-// is what admits the new name a restriction step declares:
+// oOverReportChain is the ONE chain that makes extensionStepAttributeUses' exact
+// per-step recovery observable end to end (#1102), five derivation steps of
+// alternating method under an ancestor whose ##any {attribute wildcard} is what
+// admits the new name a restriction step declares:
 //
 //	qA(anyAttribute) ←ext qE1 ←restr qR(@r) ←ext qE2 ←restr qR2(prohibits @r) ←ext qT
 //
@@ -348,10 +348,12 @@ func TestDerivationOKRestrictionProhibitedRequired(t *testing.T) {
 // through qR, a RESTRICTION step, and leaves it again at qR2 through clause
 // 3.2.2. The intermediate cos-ct-extends clause 1.5's Note prescribes — the
 // extension steps re-ordered first and collapsed — therefore carries @r nowhere,
-// whatever qT declares.
+// whatever qT declares. The NAME records what the chain was built to expose:
+// while the step answered its whole folded set, qE2's answer carried @r and M
+// bound the name to qR's use.
 //
-// declared is qR's use for @r, the one the over-report carries into M. own is
-// what qT declares for itself, which may be empty.
+// declared is qR's use for @r, the one no extension step's own contribution
+// holds. own is what qT declares for itself, which may be empty.
 func oOverReportChain(t *testing.T, declared AttributeUse, own []AttributeUse) func(*SchemaBuilder) {
 	t.Helper()
 	return func(b *SchemaBuilder) {
@@ -382,72 +384,62 @@ func oInheritableAttr(t *testing.T, inheritable bool) AttributeUse {
 	return u
 }
 
-// TestCollapsedIntermediateOverReportFalseReject pins the PRICE of taking the
-// largest member of the reproducing family, as a schema this tree REJECTS and
-// the spec does not (#1102, the ruling at extensionStepAttributeUses).
+// TestCollapsedIntermediateOverReportFalseReject pins that the collapsed
+// intermediate carries each extension step's OWN uses and no member of any
+// step's base (#1102), as the valid schema this tree once rejected and now
+// accepts.
 //
-// qE2's own contribution is empty, but the fold is not invertible, so the step
-// answers its whole folded set — @r among it — and collapsedAttributeUses keeps
-// @r because no earlier extension step gave the collapse that name. M therefore
-// binds @r to qR's use where the TRUE intermediate binds it to qA's ##any
-// wildcard, and derivation-ok-restriction clause 3's ·subsumption· half
-// (checkAttributeRestriction, attributerestriction.go) measures qT's
-// re-declaration against a binding no legal intermediate carries. A lax wildcard
-// binding ·subsumes· any use binding (loc-testSubP clause 2), so under the true
-// intermediate BOTH rows are valid schemas.
+// qE2's own contribution is empty and extensionStepAttributeUses answers it
+// exactly — the clause-1-and-2 value retained past the fold (ownAttributeUses) —
+// so M carries @r nowhere, and derivation-ok-restriction clause 3's
+// ·subsumption· half (checkAttributeRestriction, attributerestriction.go) binds
+// the name through qA's ##any wildcard, which is what the TRUE intermediate
+// binds it to. A lax wildcard binding ·subsumes· any use binding (loc-testSubP
+// clause 2), so both rows are valid schemas and both are accepted.
 //
 // The rows differ in {inheritable} alone. That is the discriminator because it
 // isolates this arm: a {type definition} mismatch would be charged by
 // cos-ct-extends clause 1.6 as well, whose key-ldtype case 3 reads @r's type
 // straight off qE2 through the prohibiting qR2 — so a re-typing fixture is
-// rejected with the over-report repaired and pins nothing. loc-testSubP clause
-// 5.3 demands equal {inheritable} and key-ldtype cannot see the property at all.
-//
-// The second row REJECTING is the tripwire, not a result: exact recovery —
-// route 1 of the ruling at extensionStepAttributeUses — makes it accept, and
-// this test is where that shows.
+// rejected whatever the collapse answers and pins nothing. loc-testSubP clause
+// 5.3 demands equal {inheritable} and key-ldtype cannot see the property at all,
+// which is what makes the second row the one that MOVED: while the step answered
+// its whole folded set, M bound @r to qR's use and clause 5.3 charged the
+// mismatch.
 func TestCollapsedIntermediateOverReportFalseReject(t *testing.T) {
 	for _, tc := range []struct {
 		name        string
 		inheritable bool
-		rejected    bool
 	}{
-		{"qT matches the over-reported use", true, false},
-		{"qT differs from it in {inheritable} alone", false, true},
+		{"qT matches qR's use for @r", true},
+		{"qT differs from it in {inheritable} alone", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			err := dFinalize(t, oOverReportChain(t, oInheritableAttr(t, true),
 				[]AttributeUse{oInheritableAttr(t, tc.inheritable)}))
-			if !tc.rejected {
-				if err != nil {
-					t.Fatalf("qT re-declaring @r identically to the over-reported use was rejected: %v", err)
-				}
-				return
+			if err != nil {
+				t.Fatalf("qT declaring @r over an intermediate that carries no use for it was rejected: %v", err)
 			}
-			expectClause15(t, err)
 		})
 	}
 }
 
-// TestCollapsedIntermediateOverReportRequiredIsOpen pins the direction of the
-// over-report at checkAttributeRestrictionRequired (attributerestriction.go),
-// the one reader whose charge is a MISSING member of T: FAIL-OPEN, not
-// fail-closed (#1102).
-//
-// An over-reported member is a member of the step's base's folded set, so the
-// step's own folded set carries a use for that name with that {required} —
-// clause 3.1 inherits it, and an own member that displaced it is identical to
-// it. Below that step an extension inherits it unchanged and a restriction may
-// drop it or relax it only by failing this very check against its OWN base. The
-// two halves below are the two halves of that argument:
+// TestCollapsedIntermediateOverReportRequiredIsOpen pins the two verdicts the
+// oOverReportChain fixture produces now that the collapse carries each extension
+// step's own uses exactly (#1102). The NAME records what the fixture was built to
+// expose: while the step answered its whole folded set, M carried a use for @r
+// and this test pinned that reader's direction as FAIL-OPEN.
 //
 //   - a required @r prohibited downstream is charged at the PROHIBITION, against
 //     qE2, by derivation-ok-restriction clause 3 — the schema is invalid for a
-//     reason of its own and never reaches clause 1.5's opinion of it;
-//   - an optional @r is the one the prohibition may legally remove, and M then
-//     carries a use qT has no member for, which IS the over-report — but
-//     cvc-complex-type clause 3 quantifies over REQUIRED members, so no charge
-//     is reachable and the schema is accepted.
+//     reason of its own and never reaches clause 1.5's opinion of it. That charge
+//     reads the two FOLDED sets, which the recovery does not touch;
+//   - an optional @r is the one the prohibition may legally remove, and M carries
+//     NO use for the name: @r entered the chain at qR, a RESTRICTION step the
+//     re-ordering drops, so no extension step's own clause-1-and-2 contribution
+//     ever held it. checkAttributeRestrictionRequired (attributerestriction.go)
+//     has nothing to charge because M has no member, not because its charge is
+//     unreachable.
 func TestCollapsedIntermediateOverReportRequiredIsOpen(t *testing.T) {
 	err := dFinalize(t, oOverReportChain(t, dAttrUse(t, uq("r"), uq("str"), true, nil), nil))
 	expectRule(t, err, ruleDerivationOKRestriction)
@@ -467,11 +459,7 @@ func TestCollapsedIntermediateOverReportRequiredIsOpen(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("collapsedExtension(qT) = (ok=%t, err=%v), want a synthesized intermediate", ok, err)
 	}
-	uses := m.AttributeUses()
-	if len(uses) != 1 || uses[0].DeclarationName() != uq("r") {
-		t.Fatalf("M's {attribute uses} = %v, want the over-reported @r alone", uses)
-	}
-	if uses[0].Required() {
-		t.Fatalf("M's over-reported @r is {required}, which no valid chain can produce — see this test's doc")
+	if uses := m.AttributeUses(); len(uses) != 0 {
+		t.Fatalf("M's {attribute uses} = %v, want none — @r entered the chain at a restriction step, which the re-ordering drops", uses)
 	}
 }

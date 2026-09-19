@@ -735,17 +735,17 @@ func TestCosCTExtendsClause15CollapsedIntermediate(t *testing.T) {
 // ext-restr-ext, with a restriction step that PROHIBITS a name an earlier
 // extension inherited.
 //
-// The rows assert the OVER-approximation, not a recovery. §3.4.2.4 clause 3.1's
-// fold is not invertible (extensionStepAttributeUses, attributeusefold.go), so
-// each step answers its whole folded set — its own uses AND the base members it
-// cannot separate from them — and collapsedAttributeUses filters the base
-// members back out by name. TestCosCTExtendsClause15CollapsedIntermediate is where that
-// filtering is pinned, and its M is unchanged by the over-report.
+// The rows assert the RECOVERY: each step answers the clause-1-and-2 value it
+// was built with and no member of its base, because §3.4.2.4 clause 3.1's fold
+// is not invertible and the value is therefore retained past it rather than
+// computed back out (ownAttributeUses, complextype.go;
+// extensionStepAttributeUses, attributeusefold.go).
 //
-// Before #1082 these rows read [b] and [c], recovered as the leading
-// len(folded(c)) - len(folded(b)) members. That arithmetic answers [] for own
-// [x] over base [x] — the shape the dedup makes reachable — so the prefix went
-// with the fold that licensed it.
+// These rows read [b a] and [c b] while the step answered its whole folded set,
+// and [b] and [c] before #1082, when the leading len(folded(c)) - len(folded(b))
+// members were taken as a prefix. That arithmetic answers [] for own [x] over
+// base [x] — the shape the dedup makes reachable — so the prefix went with the
+// fold that licensed it, and only retention gets the value back.
 //
 // The verification is pinned too: handed a base that is not the type's own, the
 // step DECLINES rather than answering a set that means nothing.
@@ -772,13 +772,14 @@ func TestExtensionStepAttributeUsesMixedChain(t *testing.T) {
 		}
 		return names
 	}
-	if got := oOwn(uq("oE1"), uq("oA")); !fEqual(got, []string{"b", "a"}) {
-		t.Fatalf("the contribution of oE1 = %v, want [b a] — its own @b and oA's @a, which the fold does not separate", got)
+	if got := oOwn(uq("oE1"), uq("oA")); !fEqual(got, []string{"b"}) {
+		t.Fatalf("the contribution of oE1 = %v, want [b] — its own @b alone, with oA's @a left behind", got)
 	}
 	// The load-bearing row: oR dropped @a, so folded(oE2) is [c b] and @a is in
-	// neither side — the answer is against oE2's OWN base, not against the chain.
-	if got := oOwn(uq("oE2"), uq("oR")); !fEqual(got, []string{"c", "b"}) {
-		t.Fatalf("the contribution of oE2 = %v, want [c b]", got)
+	// neither side — the answer is against oE2's OWN base, not against the chain,
+	// and @b is oR's rather than oE2's.
+	if got := oOwn(uq("oE2"), uq("oR")); !fEqual(got, []string{"c"}) {
+		t.Fatalf("the contribution of oE2 = %v, want [c]", got)
 	}
 	d, _ := s.Type(uq("oE2"))
 	wrong, _ := s.Type(uq("oE1"))

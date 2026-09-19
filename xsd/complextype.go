@@ -361,8 +361,10 @@ func checkComplexTypeContext(loc xsderr.Loc, context ComplexTypeContext) error {
 // (attributewildcardfold.go, #265); for a restriction clause 2.1 makes the
 // supplied value already final. See AttributeUses and AttributeWildcard.
 //
-// prohibitedAttributeNames is the one field here that is NOT a §3.4.1 property.
-// It is a retained MAPPING INPUT: clause 3.2.2 excludes from that fold the
+// prohibitedAttributeNames and ownAttributeUses are the two fields here that are
+// NOT §3.4.1 properties, and both are retained MAPPING INPUTS.
+//
+// prohibitedAttributeNames carries clause 3.2.2's input: the fold excludes the
 // expanded name of "what would have been an attribute use corresponding to an
 // <attribute> child, if the <attribute> had not had use = prohibited", and
 // §3.4.2.4's Note makes such an <attribute> correspond to no component at all —
@@ -371,6 +373,17 @@ func checkComplexTypeContext(loc xsderr.Loc, context ComplexTypeContext) error {
 // runs after the producer is gone, so the fact travels on the component. It is
 // about ONE type's own source declaration, consulted once at that type's own
 // fold step, and is never walked up a base chain.
+//
+// ownAttributeUses carries the clause 1 and clause 2 value the producer supplied
+// — this type's own <attribute> children and the {attribute uses} of the
+// attribute groups its <attributeGroup ref> children ·resolve· to — retained past
+// the clause 3 fold that overwrites {attribute uses} with the union of all three.
+// cos-ct-extends (§3.4.6.2) clause 1.5 needs exactly that per-step value to
+// collapse a chain's extension steps, and clause 3.1's fold is not invertible, so
+// it is retained rather than recovered (extensionStepAttributeUses,
+// attributeusefold.go). The fold WRITES it, at the one site that overwrites the
+// property it copies; nothing else does, and a component the fold has not reached
+// carries nil as one whose own source declaration contributed no use does.
 //
 // {context} (§3.4.1 ctd-context) is the component an ANONYMOUS type appears in,
 // and the §3.4.1 tableau makes it and {name} a strict XOR: "Required if {name}
@@ -430,6 +443,12 @@ type ComplexType struct {
 	final            []DerivationMethod
 	abstract         bool
 	attributeUses    []AttributeUse
+	// ownAttributeUses is a mapping input, not a §3.4.1 property: the
+	// §3.4.2.4 clause 1 and clause 2 uses this type's OWN source declaration
+	// gave it, retained past the clause 3 fold that overwrites attributeUses
+	// (attributeusefold.go). nil ⇔ ·absent·, never a companion bool (STYLE
+	// D3). See the type doc.
+	ownAttributeUses []AttributeUse
 	// prohibitedAttributeNames is a mapping input, not a §3.4.1 property: the
 	// expanded names this type's OWN source declaration gave use="prohibited"
 	// (§3.4.2.4 clause 3.2.2). See the type doc.
