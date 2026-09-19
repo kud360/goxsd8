@@ -210,11 +210,14 @@ func (s *Schema) collapsedAttributeUses(own, acc []AttributeUse) []AttributeUse 
 //     into an acceptance: FAIL-OPEN.
 //   - Schema.attributeDefaultBinding, reached from checkRestrictionAttributes,
 //     consults M.{attribute uses} FIRST and falls back to the wildcard only for a
-//     name no use covers; M's uses are recovered exactly, so the widening reaches
-//     only that fallback, where more admitted names means ok and no charge:
-//     FAIL-OPEN. Its {process contents} half is unaffected in any direction —
-//     the value is T's own, the same one the true collapse would carry, not a
-//     widened one, so wildcardKeywordBinding sees no substitute.
+//     name no use covers. Where the fallback is reached, more admitted names
+//     means ok and no charge: FAIL-OPEN. M's uses are over-reported rather than
+//     exact (extensionStepAttributeUses, attributeusefold.go), so the fallback is
+//     reached for FEWER names than the true collapse would reach it for — the
+//     price of that is charged to the uses gap's own marker, and no widening
+//     here can add to it. Its {process contents} half is unaffected in any
+//     direction — the value is T's own, the same one the true collapse would
+//     carry, not a widened one, so wildcardKeywordBinding sees no substitute.
 //   - checkAttributeRestrictionRequired (attributerestriction.go) reads
 //     {attribute uses} only: UNAFFECTED.
 func collapsedAttributeWildcard(loc xsderr.Loc, c ComplexType, base *Wildcard) (*Wildcard, error) {
