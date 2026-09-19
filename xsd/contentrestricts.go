@@ -514,14 +514,27 @@ func positionsKey(states []int) string {
 // turning schema assembly into an exponential walk. It is a ceiling on WORK,
 // never on the verdict of a walk that finishes.
 //
-// The constant is MEASURED headroom rather than an unexamined guess (#282).
-// Instrumenting both the giveup branch and every insertion into the visited set,
-// then running the full W3C suite — 41858 cases over 6 lanes, which reach this
-// product walk 688 times — recorded ZERO walks that hit the ceiling and a
-// high-water mark of 15 product states, two orders of magnitude below 4096. The
-// bound is therefore inert on every content model the suite contains; it is kept
-// for the worst case the powerset admits, which nothing measures, not because
-// any known schema approaches it.
+// The constant is MEASURED headroom rather than an unexamined guess, and the
+// headroom is NARROWING. Three counters — entries into contentModelRestricts,
+// the giveup branch below, and every insertion into the visited set so the
+// high-water mark comes from walks that finish — run over the full W3C suite
+// record walkEntries=1987 ceilingHits=0 maxVisited=1002 (#499). The same three
+// counters over the same suite submodule recorded walkEntries=688 ceilingHits=0
+// maxVisited=15 six and a half weeks earlier (#282).
+//
+// Read both halves of that. No walk has ever reached the ceiling, so the bound
+// is inert on every content model the suite contains and the incompleteness it
+// guards is latent. But the deepest walk now visits 1002 of the 4096 states it
+// is allowed — a factor of 4.1 below the ceiling where it was a factor of 273 —
+// and maxVisited grew 66.8× while the walk entries grew only 2.9×, so the walks
+// that reach this code are going DEEPER rather than merely happening more often.
+// A single future content model, not a wider population, is now enough to cross.
+// What drove the growth is not established here: the window holds lane-widening
+// landings, and no causal claim is made from a correlation nobody checked.
+//
+// A margin that moved that far since it was last measured is not evidence for an
+// unexamined constant, which is why the ruling at contentModelRestricts' giveup
+// site names a re-measurement threshold instead of waiting for a breach.
 const maxProductStates = 4096
 
 // contentRestrictionScope names WHICH of cos-content-act-restrict's two
@@ -826,53 +839,74 @@ func (s *Schema) contentModelRestricts(r, b contentAutomaton, scope contentRestr
 				continue
 			}
 			if len(visited) >= maxProductStates {
-				// GAP(xsd): the walk is abandoned and the derivation
-				// provisionally accepted once the product reaches maxProductStates.
-				// The branch is unreached by the whole W3C suite (the measurement is
-				// recorded on maxProductStates), so the incompleteness is latent —
-				// but latent is not licensed, and the licence is narrower than it
-				// looks.
+				// GAP(xsd): the walk is abandoned and the derivation provisionally
+				// accepted once the product reaches maxProductStates. This is a RULED
+				// permanent approximation rather than a fold in progress: #499 owns
+				// the ruling, stays open as its tracker, and rests it on the
+				// bounded-resource argument below rather than on a spec licence. The
+				// branch is unreached by the whole W3C suite — maxProductStates' doc
+				// records the measurement, and the margin it has left — so the
+				// incompleteness is latent, and latent is not licensed.
 				//
-				// §3.4.6.3's leniency for an undecidable clause 2.4.2 is textually
-				// anchored to a condition this branch does not test: "If (1) the type
-				// definition being checked has T.{content
-				// type}.{particle}.{term}.{compositor} = all and (2) an implementation
-				// is unable to determine by examination of the schema in isolation
-				// whether or not clause 2.4.2 is satisfied, then the implementation
-				// may provisionally accept the derivation". The sentence that follows
-				// — "It is ·implementation-defined· whether a processor (a) always
-				// detects violations of clause 2.4.2 by examination of the schema in
-				// isolation, (b) detects them only when some element information item
-				// in the input document is valid against T but not against T.{base
-				// type definition}, or (c) sometimes detects such violations by
-				// examination of the schema in isolation and sometimes not" — states
-				// no condition of its own, and the all-compositor condition appears
-				// nowhere else in the document. A genuine {compositor} = all never
-				// reaches here in any case: contentTypeRestricts takes the narrow,
-				// correctly scoped allowance through usesAllCompositor before an
-				// automaton is built. This ceiling applies uniformly to sequence and
-				// choice models too, and for those it rests on reading (c) as a
-				// RESIDUAL CATCH-ALL detached from condition (1) — defensible, since
-				// nothing in the local specs forecloses it, but not textually
-				// guaranteed. Naming that stretch is half of why this marker exists.
+				// No spec licence covers this branch, and this marker claims none.
+				// §3.4.6.3's leniency for an undecidable clause 2.4.2 is gated by a
+				// two-conjunct antecedent — "If (1) the type definition being checked
+				// has T.{content type}.{particle}.{term}.{compositor} = all and (2) an
+				// implementation is unable to determine by examination of the schema in
+				// isolation whether or not clause 2.4.2 is satisfied, then the
+				// implementation may provisionally accept the derivation" — and the
+				// ·implementation-defined· sentence after it, "whether a processor (a)
+				// always detects violations of clause 2.4.2 by examination of the
+				// schema in isolation, (b) detects them only when some element
+				// information item in the input document is valid against T but not
+				// against T.{base type definition}, or (c) sometimes detects such
+				// violations by examination of the schema in isolation and sometimes
+				// not", says WHEN a processor already inside that antecedent detects
+				// them. It states no condition of its own and grants nothing outside
+				// it, and the all-compositor condition appears nowhere else in the
+				// document. Condition (1) cannot hold here, by construction:
+				// contentTypeRestricts claims every genuine ·all· case through
+				// usesAllCompositor before an automaton is built, so what reaches this
+				// line is exactly the sequence/choice population the antecedent does
+				// not cover. Reading (c) as a RESIDUAL CATCH-ALL detached from
+				// condition (1) was this marker's own earlier position; it is ruled
+				// out, not merely unproved (#1378).
 				//
-				// The other half is that "provisionally accept" is not a
-				// spec-guaranteed-safe resting state. §3.4.6.3 continues: "If any
-				// instance encountered in the ·assessment· episode is valid against T
-				// but not against T.{base type definition}, then the derivation of T
-				// does not satisfy this constraint, the schema does not conform to
-				// this specification, and no ·assessment· can be performed using that
-				// schema." (b) and (c) as worded describe processors that perform that
-				// runtime cross-check; this ceiling gives up permanently with no
-				// runtime fallback, so a schema accepted here can be non-conforming
-				// with nothing left to say so. What the ceiling does guarantee is
-				// direction: it abandons the WHOLE walk rather than truncating one
-				// into a verdict, so it is fail-open — a missed rejection, never a
-				// false one.
+				// "Provisionally accept" is not a spec-guaranteed-safe resting state
+				// either. §3.4.6.3 continues: "If any instance encountered in the
+				// ·assessment· episode is valid against T but not against T.{base type
+				// definition}, then the derivation of T does not satisfy this
+				// constraint, the schema does not conform to this specification, and
+				// no ·assessment· can be performed using that schema." (b) and (c) as
+				// worded describe processors that perform that runtime cross-check;
+				// this ceiling gives up permanently with no runtime fallback, so a
+				// schema accepted here can be non-conforming with nothing left to say
+				// so. What the ceiling does guarantee is direction: it abandons the
+				// WHOLE walk rather than truncating one into a verdict, so it is
+				// fail-open — a missed rejection, never a false one.
 				//
-				// It is retired by a construction that decides containment without
-				// materializing the product, never by raising the constant; #499
-				// owns that retirement.
+				// What makes the approximation permanent is that the cost it refuses
+				// is the powerset and nothing smaller. Clause 1 is stated
+				// extensionally over two automata, the subset construction is the
+				// decision procedure this file has for it, and that construction's
+				// state space is exponential in the B-positions in the worst case — so
+				// SOME bound on the walk is not optional, and every value of one
+				// declines somewhere. Raising the constant moves where it declines,
+				// buying walks whose cost grows with the states they are newly allowed
+				// and no verdict anything has measured — ceilingHits is 0. It is
+				// retired by a construction that decides containment without
+				// materializing the product, never by raising the constant.
+				//
+				// The review trigger is a RE-MEASUREMENT rather than a breach, because
+				// a breach is the one warning that arrives too late: the high-water
+				// mark last moved 66.8× in six and a half weeks, and it now stands at
+				// a quarter of the ceiling. Re-run the three counters
+				// maxProductStates' doc names and reopen this ruling on EITHER
+				// ceilingHits > 0 or maxVisited at 2048, half the ceiling. Half is what
+				// those two measurements pick out: from 1002 it is barely a doubling
+				// away against the 66.8× already observed, so it fires with room left
+				// to act in, while a walk that stops there still finishes and still
+				// decides. #499's grounding comment carries the recipe in full.
 				return true
 			}
 			visited[next] = true
