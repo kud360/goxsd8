@@ -839,12 +839,14 @@ func (s *Schema) contentModelRestricts(r, b contentAutomaton, scope contentRestr
 				continue
 			}
 			if len(visited) >= maxProductStates {
-				// GAP(xsd): the walk is abandoned and the derivation
-				// provisionally accepted once the product reaches maxProductStates.
-				// The branch is unreached by the whole W3C suite (the measurement is
-				// recorded on maxProductStates), so the incompleteness is latent —
-				// but latent is not licensed, and the licence is narrower than it
-				// looks.
+				// GAP(xsd): the walk is abandoned and the derivation provisionally
+				// accepted once the product reaches maxProductStates. This is a RULED
+				// permanent approximation rather than a fold in progress: #499 owns
+				// the ruling, stays open as its tracker, and rests it on the
+				// bounded-resource argument below rather than on a spec licence. The
+				// branch is unreached by the whole W3C suite — maxProductStates' doc
+				// records the measurement, and the margin it has left — so the
+				// incompleteness is latent, and latent is not licensed.
 				//
 				// No spec licence covers this branch, and this marker claims none.
 				// §3.4.6.3's leniency for an undecidable clause 2.4.2 is gated by a
@@ -883,9 +885,28 @@ func (s *Schema) contentModelRestricts(r, b contentAutomaton, scope contentRestr
 				// WHOLE walk rather than truncating one into a verdict, so it is
 				// fail-open — a missed rejection, never a false one.
 				//
-				// It is retired by a construction that decides containment without
-				// materializing the product, never by raising the constant; #499
-				// owns that retirement.
+				// What makes the approximation permanent is that the cost it refuses
+				// is the powerset and nothing smaller. Clause 1 is stated
+				// extensionally over two automata, the subset construction is the
+				// decision procedure this file has for it, and that construction's
+				// state space is exponential in the B-positions in the worst case — so
+				// SOME bound on the walk is not optional, and every value of one
+				// declines somewhere. Raising the constant moves where it declines,
+				// buying walks whose cost grows with the states they are newly allowed
+				// and no verdict anything has measured — ceilingHits is 0. It is
+				// retired by a construction that decides containment without
+				// materializing the product, never by raising the constant.
+				//
+				// The review trigger is a RE-MEASUREMENT rather than a breach, because
+				// a breach is the one warning that arrives too late: the high-water
+				// mark last moved 66.8× in six and a half weeks, and it now stands at
+				// a quarter of the ceiling. Re-run the three counters
+				// maxProductStates' doc names and reopen this ruling on EITHER
+				// ceilingHits > 0 or maxVisited at 2048, half the ceiling. Half is what
+				// those two measurements pick out: from 1002 it is barely a doubling
+				// away against the 66.8× already observed, so it fires with room left
+				// to act in, while a walk that stops there still finishes and still
+				// decides. #499's grounding comment carries the recipe in full.
 				return true
 			}
 			visited[next] = true
