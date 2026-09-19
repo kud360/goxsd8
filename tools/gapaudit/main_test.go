@@ -1006,12 +1006,17 @@ func TestFileMentionDoesNotRetireATracker(t *testing.T) {
 	}
 }
 
-// TestFileMentionDoesNotSuppressAnUncitedMarker is the #1060 group-1 case:
-// xsd/attributeusefold.go:296 cites nothing, and #1102 — the issue that exists
-// to give it an owner — names that path in its body. Under a file-path bar the
-// mention hid the very marker the issue was filed about, so the row STYLE P3
-// wants surfaced was the one the tool silenced. It must now surface, with
-// #1102 printed beside it as the candidate owner.
+// TestFileMentionDoesNotSuppressAnUncitedMarker is the #1060 group-1 case, as
+// xsd/attributeusefold.go stood when it was filed: the marker there cited
+// nothing, and #1102 — the issue that existed to give it an owner — named that
+// path in its body. Under a file-path bar the mention hid the very marker the
+// issue was filed about, so the row STYLE P3 wants surfaced was the one the
+// tool silenced. It must now surface, with #1102 printed beside it as the
+// candidate owner.
+//
+// The marker cites #1102 in the tree today (#1102's ruling landed), so the
+// fixture below is a transcript of that state and not a reading of the file.
+// It pins the TOOL's bar, which is what would regress.
 func TestFileMentionDoesNotSuppressAnUncitedMarker(t *testing.T) {
 	m := marker{Area: "xsd", File: "xsd/attributeusefold.go", Line: 296,
 		Text: "taking the largest of the family is a CHOICE, not a recovery, and it is not " +

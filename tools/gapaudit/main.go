@@ -652,7 +652,7 @@ func census(markers []marker) []areaCount {
 // shadows every uncited marker in it: #853, #414, #1099 and #1102 name
 // validate/cvcid.go, xsd/attributeusefold.go and parser/produce_complex.go
 // in their bodies, and between them hid the uncited markers those files
-// carry (#1060).
+// carried (#1060).
 func anyOpenMatch(m marker, issues []issue) bool {
 	for _, iss := range issues {
 		if iss.open() && matches(m, iss).retires() {
