@@ -57,8 +57,13 @@ type attributeUseFold struct {
 // exception to resolve.go's "stores nothing" stance and not a resolved-pointer
 // cache: a cache would hold state derivable from the QName plus the index (STYLE
 // D3), whereas this OVERWRITES a property with its correct value. Afterwards the
-// spec's set has exactly one encoding — the stored property — and the producer's
-// partial value is gone rather than kept beside it.
+// spec's set has exactly one encoding — the stored property.
+//
+// It keeps the value it overwrites, on the component beside the property
+// (ownAttributeUses, complextype.go). That is not a second encoding of the folded
+// set but the only encoding of a DIFFERENT fact — clauses 1 and 2 alone, which
+// the fold's own doc proves is no function of the folded sets
+// (extensionStepAttributeUses) — and cos-ct-extends clause 1.5 is its one reader.
 //
 // It writes that property on EVERY complex type definition it folds, including
 // one held anonymously inside another's {base type definition} slot. Nothing
@@ -180,12 +185,26 @@ func (s *Schema) foldTypeAttributeUses(f *attributeUseFold, i int) ComplexType {
 // an inline base is folded once, at the single slot that owns it, and nothing
 // else can reach it to fold it twice. i is the folding type's own position, used
 // only to exclude the ·xs:anyType· self-edge.
+//
+// It RETAINS the clause-1-and-2 value on the component (ownAttributeUses,
+// complextype.go) at the one statement that overwrites it, which is what gives
+// cos-ct-extends clause 1.5 one extension step's own contribution
+// (extensionStepAttributeUses). THAT RETENTION RESTS ON THIS FUNCTION RUNNING AT
+// MOST ONCE PER COMPONENT: a second run would retain the first's folded output as
+// the component's own. It holds three ways, one per route in — a named type is
+// folded behind foldTypeAttributeUses' f.folded memo, an owned inline {base type
+// definition} at the single slot that owns it, and a declaration-owned type at
+// ownedTypeSlot, which ownedtypefold.go reaches once per owning SLOT and which
+// folds before it descends, never after. A component reachable from two slots is
+// two VALUES (ComplexType is a value type), each folded once from the producer's
+// own, so it is no exception to the invariant.
 func (s *Schema) foldComponentAttributeUses(f *attributeUseFold, c ComplexType, i int) ComplexType {
 	base, slot, ok := s.baseAttributeUses(f, c, i)
 	c.base = slot
 	if !ok {
 		return c // clause 3.3: no complex {base type definition} to inherit from
 	}
+	c.ownAttributeUses = c.attributeUses
 	c.attributeUses = s.inheritAttributeUses(c.attributeUses, base, c.DerivationMethod(), c.prohibitedAttributeNames)
 	return c
 }
@@ -277,7 +296,8 @@ func (s *Schema) baseAttributeUses(f *attributeUseFold, c ComplexType, i int) ([
 // The result is a slice in document order — own uses first, then the base's, each
 // in its own document order — and no map takes part (STYLE D2). own is copied
 // rather than appended to, so the component's backing array is never aliased into
-// a longer slice.
+// a longer slice — which is also what lets foldComponentAttributeUses hand this
+// the same slice it has just retained as ownAttributeUses.
 func (s *Schema) inheritAttributeUses(own, base []AttributeUse, method DerivationMethod, prohibited []QName) []AttributeUse {
 	folded := append(make([]AttributeUse, 0, len(own)+len(base)), own...)
 	for _, u := range base {
