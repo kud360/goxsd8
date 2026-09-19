@@ -293,7 +293,7 @@ func (s *Schema) inheritAttributeUses(own, base []AttributeUse, method Derivatio
 	return folded
 }
 
-// ownAttributeUses answers what ONE extension step contributes to the collapsed
+// extensionStepAttributeUses answers what ONE extension step contributes to the collapsed
 // intermediate cos-ct-extends clause 1.5 needs: given an extension-derived
 // Complex Type Definition c and its resolved {base type definition} b, both with
 // §3.4.2.4 clause 3 already folded into them, it returns the uses the collapse
@@ -351,7 +351,7 @@ func (s *Schema) inheritAttributeUses(own, base []AttributeUse, method Derivatio
 // Taking the smallest is fail-closed at the same checkAttributeRestriction arm
 // instead, on a use that reached b through a re-ordered-away restriction step,
 // so neither direction is uniformly open; the largest is the one this tree takes.
-func (s *Schema) ownAttributeUses(c, b ComplexType) ([]AttributeUse, bool) {
+func (s *Schema) extensionStepAttributeUses(c, b ComplexType) ([]AttributeUse, bool) {
 	for _, u := range b.attributeUses {
 		if !s.hasAttributeUseIdentical(c.attributeUses, u) {
 			return nil, false

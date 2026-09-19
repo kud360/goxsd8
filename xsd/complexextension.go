@@ -783,11 +783,12 @@ func (s *Schema) extensionAllGroupPrefix(e, b Particle) bool {
 //     its union of sets (inheritAttributeUses, attributeusefold.go). A looser
 //     relation collapses more, which can only WITHHOLD a ct-props-correct clause
 //     4 charge, never invent one: FAIL-OPEN.
-//   - ownAttributeUses (attributeusefold.go) verifies an extension step against
-//     its base with it, and its decline is what makes cos-ct-extends clause 1.5
-//     accept UNDECIDED. A looser relation declines less, so more of clause 1.5 is
-//     decided and a charge becomes reachable: FAIL-CLOSED, and the one reader
-//     where a widening of these predicates is not free.
+//   - extensionStepAttributeUses (attributeusefold.go) verifies an extension
+//     step against its base with it, and its decline is what makes
+//     cos-ct-extends clause 1.5 accept UNDECIDED. A looser relation declines
+//     less, so more of clause 1.5 is decided and a charge becomes reachable:
+//     FAIL-CLOSED, and the one reader where a widening of these predicates is
+//     not free.
 
 // attributeUsesIdentical decides property identity between two Attribute Uses
 // (§3.5.1): {required}, {value constraint} (presence, {variety} and {lexical
