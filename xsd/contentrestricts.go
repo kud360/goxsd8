@@ -696,11 +696,11 @@ func (s *Schema) contentTypeRestricts(tct, bct ContentType, scope contentRestric
 	if s.unfoldedPositions(rc.Particle) > maxContentPositions || s.unfoldedPositions(bc.Particle) > maxContentPositions {
 		// GAP(xsd): a content model whose exact unfolding would exceed
 		// maxContentPositions is not unfolded at all, and the derivation is
-		// provisionally accepted undecided. This is a RULED permanent
-		// approximation rather than a fold in progress: #1378 owns the ruling and
-		// carries it in full, and it rests on the bounded-resource argument below
-		// rather than on a spec licence. The landing this file's header records
-		// (#501, now closed) introduced the ceiling; it licensed nothing.
+		// provisionally accepted undecided. RULED permanent by #1378 (STYLE P3b)
+		// rather than a fold in progress: that thread carries the ruling in full,
+		// and it rests on the bounded-resource argument below rather than on a
+		// spec licence. The landing this file's header records (#501, now closed)
+		// introduced the ceiling; it is provenance and licensed nothing.
 		//
 		// The alternative is not a smaller automaton but a WRONG one: truncating
 		// the copies of an occurrence range rewrites the range, which is monotone
@@ -718,12 +718,25 @@ func (s *Schema) contentTypeRestricts(tct, bct ContentType, scope contentRestric
 		// before this line is reached, so what remains is exactly the
 		// sequence/choice population that antecedent does not reach. Neither
 		// §3.4.6.3 nor §3.4.6.4 grants fail-open for that population anywhere.
-		// What the branch does guarantee is direction: it abandons the WHOLE walk
-		// rather than truncating one into a verdict, so it is fail-open — a missed
-		// rejection, never a fabricated one — carrying the caveat
-		// contentModelRestricts' giveup site states, that a schema accepted
-		// provisionally with no runtime cross-check can be non-conforming with
-		// nothing left to say so.
+		// What the branch does guarantee is the direction enumerated below: it
+		// abandons the WHOLE walk rather than truncating one into a verdict,
+		// carrying the caveat contentModelRestricts' giveup site states, that a
+		// schema accepted provisionally with no runtime cross-check can be
+		// non-conforming with nothing left to say so.
+		//
+		// Fail-open for all three readers of this true, each of which charges only
+		// on false and reads nothing else out of it (STYLE P3a).
+		// checkRestrictionContentType (complexderivation.go) calls in with
+		// restrictsFully and charges derivation-ok-restriction clause 2.4.2.
+		// checkExtensionTwoStepDerivable (complexextension.go) reaches the same
+		// call through checkDerivationOKRestriction and re-charges the failure as
+		// cos-ct-extends clause 1.5 at T's own position, a rule §3.4.6.3's licence
+		// does not reach either. checkModelGroupRedefinitions (redefinition.go)
+		// calls in with restrictsLanguage and charges src-redefine clause 6.2.2;
+		// it reaches this branch, unlike the {open content} arm above, because
+		// modelGroupContent's wrapper only leaves {open content} ·absent· and
+		// constrains no compositor. Each loses a rejection it could have made and
+		// none gains one.
 		//
 		// What makes the approximation permanent is measured cost against a
 		// constant pinned from both sides. maxContentPositions' own doc records
@@ -840,13 +853,13 @@ func (s *Schema) contentModelRestricts(r, b contentAutomaton, scope contentRestr
 			}
 			if len(visited) >= maxProductStates {
 				// GAP(xsd): the walk is abandoned and the derivation provisionally
-				// accepted once the product reaches maxProductStates. This is a RULED
-				// permanent approximation rather than a fold in progress: #499 owns
-				// the ruling, stays open as its tracker, and rests it on the
-				// bounded-resource argument below rather than on a spec licence. The
-				// branch is unreached by the whole W3C suite — maxProductStates' doc
-				// records the measurement, and the margin it has left — so the
-				// incompleteness is latent, and latent is not licensed.
+				// accepted once the product reaches maxProductStates. RULED permanent
+				// by #499 (STYLE P3b) rather than a fold in progress: that thread
+				// carries the ruling in full, and it rests on the bounded-resource
+				// argument below rather than on a spec licence. The branch is
+				// unreached by the whole W3C suite — maxProductStates' doc records
+				// the measurement, and the margin it has left — so the incompleteness
+				// is latent, and latent is not licensed.
 				//
 				// No spec licence covers this branch, and this marker claims none.
 				// §3.4.6.3's leniency for an undecidable clause 2.4.2 is gated by a
@@ -881,9 +894,17 @@ func (s *Schema) contentModelRestricts(r, b contentAutomaton, scope contentRestr
 				// worded describe processors that perform that runtime cross-check;
 				// this ceiling gives up permanently with no runtime fallback, so a
 				// schema accepted here can be non-conforming with nothing left to say
-				// so. What the ceiling does guarantee is direction: it abandons the
-				// WHOLE walk rather than truncating one into a verdict, so it is
-				// fail-open — a missed rejection, never a false one.
+				// so. What the ceiling does guarantee is the direction enumerated
+				// below: it abandons the WHOLE walk rather than truncating one into a
+				// verdict.
+				//
+				// Fail-open for every reader of this true, and that reader set is
+				// contentTypeRestricts' own (STYLE P3a): the call below its
+				// maxContentPositions ceiling is this function's only caller
+				// tree-wide, so the three readers that ceiling's marker enumerates by
+				// identifier — with their rules, their scopes, and their charge on
+				// false alone — are exactly these, and are not restated here. Each
+				// loses a rejection it could have made and none gains one.
 				//
 				// What makes the approximation permanent is that the cost it refuses
 				// is the powerset and nothing smaller. Clause 1 is stated

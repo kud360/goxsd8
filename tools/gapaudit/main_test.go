@@ -213,8 +213,8 @@ func TestExtractMarkerHashBoundary(t *testing.T) {
 				}
 			}
 
-			if anyOpenMatch(got[0], []issue{owner}) != tc.retired {
-				t.Errorf("anyOpenMatch = %v, want %v (only a citation keeps the marker"+
+			if tracked(got[0], []issue{owner}) != tc.retired {
+				t.Errorf("tracked = %v, want %v (only a citation keeps the marker"+
 					" out of group 1)", !tc.retired, tc.retired)
 			}
 		})
@@ -720,8 +720,8 @@ func TestMatchesByCitation(t *testing.T) {
 			if got := matches(tc.marker, tc.issue); got != matchCited {
 				t.Errorf("matches = %v, want matchCited", got)
 			}
-			if !anyOpenMatch(tc.marker, []issue{tc.issue}) {
-				t.Error("anyOpenMatch = false: the marker still lands in group 1")
+			if !tracked(tc.marker, []issue{tc.issue}) {
+				t.Error("tracked = false: the marker still lands in group 1")
 			}
 
 			stripped := tc.marker
@@ -1192,5 +1192,105 @@ func TestGroup1AnnotationsLeadWithTheActionableOnes(t *testing.T) {
 		if first > second {
 			t.Errorf("%q prints after %q:\n%s", pair[0], pair[1], out)
 		}
+	}
+}
+
+// TestRuledPermanentCitationIsNotADeadEnd reproduces #1565's own repro shape:
+// a `state=all` feed carrying the CLOSED issue that RECORDED a ruling, and two
+// markers citing it. The one writing STYLE P3b's form is tracked and prints
+// nothing; the one citing the same closed number plainly is still P3's dead
+// end. The provenance number both markers carry is the control — it is a
+// second CLOSED citation, so the old form prints two dead ends where the new
+// form prints no row at all.
+func TestRuledPermanentCitationIsNotADeadEnd(t *testing.T) {
+	ruled := marker{Area: "xsd", File: "xsd/contentrestricts.go", Line: 697,
+		Text: "a content model whose exact unfolding would exceed maxContentPositions" +
+			" is not unfolded at all. RULED permanent by #1378 (STYLE P3b) rather than" +
+			" a fold in progress. The landing this file's header records (#501, now" +
+			" closed) introduced the ceiling."}
+	plain := marker{Area: "xsd", File: "xsd/contentmodel.go", Line: 12,
+		Text: "the same gap written the old way: #1378 owns the ruling, and #501," +
+			" now closed, introduced the ceiling."}
+	issues := []issue{
+		{Number: 501, State: "CLOSED", Title: "unfoldCopies' 2/2 copy cap", Body: "the ceiling landed here"},
+		{Number: 1378, State: "CLOSED", Title: "own the retirement of the maxContentPositions ceiling",
+			Body: "ruled a permanent documented approximation", Labels: gapLabels()},
+	}
+
+	rep := reconcile([]marker{ruled, plain}, issues, true)
+	if len(rep.Untracked) != 1 {
+		t.Fatalf("Untracked = %+v, want only the plain-cited marker", rep.Untracked)
+	}
+	if rep.Untracked[0].Marker.File != plain.File {
+		t.Fatalf("Untracked[0] = %+v, want the plain-cited marker", rep.Untracked[0].Marker)
+	}
+
+	var buf strings.Builder
+	if err := printReport(&buf, rep); err != nil {
+		t.Fatalf("printReport: %v", err)
+	}
+	out := buf.String()
+	if strings.Contains(out, "xsd/contentrestricts.go:697") {
+		t.Errorf("the ruled-permanent marker is still reported:\n%s", out)
+	}
+	for _, want := range []string{"dead end: cites CLOSED #501", "dead end: cites CLOSED #1378"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("the plainly-cited marker lost %q — the new form was read too widely:\n%s", want, out)
+		}
+	}
+}
+
+// TestRulingRetiresATrackerAndSurvivesReflow pins the two halves a ruled
+// citation must keep working on an OPEN ruling, which is what a marker looks
+// like between the ruling landing and its issue closing: the tracker is not
+// reported stale, and the phrase still reads as a ruling when `go tool
+// commentwrap` has broken it across two comment lines (#1117's hazard, which
+// [paragraph] answers by joining the wrapped lines with a space).
+func TestRulingRetiresATrackerAndSurvivesReflow(t *testing.T) {
+	src := "package p\n\n" +
+		"// GAP(xsd): the walk is abandoned once the product reaches the\n" +
+		"// ceiling. RULED permanent by\n" +
+		"// #499 (STYLE P3b) rather than a fold in progress.\n" +
+		"func f() {}\n"
+
+	got, err := extractMarkers("xsd/contentrestricts.go", []byte(src))
+	if err != nil {
+		t.Fatalf("extractMarkers: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("got %d markers, want 1: %+v", len(got), got)
+	}
+	if r := rulings(got[0].Text); len(r) != 1 || r[0] != 499 {
+		t.Fatalf("rulings = %v, want [499]: the reflowed phrase no longer reads as a ruling", r)
+	}
+
+	open := issue{Number: 499, State: "OPEN", Title: "the maxProductStates ceiling",
+		Body: "unrelated prose entirely", Labels: gapLabels()}
+	if k := matches(got[0], open); k != matchRuled {
+		t.Errorf("matches = %v, want matchRuled", k)
+	}
+	rep := reconcile(got, []issue{open}, true)
+	if len(rep.Untracked) != 0 {
+		t.Errorf("Untracked = %+v, want none", rep.Untracked)
+	}
+	if len(rep.Stale) != 0 {
+		t.Errorf("Stale = %+v, want none: a ruling still cites its tracker", rep.Stale)
+	}
+}
+
+// TestRulingNamingNoIssueIsStillReported checks the form buys nothing on a
+// number the feed does not carry: a mistyped ruling is a marker naming an
+// owner that does not exist, exactly as a mistyped plain citation is (#1062).
+func TestRulingNamingNoIssueIsStillReported(t *testing.T) {
+	m := marker{Area: "xsd", File: "xsd/contentrestricts.go", Line: 697,
+		Text: "the ceiling declines the question. RULED permanent by #99999 (STYLE P3b)."}
+	issues := []issue{{Number: 1378, State: "CLOSED", Title: "an unrelated issue", Body: "unrelated prose"}}
+
+	rep := reconcile([]marker{m}, issues, true)
+	if len(rep.Untracked) != 1 {
+		t.Fatalf("Untracked = %+v, want 1 entry", rep.Untracked)
+	}
+	if u := rep.Untracked[0].Unresolved; len(u) != 1 || u[0] != 99999 {
+		t.Errorf("Unresolved = %v, want [99999]", u)
 	}
 }

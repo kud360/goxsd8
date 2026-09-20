@@ -20,18 +20,22 @@
 //  1. Markers that cite no OPEN tracking issue — the leak the rule exists
 //     to prevent. This includes a marker that only cites a CLOSED issue:
 //     STYLE P3 says a marker pointing at a closed issue is a dead end, so it
-//     is reported the same as an uncited one. Each row prints every
-//     annotation it has, in the order to act on them ([issueMatch.rank]):
-//     "dead end" names a CLOSED issue the marker itself cites and the
-//     landing that closed it should have repointed, "candidate owner" names
-//     an OPEN issue the marker resembles but does not cite, so the fix is
-//     writing that number into the marker rather than filing another,
-//     "resemblance" names a CLOSED one it merely reads like, and an
-//     unresolved-citation line names a number that is no issue in the fed
-//     list at all. Filing a new issue is what a row wants when no annotation
-//     names an owner — a judgment on the annotations rather than on their
-//     absence, because on a whole-repository feed nearly every marker in a
-//     non-trivial file resembles something (#1108).
+//     is reported the same as an uncited one. The one closed citation that
+//     does track a marker is STYLE P3b's `RULED permanent by #N`, the form a
+//     gap ruled to STAY cites the ruling that recorded it in; such a marker
+//     is reported in neither group, since there is nothing to retire and
+//     nothing to repoint (#1565). Each row prints every annotation it has,
+//     in the order to act on them ([issueMatch.rank]): "dead end" names a
+//     CLOSED issue the marker itself cites and the landing that closed it
+//     should have repointed, "candidate owner" names an OPEN issue the
+//     marker resembles but does not cite, so the fix is writing that number
+//     into the marker rather than filing another, "resemblance" names a
+//     CLOSED one it merely reads like, and an unresolved-citation line names
+//     a number that is no issue in the fed list at all. Filing a new issue
+//     is what a row wants when no annotation names an owner — a judgment on
+//     the annotations rather than on their absence, because on a
+//     whole-repository feed nearly every marker in a non-trivial file
+//     resembles something (#1108).
 //  2. OPEN `kind/gap` issues no marker in the tree cites — a stale tracker:
 //     the gap was closed in code without closing the issue that tracked it.
 //     A marker that matches by file path or by phrase alone is printed under
@@ -43,7 +47,12 @@
 // A marker that cites an issue number in its own text — STYLE P3's "names
 // that issue in the text" — is matched to that issue and to no other. That
 // is a citation, not a resemblance, and [matches] reports it as its own
-// [matchKind] so the report can say "cites" where it means cites (#852).
+// [matchKind] so the report can say "cites" where it means cites (#852). A
+// citation carrying STYLE P3b's `RULED permanent by` phrase is reported as a
+// second kind again, because it claims something a bare number cannot: the
+// issue recorded the RULING that the gap stays, rather than owning its
+// retirement, so its being closed is the expected end state and not a dead
+// end.
 //
 // The two fallbacks are heuristic: the marker's file path, or a run of
 // [minPhraseWords] of its words, appearing in the issue's title or body. A
@@ -238,6 +247,18 @@ var markerPattern = regexp.MustCompile(`GAP\(([A-Za-z][A-Za-z0-9_]*)\):\s*`)
 // there is no signal here to tell the two apart.
 var citationPattern = regexp.MustCompile(`#(\d+)`)
 
+// rulingPattern finds STYLE P3b's ruled-permanent citation: the fixed phrase
+// `RULED permanent by` immediately before the number. It is the one signal
+// that tells a RULING — the finding that a gap stays, recorded on an issue
+// that closes as completed the moment it lands — from P3's retirement owner,
+// which a closed issue can no longer be.
+//
+// One space separates the phrase from the number, whatever the source lines
+// do: `go tool commentwrap` reflows marker prose to 79 columns on its own
+// schedule, and [paragraph] has already joined the wrapped lines with a
+// single space before this pattern sees them (#1117).
+var rulingPattern = regexp.MustCompile(`(?i)RULED permanent by #(\d+)`)
+
 // citations returns every issue number text cites, in first-appearance
 // order with repeats dropped, so a marker naming one owner twice and a
 // marker naming two owners are both reported as written. It is derived
@@ -245,10 +266,24 @@ var citationPattern = regexp.MustCompile(`#(\d+)`)
 // fact, one encoding (STYLE D3), and the whole audit runs a few thousand
 // of these.
 func citations(text string) []int {
+	return issueNumbers(citationPattern, text)
+}
+
+// rulings returns every issue number text cites as a RULING. The numbers it
+// returns are a subset of [citations]' — a ruling is a citation, read a
+// second way — so the two are derived from the same text rather than stored
+// apart (STYLE D3).
+func rulings(text string) []int {
+	return issueNumbers(rulingPattern, text)
+}
+
+// issueNumbers returns the first capture group of every match of pattern in
+// text as an issue number, in first-appearance order with repeats dropped.
+func issueNumbers(pattern *regexp.Regexp, text string) []int {
 	var out []int
 	seen := make(map[int]bool)
-	for _, m := range citationPattern.FindAllStringSubmatch(text, -1) {
-		// The pattern guarantees digits, so Atoi fails only on a run too long
+	for _, m := range pattern.FindAllStringSubmatch(text, -1) {
+		// Both patterns guarantee digits, so Atoi fails only on a run too long
 		// to be an issue number. Skipping is the whole disposition: such a
 		// token is not a citation, and there is no caller to report it to.
 		n, err := strconv.Atoi(m[1])
@@ -487,8 +522,9 @@ const (
 // D3).
 //
 // An OPEN citation cannot reach here — [reconcile] only annotates a marker
-// [anyOpenMatch] already rejected — so its rank is the candidate-owner one it
-// would have as any other OPEN match.
+// [tracked] already rejected — so its rank is the candidate-owner one it
+// would have as any other OPEN match. Neither can a [matchRuled] one, of
+// either state: [tracked] retires a marker on a ruling outright.
 func (im issueMatch) rank() annotationRank {
 	if im.Issue.open() {
 		return rankCandidateOwner
@@ -598,7 +634,7 @@ func reconcile(markers []marker, issues []issue, haveIssues bool) report {
 	})
 
 	for _, m := range sorted {
-		if anyOpenMatch(m, issues) {
+		if tracked(m, issues) {
 			continue
 		}
 		rep.Untracked = append(rep.Untracked, untrackedMarker{
@@ -645,17 +681,29 @@ func census(markers []marker) []areaCount {
 	return out
 }
 
-// anyOpenMatch reports whether any OPEN issue keeps m out of group 1. The
-// bar is [matchKind.retires]: a citation, nothing weaker. A file mention
-// does not qualify, because it hides the exact row STYLE P3 exists to
-// surface — a marker naming no issue — and one open issue naming a busy file
-// shadows every uncited marker in it: #853, #414, #1099 and #1102 name
+// tracked reports whether any fed issue keeps m out of group 1. The bar is
+// [matchKind.retires]: a citation, nothing weaker. A file mention does not
+// qualify, because it hides the exact row STYLE P3 exists to surface — a
+// marker naming no issue — and one open issue naming a busy file shadows
+// every uncited marker in it: #853, #414, #1099 and #1102 name
 // validate/cvcid.go, xsd/attributeusefold.go and parser/produce_complex.go
 // in their bodies, and between them hid the uncited markers those files
 // carried (#1060).
-func anyOpenMatch(m marker, issues []issue) bool {
+//
+// A plain citation must name an OPEN issue, which is P3's rule. A RULED
+// PERMANENT one (STYLE P3b, [matchRuled]) tracks m whatever the issue's
+// state: a ruling is the finding that the gap stays, so the issue recording
+// it closes as completed and there is nothing to repoint the marker at. Such
+// a marker therefore carries no annotations either — any second number in it
+// is provenance, which P3b makes the marker's own prose responsible for
+// (#1565).
+func tracked(m marker, issues []issue) bool {
 	for _, iss := range issues {
-		if iss.open() && matches(m, iss).retires() {
+		k := matches(m, iss)
+		if !k.retires() {
+			continue
+		}
+		if iss.open() || k == matchRuled {
 			return true
 		}
 	}
@@ -739,10 +787,12 @@ func annotations(m marker, issues []issue) []issueMatch {
 }
 
 // matchKind is the closed set of signals [matches] can find: a citation is
-// what STYLE P3 asks a marker to carry, a file path says only that the issue
-// mentions the file — which it does as readily to EXCLUDE the site as to own
-// it (#1060) — and a phrase run is a resemblance. The zero value is
-// [matchNone], so an unset kind is "no match" rather than a spurious one.
+// what STYLE P3 asks a marker to carry, a ruled-permanent citation is what
+// STYLE P3b asks of a marker whose gap was ruled to stay, a file path says
+// only that the issue mentions the file — which it does as readily to
+// EXCLUDE the site as to own it (#1060) — and a phrase run is a resemblance.
+// The zero value is [matchNone], so an unset kind is "no match" rather than
+// a spurious one.
 //
 // The constants carry no rank: every reader of a matchKind compares it for
 // equality ([matchKind.found], [matchKind.retires], [matches]'s own written
@@ -757,6 +807,7 @@ const (
 	matchPhrase
 	matchFile
 	matchCited
+	matchRuled
 )
 
 // matches is the decision at the center of this tool: which signal, if any,
@@ -764,10 +815,16 @@ const (
 // first that fires, so a caller can weigh a citation differently from a
 // resemblance instead of taking every match on the same word.
 //
-// Only [matchCited] is proof. A file gets renamed and a marker's prose gets
-// rephrased in the issue that files it, so callers must treat [matchNone] as
-// "no match found", never as "definitely untracked" (see the package doc).
+// Only the two citation kinds are proof. A file gets renamed and a marker's
+// prose gets rephrased in the issue that files it, so callers must treat
+// [matchNone] as "no match found", never as "definitely untracked" (see the
+// package doc).
 func matches(m marker, iss issue) matchKind {
+	for _, n := range rulings(m.Text) {
+		if n == iss.Number {
+			return matchRuled
+		}
+	}
 	for _, n := range citations(m.Text) {
 		if n == iss.Number {
 			return matchCited
@@ -787,16 +844,20 @@ func matches(m marker, iss issue) matchKind {
 func (k matchKind) found() bool { return k != matchNone }
 
 // retires reports whether k is strong enough to keep a row out of the
-// report, in either direction. Only a citation is: STYLE P3's "names that
+// report, in either direction. Only a citation is — STYLE P3's "names that
 // issue in the text" is the one signal a human wrote on purpose, and both
-// weaker signals have been caught retiring a row they had no claim to — see
-// [anyOpenMatch] and [trackerEvidence] for the case that settles each.
-func (k matchKind) retires() bool { return k == matchCited }
+// weaker signals have been caught retiring a row they had no claim to, see
+// [tracked] and [trackerEvidence] for the case that settles each. Whether
+// the CITED ISSUE'S STATE then matters is the caller's question, not this
+// one's: [tracked] takes a plain citation only from an OPEN issue.
+func (k matchKind) retires() bool { return k == matchCited || k == matchRuled }
 
 // String names the signal as the report prints it, in the verb form that
 // completes "<marker> <verb> <issue>".
 func (k matchKind) String() string {
 	switch k {
+	case matchRuled:
+		return "cites-as-ruling"
 	case matchCited:
 		return "cites"
 	case matchFile:
@@ -891,11 +952,14 @@ func printReportTo(w io.Writer, rep report) {
 		return
 	}
 
-	_, _ = fmt.Fprintln(w, "\n=== Group 1: markers citing no OPEN tracking issue ===")
-	_, _ = fmt.Fprintln(w, "(only a citation keeps a marker out of this group, so a row means \"needs a")
-	_, _ = fmt.Fprintln(w, "look\", not proven untracked. Act on each row's annotations in the order")
-	_, _ = fmt.Fprintln(w, "printed: \"dead end\" is a CLOSED issue the marker itself cites — repoint the")
-	_, _ = fmt.Fprintln(w, "marker at a live owner; \"candidate owner\" is an OPEN issue it resembles —")
+	_, _ = fmt.Fprintln(w, "\n=== Group 1: markers citing no OPEN tracking issue and no ruling ===")
+	_, _ = fmt.Fprintln(w, "(only a citation keeps a marker out of this group — an OPEN owner's, or a")
+	_, _ = fmt.Fprintln(w, "ruling's in STYLE P3b's \"RULED permanent by #N\" form, whatever that issue's")
+	_, _ = fmt.Fprintln(w, "state — so a row means \"needs a look\", not proven untracked. Act on each")
+	_, _ = fmt.Fprintln(w, "row's annotations in the order printed: \"dead end\" is a CLOSED issue the")
+	_, _ = fmt.Fprintln(w, "marker itself cites as an owner — repoint the marker at a live owner, or")
+	_, _ = fmt.Fprintln(w, "rule the gap permanent and cite the ruling in P3b's form; \"candidate")
+	_, _ = fmt.Fprintln(w, "owner\" is an OPEN issue it resembles —")
 	_, _ = fmt.Fprintln(w, "write that number into the marker if it owns this gap; \"resemblance\" is a")
 	_, _ = fmt.Fprintln(w, "CLOSED one it merely reads like — evidence to judge, never an owner. File a")
 	_, _ = fmt.Fprintln(w, "new issue when no annotation names an owner: against a whole-repository feed")
