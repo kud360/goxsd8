@@ -309,18 +309,50 @@ type Matcher struct {
 //     directly and need no matcher.
 //   - GAP(xsd): an ·ambiguous· node whose widened subtrees need more than
 //     maxPartitionStates regions to cover the partitions they put in flight at
-//     once (#1601). The SHAPE is decided — (a{1,2}, b?){2,2} takes "a a b" —
-//     and so now is the WIDTH a partition-per-cursor encoding could not carry:
-//     (a{1,500}){1,500} reaches a quarter of a million live partitions and the
-//     spans of a region cover them in about a thousand. What stays declined is
-//     what outgrows the ceiling, and a model gets there by BREADTH as readily
-//     as by depth: partitionsBounded products over EVERY widened node of the
-//     flattened tree, so sibling repeating groups under a non-repeating one,
-//     and a row of repeating leaves under one repeating group, reach it with no
-//     nesting at all. Declining withholds the whole element-sequence verdict,
-//     whose consumers are validate's Result.violations and its one reader
+//     once. RULED permanent by #1601 (STYLE P3b) rather than a ceiling waiting
+//     on its next raise: that thread carries the ruling in full, and it rests
+//     on the measured cost below rather than on a spec licence. No spec licence
+//     covers this branch and this marker claims none — cvc-accept (§3.9.4.3)
+//     clause 3.1 is a bare existential over ·partitions· with no search
+//     procedure and no bound, §3.9.4.1.1's L(P) attaches none either, and
+//     neither Appendix C nor Appendix E.1's implementation-defined checklist
+//     lets a processor decline what it cannot afford. The SHAPE is decided —
+//     (a{1,2}, b?){2,2} takes "a a b" — and so now is the WIDTH a
+//     partition-per-cursor encoding could not carry: (a{1,500}){1,500} reaches
+//     a quarter of a million live partitions and the spans of a region cover
+//     them in about a thousand. What stays declined is what outgrows the
+//     ceiling, and a model gets there by BREADTH as readily as by depth:
+//     partitionsBounded products over EVERY widened node of the flattened tree,
+//     so sibling repeating groups under a non-repeating one, and a row of
+//     repeating leaves under one repeating group, reach it with no nesting at
+//     all. Declining withholds the whole element-sequence verdict, whose
+//     consumers are validate's Result.violations and its one reader
 //     Result.Violations, both of which carry violations PRESENT — so the
-//     decline costs a rejection and manufactures none.
+//     decline costs a rejection and manufactures none. What makes the
+//     approximation permanent is the distance between the ceiling and what
+//     still reaches it. A walk over every buildable complex type in
+//     testdata/xsdtests finds THREE declining here, all on this arm —
+//     particlesZ035_a, particlesZ036_b and particlesZ036_c — and each carries
+//     one model-group counter whose clamped range ALONE outruns the ceiling,
+//     past 10^8 in the two Z036s and past 10^11 in Z035_a. A single factor with
+//     no room ends the count, so deciding them means a per-item budget of that
+//     many regions: at the ≈1.5 KB per region maxPartitionStates' doc measures,
+//     over a hundred gigabytes and over a hundred terabytes for ONE item. Four
+//     instance cases sit on those three, all banked fail, and three of the four
+//     are suite-declared VALID and cannot flip on that lane whatever the
+//     ceiling (#1561) — so what the residual costs the suite is one missed
+//     rejection, particlesZ035_a.i. It is retired by an encoding that carries a
+//     live partition set without enumerating its cover, never by moving the
+//     constant. Two findings reopen the ruling, and a case merely declining
+//     here is neither, since three already do. One is a schema whose
+//     partitionsBounded product lands BETWEEN the ceiling and what a measured
+//     per-region cost can afford — the plateau above 40804 is empty today, so a
+//     model in it would mean a raise buys verdicts again. The other is a
+//     per-region cost measured low enough to bring one of the three counters
+//     named above inside an affordable ceiling. Re-measure rather than quoting
+//     these figures: the instrument is that corpus walk over buildable complex
+//     types, not suiteindex, which cannot reach a population defined by a
+//     resource product rather than by a name or a nesting.
 func (s *Schema) ContentMatcher(t ComplexType) (*Matcher, bool) {
 	ec, ok := t.ContentType().(ElementContent)
 	if !ok {
