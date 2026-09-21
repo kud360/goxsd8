@@ -92,13 +92,44 @@ func (wildcardKeywordBinding) defaultBinding()    {}
 // Attribute Use over that declaration — is not rendered, and the wildcard branch
 // falls through to the keyword instead. Whether an attribute HAS a ·governing
 // attribute declaration· is an assessment-episode fact (key-governing-ad clause
-// 3 resolves it by expanded name at ·assessment· time, and clause 1 lets the
-// processor stipulate one outright); a static schema check cannot fix it, and
-// guessing "a top-level declaration of that name exists, so case 3 applies"
-// makes an unrelated global declaration silently constrain a restriction's local
-// attribute type. Falling through to the keyword is FAIL-OPEN — cases 4/5 are
-// weaker tests than case 3's clause-5 comparison — and never a false reject.
-// #267 owns the retirement.
+// 3 resolves it by expanded name at ·assessment· time, against the schema of a
+// real episode rather than this document graph — cvc-resolve-instance,
+// §3.17.6.3 — and clause 1 lets the processor stipulate one outright); a static
+// schema check cannot fix it, and guessing "a top-level declaration of that name
+// exists, so case 3 applies" makes an unrelated global declaration silently
+// constrain a restriction's local attribute type. RULED permanent by #267 (STYLE
+// P3b): no schema shape can conclude that case 3 APPLIES, and the real case-3
+// binding is the instance validator's to render, with the assessed item and its
+// ·resolution· in hand (validate/doc.go's M5 contract).
+//
+// Falling through to the keyword is FAIL-OPEN against both readers of this
+// function's result, both of them in checkAttributeRestriction
+// (attributerestriction.go). checkBindingSubsumes charges c-ran clause 3 only
+// where the base binding does NOT ·subsume· the restriction's, and a keyword G
+// as keywordSubsumes below renders it accepts every specific binding a case-3
+// Attribute Use G would accept and more — the one pairing it charges, lax
+// against skip, an Attribute Use G charges too, through checkBindingSubsumes'
+// catch-all — so the substitution can only turn a charge into an acceptance,
+// never a false reject. The other reader, that caller's ok=false charge, is
+// unaffected in either direction: name admission alone decides it, before any
+// binding is built.
+//
+// The gap is NARROWER than the whole wildcard branch: it is every attribute
+// wildcard whose {namespace constraint}.{disallowed names} does NOT contain the
+// keyword defined. Where it DOES (notQName="##defined", §3.10.2), cvc-wildcard
+// (§3.10.4.1) clause 2.2 makes "the expanded name does not ·resolve· to an
+// attribute declaration" a PRECONDITION of valid attribution to that wildcard,
+// so an item ·attributed· to it can have no key-governing-ad clause-3
+// declaration and case 3 is statically excluded. The keyword returned below is
+// then the EXACT key-dft-binding for that subset and not an approximation of it
+// — modulo clause 1's stipulation, which is an external input to an assessment
+// episode that this schema-authoring-time constraint sets aside wherever it
+// reads a binding. AllowsAttributeWildcardName (wildcardadmit.go) is what makes
+// it exact rather than merely probable: it decides clause 2.2 itself, so for a
+// ##defined wildcard and a name the schema declares at top level the return
+// below is unreachable. Both subsets return the same wildcardKeywordBinding, so
+// nothing here branches on which one applies (STYLE D3); what differs is only
+// whether that value is exact or fail-open.
 func (s *Schema) attributeDefaultBinding(side attributeRestrictionSide, n QName) (defaultBinding, bool) {
 	if u, ok := findAttributeUse(side.uses, n); ok {
 		return attributeUseBinding{use: u}, true // case 2
