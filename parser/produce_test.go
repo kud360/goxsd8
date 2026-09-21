@@ -2470,8 +2470,8 @@ func TestProduceElementSubstitutionGroupUnknownHeadAccepted(t *testing.T) {
 //
 // The untyped case is the one that catches a mis-fix resolving the head out of
 // the TYPE index rather than the element index: the member would then inherit
-// xs:string instead of falling through to xs:anyType under §3.3.2.1
-// dcl.elt.common clause 4.
+// {urn:x}foo, the simple type itself, instead of falling through to xs:anyType
+// under §3.3.2.1 dcl.elt.common clause 4.
 //
 // The head is spelled with a <restriction> child rather than as a bare
 // <xs:simpleType name="foo"/>, which §3.16.2.1 rejects on its own account: the
