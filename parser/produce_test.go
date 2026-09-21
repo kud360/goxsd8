@@ -2458,6 +2458,63 @@ func TestProduceElementSubstitutionGroupUnknownHeadAccepted(t *testing.T) {
 	assertRule(t, err, "src-resolve")
 }
 
+// TestProduceElementSubstitutionGroupWrongKindHeadAccepted pins the WRONG-KIND
+// half of the same §5.3 exemption: a substitutionGroup naming a top-level
+// <simpleType> is accepted exactly as one naming nothing is. src-resolve
+// (§3.17.6.2) condition 1 is kind-parameterized — the candidate must be "a member
+// of the value of the appropriate property" — so a name answered by a
+// <simpleType> and a name answered by nothing fail it identically, and the rule
+// carries no clause that reads differently for the two. Both are ·absent· under
+// §5.3, which e-props-correct clause 1 (§3.3.6.1) defers to by reading "modulo
+// the impact of Missing Sub-components (§5.3)".
+//
+// The untyped case is the one that catches a mis-fix resolving the head out of
+// the TYPE index rather than the element index: the member would then inherit
+// xs:string instead of falling through to xs:anyType under §3.3.2.1
+// dcl.elt.common clause 4.
+//
+// The head is spelled with a <restriction> child rather than as a bare
+// <xs:simpleType name="foo"/>, which §3.16.2.1 rejects on its own account: the
+// acceptance asserted here has to be attributable to the substitutionGroup slot.
+func TestProduceElementSubstitutionGroupWrongKindHeadAccepted(t *testing.T) {
+	const head = `<xs:simpleType name="foo"><xs:restriction base="xs:string"/></xs:simpleType>`
+	want := []xsd.QName{{Space: "urn:x", Local: "foo"}}
+
+	s, err := produce(t, wrap("urn:x", head+`<xs:element name="member" type="xs:string" substitutionGroup="tns:foo"/>`))
+	if err != nil {
+		t.Fatalf("Produce rejected a substitutionGroup naming a simple type, but src-resolve cannot tell that from naming nothing and §5.3 makes both ·absent·: %v", err)
+	}
+	ed, ok := s.Element(xsd.QName{Space: "urn:x", Local: "member"})
+	if !ok {
+		t.Fatalf("element {urn:x}member not found")
+	}
+	if got := ed.SubstitutionGroupAffiliationNames(); !slices.Equal(got, want) {
+		t.Fatalf("{substitution group affiliations} = %v, want the unresolved %v retained", got, want)
+	}
+
+	s, err = produce(t, wrap("urn:x", head+`<xs:element name="member" substitutionGroup="tns:foo"/>`))
+	if err != nil {
+		t.Fatalf("Produce: %v, want an untyped member with a wrong-kind head accepted", err)
+	}
+	ed, ok = s.Element(xsd.QName{Space: "urn:x", Local: "member"})
+	if !ok {
+		t.Fatalf("element {urn:x}member not found")
+	}
+	if got := ed.SubstitutionGroupAffiliationNames(); !slices.Equal(got, want) {
+		t.Fatalf("{substitution group affiliations} = %v, want the unresolved %v retained", got, want)
+	}
+	if got := declaredTypeName(t, ed.TypeDefinition()); got != anyTypeQN {
+		t.Fatalf("{type definition} = %s, want %s — the head resolves out of the ELEMENT index, so the simple type named foo supplies nothing", got, anyTypeQN)
+	}
+
+	// The exemption is this one slot's, not a blanket one: the very same schema
+	// that excuses the wrong-kind head still charges a dangling type=.
+	_, err = produce(t, wrap("urn:x", head+
+		`<xs:element name="member" substitutionGroup="tns:foo"/>`+
+		`<xs:element name="e" type="tns:nosuch"/>`))
+	assertRule(t, err, "src-resolve")
+}
+
 // TestProduceElementSubstitutionGroupBadPrefixRejected pins the half the producer
 // DOES decide: an item whose prefix has no in-scope binding cannot be mapped to a
 // QName value at all, so it is charged src-resolve here, at the referring
