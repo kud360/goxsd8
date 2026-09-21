@@ -115,21 +115,37 @@ func (wildcardKeywordBinding) defaultBinding()    {}
 // binding is built.
 //
 // The gap is NARROWER than the whole wildcard branch: it is every attribute
-// wildcard whose {namespace constraint}.{disallowed names} does NOT contain the
-// keyword defined. Where it DOES (notQName="##defined", §3.10.2), cvc-wildcard
-// (§3.10.4.1) clause 2.2 makes "the expanded name does not ·resolve· to an
-// attribute declaration" a PRECONDITION of valid attribution to that wildcard,
-// so an item ·attributed· to it can have no key-governing-ad clause-3
-// declaration and case 3 is statically excluded. The keyword returned below is
-// then the EXACT key-dft-binding for that subset and not an approximation of it
-// — modulo clause 1's stipulation, which is an external input to an assessment
-// episode that this schema-authoring-time constraint sets aside wherever it
-// reads a binding. AllowsAttributeWildcardName (wildcardadmit.go) is what makes
-// it exact rather than merely probable: it decides clause 2.2 itself, so for a
-// ##defined wildcard and a name the schema declares at top level the return
-// below is unreachable. Both subsets return the same wildcardKeywordBinding, so
-// nothing here branches on which one applies (STYLE D3); what differs is only
-// whether that value is exact or fail-open.
+// wildcard whose {process contents} is strict or lax AND whose {namespace
+// constraint}.{disallowed names} does NOT contain the keyword defined. Two
+// wildcard shapes fall statically outside case 3, each by its own argument, and
+// for them the keyword returned below is the EXACT key-dft-binding rather than
+// an approximation of it — modulo clause 1's stipulation, which is an external
+// input to an assessment episode that this schema-authoring-time constraint
+// sets aside wherever it reads a binding.
+//
+//   - {process contents} skip. key-governing-ad clause 3 resolves by expanded
+//     name only "provided the attribute is not ·skipped·", and key-skipped
+//     (§3.10.4.1) makes an item ·attributed· to a skip wildcard ·skipped·.
+//     Clause 2 is unavailable to any wildcard-attributed item at all — that
+//     section's closing Note gives such an item no ·context-determined
+//     declaration·, and states outright that a skip {process contents} leaves
+//     it no ·governing· declaration. validate/cvcid.go's skippedAttribute is
+//     this repo's one encoding of that reading, and the place to read it from.
+//     key-dft-binding's own drafting agrees: cases 4 and 5 are each
+//     qualified "and it does not have a ·governing ... declaration·" and case 6
+//     is not, the exclusion being already guaranteed there.
+//   - {disallowed names} containing defined (notQName="##defined", §3.10.2).
+//     cvc-wildcard (§3.10.4.1) clause 2.2 makes "the expanded name does not
+//     ·resolve· to an attribute declaration" a PRECONDITION of valid
+//     attribution to that wildcard, so an item ·attributed· to it can have no
+//     key-governing-ad clause-3 declaration either. AllowsAttributeWildcardName
+//     (wildcardadmit.go) is what makes this exact rather than merely probable:
+//     it decides clause 2.2 itself, so for a ##defined wildcard and a name the
+//     schema declares at top level the return below is unreachable.
+//
+// Every subset returns the same wildcardKeywordBinding, so nothing here
+// branches on which one applies (STYLE D3); what differs is only whether that
+// value is exact or fail-open.
 func (s *Schema) attributeDefaultBinding(side attributeRestrictionSide, n QName) (defaultBinding, bool) {
 	if u, ok := findAttributeUse(side.uses, n); ok {
 		return attributeUseBinding{use: u}, true // case 2
