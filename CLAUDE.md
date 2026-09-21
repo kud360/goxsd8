@@ -100,10 +100,12 @@ under-predicted three landings running (#1239). Join that census through
 `conformance/testdata/expectations/<lane>.txt`, the lane whose score the
 prediction is about, and count only the cases carrying a line there: a case
 the suite withholds as inapplicable has no line there and cannot flip
-(#1412). On the `instance` lane, subtract the cases the suite declares
-valid as well: each carries a banked `fail` line and none can flip
-(#1561). Census a population defined by a FEATURE as the union of every
-element that establishes it, joined with `|` in the element position:
+(#1412). Take that excluded remainder with `GOXSD_WITHHELD=1`;
+`conformance/doc.go` owns what it is. On the `instance` lane, subtract the
+cases the suite declares valid as well: each carries a banked `fail` line
+and none can flip (#1561). Census a population defined by a FEATURE as the
+union of every element that establishes it, joined with `|` in the element
+position:
 `'openContent|defaultOpenContent'` censuses `{open content}`, and bounds it
 from above rather than counting it, because `<openContent mode="none">`
 establishes nothing (#1554). Census a population defined by an ATTRIBUTE

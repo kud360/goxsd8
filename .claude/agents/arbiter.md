@@ -58,18 +58,19 @@ census cannot see that. Either way the census yields candidates and not a
 prediction, so apply that block's join here too: count only the candidates
 carrying a line in `conformance/testdata/expectations/<lane>.txt` for the
 lane whose score the bullet predicts, since a case the suite withholds as
-inapplicable has no line there to flip (#1412). State the outcome as one
-of three, not two: the candidate set is unchanged; the submodule is absent
-(`suiteindex` reports this itself, and CLAUDE.md already rules it a
-supported mode); or the census read some files only partly (`suiteindex`'s
-`ChildrenUnclosed`/"Read only partly" section) — that third outcome is not
-a full discharge, and the ruling says so rather than banking a partial
-read as "unchanged". This check fires on time elapsed since filing, not on
-`origin/main` having moved — re-derive at every grounding even when no
-merge-forward happened. #609 owns the same age-not-drift trigger for a
-bullet describing code, over a different object with a different
-instrument. When #609 lands, fold this paragraph's carrier into #609's
-rather than leaving both standing.
+inapplicable has no line there to flip (#1412). Take that excluded
+remainder with `GOXSD_WITHHELD=1`; `conformance/doc.go` owns what it is.
+State the outcome as one of three, not two: the candidate set is
+unchanged; the submodule is absent (`suiteindex` reports this itself, and
+CLAUDE.md already rules it a supported mode); or the census read some
+files only partly (`suiteindex`'s `ChildrenUnclosed`/"Read only partly"
+section) — that third outcome is not a full discharge, and the ruling says
+so rather than banking a partial read as "unchanged". This check fires on
+time elapsed since filing, not on `origin/main` having moved — re-derive
+at every grounding even when no merge-forward happened. #609 owns the same
+age-not-drift trigger for a bullet describing code, over a different
+object with a different instrument. When #609 lands, fold this paragraph's
+carrier into #609's rather than leaving both standing.
 
 A landing may carry work beyond the issue body under docs/WORKFLOW.md's
 scope rule. Mason names what it absorbed; judge that on its merits, as
