@@ -298,6 +298,15 @@ type Matcher struct {
 // <group ref> acyclicity that lets the flattening carry no visited set (STYLE
 // D4) — and a *Schema is the one thing that cannot exist before they ran.
 //
+// t must be a complex type of s, because the walk follows an <element ref> or
+// <group ref> in t's particle by NAME through s's own indexes: a name absent
+// from s declines (nil, false), while a name present in s but bound to a
+// different definition silently builds a Matcher over a model the caller never
+// wrote — the precondition preserves at walk time what src-resolve (§3.17.6.2
+// clauses 1 and 1.5) and sch-props-correct clause 2 (§3.17) settle at
+// construction time, since goxsd8 resolves refs by name per-*Schema rather than
+// through pre-resolved pointers.
+//
 // A present {open content} is DECIDED rather than declined: the Matcher holds
 // it and [Matcher.Next] offers the open wildcard whatever {particle} cannot
 // take, per cvc-complex-content clauses 2 and 3 (see the file comment).
