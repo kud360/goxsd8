@@ -519,11 +519,9 @@ func assertSlice(t *testing.T, name string, got, want []string) {
 }
 
 // TestUnbankedWithheldListsOnlyWhatNoLaneBanked pins the population
-// GOXSD_WITHHELD=1 exists to surface (issue #1514): the withheld case IDs that
-// carry no committed expectation in ANY lane. The two slices a run already
-// prints are exactly what it must NOT re-report — the whole withheld set, logged
-// as a count every run, and the withheld IDs that DO carry a line, printed per
-// lane as Delta.Removed.
+// GOXSD_WITHHELD=1 exists to surface: the withheld case IDs that carry no
+// committed expectation in ANY lane, and not the two slices a run already prints
+// (doc.go "Sanctioned applicability removals").
 //
 // The fixture therefore SPLITS the withheld set between banked and never-banked,
 // and asserts the remainder by value rather than by count. That split is what
