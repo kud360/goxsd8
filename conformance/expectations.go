@@ -325,8 +325,7 @@ func ratchetAll(dir string, runs []laneRun, withheld []string, removals map[stri
 }
 
 // withheldEnv names the opt-in that lists the withheld case IDs no lane's
-// committed expectations carry — the slice of discovery's withheld set that
-// classifies as nothing, so no other line a run prints names it (issue #1514).
+// committed expectations carry (doc.go "Sanctioned applicability removals").
 // It is opt-in rather than always logged because the set is a standing property
 // of the corpus, read when a session predicts ratchet movement, not a figure
 // that moves at a landing.
@@ -335,12 +334,8 @@ const withheldEnv = "GOXSD_WITHHELD"
 // unbankedWithheld lists the case IDs discovery withheld that carry no committed
 // expectation in ANY lane's file, sorted and de-duplicated (STYLE D1/D2).
 //
-// It is the withheld set with the part every run already reports taken out. A
-// withheld ID that DOES carry a line classifies as Delta.Removed and is printed
-// per lane by reportLaneReadOnly; an ID with no line anywhere classifies as
-// nothing at all — Compare's no-op row — so nothing else a run prints names it.
-// That remainder is what a ratchet prediction must exclude, because a case no
-// lane banked has no line anywhere to flip.
+// It is the withheld set with the half every run already prints taken out
+// (doc.go "Sanctioned applicability removals").
 //
 // "Banked" is read as the UNION over lanes: an ID is banked when ANY lane's file
 // carries it. A per-lane difference would report an ID that is Removed in one
