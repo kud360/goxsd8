@@ -209,6 +209,13 @@
 // (value.IsDatatypeVerdict), which is what keeps a typeless attribute
 // (xs:anySimpleType, §3.2.2.2), or simple content of a type this backend
 // does not map, from being rejected by every document that carries one.
+// The first of those, an {attribute wildcard}, also carries an obligation that
+// is this layer's ALONE: where the wildcard does not carry ##defined, §3.4.6.4
+// key-dft-binding case 3 binds an item ·attributed· to it to a SYNTHESIZED
+// Attribute Use over the ·governing attribute declaration· its ·expanded name·
+// ·resolves· to, which only an assessment episode can ·resolve· — so xsd's
+// static c-ran rendering reports the keyword there by a ruling, not by an
+// omission for this layer's carve to repair (#267).
 //
 // Every one of those charges reaches a DESCENDANT on the same terms, against
 // the ·governing type definition· the particle its parent's {content type}
