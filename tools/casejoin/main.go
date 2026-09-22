@@ -141,11 +141,12 @@ func run(stdout io.Writer, stdin io.Reader, args []string) error {
 		printIDs(stdout, paths, found)
 		return nil
 	}
-	banked, err := loadLane(*expectations, lane)
+	file := laneFile(*expectations, lane)
+	banked, err := loadLane(lane, file)
 	if err != nil {
 		return err
 	}
-	printJoin(stdout, joinLane(lane, paths, found, banked), *expectations)
+	printJoin(stdout, joinLane(lane, paths, found, banked), file)
 	return nil
 }
 
@@ -288,21 +289,23 @@ func record(found map[string][]naming, wanted map[string]struct{}, e conformance
 	}
 }
 
+// laneFile is the ONE construction of a lane's committed file (STYLE D3): the
+// join reads it and the report names it, and a report naming a file the join
+// did not read would be unfalsifiable.
+func laneFile(dir, lane string) string {
+	return filepath.Join(dir, lane+".txt")
+}
+
 // loadLane reads one lane's committed expectations. A lane file that does not
 // exist is an ERROR here and not an empty lane: conformance.LoadExpectations
 // is right to read a missing file as a lane with no case, but a join told to
 // count against a lane nobody has ever banked would answer zero and look like
 // a finding.
-func loadLane(dir, lane string) (map[string]conformance.Status, error) {
-	file := filepath.Join(dir, lane+".txt")
+func loadLane(lane, file string) (map[string]conformance.Status, error) {
 	if _, err := os.Stat(file); err != nil {
 		return nil, fmt.Errorf("lane %q has no expectation file at %s: %w", lane, file, err)
 	}
-	banked, err := conformance.LoadExpectations(file)
-	if err != nil {
-		return nil, err
-	}
-	return banked, nil
+	return conformance.LoadExpectations(file)
 }
 
 // joined is one completed join: how the entries naming the given paths
@@ -360,7 +363,7 @@ func joinLane(lane string, paths []string, found map[string][]naming, banked map
 				continue
 			}
 			seen[n.entry.ID] = struct{}{}
-			j.classify(lane, n.entry, banked)
+			j.classify(n.entry, banked)
 		}
 	}
 	slices.Sort(j.WithheldIDs)
@@ -378,7 +381,7 @@ func joinLane(lane string, paths []string, found map[string][]naming, banked map
 // survives for it decides nothing. A line that does survive one — a sanctioned
 // applicability removal a re-pin has just created — is deleted by the next
 // ratchet rather than flipped, so it is no candidate either.
-func (j *joined) classify(lane string, e conformance.CatalogEntry, banked map[string]conformance.Status) {
+func (j *joined) classify(e conformance.CatalogEntry, banked map[string]conformance.Status) {
 	if e.Withheld {
 		j.WithheldIDs = append(j.WithheldIDs, e.ID)
 		return
@@ -392,7 +395,7 @@ func (j *joined) classify(lane string, e conformance.CatalogEntry, banked map[st
 		j.BankedPassIDs = append(j.BankedPassIDs, e.ID)
 		return
 	}
-	if lane == instanceLane && e.DeclaredValid {
+	if j.Lane == instanceLane && e.DeclaredValid {
 		j.DeclaredValidIDs = append(j.DeclaredValidIDs, e.ID)
 		return
 	}
@@ -477,13 +480,14 @@ func renderWithheld(e conformance.CatalogEntry) string {
 }
 
 // printJoin renders the join: the partition, then the candidate IDs
-// themselves, then the paths nothing names.
-func printJoin(w io.Writer, j joined, dir string) {
+// themselves, then the paths nothing names. file is the lane file the join
+// read, named so the figure can be checked against it.
+func printJoin(w io.Writer, j joined, file string) {
 	_, _ = fmt.Fprintf(w, "casejoin: %d path(s) → %d catalog entry(ies) → %d candidate case(s) in lane %s\n",
 		len(j.Paths), j.entries(), len(j.CandidateIDs), j.Lane)
 	printCaveat(w, j.Lane)
 
-	_, _ = fmt.Fprintf(w, "\n=== Join against %s ===\n", filepath.Join(dir, j.Lane+".txt"))
+	_, _ = fmt.Fprintf(w, "\n=== Join against %s ===\n", file)
 	for _, r := range j.rows() {
 		_, _ = fmt.Fprintf(w, "  %-58s %7d\n", r.label, r.count)
 	}

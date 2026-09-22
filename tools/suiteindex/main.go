@@ -1121,7 +1121,7 @@ func printPaths(stdout, stderr io.Writer, rep report) error {
 		return pathsErr(notes, nil)
 	}
 	printHeader(notes, rep)
-	_, _ = fmt.Fprintf(notes, "  paths-only mode: read the files it could not parse whole with the same query and no -paths\n")
+	_, _ = fmt.Fprintln(notes, "  paths-only mode: read the files it could not parse whole with the same query and no -paths")
 
 	files := &latchWriter{w: stdout}
 	for _, f := range matchedFiles(rep.Hits) {
