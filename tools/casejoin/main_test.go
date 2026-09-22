@@ -232,7 +232,7 @@ func TestJoinCaveatNamesAllThreeDirections(t *testing.T) {
 	header := strings.Index(got, "casejoin: ")
 	caveat := strings.Index(got, "BOUND FROM ABOVE")
 	body := strings.Index(got, "=== Join against")
-	if !(header < caveat && caveat < body) {
+	if header >= caveat || caveat >= body {
 		t.Errorf("the caveat must sit under the header, ahead of the body (#1279):\n%s", got)
 	}
 }
