@@ -122,9 +122,16 @@
 //	gh issue list --state all --json number,state,labels | go tool wipsurvey  # empty claims stay CLAIMED
 //	go tool wipsurvey < /dev/null   # issue data omitted: lease-only report
 //
+// Every fed row must carry `state`: an absent one would read as OPEN, and a
+// branch whose issue is closed could never report RETIRED. A fed list with
+// any row lacking it is discarded whole — the report still prints, every
+// branch judged lease-only — and the run exits 2 naming the first such issue
+// (#1604).
+//
 // Exit status is 0 for a normal report (whatever the branches' verdicts
 // turn out to be) and 2 for an operational error: git is not on PATH, the
-// remote is unreachable, or stdin carries malformed JSON.
+// remote is unreachable, stdin carries malformed JSON, or a fed row carries
+// no `state`.
 package main
 
 import (
@@ -171,7 +178,9 @@ func main() {
 // wip/ branch whose name does not fit the wip/issue-<N> shape is skipped
 // with a warning to stderr rather than aborting the whole report — an
 // unexpected refs/heads/wip/* branch is evidence worth a warning, not a
-// reason to withhold every other row.
+// reason to withhold every other row. A fed list missing `state` is the
+// same kind of evidence, and stronger: run renders every section with that
+// list discarded and returns its error last, so main still exits 2.
 func run(stdout, stderr io.Writer, stdin io.Reader, now time.Time) error {
 	buckets, err := remoteRefs()
 	if err != nil {
@@ -192,9 +201,11 @@ func run(stdout, stderr io.Writer, stdin io.Reader, now time.Time) error {
 		parsed = append(parsed, br)
 	}
 
-	issues, err := readIssues(stdin)
-	if err != nil {
-		return err
+	// A feed missing `state` is reported only after the report prints, so
+	// the leases it could not spoil still reach the reader.
+	issues, feedErr := readIssues(stdin)
+	if feedErr != nil && !errors.Is(feedErr, errMissingState) {
+		return feedErr
 	}
 
 	rows := make([]row, 0, len(parsed))
@@ -236,7 +247,10 @@ func run(stdout, stderr io.Writer, stdin io.Reader, now time.Time) error {
 	if err := renderParked(stdout, branchNames(buckets.parked)); err != nil {
 		return err
 	}
-	return renderOther(stdout, others)
+	if err := renderOther(stdout, others); err != nil {
+		return err
+	}
+	return feedErr
 }
 
 // refSHA is one line of `git ls-remote --heads` output: a remote head's
@@ -594,10 +608,12 @@ type ghComment struct {
 // collapse: no `comments` key means the caller supplied no comment data
 // and an empty claim cannot be dated at all, while `"comments": []` is the
 // positive statement that the thread carries no heartbeat, which dates the
-// claim as takeable.
+// claim as takeable. State is a pointer for the same reason: no `state` key
+// means the reshape dropped the field, which readIssues refuses rather than
+// reading as OPEN.
 type ghIssue struct {
 	Number   int          `json:"number"`
-	State    string       `json:"state"`
+	State    *string      `json:"state"`
 	Labels   []ghLabel    `json:"labels"`
 	Comments *[]ghComment `json:"comments"`
 }
@@ -701,6 +717,10 @@ func newestHeartbeat(comments []ghComment) *time.Time {
 // comments field is likewise optional, per issue: without it that issue's
 // branch can still be retired or dated from its own tip, only an empty
 // claim goes undated.
+//
+// The state field is not optional: a list with any row lacking it returns
+// a nil map and an error wrapping errMissingState ([missingState]), which
+// run reports after rendering every branch lease-only.
 func readIssues(r io.Reader) (map[int]issueState, error) {
 	dec := json.NewDecoder(r)
 	var raw []ghIssue
@@ -710,12 +730,15 @@ func readIssues(r io.Reader) (map[int]issueState, error) {
 		}
 		return nil, fmt.Errorf("parsing issue JSON from stdin: %w", err)
 	}
+	if err := missingState(raw); err != nil {
+		return nil, err
+	}
 
 	issues := make(map[int]issueState, len(raw))
 	for _, gi := range raw {
 		state := issueState{
 			number: gi.Number,
-			closed: strings.EqualFold(gi.State, "CLOSED"),
+			closed: strings.EqualFold(*gi.State, "CLOSED"),
 		}
 		for _, l := range gi.Labels {
 			if l.Name == "needs-replan" {
@@ -730,6 +753,40 @@ func readIssues(r io.Reader) (map[int]issueState, error) {
 		issues[gi.Number] = state
 	}
 	return issues, nil
+}
+
+// errMissingState is what every [missingState] error wraps, so run can tell
+// a feed it must discard but can still report around from one it cannot
+// read at all.
+var errMissingState = errors.New(`every branch was judged lease-only; reshape the input per docs/ROUTINES.md's "Survey input"`)
+
+// missingState returns an error naming the first fed issue, in fed order,
+// whose row carries no `state` key, or nil when every row carries one — an
+// empty list included, since it has no row to lack the key. It words a feed
+// where no row has the key apart from one where only some do: the first is a
+// reshape that never asked for the field, the second a join or merge that
+// lost it for part of the list.
+func missingState(raw []ghIssue) error {
+	missing := 0
+	first := 0
+	for _, gi := range raw {
+		if gi.State != nil {
+			continue
+		}
+		if missing == 0 {
+			first = gi.Number
+		}
+		missing++
+	}
+	if missing == 0 {
+		return nil
+	}
+	if missing == len(raw) {
+		return fmt.Errorf("no row of the fed issue list carries a \"state\" field (first: #%d),"+
+			" so no issue can be told OPEN from CLOSED — %w", first, errMissingState)
+	}
+	return fmt.Errorf("issue #%d is the first of %d of %d fed rows carrying no \"state\" field,"+
+		" so it cannot be told OPEN from CLOSED — %w", first, missing, len(raw), errMissingState)
 }
 
 // verdict is one of the outcomes classify produces for a wip/issue-<N>
@@ -763,8 +820,9 @@ const (
 // checkout's object store; classify then reports unknown rather than
 // guessing an age, because a guessed age could read as expired
 // (resumable) — the dangerous direction for a lease with no data behind
-// it. issue is nil when no issue data was supplied (stdin was empty) or
-// the branch's issue number was not present in it; the reason then notes
+// it. issue is nil when no issue data was supplied (stdin was empty), when
+// the fed list was discarded for a row missing `state` ([missingState]), or
+// when the branch's issue number was not present in it; the reason then notes
 // the verdict is lease-only.
 //
 // The order of the four questions is itself the contract:
