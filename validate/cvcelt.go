@@ -210,6 +210,12 @@ func elementFixed(g governance) (xsd.ValueConstraint, bool) {
 // AT ALL, which is what makes cvc-elt clause 4 vacuous rather than violated for
 // an unresolvable xsi:type (the Note under cvc-elt, resolving W3C issue 11764).
 //
+// That vacuity is the ELEMENT's alone. The ATTRIBUTE is charged separately
+// under cvc-attribute (§3.2.4.1) clause 5 for a QName that ·resolves· to
+// nothing, which reads the same resolution through [walk.resolveInstanceType]
+// without changing what this returns ([walk.instanceTypeResolves],
+// cvcattribute.go).
+//
 // The resolution is cvc-resolve-instance (§3.17.6.3) and stays at the Structures
 // level: the prefix is resolved against the in-scope namespace bindings at E
 // ([Element.LookupPrefix], PRINCIPLES 19) and the result looked up among the
@@ -222,11 +228,43 @@ func (w *walk) instanceTypeDefinition(e Element) (xsd.TypeDefinition, bool) {
 	if !present {
 		return nil, false
 	}
+	t, outcome := w.resolveInstanceType(e, a)
+	return t, outcome == instanceTypeResolved
+}
+
+// instanceTypeOutcome is how far an xsi:type attribute got in ·resolving· to a
+// type definition, which the two rules reading it divide differently: key-itd
+// conjunct 3 folds both failures into "E has no ·instance-specified type
+// definition·" ([walk.instanceTypeDefinition]), while cvc-attribute clause 5
+// charges the second alone ([walk.instanceTypeResolves], cvcattribute.go).
+type instanceTypeOutcome uint8
+
+const (
+	// instanceTypeNoValue is a lexical with no ·actual value· at all: not a
+	// QName, or a prefix with no binding in scope at E.
+	instanceTypeNoValue instanceTypeOutcome = iota
+	// instanceTypeUnresolved is a QName ·actual value· naming no top-level type
+	// definition of the schema.
+	instanceTypeUnresolved
+	// instanceTypeResolved is a QName ·actual value· naming one.
+	instanceTypeResolved
+)
+
+// resolveInstanceType ·resolves· the xsi:type attribute a of e against the
+// schema's top-level {type definitions}, on cvc-resolve-instance's terms
+// (§3.17.6.3), and reports which of its three outcomes that reached. It is the
+// one encoding of that walk (STYLE T4); the two readers differ only in which
+// outcomes they act on.
+func (w *walk) resolveInstanceType(e Element, a Attribute) (xsd.TypeDefinition, instanceTypeOutcome) {
 	name, isQName := resolveInstanceQName(e, a.Value())
 	if !isQName {
-		return nil, false
+		return nil, instanceTypeNoValue
 	}
-	return w.schema.Type(name)
+	t, resolved := w.schema.Type(name)
+	if !resolved {
+		return nil, instanceTypeUnresolved
+	}
+	return t, instanceTypeResolved
 }
 
 // resolveInstanceQName splits a QName lexical per the QName production of

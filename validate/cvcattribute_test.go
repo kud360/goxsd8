@@ -300,3 +300,73 @@ func TestValueChargeOutcomesAreLogged(t *testing.T) {
 			strings.Join(*visits, "\n\t"), strings.Join(want, "\n\t"))
 	}
 }
+
+// cvc-attribute (§3.2.4.1) clause 5 charges an xsi:type attribute whose
+// ·actual value· ·resolves· to no type definition, at the ATTRIBUTE's own
+// position. It is the built-in declaration for the type attribute (§3.2.7.1)
+// charging on its own: no attribute use ever matches xsi:type, so
+// [walk.matchedAttribute] never sees the item and none of the clauses above
+// reaches it (#1494).
+func TestUnresolvableXSITypeChargesClauseFive(t *testing.T) {
+	schema := eSchema(t, false, nil)
+
+	got := cAssess(t, schema, eRoot(map[string]string{"type": "Missing"}))
+
+	if len(got) != 1 {
+		t.Fatalf("Violations() = %v, want exactly one", got)
+	}
+	if got[0].Rule != "cvc-attribute" {
+		t.Errorf("Rule = %q, want cvc-attribute", got[0].Rule)
+	}
+	if got[0].Loc != loc(1, 10) {
+		t.Errorf("Loc = %s, want the xsi:type attribute's own position %s", got[0].Loc, loc(1, 10))
+	}
+	if !strings.Contains(got[0].Msg, "cvc-attribute clause 5") {
+		t.Errorf("Msg = %q, want it to name cvc-attribute clause 5 inline (STYLE E4)", got[0].Msg)
+	}
+	if !strings.Contains(got[0].Msg, `"Missing"`) {
+		t.Errorf("Msg = %q, want it to quote the ·actual value· that ·resolves· to nothing", got[0].Msg)
+	}
+
+	wantSilence(t, cAssess(t, schema, eRoot(map[string]string{"type": "Derived"}, "a")),
+		"an xsi:type that ·resolves· satisfies clause 5")
+}
+
+// Clause 5 leaves the ELEMENT where the Note under cvc-elt puts it: assessed
+// against its ·selected type definition·, whose own charges arrive beside the
+// attribute's and are not displaced by it. Base's {content type} is EMPTY, so
+// the <a> is charged by the fallback type exactly as it is without any xsi:type
+// at all.
+func TestClauseFiveLeavesTheFallbackTypeGoverning(t *testing.T) {
+	schema := eSchema(t, false, nil)
+
+	got := cAssess(t, schema, eRoot(map[string]string{"type": "Missing"}, "a"))
+
+	if len(got) != 2 {
+		t.Fatalf("Violations() = %v, want two: the clause 5 charge and Base's empty {content type}", got)
+	}
+	if got[0].Rule != "cvc-attribute" || got[1].Rule != "cvc-complex-type" {
+		t.Errorf("Rules = %q, %q, want cvc-attribute then cvc-complex-type against the SELECTED type",
+			got[0].Rule, got[1].Rule)
+	}
+}
+
+// The charge goes through neither arm of cvc-type clause 3, so a SIMPLE
+// ·governing type definition· reaches it too — the shape #1494 was filed on,
+// where the declared type is xs:string and cvc-complex-type never runs. The
+// character content still validates against that fallback type, so clause 5's
+// charge is the whole of what the document is told.
+func TestClauseFiveChargesUnderASimpleGoverningType(t *testing.T) {
+	schema := simpleTypedSchema(t, icBuiltin("string"), nil, false)
+
+	got := cAssess(t, schema, eRoot(map[string]string{"type": "Missing"}, "#hello"))
+
+	if len(got) != 1 {
+		t.Fatalf("Violations() = %v, want exactly one: clause 5, with xs:string admitting the content", got)
+	}
+	if got[0].Rule != "cvc-attribute" || !strings.Contains(got[0].Msg, "cvc-attribute clause 5") {
+		t.Errorf("charge = %v, want cvc-attribute clause 5", got[0])
+	}
+	wantSilence(t, cAssess(t, schema, eRoot(nil, "#hello")),
+		"an element carrying no xsi:type at all has no ·actual value· for clause 5 to quantify over")
+}

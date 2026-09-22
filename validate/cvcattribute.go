@@ -110,6 +110,54 @@ func (w *walk) matchedAttribute(a Attribute, e Element, u xsd.AttributeUse) {
 	}
 }
 
+// instanceTypeResolves charges cvc-attribute (§3.2.4.1) clause 5 against e's
+// xsi:type attribute: where D is the built-in declaration for the type
+// attribute (§3.2.7.1), A's ·actual value· must ·resolve· to a type definition.
+//
+// It is reached from [walk.attributes] (assess.go) and never through
+// [walk.matchedAttribute], because no attribute use ever matches xsi:type —
+// cvc-complex-type clause 2 excepts the four Built-in Attribute Declarations by
+// name (isInstanceAttribute) and §3.2.6 a-props-correct forbids a schema to
+// redeclare them. That exception is clause 2's own quantifier and nothing
+// wider: the Note under §3.2.4.2 keeps an xsi:type attribute governed by its
+// built-in declaration whatever the element's ·governing type definition· is,
+// so cvc-assess-elt clause 2 (§3.3.4.6) walks the item through cvc-attribute
+// regardless, and clause 5 is the part of that walk the built-in declaration
+// adds. It is called for BOTH arms of cvc-type clause 3 for the same reason:
+// the governing type decides nothing about an attribute it never governs.
+//
+// The charge is the ATTRIBUTE's alone and the ELEMENT is untouched by it: a
+// lexical that does not ·resolve· leaves E with no ·instance-specified type
+// definition· at all, so cvc-elt clause 4 stays vacuous and the element is
+// assessed against its ·selected type definition· (the Note under cvc-elt,
+// [walk.instanceTypeDefinition]). Clause 5 carries no such fallback wording and
+// charges whether or not that fallback succeeds.
+//
+// GAP(validate): a lexical with no ·actual value· at all — not a QName, or a
+// prefix with no binding in scope at E — is charged by nothing. Clause 5
+// quantifies over A's ·actual value·, which such a lexical does not have, so
+// the defect is clause 3's as String Valid against the built-in declaration's
+// xs:QName {type definition}; charging it here would report it under a clause
+// that does not hold it. Clause 3 has no site for xsi:type either, matchedAttribute
+// being the only one and unreachable for it, so the lexical is accepted.
+func (w *walk) instanceTypeResolves(e Element) {
+	a, present := instanceAttribute(e, "type")
+	if !present {
+		return
+	}
+	switch _, outcome := w.resolveInstanceType(e, a); outcome {
+	case instanceTypeResolved:
+		w.logAttribute(a, ruleCvcAttribute, "5", "satisfied")
+	case instanceTypeNoValue:
+		w.logAttribute(a, ruleCvcAttribute, "5", "declined")
+	case instanceTypeUnresolved:
+		w.res.violations = append(w.res.violations, xsderr.New(ruleCvcAttribute, a.Loc(),
+			"the ·actual value· %q of the xsi:type attribute of the element %s ·resolves· to no type definition (§3.17.6.3, cvc-resolve-instance), which cvc-attribute clause 5 requires of an attribute governed by the built-in declaration for the type attribute (§3.2.7.1)",
+			a.Value(), e.Name()))
+		w.logAttribute(a, ruleCvcAttribute, "5", "charged")
+	}
+}
+
 // fixedConstraint is one fixed {value constraint} together with the rule that
 // reads it and the words that rule's message needs: the clause it charges (empty
 // for cvc-au, which is one undivided sentence with no numbered clauses) and the
