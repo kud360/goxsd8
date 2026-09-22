@@ -288,10 +288,10 @@ type Matcher struct {
 	// first, and it is the LIVE SET's rather than any one region's. Every live
 	// partition stands at the same ·basic particle· — two standing at different
 	// ones would ·compete· for the name that put them there, which cos-nonambig
-	// (§3.8.6.4) rejected at Finalize (partitionsBounded) — and the flattened
-	// model is a tree, so that one particle fixes one chain of ancestors. What
-	// live partitions differ in is the occurrence counters, which is what a
-	// region carries.
+	// (§3.8.6.4) rejects at Finalize (Phase C's checkContentModelsUnambiguous) —
+	// and the flattened model is a tree, so that one particle fixes one chain of
+	// ancestors. What live partitions differ in is the occurrence counters,
+	// which is what a region carries.
 	//
 	// The premise is load-bearing for the ENCODING and not only for the
 	// verdicts: a live set that did hold two paths would be answered with one
