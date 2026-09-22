@@ -228,7 +228,7 @@ func (w *walk) instanceTypeDefinition(e Element) (xsd.TypeDefinition, bool) {
 	if !present {
 		return nil, false
 	}
-	t, outcome := w.resolveInstanceType(e, a)
+	_, t, outcome := w.resolveInstanceType(e, a)
 	return t, outcome == instanceTypeResolved
 }
 
@@ -255,16 +255,21 @@ const (
 // (§3.17.6.3), and reports which of its three outcomes that reached. It is the
 // one encoding of that walk (STYLE T4); the two readers differ only in which
 // outcomes they act on.
-func (w *walk) resolveInstanceType(e Element, a Attribute) (xsd.TypeDefinition, instanceTypeOutcome) {
+//
+// The first result is A's ·actual value· — the ·expanded name· the lexical
+// resolved to — which the clause 5 charge names in its message beside the
+// lexical, the two differing exactly when a prefix is bound to a namespace the
+// author did not expect. It is the zero QName where there is no ·actual value·.
+func (w *walk) resolveInstanceType(e Element, a Attribute) (xsd.QName, xsd.TypeDefinition, instanceTypeOutcome) {
 	name, isQName := resolveInstanceQName(e, a.Value())
 	if !isQName {
-		return nil, instanceTypeNoValue
+		return xsd.QName{}, nil, instanceTypeNoValue
 	}
 	t, resolved := w.schema.Type(name)
 	if !resolved {
-		return nil, instanceTypeUnresolved
+		return name, nil, instanceTypeUnresolved
 	}
-	return t, instanceTypeResolved
+	return name, t, instanceTypeResolved
 }
 
 // resolveInstanceQName splits a QName lexical per the QName production of

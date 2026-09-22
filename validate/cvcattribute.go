@@ -145,15 +145,15 @@ func (w *walk) instanceTypeResolves(e Element) {
 	if !present {
 		return
 	}
-	switch _, outcome := w.resolveInstanceType(e, a); outcome {
+	switch name, _, outcome := w.resolveInstanceType(e, a); outcome {
 	case instanceTypeResolved:
 		w.logAttribute(a, ruleCvcAttribute, "5", "satisfied")
 	case instanceTypeNoValue:
 		w.logAttribute(a, ruleCvcAttribute, "5", "declined")
 	case instanceTypeUnresolved:
 		w.res.violations = append(w.res.violations, xsderr.New(ruleCvcAttribute, a.Loc(),
-			"the ·actual value· %q of the xsi:type attribute of the element %s ·resolves· to no type definition (§3.17.6.3, cvc-resolve-instance), which cvc-attribute clause 5 requires of an attribute governed by the built-in declaration for the type attribute (§3.2.7.1)",
-			a.Value(), e.Name()))
+			"the xsi:type attribute of the element %s has the ·actual value· %s, from the lexical %q, and that name ·resolves· to no type definition (§3.17.6.3, cvc-resolve-instance), which cvc-attribute clause 5 requires of an attribute governed by the built-in declaration for the type attribute (§3.2.7.1)",
+			e.Name(), name, a.Value()))
 		w.logAttribute(a, ruleCvcAttribute, "5", "charged")
 	}
 }
