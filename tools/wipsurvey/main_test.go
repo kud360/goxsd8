@@ -857,31 +857,197 @@ func TestGitEmptyDiffUnfetchedObject(t *testing.T) {
 	}
 }
 
-// TestPartitionRefs checks main is taken out of the surveyed branch set:
-// it is the ancestry test's right-hand side, never a row.
+// TestParseAheadBehind exercises the pure rev-list output parser: no git
+// call, just the text `git rev-list --left-right --count <main>...<ref>`
+// would have produced.
+//
+// Which side is which is the case that matters. rev-list prints the LEFT
+// count first, and the left side is main, so the first number is what the
+// ref is BEHIND and the second is what it is AHEAD. Reading them the other
+// way round would report a merged session branch as carrying hundreds of
+// stranded commits and a genuinely stranded one as carrying none — the
+// exact inversion of the state the section exists to flag (#1627).
+func TestParseAheadBehind(t *testing.T) {
+	t.Run("the left count is behind and the right is ahead", func(t *testing.T) {
+		got, err := parseAheadBehind("13\t1\n")
+		if err != nil {
+			t.Fatalf("parseAheadBehind: %v", err)
+		}
+		if got.behind != 13 {
+			t.Errorf("behind = %d, want 13 (the left count, what main has and the ref does not)", got.behind)
+		}
+		if got.ahead != 1 {
+			t.Errorf("ahead = %d, want 1 (the right count, what the ref has and main does not)", got.ahead)
+		}
+	})
+
+	t.Run("a merged branch reads ahead zero", func(t *testing.T) {
+		got, err := parseAheadBehind("270\t0\n")
+		if err != nil {
+			t.Fatalf("parseAheadBehind: %v", err)
+		}
+		if got.ahead != 0 || got.behind != 270 {
+			t.Errorf("parseAheadBehind(\"270\\t0\") = %+v, want ahead 0 behind 270", got)
+		}
+	})
+
+	t.Run("an identical ref reads zero both ways", func(t *testing.T) {
+		got, err := parseAheadBehind("0\t0\n")
+		if err != nil {
+			t.Fatalf("parseAheadBehind: %v", err)
+		}
+		if got.ahead != 0 || got.behind != 0 {
+			t.Errorf("parseAheadBehind(\"0\\t0\") = %+v, want both zero", got)
+		}
+	})
+
+	malformed := []struct {
+		name   string
+		output string
+	}{
+		{name: "empty output", output: ""},
+		{name: "one count only", output: "13\n"},
+		{name: "three counts", output: "13\t1\t7\n"},
+		{name: "non-numeric behind", output: "main\t1\n"},
+		{name: "non-numeric ahead", output: "13\tahead\n"},
+	}
+	for _, c := range malformed {
+		t.Run(c.name+" is an error, not a zero", func(t *testing.T) {
+			got, err := parseAheadBehind(c.output)
+			if err == nil {
+				t.Fatalf("parseAheadBehind(%q) = %+v, want an error: a count nothing parsed is not a count of zero", c.output, got)
+			}
+		})
+	}
+}
+
+// TestGitAheadBehindWithoutMain checks the no-main-on-the-remote path
+// resolves to undecided without running git at all — the survey still
+// reports, with the counts unstated rather than invented.
+func TestGitAheadBehindWithoutMain(t *testing.T) {
+	got, err := gitAheadBehind("aaaa111", "")
+	if err != nil {
+		t.Fatalf("gitAheadBehind with no main SHA: unexpected error: %v", err)
+	}
+	if got != nil {
+		t.Fatalf("gitAheadBehind with no main SHA = %+v, want nil", got)
+	}
+}
+
+// TestGitAheadBehindUnfetchedObject shells git for real against a SHA no
+// checkout has: git exits 128, and that must report as undecided rather
+// than as an error aborting the whole survey, or as the ahead=0 that would
+// claim nothing is stranded on a ref nobody counted.
+func TestGitAheadBehindUnfetchedObject(t *testing.T) {
+	const absent = "0000000000000000000000000000000000000001"
+	got, err := gitAheadBehind(absent, absent)
+	if err != nil {
+		t.Fatalf("gitAheadBehind on an unfetched object: unexpected error: %v", err)
+	}
+	if got != nil {
+		t.Fatalf("gitAheadBehind on an unfetched object = %+v, want nil", got)
+	}
+}
+
+// TestPartitionRefs checks main is taken out of the surveyed branch set —
+// it is the ancestry test's right-hand side, never a row — and that the
+// three namespaces WORKFLOW.md's branch scheme distinguishes each land in
+// their own bucket. The whole of #1627 is that a ref in a namespace with
+// no bucket is a ref nothing reports.
 func TestPartitionRefs(t *testing.T) {
 	refs := []refSHA{
 		{sha: "aaaa111", ref: "refs/heads/wip/issue-1"},
 		{sha: "mmmm999", ref: "refs/heads/main"},
+		{sha: "pppp333", ref: "refs/heads/parked/untriaged-20260918-101500"},
+		{sha: "cccc444", ref: "refs/heads/claude/dazzling-cerf-u3xy2k"},
 		{sha: "bbbb222", ref: "refs/heads/wip/issue-2"},
 	}
-	wips, mainSHA := partitionRefs(refs)
-	if mainSHA != "mmmm999" {
-		t.Errorf("mainSHA = %q, want %q", mainSHA, "mmmm999")
+	got := partitionRefs(refs)
+	if got.mainSHA != "mmmm999" {
+		t.Errorf("mainSHA = %q, want %q", got.mainSHA, "mmmm999")
 	}
-	if len(wips) != 2 || wips[0].ref != "refs/heads/wip/issue-1" || wips[1].ref != "refs/heads/wip/issue-2" {
-		t.Errorf("wips = %+v, want the two wip refs in ls-remote order", wips)
+	if len(got.wips) != 2 || got.wips[0].ref != "refs/heads/wip/issue-1" || got.wips[1].ref != "refs/heads/wip/issue-2" {
+		t.Errorf("wips = %+v, want the two wip refs in ls-remote order", got.wips)
+	}
+	if len(got.parked) != 1 || got.parked[0].ref != "refs/heads/parked/untriaged-20260918-101500" {
+		t.Errorf("parked = %+v, want the one parked ref", got.parked)
+	}
+	if len(got.others) != 1 || got.others[0].ref != "refs/heads/claude/dazzling-cerf-u3xy2k" {
+		t.Errorf("others = %+v, want the one ref in neither namespace", got.others)
 	}
 
 	t.Run("no main on the remote yields an empty SHA", func(t *testing.T) {
-		wips, mainSHA := partitionRefs([]refSHA{{sha: "aaaa111", ref: "refs/heads/wip/issue-1"}})
-		if mainSHA != "" {
-			t.Errorf("mainSHA = %q, want empty", mainSHA)
+		got := partitionRefs([]refSHA{{sha: "aaaa111", ref: "refs/heads/wip/issue-1"}})
+		if got.mainSHA != "" {
+			t.Errorf("mainSHA = %q, want empty", got.mainSHA)
 		}
-		if len(wips) != 1 {
-			t.Errorf("wips = %+v, want the one wip ref", wips)
+		if len(got.wips) != 1 {
+			t.Errorf("wips = %+v, want the one wip ref", got.wips)
 		}
 	})
+
+	t.Run("a parked ref is never surveyed as a lease", func(t *testing.T) {
+		got := partitionRefs([]refSHA{{sha: "pppp333", ref: "refs/heads/parked/untriaged-20260918-101500"}})
+		if len(got.wips) != 0 {
+			t.Errorf("wips = %+v, want none: a parked branch is not a claim on an issue", got.wips)
+		}
+		if len(got.others) != 0 {
+			t.Errorf("others = %+v, want none: parked/* has a section of its own", got.others)
+		}
+		if len(got.parked) != 1 {
+			t.Errorf("parked = %+v, want the one parked ref", got.parked)
+		}
+	})
+
+	t.Run("a malformed wip ref stays a lease candidate", func(t *testing.T) {
+		// run warns on it; rehoming it into the other-branch section would
+		// silence exactly the evidence that warning exists for.
+		got := partitionRefs([]refSHA{{sha: "aaaa111", ref: "refs/heads/wip/issue-abc"}})
+		if len(got.wips) != 1 || len(got.others) != 0 {
+			t.Errorf("partitionRefs = %+v, want the malformed ref in wips", got)
+		}
+	})
+
+	t.Run("a head whose name only starts like a namespace is an other", func(t *testing.T) {
+		got := partitionRefs([]refSHA{
+			{sha: "aaaa111", ref: "refs/heads/wipfoo"},
+			{sha: "pppp333", ref: "refs/heads/parkedfoo"},
+			{sha: "mmmm999", ref: "refs/heads/maintenance"},
+		})
+		if len(got.wips) != 0 || len(got.parked) != 0 || len(got.others) != 3 {
+			t.Errorf("partitionRefs = %+v, want all three as others", got)
+		}
+		if got.mainSHA != "" {
+			t.Errorf("mainSHA = %q, want empty: refs/heads/maintenance is not main", got.mainSHA)
+		}
+	})
+}
+
+// TestBranchNames checks the parked section's rows are named without their
+// refs/heads/ prefix and ordered by name, not by whatever order the remote
+// listed them in (STYLE D1).
+func TestBranchNames(t *testing.T) {
+	got := branchNames([]refSHA{
+		{sha: "cccc333", ref: "refs/heads/parked/untriaged-20260920-090000"},
+		{sha: "aaaa111", ref: "refs/heads/parked/untriaged-20260918-101500"},
+		{sha: "bbbb222", ref: "refs/heads/parked/untriaged-20260919-120000"},
+	})
+	want := []string{
+		"parked/untriaged-20260918-101500",
+		"parked/untriaged-20260919-120000",
+		"parked/untriaged-20260920-090000",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("branchNames = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("branchNames[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+	if got := branchNames(nil); len(got) != 0 {
+		t.Errorf("branchNames(nil) = %v, want no names", got)
+	}
 }
 
 // TestParseWipRef exercises the pure branch-name parser, including the
@@ -1354,6 +1520,208 @@ func TestRenderTableDeterministic(t *testing.T) {
 	}
 	if a.String() != b.String() {
 		t.Fatalf("renderTable is not deterministic:\n--- a ---\n%s\n--- b ---\n%s", a.String(), b.String())
+	}
+}
+
+// TestRenderParkedEmptyNamespaceIsStated is #1627 arm 1's regression: an
+// empty parked/* namespace must print that it was surveyed and found
+// empty. A section omitted for want of rows and a section reporting zero
+// read identically to whoever quotes the number afterwards, which is how
+// five PLAN.md stamps came to report a parked/* count from a refspec that
+// never carried parked/*.
+func TestRenderParkedEmptyNamespaceIsStated(t *testing.T) {
+	var buf bytes.Buffer
+	if err := renderParked(&buf, nil); err != nil {
+		t.Fatalf("renderParked: %v", err)
+	}
+	got := buf.String()
+	if !strings.Contains(got, "PARKED BRANCHES") {
+		t.Errorf("empty parked namespace printed no section at all:\n%q", got)
+	}
+	if !strings.Contains(got, "refs/heads/parked/*") {
+		t.Errorf("empty parked section does not name the namespace it surveyed:\n%q", got)
+	}
+	if !strings.Contains(got, "none") {
+		t.Errorf("empty parked section does not state the count it measured:\n%q", got)
+	}
+}
+
+// TestRenderParkedRows checks each parked branch gets its own row saying
+// it holds no lease, in the order the caller supplied (STYLE D1).
+func TestRenderParkedRows(t *testing.T) {
+	branches := []string{
+		"parked/untriaged-20260918-101500",
+		"parked/untriaged-20260920-090000",
+	}
+	var buf bytes.Buffer
+	if err := renderParked(&buf, branches); err != nil {
+		t.Fatalf("renderParked: %v", err)
+	}
+	got := buf.String()
+	if strings.Contains(got, "none") {
+		t.Errorf("parked section with two rows still reports none:\n%s", got)
+	}
+	lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
+	// A blank separator line, the heading, the column header, two rows.
+	if len(lines) != 5 {
+		t.Fatalf("got %d lines, want 5 (blank + heading + header + 2 rows):\n%s", len(lines), got)
+	}
+	for i, branch := range branches {
+		line := lines[i+3]
+		if !strings.Contains(line, branch) {
+			t.Errorf("row %d = %q, want branch %q in supplied order", i, line, branch)
+		}
+		if !strings.Contains(line, "no lease") {
+			t.Errorf("row %d = %q, does not say the branch holds no lease", i, line)
+		}
+	}
+
+	var again bytes.Buffer
+	if err := renderParked(&again, branches); err != nil {
+		t.Fatalf("renderParked (again): %v", err)
+	}
+	if again.String() != got {
+		t.Errorf("renderParked is not deterministic:\n--- a ---\n%s\n--- b ---\n%s", got, again.String())
+	}
+}
+
+// TestRenderOtherEmptyNamespaceIsStated is the same guard on the section
+// for heads outside both namespaces: surveyed-and-empty must not read as
+// never-looked-at.
+func TestRenderOtherEmptyNamespaceIsStated(t *testing.T) {
+	var buf bytes.Buffer
+	if err := renderOther(&buf, nil); err != nil {
+		t.Fatalf("renderOther: %v", err)
+	}
+	got := buf.String()
+	if !strings.Contains(got, "OTHER BRANCHES") {
+		t.Errorf("empty other-branch namespace printed no section at all:\n%q", got)
+	}
+	if !strings.Contains(got, "none") {
+		t.Errorf("empty other-branch section does not state the count it measured:\n%q", got)
+	}
+}
+
+// The three NOTE cells the other-branch section prints, written out here
+// rather than read from the code, so a reworded note fails instead of
+// following along — the same discipline remedy() applies to #1437's
+// clause.
+const (
+	aheadNote  = "AHEAD OF MAIN -- carries commits main does not have; triage before deleting"
+	mergedNote = "nothing main does not already have"
+	unsureNote = "ahead/behind undecided -- run `git fetch origin`"
+)
+
+// TestRenderOtherFlagsAhead is #1627 arm 2's regression, on the shape the
+// issue measured: claude/dazzling-cerf-u3xy2k stood ahead=1 behind=13,
+// one commit main did not have, carrying a /backlog pass's whole log
+// entry. A row ahead of main must read differently from a merged one at a
+// glance, and an undecided count must read as neither.
+//
+// The counts are fixtures, not a live remote: a test reading origin would
+// stop being able to fail the moment that ref is deleted.
+func TestRenderOtherFlagsAhead(t *testing.T) {
+	rows := []otherRow{
+		{branch: "claude/dazzling-cerf-u3xy2k", counts: &aheadBehind{ahead: 1, behind: 13}},
+		{branch: "claude/eloquent-cerf-39rk64", counts: &aheadBehind{ahead: 0, behind: 270}},
+		{branch: "claude/never-fetched-000000", counts: nil},
+	}
+	var buf bytes.Buffer
+	if err := renderOther(&buf, rows); err != nil {
+		t.Fatalf("renderOther: %v", err)
+	}
+	got := buf.String()
+	lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
+	// A blank separator line, the heading, the column header, three rows.
+	if len(lines) != 6 {
+		t.Fatalf("got %d lines, want 6 (blank + heading + header + 3 rows):\n%s", len(lines), got)
+	}
+
+	stranded, merged, unfetched := lines[3], lines[4], lines[5]
+	if !strings.Contains(stranded, "claude/dazzling-cerf-u3xy2k") {
+		t.Fatalf("row 1 = %q, want the ahead=1 branch (rows render in the supplied order)", stranded)
+	}
+	if fields := strings.Fields(stranded); fields[1] != "1" || fields[2] != "13" {
+		t.Errorf("ahead/behind cells = %q, want ahead 1 behind 13", stranded)
+	}
+	if !strings.Contains(stranded, aheadNote) {
+		t.Errorf("ahead=1 row = %q, does not flag the one state that is dangerous", stranded)
+	}
+	if strings.Contains(merged, aheadNote) {
+		t.Errorf("ahead=0 row = %q, carries the ahead-of-main flag: the flag then distinguishes nothing", merged)
+	}
+	if fields := strings.Fields(merged); fields[1] != "0" || fields[2] != "270" {
+		t.Errorf("ahead/behind cells = %q, want ahead 0 behind 270", merged)
+	}
+	if !strings.Contains(unfetched, unsureNote) {
+		t.Errorf("uncounted row = %q, does not say the counts are undecided", unfetched)
+	}
+	if fields := strings.Fields(unfetched); fields[1] != "?" || fields[2] != "?" {
+		t.Errorf("uncounted row = %q, prints counts where nothing counted", unfetched)
+	}
+
+	var again bytes.Buffer
+	if err := renderOther(&again, rows); err != nil {
+		t.Fatalf("renderOther (again): %v", err)
+	}
+	if again.String() != got {
+		t.Errorf("renderOther is not deterministic:\n--- a ---\n%s\n--- b ---\n%s", got, again.String())
+	}
+}
+
+// TestOtherNoteNeverCallsAnUncountedRefMerged pins the posture the rest of
+// this tool takes on evidence it does not have: "ahead=0" is the claim
+// that nothing is stranded on the ref, and an unfetched tip supports no
+// such claim.
+func TestOtherNoteNeverCallsAnUncountedRefMerged(t *testing.T) {
+	if got := otherNote(otherRow{branch: "claude/x", counts: nil}); got == mergedNote {
+		t.Fatalf("otherNote on an uncounted ref = %q, the note that says nothing is at risk", got)
+	}
+	if got := otherNote(otherRow{branch: "claude/x", counts: &aheadBehind{ahead: 0, behind: 5}}); got != mergedNote {
+		t.Errorf("otherNote on a counted ahead=0 ref = %q, want %q", got, mergedNote)
+	}
+	if got := otherNote(otherRow{branch: "claude/x", counts: &aheadBehind{ahead: 2, behind: 5}}); got != aheadNote {
+		t.Errorf("otherNote on an ahead=2 ref = %q, want %q", got, aheadNote)
+	}
+}
+
+// TestSortOtherRows checks the section's order is the branch name and not
+// the order the remote listed its heads in (STYLE D1).
+func TestSortOtherRows(t *testing.T) {
+	rows := []otherRow{
+		{branch: "claude/zebra"},
+		{branch: "claude/alpha"},
+		{branch: "meta/audit-2026-09-06"},
+	}
+	sortOtherRows(rows)
+	want := []string{"claude/alpha", "claude/zebra", "meta/audit-2026-09-06"}
+	for i := range want {
+		if rows[i].branch != want[i] {
+			t.Fatalf("sortOtherRows = %+v, want %v", rows, want)
+		}
+	}
+}
+
+// TestReportNamesEveryNamespace checks the whole report, rendered the way
+// run renders it against a remote carrying nothing but main, still tells a
+// reader which namespaces were surveyed. That is the one claim a /backlog
+// stamp quotes a count from (#1627).
+func TestReportNamesEveryNamespace(t *testing.T) {
+	var buf bytes.Buffer
+	if err := renderTable(&buf, nil); err != nil {
+		t.Fatalf("renderTable: %v", err)
+	}
+	if err := renderParked(&buf, nil); err != nil {
+		t.Fatalf("renderParked: %v", err)
+	}
+	if err := renderOther(&buf, nil); err != nil {
+		t.Fatalf("renderOther: %v", err)
+	}
+	got := buf.String()
+	for _, want := range []string{"ISSUE", "PARKED BRANCHES", "OTHER BRANCHES", "wip/*", "parked/*"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("report over an empty remote does not mention %q:\n%s", want, got)
+		}
 	}
 }
 
