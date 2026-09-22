@@ -56,9 +56,15 @@ var fixtureSuite = map[string]string{
 
 // fixtureLanes are the committed expectations the fixture suite is joined
 // against: one case per class the report partitions into.
+//
+// S/g3/instance/i3 is WITHHELD and carries a line anyway — the state a suite
+// re-pin leaves behind, where the line is a sanctioned applicability removal
+// the next ratchet deletes rather than a score that could flip. The join must
+// classify it withheld and not as a banked failure.
 var fixtureLanes = map[string]string{
 	"instance.txt": `S/g1/instance/i1 fail
 S/g2/instance/i2 fail
+S/g3/instance/i3 fail
 S/g4/instance/i4 pass
 `,
 	"schema.txt": `S/g1/schema/s1 fail
@@ -171,7 +177,7 @@ func TestJoinCountsOnlyTheBankedFailuresThatCouldFlip(t *testing.T) {
 		"casejoin: 1 path(s) → 3 catalog entry(ies) → 1 candidate case(s) in lane instance",
 		"\n  S/g1/instance/i1\n",
 	)
-	wantRow(t, got, "no line in instance.txt — withheld (#1412)", 1)
+	wantRow(t, got, "withheld — no case produced, nothing to flip (#1412)", 1)
 	wantRow(t, got, "banked fail — suite declares it VALID, subtracted (#1561)", 1)
 	wantRow(t, got, "banked fail — CANDIDATE", 1)
 	if strings.Contains(got, "\n  S/g2/instance/i2\n") {

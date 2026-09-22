@@ -318,8 +318,9 @@ type joined struct {
 	// names at all.
 	Paths   []string
 	Unnamed []string
-	// WithheldIDs are entries the suite's applicability metadata scopes away:
-	// no line in any lane, nothing to flip (#1412).
+	// WithheldIDs are entries the suite's applicability metadata scopes away.
+	// Discovery produces no case for one, so it carries no line in any lane
+	// and nothing about it can flip a score (#1412).
 	WithheldIDs []string
 	// UnscoredIDs are entries this lane's file carries no line for although
 	// discovery produced them — the other lane's kind, a case whose line no
@@ -371,12 +372,18 @@ func joinLane(lane string, paths []string, found map[string][]naming, banked map
 }
 
 // classify files one entry in the single class it belongs to.
+//
+// Withheld is read BEFORE the lane's file rather than as a reason a line is
+// missing: discovery produces no case for a withheld entry, so whether a line
+// survives for it decides nothing. A line that does survive one — a sanctioned
+// applicability removal a re-pin has just created — is deleted by the next
+// ratchet rather than flipped, so it is no candidate either.
 func (j *joined) classify(lane string, e conformance.CatalogEntry, banked map[string]conformance.Status) {
-	status, ok := banked[e.ID]
-	if !ok && e.Withheld {
+	if e.Withheld {
 		j.WithheldIDs = append(j.WithheldIDs, e.ID)
 		return
 	}
+	status, ok := banked[e.ID]
 	if !ok {
 		j.UnscoredIDs = append(j.UnscoredIDs, e.ID)
 		return
@@ -501,7 +508,7 @@ func (j joined) rows() []row {
 		{"paths given", len(j.Paths)},
 		{"paths no catalog entry names", len(j.Unnamed)},
 		{"catalog entries naming a path", j.entries()},
-		{"  no line in " + j.Lane + ".txt — withheld (#1412)", len(j.WithheldIDs)},
+		{"  withheld — no case produced, nothing to flip (#1412)", len(j.WithheldIDs)},
 		{"  no line in " + j.Lane + ".txt — not banked by this lane", len(j.UnscoredIDs)},
 		{"  banked pass — cannot flip up", len(j.BankedPassIDs)},
 	}
