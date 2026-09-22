@@ -148,6 +148,14 @@
 // its tail with every match in it already closed and every child list
 // complete.
 //
+// `-paths` prints the matched fixtures ALONE on stdout, one path per line and
+// nothing else, for a tool downstream: `go tool casejoin` turns that list into
+// the conformance case IDs a lane's expectation file is keyed by, which is the
+// join CLAUDE.md prescribes for a ratchet prediction (#1642). The header, its
+// counts and any caveat go to stderr in that mode, so a pipeline still leaves
+// them in front of the human; the per-file listings below are left to a plain
+// run of the same query.
+//
 // The corpus ships deliberately malformed fixtures, so a parse fault is
 // content rather than a failure: the matches found ahead of it are kept and
 // the file is listed, because a construct BEHIND the fault is invisible here
@@ -167,6 +175,7 @@
 //	go tool suiteindex '{*}*@{http://www.w3.org/2001/XMLSchema-instance}type'
 //	go tool suiteindex '*@maxOccurs//*@maxOccurs'
 //	go tool suiteindex element@targetNamespace testdata/xsdtests/ibmData
+//	go tool suiteindex -paths '{*}*@{http://www.w3.org/2001/XMLSchema-instance}type' | go tool casejoin join instance
 //
 // The query is `[pattern//]local[|local…][@attr[,attr…]]` with `|` in place
 // of `,` for the ANY join over attributes, and any local part may be `*`. The
@@ -190,6 +199,7 @@ package main
 
 import (
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"io/fs"
@@ -207,20 +217,26 @@ import (
 const defaultRoot = "testdata/xsdtests"
 
 // usage is printed for any argument the tool cannot act on.
-const usage = `usage: suiteindex <[pattern//]local[|local...][@attr[,attr...]]> [dir]; "," joins attribute names as all, "|" joins either position's names as any, "//" admits a match only inside an element the pattern before it matches, at any depth, any local name may be "*", and "{uri}" before one fixes its namespace — "{*}" censuses every namespace, "{}" the one that has none`
+const usage = `usage: suiteindex [-paths] <[pattern//]local[|local...][@attr[,attr...]]> [dir]; "," joins attribute names as all, "|" joins either position's names as any, "//" admits a match only inside an element the pattern before it matches, at any depth, any local name may be "*", and "{uri}" before one fixes its namespace — "{*}" censuses every namespace, "{}" the one that has none; -paths prints the matched fixture paths alone, for a tool downstream`
 
 func main() {
-	if err := run(os.Stdout, os.Args[1:]); err != nil {
+	if err := run(os.Stdout, os.Stderr, os.Args[1:]); err != nil {
 		fmt.Fprintf(os.Stderr, "suiteindex: %v\n", err)
 		os.Exit(2)
 	}
 }
 
 // run drives the census end to end: parse the query, walk the corpus, render
-// the report. It takes its destination and arguments so a test can drive the
+// the report. It takes its destinations and arguments so a test can drive the
 // whole command without a subprocess.
-func run(stdout io.Writer, args []string) error {
-	q, root, err := parseArgs(args)
+func run(stdout, stderr io.Writer, args []string) error {
+	flags := flag.NewFlagSet("suiteindex", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	pathsOnly := flags.Bool("paths", false, "print the matched fixture paths alone, one per line, for a tool downstream")
+	if err := flags.Parse(args); err != nil {
+		return fmt.Errorf("%w\n%s", err, usage)
+	}
+	q, root, err := parseArgs(flags.Args())
 	if err != nil {
 		return err
 	}
@@ -228,10 +244,14 @@ func run(stdout io.Writer, args []string) error {
 	if err != nil {
 		return err
 	}
+	if *pathsOnly {
+		return printPaths(stdout, stderr, rep)
+	}
 	return printReport(stdout, rep)
 }
 
-// parseArgs splits the command line into the query and the tree to walk.
+// parseArgs splits the command line's positional arguments into the query and
+// the tree to walk.
 func parseArgs(args []string) (query, string, error) {
 	if len(args) == 0 || len(args) > 2 {
 		return query{}, "", errors.New(usage)
@@ -1065,17 +1085,62 @@ func printReportTo(w io.Writer, rep report) {
 		return
 	}
 
-	_, _ = fmt.Fprintf(w, "suiteindex: %d occurrence(s) of %s in %d fixture(s) under %s\n",
-		len(rep.Hits), rep.Query, countFiles(rep.Hits), rep.Root)
-	_, _ = fmt.Fprintf(w, "  walked %d file(s): %d read to the end, %d read only partly, %d with no XML element\n",
-		rep.Walked, rep.Walked-len(rep.NoElement)-len(rep.Partial), len(rep.Partial), len(rep.NoElement))
-	printCaveat(w, rep.Query)
+	printHeader(w, rep)
 
 	printBody(w, rep)
 
 	printNotes(w, "Read only partly: a match behind the fault is invisible to this census", rep.Partial)
 	printNotes(w, "No XML element: the corpus's images, prose and stylesheets, and any"+
 		" fixture that faulted ahead of its root", rep.NoElement)
+}
+
+// printHeader renders what the census found and what it could not read, plus
+// the caveat a containment figure owes. It is the whole of what the
+// paths-only mode reports beside its paths ([printPaths]), so the two modes
+// cannot drift into stating the figure differently (STYLE D3).
+func printHeader(w io.Writer, rep report) {
+	_, _ = fmt.Fprintf(w, "suiteindex: %d occurrence(s) of %s in %d fixture(s) under %s\n",
+		len(rep.Hits), rep.Query, countFiles(rep.Hits), rep.Root)
+	_, _ = fmt.Fprintf(w, "  walked %d file(s): %d read to the end, %d read only partly, %d with no XML element\n",
+		rep.Walked, rep.Walked-len(rep.NoElement)-len(rep.Partial), len(rep.Partial), len(rep.NoElement))
+	printCaveat(w, rep.Query)
+}
+
+// printPaths renders the paths-only mode: the fixtures the census matched, one
+// per line and nothing else, on stdout — a list a tool downstream reads, `go
+// tool casejoin` being the one this exists for (#1642) — while the header and
+// its caveat go to stderr, where a pipeline leaves them in front of the human.
+//
+// The per-file listings of what the census could NOT read are left to the
+// plain run: their COUNTS are in the header printed here, and a reader holding
+// a figure that depends on them is told to go read them there.
+func printPaths(stdout, stderr io.Writer, rep report) error {
+	notes := &latchWriter{w: stderr}
+	if !rep.RootPresent || rep.Walked == 0 {
+		printReportTo(notes, rep)
+		return pathsErr(notes, nil)
+	}
+	printHeader(notes, rep)
+	_, _ = fmt.Fprintf(notes, "  paths-only mode: read the files it could not parse whole with the same query and no -paths\n")
+
+	files := &latchWriter{w: stdout}
+	for _, f := range matchedFiles(rep.Hits) {
+		_, _ = fmt.Fprintln(files, f)
+	}
+	return pathsErr(notes, files)
+}
+
+// pathsErr reports the first write failure of either destination, naming which
+// one failed so a broken pipe downstream is not reported as a failure to print
+// the notes.
+func pathsErr(notes, files *latchWriter) error {
+	if files != nil && files.err != nil {
+		return fmt.Errorf("writing matched paths: %w", files.err)
+	}
+	if notes.err != nil {
+		return fmt.Errorf("writing census notes: %w", notes.err)
+	}
+	return nil
 }
 
 // printCaveat states which directions a containment figure is wrong in, and
@@ -1178,19 +1243,24 @@ func printNotes(w io.Writer, heading string, notes []fileNote) {
 	}
 }
 
-// countFiles reports how many distinct fixtures the hits fall in. Hits
-// arrive path-sorted, so distinctness is a neighbour comparison and needs no
-// set.
+// countFiles reports how many distinct fixtures the hits fall in. It counts
+// the list [matchedFiles] names rather than counting separately, so the header
+// figure and the paths-only mode's output can never disagree (STYLE D3).
 func countFiles(hits []hit) int {
-	n := 0
-	prev := ""
+	return len(matchedFiles(hits))
+}
+
+// matchedFiles names the distinct fixtures the hits fall in, in path order.
+// Hits arrive path-sorted, so distinctness is a neighbour comparison and needs
+// no set.
+func matchedFiles(hits []hit) []string {
+	var files []string
 	for i, h := range hits {
-		if i == 0 || h.File != prev {
-			n++
+		if i == 0 || h.File != files[len(files)-1] {
+			files = append(files, h.File)
 		}
-		prev = h.File
 	}
-	return n
+	return files
 }
 
 // renderIn spells n for a query position whose braceless names mean

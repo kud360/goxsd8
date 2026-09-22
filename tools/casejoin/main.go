@@ -1,0 +1,559 @@
+// Command casejoin turns suite fixture PATHS into the conformance case IDs
+// conformance/testdata/expectations/<lane>.txt is keyed by, and joins them
+// against a lane's committed file.
+//
+// A ratchet PREDICTION starts from a corpus census — `go tool suiteindex`
+// reports which fixtures carry a construct — and CLAUDE.md then prescribes
+// joining that census through a lane's expectation file. The two sides are
+// keyed differently: a census names a DOCUMENT by path, and an expectation
+// file names a CASE by `<testSet>/<testGroup>/<kind>/<test-name>`, an ID
+// assembled from catalog attribute values that need bear no relation to the
+// href beside them. Nothing bridged them, so two grounding rounds running
+// predicted `not derived` and the lane then moved anyway (#1494, #1585). This
+// is the bridge, and it is a tool because the walk is deterministic and
+// error-prone by hand (PRINCIPLES 27).
+//
+// # The two questions, which are different
+//
+// ENUMERATE — `casejoin ids` — answers which catalog entries name a path. The
+// relation is one-to-many in that direction: `saxonData/Missing/missing001.v1.xml`
+// is named by an instanceTest in four different test groups, so it yields four
+// case IDs. Every entry the catalog declares is reported, WITHHELD ones
+// included: an entry the suite's applicability metadata scopes away from this
+// processor is a real catalog entry that merely carries no line in any lane.
+//
+// JOIN — `casejoin join <lane>` — answers how many BANKED cases of one lane
+// name those paths and could still flip. A withheld entry carries no line and
+// is not counted (#1412); neither is an entry no lane selects, nor one already
+// banked `pass`, which cannot flip upward. The four Missing entries above
+// therefore join to ZERO, which is the right answer to a different question
+// from the four the enumeration reports.
+//
+// # Which document edges are reported
+//
+// All of them. A case names its documents through two lists, and a path
+// matching either one is reported: the document(s) UNDER TEST — a
+// schemaTest's ordered <schemaDocument> list, or an instanceTest's one
+// <instanceDocument> — and, for an instance case, the schema documents it is
+// ASSESSED AGAINST, which are its test group's sibling schemaTest's list
+// (conformance.CatalogEntry). Reporting only the first would silently answer
+// zero for every schema-side census, whose fixtures are named by the instance
+// cases assessed against them. Each reported entry says which edge matched.
+//
+// # What the count is, and is not
+//
+// A candidate case count is a BOUND FROM ABOVE on the cases a change to the
+// censused construct could flip — never a prediction of flips, and never a
+// lane movement. The report says so where the figure is, and names the three
+// directions it is wrong in.
+//
+// # Usage
+//
+//	go tool suiteindex -paths '{*}*@{http://www.w3.org/2001/XMLSchema-instance}type' | go tool casejoin join instance
+//	go tool casejoin ids saxonData/Missing/missing001.v1.xml
+//	go tool casejoin -suite other/dir ids < paths.txt
+//
+// Paths are taken from the command line, or, when none is given, from stdin,
+// one per line. Each is a path relative to the suite root — the spelling every
+// `suiteindex` report prints — and one still carrying the suite root on its
+// front is accepted too.
+//
+// An absent suite submodule is a supported mode, not a failure (#659): the
+// tool says the corpus is not there, names the command that initializes it,
+// and exits 0. It exits 0 for a completed report whatever it finds, and 2 for
+// an operational error: an unusable mode, an unreadable catalog, or a lane
+// name no expectation file carries.
+package main
+
+import (
+	"bufio"
+	"errors"
+	"flag"
+	"fmt"
+	"io"
+	"io/fs"
+	"os"
+	"path"
+	"path/filepath"
+	"slices"
+	"strings"
+
+	"github.com/kud360/goxsd8/conformance"
+)
+
+// defaultSuite is the W3C suite submodule at its fixed path in the tree, as
+// written from the module root — the same corpus `go tool suiteindex`
+// censuses, so the paths one prints are the paths the other takes.
+const defaultSuite = "testdata/xsdtests"
+
+// defaultExpectations is the committed expectations directory, as written
+// from the module root — the same path `go tool lanestatus` reads.
+const defaultExpectations = "conformance/testdata/expectations"
+
+// suiteIndexName is the suite's own index, the file a populated submodule
+// carries. Its absence is the corpus-absent mode: conformance.Catalog reports
+// it as an error, and this tool reports it as a mode (#659), so it is checked
+// here before the catalog is read.
+const suiteIndexName = "suite.xml"
+
+const usage = `usage: casejoin [-suite dir] [-expectations dir] ids|join <lane> [path...]
+  ids          every catalog case ID naming each path, withheld entries included
+  join <lane>  the banked cases of <lane> naming those paths that could still flip
+paths come from the command line, or from stdin one per line when none is given`
+
+func main() {
+	if err := run(os.Stdout, os.Stdin, os.Args[1:]); err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "casejoin: %v\n", err)
+		os.Exit(2)
+	}
+}
+
+// run drives one report end to end: parse the command line, read the paths,
+// read the catalog, render. It takes its destination, its path source and its
+// arguments so a test can drive the whole command without a subprocess.
+func run(stdout io.Writer, stdin io.Reader, args []string) error {
+	flags := flag.NewFlagSet("casejoin", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	suite := flags.String("suite", defaultSuite, "the suite checkout to read the catalog from")
+	expectations := flags.String("expectations", defaultExpectations, "the directory holding the per-lane expectation files")
+	if err := flags.Parse(args); err != nil {
+		return fmt.Errorf("%w\n%s", err, usage)
+	}
+	mode, lane, rest, err := parseMode(flags.Args())
+	if err != nil {
+		return err
+	}
+	index := filepath.Join(*suite, suiteIndexName)
+	if _, serr := os.Stat(index); errors.Is(serr, fs.ErrNotExist) {
+		printAbsent(stdout, *suite)
+		return nil
+	}
+	paths, err := readPaths(*suite, rest, stdin)
+	if err != nil {
+		return err
+	}
+	entries, err := conformance.Catalog(*suite)
+	if err != nil {
+		return err
+	}
+	found := namings(entries, paths)
+	if mode == modeIDs {
+		printIDs(stdout, paths, found)
+		return nil
+	}
+	banked, err := loadLane(*expectations, lane)
+	if err != nil {
+		return err
+	}
+	printJoin(stdout, joinLane(lane, paths, found, banked), *expectations)
+	return nil
+}
+
+// The two modes, which answer the two different questions the package doc
+// separates.
+const (
+	modeIDs  = "ids"
+	modeJoin = "join"
+)
+
+// parseMode reads the mode, the lane a join names, and the paths behind them.
+func parseMode(args []string) (mode, lane string, paths []string, err error) {
+	if len(args) == 0 {
+		return "", "", nil, fmt.Errorf("no mode given\n%s", usage)
+	}
+	switch args[0] {
+	case modeIDs:
+		return modeIDs, "", args[1:], nil
+	case modeJoin:
+		if len(args) < 2 {
+			return "", "", nil, fmt.Errorf("mode %q names the lane to join against\n%s", modeJoin, usage)
+		}
+		return modeJoin, args[1], args[2:], nil
+	}
+	return "", "", nil, fmt.Errorf("unknown mode %q\n%s", args[0], usage)
+}
+
+// readPaths collects the fixture paths to look up: the arguments, or stdin one
+// per line when there are none. Blank lines are skipped, every path is
+// restated in the catalog's own spelling, and the result is sorted and
+// deduplicated so one fixture named twice is one fixture.
+func readPaths(suiteDir string, args []string, stdin io.Reader) ([]string, error) {
+	raw := args
+	if len(raw) == 0 {
+		lines, err := readLines(stdin)
+		if err != nil {
+			return nil, err
+		}
+		raw = lines
+	}
+	var paths []string
+	for _, r := range raw {
+		p := normalizePath(suiteDir, r)
+		if p == "" {
+			continue
+		}
+		paths = append(paths, p)
+	}
+	slices.Sort(paths)
+	return slices.Compact(paths), nil
+}
+
+// readLines reads stdin as one path per line. Empty input is a supported mode
+// — a census that matched nothing produces it — and yields no path rather than
+// an error.
+func readLines(stdin io.Reader) ([]string, error) {
+	var lines []string
+	sc := bufio.NewScanner(stdin)
+	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	for sc.Scan() {
+		lines = append(lines, sc.Text())
+	}
+	if err := sc.Err(); err != nil {
+		return nil, fmt.Errorf("reading paths from stdin: %w", err)
+	}
+	return lines, nil
+}
+
+// normalizePath restates one input path in the spelling the catalog reports:
+// a slash path relative to the suite root, which is what every `suiteindex`
+// report prints. A path pasted with the suite root still on its front is
+// accepted and restated, since that is how a path read off a shell line or a
+// LOG entry usually arrives; a path that matches nothing after this is
+// reported as naming no catalog entry rather than silently dropped.
+func normalizePath(suiteDir, raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return ""
+	}
+	p := path.Clean(filepath.ToSlash(trimmed))
+	root := path.Clean(filepath.ToSlash(suiteDir))
+	if root != "." && strings.HasPrefix(p, root+"/") {
+		return p[len(root)+1:]
+	}
+	return p
+}
+
+// edge names which of an entry's two document lists a path matched. The
+// distinction survives into the report because it is what a reader checks a
+// candidate against: a case whose own document was censused, or one merely
+// assessed against a censused schema.
+type edge string
+
+const (
+	edgeUnderTest edge = "under test"
+	edgeAssessed  edge = "assessed against"
+)
+
+// naming is one catalog entry that names a path, and the edges it named it
+// through — both, in the rare case where a case's own document is also the
+// schema document it is assessed against.
+type naming struct {
+	entry conformance.CatalogEntry
+	edges []edge
+}
+
+// namings reports, per path, the catalog entries naming it, in case-ID order.
+// The result is keyed by path and read through the caller's own sorted path
+// slice, so no map iteration reaches the output (STYLE D2).
+func namings(entries []conformance.CatalogEntry, paths []string) map[string][]naming {
+	wanted := map[string]struct{}{}
+	for _, p := range paths {
+		wanted[p] = struct{}{}
+	}
+	found := map[string][]naming{}
+	for _, e := range entries {
+		record(found, wanted, e, e.Docs, edgeUnderTest)
+		record(found, wanted, e, e.SchemaDocs, edgeAssessed)
+	}
+	return found
+}
+
+// record files one entry under each wanted document it names. Entries arrive
+// in case-ID order, so each path's list is in that order already; an entry
+// naming a path twice — the same document listed twice, or matched on both
+// edges — is recorded once, with both edges.
+func record(found map[string][]naming, wanted map[string]struct{}, e conformance.CatalogEntry, docs []string, at edge) {
+	for _, doc := range docs {
+		if _, ok := wanted[doc]; !ok {
+			continue
+		}
+		list := found[doc]
+		if n := len(list); n > 0 && list[n-1].entry.ID == e.ID {
+			if !slices.Contains(list[n-1].edges, at) {
+				list[n-1].edges = append(list[n-1].edges, at)
+			}
+			continue
+		}
+		found[doc] = append(list, naming{entry: e, edges: []edge{at}})
+	}
+}
+
+// loadLane reads one lane's committed expectations. A lane file that does not
+// exist is an ERROR here and not an empty lane: conformance.LoadExpectations
+// is right to read a missing file as a lane with no case, but a join told to
+// count against a lane nobody has ever banked would answer zero and look like
+// a finding.
+func loadLane(dir, lane string) (map[string]conformance.Status, error) {
+	file := filepath.Join(dir, lane+".txt")
+	if _, err := os.Stat(file); err != nil {
+		return nil, fmt.Errorf("lane %q has no expectation file at %s: %w", lane, file, err)
+	}
+	banked, err := conformance.LoadExpectations(file)
+	if err != nil {
+		return nil, err
+	}
+	return banked, nil
+}
+
+// joined is one completed join: how the entries naming the given paths
+// partition against a lane's committed file.
+//
+// The five classes are DISJOINT and cover every entry, so the rows of the
+// report sum to the entry count. Only facts that cannot be recomputed are
+// stored — each class holds its case IDs and the report counts them (STYLE
+// D3).
+type joined struct {
+	Lane string
+	// Paths are the paths given, and Unnamed those of them no catalog entry
+	// names at all.
+	Paths   []string
+	Unnamed []string
+	// WithheldIDs are entries the suite's applicability metadata scopes away:
+	// no line in any lane, nothing to flip (#1412).
+	WithheldIDs []string
+	// UnscoredIDs are entries this lane's file carries no line for although
+	// discovery produced them — the other lane's kind, a case whose line no
+	// run has ever banked.
+	UnscoredIDs []string
+	// BankedPassIDs are entries this lane already records `pass`; they cannot
+	// flip upward.
+	BankedPassIDs []string
+	// DeclaredValidIDs are entries banked `fail` that the suite declares
+	// VALID. On the instance lane they are subtracted (#1561) and are not
+	// candidates; on any other lane the field is empty and such an entry is a
+	// candidate like any other.
+	DeclaredValidIDs []string
+	// CandidateIDs are the banked `fail` entries left: the bound from above.
+	CandidateIDs []string
+}
+
+// instanceLane is the one lane whose banked `fail` on a case the suite
+// declares VALID cannot flip: its executor decides no document valid yet, so
+// counting those cases inflates the bound (#1561). The subtraction is a fact
+// about that lane's executor and is made for no other lane.
+const instanceLane = "instance"
+
+// joinLane partitions the entries naming paths against one lane's committed
+// file, in case-ID order throughout (STYLE D1).
+func joinLane(lane string, paths []string, found map[string][]naming, banked map[string]conformance.Status) joined {
+	j := joined{Lane: lane, Paths: paths}
+	seen := map[string]struct{}{}
+	for _, p := range paths {
+		list := found[p]
+		if len(list) == 0 {
+			j.Unnamed = append(j.Unnamed, p)
+			continue
+		}
+		for _, n := range list {
+			if _, dup := seen[n.entry.ID]; dup {
+				continue
+			}
+			seen[n.entry.ID] = struct{}{}
+			j.classify(lane, n.entry, banked)
+		}
+	}
+	slices.Sort(j.WithheldIDs)
+	slices.Sort(j.UnscoredIDs)
+	slices.Sort(j.BankedPassIDs)
+	slices.Sort(j.DeclaredValidIDs)
+	slices.Sort(j.CandidateIDs)
+	return j
+}
+
+// classify files one entry in the single class it belongs to.
+func (j *joined) classify(lane string, e conformance.CatalogEntry, banked map[string]conformance.Status) {
+	status, ok := banked[e.ID]
+	if !ok && e.Withheld {
+		j.WithheldIDs = append(j.WithheldIDs, e.ID)
+		return
+	}
+	if !ok {
+		j.UnscoredIDs = append(j.UnscoredIDs, e.ID)
+		return
+	}
+	if status.IsPass() {
+		j.BankedPassIDs = append(j.BankedPassIDs, e.ID)
+		return
+	}
+	if lane == instanceLane && e.DeclaredValid {
+		j.DeclaredValidIDs = append(j.DeclaredValidIDs, e.ID)
+		return
+	}
+	j.CandidateIDs = append(j.CandidateIDs, e.ID)
+}
+
+// entries reports how many catalog entries named a path, which is the sum of
+// the five classes and is derived rather than stored (STYLE D3).
+func (j joined) entries() int {
+	return len(j.WithheldIDs) + len(j.UnscoredIDs) + len(j.BankedPassIDs) +
+		len(j.DeclaredValidIDs) + len(j.CandidateIDs)
+}
+
+// printAbsent renders the corpus-absent mode: why there was nothing to read,
+// and the command that fixes it. The mode exits 0 — a fresh container has no
+// suite submodule (#659), which is a state to report, not a failure.
+func printAbsent(w io.Writer, suiteDir string) {
+	_, _ = fmt.Fprintf(w, "casejoin: no suite index at %s — corpus-absent mode, nothing to join.\n",
+		filepath.Join(suiteDir, suiteIndexName))
+	_, _ = fmt.Fprintf(w, "Initialize the suite with `git submodule update --init %s` (#659).\n", defaultSuite)
+}
+
+// printIDs renders the enumeration: every catalog entry naming each path.
+func printIDs(w io.Writer, paths []string, found map[string][]naming) {
+	total, withheld := 0, 0
+	for _, p := range paths {
+		for _, n := range found[p] {
+			total++
+			if n.entry.Withheld {
+				withheld++
+			}
+		}
+	}
+	_, _ = fmt.Fprintf(w, "casejoin: %d path(s), %d catalog entry(ies) naming them, %d withheld\n",
+		len(paths), total, withheld)
+	printWithheldNote(w)
+
+	_, _ = fmt.Fprintln(w, "\n=== Catalog entries (path order; case-ID order within a path) ===")
+	if len(paths) == 0 {
+		_, _ = fmt.Fprintln(w, "(no path given)")
+	}
+	for _, p := range paths {
+		_, _ = fmt.Fprintf(w, "  %s\n", p)
+		if len(found[p]) == 0 {
+			_, _ = fmt.Fprintln(w, "      (no catalog entry names this path)")
+			continue
+		}
+		for _, n := range found[p] {
+			_, _ = fmt.Fprintf(w, "      %s — %s%s\n", n.entry.ID, renderEdges(n.edges), renderWithheld(n.entry))
+		}
+	}
+}
+
+// printWithheldNote states what a WITHHELD entry is, under the header the
+// reader holding the figure arrives at (#1279) rather than in a section of its
+// own.
+func printWithheldNote(w io.Writer) {
+	_, _ = fmt.Fprintln(w, "  a WITHHELD entry is one the suite's own applicability metadata scopes away from this")
+	_, _ = fmt.Fprintln(w, "  processor: discovery produces no case for it, it carries no line in any lane file, and")
+	_, _ = fmt.Fprintln(w, "  no change can flip it (#1412). It is a catalog entry all the same, which is why it is here")
+}
+
+// renderEdges names the document lists an entry matched a path through, in
+// the fixed order the report always prints them.
+func renderEdges(edges []edge) string {
+	names := make([]string, 0, len(edges))
+	for _, e := range []edge{edgeUnderTest, edgeAssessed} {
+		if slices.Contains(edges, e) {
+			names = append(names, string(e))
+		}
+	}
+	return strings.Join(names, ", ")
+}
+
+// renderWithheld marks a withheld entry and prints nothing for a produced one,
+// so the marker is the exception it names.
+func renderWithheld(e conformance.CatalogEntry) string {
+	if !e.Withheld {
+		return ""
+	}
+	return " — WITHHELD"
+}
+
+// printJoin renders the join: the partition, then the candidate IDs
+// themselves, then the paths nothing names.
+func printJoin(w io.Writer, j joined, dir string) {
+	_, _ = fmt.Fprintf(w, "casejoin: %d path(s) → %d catalog entry(ies) → %d candidate case(s) in lane %s\n",
+		len(j.Paths), j.entries(), len(j.CandidateIDs), j.Lane)
+	printCaveat(w, j.Lane)
+
+	_, _ = fmt.Fprintf(w, "\n=== Join against %s ===\n", filepath.Join(dir, j.Lane+".txt"))
+	for _, r := range j.rows() {
+		_, _ = fmt.Fprintf(w, "  %-58s %7d\n", r.label, r.count)
+	}
+
+	printIDSection(w, "Candidate cases (ID order)", j.CandidateIDs)
+	printPathSection(w, "Paths no catalog entry names (path order)", j.Unnamed)
+}
+
+// row is one line of the partition table.
+type row struct {
+	label string
+	count int
+}
+
+// rows renders the partition, indented so the five disjoint classes read as
+// the parts of the entry count above them. The declared-valid row is printed
+// only on the lane that subtracts it, where it is always meaningful; on any
+// other lane it would stand at zero and read as a claim that lane makes no
+// such cases (#1561).
+func (j joined) rows() []row {
+	rows := []row{
+		{"paths given", len(j.Paths)},
+		{"paths no catalog entry names", len(j.Unnamed)},
+		{"catalog entries naming a path", j.entries()},
+		{"  no line in " + j.Lane + ".txt — withheld (#1412)", len(j.WithheldIDs)},
+		{"  no line in " + j.Lane + ".txt — not banked by this lane", len(j.UnscoredIDs)},
+		{"  banked pass — cannot flip up", len(j.BankedPassIDs)},
+	}
+	if j.Lane == instanceLane {
+		rows = append(rows, row{"  banked fail — suite declares it VALID, subtracted (#1561)", len(j.DeclaredValidIDs)})
+	}
+	return append(rows, row{"  banked fail — CANDIDATE", len(j.CandidateIDs)})
+}
+
+// printCaveat states what the candidate count is and the three directions it
+// is wrong in, under the header rather than in a section of its own, because
+// that is where the reader holding the figure arrives (#1279). Unqualified the
+// figure is a false statement shipped in a tool's own output, which is the
+// defect #1585 exists to prevent — and one direction named of three would be
+// the same defect with a smaller radius.
+func printCaveat(w io.Writer, lane string) {
+	_, _ = fmt.Fprintln(w, "  read this as a BOUND FROM ABOVE on the cases a change could flip, never as a count of")
+	_, _ = fmt.Fprintln(w, "  flips and never as lane movement. It OVER-counts: a case is a candidate for naming a")
+	_, _ = fmt.Fprintln(w, "  censused fixture, whether or not the change reaches it, and the census behind those paths")
+	_, _ = fmt.Fprintln(w, "  resolves no <element ref> or <group ref>, so its population is a LEXICAL one and not a")
+	_, _ = fmt.Fprintln(w, "  population of resolved components. It UNDER-counts: a fixture that census could read only")
+	_, _ = fmt.Fprintln(w, "  partly hides every construct behind the fault, so cases naming it never reach this join —")
+	_, _ = fmt.Fprintln(w, "  read the census's own \"Read only partly\" count beside this figure.")
+	if lane == instanceLane {
+		_, _ = fmt.Fprintln(w, "  On this lane the figure already subtracts the cases the suite declares VALID, whose banked")
+		_, _ = fmt.Fprintln(w, "  fail cannot flip (#1561).")
+		return
+	}
+	_, _ = fmt.Fprintf(w, "  No VALID-case subtraction is made for lane %s: that one is the instance lane's (#1561), so\n", lane)
+	_, _ = fmt.Fprintln(w, "  this figure is looser by however many of its candidates the suite declares valid.")
+}
+
+// printIDSection lists one class's case IDs under its heading.
+func printIDSection(w io.Writer, heading string, ids []string) {
+	_, _ = fmt.Fprintf(w, "\n=== %s ===\n", heading)
+	if len(ids) == 0 {
+		_, _ = fmt.Fprintln(w, "(none)")
+	}
+	for _, id := range ids {
+		_, _ = fmt.Fprintf(w, "  %s\n", id)
+	}
+}
+
+// printPathSection lists one class's paths under its heading. It is separate
+// from printIDSection so neither heading can be printed over the other's
+// content.
+func printPathSection(w io.Writer, heading string, paths []string) {
+	_, _ = fmt.Fprintf(w, "\n=== %s ===\n", heading)
+	if len(paths) == 0 {
+		_, _ = fmt.Fprintln(w, "(none)")
+	}
+	for _, p := range paths {
+		_, _ = fmt.Fprintf(w, "  %s\n", p)
+	}
+}
