@@ -51,6 +51,12 @@
 // than as a zero nothing measured — the posture the tip age already
 // takes.
 //
+// A maintenance command's short-lived branch is such a head between its
+// push and its squash-merge, so it prints in that section, ahead>0, while
+// it is landing. Nothing is owed on it and nothing distinguishes it there
+// from a branch whose merge never happened, which is the same reading a
+// human does on every row of the section.
+//
 // ls-remote reports only a SHA per branch, not a date, so each tip's
 // commit time still comes from the local object store (`git log -1
 // --format=%cI <sha>`). When that SHA has never been fetched into this
