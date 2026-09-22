@@ -2,6 +2,7 @@ package xsd
 
 import (
 	"fmt"
+	"slices"
 	"testing"
 
 	"github.com/kud360/goxsd8/xsderr"
@@ -639,7 +640,7 @@ func TestMatcherRejectsANameNeitherTheParticleNorTheOpenWildcardAdmits(t *testin
 // file comment's worked counter-example: L(a{1,2}, b?) is {(a), (a b), (a a),
 // (a a b)} and the outer particle's fixed n = 2 makes L(P) the concatenation of
 // two of them.
-func cmNested(t *testing.T) Particle {
+func cmNested(t testing.TB) Particle {
 	t.Helper()
 	return cmGroup(t, uOccurs(t, 1, 1), CompositorSequence,
 		cmGroup(t, uOccurs(t, 2, 2), CompositorSequence,
@@ -813,7 +814,7 @@ func TestContentMatcherCarriesAWideRepetitionWhoseBodyPinsTheBoundary(t *testing
 // followed by a mandatory one, so b and c can never start a fresh iteration
 // while the open one could still take them, and a is never the item after a
 // complete iteration and a candidate to extend one at the same time.
-func cmWideBody(t *testing.T) Particle {
+func cmWideBody(t testing.TB) Particle {
 	t.Helper()
 	return cmGroup(t, uOccurs(t, 1, 1), CompositorSequence,
 		cmGroup(t, uOccurs(t, 1, 20000), CompositorSequence,
@@ -957,7 +958,7 @@ func TestMatcherDecidesTheOccurrenceBoundaryOfANestedRepetition(t *testing.T) {
 // offered that name and refused it. That is the order a resume which fails
 // without unwinding the path it appended to gets wrong, and it is invisible
 // where the group is the last member tried.
-func cmNestedAll(t *testing.T) Particle {
+func cmNestedAll(t testing.TB) Particle {
 	t.Helper()
 	return cmGroup(t, uOccurs(t, 1, 1), CompositorAll,
 		cmLeaf(t, "a", uOccurs(t, 1, 1)),
@@ -1189,4 +1190,235 @@ func cmSaturated(t testing.TB, iter int) *Matcher {
 		t.Fatalf("the saturating feed left %d live regions, want %d", len(m.live), iter*iter)
 	}
 	return m
+}
+
+// The whole live set stands at ONE ·basic particle·, which is what lets the
+// walk hold the path once instead of one per region (Matcher.path): two live
+// partitions standing at different particles would ·compete· for the name that
+// put them there, and cos-nonambig (§3.8.6.4) rejected that model at Finalize.
+// Nothing in the walk can show that any more — a live set that did hold two
+// paths would be answered with one of them and no sign of the other — so this
+// sweep asserts it from outside, over the grid of models cmProbeModels
+// generates and every feed cmProbeFeeds puts to each.
+//
+// What it compares is a per-region path the hoisted walk no longer stores: each
+// live region is driven over the same name ALONE (cmSingleton), and every
+// singleton that takes it has to arrive where the whole set did. A singleton
+// that takes a name the set rejected, or a set that takes one no singleton
+// does, is the same premise failing from the other side.
+func TestMatcherHoldsOnePathForEveryLivePartition(t *testing.T) {
+	models, feeds := cmProbeModels(t), cmProbeFeeds()
+	for _, pm := range models {
+		s, ct := cmProbeSchema(t, pm.name, pm.model())
+		for _, feed := range feeds {
+			m, ok := s.ContentMatcher(ct)
+			if !ok {
+				t.Fatalf("%s: ContentMatcher declined a model it decided a moment ago", pm.name)
+			}
+			for k, n := range feed {
+				singles := make([]*Matcher, len(m.live))
+				for i := range m.live {
+					singles[i] = cmSingleton(m, i)
+				}
+				_, took := m.Next(uq(n))
+				anyone := false
+				for i, one := range singles {
+					if _, ok := one.Next(uq(n)); !ok {
+						continue
+					}
+					anyone = true
+					if !took {
+						t.Fatalf("%s: over %v at item %d, live region %d took %s and the live set did not",
+							pm.name, feed, k, i, n)
+					}
+					if !slices.Equal(one.path, m.path) {
+						t.Fatalf("%s: over %v at item %d, live region %d stands at %v and the live set at %v",
+							pm.name, feed, k, i, one.path, m.path)
+					}
+				}
+				if took && !anyone {
+					t.Fatalf("%s: over %v at item %d, the live set took %s and no live region of it did",
+						pm.name, feed, k, n)
+				}
+			}
+		}
+	}
+	// The floor is a fraction of the grid, so that a generator edit collapsing
+	// it fails here rather than sweeping nothing quietly.
+	if len(models) < 300 {
+		t.Fatalf("the sweep ran over %d models, want at least 300", len(models))
+	}
+	t.Logf("swept %d models over %d feeds each", len(models), len(feeds))
+}
+
+// cmSingleton is m with ONE of its live regions and nothing else: the same
+// flattened model, the same path, that region's counters alone. Driving it over
+// the name m is about to take shows where that partition on its own would
+// stand. It shares m.nodes, which no walk step writes, and shares no scratch
+// with m (Matcher.probe).
+func cmSingleton(m *Matcher, i int) *Matcher {
+	one := *m
+	one.live = []region{m.live[i].clone()}
+	one.path = slices.Clone(m.path)
+	one.probe, one.reached = nil, nil
+	return &one
+}
+
+// cmProbeSchema is cmSchema over one model of the grid, plus the assertion that
+// the walk is licensed over it: every combination the grid generates is
+// cos-nonambig-clean and inside maxPartitionStates today, so a model that stops
+// being either fails here rather than dropping out of the sweep unnoticed.
+func cmProbeSchema(t testing.TB, name string, p Particle) (*Schema, ComplexType) {
+	t.Helper()
+	s, ct := cmSchema(t, p, nil)
+	if _, ok := s.ContentMatcher(ct); !ok {
+		t.Fatalf("%s: ContentMatcher declined a model of the sweep's grid", name)
+	}
+	return s, ct
+}
+
+// cmProbeModel is one model of the sweep above: a name a failure can cite, and
+// a builder, because a Particle is built against the testing.TB that holds the
+// fixture's own failures.
+type cmProbeModel struct {
+	name  string
+	model func() Particle
+}
+
+// cmRange is one occurrence range of the sweep's grid, carrying the spelling a
+// model name uses for it.
+type cmRange struct {
+	name string
+	o    func() Occurs
+}
+
+// cmLeafRanges are the occurrence ranges the sweep puts on a leaf: ranges that
+// differ in which of a counter's band edges (0, 1, {min occurs}, counterCap)
+// coincide, plus an unbounded one, whose counterCap is its {min occurs}.
+func cmLeafRanges(t testing.TB) []cmRange {
+	t.Helper()
+	return []cmRange{
+		{"0,1", func() Occurs { return uOccurs(t, 0, 1) }},
+		{"1,1", func() Occurs { return uOccurs(t, 1, 1) }},
+		{"1,2", func() Occurs { return uOccurs(t, 1, 2) }},
+		{"2,3", func() Occurs { return uOccurs(t, 2, 3) }},
+		{"1,unbounded", func() Occurs { return uUnbounded(t, 1) }},
+	}
+}
+
+// cmGroupRanges are the ranges the sweep puts on a model group, which is where
+// an ·ambiguous· node's iteration boundary splits the live set: every one of
+// them but 1,1 repeats.
+func cmGroupRanges(t testing.TB) []cmRange {
+	t.Helper()
+	return []cmRange{
+		{"1,1", func() Occurs { return uOccurs(t, 1, 1) }},
+		{"1,2", func() Occurs { return uOccurs(t, 1, 2) }},
+		{"2,2", func() Occurs { return uOccurs(t, 2, 2) }},
+		{"2,3", func() Occurs { return uOccurs(t, 2, 3) }},
+		{"1,unbounded", func() Occurs { return uUnbounded(t, 1) }},
+	}
+}
+
+// cmProbeModels is the grid of content models the sweep runs over: a repeating
+// group over two leaves under every combination of compositor and occurrence
+// range, a repeating group nested in one, an all group holding another, and the
+// nested, sibling and pinned models the tests above name one at a time. Every
+// combination is a model the walk is licensed over (cmProbeSchema), so the grid
+// stays a plain product and carries no exclusions.
+func cmProbeModels(t testing.TB) []cmProbeModel {
+	t.Helper()
+	var out []cmProbeModel
+	leaves, groups := cmLeafRanges(t), cmGroupRanges(t)
+	for _, comp := range []struct {
+		name string
+		c    Compositor
+	}{{"sequence", CompositorSequence}, {"choice", CompositorChoice}} {
+		for _, g := range groups {
+			for _, x := range leaves {
+				for _, y := range leaves {
+					out = append(out, cmProbeModel{
+						name: fmt.Sprintf("%s(a{%s},b{%s}){%s}", comp.name, x.name, y.name, g.name),
+						model: func() Particle {
+							return cmGroup(t, uOccurs(t, 1, 1), CompositorSequence,
+								cmGroup(t, g.o(), comp.c,
+									cmLeaf(t, "a", x.o()),
+									cmLeaf(t, "b", y.o())))
+						},
+					})
+				}
+			}
+		}
+	}
+	for _, g := range groups {
+		for _, h := range groups {
+			for _, x := range leaves {
+				out = append(out, cmProbeModel{
+					name: fmt.Sprintf("(a{%s},(b{1,2},c{0,1}){%s}){%s}", x.name, h.name, g.name),
+					model: func() Particle {
+						return cmGroup(t, uOccurs(t, 1, 1), CompositorSequence,
+							cmGroup(t, g.o(), CompositorSequence,
+								cmLeaf(t, "a", x.o()),
+								cmGroup(t, h.o(), CompositorSequence,
+									cmLeaf(t, "b", uOccurs(t, 1, 2)),
+									cmLeaf(t, "c", uOccurs(t, 0, 1)))))
+					},
+				})
+			}
+		}
+	}
+	for _, x := range leaves {
+		for _, y := range leaves {
+			out = append(out, cmProbeModel{
+				name: fmt.Sprintf("all(a{%s},b{%s},all(c,d?))", x.name, y.name),
+				model: func() Particle {
+					return cmGroup(t, uOccurs(t, 1, 1), CompositorAll,
+						cmLeaf(t, "a", x.o()),
+						cmLeaf(t, "b", y.o()),
+						cmGroup(t, uOccurs(t, 1, 1), CompositorAll,
+							cmLeaf(t, "c", uOccurs(t, 1, 1)),
+							cmLeaf(t, "d", uOccurs(t, 0, 1))))
+				},
+			})
+		}
+	}
+	out = append(out,
+		cmProbeModel{"(a{1,2},b?){2,2}", func() Particle { return cmNested(t) }},
+		cmProbeModel{"nested all", func() Particle { return cmNestedAll(t) }},
+		cmProbeModel{"pinned wide body", func() Particle { return cmWideBody(t) }},
+	)
+	for _, iter := range []int{2, 3, 8} {
+		out = append(out, cmProbeModel{
+			name:  fmt.Sprintf("siblings{1,%d}", iter),
+			model: func() Particle { return cmSiblings(t, iter) },
+		})
+	}
+	return out
+}
+
+// cmProbeFeeds are the child sequences the sweep puts to every model: every
+// word of length at most three over the four names the grid's models use, so
+// that a model is driven into an open iteration, out of it and into the next,
+// plus longer runs that hold the walk at a WIDE live set rather than at a
+// narrow prefix of one.
+func cmProbeFeeds() [][]string {
+	names := []string{"a", "b", "c", "d"}
+	feeds := [][]string{{}}
+	for n := 0; n < 3; n++ {
+		var next [][]string
+		for _, f := range feeds {
+			for _, name := range names {
+				next = append(next, append(append([]string{}, f...), name))
+			}
+		}
+		feeds = append(feeds, next...)
+	}
+	return append(feeds[1:],
+		cmRepeat("a", 8),
+		[]string{"a", "b", "a", "b", "a", "b", "a", "b"},
+		[]string{"a", "a", "b", "a", "a", "b", "a", "a", "b"},
+		[]string{"a", "b", "c", "a", "b", "c", "a", "b", "c"},
+		[]string{"a", "a", "a", "a", "b", "a", "a", "a", "a"},
+		[]string{"d", "c", "b", "a", "d", "c", "b", "a"},
+	)
 }

@@ -18,8 +18,8 @@ import (
 // position it is looking at.
 //
 // The walk COUNTS: state is one occurrence counter per particle of the
-// flattened content model plus the path of particles the last item was
-// ·attributed to·. No occurrence range is unfolded into copies, so
+// flattened content model plus the ONE path of particles the last item was
+// ·attributed to· (Matcher.path). No occurrence range is unfolded into copies, so
 // maxOccurs="100000" costs one counter and not a hundred thousand positions —
 // the opposite trade from particleattribution.go's automaton, which unfolds
 // because ·compete· is a question about the MODEL and this one is a question
@@ -225,12 +225,15 @@ type span struct{ lo, hi int }
 
 // region is a set of live partitions of the items taken so far (cvc-accept
 // clause 3.1) that differ in NOTHING the walk can see but the occurrence
-// counters inside them: a span of counts for every node of the flattened model,
-// and the one path of nodes the last item was ·attributed to·, outermost first.
+// counters inside them: a span of counts for every node of the flattened model.
 // It denotes the cartesian product of its spans. A Matcher holds regions
 // covering every partition those items can have reached, and
 // [Matcher.Accepting] asks its question of the whole cover rather than of a
 // chosen member.
+//
+// WHERE those partitions stand is not here: the path of nodes the last item was
+// ·attributed to· is one for the whole live set and is held once, on the
+// Matcher (Matcher.path).
 //
 // Counters are CLAMPED at counterCap, so a region records how its partitions
 // stand and not how they got there.
@@ -252,18 +255,14 @@ type span struct{ lo, hi int }
 // answer for partitions that disagree.
 type region struct {
 	counts []span
-	path   []int
 }
 
-// clone copies the mutable walk state, so a search pass that fails leaves
-// nothing behind and two regions split from one share no array.
+// clone copies the counters, so a search pass that fails leaves nothing behind
+// and two regions split from one share no array. The path a failed pass moved
+// is the walk's own scratch (Matcher.probe), which the next attempt overwrites.
 func (c *region) clone() region {
-	t := region{
-		counts: make([]span, len(c.counts)),
-		path:   make([]int, len(c.path), len(c.counts)),
-	}
+	t := region{counts: make([]span, len(c.counts))}
 	copy(t.counts, c.counts)
-	copy(t.path, c.path)
 	return t
 }
 
@@ -284,7 +283,32 @@ type Matcher struct {
 	open  *OpenContent
 	nodes []contentNode
 	live  []region
-	inS2  bool
+
+	// path is the path of nodes the last item was ·attributed to·, outermost
+	// first, and it is the LIVE SET's rather than any one region's. Every live
+	// partition stands at the same ·basic particle· — two standing at different
+	// ones would ·compete· for the name that put them there, which cos-nonambig
+	// (§3.8.6.4) rejects at Finalize (Phase C's checkContentModelsUnambiguous) —
+	// and the flattened model is a tree, so that one particle fixes one chain of
+	// ancestors. What live partitions differ in is the occurrence counters,
+	// which is what a region carries.
+	//
+	// The premise is load-bearing for the ENCODING and not only for the
+	// verdicts: a live set that did hold two paths would be answered with one
+	// of them, silently, there being nowhere to put the other.
+	path []int
+
+	// probe and reached are the search's own scratch, kept here so that a name
+	// put to a wide live set allocates no path per region. probe is the path
+	// the branch attempt under way is building: every attempt starts by copying
+	// path over it, so a failed attempt unwinds nothing. reached is the path
+	// the first branch that took the current name arrived at — every branch
+	// that takes it arrives at the same one, by the premise above — which step
+	// swaps into path once the whole live set has been offered the name.
+	probe   []int
+	reached []int
+
+	inS2 bool
 }
 
 // ContentMatcher returns a [Matcher] over t's {content type} particle, or (nil,
@@ -543,7 +567,7 @@ const maxPartitionStates = 65536
 // the occurrence counters an ·ambiguous· node's iteration boundary moves, which
 // are its own and its subtree's (markWidened). The flattened model is a tree,
 // so the same particle is reached by one path; a whole live set therefore shares
-// one path and is covered by regions over counters alone.
+// one path, which the walk holds once (Matcher.path) and no region carries.
 //
 // # What a widened counter costs in regions
 //
@@ -663,7 +687,7 @@ func (m *Matcher) count(c *region, i int) {
 // normalize appends the band-uniform regions covering t to rs, splitting t at
 // the first band edge a span crosses and recurring on both halves. Only a node
 // whose count has just moved can cross an edge, so one item taken costs at most
-// one split per level of its path (region).
+// one split per level of the path it was ·attributed to· (Matcher.path).
 func (m *Matcher) normalize(rs []region, t region) []region {
 	for i := range t.counts {
 		end := m.bandEnd(i, t.counts[i].lo)
@@ -699,10 +723,11 @@ func (m *Matcher) collapse(rs []region) []region {
 }
 
 // mergeInto widens a to cover b's partitions too and reports whether it could,
-// which is where a and b stand at the same particle and their spans differ at
-// no more than one node, that node is a LEAF, and there the two runs meet or
-// overlap without leaving the band both lie in. Two equal regions merge either
-// way, which is how a duplicate is dropped.
+// which is where their spans differ at no more than one node, that node is a
+// LEAF, and there the two runs meet or overlap without leaving the band both
+// lie in. Two equal regions merge either way, which is how a duplicate is
+// dropped. Standing at the same particle is not a condition it tests, the whole
+// live set standing at one (Matcher.path).
 //
 // Only a LEAF's span widens, so the live set holds one region per assignment of
 // the model groups' ITERATION counts and one span per band inside it, which is
@@ -710,14 +735,6 @@ func (m *Matcher) collapse(rs []region) []region {
 // regions OVERLAPPING — one covering a body position another already covers —
 // and an overlapping cover takes more entries, not fewer.
 func (m *Matcher) mergeInto(a *region, b region) bool {
-	if len(a.path) != len(b.path) {
-		return false
-	}
-	for d, i := range a.path {
-		if b.path[d] != i {
-			return false
-		}
-	}
 	j := -1
 	for i := range a.counts {
 		if a.counts[i] == b.counts[i] {
@@ -745,17 +762,10 @@ func (m *Matcher) mergeInto(a *region, b region) bool {
 	return true
 }
 
-// compareRegions orders regions by path and then by span, outermost node first,
-// so that collapse sees every pair differing in one node's span adjacently.
+// compareRegions orders regions by span, outermost node first, so that collapse
+// sees every pair differing in one node's span adjacently. There is no path to
+// order them by first: the live set stands at one particle (Matcher.path).
 func compareRegions(a, b region) int {
-	if c := cmp.Compare(len(a.path), len(b.path)); c != 0 {
-		return c
-	}
-	for d, i := range a.path {
-		if c := cmp.Compare(i, b.path[d]); c != 0 {
-			return c
-		}
-	}
 	for i, s := range a.counts {
 		if c := cmp.Compare(s.lo, b.counts[i].lo); c != 0 {
 			return c
@@ -849,13 +859,13 @@ func (m *Matcher) Accepting() bool {
 }
 
 // accepts reports whether one partition closes where the sequence stopped:
-// every node on its path can be left (canExit), or it took no item at all and
-// the model is ·emptiable·.
+// every node on the live path can be left with that partition's counters
+// (canExit), or no item was taken at all and the model is ·emptiable·.
 func (m *Matcher) accepts(c *region) bool {
-	if len(c.path) == 0 {
+	if len(m.path) == 0 {
 		return m.emptiable(0)
 	}
-	for d := len(c.path) - 1; d >= 0; d-- {
+	for d := len(m.path) - 1; d >= 0; d-- {
 		if !m.canExit(c, d) {
 			return false
 		}
@@ -883,9 +893,13 @@ const (
 // Every partition that takes the name ·attributes· it to the same ·basic
 // particle·: two different ones live for one name would ·compete·, which
 // cos-nonambig has already rejected, so the first attribution is the
-// attribution and the partitions differ in nothing the caller can see.
+// attribution, the path every one of them reached is the same path, and the
+// partitions differ in nothing the caller can see. The pass therefore reads the
+// live path throughout and installs the one advance reached at the end of it,
+// where a name no region took leaves it as it stood ([Matcher.Next]).
 func (m *Matcher) step(name QName, kind admitKind) (Attribution, bool) {
 	var taken Attribution
+	m.reached = m.reached[:0]
 	next := make([]region, 0, 2*len(m.live))
 	for i := range m.live {
 		a, cs := m.advance(&m.live[i], name, kind)
@@ -902,6 +916,7 @@ func (m *Matcher) step(name QName, kind admitKind) (Attribution, bool) {
 	if taken == nil {
 		return nil, false
 	}
+	m.path, m.reached = m.reached, m.path
 	m.live = m.collapse(next)
 	return taken, true
 }
@@ -923,29 +938,39 @@ func (m *Matcher) step(name QName, kind admitKind) (Attribution, bool) {
 // The regions it returns may straddle a band edge, count having just moved a
 // whole span; normalize is what puts them back inside the band invariant, and
 // no guard reads one in between.
+//
+// The walk it drives reads the live path and writes the scratch one, so every
+// attempt below starts from the path as the last item left it (probeFromPath)
+// and an attempt that fails is abandoned rather than unwound.
 func (m *Matcher) advance(c *region, name QName, kind admitKind) (Attribution, []region) {
-	if len(c.path) == 0 {
+	if len(m.path) == 0 {
 		t := c.clone()
+		m.probeFromPath()
 		a, ok := m.enter(&t, 0, name, kind)
 		if !ok {
 			return nil, nil
 		}
+		m.keepProbe()
 		return a, []region{t}
 	}
 	var taken Attribution
 	var out []region
-	for d := len(c.path) - 1; d >= 0; d-- {
+	for d := len(m.path) - 1; d >= 0; d-- {
 		t := c.clone()
+		m.probeFromPath()
 		if a, ok := m.continueIn(&t, d, name, kind); ok {
+			m.keepProbe()
 			taken, out = a, append(out, t)
 		}
-		if len(out) == 0 || m.nodes[c.path[d]].ambiguous {
+		if len(out) == 0 || m.nodes[m.path[d]].ambiguous {
 			r := c.clone()
+			m.probeFromPath()
 			if a, ok := m.repeat(&r, d, name, kind); ok {
+				m.keepProbe()
 				taken, out = a, append(out, r)
 			}
 		}
-		if len(out) > 0 && !m.widensAbove(c, d) {
+		if len(out) > 0 && !m.widensAbove(d) {
 			return taken, out
 		}
 		if !m.canExit(c, d) {
@@ -955,12 +980,31 @@ func (m *Matcher) advance(c *region, name QName, kind admitKind) (Attribution, [
 	return taken, out
 }
 
-// widensAbove reports whether c's path holds an ·ambiguous· node shallower than
-// depth d. Where it does not, a region already found is the only one the rest of
-// the path can reach, by the confinement contentNode.ambiguous and the file
-// comment state.
-func (m *Matcher) widensAbove(c *region, d int) bool {
-	for _, i := range c.path[:d] {
+// probeFromPath starts one branch attempt at the live path. A failed attempt
+// therefore costs no unwinding — the next one overwrites whatever it left — and
+// a whole live set put to one name allocates no path per region.
+func (m *Matcher) probeFromPath() {
+	m.probe = append(m.probe[:0], m.path...)
+}
+
+// keepProbe records the path the attempt just taken arrived at as the one step
+// will install, where no earlier attempt of the same pass has. Which is kept
+// decides nothing: every branch that takes one name arrives at the same path
+// (Matcher.path). An empty reached is the pass's "none yet", no branch that took
+// an item leaving the path empty.
+func (m *Matcher) keepProbe() {
+	if len(m.reached) > 0 {
+		return
+	}
+	m.reached = append(m.reached[:0], m.probe...)
+}
+
+// widensAbove reports whether the live path holds an ·ambiguous· node shallower
+// than depth d. Where it does not, a region already found is the only one the
+// rest of the path can reach, by the confinement contentNode.ambiguous and the
+// file comment state.
+func (m *Matcher) widensAbove(d int) bool {
+	for _, i := range m.path[:d] {
 		if m.nodes[i].ambiguous {
 			return true
 		}
@@ -969,11 +1013,13 @@ func (m *Matcher) widensAbove(c *region, d int) bool {
 }
 
 // continueIn consumes name inside the OPEN occurrence of the node at depth d of
-// c's path, whose own deeper position has already failed to consume it and been
-// closed: one more occurrence of a leaf, or a later member of a group's open
-// iteration.
+// the live path, whose own deeper position has already failed to consume it and
+// been closed: one more occurrence of a leaf, or a later member of a group's
+// open iteration. A leaf is the path's last node, so one more occurrence of one
+// leaves the path where it stands and the attempt's scratch copy of it
+// untouched.
 func (m *Matcher) continueIn(c *region, d int, name QName, kind admitKind) (Attribution, bool) {
-	i := c.path[d]
+	i := m.path[d]
 	g, isGroup := m.nodes[i].term.(ModelGroup)
 	if !isGroup {
 		a, ok := m.admits(c, i, name, kind)
@@ -983,28 +1029,28 @@ func (m *Matcher) continueIn(c *region, d int, name QName, kind admitKind) (Attr
 		m.count(c, i)
 		return a, true
 	}
-	return m.continueIteration(c, d, g, m.slotOf(i, c.path[d+1]), name, kind)
+	return m.continueIteration(c, d, g, m.slotOf(i, m.path[d+1]), name, kind)
 }
 
 // repeat consumes name as the first item of a FRESH iteration of the group at
-// depth d of c's path, which needs that group's open iteration to be a whole
-// word of its language already (iterationComplete) and its {max occurs} to admit
-// another (cvc-accept clause 3.2). A leaf has no iteration to close — its
+// depth d of the live path, which needs that group's open iteration to be a
+// whole word of its language already (iterationComplete) and its {max occurs} to
+// admit another (cvc-accept clause 3.2). A leaf has no iteration to close — its
 // occurrences are continueIn's counter — so it never repeats this way.
 func (m *Matcher) repeat(c *region, d int, name QName, kind admitKind) (Attribution, bool) {
-	i := c.path[d]
+	i := m.path[d]
 	g, isGroup := m.nodes[i].term.(ModelGroup)
 	if !isGroup {
 		return nil, false
 	}
-	if !m.iterationComplete(c, i, g, m.slotOf(i, c.path[d+1])) {
+	if !m.iterationComplete(c, i, g, m.slotOf(i, m.path[d+1])) {
 		return nil, false
 	}
 	if !m.canRepeat(c, i) {
 		return nil, false
 	}
 	m.clearSubtree(c, i)
-	c.path = c.path[:d+1]
+	m.probe = m.probe[:d+1]
 	a, ok := m.enterBody(c, i, g, name, kind)
 	if !ok {
 		return nil, false
@@ -1022,16 +1068,16 @@ func (m *Matcher) repeat(c *region, d int, name QName, kind admitKind) (Attribut
 // group with an occurrence open to resume (offerAllMembers) — since
 // S1 × … × Sn interleaves them (§3.8.4.1.3).
 func (m *Matcher) continueIteration(c *region, d int, g ModelGroup, slot int, name QName, kind admitKind) (Attribution, bool) {
-	children := m.nodes[c.path[d]].children
+	children := m.nodes[m.path[d]].children
 	switch g.Compositor() {
 	case CompositorChoice:
 		return nil, false
 	case CompositorAll:
-		i := c.path[d]
-		c.path = c.path[:d+1]
+		i := m.path[d]
+		m.probe = m.probe[:d+1]
 		return m.offerAllMembers(c, i, name, kind)
 	case CompositorSequence:
-		c.path = c.path[:d+1]
+		m.probe = m.probe[:d+1]
 		for _, ch := range children[slot+1:] {
 			if a, ok := m.enter(c, ch, name, kind); ok {
 				return a, true
@@ -1073,26 +1119,27 @@ func (m *Matcher) offerAllMembers(c *region, i int, name QName, kind admitKind) 
 }
 
 // resumeAll consumes name inside the occurrence of the nested all group at i
-// that an earlier item already opened, putting i back on the path with its
+// that an earlier item already opened, putting i back on the attempt's path with its
 // counters as they stand and offering the name to its own members — to whatever
 // depth clause 1.3's exactly-once nesting reaches. Neither the occurrence
 // counter nor the subtree beneath it moves: this is the same occurrence
 // suspended by an item that went to a sibling, not a new one. It leaves the
-// path untouched when the name is not admitted, as enter does.
+// attempt's path where it found it when the name is not admitted, as enter
+// does, so the sibling tried next descends from the right node.
 func (m *Matcher) resumeAll(c *region, i int, name QName, kind admitKind) (Attribution, bool) {
-	c.path = append(c.path, i)
+	m.probe = append(m.probe, i)
 	a, ok := m.offerAllMembers(c, i, name, kind)
 	if !ok {
-		c.path = c.path[:len(c.path)-1]
+		m.probe = m.probe[:len(m.probe)-1]
 		return nil, false
 	}
 	return a, true
 }
 
 // enter consumes name as the FIRST item of a fresh occurrence of the node at i,
-// appending the nodes it descended through to the path. It leaves the walk
-// state untouched when the name is not admitted, so a caller may try members in
-// turn.
+// appending the nodes it descended through to the attempt's path. It leaves the
+// walk state untouched when the name is not admitted, so a caller may try
+// members in turn.
 func (m *Matcher) enter(c *region, i int, name QName, kind admitKind) (Attribution, bool) {
 	g, isGroup := m.nodes[i].term.(ModelGroup)
 	if !isGroup {
@@ -1101,16 +1148,16 @@ func (m *Matcher) enter(c *region, i int, name QName, kind admitKind) (Attributi
 			return nil, false
 		}
 		m.count(c, i)
-		c.path = append(c.path, i)
+		m.probe = append(m.probe, i)
 		return a, true
 	}
 	if !m.canRepeat(c, i) {
 		return nil, false
 	}
-	c.path = append(c.path, i)
+	m.probe = append(m.probe, i)
 	a, ok := m.enterBody(c, i, g, name, kind)
 	if !ok {
-		c.path = c.path[:len(c.path)-1]
+		m.probe = m.probe[:len(m.probe)-1]
 		return nil, false
 	}
 	m.count(c, i)
@@ -1187,8 +1234,8 @@ func (m *Matcher) canRepeat(c *region, i int) bool {
 	return !bounded || c.counts[i].lo < max
 }
 
-// canExit reports whether the node at depth d of the path can be left where the
-// sequence stands: its open iteration closed, and its own occurrence count at
+// canExit reports whether the node at depth d of the live path can be left
+// where c's partitions stand: its open iteration closed, and its own count at
 // {min occurs} — or short of it with an ·emptiable· body, since the iterations
 // still owed can then each be empty (cvc-accept clauses 1.1, 2.1 and 3.1).
 //
@@ -1199,12 +1246,12 @@ func (m *Matcher) canRepeat(c *region, i int) bool {
 // sibling; what the member owes is owed to the group, and iterationComplete is
 // where the group collects it from every member at once.
 func (m *Matcher) canExit(c *region, d int) bool {
-	i := c.path[d]
-	if m.inAllGroup(c, d) {
+	i := m.path[d]
+	if m.inAllGroup(d) {
 		return true
 	}
 	if g, isGroup := m.nodes[i].term.(ModelGroup); isGroup {
-		if !m.iterationComplete(c, i, g, m.slotOf(i, c.path[d+1])) {
+		if !m.iterationComplete(c, i, g, m.slotOf(i, m.path[d+1])) {
 			return false
 		}
 	}
@@ -1214,13 +1261,13 @@ func (m *Matcher) canExit(c *region, d int) bool {
 	return m.bodyEmptiable(i)
 }
 
-// inAllGroup reports whether the node at depth d of c's path is a member of an
-// all group.
-func (m *Matcher) inAllGroup(c *region, d int) bool {
+// inAllGroup reports whether the node at depth d of the live path is a member
+// of an all group.
+func (m *Matcher) inAllGroup(d int) bool {
 	if d == 0 {
 		return false
 	}
-	g, isGroup := m.nodes[c.path[d-1]].term.(ModelGroup)
+	g, isGroup := m.nodes[m.path[d-1]].term.(ModelGroup)
 	return isGroup && g.Compositor() == CompositorAll
 }
 
