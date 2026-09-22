@@ -297,9 +297,17 @@ func record(found map[string][]naming, wanted map[string]struct{}, e conformance
 	}
 }
 
-// laneFile is the ONE construction of a lane's committed file (STYLE D3): the
-// join reads it and the report names it, and a report naming a file the join
-// did not read would be unfalsifiable.
+// laneFile is a lane's committed expectation file. It is the one construction
+// of that name WITHIN THIS TOOL (STYLE D3): the join reads it and the report
+// names it, and a report naming a file the join did not read would be
+// unfalsifiable.
+//
+// It is the SECOND construction of that name, conformance's own (unexported)
+// laneFileIn being the first — the same split as suiteIndexName above, and for
+// the same reason: this tool cannot reach an unexported helper across the
+// package boundary, and one filepath.Join does not earn an exported one.
+// Rename the convention in one and rename it in the other, or this tool joins
+// against a lane file nobody writes.
 func laneFile(dir, lane string) string {
 	return filepath.Join(dir, lane+".txt")
 }
