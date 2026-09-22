@@ -21,6 +21,9 @@
 // case IDs. Every entry the catalog declares is reported, WITHHELD ones
 // included: an entry the suite's applicability metadata scopes away from this
 // processor is a real catalog entry that merely carries no line in any lane.
+// Both modes COUNT distinct entries — an entry naming two of the given paths
+// is one entry to either — so the two headers are arithmetic over one input
+// and a reader may compare them.
 //
 // JOIN — `casejoin join <lane>` — answers how many BANKED cases of one lane
 // name those paths and could still flip. A withheld entry carries no line and
@@ -347,24 +350,43 @@ type joined struct {
 // about that lane's executor and is made for no other lane.
 const instanceLane = "instance"
 
-// joinLane partitions the entries naming paths against one lane's committed
-// file, in case-ID order throughout (STYLE D1).
-func joinLane(lane string, paths []string, found map[string][]naming, banked map[string]conformance.Status) joined {
-	j := joined{Lane: lane, Paths: paths}
+// distinctEntries reports the entries naming any of the given paths, each ONCE
+// however many of those paths it names, in path order and case-ID order within
+// a path. It is the ONE dedupe both modes count through (STYLE D3): an entry
+// that names one given path under test and another it is assessed against is
+// one entry to the enumeration and one to the join, so the two report the same
+// arithmetic over the same input rather than entry–path pairs against distinct
+// entries (#1642).
+//
+// It drops the edges each naming matched through, which belong to one PATH
+// and not to the deduplicated entry; the per-path listing reports them from
+// the namings themselves.
+func distinctEntries(paths []string, found map[string][]naming) []conformance.CatalogEntry {
 	seen := map[string]struct{}{}
+	var out []conformance.CatalogEntry
 	for _, p := range paths {
-		list := found[p]
-		if len(list) == 0 {
-			j.Unnamed = append(j.Unnamed, p)
-			continue
-		}
-		for _, n := range list {
+		for _, n := range found[p] {
 			if _, dup := seen[n.entry.ID]; dup {
 				continue
 			}
 			seen[n.entry.ID] = struct{}{}
-			j.classify(n.entry, banked)
+			out = append(out, n.entry)
 		}
+	}
+	return out
+}
+
+// joinLane partitions the entries naming paths against one lane's committed
+// file, in case-ID order throughout (STYLE D1).
+func joinLane(lane string, paths []string, found map[string][]naming, banked map[string]conformance.Status) joined {
+	j := joined{Lane: lane, Paths: paths}
+	for _, p := range paths {
+		if len(found[p]) == 0 {
+			j.Unnamed = append(j.Unnamed, p)
+		}
+	}
+	for _, e := range distinctEntries(paths, found) {
+		j.classify(e, banked)
 	}
 	slices.Sort(j.WithheldIDs)
 	slices.Sort(j.UnscoredIDs)
@@ -419,18 +441,22 @@ func printAbsent(w io.Writer, suiteDir string) {
 }
 
 // printIDs renders the enumeration: every catalog entry naming each path.
+//
+// The header counts DISTINCT entries, withheld ones included, which is what
+// the join counts too. The listing below it still prints an entry under every
+// path it names — that relation is the question this mode answers — so an
+// entry naming two of the given paths appears twice there and once in the
+// count above.
 func printIDs(w io.Writer, paths []string, found map[string][]naming) {
-	total, withheld := 0, 0
-	for _, p := range paths {
-		for _, n := range found[p] {
-			total++
-			if n.entry.Withheld {
-				withheld++
-			}
+	distinct := distinctEntries(paths, found)
+	withheld := 0
+	for _, e := range distinct {
+		if e.Withheld {
+			withheld++
 		}
 	}
 	_, _ = fmt.Fprintf(w, "casejoin: %d path(s), %d catalog entry(ies) naming them, %d withheld\n",
-		len(paths), total, withheld)
+		len(paths), len(distinct), withheld)
 	printWithheldNote(w)
 
 	_, _ = fmt.Fprintln(w, "\n=== Catalog entries (path order; case-ID order within a path) ===")

@@ -11,8 +11,9 @@ import (
 // fixtureSuite is a miniature suite catalog carrying every shape the join
 // turns on: one instance document named by three test groups, one of them
 // withheld; a schema document named both by its own schemaTest and by the
-// instance case assessed against it; and the declared outcomes the instance
-// lane subtracts on.
+// instance case assessed against it — once inside an applicable group and
+// once inside a withheld one, so both counts have a duplicate to collapse;
+// and the declared outcomes the instance lane subtracts on.
 var fixtureSuite = map[string]string{
 	"suite.xml": `<testSuite xmlns:xlink="http://www.w3.org/1999/xlink">
   <testSetRef xlink:href="sets/s.testSet"/>
@@ -36,6 +37,10 @@ var fixtureSuite = map[string]string{
     </instanceTest>
   </testGroup>
   <testGroup name="g3" version="1.0">
+    <schemaTest name="s3">
+      <schemaDocument xlink:href="../docs/c.xsd"/>
+      <expected validity="valid"/>
+    </schemaTest>
     <instanceTest name="i3">
       <instanceDocument xlink:href="../docs/a1.xml"/>
       <expected validity="invalid"/>
@@ -220,6 +225,40 @@ func TestJoinDoesNotCountAPassOrAnUnbankedCase(t *testing.T) {
 func TestJoinCountsAnEntryOnceHoweverManyGivenPathsItNames(t *testing.T) {
 	got := runFixture(t, "docs/b.xsd\ndocs/b1.xml\n", "join", "instance")
 	wantRow(t, got, "catalog entries naming a path", 2)
+}
+
+// entryCount reads the entry count out of either mode's header sentence, in
+// both of which it is the number immediately before "catalog entry(ies)".
+func entryCount(t *testing.T, got string) int {
+	t.Helper()
+	head, _, ok := strings.Cut(got, " catalog entry(ies)")
+	if !ok {
+		t.Fatalf("no entry count in:\n%s", got)
+	}
+	fields := strings.Fields(head)
+	n, err := strconv.Atoi(fields[len(fields)-1])
+	if err != nil {
+		t.Fatalf("entry count %q: %v", fields[len(fields)-1], err)
+	}
+	return n
+}
+
+// TestIDsAndJoinCountTheSameDistinctEntries holds the two modes to one
+// arithmetic over one input. S/g3/instance/i3 names docs/a1.xml under test and
+// docs/c.xsd as the schema it is assessed against, so counting entry–path
+// PAIRS in one mode and distinct entries in the other prints two different
+// entry counts for one set of paths and a reader cannot tell which number
+// means what (#1642). The withheld count dedupes with it: i3 and s3 are both
+// withheld, and i3 is named by both paths.
+func TestIDsAndJoinCountTheSameDistinctEntries(t *testing.T) {
+	ids := runFixture(t, "", "ids", "docs/a1.xml", "docs/c.xsd")
+	join := runFixture(t, "", "join", "instance", "docs/a1.xml", "docs/c.xsd")
+	if got, want := entryCount(t, ids), entryCount(t, join); got != want {
+		t.Errorf("mode ids counts %d catalog entry(ies), mode join %d, over the same paths", got, want)
+	}
+	wantLines(t, ids, "casejoin: 2 path(s), 4 catalog entry(ies) naming them, 2 withheld")
+	wantRow(t, join, "catalog entries naming a path", 4)
+	wantRow(t, join, "withheld — no case produced, nothing to flip (#1412)", 2)
 }
 
 // TestJoinCaveatNamesAllThreeDirections holds the figure's caveat to every
