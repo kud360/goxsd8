@@ -1,0 +1,311 @@
+package conformance
+
+import (
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+	"testing"
+)
+
+// catalogFixtureSuite is a miniature suite catalog exercising every shape
+// Catalog reports: one document named by more than one test group, the three
+// levels versionApplicable withholds at, a schemaTest's ordered document list,
+// the sibling-schemaTest documents an instance entry is assessed against, and
+// the three declared outcomes.
+//
+// The hrefs climb out of the set directory (`../docs/…`) exactly as the
+// pinned suite's own saxonMeta sets do, so the suite-relative spelling Catalog
+// reports is the one a census of the corpus would print.
+var catalogFixtureSuite = map[string]string{
+	"suite.xml": `<testSuite xmlns:xlink="http://www.w3.org/1999/xlink">
+  <testSetRef xlink:href="sets/applicable.testSet"/>
+  <testSetRef xlink:href="sets/scoped.testSet"/>
+</testSuite>`,
+
+	"sets/applicable.testSet": `<testSet name="Applicable" xmlns:xlink="http://www.w3.org/1999/xlink">
+  <testGroup name="g1">
+    <schemaTest name="s1">
+      <schemaDocument xlink:href="../docs/s1.xsd"/>
+      <schemaDocument xlink:href="../docs/s1-extra.xsd"/>
+      <expected validity="valid"/>
+    </schemaTest>
+    <instanceTest name="i1">
+      <instanceDocument xlink:href="../docs/shared.xml"/>
+      <expected validity="invalid"/>
+    </instanceTest>
+  </testGroup>
+  <testGroup name="g2">
+    <instanceTest name="i1">
+      <instanceDocument xlink:href="../docs/shared.xml"/>
+      <expected validity="valid"/>
+    </instanceTest>
+  </testGroup>
+  <testGroup name="g3" version="1.0">
+    <instanceTest name="i3">
+      <instanceDocument xlink:href="../docs/shared.xml"/>
+      <expected validity="invalid"/>
+    </instanceTest>
+  </testGroup>
+  <testGroup name="g4">
+    <instanceTest name="i4" version="1.0">
+      <instanceDocument xlink:href="../docs/lonely.xml"/>
+      <expected validity="invalid"/>
+    </instanceTest>
+    <instanceTest name="i5">
+      <instanceDocument xlink:href="../docs/lonely.xml"/>
+      <expected validity="valid" version="1.0"/>
+    </instanceTest>
+  </testGroup>
+  <testGroup name="g5">
+    <schemaTest name="s5">
+      <expected validity="valid"/>
+    </schemaTest>
+  </testGroup>
+</testSet>`,
+
+	"sets/scoped.testSet": `<testSet name="Scoped" version="1.0" xmlns:xlink="http://www.w3.org/1999/xlink">
+  <testGroup name="sg1">
+    <instanceTest name="si1">
+      <instanceDocument xlink:href="../docs/shared.xml"/>
+      <expected validity="valid"/>
+    </instanceTest>
+  </testGroup>
+</testSet>`,
+}
+
+// writeCatalogFixture materializes the fixture suite in a temp directory and
+// returns its root.
+func writeCatalogFixture(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	for name, body := range catalogFixtureSuite {
+		path := filepath.Join(root, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("creating %s: %v", filepath.Dir(path), err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatalf("writing %s: %v", path, err)
+		}
+	}
+	return root
+}
+
+// catalogByID indexes a read catalog for assertion, failing the test on an ID
+// the fixture does not carry.
+func catalogByID(t *testing.T, entries []CatalogEntry, id string) CatalogEntry {
+	t.Helper()
+	for _, e := range entries {
+		if e.ID == id {
+			return e
+		}
+	}
+	t.Fatalf("no catalog entry %q in %d entries", id, len(entries))
+	return CatalogEntry{}
+}
+
+// TestCatalogReportsEveryEntryTheSuiteNames holds the reader to the whole
+// catalog: one entry per declared schemaTest and instanceTest, withheld levels
+// included, each with the documents it names spelled relative to the suite
+// root.
+func TestCatalogReportsEveryEntryTheSuiteNames(t *testing.T) {
+	entries, err := Catalog(writeCatalogFixture(t))
+	if err != nil {
+		t.Fatalf("Catalog: %v", err)
+	}
+
+	var ids []string
+	for _, e := range entries {
+		ids = append(ids, e.ID)
+	}
+	want := []string{
+		"Applicable/g1/instance/i1",
+		"Applicable/g1/schema/s1",
+		"Applicable/g2/instance/i1",
+		"Applicable/g3/instance/i3",
+		"Applicable/g4/instance/i4",
+		"Applicable/g4/instance/i5",
+		"Applicable/g5/schema/s5",
+		"Scoped/sg1/instance/si1",
+	}
+	if !slices.Equal(ids, want) {
+		t.Errorf("catalog IDs = %q, want %q (sorted by ID, withheld entries included)", ids, want)
+	}
+}
+
+// TestCatalogNamesOneDocumentFromEveryGroupThatDeclaresIt is the direction the
+// relation is one-to-many in: a fixture path is the one thing a census hands
+// over, and the catalog names it from as many entries as declare it. A reader
+// answering with one ID silently under-reports (issue #1642).
+func TestCatalogNamesOneDocumentFromEveryGroupThatDeclaresIt(t *testing.T) {
+	entries, err := Catalog(writeCatalogFixture(t))
+	if err != nil {
+		t.Fatalf("Catalog: %v", err)
+	}
+
+	var naming []string
+	for _, e := range entries {
+		if slices.Contains(e.Docs, "docs/shared.xml") {
+			naming = append(naming, e.ID)
+		}
+	}
+	want := []string{
+		"Applicable/g1/instance/i1",
+		"Applicable/g2/instance/i1",
+		"Applicable/g3/instance/i3",
+		"Scoped/sg1/instance/si1",
+	}
+	if !slices.Equal(naming, want) {
+		t.Errorf("entries naming docs/shared.xml = %q, want %q", naming, want)
+	}
+}
+
+// TestCatalogMarksEveryLevelTheSuiteScopesAway holds the withheld flag to all
+// three levels versionApplicable governs, and to nothing else.
+func TestCatalogMarksEveryLevelTheSuiteScopesAway(t *testing.T) {
+	entries, err := Catalog(writeCatalogFixture(t))
+	if err != nil {
+		t.Fatalf("Catalog: %v", err)
+	}
+
+	cases := map[string]bool{
+		"Applicable/g1/instance/i1": false,
+		"Applicable/g1/schema/s1":   false,
+		"Applicable/g2/instance/i1": false,
+		"Applicable/g3/instance/i3": true, // testGroup version="1.0"
+		"Applicable/g4/instance/i4": true, // instanceTest version="1.0"
+		"Applicable/g4/instance/i5": false,
+		"Scoped/sg1/instance/si1":   true, // testSet version="1.0"
+	}
+	for id, want := range cases {
+		if got := catalogByID(t, entries, id).Withheld; got != want {
+			t.Errorf("%s: Withheld = %v, want %v", id, got, want)
+		}
+	}
+}
+
+// TestCatalogSplitsDocumentsUnderTestFromSchemaDocuments holds the two
+// document lists apart: a schemaTest's ordered <schemaDocument> list is its
+// own Docs, and an instance entry's SchemaDocs are its group's sibling
+// schemaTest's list. A group with no single schemaTest contributes none, and a
+// schemaTest declaring no document at all yields an entry naming nothing
+// rather than no entry.
+func TestCatalogSplitsDocumentsUnderTestFromSchemaDocuments(t *testing.T) {
+	entries, err := Catalog(writeCatalogFixture(t))
+	if err != nil {
+		t.Fatalf("Catalog: %v", err)
+	}
+
+	schema := catalogByID(t, entries, "Applicable/g1/schema/s1")
+	if want := []string{"docs/s1.xsd", "docs/s1-extra.xsd"}; !slices.Equal(schema.Docs, want) {
+		t.Errorf("schemaTest Docs = %q, want %q in document order", schema.Docs, want)
+	}
+	if len(schema.SchemaDocs) != 0 {
+		t.Errorf("schemaTest SchemaDocs = %q, want none: its own Docs are its schema documents", schema.SchemaDocs)
+	}
+
+	instance := catalogByID(t, entries, "Applicable/g1/instance/i1")
+	if want := []string{"docs/shared.xml"}; !slices.Equal(instance.Docs, want) {
+		t.Errorf("instanceTest Docs = %q, want %q", instance.Docs, want)
+	}
+	if want := []string{"docs/s1.xsd", "docs/s1-extra.xsd"}; !slices.Equal(instance.SchemaDocs, want) {
+		t.Errorf("instanceTest SchemaDocs = %q, want its group's schemaTest documents %q", instance.SchemaDocs, want)
+	}
+
+	lonely := catalogByID(t, entries, "Applicable/g2/instance/i1")
+	if len(lonely.SchemaDocs) != 0 {
+		t.Errorf("instance entry in a group with no schemaTest: SchemaDocs = %q, want none", lonely.SchemaDocs)
+	}
+
+	docless := catalogByID(t, entries, "Applicable/g5/schema/s5")
+	if len(docless.Docs) != 0 || len(docless.SchemaDocs) != 0 {
+		t.Errorf("schemaTest declaring no schemaDocument: Docs = %q, SchemaDocs = %q, want none of either",
+			docless.Docs, docless.SchemaDocs)
+	}
+}
+
+// TestCatalogReportsTheDeclaredOutcomeTheRunnerScoresAgainst holds
+// DeclaredValid to resolveExpected's reading: an outcome scoped to a
+// configuration this processor does not claim prescribes nothing, so its entry
+// is not declared valid however the declaration reads.
+func TestCatalogReportsTheDeclaredOutcomeTheRunnerScoresAgainst(t *testing.T) {
+	entries, err := Catalog(writeCatalogFixture(t))
+	if err != nil {
+		t.Fatalf("Catalog: %v", err)
+	}
+
+	cases := map[string]bool{
+		"Applicable/g1/schema/s1":   true,  // <expected validity="valid"/>
+		"Applicable/g1/instance/i1": false, // invalid
+		"Applicable/g2/instance/i1": true,  // valid
+		"Applicable/g4/instance/i5": false, // valid, but scoped to version="1.0": indeterminate
+		"Applicable/g5/schema/s5":   true,
+	}
+	for id, want := range cases {
+		if got := catalogByID(t, entries, id).DeclaredValid; got != want {
+			t.Errorf("%s: DeclaredValid = %v, want %v", id, got, want)
+		}
+	}
+}
+
+// TestCatalogRefusesAnAbsentSuite holds the reader to naming the init command
+// rather than reporting an empty catalog, which a join would read as "no case
+// names this fixture" (issue #659, checkSuitePresent).
+func TestCatalogRefusesAnAbsentSuite(t *testing.T) {
+	entries, err := Catalog(filepath.Join(t.TempDir(), "no-such-suite"))
+	if err == nil {
+		t.Fatalf("Catalog over an absent suite = %d entries, nil; want an error", len(entries))
+	}
+	if want := "git submodule update --init"; !strings.Contains(err.Error(), want) {
+		t.Errorf("Catalog error = %q, want it to name %q", err, want)
+	}
+}
+
+// TestCatalogEnumeratesTheWithheldMissingTestSet is issue #1642's own
+// regression case, against the pinned suite: saxonData/Missing/missing001.v1.xml
+// is named by an instanceTest in FOUR test groups of saxonMeta/Missing.testSet,
+// so one path yields four distinct case IDs — and all four are withheld, the
+// testSet declaring version="1.0", so none of them carries a line in any lane.
+// Enumerating the catalog and joining against banked cases are two different
+// questions, and this path is where a reader that conflates them answers four
+// for the second one.
+func TestCatalogEnumeratesTheWithheldMissingTestSet(t *testing.T) {
+	skipWithoutSuite(t)
+	entries, err := Catalog(suiteRoot)
+	if err != nil {
+		t.Fatalf("Catalog: %v", err)
+	}
+
+	const doc = "saxonData/Missing/missing001.v1.xml"
+	var naming []string
+	for _, e := range entries {
+		if !slices.Contains(e.Docs, doc) {
+			continue
+		}
+		naming = append(naming, e.ID)
+		if !e.Withheld {
+			t.Errorf("%s: Withheld = false, want true: Missing.testSet declares version=\"1.0\"", e.ID)
+		}
+	}
+	want := []string{
+		"Missing/missing001/instance/missing001.v1.xml",
+		"Missing/missing002/instance/missing001.v1.xml",
+		"Missing/missing003/instance/missing003.v1.xml",
+		"Missing/missing006/instance/missing006.v1.xml",
+	}
+	if !slices.Equal(naming, want) {
+		t.Errorf("entries naming %s = %q, want %q", doc, naming, want)
+	}
+
+	for _, id := range naming {
+		for _, l := range defaultLanes() {
+			banked, err := LoadExpectations(laneFile(l.name))
+			if err != nil {
+				t.Fatalf("lane %s: %v", l.name, err)
+			}
+			if _, ok := banked[id]; ok {
+				t.Errorf("%s carries a line in lane %s: a withheld case can never flip a score (#1412)", id, l.name)
+			}
+		}
+	}
+}

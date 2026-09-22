@@ -65,8 +65,8 @@ const (
 const expectationsDir = "testdata/expectations"
 
 // suitePath is the suite index whose absence means the submodule is not
-// initialized.
-func suitePath() string { return filepath.Join(suiteRoot, "suite.xml") }
+// initialized, inside the checkout `go test` sees (suiteIndexIn).
+func suitePath() string { return suiteIndexIn(suiteRoot) }
 
 // suiteOptionalEnv names the explicit opt-out for an environment that
 // legitimately has no suite checkout (issue #309): GOXSD_SUITE_OPTIONAL=1 turns
@@ -753,6 +753,11 @@ func caseID(setName, groupName, kind, testName string) string {
 // catalog's own order is the fact). A schemaTest with no <schemaDocument> at all
 // names nothing to test, which is a malformed catalog entry rather than a case
 // this harness may silently invent a document for.
+//
+// catalogDocs (conformance/catalog.go) reads the same two declarations for the
+// catalog READER, and differs only in reporting that malformed entry rather
+// than refusing it; a change to which declarations a kind names belongs in
+// both.
 func caseDocs(kind string, t validityTest, setDir string) (doc string, extra []string, err error) {
 	if kind == kindInstance {
 		return resolveDoc(setDir, t.InstanceDoc.Href), nil, nil
