@@ -94,10 +94,15 @@
 // beside the marker. A labelless input selects nothing into group 2, and the
 // report says so rather than reading as "no tracker is stale".
 //
+// Carry `state` on every row too. A fed list with any row lacking it prints
+// the census, skips groups 1 and 2, and exits 2 naming the first such issue:
+// an absent state reads as not OPEN, which turns every cited owner into a
+// false "dead end" (#1604).
+//
 // It exits 0 on a clean run (regardless of what it finds — the findings are
 // the report, not a failure) and 2 on an operational error: an unreadable
-// file, a source file this tool's scanner cannot tokenize, or stdin that
-// does not decode as the documented JSON shape.
+// file, a source file this tool's scanner cannot tokenize, stdin that does
+// not decode as the documented JSON shape, or a fed row carrying no `state`.
 package main
 
 import (
@@ -136,6 +141,12 @@ func main() {
 	rep := reconcile(markers, issues, haveIssues)
 	if err := printReport(os.Stdout, rep); err != nil {
 		fmt.Fprintf(os.Stderr, "gapaudit: %v\n", err)
+		os.Exit(2)
+	}
+	// Checked after printing, not before: the census reads no issue state,
+	// so the reader still gets it from a feed that lost the field.
+	if rep.StateErr != nil {
+		fmt.Fprintf(os.Stderr, "gapaudit: %v\n", rep.StateErr)
 		os.Exit(2)
 	}
 }
@@ -444,7 +455,10 @@ func commentLines(path string, src []byte) ([]commentLine, error) {
 // issue is one row of `gh issue list --json number,title,state,body,labels`:
 // the fields this tool needs to decide whether a marker is tracked. State is
 // "OPEN" or "CLOSED" as gh emits it; matching compares it case-insensitively
-// rather than adding a second encoding of the same fact.
+// rather than adding a second encoding of the same fact. It is a pointer
+// because absent and present must not collapse: a reshape that drops the key
+// would otherwise decode every row as not OPEN, and [missingState] is what
+// reads the difference.
 //
 // Labels is what lets the input be the whole repository rather than the
 // `kind/gap` slice of it: [reconcile] does the [gapLabel] selection itself,
@@ -453,7 +467,7 @@ func commentLines(path string, src []byte) ([]commentLine, error) {
 type issue struct {
 	Number int     `json:"number"`
 	Title  string  `json:"title"`
-	State  string  `json:"state"`
+	State  *string `json:"state"`
 	Body   string  `json:"body"`
 	Labels []label `json:"labels"`
 }
@@ -474,8 +488,11 @@ type label struct {
 // against every issue in the input, whatever it is labeled.
 const gapLabel = "kind/gap"
 
+// open reports whether iss is OPEN. A row with no state is not OPEN, which is
+// why [reconcile] computes nothing that calls this once [missingState] has
+// found such a row.
 func (iss issue) open() bool {
-	return strings.EqualFold(iss.State, "OPEN")
+	return iss.State != nil && strings.EqualFold(*iss.State, "OPEN")
 }
 
 func (iss issue) hasLabel(name string) bool {
@@ -575,9 +592,15 @@ type staleTracker struct {
 // before #1062 — selects nothing into group 2, and an empty group 2 then
 // means "no tracker was seen" rather than "no tracker is stale". The
 // report says which.
+//
+// StateErr is [missingState]'s finding on that list. Unlike an unlabeled
+// feed, a state-less one does not select nothing, it selects wrongly, so
+// groups 1 and 2 are not computed from it and main exits 2 once the census
+// is printed.
 type report struct {
 	HaveIssues bool
 	Labeled    bool
+	StateErr   error
 	Untracked  []untrackedMarker
 	Stale      []staleTracker
 	Census     []areaCount
@@ -593,6 +616,37 @@ func anyLabeled(issues []issue) bool {
 		}
 	}
 	return false
+}
+
+// missingState returns an error naming the first fed issue, in fed order,
+// whose row carries no `state` key, or nil when every row carries one — an
+// empty list included, since it has no row to lack the key. It words a feed
+// where no row has the key apart from one where only some do: the first is a
+// reshape that never asked for the field, the second a join or merge that
+// lost it for part of the list.
+func missingState(issues []issue) error {
+	missing := 0
+	first := 0
+	for _, iss := range issues {
+		if iss.State != nil {
+			continue
+		}
+		if missing == 0 {
+			first = iss.Number
+		}
+		missing++
+	}
+	if missing == 0 {
+		return nil
+	}
+	if missing == len(issues) {
+		return fmt.Errorf("no row of the fed issue list carries a \"state\" field (first: #%d),"+
+			" so no issue can be told OPEN from CLOSED — reshape the input per"+
+			" docs/ROUTINES.md's \"Survey input\"", first)
+	}
+	return fmt.Errorf("issue #%d is the first of %d of %d fed rows carrying no \"state\" field,"+
+		" so it cannot be told OPEN from CLOSED — reshape the input per"+
+		" docs/ROUTINES.md's \"Survey input\"", first, missing, len(issues))
 }
 
 // minPhraseWords is how many consecutive words of a marker's text must
@@ -614,10 +668,16 @@ const minPhraseWords = 5
 // optional issue list. It is pure: no I/O, so tests exercise it directly
 // with literal marker/issue slices. When haveIssues is false only the
 // census (group 3) is populated, since there is nothing to reconcile markers
-// against.
+// against. The same holds when a fed row carries no state (report.StateErr):
+// every OPEN/CLOSED decision would then be computed from a guess.
 func reconcile(markers []marker, issues []issue, haveIssues bool) report {
-	rep := report{HaveIssues: haveIssues, Labeled: anyLabeled(issues), Census: census(markers)}
-	if !haveIssues {
+	rep := report{
+		HaveIssues: haveIssues,
+		Labeled:    anyLabeled(issues),
+		StateErr:   missingState(issues),
+		Census:     census(markers),
+	}
+	if !haveIssues || rep.StateErr != nil {
 		return rep
 	}
 
@@ -949,6 +1009,10 @@ func printReportTo(w io.Writer, rep report) {
 	if !rep.HaveIssues {
 		_, _ = fmt.Fprintln(w, "\ngapaudit: no issue list on stdin — marker-inventory-only mode;"+
 			" groups 1 and 2 (tracking reconciliation) were skipped.")
+		return
+	}
+	if rep.StateErr != nil {
+		_, _ = fmt.Fprintf(w, "\ngapaudit: groups 1 and 2 (tracking reconciliation) were skipped: %v.\n", rep.StateErr)
 		return
 	}
 

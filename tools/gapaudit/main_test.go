@@ -125,7 +125,7 @@ func TestExtractMarkerStopsAtNextMarker(t *testing.T) {
 // asserting only the continuing half would also pass on a guard that never
 // broke at all.
 func TestExtractMarkerHashBoundary(t *testing.T) {
-	owner := issue{Number: 1117, State: "OPEN", Title: "gapaudit: the wrapped-citation boundary"}
+	owner := issue{Number: 1117, State: stateOf("OPEN"), Title: "gapaudit: the wrapped-citation boundary"}
 
 	tests := []struct {
 		name    string
@@ -368,7 +368,7 @@ func TestReadIssues(t *testing.T) {
 // with unrelated or too-short marker text, counts as a match.
 func TestMatchesByFilePath(t *testing.T) {
 	m := marker{Area: "xsd", File: "xsd/wildcard.go", Line: 111, Text: "short"}
-	iss := issue{Number: 1, Title: "close the wildcard gap", State: "OPEN",
+	iss := issue{Number: 1, Title: "close the wildcard gap", State: stateOf("OPEN"),
 		Body: "the fail-open site is xsd/wildcard.go, clause 1 only"}
 
 	if got := matches(m, iss); got != matchFile {
@@ -390,7 +390,7 @@ func TestMatchesByPhrase(t *testing.T) {
 	iss := issue{
 		Number: 2,
 		Title:  "wildcard gap",
-		State:  "OPEN",
+		State:  stateOf("OPEN"),
 		Body:   "Tracking: expanded name matching is not yet folded in for this construct.",
 	}
 
@@ -403,7 +403,7 @@ func TestMatchesByPhrase(t *testing.T) {
 // issue text do not match by either signal.
 func TestMatchesFalseWhenNeitherSignalFires(t *testing.T) {
 	m := marker{Area: "xsd", File: "xsd/wildcard.go", Line: 5, Text: "the wildcard case is not folded in yet"}
-	iss := issue{Number: 3, Title: "unrelated parser bug", State: "OPEN", Body: "a completely different problem in the lexer"}
+	iss := issue{Number: 3, Title: "unrelated parser bug", State: stateOf("OPEN"), Body: "a completely different problem in the lexer"}
 
 	if got := matches(m, iss); got != matchNone {
 		t.Errorf("matches = %v, want matchNone", got)
@@ -417,7 +417,7 @@ func TestReconcileUnmatchedMarkerLandsInGroup1(t *testing.T) {
 		{Area: "xsd", File: "xsd/orphan.go", Line: 9, Text: "nobody has filed a tracking issue for this one yet"},
 	}
 	issues := []issue{
-		{Number: 1, Title: "unrelated", State: "OPEN", Body: "nothing to do with the marker above",
+		{Number: 1, Title: "unrelated", State: stateOf("OPEN"), Body: "nothing to do with the marker above",
 			Labels: gapLabels()},
 	}
 
@@ -441,7 +441,7 @@ func TestReconcileClosedMatchIsStillUntracked(t *testing.T) {
 		{Area: "xsd", File: "xsd/wildcard.go", Line: 5, Text: "the wildcard case is not folded in yet, see the note above"},
 	}
 	issues := []issue{
-		{Number: 42, Title: "wildcard gap", State: "CLOSED", Body: "the wildcard case is not folded in yet"},
+		{Number: 42, Title: "wildcard gap", State: stateOf("CLOSED"), Body: "the wildcard case is not folded in yet"},
 	}
 
 	rep := reconcile(markers, issues, true)
@@ -461,7 +461,7 @@ func TestReconcileOpenIssueNoMarkerLandsInGroup2(t *testing.T) {
 		{Area: "xsd", File: "xsd/still-here.go", Line: 1, Text: "an entirely different still-open gap in this file"},
 	}
 	issues := []issue{
-		{Number: 55, Title: "gap that got fixed without closing the issue", State: "OPEN",
+		{Number: 55, Title: "gap that got fixed without closing the issue", State: stateOf("OPEN"),
 			Body: "xsd/long-gone.go had a fail-open branch", Labels: gapLabels()},
 	}
 
@@ -482,7 +482,7 @@ func TestReconcileTrackedMarkerIsNotReported(t *testing.T) {
 		{Area: "xsd", File: "xsd/wildcard.go", Line: 5, Text: "the wildcard case is not folded in yet (#7)"},
 	}
 	issues := []issue{
-		{Number: 7, Title: "wildcard gap", State: "OPEN", Body: "tracked at xsd/wildcard.go",
+		{Number: 7, Title: "wildcard gap", State: stateOf("OPEN"), Body: "tracked at xsd/wildcard.go",
 			Labels: gapLabels()},
 	}
 
@@ -660,7 +660,7 @@ func TestMatchesByCitation(t *testing.T) {
 					"type, and it declines instead.",
 			},
 			issue: issue{
-				Number: 414, State: "OPEN",
+				Number: 414, State: stateOf("OPEN"),
 				Title: "xsd: BOTH finalize folds walk the Schema's TYPE DEFINITIONS only",
 			},
 		},
@@ -677,7 +677,7 @@ func TestMatchesByCitation(t *testing.T) {
 					"(#774).",
 			},
 			issue: issue{
-				Number: 774, State: "OPEN",
+				Number: 774, State: stateOf("OPEN"),
 				Title: "validate: the cvc-attribute/cvc-au declines an undecidable value space leaves",
 			},
 		},
@@ -693,7 +693,7 @@ func TestMatchesByCitation(t *testing.T) {
 					"member scan declines on the same class for the same reason.",
 			},
 			issue: issue{
-				Number: 774, State: "OPEN",
+				Number: 774, State: stateOf("OPEN"),
 				Title: "validate: the cvc-attribute/cvc-au declines an undecidable value space leaves",
 			},
 		},
@@ -709,7 +709,7 @@ func TestMatchesByCitation(t *testing.T) {
 					"backend cannot read (#774).",
 			},
 			issue: issue{
-				Number: 774, State: "OPEN",
+				Number: 774, State: stateOf("OPEN"),
 				Title: "validate: the cvc-attribute/cvc-au declines an undecidable value space leaves",
 			},
 		},
@@ -741,7 +741,7 @@ func TestMatchesByCitation(t *testing.T) {
 func TestMatchesCitationOutranksResemblance(t *testing.T) {
 	m := marker{Area: "xsd", File: "xsd/wildcard.go", Line: 5,
 		Text: "expanded name matching is not yet folded in (#7)"}
-	iss := issue{Number: 7, State: "OPEN", Title: "wildcard gap",
+	iss := issue{Number: 7, State: stateOf("OPEN"), Title: "wildcard gap",
 		Body: "xsd/wildcard.go: expanded name matching is not yet folded in"}
 
 	if got := matches(m, iss); got != matchCited {
@@ -765,14 +765,14 @@ func TestCitedOwnerOutsideKindGapResolves(t *testing.T) {
 	// that can tie the two.
 	m := marker{Area: "validate", File: "validate/assess.go", Line: 682,
 		Text: "an element whose type carries one (#717)."}
-	owner := issue{Number: 717, State: "OPEN",
+	owner := issue{Number: 717, State: stateOf("OPEN"),
 		Title:  "validate: open content is not folded into the governing type",
 		Body:   "Blocked on the assertion rework.",
 		Labels: []label{{Name: "kind/feature"}, {Name: "blocked"}}}
 	// A kind/gap row the marker has nothing to do with, so group 2 is
 	// non-empty in both directions and neither subtest reads the group-2
 	// predicate as the thing under test.
-	bystander := issue{Number: 921, State: "OPEN", Title: "an unrelated lane gap",
+	bystander := issue{Number: 921, State: stateOf("OPEN"), Title: "an unrelated lane gap",
 		Body: "no marker anywhere", Labels: gapLabels()}
 
 	tests := []struct {
@@ -836,12 +836,12 @@ func TestCitedOwnerOutsideKindGapResolves(t *testing.T) {
 func TestGroup2SelectsOnlyKindGapIssues(t *testing.T) {
 	markers := []marker{{Area: "xsd", File: "xsd/x.go", Line: 1, Text: "a gap with no tracker at all"}}
 	issues := []issue{
-		{Number: 10, State: "OPEN", Title: "a tracker whose marker is gone",
+		{Number: 10, State: stateOf("OPEN"), Title: "a tracker whose marker is gone",
 			Body: "unrelated prose", Labels: gapLabels()},
-		{Number: 11, State: "OPEN", Title: "an ordinary feature",
+		{Number: 11, State: stateOf("OPEN"), Title: "an ordinary feature",
 			Body: "unrelated prose", Labels: []label{{Name: "kind/feature"}}},
-		{Number: 12, State: "OPEN", Title: "an unlabeled issue", Body: "unrelated prose"},
-		{Number: 13, State: "CLOSED", Title: "a kind/gap tracker that was closed",
+		{Number: 12, State: stateOf("OPEN"), Title: "an unlabeled issue", Body: "unrelated prose"},
+		{Number: 13, State: stateOf("CLOSED"), Title: "a kind/gap tracker that was closed",
 			Body: "unrelated prose", Labels: gapLabels()},
 	}
 
@@ -856,7 +856,7 @@ func TestGroup2SelectsOnlyKindGapIssues(t *testing.T) {
 // fails the kind/gap test and group 2 comes back empty. Empty must not read
 // as "no tracker is stale".
 func TestUnlabeledFeedSaysGroup2SelectedNothing(t *testing.T) {
-	issues := []issue{{Number: 10, State: "OPEN", Title: "a tracker", Body: "unrelated prose"}}
+	issues := []issue{{Number: 10, State: stateOf("OPEN"), Title: "a tracker", Body: "unrelated prose"}}
 
 	rep := reconcile(nil, issues, true)
 	if rep.Labeled {
@@ -871,10 +871,94 @@ func TestUnlabeledFeedSaysGroup2SelectedNothing(t *testing.T) {
 		t.Errorf("report does not flag the labelless feed:\n%s", buf.String())
 	}
 
-	labeled := reconcile(nil, []issue{{Number: 10, State: "OPEN", Labels: gapLabels()}}, true)
+	labeled := reconcile(nil, []issue{{Number: 10, State: stateOf("OPEN"), Labels: gapLabels()}}, true)
 	if !labeled.Labeled {
 		t.Error("Labeled = false on a feed carrying labels")
 	}
+}
+
+// stateOf is a fixture's issue state, as the pointer [issue.State] decodes a
+// present `state` key into.
+func stateOf(s string) *string { return &s }
+
+// TestStatelessFeedIsAnErrorNotADeadEnd is #1604's sighting: a reshape that
+// drops `state` decodes every row as not OPEN, so a marker citing its open
+// owner printed as a "dead end". The feed goes through readIssues, because
+// the absence is only visible at the decode.
+func TestStatelessFeedIsAnErrorNotADeadEnd(t *testing.T) {
+	markers := []marker{{Area: "tooling", File: "tools/gapaudit/main.go", Line: 1, Text: "owned by #1601"}}
+	feed := func(t *testing.T, in string) report {
+		t.Helper()
+		issues, have, err := readIssues(strings.NewReader(in))
+		if err != nil {
+			t.Fatalf("readIssues: %v", err)
+		}
+		return reconcile(markers, issues, have)
+	}
+	render := func(t *testing.T, rep report) string {
+		t.Helper()
+		var buf strings.Builder
+		if err := printReport(&buf, rep); err != nil {
+			t.Fatalf("printReport: %v", err)
+		}
+		return buf.String()
+	}
+
+	for _, tc := range []struct {
+		name, in, wantPrefix string
+	}{
+		{
+			name:       "no row carries state",
+			in:         `[{"number":1601,"title":"the owner","body":"","labels":[{"name":"kind/gap"}]}]`,
+			wantPrefix: `no row of the fed issue list carries a "state" field (first: #1601)`,
+		},
+		{
+			name: "some rows carry state",
+			in: `[{"number":9,"title":"other","state":"OPEN","body":"","labels":[{"name":"kind/gap"}]},
+				{"number":1601,"title":"the owner","body":"","labels":[{"name":"kind/gap"}]},
+				{"number":12,"title":"another","body":"","labels":[]}]`,
+			wantPrefix: `issue #1601 is the first of 2 of 3 fed rows carrying no "state" field`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rep := feed(t, tc.in)
+			if rep.StateErr == nil {
+				t.Fatal("StateErr = nil, want an error so main exits 2")
+			}
+			msg := rep.StateErr.Error()
+			if !strings.HasPrefix(msg, tc.wantPrefix) || !strings.Contains(msg, `docs/ROUTINES.md's "Survey input"`) {
+				t.Errorf("StateErr = %q, want prefix %q and a pointer to Survey input", msg, tc.wantPrefix)
+			}
+			if len(rep.Untracked) != 0 || len(rep.Stale) != 0 {
+				t.Errorf("groups computed from a state-less feed: Untracked %+v, Stale %+v", rep.Untracked, rep.Stale)
+			}
+			out := render(t, rep)
+			for _, banned := range []string{"dead end", "=== Group 1", "=== Group 2"} {
+				if strings.Contains(out, banned) {
+					t.Errorf("report prints %q from a state-less feed:\n%s", banned, out)
+				}
+			}
+			if !strings.Contains(out, "tooling          1") || !strings.Contains(out, "were skipped: "+msg) {
+				t.Errorf("report lacks the census or the skip note:\n%s", out)
+			}
+		})
+	}
+
+	t.Run("an empty list and empty stdin are not state-less feeds", func(t *testing.T) {
+		if rep := feed(t, `[]`); rep.StateErr != nil {
+			t.Errorf("StateErr = %v on an empty list", rep.StateErr)
+		}
+		if rep := feed(t, ``); rep.StateErr != nil {
+			t.Errorf("StateErr = %v on empty stdin", rep.StateErr)
+		}
+	})
+
+	t.Run("a stated feed still reconciles", func(t *testing.T) {
+		rep := feed(t, `[{"number":1601,"title":"the owner","state":"OPEN","body":"","labels":[{"name":"kind/gap"}]}]`)
+		if rep.StateErr != nil || len(rep.Untracked) != 0 {
+			t.Errorf("StateErr %v, Untracked %+v; want nil and none (#1601 is the OPEN owner)", rep.StateErr, rep.Untracked)
+		}
+	})
 }
 
 // TestUnresolvedCitationNamesNoIssueInTheFeed is the #852 defect-2 mechanism
@@ -887,7 +971,7 @@ func TestUnresolvedCitationNamesNoIssueInTheFeed(t *testing.T) {
 		{Area: "validate", File: "validate/assess.go", Line: 685,
 			Text: "an element whose type carries one (#71700)."},
 	}
-	issues := []issue{{Number: 999, State: "OPEN", Title: "unrelated",
+	issues := []issue{{Number: 999, State: stateOf("OPEN"), Title: "unrelated",
 		Body: "nothing in common", Labels: gapLabels()}}
 
 	rep := reconcile(markers, issues, true)
@@ -920,7 +1004,7 @@ func TestPhraseCollisionDoesNotRetireATracker(t *testing.T) {
 	m := marker{Area: "parser", File: "parser/conditional.go", Line: 208,
 		Text: "vc:maxVersion does not prune. Owned by #1002, which is blocked on a human " +
 			"ruling: downgrading a banked case is not an agent's call (CLAUDE.md's one rule)."}
-	iss := issue{Number: 921, State: "OPEN", Labels: gapLabels(),
+	iss := issue{Number: 921, State: stateOf("OPEN"), Labels: gapLabels(),
 		Title: "conformance: <current status=\"queried\"> is unmodeled",
 		Body: "Downgrading it is not an agent's call (CLAUDE.md's one rule, " +
 			"`.claude/agents/arbiter.md`'s ratchet-integrity section)."}
@@ -951,7 +1035,7 @@ func TestPhraseCollisionDoesNotRetireATracker(t *testing.T) {
 // whose marker still stands never reports stale.
 func TestCitationRetiresATracker(t *testing.T) {
 	m := marker{Area: "xsd", File: "xsd/wildcard.go", Line: 5, Text: "still open (#7)"}
-	iss := issue{Number: 7, State: "OPEN", Title: "wildcard gap", Body: "unrelated prose",
+	iss := issue{Number: 7, State: stateOf("OPEN"), Title: "wildcard gap", Body: "unrelated prose",
 		Labels: gapLabels()}
 
 	rep := reconcile([]marker{m}, []issue{iss}, true)
@@ -978,7 +1062,7 @@ func TestFileMentionDoesNotRetireATracker(t *testing.T) {
 	// that has already been selected. The mention itself is #972's real body
 	// text, so what this test pins — a path named to EXCLUDE a site retires
 	// nothing — is unaffected by the state (#1108).
-	iss := issue{Number: 972, State: "OPEN", Labels: gapLabels(),
+	iss := issue{Number: 972, State: stateOf("OPEN"), Labels: gapLabels(),
 		Title: "parser: restrictionFacets silently DROPS an XSD-namespace child",
 		Body: "Only that site — `restrictionFacets` has TWO callers and their content models differ. " +
 			"The `<simpleContent><restriction>` construction (`parser/produce_complex.go`) is " +
@@ -1021,7 +1105,7 @@ func TestFileMentionDoesNotSuppressAnUncitedMarker(t *testing.T) {
 	m := marker{Area: "xsd", File: "xsd/attributeusefold.go", Line: 296,
 		Text: "taking the largest of the family is a CHOICE, not a recovery, and it is not " +
 			"fail-open against every reader."}
-	iss := issue{Number: 1102, State: "OPEN", Labels: gapLabels(),
+	iss := issue{Number: 1102, State: stateOf("OPEN"), Labels: gapLabels(),
 		Title: "xsd: ownAttributeUses is a proven OVER-approximation since #1082, not a recovery",
 		Body: "The `GAP(xsd)` at `xsd/attributeusefold.go:296` has an owner and a ruling: " +
 			"its file — `xsd/attributeusefold.go` — is named here."}
@@ -1056,8 +1140,8 @@ func TestDeadEndDistinguishesCitationFromResemblance(t *testing.T) {
 	m := marker{Area: "validate", File: "validate/assess.go", Line: 208,
 		Text: "the folded attribute uses of a governing type are not consulted here (#761)"}
 	issues := []issue{
-		{Number: 761, State: "CLOSED", Title: "the cited owner", Body: "unrelated prose entirely"},
-		{Number: 800, State: "CLOSED", Title: "a collision",
+		{Number: 761, State: stateOf("CLOSED"), Title: "the cited owner", Body: "unrelated prose entirely"},
+		{Number: 800, State: stateOf("CLOSED"), Title: "a collision",
 			Body: "the folded attribute uses of a governing type are described here too"},
 	}
 
@@ -1100,13 +1184,13 @@ func TestDeadEndDistinguishesCitationFromResemblance(t *testing.T) {
 func TestClosedFileResemblanceIsDropped(t *testing.T) {
 	m := marker{Area: "validate", File: "validate/assess.go", Line: 208,
 		Text: "the folded attribute uses of a governing type are not consulted here"}
-	dropped := issue{Number: 300, State: "CLOSED", Title: "a closed pass over that file",
+	dropped := issue{Number: 300, State: stateOf("CLOSED"), Title: "a closed pass over that file",
 		Body: "it reworked validate/assess.go and is long since done"}
 	issues := []issue{
 		dropped,
-		{Number: 400, State: "CLOSED", Title: "a collision",
+		{Number: 400, State: stateOf("CLOSED"), Title: "a collision",
 			Body: "the folded attribute uses of a governing type are described here too"},
-		{Number: 500, State: "OPEN", Title: "a plausible owner",
+		{Number: 500, State: stateOf("OPEN"), Title: "a plausible owner",
 			Body: "the fail-open site is validate/assess.go"},
 	}
 
@@ -1151,12 +1235,12 @@ func TestGroup1AnnotationsLeadWithTheActionableOnes(t *testing.T) {
 	m := marker{Area: "validate", File: "validate/assess.go", Line: 208,
 		Text: "the folded attribute uses of a governing type are not consulted here (#500)"}
 	issues := []issue{
-		{Number: 100, State: "OPEN", Title: "a plausible owner",
+		{Number: 100, State: stateOf("OPEN"), Title: "a plausible owner",
 			Body: "the fail-open site is validate/assess.go"},
-		{Number: 300, State: "CLOSED", Title: "a collision",
+		{Number: 300, State: stateOf("CLOSED"), Title: "a collision",
 			Body: "the folded attribute uses of a governing type are described here too"},
-		{Number: 500, State: "CLOSED", Title: "the cited owner", Body: "unrelated prose entirely"},
-		{Number: 900, State: "OPEN", Title: "another plausible owner",
+		{Number: 500, State: stateOf("CLOSED"), Title: "the cited owner", Body: "unrelated prose entirely"},
+		{Number: 900, State: stateOf("OPEN"), Title: "another plausible owner",
 			Body: "see also validate/assess.go"},
 	}
 
@@ -1212,8 +1296,8 @@ func TestRuledPermanentCitationIsNotADeadEnd(t *testing.T) {
 		Text: "the same gap written the old way: #1378 owns the ruling, and #501," +
 			" now closed, introduced the ceiling."}
 	issues := []issue{
-		{Number: 501, State: "CLOSED", Title: "unfoldCopies' 2/2 copy cap", Body: "the ceiling landed here"},
-		{Number: 1378, State: "CLOSED", Title: "own the retirement of the maxContentPositions ceiling",
+		{Number: 501, State: stateOf("CLOSED"), Title: "unfoldCopies' 2/2 copy cap", Body: "the ceiling landed here"},
+		{Number: 1378, State: stateOf("CLOSED"), Title: "own the retirement of the maxContentPositions ceiling",
 			Body: "ruled a permanent documented approximation", Labels: gapLabels()},
 	}
 
@@ -1264,7 +1348,7 @@ func TestRulingRetiresATrackerAndSurvivesReflow(t *testing.T) {
 		t.Fatalf("rulings = %v, want [499]: the reflowed phrase no longer reads as a ruling", r)
 	}
 
-	open := issue{Number: 499, State: "OPEN", Title: "the maxProductStates ceiling",
+	open := issue{Number: 499, State: stateOf("OPEN"), Title: "the maxProductStates ceiling",
 		Body: "unrelated prose entirely", Labels: gapLabels()}
 	if k := matches(got[0], open); k != matchRuled {
 		t.Errorf("matches = %v, want matchRuled", k)
@@ -1284,7 +1368,7 @@ func TestRulingRetiresATrackerAndSurvivesReflow(t *testing.T) {
 func TestRulingNamingNoIssueIsStillReported(t *testing.T) {
 	m := marker{Area: "xsd", File: "xsd/contentrestricts.go", Line: 697,
 		Text: "the ceiling declines the question. RULED permanent by #99999 (STYLE P3b)."}
-	issues := []issue{{Number: 1378, State: "CLOSED", Title: "an unrelated issue", Body: "unrelated prose"}}
+	issues := []issue{{Number: 1378, State: stateOf("CLOSED"), Title: "an unrelated issue", Body: "unrelated prose"}}
 
 	rep := reconcile([]marker{m}, issues, true)
 	if len(rep.Untracked) != 1 {
