@@ -4,7 +4,9 @@
 // and which are dead. Issue #399 measured seven consecutive develop
 // passes each re-deriving the same three unchanged facts about the same
 // dead branches; PRINCIPLES 27 turns exactly that shape of repetitive,
-// deterministic work into a tool.
+// deterministic work into a tool. Every other head the remote carries is
+// reported too, unclassified: a survey that silently skips a namespace
+// cannot be told from one that looked and found it empty.
 //
 // Classification needs two sources that neither shows on its own:
 //   - the branch namespace, for how recently a branch's tip was pushed
@@ -23,6 +25,37 @@
 // session what still exists. `git ls-remote --heads origin` asks the
 // remote directly instead, matching the WIP discovery index WORKFLOW.md
 // and PRINCIPLES 28 both name authoritative.
+//
+// That one round trip asks for every head, not for a pattern, because
+// WORKFLOW.md's branch scheme names TWO namespaces — wip/* and parked/* —
+// and a report covering one of them cannot say which one it covered. Five
+// PLAN.md stamps reported a parked/* count taken from a refspec that
+// never carried parked/*, and the count was right every time, which is
+// the hazard rather than the reprieve (#1627). So wip/issue-<N> refs are
+// the classified rows, and two trailing sections report the rest: the
+// parked/* branches WORKFLOW.md keeps for human triage, and every head
+// outside both namespaces. Each section prints a "none" line when its
+// namespace is empty, so a zero this tool measured never reads like a
+// namespace nobody looked at.
+//
+// A head outside both namespaces holds no lease and is cleanup a human
+// does, with one state worth counting: a ref AHEAD of main carries
+// commits main does not have. A merged session branch whose auto-delete
+// did not fire and a session branch stranding the only copy of a landing
+// look identical by name, and one of the latter stood behind an unmerged
+// PR for a day with a /backlog pass's whole log entry on it, in a
+// namespace no survey read (#1627). Each such row prints `git rev-list
+// --left-right --count <main>...<ref>`'s pair and says in words when
+// ahead is nonzero. A checkout that never fetched the ref's tip cannot
+// count either side, and that row prints the counts as undecided rather
+// than as a zero nothing measured — the posture the tip age already
+// takes.
+//
+// A maintenance command's short-lived branch is such a head between its
+// push and its squash-merge, so it prints in that section, ahead>0, while
+// it is landing. Nothing is owed on it and nothing distinguishes it there
+// from a branch whose merge never happened, which is the same reading a
+// human does on every row of the section.
 //
 // ls-remote reports only a SHA per branch, not a date, so each tip's
 // commit time still comes from the local object store (`git log -1
@@ -131,20 +164,22 @@ func main() {
 	}
 }
 
-// run drives the survey end to end: discover branches from the remote,
-// read optional issue data from stdin, classify each branch, and render
-// the report to stdout. A branch whose name does not fit the
-// wip/issue-<N> shape is skipped with a warning to stderr rather than
-// aborting the whole report — an unexpected refs/heads/wip/* branch is
-// evidence worth a warning, not a reason to withhold every other row.
+// run drives the survey end to end: discover every head from the remote,
+// read optional issue data from stdin, classify the wip/issue-<N>
+// branches, and render the report — the classified table first, then the
+// parked/* section and the section for heads in neither namespace. A
+// wip/ branch whose name does not fit the wip/issue-<N> shape is skipped
+// with a warning to stderr rather than aborting the whole report — an
+// unexpected refs/heads/wip/* branch is evidence worth a warning, not a
+// reason to withhold every other row.
 func run(stdout, stderr io.Writer, stdin io.Reader, now time.Time) error {
-	refs, mainSHA, err := remoteRefs()
+	buckets, err := remoteRefs()
 	if err != nil {
 		return err
 	}
 
 	var parsed []branchRef
-	for _, ref := range refs {
+	for _, ref := range buckets.wips {
 		br, err := parseWipRef(ref.sha, ref.ref)
 		if err != nil {
 			// Best-effort diagnostic: a write failure here would mean stderr
@@ -168,11 +203,11 @@ func run(stdout, stderr io.Writer, stdin io.Reader, now time.Time) error {
 		if err != nil {
 			return fmt.Errorf("resolving tip for %s: %w", br.branch, err)
 		}
-		anc, err := gitAncestry(br.sha, mainSHA)
+		anc, err := gitAncestry(br.sha, buckets.mainSHA)
 		if err != nil {
 			return fmt.Errorf("resolving ancestry for %s: %w", br.branch, err)
 		}
-		diff, err := gitEmptyDiff(br.sha, mainSHA)
+		diff, err := gitEmptyDiff(br.sha, buckets.mainSHA)
 		if err != nil {
 			return fmt.Errorf("resolving net diff for %s: %w", br.branch, err)
 		}
@@ -185,7 +220,23 @@ func run(stdout, stderr io.Writer, stdin io.Reader, now time.Time) error {
 	}
 	sortRows(rows)
 
-	return renderTable(stdout, rows)
+	others := make([]otherRow, 0, len(buckets.others))
+	for _, ref := range buckets.others {
+		counts, err := gitAheadBehind(ref.sha, buckets.mainSHA)
+		if err != nil {
+			return fmt.Errorf("resolving ahead/behind for %s: %w", ref.ref, err)
+		}
+		others = append(others, otherRow{branch: branchName(ref.ref), counts: counts})
+	}
+	sortOtherRows(others)
+
+	if err := renderTable(stdout, rows); err != nil {
+		return err
+	}
+	if err := renderParked(stdout, branchNames(buckets.parked)); err != nil {
+		return err
+	}
+	return renderOther(stdout, others)
 }
 
 // refSHA is one line of `git ls-remote --heads` output: a remote head's
@@ -195,41 +246,79 @@ type refSHA struct {
 	ref string
 }
 
-// remoteRefs asks the origin remote directly for every wip/* branch's head
-// SHA and, in the same round trip, main's — one network call for both, so
-// the ancestry test costs no extra remote access. See the package doc
-// comment for why this — not the local refs/remotes/origin/wip/* cache —
-// is the authoritative branch set. The main SHA is empty when the remote
-// reports no refs/heads/main, which leaves every ancestry unresolved and
-// the report dated from tip ages alone.
-func remoteRefs() ([]refSHA, string, error) {
-	out, err := exec.Command("git", "ls-remote", "--heads", "origin", "refs/heads/wip/*", "refs/heads/main").Output()
+// remoteRefs asks the origin remote directly for every head it carries,
+// main's included — one network call for the whole report, so neither the
+// ancestry test nor the two trailing sections costs extra remote access.
+// See the package doc comment for why this — not the local
+// refs/remotes/origin/* cache — is the authoritative branch set, and why
+// the request carries no pattern.
+func remoteRefs() (refBuckets, error) {
+	out, err := exec.Command("git", "ls-remote", "--heads", "origin").Output()
 	if err != nil {
-		return nil, "", fmt.Errorf("running git ls-remote --heads origin: %w", err)
+		return refBuckets{}, fmt.Errorf("running git ls-remote --heads origin: %w", err)
 	}
 	refs, errs := parseLsRemote(string(out))
 	if len(errs) > 0 {
-		return nil, "", fmt.Errorf("parsing git ls-remote output: %w", errors.Join(errs...))
+		return refBuckets{}, fmt.Errorf("parsing git ls-remote output: %w", errors.Join(errs...))
 	}
-	wips, mainSHA := partitionRefs(refs)
-	return wips, mainSHA, nil
+	return partitionRefs(refs), nil
 }
 
-// partitionRefs splits ls-remote's refs into the wip/* branches to survey
-// and main's SHA, which is the ancestry test's right-hand side rather than
-// a surveyed branch. It is pure — no git or process calls — so tests
-// exercise it directly.
-func partitionRefs(refs []refSHA) ([]refSHA, string) {
-	var wips []refSHA
-	mainSHA := ""
+// refBuckets is the remote head namespace split the way the report reads
+// it: the wip/* branches to classify, the parked/* branches WORKFLOW.md
+// keeps for human triage, every head in neither namespace, and main's
+// SHA. main is the ancestry test's right-hand side rather than a surveyed
+// branch, so it is in none of the three slices; mainSHA is empty when the
+// remote reports no refs/heads/main, which leaves every ancestry and every
+// ahead/behind unresolved and the report dated from tip ages alone.
+type refBuckets struct {
+	wips    []refSHA
+	parked  []refSHA
+	others  []refSHA
+	mainSHA string
+}
+
+// partitionRefs splits ls-remote's refs into those four. Membership is by
+// ref prefix alone: a refs/heads/wip/ ref is a lease candidate even when
+// its name is malformed, which run reports as a warning rather than
+// silently rehoming into the section for heads outside the scheme. It is
+// pure — no git or process calls — so tests exercise it directly.
+func partitionRefs(refs []refSHA) refBuckets {
+	var buckets refBuckets
 	for _, ref := range refs {
 		if ref.ref == "refs/heads/main" {
-			mainSHA = ref.sha
+			buckets.mainSHA = ref.sha
 			continue
 		}
-		wips = append(wips, ref)
+		if strings.HasPrefix(ref.ref, "refs/heads/wip/") {
+			buckets.wips = append(buckets.wips, ref)
+			continue
+		}
+		if strings.HasPrefix(ref.ref, "refs/heads/parked/") {
+			buckets.parked = append(buckets.parked, ref)
+			continue
+		}
+		buckets.others = append(buckets.others, ref)
 	}
-	return wips, mainSHA
+	return buckets
+}
+
+// branchName is a full ref name as the report prints it: refs/heads/ is
+// what makes a ref a head, not what tells two heads apart.
+func branchName(ref string) string {
+	return strings.TrimPrefix(ref, "refs/heads/")
+}
+
+// branchNames names each ref and orders the result, which is the order the
+// section renders in (STYLE D1) — ls-remote's own order is the remote's to
+// change between two runs of an unchanged tool.
+func branchNames(refs []refSHA) []string {
+	names := make([]string, 0, len(refs))
+	for _, ref := range refs {
+		names = append(names, branchName(ref.ref))
+	}
+	sort.Strings(names)
+	return names
 }
 
 // parseLsRemote parses `git ls-remote --heads` output, one "<sha>\t<ref>"
@@ -428,6 +517,63 @@ func netDiffFromExit(code int) netDiff {
 		return diffNonEmpty
 	}
 	return diffUnresolved
+}
+
+// aheadBehind is how a head outside the surveyed namespaces stands
+// against main. ahead is the count that matters: a ref main cannot reach
+// carries commits main does not have, which is the one state on such a
+// ref owed a human's attention rather than a deletion.
+type aheadBehind struct {
+	ahead  int
+	behind int
+}
+
+// gitAheadBehind counts how far the ref at sha stands from mainSHA in each
+// direction. It returns nil, with no error, when the question cannot be
+// answered here: mainSHA is empty, or git cannot resolve one of the two
+// objects (a tip this checkout never fetched, which exits 128). That
+// mirrors gitTip's and gitAncestry's posture, for this tool's usual
+// reason — a zero printed where nothing was counted is exactly the
+// reading this section exists to make impossible.
+func gitAheadBehind(sha, mainSHA string) (*aheadBehind, error) {
+	if mainSHA == "" {
+		return nil, nil
+	}
+	out, err := exec.Command("git", "rev-list", "--left-right", "--count", mainSHA+"..."+sha).Output()
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("running git rev-list --left-right --count %s...%s: %w", mainSHA, sha, err)
+	}
+	counts, err := parseAheadBehind(string(out))
+	if err != nil {
+		return nil, fmt.Errorf("counting %s against main: %w", sha, err)
+	}
+	return &counts, nil
+}
+
+// parseAheadBehind parses `git rev-list --left-right --count
+// <mainSHA>...<sha>`'s single line, "<behind>\t<ahead>": the LEFT count is
+// what main reaches and the ref does not, so it is the ref's behind, and
+// the right count is the ref's ahead. It is pure text parsing — no git or
+// process calls — so tests exercise it directly against literal rev-list
+// output.
+func parseAheadBehind(output string) (aheadBehind, error) {
+	fields := strings.Fields(output)
+	if len(fields) != 2 {
+		return aheadBehind{}, fmt.Errorf("malformed rev-list --left-right --count output %q: expected \"<behind>\\t<ahead>\"", output)
+	}
+	behind, err := strconv.Atoi(fields[0])
+	if err != nil {
+		return aheadBehind{}, fmt.Errorf("parsing behind count from %q: %w", output, err)
+	}
+	ahead, err := strconv.Atoi(fields[1])
+	if err != nil {
+		return aheadBehind{}, fmt.Errorf("parsing ahead count from %q: %w", output, err)
+	}
+	return aheadBehind{ahead: ahead, behind: behind}, nil
 }
 
 // ghLabel is one label object in `gh issue list --json labels`'s shape.
@@ -856,4 +1002,104 @@ func leaseAgeCell(r row) string {
 		return "main's"
 	}
 	return "unknown"
+}
+
+// renderParked writes the parked/* section: one row per branch, each
+// saying what WORKFLOW.md's scheme makes it — work kept for a human, not
+// a claim on an issue — or a line saying the namespace was surveyed and
+// is empty. The empty line is the point of the section rather than a
+// courtesy: an omitted section and a measured zero read identically, and
+// five PLAN.md stamps reported a parked/* count from a tool whose refspec
+// could not produce one (#1627).
+//
+// It does not sort — callers order branches first (run calls branchNames)
+// — so the same branches always render the same text (STYLE D1).
+func renderParked(w io.Writer, branches []string) error {
+	if _, err := fmt.Fprint(w, "\nPARKED BRANCHES -- unattributable work kept for human triage; no lease, no claim\n"); err != nil {
+		return fmt.Errorf("writing parked section heading: %w", err)
+	}
+	if len(branches) == 0 {
+		if _, err := fmt.Fprintln(w, "none -- refs/heads/parked/* was surveyed and the remote carries no such ref"); err != nil {
+			return fmt.Errorf("writing empty parked section: %w", err)
+		}
+		return nil
+	}
+	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
+	if _, err := fmt.Fprintln(tw, "BRANCH\tNOTE"); err != nil {
+		return fmt.Errorf("writing parked table header: %w", err)
+	}
+	for _, branch := range branches {
+		if _, err := fmt.Fprintf(tw, "%s\tno lease; not a claim -- triage by hand\n", branch); err != nil {
+			return fmt.Errorf("writing parked table row for %s: %w", branch, err)
+		}
+	}
+	if err := tw.Flush(); err != nil {
+		return fmt.Errorf("flushing parked table: %w", err)
+	}
+	return nil
+}
+
+// otherRow is one line of the section for heads outside both namespaces.
+// counts is nil where this checkout could not count either direction, so
+// a number never stands in for a count nothing took.
+type otherRow struct {
+	branch string
+	counts *aheadBehind
+}
+
+// sortOtherRows orders the section by branch name, the only key such a row
+// has (STYLE D1): these refs carry no issue number and ls-remote's order
+// is the remote's to change.
+func sortOtherRows(rows []otherRow) {
+	sort.Slice(rows, func(i, j int) bool { return rows[i].branch < rows[j].branch })
+}
+
+// otherNote is one such row's NOTE cell, and the ahead>0 case is the one
+// the section exists for, so it is the only one that shouts. An unfetched
+// tip is reported as undecided and never as a zero: "ahead=0" is the whole
+// claim that nothing is at risk on the ref, and this tool does not make
+// that claim on a count it could not take.
+func otherNote(r otherRow) string {
+	if r.counts == nil {
+		return "ahead/behind undecided -- run `git fetch origin`"
+	}
+	if r.counts.ahead > 0 {
+		return "AHEAD OF MAIN -- carries commits main does not have; triage before deleting"
+	}
+	return "nothing main does not already have"
+}
+
+// renderOther writes the section for heads outside both namespaces:
+// BRANCH, AHEAD, BEHIND, NOTE per row, or a line saying the remote carries
+// none. A row whose counts are undecided prints "?" in both columns.
+//
+// It does not sort — callers order rows first (run calls sortOtherRows) —
+// so the same rows always render the same text (STYLE D1).
+func renderOther(w io.Writer, rows []otherRow) error {
+	if _, err := fmt.Fprint(w, "\nOTHER BRANCHES -- outside wip/* and parked/*; no lease; human-triage cleanup\n"); err != nil {
+		return fmt.Errorf("writing other-branch section heading: %w", err)
+	}
+	if len(rows) == 0 {
+		if _, err := fmt.Fprintln(w, "none -- every head on the remote is under wip/*, parked/*, or main"); err != nil {
+			return fmt.Errorf("writing empty other-branch section: %w", err)
+		}
+		return nil
+	}
+	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
+	if _, err := fmt.Fprintln(tw, "BRANCH\tAHEAD\tBEHIND\tNOTE"); err != nil {
+		return fmt.Errorf("writing other-branch table header: %w", err)
+	}
+	for _, r := range rows {
+		ahead, behind := "?", "?"
+		if r.counts != nil {
+			ahead, behind = strconv.Itoa(r.counts.ahead), strconv.Itoa(r.counts.behind)
+		}
+		if _, err := fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", r.branch, ahead, behind, otherNote(r)); err != nil {
+			return fmt.Errorf("writing other-branch table row for %s: %w", r.branch, err)
+		}
+	}
+	if err := tw.Flush(); err != nil {
+		return fmt.Errorf("flushing other-branch table: %w", err)
+	}
+	return nil
 }
