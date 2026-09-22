@@ -189,9 +189,12 @@
 // value· ·resolves· to no type definition. It is charged at that attribute's
 // own Loc against the built-in declaration for the type attribute (§3.2.7.1),
 // whatever the element's ·governing type definition· is and whether that type
-// is simple, complex or undetermined, and it needs no value space. A lexical
-// with no ·actual value· at all is charged by nothing (cvcattribute.go's
-// GAP(validate) marker).
+// is simple, complex or undetermined, and it needs no value space. The lexicals
+// it declines are those that stop at the QName SPLIT — empty, a colon structure
+// no QName has, a prefix with no binding in scope — and not every lexical
+// without an ·actual value·: one whose parts are no NCName clears that split
+// and is charged here, under a clause that does not hold its defect
+// (cvcattribute.go's GAP(validate) marker).
 //
 // The seventh is the root's content half, against the same type's {content
 // type}. cvc-complex-type clause 1 decides what its {variety} admits —

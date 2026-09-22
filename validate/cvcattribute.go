@@ -133,13 +133,28 @@ func (w *walk) matchedAttribute(a Attribute, e Element, u xsd.AttributeUse) {
 // [walk.instanceTypeDefinition]). Clause 5 carries no such fallback wording and
 // charges whether or not that fallback succeeds.
 //
-// GAP(validate): a lexical with no ·actual value· at all — not a QName, or a
-// prefix with no binding in scope at E — is charged by nothing. Clause 5
-// quantifies over A's ·actual value·, which such a lexical does not have, so
-// the defect is clause 3's as String Valid against the built-in declaration's
-// xs:QName {type definition}; charging it here would report it under a clause
-// that does not hold it. Clause 3 has no site for xsi:type either, matchedAttribute
-// being the only one and unreachable for it, so the lexical is accepted.
+// GAP(validate): clause 5 is the only clause any xsi:type attribute is charged
+// under, and a lexical outside xs:QName's lexical space falls the wrong side of
+// it in EITHER direction, according to where [resolveInstanceQName] (cvcelt.go)
+// leaves it. That function splits on emptiness and colon placement and never
+// checks either half against the NCName production, so its two sides do not
+// divide QNames from non-QNames:
+//
+//   - DECLINED. An empty lexical, a colon structure no QName has, and a prefix
+//     with no binding in scope at E stop at the split (instanceTypeNoValue) and
+//     are charged by nothing. Clause 5 quantifies over A's ·actual value·, which
+//     such a lexical does not have, so charging it here would report it under a
+//     clause that does not hold it.
+//   - CHARGED, wrongly. Every OTHER lexical outside that lexical space — 23.789,
+//     not a name — clears the split, and the name it yields resolves to nothing,
+//     so it is charged below as though it were a QName naming no type.
+//
+// Both halves are clause 3's, as String Valid against the built-in declaration's
+// xs:QName {type definition}, and clause 3 has no site for xsi:type — matchedAttribute
+// is its only one and no attribute use ever reaches the item. One such site,
+// running value.ValidateLexical the way matchedAttribute already does, retires
+// the pair: the declined lexicals gain the charge they are owed and the charged
+// ones move to the clause that holds them.
 func (w *walk) instanceTypeResolves(e Element) {
 	a, present := instanceAttribute(e, "type")
 	if !present {
@@ -152,8 +167,8 @@ func (w *walk) instanceTypeResolves(e Element) {
 		w.logAttribute(a, ruleCvcAttribute, "5", "declined")
 	case instanceTypeUnresolved:
 		w.res.violations = append(w.res.violations, xsderr.New(ruleCvcAttribute, a.Loc(),
-			"the xsi:type attribute of the element %s has the ·actual value· %s, from the lexical %q, and that name ·resolves· to no type definition (§3.17.6.3, cvc-resolve-instance), which cvc-attribute clause 5 requires of an attribute governed by the built-in declaration for the type attribute (§3.2.7.1)",
-			e.Name(), name, a.Value()))
+			"the xsi:type attribute of the element %s has the lexical %q, and the schema declares no type definition named %q for it to ·resolve· to (§3.17.6.3, cvc-resolve-instance), which cvc-attribute clause 5 requires of an attribute governed by the built-in declaration for the type attribute (§3.2.7.1)",
+			e.Name(), a.Value(), name))
 		w.logAttribute(a, ruleCvcAttribute, "5", "charged")
 	}
 }

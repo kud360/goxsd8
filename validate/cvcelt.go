@@ -211,10 +211,10 @@ func elementFixed(g governance) (xsd.ValueConstraint, bool) {
 // an unresolvable xsi:type (the Note under cvc-elt, resolving W3C issue 11764).
 //
 // That vacuity is the ELEMENT's alone. The ATTRIBUTE is charged separately
-// under cvc-attribute (§3.2.4.1) clause 5 for a QName that ·resolves· to
-// nothing, which reads the same resolution through [walk.resolveInstanceType]
-// without changing what this returns ([walk.instanceTypeResolves],
-// cvcattribute.go).
+// under cvc-attribute (§3.2.4.1) clause 5 for a lexical that clears the QName
+// split and names nothing, which reads the same resolution through
+// [walk.resolveInstanceType] without changing what this returns
+// ([walk.instanceTypeResolves], cvcattribute.go).
 //
 // The resolution is cvc-resolve-instance (§3.17.6.3) and stays at the Structures
 // level: the prefix is resolved against the in-scope namespace bindings at E
@@ -240,11 +240,17 @@ func (w *walk) instanceTypeDefinition(e Element) (xsd.TypeDefinition, bool) {
 type instanceTypeOutcome uint8
 
 const (
-	// instanceTypeNoValue is a lexical with no ·actual value· at all: not a
-	// QName, or a prefix with no binding in scope at E.
+	// instanceTypeNoValue is a lexical [resolveInstanceQName] turns away at the
+	// SPLIT: empty, a colon structure no QName has, or a prefix with no binding
+	// in scope at E. Every such lexical has no ·actual value·, but not every
+	// lexical without one is here — the split checks the two halves for
+	// emptiness and never against the NCName production, so a lexical whose
+	// parts are no NCName passes it and lands in instanceTypeUnresolved.
 	instanceTypeNoValue instanceTypeOutcome = iota
-	// instanceTypeUnresolved is a QName ·actual value· naming no top-level type
-	// definition of the schema.
+	// instanceTypeUnresolved is a lexical that cleared the split and yields a
+	// name no top-level type definition of the schema carries. That is A's
+	// ·actual value· where the lexical is a QName, and a name outside xs:QName's
+	// lexical space where it is not; both reach here and neither resolves.
 	instanceTypeUnresolved
 	// instanceTypeResolved is a QName ·actual value· naming one.
 	instanceTypeResolved
@@ -256,10 +262,11 @@ const (
 // one encoding of that walk (STYLE T4); the two readers differ only in which
 // outcomes they act on.
 //
-// The first result is A's ·actual value· — the ·expanded name· the lexical
-// resolved to — which the clause 5 charge names in its message beside the
-// lexical, the two differing exactly when a prefix is bound to a namespace the
-// author did not expect. It is the zero QName where there is no ·actual value·.
+// The first result is the name the split and the prefix binding made of the
+// lexical, which the clause 5 charge names in its message beside it so that a
+// prefix bound to a namespace the author did not expect is visible. It is A's
+// ·actual value· only where the lexical is a QName, which this does not decide
+// (see instanceTypeUnresolved). It is the zero QName on instanceTypeNoValue.
 func (w *walk) resolveInstanceType(e Element, a Attribute) (xsd.QName, xsd.TypeDefinition, instanceTypeOutcome) {
 	name, isQName := resolveInstanceQName(e, a.Value())
 	if !isQName {

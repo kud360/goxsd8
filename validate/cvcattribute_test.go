@@ -306,11 +306,11 @@ func TestValueChargeOutcomesAreLogged(t *testing.T) {
 // position. It is the built-in declaration for the type attribute (§3.2.7.1)
 // charging on its own: no attribute use ever matches xsi:type, so
 // [walk.matchedAttribute] never sees the item and none of the clauses above
-// reaches it (#1494). The prefix is BOUND, so the ·actual value· and the
-// lexical the message carries are different strings and neither can stand in
-// for the other: two arguments swapped inside the fmt.Errorf leaves every
-// asserted substring present, and only pinning the opening as a prefix
-// catches it (#1048).
+// reaches it (#1494). The prefix is BOUND, so the resolved name and the lexical
+// the message carries are different strings and neither can stand in for the
+// other: two arguments swapped inside the fmt.Errorf leaves every asserted
+// substring present, and only pinning the opening as a prefix catches it
+// (#1048).
 func TestUnresolvableXSITypeChargesClauseFive(t *testing.T) {
 	schema := eSchema(t, false, nil)
 	root := eRoot(map[string]string{"type": "p:Missing"})
@@ -327,8 +327,8 @@ func TestUnresolvableXSITypeChargesClauseFive(t *testing.T) {
 	if got[0].Loc != loc(1, 10) {
 		t.Errorf("Loc = %s, want the xsi:type attribute's own position %s", got[0].Loc, loc(1, 10))
 	}
-	const opening = `the xsi:type attribute of the element root has the ·actual value· {urn:x}Missing, ` +
-		`from the lexical "p:Missing", and that name ·resolves· to no type definition`
+	const opening = `the xsi:type attribute of the element root has the lexical "p:Missing", ` +
+		`and the schema declares no type definition named "{urn:x}Missing" for it to ·resolve· to`
 	if !strings.HasPrefix(got[0].Msg, opening) {
 		t.Errorf("Msg = %q, want it to open %q", got[0].Msg, opening)
 	}
