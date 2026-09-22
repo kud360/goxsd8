@@ -210,6 +210,12 @@ func elementFixed(g governance) (xsd.ValueConstraint, bool) {
 // AT ALL, which is what makes cvc-elt clause 4 vacuous rather than violated for
 // an unresolvable xsi:type (the Note under cvc-elt, resolving W3C issue 11764).
 //
+// That vacuity is the ELEMENT's alone. The ATTRIBUTE is charged separately
+// under cvc-attribute (§3.2.4.1) clause 5 for a lexical that clears the QName
+// split and names nothing, which reads the same resolution through
+// [walk.resolveInstanceType] without changing what this returns
+// ([walk.instanceTypeResolves], cvcattribute.go).
+//
 // The resolution is cvc-resolve-instance (§3.17.6.3) and stays at the Structures
 // level: the prefix is resolved against the in-scope namespace bindings at E
 // ([Element.LookupPrefix], PRINCIPLES 19) and the result looked up among the
@@ -222,11 +228,55 @@ func (w *walk) instanceTypeDefinition(e Element) (xsd.TypeDefinition, bool) {
 	if !present {
 		return nil, false
 	}
+	_, t, outcome := w.resolveInstanceType(e, a)
+	return t, outcome == instanceTypeResolved
+}
+
+// instanceTypeOutcome is how far an xsi:type attribute got in ·resolving· to a
+// type definition, which the two rules reading it divide differently: key-itd
+// conjunct 3 folds both failures into "E has no ·instance-specified type
+// definition·" ([walk.instanceTypeDefinition]), while cvc-attribute clause 5
+// charges the second alone ([walk.instanceTypeResolves], cvcattribute.go).
+type instanceTypeOutcome uint8
+
+const (
+	// instanceTypeNoValue is a lexical [resolveInstanceQName] turns away at the
+	// SPLIT: empty, a colon structure no QName has, or a prefix with no binding
+	// in scope at E. Every such lexical has no ·actual value·, but not every
+	// lexical without one is here — the split checks the two halves for
+	// emptiness and never against the NCName production, so a lexical whose
+	// parts are no NCName passes it and lands in instanceTypeUnresolved.
+	instanceTypeNoValue instanceTypeOutcome = iota
+	// instanceTypeUnresolved is a lexical that cleared the split and yields a
+	// name no top-level type definition of the schema carries. That is A's
+	// ·actual value· where the lexical is a QName, and a name outside xs:QName's
+	// lexical space where it is not; both reach here and neither resolves.
+	instanceTypeUnresolved
+	// instanceTypeResolved is a QName ·actual value· naming one.
+	instanceTypeResolved
+)
+
+// resolveInstanceType ·resolves· the xsi:type attribute a of e against the
+// schema's top-level {type definitions}, on cvc-resolve-instance's terms
+// (§3.17.6.3), and reports which of its three outcomes that reached. It is the
+// one encoding of that walk (STYLE T4); the two readers differ only in which
+// outcomes they act on.
+//
+// The first result is the name the split and the prefix binding made of the
+// lexical, which the clause 5 charge names in its message beside it so that a
+// prefix bound to a namespace the author did not expect is visible. It is A's
+// ·actual value· only where the lexical is a QName, which this does not decide
+// (see instanceTypeUnresolved). It is the zero QName on instanceTypeNoValue.
+func (w *walk) resolveInstanceType(e Element, a Attribute) (xsd.QName, xsd.TypeDefinition, instanceTypeOutcome) {
 	name, isQName := resolveInstanceQName(e, a.Value())
 	if !isQName {
-		return nil, false
+		return xsd.QName{}, nil, instanceTypeNoValue
 	}
-	return w.schema.Type(name)
+	t, resolved := w.schema.Type(name)
+	if !resolved {
+		return name, nil, instanceTypeUnresolved
+	}
+	return name, t, instanceTypeResolved
 }
 
 // resolveInstanceQName splits a QName lexical per the QName production of

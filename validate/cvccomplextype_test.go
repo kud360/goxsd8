@@ -362,17 +362,26 @@ func TestInstanceAttributesAreExemptFromClauseTwo(t *testing.T) {
 		return xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: name}
 	}
 	// All FOUR are excepted, xsi:type and xsi:nil included: each is ·attributed
-	// to· nothing at all, whatever it goes on to decide elsewhere.
+	// to· nothing at all, whatever it goes on to decide elsewhere. xsi:type
+	// records one line before that exemption and not in place of it — its own
+	// cvc-attribute clause 5, which is the built-in declaration's charge and
+	// leaves the item as unmatched by clause 2 as the other three.
 	for _, n := range []string{"type", "nil", "schemaLocation", "noNamespaceSchemaLocation"} {
+		want := []string{"2/exempt"}
+		if n == "type" {
+			want = []string{"5/charged", "2/exempt"}
+		}
 		uses := []xsd.AttributeUse{aUse(t, "id", false, nil)}
-		if outcomes := assessOutcomes(t, attributedRoot(xsi(n)), uses, nil); !slices.Equal(outcomes, []string{"2/exempt"}) {
-			t.Errorf("assessed xsi:%s as %v, want it EXEMPT from clause 2 rather than matched", n, outcomes)
+		if outcomes := assessOutcomes(t, attributedRoot(xsi(n)), uses, nil); !slices.Equal(outcomes, want) {
+			t.Errorf("assessed xsi:%s as %v, want %v — EXEMPT from clause 2 rather than matched", n, outcomes, want)
 		}
 	}
-	// Three of them charge nothing anywhere. xsi:nil is the exception, and not
-	// through clause 2: this root's declaration is not {nillable}, so cvc-elt
-	// clause 3.1 charges its mere presence (cvcelt_test.go).
-	for _, n := range []string{"type", "schemaLocation", "noNamespaceSchemaLocation"} {
+	// Two of them charge nothing anywhere, and the other two are charged by
+	// rules that are not clause 2: this root's declaration is not {nillable},
+	// so cvc-elt clause 3.1 charges xsi:nil's mere presence (cvcelt_test.go),
+	// and attributedRoot's "v" ·resolves· to no type definition, so
+	// cvc-attribute clause 5 charges xsi:type (cvcattribute_test.go).
+	for _, n := range []string{"schemaLocation", "noNamespaceSchemaLocation"} {
 		uses := []xsd.AttributeUse{aUse(t, "id", false, nil)}
 		wantSilence(t, assessRoot(t, attributedRoot(xsi(n)), uses, nil), "xsi:"+n+" is excepted from clause 2")
 	}
@@ -387,10 +396,18 @@ func TestInstanceAttributesAreExemptFromClauseTwo(t *testing.T) {
 // ·instance-specified type definition· at all, so the ·selected type definition·
 // stays the ·governing· one (key-governing-type-elem clause 4) and the attribute
 // half runs against it unchanged — the fallback the Note under cvc-elt states.
+// The attribute's OWN cvc-attribute clause 5 charge rides alongside that
+// fallback and does not displace it (cvcattribute_test.go).
 func TestUnresolvableXSITypeStillAssessesAgainstTheDeclaredType(t *testing.T) {
 	root := attributedRoot(xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: "type"}, local("stray"))
 	got := assessRoot(t, root, []xsd.AttributeUse{aUse(t, "id", false, nil)}, nil)
-	wantCharge(t, got, "clause 2", loc(1, 11), "stray")
+	if len(got) != 2 {
+		t.Fatalf("Violations() = %v, want two: cvc-attribute clause 5 and the fallback type's clause 2", got)
+	}
+	if got[0].Rule != "cvc-attribute" {
+		t.Errorf("Rule = %q, want the first charge to be cvc-attribute against the xsi:type item", got[0].Rule)
+	}
+	wantCharge(t, got[1:], "clause 2", loc(1, 11), "stray")
 }
 
 // A declaration carrying a {type table} whose {test} falls outside the

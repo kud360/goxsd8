@@ -110,6 +110,69 @@ func (w *walk) matchedAttribute(a Attribute, e Element, u xsd.AttributeUse) {
 	}
 }
 
+// instanceTypeResolves charges cvc-attribute (§3.2.4.1) clause 5 against e's
+// xsi:type attribute: where D is the built-in declaration for the type
+// attribute (§3.2.7.1), A's ·actual value· must ·resolve· to a type definition.
+//
+// It is reached from [walk.attributes] (assess.go) and never through
+// [walk.matchedAttribute], because no attribute use ever matches xsi:type —
+// cvc-complex-type clause 2 excepts the four Built-in Attribute Declarations by
+// name (isInstanceAttribute) and §3.2.6 a-props-correct forbids a schema to
+// redeclare them. That exception is clause 2's own quantifier and nothing
+// wider: the Note under §3.2.4.2 keeps an xsi:type attribute governed by its
+// built-in declaration whatever the element's ·governing type definition· is,
+// so cvc-assess-elt clause 2 (§3.3.4.6) walks the item through cvc-attribute
+// regardless, and clause 5 is the part of that walk the built-in declaration
+// adds. It is called for BOTH arms of cvc-type clause 3 for the same reason:
+// the governing type decides nothing about an attribute it never governs.
+//
+// The charge is the ATTRIBUTE's alone and the ELEMENT is untouched by it: a
+// lexical that does not ·resolve· leaves E with no ·instance-specified type
+// definition· at all, so cvc-elt clause 4 stays vacuous and the element is
+// assessed against its ·selected type definition· (the Note under cvc-elt,
+// [walk.instanceTypeDefinition]). Clause 5 carries no such fallback wording and
+// charges whether or not that fallback succeeds.
+//
+// GAP(validate): clause 5 is the only clause any xsi:type attribute is charged
+// under, and a lexical outside xs:QName's lexical space falls the wrong side of
+// it in EITHER direction, according to where [resolveInstanceQName] (cvcelt.go)
+// leaves it. That function splits on emptiness and colon placement and never
+// checks either half against the NCName production, so its two sides do not
+// divide QNames from non-QNames:
+//
+//   - DECLINED. An empty lexical, a colon structure no QName has, and a prefix
+//     with no binding in scope at E stop at the split (instanceTypeNoValue) and
+//     are charged by nothing. Clause 5 quantifies over A's ·actual value·, which
+//     such a lexical does not have, so charging it here would report it under a
+//     clause that does not hold it.
+//   - CHARGED, wrongly. Every OTHER lexical outside that lexical space — 23.789,
+//     not a name — clears the split, and the name it yields resolves to nothing,
+//     so it is charged below as though it were a QName naming no type.
+//
+// Both halves are clause 3's, as String Valid against the built-in declaration's
+// xs:QName {type definition}, and clause 3 has no site for xsi:type — matchedAttribute
+// is its only one and no attribute use ever reaches the item. One such site,
+// running value.ValidateLexical the way matchedAttribute already does, retires
+// the pair: the declined lexicals gain the charge they are owed and the charged
+// ones move to the clause that holds them.
+func (w *walk) instanceTypeResolves(e Element) {
+	a, present := instanceAttribute(e, "type")
+	if !present {
+		return
+	}
+	switch name, _, outcome := w.resolveInstanceType(e, a); outcome {
+	case instanceTypeResolved:
+		w.logAttribute(a, ruleCvcAttribute, "5", "satisfied")
+	case instanceTypeNoValue:
+		w.logAttribute(a, ruleCvcAttribute, "5", "declined")
+	case instanceTypeUnresolved:
+		w.res.violations = append(w.res.violations, xsderr.New(ruleCvcAttribute, a.Loc(),
+			"the xsi:type attribute of the element %s has the lexical %q, and the schema declares no type definition named %q for it to ·resolve· to (§3.17.6.3, cvc-resolve-instance), which cvc-attribute clause 5 requires of an attribute governed by the built-in declaration for the type attribute (§3.2.7.1)",
+			e.Name(), a.Value(), name))
+		w.logAttribute(a, ruleCvcAttribute, "5", "charged")
+	}
+}
+
 // fixedConstraint is one fixed {value constraint} together with the rule that
 // reads it and the words that rule's message needs: the clause it charges (empty
 // for cvc-au, which is one undivided sentence with no numbered clauses) and the

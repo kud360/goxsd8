@@ -675,7 +675,15 @@ func (w *walk) element(e Element, g governance, parent *icCheck) {
 // 2 are "the same for all complex type definitions" and both folds reach a
 // declaration-owned anonymous type through the slot that owns it
 // (xsd/ownedtypefold.go, #414).
+//
+// cvc-attribute (§3.2.4.1) clause 5 sits OUTSIDE that dispatch, ahead of it:
+// an xsi:type attribute is governed by its built-in declaration (§3.2.7.1) and
+// not by e's type, so neither arm of clause 3 and neither arm of
+// cvc-complex-type clause 2 reaches it, and the charge is the same under a
+// simple governing type, a complex one, and none at all
+// ([walk.instanceTypeResolves], cvcattribute.go).
 func (w *walk) attributes(e Element, g governance) {
+	w.instanceTypeResolves(e)
 	if st := g.simpleType(); st != nil {
 		w.simpleTypeAttributes(e, st)
 		return

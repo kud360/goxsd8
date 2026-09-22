@@ -360,7 +360,7 @@ CType/derivationmethod00102m2/instance/Negative pass
 CType/derivationmethod00102m2/instance/Positive fail
 CType/final00101m3/instance/Negative pass
 CType/final00101m3/instance/Positive fail
-CType/name00101m/instance/name00101m1_n fail
+CType/name00101m/instance/name00101m1_n pass
 CType/name00101m/instance/name00101m1_p fail
 CType/psubstitutions00101m/instance/pSubstitutions00101m1_n pass
 CType/psubstitutions00101m/instance/pSubstitutions00101m1_p fail
@@ -399,10 +399,10 @@ Complex/complex007/instance/complex007.n2.xml pass
 Complex/complex007/instance/complex007.n3.xml pass
 Complex/complex007/instance/complex007.v1.xml fail
 Complex/complex007/instance/complex007.v2.xml fail
-Complex/complex008/instance/complex008.n1.xml fail
+Complex/complex008/instance/complex008.n1.xml pass
 Complex/complex008/instance/complex008.n2.xml fail
-Complex/complex008/instance/complex008.n3.xml fail
-Complex/complex008/instance/complex008.n4.xml fail
+Complex/complex008/instance/complex008.n3.xml pass
+Complex/complex008/instance/complex008.n4.xml pass
 Complex/complex009/instance/complex009.n1.xml pass
 Complex/complex009/instance/complex009.n2.xml pass
 Complex/complex009/instance/complex009.v1.xml fail
@@ -431,7 +431,7 @@ Complex/complex014/instance/complex014.n1.xml pass
 Complex/complex014/instance/complex014.n2.xml pass
 Complex/complex014/instance/complex014.v1.xml fail
 Complex/complex014/instance/complex014.v2.xml fail
-Complex/complex015/instance/complex015.n1.xml fail
+Complex/complex015/instance/complex015.n1.xml pass
 Complex/complex021/instance/complex021.n1.xml fail
 Complex/complex022/instance/complex022.n1.xml pass
 Complex/complex022/instance/complex022.n2.xml pass
@@ -444,8 +444,8 @@ Complex/unique003/instance/unique003.v1.xml fail
 Complex/unique003/instance/unique003.v2.xml fail
 ConditionalInclusion/s4_2_2ii01/instance/s4_2_2ii01i pass
 ConditionalInclusion/s4_2_2v01/instance/s4_2_2v01i fail
-DefaultFixed/s2_7_1ii01/instance/s2_7_1ii01i fail
-DefaultFixed/s2_7_1ii02/instance/s2_7_1ii02i fail
+DefaultFixed/s2_7_1ii01/instance/s2_7_1ii01i pass
+DefaultFixed/s2_7_1ii02/instance/s2_7_1ii02i pass
 DefaultFixed/s2_7_1v01/instance/s2_7_1v01i fail
 DefaultFixed/s2_7_2ii01/instance/s2_7_2ii01i pass
 DefaultFixed/s2_7_2v01/instance/s2_7_2v01i fail
@@ -25351,7 +25351,7 @@ SType/st_final00103m2/instance/Negative pass
 SType/st_final00103m2/instance/Positive fail
 SType/st_final00103m3/instance/Negative pass
 SType/st_final00103m3/instance/Positive fail
-SType/st_name00101m/instance/ST_name00101m1_n fail
+SType/st_name00101m/instance/ST_name00101m1_n pass
 SType/st_name00101m/instance/ST_name00101m1_p fail
 SType/st_name00401m/instance/ST_name00401m1_p fail
 SType/st_targetns00101m/instance/ST_targetNS00101m1_n pass
@@ -25402,11 +25402,11 @@ Simple/simple045/instance/simple045.v01.xml fail
 Simple/simple046/instance/simple046.n01.xml pass
 Simple/simple046/instance/simple046.v01.xml fail
 Simple/simple050/instance/simple050.n01.xml pass
-Simple/simple050/instance/simple050.n02.xml fail
-Simple/simple050/instance/simple050.n03.xml fail
+Simple/simple050/instance/simple050.n02.xml pass
+Simple/simple050/instance/simple050.n03.xml pass
 Simple/simple050/instance/simple050.v01.xml fail
 Simple/simple050/instance/simple050.v02.xml fail
-Simple/simple054/instance/simple053.n01.xml fail
+Simple/simple054/instance/simple053.n01.xml pass
 Simple/simple055/instance/simple055.n01.xml pass
 Simple/simple085/instance/simple085.v01.xml fail
 Simple/simple086/instance/simple086.n01.xml pass
@@ -25563,7 +25563,7 @@ Wild/wild029/instance/wild029.v1.xml fail
 Wild/wild030/instance/wild030.n1.xml pass
 Wild/wild030/instance/wild030.v1.xml fail
 Wild/wild030/instance/wild030.v2.xml fail
-Wild/wild040/instance/wild040.n1.xml fail
+Wild/wild040/instance/wild040.n1.xml pass
 Wild/wild040/instance/wild040.v1.xml fail
 Wild/wild042/instance/wild042.n1.xml pass
 Wild/wild042/instance/wild042.v1.xml fail
@@ -26257,7 +26257,7 @@ suntest/xsd004/instance/xsd004.n11 pass
 suntest/xsd004/instance/xsd004.n12 pass
 suntest/xsd004/instance/xsd004.v00 fail
 suntest/xsd005/instance/xsd005.n00 pass
-suntest/xsd005/instance/xsd005.n01 fail
+suntest/xsd005/instance/xsd005.n01 pass
 suntest/xsd005/instance/xsd005.n02 pass
 suntest/xsd005/instance/xsd005.n03 pass
 suntest/xsd005/instance/xsd005.n04 pass

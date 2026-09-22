@@ -144,9 +144,11 @@
 // definition· subject to the declaration's {disallowed substitutions}
 // ([xsd.Schema.ValidlySubstitutable]). One that resolves AND overrides becomes
 // the ·governing type definition· the rest of the assessment reads, and one that
-// does not resolve at all charges nothing and leaves the selected type governing
-// — the Note under cvc-elt is explicit that the two failures share that
-// fallback and differ only in the charge. Clause 5 is a case split on whether
+// does not resolve at all charges no clause of cvc-elt and leaves the selected
+// type governing — the Note under cvc-elt is explicit that the two failures
+// share that fallback and differ only in the charge. That second failure is
+// charged against the ATTRIBUTE instead, under cvc-attribute clause 5 below,
+// which leaves the fallback exactly as it is. Clause 5 is a case split on whether
 // the element is EMPTY and its declaration carries a {value constraint}, and
 // both arms are decided. Clause 5.2's, for an element that HAS [[children]]:
 // 5.2.1's ordinary cvc-type dispatch, and 5.2.2 for a fixed constraint — no
@@ -181,6 +183,18 @@
 // value· against a fixed {value constraint} on the declaration and on the
 // use (two independent rules over two properties, both charged), and a
 // ·defaulted attribute·'s own {lexical form} against its type.
+//
+// cvc-attribute carries one clause more that clause 2.1 never dispatches and
+// no {attribute use} reaches: clause 5, an xsi:type attribute whose ·actual
+// value· ·resolves· to no type definition. It is charged at that attribute's
+// own Loc against the built-in declaration for the type attribute (§3.2.7.1),
+// whatever the element's ·governing type definition· is and whether that type
+// is simple, complex or undetermined, and it needs no value space. The lexicals
+// it declines are those that stop at the QName SPLIT — empty, a colon structure
+// no QName has, a prefix with no binding in scope — and not every lexical
+// without an ·actual value·: one whose parts are no NCName clears that split
+// and is charged here, under a clause that does not hold its defect
+// (cvcattribute.go's GAP(validate) marker).
 //
 // The seventh is the root's content half, against the same type's {content
 // type}. cvc-complex-type clause 1 decides what its {variety} admits —
