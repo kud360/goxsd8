@@ -819,12 +819,12 @@ func TestParseRemovalAssertionsRejectsAnythingThatWouldAssertNothing(t *testing.
 // whether this checkout has the submodule populated.
 func TestCheckSuitePresent(t *testing.T) {
 	dir := t.TempDir()
-	present := filepath.Join(dir, "suite.xml")
+	present := suiteIndexIn(dir)
 	if err := os.WriteFile(present, []byte("<testSuite/>"), 0o600); err != nil {
 		t.Fatalf("writing fake suite index: %v", err)
 	}
 
-	err := checkSuitePresent(filepath.Join(dir, "no-such-root", "suite.xml"))
+	err := checkSuitePresent(suiteIndexIn(filepath.Join(dir, "no-such-root")))
 	if err == nil {
 		t.Fatal("a non-existent suite root must yield an error, not a nil check (a skip would hide an empty run)")
 	}
@@ -863,7 +863,7 @@ func TestSuiteAbsentSkipNamesModuleRootPath(t *testing.T) {
 // the other tells them it does not reach here — and both carry
 // checkSuitePresent's own text, which is what names the init command.
 func TestUnusableSuiteEnd(t *testing.T) {
-	absent := checkSuitePresent(filepath.Join(t.TempDir(), "no-such-root", "suite.xml"))
+	absent := checkSuitePresent(suiteIndexIn(filepath.Join(t.TempDir(), "no-such-root")))
 	if absent == nil {
 		t.Fatal("a non-existent suite root must yield an error, not a nil check")
 	}

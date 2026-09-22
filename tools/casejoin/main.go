@@ -97,6 +97,11 @@ const defaultExpectations = "conformance/testdata/expectations"
 // carries. Its absence is the corpus-absent mode: conformance.Catalog reports
 // it as an error, and this tool reports it as a mode (#659), so it is checked
 // here before the catalog is read.
+//
+// It is the SECOND construction of that filename, conformance's own
+// (unexported) suiteIndexIn being the first. Rename the file in one and rename
+// it in the other, or this tool reports "nothing to join" over a suite that is
+// present.
 const suiteIndexName = "suite.xml"
 
 const usage = `usage: casejoin [-suite dir] [-expectations dir] ids|join <lane> [path...]

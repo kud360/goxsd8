@@ -41,9 +41,16 @@ import (
 // withholds it without reading its declaration either.
 
 // suiteIndexIn names the suite index inside a suite checkout — the file whose
-// absence means the submodule is not initialized. It is the ONE construction
-// of that name (STYLE D3): suitePath takes it over the package-relative
-// suiteRoot, Catalog over whatever directory its caller names.
+// absence means the submodule is not initialized. It is the one construction
+// of that name WITHIN THIS PACKAGE (STYLE D3): suitePath takes it over the
+// package-relative suiteRoot, Catalog over whatever directory its caller
+// names, and the tests over a temporary one.
+//
+// tools/casejoin builds the same name a second time, deliberately: it stats
+// the index before calling Catalog, to report an absent submodule as a mode
+// rather than an error (#659), and neither an exported stat helper nor a
+// sentinel error is worth the surface. A rename of the file lands there too,
+// or that tool reports "nothing to join" over a suite that is present.
 func suiteIndexIn(dir string) string { return filepath.Join(dir, "suite.xml") }
 
 // CatalogEntry is one entry of the W3C suite catalog — one schemaTest or
