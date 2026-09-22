@@ -65,8 +65,8 @@ const (
 const expectationsDir = "testdata/expectations"
 
 // suitePath is the suite index whose absence means the submodule is not
-// initialized.
-func suitePath() string { return filepath.Join(suiteRoot, "suite.xml") }
+// initialized, inside the checkout `go test` sees (suiteIndexIn).
+func suitePath() string { return suiteIndexIn(suiteRoot) }
 
 // suiteOptionalEnv names the explicit opt-out for an environment that
 // legitimately has no suite checkout (issue #309): GOXSD_SUITE_OPTIONAL=1 turns
@@ -251,10 +251,20 @@ func laneFile(name string) string {
 	return laneFileIn(expectationsDir, name)
 }
 
-// laneFileIn is the ONE construction of a lane's file name (STYLE D3), over the
-// directory holding it. ratchetAll takes that directory as an argument so its
-// write phase is exercisable against a temp directory rather than only against
-// the committed expectations.
+// laneFileIn names a lane's expectation file inside the directory holding it.
+// It is the one construction of that name WITHIN THIS PACKAGE (STYLE D3):
+// laneFile takes it over the committed expectationsDir, ratchetAll over
+// whatever directory its caller names — which is why that directory is an
+// argument, so the write phase is exercisable against a temp directory rather
+// than only against the committed expectations — and the tests over a
+// temporary one.
+//
+// tools/casejoin builds the same name a second time, in its own laneFile,
+// deliberately: it joins a census against a lane's committed file, and this
+// helper is unexported, with neither an exported path helper nor an exported
+// per-lane loader worth the surface for one filepath.Join. A rename of the
+// convention lands there too, or that tool joins against a lane file nobody
+// writes.
 func laneFileIn(dir, name string) string {
 	return filepath.Join(dir, name+".txt")
 }
@@ -753,6 +763,11 @@ func caseID(setName, groupName, kind, testName string) string {
 // catalog's own order is the fact). A schemaTest with no <schemaDocument> at all
 // names nothing to test, which is a malformed catalog entry rather than a case
 // this harness may silently invent a document for.
+//
+// catalogDocs (conformance/catalog.go) reads the same two declarations for the
+// catalog READER, and differs only in reporting that malformed entry rather
+// than refusing it; a change to which declarations a kind names belongs in
+// both.
 func caseDocs(kind string, t validityTest, setDir string) (doc string, extra []string, err error) {
 	if kind == kindInstance {
 		return resolveDoc(setDir, t.InstanceDoc.Href), nil, nil

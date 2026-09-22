@@ -80,6 +80,8 @@ go tool wipsurvey < issues.json       # LIVE/CLAIMED/EXPIRED/RETIRED/UNKNOWN bra
 go tool gapaudit  < gapissues.json    # GAP( markers vs trackers
 go tool suiteindex element@targetNamespace   # suite fixtures carrying a construct
 go tool suiteindex '*@*'                     # every (element, attribute) name pair, and its fixtures
+go tool suiteindex -paths <query> | go tool casejoin join <lane>   # that census's candidate cases in a lane
+go tool casejoin ids <fixture-path>   # every case ID naming that document, withheld ones included
 ```
 
 `wipsurvey` and `gapaudit` read their issue list from **stdin** in `gh issue
@@ -98,12 +100,18 @@ local name, in whatever encoding and prefix each fixture spells it with — so
 predict ratchet movement from its output rather than from a grep, which
 under-predicted three landings running (#1239). Join that census through
 `conformance/testdata/expectations/<lane>.txt`, the lane whose score the
-prediction is about, and count only the cases carrying a line there: a case
-the suite withholds as inapplicable has no line there and cannot flip
-(#1412). Take that excluded remainder with `GOXSD_WITHHELD=1`;
-`conformance/doc.go` owns what it is. On the `instance` lane, subtract the
-cases the suite declares valid as well: each carries a banked `fail` line
-and none can flip (#1561). Census a population defined by a FEATURE as the
+prediction is about, by piping it: `go tool suiteindex -paths <query> | go
+tool casejoin join <lane>` counts the candidate cases — those the lane
+carries a line for and still banks `fail` — and prints the three directions
+that figure is wrong in. Read it as a bound from above and never as a
+prediction of flips (#1642). A fixture path's own case IDs, withheld ones
+included, come from `go tool casejoin ids <path>`: the relation is
+one-to-many, one document being named by as many test groups as declare it.
+A case the suite withholds as inapplicable carries no line and cannot flip
+(#1412); take that excluded remainder with `GOXSD_WITHHELD=1`, and
+`conformance/doc.go` owns what it is. On the `instance` lane the join also
+subtracts the cases the suite declares valid: each carries a banked `fail`
+line and none can flip (#1561). Census a population defined by a FEATURE as the
 union of every element that establishes it, joined with `|` in the element
 position:
 `'openContent|defaultOpenContent'` censuses `{open content}`, and bounds it

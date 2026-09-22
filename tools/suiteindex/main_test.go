@@ -1163,6 +1163,92 @@ func TestCensusIsDeterministic(t *testing.T) {
 	}
 }
 
+// TestPathsModeSeparatesTheListFromTheReport pins the machine half of the
+// paths-only mode: stdout carries the matched fixtures alone, one per line and
+// deduplicated, so a tool downstream reads it without parsing a report (#1642);
+// everything a human needs — the counts, and the files the census could not
+// read whole — goes to stderr, where a pipeline leaves it in front of them.
+func TestPathsModeSeparatesTheListFromTheReport(t *testing.T) {
+	root := t.TempDir()
+	writeFixture(t, root, "b/two.xsd", utf16LEDoc(unprefixedDoc))
+	writeFixture(t, root, "a/one.xsd", xsPrefixDoc)
+	writeFixture(t, root, "a/none.txt", "not xml at all")
+
+	var files, notes strings.Builder
+	if err := run(&files, &notes, []string{"-paths", "element@targetNamespace", root}); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+
+	if want := "a/one.xsd\nb/two.xsd\n"; files.String() != want {
+		t.Errorf("stdout = %q, want exactly %q", files.String(), want)
+	}
+	for _, want := range []string{"2 occurrence(s)", "2 fixture(s)", "read only partly", "with no XML element"} {
+		if !strings.Contains(notes.String(), want) {
+			t.Errorf("stderr does not carry %q:\n%s", want, notes.String())
+		}
+	}
+}
+
+// TestPathsModeNamesOneFixtureOnce holds the list to one line per fixture
+// however many times the query matched inside it: a join downstream counts
+// cases per path, and a path repeated is a case counted twice.
+func TestPathsModeNamesOneFixtureOnce(t *testing.T) {
+	root := t.TempDir()
+	writeFixture(t, root, "a/two-matches.xsd", `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="a" targetNamespace="urn:b"/>
+  <xs:element name="c" targetNamespace="urn:d"/>
+</xs:schema>`)
+
+	var files, notes strings.Builder
+	if err := run(&files, &notes, []string{"-paths", "element@targetNamespace", root}); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if want := "a/two-matches.xsd\n"; files.String() != want {
+		t.Errorf("stdout = %q, want exactly %q", files.String(), want)
+	}
+	if !strings.Contains(notes.String(), "2 occurrence(s)") {
+		t.Errorf("stderr does not report the occurrences behind the one path:\n%s", notes.String())
+	}
+}
+
+// TestPathsModeCarriesTheContainmentCaveat keeps the hazard with the figure in
+// this mode too: the caveat belongs where the reader holding the count arrives
+// (#1279), which in a pipeline is stderr.
+func TestPathsModeCarriesTheContainmentCaveat(t *testing.T) {
+	root := t.TempDir()
+	writeFixture(t, root, "a/one.xsd", xsPrefixDoc)
+
+	var files, notes strings.Builder
+	if err := run(&files, &notes, []string{"-paths", "*@targetNamespace//*@name", root}); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if !strings.Contains(notes.String(), "never resolves a ref") {
+		t.Errorf("stderr drops the containment caveat:\n%s", notes.String())
+	}
+	if strings.Contains(files.String(), "bound from above") {
+		t.Errorf("the caveat reached the machine-readable list:\n%s", files.String())
+	}
+}
+
+// TestPathsModeReportsAnAbsentCorpus holds the paths mode to the same
+// supported degraded mode the report has (#659): the notice goes to stderr,
+// stdout stays empty rather than naming a fixture that is not there, and the
+// exit is clean.
+func TestPathsModeReportsAnAbsentCorpus(t *testing.T) {
+	var files, notes strings.Builder
+	absent := filepath.Join(t.TempDir(), "absent")
+	if err := run(&files, &notes, []string{"-paths", "element@targetNamespace", absent}); err != nil {
+		t.Fatalf("run: %v, want a clean exit", err)
+	}
+	if files.String() != "" {
+		t.Errorf("stdout = %q, want nothing at all", files.String())
+	}
+	if !strings.Contains(notes.String(), "git submodule update --init") {
+		t.Errorf("stderr does not name the command that initializes the suite:\n%s", notes.String())
+	}
+}
+
 // TestRunCorpusAbsent pins the supported degraded mode: a fresh container has
 // no suite submodule (#659), so the tool says the corpus is not there and
 // exits 0 rather than failing. Every query form is driven through the guard,
@@ -1190,7 +1276,7 @@ func TestRunCorpusAbsent(t *testing.T) {
 		for _, q := range queries {
 			t.Run(tc.name+" "+q, func(t *testing.T) {
 				var out strings.Builder
-				if err := run(&out, []string{q, tc.root(t)}); err != nil {
+				if err := run(&out, &out, []string{q, tc.root(t)}); err != nil {
 					t.Fatalf("run: %v, want a clean exit", err)
 				}
 				if !strings.Contains(out.String(), tc.want) {

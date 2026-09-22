@@ -99,6 +99,23 @@
 //	WriteExpectations(path, m) error
 //	    Always sorted by case ID (STYLE D1/D2).
 //
+//	Catalog(suiteDir) ([]CatalogEntry, error)
+//	    Every entry the suite catalog rooted at suiteDir names — one per
+//	    declared schemaTest and instanceTest, sorted by case ID — with the
+//	    documents it names as slash paths relative to the suite root, the
+//	    declared outcome, and whether discovery withholds it. It READS the
+//	    catalog: it runs no case, scores nothing, and its answer reaches no
+//	    lane. The set of IDs it reports is LARGER than the set a run
+//	    produces, withheld entries being catalog entries that carry no line
+//	    in any lane, so a caller counting cases that could flip a score
+//	    joins these IDs against a lane file rather than counting them
+//	    (issue #1412). What it will not do is describe an APPLICABLE entry
+//	    declaring no expected outcome: that entry is refused, in discovery's
+//	    own words, rather than reported with an outcome the catalog never
+//	    declared. Its consumer is `go tool casejoin`, which turns a
+//	    `go tool suiteindex` census of fixture paths into those IDs
+//	    (issue #1642).
+//
 // # Sanctioned applicability removals
 //
 // The W3C suite carries its own applicability metadata: a testSet, testGroup,
