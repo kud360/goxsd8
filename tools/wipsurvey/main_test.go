@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -1239,6 +1240,74 @@ func TestReadIssues(t *testing.T) {
 		}
 		if got := issues[6].takeovers; got != 0 {
 			t.Errorf("issue 6 takeovers = %d, want 0: its comments were never supplied", got)
+		}
+	})
+}
+
+// TestStatelessFeedIsDiscardedNotReadAsOpen is #1604: a reshape that drops
+// `state` decoded every row as OPEN, so no branch could report RETIRED from
+// a feed that looked supplied. readIssues must refuse the whole list with an
+// errMissingState error — run's signal to render lease-only and then exit 2
+// — and classify, handed what run looks up from that result, must print no
+// RETIRED row. #8 carries needs-replan in both feeds, so a map kept despite
+// the error would retire it from a list the tool refused.
+func TestStatelessFeedIsDiscardedNotReadAsOpen(t *testing.T) {
+	tip := fixedNow.Add(-time.Hour)
+	for _, tc := range []struct {
+		name, in, wantPrefix string
+	}{
+		{
+			name: "no row carries state",
+			in: `[{"number":8,"labels":[{"name":"needs-replan"}]},
+				{"number":7,"labels":[]}]`,
+			wantPrefix: `no row of the fed issue list carries a "state" field (first: #8)`,
+		},
+		{
+			name: "some rows carry state",
+			in: `[{"number":7,"state":"CLOSED","labels":[]},
+				{"number":8,"labels":[{"name":"needs-replan"}]},
+				{"number":9,"labels":[]}]`,
+			wantPrefix: `issue #8 is the first of 2 of 3 fed rows carrying no "state" field`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			issues, err := readIssues(strings.NewReader(tc.in))
+			if !errors.Is(err, errMissingState) {
+				t.Fatalf("readIssues err = %v, want one wrapping errMissingState so run exits 2", err)
+			}
+			msg := err.Error()
+			if !strings.HasPrefix(msg, tc.wantPrefix) || !strings.HasSuffix(msg, `per docs/ROUTINES.md's "Survey input"`) {
+				t.Errorf("readIssues err = %q, want prefix %q and a pointer to Survey input", msg, tc.wantPrefix)
+			}
+			if issues != nil {
+				t.Fatalf("readIssues = %+v, want nil map: the refused list must not reach classify", issues)
+			}
+
+			var rows []row
+			for _, n := range []int{7, 8} {
+				var issue *issueState
+				if state, ok := issues[n]; ok {
+					issue = &state
+				}
+				branch := fmt.Sprintf("wip/issue-%d", n)
+				got, lease, reason := classify(branch, &tip, ancestryOwnCommits, diffNonEmpty, fixedNow, issue)
+				rows = append(rows, row{issue: n, branch: branch, lease: lease, anc: ancestryOwnCommits, verdict: got, reason: reason})
+			}
+			var buf bytes.Buffer
+			if err := renderTable(&buf, rows); err != nil {
+				t.Fatalf("renderTable: %v", err)
+			}
+			out := buf.String()
+			if strings.Contains(out, string(retired)) || strings.Count(out, "lease-only") != 2 {
+				t.Errorf("want two lease-only rows and no RETIRED from a refused feed:\n%s", out)
+			}
+		})
+	}
+
+	t.Run("an empty list is not a state-less feed", func(t *testing.T) {
+		issues, err := readIssues(strings.NewReader(`[]`))
+		if err != nil || len(issues) != 0 {
+			t.Errorf("readIssues([]) = %+v, %v; want no issues and no error", issues, err)
 		}
 	})
 }
