@@ -24,6 +24,21 @@ import (
 // merely carries no line in any lane. The two also differ on a malformed
 // entry: casesFromSet ends the run, and the reader reports the entry with no
 // document rather than refusing to describe the catalog it was asked about.
+//
+// Those two divergences are the whole of it, and nothing about the traversal
+// is left to agreement: TestCatalogAgreesWithDiscoveryOverThePinnedSuite
+// asserts, over the pinned suite, that the IDs of the entries this reader
+// does NOT mark withheld are exactly parseSuite's produced cases and that the
+// ones it marks are exactly parseSuite's withheld list. A set that drifts is
+// a lane figure quoted from a catalog the runner does not have.
+//
+// The one thing the reader will not do is fabricate a DECLARED OUTCOME.
+// makeCase refuses a test declaring no <expected> at all, and catalogEntry
+// refuses the same test at the same level of applicability, because
+// DeclaredValid has no encoding for "nothing declared" — false there would
+// read as "declared invalid" and reach the join's #1561 subtraction as a
+// fact. A WITHHELD entry declaring nothing is reported, since discovery
+// withholds it without reading its declaration either.
 
 // suiteIndexIn names the suite index inside a suite checkout — the file whose
 // absence means the submodule is not initialized. It is the ONE construction
@@ -72,8 +87,11 @@ type CatalogEntry struct {
 	// DeclaredValid reports that the suite declares this entry's document
 	// VALID for this processor's configuration (resolveExpected, the same
 	// reading the runner scores against). It is false for an entry declared
-	// invalid, for one declared indeterminate, and for one declaring no
-	// expected outcome at all.
+	// invalid and for one declared indeterminate. An entry declaring NO
+	// expected outcome at all reaches a reader only when it is Withheld —
+	// Catalog refuses the applicable one, as makeCase does — and reports
+	// false, the suite having scoped away the entry whose declaration would
+	// have been the fact.
 	DeclaredValid bool
 }
 
@@ -84,11 +102,13 @@ type CatalogEntry struct {
 // cases a run produces, and a reader holding a fixture path is asking about
 // the former.
 //
-// It errors on an absent suite, a malformed index or an unreadable test set.
-// Uniqueness of IDs is NOT asserted here — parseSuite asserts it over the
-// cases a run produces, which is where a collision would decide a score — so a
-// caller counting entries counts distinct IDs rather than trusting this slice
-// to hold each once.
+// It errors on an absent suite, a malformed index, an unreadable test set, and
+// an APPLICABLE entry declaring no expected outcome — the entry makeCase
+// refuses, refused here for the same reason rather than reported with an
+// outcome the catalog never declared. Uniqueness of IDs is NOT asserted here —
+// parseSuite asserts it over the cases a run produces, which is where a
+// collision would decide a score — so a caller counting entries counts
+// distinct IDs rather than trusting this slice to hold each once.
 func Catalog(suiteDir string) ([]CatalogEntry, error) {
 	index := suiteIndexIn(suiteDir)
 	if err := checkSuitePresent(index); err != nil {
@@ -176,7 +196,19 @@ func catalogFromSet(set testSet, setDir, suiteDir string) ([]CatalogEntry, error
 // every level ABOVE this test is applicable to this processor; the test's own
 // `version` is read here, so the three levels versionApplicable governs meet
 // in one flag.
+//
+// An APPLICABLE test declaring no expected outcome is REFUSED, in makeCase's
+// own words: it is the one entry this reader may not describe, DeclaredValid
+// having no encoding for "nothing declared". Discovery refuses the same entry,
+// so refusing it here is also what keeps the two ID sets equal. A withheld one
+// is described, discovery recording its ID without reading its declaration.
 func catalogEntry(setName, kind string, t validityTest, g testGroup, setDir, suiteDir string, levelsOK bool) (CatalogEntry, error) {
+	id := caseID(setName, g.Name, kind, t.Name)
+	withheld := !levelsOK || !versionApplicable(t.Version)
+	want, declared := resolveExpected(t.Expected)
+	if !declared && !withheld {
+		return CatalogEntry{}, fmt.Errorf("case %q has no declared expected validity", id)
+	}
 	docs, err := catalogDocs(kind, t, setDir, suiteDir)
 	if err != nil {
 		return CatalogEntry{}, err
@@ -185,12 +217,11 @@ func catalogEntry(setName, kind string, t validityTest, g testGroup, setDir, sui
 	if err != nil {
 		return CatalogEntry{}, err
 	}
-	want, declared := resolveExpected(t.Expected)
 	return CatalogEntry{
-		ID:            caseID(setName, g.Name, kind, t.Name),
+		ID:            id,
 		Docs:          docs,
 		SchemaDocs:    schemaDocs,
-		Withheld:      !levelsOK || !versionApplicable(t.Version),
+		Withheld:      withheld,
 		DeclaredValid: declared && want.wantsValid(),
 	}, nil
 }

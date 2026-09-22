@@ -109,7 +109,10 @@
 //	    produces, withheld entries being catalog entries that carry no line
 //	    in any lane, so a caller counting cases that could flip a score
 //	    joins these IDs against a lane file rather than counting them
-//	    (issue #1412). Its consumer is `go tool casejoin`, which turns a
+//	    (issue #1412). What it will not do is describe an APPLICABLE entry
+//	    declaring no expected outcome: that entry is refused, in discovery's
+//	    own words, rather than reported with an outcome the catalog never
+//	    declared. Its consumer is `go tool casejoin`, which turns a
 //	    `go tool suiteindex` census of fixture paths into those IDs
 //	    (issue #1642).
 //

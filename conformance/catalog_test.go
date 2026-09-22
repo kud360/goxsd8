@@ -74,12 +74,33 @@ var catalogFixtureSuite = map[string]string{
 </testSet>`,
 }
 
-// writeCatalogFixture materializes the fixture suite in a temp directory and
-// returns its root.
-func writeCatalogFixture(t *testing.T) string {
+// outcomelessSuite is a miniature catalog whose single instanceTest declares
+// NO <expected> at all, scoped by the `version` value given — empty for an
+// applicable test, "1.0" for one the suite scopes away from this processor.
+// The two are the halves of catalogEntry's refusal: it refuses the first, as
+// makeCase does, and describes the second, as discovery records it.
+func outcomelessSuite(version string) map[string]string {
+	return map[string]string{
+		"suite.xml": `<testSuite xmlns:xlink="http://www.w3.org/1999/xlink">
+  <testSetRef xlink:href="sets/outcomeless.testSet"/>
+</testSuite>`,
+
+		"sets/outcomeless.testSet": `<testSet name="Outcomeless" xmlns:xlink="http://www.w3.org/1999/xlink">
+  <testGroup name="g1">
+    <instanceTest name="i1" version="` + version + `">
+      <instanceDocument xlink:href="../docs/i1.xml"/>
+    </instanceTest>
+  </testGroup>
+</testSet>`,
+	}
+}
+
+// writeCatalogFixture materializes a name-to-body map as a suite in a temp
+// directory and returns its root.
+func writeCatalogFixture(t *testing.T, files map[string]string) string {
 	t.Helper()
 	root := t.TempDir()
-	for name, body := range catalogFixtureSuite {
+	for name, body := range files {
 		path := filepath.Join(root, filepath.FromSlash(name))
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			t.Fatalf("creating %s: %v", filepath.Dir(path), err)
@@ -109,7 +130,7 @@ func catalogByID(t *testing.T, entries []CatalogEntry, id string) CatalogEntry {
 // included, each with the documents it names spelled relative to the suite
 // root.
 func TestCatalogReportsEveryEntryTheSuiteNames(t *testing.T) {
-	entries, err := Catalog(writeCatalogFixture(t))
+	entries, err := Catalog(writeCatalogFixture(t, catalogFixtureSuite))
 	if err != nil {
 		t.Fatalf("Catalog: %v", err)
 	}
@@ -138,7 +159,7 @@ func TestCatalogReportsEveryEntryTheSuiteNames(t *testing.T) {
 // over, and the catalog names it from as many entries as declare it. A reader
 // answering with one ID silently under-reports (issue #1642).
 func TestCatalogNamesOneDocumentFromEveryGroupThatDeclaresIt(t *testing.T) {
-	entries, err := Catalog(writeCatalogFixture(t))
+	entries, err := Catalog(writeCatalogFixture(t, catalogFixtureSuite))
 	if err != nil {
 		t.Fatalf("Catalog: %v", err)
 	}
@@ -163,7 +184,7 @@ func TestCatalogNamesOneDocumentFromEveryGroupThatDeclaresIt(t *testing.T) {
 // TestCatalogMarksEveryLevelTheSuiteScopesAway holds the withheld flag to all
 // three levels versionApplicable governs, and to nothing else.
 func TestCatalogMarksEveryLevelTheSuiteScopesAway(t *testing.T) {
-	entries, err := Catalog(writeCatalogFixture(t))
+	entries, err := Catalog(writeCatalogFixture(t, catalogFixtureSuite))
 	if err != nil {
 		t.Fatalf("Catalog: %v", err)
 	}
@@ -191,7 +212,7 @@ func TestCatalogMarksEveryLevelTheSuiteScopesAway(t *testing.T) {
 // schemaTest declaring no document at all yields an entry naming nothing
 // rather than no entry.
 func TestCatalogSplitsDocumentsUnderTestFromSchemaDocuments(t *testing.T) {
-	entries, err := Catalog(writeCatalogFixture(t))
+	entries, err := Catalog(writeCatalogFixture(t, catalogFixtureSuite))
 	if err != nil {
 		t.Fatalf("Catalog: %v", err)
 	}
@@ -229,7 +250,7 @@ func TestCatalogSplitsDocumentsUnderTestFromSchemaDocuments(t *testing.T) {
 // configuration this processor does not claim prescribes nothing, so its entry
 // is not declared valid however the declaration reads.
 func TestCatalogReportsTheDeclaredOutcomeTheRunnerScoresAgainst(t *testing.T) {
-	entries, err := Catalog(writeCatalogFixture(t))
+	entries, err := Catalog(writeCatalogFixture(t, catalogFixtureSuite))
 	if err != nil {
 		t.Fatalf("Catalog: %v", err)
 	}
@@ -307,5 +328,111 @@ func TestCatalogEnumeratesTheWithheldMissingTestSet(t *testing.T) {
 				t.Errorf("%s carries a line in lane %s: a withheld case can never flip a score (#1412)", id, l.name)
 			}
 		}
+	}
+}
+
+// idsMissingFrom reports the IDs of a that b does not carry. Both are sorted,
+// so one linear pass suffices and the result is in ID order (STYLE D1).
+func idsMissingFrom(a, b []string) []string {
+	var out []string
+	i := 0
+	for _, id := range a {
+		for i < len(b) && b[i] < id {
+			i++
+		}
+		if i < len(b) && b[i] == id {
+			continue
+		}
+		out = append(out, id)
+	}
+	return out
+}
+
+// wantSameIDs fails unless two sorted ID lists are equal, naming the two
+// lengths and the first few IDs only one side carries. The lists run to tens
+// of thousands of entries against the pinned suite, so printing them whole
+// would bury the divergence the assertion exists to expose.
+func wantSameIDs(t *testing.T, what string, got, want []string) {
+	t.Helper()
+	if slices.Equal(got, want) {
+		return
+	}
+	const show = 5
+	onlyGot := idsMissingFrom(got, want)
+	onlyWant := idsMissingFrom(want, got)
+	t.Errorf("%s: Catalog reports %d ID(s), discovery %d; only in Catalog: %q; only in discovery: %q",
+		what, len(got), len(want),
+		onlyGot[:min(len(onlyGot), show)], onlyWant[:min(len(onlyWant), show)])
+}
+
+// TestCatalogAgreesWithDiscoveryOverThePinnedSuite pins the reader's traversal
+// to the runner's own, which nothing else does: caseID, resolveDocs,
+// groupSchemaDocs, versionApplicable and resolveExpected are shared, so they
+// pin each entry's FACTS, but which entries exist and which of them are
+// withheld is decided a second time in catalogFromSet. A drift there is
+// silent, and what it produces is a lane figure an arbiter quotes (#1642).
+//
+// The two sets are asserted separately because they answer different halves:
+// an entry Catalog fails to mark withheld would otherwise cancel out against
+// one it wrongly marks.
+func TestCatalogAgreesWithDiscoveryOverThePinnedSuite(t *testing.T) {
+	skipWithoutSuite(t)
+	d, err := parseSuite(suitePath())
+	if err != nil {
+		t.Fatalf("parseSuite: %v", err)
+	}
+	entries, err := Catalog(suiteRoot)
+	if err != nil {
+		t.Fatalf("Catalog: %v", err)
+	}
+
+	var produced, withheld []string
+	for _, e := range entries {
+		if e.Withheld {
+			withheld = append(withheld, e.ID)
+			continue
+		}
+		produced = append(produced, e.ID)
+	}
+	var cases []string
+	for _, c := range d.cases {
+		cases = append(cases, c.id)
+	}
+	wantSameIDs(t, "entries Catalog does not withhold, against the cases discovery produces", produced, cases)
+	wantSameIDs(t, "entries Catalog withholds, against the IDs discovery withholds", withheld, d.withheld)
+}
+
+// TestCatalogRefusesAnApplicableEntryDeclaringNoOutcome holds the reader to
+// makeCase's own refusal. DeclaredValid has no encoding for "nothing
+// declared", so reporting such an entry hands the join a fabricated outcome
+// that decides the #1561 subtraction; and discovery refuses the same entry, so
+// describing it would also part the two ID sets.
+func TestCatalogRefusesAnApplicableEntryDeclaringNoOutcome(t *testing.T) {
+	entries, err := Catalog(writeCatalogFixture(t, outcomelessSuite("")))
+	if err == nil {
+		t.Fatalf("Catalog over an entry declaring no outcome = %d entries, nil; want an error", len(entries))
+	}
+	if want := `case "Outcomeless/g1/instance/i1" has no declared expected validity`; !strings.Contains(err.Error(), want) {
+		t.Errorf("Catalog error = %q, want it to carry %q: the wrapping names the test SET, so only "+
+			"this clause names the entry refused (#1048)", err, want)
+	}
+}
+
+// TestCatalogDescribesAWithheldEntryDeclaringNoOutcome is the other half of
+// that refusal, and the half the equivalence with discovery rests on:
+// casesFromSet withholds a scoped test without reading its declaration at all,
+// recording its ID, so a reader refusing it would report fewer withheld
+// entries than the runner withholds.
+func TestCatalogDescribesAWithheldEntryDeclaringNoOutcome(t *testing.T) {
+	entries, err := Catalog(writeCatalogFixture(t, outcomelessSuite("1.0")))
+	if err != nil {
+		t.Fatalf("Catalog: %v", err)
+	}
+	e := catalogByID(t, entries, "Outcomeless/g1/instance/i1")
+	if !e.Withheld {
+		t.Errorf("%s: Withheld = false, want true: the instanceTest declares version=\"1.0\"", e.ID)
+	}
+	if e.DeclaredValid {
+		t.Errorf("%s: DeclaredValid = true, want false: the entry declares no outcome at all", e.ID)
 	}
 }
