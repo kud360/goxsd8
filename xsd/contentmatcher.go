@@ -98,9 +98,9 @@ import (
 // The live partitions differ in their occurrence counters and in nothing else
 // (partitionsBounded), and a counter stops at its node's {max occurs}, or at
 // its {min occurs} where {max occurs} is unbounded (counterCap), because
-// canRepeat, canExit and offerAllMembers are its only readers and none can tell
-// a larger value from the clamp. So the set is a set of counter TUPLES, bounded
-// by the SCHEMA and never by the instance.
+// canRepeat, canExit, memberSatisfied and offerAllMembers are its only readers
+// and none can tell a larger value from the clamp. So the set is a set of
+// counter TUPLES, bounded by the SCHEMA and never by the instance.
 //
 // One entry per tuple is not enough. (a{1,500}){1,500} puts a quarter of a
 // million partitions in flight at once — every (iterations so far, items in the
@@ -299,13 +299,12 @@ type Matcher struct {
 // D4) — and a *Schema is the one thing that cannot exist before they ran.
 //
 // t must be a complex type of s, because the walk follows an <element ref> or
-// <group ref> in t's particle by NAME through s's own indexes: a name absent
-// from s declines (nil, false), while a name present in s but bound to a
-// different definition silently builds a Matcher over a model the caller never
-// wrote — the precondition preserves at walk time what src-resolve (§3.17.6.2
-// clauses 1 and 1.5) and sch-props-correct clause 2 (§3.17) settle at
-// construction time, since goxsd8 resolves refs by name per-*Schema rather than
-// through pre-resolved pointers.
+// <group ref> in t's particle by NAME through s's own indexes rather than
+// through pre-resolved pointers: a name absent from s declines (nil, false),
+// while a name present in s but bound to a different definition silently builds
+// a Matcher over a model the caller never wrote — the precondition preserves at
+// walk time what src-resolve (§3.17.6.2 clauses 1.3 and 1.5) and
+// sch-props-correct clause 2 (§3.17.6.1) settle at construction time.
 //
 // A present {open content} is DECIDED rather than declined: the Matcher holds
 // it and [Matcher.Next] offers the open wildcard whatever {particle} cannot
@@ -342,21 +341,22 @@ type Matcher struct {
 //     still reaches it. A walk over every buildable complex type in
 //     testdata/xsdtests finds THREE declining here, all on this arm —
 //     particlesZ035_a, particlesZ036_b and particlesZ036_c — and each carries
-//     one model-group counter whose clamped range ALONE outruns the ceiling,
-//     past 10^8 in the two Z036s and past 10^11 in Z035_a. A single factor with
-//     no room ends the count, so deciding them means a per-item budget of that
-//     many regions: at the ≈1.5 KB per region maxPartitionStates' doc measures,
-//     over a hundred gigabytes and over a hundred terabytes for ONE item. Four
-//     instance cases sit on those three, all banked fail, and three of the four
-//     are suite-declared VALID and cannot flip on that lane whatever the
-//     ceiling (#1561) — so what the residual costs the suite is one missed
-//     rejection, particlesZ035_a.i. It is retired by an encoding that carries a
-//     live partition set without enumerating its cover, never by moving the
-//     constant. Two findings reopen the ruling, and a case merely declining
-//     here is neither, since three already do. One is a schema whose
-//     partitionsBounded product lands BETWEEN the ceiling and what a measured
-//     per-region cost can afford — the plateau above 40804 is empty today, so a
-//     model in it would mean a raise buys verdicts again. The other is a
+//     at least one model-group counter whose clamped range ALONE outruns the
+//     ceiling, past 10^8 in the two Z036s and past 10^11 in Z035_a. A single
+//     factor with no room ends the count, so deciding them means a per-item
+//     budget of that many regions: at the ≈1.5 KB per region
+//     maxPartitionStates' doc measures, over a hundred gigabytes and over a
+//     hundred terabytes for ONE item. Four instance cases sit on those three,
+//     all banked fail, and three of the four are suite-declared VALID and
+//     cannot flip on that lane whatever the ceiling (#1561) — so what the
+//     residual costs the suite is one missed rejection, particlesZ035_a.i. It
+//     is retired by an encoding that carries a live partition set without
+//     enumerating its cover, never by moving the constant. Two findings reopen
+//     the ruling, and a case merely declining here is neither, since three
+//     already do. One is a schema whose partitionsBounded product lands BETWEEN
+//     the ceiling and what a measured per-region cost can afford — the plateau
+//     above 40804, the figure maxPartitionStates' doc derives, is empty today,
+//     so a model in it would mean a raise buys verdicts again. The other is a
 //     per-region cost measured low enough to bring one of the three counters
 //     named above inside an affordable ceiling. Re-measure rather than quoting
 //     these figures: the instrument is that corpus walk over buildable complex
@@ -381,10 +381,10 @@ func (s *Schema) ContentMatcher(t ComplexType) (*Matcher, bool) {
 
 // flatten appends the node for p and, for a model group {term}, its whole
 // subtree, returning p's node index. It reports false for a reference that
-// resolves to nothing — unreachable on a *Schema, whose Phase A rejected a
-// dangling <element ref>/<group ref> (src-resolve clauses 1.3 and 1.5), and a
-// decline rather than a skipped particle so an unresolved name can never widen
-// the accepted language.
+// resolves to nothing — unreachable on a *Schema that m.ct belongs to, whose
+// Phase A rejected a dangling <element ref>/<group ref> (src-resolve clauses
+// 1.3 and 1.5), and a decline rather than a skipped particle so an unresolved
+// name can never widen the accepted language.
 func (m *Matcher) flatten(p Particle) (int, bool) {
 	t, ok := m.resolveTerm(p.Term())
 	if !ok {
@@ -460,9 +460,12 @@ func (m *Matcher) splitsInBody(i int) bool {
 // member (§3.8.4.1.1), while a choice takes one member whole (§3.8.4.1.2) and
 // an all group interleaves them (§3.8.4.1.3), so neither narrows either.
 //
-// An all group's iterationComplete asks more than the members after the open
-// one — it collects every member's own {min occurs} — so leaving last alone
-// there over-counts the nodes that widen and never undercounts them.
+// No all group reaches here on a finalized schema: markAmbiguous short-circuits
+// on repeatable before calling splitsInBody, so every group this searches stands
+// at or under a repeating particle, and cos-all-limited (§3.8.6.2) clause 1 admits
+// an all group only as a model group definition's {model group}, as the {term}
+// of a {max occurs} = 1 particle that is a complex type's {particle}, or as a
+// {min occurs} = {max occurs} = 1 member of another all group.
 func (m *Matcher) splitsAmong(i int, g ModelGroup, first, last bool) bool {
 	children := m.nodes[i].children
 	for k, ch := range children {
@@ -500,10 +503,12 @@ func repeatable(o Occurs) bool {
 	return !bounded || max > 1
 }
 
-// maxPartitionStates is the ceiling on the regions one Matcher will carry, and
-// so on what one item of the instance costs: a name is put to every live region
-// in turn. ContentMatcher declines a model that could exceed it rather than a
-// Matcher declining a name mid-sequence.
+// maxPartitionStates is the BUDGET one item of the instance is allowed to
+// spend: a name is put to every live region in turn, so one item's cost is a
+// constant of the SCHEMA and never a function of the items already taken.
+// ContentMatcher weighs partitionsBounded's estimate of that cover against the
+// budget once, at construction, rather than a Matcher declining a name
+// mid-sequence.
 //
 // It is 65536 and not 2048 because 2048 declined the widest model a ceiling of
 // defensible cost reaches — a sequence over two SIBLING groups of {1,100},
@@ -617,11 +622,8 @@ func (m *Matcher) counterCap(i int) int {
 }
 
 // bandEnd reports the largest count w for which every count from v through w
-// answers the walk's three counter questions alike — canRepeat's
-// count < {max occurs}, canExit's and memberSatisfied's count >= {min occurs},
-// and offerAllMembers' count > 0. Those answers change only where a count
-// reaches 1, {min occurs} or counterCap, so the bands of the node at i are the
-// runs between those edges (region).
+// answers the walk's counter questions alike, so the bands of the node at i are
+// the runs between the edges those answers change at (region).
 func (m *Matcher) bandEnd(i, v int) int {
 	top := m.counterCap(i)
 	end := top
@@ -955,9 +957,8 @@ func (m *Matcher) advance(c *region, name QName, kind admitKind) (Attribution, [
 
 // widensAbove reports whether c's path holds an ·ambiguous· node shallower than
 // depth d. Where it does not, a region already found is the only one the rest of
-// the path can reach, so a model with no nested repetition costs one region and
-// one pass out through its path, which is what the walk cost when this shape was
-// declined.
+// the path can reach, by the confinement contentNode.ambiguous and the file
+// comment state.
 func (m *Matcher) widensAbove(c *region, d int) bool {
 	for _, i := range c.path[:d] {
 		if m.nodes[i].ambiguous {
