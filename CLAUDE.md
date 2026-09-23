@@ -78,8 +78,7 @@ go tool lanestatus                    # committed lane scores, as PLAN.md's tabl
 go tool surface -base origin/main     # what this branch added/removed from the exported surface (T5)
 go tool wipsurvey < issues.json       # LIVE/CLAIMED/EXPIRED/RETIRED/UNKNOWN branches
 go tool gapaudit  < gapissues.json    # GAP( markers vs trackers
-go tool suiteindex element@targetNamespace   # suite fixtures carrying a construct
-go tool suiteindex '*@*'                     # every (element, attribute) name pair, and its fixtures
+go tool suiteindex <query>            # suite fixtures carrying a construct; <query> shapes below
 go tool suiteindex -paths <query> | go tool casejoin join <lane>   # that census's candidate cases in a lane
 go tool casejoin ids <fixture-path>   # every case ID naming that document, withheld ones included
 ```
@@ -98,42 +97,51 @@ own output; neither exits non-zero.
 `suiteindex` censuses `testdata/xsdtests` by construct — namespace URI plus
 local name, in whatever encoding and prefix each fixture spells it with — so
 predict ratchet movement from its output rather than from a grep, which
-under-predicted three landings running (#1239). Join that census through
-`conformance/testdata/expectations/<lane>.txt`, the lane whose score the
-prediction is about, by piping it: `go tool suiteindex -paths <query> | go
-tool casejoin join <lane>` counts the candidate cases — those the lane
-carries a line for and still banks `fail` — and prints the three directions
-that figure is wrong in. Read it as a bound from above and never as a
-prediction of flips (#1642). A fixture path's own case IDs, withheld ones
-included, come from `go tool casejoin ids <path>`: the relation is
-one-to-many, one document being named by as many test groups as declare it.
-A case the suite withholds as inapplicable carries no line and cannot flip
+under-predicted three landings running (#1239). An absent submodule is a
+supported mode here too: it says so and exits 0. A `<query>` names an element
+and, optionally, its attributes, `element@targetNamespace`, in these shapes:
+
+- **`|` — ANY of the names.** Between element names it censuses a FEATURE as
+  the union of every element that establishes it:
+  `'openContent|defaultOpenContent'` is `{open content}` (#1554). Between
+  attribute names, an element carrying any one of them counts (#1391).
+- **`*` — any local name.** `'*@mixed|abstract'` is every occurrence of
+  either attribute, on any element, with its value (#1391).
+- **`,` — ALL of the attribute names.** `attribute@targetNamespace,form`
+  counts only an element carrying both (#1391).
+- **`@*` — the (element, attribute) name pairs**, each with its fixtures, in
+  place of the per-occurrence lines every other query prints: `'*@*'`
+  (#1391).
+- **`{uri}` and `{*}` — the namespace.** A braceless element name means the
+  XSD namespace and answers 0 for an INSTANCE-side construct, whose element
+  sits in whatever namespace its test targets; `{*}` is every namespace at
+  once, the no-namespace one included:
+  `'{*}*@{http://www.w3.org/2001/XMLSchema-instance}type'` is every `xsi:type`
+  in the corpus (#1495).
+- **`//` — nesting.** `A//B` admits a match of `B` only inside an element
+  matching `A`, at any depth: `'*@maxOccurs//*@maxOccurs'` is every
+  `maxOccurs` inside another one (#1585).
+
+Two of those shapes bound their population from above rather than count it.
+A `|` feature census over-counts, because `<openContent mode="none">`
+establishes nothing (#1554). A `//` census resolves no `<element ref>` or
+`<group ref>`, so its figure is wrong in both directions against a population
+of resolved components; read the caveat it prints before quoting the figure
+(#1585).
+
+Join a census through `conformance/testdata/expectations/<lane>.txt`, the
+lane whose score the prediction is about, with the `casejoin join` pipeline
+above: it counts the candidate cases — those the lane carries a line for and
+still banks `fail` — and prints the three directions that figure is wrong in.
+Read it as a bound from above and never as a prediction of flips (#1642). A
+case the suite withholds as inapplicable carries no line and cannot flip
 (#1412); take that excluded remainder with `GOXSD_WITHHELD=1`, and
 `conformance/doc.go` owns what it is. On the `instance` lane the join also
 subtracts the cases the suite declares valid: each carries a banked `fail`
-line and none can flip (#1561). Census a population defined by a FEATURE as the
-union of every element that establishes it, joined with `|` in the element
-position:
-`'openContent|defaultOpenContent'` censuses `{open content}`, and bounds it
-from above rather than counting it, because `<openContent mode="none">`
-establishes nothing (#1554). Census a population defined by an ATTRIBUTE
-with the wildcard `*`, which stands for any local name: `'*@*'` reports every
-(element, attribute) name pair with its fixtures, and `'*@mixed|abstract'`
-every occurrence of either attribute with its value. A `,` between attribute
-names means AND, a `|` means OR, and the `@*` form reports pairs in place of
-the per-occurrence lines every other query prints (#1391). Census an
-INSTANCE-side construct, whose element sits in whatever namespace its test
-targets, by writing `{*}` for that namespace — every namespace at once, the
-no-namespace one included:
-`'{*}*@{http://www.w3.org/2001/XMLSchema-instance}type'` is every `xsi:type`
-in the corpus, where a braceless element name means the XSD namespace and
-answers 0 (#1495). Census a population defined by NESTING with `//`, which
-admits a match only inside an element matching the pattern before it, at any
-depth: `'*@maxOccurs//*@maxOccurs'` is every `maxOccurs` inside another one.
-Read the caveat that census prints before quoting its figure — it resolves no
-`<element ref>` or `<group ref>`, so the figure is wrong in both directions
-against a population of resolved components (#1585). An absent
-submodule is a supported mode there too: it says so and exits 0.
+line and none can flip (#1561).
+
+`casejoin ids` maps a fixture path to case IDs one-to-many: one document is
+named by as many test groups as declare it (#1642).
 
 ## Style headlines
 
