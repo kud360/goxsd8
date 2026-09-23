@@ -211,10 +211,10 @@ func elementFixed(g governance) (xsd.ValueConstraint, bool) {
 // an unresolvable xsi:type (the Note under cvc-elt, resolving W3C issue 11764).
 //
 // That vacuity is the ELEMENT's alone. The ATTRIBUTE is charged separately
-// under cvc-attribute (§3.2.4.1) clause 5 for a lexical that clears the QName
-// split and names nothing, which reads the same resolution through
-// [walk.resolveInstanceType] without changing what this returns
-// ([walk.instanceTypeResolves], cvcattribute.go).
+// under cvc-attribute (§3.2.4.1), clause 3 for a lexical outside xs:QName's
+// lexical space and clause 5 for a QName that names nothing, the second reading
+// the same resolution through [walk.resolveInstanceType] without changing what
+// this returns ([walk.instanceTypeResolves], cvcattribute.go).
 //
 // The resolution is cvc-resolve-instance (§3.17.6.3) and stays at the Structures
 // level: the prefix is resolved against the in-scope namespace bindings at E
@@ -237,22 +237,23 @@ func (w *walk) instanceTypeDefinition(e Element) (xsd.TypeDefinition, bool) {
 // conjunct 3 folds both failures into "E has no ·instance-specified type
 // definition·" ([walk.instanceTypeDefinition]), while cvc-attribute clause 5
 // charges the second alone ([walk.instanceTypeResolves], cvcattribute.go).
+//
+// The outcome does not decide whether the lexical is a QName, which is
+// cvc-attribute clause 3's question ([walk.instanceTypeLexical]): a lexical
+// whose parts are no NCName reaches instanceTypeUnresolved, and clause 5 reads
+// the outcome only for a lexical clause 3 did not reject.
 type instanceTypeOutcome uint8
 
 const (
 	// instanceTypeNoValue is a lexical [resolveInstanceQName] turns away at the
 	// SPLIT: empty, a colon structure no QName has, or a prefix with no binding
-	// in scope at E. Every such lexical has no ·actual value·, but not every
-	// lexical without one is here — the split checks the two halves for
-	// emptiness and never against the NCName production, so a lexical whose
-	// parts are no NCName passes it and lands in instanceTypeUnresolved.
+	// in scope at E. Every such lexical has no ·actual value·.
 	instanceTypeNoValue instanceTypeOutcome = iota
 	// instanceTypeUnresolved is a lexical that cleared the split and yields a
-	// name no top-level type definition of the schema carries. That is A's
-	// ·actual value· where the lexical is a QName, and a name outside xs:QName's
-	// lexical space where it is not; both reach here and neither resolves.
+	// name no top-level type definition of the schema carries.
 	instanceTypeUnresolved
-	// instanceTypeResolved is a QName ·actual value· naming one.
+	// instanceTypeResolved is a lexical that cleared the split and yields the
+	// name of one.
 	instanceTypeResolved
 )
 
@@ -266,10 +267,10 @@ const (
 // lexical, which the clause 5 charge names in its message beside it so that a
 // prefix bound to a namespace the author did not expect is visible. It is A's
 // ·actual value· only where the lexical is a QName, which this does not decide
-// (see instanceTypeUnresolved). It is the zero QName on instanceTypeNoValue.
+// (see instanceTypeOutcome). It is the zero QName on instanceTypeNoValue.
 func (w *walk) resolveInstanceType(e Element, a Attribute) (xsd.QName, xsd.TypeDefinition, instanceTypeOutcome) {
-	name, isQName := resolveInstanceQName(e, a.Value())
-	if !isQName {
+	name, named := resolveInstanceQName(e, a.Value())
+	if !named {
 		return xsd.QName{}, nil, instanceTypeNoValue
 	}
 	t, resolved := w.schema.Type(name)
@@ -282,18 +283,22 @@ func (w *walk) resolveInstanceType(e Element, a Attribute) (xsd.QName, xsd.TypeD
 // resolveInstanceQName splits a QName lexical per the QName production of
 // [XML Namespaces 1.1] and resolves its prefix against the bindings in scope at
 // e, which is the whole of cvc-resolve-instance (§3.17.6.3) up to the component
-// lookup itself. It is false for a lexical that is not a QName and for a prefix
-// with no binding, the two shapes that leave the ·actual value· ·absent·.
+// lookup itself. It is false for an empty lexical, a colon structure no QName
+// has, and a prefix with no binding, each of which leaves the ·actual value·
+// ·absent·.
 //
 // The lexical arrives as A.[[normalized value]] and is collapsed here, xs:QName
 // carrying a fixed whiteSpace = collapse (Datatypes §3.3.18).
 //
 // The two halves are checked for EMPTINESS and not against the NCName
-// production: a name that is not an NCName cannot be the {name} of any
-// component, so the lookup in [walk.instanceTypeDefinition] turns it away
-// exactly as it turns away a well-formed name nothing declares, and a second
-// encoding of the XML name-character tables would decide nothing the lookup does
-// not (STYLE T4).
+// production, so true does not make the lexical a QName: whether it is one is
+// cvc-attribute clause 3's to decide, through the backend's xs:QName mapping
+// ([walk.instanceTypeLexical], cvcattribute.go). A name that is not an NCName
+// cannot be the {name} of any component, so the lookup in
+// [walk.instanceTypeDefinition] turns it away exactly as it turns away a
+// well-formed name nothing declares, and a second encoding of the XML
+// name-character tables here would decide nothing the lookup does not (STYLE
+// T4).
 func resolveInstanceQName(e Element, lexical string) (xsd.QName, bool) {
 	collapsed := collapseXMLWhitespace(lexical)
 	prefix, local, prefixed := strings.Cut(collapsed, ":")
