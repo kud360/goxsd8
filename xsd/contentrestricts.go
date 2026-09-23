@@ -101,11 +101,10 @@ import (
 // exactly, it resolves so that R looks SMALLER or B looks LARGER, i.e. towards
 // accepting the derivation: clause 2.4.2 is one conjunct of
 // derivation-ok-restriction clause 2's disjunction, so a missed rejection is
-// fail-open and a spurious one would false-reject a valid schema, which
-// §3.4.6.3's own implementation-defined licence (a processor may detect 2.4.2
-// violations always statically, only from instances, or sometimes) makes
-// unnecessary as well as harmful — though see contentModelRestricts' giveup site
-// for how narrowly that licence is actually conditioned.
+// fail-open and a spurious one would false-reject a valid schema. The direction
+// rests on that asymmetry alone and claims no spec licence for the file as a
+// whole: each branch that provisionally accepts states its own standing where it
+// does so.
 
 // contentAutomaton is one content model's position automaton together with the
 // three fragment facts addParticle returns for its root particle. The automaton
@@ -576,8 +575,9 @@ const (
 // the comments at its two rejection sites.
 //
 // Four shapes are provisionally accepted rather than decided, each fail-open.
-// The first three lean on a licence; the fourth is a ruled resource
-// approximation carrying none:
+// The first three lean on a licence, the second only where R's compositor is
+// ·all· (its marker states that the rest carries none); the fourth is a ruled
+// resource approximation carrying none:
 //
 //   - a non-element {content type} on either side. 2.4.1 (restrictionVarietyPairOK)
 //     has already established both are element-only or mixed before this is
@@ -630,30 +630,31 @@ func (s *Schema) contentTypeRestricts(tct, bct ContentType, scope contentRestric
 		// deferral rather than a fold in progress. The ruling below landed with
 		// #413, now closed; #1374 owns what retires it.
 		//
-		// The licence leaned on is §3.4.6.3's, quoted whole because the option
-		// carrying the weight is its last: "It is ·implementation-defined·
-		// whether a processor (a) always detects violations of clause 2.4.2 by
-		// examination of the schema in isolation, (b) detects them only when some
-		// element information item in the input document is valid against T but
-		// not against T.{base type definition}, or (c) sometimes detects such
-		// violations by examination of the schema in isolation and sometimes
-		// not", followed by "In the latter case, the circumstances in which the
-		// processor does one or the other are ·implementation-dependent·"
-		// (xmlschema11-1.md:2043). It names clause 2.4.2 and states no condition
-		// of its own, unlike the ·all·-scoped sentence at :2041 — a scope claim,
-		// not a guarantee, and this arm's cases split on it. Where T.{content
-		// type}.{particle}.{term}.{compositor} IS all, reached here rather than at
-		// usesAllCompositor below because this branch precedes it, the narrow
-		// :2041 sentence covers the case outright: its condition (1) holds and its
-		// condition (2) is this very inability. Everywhere else the arm rests, no
-		// more firmly than contentModelRestricts' giveup site below rests, on
-		// reading (c) as a residual catch-all detached from that condition (1) —
-		// which that site sets out and names a defensible but not textually
-		// guaranteed stretch, not re-argued here. It carries that site's other
-		// half too: (b) and (c) describe processors that defer detection to
-		// instance time and cross-check each instance against T.{base type
-		// definition}, and this arm performs no such cross-check, so a schema
-		// accepted here can be non-conforming with nothing left to say so.
+		// The sentence this arm once rested on is §3.4.6.3's, quoted whole: "It is
+		// ·implementation-defined· whether a processor (a) always detects
+		// violations of clause 2.4.2 by examination of the schema in isolation,
+		// (b) detects them only when some element information item in the input
+		// document is valid against T but not against T.{base type definition}, or
+		// (c) sometimes detects such violations by examination of the schema in
+		// isolation and sometimes not", followed by "In the latter case, the
+		// circumstances in which the processor does one or the other are
+		// ·implementation-dependent·" (xmlschema11-1.md:2043). It names clause
+		// 2.4.2 and states no condition of its own, unlike the ·all·-scoped
+		// sentence at :2041, and this arm's cases split on that sentence's
+		// antecedent. Where T.{content type}.{particle}.{term}.{compositor} IS
+		// all, reached here rather than at usesAllCompositor below because this
+		// branch precedes it, the narrow :2041 sentence covers the case outright:
+		// its condition (1) holds and its condition (2) is this very inability.
+		// Everywhere else the arm has no licence, exactly as
+		// contentModelRestricts' giveup site below has none: the (a)/(b)/(c)
+		// sentence says WHEN a processor already inside :2041's antecedent detects
+		// clause-2.4.2 violations and grants nothing outside it, and reading (c)
+		// as a residual catch-all detached from its condition (1) is ruled out,
+		// not merely unproved (#1378). It carries that site's other half too: (b)
+		// and (c) describe processors that defer detection to instance time and
+		// cross-check each instance against T.{base type definition}, and this arm
+		// performs no such cross-check, so a schema accepted here can be
+		// non-conforming with nothing left to say so.
 		//
 		// What retires the deferral is a construction, not a correction. §3.4.4.3
 		// (cvc-complex-content) states ·locally valid· under a present {open
@@ -682,9 +683,9 @@ func (s *Schema) contentTypeRestricts(tct, bct ContentType, scope contentRestric
 		//
 		// Fail-open for both readers of this true. checkRestrictionContentType
 		// (complexderivation.go) charges derivation-ok-restriction and is the
-		// clause-2.4.2 caller the licence above names; checkExtensionTwoStepDerivable
-		// (complexextension.go) charges cos-ct-extends clause 1.5, which that
-		// licence does not reach, and carries its own marker for that. Each loses
+		// clause-2.4.2 caller §3.4.6.3 names; checkExtensionTwoStepDerivable
+		// (complexextension.go) charges cos-ct-extends clause 1.5, which
+		// §3.4.6.3 does not reach, and carries its own marker for that. Each loses
 		// a rejection it could have made and neither gains one.
 		// checkModelGroupRedefinitions (redefinition.go) does not reach this arm
 		// at all — modelGroupContent leaves {open content} ·absent·.
@@ -767,10 +768,10 @@ func (s *Schema) contentTypeRestricts(tct, bct ContentType, scope contentRestric
 		// every arm of addTerm/addResolvedTerm either returns nil or panics on a
 		// broken sealed sum, and a dangling <element ref>/<group ref> was already
 		// charged src-resolve by Phase A. Should a future term kind make it
-		// reachable, provisionally accepting is the fail-open direction
-		// contentModelRestricts' giveup site states the actual, narrower licence
-		// for; the argument is not restated here. The error is not silently
-		// discarded — it decides this verdict (STYLE S3).
+		// reachable, provisionally accepting is the fail-open direction this
+		// file's header argues, and like contentModelRestricts' giveup site it
+		// claims no spec licence; the argument is not restated here. The error is
+		// not silently discarded — it decides this verdict (STYLE S3).
 		return true
 	}
 	b, err := s.contentAutomatonOf(bc)
@@ -914,9 +915,12 @@ func (s *Schema) contentModelRestricts(r, b contentAutomaton, scope contentRestr
 				// SOME bound on the walk is not optional, and every value of one
 				// declines somewhere. Raising the constant moves where it declines,
 				// buying walks whose cost grows with the states they are newly allowed
-				// and no verdict anything has measured — ceilingHits is 0. It is
-				// retired by a construction that decides containment without
-				// materializing the product, never by raising the constant.
+				// and no verdict anything has measured — ceilingHits is 0. Lowering it
+				// is pinned from below by the same measurement: the deepest walk the
+				// suite finishes visits maxVisited=1002 states, so any value below 1002
+				// starts declining walks that decide today. It is retired by a
+				// construction that decides containment without materializing the
+				// product, never by raising the constant.
 				//
 				// The review trigger is a RE-MEASUREMENT rather than a breach, because
 				// a breach is the one warning that arrives too late: the high-water
@@ -925,9 +929,16 @@ func (s *Schema) contentModelRestricts(r, b contentAutomaton, scope contentRestr
 				// maxProductStates' doc names and reopen this ruling on EITHER
 				// ceilingHits > 0 or maxVisited at 2048, half the ceiling. Half is what
 				// those two measurements pick out: from 1002 it is barely a doubling
-				// away against the 66.8× already observed, so it fires with room left
-				// to act in, while a walk that stops there still finishes and still
-				// decides. #499's grounding comment carries the recipe in full.
+				// away against the 66.8× already observed, and a walk that stops there
+				// still finishes and still decides. The two conditions are NOT
+				// independent: the ceiling check above precedes the insertion into
+				// visited, so maxVisited cannot exceed maxProductStates, and 2048 is a
+				// point on the same climb to the same ceiling. A high-water mark moving
+				// at anything like the observed rate crosses that factor-of-2 band
+				// between two measurements and reports ceilingHits > 0 without ever
+				// reading 2048, so the band fires with room left to act in only at
+				// measurement resolution, not in calendar time; when the re-measurement
+				// runs is #1609's. #499's grounding comment carries the recipe in full.
 				return true
 			}
 			visited[next] = true
