@@ -400,7 +400,7 @@ Complex/complex007/instance/complex007.n3.xml pass
 Complex/complex007/instance/complex007.v1.xml fail
 Complex/complex007/instance/complex007.v2.xml fail
 Complex/complex008/instance/complex008.n1.xml pass
-Complex/complex008/instance/complex008.n2.xml fail
+Complex/complex008/instance/complex008.n2.xml pass
 Complex/complex008/instance/complex008.n3.xml pass
 Complex/complex008/instance/complex008.n4.xml pass
 Complex/complex009/instance/complex009.n1.xml pass
