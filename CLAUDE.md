@@ -99,7 +99,7 @@ local name, in whatever encoding and prefix each fixture spells it with — so
 predict ratchet movement from its output rather than from a grep, which
 under-predicted three landings running (#1239). An absent submodule is a
 supported mode here too: it says so and exits 0. A `<query>` names an element
-and its attributes, `element@targetNamespace`, in these shapes:
+and, optionally, its attributes, `element@targetNamespace`, in these shapes:
 
 - **`|` — ANY of the names.** Between element names it censuses a FEATURE as
   the union of every element that establishes it:
