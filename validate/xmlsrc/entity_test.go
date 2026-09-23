@@ -1,0 +1,131 @@
+package xmlsrc
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/kud360/goxsd8/builtin"
+	"github.com/kud360/goxsd8/builtin/strict"
+	"github.com/kud360/goxsd8/validate"
+	"github.com/kud360/goxsd8/xsd"
+	"github.com/kud360/goxsd8/xsderr"
+)
+
+// entityDoc declares one unparsed entity, pic, in its internal subset, and one
+// parsed entity, txt, that is no member of [unparsedEntities].
+const entityDoc = `<?xml version="1.0"?>
+<!DOCTYPE r [
+  <!NOTATION gif SYSTEM "image/gif">
+  <!ENTITY pic SYSTEM "pic.gif" NDATA gif>
+  <!ENTITY txt "parsed">
+]>
+<r><c/></r>
+`
+
+// Every element of one document answers from its DOCTYPE, the document element
+// and a child alike.
+func TestElementsAnswerTheDocumentsUnparsedEntities(t *testing.T) {
+	root := rootOf(t, entityDoc)
+	child, ok := root.Children().Next()
+	if !ok {
+		t.Fatal("the document element yielded no child")
+	}
+	c, ok := child.Element()
+	if !ok {
+		t.Fatal("the first child is not an element")
+	}
+	for _, e := range []*element{root, c.(*element)} {
+		if !e.HasUnparsedEntity("pic") {
+			t.Errorf("%s: HasUnparsedEntity(%q) = false, want true", e.Name(), "pic")
+		}
+		if e.HasUnparsedEntity("txt") {
+			t.Errorf("%s: HasUnparsedEntity(%q) = true, want false: txt is a parsed entity", e.Name(), "txt")
+		}
+	}
+}
+
+// entityValidator is a validator over a schema declaring <r> with an optional
+// xs:ENTITY attribute @ent and an optional xs:ENTITIES attribute @ents.
+func entityValidator(t *testing.T) *validate.Validator {
+	t.Helper()
+	b := xsd.NewSchemaBuilder()
+	seeded, err := builtin.Seed(strict.New())
+	if err != nil {
+		t.Fatalf("seeding the builtin types: %v", err)
+	}
+	for _, st := range seeded {
+		b.AddType(st)
+	}
+	var uses []xsd.AttributeUse
+	for _, a := range []struct{ name, typ string }{{"ent", "ENTITY"}, {"ents", "ENTITIES"}} {
+		d, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, xsd.QName{Local: a.name},
+			xsd.TypeDefinitionRef{Name: xsd.QName{Space: xsd.XMLSchemaNS, Local: a.typ}},
+			xsd.NewAttributeGlobalScope(), nil, false)
+		if err != nil {
+			t.Fatalf("building the %s attribute declaration: %v", a.name, err)
+		}
+		u, err := xsd.NewAttributeUse(xsderr.Loc{}, false, xsd.LocalAttributeDeclaration{Declaration: d}, nil, false)
+		if err != nil {
+			t.Fatalf("building the %s attribute use: %v", a.name, err)
+		}
+		uses = append(uses, u)
+	}
+	ct, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Local: "RType"}, xsd.QName{}, nil,
+		xsd.DerivationRestriction, false, uses, nil, nil, xsd.EmptyContent{}, nil, nil)
+	if err != nil {
+		t.Fatalf("building RType: %v", err)
+	}
+	b.AddType(ct)
+	e, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "r"},
+		xsd.TypeDefinitionRef{Name: xsd.QName{Local: "RType"}}, nil, xsd.NewGlobalScope(),
+		nil, false, nil, nil, nil, false, nil)
+	if err != nil {
+		t.Fatalf("building the r element declaration: %v", err)
+	}
+	b.AddElement(e)
+	schema, err := b.Finalize()
+	if err != nil {
+		t.Fatalf("finalizing the entity schema: %v", err)
+	}
+	v, err := validate.New(schema, strict.New())
+	if err != nil {
+		t.Fatalf("validate.New: %v", err)
+	}
+	return v
+}
+
+// The internal subset's NDATA declarations are what an XML instance's
+// ·ENTITY values· are read against, end to end: a declared name passes, and an
+// undeclared one — including a parsed entity's name, and an ENTITIES item
+// beside declared ones — fails String Valid clause 3. A document with no
+// DOCTYPE declares nothing, so every ·ENTITY value· in it fails.
+func TestXMLEntityValuesAreReadAgainstTheInternalSubset(t *testing.T) {
+	const doctype = `<!DOCTYPE r [<!ENTITY pic SYSTEM "pic.gif" NDATA gif><!ENTITY txt "parsed">]>`
+	for _, tc := range []struct {
+		doc   string
+		ghost string // the undeclared ·ENTITY value· charged, or "" for none
+	}{
+		{doctype + `<r ent="pic"/>`, ""},
+		{doctype + `<r ents="pic pic"/>`, ""},
+		{doctype + `<r ent="ghost"/>`, "ghost"},
+		{doctype + `<r ent="txt"/>`, "txt"},
+		{doctype + `<r ents="pic ghost"/>`, "ghost"},
+		{`<r ent="pic"/>`, "pic"},
+	} {
+		res, err := Validate(entityValidator(t), strings.NewReader(tc.doc))
+		if err != nil {
+			t.Fatalf("%s: Validate: %v", tc.doc, err)
+		}
+		got := res.Violations()
+		if tc.ghost == "" {
+			if len(got) != 0 {
+				t.Errorf("%s: Violations() = %v, want none", tc.doc, got)
+			}
+			continue
+		}
+		if len(got) != 1 || !strings.Contains(got[0].Msg, "the ·ENTITY value· \""+tc.ghost+"\"") ||
+			!strings.Contains(got[0].Msg, "cvc-simple-type clause 3") {
+			t.Errorf("%s: Violations() = %v, want one String Valid clause 3 charge naming %q", tc.doc, got, tc.ghost)
+		}
+	}
+}

@@ -30,6 +30,13 @@ type Reader struct {
 	stack []frame
 	// eof latches io.EOF so repeated Token calls keep returning it.
 	eof bool
+
+	// entities maps each general entity name the DOCTYPE's internal subset
+	// declares to whether that entity is unparsed. It holds the parsed ones
+	// too because the FIRST declaration of a name binds (XML 1.0 §4.2), so a
+	// later NDATA declaration of a name already declared parsed declares no
+	// unparsed entity. It is a lookup index only, never iterated.
+	entities map[string]bool
 }
 
 // frame is one open element: its resolved name (to match the end tag), the
@@ -63,10 +70,11 @@ func NewReader(uri string, r io.Reader) *Reader {
 }
 
 // Token advances to the next element or character-data node and returns it.
-// It returns io.EOF at the end of a well-formed document. Comments,
-// processing instructions, and directives are skipped. Malformed input,
-// unbound namespace prefixes, and mismatched or unclosed tags are returned
-// as errors carrying an xsderr.Loc — never as a panic (see the fuzz target).
+// It returns io.EOF at the end of a well-formed document. Comments, processing
+// instructions, and directives are skipped; a DOCTYPE directive's entity declarations
+// are read on the way past (see HasUnparsedEntity). Malformed input, unbound namespace
+// prefixes, and mismatched or unclosed tags are returned as errors carrying an
+// xsderr.Loc — never as a panic (see the fuzz target).
 func (r *Reader) Token() (Node, error) {
 	if r.eof {
 		return nil, io.EOF
@@ -126,11 +134,50 @@ func (r *Reader) classify(tok xml.Token, off int64) (Node, bool, error) {
 		return &CharData{data: string(t), offset: off, loc: loc}, true, nil
 	case xml.ProcInst:
 		return nil, false, r.checkDeclaration(t, loc)
+	case xml.Directive:
+		r.declareEntities(t)
+		return nil, false, nil
 	default:
-		// xml.Comment, xml.Directive: not part of the element/character-data
-		// stream the parser consumes.
+		// xml.Comment: not part of the element/character-data stream the
+		// parser consumes.
 		return nil, false, nil
 	}
+}
+
+// declareEntities records the general entity declarations of a DOCTYPE
+// directive at the document level, keeping the first declaration of each name.
+// A directive inside an element is no DOCTYPE and declares nothing.
+func (r *Reader) declareEntities(d xml.Directive) {
+	if len(r.stack) > 0 {
+		return
+	}
+	for _, decl := range doctypeEntities(string(d)) {
+		if _, bound := r.entities[decl.name]; bound {
+			continue
+		}
+		if r.entities == nil {
+			r.entities = make(map[string]bool)
+		}
+		r.entities[decl.name] = decl.unparsed
+	}
+}
+
+// HasUnparsedEntity reports whether name is the name of an unparsed entity —
+// one declared <!ENTITY name SYSTEM|PUBLIC ... NDATA notation> — in the
+// document's DOCTYPE internal subset: the [unparsed entities] property of the
+// document information item, which an ·ENTITY value· must name (Structures
+// §3.16.4 key-vde, Appendix D).
+//
+// The answer is final once Token has returned the document element's
+// StartElement: XML 1.0 places the doctypedecl before the document element,
+// so no declaration can arrive later. Asked earlier, it reports only what has
+// been read so far.
+//
+// The external DTD subset is never read (encoding/xml does not fetch it), nor
+// is a parameter entity expanded, so an unparsed entity declared only there is
+// reported false.
+func (r *Reader) HasUnparsedEntity(name string) bool {
+	return r.entities[name]
 }
 
 // checkDeclaration enforces XML 1.0 §4.3.3's fatal error: "it is a fatal error
