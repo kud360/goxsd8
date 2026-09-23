@@ -378,3 +378,86 @@ func TestClauseFiveChargesUnderASimpleGoverningType(t *testing.T) {
 	wantSilence(t, cAssess(t, schema, eRoot(nil, "#hello")),
 		"an element carrying no xsi:type at all has no ·actual value· for clause 5 to quantify over")
 }
+
+// cvc-attribute (§3.2.4.1) clause 3 charges an xsi:type lexical that is not
+// String Valid against xs:QName, the built-in declaration's {type definition}
+// (§3.2.7.1), and clause 5 is declined for it: such a lexical has no ·actual
+// value· to ·resolve· (#1641). The first three stop at resolveInstanceQName's
+// split and were charged by nothing; the last two clear it and were charged
+// under clause 5 as QNames naming no type. The charge wraps the Datatype Valid
+// verdict as its cause, and its opening is pinned as a prefix so that the
+// element name and the lexical cannot trade places unseen (#1048).
+func TestNonQNameXSITypeChargesClauseThree(t *testing.T) {
+	schema := eSchema(t, false, nil)
+
+	for _, lexical := range []string{
+		"p:Derived",   // a prefix with no binding in scope
+		"",            // empty
+		"a:b:Derived", // a colon structure no QName has
+		"23.789",      // an NCName cannot open with a digit
+		"not a name",  // nor carry a space
+	} {
+		got, visits := cAssessLogged(t, schema, eRoot(map[string]string{"type": lexical}))
+
+		if len(got) != 1 {
+			t.Errorf("xsi:type=%q: Violations() = %v, want exactly one", lexical, got)
+			continue
+		}
+		if got[0].Rule != "cvc-attribute" || got[0].Loc != loc(1, 10) {
+			t.Errorf("xsi:type=%q: charge = %v, want cvc-attribute at the attribute's own %s", lexical, got[0], loc(1, 10))
+		}
+		opening := `the xsi:type attribute of the element root has the ·initial value· "` + lexical +
+			`", which is not ·valid· with respect to {http://www.w3.org/2001/XMLSchema}QName`
+		if !strings.HasPrefix(got[0].Msg, opening) {
+			t.Errorf("xsi:type=%q: Msg = %q, want it to open %q", lexical, got[0].Msg, opening)
+		}
+		if !strings.Contains(got[0].Msg, "cvc-attribute clause 3") || strings.Contains(got[0].Msg, "clause 5") {
+			t.Errorf("xsi:type=%q: Msg = %q, want it to name cvc-attribute clause 3 and not clause 5", lexical, got[0].Msg)
+		}
+		if rule, _ := xsderr.RuleOf(got[0].Unwrap()); rule != "cvc-datatype-valid" {
+			t.Errorf("xsi:type=%q: cause = %v, want the cvc-datatype-valid verdict wrapped", lexical, got[0].Unwrap())
+		}
+		want := []string{"3/charged", "5/declined"}
+		if outcomes := attributeOutcomes(*visits); !slices.Equal(outcomes, want) {
+			t.Errorf("xsi:type=%q: logged %v, want %v", lexical, outcomes, want)
+		}
+	}
+}
+
+// A lexical in xs:QName's lexical space satisfies clause 3 and reaches clause 5
+// alone: one naming no type is charged there and nowhere else, and one naming a
+// type the schema carries is charged nowhere. The prefix is bound, so clause 3
+// maps it under the element's bindings exactly as clause 5 resolves it.
+func TestQNameXSITypeSatisfiesClauseThree(t *testing.T) {
+	schema := eSchema(t, false, nil)
+	root := eRoot(map[string]string{"type": "xs:unknownType"})
+	root.bindings = map[string]string{"xs": xsd.XMLSchemaNS}
+
+	got, visits := cAssessLogged(t, schema, root)
+
+	if len(got) != 1 || !strings.Contains(got[0].Msg, "cvc-attribute clause 5") {
+		t.Fatalf("Violations() = %v, want exactly one, under cvc-attribute clause 5", got)
+	}
+	if want := []string{"3/satisfied", "5/charged"}; !slices.Equal(attributeOutcomes(*visits), want) {
+		t.Errorf("logged %v, want %v", attributeOutcomes(*visits), want)
+	}
+
+	got, visits = cAssessLogged(t, schema, eRoot(map[string]string{"type": "Derived"}, "a"))
+	wantSilence(t, got, "an xsi:type that is a QName and ·resolves· satisfies clauses 3 and 5")
+	if want := []string{"3/satisfied", "5/satisfied"}; !slices.Equal(attributeOutcomes(*visits), want) {
+		t.Errorf("logged %v, want %v", attributeOutcomes(*visits), want)
+	}
+}
+
+// attributeOutcomes is the clause/outcome pair of every cvc-attribute line the
+// walk logged, in order.
+func attributeOutcomes(visits []string) []string {
+	outcomes := []string{}
+	for _, line := range visits {
+		if field(line, "validate.rule=") != "cvc-attribute" {
+			continue
+		}
+		outcomes = append(outcomes, field(line, "validate.clause=")+"/"+field(line, "validate.outcome="))
+	}
+	return outcomes
+}
