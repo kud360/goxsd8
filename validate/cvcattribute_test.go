@@ -53,8 +53,9 @@ func typedUse(t *testing.T, local string, typ xsd.QName, required bool, declVC, 
 // installed, so cos-valid-simple-default (§3.2.6.2) is waved through at
 // assembly and a fixture may carry a {value constraint} whose {lexical form} is
 // invalid — which is exactly the state cvc-complex-type clause 4 exists to
-// catch at assessment time.
-func typedSchema(t *testing.T, uses []xsd.AttributeUse) *xsd.Schema {
+// catch at assessment time. extra adds the fixture's own named simple types
+// beside the builtin ones.
+func typedSchema(t *testing.T, uses []xsd.AttributeUse, extra ...*xsd.SimpleType) *xsd.Schema {
 	t.Helper()
 	ct, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Local: "RootType"}, xsd.QName{}, nil,
 		xsd.DerivationRestriction, false, uses, nil, nil, xsd.EmptyContent{}, nil, nil)
@@ -73,6 +74,9 @@ func typedSchema(t *testing.T, uses []xsd.AttributeUse) *xsd.Schema {
 	}
 	b := xsd.NewSchemaBuilder()
 	for _, st := range seeded {
+		b.AddType(st)
+	}
+	for _, st := range extra {
 		b.AddType(st)
 	}
 	b.AddType(ct)
@@ -95,10 +99,10 @@ func valuedRoot(name string, lexical string) *testElement {
 }
 
 // assessTyped assesses root against a schema declaring "root" over uses, with
-// the builtin types seeded.
-func assessTyped(t *testing.T, root Element, uses []xsd.AttributeUse) []*xsderr.Error {
+// the builtin types and extra seeded.
+func assessTyped(t *testing.T, root Element, uses []xsd.AttributeUse, extra ...*xsd.SimpleType) []*xsderr.Error {
 	t.Helper()
-	v, err := New(typedSchema(t, uses), testBackend())
+	v, err := New(typedSchema(t, uses, extra...), testBackend())
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

@@ -128,7 +128,8 @@ func (v *Validator) Assess(root Element) *Result {
 	if root == nil {
 		panic("validate: Assess: nil root Element")
 	}
-	w := walk{log: v.log, schema: v.schema, backend: v.backend, values: value.NewValueSpace(v.backend)}
+	entities, _ := root.(UnparsedEntities) // nil: the source supports no [unparsedEntities]
+	w := walk{log: v.log, schema: v.schema, backend: v.backend, values: value.NewValueSpace(v.backend), entities: entities}
 	var g governance
 	d, found := v.Schema().Element(root.Name())
 	if found {
@@ -561,15 +562,19 @@ func (w *walk) instanceGovernance(e Element) (governance, bool) {
 // is a SET of elements, and an [Element] is an interface whose == compares
 // whatever an adapter's dynamic type compares. ids is the [ID/IDREF table] those
 // ordinals bind into, assembled across the whole walk and read once, at the
-// ·validation root· (cvcid.go).
+// ·validation root· (cvcid.go). entities is the root narrowed to
+// [UnparsedEntities] once, at the top of the call, and nil where the source does
+// not support [unparsedEntities] — the nil is that fact's only encoding, and
+// String Valid clause 3 reads it (cvcsimpletype.go).
 type walk struct {
-	log     *slog.Logger
-	schema  *xsd.Schema
-	backend value.Backend
-	values  xsd.ValueSpace
-	nodes   int
-	ids     idTable
-	res     Result
+	log      *slog.Logger
+	schema   *xsd.Schema
+	backend  value.Backend
+	values   xsd.ValueSpace
+	entities UnparsedEntities
+	nodes    int
+	ids      idTable
+	res      Result
 }
 
 // elementContext is the [value.Context] an instance lexical is mapped under:

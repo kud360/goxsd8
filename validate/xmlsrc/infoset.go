@@ -9,7 +9,11 @@ import (
 	"github.com/kud360/goxsd8/xsderr"
 )
 
-// The engine meets this package only through these four views.
+// The engine meets this package only through these four views, and narrows the
+// document element to the [validate.UnparsedEntities] capability. That last
+// assertion is what keeps a rename of the capability from compiling silently
+// into a source that supports no [unparsedEntities], whose every ENTITY value
+// the engine then rejects.
 //
 // *xmltree.CharData is validate.Text as it stands: Data reports the decoded
 // characters and Loc the run's position, which is the whole interface. A
@@ -23,6 +27,8 @@ var (
 	_ validate.Attribute = attribute{}
 	_ validate.Children  = (*children)(nil)
 	_ validate.Text      = (*xmltree.CharData)(nil)
+
+	_ validate.UnparsedEntities = (*element)(nil)
 )
 
 // qname converts a resolved xmltree name to the QName the schema side

@@ -54,6 +54,23 @@ type Element interface {
 	Loc() xsderr.Loc
 }
 
+// UnparsedEntities is the optional capability through which a source presents
+// the [unparsedEntities] property of the document information item (Appendix
+// D, id="infoset"). A source that does not implement it does not support
+// [unparsedEntities], and every ·ENTITY value· it presents fails cvc-simple-type
+// clause 3 (§3.16.4): Appendix D states that failure to support the property
+// "will mean all items of type ENTITY or ENTITIES will fail to ·validate·", so
+// absence is a rejection, not a skipped check.
+//
+// The property belongs to the DOCUMENT, so the engine narrows only the
+// [Element] passed to [Validator.Assess]; elements below it are never asked.
+type UnparsedEntities interface {
+	// HasUnparsedEntity reports whether name is the [name] of some unparsed
+	// entity information item in [unparsedEntities], i.e. whether name is a
+	// ·declared entity name· (key-vde).
+	HasUnparsedEntity(name string) bool
+}
+
 // Attribute is one attribute information item of an [Element], as a source
 // adapter presents it. Namespace declarations are not attributes and never
 // appear as one (see [Element]'s Attributes).

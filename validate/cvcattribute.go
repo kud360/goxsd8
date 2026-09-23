@@ -16,23 +16,18 @@ import (
 // clause 1.2 — is cvccomplexcontent.go's.
 //
 // Every one of them delegates to String Valid (§3.16.4, cvc-simple-type) and
-// so inherits its three clauses: whiteSpace normalization (cl.1) and Datatype
-// Valid (cl.2, Datatypes §4.1.4) are what value.ValidateLexical runs, in that
-// order, and clause 3 is the residue below.
+// so inherits its three clauses, which [walk.stringValid] runs
+// (cvcsimpletype.go): whiteSpace normalization (cl.1) and Datatype Valid (cl.2,
+// Datatypes §4.1.4) through value.ValidateLexical, in that order, then clause
+// 3's "every ·ENTITY value· in V is a ·declared entity name·" against the
+// document's [unparsedEntities] ([UnparsedEntities]).
 //
-// GAP(validate): String Valid clause 3 — "every ·ENTITY value· in V is a
-// ·declared entity name·" — is not checked, so an xs:ENTITY-valued attribute,
-// or an element ·initial value· of that type, naming an entity the document
-// never declared is accepted. A ·declared entity name· is the [name] of an
-// unparsed entity information item in the DOCUMENT's [unparsedEntities]
-// property (key-vde), which the abstract infoset does not carry: [Element],
-// [Attribute] and [Text] are element-level views with no document above them,
-// and the property arrives as a capability interface of its own rather than as
-// a method added to any of the three (PRINCIPLES 3, doc.go). The withheld
-// value's whole consumer set is Result.violations and its one reader
-// Result.Violations, both of which decidedNotValid reads as violations
-// PRESENT, so withholding one can only cost a rejection and never manufacture
-// one (#773).
+// GAP(validate): the [unparsedEntities] validate/xmlsrc presents is read from
+// the DOCTYPE's internal subset alone — encoding/xml never reads the external
+// DTD subset, and parser/xmltree expands no parameter entity — so an unparsed
+// entity declared only through either is not a member, and an ·ENTITY value·
+// naming it is charged as undeclared. The direction is fail-CLOSED: the set's
+// one reader, [walk.entitiesDeclared], charges on a name the set lacks (#773).
 
 // ruleCvcAttribute is Attribute Locally Valid (Structures §3.2.4.1,
 // cvc-attribute). The clause charged goes in the message on ruleCvcElt's
@@ -59,7 +54,7 @@ const ruleCvcAu xsderr.Rule = "cvc-au"
 // and not of the verdict, so a charge, a pass and a decline record the same
 // sites.
 //
-// The three declines below withhold a verdict rather than guess one:
+// The four declines below withhold a verdict rather than guess one:
 //
 //   - a use whose {attribute declaration} does not resolve. Unreachable on a
 //     *xsd.Schema that exists (Phase A charges src-resolve for a dangling
@@ -78,6 +73,8 @@ const ruleCvcAu xsderr.Rule = "cvc-au"
 //     xs:anySimpleType, which no backend maps, and the resulting error carries
 //     cvc-datatype-valid exactly as a genuine rejection does. Charging it would
 //     reject every typeless attribute in existence (#774).
+//   - an ·ENTITY value· candidate whose ·validating type· this package cannot
+//     decide, on [walk.entitiesDeclared]'s terms.
 func (w *walk) matchedAttribute(a Attribute, e Element, u xsd.AttributeUse) {
 	d, resolved := w.schema.ResolvedAttributeDeclaration(u)
 	if !resolved {
@@ -90,12 +87,13 @@ func (w *walk) matchedAttribute(a Attribute, e Element, u xsd.AttributeUse) {
 		return
 	}
 	w.simpleAssertions(st, a.Loc())
-	if _, err := value.ValidateLexical(w.backend, w.schema, st, a.Value(), elementContext{owner: e}); err != nil {
-		if !value.IsDatatypeVerdict(err) {
-			w.logAttribute(a, ruleCvcAttribute, "3", "declined")
-			return
-		}
-		w.res.violations = append(w.res.violations, causedBy(ruleCvcAttribute, a.Loc(), err,
+	decided, verdict := w.stringValid(st, a.Value(), e, a.Loc())
+	if !decided {
+		w.logAttribute(a, ruleCvcAttribute, "3", "declined")
+		return
+	}
+	if verdict != nil {
+		w.res.violations = append(w.res.violations, causedBy(ruleCvcAttribute, a.Loc(), verdict,
 			"the ·initial value· of the attribute %s is not ·valid· with respect to its declaration's {type definition} %s, which cvc-attribute clause 3 requires as per String Valid (§3.16.4)",
 			a.Name(), st.Name()))
 		w.logAttribute(a, ruleCvcAttribute, "3", "charged")
@@ -348,6 +346,12 @@ func (w *walk) defaultedAttributes(e Element, attrs []Attribute, governing xsd.C
 // charge nothing. A decided rejection hands back the Datatype Valid verdict
 // itself, which the charge carries as its wrapped cause (validate.go's causedBy).
 //
+// ValidDefault answers String Valid clauses 1 and 2 only, being a question the
+// schema alone settles, so clause 3 is asked here of a {lexical form} it
+// accepts: whether each ·ENTITY value· in it is a ·declared entity name· is the
+// DOCUMENT's to say ([walk.entitiesDeclared]), and a rejection there is the
+// wrapped cause on the same terms.
+//
 // The type's assertion sites are recorded at the ELEMENT's location, on
 // [walk.simpleAssertions]'s terms: the attribute is absent, which is what makes
 // it defaulted, so there is no attribute item to carry a Loc.
@@ -362,6 +366,12 @@ func (w *walk) defaultedAttribute(e Element, u xsd.AttributeUse, vc xsd.ValueCon
 	}
 	w.simpleAssertions(st, e.Loc())
 	cause, decided := w.values.ValidDefault(w.schema, st, vc)
+	if !decided {
+		return
+	}
+	if cause == nil {
+		decided, cause = w.entitiesDeclared(st, vc.LexicalForm(), e, e.Loc())
+	}
 	if !decided || cause == nil {
 		return
 	}

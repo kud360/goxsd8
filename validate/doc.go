@@ -24,14 +24,21 @@
 // yields one child at a time and the walk never holds a document.
 //
 // A later infoset property arrives as a NEW optional capability
-// interface the engine narrows to — interface{ BaseURI() string },
-// falling back to Loc().URI where an adapter does not implement it —
-// and NEVER as a method added to Element, Attribute or Text
-// (PRINCIPLES 3). Those three are implemented by adapter packages
-// outside this module, so a method added to one breaks every adapter at
-// once. [[prefix]], [[base URI]] and [[attribute type]] are the
-// Appendix D properties waiting on that route: no cvc- rule reads one
-// today.
+// interface the engine narrows to, and NEVER as a method added to
+// Element, Attribute or Text (PRINCIPLES 3). Those three are implemented
+// by adapter packages outside this module, so a method added to one
+// breaks every adapter at once. [UnparsedEntities] is the capability
+// that has shipped: the document's [unparsedEntities], narrowed once off
+// the root [Validator.Assess] is handed.
+//
+// Each capability's own doc comment decides what its absence means, and
+// the two contracts differ. [unparsedEntities] absent REJECTS: Appendix
+// D makes every ENTITY or ENTITIES value of a source that does not
+// support the property fail String Valid clause 3. [[base URI]] absent
+// would FALL BACK: a planned interface{ BaseURI() string }, not yet
+// built, would answer Loc().URI where an adapter does not implement it.
+// [[prefix]], [[base URI]] and [[attribute type]] are the Appendix D
+// properties still waiting on that route: no cvc- rule reads one today.
 //
 // # Assessment semantics designed in from the start
 //
@@ -111,10 +118,12 @@
 // the inner rule ID off it instead of a consumer scraping the message for one.
 // cvc-attribute clause 3, cvc-type clause 3.1.3, cvc-complex-type clause 1.2
 // and cvc-complex-type clause 4 over a ·defaulted attribute·'s {lexical form}
-// each wrap the Datatype Valid (Datatypes §4.1.4) verdict, whose own rule is
-// cvc-datatype-valid or one of the facet rules under it — String Valid's own
-// clause 2 is where the delegation lands, and this package charges no
-// intermediate cvc-simple-type node of its own. The first three read the
+// each wrap the String Valid verdict. Where clause 2 fails, that is the
+// Datatype Valid (Datatypes §4.1.4) verdict, whose own rule is
+// cvc-datatype-valid or one of the facet rules under it, and no intermediate
+// cvc-simple-type node sits between. Where clause 3 fails — an ·ENTITY value·
+// that is not a ·declared entity name· — the verdict is cvc-simple-type's own,
+// since that clause delegates to nothing. The first three read clause 2's
 // verdict off value.ValidateLexical directly; clause 4 reads it through
 // xsd.ValueSpace's ValidDefault, which returns the same error. Error() still
 // renders that verdict into the message as well, for a reader who holds only
@@ -217,7 +226,8 @@
 // Everything not decidable is left undecided rather than guessed at: an
 // {attribute wildcard} to evaluate, a ·governing type definition· that is
 // not determinable, a {content type} whose shape xsd.Schema.ContentMatcher
-// declines, a declaration whose {type definition} is not a simple type, and —
+// declines, a declaration whose {type definition} is not a simple type, a
+// value whose ·validating type· String Valid clause 3 cannot decide, and —
 // the decline that matters most — a value.ValidateLexical error that is a fault
 // of the type or of the backend rather than a verdict about the lexical
 // (value.IsDatatypeVerdict), which is what keeps a typeless attribute
