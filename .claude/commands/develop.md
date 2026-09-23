@@ -95,8 +95,9 @@ heartbeat.
    fixture — whether a QName prefix is bound, whether a name resolves, any
    outcome a layer between the producer and `Result.Violations` decides —
    cannot be read off a value string: narrow on it by named candidates, or
-   state `not derived — <bound>`. `.claude/agents/arbiter.md:55` owns what
-   an `instance`-lane claim needs (#1657).
+   state `not derived — <bound>`. The **ratchet prediction** paragraph of
+   `.claude/agents/arbiter.md`'s `## Judging` owns what an
+   `instance`-lane claim needs (#1657).
 
    ```
    PREDICTION:
