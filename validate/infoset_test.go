@@ -27,8 +27,15 @@ func (e *testElement) Attributes() []Attribute { return e.attrs }
 func (e *testElement) Children() Children      { return &testChildren{kids: e.kids, err: e.kidsErr} }
 func (e *testElement) Loc() xsderr.Loc         { return e.loc }
 
+// LookupPrefix keeps [Element]'s contract for the empty prefix: with no default
+// namespace declared it yields the ·absent· namespace name and ok, as the
+// xmltree scope does, so an unprefixed QName lexical maps to a no-namespace
+// value rather than failing for want of a binding.
 func (e *testElement) LookupPrefix(prefix string) (string, bool) {
 	uri, ok := e.bindings[prefix]
+	if !ok && prefix == "" {
+		return "", true
+	}
 	return uri, ok
 }
 

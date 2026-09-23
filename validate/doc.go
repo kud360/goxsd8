@@ -147,20 +147,21 @@
 // does not resolve at all charges no clause of cvc-elt and leaves the selected
 // type governing — the Note under cvc-elt is explicit that the two failures
 // share that fallback and differ only in the charge. That second failure is
-// charged against the ATTRIBUTE instead, under cvc-attribute clause 5 below,
-// which leaves the fallback exactly as it is. Clause 5 is a case split on whether
-// the element is EMPTY and its declaration carries a {value constraint}, and
-// both arms are decided. Clause 5.2's, for an element that HAS [[children]]:
-// 5.2.1's ordinary cvc-type dispatch, and 5.2.2 for a fixed constraint — no
-// element [[children]] (5.2.2.1), and an ·initial value· matching the {lexical
-// form} under a mixed {content type} (5.2.2.2.1) or an ·actual value· equal or
-// identical to the {value} under a simple one (5.2.2.2.2). Clause 5.1's, for an
-// empty one: the item assessed is the one carrying D.{value constraint}.{lexical
-// form} as its ·normalized value·, which 5.1.2 sends to the same cvc-type
-// dispatch and which the [ID/IDREF table] and a ·key-sequence· read in place of
-// the empty ·initial value·; and 5.1.1 charges Element Default Valid (Immediate)
-// (§3.3.6.2) over that constraint where the ·governing type definition· is an
-// ·instance-specified· one, which is the xsi:type case alone.
+// charged against the ATTRIBUTE instead, under cvc-attribute clause 3 or 5
+// below, which leaves the fallback exactly as it is. Clause 5 is a case split
+// on whether the element is EMPTY and its declaration carries a {value
+// constraint}, and both arms are decided. Clause 5.2's, for an element that
+// HAS [[children]]: 5.2.1's ordinary cvc-type dispatch, and 5.2.2 for a fixed
+// constraint — no element [[children]] (5.2.2.1), and an ·initial value·
+// matching the {lexical form} under a mixed {content type} (5.2.2.2.1) or an
+// ·actual value· equal or identical to the {value} under a simple one
+// (5.2.2.2.2). Clause 5.1's, for an empty one: the item assessed is the one
+// carrying D.{value constraint}.{lexical form} as its ·normalized value·, which
+// 5.1.2 sends to the same cvc-type dispatch and which the [ID/IDREF table] and
+// a ·key-sequence· read in place of the empty ·initial value·; and 5.1.1
+// charges Element Default Valid (Immediate) (§3.3.6.2) over that constraint
+// where the ·governing type definition· is an ·instance-specified· one, which
+// is the xsi:type case alone.
 //
 // The third is cvc-type (§3.3.4.4) clause 3.1, the arm taken where the
 // ·governing type definition· is a Simple Type Definition rather than a complex
@@ -184,17 +185,16 @@
 // use (two independent rules over two properties, both charged), and a
 // ·defaulted attribute·'s own {lexical form} against its type.
 //
-// cvc-attribute carries one clause more that clause 2.1 never dispatches and
-// no {attribute use} reaches: clause 5, an xsi:type attribute whose ·actual
-// value· ·resolves· to no type definition. It is charged at that attribute's
-// own Loc against the built-in declaration for the type attribute (§3.2.7.1),
+// cvc-attribute is also charged against the one declaration clause 2.1 never
+// dispatches to and no {attribute use} reaches: the built-in declaration for
+// the type attribute (§3.2.7.1), at the xsi:type attribute's own Loc,
 // whatever the element's ·governing type definition· is and whether that type
-// is simple, complex or undetermined, and it needs no value space. The lexicals
-// it declines are those that stop at the QName SPLIT — empty, a colon structure
-// no QName has, a prefix with no binding in scope — and not every lexical
-// without an ·actual value·: one whose parts are no NCName clears that split
-// and is charged here, under a clause that does not hold its defect
-// (cvcattribute.go's GAP(validate) marker).
+// is simple, complex or undetermined. Clause 3 reads its lexical through the
+// same value.Backend against that declaration's xs:QName {type definition}, so
+// an empty lexical, a colon structure no QName has, a part that is no NCName
+// and a prefix with no binding in scope are each charged there. Clause 5
+// charges a lexical clause 3 accepts whose ·actual value· ·resolves· to no type
+// definition, and needs no value space.
 //
 // The seventh is the root's content half, against the same type's {content
 // type}. cvc-complex-type clause 1 decides what its {variety} admits —

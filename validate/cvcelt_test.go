@@ -211,10 +211,10 @@ func TestDisallowedSubstitutionsBlockTheOverride(t *testing.T) {
 // resolving W3C issue 11764. The element falls back to the selected type, and
 // no cvc-elt charge is made for any of the shapes that fail to ·resolve·.
 //
-// Five of the six charge nothing at all. The sixth is the ATTRIBUTE's own
-// cvc-attribute clause 5, which is not cvc-elt's and is pinned in
-// cvcattribute_test.go; this fixture asserts only that it leaves the element
-// side vacuous.
+// Each shape IS charged, but against the ATTRIBUTE and under cvc-attribute —
+// clause 3 for the five with no ·actual value·, clause 5 for the QName naming
+// nothing — which is not cvc-elt's and is pinned in cvcattribute_test.go; this
+// fixture asserts only that it leaves the element side vacuous.
 func TestUnresolvedXSITypeChargesNoCvcEltClause(t *testing.T) {
 	schema := eSchema(t, false, nil)
 
@@ -224,14 +224,13 @@ func TestUnresolvedXSITypeChargesNoCvcEltClause(t *testing.T) {
 		":Derived",    // an empty prefix
 		"Derived:",    // an empty local part
 		"",            // empty
+		"Missing",     // a QName naming no type
 	} {
-		wantSilence(t, cAssess(t, schema, eRoot(map[string]string{"type": lexical})),
-			"an xsi:type of "+lexical+" has no ·actual value·, which charges no clause")
-	}
-
-	got := cAssess(t, schema, eRoot(map[string]string{"type": "Missing"}))
-	if len(got) != 1 || got[0].Rule != "cvc-attribute" {
-		t.Fatalf("Violations() = %v, want exactly one cvc-attribute charge and no cvc-elt clause 4", got)
+		got := cAssess(t, schema, eRoot(map[string]string{"type": lexical}))
+		if len(got) != 1 || got[0].Rule != "cvc-attribute" {
+			t.Errorf("xsi:type=%q: Violations() = %v, want exactly one cvc-attribute charge and no cvc-elt clause 4",
+				lexical, got)
+		}
 	}
 }
 

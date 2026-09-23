@@ -363,13 +363,15 @@ func TestInstanceAttributesAreExemptFromClauseTwo(t *testing.T) {
 	}
 	// All FOUR are excepted, xsi:type and xsi:nil included: each is ·attributed
 	// to· nothing at all, whatever it goes on to decide elsewhere. xsi:type
-	// records one line before that exemption and not in place of it — its own
-	// cvc-attribute clause 5, which is the built-in declaration's charge and
-	// leaves the item as unmatched by clause 2 as the other three.
+	// records two lines before that exemption and not in place of it — its own
+	// cvc-attribute clauses 3 and 5, which are the built-in declaration's and
+	// leave the item as unmatched by clause 2 as the other three. Clause 3
+	// declines: this schema seeds no xs:QName for it to read the lexical
+	// against.
 	for _, n := range []string{"type", "nil", "schemaLocation", "noNamespaceSchemaLocation"} {
 		want := []string{"2/exempt"}
 		if n == "type" {
-			want = []string{"5/charged", "2/exempt"}
+			want = []string{"3/declined", "5/charged", "2/exempt"}
 		}
 		uses := []xsd.AttributeUse{aUse(t, "id", false, nil)}
 		if outcomes := assessOutcomes(t, attributedRoot(xsi(n)), uses, nil); !slices.Equal(outcomes, want) {
