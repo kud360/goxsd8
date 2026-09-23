@@ -30,8 +30,11 @@ func drained(t *testing.T, doc string) *xmltree.Reader {
 // parameter entity, a parsed external entity and an internal one are not
 // members — the last even where an NDATA keyword follows its literal — nor is
 // a name that appears only inside a literal, a processing instruction or a
-// comment. A parameter-entity reference is stepped over, and a declaration
-// after it still counts.
+// comment, nor a declaration whose ExternalID and NDataDecl do not read by
+// position — PUBLIC with one literal, an unquoted system identifier, a
+// notation name carrying ']', a token after the notation name. A
+// parameter-entity reference is stepped over, and a declaration after it
+// still counts.
 func TestHasUnparsedEntityReadsTheInternalSubset(t *testing.T) {
 	r := drained(t, `<?xml version="1.0"?>
 <!DOCTYPE r SYSTEM "r.dtd" [
@@ -42,6 +45,10 @@ func TestHasUnparsedEntityReadsTheInternalSubset(t *testing.T) {
   <!ENTITY parsed SYSTEM "parsed.xml">
   <!ENTITY text "a literal naming NDATA gif">
   <!ENTITY internal "a literal" NDATA gif>
+  <!ENTITY onelit PUBLIC "x" NDATA gif>
+  <!ENTITY bare SYSTEM x NDATA gif>
+  <!ENTITY bracket SYSTEM "x" NDATA gif]>
+  <!ENTITY trailing SYSTEM "x" NDATA gif gif>
   <!ATTLIST r a CDATA "<!ENTITY inattlist SYSTEM 'x' NDATA gif>">
   <?pi <!ENTITY inpi SYSTEM "x" NDATA gif> ?>
   <!-- <!ENTITY incomment SYSTEM "x" NDATA gif> -->
@@ -56,6 +63,7 @@ func TestHasUnparsedEntityReadsTheInternalSubset(t *testing.T) {
 		{"pic", true}, {"pub", true}, {"after", true},
 		{"pe", false}, {"parsed", false}, {"text", false}, {"internal", false}, {"inattlist", false},
 		{"inpi", false}, {"incomment", false}, {"gif", false}, {"undeclared", false},
+		{"onelit", false}, {"bare", false}, {"bracket", false}, {"trailing", false},
 	} {
 		if got := r.HasUnparsedEntity(tc.name); got != tc.want {
 			t.Errorf("HasUnparsedEntity(%q) = %t, want %t", tc.name, got, tc.want)

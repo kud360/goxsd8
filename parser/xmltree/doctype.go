@@ -1,9 +1,6 @@
 package xmltree
 
-import (
-	"slices"
-	"strings"
-)
+import "strings"
 
 // entityDecl is one general entity declaration of a DOCTYPE's internal
 // subset: the entity's name, and whether it is UNPARSED — an external entity
@@ -23,7 +20,7 @@ type entityDecl struct {
 // instruction or any other markup declaration is stepped over whole, and a
 // parameter-entity reference is stepped over unexpanded, so an entity
 // declared in its replacement text is not seen. A declaration it cannot read
-// declares nothing, which leaves an ·ENTITY value· naming that entity
+// declares no unparsed entity, which leaves an ·ENTITY value· naming that entity
 // undeclared rather than declared.
 func doctypeEntities(directive string) []entityDecl {
 	rest, ok := strings.CutPrefix(directive, "DOCTYPE")
@@ -93,10 +90,10 @@ func markupDecl(s string) (body, after string) {
 // entityDeclOf reads one <!ENTITY ...> body. It reports false for a parameter
 // entity declaration (<!ENTITY % name ...>), which declares no general entity
 // at all, for a keyword run on into the name with no white space between, and
-// for a body too short to name one. A general entity is unparsed when its
-// definition is an external identifier (SYSTEM or PUBLIC) followed by an
-// NDATA notation name; a literal definition is a parsed entity whatever it
-// spells, since a quoted token never equals the bare keyword.
+// for a body too short to name one. A general entity is unparsed only when its
+// definition is exactly an ExternalID followed by an NDataDecl (XML 1.0
+// EntityDef); any other definition, a malformed one included, is a parsed
+// entity.
 func entityDeclOf(body string) (entityDecl, bool) {
 	if body == "" || !strings.ContainsRune(declSpace, rune(body[0])) {
 		return entityDecl{}, false
@@ -105,8 +102,43 @@ func entityDeclOf(body string) (entityDecl, bool) {
 	if len(toks) < 2 || strings.HasPrefix(toks[0], "%") {
 		return entityDecl{}, false
 	}
-	external := toks[1] == "SYSTEM" || toks[1] == "PUBLIC"
-	return entityDecl{name: toks[0], unparsed: external && slices.Contains(toks[2:], "NDATA")}, true
+	return entityDecl{name: toks[0], unparsed: unparsedDef(toks[1:])}, true
+}
+
+// unparsedDef reports whether def, the tokens of an entity definition, reads
+// by position as `SYSTEM lit NDATA Name` or `PUBLIC lit lit NDATA Name` and
+// nothing more: XML 1.0's ExternalID followed by an NDataDecl.
+func unparsedDef(def []string) bool {
+	var lits int
+	switch def[0] {
+	case "SYSTEM":
+		lits = 1
+	case "PUBLIC":
+		lits = 2
+	default:
+		return false
+	}
+	if len(def) != 1+lits+2 {
+		return false
+	}
+	for _, t := range def[1 : 1+lits] {
+		if !isLiteral(t) {
+			return false
+		}
+	}
+	return def[1+lits] == "NDATA" && isDeclName(def[2+lits])
+}
+
+// isLiteral reports whether t, one of declTokens' tokens, is a closed quoted
+// literal.
+func isLiteral(t string) bool {
+	return len(t) >= 2 && (t[0] == '"' || t[0] == '\'') && t[len(t)-1] == t[0]
+}
+
+// isDeclName reports whether t, one of declTokens' tokens, can be a Name: it
+// holds no quote, no subset bracket and no parameter-entity reference.
+func isDeclName(t string) bool {
+	return !strings.ContainsAny(t, `"'[]%`)
 }
 
 // declSpace is the white space that separates the tokens of a markup
