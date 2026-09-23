@@ -88,10 +88,22 @@ heartbeat.
    the join could not be completed with the tools in the tree — name what
    stopped it.
 
+   Go below the join's candidate count only from the candidate cases
+   `casejoin join` lists by ID, naming each one discarded and the reason
+   it cannot flip — never by de-duplicating or pattern-reading
+   `suiteindex`'s value strings. A property decided per element or per
+   fixture — whether a QName prefix is bound, whether a name resolves, any
+   outcome a layer between the producer and `Result.Violations` decides —
+   cannot be read off a value string: narrow on it by named candidates, or
+   state `not derived — <bound>`. The **ratchet prediction** paragraph of
+   `.claude/agents/arbiter.md`'s `## Judging` owns what an
+   `instance`-lane claim needs (#1657).
+
    ```
    PREDICTION:
    <lane>: +N | unchanged | not derived — <what stopped it>
    <the invocations run, and what each returned>
+   <candidates discarded, each by ID and reason — or none>
    ```
 
 4. **Implement.** Where step 3's `## Surface` ruling found an exported
