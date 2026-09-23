@@ -38,24 +38,36 @@ const ruleCvcID xsderr.Rule = "cvc-id"
 // element contribute one member between them, not two, so clause 2 does not
 // fire for them.
 
-// idRole is what the ·validating type· of a value makes it: an id its element
-// declares, a reference to one, or neither.
-type idRole int
+// valueRole is what the ·validating type· of a value makes it (§3.16.4,
+// key-TYPE-value): an ·ID value· its element declares, an ·IDREF value·
+// referring to one, an ·ENTITY value· String Valid clause 3 reads
+// (cvcsimpletype.go), or none of these. The [ID/IDREF table] and clause 3 read
+// one classification between them, so there is one resolver of ·validating
+// type·s and not two (STYLE T4).
+type valueRole int
 
 const (
-	idRoleNone idRole = iota
-	idRoleDeclare
-	idRoleReference
+	roleNone valueRole = iota
+	roleIDDeclare
+	roleIDReference
+	roleEntity
 )
 
-// idBinding is one ·ID value· or ·IDREF value· of an item's ·actual value·,
-// carrying the role its OWN ·validating type· gives it. The role travels per
-// value and not per item because a list whose {item type definition} is a union
-// decides it per item (§3.16.4 key-vtype clause 2), so one attribute's value can
-// hold an ·ID value· and a string that is neither.
-type idBinding struct {
+// isID reports whether r is one of the two roles §3.17.5.2 builds the [ID/IDREF
+// table] from.
+func (r valueRole) isID() bool { return r == roleIDDeclare || r == roleIDReference }
+
+// isEntity reports whether r is an ·ENTITY value·'s.
+func (r valueRole) isEntity() bool { return r == roleEntity }
+
+// roleValue is one ·ID value·, ·IDREF value· or ·ENTITY value· of an item's
+// ·actual value·, carrying the role its OWN ·validating type· gives it. The
+// role travels per value and not per item because a list whose {item type
+// definition} is a union decides it per item (§3.16.4 key-vtype clause 2), so
+// one attribute's value can hold an ·ID value· and a string that is neither.
+type roleValue struct {
 	value string
-	role  idRole
+	role  valueRole
 }
 
 // idTable is the ·validation root·'s [ID/IDREF table]: one entry per distinct
@@ -269,7 +281,7 @@ func (w *walk) idElement(c *icCheck) {
 //
 // The item is admitted by its ·governing type definition· (idCandidate) before
 // the lexical is read at all, and classified by its ·validating type·
-// afterwards (idBindings): clause 3 of the ·eligible item set· is what decides
+// afterwards (roleValues): clause 3 of the ·eligible item set· is what decides
 // whether the value is worth mapping, so a type outside the ID/IDREF closure
 // runs no pipeline here.
 //
@@ -294,32 +306,37 @@ func (w *walk) idRecord(st *xsd.SimpleType, lexical string, owner Element, node 
 		}
 		return
 	}
-	bindings, decided := w.idBindings(st, lexical, owner)
+	values, decided := w.roleValues(st, lexical, owner)
 	if !decided {
 		w.ids.declined = true
 		return
 	}
-	for _, b := range bindings {
-		if b.role == idRoleDeclare {
-			w.ids.declare(b.value, node, loc)
-			continue
+	for _, v := range values {
+		switch v.role {
+		case roleIDDeclare:
+			w.ids.declare(v.value, node, loc)
+		case roleIDReference:
+			w.ids.reference(v.value, loc)
+		case roleEntity, roleNone:
+			// An ·ENTITY value· is String Valid clause 3's and no member of the
+			// [ID/IDREF table]; roleValues yields no roleNone at all.
 		}
-		w.ids.reference(b.value, loc)
 	}
 }
 
-// idValues splits one item's ·actual value· into the strings a ·validating type·
-// is read against: every item of a list value, or the single value of an atomic
-// one. WHICH of them are ·ID values· or ·IDREF values· is idBindings's to say.
+// valueTokens splits one item's ·actual value· into the strings a ·validating
+// type· is read against: every item of a list value, or the single value of an
+// atomic one. WHICH of them are ·ID values·, ·IDREF values· or ·ENTITY values·
+// is roleValues's to say.
 //
 // The values are read off the COLLAPSED lexical rather than out of the parsed
-// value, which is exact for the three types clause 3 names and for every type
-// derived from them: ID, IDREF and the item type of IDREFS all derive from
-// xs:NCName, whose ·value space· is its ·lexical space· (Datatypes §3.4.7)
-// under the collapse whiteSpace its ancestor xs:token fixes. idRecord has
-// already run String Valid over the lexical, so a value reaching here is one
-// that mapping accepted.
-func idValues(lexical string, list bool) []string {
+// value, which is exact for the five types namedRole names and for every type
+// derived from them: ID, IDREF, ENTITY and the item types of IDREFS and
+// ENTITIES all derive from xs:NCName, whose ·value space· is its ·lexical
+// space· (Datatypes §3.4.7) under the collapse whiteSpace its ancestor xs:token
+// fixes. Both callers have already run String Valid clauses 1 and 2 over the
+// lexical, so a value reaching here is one that mapping accepted.
+func valueTokens(lexical string, list bool) []string {
 	fields := strings.Fields(lexical)
 	if list || len(fields) < 2 {
 		return fields
@@ -338,9 +355,17 @@ func idValues(lexical string, list bool) []string {
 //
 // It is a CANDIDACY test and never the classification: whether a value in that
 // type's closure really is an ·ID value· is its ·validating type·'s to say
-// (idBindings). A union of ID and string admits every item it governs and
+// (roleValues). A union of ID and string admits every item it governs and
 // contributes a binding for only those the ID member validated.
 func (w *walk) idCandidate(st *xsd.SimpleType) (candidate, decided bool) {
+	return w.candidate(st, valueRole.isID)
+}
+
+// candidate is idCandidate's walk over any family of roles: whether st is, or
+// is ·derived· or ·constructed· directly or indirectly from, a type namedRole
+// gives a role in family. String Valid clause 3 asks it of ENTITY and ENTITIES
+// (cvcsimpletype.go) on the same terms.
+func (w *walk) candidate(st *xsd.SimpleType, family func(valueRole) bool) (candidate, decided bool) {
 	if st == nil {
 		return false, true
 	}
@@ -348,7 +373,7 @@ func (w *walk) idCandidate(st *xsd.SimpleType) (candidate, decided bool) {
 	if !decided {
 		return false, false
 	}
-	if role != idRoleNone {
+	if family(role) {
 		return true, true
 	}
 	variety, err := st.Variety(w.schema)
@@ -361,14 +386,14 @@ func (w *walk) idCandidate(st *xsd.SimpleType) (candidate, decided bool) {
 		if err != nil || item == nil {
 			return false, false
 		}
-		return w.idCandidate(item)
+		return w.candidate(item, family)
 	case xsd.Union:
 		members, err := st.Members(w.schema)
 		if err != nil {
 			return false, false
 		}
 		for _, m := range members {
-			candidate, decided := w.idCandidate(m)
+			candidate, decided := w.candidate(m, family)
 			if !decided {
 				return false, false
 			}
@@ -380,52 +405,59 @@ func (w *walk) idCandidate(st *xsd.SimpleType) (candidate, decided bool) {
 	return false, true
 }
 
-// namedRole reads clause 3's ·derived· half off st's {base type definition}
-// chain: ID, IDREF and IDREFS by name, and every type reaching one of them by
-// restriction.
+// namedRole reads the ·derived· half of key-TYPE-value off st's {base type
+// definition} chain: ID, IDREF and IDREFS by name for §3.17.5.2 clause 3,
+// ENTITY and ENTITIES by name for String Valid clause 3, and every type
+// reaching one of them by restriction.
 //
 // list distinguishes the two readings of the ·actual value·: IDREFS holds one
-// ·IDREF value· per list item, an atomic type exactly one. It answers for the
-// chain alone and walks into no {item type definition} or {member type
-// definitions} — those are idCandidate's and idBindings's, which need them for
-// different questions.
-func (w *walk) namedRole(st *xsd.SimpleType) (role idRole, list, decided bool) {
+// ·IDREF value· per list item and ENTITIES one ·ENTITY value·, an atomic type
+// exactly one. It answers for the chain alone and walks into no {item type
+// definition} or {member type definitions} — those are candidate's and
+// roleValues's, which need them for different questions.
+func (w *walk) namedRole(st *xsd.SimpleType) (role valueRole, list, decided bool) {
 	for t := st; t != nil; {
 		switch t.Name() {
 		case idName:
-			return idRoleDeclare, false, true
+			return roleIDDeclare, false, true
 		case idrefName:
-			return idRoleReference, false, true
+			return roleIDReference, false, true
 		case idrefsName:
-			return idRoleReference, true, true
+			return roleIDReference, true, true
+		case entityName:
+			return roleEntity, false, true
+		case entitiesName:
+			return roleEntity, true, true
 		}
 		if t.IsAnySimpleType() {
 			break
 		}
 		base, err := t.Base(w.schema)
 		if err != nil {
-			return idRoleNone, false, false
+			return roleNone, false, false
 		}
 		if base == t {
 			break
 		}
 		t = base
 	}
-	return idRoleNone, false, true
+	return roleNone, false, true
 }
 
-// idBindings is what one item's ·actual value· contributes to the [ID/IDREF
-// table]: every ·ID value· and ·IDREF value· in it, each classified by its own
-// ·validating type· (§3.16.4, key-vtype) and not by the ·governing type
-// definition· idCandidate admitted the item on. §3.17.5.2's ·ID value· is
-// "one whose ·validating type· is or is ·derived· from ID" (key-TYPE-value), so
-// a union of ID and string contributes nothing for a value the string member
-// validated.
+// roleValues is every ·ID value·, ·IDREF value· and ·ENTITY value· in one
+// item's ·actual value·, each classified by its own ·validating type· (§3.16.4,
+// key-vtype) and not by the ·governing type definition· a candidacy test
+// admitted the item on. §3.17.5.2's ·ID value· is "one whose ·validating type·
+// is or is ·derived· from ID" (key-TYPE-value), so a union of ID and string
+// contributes nothing for a value the string member validated, and an ·ENTITY
+// value· is read on the same terms. The [ID/IDREF table] takes the ID roles off
+// the result (idRecord) and String Valid clause 3 the ENTITY one
+// (cvcsimpletype.go).
 //
 // The two arms are key-vtype's two clauses. Clause 1 fixes the type of the whole
 // value, which for a union is the ·active basic member· (validatingType); where
-// that type is ID, IDREF or IDREFS the value is read straight off the lexical.
-// Clause 2 is the list case, "the validating type of an (atomic) item value A
+// that type has a namedRole the value is read straight off the lexical. Clause
+// 2 is the list case, "the validating type of an (atomic) item value A
 // occurring in V", decided PER ITEM — so a list of a union of ID and string
 // contributes a binding for the tokens the ID member validated and nothing for
 // the rest, within one value.
@@ -434,7 +466,7 @@ func (w *walk) namedRole(st *xsd.SimpleType) (role idRole, list, decided bool) {
 // makes each member scan below find a member at all: the same dispatch accepted
 // it (§4.1.4 cl.2.3). A scan that finds none is a decline, on validatingType's
 // terms.
-func (w *walk) idBindings(st *xsd.SimpleType, lexical string, owner Element) ([]idBinding, bool) {
+func (w *walk) roleValues(st *xsd.SimpleType, lexical string, owner Element) ([]roleValue, bool) {
 	t, decided := w.validatingType(st, lexical, owner)
 	if !decided {
 		return nil, false
@@ -443,13 +475,13 @@ func (w *walk) idBindings(st *xsd.SimpleType, lexical string, owner Element) ([]
 	if !decided {
 		return nil, false
 	}
-	if role != idRoleNone {
-		values := idValues(lexical, list)
-		bindings := make([]idBinding, 0, len(values))
-		for _, v := range values {
-			bindings = append(bindings, idBinding{value: v, role: role})
+	if role != roleNone {
+		tokens := valueTokens(lexical, list)
+		values := make([]roleValue, 0, len(tokens))
+		for _, v := range tokens {
+			values = append(values, roleValue{value: v, role: role})
 		}
-		return bindings, true
+		return values, true
 	}
 	variety, err := t.Variety(w.schema)
 	if err != nil {
@@ -462,23 +494,23 @@ func (w *walk) idBindings(st *xsd.SimpleType, lexical string, owner Element) ([]
 	if err != nil || item == nil {
 		return nil, false
 	}
-	return w.idItemBindings(item, lexical, owner)
+	return w.itemRoleValues(item, lexical, owner)
 }
 
-// idItemBindings is key-vtype clause 2 over one list value: each item of it gets
+// itemRoleValues is key-vtype clause 2 over one list value: each item of it gets
 // its own ·validating type·, "the basic member of I's transitive membership
 // which actually validated the substring in N that corresponds to A" where the
-// {item type definition} I is a union, and an item whose type is neither ID nor
-// IDREF simply contributes nothing beside the items that are.
+// {item type definition} I is a union, and an item whose type has no role
+// simply contributes nothing beside the items that do.
 //
 // The item type is where the descent ends: cos-st-restricts clause 2.1
 // (§3.16.6.2) admits an {item type definition} whose {variety} is atomic, or
 // union with "no types whose {variety} is list among the union's transitive
 // membership", so no item of a list is itself a list and there is no second
 // split to make.
-func (w *walk) idItemBindings(item *xsd.SimpleType, lexical string, owner Element) ([]idBinding, bool) {
-	var bindings []idBinding
-	for _, f := range idValues(lexical, true) {
+func (w *walk) itemRoleValues(item *xsd.SimpleType, lexical string, owner Element) ([]roleValue, bool) {
+	var values []roleValue
+	for _, f := range valueTokens(lexical, true) {
 		t, decided := w.validatingType(item, f, owner)
 		if !decided {
 			return nil, false
@@ -487,12 +519,12 @@ func (w *walk) idItemBindings(item *xsd.SimpleType, lexical string, owner Elemen
 		if !decided {
 			return nil, false
 		}
-		if role == idRoleNone {
+		if role == roleNone {
 			continue
 		}
-		bindings = append(bindings, idBinding{value: f, role: role})
+		values = append(values, roleValue{value: f, role: role})
 	}
-	return bindings, true
+	return values, true
 }
 
 // validatingType is key-vtype clause 1: the ·validating type· of a value is the
@@ -522,11 +554,14 @@ func (w *walk) validatingType(st *xsd.SimpleType, lexical string, owner Element)
 	return t, true
 }
 
-// The three built-in types §3.17.5.2 clause 3 names by hand.
+// The three built-in types §3.17.5.2 clause 3 names by hand, and the two whose
+// values String Valid clause 3 reads (key-TYPE-value).
 var (
-	idName     = xsd.QName{Space: xsd.XMLSchemaNS, Local: "ID"}
-	idrefName  = xsd.QName{Space: xsd.XMLSchemaNS, Local: "IDREF"}
-	idrefsName = xsd.QName{Space: xsd.XMLSchemaNS, Local: "IDREFS"}
+	idName       = xsd.QName{Space: xsd.XMLSchemaNS, Local: "ID"}
+	idrefName    = xsd.QName{Space: xsd.XMLSchemaNS, Local: "IDREF"}
+	idrefsName   = xsd.QName{Space: xsd.XMLSchemaNS, Local: "IDREFS"}
+	entityName   = xsd.QName{Space: xsd.XMLSchemaNS, Local: "ENTITY"}
+	entitiesName = xsd.QName{Space: xsd.XMLSchemaNS, Local: "ENTITIES"}
 )
 
 // attributeType is the ·governing type definition· of one attribute

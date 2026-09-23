@@ -47,11 +47,6 @@ const ruleCvcComplexContent xsderr.Rule = "cvc-complex-content"
 //     [[child]], concatenated in order (Glossary) — ·valid· with respect to the
 //     {simple type definition} per String Valid (§3.16.4). The first half is
 //     settled per child, the second only once the [[children]] are exhausted.
-//
-//     GAP(validate): String Valid clause 3, "every ·ENTITY value· in V is a
-//     ·declared entity name·", is not checked for an ·initial value· any more
-//     than it is for an attribute's; cvcattribute.go's file comment states the
-//     withheld property and the direction of the fail-open for both (#773).
 //   - 1.3, element-only: no character information item [[children]] other than
 //     XML 1.1 white space.
 //   - 1.4, element-only or mixed: the sequence of element information items,
@@ -589,8 +584,9 @@ func (c *contentCheck) fixedActualValue(w *walk, f xsd.ValueConstraint) {
 // stringValid runs String Valid (§3.16.4) over this element's ·initial value· —
 // the string composed, in order, of the [[character code]] of each character
 // information item in E.[[children]] (Glossary, ·initial value·) — against st,
-// and reports the verdict: decided false where this package withholds one, and
-// otherwise a nil verdict for a ·valid· value and the datatype rejection for an
+// and reports the verdict on [walk.stringValid]'s terms: decided false where
+// this package withholds one, and otherwise a nil verdict for a ·valid· value
+// and the rejection — Datatype Valid's, or String Valid clause 3's — for an
 // invalid one.
 //
 // Two clauses ask it of the same string, and the CHARGE is each caller's own
@@ -603,8 +599,8 @@ func (c *contentCheck) fixedActualValue(w *walk, f xsd.ValueConstraint) {
 // st needs no resolution, unlike the {type definition} the attribute charges
 // reach through — a ·governing type definition· is the component itself, and
 // [xsd.SimpleContent] carries one that [xsd.NewComplexType] rejects a nil of
-// (ct-props-correct clause 1) — so the one decline below is the whole of what
-// these charges withhold.
+// (ct-props-correct clause 1) — so the declines of [walk.stringValid] are the
+// whole of what these charges withhold.
 //
 // The string tested is [contentCheck.assessed]'s and not c.initial, because
 // cvc-elt clause 5 dispatches BEFORE cvc-type reaches either rule and its two
@@ -622,7 +618,8 @@ func (c *contentCheck) fixedActualValue(w *walk, f xsd.ValueConstraint) {
 // [value.IsDatatypeVerdict] classification: an ungoverned simple type reports
 // under cvc-datatype-valid exactly as a genuine rejection does, and charging it
 // would reject every element whose character content this backend cannot read
-// (#774).
+// (#774). An undecidable ·validating type· withholds String Valid clause 3's
+// verdict on the terms [walk.entitiesDeclared] states.
 //
 // st's assertion sites are recorded BEFORE the decline ([walk.simpleAssertions],
 // cvcassertion.go), because it leaves the element's ·initial value· to be read
@@ -635,14 +632,7 @@ func (c *contentCheck) stringValid(w *walk, st *xsd.SimpleType) (decided bool, v
 	if !c.nilled {
 		w.simpleAssertions(st, c.e.Loc())
 	}
-	_, err := value.ValidateLexical(w.backend, w.schema, st, c.assessed(), elementContext{owner: c.e})
-	if err == nil {
-		return true, nil
-	}
-	if !value.IsDatatypeVerdict(err) {
-		return false, nil
-	}
-	return true, err
+	return w.stringValid(st, c.assessed(), c.e, c.e.Loc())
 }
 
 // simpleTypeValue settles cvc-type clause 3.1.3: where E is not ·nilled·, its

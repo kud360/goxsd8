@@ -32,6 +32,14 @@
 //     GAP(xml): UTF-16 without a mark, declared only by encoding=, is
 //     not decoded — it fails well-formedness rather than being read.
 //     Tracked by #361.
+//   - The DOCTYPE's internal subset is read for its unparsed entity
+//     declarations (<!ENTITY name SYSTEM|PUBLIC ... NDATA notation>), the
+//     document's [unparsed entities] property, answered by
+//     Reader.HasUnparsedEntity and final once the document element's start
+//     tag is read. It surfaces as no Node: a prolog fact is not part of the
+//     element/character-data stream. The external subset is never read and
+//     a parameter entity never expanded, so an entity declared only through
+//     either is not a member.
 //
 // Fuzz targets guard the reader against panics on malformed input
 // (PRINCIPLES 24); malformed XML is an error value, never a crash.
