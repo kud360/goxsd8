@@ -27,7 +27,7 @@ import (
 // DTD subset, and parser/xmltree expands no parameter entity — so an unparsed
 // entity declared only through either is not a member, and an ·ENTITY value·
 // naming it is charged as undeclared. The direction is fail-CLOSED: the set's
-// one reader, [walk.entitiesDeclared], charges on a name the set lacks (#773).
+// one reader, [walk.entitiesDeclared], charges on a name the set lacks (#1668).
 
 // ruleCvcAttribute is Attribute Locally Valid (Structures §3.2.4.1,
 // cvc-attribute). The clause charged goes in the message on ruleCvcElt's
