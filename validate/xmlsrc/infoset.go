@@ -88,6 +88,15 @@ func (e *element) LookupPrefix(prefix string) (string, bool) {
 
 func (e *element) Loc() xsderr.Loc { return e.start.Loc() }
 
+// HasUnparsedEntity answers from the document's DOCTYPE through the shared
+// reader, which keeps the only copy of the declarations. Every element of one
+// document therefore gives one answer, and it is final by the time any element
+// exists: the walk yields none before the document element's start tag is read
+// (see [xmltree.Reader.HasUnparsedEntity]).
+func (e *element) HasUnparsedEntity(name string) bool {
+	return e.w.r.HasUnparsedEntity(name)
+}
+
 // attribute is one attribute information item. xsi:type, xsi:nil,
 // xsi:schemaLocation and xsi:noNamespaceSchemaLocation arrive through it
 // like any other attribute: §2.7's note makes them attribute information
