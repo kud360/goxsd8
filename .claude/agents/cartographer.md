@@ -73,12 +73,28 @@ body says so.
    records in consecutive sessions outranks a lane slice: the tax
    compounds, the fix is usually one session, and ranking on lane movement
    alone starves that queue until a retro re-diagnoses friction that was
-   already filed and specified (#527, #565). **A `kind/refactor` carrying
-   a steward cost-of-delay ranking is banded on that ranking**, for the
-   same reason and with the same failure mode: a divergence the steward
-   measured as increasing outranks a lane slice, and nothing else will
-   ever lift it, because a refactor moves no lane by construction and
-   costs no per-session friction to compound (#843).
+   already filed and specified (#527, #565).
+
+   **Band a `kind/refactor` on a measured cost of delay, never on a
+   ranking word.** A refactor moves no lane and compounds no per-session
+   friction, so nothing else lifts it (#1499). It is **measured** when
+   its body's `## Cost of delay` section states a figure that repeats
+   exactly across runs on the same commit AND the command that
+   reproduces it — a `git grep -c` copy count, a `go tool surface` line,
+   or the `allocs/op` of a `go test -bench -benchmem` result. A benchmark
+   prints several figures, so its section names which one it records.
+   **`ns/op`, every other timing figure, and `B/op` never qualify**: each
+   varies between runs on one commit. Who produced the figure does not
+   matter: a steward audit and an adjacent landing's `allocs/op` count
+   alike (#1589). Anything else is **unmeasured** — no section, a section
+   without a command, a figure that varies between runs, or a ranking
+   word such as "stable debt" or "Ranked #4". Re-run
+   each measured refactor's command on the stamp's commit, compare its
+   figure with the value the body recorded, then write the new figure in
+   that value's place: a measured refactor enters the band, and one whose
+   figure grew past the recorded value outranks a lane slice. An
+   unmeasured refactor is ordered by dependency alone, and no stamp
+   carries a line owing it a ranking.
 5. **Fold in the persona stories the orchestrating session hands you.**
    You never role-play a persona yourself — you have read the source, so
    your verdict would launder an insider's opinion as an outsider's, which
@@ -116,6 +132,9 @@ Fill every section; write "n/a" or "none" rather than dropping one.
 ## Depends on
 <#N, #M — or "none">
 ```
+
+A `kind/refactor` adds `## Cost of delay`: the figure and the command that
+reproduces it, or "unmeasured" (step 4 says what each bands on).
 
 **The body states the decision; the thread holds the reasoning.** An agent
 must be able to start from the body alone, which is a floor on its

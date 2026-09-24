@@ -11,10 +11,10 @@ appending to them. Land the result as a `meta: retro <date>` commit,
 opened and squash-merged as a PR in this same session.
 
 **Part 2 — architecture audit.** Delegate to the **steward** for its full
-audit. Code findings become `kind/refactor` issues ranked by
-cost-of-delay; doc corrections land in a `meta: audit <date>` commit in
-the same session; code moves are never made here — they go through the
-develop loop.
+audit. Code findings become `kind/refactor` issues carrying the
+steward's `## Cost of delay`; doc corrections land in a
+`meta: audit <date>` commit in the same session; code moves are never
+made here — they go through the develop loop.
 
 Neither agent can be assumed to hold a GitHub channel and the steward's
 tools are read-only, so **this session files what they return** — tooling
