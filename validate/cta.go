@@ -122,9 +122,7 @@ func (w *walk) conditionallySelected(e Element, table xsd.TypeTable) (xsd.TypeDe
 // ·expanded names· no attribute of E already has) are NOT merged in, so a
 // {test} reading an attribute e does not carry directly sees the empty
 // sequence, and a WILDCARD NameTest (`@*`, `@p:*`, `@*:n`) ranges over e's own
-// [[attributes]] alone. §3.3.5.6's inheritance mechanism is unimplemented, and
-// {inheritable} is not read on global attribute declarations at all (#831),
-// which is the precondition for merging correctly.
+// [[attributes]] alone. §3.3.5.6's inheritance mechanism is unimplemented.
 //
 // The DIRECTION of this gap is UNESTABLISHED (STYLE P3a), not fail-open. The
 // value withheld is one operand of a general comparison, and its readers are
