@@ -199,7 +199,7 @@ func (w *walk) idAttributes(c *icCheck) {
 // constraints may play a part" — because cvc-complex-type clause 4 supplies the
 // item and its ·actual value· is the constraint's. This package does not
 // synthesize the item, so the id it would declare is one cvc-id never saw, and
-// clause 1 would charge an empty binding for it (#774).
+// clause 1 would charge an empty binding for it (#1676).
 func (w *walk) idDefaultedAttributes(c *icCheck, attrs []Attribute, ct xsd.ComplexType) {
 	for _, u := range ct.AttributeUses() {
 		if u.Required() || hasAttributeNamed(attrs, u.DeclarationName()) {
