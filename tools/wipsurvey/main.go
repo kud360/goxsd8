@@ -173,14 +173,13 @@ func main() {
 
 // run drives the survey end to end: discover every head from the remote,
 // read optional issue data from stdin, classify the wip/issue-<N>
-// branches, and render the report — the classified table first, then the
-// parked/* section and the section for heads in neither namespace. A
-// wip/ branch whose name does not fit the wip/issue-<N> shape is skipped
-// with a warning to stderr rather than aborting the whole report — an
-// unexpected refs/heads/wip/* branch is evidence worth a warning, not a
-// reason to withhold every other row. A fed list missing `state` is the
-// same kind of evidence, and stronger: run renders every section with that
-// list discarded and returns its error last, so main still exits 2.
+// branches, and render the report ([renderReport]). A wip/ branch whose
+// name does not fit the wip/issue-<N> shape is skipped with a warning to
+// stderr rather than aborting the whole report — an unexpected
+// refs/heads/wip/* branch is evidence worth a warning, not a reason to
+// withhold every other row. A fed list missing `state` is the same kind of
+// evidence, and stronger: run discards that list and hands its error to
+// renderReport, which owns when it is returned.
 func run(stdout, stderr io.Writer, stdin io.Reader, now time.Time) error {
 	buckets, err := remoteRefs()
 	if err != nil {
@@ -201,8 +200,7 @@ func run(stdout, stderr io.Writer, stdin io.Reader, now time.Time) error {
 		parsed = append(parsed, br)
 	}
 
-	// A feed missing `state` is reported only after the report prints, so
-	// the leases it could not spoil still reach the reader.
+	// A feed missing `state` is not fatal here: renderReport returns it.
 	issues, feedErr := readIssues(stdin)
 	if feedErr != nil && !errors.Is(feedErr, errMissingState) {
 		return feedErr
@@ -241,13 +239,23 @@ func run(stdout, stderr io.Writer, stdin io.Reader, now time.Time) error {
 	}
 	sortOtherRows(others)
 
-	if err := renderTable(stdout, rows); err != nil {
+	return renderReport(stdout, rows, branchNames(buckets.parked), others, feedErr)
+}
+
+// renderReport writes the whole report to w — the classified table, then
+// the parked/* section, then the section for heads in neither namespace —
+// and returns the first write error. Absent one it renders every section
+// and only then returns feedErr, the error run was handed by readIssues, so
+// a fed list missing `state` still prints the leases it could not spoil
+// before main exits 2 (#1604).
+func renderReport(w io.Writer, rows []row, parked []string, others []otherRow, feedErr error) error {
+	if err := renderTable(w, rows); err != nil {
 		return err
 	}
-	if err := renderParked(stdout, branchNames(buckets.parked)); err != nil {
+	if err := renderParked(w, parked); err != nil {
 		return err
 	}
-	if err := renderOther(stdout, others); err != nil {
+	if err := renderOther(w, others); err != nil {
 		return err
 	}
 	return feedErr
@@ -719,8 +727,8 @@ func newestHeartbeat(comments []ghComment) *time.Time {
 // claim goes undated.
 //
 // The state field is not optional: a list with any row lacking it returns
-// a nil map and an error wrapping errMissingState ([missingState]), which
-// run reports after rendering every branch lease-only.
+// a nil map and an error wrapping errMissingState ([missingState]); run
+// judges every branch lease-only and hands that error to [renderReport].
 func readIssues(r io.Reader) (map[int]issueState, error) {
 	dec := json.NewDecoder(r)
 	var raw []ghIssue
