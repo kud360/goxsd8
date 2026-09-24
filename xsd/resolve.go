@@ -72,13 +72,20 @@ var anyTypeName = QName{Space: XMLSchemaNS, Local: "anyType"}
 //     every simple-type base chain as already resolved. Its walk carries no
 //     visited set, for the reason its own doc records. It then MATERIALISES the
 //     two attribute-side properties whose mapping rules a producer cannot
-//     finish, because each needs the resolved base: {attribute
-//     uses}, whose §3.4.2.4 clause 3 folds the {base type definition}'s uses
-//     into every complex type's own (attributeusefold.go, #401), and {attribute
-//     wildcard}, whose §3.4.2.5 clause 2.2 unions an EXTENSION's own ·complete
-//     wildcard· with its ·base wildcard· (attributewildcardfold.go, #265). The
-//     two are independent properties, so their relative order carries no
-//     verdict; both precede the checks. It then rejects the derivation-relative
+//     finish, in three folds. The first takes §3.6.2.1's and §3.6.2.2's
+//     transitive closure over the <attributeGroup ref>s Phase A resolved, into
+//     every attribute group definition and complex type alike — §3.4.2.4
+//     clause 2 and §3.4.2.5 clause 1 for a type (attributegroupfold.go, #479);
+//     it runs first because the other two start from the clause 1 and 2 value
+//     it produces. The second folds {attribute uses}' §3.4.2.4 clause 3, the
+//     {base type definition}'s uses, into every complex type's own
+//     (attributeusefold.go, #401), and the third {attribute wildcard}'s
+//     §3.4.2.5 clause 2.2, which unions an EXTENSION's own ·complete wildcard·
+//     with its ·base wildcard· (attributewildcardfold.go, #265). Those two are
+//     independent properties, so their relative order carries no verdict; all
+//     three precede the checks, the first of which is ag-props-correct (§3.6.6)
+//     clause 2 over every folded attribute group definition
+//     (checkAttributeGroupUsesUnique). It then rejects the derivation-relative
 //     constraints that need that resolved base — the ct-props-correct (§3.4.6.1)
 //     clauses 2 and 4, derivation-ok-restriction (§3.4.6.3) for every
 //     restriction-derived complex type, and cos-ct-extends (§3.4.6.2) for every
@@ -172,14 +179,20 @@ var anyTypeName = QName{Space: XMLSchemaNS, Local: "anyType"}
 // behind a reference obtains it by a read-time index lookup
 // (schema.Type/Element/Attribute), never from a resolved pointer this pass
 // produced — that pointer would be state derivable from the QName plus the index
-// (STYLE D3). Its only mutations are Phase D's two folds, which are mapping rules
-// finished rather than references cached: each overwrites a property with the
-// value its §3.4.2 rule defines, leaving one encoding of it and not two (see
-// foldAttributeUses and foldAttributeWildcards). Each writes into every root that
-// can OWN a complex type — {type definitions}, {element declarations}, {model
-// group definitions} and the <redefine> originals, with the by-name index derived
-// from each — because a folded type is observable only through the slot holding
-// it (ownedtypefold.go).
+// (STYLE D3). Its only mutations are Phase D's three folds, which are mapping
+// rules finished rather than references cached: each overwrites a property with
+// the value its §3.4.2 or §3.6.2 rule defines, leaving one encoding of it and not
+// two (see foldAttributeGroupReferences, foldAttributeUses and
+// foldAttributeWildcards). Each writes into every root that can OWN a complex
+// type — {type definitions}, {element declarations}, {model group definitions}
+// and the <redefine> originals, with the by-name index derived from each —
+// because a folded type is observable only through the slot holding it
+// (ownedtypefold.go); the first writes {attribute group definitions} and their
+// <redefine> originals too. The attribute group fold also CONSUMES the one kind
+// of reference this pass resolves by rewriting — every AttributeGroupRef — and
+// that is no cached resolution either: §3.6.2.1 says such a ref "does not
+// correspond to any component as such", so the property it contributes to is
+// the only place its target was ever meant to appear.
 //
 // An absent reference is skipped, not treated as dangling: absence — a zero
 // QName in a bare-QName slot, a nil TypeDefinitionOrRef in a {type definition}
@@ -187,24 +200,25 @@ var anyTypeName = QName{Space: XMLSchemaNS, Local: "anyType"}
 // present-but-unresolvable reference is a failure. That skip is reachable only
 // from the genuinely OPTIONAL reference slots (a ComplexType with no {base type
 // definition} name, an ElementDeclaration with no {type definition}, for
-// instance); it can never mask a mandatory reference, because the four ref-only
+// instance); it can never mask a mandatory reference, because the five ref-only
 // sum variants — AttributeDeclarationRef, ElementDeclarationRef, ModelGroupRef,
-// TypeDefinitionRef — cannot hold a zero QName in the first place:
-// NewAttributeUse, NewParticle, NewElementDeclaration and
-// NewAttributeDeclaration reject one at construction (STYLE T1).
+// TypeDefinitionRef, AttributeGroupRef — cannot hold a zero QName in the first
+// place: NewAttributeUse, NewParticle, NewElementDeclaration,
+// NewAttributeDeclaration and the attribute-content containers
+// (checkAttributeContent) reject one at construction (STYLE T1).
 //
 // FOLLOW-COST ASYMMETRY (recorded deliberately, not silently): Phase A wires
 // present-tense readers for the three Query views (Type/Element/Attribute
-// Resolvers) and for modelGroupIndex + idcIndex. It reads NEITHER
-// attributeGroupIndex NOR notationIndex — no in-scope reference resolves into
-// them yet (an <attributeGroup ref> is inlined at producer mapping time with no
-// persistent ref component, §3.6.2.1; nothing carries a NOTATION reference).
-// Schema.ModelGroup(QName) (#307) closed the modelGroupIndex half of the
-// asymmetry this paragraph used to record: a ModelGroupRef, like a
-// ModelGroupScopeParent (elementdeclaration.go), is followable today the same
-// read-time-lookup way the three Query views are, and needed no new Resolver
-// interface (no consumer takes one, unlike Type/Element/Attribute). Because
-// resolution is still validation-only, this package exposes no
+// Resolvers) and for modelGroupIndex, attributeGroupIndex and idcIndex. It reads
+// no notationIndex — nothing carries a NOTATION reference. Schema.ModelGroup
+// (QName) (#307) closed the modelGroupIndex half of the asymmetry this paragraph
+// used to record: a ModelGroupRef, like a ModelGroupScopeParent
+// (elementdeclaration.go), is followable today the same read-time-lookup way the
+// three Query views are, and needed no new Resolver interface (no consumer takes
+// one, unlike Type/Element/Attribute). An AttributeGroupRef needs no follower
+// either, for a different reason: the attribute group fold consumes every one
+// (attributegroupfold.go), so no finalized component holds a reference to
+// follow. Because resolution is still validation-only, this package exposes no
 // Schema.IdentityConstraint(name) accessor (STYLE 8 — export nothing without a
 // consumer): the cost of following a keyref at read time is shifted onto the
 // future Walker/Matcher and instance validator, which will need exactly that
@@ -241,10 +255,16 @@ func (s *Schema) resolve() error {
 	if err := s.checkSimpleTypeDerivations(); err != nil {
 		return err
 	}
+	if err := s.foldAttributeGroupReferences(); err != nil {
+		return err
+	}
 	if err := s.foldAttributeUses(); err != nil {
 		return err
 	}
 	if err := s.foldAttributeWildcards(); err != nil {
+		return err
+	}
+	if err := s.checkAttributeGroupUsesUnique(); err != nil {
 		return err
 	}
 	if err := s.checkComplexDerivations(); err != nil {
@@ -305,15 +325,14 @@ func (s *Schema) resolveReferences() error {
 		}
 	}
 	// {attribute group definitions} (§3.17.1), whose reference sites are an
-	// <attribute ref> and a local <attribute>'s type= (src-resolve clauses 1.2 and
-	// 1.1). A definition's {attribute uses} are its own components: the producer
-	// builds them for every top-level <attributeGroup> and splices a COPY into each
-	// complex type referencing it, since §3.6.2.1 inlines the ref at mapping time.
-	// Those copies are walked with their types above, so this loop is what reaches
-	// a definition NOTHING references. Re-charging the same names once per
-	// referencing type is bounded and harmless, and no visited set belongs here
-	// (PRINCIPLES 9): that same inlining leaves an Attribute Group Definition
-	// holding no edge to another one.
+	// <attribute ref>, a local <attribute>'s type= and an <attributeGroup ref>
+	// (src-resolve clauses 1.2, 1.1 and 1.4). This loop is the ONLY route to a
+	// definition's own members: a container referencing it holds an
+	// AttributeGroupRef, which the descent charges and never follows, and the fold
+	// that copies the members into each referencing container runs after this
+	// phase. No visited set belongs here (PRINCIPLES 9): the one edge between two
+	// definitions, the <attributeGroup ref>, is by-name and not followed, so a
+	// reference cycle — which §3.6.2.1 permits — is never walked round.
 	for _, g := range s.attributeGroups {
 		if err := w.walkAttributeGroupDefinition(g); err != nil {
 			return err
@@ -373,6 +392,7 @@ func (s *Schema) referenceWalk() componentWalk {
 	return componentWalk{
 		typeDefinitionSlot: s.resolveTypeDefinitionSlot,
 		attributeUse:       s.resolveAttributeUse,
+		attributeGroupRef:  s.resolveAttributeGroupRef,
 		elementDeclaration: s.resolveElementDecl,
 		simpleType:         s.resolveSimpleType,
 		termRef:            s.resolveTermRef,
@@ -499,6 +519,28 @@ func (s *Schema) resolveModelGroupName(ref QName, loc xsderr.Loc, ctx string) er
 	if _, ok := s.modelGroupIndex[ref]; !ok {
 		return xsderr.New(ruleSrcResolve, loc,
 			"%s references model group definition %s, but no model group definition with that expanded name is present in the schema (src-resolve clause 1.5)", ctx, ref)
+	}
+	return nil
+}
+
+// resolveAttributeGroupRef resolves an <attributeGroup ref> member of a
+// container's attribute content (src-resolve clause 1.4) against
+// attributeGroupIndex directly. It never descends the definition it finds: that
+// definition is a root of this phase in its own right (resolveReferences), and
+// the §3.6.2.1 closure that does follow the edge is the attribute group fold's
+// (attributegroupfold.go), which relies on this check having passed. loc is the
+// container's position, since a member retains none of its own; owner names the
+// container. The member may be a reference the author never wrote as a child —
+// the one §3.4.2.4 synthesizes on a complex type from <schema defaultAttributes>
+// — so the message names both sources rather than asserting an <attributeGroup
+// ref> child exists.
+//
+// An AttributeGroupRef cannot carry the absent QName (checkAttributeContent), so
+// unlike the other by-name helpers this one has no absent case to skip.
+func (s *Schema) resolveAttributeGroupRef(r AttributeGroupRef, loc xsderr.Loc, owner string) error {
+	if _, ok := s.attributeGroupIndex[r.Name]; !ok {
+		return xsderr.New(ruleSrcResolve, loc,
+			"%s references attribute group definition %s — through an <attributeGroup ref> child, or, on a complex type, the reference §3.4.2.4 synthesizes from <schema defaultAttributes> — but no attribute group definition with that expanded name is present in the schema (src-resolve clause 1.4)", owner, r.Name)
 	}
 	return nil
 }

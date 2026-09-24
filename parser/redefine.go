@@ -59,7 +59,7 @@ import (
 // derive from or contain itself — so the FOUR resolution sites that can meet a
 // self-reference each consult the set first: resolveBase (a simple type's base=)
 // and redefinedComplexBase (a complex type's, both produce.go),
-// produceGroupRefParticle (a <group ref>) and collectReferencedGroup (an
+// produceGroupRefParticle (a <group ref>) and attributeGroupMember (an
 // <attributeGroup ref>, both produce_complex.go).
 //
 // # The complex-type pairing (#505)
@@ -729,13 +729,14 @@ func (p *producer) prescanRedefine(el *Element) error {
 		}
 		qn := xsd.QName{Space: p.target, Local: e.key.name}
 		src := typeSource{elem: decl, owner: p}
+		// An <attributeGroup> has no source index to enter: an <attributeGroup
+		// ref> resolves against xsd's {attribute group definitions} at finalize,
+		// which produceRedefinition's own build of this declaration enters.
 		switch e.key.kind {
 		case "simpleType":
 			p.symbols.simpleTypes[qn] = src
 		case "complexType":
 			p.symbols.complexTypes[qn] = src
-		case "attributeGroup":
-			p.symbols.attributeGroups[qn] = src
 		case "group":
 			p.symbols.modelGroups[qn] = src
 		}

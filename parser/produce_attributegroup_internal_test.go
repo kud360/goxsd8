@@ -8,25 +8,22 @@ import (
 	"github.com/kud360/goxsd8/xsd"
 )
 
-// This test is package-internal because the agreement it pins is not observable
-// from outside: xsd.Schema exposes no AttributeGroup(QName) accessor (STYLE T5 —
-// none is exported until a caller justifies it), so the top-level Attribute Group
-// Definition component that run() hands to AddAttributeGroup cannot be read back
-// after Finalize and compared with the copy folded into a referencing complex
-// type. Driving the two producers directly is the only way to put the two
-// foldings side by side.
+// This test is package-internal because what it pins is the PRODUCER's output
+// before Finalize, which no exported surface shows: a complex type naming an
+// <attributeGroup> is handed the REFERENCE, never a re-mapping of the group's
+// source elements (#479), and the group's own component — built once, under the
+// DECLARING document's producer — is the only place the group's attributes are
+// declared. §3.4.2.4 clause c-add2 unions the ALREADY-RESOLVED component
+// property, so after Finalize the referencing type holds exactly those
+// declarations; TestParseAttributeGroupFoldedUnderItsOwnProducer pins that half
+// through Parse.
 //
-// The two foldings are §3.6.2.1's {attribute uses} of the group itself and
-// §3.4.2.4 clause c-add2's contribution of that same property to a complex type
-// that names the group. c-add2 is a union of the ALREADY-RESOLVED component
-// property, so the two must agree — an assembly holding a {urn:x}a in G's own
-// component and a {}a in T's would be exactly the #368 bug, and would go
-// unnoticed by any test that reads only one of the two sites.
-func TestAttributeGroupComponentAndInlineFoldAgree(t *testing.T) {
+// A chameleon fixture makes the distinction observable: every property under
+// test is decided by the declaring document, so a re-mapping under root.xsd's
+// producer would mint {}a typed {}Local — the #368 bug — where the component
+// holds {urn:x}a typed {urn:x}Local.
+func TestAttributeGroupReferenceIsNotRemapped(t *testing.T) {
 	const xs = `xmlns:xs="http://www.w3.org/2001/XMLSchema"`
-	// A chameleon: no targetNamespace of its own, its own attributeFormDefault,
-	// and an unqualified type= naming a sibling — every property under test is
-	// decided by THIS document, so a fold under root.xsd's producer disagrees.
 	const chameleon = `<xs:schema ` + xs + ` attributeFormDefault="qualified">` +
 		`<xs:simpleType name="Local"><xs:restriction base="xs:string"/></xs:simpleType>` +
 		`<xs:attributeGroup name="G"><xs:attribute name="a" type="Local"/></xs:attributeGroup>` +
@@ -60,50 +57,43 @@ func TestAttributeGroupComponentAndInlineFoldAgree(t *testing.T) {
 		t.Fatalf("prescan(root): %v", err)
 	}
 
+	gName := xsd.QName{Space: "urn:x", Local: "G"}
 	group := childElement(basep.schemaElem, xsd.XMLSchemaNS, "attributeGroup")
-	ag, err := basep.buildAttributeGroup(xsd.QName{Space: "urn:x", Local: "G"}, group)
+	ag, err := basep.buildAttributeGroup(gName, group)
 	if err != nil {
 		t.Fatalf("buildAttributeGroup: %v", err)
 	}
 	tName := xsd.QName{Space: "urn:x", Local: "T"}
 	ctElem := childElement(rootp.schemaElem, xsd.XMLSchemaNS, "complexType")
-	inlined, _, _, err := rootp.produceAttributeUses(ctElem, ctElem,
+	content, _, wildcard, err := rootp.produceAttributeUses(ctElem, ctElem,
 		attributeScopeParentOf(namedComplexType{name: tName}))
 	if err != nil {
 		t.Fatalf("produceAttributeUses: %v", err)
 	}
 
+	if len(content) != 1 || content[0] != xsd.AttributeUseOrGroupRef(xsd.AttributeGroupRef{Name: gName}) {
+		t.Fatalf("complex type T's attribute content = %#v, want the one reference to {urn:x}G and nothing mapped from G's body", content)
+	}
+	if wildcard != nil {
+		t.Errorf("complex type T's local wildcard = %v, want none: T writes no <anyAttribute>, and G's is folded in at finalize", wildcard)
+	}
 	own := attributeUseNames(t, ag.AttributeUses())
-	folded := attributeUseNames(t, inlined)
 	if len(own) != 1 || own[0] != "{urn:x}a:{urn:x}Local" {
 		t.Fatalf("{urn:x}G's own {attribute uses} = %v, want one {urn:x}a typed {urn:x}Local", own)
 	}
-	if len(folded) != len(own) || folded[0] != own[0] {
-		t.Errorf("complex type T folded %v but {urn:x}G's own component holds %v — c-add2 unions the component's already-resolved property, so the two foldings must agree", folded, own)
-	}
-
-	// {scope}.{parent} (§3.2.1 sc_a) is part of that agreement, and it is where
-	// the two foldings would silently diverge: the inline walk descends the
-	// group's source elements from a COMPLEX TYPE, so a threading that forwarded
-	// T's own parent would scope {urn:x}a to T here and to G in G's component.
-	// §3.2.2.2 dcl.att.local settles it — the <attribute> is a child of the
-	// top-level <attributeGroup> and has no <complexType> ancestor, so its
-	// {parent} is G whichever type reached it.
-	wantParent := xsd.AttributeScopeParent(xsd.AttributeGroupScopeParent{Name: xsd.QName{Space: "urn:x", Local: "G"}})
-	ownParent := attributeUseScopeParent(t, ag.AttributeUses()[0])
-	foldedParent := attributeUseScopeParent(t, inlined[0])
-	if ownParent != wantParent {
-		t.Errorf("{urn:x}G's own component scopes {urn:x}a to %#v, want %#v", ownParent, wantParent)
-	}
-	if foldedParent != wantParent {
-		t.Errorf("complex type T scopes the folded {urn:x}a to %#v, want %#v — an <attribute> inside a top-level <attributeGroup> has no <complexType> ancestor, so §3.2.2.2 dcl.att.local makes its {parent} the group, not the referencing type", foldedParent, wantParent)
+	// {scope}.{parent} (§3.2.1 sc_a): the <attribute> is a child of the
+	// top-level <attributeGroup> and has no <complexType> ancestor, so §3.2.2.2
+	// dcl.att.local makes its {parent} G, the one value every referrer inherits.
+	want := xsd.AttributeScopeParent(xsd.AttributeGroupScopeParent{Name: gName})
+	if got := attributeUseScopeParent(t, ag.AttributeUses()[0]); got != want {
+		t.Errorf("{urn:x}G's own component scopes {urn:x}a to %#v, want %#v", got, want)
 	}
 }
 
-// TestReferencedAttributeGroupAttributesScopedToGroup is the direct case behind
-// the agreement above, on the ordinary (non-chameleon, single-document) path: a
-// complex type C references attribute group G, and G's attribute reports G as its
-// {scope}.{parent}, never C.
+// TestReferencedAttributeGroupAttributesScopedToGroup is the direct case on the
+// ordinary (non-chameleon, single-document) path, read after Finalize: a complex
+// type C references attribute group G, and the attribute G contributes to C's
+// folded {attribute uses} reports G as its {scope}.{parent}, never C.
 func TestReferencedAttributeGroupAttributesScopedToGroup(t *testing.T) {
 	const doc = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:x" xmlns:tns="urn:x">` +
 		`<xs:attributeGroup name="G"><xs:attribute name="a" type="xs:string"/></xs:attributeGroup>` +
@@ -122,39 +112,27 @@ func TestReferencedAttributeGroupAttributesScopedToGroup(t *testing.T) {
 	}
 }
 
-// complexTypeAttributeUses produces the named top-level <complexType> of a
-// single-document schema and returns its {attribute uses}.
+// complexTypeAttributeUses produces and finalizes a single-document schema and
+// returns the {attribute uses} of its named top-level complex type.
 func complexTypeAttributeUses(t *testing.T, doc, name string) []xsd.AttributeUse {
 	t.Helper()
 	parsed, err := ReadDocument("mem://scope.xsd", strings.NewReader(doc))
 	if err != nil {
 		t.Fatalf("ReadDocument: %v", err)
 	}
-	builder := xsd.NewSchemaBuilder()
-	sym, err := newSymbols(builder, strict.New())
+	s, err := Produce(parsed, strict.New())
 	if err != nil {
-		t.Fatalf("newSymbols: %v", err)
+		t.Fatalf("Produce: %v", err)
 	}
-	p := newProducer(parsed, "urn:x", nil, nil, nil, builder, sym)
-	if err := p.prescan(); err != nil {
-		t.Fatalf("prescan: %v", err)
+	def, ok := s.Type(xsd.QName{Space: "urn:x", Local: name})
+	if !ok {
+		t.Fatalf("no top-level type {urn:x}%s in the fixture", name)
 	}
-	for _, child := range p.schemaElem.Children() {
-		el, ok := child.(*Element)
-		if !ok || el.Name().Space() != xsd.XMLSchemaNS || el.Name().Local() != "complexType" {
-			continue
-		}
-		if n, _ := el.Attr("name"); n != name {
-			continue
-		}
-		ct, err := p.produceComplexType(namedComplexType{name: xsd.QName{Space: "urn:x", Local: name}}, el)
-		if err != nil {
-			t.Fatalf("produceComplexType(%s): %v", name, err)
-		}
-		return ct.AttributeUses()
+	ct, ok := def.(xsd.ComplexType)
+	if !ok {
+		t.Fatalf("{urn:x}%s is a %T, want a complex type", name, def)
 	}
-	t.Fatalf("no top-level <complexType name=%q> in the fixture", name)
-	return nil
+	return ct.AttributeUses()
 }
 
 // attributeUseScopeParent reports the {scope}.{parent} of a use's sibling local
@@ -173,9 +151,10 @@ func attributeUseScopeParent(t *testing.T, u xsd.AttributeUse) xsd.AttributeScop
 	return parent
 }
 
-// attributeUseNames renders each attribute use as "name:type" so two foldings of
-// one group compare as plain strings; a use that is not a local declaration with
-// a by-name type fails the test, since neither shape can occur in this fixture.
+// attributeUseNames renders each attribute use as "name:type" so a use's
+// expanded name and type compare as one plain string; a use that is not a local
+// declaration with a by-name type fails the test, since neither shape can occur
+// in this fixture.
 func attributeUseNames(t *testing.T, uses []xsd.AttributeUse) []string {
 	t.Helper()
 	names := make([]string, 0, len(uses))

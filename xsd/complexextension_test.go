@@ -50,7 +50,7 @@ func TestValueConstraintSameRecordIgnoresNamespaceContext(t *testing.T) {
 func xType(t *testing.T, name, base QName, content ContentType, uses []AttributeUse, wildcard *Wildcard) ComplexType {
 	t.Helper()
 	ct, err := NewComplexType(xsderr.Loc{}, name, base, nil, DerivationExtension, false,
-		uses, nil, wildcard, content, nil, nil)
+		attributeUseMembers(uses), nil, wildcard, content, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType(%s): %v", name, err)
 	}
@@ -815,7 +815,7 @@ func oRedefiningRestriction(t *testing.T, name QName, originalUses []AttributeUs
 	t.Helper()
 	id := NewComponentID()
 	original, err := NewAnonymousComplexType(xsderr.Loc{}, ComplexTypeDefinitionContext{Component: id},
-		anyTypeName, nil, DerivationRestriction, false, originalUses, nil, nil, EmptyContent{}, nil, nil)
+		anyTypeName, nil, DerivationRestriction, false, attributeUseMembers(originalUses), nil, nil, EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAnonymousComplexType (the clause-1.1 original of %s): %v", name, err)
 	}

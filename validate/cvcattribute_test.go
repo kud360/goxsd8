@@ -58,7 +58,7 @@ func typedUse(t *testing.T, local string, typ xsd.QName, required bool, declVC, 
 func typedSchema(t *testing.T, uses []xsd.AttributeUse, extra ...*xsd.SimpleType) *xsd.Schema {
 	t.Helper()
 	ct, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Local: "RootType"}, xsd.QName{}, nil,
-		xsd.DerivationRestriction, false, uses, nil, nil, xsd.EmptyContent{}, nil, nil)
+		xsd.DerivationRestriction, false, attrContent(uses), nil, nil, xsd.EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("building RootType: %v", err)
 	}

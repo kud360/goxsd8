@@ -4,25 +4,24 @@ import "github.com/kud360/goxsd8/xsderr"
 
 // ruleAgPropsCorrect is Attribute Group Definition Properties Correct
 // (Structures §3.6.6, id="ag-props-correct"): an attribute group definition's
-// properties must match the §3.6.1 property tableau. This file enforces:
+// properties must match the §3.6.1 property tableau. This package enforces:
 //
-//   - clause 1 (tableau shape): {name} is present. The rest is satisfied by
-//     construction — the sum and optional-slot machinery already make an
-//     ill-formed {attribute uses} member or {attribute wildcard}
+//   - clause 1 (tableau shape): {name} is present, in NewAttributeGroupDefinition.
+//     The rest is satisfied by construction — the sum and optional-slot machinery
+//     already make an ill-formed {attribute uses} member or {attribute wildcard}
 //     unrepresentable, so no extra check is needed there.
 //   - clause 2: no two {attribute uses} members have {attribute declaration}s
-//     with the same expanded name. This is cheaply computable now — BOTH sum
-//     variants expose a QName WITHOUT resolution (a local declaration's own
-//     Name(), or a ref's Name directly) — so it is enforced structurally here,
-//     paralleling NewTypeTable enforcing e-props-correct clause 6.
+//     with the same expanded name, at FINALIZE (checkAttributeGroupUsesUnique),
+//     over the folded property. The constructor cannot decide it: a member that
+//     arrives through an <attributeGroup ref> is not known until finalize
+//     resolves the reference and takes §3.6.2.1's transitive closure
+//     (attributegroupfold.go), and a scan over the unfolded content would report
+//     an index naming no member of {attribute uses}.
 //
-// The §3.6.2.2 aspect of {attribute uses} — the union that folds in the
-// {attribute uses} of referenced <attributeGroup>s — is resolved at PRODUCER
-// mapping time, not finalize: §3.6.2.1 inlines each <attributeGroup ref> when the
-// group is mapped, so the producer hands this constructor the already-computed
-// union (matching xsd/resolve.go's "inlined at producer mapping time with no
-// persistent ref component"). This constructor therefore validates the complete
-// members it is given, not just a container's direct <attribute> children.
+// Circularity is NOT among the clauses, and nothing here or in the fold rejects
+// it: §3.6.2.1 says "Circular reference is not disallowed", and ag-props-correct
+// has exactly the two clauses above, so a cycle of <attributeGroup ref>s has no
+// rule ID to be charged to (PRINCIPLES 9).
 const ruleAgPropsCorrect xsderr.Rule = "ag-props-correct"
 
 // AttributeGroupDefinition is the Attribute Group Definition component
@@ -35,18 +34,31 @@ const ruleAgPropsCorrect xsderr.Rule = "ag-props-correct"
 // tableau, §3.6.2.1 "union of ... sets"); this package represents it as a
 // document-order slice per its standing convention (determinism, STYLE D2/D3) —
 // the order carries no spec significance. ag-props-correct clause 2 forbids two
-// members whose {attribute declaration}s share an expanded name, which
-// NewAttributeGroupDefinition enforces.
+// members whose {attribute declaration}s share an expanded name, which Finalize
+// enforces over the folded property (checkAttributeGroupUsesUnique).
 //
-// Construct only through NewAttributeGroupDefinition, which rejects the states
-// ag-props-correct (§3.6.6) clauses 1 and 2 forbid so they are unrepresentable
-// (STYLE T1). AttributeGroupDefinition is immutable after construction.
+// attributeContent is NOT a §3.6.1 property: it is the mapping INPUT §3.6.2.1
+// and §3.6.2.2 build both attribute properties from — the definition's own
+// <attribute> and <attributeGroup ref> children in document order — retained
+// because a referenced group is reachable only once the schema is assembled.
+// Finalize folds it into attributeUses and wildcard and sets it to nil
+// (attributegroupfold.go), so a finalized definition holds no reference; until
+// then attributeUses holds only its ResolvedAttributeUse arms, the pre-finalize
+// under-approximation AttributeUses documents. The duplication of those arms in
+// both fields ends at that fold (STYLE D3).
+//
+// Construct only through NewAttributeGroupDefinition, which rejects the state
+// ag-props-correct (§3.6.6) clause 1 forbids and the member states
+// checkAttributeContent does, so they are unrepresentable (STYLE T1).
+// AttributeGroupDefinition is immutable after construction; Finalize's fold
+// writes only the copies the assembled Schema holds.
 type AttributeGroupDefinition struct {
-	loc           xsderr.Loc // source position; provenance, not a §3.6.1 property
-	name          QName
-	attributeUses []AttributeUse
-	wildcard      Wildcard
-	hasWildcard   bool
+	loc              xsderr.Loc // source position; provenance, not a §3.6.1 property
+	name             QName
+	attributeUses    []AttributeUse
+	attributeContent []AttributeUseOrGroupRef
+	wildcard         Wildcard
+	hasWildcard      bool
 }
 
 // NewAttributeGroupDefinition builds an AttributeGroupDefinition, rejecting the
@@ -68,20 +80,19 @@ type AttributeGroupDefinition struct {
 // latter would admit QName{Space: "urn:x", Local: ""} as a named definition.
 // Same idiom as NewElementDeclaration's e-props-correct clause 1 check.
 //
-// It also rejects the state clause 2 forbids: two {attribute uses} members whose
-// {attribute declaration}s have the same expanded name. The scan is
-// deterministic (STYLE D2) — the members are walked in document order and
-// membership is tested against a map[QName]struct{} seen-set, so the first
-// duplicate found by index is the one rejected (never ranging the map itself for
-// the scan). Both sum variants expose the expanded name without resolution: a
-// LocalAttributeDeclaration via its Declaration.Name(), an
-// AttributeDeclarationRef via its Name.
+// attributeContent is the definition's OWN attribute content in document order:
+// a ResolvedAttributeUse per <attribute> child, an AttributeGroupRef per
+// <attributeGroup ref> child, and a ResolvedAttributeGroup for a redefining
+// definition's self-reference (see that type). checkAttributeContent rejects a
+// member no arm describes. Clause 2 — no two members of {attribute uses} sharing
+// an expanded name — is NOT checked here: a referenced group's members are not
+// known until Finalize folds them in, so Finalize charges it over the folded
+// property (checkAttributeGroupUsesUnique).
 //
-// The REST of clause 1 is satisfied by construction (the sum and optional-slot
-// machinery already make ill-formed members unrepresentable); the §3.6.2.2
-// referenced-group union is folded in by the producer (§3.6.2.1, mapping time)
-// before it calls this constructor, so the members passed here are already
-// complete.
+// wildcard is the definition's OWN <anyAttribute> only, §3.6.2.2's ·local
+// wildcard·. The intersection with the referenced groups' {attribute wildcard}s
+// that §3.6.2.2 makes the property is taken at Finalize, beside the {attribute
+// uses} closure (attributegroupfold.go).
 //
 // It also rejects one state Wildcard Properties Correct (§3.10.6.1,
 // w-props-correct) clause 5 forbids, charged to that rule rather than to
@@ -89,7 +100,7 @@ type AttributeGroupDefinition struct {
 // carries the sibling keyword. This slot is one of the two places an attribute
 // wildcard is identifiable as such; see rejectSiblingOnAttributeWildcard.
 //
-// attributeUses is copied; the caller's backing array is not aliased, and an
+// attributeContent is copied; the caller's backing array is not aliased, and an
 // empty input is held as nil. wildcard is a pointer so absence
 // (nil) is distinct from a present zero record (mirroring elementdeclaration.go's
 // *TypeTable and the wildcard.go optional-slot pattern); when non-nil the
@@ -102,31 +113,64 @@ type AttributeGroupDefinition struct {
 // element's, say) — it is observable, not merely an error-charging convenience.
 // A caller with no real parser position — a synthesized or programmatically
 // built definition — passes the zero xsderr.Loc{}, which reads as "unknown".
-func NewAttributeGroupDefinition(loc xsderr.Loc, name QName, attributeUses []AttributeUse, wildcard *Wildcard) (AttributeGroupDefinition, error) {
+func NewAttributeGroupDefinition(loc xsderr.Loc, name QName, attributeContent []AttributeUseOrGroupRef, wildcard *Wildcard) (AttributeGroupDefinition, error) {
 	if name.Local == "" {
 		return AttributeGroupDefinition{}, xsderr.New(ruleAgPropsCorrect, loc,
 			"attribute group definition has an absent {name}, but the §3.6.1 tableau types it as a Required xs:NCName, whose value space excludes the empty string (ag-props-correct clause 1)")
 	}
-	seen := make(map[QName]struct{}, len(attributeUses))
-	for i, use := range attributeUses {
-		expanded := use.DeclarationName()
-		if _, dup := seen[expanded]; dup {
-			return AttributeGroupDefinition{}, xsderr.New(ruleAgPropsCorrect, loc,
-				"attribute group definition {attribute uses}[%d] repeats the expanded name %s, but ag-props-correct clause 2 forbids two attribute uses whose {attribute declaration}s share an expanded name", i, expanded)
-		}
-		seen[expanded] = struct{}{}
+	if err := checkAttributeContent(loc, "attribute group definition "+name.String(), attributeContent); err != nil {
+		return AttributeGroupDefinition{}, err
 	}
 	if err := rejectSiblingOnAttributeWildcard(loc, wildcard); err != nil {
 		return AttributeGroupDefinition{}, err
 	}
-	g := AttributeGroupDefinition{loc: loc, name: name}
-	if len(attributeUses) > 0 {
-		g.attributeUses = append([]AttributeUse(nil), attributeUses...)
+	g := AttributeGroupDefinition{loc: loc, name: name, attributeUses: directAttributeUses(attributeContent)}
+	if len(attributeContent) > 0 {
+		g.attributeContent = append([]AttributeUseOrGroupRef(nil), attributeContent...)
 	}
 	if wildcard != nil {
 		g.wildcard, g.hasWildcard = *wildcard, true
 	}
 	return g, nil
+}
+
+// checkAttributeGroupUsesUnique is ag-props-correct (§3.6.6) clause 2, charged at
+// Finalize over every Attribute Group Definition's FOLDED {attribute uses}: the
+// {attribute group definitions} in document order, then the <redefine>
+// originals in pairing order, which §4.2.4 clause 4.1.2 keeps out of every
+// property yet checkAttributeGroupRedefinitions reads as the B side of clause
+// 7.2.2. A definition held by value in a ResolvedAttributeGroup needs no charge
+// of its own: the fold expands it into its holder, so every duplicate among its
+// members is one among the holder's.
+//
+// It runs after attributegroupfold.go's fold, the first point at which the
+// members reached through an <attributeGroup ref> exist. The first duplicate by
+// index is the one reported (duplicateAttributeUseName), and the fold lays the
+// members out in the document order the producer-time check this replaced
+// scanned, so the message names the same member it did (#479).
+func (s *Schema) checkAttributeGroupUsesUnique() error {
+	for _, g := range s.attributeGroups {
+		if err := checkAttributeGroupDefinitionUsesUnique(g); err != nil {
+			return err
+		}
+	}
+	for _, r := range s.attributeGroupRedefinitions {
+		if err := checkAttributeGroupDefinitionUsesUnique(r.original); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// checkAttributeGroupDefinitionUsesUnique charges ag-props-correct clause 2
+// against one folded definition, at its own position.
+func checkAttributeGroupDefinitionUsesUnique(g AttributeGroupDefinition) error {
+	i, name, duplicate := duplicateAttributeUseName(g.attributeUses)
+	if !duplicate {
+		return nil
+	}
+	return xsderr.New(ruleAgPropsCorrect, g.Loc(),
+		"%s {attribute uses}[%d] repeats the expanded name %s, but ag-props-correct clause 2 forbids two attribute uses whose {attribute declaration}s share an expanded name", attributeGroupOwner(g), i, name)
 }
 
 // Name returns the {name} property, bundled with {target namespace} as a QName.
@@ -147,6 +191,14 @@ func (g AttributeGroupDefinition) Loc() xsderr.Loc {
 //
 // The spec property is a set (§3.6.1); the document order here is an
 // implementation choice for determinism and carries no spec significance.
+//
+// On a definition reached through a finalized [Schema] this is the §3.6.2.1
+// property: the union of the definition's own attribute uses with those of
+// every attribute group its <attributeGroup ref>s reach, transitively and
+// through any reference cycle, folded in at Finalize (attributegroupfold.go).
+// On a definition a caller built with [NewAttributeGroupDefinition] and has not
+// yet finalized, it is only the ResolvedAttributeUse members that caller passed
+// in: a referenced group is reachable only from the assembled schema.
 func (g AttributeGroupDefinition) AttributeUses() []AttributeUse {
 	if len(g.attributeUses) == 0 {
 		return nil
@@ -157,6 +209,12 @@ func (g AttributeGroupDefinition) AttributeUses() []AttributeUse {
 // AttributeWildcard returns the {attribute wildcard} property (Optional); the
 // second result is false when it is absent, in which case the first result is
 // not meaningful.
+//
+// On a definition reached through a finalized [Schema] this is the §3.6.2.2
+// property: the definition's own <anyAttribute> intersected (cos-aw-intersect)
+// with the {attribute wildcard}s of every attribute group its <attributeGroup
+// ref>s reach, folded in at Finalize (attributegroupfold.go). On a definition
+// not yet finalized it is only the ·local wildcard· its caller passed in.
 func (g AttributeGroupDefinition) AttributeWildcard() (Wildcard, bool) {
 	return g.wildcard, g.hasWildcard
 }

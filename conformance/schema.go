@@ -1346,7 +1346,7 @@ func attrDeclsDecidable(el *parser.Element) (decidable, shared bool) {
 		return localAttributeDecidable(el), true
 	case "attributeGroup":
 		// Admitted in both shapes (#1182). The ref form is produced (#177); the
-		// ref-less one is REJECTED by collectReferencedGroup, either for carrying
+		// ref-less one is REJECTED by attributeGroupMember, either for carrying
 		// the name= xs:attributeGroupRef prohibits or for missing the ref= it
 		// requires, so the verdict is the producer's own and nothing is fabricated.
 		return true, true
@@ -1522,7 +1522,7 @@ func attributeGroupDecidable(el *parser.Element) bool {
 			}
 		case "attributeGroup":
 			// Produced in the ref form (#177) and REJECTED in the ref-less one
-			// (#1182), by the same collectReferencedGroup arms attrDeclsDecidable's
+			// (#1182), by the same attributeGroupMember arms attrDeclsDecidable's
 			// <attributeGroup> child reaches.
 		default:
 			return false

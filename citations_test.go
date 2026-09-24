@@ -66,6 +66,12 @@ var allowedCollisionCitations = []citationAllowance{
 	// citing item 9's second half — the finalize pass that has already rejected
 	// the circular graph is what licenses the unguarded walk.
 	{file: "xsd/allgrouplimited.go", number: 9, count: 1},
+	// #479: the two sites that argue an <attributeGroup ref> cycle is a closure
+	// to take rather than a failure to charge — item 9's converse, where the spec
+	// itself authors the cycle (§3.6.2.1), so there is no rule ID to reject it
+	// under and the fold's reached set is the spec's, not a construction guard.
+	{file: "xsd/attributegroupdefinition.go", number: 9, count: 1},
+	{file: "xsd/attributegroupfold.go", number: 9, count: 1},
 	{file: "xsd/attributeusefold.go", number: 9, count: 1},
 	{file: "xsd/attributewildcardfold.go", number: 9, count: 1},
 	{file: "xsd/complexderivation.go", number: 9, count: 1},

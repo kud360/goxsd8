@@ -160,7 +160,7 @@ func TestProduceBooleanAttributePaddedActualValue(t *testing.T) {
 			// §3.4.2.4: only an ·actual value· of false opts out, so a padded " true "
 			// must FOLD the default group. A raw compare read it as false and
 			// suppressed the fold.
-			name: `defaultAttributesApply=" true " on <complexType> (foldDefaultAttributes)`,
+			name: `defaultAttributesApply=" true " on <complexType> (defaultAttributesRef)`,
 			doc:  defaultAttributesSchema(`<xs:complexType name="T" defaultAttributesApply=" true "><xs:sequence/></xs:complexType>`),
 			check: func(t *testing.T, s *xsd.Schema) {
 				if !hasAttrUse(topComplexTypeIn(t, s, xq("T")).AttributeUses(), "da") {

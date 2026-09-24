@@ -76,17 +76,19 @@ func (w Wildcard) ProcessContents() ProcessContents {
 // NamespaceConstraint returns the {namespace constraint} property. It is exposed
 // for the §3.10.6 wildcard-set operations, which combine or relate the
 // constraints of wildcards that are already built and so must read them back off
-// the components: the §3.6.2.2 "Common Rules for Attribute Wildcards"
-// combination (declare-attributeGroup-wildcard), where the parser's
-// <attributeGroup>/<complexType> attribute-wildcard producer folds each
-// referenced group's constraint through IntersectNamespaceConstraint and rebuilds
-// via NewWildcard; and, in-package, the complex-content restriction walk, which
-// folds a base content model's live wildcards through UnionNamespaceConstraint
-// and relates the result by wildcardSubset (contentrestricts.go). It mirrors the
-// inspection getters NamespaceConstraint.Variety/Namespaces; to decide whether a
-// name is admitted, call NamespaceConstraint.AllowsName on the result — or, for
-// cvc-wildcard entire, Schema.AllowsAttributeWildcardName / Schema.ContentMatcher
-// — rather than inspecting this.
+// the components: the parser's §3.4.2.3.3 clause 6.2 open-content wildcard,
+// which unions an <openContent>'s constraint with the ·explicit content type·'s
+// through UnionNamespaceConstraint and rebuilds via NewWildcard; and, in-package,
+// the §3.6.2.2 "Common Rules for Attribute Wildcards" combination
+// (declare-attributeGroup-wildcard), which Finalize folds through
+// intersectNamespaceConstraint (attributegroupfold.go), and the complex-content
+// restriction walk, which folds a base content model's live wildcards through
+// UnionNamespaceConstraint and relates the result by wildcardSubset
+// (contentrestricts.go). It mirrors the inspection getters
+// NamespaceConstraint.Variety/Namespaces; to decide whether a name is admitted,
+// call NamespaceConstraint.AllowsName on the result — or, for cvc-wildcard
+// entire, Schema.AllowsAttributeWildcardName / Schema.ContentMatcher — rather
+// than inspecting this.
 func (w Wildcard) NamespaceConstraint() NamespaceConstraint {
 	return w.namespaceConstraint
 }

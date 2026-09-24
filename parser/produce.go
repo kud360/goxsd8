@@ -217,23 +217,6 @@ type symbols struct {
 	// the declaring document).
 	complexTypes map[xsd.QName]typeSource
 
-	// attributeGroups maps each top-level named <attributeGroup>'s expanded name
-	// to its source (raw element plus the producer of the document that declares
-	// it), filled by the pre-scan so an <attributeGroup ref> (from a
-	// <complexType>/<restriction> or another <attributeGroup>) resolves and is
-	// inlined at mapping time regardless of document order (§3.6.2.1).
-	//
-	// The owning producer is carried for BOTH reasons the two type indexes carry
-	// one, because an <attributeGroup> body holds local declarations AND unqualified
-	// references: §3.2.2.2 takes a local <attribute>'s {target namespace} from "the
-	// ancestor <schema> element information item", which is the DECLARING document's,
-	// and src-resolve (§3.17.6.2) clause 4.1.1 scopes the absent-namespace default of
-	// its type=/ref= to "the schema document containing the QName", which §F.1 task
-	// (b) coerces when that document is a chameleon. Folded under a referring
-	// producer instead, localTargetNS would mint the local names in the wrong
-	// namespace and unqualifiedRefNS/declares would answer for the wrong document.
-	attributeGroups map[xsd.QName]typeSource
-
 	// modelGroups maps each top-level named <group>'s expanded name to its source
 	// (raw element plus the producer of the document that declares it), filled by
 	// the pre-scan so a <group ref> reaches its definition regardless of document
@@ -244,11 +227,20 @@ type symbols struct {
 	// resolveModelGroup); every OTHER <group ref> stays an unresolved
 	// ModelGroupRef until finalize (produceGroupRefParticle).
 	//
-	// The owning producer is carried for both reasons attributeGroups carries one:
-	// a <group> body holds local <element> declarations, whose {target namespace}
-	// §3.3.2.3 takes from "the ancestor <schema> element information item" of the
-	// DECLARING document, and unqualified type=/ref= references inside it take that
-	// document's §F.1 chameleon coercion.
+	// The owning producer is carried for BOTH reasons the two type indexes carry
+	// one, because a <group> body holds local declarations AND unqualified
+	// references: §3.3.2.3 takes a local <element>'s {target namespace} from "the
+	// ancestor <schema> element information item", which is the DECLARING
+	// document's, and src-resolve (§3.17.6.2) clause 4.1.1 scopes the
+	// absent-namespace default of its type=/ref= to "the schema document containing
+	// the QName", which §F.1 task (b) coerces when that document is a chameleon.
+	// Built under a referring producer instead, localTargetNS would mint the local
+	// names in the wrong namespace and unqualifiedRefNS/declares would answer for
+	// the wrong document.
+	//
+	// There is no attribute-group twin. An <attributeGroup ref> is resolved at
+	// finalize against xsd's {attribute group definitions} (#479), and no mapping
+	// rule reads a referenced group at mapping time.
 	modelGroups map[xsd.QName]typeSource
 
 	// elements maps each top-level <element>'s expanded name to its source (raw
@@ -424,16 +416,15 @@ type symbols struct {
 	backend value.Backend
 }
 
-// typeSource is one entry of symbols.simpleTypes, symbols.complexTypes or
-// symbols.attributeGroups: a top-level <simpleType>/<complexType>/
-// <attributeGroup> element together with the producer of the document that
-// DECLARES it. On-demand construction from a reference runs through owner, never
-// through the producer that happens to be asking, so the definition's local
-// element and attribute declarations take their own document's target namespace
-// and form defaults (§3.3.2.3 dcl.elt.local, §3.2.2.2 dcl.att.local) and its own
-// unqualified QName references take their own document's §F.1 coercion — all
-// properties of the declaring document, which assembly-wide visibility (§4.2.3
-// c-incl-incl) does not transfer to the asker.
+// typeSource is one entry of a symbols source index, or a <redefine>d
+// original: a top-level declaration element together with the producer of the
+// document that DECLARES it. On-demand construction from a reference runs
+// through owner, never through the producer that happens to be asking, so the
+// definition's local element and attribute declarations take their own
+// document's target namespace and form defaults (§3.3.2.3 dcl.elt.local,
+// §3.2.2.2 dcl.att.local) and its own unqualified QName references take their
+// own document's §F.1 coercion — all properties of the declaring document, which
+// assembly-wide visibility (§4.2.3 c-incl-incl) does not transfer to the asker.
 type typeSource struct {
 	elem  *Element
 	owner *producer
@@ -509,7 +500,6 @@ func newSymbols(builder *xsd.SchemaBuilder, backend value.Backend) (*symbols, er
 	return &symbols{
 		simpleTypes:         make(map[xsd.QName]typeSource),
 		complexTypes:        make(map[xsd.QName]typeSource),
-		attributeGroups:     make(map[xsd.QName]typeSource),
 		modelGroups:         make(map[xsd.QName]typeSource),
 		elements:            make(map[xsd.QName]typeSource),
 		identityConstraints: make(map[xsd.QName]identityConstraintSource),
@@ -728,23 +718,25 @@ func rejectRepeatedAnnotations(el *Element) error {
 }
 
 // prescan registers this document's top-level named <simpleType>s and
-// <complexType>s (forward base= references, §3.1.3/§3.4.2), named
-// <attributeGroup>s (forward <attributeGroup ref> inlining, §3.6.2.1), named
-// <group>s (forward <group ref> resolution for §3.4.2.3.3 clause 4.2.3's
-// sub-case test, resolveModelGroup) and top-level <element>s (forward
-// substitutionGroup= heads for §3.3.2.1's {type definition} clause 3,
-// substitutionGroupHeadType) in the assembly-wide symbol table, building
-// nothing yet. EVERY document's prescan runs before ANY document's run, so a
-// reference in one document reaches a definition in another (§4.2.3
-// c-incl-incl). Names are minted in the effective target namespace, so a
-// chameleon document's definitions are registered under the including namespace
-// (§F.1 task a).
+// <complexType>s (forward base= references, §3.1.3/§3.4.2), named <group>s
+// (forward <group ref> resolution for §3.4.2.3.3 clause 4.2.3's sub-case test,
+// resolveModelGroup) and top-level <element>s (forward substitutionGroup= heads
+// for §3.3.2.1's {type definition} clause 3, substitutionGroupHeadType) in the
+// assembly-wide symbol table, building nothing yet. EVERY document's prescan
+// runs before ANY document's run, so a reference in one document reaches a
+// definition in another (§4.2.3 c-incl-incl). Names are minted in the effective
+// target namespace, so a chameleon document's definitions are registered under
+// the including namespace (§F.1 task a). A named <attributeGroup> is registered
+// nowhere: an <attributeGroup ref> is resolved at finalize against xsd's
+// {attribute group definitions} (#479), which run's build of each definition
+// enters.
 //
 // A name an <override> in force over this document substitutes for is registered
-// with the OVERRIDING declaration (§F.2 clause 1), so a base= or
-// <attributeGroup ref> naming it reaches the replacement rather than the
-// replaced definition — "overriding components are constructed as if the
-// overridden components had never existed" (§4.2.5).
+// with the OVERRIDING declaration (§F.2 clause 1), so a base= naming it reaches
+// the replacement rather than the replaced definition — "overriding components
+// are constructed as if the overridden components had never existed" (§4.2.5).
+// An <attributeGroup ref> reaches the replacement the same way, because run
+// builds only the replacement's component.
 //
 // A <redefine> child of this document contributes its OWN children as this
 // document's definitions (§4.2.4 clause 4.1.1), so they are registered too — see
@@ -802,8 +794,6 @@ func (p *producer) prescan() error {
 			p.symbols.simpleTypes[xsd.QName{Space: p.target, Local: name}] = typeSource{elem: decl, owner: p}
 		case isXSD(el, "complexType"):
 			p.symbols.complexTypes[xsd.QName{Space: p.target, Local: name}] = typeSource{elem: decl, owner: p}
-		case isXSD(el, "attributeGroup"):
-			p.symbols.attributeGroups[xsd.QName{Space: p.target, Local: name}] = typeSource{elem: decl, owner: p}
 		case isXSD(el, "group"):
 			p.symbols.modelGroups[xsd.QName{Space: p.target, Local: name}] = typeSource{elem: decl, owner: p}
 		case isXSD(el, "element"):

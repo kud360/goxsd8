@@ -346,13 +346,13 @@ func (s *Schema) substitutionGroupsIntersect(a, b ElementDeclaration) bool {
 // Intersection (§3.10.6.4, cos-aw-intersect) of the two has {variety} any, or
 // {variety} not, or {variety} enumeration with a non-empty {namespaces}.
 //
-// The intersection itself is not re-derived: IntersectNamespaceConstraint is the
+// The intersection itself is not re-derived: intersectNamespaceConstraint is the
 // one canonical §3.10.6.4 implementation (STYLE T4). Its error is documented
 // unreachable for two validly-constructed operands, but it is propagated rather
 // than dropped (STYLE S3) so any future divergence surfaces as a failure instead
 // of a silently wrong verdict.
 func wildcardsOverlap(a, b Wildcard) (bool, error) {
-	c, err := IntersectNamespaceConstraint(xsderr.Loc{}, a.NamespaceConstraint(), b.NamespaceConstraint())
+	c, err := intersectNamespaceConstraint(xsderr.Loc{}, a.NamespaceConstraint(), b.NamespaceConstraint())
 	if err != nil {
 		return false, fmt.Errorf("intersecting the {namespace constraint}s of two wildcard particles (cos-aw-intersect): %w", err)
 	}

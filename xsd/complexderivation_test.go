@@ -68,14 +68,14 @@ func dTypeAt(t *testing.T, loc xsderr.Loc, name, base QName, content ContentType
 	t.Helper()
 	if name.Local == "" {
 		ct, err := NewAnonymousComplexType(loc, ElementDeclarationContext{Component: NewComponentID()},
-			base, nil, DerivationRestriction, false, uses, nil, wildcard, content, nil, nil)
+			base, nil, DerivationRestriction, false, attributeUseMembers(uses), nil, wildcard, content, nil, nil)
 		if err != nil {
 			t.Fatalf("NewAnonymousComplexType: %v", err)
 		}
 		return ct
 	}
 	ct, err := NewComplexType(loc, name, base, nil, DerivationRestriction, false,
-		uses, nil, wildcard, content, nil, nil)
+		attributeUseMembers(uses), nil, wildcard, content, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType(%s): %v", name, err)
 	}

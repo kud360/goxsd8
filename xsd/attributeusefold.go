@@ -5,14 +5,16 @@ import "slices"
 // This file completes one mapping rule: Mapping Rule for Attribute Uses Property
 // (Structures §3.4.2.4, dcl.ctd.attuses), whose clause 3 no producer can apply.
 //
-// Clauses 1 and 2 — the attribute uses corresponding to a source declaration's
-// own <attribute> children, and the {attribute uses} of the attribute groups its
-// <attributeGroup ref> children ·resolve· to — are decidable from one <complexType>
-// element, and parser/produce_complex.go applies them. Clause 3 is not: the uses
-// "inherited" from the {base type definition} need the base COMPONENT, which is
-// reachable only once the whole schema set is assembled and its base references
-// are known to resolve. So {attribute uses} arrives at finalize under-approximated,
-// and is completed HERE, once, before any constraint reads it.
+// Clause 1 — the attribute uses corresponding to a source declaration's own
+// <attribute> children — is decidable from one <complexType> element, and
+// parser/produce_complex.go applies it. Clause 2 — the {attribute uses} of the
+// attribute groups its <attributeGroup ref> children ·resolve· to — needs those
+// groups' components, and attributegroupfold.go applies it at finalize, just
+// before this fold (#479). Clause 3 needs the {base type definition}'s
+// COMPONENT: the uses "inherited" from it are reachable only once the whole
+// schema set is assembled and its base references are known to resolve. So
+// {attribute uses} reaches this fold holding clauses 1 and 2, and is completed
+// HERE, once, before any constraint reads it.
 //
 // The alternative — leaving the property partial and folding the base chain at
 // each read site — is what this replaced (#262/#264's foldedAttributeUse). It put
@@ -53,7 +55,8 @@ type attributeUseFold struct {
 // foldAttributeUses materialises §3.4.2.4 clause 3 into every Complex Type
 // Definition's {attribute uses}, in base-before-derived dependency order.
 //
-// It is the ONE mutation the finalize pass performs. That is a deliberate
+// It is one of the finalize pass's three mutations, beside
+// foldAttributeGroupReferences and foldAttributeWildcards. That is a deliberate
 // exception to resolve.go's "stores nothing" stance and not a resolved-pointer
 // cache: a cache would hold state derivable from the QName plus the index (STYLE
 // D3), whereas this OVERWRITES a property with its correct value. Afterwards the
@@ -77,8 +80,10 @@ type attributeUseFold struct {
 // recursion below to carry no visited set: the {base type definition} graph is
 // known acyclic apart from ·xs:anyType·'s self-derivation (§3.4.7,
 // any-type-itself), the one edge foldTypeAttributeUses excludes by position
-// rather than by a guard (PRINCIPLES 9, STYLE D4). It must run before Phase D,
-// which is the first phase to read {attribute uses}.
+// rather than by a guard (PRINCIPLES 9, STYLE D4). It must run AFTER the
+// attribute group fold (foldAttributeGroupReferences), whose clause 2 output is
+// both the set clause 3 starts from and the value retained as ownAttributeUses
+// below, and before Phase D's checks, the first to read {attribute uses}.
 //
 // Clause 3.2.2 — the <attribute use="prohibited"> child, which BLOCKS the
 // same-named inherited use — is applied here too, from the prohibited names the
@@ -196,8 +201,9 @@ func (s *Schema) foldTypeAttributeUses(f *attributeUseFold, i int) ComplexType {
 // definition} at the single slot that owns it, and a declaration-owned type at
 // ownedTypeSlot, which ownedtypefold.go reaches once per owning SLOT and which
 // folds before it descends, never after. A component reachable from two slots is
-// two VALUES (ComplexType is a value type), each folded once from the producer's
-// own, so it is no exception to the invariant.
+// two VALUES (ComplexType is a value type), each folded once from the clause 1
+// and 2 value the attribute group fold left it, so it is no exception to the
+// invariant.
 func (s *Schema) foldComponentAttributeUses(f *attributeUseFold, c ComplexType, i int) ComplexType {
 	base, slot, ok := s.baseAttributeUses(f, c, i)
 	c.base = slot
@@ -289,7 +295,7 @@ func (s *Schema) baseAttributeUses(f *attributeUseFold, c ComplexType, i int) ([
 // The identity test bottoms out at COMPONENT IDENTITY and never reads {attribute
 // uses} (attributeUsesIdentical, complexextension.go). That is what makes it safe
 // HERE: it reaches s.ResolvedType and so s.typeIndex, which until
-// storeFoldedAttributeUses runs still hold the producer's partial value. An
+// storeFoldedAttributeUses runs still hold the clause 1 and 2 value. An
 // identity test widened to compare a folded property would make this fold read
 // its own half-written output.
 //
@@ -405,7 +411,7 @@ func (s *Schema) hasAttributeUseIdentical(uses []AttributeUse, u AttributeUse) b
 // {base type definition} slot. It needs no store of its own here because
 // baseAttributeUses already re-seated that slot with the folded base, so storing
 // the owner stores the base with it: a reader that follows Base() (ResolvedType) sees
-// the original's OWN clause-3 {attribute uses}, not the producer's partial value.
+// the original's OWN clause-3 {attribute uses}, not its clause 1 and 2 value.
 func (s *Schema) storeFoldedAttributeUses(f *attributeUseFold) {
 	for i, c := range f.types {
 		if !f.folded[i] {

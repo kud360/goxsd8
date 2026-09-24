@@ -229,9 +229,9 @@ func TestUnionDisallowedNameKeywords(t *testing.T) {
 				if joined != tc.wantUnion {
 					t.Errorf("union carries defined = %t, want %t", joined, tc.wantUnion)
 				}
-				meet, err := IntersectNamespaceConstraint(xsderr.Loc{}, pq.p, pq.q)
+				meet, err := intersectNamespaceConstraint(xsderr.Loc{}, pq.p, pq.q)
 				if err != nil {
-					t.Fatalf("IntersectNamespaceConstraint: %v", err)
+					t.Fatalf("intersectNamespaceConstraint: %v", err)
 				}
 				if met := meet.hasDisallowedNameKeyword(DisallowedNameDefined); met != tc.wantIntersects {
 					t.Errorf("intersection carries defined = %t, want %t", met, tc.wantIntersects)

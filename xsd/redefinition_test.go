@@ -11,7 +11,7 @@ import (
 // {attribute uses} and {attribute wildcard}.
 func dGroup(t *testing.T, name QName, uses []AttributeUse, wildcard *Wildcard) AttributeGroupDefinition {
 	t.Helper()
-	g, err := NewAttributeGroupDefinition(xsderr.Loc{}, name, uses, wildcard)
+	g, err := NewAttributeGroupDefinition(xsderr.Loc{}, name, attributeUseMembers(uses), wildcard)
 	if err != nil {
 		t.Fatalf("NewAttributeGroupDefinition(%s): %v", name, err)
 	}

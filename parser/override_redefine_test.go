@@ -16,10 +16,11 @@ import (
 // In three of the four, unrecognized substitution is a false-circularity trap:
 // the self-reference resolves to the visible redefinition and the assembly is
 // rejected as a circular derivation or a circular group. The fourth,
-// attributeGroup, fails silently instead — the lost self-reference falls into
-// ordinary §3.6.2.1 inlining, meets the build's own visited set, and
-// contributes nothing, so the original's {attribute uses} vanish with no
-// diagnostic at all (an under-rejection, not a false reject).
+// attributeGroup, fails silently instead — the lost self-reference becomes an
+// ordinary by-name reference to the redefinition itself, a §3.6.2.1 self-cycle
+// the finalize-time closure takes as contributing nothing, so the original's
+// {attribute uses} vanish with no diagnostic at all (an under-rejection, not a
+// false reject).
 
 // TestParseOverrideRedefinedSimpleTypeResolvesToOriginal is src-expredef clause
 // 1.1 under substitution: main.xsd's <override> replaces mid.xsd's redefining
@@ -139,7 +140,7 @@ func TestParseOverrideRedefinedGroupResolvesToOriginal(t *testing.T) {
 
 // TestParseOverrideRedefinedAttributeGroupResolvesToOriginal is src-expredef
 // clause 2's attributeGroup half under substitution: the substituting
-// <attributeGroup>'s self-reference splices in lib.xsd's {attribute uses}.
+// <attributeGroup>'s self-reference contributes lib.xsd's {attribute uses}.
 func TestParseOverrideRedefinedAttributeGroupResolvesToOriginal(t *testing.T) {
 	s, err := parseMap(t, "main.xsd", map[string]string{
 		"main.xsd": wrap("urn:a", `<xs:override schemaLocation="mid.xsd">`+

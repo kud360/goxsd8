@@ -379,8 +379,10 @@ func scopeParentOf(id complexTypeIdentity) xsd.ElementScopeParent {
 // one.
 //
 // It is NOT what an attribute reached through an <attributeGroup ref> reports:
-// such an attribute's own ancestor axis has no <complexType> in it, so
-// collectReferencedGroup rebinds the parent to the group at the hop.
+// such an attribute's own ancestor axis has no <complexType> in it, so it is
+// declared once, in the group's own component, under the group's scope
+// (buildAttributeGroup), and reaches the type at finalize through that
+// component.
 //
 // The switch is exhaustive over the sealed sum; see topLevelComplexTypeName for
 // why the default arm is unreachable.
@@ -434,32 +436,32 @@ func attributeScopeParentOf(id complexTypeIdentity) xsd.AttributeScopeParent {
 //
 // The switch is exhaustive over the sealed sum; see topLevelComplexTypeName for
 // why the default arm is unreachable.
-func (p *producer) newComplexType(id complexTypeIdentity, loc xsderr.Loc, base xsd.TypeDefinitionOrRef, final []xsd.DerivationMethod, derivationMethod xsd.DerivationMethod, abstract bool, attributeUses []xsd.AttributeUse, prohibitedAttributeNames []xsd.QName, attributeWildcard *xsd.Wildcard, contentType xsd.ContentType, prohibitedSubstitutions []xsd.DerivationMethod, assertions []xsd.Assertion) (xsd.ComplexType, error) {
+func (p *producer) newComplexType(id complexTypeIdentity, loc xsderr.Loc, base xsd.TypeDefinitionOrRef, final []xsd.DerivationMethod, derivationMethod xsd.DerivationMethod, abstract bool, attributeContent []xsd.AttributeUseOrGroupRef, prohibitedAttributeNames []xsd.QName, attributeWildcard *xsd.Wildcard, contentType xsd.ContentType, prohibitedSubstitutions []xsd.DerivationMethod, assertions []xsd.Assertion) (xsd.ComplexType, error) {
 	switch i := id.(type) {
 	case namedComplexType:
 		return xsd.NewComplexType(loc, i.name, baseTypeName(base), final,
-			derivationMethod, abstract, attributeUses, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions)
+			derivationMethod, abstract, attributeContent, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions)
 	case redefiningComplexType:
 		original, owns := ownedComplexBase(base)
 		if !owns {
 			return xsd.ComplexType{}, fmt.Errorf("parser: the redefining <complexType> %s at %s did not resolve its own name as its {base type definition}, so src-expredef clause 1.2 has no clause-1.1 original to pair it with; src-redefine clause 5 requires that self-derivation and checkRedefinedComplexType charges it before production", i.name, loc)
 		}
 		return xsd.NewComplexTypeOwningBase(loc, i.owner, i.name, original, final,
-			derivationMethod, abstract, attributeUses, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions)
+			derivationMethod, abstract, attributeContent, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions)
 	case elementOwnedComplexType:
 		return xsd.NewAnonymousComplexType(loc, xsd.ElementDeclarationContext{Component: i.owner}, baseTypeName(base), final,
-			derivationMethod, abstract, attributeUses, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions)
+			derivationMethod, abstract, attributeContent, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions)
 	case typeAlternativeOwnedComplexType:
 		return xsd.NewAnonymousComplexType(loc, xsd.ElementDeclarationContext{Component: i.owner}, baseTypeName(base), final,
-			derivationMethod, abstract, attributeUses, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions)
+			derivationMethod, abstract, attributeContent, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions)
 	case redefineOriginalComplexType:
 		context := xsd.ComplexTypeDefinitionContext{Component: i.owner}
 		if original, owns := ownedComplexBase(base); owns {
 			return xsd.NewAnonymousComplexTypeOwningBase(loc, i.ownedOriginal, context, original, final,
-				derivationMethod, abstract, attributeUses, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions)
+				derivationMethod, abstract, attributeContent, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions)
 		}
 		return xsd.NewAnonymousComplexType(loc, context, baseTypeName(base), final,
-			derivationMethod, abstract, attributeUses, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions)
+			derivationMethod, abstract, attributeContent, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions)
 	default:
 		panic("parser: newComplexType: non-exhaustive complexTypeIdentity switch")
 	}
@@ -524,10 +526,11 @@ func ownedComplexBase(base xsd.TypeDefinitionOrRef) (xsd.ComplexType, bool) {
 // content (§3.2.2.2 dcl.att.local) reports. It is threaded down as an explicit
 // xsd.ElementScopeParent / xsd.AttributeScopeParent parameter rather than stashed
 // on the producer, so nesting can never mis-attribute a declaration. The
-// attribute half stops at the <attributeGroup ref> hop, which is a scope boundary
-// and rebinds the parent to the referenced group — see collectReferencedGroup.
-// The two sums are distinct types (§3.2.1 sc_a's alternation is CTD | AGD where
-// §3.3.1 sc_e's is CTD | MGD), so complexTypeIdentity emits one of each.
+// attribute half stops at the <attributeGroup ref>, which is a scope boundary:
+// the referenced group's attributes are the group's own, declared under its
+// scope — see attributeScopeParentOf. The two sums are distinct types (§3.2.1
+// sc_a's alternation is CTD | AGD where §3.3.1 sc_e's is CTD | MGD), so
+// complexTypeIdentity emits one of each.
 //
 // A missing name on the NAMED arm is rejected FIRST, before any content is
 // built, with the same plain grammar fault topLevelName raises and for the same
@@ -2825,26 +2828,21 @@ func (p *producer) produceAnyParticle(el *Element) (*xsd.Particle, error) {
 }
 
 // produceAttributeUses maps the attribute-bearing children of parent (a
-// <complexType>, <restriction>, or <extension>) into {attribute uses}, the
-// expanded names §3.4.2.4 clause 3.2.2 blocks, and an optional {attribute
-// wildcard}, following <attributeGroup ref> children transitively
-// (§3.6.2.1/§3.6.2.2, the inline case). {attribute uses} is the union of parent's
-// own <attribute> uses with the uses of every referenced attribute group
-// (§3.6.2.1); {attribute wildcard} is the intersection of parent's own
-// <anyAttribute> with the referenced groups' wildcards (§3.6.2.2, always
-// intersection at one container).
+// <complexType>, <restriction>, or <extension>) into the type's attribute
+// content, the expanded names §3.4.2.4 clause 3.2.2 blocks, and its ·local
+// wildcard· — its own <anyAttribute>, if any.
 //
-// The BASE type's contribution to {attribute uses} is deliberately NOT folded in
-// here: §3.4.2.4 clause 3 needs the resolved base component, which no producer
-// holds, so xsd/attributeusefold.go completes the property at finalize (#401).
-// What this function returns is therefore clauses 1 and 2 alone, and the
-// component xsd.NewComplexType is handed carries exactly that until finalize
-// overwrites it. The clause 3.2.2 names ride along for the same reason: the fold
-// that consumes them runs there, and by then the source is gone. The base's
-// contribution to {attribute wildcard} is split the same way and for the same
-// reason — §3.4.2.5 clause 2.2's cos-aw-union for an extension needs that same
-// resolved base — with xsd/attributewildcardfold.go completing that property at
-// finalize (#414).
+// None of the three is a finished property. {attribute uses} is §3.4.2.4 clauses
+// 1-3 and {attribute wildcard} §3.4.2.5 clauses 1-2, and every clause past the
+// type's own children needs a component no producer holds: clause 2 and the
+// ·complete wildcard· need the attribute group definitions the <attributeGroup
+// ref> children name, which xsd/attributegroupfold.go folds in at finalize
+// (#479), and clause 3 and clause 2.2 need the resolved base, which
+// xsd/attributeusefold.go (#401) and xsd/attributewildcardfold.go (#414) fold
+// in after it. So the content carries each <attributeGroup ref> as an
+// xsd.AttributeGroupRef in document order, and the clause 3.2.2 names ride
+// along for the same reason: the fold that consumes them runs at finalize, and
+// by then the source is gone.
 //
 // ctElem is the <complexType> element itself, which is parent only in the
 // implicit-content form: the two wrapped forms pass their <restriction>/
@@ -2857,43 +2855,43 @@ func (p *producer) produceAnyParticle(el *Element) (*xsd.Particle, error) {
 // children — the enclosing complex type, supplied by the caller as an explicit
 // parameter rather than stashed on the producer, so nesting can never
 // mis-attribute a declaration. It does NOT reach the attributes of a referenced
-// <attributeGroup>: those are scoped to the group, and collectReferencedGroup
-// rebinds the parent at that hop (§3.2.2.2 dcl.att.local).
-func (p *producer) produceAttributeUses(ctElem, parent *Element, scopeParent xsd.AttributeScopeParent) ([]xsd.AttributeUse, []xsd.QName, *xsd.Wildcard, error) {
-	var uses []xsd.AttributeUse
-	var wildcards []xsd.Wildcard
-	visited := map[xsd.QName]struct{}{}
-	if err := p.collectAttributeContent(parent, scopeParent, visited, &uses, &wildcards); err != nil {
+// <attributeGroup>: those belong to the group's own component, built by
+// buildAttributeGroup under the group's own scope (§3.2.2.2 dcl.att.local).
+func (p *producer) produceAttributeUses(ctElem, parent *Element, scopeParent xsd.AttributeScopeParent) ([]xsd.AttributeUseOrGroupRef, []xsd.QName, *xsd.Wildcard, error) {
+	content, wildcard, err := p.collectAttributeContent(parent, scopeParent)
+	if err != nil {
 		return nil, nil, nil, err
 	}
 	// §3.4.2.4's precondition, LAST: the synthesized <attributeGroup ref> appears
 	// "after any other <attributeGroup> [children]", so it enters clause 2's union
 	// behind them and its wildcard enters the §3.6.2.2 pre-order behind theirs —
-	// which is what leaves combineAttributeWildcards taking {process contents} off
-	// the container's own <anyAttribute> when it has one.
-	if err := p.foldDefaultAttributes(ctElem, visited, &uses, &wildcards); err != nil {
+	// which is what leaves the finalize-time intersection taking {process
+	// contents} off the container's own <anyAttribute> when it has one.
+	dflt, err := p.defaultAttributesRef(ctElem)
+	if err != nil {
 		return nil, nil, nil, err
+	}
+	if dflt != nil {
+		content = append(content, *dflt)
 	}
 	prohibited, err := p.prohibitedAttributeNames(parent)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	wildcard, err := combineAttributeWildcards(parent.Loc(), wildcards)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	return uses, prohibited, wildcard, nil
+	return content, prohibited, wildcard, nil
 }
 
-// foldDefaultAttributes applies §3.4.2.4's (dcl.ctd.attuses) precondition on
+// defaultAttributesRef applies §3.4.2.4's (dcl.ctd.attuses) precondition on
 // ctElem: when the <schema> ancestor carries defaultAttributes and the
 // <complexType> does not carry defaultAttributesApply="false", {attribute uses}
 // is computed "as if there were an <attributeGroup> [child] with empty content
 // and a ref [attribute] whose ·actual value· is the same as that of the
-// defaultAttributes [attribute]". §3.4.2.5 (dcl.ctd.anyatt) states the IDENTICAL
-// precondition for {attribute wildcard}, and both are discharged here at once:
-// the synthesized reference contributes to wildcards exactly as a written
-// <attributeGroup ref> does, so the two properties cannot come apart.
+// defaultAttributes [attribute]". So it returns exactly that reference — an
+// xsd.AttributeGroupRef — or nil when the precondition does not hold. §3.4.2.5
+// (dcl.ctd.anyatt) states the IDENTICAL precondition for {attribute wildcard},
+// and both are discharged by the one reference: finalize folds it in exactly
+// as it folds a written <attributeGroup ref>, so the two properties cannot come
+// apart.
 //
 // The default group in force is derived from p.schemaElem per call rather than
 // stashed on the producer (STYLE D3, as chameleon() derives its own answer), and
@@ -2907,24 +2905,25 @@ func (p *producer) produceAttributeUses(ctElem, parent *Element, scopeParent xsd
 // Summary, <complexType>).
 //
 // There is NO eager document-level check that defaultAttributes resolves. A
-// document that declares one and defines no <complexType> never invokes
-// ·resolve· on it, so an unresolvable QName there is charged nothing — the
-// reference exists only where the precondition synthesizes it.
+// document that declares one and defines no <complexType> synthesizes no
+// reference, so an unresolvable QName there is charged nothing — the reference
+// exists only where the precondition synthesizes it, and finalize charges it
+// src-resolve clause 1.4 there, against the <complexType> that holds it.
 //
-// visited is the caller's, shared with the container walk that already ran, so a
-// <complexType> that ALSO writes an explicit <attributeGroup ref> naming the
-// default group splices it ONCE. Splicing it twice would put two uses with one
-// expanded name in the property and trip ct-props-correct (§3.4.6.1) clause 4 on
-// a schema the spec accepts — the set union of clause 2 has no such duplicate.
+// A <complexType> that ALSO writes an explicit <attributeGroup ref> naming the
+// default group holds two references to one group, and folds it ONCE: the
+// finalize-time closure takes the set union clause 2 describes, so no two uses
+// with one expanded name reach ct-props-correct (§3.4.6.1) clause 4.
 //
-// visited reaches ONE type, so it cannot see a BASE type's fold, and it does not
-// have to. When a <complexContent> or <simpleContent> EXTENSION's base folds this
-// same default group — the ordinary case, since the base need only not carry
-// defaultAttributesApply="false" — the group's uses reach the derived type twice,
-// once from clause 2 here and once from §3.4.2.4 clause 3.1's inheritance of the
-// base's already-folded {attribute uses}. Clause 3.1 unions SETS and holds the
-// twice-reached member once, so ct-props-correct (§3.4.6.1) clause 4 has no two
-// DISTINCT members to charge (xsd/attributeusefold.go, #1082).
+// That closure reaches ONE type, so it cannot see a BASE type's fold, and it
+// does not have to. When a <complexContent> or <simpleContent> EXTENSION's base
+// folds this same default group — the ordinary case, since the base need only
+// not carry defaultAttributesApply="false" — the group's uses reach the derived
+// type twice, once from clause 2 and once from §3.4.2.4 clause 3.1's
+// inheritance of the base's already-folded {attribute uses}. Clause 3.1 unions
+// SETS and holds the twice-reached member once, so ct-props-correct (§3.4.6.1)
+// clause 4 has no two DISTINCT members to charge (xsd/attributeusefold.go,
+// #1082).
 //
 // The QName is resolved at p.schemaElem, never at ctElem, because it is written
 // there: that is the element whose in-scope prefixes bind it, whose <import>s
@@ -2934,24 +2933,23 @@ func (p *producer) produceAttributeUses(ctElem, parent *Element, scopeParent xsd
 // OVERRIDDEN document's root even for a <complexType> substituted in from the
 // overriding one, which is the reading §4.2.5 gives and defaultOpenContentElem
 // already takes for <defaultOpenContent>.
-func (p *producer) foldDefaultAttributes(ctElem *Element, visited map[xsd.QName]struct{},
-	uses *[]xsd.AttributeUse, wildcards *[]xsd.Wildcard) error {
+func (p *producer) defaultAttributesRef(ctElem *Element) (*xsd.AttributeGroupRef, error) {
 	lexical, ok := p.schemaElem.Attr("defaultAttributes")
 	if !ok {
-		return nil
+		return nil, nil
 	}
 	apply, present, err := boolAttr(ctElem, "defaultAttributesApply")
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if present && !apply {
-		return nil
+		return nil, nil
 	}
 	qn, err := p.resolveQName(p.schemaElem, lexical, "defaultAttributes")
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return p.spliceAttributeGroup(qn, p.schemaElem.Loc(), "<schema defaultAttributes>", visited, uses, wildcards)
+	return &xsd.AttributeGroupRef{Name: qn}, nil
 }
 
 // prohibitedAttributeNames is §3.4.2.4 clause 3.2.2's input: the expanded names
@@ -3040,65 +3038,58 @@ func (p *producer) prohibitedAttributeNames(parent *Element) ([]xsd.QName, error
 }
 
 // buildAttributeGroup maps a top-level <attributeGroup> (§3.6.2) into an
-// Attribute Group Definition: its {attribute uses}/{attribute wildcard} fold in
-// every referenced group transitively (§3.6.2.1/§3.6.2.2). The visited set is
-// seeded with name so a reference chain that loops back to this group terminates
-// — a circular <attributeGroup> reference is SPEC-LEGAL (§3.6.2.1), taking the
-// transitive closure, never an error (grounding Q3). ag-props-correct (§3.6.6)
-// clause 2 fires inside NewAttributeGroupDefinition only on a genuine
-// duplicate-name collision among the folded uses.
+// Attribute Group Definition over its OWN attribute content: its <attribute>
+// children, its <attributeGroup ref> children as references, and its own
+// <anyAttribute> as the ·local wildcard·. The §3.6.2.1 {attribute uses} closure
+// and the §3.6.2.2 {attribute wildcard} intersection over the groups it
+// references — cycles included, which §3.6.2.1 makes legal rather than an error
+// — are taken at finalize (xsd/attributegroupfold.go, #479), where
+// ag-props-correct (§3.6.6) clause 2 is charged over the folded uses too.
 //
 // Every <attribute> collected from elem's own body is scoped to THIS group by
 // construction (§3.2.2.2 dcl.att.local: an <attribute> with no <complexType>
 // ancestor takes the Attribute Group Definition corresponding to the
 // <attributeGroup> it is within), so name is passed down as an
-// xsd.AttributeGroupScopeParent — the same value collectReferencedGroup rebinds
-// to when a complex type reaches this group by reference instead.
+// xsd.AttributeGroupScopeParent. A complex type referencing the group reaches
+// those same declarations through the group's component at finalize, never by
+// re-mapping elem, so they carry that {scope}.{parent} whichever container
+// reaches them.
+//
+// The receiver MUST be the producer of the document that declares elem, for the
+// reasons collectAttributeContent gives; a caller holding a typeSource builds
+// through its owner.
 func (p *producer) buildAttributeGroup(name xsd.QName, elem *Element) (xsd.AttributeGroupDefinition, error) {
-	var uses []xsd.AttributeUse
-	var wildcards []xsd.Wildcard
-	visited := map[xsd.QName]struct{}{name: {}}
-	if err := p.collectAttributeContent(elem, xsd.AttributeGroupScopeParent{Name: name}, visited, &uses, &wildcards); err != nil {
-		return xsd.AttributeGroupDefinition{}, err
-	}
-	wildcard, err := combineAttributeWildcards(elem.Loc(), wildcards)
+	content, wildcard, err := p.collectAttributeContent(elem, xsd.AttributeGroupScopeParent{Name: name})
 	if err != nil {
 		return xsd.AttributeGroupDefinition{}, err
 	}
-	return xsd.NewAttributeGroupDefinition(elem.Loc(), name, uses, wildcard)
+	return xsd.NewAttributeGroupDefinition(elem.Loc(), name, content, wildcard)
 }
 
-// collectAttributeContent appends container's own <attribute> uses and its own
-// <anyAttribute> wildcard, then descends every <attributeGroup ref> child
-// transitively (§3.6.2.1), appending each reached group's uses and own wildcard.
-// wildcards are collected in §3.6.2.2 pre-order — a container's own <anyAttribute>
-// (L) before its referenced groups' wildcards (W, in document order) — so
-// wildcards[0] is the wildcard whose {process contents} the combination takes
-// (L if present, else the first of W). visited guards against the spec-legal
-// circular <attributeGroup> reference chains (§3.6.2.1, Q3): an already-visited
-// name is not re-descended, so a cycle contributes each element once.
+// collectAttributeContent maps container's OWN attribute content, in document
+// order: an xsd.ResolvedAttributeUse per <attribute> child that maps to a use,
+// and one member per <attributeGroup ref> child (attributeGroupMember). It
+// returns container's own <anyAttribute> apart, as the ·local wildcard· §3.6.2.2
+// names L. It follows no reference: the groups a container names are folded in
+// at finalize, from their own components (xsd/attributegroupfold.go).
 //
 // The receiver MUST be the producer of the document that declares container: every
 // child mapped here — a local <attribute>'s {target namespace} (§3.2.2.2) and its
 // type=, an <attribute ref>, an <attributeGroup ref> — is resolved against the
-// receiver's schemaElem and §F.1 coercion. collectReferencedGroup switches
-// producers on the way in for exactly that reason.
+// receiver's schemaElem and §F.1 coercion.
 //
 // scopeParent is the {scope}.{parent} of container's OWN <attribute> children
-// only (§3.2.2.2 dcl.att.local, the component container corresponds to). It is
-// deliberately not forwarded across the <attributeGroup ref> hop:
-// collectReferencedGroup descends into a top-level <attributeGroup>'s own body,
-// whose <attribute> children have no <complexType> ancestor and are therefore
-// scoped to that group whichever container reached it, so that function rebinds
-// the value rather than threading this one.
-func (p *producer) collectAttributeContent(container *Element, scopeParent xsd.AttributeScopeParent, visited map[xsd.QName]struct{}, uses *[]xsd.AttributeUse, wildcards *[]xsd.Wildcard) error {
+// (§3.2.2.2 dcl.att.local, the component container corresponds to).
+func (p *producer) collectAttributeContent(container *Element, scopeParent xsd.AttributeScopeParent) ([]xsd.AttributeUseOrGroupRef, *xsd.Wildcard, error) {
+	var wildcard *xsd.Wildcard
 	if any := childElement(container, xsd.XMLSchemaNS, "anyAttribute"); any != nil {
 		wc, err := p.produceWildcard(any)
 		if err != nil {
-			return err
+			return nil, nil, err
 		}
-		*wildcards = append(*wildcards, wc)
+		wildcard = &wc
 	}
+	var content []xsd.AttributeUseOrGroupRef
 	for _, child := range container.Children() {
 		el, ok := child.(*Element)
 		if !ok || el.Name().Space() != xsd.XMLSchemaNS {
@@ -3108,144 +3099,69 @@ func (p *producer) collectAttributeContent(container *Element, scopeParent xsd.A
 		case "attribute":
 			use, err := p.produceAttributeUse(el, scopeParent)
 			if err != nil {
-				return err
+				return nil, nil, err
 			}
 			if use != nil {
-				*uses = append(*uses, *use)
+				content = append(content, xsd.ResolvedAttributeUse{Use: *use})
 			}
 		case "attributeGroup":
-			if err := p.collectReferencedGroup(el, visited, uses, wildcards); err != nil {
-				return err
+			member, err := p.attributeGroupMember(el)
+			if err != nil {
+				return nil, nil, err
 			}
+			content = append(content, member)
 		}
 	}
-	return nil
+	return content, wildcard, nil
 }
 
-// collectReferencedGroup resolves one <attributeGroup ref> child and descends
-// into the referenced top-level definition, splicing in its uses and wildcards
-// (§3.6.2.1). A ref whose name resolves to no top-level <attributeGroup> is a
-// dangling reference charged src-resolve clause 1.4 (§3.17.6.2); a nested
-// <attributeGroup> with no ref, or one carrying the name xs:attributeGroupRef
-// prohibits (rejectProhibitedRefAttrs), is a well-formedness fault with no
-// dedicated SCC (§3.6.3 "None as such", grounding Q6), reported as a plain error.
-// An already-visited target is skipped, tolerating the spec-legal cycle (Q3).
+// attributeGroupMember maps one <attributeGroup ref> child to its attribute
+// content member. A nested <attributeGroup> with no ref, or one carrying the name
+// xs:attributeGroupRef prohibits (rejectProhibitedRefAttrs), is a
+// well-formedness fault with no dedicated SCC (§3.6.3 "None as such", grounding
+// Q6), reported as a plain error.
 //
-// The two halves of this hop belong to DIFFERENT documents, and each is resolved
-// by its own producer. The ref= attribute is held by el, a child of the ASKING
-// document, so p resolves it (§F.1 task (b) transforms xs:*/@ref in the document
-// that carries it). The definition it names may have been contributed by any
-// document of the <include> closure (§4.2.3 c-incl-incl), so its body is descended
-// under src.owner: that visibility lets a foreign producer REACH the group, it
-// does not transfer resolution authority over the group's own local <attribute>
-// names (§3.2.2.2) or unqualified type=/ref= values (src-resolve clause 4.1.1) —
-// the same split #228 established for complexTypes and #337 for simpleTypes.
+// The ref= attribute is held by el, so p resolves its QName (§F.1 task (b)
+// transforms xs:*/@ref in the document that carries it). What it NAMES is not
+// looked up here: the member is an xsd.AttributeGroupRef, resolved against
+// {attribute group definitions} at finalize (src-resolve clause 1.4), so a
+// definition from any document of the assembly — or one the builder was handed
+// with no document source at all — is reachable by name.
 //
-// Descending the source elements under their owner computes exactly §3.4.2.4
-// clause c-add2's component-level union of the referenced AttributeGroupDefinition's
-// {attribute uses}: every element is mapped by the producer that would have mapped
-// it in the top-level component, and visited makes the transitive closure §3.6.2.1
-// mandates for cycles come out the same whichever group the walk started from
-// (TestAttributeGroupComponentAndInlineFoldAgree pins the two foldings agreeing).
-// It is preferred over folding an already-built component because that would need a
-// memo the tri-state build guard cannot supply — an attributeGroup cycle is legal,
-// so "on the stack" is not an error here as it is for a base chain — and because a
-// diamond (two refs reaching one group) would then splice that group's uses twice
-// and trip ag-props-correct on a collision the spec's set union does not have.
-//
-// This hop is a {scope} BOUNDARY, and takes NO scopeParent from its caller: it
-// REBINDS the parent to the resolved group. §3.2.2.2 dcl.att.local reads {parent}
-// off the <attribute>'s own ancestor axis, and an <attribute> child of a
-// top-level <attributeGroup> has no <complexType> ancestor at all, so its
-// {parent} is that Attribute Group Definition invariantly — the same value
-// however many complex types reference the group, and the same value
-// buildAttributeGroup passes when it builds the group's own component. Forwarding
-// the referencing complex type's parent here instead would make the two foldings
-// this function's doc claims are equal differ in {scope}.{parent}
-// (TestAttributeGroupComponentAndInlineFoldAgree pins that they do not).
-func (p *producer) collectReferencedGroup(el *Element, visited map[xsd.QName]struct{}, uses *[]xsd.AttributeUse, wildcards *[]xsd.Wildcard) error {
+// The one exception is a redefining <attributeGroup>'s self-reference, which
+// src-expredef clause 2 makes mean the ORIGINAL in the <redefine>d document
+// (§4.2.4 clause 7.1). That original is in no index (clause 4.1.2), so a
+// reference by name would resolve to the redefinition itself and drop every use
+// the original contributes; it is built here instead, under the REDEFINED
+// document's own producer so its local declarations keep their own document's
+// namespace and defaults, and handed over by value as an
+// xsd.ResolvedAttributeGroup — the attribute-side twin of the ResolvedTerm
+// produceGroupRefParticle builds for a <group ref> self-reference. It carries
+// the same expanded name as the redefinition, so its local declarations report
+// the same {scope}.{parent} either way. The build terminates: the original lives
+// in the redefined document, outside any <redefine>, so a self-reference in ITS
+// body is an ordinary reference.
+func (p *producer) attributeGroupMember(el *Element) (xsd.AttributeUseOrGroupRef, error) {
 	if err := rejectProhibitedRefAttrs(el); err != nil {
-		return err
+		return nil, err
 	}
 	ref, ok := el.Attr("ref")
 	if !ok {
-		return fmt.Errorf("parser: a nested <attributeGroup> must be a reference (carry a ref attribute), but none is present")
+		return nil, fmt.Errorf("parser: a nested <attributeGroup> must be a reference (carry a ref attribute), but none is present")
 	}
 	qn, err := p.resolveQName(el, ref, "ref")
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if src, redefining := p.redefinedAttributeGroupOriginal(el, qn); redefining {
-		// src-expredef clause 2 again, for the attributeGroup half: this is a
-		// redefining <attributeGroup>'s self-reference, so it splices in the
-		// ORIGINAL's uses and wildcard rather than nothing. It is tested BEFORE the
-		// visited set, which buildAttributeGroup seeds with the group's own name and
-		// which would otherwise swallow the reference silently. The descent still
-		// terminates: the original lives in the redefined document, outside any
-		// <redefine>, so a self-reference in ITS body is an ordinary reference and
-		// meets the visited entry below. The redefined original carries the same
-		// expanded name, so it is the same {scope}.{parent} either way.
-		return src.owner.collectAttributeContent(src.elem, xsd.AttributeGroupScopeParent{Name: qn}, visited, uses, wildcards)
+	src, redefining := p.redefinedAttributeGroupOriginal(el, qn)
+	if !redefining {
+		return xsd.AttributeGroupRef{Name: qn}, nil
 	}
-	return p.spliceAttributeGroup(qn, el.Loc(), "<attributeGroup ref>", visited, uses, wildcards)
-}
-
-// spliceAttributeGroup resolves qn to a top-level <attributeGroup> and appends
-// that group's uses and wildcards to the collection under way, descending it
-// under its OWN producer for the reasons collectReferencedGroup's doc gives. It
-// is the resolve-and-descend tail shared by the two constructs that reach a
-// group by name: a written <attributeGroup ref> child, and the <attributeGroup
-// ref> §3.4.2.4 synthesizes for a <schema defaultAttributes> (foldDefaultAttributes).
-//
-// visited is honoured before the lookup, so a group already spliced into this
-// collection contributes once however many references reach it — the transitive
-// closure §3.6.2.1 mandates for a circular chain, and the guard that keeps the
-// synthesized default-group ref from double-splicing a group the type also names
-// explicitly.
-//
-// loc and construct are diagnostic only, naming the position and the source
-// construct the author actually wrote (STYLE E1) — the same role resolveQName's
-// attr parameter plays. The self-reference case src-expredef clause 2 admits is
-// NOT here: it is keyed on a redefining <attributeGroup> ancestor, which only a
-// written ref inside a <redefine> can have, so it stays in collectReferencedGroup.
-func (p *producer) spliceAttributeGroup(qn xsd.QName, loc xsderr.Loc, construct string,
-	visited map[xsd.QName]struct{}, uses *[]xsd.AttributeUse, wildcards *[]xsd.Wildcard) error {
-	if _, seen := visited[qn]; seen {
-		return nil
-	}
-	visited[qn] = struct{}{}
-	src, ok := p.symbols.attributeGroups[qn]
-	if !ok {
-		return xsderr.New(ruleSrcResolve, loc,
-			"%s %s does not resolve to any top-level attribute group definition (src-resolve clause 1.4)", construct, qn)
-	}
-	return src.owner.collectAttributeContent(src.elem, xsd.AttributeGroupScopeParent{Name: qn}, visited, uses, wildcards)
-}
-
-// combineAttributeWildcards folds a §3.6.2.2 pre-order sequence of collected
-// wildcards into the single {attribute wildcard} (or absent, nil): an empty
-// sequence is absent; otherwise the result's {namespace constraint} is the left
-// fold of IntersectNamespaceConstraint over every member (§3.10.6.4
-// cos-aw-intersect — combination at one container is always intersection), and
-// its {process contents} comes from the first member (L if the container had its
-// own <anyAttribute>, else the first referenced group's wildcard).
-func combineAttributeWildcards(loc xsderr.Loc, wildcards []xsd.Wildcard) (*xsd.Wildcard, error) {
-	if len(wildcards) == 0 {
-		return nil, nil
-	}
-	nc := wildcards[0].NamespaceConstraint()
-	for _, w := range wildcards[1:] {
-		combined, err := xsd.IntersectNamespaceConstraint(loc, nc, w.NamespaceConstraint())
-		if err != nil {
-			return nil, err
-		}
-		nc = combined
-	}
-	result, err := xsd.NewWildcard(loc, nc, wildcards[0].ProcessContents())
+	original, err := src.owner.buildAttributeGroup(qn, src.elem)
 	if err != nil {
 		return nil, err
 	}
-	return &result, nil
+	return xsd.ResolvedAttributeGroup{Definition: original}, nil
 }
 
 // produceAttributeUse maps a local <attribute> to an Attribute Use (§3.2.2.2,

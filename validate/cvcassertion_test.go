@@ -97,7 +97,7 @@ func aVarietyTypes(t *testing.T) []*xsd.SimpleType {
 func aComplexType(t *testing.T, uses []xsd.AttributeUse, content xsd.ContentType, assertions []xsd.Assertion) xsd.ComplexType {
 	t.Helper()
 	ct, err := xsd.NewComplexType(xsderr.Loc{}, local("RootType"), xsd.QName{}, nil,
-		xsd.DerivationRestriction, false, uses, nil, nil, content, nil, assertions)
+		xsd.DerivationRestriction, false, attrContent(uses), nil, nil, content, nil, assertions)
 	if err != nil {
 		t.Fatalf("building RootType: %v", err)
 	}

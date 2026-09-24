@@ -52,7 +52,7 @@ func ctaCandidateType(t *testing.T, name string) xsd.ComplexType {
 	t.Helper()
 	uses := []xsd.AttributeUse{aUse(t, "kind", false, nil), aUse(t, "need"+name, true, nil)}
 	ct, err := xsd.NewComplexType(xsderr.Loc{}, local(name), local("Fallback"), nil,
-		xsd.DerivationExtension, false, uses, nil, nil, xsd.EmptyContent{}, nil, nil)
+		xsd.DerivationExtension, false, attrContent(uses), nil, nil, xsd.EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("building the %s complex type: %v", name, err)
 	}

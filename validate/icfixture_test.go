@@ -232,7 +232,7 @@ func icContent(t *testing.T, particles ...xsd.Particle) xsd.ContentType {
 func icComplex(t *testing.T, name string, uses []xsd.AttributeUse, content xsd.ContentType) xsd.ComplexType {
 	t.Helper()
 	ct, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Local: name}, xsd.QName{}, nil,
-		xsd.DerivationRestriction, false, uses, nil, nil, content, nil, nil)
+		xsd.DerivationRestriction, false, attrContent(uses), nil, nil, content, nil, nil)
 	if err != nil {
 		t.Fatalf("building %s: %v", name, err)
 	}
@@ -407,10 +407,10 @@ func icAnonymousSchema(t *testing.T, kidAid, topAid string, rootICs []xsd.Identi
 	kidID := xsd.NewComponentID()
 	kidType, err := xsd.NewAnonymousComplexType(xsderr.Loc{},
 		xsd.ElementDeclarationContext{Component: kidID}, xsd.QName{Local: "Base"}, nil,
-		xsd.DerivationExtension, false, []xsd.AttributeUse{
+		xsd.DerivationExtension, false, attrContent([]xsd.AttributeUse{
 			icUse(t, xsd.QName{Local: "aid"}, kidAid),
 			icUse(t, xsd.QName{Local: "ref"}, "IDREF"),
-		}, nil, nil, xsd.EmptyContent{}, nil, nil)
+		}), nil, nil, xsd.EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("building the anonymous kid type: %v", err)
 	}

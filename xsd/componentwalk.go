@@ -24,23 +24,28 @@ import "github.com/kud360/goxsd8/xsderr"
 // the outer failure (STYLE D1). Slices are walked in document order (STYLE D2).
 //
 // BY-NAME ARMS ARE CHARGED, NEVER FOLLOWED. A TypeDefinitionRef base, an
-// <element ref>, a <group ref> and an <attribute ref> each name a TOP-LEVEL
-// component, reached from a phase's ROOT LOOPS and never from a referring site,
-// so following one would re-walk it once per site. A phase whose roots omit one
-// of those tables owes nothing at what it holds: checkComponentValueConstraints
-// and checkTypeTableSubstitutability enumerate no s.attributes, because a global
-// attribute declaration nests only a simple {type definition} and neither phase
-// charges a simple type — a-props-correct clause 2 against the declaration
-// itself is checkAttributeDeclarationDefaults'. What the descent follows is
-// OWNERSHIP — an inline type definition, an attribute use's local declaration, a
-// particle's inline term — and an owned component must pre-exist the slot holding
-// it, which is what makes the walked structure a finite tree.
+// <element ref>, a <group ref>, an <attribute ref> and an <attributeGroup ref>
+// each name a TOP-LEVEL component, reached from a phase's ROOT LOOPS and never
+// from a referring site, so following one would re-walk it once per site. A
+// phase whose roots omit one of those tables owes nothing at what it holds:
+// checkComponentValueConstraints and checkTypeTableSubstitutability enumerate no
+// s.attributes, because a global attribute declaration nests only a simple {type
+// definition} and neither phase charges a simple type — a-props-correct clause 2
+// against the declaration itself is checkAttributeDeclarationDefaults'. What the
+// descent follows is OWNERSHIP — an inline type definition, an attribute use's
+// local declaration, a particle's inline term, the redefined original a
+// ResolvedAttributeGroup holds — and an owned component must pre-exist the slot
+// holding it, which is what makes the walked structure a finite tree.
 //
 // NO VISITED SET AND NO CYCLE GUARD (STYLE D4, PRINCIPLES 9). The edges that
 // could close a cycle are exactly the by-name ones the descent does not follow.
 // A circular {base type definition} chain is rejected by ct-props-correct clause
 // 3 in Phase B (checkComplexBaseAcyclic); a seen-set here would mask that
-// check's absence rather than defend against anything.
+// check's absence rather than defend against anything. An <attributeGroup ref>
+// cycle is the one such edge the spec makes LEGAL (§3.6.2.1: "Circular reference
+// is not disallowed"), and it needs no guard here for the same reason: the
+// descent never follows the ref. The only visited set that edge calls for is the
+// attribute group fold's, scoped to one closure (attributegroupfold.go).
 //
 // {attribute wildcard}, {open content} and {assertions} carry no field. Each is
 // a leaf of THIS tree — none nests a type definition, an attribute use or an
@@ -57,6 +62,11 @@ type componentWalk struct {
 	// enclosing complex type's or attribute group definition's position and owner
 	// names it, because an Attribute Use retains no position of its own.
 	attributeUse func(u AttributeUse, loc xsderr.Loc, owner string) error
+	// attributeGroupRef is charged on an <attributeGroup ref> member of a
+	// container's attribute content, a by-name arm. loc and owner are the
+	// container's, as for attributeUse. It is reached only before the attribute
+	// group fold, which leaves no reference behind (attributeMembers).
+	attributeGroupRef func(r AttributeGroupRef, loc xsderr.Loc, owner string) error
 	// elementDeclaration is charged on an Element Declaration, global or local; it
 	// retains its own Loc, so it takes neither loc nor owner.
 	elementDeclaration func(e ElementDeclaration) error
@@ -86,9 +96,9 @@ func (w componentWalk) walkTypeRoot(t TypeDefinition) error {
 }
 
 // walkComplexType descends one Complex Type Definition: its {base type
-// definition}, then each of its {attribute uses}, then its {content type} —
-// SimpleContent's {simple type definition} or ElementContent's particle tree,
-// EmptyContent nesting nothing.
+// definition}, then its attribute content (walkAttributeMembers), then its
+// {content type} — SimpleContent's {simple type definition} or ElementContent's
+// particle tree, EmptyContent nesting nothing.
 //
 // The base slot comes first because a fault in a base is a fault the type
 // inherits, so a reader meeting two is sent to the one the other is built on.
@@ -102,10 +112,8 @@ func (w componentWalk) walkComplexType(c ComplexType) error {
 	if err := w.walkTypeDefinition(c.Base(), c.Loc(), owner+" {base type definition}"); err != nil {
 		return err
 	}
-	for _, u := range c.AttributeUses() {
-		if err := w.walkAttributeUse(u, c.Loc(), owner); err != nil {
-			return err
-		}
+	if err := w.walkAttributeMembers(attributeMembers(c.attributeContent, c.attributeUses), c.Loc(), owner); err != nil {
+		return err
 	}
 	switch ct := c.ContentType().(type) {
 	case EmptyContent:
@@ -258,23 +266,58 @@ func (w componentWalk) walkModelGroup(g ModelGroup, loc xsderr.Loc) error {
 	return nil
 }
 
-// walkAttributeGroupDefinition enters one Attribute Group Definition, whose
-// only nesting slot is its {attribute uses} (§3.6.1) — {attribute wildcard}
-// nests no component this tree reaches.
+// walkAttributeMembers descends a container's attribute content in document
+// order, over the AttributeUseOrGroupRef sum's three arms: a ResolvedAttributeUse
+// is walked as the Attribute Use it is; an AttributeGroupRef is CHARGED and never
+// followed, like every by-name arm (the group it names is a root of every phase
+// that owes it anything); a ResolvedAttributeGroup's definition is OWNED by the
+// slot and is entered, since no index holds that redefined original and this
+// slot is the only route to its content.
 //
-// It is a ROOT entry point and is reached from no referring site: §3.6.2.1
-// inlines every <attributeGroup ref> at producer mapping time, so no component
-// holds an edge to an Attribute Group Definition. Every phase whose roots
-// include {attribute group definitions} enters them through here, so the owner
-// phrase and the referrer-Loc re-rooting are decided once (STYLE T4).
-func (w componentWalk) walkAttributeGroupDefinition(g AttributeGroupDefinition) error {
-	owner := attributeGroupOwner(g)
-	for _, u := range g.AttributeUses() {
-		if err := w.walkAttributeUse(u, g.Loc(), owner); err != nil {
-			return err
+// members comes from attributeMembers, so it is the unfolded content before the
+// attribute group fold runs and the folded {attribute uses} after it. Both
+// phases the fold precedes — Phase A and checkSimpleTypeDerivations — therefore
+// see every reference and every owned original, and every later phase sees the
+// folded uses and no reference at all.
+func (w componentWalk) walkAttributeMembers(members []AttributeUseOrGroupRef, loc xsderr.Loc, owner string) error {
+	for _, m := range members {
+		switch m := m.(type) {
+		case ResolvedAttributeUse:
+			if err := w.walkAttributeUse(m.Use, loc, owner); err != nil {
+				return err
+			}
+		case AttributeGroupRef:
+			if w.attributeGroupRef == nil {
+				continue
+			}
+			if err := w.attributeGroupRef(m, loc, owner); err != nil {
+				return err
+			}
+		case ResolvedAttributeGroup:
+			if err := w.walkAttributeGroupDefinition(m.Definition); err != nil {
+				return err
+			}
+		default:
+			panic("xsd: componentWalk.walkAttributeMembers: non-exhaustive AttributeUseOrGroupRef switch")
 		}
 	}
 	return nil
+}
+
+// walkAttributeGroupDefinition enters one Attribute Group Definition, whose
+// only nesting slot is its attribute content (§3.6.1 {attribute uses}, and
+// before the fold the <attributeGroup ref>s it is built from) — {attribute
+// wildcard} nests no component this tree reaches.
+//
+// Every phase whose roots include {attribute group definitions} enters them
+// through here, and so does walkAttributeMembers for the one definition a slot
+// OWNS, so the owner phrase and the referrer-Loc re-rooting are decided once
+// (STYLE T4). A definition IS the target of a by-name edge — an
+// <attributeGroup ref> in another container — but that edge is charged, never
+// followed (walkAttributeMembers), so reaching a definition by reference re-walks
+// nothing and a reference cycle loops nothing.
+func (w componentWalk) walkAttributeGroupDefinition(g AttributeGroupDefinition) error {
+	return w.walkAttributeMembers(attributeMembers(g.attributeContent, g.attributeUses), g.Loc(), attributeGroupOwner(g))
 }
 
 // attributeGroupOwner renders an Attribute Group Definition as the owner phrase

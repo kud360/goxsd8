@@ -41,21 +41,23 @@
 // time — no traversal carries a `seen` set in order to detect a
 // forbidden circularity. The one exception is where the spec itself
 // declares the cycle legal: attribute-group references may form cycles
-// (§3.6.2.1), and the transitive-closure fold of {attribute uses}
-// carries a visited set purely to bound the walk and avoid re-descending
-// a group already folded in — it rejects nothing. Likewise the
-// composition index keyed by resolved location AND the namespace the
-// document was reached under AND the override applied to it is DOCUMENT
-// IDENTITY, not a cycle guard: §4.2.3 makes two xs:includes of the same
-// resolved location the same schema document and declares include cycles
-// legal, §4.2.6.2 says as much for repeated xs:imports, §4.2.5 says as
-// much for equivalent xs:overrides (and requires the processor to
-// recognize that closure has been reached, which is exactly what the
-// index does), the namespace is part of the key because one document
-// reached as a chameleon include and as an import yields two different
-// component sets, and the override is part of it because one document
-// overridden two different ways likewise does. Each distinct reading is
-// loaded once and nothing is rejected.
+// (§3.6.2.1), and xsd's finalize-time transitive-closure fold of
+// {attribute uses} and {attribute wildcard} carries a visited set purely
+// to bound the walk and avoid re-descending a group already folded in —
+// it rejects nothing. This package holds each <attributeGroup ref> as a
+// reference and follows none. Likewise the composition index keyed by
+// resolved location AND the namespace the document was reached under AND
+// the override applied to it is DOCUMENT IDENTITY, not a cycle guard:
+// §4.2.3 makes two xs:includes of the same resolved location the same
+// schema document and declares include cycles legal, §4.2.6.2 says as
+// much for repeated xs:imports, §4.2.5 says as much for equivalent
+// xs:overrides (and requires the processor to recognize that closure has
+// been reached, which is exactly what the index does), the namespace is
+// part of the key because one document reached as a chameleon include
+// and as an import yields two different component sets, and the override
+// is part of it because one document overridden two different ways
+// likewise does. Each distinct reading is loaded once and nothing is
+// rejected.
 //
 // # Determinism
 //
