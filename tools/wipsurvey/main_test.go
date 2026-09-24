@@ -1247,8 +1247,8 @@ func TestReadIssues(t *testing.T) {
 // TestStatelessFeedIsDiscardedNotReadAsOpen is #1604: a reshape that drops
 // `state` decoded every row as OPEN, so no branch could report RETIRED from
 // a feed that looked supplied. readIssues must refuse the whole list with an
-// errMissingState error — run's signal to render lease-only and then exit 2
-// — and classify, handed what run looks up from that result, must print no
+// errMissingState error — the error run hands to [renderReport] — and
+// classify, handed what run looks up from that result, must print no
 // RETIRED row. #8 carries needs-replan in both feeds, so a map kept despite
 // the error would retire it from a list the tool refused.
 func TestStatelessFeedIsDiscardedNotReadAsOpen(t *testing.T) {
