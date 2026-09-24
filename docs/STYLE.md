@@ -214,7 +214,10 @@ the number instead is not the fix: the ruling's grounding and the
 measurements that reopen it live on that thread, and the marker is the
 only route to them. Nothing else in the marker is audited once the ruling
 retires it, so a second number there is provenance and must read as
-provenance (#1376).
+provenance (#1376). That is a prose control, not a mechanized one: a second
+number's role — provenance beside a ruling, or a stale owner — is read
+from the marker's own words, and `go tool gapaudit` has no signal to tell
+the two apart (#1619).
 
 **P4. Stream from the start.** Bounded memory on every input path: no
 `io.ReadAll`, no whole-document buffering. Position tracking uses an
