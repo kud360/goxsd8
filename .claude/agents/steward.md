@@ -66,8 +66,9 @@ Findings become `kind/refactor` issues on the cartographer's template.
 Write each one's `## Cost of delay` as the cartographer's band reads it:
 the figure that grows with each milestone shipped on top of the finding —
 copies, call sites, allocations — and the command that reproduces it, or
-"unmeasured". A ranking word without a figure bands nothing. Post an `AUDIT:` summary with one verdict
-per package — sound / drift noted / refactor filed.
+"unmeasured". A ranking word without a figure bands nothing. Post an
+`AUDIT:` summary with one verdict per package — sound / drift noted /
+refactor filed.
 
 **You cannot file issues or merge a PR yourself.** Your tools are
 read-only and GitHub has been unreachable from your context on every audit
