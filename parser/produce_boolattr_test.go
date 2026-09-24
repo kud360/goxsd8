@@ -188,7 +188,7 @@ func TestProduceBooleanAttributePaddedActualValue(t *testing.T) {
 // name, then attribute name, then the offending lexical — so the assertion pins
 // the argument ORDER and not merely the presence of three strings (#1048).
 //
-// The rows reach thirteen of boolAttr's fourteen call sites. The fourteenth,
+// The rows reach fourteen of boolAttr's fifteen call sites. The fifteenth,
 // produceLocalAttribute's inheritable, has no document that reaches it with a
 // bad lexical: its only caller is produceAttributeUse, which reads inheritable
 // off the SAME <attribute> element first and returns on the fault, so the row
@@ -271,6 +271,13 @@ func TestProduceBooleanAttributeOutOfLexicalSpaceRejected(t *testing.T) {
 			doc: wrap("urn:x", `<xs:complexType name="T"><xs:sequence/>`+
 				`<xs:attribute name="a" type="xs:string" inheritable="Y"/></xs:complexType>`),
 			wantMsg: `<attribute> inheritable value "Y"`,
+		},
+		{
+			// produceAttribute's site: the global form reads inheritable itself
+			// (§3.2.2.1), with no Attribute Use ahead of it to charge first.
+			name:    `inheritable="yes" on a top-level <attribute>`,
+			doc:     wrap("urn:x", `<xs:attribute name="a" type="xs:string" inheritable="yes"/>`),
+			wantMsg: `<attribute> inheritable value "yes"`,
 		},
 		{
 			name:    `appliesToEmpty="yes" on <defaultOpenContent>`,

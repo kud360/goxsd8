@@ -82,6 +82,38 @@ func TestProduceTopLevelAttribute(t *testing.T) {
 	}
 }
 
+// TestProduceTopLevelAttributeInheritable pins §3.2.2.1 dcl.att.global's
+// {inheritable} row on the global form: the ·actual value· of inheritable, if
+// present, otherwise false. The true row is the one a hardcoded false fails
+// (#831); the false and absent rows fail a hardcoded true.
+func TestProduceTopLevelAttributeInheritable(t *testing.T) {
+	// A slice, not a map: subtest order is output (STYLE D2).
+	cases := []struct {
+		name string
+		attr string
+		want bool
+	}{
+		{`inheritable="true"`, ` inheritable="true"`, true},
+		{`inheritable="false"`, ` inheritable="false"`, false},
+		{"inheritable absent", "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			s, err := produce(t, wrap("", `<xs:attribute name="lang" type="xs:language"`+tc.attr+`/>`))
+			if err != nil {
+				t.Fatalf("Produce: %v", err)
+			}
+			ad, ok := s.Attribute(xsd.QName{Local: "lang"})
+			if !ok {
+				t.Fatal("attribute lang not found")
+			}
+			if got := ad.Inheritable(); got != tc.want {
+				t.Errorf("{inheritable} = %t, want %t (§3.2.2.1)", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestProduceElementTargetNamespace(t *testing.T) {
 	s, err := produce(t, wrap("urn:x", `<xs:element name="root" type="xs:string"/>`))
 	if err != nil {

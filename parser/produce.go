@@ -3189,7 +3189,14 @@ func (p *producer) produceAttribute(qname xsd.QName, elem *Element) (xsd.Attribu
 	if err != nil {
 		return xsd.AttributeDeclaration{}, err
 	}
-	return xsd.NewAttributeDeclaration(elem.Loc(), qname, typeDef, xsd.NewAttributeGlobalScope(), vc, false)
+	// §3.2.2.1 dcl.att.global: {inheritable} is the ·actual value· of
+	// inheritable, if present, otherwise false — the zero value, so presence is
+	// not a rule input.
+	inheritable, _, err := boolAttr(elem, "inheritable")
+	if err != nil {
+		return xsd.AttributeDeclaration{}, err
+	}
+	return xsd.NewAttributeDeclaration(elem.Loc(), qname, typeDef, xsd.NewAttributeGlobalScope(), vc, inheritable)
 }
 
 // valueConstraintOf maps the default/fixed attributes of an <element>/<attribute>
