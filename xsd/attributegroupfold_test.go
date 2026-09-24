@@ -323,7 +323,7 @@ func TestAttributeGroupRefDanglingChargedAtFinalize(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := gFinalize(t, func(b *SchemaBuilder) { tc.build(t, b) })
 			expectRule(t, err, ruleSrcResolve)
-			want := tc.owner + " <attributeGroup ref> references attribute group definition " + uq("missing").String()
+			want := tc.owner + " references attribute group definition " + uq("missing").String() + " — through an <attributeGroup ref> child, or, on a complex type, the reference §3.4.2.4 synthesizes from <schema defaultAttributes> — but"
 			if !strings.Contains(err.Error(), want) || !strings.Contains(err.Error(), "src-resolve clause 1.4") {
 				t.Fatalf("message %q does not contain %q and cite clause 1.4", err, want)
 			}

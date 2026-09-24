@@ -184,15 +184,20 @@ func TestDefaultAttributesCollisionRejected(t *testing.T) {
 // group: the synthesized reference is the ordinary <attributeGroup ref> §3.4.2.4
 // says it is "as if", resolved at finalize like any other (#479), so it is
 // charged against the <complexType> that holds it — the referrer-Loc convention
-// every src-resolve rejection follows — and names the group it misses.
+// every src-resolve rejection follows — names the group it misses, and names
+// <schema defaultAttributes>, since the <complexType> has no <attributeGroup
+// ref> child for the author to find.
 func TestDefaultAttributesUnresolvableRejected(t *testing.T) {
 	_, err := produce(t, wrapDefaults("urn:x", `defaultAttributes="tns:missing"`,
 		`<xs:complexType name="T"><xs:sequence/></xs:complexType>`))
 	if err == nil {
 		t.Fatal("Produce accepted a defaultAttributes naming no attribute group, want src-resolve")
 	}
-	if !strings.Contains(err.Error(), "[src-resolve] complex type {urn:x}T <attributeGroup ref> references attribute group definition {urn:x}missing") {
+	if !strings.Contains(err.Error(), "[src-resolve] complex type {urn:x}T references attribute group definition {urn:x}missing") {
 		t.Fatalf("error = %q, want src-resolve charged against complex type {urn:x}T for the missing {urn:x}missing", err)
+	}
+	if !strings.Contains(err.Error(), "<schema defaultAttributes>") {
+		t.Fatalf("error = %q, want it to name the <schema defaultAttributes> construct the author wrote", err)
 	}
 	if !strings.Contains(err.Error(), "src-resolve clause 1.4") {
 		t.Fatalf("error = %q, want it to cite src-resolve clause 1.4", err)

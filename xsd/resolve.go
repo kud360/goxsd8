@@ -530,14 +530,17 @@ func (s *Schema) resolveModelGroupName(ref QName, loc xsderr.Loc, ctx string) er
 // the §3.6.2.1 closure that does follow the edge is the attribute group fold's
 // (attributegroupfold.go), which relies on this check having passed. loc is the
 // container's position, since a member retains none of its own; owner names the
-// container.
+// container. The member may be a reference the author never wrote as a child —
+// the one §3.4.2.4 synthesizes on a complex type from <schema defaultAttributes>
+// — so the message names both sources rather than asserting an <attributeGroup
+// ref> child exists.
 //
 // An AttributeGroupRef cannot carry the absent QName (checkAttributeContent), so
 // unlike the other by-name helpers this one has no absent case to skip.
 func (s *Schema) resolveAttributeGroupRef(r AttributeGroupRef, loc xsderr.Loc, owner string) error {
 	if _, ok := s.attributeGroupIndex[r.Name]; !ok {
 		return xsderr.New(ruleSrcResolve, loc,
-			"%s <attributeGroup ref> references attribute group definition %s, but no attribute group definition with that expanded name is present in the schema (src-resolve clause 1.4)", owner, r.Name)
+			"%s references attribute group definition %s — through an <attributeGroup ref> child, or, on a complex type, the reference §3.4.2.4 synthesizes from <schema defaultAttributes> — but no attribute group definition with that expanded name is present in the schema (src-resolve clause 1.4)", owner, r.Name)
 	}
 	return nil
 }
