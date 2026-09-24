@@ -212,8 +212,11 @@ represents it**:
   by-name arm is the deferred one and whose owned arm is already resolved),
   the SIMPLE-type base chain (`st-props-correct` cl. 2 — a
   `SimpleTypeOrRef` since #636, with the same two-arm shape), the
-  `<group ref>` graph (`mg-props-correct` cl. 2), and substitution-group
-  affiliation (`e-props-correct` cl. 5), all in `xsd/resolve.go`. Because
+  `<group ref>` graph (`mg-props-correct` cl. 2), substitution-group
+  affiliation (`e-props-correct` cl. 5), and the `<attributeGroup ref>`
+  graph (`src-resolve` cl. 1.4 — an `AttributeUseOrGroupRef` since #479,
+  folded to its §3.6.2.1/§3.6.2.2 transitive closure in
+  `xsd/attributegroupfold.go`), all in `xsd/resolve.go`. Because
   the simple-type base is a reference again, every reader that walks it —
   `Base`, `Variety`, `Primitive`, `Item`, `Members`, `EffectiveFacets` —
   takes an `xsd.TypeResolver` and returns an error, and the packages above
@@ -226,9 +229,11 @@ represents it**:
   component at construction, so demand-driven eager base construction would
   otherwise not terminate. The simple-type twin died with #636, which also
   removed the producer's `st-props-correct` cl. 2 and `src-resolve` cl. 1.1
-  charges for a simple type's base. The producer also still inlines
-  `<attributeGroup ref>` at mapping time with no ref component, which is a
-  different representation and not this concern.
+  charges for a simple type's base. The attribute-group half died with
+  #479, which also removed the producer's `src-resolve` cl. 1.4 splice
+  (`collectReferencedGroup`/`spliceAttributeGroup`) and its
+  `combineAttributeWildcards` §3.6.2.2 union, both now decided in
+  `xsd/attributegroupfold.go`.
 
   **`ct-props-correct` is not the only rule charged from both packages, and
   the others are deliberate.** `src-resolve` (cl. 1.1 for a COMPLEX base, and
