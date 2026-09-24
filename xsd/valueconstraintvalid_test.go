@@ -266,7 +266,7 @@ func TestPhaseEReachesEveryAttributeUseSite(t *testing.T) {
 			b.AddModelGroup(mgd)
 		}},
 		{"a top-level attribute group definition", func(b *SchemaBuilder) {
-			g, err := NewAttributeGroupDefinition(xsderr.Loc{}, uq("ag"), bad(), nil)
+			g, err := NewAttributeGroupDefinition(xsderr.Loc{}, uq("ag"), attributeUseMembers(bad()), nil)
 			if err != nil {
 				t.Fatalf("NewAttributeGroupDefinition: %v", err)
 			}

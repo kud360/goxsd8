@@ -130,15 +130,14 @@ import "github.com/kud360/goxsd8/xsderr"
 // position depends on which route reached it.
 //
 // {attribute group definitions} are rooted although walking types alone would
-// suffice for the parser path — §3.6.2.1 inlines every <attributeGroup ref> at
-// producer mapping time, so a referenced group's uses are already folded into
-// each type referencing it. An UNREFERENCED group, and any group a SchemaBuilder
-// caller adds directly, holds Attribute Use components the spec constrains all
-// the same, and a folded use is simply re-tested with the same verdict. Phase A
-// roots them for that reason too (#725), so an <attribute ref> reaching this
-// phase has been vetted for resolvability like any other: the
-// ResolvedAttributeDeclaration miss below is unreachable for a schema that
-// survived Phase A, not a fail-open.
+// reach every REFERENCED group's uses — this phase runs after the attribute
+// group fold (attributegroupfold.go), so those uses are already folded into
+// each type referencing it. An UNREFERENCED group holds Attribute Use
+// components the spec constrains all the same, and a folded use is simply
+// re-tested with the same verdict. Phase A roots them for that reason too
+// (#725), so an <attribute ref> reaching this phase has been vetted for
+// resolvability like any other: the ResolvedAttributeDeclaration miss below is
+// unreachable for a schema that survived Phase A, not a fail-open.
 func (s *Schema) checkComponentValueConstraints() error {
 	w := componentWalk{
 		attributeUse:       s.checkAttributeUseValueConstraint,

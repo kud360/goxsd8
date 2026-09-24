@@ -56,7 +56,7 @@ func entityValidator(t *testing.T) *validate.Validator {
 	for _, st := range seeded {
 		b.AddType(st)
 	}
-	var uses []xsd.AttributeUse
+	var uses []xsd.AttributeUseOrGroupRef
 	for _, a := range []struct{ name, typ string }{{"ent", "ENTITY"}, {"ents", "ENTITIES"}} {
 		d, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, xsd.QName{Local: a.name},
 			xsd.TypeDefinitionRef{Name: xsd.QName{Space: xsd.XMLSchemaNS, Local: a.typ}},
@@ -68,7 +68,7 @@ func entityValidator(t *testing.T) *validate.Validator {
 		if err != nil {
 			t.Fatalf("building the %s attribute use: %v", a.name, err)
 		}
-		uses = append(uses, u)
+		uses = append(uses, xsd.ResolvedAttributeUse{Use: u})
 	}
 	ct, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Local: "RType"}, xsd.QName{}, nil,
 		xsd.DerivationRestriction, false, uses, nil, nil, xsd.EmptyContent{}, nil, nil)

@@ -84,8 +84,8 @@ var restrictionBlockingKeywords = []DerivationMethod{DerivationExtension, Deriva
 // Alternative, an <alternative>'s inline <complexType> (#438). §3.4.6.1's
 // chapeau binds it like every other complex type definition ("All complex type
 // definitions ... must satisfy the following constraints", with no carve-out for
-// the slot that reaches one), and the two folds already materialise §3.4.2.4
-// clause 3 and §3.4.2.5 clause 2 on it (ownedtypefold.go, #414), so the
+// the slot that reaches one), and the finalize folds already materialise
+// §3.4.2.4 and §3.4.2.5 in full on it (ownedtypefold.go, #414, #479), so the
 // derivation clauses below meet a FOLDED component rather than turning an
 // anonymous extension into a false rejection.
 //
@@ -189,7 +189,7 @@ func (s *Schema) checkSimpleBaseIsExtension(c ComplexType) error {
 // extension of B declaring that name itself would collide with it and be rejected
 // here for a duplicate its source never wrote (#401).
 func checkAttributeUseNamesUnique(c ComplexType) error {
-	name, duplicate := duplicateAttributeUseName(c.attributeUses)
+	_, name, duplicate := duplicateAttributeUseName(c.attributeUses)
 	if !duplicate {
 		return nil
 	}
@@ -198,26 +198,27 @@ func checkAttributeUseNamesUnique(c ComplexType) error {
 }
 
 // duplicateAttributeUseName reports the FIRST expanded name that two members of
-// an {attribute uses} set share, scanning in document order so the reported
-// duplicate is deterministic and the map never determines the verdict (STYLE
-// D2/D1).
+// an {attribute uses} set share, and the index of the member that repeats it,
+// scanning in document order so the reported duplicate is deterministic and the
+// map never determines the verdict (STYLE D2/D1).
 //
-// It takes the set rather than the Complex Type Definition because it has two
-// consumers over one scan (STYLE T4): ct-props-correct clause 4 above, which
-// charges a REAL type, and cos-ct-extends clause 1.5, which asks the same
-// question of the synthesized collapsed intermediate and charges its OWN rule at
-// the extending type's position — a synthetic component may not be named in a
-// verdict (checkExtensionTwoStepDerivable).
-func duplicateAttributeUseName(uses []AttributeUse) (QName, bool) {
+// It takes the set rather than the component because it has three consumers
+// over one scan (STYLE T4): ct-props-correct clause 4 above, which charges a
+// REAL type; ag-props-correct clause 2, the only one to print the index
+// (checkAttributeGroupDefinitionUsesUnique); and cos-ct-extends clause 1.5,
+// which asks the same question of the synthesized collapsed intermediate and
+// charges its OWN rule at the extending type's position — a synthetic component
+// may not be named in a verdict (checkExtensionTwoStepDerivable).
+func duplicateAttributeUseName(uses []AttributeUse) (int, QName, bool) {
 	seen := map[QName]bool{}
-	for _, u := range uses {
+	for i, u := range uses {
 		name := u.DeclarationName()
 		if seen[name] {
-			return name, true
+			return i, name, true
 		}
 		seen[name] = true
 	}
-	return QName{}, false
+	return 0, QName{}, false
 }
 
 // checkComplexTypeRestriction runs derivation-ok-restriction (§3.4.6.3) for one

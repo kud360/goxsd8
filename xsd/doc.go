@@ -157,8 +157,9 @@
 // expresses. It takes its <group ref> lookup as a parameter because
 // those two callers resolve one differently, not because it is an
 // extension point. Every other mapping rule this package completes —
-// the §3.4.2.4 clause 3 and §3.4.2.5 clause 2 folds, and this one's
-// structural inverse — stays in-package (T5).
+// the §3.6.2.1/§3.6.2.2 attribute group fold, the §3.4.2.4 clause 3 and
+// §3.4.2.5 clause 2 folds, and this one's structural inverse — stays
+// in-package (T5).
 //
 // # Value spaces
 //

@@ -173,7 +173,7 @@ import (
 //     carries the attribute tail — so there is nothing here to descend INTO. What
 //     is missing is the REPORT: modelGroup has no <group> arm and container none
 //     for <attributeGroup>; produceGroupRefParticle reads ref, minOccurs and
-//     maxOccurs, and collectReferencedGroup reads ref, each of them reading name
+//     maxOccurs, and attributeGroupMember reads ref, each of them reading name
 //     as well through rejectProhibitedRefAttrs (produce.go), which charges the
 //     definition-form attribute the reference form prohibits; no s4sModel orders
 //     either ref form; and groupParticles' default arm charges a name written

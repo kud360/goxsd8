@@ -27,7 +27,7 @@ func dType(t *testing.T, name, base string, method xsd.DerivationMethod, uses []
 		baseName = xsd.QName{Local: base}
 	}
 	ct, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Local: name}, baseName, nil,
-		method, false, uses, nil, nil, content, nil, nil)
+		method, false, attrContent(uses), nil, nil, content, nil, nil)
 	if err != nil {
 		t.Fatalf("building the %s complex type: %v", name, err)
 	}

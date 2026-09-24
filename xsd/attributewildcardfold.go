@@ -7,15 +7,15 @@ import "github.com/kud360/goxsd8/xsderr"
 // can apply.
 //
 // Clause 1 — the ·complete wildcard·, §3.6.2.2's intersection of the type's own
-// <anyAttribute> with those of the attribute groups it references — is decidable
-// from one <complexType> element, and parser/produce_complex.go applies it
-// (combineAttributeWildcards). Clause 2 then splits on {derivation method}: for a
-// restriction the value IS the ·complete wildcard· (clause 2.1) and the producer
-// is already right, but for an EXTENSION the value folds in the ·base wildcard·
-// (clause 2.2), which needs the base COMPONENT and so is reachable only once the
-// whole schema set is assembled. So {attribute wildcard} arrives at finalize
-// under-approximated for extensions, and is completed HERE, once, before any
-// constraint reads it.
+// <anyAttribute> with those of the attribute groups it references — needs those
+// groups' components, and attributegroupfold.go applies it at finalize, just
+// before this fold (#479). Clause 2 then splits on {derivation method}: for a
+// restriction the value IS the ·complete wildcard· (clause 2.1) and is already
+// right, but for an EXTENSION the value folds in the ·base wildcard· (clause
+// 2.2), which needs the base COMPONENT and so is reachable only once the whole
+// schema set is assembled. So {attribute wildcard} reaches this fold as the
+// ·complete wildcard·, under-approximated for extensions, and is completed
+// HERE, once, before any constraint reads it.
 //
 // This is attributeusefold.go's property-wise sibling and deliberately not merged
 // with it: the two folds share nothing but the shape of the walk (base before
@@ -71,11 +71,12 @@ type attributeWildcardFold struct {
 // foldAttributeWildcards materialises §3.4.2.5 clause 2 into every Complex Type
 // Definition's {attribute wildcard}, in base-before-derived dependency order.
 //
-// It is the second of the finalize pass's two mutations, beside foldAttributeUses
+// It is the third of the finalize pass's three mutations, beside
+// foldAttributeGroupReferences (attributegroupfold.go) and foldAttributeUses
 // (attributeusefold.go), and rests on the same footing: not a resolved-pointer
 // cache — that would hold state derivable from the QName plus the index (STYLE
 // D3) — but a property OVERWRITTEN with the value §3.4.2.5 defines, so the spec's
-// value has exactly one encoding afterwards and the producer's partial one is gone
+// value has exactly one encoding afterwards and the clause-1 partial one is gone
 // rather than kept beside it.
 //
 // It writes that property on EVERY complex type definition it folds, including
@@ -95,7 +96,9 @@ type attributeWildcardFold struct {
 // type definition} graph is known acyclic apart from ·xs:anyType·'s
 // self-derivation (§3.4.7, any-type-itself), the one edge foldTypeAttributeWildcard
 // excludes by position rather than by a guard (PRINCIPLES 9, STYLE D4). It must run
-// before Phase D, the first phase to read {attribute wildcard}.
+// AFTER the attribute group fold (foldAttributeGroupReferences), which is what
+// stores the ·complete wildcard· this fold starts from, and before Phase D's
+// checks, the first to read {attribute wildcard}.
 //
 // It folds the DECLARATION-OWNED anonymous complex types too, in a second walk
 // over the roots ownedtypefold.go enumerates; §3.4.2.5's own Note makes the rule
@@ -218,7 +221,7 @@ func (s *Schema) clause2AttributeWildcard(f *attributeWildcardFold, c ComplexTyp
 	}
 	c.base = slot
 	if c.DerivationMethod() != DerivationExtension {
-		return c, nil // clause 2.1: the ·complete wildcard· the producer already stored
+		return c, nil // clause 2.1: the ·complete wildcard· the attribute group fold stored
 	}
 	w, err := unionExtensionAttributeWildcard(c.loc, own, base)
 	if err != nil {
@@ -249,7 +252,7 @@ func (s *Schema) clause2AttributeWildcard(f *attributeWildcardFold, c ComplexTyp
 // {attribute wildcard} in the assembled schema, and not merely inside this pass.
 // checkAttributeRestrictionWildcard (attributerestriction.go) reads a base's
 // {attribute wildcard} to CHARGE its restrictions — "T declares a wildcard but B
-// has none" — so a base left at the producer's clause-1 value makes a legal
+// has none" — so a base left at its clause-1 value makes a legal
 // restriction of it a FALSE REJECT whenever that base only INHERITED its own
 // wildcard (#505).
 //
@@ -294,11 +297,11 @@ func (s *Schema) baseAttributeWildcard(f *attributeWildcardFold, c ComplexType, 
 // component it is handed — there is no second accessor for the second reading
 // (STYLE T4):
 //
-//   - on a component as the producer mapped it, the value IS §3.4.2.5 clause 1's
-//     ·complete wildcard·. §3.6.2.2's combination of the type's own
-//     <anyAttribute> with the referenced attribute groups' is exactly what
-//     NewComplexType was given, so it is read back off the component rather than
-//     recomputed (the producer's combineAttributeWildcards is its one encoding).
+//   - on a component as the attribute group fold left it, the value IS §3.4.2.5
+//     clause 1's ·complete wildcard·. §3.6.2.2's combination of the type's own
+//     <anyAttribute> with the referenced attribute groups' is exactly what that
+//     fold stored, so it is read back off the component rather than recomputed
+//     (attributegroupfold.go's closure is its one encoding).
 //   - on a component this fold has already returned, the value is the FOLDED
 //     {attribute wildcard} — which is what clause 2.2.1.1 names for the ·base
 //     wildcard·, the base's property and not the base's <anyAttribute>.
@@ -364,7 +367,7 @@ func unionExtensionAttributeWildcard(loc xsderr.Loc, own, base *Wildcard) (*Wild
 // A folded value that is ·absent· overwrites nothing: the fold never turns a
 // present property absent — clause 2.1 keeps the ·complete wildcard·, and every
 // clause 2.2 case yields ·absent· only when BOTH operands are — so an absent
-// result means the producer already left the property absent
+// result means the attribute group fold already left the property absent
 // (clause2AttributeWildcard stores only a present one). The COMPONENT is still
 // stored, because its {base type definition} slot may have been re-seated even
 // when its own wildcard was not: that is exactly the case of a restriction over

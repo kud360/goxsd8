@@ -463,7 +463,7 @@ func (s *Schema) checkExtensionTwoStepDerivable(t ComplexType) error {
 		// here is a missed rejection and can never fabricate one.
 		return nil
 	}
-	if name, duplicate := duplicateAttributeUseName(m.attributeUses); duplicate {
+	if _, name, duplicate := duplicateAttributeUseName(m.attributeUses); duplicate {
 		return xsderr.New(ruleCosCTExtends, t.Loc(),
 			"%s is not ·derivable· in two steps — an extension followed by a possibly vacuous restriction — from the ancestor whose {base type definition} is xs:anyType, as cos-ct-extends clause 1.5 requires: re-ordering its derivation chain to put every extension step first collapses two attribute uses for %s into one type, which ct-props-correct clause 4 forbids, so an extension in the chain adds back an attribute a restriction in the chain removed", complexTypeOwner(t), name)
 	}

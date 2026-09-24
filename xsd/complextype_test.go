@@ -194,15 +194,15 @@ func TestNewOpenContentRejectsInvalidMode(t *testing.T) {
 func TestComplexTypeSlicesDoNotAlias(t *testing.T) {
 	final := []xsd.DerivationMethod{xsd.DerivationExtension}
 	prohibited := []xsd.DerivationMethod{xsd.DerivationRestriction}
-	uses := []xsd.AttributeUse{mustAttributeUse(t)}
+	content := resolvedUses(mustAttributeUse(t))
 	c, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Local: "ct"}, xsd.QName{Local: "base"}, final,
-		xsd.DerivationRestriction, false, uses, nil, nil, xsd.EmptyContent{}, prohibited, nil)
+		xsd.DerivationRestriction, false, content, nil, nil, xsd.EmptyContent{}, prohibited, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType unexpected error: %v", err)
 	}
 	final[0] = xsd.DerivationRestriction
 	prohibited[0] = xsd.DerivationExtension
-	uses[0] = xsd.AttributeUse{}
+	content[0] = xsd.ResolvedAttributeUse{}
 	if c.Final()[0] != xsd.DerivationExtension {
 		t.Errorf("ComplexType aliased the {final} slice: got %s", c.Final()[0])
 	}

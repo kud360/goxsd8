@@ -35,11 +35,11 @@ import "github.com/kud360/goxsd8/xsderr"
 //     (Phase B, resolve.go's checkComplexBaseAcyclic, #173) — it needs the whole
 //     base graph, which only exists once the schema set is assembled;
 //   - clause 4 (no two {attribute uses} share an {attribute declaration}
-//     expanded name) needs the Ref variant of {attribute declaration} resolved,
-//     so it too is enforced at finalize (Phase D, checkAttributeUseNamesUnique,
-//     #262) rather than at shape time (unlike AttributeGroupDefinition, whose
-//     own ag-props-correct clause 2 is enforced at shape time over uses it
-//     already owns);
+//     expanded name) needs the whole folded property — the uses of every
+//     referenced attribute group and of the base — so it too is enforced at
+//     finalize (Phase D, checkAttributeUseNamesUnique, #262), as
+//     AttributeGroupDefinition's ag-props-correct clause 2 is for the same
+//     reason (checkAttributeGroupUsesUnique);
 //   - clause 5 ({content type}.{open content} non-absent ⇒ {variety} is
 //     element-only or mixed) is satisfied BY CONSTRUCTION and gets no runtime
 //     check anywhere, at shape time or at finalize: {open content} is a field
@@ -351,18 +351,27 @@ func checkComplexTypeContext(loc xsderr.Loc, context ComplexTypeContext) error {
 // remaining resolved parts stay deferred.
 //
 // {attribute uses} and {attribute wildcard} are the TWO properties Finalize
-// completes rather than merely checks, because each has a mapping clause that
-// needs the resolved base. §3.4.2.4 clause 3 folds the {base type definition}'s
-// uses into the type's own, so the value a producer supplies to NewComplexType is
-// clauses 1 and 2 alone and Phase D overwrites it with the full set
-// (attributeusefold.go, #401). §3.4.2.5 clause 2.2 unions an EXTENSION's own
-// ·complete wildcard· with the base's, so for an extension the supplied value is
-// clause 1 alone and Phase D overwrites it with the union
+// completes rather than merely checks, because each has mapping clauses that
+// need other components. §3.4.2.4 clause 2 and §3.4.2.5 clause 1's ·complete
+// wildcard· fold in the attribute groups the type's <attributeGroup ref>s
+// ·resolve· to, which Phase D does first, from attributeContent
+// (attributegroupfold.go, #479). §3.4.2.4 clause 3 then folds the {base type
+// definition}'s uses into the type's own (attributeusefold.go, #401), and
+// §3.4.2.5 clause 2.2 unions an EXTENSION's ·complete wildcard· with the base's
 // (attributewildcardfold.go, #265); for a restriction clause 2.1 makes the
-// supplied value already final. See AttributeUses and AttributeWildcard.
+// ·complete wildcard· final. See AttributeUses and AttributeWildcard.
 //
-// prohibitedAttributeNames and ownAttributeUses are the two fields here that are
-// NOT §3.4.1 properties, and both are retained MAPPING INPUTS.
+// attributeContent, prohibitedAttributeNames and ownAttributeUses are the three
+// fields here that are NOT §3.4.1 properties, and all three are retained MAPPING
+// INPUTS.
+//
+// attributeContent is the type's own <attribute> and <attributeGroup ref>
+// children in document order — clauses 1 and 2's input, as the
+// AttributeUseOrGroupRef sum — retained because a referenced group is reachable
+// only once the schema is assembled. The group fold overwrites attributeUses
+// with the clause 1 and 2 union and sets attributeContent to nil, so a finalized
+// type holds no reference; until then attributeUses holds only the
+// ResolvedAttributeUse arms, and that duplication ends at the fold (STYLE D3).
 //
 // prohibitedAttributeNames carries clause 3.2.2's input: the fold excludes the
 // expanded name of "what would have been an attribute use corresponding to an
@@ -374,16 +383,17 @@ func checkComplexTypeContext(loc xsderr.Loc, context ComplexTypeContext) error {
 // about ONE type's own source declaration, consulted once at that type's own
 // fold step, and is never walked up a base chain.
 //
-// ownAttributeUses carries the clause 1 and clause 2 value the producer supplied
-// — this type's own <attribute> children and the {attribute uses} of the
-// attribute groups its <attributeGroup ref> children ·resolve· to — retained past
-// the clause 3 fold that overwrites {attribute uses} with the union of all three.
-// cos-ct-extends (§3.4.6.2) clause 1.5 needs exactly that per-step value to
-// collapse a chain's extension steps, and clause 3.1's fold is not invertible, so
-// it is retained rather than recovered (extensionStepAttributeUses,
-// attributeusefold.go). The fold WRITES it, at the one site that overwrites the
-// property it copies; nothing else does, and a component the fold has not reached
-// carries nil as one whose own source declaration contributed no use does.
+// ownAttributeUses carries the clause 1 and clause 2 value the group fold
+// computed from attributeContent — this type's own <attribute> children and the
+// {attribute uses} of the attribute groups its <attributeGroup ref> children
+// ·resolve· to — retained past the clause 3 fold that overwrites {attribute
+// uses} with the union of all three. cos-ct-extends (§3.4.6.2) clause 1.5 needs
+// exactly that per-step value to collapse a chain's extension steps, and clause
+// 3.1's fold is not invertible, so it is retained rather than recovered
+// (extensionStepAttributeUses, attributeusefold.go). The fold WRITES it, at the
+// one site that overwrites the property it copies; nothing else does, and a
+// component the fold has not reached carries nil as one whose own source
+// declaration contributed no use does.
 //
 // {context} (§3.4.1 ctd-context) is the component an ANONYMOUS type appears in,
 // and the §3.4.1 tableau makes it and {name} a strict XOR: "Required if {name}
@@ -443,6 +453,10 @@ type ComplexType struct {
 	final            []DerivationMethod
 	abstract         bool
 	attributeUses    []AttributeUse
+	// attributeContent is a mapping input, not a §3.4.1 property: §3.4.2.4
+	// clauses 1 and 2's source, nil once the group fold has consumed it
+	// (attributegroupfold.go). See the type doc.
+	attributeContent []AttributeUseOrGroupRef
 	// ownAttributeUses is a mapping input, not a §3.4.1 property: the
 	// §3.4.2.4 clause 1 and clause 2 uses this type's OWN source declaration
 	// gave it, retained past the clause 3 fold that overwrites attributeUses
@@ -492,6 +506,16 @@ type ComplexType struct {
 // attribute-use expanded-name uniqueness) and the derivation-validity rules are
 // NOT checked here — see ruleCTPropsCorrect's doc.
 //
+// attributeContent is the type's OWN attribute content in document order — a
+// ResolvedAttributeUse per <attribute> child and an AttributeGroupRef per
+// <attributeGroup ref> child, the synthesized <schema defaultAttributes>
+// reference last (§3.4.2.4's precondition) — and checkAttributeContent rejects a
+// member no arm describes. attributeWildcard is the type's OWN <anyAttribute>
+// only: §3.6.2.2's ·local wildcard·, which Finalize intersects with the
+// referenced groups' {attribute wildcard}s to form §3.4.2.5 clause 1's ·complete
+// wildcard· (attributegroupfold.go). Neither is the property its accessor
+// reports until Finalize has folded it; see AttributeUses and AttributeWildcard.
+//
 // prohibitedAttributeNames is not a §3.4.1 property and is not validated here:
 // it is the mapping input §3.4.2.4 clause 3.2.2 needs and any set of expanded
 // names is legal (the Note makes a prohibited <attribute> "pointless, though not
@@ -520,12 +544,12 @@ type ComplexType struct {
 // element's, say) — it is observable, not merely an error-charging convenience.
 // A caller with no real parser position — a synthesized or programmatically
 // built definition — passes the zero xsderr.Loc{}, which reads as "unknown".
-func NewComplexType(loc xsderr.Loc, name QName, baseTypeDefinitionName QName, final []DerivationMethod, derivationMethod DerivationMethod, abstract bool, attributeUses []AttributeUse, prohibitedAttributeNames []QName, attributeWildcard *Wildcard, contentType ContentType, prohibitedSubstitutions []DerivationMethod, assertions []Assertion) (ComplexType, error) {
+func NewComplexType(loc xsderr.Loc, name QName, baseTypeDefinitionName QName, final []DerivationMethod, derivationMethod DerivationMethod, abstract bool, attributeContent []AttributeUseOrGroupRef, prohibitedAttributeNames []QName, attributeWildcard *Wildcard, contentType ContentType, prohibitedSubstitutions []DerivationMethod, assertions []Assertion) (ComplexType, error) {
 	if name.Local == "" {
 		return ComplexType{}, xsderr.New(ruleCTPropsCorrect, loc,
 			"complex type definition has an absent {name}, but the §3.4.1 tableau makes {context} Required when {name} is absent; build an anonymous complex type through NewAnonymousComplexType (ct-props-correct clause 1)")
 	}
-	return newComplexType(loc, name, nil, baseTypeDefinitionRef(baseTypeDefinitionName), final, derivationMethod, abstract, attributeUses, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions)
+	return newComplexType(loc, name, nil, baseTypeDefinitionRef(baseTypeDefinitionName), final, derivationMethod, abstract, attributeContent, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions)
 }
 
 // baseTypeDefinitionRef lifts a pre-resolution base QName into the {base type
@@ -593,7 +617,7 @@ func baseTypeDefinitionRef(name QName) TypeDefinitionOrRef {
 // make this one case expressible would fork the §3.4.1 sum in two for a single
 // mapping rule, and every exhaustive switch over it would grow a case that means
 // the same thing as an existing one (STYLE T4).
-func NewComplexTypeOwningBase(loc xsderr.Loc, id ComponentID, name QName, base ComplexType, final []DerivationMethod, derivationMethod DerivationMethod, abstract bool, attributeUses []AttributeUse, prohibitedAttributeNames []QName, attributeWildcard *Wildcard, contentType ContentType, prohibitedSubstitutions []DerivationMethod, assertions []Assertion) (ComplexType, error) {
+func NewComplexTypeOwningBase(loc xsderr.Loc, id ComponentID, name QName, base ComplexType, final []DerivationMethod, derivationMethod DerivationMethod, abstract bool, attributeContent []AttributeUseOrGroupRef, prohibitedAttributeNames []QName, attributeWildcard *Wildcard, contentType ContentType, prohibitedSubstitutions []DerivationMethod, assertions []Assertion) (ComplexType, error) {
 	if name.Local == "" {
 		return ComplexType{}, xsderr.New(ruleCTPropsCorrect, loc,
 			"complex type definition has an absent {name}, but the §3.4.1 tableau makes {context} Required when {name} is absent; build an anonymous complex type through NewAnonymousComplexType (ct-props-correct clause 1)")
@@ -601,7 +625,7 @@ func NewComplexTypeOwningBase(loc xsderr.Loc, id ComponentID, name QName, base C
 	if err := checkOwnedBaseContext(loc, id, complexTypeLabel(name), base); err != nil {
 		return ComplexType{}, err
 	}
-	return newComplexType(loc, name, nil, InlineTypeDefinition{Definition: base}, final, derivationMethod, abstract, attributeUses, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions)
+	return newComplexType(loc, name, nil, InlineTypeDefinition{Definition: base}, final, derivationMethod, abstract, attributeContent, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions)
 }
 
 // NewAnonymousComplexTypeOwningBase builds an ANONYMOUS ComplexType that itself
@@ -630,7 +654,7 @@ func NewComplexTypeOwningBase(loc xsderr.Loc, id ComponentID, name QName, base C
 // is the only constructor holding both edges of a chain at once: the owner-side
 // token and the {context} the same component takes from the level above it.
 // It is not stored, for the reason NewComplexTypeOwningBase's doc gives.
-func NewAnonymousComplexTypeOwningBase(loc xsderr.Loc, id ComponentID, context ComplexTypeContext, base ComplexType, final []DerivationMethod, derivationMethod DerivationMethod, abstract bool, attributeUses []AttributeUse, prohibitedAttributeNames []QName, attributeWildcard *Wildcard, contentType ContentType, prohibitedSubstitutions []DerivationMethod, assertions []Assertion) (ComplexType, error) {
+func NewAnonymousComplexTypeOwningBase(loc xsderr.Loc, id ComponentID, context ComplexTypeContext, base ComplexType, final []DerivationMethod, derivationMethod DerivationMethod, abstract bool, attributeContent []AttributeUseOrGroupRef, prohibitedAttributeNames []QName, attributeWildcard *Wildcard, contentType ContentType, prohibitedSubstitutions []DerivationMethod, assertions []Assertion) (ComplexType, error) {
 	if err := checkAnonymousComplexTypeContext(loc, context); err != nil {
 		return ComplexType{}, err
 	}
@@ -641,7 +665,7 @@ func NewAnonymousComplexTypeOwningBase(loc xsderr.Loc, id ComponentID, context C
 	if err := checkOwnedBaseContext(loc, id, complexTypeLabel(QName{}), base); err != nil {
 		return ComplexType{}, err
 	}
-	return newComplexType(loc, QName{}, context, InlineTypeDefinition{Definition: base}, final, derivationMethod, abstract, attributeUses, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions)
+	return newComplexType(loc, QName{}, context, InlineTypeDefinition{Definition: base}, final, derivationMethod, abstract, attributeContent, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions)
 }
 
 // checkOwnedBaseContext rejects an owning type whose identity id is unminted, and
@@ -710,11 +734,11 @@ func checkOwnedBaseContext(loc xsderr.Loc, id ComponentID, label string, base Co
 // The parser calls this for the inline anonymous <complexType> of a local or a
 // global <element> (#340), always with an ElementDeclarationContext naming the
 // declaration it is building; see ComplexTypeContext.
-func NewAnonymousComplexType(loc xsderr.Loc, context ComplexTypeContext, baseTypeDefinitionName QName, final []DerivationMethod, derivationMethod DerivationMethod, abstract bool, attributeUses []AttributeUse, prohibitedAttributeNames []QName, attributeWildcard *Wildcard, contentType ContentType, prohibitedSubstitutions []DerivationMethod, assertions []Assertion) (ComplexType, error) {
+func NewAnonymousComplexType(loc xsderr.Loc, context ComplexTypeContext, baseTypeDefinitionName QName, final []DerivationMethod, derivationMethod DerivationMethod, abstract bool, attributeContent []AttributeUseOrGroupRef, prohibitedAttributeNames []QName, attributeWildcard *Wildcard, contentType ContentType, prohibitedSubstitutions []DerivationMethod, assertions []Assertion) (ComplexType, error) {
 	if err := checkAnonymousComplexTypeContext(loc, context); err != nil {
 		return ComplexType{}, err
 	}
-	return newComplexType(loc, QName{}, context, baseTypeDefinitionRef(baseTypeDefinitionName), final, derivationMethod, abstract, attributeUses, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions)
+	return newComplexType(loc, QName{}, context, baseTypeDefinitionRef(baseTypeDefinitionName), final, derivationMethod, abstract, attributeContent, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions)
 }
 
 // checkAnonymousComplexTypeContext charges the two rejections every anonymous
@@ -777,10 +801,21 @@ func checkAnonymousComplexTypeContext(loc xsderr.Loc, context ComplexTypeContext
 // checkRestrictionAssertions (complexderivation.go), which this makes answer
 // "prefix" for every chain: the direction is fail-open — clause 1.5 never rejects
 // on assertions — and no other reader of M.{assertions} exists.
+//
+// M is BORN FOLDED: p.uses and p.wildcard are already the {attribute uses} and
+// {attribute wildcard} the collapse computed from folded components, so M's
+// attribute content is cleared after construction, the state a finalized
+// component is in (attributeMembers). Left set, it would be a second copy of
+// p.uses no fold ever consumes.
 func newCollapsedExtension(loc xsderr.Loc, a ComplexType, p collapsedProperties) (ComplexType, error) {
 	context, _ := a.Context()
-	return newComplexType(loc, a.Name(), context, collapsedExtensionBase(a), nil, DerivationExtension, false,
-		p.uses, nil, p.wildcard, p.content, nil, a.assertions)
+	m, err := newComplexType(loc, a.Name(), context, collapsedExtensionBase(a), nil, DerivationExtension, false,
+		attributeUseMembers(p.uses), nil, p.wildcard, p.content, nil, a.assertions)
+	if err != nil {
+		return ComplexType{}, err
+	}
+	m.attributeContent = nil
+	return m, nil
 }
 
 // collapsedExtensionBase is M's {base type definition}: a reference to A, in
@@ -835,7 +870,7 @@ func collapsedExtensionBase(a ComplexType) TypeDefinitionOrRef {
 // anonymous base it may pass is A itself, already constructed and already
 // context-checked against its real owner, and M is never a component a consumer
 // can reach.
-func newComplexType(loc xsderr.Loc, name QName, context ComplexTypeContext, base TypeDefinitionOrRef, final []DerivationMethod, derivationMethod DerivationMethod, abstract bool, attributeUses []AttributeUse, prohibitedAttributeNames []QName, attributeWildcard *Wildcard, contentType ContentType, prohibitedSubstitutions []DerivationMethod, assertions []Assertion) (ComplexType, error) {
+func newComplexType(loc xsderr.Loc, name QName, context ComplexTypeContext, base TypeDefinitionOrRef, final []DerivationMethod, derivationMethod DerivationMethod, abstract bool, attributeContent []AttributeUseOrGroupRef, prohibitedAttributeNames []QName, attributeWildcard *Wildcard, contentType ContentType, prohibitedSubstitutions []DerivationMethod, assertions []Assertion) (ComplexType, error) {
 	if err := checkTypeDefinitionOrRef(loc, base, baseTypeSlot, complexTypeLabel(name)); err != nil {
 		return ComplexType{}, err
 	}
@@ -864,6 +899,9 @@ func newComplexType(loc xsderr.Loc, name QName, context ComplexTypeContext, base
 	if err := checkContentType(loc, contentType); err != nil {
 		return ComplexType{}, err
 	}
+	if err := checkAttributeContent(loc, complexTypeLabel(name), attributeContent); err != nil {
+		return ComplexType{}, err
+	}
 	if err := rejectSiblingOnAttributeWildcard(loc, attributeWildcard); err != nil {
 		return ComplexType{}, err
 	}
@@ -874,13 +912,14 @@ func newComplexType(loc xsderr.Loc, name QName, context ComplexTypeContext, base
 		base:             base,
 		derivationMethod: derivationMethod,
 		abstract:         abstract,
+		attributeUses:    directAttributeUses(attributeContent),
 		contentType:      contentType,
 	}
 	if len(final) > 0 {
 		c.final = append([]DerivationMethod(nil), final...)
 	}
-	if len(attributeUses) > 0 {
-		c.attributeUses = append([]AttributeUse(nil), attributeUses...)
+	if len(attributeContent) > 0 {
+		c.attributeContent = append([]AttributeUseOrGroupRef(nil), attributeContent...)
 	}
 	if len(prohibitedAttributeNames) > 0 {
 		c.prohibitedAttributeNames = append([]QName(nil), prohibitedAttributeNames...)
@@ -1017,10 +1056,12 @@ func (c ComplexType) Abstract() bool {
 // The spec property is a set (§3.4.1); the document order here is an
 // implementation choice for determinism and carries no spec significance.
 //
-// On a type reached through a finalized [Schema] this is the §3.4.2.4 clause 3
-// property — the type's own uses followed by those inherited from its {base type
-// definition}, less what clauses 3.2.1 and 3.2.2 exclude — because Finalize
-// materialises the fold (attributeusefold.go, #401). §3.4.2.4 makes that mapping
+// On a type reached through a finalized [Schema] this is the whole §3.4.2.4
+// property — the type's own uses and those of every attribute group its
+// <attributeGroup ref>s reach, transitively (clause 2, attributegroupfold.go,
+// #479), followed by those inherited from its {base type definition}, less what
+// clauses 3.2.1 and 3.2.2 exclude (clause 3) — because Finalize materialises
+// both folds (attributeusefold.go, #401). §3.4.2.4 makes that mapping
 // rule "the same for all complex type definitions", and an ANONYMOUS type gets
 // it too at the slots Finalize walks: an element declaration's own {type
 // definition}, a {type table} alternative's, and every such slot those two nest,
@@ -1034,8 +1075,9 @@ func (c ComplexType) Abstract() bool {
 // 1), so no complex type can be seated there to fold.
 //
 // On a ComplexType a caller built with [NewComplexType] and has not yet
-// finalized, it is only what that caller passed in: clause 3 needs the base
-// COMPONENT, which a standalone value has no way to reach.
+// finalized, it is only the ResolvedAttributeUse members that caller passed in:
+// clause 2 needs the referenced attribute group definitions and clause 3 the
+// base COMPONENT, and a standalone value has no way to reach either.
 func (c ComplexType) AttributeUses() []AttributeUse {
 	if len(c.attributeUses) == 0 {
 		return nil
@@ -1048,18 +1090,23 @@ func (c ComplexType) AttributeUses() []AttributeUse {
 // not meaningful.
 //
 // On a type reached through a finalized [Schema] this is the §3.4.2.5 clause 2
-// property. For a restriction that is the ·complete wildcard· the caller supplied
-// (clause 2.1); for an EXTENSION it is that wildcard's {namespace constraint}
-// unioned with the {base type definition}'s per cos-aw-union, under the
-// extension's own {process contents} (clause 2.2), because Finalize materialises
-// the fold (attributewildcardfold.go, #265). The §3.4.2.5 mapping rule is
-// likewise "the same for all complex type definitions", and an anonymous type
-// gets it at the slots AttributeUses names, by the two routes that entry
-// distinguishes (ownedtypefold.go, #414; baseAttributeWildcard, #505).
+// property, built on clause 1's ·complete wildcard·: the type's own
+// <anyAttribute> intersected (cos-aw-intersect, §3.6.2.2) with the {attribute
+// wildcard}s of every attribute group its <attributeGroup ref>s reach
+// (attributegroupfold.go, #479). For a restriction the property is that
+// ·complete wildcard· (clause 2.1); for an EXTENSION it is that wildcard's
+// {namespace constraint} unioned with the {base type definition}'s per
+// cos-aw-union, under the extension's own {process contents} (clause 2.2),
+// because Finalize materialises both folds (attributewildcardfold.go, #265). The
+// §3.4.2.5 mapping rule is likewise "the same for all complex type definitions",
+// and an anonymous type gets it at the slots AttributeUses names, by the two
+// routes that entry distinguishes (ownedtypefold.go, #414; baseAttributeWildcard,
+// #505).
 //
 // On a ComplexType a caller built with [NewComplexType] and has not yet
-// finalized, it is only what that caller passed in: clause 2.2 needs the base
-// COMPONENT, which a standalone value has no way to reach.
+// finalized, it is only the ·local wildcard· that caller passed in: clause 1
+// needs the referenced attribute group definitions and clause 2.2 the base
+// COMPONENT, and a standalone value has no way to reach either.
 func (c ComplexType) AttributeWildcard() (Wildcard, bool) {
 	return c.attributeWildcard, c.hasAttributeWildcard
 }

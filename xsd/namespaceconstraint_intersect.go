@@ -2,14 +2,16 @@ package xsd
 
 import "github.com/kud360/goxsd8/xsderr"
 
-// IntersectNamespaceConstraint returns the Attribute Wildcard Intersection
+// intersectNamespaceConstraint returns the Attribute Wildcard Intersection
 // (Structures §3.10.6.4, id="cos-aw-intersect") of a and b: the Namespace
 // Constraint that admits a namespace name (and expanded name) iff BOTH a and b
 // admit it. It is the binary primitive of the §3.6.2.2 "Common Rules for
-// Attribute Wildcards" combination (declare-attributeGroup-wildcard) applied by
-// the parser's <attributeGroup>/<complexType> attribute-wildcard producers; the
-// spec's "more than two" case (§3.10.6.4 final paragraph) is a plain left fold of
-// this primitive done by the caller, not by this function.
+// Attribute Wildcards" combination (declare-attributeGroup-wildcard), which
+// Finalize's attribute group fold applies (attributegroupfold.go), and of
+// particleattribution.go's wildcard ·overlap· test; the spec's "more than two"
+// case (§3.10.6.4 final paragraph) is a plain left fold of this primitive done
+// by the caller, not by this function. Both callers are in this package, so it
+// is unexported (STYLE T5).
 //
 // The {variety}/{namespaces} result is the §3.10.6.4 five-case table:
 //
@@ -55,14 +57,14 @@ import "github.com/kud360/goxsd8/xsderr"
 // Intersection is commutative: (loc, a, b) and (loc, b, a) yield equal results.
 // loc charges the (defensive) rejection position; a synthesized caller may pass
 // the zero xsderr.Loc{}.
-func IntersectNamespaceConstraint(loc xsderr.Loc, a, b NamespaceConstraint) (NamespaceConstraint, error) {
+func intersectNamespaceConstraint(loc xsderr.Loc, a, b NamespaceConstraint) (NamespaceConstraint, error) {
 	variety, namespaces := intersectVarietyAndSet(a, b)
 	disallowed := intersectDisallowedNames(a, b)
 	return NewNamespaceConstraint(loc, variety, namespaces, disallowed, intersectDisallowedNameKeywords(a, b))
 }
 
 // intersectVarietyAndSet computes the {variety}/{namespaces} of the intersection
-// per the §3.10.6.4 five-case table (see IntersectNamespaceConstraint). It reads
+// per the §3.10.6.4 five-case table (see intersectNamespaceConstraint). It reads
 // the operands' sealed {variety} within its defining package, which is not a
 // forbidden type switch (STYLE T3 governs concrete switches outside the package).
 func intersectVarietyAndSet(a, b NamespaceConstraint) (NamespaceConstraintVariety, []Namespace) {

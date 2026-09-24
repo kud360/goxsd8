@@ -28,7 +28,7 @@ import (
 // race would have nothing to find.
 func concurrencySchema(t *testing.T) *xsd.Schema {
 	t.Helper()
-	uses := []xsd.AttributeUse{typedUse(t, "n", integerType(), true, nil, nil)}
+	uses := []xsd.AttributeUseOrGroupRef{xsd.ResolvedAttributeUse{Use: typedUse(t, "n", integerType(), true, nil, nil)}}
 	content := cSequence(t, false, cParticle(t, "item", 0, 3))
 	ct, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Local: "RootType"}, xsd.QName{}, nil,
 		xsd.DerivationRestriction, false, uses, nil, nil, content, nil, nil)

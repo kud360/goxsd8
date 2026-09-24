@@ -25,7 +25,7 @@ import (
 func oInline(t *testing.T, base QName, uses []AttributeUse, wildcard *Wildcard, content ContentType) ComplexType {
 	t.Helper()
 	ct, err := NewAnonymousComplexType(xsderr.Loc{}, ElementDeclarationContext{Component: NewComponentID()},
-		base, nil, DerivationExtension, false, uses, nil, wildcard, content, nil, nil)
+		base, nil, DerivationExtension, false, attributeUseMembers(uses), nil, wildcard, content, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAnonymousComplexType: %v", err)
 	}

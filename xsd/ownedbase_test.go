@@ -25,12 +25,12 @@ func oPair(t *testing.T, name, originalBase QName, method DerivationMethod, ownU
 	t.Helper()
 	id := NewComponentID()
 	original, err := NewAnonymousComplexType(xsderr.Loc{}, ComplexTypeDefinitionContext{Component: id},
-		originalBase, nil, DerivationRestriction, false, originalUses, nil, originalWildcard, EmptyContent{}, nil, nil)
+		originalBase, nil, DerivationRestriction, false, attributeUseMembers(originalUses), nil, originalWildcard, EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAnonymousComplexType (the clause-1.1 original of %s): %v", name, err)
 	}
 	ct, err := NewComplexTypeOwningBase(xsderr.Loc{}, id, name, original, nil, method, false,
-		ownUses, nil, ownWildcard, EmptyContent{}, nil, nil)
+		attributeUseMembers(ownUses), nil, ownWildcard, EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexTypeOwningBase(%s): %v", name, err)
 	}

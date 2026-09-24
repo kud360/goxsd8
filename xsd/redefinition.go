@@ -84,25 +84,30 @@ func (b *SchemaBuilder) AddRedefiningAttributeGroup(g, original AttributeGroupDe
 // redefinition plays T and the original plays B, and no complex type is minted
 // to view them through (attributerestriction.go).
 //
-// NO FOLD APPLIES TO EITHER SIDE, and none is missing. The Note under clause
-// 7.2.2 settles it for the redefinition — "An attribute group restrictively
-// redefined per clause 7.2 corresponds to an attribute group whose {attribute
-// uses} consist all and only of those attribute uses corresponding to
-// <attribute>s explicitly present among the [children] of the <redefine>ing
-// <attributeGroup> … No inheritance from the <redefine>d attribute group occurs"
-// — and the same holds of the original, which is an ordinary top-level
-// definition of S2. Neither has a {base type definition}, so the §3.4.2.4 clause
-// 3 fold checkRestrictionAttributes depends on has nothing to reach through
-// here; the §3.6.2.2 union of any <attributeGroup ref> children is already in
-// both components, applied by the producer at mapping time (§3.6.2.1).
+// ONE FOLD APPLIES TO BOTH SIDES, and it has run: the §3.6.2.1/§3.6.2.2 closure
+// over each side's own <attributeGroup ref>s (attributegroupfold.go), which
+// writes the redefinition in {attribute group definitions} and the original in
+// its pairing alike. The Note under clause 7.2.2 — "An attribute group
+// restrictively redefined per clause 7.2 corresponds to an attribute group
+// whose {attribute uses} consist all and only of those attribute uses
+// corresponding to <attribute>s explicitly present among the [children] of the
+// <redefine>ing <attributeGroup> … No inheritance from the <redefine>d
+// attribute group occurs" — rules out only inheritance from the ORIGINAL, which
+// clause 7.2's branch has no self-reference to carry; a group either side
+// references by name is folded in exactly as for any other definition.
+// Neither side has a {base type definition}, so the §3.4.2.4 clause 3 fold
+// checkRestrictionAttributes depends on has nothing to reach through here.
 //
-// PHASE ORDER: it runs immediately after checkComplexDerivations, and needs
+// PHASE ORDER: it runs after the attribute group fold, without which both sides
+// would still hold only their direct uses and an original that reaches an
+// attribute through a referenced group would REJECT a redefinition declaring
+// that attribute. It runs immediately after checkComplexDerivations, and needs
 // Phase B's simple-type acyclicity, since loc-testSubP clause 5.1 walks a {base
 // type definition} chain with no visited set. It follows no chain of its own:
 // the pairing is a single edge from a named definition to an off-index
-// component, and §3.6.2.1 has already inlined every <attributeGroup ref> at
-// mapping time, so an AttributeGroupDefinition holds no edge to another one and
-// no visited set belongs here (PRINCIPLES 9). It draws Phase A's resolvability
+// component, and the fold has consumed every <attributeGroup ref> on both
+// sides, so neither holds an edge to another definition and no visited set
+// belongs here (PRINCIPLES 9). It draws Phase A's resolvability
 // guarantee on BOTH sides: resolveReferences roots {attribute group
 // definitions} for the redefinition, which sits there like any other component,
 // and the recorded pairings for the original, which §4.2.4 clause 4.1.2 keeps

@@ -115,7 +115,7 @@ func TestDefaultAttributesFoldsTheGroupWildcard(t *testing.T) {
 	}
 	// {process contents} comes from the FIRST member of the §3.6.2.2 pre-order,
 	// which is the type's own <anyAttribute> — the synthesized reference is
-	// spliced "after any other <attributeGroup> [children]", so it can never
+	// placed "after any other <attributeGroup> [children]", so it can never
 	// displace L at the head and hand the combination the group's strict.
 	if w.ProcessContents() != xsd.ProcessLax {
 		t.Errorf("{process contents} = %v, want lax from the type's own <anyAttribute>", w.ProcessContents())
@@ -181,20 +181,21 @@ func TestDefaultAttributesCollisionRejected(t *testing.T) {
 
 // TestDefaultAttributesUnresolvableRejected pins the src-resolve (§3.17.6.2
 // clause 1.4) verdict on a defaultAttributes naming no top-level attribute
-// group: the synthesized reference resolves through the ordinary
-// <attributeGroup ref> mechanism, and its position is the <schema> element that
-// carries the attribute, not the <complexType> that triggered the fold.
+// group: the synthesized reference is the ordinary <attributeGroup ref> §3.4.2.4
+// says it is "as if", resolved at finalize like any other (#479), so it is
+// charged against the <complexType> that holds it — the referrer-Loc convention
+// every src-resolve rejection follows — and names the group it misses.
 func TestDefaultAttributesUnresolvableRejected(t *testing.T) {
 	_, err := produce(t, wrapDefaults("urn:x", `defaultAttributes="tns:missing"`,
 		`<xs:complexType name="T"><xs:sequence/></xs:complexType>`))
 	if err == nil {
 		t.Fatal("Produce accepted a defaultAttributes naming no attribute group, want src-resolve")
 	}
-	if !strings.Contains(err.Error(), "src-resolve") {
-		t.Fatalf("error = %q, want it to cite src-resolve", err)
+	if !strings.Contains(err.Error(), "[src-resolve] complex type {urn:x}T <attributeGroup ref> references attribute group definition {urn:x}missing") {
+		t.Fatalf("error = %q, want src-resolve charged against complex type {urn:x}T for the missing {urn:x}missing", err)
 	}
-	if !strings.Contains(err.Error(), "<schema defaultAttributes>") {
-		t.Fatalf("error = %q, want it to name the <schema defaultAttributes> construct the author wrote", err)
+	if !strings.Contains(err.Error(), "src-resolve clause 1.4") {
+		t.Fatalf("error = %q, want it to cite src-resolve clause 1.4", err)
 	}
 }
 

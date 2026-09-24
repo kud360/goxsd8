@@ -947,10 +947,10 @@ func TestParseRedefineGroupSelfReferenceUnderElementNotCounted(t *testing.T) {
 }
 
 // TestParseRedefineAttributeGroupResolvesToOriginal is src-expredef clause 2's
-// attributeGroup half: the self-reference splices in the ORIGINAL group's
+// attributeGroup half: the self-reference contributes the ORIGINAL group's
 // {attribute uses}, which is the whole point of redefining an attribute group by
-// self-reference. Without it §3.6.2.1's ordinary inlining would meet the
-// build's own visited set and contribute nothing at all.
+// self-reference. Resolved by name instead, it would name the redefinition
+// itself, a §3.6.2.1 self-cycle the closure takes as contributing nothing at all.
 func TestParseRedefineAttributeGroupResolvesToOriginal(t *testing.T) {
 	s, err := parseMap(t, "main.xsd", map[string]string{
 		"main.xsd": wrap("urn:a", `<xs:redefine schemaLocation="lib.xsd">`+

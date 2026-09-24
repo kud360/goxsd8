@@ -1,17 +1,17 @@
 package xsd
 
-// This file supplies the ROOTS the two finalize folds walk beyond the Schema's
-// {type definitions}, and applies neither mapping rule itself. §3.4.2.4 opens
-// "This mapping rule is the same for all complex type definitions" and §3.4.2.5
-// says the same of its own, so a complex type reached only through a
-// DECLARATION is owed clause 3 and clause 2 exactly as a named one is. An
+// This file supplies the ROOTS the three finalize folds walk beyond the Schema's
+// {type definitions}, and applies none of their mapping rules itself. §3.4.2.4
+// opens "This mapping rule is the same for all complex type definitions" and
+// §3.4.2.5 says the same of its own, so a complex type reached only through a
+// DECLARATION is owed every clause of both exactly as a named one is. An
 // anonymous type enters no §3.17.1 symbol table and no {type definitions}
 // slice, so the only route to one is the slot that owns it, and a fold walking
 // s.types alone reached none (#414).
 //
-// The two folds stay two folds: what is shared here is the set of roots each
+// The three folds stay three folds: what is shared here is the set of roots each
 // outer walk starts from, never the mapping logic, whose case lists and
-// combination operators differ (#265).
+// combination operators differ (#265, #479).
 //
 // The descent REWRITES rather than merely visits, which is what makes it a
 // second walk and not a field on componentwalk.go's read-only one. A
@@ -27,7 +27,7 @@ package xsd
 // it, and none can reach it other than as a genuine base.
 const noTypePosition = -1
 
-// ownedTypeFold is the rewriting descent both finalize folds run over the
+// ownedTypeFold is the rewriting descent every finalize fold runs over the
 // components a Schema's roots OWN, carrying the one per-type fold to apply at
 // every declaration-owned anonymous complex type.
 //
@@ -211,8 +211,9 @@ func (o ownedTypeFold) particle(p Particle) (Particle, error) {
 // documents ("only what that caller passed in"). It is not a defence against
 // double folding: §3.4.2.3.2 builds an extension's {content type} particle
 // around its BASE's, so one backing array is reachable from more than one root,
-// but both mapping rules are idempotent — clause 3.2.1 excludes an inherited use
-// whose name an own use already carries, cos-aw-union re-unions to the same
+// but every mapping rule is idempotent — the attribute group fold leaves no
+// content to fold a second time, clause 3.2.1 excludes an inherited use whose
+// name an own use already carries, cos-aw-union re-unions to the same
 // constraint — so folding a component twice yields what folding it once does.
 // TestOwnedFoldLeavesTheCallersSlicesAlone pins what the copy actually decides.
 func (o ownedTypeFold) modelGroup(g ModelGroup) (ModelGroup, error) {

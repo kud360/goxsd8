@@ -193,24 +193,30 @@ func agLocalUse(t *testing.T, loc xsderr.Loc, name, typeName xsd.QName) xsd.Attr
 }
 
 // attributeGroupAt builds a top-level attribute group definition at loc over the
-// given {attribute uses}.
+// given {attribute uses}, with no <attributeGroup ref>.
 func attributeGroupAt(t *testing.T, loc xsderr.Loc, name xsd.QName, uses ...xsd.AttributeUse) xsd.AttributeGroupDefinition {
 	t.Helper()
-	g, err := xsd.NewAttributeGroupDefinition(loc, name, uses, nil)
+	return attributeGroupContentAt(t, loc, name, resolvedUses(uses...)...)
+}
+
+// attributeGroupContentAt builds a top-level attribute group definition at loc
+// over the given attribute content, <attributeGroup ref>s included.
+func attributeGroupContentAt(t *testing.T, loc xsderr.Loc, name xsd.QName, content ...xsd.AttributeUseOrGroupRef) xsd.AttributeGroupDefinition {
+	t.Helper()
+	g, err := xsd.NewAttributeGroupDefinition(loc, name, content, nil)
 	if err != nil {
 		t.Fatalf("NewAttributeGroupDefinition(%v): %v", name, err)
 	}
 	return g
 }
 
-// attributeCTAt builds a complex type at loc whose {attribute uses} are the given
-// ones — the shape the producer leaves behind when a complex type references an
-// <attributeGroup>, since §3.6.2.1 inlines the ref at mapping time and splices a
-// copy of the group's uses into the type.
-func attributeCTAt(t *testing.T, loc xsderr.Loc, name xsd.QName, uses ...xsd.AttributeUse) xsd.ComplexType {
+// attributeCTAt builds a complex type at loc over the given attribute content,
+// which may reference an <attributeGroup> (an AttributeGroupRef) for Finalize to
+// fold in.
+func attributeCTAt(t *testing.T, loc xsderr.Loc, name xsd.QName, content ...xsd.AttributeUseOrGroupRef) xsd.ComplexType {
 	t.Helper()
 	ct, err := xsd.NewComplexType(loc, name, xsd.QName{}, nil, xsd.DerivationRestriction, false,
-		uses, nil, nil, xsd.EmptyContent{}, nil, nil)
+		content, nil, nil, xsd.EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType(%v): %v", name, err)
 	}
@@ -224,13 +230,13 @@ func attributeCTAt(t *testing.T, loc xsderr.Loc, name xsd.QName, uses ...xsd.Att
 // assembled schema (#725).
 //
 // The four differ in WHICH root loop reaches the uses, which is the whole point:
-// a group a complex type references is reached incidentally through that type,
-// because the producer splices a copy of the group's uses into it; a group
-// NOTHING references is reached only through {attribute group definitions}; and a
-// <redefine> original is in no property and no index at all (§4.2.4 clause
-// 4.1.2), so only the recorded pairing reaches it. Each case also pins the
-// position, which is the definition the reader must edit — the group's own, or,
-// for a local declaration's type=, that declaration's.
+// a group — whether a complex type references it or NOTHING does — is reached
+// only through {attribute group definitions}, since a referencing type holds an
+// <attributeGroup ref> the descent charges and never follows; and a <redefine>
+// original is in no property and no index at all (§4.2.4 clause 4.1.2), so only
+// the recorded pairing reaches it. Each case also pins the position, which is the
+// definition the reader must edit — the group's own, or, for a local
+// declaration's type=, that declaration's.
 func TestResolveDanglingReferenceInAttributeGroup(t *testing.T) {
 	legal := func(t *testing.T, name xsd.QName) xsd.AttributeGroupDefinition {
 		return attributeGroupAt(t, xsderr.Loc{}, name, agRefUse(t, qn("declared")))
@@ -261,12 +267,12 @@ func TestResolveDanglingReferenceInAttributeGroup(t *testing.T) {
 		{
 			name: "an <attribute ref> in a group a complex type references",
 			build: func(t *testing.T, b *xsd.SchemaBuilder) {
-				// The type carries the spliced copy and is reached first; the
-				// group's own copy is walked too, and either verdict rejects.
-				b.AddType(attributeCTAt(t, resolveLoc(104), qn("ct"), agRefUse(t, qn("nope"))))
+				// The type is reached first and its <attributeGroup ref> resolves;
+				// the dangling name is the group's, charged at the group.
+				b.AddType(attributeCTAt(t, resolveLoc(104), qn("ct"), xsd.AttributeGroupRef{Name: qn("ag")}))
 				b.AddAttributeGroup(attributeGroupAt(t, resolveLoc(105), qn("ag"), agRefUse(t, qn("nope"))))
 			},
-			want: resolveLoc(104),
+			want: resolveLoc(105),
 			msg:  "attribute use <attribute ref> references attribute declaration",
 		},
 		{
@@ -318,7 +324,7 @@ func TestResolveAttributeGroupsResolvable(t *testing.T) {
 	b.AddAttribute(attributeNamed(t, qn("declared")))
 	b.AddAttributeGroup(attributeGroupAt(t, xsderr.Loc{}, qn("unreferenced"),
 		agRefUse(t, qn("declared")), agLocalUse(t, xsderr.Loc{}, qn("a"), qn("st"))))
-	b.AddType(attributeCTAt(t, xsderr.Loc{}, qn("ct"), agRefUse(t, qn("declared"))))
+	b.AddType(attributeCTAt(t, xsderr.Loc{}, qn("ct"), xsd.AttributeGroupRef{Name: qn("referenced")}))
 	b.AddAttributeGroup(attributeGroupAt(t, xsderr.Loc{}, qn("referenced"), agRefUse(t, qn("declared"))))
 	b.AddRedefiningAttributeGroup(
 		attributeGroupAt(t, xsderr.Loc{}, qn("redefined"), agRefUse(t, qn("declared"))),
@@ -390,7 +396,7 @@ func TestResolveDanglingAttributeRef(t *testing.T) {
 		t.Fatalf("NewAttributeUse: %v", err)
 	}
 	ct, err := xsd.NewComplexType(xsderr.Loc{}, qn("ct"), xsd.QName{}, nil, xsd.DerivationRestriction, false,
-		[]xsd.AttributeUse{use}, nil, nil, xsd.EmptyContent{}, nil, nil)
+		resolvedUses(use), nil, nil, xsd.EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType: %v", err)
 	}
@@ -737,7 +743,7 @@ func TestResolveRejectionsCiteTheOffendingComponent(t *testing.T) {
 					t.Fatalf("NewAttributeUse: %v", err)
 				}
 				ct, err := xsd.NewComplexType(resolveLoc(31), qn("ct"), xsd.QName{}, nil, xsd.DerivationRestriction, false,
-					[]xsd.AttributeUse{use}, nil, nil, xsd.EmptyContent{}, nil, nil)
+					resolvedUses(use), nil, nil, xsd.EmptyContent{}, nil, nil)
 				if err != nil {
 					t.Fatalf("NewComplexType: %v", err)
 				}

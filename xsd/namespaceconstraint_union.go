@@ -5,7 +5,7 @@ import "github.com/kud360/goxsd8/xsderr"
 // UnionNamespaceConstraint returns the Attribute Wildcard Union (Structures
 // §3.10.6.3, id="cos-aw-union") of a and b: the Namespace Constraint that admits
 // a namespace name iff a or b admits it. It is the mirror of
-// namespaceconstraint_intersect.go's IntersectNamespaceConstraint, over the same
+// namespaceconstraint_intersect.go's intersectNamespaceConstraint, over the same
 // record and the same set helpers (namespaceconstraint_sets.go), and the two must
 // be read together — several of their clauses differ only by a swapped operator.
 //

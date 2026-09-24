@@ -109,7 +109,7 @@ func governedSchema(t *testing.T, uses []xsd.AttributeUse, wildcard *xsd.Wildcar
 func governedSchemaDeclaring(t *testing.T, uses []xsd.AttributeUse, wildcard *xsd.Wildcard, declared ...xsd.QName) *xsd.Schema {
 	t.Helper()
 	ct, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Local: "RootType"}, xsd.QName{}, nil,
-		xsd.DerivationRestriction, false, uses, nil, wildcard, xsd.EmptyContent{}, nil, nil)
+		xsd.DerivationRestriction, false, attrContent(uses), nil, wildcard, xsd.EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("building RootType: %v", err)
 	}
@@ -427,7 +427,7 @@ func TestUnevaluableTypeTableDeclinesTheAttributeHalf(t *testing.T) {
 		t.Fatalf("building the type table: %v", err)
 	}
 	ct, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Local: "RootType"}, xsd.QName{}, nil,
-		xsd.DerivationRestriction, false, []xsd.AttributeUse{aUse(t, "id", true, nil)}, nil, nil,
+		xsd.DerivationRestriction, false, attrContent([]xsd.AttributeUse{aUse(t, "id", true, nil)}), nil, nil,
 		xsd.EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("building RootType: %v", err)
@@ -578,7 +578,7 @@ func anonymousRootSchema(t *testing.T, base xsd.QName, derivation xsd.Derivation
 	t.Helper()
 	id := xsd.NewComponentID()
 	ct, err := xsd.NewAnonymousComplexType(xsderr.Loc{}, xsd.ElementDeclarationContext{Component: id},
-		base, nil, derivation, false, uses, nil, nil, xsd.EmptyContent{}, nil, nil)
+		base, nil, derivation, false, attrContent(uses), nil, nil, xsd.EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("building the anonymous root type: %v", err)
 	}
@@ -588,7 +588,7 @@ func anonymousRootSchema(t *testing.T, base xsd.QName, derivation xsd.Derivation
 		t.Fatalf("building the root element declaration: %v", err)
 	}
 	baseType, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Local: "Base"}, xsd.QName{}, nil,
-		xsd.DerivationRestriction, false, []xsd.AttributeUse{aUse(t, "fromBase", false, nil)}, nil,
+		xsd.DerivationRestriction, false, attrContent([]xsd.AttributeUse{aUse(t, "fromBase", false, nil)}), nil,
 		anyWildcard(t, xsd.ProcessStrict), xsd.EmptyContent{}, nil, nil)
 	if err != nil {
 		t.Fatalf("building Base: %v", err)
@@ -665,4 +665,15 @@ func TestAnonymousRestrictionOfAnyTypeIsAssessed(t *testing.T) {
 	wantCharge(t, assessAgainst(t, schema, attributedRoot(local("id"), local("stray"))),
 		"clause 2", loc(1, 11), "stray")
 	wantCharge(t, assessAgainst(t, schema, attributedRoot()), "clause 3", loc(1, 1), "id")
+}
+
+// attrContent lifts attribute uses into the attribute content a complex-type
+// constructor takes, one xsd.ResolvedAttributeUse each: a type with no
+// <attributeGroup ref>, whose content Finalize folds to exactly these uses.
+func attrContent(uses []xsd.AttributeUse) []xsd.AttributeUseOrGroupRef {
+	content := make([]xsd.AttributeUseOrGroupRef, len(uses))
+	for i, u := range uses {
+		content[i] = xsd.ResolvedAttributeUse{Use: u}
+	}
+	return content
 }

@@ -72,17 +72,17 @@ func TestIntersectDisallowedNameKeywordsUnionsDefined(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got, err := IntersectNamespaceConstraint(xsderr.Loc{}, anyConstraint(t, c.a...), anyConstraint(t, c.b...))
+			got, err := intersectNamespaceConstraint(xsderr.Loc{}, anyConstraint(t, c.a...), anyConstraint(t, c.b...))
 			if err != nil {
-				t.Fatalf("IntersectNamespaceConstraint: %v", err)
+				t.Fatalf("intersectNamespaceConstraint: %v", err)
 			}
 			if has := got.hasDisallowedNameKeyword(DisallowedNameDefined); has != c.want {
 				t.Errorf("intersection contains defined = %v, want %v", has, c.want)
 			}
 			// Intersection is commutative in this half too.
-			swapped, err := IntersectNamespaceConstraint(xsderr.Loc{}, anyConstraint(t, c.b...), anyConstraint(t, c.a...))
+			swapped, err := intersectNamespaceConstraint(xsderr.Loc{}, anyConstraint(t, c.b...), anyConstraint(t, c.a...))
 			if err != nil {
-				t.Fatalf("IntersectNamespaceConstraint (swapped): %v", err)
+				t.Fatalf("intersectNamespaceConstraint (swapped): %v", err)
 			}
 			if has := swapped.hasDisallowedNameKeyword(DisallowedNameDefined); has != c.want {
 				t.Errorf("swapped intersection contains defined = %v, want %v", has, c.want)

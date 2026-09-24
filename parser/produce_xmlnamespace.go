@@ -105,15 +105,13 @@ func supplyXMLNamespace(docs []composedDocument) bool {
 // GAP(parser): the xml:specialAttrs attribute group definition — the component
 // the s4s itself imports the namespace for (xmlschema11-1.md:4406) — is NOT
 // supplied, so <attributeGroup ref="xml:specialAttrs"/> is still charged
-// src-resolve clause 1.4. Supplying it as a COMPONENT would not help: a group
-// reference is resolved by splicing the referenced top-level <attributeGroup>
-// ELEMENT's own uses and wildcards into the referring type
-// (spliceAttributeGroup, §3.6.2.2), which reads symbols.attributeGroups and
-// never {attribute group definitions}, so a seeded component is unreachable by
-// reference and teaching that path to accept one would mint a second resolution
-// mechanism beside it (STYLE T4). No suite schema case turns on it: the one
-// fixture naming the group, msData/additional/test264908_1a.xsd, declares the
-// group itself. Owned by #1458.
+// src-resolve clause 1.4. A group reference now resolves at finalize against
+// {attribute group definitions} (xsd/attributegroupfold.go, #479), so a
+// component seeded here beside the four declarations would be reachable by
+// reference with no second resolution mechanism; supplying it is what remains.
+// No suite schema case turns on it: the one fixture naming the group,
+// msData/additional/test264908_1a.xsd, declares the group itself. Owned by
+// #1458.
 func addXMLNamespace(builder *xsd.SchemaBuilder, docs []composedDocument) error {
 	if !supplyXMLNamespace(docs) {
 		return nil

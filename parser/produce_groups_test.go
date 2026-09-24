@@ -66,9 +66,10 @@ func topModelGroup(t *testing.T, s *xsd.Schema, local string) xsd.ModelGroup {
 	return mg
 }
 
-// TestProduceAttributeGroupRefInlinesUses proves an <attributeGroup ref> inside a
-// <complexType> splices in the referenced group's {attribute uses} (§3.6.2.1).
-func TestProduceAttributeGroupRefInlinesUses(t *testing.T) {
+// TestProduceAttributeGroupRefFoldsUses proves an <attributeGroup ref> inside a
+// <complexType> contributes the referenced group's {attribute uses} to the
+// finalized type (§3.4.2.4 clause 2, folded at finalize, #479).
+func TestProduceAttributeGroupRefFoldsUses(t *testing.T) {
 	s, err := produce(t, wrap("", `
 		<xs:attributeGroup name="ag"><xs:attribute name="a" type="xs:string"/></xs:attributeGroup>
 		<xs:complexType name="T"><xs:sequence/><xs:attributeGroup ref="ag"/></xs:complexType>`))
@@ -77,7 +78,7 @@ func TestProduceAttributeGroupRefInlinesUses(t *testing.T) {
 	}
 	uses := topComplexType(t, s, "T").AttributeUses()
 	if !hasAttrUse(uses, "a") {
-		t.Fatalf("complex type T attribute uses = %d, want the inlined 'a' from ag", len(uses))
+		t.Fatalf("complex type T attribute uses = %d, want the folded 'a' from ag", len(uses))
 	}
 }
 
