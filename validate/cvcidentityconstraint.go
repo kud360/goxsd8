@@ -491,7 +491,8 @@ func (w *walk) elementKeyMember(c *icCheck) (icKeyMember, bool, bool) {
 // (value.IsDatatypeVerdict) — an ungoverned type above all, which reports under
 // cvc-datatype-valid exactly as a genuine rejection does. Reading one as
 // "absent" would silently shorten a ·key-sequence·, and a short one is what
-// clause 4.2.1 charges a key for (#774).
+// clause 4.2.1 charges a key for. RULED permanent by #774 (STYLE P3b), on
+// cvcattribute.go's terms: an ungoverned type is backend coverage.
 func (w *walk) keyMember(st *xsd.SimpleType, lexical string, owner Element, element, nillable bool) (icKeyMember, bool, bool) {
 	if st == nil {
 		return icKeyMember{}, false, false

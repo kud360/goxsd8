@@ -617,9 +617,10 @@ func (c *contentCheck) fixedActualValue(w *walk, f xsd.ValueConstraint) {
 // fail-open cvcattribute.go's matchedAttribute states in full, over the same
 // [value.IsDatatypeVerdict] classification: an ungoverned simple type reports
 // under cvc-datatype-valid exactly as a genuine rejection does, and charging it
-// would reject every element whose character content this backend cannot read
-// (#774). An undecidable ·validating type· withholds String Valid clause 3's
-// verdict on the terms [walk.entitiesDeclared] states.
+// would reject every element whose character content this backend cannot read.
+// RULED permanent by #774 (STYLE P3b), on matchedAttribute's terms. An
+// undecidable ·validating type· withholds String Valid clause 3's verdict on
+// the terms [walk.entitiesDeclared] states.
 //
 // st's assertion sites are recorded BEFORE the decline ([walk.simpleAssertions],
 // cvcassertion.go), because it leaves the element's ·initial value· to be read

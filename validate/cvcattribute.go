@@ -60,19 +60,29 @@ const ruleCvcAu xsderr.Rule = "cvc-au"
 //     *xsd.Schema that exists (Phase A charges src-resolve for a dangling
 //     Ref), and a decline rather than a charge because a resolution that failed
 //     says nothing about the attribute.
-//   - a {type definition} that is absent, unresolvable, or COMPLEX. cvc-attribute
-//     clause 2 makes an absent one a violation in its own right, which this
-//     package does not charge: the property is read off an assembled schema,
-//     where an absent {type definition} on an Attribute Declaration is not
-//     representable at all (§3.2.1 makes the slot required), so charging clause 2
-//     here would report the component model's own shape rather than the
-//     document's.
+//   - a {type definition} that is absent or COMPLEX. GAP(validate): §3.2.1
+//     types the slot as a Required Simple Type Definition, and both shapes still
+//     reach an assembled schema. [xsd.NewAttributeDeclaration] accepts a nil
+//     {type definition} from a caller building components directly — never from
+//     a schema document, where §3.2.2.2's third tier assigns xs:anySimpleType —
+//     and it refuses only an INLINE complex type, so a by-name @type naming a
+//     complex type passes it and Finalize alike. (An unresolvable one never gets
+//     here: Finalize charges src-resolve for a by-name reference naming
+//     nothing.) Both are schema faults Finalize leaves unchecked with the rest of
+//     sch-props-correct clause 1, a deferral [xsd.Schema]'s own doc records, so
+//     this package declines rather than charge cvc-attribute clause 2 for an
+//     absence xsd admitted. RULED permanent by #774 (STYLE P3b): the charge
+//     belongs to xsd's deferred schema check, not to the instance walk.
 //   - a lexical whose ValidateLexical error is not a VERDICT
 //     ([value.IsDatatypeVerdict]). GAP(validate): an ungoverned type is the
 //     live case — §3.2.2.2's third tier types an <attribute> with no @type as
 //     xs:anySimpleType, which no backend maps, and the resulting error carries
 //     cvc-datatype-valid exactly as a genuine rejection does. Charging it would
-//     reject every typeless attribute in existence (#774).
+//     reject every typeless attribute in existence, and xs:anySimpleType is a
+//     ·special· datatype, for which Datatype Valid (Datatypes §4.1.4) holds
+//     unconditionally. RULED permanent by #774 (STYLE P3b): the decline is
+//     inherent to [value.IsDatatypeVerdict]'s split, and an ordinary type no
+//     backend maps is backend coverage to close, not this package's.
 //   - an ·ENTITY value· candidate whose ·validating type· this package cannot
 //     decide, on [walk.entitiesDeclared]'s terms.
 func (w *walk) matchedAttribute(a Attribute, e Element, u xsd.AttributeUse) {
@@ -186,7 +196,9 @@ var qnameTypeName = xsd.QName{Space: xsd.XMLSchemaNS, Local: "QName"}
 //     ([value.IsDatatypeVerdict]). GAP(validate): a backend that does not map
 //     xs:QName leaves an xsi:type lexical outside its lexical space to clause
 //     5, which declines the ones [resolveInstanceQName] turns away and charges
-//     the rest as names no type carries (#774).
+//     the rest as names no type carries. RULED permanent by #774 (STYLE P3b),
+//     on [walk.matchedAttribute]'s terms: mapping xs:QName is backend coverage,
+//     not this package's.
 func (w *walk) instanceTypeLexical(a Attribute, e Element) bool {
 	st, simple := w.schema.ResolvedSimpleType(xsd.TypeDefinitionRef{Name: qnameTypeName})
 	if !simple {
@@ -237,7 +249,11 @@ type fixedConstraint struct {
 // backend does not govern and a {lexical form} outside its own type's lexical
 // space (a schema fault cos-valid-simple-default charges at assembly, not the
 // instance's). Charging on undecided would reject a document for a gap in the
-// processor (#774).
+// processor. RULED permanent by #774 (STYLE P3b): cos-valid-simple-default
+// (§3.2.6.2) is a Schema Component Constraint, and a schema assembled through
+// [xsd.SchemaBuilder.Finalize] rather than FinalizeWith carries an undecided
+// value space, so that check may never have run; the instance walk has no
+// sound verdict to give in its place.
 func (w *walk) fixedAgreement(a Attribute, e Element, st *xsd.SimpleType, f fixedConstraint) {
 	same, decided := value.ConstraintMatches(w.backend, w.schema, st, a.Value(), elementContext{owner: e}, f.vc)
 	if !decided {

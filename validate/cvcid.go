@@ -199,7 +199,7 @@ func (w *walk) idAttributes(c *icCheck) {
 // constraints may play a part" — because cvc-complex-type clause 4 supplies the
 // item and its ·actual value· is the constraint's. This package does not
 // synthesize the item, so the id it would declare is one cvc-id never saw, and
-// clause 1 would charge an empty binding for it (#774).
+// clause 1 would charge an empty binding for it (#1676).
 func (w *walk) idDefaultedAttributes(c *icCheck, attrs []Attribute, ct xsd.ComplexType) {
 	for _, u := range ct.AttributeUses() {
 		if u.Required() || hasAttributeNamed(attrs, u.DeclarationName()) {
@@ -289,8 +289,8 @@ func (w *walk) idElement(c *icCheck) {
 // (value.IsDatatypeVerdict) declines, on cvcattribute.go's terms — an ungoverned
 // type reports under cvc-datatype-valid exactly as a genuine rejection does, and
 // reading one as "no id here" would hide a declaration clause 1 charges for the
-// absence of (#774). validatingType's member scan declines on the same class for
-// the same reason.
+// absence of. validatingType's member scan declines on the same class for the
+// same reason. RULED permanent by #774 (STYLE P3b), on cvcattribute.go's terms.
 func (w *walk) idRecord(st *xsd.SimpleType, lexical string, owner Element, node int, loc xsderr.Loc) {
 	candidate, decided := w.idCandidate(st)
 	if !decided {
