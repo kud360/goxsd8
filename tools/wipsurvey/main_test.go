@@ -1771,26 +1771,45 @@ func TestSortOtherRows(t *testing.T) {
 	}
 }
 
-// TestReportNamesEveryNamespace checks the whole report, rendered the way
-// run renders it against a remote carrying nothing but main, still tells a
-// reader which namespaces were surveyed. That is the one claim a /backlog
-// stamp quotes a count from (#1627).
+// TestReportNamesEveryNamespace checks the whole report renderReport writes
+// for a remote carrying nothing but main still tells a reader which
+// namespaces were surveyed. That is the one claim a /backlog stamp quotes a
+// count from (#1627).
 func TestReportNamesEveryNamespace(t *testing.T) {
 	var buf bytes.Buffer
-	if err := renderTable(&buf, nil); err != nil {
-		t.Fatalf("renderTable: %v", err)
-	}
-	if err := renderParked(&buf, nil); err != nil {
-		t.Fatalf("renderParked: %v", err)
-	}
-	if err := renderOther(&buf, nil); err != nil {
-		t.Fatalf("renderOther: %v", err)
+	if err := renderReport(&buf, nil, nil, nil, nil); err != nil {
+		t.Fatalf("renderReport: %v", err)
 	}
 	got := buf.String()
 	for _, want := range []string{"ISSUE", "PARKED BRANCHES", "OTHER BRANCHES", "wip/*", "parked/*"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("report over an empty remote does not mention %q:\n%s", want, got)
 		}
+	}
+}
+
+// TestRenderReportSectionsThenFeedError pins renderReport's composition
+// (#1652): all three sections, in order, and the error it was handed
+// returned only after them — #1604's state-less feed still prints its
+// report before main exits 2.
+func TestRenderReportSectionsThenFeedError(t *testing.T) {
+	errSentinel := errors.New("sentinel")
+	var buf bytes.Buffer
+	if err := renderReport(&buf, nil, nil, nil, errSentinel); !errors.Is(err, errSentinel) {
+		t.Fatalf("renderReport err = %v, want the feed error it was handed", err)
+	}
+	got := buf.String()
+	prev := -1
+	for _, heading := range []string{"ISSUE", "PARKED BRANCHES", "OTHER BRANCHES"} {
+		at := strings.Index(got, heading)
+		if at <= prev {
+			t.Fatalf("heading %q at %d, want present and after the previous section's (%d):\n%s", heading, at, prev, got)
+		}
+		prev = at
+	}
+
+	if err := renderReport(&bytes.Buffer{}, nil, nil, nil, nil); err != nil {
+		t.Errorf("renderReport with no feed error = %v, want nil", err)
 	}
 }
 
