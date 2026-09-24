@@ -719,7 +719,8 @@ regression; the descent is what made them visible, and the trade of a wrong
 decision for an honest decline is one the lane cannot register as movement.
 
 **#913 added the second class.** Seven CTA documents are false-charged through `cvc-type` clause 3.1 until
-§3.12.4's `{inherited attributes}` merge lands (#831, #871) — an
+§3.12.4's `{inherited attributes}` merge lands (#871, `ready` since its
+precondition #831 landed on 2026-09-24) — an
 honest-decline-to-wrong-decision trade the ratchet's zero-flip-down cannot
 register, escalated on #831's thread.
 
@@ -758,7 +759,9 @@ static remainder #886 did not charge). **#859**, the wildcard `ta-AttrName`
 arms, **landed 2026-08-18 at `ea0650a`** — this paragraph carried it as
 remaining work for fifteen days, arguing about a stale lease on a branch whose
 issue had already closed the same day. **#871** is the §3.12.4 clause 1.1.3
-·inherited attributes· merge, blocked on M4's #831. None of the five carries a
+·inherited attributes· merge, `ready` since M4's #831 landed on 2026-09-24;
+#1682 (the `ref=` use-level `{inheritable}` fallback) is related but does not
+block it. None of the five carries a
 milestone, which is the same pattern M4's tail records.
 
 **Assertion evaluation is FILED — #1042, `blocked`, and the first issue this
