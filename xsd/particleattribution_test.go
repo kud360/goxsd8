@@ -587,14 +587,16 @@ func TestUPAAllGroupEmptiableMemberCompetesWithSuccessor(t *testing.T) {
 	expectRule(t, uUPAOnly(t, g), ruleCosNonambig)
 }
 
-// TestUPAAllGroupSatisfiedRepeatableMemberCompetesWithSuccessor is the other
-// residual: a member with {max occurs} past {min occurs} is satisfied after its
-// first occurrence, so it may still be taken once the group is complete. The
+// TestUPAAllGroupRepeatableMemberExitCompetesWithSuccessor is a regression pin
+// over the repeatable-member exit shape: in sequence(all(a{1,2}, b), a) the
 // sequence <b/><a/><a/> has a path whose last item is the <all>'s a taken a
 // second time and another whose last item is the successor a, so cos-nonambig
-// fires here too — the exit state is not empty just because every member is
-// non-·emptiable·.
-func TestUPAAllGroupSatisfiedRepeatableMemberCompetesWithSuccessor(t *testing.T) {
+// fires — the exit state is not empty just because every member is
+// non-·emptiable·. It discriminates no single mechanism of addAll: the primed
+// replay's own unfolding edge a1′ → a2′ and the residual's continuation half
+// each put the second a beside the successor, and the rejection survives either
+// one dropped alone.
+func TestUPAAllGroupRepeatableMemberExitCompetesWithSuccessor(t *testing.T) {
 	g := uAllThen(t, uOne(t, ResolvedTerm{Term: uLocal(t, uq("a"), uq("T"))}),
 		uParticle(t, uOccurs(t, 1, 2), ResolvedTerm{Term: uLocal(t, uq("a"), uq("T"))}),
 		uOne(t, ResolvedTerm{Term: uLocal(t, uq("b"), uq("T"))}),
