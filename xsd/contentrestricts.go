@@ -1207,6 +1207,7 @@ func (s *Schema) someBindingSubsumes(b contentAutomaton, matched []int, p positi
 // reporting the keyword where case 1 would apply can only miss a rejection. It
 // is the element-side twin of attributeDefaultBinding's case-3 marker and is
 // retired only by an assessment-time consumer, never by a static check.
+// #345 owns the retirement.
 func elementPositionBinding(p position) defaultBinding {
 	switch t := p.term.(type) {
 	case ElementDeclaration:
