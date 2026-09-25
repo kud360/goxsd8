@@ -904,10 +904,9 @@ func TestReportNamesTheMatchedElementOnlyWhenTheQueryLeavesItOpen(t *testing.T) 
 
 // TestReportUnionCensusIsAttributablePerElement pins what makes a union
 // census readable: its hits are one run of consecutive lines in the report's
-// path-then-document order, and the
-// `element=` field is the only record of which alternative each line answers.
-// Without it the two halves of a feature are counted together and can never
-// be told apart again (#1554).
+// path-then-document order, and the `element=` field is the only record of
+// which alternative each line answers. Without it the two halves of a feature
+// are counted together and can never be told apart again (#1554).
 func TestReportUnionCensusIsAttributablePerElement(t *testing.T) {
 	root := t.TempDir()
 	writeFixture(t, root, "one.xsd", xsPrefixDoc)
@@ -1445,15 +1444,16 @@ func TestParseQueryRejects(t *testing.T) {
 // names is refused and not merely THAT it is: the join means every name at
 // once, which no single element carries. The message it replaces reported the
 // query as a missing `@` and sent the reader to an attribute list they had
-// not written (#1554). The whole message is pinned, both joins in their own
-// halves of it, because swapping the two inside it changes no branch and
-// leaves every shorter substring in place (#1048).
+// not written (#1554); this one names `@` only in a trailing clause, for the
+// reader whose `,` was a forgotten `@`. The whole message is pinned, both
+// joins in their own halves of it, because swapping the two inside it changes
+// no branch and leaves every shorter substring in place (#1048).
 func TestParseQueryRefusesTheAllJoinOnElementNames(t *testing.T) {
 	_, err := parseQuery("openContent,defaultOpenContent")
 	if err == nil {
 		t.Fatalf("parseQuery = nil error, want a refusal")
 	}
-	want := `query "openContent,defaultOpenContent": element names are joined by "|" (any one of them), never by ",": no element carries two names at once`
+	want := `query "openContent,defaultOpenContent": element names are joined by "|" (any one of them), never by ",": no element carries two names at once, and attribute names follow "@"`
 	if err.Error() != want {
 		t.Errorf("refusal = %q, want %q", err, want)
 	}
