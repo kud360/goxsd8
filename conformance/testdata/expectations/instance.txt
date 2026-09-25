@@ -284,8 +284,8 @@ CTA/cta0002/instance/cta0002.n01 pass
 CTA/cta0002/instance/cta0002.v01 fail
 CTA/cta0008/instance/cta0008.n01 pass
 CTA/cta0008/instance/cta0008.v01 fail
-CTA/cta0009/instance/cta0009.n01 fail
-CTA/cta0009/instance/cta0009.n02 fail
+CTA/cta0009/instance/cta0009.n01 pass
+CTA/cta0009/instance/cta0009.n02 pass
 CTA/cta0009/instance/cta0009.v01 fail
 CTA/cta0009/instance/cta0009.v02 fail
 CTA/cta0010/instance/cta0010.n01 pass

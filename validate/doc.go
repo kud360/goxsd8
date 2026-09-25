@@ -58,7 +58,10 @@
 //   - Conditional type assignment: a declaration's {type table}
 //     ·conditionally selects· the ·selected type definition· an xsi:type
 //     then ·overrides· or does not, through xpath's §3.12.6
-//     required-subset evaluator (cta.go). A {test} that evaluator
+//     required-subset evaluator (cta.go). A {test} reads the element's own
+//     [[attributes]] and, behind them, its [inherited attributes]
+//     (§3.3.5.6), which the descent computes top-down and threads to every
+//     child it does not skip (inherited.go). A {test} the evaluator
 //     declines withholds the element's ·governing type definition·
 //     instead of falling back to the declared type, and is recorded as an
 //     [Unevaluated] under key-cta-ta-select (§3.12.4) — nothing else

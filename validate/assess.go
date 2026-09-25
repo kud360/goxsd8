@@ -138,7 +138,7 @@ func (v *Validator) Assess(root Element) *Result {
 				"the validation root %s is governed by an element declaration whose {abstract} is true, but cvc-elt clause 2 requires it to be false: an abstract declaration validates no element information item",
 				root.Name()))
 		}
-		g = w.declaredGovernance(root, d)
+		g = w.declaredGovernance(root, d, nil)
 	}
 	if !found {
 		typed, assessable := w.instanceGovernance(root)
@@ -150,7 +150,7 @@ func (v *Validator) Assess(root Element) *Result {
 		}
 		g = typed
 	}
-	w.element(root, g, nil)
+	w.element(root, g, nil, nil)
 	w.ids.charge(&w, root)
 	return &w.res
 }
@@ -239,9 +239,10 @@ func (g governance) valueType() *xsd.SimpleType {
 }
 
 // declaredGovernance pairs a ·governing element declaration· with the
-// ·governing type definition· it supplies for e (governingType).
-func (w *walk) declaredGovernance(e Element, d xsd.ElementDeclaration) governance {
-	t, instance := w.governingType(e, d)
+// ·governing type definition· it supplies for e (governingType), whose
+// [inherited attributes] are inherited.
+func (w *walk) declaredGovernance(e Element, d xsd.ElementDeclaration, inherited []inheritedAttribute) governance {
+	t, instance := w.governingType(e, d, inherited)
 	return governance{decl: d, hasDecl: true, typ: t, instance: instance}
 }
 
@@ -284,8 +285,8 @@ func (w *walk) declaredGovernance(e Element, d xsd.ElementDeclaration) governanc
 // value· §3.11.4 clause 3 and §3.17.5.2 read. No reader narrows further on the
 // type's {name}: an anonymous governing type is assessed exactly as a named
 // one, for both halves (#1116).
-func (w *walk) governingType(e Element, d xsd.ElementDeclaration) (xsd.TypeDefinition, bool) {
-	selected, ok := w.selectedType(e, d)
+func (w *walk) governingType(e Element, d xsd.ElementDeclaration, inherited []inheritedAttribute) (xsd.TypeDefinition, bool) {
+	selected, ok := w.selectedType(e, d, inherited)
 	if !ok {
 		return nil, false
 	}
@@ -388,21 +389,24 @@ func typeName(t xsd.TypeDefinition) string {
 //     Wildcard one is e-validity clause 1.1.3, which quantifies over ·wildcard
 //     particles· alone ([walk.unresolvedStrictWildcardChild]).
 //
+// inherited is e's [inherited attributes], which a {type table} on the
+// declaration reads (cta.go) and nothing else here does.
+//
 // A nil attribution is a parent that attributed the child to nothing: no
 // ·governing type definition· of its own, an element already charged, or a
 // child clause 1.4 declined or rejected. It leaves the child assessed against
 // nothing, which is where every descendant was before the descent existed.
-func (w *walk) childGoverning(e Element, a xsd.Attribution) (governance, bool) {
+func (w *walk) childGoverning(e Element, a xsd.Attribution, inherited []inheritedAttribute) (governance, bool) {
 	switch t := a.(type) {
 	case xsd.ElementDeclaration:
 		if t.Name() != e.Name() {
-			return w.resolvedGovernance(e), true
+			return w.resolvedGovernance(e, inherited), true
 		}
-		return w.declaredGovernance(e, t), true
+		return w.declaredGovernance(e, t, inherited), true
 	case xsd.Wildcard:
-		return w.wildcardGoverning(e, t)
+		return w.wildcardGoverning(e, t, inherited)
 	case *xsd.OpenContent:
-		return w.wildcardGoverning(e, t.Wildcard())
+		return w.wildcardGoverning(e, t.Wildcard(), inherited)
 	default:
 		return governance{}, true
 	}
@@ -418,11 +422,11 @@ func (w *walk) childGoverning(e Element, a xsd.Attribution) (governance, bool) {
 // The two arms differ only in what an unresolved name costs the ENCLOSING
 // element, which is e-validity clause 1.1.3's business and
 // [walk.unresolvedStrictWildcardChild]'s, not this function's.
-func (w *walk) wildcardGoverning(e Element, wild xsd.Wildcard) (governance, bool) {
+func (w *walk) wildcardGoverning(e Element, wild xsd.Wildcard, inherited []inheritedAttribute) (governance, bool) {
 	if wild.ProcessContents() == xsd.ProcessSkip {
 		return governance{}, false
 	}
-	return w.resolvedGovernance(e), true
+	return w.resolvedGovernance(e, inherited), true
 }
 
 // unresolvedStrictWildcardChild settles Assessment Outcome (Element) (§3.3.5.1,
@@ -510,13 +514,13 @@ func (w *walk) unresolvedStrictWildcardChild(content *contentCheck, child Elemen
 // unless the element's own xsi:type supplies a ·governing type definition·
 // (instanceGovernance), which makes it clause 1.2's ·strictly assessed· rather
 // than clause 3.3's ·laxly assessed·.
-func (w *walk) resolvedGovernance(e Element) governance {
+func (w *walk) resolvedGovernance(e Element, inherited []inheritedAttribute) governance {
 	d, found := w.schema.Element(e.Name())
 	if !found {
 		g, _ := w.instanceGovernance(e)
 		return g
 	}
-	return w.declaredGovernance(e, d)
+	return w.declaredGovernance(e, d, inherited)
 }
 
 // instanceGovernance is the governance of an element with no ·governing element
@@ -634,7 +638,13 @@ func (c elementContext) LookupNamespace(prefix string) (string, bool) {
 // split across from the content check that decided it: the ·initial value· the
 // two rules below read is the one clause 5.1 substituted where its arm is live,
 // and only the check that consumed the [[children]] knows that it is.
-func (w *walk) element(e Element, g governance, parent *icCheck) {
+//
+// inherited is e's own [inherited attributes] (§3.3.5.6), nil at the
+// ·validation root·, and it travels down beside parent. What e hands its own
+// [[children]] is computed here, after g, because key-p-inherited clause 3
+// reads the ·attribution· of e's attributes to e's ·governing type definition·
+// ([walk.handedDown]).
+func (w *walk) element(e Element, g governance, parent *icCheck, inherited []inheritedAttribute) {
 	if w.log.Enabled(context.Background(), slog.LevelDebug) {
 		w.log.Debug("assessing element", slog.Any("name", e.Name()), slog.Any("loc", e.Loc()))
 	}
@@ -644,7 +654,7 @@ func (w *walk) element(e Element, g governance, parent *icCheck) {
 	w.attributes(e, g)
 	w.elementAssertions(e, g)
 	content := w.contentCheck(e, g, isNilled)
-	w.children(e, content, id)
+	w.children(e, content, id, w.handedDown(e, g, inherited))
 	if w.res.err != nil {
 		// A walk that stopped on a source fault never settles §3.11.4 or
 		// §3.17.5.2 for this element, on [contentCheck.end]'s grounds: the
@@ -946,14 +956,17 @@ func (w *walk) text(t Text) {
 // A walk that stopped early never reaches [contentCheck.end], so a truncated
 // [[children]] cursor cannot be charged for ending short of a particle it
 // would have satisfied.
-func (w *walk) children(e Element, content *contentCheck, id *icCheck) {
+//
+// inherited is the [inherited attributes] each element [[child]] gets, the
+// same for all of them ([walk.handedDown]).
+func (w *walk) children(e Element, content *contentCheck, id *icCheck, inherited []inheritedAttribute) {
 	kids := e.Children()
 	for {
 		c, ok := kids.Next()
 		if !ok {
 			break
 		}
-		w.child(c, content, id)
+		w.child(c, content, id, inherited)
 		if w.res.err != nil {
 			return
 		}
@@ -979,11 +992,13 @@ func (w *walk) children(e Element, content *contentCheck, id *icCheck) {
 // the whole SUBTREE that is not ·assessed· (clause 3.2): [walk.element] is the
 // only path to a child's own [[children]], so declining to call it leaves every
 // element below the skipped one unvisited, whatever its own attribution would
-// have been.
-func (w *walk) child(c Child, content *contentCheck, id *icCheck) {
+// have been. It is also what keeps inherited, the child's [inherited
+// attributes], from reaching a child e-inherited_attributes gives none: one
+// attributed to a skip Wildcard.
+func (w *walk) child(c Child, content *contentCheck, id *icCheck, inherited []inheritedAttribute) {
 	if e, ok := c.Element(); ok {
 		a := content.element(w, e)
-		g, assess := w.childGoverning(e, a)
+		g, assess := w.childGoverning(e, a, inherited)
 		if !assess {
 			w.logSkipped(e)
 			return
@@ -999,7 +1014,7 @@ func (w *walk) child(c Child, content *contentCheck, id *icCheck) {
 			// binding and never take one away (cvcid.go).
 			w.ids.declined = true
 		}
-		w.element(e, g, id)
+		w.element(e, g, id, inherited)
 		return
 	}
 	t, ok := c.Text()
