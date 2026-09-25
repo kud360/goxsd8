@@ -3,7 +3,9 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"strings"
@@ -293,5 +295,157 @@ index 111..222 100644
 func TestAddedLinesEmptyDiff(t *testing.T) {
 	if got := addedLines(""); len(got) != 0 {
 		t.Errorf("addedLines(\"\") = %+v, want none", got)
+	}
+}
+
+// gitIn runs git in dir for a temp-repo fixture, isolated from the user's
+// and the system's git config so a signing or hooks setting there cannot
+// change what the fixture builds.
+func gitIn(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	cmd.Env = append(os.Environ(),
+		"GIT_CONFIG_GLOBAL="+os.DevNull,
+		"GIT_CONFIG_NOSYSTEM=1",
+		"GIT_AUTHOR_NAME=landcheck test", "GIT_AUTHOR_EMAIL=landcheck@example.invalid",
+		"GIT_COMMITTER_NAME=landcheck test", "GIT_COMMITTER_EMAIL=landcheck@example.invalid",
+		"GIT_TERMINAL_PROMPT=0",
+	)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
+	}
+}
+
+// commitLog appends line to docs/LOG/2026-09.md in dir and commits it.
+func commitLog(t *testing.T, dir, line string) {
+	t.Helper()
+	path := dir + "/docs/LOG/2026-09.md"
+	data, err := os.ReadFile(path)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("reading %s: %v", path, err)
+	}
+	if err := os.WriteFile(path, append(data, line+"\n"...), 0o644); err != nil {
+		t.Fatalf("writing %s: %v", path, err)
+	}
+	gitIn(t, dir, "add", "docs/LOG/2026-09.md")
+	gitIn(t, dir, "commit", "-q", "-m", line)
+}
+
+// newPushedBranch builds a real clone under t.TempDir() with a bare remote
+// as origin: main is pushed, and branch wip/issue-1499 carries one pushed
+// commit with its upstream set, so HEAD == @{upstream} and origin/main is
+// current. Upstream tracking needs a real remote, which the historical-SHA
+// fixtures above cannot supply. It returns the clone's path.
+func newPushedBranch(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	remote := root + "/remote.git"
+	work := root + "/work"
+	gitIn(t, root, "init", "-q", "--bare", "-b", "main", remote)
+	gitIn(t, root, "init", "-q", "-b", "main", work)
+	gitIn(t, work, "remote", "add", "origin", remote)
+	if err := os.MkdirAll(work+"/docs/LOG", 0o755); err != nil {
+		t.Fatalf("creating docs/LOG: %v", err)
+	}
+	commitLog(t, work, "base entry (#1)")
+	gitIn(t, work, "push", "-q", "-u", "origin", "main")
+	gitIn(t, work, "checkout", "-q", "-b", "wip/issue-1499")
+	gitIn(t, work, "commit", "-q", "--allow-empty", "-m", "implementation")
+	gitIn(t, work, "push", "-q", "-u", "origin", "wip/issue-1499")
+	return work
+}
+
+// TestRunPushedHead drives run from inside a temp repo. Every case but the
+// clean one holds a LOG entry naming #1499 at local HEAD, which checkLanding
+// alone would pass, so each non-zero outcome is the pushed-head check's.
+func TestRunPushedHead(t *testing.T) {
+	const entry = "landed (#1499)"
+	tests := []struct {
+		name string
+		// arrange takes the repo from newPushedBranch's state to the case's.
+		arrange func(t *testing.T, dir string)
+		// wantCode is the exit code; 2 means run returns an error.
+		wantCode int
+		// wantPrefix opens the stdout report (exit 0 or 1) or the error
+		// (exit 2).
+		wantPrefix string
+	}{
+		{
+			name: "1499 shape: LOG commit local-only, upstream one behind: defect",
+			arrange: func(t *testing.T, dir string) {
+				commitLog(t, dir, entry)
+			},
+			wantCode:   1,
+			wantPrefix: "landcheck: HEAD is 1 commit(s) ahead of its upstream",
+		},
+		{
+			name: "LOG commit pushed: clean",
+			arrange: func(t *testing.T, dir string) {
+				commitLog(t, dir, entry)
+				gitIn(t, dir, "push", "-q")
+			},
+			wantCode:   0,
+			wantPrefix: "landcheck: docs/LOG/ names #1499",
+		},
+		{
+			name: "branch has no upstream: operational",
+			arrange: func(t *testing.T, dir string) {
+				gitIn(t, dir, "checkout", "-q", "-b", "unpushed")
+				commitLog(t, dir, entry)
+			},
+			wantCode:   2,
+			wantPrefix: "comparing HEAD with its upstream",
+		},
+		{
+			name: "detached HEAD: operational",
+			arrange: func(t *testing.T, dir string) {
+				commitLog(t, dir, entry)
+				gitIn(t, dir, "push", "-q")
+				gitIn(t, dir, "checkout", "-q", "--detach")
+			},
+			wantCode:   2,
+			wantPrefix: "comparing HEAD with its upstream",
+		},
+		{
+			name: "HEAD one behind its upstream: operational",
+			arrange: func(t *testing.T, dir string) {
+				commitLog(t, dir, entry)
+				commitLog(t, dir, "later note")
+				gitIn(t, dir, "push", "-q")
+				gitIn(t, dir, "reset", "-q", "--hard", "HEAD~1")
+			},
+			wantCode:   2,
+			wantPrefix: "HEAD is 1 commit(s) behind its upstream",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := newPushedBranch(t)
+			tc.arrange(t, dir)
+			t.Chdir(dir)
+
+			var buf bytes.Buffer
+			code, err := run([]string{"-issue", "1499"}, &buf)
+			if tc.wantCode == 2 {
+				if err == nil {
+					t.Fatalf("run: code %d and no error, want an operational error; output:\n%s", code, buf.String())
+				}
+				if !strings.HasPrefix(err.Error(), tc.wantPrefix) {
+					t.Errorf("error = %q, want prefix %q", err.Error(), tc.wantPrefix)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("run: %v", err)
+			}
+			if code != tc.wantCode {
+				t.Errorf("code = %d, want %d; output:\n%s", code, tc.wantCode, buf.String())
+			}
+			if !strings.HasPrefix(buf.String(), tc.wantPrefix) {
+				t.Errorf("output = %q, want prefix %q", buf.String(), tc.wantPrefix)
+			}
+		})
 	}
 }
