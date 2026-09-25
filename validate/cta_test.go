@@ -287,9 +287,10 @@ func TestEmptyAlternativesSelectsTheDefaultType(t *testing.T) {
 	ctaWantGoverned(t, ctaAssess(t, ctaRoot("book")), ctaGovernedByFallback)
 }
 
-// A {test} reads the element's OWN [[attributes]] (§3.12.4 clause 1.1.2), so
-// an absent one makes the comparison false rather than an error — the
-// alternative simply does not select.
+// A {test} at the ·validation root·, which inherits nothing, reads the
+// element's OWN [[attributes]] (§3.12.4 clause 1.1.2) alone, so an absent one
+// makes the comparison false rather than an error — the alternative simply does
+// not select.
 func TestAbsentAttributeSelectsNothing(t *testing.T) {
 	// <root other="v"/> carries no kind at all. Fallback declares neither
 	// attribute, so the ONE charge names other; First would have charged

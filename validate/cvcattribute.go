@@ -331,21 +331,36 @@ func citation(rule xsderr.Rule, clause string) string {
 // reaches this clause with an invalid default still in it.
 func (w *walk) defaultedAttributes(e Element, attrs []Attribute, governing xsd.ComplexType) {
 	for _, u := range governing.AttributeUses() {
-		if u.Required() { // clause 2
-			continue
-		}
-		vc, constrained := w.schema.EffectiveValueConstraint(u)
-		if !constrained { // clause 3
-			continue
-		}
-		if isInstanceAttribute(u.DeclarationName()) { // clause 4
-			continue
-		}
-		if hasAttributeNamed(attrs, u.DeclarationName()) { // clause 5
+		vc, defaulted := w.defaultedConstraint(u, attrs)
+		if !defaulted {
 			continue
 		}
 		w.defaultedAttribute(e, u, vc)
 	}
+}
+
+// defaultedConstraint reports whether u, a member of the {attribute uses} of
+// the complex type governing an element whose [[attributes]] are attrs, is a
+// ·defaulted attribute· of that element (key-dflt-att clauses 2 to 5, in their
+// own order), and if so the ·effective value constraint· whose {lexical form}
+// is the [[normalized value]] Attribute Default Value (§3.4.5.1) supplies. It is
+// the one encoding of that definition, read by defaultedAttributes and by
+// [walk.handedDown].
+func (w *walk) defaultedConstraint(u xsd.AttributeUse, attrs []Attribute) (xsd.ValueConstraint, bool) {
+	if u.Required() { // clause 2
+		return xsd.ValueConstraint{}, false
+	}
+	vc, constrained := w.schema.EffectiveValueConstraint(u)
+	if !constrained { // clause 3
+		return xsd.ValueConstraint{}, false
+	}
+	if isInstanceAttribute(u.DeclarationName()) { // clause 4
+		return xsd.ValueConstraint{}, false
+	}
+	if hasAttributeNamed(attrs, u.DeclarationName()) { // clause 5
+		return xsd.ValueConstraint{}, false
+	}
+	return vc, true
 }
 
 // defaultedAttribute charges clause 4 for one ·defaulted attribute·. The type
