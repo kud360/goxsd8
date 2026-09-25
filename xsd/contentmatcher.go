@@ -96,7 +96,7 @@ import (
 // # What the walk carries the set AS
 //
 // The live partitions differ in their occurrence counters and in nothing else
-// (partitionsBounded), and a counter stops at its node's {max occurs}, or at
+// (Matcher.path), and a counter stops at its node's {max occurs}, or at
 // its {min occurs} where {max occurs} is unbounded (counterCap), because
 // canRepeat, canExit, memberSatisfied and offerAllMembers are its only readers
 // and none can tell a larger value from the clamp. So the set is a set of
@@ -286,12 +286,19 @@ type Matcher struct {
 
 	// path is the path of nodes the last item was ·attributed to·, outermost
 	// first, and it is the LIVE SET's rather than any one region's. Every live
-	// partition stands at the same ·basic particle· — two standing at different
-	// ones would ·compete· for the name that put them there, which cos-nonambig
-	// (§3.8.6.4) rejects at Finalize (Phase C's checkContentModelsUnambiguous) —
-	// and the flattened model is a tree, so that one particle fixes one chain of
-	// ancestors. What live partitions differ in is the occurrence counters,
-	// which is what a region carries.
+	// partition stands at the same ·basic particle·. Two that did not would
+	// ·compete· for the name that put them there — key-compete (§3.8.4.2) calls
+	// two particles competing when one sequence has two ·paths· identical but
+	// for their last item, which is exactly two live partitions taking one name
+	// to different particles — and cos-nonambig (§3.8.6.4) forbids a content
+	// model to contain two ·element particles· or two ·wildcard particles· that
+	// compete, which Finalize has already decided (Phase C's
+	// checkContentModelsUnambiguous). The competition it permits, an element
+	// particle against a wildcard particle, never reaches the live set: one
+	// search pass admits one kind of particle (admitKind), and Matcher.Next puts
+	// the name to elements first. The flattened model is a tree, so that one
+	// particle fixes one chain of ancestors. What live partitions differ in is
+	// the occurrence counters, which is what a region carries.
 	//
 	// The premise is load-bearing for the ENCODING and not only for the
 	// verdicts: a live set that did hold two paths would be answered with one
@@ -557,17 +564,11 @@ const maxPartitionStates = 65536
 //
 // # Why the counters are the whole of what varies
 //
-// Every live partition stands at the same ·basic particle·. Two that did not
-// would ·compete· for the name that put them there — key-compete (§3.8.4.2)
-// calls two particles competing when one sequence has two ·paths· identical but
-// for their last item, which is exactly two live partitions taking one name to
-// different particles — and cos-nonambig (§3.8.6.4) forbids a content model to
-// contain two ·element particles· or two ·wildcard particles· that compete.
-// Finalize has already decided cos-nonambig, so live partitions differ ONLY in
-// the occurrence counters an ·ambiguous· node's iteration boundary moves, which
-// are its own and its subtree's (markWidened). The flattened model is a tree,
-// so the same particle is reached by one path; a whole live set therefore shares
-// one path, which the walk holds once (Matcher.path) and no region carries.
+// The whole live set stands at one ·basic particle· and so shares one path,
+// which the walk holds once and no region carries (Matcher.path derives it).
+// Live partitions therefore differ ONLY in the occurrence counters an
+// ·ambiguous· node's iteration boundary moves, its own and its subtree's
+// (markWidened).
 //
 // # What a widened counter costs in regions
 //
@@ -891,12 +892,11 @@ const (
 // partitions still live (region).
 //
 // Every partition that takes the name ·attributes· it to the same ·basic
-// particle·: two different ones live for one name would ·compete·, which
-// cos-nonambig has already rejected, so the first attribution is the
-// attribution, the path every one of them reached is the same path, and the
-// partitions differ in nothing the caller can see. The pass therefore reads the
-// live path throughout and installs the one advance reached at the end of it,
-// where a name no region took leaves it as it stood ([Matcher.Next]).
+// particle· and reaches the same path (Matcher.path derives it), so the first
+// attribution is the attribution and the partitions differ in nothing the
+// caller can see. The pass therefore reads the live path throughout and
+// installs the one advance reached at the end of it, where a name no region
+// took leaves it as it stood ([Matcher.Next]).
 func (m *Matcher) step(name QName, kind admitKind) (Attribution, bool) {
 	var taken Attribution
 	m.reached = m.reached[:0]
