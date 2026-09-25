@@ -1193,9 +1193,7 @@ func cmSaturated(t testing.TB, iter int) *Matcher {
 }
 
 // The whole live set stands at ONE ·basic particle·, which is what lets the
-// walk hold the path once instead of one per region (Matcher.path): two live
-// partitions standing at different particles would ·compete· for the name that
-// put them there, and cos-nonambig (§3.8.6.4) rejected that model at Finalize.
+// walk hold the path once instead of one per region (Matcher.path derives it).
 // Nothing in the walk can show that any more — a live set that did hold two
 // paths would be answered with one of them and no sign of the other — so this
 // sweep asserts it from outside, over the grid of models cmProbeModels
