@@ -715,11 +715,12 @@ predicted. All were already banked `fail` before #790 and are not its
 regression; the descent is what made them visible, and the trade of a wrong
 decision for an honest decline is one the lane cannot register as movement.
 
-**#913 added the second class.** Seven CTA documents are false-charged through `cvc-type` clause 3.1 until
-§3.12.4's `{inherited attributes}` merge lands (#871, `ready` since its
-precondition #831 landed on 2026-09-24) — an
-honest-decline-to-wrong-decision trade the ratchet's zero-flip-down cannot
-register, escalated on #831's thread.
+**#913 added the second class, and #871 retired it.** Seven declared-valid CTA
+documents (`cta0010.v01`, `cta0011.v01`/`.v02`, `cta0013.v01`/`.v02`,
+`cta0014.v01`/`.v02`) were false-charged through `cvc-type` clause 3.1 until
+§3.12.4's `{inherited attributes}` merge landed (#871, `2e9ab84`, 2026-09-25).
+They now decline rather than reject, and stay banked `fail` under #1561, so the
+lane cannot register the trade; #871's own `instance` +2 came from `cta0009`.
 
 The decline census that separated harvest candidates from indeterminates
 predates every M5 landing from #766 onward and every outside-M5 mover — #909,
@@ -755,11 +756,11 @@ which #858 withheld rather than faked) and **#894** (err:XPST0051/XPST0080, the
 static remainder #886 did not charge). **#859**, the wildcard `ta-AttrName`
 arms, **landed 2026-08-18 at `ea0650a`** — this paragraph carried it as
 remaining work for fifteen days, arguing about a stale lease on a branch whose
-issue had already closed the same day. **#871** is the §3.12.4 clause 1.1.3
-·inherited attributes· merge, `ready` since M4's #831 landed on 2026-09-24;
-#1682 (the `ref=` use-level `{inheritable}` fallback) is related but does not
-block it. None of the five carries a
-milestone, which is the same pattern M4's tail records.
+issue had already closed the same day. **#871**, the §3.12.4 clause 1.1.3
+·inherited attributes· merge, landed on 2026-09-25 at `2e9ab84`; #1682 (the
+`ref=` use-level `{inheritable}` fallback) now has it as a live reader. None of
+the three still open (#888, #889, #894) carries a milestone, which is the same pattern M4's tail
+records.
 
 **Assertion evaluation is FILED — #1042, `blocked`, and the first issue this
 project has ever placed on this milestone.** It owns `cvc-assertion` (§3.13.4.1)
