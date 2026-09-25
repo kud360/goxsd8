@@ -293,6 +293,10 @@ is anyone else's to volunteer:
    merge-base-current requirement together (#963) — exit 0 clean, 1 if
    this precondition's grep fails, 2 if the base is stale or the tool
    cannot run; hand-run the grep above only when the tool is unavailable.
+   Both read the local `HEAD` while the PR merges the pushed head, so
+   `landcheck` first exits 1 while `git rev-list @{u}..HEAD` is non-empty
+   and 2 when `HEAD` is behind its upstream or has none, and a hand-run
+   runs that `rev-list` first (#1674).
 2. **`origin/main` has not moved past the verdict's base** —
    `git log HEAD..origin/main` is empty. If it is not, merge forward and
    re-judge per **After the verdict**, then re-verify: main can drift

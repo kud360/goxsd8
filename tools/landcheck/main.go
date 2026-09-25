@@ -19,15 +19,25 @@
 // operational error (exit 2), not a defect (exit 1): the check did not run
 // to a verdict, it declined to run at all.
 //
+// Before either, HEAD must be the head the PR will merge, since every check
+// above reads HEAD: a LOG commit that exists only in this checkout reads
+// PRESENT while the pushed head, which is what merges, lacks it (#1674). HEAD
+// ahead of its upstream is a defect (exit 1). HEAD behind its upstream, no
+// upstream at all, or a detached HEAD is an operational error (exit 2): the
+// pushed head carries commits this checkout never examined, or there is no
+// pushed head to compare with.
+//
 // Usage:
 //
 //	go tool landcheck -issue 963                      # base defaults to origin/main
 //	go tool landcheck -issue 963 -base origin/main
 //
 // Exit codes mirror tools/lint, not the report-only survey tools: 0 for a
-// clean run (the entry is found and the base is current), 1 for a defect (no
-// matching added line), 2 for an operational error (a stale base, a bad git
-// ref, or git failing to run at all).
+// clean run (HEAD matches its upstream, the entry is found and the base is
+// current), 1 for a defect (HEAD has unpushed commits, or no matching added
+// line), 2 for an operational error (HEAD behind its upstream, no upstream or
+// a detached HEAD, a stale base, a bad git ref, or git failing to run at
+// all).
 package main
 
 import (
@@ -38,6 +48,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -51,8 +62,10 @@ func main() {
 }
 
 // run is main's testable body: parse flags, resolve the repo root so the
-// check gives the same answer from any working directory, and delegate to
-// checkLanding against the current HEAD.
+// check gives the same answer from any working directory, verify HEAD is
+// the pushed head, and delegate to checkLanding against it. The pushed-head
+// check lives here rather than in checkLanding because checkLanding also
+// runs against historical commits, which have no upstream.
 func run(args []string, stdout io.Writer) (int, error) {
 	fs := flag.NewFlagSet("landcheck", flag.ContinueOnError)
 	issue := fs.Int("issue", 0, "issue number the branch's docs/LOG/ entry must name")
@@ -68,7 +81,48 @@ func run(args []string, stdout io.Writer) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	code, err := checkPushed(root, stdout)
+	if err != nil || code != 0 {
+		return code, err
+	}
 	return checkLanding(root, *base, "HEAD", *issue, stdout)
+}
+
+// checkPushed verifies that HEAD in the repository at dir is exactly its
+// upstream, the head a PR from this branch merges. It returns 1 with a report
+// on stdout when HEAD has commits its upstream lacks (#1499's shape), and an
+// error when HEAD is behind its upstream or has none. Behind is caught too,
+// not just ahead: the checks after this one would then judge a commit other
+// than the one that merges, in whichever direction it differs.
+//
+// @{upstream} is the remote-tracking ref as of this checkout's last fetch or
+// push, not the remote's live state: a push from another checkout goes
+// unseen until a fetch.
+func checkPushed(dir string, stdout io.Writer) (int, error) {
+	out, err := exec.Command("git", "-C", dir, "rev-list", "--left-right", "--count", "@{upstream}...HEAD").Output()
+	if err != nil {
+		return 0, fmt.Errorf("comparing HEAD with its upstream (HEAD must be a branch pushed with an upstream set, e.g. `git push -u`): running git rev-list --left-right --count @{upstream}...HEAD: %w", err)
+	}
+	fields := strings.Fields(string(out))
+	if len(fields) != 2 {
+		return 0, fmt.Errorf("comparing HEAD with its upstream: git rev-list --left-right --count printed %q, want two counts", out)
+	}
+	behind, err := strconv.Atoi(fields[0])
+	if err != nil {
+		return 0, fmt.Errorf("comparing HEAD with its upstream: parsing behind count %q: %w", fields[0], err)
+	}
+	ahead, err := strconv.Atoi(fields[1])
+	if err != nil {
+		return 0, fmt.Errorf("comparing HEAD with its upstream: parsing ahead count %q: %w", fields[1], err)
+	}
+	if ahead > 0 {
+		_, err := fmt.Fprintf(stdout, "landcheck: HEAD is %d commit(s) ahead of its upstream: the PR merges the pushed head, not this checkout's — push, then re-run\n", ahead)
+		return 1, err
+	}
+	if behind > 0 {
+		return 0, fmt.Errorf("HEAD is %d commit(s) behind its upstream: the PR merges commits this checkout has not examined — pull, then re-run", behind)
+	}
+	return 0, nil
 }
 
 // checkLanding verifies precondition 2 (base is current) and, only once that
