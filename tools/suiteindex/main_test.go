@@ -903,10 +903,10 @@ func TestReportNamesTheMatchedElementOnlyWhenTheQueryLeavesItOpen(t *testing.T) 
 }
 
 // TestReportUnionCensusIsAttributablePerElement pins what makes a union
-// census readable: its hits are one run of lines in path order, and the
-// `element=` field is the only record of which alternative each line answers.
-// Without it the two halves of a feature are counted together and can never
-// be told apart again (#1554).
+// census readable: its hits are one run of consecutive lines in the report's
+// path-then-document order, and the `element=` field is the only record of
+// which alternative each line answers. Without it the two halves of a feature
+// are counted together and can never be told apart again (#1554).
 func TestReportUnionCensusIsAttributablePerElement(t *testing.T) {
 	root := t.TempDir()
 	writeFixture(t, root, "one.xsd", xsPrefixDoc)
@@ -922,14 +922,20 @@ func TestReportUnionCensusIsAttributablePerElement(t *testing.T) {
 	if err := printReport(&out, rep); err != nil {
 		t.Fatalf("printReport: %v", err)
 	}
-	for _, want := range []string{
-		"2 occurrence(s) of " + ns + "element|" + ns + "complexType@name in 1 fixture(s)",
-		`one.xsd:3:3 element=` + ns + `complexType parent=` + ns + `schema children=[` + ns + `sequence] name="ct"`,
-		`one.xsd:5:7 element=` + ns + `element parent=` + ns + `sequence children=[] name="a"`,
-	} {
-		if !strings.Contains(out.String(), want) {
-			t.Errorf("union report does not carry %q:\n%s", want, out.String())
-		}
+	summary := "2 occurrence(s) of " + ns + "element|" + ns + "complexType@name in 1 fixture(s)"
+	if !strings.Contains(out.String(), summary) {
+		t.Errorf("union report does not carry %q:\n%s", summary, out.String())
+	}
+	// The two hits as whole lines, consecutive, the complexType's position
+	// ahead of the element's.
+	run := []string{
+		`  one.xsd:3:3 element=` + ns + `complexType parent=` + ns + `schema children=[` + ns + `sequence] name="ct"`,
+		`  one.xsd:5:7 element=` + ns + `element parent=` + ns + `sequence children=[] name="a"`,
+	}
+	lines := strings.Split(out.String(), "\n")
+	first := slices.Index(lines, run[0])
+	if first < 0 || first+1 >= len(lines) || lines[first+1] != run[1] {
+		t.Errorf("union report does not carry the run %q:\n%s", run, out.String())
 	}
 }
 
@@ -1438,15 +1444,16 @@ func TestParseQueryRejects(t *testing.T) {
 // names is refused and not merely THAT it is: the join means every name at
 // once, which no single element carries. The message it replaces reported the
 // query as a missing `@` and sent the reader to an attribute list they had
-// not written (#1554). The whole message is pinned, both joins in their own
-// halves of it, because swapping the two inside it changes no branch and
-// leaves every shorter substring in place (#1048).
+// not written (#1554); this one names `@` only in a trailing clause, for the
+// reader whose `,` was a forgotten `@`. The whole message is pinned, both
+// joins in their own halves of it, because swapping the two inside it changes
+// no branch and leaves every shorter substring in place (#1048).
 func TestParseQueryRefusesTheAllJoinOnElementNames(t *testing.T) {
 	_, err := parseQuery("openContent,defaultOpenContent")
 	if err == nil {
 		t.Fatalf("parseQuery = nil error, want a refusal")
 	}
-	want := `query "openContent,defaultOpenContent": element names are joined by "|" (any one of them), never by ",": no element carries two names at once`
+	want := `query "openContent,defaultOpenContent": element names are joined by "|" (any one of them), never by ",": no element carries two names at once, and attribute names follow "@"`
 	if err.Error() != want {
 		t.Errorf("refusal = %q, want %q", err, want)
 	}

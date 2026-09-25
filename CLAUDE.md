@@ -103,7 +103,7 @@ and, optionally, its attributes, `element@targetNamespace`, in these shapes:
 
 - **`|` — ANY of the names.** Between element names it censuses a FEATURE as
   the union of every element that establishes it:
-  `'openContent|defaultOpenContent'` is `{open content}` (#1554). Between
+  `'openContent|defaultOpenContent'` bounds `{open content}` (#1554). Between
   attribute names, an element carrying any one of them counts (#1391).
 - **`*` — any local name.** `'*@mixed|abstract'` is every occurrence of
   either attribute, on any element, with its value (#1391).

@@ -3,13 +3,12 @@
 // every encoding the corpus ships.
 //
 // A grounding round predicting ratchet movement needs the set of fixtures
-// exercising a construct. Deriving that set by grep failed three landings
-// running, each by a different mechanism, and the fix installed for each
-// reached only that one: a UTF-16LE fixture read as interleaved NULs by a
-// UTF-8 grep, a fixture outside the single directory the previous finding
-// had named, and a fixture found by matching one clause's SHAPE instead of
-// the construct it carries (#1239). PRINCIPLES 27 turns that shape of
-// repeated, deterministic work into a tool.
+// exercising a construct. A grep misses members of that set by mechanisms
+// that share no fix: a UTF-16LE fixture read as interleaved NULs by a UTF-8
+// grep, a fixture outside the single directory a search named, and a fixture
+// found by matching one clause's SHAPE instead of the construct it carries
+// (#1239). PRINCIPLES 27 turns that shape of repeated, deterministic work
+// into a tool.
 //
 // # What it matches
 //
@@ -53,8 +52,8 @@
 //
 // ELEMENT names take the `|` join only, which is how a FEATURE spelled by
 // more than one element is censused in one query:
-// `openContent|defaultOpenContent` is the `{open content}` population, whose
-// halves counted apart under-predicted a landing's ratchet movement (#1554).
+// `openContent|defaultOpenContent` bounds the `{open content}` population
+// from above, and CLAUDE.md's suiteindex paragraph says why (#1554).
 // The `,` join is refused in that position rather than matching nothing — no
 // element carries two names at once — and a query naming more than one of
 // them always prints the element each hit was, since the query no longer
@@ -65,12 +64,10 @@
 // A query may require its occurrences to lie INSIDE another matching element,
 // at any depth, by writing that element's pattern ahead of `//`:
 // `*@maxOccurs//*@maxOccurs` is every element carrying `maxOccurs` that
-// stands inside another one carrying it. A population defined by nesting had
-// no spelling at all before, so two grounding rounds running answered
-// `not derived` and measured their landing by hand instead (#1585). Both
-// sides of `//` are whole patterns — element alternatives, an attribute list
-// and its join each — and each side is read on its own, so `A//B` finds a B
-// under an A and never a B under a B.
+// stands inside another one carrying it (#1585). Both sides of `//` are whole
+// patterns — element alternatives, an attribute list and its join each — and
+// each side is read on its own, so `A//B` finds a B under an A and never a B
+// under a B.
 //
 // An element is not its own ancestor: a start tag answering both patterns
 // qualifies nothing but its own descendants, which is the entire difference
@@ -536,7 +533,7 @@ func parseElements(whole, s string) ([]namePat, string, error) {
 		}
 		elems = append(elems, p)
 		if strings.HasPrefix(more, string(joinAll)) {
-			return nil, "", fmt.Errorf("query %q: element names are joined by %q (any one of them), never by %q: no element carries two names at once", whole, joinAny, joinAll)
+			return nil, "", fmt.Errorf("query %q: element names are joined by %q (any one of them), never by %q: no element carries two names at once, and attribute names follow %q", whole, joinAny, joinAll, "@")
 		}
 		if !strings.HasPrefix(more, string(joinAny)) {
 			return elems, more, nil
@@ -999,7 +996,7 @@ func markUnclosed(hits []hit, open []openElem) {
 // pattern and its ancestor pattern are tested with it, which is what makes
 // `A//B`'s two sides read alike (STYLE T4).
 //
-// An element carrying none of the names a `|` query lists is not an
+// An element carrying none of the attribute names a `|` query lists is not an
 // occurrence, and neither is one carrying no attribute at all under `@*`: an
 // attribute census has nothing to say about an element with no attribute.
 func match(start *xmltree.StartElement, p pattern) ([]attrHit, bool) {
