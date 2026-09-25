@@ -39,13 +39,13 @@ import (
 // two mandatory copies and become indistinguishable. Nothing licenses either
 // outcome — clause 1 is pure set containment naming no algorithm, Appendix J's
 // unfolding guidance is scoped by its own text to cos-nonambig, and §3.4.6.3's
-// implementation-defined licence excuses provisional ACCEPTANCE of an undecided
-// case, never a rejection. So the constants are not raised, which would only move
-// the same two thresholds, but replaced for this consumer: unfoldExactly emits
-// {max occurs} copies of a bounded range and {min occurs} copies plus a loop-back
-// for an unbounded one, so the automaton accepts exactly L and this walk DECIDES
-// containment over the declared {min occurs}/{max occurs} instead of over a
-// truncated unfolding (#501).
+// "may provisionally accept the derivation" (xmlschema11-1.md:2041) licenses
+// ACCEPTANCE of an undecided case, never a rejection. So the constants are not
+// raised, which would only move the same two thresholds, but replaced for this
+// consumer: unfoldExactly emits {max occurs} copies of a bounded range and
+// {min occurs} copies plus a loop-back for an unbounded one, so the automaton
+// accepts exactly L and this walk DECIDES containment over the declared
+// {min occurs}/{max occurs} instead of over a truncated unfolding (#501).
 //
 // The exact unfolding does not step outside what cos-nonambig validated.
 // maxMandatoryCopies' own argument is that copies past the second realize no
@@ -595,17 +595,17 @@ const (
 //     holds for the machinery here: addAll models all(P1…Pn) as a star over its
 //     members followed by a primed replay of one of them, whose language is a
 //     SUPERSET of the star's and so of the interleave — a single-member ·all·
-//     already reads as that member repeated — so an R modelled that way admits sequences
-//     R does not, and charging their absence from B would false-reject. B needs
-//     no such leniency for the mirror-image reason: the same over-approximation
-//     makes B look larger, which can only accept. This is the NARROW §3.4.6.3
-//     all-group allowance, not the broader implementation-defined (a)/(b)/(c)
-//     clause that the pre-#263 stub relied on; being spec-licensed rather than a
-//     deliberate incompleteness, it carries no GAP marker FOR THAT CALLER. The
-//     licence is §3.4.6.3's and names clause 2.4.2, so it does not travel with
-//     this function: a restrictsLanguage caller charging some other rule inherits
-//     the leniency's fail-open behaviour and must carry its own marker for it
-//     (checkModelGroupRedefinitions, redefinition.go).
+//     already reads as that member repeated — so an R modelled that way admits
+//     sequences R does not, and charging their absence from B would false-reject.
+//     B needs no such leniency for the mirror-image reason: the same
+//     over-approximation makes B look larger, which can only accept. This is the
+//     NARROW §3.4.6.3 all-group allowance, not the broader implementation-defined
+//     (a)/(b)/(c) clause that the pre-#263 stub relied on; being spec-licensed
+//     rather than a deliberate incompleteness, it carries no GAP marker FOR THAT
+//     CALLER. The licence is §3.4.6.3's and names clause 2.4.2, so it does not
+//     travel with this function: a restrictsLanguage caller charging some other
+//     rule inherits the leniency's fail-open behaviour and must carry its own
+//     marker for it (checkModelGroupRedefinitions, redefinition.go).
 //   - a content model whose exact unfolding would exceed maxContentPositions on
 //     either side. This one alone is a RESOURCE ceiling rather than a modelling
 //     gap — it bounds the automaton's size, see maxContentPositions for what that
