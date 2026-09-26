@@ -1275,12 +1275,18 @@ func axisAttrs(start *xmltree.StartElement, want namePat) ([]attrHit, bool) {
 
 // attrOn returns start's want attribute as the hit records it — the name the
 // document resolved, never the pattern that admitted it, which can be open on
-// either axis. The attribute list is a document-ordered slice, so the first
-// match is the only one a well-formed document can have.
+// either axis. Attributes are tried in the order the tag spells them.
 //
-// Under an active value test the attribute is returned only when it answers
-// the test, with every token's resolution recorded; otherwise its hit carries
-// no resolution at all.
+// With no value test the first attribute want admits wins, and its hit
+// carries no resolution at all. A pattern fixing both namespace and local
+// name has at most one candidate, since no start tag carries two attributes
+// with one expanded name; a `{*}` or `*` pattern can admit several, and
+// nothing but order tells them apart.
+//
+// Under an active value test the first admitted attribute that ANSWERS the
+// test wins, with every token's resolution recorded: an admitted attribute
+// that does not answer is skipped and the next one tried, so `{*}type` still
+// finds a plain `type` after an `xsi:type` that fails the test.
 func attrOn(start *xmltree.StartElement, want namePat, v valueTest) (attrHit, bool) {
 	for _, a := range start.Attributes() {
 		name := qnameOf(a.Name())
@@ -1292,7 +1298,9 @@ func attrOn(start *xmltree.StartElement, want namePat, v valueTest) (attrHit, bo
 			return h, true
 		}
 		h.Resolved = resolveTokens(start, h.Value)
-		return h, slices.ContainsFunc(h.Resolved, v.admits)
+		if slices.ContainsFunc(h.Resolved, v.admits) {
+			return h, true
+		}
 	}
 	return attrHit{}, false
 }

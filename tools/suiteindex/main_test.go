@@ -2182,6 +2182,23 @@ func TestScanFixtureAppliesAValueTestOnTheAncestorSide(t *testing.T) {
 	}
 }
 
+// TestScanFixtureTriesEveryAttributeTheNameAdmits pins that a value test is
+// applied to every attribute a wildcard name pattern admits, not only to the
+// first: `{*}type` admits both `xsi:type` and a plain `type`, and only the
+// second answers `{}1`, as in msData/simpleType/test107331_9.xml (#1671).
+func TestScanFixtureTriesEveryAttributeTheNameAdmits(t *testing.T) {
+	doc := `<root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <item xsi:type="ct4" type="1"/>
+</root>`
+	scan := scanFixture("v.xml", strings.NewReader(doc), mustQuery(t, "{*}*@{*}type={}1"))
+	if scan.Err != nil {
+		t.Fatalf("scanFixture: %v", scan.Err)
+	}
+	if got, want := resolvedLines(scan), []string{`2: type="1"->[{}1]`}; !slices.Equal(got, want) {
+		t.Errorf("hits = %q, want %q", got, want)
+	}
+}
+
 // valueCaveat is a line of the value-test caveat, which a report prints
 // exactly when a side of the query carries a value test.
 const valueCaveat = "read this as a bound on DIRECT references, never as a population of resolved types:"
