@@ -207,7 +207,7 @@ func (w *walk) idAttributes(c *icCheck) {
 // GAP(validate): a use whose {attribute declaration} does not resolve, or whose
 // {type definition} is not a resolvable simple type, declines. The first is
 // unreachable on a *xsd.Schema that exists; the second is the absent-or-COMPLEX
-// {type definition} cvcattribute.go's file comment records. The decline
+// {type definition} [walk.matchedAttribute]'s doc records. The decline
 // withholds cvc-id clause 1 alone ([idTable.charge]). RULED permanent by #774
 // (STYLE P3b), on cvcattribute.go's terms.
 func (w *walk) idDefaultedAttributes(c *icCheck, attrs []Attribute, ct xsd.ComplexType) {
