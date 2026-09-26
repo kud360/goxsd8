@@ -191,21 +191,29 @@ func (w *walk) idAttributes(c *icCheck) {
 	}
 }
 
-// idDefaultedAttributes declines for a ·defaulted attribute· whose declaration
-// is ID-governed.
+// idDefaultedAttributes reads the ·eligible item set·'s ·defaulted attribute·
+// half off one element: §3.17.5.2's own Note is explicit that "the use of
+// [schema actual value] ... means that default or fixed value constraints may
+// play a part", and Attribute Default Value (§3.4.5.1, sic-attrDefault) is what
+// puts the item in the PSVI with the ·effective value constraint·'s value.
+// Which uses are ·defaulted attributes· is [walk.defaultedConstraint]'s to say
+// (key-dflt-att), and the item's ids bind to the OWNER element, as a present
+// attribute's do. The item is synthesized and has no source position, so it
+// cites the owner's, as [walk.defaultedAttribute]'s clause 4 charge does. A
+// {lexical form} outside the type's lexical space records nothing
+// ([walk.idRecord]'s String Valid gate): that is cvc-complex-type clause 4's to
+// charge, and [walk.defaultedAttribute] charges it.
 //
-// GAP(validate): §3.17.5.2's own Note puts one in the ·eligible item set· —
-// "the use of [schema actual value] ... means that default or fixed value
-// constraints may play a part" — because cvc-complex-type clause 4 supplies the
-// item and its ·actual value· is the constraint's. This package does not
-// synthesize the item, so the id it would declare is one cvc-id never saw, and
-// clause 1 would charge an empty binding for it (#1676).
+// GAP(validate): a use whose {attribute declaration} does not resolve, or whose
+// {type definition} is not a resolvable simple type, declines. The first is
+// unreachable on a *xsd.Schema that exists; the second is the absent-or-COMPLEX
+// {type definition} [walk.matchedAttribute]'s doc records. The decline
+// withholds cvc-id clause 1 alone ([idTable.charge]). RULED permanent by #774
+// (STYLE P3b), on cvcattribute.go's terms.
 func (w *walk) idDefaultedAttributes(c *icCheck, attrs []Attribute, ct xsd.ComplexType) {
 	for _, u := range ct.AttributeUses() {
-		if u.Required() || hasAttributeNamed(attrs, u.DeclarationName()) {
-			continue
-		}
-		if _, constrained := w.schema.EffectiveValueConstraint(u); !constrained {
+		vc, defaulted := w.defaultedConstraint(u, attrs)
+		if !defaulted {
 			continue
 		}
 		d, resolved := w.schema.ResolvedAttributeDeclaration(u)
@@ -218,10 +226,7 @@ func (w *walk) idDefaultedAttributes(c *icCheck, attrs []Attribute, ct xsd.Compl
 			w.ids.declined = true
 			continue
 		}
-		candidate, decided := w.idCandidate(st)
-		if !decided || candidate {
-			w.ids.declined = true
-		}
+		w.idRecord(st, vc.LexicalForm(), c.e, c.node, c.e.Loc())
 	}
 }
 

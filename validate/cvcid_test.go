@@ -378,6 +378,113 @@ func TestDefaultedEmptyElementSatisfiesAnIDREF(t *testing.T) {
 		icChargeAttr(ruleCvcID, 2))
 }
 
+// idDefaultedAttrSchema builds the attribute-side counterpart of idDefaulted's
+// shape, which icSchema's shared ItemType cannot carry without every <item> of
+// every other fixture declaring the same id:
+//
+//	root   RootType   sequence( item*, ditem*, dref* )
+//	item   ItemType   empty, @xid xs:ID, @ref xs:IDREF
+//	ditem  DItemType  empty, @did xs:ID    default "d1"
+//	dref   DRefType   empty, @dref xs:IDREF default "ghost"
+func idDefaultedAttrSchema(t *testing.T) *xsd.Schema {
+	t.Helper()
+	defaulted := func(local, typ, lexical string) xsd.AttributeUse {
+		vc := xsd.NewValueConstraint(xsd.ValueDefault, lexical, nil, nil)
+		return typedUse(t, local, icBuiltin(typ), false, &vc, nil)
+	}
+	itemType := icComplex(t, "ItemType", []xsd.AttributeUse{
+		icUse(t, xsd.QName{Local: "xid"}, "ID"),
+		icUse(t, xsd.QName{Local: "ref"}, "IDREF"),
+	}, xsd.EmptyContent{})
+	dItemType := icComplex(t, "DItemType", []xsd.AttributeUse{defaulted("did", "ID", "d1")}, xsd.EmptyContent{})
+	dRefType := icComplex(t, "DRefType", []xsd.AttributeUse{defaulted("dref", "IDREF", "ghost")}, xsd.EmptyContent{})
+	local := func(name, typ string) xsd.Particle {
+		return icRepeated(t, icLocal(t, "RootType", xsd.QName{Local: name}, xsd.QName{Local: typ}, false, nil))
+	}
+	rootType := icComplex(t, "RootType", nil,
+		icContent(t, local("item", "ItemType"), local("ditem", "DItemType"), local("dref", "DRefType")))
+	root, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "root"},
+		xsd.TypeDefinitionRef{Name: xsd.QName{Local: "RootType"}}, nil, xsd.NewGlobalScope(),
+		nil, false, nil, nil, nil, false, nil)
+	if err != nil {
+		t.Fatalf("building the root element declaration: %v", err)
+	}
+	b := xsd.NewSchemaBuilder()
+	for _, st := range icSeeded(t) {
+		b.AddType(st)
+	}
+	b.AddType(itemType)
+	b.AddType(dItemType)
+	b.AddType(dRefType)
+	b.AddType(rootType)
+	b.AddElement(root)
+	schema, err := b.Finalize()
+	if err != nil {
+		t.Fatalf("finalizing the defaulted-attribute schema: %v", err)
+	}
+	return schema
+}
+
+// idDItem is <ditem/>, leaving its defaulted @did absent unless did is given.
+func idDItem(line int, did ...string) *testElement {
+	attrs := make([]Attribute, 0, len(did))
+	for _, v := range did {
+		attrs = append(attrs, icAttr(xsd.QName{Local: "did"}, v, line))
+	}
+	return icElem(xsd.QName{Local: "ditem"}, line, attrs)
+}
+
+// idDRef is <dref/>, whose defaulted @dref is absent.
+func idDRef(line int) *testElement {
+	return icElem(xsd.QName{Local: "dref"}, line, nil)
+}
+
+// An IDREF naming the id an absent ·defaulted attribute· supplies RESOLVES:
+// §3.17.5.2's Note puts the item Attribute Default Value adds in the ·eligible
+// item set·, and it binds its OWNER element.
+func TestDefaultedAttributeSatisfiesAnIDREF(t *testing.T) {
+	schema := idDefaultedAttrSchema(t)
+
+	icWantCharges(t, icAssess(t, schema, icRoot(idItem(2, "ref", "d1"), idDItem(3))))
+	icWantCharges(t, icAssess(t, schema, icRoot(idItem(2, "ref", "d2"), idDItem(3))),
+		icChargeAttr(ruleCvcID, 2))
+}
+
+// A dangling IDREF beside an element whose ID-governed ·defaulted attribute· is
+// absent is still charged under cvc-id clause 1: the default is read, not
+// declined, so it does not withhold the clause for the whole ·validation root·
+// (#1676).
+func TestDefaultedAttributeLeavesClauseOneCharged(t *testing.T) {
+	schema := idDefaultedAttrSchema(t)
+
+	icWantCharges(t, icAssess(t, schema, icRoot(idItem(2, "ref", "nowhere"), idDItem(3))),
+		icChargeAttr(ruleCvcID, 2))
+}
+
+// One defaulted ID supplied to two elements gives its binding two members, which
+// cvc-id clause 2 charges at the SECOND owner — the synthesized item has no
+// position of its own. A defaulted id matching an explicit one is the same
+// duplicate, and an explicit value in place of the default is none.
+func TestDefaultedAttributeDeclaresItsID(t *testing.T) {
+	schema := idDefaultedAttrSchema(t)
+
+	icWantCharges(t, icAssess(t, schema, icRoot(idDItem(2), idDItem(3))),
+		icCharge(ruleCvcID, 3))
+	icWantCharges(t, icAssess(t, schema, icRoot(idItem(2, "xid", "d1"), idDItem(3))),
+		icCharge(ruleCvcID, 3))
+	icWantCharges(t, icAssess(t, schema, icRoot(idDItem(2), idDItem(3, "d2"))))
+}
+
+// An absent IDREF-governed ·defaulted attribute· whose default names nothing is
+// a dangling reference, which cvc-id clause 1 charges at its owner element.
+func TestDefaultedAttributeIDREFIsChargedWhenItNamesNothing(t *testing.T) {
+	schema := idDefaultedAttrSchema(t)
+
+	icWantCharges(t, icAssess(t, schema, icRoot(idDRef(2))),
+		icCharge(ruleCvcID, 2))
+	icWantCharges(t, icAssess(t, schema, icRoot(idItem(2, "xid", "ghost"), idDRef(3))))
+}
+
 // The rule ID is the BARE catalog name, with the clause in the message text.
 func TestCvcIDRuleIsTheBareCatalogName(t *testing.T) {
 	if !xsderr.IsValidRule(ruleCvcID) {
