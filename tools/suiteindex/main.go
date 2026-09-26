@@ -1387,16 +1387,25 @@ func pathsErr(notes, files *latchWriter) error {
 	return nil
 }
 
-// printCaveat states which directions a containment figure is wrong in, and
-// prints nothing at all for a query that asked no containment question. The
-// census walks the document's own nesting and resolves nothing, so the figure
-// is a ceiling of a lexical population and neither a count nor a ceiling of
-// the resolved-component population a reader is usually after; unqualified,
-// it would be a false statement shipped in the tool's own output (#1585).
+// printCaveat states what a figure does not resolve, for each shape that
+// owes a caveat: containment and the value test. The two are independent, and
+// a query carrying both prints both; one carrying neither prints nothing.
 //
 // It sits under the header rather than in a section of its own because that
 // is where the reader holding the figure arrives (#1279).
 func printCaveat(w io.Writer, q query) {
+	printContainmentCaveat(w, q)
+	printValueCaveat(w, q)
+}
+
+// printContainmentCaveat states which directions a containment figure is
+// wrong in, and prints nothing at all for a query that asked no containment
+// question. The census walks the document's own nesting and resolves nothing,
+// so the figure is a ceiling of a lexical population and neither a count nor
+// a ceiling of the resolved-component population a reader is usually after;
+// unqualified, it would be a false statement shipped in the tool's own output
+// (#1585).
+func printContainmentCaveat(w io.Writer, q query) {
 	if q.Ancestor == nil {
 		return
 	}
@@ -1404,6 +1413,23 @@ func printCaveat(w io.Writer, q query) {
 	_, _ = fmt.Fprintln(w, "  of a resolved one: it over-counts, because an ancestor in the document is not a")
 	_, _ = fmt.Fprintln(w, "  particle after <element ref>/<group ref> resolution, and it MISSES a nest that only")
 	_, _ = fmt.Fprintln(w, "  that resolution creates, because this census never resolves a ref")
+}
+
+// printValueCaveat states what a value-test figure does not resolve, when
+// either side of the query carries a value test (#1671). The test resolves a
+// value's prefix and nothing further, so the figure counts the attributes
+// that NAME an operand directly, which is not the population of declarations
+// whose type is that operand.
+func printValueCaveat(w io.Writer, q query) {
+	if !q.Value.active() && (q.Ancestor == nil || !q.Ancestor.Value.active()) {
+		return
+	}
+	_, _ = fmt.Fprintln(w, "  read this as a bound on DIRECT references, never as a population of resolved types:")
+	_, _ = fmt.Fprintln(w, "  it follows no derivation chain, so a declaration typed by a named simpleType that")
+	_, _ = fmt.Fprintln(w, "  restricts an operand's type is found only by a second query on that type's name, and")
+	_, _ = fmt.Fprintln(w, "  it resolves no <element ref>/<group ref>. The query, not any schema, asserts that the")
+	_, _ = fmt.Fprintln(w, "  attribute holds QNames, and a token that is not a lexical QName answers no operand,")
+	_, _ = fmt.Fprintln(w, "  UNBOUND included")
 }
 
 // printBody renders the half of the report the query's shape chooses: the
@@ -1556,12 +1582,47 @@ func renderChildren(h hit) string {
 // records it. The local part alone is what a reader recognizes, and no
 // ambiguity follows it: a query naming two attributes of one local name in
 // different namespaces is not one anybody writes.
+//
+// An attribute a value test resolved is followed, with no space, by
+// `->[r1, r2, …]`: one resolution per token, in token order ([renderToken]).
+// One without a resolution prints nothing more, so a query with no value test
+// renders the bytes it always did.
 func renderAttrs(attrs []attrHit) string {
 	var b strings.Builder
 	for _, a := range attrs {
 		fmt.Fprintf(&b, " %s=%q", a.Name.Local, a.Value)
+		if a.Resolved == nil {
+			continue
+		}
+		toks := make([]string, 0, len(a.Resolved))
+		for _, r := range a.Resolved {
+			toks = append(toks, renderToken(r))
+		}
+		b.WriteString("->[" + strings.Join(toks, ", ") + "]")
 	}
 	return b.String()
+}
+
+// renderToken spells one token's resolution: a bound token as the braced
+// operand that matches it exactly ([bracedName]), so it re-enters as an
+// operand; an unbound one as [unboundOperand]; and one that is no QName as
+// "(not a QName)", which cannot be read as a name for the same reason
+// "(none)" cannot.
+//
+// The switch is exhaustive over the sealed sum; the default arm asserts the
+// invariant and is unreachable, since [tokenRes] is unexported and this file
+// declares every arm.
+func renderToken(r tokenRes) string {
+	switch r := r.(type) {
+	case boundToken:
+		return bracedName(r.Name.Space, r.Name.Local)
+	case unboundToken:
+		return unboundOperand
+	case notQNameToken:
+		return "(not a QName)"
+	default:
+		panic("suiteindex: renderToken: non-exhaustive tokenRes switch")
+	}
 }
 
 // renderMatched names the element a hit matched, for a query that does not
