@@ -71,6 +71,23 @@ type UnparsedEntities interface {
 	HasUnparsedEntity(name string) bool
 }
 
+// DeclarationsProcessed is the optional capability through which a source
+// presents the [all declarations processed] property of the document
+// information item (XML Infoset §2.1, docs/specs/md/xml-infoset.md): whether it
+// read the complete DTD. False means some declaration went unread — an external
+// DTD subset, or a parameter entity the source did not read — so a name absent
+// from [unparsedEntities] may be declared there. The engine reads it only to
+// word the cvc-simple-type clause 3 diagnostic; the verdict is the same either
+// way, since a declaration that was not read declares nothing (Appendix D).
+//
+// A source that does not implement it is taken to have processed every
+// declaration, and a miss is reported as plainly undeclared. Like
+// [UnparsedEntities], it is narrowed off the root [Validator.Assess] is handed.
+type DeclarationsProcessed interface {
+	// AllDeclarationsProcessed reports [all declarations processed].
+	AllDeclarationsProcessed() bool
+}
+
 // Attribute is one attribute information item of an [Element], as a source
 // adapter presents it. Namespace declarations are not attributes and never
 // appear as one (see [Element]'s Attributes).

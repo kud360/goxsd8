@@ -883,3 +883,45 @@ func TestSchemaSetSource(t *testing.T) {
 		}
 	}
 }
+
+// TestValidateNeverReadsTheExternalDTDSubset pins the policy doc.go publishes:
+// the external DTD subset is never fetched, so an ENTITY value whose unparsed
+// entity is declared only there is charged — with a message saying the DTD was
+// not fully read, not that the name is undeclared — and the report is the same
+// byte for byte whether the external subset's file exists beside the instance
+// or not. An entity declared through an internal parameter entity is read.
+func TestValidateNeverReadsTheExternalDTDSubset(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name, body string) string {
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	schema := write("ent.xsd", `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="r"><xs:complexType><xs:attribute name="ent" type="xs:ENTITY"/></xs:complexType></xs:element></xs:schema>`)
+	external := write("external.xml", `<!DOCTYPE r SYSTEM "x.dtd"><r ent="pic"/>`)
+	internal := write("internal.xml", `<!DOCTYPE r [<!ENTITY % p "<!ENTITY pic SYSTEM 'u.bin' NDATA n>"> %p; <!NOTATION n SYSTEM "x">]><r ent="pic"/>`)
+
+	report := func() string {
+		t.Helper()
+		var stdout, stderr bytes.Buffer
+		if code := run([]string{"validate", "-schema", schema, external}, &stdout, &stderr); code != exitInvalid {
+			t.Fatalf("code = %d, want %d (stdout %q, stderr %q)", code, exitInvalid, stdout.String(), stderr.String())
+		}
+		return stdout.String()
+	}
+	absent := report()
+	if !strings.Contains(absent, "[cvc-attribute]") || !strings.Contains(absent, "the document's DTD was not fully read") {
+		t.Errorf("stdout = %q, want a cvc-attribute charge saying the DTD was not fully read", absent)
+	}
+	write("x.dtd", `<!NOTATION n SYSTEM "x"><!ENTITY pic SYSTEM "u.bin" NDATA n>`)
+	if present := report(); present != absent {
+		t.Errorf("with x.dtd present, stdout = %q, want it identical to the absent case's %q", present, absent)
+	}
+
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"validate", "-schema", schema, internal}, &stdout, &stderr); code != exitOK {
+		t.Errorf("internal parameter entity: code = %d, want %d (stdout %q, stderr %q)", code, exitOK, stdout.String(), stderr.String())
+	}
+}

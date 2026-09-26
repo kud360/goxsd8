@@ -28,11 +28,13 @@
 // are never coalesced, because the engine assembles the ·initial value·
 // from the runs and a coalesced run would carry only the first one's Loc.
 //
-// Every element implements validate.UnparsedEntities, answering from the
-// unparsed entities the DOCTYPE's internal subset declares, through the one
-// shared reader. The external DTD subset is never read, so an entity declared
-// only there is not a member and an ENTITY value naming it is rejected; the
-// GAP(validate) marker at the head of validate/cvcattribute.go tracks that.
+// Every element implements validate.UnparsedEntities and
+// validate.DeclarationsProcessed, answering through the one shared reader.
+// The internal DTD subset is read for unparsed entity declarations, including
+// those in the replacement text of its internal parameter entities; the
+// external DTD subset is never fetched. An ENTITY value whose declaration
+// could only be there is rejected with a message saying the DTD was not fully
+// read, rather than that the name is undeclared.
 //
 //   - GAP(xml): content OUTSIDE the document element is not inspected:
 //     character data before it is dropped, and anything after its end tag

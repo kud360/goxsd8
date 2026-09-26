@@ -23,11 +23,15 @@ import (
 // document's [unparsedEntities] ([UnparsedEntities]).
 //
 // GAP(validate): the [unparsedEntities] validate/xmlsrc presents is read from
-// the DOCTYPE's internal subset alone — encoding/xml never reads the external
-// DTD subset, and parser/xmltree expands no parameter entity — so an unparsed
-// entity declared only through either is not a member, and an ·ENTITY value·
-// naming it is charged as undeclared. The direction is fail-CLOSED: the set's
-// one reader, [walk.entitiesDeclared], charges on a name the set lacks (#1668).
+// the DOCTYPE's internal subset, its internal parameter entities expanded under
+// a depth and size bound. The external DTD subset is declined, and so is an
+// external parameter entity or one past that bound, so an unparsed entity
+// declared only there is not a member: XML 1.0 §5.1 and §5.2 oblige a
+// non-validating processor to read the document entity alone, RULED permanent
+// by #1668 (STYLE P3b). The direction is fail-CLOSED: the set's one reader,
+// [walk.entitiesDeclared], charges on a name the set lacks, and words the
+// charge through [DeclarationsProcessed] as possibly declared where the source
+// did not read.
 
 // ruleCvcAttribute is Attribute Locally Valid (Structures §3.2.4.1,
 // cvc-attribute). The clause charged goes in the message on ruleCvcElt's

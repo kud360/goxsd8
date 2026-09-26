@@ -27,18 +27,23 @@
 // interface the engine narrows to, and NEVER as a method added to
 // Element, Attribute or Text (PRINCIPLES 3). Those three are implemented
 // by adapter packages outside this module, so a method added to one
-// breaks every adapter at once. [UnparsedEntities] is the capability
-// that has shipped: the document's [unparsedEntities], narrowed once off
-// the root [Validator.Assess] is handed.
+// breaks every adapter at once. [UnparsedEntities] and
+// [DeclarationsProcessed] are the capabilities that have shipped: the
+// document's [unparsedEntities] and [all declarations processed], each
+// narrowed once off the root [Validator.Assess] is handed.
 //
 // Each capability's own doc comment decides what its absence means, and
-// the two contracts differ. [unparsedEntities] absent REJECTS: Appendix
+// the contracts differ. [unparsedEntities] absent REJECTS: Appendix
 // D makes every ENTITY or ENTITIES value of a source that does not
-// support the property fail String Valid clause 3. [[base URI]] absent
-// would FALL BACK: a planned interface{ BaseURI() string }, not yet
-// built, would answer Loc().URI where an adapter does not implement it.
-// [[prefix]], [[base URI]] and [[attribute type]] are the Appendix D
-// properties still waiting on that route: no cvc- rule reads one today.
+// support the property fail String Valid clause 3. [all declarations
+// processed] absent is taken as TRUE, and only words a diagnostic: a
+// name missing from [unparsedEntities] is reported as plainly undeclared
+// rather than as possibly declared where the source did not read.
+// [[base URI]] absent would FALL BACK: a planned interface{ BaseURI()
+// string }, not yet built, would answer Loc().URI where an adapter does
+// not implement it. [[prefix]], [[base URI]] and [[attribute type]] are
+// the Appendix D properties still waiting on that route: no cvc- rule
+// reads one today.
 //
 // # Assessment semantics designed in from the start
 //

@@ -172,3 +172,40 @@ func TestADefaultedEntityAttributeMustBeDeclared(t *testing.T) {
 	wantSilence(t, assessTyped(t, withEntities(bare(), "ghost"), uses), "the default names a declared entity")
 	wantClauseThree(t, assessTyped(t, withEntities(bare(), "pic"), uses), ruleCvcComplexType, "ghost")
 }
+
+// processedRoot is an entityRoot whose source also presents [all declarations
+// processed].
+type processedRoot struct {
+	entityRoot
+	processed bool
+}
+
+func (p processedRoot) AllDeclarationsProcessed() bool { return p.processed }
+
+// [all declarations processed] words the miss and never the verdict: a source
+// reporting its DTD not fully read has an undeclared name charged under the
+// same clause 3 as one reporting every declaration processed, but the message
+// says the DTD was not fully read. A source that does not implement
+// [DeclarationsProcessed] is taken to have processed every declaration, and a
+// declared name passes whatever the source reports.
+func TestAnUnreadDTDWordsTheMissButNotTheVerdict(t *testing.T) {
+	uses := []xsd.AttributeUse{typedUse(t, "ent", icBuiltin("ENTITY"), false, nil, nil)}
+	const unread = "the document's DTD was not fully read"
+
+	wantSilence(t, assessTyped(t, processedRoot{withEntities(valuedRoot("ent", "pic"), "pic"), false}, uses),
+		"pic is declared, though the DTD was not fully read")
+	for _, tc := range []struct {
+		why    string
+		root   Element
+		unread bool
+	}{
+		{"declarations unread", processedRoot{withEntities(valuedRoot("ent", "ghost"), "pic"), false}, true},
+		{"every declaration processed", processedRoot{withEntities(valuedRoot("ent", "ghost"), "pic"), true}, false},
+		{"no DeclarationsProcessed", withEntities(valuedRoot("ent", "ghost"), "pic"), false},
+	} {
+		msg := wantClauseThree(t, assessTyped(t, tc.root, uses), ruleCvcAttribute, "ghost")
+		if got := strings.Contains(msg, unread); got != tc.unread {
+			t.Errorf("%s: wrapped Msg = %q, says %q: %t, want %t", tc.why, msg, unread, got, tc.unread)
+		}
+	}
+}

@@ -129,7 +129,9 @@ func (v *Validator) Assess(root Element) *Result {
 		panic("validate: Assess: nil root Element")
 	}
 	entities, _ := root.(UnparsedEntities) // nil: the source supports no [unparsedEntities]
-	w := walk{log: v.log, schema: v.schema, backend: v.backend, values: value.NewValueSpace(v.backend), entities: entities}
+	processed, told := root.(DeclarationsProcessed)
+	w := walk{log: v.log, schema: v.schema, backend: v.backend, values: value.NewValueSpace(v.backend), entities: entities,
+		declsUnread: told && !processed.AllDeclarationsProcessed()}
 	var g governance
 	d, found := v.Schema().Element(root.Name())
 	if found {
@@ -569,16 +571,20 @@ func (w *walk) instanceGovernance(e Element) (governance, bool) {
 // ·validation root· (cvcid.go). entities is the root narrowed to
 // [UnparsedEntities] once, at the top of the call, and nil where the source does
 // not support [unparsedEntities] — the nil is that fact's only encoding, and
-// String Valid clause 3 reads it (cvcsimpletype.go).
+// String Valid clause 3 reads it (cvcsimpletype.go). declsUnread is the root's
+// [DeclarationsProcessed] answer, read once at the same point and inverted: true
+// only where the source implements the capability and reports false, which is
+// all clause 3's diagnostic needs.
 type walk struct {
-	log      *slog.Logger
-	schema   *xsd.Schema
-	backend  value.Backend
-	values   xsd.ValueSpace
-	entities UnparsedEntities
-	nodes    int
-	ids      idTable
-	res      Result
+	log         *slog.Logger
+	schema      *xsd.Schema
+	backend     value.Backend
+	values      xsd.ValueSpace
+	entities    UnparsedEntities
+	declsUnread bool
+	nodes       int
+	ids         idTable
+	res         Result
 }
 
 // elementContext is the [value.Context] an instance lexical is mapped under:
