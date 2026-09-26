@@ -54,7 +54,7 @@ func inhNamedUse(t *testing.T, name string, inheritable bool, vc *xsd.ValueConst
 		t.Fatalf("building the %s attribute declaration: %v", name, err)
 	}
 	u, err := xsd.NewAttributeUse(xsderr.Loc{}, false,
-		xsd.LocalAttributeDeclaration{Declaration: decl}, vc, inheritable)
+		xsd.LocalAttributeDeclaration{Declaration: decl}, vc, &inheritable)
 	if err != nil {
 		t.Fatalf("building the %s attribute use: %v", name, err)
 	}
@@ -66,7 +66,7 @@ func inhNamedUse(t *testing.T, name string, inheritable bool, vc *xsd.ValueConst
 func inhRefUse(t *testing.T, inheritable bool) xsd.AttributeUse {
 	t.Helper()
 	u, err := xsd.NewAttributeUse(xsderr.Loc{}, false,
-		xsd.AttributeDeclarationRef{Name: local("lang")}, nil, inheritable)
+		xsd.AttributeDeclarationRef{Name: local("lang")}, nil, &inheritable)
 	if err != nil {
 		t.Fatalf("building the lang reference use: %v", err)
 	}

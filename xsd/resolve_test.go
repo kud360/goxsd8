@@ -165,7 +165,7 @@ func keyOrRef(t *testing.T, name xsd.QName, category xsd.IdentityConstraintCateg
 // component's (the referrer-Loc convention, resolveReferences).
 func agRefUse(t *testing.T, name xsd.QName) xsd.AttributeUse {
 	t.Helper()
-	u, err := xsd.NewAttributeUse(xsderr.Loc{}, false, xsd.AttributeDeclarationRef{Name: name}, nil, false)
+	u, err := xsd.NewAttributeUse(xsderr.Loc{}, false, xsd.AttributeDeclarationRef{Name: name}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAttributeUse(ref %v): %v", name, err)
 	}
@@ -185,7 +185,7 @@ func agLocalUse(t *testing.T, loc xsderr.Loc, name, typeName xsd.QName) xsd.Attr
 	if err != nil {
 		t.Fatalf("NewAttributeDeclaration(%v): %v", name, err)
 	}
-	u, err := xsd.NewAttributeUse(xsderr.Loc{}, false, xsd.LocalAttributeDeclaration{Declaration: d}, nil, false)
+	u, err := xsd.NewAttributeUse(xsderr.Loc{}, false, xsd.LocalAttributeDeclaration{Declaration: d}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAttributeUse(local %v): %v", name, err)
 	}
@@ -391,7 +391,7 @@ func TestResolveDanglingElementRef(t *testing.T) {
 
 func TestResolveDanglingAttributeRef(t *testing.T) {
 	// A complex type's attribute use is an <attribute ref> to a missing attribute.
-	use, err := xsd.NewAttributeUse(xsderr.Loc{}, false, xsd.AttributeDeclarationRef{Name: qn("nope")}, nil, false)
+	use, err := xsd.NewAttributeUse(xsderr.Loc{}, false, xsd.AttributeDeclarationRef{Name: qn("nope")}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAttributeUse: %v", err)
 	}
@@ -738,7 +738,7 @@ func TestResolveRejectionsCiteTheOffendingComponent(t *testing.T) {
 			name: "src-resolve dangling attribute ref cites the enclosing complex type",
 			rule: "src-resolve",
 			build: func(t *testing.T) (*xsd.SchemaBuilder, xsderr.Loc) {
-				use, err := xsd.NewAttributeUse(xsderr.Loc{}, false, xsd.AttributeDeclarationRef{Name: qn("nope")}, nil, false)
+				use, err := xsd.NewAttributeUse(xsderr.Loc{}, false, xsd.AttributeDeclarationRef{Name: qn("nope")}, nil, nil)
 				if err != nil {
 					t.Fatalf("NewAttributeUse: %v", err)
 				}

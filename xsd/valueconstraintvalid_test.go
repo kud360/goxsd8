@@ -102,7 +102,7 @@ func vcGlobalFixed(t *testing.T, lexical string) func(*SchemaBuilder) {
 func vcRefUse(t *testing.T, kind ValueConstraintKind, lexical string) AttributeUse {
 	t.Helper()
 	vc := NewValueConstraint(kind, lexical, nil, nil)
-	u, err := NewAttributeUse(xsderr.Loc{}, false, AttributeDeclarationRef{Name: uq("g")}, &vc, false)
+	u, err := NewAttributeUse(xsderr.Loc{}, false, AttributeDeclarationRef{Name: uq("g")}, &vc, nil)
 	if err != nil {
 		t.Fatalf("NewAttributeUse: %v", err)
 	}
@@ -183,7 +183,7 @@ func TestPhaseEClause3LocalVariant(t *testing.T) {
 		t.Fatalf("NewAttributeDeclaration: %v", err)
 	}
 	useVC := NewValueConstraint(ValueFixed, "07", nil, nil)
-	use, err := NewAttributeUse(xsderr.Loc{}, false, LocalAttributeDeclaration{Declaration: decl}, &useVC, false)
+	use, err := NewAttributeUse(xsderr.Loc{}, false, LocalAttributeDeclaration{Declaration: decl}, &useVC, nil)
 	if err != nil {
 		t.Fatalf("NewAttributeUse: %v", err)
 	}
@@ -200,7 +200,7 @@ func TestPhaseEClause3LocalVariant(t *testing.T) {
 // fixed. A use with no own constraint is the ·effective value constraint· case
 // (key-evc) — clause 3 is not about that.
 func TestPhaseEClause3AntecedentNotMet(t *testing.T) {
-	bare, err := NewAttributeUse(xsderr.Loc{}, false, AttributeDeclarationRef{Name: uq("g")}, nil, false)
+	bare, err := NewAttributeUse(xsderr.Loc{}, false, AttributeDeclarationRef{Name: uq("g")}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAttributeUse: %v", err)
 	}
@@ -450,7 +450,7 @@ func TestPhaseEAPropsCorrectClause2LocalDeclaration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewAttributeDeclaration: %v", err)
 	}
-	use, err := NewAttributeUse(xsderr.Loc{}, false, LocalAttributeDeclaration{Declaration: decl}, nil, false)
+	use, err := NewAttributeUse(xsderr.Loc{}, false, LocalAttributeDeclaration{Declaration: decl}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAttributeUse: %v", err)
 	}

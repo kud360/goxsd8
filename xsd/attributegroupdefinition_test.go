@@ -12,7 +12,7 @@ import (
 // local declaration with the given expanded name.
 func useWithLocalName(t *testing.T, name xsd.QName) xsd.AttributeUse {
 	t.Helper()
-	u, err := xsd.NewAttributeUse(xsderr.Loc{}, false, localDecl(t, name), nil, false)
+	u, err := xsd.NewAttributeUse(xsderr.Loc{}, false, localDecl(t, name), nil, nil)
 	if err != nil {
 		t.Fatalf("NewAttributeUse: %v", err)
 	}
@@ -23,7 +23,7 @@ func useWithLocalName(t *testing.T, name xsd.QName) xsd.AttributeUse {
 // deferred reference with the given expanded name.
 func useWithRefName(t *testing.T, name xsd.QName) xsd.AttributeUse {
 	t.Helper()
-	u, err := xsd.NewAttributeUse(xsderr.Loc{}, false, xsd.AttributeDeclarationRef{Name: name}, nil, false)
+	u, err := xsd.NewAttributeUse(xsderr.Loc{}, false, xsd.AttributeDeclarationRef{Name: name}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAttributeUse: %v", err)
 	}

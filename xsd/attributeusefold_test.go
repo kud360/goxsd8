@@ -377,7 +377,7 @@ func oInheritableAttr(t *testing.T, inheritable bool) AttributeUse {
 	if err != nil {
 		t.Fatalf("NewAttributeDeclaration(r): %v", err)
 	}
-	u, err := NewAttributeUse(xsderr.Loc{}, false, LocalAttributeDeclaration{Declaration: decl}, nil, inheritable)
+	u, err := NewAttributeUse(xsderr.Loc{}, false, LocalAttributeDeclaration{Declaration: decl}, nil, &inheritable)
 	if err != nil {
 		t.Fatalf("NewAttributeUse(r): %v", err)
 	}

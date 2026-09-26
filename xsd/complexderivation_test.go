@@ -159,7 +159,7 @@ func dAttrUse(t *testing.T, name, typeName QName, required bool, vc *ValueConstr
 	if err != nil {
 		t.Fatalf("NewAttributeDeclaration(%s): %v", name, err)
 	}
-	u, err := NewAttributeUse(xsderr.Loc{}, required, LocalAttributeDeclaration{Declaration: decl}, nil, false)
+	u, err := NewAttributeUse(xsderr.Loc{}, required, LocalAttributeDeclaration{Declaration: decl}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAttributeUse(%s): %v", name, err)
 	}

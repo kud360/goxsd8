@@ -3302,9 +3302,16 @@ func (p *producer) produceAttributeUse(el *Element, scopeParent xsd.AttributeSco
 		return nil, nil
 	}
 	required := use == "required"
-	inheritable, _, err := boolAttr(el, "inheritable")
+	// A nil inheritable is an absent attribute, which NewAttributeUse maps to false
+	// for the local form (§3.2.2.2 dcl.att.local) and to the referenced
+	// declaration's {inheritable} for the ref form (§3.2.2.3 ref.att.local).
+	value, present, err := boolAttr(el, "inheritable")
 	if err != nil {
 		return nil, err
+	}
+	var inheritable *bool
+	if present {
+		inheritable = &value
 	}
 
 	if hasRef {

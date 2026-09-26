@@ -185,7 +185,7 @@ func TestBindingSubsumesAttributeUses(t *testing.T) {
 	other := NewValueConstraint(ValueDefault, "7", nil, nil)
 
 	inheritable := func(u AttributeUse) AttributeUse {
-		u.inheritable = true
+		u.inheritable = inheritTrue
 		return u
 	}
 
@@ -238,7 +238,7 @@ func TestEffectiveValueConstraintFallback(t *testing.T) {
 		b.AddAttribute(global)
 	})
 
-	own, err := NewAttributeUse(xsderr.Loc{}, false, AttributeDeclarationRef{Name: uq("g")}, &useDefault, false)
+	own, err := NewAttributeUse(xsderr.Loc{}, false, AttributeDeclarationRef{Name: uq("g")}, &useDefault, nil)
 	if err != nil {
 		t.Fatalf("NewAttributeUse: %v", err)
 	}
@@ -246,7 +246,7 @@ func TestEffectiveValueConstraintFallback(t *testing.T) {
 		t.Fatalf("the use's OWN {value constraint} must win: got %+v ok=%t", vc, ok)
 	}
 
-	inherited, err := NewAttributeUse(xsderr.Loc{}, false, AttributeDeclarationRef{Name: uq("g")}, nil, false)
+	inherited, err := NewAttributeUse(xsderr.Loc{}, false, AttributeDeclarationRef{Name: uq("g")}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAttributeUse: %v", err)
 	}

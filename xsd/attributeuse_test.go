@@ -32,15 +32,16 @@ func localDeclVC(t *testing.T, kind xsd.ValueConstraintKind) xsd.LocalAttributeD
 
 func TestNewAttributeUseValidLocalDeclaration(t *testing.T) {
 	decl := localDecl(t, xsd.QName{Space: "urn:ns", Local: "a"})
-	u, err := xsd.NewAttributeUse(xsderr.Loc{}, true, decl, nil, true)
+	yes := true
+	u, err := xsd.NewAttributeUse(xsderr.Loc{}, true, decl, nil, &yes)
 	if err != nil {
 		t.Fatalf("NewAttributeUse unexpected error: %v", err)
 	}
 	if !u.Required() {
 		t.Error("Required() = false, want true")
 	}
-	if !u.Inheritable() {
-		t.Error("Inheritable() = false, want true")
+	if !inheritableSchema(t, nil).ResolvedInheritable(u) {
+		t.Error("ResolvedInheritable = false, want true")
 	}
 	got, ok := u.AttributeDeclaration().(xsd.LocalAttributeDeclaration)
 	if !ok {
@@ -56,7 +57,7 @@ func TestNewAttributeUseValidLocalDeclaration(t *testing.T) {
 
 func TestNewAttributeUseValidRef(t *testing.T) {
 	ref := xsd.AttributeDeclarationRef{Name: xsd.QName{Space: "urn:ns", Local: "b"}}
-	u, err := xsd.NewAttributeUse(xsderr.Loc{}, false, ref, nil, false)
+	u, err := xsd.NewAttributeUse(xsderr.Loc{}, false, ref, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAttributeUse unexpected error: %v", err)
 	}
@@ -73,7 +74,7 @@ func TestNewAttributeUseValidRef(t *testing.T) {
 }
 
 func TestNewAttributeUseRejectsNilDeclaration(t *testing.T) {
-	_, err := xsd.NewAttributeUse(xsderr.Loc{}, false, nil, nil, false)
+	_, err := xsd.NewAttributeUse(xsderr.Loc{}, false, nil, nil, nil)
 	if err == nil {
 		t.Fatal("NewAttributeUse(nil declaration) succeeded, want au-props-correct error")
 	}
@@ -98,7 +99,7 @@ func TestNewAttributeUseRejectsAbsentRefName(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := xsd.NewAttributeUse(xsderr.Loc{}, false, xsd.AttributeDeclarationRef{Name: tc.ref}, nil, false)
+			_, err := xsd.NewAttributeUse(xsderr.Loc{}, false, xsd.AttributeDeclarationRef{Name: tc.ref}, nil, nil)
 			if !tc.wantErr {
 				if err != nil {
 					t.Fatalf("NewAttributeUse(ref %v) unexpected error: %v", tc.ref, err)
@@ -118,7 +119,7 @@ func TestNewAttributeUseRejectsAbsentRefName(t *testing.T) {
 
 func TestNewAttributeUseValueConstraintRoundTrip(t *testing.T) {
 	vc := xsd.NewValueConstraint(xsd.ValueDefault, "d", nil, nil)
-	u, err := xsd.NewAttributeUse(xsderr.Loc{}, false, localDecl(t, xsd.QName{Local: "a"}), &vc, false)
+	u, err := xsd.NewAttributeUse(xsderr.Loc{}, false, localDecl(t, xsd.QName{Local: "a"}), &vc, nil)
 	if err != nil {
 		t.Fatalf("NewAttributeUse: %v", err)
 	}
@@ -150,7 +151,7 @@ func TestNewAttributeUseClause3(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := xsd.NewAttributeUse(xsderr.Loc{}, false, tc.decl, tc.useVC, false)
+			_, err := xsd.NewAttributeUse(xsderr.Loc{}, false, tc.decl, tc.useVC, nil)
 			if tc.wantErr {
 				if err == nil {
 					t.Fatal("NewAttributeUse succeeded, want au-props-correct clause 3 error")
@@ -160,6 +161,61 @@ func TestNewAttributeUseClause3(t *testing.T) {
 			}
 			if err != nil {
 				t.Fatalf("NewAttributeUse unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+// inheritableSchema finalizes a schema whose {attribute declarations} hold at
+// most a top-level "a" of the given {inheritable}; a nil global declares none.
+func inheritableSchema(t *testing.T, global *bool) *xsd.Schema {
+	t.Helper()
+	b := xsd.NewSchemaBuilder()
+	if global != nil {
+		d, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, xsd.QName{Local: "a"}, nil, xsd.NewAttributeGlobalScope(), nil, *global)
+		if err != nil {
+			t.Fatalf("NewAttributeDeclaration(a): %v", err)
+		}
+		b.AddAttribute(d)
+	}
+	s, err := b.Finalize()
+	if err != nil {
+		t.Fatalf("Finalize: %v", err)
+	}
+	return s
+}
+
+// TestResolvedInheritable pins an Attribute Use's {inheritable} for every shape
+// of its own inheritable attribute (absent, false, true) on both mappings. The
+// local form falls back to false (§3.2.2.2 dcl.att.local); the ref form falls
+// back to the referenced declaration's {inheritable} (§3.2.2.3 ref.att.local),
+// and a dangling ref answers false (#1682).
+func TestResolvedInheritable(t *testing.T) {
+	yes, no := true, false
+	ref := xsd.AttributeDeclarationRef{Name: xsd.QName{Local: "a"}}
+	for _, tc := range []struct {
+		name   string
+		decl   xsd.AttributeDeclarationOrRef
+		own    *bool
+		global *bool
+		want   bool
+	}{
+		{"local, absent", localDecl(t, xsd.QName{Local: "a"}), nil, nil, false},
+		{"local, absent, over a true global of the same name", localDecl(t, xsd.QName{Local: "a"}), nil, &yes, false},
+		{"local, true", localDecl(t, xsd.QName{Local: "a"}), &yes, nil, true},
+		{"ref, absent, over a true global", ref, nil, &yes, true},
+		{"ref, absent, over a false global", ref, nil, &no, false},
+		{"ref, false, over a true global (cta0012.xsd)", ref, &no, &yes, false},
+		{"ref, true, over a false global (cta0011.xsd)", ref, &yes, &no, true},
+		{"ref, absent, dangling", ref, nil, nil, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			u, err := xsd.NewAttributeUse(xsderr.Loc{}, false, tc.decl, nil, tc.own)
+			if err != nil {
+				t.Fatalf("NewAttributeUse: %v", err)
+			}
+			if got := inheritableSchema(t, tc.global).ResolvedInheritable(u); got != tc.want {
+				t.Errorf("ResolvedInheritable = %t, want %t", got, tc.want)
 			}
 		})
 	}
