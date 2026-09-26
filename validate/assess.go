@@ -353,7 +353,8 @@ func typeName(t xsd.TypeDefinition) string {
 // root·'s are (declaredGovernance), and whether it is assessed at all.
 //
 // assess is false for one shape alone, clause 3.2's: a child ·attributed to· a
-// skip Wildcard is not ·assessed·, and neither is any element below it —
+// skip Wildcard — the {term} of a ·wildcard particle·, never the {wildcard} of
+// an {open content} — is not ·assessed·, and neither is any element below it —
 // ·skipped· (§3.10.4.1, key-skipped) holds for an item "attributed to a skip
 // wildcard or if one of its ancestor elements is". cvc-wildcard makes that a
 // hard stop and not a permissive pass: a skip wildcard leaves the item with no
@@ -383,13 +384,17 @@ func typeName(t xsd.TypeDefinition) string {
 //     [walk.unresolvedStrictWildcardChild]; under lax, nothing, at the child or
 //     anywhere else.
 //   - clause 4, "otherwise", for an [*xsd.OpenContent]: the same ·resolution·,
-//     decided off the {open content}'s own {wildcard} (wildcardGoverning). An
+//     WHATEVER the {process contents} of the {open content}'s {wildcard}. An
 //     item cvc-complex-content clause 2.4 or 3.4 admitted is ·attributed to·
-//     the {open content} and to no particle (§3.4.4.4), so clause 3 never names
-//     it and clause 4 carries it — to the same declaration, and to none where
-//     the name ·resolves· to none. What this arm does NOT share with the
-//     Wildcard one is e-validity clause 1.1.3, which quantifies over ·wildcard
-//     particles· alone ([walk.unresolvedStrictWildcardChild]).
+//     the {open content} record and to no particle and no Wildcard (§3.4.4.4,
+//     key-att-to), so clause 3 never names it, clause 4.1's ·skipped· is false
+//     for it (key-skipped quantifies over an item "·attributed· to a skip
+//     wildcard"), and clause 4 carries it — to the declaration its ·expanded
+//     name· ·resolves· to, and to none where it resolves to none, which is
+//     cvc-assess-elt clause 3.3's ·lax assessment· and never clause 3.2's "not
+//     assessed" (#1576). What this arm does NOT share with the Wildcard one is
+//     e-validity clause 1.1.3, which quantifies over ·wildcard particles· alone
+//     ([walk.unresolvedStrictWildcardChild]).
 //
 // inherited is e's [inherited attributes], which a {type table} on the
 // declaration reads (cta.go) and nothing else here does.
@@ -406,29 +411,15 @@ func (w *walk) childGoverning(e Element, a xsd.Attribution, inherited []inherite
 		}
 		return w.declaredGovernance(e, t, inherited), true
 	case xsd.Wildcard:
-		return w.wildcardGoverning(e, t, inherited)
+		if t.ProcessContents() == xsd.ProcessSkip {
+			return governance{}, false
+		}
+		return w.resolvedGovernance(e, inherited), true
 	case *xsd.OpenContent:
-		return w.wildcardGoverning(e, t.Wildcard(), inherited)
+		return w.resolvedGovernance(e, inherited), true
 	default:
 		return governance{}, true
 	}
-}
-
-// wildcardGoverning is key-governing-ed for a child a wildcard admitted, shared
-// by the two ·attributions· that carry one: the {term} of a ·wildcard particle·
-// and the {wildcard} of a present {open content}. A skip wildcard leaves the
-// child ·skipped· (§3.10.4.1, key-skipped) and ends the descent; strict and lax
-// alike resolve the child's ·expanded name· among the top-level element
-// declarations.
-//
-// The two arms differ only in what an unresolved name costs the ENCLOSING
-// element, which is e-validity clause 1.1.3's business and
-// [walk.unresolvedStrictWildcardChild]'s, not this function's.
-func (w *walk) wildcardGoverning(e Element, wild xsd.Wildcard, inherited []inheritedAttribute) (governance, bool) {
-	if wild.ProcessContents() == xsd.ProcessSkip {
-		return governance{}, false
-	}
-	return w.resolvedGovernance(e, inherited), true
 }
 
 // unresolvedStrictWildcardChild settles Assessment Outcome (Element) (§3.3.5.1,
