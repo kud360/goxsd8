@@ -193,6 +193,13 @@ func inheritableSchema(t *testing.T, global *bool) *xsd.Schema {
 func TestResolvedInheritable(t *testing.T) {
 	yes, no := true, false
 	ref := xsd.AttributeDeclarationRef{Name: xsd.QName{Local: "a"}}
+	// The producer never builds this pairing — one attribute feeds both
+	// properties — but the constructor's contract is that an absent inheritable
+	// on a Local use is false, not its declaration's.
+	inheritableLocal, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, xsd.QName{Local: "a"}, nil, adLocalScope(t), nil, true)
+	if err != nil {
+		t.Fatalf("NewAttributeDeclaration: %v", err)
+	}
 	for _, tc := range []struct {
 		name   string
 		decl   xsd.AttributeDeclarationOrRef
@@ -202,6 +209,7 @@ func TestResolvedInheritable(t *testing.T) {
 	}{
 		{"local, absent", localDecl(t, xsd.QName{Local: "a"}), nil, nil, false},
 		{"local, absent, over a true global of the same name", localDecl(t, xsd.QName{Local: "a"}), nil, &yes, false},
+		{"local, absent, over an inheritable local declaration", xsd.LocalAttributeDeclaration{Declaration: inheritableLocal}, nil, nil, false},
 		{"local, true", localDecl(t, xsd.QName{Local: "a"}), &yes, nil, true},
 		{"ref, absent, over a true global", ref, nil, &yes, true},
 		{"ref, absent, over a false global", ref, nil, &no, false},
