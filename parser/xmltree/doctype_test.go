@@ -196,6 +196,7 @@ func TestAllDeclarationsProcessed(t *testing.T) {
 		{`<!DOCTYPE r [` + late + `]><r/>`, true, true},
 		{`<!DOCTYPE r SYSTEM "x.dtd"><r/>`, false, false},
 		{`<!DOCTYPE r PUBLIC "-//x//y" "x.dtd"><r/>`, false, false},
+		{`<!DOCTYPE r SYSTEM "x.dtd"><!ELEMENT r ANY><r/>`, false, false},
 		{`<!DOCTYPE r SYSTEM "x.dtd" [` + late + `]><r/>`, false, true},
 		{`<!DOCTYPE r SYSTEM "[%x;]"><r/>`, false, false},
 		{`<!DOCTYPE r [<!ENTITY % x SYSTEM "x.ent"> %x; ` + late + `]><r/>`, false, false},
