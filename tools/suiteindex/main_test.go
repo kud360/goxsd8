@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"unicode/utf16"
@@ -2045,4 +2046,450 @@ func TestSuiteMaxOccursInsideMaxOccurs(t *testing.T) {
 	if named != 94 {
 		t.Errorf("%d hit(s) name an ancestor their parent field does not, want 94", named)
 	}
+}
+
+// valueDoc carries every answer a value-test token can give: bound through a
+// prefix, unbound, bound to no namespace with no default in scope, bound
+// through a prefix declared on the token's OWN start tag, the three shapes
+// that are not a QName, an empty value, a list split on a tab, and a list
+// joined by an NBSP, which is not XML whitespace and so is one token (#1671).
+const valueDoc = `<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" id="s">
+  <xs:element name="a" type="xs:ENTITY"/>
+  <xs:element name="b" type="u:thing"/>
+  <xs:element name="c" type=":lead"/>
+  <xs:element name="d" type="bare"/>
+  <xs:element name="e" type="p:q:r"/>
+  <xs:element name="f" type="tail:"/>
+  <xs:element name="g" type=""/>
+  <xs:element name="h" xmlns:u="urn:u" type="u:thing"/>
+  <xs:union memberTypes="xs:integer&#9;xs:ENTITY"/>
+  <xs:union memberTypes="xs:integer&#xA0;xs:ENTITY"/>
+  <xs:union memberTypes="xs:integer :lead p:q:r tail:"/>
+</xs:schema>`
+
+// resolvedLines renders each hit of a scan as "line:attrs", the attributes in
+// the report's own spelling, resolutions included ([renderAttrs]).
+func resolvedLines(scan fixtureScan) []string {
+	var lines []string
+	for _, h := range scan.Hits {
+		lines = append(lines, strconv.Itoa(h.Line)+":"+renderAttrs(h.Attrs))
+	}
+	return lines
+}
+
+// TestScanFixtureResolvesAValueTest pins the value test's matching rules, row
+// by row over [valueDoc]: `{*}*` matches every BOUND token and never an
+// unbound one or one that is no QName; UNBOUND matches only a prefix no
+// binding in scope at the token's own start tag declares, so line 10's
+// `u:thing` is bound where line 4's is not; an unprefixed token with no
+// default namespace is bound to no namespace and answers `{}local`; a list is
+// split on XML whitespace only; and both joins are read over the attributes
+// that ANSWER, recording only those.
+func TestScanFixtureResolvesAValueTest(t *testing.T) {
+	const x = "{" + xsd.XMLSchemaNS + "}"
+	cases := []struct {
+		query string
+		want  []string
+	}{
+		{"*@type={*}*", []string{
+			`3: type="xs:ENTITY"->[` + x + `ENTITY]`,
+			`6: type="bare"->[{}bare]`,
+			`10: type="u:thing"->[{urn:u}thing]`,
+		}},
+		{"*@type=UNBOUND", []string{
+			`4: type="u:thing"->[UNBOUND]`,
+		}},
+		{"*@type={}bare", []string{
+			`6: type="bare"->[{}bare]`,
+		}},
+		{"*@type={*}*|UNBOUND", []string{
+			`3: type="xs:ENTITY"->[` + x + `ENTITY]`,
+			`4: type="u:thing"->[UNBOUND]`,
+			`6: type="bare"->[{}bare]`,
+			`10: type="u:thing"->[{urn:u}thing]`,
+		}},
+		{"*@memberTypes=" + x + "ENTITY", []string{
+			`11: memberTypes="xs:integer\txs:ENTITY"->[` + x + `integer, ` + x + `ENTITY]`,
+		}},
+		{"*@memberTypes={*}*", []string{
+			`11: memberTypes="xs:integer\txs:ENTITY"->[` + x + `integer, ` + x + `ENTITY]`,
+			`13: memberTypes="xs:integer :lead p:q:r tail:"->[` + x +
+				`integer, (not a QName), (not a QName), (not a QName)]`,
+		}},
+		// The test applies to every listed attribute: under `,` both must
+		// answer, so only the element whose type is in no namespace counts.
+		{"element@name,type={}*", []string{
+			`6: name="d"->[{}d] type="bare"->[{}bare]`,
+		}},
+		// Under `|` one answering attribute is enough, and the one that does
+		// not answer is not recorded.
+		{"element@name|type=" + x + "ENTITY", []string{
+			`3: type="xs:ENTITY"->[` + x + `ENTITY]`,
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.query, func(t *testing.T) {
+			scan := scanFixture("v.xsd", strings.NewReader(valueDoc), mustQuery(t, tc.query))
+			if scan.Err != nil {
+				t.Fatalf("scanFixture: %v", scan.Err)
+			}
+			if got := resolvedLines(scan); !slices.Equal(got, tc.want) {
+				t.Errorf("hits =\n  %s\nwant\n  %s", strings.Join(got, "\n  "), strings.Join(tc.want, "\n  "))
+			}
+		})
+	}
+}
+
+// TestScanFixtureRecordsNoResolutionWithoutAValueTest pins the invariant
+// every other query's report rests on: a hit from a query with no value test
+// carries no resolution at all, however QName-shaped its values are, so its
+// match line renders the bytes it always did.
+func TestScanFixtureRecordsNoResolutionWithoutAValueTest(t *testing.T) {
+	scan := scanFixture("v.xsd", strings.NewReader(valueDoc), mustQuery(t, "*@type|memberTypes"))
+	if scan.Err != nil {
+		t.Fatalf("scanFixture: %v", scan.Err)
+	}
+	if len(scan.Hits) != 11 {
+		t.Fatalf("got %d hit(s), want 11", len(scan.Hits))
+	}
+	for _, h := range scan.Hits {
+		for _, a := range h.Attrs {
+			if a.Resolved != nil {
+				t.Errorf("line %d: %s carries resolutions %+v without a value test", h.Line, a.Name.Local, a.Resolved)
+			}
+		}
+	}
+	if got, want := renderAttrs(scan.Hits[0].Attrs), ` type="xs:ENTITY"`; got != want {
+		t.Errorf("renderAttrs = %q, want %q", got, want)
+	}
+}
+
+// TestScanFixtureAppliesAValueTestOnTheAncestorSide pins that the ancestor
+// pattern takes a value test through the one [match] both sides share: only
+// the attribute under the complexType whose name resolves to `{}ct` counts.
+func TestScanFixtureAppliesAValueTestOnTheAncestorSide(t *testing.T) {
+	doc := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="ct"><xs:attribute name="x"/></xs:complexType>
+  <xs:complexType name="other"><xs:attribute name="y"/></xs:complexType>
+</xs:schema>`
+	scan := scanFixture("v.xsd", strings.NewReader(doc), mustQuery(t, "complexType@name={}ct//attribute@name"))
+	if scan.Err != nil {
+		t.Fatalf("scanFixture: %v", scan.Err)
+	}
+	if got, want := resolvedLines(scan), []string{`2: name="x"`}; !slices.Equal(got, want) {
+		t.Errorf("hits = %q, want %q", got, want)
+	}
+}
+
+// valueCaveat is a line of the value-test caveat, which a report prints
+// exactly when a side of the query carries a value test.
+const valueCaveat = "read this as a bound on DIRECT references, never as a population of resolved types:"
+
+// TestReportPrintsTheResolutionsAndTheValueCaveat pins the value test's
+// report: a whole match line, resolution suffix included, and every point of
+// the caveat. The caveat prints for a test on either side of `//`, beside the
+// containment caveat when both apply.
+func TestReportPrintsTheResolutionsAndTheValueCaveat(t *testing.T) {
+	root := t.TempDir()
+	writeFixture(t, root, "v.xsd", valueDoc)
+	for _, q := range []string{"*@type={*}*|UNBOUND", "schema@id={}s//*@type=UNBOUND", "schema@id={}s//*@type"} {
+		t.Run(q, func(t *testing.T) {
+			rep, err := census(root, mustQuery(t, q))
+			if err != nil {
+				t.Fatalf("census: %v", err)
+			}
+			var out strings.Builder
+			if err := printReport(&out, rep); err != nil {
+				t.Fatalf("printReport: %v", err)
+			}
+			for _, want := range []string{
+				valueCaveat,
+				"it follows no derivation chain, so a declaration typed by a named simpleType that",
+				"restricts an operand's type is found only by a second query on that type's name, and",
+				"it resolves no <element ref>/<group ref>. The query, not any schema, asserts that the",
+				"attribute holds QNames, and a token that is not a lexical QName answers no operand,",
+				"  UNBOUND included\n",
+			} {
+				if !strings.Contains(out.String(), want) {
+					t.Errorf("report does not carry %q:\n%s", want, out.String())
+				}
+			}
+			if !strings.Contains(out.String(), "\n  v.xsd:4:3 element="+ns+"element parent="+ns+"schema") {
+				t.Errorf("report does not carry line 4's hit:\n%s", out.String())
+			}
+		})
+	}
+	rep, err := census(root, mustQuery(t, "*@type={*}*|UNBOUND"))
+	if err != nil {
+		t.Fatalf("census: %v", err)
+	}
+	var out strings.Builder
+	if err := printReport(&out, rep); err != nil {
+		t.Fatalf("printReport: %v", err)
+	}
+	want := "\n  v.xsd:4:3 element=" + ns + "element parent=" + ns + `schema children=[] type="u:thing"->[UNBOUND]` + "\n"
+	if !strings.Contains(out.String(), want) {
+		t.Errorf("report does not carry the line %q:\n%s", want, out.String())
+	}
+	if strings.Contains(out.String(), "bound from above") {
+		t.Errorf("report carries the containment caveat without a containment query:\n%s", out.String())
+	}
+}
+
+// TestReportPrintsNoResolutionWithoutAValueTest pins the other half: a query
+// with no value test prints no resolution suffix and no value caveat, and its
+// match line is the exact bytes it was before #1671.
+func TestReportPrintsNoResolutionWithoutAValueTest(t *testing.T) {
+	root := t.TempDir()
+	writeFixture(t, root, "v.xsd", valueDoc)
+	for _, q := range []string{"*@type", "*@type|memberTypes", "*@*", "*@name//*@type"} {
+		t.Run(q, func(t *testing.T) {
+			rep, err := census(root, mustQuery(t, q))
+			if err != nil {
+				t.Fatalf("census: %v", err)
+			}
+			var out strings.Builder
+			if err := printReport(&out, rep); err != nil {
+				t.Fatalf("printReport: %v", err)
+			}
+			for _, absent := range []string{"->[", "DIRECT references"} {
+				if strings.Contains(out.String(), absent) {
+					t.Errorf("report carries %q, which belongs to the value test alone:\n%s", absent, out.String())
+				}
+			}
+		})
+	}
+	rep, err := census(root, mustQuery(t, "*@type"))
+	if err != nil {
+		t.Fatalf("census: %v", err)
+	}
+	var out strings.Builder
+	if err := printReport(&out, rep); err != nil {
+		t.Fatalf("printReport: %v", err)
+	}
+	want := "\n  v.xsd:4:3 element=" + ns + "element parent=" + ns + `schema children=[] type="u:thing"` + "\n"
+	if !strings.Contains(out.String(), want) {
+		t.Errorf("report does not carry the line %q:\n%s", want, out.String())
+	}
+}
+
+// TestParseQueryValueTest pins the value-test grammar: operands after `=`,
+// joined by `|`, each a braced name or UNBOUND, on either side of `//`. The
+// Clark-named attribute and the URI holding `=`, `|` and `,` are the rows the
+// scan turns on — [splitName] consumes a wrapper whole before it looks for a
+// separator — and `{}UNBOUND` is a name, never the keyword.
+func TestParseQueryValueTest(t *testing.T) {
+	cases := []struct {
+		in       string
+		attrs    []namePat
+		join     attrJoin
+		value    valueTest
+		ancestor valueTest
+	}{
+		{
+			in:    "*@type={urn:x}t",
+			attrs: []namePat{{Local: "type"}},
+			join:  joinAll,
+			value: valueTest{Names: []namePat{{Space: "urn:x", Local: "t"}}},
+		},
+		{
+			in:    "*@type|base={urn:x}t|{*}*|UNBOUND",
+			attrs: []namePat{{Local: "type"}, {Local: "base"}},
+			join:  joinAny,
+			value: valueTest{Names: []namePat{{Space: "urn:x", Local: "t"}, {Space: wildcard, Local: wildcard}}, Unbound: true},
+		},
+		{
+			in:    "*@a,b={}bare",
+			attrs: []namePat{{Local: "a"}, {Local: "b"}},
+			join:  joinAll,
+			value: valueTest{Names: []namePat{{Local: "bare"}}},
+		},
+		{
+			in:    "*@type=UNBOUND|UNBOUND",
+			attrs: []namePat{{Local: "type"}},
+			join:  joinAll,
+			value: valueTest{Unbound: true},
+		},
+		{
+			in:    "*@type={}UNBOUND",
+			attrs: []namePat{{Local: "type"}},
+			join:  joinAll,
+			value: valueTest{Names: []namePat{{Local: unboundOperand}}},
+		},
+		{
+			in:    "{*}*@{" + xsiNS + "}type=UNBOUND",
+			attrs: []namePat{{Space: xsiNS, Local: "type"}},
+			join:  joinAll,
+			value: valueTest{Unbound: true},
+		},
+		{
+			in:    "*@type={urn:a=b|c,d}t",
+			attrs: []namePat{{Local: "type"}},
+			join:  joinAll,
+			value: valueTest{Names: []namePat{{Space: "urn:a=b|c,d", Local: "t"}}},
+		},
+		{
+			in:       "complexType@name={}ct//attribute@type={*}*",
+			attrs:    []namePat{{Local: "type"}},
+			join:     joinAll,
+			value:    valueTest{Names: []namePat{{Space: wildcard, Local: wildcard}}},
+			ancestor: valueTest{Names: []namePat{{Local: "ct"}}},
+		},
+		{
+			in:    "*@type",
+			attrs: []namePat{{Local: "type"}},
+			join:  joinAll,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.in, func(t *testing.T) {
+			q := mustQuery(t, tc.in)
+			if !slices.Equal(q.Attrs, tc.attrs) {
+				t.Errorf("Attrs = %+v, want %+v", q.Attrs, tc.attrs)
+			}
+			if q.Join != tc.join {
+				t.Errorf("Join = %q, want %q", q.Join, tc.join)
+			}
+			if !sameValueTest(q.Value, tc.value) {
+				t.Errorf("Value = %+v, want %+v", q.Value, tc.value)
+			}
+			if q.Ancestor != nil && !sameValueTest(q.Ancestor.Value, tc.ancestor) {
+				t.Errorf("Ancestor.Value = %+v, want %+v", q.Ancestor.Value, tc.ancestor)
+			}
+		})
+	}
+}
+
+// sameValueTest reports whether two value tests hold the same operands in the
+// same order.
+func sameValueTest(a, b valueTest) bool {
+	return slices.Equal(a.Names, b.Names) && a.Unbound == b.Unbound
+}
+
+// TestParseQueryRejectsAValueTest pins each refusal of the value-test grammar
+// by its whole message, because a message naming the wrong half of a query
+// changes no branch (#1048): a test after an element name, on either side of
+// `//`; a braceless operand, the keyword's case included, since no default
+// namespace is assumed for data; the `,` join between operands; `@*`, whose
+// report has no value column; and anything after the operands but `//`.
+func TestParseQueryRejectsAValueTest(t *testing.T) {
+	braceless := func(q, tok string) string {
+		return `query "` + q + `": value operand "` + tok + `" names no namespace: write it out as {uri}local,` +
+			` {}local for no namespace or {*}local for any, since no default can be assumed for data, or write UNBOUND`
+	}
+	for _, tc := range []struct{ in, want string }{
+		{"element=x", `query "element=x": a value test follows an attribute list ("@attr=…"), never an element name`},
+		{"a//b={*}*", `query "a//b={*}*": a value test follows an attribute list ("@attr=…"), never an element name`},
+		{"*@type=ENTITY", braceless("*@type=ENTITY", "ENTITY")},
+		{"*@type=unbound", braceless("*@type=unbound", "unbound")},
+		{"*@type=UNBOUNDX", braceless("*@type=UNBOUNDX", "UNBOUNDX")},
+		{"*@type={urn:x}a,{urn:x}b", `query "*@type={urn:x}a,{urn:x}b": value operands are joined by "|" (any one of them), never by ",": one token is never two names`},
+		{"*@*={*}*", `query "*@*={*}*": "@*" names the whole attribute axis and takes no value test`},
+		{"*@{urn:y}*=UNBOUND", `query "*@{urn:y}*=UNBOUND": "@*" names the whole attribute axis and takes no value test`},
+		{"*@type={urn:x}a@b", `query "*@type={urn:x}a@b": a value test ends the pattern, so only "//" or the end of the query may follow its operands, found "@b"`},
+		{"*@type=UNBOUND=x", `query "*@type=UNBOUND=x": a value test ends the pattern, so only "//" or the end of the query may follow its operands, found "=x"`},
+		{"*@type=", `query "*@type=": empty value operand`},
+		{"*@type={urn:x}a|", `query "*@type={urn:x}a|": empty value operand`},
+		{"*@type={urn:x", `query "*@type={urn:x": unterminated "{" in "{urn:x"`},
+		{"*@type={urn:x}", `query "*@type={urn:x}": empty local name`},
+	} {
+		t.Run(tc.in, func(t *testing.T) {
+			_, err := parseQuery(tc.in)
+			if err == nil {
+				t.Fatalf("parseQuery = nil error, want %q", tc.want)
+			}
+			if err.Error() != tc.want {
+				t.Errorf("refusal = %q, want %q", err, tc.want)
+			}
+		})
+	}
+}
+
+// TestQueryStringValueTestReEntersAsItself pins the value test's echo: name
+// operands first, always braced so a no-namespace name is never read as
+// braceless, then UNBOUND — and the echo parses back to the same test on both
+// sides of `//` (#1297).
+func TestQueryStringValueTestReEntersAsItself(t *testing.T) {
+	const x = "{" + xsd.XMLSchemaNS + "}"
+	cases := []struct{ in, want string }{
+		{"*@type|base|itemType|memberTypes=" + x + "ENTITY|" + x + "ENTITIES",
+			ns + "*@type|base|itemType|memberTypes=" + x + "ENTITY|" + x + "ENTITIES"},
+		{"{*}*" + xsiType + "=UNBOUND", "{*}*" + xsiType + "=UNBOUND"},
+		{"*@type=UNBOUND|{}bare|{*}*", ns + "*@type={}bare|{*}*|UNBOUND"},
+		{"*@type={}UNBOUND", ns + "*@type={}UNBOUND"},
+		{"complexType@name={}ct//attribute@type={*}*", ns + "complexType@name={}ct//" + ns + "attribute@type={*}*"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.in, func(t *testing.T) {
+			q := mustQuery(t, tc.in)
+			if got := q.String(); got != tc.want {
+				t.Errorf("String() = %q, want %q", got, tc.want)
+			}
+			back, err := parseQuery(q.String())
+			if err != nil {
+				t.Fatalf("parseQuery(%q): %v", q.String(), err)
+			}
+			if !sameValueTest(back.Value, q.Value) {
+				t.Errorf("%q re-entered with value %+v, want %+v", q.String(), back.Value, q.Value)
+			}
+			if q.Ancestor != nil && !sameValueTest(back.Ancestor.Value, q.Ancestor.Value) {
+				t.Errorf("%q re-entered with ancestor value %+v, want %+v", q.String(), back.Ancestor.Value, q.Ancestor.Value)
+			}
+		})
+	}
+}
+
+// TestSuiteEntityReferenceCensus reproduces #773's census FROM THE TOOL: every
+// type, base, itemType and memberTypes token resolving to xs:ENTITY or
+// xs:ENTITIES. saxonData/Id/id017–id021.xsd are the fixtures behind the nine
+// cases #773 banked, each referencing the type directly; id019 does it inside
+// a two-token memberTypes, which is the per-token rule. "Names" is an
+// at-least bar, so other fixtures may match too.
+func TestSuiteEntityReferenceCensus(t *testing.T) {
+	root := suiteRoot(t)
+	const x = "{" + xsd.XMLSchemaNS + "}"
+	rep, err := census(root, mustQuery(t, "*@type|base|itemType|memberTypes="+x+"ENTITY|"+x+"ENTITIES"))
+	if err != nil {
+		t.Fatalf("census: %v", err)
+	}
+	matched := map[string]string{}
+	for _, h := range rep.Hits {
+		matched[h.File] = renderAttrs(h.Attrs)
+	}
+	for _, f := range []string{
+		"saxonData/Id/id017.xsd", "saxonData/Id/id018.xsd", "saxonData/Id/id019.xsd",
+		"saxonData/Id/id020.xsd", "saxonData/Id/id021.xsd",
+	} {
+		if _, ok := matched[f]; !ok {
+			t.Errorf("the census missed %s", f)
+		}
+	}
+	want := ` memberTypes="xs:ENTITY xs:integer"->[` + x + `ENTITY, ` + x + `integer]`
+	if got := matched["saxonData/Id/id019.xsd"]; got != want {
+		t.Errorf("id019.xsd resolved as %q, want %q", got, want)
+	}
+}
+
+// TestSuiteUnboundXsiTypeCensus reproduces #1641's census FROM THE TOOL: the
+// xsi:type whose prefix no binding in scope declares.
+// saxonData/Complex/complex008.n2.xml declares only xmlns:xsi and carries
+// xsi:type="unknownPrefix:unknownType".
+func TestSuiteUnboundXsiTypeCensus(t *testing.T) {
+	root := suiteRoot(t)
+	rep, err := census(root, mustQuery(t, "{*}*"+xsiType+"=UNBOUND"))
+	if err != nil {
+		t.Fatalf("census: %v", err)
+	}
+	const fixture = "saxonData/Complex/complex008.n2.xml"
+	for _, h := range rep.Hits {
+		if h.File != fixture {
+			continue
+		}
+		if got, want := renderAttrs(h.Attrs), ` type="unknownPrefix:unknownType"->[UNBOUND]`; got != want {
+			t.Errorf("%s resolved as %q, want %q", fixture, got, want)
+		}
+		return
+	}
+	t.Errorf("the census missed %s", fixture)
 }
