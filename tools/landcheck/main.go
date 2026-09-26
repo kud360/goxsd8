@@ -1,5 +1,6 @@
 // Command landcheck runs docs/WORKFLOW.md's Landing preconditions 1 and 2 by
-// git, so a landing precondition is checked rather than remembered.
+// git, and its closing-keyword rule over the planned squash text and PR
+// description, so a landing precondition is checked rather than remembered.
 //
 // Precondition 1 is not "the chronicler was invoked" and not a non-empty
 // `docs/LOG/` path diff: a forward merge can carry another issue's entry into
@@ -27,17 +28,36 @@
 // pushed head carries commits this checkout never examined, or there is no
 // pushed head to compare with.
 //
+// After preconditions 1 and 2, the closing-keyword check reads the two texts
+// GitHub closes issues from at the merge — the planned squash commit text
+// (-squash) and PR description (-pr-body), each a file — before the PR is
+// opened. Both are read because precondition 4's after-merge read-back
+// iterates over the squash text alone, and a keyword in the description
+// alone closed #345 unseen (#1178). A closing keyword binds the single
+// reference after it, across a line break and before a `'s`. The check
+// rejects a binding whose reference is followed by `,` and a further
+// reference (the comma form), and a binding whose issue a clause holding
+// "names and leaves open" or "not closing keywords" also names — per
+// reference, so `Closes #625. Names and leaves open #830.` passes. A clause
+// runs between sentence ends, blank lines and list-item starts.
+//
+// -no-issue replaces -issue for a PR that closes no issue, a /backlog or
+// post-land pass: precondition 1 has no number to look for and is skipped,
+// and the closing-keyword check rejects every binding in either text.
+//
 // Usage:
 //
-//	go tool landcheck -issue 963                      # base defaults to origin/main
-//	go tool landcheck -issue 963 -base origin/main
+//	go tool landcheck -issue 963 -squash squash.txt -pr-body pr.md     # base defaults to origin/main
+//	go tool landcheck -issue 963 -squash squash.txt -pr-body pr.md -base origin/main
+//	go tool landcheck -no-issue -squash squash.txt -pr-body pr.md
 //
 // Exit codes mirror tools/lint, not the report-only survey tools: 0 for a
-// clean run (HEAD matches its upstream, the entry is found and the base is
-// current), 1 for a defect (HEAD has unpushed commits, or no matching added
-// line), 2 for an operational error (HEAD behind its upstream, no upstream or
-// a detached HEAD, a stale base, a bad git ref, or git failing to run at
-// all).
+// clean run (HEAD matches its upstream, the entry is found, the base is
+// current and no closing keyword is rejected), 1 for a defect (HEAD has
+// unpushed commits, no matching added line, or a rejected closing keyword),
+// 2 for an operational error (a missing or unreadable text, HEAD behind its
+// upstream, no upstream or a detached HEAD, a stale base, a bad git ref, or
+// git failing to run at all).
 package main
 
 import (
@@ -61,20 +81,42 @@ func main() {
 	os.Exit(code)
 }
 
-// run is main's testable body: parse flags, resolve the repo root so the
-// check gives the same answer from any working directory, verify HEAD is
-// the pushed head, and delegate to checkLanding against it. The pushed-head
-// check lives here rather than in checkLanding because checkLanding also
-// runs against historical commits, which have no upstream.
+// run is main's testable body: parse flags, read the two landing texts,
+// resolve the repo root so the check gives the same answer from any working
+// directory, verify HEAD is the pushed head, delegate to checkLanding
+// against it — checkBaseCurrent alone under -no-issue — and then to
+// checkClosingKeywords. The pushed-head check lives here rather than in
+// checkLanding because checkLanding also runs against historical commits,
+// which have no upstream.
 func run(args []string, stdout io.Writer) (int, error) {
 	fs := flag.NewFlagSet("landcheck", flag.ContinueOnError)
-	issue := fs.Int("issue", 0, "issue number the branch's docs/LOG/ entry must name")
+	issue := fs.Int("issue", 0, "issue number the branch's docs/LOG/ entry must name; required unless -no-issue")
+	noIssue := fs.Bool("no-issue", false, "the PR closes no issue (a /backlog or post-land pass): skip precondition 1 and reject every bound closing keyword")
 	base := fs.String("base", "origin/main", "git ref the branch is landing onto")
+	squashPath := fs.String("squash", "", "file holding the planned squash commit text, subject and body (required)")
+	prBodyPath := fs.String("pr-body", "", "file holding the planned PR description (required)")
 	if err := fs.Parse(args); err != nil {
 		return 0, err
 	}
-	if *issue <= 0 {
-		return 0, fmt.Errorf("-issue is required and must be a positive integer, got %d", *issue)
+	if *noIssue && *issue != 0 {
+		return 0, fmt.Errorf("-issue and -no-issue are exclusive: a PR either closes issue %d or closes none", *issue)
+	}
+	if !*noIssue && *issue <= 0 {
+		return 0, fmt.Errorf("-issue is required and must be a positive integer, got %d; pass -no-issue for a PR that closes no issue", *issue)
+	}
+	texts := make([]landingText, 0, 2)
+	for _, in := range []struct{ flag, path, name string }{
+		{"-squash", *squashPath, "squash text"},
+		{"-pr-body", *prBodyPath, "PR description"},
+	} {
+		if in.path == "" {
+			return 0, fmt.Errorf("%s is required: GitHub closes issues from the %s, so the check reads it before the merge", in.flag, in.name)
+		}
+		data, err := os.ReadFile(in.path)
+		if err != nil {
+			return 0, fmt.Errorf("reading the %s (%s): %w", in.name, in.flag, err)
+		}
+		texts = append(texts, landingText{name: in.name, body: string(data)})
 	}
 
 	root, err := repoRoot()
@@ -85,7 +127,17 @@ func run(args []string, stdout io.Writer) (int, error) {
 	if err != nil || code != 0 {
 		return code, err
 	}
-	return checkLanding(root, *base, "HEAD", *issue, stdout)
+	if *noIssue {
+		if err := checkBaseCurrent(root, *base, "HEAD"); err != nil {
+			return 0, err
+		}
+		return checkClosingKeywords(texts, true, stdout)
+	}
+	code, err = checkLanding(root, *base, "HEAD", *issue, stdout)
+	if err != nil || code != 0 {
+		return code, err
+	}
+	return checkClosingKeywords(texts, false, stdout)
 }
 
 // checkPushed verifies that HEAD in the repository at dir is exactly its

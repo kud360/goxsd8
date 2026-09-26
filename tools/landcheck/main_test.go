@@ -427,7 +427,8 @@ func TestRunPushedHead(t *testing.T) {
 			t.Chdir(dir)
 
 			var buf bytes.Buffer
-			code, err := run([]string{"-issue", "1499"}, &buf)
+			args := append([]string{"-issue", "1499"}, textArgs(t, "landed (#1499)\n\nCloses #1499.\n", "Closes #1499.\n")...)
+			code, err := run(args, &buf)
 			if tc.wantCode == 2 {
 				if err == nil {
 					t.Fatalf("run: code %d and no error, want an operational error; output:\n%s", code, buf.String())
@@ -445,6 +446,134 @@ func TestRunPushedHead(t *testing.T) {
 			}
 			if !strings.HasPrefix(buf.String(), tc.wantPrefix) {
 				t.Errorf("output = %q, want prefix %q", buf.String(), tc.wantPrefix)
+			}
+		})
+	}
+}
+
+// textArgs writes the two landing texts to files under t.TempDir() and
+// returns the -squash and -pr-body flags naming them.
+func textArgs(t *testing.T, squash, prBody string) []string {
+	t.Helper()
+	dir := t.TempDir()
+	squashPath, prBodyPath := dir+"/squash.txt", dir+"/pr.md"
+	if err := os.WriteFile(squashPath, []byte(squash), 0o644); err != nil {
+		t.Fatalf("writing %s: %v", squashPath, err)
+	}
+	if err := os.WriteFile(prBodyPath, []byte(prBody), 0o644); err != nil {
+		t.Fatalf("writing %s: %v", prBodyPath, err)
+	}
+	return []string{"-squash", squashPath, "-pr-body", prBodyPath}
+}
+
+// TestRunClosingKeywords drives run's mode flags and text inputs from a
+// pushed branch whose LOG entry names #1499, so every outcome below is the
+// flags' or the closing-keyword check's.
+func TestRunClosingKeywords(t *testing.T) {
+	tests := []struct {
+		name string
+		// args builds the command line; it may write text files.
+		args func(t *testing.T) []string
+		// wantCode is the exit code; 2 means run returns an error.
+		wantCode int
+		// wantOutput is the whole stdout report (exit 0 or 1); wantPrefix
+		// opens the error (exit 2).
+		wantOutput, wantPrefix string
+	}{
+		{
+			name: "one Closes sentence in both texts: clean",
+			args: func(t *testing.T) []string {
+				return append([]string{"-issue", "1499"}, textArgs(t, "landed (#1499)\n\nCloses #1499.\n", "Closes #1499.\n")...)
+			},
+			wantOutput: "landcheck: docs/LOG/ names #1499: landed (#1499)\n" +
+				"landcheck: squash text: closing keywords bind #1499\n" +
+				"landcheck: PR description: closing keywords bind #1499\n",
+		},
+		{
+			name: "comma form in the squash text: defect",
+			args: func(t *testing.T) []string {
+				return append([]string{"-issue", "1499"}, textArgs(t, "landed (#1499)\n\nCloses #1499, #1500.\n", "Closes #1499.\n")...)
+			},
+			wantCode: 1,
+			wantOutput: "landcheck: docs/LOG/ names #1499: landed (#1499)\n" +
+				"landcheck: squash text: \"Closes #1499\" is the comma form: a further reference follows #1499, and the keyword closes only #1499\n" +
+				"landcheck: PR description: closing keywords bind #1499\n",
+		},
+		{
+			name: "no-issue, no keyword: clean, precondition 1 skipped",
+			args: func(t *testing.T) []string {
+				return append([]string{"-no-issue"}, textArgs(t, "meta: backlog 2026-09-26\n", "Names and leaves open #345.\n")...)
+			},
+			wantOutput: "landcheck: squash text: closing keywords bind nothing\n" +
+				"landcheck: PR description: closing keywords bind nothing\n",
+		},
+		{
+			name: "no-issue, PR 1706's keyword in the description only: defect",
+			args: func(t *testing.T) []string {
+				return append([]string{"-no-issue"}, textArgs(t, "meta: backlog 2026-09-25\n", "- Fixes #345's stale premise.\n")...)
+			},
+			wantCode: 1,
+			wantOutput: "landcheck: squash text: closing keywords bind nothing\n" +
+				"landcheck: PR description: \"Fixes #345\" binds #345 in a PR that closes no issue\n",
+		},
+		{
+			name: "-issue and -no-issue together: operational",
+			args: func(t *testing.T) []string {
+				return append([]string{"-issue", "1499", "-no-issue"}, textArgs(t, "", "")...)
+			},
+			wantCode:   2,
+			wantPrefix: "-issue and -no-issue are exclusive",
+		},
+		{
+			name: "neither -issue nor -no-issue: operational",
+			args: func(t *testing.T) []string {
+				return textArgs(t, "", "")
+			},
+			wantCode:   2,
+			wantPrefix: "-issue is required",
+		},
+		{
+			name: "no -pr-body: operational",
+			args: func(t *testing.T) []string {
+				return append([]string{"-issue", "1499"}, textArgs(t, "", "")[:2]...)
+			},
+			wantCode:   2,
+			wantPrefix: "-pr-body is required",
+		},
+		{
+			name: "unreadable -squash: operational",
+			args: func(t *testing.T) []string {
+				return []string{"-issue", "1499", "-squash", t.TempDir() + "/absent.txt", "-pr-body", os.DevNull}
+			},
+			wantCode:   2,
+			wantPrefix: "reading the squash text (-squash)",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := newPushedBranch(t)
+			commitLog(t, dir, "landed (#1499)")
+			gitIn(t, dir, "push", "-q")
+			args := tc.args(t)
+			t.Chdir(dir)
+
+			var buf bytes.Buffer
+			code, err := run(args, &buf)
+			if tc.wantCode == 2 {
+				if err == nil {
+					t.Fatalf("run: code %d and no error, want an operational error; output:\n%s", code, buf.String())
+				}
+				if !strings.HasPrefix(err.Error(), tc.wantPrefix) {
+					t.Errorf("error = %q, want prefix %q", err.Error(), tc.wantPrefix)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("run: %v", err)
+			}
+			if code != tc.wantCode || buf.String() != tc.wantOutput {
+				t.Errorf("code = %d, output:\n%s\nwant code %d, output:\n%s", code, buf.String(), tc.wantCode, tc.wantOutput)
 			}
 		})
 	}
