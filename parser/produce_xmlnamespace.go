@@ -91,27 +91,18 @@ func supplyXMLNamespace(docs []composedDocument) bool {
 }
 
 // addXMLNamespace hands builder the declarations xmlNamespaceAttributes builds
-// when supplyXMLNamespace says this assembly needs them, and does nothing
-// otherwise.
+// and the attribute group definition xmlNamespaceAttributeGroup builds when
+// supplyXMLNamespace says this assembly needs them, and does nothing otherwise.
 //
 // It runs ONCE per assembly, beside newSymbols' unconditional seeding and for
 // the same duplication reason: the declarations enter the very {attribute
 // declarations} set a document's own top-level <attribute> declarations reach,
-// so a second helping would collide with the first under sch-props-correct
-// clause 2. It runs AFTER the whole <include>/<import> closure is discovered,
-// because supplyXMLNamespace's composed half is a fact about the finished
-// document set and not about any one <import> element.
-//
-// GAP(parser): the xml:specialAttrs attribute group definition — the component
-// the s4s itself imports the namespace for (xmlschema11-1.md:4406) — is NOT
-// supplied, so <attributeGroup ref="xml:specialAttrs"/> is still charged
-// src-resolve clause 1.4. A group reference now resolves at finalize against
-// {attribute group definitions} (xsd/attributegroupfold.go, #479), so a
-// component seeded here beside the four declarations would be reachable by
-// reference with no second resolution mechanism; supplying it is what remains.
-// No suite schema case turns on it: the one fixture naming the group,
-// msData/additional/test264908_1a.xsd, declares the group itself. Owned by
-// #1458.
+// and the group the very {attribute group definitions} set its top-level
+// <attributeGroup> definitions reach, so a second helping would collide with
+// the first under sch-props-correct clause 2. It runs AFTER the whole
+// <include>/<import> closure is discovered, because supplyXMLNamespace's
+// composed half is a fact about the finished document set and not about any one
+// <import> element.
 func addXMLNamespace(builder *xsd.SchemaBuilder, docs []composedDocument) error {
 	if !supplyXMLNamespace(docs) {
 		return nil
@@ -123,7 +114,55 @@ func addXMLNamespace(builder *xsd.SchemaBuilder, docs []composedDocument) error 
 	for _, d := range decls {
 		builder.AddAttribute(d)
 	}
+	group, err := xmlNamespaceAttributeGroup()
+	if err != nil {
+		return err
+	}
+	builder.AddAttributeGroup(group)
 	return nil
+}
+
+// xmlNamespaceAttributeGroup builds the one Attribute Group Definition the
+// schema document for the XML namespace declares: xml:specialAttrs, whose
+// {attribute uses} are xml:base, xml:lang, xml:space and xml:id in that order,
+// each an optional use (the document writes no use=, which reads as "optional")
+// that REFERENCES the declaration xmlNamespaceAttributes builds, with no {value
+// constraint} of its own and {inheritable} left to that declaration (§3.2.2.3
+// ref.att.local, the nil NewAttributeUse maps to it). It carries no {attribute
+// wildcard}.
+//
+// THE REVISION SERVED IS THE 2009 ONE of http://www.w3.org/2001/xml.xsd, the
+// revision xmlNamespaceAttributes serves and names, for the reason given there;
+// the group's name and membership are that document's, and no local spec text
+// states either (the s4s's import annotation, xmlschema11-1.md:4406, speaks of
+// "the xml: attribute groups" without naming one). §1.3.2 constrains what is
+// served to agree with that document and makes any disagreement
+// ·implementation-dependent· (xmlschema11-1.md:217); §4.2.6.1 licenses
+// constructing it (xmlschema11-1.md:4199).
+//
+// The definition is HAND-BUILT for the reason xmlNamespaceAttributes' table is:
+// no local copy of xml.xsd exists for a generator to read (PRINCIPLES 26).
+//
+// The members are by-name references rather than the declarations themselves,
+// so they resolve at finalize against {attribute declarations} (src-resolve
+// clause 1.2) exactly as a document's own <attribute ref="xml:lang"/> does, and
+// a group reference to this definition resolves at finalize against
+// {attribute group definitions} (src-resolve clause 1.4) and is folded into the
+// referring type by attributegroupfold.go (§3.6.2.1) — no second resolution
+// mechanism (STYLE T4).
+func xmlNamespaceAttributeGroup() (xsd.AttributeGroupDefinition, error) {
+	members := []string{"base", "lang", "space", "id"}
+	content := make([]xsd.AttributeUseOrGroupRef, 0, len(members))
+	for _, local := range members {
+		au, err := xsd.NewAttributeUse(xsderr.Loc{}, false,
+			xsd.AttributeDeclarationRef{Name: xsd.QName{Space: xmltree.XMLNamespaceURI, Local: local}}, nil, nil)
+		if err != nil {
+			return xsd.AttributeGroupDefinition{}, err
+		}
+		content = append(content, xsd.ResolvedAttributeUse{Use: au})
+	}
+	return xsd.NewAttributeGroupDefinition(xsderr.Loc{},
+		xsd.QName{Space: xmltree.XMLNamespaceURI, Local: "specialAttrs"}, content, nil)
 }
 
 // xmlNamespaceAttributes builds the four Attribute Declarations the schema

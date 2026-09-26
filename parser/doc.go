@@ -226,47 +226,46 @@
 //     reference into it failing src-resolve at finalize (which this
 //     package hard-fails, see [xsd.SchemaBuilder.Finalize]); an assembly
 //     that makes no such reference is accepted, which under-rejects.
-//     The XML namespace is the one namespace that clause is NARROWER
-//     for: an explicit <xs:import> of it is served the four built-in
-//     attribute declarations, so what is genuinely missing there is
-//     xml:specialAttrs alone — the GAP(parser) marker on
-//     parser/produce_xmlnamespace.go's addXMLNamespace records why a
-//     seeded component cannot close that residual, and names its owner.
-//     The src-resolve clause 4 licensing above does NOT
-//     close this gap and cannot: clause 4 judges whether the document
-//     ASKED for the namespace, §5.3 what follows when a namespace it did
-//     ask for supplies no such component — §4.2.6.1 holds the two apart
-//     in as many words ("references … not imported by that schema
-//     document … are not handled as if they referred to missing
-//     components"). That hard-fail is itself the deviation from §5.3,
-//     which makes an unresolved reference an ·absent· value and defers
-//     the consequence to ·assessment·, never rejecting the schema. One
-//     slot is already aligned: a {substitution group affiliations}
-//     member naming no declaration is retained as ·absent· rather than
-//     rejected (see xsd/resolve.go's resolveElementDecl). The remaining
-//     slots — {type definition}, <element ref>, <attribute ref>, <group
-//     ref>, keyref, and a simple type's base=, itemType= or
+//     The XML namespace is the one namespace this gap does not reach:
+//     an explicit <xs:import> of it is served every component the 2009
+//     xml.xsd declares — four attribute declarations and the
+//     xml:specialAttrs attribute group definition — by
+//     parser/produce_xmlnamespace.go's addXMLNamespace, so none of its
+//     components is missing. The src-resolve clause 4 licensing above
+//     does NOT close this gap and cannot: clause 4 judges whether the
+//     document ASKED for the namespace, §5.3 what follows when a
+//     namespace it did ask for supplies no such component — §4.2.6.1
+//     holds the two apart in as many words ("references … not imported
+//     by that schema document … are not handled as if they referred to
+//     missing components"). That hard-fail is itself the deviation from
+//     §5.3, which makes an unresolved reference an ·absent· value and
+//     defers the consequence to ·assessment·, never rejecting the
+//     schema. One slot is already aligned: a {substitution group
+//     affiliations} member naming no declaration is retained as ·absent·
+//     rather than rejected (see xsd/resolve.go's resolveElementDecl).
+//     The remaining slots — {type definition}, <element ref>, <attribute
+//     ref>, <group ref>, keyref, and a simple type's base=, itemType= or
 //     memberTypes= — still reject, and they would also need the ·lax
 //     assessment· fallback §5.3 requires on the validation side, which
 //     no slot has. This bullet is the one place the reason is written
-//     down; the marker in xsd/resolve.go points here rather than
-//     restate it. The spec question is settled: §5.3 DOES govern a
-//     failed ·resolution·, so the hard-fail is a deliberate
-//     implementation policy choice and not something §5.3 mandates (the
-//     2026-09-14 oracle ruling, on issue 1426's thread with its
-//     citations). The cost of reversing it was measured once and stands
-//     here as history rather than re-derived: branch wip/issue-434 at
-//     e86b5c3 carries the construction half in full — every by-name arm
-//     retaining ·absent· rather than charging src-resolve — and
-//     regressed 35 schema cases against 9 improved there and 14 in
-//     instance; issue 434 was declined not_planned on that measurement.
-//     Reversing the policy therefore means either accepting a
-//     schema-lane regression of that order or minting a ratchet class
-//     able to record one, and CLAUDE.md's closing sentence reserves
-//     both calls to a human-filed issue ("This file's 'one rule', and
-//     the ratchet-integrity section of .claude/agents/arbiter.md,
-//     change only via a human-filed issue — never in a retro"). No
-//     issue owns this gap, and neither marker names one.
+//     down; the marker in xsd/resolve.go points here rather than restate
+//     it. The spec question is settled: §5.3 DOES govern a failed
+//     ·resolution·, so the hard-fail is a deliberate implementation
+//     policy choice and not something §5.3 mandates (the 2026-09-14
+//     oracle ruling, on issue 1426's thread with its citations). The
+//     cost of reversing it was measured once and stands here as history
+//     rather than re-derived: branch wip/issue-434 at e86b5c3 carries
+//     the construction half in full — every by-name arm retaining
+//     ·absent· rather than charging src-resolve — and regressed 35
+//     schema cases against 9 improved there and 14 in instance; issue
+//     434 was declined not_planned on that measurement. Reversing the
+//     policy therefore means either accepting a schema-lane regression
+//     of that order or minting a ratchet class able to record one, and
+//     CLAUDE.md's closing sentence reserves both calls to a human-filed
+//     issue ("This file's 'one rule', and the ratchet-integrity section
+//     of .claude/agents/arbiter.md, change only via a human-filed issue
+//     — never in a retro"). No issue owns this gap, and neither marker
+//     names one.
 //   - GAP(xsd): two DISTINCT <xs:redefine> elements whose children are
 //     textually equivalent each contribute their own replacement
 //     components, so redefining one document the same way down two paths

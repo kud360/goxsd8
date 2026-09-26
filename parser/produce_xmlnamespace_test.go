@@ -204,24 +204,56 @@ func TestProduceXMLNamespaceRefResolves(t *testing.T) {
 	}
 }
 
-// TestProduceXMLNamespaceGroupWithheld pins addXMLNamespace's GAP(parser): the
-// xml:specialAttrs attribute group definition is NOT supplied, so an
-// <attributeGroup ref="xml:specialAttrs"/> is still charged src-resolve clause
-// 1.4 and the property holds no such definition. The gap is pinned rather than
-// left to be noticed, so the landing that closes it has to come through here.
-// Owned by #1458.
-func TestProduceXMLNamespaceGroupWithheld(t *testing.T) {
-	_, err := produce(t, importsXML(
+// TestProduceXMLNamespaceGroupResolves pins the xml:specialAttrs attribute
+// group definition addXMLNamespace supplies beside the four declarations: an
+// <attributeGroup ref="xml:specialAttrs"/> resolves at finalize instead of being
+// charged src-resolve clause 1.4, the definition is in {attribute group
+// definitions}, and §3.6.2.1's closure carries its uses into the referring
+// type's {attribute uses}. The membership and its order — xml:base, xml:lang,
+// xml:space, xml:id — are the 2009 revision of http://www.w3.org/2001/xml.xsd,
+// the revision TestProduceSuppliesXMLNamespace pins for the declarations.
+func TestProduceXMLNamespaceGroupResolves(t *testing.T) {
+	s, err := produce(t, importsXML(
 		`<xs:complexType name="ct"><xs:attributeGroup ref="xml:specialAttrs"/></xs:complexType>`))
-	if err == nil {
-		t.Fatalf("Produce accepted an xml:specialAttrs reference, which nothing supplies (src-resolve clause 1.4)")
-	}
-	s, err := produce(t, importsXML(""))
 	if err != nil {
-		t.Fatalf("Produce: %v", err)
+		t.Fatalf("Produce: %v, want the supplied built-in xml:specialAttrs to resolve the ref (src-resolve clause 1.4)", err)
 	}
-	if hasAttributeGroup(s, xsd.QName{Space: xmltree.XMLNamespaceURI, Local: "specialAttrs"}) {
-		t.Errorf("{attribute group definitions} holds xml:specialAttrs, which addXMLNamespace does not supply")
+	if !hasAttributeGroup(s, xsd.QName{Space: xmltree.XMLNamespaceURI, Local: "specialAttrs"}) {
+		t.Fatalf("{attribute group definitions} holds no xml:specialAttrs, want the supplied built-in one")
+	}
+	for _, g := range s.AttributeGroups() {
+		if got := g.Loc(); g.Name().Local == "specialAttrs" && got != (xsderr.Loc{}) {
+			t.Fatalf("xml:specialAttrs Loc() = %v, want the zero Loc: no schema document declares this component", got)
+		}
+	}
+	ct, found := s.Type(xsd.QName{Local: "ct"})
+	if !found {
+		t.Fatalf("Schema.Type reports no ct")
+	}
+	complexType, ok := ct.(xsd.ComplexType)
+	if !ok {
+		t.Fatalf("ct = %T, want an xsd.ComplexType", ct)
+	}
+	// A slice, not a map: the {attribute uses} order is output (STYLE D2).
+	want := []string{"base", "lang", "space", "id"}
+	uses := complexType.AttributeUses()
+	if len(uses) != len(want) {
+		t.Fatalf("{attribute uses} = %d, want %d (the group's members)", len(uses), len(want))
+	}
+	for i, local := range want {
+		name := xsd.QName{Space: xmltree.XMLNamespaceURI, Local: local}
+		if got := uses[i].DeclarationName(); got != name {
+			t.Fatalf("{attribute uses}[%d] declaration name = %s, want %s", i, got, name)
+		}
+		if uses[i].Required() {
+			t.Fatalf("{attribute uses}[%d] (%s) {required} = true, want false (xml.xsd writes no use=)", i, name)
+		}
+		if vc, has := uses[i].ValueConstraint(); has {
+			t.Fatalf("{attribute uses}[%d] (%s) {value constraint} = %v, want ·absent·", i, name, vc)
+		}
+		if _, ok := s.ResolvedAttributeDeclaration(uses[i]); !ok {
+			t.Fatalf("{attribute uses}[%d] resolves to no declaration, want the supplied built-in %s", i, name)
+		}
 	}
 }
 
