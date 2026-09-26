@@ -961,7 +961,7 @@ MS-DataTypes2006-07-15/time_minInclusive002_1159/instance/time_minInclusive002_1
 MS-DataTypes2006-07-15/time_minInclusive003_1160/instance/time_minInclusive003_1160.v pass
 MS-DataTypes2006-07-15/time_minInclusive004_1161/instance/time_minInclusive004_1161.v pass
 MS-DataTypes2006-07-15/time_minInclusive005_1162/instance/time_minInclusive005_1162.v pass
-MS-DataTypes2006-07-15/time_minInclusive006_1163/instance/time_minInclusive006_1163.i fail
+MS-DataTypes2006-07-15/time_minInclusive006_1163/instance/time_minInclusive006_1163.i pass
 MS-DataTypes2006-07-15/time_pattern001_1147/instance/time_pattern001_1147.v pass
 MS-DataTypes2006-07-15/token_enumeration001_1413/instance/token_enumeration001_1413.i pass
 MS-DataTypes2006-07-15/token_enumeration002_1414/instance/token_enumeration002_1414.v pass
