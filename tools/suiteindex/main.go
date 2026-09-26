@@ -84,6 +84,42 @@
 // report says so in its own output, in both directions it can be wrong
 // ([printCaveat]).
 //
+// # Value tests
+//
+// Write `=` and operands after an attribute list to select occurrences by
+// what a QName-valued attribute RESOLVES to, against the bindings in scope at
+// its own start tag:
+// `*@type|base|itemType|memberTypes={http://www.w3.org/2001/XMLSchema}ENTITY`
+// is every reference to xs:ENTITY, however each fixture prefixes it (#1671).
+// The test applies to every attribute in the list, and an attribute answers
+// it when the element carries it and at least one of its tokens satisfies at
+// least one operand; the list's join is then read over the attributes that
+// answer.
+//
+// An operand is a Clark name with its wrapper always written — `{uri}local`,
+// `{}local` for no namespace, `{*}` and `*` wildcarding either axis as they do
+// in the element position — or the keyword UNBOUND, and operands take the `|`
+// join only. A braceless name is refused: a value's namespace is data, so no
+// default is assumed for it. `@*` takes no value test.
+//
+// Every tested value is split on XML whitespace (#x20, #x9, #xD, #xA) into
+// tokens, whatever attribute carries it, so a list such as memberTypes is
+// matched per token and a scalar QName is one token. Each token splits on its
+// first colon; the prefix, or the default namespace for an unprefixed token,
+// resolves in scope. A token whose prefix is bound nowhere answers UNBOUND,
+// and `{*}*` never matches it: `{*}*|UNBOUND` is every QName-shaped token. An
+// unprefixed token with no default namespace in scope is BOUND, to no
+// namespace, and answers `{}local`. A token with an empty prefix, an empty
+// local part or a second colon is not a QName and answers no operand at all.
+// NCName character validity is not checked: this census resolves bindings and
+// does not validate a lexical space.
+//
+// A match line of a value-test query follows each tested attribute's raw
+// value with `->[…]`, one resolution per token in token order: the braced
+// name, UNBOUND, or `(not a QName)`. The report prints a caveat under its
+// header, because the figure is a bound on DIRECT references and not a
+// population of resolved types ([printValueCaveat]).
+//
 // # Encoding
 //
 // Encoding is this tool's problem, not the caller's. Every fixture is read
@@ -171,13 +207,15 @@
 //	go tool suiteindex 'openContent|defaultOpenContent'
 //	go tool suiteindex '{*}*@{http://www.w3.org/2001/XMLSchema-instance}type'
 //	go tool suiteindex '*@maxOccurs//*@maxOccurs'
+//	go tool suiteindex '*@type|base|itemType|memberTypes={http://www.w3.org/2001/XMLSchema}ENTITY|{http://www.w3.org/2001/XMLSchema}ENTITIES'
+//	go tool suiteindex '{*}*@{http://www.w3.org/2001/XMLSchema-instance}type=UNBOUND'
 //	go tool suiteindex element@targetNamespace testdata/xsdtests/ibmData
 //	go tool suiteindex -paths '{*}*@{http://www.w3.org/2001/XMLSchema-instance}type' | go tool casejoin join instance
 //
-// The query is `[pattern//]local[|local…][@attr[,attr…]]` with `|` in place
-// of `,` for the ANY join over attributes, and any local part may be `*`. The
-// pattern before `//` has that same shape and names the ancestor an
-// occurrence lies inside. Any name may be written in Clark notation
+// The query is `[pattern//]local[|local…][@attr[,attr…][=operand[|operand…]]]`
+// with `|` in place of `,` for the ANY join over attributes, and any local
+// part may be `*`. The pattern before `//` has that same shape and names the
+// ancestor an occurrence lies inside. Any name may be written in Clark notation
 // (`{uri}local`) to name its namespace outright, or `{*}local` to census
 // every namespace at once; a braceless element name is in the XML Schema
 // namespace and a braceless attribute name is in no namespace. The second
@@ -215,7 +253,7 @@ import (
 const defaultRoot = "testdata/xsdtests"
 
 // usage is printed for any argument the tool cannot act on.
-const usage = `usage: suiteindex [-paths] <[pattern//]local[|local...][@attr[,attr...]]> [dir]; "," joins attribute names as all, "|" joins either position's names as any, "//" admits a match only inside an element the pattern before it matches, at any depth, any local name may be "*", and "{uri}" before one fixes its namespace — "{*}" censuses every namespace, "{}" the one that has none; -paths prints the matched fixture paths alone, for a tool downstream`
+const usage = `usage: suiteindex [-paths] <[pattern//]local[|local...][@attr[,attr...][=operand[|operand...]]]> [dir]; "," joins attribute names as all, "|" joins either position's names as any, "//" admits a match only inside an element the pattern before it matches, at any depth, any local name may be "*", and "{uri}" before one fixes its namespace — "{*}" censuses every namespace, "{}" the one that has none; "=" after an attribute list admits only an attribute with a token resolving to one of its "|"-joined operands, each "{uri}local" or UNBOUND; -paths prints the matched fixture paths alone, for a tool downstream`
 
 func main() {
 	if err := run(os.Stdout, os.Stderr, os.Args[1:]); err != nil {
@@ -358,8 +396,9 @@ const (
 )
 
 // pattern is one element test: the element names it admits, the attribute
-// names an occurrence carries, and how that list is read. A query is one
-// pattern, plus the ancestor pattern an occurrence must lie inside.
+// names an occurrence carries, how that list is read, and the test on their
+// values. A query is one pattern, plus the ancestor pattern an occurrence must
+// lie inside.
 type pattern struct {
 	// Element holds the element names an occurrence may carry, each an
 	// alternative: a feature spelled by more than one element is one census
@@ -541,8 +580,9 @@ func (q query) String() string {
 // name. A braceless element name is in the XML Schema namespace — the
 // vocabulary every schema fixture in this corpus is written in — and a
 // braceless attribute name is in no namespace, which is what an unprefixed
-// attribute resolves to. A [containment] separator makes the pattern ahead of
-// it the ancestor an occurrence must lie inside.
+// attribute resolves to. A [valueSep] after the attribute list starts a
+// [valueTest]. A [containment] separator makes the pattern ahead of it the
+// ancestor an occurrence must lie inside.
 func parseQuery(s string) (query, error) {
 	first, rest, err := parsePattern(s, s)
 	if err != nil {
@@ -565,7 +605,8 @@ func parseQuery(s string) (query, error) {
 }
 
 // parsePattern consumes one pattern from the head of s — an element position,
-// then an attribute list if an `@` follows — and returns it with whatever is
+// then an attribute list if an `@` follows and its value test if a
+// [valueSep] follows that — and returns it with whatever is
 // left, which is the [containment] separator or nothing at all. whole is the
 // query the caller was given, which every message names, so a rejection reads
 // against what was typed rather than against the fragment that failed.
