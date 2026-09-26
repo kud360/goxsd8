@@ -344,8 +344,8 @@ func (w *walk) defaultedAttributes(e Element, attrs []Attribute, governing xsd.C
 // ·defaulted attribute· of that element (key-dflt-att clauses 2 to 5, in their
 // own order), and if so the ·effective value constraint· whose {lexical form}
 // is the [[normalized value]] Attribute Default Value (§3.4.5.1) supplies. It is
-// the one encoding of that definition, read by defaultedAttributes and by
-// [walk.handedDown].
+// the one encoding of that definition, read by defaultedAttributes,
+// [walk.handedDown] and [walk.idDefaultedAttributes].
 func (w *walk) defaultedConstraint(u xsd.AttributeUse, attrs []Attribute) (xsd.ValueConstraint, bool) {
 	if u.Required() { // clause 2
 		return xsd.ValueConstraint{}, false
