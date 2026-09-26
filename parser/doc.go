@@ -227,11 +227,11 @@
 //     package hard-fails, see [xsd.SchemaBuilder.Finalize]); an assembly
 //     that makes no such reference is accepted, which under-rejects.
 //     The XML namespace is the one namespace this gap does not reach:
-//     an explicit <xs:import> of it is served every component the 2009
-//     xml.xsd declares — four attribute declarations and the
-//     xml:specialAttrs attribute group definition — by
-//     parser/produce_xmlnamespace.go's addXMLNamespace, so none of its
-//     components is missing. The src-resolve clause 4 licensing above
+//     an explicit <xs:import> of it is served, in place of the document
+//     it cannot fetch, the components the 2009 xml.xsd declares — four
+//     attribute declarations and the xml:specialAttrs attribute group
+//     definition, built by parser/produce_xmlnamespace.go's
+//     addXMLNamespace. The src-resolve clause 4 licensing above
 //     does NOT close this gap and cannot: clause 4 judges whether the
 //     document ASKED for the namespace, §5.3 what follows when a
 //     namespace it did ask for supplies no such component — §4.2.6.1

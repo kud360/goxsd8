@@ -122,8 +122,8 @@ func addXMLNamespace(builder *xsd.SchemaBuilder, docs []composedDocument) error 
 	return nil
 }
 
-// xmlNamespaceAttributeGroup builds the one Attribute Group Definition the
-// schema document for the XML namespace declares: xml:specialAttrs, whose
+// xmlNamespaceAttributeGroup builds the Attribute Group Definition the schema
+// document for the XML namespace declares as xml:specialAttrs, whose
 // {attribute uses} are xml:base, xml:lang, xml:space and xml:id in that order,
 // each an optional use (the document writes no use=, which reads as "optional")
 // that REFERENCES the declaration xmlNamespaceAttributes builds, with no {value
