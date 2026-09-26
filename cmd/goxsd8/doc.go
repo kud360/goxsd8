@@ -75,6 +75,12 @@
 //	    the schema set's: it is reported on stderr naming that
 //	    instance, whose hints are then dropped, and it is assessed
 //	    against the -schema documents alone.
+//	    An XML instance's DOCTYPE is read for the unparsed entities
+//	    an ENTITY value must name: the internal subset, including
+//	    its internal parameter entities. The external DTD subset is
+//	    never fetched, so a name declared only there is charged with
+//	    a message saying the DTD was not fully read, not that the
+//	    name is undeclared.
 //	    Exit 0 when no instance was charged a violation and none left
 //	    a check undecided, 1 invalid, 2 usage/IO, and
 //	    3 when the schema set does not compile. 4 is an instance the

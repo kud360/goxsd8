@@ -10,10 +10,11 @@ import (
 )
 
 // The engine meets this package only through these four views, and narrows the
-// document element to the [validate.UnparsedEntities] capability. That last
-// assertion is what keeps a rename of the capability from compiling silently
-// into a source that supports no [unparsedEntities], whose every ENTITY value
-// the engine then rejects.
+// document element to the [validate.UnparsedEntities] and
+// [validate.DeclarationsProcessed] capabilities. Those last assertions are what
+// keep a rename of a capability from compiling silently into a source that
+// supports no [unparsedEntities], whose every ENTITY value the engine then
+// rejects, or one whose unread DTD a miss no longer reports.
 //
 // *xmltree.CharData is validate.Text as it stands: Data reports the decoded
 // characters and Loc the run's position, which is the whole interface. A
@@ -28,7 +29,8 @@ var (
 	_ validate.Children  = (*children)(nil)
 	_ validate.Text      = (*xmltree.CharData)(nil)
 
-	_ validate.UnparsedEntities = (*element)(nil)
+	_ validate.UnparsedEntities      = (*element)(nil)
+	_ validate.DeclarationsProcessed = (*element)(nil)
 )
 
 // qname converts a resolved xmltree name to the QName the schema side
@@ -101,6 +103,12 @@ func (e *element) Loc() xsderr.Loc { return e.start.Loc() }
 // (see [xmltree.Reader.HasUnparsedEntity]).
 func (e *element) HasUnparsedEntity(name string) bool {
 	return e.w.r.HasUnparsedEntity(name)
+}
+
+// AllDeclarationsProcessed answers from the shared reader on
+// HasUnparsedEntity's terms (see [xmltree.Reader.AllDeclarationsProcessed]).
+func (e *element) AllDeclarationsProcessed() bool {
+	return e.w.r.AllDeclarationsProcessed()
 }
 
 // attribute is one attribute information item. xsi:type, xsi:nil,

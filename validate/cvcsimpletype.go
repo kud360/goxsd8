@@ -44,7 +44,10 @@ func (w *walk) stringValid(st *xsd.SimpleType, lexical string, owner Element, lo
 //     Appendix D makes non-support of [unparsedEntities] itself the failure:
 //     "all items of type ENTITY or ENTITIES will fail to ·validate·".
 //   - the value names no unparsed entity in [unparsedEntities], so it is not a
-//     ·declared entity name· (key-vde).
+//     ·declared entity name· (key-vde). Where the source reports through
+//     [DeclarationsProcessed] that its DTD was not fully read (walk.declsUnread),
+//     the message says so, since the name may be declared where the source did
+//     not read; the verdict is the same.
 //
 // Which values are ·ENTITY values· is key-TYPE-value's, read through the same
 // ·validating type· machinery the [ID/IDREF table] uses (roleValues, cvcid.go):
@@ -81,11 +84,17 @@ func (w *walk) entitiesDeclared(st *xsd.SimpleType, lexical string, owner Elemen
 				"the ·ENTITY value· %q is not a ·declared entity name·: the source presents no [unparsedEntities] property of the document information item, and Appendix D makes every ·ENTITY value· of such a source fail cvc-simple-type clause 3",
 				v.value)
 		}
-		if !w.entities.HasUnparsedEntity(v.value) {
+		if w.entities.HasUnparsedEntity(v.value) {
+			continue
+		}
+		if w.declsUnread {
 			return true, xsderr.New(ruleCvcSimpleType, loc,
-				"the ·ENTITY value· %q names no unparsed entity in the document's [unparsedEntities], so it is not a ·declared entity name· (key-vde), which cvc-simple-type clause 3 requires",
+				"the ·ENTITY value· %q names no unparsed entity in the document's [unparsedEntities], so it is not a ·declared entity name· (key-vde), which cvc-simple-type clause 3 requires: the document's DTD was not fully read — an external DTD subset or a parameter entity went unread — and the name may be declared there, but a declaration that was not read declares nothing",
 				v.value)
 		}
+		return true, xsderr.New(ruleCvcSimpleType, loc,
+			"the ·ENTITY value· %q names no unparsed entity in the document's [unparsedEntities], so it is not a ·declared entity name· (key-vde), which cvc-simple-type clause 3 requires",
+			v.value)
 	}
 	return true, nil
 }

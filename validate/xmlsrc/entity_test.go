@@ -94,6 +94,75 @@ func entityValidator(t *testing.T) *validate.Validator {
 	return v
 }
 
+// Every element answers [all declarations processed] from the one reader: true
+// for a DOCTYPE with only an internal subset, false for one naming an external
+// subset.
+func TestElementsAnswerAllDeclarationsProcessed(t *testing.T) {
+	for _, tc := range []struct {
+		doc  string
+		want bool
+	}{
+		{entityDoc, true},
+		{`<!DOCTYPE r SYSTEM "x.dtd"><r><c/></r>`, false},
+	} {
+		root := rootOf(t, tc.doc)
+		child, ok := root.Children().Next()
+		if !ok {
+			t.Fatalf("%s: the document element yielded no child", tc.doc)
+		}
+		c, ok := child.Element()
+		if !ok {
+			t.Fatalf("%s: the first child is not an element", tc.doc)
+		}
+		for _, e := range []*element{root, c.(*element)} {
+			if got := e.AllDeclarationsProcessed(); got != tc.want {
+				t.Errorf("%s: %s: AllDeclarationsProcessed() = %t, want %t", tc.doc, e.Name(), got, tc.want)
+			}
+		}
+	}
+}
+
+// What the reader did not read declares nothing, and the charge says the DTD
+// was not fully read rather than that the name is undeclared: an entity
+// declared only in an external subset, or after a reference to an external
+// parameter entity, is charged so. One declared in an internal parameter
+// entity's replacement text is declared, and so is one after an unread
+// reference in a standalone="yes" document (XML 1.0 §5.1). A name missing from
+// a DTD read in full is charged as plainly undeclared.
+func TestXMLEntityValuesAndTheUnreadDTD(t *testing.T) {
+	const unread = "the document's DTD was not fully read"
+	for _, tc := range []struct {
+		doc     string
+		charged bool
+		unread  bool
+	}{
+		{`<!DOCTYPE r SYSTEM "x.dtd"><r ent="pic"/>`, true, true},
+		{`<!DOCTYPE r [<!ENTITY % p "<!ENTITY pic SYSTEM 'u.bin' NDATA n>"> %p; <!NOTATION n SYSTEM 'x'>]><r ent="pic"/>`, false, false},
+		{`<!DOCTYPE r [<!ENTITY % x SYSTEM "x.ent"> %x; <!ENTITY pic SYSTEM "u.bin" NDATA n>]><r ent="pic"/>`, true, true},
+		{`<?xml version="1.0" standalone="yes"?><!DOCTYPE r [<!ENTITY % x SYSTEM "x.ent"> %x; <!ENTITY pic SYSTEM "u.bin" NDATA n>]><r ent="pic"/>`, false, false},
+		{`<!DOCTYPE r [<!ENTITY other SYSTEM "u.bin" NDATA n>]><r ent="pic"/>`, true, false},
+	} {
+		res, err := Validate(entityValidator(t), strings.NewReader(tc.doc))
+		if err != nil {
+			t.Fatalf("%s: Validate: %v", tc.doc, err)
+		}
+		got := res.Violations()
+		if !tc.charged {
+			if len(got) != 0 {
+				t.Errorf("%s: Violations() = %v, want none", tc.doc, got)
+			}
+			continue
+		}
+		if len(got) != 1 || !strings.Contains(got[0].Msg, `the ·ENTITY value· "pic"`) {
+			t.Errorf("%s: Violations() = %v, want one String Valid clause 3 charge naming pic", tc.doc, got)
+			continue
+		}
+		if says := strings.Contains(got[0].Msg, unread); says != tc.unread {
+			t.Errorf("%s: Msg = %q, says %q: %t, want %t", tc.doc, got[0].Msg, unread, says, tc.unread)
+		}
+	}
+}
+
 // The internal subset's NDATA declarations are what an XML instance's
 // ·ENTITY values· are read against, end to end: a declared name passes, and an
 // undeclared one — including a parsed entity's name, and an ENTITIES item

@@ -291,6 +291,9 @@ func TestUsageCoversContract(t *testing.T) {
 		"are examples, not the whole class",
 		"an I/O fault\n      reading a document the argument REFERENCES",
 		"charged 1 like a rejection",
+		// #1668's answer: which part of a DTD validate reads for the
+		// unparsed entities an ENTITY value names.
+		"its internal parameter entities. The external DTD subset is\n      never fetched",
 	}
 	for _, w := range want {
 		if !strings.Contains(usage, w) {
