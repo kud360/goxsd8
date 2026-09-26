@@ -105,6 +105,12 @@ func (AttributeDeclarationRef) attributeDeclarationRef()   {}
 // moving the schema conformance lane (derivation-ok-restriction clause 3 via
 // key-evc, defaultbinding.go).
 //
+// {inheritable} is stored as the use's own inheritableSpec, not as the property.
+// The ref.att.local mapping (§3.2.2.3) falls back to [{attribute
+// declaration}].{inheritable} when the inheritable attribute is absent, and a
+// Ref's declaration is readable only after finalize, so the property is
+// (*Schema).ResolvedInheritable (defaultbinding.go, #1682).
+//
 // Construct only through NewAttributeUse, which rejects the states
 // au-props-correct (§3.5.6) clauses 1 and 3 (variety half, Local case) forbid so
 // they are unrepresentable (STYLE T1). AttributeUse is immutable after
@@ -114,8 +120,21 @@ type AttributeUse struct {
 	attributeDeclaration AttributeDeclarationOrRef
 	valueConstraint      ValueConstraint
 	hasValueConstraint   bool
-	inheritable          bool
+	inheritable          inheritableSpec
 }
+
+// inheritableSpec is what an Attribute Use's own XML said about {inheritable}.
+// inheritAbsent is held only by an AttributeDeclarationRef use with no
+// inheritable attribute, whose {inheritable} is its declaration's (§3.2.2.3
+// ref.att.local); NewAttributeUse maps an absent attribute on a Local use to
+// inheritFalse, the §3.2.2.2 dcl.att.local fallback, which needs no schema.
+type inheritableSpec uint8
+
+const (
+	inheritAbsent inheritableSpec = iota
+	inheritFalse
+	inheritTrue
+)
 
 // NewAttributeUse builds an AttributeUse, rejecting the states Attribute Use
 // Correct (§3.5.6, au-props-correct) forbids:
@@ -142,10 +161,16 @@ type AttributeUse struct {
 // is set — the pointer itself is never stored, so the caller's value is not
 // aliased.
 //
+// inheritable is the actual value of the inheritable attribute, or nil when the
+// attribute is absent; it is copied, never stored. A nil on a
+// LocalAttributeDeclaration use means false (§3.2.2.2 dcl.att.local); a nil on
+// an AttributeDeclarationRef use defers to the declaration's {inheritable}
+// (§3.2.2.3 ref.att.local), which (*Schema).ResolvedInheritable reads.
+//
 // loc is the source position charged to any rejection. A caller with no real
 // parser position — a synthesized or programmatically built use — may
 // legitimately pass the zero xsderr.Loc{}.
-func NewAttributeUse(loc xsderr.Loc, required bool, attributeDeclaration AttributeDeclarationOrRef, valueConstraint *ValueConstraint, inheritable bool) (AttributeUse, error) {
+func NewAttributeUse(loc xsderr.Loc, required bool, attributeDeclaration AttributeDeclarationOrRef, valueConstraint *ValueConstraint, inheritable *bool) (AttributeUse, error) {
 	if attributeDeclaration == nil {
 		return AttributeUse{}, xsderr.New(ruleAuPropsCorrect, loc,
 			"attribute use has an absent {attribute declaration}, but it is Required (au-props-correct clause 1)")
@@ -168,12 +193,29 @@ func NewAttributeUse(loc xsderr.Loc, required bool, attributeDeclaration Attribu
 	u := AttributeUse{
 		required:             required,
 		attributeDeclaration: attributeDeclaration,
-		inheritable:          inheritable,
+		inheritable:          ownInheritable(attributeDeclaration, inheritable),
 	}
 	if valueConstraint != nil {
 		u.valueConstraint, u.hasValueConstraint = *valueConstraint, true
 	}
 	return u, nil
+}
+
+// ownInheritable maps NewAttributeUse's inheritable argument to the stored
+// inheritableSpec: the attribute's value when present; when absent, false for
+// the Local variant (§3.2.2.2 dcl.att.local) and inheritAbsent for the Ref
+// variant (§3.2.2.3 ref.att.local).
+func ownInheritable(d AttributeDeclarationOrRef, inheritable *bool) inheritableSpec {
+	if inheritable != nil && *inheritable {
+		return inheritTrue
+	}
+	if inheritable != nil {
+		return inheritFalse
+	}
+	if _, ok := d.(AttributeDeclarationRef); ok {
+		return inheritAbsent
+	}
+	return inheritFalse
 }
 
 // Required returns the {required} property (§3.5.1): whether the attribute must
@@ -225,9 +267,4 @@ func (u AttributeUse) AttributeDeclaration() AttributeDeclarationOrRef {
 // (*Schema).EffectiveValueConstraint (defaultbinding.go).
 func (u AttributeUse) ValueConstraint() (ValueConstraint, bool) {
 	return u.valueConstraint, u.hasValueConstraint
-}
-
-// Inheritable returns the {inheritable} property (Required).
-func (u AttributeUse) Inheritable() bool {
-	return u.inheritable
 }

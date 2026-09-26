@@ -234,6 +234,31 @@ func (s *Schema) EffectiveValueConstraint(u AttributeUse) (ValueConstraint, bool
 	return d.ValueConstraint()
 }
 
+// ResolvedInheritable is an attribute use's {inheritable} (Structures §3.5.1,
+// au-inheritable). The use's own inheritable attribute wins when present. When
+// it is absent the value is false for the Local variant (§3.2.2.2
+// dcl.att.local) and the resolved declaration's {inheritable} for the Ref
+// variant (§3.2.2.3 ref.att.local), which is why it is on *Schema: the same
+// reason [Schema.EffectiveValueConstraint] is. A dangling Ref answers false,
+// the unreachable case [Schema.ResolvedAttributeDeclaration] documents.
+//
+// Its readers are loc-testSubP (§3.4.6.4) clause 5.3 (checkAttributeUseSubsumes),
+// §3.5.1 property identity (attributeUsesIdentical, complexextension.go), and the
+// instance validator's key-p-inherited (§3.3.5.6) clause 3.1 (#1682).
+func (s *Schema) ResolvedInheritable(u AttributeUse) bool {
+	switch u.inheritable {
+	case inheritTrue:
+		return true
+	case inheritFalse:
+		return false
+	case inheritAbsent:
+		d, ok := s.ResolvedAttributeDeclaration(u)
+		return ok && d.Inheritable()
+	default:
+		panic("xsd: ResolvedInheritable: non-exhaustive inheritableSpec switch")
+	}
+}
+
 // checkBindingSubsumes charges c-ran clause 3 when general does not ·subsume·
 // specific (Structures §3.4.6.4, loc-testSubP). general is the BASE side's
 // binding (the spec's G) and specific the restriction's (S); n names the
@@ -524,9 +549,10 @@ func (s *Schema) checkAttributeUseSubsumes(n QName, r attributeRestriction, gene
 	if err := s.checkAttributeValueConstraintSubsumes(n, r, general, specific); err != nil {
 		return err
 	}
-	if general.Inheritable() != specific.Inheritable() {
+	g, sp := s.ResolvedInheritable(general), s.ResolvedInheritable(specific)
+	if g != sp {
 		return xsderr.New(r.rule, r.loc,
-			"%s %s %s, but attribute %s has {inheritable} = %t there and %t in the base, and loc-testSubP clause 5.3 requires them to be equal (%s)", r.derived.label, r.verb, r.base.label, n, specific.Inheritable(), general.Inheritable(), r.clause)
+			"%s %s %s, but attribute %s has {inheritable} = %t there and %t in the base, and loc-testSubP clause 5.3 requires them to be equal (%s)", r.derived.label, r.verb, r.base.label, n, sp, g, r.clause)
 	}
 	return nil
 }

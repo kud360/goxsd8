@@ -132,7 +132,7 @@ func TestProduceBooleanAttributePaddedActualValue(t *testing.T) {
 				if len(uses) != 1 {
 					t.Fatalf("{attribute uses} = %d, want 1", len(uses))
 				}
-				if !uses[0].Inheritable() {
+				if !s.ResolvedInheritable(uses[0]) {
 					t.Error("Attribute Use {inheritable} = false, want true (§3.5.1)")
 				}
 				local, ok := uses[0].AttributeDeclaration().(xsd.LocalAttributeDeclaration)

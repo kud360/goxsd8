@@ -76,7 +76,7 @@ func icUseOf(t *testing.T, name, typ xsd.QName) xsd.AttributeUse {
 	if err != nil {
 		t.Fatalf("building the %s attribute declaration: %v", name, err)
 	}
-	u, err := xsd.NewAttributeUse(xsderr.Loc{}, false, xsd.LocalAttributeDeclaration{Declaration: d}, nil, false)
+	u, err := xsd.NewAttributeUse(xsderr.Loc{}, false, xsd.LocalAttributeDeclaration{Declaration: d}, nil, nil)
 	if err != nil {
 		t.Fatalf("building the %s attribute use: %v", name, err)
 	}

@@ -38,7 +38,7 @@ func typedUse(t *testing.T, local string, typ xsd.QName, required bool, declVC, 
 		t.Fatalf("building the %s attribute declaration: %v", local, err)
 	}
 	u, err := xsd.NewAttributeUse(xsderr.Loc{}, required,
-		xsd.LocalAttributeDeclaration{Declaration: decl}, useVC, false)
+		xsd.LocalAttributeDeclaration{Declaration: decl}, useVC, nil)
 	if err != nil {
 		t.Fatalf("building the %s attribute use: %v", local, err)
 	}

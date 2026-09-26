@@ -793,9 +793,12 @@ func (s *Schema) extensionAllGroupPrefix(e, b Particle) bool {
 // attributeUsesIdentical decides property identity between two Attribute Uses
 // (§3.5.1): {required}, {value constraint} (presence, {variety} and {lexical
 // form} — sameRecord, which omits the namespace context deliberately), and
-// {inheritable}, plus the {attribute declaration} slot.
+// {inheritable}, plus the {attribute declaration} slot. {inheritable} is the
+// resolved property (ResolvedInheritable), not the use's own inheritableSpec: a
+// Ref use writing inheritable="false" and one writing nothing over a declaration
+// whose {inheritable} is false hold the same property (§3.2.2.3 ref.att.local).
 func (s *Schema) attributeUsesIdentical(a, b AttributeUse) bool {
-	if a.required != b.required || a.inheritable != b.inheritable {
+	if a.required != b.required || s.ResolvedInheritable(a) != s.ResolvedInheritable(b) {
 		return false
 	}
 	if a.hasValueConstraint != b.hasValueConstraint || !a.valueConstraint.sameRecord(b.valueConstraint) {

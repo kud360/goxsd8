@@ -64,7 +64,7 @@ func entityValidator(t *testing.T) *validate.Validator {
 		if err != nil {
 			t.Fatalf("building the %s attribute declaration: %v", a.name, err)
 		}
-		u, err := xsd.NewAttributeUse(xsderr.Loc{}, false, xsd.LocalAttributeDeclaration{Declaration: d}, nil, false)
+		u, err := xsd.NewAttributeUse(xsderr.Loc{}, false, xsd.LocalAttributeDeclaration{Declaration: d}, nil, nil)
 		if err != nil {
 			t.Fatalf("building the %s attribute use: %v", a.name, err)
 		}

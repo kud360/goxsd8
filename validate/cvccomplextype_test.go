@@ -31,7 +31,7 @@ func aUse(t *testing.T, local string, required bool, vc *xsd.ValueConstraint) xs
 		t.Fatalf("building the %s attribute declaration: %v", local, err)
 	}
 	u, err := xsd.NewAttributeUse(xsderr.Loc{}, required,
-		xsd.LocalAttributeDeclaration{Declaration: decl}, vc, false)
+		xsd.LocalAttributeDeclaration{Declaration: decl}, vc, nil)
 	if err != nil {
 		t.Fatalf("building the %s attribute use: %v", local, err)
 	}

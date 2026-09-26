@@ -64,7 +64,7 @@ func (w *walk) handedDown(e Element, g governance, inherited []inheritedAttribut
 	// that use's {inheritable}.
 	if ct := g.complexType(); ct != nil {
 		for _, u := range ct.AttributeUses() {
-			if !u.Inheritable() {
+			if !w.schema.ResolvedInheritable(u) {
 				continue
 			}
 			vc, defaulted := w.defaultedConstraint(u, attrs)
@@ -97,13 +97,14 @@ func (w *walk) handedDown(e Element, g governance, inherited []inheritedAttribut
 // skippedAttribute for the item key-governing-ad (§3.2.4.2) clause 3 leaves
 // with no declaration, and the top-level resolution for every other. The two
 // differ in what they read off the result — attributeType the {type
-// definition} of the use's resolved declaration, this the use's OWN
-// {inheritable}, which clause 3.1 names and which may differ from its
-// declaration's.
+// definition} of the use's resolved declaration, this the use's {inheritable}
+// ([xsd.Schema.ResolvedInheritable]), which clause 3.1 names and which may
+// differ from its declaration's: a use's own inheritable attribute wins over
+// the declaration's (§3.2.2.3 ref.att.local).
 func (w *walk) inheritable(g governance, a Attribute) bool {
 	if ct := g.complexType(); ct != nil {
 		if u, matched := attributeUseNamed(ct.AttributeUses(), a.Name()); matched {
-			return u.Inheritable()
+			return w.schema.ResolvedInheritable(u)
 		}
 	}
 	if w.skippedAttribute(g, a) {
