@@ -104,7 +104,9 @@ type paramEntity struct {
 // scan reads s — the internal subset, or a parameter entity's enlarged
 // replacement text — and reports whether the whole scan stops, which a
 // declined reference makes it do unless standalone. Only the internal subset
-// itself ends at a ']'.
+// itself ends at a ']'. A comment, processing instruction or markup
+// declaration left open where replacement text ends is declined (see
+// unclosed).
 func (sc *subsetScan) scan(s string) (stop bool) {
 	for s != "" {
 		switch {
@@ -113,23 +115,30 @@ func (sc *subsetScan) scan(s string) (stop bool) {
 		case strings.HasPrefix(s, "<!--"):
 			end := strings.Index(s, "-->")
 			if end < 0 {
-				return false
+				return sc.unclosed()
 			}
 			s = s[end+len("-->"):]
 		case strings.HasPrefix(s, "<?"):
 			end := strings.Index(s, "?>")
 			if end < 0 {
-				return false
+				return sc.unclosed()
 			}
 			s = s[end+len("?>"):]
 		case strings.HasPrefix(s, "<!["):
 			return sc.decline()
 		case strings.HasPrefix(s, "<!ENTITY"):
-			body, after := markupDecl(s[len("<!ENTITY"):])
+			body, after, closed := markupDecl(s[len("<!ENTITY"):])
+			if !closed && sc.depth > 0 {
+				return sc.decline()
+			}
 			sc.declare(body)
 			s = after
 		case strings.HasPrefix(s, "<!"):
-			_, s = markupDecl(s[len("<!"):])
+			_, after, closed := markupDecl(s[len("<!"):])
+			if !closed {
+				return sc.unclosed()
+			}
+			s = after
 		case s[0] == '%':
 			name, after, ok := peReference(s[1:])
 			if !ok {
@@ -171,6 +180,18 @@ func (sc *subsetScan) expand(name string) (stop bool) {
 	stop = sc.scan(" " + pe.text + " ")
 	sc.depth--
 	return stop
+}
+
+// unclosed ends the read of s at a construct s opens and never closes. In
+// replacement text that construct is declined: a parameter entity referenced
+// between declarations must expand to complete markup declarations (XML 1.0
+// WFC PE Between Declarations), so the text is not well-formed and the scan
+// must not read on past it. In the internal subset itself only the scan ends.
+func (sc *subsetScan) unclosed() (stop bool) {
+	if sc.depth == 0 {
+		return false
+	}
+	return sc.decline()
 }
 
 // decline records a reference or construct the scan does not read, and
@@ -297,14 +318,15 @@ func outsideQuotes(s string, c byte) int {
 }
 
 // markupDecl splits s at the '>' closing the markup declaration it is inside
-// of, returning the declaration's body and what follows it. A declaration
-// with no closing '>' runs to the end of s.
-func markupDecl(s string) (body, after string) {
+// of, returning the declaration's body and what follows it, and reports
+// whether that '>' is in s. A declaration with no closing '>' runs to the end
+// of s.
+func markupDecl(s string) (body, after string, closed bool) {
 	end := outsideQuotes(s, '>')
 	if end < 0 {
-		return s, ""
+		return s, "", false
 	}
-	return s[:end], s[end+1:]
+	return s[:end], s[end+1:], true
 }
 
 // entityDeclOf reads one <!ENTITY ...> body. It reports false for a parameter
