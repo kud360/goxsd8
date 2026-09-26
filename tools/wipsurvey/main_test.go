@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"os"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -926,7 +928,7 @@ func TestParseAheadBehind(t *testing.T) {
 // resolves to undecided without running git at all — the survey still
 // reports, with the counts unstated rather than invented.
 func TestGitAheadBehindWithoutMain(t *testing.T) {
-	got, err := gitAheadBehind("aaaa111", "")
+	got, err := gitAheadBehind("aaaa111", "", false)
 	if err != nil {
 		t.Fatalf("gitAheadBehind with no main SHA: unexpected error: %v", err)
 	}
@@ -941,12 +943,130 @@ func TestGitAheadBehindWithoutMain(t *testing.T) {
 // claim nothing is stranded on a ref nobody counted.
 func TestGitAheadBehindUnfetchedObject(t *testing.T) {
 	const absent = "0000000000000000000000000000000000000001"
-	got, err := gitAheadBehind(absent, absent)
+	got, err := gitAheadBehind(absent, absent, false)
 	if err != nil {
 		t.Fatalf("gitAheadBehind on an unfetched object: unexpected error: %v", err)
 	}
 	if got != nil {
 		t.Fatalf("gitAheadBehind on an unfetched object = %+v, want nil", got)
+	}
+}
+
+// gitOut runs git in dir for a temp-repo fixture and returns its trimmed
+// output, isolated from the user's and the system's git config so a
+// signing or hooks setting there cannot change what the fixture builds.
+func gitOut(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	cmd.Env = append(os.Environ(),
+		"GIT_CONFIG_GLOBAL="+os.DevNull,
+		"GIT_CONFIG_NOSYSTEM=1",
+		"GIT_AUTHOR_NAME=wipsurvey test", "GIT_AUTHOR_EMAIL=wipsurvey@example.invalid",
+		"GIT_COMMITTER_NAME=wipsurvey test", "GIT_COMMITTER_EMAIL=wipsurvey@example.invalid",
+		"GIT_TERMINAL_PROMPT=0",
+	)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// commitEmpty commits nothing under subject in dir and returns the new
+// commit's SHA.
+func commitEmpty(t *testing.T, dir, subject string) string {
+	t.Helper()
+	gitOut(t, dir, "commit", "--quiet", "--allow-empty", "-m", subject)
+	return gitOut(t, dir, "rev-parse", "HEAD")
+}
+
+// TestGitAheadBehindNamesTheStrandedPass shells git for real against a
+// temp repo carrying #1705's two shapes: a head whose commits ahead of main
+// include a /backlog pass under a later commit, and one ahead by a
+// recovery commit that only mentions a backlog LOG entry. The first must
+// come back naming the pass, the second must not, and neither may be taken
+// at all once the checkout is called shallow.
+func TestGitAheadBehindNamesTheStrandedPass(t *testing.T) {
+	dir := t.TempDir()
+	gitOut(t, dir, "init", "--quiet", "--initial-branch=main")
+	mainSHA := commitEmpty(t, dir, "docs: the landing main is at")
+	commitEmpty(t, dir, "meta: backlog 2026-09-24")
+	strandedSHA := commitEmpty(t, dir, "docs: a later commit on the same head")
+	gitOut(t, dir, "checkout", "--quiet", "-b", "recovery", mainSHA)
+	recoverySHA := commitEmpty(t, dir, "meta: recover stranded 2026-09-21 backlog LOG entry (#1649)")
+	t.Chdir(dir)
+
+	got, err := gitAheadBehind(strandedSHA, mainSHA, false)
+	if err != nil {
+		t.Fatalf("gitAheadBehind on the stranded head: %v", err)
+	}
+	want := aheadBehind{ahead: 2, behind: 0, backlogSubject: "meta: backlog 2026-09-24"}
+	if got == nil || *got != want {
+		t.Errorf("gitAheadBehind on the stranded head = %+v, want %+v", got, want)
+	}
+
+	got, err = gitAheadBehind(recoverySHA, mainSHA, false)
+	if err != nil {
+		t.Fatalf("gitAheadBehind on the recovery head: %v", err)
+	}
+	want = aheadBehind{ahead: 1, behind: 0}
+	if got == nil || *got != want {
+		t.Errorf("gitAheadBehind on the recovery head = %+v, want %+v", got, want)
+	}
+
+	for _, sha := range []string{strandedSHA, recoverySHA} {
+		got, err := gitAheadBehind(sha, mainSHA, true)
+		if err != nil {
+			t.Fatalf("gitAheadBehind in a shallow checkout: unexpected error: %v", err)
+		}
+		if got != nil {
+			t.Errorf("gitAheadBehind(%s) in a shallow checkout = %+v, want nil: a shallow count is not a count", sha, got)
+		}
+	}
+}
+
+// TestGitShallow checks the guard reads a real clone's depth, in both
+// directions: a full repo is not shallow, and a --depth 1 clone of it is.
+func TestGitShallow(t *testing.T) {
+	full := t.TempDir()
+	gitOut(t, full, "init", "--quiet", "--initial-branch=main")
+	commitEmpty(t, full, "docs: first")
+	commitEmpty(t, full, "docs: second")
+	shallow := t.TempDir()
+	gitOut(t, shallow, "clone", "--quiet", "--depth", "1", "file://"+full, ".")
+
+	for _, c := range []struct {
+		dir  string
+		want bool
+	}{{full, false}, {shallow, true}} {
+		t.Chdir(c.dir)
+		got, err := gitShallow()
+		if err != nil {
+			t.Fatalf("gitShallow in %s: %v", c.dir, err)
+		}
+		if got != c.want {
+			t.Errorf("gitShallow in %s = %v, want %v", c.dir, got, c.want)
+		}
+	}
+}
+
+// TestParseShallow checks rev-parse's two answers parse and that anything
+// else — git before 2.15 echoing the flag it does not know — is an error,
+// never the "not shallow" that would take every count the guard withholds.
+func TestParseShallow(t *testing.T) {
+	for _, c := range []struct {
+		output string
+		want   bool
+	}{{"true\n", true}, {"false\n", false}} {
+		got, err := parseShallow(c.output)
+		if err != nil || got != c.want {
+			t.Errorf("parseShallow(%q) = %v, %v; want %v, nil", c.output, got, err, c.want)
+		}
+	}
+	for _, output := range []string{"", "--is-shallow-repository\n", "yes\n"} {
+		if got, err := parseShallow(output); err == nil {
+			t.Errorf("parseShallow(%q) = %v, nil; want an error", output, got)
+		}
 	}
 }
 
@@ -1678,7 +1798,7 @@ func TestRenderOtherEmptyNamespaceIsStated(t *testing.T) {
 const (
 	aheadNote  = "AHEAD OF MAIN -- carries commits main does not have; triage before deleting"
 	mergedNote = "nothing main does not already have"
-	unsureNote = "ahead/behind undecided -- run `git fetch origin`"
+	unsureNote = "ahead/behind undecided -- run `git fetch origin`, or `git fetch --unshallow origin` in a shallow clone"
 )
 
 // TestRenderOtherFlagsAhead is #1627 arm 2's regression, on the shape the
@@ -1794,9 +1914,13 @@ func TestBacklogSubject(t *testing.T) {
 }
 
 // TestOtherNoteStrandedPass checks a ref carrying a /backlog pass reads
-// differently from a plain ahead row, and that a row without one keeps the
-// AHEAD OF MAIN note (#1705).
+// differently from a plain ahead row, that a row without one keeps the
+// AHEAD OF MAIN note, and that an uncounted row — which gitAheadBehind
+// returns for every ref in a shallow checkout — reads as neither (#1705).
 func TestOtherNoteStrandedPass(t *testing.T) {
+	if got := otherNote(otherRow{branch: "claude/x", counts: nil}); got != unsureNote {
+		t.Errorf("otherNote on an uncounted ref = %q, want %q", got, unsureNote)
+	}
 	const stranded = "STRANDED PASS -- `meta: backlog 2026-09-24` never reached main; recover its PLAN.md and LOG write-up before deleting"
 	pass := otherRow{branch: "claude/dazzling-cerf-c1o1wx", counts: &aheadBehind{ahead: 1, behind: 12, backlogSubject: "meta: backlog 2026-09-24"}}
 	if got := otherNote(pass); got != stranded {

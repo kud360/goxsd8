@@ -229,9 +229,13 @@ func run(stdout, stderr io.Writer, stdin io.Reader, now time.Time) error {
 	}
 	sortRows(rows)
 
+	shallow, err := gitShallow()
+	if err != nil {
+		return err
+	}
 	others := make([]otherRow, 0, len(buckets.others))
 	for _, ref := range buckets.others {
-		counts, err := gitAheadBehind(ref.sha, buckets.mainSHA)
+		counts, err := gitAheadBehind(ref.sha, buckets.mainSHA, shallow)
 		if err != nil {
 			return fmt.Errorf("resolving ahead/behind for %s: %w", ref.ref, err)
 		}
@@ -572,14 +576,21 @@ func backlogSubject(subjects []string) string {
 }
 
 // gitAheadBehind counts how far the ref at sha stands from mainSHA in each
-// direction. It returns nil, with no error, when the question cannot be
-// answered here: mainSHA is empty, or git cannot resolve one of the two
-// objects (a tip this checkout never fetched, which exits 128). That
-// mirrors gitTip's and gitAncestry's posture, for this tool's usual
-// reason — a zero printed where nothing was counted is exactly the
-// reading this section exists to make impossible.
-func gitAheadBehind(sha, mainSHA string) (*aheadBehind, error) {
-	if mainSHA == "" {
+// direction, and names the /backlog pass among the commits ahead. It
+// returns nil, with no error, when the question cannot be answered here:
+// mainSHA is empty, the checkout is shallow, or git cannot resolve one of
+// the two objects (a tip this checkout never fetched, which exits 128).
+// That mirrors gitTip's and gitAncestry's posture, for this tool's usual
+// reason — a zero printed where nothing was counted is exactly the reading
+// this section exists to make impossible.
+//
+// A shallow checkout does not fail these range queries; it answers them
+// from the visible history, so a stale head counts hundreds of commits
+// ahead and its subjects include every old /backlog pass main's truncated
+// history does not reach (docs/ROUTINES.md, #1705). Its counts are therefore undecided,
+// never taken.
+func gitAheadBehind(sha, mainSHA string, shallow bool) (*aheadBehind, error) {
+	if mainSHA == "" || shallow {
 		return nil, nil
 	}
 	out, err := exec.Command("git", "rev-list", "--left-right", "--count", mainSHA+"..."+sha).Output()
@@ -594,7 +605,42 @@ func gitAheadBehind(sha, mainSHA string) (*aheadBehind, error) {
 	if err != nil {
 		return nil, fmt.Errorf("counting %s against main: %w", sha, err)
 	}
+	if counts.ahead == 0 {
+		return &counts, nil
+	}
+	out, err = exec.Command("git", "log", "--format=%s", mainSHA+".."+sha, "--").Output()
+	if errors.As(err, &exitErr) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("running git log --format=%%s %s..%s: %w", mainSHA, sha, err)
+	}
+	counts.backlogSubject = backlogSubject(strings.Split(string(out), "\n"))
 	return &counts, nil
+}
+
+// gitShallow asks whether this checkout is shallow, which gitAheadBehind
+// must know before it takes any count.
+func gitShallow() (bool, error) {
+	out, err := exec.Command("git", "rev-parse", "--is-shallow-repository").Output()
+	if err != nil {
+		return false, fmt.Errorf("running git rev-parse --is-shallow-repository: %w", err)
+	}
+	return parseShallow(string(out))
+}
+
+// parseShallow parses `git rev-parse --is-shallow-repository`'s single
+// line. Anything but "true" or "false" is an error rather than a guess:
+// git before 2.15 echoes the unknown flag back, and reading that as "not
+// shallow" would take every count this guard exists to withhold.
+func parseShallow(output string) (bool, error) {
+	switch strings.TrimSpace(output) {
+	case "true":
+		return true, nil
+	case "false":
+		return false, nil
+	}
+	return false, fmt.Errorf("malformed rev-parse --is-shallow-repository output %q: expected \"true\" or \"false\"", output)
 }
 
 // parseAheadBehind parses `git rev-list --left-right --count
@@ -1150,7 +1196,7 @@ func sortOtherRows(rows []otherRow) {
 // it could not take.
 func otherNote(r otherRow) string {
 	if r.counts == nil {
-		return "ahead/behind undecided -- run `git fetch origin`"
+		return "ahead/behind undecided -- run `git fetch origin`, or `git fetch --unshallow origin` in a shallow clone"
 	}
 	if r.counts.backlogSubject != "" {
 		return "STRANDED PASS -- `" + r.counts.backlogSubject + "` never reached main; recover its PLAN.md and LOG write-up before deleting"
