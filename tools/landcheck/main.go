@@ -33,17 +33,12 @@
 // (-squash) and PR description (-pr-body), each a file — before the PR is
 // opened. Both are read because precondition 4's after-merge read-back
 // iterates over the squash text alone, and a keyword in the description
-// alone closed #345 unseen (#1178). A closing keyword binds the single
-// reference after it, across a line break and before a `'s`. The check
-// rejects a binding whose reference is followed by `,` and a further
-// reference (the comma form), and a binding whose issue a clause holding
-// "names and leaves open" or "not closing keywords" also names — per
-// reference, so `Closes #625. Names and leaves open #830.` passes. A clause
-// runs between sentence ends, blank lines and list-item starts.
+// alone closed #345 unseen (#1178). checkClosingKeywords owns which bindings
+// the check rejects.
 //
 // -no-issue replaces -issue for a PR that closes no issue, a /backlog or
 // post-land pass: precondition 1 has no number to look for and is skipped,
-// and the closing-keyword check rejects every binding in either text.
+// and the closing-keyword check runs in its closes-no-issue mode.
 //
 // Usage:
 //
