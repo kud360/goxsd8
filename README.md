@@ -140,6 +140,13 @@ compile is named the same way, for whichever documents its assembly reached, so
 one document's rejection does not silence another's shortfall. Exit **3**
 answers a `-schema` set that does not compile and nothing else.
 
+An XML instance's DOCTYPE is read for the unparsed entities an `xs:ENTITY`
+value must name: the **internal subset**, including its internal
+parameter entities. The **external DTD subset is never fetched**, so a name
+declared only there is charged `cvc-simple-type` with a message saying the
+DTD was not fully read, not that the name is undeclared. The library reads a
+DOCTYPE the same way (`go doc github.com/kud360/goxsd8/validate/xmlsrc`).
+
 `parse` compiles **each argument separately**, in argument order — several
 schema arguments are several compilations, not one set — and prints each
 summary on stdout: the distinct namespaces of the components that compilation
