@@ -344,9 +344,10 @@ session's place — the cartographer for its own `post-land` PR.
 Precondition 1 already says what it has to say here. `go tool landcheck
 -no-issue -squash <file> -pr-body <file>` checks the pushed head and
 precondition 2 as above, and exits 1 on every bound closing keyword in
-either text, since a PR of this shape closes nothing (#1178). Precondition 2 binds
-with nothing keyed on a verdict: `git log HEAD..origin/main` is empty,
-and a branch that is behind merges forward and re-runs the gate.
+either text, since a PR of this shape closes nothing (#1178).
+Precondition 2 binds with nothing keyed on a verdict: `git log
+HEAD..origin/main` is empty, and a branch that is behind merges forward
+and re-runs the gate.
 Precondition 3 does not bind — the pass is held end to end by the agent
 that opens it, and there is no owning issue thread for a `MASON:` comment
 to be on; it composes its own account into the LOG entry and the PR body
