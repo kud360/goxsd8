@@ -1754,6 +1754,60 @@ func TestOtherNoteNeverCallsAnUncountedRefMerged(t *testing.T) {
 	}
 }
 
+// TestBacklogSubject pins the prefix match that tells a stranded /backlog
+// pass from every other commit ahead of main (#1705). A recovery commit
+// that mentions a backlog LOG entry is not a pass, and neither is a subject
+// that merely contains the words.
+func TestBacklogSubject(t *testing.T) {
+	cases := []struct {
+		name     string
+		subjects []string
+		want     string
+	}{
+		{name: "no commits", subjects: nil, want: ""},
+		{
+			name:     "a pass's own commit",
+			subjects: []string{"meta: backlog 2026-09-24"},
+			want:     "meta: backlog 2026-09-24",
+		},
+		{
+			name:     "the newest pass, below a later commit",
+			subjects: []string{"docs: fix a typo (#1)", "meta: backlog 2026-09-24", "meta: backlog 2026-09-21"},
+			want:     "meta: backlog 2026-09-24",
+		},
+		{
+			name:     "a recovery commit is not a pass",
+			subjects: []string{"meta: recover stranded 2026-09-21 backlog LOG entry (#1649)"},
+			want:     "",
+		},
+		{
+			name:     "the words without the prefix",
+			subjects: []string{"docs: meta: backlog 2026-09-24 notes", "meta: backlogs"},
+			want:     "",
+		},
+	}
+	for _, c := range cases {
+		if got := backlogSubject(c.subjects); got != c.want {
+			t.Errorf("%s: backlogSubject(%q) = %q, want %q", c.name, c.subjects, got, c.want)
+		}
+	}
+}
+
+// TestOtherNoteStrandedPass checks a ref carrying a /backlog pass reads
+// differently from a plain ahead row, and that a row without one keeps the
+// AHEAD OF MAIN note (#1705).
+func TestOtherNoteStrandedPass(t *testing.T) {
+	const stranded = "STRANDED PASS -- `meta: backlog 2026-09-24` never reached main; recover its PLAN.md and LOG write-up before deleting"
+	pass := otherRow{branch: "claude/dazzling-cerf-c1o1wx", counts: &aheadBehind{ahead: 1, behind: 12, backlogSubject: "meta: backlog 2026-09-24"}}
+	if got := otherNote(pass); got != stranded {
+		t.Errorf("otherNote on a stranded pass = %q, want %q", got, stranded)
+	}
+	plain := otherRow{branch: "claude/x", counts: &aheadBehind{ahead: 3, behind: 12}}
+	if got := otherNote(plain); got != aheadNote {
+		t.Errorf("otherNote on an ahead row with no pass = %q, want %q", got, aheadNote)
+	}
+}
+
 // TestSortOtherRows checks the section's order is the branch name and not
 // the order the remote listed its heads in (STYLE D1).
 func TestSortOtherRows(t *testing.T) {

@@ -544,10 +544,31 @@ func netDiffFromExit(code int) netDiff {
 // aheadBehind is how a head outside the surveyed namespaces stands
 // against main. ahead is the count that matters: a ref main cannot reach
 // carries commits main does not have, which is the one state on such a
-// ref owed a human's attention rather than a deletion.
+// ref owed a human's attention rather than a deletion. backlogSubject is
+// the subject of the newest of those commits a /backlog pass wrote, empty
+// when none is: that ref strands a PLAN.md stamp and a LOG entry (#1705).
 type aheadBehind struct {
-	ahead  int
-	behind int
+	ahead          int
+	behind         int
+	backlogSubject string
+}
+
+// backlogPassPrefix opens the subject of every /backlog pass's commit. The
+// trailing space is load-bearing: `meta: recover stranded 2026-09-21
+// backlog LOG entry` is a recovery, not a pass.
+const backlogPassPrefix = "meta: backlog "
+
+// backlogSubject returns the first of subjects that a /backlog pass wrote,
+// or "" when none is. Given `git log --format=%s <main>..<ref>`'s lines,
+// newest first, that is the newest pass the ref strands. It is pure, so
+// tests exercise it directly against literal subjects.
+func backlogSubject(subjects []string) string {
+	for _, s := range subjects {
+		if strings.HasPrefix(s, backlogPassPrefix) {
+			return s
+		}
+	}
+	return ""
 }
 
 // gitAheadBehind counts how far the ref at sha stands from mainSHA in each
@@ -1121,13 +1142,18 @@ func sortOtherRows(rows []otherRow) {
 }
 
 // otherNote is one such row's NOTE cell, and the ahead>0 case is the one
-// the section exists for, so it is the only one that shouts. An unfetched
-// tip is reported as undecided and never as a zero: "ahead=0" is the whole
-// claim that nothing is at risk on the ref, and this tool does not make
-// that claim on a count it could not take.
+// the section exists for, so it is the only one that shouts — naming a
+// stranded /backlog pass apart from the rest, since that ref holds a write-up
+// no later pass re-derives (#1705). An uncounted ref is reported as
+// undecided and never as a zero: "ahead=0" is the whole claim that nothing
+// is at risk on the ref, and this tool does not make that claim on a count
+// it could not take.
 func otherNote(r otherRow) string {
 	if r.counts == nil {
 		return "ahead/behind undecided -- run `git fetch origin`"
+	}
+	if r.counts.backlogSubject != "" {
+		return "STRANDED PASS -- `" + r.counts.backlogSubject + "` never reached main; recover its PLAN.md and LOG write-up before deleting"
 	}
 	if r.counts.ahead > 0 {
 		return "AHEAD OF MAIN -- carries commits main does not have; triage before deleting"
