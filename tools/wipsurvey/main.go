@@ -46,16 +46,22 @@
 // PR for a day with a /backlog pass's whole log entry on it, in a
 // namespace no survey read (#1627). Each such row prints `git rev-list
 // --left-right --count <main>...<ref>`'s pair and says in words when
-// ahead is nonzero. A checkout that never fetched the ref's tip cannot
-// count either side, and that row prints the counts as undecided rather
-// than as a zero nothing measured — the posture the tip age already
-// takes.
+// ahead is nonzero: STRANDED PASS when one of those commits' subjects
+// opens `meta: backlog `, AHEAD OF MAIN otherwise. A pass whose docs PR
+// never merges strands its PLAN.md stamp and LOG entry, and those PRs are
+// closed rather than left open, so only the ref still shows it (#1705). A
+// checkout that never fetched the ref's tip cannot count either side, and
+// neither can a shallow one, which counts only its visible history and
+// reads every stale head as far ahead; that row prints the counts as
+// undecided rather than as a number nothing measured — the posture the
+// tip age already takes.
 //
 // A maintenance command's short-lived branch is such a head between its
-// push and its squash-merge, so it prints in that section, ahead>0, while
-// it is landing. Nothing is owed on it and nothing distinguishes it there
-// from a branch whose merge never happened, which is the same reading a
-// human does on every row of the section.
+// push and its squash-merge, so it prints in that section, ahead>0 — a
+// /backlog pass's as STRANDED PASS — while it is landing. Nothing is owed
+// on it and nothing distinguishes it there from a branch whose merge never
+// happened, which is the same reading a human does on every row of the
+// section.
 //
 // ls-remote reports only a SHA per branch, not a date, so each tip's
 // commit time still comes from the local object store (`git log -1
@@ -117,7 +123,7 @@
 //
 // Usage:
 //
-//	git fetch origin
+//	git fetch origin   # git fetch --unshallow origin, in a shallow clone
 //	gh issue list --state all --json number,state,labels,comments | go tool wipsurvey
 //	gh issue list --state all --json number,state,labels | go tool wipsurvey  # empty claims stay CLAIMED
 //	go tool wipsurvey < /dev/null   # issue data omitted: lease-only report
