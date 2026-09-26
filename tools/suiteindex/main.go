@@ -84,6 +84,42 @@
 // report says so in its own output, in both directions it can be wrong
 // ([printCaveat]).
 //
+// # Value tests
+//
+// Write `=` and operands after an attribute list to select occurrences by
+// what a QName-valued attribute RESOLVES to, against the bindings in scope at
+// its own start tag:
+// `*@type|base|itemType|memberTypes={http://www.w3.org/2001/XMLSchema}ENTITY`
+// is every reference to xs:ENTITY, however each fixture prefixes it (#1671).
+// The test applies to every attribute in the list, and an attribute answers
+// it when the element carries it and at least one of its tokens satisfies at
+// least one operand; the list's join is then read over the attributes that
+// answer.
+//
+// An operand is a Clark name with its wrapper always written — `{uri}local`,
+// `{}local` for no namespace, `{*}` and `*` wildcarding either axis as they do
+// in the element position — or the keyword UNBOUND, and operands take the `|`
+// join only. A braceless name is refused: a value's namespace is data, so no
+// default is assumed for it. `@*` takes no value test.
+//
+// Every tested value is split on XML whitespace (#x20, #x9, #xD, #xA) into
+// tokens, whatever attribute carries it, so a list such as memberTypes is
+// matched per token and a scalar QName is one token. Each token splits on its
+// first colon; the prefix, or the default namespace for an unprefixed token,
+// resolves in scope. A token whose prefix is bound nowhere answers UNBOUND,
+// and `{*}*` never matches it: `{*}*|UNBOUND` is every QName-shaped token. An
+// unprefixed token with no default namespace in scope is BOUND, to no
+// namespace, and answers `{}local`. A token with an empty prefix, an empty
+// local part or a second colon is not a QName and answers no operand at all.
+// NCName character validity is not checked: this census resolves bindings and
+// does not validate a lexical space.
+//
+// A match line of a value-test query follows each tested attribute's raw
+// value with `->[…]`, one resolution per token in token order: the braced
+// name, UNBOUND, or `(not a QName)`. The report prints a caveat under its
+// header, because the figure is a bound on DIRECT references and not a
+// population of resolved types ([printValueCaveat]).
+//
 // # Encoding
 //
 // Encoding is this tool's problem, not the caller's. Every fixture is read
@@ -171,13 +207,15 @@
 //	go tool suiteindex 'openContent|defaultOpenContent'
 //	go tool suiteindex '{*}*@{http://www.w3.org/2001/XMLSchema-instance}type'
 //	go tool suiteindex '*@maxOccurs//*@maxOccurs'
+//	go tool suiteindex '*@type|base|itemType|memberTypes={http://www.w3.org/2001/XMLSchema}ENTITY|{http://www.w3.org/2001/XMLSchema}ENTITIES'
+//	go tool suiteindex '{*}*@{http://www.w3.org/2001/XMLSchema-instance}type=UNBOUND'
 //	go tool suiteindex element@targetNamespace testdata/xsdtests/ibmData
 //	go tool suiteindex -paths '{*}*@{http://www.w3.org/2001/XMLSchema-instance}type' | go tool casejoin join instance
 //
-// The query is `[pattern//]local[|local…][@attr[,attr…]]` with `|` in place
-// of `,` for the ANY join over attributes, and any local part may be `*`. The
-// pattern before `//` has that same shape and names the ancestor an
-// occurrence lies inside. Any name may be written in Clark notation
+// The query is `[pattern//]local[|local…][@attr[,attr…][=operand[|operand…]]]`
+// with `|` in place of `,` for the ANY join over attributes, and any local
+// part may be `*`. The pattern before `//` has that same shape and names the
+// ancestor an occurrence lies inside. Any name may be written in Clark notation
 // (`{uri}local`) to name its namespace outright, or `{*}local` to census
 // every namespace at once; a braceless element name is in the XML Schema
 // namespace and a braceless attribute name is in no namespace. The second
@@ -202,6 +240,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -214,7 +253,7 @@ import (
 const defaultRoot = "testdata/xsdtests"
 
 // usage is printed for any argument the tool cannot act on.
-const usage = `usage: suiteindex [-paths] <[pattern//]local[|local...][@attr[,attr...]]> [dir]; "," joins attribute names as all, "|" joins either position's names as any, "//" admits a match only inside an element the pattern before it matches, at any depth, any local name may be "*", and "{uri}" before one fixes its namespace — "{*}" censuses every namespace, "{}" the one that has none; -paths prints the matched fixture paths alone, for a tool downstream`
+const usage = `usage: suiteindex [-paths] <[pattern//]local[|local...][@attr[,attr...][=operand[|operand...]]]> [dir]; "," joins attribute names as all, "|" joins either position's names as any, "//" admits a match only inside an element the pattern before it matches, at any depth, any local name may be "*", and "{uri}" before one fixes its namespace — "{*}" censuses every namespace, "{}" the one that has none; "=" after an attribute list admits only an attribute with a token resolving to one of its "|"-joined operands, each "{uri}local" or UNBOUND; -paths prints the matched fixture paths alone, for a tool downstream`
 
 func main() {
 	if err := run(os.Stdout, os.Stderr, os.Args[1:]); err != nil {
@@ -357,8 +396,9 @@ const (
 )
 
 // pattern is one element test: the element names it admits, the attribute
-// names an occurrence carries, and how that list is read. A query is one
-// pattern, plus the ancestor pattern an occurrence must lie inside.
+// names an occurrence carries, how that list is read, and the test on their
+// values. A query is one pattern, plus the ancestor pattern an occurrence must
+// lie inside.
 type pattern struct {
 	// Element holds the element names an occurrence may carry, each an
 	// alternative: a feature spelled by more than one element is one census
@@ -368,6 +408,93 @@ type pattern struct {
 	Element []namePat
 	Attrs   []namePat
 	Join    attrJoin
+	// Value is the test every attribute in Attrs must also pass to count as
+	// carried ([valueTest]). It is inactive for a pattern with no attribute
+	// list, and never active beside `@*`: the parser refuses both.
+	Value valueTest
+}
+
+// valueTest is a test on the VALUE of an attribute, written after the
+// attribute list as `=` and operands joined by `|`: an attribute answers it
+// when at least one of its whitespace-separated tokens, resolved as a QName
+// against the bindings in scope at its own start tag, satisfies at least one
+// operand (#1671). Names and Unbound are independent alternatives, and the
+// test is inactive when neither is set ([valueTest.active]).
+type valueTest struct {
+	// Names are the `{uri}local` operands, in query order, each wildcarded
+	// on either axis exactly as [namePat] is anywhere else. They match a
+	// BOUND token only.
+	Names []namePat
+	// Unbound is the [unboundOperand] operand: it matches a token whose
+	// prefix no in-scope binding declares. It is a bool and not a count, so a
+	// repeated keyword changes nothing.
+	Unbound bool
+}
+
+// unboundOperand is the operand matching a token whose prefix is unbound. It
+// cannot collide with a name operand, every one of which is brace-led: a
+// no-namespace name spelled UNBOUND is written `{}UNBOUND`.
+const unboundOperand = "UNBOUND"
+
+// valueSep introduces a pattern's [valueTest]. `=` is not an NCName
+// character, so no attribute name a document writes collides with it.
+const valueSep = "="
+
+// active reports whether v tests anything at all. It is derived from the
+// operands rather than held beside them (STYLE D3).
+func (v valueTest) active() bool {
+	return len(v.Names) > 0 || v.Unbound
+}
+
+// admits reports whether one resolved token satisfies an operand of v. A
+// token that is not a lexical QName satisfies none, [unboundOperand] and
+// `{*}*` included: no prefix was found for either to answer about.
+//
+// The switch is exhaustive over the sealed sum; the default arm asserts the
+// invariant and is unreachable, since [tokenRes] is unexported and this file
+// declares every arm.
+func (v valueTest) admits(r tokenRes) bool {
+	switch r := r.(type) {
+	case boundToken:
+		for _, n := range v.Names {
+			if n.matches(r.Name) {
+				return true
+			}
+		}
+		return false
+	case unboundToken:
+		return v.Unbound
+	case notQNameToken:
+		return false
+	default:
+		panic("suiteindex: valueTest.admits: non-exhaustive tokenRes switch")
+	}
+}
+
+// String renders v's operands in the canonical form — name operands first,
+// in query order and always braced ([bracedName]), then [unboundOperand] —
+// so the echo re-enters as the same test (#1297). It is empty for an
+// inactive test.
+func (v valueTest) String() string {
+	if !v.active() {
+		return ""
+	}
+	ops := make([]string, 0, len(v.Names)+1)
+	for _, n := range v.Names {
+		ops = append(ops, bracedName(n.Space, n.Local))
+	}
+	if v.Unbound {
+		ops = append(ops, unboundOperand)
+	}
+	return valueSep + strings.Join(ops, string(joinAny))
+}
+
+// bracedName spells a name in Clark notation with the wrapper ALWAYS written,
+// `{}local` for no namespace and `{*}` for the namespace axis. A value
+// operand has no default namespace, so neither [xsd.QName.String] nor
+// [renderIn], which leave a no-namespace name bare, can spell one.
+func bracedName(space, local string) string {
+	return "{" + space + "}" + local
 }
 
 // query is one census: the construct to look for, and the ancestor an
@@ -431,6 +558,7 @@ func (p pattern) String() string {
 		b.WriteString(sep)
 		b.WriteString(a.render(attrSpace))
 	}
+	b.WriteString(p.Value.String())
 	return b.String()
 }
 
@@ -452,8 +580,9 @@ func (q query) String() string {
 // name. A braceless element name is in the XML Schema namespace — the
 // vocabulary every schema fixture in this corpus is written in — and a
 // braceless attribute name is in no namespace, which is what an unprefixed
-// attribute resolves to. A [containment] separator makes the pattern ahead of
-// it the ancestor an occurrence must lie inside.
+// attribute resolves to. A [valueSep] after the attribute list starts a
+// [valueTest]. A [containment] separator makes the pattern ahead of it the
+// ancestor an occurrence must lie inside.
 func parseQuery(s string) (query, error) {
 	first, rest, err := parsePattern(s, s)
 	if err != nil {
@@ -476,7 +605,8 @@ func parseQuery(s string) (query, error) {
 }
 
 // parsePattern consumes one pattern from the head of s — an element position,
-// then an attribute list if an `@` follows — and returns it with whatever is
+// then an attribute list if an `@` follows and its value test if a
+// [valueSep] follows that — and returns it with whatever is
 // left, which is the [containment] separator or nothing at all. whole is the
 // query the caller was given, which every message names, so a rejection reads
 // against what was typed rather than against the fragment that failed.
@@ -486,6 +616,9 @@ func parsePattern(whole, s string) (pattern, string, error) {
 		return pattern{}, "", err
 	}
 	p := pattern{Element: elems, Join: joinAll}
+	if strings.HasPrefix(rest, valueSep) {
+		return pattern{}, "", fmt.Errorf("query %q: a value test follows an attribute list (%q), never an element name", whole, "@attr"+valueSep+"…")
+	}
 	if !strings.HasPrefix(rest, "@") {
 		return p, rest, nil
 	}
@@ -496,6 +629,15 @@ func parsePattern(whole, s string) (pattern, string, error) {
 			return pattern{}, "", fmt.Errorf("query %q: %w", whole, err)
 		}
 		p.Attrs = append(p.Attrs, attr)
+		if strings.HasPrefix(more, valueSep) {
+			p.Value, more, err = parseOperands(whole, more[len(valueSep):])
+			if err != nil {
+				return pattern{}, "", err
+			}
+			if more != "" && !strings.HasPrefix(more, containment) {
+				return pattern{}, "", fmt.Errorf("query %q: a value test ends the pattern, so only %q or the end of the query may follow its operands, found %q", whole, containment, more)
+			}
+		}
 		if more == "" || strings.HasPrefix(more, containment) {
 			closed, err := closeAttrs(whole, p)
 			if err != nil {
@@ -542,21 +684,82 @@ func parseElements(whole, s string) ([]namePat, string, error) {
 	}
 }
 
-// closeAttrs finishes a parsed attribute list, rejecting the one combination
+// closeAttrs finishes a parsed attribute list, rejecting the combinations
 // the grammar admits and the matcher cannot mean: a wildcard beside another
-// name. `@*` already stands for every attribute, so joining it to a second
-// name says nothing under either join.
+// name, or beside a value test. `@*` already stands for every attribute, so
+// joining it to a second name says nothing under either join, and it selects
+// the name-axis report, which has no value column to print a resolution in.
 func closeAttrs(whole string, p pattern) (pattern, error) {
-	if len(p.Attrs) == 1 {
-		return p, nil
-	}
 	for _, a := range p.Attrs {
-		if a.isAny() {
+		if !a.isAny() {
+			continue
+		}
+		if len(p.Attrs) > 1 {
 			return pattern{}, fmt.Errorf("query %q: %q names the whole attribute axis and stands alone", whole, "@"+wildcard)
+		}
+		if p.Value.active() {
+			return pattern{}, fmt.Errorf("query %q: %q names the whole attribute axis and takes no value test", whole, "@"+wildcard)
 		}
 	}
 	return p, nil
 }
+
+// parseOperands consumes a value test's operands from the head of s — the
+// text after [valueSep] — and returns them with whatever follows. Operands
+// take the [joinAny] join only, so a `|` here never starts another attribute
+// name, and a [joinAll] is refused: one token is never two names at once.
+//
+// Every operand is [unboundOperand] or brace-led. A braceless name is
+// refused rather than given a default namespace, as the element and
+// attribute positions do: a value's namespace is data the query cannot
+// assume, so it is written out — `{uri}local`, `{}local` or `{*}local`.
+func parseOperands(whole, s string) (valueTest, string, error) {
+	var v valueTest
+	rest := s
+	for {
+		more, err := parseOperand(whole, rest, &v)
+		if err != nil {
+			return valueTest{}, "", err
+		}
+		if strings.HasPrefix(more, string(joinAll)) {
+			return valueTest{}, "", fmt.Errorf("query %q: value operands are joined by %q (any one of them), never by %q: one token is never two names", whole, joinAny, joinAll)
+		}
+		if !strings.HasPrefix(more, string(joinAny)) {
+			return v, more, nil
+		}
+		rest = more[len(joinAny):]
+	}
+}
+
+// parseOperand consumes one operand from the head of s into v and returns
+// what follows it.
+func parseOperand(whole, s string, v *valueTest) (string, error) {
+	if strings.HasPrefix(s, "{") {
+		n, more, err := splitName(s, "")
+		if err != nil {
+			return "", fmt.Errorf("query %q: %w", whole, err)
+		}
+		v.Names = append(v.Names, n)
+		return more, nil
+	}
+	tok, more := s, ""
+	if i := strings.IndexAny(s, nameStops); i >= 0 {
+		tok, more = s[:i], s[i:]
+	}
+	if tok == "" {
+		return "", fmt.Errorf("query %q: empty value operand", whole)
+	}
+	if tok != unboundOperand {
+		return "", fmt.Errorf("query %q: value operand %q names no namespace: write it out as {uri}local, {}local for no namespace or {*}local for any, since no default can be assumed for data, or write %s", whole, tok, unboundOperand)
+	}
+	v.Unbound = true
+	return more, nil
+}
+
+// nameStops are the characters that end a local part in a query: the start of
+// an attribute list or a value test, either join, and the [containment]
+// separator.
+const nameStops = "@" + valueSep + string(joinAll) + string(joinAny) + containment
 
 // splitName consumes one name from the head of s — an optional Clark
 // `{uri}` wrapper, then a local part — and returns it with whatever follows.
@@ -575,7 +778,7 @@ func splitName(s, defaultSpace string) (p namePat, rest string, err error) {
 		s = s[end+1:]
 	}
 	local := s
-	if i := strings.IndexAny(s, "@"+string(joinAll)+string(joinAny)+containment); i >= 0 {
+	if i := strings.IndexAny(s, nameStops); i >= 0 {
 		local, rest = s[:i], s[i:]
 	}
 	if local == "" {
@@ -595,7 +798,37 @@ func splitName(s, defaultSpace string) (p namePat, rest string, err error) {
 type attrHit struct {
 	Name  xsd.QName
 	Value string
+	// Resolved holds one resolution per whitespace-separated token of Value,
+	// in token order — every token, not only the ones that satisfied the
+	// test, since the others are what a reader checks the hit against. It is
+	// nil exactly when the query has no value test ([valueTest]), which is
+	// what keeps every other query's match lines the bytes they always were.
+	Resolved []tokenRes
 }
+
+// tokenRes is what one token of an attribute value resolved to as a QName. It
+// is a SEALED SUM (STYLE T1/T2), closed by the QName lexical space and sealed
+// by the tokenRes marker method, with one arm per answer:
+//
+//   - boundToken — its prefix, or the default namespace for an unprefixed
+//     token, is bound in scope, and it names an expanded name;
+//   - unboundToken — its prefix is bound nowhere in scope;
+//   - notQNameToken — it is not a lexical QName at all, so it has no prefix
+//     to be bound or unbound.
+type tokenRes interface{ tokenRes() }
+
+// boundToken is a token that resolved to Name.
+type boundToken struct{ Name xsd.QName }
+
+// unboundToken is a token whose prefix no in-scope binding declares.
+type unboundToken struct{}
+
+// notQNameToken is a token that is not a lexical QName.
+type notQNameToken struct{}
+
+func (boundToken) tokenRes()    {}
+func (unboundToken) tokenRes()  {}
+func (notQNameToken) tokenRes() {}
 
 // hit is one occurrence of the queried construct.
 type hit struct {
@@ -999,6 +1232,8 @@ func markUnclosed(hits []hit, open []openElem) {
 // An element carrying none of the attribute names a `|` query lists is not an
 // occurrence, and neither is one carrying no attribute at all under `@*`: an
 // attribute census has nothing to say about an element with no attribute.
+// Under a value test an attribute counts as carried only when it answers the
+// test, so both joins read "answers" where they otherwise read "carries".
 func match(start *xmltree.StartElement, p pattern) ([]attrHit, bool) {
 	if !p.matchesElement(qnameOf(start.Name())) {
 		return nil, false
@@ -1008,7 +1243,7 @@ func match(start *xmltree.StartElement, p pattern) ([]attrHit, bool) {
 	}
 	var got []attrHit
 	for _, want := range p.Attrs {
-		a, ok := attrOn(start, want)
+		a, ok := attrOn(start, want, p.Value)
 		if !ok && p.Join == joinAll {
 			return nil, false
 		}
@@ -1040,16 +1275,77 @@ func axisAttrs(start *xmltree.StartElement, want namePat) ([]attrHit, bool) {
 
 // attrOn returns start's want attribute as the hit records it — the name the
 // document resolved, never the pattern that admitted it, which can be open on
-// either axis. The attribute list is a document-ordered slice, so the first
-// match is the only one a well-formed document can have.
-func attrOn(start *xmltree.StartElement, want namePat) (attrHit, bool) {
+// either axis. Attributes are tried in the order the tag spells them.
+//
+// With no value test the first attribute want admits wins, and its hit
+// carries no resolution at all. A pattern fixing both namespace and local
+// name has at most one candidate, since no start tag carries two attributes
+// with one expanded name; a `{*}` or `*` pattern can admit several, and
+// nothing but order tells them apart.
+//
+// Under an active value test the first admitted attribute that ANSWERS the
+// test wins, with every token's resolution recorded: an admitted attribute
+// that does not answer is skipped and the next one tried, so `{*}type` still
+// finds a plain `type` after an `xsi:type` that fails the test.
+func attrOn(start *xmltree.StartElement, want namePat, v valueTest) (attrHit, bool) {
 	for _, a := range start.Attributes() {
 		name := qnameOf(a.Name())
-		if want.matches(name) {
-			return attrHit{Name: name, Value: a.Value()}, true
+		if !want.matches(name) {
+			continue
+		}
+		h := attrHit{Name: name, Value: a.Value()}
+		if !v.active() {
+			return h, true
+		}
+		h.Resolved = resolveTokens(start, h.Value)
+		if slices.ContainsFunc(h.Resolved, v.admits) {
+			return h, true
 		}
 	}
 	return attrHit{}, false
+}
+
+// resolveTokens resolves every token of value as a QName at start. The value
+// is split on XML whitespace whatever attribute carries it: the query, not a
+// schema, asserts that the attribute holds QNames, and a scalar QName holds
+// no whitespace, so it is one token. An empty value has none, so it answers
+// no operand.
+func resolveTokens(start *xmltree.StartElement, value string) []tokenRes {
+	var res []tokenRes
+	for _, tok := range strings.FieldsFunc(value, isXMLSpace) {
+		res = append(res, resolveToken(start, tok))
+	}
+	return res
+}
+
+// resolveToken resolves one token against the bindings in scope at start
+// (Datatypes §3.3.18 via [xmltree.StartElement.LookupPrefix]): an unprefixed
+// token takes the default namespace, or no namespace when none is in scope,
+// and is bound either way. The token splits on its FIRST colon (Namespaces in
+// XML, PrefixedName / UnprefixedName); an empty prefix, an empty local part or
+// a second colon makes it no QName. NCName character validity is not checked:
+// this census resolves bindings and does not validate a lexical space.
+func resolveToken(start *xmltree.StartElement, tok string) tokenRes {
+	prefix, local, prefixed := strings.Cut(tok, ":")
+	if !prefixed {
+		prefix, local = "", tok
+	}
+	if prefixed && (prefix == "" || local == "" || strings.Contains(local, ":")) {
+		return notQNameToken{}
+	}
+	uri, ok := start.LookupPrefix(prefix)
+	if !ok {
+		return unboundToken{}
+	}
+	return boundToken{Name: xsd.QName{Space: uri, Local: local}}
+}
+
+// isXMLSpace reports whether r is XML whitespace (#x20, #x9, #xD, #xA), the
+// only characters a list value is split on. [strings.Fields] would also
+// split on NBSP and the other Unicode spaces, which XSD's whiteSpace
+// collapse does not treat as separators.
+func isXMLSpace(r rune) bool {
+	return strings.ContainsRune("\x20\t\r\n", r)
 }
 
 // qnameOf restates a name the reader resolved in the form the query language
@@ -1140,16 +1436,25 @@ func pathsErr(notes, files *latchWriter) error {
 	return nil
 }
 
-// printCaveat states which directions a containment figure is wrong in, and
-// prints nothing at all for a query that asked no containment question. The
-// census walks the document's own nesting and resolves nothing, so the figure
-// is a ceiling of a lexical population and neither a count nor a ceiling of
-// the resolved-component population a reader is usually after; unqualified,
-// it would be a false statement shipped in the tool's own output (#1585).
+// printCaveat states what a figure does not resolve, for each shape that
+// owes a caveat: containment and the value test. The two are independent, and
+// a query carrying both prints both; one carrying neither prints nothing.
 //
 // It sits under the header rather than in a section of its own because that
 // is where the reader holding the figure arrives (#1279).
 func printCaveat(w io.Writer, q query) {
+	printContainmentCaveat(w, q)
+	printValueCaveat(w, q)
+}
+
+// printContainmentCaveat states which directions a containment figure is
+// wrong in, and prints nothing at all for a query that asked no containment
+// question. The census walks the document's own nesting and resolves nothing,
+// so the figure is a ceiling of a lexical population and neither a count nor
+// a ceiling of the resolved-component population a reader is usually after;
+// unqualified, it would be a false statement shipped in the tool's own output
+// (#1585).
+func printContainmentCaveat(w io.Writer, q query) {
 	if q.Ancestor == nil {
 		return
 	}
@@ -1157,6 +1462,23 @@ func printCaveat(w io.Writer, q query) {
 	_, _ = fmt.Fprintln(w, "  of a resolved one: it over-counts, because an ancestor in the document is not a")
 	_, _ = fmt.Fprintln(w, "  particle after <element ref>/<group ref> resolution, and it MISSES a nest that only")
 	_, _ = fmt.Fprintln(w, "  that resolution creates, because this census never resolves a ref")
+}
+
+// printValueCaveat states what a value-test figure does not resolve, when
+// either side of the query carries a value test (#1671). The test resolves a
+// value's prefix and nothing further, so the figure counts the attributes
+// that NAME an operand directly, which is not the population of declarations
+// whose type is that operand.
+func printValueCaveat(w io.Writer, q query) {
+	if !q.Value.active() && (q.Ancestor == nil || !q.Ancestor.Value.active()) {
+		return
+	}
+	_, _ = fmt.Fprintln(w, "  read this as a bound on DIRECT references, never as a population of resolved types:")
+	_, _ = fmt.Fprintln(w, "  it follows no derivation chain, so a declaration typed by a named simpleType that")
+	_, _ = fmt.Fprintln(w, "  restricts an operand's type is found only by a second query on that type's name, and")
+	_, _ = fmt.Fprintln(w, "  it resolves no <element ref>/<group ref>. The query, not any schema, asserts that the")
+	_, _ = fmt.Fprintln(w, "  attribute holds QNames, and a token that is not a lexical QName answers no operand,")
+	_, _ = fmt.Fprintln(w, "  UNBOUND included")
 }
 
 // printBody renders the half of the report the query's shape chooses: the
@@ -1309,12 +1631,47 @@ func renderChildren(h hit) string {
 // records it. The local part alone is what a reader recognizes, and no
 // ambiguity follows it: a query naming two attributes of one local name in
 // different namespaces is not one anybody writes.
+//
+// An attribute a value test resolved is followed, with no space, by
+// `->[r1, r2, …]`: one resolution per token, in token order ([renderToken]).
+// One without a resolution prints nothing more, so a query with no value test
+// renders the bytes it always did.
 func renderAttrs(attrs []attrHit) string {
 	var b strings.Builder
 	for _, a := range attrs {
 		fmt.Fprintf(&b, " %s=%q", a.Name.Local, a.Value)
+		if a.Resolved == nil {
+			continue
+		}
+		toks := make([]string, 0, len(a.Resolved))
+		for _, r := range a.Resolved {
+			toks = append(toks, renderToken(r))
+		}
+		b.WriteString("->[" + strings.Join(toks, ", ") + "]")
 	}
 	return b.String()
+}
+
+// renderToken spells one token's resolution: a bound token as the braced
+// operand that matches it exactly ([bracedName]), so it re-enters as an
+// operand; an unbound one as [unboundOperand]; and one that is no QName as
+// "(not a QName)", which cannot be read as a name for the same reason
+// "(none)" cannot.
+//
+// The switch is exhaustive over the sealed sum; the default arm asserts the
+// invariant and is unreachable, since [tokenRes] is unexported and this file
+// declares every arm.
+func renderToken(r tokenRes) string {
+	switch r := r.(type) {
+	case boundToken:
+		return bracedName(r.Name.Space, r.Name.Local)
+	case unboundToken:
+		return unboundOperand
+	case notQNameToken:
+		return "(not a QName)"
+	default:
+		panic("suiteindex: renderToken: non-exhaustive tokenRes switch")
+	}
 }
 
 // renderMatched names the element a hit matched, for a query that does not
