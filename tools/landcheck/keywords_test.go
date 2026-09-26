@@ -145,8 +145,18 @@ func TestCheckClosingKeywords(t *testing.T) {
 			wantOutput: "landcheck: t: closing keywords bind nothing\n",
 		},
 		{
+			name:       "separate sentences are separate clauses: clean",
+			body:       "Closes #625. See #625's thread! Names and leaves open #830.",
+			wantOutput: "landcheck: t: closing keywords bind #625\n",
+		},
+		{
+			name:       "separate paragraphs are separate clauses: clean",
+			body:       "Closes #625\n\nThe #625 follow-up is filed\n\nNames and leaves open #830\n",
+			wantOutput: "landcheck: t: closing keywords bind #625\n",
+		},
+		{
 			name:       "separate list items are separate clauses: clean",
-			body:       "- Closes #5\n- names and leaves open #6\n",
+			body:       "- Closes #5\n- #5's follow-up is filed\n- names and leaves open #6\n",
 			wantOutput: "landcheck: t: closing keywords bind #5\n",
 		},
 		{
