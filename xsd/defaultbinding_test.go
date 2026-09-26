@@ -260,6 +260,35 @@ func TestEffectiveValueConstraintFallback(t *testing.T) {
 	}
 }
 
+// TestAttributeUsesIdenticalComparesResolvedInheritable pins §3.5.1 property
+// identity on the resolved {inheritable}: a ref use writing no inheritable over
+// a declaration whose {inheritable} is false holds the same property as one
+// writing inheritable="false" (§3.2.2.3 ref.att.local), and a different one
+// from one writing "true" (#1682).
+func TestAttributeUsesIdenticalComparesResolvedInheritable(t *testing.T) {
+	s := bSchema(t, func(b *SchemaBuilder) {
+		global, err := NewAttributeDeclaration(xsderr.Loc{}, uq("g"), TypeDefinitionRef{Name: uq("str")}, NewAttributeGlobalScope(), nil, false)
+		if err != nil {
+			t.Fatalf("NewAttributeDeclaration: %v", err)
+		}
+		b.AddAttribute(global)
+	})
+	use := func(own *bool) AttributeUse {
+		u, err := NewAttributeUse(xsderr.Loc{}, false, AttributeDeclarationRef{Name: uq("g")}, nil, own)
+		if err != nil {
+			t.Fatalf("NewAttributeUse: %v", err)
+		}
+		return u
+	}
+	yes, no := true, false
+	if !s.attributeUsesIdentical(use(nil), use(&no)) {
+		t.Error(`absent inheritable and inheritable="false" over a false declaration: not identical, want identical`)
+	}
+	if s.attributeUsesIdentical(use(nil), use(&yes)) {
+		t.Error(`absent inheritable and inheritable="true" over a false declaration: identical, want not identical`)
+	}
+}
+
 // vcElem builds a global element declaration of the named type carrying vc as
 // its {value constraint}.
 func vcElem(t *testing.T, local string, typeName QName, vc *ValueConstraint) ElementDeclaration {

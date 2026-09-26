@@ -62,11 +62,12 @@ func inhNamedUse(t *testing.T, name string, inheritable bool, vc *xsd.ValueConst
 }
 
 // inhRefUse is an optional use of lang referring to the top-level declaration
-// (inhGlobal), with the use's own {inheritable}.
-func inhRefUse(t *testing.T, inheritable bool) xsd.AttributeUse {
+// (inhGlobal), with the use's own inheritable attribute (nil where it writes
+// none) and {value constraint}.
+func inhRefUse(t *testing.T, inheritable *bool, vc *xsd.ValueConstraint) xsd.AttributeUse {
 	t.Helper()
 	u, err := xsd.NewAttributeUse(xsderr.Loc{}, false,
-		xsd.AttributeDeclarationRef{Name: local("lang")}, nil, &inheritable)
+		xsd.AttributeDeclarationRef{Name: local("lang")}, vc, inheritable)
 	if err != nil {
 		t.Fatalf("building the lang reference use: %v", err)
 	}
@@ -259,11 +260,37 @@ func TestAttributeUseInheritableWinsOverItsDeclarations(t *testing.T) {
 		use, decl bool
 	}{{use: false, decl: true}, {use: true, decl: false}} {
 		f := inhFixture{
-			rootUses: []xsd.AttributeUse{inhRefUse(t, tc.use)},
+			rootUses: []xsd.AttributeUse{inhRefUse(t, &tc.use, nil)},
 			global:   func(b *xsd.SchemaBuilder) { b.AddAttribute(inhGlobal(t, tc.decl)) },
 		}
 		inhWantSelected(t, cAssess(t, f.schema(t), inhDoc("de", "", "")), tc.use,
 			"the use's {inheritable} against the declaration's")
+	}
+}
+
+// A use referring to the top-level declaration with no inheritable attribute
+// of its own has the declaration's {inheritable} (§3.2.2.3 ref.att.local), and
+// clause 3.1 reads that: <root>'s lang reaches <leaf> exactly where the
+// declaration is inheritable, for a specified lang (walk.inheritable) and for
+// one the use supplies as a ·defaulted attribute· (walk.handedDown) (#1682).
+func TestRefUseWithoutInheritableTakesItsDeclarations(t *testing.T) {
+	de := xsd.NewValueConstraint(xsd.ValueDefault, "de", nil, nil)
+	for _, tc := range []struct {
+		decl bool
+		vc   *xsd.ValueConstraint
+		doc  *testElement
+		why  string
+	}{
+		{true, nil, inhDoc("de", "", ""), "a specified lang, declaration {inheritable} true"},
+		{false, nil, inhDoc("de", "", ""), "a specified lang, declaration {inheritable} false"},
+		{true, &de, inhDoc("", "", ""), "a defaulted lang, declaration {inheritable} true"},
+		{false, &de, inhDoc("", "", ""), "a defaulted lang, declaration {inheritable} false"},
+	} {
+		f := inhFixture{
+			rootUses: []xsd.AttributeUse{inhRefUse(t, nil, tc.vc)},
+			global:   func(b *xsd.SchemaBuilder) { b.AddAttribute(inhGlobal(t, tc.decl)) },
+		}
+		inhWantSelected(t, cAssess(t, f.schema(t), tc.doc), tc.decl, tc.why)
 	}
 }
 
