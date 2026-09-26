@@ -251,9 +251,12 @@ func (s *Schema) ResolvedInheritable(u AttributeUse) bool {
 		return true
 	case inheritFalse:
 		return false
+	case inheritAbsent:
+		d, ok := s.ResolvedAttributeDeclaration(u)
+		return ok && d.Inheritable()
+	default:
+		panic("xsd: ResolvedInheritable: non-exhaustive inheritableSpec switch")
 	}
-	d, ok := s.ResolvedAttributeDeclaration(u)
-	return ok && d.Inheritable()
 }
 
 // checkBindingSubsumes charges c-ran clause 3 when general does not ·subsume·
