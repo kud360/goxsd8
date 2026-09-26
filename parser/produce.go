@@ -107,9 +107,9 @@ const (
 // Composition section), so a type= into a foreign namespace needs an <import>
 // element naming it here as much as it does under [Parse]. One of them also
 // SUPPLIES components: an <import> of the §1.3.2 XML namespace is answered with
-// that namespace's four built-in attribute declarations
-// (parser/produce_xmlnamespace.go), a construction rather than a fetch
-// (§4.2.6.1) and so as available here as under [Parse].
+// that namespace's four built-in attribute declarations and its xml:specialAttrs
+// attribute group definition (parser/produce_xmlnamespace.go), a construction
+// rather than a fetch (§4.2.6.1) and so as available here as under [Parse].
 //
 // backend is passed explicitly rather than defaulted to a builtin/strict policy
 // here: that default belongs to [Parse], keeping this leaf free of a
@@ -471,7 +471,7 @@ type identityConstraintSource struct {
 // <attribute ref="xsi:type"/> resolves at finalize instead of being charged
 // src-resolve clause 1.2.
 //
-// The XML namespace's declarations are NOT seeded here, and the asymmetry is
+// The XML namespace's components are NOT seeded here, and the asymmetry is
 // src-resolve clause 4.2's: they are supplied CONDITIONALLY, by addXMLNamespace
 // (produce_xmlnamespace.go), from each caller of this function once the whole
 // document set is known. Nothing seeded here is conditional on anything.

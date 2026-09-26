@@ -873,7 +873,7 @@ type fetched struct {
 // Default Valid checks (a-props-correct clause 2, au-props-correct clause
 // 2) decide rather than fail open — see [Produce] for the full statement.
 //
-// The XML namespace's built-in declarations are added once beside those
+// The XML namespace's built-in components are added once beside those
 // builtins, by addXMLNamespace, and only HERE rather than at the <import> that
 // asks for them: whether they are supplied at all turns on the FINISHED
 // document set (supplyXMLNamespace), which no single <import> element knows.
