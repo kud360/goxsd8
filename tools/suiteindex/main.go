@@ -52,8 +52,8 @@
 //
 // ELEMENT names take the `|` join only, which is how a FEATURE spelled by
 // more than one element is censused in one query:
-// `openContent|defaultOpenContent` bounds the `{open content}` population
-// from above, and CLAUDE.md's suiteindex paragraph says why (#1554).
+// `openContent|defaultOpenContent` censuses `{open content}`, and CLAUDE.md's
+// suiteindex paragraph says how far that figure holds (#1554).
 // The `,` join is refused in that position rather than matching nothing — no
 // element carries two names at once — and a query naming more than one of
 // them always prints the element each hit was, since the query no longer

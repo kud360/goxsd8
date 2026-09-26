@@ -96,10 +96,10 @@ own output; neither exits non-zero.
 
 `suiteindex` censuses `testdata/xsdtests` by construct — namespace URI plus
 local name, in whatever encoding and prefix each fixture spells it with — so
-predict ratchet movement from its output rather than from a grep, which
-under-predicted three landings running (#1239). An absent submodule is a
-supported mode here too: it says so and exits 0. A `<query>` names an element
-and, optionally, its attributes, `element@targetNamespace`, in these shapes:
+predict ratchet movement from its output rather than from a grep (#1239). An
+absent submodule is a supported mode here too: it says so and exits 0. A
+`<query>` names an element and, optionally, its attributes,
+`element@targetNamespace`, in these shapes:
 
 - **`|` — ANY of the names.** Between element names it censuses a FEATURE as
   the union of every element that establishes it:
@@ -122,12 +122,14 @@ and, optionally, its attributes, `element@targetNamespace`, in these shapes:
   matching `A`, at any depth: `'*@maxOccurs//*@maxOccurs'` is every
   `maxOccurs` inside another one (#1585).
 
-Two of those shapes bound their population from above rather than count it.
-A `|` feature census over-counts, because `<openContent mode="none">`
-establishes nothing (#1554). A `//` census resolves no `<element ref>` or
-`<group ref>`, so its figure is wrong in both directions against a population
-of resolved components; read the caveat it prints before quoting the figure
-(#1585).
+Quote neither a `|` feature census nor a `//` census as a count of resolved
+components: each figure is lexical, and wrong in both directions against that
+population. A `|` census over-counts, because `<openContent mode="none">`
+establishes nothing and a `<defaultOpenContent>` can miss its `appliesToEmpty`
+gate (`dcl.ctd.ctcc.common` 6.1, 5.2); it under-counts, because an extension
+inherits its base's `{open content}` with neither element of its own (4.2.2,
+4.2.3.3) (#1554). A `//` census resolves no `<element ref>` or `<group ref>`;
+read the caveat it prints before quoting the figure (#1585).
 
 Join a census through `conformance/testdata/expectations/<lane>.txt`, the
 lane whose score the prediction is about, with the `casejoin join` pipeline
