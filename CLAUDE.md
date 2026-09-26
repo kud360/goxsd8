@@ -121,6 +121,13 @@ absent submodule is a supported mode here too: it says so and exits 0. A
 - **`//` — nesting.** `A//B` admits a match of `B` only inside an element
   matching `A`, at any depth: `'*@maxOccurs//*@maxOccurs'` is every
   `maxOccurs` inside another one (#1585).
+- **`=` — the resolved QName value.** The test applies to every listed
+  attribute, per whitespace-separated token, resolved against that
+  occurrence's own bindings; operands are braced Clark names or `UNBOUND`,
+  joined by `|`:
+  `'*@type|base|itemType|memberTypes={http://www.w3.org/2001/XMLSchema}ENTITY'`
+  is every direct reference to `xs:ENTITY`, and its caveat says what it does
+  not resolve (#1671).
 
 Quote neither a `|` feature census nor a `//` census as a count of resolved
 components: each figure is lexical, and wrong in both directions against that
