@@ -202,6 +202,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -1190,6 +1191,8 @@ func markUnclosed(hits []hit, open []openElem) {
 // An element carrying none of the attribute names a `|` query lists is not an
 // occurrence, and neither is one carrying no attribute at all under `@*`: an
 // attribute census has nothing to say about an element with no attribute.
+// Under a value test an attribute counts as carried only when it answers the
+// test, so both joins read "answers" where they otherwise read "carries".
 func match(start *xmltree.StartElement, p pattern) ([]attrHit, bool) {
 	if !p.matchesElement(qnameOf(start.Name())) {
 		return nil, false
@@ -1199,7 +1202,7 @@ func match(start *xmltree.StartElement, p pattern) ([]attrHit, bool) {
 	}
 	var got []attrHit
 	for _, want := range p.Attrs {
-		a, ok := attrOn(start, want)
+		a, ok := attrOn(start, want, p.Value)
 		if !ok && p.Join == joinAll {
 			return nil, false
 		}
@@ -1233,14 +1236,67 @@ func axisAttrs(start *xmltree.StartElement, want namePat) ([]attrHit, bool) {
 // document resolved, never the pattern that admitted it, which can be open on
 // either axis. The attribute list is a document-ordered slice, so the first
 // match is the only one a well-formed document can have.
-func attrOn(start *xmltree.StartElement, want namePat) (attrHit, bool) {
+//
+// Under an active value test the attribute is returned only when it answers
+// the test, with every token's resolution recorded; otherwise its hit carries
+// no resolution at all.
+func attrOn(start *xmltree.StartElement, want namePat, v valueTest) (attrHit, bool) {
 	for _, a := range start.Attributes() {
 		name := qnameOf(a.Name())
-		if want.matches(name) {
-			return attrHit{Name: name, Value: a.Value()}, true
+		if !want.matches(name) {
+			continue
 		}
+		h := attrHit{Name: name, Value: a.Value()}
+		if !v.active() {
+			return h, true
+		}
+		h.Resolved = resolveTokens(start, h.Value)
+		return h, slices.ContainsFunc(h.Resolved, v.admits)
 	}
 	return attrHit{}, false
+}
+
+// resolveTokens resolves every token of value as a QName at start. The value
+// is split on XML whitespace whatever attribute carries it: the query, not a
+// schema, asserts that the attribute holds QNames, and a scalar QName holds
+// no whitespace, so it is one token. An empty value has none, so it answers
+// no operand.
+func resolveTokens(start *xmltree.StartElement, value string) []tokenRes {
+	var res []tokenRes
+	for _, tok := range strings.FieldsFunc(value, isXMLSpace) {
+		res = append(res, resolveToken(start, tok))
+	}
+	return res
+}
+
+// resolveToken resolves one token against the bindings in scope at start
+// (Datatypes §3.3.18 via [xmltree.StartElement.LookupPrefix]): an unprefixed
+// token takes the default namespace, or no namespace when none is in scope,
+// and is bound either way. The token splits on its FIRST colon (Namespaces in
+// XML, PrefixedName / UnprefixedName); an empty prefix, an empty local part or
+// a second colon makes it no QName. NCName character validity is not checked:
+// this census resolves bindings and does not validate a lexical space.
+func resolveToken(start *xmltree.StartElement, tok string) tokenRes {
+	prefix, local, prefixed := strings.Cut(tok, ":")
+	if !prefixed {
+		prefix, local = "", tok
+	}
+	if prefixed && (prefix == "" || local == "" || strings.Contains(local, ":")) {
+		return notQNameToken{}
+	}
+	uri, ok := start.LookupPrefix(prefix)
+	if !ok {
+		return unboundToken{}
+	}
+	return boundToken{Name: xsd.QName{Space: uri, Local: local}}
+}
+
+// isXMLSpace reports whether r is XML whitespace (#x20, #x9, #xD, #xA), the
+// only characters a list value is split on. [strings.Fields] would also
+// split on NBSP and the other Unicode spaces, which XSD's whiteSpace
+// collapse does not treat as separators.
+func isXMLSpace(r rune) bool {
+	return strings.ContainsRune("\x20\t\r\n", r)
 }
 
 // qnameOf restates a name the reader resolved in the form the query language
