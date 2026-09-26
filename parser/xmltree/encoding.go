@@ -279,17 +279,17 @@ func (u *utf16Reader) unit(b []byte) uint16 {
 	return uint16(b[1])<<8 | uint16(b[0])
 }
 
-// declaredEncoding returns the value of an XML declaration's encoding
-// pseudo-attribute, or "" when the declaration omits it. inst is the
+// pseudoAttr returns the value of an XML declaration's name pseudo-attribute
+// (encoding, standalone), or "" when the declaration omits it. inst is the
 // declaration's content — everything between "<?xml" and "?>".
-func declaredEncoding(inst string) string {
+func pseudoAttr(inst, name string) string {
 	rest := inst
 	for {
-		at := strings.Index(rest, "encoding")
+		at := strings.Index(rest, name)
 		if at < 0 {
 			return ""
 		}
-		rest = rest[at+len("encoding"):]
+		rest = rest[at+len(name):]
 		value, ok := pseudoAttrValue(rest)
 		if ok {
 			return value

@@ -37,9 +37,14 @@
 //     document's [unparsed entities] property, answered by
 //     Reader.HasUnparsedEntity and final once the document element's start
 //     tag is read. It surfaces as no Node: a prolog fact is not part of the
-//     element/character-data stream. The external subset is never read and
-//     a parameter entity never expanded, so an entity declared only through
-//     either is not a member.
+//     element/character-data stream. Internal parameter entities are
+//     expanded, bounded in depth and size. The external subset is never
+//     read, by design (#1668), nor is an external parameter entity; a
+//     declaration after a parameter-entity reference that is not read is not
+//     processed unless standalone="yes" (XML 1.0 §5.1). An entity declared
+//     only where the reader did not read is not a member, and
+//     Reader.AllDeclarationsProcessed, the [all declarations processed]
+//     property, then reports false.
 //
 // Fuzz targets guard the reader against panics on malformed input
 // (PRINCIPLES 24); malformed XML is an error value, never a crash.

@@ -37,6 +37,14 @@ type Reader struct {
 	// later NDATA declaration of a name already declared parsed declares no
 	// unparsed entity. It is a lookup index only, never iterated.
 	entities map[string]bool
+	// declsUnread is the inverse of [all declarations processed]: the DOCTYPE
+	// named an external subset, or its internal subset referenced a parameter
+	// entity that was not read (see doctypeEntities). Inverted so that the
+	// zero value — no DOCTYPE at all — is the right answer.
+	declsUnread bool
+	// standalone records the XML declaration's standalone="yes" (XML 1.0
+	// §2.9), which the DOCTYPE after it is read under.
+	standalone bool
 }
 
 // frame is one open element: its resolved name (to match the end tag), the
@@ -133,6 +141,9 @@ func (r *Reader) classify(tok xml.Token, off int64) (Node, bool, error) {
 	case xml.CharData:
 		return &CharData{data: string(t), offset: off, loc: loc}, true, nil
 	case xml.ProcInst:
+		if t.Target == "xml" {
+			r.standalone = pseudoAttr(string(t.Inst), "standalone") == "yes"
+		}
 		return nil, false, r.checkDeclaration(t, loc)
 	case xml.Directive:
 		r.declareEntities(t)
@@ -145,13 +156,18 @@ func (r *Reader) classify(tok xml.Token, off int64) (Node, bool, error) {
 }
 
 // declareEntities records the general entity declarations of a DOCTYPE
-// directive at the document level, keeping the first declaration of each name.
-// A directive inside an element is no DOCTYPE and declares nothing.
+// directive at the document level, keeping the first declaration of each name,
+// and whether any declaration went unread. A directive inside an element is no
+// DOCTYPE and declares nothing.
 func (r *Reader) declareEntities(d xml.Directive) {
 	if len(r.stack) > 0 {
 		return
 	}
-	for _, decl := range doctypeEntities(string(d)) {
+	decls, unread := doctypeEntities(string(d), r.standalone)
+	if unread {
+		r.declsUnread = true
+	}
+	for _, decl := range decls {
 		if _, bound := r.entities[decl.name]; bound {
 			continue
 		}
@@ -173,11 +189,27 @@ func (r *Reader) declareEntities(d xml.Directive) {
 // so no declaration can arrive later. Asked earlier, it reports only what has
 // been read so far.
 //
-// The external DTD subset is never read (encoding/xml does not fetch it), nor
-// is a parameter entity expanded, so an unparsed entity declared only there is
-// reported false.
+// The internal subset is read with its internal parameter entities expanded;
+// the external DTD subset is never read, by design (#1668), nor is an external
+// parameter entity, and a declaration after a parameter-entity reference that
+// was not read is not processed unless the document is standalone="yes" (XML
+// 1.0 §5.1). An unparsed entity declared only where the reader did not read
+// is reported false, and AllDeclarationsProcessed then reports false too.
 func (r *Reader) HasUnparsedEntity(name string) bool {
 	return r.entities[name]
+}
+
+// AllDeclarationsProcessed reports the document information item's [all
+// declarations processed] (XML Infoset §2.1): whether the reader read the
+// complete DTD. It is false when the DOCTYPE names an external subset, which
+// is never read, or when the internal subset references a parameter entity
+// the reader did not read (see HasUnparsedEntity), whatever the document's
+// standalone declaration says.
+//
+// The answer is final once Token has returned the document element's
+// StartElement, on HasUnparsedEntity's terms.
+func (r *Reader) AllDeclarationsProcessed() bool {
+	return !r.declsUnread
 }
 
 // checkDeclaration enforces XML 1.0 §4.3.3's fatal error: "it is a fatal error
@@ -192,7 +224,7 @@ func (r *Reader) checkDeclaration(pi xml.ProcInst, loc xsderr.Loc) error {
 	if pi.Target != "xml" {
 		return nil
 	}
-	name := declaredEncoding(string(pi.Inst))
+	name := pseudoAttr(string(pi.Inst), "encoding")
 	if name == "" || r.bom.agreesWith(name) {
 		return nil
 	}
