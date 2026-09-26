@@ -372,7 +372,7 @@ func TestDatatypesFacetsShapeGuard(t *testing.T) {
 	anyURIDir := filepath.Join(suiteRoot, "msData", "datatypes", "Facets", "anyURI")
 
 	// The canonical single-<foo> shape is read: value and base recovered.
-	raw, base, children, _, ok := readFacetsCase(filepath.Join(anyURIDir, "anyURI_length001.xml"))
+	raw, base, children, _, ok := readFacetsCase(caseSpec{doc: filepath.Join(anyURIDir, "anyURI_length001.xml")})
 	if !ok {
 		t.Fatal("readFacetsCase must accept the canonical single-<foo> anyURI_length001 shape")
 	}
@@ -383,10 +383,89 @@ func TestDatatypesFacetsShapeGuard(t *testing.T) {
 	// The out-of-cohort shapes are declined: zero <foo> (b001) and multiple <foo>
 	// (b006) both fail the exactly-one guard.
 	for _, rel := range []string{"anyURI_b001.xml", "anyURI_b006.xml"} {
-		if _, _, _, _, ok := readFacetsCase(filepath.Join(anyURIDir, rel)); ok {
+		if _, _, _, _, ok := readFacetsCase(caseSpec{doc: filepath.Join(anyURIDir, rel)}); ok {
 			t.Errorf("readFacetsCase(%s) must decline the out-of-cohort shape (not exactly one <foo>)", rel)
 		}
 	}
+}
+
+// TestFacetsSchemaPathPrecedence pins which schema document readFacetsCase reads
+// (issue #591). The instance's own xsi:noNamespaceSchemaLocation wins over the
+// test group's schema document whenever both are present; the group's is the
+// fallback only for an instance naming none. Most suite fixtures name the same
+// document both ways, so only a disagreeing pair can tell the two orders apart:
+// here the instance's own schema restricts xs:string and the group's xs:decimal.
+func TestFacetsSchemaPathPrecedence(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name, content string) string {
+		t.Helper()
+		p := filepath.Join(dir, name)
+		if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+			t.Fatalf("writing %s: %v", name, err)
+		}
+		return p
+	}
+	schema := func(base string) string {
+		return `<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:element name="foo"><xsd:simpleType>
+    <xsd:restriction base="xsd:` + base + `"><xsd:maxLength value="5"/></xsd:restriction>
+  </xsd:simpleType></xsd:element>
+</xsd:schema>`
+	}
+	write("own.xsd", schema("string"))
+	groupSchema := write("group.xsd", schema("decimal"))
+	withLoc := write("with.xml", `<test xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:noNamespaceSchemaLocation="own.xsd"><foo>1</foo></test>`)
+	withoutLoc := write("without.xml", `<test><foo>1</foo></test>`)
+
+	tests := []struct {
+		name     string
+		c        caseSpec
+		wantBase string
+		wantOK   bool
+	}{
+		{"own location wins", caseSpec{doc: withLoc, schemaDoc: groupSchema}, "string", true},
+		{"group schema is the fallback", caseSpec{doc: withoutLoc, schemaDoc: groupSchema}, "decimal", true},
+		{"neither names a schema", caseSpec{doc: withoutLoc}, "", false},
+		{"several group documents", caseSpec{doc: withoutLoc, schemaDoc: groupSchema, schemaExtraDocs: []string{groupSchema}}, "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, base, _, _, ok := readFacetsCase(tt.c)
+			if base != tt.wantBase || ok != tt.wantOK {
+				t.Errorf("readFacetsCase: base=%q ok=%v, want base=%q ok=%v", base, ok, tt.wantBase, tt.wantOK)
+			}
+		})
+	}
+}
+
+// TestFacetsCaseDecidesAnInstanceNamingNoSchema pins that time_minInclusive006_1163.i
+// is READ, not declined (issue #591): its instance carries no
+// xsi:noNamespaceSchemaLocation, and its test group's schemaTest names
+// time_minInclusive006.xsd. The expectations file cannot show this — a decline and
+// a wrong verdict both bank fail. Skips when the submodule is absent.
+func TestFacetsCaseDecidesAnInstanceNamingNoSchema(t *testing.T) {
+	skipWithoutSuite(t)
+	found, err := parseSuite(suitePath())
+	if err != nil {
+		t.Fatalf("parsing suite: %v", err)
+	}
+	const id = "MS-DataTypes2006-07-15/time_minInclusive006_1163/instance/time_minInclusive006_1163.i"
+	for _, c := range found.cases {
+		if c.id != id {
+			continue
+		}
+		inst, err := decodeFacetsInstance(c.doc)
+		if err != nil || inst.SchemaLoc != "" {
+			t.Fatalf("fixture premise: %s must decode and name no schema itself, got SchemaLoc=%q err=%v", c.doc, inst.SchemaLoc, err)
+		}
+		raw, base, children, _, ok := readFacetsCase(c)
+		if !ok || raw != "13:20:00Z" || base != "time" || len(children) != 2 {
+			t.Errorf("readFacetsCase(%s) = raw=%q base=%q children=%d ok=%v, want raw=13:20:00Z base=time children=2 ok=true", id, raw, base, len(children), ok)
+		}
+		return
+	}
+	t.Fatalf("case %s not discovered", id)
 }
 
 // TestDatatypesAnyURIShapeCohort drives the anyURI a*/b* multi-leaf cohort (issue
@@ -498,7 +577,7 @@ func TestDatatypesQNameFacets(t *testing.T) {
 	qnameDir := filepath.Join(suiteRoot, "msData", "datatypes", "Facets", "QName")
 
 	// A real root-level context is built and the length case is read whole.
-	raw, base, children, ctx, ok := readFacetsCase(filepath.Join(qnameDir, "QName_length001.xml"))
+	raw, base, children, ctx, ok := readFacetsCase(caseSpec{doc: filepath.Join(qnameDir, "QName_length001.xml")})
 	if !ok || base != "QName" || raw != "foofo" || len(children) == 0 {
 		t.Fatalf("readFacetsCase(QName_length001) = raw=%q base=%q children=%d ok=%v, want raw=foofo base=QName children>0 ok=true", raw, base, len(children), ok)
 	}

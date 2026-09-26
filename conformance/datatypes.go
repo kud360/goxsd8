@@ -491,19 +491,23 @@ import (
 // that kind, which readFacetsCase's exactly-one-<foo> reader declines. Outside it,
 // the lane's standing exclusions are unchanged and named elsewhere in this comment:
 // the NIST corpus, UNION variety, the plural list-typed dirs (IDREFS, NMTOKENS),
-// string_pattern002's user-defined list item type, and time_minInclusive006_1163.i.
-// Every one of those is an honest decline (Fail, recorded in the instance lane),
-// never a false accept. time_minInclusive006_1163.i (issue #123) is a recorded gap
-// for a different reason: its instance file carries no xsi:noNamespaceSchemaLocation
-// (a defect in that one suite file), so readFacetsCase cannot resolve its schema and
-// declines it (Fail) rather than guessing the base — an honest decline, not a false
-// accept. The anyURI Facets/anyURI/anyURI_a*.xml and anyURI_b*.xml cases, honest
-// declines from the #124 landing, are now DECIDED by their own reader and executor —
-// see "The anyURI a*/b* multi-leaf cohort (issue #190)" above; readFacetsCase itself
-// still decodes only the canonical single-<foo> shape and still declines everything
-// else, including those eight files should they ever reach it. Of the
-// anyURI/hexBinary/ base64Binary cases, readFacetsCase decides the
-// length/minLength/maxLength/ enumeration ones in the canonical <test><foo> shape.
+// and string_pattern002's user-defined list item type. Every one of those is an
+// honest decline (Fail, recorded in the instance lane), never a false accept. An
+// instance that carries no xsi:noNamespaceSchemaLocation is not one of them: the
+// suite does not require that attribute, since its catalog pairs an instance with
+// its schema through the <testGroup>'s schemaTest, so readFacetsCase falls back
+// to that schema document (facetsSchemaPath, issue #591) — which is how
+// time_minInclusive006_1163.i is decided. decimal_totalDigits004_1060.v carries no
+// such attribute either, but is still declined for its instance shape — a root
+// attribute rather than a <foo> leaf, which readFacetsCase refuses before any
+// schema is looked up (issue #593). The anyURI Facets/anyURI/anyURI_a*.xml and
+// anyURI_b*.xml cases, honest declines from the #124 landing, are now DECIDED by
+// their own reader and executor — see "The anyURI a*/b* multi-leaf cohort (issue
+// #190)" above; readFacetsCase itself still decodes only the canonical single-<foo>
+// shape and still declines everything else, including those eight files should they
+// ever reach it. Of the anyURI/hexBinary/ base64Binary cases, readFacetsCase decides
+// the length/minLength/maxLength/ enumeration ones in the canonical <test><foo>
+// shape.
 
 // synthNS namespaces the anonymous leaf types the facet cohort synthesizes. It
 // is deliberately outside xsd.XMLSchemaNS so a synthesized leaf is never mistaken
@@ -1187,7 +1191,7 @@ func buildListRestrictionFacets(children []facetChild) ([]xsd.Facet, bool) {
 // cannot be read, or that pairs an inapplicable facet with its primitive is
 // declined (Fail, a recorded gap) rather than mis-decided or crashed.
 func execFacetsCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c caseSpec) Status {
-	raw, base, children, ctx, ok := readFacetsCase(c.doc)
+	raw, base, children, ctx, ok := readFacetsCase(c)
 	if !ok {
 		return Fail()
 	}
@@ -2614,18 +2618,21 @@ func enumerationMember(ch facetChild) xsd.EnumerationMember {
 	return xsd.NewEnumerationMember(ch.value, binds, def)
 }
 
-// readFacetsCase reads one facet-cohort instance: the tested value (the <foo>
-// leaf text, un-normalized — ValidateLexical's whiteSpace stage normalizes it)
-// and, from the schema at the instance's noNamespaceSchemaLocation, the
-// restriction's base primitive and facet children. ok is false when either
-// document cannot be read for this shape.
-func readFacetsCase(instancePath string) (raw, base string, children []facetChild, ctx value.Context, ok bool) {
-	inst, err := decodeFacetsInstance(instancePath)
-	if err != nil || inst.SchemaLoc == "" || len(inst.Foos) != 1 {
+// readFacetsCase reads one facet-cohort instance case: the tested value (the
+// <foo> leaf text, un-normalized — ValidateLexical's whiteSpace stage normalizes
+// it) and, from the schema document facetsSchemaPath picks, the restriction's
+// base primitive and facet children. ok is false when either document cannot be
+// read for this shape.
+func readFacetsCase(c caseSpec) (raw, base string, children []facetChild, ctx value.Context, ok bool) {
+	inst, err := decodeFacetsInstance(c.doc)
+	if err != nil || len(inst.Foos) != 1 {
 		return "", "", nil, nil, false
 	}
 	foo := inst.Foos[0]
-	schemaPath := filepath.Join(filepath.Dir(instancePath), filepath.FromSlash(inst.SchemaLoc))
+	schemaPath, ok := facetsSchemaPath(c, inst.SchemaLoc)
+	if !ok {
+		return "", "", nil, nil, false
+	}
 	base, attrName, children, ok := decodeRestriction(schemaPath)
 	if !ok || base == "" || len(children) == 0 {
 		return "", "", nil, nil, false
@@ -2648,6 +2655,24 @@ func readFacetsCase(instancePath string) (raw, base string, children []facetChil
 		return v, base, children, ctx, true
 	}
 	return foo.Text, base, children, ctx, true
+}
+
+// facetsSchemaPath picks the schema document a facet-cohort case is read against.
+// The instance's own xsi:noNamespaceSchemaLocation (schemaLoc, resolved against
+// the instance's directory) is authoritative where present. Otherwise it is the
+// schema document the case's test group names (c.schemaDoc): the catalog pairs
+// that schema with the instance whether or not the instance repeats it. A group
+// naming several schema documents is declined rather than read as its first,
+// since decodeRestriction reads one document. ok is false when neither names a
+// document.
+func facetsSchemaPath(c caseSpec, schemaLoc string) (string, bool) {
+	if schemaLoc != "" {
+		return filepath.Join(filepath.Dir(c.doc), filepath.FromSlash(schemaLoc)), true
+	}
+	if c.schemaDoc == "" || len(c.schemaExtraDocs) != 0 {
+		return "", false
+	}
+	return c.schemaDoc, true
 }
 
 // facetsInstance mirrors the Facets cohort's instance shape: a <test> root whose
