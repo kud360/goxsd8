@@ -64,11 +64,7 @@ landcheck: squash text: "Closed #625" binds #625, which a "names and leaves open
 	t.Run("2355fe0 squash: the contradiction alone names all five", func(t *testing.T) {
 		requireFixtures(t, dir, fixtureCommaFormBase, fixtureCommaFormHead)
 		body := commitText(t, dir, fixtureCommaFormHead)
-		bs, err := findBindings(body)
-		if err != nil {
-			t.Fatalf("findBindings: %v", err)
-		}
-		got, err := leftOpen(body, bs)
+		got, err := leftOpen(body)
 		if err != nil {
 			t.Fatalf("leftOpen: %v", err)
 		}
@@ -125,11 +121,6 @@ func TestCheckClosingKeywords(t *testing.T) {
 			wantOutput: "landcheck: t: closing keywords bind #625\n",
 		},
 		{
-			name:       "one sentence binds one issue and leaves another open: clean",
-			body:       "Closes #625 and names and leaves open #830.",
-			wantOutput: "landcheck: t: closing keywords bind #625\n",
-		},
-		{
 			name:       "one Closes sentence per issue: clean",
 			body:       "Closes #669. Closes #625. Closes #748.",
 			wantOutput: "landcheck: t: closing keywords bind #669 #625 #748\n",
@@ -170,6 +161,40 @@ func TestCheckClosingKeywords(t *testing.T) {
 			body:       "Closes #625. Names and leaves open #625.",
 			wantCode:   1,
 			wantOutput: "landcheck: t: \"Closes #625\" binds #625, which a \"names and leaves open\" or \"not closing keywords\" clause also names\n",
+		},
+		{
+			name:       "one sentence binds an issue inside its own leave-open clause",
+			body:       "Closes #625 and names and leaves open #830.",
+			wantCode:   1,
+			wantOutput: "landcheck: t: \"Closes #625\" binds #625, which a \"names and leaves open\" or \"not closing keywords\" clause also names\n",
+		},
+		{
+			name:       "the binding itself sits in a not-closing-keywords clause",
+			body:       "Fixes #12 here is not closing keywords.",
+			wantCode:   1,
+			wantOutput: "landcheck: t: \"Fixes #12\" binds #12, which a \"names and leaves open\" or \"not closing keywords\" clause also names\n",
+		},
+		{
+			name:       "an abbreviation's period does not end the leave-open clause",
+			body:       "Closes #5. Names and leaves open, e.g. #5.",
+			wantCode:   1,
+			wantOutput: "landcheck: t: \"Closes #5\" binds #5, which a \"names and leaves open\" or \"not closing keywords\" clause also names\n",
+		},
+		{
+			name:       "cf., vs. and viz. do not end the leave-open clause",
+			body:       "Closes #5. Names and leaves open, cf. #6 vs. #7 viz. #5.",
+			wantCode:   1,
+			wantOutput: "landcheck: t: \"Closes #5\" binds #5, which a \"names and leaves open\" or \"not closing keywords\" clause also names\n",
+		},
+		{
+			name:       "a blank line after an abbreviation's letters still ends the clause: clean",
+			body:       "Closes #5 vs\n\nnames and leaves open #6",
+			wantOutput: "landcheck: t: closing keywords bind #5\n",
+		},
+		{
+			name:       "an undotted abbreviation outside the list ends the clause: the GAP(landcheck) false accept",
+			body:       "Closes #5. Names and leaves open #6 etc. and #5.",
+			wantOutput: "landcheck: t: closing keywords bind #5\n",
 		},
 		{
 			name:       "keyword, reference and phrase across line breaks",
