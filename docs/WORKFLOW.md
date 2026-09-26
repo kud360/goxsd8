@@ -267,7 +267,11 @@ To name an issue WITHOUT closing it, write **names and leaves open** —
 never a closing keyword (`close`, `closes`, `closed`, `fix`, `fixes`,
 `fixed`, `resolve`, `resolves`, `resolved`) in a negated clause or a
 list heading. The binding holds whatever the surrounding prose means,
-and a line break does not break it (#1034).
+and a line break does not break it (#1034). GitHub closes from the squash
+text and the PR description both, so `go tool landcheck` reads the two
+planned texts before the PR opens (`-squash <file> -pr-body <file>`) and
+exits 1 on the comma form or on a keyword whose bound `#<N>` a *names and
+leaves open* or *not closing keywords* clause also names (#1178).
 
 The LOG entry comes due here and nowhere earlier. `/develop` step 5
 (Judge) runs before step 6 (Land), where the chronicler writes it, so the
@@ -289,10 +293,12 @@ is anyone else's to volunteer:
    land (PRINCIPLES 29). A pass that closes no issue — a `post-land`
    stamp, a `/backlog` run — has no number to grep for: its entry is due
    by the same rule and this check has nothing to say about it. `go tool
-   landcheck -issue <N>` runs this precondition and precondition 2's
-   merge-base-current requirement together (#963) — exit 0 clean, 1 if
-   this precondition's grep fails, 2 if the base is stale or the tool
-   cannot run; hand-run the grep above only when the tool is unavailable.
+   landcheck -issue <N> -squash <file> -pr-body <file>` runs this
+   precondition and precondition 2's merge-base-current requirement
+   together (#963), then the closing-keyword check above — exit 0 clean,
+   1 if this precondition's grep or the closing-keyword check fails, 2 if
+   the base is stale or the tool cannot run; hand-run the grep above only
+   when the tool is unavailable.
    Both read the local `HEAD` while the PR merges the pushed head, so
    `landcheck` first exits 1 while `git rev-list @{u}..HEAD` is non-empty
    and 2 when `HEAD` is behind its upstream or has none, and a hand-run
@@ -335,7 +341,10 @@ is anyone else's to volunteer:
 **A PR that closes no issue is verified by the agent that opens it**,
 which verifies and states these preconditions in the orchestrating
 session's place — the cartographer for its own `post-land` PR.
-Precondition 1 already says what it has to say here. Precondition 2 binds
+Precondition 1 already says what it has to say here. `go tool landcheck
+-no-issue -squash <file> -pr-body <file>` checks the pushed head and
+precondition 2 as above, and exits 1 on every bound closing keyword in
+either text, since a PR of this shape closes nothing (#1178). Precondition 2 binds
 with nothing keyed on a verdict: `git log HEAD..origin/main` is empty,
 and a branch that is behind merges forward and re-runs the gate.
 Precondition 3 does not bind — the pass is held end to end by the agent
