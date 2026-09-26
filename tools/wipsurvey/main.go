@@ -46,16 +46,22 @@
 // PR for a day with a /backlog pass's whole log entry on it, in a
 // namespace no survey read (#1627). Each such row prints `git rev-list
 // --left-right --count <main>...<ref>`'s pair and says in words when
-// ahead is nonzero. A checkout that never fetched the ref's tip cannot
-// count either side, and that row prints the counts as undecided rather
-// than as a zero nothing measured — the posture the tip age already
-// takes.
+// ahead is nonzero: STRANDED PASS when one of those commits' subjects
+// opens `meta: backlog `, AHEAD OF MAIN otherwise. A pass whose docs PR
+// never merges strands its PLAN.md stamp and LOG entry, and those PRs are
+// closed rather than left open, so only the ref still shows it (#1705). A
+// checkout that never fetched the ref's tip cannot count either side, and
+// neither can a shallow one, which counts only its visible history and
+// reads every stale head as far ahead; that row prints the counts as
+// undecided rather than as a number nothing measured — the posture the
+// tip age already takes.
 //
 // A maintenance command's short-lived branch is such a head between its
-// push and its squash-merge, so it prints in that section, ahead>0, while
-// it is landing. Nothing is owed on it and nothing distinguishes it there
-// from a branch whose merge never happened, which is the same reading a
-// human does on every row of the section.
+// push and its squash-merge, so it prints in that section, ahead>0 — a
+// /backlog pass's as STRANDED PASS — while it is landing. Nothing is owed
+// on it and nothing distinguishes it there from a branch whose merge never
+// happened, which is the same reading a human does on every row of the
+// section.
 //
 // ls-remote reports only a SHA per branch, not a date, so each tip's
 // commit time still comes from the local object store (`git log -1
@@ -117,7 +123,7 @@
 //
 // Usage:
 //
-//	git fetch origin
+//	git fetch origin   # git fetch --unshallow origin, in a shallow clone
 //	gh issue list --state all --json number,state,labels,comments | go tool wipsurvey
 //	gh issue list --state all --json number,state,labels | go tool wipsurvey  # empty claims stay CLAIMED
 //	go tool wipsurvey < /dev/null   # issue data omitted: lease-only report
@@ -229,9 +235,13 @@ func run(stdout, stderr io.Writer, stdin io.Reader, now time.Time) error {
 	}
 	sortRows(rows)
 
+	shallow, err := gitShallow()
+	if err != nil {
+		return err
+	}
 	others := make([]otherRow, 0, len(buckets.others))
 	for _, ref := range buckets.others {
-		counts, err := gitAheadBehind(ref.sha, buckets.mainSHA)
+		counts, err := gitAheadBehind(ref.sha, buckets.mainSHA, shallow)
 		if err != nil {
 			return fmt.Errorf("resolving ahead/behind for %s: %w", ref.ref, err)
 		}
@@ -544,21 +554,49 @@ func netDiffFromExit(code int) netDiff {
 // aheadBehind is how a head outside the surveyed namespaces stands
 // against main. ahead is the count that matters: a ref main cannot reach
 // carries commits main does not have, which is the one state on such a
-// ref owed a human's attention rather than a deletion.
+// ref owed a human's attention rather than a deletion. backlogSubject is
+// the subject of the newest of those commits a /backlog pass wrote, empty
+// when none is: that ref strands a PLAN.md stamp and a LOG entry (#1705).
 type aheadBehind struct {
-	ahead  int
-	behind int
+	ahead          int
+	behind         int
+	backlogSubject string
+}
+
+// backlogPassPrefix opens the subject of every /backlog pass's commit. The
+// trailing space is load-bearing: `meta: recover stranded 2026-09-21
+// backlog LOG entry` is a recovery, not a pass.
+const backlogPassPrefix = "meta: backlog "
+
+// backlogSubject returns the first of subjects that a /backlog pass wrote,
+// or "" when none is. Given `git log --format=%s <main>..<ref>`'s lines,
+// newest first, that is the newest pass the ref strands. It is pure, so
+// tests exercise it directly against literal subjects.
+func backlogSubject(subjects []string) string {
+	for _, s := range subjects {
+		if strings.HasPrefix(s, backlogPassPrefix) {
+			return s
+		}
+	}
+	return ""
 }
 
 // gitAheadBehind counts how far the ref at sha stands from mainSHA in each
-// direction. It returns nil, with no error, when the question cannot be
-// answered here: mainSHA is empty, or git cannot resolve one of the two
-// objects (a tip this checkout never fetched, which exits 128). That
-// mirrors gitTip's and gitAncestry's posture, for this tool's usual
-// reason — a zero printed where nothing was counted is exactly the
-// reading this section exists to make impossible.
-func gitAheadBehind(sha, mainSHA string) (*aheadBehind, error) {
-	if mainSHA == "" {
+// direction, and names the /backlog pass among the commits ahead. It
+// returns nil, with no error, when the question cannot be answered here:
+// mainSHA is empty, the checkout is shallow, or git cannot resolve one of
+// the two objects (a tip this checkout never fetched, which exits 128).
+// That mirrors gitTip's and gitAncestry's posture, for this tool's usual
+// reason — a zero printed where nothing was counted is exactly the reading
+// this section exists to make impossible.
+//
+// A shallow checkout does not fail these range queries; it answers them
+// from the visible history, so a stale head counts hundreds of commits
+// ahead and its subjects include every old /backlog pass main's truncated
+// history does not reach (docs/ROUTINES.md, #1705). Its counts are therefore undecided,
+// never taken.
+func gitAheadBehind(sha, mainSHA string, shallow bool) (*aheadBehind, error) {
+	if mainSHA == "" || shallow {
 		return nil, nil
 	}
 	out, err := exec.Command("git", "rev-list", "--left-right", "--count", mainSHA+"..."+sha).Output()
@@ -573,7 +611,42 @@ func gitAheadBehind(sha, mainSHA string) (*aheadBehind, error) {
 	if err != nil {
 		return nil, fmt.Errorf("counting %s against main: %w", sha, err)
 	}
+	if counts.ahead == 0 {
+		return &counts, nil
+	}
+	out, err = exec.Command("git", "log", "--format=%s", mainSHA+".."+sha, "--").Output()
+	if errors.As(err, &exitErr) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("running git log --format=%%s %s..%s: %w", mainSHA, sha, err)
+	}
+	counts.backlogSubject = backlogSubject(strings.Split(string(out), "\n"))
 	return &counts, nil
+}
+
+// gitShallow asks whether this checkout is shallow, which gitAheadBehind
+// must know before it takes any count.
+func gitShallow() (bool, error) {
+	out, err := exec.Command("git", "rev-parse", "--is-shallow-repository").Output()
+	if err != nil {
+		return false, fmt.Errorf("running git rev-parse --is-shallow-repository: %w", err)
+	}
+	return parseShallow(string(out))
+}
+
+// parseShallow parses `git rev-parse --is-shallow-repository`'s single
+// line. Anything but "true" or "false" is an error rather than a guess:
+// git before 2.15 echoes the unknown flag back, and reading that as "not
+// shallow" would take every count this guard exists to withhold.
+func parseShallow(output string) (bool, error) {
+	switch strings.TrimSpace(output) {
+	case "true":
+		return true, nil
+	case "false":
+		return false, nil
+	}
+	return false, fmt.Errorf("malformed rev-parse --is-shallow-repository output %q: expected \"true\" or \"false\"", output)
 }
 
 // parseAheadBehind parses `git rev-list --left-right --count
@@ -1121,13 +1194,18 @@ func sortOtherRows(rows []otherRow) {
 }
 
 // otherNote is one such row's NOTE cell, and the ahead>0 case is the one
-// the section exists for, so it is the only one that shouts. An unfetched
-// tip is reported as undecided and never as a zero: "ahead=0" is the whole
-// claim that nothing is at risk on the ref, and this tool does not make
-// that claim on a count it could not take.
+// the section exists for, so it is the only one that shouts — naming a
+// stranded /backlog pass apart from the rest, since that ref holds a write-up
+// no later pass re-derives (#1705). An uncounted ref is reported as
+// undecided and never as a zero: "ahead=0" is the whole claim that nothing
+// is at risk on the ref, and this tool does not make that claim on a count
+// it could not take.
 func otherNote(r otherRow) string {
 	if r.counts == nil {
-		return "ahead/behind undecided -- run `git fetch origin`"
+		return "ahead/behind undecided -- run `git fetch origin`, or `git fetch --unshallow origin` in a shallow clone"
+	}
+	if r.counts.backlogSubject != "" {
+		return "STRANDED PASS -- `" + r.counts.backlogSubject + "` never reached main; recover its PLAN.md and LOG write-up before deleting"
 	}
 	if r.counts.ahead > 0 {
 		return "AHEAD OF MAIN -- carries commits main does not have; triage before deleting"
