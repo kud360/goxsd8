@@ -127,32 +127,31 @@ Invariants:
   alive is the tip's timestamp
   (`git log -1 --format=%cI origin/wip/issue-<N>`) against the **2h claim
   TTL**: newer is LIVE — off-limits, and so is its issue; older is
-  EXPIRED — resumable. Checkpoint pushes are therefore the lease
-  heartbeat; a long step pushes intermediate commits rather than letting
-  its lease lapse, and a step that produces nothing to commit pushes
-  `git commit --allow-empty` instead — the first such push is also what
-  gives a bare claim a tip of its own to be dated by. **Push a heartbeat
-  immediately before every delegation**: the orchestrator cannot push while
-  a subagent round runs, so the round's whole life must fit inside the TTL
-  that push starts (#1493). A branch that has
-  pushed **no commits of its own** has no tip time of its own — its tip is
-  the landing it branched from, so no tip-age reading may date it or
-  retire it (#722). **Its lease is dated by the newest thread comment
-  whose body opens with `RESUME:` or `TAKEOVER:`**, against the same 2h
-  TTL. No other comment dates it: a `GROUNDING:`, a verdict, a `MASON:`
-  account and a planning note each record work already done, not a session
-  still holding the branch. Past the TTL the claim is takeable. With **no
-  such comment ever posted** it is not: the claim is pushed before its
-  first heartbeat, so an undated claim is as likely seconds old as
-  abandoned, and it stays CLAIMED until a human or a session settles it
-  from the thread. **Taking over is how every resume begins**, an EXPIRED
-  branch as much as a takeable CLAIMED one: post the `TAKEOVER:` comment
-  naming the branch tip you found and its age, then push the heartbeat
-  before any other work — which makes the ref the arbiter of the race,
-  exactly as it is everywhere else, and a rejected heartbeat means another
-  session holds the branch: fetch and pick again (#867, #1469). The comment
-  states what you read (tip, age, diff against main), never a cause you did
-  not measure — a lapsed lease cannot tell a dead round from a slow one.
+  EXPIRED — resumable.
+- **Checkpoint pushes are the lease heartbeat.** A long step pushes
+  intermediate commits rather than letting its lease lapse, and a step
+  that produces nothing to commit pushes `git commit --allow-empty` instead.
+  **Push one immediately before every delegation**: the orchestrator cannot
+  push while a subagent round runs, so the round's whole life must fit
+  inside the TTL that push starts (#1493).
+- **A branch with no commits of its own is dated by its thread.** Its tip
+  is the landing it branched from, so no tip-age reading may date it or
+  retire it (#722); **the newest thread comment whose body opens with
+  `RESUME:` or `TAKEOVER:`** dates it, against the same 2h TTL. No other
+  comment does: a `GROUNDING:`, a verdict, a `MASON:` account and a
+  planning note record work already done, not a session still holding the
+  branch. With **no such comment ever posted** the claim is not takeable:
+  it is pushed before its first heartbeat, so an undated claim is as likely
+  seconds old as abandoned, and it stays CLAIMED until a human or a session
+  settles it from the thread.
+- **Taking over is how every resume begins**, an EXPIRED branch as much as
+  a takeable CLAIMED one: post the `TAKEOVER:` comment naming the branch
+  tip you found and its age, then push the heartbeat before any other work.
+  The ref is then the arbiter of the race, and a rejected heartbeat means
+  another session holds the branch: fetch and pick again (#867, #1469). The
+  comment states what you read — tip, age, diff against main — never a
+  cause you did not measure: a lapsed lease cannot tell a dead round from a
+  slow one.
 - **Races are settled by git's atomic ref updates, never by force.** A
   rejected push to `wip/*` means you lost the race: fetch, abandon the
   local attempt, pick something else. Force-pushing `wip/*` or `parked/*`
@@ -548,7 +547,8 @@ applied before filing and again before grounding something already filed:
   thread and name the section the body still gets wrong. **A body known to
   be wrong is never landed silently.** `WebFetch` on the issue URL returns
   a small model's summary of the rendered page, never the stored body.
-- **Search the open queue** for the primary file path and identifier. A
+- **Search the open queue** for the primary file path and identifier, the
+  way docs/ROUTINES.md says makes an empty answer mean something (#893). A
   hit is either a duplicate (close one, say which) or an adjacent issue
   (cross-reference both). Never pass a hit silently.
 - **An `## Acceptance` ratchet promise states lane movement and names its
