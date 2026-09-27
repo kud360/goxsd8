@@ -44,9 +44,9 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           # The W3C suite. An absent submodule FAILS the run rather than
           # skipping it (conformance/conformance_test.go: a run that executed
-          # zero cases must never be mistaken for a green one, #309), and
-          # `go test ./...` reaches that test too — so the suite is a
-          # requirement of gate part 1 as much as of part 4.
+          # zero cases must never be mistaken for a green one, #309). Part 4
+          # runs that test; part 1 skips it, and the suite-backed tests part 1
+          # does run read the same checkout.
           submodules: true
 
       - uses: actions/setup-go@v5
@@ -56,7 +56,7 @@ jobs:
           go-version-file: go.mod
 
       - name: gate part 1 — build, test, vet
-        run: go build ./... && go test ./... && go vet ./...
+        run: go build ./... && go test -skip '^TestConformance$' ./... && go vet ./...
 
       # `go tool lint` fetches its version-pinned linter with `go run
       # pkg@version`, which needs network access on a cold module cache
@@ -77,4 +77,4 @@ jobs:
       # on a regression. -v is the gate's own flag and surfaces cases the branch
       # improved but has not banked.
       - name: gate part 4 — conformance (read-only)
-        run: go test ./conformance -run TestConformance -count=1 -v
+        run: go test ./conformance -run TestConformance -count=1 -timeout 30m -v
