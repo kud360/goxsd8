@@ -1200,14 +1200,56 @@ func (s *Schema) someBindingSubsumes(b contentAutomaton, matched []int, p positi
 // GAP(xsd): cases 4 and 5 carry the qualifier "and it does not have a ·governing
 // element declaration·"; when the item DOES have one, case 1 applies even though
 // it was ·attributed· to a wildcard. Whether an item has a ·governing element
-// declaration· is an assessment-episode fact (key-governing-ed), so this static
-// rendering always reports the keyword for a wildcard position. The direction is
-// fail-open in both places it is read: keywordSubsumes answers true for a strict
-// or skip general binding and for every non-skip specific one under lax, so
-// reporting the keyword where case 1 would apply can only miss a rejection. It
-// is the element-side twin of attributeDefaultBinding's case-3 marker and is
-// retired only by an assessment-time consumer, never by a static check.
-// #345 owns the retirement.
+// declaration· is an assessment-episode fact (key-governing-ed clauses 3 and 4
+// resolve it by expanded name against the schema of a real episode, and clause 1
+// lets the processor stipulate one outright), so this static rendering reports
+// the keyword for every wildcard position and never case 1. RULED permanent by
+// #345 (STYLE P3b): no schema shape can conclude that case 1 APPLIES to a
+// wildcard-attributed item, and the real binding is the instance validator's to
+// render. It is the element-side twin of attributeDefaultBinding's case-3
+// marker.
+//
+// The gap is NARROWER than the whole wildcard branch. Two wildcard shapes fall
+// statically outside key-governing-ed clauses 2-4, and for them the keyword
+// returned below is the EXACT key-dft-binding — modulo clause 1's stipulation,
+// which this schema-authoring-time constraint sets aside as
+// attributeDefaultBinding does:
+//
+//   - {process contents} skip. §3.10.4.1's closing Note states that "if the
+//     wildcard has a {process contents} property of skip, then the item has no
+//     ·governing· declaration": clause 2 is unavailable to any
+//     wildcard-attributed item, clause 3 fires only for a strict or lax
+//     ·wildcard particle·, and key-skipped makes the item ·skipped·, which
+//     clause 4.1 excludes. The keyword is case 6, which carries no qualifier.
+//   - {disallowed names} containing defined (notQName="##defined").
+//     cvc-wildcard clause 2.1 makes "the expanded name of I does not ·resolve·
+//     to an element declaration" a precondition of valid attribution to that
+//     wildcard (key-att-to), so the item has no declaration for clause 3 or
+//     clause 4 to resolve to; clauses 4.2 and 4.3 qualify a declaration clause
+//     2.1 has already excluded. sibling is NOT a further exclusion: cvc-wildcard
+//     clause 3 tests ·match· against the declarations ·contained· in the
+//     containing type's content model, not the global ·resolve· that
+//     key-governing-ed clauses 3 and 4 use.
+//
+// The remainder — a strict or lax wildcard whose {disallowed names} does not
+// contain defined — is fail-open by ruling. Both reads of this function are in
+// someBindingSubsumes, as bindingSubsumes' general and specific arguments, and
+// its one consumer, contentModelRestricts, charges clause 2 on a false answer
+// and on nothing else. A keyword reaches the specific side only against another
+// keyword (positionAdmits: no element particle covers a wildcard), and on either
+// side keywordSubsumes answers a remainder keyword at least as permissively as
+// bindingSubsumes answers the case-1 Element Declaration in its place, so
+// reporting the keyword can only miss a charge.
+//
+// This ruling does not cover a strict general keyword against a skip or a
+// ##defined lax specific one: both specific keywords are exact here, so
+// loc-testSubP clause 3 decides that pairing statically and refuses it, and
+// keywordSubsumes accepting it is a real missed reject (W3C suite wildZ008) —
+// excluded here, and filed by this ruling's grounding as #1748.
+//
+// Every subset returns the same wildcardKeywordBinding, so nothing here branches
+// on which one applies (STYLE D3); what differs is only whether that value is
+// exact or fail-open.
 func elementPositionBinding(p position) defaultBinding {
 	switch t := p.term.(type) {
 	case ElementDeclaration:

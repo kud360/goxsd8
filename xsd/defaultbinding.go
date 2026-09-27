@@ -328,12 +328,26 @@ func keywordSubsumes(general wildcardKeywordBinding, specific defaultBinding) bo
 		// through key-dft-binding cases 4/5, whose "does not have a ·governing
 		// element declaration· or a ·governing attribute declaration·" qualifier
 		// is an assessment-episode fact this check cannot settle (see
-		// attributeDefaultBinding's GAP), and XSD 1.0's derivation-ok-restriction
-		// decided this branch by namespace allowance alone. Rejecting would
-		// decline the canonical valid pattern "base carries a ##any wildcard,
-		// restriction names specific attributes or elements" — W3C suite
-		// MS-ComplexType ctG007 and ctO003 declare exactly that VALID. Accepting
-		// is FAIL-OPEN, never a false reject. #345 owns the retirement.
+		// attributeDefaultBinding's and elementPositionBinding's GAPs), and XSD
+		// 1.0's derivation-ok-restriction decided this branch by namespace
+		// allowance alone. Rejecting would decline the canonical valid pattern
+		// "base carries a ##any wildcard, restriction names specific attributes
+		// or elements" — W3C suite MS-ComplexType ctG007 and ctO003 declare
+		// exactly that VALID. RULED permanent by #345 (STYLE P3b), over the
+		// assessment-dependent extent only: specific an Attribute Use, an Element
+		// Declaration, or a lax keyword from a wildcard whose {disallowed names}
+		// does not contain defined — the pairings where a real case-1/2/3 binding
+		// might apply in place of a keyword. There accepting is FAIL-OPEN against
+		// both readers of false: checkKeywordSubsumes charges
+		// derivation-ok-restriction clause 3 on it, and bindingSubsumes hands it
+		// through someBindingSubsumes to contentModelRestricts, which charges
+		// cos-content-act-restrict clause 2; neither charges on true.
+		//
+		// The ruling does NOT cover specific a skip keyword, or a lax keyword from
+		// a ##defined wildcard: elementPositionBinding renders both exactly, so
+		// clause 3 decides the pairing statically and refuses it, and the true
+		// below is a real missed reject for it (W3C suite wildZ008 for skip) —
+		// excluded here, and filed by #345's grounding as #1748.
 		return true
 	default:
 		panic("xsd: keywordSubsumes: non-exhaustive ProcessContents switch")
