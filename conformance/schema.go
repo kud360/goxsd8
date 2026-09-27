@@ -475,7 +475,9 @@ func execSchemaCase(backend value.Backend, c caseSpec) Status {
 
 // The words a schema charge probe answers where a decided case carries no rule
 // to name. Each is parenthesized so no spec rule ID can collide with it.
-// doc.go's GOXSD_DECLINES=1 paragraph owns what each one means.
+// doc.go's GOXSD_DECLINES=1 paragraph owns what chargeAccepted and
+// chargeUnruled mean; chargeDeclined never reaches a decided disagreement
+// (a decline is never a decided case), so doc.go does not define it.
 const (
 	chargeAccepted = "(accepted)"
 	chargeUnruled  = "(unruled)"
