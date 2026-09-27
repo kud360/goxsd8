@@ -593,3 +593,39 @@ func TestSchemaSchZ006RejectedOnRedefinedGroup(t *testing.T) {
 		t.Fatalf("error %q charges MemberType, which nothing redefines", xe)
 	}
 }
+
+// TestSchemaChargeNamesTheRuleBehindTheDecision pins the schema lane's charge
+// probe (lane.charge, issue #1740) on each of its four answers: the rule a real
+// rejection carries, `(accepted)` for an assembly that succeeded, `(unruled)`
+// for a rejection carrying no rule — an <include> with no schemaLocation, the
+// §2.4 clause 1 grammar fault STYLE E2 charges without one (#404) — and
+// `(declined)` for a case assembleCase does not decide. Skips when the
+// submodule is absent.
+func TestSchemaChargeNamesTheRuleBehindTheDecision(t *testing.T) {
+	skipWithoutSuite(t)
+	charge := newSchemaCharge()
+	dir := t.TempDir()
+	unruled := filepath.Join(dir, "unruled.xsd")
+	if err := os.WriteFile(unruled, []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:include/></xs:schema>`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	malformed := filepath.Join(dir, "malformed.xsd")
+	if err := os.WriteFile(malformed, []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="e"`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sunSType := filepath.Join(suiteRoot, "sunData", "SType")
+	cases := []struct {
+		doc  string
+		want string
+	}{
+		{filepath.Join(sunSType, "ST_name", "ST_name00301m", "ST_name00301m.xsd"), "sch-props-correct"},
+		{filepath.Join(sunSType, "ST_baseTD", "ST_baseTD00101m", "ST_baseTD00101m.xsd"), chargeAccepted},
+		{unruled, chargeUnruled},
+		{malformed, chargeDeclined},
+	}
+	for _, tc := range cases {
+		if got := charge(caseSpec{kind: kindSchema, doc: tc.doc, expect: expectValid()}); got != tc.want {
+			t.Errorf("charge(%s) = %q, want %q", filepath.Base(tc.doc), got, tc.want)
+		}
+	}
+}

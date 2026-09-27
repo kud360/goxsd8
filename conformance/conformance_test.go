@@ -234,14 +234,33 @@ func reportDeclines(t *testing.T, l lane, cases []caseSpec, actual map[string]St
 		t.Logf("lane %s: %d declined case(s) recorded fail — harvest candidates re-checked this run (%s=1 lists them), %s",
 			l.name, len(census.candidates), declinesEnv, censusNotScore)
 	}
-	if census.indeterminate > 0 {
+	if len(census.indeterminate) > 0 {
 		t.Logf("lane %s: %d further case(s) declined as indeterminate, never harvestable (issue #277), %s",
-			l.name, census.indeterminate, censusNotScore)
+			l.name, len(census.indeterminate), censusNotScore)
 	}
 	if os.Getenv(declinesEnv) != "1" {
 		return
 	}
 	t.Logf("lane %s: decline candidates: %v", l.name, census.candidates)
+	t.Logf("lane %s: indeterminate declines: %v", l.name, census.indeterminate)
+	t.Logf("lane %s: decided disagreements: %v", l.name, chargedIDs(l, census.disagreed))
+}
+
+// chargedIDs renders a census's decided disagreements for the GOXSD_DECLINES=1
+// listing: each case's ID, followed by `=` and what the lane's executor charged
+// it when the lane has a charge probe (lane.charge, issue #1740). The probe
+// re-runs only these cases, and only under the opt-in, so a default run pays
+// nothing for it.
+func chargedIDs(l lane, disagreed []caseSpec) []string {
+	out := make([]string, 0, len(disagreed))
+	for _, c := range disagreed {
+		if l.charge == nil {
+			out = append(out, c.id)
+			continue
+		}
+		out = append(out, c.id+"="+l.charge(c))
+	}
+	return out
 }
 
 // reportWithheld lists the withheld case IDs no lane banked (withheldEnv). It is

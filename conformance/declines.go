@@ -35,34 +35,41 @@ package conformance
 // decided by definition — and it decides nothing: it scores no case, writes no
 // expectation, and flips a local copy of the caseSpec.
 
-// declinesEnv names the opt-in that additionally logs the candidate case IDs
-// themselves. The per-lane candidate COUNT is always logged, so the queue's size
-// (and its movement at an engine-widening landing) is never invisible; the IDs
-// are opt-in because a lane awaiting its milestone declines every case it claims
-// and would otherwise bury the run's other reporting.
+// declinesEnv names the opt-in that additionally logs the case IDs themselves,
+// one sorted list per class of the census. The per-lane candidate and
+// indeterminate COUNTS are always logged, so the queue's size (and its movement
+// at an engine-widening landing) is never invisible; the IDs are opt-in because
+// a lane awaiting its milestone declines every case it claims and would
+// otherwise bury the run's other reporting.
 const declinesEnv = "GOXSD_DECLINES"
 
 // declineCensus is one lane's decline audit for a single run: the partition of
-// that lane's recorded failures into the ones an executor decided (absent from
-// both fields) and the ones no executor decided at all.
+// that lane's recorded failures into the ones an executor decided and the ones
+// no executor decided at all. The three fields are disjoint and together hold
+// every failure the run recorded, each in case-ID order (STYLE D1/D2).
 type declineCensus struct {
-	// candidates lists the cases this run declined and recorded fail, in case-ID
-	// order (STYLE D1/D2). This is the harvest queue: an engine widening may have
-	// already made some of them decidable without any reader edit.
+	// candidates lists the cases this run declined and recorded fail. This is
+	// the harvest queue: an engine widening may have already made some of them
+	// decidable without any reader edit.
 	candidates []string
-	// indeterminate counts the cases declined by the issue #277 convention —
-	// the Working Group left them undecided, so runLane never dispatches them.
-	// They are NOT candidates, because no executor may ever score them a pass,
-	// but they are declines, so their number is reported rather than dropped.
-	indeterminate int
+	// indeterminate lists the cases declined by the issue #277 convention — the
+	// Working Group left them undecided, so runLane never dispatches them. They
+	// are NOT candidates, because no executor may ever score them a pass, but
+	// they are declines, so they are reported rather than dropped.
+	indeterminate []string
+	// disagreed holds the cases an executor decided and got wrong: the flipped
+	// probe passed, so the executor reached its closing comparison and its
+	// observation contradicts the suite. They are kept as cases rather than IDs
+	// so a lane's charge probe can re-run them (lane.charge).
+	disagreed []caseSpec
 }
 
 // takeDeclineCensus re-attempts every case lane l recorded as a failure in this
 // run and partitions those failures into decided and declined. cases must be the
 // slice runLane consumed and actual the map it returned, so the census re-runs
 // only the executor and never rediscovers the suite. Iteration is over the
-// case-ID-sorted cases slice, never over actual, so the candidate list is
-// deterministic (STYLE D1/D2).
+// case-ID-sorted cases slice, never over actual, so every list is deterministic
+// (STYLE D1/D2).
 func takeDeclineCensus(l lane, cases []caseSpec, actual map[string]Status) declineCensus {
 	var census declineCensus
 	for _, c := range cases {
@@ -71,10 +78,11 @@ func takeDeclineCensus(l lane, cases []caseSpec, actual map[string]Status) decli
 			continue
 		}
 		if c.expect.isIndeterminate() {
-			census.indeterminate++
+			census.indeterminate = append(census.indeterminate, c.id)
 			continue
 		}
 		if l.exec(flipExpectation(c)).IsPass() {
+			census.disagreed = append(census.disagreed, c)
 			continue
 		}
 		census.candidates = append(census.candidates, c.id)

@@ -58,11 +58,12 @@ func suiteIndexIn(dir string) string { return filepath.Join(dir, "suite.xml") }
 // expectation files are keyed by, the documents the entry names, and what the
 // catalog declares about it.
 //
-// Its consumer is tools/casejoin, which turns a tools/suiteindex census of
+// Its consumers are tools/casejoin, which turns a tools/suiteindex census of
 // fixture paths into the case IDs CLAUDE.md's ratchet-prediction join runs
-// against (STYLE T5). It is a plain record because it is a REPORT: every field
-// is a fact read off the catalog, and nothing downstream may construct one and
-// have it mean anything.
+// against, and tools/lanepartition, which clusters a lane's banked fails by
+// DeclaredValid and test set (STYLE T5). It is a plain record because it is a
+// REPORT: every field is a fact read off the catalog, and nothing downstream
+// may construct one and have it mean anything.
 type CatalogEntry struct {
 	// ID is the entry's case ID, `<testSet>/<testGroup>/<kind>/<test-name>`
 	// (runner.go "Case IDs"), built by the same caseID makeCase stamps a

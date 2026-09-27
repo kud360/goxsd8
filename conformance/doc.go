@@ -112,9 +112,10 @@
 //	    (issue #1412). What it will not do is describe an APPLICABLE entry
 //	    declaring no expected outcome: that entry is refused, in discovery's
 //	    own words, rather than reported with an outcome the catalog never
-//	    declared. Its consumer is `go tool casejoin`, which turns a
+//	    declared. Its consumers are `go tool casejoin`, which turns a
 //	    `go tool suiteindex` census of fixture paths into those IDs
-//	    (issue #1642).
+//	    (issue #1642), and `go tool lanepartition`, which clusters a lane's
+//	    banked fails by declared outcome and test set (issue #1740).
 //
 // # Sanctioned applicability removals
 //
@@ -208,9 +209,16 @@
 // entry and a `Ratchet:` trailer to quote.
 //
 //	GOXSD_DECLINES=1
-//	    Additionally logs the candidate case IDs themselves, sorted. Opt-in
-//	    because a lane still awaiting its milestone declines every case it
-//	    claims and would bury the run's other reporting.
+//	    Additionally logs, per lane, three sorted case-ID lists partitioning
+//	    the run's recorded failures: `decline candidates:`, `indeterminate
+//	    declines:` (the #277 cases the second count counts), and `decided
+//	    disagreements:`, where a lane with a charge probe (lane.charge; the
+//	    schema lane) writes each ID as `<id>=<charge>` — the rule
+//	    xsderr.RuleOf reads off the assembly's error, `(unruled)` for an error
+//	    carrying none, `(accepted)` for an assembly that succeeded. `go tool
+//	    lanepartition` reads these lines (#1740). Opt-in because a lane still
+//	    awaiting its milestone declines every case it claims and would bury
+//	    the run's other reporting.
 //
 // # Missing suite
 //
