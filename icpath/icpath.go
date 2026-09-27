@@ -25,7 +25,7 @@ type Expr struct{ paths []path }
 // (validate/cvcidentityconstraint.go's icFrame.declined), which carries the GAP
 // marker for it.
 //
-// It covers the four shapes [SelectorViolation] CHARGES as well, under the same
+// It covers the five shapes [SelectorViolation] CHARGES as well, under the same
 // one encoding: a tree built over a name that did not resolve is not matchable
 // whatever the schema's fate, and a component assembled directly through
 // [xsd.NewIdentityConstraint] reaches no assembler and so no charge.

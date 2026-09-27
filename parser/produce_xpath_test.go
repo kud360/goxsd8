@@ -891,12 +891,13 @@ const (
 )
 
 // TestProduceIdentityConstraintPathViolations pins c-selector-xpath (§3.11.6.2)
-// and c-fields-xpaths (§3.11.6.3) at the four shapes a recognizer for clause
-// 2.1's BNF can prove against clause 2 WHOLE. Clause 2 is a disjunction, so an
+// and c-fields-xpaths (§3.11.6.3) at the five shapes a recognizer for clause
+// 2.1's BNF can prove against the SCC WHOLE. Clause 2 is a disjunction, so an
 // {expression} failing 2.1's grammar may still satisfy 2.2's "XPath expression
 // involving the child axis whose abbreviated form is as given above"; each shape
-// below is a fault the unabbreviated spelling carries too, which is why charging
-// it cannot reject a conforming schema. TestProduceIdentityConstraintPathFailsOpen
+// below is a fault the unabbreviated spelling carries too, or, for a field's
+// bare '@', no XPath 2.0 expression under any spelling, which is why charging it
+// cannot reject a conforming schema. TestProduceIdentityConstraintPathFailsOpen
 // pins the other side.
 //
 // The charge is positioned at the offending <selector>/<field> and never at the
@@ -930,6 +931,13 @@ func TestProduceIdentityConstraintPathViolations(t *testing.T) {
 		rule:     "c-fields-xpaths", // clause 2: production [7]'s final step alone
 		line:     icFieldLine,
 		msg:      `the {fields} member "@x/b" names an attribute before its final step`,
+	}, {
+		name:     "a field's '@' with no NameTest after it",
+		selector: "a",
+		field:    "@",
+		rule:     "c-fields-xpaths", // clause 1: production [31]'s NodeTest is mandatory
+		line:     icFieldLine,
+		msg:      `the {fields} member "@" has an '@' with no NodeTest after it`,
 	}, {
 		name:     "a selector naming an attribute",
 		selector: "@x",

@@ -58,14 +58,15 @@
 // # The two Schema Component Constraints
 //
 // [SelectorViolation] and [FieldViolation] are the assembler's entry points, and
-// they charge FOUR shapes: an unbound prefix, a predicate, an attribute step
-// before a field's final step, and an attribute named anywhere in a selector.
-// Every other {expression} is nil there — above all one this package simply
-// cannot read — because clause 2 of each SCC is a disjunction whose second arm
-// ("an XPath expression involving the child axis whose abbreviated form is as
-// given above") no recognizer of clause 2.1's BNF can see. "Does not match
-// production [1]" is therefore never evidence of a violation, and
-// [SelectorViolation]'s doc carries the argument for each of the four.
+// they charge FIVE shapes: an unbound prefix, a predicate, an attribute step
+// before a field's final step, an '@' with no NameTest after it in a field, and
+// an attribute named anywhere in a selector. Every other {expression} is nil
+// there — above all one this package simply cannot read — because clause 2 of
+// each SCC is a disjunction whose second arm ("an XPath expression involving the
+// child axis whose abbreviated form is as given above") no recognizer of clause
+// 2.1's BNF can see. "Does not match production [1]" is therefore never evidence
+// of a violation, and [SelectorViolation]'s doc carries the argument for each of
+// the five.
 //
 // THE PREDICATES IT RECOGNIZES are the ones whose whole {expression} lexes as
 // tokens of production [5] plus the two brackets: `a[b]` and `a[@b]` are
@@ -74,12 +75,8 @@
 // holds. Under-charging is a rejection the processor can still make at validate
 // time; over-charging rejects a conforming schema before any instance exists.
 //
-// One sub-shape inside those four is declined rather than charged, under
-// shapeFault's own GAP marker: an '@' with no NameTest after it, in a FIELD.
-//
 // An unbound prefix is the one charged shape with a vocabulary of its own:
 // err:XPST0081 travels as the wrapped cause under the SCC charge, reached with
-// one errors.Unwrap and read with [xsderr.RuleOf]. The other three have no
-// second vocabulary and wrap nothing, so the SCC's rule is never on two layers
-// of one error (STYLE E2).
+// one errors.Unwrap and read with [xsderr.RuleOf]. The other four wrap nothing,
+// so the SCC's rule is never on two layers of one error (STYLE E2).
 package icpath

@@ -35,23 +35,24 @@ const ruleXPST0081 xsderr.Rule = "err:XPST0081"
 // the position of the <selector> element the {expression} was written on, which
 // this package cannot know and never reconstructs (STYLE E3).
 //
-// THE FOUR SHAPES IT CHARGES ARE THE ONLY ONES EITHER CLAUSE PROVES. Clause 2 is
+// THE FIVE SHAPES IT CHARGES ARE THE ONLY ONES EITHER CLAUSE PROVES. Clause 2 is
 // a disjunction — 2.1's literal BNF or 2.2's "XPath expression involving the
 // child axis whose abbreviated form is as given above" — so an {expression} that
 // fails 2.1 may still satisfy 2.2, and a recognizer for 2.1 alone cannot tell
 // the two apart. What it CAN prove is a fault no spelling excuses: an unbound
 // prefix, which is clause 1's xpath-valid (§3.13.6.2) static error under either
-// arm; a predicate, which abbreviation neither introduces nor removes; and an
-// attribute step, which clause 2.2 does not name for a selector at all and
-// production [7] admits for a field only as a Path's final step. Everything else
-// — above all an {expression} written in unabbreviated axis syntax, and a `.//`
-// path whose Steps are all `.`, which production [3]'s bare `.` derives outright
-// — is nil here and left to [CompileSelector] to decline at validate time.
+// arm; a field's '@' with no NameTest after it, which is no XPath 2.0 expression
+// at all and so fails xpath-valid's own clause 1; a predicate, which
+// abbreviation neither introduces nor removes; and an attribute step, which
+// clause 2.2 does not name for a selector at all and production [7] admits for a
+// field only as a Path's final step. Everything else — above all an {expression}
+// written in unabbreviated axis syntax, and a `.//` path whose Steps are all
+// `.`, which production [3]'s bare `.` derives outright — is nil here and left
+// to [CompileSelector] to decline at validate time.
 //
 // The result is an *[xsderr.Error] carrying the SCC as its rule. For the unbound
 // prefix it wraps a cause carrying err:XPST0081, which a consumer reads with
-// [xsderr.RuleOf] after one errors.Unwrap; the other three have no second
-// vocabulary and wrap nothing.
+// [xsderr.RuleOf] after one errors.Unwrap; the other four wrap nothing.
 func SelectorViolation(loc xsderr.Loc, x xsd.XPathExpression) error {
 	return violationAt(loc, x, false)
 }
@@ -146,7 +147,9 @@ func subject(field bool) string {
 
 // shapeViolation is the verdict a shapeFault proves. It carries no cause:
 // productions [2], [3] and [7] are the SCC's own text and no other vocabulary
-// states them, so a wrapped layer would put the same rule on both (STYLE E2).
+// states them, so a wrapped layer would put the same rule on both (STYLE E2). A
+// field's bare '@' breaks XPath 2.0's production [31] instead: its message names
+// the production, and it wraps no err:XPST0003.
 func shapeViolation(x xsd.XPathExpression, field bool, fault string) defect {
 	return defect{
 		kind: defectViolation,
