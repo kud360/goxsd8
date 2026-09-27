@@ -126,4 +126,14 @@
 // copy that can drift (STYLE D3/T4) — the drift that silently dropped
 // maxScale/minScale twice. It answers the name→kind question only;
 // whether a facet may be applied to a given datatype remains TypeSpec.Applies.
+//
+// # The NCName pattern
+//
+//	func NCNamePattern() string
+//
+// NCNamePattern reads xs:NCName's pattern-facet value off the generated row
+// (Datatypes §3.4.7.1), unanchored and in XSD regex syntax, for the consumers
+// that compile the NCName production through regex.Translate: the parser's
+// declaration-name check and builtin/strict's QName lexical check. The
+// '^'-anchored FO copies in xpath and icpath are pinned to it by test.
 package builtin

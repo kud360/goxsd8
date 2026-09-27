@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kud360/goxsd8/builtin"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
 )
@@ -227,6 +228,15 @@ func TestScanNCNameIsTheXMLNameClass(t *testing.T) {
 		if got := scanNCName(tc.s, 0); got != tc.want {
 			t.Errorf("scanNCName(%q, 0) = %d, want %d (%s)", tc.s, got, tc.want, tc.why)
 		}
+	}
+}
+
+// TestNCNamePatternPinned fails when ncNamePattern stops being xs:NCName's
+// pattern facet as the generated builtin row carries it (Datatypes §3.4.7.1),
+// behind the '^' the FO prefix scan adds.
+func TestNCNamePatternPinned(t *testing.T) {
+	if want := "^" + builtin.NCNamePattern(); ncNamePattern != want {
+		t.Errorf("ncNamePattern = %q, want %q (\"^\" + builtin.NCNamePattern())", ncNamePattern, want)
 	}
 }
 

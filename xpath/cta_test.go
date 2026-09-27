@@ -1496,6 +1496,15 @@ func TestScanNCNameIsTheXMLNameClass(t *testing.T) {
 	}
 }
 
+// TestCTANCNamePatternPinned fails when ctaNCNamePattern stops being xs:NCName's
+// pattern facet as the generated builtin row carries it (Datatypes §3.4.7.1),
+// behind the '^' the FO prefix scan adds.
+func TestCTANCNamePatternPinned(t *testing.T) {
+	if want := "^" + builtin.NCNamePattern(); ctaNCNamePattern != want {
+		t.Errorf("ctaNCNamePattern = %q, want %q (\"^\" + builtin.NCNamePattern())", ctaNCNamePattern, want)
+	}
+}
+
 // TestCompileFollowsTheXMLNameClass is the same boundary reaching the parser:
 // an AttrName the class does not admit is no [17] ta-AttrName at all, and one
 // it does admit is a single name token however Unicode's categories read it.

@@ -71,8 +71,9 @@
 // Callers: the pattern facet uses flavor XSD; xpath's fn:matches/
 // fn:replace/fn:tokenize use flavor FO. Never cross them. The one pattern
 // translated both ways is the module's own fixed NCName pattern, which no
-// source wrote: parser and builtin/strict take flavor XSD for a whole-string
-// test, xpath and validate flavor FO for the '^'-anchored PREFIX scan that
+// source wrote: parser and builtin/strict take it from builtin.NCNamePattern
+// with flavor XSD for a whole-string test, xpath and icpath hold a
+// test-pinned copy behind '^' with flavor FO for the PREFIX scan that
 // whole-string anchoring cannot express, and the pattern carries no construct
 // the two flavors read differently.
 package regex

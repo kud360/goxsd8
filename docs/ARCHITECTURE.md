@@ -23,7 +23,8 @@ Value implementations, parsing, validation, and generation live above them.
                  value           (value-space contracts, facet pipeline; imports xsd, xsderr, regex)
                  value/backendtest (conformance kit for any backend)
                  builtin         (the generated TypeSpec table and Seed; imports value, xsd, xsderr)
-   builtin/strict  builtin/native  <user backends>   (implement value contracts)
+   builtin/strict  builtin/native  <user backends>   (implement value contracts; builtin/strict
+                                  also imports builtin, for xs:NCName's generated pattern)
                  regex           (one engine, XSD + F&O flavors)
                  parser/xmltree  (position-tracking XML; imports xsderr only, and
                                   nothing else in the module — independent of the
@@ -188,7 +189,9 @@ represents it**:
   - `builtin/strict` (ships) — spec-exact: arbitrary-precision
     decimal/integer, `precisionDecimal` (coefficient/scale/sign identity,
     NaN/±INF), the 7-property date/time model, XSD-exact float/double
-    behavior.
+    behavior. It imports `builtin` for one datum, `builtin.NCNamePattern`,
+    which its QName lexical check compiles; `builtin` imports no backend,
+    so the edge points toward the leaves like every other.
   - `builtin/native` (**M12 — doc-only contract, exports nothing today**)
     — Go-friendly: `int64`, `float64`, `string`, `time.Time`; documented,
     deliberate deviations from the spec value spaces (range limits,
