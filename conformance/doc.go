@@ -208,9 +208,16 @@
 // entry and a `Ratchet:` trailer to quote.
 //
 //	GOXSD_DECLINES=1
-//	    Additionally logs the candidate case IDs themselves, sorted. Opt-in
-//	    because a lane still awaiting its milestone declines every case it
-//	    claims and would bury the run's other reporting.
+//	    Additionally logs, per lane, three sorted case-ID lists partitioning
+//	    the run's recorded failures: `decline candidates:`, `indeterminate
+//	    declines:` (the #277 cases the second count counts), and `decided
+//	    disagreements:`, where a lane with a charge probe (lane.charge; the
+//	    schema lane) writes each ID as `<id>=<charge>` — the rule
+//	    xsderr.RuleOf reads off the assembly's error, `(unruled)` for an error
+//	    carrying none, `(accepted)` for an assembly that succeeded. `go tool
+//	    lanepartition` reads these lines (#1740). Opt-in because a lane still
+//	    awaiting its milestone declines every case it claims and would bury
+//	    the run's other reporting.
 //
 // # Missing suite
 //

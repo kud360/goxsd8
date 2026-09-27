@@ -68,8 +68,17 @@ func TestTakeDeclineCensusSeparatesDeclinesFromDecisions(t *testing.T) {
 	if !slices.Equal(census.candidates, wantCandidates) {
 		t.Errorf("candidates = %v, want %v", census.candidates, wantCandidates)
 	}
-	if census.indeterminate != 1 {
-		t.Errorf("indeterminate = %d, want 1", census.indeterminate)
+	wantIndeterminate := []string{"set/g/schema/indeterminate"}
+	if !slices.Equal(census.indeterminate, wantIndeterminate) {
+		t.Errorf("indeterminate = %v, want %v", census.indeterminate, wantIndeterminate)
+	}
+	var disagreed []string
+	for _, c := range census.disagreed {
+		disagreed = append(disagreed, c.id)
+	}
+	wantDisagreed := []string{"set/g/schema/disagree"}
+	if !slices.Equal(disagreed, wantDisagreed) {
+		t.Errorf("disagreed = %v, want %v", disagreed, wantDisagreed)
 	}
 
 	// The probe re-runs exactly the claimed, non-indeterminate failures, in
@@ -100,6 +109,23 @@ func TestTakeDeclineCensusLeavesDiscoveryUntouched(t *testing.T) {
 		if c.expect != before[i] {
 			t.Errorf("case %s: expectation mutated to %v, want %v", c.id, c.expect, before[i])
 		}
+	}
+}
+
+// TestChargedIDsWritesTheChargeOnlyForALaneThatHasOne pins the
+// GOXSD_DECLINES=1 decided-disagreements rendering tools/lanepartition parses
+// (#1740): `<id>=<charge>` in case order for a lane with a charge probe, the
+// bare ID for a lane without one.
+func TestChargedIDsWritesTheChargeOnlyForALaneThatHasOne(t *testing.T) {
+	disagreed := []caseSpec{{id: "set/g/schema/a"}, {id: "set/g/schema/b"}}
+	charging := lane{name: "fake", charge: func(c caseSpec) string { return "rule-of-" + c.id[len(c.id)-1:] }}
+	want := []string{"set/g/schema/a=rule-of-a", "set/g/schema/b=rule-of-b"}
+	if got := chargedIDs(charging, disagreed); !slices.Equal(got, want) {
+		t.Errorf("charging lane: chargedIDs = %v, want %v", got, want)
+	}
+	want = []string{"set/g/schema/a", "set/g/schema/b"}
+	if got := chargedIDs(lane{name: "fake"}, disagreed); !slices.Equal(got, want) {
+		t.Errorf("non-charging lane: chargedIDs = %v, want %v", got, want)
 	}
 }
 

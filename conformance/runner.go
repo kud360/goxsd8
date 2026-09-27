@@ -212,6 +212,13 @@ type lane struct {
 	name    string
 	selects func(caseSpec) bool
 	exec    executor
+	// charge names what this lane's executor charged a case it DECIDED, for the
+	// decline census's GOXSD_DECLINES=1 listing of decided disagreements
+	// (reportDeclines, issue #1740): the rule a rejection carries, or a
+	// parenthesized word where there is no rule to name. It reports only and
+	// scores nothing. It is nil for a lane whose executor has no charge to name,
+	// and such a lane's disagreements are listed by ID alone.
+	charge func(caseSpec) string
 }
 
 // stubFail is the placeholder executor: no engine exists yet, so every case is
@@ -238,7 +245,7 @@ func selectsKind(k string) func(caseSpec) bool {
 func defaultLanes() []lane {
 	return []lane{
 		{name: "datatypes", selects: selectsDatatypes, exec: newDatatypesExec()},
-		{name: "schema", selects: selectsKind(kindSchema), exec: newSchemaExec()},
+		{name: "schema", selects: selectsKind(kindSchema), exec: newSchemaExec(), charge: newSchemaCharge()},
 		{name: "instance", selects: selectsKind(kindInstance), exec: newInstanceExec()},
 		{name: "xpath", selects: selectsNone, exec: stubFail},
 		{name: "json", selects: selectsNone, exec: stubFail},

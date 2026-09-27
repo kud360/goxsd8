@@ -473,6 +473,43 @@ func execSchemaCase(backend value.Backend, c caseSpec) Status {
 	return decideAgreement(perr == nil, c.expect.wantsValid())
 }
 
+// The words a schema charge probe answers where a decided case carries no rule
+// to name. Each is parenthesized so no spec rule ID can collide with it.
+const (
+	// chargeAccepted: the assembly succeeded, so nothing was charged — the
+	// decision a suite-invalid case disagrees with.
+	chargeAccepted = "(accepted)"
+	// chargeUnruled: the assembly failed on an error carrying no rule ID, the
+	// §2.4 clause 1 grammar fault STYLE E2 charges without one (#404).
+	chargeUnruled = "(unruled)"
+	// chargeDeclined: assembleCase declined the case. The census asks only
+	// about decided cases, so this answers a case the executor did not decide.
+	chargeDeclined = "(declined)"
+)
+
+// newSchemaCharge builds the schema lane's charge probe (lane.charge): the rule
+// xsderr.RuleOf reads off the assembly's own error, through the same
+// assembleCase the executor decides with, so the rule named is the one behind
+// the decision and not a second reading of the documents. Like newSchemaExec it
+// builds its strict backend once.
+func newSchemaCharge() func(caseSpec) string {
+	backend := strict.New()
+	return func(c caseSpec) string {
+		_, decidable, perr := assembleCase(backend, c.doc, c.extraDocs)
+		if !decidable {
+			return chargeDeclined
+		}
+		if perr == nil {
+			return chargeAccepted
+		}
+		rule, ok := xsderr.RuleOf(perr)
+		if !ok {
+			return chargeUnruled
+		}
+		return string(rule)
+	}
+}
+
 // assembleCase assembles the schema rooted at doc, together with any FURTHER
 // documents extraDocs declares, and reports whether the outcome may be read as a
 // verdict at all. It is the schema lane's decidability gate and the instance
