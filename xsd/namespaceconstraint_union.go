@@ -4,10 +4,16 @@ import "github.com/kud360/goxsd8/xsderr"
 
 // UnionNamespaceConstraint returns the Attribute Wildcard Union (Structures
 // §3.10.6.3, id="cos-aw-union") of a and b: the Namespace Constraint that admits
-// a namespace name iff a or b admits it. It is the mirror of
-// namespaceconstraint_intersect.go's intersectNamespaceConstraint, over the same
-// record and the same set helpers (namespaceconstraint_sets.go), and the two must
-// be read together — several of their clauses differ only by a swapped operator.
+// a namespace name iff a or b admits it.
+//
+// Note for editors of this package: this is the mirror of
+// namespaceconstraint_intersect.go's intersectNamespaceConstraint (§3.10.6.4,
+// cos-aw-intersect), over the same record and the same set helpers
+// (namespaceconstraint_sets.go), and the two must be read together — several of
+// their clauses differ only by a swapped operator. The intersection is not
+// exported: it is computed in-package only, by both of its callers —
+// attributegroupfold.go's §3.6.2.2 (declare-attributeGroup-wildcard) fold and
+// particleattribution.go's Appendix J ·overlap· test for cos-nonambig (§3.8.6.4).
 //
 // Its out-of-package consumer is the parser's Open Content producer: §3.4.2.3.3
 // (dcl.ctd.ctcc.common) clause 6.2 defines a derived complex type's {open
