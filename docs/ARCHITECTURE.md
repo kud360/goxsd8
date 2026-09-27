@@ -22,6 +22,7 @@ Value implementations, parsing, validation, and generation live above them.
                                   on #755 moving that reader into the library)
                  value           (value-space contracts, facet pipeline; imports xsd, xsderr, regex)
                  value/backendtest (conformance kit for any backend)
+                 builtin         (the generated TypeSpec table and Seed; imports value, xsd, xsderr)
    builtin/strict  builtin/native  <user backends>   (implement value contracts)
                  regex           (one engine, XSD + F&O flavors)
                  parser/xmltree  (position-tracking XML; imports xsderr only, and
@@ -84,6 +85,13 @@ Nothing in the library imports infrastructure. Infrastructure may import
 the library, and may import other infrastructure — so a tool needing the
 expectations file format calls `conformance.LoadExpectations` rather than
 becoming a second reader of a format that already has an owner.
+
+**Give code two tools share one home under `tools/internal/<name>`**; do
+not copy it into a second `package main`. Go's internal rule confines that
+package's importers to `tools/...`, and `go tool surface` skips `tools/`, so
+it can reach neither the library nor the published surface — no per-helper
+argument for standing it up is owed. `tools/hfnextract/internal` is the
+same shape one level down.
 
 `cmd/goxsd8` is a library CONSUMER, not a place to grow capability. A
 capability the CLI needs and the library does not export is a library gap to
@@ -259,29 +267,27 @@ represents it**:
   demand; no status booleans beside the facts that imply them.
 - The model is **read-only** after construction; mutation/editing APIs are
   out of scope. `Finalize` performs a bounded set of mutations before it
-  returns — **two** as of 2026-08-09, run in this order from
-  `xsd/resolve.go`:
-  `xsd/attributeusefold.go` materialises §3.4.2.4 clause 3's inherited
-  `{attribute uses}` into every complex type (#401), then
+  returns — **three**, run in this order from `xsd/resolve.go`'s Phase D:
+  `xsd/attributegroupfold.go` materialises the §3.6.2.1 `{attribute uses}`
+  union and §3.6.2.2 `{attribute wildcard}` intersection an
+  `<attributeGroup ref>` takes part in, into every attribute group
+  definition and complex type, consuming every `AttributeGroupRef` (#479);
+  then `xsd/attributeusefold.go` materialises §3.4.2.4 clause 3's inherited
+  `{attribute uses}` into every complex type (#401); then
   `xsd/attributewildcardfold.go` materialises §3.4.2.5 clause 2's
   `{attribute wildcard}` the same way. Each is a property OVERWRITE, not a
   cache of derivable state (STYLE D3): afterwards the producer's partial
   value is gone rather than kept beside the correct one. Read-only means
   read-only *after* `Finalize`.
 
-  The previous edition of this bullet said "there is one write site, not a
-  growing set". **The set grew** — that tripwire has fired once, and the two
-  folds remain near-identical parallel machinery: identical
-  `position`/`types`/`folded` fold structs, identical index-building loops,
-  byte-identical `storeFoldedAttributeUses`/`storeFoldedAttributeWildcards`,
-  and identical `foldOwned…` wrappers around `ownedTypeFold`. **#414 is
-  closed and was never this finding** — it was the anonymous-type gap, which
-  `xsd/ownedtypefold.go` closed by sharing the ROOTS descent and deliberately
-  not the mapping logic — so the STYLE T4 duplication outlived its tracker
-  and is refiled at the 2026-09-06 audit as #1285. The standing limit is
-  restated deliberately: a THIRD finalize-time write site is a design
-  change, not an increment, and belongs in a reviewed issue before it is
-  written.
+  **A FOURTH finalize-time write site is a design change, not an
+  increment: file it as a reviewed issue before writing it.** The third
+  arrived that way (#479). The attribute-group fold has its own shape — one
+  closure computing both properties — and is not a copy of the other two;
+  the use and wildcard folds still share near-identical scaffolding (fold
+  structs, index-building loops, byte-identical `storeFolded…` bodies,
+  `foldOwned…` wrappers around `ownedTypeFold`), which is #1285's STYLE T4
+  finding. #414 closed on the anonymous-type gap, not on that duplication.
 
 ### Value spaces without a dependency (`xsd.ValueSpace`)
 
@@ -519,18 +525,18 @@ nothing, under the `GAP(xpath)` marker on `validate`'s `icFrame.declined`.
 
 ## Validation (`validate`)
 
-**Status: the engine ships the seam and charges nine rules, at the
-·validation root· and at every descendant the descent types; the XML
-adapter ships over it.**
+**Status: the engine ships the seam and charges the cvc- rules
+`validate/doc.go` names, at the ·validation root· and at every descendant the
+descent types; the XML adapter ships over it.**
 `validate` exports the infoset views (`Element`, `Attribute`, `Text`,
-`Children`, `Child`, with `ElementChild`/`TextChild` constructing the sum)
+`Children`, `Child`, with `ElementChild`/`TextChild` constructing the sum),
+the two optional document-level capabilities an adapter may implement
+(`UnparsedEntities`, `DeclarationsProcessed`, narrowed off the root),
 plus `New`/`Validator`/`Result`/`Option`/`WithLogger` and `Unevaluated`
 (`Rule`/`Loc`/`Msg`, read off `Result.Unevaluated`: one check the assessment
 reached and did not perform, deliberately not an `error`), and `Assess` walks a
-source once, charging `cvc-assess-elt`, `cvc-elt`, `cvc-type`,
-`cvc-complex-type`, `cvc-complex-content`, `cvc-attribute`, `cvc-au`,
-`cvc-identity-constraint` and `cvc-id`. Which clauses of each, and which are
-declined, is `validate/doc.go`'s and is not restated here. A union-governed
+source once. **Read which rules it charges, which clauses of each, and which
+are declined in `validate/doc.go`; do not enumerate them here.** A union-governed
 value is classified by its ·validating type· (#813). Identity-constraint
 `{selector}`/`{fields}` are compiled and evaluated directly as the
 restricted path subsets of §3.11.6.2/§3.11.6.3 (`icpath`) and deliberately
@@ -650,18 +656,9 @@ standing list of places where the surface currently outruns it, so each
 audit re-checks the same set instead of rediscovering it. Everything here
 compiles, is documented, and has **zero** callers module-wide.
 
-- **The annotation subsystem** — `xsd.Annotation`/`AppInfo`/`Documentation`/
-  `Attr` plus their constructors and accessors, `SchemaBuilder.AddAnnotation`,
-  a trailing `annotations []Annotation` parameter on every component
-  constructor that takes one, and `parser`'s `Text`/`Node` character-data
-  retention that exists (per `parser/tree.go`) to round-trip
-  `<xs:documentation>`. No producer builds an `Annotation`: every `parser`
-  call site passes `nil` and no accessor is read anywhere. No milestone in
-  docs/PLAN.md owns populating it. **#407** has already taken the delete
-  branch (its decision (b), part 1 of 2) and is `ready`; each trailing
-  positional slot is #405's "last slot to wave through" tripwire, once per
-  constructor, and the slot count has grown twice while the subsystem stayed
-  unpopulated. The slot count itself is not maintained here (#665).
+- **The annotation subsystem** — **deleted (#407); do not re-file.**
+  `xsd/doc.go` states that §3.15 `{annotation}` is not modelled, because no
+  rule consumes it.
 - **`value.LexicalFacet` / `value.ValueFacet`** — the two pipeline-stage
   interfaces. Every implementation is unexported inside `value`, the
   assembling function (`compile`) is unexported, and no exported API takes
@@ -703,8 +700,10 @@ compiles, is documented, and has **zero** callers module-wide.
   longer unexport the whole set on its own: `cmd/goxsd8` reads a `-schema`
   document's `targetNamespace` through `parser.ReadDocument` →
   `Document.Root` → `Element.Attr`, a read the multi-root entry point above
-  would delete. `Text`'s own justification (`<xs:documentation>`
-  round-trip) belongs to the annotation decision (#407).
+  would delete. `Text` has two readers inside `parser` (§4.2.5 override
+  canonicalization and the `<xs:notation>` content check), so the annotation
+  deletion left it a type with a job, and whether it stays EXPORTED is
+  #1051's question alone.
 - **`xsd.Occurs.Permits`, `xsd.Namespace.IsAbsent`,
   `xsd.NamespaceConstraint.AllowsNamespace`** — zero non-test callers
   module-wide. `Permits` answers a closed `min <= n <= max` question no
