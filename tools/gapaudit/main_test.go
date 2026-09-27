@@ -1324,6 +1324,31 @@ func TestRuledPermanentCitationIsNotADeadEnd(t *testing.T) {
 	}
 }
 
+// TestRulingPhraseIsCaseSensitive pins STYLE P3b's spelling as the only one
+// that reads as a ruling (#1617): a marker writing the phrase in any other
+// case is a plain citation of the CLOSED issue, and so still P3's dead end.
+func TestRulingPhraseIsCaseSensitive(t *testing.T) {
+	issues := []issue{{Number: 1378, State: stateOf("CLOSED"), Title: "own the retirement of the maxContentPositions ceiling",
+		Body: "ruled a permanent documented approximation", Labels: gapLabels()}}
+	for _, phrase := range []string{"Ruled permanent by", "RULED PERMANENT BY", "ruled permanent by"} {
+		m := marker{Area: "xsd", File: "xsd/contentrestricts.go", Line: 697,
+			Text: "the ceiling declines the question. " + phrase + " #1378 (STYLE P3b)."}
+		if r := rulings(m.Text); len(r) != 0 {
+			t.Errorf("%q: rulings = %v, want none", phrase, r)
+		}
+
+		rep := reconcile([]marker{m}, issues, true)
+		var buf strings.Builder
+		if err := printReport(&buf, rep); err != nil {
+			t.Fatalf("%q: printReport: %v", phrase, err)
+		}
+		out := buf.String()
+		if !strings.Contains(out, "xsd/contentrestricts.go:697") || !strings.Contains(out, "dead end: cites CLOSED #1378") {
+			t.Errorf("%q: the marker was retired as a ruling, want a dead end:\n%s", phrase, out)
+		}
+	}
+}
+
 // TestRulingRetiresATrackerAndSurvivesReflow pins the two halves a ruled
 // citation must keep working on an OPEN ruling, which is what a marker looks
 // like between the ruling landing and its issue closing: the tracker is not
