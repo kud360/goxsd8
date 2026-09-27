@@ -158,10 +158,17 @@ func (s *Schema) attributeDefaultBinding(side attributeRestrictionSide, n QName)
 
 // ResolvedAttributeDeclaration resolves the Attribute Declaration behind an
 // attribute use for both variants of the AttributeDeclarationOrRef sum: the
-// sibling declaration a LocalAttributeDeclaration owns by value, or the
-// top-level declaration an AttributeDeclarationRef names. ok is false only for
-// a dangling Ref, which Phase A already rejected (src-resolve clause 1.2), so
-// it is unreachable on a *Schema that exists.
+// sibling declaration a [LocalAttributeDeclaration] owns by value, or the
+// top-level declaration an [AttributeDeclarationRef] names.
+//
+// u must be a use of s, because the Ref variant carries only the declaration's
+// expanded name and is resolved by NAME through [Schema.Attribute] on s, not
+// through a pointer to the declaration u was built against. A use of s never
+// dangles — Phase A rejected a dangling Ref (src-resolve clause 1.2) — so ok is
+// always true for one. A Ref from another *Schema either dangles, when s
+// declares no attribute of that name, and reports ok false; or silently
+// resolves to s's own declaration of that name rather than the one u was built
+// against. The Local variant resolves the same from any receiver.
 //
 // It is exported for the instance validator, which needs the declaration behind
 // a use it matched an attribute information item to — its {type definition} for
@@ -210,7 +217,8 @@ func (s *Schema) ownedAttributeDeclaration(u AttributeUse) (AttributeDeclaration
 // declaration is reachable only through the schema's {attribute declarations}; a
 // method on the use would need a schema back-pointer, or would silently answer for
 // the Local variant alone. The receiver matches its sibling
-// [Schema.ResolvedAttributeDeclaration].
+// [Schema.ResolvedAttributeDeclaration], and so does the precondition: u must be
+// a use of s, on the terms that method states.
 //
 // Two callers read it, and BOTH read the term by that name: finalize's
 // checkAttributeValueConstraintSubsumes, where loc-testSubP (§3.4.6.4) clause 5.2
@@ -236,11 +244,13 @@ func (s *Schema) EffectiveValueConstraint(u AttributeUse) (ValueConstraint, bool
 
 // ResolvedInheritable is an attribute use's {inheritable} (Structures §3.5.1,
 // au-inheritable). The use's own inheritable attribute wins when present. When
-// it is absent the value is false for the Local variant (§3.2.2.2
-// dcl.att.local) and the resolved declaration's {inheritable} for the Ref
-// variant (§3.2.2.3 ref.att.local), which is why it is on *Schema: the same
-// reason [Schema.EffectiveValueConstraint] is. A dangling Ref answers false,
-// the unreachable case [Schema.ResolvedAttributeDeclaration] documents.
+// it is absent the value is false for the Local variant,
+// [LocalAttributeDeclaration] (§3.2.2.2 dcl.att.local), and the resolved
+// declaration's {inheritable} for the Ref variant, [AttributeDeclarationRef]
+// (§3.2.2.3 ref.att.local), which is why it is on *Schema: the same reason
+// [Schema.EffectiveValueConstraint] is. u must be a use of s, on the terms
+// [Schema.ResolvedAttributeDeclaration] states; a Ref that does not resolve
+// through s answers false.
 //
 // Its readers are loc-testSubP (§3.4.6.4) clause 5.3 (checkAttributeUseSubsumes),
 // §3.5.1 property identity (attributeUsesIdentical, complexextension.go), and the
