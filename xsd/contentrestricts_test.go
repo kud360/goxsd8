@@ -35,11 +35,16 @@ func cUnbounded(t *testing.T, local string, minOccurs int) Particle {
 	return uParticle(t, uUnbounded(t, minOccurs), ResolvedTerm{Term: uLocal(t, uq(local), uq("T"))})
 }
 
-// cAny is a particle over a wildcard with the given {namespace constraint} and
-// {process contents}, occurring exactly once.
-func cAny(t *testing.T, variety NamespaceConstraintVariety, namespaces []Namespace, pc ProcessContents) Particle {
+// cAny is a particle over a wildcard with the given {namespace constraint} —
+// its {disallowed names} holding keywords and no QName — and {process contents},
+// occurring exactly once.
+func cAny(t *testing.T, variety NamespaceConstraintVariety, namespaces []Namespace, pc ProcessContents, keywords ...DisallowedNameKeyword) Particle {
 	t.Helper()
-	return uOne(t, ResolvedTerm{Term: uWildcard(t, variety, namespaces, pc)})
+	w, err := NewWildcard(xsderr.Loc{}, cNC(t, variety, namespaces, nil, keywords), pc)
+	if err != nil {
+		t.Fatalf("NewWildcard: %v", err)
+	}
+	return uOne(t, ResolvedTerm{Term: w})
 }
 
 // TestContentRestrictsOccurrenceRange pins cos-content-act-restrict clause 1
@@ -156,27 +161,37 @@ func TestContentRestrictsWildcardNarrowed(t *testing.T) {
 	expectRule(t, cRestricts(t, oneNS, anyW), ruleDerivationOKRestriction)
 }
 
-// TestContentRestrictsProcessContentsSubsumption pins loc-testSubP clauses 1-2
+// TestContentRestrictsProcessContentsSubsumption pins loc-testSubP clauses 1-3
 // through cos-content-act-restrict clause 2 (ctr-child-type-subsumption): a lax
-// base wildcard does not subsume a skip restriction wildcard, while a skip base
-// subsumes anything. The transition itself is compatible in both directions —
-// the two wildcards have identical {namespace constraint}s — so only clause 2
-// can be deciding the verdict.
+// base wildcard does not subsume a skip restriction wildcard, a strict one does
+// not subsume a skip one or a lax one whose {disallowed names} contains defined
+// (cvc-wildcard clause 2.1 makes that keyword exact), while a skip base subsumes
+// anything. Strict over a plain lax is #345's fail-open acceptance. The
+// transition itself is compatible in every row — the specific wildcard's
+// {namespace constraint} is the general's, plus at most the defined keyword,
+// which cos-ns-subset lets a subset add — so only cos-content-act-restrict clause 2 can be deciding the
+// verdict. The strict-over-skip row is W3C suite wildZ008's shape.
 func TestContentRestrictsProcessContentsSubsumption(t *testing.T) {
+	defined := []DisallowedNameKeyword{DisallowedNameDefined}
 	for _, tc := range []struct {
-		name           string
-		general        ProcessContents
-		specific       ProcessContents
-		wantRestricted bool
+		name             string
+		general          ProcessContents
+		specific         ProcessContents
+		specificKeywords []DisallowedNameKeyword
+		wantRestricted   bool
 	}{
 		{name: "skip over lax", general: ProcessSkip, specific: ProcessLax, wantRestricted: true},
 		{name: "lax over strict", general: ProcessLax, specific: ProcessStrict, wantRestricted: true},
 		{name: "lax over skip", general: ProcessLax, specific: ProcessSkip, wantRestricted: false},
+		{name: "strict over strict", general: ProcessStrict, specific: ProcessStrict, wantRestricted: true},
+		{name: "strict over skip", general: ProcessStrict, specific: ProcessSkip, wantRestricted: false},
+		{name: "strict over ##defined lax", general: ProcessStrict, specific: ProcessLax, specificKeywords: defined, wantRestricted: false},
+		{name: "strict over plain lax", general: ProcessStrict, specific: ProcessLax, wantRestricted: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			err := cRestricts(t,
 				uGroup(t, CompositorSequence, cAny(t, NamespaceConstraintAny, nil, tc.general)),
-				uGroup(t, CompositorSequence, cAny(t, NamespaceConstraintAny, nil, tc.specific)))
+				uGroup(t, CompositorSequence, cAny(t, NamespaceConstraintAny, nil, tc.specific, tc.specificKeywords...)))
 			if tc.wantRestricted && err != nil {
 				t.Fatalf("a subsuming ·default binding· was rejected: %v", err)
 			}
