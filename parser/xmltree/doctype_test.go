@@ -194,7 +194,10 @@ func peBlowUp(xmlDecl string) string {
 // and the first declined reference cuts off every entity declaration after it
 // (XML 1.0 §5.1) unless the XML declaration says standalone="yes", which
 // admits them without making the DTD read. An external subset cuts nothing
-// off: the internal subset is read before it.
+// off: the internal subset is read before it. A header whose document type
+// name is a literal is read with the literal's token ending at its closing
+// quote, as the header always has been: `"r"SYSTEM` names an external subset
+// and `"r"x SYSTEM` does not.
 func TestAllDeclarationsProcessed(t *testing.T) {
 	const late = `<!ENTITY late SYSTEM "late.bin" NDATA n>`
 	const yes = `<?xml version="1.0" standalone="yes"?>`
@@ -211,6 +214,8 @@ func TestAllDeclarationsProcessed(t *testing.T) {
 		{`<!DOCTYPE r SYSTEM "x.dtd"><!ELEMENT r ANY><r/>`, false, false},
 		{`<!DOCTYPE r SYSTEM "x.dtd" [` + late + `]><r/>`, false, true},
 		{`<!DOCTYPE r SYSTEM "[%x;]"><r/>`, false, false},
+		{`<!DOCTYPE "r"SYSTEM "x.dtd"><r/>`, false, false},
+		{`<!DOCTYPE "r"x SYSTEM "x.dtd"><r/>`, true, false},
 		{`<!DOCTYPE r [<!ENTITY % x SYSTEM "x.ent"> %x; ` + late + `]><r/>`, false, false},
 		{`<!DOCTYPE r [<!ENTITY % x PUBLIC "-//x//y" "x.ent"> %x; ` + late + `]><r/>`, false, false},
 		{`<!DOCTYPE r [%undeclared; ` + late + `]><r/>`, false, false},

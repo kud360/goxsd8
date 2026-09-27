@@ -343,7 +343,7 @@ func entityDeclOf(body string) (entityDecl, bool) {
 	if body == "" || !strings.ContainsRune(declSpace, rune(body[0])) {
 		return entityDecl{}, false
 	}
-	toks := declTokens(body)
+	toks := entityDefTokens(body)
 	if len(toks) < 2 || strings.HasPrefix(toks[0], "%") {
 		return entityDecl{}, false
 	}
@@ -398,9 +398,10 @@ func isNotationName(t string) bool {
 	return true
 }
 
-// isLiteral reports whether t, one of declTokens' tokens, is a closed quoted
+// isLiteral reports whether t, one of splitDecl's tokens, is a closed quoted
 // literal and nothing more: its quote recurs only as its last character, so a
-// literal with text run on after it — `"x"y""` — is none.
+// literal with text run on after it — `"x"y""`, an entityDefTokens token — is
+// none.
 func isLiteral(t string) bool {
 	return len(t) >= 2 && (t[0] == '"' || t[0] == '\'') && strings.IndexByte(t[1:], t[0]) == len(t)-2
 }
@@ -417,11 +418,24 @@ const declSpace = " \t\r\n"
 
 // declTokens splits a markup declaration body on white space, keeping each
 // quoted literal whole and WITH its quotes, so a literal never compares equal
-// to a keyword. A literal ends its token only at white space: text run on
-// after the closing quote with no S between — `"x"NDATA`, which XML 1.0
-// NDataDecl forbids — stays in the literal's token, which isLiteral then
-// refuses.
+// to a keyword.
 func declTokens(s string) []string {
+	return splitDecl(s, false)
+}
+
+// entityDefTokens is declTokens for a general entity's <!ENTITY> body, except
+// that a literal ends its token only at white space: text run on after the
+// closing quote with no S between — `"x"NDATA`, which XML 1.0 NDataDecl
+// forbids — stays in the literal's token, which isLiteral then refuses. The
+// DOCTYPE header and a parameter entity's body keep declTokens' split, where a
+// literal's token ends at its closing quote.
+func entityDefTokens(s string) []string {
+	return splitDecl(s, true)
+}
+
+// splitDecl splits s as declTokens does, a literal's token running on to the
+// next white space when runOn is set.
+func splitDecl(s string, runOn bool) []string {
 	var toks []string
 	for {
 		s = strings.TrimLeft(s, declSpace)
@@ -433,7 +447,10 @@ func declTokens(s string) []string {
 			if end < 0 {
 				return append(toks, s)
 			}
-			end = runEnd(s, end+2)
+			end += 2
+			if runOn {
+				end = runEnd(s, end)
+			}
 			toks = append(toks, s[:end])
 			s = s[end:]
 			continue
