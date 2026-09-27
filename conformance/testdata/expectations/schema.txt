@@ -10453,7 +10453,7 @@ MS-Wildcards2006-07-15/wildZ004/schema/wildZ004 pass
 MS-Wildcards2006-07-15/wildZ005/schema/wildZ005 pass
 MS-Wildcards2006-07-15/wildZ006/schema/wildZ006 pass
 MS-Wildcards2006-07-15/wildZ007/schema/wildZ007 pass
-MS-Wildcards2006-07-15/wildZ008/schema/wildZ008 fail
+MS-Wildcards2006-07-15/wildZ008/schema/wildZ008 pass
 MS-Wildcards2006-07-15/wildZ009/schema/wildZ009 pass
 MS-Wildcards2006-07-15/wildZ009b/schema/wildZ009b pass
 MS-Wildcards2006-07-15/wildZ010/schema/wildZ010 pass
