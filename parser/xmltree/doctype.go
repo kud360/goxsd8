@@ -52,7 +52,10 @@ const (
 // It reads markup and nothing else: a comment, a processing instruction and
 // any markup declaration other than <!ENTITY> are stepped over whole. A
 // declaration it cannot read declares no unparsed entity, which leaves an
-// ·ENTITY value· naming that entity undeclared rather than declared.
+// ·ENTITY value· naming that entity undeclared rather than declared. One
+// not-well-formed declaration is read all the same: a notation name that
+// breaks the Name production only in a non-ASCII character, the GAP(xml)
+// isNotationName carries.
 func doctypeEntities(directive string, standalone bool) (decls []entityDecl, unread bool) {
 	rest, ok := strings.CutPrefix(directive, "DOCTYPE")
 	if !ok {
@@ -340,7 +343,7 @@ func entityDeclOf(body string) (entityDecl, bool) {
 	if body == "" || !strings.ContainsRune(declSpace, rune(body[0])) {
 		return entityDecl{}, false
 	}
-	toks := declTokens(body)
+	toks := entityDefTokens(body)
 	if len(toks) < 2 || strings.HasPrefix(toks[0], "%") {
 		return entityDecl{}, false
 	}
@@ -368,13 +371,39 @@ func unparsedDef(def []string) bool {
 			return false
 		}
 	}
-	return def[1+lits] == "NDATA" && isDeclName(def[2+lits])
+	return def[1+lits] == "NDATA" && isNotationName(def[2+lits])
 }
 
-// isLiteral reports whether t, one of declTokens' tokens, is a closed quoted
-// literal.
+// isNotationName reports whether t, the token an NDataDecl closes on, is an
+// XML 1.0 Name (production [5]) in its ASCII characters: the first is a
+// NameStartChar ([4]: ':', A-Z, '_', a-z) and every later one a NameChar ([4a]:
+// those, '-', '.', 0-9). It rejects the notation names `g&h` and `1gif`.
+//
+// GAP(xml): a non-ASCII character is admitted without the range check of
+// NameStartChar [4] and NameChar [4a], so a notation name breaking Name only
+// in one — '×' (#xD7), say — reads as a Name and its entity as unparsed. The
+// direction is fail-OPEN against the set's one reader: validate's
+// (*walk).entitiesDeclared, reached through xmltree.Reader.HasUnparsedEntity
+// and validate/xmlsrc's element.HasUnparsedEntity, raises no cvc-simple-type
+// clause 3 error for an ·ENTITY value· naming that entity. Owned by #1745.
+func isNotationName(t string) bool {
+	for i := 0; i < len(t); i++ {
+		c := t[i]
+		start := c == ':' || c == '_' || ('A' <= c && c <= 'Z') || ('a' <= c && c <= 'z')
+		later := i > 0 && (c == '-' || c == '.' || ('0' <= c && c <= '9'))
+		if c < 0x80 && !start && !later {
+			return false
+		}
+	}
+	return true
+}
+
+// isLiteral reports whether t, one of splitDecl's tokens, is a closed quoted
+// literal and nothing more: its quote recurs only as its last character, so a
+// literal with text run on after it — `"x"y""`, an entityDefTokens token — is
+// none.
 func isLiteral(t string) bool {
-	return len(t) >= 2 && (t[0] == '"' || t[0] == '\'') && t[len(t)-1] == t[0]
+	return len(t) >= 2 && (t[0] == '"' || t[0] == '\'') && strings.IndexByte(t[1:], t[0]) == len(t)-2
 }
 
 // isDeclName reports whether t, one of declTokens' tokens, can be a Name: it
@@ -391,6 +420,22 @@ const declSpace = " \t\r\n"
 // quoted literal whole and WITH its quotes, so a literal never compares equal
 // to a keyword.
 func declTokens(s string) []string {
+	return splitDecl(s, false)
+}
+
+// entityDefTokens is declTokens for a general entity's <!ENTITY> body, except
+// that a literal ends its token only at white space: text run on after the
+// closing quote with no S between — `"x"NDATA`, which XML 1.0 NDataDecl
+// forbids — stays in the literal's token, which isLiteral then refuses. The
+// DOCTYPE header and a parameter entity's body keep declTokens' split, where a
+// literal's token ends at its closing quote.
+func entityDefTokens(s string) []string {
+	return splitDecl(s, true)
+}
+
+// splitDecl splits s as declTokens does, a literal's token running on to the
+// next white space when runOn is set.
+func splitDecl(s string, runOn bool) []string {
 	var toks []string
 	for {
 		s = strings.TrimLeft(s, declSpace)
@@ -402,8 +447,12 @@ func declTokens(s string) []string {
 			if end < 0 {
 				return append(toks, s)
 			}
-			toks = append(toks, s[:end+2])
-			s = s[end+2:]
+			end += 2
+			if runOn {
+				end = runEnd(s, end)
+			}
+			toks = append(toks, s[:end])
+			s = s[end:]
 			continue
 		}
 		end := strings.IndexAny(s, declSpace+`"'`)
@@ -413,4 +462,14 @@ func declTokens(s string) []string {
 		toks = append(toks, s[:end])
 		s = s[end:]
 	}
+}
+
+// runEnd reports the index of the first white space in s at or after from, or
+// len(s).
+func runEnd(s string, from int) int {
+	end := strings.IndexAny(s[from:], declSpace)
+	if end < 0 {
+		return len(s)
+	}
+	return from + end
 }
