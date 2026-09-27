@@ -312,7 +312,9 @@
 // (a declaration name that is not an xs:NCName, a QName-valued attribute
 // with an empty local part, an empty prefix, or more than one colon, an
 // unrecognized ## token in notQName, §3.10.2, a minOccurs/maxOccurs
-// outside xs:nonNegativeInteger/xs:allNNI, a processContents outside the
+// outside xs:nonNegativeInteger/xs:allNNI, a length, minLength, maxLength
+// or fractionDigits value outside xs:nonNegativeInteger or a totalDigits
+// value outside xs:positiveInteger, a processContents outside the
 // enumeration skip/lax/strict), which no Schema Representation Constraint
 // covers. A document that is simply not VALID against the schema for
 // schema documents — a prohibited attribute on a top-level form, an
