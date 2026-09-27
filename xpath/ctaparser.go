@@ -433,19 +433,26 @@ func ctaScanWildcardTail(s string, i int) int {
 	return j
 }
 
+// ctaNCNamePattern is the pattern Datatypes §3.4.7.1 fixes for xs:NCName,
+// "[\i-[:]][\c-[:]]*", behind the '^' a prefix scan needs. It is a local copy
+// of the generated builtin row's value rather than a production import of
+// builtin, and TestCTANCNamePatternPinned fails if the two diverge (PRINCIPLES
+// 26/27).
+const ctaNCNamePattern = `^[\i-[:]][\c-[:]]*`
+
 // ctaNCNameRE matches the longest NCName at the START of the string it is
-// applied to — [Namespaces in XML] production [4], spelled as the pattern
-// Datatypes §3.4.7.1 fixes for xs:NCName, "[\i-[:]][\c-[:]]*". It is
-// translated and compiled once here through [regex.Translate], so the code
-// points behind \i and \c are the ones the regex package owns and not a second
-// table (PRINCIPLES 26/27; parser and builtin/strict reach the same class the
-// same way, and regex/class.go records which edition of XML supplies it).
+// applied to — [Namespaces in XML] production [4], spelled as
+// ctaNCNamePattern. It is translated and compiled once here through
+// [regex.Translate], so the code points behind \i and \c are the ones the
+// regex package owns and not a second table (PRINCIPLES 26/27; parser and
+// builtin/strict reach the same class the same way, and regex/class.go records
+// which edition of XML supplies it).
 //
 // The flavor is FO because only FO's '^' is a real anchor: FlavorXSD anchors
 // the WHOLE string, which cannot express a prefix scan. This pattern carries
 // no construct the two flavors read differently.
 var ctaNCNameRE = func() *regexp.Regexp {
-	goRE, err := regex.Translate(`^[\i-[:]][\c-[:]]*`, regex.FlavorFO, "")
+	goRE, err := regex.Translate(ctaNCNamePattern, regex.FlavorFO, "")
 	if err != nil {
 		panic("xpath: translating the NCName pattern: " + err.Error())
 	}

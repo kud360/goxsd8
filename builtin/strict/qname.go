@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/kud360/goxsd8/builtin"
 	"github.com/kud360/goxsd8/regex"
 	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsderr"
@@ -11,15 +12,16 @@ import (
 
 // ncNameRE matches the NCName production ([XML Namespaces] NT-NCName): a
 // NameStartChar-minus-colon followed by NameChar-minus-colon, whole-string
-// anchored. It is compiled once from the XSD-flavor pattern "[\i-[:]][\c-[:]]*"
-// via regex.Translate so the NameStartChar/NameChar code-point sets are the
-// ones the regex package already owns and not a second table here (PRINCIPLES
-// 26/27). Those sets are hand-typed rather than generated (#989). FlavorXSD
-// output is whole-string anchored (\A(?:…)\z), so a match means the entire
-// string is an NCName — in particular an empty string and any string containing
-// ':' fail.
+// anchored. It is compiled once, with the XSD flavor via regex.Translate, from
+// xs:NCName's pattern "[\i-[:]][\c-[:]]*" as the generated builtin row carries
+// it (builtin.NCNamePattern), and the NameStartChar/NameChar code-point sets
+// are the ones the regex package already owns — neither is a second table here
+// (PRINCIPLES 26/27). Those sets are hand-typed rather than generated (#989).
+// FlavorXSD output is whole-string anchored (\A(?:…)\z), so a match means the
+// entire string is an NCName — in particular an empty string and any string
+// containing ':' fail.
 var ncNameRE = func() *regexp.Regexp {
-	goRE, err := regex.Translate(`[\i-[:]][\c-[:]]*`, regex.FlavorXSD, "")
+	goRE, err := regex.Translate(builtin.NCNamePattern(), regex.FlavorXSD, "")
 	if err != nil {
 		panic("strict: translating the NCName pattern: " + err.Error())
 	}
