@@ -424,17 +424,19 @@ func declTokens(s string) []string {
 }
 
 // entityDefTokens is declTokens for a general entity's <!ENTITY> body, except
-// that a literal ends its token only at white space: text run on after the
-// closing quote with no S between — `"x"NDATA`, which XML 1.0 NDataDecl
-// forbids — stays in the literal's token, which isLiteral then refuses. The
-// DOCTYPE header and a parameter entity's body keep declTokens' split, where a
-// literal's token ends at its closing quote.
+// that every token ends only at white space. Text run on after a literal's
+// closing quote with no S between — `"x"NDATA`, which XML 1.0 NDataDecl [76]
+// forbids — stays in the literal's token, which isLiteral then refuses; a
+// literal run on after a keyword — `SYSTEM"x"`, which ExternalID [75] forbids
+// — stays in the keyword's token, which unparsedDef then refuses. The DOCTYPE
+// header and a parameter entity's body keep declTokens' split, where every
+// token ends at a quote as well as at white space.
 func entityDefTokens(s string) []string {
 	return splitDecl(s, true)
 }
 
-// splitDecl splits s as declTokens does, a literal's token running on to the
-// next white space when runOn is set.
+// splitDecl splits s as declTokens does, every token running on to the next
+// white space when runOn is set.
 func splitDecl(s string, runOn bool) []string {
 	var toks []string
 	for {
@@ -455,7 +457,11 @@ func splitDecl(s string, runOn bool) []string {
 			s = s[end:]
 			continue
 		}
-		end := strings.IndexAny(s, declSpace+`"'`)
+		stops := declSpace + `"'`
+		if runOn {
+			stops = declSpace
+		}
+		end := strings.IndexAny(s, stops)
 		if end < 0 {
 			return append(toks, s)
 		}
