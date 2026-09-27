@@ -3834,6 +3834,8 @@ func occursOf(el *Element) (occ xsd.Occurs, elided bool, err error) {
 // type="xs:nonNegativeInteger" and maxOccurs type="xs:allNNI" (Appendix A's
 // occurs attribute group), so a lexical outside that value space is an attribute
 // failing its own declared type, which is what ruleDatatypeValid names.
+// facetCountValue reads a length or digits facet's value attribute through it
+// on the same footing. attr names the attribute in the diagnostic's opening.
 //
 // NOT p-props-correct (§3.9.6.1). That constraint quantifies over an existing
 // particle's PROPERTIES, and occursOf returns this error before reaching
