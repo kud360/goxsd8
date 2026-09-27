@@ -137,8 +137,10 @@ This file does not restate them.
 repository-scoped REST, and which `gh` and proxy errors are real is settled
 under **Environment requirements**.
 
-`go tool wipsurvey` and `go tool gapaudit` read `gh issue list --json`-shaped
-JSON on stdin, so any channel that can write that JSON to a file feeds them.
+`go tool wipsurvey`, `go tool gapaudit` and `go tool lanepartition` read `gh
+issue list --json`-shaped JSON on stdin, so any channel that can write that
+JSON to a file feeds them; `lanepartition` reads `gapissues.json`, the shape
+carrying `body`.
 Over repository-scoped REST:
 
 ```sh

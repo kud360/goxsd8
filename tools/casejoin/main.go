@@ -302,12 +302,13 @@ func record(found map[string][]naming, wanted map[string]struct{}, e conformance
 // names it, and a report naming a file the join did not read would be
 // unfalsifiable.
 //
-// It is the SECOND construction of that name, conformance's own (unexported)
-// laneFileIn being the first — the same split as suiteIndexName above, and for
-// the same reason: this tool cannot reach an unexported helper across the
-// package boundary, and one filepath.Join does not earn an exported one.
-// Rename the convention in one and rename it in the other, or this tool joins
-// against a lane file nobody writes.
+// It is a SECOND construction of that name, conformance's own (unexported)
+// laneFileIn being the first and tools/lanepartition's run another — the same
+// split as suiteIndexName above, and for the same reason: this tool cannot
+// reach an unexported helper across the package boundary, and one
+// filepath.Join does not earn an exported one. Rename the convention in one
+// and rename it in the other, or this tool joins against a lane file nobody
+// writes.
 func laneFile(dir, lane string) string {
 	return filepath.Join(dir, lane+".txt")
 }

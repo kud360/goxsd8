@@ -112,9 +112,10 @@
 //	    (issue #1412). What it will not do is describe an APPLICABLE entry
 //	    declaring no expected outcome: that entry is refused, in discovery's
 //	    own words, rather than reported with an outcome the catalog never
-//	    declared. Its consumer is `go tool casejoin`, which turns a
+//	    declared. Its consumers are `go tool casejoin`, which turns a
 //	    `go tool suiteindex` census of fixture paths into those IDs
-//	    (issue #1642).
+//	    (issue #1642), and `go tool lanepartition`, which clusters a lane's
+//	    banked fails by declared outcome and test set (issue #1740).
 //
 // # Sanctioned applicability removals
 //

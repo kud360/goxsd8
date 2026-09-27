@@ -59,15 +59,14 @@ already done, and the commit body says so.
 
    **Then partition each active lane's failures, and read the lane before
    the queue.** A score says how many cases fail; the question the band
-   answers is which single decision holds the most of them. `casejoin
-   join <lane>` fed every fixture path in the suite splits the lane's
-   banked `fail` lines into those that can flip and those that cannot,
-   and the conformance run's decline census says which the engine
-   declines. The largest cluster, and the one decision that holds it, is
-   the milestone's north star; say whether an open issue targets it and
-   file one if none does (#1738). Until a tool partitions failures by
-   mechanism, take the largest clusters by test set and expected
-   validity by hand, once a week at least.
+   answers is which single decision holds the most of them. `go tool
+   lanepartition -log <run log> <lane> < gapissues.json` clusters the
+   lane's banked `fail` lines by expected validity, test set, and — from
+   a `GOXSD_DECLINES=1` conformance run's `-v` output — declined versus
+   decided-and-wrong, by charged rule on the schema lane, largest first,
+   each with the open issues naming it (#1740). The largest cluster, and
+   the one decision that holds it, is the milestone's north star; say
+   whether an open issue targets it and file one if none does (#1738).
 2. **Reconcile the branch namespace** — report-only; sessions never delete
    or rename refs. A `wip/issue-<N>` whose issue is CLOSED should have
    vanished at merge: verify its content is in main and supersede the
