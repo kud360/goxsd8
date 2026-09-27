@@ -268,7 +268,7 @@ var citationPattern = regexp.MustCompile(`#(\d+)`)
 // do: `go tool commentwrap` reflows marker prose to 79 columns on its own
 // schedule, and [paragraph] has already joined the wrapped lines with a
 // single space before this pattern sees them (#1117).
-var rulingPattern = regexp.MustCompile(`(?i)RULED permanent by #(\d+)`)
+var rulingPattern = regexp.MustCompile(`RULED permanent by #(\d+)`)
 
 // citations returns every issue number text cites, in first-appearance
 // order with repeats dropped, so a marker naming one owner twice and a
