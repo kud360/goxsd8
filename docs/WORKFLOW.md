@@ -48,14 +48,26 @@ about the tree, the queue or a measurement enters one:
   same source.
 - **A citation resolves by KIND as well as number** — a `cvc-*` Validation
   Rule lives in a different subsection from a Schema Component Constraint,
-  and CLAUDE.md's headline numbers are not STYLE IDs. Point at a site with
-  a `GAP(...)` marker's text or the enclosing identifier: a line number
-  into a file the previous landing touched has a one-session shelf life.
+  and CLAUDE.md's headline numbers are not STYLE IDs. Point at a site by
+  its `GAP(...)` marker's text, its enclosing identifier, its heading or a
+  quoted sentence, never by line number: a line number into a file the
+  previous landing touched has a one-session shelf life. An edit that passes
+  over a line citation converts it rather than re-anchoring it (#1356).
 - **Take a figure from the instrument that produces it** — the exported
   surface from `go tool surface`, the branch namespace from `go tool
   wipsurvey`, a case count from a run. A `Ratchet:` trailer naming
   absolute lane endpoints pastes them; a writer with no instrument in
-  reach states the delta alone and says that is what it is (#796).
+  reach states the delta alone and says that is what it is (#796). A
+  measured behaviour names the entry point and the commit it was measured
+  at — `parser.Parse` at `40eaeac` — because a fixture legal at one entry
+  point can be rejected at another (#1629).
+- **A set taken from the tree or the corpus states how it was taken** — the
+  command, the paths or globs it ran over, whether tests were in, and the
+  commit — and is read as a lower bound any later round may widen. A body
+  that scopes work over such a set decides done by the command that
+  re-derives it, never by the count (#912, #1485). A claim that the suite
+  does or does not reach a construct carries its census, or is written as
+  unchecked (#510, #679).
 - **A lane's score is the census of
   `conformance/testdata/expectations/<lane>.txt` — its `pass` and `fail`
   line counts, which `go tool lanestatus` prints. A `docs/LOG` entry and a
@@ -68,7 +80,18 @@ about the tree, the queue or a measurement enters one:
   instrument's delta from another's baseline yields a figure no instrument
   ever printed (#1120).
 - **Anything unchecked is written as a hypothesis**, in the sentence that
-  makes the claim, not in a caveat elsewhere.
+  makes the claim, not in a caveat elsewhere. A claim carried over from
+  another thread keeps its author's qualifiers verbatim: "for the shapes I
+  could construct" is a bound, and quoting it somewhere more authoritative
+  does not make it a finding (#550).
+- **An instruction is checked against the tree it acts on, not the tree it
+  was written against.** On absorbing `origin/main` — a merge forward, a
+  resumed branch, a takeover — diff the absorbed range for `CLAUDE.md`,
+  `docs/`, `.claude/`, and carry any change to the rules into every brief
+  written after it. Before acting on an instruction that names a tree state
+  — a pre-committed amendment, a brief, a body's site list — re-read the
+  site in the tree you are about to edit; where they disagree the tree wins
+  and the divergence is said on the thread (#609).
 
 ## The branch scheme (the WIP discovery index)
 
@@ -108,7 +131,10 @@ Invariants:
   heartbeat; a long step pushes intermediate commits rather than letting
   its lease lapse, and a step that produces nothing to commit pushes
   `git commit --allow-empty` instead — the first such push is also what
-  gives a bare claim a tip of its own to be dated by. A branch that has
+  gives a bare claim a tip of its own to be dated by. **Push a heartbeat
+  immediately before every delegation**: the orchestrator cannot push while
+  a subagent round runs, so the round's whole life must fit inside the TTL
+  that push starts (#1493). A branch that has
   pushed **no commits of its own** has no tip time of its own — its tip is
   the landing it branched from, so no tip-age reading may date it or
   retire it (#722). **Its lease is dated by the newest thread comment
@@ -119,10 +145,14 @@ Invariants:
   such comment ever posted** it is not: the claim is pushed before its
   first heartbeat, so an undated claim is as likely seconds old as
   abandoned, and it stays CLAIMED until a human or a session settles it
-  from the thread. Taking a claim means posting the `TAKEOVER:` comment
-  naming the branch tip you found, then pushing the heartbeat — which
-  makes the ref the arbiter of the race, exactly as it is everywhere else
-  (#867).
+  from the thread. **Taking over is how every resume begins**, an EXPIRED
+  branch as much as a takeable CLAIMED one: post the `TAKEOVER:` comment
+  naming the branch tip you found and its age, then push the heartbeat
+  before any other work — which makes the ref the arbiter of the race,
+  exactly as it is everywhere else, and a rejected heartbeat means another
+  session holds the branch: fetch and pick again (#867, #1469). The comment
+  states what you read (tip, age, diff against main), never a cause you did
+  not measure — a lapsed lease cannot tell a dead round from a slow one.
 - **Races are settled by git's atomic ref updates, never by force.** A
   rejected push to `wip/*` means you lost the race: fetch, abandon the
   local attempt, pick something else. Force-pushing `wip/*` or `parked/*`
@@ -134,7 +164,9 @@ Invariants:
   merge, abandoned ones stay as re-planning evidence. A retired name is
   never contended, because an issue is never re-attempted under its own
   number — re-planning supersedes it with a new issue, and the fresh
-  attempt starts as `wip/issue-<M>` from `origin/main`.
+  attempt starts as `wip/issue-<M>` from `origin/main`. A human operator's
+  direction on the thread is the one thing that may send a session back to
+  a parked branch; no session decides that for itself (#648).
 - **Freshly-fetched `origin/main` is the only base.** Every diff, merge
   and branch point that names `main` is taken against `origin/main` after
   an explicit `git fetch origin main` in THIS session; a local `main` in
@@ -179,10 +211,13 @@ chooses (#350).
 
 - Only the orchestrating session's own git commands write into the
   `wip/issue-<N>` checkout.
-- **Any subagent spawned to mutate code gets worktree isolation** — the
-  harness's `isolation: "worktree"` option. Mandatory for every **mason**
-  invocation, because a mason may break lines deliberately at any moment
-  to check that a test notices. Its branch is local-only and never pushed.
+- **Any subagent spawned to write files gets worktree isolation** — the
+  harness's `isolation: "worktree"` option — whatever it writes: the
+  invariant is about the tree, not the file type, so the chronicler's LOG
+  entry is isolated exactly as a mason round is (#1392). A mason may also
+  break lines deliberately at any moment to check that a test notices. The
+  worktree's branch is local-only and never pushed; the two halves of a
+  `/retro` each get their own.
 - The orchestrator never commits on a live subagent's behalf, for any
   reason — including a stop-hook "uncommitted changes" warning, which
   fires on an in-progress edit exactly as readily as a finished one
@@ -202,16 +237,18 @@ chooses (#350).
   whose mandatory heartbeat is a commit `wip/issue-<N>` has and the
   worktree, cut from `origin/main`, does not — `git merge --no-ff`. No
   cherry-pick, no rebase, no re-edit by hand: each rewrites the SHAs
-  mason's account names, so a reader checking that account against the
-  branch finds nothing (#1099). Then discard the worktree and checkpoint,
+  the subagent's account names, so a reader checking that account against
+  the branch finds nothing (#1099). Then discard the worktree and checkpoint,
   naming the resulting SHA — the fast-forwarded tip, or the merge
   commit — in that checkpoint's `RESUME:` comment, which this step posts
   whether or not the next action is obvious: a commit message on
   `wip/issue-<N>` does not survive the squash at landing.
 
-The orchestrator holds the pen itself only when the edit carries no design
-content and its scope is provable: a change a review verdict specifies
-verbatim, or text no compiler reads. Everything else is a mason round.
+**The orchestrator holds the pen only for words already written on the
+thread.** Its edit transcribes a verdict's or a ruling's text, or is
+mechanical — a reflow, a renumbering, a SHA — and its commit body links the
+comment it transcribes. Composing new text is design content, in a `.md`
+file as much as a `.go` one, and is a mason round (#1442).
 
 **Every orchestrator edit is a new commit.** Amend and force-push of a
 pushed `wip/*` or `parked/*` ref are forbidden without exception —
@@ -257,6 +294,21 @@ plus log entry), `Closes #<N>` in the body closes the issue, and GitHub
 auto-deletes the head branch (keep the repo's "Automatically delete head
 branches" setting ON). Nothing is ever committed directly to `main`.
 
+**Write the squash title from the landed change**, never by inheriting a
+branch commit's title: a finding against prose that a commit title also
+states is a finding against the squash title, and the squash is the one
+place it can still be corrected (#1329).
+
+An iteration that lands no code — a park, a stood-down pick — lands its
+LOG entry the way a maintenance command does: a short-lived branch of its
+own, its own PR, squash-merged in the same session (#797).
+
+**An issue closes by a landing** — a bound `Closes #<N>`, or precondition
+4's hand close — **or by the cartographer as obsolete or duplicate**, with a
+comment saying why. No other agent closes or reopens an issue; a close
+without a landing or a comment is reversed by the orchestrator that finds
+it, and said on the thread (#1351).
+
 A landing that closes more than one issue writes ONE `Closes #<N>`
 sentence per issue — `Closes #669. Closes #625. Closes #748.` — never the
 comma form `Closes #669, #625, #748.`. GitHub binds a closing keyword to
@@ -287,22 +339,19 @@ is anyone else's to volunteer:
    `git diff origin/main...HEAD -- docs/LOG/` piped through
    `grep -E '^\+.*(\(#<N>\)|issues/<N>|#<N>)'` for the issue number being
    landed. Not "the chronicler was invoked", and not a non-empty
-   `docs/LOG/` path diff: a forward merge carries other issues' entries
-   into that diff, which read PRESENT on #813's branch while its own entry
-   was absent. The entry rides the session commit or the session does not
-   land (PRINCIPLES 29). A pass that closes no issue — a `post-land`
+   `docs/LOG/` path diff, which a forward merge fills with other issues'
+   entries (#813). The entry rides the session commit or the session does
+   not land (PRINCIPLES 29). A pass that closes no issue — a `post-land`
    stamp, a `/backlog` run — has no number to grep for: its entry is due
    by the same rule and this check has nothing to say about it. `go tool
    landcheck -issue <N> -squash <file> -pr-body <file>` runs this
-   precondition and precondition 2's merge-base-current requirement
-   together (#963), then the closing-keyword check above — exit 0 clean,
-   1 if this precondition's grep or the closing-keyword check fails, 2 if
-   the base is stale or the tool cannot run; hand-run the grep above only
-   when the tool is unavailable.
-   Both read the local `HEAD` while the PR merges the pushed head, so
-   `landcheck` first exits 1 while `git rev-list @{u}..HEAD` is non-empty
-   and 2 when `HEAD` is behind its upstream or has none, and a hand-run
-   runs that `rev-list` first (#1674).
+   precondition, precondition 2's merge-base-current requirement and the
+   closing-keyword check above (#963) — exit 0 clean, 1 if the grep or the
+   keyword check fails, 2 if the base is stale or the tool cannot run.
+   It reads the pushed head, not the local `HEAD`: it exits 1 while
+   `git rev-list @{u}..HEAD` is non-empty and 2 when `HEAD` is behind its
+   upstream or has none, and a hand-run of the grep runs that `rev-list`
+   first (#1674).
 2. **`origin/main` has not moved past the verdict's base** —
    `git log HEAD..origin/main` is empty. If it is not, merge forward and
    re-judge per **After the verdict**, then re-verify: main can drift
@@ -315,14 +364,20 @@ is anyone else's to volunteer:
    `--allow-empty` lease heartbeats fall out of it and owe nothing, and the
    `(top)` magic is what holds that answer steady from a subdirectory.
    Every commit it does yield is covered by some `MASON:` comment on the
-   thread, or the orchestrator states here which arm of the pen bound
-   admits it — a verdict-specified change, or text no compiler reads. A
-   commit that is neither is a mason round that was skipped, and the branch
-   does not land (#1227). A repair round's own comment dispositions every
-   numbered item of the verdict it repairs. An account that was never
-   written is a mason round, never the orchestrator's to compose (#565).
-4. **Every issue the squash body names reads `closed`** — AFTER the merge,
-   not before it. The iteration set is every `#<N>` reference the squash
+   thread, or the orchestrator states here which thread comment its pen
+   transcribed (**One writer per checkout**). A commit that is neither is a
+   mason round that was skipped, and the branch does not land (#1227). A
+   `MASON:` comment covers a commit only if it carries the account itself —
+   a body that is a local path carries nothing (**What survives a
+   session**, #992) — and every SHA it names resolves in this checkout
+   (`git cat-file -t <sha>`): an account naming a SHA that resolves nowhere
+   describes work that does not exist, and the checkpoint comment says so
+   (#1355). A repair round's own comment dispositions every numbered item of
+   the verdict it repairs. An account that was never written is a mason
+   round, never the orchestrator's to compose (#565).
+4. **Every issue the squash body names reads the state the body meant**
+   — AFTER the merge, not before it (#1040). The iteration set is every
+   `#<N>` reference the squash
    commit text names, subject and body, bound closing keyword and plain
    mention alike — `git log -1 --format=%B <squash-sha>` piped through
    `grep -oE '#[0-9]+' | sort -u`. Not the `Closes` sentences, which the
@@ -368,8 +423,9 @@ lands inside the verdict's own window. A merge forward is never a rebase
 (force-push is forbidden, so a merge is the only mechanism); it names the
 absorbed SHAs in the log entry and the PR body, re-runs the FULL gate on
 the committed merged tree — a conflict-free auto-merge included, because a
-clean merge is not evidence of a compatible one (#392) — and re-reads
-CLAUDE.md's gate block if an absorbed commit changed the gate itself.
+clean merge is not evidence of a compatible one (#392) — and checks the
+absorbed range for changed rules, the gate among them, per **Claims that
+outlive the session**.
 
 Anything that moves the tree after the verdict — a merge forward, a late
 finding, a fix turned up while writing the log — is judged by one
@@ -430,7 +486,7 @@ then yours, each byte-identical to its authored form — nothing reflowed,
 reordered or tidied. Then prove it by reconstructing each parent from the
 resolved file (`git show :2:<path>`, `git show :3:<path>`); each must
 appear as an unbroken, unedited run. Heading arithmetic passes while an
-entry is silently dropped. (#600 tracks the single-append-point layout.)
+entry is silently dropped.
 
 ## Parking
 
@@ -439,24 +495,30 @@ restart on one issue, a `wip/` branch whose `go tool wipsurvey` reason
 names its repeated empty-diff `TAKEOVER:` count (#1437), or a resume
 whose merge will not resolve: checkpoint the branch one final time,
 **relabel** the issue `needs-replan` and clear `ready`, and comment the
-findings that killed the attempt. Nothing is renamed or deleted — the
-label alone retires the branch in place as re-planning evidence. **Two
+findings that killed the attempt. A surveying session that parks on the
+empty-diff trigger has nothing to checkpoint and does not take the branch
+first — taking it would be one more empty holding — so it relabels and
+comments where the branch stands (#1492). Nothing is renamed or deleted —
+the label alone retires the branch in place as re-planning evidence. **Two
 rejections is the hard cap** (PRINCIPLES 30); never solicit a third
 round. **Three lost rounds is the hard cap on the other trigger**:
 nothing is known to be wrong with the change, so the finding to comment
 is that the round does not fit a container's life, and the replacement
-issue is a smaller one (#1443). After re-planning, the cartographer files
-the replacement, names it on the parked thread, and closes the
-`needs-replan` issue `not_planned` — never `completed`, which marks work
-that landed (#493).
+issue is a smaller one (#1443). The cap counts the lost-round statements
+on the thread (`/develop`'s **Lost rounds**). After re-planning, the
+cartographer files the replacement, names it on the parked thread, and
+closes the `needs-replan` issue `not_planned` — never `completed`, which
+marks work that landed (#493).
 
 ## GitHub conventions
 
 **Labels**: **exactly one queue label** — `ready` (unblocked, sized for
-one session), `blocked`, `needs-replan` or `epic` — plus
-`area/{model,xsderr,parser,value,builtin,xpath,`
-`validate,codegen,codec,regex,loader,conformance,cli,meta}` and
-`kind/{feature,gap,bug,refactor,process,tooling,story}`. Milestones mirror
+one session), `blocked`, `needs-replan` or `epic` — plus an `area/` naming
+the package or subject, spelt as the package is: `area/{xsd,xsderr,parser,`
+`value,builtin,xpath,icpath,validate,codegen,codec,regex,loader,`
+`conformance,cmd,docs,meta}`, and a
+`kind/{feature,gap,bug,refactor,process,tooling,story,docs}`. This list is
+the only one; other documents point here (#1019). Milestones mirror
 docs/PLAN.md. `blocked` means waiting on a named dependency recorded in
 `## Depends on` — an issue or a trigger, not only an open issue. The queue
 labels are exclusive because the surveys read them that way: an issue
@@ -476,29 +538,25 @@ applied before filing and again before grounding something already filed:
 
 - **Correct a stale or wrong premise in the body**, not only in a comment;
   the next reader starts from the body. The comment stays as provenance.
-- **Never write back a body *as* `issue_read` returned it** — that read
-  path strips angle-bracketed tokens, leaving an empty inline-code span
-  where an element name was (or an empty `()` where an autolink was), and
-  HTML-entity-escapes the punctuation that survives (`'` as `&#39;`, `"`
-  as `&#34;`, `>` as `&gt;`) even in a body holding no brackets at all.
-  Repair that copy: undo the escaping, author the section you came to
-  change, leave every other section as it stands, and write that back.
-  The escaping is mechanically reversible; the stripping is not — an
-  empty span carries no residue, no length and no first letter, so
-  nothing in the body or the tree says which token it held. Where a
-  stripped token will not re-derive, the write is blocked and the
-  correction is not: comment on the thread and name the section the body
-  still gets wrong. **A body known to be wrong is never landed
-  silently.** `WebFetch` on the issue URL answers a prompt over the
-  rendered page through a small model, so it returns a summary of that
-  page rather than the stored body — read what an issue says with it,
-  never the body you intend to write back (#764).
+- **Write back only a body read byte-faithfully and whole** — through
+  repository-scoped REST (docs/ROUTINES.md). The MCP `issue_read` path
+  strips angle-bracketed tokens, escapes punctuation, and truncates a long
+  body without a marker, headings included (#764, #1014). The escaping is
+  reversible; the stripping and the truncation are not. Where only that
+  path is available, a write is blocked unless the copy is provably
+  complete and every stripped token re-derives: otherwise comment on the
+  thread and name the section the body still gets wrong. **A body known to
+  be wrong is never landed silently.** `WebFetch` on the issue URL returns
+  a small model's summary of the rendered page, never the stored body.
 - **Search the open queue** for the primary file path and identifier. A
   hit is either a duplicate (close one, say which) or an adjacent issue
   (cross-reference both). Never pass a hit silently.
-- **An `## Acceptance` ratchet promise names its condition** ("moves the
-  `schema` lane **provided** #N has landed"), so a later re-plan leaves the
-  staleness one grep away.
+- **An `## Acceptance` ratchet promise states lane movement and names its
+  condition** ("moves the `schema` lane **provided** #N has landed"), so a
+  later re-plan leaves the staleness one grep away. A body never quotes an
+  absolute banked figure; where one is needed it names
+  `conformance/testdata/expectations/<lane>.txt` as the thing to read at
+  work time (#646).
 - **An `## Acceptance` bullet is ruled before anything is implemented
   against it** — `/develop` step 3, which owns the questions that ruling
   asks and the shape it is posted in. Writing the bullet correctly at
