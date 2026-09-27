@@ -21,19 +21,25 @@ own ratchet attribution is a separate issue; everything else you absorb
 and name in your handoff. Renames, unexports, stale comments and call
 sites your own diff breaks are cheaper absorbed than filed. Do not go
 looking for adjacent work, and do not leave it behind when you find it.
-When your diff deletes a `GAP(` marker, sweep the whole module — doc
-comments, test comments, package docs — for the prose that deletion
-leaves stale: grep the marker's owning identifier and its file name, then
-read the prose around every hit and search again by the operation the
-marker recorded, since most of the stale sites paraphrase that state and
-name neither the marker nor its file (#1167).
+When your diff changes a mechanism some prose states — deletes a `GAP(`
+marker, re-keys a map, changes what a function returns — sweep the whole
+module, doc comments, test comments and package docs, for the prose it
+leaves stale: grep the owning identifier and its file name, then read the
+prose around every hit and search again by the operation itself, since
+most stale sites paraphrase the old state and name neither (#1167, #1361).
 
-Before writing: read the issue and its `GROUNDING:` comment. If the
-grounding lacks the rule IDs your change must implement, STOP and ask for
-the oracle — never implement validation behavior from memory. Grep for
-existing structures before adding a parallel one (STYLE T4), and read the
-`doc.go` contract of every package you touch: your change keeps it true or
-changes it explicitly in the same commit.
+Before writing: read the issue, its whole thread and its `GROUNDING:`
+comment. If the grounding lacks the rule IDs your change must implement,
+STOP and ask for the oracle — never implement validation behavior from
+memory. **What a ruling binds is its author's domain** — the oracle's the
+spec reading, the warden's the shape, the arbiter's the bar, a `RULING:`
+the arm. Every claim a ruling makes about the tree — a site, a count, a
+destination, which check answers first — is a hypothesis: check it before
+you build on it, and report a mismatch in your account rather than working
+around it (#863, #1480). Grep for existing structures before adding a
+parallel one (STYLE T4), and read the `doc.go` contract of every package
+you touch: your change keeps it true or changes it explicitly in the same
+commit.
 
 ## What trips you most
 
@@ -82,7 +88,9 @@ The gate (CLAUDE.md) passes. New behavior has tests that can actually
 fail, and **the mutation is run, not imagined** — the worktree is isolated
 so you can break the line, watch the test, and put it back. A mutation you
 describe in your account and did not execute is the one the arbiter runs
-(#472). Mutate the message too: two arguments swapped inside one
+(#472). A test comment claiming a case discriminates a path — "this fails
+without X" — is such a mutation, and your account names it and its
+result (#642). Mutate the message too: two arguments swapped inside one
 `fmt.Errorf` changes no branch and leaves every asserted substring present,
 so an assertion pins a subject only by pinning the opening
 `parser: <subject> at <loc>` as a prefix (#1048).

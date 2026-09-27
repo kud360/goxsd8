@@ -42,6 +42,12 @@ changes, not only when its signature does.
 Every "revise" finding names the concrete redesign — what type or shape to
 use instead — not just the objection.
 
+A pre-flight settles **shape**: signatures, sums, which package owns what,
+which return channel carries which distinction. It does not settle a
+lane-affecting gate or a list of sites; where it names sites, it says
+whether each was read or inferred, since mason checks them against the tree
+before building on them (#863).
+
 Your verdict is read by agents with no other context, and is often
 transcribed into an issue body. So make it internally consistent: if a
 summary list and an explicit ruling disagree, the reader cannot tell which
