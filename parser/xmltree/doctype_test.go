@@ -27,13 +27,17 @@ func drained(t *testing.T, doc string) *xmltree.Reader {
 }
 
 // HasUnparsedEntity answers from the internal subset's <!ENTITY> declarations,
-// and only an external general entity with an NDATA notation is unparsed: a
+// and only an external general entity with an NDATA notation is unparsed —
+// whatever Name the notation carries, NameChars and a non-ASCII one included: a
 // parameter entity, a parsed external entity and an internal one are not
 // members — the last even where an NDATA keyword follows its literal — nor is
 // a name that appears only inside a literal, a processing instruction or a
 // comment, nor a declaration whose ExternalID and NDataDecl do not read by
 // position — PUBLIC with one literal, an unquoted system identifier, a
-// notation name carrying ']', a token after the notation name. A reference to
+// notation name carrying ']', a token after the notation name, a keyword that
+// is not NDATA — nor one that is not well-formed (XML 1.0 [75], [76], [5]): no
+// S between the literal and NDATA, a literal with text run on after it, a
+// notation name carrying '&' or starting with a digit. A reference to
 // a parameter entity that is not read — here an external one — cuts the scan
 // off, so a declaration after it is not a member (XML 1.0 §5.1).
 func TestHasUnparsedEntityReadsTheInternalSubset(t *testing.T) {
@@ -42,6 +46,8 @@ func TestHasUnparsedEntityReadsTheInternalSubset(t *testing.T) {
   <!NOTATION gif SYSTEM "image/gif">
   <!ENTITY pic SYSTEM "pic.gif" NDATA gif>
   <!ENTITY pub PUBLIC "-//x//y" 'pub.gif' NDATA gif>
+  <!ENTITY namechars SYSTEM "x" NDATA _g-i.f:9>
+  <!ENTITY accented SYSTEM "x" NDATA ïmage>
   <!ENTITY % pe SYSTEM "pe.gif" NDATA gif>
   <!ENTITY parsed SYSTEM "parsed.xml">
   <!ENTITY text "a literal naming NDATA gif">
@@ -50,6 +56,11 @@ func TestHasUnparsedEntityReadsTheInternalSubset(t *testing.T) {
   <!ENTITY bare SYSTEM x NDATA gif>
   <!ENTITY bracket SYSTEM "x" NDATA gif]>
   <!ENTITY trailing SYSTEM "x" NDATA gif gif>
+  <!ENTITY keyword SYSTEM "x" XNDATA gif>
+  <!ENTITY nos SYSTEM "x"NDATA gif>
+  <!ENTITY runon SYSTEM "x"y"" NDATA gif>
+  <!ENTITY amp SYSTEM "x" NDATA g&h>
+  <!ENTITY digit SYSTEM "x" NDATA 1gif>
   <!ATTLIST r a CDATA "<!ENTITY inattlist SYSTEM 'x' NDATA gif>">
   <?pi <!ENTITY inpi SYSTEM "x" NDATA gif> ?>
   <!-- <!ENTITY incomment SYSTEM "x" NDATA gif> -->
@@ -61,10 +72,11 @@ func TestHasUnparsedEntityReadsTheInternalSubset(t *testing.T) {
 		name string
 		want bool
 	}{
-		{"pic", true}, {"pub", true}, {"after", false},
+		{"pic", true}, {"pub", true}, {"namechars", true}, {"accented", true}, {"after", false},
 		{"pe", false}, {"parsed", false}, {"text", false}, {"internal", false}, {"inattlist", false},
 		{"inpi", false}, {"incomment", false}, {"gif", false}, {"undeclared", false},
 		{"onelit", false}, {"bare", false}, {"bracket", false}, {"trailing", false},
+		{"keyword", false}, {"nos", false}, {"runon", false}, {"amp", false}, {"digit", false},
 	} {
 		if got := r.HasUnparsedEntity(tc.name); got != tc.want {
 			t.Errorf("HasUnparsedEntity(%q) = %t, want %t", tc.name, got, tc.want)
