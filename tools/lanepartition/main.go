@@ -24,12 +24,11 @@
 // disagreements. Fed one, the report classes each banked fail by the list
 // naming it, splits not-valid into invalid and indeterminate by the second
 // list, and on a lane whose run charges a rule — the schema lane — clusters
-// each decided disagreement by the rule xsderr.RuleOf read off the
-// assembly's error: `(accepted)` where the assembly succeeded, so a
-// suite-invalid case charges nothing, and `(unruled)` where it failed on an
-// error carrying no rule. A banked fail no list names is one the run passed
-// or did not produce; the log is from a tree whose engine differs from the
-// file's, and the report counts such cases rather than guessing their class.
+// each decided disagreement by its charge, in the words conformance/doc.go's
+// "The decline census" section owns. A banked fail no list names is one the
+// run passed or did not produce; the log is from a tree whose engine differs
+// from the file's, and the report counts such cases rather than guessing
+// their class.
 //
 // An issue list on stdin, shaped as docs/ROUTINES.md's "Survey input" writes
 // `gapissues.json` — rows carrying number, state and body: each
@@ -404,7 +403,6 @@ func compareClusters(a, b cluster) int {
 // reads.
 type ghIssue struct {
 	Number int     `json:"number"`
-	Title  string  `json:"title"`
 	State  *string `json:"state"`
 	Body   string  `json:"body"`
 }

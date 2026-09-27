@@ -475,15 +475,10 @@ func execSchemaCase(backend value.Backend, c caseSpec) Status {
 
 // The words a schema charge probe answers where a decided case carries no rule
 // to name. Each is parenthesized so no spec rule ID can collide with it.
+// doc.go's GOXSD_DECLINES=1 paragraph owns what each one means.
 const (
-	// chargeAccepted: the assembly succeeded, so nothing was charged — the
-	// decision a suite-invalid case disagrees with.
 	chargeAccepted = "(accepted)"
-	// chargeUnruled: the assembly failed on an error carrying no rule ID, the
-	// §2.4 clause 1 grammar fault STYLE E2 charges without one (#404).
-	chargeUnruled = "(unruled)"
-	// chargeDeclined: assembleCase declined the case. The census asks only
-	// about decided cases, so this answers a case the executor did not decide.
+	chargeUnruled  = "(unruled)"
 	chargeDeclined = "(declined)"
 )
 
