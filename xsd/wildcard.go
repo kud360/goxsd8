@@ -81,7 +81,10 @@ func (w Wildcard) ProcessContents() ProcessContents {
 // through UnionNamespaceConstraint and rebuilds via NewWildcard; and, in-package,
 // the §3.6.2.2 "Common Rules for Attribute Wildcards" combination
 // (declare-attributeGroup-wildcard), which Finalize folds through
-// intersectNamespaceConstraint (attributegroupfold.go), and the complex-content
+// intersectNamespaceConstraint (attributegroupfold.go), the Unique Particle
+// Attribution check (§3.8.6.4, cos-nonambig), whose Appendix J ·overlap· test
+// relates two wildcard particles through the same intersectNamespaceConstraint
+// (particleattribution.go, wildcardsOverlap), and the complex-content
 // restriction walk, which folds a base content model's live wildcards through
 // UnionNamespaceConstraint and relates the result by wildcardSubset
 // (contentrestricts.go). It mirrors the inspection getters
