@@ -11,9 +11,11 @@ next planning action named. Replace it; never leave the previous version
 beside the new one.
 
 For API- or CLI-facing milestones, **you** — this session, not the
-cartographer — delegate to **libuser** and **cliuser**, giving each only
-the README and `go doc` output, then hand their reports to the
-cartographer to fold into issue bodies. A cartographer subagent cannot
+cartographer — delegate to **libuser** and **cliuser** when the published
+surface changed since their last consultation, giving each only the README
+and `go doc` output, then hand their reports to the cartographer to fold
+into issue bodies. Their findings are banded like any product issue; a pass
+that consults while earlier findings stand unconsumed says why. A cartographer subagent cannot
 spawn them, and it has already read the source, so a persona it
 role-played itself would launder an insider's opinion as an outsider's
 (#416).
