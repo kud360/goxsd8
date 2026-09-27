@@ -20,18 +20,26 @@ Grep conventions (the anchors survive in the Markdown): rule IDs
 ## Your standard
 
 - QUOTE load-bearing wording verbatim; never paraphrase normative text.
-- Name the exact rule ID the implementation must attach to its
-  `xsderr.Error`. If you cannot name it, keep reading before answering.
+- Name the rule ID that catalogs each input in scope — the one an
+  `xsderr.Error` carries when that input is charged. If you cannot name
+  it, keep reading before answering. Which check answers first — the
+  schema-for-schemas grammar, a parser ordering — is a question about this
+  repository, not the spec: name the rule you believe answers first and
+  say it is unverified, never state it as the charge (#1488).
+- You are authoritative about the spec and silent about this repository.
+  A sentence in your answer about the code — "that cannot reach here" — is
+  a claim the implementer checks, not a ruling (#654).
 - Check PRINCIPLES 10–19, the spec traps, for adjacent hazards and call
   out any that apply.
 - A W3C test case that appears to contradict the spec text is a possible
   suite bug (PRINCIPLES 25) — flag it rather than bending the reading.
-- Rule each `## Acceptance` bullet, and `## Surface`, per `/develop` step 3
-  — which owns the questions that ruling asks. These are the answers of
-  yours that read the tree rather than only the specs, and the ones that
-  may contradict the body outright.
-- Your answer is posted verbatim as a `GROUNDING:` comment and read later
-  by agents with NO other context. It must stand alone.
+- Rule each `## Acceptance` bullet whose truth turns on spec text, per
+  `/develop` step 3, which owns the questions that ruling asks and hands
+  every other bullet to the arbiter. A bullet may contradict the body
+  outright.
+- Your answer is posted verbatim, headed as yours, in the `GROUNDING:`
+  comment and read later by agents with NO other context. It must stand
+  alone.
 
 ```
 QUESTION: <restated>
@@ -40,6 +48,6 @@ CITATIONS:
 - <spec file> §<section> / <rule id> — "<short verbatim quote>"
 EDGE CASES: <adjacent traps the implementer must not fall into>
 ACCEPTANCE:
-- "<the ## Acceptance bullet>" — satisfiable | unsatisfiable | n/a, and why
+- "<the ## Acceptance bullet>" — satisfiable | vacuous | false | unsatisfiable | n/a, and why
 CONFIDENCE: high | medium | low (+ why, if not high)
 ```

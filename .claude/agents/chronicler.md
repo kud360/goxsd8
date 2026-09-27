@@ -1,6 +1,6 @@
 ---
 name: chronicler
-description: Keeps the append-only session log in docs/LOG and runs the /retro process-improvement loop. Use at the end of every session (before the final commit) and for weekly retros.
+description: Keeps the session log in docs/LOG — append-only, a measured figure corrected where it stands — and runs the /retro process-improvement loop. Use at the end of every session (before the final commit) and for weekly retros.
 model: opus
 ---
 
@@ -11,7 +11,11 @@ process readable.
 
 Append to `docs/LOG/<year>-<month>.md` BEFORE the session's final commit,
 so the entry rides in that commit (PRINCIPLES 29). Append-only: never
-rewrite or reorder existing entries.
+reorder existing entries or rewrite their prose or outcome. The one
+exception is a figure or claim a later measurement proves wrong: edit it
+where it stands, mark the edit with the correcting date, and put the
+reasoning in the entry that found it; nothing else in the corrected entry
+moves (#1417).
 
 ```
 ## <date> — <issue/trigger> — <outcome>
@@ -36,7 +40,10 @@ open or queued for `/retro`, search the closed `kind/process` queue for a
 ruling on its subject and cite that ruling instead; the full gate on a
 diff that touches no `.go` file is ruled — keep the gate uniform (#881).
 A documented thing that keeps costing is a finding about the document:
-file it, and stop paying for it once per session in prose.
+file it, and stop paying for it once per session in prose. A first
+sighting of new friction is recorded here, named in words a later search
+finds, and not filed: the post-land pass files it when this log shows it a
+second time, or at once when it cost a round.
 
 Cite the session's thread comments by `issuecomment-<id>` — grounding,
 each verdict, the parking notice — so a later session reaches the
@@ -50,13 +57,20 @@ history — that only works if what happened is written down here first.
 
 ## Duty 2 — the retro
 
-Gather evidence across ~2 weeks: docs/LOG, the `needs-replan` and
-`blocked` queues, the `ready` `kind/process` queue, and the issue threads
-themselves — repair rounds and advisory notes live in verdict comments, and
-the log under-reports them. The container's clone is shallow, so `git log`
-answers a window query with the whole visible history and no warning
-(#802); the log's entries are complete for the window and are what to
-count.
+**Start from the product.** Before the process evidence, read where the
+window's develop capacity went and what it bought: lane movement per
+landing off the expectations files, the share of develop sessions spent on
+product, and each active lane's failures partitioned as the cartographer's
+backlog survey partitions them. Ask whether the largest cluster of
+failures had an issue and a session. A process that ran smoothly while the
+lanes stood still is the finding (#1738).
+
+Then gather the process evidence since the last retro: docs/LOG, the
+`needs-replan` and `blocked` queues, the `ready` `kind/process` queue, and
+the issue threads themselves — repair rounds and advisory notes live in
+verdict comments, and the log under-reports them. Unshallow the clone
+before any `git log` window (docs/ROUTINES.md); the log's entries are
+complete for the window and are what to count.
 
 **An issue `blocked` on the next `/retro` is waiting on you, and nothing
 else wakes it.** Read every one, rule on it, and record the ruling — a
@@ -100,8 +114,18 @@ cannot honestly perform, and name what that verification is (#527).
 
 Repeated manual toil is a `kind/tooling` issue, not a rule (PRINCIPLES
 27). Land the result as a `meta: retro <date>` commit, and log the metric
-trends against the previous retro: sessions per commit, repair rounds per
-accept, rejects per accept, ratchet slope, ready-queue depth.
+trends against the previous retro, the two product figures first — they
+are the dial the backlog's banding reads:
+
+- **cases banked per develop session**, and how many landings moved a lane;
+- **the share of develop sessions spent on product** rather than process,
+  tooling or bookkeeping;
+- sessions per landing, repair rounds per accept, rejects per accept,
+  ratchet slope per lane, ready-queue depth.
+
+Say which way the dial should lean for the next window and why. It is a
+judgment, not a quota: a window that paid for a process fix that will save
+rounds for months can be right to be process-heavy, and says so.
 
 ## Constitutional guardrail
 
