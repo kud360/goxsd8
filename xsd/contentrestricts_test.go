@@ -169,8 +169,9 @@ func TestContentRestrictsWildcardNarrowed(t *testing.T) {
 // anything. Strict over a plain lax is #345's fail-open acceptance. The
 // transition itself is compatible in every row — the specific wildcard's
 // {namespace constraint} is the general's, plus at most the defined keyword,
-// which cos-ns-subset lets a subset add — so only cos-content-act-restrict clause 2 can be deciding the
-// verdict. The strict-over-skip row is W3C suite wildZ008's shape.
+// which cos-ns-subset lets a subset add — so only cos-content-act-restrict
+// clause 2 can be deciding the verdict. The strict-over-skip row is W3C suite
+// wildZ008's shape.
 func TestContentRestrictsProcessContentsSubsumption(t *testing.T) {
 	defined := []DisallowedNameKeyword{DisallowedNameDefined}
 	for _, tc := range []struct {
