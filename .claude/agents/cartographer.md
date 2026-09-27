@@ -94,9 +94,9 @@ already done, and the commit body says so.
    `casejoin join` bound for the construct it reads, per CLAUDE.md's
    surveys block — and by whether it removes a cap on the active
    milestone's lane, which outranks any count. Band the slice that moves
-   the milestone's north star first (docs/PLAN.md's milestone section
-   names it). Prefer vertical slices that move a lane over horizontal
-   completeness.
+   the milestone's north star first — step 1 names it, and the Status
+   section carries it. Prefer vertical slices that move a lane over
+   horizontal completeness.
 
    **Process, tooling and refactors earn rows by what they cost, and the
    retro's metrics are the dial.** A `kind/process` or `kind/tooling`
