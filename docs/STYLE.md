@@ -5,14 +5,21 @@ pass. Each rule has an ID; reviews cite rule IDs. The rationale behind
 these rules lives in docs/PRINCIPLES.md.
 
 **Citing rules.** A style rule is cited by its letter ID from this file
-(`STYLE D4`, `STYLE T2`) — never by a position in CLAUDE.md's "Style
+(`STYLE S2`, `STYLE T4`) — never by a position in CLAUDE.md's "Style
 headlines" list, which is a summary and carries no citable IDs.
 `PRINCIPLES N` always means item N of docs/PRINCIPLES.md, whose numbering
 is append-only. Both lists start at 1 and disagree about what the early
 numbers mean (headline 5 "no cycle checks" is PRINCIPLES.md item 9), so a
 positional citation of the headline list silently names the wrong
-principle. The module-root `citations_test.go` guards the numbers that
-have actually been confused.
+principle. The module-root `citations_test.go` and `stylecitations_test.go`
+check that a cited number or ID exists; neither can check that it is the
+rule the sentence means.
+
+**In text no test reads — a verdict, an issue body, a commit message, a LOG
+entry — write the rule's headline beside its ID**: `STYLE D3 (one fact, one
+encoding)`, `PRINCIPLES 9 (phased construction beats cycle checks)`. A real
+but wrong ID then contradicts the words next to it at the moment it is
+written (#548).
 
 ## Control flow
 
@@ -157,10 +164,7 @@ never date unshipped prose "implemented". Any diff that changes a package's
 exported or implemented surface reconciles that package's status prose in the
 *same commit* — render `go doc` for every package you touch and confirm the
 coverage claim matches before you report it updated. The forward-looking
-design prose is valuable: relabel it planned, don't delete it. (Rationale:
-one change cost a repair round on a stale "Current coverage" section its own
-commit message claimed to have updated; separate sweeps had to walk back
-"implemented in M…" headings sitting over packages that export nothing.)
+design prose is valuable: relabel it planned, don't delete it.
 
 ## Spec fidelity
 
@@ -170,7 +174,10 @@ quote the clause in the commit message.
 
 **P2. Comment only constraints.** Code comments state what the code cannot:
 spec rule being implemented, invariants, why a spec-deviation is deliberate.
-Never narrate the next line.
+Never narrate the next line, and never carry a `Ratchet impact` paragraph:
+what a change moved belongs to its commit trailer and `docs/LOG`, and a
+comment stating lane effects is stale one landing later (PRINCIPLES 32,
+#622).
 
 **P3. Deliberate gaps are tracked, and `GAP(` is the only token that
 tracks them.** Every unsupported-construct fallback — fail-open XPath
@@ -186,6 +193,14 @@ is owned by an issue names that issue in the text, and the issue must
 still be open: a marker pointing at a closed issue is a dead end, so
 repoint it in the landing that closes the owner.
 
+Prose that discloses a gap — a decline, a fail-open, an uncharged rule, a
+test asserting the incomplete behaviour — sits in the same comment block as
+its marker; prose with no marker beside it is untracked however honest it
+is (#960). A diff that routes new input through a known defect has widened
+that gap: it owes a marker at the site it widened, and a test fixture
+chosen to avoid the defect says in its comment that the avoided verdict is
+wrong (#1084).
+
 **P3a. A claimed direction names the consumers it quantifies over.** A
 marker or comment that asserts a gap's error direction — "fail-open",
 "never a false reject", "can only cost a win" — must list the readers of
@@ -197,11 +212,9 @@ the withheld value makes a withholding fail-CLOSED. The unenumerated
 form — "every consumer of X charges on a missing member" — is not an
 acceptable claim, because it is exactly the sentence that gets written
 when only the consumers in view were checked. Write the identifiers, or
-write no direction at all and say the direction is unestablished.
-(Rationale: two consecutive sessions spent their one repair round on a
-fail-open claim that was fail-closed; both died in seconds under
-reproduction, and neither the gate nor the ratchet could see them —
-the corpus does not contain the shapes.)
+write no direction at all and say the direction is unestablished. Neither
+the gate nor the ratchet can check a direction claim: the corpus does not
+contain the shapes (#403).
 
 **P3b. A gap RULED permanent cites the ruling, as `RULED permanent by
 #N`.** A ruling is the finding that the gap stays, so it is not a

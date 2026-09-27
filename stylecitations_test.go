@@ -1,6 +1,6 @@
 // This file guards, module-wide, the STYLE-ID citation convention documented
 // in docs/STYLE.md: "A style rule is cited by its letter ID from this file
-// (`STYLE D4`, `STYLE T2`) — never by a position in CLAUDE.md's 'Style
+// (`STYLE S2`, `STYLE T4`) — never by a position in CLAUDE.md's 'Style
 // headlines' list, which is a summary and carries no citable IDs." It is the
 // sibling of citations_test.go, which guards `PRINCIPLES N` against the same
 // mistake — a token that reads as a citation but does not name the thing its

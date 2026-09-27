@@ -31,7 +31,7 @@ two texts disagree, the owner wins and the other is the bug.
 | Document | Owns |
 |---|---|
 | `docs/ARCHITECTURE.md` | package graph, boundaries, dependency direction |
-| `docs/STYLE.md` | style rules — cite by letter ID (`STYLE D4`) |
+| `docs/STYLE.md` | style rules — cite by letter ID (`STYLE T4`) |
 | `docs/PRINCIPLES.md` | invariants and their rationale (`PRINCIPLES 9`) |
 | `docs/WORKFLOW.md` | the rules every session obeys, whatever it is doing |
 | `.claude/commands/<cmd>.md` | what that command does, step by step |
@@ -43,16 +43,24 @@ two texts disagree, the owner wins and the other is the bug.
 ## The gate
 
 ```sh
-go build ./... && go test ./... && go vet ./...      # part 1
+go build ./... && go test -skip '^TestConformance$' ./... && go vet ./...  # part 1
 go tool lint                                          # part 2 (STYLE lint subset)
 go tool commentwrap ./...                             # part 3 (-fix reflows)
-go test ./conformance -run TestConformance -count=1 -v  # part 4 (-v surfaces improved-but-unbanked cases)
+go test ./conformance -run TestConformance -count=1 -timeout 30m -v  # part 4 (-v surfaces improved-but-unbanked cases)
 ```
 
-**Run each gate command unpiped and read its own exit code.** A pipeline's
-exit status is its last command's, so `go test ./... | tail` reports whether
-`tail` succeeded and stays green however the test failed; when the output is
-too long to read, redirect it to a file and read the file afterwards.
+Part 1 skips `TestConformance` because part 4 runs it; neither part is the
+gate without the other. Part 4's `-timeout` is part of the command: the suite
+alone runs within a few minutes of Go's 10-minute default (#1698).
+
+**The gate is run, not argued.** Run every part on every tree you hand off or
+judge, whatever the diff contains — a prediction that a part cannot fail is
+not a reason to skip it (#881, #1344). Run each command in the foreground,
+because a backgrounded run dies with the turn that started it
+(docs/ROUTINES.md), and unpiped, reading its own exit code: a pipeline's exit
+status is its last command's, so `go test ./... | tail` reports whether `tail`
+succeeded and stays green however the test failed. When the output is too
+long to read, redirect it to a file and read the file afterwards.
 
 **This block is the only definition of the gate.** A step named anywhere
 else — a session brief, a LOG entry, an issue body — is not a gate step,
@@ -89,10 +97,12 @@ a file feeds them. docs/ROUTINES.md ranks the channels, states what to do
 when one errors, and spells the paginate-and-reshape recipe under "Survey
 input".
 
-Empty stdin is a supported mode, not a failure. `wipsurvey` then reports
-leases only and can never report RETIRED; `gapaudit` reports the marker
-census only and reconciles nothing against trackers. Each says so in its
-own output; neither exits non-zero.
+Empty stdin is a supported mode for a census, not a failure. `wipsurvey`
+then reports leases only and can never report RETIRED; `gapaudit` reports the
+marker census only and reconciles nothing against trackers. Each says so in
+its own output; neither exits non-zero. A run whose output an issue's
+`## Acceptance` quotes is a measurement, and only a fed run discharges it
+(#1157).
 
 `suiteindex` censuses `testdata/xsdtests` by construct — namespace URI plus
 local name, in whatever encoding and prefix each fixture spells it with — so
