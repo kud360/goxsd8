@@ -454,9 +454,11 @@ that landed (#493).
 
 **Labels**: **exactly one queue label** — `ready` (unblocked, sized for
 one session), `blocked`, `needs-replan` or `epic` — plus
-`area/{model,xsderr,parser,value,builtin,xpath,`
-`validate,codegen,codec,regex,loader,conformance,cli,meta}` and
-`kind/{feature,gap,bug,refactor,process,tooling,story}`. Milestones mirror
+`area/{xsd,xsderr,parser,value,builtin,xpath,icpath,`
+`validate,codegen,codec,regex,loader,conformance,cmd,meta,docs}` and
+`kind/{feature,gap,bug,refactor,process,tooling,story,docs}`. An `area/` label
+names the package it touches; `area/model` and `area/cli` are retired
+spellings of `area/xsd` and `area/cmd`. Milestones mirror
 docs/PLAN.md. `blocked` means waiting on a named dependency recorded in
 `## Depends on` — an issue or a trigger, not only an open issue. The queue
 labels are exclusive because the surveys read them that way: an issue
