@@ -134,7 +134,8 @@ Invariants:
   **Push one immediately before every delegation**: the orchestrator cannot
   push while a subagent round runs, so the round's whole life must fit
   inside the TTL that push starts (#1493).
-- **A branch with no commits of its own is dated by its thread.** Its tip
+- **A branch with no commits of its own — a claim pushed without its
+  claim commit — is dated by its thread.** Its tip
   is the landing it branched from, so no tip-age reading may date it or
   retire it (#722); **the newest thread comment whose body opens with
   `RESUME:` or `TAKEOVER:`** dates it, against the same 2h TTL. No other
@@ -154,7 +155,10 @@ Invariants:
   slow one.
 - **Races are settled by git's atomic ref updates, never by force.** A
   rejected push to `wip/*` means you lost the race: fetch, abandon the
-  local attempt, pick something else. Force-pushing `wip/*` or `parked/*`
+  local attempt, pick something else. Only a push carrying a commit the
+  ref lacks can be rejected — a push of the SHA the ref already holds
+  succeeds — so every claim and every takeover pushes a commit of its own
+  (`develop.md` step 2, #1743). Force-pushing `wip/*` or `parked/*`
   is forbidden — it is the one way sessions could stomp each other.
   Sessions only ever CREATE refs; the single deletion in the system is
   GitHub's auto-delete on merge.

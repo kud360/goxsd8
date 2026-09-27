@@ -52,15 +52,33 @@ counts.
      conflicts are not tractable, park it and pick again), read the newest
      `RESUME:` comment, and continue from its "Next:" at the matching step
      below.
-   - Otherwise claim the highest-priority `ready` issue that reads `open`
-     — a closed issue can still wear `ready` — whose dependencies are
-     closed, with no live branch, and whose `## Notes` names no same-file
-     relation to an issue with a LIVE branch (#1111):
-     `git switch -c wip/issue-<N> origin/main && git push -u origin HEAD`.
-     The push is the claim; a rejected push means you lost the race —
-     fetch and pick again.
-   - Nothing to resume and nothing ready → delegate to **cartographer**,
-     then stop.
+   - **Nothing to resume, and the band is stale or nothing is ready →
+     plan, then stop.** The band is stale when the newest `meta: retro`
+     commit on `origin/main` is newer than the newest `meta: backlog` one
+     (`git log -1 --format=%s -E --grep='^meta: (retro|backlog)'
+     origin/main` answers it), or when none of its rows is open: a retro
+     re-ranks the queue only through the next stamp, so a session picking
+     from the old band spends itself on the order the retro replaced.
+     Delegate a `/backlog` pass to **cartographer** and land it as
+     `.claude/commands/backlog.md` does.
+   - Otherwise claim the highest-priority `ready` issue — `docs/PLAN.md`'s
+     Working band orders them — that reads `open` (a closed issue can
+     still wear `ready`), whose dependencies are closed, with no live
+     branch, and whose `## Notes` names no same-file relation to an issue
+     with a LIVE branch (#1111). Claim with a commit only this session
+     could write, then push it:
+
+     ```sh
+     git switch -c wip/issue-<N> origin/main
+     git commit --allow-empty -m "claim #<N> $(date -u +%FT%T.%NZ)"
+     git push -u origin HEAD
+     ```
+
+     The push is the claim, and a rejected push means you lost the race —
+     fetch and pick again. Without the commit a second claimer at the same
+     `origin/main` tip pushes the SHA the ref already holds, which git
+     answers "Everything up-to-date", exit 0; a create-only
+     `--force-with-lease=<ref>:` push answers the same (#1743).
 
 3. **Ground.** Read the whole thread first: a comment that declares itself
    normative for the issue binds as the body does, and goes into every

@@ -85,15 +85,19 @@ with the W3C suite empty whatever the session's checkout holds, and the
 gate fails on the missing-suite guard (#659).
 
 The gate (CLAUDE.md) passes. New behavior has tests that can actually
-fail, and **the mutation is run, not imagined** — the worktree is isolated
-so you can break the line, watch the test, and put it back. A mutation you
-describe in your account and did not execute is the one the arbiter runs
-(#472). A test comment claiming a case discriminates a path — "this fails
-without X" — is such a mutation, and your account names it and its
-result (#642). Mutate the message too: two arguments swapped inside one
-`fmt.Errorf` changes no branch and leaves every asserted substring present,
-so an assertion pins a subject only by pinning the opening
-`parser: <subject> at <loc>` as a prefix (#1048).
+fail, and **every claim your account makes about behaviour is run, not
+imagined** — the worktree is isolated so you can break the line, watch
+the test, and put it back. A mutation you describe and did not execute is
+the one the arbiter runs (#472). A test comment claiming a case
+discriminates a path — "this fails without X" — is such a mutation, and
+your account names it and its result (#642). Mutate the message too: two
+arguments swapped inside one `fmt.Errorf` changes no branch and leaves
+every asserted substring present, so an assertion pins a subject only by
+pinning the opening `parser: <subject> at <loc>` as a prefix (#1048). A
+claim that your change leaves another caller's answers unchanged is a
+differential: run the functions it names against verbatim `origin/main`
+copies in a throwaway file, state the input count in your account, and
+delete the file — or state the claim as unverified (#1749).
 
 ## The implementation account
 
