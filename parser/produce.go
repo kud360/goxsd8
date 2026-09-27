@@ -64,11 +64,13 @@ const (
 	// token in notQName, whose value space is fixed by xs:qnameList/xs:qnameListA
 	// (§3.10.2) rather than by any src-wildcard clause, a QName-valued
 	// attribute whose local part is empty (bindQName), which no src-* clause
-	// reaches because they all presuppose a well-formed QName, and a
-	// minOccurs/maxOccurs lexical outside the xs:nonNegativeInteger/xs:allNNI
-	// types Appendix A's occurs attribute group declares (nonNegativeInt),
-	// which p-props-correct cannot reach because no particle exists yet (#932),
-	// and a processContents lexical outside the skip/lax/strict enumeration
+	// reaches because they all presuppose a well-formed QName, a minOccurs/maxOccurs
+	// lexical outside the xs:nonNegativeInteger/xs:allNNI types Appendix A's occurs
+	// attribute group declares (nonNegativeInt), which p-props-correct cannot reach
+	// because no particle exists yet (#932), a length or digits facet's value lexical
+	// outside the xs:nonNegativeInteger/xs:positiveInteger its facet element declares
+	// (facetCountValue), which facet compilation reaches only when an instance does
+	// (#1774), and a processContents lexical outside the skip/lax/strict enumeration
 	// Appendix A's wildcard attribute group declares (processContentsOf), which
 	// w-props-correct cannot reach because no wildcard exists yet (#950).
 	ruleDatatypeValid xsderr.Rule = "cvc-datatype-valid"
@@ -2585,6 +2587,9 @@ func (p *producer) restrictionFacets(restriction *Element) ([]xsd.Facet, error) 
 			facets[patternAt] = folded
 			continue
 		}
+		if err := facetCountValue(el, kind); err != nil {
+			return nil, err
+		}
 		fixed, err := facetFixed(el)
 		if err != nil {
 			return nil, err
@@ -3606,6 +3611,73 @@ func childElements(el *Element, space, local string) []*Element {
 // and the empty string — so the equivalence holds at every call site.
 func collapseTrim(lexical string) string {
 	return strings.Trim(lexical, "\x09\x0A\x0D\x20")
+}
+
+// facetCountValue checks a length or digits facet element's value attribute
+// against the type the schema for schema documents declares for it:
+// xs:nonNegativeInteger on xs:numFacet, the type of <length>, <minLength>,
+// <maxLength> and <fractionDigits> (xmlschema11-2.md:4059), and
+// xs:positiveInteger on <totalDigits>, whose inline restriction of xs:numFacet
+// narrows it (:4090). A literal outside that type is the schema document failing
+// validation against the schema for schema documents (Structures §5.1), the
+// attribute failing its declared type under cvc-attribute clause 3, charged
+// cvc-datatype-valid (§4.1.4) at assembly time whether or not any instance
+// reaches the facet. An xmltree.Attribute's position is its owning element's, so
+// el.Loc() is the attribute's location.
+//
+// The positiveInteger fault stays cvc-datatype-valid rather than
+// totalDigits-valid-restriction: "0" is outside the attribute's own declared
+// type, which is a different question from comparing {value} with a base type's
+// totalDigits (§4.3.11.4), charged at finalize.
+//
+// The test is lexical-space membership alone (nonNegativeIntegerLexical), with
+// no machine-integer parse: both types are unbounded above, so a literal past
+// math.MaxInt is inside them and must pass.
+//
+// GAP(parser): an absent value attribute is left alone — the declaration's
+// use="required" is charged nowhere, and every facet reads the absence as ""
+// (#1777).
+func facetCountValue(el *Element, kind xsd.FacetKind) error {
+	lexical, ok := el.Attr("value")
+	if !ok {
+		return nil
+	}
+	name := "<" + el.Name().Local() + ">"
+	positive, inLexical := nonNegativeIntegerLexical(collapseTrim(lexical))
+	switch kind {
+	case xsd.FacetLength, xsd.FacetMinLength, xsd.FacetMaxLength, xsd.FacetFractionDigits:
+		if inLexical {
+			return nil
+		}
+		return xsderr.New(ruleDatatypeValid, el.Loc(),
+			"%s value %q is not a nonNegativeInteger", name, lexical)
+	case xsd.FacetTotalDigits:
+		if positive {
+			return nil
+		}
+		return xsderr.New(ruleDatatypeValid, el.Loc(),
+			"%s value %q is not a positiveInteger", name, lexical)
+	default:
+		return nil
+	}
+}
+
+// nonNegativeIntegerLexical reports whether the collapsed literal s is in
+// xs:nonNegativeInteger's lexical space (§3.4.20.1: an optional sign, then one or
+// more digits #x30-#x39, the sign "-" only on a form denoting zero) and, as
+// positive, whether it is also in xs:positiveInteger's (§3.4.25.1: an optional
+// "+", then digits at least one of which is not "0"). It scans rather than
+// parses, so it has no upper bound.
+func nonNegativeIntegerLexical(s string) (positive, ok bool) {
+	digits, negative := strings.CutPrefix(s, "-")
+	if !negative {
+		digits = strings.TrimPrefix(s, "+")
+	}
+	nonzero := strings.TrimLeft(digits, "0") != ""
+	if digits == "" || !allDigits(digits) || (negative && nonzero) {
+		return false, false
+	}
+	return nonzero, true
 }
 
 // facetFixed maps a facet element's fixed attribute to that facet's {fixed}
