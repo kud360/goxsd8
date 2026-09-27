@@ -1255,7 +1255,7 @@ func elementPositionBinding(p position) defaultBinding {
 	case ElementDeclaration:
 		return elementDeclarationBinding{decl: t} // case 1
 	case Wildcard:
-		return wildcardKeywordBinding{keyword: t.ProcessContents()} // cases 4/5/6
+		return newWildcardKeywordBinding(t) // cases 4/5/6
 	default:
 		panic("xsd: elementPositionBinding: position {term} is neither an element declaration nor a wildcard")
 	}

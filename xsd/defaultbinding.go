@@ -53,7 +53,28 @@ type attributeUseBinding struct{ use AttributeUse }
 // (cases 4 and 5), or to a skip wildcard (case 6, which needs no such
 // qualifier), so the binding is the keyword itself. The keyword is the already
 // typed ProcessContents closed set (closedsets.go), never a string.
-type wildcardKeywordBinding struct{ keyword ProcessContents }
+//
+// disallowsDefined records whether the wildcard's {disallowed names} contains
+// the keyword defined. That wildcard admits only names that do not ·resolve·
+// (cvc-wildcard clauses 2.1/2.2), so an item ·attributed· to it has no
+// ·governing· declaration and the keyword is the EXACT binding even when it is
+// lax — the one fact keywordSubsumes' clause 3 needs beyond the keyword itself.
+// Production code builds it only through newWildcardKeywordBinding.
+type wildcardKeywordBinding struct {
+	keyword          ProcessContents
+	disallowsDefined bool
+}
+
+// newWildcardKeywordBinding is key-dft-binding cases 4/5/6 for an item
+// ·attributed· to w: the one construction both halves of ·default binding· use
+// (attributeDefaultBinding and contentrestricts.go's elementPositionBinding), so
+// neither can forget the {disallowed names} fact (STYLE T4).
+func newWildcardKeywordBinding(w Wildcard) wildcardKeywordBinding {
+	return wildcardKeywordBinding{
+		keyword:          w.ProcessContents(),
+		disallowsDefined: w.namespaceConstraint.hasDisallowedNameKeyword(DisallowedNameDefined),
+	}
+}
 
 func (elementDeclarationBinding) defaultBinding() {}
 func (attributeUseBinding) defaultBinding()       {}
@@ -153,7 +174,7 @@ func (s *Schema) attributeDefaultBinding(side attributeRestrictionSide, n QName)
 	if !side.hasWildcard || !s.AllowsAttributeWildcardName(side.wildcard, n) {
 		return nil, false
 	}
-	return wildcardKeywordBinding{keyword: side.wildcard.ProcessContents()}, true // cases 4/5/6
+	return newWildcardKeywordBinding(side.wildcard), true // cases 4/5/6
 }
 
 // ResolvedAttributeDeclaration resolves the Attribute Declaration behind an
