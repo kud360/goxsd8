@@ -75,8 +75,10 @@ const (
 	defaultExpectations = "conformance/testdata/expectations"
 )
 
-// instanceLane is the lane whose banked fail on a case the suite declares
-// VALID cannot flip: its executor decides no document valid yet (#1561).
+// instanceLane is the lane whose executor observes "valid" for a single shape
+// only: its banked fail on a case the suite declares VALID flips only where
+// that case is a simple leaf root (#1738). Before #1738 such a case could not
+// flip at all (#1561).
 const instanceLane = "instance"
 
 const usage = `usage: lanepartition [-suite dir] [-expectations dir] [-log file] <lane> [< gapissues.json]
@@ -478,8 +480,8 @@ func render(w io.Writer, p partitioned, file, logPath string, issues []ghIssue, 
 	_, _ = fmt.Fprintln(w, "  every figure is a part of the committed file's banked fails — the lane's score, which")
 	_, _ = fmt.Fprintln(w, "  `go tool lanestatus` prints — and nothing a run did moves it.")
 	if p.lane == instanceLane {
-		_, _ = fmt.Fprintln(w, "  On this lane a banked fail the suite declares VALID cannot flip: the executor decides no")
-		_, _ = fmt.Fprintln(w, "  document valid yet (#1561).")
+		_, _ = fmt.Fprintln(w, "  On this lane a banked fail the suite declares VALID flips only where the executor decides")
+		_, _ = fmt.Fprintln(w, "  the document valid, which it does for a simple leaf root alone (#1738).")
 	}
 	renderLogNote(w, p, logPath)
 
