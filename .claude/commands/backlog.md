@@ -1,5 +1,5 @@
 ---
-description: Reconcile GitHub issues with reality and keep the ready queue dependency-ordered, consulting the user personas for API/CLI-facing work. Doc-only commit; no code changes.
+description: Reconcile GitHub issues with reality and keep the ready queue value-ordered, consulting the user personas for API/CLI-facing work. Doc-only commit; no code changes.
 ---
 
 Delegate to the **cartographer** for its full /backlog pass: survey

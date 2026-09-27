@@ -14,13 +14,20 @@ obsolete or duplicate is yours to do freely.
 Cheap and targeted, not a full backlog run. Three duties:
 
 1. **Unblock.** Find `blocked` issues whose `## Depends on` names the
-   just-closed issue; where every dependency is now closed, relabel
-   `ready` and comment one line naming the landing. Still-open
-   dependencies mean it stays `blocked` — touch nothing.
+   just-closed issue, or names a trigger a survey you run can read — a
+   lane score `go tool lanestatus` prints; where every dependency is now
+   closed or the trigger has fired, relabel `ready` and comment one line
+   naming the landing. A trigger stated as a figure is how a ruling's
+   review condition gets scheduled (#1609). Still-open dependencies mean
+   it stays `blocked` — touch nothing.
 2. **Dispose of this landing's follow-ups, while they are fresh** — the
    log entry's "Next:" and surprises, and the thread's advisory verdict
-   notes. Each is **filed** (complete body, correct labels and deps) or
-   **explicitly dismissed in a comment**.
+   notes. A product defect is **filed** (complete body, correct labels and
+   deps) or **dismissed in a comment**, at once. Process friction is
+   filed when the log shows it a second time, or at its first sighting
+   only when it cost a round; until then its record is the log entry's
+   Friction bullet, which the `/retro` reads in full. Search the log for
+   an earlier sighting before deciding which this is.
 3. **Leave the pass's own signal on `main`** — a dated `post-land` entry
    in `docs/LOG/<year>-<month>.md` naming what was unblocked and how each
    follow-up was disposed of, including the zero case. Land that entry
@@ -31,12 +38,11 @@ Cheap and targeted, not a full backlog run. Three duties:
    (#400). If the pass restamps `docs/PLAN.md`, step 6's replacement rule
    governs; there is no post-land variant of it.
 
-A hand-off is not a disposition. "Handed to the post-land pass", "its
-right home is whichever issue next touches X", "recorded so a later
-session can pick it up" — none of these track anything, because no ledger
-exists to check them against (#330). Note that work absorbed into the
-landing needs no disposition at all: it is already done, and the commit
-body says so.
+A hand-off is not a disposition. "Its right home is whichever issue next
+touches X" tracks nothing (#330). The log's Friction bullet is a ledger
+because the retro reads every one of them; a sentence anywhere else is
+not. Work absorbed into the landing needs no disposition at all: it is
+already done, and the commit body says so.
 
 ## A backlog run
 
@@ -50,6 +56,18 @@ body says so.
    for it — `gapaudit`'s matching is heuristic and says so, and fed no
    issue list it reconciles nothing, which is a census rather than an
    audit.
+
+   **Then partition each active lane's failures, and read the lane before
+   the queue.** A score says how many cases fail; the question the band
+   answers is which single decision holds the most of them. `casejoin
+   join <lane>` fed every fixture path in the suite splits the lane's
+   banked `fail` lines into those that can flip and those that cannot,
+   and the conformance run's decline census says which the engine
+   declines. The largest cluster, and the one decision that holds it, is
+   the milestone's north star; say whether an open issue targets it and
+   file one if none does (#1738). Until a tool partitions failures by
+   mechanism, take the largest clusters by test set and expected
+   validity by hand, once a week at least.
 2. **Reconcile the branch namespace** — report-only; sessions never delete
    or rename refs. A `wip/issue-<N>` whose issue is CLOSED should have
    vanished at merge: verify its content is in main and supersede the
@@ -59,42 +77,43 @@ body says so.
 3. **Reconcile the issues**: close stale and obsolete, merge duplicates,
    split anything too big for one session, file `kind/gap` issues for
    untracked GAP sites. A stale premise in an open body is fixed by
-   editing that body, not by commenting only.
-4. **Order the ready queue by dependency** and publish the top band in
+   editing that body, not by commenting only. **Fold bookkeeping into
+   sweeps**: comment corrections, marker repoints and reflows in one
+   package are one issue, taken in one landing, rather than one develop
+   loop each.
+4. **Order the ready queue by value** and publish the top band in
    docs/PLAN.md's Status section, so a session can pick the
    highest-value startable issue instead of scanning the whole queue.
-   There is no numeric cap on `ready` itself — it means filed and
-   unblocked, and its size is an output, not a target (#347). **The
-   ordering is the deliverable**: prefer vertical slices that move a
-   conformance lane over horizontal completeness.
+   There is no numeric cap on `ready` itself — its size is an output, not
+   a target (#347). **The ordering is the deliverable**, and each row is
+   one issue: a same-file relation between two issues is recorded on both
+   bodies, and the session that takes one absorbs the other under
+   WORKFLOW's Scope rule when it can (#1636).
 
-   **Band `kind/process` and `kind/tooling` work on the sessions it costs,
-   never on the lane it does not move.** An issue whose friction the log
-   records in consecutive sessions outranks a lane slice: the tax
-   compounds, the fix is usually one session, and ranking on lane movement
-   alone starves that queue until a retro re-diagnoses friction that was
-   already filed and specified (#527, #565).
+   **Product leads.** A lane slice is ranked by its expected yield — the
+   `casejoin join` bound for the construct it reads, per CLAUDE.md's
+   surveys block — and by whether it removes a cap on the active
+   milestone's lane, which outranks any count. Band the slice that moves
+   the milestone's north star first (docs/PLAN.md's milestone section
+   names it). Prefer vertical slices that move a lane over horizontal
+   completeness.
 
-   **Band a `kind/refactor` on a measured cost of delay, never on a
-   ranking word.** A refactor moves no lane and compounds no per-session
-   friction, so nothing else lifts it (#1499). It is **measured** when
-   its body's `## Cost of delay` section states a figure that repeats
-   exactly across runs on the same commit AND the command that
-   reproduces it — a `git grep -c` copy count, a `go tool surface` line,
-   or the `allocs/op` of a `go test -bench -benchmem` result. A benchmark
-   prints several figures, so its section names which one it records.
-   **`ns/op`, every other timing figure, and `B/op` never qualify**: each
-   varies between runs on one commit. Who produced the figure does not
-   matter: a steward audit and an adjacent landing's `allocs/op` count
-   alike (#1589). Anything else is **unmeasured** — no section, a section
-   without a command, a figure that varies between runs, or a ranking
-   word such as "stable debt" or "Ranked #4". Re-run
-   each measured refactor's command on the stamp's commit, compare its
-   figure with the value the body recorded, then write the new figure in
-   that value's place: a measured refactor enters the band, and one whose
-   figure grew past the recorded value outranks a lane slice. An
-   unmeasured refactor is ordered by dependency alone, and no stamp
-   carries a line owing it a ranking.
+   **Process, tooling and refactors earn rows by what they cost, and the
+   retro's metrics are the dial.** A `kind/process` or `kind/tooling`
+   issue ranks on the sessions the log shows it costing; one that costs a
+   round in consecutive sessions belongs in the band (#527). A
+   `kind/refactor` ranks on a measured cost of delay, never on a ranking
+   word (#1499): its body's `## Cost of delay` states a figure that
+   repeats exactly across runs on one commit and the command that
+   reproduces it — a `git grep -c` copy count, a `go tool surface` line, or
+   a named `allocs/op` figure, never `ns/op`, `B/op` or another timing
+   (#1589). Re-run each measured refactor's command on the stamp's commit
+   and write the new figure in the recorded one's place; one whose figure
+   grew enters the band. The last `/retro` logged the share of develop
+   sessions spent on product and the cases banked per session: when those
+   fell, the band tilts toward product; when a process cost is eating
+   rounds, toward that. No quota decides it — the stamp says which way it
+   leaned and why.
 5. **Fold in the persona stories the orchestrating session hands you.**
    You never role-play a persona yourself — you have read the source, so
    your verdict would launder an insider's opinion as an outsider's, which
@@ -105,9 +124,13 @@ body says so.
    queue counts from GitHub, rewrite the section from those numbers, and
    stamp it with today's date. Never append a dated paragraph beside the old
    text and never correct a number in place — the whole section is
-   replaced or it is not touched. PLAN.md is status; `docs/LOG` is
-   history and GitHub is the queue. Name the next planning action, and
-   fix any milestone scope paragraph that reality has outgrown.
+   replaced or it is not touched, and nothing edits it between stamps: a
+   row whose issue closed waits for the next stamp, and a falsified
+   premise is corrected in the issue's body (#1630). PLAN.md is status —
+   the lane table, the queue counts, the band and the next action — while
+   `docs/LOG` is history and GitHub is the queue, so the section carries
+   no account of the pass. Name the next planning action, and fix any
+   milestone scope paragraph that reality has outgrown.
 
 ## Issue bodies
 
@@ -147,7 +170,6 @@ re-scope: correct stale premises in the body, mark unreproduced mechanism
 claims as hypotheses, check every citation against the tree, and search
 the queue for overlap before filing.
 
-Labels: `ready` / `blocked` / `needs-replan` / `epic`; `area/<pkg>`;
-`kind/{feature,gap,bug,refactor,process,tooling,story}`. Milestones mirror
-docs/PLAN.md. `blocked` means waiting on a named dependency in
-`## Depends on` — an issue or a trigger, not only an open issue.
+Labels are docs/WORKFLOW.md's **GitHub conventions** list. `blocked` means
+waiting on a named dependency in `## Depends on` — an issue or a trigger,
+not only an open issue.
