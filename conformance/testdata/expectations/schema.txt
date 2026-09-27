@@ -5394,7 +5394,7 @@ MS-IdentityConstraint2006-07-15/idI150/schema/idI150 fail
 MS-IdentityConstraint2006-07-15/idI151/schema/idI151 fail
 MS-IdentityConstraint2006-07-15/idI152/schema/idI152 pass
 MS-IdentityConstraint2006-07-15/idJ001/schema/idJ001 fail
-MS-IdentityConstraint2006-07-15/idJ002/schema/idJ002 fail
+MS-IdentityConstraint2006-07-15/idJ002/schema/idJ002 pass
 MS-IdentityConstraint2006-07-15/idJ003/schema/idJ003 fail
 MS-IdentityConstraint2006-07-15/idJ004/schema/idJ004 pass
 MS-IdentityConstraint2006-07-15/idJ005/schema/idJ005 fail

@@ -1,6 +1,8 @@
 package icpath
 
 import (
+	"errors"
+	"strings"
 	"testing"
 
 	"github.com/kud360/goxsd8/xsd"
@@ -309,22 +311,45 @@ func violationOf(expr string, field bool) error {
 	return SelectorViolation(xsderr.Loc{}, x)
 }
 
-// An '@' with no NameTest after it splits the two arms. A SELECTOR is charged
-// whatever follows the '@', because what clause 2.2 withholds from a selector is
-// the attribute axis itself. A FIELD is not: the field claim is about POSITION,
-// which a dangling '@' has none of, and the clause it really breaks — xpath-valid
-// clause 1 — is not one this package reads (shapeFault's GAP). The suite's own
-// idJ002 is the case that stays failing because of it.
-func TestBareAttributeAxisSplitsTheTwoArms(t *testing.T) {
-	if err := violationOf("@", false); err == nil {
-		t.Error(`SelectorViolation("@") = nil, want a charge — a selector may not name the attribute axis at all`)
+// An '@' with no NameTest after it is charged on both arms, under different
+// clauses. A SELECTOR is charged for naming the attribute axis at all, which
+// clause 2.2 withholds from it whatever follows. A FIELD is charged under clause
+// 1: production [31] AbbrevForwardStep requires a NodeTest after the '@', so the
+// member is no XPath 2.0 expression. `@*` and `@p:*` carry a NameTest and stay
+// legal; `@b/` has one and is still the position charge. The message is pinned
+// by its opening, because a lone '@' fails the position check too and only the
+// message tells which branch charged it.
+func TestBareAttributeAxisIsCharged(t *testing.T) {
+	for _, tc := range []struct {
+		expr  string
+		field bool
+		msg   string
+	}{
+		{"@", false, `the {selector} "@" names an attribute, but c-selector-xpath clause 2`},
+		{"@", true, `the {fields} member "@" has an '@' with no NodeTest after it, but c-fields-xpaths clause 1`},
+		{"a/@", true, `the {fields} member "a/@" has an '@' with no NodeTest after it`},
+		{"@/a", true, `the {fields} member "@/a" has an '@' with no NodeTest after it`},
+		{"@.", true, `the {fields} member "@." has an '@' with no NodeTest after it`},
+		{"a/@b|@", true, `the {fields} member "a/@b|@" has an '@' with no NodeTest after it`},
+		{"@b/", true, `the {fields} member "@b/" names an attribute before its final step`},
+	} {
+		err := violationOf(tc.expr, tc.field)
+		var e *xsderr.Error
+		if !errors.As(err, &e) {
+			t.Errorf("charging %q (field=%v) = %v, want an *xsderr.Error", tc.expr, tc.field, err)
+			continue
+		}
+		if !strings.HasPrefix(e.Msg, tc.msg) {
+			t.Errorf("charging %q (field=%v): message = %q, want it to open %q", tc.expr, tc.field, e.Msg, tc.msg)
+		}
+		if _, ok := compileOf(tc.expr, tc.field, nil); ok {
+			t.Errorf("compiling %q (field=%v) succeeded; want a decline", tc.expr, tc.field)
+		}
 	}
-	if err := violationOf("@", true); err != nil {
-		t.Errorf(`FieldViolation("@") = %v, want nil — xpath-valid clause 1 is not this package's`, err)
-	}
-	for _, field := range []bool{false, true} {
-		if _, ok := compileOf("@", field, nil); ok {
-			t.Errorf(`compiling "@" (field=%v) succeeded; want a decline`, field)
+	p := []xsd.NamespaceBinding{xsd.NewNamespaceBinding("p", "urn:p")}
+	for _, expr := range []string{"@*", "@p:*", "a/@*"} {
+		if err := FieldViolation(xsderr.Loc{}, xsd.NewXPathExpression(expr, p, nil, nil)); err != nil {
+			t.Errorf("FieldViolation(%q) = %v, want nil — '*' and 'NCName:*' are NameTests (production [4])", expr, err)
 		}
 	}
 }

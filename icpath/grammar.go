@@ -18,7 +18,7 @@ import (
 // field selects production [7] over production [2]: only a field may end in an
 // attribute step.
 //
-// The order the three states are decided in is the whole of "charge these four,
+// The order the three states are decided in is the whole of "charge these five,
 // decline everything else":
 //
 //   - UNSUPPORTED DOMINATES. A stream carrying a run this lexer cannot read is
@@ -29,7 +29,7 @@ import (
 //     prefix in isolation would reject a schema whose only fault is a spelling
 //     this compiler does not read.
 //   - A SHAPE VIOLATION IS INDEPENDENT OF THE PARSE. Over a fully lexed stream
-//     shapeFault proves its three shapes from the tokens alone, so `a[b]` is
+//     shapeFault proves its four shapes from the tokens alone, so `a[b]` is
 //     charged although it parses to nothing at all.
 //   - AN UNBOUND PREFIX NEEDS A COMPLETE PARSE. Name resolution never fails a
 //     parse — it records and carries on — so a parse that failed at all failed
@@ -199,10 +199,12 @@ func fullyLexed(toks []token) bool {
 
 // shapeFault reports the production violation a FULLY LEXED token stream proves,
 // in the words the charge names it with, and ok false where it proves none. The
-// three shapes it decides are exactly the ones no spelling of the {expression}
-// can excuse — an abbreviated XPath and the unabbreviated form clause 2.2 admits
-// as its equivalent both carry them — so each is a violation whichever of clause
-// 2's two arms the author was writing under.
+// four shapes it decides are exactly the ones no spelling of the {expression}
+// can excuse. Three are clause-2 faults that an abbreviated XPath and the
+// unabbreviated form clause 2.2 admits as its equivalent both carry, so each is
+// a violation whichever of clause 2's two arms the author was writing under. The
+// fourth, a field's '@' with no NameTest after it, is no XPath 2.0 expression
+// under any spelling, which fails clause 1.
 //
 // The scan is per union member, because production [1] is a union of Paths and a
 // member's final step is its own: `a/@b|c/@d` is two legal field Paths and reads
@@ -227,26 +229,12 @@ func shapeFault(toks []token, field bool) (string, bool) {
 			if !field {
 				return fmt.Sprintf("names an attribute, but %s clause 2 admits only the child axis — production [2] has no '@' and clause 2.2 names no other axis", scc), true
 			}
-			// The selector arm above needs no NameTest after the '@' — the
-			// attribute AXIS is what clause 2.2 withholds from a selector, whatever
-			// names it — but the field arm below is a claim about POSITION, and an
-			// '@' with no NameTest after it holds no position in production [7].
-			//
-			// GAP(xpath): an '@' with no NameTest after it, in a FIELD. It is
-			// provable — no remaining token of production [5] is a NodeTest, so
-			// nothing in a fully lexed stream completes the abbreviated attribute
-			// step either arm of clause 2 reads — but what it breaks is
-			// xpath-valid's clause 1, "The {expression} of X is a valid XPath
-			// expression", and this package reads clause 2, "X does not produce
-			// any static error", and nothing else. Charging it under a clause-2
-			// message would cite the wrong clause, so it is DECLINED until clause
-			// 1 has a grounding of its own. The withheld value reaches only
-			// [FieldViolation]'s caller, parser's constructIdentityConstraint,
-			// which rejects the schema on a NON-nil error and does nothing at all
-			// on nil, so withholding one can only let a schema through and never
-			// reject a conforming one. Nothing owns its retirement.
+			// An '@' with no NameTest after it is no XPath 2.0 expression at all:
+			// production [31] AbbrevForwardStep is `"@"? NodeTest`, its NodeTest
+			// is mandatory, and of production [5]'s tokens only a NameTest is one.
+			// That fails xpath-valid clause 1, and with it c-fields-xpaths clause 1.
 			if j+1 >= len(m) || m[j+1].kind != 'n' {
-				continue
+				return fmt.Sprintf("has an '@' with no NodeTest after it, but %s clause 1 requires it to satisfy xpath-valid, whose clause 1 requires a valid XPath 2.0 expression — production [31] AbbrevForwardStep is \"@\"? NodeTest, and its NodeTest is mandatory", scc), true
 			}
 			// Production [7] admits `'@' NameTest` as the whole of a Path's final
 			// step and nowhere else, and clause 2.2's "child and/or attribute axes
