@@ -3630,22 +3630,29 @@ func collapseTrim(lexical string) string {
 // type, which is a different question from comparing {value} with a base type's
 // totalDigits (§4.3.11.4), charged at finalize.
 //
-// An absent value attribute is left alone: it is a presence fault of the
-// declaration's use="required", not a literal failing its type, and the parser
-// does not charge it yet.
+// The test is lexical-space membership alone (nonNegativeIntegerLexical), with
+// no machine-integer parse: both types are unbounded above, so a literal past
+// math.MaxInt is inside them and must pass.
+//
+// GAP(parser): an absent value attribute is left alone — the declaration's
+// use="required" is charged nowhere, and every facet reads the absence as ""
+// (#1777).
 func facetCountValue(el *Element, kind xsd.FacetKind) error {
 	lexical, ok := el.Attr("value")
 	if !ok {
 		return nil
 	}
 	name := "<" + el.Name().Local() + ">"
+	positive, inLexical := nonNegativeIntegerLexical(collapseTrim(lexical))
 	switch kind {
 	case xsd.FacetLength, xsd.FacetMinLength, xsd.FacetMaxLength, xsd.FacetFractionDigits:
-		_, err := nonNegativeInt(lexical, el.Loc(), name)
-		return err
+		if inLexical {
+			return nil
+		}
+		return xsderr.New(ruleDatatypeValid, el.Loc(),
+			"%s value %q is not a nonNegativeInteger", name, lexical)
 	case xsd.FacetTotalDigits:
-		n, err := nonNegativeInt(lexical, el.Loc(), name)
-		if err == nil && n > 0 {
+		if positive {
 			return nil
 		}
 		return xsderr.New(ruleDatatypeValid, el.Loc(),
@@ -3653,6 +3660,24 @@ func facetCountValue(el *Element, kind xsd.FacetKind) error {
 	default:
 		return nil
 	}
+}
+
+// nonNegativeIntegerLexical reports whether the collapsed literal s is in
+// xs:nonNegativeInteger's lexical space (§3.4.20.1: an optional sign, then one or
+// more digits #x30-#x39, the sign "-" only on a form denoting zero) and, as
+// positive, whether it is also in xs:positiveInteger's (§3.4.25.1: an optional
+// "+", then digits at least one of which is not "0"). It scans rather than
+// parses, so it has no upper bound.
+func nonNegativeIntegerLexical(s string) (positive, ok bool) {
+	digits, negative := strings.CutPrefix(s, "-")
+	if !negative {
+		digits = strings.TrimPrefix(s, "+")
+	}
+	nonzero := strings.TrimLeft(digits, "0") != ""
+	if digits == "" || !allDigits(digits) || (negative && nonzero) {
+		return false, false
+	}
+	return nonzero, true
 }
 
 // facetFixed maps a facet element's fixed attribute to that facet's {fixed}
