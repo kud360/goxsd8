@@ -291,6 +291,16 @@ func TestUsageCoversContract(t *testing.T) {
 		"are examples, not the whole class",
 		"an I/O fault\n      reading a document the argument REFERENCES",
 		"charged 1 like a rejection",
+		// #1419's ruling, which validate's copy lacked while parse's carried it:
+		// the same fault is charged 3 there, and exit 2's headline is scoped so
+		// it no longer reads as every I/O fault. Each paragraph also sets the
+		// fault apart from the legal skip.
+		"a -schema argument REFERENCES,\n      through <xs:include>",
+		"is charged 3: the schema set does not compile",
+		"Of the I/O faults\n      reading a schema document, exit 2 covers only a -schema",
+		"2 usage or I/O on an argument or\n      on stdout",
+		"The I/O fault above is not that skip",
+		"The fault is not the legal skip",
 		// #1668's answer: which part of a DTD validate reads for the
 		// unparsed entities an ENTITY value names.
 		"its internal parameter entities. The external DTD subset is\n      never fetched",

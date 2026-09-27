@@ -101,9 +101,11 @@ func parseOne(location string, quiet bool, log *slog.Logger, stdout, stderr io.W
 		// the ARGUMENT, so an argument that cannot be read is charged 2 and
 		// never reaches here; an I/O fault reading a document that argument
 		// REFERENCES does reach here and is charged 1 like a rejection, though
-		// nothing about the schema was decided. Whether that should be 2
-		// instead is #1419 and is not settled here. Errors reach stderr
-		// whatever -q says, so a script can grep them.
+		// nothing about the schema was decided. It stays 1 (#1419): the
+		// contract scopes exit 2 to the argument, and a Resolver error cannot
+		// in general be told apart from a resolver declining to serve the
+		// document. Errors reach stderr whatever -q says, so a script can grep
+		// them.
 		_, _ = fmt.Fprintln(stderr, violationLine(err))
 		return exitInvalid
 	}
