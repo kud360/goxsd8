@@ -385,7 +385,7 @@ func unparsedDef(def []string) bool {
 // direction is fail-OPEN against the set's one reader: validate's
 // (*walk).entitiesDeclared, reached through xmltree.Reader.HasUnparsedEntity
 // and validate/xmlsrc's element.HasUnparsedEntity, raises no cvc-simple-type
-// clause 3 error for an ·ENTITY value· naming that entity. Owned by #1670.
+// clause 3 error for an ·ENTITY value· naming that entity. Owned by #1745.
 func isNotationName(t string) bool {
 	for i := 0; i < len(t); i++ {
 		c := t[i]
