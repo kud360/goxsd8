@@ -39,6 +39,12 @@ func TestProduceFacetCountValueRejected(t *testing.T) {
 		{"totalDigits zero", "decimal", `<xs:totalDigits value="0"/>`, `<totalDigits> value "0" is not a positiveInteger`},
 		{"totalDigits negative", "decimal", `<xs:totalDigits value="-3"/>`, `<totalDigits> value "-3" is not a positiveInteger`},
 		{"totalDigits empty", "decimal", `<xs:totalDigits value=""/>`, `<totalDigits> value "" is not a positiveInteger`},
+		// §3.4.25.1 admits only "+" as a sign, so "-0" — a nonNegativeInteger — is not
+		// a positiveInteger.
+		{"totalDigits negative zero", "decimal", `<xs:totalDigits value="-0"/>`, `<totalDigits> value "-0" is not a positiveInteger`},
+		{"maxLength sign alone", "string", `<xs:maxLength value="+"/>`, `<maxLength> value "+" is not a nonNegativeInteger`},
+		{"maxLength two signs", "string", `<xs:maxLength value="+-0"/>`, `<maxLength> value "+-0" is not a nonNegativeInteger`},
+		{"maxLength negative above MaxInt", "string", `<xs:maxLength value="-99999999999999999999"/>`, `<maxLength> value "-99999999999999999999" is not a nonNegativeInteger`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -62,9 +68,10 @@ func TestProduceFacetCountValueRejected(t *testing.T) {
 // TestProduceFacetCountValueAdmitted pins the valid lexical forms no suite
 // fixture spells for these facets, which a wrongly strict check would reject
 // with nothing in the conformance lanes to notice: a leading "+", surrounding XML
-// whitespace (collapsed before the lexical test, §4.1.4), and leading zeros.
-// fractionDigits "0" is the nonNegativeInteger that totalDigits' narrower
-// positiveInteger excludes.
+// whitespace (collapsed before the lexical test, §4.1.4), leading zeros, "-0"
+// (§3.4.20.1 lets a form denoting zero carry "-"), and a literal above
+// math.MaxInt, which both unbounded types contain. fractionDigits "0" is the
+// nonNegativeInteger that totalDigits' narrower positiveInteger excludes.
 func TestProduceFacetCountValueAdmitted(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -82,6 +89,10 @@ func TestProduceFacetCountValueAdmitted(t *testing.T) {
 		{"totalDigits leading plus", "decimal", `<xs:totalDigits value="+5"/>`},
 		{"totalDigits padded", "decimal", `<xs:totalDigits value=" 5 "/>`},
 		{"totalDigits leading zeros", "decimal", `<xs:totalDigits value="007"/>`},
+		{"maxLength negative zero", "string", `<xs:maxLength value="-0"/>`},
+		{"maxLength above MaxInt", "string", `<xs:maxLength value="99999999999999999999"/>`},
+		{"fractionDigits above MaxInt", "decimal", `<xs:fractionDigits value="99999999999999999999"/>`},
+		{"totalDigits above MaxInt", "decimal", `<xs:totalDigits value="+99999999999999999999"/>`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
