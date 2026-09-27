@@ -28,7 +28,10 @@ Value implementations, parsing, validation, and generation live above them.
                  regex           (one engine, XSD + F&O flavors)
                  parser/xmltree  (position-tracking XML; imports xsderr only, and
                                   nothing else in the module — independent of the
-                                  schema pipeline, not of the error currency)
+                                  schema pipeline, not of the error currency. A
+                                  stdlib-only internal/ leaf is the one further edge
+                                  it may take; it never imports regex — see the
+                                  XML-production ruling below)
                  loader          (schema resolution interfaces)
                  xpath           (XPath 2.0 engine; imports xsd, value, regex, xsderr)
                  icpath          (the §3.11.6.2/§3.11.6.3 identity-constraint path
@@ -93,6 +96,16 @@ package's importers to `tools/...`, and `go tool surface` skips `tools/`, so
 it can reach neither the library nor the published surface — no per-helper
 argument for standing it up is owed. `tools/hfnextract/internal` is the
 same shape one level down.
+
+**Give an XML 1.0 production two library packages read one home in a
+stdlib-only `internal/<name>` leaf**; do not export it from either reader,
+and do not add an edge between them. `parser/xmltree` in particular never
+imports `regex` to reach one. The Name productions ([4] `NameStartChar`,
+[4a] `NameChar`) are the first case: `regex`'s `\i`/`\c` sets and
+`parser/xmltree`'s DOCTYPE name checks (#1745, #1765) both need them, and
+today `regex/class.go` holds them whole while `xmltree`'s `isNotationName`
+holds an ASCII-only second copy. Whether that one table is generated is
+#989's question, asked once of the table's home.
 
 `cmd/goxsd8` is a library CONSUMER, not a place to grow capability. A
 capability the CLI needs and the library does not export is a library gap to
@@ -346,8 +359,9 @@ files are the evidence it is working, not evidence of a missing seam. Judge
 Two access styles over the compiled model, one shared core:
 
 - **Query**: direct lookups — element/attribute/type by QName — exposed
-  through minimal capability views (STYLE T3), so a consumer that needs
-  only `ElementByName` receives only that.
+  through minimal capability views (STYLE T3): `xsd.ElementResolver`,
+  `xsd.AttributeResolver` and `xsd.TypeResolver`, each one lookup method, so
+  a consumer that needs only `Element` receives only that.
 - **Walk**: traversal of a type's effective content model. The algebra
   ships (type-derivation validity, substitution-group acceptance, wildcard
   admission, attribute-use lookup) — **mostly unexported, with four
@@ -673,16 +687,16 @@ compiles, is documented, and has **zero** callers module-wide.
   fulfills" half of T5. Re-check, do not re-file. `Chain` left this list
   when `cmd/goxsd8`'s `compileSet` took it, `Dir` and `Map` have consumers
   in both tiers, and `ResolverFunc` is exercised by `parser`'s tests.
-  `regex.FlavorFO` sat here on the same terms until `xpath` and `validate`
-  took it for their NCName prefix scanners (#979); the F&O functions it was
-  built for still arrive at M6/M7.
+  `regex.FlavorFO` sat here on the same terms until `xpath` and `icpath`
+  took it for their NCName prefix scanners (#979; `validate`'s scanner moved
+  to `icpath`); the F&O functions it was built for still arrive at M6/M7.
 - **`validate.Validator.Schema()`** — exported for "the read-only view of
-  the compiled schema an adapter needs" (`validate/validate.go:95`), but no
+  the compiled schema an adapter needs" (its godoc), but no
   adapter uses it and, per `validate/doc.go`, none can: adapters build
   infoset values and never resolve declarations. Its two call sites are
   both inside `validate`, and its own doc's second sentence ("The walk
   reads the `*xsd.Schema` itself and not this narrowing") is falsified by
-  `validate/assess.go:100`, which reads the narrowing. Filed as **#848**:
+  `Validator.Assess`, which reads the narrowing. Filed as **#848**:
   unexport, or name the real consumer. Whichever way it goes, settle
   `xsd.ElementResolver` with it: this method's return type is that
   interface's only consumer module-wide, and its sibling
@@ -708,15 +722,17 @@ compiles, is documented, and has **zero** callers module-wide.
   deletion left it a type with a job, and whether it stays EXPORTED is
   #1051's question alone.
 - **`xsd.Occurs.Permits`, `xsd.Namespace.IsAbsent`,
-  `xsd.NamespaceConstraint.AllowsNamespace`** — zero non-test callers
-  module-wide. `Permits` answers a closed `min <= n <= max` question no
-  caller asks, every occurrence site reading `Min`/`Max` for a one-sided
-  bound instead; `IsAbsent` is `URI`'s second result spelled a second way
-  (D3); `AllowsNamespace` sits, like `NamespaceConstraint.AllowsName` beside
-  it, beneath the wildcard-admission entry points as the {namespace
-  constraint} property's own accessor — `xsd/doc.go`'s Walk API section
-  redirects a caller admitting a name to `Schema.ContentMatcher` or
-  `Schema.AllowsAttributeWildcardName` instead of either.
+  `xsd.NamespaceConstraint.AllowsNamespace`** — no non-test caller outside
+  `xsd`; the first two have none inside it either. `Permits` answers a
+  closed `min <= n <= max` question no caller asks, every occurrence site
+  reading `Min`/`Max` for a one-sided bound instead; `IsAbsent` is `URI`'s
+  second result spelled a second way (D3); `AllowsNamespace` sits, like
+  `NamespaceConstraint.AllowsName` beside it, beneath the wildcard-admission
+  entry points as the {namespace constraint} property's own accessor —
+  `xsd/doc.go`'s Walk API section redirects a caller admitting a name to
+  `Schema.ContentMatcher` or `Schema.AllowsAttributeWildcardName` instead of
+  either. `AllowsName` stands the same way — in-package callers and
+  `parser`'s tests only — and settles with it.
   Filed at the 2026-09-06 audit as #1287. `Notation.SystemIdentifier`,
   `Notation.PublicIdentifier` and `xmltree.CharData.Offset` are callerless
   too and are NOT filed: the first two are §3.14.1 component properties the
