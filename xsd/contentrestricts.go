@@ -1243,9 +1243,9 @@ func (s *Schema) someBindingSubsumes(b contentAutomaton, matched []int, p positi
 //
 // This ruling does not cover a strict general keyword against a skip or a
 // ##defined lax specific one: both specific keywords are exact here, so
-// loc-testSubP clause 3 decides that pairing statically and refuses it, and
-// keywordSubsumes accepting it is a real missed reject (W3C suite wildZ008) —
-// excluded here, and filed by this ruling's grounding as #1748.
+// loc-testSubP clause 3 decides that pairing statically, and keywordSubsumes
+// refuses it (W3C suite wildZ008 is the skip pairing) — reading the ##defined
+// fact from the binding's disallowsDefined field (#1748).
 //
 // Every subset returns the same wildcardKeywordBinding, so nothing here branches
 // on which one applies (STYLE D3); what differs is only whether that value is
@@ -1255,7 +1255,7 @@ func elementPositionBinding(p position) defaultBinding {
 	case ElementDeclaration:
 		return elementDeclarationBinding{decl: t} // case 1
 	case Wildcard:
-		return wildcardKeywordBinding{keyword: t.ProcessContents()} // cases 4/5/6
+		return newWildcardKeywordBinding(t) // cases 4/5/6
 	default:
 		panic("xsd: elementPositionBinding: position {term} is neither an element declaration nor a wildcard")
 	}

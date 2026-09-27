@@ -53,7 +53,28 @@ type attributeUseBinding struct{ use AttributeUse }
 // (cases 4 and 5), or to a skip wildcard (case 6, which needs no such
 // qualifier), so the binding is the keyword itself. The keyword is the already
 // typed ProcessContents closed set (closedsets.go), never a string.
-type wildcardKeywordBinding struct{ keyword ProcessContents }
+//
+// disallowsDefined records whether the wildcard's {disallowed names} contains
+// the keyword defined. That wildcard admits only names that do not ·resolve·
+// (cvc-wildcard clauses 2.1/2.2), so an item ·attributed· to it has no
+// ·governing· declaration and the keyword is the EXACT binding even when it is
+// lax — the one fact keywordSubsumes' clause 3 needs beyond the keyword itself.
+// Production code builds it only through newWildcardKeywordBinding.
+type wildcardKeywordBinding struct {
+	keyword          ProcessContents
+	disallowsDefined bool
+}
+
+// newWildcardKeywordBinding is key-dft-binding cases 4/5/6 for an item
+// ·attributed· to w: the one construction both halves of ·default binding· use
+// (attributeDefaultBinding and contentrestricts.go's elementPositionBinding), so
+// neither can forget the {disallowed names} fact (STYLE T4).
+func newWildcardKeywordBinding(w Wildcard) wildcardKeywordBinding {
+	return wildcardKeywordBinding{
+		keyword:          w.ProcessContents(),
+		disallowsDefined: w.namespaceConstraint.hasDisallowedNameKeyword(DisallowedNameDefined),
+	}
+}
 
 func (elementDeclarationBinding) defaultBinding() {}
 func (attributeUseBinding) defaultBinding()       {}
@@ -107,12 +128,12 @@ func (wildcardKeywordBinding) defaultBinding()    {}
 // (attributerestriction.go). checkBindingSubsumes charges c-ran clause 3 only
 // where the base binding does NOT ·subsume· the restriction's, and a keyword G
 // as keywordSubsumes below renders it accepts every specific binding a case-3
-// Attribute Use G would accept and more — the one pairing it charges, lax
-// against skip, an Attribute Use G charges too, through checkBindingSubsumes'
-// catch-all — so the substitution can only turn a charge into an acceptance,
-// never a false reject. The other reader, that caller's ok=false charge, is
-// unaffected in either direction: name admission alone decides it, before any
-// binding is built.
+// Attribute Use G would accept and more — the pairings it charges, lax against
+// skip and strict against skip or against a ##defined lax, an Attribute Use G
+// charges too, through checkBindingSubsumes' catch-all — so the substitution
+// can only turn a charge into an acceptance, never a false reject. The other
+// reader, that caller's ok=false charge, is unaffected in either direction:
+// name admission alone decides it, before any binding is built.
 //
 // The gap is NARROWER than the whole wildcard branch: it is every attribute
 // wildcard whose {process contents} is strict or lax AND whose {namespace
@@ -153,7 +174,7 @@ func (s *Schema) attributeDefaultBinding(side attributeRestrictionSide, n QName)
 	if !side.hasWildcard || !s.AllowsAttributeWildcardName(side.wildcard, n) {
 		return nil, false
 	}
-	return wildcardKeywordBinding{keyword: side.wildcard.ProcessContents()}, true // cases 4/5/6
+	return newWildcardKeywordBinding(side.wildcard), true // cases 4/5/6
 }
 
 // ResolvedAttributeDeclaration resolves the Attribute Declaration behind an
@@ -300,16 +321,36 @@ func (s *Schema) checkBindingSubsumes(n QName, r attributeRestriction, general, 
 }
 
 // checkKeywordSubsumes decides loc-testSubP clauses 1-3, where the base's
-// binding G is one of the three keywords, and charges the one way they can fail.
+// binding G is one of the three keywords, and charges the ways they can fail.
 // The predicate itself is keywordSubsumes, which the element half of the
-// definition shares (STYLE T4); only the message is built here, and only the
-// lax-versus-skip pairing of clause 2 can reach it.
+// definition shares (STYLE T4); only the message is built here. Every refusal
+// has a keyword S: clause 2's lax G against a skip S, or clause 3's strict G
+// against an EXACT non-strict S — a skip S, or a lax S whose wildcard's
+// {disallowed names} contains defined.
 func checkKeywordSubsumes(n QName, r attributeRestriction, general wildcardKeywordBinding, specific defaultBinding) error {
 	if keywordSubsumes(general, specific) {
 		return nil
 	}
+	requirement := "loc-testSubP clause 2 requires the specific binding not to be skip"
+	if general.keyword == ProcessStrict {
+		requirement = "loc-testSubP clause 3 requires the specific binding to be strict too"
+	}
 	return xsderr.New(r.rule, r.loc,
-		"%s %s %s, but %s binds attribute %s to a lax wildcard while the restriction binds it to a skip wildcard, and loc-testSubP clause 2 requires the specific binding not to be skip (%s)", r.derived.label, r.verb, r.base.label, r.base.label, n, r.clause)
+		"%s %s %s, but %s binds attribute %s to a %s wildcard while the restriction binds it to %s, and %s (%s)", r.derived.label, r.verb, r.base.label, r.base.label, n, general.keyword, describeRefusedBinding(specific), requirement, r.clause)
+}
+
+// describeRefusedBinding names the specific binding keywordSubsumes refused, for
+// checkKeywordSubsumes' message. A lax one is refused only for its wildcard's
+// {disallowed names} containing defined, so the message says so.
+func describeRefusedBinding(specific defaultBinding) string {
+	k, ok := specific.(wildcardKeywordBinding)
+	if !ok {
+		return "a non-keyword binding"
+	}
+	if k.disallowsDefined {
+		return "a " + k.keyword.String() + " wildcard whose {disallowed names} contains defined"
+	}
+	return "a " + k.keyword.String() + " wildcard"
 }
 
 // keywordSubsumes is loc-testSubP clauses 1-3, where the general binding G is
@@ -321,7 +362,10 @@ func checkKeywordSubsumes(n QName, r attributeRestriction, general wildcardKeywo
 //
 //   - clause 1: G is skip, which subsumes anything.
 //   - clause 2: G is lax and S is not skip.
-//   - clause 3: both G and S are strict; see the GAP below for the reading taken.
+//   - clause 3: both G and S are strict. A strict G is refused against an EXACT
+//     non-strict keyword S — skip, or lax from a wildcard whose {disallowed
+//     names} contains defined — and accepted against every other S; see the GAP
+//     below for the reading taken there.
 func keywordSubsumes(general wildcardKeywordBinding, specific defaultBinding) bool {
 	switch general.keyword {
 	case ProcessSkip:
@@ -330,6 +374,16 @@ func keywordSubsumes(general wildcardKeywordBinding, specific defaultBinding) bo
 		k, ok := specific.(wildcardKeywordBinding)
 		return !ok || k.keyword != ProcessSkip // clause 2
 	case ProcessStrict:
+		// Clause 3, decided statically where S is an exact non-strict keyword:
+		// skip is key-dft-binding case 6, which no ·governing· declaration can
+		// displace, and a lax S from a ##defined wildcard admits only names that
+		// do not ·resolve· (cvc-wildcard clauses 2.1/2.2), so no case-1/2/3
+		// binding can stand in its place either. W3C suite wildZ008 is the skip
+		// pairing.
+		k, ok := specific.(wildcardKeywordBinding)
+		if ok && (k.keyword == ProcessSkip || (k.keyword == ProcessLax && k.disallowsDefined)) {
+			return false // clause 3
+		}
 		// GAP(xsd): loc-testSubP clause 3 says a strict G ·subsumes· only another
 		// strict S, so a restriction that replaces a base's strict wildcard with a
 		// named {attribute use} — or, on the element side, with a named element
@@ -347,17 +401,13 @@ func keywordSubsumes(general wildcardKeywordBinding, specific defaultBinding) bo
 		// assessment-dependent extent only: specific an Attribute Use, an Element
 		// Declaration, or a lax keyword from a wildcard whose {disallowed names}
 		// does not contain defined — the pairings where a real case-1/2/3 binding
-		// might apply in place of a keyword. There accepting is FAIL-OPEN against
-		// both readers of false: checkKeywordSubsumes charges
+		// might apply in place of a keyword. Those, and the strict S clause 3
+		// accepts outright, are all that reach the return below; the exact
+		// non-strict keywords were refused above (#1748). There accepting is
+		// FAIL-OPEN against both readers of false: checkKeywordSubsumes charges
 		// derivation-ok-restriction clause 3 on it, and bindingSubsumes hands it
 		// through someBindingSubsumes to contentModelRestricts, which charges
 		// cos-content-act-restrict clause 2; neither charges on true.
-		//
-		// The ruling does NOT cover specific a skip keyword, or a lax keyword from
-		// a ##defined wildcard: elementPositionBinding renders both exactly, so
-		// clause 3 decides the pairing statically and refuses it, and the true
-		// below is a real missed reject for it (W3C suite wildZ008 for skip) —
-		// excluded here, and filed by #345's grounding as #1748.
 		return true
 	default:
 		panic("xsd: keywordSubsumes: non-exhaustive ProcessContents switch")

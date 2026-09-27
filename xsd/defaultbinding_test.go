@@ -2,6 +2,7 @@ package xsd
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/kud360/goxsd8/xsderr"
@@ -97,34 +98,51 @@ func TestBindingSubsumesKeywords(t *testing.T) {
 	use := attributeUseBinding{use: dAttr(t, uq("a"), uq("str"))}
 	decl := elementDeclarationBinding{decl: uLocal(t, uq("a"), uq("str"))}
 
+	strict := wildcardKeywordBinding{keyword: ProcessStrict}
 	for _, tc := range []struct {
 		name     string
 		general  defaultBinding
 		specific defaultBinding
 		wantOK   bool
+		// wantMsg, for a keyword refusal, is the message text naming G, then S,
+		// then the clause — in that order, so a message that swaps them fails.
+		wantMsg string
 	}{
 		{"clause 1: skip subsumes an attribute use",
-			wildcardKeywordBinding{keyword: ProcessSkip}, use, true},
+			wildcardKeywordBinding{keyword: ProcessSkip}, use, true, ""},
 		{"clause 1: skip subsumes skip",
-			wildcardKeywordBinding{keyword: ProcessSkip}, wildcardKeywordBinding{keyword: ProcessSkip}, true},
+			wildcardKeywordBinding{keyword: ProcessSkip}, wildcardKeywordBinding{keyword: ProcessSkip}, true, ""},
 		{"clause 2: lax subsumes an attribute use",
-			wildcardKeywordBinding{keyword: ProcessLax}, use, true},
+			wildcardKeywordBinding{keyword: ProcessLax}, use, true, ""},
 		{"clause 2: lax does NOT subsume skip",
-			wildcardKeywordBinding{keyword: ProcessLax}, wildcardKeywordBinding{keyword: ProcessSkip}, false},
+			wildcardKeywordBinding{keyword: ProcessLax}, wildcardKeywordBinding{keyword: ProcessSkip}, false,
+			"but {urn:upa}b binds attribute {urn:upa}a to a lax wildcard while the restriction binds it to a skip wildcard, and loc-testSubP clause 2 "},
 		{"clause 3: strict subsumes strict",
-			wildcardKeywordBinding{keyword: ProcessStrict}, wildcardKeywordBinding{keyword: ProcessStrict}, true},
+			strict, strict, true, ""},
+		{"clause 3: strict does NOT subsume skip",
+			strict, wildcardKeywordBinding{keyword: ProcessSkip}, false,
+			"but {urn:upa}b binds attribute {urn:upa}a to a strict wildcard while the restriction binds it to a skip wildcard, and loc-testSubP clause 3 "},
+		{"clause 3: strict does NOT subsume a lax from a ##defined wildcard",
+			strict, wildcardKeywordBinding{keyword: ProcessLax, disallowsDefined: true}, false,
+			"but {urn:upa}b binds attribute {urn:upa}a to a strict wildcard while the restriction binds it to a lax wildcard whose {disallowed names} contains defined, and loc-testSubP clause 3 "},
+		{"strict over a plain lax is the documented fail-open",
+			strict, wildcardKeywordBinding{keyword: ProcessLax}, true, ""},
 		{"strict over an attribute use is the documented fail-open",
-			wildcardKeywordBinding{keyword: ProcessStrict}, use, true},
+			strict, use, true, ""},
 		{"an Element Declaration does not subsume an Attribute Use",
-			decl, use, false},
+			decl, use, false, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			err := s.checkBindingSubsumes(uq("a"), complexTypeAttributeRestriction(tt, bb), tc.general, tc.specific)
 			if tc.wantOK && err != nil {
 				t.Fatalf("expected ·subsumes·, got %v", err)
 			}
-			if !tc.wantOK {
-				expectRule(t, err, ruleDerivationOKRestriction)
+			if tc.wantOK {
+				return
+			}
+			expectRule(t, err, ruleDerivationOKRestriction)
+			if !strings.Contains(err.Error(), tc.wantMsg) {
+				t.Fatalf("error %q does not contain %q", err, tc.wantMsg)
 			}
 		})
 	}
