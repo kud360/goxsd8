@@ -117,7 +117,10 @@ already done, and the commit body says so.
 5. **Fold in the persona stories the orchestrating session hands you.**
    You never role-play a persona yourself — you have read the source, so
    your verdict would launder an insider's opinion as an outsider's, which
-   is worse than none. Handed nothing, fold nothing, and say so.
+   is worse than none. Handed nothing, fold nothing, and say so. Check
+   every claim a report makes against the tree before it enters a body: a
+   persona's false conclusion is still a finding, about the text that led
+   an outside reader to it — file the arrival, not the claim (#1568).
 6. **Rewrite docs/PLAN.md's Status section.** You own it, and you own it
    by REPLACEMENT: paste `go tool lanestatus` verbatim for the lane
    table — never hand-count an expectations file — read the milestone and

@@ -72,11 +72,13 @@ verdict comments, and the log under-reports them. Unshallow the clone
 before any `git log` window (docs/ROUTINES.md); the log's entries are
 complete for the window and are what to count.
 
-**An issue `blocked` on the next `/retro` is waiting on you, and nothing
-else wakes it.** Read every one, rule on it, and record the ruling — a
-ruling to change nothing closes the issue and is a real outcome. A
-question routed here and left unruled is worse than one never routed,
-because the routing reads as a plan.
+**An issue waiting on the next `/retro` is waiting on you, and nothing
+else wakes it** — `blocked` on it, or naming it in `## Depends on` or in a
+"belongs to `/retro`" sentence under any label, so search the open bodies
+for `/retro`, not only the `blocked` queue (#696). Read every one, rule on
+it, and record the ruling — a ruling to change nothing closes the issue
+and is a real outcome. A question routed here and left unruled is worse
+than one never routed, because the routing reads as a plan.
 
 Find friction that RECURS; two sessions hitting the same wall is a
 pattern, one is an anecdote. Classify each pattern by where it ENTERS the
@@ -110,7 +112,10 @@ yourself stating in two places belongs in neither — find the owner.
 doc-only process issue about the process documents is discharged HERE, not
 routed to a develop iteration that has not picked it in the weeks its
 friction kept recurring. Route back only what needs verification a retro
-cannot honestly perform, and name what that verification is (#527).
+cannot honestly perform, and name what that verification is (#527). A
+routed-back issue loses `kind/process` — it is a tool, a code comment or
+a measurement now, labelled for what the develop loop will do — or the
+next retro reads it again and routes it again (#857).
 
 Repeated manual toil is a `kind/tooling` issue, not a rule (PRINCIPLES
 27). Land the result as a `meta: retro <date>` commit, and log the metric
@@ -118,8 +123,10 @@ trends against the previous retro, the two product figures first — they
 are the dial the backlog's banding reads:
 
 - **cases banked per develop session**, and how many landings moved a lane;
-- **the share of develop sessions spent on product** rather than process,
-  tooling or bookkeeping;
+- **the share of develop sessions spent on product** — a landing that
+  changes what the engine or the CLI decides or reports — rather than
+  process, tooling or bookkeeping (a comment, marker, doc or refactor
+  landing);
 - sessions per landing, repair rounds per accept, rejects per accept,
   ratchet slope per lane, ready-queue depth.
 
