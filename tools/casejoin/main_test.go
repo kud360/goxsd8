@@ -13,7 +13,7 @@ import (
 // withheld; a schema document named both by its own schemaTest and by the
 // instance case assessed against it — once inside an applicable group and
 // once inside a withheld one, so both counts have a duplicate to collapse;
-// and the declared outcomes the instance lane subtracts on.
+// and the declared outcomes the instance lane files its declared-valid row on.
 var fixtureSuite = map[string]string{
 	"suite.xml": `<testSuite xmlns:xlink="http://www.w3.org/1999/xlink">
   <testSetRef xlink:href="sets/s.testSet"/>
@@ -173,36 +173,35 @@ func TestIDsReportsAPathNoCatalogEntryNames(t *testing.T) {
 }
 
 // TestJoinCountsOnlyTheBankedFailuresThatCouldFlip is the join itself: of the
-// three entries naming the path, the withheld one carries no line, the one
-// the suite declares valid is subtracted on this lane (#1561), and one
-// candidate is left.
+// three entries naming the path, the withheld one carries no line, and the two
+// banked failures are both candidates — the one the suite declares valid
+// counted on its own row, since the instance lane's executor decides a
+// document valid for a simple leaf root (#1738) and it may be one.
 func TestJoinCountsOnlyTheBankedFailuresThatCouldFlip(t *testing.T) {
 	got := runFixture(t, "", "join", "instance", "docs/a1.xml")
 	wantLines(t, got,
-		"casejoin: 1 path(s) → 3 catalog entry(ies) → 1 candidate case(s) in lane instance",
-		"\n  S/g1/instance/i1\n",
+		"casejoin: 1 path(s) → 3 catalog entry(ies) → 2 candidate case(s) in lane instance",
+		"\n  S/g1/instance/i1\n  S/g2/instance/i2\n",
+		"which it does for a simple leaf root alone (#1738)",
 	)
 	wantRow(t, got, "withheld — no case produced, nothing to flip (#1412)", 1)
-	wantRow(t, got, "banked fail — suite declares it VALID, subtracted (#1561)", 1)
+	wantRow(t, got, "banked fail, suite declares it VALID — CANDIDATE as a simple leaf root (#1738)", 1)
 	wantRow(t, got, "banked fail — CANDIDATE", 1)
-	if strings.Contains(got, "\n  S/g2/instance/i2\n") {
-		t.Errorf("a case the suite declares VALID is listed as a candidate:\n%s", got)
-	}
 }
 
-// TestJoinSubtractsSuiteValidCasesOnTheInstanceLaneOnly holds the #1561
-// subtraction to the lane it is a fact about. S/g4/schema/s4 is declared valid
-// and banked fail: on the schema lane it is a candidate like any other, and a
-// blanket subtraction would hide it.
-func TestJoinSubtractsSuiteValidCasesOnTheInstanceLaneOnly(t *testing.T) {
+// TestJoinSeparatesSuiteValidCasesOnTheInstanceLaneOnly holds the
+// declared-valid row to the lane it is a fact about. S/g4/schema/s4 is
+// declared valid and banked fail: on the schema lane it is a candidate like any
+// other, with no row of its own.
+func TestJoinSeparatesSuiteValidCasesOnTheInstanceLaneOnly(t *testing.T) {
 	got := runFixture(t, "", "join", "schema", "docs/b.xsd")
 	wantLines(t, got,
 		"→ 1 candidate case(s) in lane schema",
 		"\n  S/g4/schema/s4\n",
-		"No VALID-case subtraction is made for lane schema",
 	)
-	if strings.Contains(got, "subtracted (#1561)") {
-		t.Errorf("the instance lane's subtraction row is printed for lane schema:\n%s", got)
+	wantRow(t, got, "banked fail — CANDIDATE", 1)
+	if strings.Contains(got, "suite declares it VALID") || strings.Contains(got, "#1738") {
+		t.Errorf("the instance lane's declared-valid row or caveat is printed for lane schema:\n%s", got)
 	}
 }
 

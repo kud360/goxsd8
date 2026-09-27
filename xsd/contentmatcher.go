@@ -380,7 +380,8 @@ type Matcher struct {
 //     maxPartitionStates' doc measures, over a hundred gigabytes and over a
 //     hundred terabytes for ONE item. Four instance cases sit on those three,
 //     all banked fail, and three of the four are suite-declared VALID and
-//     cannot flip on that lane whatever the ceiling (#1561) — so what the
+//     cannot flip on that lane whatever the ceiling, a complex-typed root
+//     being outside the one shape it decides valid (#1738) — so what the
 //     residual costs the suite is one missed rejection, particlesZ035_a.i. It
 //     is retired by an encoding that carries a live partition set without
 //     enumerating its cover, never by moving the constant. Two findings reopen
