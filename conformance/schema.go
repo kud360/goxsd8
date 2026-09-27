@@ -473,6 +473,40 @@ func execSchemaCase(backend value.Backend, c caseSpec) Status {
 	return decideAgreement(perr == nil, c.expect.wantsValid())
 }
 
+// The words a schema charge probe answers where a decided case carries no rule
+// to name. Each is parenthesized so no spec rule ID can collide with it.
+// doc.go's GOXSD_DECLINES=1 paragraph owns what chargeAccepted and
+// chargeUnruled mean; chargeDeclined never reaches a decided disagreement
+// (a decline is never a decided case), so doc.go does not define it.
+const (
+	chargeAccepted = "(accepted)"
+	chargeUnruled  = "(unruled)"
+	chargeDeclined = "(declined)"
+)
+
+// newSchemaCharge builds the schema lane's charge probe (lane.charge): the rule
+// xsderr.RuleOf reads off the assembly's own error, through the same
+// assembleCase the executor decides with, so the rule named is the one behind
+// the decision and not a second reading of the documents. Like newSchemaExec it
+// builds its strict backend once.
+func newSchemaCharge() func(caseSpec) string {
+	backend := strict.New()
+	return func(c caseSpec) string {
+		_, decidable, perr := assembleCase(backend, c.doc, c.extraDocs)
+		if !decidable {
+			return chargeDeclined
+		}
+		if perr == nil {
+			return chargeAccepted
+		}
+		rule, ok := xsderr.RuleOf(perr)
+		if !ok {
+			return chargeUnruled
+		}
+		return string(rule)
+	}
+}
+
 // assembleCase assembles the schema rooted at doc, together with any FURTHER
 // documents extraDocs declares, and reports whether the outcome may be read as a
 // verdict at all. It is the schema lane's decidability gate and the instance

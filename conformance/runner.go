@@ -212,6 +212,13 @@ type lane struct {
 	name    string
 	selects func(caseSpec) bool
 	exec    executor
+	// charge names what this lane's executor charged a case it DECIDED, for the
+	// decline census's GOXSD_DECLINES=1 listing of decided disagreements
+	// (reportDeclines, issue #1740): the rule a rejection carries, or a
+	// parenthesized word where there is no rule to name. It reports only and
+	// scores nothing. It is nil for a lane whose executor has no charge to name,
+	// and such a lane's disagreements are listed by ID alone.
+	charge func(caseSpec) string
 }
 
 // stubFail is the placeholder executor: no engine exists yet, so every case is
@@ -238,7 +245,7 @@ func selectsKind(k string) func(caseSpec) bool {
 func defaultLanes() []lane {
 	return []lane{
 		{name: "datatypes", selects: selectsDatatypes, exec: newDatatypesExec()},
-		{name: "schema", selects: selectsKind(kindSchema), exec: newSchemaExec()},
+		{name: "schema", selects: selectsKind(kindSchema), exec: newSchemaExec(), charge: newSchemaCharge()},
 		{name: "instance", selects: selectsKind(kindInstance), exec: newInstanceExec()},
 		{name: "xpath", selects: selectsNone, exec: stubFail},
 		{name: "json", selects: selectsNone, exec: stubFail},
@@ -259,12 +266,11 @@ func laneFile(name string) string {
 // than only against the committed expectations — and the tests over a
 // temporary one.
 //
-// tools/casejoin builds the same name a second time, in its own laneFile,
-// deliberately: it joins a census against a lane's committed file, and this
-// helper is unexported, with neither an exported path helper nor an exported
-// per-lane loader worth the surface for one filepath.Join. A rename of the
-// convention lands there too, or that tool joins against a lane file nobody
-// writes.
+// tools/casejoin, in its own laneFile, and tools/lanepartition, in its run,
+// build the same name again, deliberately: each reads a lane's committed file,
+// and this helper is unexported, with neither an exported path helper nor an
+// exported per-lane loader worth the surface for one filepath.Join. A rename
+// of the convention lands in both, or a tool reads a lane file nobody writes.
 func laneFileIn(dir, name string) string {
 	return filepath.Join(dir, name+".txt")
 }

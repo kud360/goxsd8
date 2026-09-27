@@ -91,6 +91,7 @@ go tool gapaudit  < gapissues.json    # GAP( markers vs trackers
 go tool suiteindex <query>            # suite fixtures carrying a construct; <query> shapes below
 go tool suiteindex -paths <query> | go tool casejoin join <lane>   # that census's candidate cases in a lane
 go tool casejoin ids <fixture-path>   # every case ID naming that document, withheld ones included
+go tool lanepartition -log run.log <lane> < gapissues.json   # banked fails clustered, largest first, vs open issues
 ```
 
 `wipsurvey` and `gapaudit` read their issue list from **stdin** in `gh issue
