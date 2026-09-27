@@ -349,19 +349,31 @@ type joined struct {
 	// BankedPassIDs are entries this lane already records `pass`; they cannot
 	// flip upward.
 	BankedPassIDs []string
-	// DeclaredValidIDs are entries banked `fail` that the suite declares
-	// VALID. On the instance lane they are subtracted (#1561) and are not
-	// candidates; on any other lane the field is empty and such an entry is a
-	// candidate like any other.
+	// DeclaredValidIDs are candidates, banked `fail` on the instance lane, that
+	// the suite declares VALID. They are counted apart from CandidateIDs because
+	// that lane's executor decides a document valid for one shape alone — a
+	// simple leaf root (#1738) — so only a case of that shape among them can
+	// flip. On any other lane the field is empty and such an entry is in
+	// CandidateIDs like any other.
 	DeclaredValidIDs []string
-	// CandidateIDs are the banked `fail` entries left: the bound from above.
+	// CandidateIDs are the other banked `fail` entries. Together with
+	// DeclaredValidIDs they are the bound from above (candidates).
 	CandidateIDs []string
 }
 
-// instanceLane is the one lane whose banked `fail` on a case the suite
-// declares VALID cannot flip: its executor decides no document valid yet, so
-// counting those cases inflates the bound (#1561). The subtraction is a fact
-// about that lane's executor and is made for no other lane.
+// candidates returns every candidate case, in case-ID order: the two banked
+// `fail` classes together, derived rather than stored (STYLE D3).
+func (j joined) candidates() []string {
+	all := slices.Concat(j.DeclaredValidIDs, j.CandidateIDs)
+	slices.Sort(all)
+	return all
+}
+
+// instanceLane is the one lane whose executor observes "valid" for a single
+// shape only: its banked `fail` on a case the suite declares VALID flips only
+// where that case is a simple leaf root (#1738). Before #1738 such a case could
+// not flip at all and the join subtracted it (#1561); it is now a candidate,
+// counted on a row of its own on this lane alone.
 const instanceLane = "instance"
 
 // distinctEntries reports the entries naming any of the given paths, each ONCE
@@ -524,7 +536,7 @@ func renderWithheld(e conformance.CatalogEntry) string {
 // read, named so the figure can be checked against it.
 func printJoin(w io.Writer, j joined, file string) {
 	_, _ = fmt.Fprintf(w, "casejoin: %d path(s) → %d catalog entry(ies) → %d candidate case(s) in lane %s\n",
-		len(j.Paths), j.entries(), len(j.CandidateIDs), j.Lane)
+		len(j.Paths), j.entries(), len(j.candidates()), j.Lane)
 	printCaveat(w, j.Lane)
 
 	_, _ = fmt.Fprintf(w, "\n=== Join against %s ===\n", file)
@@ -532,7 +544,7 @@ func printJoin(w io.Writer, j joined, file string) {
 		_, _ = fmt.Fprintf(w, "  %-58s %7d\n", r.label, r.count)
 	}
 
-	printIDSection(w, "Candidate cases (ID order)", j.CandidateIDs)
+	printIDSection(w, "Candidate cases (ID order)", j.candidates())
 	printPathSection(w, "Paths no catalog entry names (path order)", j.Unnamed)
 }
 
@@ -544,9 +556,9 @@ type row struct {
 
 // rows renders the partition, indented so the five disjoint classes read as
 // the parts of the entry count above them. The declared-valid row is printed
-// only on the lane that subtracts it, where it is always meaningful; on any
-// other lane it would stand at zero and read as a claim that lane makes no
-// such cases (#1561).
+// only on the instance lane, which alone files such a case apart (#1738); on
+// any other lane it would stand at zero and read as a claim that lane makes no
+// such cases.
 func (j joined) rows() []row {
 	rows := []row{
 		{"paths given", len(j.Paths)},
@@ -557,7 +569,7 @@ func (j joined) rows() []row {
 		{"  banked pass — cannot flip up", len(j.BankedPassIDs)},
 	}
 	if j.Lane == instanceLane {
-		rows = append(rows, row{"  banked fail — suite declares it VALID, subtracted (#1561)", len(j.DeclaredValidIDs)})
+		rows = append(rows, row{"  banked fail, suite declares it VALID — CANDIDATE as a simple leaf root (#1738)", len(j.DeclaredValidIDs)})
 	}
 	return append(rows, row{"  banked fail — CANDIDATE", len(j.CandidateIDs)})
 }
@@ -576,13 +588,12 @@ func printCaveat(w io.Writer, lane string) {
 	_, _ = fmt.Fprintln(w, "  population of resolved components. It UNDER-counts: a fixture that census could read only")
 	_, _ = fmt.Fprintln(w, "  partly hides every construct behind the fault, so cases naming it never reach this join —")
 	_, _ = fmt.Fprintln(w, "  read the census's own \"Read only partly\" count beside this figure.")
-	if lane == instanceLane {
-		_, _ = fmt.Fprintln(w, "  On this lane the figure already subtracts the cases the suite declares VALID, whose banked")
-		_, _ = fmt.Fprintln(w, "  fail cannot flip (#1561).")
+	if lane != instanceLane {
 		return
 	}
-	_, _ = fmt.Fprintf(w, "  No VALID-case subtraction is made for lane %s: that one is the instance lane's (#1561), so\n", lane)
-	_, _ = fmt.Fprintln(w, "  this figure is looser by however many of its candidates the suite declares valid.")
+	_, _ = fmt.Fprintln(w, "  On this lane a candidate the suite declares VALID flips only where the executor decides the")
+	_, _ = fmt.Fprintln(w, "  document valid, which it does for a simple leaf root alone (#1738): the figure includes them,")
+	_, _ = fmt.Fprintln(w, "  and their own row below counts them, so read that row as the looser part of the bound.")
 }
 
 // printIDSection lists one class's case IDs under its heading.

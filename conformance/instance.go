@@ -124,7 +124,9 @@ import (
 //
 // All nine are unconditional: no verdict here can be overturned by anything in
 // the rest of the document, which is what makes them decidable while the engine
-// leaves most of the document undecided.
+// leaves most of the document undecided. They are every "not valid" this lane
+// observes; its one "valid" is a simple leaf root that charges none of them
+// ("Why an EMPTY Result is evidence of validity for ONE shape only" below).
 //
 // # Charges at depth
 //
@@ -179,27 +181,83 @@ import (
 // governing type is determinable is assessed for its attributes too — which is
 // among the reasons decidedNotValid pins no violation count.
 //
-// # Why an EMPTY Result is not evidence of validity
+// # Why an EMPTY Result is evidence of validity for ONE shape only
 //
-// Everything else — a root that is declared and not abstract, so no violation
-// is charged — is UNDECIDABLE IN BOTH DIRECTIONS and DECLINES. e-validity is a
-// conjunction: local validity, AND no [[children]] or [[attributes]] whose
-// [validity] is invalid, AND none attributed to a strict ·wildcard particle·
-// and left notKnown. Being ·strictly assessed· at all (key-sva, §3.3.4.6) is
-// itself a three-clause definition whose clauses 2 and 3 dispatch assessment
-// recursively into every attribute and child, which Assess now follows only as
-// far as it can type: a descendant is decided against the declaration its
-// parent's content model ·attributed· it to, and where that declaration or its
-// type is not determinable — a {type table}, an unresolvable {type definition},
-// a name no top-level declaration matches under a wildcard and no xsi:type types
-// either, a ·skipped· subtree — the element and everything below it is decided
-// against nothing. Every clause of every rule this engine does not evaluate at
-// all (assertions, cvc-elt clause 5.1, cvc-type's own clauses 1 and 2) is
-// undecided at every depth besides. The spec has no category for "this
-// processor did not implement that check" stronger than notKnown, so an empty
-// Result licenses no "valid" claim; equally it licenses no "invalid" one, so an
-// expected-invalid case in this shape declines exactly as an expected-valid one
-// does.
+// In general an empty Result — no violation charged — is UNDECIDABLE IN BOTH
+// DIRECTIONS and DECLINES. e-validity is a conjunction: local validity, AND no
+// [[children]] or [[attributes]] whose [validity] is invalid, AND none
+// attributed to a strict ·wildcard particle· and left notKnown. Being
+// ·strictly assessed· at all (key-sva, §3.3.4.6) is itself a three-clause
+// definition whose clauses 2 and 3 dispatch assessment recursively into every
+// attribute and child, which Assess follows only as far as it can type: where a
+// descendant's declaration or type is not determinable — a withheld {type
+// table} selection, an unresolvable {type definition}, a name no top-level
+// declaration matches under a wildcard and no xsi:type types either, a
+// ·skipped· subtree — the element and everything below it is decided against
+// nothing, and several of validate's declines (its attribute half, its
+// ID/IDREF table, its identity constraints) write a log line and no record.
+// The spec has no category for "this processor did not implement that check"
+// stronger than notKnown, so outside the shape below an empty Result licenses
+// no "valid" claim; equally it licenses no "invalid" one, so an
+// expected-invalid case declines exactly as an expected-valid one does.
+//
+// The one shape it DOES license "valid" for is a SIMPLE LEAF ROOT
+// (simpleLeafRoot, simpleleaf.go, #1738), and only where the walk also
+// recorded nothing in Result.Unevaluated. The gate reads the schema and the
+// instance independently of the walk, and discharges every clause of cvc-elt
+// (§3.3.4.3) the walk does not decide on its own:
+//
+//   - clause 1: the root's expanded name resolves to a TOP-LEVEL declaration.
+//   - clause 2: that declaration's {abstract} is false.
+//   - clause 3: its {nillable} is false and the root carries no xsi:nil, so
+//     3.1 holds and 3.2 is never live.
+//   - clause 4: the root carries no xsi:type, so no ·instance-specified type
+//     definition· exists and the ·selected type definition· governs; the
+//     declaration has no {type table}, so the selected type is its {type
+//     definition}.
+//   - clause 5.2.2: the declaration carries no fixed {value constraint}. A
+//     default one is admitted: clause 5.1 substitutes its {lexical form} for an
+//     empty root, and the walk decides cvc-type over that.
+//   - clause 6: the declaration has no {identity-constraint definitions}.
+//   - clause 7 (cvc-id, §3.3.4.5): the {type definition}'s closure — its base
+//     chain, list item and union members, transitively — holds no ID, IDREF,
+//     IDREFS, ENTITY, ENTITIES or NOTATION, and the root has no descendants or
+//     other attributes, so the [ID/IDREF table] is empty. The same exclusion
+//     keeps String Valid clause 3's ENTITY check and NOTATION's schema-dependent
+//     value space out of play.
+//
+// Clause 5's remaining conjunct is cvc-type (§3.3.4.4) against a {type
+// definition} that resolves to a Simple Type Definition: clause 1 holds by the
+// resolution and clause 2 is about complex types alone. Clause 3.1 is the
+// walk's own, and the gate is a second, independent check on its first two
+// sub-clauses: 3.1.1, the root carries no attribute beyond xsi:schemaLocation
+// and xsi:noNamespaceSchemaLocation (namespace declarations are not
+// [[attributes]]); 3.1.2, it has no element [[children]]. 3.1.3 — the ·initial
+// value· String Valid against the type — is decided by the walk, and its one
+// decline (validate's contentCheck.simpleTypeValue, String Valid withheld) is
+// the only decline reachable on this shape. It is RECORDED in
+// Result.Unevaluated, so an empty Unevaluated shows that 3.1.3 really was
+// decided. So are the assertions-facet sites of the type's closure, which
+// validate records and never evaluates.
+//
+// key-sva's attribute and children clauses are then vacuous or trivially met:
+// there are no children, and the two xsi: hints are ·valid· against the
+// built-in declarations' anyURI and list-of-anyURI types (§3.2.7), whose
+// lexical spaces admit every string (Datatypes §3.3.17). No descendant or
+// attribute can be invalid or notKnown, so e-validity reduces to the root's
+// local validity, which the walk and the gate have decided between them.
+//
+// The TRUST BOUNDARY is value.ValidateLexical: its verdict on the root's
+// ·initial value· is taken as Datatype Valid (Datatypes §4.1.4). The datatypes
+// lane is what grounds that verdict; this lane does not re-check it.
+//
+// One more hazard sits outside the clauses altogether: the schema must be the
+// one the suite declared. The #1002 GAP(parser) retains elements vc:maxVersion
+// excludes, so a schema document carrying version conditionals can assemble
+// components a 1.1 processor must not see — VC/vc006.n1, suite-invalid, walks
+// clean for exactly that reason. The gate declines any assembly one of whose
+// documents carries an attribute in the versioning namespace, a conservative
+// superset of that GAP.
 //
 // The one shape that looks like case 1 and is not: a root with no top-level
 // declaration whose xsi:type ·resolves·. Its ·instance-specified type
@@ -211,12 +269,18 @@ import (
 // # Why no false pass is possible
 //
 // Every "not valid" observation this lane emits comes from one of the nine
-// charges above, each of which is unconditional. It never emits a "valid"
-// observation at all: an empty Result declines. So the lane can record a
-// still-failing gap for a suite-invalid case it cannot see the defect in, and
-// for a suite-valid case whose root is undeclared or abstract, but it cannot
-// score a pass on a document it did not really reject — at the root or at any
-// depth, the charges being the same nine either way.
+// charges above, each of which is unconditional. Its one "valid" observation
+// is an empty Result — no violation, no unevaluated record — on a simple leaf
+// root, whose every applicable clause the section above names the decider of;
+// every other empty Result declines. So the lane can record a still-failing
+// gap for a suite-invalid case it cannot see the defect in, and for a
+// suite-valid case outside the leaf shape, but it cannot score a pass on a
+// document it did not really reject, nor on one it did not really decide
+// valid — at the root or at any depth, the charges being the same nine either
+// way. The bound on the valid side is exactly as wide as the gate is correct
+// and ValidateLexical is right: a clause the gate should have excluded and did
+// not, or a Datatype Valid verdict the backend gets wrong, is where a false
+// pass could come from.
 //
 // Case 3's ATTRIBUTE clauses are the ones whose unconditionality depends on a
 // schema COMPONENT being complete rather than on the instance alone: an
@@ -256,11 +320,12 @@ import (
 // that STOPPED on a source fault mid-document, so what it did or did not charge
 // records how far the walk got and not what the document holds: the abstract-root
 // branch keeps walking after charging, so a Result can carry BOTH a decidable
-// violation and a truncated walk. And a violation set that is EMPTY, or that
-// holds any rule outside the three enumerated, declines rather than being read
-// as a verdict a later slice's wider Assess might charge under an
-// approximation; the COUNT is not a condition, since one root can honestly
-// carry several charges (see decidedNotValid).
+// violation and a truncated walk. And a violation set that holds any rule
+// outside the nine enumerated declines rather than being read as a verdict a
+// later slice's wider Assess might charge under an approximation; the COUNT is
+// not a condition, since one root can honestly carry several charges (see
+// decidedNotValid). An EMPTY violation set declines unless the simple-leaf-root
+// conditions above all hold.
 
 // newInstanceExec builds the instance lane's executor. The strict backend is
 // built once here, exactly as newSchemaExec does it: it maps all 20 primitives,
@@ -274,8 +339,9 @@ func newInstanceExec() executor {
 
 // execInstanceCase decides one instanceTest case, or honestly declines it
 // (Fail): it assembles the group's schema through the shared gate, assesses the
-// instance document against it, and reads the assessment only where the two
-// root-dispatch charges make the answer unconditional.
+// instance document against it, and reads the assessment only where the answer
+// is unconditional: a set of the nine decidable charges is "not valid", and an
+// empty Result on a simple leaf root (simpleLeafRoot) is "valid".
 func execInstanceCase(backend value.Backend, c caseSpec) Status {
 	if c.schemaDoc == "" {
 		// The group declared no single schemaTest to take a schema from
@@ -283,7 +349,7 @@ func execInstanceCase(backend value.Backend, c caseSpec) Status {
 		// invalid one.
 		return Fail()
 	}
-	schema, decidable, perr := assembleCase(backend, c.schemaDoc, c.schemaExtraDocs)
+	schema, report, decidable, perr := assembleCase(backend, c.schemaDoc, c.schemaExtraDocs)
 	if !decidable || perr != nil {
 		return Fail()
 	}
@@ -297,12 +363,18 @@ func execInstanceCase(backend value.Backend, c caseSpec) Status {
 	if !ok {
 		return Fail()
 	}
-	if !decidedNotValid(result.Violations()) {
+	if violations := result.Violations(); len(violations) > 0 {
+		if !decidedNotValid(violations) {
+			return Fail()
+		}
+		return decideAgreement(false, c.expect.wantsValid())
+	}
+	// An empty Result is "valid" for the simple-leaf-root shape alone, and only
+	// where the walk recorded no check it reached and did not perform.
+	if len(result.Unevaluated()) > 0 || !simpleLeafRoot(schema, report, c.doc) {
 		return Fail()
 	}
-	// The only observation this slice can make is "not valid": an empty Result
-	// declined above rather than reaching here as "valid".
-	return decideAgreement(false, c.expect.wantsValid())
+	return decideAgreement(true, c.expect.wantsValid())
 }
 
 // assessInstance reads the instance document at doc and assesses it against v,

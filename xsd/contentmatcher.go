@@ -367,7 +367,8 @@ type Matcher struct {
 //     all. Declining withholds the whole element-sequence verdict, whose
 //     consumers are validate's Result.violations and its one reader
 //     Result.Violations, both of which carry violations PRESENT — so the
-//     decline costs a rejection and manufactures none. What makes the
+//     decline costs a rejection and manufactures none; validate records each
+//     child it leaves unmatched as an Unevaluated instead. What makes the
 //     approximation permanent is the distance between the ceiling and what
 //     still reaches it. A walk over every buildable complex type in
 //     testdata/xsdtests finds THREE declining here, all on this arm —
@@ -379,7 +380,8 @@ type Matcher struct {
 //     maxPartitionStates' doc measures, over a hundred gigabytes and over a
 //     hundred terabytes for ONE item. Four instance cases sit on those three,
 //     all banked fail, and three of the four are suite-declared VALID and
-//     cannot flip on that lane whatever the ceiling (#1561) — so what the
+//     cannot flip on that lane whatever the ceiling, a complex-typed root
+//     being outside the one shape it decides valid (#1738) — so what the
 //     residual costs the suite is one missed rejection, particlesZ035_a.i. It
 //     is retired by an encoding that carries a live partition set without
 //     enumerating its cover, never by moving the constant. Two findings reopen

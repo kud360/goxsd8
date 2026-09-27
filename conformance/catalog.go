@@ -36,7 +36,7 @@ import (
 // makeCase refuses a test declaring no <expected> at all, and catalogEntry
 // refuses the same test at the same level of applicability, because
 // DeclaredValid has no encoding for "nothing declared" — false there would
-// read as "declared invalid" and reach the join's #1561 subtraction as a
+// read as "declared invalid" and reach the join's declared-VALID row as a
 // fact. A WITHHELD entry declaring nothing is reported, since discovery
 // withholds it without reading its declaration either.
 

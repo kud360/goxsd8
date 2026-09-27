@@ -75,8 +75,8 @@ func runPinned(t *testing.T, withLog bool, lane string) string {
 }
 
 // TestInstanceAt61db25aSplitsDeclaredValidFromCandidates reproduces the
-// instance bullet: 14,695 declared-valid banked fails, which cannot flip
-// (#1561), and 419 candidates, from the catalog alone.
+// instance bullet: 14,695 declared-valid banked fails, which could not flip
+// at 61db25a (#1561), and 419 candidates, from the catalog alone.
 func TestInstanceAt61db25aSplitsDeclaredValidFromCandidates(t *testing.T) {
 	got := runPinned(t, false, "instance")
 	wantTableRow(t, got, "banked fail", "14695", "419", "15114")

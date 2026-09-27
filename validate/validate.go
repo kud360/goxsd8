@@ -137,7 +137,18 @@ func (r *Result) Violations() []*xsderr.Error {
 // many evaluations a real evaluator would have run. The CTA site (cta.go) is
 // reached by the walk rather than collected, and is likewise one record per
 // withheld ·conditionally selected· type and not one per alternative the scan
-// never tried.
+// never tried. The content sites (cvccomplexcontent.go) are reached by the walk
+// as well, one record per element whose String Valid (§3.16.4) verdict on its
+// ·initial value· was withheld (cvc-type clause 3.1.3, cvc-complex-type clause
+// 1.2), per element whose fixed {value constraint} comparison was undecided
+// (cvc-elt clause 5.2.2.2.2), and per element [[child]] left unmatched because
+// xsd.Schema.ContentMatcher does not decide its parent's {content type}
+// (cvc-complex-content). The attribute-side declines (cvcattribute.go), the
+// ID/IDREF table's (cvcid.go) and the identity constraints'
+// (cvcidentityconstraint.go) are not recorded here, nor is a ·governing type
+// definition· left undetermined other than by a withheld {type table} (#1093),
+// so an empty Unevaluated is not by itself a claim that the walk performed
+// every check it reached.
 type Unevaluated struct {
 	rule xsderr.Rule
 	loc  xsderr.Loc
@@ -151,12 +162,13 @@ func newUnevaluated(rule xsderr.Rule, loc xsderr.Loc, format string, args ...any
 }
 
 // Rule returns the spec rule the check answers to. For a check whose failure is
-// a charge, that is the ID it would have been charged under — cvc-assertion and
-// cvc-assertions-valid both are. It is NOT always a chargeable rule: §3.12.4
-// gives conditional type assignment no Validation Rule of its own, so a
-// withheld Type Alternative {test} is recorded under the [Definition:] anchor
-// key-cta-ta-select (cta.go), whose failure selects no type rather than
-// charging one.
+// a charge, that is the ID it would have been charged under — cvc-assertion,
+// cvc-assertions-valid and each content site's cvc-type, cvc-complex-type,
+// cvc-elt or cvc-complex-content all are, the clause going in [Unevaluated.Msg].
+// It is NOT always a chargeable rule: §3.12.4 gives conditional type assignment
+// no Validation Rule of its own, so a withheld Type Alternative {test} is
+// recorded under the [Definition:] anchor key-cta-ta-select (cta.go), whose
+// failure selects no type rather than charging one.
 func (u Unevaluated) Rule() xsderr.Rule { return u.rule }
 
 // Loc returns the INSTANCE location the check was reached at: the element for

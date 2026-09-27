@@ -648,9 +648,11 @@ here rather than overcounted. Read the count as a floor and never as the lane's
 remaining work.
 
 **The lane score is a floor built for soundness, and no jump has ever changed
-what the number means.** The lane emits only "not valid" observations; a
-violation-free `Result` DECLINES rather than passing, because `Assess` evaluates
-none of `e-validity`'s other conjuncts. **Every passing case is an
+what the number means.** The lane's one "valid" observation is a violation-free
+`Result` with nothing unevaluated on a simple leaf root (#1738), whose every
+applicable `cvc-elt` clause the lane gate or the walk decides; any other
+violation-free `Result` DECLINES rather than passing, because `Assess` does not
+evaluate `e-validity`'s other conjuncts for it. **Every other passing case is an
 expected-INVALID one by construction**, not by measurement, and the failures
 that remain are overwhelmingly declines rather than disagreements. The
 milestone's remaining slices are what turn declines into decisions.

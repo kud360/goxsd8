@@ -466,7 +466,7 @@ func newSchemaExec() executor {
 // document set; what is left here is the one comparison of the assembly's
 // outcome with the suite's declared validity.
 func execSchemaCase(backend value.Backend, c caseSpec) Status {
-	_, decidable, perr := assembleCase(backend, c.doc, c.extraDocs)
+	_, _, decidable, perr := assembleCase(backend, c.doc, c.extraDocs)
 	if !decidable {
 		return Fail()
 	}
@@ -492,7 +492,7 @@ const (
 func newSchemaCharge() func(caseSpec) string {
 	backend := strict.New()
 	return func(c caseSpec) string {
-		_, decidable, perr := assembleCase(backend, c.doc, c.extraDocs)
+		_, _, decidable, perr := assembleCase(backend, c.doc, c.extraDocs)
 		if !decidable {
 			return chargeDeclined
 		}
@@ -516,23 +516,25 @@ func newSchemaCharge() func(caseSpec) string {
 // answers with a plain Go error rather than a validity verdict, runs
 // parser.ParseReport, and gates the WHOLE <xs:include>/<xs:override>/<xs:import>
 // closure it reports on the decidable top-level shape (closureDecidable, which
-// runs schemaShapeDecidable on every document the assembly consumed). The second
+// runs schemaShapeDecidable on every document the assembly consumed). The third
 // result, decidable, is false — and the caller DECLINES — under any of five
 // conditions: a root it cannot resolve; a root it cannot read (any ReadDocument
 // error, including a parser encoding limitation such as unsupported UTF-16); a
 // root element that is not <schema>; a closure holding one document outside the
 // producer's decidable subset, or missing one the case further declared; and a
 // case whose parse failed with a rejection its own unfollowed directives could
-// have fabricated (fabricatedRejection, #276/#404). The other two results say
+// have fabricated (fabricatedRejection, #276/#404). The other three results say
 // nothing then.
 //
-// Where decidable is true, the third result is the assembly's OWN error: nil is
+// Where decidable is true, the fourth result is the assembly's OWN error: nil is
 // genuine evidence of validity — no document of the assembly has any of the
 // violations the allowlist confines it to, so a real one would surface — and
 // non-nil is a REAL implemented rejection. The first result is what the assembly
-// built. The schema lane reads the error alone; the instance lane needs the
-// schema, and takes it only where the error is nil, a schema the assembly
-// rejected being not the schema the suite declared.
+// built, and the second the parser.AssemblyReport of the documents it read. The
+// schema lane reads the error alone; the instance lane needs the schema, and
+// takes it only where the error is nil, a schema the assembly rejected being not
+// the schema the suite declared — and the report, which its simpleLeafRoot gate
+// scans for versioning attributes the assembly may have mishandled.
 //
 // The resolver is a loader.Dir rooted at doc's own directory and the root is
 // named by its BASE name, because parser.ParseReport reads the root under
@@ -542,13 +544,13 @@ func newSchemaCharge() func(caseSpec) string {
 // one directory tree away from where the resolver serves. The harness's own
 // precondition read below therefore uses the SAME resolver and the SAME location
 // string, so it reads byte-identically the document the assembly roots at.
-func assembleCase(backend value.Backend, doc string, extraDocs []string) (*xsd.Schema, bool, error) {
+func assembleCase(backend value.Backend, doc string, extraDocs []string) (*xsd.Schema, *parser.AssemblyReport, bool, error) {
 	resolver := loader.Dir(filepath.Dir(doc))
 	location := filepath.Base(doc)
 	rc, _, err := resolver.Resolve("", location)
 	if err != nil {
 		// Unreadable document: an honest recorded gap, not a validity verdict.
-		return nil, false, nil
+		return nil, nil, false, nil
 	}
 	defer func() { _ = rc.Close() }() // read-only handle: close error cannot affect the verdict
 	root, err := parser.ReadDocument(location, rc)
@@ -561,13 +563,13 @@ func assembleCase(backend value.Backend, doc string, extraDocs []string) (*xsd.S
 		// fabricated for a well-formed document — a wrong-reason pass that would
 		// silently flip pass→fail once UTF-16 decoding lands (a separate change).
 		// Declining on ANY ReadDocument error keeps the lane's verdicts honest.
-		return nil, false, nil
+		return nil, nil, false, nil
 	}
 	// §3.17.2 does not require <schema> to be the document root, so a non-schema
 	// root is a Parse precondition fault (a plain Go error, not a
 	// sch-props-correct rejection), not decidable for this lane — decline.
 	if !root.IsSchema() {
-		return nil, false, nil
+		return nil, nil, false, nil
 	}
 	// ParseReport, not Parse: the verdict needs the DOCUMENT SET the assembly
 	// consumed, not only its components (#272).
@@ -577,10 +579,10 @@ func assembleCase(backend value.Backend, doc string, extraDocs []string) (*xsd.S
 	// invalid representation, in the root or in any composed document, could
 	// false-accept.
 	if !closureDecidable(report) {
-		return nil, false, nil
+		return nil, nil, false, nil
 	}
 	if !extraDocsInClosure(report, resolver, doc, extraDocs) {
-		return nil, false, nil
+		return nil, nil, false, nil
 	}
 	// A directive that named no document is only half the fabricated-rejection
 	// hazard (#276): the missing components matter solely when something referred
@@ -591,9 +593,9 @@ func assembleCase(backend value.Backend, doc string, extraDocs []string) (*xsd.S
 	// exactly that outcome — so the case is still decided, and so is a parse that
 	// failed for a reason no unfollowed directive could have produced (#404).
 	if fabricatedRejection(report, perr) {
-		return nil, false, nil
+		return nil, nil, false, nil
 	}
-	return schema, true, perr
+	return schema, report, true, perr
 }
 
 // ruleSrcResolve is the rule the producer charges for a reference the assembled

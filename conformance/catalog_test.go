@@ -405,7 +405,7 @@ func TestCatalogAgreesWithDiscoveryOverThePinnedSuite(t *testing.T) {
 // TestCatalogRefusesAnApplicableEntryDeclaringNoOutcome holds the reader to
 // makeCase's own refusal. DeclaredValid has no encoding for "nothing
 // declared", so reporting such an entry hands the join a fabricated outcome
-// that decides the #1561 subtraction; and discovery refuses the same entry, so
+// that decides the join's declared-VALID row; and discovery refuses the same entry, so
 // describing it would also part the two ID sets.
 func TestCatalogRefusesAnApplicableEntryDeclaringNoOutcome(t *testing.T) {
 	entries, err := Catalog(writeCatalogFixture(t, outcomelessSuite("")))

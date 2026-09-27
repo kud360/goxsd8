@@ -93,16 +93,17 @@ func TestInstanceExecutorDecidesAbstractRoot(t *testing.T) {
 		t.Error("the executor must Fail under a flipped expectation (it decides for real)")
 	}
 	// The control that the verdict turns on {abstract} and not on the shape of the
-	// instance is TestInstanceExecutorDeclinesUndecidableShapes' first row: the
-	// same document under a non-abstract declaration charges nothing and declines.
+	// instance is TestInstanceExecutorDecidesSimpleLeafRoot: the same document
+	// under a non-abstract declaration charges nothing and is decided VALID.
 }
 
 // TestInstanceExecutorDeclinesUndecidableShapes proves every shape this slice
 // cannot decide is DECLINED in BOTH directions rather than guessed. The
-// load-bearing row is the first: a declared, non-abstract root charges NOTHING,
-// and an empty validate.Result is not evidence of validity — §3.3.5.1's
-// e-validity is a conjunction whose descendant clauses Assess never evaluates, so
-// neither "valid" nor "invalid" may be claimed.
+// load-bearing row is the first: a declared, non-abstract root with element
+// [[children]] charges NOTHING, and outside the simple-leaf-root shape an empty
+// validate.Result is not evidence of validity — §3.3.5.1's e-validity is a
+// conjunction whose descendant clauses Assess does not evaluate, so neither
+// "valid" nor "invalid" may be claimed.
 func TestInstanceExecutorDeclinesUndecidableShapes(t *testing.T) {
 	exec := newInstanceExec()
 	cases := []struct {
@@ -111,8 +112,11 @@ func TestInstanceExecutorDeclinesUndecidableShapes(t *testing.T) {
 		instance   string
 	}{
 		{
-			"a declared, non-abstract root charges nothing, and no charge is not a verdict",
-			knownRoot, `<known>x</known>`,
+			"a declared, non-abstract root of a COMPLEX type charges nothing, and no charge is not a verdict outside the simple-leaf-root shape",
+			`<xs:element name="known"><xs:complexType><xs:sequence>` +
+				`<xs:element name="a" type="xs:string" minOccurs="0"/>` +
+				`</xs:sequence></xs:complexType></xs:element>`,
+			`<known><a>x</a></known>`,
 		},
 		{
 			// An undeclared root whose xsi:type ·resolves· determines a ·governing
@@ -191,7 +195,7 @@ func abstractRootValidator(t *testing.T) *validate.Validator {
 	schemaPath := filepath.Join(t.TempDir(), "s.xsd")
 	writeFixture(t, schemaPath, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">`+
 		`<xs:element name="e" type="xs:string" abstract="true"/></xs:schema>`)
-	schema, _, err := assembleCase(strict.New(), schemaPath, nil)
+	schema, _, _, err := assembleCase(strict.New(), schemaPath, nil)
 	if err != nil {
 		t.Fatalf("assembling the schema: %v", err)
 	}
