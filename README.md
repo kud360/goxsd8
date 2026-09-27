@@ -66,13 +66,20 @@ all. `gen` lands with M9.
 
 **Exit 2 narrowed when `parse` landed, and again when `validate` did.** It
 used to mean "this binary is a stub" for every invocation; for both built
-subcommands it now means a usage or IO fault — a missing argument, an
-undefined flag, a document that cannot be read, and for `validate` a
-`-format` token outside `xml|json|ber` or an instance whose format is
-`json` or `ber`, which the contract reserves and no milestone has built. It
-is never a verdict about a schema or an instance. A script that read exit 2
-as "skip, unimplemented" must read the stderr line, or branch on the other
-codes instead: for `parse`, 0 compiled and 1 rejected; for `validate`, 0 no
+subcommands it now means a usage fault or an I/O fault on an argument or on
+stdout — a missing argument, an undefined flag, an argument that cannot be
+read, and for `validate` a `-format` token outside `xml|json|ber` or an
+instance whose format is `json` or `ber`, which the contract reserves and no
+milestone has built. It is never a verdict about a schema or an instance. Of
+the I/O faults reading a schema document, exit 2 covers only an argument that
+cannot be read: an I/O fault reading a document an argument **references**,
+through `<xs:include>`, `<xs:import>`, `<xs:override>` or `<xs:redefine>`, is
+charged 1 by `parse` and 3 by `validate` — a rejected schema, a schema set that
+does not compile — though nothing about the schema was decided. That fault is
+not the legal skip of a `schemaLocation` resolving to no document, which moves
+no exit code, though the faulting run names the directive on stderr too, before
+printing the fault. A script that read exit 2 as "skip, unimplemented" must
+read the stderr line, or branch on the other codes instead: for `parse`, 0 compiled and 1 rejected; for `validate`, 0 no
 violation charged and nothing left undecided, 1 an invalid instance, 3 a
 schema set that does not compile, and 4 an instance the assessment declined to
 decide — charged nothing, with a check it reached left unevaluated, so it
@@ -176,10 +183,12 @@ so a summary printed off a set **short** of a document it named is
 distinguishable from one printed off a complete set. `src-include` clause 2.4
 and `src-import` make that skip legal, which is why it is a line and not an
 error; a bare `<xs:import>`, naming no document to fail to reach, is not
-reported at all. A **rejected** schema is named the same way, for the
-directives assembly reached before it stopped, in a line that says the assembly
-was rejected rather than compiled and says nothing about whether the unread
-document had a part in that.
+reported at all. The I/O fault above is not that skip: it is charged 1, though
+the faulting run names the directive on stderr too, before printing the fault.
+A **rejected** schema is named the same way, for the directives assembly
+reached before it stopped, in a line that says the assembly was rejected rather
+than compiled and says nothing about whether the unread document had a part in
+that.
 
 Beyond `-schema` and `-out`, the contract carries `-format xml|json|ber`
 (force the instance source format instead of deriving it from the

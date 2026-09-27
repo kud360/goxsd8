@@ -64,8 +64,11 @@ Usage (contract; subcommands land with their milestones):
       named on stderr at its own position, with no rule ID and no
       change of exit code: the skip is legal, so the summary above is
       printed off a schema short of whatever that document declares.
-      -q does not silence it. A bare <xs:import>, which names no
-      document, is not reported. A REJECTED schema is named the same
+      -q does not silence it. The I/O fault above is not that skip:
+      it is charged 1, though the faulting run names the directive on
+      stderr too, before printing the fault.
+      A bare <xs:import>, which names no document, is not reported.
+      A REJECTED schema is named the same
       way, for the directives assembly reached before it stopped, in
       a line saying the assembly was rejected rather than compiled
       and saying nothing about whether the unread document had a part
@@ -103,8 +106,17 @@ Usage (contract; subcommands land with their milestones):
       a message saying the DTD was not fully read, not that the
       name is undeclared.
       Exit 0 when no instance was charged a violation and none left
-      a check undecided, 1 invalid, 2 usage/IO, and
-      3 when the schema set does not compile. 4 is an instance the
+      a check undecided, 1 invalid, 2 usage or I/O on an argument or
+      on stdout, and 3 when the schema set does not compile.
+      An I/O fault reading a document a -schema argument REFERENCES,
+      through <xs:include>, <xs:import>, <xs:override> or
+      <xs:redefine>, is charged 3: the schema set does not compile,
+      though nothing about the schema was decided. Of the I/O faults
+      reading a schema document, exit 2 covers only a -schema
+      argument that cannot be read. The fault is not the legal skip
+      of a schemaLocation resolving to no document, which moves no
+      exit code, though the faulting run names the directive on
+      stderr too, before printing the fault. 4 is an instance the
       assessment declined to decide: no violation charged, and a
       check it reached not performed, so the instance stands
       undecided against the rule that check answers to rather than

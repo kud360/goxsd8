@@ -331,8 +331,9 @@ func TestParseNonSchemaRootCarriesNoRule(t *testing.T) {
 // returning), then the violation line. It is the LAST line that is pinned.
 //
 // Exit 1, not 2 — the code the contract reserves for a schema verdict, though
-// nothing here was decided about the schema. That is #1419's question, not
-// this test's: this pins what the binary does today.
+// nothing here was decided about the schema. #1419 ruled it stays 1, and the
+// contract now says so beside the legal skip it is not;
+// TestValidateIOFaultOnReferencedDocumentIsASchemaFault pins validate's 3.
 //
 // The pin stops where the operating system's own words begin. Everything
 // through `under "<root>": ` is goxsd8's, and pinning it as a PREFIX pins the

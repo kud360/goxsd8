@@ -368,6 +368,53 @@ func TestValidateNamesAnUnresolvedDirectiveOfARejectedSet(t *testing.T) {
 	}
 }
 
+// TestValidateIOFaultOnReferencedDocumentIsASchemaFault is #1419's ruling on
+// validate's side of the fault TestParseIOFaultOnReferencedDocumentCarriesNoRule
+// pins for parse: an I/O fault reading a document a -schema argument
+// REFERENCES comes back out of compileSet and is charged exitSchema, not the
+// exitUsage an unreadable argument earns — the code the contract now states.
+//
+// The instance argument is there to reach compileSet at all: with none, the
+// run stops on "no instance given" and exits 2 before composing (#1432).
+// Compilation fails before any instance is read, so which one it is does not
+// matter. The ENOTDIR trigger and its platform probe are the parse test's, for
+// its reason: a platform answering ENOENT would take the legal-skip arm.
+func TestValidateIOFaultOnReferencedDocumentIsASchemaFault(t *testing.T) {
+	const schema = "testdata/notdir-include.xsd"
+	abs, err := filepath.Abs(schema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inner := filepath.Join(abs, "inner.xsd")
+	probe, probeErr := os.Open(inner)
+	if probeErr == nil {
+		_ = probe.Close()
+	}
+	if probeErr == nil || os.IsNotExist(probeErr) {
+		t.Skipf("open %q = %v, want a non-not-exist error: this platform does not answer a path through a regular file with ENOTDIR", inner, probeErr)
+	}
+
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"validate", "-schema", schema, validInstance}, &stdout, &stderr); code != exitSchema {
+		t.Fatalf("code = %d, want %d — the set does not compile (stderr %q)", code, exitSchema, stderr.String())
+	}
+	if stdout.Len() != 0 {
+		t.Errorf("stdout = %q, want empty — no instance was assessed", stdout.String())
+	}
+	lines := strings.Split(strings.TrimSuffix(stderr.String(), "\n"), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("stderr = %q, want two lines: the unfollowed-directive shortfall, then the fault", stderr.String())
+	}
+	if want := "goxsd8: validate: " + abs + ":12:3: "; !strings.HasPrefix(lines[0], want) {
+		t.Errorf("stderr line 1 = %q, want reportUnfollowed's line for the directive, prefix %q", lines[0], want)
+	}
+	prefix := fmt.Sprintf("parser: resolving <include> schemaLocation %q at %s:12:3: loader: opening %q under %q: ",
+		inner, abs, inner, filesystemRoot(abs))
+	if !strings.HasPrefix(lines[1], prefix) {
+		t.Errorf("stderr line 2 = %q, want prefix %q", lines[1], prefix)
+	}
+}
+
 // TestValidateHints is the -no-hints Acceptance bullet, both halves: a partial
 // -schema set plus the instance's own xsi:schemaLocation succeeds, and the
 // same set with -no-hints fails under a rule ID that names the fault —
