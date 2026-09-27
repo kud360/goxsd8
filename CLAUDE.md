@@ -51,16 +51,18 @@ go test ./conformance -run TestConformance -count=1 -timeout 30m -v  # part 4 (-
 
 Part 1 skips `TestConformance` because part 4 runs it; neither part is the
 gate without the other. Part 4's `-timeout` is part of the command: the suite
-alone runs within a few minutes of Go's 10-minute default (#1698).
+alone uses most of Go's 10-minute default (#1698).
 
 **The gate is run, not argued.** Run every part on every tree you hand off or
 judge, whatever the diff contains — a prediction that a part cannot fail is
-not a reason to skip it (#881, #1344). Run each command in the foreground,
-because a backgrounded run dies with the turn that started it
-(docs/ROUTINES.md), and unpiped, reading its own exit code: a pipeline's exit
-status is its last command's, so `go test ./... | tail` reports whether `tail`
-succeeded and stays green however the test failed. When the output is too
-long to read, redirect it to a file and read the file afterwards.
+not a reason to skip it (#881, #1344). Run each command to its exit code
+before your turn ends — in the foreground, or as a tracked background
+command you wait on — because a run still in flight when the turn ends dies
+with it (docs/ROUTINES.md). Run it unpiped and read its own exit code: a
+pipeline's exit status is its last command's, so `go test ./... | tail`
+reports whether `tail` succeeded and stays green however the test failed.
+When the output is too long to read, redirect it to a file and read the
+file afterwards.
 
 **This block is the only definition of the gate.** A step named anywhere
 else — a session brief, a LOG entry, an issue body — is not a gate step,
