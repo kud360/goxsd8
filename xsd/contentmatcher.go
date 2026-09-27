@@ -367,7 +367,8 @@ type Matcher struct {
 //     all. Declining withholds the whole element-sequence verdict, whose
 //     consumers are validate's Result.violations and its one reader
 //     Result.Violations, both of which carry violations PRESENT — so the
-//     decline costs a rejection and manufactures none. What makes the
+//     decline costs a rejection and manufactures none; validate records each
+//     child it leaves unmatched as an Unevaluated instead. What makes the
 //     approximation permanent is the distance between the ceiling and what
 //     still reaches it. A walk over every buildable complex type in
 //     testdata/xsdtests finds THREE declining here, all on this arm —

@@ -241,16 +241,24 @@
 // (value.IsDatatypeVerdict), which is what keeps a typeless attribute
 // (xs:anySimpleType, §3.2.2.2), or simple content of a type this backend
 // does not map, from being rejected by every document that carries one.
-// The first of those, an {attribute wildcard}, also carries an obligation that
-// is this layer's ALONE: where the wildcard's {process contents} is strict or
-// lax and it does not carry ##defined, §3.4.6.4 key-dft-binding case 3 binds an
-// item ·attributed· to it to a SYNTHESIZED Attribute Use over the ·governing
+// The content half's declines are recorded as [Unevaluated] under the rule
+// each would have charged (cvccomplexcontent.go): a {content type} whose shape
+// xsd.Schema.ContentMatcher declines, String Valid withheld over an element's
+// ·initial value· (cvc-type clause 3.1.3, cvc-complex-type clause 1.2), and an
+// undecided comparison against a fixed {value constraint} (cvc-elt clause
+// 5.2.2.2.2). The rest are not recorded: the attribute half's write a Debug
+// log line alone, and a ·governing type definition· left undetermined other
+// than by a withheld {type table} records nothing (#1093). The first item of the
+// list above, an {attribute wildcard}, also carries an obligation that is this
+// layer's ALONE: where the wildcard's {process contents} is strict or lax and it
+// does not carry ##defined, §3.4.6.4 key-dft-binding case 3 binds an item
+// ·attributed· to it to a SYNTHESIZED Attribute Use over the ·governing
 // attribute declaration· its ·expanded name· ·resolves· to, which only an
-// assessment episode can ·resolve· — so xsd's static c-ran rendering reports
-// the keyword there by a ruling, not by an omission for this layer's carve to
-// repair (#267). A skip {attribute wildcard} is outside that obligation as
-// squarely as a ##defined one, and this layer owes it no case-3 rendering at
-// all: key-governing-ad (§3.2.4.2) clause 3 resolves by name only "provided the
+// assessment episode can ·resolve· — so xsd's static c-ran rendering reports the
+// keyword there by a ruling, not by an omission for this layer's carve to repair
+// (#267). A skip {attribute wildcard} is outside that obligation as squarely as
+// a ##defined one, and this layer owes it no case-3 rendering at all:
+// key-governing-ad (§3.2.4.2) clause 3 resolves by name only "provided the
 // attribute is not ·skipped·" and key-skipped makes such an item ·skipped·, so
 // it has no ·governing attribute declaration· to bind and case 6's keyword is
 // already the whole binding. cvcid.go's skippedAttribute encodes that reading

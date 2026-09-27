@@ -195,9 +195,11 @@
 //
 // An instance the assessment DECLINED to decide exits 4: nothing was charged
 // against it, and a check the assessment reached was not performed — an
-// <xs:assert> whose {test} this engine does not evaluate, or a {type table}
-// that withheld its ·conditionally selected· type — so the document stands
-// undecided against exactly the rules those checks answer to, which is what
+// <xs:assert> whose {test} this engine does not evaluate, a {type table} that
+// withheld its ·conditionally selected· type, an element's character content
+// whose simple type the value backend cannot decide, or a content model too
+// wide for the matcher to decide — so the document stands undecided against
+// exactly the rules those checks answer to, which is what
 // [validate.Result.Unevaluated] records and validate's own doc.go calls not a
 // pass. Each such check prints the "<loc>: [<rule>] <message>" line a
 // violation prints, on stdout, so a script scanning for a rule ID reads them

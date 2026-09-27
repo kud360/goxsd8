@@ -422,7 +422,9 @@ func (c *contentCheck) element(w *walk, child Element) xsd.Attribution {
 func (c *contentCheck) match(w *walk, child Element) xsd.Attribution {
 	clause := c.contentClause()
 	if c.matcher == nil {
-		c.log(w, child.Name(), child.Loc(), ruleCvcComplexContent, clause, "declined")
+		c.decline(w, child.Name(), child.Loc(), ruleCvcComplexContent, clause,
+			"the element information item %s among the [[children]] of %s was not matched against the {content type} of its ·governing type definition·: xsd.Schema.ContentMatcher does not decide that {content type}'s shape, so whether the sequence is ·valid· with respect to it as cvc-complex-content clause %s requires is undecided",
+			child.Name(), c.e.Name(), clause)
 		return nil
 	}
 	if a, ok := c.matcher.Next(child.Name()); ok {
@@ -562,6 +564,8 @@ func (c *contentCheck) fixedLexical(w *walk, f xsd.ValueConstraint) {
 // [walk.fixedAgreement]'s terms and for the same reasons: an ungoverned type or a
 // {lexical form} outside its own type's lexical space is a gap in this processor
 // or a schema fault cos-valid-default charges at assembly, not the instance's.
+// It is recorded as an [Unevaluated] instead ([contentCheck.decline]), the clause
+// having been reached and not performed.
 func (c *contentCheck) fixedActualValue(w *walk, f xsd.ValueConstraint) {
 	st := c.g.valueType()
 	if st == nil {
@@ -569,7 +573,9 @@ func (c *contentCheck) fixedActualValue(w *walk, f xsd.ValueConstraint) {
 	}
 	same, decided := value.ConstraintMatches(w.backend, w.schema, st, c.initial.String(), elementContext{owner: c.e}, f)
 	if !decided {
-		c.log(w, c.e.Name(), c.e.Loc(), ruleCvcElt, "5.2.2.2.2", "declined")
+		c.decline(w, c.e.Name(), c.e.Loc(), ruleCvcElt, "5.2.2.2.2",
+			"the ·actual value· of the element %s was not compared with the {value} of the fixed {value constraint} %q of its ·governing element declaration·: value.ConstraintMatches could not decide the comparison, a fault of the type or of the value backend rather than a verdict about the value, so cvc-elt clause 5.2.2.2.2 is undecided",
+			c.e.Name(), f.LexicalForm())
 		return
 	}
 	if same {
@@ -620,7 +626,9 @@ func (c *contentCheck) fixedActualValue(w *walk, f xsd.ValueConstraint) {
 // would reject every element whose character content this backend cannot read.
 // RULED permanent by #774 (STYLE P3b), on matchedAttribute's terms. An
 // undecidable ·validating type· withholds String Valid clause 3's verdict on
-// the terms [walk.entitiesDeclared] states.
+// the terms [walk.entitiesDeclared] states. Either decline is recorded by the
+// caller as an [Unevaluated] under the rule it withholds ([contentCheck.decline]),
+// unlike matchedAttribute's, which logs alone.
 //
 // st's assertion sites are recorded BEFORE the decline ([walk.simpleAssertions],
 // cvcassertion.go), because it leaves the element's ·initial value· to be read
@@ -656,7 +664,9 @@ func (c *contentCheck) simpleTypeValue(w *walk) {
 	}
 	decided, verdict := c.stringValid(w, st)
 	if !decided {
-		c.log(w, c.e.Name(), c.e.Loc(), ruleCvcType, "3.1.3", "declined")
+		c.decline(w, c.e.Name(), c.e.Loc(), ruleCvcType, "3.1.3",
+			"the ·initial value· of the element %s was not decided against its ·governing type definition· %s: String Valid (§3.16.4) was withheld, the value backend reporting a fault of the type rather than a verdict about the lexical or the ·validating type· String Valid clause 3 reads being undecidable, so cvc-type clause 3.1.3 is undecided",
+			c.e.Name(), typeName(st))
 		return
 	}
 	if verdict == nil {
@@ -675,7 +685,9 @@ func (c *contentCheck) simpleTypeValue(w *walk) {
 func (c *contentCheck) initialValue(w *walk, st *xsd.SimpleType) {
 	decided, verdict := c.stringValid(w, st)
 	if !decided {
-		c.log(w, c.e.Name(), c.e.Loc(), ruleCvcComplexType, "1.2", "declined")
+		c.decline(w, c.e.Name(), c.e.Loc(), ruleCvcComplexType, "1.2",
+			"the ·initial value· of the element %s was not decided against the {simple type definition} %s of its ·governing type definition·'s {content type}: String Valid (§3.16.4) was withheld, the value backend reporting a fault of the type rather than a verdict about the lexical or the ·validating type· String Valid clause 3 reads being undecidable, so cvc-complex-type clause 1.2 is undecided",
+			c.e.Name(), st.Name())
 		return
 	}
 	if verdict == nil {
@@ -724,6 +736,20 @@ func (c *contentCheck) chargeCause(w *walk, rule xsderr.Rule, clause string, loc
 	w.res.violations = append(w.res.violations, causedBy(rule, loc, cause, format, args...))
 	c.charged = true
 	c.log(w, c.e.Name(), loc, rule, clause, "charged")
+}
+
+// decline records one content check this element REACHED and did not perform
+// as an [Unevaluated] under rule — the bare ID the check would have been
+// charged under, the clause going in the message — and logs it as "declined"
+// at clause. Recording and logging are one call so a site cannot do one
+// without the other: a decline that only logged would leave an empty [Result]
+// reading as a walk that checked everything it reached.
+//
+// Unlike a charge it leaves c.charged alone: nothing was decided, so no later
+// clause is silenced by it.
+func (c *contentCheck) decline(w *walk, name xsd.QName, loc xsderr.Loc, rule xsderr.Rule, clause, format string, args ...any) {
+	w.res.unevaluated = append(w.res.unevaluated, newUnevaluated(rule, loc, format, args...))
+	c.log(w, name, loc, rule, clause, "declined")
 }
 
 // log records one content decision: which rule and clause settled it, and how

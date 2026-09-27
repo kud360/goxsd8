@@ -348,8 +348,8 @@ func TestNilledElementSkipsTheFixedValueCheck(t *testing.T) {
 
 // eSubstituted assesses root against schema with a recording logger and returns
 // the violations beside every line the walk wrote, so a test can assert what was
-// DECIDED and not only that nothing was charged — a decline and a satisfied
-// clause are both silent in [Result].
+// DECIDED and not only that nothing was charged — a satisfied clause is silent
+// in [Result], and the log line names which clause was satisfied.
 func eSubstituted(t *testing.T, schema *xsd.Schema, root Element) ([]*xsderr.Error, []string) {
 	t.Helper()
 	log, visits := recordingLogger()
@@ -367,7 +367,8 @@ func eSubstituted(t *testing.T, schema *xsd.Schema, root Element) ([]*xsderr.Err
 // eWantOutcome fails unless the visits hold a content line for rule and clause
 // carrying want, and never one carrying "declined" for that same clause. The
 // negative half is the point: a clause this package DECLINES charges nothing,
-// exactly as a satisfied one does, so silence alone cannot tell the two apart.
+// exactly as a satisfied one does, so the violations alone cannot tell the two
+// apart.
 func eWantOutcome(t *testing.T, visits []string, rule xsderr.Rule, clause, want string) {
 	t.Helper()
 	line := func(outcome string) string {
