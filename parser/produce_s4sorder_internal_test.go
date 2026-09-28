@@ -20,6 +20,9 @@ var s4sModels = []struct {
 	{"attribute", s4sAttribute},
 	{"simpleType", s4sSimpleType},
 	{"alternative", s4sAlternative},
+	{"keybase", s4sKeybase},
+	{"selector", s4sSelector},
+	{"field", s4sField},
 }
 
 // s4sProbe is the vocabulary the models above draw on: every element name they
@@ -34,8 +37,8 @@ var s4sProbe = []string{
 	"attribute", "attributeGroup", "anyAttribute", "assert",
 	"length", "minLength", "maxLength", "pattern", "enumeration", "whiteSpace",
 	"maxInclusive", "maxExclusive", "minInclusive", "minExclusive",
-	"totalDigits", "fractionDigits", "assertion", "explicitTimezone",
-	"maxScale", "minScale",
+	"totalDigits", "fractionDigits", "assertion", "assertions", "explicitTimezone",
+	"maxScale", "minScale", "selector", "field",
 }
 
 // TestS4SModelPositionsAreDisjoint pins the invariant checkS4SChildOrder's fault
