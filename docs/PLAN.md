@@ -17,187 +17,180 @@ read them. One stamp for the whole section, so a reader can tell staleness
 from wrongness at a glance. Never add a dated paragraph beside the old
 one — appending is what this replaces.
 
-## Status — 2026-09-27 (`/backlog`, the thirty-fifth)
+## Status — 2026-09-28 (`/backlog`, the thirty-sixth)
 
-**This is the first stamp under the value-first band that two `/retro`s ruled
-today.** The ninth retro made `/backlog` read each active lane's failures
-before the queue and lead with the decision that holds the most of them. The
-tenth found that the ninth's rebalance never reached a develop session. Ten
-landings banked +2 cases while every pick came from the 2026-09-26 band, and
-#1738, the north star the ninth named, had an issue and no session. Under
-`develop.md` step 2, a band older than the newest `meta: retro` commit is stale,
-and this stamp is what makes it fresh. **Lean: hard toward product, per the
-tenth retro's dial:** 0.2 cases banked per develop session and a 40% product
-share. The band below opens with both milestones' north stars and bands
-comment-only work only as a sweep.
+**The value-first band worked: all eight top rows landed in order, and the lanes
+moved +10,685.** The window was `0897855..efaa5ad`: 8 landings, each with its
+post-land pass, and no retro or audit. Measured against the tenth retro's dial
+(0.2 cases banked per develop session, a 40% product share), this window banked
+**1,336 cases per session** with a **75% product share** (6 of 8 landings).
+Rows 9 (#1609) and 10 (#1772) were not reached, and both carry forward. **Lean:
+still toward product.** Both north stars are re-measured below, and each has a
+new owner that this pass filed. The two carried rows stay in the band because
+one is a fired trigger and the other is persona consumption.
 
-**The 2026-09-26 band: rows 1–11 landed, and row 12 (#1688) is open.** The
-window was `0087949..b52ce09`: 14 landings, each with a post-land pass except
-#1724's (the tenth retro logged the skip), plus two retros and two audits. The
-landings were the eleven rows, #345 (reopened by the last stamp, then ruled), and
-two same-day follow-ups, #1748 and #1746. **Every one of the window's 76 closes
-is accounted for**: 14 by landings, 58 by the ninth retro's ledger and 4 by the
-tenth's. No issue closed without a landing or a ruling, which is the band test
-the last stamp set. **This pass's own PR description must still carry no closing
-keyword**, and `go tool landcheck -no-issue` now checks it before the merge
-(#1178).
+**Every one of the window's 12 closes is accounted for.** Eight closed by
+landings: #1774, #1740, #1738, #1773, #1737, #1775, #593 and #622. Three closed
+as absorbed: #1771 into #1737, and #543 and #540 into #622. #795 closed
+`not_planned` in #1738's post-land pass. **This pass's own PR description must
+carry no closing keyword**, and `go tool landcheck -no-issue` checks it before
+the merge (#1178).
 
 ### Conformance lanes
 
-**This table is `go tool lanestatus`, pasted verbatim, on `main` at `b52ce09`.**
+**This table is `go tool lanestatus`, pasted verbatim, on `main` at `efaa5ad`.**
 It is the committed expectations census, which `docs/WORKFLOW.md` names as the
 lane score (#1120).
 
 | Lane | Pass | Fail | Total |
 |---|---:|---:|---:|
 | `ber` | — | — | 0 |
-| `datatypes` | 1162 | 11 | 1173 |
-| `instance` | 11247 | 15114 | 26361 |
+| `datatypes` | 1163 | 10 | 1173 |
+| `instance` | 21756 | 4605 | 26361 |
 | `json` | — | — | 0 |
-| `schema` | 14699 | 699 | 15398 |
+| `schema` | 14874 | 524 | 15398 |
 | `xpath` | — | — | 0 |
 
-**`schema` gained 2, `datatypes` 1, and no lane regressed.**
-`git diff 0087949 b52ce09 -- conformance/testdata/expectations/` reads three
-`fail` → `pass` lines and nothing else: `time_minInclusive006_1163.i` (#591),
-`idJ002` (#1572) and `wildZ008` (#1748). `instance` is byte-identical.
-**`datatypes ⊆ instance` is intended** (#1507). **An em dash means a lane with no
-cases yet, not a lane scoring zero.** `datatypes` is M3 and complete. `schema` is
-M4, `instance` M5, and both are active. `xpath`, `json` and `ber` wait on
-M6/M7, M8 and M11.
+**`instance` gained 10,509, `schema` 175 and `datatypes` 1, and no lane
+regressed.** `git diff b52ce09 efaa5ad -- conformance/testdata/expectations/`
+shows 10,685 `fail` → `pass` lines and zero `pass` → `fail` lines. `instance`:
+#1738 +10,508 and #1737 +1. `schema`: #1774 +135, #1773 +28, #1737 +11 and #1775
++1. `datatypes`: #593 +1. **`datatypes ⊆ instance` is intended** (#1507). **An
+em dash means a lane with no cases yet, not a lane scoring zero.** `datatypes` is
+M3 and complete. `schema` is M4, `instance` M5, and both are active. `xpath`,
+`json` and `ber` wait on M6/M7, M8 and M11.
 
 ### What holds each active lane's failures
 
-**Measured on `b52ce09`** with one read-only `GOXSD_DECLINES=1` conformance run
-(nothing banked; 41,759 cases, 99 withheld) and `casejoin join <lane>` over
-every file in the suite. Case lists were taken by hand until #1740 exists.
+**Measured on `efaa5ad`** with one read-only `GOXSD_DECLINES=1` conformance run
+(nothing banked; 41,759 cases, 99 withheld) fed to `go tool lanepartition -log
+<run> <lane>`. This is the first stamp that runs #1740's instrument instead of
+joining by hand. Each cluster figure is a part of the banked fails and a bound
+from above, never a prediction of flips.
 
 | lane | banked fail | declined | indeterminate (#277) | decided against the suite |
 |---|---:|---:|---:|---:|
-| `instance` | 15114 | 15103 | 5 | 6 |
-| `schema` | 699 | 126 | 11 | 562 |
-| `datatypes` | 11 | 7 | — | 4 |
+| `instance` | 4605 | 4594 | 5 | 6 |
+| `schema` | 524 | 126 | 11 | 387 |
+| `datatypes` | 10 | 6 | — | 4 |
 
-- **M5's north star is #1738, and nothing else in the lane comes close.**
-  14,695 of `instance`'s fails are cases the suite declares VALID, and the run
-  declines 14,689 of them, because the lane never emits a `valid` observation.
-  10,609 are NIST SV-IV. The next clusters are `MS-DataTypes` 724, `MS-Regex`
-  587, `MS-Particles` 386 and `MS-ComplexType` 238. The 419 cases that can flip
-  today are led by `MS-Regex` (163) and `Assert`/`assertion` (71, which wait on
-  M6's evaluator, #1042).
-- **M4's north star is #1774, filed this pass.** 551 of the 562 decided cases
-  are suite-`invalid` schemas the processor accepts. `MS-DataTypes` holds 158 of
-  them in two single decisions: 134 go to #1774 (a length or digits facet's
-  `value` literal is never checked against its s4s type) and 24 to #1773
-  (`maxInclusive and maxExclusive`). The next test sets are
-  `MS-IdentityConstraint` 104 (#1737 owns 11 of them), `MS-Wildcards` 61,
-  `MS-ModelGroups` 34, `MS-Element` 32 and `MS-Particles` 23, and none of them is
-  partitioned by mechanism yet.
-- **Eight suite-`valid` schemas are decided invalid, which is a false reject.**
-  `addB106` is #1775, filed this pass. `addB194` sits under #462, and `vc007` and
-  `vc_003` under #1002. Four are untracked, each decided under a different rule:
-  `particlesEb041` (`ct-props-correct`), `particlesZ033_a` (`minOccurs` above
-  the integer range), `schU1` (`sch-props-correct` across a two-document
-  assembly) and `ste110` (`cos-st-restricts` 3.3). Each needs a grounding before
-  it is a defect.
+- **M5's north star is #1808, filed this pass.** 4,181 of `instance`'s 4,594
+  declines are suite-VALID cases. #1738's gate admits a simple leaf root alone,
+  and no open issue targeted the next shape. The largest clusters are
+  `MS-DataTypes` 717, `MS-Regex` 587, `MS-Particles` 385, `NIST2004-01-14` 260,
+  `MS-ComplexType` 238, `MS-IdentityConstraint` 149 and `MS-ModelGroups` 145.
+  How much of the 4,181 the gate holds, rather than a decline inside the walk,
+  is a hypothesis #1808's grounding measures first. #1788 widens what the slice
+  may admit (attribute-side, ID/IDREF and identity-constraint declines). The 413
+  declined suite-invalid cases are led by `MS-Regex` 163 (#1473) and `Assert` 45
+  (#1042, M6).
+- **M4's north star is #1786.** 380 of the 387 decided cases are suite-invalid
+  schemas the processor accepts. The largest cluster, `MS-IdentityConstraint`
+  93, holds #1786's 44 (§3.11.2's content models) as one decision. The other 49
+  are 15 `id` values and 34 `xpath` values, and #1796 owns part of the latter.
+  **The second cluster, `MS-Wildcards` 61, had no owner, so this pass filed
+  #1809.** 49 of the 61 carry a `namespace=` value outside `namespaceList`. XSD
+  1.1's permissive `anyURI` may admit them, so it opens on an oracle ruling. Its
+  bound is 49 at most, and possibly 0. Next come `MS-ModelGroups` 34,
+  `MS-Element` 32, `MS-Particles` 23, `ElemDecl` 17 and `All`, `MS-SimpleType`
+  15 each, none partitioned by mechanism yet.
+- **Seven suite-`valid` schemas are decided invalid, which is a false reject.**
+  `addB106` flipped with #1775. `particlesZ033_a` is now #1780. `addB194` sits
+  under #462, and `vc007` and `vc_003` under #1002. **Three are untracked**:
+  `particlesEb041` (`ct-props-correct`), `schU1` (`sch-props-correct` across a
+  two-document assembly) and `ste110` (`cos-st-restricts`). Each needs a
+  grounding before it is a defect.
+- **`datatypes`' 10** are 6 declines (`PDecimal`/`PrecisionDecimalTests` 5) and 4
+  decided: `anyURI_a004_1339.i` (#1803's fixture), `gMonth002`/`gMonth004`
+  (#921) and `pdecimal006.n2`.
 
 ### Branch namespace, `origin` (report-only; a session never deletes a ref)
 
-`git ls-remote --heads origin` lists `main` and **`chronicler-345`**, and
+`git ls-remote --heads origin` lists `main` and **`chronicler-345`**.
 `go tool wipsurvey`, run on an unshallowed checkout, prints no issue rows and
 `none` under PARKED.
 
-- **`chronicler-345`** is 4 ahead and 17 behind, and no PR has it as its head.
-  Its tree is byte-identical to `c9e7766`, the squash of #345's PR #1751 from
-  `wip/issue-345`, so **nothing on it is missing from `main`**. A human may
-  delete it.
+- **`chronicler-345`** is now 4 ahead and 34 behind, and no PR has it as its
+  head. `git diff ae2cdc3 c9e7766` is empty: its tree is still byte-identical to
+  `c9e7766`, the squash of #345's PR #1751, so **nothing on it is missing from
+  `main`**. A human may delete it. This is its second stamp flagged.
 - No `wip/*` ref exists, so no claim stands and every `ready` row is startable.
 
 ### Marker census
 
-`go tool gapaudit`, fed this pass's post-write `state=all` walk on `b52ce09`
-(`rows 1775 distinct 1775 min 1 max 1775 no gaps`), reports **68 markers across
-10 areas, 16 in group 1 and 29 in group 2, with zero dead ends.** This is the
-sixth consecutive stamp with zero dead ends.
+`go tool gapaudit`, fed this pass's post-write `state=all` walk on `efaa5ad`
+(`rows 1809 distinct 1809 min 1 max 1809 no gaps`), reports **71 markers across
+10 areas, 16 in group 1 and 28 in group 2, with zero dead ends.** This is the
+seventh consecutive stamp with zero dead ends.
 
-- **Markers went from 67 to 68.** #1178 added `tools/landcheck/keywords.go:48`
-  (a new area; its post-land pass dismissed the ownerless marker), #1670 added a
-  `GAP(xml)` owned by #1745, and #1572 retired `icpath/grammar.go:235`.
-- **Group 1 is 16, as before.** The landcheck marker entered it and
-  `icpath/grammar.go:235` left. `parser/doc.go:221` is still the §5.3 policy row
+- **Markers went from 68 to 71.** Three `GAP(` markers were added, each with its
+  owner: `parser/produce.go`'s absent-`value` facet (#1777), `bindQName`'s
+  partial NCName test (#1801) and `conformance/datatypes.go`'s restriction
+  pairing (#1803). #1737 retired arrival 1 of the `validate/cvcidentityconstraint.go`
+  marker only in part, and repointed the remainder to #1796.
+- **Group 1 is 16, as before.** `parser/doc.go:221` is still the §5.3 policy row
   that points at a human-reserved decision.
-- **Group 2 went from 27 to 29.** It was 27 before this pass's writes, and the
-  two new lane-gap filings (#1773, #1774), which carry no marker by nature, make
-  29. No new `kind/gap` issue is owed for a marker.
+- **Group 2 went from 29 to 28.** It was 27 before this pass's writes. The lane
+  gaps #1773 and #1774 closed, #1788, #1789 and #1796 entered, and #1809, a
+  lane gap with no marker by nature, makes 28. No new `kind/gap` issue is owed
+  for a marker.
 
 ### Milestones and queue
 
-**One page-numbered `state=all` REST walk, stamped `rows 1775 distinct 1775 min
-1 max 1775 no gaps`**, taken after this pass's writes: 936 issues (PRs
-excluded), **284 open, 652 closed.**
+**One page-numbered `state=all` REST walk, stamped `rows 1809 distinct 1809 min
+1 max 1809 no gaps`**, taken after this pass's writes: 953 issues (PRs
+excluded), **289 open, 664 closed.**
 
 | milestone | open | closed | state |
 |---|---:|---:|---|
 | M1 — Spec infrastructure | 0 | 3 | done |
 | M2 — Foundation leaves | 0 | 5 | done |
 | M3 — Datatypes vertical slice | 0 | 12 | complete |
-| **M4 — Schema parsing** | **55** | **140** | active |
-| **M5 — Instance validation (XML)** | **15** | **43** | active |
+| **M4 — Schema parsing** | **57** | **144** | active |
+| **M5 — Instance validation (XML)** | **17** | **44** | active |
 | M6 — XPath required subset | 1 | 0 | not started |
 | M7–M12 | 0 | 0 | not started |
 
-Queue labels on open issues are **275 `ready`, 7 `blocked`, 0 `needs-replan`
-and 2 `epic`**, which sums to 284. Every open issue carries exactly one queue
+Queue labels on open issues are **279 `ready`, 8 `blocked`, 0 `needs-replan`
+and 2 `epic`**, which sums to 289. Every open issue carries exactly one queue
 label, at least one `kind/` label and at least one `area/` label. By kind:
-`kind/refactor` 84, `kind/gap` 51, `kind/story` 42, `kind/docs` 42,
-`kind/tooling` 38, `kind/bug` 33, `kind/feature` 3, **`kind/process` 0**.
+`kind/refactor` 82, `kind/gap` 53, `kind/story` 42, `kind/docs` 40,
+`kind/tooling` 38, `kind/bug` 35, `kind/feature` 4, **`kind/process` 3**.
 
-- **M4 went from 52 to 55 open.** #1572 closed, and #1737, #1773, #1774 and
-  #1775 were filed. **M5 went from 14 to 15.** #1576, #1668, #1670 and #1746
-  closed, #1733, #1745, #1746 and #1765 were filed, and #1738 joined M5. M4 is
-  still a schema milestone with a measured tail: 562 decided disagreements, not
-  a residue of permanent declines. That answers the question the last stamp
-  owed the retro. The milestone scope paragraphs need no correction.
-- **`blocked` went from 12 to 7.** The ninth retro closed #1698, #1708 and
-  #1344, #591's landing unblocked #593, and #1572 fired #1609's `schema` trigger.
-  **This pass's unblock sweep found zero.** It read all seven `## Depends on`
-  sections, and #16, #555, #1002, #1042, #1051, #1224 and #1374 each wait on a
-  trigger or an open issue that has not moved.
-- **Measured refactors, re-run on `b52ce09`, are all flat.** #1772 (3 copies, 59
-  pins, 15 of 17 `doc.go` commits co-touching `main.go`), #1770 (2 encodings, 1
-  call site) and #1771 (12 count-bearing sentences) were each filed at
-  `13c2ffd`, and no `.go` file changed since. None grew, so none enters the band
-  on its figure. The other 81 open `kind/refactor` issues are unmeasured and are
-  ordered by dependency alone.
+- **M4 went from 55 to 57 open.** Four closed (#1774, #1773, #1737, #1775). Six
+  were filed: #1777, #1779, #1780, #1786 and #1801 by post-land passes, and #1809
+  by this pass. **M5 went from 15 to 17.** #1738 closed. #1788 and #1789 were
+  filed by its post-land pass, and #1808 by this pass. The M5 scope paragraph
+  below now names #1738 as the largest single lane move, in place of #913.
+- **`blocked` went from 7 to 8**, because #1790 (a human-authorized CLAUDE.md
+  edit) was filed `blocked`. #1796 was filed and then unblocked by #1737's
+  landing. **This pass's unblock sweep found zero.** It read all eight
+  `## Depends on` sections. #16, #555, #1002, #1042, #1051, #1224, #1374 and
+  #1790 each wait on a trigger or an open issue that has not moved.
+- **`kind/process` went from 0 to 3:** #1781, #1791 and #1798, each filed at a
+  second or later sighting that cost a round. The `/retro` reads them.
+- **Measured refactors, re-run on `efaa5ad`.** #1772's pins are flat at 59 and
+  its copies at 3. Co-touch is now 15 of 18 `doc.go` commits: #1738 edited
+  `doc.go`'s exit-4 paragraph alone. That is a one-copy edit, not yet drift,
+  because `-help` and README carry generic exit-4 prose. Its body is restamped.
+  #1770 is flat (2 encodings, 1 call site). #1771 closed, absorbed by #1737.
+  None grew, so none enters the band on its figure. The other open
+  `kind/refactor` issues are unmeasured and are ordered by dependency alone.
 
-### Persona consultations: `libuser` and `cliuser` both ran on the `139b564` delta
+### Persona consultations: carried from the `139b564` delta, not re-run
 
-**The cartographer role-plays no persona and does not spawn one** (#416). **The
-orchestrating session ran both this session.** `libuser` worked from `go doc`
-and `README.md` only. `cliuser` worked from `README.md`, the built binary's
-`-help` and cases it constructed. The delta was `go tool surface -base 139b564`
-(**+4/−0**: `builtin.NCNamePattern` from #849; `validate.DeclarationsProcessed`,
-`(*xmltree.Reader).AllDeclarationsProcessed` and `xmlsrc`'s implementation from
-#1668), the exported-doc rewrites of #1724 and #1686, and the CLI contract text
-of #1668 and #1419. They ran with thirteen earlier findings unconsumed, because
-the surface had changed on both the API and the CLI side.
-- **`libuser`: 5 of 5 clean.** Each new identifier's doc names its consumers
-  and was wired end to end. README, `xmlsrc`'s package doc and the `Reader` doc
-  agree on "internal subset only". Nothing was filed.
-- **`cliuser` on #1419: clean.** A missing `-schema` argument exits 2. A
-  referenced `<xs:include>` I/O fault exits 3 under `validate` and 1 under
-  `parse`, as documented.
-- **`cliuser` on #1668: one finding, folded into #1772.** `-help` and `doc.go`
-  drop the `cvc-simple-type` rule ID that `README.md` gives for an ENTITY named
-  only in the external DTD subset. The binary emits `[cvc-simple-type]`. It was
-  verified against the tree (`main.go:106`, `doc.go:85`, `README.md:153`). #1772
-  owns the three-copy contract, and its Acceptance already covers reconciling
-  drift, so the finding went into its Notes rather than a new issue.
+**The cartographer role-plays no persona and does not spawn one** (#416).
+**Neither persona was re-run this pass, because the surface they see did not
+change.** The orchestrating session checked: `go tool surface -base 139b564`
+still reads **+4/−0**, the same four identifiers as the last stamp. The only
+CLI-text change, #1738's exit-4 paragraph in `cmd/goxsd8/doc.go`, reaches
+neither `-help` nor `README.md`. The last consultation stands. On that delta,
+`libuser` was 5 of 5 clean and `cliuser`'s one finding was folded into #1772.
 
 **Thirteen persona findings stay open and unconsumed:** #1568–#1571,
-#1593–#1596, #1626, #1684, #1685, #1687 and #1688. This window consumed #1724,
-#1686 and #1419. **M5** is API- and CLI-facing, **M4** is API-facing only, and
-**M6** has no surface yet.
+#1593–#1596, #1626, #1684, #1685, #1687 and #1688. This window consumed none.
+**M5** is API- and CLI-facing, **M4** is API-facing only, and **M6** has no
+surface yet.
 
 ### Working band
 
@@ -206,59 +199,65 @@ This is ordered for a `/develop` session: take the highest row you can start.
 because this is a snapshot. Each row names one issue (#1636). A row that
 absorbs others says so, and the absorbed issues' bodies say so too.
 
-**The ordering principle for this stamp:** the two north stars first, the
-instrument that finds the next one after them, then the remaining lane slices by
-bound, then the one sweep and the one fired trigger, then the persona finding.
-No refactor figure grew, so none entered on that ground. #1772 entered on its
-finding.
+**The ordering principle for this stamp:** the two north stars first, then the
+second-largest cluster, which is gated on an oracle, then the remaining lane
+slices by bound. The fired trigger and the persona consumption carried from the
+last band follow, then the one tooling fix that corrects every bound this
+section quotes. No refactor figure grew.
 
 | # | issue | why here |
 |---|---|---|
-| 1 | #1738 | **M5's north star.** 14,689 suite-VALID `instance` cases are declined because the lane never observes `valid`. The first slice is bounded to simple-typed roots, and its population is the 10,609 NIST SV-IV cases. Warden pre-flight first (`## Surface`) |
-| 2 | #1774 | **M4's north star, filed this pass.** A facet's `value` literal is never checked against its s4s type. The `schema` bound is 134, all decided `valid` today |
-| 3 | #1740 | **The instrument this stamp built by hand.** It partitions banked fails into declined, indeterminate and decided, by expected validity and test set, and joins them to issues. Both retros asked for it. Every stamp until it lands repeats a 350s run plus hand joins. `Ratchet: unchanged` |
-| 4 | #1773 | **M4, 24 cases, one rule.** `maxInclusive and maxExclusive` and its min twin are never charged. The site is beside `boundConsistencyViolates` |
-| 5 | #1737 | **M4, unblocked by #1572.** Clause 2.2's `child::`/`attribute::` spellings. The bound is 11 `schema` and 1 `instance`. Absorbs #1771 if it changes the charged-shape count |
-| 6 | #1775 | **M4, a false reject.** A QName-valued attribute is not whitespace-collapsed (`addB106`). The bound is 1, and the defect is clear |
-| 7 | #593 | **Unblocked by #591.** A facets case whose tested value sits on the root attribute. The `datatypes` bound is 1, and no banked pass may be lost |
-| 8 | #622 | **The one bookkeeping sweep; it absorbs #543 and #540.** Four `Ratchet impact` paragraphs (STYLE P2's ban), seven wrong `STYLE D4` sites and four bare-numeric `STYLE N` sites. One grounding, one landing, three closes |
-| 9 | #1609 | **A fired review trigger.** Re-measure #499's content-model walk counters. Re-arm with a margin, not the next case (tenth retro) |
-| 10 | #1772 | **Persona consumption, warm from this pass's `cliuser` run, plus a measured refactor.** `-help` drops `cvc-simple-type` from the ENTITY/DTD paragraph that README carries. The contract is written three times (59 pins, flat), so one source fixes this drift and the next. `Ratchet: unchanged` |
+| 1 | #1808 | **M5's north star, filed this pass.** 4,181 declined suite-VALID `instance` cases, bounded from above. The grounding names the complex-typed root slice whose declines are all recorded and measures its share first. It absorbs #1789 (same test file) |
+| 2 | #1786 | **M4's north star.** §3.11.2's content models for `unique`/`key`/`keyref`/`selector`/`field`. The `schema` bound is 44, each case enumerated, and it is the largest single decision in the lane. Absorbs #1098 if its message fix is still open |
+| 3 | #1809 | **M4's second cluster, filed this pass.** 49 `MS-Wildcards` `namespace=` values outside `namespaceList`. It opens on an oracle ruling, because XSD 1.1's `anyURI` may admit them. The bound is 49 at most and possibly 0 |
+| 4 | #1788 | **M5, widens row 1.** Routes the attribute-side, ID/IDREF and identity-constraint declines into `Unevaluated` after an oracle ruling on `xs:anySimpleType`. It also fixes an exit 4 that should be 0 on `validate`. `Ratchet` likely unchanged |
+| 5 | #1796 | **Unblocked by #1737.** Clause 2.2's arrival-1 remainder (non-initial `//`, leading `/`, KindTest steps). It reaches into the 34 `xpath`-valued `MS-IdentityConstraint` cases. The bound is taken at grounding |
+| 6 | #1780 | **M4, a false reject.** `minOccurs`/`maxOccurs` above `math.MaxInt` (`particlesZ033_a`). The bound is 1, and the defect is clear |
+| 7 | #1609 | **A fired review trigger, carried.** Re-measure #499's content-model walk counters. `schema` is now 14874, 177 past the 14697 trigger. Re-arm with a margin, not the next case (tenth retro) |
+| 8 | #1772 | **Persona consumption plus a measured refactor, carried.** `-help` drops `cvc-simple-type` from the ENTITY/DTD paragraph. The contract is written three times, and #1738 has now edited one copy alone. `Ratchet: unchanged` |
+| 9 | #1785 | **Tooling that corrects every bound.** `casejoin` counts suite-indeterminate cases as candidates, 5 on `instance` and 11 on `schema`. `Ratchet: unchanged` |
+| 10 | #1779 | **M4, the `strconv.Atoi` family's other half.** Four facet-`{value}` readers in `xsd`/`value` falsely reject or decline literals above `math.MaxInt`. `Ratchet` unchanged expected. Taken after row 6, whose fix it mirrors |
 
 **Named below the band, on purpose.**
-- **Refactors.** **#1283** (the ninth audit asked for it above the other
-  refactors) blocks #1051 and carries the wrapper contract four open issues read.
-  It has no `## Cost of delay`, so it waits on a figure. #1770 and #1771 are
-  measured and flat. #1772 is row 10, on its persona finding. #1770 is also the route #1765 and #1745 should take.
-  #1735, #1736, #1757, #1701, #848 and #845 are unmeasured.
+- **Process, for the `/retro` on 2026-10-04:** #1781, #1791 and #1798. Each
+  cost a round once. None has yet cost a round in consecutive sessions.
+- **Tooling:** #1794 (`suiteindex` same-element pair shape). A bound drawn from
+  one test-set cluster missed the IBM sets twice. It enters the band if a third
+  bound is corrected at grounding.
+- **M4 gaps with `Ratchet: unchanged` expected:** #1777 (absent facet `value`)
+  and #1801 (`bindQName`'s partial NCName test). **Conformance bookkeeping:**
+  #1803 (restriction pairing, which reads `anyURI_a004`).
+- **Refactors.** **#1283** blocks #1051 and carries the wrapper contract. It has
+  no `## Cost of delay`, so it waits on a figure. #1770 is measured and flat,
+  and it is the route #1765 and #1745 should take. #1735, #1736, #1757, #1701,
+  #848 and #845 are unmeasured.
 - **M5 `parser/xmltree` gaps:** #1733, #1745 and #1765, all in
   `parser/xmltree/doctype.go`, sequenced behind #1770.
-- **M4 measurement:** **#595**'s clause-1.5 histogram. Its population is now
-  measured at 562 (thread), and 393 of it is unattributed.
-- **Comment corrections that need exegesis:** #702 and #613 (`kind/docs` was
-  added this pass).
-- **The four untracked schema false rejects** listed under the lane partition.
-  #1740's output is where they get owners.
-- **Persona findings:** see the section above.
+- **M4 measurement:** **#595**'s clause-1.5 histogram. #1740 now partitions by
+  charged rule, so re-read #595's premise against `lanepartition`'s output
+  before taking it.
+- **The three untracked schema false rejects** listed under the lane partition.
+- **#1790** waits on a human. **Persona findings:** see the section above.
 
 ### Next planning action
 
 1. **This stamp's own PR runs `go tool landcheck -no-issue -squash <file>
    -pr-body <file>`** before merging, and the PR description carries no closing
    keyword.
-2. **Until #1740 lands, the next stamp repeats this partition by hand.** Run
-   `GOXSD_DECLINES=1 go test ./conformance -run TestConformance -count=1
-   -timeout 30m -v` and `casejoin join <lane>` over every suite path, then set
-   the decline lists against the `fail` lines and read expected validity from
-   the catalog. The band test for the next stamp: whether rows 1–2 were taken
-   before any row below them.
-3. **The next `/retro` is Sunday 2026-10-04.** It reads whether this band moved
-   the lanes: cases banked per develop session and the product share, against
-   this window's 0.2 and 40%.
-4. **The human decision blocking #1002 is unchanged, carried for a
-   TWENTY-NINTH stamp.** The choice is between (a) a constitutional "superseded
-   pass" ratchet class and (b) holding §4.2.2's `vc:maxVersion` arm until
-   assertions land. CLAUDE.md puts (a) beyond any agent.
+2. **The next stamp runs `lanepartition` again, on the stamp's commit.** Feed it
+   a `GOXSD_DECLINES=1 go test ./conformance -run TestConformance -count=1
+   -timeout 30m -v` log and the post-write `gapissues.json`. The band test for
+   the next stamp is whether rows 1–3 were taken before any row below them, and
+   whether #1808's grounding measured its share of the 4,181.
+3. **The next `/retro` is Sunday 2026-10-04.** It reads this window's 1,336
+   cases per session and 75% product share against the tenth retro's 0.2 and
+   40%. Most of that figure is #1738's single landing, so it should read the
+   median as well as the mean. It also reads the three `kind/process` issues.
+4. **The human decision blocking #1002 is unchanged, carried for a THIRTIETH
+   stamp.** The choice is between (a) a constitutional "superseded pass" ratchet
+   class and (b) holding §4.2.2's `vc:maxVersion` arm until assertions land.
+   CLAUDE.md puts (a) beyond any agent. #1809's ruling may add a second case of
+   the same 1.0-versus-1.1 shape.
 
 ## Milestones
 
@@ -552,7 +551,9 @@ has recorded; identity constraints and the ID/IDREF table (**#718**,
 1017 → 1133); `xsi:type` and `xsi:nil` deciding rather than declining (**#716**,
 +183); and a union-governed item classified by its ·validating type· (**#813**,
 +9, unioned onto #716's). #913's cvc-type clause 3.1 landing added **9409**,
-itself M5 and the largest single lane move this project has recorded.
+itself M5. **#1738** (`f6ab5b1`, 2026-09-27) added **10,508**, the largest single
+lane move this project has recorded: the lane's first `valid` observation, for a
+simple leaf root. Its second slice is **#1808**.
 
 **Landings OUTSIDE this milestone keep moving this lane, by four distinct
 mechanisms, and a running total of them is not maintained here** — take the
