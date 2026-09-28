@@ -13,18 +13,20 @@ import (
 	"github.com/kud360/goxsd8/xsd"
 )
 
-// This file holds the instance lane's shape gate for the one "valid"
-// observation it makes (#1738): a SIMPLE LEAF ROOT — a validation root whose
-// ·governing element declaration· and instance shape leave no clause of cvc-elt
-// (§3.3.4.3) and key-sva (§3.3.4.6) to decide beyond what an empty
-// validate.Result has already shown decided. instance.go's "Why an EMPTY Result
-// is evidence of validity for ONE shape only" states which clause each
-// condition below discharges; this file is only the conditions.
+// This file holds the instance lane's shape gates for the "valid" observation
+// it makes, one per shape: a SIMPLE LEAF ROOT (#1738) and a COMPLEX EMPTY LEAF
+// ROOT (#1808) — each a validation root whose ·governing element declaration·
+// and instance shape leave no clause of cvc-elt (§3.3.4.3) and key-sva
+// (§3.3.4.6) to decide beyond what an empty validate.Result has already shown
+// decided. instance.go's "Why an EMPTY Result is evidence of validity for TWO
+// shapes only" states which clause each condition below discharges; this file
+// is only the conditions.
 //
-// The gate is computed per case and stored nowhere. It reads the schema and the
-// documents independently of the walk, so the walk's own cvc-type clause
-// 3.1.1/3.1.2 and cvc-elt clause 3.1 charges are a SECOND check on the
-// attribute and children conditions, never the only one.
+// Each gate is computed per case and stored nowhere. It reads the schema and
+// the documents independently of the walk, so the walk's own charges on the
+// attribute and children conditions — cvc-type clauses 3.1.1/3.1.2 for the
+// simple leaf root, cvc-complex-type clauses 1.1 and 2 for the complex empty
+// one, cvc-elt clause 3.1 for both — are a SECOND check, never the only one.
 
 // versioningNS is the XML Schema versioning namespace §4.2.2 reads vc:minVersion,
 // vc:maxVersion, vc:typeAvailable, vc:typeUnavailable, vc:facetAvailable and
@@ -52,7 +54,7 @@ var idOrEntityOrNotation = []string{"ID", "IDREF", "IDREFS", "ENTITY", "ENTITIES
 // condition — an unreadable document, a peek error, an unresolvable type — is a
 // false, never a guess: the gate only ever narrows what the lane decides.
 func simpleLeafRoot(schema *xsd.Schema, report *parser.AssemblyReport, doc string) bool {
-	root, ok := peekLeafRoot(doc)
+	root, ok := peekRoot(doc, leafContent)
 	if !ok {
 		return false
 	}
@@ -66,13 +68,32 @@ func simpleLeafRoot(schema *xsd.Schema, report *parser.AssemblyReport, doc strin
 	return !closureVersioned(report)
 }
 
-// peekLeafRoot reads the instance document at doc with encoding/xml,
-// independently of the walk, and returns its root's expanded name where the
-// root is a leaf this gate admits:
+// complexEmptyLeafRoot reports whether the instance document at doc, against
+// schema as assembled into report, has the complex-empty-leaf-root shape an
+// empty validate.Result may be read as "valid" for. Like simpleLeafRoot, any
+// failure to establish a condition is a false, never a guess.
+func complexEmptyLeafRoot(schema *xsd.Schema, report *parser.AssemblyReport, doc string) bool {
+	root, ok := peekRoot(doc, emptyContent)
+	if !ok {
+		return false
+	}
+	d, ok := schema.Element(root)
+	if !ok {
+		return false
+	}
+	if !complexEmptyDeclaration(schema, d) {
+		return false
+	}
+	return !closureVersioned(report)
+}
+
+// peekRoot reads the instance document at doc with encoding/xml, independently
+// of the walk, and returns its root's expanded name where content — which reads
+// the root's content up to its end tag, leafContent or emptyContent — admits
+// that content, and where the root meets both gates' common conditions:
 //
 //   - no DOCTYPE at all, since a DTD can default an attribute onto the root that
 //     this peek would not see;
-//   - no element information item [[children]];
 //   - no [[attributes]] other than xsi:schemaLocation and
 //     xsi:noNamespaceSchemaLocation. Namespace declarations are skipped: the
 //     infoset carries them in [namespace attributes], not [attributes].
@@ -80,7 +101,7 @@ func simpleLeafRoot(schema *xsd.Schema, report *parser.AssemblyReport, doc strin
 //
 // A decoder error of any kind — including an encoding encoding/xml does not
 // read — answers false.
-func peekLeafRoot(doc string) (xsd.QName, bool) {
+func peekRoot(doc string, content func(*xml.Decoder) bool) (xsd.QName, bool) {
 	rc, _, err := loader.Dir(filepath.Dir(doc)).Resolve("", filepath.Base(doc))
 	if err != nil {
 		return xsd.QName{}, false
@@ -96,7 +117,7 @@ func peekLeafRoot(doc string) (xsd.QName, bool) {
 		case xml.Directive:
 			return xsd.QName{}, false
 		case xml.StartElement:
-			if !leafAttributes(t.Attr) || !leafContent(dec) {
+			if !leafAttributes(t.Attr) || !content(dec) {
 				return xsd.QName{}, false
 			}
 			return xsd.QName{Space: t.Name.Space, Local: t.Name.Local}, true
@@ -139,6 +160,26 @@ func leafContent(dec *xml.Decoder) bool {
 	}
 }
 
+// emptyContent reads the root's content up to its end tag and reports whether it
+// holds no element and no character information item [[children]] at all,
+// white space included: comments and processing instructions are the only
+// content it admits. It is leafContent less character data, which
+// cvc-complex-type clause 1.1 admits none of under an empty {content type}.
+func emptyContent(dec *xml.Decoder) bool {
+	for {
+		tok, err := dec.Token()
+		if err != nil {
+			return false
+		}
+		switch tok.(type) {
+		case xml.StartElement, xml.CharData:
+			return false
+		case xml.EndElement:
+			return true
+		}
+	}
+}
+
 // simpleLeafDeclaration reports whether d, the top-level declaration the root
 // resolves to ([xsd.Schema.Element] indexes top-level declarations alone), is
 // one whose every cvc-elt clause a complete walk has decided: not abstract,
@@ -164,6 +205,60 @@ func simpleLeafDeclaration(schema *xsd.Schema, d xsd.ElementDeclaration) bool {
 		return false
 	}
 	return !closureReaches(schema, st)
+}
+
+// complexEmptyDeclaration reports whether d, the top-level declaration the root
+// resolves to, is one whose every cvc-elt clause is either vacuous for a root
+// with no attributes and no content or decided by the walk: not abstract, not
+// nillable, no {value constraint} of either kind, no {identity-constraint
+// definitions}, no {type table}, and a {type definition} that resolves to a
+// Complex Type Definition that is not abstract, whose {content type}.{variety}
+// is empty, and whose {attribute uses}, {attribute wildcard} and {assertions}
+// are all empty or absent.
+//
+// Unlike simpleLeafDeclaration it refuses a default {value constraint} too:
+// with none at all, cvc-elt clause 5.2 applies and clause 5.1's substitution of
+// a {lexical form} into an empty {content type} never arises. An assembled
+// schema carries no such declaration anyway (e-props-correct clause 2 through
+// cos-valid-default clause 2.1, which admits a default on mixed content only);
+// the gate refuses it on its own rather than resting on that check. The type's
+// properties are read off the component as Finalize leaves them, already folded
+// over its {base type definition} chain (cos-ct-extends, §3.4.2.4, §3.4.2.5), so
+// no base walk is needed here the way closureReaches needs one.
+func complexEmptyDeclaration(schema *xsd.Schema, d xsd.ElementDeclaration) bool {
+	if d.Abstract() || d.Nillable() {
+		return false
+	}
+	if _, ok := d.ValueConstraint(); ok {
+		return false
+	}
+	if len(d.IdentityConstraints()) > 0 {
+		return false
+	}
+	if _, ok := d.TypeTable(); ok {
+		return false
+	}
+	td, ok := schema.ResolvedType(d.TypeDefinition())
+	if !ok {
+		return false
+	}
+	ct, ok := td.(xsd.ComplexType)
+	if !ok {
+		return false
+	}
+	if ct.Abstract() {
+		return false
+	}
+	if _, ok := ct.ContentType().(xsd.EmptyContent); !ok {
+		return false
+	}
+	if len(ct.AttributeUses()) > 0 {
+		return false
+	}
+	if _, ok := ct.AttributeWildcard(); ok {
+		return false
+	}
+	return len(ct.Assertions()) == 0
 }
 
 // closureReaches reports whether st's closure — its {base type definition}
