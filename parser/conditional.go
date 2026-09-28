@@ -416,12 +416,10 @@ func supportedFacet(qn xsd.QName) bool {
 // retained-or-ignored case, not an error.
 //
 // The lexical test is qnameLexical's three colon-and-emptiness shapes AND the
-// full NCName pattern on each half. [producer.bindQName] deliberately stops
-// short of the pattern, because nothing normalizes a QName-valued ATTRIBUTE
-// before it reaches there and a padded "xs:string " would be recharged; that
-// cannot arise here, where every item has just come out of a whitespace split,
-// and stopping short would accept "23" as a QName — which is exactly the item
-// src-cip is asked about in the suite's vc905.
+// full NCName pattern on each half. [producer.bindQName] stops short of the
+// pattern (its GAP(parser) marker); stopping short here would accept "23" as a
+// QName — which is exactly the item src-cip is asked about in the suite's
+// vc905.
 //
 // The unprefixed item takes the default namespace in scope at el, or no
 // namespace where none is declared. It is deliberately NOT defaulted to the
