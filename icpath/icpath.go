@@ -16,7 +16,9 @@ type Expr struct{ paths []path }
 // CompileSelector compiles the {selector} of an identity-constraint definition
 // (§3.11.1, an [xsd.XPathExpression] property record) into a matchable [Expr],
 // reporting ok false for an {expression} outside the ·selector subset· —
-// productions [1] through [4], with no attribute step anywhere.
+// productions [1] through [4], with no attribute step anywhere — and outside
+// the unabbreviated spelling clause 2.2 admits for it, a `child::` head before a
+// NameTest, which compiles to the [Expr] the bare NameTest does.
 //
 // ok false is the WITHHOLD direction (PRINCIPLES 20) and is not a verdict about
 // the schema: a legal XPath 2.0 path this subset does not admit looks exactly
@@ -25,7 +27,7 @@ type Expr struct{ paths []path }
 // (validate/cvcidentityconstraint.go's icFrame.declined), which carries the GAP
 // marker for it.
 //
-// It covers the five shapes [SelectorViolation] CHARGES as well, under the same
+// It covers the shapes [SelectorViolation] CHARGES as well, under the same
 // one encoding: a tree built over a name that did not resolve is not matchable
 // whatever the schema's fate, and a component assembled directly through
 // [xsd.NewIdentityConstraint] reaches no assembler and so no charge.
@@ -41,7 +43,8 @@ func CompileSelector(x xsd.XPathExpression) (Expr, bool) {
 // {fields} (§3.11.1, an [xsd.XPathExpression] property record) into a matchable
 // [Expr], reporting ok false for an {expression} outside the ·field subset· —
 // the same productions with [7] replacing [2], so the FINAL step alone may name
-// an attribute.
+// an attribute. Its unabbreviated spellings compile as [CompileSelector]'s do,
+// with an `attribute::` head before the final NameTest compiling as its '@'.
 //
 // ok false carries what [CompileSelector]'s does, on the same terms.
 func CompileField(x xsd.XPathExpression) (Expr, bool) {

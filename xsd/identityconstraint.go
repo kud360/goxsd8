@@ -38,11 +38,12 @@ const ruleICProps xsderr.Rule = "c-props-correct"
 // c-fields-xpaths (§3.11.6.3), the Schema Component Constraints on
 // {selector}/{fields}'s own {expression}, are charged by parser over icpath —
 // at the <selector>/<field> element, a position this constructor does not hold
-// — for the four shapes their clause 2 proves whichever arm of its disjunction
-// the author wrote under (icpath.SelectorViolation). An {expression} outside
-// the restricted selector/field path grammar those sections define — a subset
-// of the path axes, not XPath 2.0 — but not PROVED illegal by it is assembled
-// here unchallenged and declined at validate time instead.
+// — for the shapes that fail their clause 1, or their clause 2 whichever arm of
+// its disjunction the author wrote under (icpath.SelectorViolation). An
+// {expression} icpath neither compiles — the restricted selector/field path
+// grammar those sections define, a subset of the path axes and not XPath 2.0,
+// with the unabbreviated spellings clause 2.2 admits — nor PROVES illegal is
+// assembled here unchallenged and declined at validate time instead.
 //
 // Construct only through NewIdentityConstraint, which rejects the states
 // c-props-correct clause 1 (§3.11.6.1) forbids so they are unrepresentable

@@ -275,10 +275,11 @@ func (p *producer) buildIdentityConstraint(name xsd.QName, el *Element, category
 // holding the offending <selector>/<field> element's own Loc — xsd's constructor
 // carries the <unique>/<key>/<keyref>'s (STYLE E3) — and the altitude the twin
 // SCC over an XPath Expression record, ta-props-correct, is charged at
-// (produce_typetable.go). icpath answers about the FOUR shapes clause 2 proves
-// whichever of its two arms the author wrote under and declines everything else,
-// so a conforming schema written in unabbreviated XPath is never rejected here;
-// its paths are declined at validate time instead (icpath.SelectorViolation).
+// (produce_typetable.go). icpath charges only the shapes that fail clause 1, or
+// clause 2 whichever of its two arms the author wrote under, and is nil for
+// everything else (icpath.SelectorViolation), so a conforming schema is never
+// rejected here for a path icpath cannot read; such a path is declined at
+// validate time instead.
 //
 // A consumer assembling components directly through xsd.NewIdentityConstraint
 // gets no charge, which is this rule family's existing norm — xsd.NewTypeAlternative

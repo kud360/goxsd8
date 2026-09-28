@@ -261,7 +261,8 @@ func skipSpace(s string, i int) int {
 
 // fullyLexed reports whether every rune of the {expression} the stream came from
 // fell inside a token this package reads — production [5]'s, a predicate
-// bracket, an axis head or `node()`. Nothing is charged over a stream that fails this: see compile.
+// bracket, an axis head or `node()`. Nothing is charged over a stream that fails
+// this: see compile.
 func fullyLexed(toks []token) bool {
 	for _, t := range toks {
 		if t.kind == '?' {

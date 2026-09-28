@@ -528,17 +528,21 @@ Two consumers in two phases, the shape `xpath` has for §3.12.6's `ta-Test`:
 charging `c-selector-xpath` / `c-fields-xpaths` at the offending
 `<selector>`/`<field>`, and `validate` compiles and advances the same
 `{expression}` at ·assessment· time for `cvc-identity-constraint`. It is NOT
-part of `xpath`: this grammar shares no production with XPath 2.0, and
+part of `xpath`: this grammar is not a stage of XPath 2.0 — its lexer borrows
+XPath 2.0's closed axis vocabulary and `node()` only to classify a step head,
+and its matcher evaluates the child and attribute axes alone — and
 `validate/doc.go` states these paths are evaluated "directly and never through
 the XPath engine".
 
 **Fail-open, in both phases.** Clause 2 of each SCC is a disjunction whose
-second arm admits any unabbreviated XPath spelling of an admitted path, which
-no recognizer of the first arm's BNF can see — so a `Violation` entry point
-charges only the shapes no spelling excuses and is nil for everything else,
-`icpath/doc.go` enumerating which. A path the matcher cannot represent is
-declined at compile time and the identity constraint carrying it charges
-nothing, under the `GAP(xpath)` marker on `validate`'s `icFrame.declined`.
+second arm admits the `child::` (and, for a field, `attribute::`) spelling of
+an admitted path; `icpath` compiles those as their abbreviated twins, and a
+`Violation` entry point charges only the shapes that fail clause 1 or both
+arms of clause 2 and is nil for everything else, `icpath.SelectorViolation`
+enumerating which. A path `icpath` cannot read, or the matcher cannot
+represent, is declined at compile time and the identity constraint carrying
+it charges nothing, under the `GAP(xpath)` marker on `validate`'s
+`icFrame.declined`.
 
 ## Validation (`validate`)
 
