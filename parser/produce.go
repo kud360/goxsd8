@@ -3351,7 +3351,7 @@ func (p *producer) resolveQName(elem *Element, lexical, attr string) (xsd.QName,
 // whole ncNameRE predicate conditionalQNames applies to each half, so a
 // non-NCName half ("xs: string", "xs:1a") passes the lexical test. A reference
 // that must resolve is then charged src-resolve instead of cvc-datatype-valid,
-// and a notQName item binds to a name no NCName can match.
+// and a notQName item binds to a name no NCName can match (#1801).
 func (p *producer) bindQName(elem *Element, lexical, attr string) (xsd.QName, error) {
 	prefix, local, fault := qnameLexical(collapseTrim(lexical))
 	if fault != "" {
