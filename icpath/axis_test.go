@@ -108,7 +108,8 @@ func TestUnabbreviatedResidualIsCharged(t *testing.T) {
 		}
 	}
 	rows = append(rows,
-		row{"attribute::a/b", true, `the {fields} member "attribute::a/b" names an attribute before its final step`},
+		row{"@node()", false, `the {selector} "@node()" names an attribute, but c-selector-xpath clause 2`},
+		row{"attribute::a/b", true,`the {fields} member "attribute::a/b" names an attribute before its final step`},
 		row{"self::node()/child::a", false, `the {selector} "self::node()/child::a" steps along the self axis`},
 		row{"child::a|self::*", false, `the {selector} "child::a|self::*" steps along the self axis`},
 		row{"child::q:a", false, `the {selector} "child::q:a" has an XPath static error`},
