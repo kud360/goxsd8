@@ -775,8 +775,8 @@ library and typed comparison, which is too big for one issue. Carving it is a
 withhold into `Result.Unevaluated` under `key-cta-ta-select` (§3.12.4), with no
 second type and no `Evaluated bool` — the encoding #719 shipped
 (`Rule()`/`Loc()`/`Msg()`, `Result.Unevaluated()` in document order), reused
-rather than paralleled (STYLE D4), exactly as #842's warden pre-flight had ruled
-on D3. **Surface: none new.** STYLE 9's fail-open discipline is only honest if a
+rather than paralleled (STYLE D3), exactly as #842's warden pre-flight had ruled
+on D3. **Surface: none new.** STYLE P3's fail-open discipline is only honest if a
 fail-open answer is distinguishable from a real pass, and both of this
 milestone's fail-open channels — the assertion sites #719 collects and the CTA
 withhold #56 records — now reach the same slice under their own rule IDs.

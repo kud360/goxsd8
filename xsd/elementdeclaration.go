@@ -390,12 +390,6 @@ func (s Scope) Parent() (ElementScopeParent, bool) {
 // schema-document-supplied, so finalize adds no src-resolve check for it — see
 // ElementScopeParent.
 //
-// Ratchet impact: the schema lane widens whenever the producer starts mapping a
-// {type definition} shape it used to decline — the inline anonymous <simpleType>
-// of a local declaration (#229) and then the inline anonymous <complexType> of a
-// local OR global one (#340), both of which the InlineTypeDefinition arm of the
-// slot exists to hold.
-//
 // Construct only through NewElementDeclaration, or through
 // NewElementDeclarationOwningTypes when the declaration owns the anonymous
 // complex type of an inline <complexType> child, its own or an <alternative>'s;

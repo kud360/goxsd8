@@ -436,7 +436,7 @@ import (
 // decides it through the ordinary value.ValidateLexical pipeline; the sibling
 // <xsd:notation> declarations are not load-bearing for any instance verdict
 // (§3.14.1 is a schema-construction SCC satisfied by every fixture) and are not
-// parsed (STYLE D4). xsd:boolean facets (no Facets dir exists for it), the plural
+// parsed. xsd:boolean facets (no Facets dir exists for it), the plural
 // list-typed dirs (IDREFS, NMTOKENS), the NIST corpus, and UNION variety remain
 // out of scope until their backends land. LIST variety over a lexical-cohort item
 // primitive is now decided (issue #75, "The list-variety cohort" above): the
@@ -1247,7 +1247,7 @@ func execFacetsCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c 
 // The <xsd:notation> component declarations are NOT load-bearing for any instance
 // verdict (§3.14.1's "must name a declared notation" is a schema-construction SCC
 // satisfied by every fixture and irrelevant to instance-side membership), so they
-// are deliberately not parsed (STYLE D4). A case whose schema does not decode to
+// are deliberately not parsed. A case whose schema does not decode to
 // the two-step shape, whose base step does not restrict NOTATION, or that pairs an
 // inapplicable facet with NOTATION is declined (Fail, a recorded gap).
 func execNotationFacetsCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c caseSpec) Status {
@@ -2288,7 +2288,7 @@ type itemSchema struct {
 
 // decodeItemAttrTypes parses the sibling datatypes.xsd into a name -> primitive
 // local-name lookup, reading the fixture itself rather than hand-typing the
-// name->type table (STYLE 10; the same fixture-parsing discipline as
+// name->type table (STYLE D3; the same fixture-parsing discipline as
 // decodeTestedPrimitive). Attributes with no type (e.g. SOMITEM_DATATYPE_ANYTYPE)
 // are omitted, so an untyped attribute is never treated as a tested value.
 func decodeItemAttrTypes(path string) (map[string]string, error) {
@@ -3733,7 +3733,7 @@ func testedAttrs(se xml.StartElement) []xml.Attr {
 // which adds an attribute to a restricted anyURI content type). Everything else
 // these schemas carry — <include>/<import>/<redefine> with deliberately
 // unresolvable locations, <notation>, <annotation> — is not load-bearing for any
-// instance verdict and is deliberately not decoded (STYLE D4).
+// instance verdict and is deliberately not decoded.
 type anyURISchema struct {
 	Elements     []anyURIElemDecl    `xml:"element"`
 	SimpleTypes  []anyURISimpleType  `xml:"simpleType"`

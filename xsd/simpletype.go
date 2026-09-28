@@ -48,7 +48,7 @@ const ruleSTPropsCorrect xsderr.Rule = "st-props-correct"
 // SimpleType.Members. Storing a copy on the branch as well would be one fact in
 // two encodings (STYLE D3), and minting a fresh data-carrying branch per
 // Variety call would additionally allocate a component-identity-carrying value
-// on every read with no measured hot path (STYLE D3/D4).
+// on every read with no measured hot path (STYLE D3).
 //
 // This is deliberately NOT the same type as builtin.Variety, and the two are
 // not unified. builtin.Variety is the pre-resolution data-table shape: it has

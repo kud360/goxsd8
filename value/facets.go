@@ -138,7 +138,7 @@ var errTypeFault = errors.New("value: a fault of the type or the backend, not a 
 //
 // It WRAPS errTypeFault rather than sitting beside it: a precondition fault is one
 // kind of type fault, so the narrow predicate and the wide one read one chain and
-// the classification has a single encoding (STYLE T4/D4).
+// the classification has a single encoding (STYLE T4/D3).
 var errFacetPrecondition = fmt.Errorf("%w: facet-pipeline precondition violated", errTypeFault)
 
 // typeFault marks err as a fault of the type or the backend rather than a verdict

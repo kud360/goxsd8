@@ -325,11 +325,6 @@ func (s AttributeScope) Parent() (AttributeScopeParent, bool) {
 // dcl.att.global (§3.2.2.1) populates it here — so absence must be
 // representable on the declaration independently of the use.
 //
-// Ratchet impact: the schema lane widens whenever the producer starts mapping a
-// {type definition} shape it used to decline — the inline anonymous <simpleType>
-// of a local declaration (#229) and then of a global one (#733), both of which
-// the InlineTypeDefinition arm of the slot exists to hold.
-//
 // Construct only through NewAttributeDeclaration, which rejects the states
 // a-props-correct (§3.2.6.1) clause 1 forbids so they are unrepresentable
 // (STYLE T1). AttributeDeclaration is immutable after construction.

@@ -3015,7 +3015,7 @@ func (p *producer) disallowedSubstitutions(elem *Element) []xsd.DerivationMethod
 // {substitution group exclusions} on the HEAD of an affiliation edge, an
 // affiliation ·resolves· by expanded name and so names a top-level declaration,
 // and clause 3 keeps a local declaration out of the property in the first place.
-// Mapping it on the local path would add a fact with no reader (STYLE D4).
+// Mapping it on the local path would add a fact with no reader.
 func (p *producer) substitutionGroupExclusions(elem *Element) []xsd.DerivationMethod {
 	return p.effectiveDerivationSet(elem, "final", "finalDefault", elementFinalKeywords)
 }
