@@ -70,7 +70,7 @@ import (
 // The same document can appear twice in the report (once per namespace or
 // ·override pre-processing· it was reached under, parser.AssemblyReport's own
 // documentation); checking it twice is the same verdict twice, so no dedup index
-// is kept here (STYLE D3/D4).
+// is kept here (STYLE D3).
 func closureDecidable(report *parser.AssemblyReport) bool {
 	for _, d := range report.Documents() {
 		if !schemaShapeDecidable(d.Doc) {
@@ -95,7 +95,7 @@ func closureDecidable(report *parser.AssemblyReport) bool {
 //
 // The linear scan is the whole implementation on purpose — one case's closure is
 // scanned once per extra document, so an index would be redundant state (STYLE
-// D3) for no measured hot path (STYLE D4).
+// D3) for no measured hot path.
 func closureReached(report *parser.AssemblyReport, resolved string) bool {
 	for _, d := range report.Documents() {
 		if d.Location == resolved {
