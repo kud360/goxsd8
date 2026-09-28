@@ -420,11 +420,6 @@ func checkComplexTypeContext(loc xsderr.Loc, context ComplexTypeContext) error {
 // is IDENTITY, minted, opaque, and deliberately not derived from position. See
 // Loc, whose meaning this adds nothing to.
 //
-// Ratchet impact: the schema conformance lane widened when the producer started
-// building this shape (#176) and again when it started building the ANONYMOUS
-// one, {context} and all, for an inline <complexType> child of an <element>
-// (#340).
-//
 // Construct only through NewComplexType (named), NewComplexTypeOwningBase (named,
 // owning its base), NewAnonymousComplexType (anonymous) or
 // NewAnonymousComplexTypeOwningBase (anonymous, owning its base), which reject the

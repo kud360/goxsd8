@@ -101,10 +101,6 @@ func (AttributeDeclarationRef) attributeDeclarationRef()   {}
 // INPUT, not a component property, and is deliberately NOT stored here alongside
 // {required} — carrying both would be redundant state (STYLE D3).
 //
-// Ratchet impact: the producer wires real value constraints in as of #235,
-// moving the schema conformance lane (derivation-ok-restriction clause 3 via
-// key-evc, defaultbinding.go).
-//
 // {inheritable} is stored as the use's own inheritableSpec, not as the property.
 // The ref.att.local mapping (§3.2.2.3) falls back to [{attribute
 // declaration}].{inheritable} when the inheritable attribute is absent, and a
