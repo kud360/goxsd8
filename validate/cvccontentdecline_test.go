@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
 )
@@ -11,15 +12,36 @@ import (
 // The tests below pin that every content decline cvccomplexcontent.go makes is
 // RECORDED as an [Unevaluated] and not only logged ([contentCheck.decline]): a
 // decline that only logged would leave an empty Result reading as a walk that
-// performed every check it reached. xs:anySimpleType is the undecided type
-// throughout, no value backend mapping it (§3.16.7.1), so String Valid over it
-// is withheld rather than decided.
+// performed every check it reached. The undecided type is xs:decimal under
+// decimalGap, a backend that does not map it, so String Valid over it is
+// withheld rather than decided. xs:anySimpleType is not one: Datatype Valid
+// holds for every literal against a ·special· datatype (Datatypes §4.1.4), so
+// the walk decides it though no backend maps it (#1788).
+
+// decimalGap is the strict backend with xs:decimal unmapped: value.ValidateLexical
+// then reports a fault of the TYPE for xs:decimal, which is the decline the
+// tests below record. The schema is seeded under the strict backend, since
+// builtin.Seed maps every primitive; only the assessment reads this one.
+type decimalGap struct{ value.Backend }
+
+func (b decimalGap) Mapping(typ xsd.QName) (value.Mapping, bool) {
+	if typ == icBuiltin("decimal") {
+		return value.Mapping{}, false
+	}
+	return b.Backend.Mapping(typ)
+}
 
 // assessRecorded assesses root against schema and returns what the walk charged
 // and what it recorded as unevaluated.
 func assessRecorded(t *testing.T, schema *xsd.Schema, root Element) ([]*xsderr.Error, []Unevaluated) {
 	t.Helper()
-	v, err := New(schema, testBackend())
+	return assessRecordedWith(t, testBackend(), schema, root)
+}
+
+// assessRecordedWith is assessRecorded under backend.
+func assessRecordedWith(t *testing.T, backend value.Backend, schema *xsd.Schema, root Element) ([]*xsderr.Error, []Unevaluated) {
+	t.Helper()
+	v, err := New(schema, backend)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -56,19 +78,32 @@ func wantDeclines(t *testing.T, got []Unevaluated, want ...Unevaluated) {
 // charged under. The xs:integer control shows the record is the decline's and
 // not every simple-typed element's.
 func TestWithheldSimpleTypeValueIsRecorded(t *testing.T) {
-	got, undecided := assessRecorded(t, simpleTypedSchema(t, icBuiltin("anySimpleType"), nil, false), cRoot("#x"))
+	schema := simpleTypedSchema(t, icBuiltin("decimal"), nil, false)
+	got, undecided := assessRecordedWith(t, decimalGap{testBackend()}, schema, cRoot("#1.5"))
 	wantSilence(t, got, "a withheld String Valid verdict charges nothing")
 	wantDeclines(t, undecided, Unevaluated{rule: ruleCvcType, loc: loc(1, 1), msg: "cvc-type clause 3.1.3"})
 
-	got, undecided = assessRecorded(t, simpleTypedSchema(t, icBuiltin("integer"), nil, false), cRoot("#42"))
-	wantSilence(t, got, "42 is an xs:integer")
+	got, undecided = assessRecorded(t, schema, cRoot("#1.5"))
+	wantSilence(t, got, "1.5 is an xs:decimal")
 	wantDeclines(t, undecided)
+}
+
+// A ·special· ·governing type definition· is DECIDED: Datatype Valid holds for
+// every literal against it (Datatypes §4.1.4, cvc-datatype-valid), so cvc-type
+// clause 3.1.3 is satisfied with neither a charge nor a record, though no
+// backend maps either type.
+func TestSpecialSimpleTypeValueIsDecided(t *testing.T) {
+	for _, typ := range []string{"anySimpleType", "anyAtomicType"} {
+		got, undecided := assessRecorded(t, simpleTypedSchema(t, icBuiltin(typ), nil, false), cRoot("#x"))
+		wantSilence(t, got, "Datatype Valid holds for every literal against xs:"+typ)
+		wantDeclines(t, undecided)
+	}
 }
 
 // cvc-complex-type clause 1.2's ·initial value· half, withheld over a simple
 // {content type}, is recorded at the CONTAINING element.
 func TestWithheldSimpleContentValueIsRecorded(t *testing.T) {
-	got, undecided := assessRecorded(t, simpleContentSchema(t, icBuiltin("anySimpleType")), cRoot("#x"))
+	got, undecided := assessRecordedWith(t, decimalGap{testBackend()}, simpleContentSchema(t, icBuiltin("decimal")), cRoot("#1.5"))
 	wantSilence(t, got, "a withheld String Valid verdict charges nothing")
 	wantDeclines(t, undecided, Unevaluated{rule: ruleCvcComplexType, loc: loc(1, 1), msg: "cvc-complex-type clause 1.2"})
 }
@@ -76,14 +111,22 @@ func TestWithheldSimpleContentValueIsRecorded(t *testing.T) {
 // An undecided comparison against a fixed {value constraint} (cvc-elt clause
 // 5.2.2.2.2) is recorded after the cvc-type clause 3.1.3 record the same
 // undecided type makes: a decline sets no charge, so it silences no later
-// clause, and each withheld clause is its own record.
+// clause, and each withheld clause is its own record. Over xs:anySimpleType the
+// comparison alone is undecided — its value space has no lexical mapping that
+// is a function (Datatypes §3.2.1.2) — while clause 3.1.3 is decided.
 func TestUndecidedFixedValueComparisonIsRecorded(t *testing.T) {
-	fixed := xsd.NewValueConstraint(xsd.ValueFixed, "x", nil, nil)
-	got, undecided := assessRecorded(t, simpleTypedSchema(t, icBuiltin("anySimpleType"), &fixed, false), cRoot("#x"))
+	fixed := xsd.NewValueConstraint(xsd.ValueFixed, "1.5", nil, nil)
+	got, undecided := assessRecordedWith(t, decimalGap{testBackend()},
+		simpleTypedSchema(t, icBuiltin("decimal"), &fixed, false), cRoot("#1.5"))
 	wantSilence(t, got, "an undecided comparison charges nothing")
 	wantDeclines(t, undecided,
 		Unevaluated{rule: ruleCvcType, loc: loc(1, 1), msg: "cvc-type clause 3.1.3"},
 		Unevaluated{rule: ruleCvcElt, loc: loc(1, 1), msg: "cvc-elt clause 5.2.2.2.2"})
+
+	fixed = xsd.NewValueConstraint(xsd.ValueFixed, "x", nil, nil)
+	got, undecided = assessRecorded(t, simpleTypedSchema(t, icBuiltin("anySimpleType"), &fixed, false), cRoot("#x"))
+	wantSilence(t, got, "an undecided comparison charges nothing")
+	wantDeclines(t, undecided, Unevaluated{rule: ruleCvcElt, loc: loc(1, 1), msg: "cvc-elt clause 5.2.2.2.2"})
 }
 
 // A {content type} xsd.Schema.ContentMatcher declines leaves each element

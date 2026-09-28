@@ -340,14 +340,16 @@ func TestWildcardDoesNotSilenceClauseThree(t *testing.T) {
 // reached, whatever {value constraint} the use carries. The fixed and default
 // rows are the same silence for that one reason, which is what makes this the
 // control for the typed charges in cvcattribute_test.go: those fire only
-// because their declaration names a type this backend governs.
+// because their declaration names a type this backend governs. The decline is
+// RECORDED as an [Unevaluated] at the attribute, and not only logged.
 func TestMatchedAttributeWithoutATypeIsDeclined(t *testing.T) {
 	fixed := xsd.NewValueConstraint(xsd.ValueFixed, "1", nil, nil)
 	dflt := xsd.NewValueConstraint(xsd.ValueDefault, "1", nil, nil)
 	for _, vc := range []*xsd.ValueConstraint{nil, &fixed, &dflt} {
 		uses := []xsd.AttributeUse{aUse(t, "id", true, vc)}
-		wantSilence(t, assessRoot(t, attributedRoot(local("id")), uses, nil),
-			"a declaration with no {type definition} yields no ·actual value· to judge")
+		got, undecided := assessRecorded(t, governedSchema(t, uses, nil), attributedRoot(local("id")))
+		wantSilence(t, got, "a declaration with no {type definition} yields no ·actual value· to judge")
+		wantDeclines(t, undecided, Unevaluated{rule: ruleCvcAttribute, loc: loc(1, 10), msg: "cvc-attribute clause 3"})
 		if outcomes := assessOutcomes(t, attributedRoot(local("id")), uses, nil); !slices.Equal(outcomes, []string{"3/declined"}) {
 			t.Errorf("assessed %v, want cvc-attribute clause 3 DECLINED", outcomes)
 		}
@@ -378,6 +380,10 @@ func TestInstanceAttributesAreExemptFromClauseTwo(t *testing.T) {
 			t.Errorf("assessed xsi:%s as %v, want %v — EXEMPT from clause 2 rather than matched", n, outcomes, want)
 		}
 	}
+	// xsi:type's clause 3 decline is recorded at the attribute, not only logged.
+	_, undecided := assessRecorded(t, governedSchema(t, []xsd.AttributeUse{aUse(t, "id", false, nil)}, nil),
+		attributedRoot(xsi("type")))
+	wantDeclines(t, undecided, Unevaluated{rule: ruleCvcAttribute, loc: loc(1, 10), msg: "cvc-attribute clause 3"})
 	// Two of them charge nothing anywhere, and the other two are charged by
 	// rules that are not clause 2: this root's declaration is not {nillable},
 	// so cvc-elt clause 3.1 charges xsi:nil's mere presence (cvcelt_test.go),

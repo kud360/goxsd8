@@ -328,14 +328,17 @@ func TestSimpleContentConcatenatesEveryTextRun(t *testing.T) {
 	wantContentCharge(t, cAssess(t, schema, cRoot("#4", "#-2")), "cvc-complex-type", "1.2", loc(1, 1))
 }
 
-// An ungoverned {simple type definition} DECLINES rather than charging: no
-// backend maps xs:anySimpleType, and value.ValidateLexical reports that under
-// cvc-datatype-valid exactly as it reports a real rejection (#774).
-func TestSimpleContentDeclinesAnUngovernedType(t *testing.T) {
-	schema := simpleContentSchema(t, xsd.QName{Space: xsd.XMLSchemaNS, Local: "anySimpleType"})
-
-	wantSilence(t, cAssess(t, schema, cRoot("#anything at all")),
-		"an ungoverned type is a backend gap, not a verdict about the ·initial value·")
+// A ·special· {simple type definition} is DECIDED valid, neither charged nor
+// declined, though no backend maps it: Datatype Valid (Datatypes §4.1.4) holds
+// for every literal against xs:anySimpleType and xs:anyAtomicType (#1788). The
+// decline over a type the backend does not map is
+// TestWithheldSimpleContentValueIsRecorded's.
+func TestSimpleContentDecidesASpecialType(t *testing.T) {
+	for _, typ := range []string{"anySimpleType", "anyAtomicType"} {
+		got, undecided := assessRecorded(t, simpleContentSchema(t, icBuiltin(typ)), cRoot("#anything at all"))
+		wantSilence(t, got, "Datatype Valid holds for every literal against xs:"+typ)
+		wantDeclines(t, undecided)
+	}
 }
 
 // One element carries at most one content charge: the first, at the offending

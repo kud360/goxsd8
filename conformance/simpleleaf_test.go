@@ -45,6 +45,10 @@ func TestInstanceExecutorDecidesSimpleLeafRoot(t *testing.T) {
 				`<xs:simpleType name="U"><xs:union memberTypes="L xs:boolean"/></xs:simpleType>`,
 			`<known>1 2 3</known>`,
 		},
+		// Datatype Valid holds for every literal against the two ·special·
+		// datatypes (Datatypes §4.1.4), so validate decides both (#1788).
+		{"an xs:anySimpleType-typed leaf root", `<xs:element name="known" type="xs:anySimpleType"/>`, `<known>x</known>`},
+		{"an xs:anyAtomicType-typed leaf root", `<xs:element name="known" type="xs:anyAtomicType"/>`, `<known>x</known>`},
 	}
 	for _, tc := range cases {
 		if !exec(instanceCase(t, tc.schemaBody, tc.instance, true)).IsPass() {
@@ -129,13 +133,14 @@ func TestInstanceExecutorDeclinesOutsideSimpleLeafRoot(t *testing.T) {
 
 // TestInstanceExecutorDeclinesUnevaluatedLeaf proves a simple-leaf-root shape
 // whose walk RECORDED a check it did not perform declines rather than reading
-// the empty violation list as "valid": validate's cvc-type clause 3.1.3 decline
-// over a type no backend maps (#1738 routed it into Unevaluated), and an
+// the empty violation list as "valid": validate's cvc-elt clause 5.2.2.2.2
+// decline over a fixed {value constraint} it cannot compare in
+// xs:anySimpleType's value space (#1738 routed it into Unevaluated), and an
 // assertions facet, whose {test} validate records and never evaluates.
 func TestInstanceExecutorDeclinesUnevaluatedLeaf(t *testing.T) {
 	exec := newInstanceExec()
 	for _, tc := range []struct{ why, schemaBody string }{
-		{"String Valid withheld over xs:anySimpleType", `<xs:element name="known" type="xs:anySimpleType"/>`},
+		{"a fixed-value comparison withheld over xs:anySimpleType", `<xs:element name="known" type="xs:anySimpleType" fixed="x"/>`},
 		{
 			"an unevaluated assertions facet",
 			`<xs:element name="known" type="A"/><xs:simpleType name="A"><xs:restriction base="xs:string">` +

@@ -624,11 +624,11 @@ func (c *contentCheck) fixedActualValue(w *walk, f xsd.ValueConstraint) {
 // [value.IsDatatypeVerdict] classification: an ungoverned simple type reports
 // under cvc-datatype-valid exactly as a genuine rejection does, and charging it
 // would reject every element whose character content this backend cannot read.
-// RULED permanent by #774 (STYLE P3b), on matchedAttribute's terms. An
-// undecidable ·validating type· withholds String Valid clause 3's verdict on
-// the terms [walk.entitiesDeclared] states. Either decline is recorded by the
-// caller as an [Unevaluated] under the rule it withholds ([contentCheck.decline]),
-// unlike matchedAttribute's, which logs alone.
+// RULED permanent by #774 (STYLE P3b), on matchedAttribute's terms; a ·special·
+// type is decided and never reaches it (isSpecial). An undecidable ·validating
+// type· withholds String Valid clause 3's verdict on the terms
+// [walk.entitiesDeclared] states. Either decline is recorded by the caller as an
+// [Unevaluated] under the rule it withholds ([contentCheck.decline]).
 //
 // st's assertion sites are recorded BEFORE the decline ([walk.simpleAssertions],
 // cvcassertion.go), because it leaves the element's ·initial value· to be read
@@ -738,30 +738,19 @@ func (c *contentCheck) chargeCause(w *walk, rule xsderr.Rule, clause string, loc
 	c.log(w, c.e.Name(), loc, rule, clause, "charged")
 }
 
-// decline records one content check this element REACHED and did not perform
-// as an [Unevaluated] under rule — the bare ID the check would have been
-// charged under, the clause going in the message — and logs it as "declined"
-// at clause. Recording and logging are one call so a site cannot do one
-// without the other: a decline that only logged would leave an empty [Result]
-// reading as a walk that checked everything it reached.
-//
-// Unlike a charge it leaves c.charged alone: nothing was decided, so no later
-// clause is silenced by it.
+// decline records one content check this element REACHED and did not perform,
+// on [walk.decline]'s terms. Unlike a charge it leaves c.charged alone: nothing
+// was decided, so no later clause is silenced by it.
 func (c *contentCheck) decline(w *walk, name xsd.QName, loc xsderr.Loc, rule xsderr.Rule, clause, format string, args ...any) {
-	w.res.unevaluated = append(w.res.unevaluated, newUnevaluated(rule, loc, format, args...))
-	c.log(w, name, loc, rule, clause, "declined")
+	w.decline("assessing content", name, loc, rule, clause, format, args...)
 }
 
 // log records one content decision: which rule and clause settled it, and how
-// (STYLE L1). A check that settles nothing logs nothing — the walk's own
-// "assessing element"/"assessing text" lines already record the visit.
+// (STYLE L1, [walk.logDecision]). A check that settles nothing logs nothing —
+// the walk's own "assessing element"/"assessing text" lines already record the
+// visit.
 func (c *contentCheck) log(w *walk, name xsd.QName, loc xsderr.Loc, rule xsderr.Rule, clause, outcome string) {
-	if !w.log.Enabled(context.Background(), slog.LevelDebug) {
-		return
-	}
-	w.log.LogAttrs(context.Background(), slog.LevelDebug, "assessing content",
-		slog.Any("name", name), slog.Any("loc", loc), slog.String("rule", string(rule)),
-		slog.String("clause", clause), slog.String("outcome", outcome))
+	w.logDecision("assessing content", name, loc, rule, clause, outcome)
 }
 
 // attributedTo names what an item was ·attributed to· (§3.4.4.4) for the log,

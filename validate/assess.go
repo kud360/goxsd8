@@ -850,20 +850,26 @@ func (w *walk) requiredAttributeUses(e Element, attrs []Attribute, governing xsd
 	}
 }
 
-// logAttribute records one attribute information item's assessment: its
-// ·expanded name· and location always, and the rule, clause and outcome that
-// settled it wherever anything did (STYLE L1). An attribute assessed against
-// no ·governing type definition· has no rule to name and its line carries
-// none — the walk visited it and decided nothing.
+// logAttribute records one attribute information item's assessment on
+// [walk.logDecision]'s terms. An attribute assessed against no ·governing type
+// definition· has no rule to name and its line carries none — the walk visited
+// it and decided nothing.
+func (w *walk) logAttribute(a Attribute, rule xsderr.Rule, clause, outcome string) {
+	w.logDecision("assessing attribute", a.Name(), a.Loc(), rule, clause, outcome)
+}
+
+// logDecision writes one event line (STYLE L1): the ·expanded name· and
+// location of the item decided about always, and the rule, clause and outcome
+// that settled it wherever anything did.
 //
 // An empty clause drops the key rather than emitting it empty: cvc-au is one
 // undivided sentence with no numbered clauses, so there is no clause to name
 // and a "clause=" with nothing after it would read as a missing value.
-func (w *walk) logAttribute(a Attribute, rule xsderr.Rule, clause, outcome string) {
+func (w *walk) logDecision(event string, name xsd.QName, loc xsderr.Loc, rule xsderr.Rule, clause, outcome string) {
 	if !w.log.Enabled(context.Background(), slog.LevelDebug) {
 		return
 	}
-	attrs := []slog.Attr{slog.Any("name", a.Name()), slog.Any("loc", a.Loc())}
+	attrs := []slog.Attr{slog.Any("name", name), slog.Any("loc", loc)}
 	if rule != "" {
 		attrs = append(attrs, slog.String("rule", string(rule)))
 		if clause != "" {
@@ -871,7 +877,29 @@ func (w *walk) logAttribute(a Attribute, rule xsderr.Rule, clause, outcome strin
 		}
 		attrs = append(attrs, slog.String("outcome", outcome))
 	}
-	w.log.LogAttrs(context.Background(), slog.LevelDebug, "assessing attribute", attrs...)
+	w.log.LogAttrs(context.Background(), slog.LevelDebug, event, attrs...)
+}
+
+// decline records one check the walk REACHED and did not perform as an
+// [Unevaluated] under rule — the bare ID the check would have been charged
+// under, the clause going in the message — and logs it as "declined" at clause
+// under event, naming the item at loc. Recording and logging are one call so a
+// site cannot do one without the other: a decline that only logged would leave
+// an empty [Result] reading as a walk that checked everything it reached.
+//
+// Every decline site of the package calls it, directly or through
+// [contentCheck.decline], [walk.declineAttribute], [walk.declineID] or
+// [icTarget.decline], except the ones [Unevaluated]'s own doc names as not
+// recorded.
+func (w *walk) decline(event string, name xsd.QName, loc xsderr.Loc, rule xsderr.Rule, clause, format string, args ...any) {
+	w.res.unevaluated = append(w.res.unevaluated, newUnevaluated(rule, loc, format, args...))
+	w.logDecision(event, name, loc, rule, clause, "declined")
+}
+
+// declineAttribute is [walk.decline] for a check on the attribute information
+// item a, recorded at a's own location.
+func (w *walk) declineAttribute(a Attribute, rule xsderr.Rule, clause, format string, args ...any) {
+	w.decline("assessing attribute", a.Name(), a.Loc(), rule, clause, format, args...)
 }
 
 // logSkipped records the one child the walk does not assess at all: cvc-assess-elt

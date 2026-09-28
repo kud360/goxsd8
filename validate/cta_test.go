@@ -219,9 +219,11 @@ func TestUnevaluableTestIsRecordedAsUnevaluated(t *testing.T) {
 		ctaAlt{"count(@kind) > 0", "Second"},
 		ctaAlt{"@kind = 'cd'", "First"})
 	// The first alternative selects, so the second is never tried: a record
-	// here would report a check the scan did not reach.
-	if got := res.Unevaluated(); got != nil {
-		t.Fatalf("Unevaluated() = %v, want none — the scan stopped before the unevaluable alternative", messages(got))
+	// here would report a check the scan did not reach. First's kind use is
+	// typeless (aUse), so the element's own attribute half records its
+	// cvc-attribute decline, and that one record is all there is.
+	if got := res.Unevaluated(); len(got) != 1 || got[0].Rule() != ruleCvcAttribute {
+		t.Fatalf("Unevaluated() = %v, want only the kind attribute's cvc-attribute record — the scan stopped before the unevaluable alternative", messages(got))
 	}
 	res = ctaResult(t, ctaRoot("book"),
 		ctaAlt{"@kind = 'cd'", "First"},
