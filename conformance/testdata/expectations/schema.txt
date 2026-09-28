@@ -881,7 +881,7 @@ MS-Additional2006-07-15/addB102/schema/addB102 pass
 MS-Additional2006-07-15/addB103/schema/addB103 pass
 MS-Additional2006-07-15/addB104/schema/addB104 pass
 MS-Additional2006-07-15/addB105/schema/addB105 pass
-MS-Additional2006-07-15/addB106/schema/addB106 fail
+MS-Additional2006-07-15/addB106/schema/addB106 pass
 MS-Additional2006-07-15/addB107/schema/addB107 pass
 MS-Additional2006-07-15/addB108/schema/addB108 fail
 MS-Additional2006-07-15/addB109/schema/addB109 pass
