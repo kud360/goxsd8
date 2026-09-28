@@ -117,6 +117,12 @@ func (p *producer) identityConstraintsOf(hostElem *Element) ([]xsd.IdentityConst
 // the form-specific clauses live with their form (2 and 3 in
 // constructIdentityConstraint, 4 and 5 in referencedIdentityConstraint).
 //
+// The element's OWN children, and its <selector>'s and <field>s', are ordered
+// against xs:keybase ahead of the fork (checkIdentityConstraintChildOrder,
+// #1786), so every src-identity-constraint clause over either form stands behind
+// that walk — the run order checkS4SChildOrder's doc records for every src-*
+// charge (#1246).
+//
 //   - The name= form DEFINES a component. It is built (once per expanded name)
 //     and registered as one of the schema's {identity-constraint definitions}
 //     (§3.17.1) HERE, at the definition's own document-order position — never at
@@ -137,6 +143,9 @@ func (p *producer) identityConstraintsOf(hostElem *Element) ([]xsd.IdentityConst
 // xsd.NewIdentityConstraint's, charged c-props-correct clause 1 (§3.11.6.1)
 // against §3.11.1's Required {name} — the same split topLevelName draws (#675).
 func (p *producer) produceIdentityConstraint(el *Element, category xsd.IdentityConstraintCategory) (xsd.IdentityConstraint, error) {
+	if err := checkIdentityConstraintChildOrder(el); err != nil {
+		return xsd.IdentityConstraint{}, err
+	}
 	_, hasName := el.Attr("name")
 	if _, hasRef := el.Attr("ref"); hasRef == hasName {
 		return xsd.IdentityConstraint{}, xsderr.New(ruleSrcIdentityConstraint, el.Loc(),
@@ -200,6 +209,36 @@ func (p *producer) referencedIdentityConstraint(el *Element, category xsd.Identi
 			"<%s ref=%q> names a definition whose {identity-constraint category} is %s, but src-identity-constraint clause 5 requires it to match the referring element's name", local, qn, src.category)
 	}
 	return src.owner.buildIdentityConstraint(qn, src.elem, src.category)
+}
+
+// checkIdentityConstraintChildOrder orders the children of one
+// <unique>/<key>/<keyref> against s4sKeybase, then the children of each
+// <selector> and <field> among them against s4sSelector and s4sField, in
+// document order (checkS4SChildOrder, #1786). The model is the same for the
+// name= and the ref= form.
+func checkIdentityConstraintChildOrder(el *Element) error {
+	if err := checkS4SChildOrder(el, s4sKeybase); err != nil {
+		return err
+	}
+	for _, child := range el.Children() {
+		c, ok := child.(*Element)
+		if !ok || c.Name().Space() != xsd.XMLSchemaNS {
+			continue
+		}
+		var m s4sModel
+		switch c.Name().Local() {
+		case "selector":
+			m = s4sSelector
+		case "field":
+			m = s4sField
+		default:
+			continue // <annotation>, the one other name s4sKeybase admits
+		}
+		if err := checkS4SChildOrder(c, m); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // checkIdentityConstraintRefBare enforces src-identity-constraint clause 4
@@ -270,6 +309,14 @@ func (p *producer) buildIdentityConstraint(name xsd.QName, el *Element, category
 // refer attribute). It does NOT memoize — that bookkeeping lives in
 // buildIdentityConstraint.
 //
+// It orders el's children (checkIdentityConstraintChildOrder) ahead of both
+// clauses, although produceIdentityConstraint already has on the path through
+// el's own position. A ref= written EARLIER in document order builds el through
+// referencedIdentityConstraint before that position is reached, and this walk
+// is what keeps clauses 2 and 3 and the XPath charges below behind the grammar
+// fault on that path too (#1246). The direct path walks el twice; the memo
+// bounds the second walk to one per definition.
+//
 // It also charges c-selector-xpath (§3.11.6.2) and c-fields-xpaths (§3.11.6.3)
 // over each XPath Expression record as it is built, which is the one altitude
 // holding the offending <selector>/<field> element's own Loc — xsd's constructor
@@ -285,6 +332,9 @@ func (p *producer) buildIdentityConstraint(name xsd.QName, el *Element, category
 // gets no charge, which is this rule family's existing norm — xsd.NewTypeAlternative
 // does not charge ta-props-correct clause 2 either — and not a new hole.
 func (p *producer) constructIdentityConstraint(name xsd.QName, el *Element, category xsd.IdentityConstraintCategory) (xsd.IdentityConstraint, error) {
+	if err := checkIdentityConstraintChildOrder(el); err != nil {
+		return xsd.IdentityConstraint{}, err
+	}
 	local := el.Name().Local()
 	selectorEl := childElement(el, xsd.XMLSchemaNS, "selector")
 	if selectorEl == nil {

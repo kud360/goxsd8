@@ -99,22 +99,24 @@ var s4sStructuralTail = slices.Concat([]s4sSlot{
 // inherited from xs:annotated (:4426).
 var s4sAnnotationFirst = []s4sSlot{{admits: s4sNames("annotation")}}
 
-// The twelve models checkS4SChildOrder is charged with. Eight are the element
+// The fifteen models checkS4SChildOrder is charged with. Eight are the element
 // positions a complex type is written through — xs:complexTypeModel appearing
 // twice, once for each of its disjuncts a <complexType> can be dispatched on. The
-// last four are the declarations whose own children were ordered against no
+// next four are the declarations whose own children were ordered against no
 // content model at all until #1076 and #1275: <element>, <attribute>,
-// <simpleType> and <alternative>. Each model is quoted verbatim from its XML
-// Representation Summary, and its slots are that quotation read left to right.
+// <simpleType> and <alternative>. The last three are an identity constraint's
+// <unique>/<key>/<keyref> and the <selector> and <field> under it, ordered since
+// #1786. Each model is quoted verbatim from its XML Representation Summary, and
+// its slots are that quotation read left to right.
 //
 // These are TRANSCRIBED from the spec, not generated (PRINCIPLES 26). Generating
 // them means flattening Appendix A itself — resolving xs:group refs and the
 // xs:restriction/xs:extension chains through xs:annotated — for the whole schema
-// for schema documents rather than these twelve, which is its own tool and its own
-// grounding; the twelve here are pinned against their quoted model text and against
-// the disjointness their fault classification rests on (the tests beside this
-// file), and rejectProhibitedAttrs (produce.go) already transcribes s4s facts on
-// the same footing.
+// for schema documents rather than these fifteen, which is its own tool and its
+// own grounding; the fifteen here are pinned against their quoted model text and
+// against the disjointness their fault classification rests on (the tests beside
+// this file), and rejectProhibitedAttrs (produce.go) already transcribes s4s facts
+// on the same footing.
 var (
 	// s4sComplexTypeWrapped is xs:complexTypeModel (:4757) on the two disjuncts
 	// that delegate: a <complexType> carrying a <simpleContent> or a
@@ -296,7 +298,85 @@ var (
 			{admits: s4sNames("simpleType", "complexType")},
 		}),
 	}
+
+	// s4sKeybase is ONE model for <unique>, <key> and <keyref>, in both the name=
+	// and the ref= form: Appendix A types <unique> and <key> xs:keybase outright
+	// (:5672, :5678) and <keyref> extends it with a refer attribute and no element
+	// position (:5683), and the three summaries (:2991, :2997, :3004) quote the
+	// identical content.
+	//
+	// "(selector, field+)?" is ONE optional group whose two halves are not
+	// separately optional, and s4sSlot has no required/minOccurs notion to say so:
+	// the walk orders the children that are present and sees neither half missing.
+	// A <field> with no <selector> is src-identity-constraint clause 2's on the name=
+	// form (constructIdentityConstraint), a <selector> with no <field> is
+	// c-props-correct clause 1's (xsd.NewIdentityConstraint), and either half on
+	// the ref= form is clause 4's (checkIdentityConstraintRefBare).
+	s4sKeybase = s4sModel{
+		grammar: "xs:keybase",
+		spec:    "xmlschema11-1.md:2991",
+		model:   "(annotation?, (selector, field+)?)",
+		slots: slices.Concat(s4sAnnotationFirst, []s4sSlot{
+			{admits: s4sNames("selector")},
+			{admits: s4sNames("field"), repeated: true},
+		}),
+	}
+
+	// s4sSelector is the <selector> element's own model (:5599): xs:annotated
+	// extended with the xpath and xpathDefaultNamespace ATTRIBUTES and no element
+	// position, leaving the "annotation?" it inherits.
+	s4sSelector = s4sModel{
+		grammar: "xs:selector",
+		spec:    "xmlschema11-1.md:3010",
+		model:   "(annotation?)",
+		slots:   s4sAnnotationFirst,
+	}
+
+	// s4sField is the <field> element's own model (:5624), the same shape as
+	// s4sSelector's at a different line — quoted twice rather than shared, on
+	// s4sComplexContentWrapper's reasoning.
+	s4sField = s4sModel{
+		grammar: "xs:field",
+		spec:    "xmlschema11-1.md:3016",
+		model:   "(annotation?)",
+		slots:   s4sAnnotationFirst,
+	}
 )
+
+// s4sVowelArticles is the indefinite article each vowel-letter name the models
+// above position takes before it in checkS4SChildOrder's order fault, chosen by
+// the SOUND the name opens with (#1098). A letter test is wrong for this
+// vocabulary: <union> and <unique> open with a vowel letter and the /juː/ sound,
+// and take "a". Every name missing here takes "a", which is right for every
+// consonant-letter name the models position, and TestS4SVowelNamesHaveArticles
+// fails on a vowel-letter name a model admits that this table does not decide.
+var s4sVowelArticles = []struct{ local, article string }{
+	{"all", "an"},
+	{"alternative", "an"},
+	{"annotation", "an"},
+	{"anyAttribute", "an"},
+	{"assert", "an"},
+	{"assertion", "an"},
+	{"assertions", "an"},
+	{"attribute", "an"},
+	{"attributeGroup", "an"},
+	{"enumeration", "an"},
+	{"explicitTimezone", "an"},
+	{"extension", "an"},
+	{"openContent", "an"},
+	{"union", "a"},
+	{"unique", "a"},
+}
+
+// s4sArticle returns the indefinite article local takes, from s4sVowelArticles.
+func s4sArticle(local string) string {
+	for _, e := range s4sVowelArticles {
+		if e.local == local {
+			return e.article
+		}
+	}
+	return "a"
+}
 
 // checkS4SChildOrder rejects a child of owner that m's content model does not
 // admit where it is written: a child before a position it must follow, a second
@@ -347,7 +427,7 @@ var (
 // The order is this walk FIRST: a document whose children the content model does
 // not admit is answered by the grammar fault, and no src-* verdict is reached
 // over a shape the grammar already rejects. That rule IS the membership, and it
-// takes no roster. Inside a production — the body that walks one of the twelve
+// takes no roster. Inside a production — the body that walks one of the fifteen
 // models above, and everything that body calls — EVERY src-* clause this parser
 // charges over the walked element or over anything beneath it is behind that
 // walk, with no exception, and a NEW charge takes the same order (#1246). The
@@ -416,8 +496,8 @@ func checkS4SChildOrder(owner *Element, m s4sModel) error {
 			return fmt.Errorf("parser: <%s> at %s repeats a position the schema for schema documents admits at most once among the children of the <%s> at %s: %s's content model (%s) is %s",
 				local, el.Loc(), owner.Name().Local(), owner.Loc(), m.grammar, m.spec, m.model)
 		}
-		return fmt.Errorf("parser: <%s> at %s is out of the child order the schema for schema documents requires of the <%s> at %s: %s's content model (%s) is %s, and a <%s> may not follow the children written before it here",
-			local, el.Loc(), owner.Name().Local(), owner.Loc(), m.grammar, m.spec, m.model, local)
+		return fmt.Errorf("parser: <%s> at %s is out of the child order the schema for schema documents requires of the <%s> at %s: %s's content model (%s) is %s, and %s <%s> may not follow the children written before it here",
+			local, el.Loc(), owner.Name().Local(), owner.Loc(), m.grammar, m.spec, m.model, s4sArticle(local), local)
 	}
 	return nil
 }
