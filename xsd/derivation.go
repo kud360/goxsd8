@@ -11,10 +11,11 @@ import (
 // Simple Type Definition D to its {base type definition} B. This package charges
 // its structural/variety-shape sub-clauses (1.1, 2.1, 2.2.1.1, 2.2.1.2, 2.2.2.1,
 // 2.2.2.3, 3.1, 3.2.1.1, 3.2.1.2, 3.2.2.1, 3.2.2.3) at construction time, plus
-// the list/union applicable-facet clauses 2.2.2.4 and 3.2.2.4 and the count- and
-// token-valued part of the facet-constraint clauses 1.3.2 / 2.2.2.5 / 3.2.2.5.
-// Its remaining facet-value sub-clauses need an applicability table or a value
-// space and are charged above this pure leaf — see SimpleType.CheckDerivation.
+// the list/union applicable-facet clauses 2.2.2.4 and 3.2.2.4 and the part of
+// the facet-constraint clauses 1.3.2 / 2.2.2.5 / 3.2.2.5 that reads counts,
+// keyword tokens, or which bound facets one step specifies. Its remaining
+// facet-value sub-clauses need an applicability table or a value space and are
+// charged above this pure leaf — see SimpleType.CheckDerivation.
 const ruleCosSTRestricts xsderr.Rule = "cos-st-restricts"
 
 // The precisionDecimal scale-facet Schema Component Constraints, charged at
@@ -61,9 +62,11 @@ const (
 // plain counts or keyword tokens — the subset of cos-st-restricts clause 1.3.2 /
 // 2.2.2.5 / 3.2.2.5 ("DF satisfies the constraints on facet components given in
 // the appropriate subsection of Constraining Facets") that this pure-leaf package
-// can decide without a value space. The rules whose operands ARE value-space
-// members — the four bound facets and enumeration — live in package value
-// (value/restriction.go), which this package must not depend on (PRINCIPLES 1).
+// can decide without a value space — plus the two bound-facet SCCs whose operand
+// is which facets a derivation step specifies, not what their {value}s are. The
+// rules whose operands ARE value-space members — the four bound facets' {value}s
+// and enumeration — live in package value (value/restriction.go), which this
+// package must not depend on (PRINCIPLES 1).
 const (
 	// ruleLengthValidRestriction is length valid restriction (§4.3.1.4,
 	// id="length-valid-restriction"): a restriction's length {value} must EQUAL
@@ -111,6 +114,14 @@ const (
 	// totalDigits" (§4.3.12.4, id="fractionDigits-totalDigits"), a same-type
 	// consistency SCC.
 	ruleFractionDigitsLETotalDigits xsderr.Rule = "fractionDigits-totalDigits"
+	// ruleMaxInclusiveMaxExclusive is "maxInclusive and maxExclusive" (§4.3.8.4,
+	// id="maxInclusive-maxExclusive"): the two may not both be specified in the
+	// same derivation step.
+	ruleMaxInclusiveMaxExclusive xsderr.Rule = "maxInclusive-maxExclusive"
+	// ruleMinInclusiveMinExclusive is "minInclusive and minExclusive" (§4.3.9.4,
+	// id="minInclusive-minExclusive"): the two may not both be specified in the
+	// same derivation step.
+	ruleMinInclusiveMinExclusive xsderr.Rule = "minInclusive-minExclusive"
 )
 
 // CheckDerivation enforces the cross-reference Simple Type Definition
@@ -178,6 +189,11 @@ const (
 //     consistency SCCs minLength ≤ maxLength and fractionDigits ≤ totalDigits)
 //     — via checkFacetRestrictions. These are the part of cos-st-restricts
 //     clause 1.3.2 / 2.2.2.5 / 3.2.2.5 decidable without a value space.
+//   - maxInclusive-maxExclusive (§4.3.8.4) and minInclusive-minExclusive
+//     (§4.3.9.4), which forbid specifying both bounds of one side at one
+//     derivation step — also via checkFacetRestrictions, in
+//     checkSameStepBoundPairs. They read which facets t's own step specifies and
+//     no {value}, so they need no value space either.
 //   - length-minLength-maxLength (§4.3.1.4) in FULL, also via
 //     checkFacetRestrictions: clauses 1.1/2.1, the same-{facets} value ordering,
 //     in checkLengthCoexistence, and clauses 1.2/2.2, the derivation-history
@@ -216,17 +232,17 @@ const (
 // Still deferred here, and why:
 //
 //   - cos-st-restricts clause 1.3.1 (a facet is applicable to an ATOMIC D) and
-//     the value-space half of 1.3.2 / 2.2.2.5 / 3.2.2.5 — the four bound facets
-//     and enumeration, which need a lexical→value mapping — and, for the same
-//     reason, the §4.3.7.4–§4.3.10.4 opposite-bound consistency SCCs, the
-//     value-typed counterpart of the count-valued minLength ≤ maxLength charged
-//     here. All live above this pure leaf: applicability against the generated
-//     per-primitive table, the value-space comparisons in
-//     value.CheckFacetRestriction. They are taken back as a finalize-time
-//     capability, SimpleTypeRestrictionChecker (restrictionchecker.go), which
-//     checkSimpleTypeDerivations puts every simple type an assembled Schema
-//     reaches to; builtin.NewRestrictionChecker is the implementation that wires
-//     the two halves together.
+//     the value-space half of 1.3.2 / 2.2.2.5 / 3.2.2.5 — the four bound
+//     facets' {value}s and enumeration, which need a lexical→value mapping —
+//     and, for the same reason, the §4.3.7.4–§4.3.10.4 opposite-bound
+//     consistency SCCs, the value-typed counterpart of the count-valued
+//     minLength ≤ maxLength charged here. All live above this pure leaf:
+//     applicability against the generated per-primitive table, the value-space
+//     comparisons in value.CheckFacetRestriction. They are taken back as a
+//     finalize-time capability, SimpleTypeRestrictionChecker
+//     (restrictionchecker.go), which checkSimpleTypeDerivations puts every
+//     simple type an assembled Schema reaches to; builtin.NewRestrictionChecker
+//     is the implementation that wires the two halves together.
 //
 // The two constructed-variety facet-shape clauses — 2.2.1.2 for a list and its
 // union sibling 3.2.1.2 — are BOTH charged here, in checkListGraph and
@@ -844,7 +860,9 @@ func checkScaleConsistency(r TypeResolver, t *SimpleType) error {
 // cannot cross it. base — t's already-resolved {base type definition} — is nil
 // only for xs:anySimpleType, which carries no facets, so the base-relative SCCs
 // are vacuous there; the count-facet consistency SCCs are not
-// restriction-specific and run on every type's own effective {facets}.
+// restriction-specific and run on every type's own effective {facets}, and the
+// same-step bound-pair SCCs on every type's own facets
+// (checkSameStepBoundPairs).
 func checkFacetRestrictions(r TypeResolver, t, base *SimpleType) error {
 	if base != nil {
 		loc := t.loc
@@ -874,7 +892,48 @@ func checkFacetRestrictions(r TypeResolver, t, base *SimpleType) error {
 			return err
 		}
 	}
+	if err := checkSameStepBoundPairs(t); err != nil {
+		return err
+	}
 	return checkFacetConsistency(r, t)
+}
+
+// checkSameStepBoundPairs charges "maxInclusive and maxExclusive" (§4.3.8.4,
+// id="maxInclusive-maxExclusive") and "minInclusive and minExclusive" (§4.3.9.4,
+// id="minInclusive-minExclusive"): "It is an ·error· for both ... to be specified
+// in the same derivation step of a Simple Type Definition."
+//
+// The operand is t's OWN facets — the set S its <restriction> specifies, which
+// §3.16.6.4 overlays onto the base's {facets} — never EffectiveFacets. A pair
+// split across two steps, one bound inherited and the other specified here, is
+// legal: the overlay keeps both kinds in {facets}, but neither step specified
+// both. No {value} is read, so the check needs no value space and holds however
+// far a backend maps the base.
+//
+// It runs before any applicability clause — checkVarietyApplicableFacets, later
+// in CheckDerivation, and 1.3.1 in the SimpleTypeRestrictionChecker after it —
+// so a pair on a type to which bounds are not applicable at all is charged under
+// the pair's rule. The SCC's text carries no applicability qualifier, and the
+// schema is rejected either way.
+func checkSameStepBoundPairs(t *SimpleType) error {
+	if err := checkSameStepBoundPair(t, FacetMaxInclusive, FacetMaxExclusive, ruleMaxInclusiveMaxExclusive); err != nil {
+		return err
+	}
+	return checkSameStepBoundPair(t, FacetMinInclusive, FacetMinExclusive, ruleMinInclusiveMinExclusive)
+}
+
+// checkSameStepBoundPair rejects t under rule when its own facets specify both
+// inclusive and exclusive — one side of checkSameStepBoundPairs.
+func checkSameStepBoundPair(t *SimpleType, inclusive, exclusive FacetKind, rule xsderr.Rule) error {
+	if _, ok := findFacet(t.ownFacets, inclusive); !ok {
+		return nil
+	}
+	if _, ok := findFacet(t.ownFacets, exclusive); !ok {
+		return nil
+	}
+	return xsderr.New(rule, t.loc,
+		"simple type restriction specifies both %s and %s in the same derivation step (%s)",
+		inclusive, exclusive, rule)
 }
 
 // checkCountRestriction charges one of the five count-valued "<facet> valid

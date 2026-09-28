@@ -131,7 +131,9 @@
 // relating a lower bound facet to an upper bound facet declared at the SAME
 // derivation step (minInclusive <= maxInclusive, minExclusive <= maxExclusive,
 // minExclusive < maxInclusive, minInclusive < maxExclusive), which are
-// standalone §4.3 SCCs rather than a clause of cos-st-restricts.
+// standalone §4.3 SCCs rather than a clause of cos-st-restricts. The two
+// same-step bound SCCs that compare no {value}, maxInclusive-maxExclusive and
+// minInclusive-minExclusive, are xsd.SimpleType.CheckDerivation's.
 //
 // Reach BOTH through builtin.NewRestrictionChecker, the
 // xsd.SimpleTypeRestrictionChecker installed at xsd.SchemaBuilder.FinalizeWith:

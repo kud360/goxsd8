@@ -450,3 +450,58 @@ func TestLengthDerivationHistory(t *testing.T) {
 		})
 	}
 }
+
+// TestSameStepBoundPairs covers maxInclusive-maxExclusive (§4.3.8.4) and
+// minInclusive-minExclusive (§4.3.9.4): both bounds of one side specified at ONE
+// derivation step are rejected under that side's rule, and the same two kinds
+// split across steps are accepted. The split rows are the negative control for
+// reading the overlaid {facets} instead of the step's own facets: every leaf
+// there has both kinds of the pair in its EffectiveFacets, so a check reading
+// them rejects it. builtin's TestSameStepBoundPairsFullCheck runs the same
+// shapes, with value-consistent {value}s, through the whole restriction checker.
+func TestSameStepBoundPairs(t *testing.T) {
+	f := func(kind FacetKind, v string) Facet { return NewFacet(kind, []string{v}, false) }
+	cases := []struct {
+		name     string
+		steps    [][]Facet // own facets per derivation step, outermost base first
+		wantRule xsderr.Rule
+	}{
+		{"maxInclusive and maxExclusive at one step",
+			[][]Facet{{f(FacetMaxInclusive, "5"), f(FacetMaxExclusive, "10")}}, ruleMaxInclusiveMaxExclusive},
+		{"minInclusive and minExclusive at one step",
+			[][]Facet{{f(FacetMinInclusive, "5"), f(FacetMinExclusive, "1")}}, ruleMinInclusiveMinExclusive},
+		{"inherited maxInclusive, own maxExclusive",
+			[][]Facet{{f(FacetMaxInclusive, "10")}, {f(FacetMaxExclusive, "5")}}, ""},
+		{"inherited maxExclusive, own maxInclusive",
+			[][]Facet{{f(FacetMaxExclusive, "10")}, {f(FacetMaxInclusive, "5")}}, ""},
+		{"inherited minInclusive, own minExclusive",
+			[][]Facet{{f(FacetMinInclusive, "1")}, {f(FacetMinExclusive, "5")}}, ""},
+		{"inherited minExclusive, own minInclusive",
+			[][]Facet{{f(FacetMinExclusive, "1")}, {f(FacetMinInclusive, "5")}}, ""},
+		{"both inherited from two ancestor steps",
+			[][]Facet{{f(FacetMaxInclusive, "10")}, {f(FacetMaxExclusive, "5")}, nil}, ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			st := mustPrim(t, "decimal")
+			var err error
+			for i, own := range c.steps {
+				st, err = newCheckedSimpleType(xsderr.Loc{}, QName{Space: "urn:test", Local: "step" + strconv.Itoa(i)},
+					RestrictionDerivation{}, st, own, nil)
+				if err != nil && i < len(c.steps)-1 {
+					t.Fatalf("ancestor step %d rejected: %v", i, err)
+				}
+			}
+			if c.wantRule == "" {
+				if err != nil {
+					t.Fatalf("pair split across derivation steps rejected: %v", err)
+				}
+				return
+			}
+			wantRule(t, err, c.wantRule)
+			if !strings.Contains(err.Error(), "same derivation step") {
+				t.Errorf("message %q does not name the same-step condition", err.Error())
+			}
+		})
+	}
+}
