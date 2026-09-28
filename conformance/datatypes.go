@@ -447,14 +447,14 @@ import (
 // "Hex" is a USER-DEFINED pattern-restricted simpleType, not a seeded strict-mapped
 // primitive (execListCase declines a non-seeded item type), and its instance shape
 // (a <Xml xmlns="TestNamespace"> root with three <Hex> list-valued children) matches
-// neither readFacetsCase's shapes (a single <foo>, or a root attribute the
-// restriction's <xsd:attribute> names) nor readListCohortCase's comp_foo/simpleTest
-// shape, so it is honestly declined (Fail), never false-accepted. Within the integer
-// family, the odd multi-element cases (e.g. Facets/int/test111092.xml, two named
-// restriction steps under distinct elements) do not fit readFacetsCase's instance
-// shapes and fall through to the instance lane as recorded gaps (issue #331 left
-// them there: this is a READER-shape limit, not the routing gap that issue closed).
-// The family's LIST-variety fixtures (byte009/long009/short009/unsignedByte007/
+// neither readFacetsCase's shapes (see facetsTestedValue) nor readListCohortCase's
+// comp_foo/simpleTest shape, so it is honestly declined (Fail), never
+// false-accepted. Within the integer family, the odd multi-element cases (e.g.
+// Facets/int/test111092.xml, two named restriction steps under distinct elements) do
+// not fit readFacetsCase's instance shapes and fall through to the instance lane as
+// recorded gaps (issue #331 left them there: this is a READER-shape limit, not the
+// routing gap that issue closed). The family's LIST-variety fixtures
+// (byte009/long009/short009/unsignedByte007/
 // unsignedInt007/unsignedLong007/unsignedShort007.xml) were claimed and decided by
 // issue #224. Their forty-eight NON-list siblings (byte001–008, long001–008,
 // short001–008, unsignedByte/Int/Long/Short001–006, each testing a value against
@@ -499,19 +499,13 @@ import (
 // <testGroup>'s schemaTest, so readFacetsCase falls back to that schema document
 // (facetsSchemaPath, issue #591) — which is how time_minInclusive006_1163.i is
 // decided. decimal_totalDigits004_1060.v carries no such attribute either, and is
-// decided through readFacetsCase's second shape: a root with no <foo> child whose
-// own unqualified attribute is the one the schema's restriction is declared on
-// carries the tested value (issue #593). The anyURI Facets/anyURI/anyURI_a*.xml and
-// anyURI_b*.xml cases, honest declines from the #124 landing, are now DECIDED by
-// their own reader and executor — see "The anyURI a*/b* multi-leaf cohort (issue
-// #190)" above. readFacetsCase itself decodes only those two shapes: it declines
-// several <foo> children whatever the root carries, and no <foo> child unless the
-// root carries the restriction's attribute. Of those eight files, anyURI_a004.xml
-// alone would fit the second shape — its root's att attribute, which
-// decodeRestriction pairs with the restriction — and be mis-read as one tested
-// value, so anyURIShapeCase's dispatch before facetsCase is what keeps it decided
-// whole. Of the anyURI/hexBinary/ base64Binary cases, readFacetsCase decides the
-// length/minLength/maxLength/ enumeration ones in the canonical <test><foo> shape.
+// decided through facetsTestedValue's zero-<foo> shape (issue #593). The anyURI
+// Facets/anyURI/anyURI_a*.xml and anyURI_b*.xml cases, honest declines from the #124
+// landing, are now DECIDED by their own reader and executor — see "The anyURI a*/b*
+// multi-leaf cohort (issue #190)" above; anyURI_a004.xml relies on that dispatch
+// order, as decodeRestriction's GAP marker states (#1803). Of the anyURI/hexBinary/
+// base64Binary cases, readFacetsCase decides the length/minLength/maxLength/
+// enumeration ones in the canonical <test><foo> shape.
 
 // synthNS namespaces the anonymous leaf types the facet cohort synthesizes. It
 // is deliberately outside xsd.XMLSchemaNS so a synthesized leaf is never mistaken
@@ -720,7 +714,7 @@ var notationFacetsCase = regexp.MustCompile(`msData/datatypes/Facets/NOTATION/NO
 // declare their schema with the namespace-qualified xsi:schemaLocation — so they
 // get their own reader and executor (readAnyURIShapeCase/execAnyURIShapeCase) and
 // are dispatched BEFORE facetsCase, whose reader would decline seven of them and
-// mis-read anyURI_a004.xml's root att attribute as its one tested value.
+// mis-read anyURI_a004.xml (decodeRestriction's GAP marker, #1803).
 // See "The anyURI a*/b* multi-leaf cohort" above.
 var anyURIShapeCase = regexp.MustCompile(`msData/datatypes/Facets/anyURI/anyURI_[ab][0-9]+\.xml$`)
 
@@ -2662,8 +2656,9 @@ func readFacetsCase(c caseSpec) (raw, base string, children []facetChild, ctx va
 // the NMTOKEN cohort's shape — or, when attrName is empty, its element content;
 // the root's attributes are never consulted. With no <foo>, the value is the
 // root's own unqualified attribute named attrName (issue #593); an empty
-// attrName or an absent root attribute declines, so a zero-<foo> instance is
-// never read as an empty tested value.
+// attrName or an absent root attribute declines, so no absent value is read as
+// empty. The zero-<foo> branch widens decodeRestriction's attribute-pairing gap:
+// see the GAP marker on decodeRestriction (#1803).
 func facetsTestedValue(inst facetsInstance, attrName string) (string, bool) {
 	if len(inst.Foos) == 0 {
 		return inst.rootAttr(attrName)
@@ -2693,14 +2688,12 @@ func facetsSchemaPath(c caseSpec, schemaLoc string) (string, bool) {
 	return c.schemaDoc, true
 }
 
-// facetsInstance mirrors the Facets cohort's instance shapes: a root whose single
-// <foo> child holds the tested value in its content or a named attribute, or a
-// root with no <foo> child that carries the tested value in its own attribute
-// (issue #593). Foos collects every <foo> child so readFacetsCase can decline
-// several of them, and facetsTestedValue can decline an instance with none
-// unless the root carries the restriction's attribute: an out-of-cohort shape is honestly
-// declined rather than mis-read as a single empty or last-wins tested value. The
-// anyURI a*/b* fixtures that motivated this guard are now claimed earlier, by
+// facetsInstance mirrors the Facets cohort's instance shapes, which
+// facetsTestedValue's doc states. Foos collects every <foo> child so
+// readFacetsCase can decline several of them and facetsTestedValue can pick by
+// how many there are: an out-of-cohort shape is honestly declined rather than
+// mis-read as a single empty or last-wins tested value. The anyURI a*/b*
+// fixtures that motivated this guard are now claimed earlier, by
 // anyURIShapeCase's dedicated multi-leaf reader (issue #190), so they no longer
 // reach here; the guard stays because it is what keeps any FUTURE out-of-cohort
 // shape from being mis-read. Attrs captures the root's raw attributes (mirroring
@@ -2710,7 +2703,8 @@ func facetsSchemaPath(c caseSpec, schemaLoc string) (string, bool) {
 // (verified), so a root-only snapshot is a complete context for the tested <foo>
 // literal — no ancestor-chain streaming (readQNameContexts) is needed here; that
 // context is inert for every other base type (their Parse ignores it). And
-// rootAttr reads the tested value from them for the zero-<foo> shape.
+// facetsTestedValue reads a root-carried tested value from them through
+// rootAttr.
 type facetsInstance struct {
 	SchemaLoc string     `xml:"http://www.w3.org/2001/XMLSchema-instance noNamespaceSchemaLocation,attr"`
 	Attrs     []xml.Attr `xml:",any,attr"`
@@ -2763,17 +2757,30 @@ func decodeFacetsInstance(path string) (facetsInstance, error) {
 }
 
 // decodeRestriction streams the schema and returns the base primitive (prefix
-// stripped), the name of the enclosing xsd:attribute if the restriction is
-// declared on one (empty when it constrains element content), and the
-// constraining-facet children of its first xsd:restriction. Facet children are
-// the restriction's direct element children in the XML Schema namespace, in
-// document order (P4: token stream, no whole-document buffer). Each facet child
-// captures the namespace bindings in scope where it was written — accumulated
-// down the schema document's ancestor chain including the child's own xmlns
-// declarations (§3.3.18) — so buildOwnFacets can resolve a QName/NOTATION
-// enumeration member's prefix against the DECLARING schema's context (issue
-// #152), the schema-side analogue of readQNameContexts' instance-side walk. ok is
-// false when no restriction is found.
+// stripped), the name of the xsd:attribute it pairs the restriction with (empty
+// when it pairs none; see the marker below), and the constraining-facet children
+// of its first xsd:restriction. Facet children are the restriction's direct
+// element children in the XML Schema namespace, in document order (P4: token
+// stream, no whole-document buffer). Each facet child captures the namespace
+// bindings in scope where it was written — accumulated down the schema
+// document's ancestor chain including the child's own xmlns declarations
+// (§3.3.18) — so buildOwnFacets can resolve a QName/NOTATION enumeration member's
+// prefix against the DECLARING schema's context (issue #152), the schema-side
+// analogue of readQNameContexts' instance-side walk. ok is false when no
+// restriction is found.
+//
+// GAP(conformance): the pairing takes the LAST xsd:attribute opened before the
+// restriction, not the one enclosing it: lastAttr is never cleared when that
+// attribute closes, so a self-closed <xsd:attribute name="att" type="st"/>
+// followed by an unrelated <xsd:simpleType name="st"><xsd:restriction> pairs
+// "att" with it. facetsTestedValue's zero-<foo> branch widens this: it reads
+// attrName off the instance root, so such a self-closed root attribute becomes a
+// tested value. anyURI_a004.xml has exactly that shape and would be mis-read as
+// one tested value; only newDatatypesExec dispatching anyURIShapeCase before
+// facetsCase keeps it decided whole, and no structural guarantee protects a
+// zero-<foo> fixture outside anyURIShapeCase's regexp. Tightening the pairing
+// changes attrName on the single-<foo> path too, so it lands separately: #1803
+// owns the fix.
 func decodeRestriction(path string) (base, attrName string, children []facetChild, ok bool) {
 	f, err := os.Open(path)
 	if err != nil {
