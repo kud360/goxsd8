@@ -114,6 +114,23 @@ func TestUnabbreviatedResidualIsCharged(t *testing.T) {
 		row{"child::a|self::*", false, `the {selector} "child::a|self::*" steps along the self axis`},
 		row{"child::q:a", false, `the {selector} "child::q:a" has an XPath static error`},
 	)
+	// A predicate holding `node()` or an axis head now lexes whole, so it takes
+	// the predicate charge, which the scan decides before any axis: an admitted
+	// head, a non-admitted one and `node()` alike, where each was a decline
+	// while the lexer could not read them.
+	for _, tc := range []struct {
+		expr  string
+		field bool
+	}{
+		{"a[node()]", false}, {"a[child::b]", false}, {"a[self::b]", false}, {"a[attribute::b]", false},
+		{"a[node()]", true}, {"a[child::b]", true}, {"a[self::b]", true}, {"a[attribute::b]", true},
+	} {
+		scc, subj := "c-selector-xpath", "{selector}"
+		if tc.field {
+			scc, subj = "c-fields-xpaths", "{fields} member"
+		}
+		rows = append(rows, row{tc.expr, tc.field, fmt.Sprintf(`the %s %q carries a predicate, but %s clause 2 admits none`, subj, tc.expr, scc)})
+	}
 	p := []xsd.NamespaceBinding{xsd.NewNamespaceBinding("p", "urn:p")}
 	for _, tc := range rows {
 		x := xsd.NewXPathExpression(tc.expr, p, nil, nil)

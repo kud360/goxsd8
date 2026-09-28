@@ -285,7 +285,8 @@ func fullyLexed(toks []token) bool {
 //
 // What it does NOT decide is a child-axis or attribute-axis head clause 2.2
 // admits: parse compiles one before a NameTest onto the arm its abbreviated
-// spelling takes, and declines one before `node()`, which no ruling reaches.
+// spelling takes, and declines one before `node()`, which no ruling reaches yet
+// (#1796).
 //
 // The scan is per union member, because production [1] is a union of Paths and a
 // member's final step is its own: `a/@b|c/@d` is two legal field Paths and reads
@@ -462,7 +463,7 @@ func parse(toks []token, field bool, r *names) (Expr, bool) {
 // '@' arm — so each compiles to the tree its abbreviated spelling compiles to,
 // by construction. Every other axis head is charged before the parse is reached
 // (shapeFault), except `child::node()` and `attribute::node()`, which decline
-// here.
+// here until #1796 rules them.
 //
 // A `.` Step is dropped as it is read (see path). The one shape dropping cannot
 // handle is a `.//` path whose every Step was a `.`, which leaves no element

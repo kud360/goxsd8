@@ -141,8 +141,8 @@ type icFieldCursor struct {
 // icpath compiles the `child::` and `attribute::` spellings clause 2.2 admits:
 // a legal XPath 2.0 path neither subset admits and no charged shape covers —
 // an abbreviated one such as `a//b` or `/a`, one icpath's lexer cannot read
-// whole such as `a/text()`, and `child::node()` or `attribute::node()`, which
-// no ruling reaches; a predicate whose {expression} icpath's lexer cannot read
+// whole such as `a/text()`, and `child::node()` or `attribute::node()` — whose
+// charge or permanent decline #1796 owns; a predicate whose {expression} icpath's lexer cannot read
 // whole; a `.//` with no element step left once the self steps
 // are removed, which production [3]'s bare `.` Step makes assembly-LEGAL and
 // only this matcher cannot represent; and — because a component assembled

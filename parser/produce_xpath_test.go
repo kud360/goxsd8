@@ -1035,7 +1035,7 @@ func TestProduceIdentityConstraintPathFailsOpen(t *testing.T) {
 	for _, tt := range []struct{ name, selector, why string }{
 		{"an unabbreviated axis", "child::a", "clause 2.2 admits the unabbreviated form of an abbreviated path"},
 		{"an unabbreviated axis with white space", "child :: a", "white space may surround '::', which is its own XPath 2.0 token"},
-		{"a child axis before node()", "child::node()", "a KindTest step no ruling reaches, so it is declined and not charged"},
+		{"a child axis before node()", "child::node()", "a KindTest step no ruling reaches yet (#1796), so it is declined and not charged"},
 		{"self steps under .//", ".//.", "production [3]'s bare '.' Step derives it, so clause 2.1 holds outright"},
 		{"a numeric predicate", "a[1]", "'1' opens no token, and a stream this lexer cannot read is declined and never charged"},
 		{"a quoted predicate", "a[b='c']", "the quotes open no token either, so the '[' is not read as a predicate"},

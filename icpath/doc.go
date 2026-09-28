@@ -71,8 +71,8 @@
 // spelled with the abbreviated or the unabbreviated head, and this package compiles
 // every such spelling. Every other {expression} is nil there — above all one this
 // package simply cannot read, and an abbreviated path outside production [1] that no
-// charged shape covers — so "does not match production [1]" is never on its own
-// evidence of a violation. [SelectorViolation]'s doc carries the argument for each
+// charged shape covers, which #1796 owns — so "does not match production [1]" is
+// never on its own evidence of a violation. [SelectorViolation]'s doc carries the argument for each
 // shape.
 //
 // THE PREDICATES IT RECOGNIZES are the ones whose whole {expression} lexes as

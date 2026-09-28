@@ -35,8 +35,9 @@ const ruleXPST0081 xsderr.Rule = "err:XPST0081"
 // the position of the <selector> element the {expression} was written on, which
 // this package cannot know and never reconstructs (STYLE E3).
 //
-// THE SEVEN SHAPES IT CHARGES ARE THE ONLY ONES EITHER CLAUSE PROVES. Clause 2
-// is a disjunction — 2.1's literal BNF or 2.2's "XPath expression involving the
+// IT CHARGES SEVEN SHAPES, each of which fails clause 1 or both arms of clause
+// 2; they are not every shape clause 2 proves (#1796). Clause 2 is a
+// disjunction — 2.1's literal BNF or 2.2's "XPath expression involving the
 // child axis whose abbreviated form is as given above" — and 2.2 is read
 // syntactically: the unabbreviated spellings it admits are the ones XPath 2.0
 // §3.2.4's abbreviations reduce to 2.1's BNF, which for a selector is a
@@ -59,10 +60,14 @@ const ruleXPST0081 xsderr.Rule = "err:XPST0081"
 //     either, `self::node()` included: XPath 2.0 states no abbreviation of it
 //     to `.`.
 //
-// Everything else — above all a path this package cannot read whole, an
-// abbreviated path outside the subset such as `a//b`, and a `.//` path whose
-// Steps are all `.`, which production [3]'s bare `.` derives outright — is nil
-// here and left to [CompileSelector] to decline at validate time.
+// Everything else is nil here and left to [CompileSelector] to decline at
+// validate time: above all a path this package cannot read whole, and a `.//`
+// path whose Steps are all `.`, which production [3]'s bare `.` derives
+// outright. So is a legal XPath 2.0 path that clause 2.1 does not admit and no
+// §3.2.4 abbreviation reduces to it — a non-initial `//` (`a//b`), a leading
+// `/`, a KindTest step (`a/text()`, `child::node()`, `attribute::node()`) —
+// which clause 2 may prove and this package does not charge until #1796 rules
+// it.
 //
 // The result is an *[xsderr.Error] carrying the SCC as its rule, with the
 // clause it breaks in the message. For the unbound prefix it wraps a cause
@@ -79,7 +84,7 @@ func SelectorViolation(loc xsderr.Loc, x xsd.XPathExpression) error {
 // §3.11.6.3 clause 2 quantifies over the members one at a time ("For each member
 // of the {fields}"), so this answers about one member and a caller charging a
 // whole {fields} calls it per member, in document order. Everything
-// [SelectorViolation] states about which shapes are provable holds here
+// [SelectorViolation] states about which shapes are charged holds here
 // unchanged, with production [7] in production [2]'s place.
 func FieldViolation(loc xsderr.Loc, x xsd.XPathExpression) error {
 	return violationAt(loc, x, true)
