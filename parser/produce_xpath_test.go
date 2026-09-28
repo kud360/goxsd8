@@ -891,14 +891,15 @@ const (
 )
 
 // TestProduceIdentityConstraintPathViolations pins c-selector-xpath (§3.11.6.2)
-// and c-fields-xpaths (§3.11.6.3) at the five shapes a recognizer for clause
-// 2.1's BNF can prove against the SCC WHOLE. Clause 2 is a disjunction, so an
-// {expression} failing 2.1's grammar may still satisfy 2.2's "XPath expression
-// involving the child axis whose abbreviated form is as given above"; each shape
-// below is a fault the unabbreviated spelling carries too, or, for a field's
-// bare '@', no XPath 2.0 expression under any spelling, which is why charging it
-// cannot reject a conforming schema. TestProduceIdentityConstraintPathFailsOpen
-// pins the other side.
+// and c-fields-xpaths (§3.11.6.3) at the shapes [icpath.SelectorViolation]
+// proves against the SCC WHOLE. Clause 2 is a disjunction, so an {expression}
+// failing 2.1's grammar may still satisfy 2.2's "XPath expression involving the
+// child axis whose abbreviated form is as given above"; each shape below fails
+// both arms — a fault the unabbreviated spelling carries too, or an axis clause
+// 2.2 does not name — or, for a step with no NodeTest, is no XPath 2.0
+// expression under any spelling, which is why charging it cannot reject a
+// conforming schema. TestProduceIdentityConstraintPathFailsOpen pins the other
+// side.
 //
 // The charge is positioned at the offending <selector>/<field> and never at the
 // <unique> above it (STYLE E3), which is what the line assertion proves.
@@ -945,6 +946,48 @@ func TestProduceIdentityConstraintPathViolations(t *testing.T) {
 		rule:     "c-selector-xpath", // clause 2: production [2] has no '@'
 		line:     icSelectorLine,
 		msg:      `the {selector} "@x" names an attribute`,
+	}, {
+		name:     "an unbound prefix under the child axis",
+		selector: "child::q:a",
+		field:    "@x",
+		rule:     "c-selector-xpath", // clause 1: the axis head reads, so the prefix resolves
+		line:     icSelectorLine,
+		msg:      `the {selector} "child::q:a" has an XPath static error`,
+	}, {
+		name:     "an axis head with no NodeTest after it",
+		selector: "child::",
+		field:    "@x",
+		rule:     "c-selector-xpath", // clause 1: production [29]'s NodeTest is mandatory
+		line:     icSelectorLine,
+		msg:      `the {selector} "child::" has an axis step "child::" with no NodeTest after it`,
+	}, {
+		name:     "a field's attribute axis with no NodeTest after it",
+		selector: "a",
+		field:    "attribute::",
+		rule:     "c-fields-xpaths", // clause 1: production [29]'s NodeTest is mandatory
+		line:     icFieldLine,
+		msg:      `the {fields} member "attribute::" has an axis step "attribute::" with no NodeTest after it`,
+	}, {
+		name:     "an axis clause 2.2 does not name",
+		selector: "self::node()",
+		field:    "@x",
+		rule:     "c-selector-xpath", // clause 2: neither arm spells the self axis
+		line:     icSelectorLine,
+		msg:      `the {selector} "self::node()" steps along the self axis`,
+	}, {
+		name:     "a field's axis clause 2.2 does not name",
+		selector: "a",
+		field:    "descendant::*",
+		rule:     "c-fields-xpaths", // clause 2: neither arm spells the descendant axis
+		line:     icFieldLine,
+		msg:      `the {fields} member "descendant::*" steps along the descendant axis`,
+	}, {
+		name:     "a selector naming the attribute axis",
+		selector: "attribute::*",
+		field:    "@y",
+		rule:     "c-selector-xpath", // clause 2: clause 2.2 names the child axis alone
+		line:     icSelectorLine,
+		msg:      `the {selector} "attribute::*" names an attribute`,
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -991,12 +1034,14 @@ func TestProduceIdentityConstraintUnboundPrefixWrapsTheXPathCode(t *testing.T) {
 func TestProduceIdentityConstraintPathFailsOpen(t *testing.T) {
 	for _, tt := range []struct{ name, selector, why string }{
 		{"an unabbreviated axis", "child::a", "clause 2.2 admits the unabbreviated form of an abbreviated path"},
+		{"an unabbreviated axis with white space", "child :: a", "white space may surround '::', which is its own XPath 2.0 token"},
+		{"a child axis before node()", "child::node()", "a KindTest step no ruling reaches, so it is declined and not charged"},
 		{"self steps under .//", ".//.", "production [3]'s bare '.' Step derives it, so clause 2.1 holds outright"},
 		{"a numeric predicate", "a[1]", "'1' opens no token, and a stream this lexer cannot read is declined and never charged"},
 		{"a quoted predicate", "a[b='c']", "the quotes open no token either, so the '[' is not read as a predicate"},
-		{"a descendant step mid-path", "a//b", "outside production [2], but clause 2.2 may still spell it"},
-		{"an absolute path", "/a", "outside production [2], but clause 2.2 may still spell it"},
-		{"an unbound prefix under an unreadable axis", "child::q:a", "unsupported dominates: the prefix is not read in isolation"},
+		{"a descendant step mid-path", "a//b", "outside production [2], and no shape this package charges covers it, so it is declined"},
+		{"an absolute path", "/a", "outside production [2], and no shape this package charges covers it, so it is declined"},
+		{"an unbound prefix before an unreadable step", "q:a/text()", "unsupported dominates: '(' after text opens no token, so the prefix is not read in isolation"},
 		{"an unbound prefix on a path outside the subset", "q:a//b", "unsupported dominates: the stream lexes whole and still parses to nothing, so clause 1 is never reached"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
