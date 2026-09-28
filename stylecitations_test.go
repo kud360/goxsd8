@@ -18,13 +18,13 @@
 //     tokens (31 sites — one comment cited two at once) onto it, so an
 //     ID-shaped token naming no rule has no legitimate form left.
 //   - ALLOW-LIST: a bare-numeric token is a position in CLAUDE.md's headline
-//     list, which is #540's still-open defect. Every instance is pinned in
-//     allowedBadStyleCitations by file, token and count — exactly
-//     allowedCollisionCitations' shape — so a NEW or COPIED one cannot land
-//     without editing that list, and editing it is the review this file
-//     exists to force. The list shrinking to empty is what closes #540; it
-//     is not this file's job to shrink it. An entry whose token is NOT bare
-//     digits is itself an error, so the list cannot re-admit #382's class.
+//     list, #540's defect. #540 cited every such site onto its letter ID and
+//     left allowedBadStyleCitations empty, so this half is now a standing
+//     bound: any bare-numeric token fails it. The list keeps
+//     allowedCollisionCitations' file/token/count shape, so re-admitting one
+//     means adding an entry, and adding it is the review this file exists to
+//     force. An entry whose token is NOT bare digits is itself an error, so
+//     the list cannot re-admit #382's class.
 //
 // The bound half is exactly decidable and that is its whole value. It does
 // not decide whether a citation is TOPICALLY right — whether a REAL ID's rule
@@ -48,8 +48,8 @@ import (
 const styleCitationsGuardFile = "stylecitations_test.go"
 
 // allowedBadStyleCitations is the reviewed state of every bare-numeric STYLE
-// citation in the module: the sites #540 describes, confirmed by direct
-// inspection of the cited comment. Counts are per file and per token, not per
+// citation in the module, and it is empty: #540 cited each of its sites onto
+// the letter ID it meant (T5, D3). Counts are per file and per token, not per
 // line, so ordinary editing above a citation does not trip the guard while a
 // new or copied bad citation does. Every token here is bare digits; a
 // letter-shaped one is rejected by TestStyleCitationsNameARealRule's sibling
@@ -58,10 +58,7 @@ const styleCitationsGuardFile = "stylecitations_test.go"
 // #382's entries — `T7` ×29, `T8`, `D6`, `L6` across 19 files — are gone: that
 // issue ruled each of them onto the rule docs/STYLE.md already states (T1, T2,
 // T5, D3) and renumbered every site.
-var allowedBadStyleCitations = []styleCitationAllowance{
-	{file: "conformance/datatypes.go", token: "10", count: 1},
-	{file: "xsd/resolve.go", token: "8", count: 2},
-}
+var allowedBadStyleCitations []styleCitationAllowance
 
 // The vacuity floors, sitting safely below the counts at the time of
 // writing (273 .go files, 602 STYLE citation tokens, 23 defined rule IDs) so
@@ -140,7 +137,7 @@ func TestStyleCitationsNameARealRule(t *testing.T) {
 // TestPositionalStyleCitationsAreAllowListed is the ALLOW-LIST half: every
 // bare-numeric citation — a position in CLAUDE.md's headline list rather than
 // an ID — was reviewed onto allowedBadStyleCitations, and no reviewed entry has
-// gone stale.
+// gone stale. With the list empty it fails every bare-numeric citation.
 func TestPositionalStyleCitationsAreAllowListed(t *testing.T) {
 	root := moduleRootDir(t)
 
@@ -148,7 +145,7 @@ func TestPositionalStyleCitationsAreAllowListed(t *testing.T) {
 	for _, a := range allowedBadStyleCitations {
 		if !isBareNumericToken(a.token) {
 			t.Errorf("allowedBadStyleCitations entry {file: %q, token: %q} is not a bare "+
-				"number — this list pins #540's positional citations only, and a "+
+				"number — this list pins positional citations (#540) only, and a "+
 				"letter-shaped ID answers to TestStyleCitationsNameARealRule instead",
 				a.file, a.token)
 			continue
@@ -168,9 +165,8 @@ func TestPositionalStyleCitationsAreAllowListed(t *testing.T) {
 		}
 		t.Errorf("%s:%d: cites STYLE %s, a bare number — that is a position in "+
 			"CLAUDE.md's headline list, not a citable ID (see %s's \"Citing rules\"). "+
-			"Confirm the intended letter ID, then add {file: %q, token: %q, count: N} "+
-			"to allowedBadStyleCitations",
-			s.file, s.line, s.token, styleDocRelPath, s.file, s.token)
+			"Cite the letter ID the sentence means instead",
+			s.file, s.line, s.token, styleDocRelPath)
 	}
 
 	for _, a := range allowedBadStyleCitations {

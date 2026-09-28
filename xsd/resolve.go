@@ -219,7 +219,7 @@ var anyTypeName = QName{Space: XMLSchemaNS, Local: "anyType"}
 // either, for a different reason: the attribute group fold consumes every one
 // (attributegroupfold.go), so no finalized component holds a reference to
 // follow. Because resolution is still validation-only, this package exposes no
-// Schema.IdentityConstraint(name) accessor (STYLE 8 — export nothing without a
+// Schema.IdentityConstraint(name) accessor (STYLE T5 — export nothing without a
 // consumer): the cost of following a keyref at read time is shifted onto the
 // future Walker/Matcher and instance validator, which will need exactly that
 // accessor. That remaining asymmetry is intentional, discharged by the
@@ -292,7 +292,7 @@ func (s *Schema) resolve() error {
 // rejecting the first unresolvable one. The three narrow-view resolvers below
 // take a Resolver interface (STYLE T3) so they are testable against a fake; the
 // model-group and keyref resolvers read the internal indexes directly, since no
-// external consumer justifies minting a capability interface for them (STYLE 8).
+// external consumer justifies minting a capability interface for them (STYLE T5).
 //
 // REFERRER-LOC CONVENTION. Every src-resolve rejection here is charged to the
 // REFERRING component's position, never to the target's — the target is exactly

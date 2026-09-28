@@ -2288,7 +2288,7 @@ type itemSchema struct {
 
 // decodeItemAttrTypes parses the sibling datatypes.xsd into a name -> primitive
 // local-name lookup, reading the fixture itself rather than hand-typing the
-// name->type table (STYLE 10; the same fixture-parsing discipline as
+// name->type table (STYLE D3; the same fixture-parsing discipline as
 // decodeTestedPrimitive). Attributes with no type (e.g. SOMITEM_DATATYPE_ANYTYPE)
 // are omitted, so an untyped attribute is never treated as a tested value.
 func decodeItemAttrTypes(path string) (map[string]string, error) {
