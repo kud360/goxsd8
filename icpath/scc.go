@@ -35,15 +35,15 @@ const ruleXPST0081 xsderr.Rule = "err:XPST0081"
 // the position of the <selector> element the {expression} was written on, which
 // this package cannot know and never reconstructs (STYLE E3).
 //
-// IT CHARGES SEVEN SHAPES, each of which fails clause 1 or both arms of clause
-// 2; they are not every shape clause 2 proves (#1796). Clause 2 is a
-// disjunction — 2.1's literal BNF or 2.2's "XPath expression involving the
-// child axis whose abbreviated form is as given above" — and 2.2 is read
-// syntactically: the unabbreviated spellings it admits are the ones XPath 2.0
-// §3.2.4's abbreviations reduce to 2.1's BNF, which for a selector is a
-// `child::` head before a NameTest and for a field also an `attribute::` head
-// before its final NameTest. Those compile as their abbreviated twins do. What
-// is charged is a fault no spelling excuses:
+// IT CHARGES TEN SHAPES, each of which fails clause 1 or both arms of clause 2;
+// they are not every shape clause 2 proves. Clause 2 is a disjunction — 2.1's
+// literal BNF or 2.2's "XPath expression involving the child axis whose
+// abbreviated form is as given above" — and 2.2 is read syntactically: the
+// unabbreviated spellings it admits are the ones XPath 2.0 §3.2.4's
+// abbreviations reduce to 2.1's BNF, which for a selector is a `child::` head
+// before a NameTest and for a field also an `attribute::` head before its final
+// NameTest. Those compile as their abbreviated twins do. What is charged is a
+// fault no spelling excuses:
 //
 //   - an unbound prefix, which is clause 1's xpath-valid (§3.13.6.2) static
 //     error under either arm;
@@ -58,16 +58,21 @@ const ruleXPST0081 xsderr.Rule = "err:XPST0081"
 //   - an axis head clause 2.2 does not name — any of XPath 2.0's thirteen but
 //     child, and for a field attribute — which clause 2.1's tokens do not spell
 //     either, `self::node()` included: XPath 2.0 states no abbreviation of it
-//     to `.`.
+//     to `.`;
+//   - a root-relative path, opened by `/` or `//`, which production [2] and
+//     [7]'s context-relative Path never is;
+//   - a `//` anywhere but the leading `.//` pair, which §3.2.4 rule 3 expands
+//     to `descendant-or-self::node()`, an axis clause 2.2 does not name; and
+//   - a KindTest step, `child::node()` and `attribute::node()` included, which
+//     production [3]'s Step (`'.' | NameTest`) does not spell and no
+//     abbreviation turns into a NameTest.
 //
 // Everything else is nil here and left to [CompileSelector] to decline at
-// validate time: above all a path this package cannot read whole, and a `.//`
-// path whose Steps are all `.`, which production [3]'s bare `.` derives
-// outright. So is a legal XPath 2.0 path that clause 2.1 does not admit and no
-// §3.2.4 abbreviation reduces to it — a non-initial `//` (`a//b`), a leading
-// `/`, a KindTest step (`a/text()`, `child::node()`, `attribute::node()`) —
-// which clause 2 may prove and this package does not charge until #1796 rules
-// it.
+// validate time. That covers, above all, an {expression} this package cannot
+// read whole: a FunctionCall such as `document("")`, or a KindTest with an
+// argument (`element(a)`), whatever clause 1 or 2 says of it. It also covers a
+// `//` with no Step after it, and a `.//` path whose Steps are all `.`, which
+// production [3]'s bare `.` derives outright.
 //
 // The result is an *[xsderr.Error] carrying the SCC as its rule, with the
 // clause it breaks in the message. For the unbound prefix it wraps a cause

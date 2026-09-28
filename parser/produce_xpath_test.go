@@ -988,6 +988,41 @@ func TestProduceIdentityConstraintPathViolations(t *testing.T) {
 		rule:     "c-selector-xpath", // clause 2: clause 2.2 names the child axis alone
 		line:     icSelectorLine,
 		msg:      `the {selector} "attribute::*" names an attribute`,
+	}, {
+		name:     "a KindTest after the child axis",
+		selector: "child::node()",
+		field:    "@x",
+		rule:     "c-selector-xpath", // clause 2: production [3] Step is '.' or a NameTest
+		line:     icSelectorLine,
+		msg:      `the {selector} "child::node()" has a KindTest step "node()"`,
+	}, {
+		name:     "a field's KindTest after the attribute axis",
+		selector: "a",
+		field:    "attribute::node()",
+		rule:     "c-fields-xpaths", // clause 2: production [7]'s final step is '@' NameTest
+		line:     icFieldLine,
+		msg:      `the {fields} member "attribute::node()" has a KindTest step "node()"`,
+	}, {
+		name:     "a non-initial '//'",
+		selector: "a//b",
+		field:    "@x",
+		rule:     "c-selector-xpath", // clause 2: xpath20 §3.2.4 rule 3's descendant-or-self step
+		line:     icSelectorLine,
+		msg:      `the {selector} "a//b" has a non-initial '//'`,
+	}, {
+		name:     "a root-relative path",
+		selector: "/a",
+		field:    "@x",
+		rule:     "c-selector-xpath", // clause 2: production [2]'s Path is context-relative
+		line:     icSelectorLine,
+		msg:      `the {selector} "/a" is root-relative (it opens with "/")`,
+	}, {
+		name:     "a field opening with '//'",
+		selector: "a",
+		field:    "//@x",
+		rule:     "c-fields-xpaths", // clause 2: production [7]'s Path is context-relative
+		line:     icFieldLine,
+		msg:      `the {fields} member "//@x" is root-relative (it opens with "//")`,
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1035,14 +1070,13 @@ func TestProduceIdentityConstraintPathFailsOpen(t *testing.T) {
 	for _, tt := range []struct{ name, selector, why string }{
 		{"an unabbreviated axis", "child::a", "clause 2.2 admits the unabbreviated form of an abbreviated path"},
 		{"an unabbreviated axis with white space", "child :: a", "white space may surround '::', which is its own XPath 2.0 token"},
-		{"a child axis before node()", "child::node()", "a KindTest step no ruling reaches yet (#1796), so it is declined and not charged"},
 		{"self steps under .//", ".//.", "production [3]'s bare '.' Step derives it, so clause 2.1 holds outright"},
 		{"a numeric predicate", "a[1]", "'1' opens no token, and a stream this lexer cannot read is declined and never charged"},
 		{"a quoted predicate", "a[b='c']", "the quotes open no token either, so the '[' is not read as a predicate"},
-		{"a descendant step mid-path", "a//b", "outside production [2], and no shape this package charges covers it, so it is declined"},
-		{"an absolute path", "/a", "outside production [2], and no shape this package charges covers it, so it is declined"},
-		{"an unbound prefix before an unreadable step", "q:a/text()", "unsupported dominates: '(' after text opens no token, so the prefix is not read in isolation"},
-		{"an unbound prefix on a path outside the subset", "q:a//b", "unsupported dominates: the stream lexes whole and still parses to nothing, so clause 1 is never reached"},
+		{"the leading pair before a self step", ". //.", "the './/' pair production [2] admits, then a '.' Step, so it is no non-initial '//'"},
+		{"a stepless '//'", "a//", "no XPath 2.0 path expression at all, so no clause-2 charge names it and it is declined"},
+		{"an unbound prefix before an unreadable step", "q:a/processing-instruction('x')", "unsupported dominates: a KindTest with an argument does not lex, so the prefix is not read in isolation"},
+		{"an unbound prefix on a path outside the subset", "q:a|.//.", "unsupported dominates: the stream lexes whole and still parses to nothing, so clause 1 is never reached"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			if _, err := produce(t, icPathDoc(tt.selector, "@x")); err != nil {
