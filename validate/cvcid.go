@@ -77,7 +77,10 @@ type roleValue struct {
 //
 // declined records that some item of the subtree could have been in the
 // ·eligible item set· and could not be read — see idTable.charge for which of
-// the two clauses that suppresses, and why it suppresses only one.
+// the two clauses that suppresses, and why it suppresses only one. Each site
+// that sets it records its own [Unevaluated] ([walk.declineID]), except the two
+// whose decline is recorded elsewhere or cannot arise (idDefaultedAttributes'
+// unresolved use, walk.child's unattributed child).
 type idTable struct {
 	entries  []*idEntry
 	index    map[string]*idEntry
@@ -206,10 +209,11 @@ func (w *walk) idAttributes(c *icCheck) {
 //
 // GAP(validate): a use whose {attribute declaration} does not resolve, or whose
 // {type definition} is not a resolvable simple type, declines. The first is
-// unreachable on a *xsd.Schema that exists; the second is the absent-or-COMPLEX
-// {type definition} [walk.matchedAttribute]'s doc records. The decline
-// withholds cvc-id clause 1 alone ([idTable.charge]). RULED permanent by #774
-// (STYLE P3b), on cvcattribute.go's terms.
+// unreachable on a *xsd.Schema that exists and records nothing; the second is
+// the absent-or-COMPLEX {type definition} [walk.matchedAttribute]'s doc records,
+// and is recorded as an [Unevaluated] ([walk.declineID]). The decline withholds
+// cvc-id clause 1 alone ([idTable.charge]). RULED permanent by #774 (STYLE P3b),
+// on cvcattribute.go's terms.
 func (w *walk) idDefaultedAttributes(c *icCheck, attrs []Attribute, ct xsd.ComplexType) {
 	for _, u := range ct.AttributeUses() {
 		vc, defaulted := w.defaultedConstraint(u, attrs)
@@ -218,12 +222,16 @@ func (w *walk) idDefaultedAttributes(c *icCheck, attrs []Attribute, ct xsd.Compl
 		}
 		d, resolved := w.schema.ResolvedAttributeDeclaration(u)
 		if !resolved {
+			// Unreachable on a *xsd.Schema that exists, so it records no
+			// [Unevaluated] no schema can produce.
 			w.ids.declined = true
 			continue
 		}
 		st, simple := w.schema.ResolvedSimpleType(d.TypeDefinition())
 		if !simple {
-			w.ids.declined = true
+			w.declineID(c.e, c.e.Loc(),
+				"the ·defaulted attribute· %s of the element %s was not read into the ID/IDREF table: its declaration's {type definition} is absent or not a simple type definition, so cvc-id clause 1 is undecided",
+				u.DeclarationName(), c.e.Name())
 			continue
 		}
 		w.idRecord(st, vc.LexicalForm(), c.e, c.node, c.e.Loc())
@@ -241,30 +249,26 @@ func (w *walk) idDefaultedAttributes(c *icCheck, attrs []Attribute, ct xsd.Compl
 // value constraints may play a part", and cvc-elt clause 5.1 is what puts the
 // substituted item in the ·eligible item set· (#853).
 //
-// GAP(validate): two shapes decline instead — a declaration whose type was not
-// determinable (a {type table} carrying a {test} the §3.12.6 evaluator declines,
-// an unresolvable {type definition}, an xsi:type whose ·override· could not be
-// decided), and an element that is ·nilled·.
+// GAP(validate): a declaration whose type was not determinable (a {type table}
+// carrying a {test} the §3.12.6 evaluator declines, an unresolvable {type
+// definition}, an xsi:type whose ·override· could not be decided) declines
+// instead, recorded as an [Unevaluated] ([walk.declineID]). An element with NO
+// ·governing element declaration· is not that shape: it is ·laxly assessed·
+// against xs:anyType, whose complex {content type} is not derived from ID and so
+// contributes nothing under clause 3.
 //
-// The second is a value the spec says IS ·absent· — §3.3.5.4 gives a ·nilled·
-// element an absent [schema normalized value] and so an absent [schema actual
-// value] — and it declines rather than recording that absence because recording
-// it would let cvc-id clause 1 charge an empty binding on the strength of it,
-// which is a widening of that clause and not a reading of this one. An element
-// with NO ·governing element declaration· is not among the two: it is ·laxly
-// assessed· against xs:anyType, whose complex {content type} is not derived from
-// ID and so contributes nothing under clause 3.
+// A ·nilled· element contributes nothing and withholds nothing: §3.3.5.4 gives
+// it an absent [schema actual value], and clause 2 of the ·eligible item set·
+// excludes every item whose [schema actual value] is ·absent·.
 func (w *walk) idElement(c *icCheck) {
 	if c.g.hasDecl && c.g.typ == nil {
-		w.ids.declined = true
+		w.declineID(c.e, c.e.Loc(),
+			"the element %s was not read into the ID/IDREF table: its ·governing type definition· was not determinable, so cvc-id clause 1 is undecided",
+			c.e.Name())
 		return
 	}
 	st := c.g.valueType()
-	if st == nil {
-		return
-	}
-	if nilled(c.e, c.g) {
-		w.ids.declined = true
+	if st == nil || nilled(c.e, c.g) {
 		return
 	}
 	node := -1
@@ -296,10 +300,13 @@ func (w *walk) idElement(c *icCheck) {
 // reading one as "no id here" would hide a declaration clause 1 charges for the
 // absence of. validatingType's member scan declines on the same class for the
 // same reason. RULED permanent by #774 (STYLE P3b), on cvcattribute.go's terms.
+// Each decline is recorded as an [Unevaluated] at the item ([walk.declineID]).
 func (w *walk) idRecord(st *xsd.SimpleType, lexical string, owner Element, node int, loc xsderr.Loc) {
 	candidate, decided := w.idCandidate(st)
 	if !decided {
-		w.ids.declined = true
+		w.declineID(owner, loc,
+			"an item of the element %s was not read into the ID/IDREF table: whether its type %s is ·derived· or ·constructed· from ID, IDREF or IDREFS could not be decided, so cvc-id clause 1 is undecided",
+			owner.Name(), typeName(st))
 		return
 	}
 	if !candidate {
@@ -307,13 +314,17 @@ func (w *walk) idRecord(st *xsd.SimpleType, lexical string, owner Element, node 
 	}
 	if _, err := value.ValidateLexical(w.backend, w.schema, st, lexical, elementContext{owner: owner}); err != nil {
 		if !value.IsDatatypeVerdict(err) {
-			w.ids.declined = true
+			w.declineID(owner, loc,
+				"an item of the element %s was not read into the ID/IDREF table: the value backend reported a fault of its type %s rather than a verdict about the lexical, so cvc-id clause 1 is undecided",
+				owner.Name(), typeName(st))
 		}
 		return
 	}
 	values, decided := w.roleValues(st, lexical, owner)
 	if !decided {
-		w.ids.declined = true
+		w.declineID(owner, loc,
+			"an item of the element %s was not read into the ID/IDREF table: the ·validating type· of its value under %s could not be decided, so cvc-id clause 1 is undecided",
+			owner.Name(), typeName(st))
 		return
 	}
 	for _, v := range values {
@@ -327,6 +338,15 @@ func (w *walk) idRecord(st *xsd.SimpleType, lexical string, owner Element, node 
 			// [ID/IDREF table]; roleValues yields no roleNone at all.
 		}
 	}
+}
+
+// declineID marks the [ID/IDREF table] as missing an item that could have been
+// in the ·eligible item set· and records the withheld check on [walk.decline]'s
+// terms, at loc — the item's own location — under cvc-id clause 1, the one
+// clause the decline suppresses ([idTable.charge]).
+func (w *walk) declineID(owner Element, loc xsderr.Loc, format string, args ...any) {
+	w.ids.declined = true
+	w.decline("assessing ID/IDREF table", owner.Name(), loc, ruleCvcID, "1", format, args...)
 }
 
 // valueTokens splits one item's ·actual value· into the strings a ·validating

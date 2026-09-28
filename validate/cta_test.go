@@ -219,18 +219,23 @@ func TestUnevaluableTestIsRecordedAsUnevaluated(t *testing.T) {
 		ctaAlt{"count(@kind) > 0", "Second"},
 		ctaAlt{"@kind = 'cd'", "First"})
 	// The first alternative selects, so the second is never tried: a record
-	// here would report a check the scan did not reach.
-	if got := res.Unevaluated(); got != nil {
-		t.Fatalf("Unevaluated() = %v, want none — the scan stopped before the unevaluable alternative", messages(got))
+	// here would report a check the scan did not reach. First's kind use is
+	// typeless (aUse), so the element's own attribute half records its
+	// cvc-attribute decline, and that one record is all there is.
+	if got := res.Unevaluated(); len(got) != 1 || got[0].Rule() != ruleCvcAttribute {
+		t.Fatalf("Unevaluated() = %v, want only the kind attribute's cvc-attribute record — the scan stopped before the unevaluable alternative", messages(got))
 	}
 	res = ctaResult(t, ctaRoot("book"),
 		ctaAlt{"@kind = 'cd'", "First"},
 		ctaAlt{"count(@kind) > 0", "Second"},
 		ctaAlt{"@kind = 'book'", "First"})
 	wantSilence(t, res.Violations(), "the withheld type charges nothing")
+	// The withheld type is one record, and the one other is what it costs the
+	// ID/IDREF table: an element of undetermined type is an item cvc-id clause 1
+	// cannot read, recorded as the element leaves.
 	got := res.Unevaluated()
-	if len(got) != 1 {
-		t.Fatalf("Unevaluated() = %v, want exactly one record for the withheld ·conditionally selected· type", messages(got))
+	if len(got) != 2 || got[1].Rule() != ruleCvcID {
+		t.Fatalf("Unevaluated() = %v, want exactly one record for the withheld ·conditionally selected· type, then cvc-id's", messages(got))
 	}
 	if got[0].Rule() != "key-cta-ta-select" {
 		t.Errorf("Rule() = %q, want key-cta-ta-select", got[0].Rule())

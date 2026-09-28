@@ -102,15 +102,8 @@ func valuedRoot(name string, lexical string) *testElement {
 // the builtin types and extra seeded.
 func assessTyped(t *testing.T, root Element, uses []xsd.AttributeUse, extra ...*xsd.SimpleType) []*xsderr.Error {
 	t.Helper()
-	v, err := New(typedSchema(t, uses, extra...), testBackend())
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
-	res := v.Assess(root)
-	if res.Err() != nil {
-		t.Fatalf("Err() = %v, want nil", res.Err())
-	}
-	return res.Violations()
+	got, _ := assessRecorded(t, typedSchema(t, uses, extra...), root)
+	return got
 }
 
 // onlyCharge fails unless exactly one violation was charged under rule, and
@@ -147,18 +140,55 @@ func TestAttributeLexicalIsCheckedAgainstItsType(t *testing.T) {
 		"whiteSpace normalization precedes datatype validation (String Valid clause 1)")
 }
 
-// The regression the classification predicate exists for: an attribute
-// declaration with NO @type is xs:anySimpleType (§3.2.2.2's third tier), which
-// no backend maps, and value.ValidateLexical reports that under
-// cvc-datatype-valid exactly as it reports a real rejection. Charging it would
-// reject every typeless attribute in existence.
-func TestTypelessAttributeIsNeverCharged(t *testing.T) {
-	anySimple := xsd.QName{Space: xsd.XMLSchemaNS, Local: "anySimpleType"}
-	for _, typ := range []xsd.QName{anySimple, {Space: xsd.XMLSchemaNS, Local: "anyAtomicType"}} {
-		uses := []xsd.AttributeUse{typedUse(t, "n", typ, false, nil, nil)}
-		wantSilence(t, assessTyped(t, valuedRoot("n", "anything at all"), uses),
-			"an ungoverned type is a backend gap, not a verdict about the lexical")
+// An attribute declaration with NO @type is xs:anySimpleType (§3.2.2.2's third
+// tier), which no backend maps. Datatype Valid holds for every literal against
+// it and against xs:anyAtomicType (Datatypes §4.1.4, the ·special· disjunct), so
+// clause 3 is DECIDED satisfied: neither charged, which would reject every
+// typeless attribute in existence, nor declined, which would leave every such
+// document undecided (#1788). The same holds of a ·defaulted attribute·'s
+// {lexical form} under cvc-complex-type clause 4.
+func TestTypelessAttributeIsDecided(t *testing.T) {
+	bare := &testElement{name: xsd.QName{Local: "root"}, loc: loc(1, 1)}
+	dflt := xsd.NewValueConstraint(xsd.ValueDefault, "anything at all", nil, nil)
+	for _, typ := range []xsd.QName{icBuiltin("anySimpleType"), icBuiltin("anyAtomicType")} {
+		got, undecided := assessRecorded(t, typedSchema(t, []xsd.AttributeUse{typedUse(t, "n", typ, false, nil, nil)}),
+			valuedRoot("n", "anything at all"))
+		wantSilence(t, got, "Datatype Valid holds for every literal against a ·special· datatype")
+		wantDeclines(t, undecided)
+
+		got, undecided = assessRecorded(t, typedSchema(t, []xsd.AttributeUse{typedUse(t, "n", typ, false, &dflt, nil)}), bare)
+		wantSilence(t, got, "Datatype Valid holds for every default against a ·special· datatype")
+		wantDeclines(t, undecided)
 	}
+}
+
+// Every attribute-side decline is RECORDED as an [Unevaluated] at the item it
+// withheld a verdict on, under the rule it would have been charged under: a
+// {type definition} the backend does not map (cvc-attribute clause 3), a fixed
+// comparison over a ·special· type, whose value space has no lexical mapping
+// that is a function (cvc-attribute clause 4, cvc-au), and a ·defaulted
+// attribute· whose {lexical form} the value space cannot read (cvc-complex-type
+// clause 4, at the element).
+func TestAttributeDeclinesAreRecorded(t *testing.T) {
+	decimal := []xsd.AttributeUse{typedUse(t, "n", icBuiltin("decimal"), false, nil, nil)}
+	got, undecided := assessRecordedWith(t, gapBackend(icBuiltin("decimal")), typedSchema(t, decimal), valuedRoot("n", "1.5"))
+	wantSilence(t, got, "a withheld String Valid verdict charges nothing")
+	wantDeclines(t, undecided, Unevaluated{rule: ruleCvcAttribute, loc: loc(1, 10), msg: "cvc-attribute clause 3"})
+
+	fixed := xsd.NewValueConstraint(xsd.ValueFixed, "x", nil, nil)
+	both := []xsd.AttributeUse{typedUse(t, "n", icBuiltin("anySimpleType"), false, &fixed, &fixed)}
+	got, undecided = assessRecorded(t, typedSchema(t, both), valuedRoot("n", "x"))
+	wantSilence(t, got, "an undecided comparison charges nothing")
+	wantDeclines(t, undecided,
+		Unevaluated{rule: ruleCvcAttribute, loc: loc(1, 10), msg: "cvc-attribute clause 4"},
+		Unevaluated{rule: ruleCvcAu, loc: loc(1, 10), msg: "so cvc-au is undecided"})
+
+	dflt := xsd.NewValueConstraint(xsd.ValueDefault, "1.5", nil, nil)
+	defaulted := []xsd.AttributeUse{typedUse(t, "n", icBuiltin("decimal"), false, &dflt, nil)}
+	got, undecided = assessRecordedWith(t, gapBackend(icBuiltin("decimal")), typedSchema(t, defaulted),
+		&testElement{name: xsd.QName{Local: "root"}, loc: loc(1, 1)})
+	wantSilence(t, got, "an undecided default charges nothing")
+	wantDeclines(t, undecided, Unevaluated{rule: ruleCvcComplexType, loc: loc(1, 1), msg: "cvc-complex-type clause 4"})
 }
 
 // cvc-attribute clause 4 compares ·actual values·: "01" and "1" are one
@@ -425,6 +455,8 @@ func TestNonQNameXSITypeChargesClauseThree(t *testing.T) {
 		if outcomes := attributeOutcomes(*visits); !slices.Equal(outcomes, want) {
 			t.Errorf("xsi:type=%q: logged %v, want %v", lexical, outcomes, want)
 		}
+		_, undecided := assessRecorded(t, schema, eRoot(map[string]string{"type": lexical}))
+		wantDeclines(t, undecided, Unevaluated{rule: ruleCvcAttribute, loc: loc(1, 10), msg: "so clause 5 is undecided"})
 	}
 }
 

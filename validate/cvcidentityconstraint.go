@@ -134,7 +134,8 @@ type icFieldCursor struct {
 // document for a gap in the processor. The withheld value's whole consumer set
 // is Result.violations, reached through icCheck.open setting this flag, and its
 // one reader Result.Violations; both carry violations PRESENT, so withholding
-// one can only cost a rejection and never manufacture one.
+// one can only cost a rejection and never manufacture one. The decline itself
+// is recorded as an [Unevaluated] ([icCheck.declineFrame]).
 //
 // WHAT STILL ARRIVES HERE, now that parser charges c-selector-xpath and
 // c-fields-xpaths over the shapes [icpath.SelectorViolation] enumerates and
@@ -277,13 +278,13 @@ func (c *icCheck) open(w *walk, g governance) {
 		c.frames = append(c.frames, f)
 		sel, ok := icpath.CompileSelector(ic.Selector())
 		if !ok {
-			f.declined = true
+			c.declineFrame(w, f, "{selector}")
 			continue
 		}
 		for _, x := range ic.Fields() {
 			fx, ok := icpath.CompileField(x)
 			if !ok {
-				f.declined = true
+				c.declineFrame(w, f, "{fields}")
 				break
 			}
 			f.fields = append(f.fields, fx)
@@ -297,6 +298,16 @@ func (c *icCheck) open(w *walk, g governance) {
 			c.addTarget(w, f)
 		}
 	}
+}
+
+// declineFrame declines f, a constraint declared on c's element whose part —
+// its {selector} or one of its {fields} — icpath could not compile, and records
+// the withheld clauses on [walk.decline]'s terms at c's element.
+func (c *icCheck) declineFrame(w *walk, f *icFrame, part string) {
+	f.declined = true
+	w.decline("assessing identity constraint", c.e.Name(), c.e.Loc(), ruleCvcIdentityConstraint, "4",
+		"the identity constraint %s declared on %s was not evaluated: its %s lies outside the path subset this processor compiles (§3.11.6), so cvc-identity-constraint clauses 3 and 4 are undecided for it",
+		f.ic.Name(), c.e.Name(), part)
 }
 
 // addTarget records c's element as a member of f's ·target node set· and opens
@@ -363,11 +374,11 @@ func (c *icCheck) fieldAttributes(w *walk, t *icTarget, i int, sel icpath.Select
 			if w.skippedAttribute(c.g, a) {
 				continue
 			}
-			t.slots[i].declined = true
+			t.decline(w, i, a.Name(), a.Loc(), "its ·governing type definition· could not be determined")
 			continue
 		}
 		m, present, decided := w.keyMember(st, a.Value(), c.e, false, false)
-		t.slots[i].record(m, present, decided, a.Loc())
+		t.offer(w, i, a.Name(), a.Loc(), m, present, decided)
 	}
 }
 
@@ -435,21 +446,19 @@ func (w *walk) identityExit(c *icCheck) {
 // fill records c's element as the field node it was selected as, from its own
 // ·governing type definition· and its own ·initial value·.
 //
-// Two shapes decline rather than contribute a value, each because the
-// [schema actual value] §3.11.4 clause 3 reads does not exist for them:
+// A ·governing type definition· that is not a simple type definition and not a
+// complex type with {content type}.{variety} simple — governance.valueType's
+// nil, including the case where no type was determinable at all (a {type
+// table} carrying a {test} the §3.12.6 evaluator declines, an unresolvable
+// slot, an xsi:type whose ·override· could not be decided) — declines rather
+// than contribute a value, recorded as an [Unevaluated] ([icTarget.decline]).
 //
-//   - a ·governing type definition· that is not a simple type definition and
-//     not a complex type with {content type}.{variety} simple, which is
-//     governance.valueType's nil — including the case where no type was
-//     determinable at all (a {type table} carrying a {test} the §3.12.6
-//     evaluator declines, an unresolvable slot, an xsi:type whose ·override·
-//     could not be decided).
-//   - GAP(validate): an element that is ·nilled· (§3.3.4.3, key-nilled).
-//     §3.3.5.4 gives it an absent [schema normalized value] and so an absent
-//     [schema actual value], and §3.11.4's own Note names a nilled node as
-//     leaving the ·key-sequence· short — which for a key is a clause 4.2.1
-//     charge. Recording that absence rather than declining would widen clause
-//     4.2.1 on the strength of this reading, so the slot declines instead.
+// An element that is ·nilled· (§3.3.4.3, key-nilled) contributes an ABSENT
+// value, and withholds nothing: §3.3.5.4 gives it an absent [schema actual
+// value], and §3.11.4 clause 3's own Note names a field evaluating to "a
+// sequence consisting only of ·skipped· or ·nilled· nodes" as leaving the
+// ·key-sequence· short, which keeps the target out of the ·qualified node set·
+// ([icFrame.keyOnly] charges a key for it under clause 4.2.1).
 //
 // An EMPTY element whose declaration carries a {value constraint} is not among
 // them: cvc-elt clause 5.1 replaces the item assessed with one whose ·normalized
@@ -461,7 +470,7 @@ func (c *icCheck) fill(w *walk) {
 	}
 	m, present, decided := w.elementKeyMember(c)
 	for _, p := range c.pending {
-		p.target.slots[p.index].record(m, present, decided, c.e.Loc())
+		p.target.offer(w, p.index, c.e.Name(), c.e.Loc(), m, present, decided)
 	}
 }
 
@@ -469,8 +478,11 @@ func (c *icCheck) fill(w *walk) {
 // field node, on fill's terms.
 func (w *walk) elementKeyMember(c *icCheck) (icKeyMember, bool, bool) {
 	st := c.g.valueType()
-	if st == nil || nilled(c.e, c.g) {
+	if st == nil {
 		return icKeyMember{}, false, false
+	}
+	if nilled(c.e, c.g) {
+		return icKeyMember{}, false, true
 	}
 	nillable := c.g.hasDecl && c.g.decl.Nillable()
 	return w.keyMember(st, c.assessed(), c.e, true, nillable)
@@ -494,7 +506,11 @@ func (w *walk) elementKeyMember(c *icCheck) (icKeyMember, bool, bool) {
 // cvc-datatype-valid exactly as a genuine rejection does. Reading one as
 // "absent" would silently shorten a ·key-sequence·, and a short one is what
 // clause 4.2.1 charges a key for. RULED permanent by #774 (STYLE P3b), on
-// cvcattribute.go's terms: an ungoverned type is backend coverage.
+// cvcattribute.go's terms: an ungoverned type is backend coverage. A ·special·
+// type declines here too, though String Valid decides it (isSpecial): its
+// lexical mapping is "not a function" (Datatypes §3.2.1.2), so a lexical names
+// no one ·actual value· to compare. The caller records the decline
+// ([icTarget.offer]).
 func (w *walk) keyMember(st *xsd.SimpleType, lexical string, owner Element, element, nillable bool) (icKeyMember, bool, bool) {
 	if st == nil {
 		return icKeyMember{}, false, false
@@ -506,15 +522,30 @@ func (w *walk) keyMember(st *xsd.SimpleType, lexical string, owner Element, elem
 	return icKeyMember{st: st, v: v, element: element, nillable: nillable}, true, true
 }
 
-// record takes one candidate field node's answer into the slot, per clause 3's
-// bound of at most one valued node. A declined node poisons the slot outright:
-// the value it did not yield could have been the one that qualified the target,
-// and guessing either way is what the decline exists to avoid.
-func (s *icSlot) record(m icKeyMember, present, decided bool, loc xsderr.Loc) {
+// offer takes one candidate field node's answer — the node named name at loc —
+// into slot i, declining it where the node's value was undecided.
+func (t *icTarget) offer(w *walk, i int, name xsd.QName, loc xsderr.Loc, m icKeyMember, present, decided bool) {
 	if !decided {
-		s.declined = true
+		t.decline(w, i, name, loc, "its [schema actual value] could not be read, a fault of its type or of the value backend rather than a verdict about its lexical")
 		return
 	}
+	t.slots[i].record(m, present, loc)
+}
+
+// decline poisons slot i outright, for the field node named name at loc, and
+// records it on [walk.decline]'s terms: the value the node did not yield could
+// have been the one that qualified the target, and guessing either way is what
+// the decline exists to avoid. why states what could not be read.
+func (t *icTarget) decline(w *walk, i int, name xsd.QName, loc xsderr.Loc, why string) {
+	t.slots[i].declined = true
+	w.decline("assessing identity constraint", name, loc, ruleCvcIdentityConstraint, "3",
+		"the field %q of the identity constraint %s selected %s for the ·target node· %s, but %s, so cvc-identity-constraint clauses 3 and 4 are undecided for that constraint",
+		t.frame.ic.Fields()[i].Expression(), t.frame.ic.Name(), name, t.e.Name(), why)
+}
+
+// record takes one decided field node's answer into the slot, per clause 3's
+// bound of at most one valued node.
+func (s *icSlot) record(m icKeyMember, present bool, loc xsderr.Loc) {
 	if !present {
 		return
 	}
@@ -628,9 +659,12 @@ func (f *icFrame) qualify(w *walk, host Element) ([]*icTarget, bool) {
 // The scan is over pairs in document order and charges the LATER member of each
 // duplicated pair, which is the one a reader has to delete; an earlier member
 // already charged is not charged again for a third occurrence, so n equal
-// key-sequences charge n-1 times and not n(n-1)/2.
+// key-sequences charge n-1 times and not n(n-1)/2. A pair [walk.sameKeySequence]
+// cannot decide charges nothing and is recorded as an [Unevaluated] against its
+// later member, once per member however many pairs it is undecided in.
 func (f *icFrame) duplicates(w *walk, host Element, q []*icTarget) {
 	charged := make([]bool, len(q))
+	undecided := make([]bool, len(q))
 	seqs := make([]icKeySequence, len(q))
 	for i, t := range q {
 		seqs[i] = t.sequence()
@@ -641,6 +675,12 @@ func (f *icFrame) duplicates(w *walk, host Element, q []*icTarget) {
 				continue
 			}
 			same, decided := w.sameKeySequence(seqs[i], seqs[j])
+			if !decided && !undecided[j] {
+				undecided[j] = true
+				w.decline("assessing identity constraint", q[j].e.Name(), q[j].e.Loc(), ruleCvcIdentityConstraint, strings.TrimPrefix(f.duplicateClause(), "clause "),
+					"the ·key-sequence· of the ·target node· %s was not compared with the one at %s: the identity constraint %s declared on %s is a %s, and a member pair of the two could not be compared in one value space, so its %s is undecided",
+					q[j].e.Name(), q[i].e.Loc(), f.ic.Name(), host.Name(), f.ic.Category(), f.duplicateClause())
+			}
 			if !decided || !same {
 				continue
 			}
@@ -710,9 +750,12 @@ func (f *icFrame) keyOnly(w *walk, host Element, q []*icTarget) {
 // children's tables and from what E itself qualified, never from a sibling's or
 // an ancestor's.
 //
-// Three shapes decline instead of charging: a frame whose paths did not
-// compile, a ·qualified node set· qualify could not settle, and a binding some
-// descendant declined for one of those same reasons. A referenced key with no
+// Four shapes decline instead of charging: a frame whose paths did not compile
+// (recorded where it was opened), a ·qualified node set· qualify could not
+// settle (recorded at the slot that declined, or charged under clause 3), a
+// binding some descendant declined for one of those same reasons, and a member
+// lookup could not decide. The last two withhold this keyref's own clause 4.3
+// and are recorded here, per keyref and per member. A referenced key with no
 // binding AT ALL is not one of them — that is a key whose own element never
 // occurred in the subtree, which is exactly the "there is a node table" half of
 // clause 4.3 failing, and it is charged.
@@ -728,12 +771,21 @@ func (c *icCheck) keyrefs(w *walk) {
 		ref, _ := f.ic.ReferencedKeyName()
 		b, found := c.table.binding(ref)
 		if found && b.declined {
+			w.decline("assessing identity constraint", c.e.Name(), c.e.Loc(), ruleCvcIdentityConstraint, "4.3",
+				"the keyref %s declared on %s was not resolved: the node table of its {referenced key} %s was not assembled in full, so cvc-identity-constraint clause 4.3 is undecided for it",
+				f.ic.Name(), c.e.Name(), ref)
 			continue
 		}
 		for _, t := range q {
 			if found {
 				same, decided := b.lookup(w, t.sequence())
-				if !decided || same {
+				if same {
+					continue
+				}
+				if !decided {
+					w.decline("assessing identity constraint", t.e.Name(), t.e.Loc(), ruleCvcIdentityConstraint, "4.3",
+						"the ·key-sequence· of %s was not resolved against the node table of %s, the {referenced key} of the keyref %s declared on %s: a member pair could not be compared in one value space, or it matched only an entry §3.11.5's conflict resolution could not settle, so cvc-identity-constraint clause 4.3 is undecided for it",
+						t.e.Name(), ref, f.ic.Name(), c.e.Name())
 					continue
 				}
 			}
@@ -821,10 +873,17 @@ type icBinding struct {
 // is the only thing the conflict resolution reads: "potential conflicts are
 // resolved by not including any conflicting entries which would have owed their
 // inclusion to clause 1".
+//
+// contested marks an entry the proviso would have dropped had a comparison
+// [resolveEntryConflicts] could not decide come out "same": it is kept, and a
+// clause 4.3 match against it alone is undecided rather than satisfied
+// ([icBinding.lookup]). It travels up with the entry, since the entry it was
+// contested against may itself be dropped before the next level compares them.
 type icEntry struct {
 	seq       icKeySequence
 	node      int
 	fromChild bool
+	contested bool
 }
 
 // declare returns the binding for def, adding it in first-seen order where the
@@ -892,7 +951,9 @@ func (t *icTable) resolveConflicts(w *walk) {
 // An undecided comparison is not a conflict either, and both departures keep
 // MORE entries than the proviso would. The whole consumer set of a node table
 // is icCheck.keyrefs, whose charge condition is a key-sequence NOT found among
-// them, so an extra entry costs a rejection and can manufacture none.
+// them, so an extra entry costs a rejection and can manufacture none. An entry
+// an undecided comparison would have dropped is marked contested, so a keyref
+// member matching it alone records clause 4.3 as undecided instead of passing.
 func resolveEntryConflicts(w *walk, entries []icEntry) []icEntry {
 	drop := make([]bool, len(entries))
 	for i := range entries {
@@ -901,15 +962,18 @@ func resolveEntryConflicts(w *walk, entries []icEntry) []icEntry {
 				continue
 			}
 			same, decided := w.sameKeySequence(entries[i].seq, entries[j].seq)
-			if !decided || !same {
+			if decided && !same {
 				continue
 			}
-			if entries[i].fromChild {
-				drop[i] = true
+			loseI := entries[i].fromChild
+			loseJ := entries[j].fromChild || !entries[i].fromChild
+			if !decided {
+				entries[i].contested = entries[i].contested || loseI
+				entries[j].contested = entries[j].contested || loseJ
+				continue
 			}
-			if entries[j].fromChild || !entries[i].fromChild {
-				drop[j] = true
-			}
+			drop[i] = drop[i] || loseI
+			drop[j] = drop[j] || loseJ
 		}
 	}
 	kept := make([]icEntry, 0, len(entries))
@@ -924,16 +988,17 @@ func resolveEntryConflicts(w *walk, entries []icEntry) []icEntry {
 
 // lookup is clause 4.3's search: is there an entry in this node table whose
 // ·key-sequence· is equal or identical to seq, member for member? decided is
-// false where no entry matched but some comparison could not be made, so the
-// caller declines instead of charging.
+// false where no uncontested entry matched but some comparison could not be
+// made or some contested entry matched, so the caller declines instead of
+// charging or passing.
 func (b *icBinding) lookup(w *walk, seq icKeySequence) (same, decided bool) {
 	decided = true
 	for _, e := range b.entries {
 		match, ok := w.sameKeySequence(e.seq, seq)
-		if match {
+		if match && !e.contested {
 			return true, true
 		}
-		if !ok {
+		if match || !ok {
 			decided = false
 		}
 	}

@@ -168,9 +168,9 @@ import (
 // {value constraint} instead — a decline case 9's clause 3.1.3 shares, over the
 // same ·initial value· and for the same reason. The value charges add their own: a
 // declaration whose {type definition} does not resolve to a simple type, and — the
-// one that would otherwise reject every typeless attribute — a
-// value.ValidateLexical error that is a fault of the type or of the backend rather
-// than a verdict about the lexical (value.IsDatatypeVerdict). Each of those is a
+// one that would otherwise reject every value of a type the backend does not map
+// — a value.ValidateLexical error that is a fault of the type or of the backend
+// rather than a verdict about the lexical (value.IsDatatypeVerdict). Each of those is a
 // DECLINE inside validate, and a declined attribute charges nothing at all, so it
 // cannot arrive here.
 //
@@ -195,8 +195,8 @@ import (
 // table} selection, an unresolvable {type definition}, a name no top-level
 // declaration matches under a wildcard and no xsi:type types either, a
 // ·skipped· subtree — the element and everything below it is decided against
-// nothing, and several of validate's declines (its attribute half, its
-// ID/IDREF table, its identity constraints) write a log line and no record.
+// nothing, and a few of validate's declines record nothing in
+// Result.Unevaluated (validate.Unevaluated's own doc lists them).
 // The spec has no category for "this processor did not implement that check"
 // stronger than notKnown, so outside the two shapes below an empty Result
 // licenses no "valid" claim; equally it licenses no "invalid" one, so an
@@ -250,7 +250,10 @@ import (
 //
 // The TRUST BOUNDARY is value.ValidateLexical: its verdict on the root's
 // ·initial value· is taken as Datatype Valid (Datatypes §4.1.4). The datatypes
-// lane is what grounds that verdict; this lane does not re-check it.
+// lane is what grounds that verdict; this lane does not re-check it. A root of
+// xs:anySimpleType or xs:anyAtomicType never reaches it: Datatype Valid holds
+// for every literal against a ·special· datatype, and validate decides so
+// itself (#1788).
 //
 // The second shape is a COMPLEX EMPTY LEAF ROOT (complexEmptyLeafRoot,
 // simpleleaf.go, #1808), again only where the walk recorded nothing in

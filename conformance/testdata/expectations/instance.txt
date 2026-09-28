@@ -642,7 +642,7 @@ ElemDecl/typedef01201m1/instance/Positive fail
 ElemDecl/typedef01202m1/instance/Negative pass
 ElemDecl/typedef01202m1/instance/Positive fail
 ElemDecl/typedef01301m1/instance/Negative pass
-ElemDecl/typedef01301m1/instance/Positive fail
+ElemDecl/typedef01301m1/instance/Positive pass
 ElemDecl/typedef01401m1/instance/Negative pass
 ElemDecl/typedef01401m1/instance/Positive fail
 ElemDecl/typedef01501m1/instance/Negative fail
@@ -25404,7 +25404,7 @@ Simple/simple046/instance/simple046.v01.xml pass
 Simple/simple050/instance/simple050.n01.xml pass
 Simple/simple050/instance/simple050.n02.xml pass
 Simple/simple050/instance/simple050.n03.xml pass
-Simple/simple050/instance/simple050.v01.xml fail
+Simple/simple050/instance/simple050.v01.xml pass
 Simple/simple050/instance/simple050.v02.xml fail
 Simple/simple054/instance/simple053.n01.xml pass
 Simple/simple055/instance/simple055.n01.xml pass

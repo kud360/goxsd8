@@ -238,31 +238,27 @@
 // value whose ·validating type· String Valid clause 3 cannot decide, and —
 // the decline that matters most — a value.ValidateLexical error that is a fault
 // of the type or of the backend rather than a verdict about the lexical
-// (value.IsDatatypeVerdict), which is what keeps a typeless attribute
-// (xs:anySimpleType, §3.2.2.2), or simple content of a type this backend
-// does not map, from being rejected by every document that carries one.
-// The content half's declines are recorded as [Unevaluated] under the rule
-// each would have charged (cvccomplexcontent.go): a {content type} whose shape
-// xsd.Schema.ContentMatcher declines, String Valid withheld over an element's
-// ·initial value· (cvc-type clause 3.1.3, cvc-complex-type clause 1.2), and an
-// undecided comparison against a fixed {value constraint} (cvc-elt clause
-// 5.2.2.2.2). The rest are not recorded: the attribute half's write a Debug
-// log line alone, and a ·governing type definition· left undetermined other
-// than by a withheld {type table} records nothing (#1093). The first item of the
-// list above, an {attribute wildcard}, also carries an obligation that is this
-// layer's ALONE: where the wildcard's {process contents} is strict or lax and it
-// does not carry ##defined, §3.4.6.4 key-dft-binding case 3 binds an item
-// ·attributed· to it to a SYNTHESIZED Attribute Use over the ·governing
-// attribute declaration· its ·expanded name· ·resolves· to, which only an
-// assessment episode can ·resolve· — so xsd's static c-ran rendering reports the
-// keyword there by a ruling, not by an omission for this layer's carve to repair
-// (#267). A skip {attribute wildcard} is outside that obligation as squarely as
-// a ##defined one, and this layer owes it no case-3 rendering at all:
-// key-governing-ad (§3.2.4.2) clause 3 resolves by name only "provided the
-// attribute is not ·skipped·" and key-skipped makes such an item ·skipped·, so
-// it has no ·governing attribute declaration· to bind and case 6's keyword is
-// already the whole binding. cvcid.go's skippedAttribute encodes that reading
-// for the attribute side, as the paragraph below does for the element side.
+// (value.IsDatatypeVerdict), which is what keeps a value of a type this
+// backend does not map from being rejected by every document that carries
+// one. The two ·special· datatypes are decided instead, Datatype Valid holding
+// for every literal against xs:anySimpleType and xs:anyAtomicType (Datatypes
+// §4.1.4), so a typeless attribute (§3.2.2.2) is satisfied. Which declines are
+// recorded as [Unevaluated], and which are not, is [Unevaluated]'s own doc to
+// say. The first item of the list above, an {attribute wildcard}, also carries
+// an obligation that is this layer's ALONE: where the wildcard's {process
+// contents} is strict or lax and it does not carry ##defined, §3.4.6.4
+// key-dft-binding case 3 binds an item ·attributed· to it to a SYNTHESIZED
+// Attribute Use over the ·governing attribute declaration· its ·expanded name·
+// ·resolves· to, which only an assessment episode can ·resolve· — so xsd's
+// static c-ran rendering reports the keyword there by a ruling, not by an
+// omission for this layer's carve to repair (#267). A skip {attribute wildcard}
+// is outside that obligation as squarely as a ##defined one, and this layer owes
+// it no case-3 rendering at all: key-governing-ad (§3.2.4.2) clause 3 resolves
+// by name only "provided the attribute is not ·skipped·" and key-skipped makes
+// such an item ·skipped·, so it has no ·governing attribute declaration· to bind
+// and case 6's keyword is already the whole binding. cvcid.go's skippedAttribute
+// encodes that reading for the attribute side, as the paragraph below does for
+// the element side.
 //
 // Every one of those charges reaches a DESCENDANT on the same terms, against
 // the ·governing type definition· the particle its parent's {content type}
@@ -306,7 +302,9 @@
 // a ·key-sequence· member pair governed by two different simple types — and
 // cvc-id clause 1 additionally declines for the whole document once any item of
 // the subtree did, since an unread declaration is exactly what an empty binding
-// would misreport.
+// would misreport. A ·nilled· element is not such an item: its [schema actual
+// value] is ·absent· (§3.3.5.4), so it is outside the ·eligible item set· and
+// leaves a ·key-sequence· short, and both rules read it as the spec does.
 //
 // The rest of the cvc- decisions land on the walk [Validator.Assess]
 // already makes. Non-fatal warnings get an accessor of their own the day

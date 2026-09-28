@@ -21,9 +21,15 @@ const ruleCvcSimpleType xsderr.Rule = "cvc-simple-type"
 // lexical and the rejection for an invalid one, which the caller charges under
 // its own rule with the verdict as the wrapped cause.
 //
-// A ValidateLexical error that is not a VERDICT ([value.IsDatatypeVerdict])
-// withholds one; each caller states that decline's GAP on its own terms.
+// A ·special· st (isSpecial) passes clause 2 without asking ValidateLexical,
+// which no backend answers for one: no clause 1 normalization can move a string
+// out of either type's lexical space. A ValidateLexical error
+// that is not a VERDICT ([value.IsDatatypeVerdict]) withholds one; each caller
+// states that decline's GAP on its own terms.
 func (w *walk) stringValid(st *xsd.SimpleType, lexical string, owner Element, loc xsderr.Loc) (decided bool, verdict error) {
+	if isSpecial(st) {
+		return w.entitiesDeclared(st, lexical, owner, loc)
+	}
 	_, err := value.ValidateLexical(w.backend, w.schema, st, lexical, elementContext{owner: owner})
 	if err == nil {
 		return w.entitiesDeclared(st, lexical, owner, loc)
@@ -32,6 +38,22 @@ func (w *walk) stringValid(st *xsd.SimpleType, lexical string, owner Element, lo
 		return false, nil
 	}
 	return true, err
+}
+
+// isSpecial reports whether st is one of the two ·special· datatypes,
+// xs:anySimpleType and xs:anyAtomicType (Datatypes §2.4, dt-special), by the
+// pointer identity [xsd.AnySimpleType] and [xsd.AnyAtomicType] make
+// load-bearing. Datatype Valid (Datatypes §4.1.4, cvc-datatype-valid) holds
+// UNCONDITIONALLY for every literal against either — its own first disjunct is
+// "T corresponds to a ·special· datatype" — so a value this package reads
+// against one is decided, never declined, whatever the backend maps: both
+// lexical spaces are every Char sequence and both {facets} are empty (#1788).
+// Their value spaces are another matter, the lexical mapping "not a function"
+// (Datatypes §3.2.1.2, §3.2.2.2), so what needs a special type's ·actual value·
+// still declines: a fixed-value comparison ([walk.fixedAgreement],
+// [contentCheck.fixedActualValue]) and a ·key-sequence· member ([walk.keyMember]).
+func isSpecial(st *xsd.SimpleType) bool {
+	return st == xsd.AnySimpleType() || st == xsd.AnyAtomicType()
 }
 
 // entitiesDeclared settles String Valid clause 3 — "Let V be the ·actual value·
