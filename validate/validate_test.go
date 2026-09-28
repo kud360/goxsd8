@@ -150,7 +150,9 @@ func sampleTree() *testElement {
 // wantVisits is sampleTree's every information item, once each, in the order
 // cvc-assess-elt (§3.3.4.6) fixes: the element, then its [[attributes]], then
 // its [[children]] in document order, recursively. Every key is qualified by
-// the "validate" group New installs (STYLE L1).
+// the "validate" group New installs (STYLE L1). The last line is not a visit:
+// rootSchema's declaration carries no {type definition}, so the root's type is
+// undetermined and its ID/IDREF-table decline is recorded as it leaves.
 var wantVisits = []string{
 	"assessing element validate.name=root validate.loc=instance.xml:1:1",
 	"assessing attribute validate.name=id validate.loc=instance.xml:1:23",
@@ -161,6 +163,7 @@ var wantVisits = []string{
 	"assessing text validate.chars=7 validate.loc=instance.xml:4:3",
 	"assessing element validate.name=b validate.loc=instance.xml:5:3",
 	"assessing element validate.name=c validate.loc=instance.xml:5:6",
+	"assessing ID/IDREF table validate.name=root validate.loc=instance.xml:1:1 validate.rule=cvc-id validate.clause=1 validate.outcome=declined",
 }
 
 func TestAssessWalksEveryNodeOnceInDocumentOrder(t *testing.T) {
@@ -304,6 +307,7 @@ func TestAssessChargesAnAbstractRoot(t *testing.T) {
 	}
 	want := slices.Clone(wantVisits)
 	want[0] = "assessing element validate.name=abstractRoot validate.loc=instance.xml:1:1"
+	want[len(want)-1] = strings.Replace(want[len(want)-1], "name=root", "name=abstractRoot", 1)
 	if !slices.Equal(*visits, want) {
 		t.Errorf("walk visited\n\t%s\nwant\n\t%s",
 			strings.Join(*visits, "\n\t"), strings.Join(want, "\n\t"))

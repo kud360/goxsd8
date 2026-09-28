@@ -171,7 +171,7 @@ func TestTypelessAttributeIsDecided(t *testing.T) {
 // clause 4, at the element).
 func TestAttributeDeclinesAreRecorded(t *testing.T) {
 	decimal := []xsd.AttributeUse{typedUse(t, "n", icBuiltin("decimal"), false, nil, nil)}
-	got, undecided := assessRecordedWith(t, decimalGap{testBackend()}, typedSchema(t, decimal), valuedRoot("n", "1.5"))
+	got, undecided := assessRecordedWith(t, gapBackend(icBuiltin("decimal")), typedSchema(t, decimal), valuedRoot("n", "1.5"))
 	wantSilence(t, got, "a withheld String Valid verdict charges nothing")
 	wantDeclines(t, undecided, Unevaluated{rule: ruleCvcAttribute, loc: loc(1, 10), msg: "cvc-attribute clause 3"})
 
@@ -185,7 +185,7 @@ func TestAttributeDeclinesAreRecorded(t *testing.T) {
 
 	dflt := xsd.NewValueConstraint(xsd.ValueDefault, "1.5", nil, nil)
 	defaulted := []xsd.AttributeUse{typedUse(t, "n", icBuiltin("decimal"), false, &dflt, nil)}
-	got, undecided = assessRecordedWith(t, decimalGap{testBackend()}, typedSchema(t, defaulted),
+	got, undecided = assessRecordedWith(t, gapBackend(icBuiltin("decimal")), typedSchema(t, defaulted),
 		&testElement{name: xsd.QName{Local: "root"}, loc: loc(1, 1)})
 	wantSilence(t, got, "an undecided default charges nothing")
 	wantDeclines(t, undecided, Unevaluated{rule: ruleCvcComplexType, loc: loc(1, 1), msg: "cvc-complex-type clause 4"})

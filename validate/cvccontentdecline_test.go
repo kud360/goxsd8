@@ -13,19 +13,26 @@ import (
 // RECORDED as an [Unevaluated] and not only logged ([contentCheck.decline]): a
 // decline that only logged would leave an empty Result reading as a walk that
 // performed every check it reached. The undecided type is xs:decimal under
-// decimalGap, a backend that does not map it, so String Valid over it is
+// gapBackend, a backend that does not map it, so String Valid over it is
 // withheld rather than decided. xs:anySimpleType is not one: Datatype Valid
 // holds for every literal against a ·special· datatype (Datatypes §4.1.4), so
 // the walk decides it though no backend maps it (#1788).
 
-// decimalGap is the strict backend with xs:decimal unmapped: value.ValidateLexical
-// then reports a fault of the TYPE for xs:decimal, which is the decline the
-// tests below record. The schema is seeded under the strict backend, since
-// builtin.Seed maps every primitive; only the assessment reads this one.
-type decimalGap struct{ value.Backend }
+// typeGap is the strict backend with one type unmapped: value.ValidateLexical
+// then reports a fault of the TYPE for it and for every type derived from it,
+// which is the decline the tests record. The schema is seeded under the strict
+// backend, since builtin.Seed maps every primitive; only the assessment reads
+// this one.
+type typeGap struct {
+	value.Backend
+	gap xsd.QName
+}
 
-func (b decimalGap) Mapping(typ xsd.QName) (value.Mapping, bool) {
-	if typ == icBuiltin("decimal") {
+// gapBackend is the strict backend with gap unmapped.
+func gapBackend(gap xsd.QName) value.Backend { return typeGap{Backend: testBackend(), gap: gap} }
+
+func (b typeGap) Mapping(typ xsd.QName) (value.Mapping, bool) {
+	if typ == b.gap {
 		return value.Mapping{}, false
 	}
 	return b.Backend.Mapping(typ)
@@ -79,7 +86,7 @@ func wantDeclines(t *testing.T, got []Unevaluated, want ...Unevaluated) {
 // not every simple-typed element's.
 func TestWithheldSimpleTypeValueIsRecorded(t *testing.T) {
 	schema := simpleTypedSchema(t, icBuiltin("decimal"), nil, false)
-	got, undecided := assessRecordedWith(t, decimalGap{testBackend()}, schema, cRoot("#1.5"))
+	got, undecided := assessRecordedWith(t, gapBackend(icBuiltin("decimal")), schema, cRoot("#1.5"))
 	wantSilence(t, got, "a withheld String Valid verdict charges nothing")
 	wantDeclines(t, undecided, Unevaluated{rule: ruleCvcType, loc: loc(1, 1), msg: "cvc-type clause 3.1.3"})
 
@@ -103,7 +110,7 @@ func TestSpecialSimpleTypeValueIsDecided(t *testing.T) {
 // cvc-complex-type clause 1.2's ·initial value· half, withheld over a simple
 // {content type}, is recorded at the CONTAINING element.
 func TestWithheldSimpleContentValueIsRecorded(t *testing.T) {
-	got, undecided := assessRecordedWith(t, decimalGap{testBackend()}, simpleContentSchema(t, icBuiltin("decimal")), cRoot("#1.5"))
+	got, undecided := assessRecordedWith(t, gapBackend(icBuiltin("decimal")), simpleContentSchema(t, icBuiltin("decimal")), cRoot("#1.5"))
 	wantSilence(t, got, "a withheld String Valid verdict charges nothing")
 	wantDeclines(t, undecided, Unevaluated{rule: ruleCvcComplexType, loc: loc(1, 1), msg: "cvc-complex-type clause 1.2"})
 }
@@ -116,7 +123,7 @@ func TestWithheldSimpleContentValueIsRecorded(t *testing.T) {
 // is a function (Datatypes §3.2.1.2) — while clause 3.1.3 is decided.
 func TestUndecidedFixedValueComparisonIsRecorded(t *testing.T) {
 	fixed := xsd.NewValueConstraint(xsd.ValueFixed, "1.5", nil, nil)
-	got, undecided := assessRecordedWith(t, decimalGap{testBackend()},
+	got, undecided := assessRecordedWith(t, gapBackend(icBuiltin("decimal")),
 		simpleTypedSchema(t, icBuiltin("decimal"), &fixed, false), cRoot("#1.5"))
 	wantSilence(t, got, "an undecided comparison charges nothing")
 	wantDeclines(t, undecided,

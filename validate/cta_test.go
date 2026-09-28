@@ -230,9 +230,12 @@ func TestUnevaluableTestIsRecordedAsUnevaluated(t *testing.T) {
 		ctaAlt{"count(@kind) > 0", "Second"},
 		ctaAlt{"@kind = 'book'", "First"})
 	wantSilence(t, res.Violations(), "the withheld type charges nothing")
+	// The withheld type is one record, and the one other is what it costs the
+	// ID/IDREF table: an element of undetermined type is an item cvc-id clause 1
+	// cannot read, recorded as the element leaves.
 	got := res.Unevaluated()
-	if len(got) != 1 {
-		t.Fatalf("Unevaluated() = %v, want exactly one record for the withheld ·conditionally selected· type", messages(got))
+	if len(got) != 2 || got[1].Rule() != ruleCvcID {
+		t.Fatalf("Unevaluated() = %v, want exactly one record for the withheld ·conditionally selected· type, then cvc-id's", messages(got))
 	}
 	if got[0].Rule() != "key-cta-ta-select" {
 		t.Errorf("Rule() = %q, want key-cta-ta-select", got[0].Rule())

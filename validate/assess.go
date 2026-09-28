@@ -1037,6 +1037,15 @@ func (w *walk) child(c Child, content *contentCheck, id *icCheck, inherited []in
 			// 1 arm, which stops charging an empty binding; clause 2 keeps
 			// charging, because an unseen item can only ADD members to a
 			// binding and never take one away (cvcid.go).
+			//
+			// It records no [Unevaluated] of its own. A clause 1.4 the matcher
+			// declined is content.element's cvc-complex-content record, a parent
+			// whose type was undetermined is its own idElement record, and a
+			// rejected, ·nilled· or simple-typed parent carries a violation, so
+			// a record here would restate one decline per child. The one nil
+			// attribution none of those covers — a parent assessed against no
+			// type at all, whose children this package leaves untyped — is on
+			// [Unevaluated]'s not-recorded list.
 			w.ids.declined = true
 		}
 		w.element(e, g, id, inherited)

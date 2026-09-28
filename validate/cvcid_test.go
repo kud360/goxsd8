@@ -274,26 +274,23 @@ func idNilled(line int, nil_ string) *testElement {
 	return icElem(xsd.QName{Local: "item"}, line, nil, ElementChild(name))
 }
 
-// Only a ·nilled· element declines the ID/IDREF table, and ·nilled· is
-// key-nilled's conjunction — D.{nillable} = true AND an ·actual value· of true
-// ([nilled]) — not the PRESENCE of an xsi:nil attribute. Both conjuncts are
-// pinned here by the dangling reference clause 1 charges, which any decline
-// suppresses: reading presence alone would swallow the charge in the first and
-// third documents, where the element is not ·nilled· at all.
-func TestOnlyANilledElementDeclinesTheIDTable(t *testing.T) {
+// A ·nilled· element is outside the ·eligible item set· and withholds nothing:
+// §3.3.5.4 gives it an absent [schema actual value], and §3.17.5.2's clause 2
+// excludes every such item. The dangling reference is charged under cvc-id
+// clause 1 whether <name> is ·nilled· (key-nilled: D.{nillable} = true AND an
+// ·actual value· of true), not ·nilled·, or carries an xsi:nil clause 3.1
+// charges, and nothing is recorded as unevaluated in any of the three.
+func TestANilledElementWithholdsNoIDCheck(t *testing.T) {
 	ghost := icRoot(idItem(2, "ref", "ghost"), idNilled(3, "false"))
 	icWantCharges(t, icAssess(t, icSchema(t, "", true, nil, nil), ghost),
 		icChargeAttr(ruleCvcID, 2))
 
-	// The same document with a nilled <name>: the decline is real and the
-	// reference goes unread, since a ·nilled· element could have been the
-	// declaration the reference names.
 	nilled := icRoot(idItem(2, "ref", "ghost"), idNilled(3, "true"))
-	icWantCharges(t, icAssess(t, icSchema(t, "", true, nil, nil), nilled))
+	icWantCharges(t, icAssess(t, icSchema(t, "", true, nil, nil), nilled),
+		icChargeAttr(ruleCvcID, 2))
+	_, undecided := assessRecorded(t, icSchema(t, "", true, nil, nil), nilled)
+	wantDeclines(t, undecided)
 
-	// xsi:nil = true on a declaration whose {nillable} is false makes no
-	// ·nilled· element either: cvc-elt clause 3.1 charges the attribute, and
-	// clause 1 keeps reading the table.
 	icWantCharges(t, icAssess(t, icSchema(t, "", false, nil, nil), nilled),
 		icCharge(ruleCvcElt, 4), icChargeAttr(ruleCvcID, 2))
 }
@@ -493,4 +490,26 @@ func TestCvcIDRuleIsTheBareCatalogName(t *testing.T) {
 	if xsderr.IsValidRule(xsderr.Rule("cvc-id.2")) {
 		t.Error("cvc-id.2 is a catalog rule; the clause belongs in the message")
 	}
+}
+
+// Every item the ID/IDREF table could not read is RECORDED as an [Unevaluated]
+// under cvc-id at the item's own location, and not only folded into the flag
+// that suppresses clause 1: under a backend that maps no xs:string, neither the
+// IDREF nor the ID attribute below has a readable value, so the dangling
+// reference is not charged and each item says why.
+func TestUnreadableIDItemsAreRecorded(t *testing.T) {
+	doc := icRoot(idItem(2, "ref", "ghost"), idItem(3, "xid", "a"))
+	icWantCharges(t, icAssess(t, idSchema(t), doc), icChargeAttr(ruleCvcID, 2))
+
+	got, undecided := assessRecordedWith(t, gapBackend(icBuiltin("string")), idSchema(t), doc)
+	wantSilence(t, got, "an unread item suppresses cvc-id clause 1")
+	var ids []Unevaluated
+	for _, u := range undecided {
+		if u.Rule() == ruleCvcID {
+			ids = append(ids, u)
+		}
+	}
+	wantDeclines(t, ids,
+		Unevaluated{rule: ruleCvcID, loc: loc(2, 2), msg: "cvc-id clause 1 is undecided"},
+		Unevaluated{rule: ruleCvcID, loc: loc(3, 2), msg: "cvc-id clause 1 is undecided"})
 }
