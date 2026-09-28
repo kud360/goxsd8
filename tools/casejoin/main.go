@@ -351,10 +351,10 @@ type joined struct {
 	BankedPassIDs []string
 	// DeclaredValidIDs are candidates, banked `fail` on the instance lane, that
 	// the suite declares VALID. They are counted apart from CandidateIDs because
-	// that lane's executor decides a document valid for one shape alone — a
-	// simple leaf root (#1738) — so only a case of that shape among them can
-	// flip. On any other lane the field is empty and such an entry is in
-	// CandidateIDs like any other.
+	// that lane's executor decides a document valid for two shapes alone — a
+	// simple leaf root (#1738) and a complex empty leaf root (#1808) — so only a
+	// case of one of those shapes among them can flip. On any other lane the
+	// field is empty and such an entry is in CandidateIDs like any other.
 	DeclaredValidIDs []string
 	// CandidateIDs are the other banked `fail` entries. Together with
 	// DeclaredValidIDs they are the bound from above (candidates).
@@ -369,11 +369,12 @@ func (j joined) candidates() []string {
 	return all
 }
 
-// instanceLane is the one lane whose executor observes "valid" for a single
-// shape only: its banked `fail` on a case the suite declares VALID flips only
-// where that case is a simple leaf root (#1738). Before #1738 such a case could
-// not flip at all and the join subtracted it (#1561); it is now a candidate,
-// counted on a row of its own on this lane alone.
+// instanceLane is the one lane whose executor observes "valid" for two shapes
+// only: its banked `fail` on a case the suite declares VALID flips only where
+// that case is a simple leaf root (#1738) or a complex empty leaf root (#1808).
+// Before #1738 such a case could not flip at all and the join subtracted it
+// (#1561); it is now a candidate, counted on a row of its own on this lane
+// alone.
 const instanceLane = "instance"
 
 // distinctEntries reports the entries naming any of the given paths, each ONCE
@@ -569,7 +570,7 @@ func (j joined) rows() []row {
 		{"  banked pass — cannot flip up", len(j.BankedPassIDs)},
 	}
 	if j.Lane == instanceLane {
-		rows = append(rows, row{"  banked fail, suite declares it VALID — CANDIDATE as a simple leaf root (#1738)", len(j.DeclaredValidIDs)})
+		rows = append(rows, row{"  banked fail, suite declares it VALID — CANDIDATE as a simple or complex empty leaf root (#1738, #1808)", len(j.DeclaredValidIDs)})
 	}
 	return append(rows, row{"  banked fail — CANDIDATE", len(j.CandidateIDs)})
 }
@@ -592,8 +593,9 @@ func printCaveat(w io.Writer, lane string) {
 		return
 	}
 	_, _ = fmt.Fprintln(w, "  On this lane a candidate the suite declares VALID flips only where the executor decides the")
-	_, _ = fmt.Fprintln(w, "  document valid, which it does for a simple leaf root alone (#1738): the figure includes them,")
-	_, _ = fmt.Fprintln(w, "  and their own row below counts them, so read that row as the looser part of the bound.")
+	_, _ = fmt.Fprintln(w, "  document valid, which it does for a simple or complex empty leaf root alone (#1738, #1808):")
+	_, _ = fmt.Fprintln(w, "  the figure includes them, and their own row below counts them, so read that row as the looser")
+	_, _ = fmt.Fprintln(w, "  part of the bound.")
 }
 
 // printIDSection lists one class's case IDs under its heading.

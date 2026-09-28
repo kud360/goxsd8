@@ -176,16 +176,17 @@ func TestIDsReportsAPathNoCatalogEntryNames(t *testing.T) {
 // three entries naming the path, the withheld one carries no line, and the two
 // banked failures are both candidates — the one the suite declares valid
 // counted on its own row, since the instance lane's executor decides a
-// document valid for a simple leaf root (#1738) and it may be one.
+// document valid for a simple or complex empty leaf root (#1738, #1808) and it
+// may be one.
 func TestJoinCountsOnlyTheBankedFailuresThatCouldFlip(t *testing.T) {
 	got := runFixture(t, "", "join", "instance", "docs/a1.xml")
 	wantLines(t, got,
 		"casejoin: 1 path(s) → 3 catalog entry(ies) → 2 candidate case(s) in lane instance",
 		"\n  S/g1/instance/i1\n  S/g2/instance/i2\n",
-		"which it does for a simple leaf root alone (#1738)",
+		"which it does for a simple or complex empty leaf root alone (#1738, #1808)",
 	)
 	wantRow(t, got, "withheld — no case produced, nothing to flip (#1412)", 1)
-	wantRow(t, got, "banked fail, suite declares it VALID — CANDIDATE as a simple leaf root (#1738)", 1)
+	wantRow(t, got, "banked fail, suite declares it VALID — CANDIDATE as a simple or complex empty leaf root (#1738, #1808)", 1)
 	wantRow(t, got, "banked fail — CANDIDATE", 1)
 }
 
