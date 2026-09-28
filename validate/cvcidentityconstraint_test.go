@@ -185,13 +185,13 @@ func TestKeyChargesANillableElementMember(t *testing.T) {
 		icCharge(ruleCvcIdentityConstraint, 3))
 }
 
-// Only a ·nilled· field node withholds its ·key-sequence· member
+// Only a ·nilled· field node contributes no ·key-sequence· member
 // (elementKeyMember), and ·nilled· is key-nilled's conjunction — D.{nillable} =
 // true AND an ·actual value· of true ([nilled]) — not the PRESENCE of an xsi:nil
 // attribute. Both conjuncts are pinned by the duplicate a unique charges only
 // where both <name> nodes supplied their member: reading presence alone would
-// decline every slot below and charge nothing at all.
-func TestOnlyANilledFieldNodeWithholdsItsKeySequenceMember(t *testing.T) {
+// leave every sequence below short and charge nothing at all.
+func TestOnlyANilledFieldNodeContributesNoKeySequenceMember(t *testing.T) {
 	unique := icDef(t, "U", xsd.IdentityConstraintUnique, ".//item", nil, "", "name")
 	doc := func(nil_ string) *testElement {
 		named := func(line int) *testElement {
@@ -328,4 +328,98 @@ func TestIdentityConstraintRuleIsTheBareCatalogName(t *testing.T) {
 	if xsderr.IsValidRule(xsderr.Rule("cvc-identity-constraint.4.2.1")) {
 		t.Error("cvc-identity-constraint.4.2.1 is a catalog rule; the clause belongs in the message")
 	}
+}
+
+// icDeclines is the cvc-identity-constraint records among undecided, in order.
+func icDeclines(undecided []Unevaluated) []Unevaluated {
+	var out []Unevaluated
+	for _, u := range undecided {
+		if u.Rule() == ruleCvcIdentityConstraint {
+			out = append(out, u)
+		}
+	}
+	return out
+}
+
+// A key whose field selects only ·nilled· nodes leaves every ·key-sequence·
+// short, which §3.11.4 clause 3's Note names outright, so each ·target node·
+// is out of the ·qualified node set· and clause 4.2.1 charges it. Nothing is
+// withheld, so nothing is recorded.
+func TestANilledFieldNodeLeavesAKeySequenceShort(t *testing.T) {
+	key := icDef(t, "K", xsd.IdentityConstraintKey, ".//item", nil, "", "name")
+	schema := icSchema(t, "", true, []xsd.IdentityConstraint{key}, nil)
+	doc := icRoot(idNilled(2, "true"), idNilled(4, "true"))
+
+	got, undecided := assessRecorded(t, schema, doc)
+	icWantCharges(t, got, icCharge(ruleCvcIdentityConstraint, 2), icCharge(ruleCvcIdentityConstraint, 4))
+	wantDeclines(t, undecided)
+}
+
+// Every identity-constraint decline is RECORDED at its origin: a path outside
+// the subset at the element declaring the constraint (clause 4), a keyref whose
+// {referenced key}'s node table was not assembled (clause 4.3), and a field node
+// with no determinable ·governing type definition· (clause 3).
+func TestIdentityConstraintDeclinesAreRecorded(t *testing.T) {
+	key := icDef(t, "K", xsd.IdentityConstraintKey, "item[1]", nil, "", "@id")
+	keyref := icDef(t, "R", xsd.IdentityConstraintKeyref, "ref", nil, "K", "@r")
+	ref := icElem(xsd.QName{Local: "ref"}, 4, []Attribute{icAttr(xsd.QName{Local: "r"}, "zzz", 4)})
+	_, undecided := assessRecorded(t, icSchema(t, "", false, []xsd.IdentityConstraint{key, keyref}, nil),
+		icRoot(icIDed(2, "a"), icIDed(3, "a"), ref))
+	wantDeclines(t, icDeclines(undecided),
+		Unevaluated{rule: ruleCvcIdentityConstraint, loc: loc(1, 1), msg: "clauses 3 and 4 are undecided"},
+		Unevaluated{rule: ruleCvcIdentityConstraint, loc: loc(1, 1), msg: "clause 4.3 is undecided"})
+
+	tabled := icDef(t, "T", xsd.IdentityConstraintKey, ".//item", nil, "", "tabled")
+	named := func(line int) *testElement {
+		node := icElem(xsd.QName{Local: "tabled"}, line+1, nil, TextChild(&testText{data: "a", loc: loc(line+1, 8)}))
+		return icElem(xsd.QName{Local: "item"}, line, nil, ElementChild(node))
+	}
+	_, undecided = assessRecorded(t, icSchema(t, "", false, []xsd.IdentityConstraint{tabled}, nil), icRoot(named(2), named(4)))
+	wantDeclines(t, icDeclines(undecided),
+		Unevaluated{rule: ruleCvcIdentityConstraint, loc: loc(3, 1), msg: "clauses 3 and 4 are undecided"},
+		Unevaluated{rule: ruleCvcIdentityConstraint, loc: loc(5, 1), msg: "clauses 3 and 4 are undecided"})
+}
+
+// A ·key-sequence· comparison sameKeyMember cannot make — two members validated
+// against different simple types, here xs:string and xs:ID — withholds the
+// clause that reads it, and is recorded: clause 4.2.2 against the later ·target
+// node· of a key, and clause 4.3 against a keyref member. The xs:string/xs:string
+// control is the decided answer the first record stands in for.
+func TestUndecidedKeySequenceComparisonsAreRecorded(t *testing.T) {
+	key := icDef(t, "K", xsd.IdentityConstraintKey, ".//item", nil, "", "@id|@xid")
+	schema := icSchema(t, "", false, []xsd.IdentityConstraint{key}, nil)
+	icWantCharges(t, icAssess(t, schema, icRoot(icIDed(2, "a"), icIDed(3, "a"))), icCharge(ruleCvcIdentityConstraint, 3))
+	got, undecided := assessRecorded(t, schema, icRoot(icIDed(2, "a"), idItem(3, "xid", "a")))
+	wantSilence(t, got, "an undecided comparison charges nothing")
+	wantDeclines(t, icDeclines(undecided), Unevaluated{rule: ruleCvcIdentityConstraint, loc: loc(3, 1), msg: "clause 4.2.2 is undecided"})
+
+	unique := icDef(t, "U", xsd.IdentityConstraintUnique, "item", nil, "", "@xid")
+	keyref := icDef(t, "R", xsd.IdentityConstraintKeyref, "item", nil, "U", "@ref")
+	got, undecided = assessRecorded(t, icSchema(t, "", false, []xsd.IdentityConstraint{unique, keyref}, nil),
+		icRoot(idItem(2, "xid", "a"), idItem(3, "ref", "a")))
+	wantSilence(t, got, "an undecided lookup charges nothing")
+	wantDeclines(t, icDeclines(undecided), Unevaluated{rule: ruleCvcIdentityConstraint, loc: loc(3, 1), msg: "clause 4.3 is undecided"})
+}
+
+// §3.11.5's conflict resolution drops two child entries sharing a
+// ·key-sequence·, so a keyref member matching that sequence is charged under
+// clause 4.3. Where the comparison between the two could not be made, both
+// entries are kept CONTESTED, and a member matching only a contested entry is
+// recorded as undecided rather than passing on an entry the proviso may have
+// removed. Without the contested mark, the second document walks clean.
+func TestKeyrefMatchingOnlyAContestedEntryIsRecorded(t *testing.T) {
+	unique := icDef(t, "U", xsd.IdentityConstraintUnique, "item", nil, "", "@id|@xid")
+	keyref := icDef(t, "R", xsd.IdentityConstraintKeyref, "item", nil, "U", "@id")
+	schema := icSchema(t, "", false, []xsd.IdentityConstraint{keyref}, []xsd.IdentityConstraint{unique})
+	box := func(line int, item *testElement) *testElement {
+		return icElem(xsd.QName{Local: "box"}, line, nil, ElementChild(item))
+	}
+
+	got, undecided := assessRecorded(t, schema, icRoot(icIDed(2, "a"), box(3, icIDed(4, "a")), box(5, icIDed(6, "a"))))
+	icWantCharges(t, got, icCharge(ruleCvcIdentityConstraint, 2))
+	wantDeclines(t, icDeclines(undecided))
+
+	got, undecided = assessRecorded(t, schema, icRoot(icIDed(2, "a"), box(3, icIDed(4, "a")), box(5, idItem(6, "xid", "a"))))
+	wantSilence(t, got, "a match on a contested entry charges nothing")
+	wantDeclines(t, icDeclines(undecided), Unevaluated{rule: ruleCvcIdentityConstraint, loc: loc(2, 1), msg: "clause 4.3 is undecided"})
 }
