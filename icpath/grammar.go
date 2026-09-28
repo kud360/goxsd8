@@ -24,8 +24,9 @@ import (
 //   - UNSUPPORTED DOMINATES. A stream carrying a run this lexer cannot read is
 //     declined whatever else it holds, before any shape is judged. That is what
 //     keeps a quoted "[" inside an expression this package does not read from
-//     being charged as a predicate, and it is why `p:a/text()` with p unbound is
-//     a decline and not a clause-1 charge: `text()` does not lex, and reading its
+//     being charged as a predicate, and it is why
+//     `p:a/processing-instruction('x')` with p unbound is a decline and not a
+//     clause-1 charge: a KindTest with an argument does not lex, and reading its
 //     prefix in isolation would reject a schema whose only fault is a spelling
 //     this compiler does not read.
 //   - A SHAPE VIOLATION IS INDEPENDENT OF THE PARSE. Over a fully lexed stream
@@ -130,9 +131,10 @@ func (r *names) recordUnbound(prefix string) {
 // are an XPath 2.0 axis keyword and its '::' read as one token: 'C' for the
 // child axis, 'A' for the attribute axis — the two clause 2.2 of
 // c-fields-xpaths names — and 'X' for any of the other eleven; each carries
-// its keyword. 'K' is the KindTest `node()` (xpath20 production [55]
-// AnyKindTest), the one KindTest this lexer reads. '?' is one rune or run that
-// opens no token of any sort, and exists so the lexer is total.
+// its keyword. 'K' is an argument-free KindTest (xpath20 production [54]), such
+// as `node()` or `text()`, carrying its spelling with the parentheses closed up.
+// '?' is one rune or run that opens no token of any sort, and exists so the lexer
+// is total.
 type token struct {
 	kind byte
 	text string
@@ -141,9 +143,9 @@ type token struct {
 // tokenize splits an {expression} into the tokens production [5] lists — "token
 // ::= '.' | '/' | '//' | '|' | '@' | NameTest" — longest-token first, with
 // production [6]'s white space allowed around tokens though not inside them —
-// and into the axis heads and the `node()` KindTest scanAxisOrKind reads, which
-// are what clause 2.2's unabbreviated spellings and the residual shapes charged
-// beside them are written in.
+// and into the axis heads and the argument-free KindTests scanAxisOrKind reads,
+// which are what clause 2.2's unabbreviated spellings and the residual shapes
+// charged beside them are written in.
 //
 // It is TOTAL: every {expression} yields a stream, and a rune that opens no
 // token becomes one '?' token rather than ending the scan. A lexer that stopped
@@ -199,15 +201,17 @@ func tokenize(s string) []token {
 }
 
 // scanAxisOrKind reads, at i, the two runs of XPath 2.0 this lexer reads beyond
-// production [5]: an axis head, `NCName S? '::'`, and the KindTest `node()`,
-// `"node" S? "(" S? ")"`. It reports ok false where neither starts at i, and the
-// caller scans a NameTest there instead.
+// production [5]: an axis head, `NCName S? '::'`, and an argument-free KindTest,
+// `KindKeyword S? "(" S? ")"` over kindKeyword's vocabulary. It reports ok false
+// where neither starts at i, and the caller scans a NameTest there instead.
 //
-// Axis-ness is decided by the '::' and never by the name, so `child` alone is
-// still an element NameTest; and white space is admitted on both sides of the
-// '::', because in XPath 2.0 an axis keyword and '::' are two tokens
-// (production [30]'s `("child" "::")`). Every other '(' opens no token: a
-// KindTest or function call beyond `node()` is general XPath 2.0, which this
+// Axis-ness is decided by the '::' and never by the name, and it is tested
+// first, so `child` alone is still an element NameTest and `attribute::` an axis
+// head while `attribute()` is a KindTest; and white space is admitted on both
+// sides of the '::', because in XPath 2.0 an axis keyword and '::' are two
+// tokens (production [30]'s `("child" "::")`). Every other '(' opens no token: a
+// KindTest with an argument, whose QNames, TypeNames and StringLiterals this
+// lexer does not read, or a function call is general XPath 2.0, which this
 // package does not read.
 func scanAxisOrKind(s string, i int) (token, int, bool) {
 	j := scanNCName(s, i)
@@ -218,14 +222,29 @@ func scanAxisOrKind(s string, i int) (token, int, bool) {
 	if strings.HasPrefix(s[k:], "::") {
 		return axisHead(s[i:j]), k + 2, true
 	}
-	if s[i:j] != "node" || !strings.HasPrefix(s[k:], "(") {
+	if !kindKeyword(s[i:j]) || !strings.HasPrefix(s[k:], "(") {
 		return token{}, i, false
 	}
 	k = skipSpace(s, k+1)
 	if !strings.HasPrefix(s[k:], ")") {
 		return token{}, i, false
 	}
-	return token{kind: 'K', text: "node()"}, k + 1, true
+	return token{kind: 'K', text: s[i:j] + "()"}, k + 1, true
+}
+
+// kindKeyword reports whether name opens a KindTest that admits empty
+// parentheses: the switch is the whole of the xpath20 production [54] KindTest
+// alternatives whose argument is optional or absent — productions [55] to [60]
+// and [64] — a closed vocabulary like axisHead's. `schema-element` and
+// `schema-attribute` (productions [66] and [62]) require an argument and are not
+// in it. xpath20 A.3 reserves all seven as function names, so none of them
+// before `()` is ever a FunctionCall.
+func kindKeyword(name string) bool {
+	switch name {
+	case "node", "text", "comment", "processing-instruction", "document-node", "element", "attribute":
+		return true
+	}
+	return false
 }
 
 // axisHead classifies the name read before an axis head's '::'. The switch is
@@ -261,8 +280,8 @@ func skipSpace(s string, i int) int {
 
 // fullyLexed reports whether every rune of the {expression} the stream came from
 // fell inside a token this package reads — production [5]'s, a predicate
-// bracket, an axis head or `node()`. Nothing is charged over a stream that fails
-// this: see compile.
+// bracket, an axis head or an argument-free KindTest. Nothing is charged over a
+// stream that fails this: see compile.
 func fullyLexed(toks []token) bool {
 	for _, t := range toks {
 		if t.kind == '?' {
@@ -280,13 +299,24 @@ func fullyLexed(toks []token) bool {
 // attribute step is named for a selector by neither arm, and admitted for a
 // field only as a Path's final step. An axis head other than child — or, for a
 // field, attribute — is one clause 2.2 does not name, and clause 2.1 spells no
-// axis at all. An '@' or an axis head with no NodeTest after it is no XPath 2.0
-// expression under any spelling, which fails clause 1.
+// axis at all. A KindTest step is no NameTest (xpath20 production [35]), and
+// production [3] Step spells none. A root-relative path, opened by '/' or '//',
+// is one production [2] and [7]'s context-relative Path never is. A '//'
+// anywhere but the leading './/' pair is §3.2.4 rule 3's descendant-or-self
+// step, which neither arm admits. An '@' or an axis head with no NodeTest after
+// it is no XPath 2.0 expression under any spelling, which fails clause 1.
+//
+// Where one member holds several of these faults, the LEFTMOST in token order is
+// the one charged: `self::node()` is charged for its axis and not its KindTest,
+// and `/@a` in a selector for its opening '/' and not its attribute.
 //
 // What it does NOT decide is a child-axis or attribute-axis head clause 2.2
-// admits: parse compiles one before a NameTest onto the arm its abbreviated
-// spelling takes, and declines one before `node()`, which no ruling reaches yet
-// (#1796).
+// admits before a NameTest, which parse compiles onto the arm its abbreviated
+// spelling takes. Nor does it charge a '//' that no Step follows, a leading '/'
+// followed by '/' or '//', or a non-initial '//' right after a '/' or another
+// '//': none of them is an XPath 2.0 path expression at all, and the scan
+// leaves them to the parse's decline rather than naming them by a clause-2
+// reason.
 //
 // The scan is per union member, because production [1] is a union of Paths and a
 // member's final step is its own: `a/@b|c/@d` is two legal field Paths and reads
@@ -303,6 +333,28 @@ func shapeFault(toks []token, field bool) (string, bool) {
 	}
 	for _, m := range unionMembers(toks) {
 		for j, t := range m {
+			// A leading '/' or '//' makes the path root-relative (xpath20
+			// production [25] PathExpr and the expansions under it), and
+			// production [2] and [7]'s Path is context-relative, abbreviated or
+			// not: the only '//' either opens with is the one in the './/' pair.
+			if j == 0 && rootRelative(m) {
+				return fmt.Sprintf("is root-relative (it opens with %q), but %s clause 2 admits it under neither arm — xpath20 production [25] expands a leading %q to a step from the root, and production %s's Path is context-relative, its only leading '//' the './/' pair", spelling(t), scc, spelling(t), pathProduction(field)), true
+			}
+			// Every '//' but the leading './/' pair is non-initial, which xpath20
+			// §3.2.4 rule 3 expands to /descendant-or-self::node()/: an axis clause
+			// 2.2 does not name, in a place production [2] and [7] admit no '//'.
+			// One with a '/' or '//' on either side, or no Step after it, is no
+			// path expression at all and is left to the parse.
+			if j > 0 && t.kind == 'D' && (j != 1 || m[0].kind != '.') && m[j-1].kind != '/' && m[j-1].kind != 'D' && stepAfter(m, j) {
+				return fmt.Sprintf("has a non-initial '//', but %s clause 2 admits it under neither arm — xpath20 §3.2.4 rule 3 expands it to /descendant-or-self::node()/, and production %s admits '//' only in its leading './/' pair", scc, pathProduction(field)), true
+			}
+			// A KindTest is no NameTest (xpath20 production [35] NodeTest is
+			// `KindTest | NameTest`), production [3] Step is '.' or a NameTest, and
+			// no §3.2.4 abbreviation turns the one into the other — whatever axis
+			// head, '@' or '/' precedes it.
+			if t.kind == 'K' {
+				return fmt.Sprintf("has a KindTest step %q, but %s clause 2 admits it under neither arm — %s, and xpath20 production [35] makes a KindTest no NameTest", t.text, scc, stepProductions(field)), true
+			}
 			head := t.kind == 'C' || t.kind == 'A' || t.kind == 'X'
 			// An axis head with no NodeTest after it is no XPath 2.0 expression at
 			// all: production [29] ForwardStep is `ForwardAxis NodeTest` and
@@ -348,10 +400,57 @@ func shapeFault(toks []token, field bool) (string, bool) {
 }
 
 // nodeTestAfter reports whether the token after m[j] is a NodeTest (xpath20
-// production [35], `KindTest | NameTest`): a NameTest, or the one KindTest this
-// lexer reads.
+// production [35], `KindTest | NameTest`): a NameTest, or an argument-free
+// KindTest.
 func nodeTestAfter(m []token, j int) bool {
 	return j+1 < len(m) && (m[j+1].kind == 'n' || m[j+1].kind == 'K')
+}
+
+// stepAfter reports whether a token opening a Step follows m[j]: anything but
+// the end of the member, a '/' or a '//'. A '/' or '//' with no Step after it
+// is no XPath 2.0 path expression, and shapeFault charges neither by a clause-2
+// reason.
+func stepAfter(m []token, j int) bool {
+	return j+1 < len(m) && m[j+1].kind != '/' && m[j+1].kind != 'D'
+}
+
+// rootRelative reports whether the non-empty member is a root-relative XPath
+// 2.0 path: a leading '//' with a Step after it, or a leading '/' with a
+// Step or nothing after it — `/` alone is the root, and legal XPath 2.0
+// (xpath20 production [25]).
+func rootRelative(m []token) bool {
+	switch m[0].kind {
+	case 'D':
+		return stepAfter(m, 0)
+	case '/':
+		return len(m) == 1 || stepAfter(m, 0)
+	}
+	return false
+}
+
+// spelling is the text of a '/' or '//' token, as a charge names it.
+func spelling(t token) string {
+	if t.kind == 'D' {
+		return "//"
+	}
+	return "/"
+}
+
+// pathProduction is the Path production governing one kind of {expression}.
+func pathProduction(field bool) string {
+	if field {
+		return "[7]"
+	}
+	return "[2]"
+}
+
+// stepProductions is what production [3] and, for a field, production [7]'s
+// final step admit, as the KindTest charge reports it.
+func stepProductions(field bool) string {
+	if field {
+		return "production [3] Step is '.' or a NameTest and production [7]'s final step is '@' NameTest"
+	}
+	return "production [3] Step is '.' or a NameTest"
 }
 
 // namedAxes is what clause 2.2 of the SCC over one kind of {expression} names,
@@ -461,9 +560,8 @@ func parse(toks []token, field bool, r *names) (Expr, bool) {
 // The unabbreviated spellings clause 2.2 admits take the arms their abbreviated
 // twins take — `child::` NameTest the NameTest arm, `attribute::` NameTest the
 // '@' arm — so each compiles to the tree its abbreviated spelling compiles to,
-// by construction. Every other axis head is charged before the parse is reached
-// (shapeFault), except `child::node()` and `attribute::node()`, which decline
-// here until #1796 rules them.
+// by construction. Every other axis head, and every KindTest after an admitted
+// one, is charged before the parse is reached (shapeFault).
 //
 // A `.` Step is dropped as it is read (see path). The one shape dropping cannot
 // handle is a `.//` path whose every Step was a `.`, which leaves no element

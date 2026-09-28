@@ -26,14 +26,13 @@
 //
 // The grammar above is not a stage of XPath 2.0, so hosting it in xpath would
 // put one package's name on two unrelated grammars. The lexer borrows XPath
-// 2.0's closed axis vocabulary (productions [30] and [33]) and its `node()`
-// KindTest, but only to CLASSIFY a step head: the `child::` and `attribute::`
-// spellings clause 2.2 admits compile onto the abbreviated arms, every other
-// axis is charged, and the matcher evaluates the child and attribute axes
-// alone. xpath serves conditional type assignment and assertions;
-// validate/doc.go states that identity-constraint paths are evaluated "directly
-// and never through the XPath engine", and that stays true with this package
-// carrying them.
+// 2.0's closed axis vocabulary (productions [30] and [33]) and its argument-free
+// KindTests, but only to CLASSIFY a step: the `child::` and `attribute::` spellings clause
+// 2.2 admits compile onto the abbreviated arms, every other axis and every KindTest is
+// charged, and the matcher evaluates the child and attribute axes alone. xpath serves
+// conditional type assignment and assertions; validate/doc.go states that
+// identity-constraint paths are evaluated "directly and never through the XPath engine",
+// and that stays true with this package carrying them.
 //
 // It is its own package rather than validate's private file because the two
 // Schema Component Constraints over this grammar are charged at schema ASSEMBLY
@@ -70,18 +69,18 @@
 // reach is the child axis, and for a field the attribute axis, before a NameTest and
 // spelled with the abbreviated or the unabbreviated head, and this package compiles
 // every such spelling. Every other {expression} is nil there — above all one this
-// package simply cannot read, and an abbreviated path outside production [1] that no
-// charged shape covers, which #1796 owns — so "does not match production [1]" is
+// package simply cannot read, and a legal XPath 2.0 expression no charged shape
+// covers, such as a FunctionCall — so "does not match production [1]" is
 // never on its own evidence of a violation. [SelectorViolation]'s doc carries the
 // argument for each shape.
 //
 // THE PREDICATES IT RECOGNIZES are the ones whose whole {expression} lexes as
 // tokens this lexer reads (production [5]'s, the two brackets, an axis head and
-// `node()`): `a[b]` and `a[@b]` are charged, `a[1]` and `a[b='c']` are not,
-// because a digit and a quote open no token and a stream this package cannot
-// read whole is declined whatever it holds. Under-charging is a rejection the
-// processor can still make at validate time; over-charging rejects a conforming
-// schema before any instance exists.
+// an argument-free KindTest): `a[b]` and `a[@b]` are charged, `a[1]` and
+// `a[b='c']` are not, because a digit and a quote open no token and a stream
+// this package cannot read whole is declined whatever it holds. Under-charging
+// is a rejection the processor can still make at validate time; over-charging
+// rejects a conforming schema before any instance exists.
 //
 // An unbound prefix is the one charged shape with a vocabulary of its own:
 // err:XPST0081 travels as the wrapped cause under the SCC charge, reached with

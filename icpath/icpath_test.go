@@ -2,6 +2,7 @@ package icpath
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -171,16 +172,17 @@ func TestPathSubsetDeclinesWhatItDoesNotAdmit(t *testing.T) {
 	}{
 		{"@id", false, "a selector may not name an attribute (production [2] has no '@')"},
 		{"@id/a", true, "an attribute step is only ever the FINAL step (production [7])"},
-		{"a//b", true, "'//' is admitted only as the leading './/'"},
+		{"a//b", true, "'//' is admitted only as the leading './/', and a non-initial one is charged"},
 		{"a[1]", true, "predicates are outside the subset"},
-		{"child::node()", true, "a KindTest after the child axis is in no ruled shape (#1796)"},
-		{"attribute::node()", true, "nor after the attribute axis"},
-		{"@node()", true, "nor after an '@'"},
-		{"node()", false, "nor as an abbreviated step"},
+		{"child::node()", true, "a KindTest step is charged after the child axis"},
+		{"attribute::node()", true, "and after the attribute axis"},
+		{"@node()", true, "and after an '@'"},
+		{"node()", false, "and as an abbreviated step"},
 		{"foo::a", true, "'foo' is none of the thirteen axis keywords"},
 		{"::a", true, "a '::' with no axis keyword before it"},
-		{"child::a/text()", false, "'(' opens no token after any name but node"},
-		{"/a", true, "an absolute path is outside the subset"},
+		{"child::a/text()", false, "and so is every other argument-free KindTest"},
+		{"a/element(b)", false, "a KindTest with an argument does not lex at all"},
+		{"/a", true, "a root-relative path is charged"},
 		{"a/", true, "a trailing '/' has no Step after it"},
 		{"", true, "an empty expression is no Path at all"},
 		{".//.", true, "'.//' with no element step left is not modeled"},
@@ -305,16 +307,14 @@ func TestPathSubsetUnsupportedDominates(t *testing.T) {
 	}{
 		{"a[1]", true, "'1' opens no token, so the '[' is not read as a predicate"},
 		{"a[b='c']", true, "nor do '=' and the quotes"},
-		{"q:a/text()", false, "'(' after text does not lex, so the unbound q is not read in isolation"},
-		{"child::node()", false, "a KindTest after the child axis is in no ruled shape (#1796), so it declines uncharged"},
-		{"attribute::node()", true, "nor after the attribute axis"},
-		{"@node()", true, "and an '@' before node() HAS a NodeTest, so it is no bare '@'"},
+		{"q:a/processing-instruction('x')", false, "a KindTest with an argument does not lex, so the unbound q is not read in isolation"},
+		{"q:a/element(b)", true, "nor does element(b), whose argument is a QName this lexer does not read"},
+		{"a/schema-element()", false, "schema-element requires an argument, so its empty parentheses do not lex either"},
 		{"foo::a", false, "'foo::' spells no axis of XPath 2.0, so the stream does not lex whole"},
-		{"q:a//b", false, "the stream lexes whole but parses to nothing, so the recorded unbound prefix is discarded"},
+		{"q:a|.//.", false, "the stream lexes whole but parses to nothing, so the recorded unbound prefix is discarded"},
 		{".//.", false, "production [3]'s bare '.' Step derives it — assembly-legal, only unmatchable"},
 		{"child::a", false, "clause 2.2 admits the unabbreviated form of an abbreviated path"},
 		{"attribute::a", true, "and, for a field's final step, the attribute axis as well"},
-		{"a//b", true, "outside production [7], and no shape this package charges covers it, so it is declined"},
 		{"", false, "an absent xpath attribute is no SCC violation"},
 	} {
 		if err := violationOf(tc.expr, tc.field); err != nil {
@@ -371,6 +371,118 @@ func TestBareAttributeAxisIsCharged(t *testing.T) {
 	for _, expr := range []string{"@*", "@p:*", "a/@*"} {
 		if err := FieldViolation(xsderr.Loc{}, xsd.NewXPathExpression(expr, p, nil, nil)); err != nil {
 			t.Errorf("FieldViolation(%q) = %v, want nil — '*' and 'NCName:*' are NameTests (production [4])", expr, err)
+		}
+	}
+}
+
+// A root-relative path, a non-initial '//' and a KindTest step each fail both
+// arms of clause 2 whatever names fill them, and are charged. The message is
+// pinned whole up to its clause and reason, so a charge reached by another arm
+// — the parse's decline, the axis charge, the attribute charge — fails the row.
+// Where a member holds two faults the leftmost is charged: `self::node()` keeps
+// its axis charge, and a selector's `/@a` is charged for its '/'.
+func TestRootRelativeNonInitialDescendantAndKindTestAreCharged(t *testing.T) {
+	const (
+		selRoot  = `, but c-selector-xpath clause 2 admits it under neither arm — xpath20 production [25] expands a leading %q to a step from the root, and production [2]'s Path is context-relative, its only leading '//' the './/' pair`
+		fldRoot  = `, but c-fields-xpaths clause 2 admits it under neither arm — xpath20 production [25] expands a leading %q to a step from the root, and production [7]'s Path is context-relative, its only leading '//' the './/' pair`
+		selDesc  = `has a non-initial '//', but c-selector-xpath clause 2 admits it under neither arm — xpath20 §3.2.4 rule 3 expands it to /descendant-or-self::node()/, and production [2] admits '//' only in its leading './/' pair`
+		fldDesc  = `has a non-initial '//', but c-fields-xpaths clause 2 admits it under neither arm — xpath20 §3.2.4 rule 3 expands it to /descendant-or-self::node()/, and production [7] admits '//' only in its leading './/' pair`
+		selKind  = `, but c-selector-xpath clause 2 admits it under neither arm — production [3] Step is '.' or a NameTest, and xpath20 production [35] makes a KindTest no NameTest`
+		fldKind  = `, but c-fields-xpaths clause 2 admits it under neither arm — production [3] Step is '.' or a NameTest and production [7]'s final step is '@' NameTest, and xpath20 production [35] makes a KindTest no NameTest`
+		selector = `the {selector} %q `
+		fieldM   = `the {fields} member %q `
+	)
+	root := func(expr, sp string, field bool) string {
+		if field {
+			return fmt.Sprintf(fieldM+"is root-relative (it opens with %q)"+fldRoot, expr, sp, sp)
+		}
+		return fmt.Sprintf(selector+"is root-relative (it opens with %q)"+selRoot, expr, sp, sp)
+	}
+	desc := func(expr string, field bool) string {
+		if field {
+			return fmt.Sprintf(fieldM+fldDesc, expr)
+		}
+		return fmt.Sprintf(selector+selDesc, expr)
+	}
+	kind := func(expr, kt string, field bool) string {
+		if field {
+			return fmt.Sprintf(fieldM+"has a KindTest step %q"+fldKind, expr, kt)
+		}
+		return fmt.Sprintf(selector+"has a KindTest step %q"+selKind, expr, kt)
+	}
+	type row struct {
+		expr  string
+		field bool
+		msg   string
+	}
+	var rows []row
+	for _, field := range []bool{false, true} {
+		rows = append(rows,
+			row{"/a", field, root("/a", "/", field)},
+			row{"/", field, root("/", "/", field)},
+			row{"//a", field, root("//a", "//", field)},
+			row{"/./a", field, root("/./a", "/", field)},
+			row{"b|/a", field, root("b|/a", "/", field)},
+			row{"a//b", field, desc("a//b", field)},
+			row{"a/.//b", field, desc("a/.//b", field)},
+			row{".//a//b", field, desc(".//a//b", field)},
+			row{"a //.", field, desc("a //.", field)},
+			row{"a/text()", field, kind("a/text()", "text()", field)},
+			row{"text()", field, kind("text()", "text()", field)},
+			row{"a/comment ( )", field, kind("a/comment ( )", "comment()", field)},
+			row{"processing-instruction()", field, kind("processing-instruction()", "processing-instruction()", field)},
+			row{"document-node()", field, kind("document-node()", "document-node()", field)},
+			row{"a/element()", field, kind("a/element()", "element()", field)},
+			row{"child::node()", field, kind("child::node()", "node()", field)},
+			row{"node()", field, kind("node()", "node()", field)},
+			row{"q:a/text()", field, kind("q:a/text()", "text()", field)},
+		)
+	}
+	rows = append(rows,
+		row{"attribute::node()", true, kind("attribute::node()", "node()", true)},
+		row{"@node()", true, kind("@node()", "node()", true)},
+		row{"a/attribute()", true, kind("a/attribute()", "attribute()", true)},
+		row{"@text()", true, kind("@text()", "text()", true)},
+		row{"attribute::node()", false, `the {selector} "attribute::node()" names an attribute, but c-selector-xpath clause 2`},
+		row{"self::node()", false, `the {selector} "self::node()" steps along the self axis`},
+		row{"self::text()", true, `the {fields} member "self::text()" steps along the self axis`},
+		row{"/@a", false, root("/@a", "/", false)},
+		row{"a//@b", true, desc("a//@b", true)},
+	)
+	for _, tc := range rows {
+		err := violationOf(tc.expr, tc.field)
+		var e *xsderr.Error
+		if !errors.As(err, &e) {
+			t.Errorf("charging %q (field=%v) = %v, want an *xsderr.Error", tc.expr, tc.field, err)
+			continue
+		}
+		if !strings.HasPrefix(e.Msg, tc.msg) {
+			t.Errorf("charging %q (field=%v): message = %q, want it to open %q", tc.expr, tc.field, e.Msg, tc.msg)
+		}
+		if _, ok := compileOf(tc.expr, tc.field, nil); ok {
+			t.Errorf("compiling %q (field=%v) succeeded; a charged {expression} must decline too", tc.expr, tc.field)
+		}
+	}
+}
+
+// The '//' charges never reach a '/' or '//' that has no Step after it, nor the
+// admitted leading './/' pair: `. //.` is that pair before a '.' Step, and the
+// rest are no XPath 2.0 path expression at all, so each stays uncharged here and
+// is declined by the parse.
+func TestSteplessSlashesAndTheLeadingPairAreNotCharged(t *testing.T) {
+	p := []xsd.NamespaceBinding{
+		xsd.NewNamespaceBinding("xpns", "urn:x"),
+		xsd.NewNamespaceBinding("xpns1", "urn:x1"),
+	}
+	if err := FieldViolation(xsderr.Loc{}, xsd.NewXPathExpression(".///@*", nil, nil, nil)); err != nil {
+		t.Errorf(`FieldViolation(".///@*") = %v, want nil`, err)
+	}
+	for _, expr := range []string{"//", "a//", ".//", "a///b", "a////b", "a/ //b", "////a", "/ /a", "//|a", ". //.", "xpns1:* | .//xpns:*/.", ".//a"} {
+		for _, field := range []bool{false, true} {
+			x := xsd.NewXPathExpression(expr, p, nil, nil)
+			if err := violationAt(xsderr.Loc{}, x, field); err != nil {
+				t.Errorf("charging %q (field=%v) = %v, want nil", expr, field, err)
+			}
 		}
 	}
 }
