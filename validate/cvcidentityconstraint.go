@@ -137,15 +137,17 @@ type icFieldCursor struct {
 // one can only cost a rejection and never manufacture one.
 //
 // WHAT STILL ARRIVES HERE, now that parser charges c-selector-xpath and
-// c-fields-xpaths over the five shapes those rules prove
-// ([icpath.SelectorViolation]): a legal XPath 2.0 path neither subset admits,
-// including an unabbreviated spelling clause 2.2 licenses; a predicate whose
-// {expression} icpath's lexer cannot read whole; a `.//` with no element step
-// left once the self steps are removed, which production [3]'s bare `.` Step
-// makes assembly-LEGAL and only this matcher cannot represent; and — because a
+// c-fields-xpaths over the shapes [icpath.SelectorViolation] enumerates and
+// icpath compiles the `child::` and `attribute::` spellings clause 2.2 admits:
+// a legal XPath 2.0 path neither subset admits and no charged shape covers —
+// an abbreviated one such as `a//b` or `/a`, one icpath's lexer cannot read
+// whole such as `a/text()`, and `child::node()` or `attribute::node()` — whose
+// charge or permanent decline #1796 owns; a predicate whose {expression}
+// icpath's lexer cannot read whole; a `.//` with no element step left once the
+// self steps are removed, which production [3]'s bare `.` Step makes
+// assembly-LEGAL and only this matcher cannot represent; and — because a
 // component assembled directly through [xsd.NewIdentityConstraint] reaches no
-// assembler — any of the five as well. #1737 owns the retirement of the
-// first.
+// assembler — any charged shape as well.
 type icFrame struct {
 	ic       xsd.IdentityConstraint
 	sel      icpath.Expr

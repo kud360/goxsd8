@@ -3189,7 +3189,7 @@ MS-IdentityConstraint2006-07-15/idL046/instance/idL046.v fail
 MS-IdentityConstraint2006-07-15/idL047/instance/idL047.i pass
 MS-IdentityConstraint2006-07-15/idL048/instance/idL048.v fail
 MS-IdentityConstraint2006-07-15/idL049/instance/idL049.v fail
-MS-IdentityConstraint2006-07-15/idL050/instance/idL050.i fail
+MS-IdentityConstraint2006-07-15/idL050/instance/idL050.i pass
 MS-IdentityConstraint2006-07-15/idL051/instance/idL051.v fail
 MS-IdentityConstraint2006-07-15/idL052/instance/idL052.i pass
 MS-IdentityConstraint2006-07-15/idL053/instance/idL053.v fail
