@@ -323,7 +323,7 @@ MS-DataTypes2006-07-15/decimal_pattern001_1036/instance/decimal_pattern001_1036.
 MS-DataTypes2006-07-15/decimal_totalDigits001_1057/instance/decimal_totalDigits001_1057.i pass
 MS-DataTypes2006-07-15/decimal_totalDigits002_1058/instance/decimal_totalDigits002_1058.v pass
 MS-DataTypes2006-07-15/decimal_totalDigits003_1059/instance/decimal_totalDigits003_1059.v pass
-MS-DataTypes2006-07-15/decimal_totalDigits004_1060/instance/decimal_totalDigits004_1060.v fail
+MS-DataTypes2006-07-15/decimal_totalDigits004_1060/instance/decimal_totalDigits004_1060.v pass
 MS-DataTypes2006-07-15/double001_1939/instance/double001_1939.i pass
 MS-DataTypes2006-07-15/double002_1940/instance/double002_1940.v pass
 MS-DataTypes2006-07-15/double003_1941/instance/double003_1941.v pass
