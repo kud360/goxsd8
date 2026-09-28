@@ -1,6 +1,7 @@
 package conformance
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -73,9 +74,9 @@ func TestDatatypesSelectorClaimsOnlyCohort(t *testing.T) {
 		{caseSpec{kind: kindInstance, doc: "../testdata/xsdtests/msData/datatypes/unsignedShort006.xml"}, true},
 		// The selector stays pinned from BOTH sides: Facets/int/test111092.xml is a
 		// genuinely undecidable shape (two named restriction steps under distinct
-		// <foo1>/<foo2> elements, which readFacetsCase's exactly-one-<foo> reader
-		// declines), so it is claimed by no selector and stays the instance lane's
-		// recorded gap. #331 widened the routing, not the readers.
+		// <foo1>/<foo2> elements and no <foo>, which readFacetsCase declines), so
+		// it is claimed by no selector and stays the instance lane's recorded gap.
+		// #331 widened the routing, not the readers.
 		{caseSpec{kind: kindInstance, doc: "../testdata/xsdtests/msData/datatypes/Facets/int/test111092.xml"}, false},
 		// The xs:int and xs:integer lexical fixtures ARE claimed since issue #365.
 		// #331 planted these two rows negative on purpose — the same device #224 used
@@ -356,13 +357,15 @@ func TestDatatypesFacetsBinaryAndURI(t *testing.T) {
 	}
 }
 
-// TestDatatypesFacetsShapeGuard proves readFacetsCase decides only the canonical
+// TestDatatypesFacetsShapeGuard proves readFacetsCase decides the canonical
 // single-<foo> instance shape and still honestly declines the anyURI multi-leaf
 // shapes (issue #124's guard, unchanged by #190): anyURI_b001.xml carries its
 // values in repeated <bar> children (zero <foo>) and anyURI_b006.xml repeats many
 // <foo> values against one enumeration, neither of which is a single tested value.
 // A mis-read there would coincidentally pass or fail for the wrong reason,
-// inflating the ratchet; the exactly-one-<foo> guard declines both. Those two files
+// inflating the ratchet. The several-<foo> guard declines b006; b001, with no
+// <foo> and a restriction declared on no attribute, is declined by
+// facetsTestedValue's zero-<foo> rule (issue #593). Those two files
 // no longer REACH readFacetsCase (anyURIShapeCase claims them first — see
 // TestDatatypesAnyURIShapeCohort), so this test drives the reader directly to keep
 // the guard covered for any future out-of-cohort shape. Skips when the submodule is
@@ -380,11 +383,11 @@ func TestDatatypesFacetsShapeGuard(t *testing.T) {
 		t.Errorf("readFacetsCase(anyURI_length001) = raw=%q base=%q children=%d, want raw=foofo base=anyURI children>0", raw, base, len(children))
 	}
 
-	// The out-of-cohort shapes are declined: zero <foo> (b001) and multiple <foo>
-	// (b006) both fail the exactly-one guard.
+	// The out-of-cohort shapes are declined: zero <foo> with no root-carried value
+	// (b001) and multiple <foo> (b006).
 	for _, rel := range []string{"anyURI_b001.xml", "anyURI_b006.xml"} {
 		if _, _, _, _, ok := readFacetsCase(caseSpec{doc: filepath.Join(anyURIDir, rel)}); ok {
-			t.Errorf("readFacetsCase(%s) must decline the out-of-cohort shape (not exactly one <foo>)", rel)
+			t.Errorf("readFacetsCase(%s) must decline the out-of-cohort shape", rel)
 		}
 	}
 }
@@ -445,27 +448,110 @@ func TestFacetsSchemaPathPrecedence(t *testing.T) {
 // time_minInclusive006.xsd. The expectations file cannot show this — a decline and
 // a wrong verdict both bank fail. Skips when the submodule is absent.
 func TestFacetsCaseDecidesAnInstanceNamingNoSchema(t *testing.T) {
+	const id = "MS-DataTypes2006-07-15/time_minInclusive006_1163/instance/time_minInclusive006_1163.i"
+	c := suiteCase(t, id)
+	inst, err := decodeFacetsInstance(c.doc)
+	if err != nil || inst.SchemaLoc != "" {
+		t.Fatalf("fixture premise: %s must decode and name no schema itself, got SchemaLoc=%q err=%v", c.doc, inst.SchemaLoc, err)
+	}
+	raw, base, children, _, ok := readFacetsCase(c)
+	if !ok || raw != "13:20:00Z" || base != "time" || len(children) != 2 {
+		t.Errorf("readFacetsCase(%s) = raw=%q base=%q children=%d ok=%v, want raw=13:20:00Z base=time children=2 ok=true", id, raw, base, len(children), ok)
+	}
+}
+
+// TestFacetsCaseDecidesARootAttributeInstance pins that
+// decimal_totalDigits004_1060.v is READ, not declined (issue #593): its instance
+// is <t1 att9=".12345"/>, with no <foo> child, and its schema declares the
+// restriction on the root type's att9 attribute. The expectations file cannot
+// show this — a decline and a wrong verdict both bank fail. Skips when the
+// submodule is absent.
+func TestFacetsCaseDecidesARootAttributeInstance(t *testing.T) {
+	const id = "MS-DataTypes2006-07-15/decimal_totalDigits004_1060/instance/decimal_totalDigits004_1060.v"
+	c := suiteCase(t, id)
+	inst, err := decodeFacetsInstance(c.doc)
+	if err != nil || len(inst.Foos) != 0 {
+		t.Fatalf("fixture premise: %s must decode with no <foo> child, got %d err=%v", c.doc, len(inst.Foos), err)
+	}
+	raw, base, children, _, ok := readFacetsCase(c)
+	if !ok || raw != ".12345" || base != "decimal" || len(children) != 2 {
+		t.Errorf("readFacetsCase(%s) = raw=%q base=%q children=%d ok=%v, want raw=.12345 base=decimal children=2 ok=true", id, raw, base, len(children), ok)
+	}
+}
+
+// TestFacetsCaseRootAttributeShape pins readFacetsCase's tested-value pick
+// against the root-attribute shape of issue #593, over synthetic instances of a
+// schema whose restriction is declared on an attribute named att. Only an
+// instance with no <foo> child reads the root's unqualified att. Several <foo>
+// children decline even when the root carries att; one <foo> is read from that
+// <foo> even when the root carries att too; and a root att in a namespace
+// (xsi:att) is not the tested value.
+func TestFacetsCaseRootAttributeShape(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name, content string) string {
+		t.Helper()
+		p := filepath.Join(dir, name)
+		if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+			t.Fatalf("writing %s: %v", name, err)
+		}
+		return p
+	}
+	attrSchema := write("attr.xsd", `<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:element name="r"><xsd:complexType>
+    <xsd:attribute name="att"><xsd:simpleType>
+      <xsd:restriction base="xsd:decimal"><xsd:totalDigits value="5"/></xsd:restriction>
+    </xsd:simpleType></xsd:attribute>
+  </xsd:complexType></xsd:element>
+</xsd:schema>`)
+	contentSchema := write("content.xsd", `<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:element name="r"><xsd:simpleType>
+    <xsd:restriction base="xsd:decimal"><xsd:totalDigits value="5"/></xsd:restriction>
+  </xsd:simpleType></xsd:element>
+</xsd:schema>`)
+	const xsi = `xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"`
+
+	tests := []struct {
+		name    string
+		inst    string
+		schema  string
+		wantRaw string
+		wantOK  bool
+	}{
+		{"no foo, root carries att", `<r att="1.5"/>`, attrSchema, "1.5", true},
+		{"no foo, root lacks att", `<r other="1.5"/>`, attrSchema, "", false},
+		{"no foo, root att only in a namespace", `<r ` + xsi + ` xsi:att="1.5"/>`, attrSchema, "", false},
+		{"no foo, restriction on element content", `<r att="1.5"/>`, contentSchema, "", false},
+		{"several foo, root carries att", `<r att="1.5"><foo att="2"/><foo att="3"/></r>`, attrSchema, "", false},
+		{"one foo, root carries att too", `<r att="1.5"><foo att="2"/></r>`, attrSchema, "2", true},
+		{"one foo lacking att, root carries att", `<r att="1.5"><foo/></r>`, attrSchema, "", false},
+	}
+	for i, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := write(fmt.Sprintf("inst%d.xml", i), tt.inst)
+			raw, _, _, _, ok := readFacetsCase(caseSpec{doc: doc, schemaDoc: tt.schema})
+			if raw != tt.wantRaw || ok != tt.wantOK {
+				t.Errorf("readFacetsCase(%s) = raw=%q ok=%v, want raw=%q ok=%v", tt.inst, raw, ok, tt.wantRaw, tt.wantOK)
+			}
+		})
+	}
+}
+
+// suiteCase returns the discovered suite case named id, skipping when the
+// submodule is absent and failing when no case carries that id.
+func suiteCase(t *testing.T, id string) caseSpec {
+	t.Helper()
 	skipWithoutSuite(t)
 	found, err := parseSuite(suitePath())
 	if err != nil {
 		t.Fatalf("parsing suite: %v", err)
 	}
-	const id = "MS-DataTypes2006-07-15/time_minInclusive006_1163/instance/time_minInclusive006_1163.i"
 	for _, c := range found.cases {
-		if c.id != id {
-			continue
+		if c.id == id {
+			return c
 		}
-		inst, err := decodeFacetsInstance(c.doc)
-		if err != nil || inst.SchemaLoc != "" {
-			t.Fatalf("fixture premise: %s must decode and name no schema itself, got SchemaLoc=%q err=%v", c.doc, inst.SchemaLoc, err)
-		}
-		raw, base, children, _, ok := readFacetsCase(c)
-		if !ok || raw != "13:20:00Z" || base != "time" || len(children) != 2 {
-			t.Errorf("readFacetsCase(%s) = raw=%q base=%q children=%d ok=%v, want raw=13:20:00Z base=time children=2 ok=true", id, raw, base, len(children), ok)
-		}
-		return
 	}
 	t.Fatalf("case %s not discovered", id)
+	return caseSpec{}
 }
 
 // TestDatatypesAnyURIShapeCohort drives the anyURI a*/b* multi-leaf cohort (issue
