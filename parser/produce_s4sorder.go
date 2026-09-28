@@ -343,6 +343,41 @@ var (
 	}
 )
 
+// s4sVowelArticles is the indefinite article each vowel-letter name the models
+// above position takes before it in checkS4SChildOrder's order fault, chosen by
+// the SOUND the name opens with (#1098). A letter test is wrong for this
+// vocabulary: <union> and <unique> open with a vowel letter and the /juː/ sound,
+// and take "a". Every name missing here takes "a", which is right for every
+// consonant-letter name the models position, and TestS4SVowelNamesHaveArticles
+// fails on a vowel-letter name a model admits that this table does not decide.
+var s4sVowelArticles = []struct{ local, article string }{
+	{"all", "an"},
+	{"alternative", "an"},
+	{"annotation", "an"},
+	{"anyAttribute", "an"},
+	{"assert", "an"},
+	{"assertion", "an"},
+	{"assertions", "an"},
+	{"attribute", "an"},
+	{"attributeGroup", "an"},
+	{"enumeration", "an"},
+	{"explicitTimezone", "an"},
+	{"extension", "an"},
+	{"openContent", "an"},
+	{"union", "a"},
+	{"unique", "a"},
+}
+
+// s4sArticle returns the indefinite article local takes, from s4sVowelArticles.
+func s4sArticle(local string) string {
+	for _, e := range s4sVowelArticles {
+		if e.local == local {
+			return e.article
+		}
+	}
+	return "a"
+}
+
 // checkS4SChildOrder rejects a child of owner that m's content model does not
 // admit where it is written: a child before a position it must follow, a second
 // child in a position that does not repeat, or a child no position of m admits at
@@ -461,8 +496,8 @@ func checkS4SChildOrder(owner *Element, m s4sModel) error {
 			return fmt.Errorf("parser: <%s> at %s repeats a position the schema for schema documents admits at most once among the children of the <%s> at %s: %s's content model (%s) is %s",
 				local, el.Loc(), owner.Name().Local(), owner.Loc(), m.grammar, m.spec, m.model)
 		}
-		return fmt.Errorf("parser: <%s> at %s is out of the child order the schema for schema documents requires of the <%s> at %s: %s's content model (%s) is %s, and a <%s> may not follow the children written before it here",
-			local, el.Loc(), owner.Name().Local(), owner.Loc(), m.grammar, m.spec, m.model, local)
+		return fmt.Errorf("parser: <%s> at %s is out of the child order the schema for schema documents requires of the <%s> at %s: %s's content model (%s) is %s, and %s <%s> may not follow the children written before it here",
+			local, el.Loc(), owner.Name().Local(), owner.Loc(), m.grammar, m.spec, m.model, s4sArticle(local), local)
 	}
 	return nil
 }

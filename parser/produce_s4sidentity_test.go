@@ -51,6 +51,7 @@ func TestProduceS4SIdentityConstraintChildOrderRejected(t *testing.T) {
 		lines      []string
 		wantPrefix string
 		wantOwner  string
+		wantTail   string // the order fault's closing clause, article included (#1098)
 	}{
 		{
 			// idA042's shape.
@@ -68,7 +69,8 @@ func TestProduceS4SIdentityConstraintChildOrderRejected(t *testing.T) {
 			wantOwner:  "<unique> at " + produceURI + ":3:1",
 		},
 		{
-			// idA043's and annotation00101m2's shape.
+			// idA043's and annotation00101m2's shape. The article is #1098's: the
+			// message reads "an <annotation>", by the table and not by the letter.
 			name: "annotation after the fields on a keyref",
 			lines: []string{
 				`<xs:element name="e">`,
@@ -81,6 +83,7 @@ func TestProduceS4SIdentityConstraintChildOrderRejected(t *testing.T) {
 			},
 			wantPrefix: "parser: <annotation> at " + produceURI + ":6:1 is out of the child order",
 			wantOwner:  "<keyref> at " + produceURI + ":3:1",
+			wantTail:   ", and an <annotation> may not follow the children written before it here",
 		},
 		{
 			name: "field before selector on a key",
@@ -94,6 +97,7 @@ func TestProduceS4SIdentityConstraintChildOrderRejected(t *testing.T) {
 			},
 			wantPrefix: "parser: <selector> at " + produceURI + ":5:1 is out of the child order",
 			wantOwner:  "<key> at " + produceURI + ":3:1",
+			wantTail:   ", and a <selector> may not follow the children written before it here",
 		},
 		{
 			name: "two selectors on a keyref",
@@ -177,6 +181,9 @@ func TestProduceS4SIdentityConstraintChildOrderRejected(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := produce(t, s4sTopLevelDoc(tc.lines...))
 			assertS4SIdentityFault(t, err, tc.wantPrefix, tc.wantOwner, keybaseModel)
+			if !strings.HasSuffix(err.Error(), tc.wantTail) {
+				t.Errorf("error = %v, want it to close %q", err, tc.wantTail)
+			}
 		})
 	}
 }
