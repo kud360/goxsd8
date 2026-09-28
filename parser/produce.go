@@ -3340,14 +3340,20 @@ func (p *producer) resolveQName(elem *Element, lexical, attr string) (xsd.QName,
 // representation-invariant backstop would report an author's mistake as
 // xsderr.RuleComponentInvariant, a caller fault (#343).
 //
-// The check tests those three NCName properties only, deliberately not the whole
-// ncNameRE predicate declarationName applies to a name: xs:QName carries
-// whiteSpace = collapse (§3.3.18) and nothing normalizes a QName-valued
-// attribute before it arrives here, so matching the full pattern would recharge
-// padded lexicals (type="xs:string ") whose verdict this producer settles
-// elsewhere today.
+// The lexical is whiteSpace-normalized through collapseTrim before it is split:
+// xs:QName's whiteSpace facet is fixed to collapse (Datatypes §3.3.18.1,
+// QName.whiteSpace), and src-resolve (§3.17.6.2) resolves the ·actual value·,
+// so base="    xs:string " names xs:string. An interior space survives it —
+// collapse folds a run to one #x20 and never deletes it — so "xs: string"
+// keeps its " string" local part.
+//
+// GAP(parser): the check tests those three NCName properties only, not the
+// whole ncNameRE predicate conditionalQNames applies to each half, so a
+// non-NCName half ("xs: string", "xs:1a") passes the lexical test. A reference
+// that must resolve is then charged src-resolve instead of cvc-datatype-valid,
+// and a notQName item binds to a name no NCName can match.
 func (p *producer) bindQName(elem *Element, lexical, attr string) (xsd.QName, error) {
-	prefix, local, fault := qnameLexical(lexical)
+	prefix, local, fault := qnameLexical(collapseTrim(lexical))
 	if fault != "" {
 		return xsd.QName{}, xsderr.New(ruleDatatypeValid, elem.Loc(),
 			"<%s> %s value %q is not in the ·lexical space· of xs:QName, the type the schema for schema documents declares for it: %s (Datatypes §3.3.18, §3.4.7.1)",
@@ -3607,8 +3613,12 @@ func childElements(el *Element, space, local string) []*Element {
 // contains one, so both reject; otherwise R == T. Every literal compared through
 // this helper is whitespace-free — none/interleave/suffix, unbounded,
 // skip/strict/lax, true/false/1/0, prohibited/optional/required,
-// qualified/unqualified, the decimal digit strings, NCNames, xs:decimal literals
-// and the empty string — so the equivalence holds at every call site.
+// qualified/unqualified, the decimal digit strings, NCNames, xs:QNames,
+// xs:decimal literals and the empty string — so the equivalence holds at every
+// call site but one. [producer.bindQName], whose GAP(parser) marker leaves the
+// full NCName test unapplied, rejects neither a T with interior whitespace nor
+// its R lexically — but neither names a declared component, since every
+// declared name is an NCName.
 func collapseTrim(lexical string) string {
 	return strings.Trim(lexical, "\x09\x0A\x0D\x20")
 }
