@@ -137,18 +137,30 @@ func (r *Result) Violations() []*xsderr.Error {
 // many evaluations a real evaluator would have run. The CTA site (cta.go) is
 // reached by the walk rather than collected, and is likewise one record per
 // withheld ·conditionally selected· type and not one per alternative the scan
-// never tried. The content sites (cvccomplexcontent.go) are reached by the walk
-// as well, one record per element whose String Valid (§3.16.4) verdict on its
-// ·initial value· was withheld (cvc-type clause 3.1.3, cvc-complex-type clause
-// 1.2), per element whose fixed {value constraint} comparison was undecided
-// (cvc-elt clause 5.2.2.2.2), and per element [[child]] left unmatched because
-// xsd.Schema.ContentMatcher does not decide its parent's {content type}
-// (cvc-complex-content). The attribute-side declines (cvcattribute.go), the
-// ID/IDREF table's (cvcid.go) and the identity constraints'
-// (cvcidentityconstraint.go) are not recorded here, nor is a ·governing type
-// definition· left undetermined other than by a withheld {type table} (#1093),
-// so an empty Unevaluated is not by itself a claim that the walk performed
-// every check it reached.
+// never tried. Every other site is reached by the walk too, one record per
+// withheld check at the item it withheld a verdict on:
+//
+//   - content (cvccomplexcontent.go): String Valid (§3.16.4) over an element's
+//     ·initial value· (cvc-type clause 3.1.3, cvc-complex-type clause 1.2), a
+//     fixed {value constraint} comparison (cvc-elt clause 5.2.2.2.2), and an
+//     element [[child]] left unmatched because xsd.Schema.ContentMatcher does
+//     not decide its parent's {content type} (cvc-complex-content);
+//   - attributes (cvcattribute.go): cvc-attribute clauses 3, 4 and 5, cvc-au,
+//     and a ·defaulted attribute·'s {lexical form} (cvc-complex-type clause 4);
+//   - the ID/IDREF table (cvcid.go): each item that could have been in the
+//     ·eligible item set· and could not be read (cvc-id clause 1);
+//   - identity constraints (cvcidentityconstraint.go): a path outside the
+//     subset, a field node with no readable value, and an undecided
+//     ·key-sequence· comparison (cvc-identity-constraint clauses 3 and 4).
+//
+// Three declines are NOT recorded, so an empty Unevaluated is not by itself a
+// claim that the walk performed every check it reached: a ·governing type
+// definition· left undetermined other than by a withheld {type table} (#1093);
+// the element [[children]] of an element assessed against no type at all,
+// which this package leaves untyped where §3.3.4.6 would ·laxly assess· them
+// against xs:anyType's wildcard, suppressing cvc-id clause 1 unrecorded; and an
+// unresolvable {attribute declaration}, which no *xsd.Schema that exists
+// carries.
 type Unevaluated struct {
 	rule xsderr.Rule
 	loc  xsderr.Loc

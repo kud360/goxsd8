@@ -194,14 +194,16 @@
 // wrong" from "your data is wrong" by exit code alone.
 //
 // An instance the assessment DECLINED to decide exits 4: nothing was charged
-// against it, and a check the assessment reached was not performed — an
-// <xs:assert> whose {test} this engine does not evaluate, a {type table} that
-// withheld its ·conditionally selected· type, an element's character content
-// whose simple type the value backend cannot decide, or a content model too
-// wide for the matcher to decide — so the document stands undecided against
-// exactly the rules those checks answer to, which is what
-// [validate.Result.Unevaluated] records and validate's own doc.go calls not a
-// pass. Each such check prints the "<loc>: [<rule>] <message>" line a
+// against it, and a check the assessment reached was not performed — for
+// example an <xs:assert> whose {test} this engine does not evaluate, a {type
+// table} that withheld its ·conditionally selected· type, a value whose simple
+// type the value backend cannot decide, a fixed {value constraint} it cannot
+// compare, a content model too wide for the matcher to decide, or an ID/IDREF
+// or identity-constraint check over a value it could not read — so the
+// document stands undecided against exactly the rules those checks answer to,
+// which is what [validate.Result.Unevaluated] records (its own doc lists every
+// kind, and the few declines it does not record) and validate's own doc.go
+// calls not a pass. Each such check prints the "<loc>: [<rule>] <message>" line a
 // violation prints, on stdout, so a script scanning for a rule ID reads them
 // with the charges. 4 is the least severe outcome after 0 and the codes
 // aggregate by severity rather than by number, so a run whose instances mix
