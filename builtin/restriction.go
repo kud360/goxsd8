@@ -92,7 +92,9 @@ func (c restrictionChecker) CheckRestriction(r xsd.TypeResolver, t *xsd.SimpleTy
 //
 // The count- and token-valued constraints of those same clauses (length,
 // minLength, maxLength, totalDigits, fractionDigits, whiteSpace,
-// explicitTimezone, and the COUNT-valued consistency SCCs) are charged by
+// explicitTimezone, the COUNT-valued consistency SCCs, and the same-step
+// bound-pair SCCs maxInclusive-maxExclusive and minInclusive-minExclusive, which
+// read which facets t specifies and no {value}) are charged by
 // xsd.SimpleType.CheckDerivation, which the same finalize pass runs against t
 // immediately BEFORE this one, so t reaching this function has passed them.
 //

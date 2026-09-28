@@ -14,8 +14,8 @@ package xsd
 //     Datatypes §4.1.5). The applicable set is per-primitive and comes from a
 //     GENERATED table (PRINCIPLES 26), which lives above this leaf.
 //   - the value-space constraints of clauses 1.3.2 / 2.2.2.5 / 3.2.2.5 — the
-//     four bound facets and enumeration — which need a lexical→value mapping,
-//     also above this leaf.
+//     four bound facets' {value}s and enumeration — which need a lexical→value
+//     mapping, also above this leaf.
 //
 // The list and union applicability counterparts, clauses 2.2.2.4 and 3.2.2.4,
 // are NOT this interface's: their applicable sets are fixed literals keyed off
