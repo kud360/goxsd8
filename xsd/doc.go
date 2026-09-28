@@ -189,7 +189,7 @@
 // SimpleTypeRestrictionChecker charges the facet-VALUE half of
 // cos-st-restricts (§3.16.6.2) — the atomic applicability clause, whose
 // per-primitive applicable sets come from a generated table, and the bound
-// and enumeration constraints, which need a value space. That one is
+// and enumeration {value} constraints, which need a value space. That one is
 // REJECT-CAPABLE: it answers with an error carrying a per-facet rule ID,
 // which finalize returns as the schema's rejection, so bundling it with the
 // fail-open comparisons would make an incoherent capability mix

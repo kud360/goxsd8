@@ -13,7 +13,9 @@ import (
 // need a Backend, which is exactly the part of cos-st-restricts clause 1.3.2 /
 // 2.2.2.5 / 3.2.2.5 that package xsd — a pure leaf that cannot import this
 // package — has to leave undone (xsd/derivation.go's checkFacetRestrictions
-// charges the count- and token-valued rules there).
+// charges the count- and token-valued rules there, and the two bound-facet SCCs
+// that read no {value}: maxInclusive-maxExclusive and minInclusive-minExclusive,
+// which forbid specifying both bounds of one side at one derivation step).
 //
 // It is the construction-time complement of facets.go: the same four bound
 // facets and the same enumeration facet, but comparing a RESTRICTION's facet

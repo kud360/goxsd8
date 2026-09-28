@@ -87,6 +87,8 @@ var irregularRules = []string{
 	"minExclusive-less-than-equal-to-maxExclusive",
 	"minExclusive-less-than-maxInclusive",
 	"minInclusive-less-than-maxExclusive",
+	"maxInclusive-maxExclusive",
+	"minInclusive-minExclusive",
 	"fractionDigits-totalDigits",
 	"maxScale-valid-restriction",
 	"minScale-valid-restriction",

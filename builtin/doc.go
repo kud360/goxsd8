@@ -105,8 +105,9 @@
 // literal is validated. It lives here because this is the only package holding
 // both the generated applicability table and an edge to package value; package
 // xsd, a pure leaf, can depend on neither, so it charges only the count- and
-// token-valued facet constraints and the list/union applicable-facet sets
-// itself, and takes the rest as a capability.
+// token-valued facet constraints, the same-step bound-pair SCCs (which read no
+// {value}), and the list/union applicable-facet sets itself, and takes the rest
+// as a capability.
 //
 // A caller installs one at xsd.SchemaBuilder.FinalizeWith, which is what the
 // parser does; xsd's finalize pass then charges every simple type the assembled

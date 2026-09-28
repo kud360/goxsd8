@@ -1,6 +1,7 @@
 package builtin_test
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
@@ -314,5 +315,62 @@ func TestRestrictionCheckerPatternSyntaxOwnFacetsOnly(t *testing.T) {
 	}
 	if err := checker.CheckRestriction(noSchema{}, bad); err == nil {
 		t.Fatal("the DECLARING type was not charged — the check reaches nothing at all")
+	}
+}
+
+// TestSameStepBoundPairsFullCheck runs maxInclusive-maxExclusive (§4.3.8.4) and
+// minInclusive-minExclusive (§4.3.9.4) over xs:decimal through both halves a
+// finalized schema gets: CheckDerivation, then the restriction checker, at every
+// step. Each same-step pair's {value}s satisfy every value-space SCC, so its
+// rejection comes from the pair's own rule or from nothing. Each split pair's
+// {value}s satisfy the valid-restriction and opposite-bound SCCs, so its
+// acceptance is the pair check declining a pair it inherited half of.
+func TestSameStepBoundPairsFullCheck(t *testing.T) {
+	idx, backend := seededIndex(t)
+	checker := builtin.NewRestrictionChecker(backend)
+	f := func(kind xsd.FacetKind, v string) xsd.Facet { return xsd.NewFacet(kind, []string{v}, false) }
+	cases := []struct {
+		name     string
+		steps    [][]xsd.Facet // own facets per derivation step over xs:decimal
+		wantRule xsderr.Rule
+	}{
+		{"maxInclusive and maxExclusive at one step",
+			[][]xsd.Facet{{f(xsd.FacetMaxInclusive, "5"), f(xsd.FacetMaxExclusive, "10")}}, "maxInclusive-maxExclusive"},
+		{"minInclusive and minExclusive at one step",
+			[][]xsd.Facet{{f(xsd.FacetMinInclusive, "5"), f(xsd.FacetMinExclusive, "1")}}, "minInclusive-minExclusive"},
+		{"inherited maxInclusive, own maxExclusive",
+			[][]xsd.Facet{{f(xsd.FacetMaxInclusive, "10")}, {f(xsd.FacetMaxExclusive, "5")}}, ""},
+		{"inherited maxExclusive, own maxInclusive",
+			[][]xsd.Facet{{f(xsd.FacetMaxExclusive, "10")}, {f(xsd.FacetMaxInclusive, "5")}}, ""},
+		{"inherited minInclusive, own minExclusive",
+			[][]xsd.Facet{{f(xsd.FacetMinInclusive, "1")}, {f(xsd.FacetMinExclusive, "5")}}, ""},
+		{"inherited minExclusive, own minInclusive",
+			[][]xsd.Facet{{f(xsd.FacetMinExclusive, "1")}, {f(xsd.FacetMinInclusive, "5")}}, ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			st := idx["decimal"]
+			var err error
+			for i, own := range c.steps {
+				st, err = newCheckedSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "step" + strconv.Itoa(i)},
+					xsd.RestrictionDerivation{}, st, own, nil)
+				if err == nil {
+					err = checker.CheckRestriction(noSchema{}, st)
+				}
+				if err != nil && i < len(c.steps)-1 {
+					t.Fatalf("ancestor step %d rejected: %v", i, err)
+				}
+			}
+			if c.wantRule == "" {
+				if err != nil {
+					t.Fatalf("pair split across derivation steps rejected: %v", err)
+				}
+				return
+			}
+			rule, ok := xsderr.RuleOf(err)
+			if !ok || rule != c.wantRule {
+				t.Fatalf("rule = %q (ok=%v), want %q; err=%v", rule, ok, c.wantRule, err)
+			}
+		})
 	}
 }
