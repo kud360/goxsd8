@@ -85,9 +85,9 @@ func TestUnabbreviatedResidualIsCharged(t *testing.T) {
 	}
 	var rows []row
 	for _, field := range []bool{false, true} {
-		scc, subj := "c-selector-xpath", "{selector}"
+		scc, subj, named := "c-selector-xpath", "{selector}", "the child axis alone"
 		if field {
-			scc, subj = "c-fields-xpaths", "{fields} member"
+			scc, subj, named = "c-fields-xpaths", "{fields} member", "the child and attribute axes alone"
 		}
 		for _, ax := range axisKeywords {
 			for _, expr := range []string{ax + "::", "a/" + ax + "::", ax + "::/a", ax + "::.", ax + "::@a", ax + "::child::a"} {
@@ -103,7 +103,7 @@ func TestUnabbreviatedResidualIsCharged(t *testing.T) {
 				continue
 			}
 			for _, expr := range []string{ax + "::a", ax + "::*", ax + "::node()", "a/" + ax + "::p:*", ax + " :: node ( )"} {
-				rows = append(rows, row{expr, field, fmt.Sprintf(`the %s %q steps along the %s axis, but %s clause 2 admits it under neither arm`, subj, expr, ax, scc)})
+				rows = append(rows, row{expr, field, fmt.Sprintf(`the %s %q steps along the %s axis, but %s clause 2 admits it under neither arm — production [5] spells no axis, and clause 2.2 names %s`, subj, expr, ax, scc, named)})
 			}
 		}
 	}
