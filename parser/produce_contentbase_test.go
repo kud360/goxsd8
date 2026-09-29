@@ -111,27 +111,36 @@ func TestProduceRestrictionBaseCycle(t *testing.T) {
 	}
 }
 
-// TestProduceContentModelExtensionRefused pins the GAP(parser) marker on
-// baseComponent: an anonymous <extension> of T inside T's own content
-// model reads T's unfinished {content type}, and is refused as a producer limit
-// charged to no rule, never as ct-props-correct clause 3.
+// TestProduceContentModelExtensionRefused pins the GAP(parser) #1883 marker on
+// baseComponent at both its call sites: an anonymous type inside T's own content
+// model that derives from T through <simpleContent>, or through a
+// <complexContent> <extension>, reads T's unfinished {content type}, and is
+// refused as a producer limit charged to no rule, never as ct-props-correct
+// clause 3.
 func TestProduceContentModelExtensionRefused(t *testing.T) {
-	_, err := produce(t, wrap("urn:x", `
-		<xs:complexType name="T">
-			<xs:sequence>
-				<xs:element name="inner" minOccurs="0">
-					<xs:complexType><xs:complexContent><xs:extension base="tns:T"/></xs:complexContent></xs:complexType>
-				</xs:element>
-			</xs:sequence>
-		</xs:complexType>`))
-	if err == nil {
-		t.Fatal("Produce accepted an extension of T inside T's own content model, which this producer cannot map")
-	}
-	if rule, ok := xsderr.RuleOf(err); ok {
-		t.Fatalf("error charged %s, want a producer limit charged to no rule (%v)", rule, err)
-	}
-	if !strings.HasPrefix(err.Error(), "parser: the <extension> at ") || !strings.Contains(err.Error(), "derives from {urn:x}T from inside {urn:x}T's own content model") {
-		t.Fatalf("error = %v, want the refusal naming the <extension> and T", err)
+	for _, tc := range []struct{ name, derivation string }{
+		{"complexContent extension", `<xs:complexContent><xs:extension base="tns:T"/></xs:complexContent>`},
+		{"simpleContent extension", `<xs:simpleContent><xs:extension base="tns:T"/></xs:simpleContent>`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := produce(t, wrap("urn:x", `
+				<xs:complexType name="T">
+					<xs:sequence>
+						<xs:element name="inner" minOccurs="0">
+							<xs:complexType>`+tc.derivation+`</xs:complexType>
+						</xs:element>
+					</xs:sequence>
+				</xs:complexType>`))
+			if err == nil {
+				t.Fatal("Produce accepted a derivation from T inside T's own content model, which this producer cannot map")
+			}
+			if rule, ok := xsderr.RuleOf(err); ok {
+				t.Fatalf("error charged %s, want a producer limit charged to no rule (%v)", rule, err)
+			}
+			if !strings.HasPrefix(err.Error(), "parser: the <extension> at ") || !strings.Contains(err.Error(), "derives from {urn:x}T from inside {urn:x}T's own content model") {
+				t.Fatalf("error = %v, want the refusal naming the <extension> and T", err)
+			}
+		})
 	}
 }
 
