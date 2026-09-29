@@ -270,8 +270,12 @@
 // to· a skip ·wildcard particle·, which is ·skipped· along with every element
 // beneath it (clause 3.2) — an {open content} item is ·attributed to· the
 // record and never to a Wildcard (§3.4.4.4, key-att-to), so key-skipped does
-// not reach it (#1576) — and a child whose declaration is not determinable,
-// whose own subtree is then assessed against nothing in its turn.
+// not reach it (#1576) — and a child its parent ·attributes· to nothing, a
+// parent whose own type this package could not determine or whose content it
+// declined or charged, which is assessed against nothing along with its whole
+// subtree. A child whose name ·resolves· to no declaration is neither: it is
+// ·laxly assessed· against xs:anyType, whose lax wildcard ·attributes· its own
+// [[children]] on the same resolving terms (key-lva, #1823).
 //
 // The eighth is cvc-identity-constraint (§3.11.4), over the {identity-constraint
 // definitions} of the ·governing element declaration· of every element the

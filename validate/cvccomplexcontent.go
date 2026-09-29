@@ -95,13 +95,16 @@ const ruleCvcComplexContent xsderr.Rule = "cvc-complex-content"
 // determine, which decides NEITHER arm: every child is walked and none is
 // charged or passed by a type, and none is ·attributed to· anything either, so
 // the whole subtree below such an element is walked against no type in its turn
-// ([walk.childGoverning]). The two cvc-elt clauses below still apply — they read
-// the DECLARATION and not the type. A nil matcher beside a non-nil governing is
-// none of those states: it is clause 1.4 alone declining — a shape
-// [xsd.Schema.ContentMatcher] does not decide — while clauses 1.1 to 1.3 still
-// hold, since they read the {variety} and not the particle. A present {open
-// content} is no longer one of those shapes: the matcher decides both {mode}s,
-// and every charge below names the clause that decided it.
+// ([walk.childGoverning]). A ·laxly assessed· element, which has no type to
+// determine, is the one exception: [walk.child] hands its [[children]] the
+// attribution xs:anyType's lax wildcard makes. The two cvc-elt clauses below
+// still apply — they read the DECLARATION and not the type. A nil matcher
+// beside a non-nil governing is none of those states: it is clause 1.4 alone
+// declining — a shape [xsd.Schema.ContentMatcher] does not decide — while
+// clauses 1.1 to 1.3 still hold, since they read the {variety} and not the
+// particle. A present {open content} is no longer one of those shapes: the
+// matcher decides both {mode}s, and every charge below names the clause that
+// decided it.
 //
 // nilled is whether E is ·nilled· (§3.3.4.3, key-nilled), decided before any
 // child arrives ([walk.nilCheck]). It turns cvc-complex-type clause 1 off
@@ -368,11 +371,13 @@ func (c *contentCheck) text(w *walk, t Text) {
 // into it (cvc-assess-elt clause 3.1, [walk.childGoverning]).
 //
 // The attribution is nil wherever nothing attributed the item: a check with no
-// ·governing type definition·, a simple one, a ·nilled· element, an element
-// already charged, a {variety} that admits no element information item [[child]]
-// at all, and a clause 1.4 that declined or charged. A nilled element's child is
-// still WALKED — the charge is against the parent, not the child, and the
-// child's own subtree is assessed against nothing rather than skipped.
+// ·governing type definition· — a ·laxly assessed· parent's included, whose
+// attribution [walk.child] supplies instead — a simple one, a ·nilled·
+// element, an element already charged, a {variety} that admits no element
+// information item [[child]] at all, and a clause 1.4 that declined or
+// charged. A nilled element's child is still WALKED — the charge is against
+// the parent, not the child, and the child's own subtree is assessed against
+// nothing rather than skipped.
 func (c *contentCheck) element(w *walk, child Element) xsd.Attribution {
 	if c.charged {
 		return nil
