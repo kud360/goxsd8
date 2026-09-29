@@ -502,33 +502,160 @@ func TestSchemaExecutorDecidesReachableExtraDocuments(t *testing.T) {
 	}
 }
 
-// TestSchemaExecutorDeclinesUnreachableExtraDocument proves the decline-not-guess
-// rule for a multi-document schemaTest (issue #238): when a declared document is
-// NOT consumed by the assembly rooted at the first, parser.ParseReport — which
-// takes one root — would assemble a schema the suite never declared, so the case must be
-// DECLINED under BOTH polarities rather than decided against a subset.
-//
-// The decoy is what makes this able to fail: "other.xsd" declares the same name
-// as the root, so a harness that merged the declared documents (or one that
-// simply ignored the extra) would produce a decidable verdict either way —
-// "invalid" if merged, "valid" if ignored. Only declining refuses both.
-func TestSchemaExecutorDeclinesUnreachableExtraDocument(t *testing.T) {
+// TestSchemaExecutorDecidesIndependentRoots proves a multi-document schemaTest
+// whose further documents the first one does NOT reach is decided on the union
+// of every root's schema(D), assembled as ONE schema (#1840). Each case must also
+// Fail under the flipped expectation. The two invalid cases are built so that
+// deciding on the first document alone gives the other answer; the valid one
+// pins that a root an earlier root already reached composes once, not twice.
+func TestSchemaExecutorDecidesIndependentRoots(t *testing.T) {
 	exec := newSchemaExec()
-	trees := map[string][]string{
-		"independent second document":            {"other.xsd"},
-		"declared document absent from the tree": {"missing.xsd"},
+	cases := []struct {
+		name        string
+		docs        map[string]string
+		extra       []string
+		expectValid bool
+	}{
+		{
+			// sch-props-correct (§3.17.6.1) clause 2: two roots declare one expanded
+			// name as distinct components.
+			name: "two roots declare one element name in one namespace",
+			docs: map[string]string{
+				"main.xsd":  schemaSrc("urn:a", `<xs:element name="dup" type="xs:string"/>`),
+				"other.xsd": schemaSrc("urn:a", `<xs:element name="dup" type="xs:string"/>`),
+			},
+			extra:       []string{"other.xsd"},
+			expectValid: false,
+		},
+		{
+			// src-resolve: the second root's reference names no component of the set.
+			name: "second root holds an unresolvable reference",
+			docs: map[string]string{
+				"main.xsd":  schemaSrc("urn:a", `<xs:element name="root" type="xs:string"/>`),
+				"other.xsd": schemaSrc("urn:b", `<xs:element name="e" type="tns:missing"/>`),
+			},
+			extra:       []string{"other.xsd"},
+			expectValid: false,
+		},
+		{
+			// The third root is reached by the second, not the first: it is entered
+			// as a root and lands on the second's reading, composed once.
+			name: "three roots, the third included by the second",
+			docs: map[string]string{
+				"main.xsd":  schemaSrc("urn:a", `<xs:element name="root" type="xs:string"/>`),
+				"other.xsd": schemaSrc("urn:b", include("lib.xsd")+`<xs:element name="e" type="tns:code"/>`),
+				"lib.xsd":   schemaSrc("urn:b", decidableType),
+			},
+			extra:       []string{"other.xsd", "lib.xsd"},
+			expectValid: true,
+		},
 	}
-	docs := map[string]string{
+	for _, tc := range cases {
+		root := writeSchemaTree(t, "main.xsd", tc.docs)
+		spec := caseSpec{
+			kind:      kindSchema,
+			doc:       root,
+			extraDocs: extraPaths(root, tc.extra),
+			expect:    expectValidity(tc.expectValid),
+		}
+		if !exec(spec).IsPass() {
+			t.Errorf("%s: executor disagreed with expectValid=%v", tc.name, tc.expectValid)
+		}
+		flipped := spec
+		flipped.expect = expectValidity(!tc.expectValid)
+		if exec(flipped).IsPass() {
+			t.Errorf("%s: executor must Fail under a flipped expectation (decides for real)", tc.name)
+		}
+	}
+}
+
+// TestSchemaExecutorChargesCollidingRoots pins the rule the two-root collision
+// is decided on: sch-props-correct, not a plain error or a directive's fault.
+func TestSchemaExecutorChargesCollidingRoots(t *testing.T) {
+	root := writeSchemaTree(t, "main.xsd", map[string]string{
 		"main.xsd":  schemaSrc("urn:a", `<xs:element name="dup" type="xs:string"/>`),
 		"other.xsd": schemaSrc("urn:a", `<xs:element name="dup" type="xs:string"/>`),
+	})
+	c := caseSpec{kind: kindSchema, doc: root, extraDocs: extraPaths(root, []string{"other.xsd"})}
+	if got := newSchemaCharge()(c); got != "sch-props-correct" {
+		t.Errorf("charge = %q, want sch-props-correct (§3.17.6.1 clause 2)", got)
+	}
+}
+
+// TestSchemaExecutorKeepsReachedExtraDocumentsOffTheRootSet proves a declared
+// document the FIRST one already reaches is not entered as a root again (#1840).
+// Each is a <redefine> or <override> target: read plainly a second time it
+// contributes the very definition the directive replaced, beside the replacement,
+// and the set collides under sch-props-correct clause 2 — so each case goes red
+// when extraRoots stops skipping reached documents.
+func TestSchemaExecutorKeepsReachedExtraDocumentsOffTheRootSet(t *testing.T) {
+	exec := newSchemaExec()
+	cases := map[string]map[string]string{
+		"second document is the first's <redefine> target": {
+			"main.xsd": schemaSrc("urn:a", `<xs:redefine schemaLocation="lib.xsd">`+
+				`<xs:simpleType name="code"><xs:restriction base="tns:code">`+
+				`<xs:maxLength value="2"/></xs:restriction></xs:simpleType></xs:redefine>`+
+				`<xs:element name="root" type="tns:code"/>`),
+			"lib.xsd": schemaSrc("urn:a", decidableType),
+		},
+		"second document is the first's <override> target": {
+			"main.xsd": schemaSrc("urn:a", override("lib.xsd",
+				`<xs:simpleType name="code"><xs:restriction base="xs:token"/></xs:simpleType>`)+
+				`<xs:element name="root" type="tns:code"/>`),
+			"lib.xsd": schemaSrc("urn:a", decidableType),
+		},
+	}
+	for _, name := range slices.Sorted(maps.Keys(cases)) {
+		root := writeSchemaTree(t, "main.xsd", cases[name])
+		spec := caseSpec{
+			kind:      kindSchema,
+			doc:       root,
+			extraDocs: extraPaths(root, []string{"lib.xsd"}),
+			expect:    expectValidity(true),
+		}
+		if !exec(spec).IsPass() {
+			t.Errorf("%s: executor must accept the set the first document composes", name)
+		}
+		spec.expect = expectValidity(false)
+		if exec(spec).IsPass() {
+			t.Errorf("%s: executor must Fail under a flipped expectation (decides for real)", name)
+		}
+	}
+}
+
+// TestSchemaExecutorDeclinesUndecidableExtraRoot proves the multi-root assembly
+// keeps every decline the single root has: a further root holding a shape the
+// producer does not build, one that cannot be read, one that is not <schema> and
+// one that is not there are each DECLINED under both polarities. The first
+// document alone is decidable and valid, so each case goes red if the gate
+// stops at the first root's closure or skips a further root's preconditions.
+func TestSchemaExecutorDeclinesUndecidableExtraRoot(t *testing.T) {
+	exec := newSchemaExec()
+	trees := map[string]map[string]string{
+		"further root holds an undecidable shape": {
+			"other.xsd": schemaSrc("urn:b", undecidable),
+		},
+		"further root includes an undecidable document": {
+			"other.xsd": schemaSrc("urn:b", include("deep.xsd")),
+			"deep.xsd":  schemaSrc("urn:b", undecidable),
+		},
+		"further root is not well-formed": {
+			"other.xsd": `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">`,
+		},
+		"further root is not a <schema>": {
+			"other.xsd": `<notSchema/>`,
+		},
+		"further root is absent from the tree": {},
 	}
 	for _, name := range slices.Sorted(maps.Keys(trees)) {
+		docs := maps.Clone(trees[name])
+		docs["main.xsd"] = schemaSrc("urn:a", `<xs:element name="root" type="xs:string"/>`)
 		root := writeSchemaTree(t, "main.xsd", docs)
 		for _, ev := range []bool{true, false} {
 			spec := caseSpec{
 				kind:      kindSchema,
 				doc:       root,
-				extraDocs: extraPaths(root, trees[name]),
+				extraDocs: extraPaths(root, []string{"other.xsd"}),
 				expect:    expectValidity(ev),
 			}
 			if exec(spec).IsPass() {
