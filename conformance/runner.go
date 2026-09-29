@@ -111,9 +111,9 @@ func checkSuitePresent(index string) error {
 // schemaTest declaring several <schemaDocument> children, which xsts.xsd (the
 // suite's own catalog schema) defines as "run as if the schema documents given
 // were loaded one by one, in order" — so the whole list, in document order, is
-// the case, not any one member of it. assembleCase admits such a case only when
-// every extra document is provably part of the closure the parser itself walks
-// from doc; see conformance/schema.go.
+// the case, not any one member of it. assembleCase assembles the whole list as
+// one schema, entering as a further root each extra document the closure from
+// doc does not reach; see conformance/schema.go.
 //
 // schemaDoc and schemaExtraDocs name the schema documents an INSTANCE case is
 // assessed against: the <schemaDocument> list of its test group's sibling
@@ -790,8 +790,8 @@ func caseDocs(kind string, t validityTest, setDir string) (doc string, extra []s
 //
 // Any count other than EXACTLY ONE schemaTest yields NO schema reference, so
 // execInstanceCase declines the case rather than picking a sibling or inventing a
-// document — the same refusal extraDocsInClosure makes for a schemaTest's
-// undecidable document set. Of the 9952 groups the pinned suite yields instance
+// document. A multi-document list it passes through whole, which assembleCase
+// decides on as one set. Of the 9952 groups the pinned suite yields instance
 // cases from, 55 declare NO schemaTest (MS-Additional2006-07-15/addA006 and 54
 // siblings) and so decline here, one case each; none declares more than one, so
 // that arm is defensive against a re-pin rather than exercised today.
