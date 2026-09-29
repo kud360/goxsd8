@@ -382,14 +382,6 @@ func TestInstanceExecutorDeclinesOutsideAssessedSubtreeRoot(t *testing.T) {
 	}{
 		{"DOCTYPE present", aInt, `<!DOCTYPE known><known><a>1</a></known>`},
 		{"DOCTYPE present on a content-less root", emptyRoot, `<!DOCTYPE known><known/>`},
-		{
-			"xsi:type on the root (cvc-elt clause 4)",
-			knownRoot, `<known ` + xsiXS + ` xsi:type="xs:string">x</known>`,
-		},
-		{
-			"xsi:type on a content-less root (cvc-elt clause 4)",
-			`<xs:element name="known" type="E"/><xs:complexType name="E"/>`, `<known ` + xsiNS + ` xsi:type="E"/>`,
-		},
 		{"a fixed {value constraint} on the root (cvc-elt clause 5.2.2)", `<xs:element name="known" type="xs:string" fixed="x"/>`, `<known>x</known>`},
 		{
 			"a {type table} on the root (cvc-elt clause 4)",
@@ -406,7 +398,6 @@ func TestInstanceExecutorDeclinesOutsideAssessedSubtreeRoot(t *testing.T) {
 			`<xs:element name="known"><xs:complexType><xs:sequence><xs:any processContents="skip"/></xs:sequence></xs:complexType></xs:element>`,
 			`<known><b><c/></b></known>`,
 		},
-		{"xsi:type below the root (cvc-elt clause 4)", aInt, `<known ` + xsiXS + `><a xsi:type="xs:int">1</a></known>`},
 		{
 			"xsi:nil below the root (cvc-elt clause 3)",
 			`<xs:element name="known"><xs:complexType><xs:sequence><xs:element name="a" type="xs:int" nillable="true"/></xs:sequence></xs:complexType></xs:element>`,
@@ -505,6 +496,147 @@ func TestInstanceExecutorDeclinesOutsideAssessedSubtreeRoot(t *testing.T) {
 	}
 	for _, tc := range cases {
 		declinesBothPolarities(t, exec, instanceCase(t, tc.schemaBody, tc.instance, false), tc.condition)
+	}
+}
+
+// xsiTypes declares the types the xsi:type rows name: CA, an element-only type
+// of one <x>; ECA, CA extended by a <z>, which CA does not admit; and CI, a
+// simple {content type} extending xs:int.
+const xsiTypes = `<xs:complexType name="CA"><xs:sequence><xs:element name="x" type="xs:int"/></xs:sequence></xs:complexType>` +
+	`<xs:complexType name="ECA"><xs:complexContent><xs:extension base="CA"><xs:sequence>` +
+	`<xs:element name="z" type="xs:int"/></xs:sequence></xs:extension></xs:complexContent></xs:complexType>` +
+	`<xs:complexType name="CI"><xs:simpleContent><xs:extension base="xs:int"/></xs:simpleContent></xs:complexType>`
+
+// xsiChild declares <known> with the one child declaration a, beside xsiTypes.
+func xsiChild(a string) string {
+	return `<xs:element name="known"><xs:complexType><xs:sequence>` + a + `</xs:sequence></xs:complexType></xs:element>` + xsiTypes
+}
+
+// xsiKnown is an instance <known> binding xsi and xs, holding child.
+func xsiKnown(child string) string {
+	return `<known ` + xsiXS + `>` + child + `</known>`
+}
+
+// TestInstanceExecutorDecidesXsiType proves the gate admits an xsi:type whose
+// override the walk decides (cvc-elt clause 4, §3.3.4.2 key-overrides) and
+// follows the ·instance-specified type definition· below it
+// (key-governing-type-elem clause 3, #1859). Each row names the gate condition
+// that, removed or inverted, turns it into a decline.
+func TestInstanceExecutorDecidesXsiType(t *testing.T) {
+	exec := newInstanceExec()
+	for _, tc := range []struct{ why, schemaBody, instance string }{
+		{"xsi:type naming the root's declared type", knownRoot, `<known ` + xsiXS + ` xsi:type="xs:string">x</known>`},
+		{
+			"xsi:type naming a content-less root's declared type",
+			`<xs:element name="known" type="E"/><xs:complexType name="E"/>`, `<known ` + xsiNS + ` xsi:type="E"/>`,
+		},
+		{
+			// Following d.{type definition} instead, the <z> is unattributable.
+			"an extension of the declared type below the root, content only the extension admits",
+			xsiChild(`<xs:element name="a" type="CA"/>`), xsiKnown(`<a xsi:type="ECA"><x>1</x><z>2</z></a>`),
+		},
+		{"a restriction of a simple declared type below the root", xsiChild(`<xs:element name="a" type="xs:decimal"/>`), xsiKnown(`<a xsi:type="xs:int">1</a>`)},
+		{
+			// blockingUnread's identity exception: cos-st-derived-ok clause 1.
+			"the declared simple type itself under block=\"restriction\"",
+			xsiChild(`<xs:element name="a" type="xs:decimal" block="restriction"/>`), xsiKnown(`<a xsi:type="xs:decimal">1</a>`),
+		},
+		{
+			// elemT040's shape: cos-st-derived-ok reads restriction alone.
+			"a simple type for an xs:anyType declaration under block=\"extension\"",
+			xsiChild(`<xs:element name="a" block="extension"/>`), xsiKnown(`<a xsi:type="xs:int">1</a>`),
+		},
+		{
+			// xsd reads blocked for a complex declared type other than xs:anyType.
+			"an extension of a complex declared type under block=\"restriction\"",
+			xsiChild(`<xs:element name="a" type="CA" block="restriction"/>`), xsiKnown(`<a xsi:type="ECA"><x>1</x><z>2</z></a>`),
+		},
+		{
+			// cos-ct-derived-ok reads extension and restriction alone.
+			"a complex type for an xs:anyType declaration under block=\"substitution\"",
+			xsiChild(`<xs:element name="a" block="substitution"/>`), xsiKnown(`<a xsi:type="ECA"><x>1</x><z>2</z></a>`),
+		},
+		{
+			// The innermost binding of p wins; the root's names no type.
+			"an xsi:type prefix rebound on its own element",
+			xsiChild(`<xs:element name="a" type="xs:decimal"/>`),
+			`<known ` + xsiNS + ` xmlns:p="urn:wrong"><a xmlns:p="http://www.w3.org/2001/XMLSchema" xsi:type="p:int">1</a></known>`,
+		},
+	} {
+		if !exec(instanceCase(t, tc.schemaBody, tc.instance, true)).IsPass() {
+			t.Errorf("%s: the walk decides the override and the gate follows it; the executor must agree with a suite-valid case", tc.why)
+		}
+		if exec(instanceCase(t, tc.schemaBody, tc.instance, false)).IsPass() {
+			t.Errorf("%s: the executor must Fail under a flipped expectation (it decides for real)", tc.why)
+		}
+	}
+}
+
+// TestInstanceExecutorChargesXsiType proves the walk, not the gate, decides an
+// xsi:type that does not ·override· (cvc-elt clause 4), does not ·resolve·
+// (cvc-attribute clause 5) or is no QName (clause 3): each row is decided
+// INVALID.
+func TestInstanceExecutorChargesXsiType(t *testing.T) {
+	exec := newInstanceExec()
+	for _, tc := range []struct{ why, schemaBody, instance string }{
+		{"a type not derived from the declared one (cvc-elt clause 4)", xsiChild(`<xs:element name="a" type="xs:int"/>`), xsiKnown(`<a xsi:type="xs:boolean">1</a>`)},
+		{
+			"an extension a complex declared type's declaration blocks (cvc-elt clause 4, cos-ct-derived-ok clause 1)",
+			xsiChild(`<xs:element name="a" type="CA" block="extension"/>`), xsiKnown(`<a xsi:type="ECA"><x>1</x><z>2</z></a>`),
+		},
+		{
+			// Pinned: the walk DECIDES a QName lexical that resolves to no type.
+			"a QName naming no type definition (cvc-attribute clause 5)",
+			xsiChild(`<xs:element name="a" type="xs:int"/>`), xsiKnown(`<a xsi:type="Nope">1</a>`),
+		},
+		{
+			// Pinned: the walk CHARGES an unbound prefix under cvc-attribute clause
+			// 3 and records clause 5 in Result.Unevaluated; the executor reads the
+			// charge first, so the record never makes the case decline.
+			"a QName whose prefix is unbound (cvc-attribute clause 3)",
+			xsiChild(`<xs:element name="a" type="xs:int"/>`), xsiKnown(`<a xsi:type="q:int">1</a>`),
+		},
+	} {
+		if !exec(instanceCase(t, tc.schemaBody, tc.instance, false)).IsPass() {
+			t.Errorf("%s: the walk charges the xsi:type; the executor must agree with a suite-invalid case", tc.why)
+		}
+		if exec(instanceCase(t, tc.schemaBody, tc.instance, true)).IsPass() {
+			t.Errorf("%s: the executor must Fail under a flipped expectation", tc.why)
+		}
+	}
+}
+
+// TestInstanceExecutorDeclinesUnrecordedOverride pins blockingUnread: every row
+// is an xsi:type xsd.Schema.ValidlySubstitutable answers TRUE for although the
+// declaration's {disallowed substitutions} blocks it, so the walk charges
+// nothing and records nothing, and the gate alone keeps the empty Result from
+// reading as "valid".
+func TestInstanceExecutorDeclinesUnrecordedOverride(t *testing.T) {
+	exec := newInstanceExec()
+	for _, tc := range []struct{ why, schemaBody, instance string }{
+		{
+			"a complex type for an xs:anyType declaration under block=\"extension\" (cos-ct-derived-ok clause 1)",
+			xsiChild(`<xs:element name="a" block="extension"/>`), xsiKnown(`<a xsi:type="ECA"><x>1</x><z>2</z></a>`),
+		},
+		{
+			"a complex type for an xs:anyType declaration under block=\"restriction\" (cos-ct-derived-ok clause 1)",
+			xsiChild(`<xs:element name="a" block="restriction"/>`), xsiKnown(`<a xsi:type="ECA"><x>1</x><z>2</z></a>`),
+		},
+		{
+			// elemT026's shape.
+			"a simple type for an xs:anyType declaration under block=\"restriction\" (cos-st-derived-ok clause 2.1)",
+			xsiChild(`<xs:element name="a" block="restriction"/>`), xsiKnown(`<a xsi:type="xs:int">1</a>`),
+		},
+		{
+			"a simple restriction of a simple declared type under block=\"restriction\" (cos-st-derived-ok clause 2.1)",
+			xsiChild(`<xs:element name="a" type="xs:decimal" block="restriction"/>`), xsiKnown(`<a xsi:type="xs:int">1</a>`),
+		},
+		{
+			"a complex type over a simple declared type under block=\"restriction\" (cos-ct-derived-ok clause 2.3.2.2)",
+			xsiChild(`<xs:element name="a" type="xs:decimal" block="restriction"/>`), xsiKnown(`<a xsi:type="CI">1</a>`),
+		},
+	} {
+		declinesBothPolarities(t, exec, instanceCase(t, tc.schemaBody, tc.instance, false), tc.why)
 	}
 }
 
@@ -654,12 +786,19 @@ type fixture struct{ name, content string }
 // charges first — an undeclared root (cvc-assess-elt), an abstract declaration
 // (cvc-elt clause 2), an element child of a simple type (cvc-type clause
 // 3.1.2), an attribute outside the xsi: four (3.1.1), an xsi:nil (cvc-elt
-// clause 3) — at the gate itself, since it is a precondition in its own right
-// and not a restatement of those charges. No executor row can see them, so the
-// gate is called directly, with the declared root, with content and without,
-// as the controls. A decoder error is refused too.
+// clause 3), an xsi:type that does not resolve (cvc-attribute clause 3 or 5) or
+// does not ·override· (cvc-elt clause 4) — at the gate itself, since it is a
+// precondition in its own right and not a restatement of those charges. No
+// executor row can see them, so the gate is called directly, with the declared
+// root, with content and without, as the controls. A decoder error is refused
+// too.
+//
+// The no-namespace simple type int is there for the unbound-prefix row: a
+// gate that dropped an unbound prefix rather than refusing it would resolve
+// "xs:int" to it, a restriction of the declared xs:string.
 func TestAssessedSubtreeRootRootConditions(t *testing.T) {
-	const schemaBody = knownRoot + `<xs:element name="abstract" type="xs:string" abstract="true"/>`
+	const schemaBody = knownRoot + `<xs:element name="abstract" type="xs:string" abstract="true"/>` +
+		`<xs:simpleType name="int"><xs:restriction base="xs:string"/></xs:simpleType>`
 	for _, tc := range []struct {
 		why, instance string
 		want          bool
@@ -671,6 +810,12 @@ func TestAssessedSubtreeRootRootConditions(t *testing.T) {
 		{"an element child of a simple type", `<known><a/></known>`, false},
 		{"an attribute outside the xsi: four", `<known foo="1">x</known>`, false},
 		{"an xsi:nil", `<known ` + xsiNS + ` xsi:nil="false">x</known>`, false},
+		// The walk charges each refused xsi:type below, so only a
+		// direct call sees the gate's own refusal.
+		{"an xsi:type naming the declared type", `<known ` + xsiXS + ` xsi:type="xs:string">1</known>`, true},
+		{"an xsi:type naming no type definition", `<known ` + xsiXS + ` xsi:type="Nope">1</known>`, false},
+		{"an xsi:type whose prefix is unbound", `<known ` + xsiNS + ` xsi:type="xs:int">1</known>`, false},
+		{"an xsi:type that does not ·override· the declared type", `<known ` + xsiXS + ` xsi:type="xs:int">1</known>`, false},
 		{"a malformed document", `<known>`, false},
 	} {
 		c := instanceCase(t, schemaBody, tc.instance, true)

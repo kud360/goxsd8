@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/kud360/goxsd8/loader"
 	"github.com/kud360/goxsd8/parser"
@@ -103,20 +104,26 @@ func documentEnd(dec *xml.Decoder) bool {
 }
 
 // subtreeGate is one assessedSubtreeRoot reading: the schema the subtree is
-// checked against and the decoder positioned inside it.
+// checked against, the decoder positioned inside it, and the namespace
+// declarations of every element open above that position, outermost first,
+// which resolveQName reads.
 type subtreeGate struct {
 	schema *xsd.Schema
 	dec    *xml.Decoder
+	scope  []xml.Attr
 }
 
 // element reads the element whose start tag is start, and whose ·governing
 // element declaration· is d, through to its end tag, and reports whether every
 // condition below holds for it and, recursively, for every element under it:
 //
-//   - it carries no xsi:type and no xsi:nil (plainAttributes);
+//   - it carries no xsi:nil (plainAttributes);
 //   - d is not abstract and carries no {type table} and no fixed {value
 //     constraint} (assessedDeclaration);
-//   - d.{type definition} resolves;
+//   - its ·governing type definition· is determined: d.{type definition}
+//     resolves, and an xsi:type the element carries meets governingType's
+//     conditions, the type it names then standing in for d.{type definition}
+//     in the two conditions below;
 //   - for a Simple Type Definition, its closure reaches none of
 //     walkUnrecorded, the element carries no attribute but the four
 //     xsi: ones cvc-type clause 3.1.1 excepts, and no element [[child]];
@@ -129,8 +136,15 @@ func (g *subtreeGate) element(start xml.StartElement, d xsd.ElementDeclaration, 
 	if !plainAttributes(start.Attr) || !assessedDeclaration(d) {
 		return false
 	}
+	mark := len(g.scope)
+	for _, a := range start.Attr {
+		if isNamespaceDeclaration(a) {
+			g.scope = append(g.scope, a)
+		}
+	}
+	defer func() { g.scope = g.scope[:mark] }()
 	constrained = constrained || len(d.IdentityConstraints()) > 0
-	td, ok := g.schema.ResolvedType(d.TypeDefinition())
+	td, ok := g.governingType(start, d)
 	if !ok {
 		return false
 	}
@@ -146,18 +160,134 @@ func (g *subtreeGate) element(start xml.StartElement, d xsd.ElementDeclaration, 
 	return false
 }
 
-// plainAttributes reports whether attrs, one start tag's attribute list, holds
-// no xsi:type and no xsi:nil.
-func plainAttributes(attrs []xml.Attr) bool {
-	for _, a := range attrs {
-		if a.Name.Space != xsd.XMLSchemaInstanceNS {
-			continue
-		}
-		if a.Name.Local == "type" || a.Name.Local == "nil" {
-			return false
+// governingType is the ·governing type definition· (key-governing-type-elem) of
+// the element whose start tag is start and whose ·governing element
+// declaration· is d, determined here independently of the walk, and false
+// wherever the gate does not determine it. d carries no {type table}
+// (assessedDeclaration), so its ·selected type definition· is d.{type
+// definition}, which must resolve.
+//
+// With no xsi:type the selected type governs (clause 4). With one, the gate
+// follows its ·instance-specified type definition· T (clause 3) where all of
+// these hold, and answers false otherwise:
+//
+//   - the lexical names a type: it resolves as a QName against the namespace
+//     bindings in scope (§3.17.6.3, cvc-resolve-instance) and the schema has a
+//     top-level type definition of that name. A lexical that does not is the
+//     walk's, charged under cvc-attribute clause 3 or 5 or, where the walk
+//     withholds clause 3, recorded in Result.Unevaluated, so no empty Result
+//     reaches the gate with it;
+//   - blockingUnread does not hold;
+//   - xsd.Schema.ValidlySubstitutable answers that T ·overrides· the selected
+//     type under d.{disallowed substitutions} (§3.3.4.2, key-overrides), which
+//     is cvc-elt clause 4. A false is the walk's cvc-elt charge. An error is
+//     validate's instanceOverride decline, which leaves the governing type
+//     undetermined and records nothing, so the gate refuses it itself.
+func (g *subtreeGate) governingType(start xml.StartElement, d xsd.ElementDeclaration) (xsd.TypeDefinition, bool) {
+	selected, ok := g.schema.ResolvedType(d.TypeDefinition())
+	if !ok {
+		return nil, false
+	}
+	i := slices.IndexFunc(start.Attr, func(a xml.Attr) bool { return a.Name == xsiType })
+	if i < 0 {
+		return selected, true
+	}
+	name, ok := g.resolveQName(start.Attr[i].Value)
+	if !ok {
+		return nil, false
+	}
+	t, ok := g.schema.Type(name)
+	if !ok {
+		return nil, false
+	}
+	blocked := d.DisallowedSubstitutions()
+	if blockingUnread(t, selected, blocked) {
+		return nil, false
+	}
+	overrides, err := g.schema.ValidlySubstitutable(t, selected, blocked)
+	if err != nil || !overrides {
+		return nil, false
+	}
+	return t, true
+}
+
+// blockingUnread reports whether xsd.Schema.ValidlySubstitutable may answer
+// TRUE for the ·instance-specified type definition· t against the ·selected
+// type definition· selected where the blocking keywords in blocked make the
+// answer FALSE. The walk reads that answer as cvc-elt clause 4 decided and
+// records nothing, so the gate refuses both shapes xsd decides without reading
+// blocked:
+//
+//   - selected is ·xs:anyType·, which validlyDerived answers true for before
+//     reading blocked. For a complex t, extension or restriction in blocked can
+//     fail cos-ct-derived-ok clause 1 on a step of t's {base type definition}
+//     chain, which the gate does not walk (xs:anyType's own {prohibited
+//     substitutions} is the empty set, §3.4.7, and adds nothing); for a simple
+//     t, restriction in blocked can fail cos-st-derived-ok clause 2.1, the one
+//     keyword that constraint reads.
+//   - selected is a Simple Type Definition and restriction is in blocked:
+//     derivedOKSimple runs cos-st-derived-ok under the empty blocking set (the
+//     GAP(xsd) on ValidlySubstitutable), reached for a simple t directly and
+//     for a complex t through cos-ct-derived-ok clause 2.3.2.2.
+//
+// Neither applies where t is selected itself, which clause 1 of both
+// constraints admits whatever blocked holds; t is a top-level type, so a name
+// equal to selected's is that identity.
+func blockingUnread(t, selected xsd.TypeDefinition, blocked []xsd.DerivationMethod) bool {
+	if t.Name() == selected.Name() {
+		return false
+	}
+	restriction := slices.Contains(blocked, xsd.DerivationRestriction)
+	if _, simple := selected.(*xsd.SimpleType); simple {
+		return restriction
+	}
+	if selected.Name() != anyTypeName {
+		return false
+	}
+	if _, simple := t.(*xsd.SimpleType); simple {
+		return restriction
+	}
+	return restriction || slices.Contains(blocked, xsd.DerivationExtension)
+}
+
+// resolveQName maps lexical, an xs:QName lexical, to the ·expanded name· the
+// namespace declarations in g.scope bind it to after whiteSpace collapse: an
+// unprefixed name takes the default namespace, or none where no default
+// namespace declaration is in scope. A lexical with an empty prefix or local
+// part, or whose prefix no declaration in scope binds, answers false; any
+// other malformation yields a name no type definition carries.
+func (g *subtreeGate) resolveQName(lexical string) (xsd.QName, bool) {
+	prefix, local, prefixed := strings.Cut(strings.Trim(lexical, " \t\r\n"), ":")
+	decl := xml.Name{Space: "xmlns", Local: prefix}
+	if !prefixed {
+		prefix, local = "", prefix
+		decl = xml.Name{Local: "xmlns"}
+	}
+	if local == "" || (prefixed && prefix == "") {
+		return xsd.QName{}, false
+	}
+	for i := len(g.scope) - 1; i >= 0; i-- {
+		if g.scope[i].Name == decl {
+			return xsd.QName{Space: g.scope[i].Value, Local: local}, true
 		}
 	}
-	return true
+	return xsd.QName{Local: local}, !prefixed
+}
+
+// xsiType and xsiNil are the ·expanded names· of the built-in xsi:type and
+// xsi:nil attribute declarations (§3.2.7).
+var (
+	xsiType = xml.Name{Space: xsd.XMLSchemaInstanceNS, Local: "type"}
+	xsiNil  = xml.Name{Space: xsd.XMLSchemaInstanceNS, Local: "nil"}
+)
+
+// anyTypeName is the ·expanded name· of ·xs:anyType·.
+var anyTypeName = xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"}
+
+// plainAttributes reports whether attrs, one start tag's attribute list, holds
+// no xsi:nil.
+func plainAttributes(attrs []xml.Attr) bool {
+	return !slices.ContainsFunc(attrs, func(a xml.Attr) bool { return a.Name == xsiNil })
 }
 
 // notExcepted reports whether a is an attribute information item that neither

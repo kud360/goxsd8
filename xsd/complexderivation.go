@@ -706,6 +706,13 @@ func (s *Schema) baseComplexType(c ComplexType) (ComplexType, bool) {
 // spurious TRUE withholds that charge and admits a member declaration those
 // exclusions should have turned away — and it reads the answer ONLY as a
 // verdict, nothing downstream being typed off it.
+//
+// A seventh, outside this package, does not read the answer where this gap
+// can make it spuriously TRUE: the conformance lane's assessed-subtree-root
+// gate refuses an xsi:type against a simple ·selected type definition· whose
+// declaration blocks restriction, and against ·xs:anyType· whose declaration
+// blocks a keyword cos-ct-derived-ok or cos-st-derived-ok reads, since
+// validlyDerived answers that case before reading blocked at all.
 func (s *Schema) ValidlySubstitutable(sub, super TypeDefinition, blocked []DerivationMethod) (bool, error) {
 	if sup, ok := super.(ComplexType); ok {
 		blocked = unionDerivationMethods(blocked, sup.prohibitedSubstitutions)
