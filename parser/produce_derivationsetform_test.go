@@ -117,7 +117,8 @@ func TestProduceDerivationSetProhibitedFormCharged(t *testing.T) {
 // TestProduceDerivationSetDeclaredFormNamed pins that the diagnostic names the
 // production that declares the attribute on the element's own form: a local
 // <element>'s block is xs:localElement's, a top-level <element>'s final is
-// xs:topLevelElement's.
+// xs:topLevelElement's, and a <redefine> child <complexType> is the top-level
+// form, so its final is checked, never passed over as a nested form's.
 func TestProduceDerivationSetDeclaredFormNamed(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
@@ -135,6 +136,13 @@ func TestProduceDerivationSetDeclaredFormNamed(t *testing.T) {
 			name:    `top-level <element> final="list"`,
 			body:    "\n" + `<xs:element name="e" type="xs:string" final="list"/>`,
 			wantMsg: `<element> final "list" is not in the ·lexical space· of xs:derivationSet, the type xs:topLevelElement declares final with`,
+		},
+		{
+			name: `<redefine> <complexType> final="list"`,
+			body: `<xs:redefine schemaLocation="nowhere.xsd">` + "\n" +
+				`<xs:complexType name="ct" final="list"><xs:sequence/></xs:complexType>` + "\n" +
+				`</xs:redefine>`,
+			wantMsg: `<complexType> final "list" is not in the ·lexical space· of xs:derivationSet, the type xs:topLevelComplexType declares final with`,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
