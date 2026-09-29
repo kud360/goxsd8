@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"errors"
+	"flag"
 	"fmt"
 	"os"
 	"os/exec"
@@ -179,140 +180,104 @@ func TestExitSeverityRanksEveryCode(t *testing.T) {
 	}
 }
 
-// TestUsageCoversContract guards the usage constant against drifting away
-// from the doc.go contract it renders.
-func TestUsageCoversContract(t *testing.T) {
-	want := []string{
-		"goxsd8 parse [-q] [-v] <schema.xsd>...",
-		"goxsd8 validate -schema <schema.xsd> [-schema <s2>]... <instance>...",
-		"goxsd8 gen -schema <schema.xsd> -out <dir>",
-		"GOXSD_DEBUG=parser,validate,codec",
-		"Implemented today: the help path, parse and validate.",
-		// The four answers a batch script needs and the page withheld
-		// (#1066, #1031): which stream carries parse's summary and its
-		// error lines, which carries validate's violations, that the
-		// exit code aggregates over the instance arguments, and what
-		// -format accepts.
-		"summary on stdout",
-		"first error on stderr as <loc>: [<rule>] <message>",
-		"assembly\n      stops there",
-		"so a run holding one of each exits 1",
-		"prints one line on stdout",
-		"-format xml|json|ber",
-		"case-sensitively",
-		// #720's own answers, none of which any earlier copy carried: that
-		// several -schema arguments are ONE set, that a broken schema set has
-		// an exit code of its own, that the run reports every instance rather
-		// than stopping at the first bad one, what an unrecognized -format
-		// token earns, that two of the three tokens are reserved and unbuilt,
-		// that - is an instance spelling alone, and which elements' hints are
-		// followed.
-		"compose into ONE set",
-		"3 when the schema set does not compile",
-		"Every instance is assessed — the run never stops at the first\n      invalid one",
-		"are usage errors listing the\n      values.",
-		"Only xml is assessed today",
-		"- names standard input as an\n      instance, never as a schema.",
-		"hints on the document element of an XML",
-		"set will not compose with is the instance's own fault",
-		// #472's own four decisions, each of which a user can only learn
-		// from this block: what several schema arguments mean, that a
-		// document parse cannot read is exit 2 rather than a verdict,
-		// where the common flags may stand, and what -q suppresses.
-		"several\n      arguments are several compilations, not one set.",
-		"2 when an\n      argument cannot be read",
-		"qualify a subcommand and follow its name",
-		"-q suppresses a subcommand's informational",
-		// #1223's own answers: that exit 0 no longer covers an instance the
-		// assessment declined to decide, what the code it does get means,
-		// that the codes aggregate by severity and not by number, and that
-		// the declined checks print beside the violations rather than being
-		// what -q swallows.
-		"none left\n      a check undecided",
-		"assessment declined to decide",
-		"undecided is less severe than",
-		"each check the assessment\n      declined, prints one line on stdout",
-		"validate's violations and undecided checks are\nsilenced by it",
-		// #1260's own answers, none of which any earlier copy carried: that a
-		// schema-side schemaLocation resolving to nothing is reported at all,
-		// where and how it is reported, that -q leaves it alone, that a bare
-		// <xs:import> is not it, and that validate reports the same for its
-		// -schema set.
-		"whose schemaLocation resolves to no document is",
-		"named on stderr at its own position",
-		"-q does not silence it.",
-		"A bare <xs:import>, which names no",
-		"A -schema document's own unresolved directive",
-		// #1312's ruling, which the two copies must carry or the note is
-		// undocumented on the path it was dropped from: that a REJECTED
-		// assembly is named too, for what it reached, and that the line
-		// charges the shortfall no part in the rejection.
-		"A REJECTED schema is named the same",
-		"saying nothing about whether the unread document had a part",
-		"when the set does not compile, for whichever",
-		// #1261's own answers, which a script reading the summary had to
-		// reverse-engineer: that the count block is always all seven kinds in
-		// one fixed order, that types is simple and complex on one line, what
-		// model groups counts, and that components is their sum.
-		"all seven kinds always and always in this order",
-		"definitions together on the one line",
-		"counts the top-level <xs:group> definitions",
-		"components: line closing the block is the sum",
-		// #1007's own answer: gen's exit codes, which no copy carried, stated
-		// as the codes it will answer with because gen is unbuilt.
-		"Exit 0 when every pair is generated",
-		"the codes gen answers with once M9 builds it",
-		// #1189's fifth diagnosis, in the status paragraph that enumerates
-		// them.
-		"that a help request carries a value",
-		// #1313's exception to the line shape above, which the copies must
-		// carry together or the shape reads as unconditional in whichever one
-		// drops it: what the line prints instead, where the class's taxonomy
-		// lives, and the two rejections violationLine's own doc names.
-		//
-		// #1354 widened it from those two to the membership rule itself, so
-		// the rows pin the OPEN reading and not an enumeration: the rule
-		// ("have no rule to cite"), the marker that keeps the named ones
-		// examples, and the third kind with the exit code it earns — an I/O
-		// fault on a referenced document, which is no spec class at all.
-		// Dropping the marker row would let the sentence close again silently.
-		//
-		// #1367 split the first of those rows in three, the last of them new:
-		// the membership rule, what the line prints, and what it OPENS with —
-		// which the copies called bare while every demonstrated member opened
-		// with an internal package name. That third fact is negative, the CLI
-		// stamping nothing on the producer's message, so it cannot be read out
-		// of a row that says only what the message is.
-		"Some errors have no rule to cite",
-		"component's own message instead",
-		"Nothing is stamped on that message",
-		"A document whose root is\n      not <xs:schema>",
-		"s4s-grammar class\n      (xsderr/doc.go)",
-		"are examples, not the whole class",
-		"an I/O fault\n      reading a document the argument REFERENCES",
-		"charged 1 like a rejection",
-		// #1419's ruling, which validate's copy lacked while parse's carried it:
-		// the same fault is charged 3 there, and exit 2's headline is scoped so
-		// it no longer reads as every I/O fault. Each paragraph also sets the
-		// fault apart from the legal skip.
-		"a -schema argument REFERENCES,\n      through <xs:include>",
-		"is charged 3: the schema set does not compile",
-		"Of the I/O faults\n      reading a schema document, exit 2 covers only a -schema",
-		"2 usage or I/O on an argument or\n      on stdout",
-		"The I/O fault above is not that skip",
-		"The fault is not the legal skip",
-		// #1668's answer: which part of a DTD validate reads for the
-		// unparsed entities an ENTITY value names.
-		"its internal parameter entities. The external DTD subset is\n      never fetched",
+// update makes TestDocRendersUsage rewrite doc.go's # Usage section instead of
+// failing on it; main.go's go:generate directive is what passes it.
+var update = flag.Bool("update", false, "rewrite doc.go's # Usage section from usage")
+
+// The generated section of doc.go's package comment runs from the # Usage
+// heading up to the hand-written heading that follows it.
+const (
+	docUsageStart = "// # Usage"
+	docUsageEnd   = "// # Argument vocabulary"
+)
+
+// docUsageBlock renders usage as doc.go's # Usage section, which is the only
+// place the mapping between the two lives. The title paragraph is dropped —
+// doc.go's opening sentence states it — and the heading line becomes a doc
+// comment heading. Every line indented two spaces is a subcommand block and
+// renders preformatted, so go doc keeps its layout; every other line is prose
+// and renders as it is wrapped in usage, which is why a ragged prose paragraph
+// in usage surfaces as a go tool commentwrap finding on doc.go and is fixed by
+// reflowing usage, never doc.go.
+func docUsageBlock(u string) (string, error) {
+	_, rest, ok := strings.Cut(u, "\n\n")
+	if !ok {
+		return "", errors.New("usage has no title paragraph to drop")
 	}
-	for _, w := range want {
-		if !strings.Contains(usage, w) {
-			t.Errorf("usage is missing %q", w)
+	heading, body, ok := strings.Cut(rest, "\n\n")
+	if !ok || strings.Contains(heading, "\n") || !strings.HasSuffix(heading, ":") {
+		return "", fmt.Errorf("usage's second paragraph %q is not a one-line heading ending in a colon", heading)
+	}
+	var b strings.Builder
+	b.WriteString("// # " + strings.TrimSuffix(heading, ":") + "\n//\n")
+	for _, line := range strings.Split(strings.TrimSuffix(body, "\n"), "\n") {
+		switch {
+		case line == "":
+			b.WriteString("//\n")
+		case strings.HasPrefix(line, "  "):
+			b.WriteString("//\t" + line[2:] + "\n")
+		case strings.HasPrefix(line, " "), strings.HasPrefix(line, "\t"):
+			return "", fmt.Errorf("usage line %q is neither prose nor indented two spaces as a subcommand block", line)
+		default:
+			b.WriteString("// " + line + "\n")
 		}
 	}
-	// The rows above pin each subcommand's argument syntax; this pins the
-	// vocabulary dispatch reads against the text a user is shown, so the two
-	// cannot become separate lists (STYLE D3/T4).
+	b.WriteString("//\n")
+	return b.String(), nil
+}
+
+// TestDocRendersUsage holds doc.go's # Usage section to the rendering of usage,
+// so the contract is edited in one place (#1772). It compares the section as
+// read from doc.go against docUsageBlock(usage), so an edit to either side
+// alone fails it. With -update (go generate) it rewrites the section instead.
+func TestDocRendersUsage(t *testing.T) {
+	want, err := docUsageBlock(usage)
+	if err != nil {
+		t.Fatalf("rendering usage: %v", err)
+	}
+	src, err := os.ReadFile("doc.go")
+	if err != nil {
+		t.Fatalf("reading doc.go: %v", err)
+	}
+	doc := string(src)
+	start := strings.Index(doc, "\n"+docUsageStart) + 1
+	end := strings.Index(doc, "\n"+docUsageEnd) + 1
+	if start == 0 || end <= start {
+		t.Fatalf("doc.go has no %q line followed by a %q line to bound the generated section", docUsageStart, docUsageEnd)
+	}
+	got := doc[start:end]
+	if got == want {
+		return
+	}
+	if *update {
+		if err := os.WriteFile("doc.go", []byte(doc[:start]+want+doc[end:]), 0o644); err != nil {
+			t.Fatalf("writing doc.go: %v", err)
+		}
+		return
+	}
+	gotLines, wantLines := strings.Split(got, "\n"), strings.Split(want, "\n")
+	i := 0
+	for i < len(gotLines) && i < len(wantLines) && gotLines[i] == wantLines[i] {
+		i++
+	}
+	t.Errorf("doc.go's # Usage section is not the rendering of usage: edit usage in main.go and run go generate ./cmd/goxsd8, never doc.go's copy\nfirst difference, section line %d:\n doc.go: %q\n  usage: %q",
+		i+1, lineAt(gotLines, i), lineAt(wantLines, i))
+}
+
+// lineAt returns lines[i], or a marker when the section ran out first.
+func lineAt(lines []string, i int) string {
+	if i < len(lines) {
+		return lines[i]
+	}
+	return "(section ended)"
+}
+
+// TestUsageCoversContract pins usage against the code it describes, which
+// TestDocRendersUsage cannot: that test holds doc.go to usage, and nothing but
+// these checks holds usage to dispatch.
+func TestUsageCoversContract(t *testing.T) {
+	// This pins the vocabulary dispatch reads against the text a user is
+	// shown, so the two cannot become separate lists (STYLE D3/T4).
 	for _, name := range subcommands {
 		if !strings.Contains(usage, "goxsd8 "+name+" ") {
 			t.Errorf("usage documents no %q subcommand, but dispatch reserves it", name)
