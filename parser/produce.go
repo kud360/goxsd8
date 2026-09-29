@@ -322,10 +322,10 @@ type symbols struct {
 	// base= — see buildSimpleType.
 	built map[xsd.QName]*xsd.SimpleType
 
-	// builtComplex is the same memo + cycle guard for COMPLEX-type construction,
-	// with the identical tri-state (absent unstarted, present-nil on the build
-	// stack, present-non-nil done) so "started but unrecorded" stays
-	// unrepresentable (STYLE T1/D3). The on-stack state is what terminates
+	// builtComplex is the memo + cycle guard for COMPLEX-type construction. An
+	// absent key is unstarted, and a present one holds the complexBuild arm the
+	// declaration's build has reached, so "started but unrecorded" stays
+	// unrepresentable (STYLE T1/D3). The complexOnBaseChain arm is what terminates
 	// demand-driven base construction on a circular chain, charged
 	// ct-props-correct clause 3 (§3.4.6.1) — the SAME rule xsd/resolve.go's
 	// checkComplexBaseAcyclic charges for the programmatic SchemaBuilder path; see
@@ -336,7 +336,7 @@ type symbols struct {
 	// assembly sch-props-correct (§3.17.6.1) clause 2 accepts, and a <redefine>
 	// whose redefined document ALSO contributes the name is exactly the assembly
 	// where it addresses two.
-	builtComplex map[*Element]*xsd.ComplexType
+	builtComplex map[*Element]complexBuild
 
 	// anyType is the ur-type component (§3.4.7) the builder was seeded with, held
 	// so a derivation naming it resolves to that very component rather than to a
@@ -346,8 +346,8 @@ type symbols struct {
 	anyType xsd.ComplexType
 
 	// builtGroups is the memo + on-stack guard for MODEL GROUP DEFINITION
-	// construction, with the same tri-state as built/builtComplex (absent
-	// unstarted, present-nil on the build stack, present-non-nil done).
+	// construction, with a tri-state (absent unstarted, present-nil on the build
+	// stack, present-non-nil done).
 	//
 	// The memo half is a correctness requirement, not an optimization: mapping a
 	// definition whose body holds a local <element> with a NAMED
@@ -411,7 +411,7 @@ type symbols struct {
 	redefineOriginals map[*Element]struct{}
 
 	// builtIC is the build-once memo for identity-constraint construction. It has
-	// NO on-stack sentinel, unlike built/builtComplex: mapping a definition reads
+	// NO on-stack sentinel, unlike builtComplex: mapping a definition reads
 	// only its own <selector>/<field> and retains its refer= as an unresolved
 	// QName, so construction never recurses into another definition and there is
 	// no circularity to guard (PRINCIPLES 9).
@@ -526,7 +526,7 @@ func newSymbols(builder *xsd.SchemaBuilder, backend value.Backend) (*symbols, er
 		builtGroups:         make(map[*Element]*xsd.ModelGroupDefinition),
 		builtIC:             make(map[xsd.QName]xsd.IdentityConstraint),
 		redefineOriginals:   make(map[*Element]struct{}),
-		builtComplex:        make(map[*Element]*xsd.ComplexType),
+		builtComplex:        make(map[*Element]complexBuild),
 		anyType:             anyType,
 		backend:             backend,
 	}, nil
@@ -1790,19 +1790,19 @@ func (p *producer) buildSimpleType(name xsd.QName, elem *Element) (*xsd.SimpleTy
 //
 // Nor can it MEMBER a cycle this function's guard would catch — but the reason
 // is narrower than it once was, and the difference is load-bearing. Nothing can
-// NAME an anonymous type, so it can be no cycle's entry point and this sentinel
+// NAME an anonymous type, so it can be no cycle's entry point and this guard
 // would never see it. It can nonetheless sit ON a chain that closes: src-expredef
 // clause 1.1's original is an anonymous type whose own base= names a top-level
 // type again, so a cycle can run THROUGH it. PRINCIPLES 9's "construction order
 // makes one impossible" therefore does NOT discharge the anonymous hop, and the
 // blanket claim that it did was false the moment #505 landed. The rejection for
-// such a chain is the on-stack sentinel below, reached at the named type the
+// such a chain is the complexOnBaseChain arm below, reached at the named type the
 // chain comes back to, and its finalize-side twin xsd/resolve.go's
 // checkComplexBaseAcyclic, which descends the anonymous hop for exactly this
 // reason.
 //
-// A declaration already on the build stack (the PRESENT-nil memo state) is a
-// circular {base type definition} chain, charged ct-props-correct clause 3
+// A declaration whose OWN base hop is still being resolved (complexOnBaseChain)
+// is a circular {base type definition} chain, charged ct-props-correct clause 3
 // (§3.4.6.1). That is the SAME rule, with the same verdict, that
 // xsd/resolve.go's checkComplexBaseAcyclic charges: two entry points on one rule
 // for the two construction paths — this one for the producer, whose demand-driven
@@ -1810,22 +1810,74 @@ func (p *producer) buildSimpleType(name xsd.QName, elem *Element) (*xsd.SimpleTy
 // SchemaBuilder, which has no producer and must stay self-defending. Neither
 // substitutes for the other (PRINCIPLES 9's "detect once at construction" applies
 // per construction path).
+//
+// The guard covers the base hop ONLY, because clause 3 is about {base type
+// definition} and nothing else. Once the hop is resolved the declaration moves to
+// complexContentPending (enterContentModel) while its content model is built, and
+// a derivation reached from THERE — a local element's anonymous type whose base=
+// names the enclosing type, particlesEb041's shape — is containment, not a
+// cycle: its chain runs through this declaration to a base that is already
+// resolved (#1842). That derivation must not need this declaration finished,
+// since the memo holds a component only when produceComplexType returns, so
+// resolveBaseType answers it from the pending arm without calling in here.
 func (p *producer) buildComplexType(name xsd.QName, elem *Element) (xsd.ComplexType, error) {
-	if ct, started := p.symbols.builtComplex[elem]; started {
-		if ct != nil {
-			return *ct, nil
-		}
+	switch b := p.symbols.builtComplex[elem].(type) {
+	case complexBuilt:
+		return b.ct, nil
+	case complexOnBaseChain:
 		return xsd.ComplexType{}, xsderr.New(ruleCTPropsCorr, elem.Loc(),
 			"circular complex type definition: %s derives ultimately from itself, but ct-props-correct clause 3 forbids a circular {base type definition} chain (only xs:anyType may be its own base)", name)
+	case complexContentPending:
+		return xsd.ComplexType{}, fmt.Errorf("parser: complex type %s at %s was asked for while its content model is still being built; only resolveBaseType reads that state, and it answers from the pending entry without calling buildComplexType", name, elem.Loc())
 	}
-	p.symbols.builtComplex[elem] = nil // mark on-stack
+	p.symbols.builtComplex[elem] = complexOnBaseChain{}
 
 	ct, err := p.produceComplexType(p.namedComplexTypeIdentity(name, elem), elem)
 	if err != nil {
 		return xsd.ComplexType{}, err
 	}
-	p.symbols.builtComplex[elem] = &ct // replace the on-stack sentinel with the finished node
+	p.symbols.builtComplex[elem] = complexBuilt{ct: ct}
 	return ct, nil
+}
+
+// complexBuild is a declaration's builtComplex entry once buildComplexType has
+// started it, in one of three arms: complexOnBaseChain while its {base type
+// definition} is being resolved, complexContentPending once that is resolved and
+// its content model is being built, and complexBuilt once produceComplexType has
+// returned. It is a sealed sum over a closed set of build phases.
+type complexBuild interface{ complexBuild() }
+
+// complexOnBaseChain marks a declaration whose base hop is in progress; reaching
+// it again is ct-props-correct clause 3's circular chain (buildComplexType).
+type complexOnBaseChain struct{}
+
+// complexContentPending marks a declaration whose base hop is resolved and whose
+// content model is being built. assertions is its {assertions} (§3.4.2.1), already
+// final at that point because clauses 1 and 2 read only the resolved base and the
+// declaration's own <assert> children: it is all a <complexContent> <restriction>
+// reached from that content model reads of its base (resolveBaseType).
+type complexContentPending struct{ assertions []xsd.Assertion }
+
+// complexBuilt holds a finished declaration's component.
+type complexBuilt struct{ ct xsd.ComplexType }
+
+func (complexOnBaseChain) complexBuild()    {}
+func (complexContentPending) complexBuild() {}
+func (complexBuilt) complexBuild()          {}
+
+// enterContentModel moves a NAMED declaration from complexOnBaseChain to
+// complexContentPending: el's {base type definition} is resolved and assertions
+// is its final {assertions}. It is called by the two forms that carry a content
+// model, produceImplicitContent and produceComplexContent, between resolving the
+// base and building the content. An anonymous identity has no memo entry — it
+// never comes through buildComplexType — so it is left alone; that includes a
+// src-expredef clause 1.1 original, which is produced from a top-level
+// declaration that may itself be on the base chain under its named identity.
+func (p *producer) enterContentModel(id complexTypeIdentity, el *Element, assertions []xsd.Assertion) {
+	if _, named := topLevelComplexTypeName(id); !named {
+		return
+	}
+	p.symbols.builtComplex[el] = complexContentPending{assertions: assertions}
 }
 
 // namedComplexTypeIdentity chooses which NAMED arm of complexTypeIdentity elem
@@ -1853,13 +1905,16 @@ func (p *producer) namedComplexTypeIdentity(name xsd.QName, elem *Element) compl
 
 // resolveBaseType identifies the {base type definition} a base= attribute names
 // (§3.4.2 preamble), in BOTH the forms a §3.4.2 mapping needs: the resolved
-// COMPONENT, which the content-type tableaux and §3.4.2.1 clause 1's
-// {assertions} fold read, and the xsd.TypeDefinitionOrRef SLOT the built
+// COMPONENT (resolvedBase), which the content-type tableaux and §3.4.2.1 clause
+// 1's {assertions} fold read, and the xsd.TypeDefinitionOrRef SLOT the built
 // component stores. The two are returned together because one decision fixes
 // both, and splitting them would let a caller pair a component with a slot that
-// does not name it (STYLE D3). at is the <restriction>/<extension> carrying the
-// base=, charged for a failure; id is the identity of the type being built,
-// which is what makes the redefine branch below reachable.
+// does not name it (STYLE D3). A named complex base whose content model holds
+// this derivation is not finished yet, so its resolvedBase carries only the
+// {assertions} its complexContentPending entry holds. at is the
+// <restriction>/<extension> carrying the base=, charged for a failure; id is
+// the identity of the type being built, which is what makes the redefine branch
+// below reachable.
 //
 // A base of either variety is built through its OWN document's producer
 // (typeSource's owner), never through p: see symbols.simpleTypes and
@@ -1874,40 +1929,78 @@ func (p *producer) namedComplexTypeIdentity(name xsd.QName, elem *Element) compl
 // a simple type's base and that finalize charges for an unresolvable
 // {base type definition} reference (xsd/resolve.go's resolveTypeName). One rule,
 // three entry points, identical verdict.
-func (p *producer) resolveBaseType(id complexTypeIdentity, at *Element, name xsd.QName) (xsd.TypeDefinition, xsd.TypeDefinitionOrRef, error) {
+func (p *producer) resolveBaseType(id complexTypeIdentity, at *Element, name xsd.QName) (resolvedBase, xsd.TypeDefinitionOrRef, error) {
 	if orig, owned, err := p.redefinedComplexBase(id, at, name); owned || err != nil {
 		if err != nil {
-			return nil, nil, err
+			return resolvedBase{}, nil, err
 		}
-		return orig, xsd.InlineTypeDefinition{Definition: orig}, nil
+		return resolvedBase{def: orig}, xsd.InlineTypeDefinition{Definition: orig}, nil
 	}
 	if name == anyTypeName {
 		// The ur-type is declared by no document, so it is in no symbol table and
 		// in no build memo: symbols.anyType holds the very component the builder
 		// was seeded with (§3.4.7).
-		return p.symbols.anyType, xsd.TypeDefinitionRef{Name: name}, nil
+		return resolvedBase{def: p.symbols.anyType}, xsd.TypeDefinitionRef{Name: name}, nil
 	}
 	if src, ok := p.symbols.complexTypes[name]; ok {
-		// Unbuilt, built or on-stack: buildComplexType handles the memo hit and the
-		// ct-props-correct clause 3 cycle rejection alike.
+		// A base whose content model is being built is reached from inside that
+		// content model, which is not a cycle (buildComplexType); only its
+		// {assertions} can be read.
+		if pending, ok := p.symbols.builtComplex[src.elem].(complexContentPending); ok {
+			return resolvedBase{name: name, pending: pending.assertions}, xsd.TypeDefinitionRef{Name: name}, nil
+		}
+		// Unbuilt, built or on the base chain: buildComplexType handles the memo
+		// hit and the ct-props-correct clause 3 cycle rejection alike.
 		ct, err := src.owner.buildComplexType(name, src.elem)
 		if err != nil {
-			return nil, nil, err
+			return resolvedBase{}, nil, err
 		}
-		return ct, xsd.TypeDefinitionRef{Name: name}, nil
+		return resolvedBase{def: ct}, xsd.TypeDefinitionRef{Name: name}, nil
 	}
 	if st, ok := p.symbols.built[name]; ok && st != nil {
-		return st, xsd.TypeDefinitionRef{Name: name}, nil
+		return resolvedBase{def: st}, xsd.TypeDefinitionRef{Name: name}, nil
 	}
 	if src, ok := p.symbols.simpleTypes[name]; ok {
 		st, err := src.owner.buildSimpleType(name, src.elem)
 		if err != nil {
-			return nil, nil, err
+			return resolvedBase{}, nil, err
 		}
-		return st, xsd.TypeDefinitionRef{Name: name}, nil
+		return resolvedBase{def: st}, xsd.TypeDefinitionRef{Name: name}, nil
 	}
-	return nil, nil, xsderr.New(ruleSrcResolve, at.Loc(),
+	return resolvedBase{}, nil, xsderr.New(ruleSrcResolve, at.Loc(),
 		"base type %s does not resolve to any type definition in scope (src-resolve clause 1.1)", name)
+}
+
+// resolvedBase is the {base type definition} COMPONENT resolveBaseType
+// identified, as far as a §3.4.2 mapping can read it when it asks. def is the
+// finished component, and is nil exactly when the base is a named complex type
+// whose own content model is still being built (complexContentPending): then
+// only its {assertions}, held in pending under its expanded name, are known, and
+// assertionsWithBase reads them. Every other read goes through component, which
+// refuses that case.
+type resolvedBase struct {
+	def     xsd.TypeDefinition
+	name    xsd.QName
+	pending []xsd.Assertion
+}
+
+// component returns the finished base for the mappings that read more than its
+// {assertions}: §3.4.2.2's simple-type tableau and §3.4.2.3.3 clause 4.2's
+// extension content type. at is the derivation alternant charged when the base
+// is still being built.
+//
+// GAP(parser): a <simpleContent> derivation, or a <complexContent> <extension>,
+// whose base is a named complex type reached from inside that type's own content
+// model is refused rather than mapped. Both read the base's {content type}, which
+// is not finished until the content model holding this derivation is, and
+// xsd.NewComplexType takes a complete {content type} by value, so the recursion
+// has no fixed point to construct. No spec rule forbids the extension shape; the
+// refusal is this producer's limit, and no suite fixture reaches it.
+func (b resolvedBase) component(at *Element) (xsd.TypeDefinition, error) {
+	if b.def != nil {
+		return b.def, nil
+	}
+	return nil, fmt.Errorf("parser: the <%s> at %s derives from %s from inside %s's own content model, and this producer cannot map a derivation that reads a base {content type} still being built", at.Name().Local(), at.Loc(), b.name, b.name)
 }
 
 // redefinedComplexBase builds src-expredef clause 1.1's ORIGINAL when at's base=

@@ -2,6 +2,7 @@ package parser
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/kud360/goxsd8/icpath"
 	"github.com/kud360/goxsd8/xsd"
@@ -439,9 +440,14 @@ func identityConstraintCategoryOf(local string) (xsd.IdentityConstraintCategory,
 // A simple {base type definition} contributes nothing: a Simple Type Definition
 // has no {assertions} property at all (its assertions live in the §4.3.13
 // assertions FACET, which is not this property and is not inherited by the
-// complex type deriving from it).
-func assertionsWithBase(base xsd.TypeDefinition, own []xsd.Assertion) []xsd.Assertion {
-	ct, ok := base.(xsd.ComplexType)
+// complex type deriving from it). A named complex base whose content model is
+// still being built contributes the {assertions} its complexContentPending entry
+// holds, which are already final (see resolvedBase).
+func assertionsWithBase(base resolvedBase, own []xsd.Assertion) []xsd.Assertion {
+	if base.def == nil {
+		return append(slices.Clip(base.pending), own...) // clipped: never extends the memo's backing array
+	}
+	ct, ok := base.def.(xsd.ComplexType)
 	if !ok {
 		return own
 	}
