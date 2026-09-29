@@ -1065,6 +1065,45 @@ func TestProduceIdentityConstraintPathViolations(t *testing.T) {
 	}
 }
 
+// TestProduceIdentityConstraintAbsentXPath pins a <selector>/<field> with no
+// xpath attribute as a plain grammar error (xs:selector and xs:field declare it
+// use="required"), positioned at that element, and never as the clause 1 charge
+// the "" row of TestProduceIdentityConstraintPathViolations pins for a present
+// xpath="".
+func TestProduceIdentityConstraintAbsentXPath(t *testing.T) {
+	tests := []struct {
+		name string
+		doc  string
+		want string
+	}{{
+		name: "<selector/>",
+		doc:  strings.Replace(icPathDoc("a", "@x"), `<xs:selector xpath="a"/>`, `<xs:selector/>`, 1),
+		want: "parser: <selector> at mem://produce.xsd:3:",
+	}, {
+		name: "<field/>",
+		doc:  strings.Replace(icPathDoc("a", "@x"), `<xs:field xpath="@x"/>`, `<xs:field/>`, 1),
+		want: "parser: <field> at mem://produce.xsd:4:",
+	}}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := produce(t, tt.doc)
+			if err == nil {
+				t.Fatalf("Produce succeeded, want an error for %s without xpath", tt.name)
+			}
+			var e *xsderr.Error
+			if errors.As(err, &e) {
+				t.Fatalf("error = %v, want a plain error: no Schema Representation Constraint governs a missing required attribute, and c-selector-xpath/c-fields-xpaths govern only an xpath the document wrote", err)
+			}
+			if !strings.HasPrefix(err.Error(), tt.want) {
+				t.Errorf("error = %q, want it to open %q", err, tt.want)
+			}
+			if !strings.Contains(err.Error(), `has no xpath attribute`) {
+				t.Errorf("error = %q, want it to name the missing xpath attribute", err)
+			}
+		})
+	}
+}
+
 // An unbound prefix is the one charged shape with a vocabulary of its own, so
 // err:XPST0081 travels as the wrapped cause one errors.Unwrap below the SCC and
 // is read with xsderr.RuleOf — never scraped out of the message.
