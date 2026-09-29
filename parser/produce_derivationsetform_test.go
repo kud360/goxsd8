@@ -13,11 +13,13 @@ import (
 // removes the declaration, so no type assesses the value and "foo" is no
 // datatype fault. xs:localElement prohibits final (xmlschema11-1.md:5125), whose
 // ref= form draws src-element clause 2.2; xs:localSimpleType prohibits final
-// (xmlschema11-2.md:3908); xs:localComplexType prohibits abstract, final and
-// block (xmlschema11-1.md:4824-4826), at every nested position. The plain rows
-// carry no rule ID (§5.1 alone, STYLE E2) and pin the opening "parser: <subject>
-// at <loc>" as well as the attribute named. The offending element sits on line 3
-// in every row.
+// (xmlschema11-2.md:3908); xs:localComplexType prohibits name, abstract, final
+// and block (xmlschema11-1.md:4823-4826), at every nested position. The same
+// guard charges name, so its rows sit here too, and name comes first in that
+// order: a nested <complexType> writing name and abstract is reported at name.
+// The plain rows carry no rule ID (§5.1 alone, STYLE E2) and pin the opening
+// "parser: <subject> at <loc>" as well as the attribute named. The offending
+// element sits on line 3 in every row.
 func TestProduceDerivationSetProhibitedFormCharged(t *testing.T) {
 	// A slice, not a map: subtest order is output (STYLE D2).
 	cases := []struct {
@@ -90,6 +92,30 @@ func TestProduceDerivationSetProhibitedFormCharged(t *testing.T) {
 				`</xs:alternative></xs:element>`,
 			wantPrefix: "parser: nested <complexType> at " + produceURI + ":3:",
 			wantMsg:    "carries a block attribute",
+		},
+		{
+			name: `nested <complexType> name="n"`,
+			body: `<xs:element name="e">` + "\n" +
+				`<xs:complexType name="n"><xs:sequence/></xs:complexType>` + "\n" +
+				`</xs:element>`,
+			wantPrefix: "parser: nested <complexType> at " + produceURI + ":3:",
+			wantMsg:    "carries a name attribute",
+		},
+		{
+			name: `<alternative> <complexType> name="n"`,
+			body: `<xs:element name="e" type="xs:anyType"><xs:alternative test="true()">` + "\n" +
+				`<xs:complexType name="n"><xs:sequence/></xs:complexType>` + "\n" +
+				`</xs:alternative></xs:element>`,
+			wantPrefix: "parser: nested <complexType> at " + produceURI + ":3:",
+			wantMsg:    "carries a name attribute",
+		},
+		{
+			name: `nested <complexType> abstract="true" name="n"`,
+			body: `<xs:element name="e">` + "\n" +
+				`<xs:complexType abstract="true" name="n"><xs:sequence/></xs:complexType>` + "\n" +
+				`</xs:element>`,
+			wantPrefix: "parser: nested <complexType> at " + produceURI + ":3:",
+			wantMsg:    "carries a name attribute",
 		},
 	}
 	for _, tc := range cases {
