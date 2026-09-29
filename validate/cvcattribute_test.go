@@ -497,3 +497,146 @@ func attributeOutcomes(visits []string) []string {
 	}
 	return outcomes
 }
+
+// wildAttrSchema is the fixture for an attribute ·attributed to· an {attribute
+// wildcard}: <root>'s RootType carries a ##any {attribute wildcard} whose
+// {process contents} is pc, and a {content type} of one optional element
+// particle <opaque> — a local declaration with an ·absent· {type definition},
+// so a type this package cannot determine — then a lax element wildcard,
+// 0..unbounded, that admits an undeclared child to be ·laxly assessed·. Two
+// top-level attribute declarations are what a wildcard-attributed name
+// ·resolves· to:
+//
+//	n  xs:integer
+//	f  xs:string, fixed "x"
+func wildAttrSchema(t *testing.T, pc xsd.ProcessContents) *xsd.Schema {
+	t.Helper()
+	o, err := xsd.NewUnboundedOccurs(xsderr.Loc{}, 0)
+	if err != nil {
+		t.Fatalf("NewUnboundedOccurs: %v", err)
+	}
+	wild, err := xsd.NewParticle(xsderr.Loc{}, o, xsd.ResolvedTerm{Term: *anyWildcard(t, xsd.ProcessLax)})
+	if err != nil {
+		t.Fatalf("NewParticle: %v", err)
+	}
+	ct, err := xsd.NewComplexType(xsderr.Loc{}, local("RootType"), xsd.QName{}, nil,
+		xsd.DerivationRestriction, false, nil, nil, anyWildcard(t, pc),
+		cSequence(t, false, cParticle(t, "opaque", 0, 1), wild), nil, nil)
+	if err != nil {
+		t.Fatalf("building RootType: %v", err)
+	}
+	fixed := xsd.NewValueConstraint(xsd.ValueFixed, "x", nil, nil)
+	decls := []struct {
+		name string
+		typ  xsd.QName
+		vc   *xsd.ValueConstraint
+	}{{"n", integerType(), nil}, {"f", icBuiltin("string"), &fixed}}
+	return cSchemaFrom(t, ct, func(b *xsd.SchemaBuilder) {
+		for _, st := range icSeeded(t) {
+			b.AddType(st)
+		}
+		for _, d := range decls {
+			decl, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, local(d.name),
+				xsd.TypeDefinitionRef{Name: d.typ}, xsd.NewAttributeGlobalScope(), d.vc, false)
+			if err != nil {
+				t.Fatalf("building the top-level %s attribute declaration: %v", d.name, err)
+			}
+			b.AddAttribute(decl)
+		}
+	})
+}
+
+// wantAttributeCharge fails unless got is exactly one cvc-attribute charge at
+// the attribute's position at, whose message OPENS with prefix: pinning the
+// opening rather than a substring is what ties the charge to the attribute it
+// names (#1048).
+func wantAttributeCharge(t *testing.T, got []*xsderr.Error, at xsderr.Loc, prefix string) {
+	t.Helper()
+	charge := onlyCharge(t, got, ruleCvcAttribute)
+	if charge.Loc != at {
+		t.Errorf("Loc = %s, want the attribute's %s", charge.Loc, at)
+	}
+	if !strings.HasPrefix(charge.Msg, prefix) {
+		t.Errorf("Msg = %q, want it to open with %q", charge.Msg, prefix)
+	}
+}
+
+// The openings of the two cvc-attribute charges a wildcard-attributed
+// attribute can draw: clause 3 against n, clause 4 against f.
+const (
+	clause3OnN = "the ·initial value· of the attribute n is not ·valid· with respect to its declaration's {type definition}"
+	clause4OnF = `the ·actual value· of the attribute f is neither equal nor identical to the {value} of the fixed {value constraint} "x" on its attribute declaration`
+)
+
+// An attribute ·attributed to· a strict or lax {attribute wildcard}
+// (cvc-complex-type clause 2.2) has for its ·governing attribute declaration·
+// the top-level one its ·expanded name· ·resolves· to (key-governing-ad clause
+// 3), and cvc-assess-elt (§3.3.4.6) clause 2.1 assesses it against that
+// declaration: cvc-attribute (§3.2.4.1) clause 3 for a lexical outside its
+// {type definition} and clause 4 for a fixed {value constraint} it disagrees
+// with. Under skip the item is ·skipped· and nothing is assessed, and a name
+// resolving no declaration has no governing declaration under strict either
+// (clause 2.2; e-validity clause 1.1.3 names only a ·wildcard particle·).
+//
+// The charged rows fail with [walk.unmatchedAttribute]'s call to
+// [walk.wildcardAttribute] removed; the silent rows guard against
+// over-charging (#1891).
+func TestWildcardAttributedAttributeIsAssessedAgainstItsResolvedDeclaration(t *testing.T) {
+	for _, pc := range []xsd.ProcessContents{xsd.ProcessStrict, xsd.ProcessLax} {
+		schema := wildAttrSchema(t, pc)
+		t.Run(pc.String()+"/clause 3 charged", func(t *testing.T) {
+			wantAttributeCharge(t, icAssess(t, schema, valuedRoot("n", "abc")), loc(1, 10), clause3OnN)
+		})
+		t.Run(pc.String()+"/clause 4 charged", func(t *testing.T) {
+			wantAttributeCharge(t, icAssess(t, schema, valuedRoot("f", "y")), loc(1, 10), clause4OnF)
+		})
+		t.Run(pc.String()+"/silent", func(t *testing.T) {
+			wantSilence(t, icAssess(t, schema, valuedRoot("n", "12")), "12 is an xs:integer")
+			wantSilence(t, icAssess(t, schema, valuedRoot("f", "x")), "x agrees with the fixed x")
+			wantSilence(t, icAssess(t, schema, valuedRoot("m", "abc")),
+				"m resolves no declaration, so it has no ·governing attribute declaration·")
+		})
+	}
+
+	t.Run("skip/silent", func(t *testing.T) {
+		skip := wildAttrSchema(t, xsd.ProcessSkip)
+		wantSilence(t, icAssess(t, skip, valuedRoot("n", "abc")), "a ·skipped· attribute is not assessed")
+		wantSilence(t, icAssess(t, skip, valuedRoot("f", "y")), "a ·skipped· attribute is not assessed")
+	})
+}
+
+// An element ·laxly assessed· (key-lva) — an undeclared <unknown> the lax
+// element wildcard admitted — is locally validated against xs:anyType, whose
+// {attribute wildcard} is lax over every namespace (§3.4.7), so its attributes
+// are assessed against the declarations their names resolve to, as under a
+// declared type's lax wildcard. <root>'s own {attribute wildcard} is skip here,
+// so nothing but xs:anyType's can reach them. An element whose type this
+// package could not determine — <opaque> — is not ·laxly assessed· and decides
+// nothing about its attributes.
+//
+// The charged rows fail with [walk.attribute]'s lax arm reduced to the
+// undetermined one; the <opaque> row fails with the lax arm taken for every
+// element with no complex governing type (#1891).
+func TestLaxlyAssessedElementAttributesAreAssessedAgainstTheirResolvedDeclarations(t *testing.T) {
+	schema := wildAttrSchema(t, xsd.ProcessSkip)
+	root := func(child, attr, value string) *testElement {
+		return icElem(xsd.QName{Local: "root"}, 1, nil,
+			ElementChild(icElem(xsd.QName{Local: child}, 2, []Attribute{icAttr(local(attr), value, 2)})))
+	}
+
+	t.Run("clause 3 charged", func(t *testing.T) {
+		wantAttributeCharge(t, icAssess(t, schema, root("unknown", "n", "abc")), loc(2, 2), clause3OnN)
+	})
+	t.Run("clause 4 charged", func(t *testing.T) {
+		wantAttributeCharge(t, icAssess(t, schema, root("unknown", "f", "y")), loc(2, 2), clause4OnF)
+	})
+	t.Run("silent", func(t *testing.T) {
+		wantSilence(t, icAssess(t, schema, root("unknown", "n", "12")), "12 is an xs:integer")
+		wantSilence(t, icAssess(t, schema, root("unknown", "m", "abc")),
+			"m resolves no declaration, and xs:anyType's wildcard is lax")
+	})
+	t.Run("undetermined silent", func(t *testing.T) {
+		wantSilence(t, icAssess(t, schema, root("opaque", "n", "abc")),
+			"an element whose type was not determined decides nothing about its attributes")
+	})
+}

@@ -100,8 +100,9 @@
 //
 // [Result] carries every violation charged so far as an *xsderr.Error
 // (cvc-* rule + instance and/or schema Loc), in document order. Nine rules
-// are charged today, at the ·validation root· and at every descendant whose
-// ·governing element declaration· the descent determines.
+// are charged today, at the ·validation root· and at every descendant the
+// descent assesses — against a ·governing element declaration·, against a
+// ·governing type definition· alone, or, ·laxly assessed·, against xs:anyType.
 //
 // Read the verdict off [Result.Violations]; [Result.Err] reports whether the
 // walk finished, not whether the document is valid. An empty Violations means
@@ -192,26 +193,37 @@
 // alone is skipped for one. cvc-type's own clauses 1 and 2 are not evaluated.
 //
 // Three more are the root's attribute half, against its ·governing
-// type definition·'s {attribute uses}. cvc-complex-type (§3.4.4.2) clauses
-// 2 and 3 decide EXISTENCE and need no value space. Clause 4 and the two
-// rules clause 2.1 dispatches to — cvc-attribute (§3.2.4.1) clauses 3 and 4
-// and cvc-au (§3.5.4) — decide VALUES, and read them through the
-// value.Backend [New] takes: an attribute's lexical against its
-// declaration's {type definition} per String Valid (§3.16.4), its ·actual
-// value· against a fixed {value constraint} on the declaration and on the
-// use (two independent rules over two properties, both charged), and a
-// ·defaulted attribute·'s own {lexical form} against its type.
+// type definition·'s {attribute uses} and {attribute wildcard}.
+// cvc-complex-type (§3.4.4.2) clauses 2 and 3 decide EXISTENCE and need no
+// value space. Clause 4 and the two rules clause 2.1 dispatches to —
+// cvc-attribute (§3.2.4.1) clauses 3 and 4 and cvc-au (§3.5.4) — decide
+// VALUES, and read them through the value.Backend [New] takes: an
+// attribute's lexical against its declaration's {type definition} per
+// String Valid (§3.16.4), its ·actual value· against a fixed {value
+// constraint} on the declaration and on the use (two independent rules over
+// two properties, both charged), and a ·defaulted attribute·'s own {lexical
+// form} against its type.
 //
-// cvc-attribute is also charged against the one declaration clause 2.1 never
-// dispatches to and no {attribute use} reaches: the built-in declaration for
-// the type attribute (§3.2.7.1), at the xsi:type attribute's own Loc,
-// whatever the element's ·governing type definition· is and whether that type
-// is simple, complex or undetermined. Clause 3 reads its lexical through the
-// same value.Backend against that declaration's xs:QName {type definition}, so
-// an empty lexical, a colon structure no QName has, a part that is no NCName
-// and a prefix with no binding in scope are each charged there. Clause 5
-// charges a lexical clause 3 accepts whose ·actual value· ·resolves· to no type
-// definition, and needs no value space.
+// cvc-attribute clauses 3 and 4 are charged on the same terms against an
+// attribute ·attributed to· a strict or lax {attribute wildcard} under clause
+// 2.2 — the governing type's, or xs:anyType's lax one on a ·laxly assessed·
+// element (§3.4.7) — with the top-level declaration its ·expanded name·
+// ·resolves· to as its ·governing attribute declaration· (key-governing-ad
+// clause 3). A ·skipped· attribute, attributed to a skip wildcard, and one whose
+// name resolves no declaration have none, under strict as under lax, and are
+// not assessed (cvc-assess-elt clause 2.2).
+//
+// cvc-attribute is also charged against the built-in declaration for the type
+// attribute (§3.2.7.1), at the xsi:type attribute's own Loc, and that charge
+// sits outside cvc-type clause 3's dispatch: the declaration governs the item
+// whatever the element's ·governing type definition· is — simple, complex or
+// undetermined — and cvc-complex-type clause 2 excepts xsi:type by name, so
+// neither clause 2.1 nor clause 2.2 reaches it. Clause 3 reads its lexical
+// through the same value.Backend against that declaration's xs:QName {type
+// definition}, so an empty lexical, a colon structure no QName has, a part
+// that is no NCName and a prefix with no binding in scope are each charged
+// there. Clause 5 charges a lexical clause 3 accepts whose ·actual value·
+// ·resolves· to no type definition, and needs no value space.
 //
 // The seventh is the root's content half, against the same type's {content
 // type}. cvc-complex-type clause 1 decides what its {variety} admits —
@@ -231,34 +243,32 @@
 // — validated against its {simple type definition} per String Valid, charged
 // against the root's own Loc.
 //
-// Everything not decidable is left undecided rather than guessed at: an
-// {attribute wildcard} to evaluate, a ·governing type definition· that is
-// not determinable, a {content type} whose shape xsd.Schema.ContentMatcher
-// declines, a declaration whose {type definition} is not a simple type, a
-// value whose ·validating type· String Valid clause 3 cannot decide, and —
-// the decline that matters most — a value.ValidateLexical error that is a fault
-// of the type or of the backend rather than a verdict about the lexical
-// (value.IsDatatypeVerdict), which is what keeps a value of a type this
-// backend does not map from being rejected by every document that carries
-// one. The two ·special· datatypes are decided instead, Datatype Valid holding
-// for every literal against xs:anySimpleType and xs:anyAtomicType (Datatypes
-// §4.1.4), so a typeless attribute (§3.2.2.2) is satisfied. Which declines are
-// recorded as [Unevaluated], and which are not, is [Unevaluated]'s own doc to
-// say. The first item of the list above, an {attribute wildcard}, also carries
-// an obligation that is this layer's ALONE: where the wildcard's {process
-// contents} is strict or lax and it does not carry ##defined, §3.4.6.4
-// key-dft-binding case 3 binds an item ·attributed· to it to a SYNTHESIZED
-// Attribute Use over the ·governing attribute declaration· its ·expanded name·
-// ·resolves· to, which only an assessment episode can ·resolve· — so xsd's
-// static c-ran rendering reports the keyword there by a ruling, not by an
-// omission for this layer's carve to repair (#267). A skip {attribute wildcard}
-// is outside that obligation as squarely as a ##defined one, and this layer owes
-// it no case-3 rendering at all: key-governing-ad (§3.2.4.2) clause 3 resolves
-// by name only "provided the attribute is not ·skipped·" and key-skipped makes
-// such an item ·skipped·, so it has no ·governing attribute declaration· to bind
-// and case 6's keyword is already the whole binding. cvcid.go's skippedAttribute
-// encodes that reading for the attribute side, as the paragraph below does for
-// the element side.
+// Everything not decidable is left undecided rather than guessed at: a
+// ·governing type definition· that is not determinable, a {content type} whose
+// shape xsd.Schema.ContentMatcher declines, a declaration whose {type
+// definition} is not a simple type, a value whose ·validating type· String Valid
+// clause 3 cannot decide, and — the decline that matters most — a
+// value.ValidateLexical error that is a fault of the type or of the backend
+// rather than a verdict about the lexical (value.IsDatatypeVerdict), which is
+// what keeps a value of a type this backend does not map from being rejected by
+// every document that carries one. The two ·special· datatypes are decided
+// instead, Datatype Valid holding for every literal against xs:anySimpleType and
+// xs:anyAtomicType (Datatypes §4.1.4), so a typeless attribute (§3.2.2.2) is
+// satisfied. Which declines are recorded as [Unevaluated], and which are not, is
+// [Unevaluated]'s own doc to say. An {attribute wildcard} carries an obligation
+// that is this layer's ALONE: where the wildcard's {process contents} is strict
+// or lax and it does not carry ##defined, §3.4.6.4 key-dft-binding case 3 binds
+// an item ·attributed· to it to a SYNTHESIZED Attribute Use over the ·governing
+// attribute declaration· its ·expanded name· ·resolves· to, which only an
+// assessment episode can ·resolve· — so xsd's static c-ran rendering reports the
+// keyword there by a ruling, not by an omission for this layer's carve to repair
+// (#267). A skip {attribute wildcard} is outside that obligation as squarely as
+// a ##defined one, and this layer owes it no case-3 rendering at all:
+// key-governing-ad (§3.2.4.2) clause 3 resolves by name only "provided the
+// attribute is not ·skipped·" and key-skipped makes such an item ·skipped·, so
+// it has no ·governing attribute declaration· to bind and case 6's keyword is
+// already the whole binding. cvcid.go's skippedAttribute encodes that reading
+// for the attribute side, as the paragraph below does for the element side.
 //
 // Every one of those charges reaches a DESCENDANT on the same terms, against
 // the ·governing type definition· the particle its parent's {content type}
