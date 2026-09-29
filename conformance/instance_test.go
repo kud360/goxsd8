@@ -93,7 +93,7 @@ func TestInstanceExecutorDecidesAbstractRoot(t *testing.T) {
 		t.Error("the executor must Fail under a flipped expectation (it decides for real)")
 	}
 	// The control that the verdict turns on {abstract} and not on the shape of the
-	// instance is TestInstanceExecutorDecidesSimpleLeafRoot: the same document
+	// instance is TestInstanceExecutorDecidesContentLessRoot: the same document
 	// under a non-abstract declaration charges nothing and is decided VALID.
 }
 
@@ -101,7 +101,7 @@ func TestInstanceExecutorDecidesAbstractRoot(t *testing.T) {
 // cannot decide is DECLINED in BOTH directions rather than guessed. The
 // load-bearing row is the first: a declared, non-abstract root with an element
 // [[child]] ·attributed to· a lax wildcard charges NOTHING, and outside the
-// three gated shapes an empty validate.Result is not evidence of validity —
+// gated shape an empty validate.Result is not evidence of validity —
 // §3.3.5.1's e-validity is a conjunction whose clauses for that child Assess does
 // not evaluate, so neither "valid" nor "invalid" may be claimed.
 func TestInstanceExecutorDeclinesUndecidableShapes(t *testing.T) {
@@ -112,7 +112,7 @@ func TestInstanceExecutorDeclinesUndecidableShapes(t *testing.T) {
 		instance   string
 	}{
 		{
-			"a declared, non-abstract root of a COMPLEX type whose child a lax wildcard admits charges nothing, and no charge is not a verdict outside the three gated shapes",
+			"a declared, non-abstract root of a COMPLEX type whose child a lax wildcard admits charges nothing, and no charge is not a verdict outside the gated shape",
 			`<xs:element name="known"><xs:complexType><xs:sequence>` +
 				`<xs:any processContents="lax" minOccurs="0"/>` +
 				`</xs:sequence></xs:complexType></xs:element>`,
@@ -345,10 +345,10 @@ func TestInstanceExecutorAgreesWithSuite(t *testing.T) {
 		schemaDoc: filepath.Join(dir, "typeDef00201m.xsd"),
 		expect:    expectValid(),
 	}
-	// The root is a simple leaf root the walk charges nothing for, so the case is
+	// The root is an assessed subtree root the walk charges nothing for, so the case is
 	// decided valid, and a flipped expectation disagrees.
 	if !exec(c).IsPass() {
-		t.Error("a declared simple leaf root against a real suite schema: the executor must agree with the suite-valid case")
+		t.Error("a declared assessed subtree root against a real suite schema: the executor must agree with the suite-valid case")
 	}
 	c.expect = expectValidity(false)
 	if exec(c).IsPass() {

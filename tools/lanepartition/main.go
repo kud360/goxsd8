@@ -74,11 +74,10 @@ const (
 	defaultExpectations = "conformance/testdata/expectations"
 )
 
-// instanceLane is the lane whose executor observes "valid" for three shapes
-// only: its banked fail on a case the suite declares VALID flips only where
-// that case is a simple leaf root (#1738), a complex empty leaf root (#1808) or
-// an assessed subtree root (#1841). Before #1738 such a case could not flip at
-// all (#1561).
+// instanceLane is the lane whose executor observes "valid" for one shape only:
+// its banked fail on a case the suite declares VALID flips only where that
+// case is an assessed subtree root (#1841, #1855). Before #1738 such a case
+// could not flip at all (#1561).
 const instanceLane = "instance"
 
 const usage = `usage: lanepartition [-suite dir] [-expectations dir] [-log file] <lane> [< gapissues.json]
@@ -418,8 +417,8 @@ func render(w io.Writer, p partitioned, file, logPath string, issues []ghIssue, 
 	_, _ = fmt.Fprintln(w, "  `go tool lanestatus` prints — and nothing a run did moves it.")
 	if p.lane == instanceLane {
 		_, _ = fmt.Fprintln(w, "  On this lane a banked fail the suite declares VALID flips only where the executor decides")
-		_, _ = fmt.Fprintln(w, "  the document valid, which it does for a simple or complex empty leaf root or an assessed")
-		_, _ = fmt.Fprintln(w, "  subtree root alone (#1738, #1808, #1841).")
+		_, _ = fmt.Fprintln(w, "  the document valid, which it does for an assessed subtree root alone, with content or")
+		_, _ = fmt.Fprintln(w, "  without (#1841, #1855).")
 	}
 	renderLogNote(w, p, logPath)
 
