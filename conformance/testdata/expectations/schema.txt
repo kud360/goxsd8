@@ -1547,7 +1547,7 @@ MS-ComplexType2006-07-15/ctA038/schema/ctA038 pass
 MS-ComplexType2006-07-15/ctA039/schema/ctA039 pass
 MS-ComplexType2006-07-15/ctA040/schema/ctA040 pass
 MS-ComplexType2006-07-15/ctA041/schema/ctA041 pass
-MS-ComplexType2006-07-15/ctA042/schema/ctA042 fail
+MS-ComplexType2006-07-15/ctA042/schema/ctA042 pass
 MS-ComplexType2006-07-15/ctA043/schema/ctA043 pass
 MS-ComplexType2006-07-15/ctA044/schema/ctA044 pass
 MS-ComplexType2006-07-15/ctA045/schema/ctA045 pass
