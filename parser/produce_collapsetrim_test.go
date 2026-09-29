@@ -64,7 +64,7 @@ func TestProduceCollapseTrimRejectsNonXMLWhitespacePadding(t *testing.T) {
 		},
 		{
 			// occursOf: the maxOccurs="unbounded" keyword arm. Padded, it is not
-			// the keyword, so it falls to nonNegativeInt and fails xs:allNNI's
+			// the keyword, so it falls to nonNegativeNumeral and fails xs:allNNI's
 			// numeric member instead of being read as ·unbounded·.
 			name:     "occursOf maxOccurs unbounded padded with U+00A0",
 			body:     `<xs:complexType name="T"><xs:sequence maxOccurs="&#xA0;unbounded"><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>`,
@@ -75,7 +75,7 @@ func TestProduceCollapseTrimRejectsNonXMLWhitespacePadding(t *testing.T) {
 			// nonNegativeNumeral: the nonNegativeIntegerLexical argument. The
 			// digit scan rejects the padding itself, so the whole numeric family
 			// depends on this one trim.
-			name:     "nonNegativeInt minOccurs padded with U+00A0",
+			name:     "nonNegativeNumeral minOccurs padded with U+00A0",
 			body:     `<xs:complexType name="T"><xs:sequence minOccurs="&#xA0;1"><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>`,
 			wantRule: "cvc-datatype-valid",
 			wantMsg:  "minOccurs value",

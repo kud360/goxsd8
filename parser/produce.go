@@ -66,7 +66,7 @@ const (
 	// attribute whose local part is empty (bindQName), which no src-* clause
 	// reaches because they all presuppose a well-formed QName, a minOccurs/maxOccurs
 	// lexical outside the xs:nonNegativeInteger/xs:allNNI types Appendix A's occurs
-	// attribute group declares (nonNegativeInt), which p-props-correct cannot reach
+	// attribute group declares (nonNegativeNumeral), which p-props-correct cannot reach
 	// because no particle exists yet (#932), a length or digits facet's value lexical
 	// outside the xs:nonNegativeInteger/xs:positiveInteger its facet element declares
 	// (facetCountValue), which facet compilation reaches only when an instance does
