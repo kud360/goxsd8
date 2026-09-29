@@ -306,7 +306,14 @@ func TestPathSubsetUnsupportedDominates(t *testing.T) {
 		why   string
 	}{
 		{"a[1]", true, "'1' opens no token, so the '[' is not read as a predicate"},
-		{"a[b='c']", true, "nor do '=' and the quotes"},
+		{"a[b!='c']", true, "nor does '!=', of the six GeneralComp operators only '=' is read"},
+		{"a='c'", false, "'=' and a StringLiteral are read inside a predicate alone, so a comparison outside one does not lex"},
+		{"//='c'", false, "which keeps a leading '//' before a '=' from being charged as root-relative"},
+		{"@='c'", false, "and a selector's '@' before one from being charged as an attribute"},
+		{"//=a", false, "'=' alone outside a predicate opens no token either"},
+		{"@=a", false, "nor before a selector's '@'"},
+		{"@'c'", false, "and a StringLiteral alone outside one opens none"},
+		{"a[b='c]", true, "an unterminated StringLiteral does not lex"},
 		{"q:a/processing-instruction('x')", false, "a KindTest with an argument does not lex, so the unbound q is not read in isolation"},
 		{"q:a/element(b)", true, "nor does element(b), whose argument is a QName this lexer does not read"},
 		{"a/schema-element()", false, "schema-element requires an argument, so its empty parentheses do not lex either"},
@@ -549,10 +556,9 @@ func TestNonExpressionsAreChargedUnderClause1(t *testing.T) {
 // leading './/' pair before a Step is admitted, and a '//' with a Step after it
 // is no separator fault. Two Steps with no separator are left undecided,
 // because the lexer reads the legal `..` as the same two '.' tokens as `. .`
-// (#1829). A legal Wildcard `*:a`, a FunctionCall and colon residue a split
-// name does not spell open a token this lexer does not read, so the stream is
-// declined whatever else it holds. `child :: a` is an axis head, which is read
-// before any split name.
+// (#1829). A legal Wildcard `*:a` and colon residue a split name does not spell
+// open a token this lexer does not read, so the stream is declined whatever else
+// it holds. `child :: a` is an axis head, which is read before any split name.
 func TestTheLeadingPairStepAdjacencyAndUnreadableRunsAreNotCharged(t *testing.T) {
 	p := []xsd.NamespaceBinding{
 		xsd.NewNamespaceBinding("xpns", "urn:x"),
@@ -561,7 +567,7 @@ func TestTheLeadingPairStepAdjacencyAndUnreadableRunsAreNotCharged(t *testing.T)
 	for _, expr := range []string{
 		". //.", "xpns1:* | .//xpns:*/.", ".//a",
 		"..", ". .", "a b",
-		"*:a", "document('')", "(: tid :* :)", "a:b :c", "p:", ":a",
+		"*:a", "(: tid :* :)", "a:b :c", "p:", ":a",
 		"child :: a",
 	} {
 		for _, field := range []bool{false, true} {
@@ -614,5 +620,146 @@ func TestUnresolvedNameTestMatchesNothing(t *testing.T) {
 	}
 	if got.matches(xsd.QName{Space: "urn:q", Local: "a"}) {
 		t.Error("an unresolved NameTest matched {urn:q}a; it must match nothing")
+	}
+}
+
+// A FunctionCall is no Step of production [3], and is charged under clause 2 of
+// either SCC wherever it sits in a member. The message is pinned whole from its
+// opening, so the predicate charge, the root-relative charge or a decline fails
+// the row. A FunctionCall whose NodeTest-less head precedes it is charged
+// leftmost, under clause 1: `child::f('x')` and a field's `@f('x')` are no XPath
+// 2.0 expression at all.
+func TestFunctionCallIsCharged(t *testing.T) {
+	const (
+		sel = `the {selector} %q has a FunctionCall %q, but c-selector-xpath clause 2 admits it under neither arm — production [3] Step is '.' or a NameTest, and xpath20 production [27] makes a FunctionCall a FilterExpr and no AxisStep`
+		fld = `the {fields} member %q has a FunctionCall %q, but c-fields-xpaths clause 2 admits it under neither arm — production [3] Step is '.' or a NameTest and production [7]'s final step is '@' NameTest, and xpath20 production [27] makes a FunctionCall a FilterExpr and no AxisStep`
+	)
+	call := func(expr, fc string, field bool) string {
+		if field {
+			return fmt.Sprintf(fld, expr, fc)
+		}
+		return fmt.Sprintf(sel, expr, fc)
+	}
+	type row struct {
+		expr  string
+		field bool
+		msg   string
+	}
+	var rows []row
+	for _, field := range []bool{false, true} {
+		rows = append(rows,
+			row{"document('')", field, call("document('')", "document('')", field)},
+			row{`document("")`, field, call(`document("")`, `document("")`, field)},
+			row{"document ( '' )", field, call("document ( '' )", "document ( '' )", field)},
+			row{"f()", field, call("f()", "f()", field)},
+			row{`concat('a', "b" ,'c''d')`, field, call(`concat('a', "b" ,'c''d')`, `concat('a', "b" ,'c''d')`, field)},
+			row{"a/document('')", field, call("a/document('')", "document('')", field)},
+			row{"self('x')", field, call("self('x')", "self('x')", field)},
+			row{"q:a/f('[')", field, call("q:a/f('[')", "f('[')", field)},
+			row{"child::f('x')", field, fmt.Sprintf(`the %s "child::f('x')" has an axis step "child::" with no NodeTest after it, but %s clause 1`, subject(field), sccOf(field))},
+		)
+	}
+	rows = append(rows,
+		row{"@f('x')", true, `the {fields} member "@f('x')" has an '@' with no NodeTest after it, but c-fields-xpaths clause 1`},
+		row{"a/@f('x')", true, `the {fields} member "a/@f('x')" has an '@' with no NodeTest after it, but c-fields-xpaths clause 1`},
+	)
+	for _, tc := range rows {
+		err := violationOf(tc.expr, tc.field)
+		var e *xsderr.Error
+		if !errors.As(err, &e) {
+			t.Errorf("charging %q (field=%v) = %v, want an *xsderr.Error", tc.expr, tc.field, err)
+			continue
+		}
+		if !strings.HasPrefix(e.Msg, tc.msg) {
+			t.Errorf("charging %q (field=%v): message = %q, want it to open %q", tc.expr, tc.field, e.Msg, tc.msg)
+		}
+		if cause := errors.Unwrap(err); cause != nil {
+			t.Errorf("charging %q (field=%v) wraps %v; a grammar charge wraps no cause", tc.expr, tc.field, cause)
+		}
+		if _, ok := compileOf(tc.expr, tc.field, nil); ok {
+			t.Errorf("compiling %q (field=%v) succeeded; a charged {expression} must decline too", tc.expr, tc.field)
+		}
+	}
+}
+
+// A predicate whose '=' comparison has a StringLiteral operand now lexes whole,
+// and is charged as the predicate it is — the W3C suite's idI151 and idJ209
+// shapes, with `imp` bound and unbound alike: the predicate is decided from the
+// tokens before any prefix resolves, so the charge wraps no err:XPST0081. A
+// quoted bracket is a literal's content and not a second predicate bracket.
+func TestPredicateWithAStringComparisonIsCharged(t *testing.T) {
+	const pred = `carries a predicate, but %s clause 2 admits none — production [3] Step is '.' or a NameTest, and abbreviating an unabbreviated XPath does not drop a predicate`
+	imp := []xsd.NamespaceBinding{xsd.NewNamespaceBinding("imp", "urn:imp")}
+	for _, bindings := range [][]xsd.NamespaceBinding{nil, imp} {
+		for _, tc := range []struct {
+			expr  string
+			field bool
+		}{
+			{`imp:iid[type="predicate"]`, false},
+			{`imp:sid[type="predicate"]`, true},
+			{`a[b = 'x']`, false},
+			{`a[@b='x']`, true},
+			{`a[b="]"]`, false},
+			{`a['x'=b]/c`, true},
+			{`a[b='it''s']`, true},
+			{`a[f('x')]`, false},
+		} {
+			x := xsd.NewXPathExpression(tc.expr, bindings, nil, nil)
+			err := violationAt(xsderr.Loc{}, x, tc.field)
+			var e *xsderr.Error
+			if !errors.As(err, &e) {
+				t.Errorf("charging %q (field=%v, bindings=%d) = %v, want an *xsderr.Error", tc.expr, tc.field, len(bindings), err)
+				continue
+			}
+			want := fmt.Sprintf("the %s %q "+pred, subject(tc.field), tc.expr, sccOf(tc.field))
+			if e.Msg != want {
+				t.Errorf("charging %q (field=%v, bindings=%d): message = %q, want %q", tc.expr, tc.field, len(bindings), e.Msg, want)
+			}
+			if cause := errors.Unwrap(err); cause != nil {
+				t.Errorf("charging %q (field=%v, bindings=%d) wraps %v; the predicate charge wraps no cause", tc.expr, tc.field, len(bindings), cause)
+			}
+		}
+	}
+}
+
+// What the FunctionCall reader does not read stays declined: a prefixed name,
+// whose prefix nothing here resolves; a reserved function name, which before a
+// '(' is a KindTest or a keyword (xpath20 A.3); an argument other than a
+// StringLiteral; a malformed argument list; and a comment after the name, which
+// is no argument list at all (A.1.3, gn: parens).
+func TestFunctionCallReaderDeclinesWhatItDoesNotRead(t *testing.T) {
+	for _, expr := range []string{
+		"p:f('x')", "if('x')", "item()", "element('a')", "processing-instruction('x')",
+		"f(a)", "f(1)", "f('x'", "f('x',)", "f(,)", "f('x' 'y')", "f (: c :)", "f('x)",
+	} {
+		for _, field := range []bool{false, true} {
+			if err := violationOf(expr, field); err != nil {
+				t.Errorf("charging %q (field=%v) = %v, want nil — the call is not read, so the stream is declined", expr, field, err)
+			}
+		}
+	}
+}
+
+// The lexer reads a FunctionCall as ONE token carrying its spelling, and '=' and
+// a StringLiteral only between a predicate's brackets: outside one each opens no
+// token. A doubled delimiter is production [75]/[76]'s escape and stays inside
+// the literal.
+func TestTokenizeReadsFunctionCallsAndPredicateLiterals(t *testing.T) {
+	for _, tc := range []struct {
+		s    string
+		want []token
+	}{
+		{"document('')", []token{{kind: 'F', text: "document('')"}}},
+		{"a/f( 'x' , \"y\" )", []token{{kind: 'n', text: "a"}, {kind: '/'}, {kind: 'F', text: "f( 'x' , \"y\" )"}}},
+		{`a[b="x"]`, []token{{kind: 'n', text: "a"}, {kind: '['}, {kind: 'n', text: "b"}, {kind: '='}, {kind: 's', text: `"x"`}, {kind: ']'}}},
+		{"a[b='it''s']", []token{{kind: 'n', text: "a"}, {kind: '['}, {kind: 'n', text: "b"}, {kind: '='}, {kind: 's', text: "'it''s'"}, {kind: ']'}}},
+		{"a='x'", []token{{kind: 'n', text: "a"}, {kind: '?'}, {kind: '?'}, {kind: 'n', text: "x"}, {kind: '?'}}},
+		{"a[b]='x'", []token{{kind: 'n', text: "a"}, {kind: '['}, {kind: 'n', text: "b"}, {kind: ']'}, {kind: '?'}, {kind: '?'}, {kind: 'n', text: "x"}, {kind: '?'}}},
+		{"if('x')", []token{{kind: 'n', text: "if"}, {kind: '?'}, {kind: '?'}, {kind: 'n', text: "x"}, {kind: '?'}, {kind: '?'}}},
+	} {
+		got := tokenize(tc.s)
+		if fmt.Sprint(got) != fmt.Sprint(tc.want) {
+			t.Errorf("tokenize(%q) = %v, want %v", tc.s, got, tc.want)
+		}
 	}
 }

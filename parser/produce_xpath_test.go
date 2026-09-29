@@ -925,6 +925,20 @@ func TestProduceIdentityConstraintPathViolations(t *testing.T) {
 		line:     icFieldLine,
 		msg:      `the {fields} member "b[c]" carries a predicate`,
 	}, {
+		name:     "a predicate comparing with a StringLiteral",
+		selector: "imp:iid[type='predicate']",
+		field:    "@x",
+		rule:     "c-selector-xpath", // clause 2: production [3] Step is '.' or a NameTest
+		line:     icSelectorLine,
+		msg:      `the {selector} "imp:iid[type='predicate']" carries a predicate`,
+	}, {
+		name:     "a FunctionCall",
+		selector: "a",
+		field:    "document('')",
+		rule:     "c-fields-xpaths", // clause 2: production [27] makes a FunctionCall no AxisStep
+		line:     icFieldLine,
+		msg:      `the {fields} member "document('')" has a FunctionCall "document('')"`,
+	}, {
 		name:     "an attribute before a field's final step",
 		selector: "a",
 		field:    "@x/b",
@@ -1131,7 +1145,8 @@ func TestProduceIdentityConstraintPathFailsOpen(t *testing.T) {
 		{"an unabbreviated axis with white space", "child :: a", "white space may surround '::', which is its own XPath 2.0 token"},
 		{"self steps under .//", ".//.", "production [3]'s bare '.' Step derives it, so clause 2.1 holds outright"},
 		{"a numeric predicate", "a[1]", "'1' opens no token, and a stream this lexer cannot read is declined and never charged"},
-		{"a quoted predicate", "a[b='c']", "the quotes open no token either, so the '[' is not read as a predicate"},
+		{"a predicate comparing with '!='", "a[b!='c']", "of the comparison operators only '=' is read, so the '[' is not read as a predicate"},
+		{"a prefixed FunctionCall", "q:f('x')", "a prefixed call is not read, so neither the call nor the unbound q is charged"},
 		{"the leading pair before a self step", ". //.", "the './/' pair production [2] admits, then a '.' Step, so it is no non-initial '//'"},
 		{"the parent step", "..", "legal XPath 2.0 outside both subsets, and lexed as the same two '.' tokens as `. .`, so no Step-adjacency charge names it"},
 		{"an unbound prefix before an unreadable step", "q:a/processing-instruction('x')", "unsupported dominates: a KindTest with an argument does not lex, so the prefix is not read in isolation"},

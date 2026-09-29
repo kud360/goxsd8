@@ -5124,7 +5124,7 @@ MS-IdentityConstraint2006-07-15/idE010/schema/idE010 pass
 MS-IdentityConstraint2006-07-15/idE011/schema/idE011 pass
 MS-IdentityConstraint2006-07-15/idE012/schema/idE012 pass
 MS-IdentityConstraint2006-07-15/idE013/schema/idE013 pass
-MS-IdentityConstraint2006-07-15/idE014/schema/idE014 fail
+MS-IdentityConstraint2006-07-15/idE014/schema/idE014 pass
 MS-IdentityConstraint2006-07-15/idE015/schema/idE015 pass
 MS-IdentityConstraint2006-07-15/idE016/schema/idE016 pass
 MS-IdentityConstraint2006-07-15/idE017/schema/idE017 pass
@@ -5391,7 +5391,7 @@ MS-IdentityConstraint2006-07-15/idI147/schema/idI147 pass
 MS-IdentityConstraint2006-07-15/idI148/schema/idI148 pass
 MS-IdentityConstraint2006-07-15/idI149/schema/idI149 pass
 MS-IdentityConstraint2006-07-15/idI150/schema/idI150 pass
-MS-IdentityConstraint2006-07-15/idI151/schema/idI151 fail
+MS-IdentityConstraint2006-07-15/idI151/schema/idI151 pass
 MS-IdentityConstraint2006-07-15/idI152/schema/idI152 pass
 MS-IdentityConstraint2006-07-15/idJ001/schema/idJ001 pass
 MS-IdentityConstraint2006-07-15/idJ002/schema/idJ002 pass
@@ -5601,7 +5601,7 @@ MS-IdentityConstraint2006-07-15/idJ205/schema/idJ205 pass
 MS-IdentityConstraint2006-07-15/idJ206/schema/idJ206 pass
 MS-IdentityConstraint2006-07-15/idJ207/schema/idJ207 pass
 MS-IdentityConstraint2006-07-15/idJ208/schema/idJ208 pass
-MS-IdentityConstraint2006-07-15/idJ209/schema/idJ209 fail
+MS-IdentityConstraint2006-07-15/idJ209/schema/idJ209 pass
 MS-IdentityConstraint2006-07-15/idJ210/schema/idJ210 pass
 MS-IdentityConstraint2006-07-15/idK001/schema/idK001 pass
 MS-IdentityConstraint2006-07-15/idK002/schema/idK002 pass

@@ -35,7 +35,7 @@ const ruleXPST0081 xsderr.Rule = "err:XPST0081"
 // the position of the <selector> element the {expression} was written on, which
 // this package cannot know and never reconstructs (STYLE E3).
 //
-// IT CHARGES THIRTEEN SHAPES, each of which fails clause 1 or both arms of clause 2;
+// IT CHARGES FOURTEEN SHAPES, each of which fails clause 1 or both arms of clause 2;
 // they are not every shape clause 2 proves. Clause 2 is a disjunction — 2.1's
 // literal BNF or 2.2's "XPath expression involving the child axis whose
 // abbreviated form is as given above" — and 2.2 is read syntactically: the
@@ -64,7 +64,7 @@ const ruleXPST0081 xsderr.Rule = "err:XPST0081"
 //   - an attribute named anywhere in a selector, under either spelling, which
 //     clause 2.2 does not name for a selector at all;
 //   - an attribute step before a field's final step, which production [7]
-//     admits only as a Path's final step; and
+//     admits only as a Path's final step;
 //   - an axis head clause 2.2 does not name — any of XPath 2.0's thirteen but
 //     child, and for a field attribute — which clause 2.1's tokens do not spell
 //     either, `self::node()` included: XPath 2.0 states no abbreviation of it
@@ -72,18 +72,25 @@ const ruleXPST0081 xsderr.Rule = "err:XPST0081"
 //   - a root-relative path, opened by `/` or `//`, which production [2] and
 //     [7]'s context-relative Path never is;
 //   - a `//` anywhere but the leading `.//` pair, which §3.2.4 rule 3 expands
-//     to `descendant-or-self::node()`, an axis clause 2.2 does not name; and
+//     to `descendant-or-self::node()`, an axis clause 2.2 does not name;
 //   - a KindTest step, `child::node()` and `attribute::node()` included, which
 //     production [3]'s Step (`'.' | NameTest`) does not spell and no
-//     abbreviation turns into a NameTest.
+//     abbreviation turns into a NameTest; and
+//   - a FunctionCall such as `document("")`, which XPath 2.0 makes a
+//     FilterExpr and no axis step, so no Step of production [3] either. It is
+//     read only with an unprefixed name that is no reserved function name and
+//     StringLiteral arguments alone, which is XPath 2.0 whatever function
+//     signatures the static context holds.
 //
 // Everything else is nil here and left to [CompileSelector] to decline at
 // validate time. That covers, above all, an {expression} this package cannot
-// read whole: a FunctionCall such as `document("")`, a KindTest with an
-// argument (`element(a)`), or a Wildcard `*:a`, whatever clause 1 or 2 says of
-// it. It also covers two Steps with no separator between them, which this
-// package cannot tell from the parent step `..`, and a `.//` path whose Steps
-// are all `.`, which production [3]'s bare `.` derives outright.
+// read whole: a KindTest with an argument (`element(a)`), a FunctionCall with a
+// prefixed name or an argument other than a StringLiteral (`p:f('x')`, `f(a)`),
+// a predicate holding any other token (`a[1]`), or a Wildcard `*:a`, whatever
+// clause 1 or 2 says of it. It also covers two Steps with no separator between
+// them, which this package cannot tell from the parent step `..`, and a `.//`
+// path whose Steps are all `.`, which production [3]'s bare `.` derives
+// outright.
 //
 // The result is an *[xsderr.Error] carrying the SCC as its rule, with the
 // clause it breaks in the message. For the unbound prefix it wraps a cause
