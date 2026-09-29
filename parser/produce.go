@@ -886,11 +886,12 @@ func rejectInvalidDerivationSet(el *Element) error {
 }
 
 // rejectLocalComplexTypeAttrs rejects a NESTED <complexType> — one written
-// anywhere but as a child of <schema>, <redefine> or <override> — that carries an
-// abstract, final or block attribute, each of which xs:localComplexType restricts
-// to use="prohibited" (xmlschema11-1.md:4824-4826). Each is legal on the
-// top-level form alone: xs:topLevelComplexType (:4804) keeps the declarations
-// xs:complexType makes (:4795-4798). Position decides the form, on the reading
+// anywhere but as a child of <schema>, <redefine> or <override> — that carries a
+// name, abstract, final or block attribute, each of which xs:localComplexType
+// restricts to use="prohibited" (xmlschema11-1.md:4823-4826). Each is legal on
+// the top-level form alone: xs:topLevelComplexType (:4804) keeps the declarations
+// xs:complexType makes for abstract, final and block (:4795-4798) and makes name
+// use="required" (:4811). Position decides the form, on the reading
 // rejectLocalSimpleTypeAttrs' doc gives for <simpleType>: <redefine>'s and
 // <override>'s content models reach the same global xs:complexType element
 // declaration the top level does.
@@ -905,11 +906,6 @@ func rejectInvalidDerivationSet(el *Element) error {
 // rather than one per producer that builds an anonymous complex type (STYLE
 // D3/T4). The attributes are checked in the grammar's own declaration order, so a
 // document writing several is always reported at the same one (STYLE D2).
-//
-// GAP(parser): #1908 — the fourth attribute xs:localComplexType prohibits, name
-// (:4823), is not charged here: a nested <complexType name="..."> is accepted
-// with its name ignored. Charging it flips a suite case of its own (ctA042), so
-// it is its own ratchet attribution and its own issue.
 func rejectLocalComplexTypeAttrs(el *Element) error {
 	if !isXSD(el, "complexType") {
 		return nil
@@ -918,7 +914,7 @@ func rejectLocalComplexTypeAttrs(el *Element) error {
 	if parent == nil || isXSD(parent, "schema") || isXSD(parent, "redefine") || isXSD(parent, "override") {
 		return nil
 	}
-	for _, attr := range [...]string{"abstract", "final", "block"} {
+	for _, attr := range [...]string{"name", "abstract", "final", "block"} {
 		if _, ok := el.Attr(attr); !ok {
 			continue
 		}
