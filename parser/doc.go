@@ -328,12 +328,15 @@
 // document's ids are judged as fetched, not as Dold′ (rejectInvalidID's
 // GAP(parser) marker, #875). A document that is simply not VALID against
 // the schema for schema documents — a prohibited attribute on a top-level
-// form, an unprefixed attribute the element's grammar declares nowhere, a
-// child written where that element's content model admits none, a child
+// form or on a nested <complexType>, <simpleType> or inline local
+// <element>, an unprefixed attribute the element's grammar declares nowhere,
+// a child written where that element's content model admits none, a child
 // repeated past its maxOccurs, a child whose name the model admits nowhere
 // — is §5.1's first bullet and carries NO rule ID at all: it is a plain
 // wrapped error naming the offending item and the grammar it violates
-// (parser's rejectProhibitedAttrs, rejectUndeclaredAttrs,
+// (parser's rejectProhibitedAttrs, rejectLocalComplexTypeAttrs,
+// rejectLocalSimpleTypeAttrs, rejectLocalElementProhibitedAttrs,
+// rejectUndeclaredAttrs,
 // checkS4SChildOrder, rejectUnmappedTopLevel, rejectOutOfModelFacetChildren
 // and simpleTypeBody's own two alternative-count branches). An attribute in
 // ANOTHER namespace is admitted wherever it stands, which is the whole of

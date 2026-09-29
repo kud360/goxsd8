@@ -618,10 +618,11 @@ func (p *producer) chameleon() bool {
 //
 // Placement is charged before content: a <notation> standing where the grammar
 // admits none is reported for where it stands, not for the second <annotation>
-// it also carries. The three attribute guards run last, for the same reason:
+// it also carries. The four attribute guards run last, for the same reason:
 // where an element stands, and how many of a child it carries, are both answered
 // ahead of what its start tag spells — and an attribute name the grammar declares
-// nowhere ahead of what an id or a block=/final= family attribute's value spells.
+// nowhere, or prohibits on a nested <complexType>, ahead of what an id or a
+// block=/final= family attribute's value spells.
 //
 // <appinfo> and <documentation> are subject to rejectUndeclaredAttrs alone, and
 // the split is the lax-content rule above: their CONTENT is governed by no guard
@@ -646,6 +647,9 @@ func rejectS4SFaults(el *Element, ids map[string]*Element) error {
 		return err
 	}
 	if err := rejectUndeclaredAttrs(el); err != nil {
+		return err
+	}
+	if err := rejectLocalComplexTypeAttrs(el); err != nil {
 		return err
 	}
 	if err := rejectInvalidID(el, ids); err != nil {
@@ -800,51 +804,125 @@ type derivationSetAttr struct {
 	typ  s4sDerivationSet
 }
 
-// derivationSetAttrs returns the block=/final= family attributes el's Appendix A
-// production declares, in declaration order, or nil for an element declaring
-// none: <element>'s final and block (xs:element, xmlschema11-1.md:5079-5080),
-// <complexType>'s final and block (xs:complexType, :4797-4798), <simpleType>'s
-// final (xs:simpleType, xmlschema11-2.md:3865) and <schema>'s finalDefault and
-// blockDefault (:4569-4571). The base production is the right one for every
-// form: a restriction narrowing an attribute to use="prohibited" is
-// rejectProhibitedAttrs' charge, not a change of the attribute's type.
-func derivationSetAttrs(el *Element) []derivationSetAttr {
+// derivationSetAttrs returns the Appendix A production el's position types it
+// with and the block=/final= family attributes that production declares, in
+// declaration order, or nil attributes where it declares none:
+//
+//   - A top-level <element> (a child of <schema> or <override>) is
+//     xs:topLevelElement, which keeps xs:element's final and block
+//     (xmlschema11-1.md:5079-5080); every other <element>, the ref= form
+//     included, is xs:localElement (:5110), which prohibits final (:5125) and
+//     keeps block.
+//   - A top-level <complexType> (a child of <schema>, <redefine> or
+//     <override>) is xs:topLevelComplexType, which keeps xs:complexType's final
+//     and block (:4797-4798); a nested one is xs:localComplexType, which
+//     prohibits both (:4825-4826).
+//   - A top-level <simpleType> is xs:topLevelSimpleType, which keeps
+//     xs:simpleType's final (xmlschema11-2.md:3865); a nested one is
+//     xs:localSimpleType, which prohibits it (:3908).
+//   - <schema> declares finalDefault and blockDefault (xmlschema11-1.md:4569-4571).
+//
+// A prohibited attribute is left out rather than typed by the base production:
+// use="prohibited" removes its declaration, so nothing assesses its value and the
+// only fault is the attribute itself, which the form's own guard charges
+// (rejectLocalElementProhibitedAttrs, rejectRefElementUseProhibitedAttrs,
+// rejectLocalComplexTypeAttrs, rejectLocalSimpleTypeAttrs).
+func derivationSetAttrs(el *Element) (string, []derivationSetAttr) {
+	parent := el.parent
+	schemaChild := parent == nil || isXSD(parent, "schema") || isXSD(parent, "override")
+	topLevel := schemaChild || isXSD(parent, "redefine")
 	switch el.Name().Local() {
 	case "element":
-		return []derivationSetAttr{{"final", s4sDerivationSetType}, {"block", s4sBlockSet}}
+		if !schemaChild {
+			return "xs:localElement", []derivationSetAttr{{"block", s4sBlockSet}}
+		}
+		return "xs:topLevelElement", []derivationSetAttr{{"final", s4sDerivationSetType}, {"block", s4sBlockSet}}
 	case "complexType":
-		return []derivationSetAttr{{"final", s4sDerivationSetType}, {"block", s4sDerivationSetType}}
+		if !topLevel {
+			return "xs:localComplexType", nil
+		}
+		return "xs:topLevelComplexType", []derivationSetAttr{{"final", s4sDerivationSetType}, {"block", s4sDerivationSetType}}
 	case "simpleType":
-		return []derivationSetAttr{{"final", s4sSimpleDerivationSet}}
+		if !topLevel {
+			return "xs:localSimpleType", nil
+		}
+		return "xs:topLevelSimpleType", []derivationSetAttr{{"final", s4sSimpleDerivationSet}}
 	case "schema":
-		return []derivationSetAttr{{"finalDefault", s4sFullDerivationSet}, {"blockDefault", s4sBlockSet}}
+		return "xs:schema", []derivationSetAttr{{"finalDefault", s4sFullDerivationSet}, {"blockDefault", s4sBlockSet}}
 	}
-	return nil
+	return "", nil
 }
 
 // rejectInvalidDerivationSet rejects a block, final, blockDefault or
 // finalDefault attribute on el whose value is outside the s4s derivation-set
 // type el's production declares it with (derivationSetAttrs): block="foo",
-// final="substitution" on an <element>, final="#All", block="#all extension".
-// §5.1's first bullet (xmlschema11-1.md:615) makes the document's validity
-// against the schema for schema documents normative and no src-* clause covers
-// the value, so it is charged cvc-datatype-valid (Datatypes §4.1.4), reached
-// through cvc-attribute, exactly as rejectInvalidID charges an id outside
+// final="substitution" on a top-level <element>, final="#All", block="#all
+// extension". §5.1's first bullet (xmlschema11-1.md:615) makes the document's
+// validity against the schema for schema documents normative and no src-* clause
+// covers the value, so it is charged cvc-datatype-valid (Datatypes §4.1.4),
+// reached through cvc-attribute, exactly as rejectInvalidID charges an id outside
 // xs:ID. It is located at el, the attribute's position (an xmltree.Attribute
-// carries its owner's).
+// carries its owner's). An attribute el's production prohibits is not checked
+// here at all, whatever its value: that is its form's prohibition guard's
+// charge, and no datatype fault exists beside it.
 //
 // It is what makes effectiveDerivationSet's inputs well-typed: once it has
-// passed, a local block=/final= names only members of its own ·relevant set·,
-// and only a Default attribute can carry a token the property it feeds drops.
+// passed, a local block=/final= its form declares names only members of its own
+// ·relevant set·, one its form prohibits is rejected by that form's guard before
+// any producer maps it, and only a Default attribute can carry a token the
+// property it feeds drops.
 func rejectInvalidDerivationSet(el *Element) error {
-	for _, attr := range derivationSetAttrs(el) {
+	grammar, attrs := derivationSetAttrs(el)
+	for _, attr := range attrs {
 		lexical, ok := el.Attr(attr.name)
 		if !ok || attr.typ.admits(lexical) {
 			continue
 		}
 		return xsderr.New(ruleDatatypeValid, el.Loc(),
-			"<%s> %s %q is not in the ·lexical space· of %s, the type the schema for schema documents declares for it (Structures §5.1, §A): its value is #all alone or a whitespace-separated list of %s",
-			el.Name().Local(), attr.name, lexical, attr.typ.name, attr.typ.spelled())
+			"<%s> %s %q is not in the ·lexical space· of %s, the type %s declares %s with (Structures §5.1, §A): its value is #all alone or a whitespace-separated list of %s",
+			el.Name().Local(), attr.name, lexical, attr.typ.name, grammar, attr.name, attr.typ.spelled())
+	}
+	return nil
+}
+
+// rejectLocalComplexTypeAttrs rejects a NESTED <complexType> — one written
+// anywhere but as a child of <schema>, <redefine> or <override> — that carries an
+// abstract, final or block attribute, each of which xs:localComplexType restricts
+// to use="prohibited" (xmlschema11-1.md:4824-4826). Each is legal on the
+// top-level form alone: xs:topLevelComplexType (:4804) keeps the declarations
+// xs:complexType makes (:4795-4798). Position decides the form, on the reading
+// rejectLocalSimpleTypeAttrs' doc gives for <simpleType>: <redefine>'s and
+// <override>'s content models reach the same global xs:complexType element
+// declaration the top level does.
+//
+// The fault carries NO numbered rule ID: src-ct's clauses (§3.4.3) say nothing
+// about these attributes, so it stands on §5.1 (xmlschema11-1.md:4296) directly,
+// the footing rejectProhibitedAttrs's doc derives; charging src-ct or
+// ct-props-correct would be a fabricated verdict (STYLE E2).
+//
+// It is keyed on the <complexType> and reached from rejectS4SFaults' walk, one
+// guard over every nested position — <element> at either level, <alternative> —
+// rather than one per producer that builds an anonymous complex type (STYLE
+// D3/T4). The attributes are checked in the grammar's own declaration order, so a
+// document writing several is always reported at the same one (STYLE D2).
+//
+// GAP(parser): the fourth attribute xs:localComplexType prohibits, name (:4823),
+// is not charged here: a nested <complexType name="..."> is accepted with its
+// name ignored. Charging it moves suite cases of its own (attQ006, ctA042), so it
+// is its own ratchet attribution and its own issue.
+func rejectLocalComplexTypeAttrs(el *Element) error {
+	if !isXSD(el, "complexType") {
+		return nil
+	}
+	parent := el.parent
+	if parent == nil || isXSD(parent, "schema") || isXSD(parent, "redefine") || isXSD(parent, "override") {
+		return nil
+	}
+	for _, attr := range [...]string{"abstract", "final", "block"} {
+		if _, ok := el.Attr(attr); !ok {
+			continue
+		}
+		return fmt.Errorf("parser: nested <complexType> at %s carries a %s attribute, which the schema for schema documents prohibits on the local form: xs:localComplexType restricts %s to use=\"prohibited\", and it is legal on the top-level form alone", el.Loc(), attr, attr)
 	}
 	return nil
 }
@@ -3251,7 +3329,8 @@ var simpleTypeFinalKeywords = []xsd.DerivationMethod{xsd.DerivationRestriction, 
 // The EBV's vocabulary is already checked when this runs: rejectInvalidDerivationSet
 // charges cvc-datatype-valid, in rejectS4SFaults' walk ahead of every producer,
 // on a block=/final=/blockDefault=/finalDefault= value outside the s4s type its
-// production declares it with. Each local attribute's type has exactly its
+// production declares it with, and a form that prohibits the attribute rejects it
+// before its producer maps it. Each local attribute's type has exactly its
 // ·relevant set· as members, so a local EBV names only members of relevant. A
 // Default EBV may name more, and those items are IGNORED here, as each table
 // says of its own Default attribute — blockDefault "may include values other
