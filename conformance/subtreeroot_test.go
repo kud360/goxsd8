@@ -377,7 +377,7 @@ func TestInstanceExecutorDeclinesOutsideAssessedSubtreeRoot(t *testing.T) {
 		},
 		// The three NOTATION rows, one per closureReaches site, name a declared
 		// notation; a value naming an undeclared one would be refused all the
-		// same, for the reason walkUnrecorded's doc gives (simpleleaf.go).
+		// same, for the reason walkUnrecorded's doc gives (subtreeroot.go).
 		{"a NOTATION closure in the root's value type", notationN + `<xs:element name="known" type="N"/>`, `<known>n</known>`},
 		{
 			"a NOTATION closure in an element value type below the root",
