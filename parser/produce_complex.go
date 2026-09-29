@@ -1,7 +1,9 @@
 package parser
 
 import (
+	"cmp"
 	"fmt"
+	"math"
 	"slices"
 	"strconv"
 	"strings"
@@ -1828,7 +1830,7 @@ func (p *producer) produceGroupParticle(group *Element, scopeParent xsd.ElementS
 // {term} it denotes: resolution and the no-circular-groups check happen at
 // finalize (#173: src-resolve clause 1.5, mg-props-correct clause 2), and
 // neither VERDICT is ever duplicated here. Occurs-range correctness
-// (p-props-correct §3.9.6.1 clause 2.1) is enforced inside xsd.NewParticle.
+// (p-props-correct §3.9.6.1 clause 2.1) is enforced by occursOf.
 //
 // One mapping rule nonetheless has to LOOK through a reference produced here:
 // §3.4.2.3.3 clause 4.2.3 selects a sub-case by the {compositor} of the
@@ -3797,57 +3799,109 @@ func (p *producer) localTargetNS(el *Element, formDefaultAttr string) (string, e
 // defaulting to 1. elided is true for the minOccurs=maxOccurs=0 case, which the
 // XML mapping rules say "maps to no component at all" (§3.7.2/§3.8.2/§3.9.2) — the
 // caller omits the particle entirely rather than building a vacuous Occurs{0,0}.
+//
+// Each value reaches xsd.NewOccurs saturated at math.MaxInt (occursNumeral.int),
+// which can merge an inverted pair into an equal one and would name a saturated
+// value the document never spelled. p-props-correct clause 2.1 (§3.9.6.1) is
+// therefore decided here for every numeric pair, on the unsaturated numerals,
+// and the message names those values (ruleParticleCorrect).
 func occursOf(el *Element) (occ xsd.Occurs, elided bool, err error) {
-	min := 1
+	minN := occursNumeral("1")
 	if minS, ok := el.Attr("minOccurs"); ok {
-		min, err = nonNegativeInt(minS, el.Loc(), "minOccurs")
+		minN, err = nonNegativeNumeral(minS, el.Loc(), "minOccurs")
 		if err != nil {
 			return xsd.Occurs{}, false, err
 		}
 	}
-	unbounded := false
-	max := 1
-	if maxS, ok := el.Attr("maxOccurs"); ok {
-		if collapseTrim(maxS) == "unbounded" {
-			unbounded = true
-		} else {
-			max, err = nonNegativeInt(maxS, el.Loc(), "maxOccurs")
-			if err != nil {
-				return xsd.Occurs{}, false, err
-			}
-		}
-	}
-	if !unbounded && min == 0 && max == 0 {
-		return xsd.Occurs{}, true, nil
-	}
-	if unbounded {
+	min := minN.int()
+	maxS, hasMax := el.Attr("maxOccurs")
+	if hasMax && collapseTrim(maxS) == "unbounded" {
 		occ, err = xsd.NewUnboundedOccurs(el.Loc(), min)
 		return occ, false, err
+	}
+	maxN := occursNumeral("1")
+	if hasMax {
+		maxN, err = nonNegativeNumeral(maxS, el.Loc(), "maxOccurs")
+		if err != nil {
+			return xsd.Occurs{}, false, err
+		}
+	}
+	max := maxN.int()
+	if min == 0 && max == 0 {
+		return xsd.Occurs{}, true, nil
+	}
+	if minN.compare(maxN) > 0 {
+		return xsd.Occurs{}, false, xsderr.New(ruleParticleCorrect, el.Loc(),
+			"particle {min occurs} %s is greater than {max occurs} %s", minN, maxN)
 	}
 	occ, err = xsd.NewOccurs(el.Loc(), min, max)
 	return occ, false, err
 }
 
-// nonNegativeInt parses an xs:nonNegativeInteger-valued occurrence attribute,
-// charging cvc-datatype-valid (Datatypes §4.1.4) on a malformed or negative
-// value: the schema for schema documents declares minOccurs
-// type="xs:nonNegativeInteger" and maxOccurs type="xs:allNNI" (Appendix A's
-// occurs attribute group), so a lexical outside that value space is an attribute
-// failing its own declared type, which is what ruleDatatypeValid names.
+// occursNumeral is one xs:nonNegativeInteger value (§3.4.20) spelled as its
+// canonical decimal numeral: ASCII digits with no sign and no leading zero, "0"
+// alone for zero. The value space has no upper bound, so a value above
+// math.MaxInt is held exactly; only the host int that int returns is bounded.
+type occursNumeral string
+
+// int returns the value as a host int, saturated at math.MaxInt. A value past the
+// host's capacity is not an error — the literal is datatype-valid however large
+// it is — and math.MaxInt is not xsd.Occurs' unbounded sentinel.
+func (n occursNumeral) int() int {
+	v, err := strconv.Atoi(string(n))
+	if err != nil {
+		// A canonical numeral is in Atoi's syntax, so the only error left is
+		// strconv.ErrRange: the value is past math.MaxInt.
+		return math.MaxInt
+	}
+	return v
+}
+
+// compare orders two values numerically: negative, zero or positive as n is less
+// than, equal to or greater than m. A canonical numeral has no leading zero, so
+// the longer is the larger and equal lengths order as strings.
+func (n occursNumeral) compare(m occursNumeral) int {
+	return cmp.Or(cmp.Compare(len(n), len(m)), strings.Compare(string(n), string(m)))
+}
+
+// nonNegativeNumeral reads an xs:nonNegativeInteger-valued occurrence attribute,
+// charging cvc-datatype-valid (Datatypes §4.1.4) on a lexical outside that type:
+// the schema for schema documents declares minOccurs type="xs:nonNegativeInteger"
+// and maxOccurs type="xs:allNNI" (Appendix A's occurs attribute group), so such a
+// lexical is an attribute failing its own declared type, which is what
+// ruleDatatypeValid names. The test is lexical-space membership alone
+// (nonNegativeIntegerLexical): xs:nonNegativeInteger is unbounded (§3.4.20), so a
+// literal past math.MaxInt is datatype-valid and is never charged here (#1780).
 //
 // NOT p-props-correct (§3.9.6.1). That constraint quantifies over an existing
 // particle's PROPERTIES, and occursOf returns this error before reaching
 // xsd.NewOccurs/xsd.NewUnboundedOccurs, so no Occurs and no Particle is ever
 // built for it to constrain. p-props-correct clause 2.1 — {min occurs} greater
-// than a numeric {max occurs} — is charged by those constructors, on the two
-// values this helper has already parsed (#932).
-func nonNegativeInt(lexical string, loc xsderr.Loc, attr string) (int, error) {
-	n, err := strconv.Atoi(collapseTrim(lexical))
-	if err != nil || n < 0 {
-		return 0, xsderr.New(ruleDatatypeValid, loc,
+// than a numeric {max occurs} — is charged by occursOf on the two values this
+// helper has already read, before saturation (#932).
+func nonNegativeNumeral(lexical string, loc xsderr.Loc, attr string) (occursNumeral, error) {
+	s := collapseTrim(lexical)
+	if _, ok := nonNegativeIntegerLexical(s); !ok {
+		return "", xsderr.New(ruleDatatypeValid, loc,
 			"%s value %q is not a nonNegativeInteger", attr, lexical)
 	}
-	return n, nil
+	digits := strings.TrimLeft(strings.TrimLeft(s, "+-"), "0")
+	if digits == "" {
+		return "0", nil
+	}
+	return occursNumeral(digits), nil
+}
+
+// nonNegativeInt reads an xs:nonNegativeInteger-valued occurrence attribute as
+// nonNegativeNumeral does, charging the same rule, and returns the value
+// saturated at math.MaxInt (occursNumeral.int). Its callers compare the value
+// with 1 alone, which saturation cannot mislead.
+func nonNegativeInt(lexical string, loc xsderr.Loc, attr string) (int, error) {
+	n, err := nonNegativeNumeral(lexical, loc, attr)
+	if err != nil {
+		return 0, err
+	}
+	return n.int(), nil
 }
 
 // allOccursGrammar enforces the occurrence grammar the schema for schema
@@ -3863,8 +3917,8 @@ func nonNegativeInt(lexical string, loc xsderr.Loc, attr string) (int, error) {
 // generic "attribute value is not valid against its declared type" rule. It is
 // NOT cos-all-limited, which constrains where the resulting particle may appear
 // rather than what the element's attributes may say, and not p-props-correct,
-// which constrains an already-built particle's properties and is charged by
-// xsd.NewOccurs for max < min alone.
+// which constrains a particle's properties and is charged by occursOf for
+// min > max alone.
 //
 // Only the content-model <all> is checked: on the <all> body of a top-level named
 // <group>, Appendix A's xs:namedGroup makes both attributes use="prohibited", a

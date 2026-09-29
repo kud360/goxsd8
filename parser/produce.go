@@ -66,7 +66,7 @@ const (
 	// attribute whose local part is empty (bindQName), which no src-* clause
 	// reaches because they all presuppose a well-formed QName, a minOccurs/maxOccurs
 	// lexical outside the xs:nonNegativeInteger/xs:allNNI types Appendix A's occurs
-	// attribute group declares (nonNegativeInt), which p-props-correct cannot reach
+	// attribute group declares (nonNegativeNumeral), which p-props-correct cannot reach
 	// because no particle exists yet (#932), a length or digits facet's value lexical
 	// outside the xs:nonNegativeInteger/xs:positiveInteger its facet element declares
 	// (facetCountValue), which facet compilation reaches only when an instance does
@@ -84,6 +84,15 @@ const (
 	// for every pair that does reach it as two named components; the two are the
 	// same rule seen at either collection point.
 	ruleSchPropsCorrect xsderr.Rule = "sch-props-correct"
+	// ruleParticleCorrect is Particle Correct (§3.9.6.1). The producer charges
+	// only clause 2.1 ({min occurs} greater than a numeric {max occurs}), in
+	// occursOf, for every parsed minOccurs/maxOccurs pair: it orders the
+	// unsaturated numerals and names them, where xsd.NewOccurs, handed both
+	// saturated at math.MaxInt, could neither order a pair past it nor name the
+	// document's values. NewOccurs charges the same clause for a synthesized
+	// occurrence range, read from no attribute; the two are the same rule seen at
+	// either collection point.
+	ruleParticleCorrect xsderr.Rule = "p-props-correct"
 )
 
 // Produce maps the TOP-LEVEL <simpleType>, <element>, <attribute>,
