@@ -906,10 +906,10 @@ func rejectInvalidDerivationSet(el *Element) error {
 // D3/T4). The attributes are checked in the grammar's own declaration order, so a
 // document writing several is always reported at the same one (STYLE D2).
 //
-// GAP(parser): the fourth attribute xs:localComplexType prohibits, name (:4823),
-// is not charged here: a nested <complexType name="..."> is accepted with its
-// name ignored. Charging it moves suite cases of its own (attQ006, ctA042), so it
-// is its own ratchet attribution and its own issue.
+// GAP(parser): #1908 — the fourth attribute xs:localComplexType prohibits, name
+// (:4823), is not charged here: a nested <complexType name="..."> is accepted
+// with its name ignored. Charging it flips a suite case of its own (ctA042), so
+// it is its own ratchet attribution and its own issue.
 func rejectLocalComplexTypeAttrs(el *Element) error {
 	if !isXSD(el, "complexType") {
 		return nil
