@@ -210,7 +210,7 @@ func (w *walk) idAttributes(c *icCheck) {
 // GAP(validate): a use whose {attribute declaration} does not resolve, or whose
 // {type definition} is not a resolvable simple type, declines. The first is
 // unreachable on a *xsd.Schema that exists and records nothing; the second is
-// the absent-or-COMPLEX {type definition} [walk.matchedAttribute]'s doc records,
+// the absent-or-COMPLEX {type definition} [walk.declaredAttribute]'s doc records,
 // and is recorded as an [Unevaluated] ([walk.declineID]). The decline withholds
 // cvc-id clause 1 alone ([idTable.charge]). RULED permanent by #774 (STYLE P3b),
 // on cvcattribute.go's terms.
@@ -657,7 +657,11 @@ func (w *walk) attributeType(e Element, g governance, a Attribute) (*xsd.SimpleT
 			return nil, false
 		}
 	}
-	return w.topLevelAttributeType(a)
+	d, found := w.topLevelAttribute(a)
+	if !found {
+		return nil, false
+	}
+	return w.schema.ResolvedSimpleType(d.TypeDefinition())
 }
 
 // skippedAttribute reports whether a is ·skipped· (§3.10.4.1, key-skipped): it
@@ -692,21 +696,16 @@ func (w *walk) skippedAttribute(g governance, a Attribute) bool {
 	return w.schema.AllowsAttributeWildcardName(wild, a.Name())
 }
 
-// topLevelAttributeType is the wildcard arm of [walk.attributeType] on its own:
-// the {type definition} of the top-level Attribute Declaration a's ·expanded
-// name· ·resolves· to (§3.10.4.1), false where the name resolves to nothing or
-// to a declaration whose type this package cannot read as a simple type.
+// topLevelAttribute is the wildcard arm of [walk.attributeType] on its own: the
+// top-level Attribute Declaration a's ·expanded name· ·resolves· to (§3.10.4.1,
+// key-governing-ad clause 3), false where the name resolves to nothing.
 //
-// It is factored out because [walk.wildcardAttributeAssertions] asks the same
-// question at the site that DECLINES such an attribute (assess.go's
-// unmatchedAttribute), and the two must read one encoding of that resolution
-// (STYLE T4): a second spelling of it there would let the type the sites are
-// recorded against drift from the type cvcid.go and cvcidentityconstraint.go
+// It is factored out because [walk.wildcardAttribute] (cvcattribute.go) asks the same
+// question where cvc-attribute clauses 3 and 4 are CHARGED against that
+// declaration, and the two must read one encoding of that resolution (STYLE
+// T4): a second spelling of it there would let the declaration the charge is
+// decided against drift from the one cvcid.go and cvcidentityconstraint.go
 // decide the lexical against.
-func (w *walk) topLevelAttributeType(a Attribute) (*xsd.SimpleType, bool) {
-	d, found := w.schema.Attribute(a.Name())
-	if !found {
-		return nil, false
-	}
-	return w.schema.ResolvedSimpleType(d.TypeDefinition())
+func (w *walk) topLevelAttribute(a Attribute) (xsd.AttributeDeclaration, bool) {
+	return w.schema.Attribute(a.Name())
 }

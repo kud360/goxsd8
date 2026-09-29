@@ -306,10 +306,11 @@ func TestBothRulesRecordAtOneElement(t *testing.T) {
 }
 
 // An attribute matching no {attribute use} is ·attributed to· the {attribute
-// wildcard} instead, so [walk.matchedAttribute] never runs for it — but under a
-// strict or a lax wildcard cvcid.go and cvcidentityconstraint.go decide its
-// lexical against the type of the top-level declaration its name ·resolves· to,
-// which is a site with no other recording path.
+// wildcard} instead, and under a strict or a lax wildcard it is assessed
+// against the top-level declaration its name ·resolves· to
+// ([walk.wildcardAttribute]), whose cvc-attribute clause 3 records the type's
+// sites exactly ONCE — wantRecords counts them, so a second recording path
+// beside [walk.declaredAttribute] fails it (#1891).
 //
 // Under ***skip*** nothing is recorded: the item is ·skipped·, no facet of any
 // type is reached over its lexical (#1043), and there is no unevaluated

@@ -32,14 +32,14 @@ import (
 // claim about how many evaluations were skipped.
 //
 // The recording sites are the four places the assessment decides an instance
-// lexical against a simple type — cvc-attribute clause 3 ([walk.matchedAttribute]),
-// cvc-complex-type clause 4 over a ·defaulted attribute·'s {lexical form}
-// ([walk.defaultedAttribute]), and cvc-type clause 3.1.3 / cvc-complex-type clause
-// 1.2 over an element's ·initial value· ([contentCheck.stringValid]) — plus
-// [walk.wildcardAttributeAssertions] for the one path that reaches a simple type's
-// facets without passing any of them. cvcid.go and cvcidentityconstraint.go re-run
-// the datatype pipeline over lexicals those sites already recorded, and record
-// nothing of their own.
+// lexical against a simple type — cvc-attribute clause 3 ([walk.declaredAttribute],
+// for an attribute matched by an {attribute use} and for one ·attributed to· a
+// strict or lax {attribute wildcard} alike), cvc-complex-type clause 4 over a
+// ·defaulted attribute·'s {lexical form} ([walk.defaultedAttribute]), and cvc-type
+// clause 3.1.3 / cvc-complex-type clause 1.2 over an element's ·initial value·
+// ([contentCheck.stringValid]). cvcid.go and cvcidentityconstraint.go re-run the
+// datatype pipeline over lexicals those sites already recorded, and record nothing
+// of their own.
 
 // ruleCvcAssertion is Assertion Satisfied (Structures §3.13.4.1,
 // cvc-assertion), whose single caller is cvc-complex-type clause 6. The clause
@@ -194,41 +194,4 @@ func (w *walk) ownAssertionSites(st *xsd.SimpleType, loc xsderr.Loc) []Unevaluat
 		}
 	}
 	return sites
-}
-
-// wildcardAttributeAssertions records the sites of an attribute information
-// item that matches no {attribute use} and is ·attributed to· the {attribute
-// wildcard} wild instead (cvc-complex-type clause 2.2, assess.go's
-// unmatchedAttribute). Under a ***strict*** or ***lax*** wildcard — and under
-// those two only — the spec's ·attribute assessment· of such an item runs
-// cvc-attribute clause 3 against the top-level declaration its ·expanded name·
-// ·resolves· to, and [walk.attributeType] names exactly that type for cvcid.go
-// and cvcidentityconstraint.go, which decide the lexical against it — so the
-// site is reached here even though [walk.matchedAttribute], the ordinary
-// clause-3 recording site, never runs for it.
-//
-// Under ***skip*** none of that holds and nothing is recorded: §3.10.4.1's Note
-// performs QName resolution only for an item ·attributed to· a strict or lax
-// wildcard, so a ·skipped· item has NO ·governing· declaration, cvc-assess-elt
-// (§3.3.4.6) clause 2.2 leaves its schema-validity unassessed, and no facet of
-// any type is reached over its lexical. [walk.attributeType] declines such an
-// attribute for exactly that reason (#1043), so under skip cvcid.go and
-// cvcidentityconstraint.go decide its lexical against nothing and there is no
-// unevaluated facet to report. The gate is sound because the ·attribution· is
-// now decided rather than inferred: the caller reaches this only for an item
-// cvc-wildcard admits, and a complex type carries at most one {attribute
-// wildcard} (§3.4.1), so wild is the one that admitted it.
-//
-// An attribute the schema resolves no top-level declaration for records
-// nothing: it has no ·governing type definition·, so §3.17.5.2 clause 3
-// excludes it and no facet of any type is reached over its lexical.
-func (w *walk) wildcardAttributeAssertions(a Attribute, wild xsd.Wildcard) {
-	if wild.ProcessContents() == xsd.ProcessSkip {
-		return
-	}
-	st, typed := w.topLevelAttributeType(a)
-	if !typed {
-		return
-	}
-	w.simpleAssertions(st, a.Loc())
 }
