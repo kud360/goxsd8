@@ -22,7 +22,8 @@ in `conformance/runner.go` is normative).
   (`GOXSD_RATCHET=1 go test ./conformance -run TestConformance -count=1`),
   never by hand.
 - Scores only move up. The ratchet refuses to record any regression or
-  vanished case; a change that would need one must be fixed or reverted.
+  vanished case, bar a named superseded pass (below); a change that would
+  need one must be fixed or reverted.
 - Never edit a file downward to make CI green.
 - Expectation movement commits together with the change that earned it,
   and every flipped case must be explainable by that change's diff.
@@ -41,6 +42,10 @@ in `conformance/runner.go` is normative).
      (`GOXSD_RATCHET_REMOVALS=schema=34,instance=65`, ratchet runs only).
      Any other number refuses the entire merge, so "sanctioned" is a
      figure the machinery checks, never a claim made in prose.
+- **Superseded passes are the one way a `pass` becomes `fail`** (issue
+  #1827, repo-owner ruling), and only for a case the arbiter's ratchet run
+  names: `.claude/agents/arbiter.md` "Ratchet integrity" owns when, and
+  `conformance/doc.go` "Superseded passes" owns how.
 - Nothing else is relaxed: scores still only move up, a genuine
   `Regressed` or `Vanished` case still aborts the merge whatever the
   removal assertion says, and this file is still machine-written only.

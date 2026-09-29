@@ -107,7 +107,7 @@ and are machine-written only — never hand-edited, never lowered. Every
 flipped case must be explainable by the diff under judgment; an
 unexplained upward flip blocks the commit and becomes an issue. If a
 change cannot pass without a downgrade, the change is wrong, not the
-expectation.
+expectation — unless the downgrade is a superseded pass (below).
 
 On accept, run it:
 
@@ -115,7 +115,8 @@ On accept, run it:
 GOXSD_RATCHET=1 go test ./conformance -run TestConformance -count=1
 ```
 
-A regression flips your accept to reject on the spot.
+A regression you did not name as a superseded pass flips your accept to
+reject on the spot.
 
 **Running and banking are ONE step.** Immediately after the run — before
 anything else, no branch switch, no ending the session — check
@@ -155,3 +156,23 @@ that token. "The runner withheld them" is not a justification: the
 runner's classification makes them eligible, your reading makes them
 right. Genuine `Regressed` and `Vanished` cases still abort the merge
 whatever the removal assertion says.
+
+**Superseded passes** (#1827, repo-owner ruling) are the one class that
+banks `pass` as `fail`: a pass that held only because two defects cancelled
+out, where fixing one correctly per spec exposes the other. Name one only
+when all three hold: the fix under judgment obeys a spec rule it did not
+before, the exposed defect has an open tracker, and that tracker's
+`## Acceptance` names the case as one to restore to `pass`. Name it by lane
+and case ID on your own ratchet run, one entry per case:
+
+```sh
+GOXSD_RATCHET_SUPERSEDED=instance:VC/vc002/instance/vc002.n1.xml \
+  GOXSD_RATCHET=1 go test ./conformance -run TestConformance -count=1
+```
+
+A verdict that banks one **states, per case, the two defects, the spec rule
+the change now obeys, and the tracker's issue number**. "The fix exposed a
+gap" is not a justification unless it names that tracker. Each use is
+per-case and on the record, never standing: you never name a case you have
+not read as `Regressed` off a run, and `conformance/doc.go` "Superseded
+passes" owns what the run refuses.

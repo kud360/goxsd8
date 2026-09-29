@@ -383,10 +383,10 @@ func supersededAssertions(raw string, set, ratcheting bool) (map[string][]string
 // case IDs. No banked case ID contains `,`, `:` or whitespace, so the first
 // `:` splits an entry unambiguously.
 //
-// Every malformed spelling is an error rather than a skipped entry — an empty
-// entry (the empty value included), a missing `:`, a name no lane carries, an
-// empty or whitespace-bearing ID, and a lane:ID pair named twice — because a
-// name nothing checks is an assertion no run made. The same ID in two lanes is
+// Every malformed spelling is an error rather than a skipped entry — an entry
+// with no `:` (an empty entry and the empty value included), a name no lane
+// carries, an empty or whitespace-bearing ID, and a lane:ID pair named twice —
+// because a name nothing checks is an assertion no run made. The same ID in two lanes is
 // two names: lane populations overlap, and each lane's regression is its own.
 // The map is an internal lookup keyed by lane, never iterated into output
 // (STYLE D2).
@@ -394,9 +394,6 @@ func parseSupersededAssertions(raw string) (map[string][]string, error) {
 	out := map[string][]string{}
 	for _, entry := range strings.Split(raw, ",") {
 		entry = strings.TrimSpace(entry)
-		if entry == "" {
-			return nil, fmt.Errorf("value %q: empty entry, want `<lane>:<case-id>`", raw)
-		}
 		name, id, ok := strings.Cut(entry, ":")
 		if !ok {
 			return nil, fmt.Errorf("entry %q: want `<lane>:<case-id>`", entry)

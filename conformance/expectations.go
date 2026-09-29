@@ -260,10 +260,10 @@ func supersede(d Delta, named []string) (Delta, error) {
 	return d, nil
 }
 
-// Ratchet computes the upward-only merge of expectations with an observed run.
-// Improved cases flip to pass and New cases are recorded at their observed
-// status; unchanged cases keep their expectation. The input maps are never
-// mutated.
+// Ratchet computes the merge of expectations with an observed run, upward-only
+// bar the superseded cases it is named. Improved cases flip to pass and New
+// cases are recorded at their observed status; unchanged cases keep their
+// expectation. The input maps are never mutated.
 //
 // superseded names the cases this lane's run asserts are superseded passes
 // (issue #1827); nil names none. Each is banked `fail` — the one downward
@@ -275,7 +275,7 @@ func supersede(d Delta, named []string) (Delta, error) {
 //   - any Regressed or Vanished case, unconditionally and whatever removals
 //     asserts — a regression superseded does not name stays Regressed;
 //   - a withheld ID the run also produced (Compare's runner-bug error);
-//   - a name in superseded that did not regress in this run, or is named
+//   - a name in superseded that did not regress in this lane, or is named
 //     twice (supersede's error);
 //   - a Removed count other than the one removals asserts, in either direction,
 //     which for the zero RemovalAssertion means any removal at all.
