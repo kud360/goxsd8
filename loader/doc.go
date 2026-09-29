@@ -32,11 +32,11 @@
 //	    First resolver that doesn't return ErrNotFound wins; attempts
 //	    are aggregated with errors.Join when all fail.
 //
-// Multiple root schemas load into one set (the CLI accepts several
-// schema arguments); xsi:schemaLocation / xsi:noNamespaceSchemaLocation
-// hints found in instances route through the SAME Resolver, resolved
-// relative to the instance document's location — hint loading and root
-// loading must never diverge.
+// Multiple root schemas load into one set through parser.ParseSet, every
+// root through the one Resolver its options name; xsi:schemaLocation /
+// xsi:noNamespaceSchemaLocation hints found in instances route through
+// the SAME Resolver, resolved relative to the instance document's
+// location — hint loading and root loading must never diverge.
 //
 // # Design notes
 //

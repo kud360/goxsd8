@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -30,6 +31,26 @@ const (
 	shortValidInstance   = "testdata/unresolved-include-valid.xml"
 	shortInvalidInstance = "testdata/unresolved-include-invalid.xml"
 )
+
+// citedLocation matches a "<file>:<line>:<col>:" location anywhere in a line,
+// capturing the file.
+var citedLocation = regexp.MustCompile(`([^\s"]+):\d+:\d+:`)
+
+// mustCiteOpenableLocations fails unless every "<file>:<line>:<col>:" location
+// text cites names a file that exists — the positive form of "no line cites a
+// document the reader cannot open" (STYLE E3), which a location inside a
+// synthesized in-memory document fails (#1368). It returns how many locations
+// it checked, so a caller that expects one can say so.
+func mustCiteOpenableLocations(t *testing.T, stream, text string) int {
+	t.Helper()
+	matches := citedLocation.FindAllStringSubmatch(text, -1)
+	for _, m := range matches {
+		if _, err := os.Stat(m[1]); err != nil {
+			t.Errorf("%s cites %s, which names no file the reader can open (%v):\n%s", stream, m[0], err, text)
+		}
+	}
+	return len(matches)
+}
 
 // TestValidateCleanInstance pins the quiet outcome: an instance that charges
 // nothing writes nothing on either stream and exits 0, so a script can run
@@ -287,8 +308,8 @@ func TestValidateSchemasShareATargetNamespace(t *testing.T) {
 // unassessed or empty set could not produce.
 //
 // The line belongs to the -schema set alone. A hinted document's own
-// unfollowed directives are #1251's, and no line may cite schemaSetLocation,
-// which names no document the reader can open (STYLE E3).
+// unfollowed directives are #1251's, and every location a line cites must name
+// a document the reader can open (STYLE E3).
 func TestValidateNamesAnUnresolvedSchemaSideDirective(t *testing.T) {
 	abs, err := filepath.Abs(shortSchema)
 	if err != nil {
@@ -307,9 +328,7 @@ func TestValidateNamesAnUnresolvedSchemaSideDirective(t *testing.T) {
 	if !strings.Contains(stderr.String(), at) {
 		t.Errorf("stderr = %q, want the unfollowed directive's location %q", stderr.String(), at)
 	}
-	if strings.Contains(stderr.String(), schemaSetLocation) {
-		t.Errorf("stderr = %q, want no line citing the synthesized wrapper root", stderr.String())
-	}
+	mustCiteOpenableLocations(t, "stderr", stderr.String())
 	if strings.Contains(stderr.String(), "[") {
 		t.Errorf("stderr = %q, want no rule brackets — the skip is not a violation", stderr.String())
 	}
@@ -439,10 +458,9 @@ func TestValidateHints(t *testing.T) {
 }
 
 // TestValidateNoNamespaceHint pins the other half of §2.7.3: the
-// no-namespace hint names one location and no namespace to pair it with, so
-// the wrapper root <include>s that document rather than <import>ing it —
-// src-import clause 1.2 forbids a namespace-less <import> from a wrapper with
-// no target namespace, so an <import> here would fail the whole set.
+// no-namespace hint names one location and no namespace to pair it with, so it
+// is followed as parser.HintAt's absent namespace — src-import clause 3.2,
+// which a no-namespace document satisfies.
 func TestValidateNoNamespaceHint(t *testing.T) {
 	dir := t.TempDir()
 	write := func(name, body string) string {
@@ -497,8 +515,8 @@ func TestValidateNoNamespaceHint(t *testing.T) {
 // document (#1251). Only the first two are faults: a schemaLocation that
 // resolves to nothing is legal to skip, so that case's line carries no rule ID.
 //
-// No line may cite schemaSetLocation, which is this process's own synthesis and
-// names no document the reader can open (STYLE E3).
+// Every location a line cites must name a document the reader can open (STYLE
+// E3): a charge against a hint is charged at the hinted document itself.
 func TestValidateUnusableHintIsTheInstancesFault(t *testing.T) {
 	dir := t.TempDir()
 	write := func(name, body string) string {
@@ -539,12 +557,8 @@ func TestValidateUnusableHintIsTheInstancesFault(t *testing.T) {
 			if !strings.Contains(stdout.String(), "[cvc-assess-elt]") {
 				t.Errorf("stdout = %q, want the -schema set's own charge for an undeclared root", stdout.String())
 			}
-			if strings.Contains(stderr.String(), schemaSetLocation) {
-				t.Errorf("stderr = %q, want no line citing the synthesized wrapper root", stderr.String())
-			}
-			if strings.Contains(stdout.String(), schemaSetLocation) {
-				t.Errorf("stdout = %q, want no line citing the synthesized wrapper root", stdout.String())
-			}
+			mustCiteOpenableLocations(t, "stderr", stderr.String())
+			mustCiteOpenableLocations(t, "stdout", stdout.String())
 			if !strings.Contains(stderr.String(), c.path) {
 				t.Errorf("stderr = %q, want the instance that carried the hint named", stderr.String())
 			}
@@ -632,9 +646,66 @@ func TestValidateNamesAMissingHintedDocument(t *testing.T) {
 	if !strings.Contains(stdout.String(), "[cvc-assess-elt]") {
 		t.Errorf("rejected stdout = %q, want the -schema set's own charge for an undeclared root", stdout.String())
 	}
-	if strings.Contains(stderr.String(), schemaSetLocation) {
-		t.Errorf("stderr = %q, want no line citing the synthesized wrapper root", stderr.String())
+	if n := mustCiteOpenableLocations(t, "rejected stderr", stderr.String()); n == 0 {
+		t.Errorf("rejected stderr =\n%s\nwant the mis-paired hint's charge located in the document it names", stderr.String())
 	}
+}
+
+// TestValidateSchemaDirectiveIsNotReportedAsAHint pins that the two shortfall
+// reporters stay disjoint on one invocation (#1346): a -schema document's OWN
+// unresolved directive is named exactly once, by runValidate's reportUnfollowed
+// at its own file:line:column, and not again by the hint reporter — which would
+// both double-report it and name a hint that RESOLVED as having resolved to
+// nothing. The include sits on line 3 and the instance carries one resolving
+// hint, the pair #1346 found reported twice.
+func TestValidateSchemaDirectiveIsNotReportedAsAHint(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name, body string) string {
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	base := write("base.xsd", `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:base">`+"\n"+
+		`  <xs:element name="b" type="xs:string"/>`+"\n"+
+		`  <xs:include schemaLocation="nosuch-nested.xsd"/>`+"\n"+
+		`</xs:schema>`)
+	write("good.xsd", `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="http://example.com/hinted"><xs:element name="note" type="xs:string"/></xs:schema>`)
+	instance := write("inst.xml", `<h:note xmlns:h="http://example.com/hinted" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://example.com/hinted good.xsd">ok</h:note>`)
+	want := "goxsd8: validate: " + base + ":3:3: this schemaLocation resolved to no document, which is legal and skipped; the compiled schema is short of whatever that document declares\n"
+
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"validate", "-schema", base, instance}, &stdout, &stderr); code != exitOK {
+		t.Fatalf("code = %d, want %d — the resolving hint decides (stdout %q, stderr %q)", code, exitOK, stdout.String(), stderr.String())
+	}
+	if stderr.String() != want {
+		t.Errorf("stderr =\n%s\nwant exactly\n%s", stderr.String(), want)
+	}
+}
+
+// TestValidateNonSchemaRootCarriesNoRule is TestParseNonSchemaRootCarriesNoRule
+// on validate's side (#1368): a -schema argument whose document element is not
+// <xs:schema> is rejected in the very line parse prints for it — no rule ID and
+// no location naming a document the reader cannot open — since both reach
+// parser's own root check. The exit code is validate's for a set that does not
+// compile, which parse's single-schema contract does not share.
+func TestValidateNonSchemaRootCarriesNoRule(t *testing.T) {
+	var parseOut, parseErr bytes.Buffer
+	if code := run([]string{"parse", "testdata/notschema.xml"}, &parseOut, &parseErr); code != exitInvalid {
+		t.Fatalf("parse: code = %d, want %d (stderr %q)", code, exitInvalid, parseErr.String())
+	}
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"validate", "-schema", "testdata/notschema.xml", validInstance}, &stdout, &stderr); code != exitSchema {
+		t.Fatalf("validate: code = %d, want %d (stderr %q)", code, exitSchema, stderr.String())
+	}
+	if stdout.Len() != 0 {
+		t.Errorf("stdout = %q, want empty — no instance was assessed", stdout.String())
+	}
+	if stderr.String() != parseErr.String() {
+		t.Errorf("validate stderr = %q, want parse's line for the same document, %q", stderr.String(), parseErr.String())
+	}
+	mustCiteOpenableLocations(t, "stderr", stderr.String())
 }
 
 // TestValidateHintRepeatsASchemaArgument is the case a naive union would break
@@ -898,36 +969,6 @@ func TestValidateMalformedInstanceIsAVerdict(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), "[xml-wf]") {
 		t.Errorf("stdout = %q, want the well-formedness fault reported", stdout.String())
-	}
-}
-
-// TestSchemaSetSource pins the wrapper root's two shapes and its ordering: a
-// document with a target namespace of its own is <import>ed and one with none
-// is <include>d (src-import clause 1.2 forbids the other spelling from a
-// wrapper with no target namespace), in argument order, with every value
-// escaped as attribute content.
-func TestSchemaSetSource(t *testing.T) {
-	got := schemaSetSource([]schemaDoc{
-		{location: "/tmp/a.xsd", namespace: "http://example.com/a"},
-		{location: "/tmp/b&c.xsd"},
-		{location: `/tmp/"d".xsd`, namespace: "urn:e<f"},
-	})
-	want := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">` + "\n" +
-		`<xs:import namespace="http://example.com/a" schemaLocation="/tmp/a.xsd"/>` + "\n" +
-		`<xs:include schemaLocation="/tmp/b&amp;c.xsd"/>` + "\n" +
-		`<xs:import namespace="urn:e&lt;f" schemaLocation="/tmp/&#34;d&#34;.xsd"/>` + "\n" +
-		`</xs:schema>`
-	if got != want {
-		t.Errorf("schemaSetSource =\n%s\nwant\n%s", got, want)
-	}
-	// The line invariant reportUnfollowedHints reads a wrapper position back
-	// through: docs[i]'s directive, and nothing else, on line i+wrapperFirstLine.
-	lines := strings.Split(got, "\n")
-	for i, location := range []string{"/tmp/a.xsd", "/tmp/b&amp;c.xsd", "/tmp/&#34;d&#34;.xsd"} {
-		line := i + wrapperFirstLine
-		if got := lines[line-1]; !strings.Contains(got, `schemaLocation="`+location+`"`) {
-			t.Errorf("line %d = %q, want docs[%d] (%s) alone on it", line, got, i, location)
-		}
 	}
 }
 

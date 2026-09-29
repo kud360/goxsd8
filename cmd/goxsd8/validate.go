@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"encoding/xml"
 	"errors"
 	"flag"
 	"fmt"
@@ -22,7 +21,6 @@ import (
 	"github.com/kud360/goxsd8/validate/xmlsrc"
 	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
-	"github.com/kud360/goxsd8/xsderr"
 )
 
 // stdinArg is the instance argument naming standard input. It is an INSTANCE
@@ -138,7 +136,7 @@ func runValidate(args []string, stdout, stderr io.Writer) int {
 		log = slog.New(slog.NewTextHandler(stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	}
 
-	docs := make([]schemaDoc, 0, len(schemas))
+	roots := make([]parser.Root, 0, len(schemas))
 	for _, location := range schemas {
 		if location == stdinArg {
 			// Refused here, before os.Open is reached, because otherwise the
@@ -161,26 +159,21 @@ func runValidate(args []string, stdout, stderr io.Writer) int {
 			// parse's contract for the same argument shape.
 			return usageError(stderr, fmt.Sprintf("goxsd8: validate: %v", err))
 		}
-		doc, err := readSchemaDoc(path)
-		if err != nil {
-			_, _ = fmt.Fprintln(stderr, violationLine(err))
-			return exitSchema
-		}
-		docs = append(docs, doc)
+		roots = append(roots, parser.RootAt(path))
 	}
 
 	// The backend the set is COMPILED with is the backend it is ASSESSED with:
 	// validate.New requires them to be one value, or instance lexicals are read
 	// in a value space no facet on the schema was ever checked against.
 	backend := strict.New()
-	base, report, err := compileSet(docs, backend, log)
+	base, report, err := compileSet(roots, backend, log)
 	if err != nil {
 		// The set's own shortfall stands above the verdict, on parseOne's terms:
-		// the wrapper assembly discovers the -schema documents in argument order,
-		// so a document whose directive resolved to nothing is named whether or
-		// not a LATER one collides — a rejection here used to silence the whole
-		// set's notes, including those of documents that composed cleanly
-		// (#1312).
+		// the assembly discovers the -schema documents in argument order, so a
+		// document whose directive resolved to nothing is named whether or not a
+		// LATER one collides, or is not a schema document at all — a rejection
+		// here used to silence the whole set's notes, including those of documents
+		// that composed cleanly (#1312).
 		reportUnfollowed(stderr, "validate", assemblyRejected, report)
 		// Reported once, before any instance is read: with no schema set there
 		// is no assessment to run, and one line beats the same line per
@@ -190,15 +183,15 @@ func runValidate(args []string, stdout, stderr io.Writer) int {
 	}
 	// Reported once for the same reason, and before any instance is assessed so
 	// that the shortfall stands above the report it explains. Every entry names
-	// a -schema document's own directive: the wrapper root's schemaLocations are
-	// the paths rootLocation already opened.
+	// a directive inside the set's own documents: the -schema arguments are
+	// roots, which the report never lists among its directives.
 	reportUnfollowed(stderr, "validate", assemblyCompiled, report)
 	v, err := validate.New(base, backend, validate.WithLogger(log))
 	if err != nil {
 		return usageError(stderr, fmt.Sprintf("goxsd8: validate: %v", err))
 	}
 
-	job := validation{docs: docs, base: v, backend: backend, forced: forced, hints: !*noHints, log: log}
+	job := validation{roots: roots, base: v, backend: backend, forced: forced, hints: !*noHints, log: log}
 	code := exitOK
 	for _, instance := range instances {
 		code = worse(code, job.one(instance, stdout, stderr))
@@ -210,13 +203,13 @@ func runValidate(args []string, stdout, stderr io.Writer) int {
 // instance is assessed against, and the policy decisions the flags settled for
 // all of them at once.
 type validation struct {
-	// docs are the -schema documents, in argument order. They are kept beside
+	// roots are the -schema documents, in argument order. They are kept beside
 	// base because an instance whose hints augment the set is compiled from
-	// them again, with the hinted documents appended.
-	docs []schemaDoc
+	// them again, with the instance's hints appended.
+	roots []parser.Root
 	// base assesses against the -schema documents alone.
 	base *validate.Validator
-	// backend is the value space docs were compiled in, and the one every
+	// backend is the value space roots were compiled in, and the one every
 	// hint-augmented recompilation must reuse (validate.New).
 	backend value.Backend
 	// forced is the -format value, empty when the flag was not given and the
@@ -293,29 +286,29 @@ func (vn *validation) validatorFor(instance string, src io.Reader, stderr io.Wri
 	if len(found) == 0 {
 		return vn.base, replay, exitOK
 	}
-	augmented, report, err := compileSet(append(slices.Clone(vn.docs), found...), vn.backend, vn.log)
+	augmented, report, err := compileSet(append(slices.Clone(vn.roots), found...), vn.backend, vn.log)
 	if err != nil {
 		// The hints' own shortfall stands above the diagnosis, on
 		// reportUnfollowed's terms: it is a fact about the assembly rather than a
 		// rider on what that assembly decided (#1312). It says nothing of the
 		// rejection, and the line below says nothing of it.
-		reportUnfollowedHints(stderr, instance, assemblyRejected, found, len(vn.docs), report)
+		reportUnfollowedHints(stderr, instance, assemblyRejected, report)
 		// A set that stops compiling only once THIS instance's hints are folded
 		// in is a fault of the instance, not of the -schema set the invocation
-		// named: exitSchema would send a script to a schema set that compiles,
-		// and the fault is charged inside the wrapper root, a document the
-		// reader cannot open (STYLE E3). §4.3.2 clause 3 obliges a processor to
-		// dereference no hint at all, so the honest degradation is the one a
-		// hint naming a MISSING document already gets — the -schema set alone
-		// decides this instance, which charges cvc-assess-elt where it declares
-		// nothing for the root — with the hints reported as unusable rather
-		// than silently dropped.
-		_, _ = fmt.Fprintf(stderr, "goxsd8: validate: %s: ignoring its schema location hints, which do not compose with the -schema set: %s\n", instance, hintFault(err))
+		// named: exitSchema would send a script to a schema set that compiles.
+		// §4.3.2 clause 3 obliges a processor to dereference no hint at all, so
+		// the honest degradation is the one a hint naming a MISSING document
+		// already gets — the -schema set alone decides this instance, which
+		// charges cvc-assess-elt where it declares nothing for the root — with
+		// the hints reported as unusable rather than silently dropped. A fault
+		// against a hint is charged at the hinted document itself (parser.HintAt),
+		// so the line keeps its location: that is the file the reader must edit.
+		_, _ = fmt.Fprintf(stderr, "goxsd8: validate: %s: ignoring its schema location hints, which do not compose with the -schema set: %s\n", instance, violationLine(err))
 		return vn.base, replay, exitOK
 	}
 	// Before the assessment reads a byte, so that the shortfall stands above the
 	// report it explains, exactly as runValidate places the -schema set's.
-	reportUnfollowedHints(stderr, instance, assemblyCompiled, found, len(vn.docs), report)
+	reportUnfollowedHints(stderr, instance, assemblyCompiled, report)
 	v, err := validate.New(augmented, vn.backend, validate.WithLogger(vn.log))
 	if err != nil {
 		return nil, nil, usageError(stderr, fmt.Sprintf("goxsd8: validate: %v", err))
@@ -323,61 +316,24 @@ func (vn *validation) validatorFor(instance string, src io.Reader, stderr io.Wri
 	return v, replay, exitOK
 }
 
-// hintFault renders a compile fault of a hint-augmented set for the diagnosis
-// that names the instance which carried the hints.
-//
-// A fault the wrapper root itself carries — src-import clause 3.1 against a
-// mis-paired hint, src-include clause 2 against a hinted document the wrapper
-// cannot compose — is rendered without its location: schemaSetLocation is this
-// process's own synthesis and names no document the reader can open, so the
-// rule and the message, which name the hinted document, are the whole of what
-// is left to say. A fault charged at a real document keeps its location, which
-// is the file the reader must edit.
-func hintFault(err error) string {
-	var e *xsderr.Error
-	if errors.As(err, &e) && e.Loc.URI == schemaSetLocation {
-		return fmt.Sprintf("[%s] %s", e.Rule, e.Msg)
-	}
-	return violationLine(err)
-}
-
 // reportUnfollowedHints names on stderr, one line per hint, every schema
 // location hint of instance whose location resolved to no document — §4.3.2
 // clause 3's "failure may cause less than complete ·assessment· outcomes",
-// which src-import and src-include make legal to skip and which nothing else in
-// this run reports (#1251). hinted are that instance's own hinted documents,
-// and first is the wrapper position they start at — the -schema arguments
-// occupy every position before it.
+// which src-import makes legal to skip and which nothing else in this run
+// reports (#1251).
 //
-// A hint is named by the LOCATION IT RESOLVED TO, never by its directive's own
-// position: every wrapper directive is charged at schemaSetLocation, this
-// process's own synthesis, which names no document the reader can open
-// (hintFault's reasoning, STYLE E3). The position is read for one thing only —
-// WHICH hint an entry belongs to, which the report itself cannot say, a
-// [parser.UnfollowedDirective] carrying a reason and a position and no
-// schemaLocation. schemaSetSource writes one directive per line for exactly
-// this: its docs[i] is on line i+wrapperFirstLine, and hinted[j] is that
-// docs[first+j], so the entry names its hint outright. Correlating by ORDINAL
-// instead — the k-th entry to the k-th hint — is wrong, the entries being only
-// the hints that FAILED: one hint that resolves ahead of one that does not
-// shifts every mapping after it.
-func reportUnfollowedHints(stderr io.Writer, instance string, compiled bool, hinted []schemaDoc, first int, report *parser.AssemblyReport) {
-	for _, u := range report.Unfollowed() {
-		if u.Reason != parser.UnfollowedLocationUnresolved || u.At.URI != schemaSetLocation {
-			continue
-		}
-		i := u.At.Line - wrapperFirstLine - first
-		if i < 0 || i >= len(hinted) {
-			// Before the hints are the -schema arguments' own wrapper directives,
-			// which runValidate already named off the set's own assembly and which
-			// this call must not name a second time (#1260). Past them the wrapper
-			// carries no directive at all, so the upper bound is the range check
-			// alone.
-			continue
-		}
+// It reads parser.AssemblyReport.UnfollowedRoots, which holds exactly the
+// HintAt roots that named no document, each by the location it was built with —
+// the absolute path instanceHints resolved. The -schema arguments are RootAt
+// roots and never appear there, and a directive inside any document of the set
+// is an Unfollowed entry instead, which runValidate already named off the
+// -schema set's own assembly (#1260): so no shortfall is named twice, and none
+// under a hint that resolved (#1346).
+func reportUnfollowedHints(stderr io.Writer, instance string, compiled bool, report *parser.AssemblyReport) {
+	for _, r := range report.UnfollowedRoots() {
 		// A failed stderr write cannot change the outcome: the exit code is
 		// settled either way, and stderr is the only channel this line has.
-		_, _ = fmt.Fprintf(stderr, "goxsd8: validate: %s: the schema location hint %s resolved to no document%s\n", instance, hinted[i].location, shortfallClause(compiled))
+		_, _ = fmt.Fprintf(stderr, "goxsd8: validate: %s: the schema location hint %s resolved to no document%s\n", instance, r.Location(), shortfallClause(compiled))
 	}
 }
 
@@ -502,120 +458,26 @@ func formatOf(instance string, forced sourceFormat) (sourceFormat, error) {
 	return "", fmt.Errorf("%s: the extension %q names no source format; pass -format %s", instance, ext, formatVocabulary())
 }
 
-// schemaDoc is one document of the schema set as the wrapper root names it: an
-// absolute filesystem path, and the target namespace under which its
-// components enter the set.
-type schemaDoc struct {
-	// location is the document's absolute path, which the wrapper root carries
-	// as a schemaLocation and the filesystem resolver serves.
-	location string
-	// namespace is the namespace the document's components are minted in,
-	// ·absent· encoded as "". For a -schema argument it is the document's own
-	// targetNamespace; for an xsi:schemaLocation hint it is the namespace the
-	// hint PAIRED with the location, which src-import clause 3.1 then requires
-	// the document to agree with.
-	namespace string
-}
-
-// readSchemaDoc reads the schema document at path — already proved readable by
-// rootLocation — for the one fact the wrapper root needs about it: its own
-// targetNamespace, which decides whether the wrapper <import>s it or
-// <include>s it. A failure here is therefore about the document's content
-// rather than about the argument.
-func readSchemaDoc(path string) (schemaDoc, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return schemaDoc{}, fmt.Errorf("reading schema document %s: %w", path, err)
-	}
-	defer func() { _ = f.Close() }() // read-only handle: a close error cannot change what was read
-	doc, err := parser.ReadDocument(path, f)
-	if err != nil {
-		return schemaDoc{}, err
-	}
-	// An ·absent· targetNamespace and an empty one are the same state here, as
-	// they are everywhere else in the module.
-	namespace, _ := doc.Root().Attr("targetNamespace")
-	return schemaDoc{location: path, namespace: namespace}, nil
-}
-
-// schemaSetLocation is the location the synthesized wrapper root is served
-// under. It is a bare name with no directory part, so that internal/schemaloc's
-// resolution of the absolute schemaLocations inside it leaves them absolute.
-const schemaSetLocation = "goxsd8-schema-set.xsd"
-
-// compileSet assembles docs into ONE schema set and returns it finalized,
-// together with the assembly's report — every document it read and every
-// ·inter-schema-document reference· it could not follow to one, which is how a
-// caller observes a set that composed short of a document it named.
+// compileSet assembles roots into ONE schema set and returns it finalized,
+// together with the assembly's report — every document it read, every
+// ·inter-schema-document reference· it could not follow to one, and every hint
+// root that named no document, which is how a caller observes a set that
+// composed short of a document it named.
 //
-// There is no multi-root entry point to call — parser.ParseReport takes a
-// single root location, which is §4.2.1's schema(D) — so the set is expressed as a schema
-// document in the spec's own terms: a wrapper <schema> with no targetNamespace
-// of its own that <import>s or <include>s each document, served in memory and
-// composed by the ordinary assembly. Composing the set this way rather than
-// merging several finalized schemas is what keeps every cross-document rule the
-// parser already enforces — src-import clause 3, sch-props-correct clause 2,
-// src-resolve at finalize — enforced over the CLI's set too.
-func compileSet(docs []schemaDoc, backend value.Backend, log *slog.Logger) (*xsd.Schema, *parser.AssemblyReport, error) {
-	// The wrapper's schemaLocations are absolute paths, so the filesystem
-	// resolver is rooted at the filesystem root: parseOne's reasoning, that this
-	// process reads the documents its own user named, with that user's
-	// privileges. docs is never empty — runValidate requires a -schema — so the
-	// first document names the volume the whole set resolves under, which on a
-	// platform with more than one is the volume they must share.
-	resolver := loader.Chain(
-		loader.Map(map[string]string{schemaSetLocation: schemaSetSource(docs)}),
-		loader.Dir(filesystemRoot(docs[0].location)),
-	)
-	return parser.ParseReport(schemaSetLocation,
-		parser.WithResolver(resolver),
+// It is parser.ParseSet over the set, so every cross-document rule the parser
+// enforces — src-import clause 3, sch-props-correct clause 2, src-resolve at
+// finalize — is enforced over the CLI's set too.
+func compileSet(roots []parser.Root, backend value.Backend, log *slog.Logger) (*xsd.Schema, *parser.AssemblyReport, error) {
+	// Every root location is an absolute path, so the filesystem resolver is
+	// rooted at the filesystem root: parseOne's reasoning, that this process
+	// reads the documents its own user named, with that user's privileges. roots
+	// is never empty — runValidate requires a -schema — so the first names the
+	// volume the whole set resolves under, which on a platform with more than
+	// one is the volume they must share.
+	return parser.ParseSet(roots,
+		parser.WithResolver(loader.Dir(filesystemRoot(roots[0].Location()))),
 		parser.WithBackend(backend),
 		parser.WithLogger(log))
-}
-
-// schemaSetSource renders the wrapper root document for docs, in argument
-// order, so that one invocation always composes its set the same way (STYLE
-// D1).
-//
-// A document with a target namespace of its own is <import>ed, which brings its
-// components in unchanged (§4.2.6). One with none is <include>d instead: the
-// wrapper has no targetNamespace either, which is src-include clause 2.2, and
-// src-import clause 1.2 forbids a namespace-less <import> from a wrapper that
-// has no target namespace to declare it in.
-//
-// ONE DIRECTIVE PER LINE, docs[i]'s on line i+wrapperFirstLine. That layout is
-// the whole of the correlation reportUnfollowedHints needs: a
-// [parser.UnfollowedDirective] names the directive by position alone, and every
-// directive here shares schemaSetLocation, so written as one line the only
-// handle a caller would have is a byte column it cannot decode back to a
-// document (#1251).
-func schemaSetSource(docs []schemaDoc) string {
-	var b strings.Builder
-	b.WriteString(`<xs:schema xmlns:xs="` + xsd.XMLSchemaNS + `">` + "\n")
-	for _, d := range docs {
-		if d.namespace == "" {
-			b.WriteString(`<xs:include schemaLocation="` + escapeAttr(d.location) + `"/>` + "\n")
-			continue
-		}
-		b.WriteString(`<xs:import namespace="` + escapeAttr(d.namespace) + `" schemaLocation="` + escapeAttr(d.location) + `"/>` + "\n")
-	}
-	b.WriteString(`</xs:schema>`)
-	return b.String()
-}
-
-// wrapperFirstLine is the line schemaSetSource writes docs[0]'s directive on,
-// line 1 carrying the wrapper's own <xs:schema> start tag.
-const wrapperFirstLine = 2
-
-// escapeAttr renders s as an XML attribute value's content. A filesystem path
-// and a namespace name are both arbitrary strings, and either can carry a
-// character the wrapper's markup would otherwise take as its own.
-func escapeAttr(s string) string {
-	var b strings.Builder
-	// strings.Builder writes never fail, so the only error channel here cannot
-	// carry one.
-	_ = xml.EscapeText(&b, []byte(s))
-	return b.String()
 }
 
 // filesystemRoot is the resolver root under which an absolute path resolves:
@@ -637,7 +499,7 @@ func filesystemRoot(location string) string {
 // clause 5 admits a hint on any element and makes its effect global either way,
 // clause 3 requires no processor to dereference any of them, and doc.go states
 // the scope this one follows.
-func instanceHints(uri, base string, r io.Reader) ([]schemaDoc, io.Reader) {
+func instanceHints(uri, base string, r io.Reader) ([]parser.Root, io.Reader) {
 	var consumed bytes.Buffer
 	reader := xmltree.NewReader(uri, io.TeeReader(r, &consumed))
 	replay := func() io.Reader { return io.MultiReader(&consumed, r) }
@@ -666,10 +528,10 @@ func instanceHints(uri, base string, r io.Reader) ([]schemaDoc, io.Reader) {
 // which document that is.
 //
 // xsi:schemaLocation pairs a namespace with a location; xsi:noNamespaceSchema-
-// Location names a location whose document has no target namespace, which the
-// wrapper root <include>s.
-func hintsOf(start *xmltree.StartElement, base string) []schemaDoc {
-	var hints []schemaDoc
+// Location names a location whose document has no target namespace, which is
+// parser.HintAt's absent namespace "".
+func hintsOf(start *xmltree.StartElement, base string) []parser.Root {
+	var hints []parser.Root
 	for _, a := range start.Attributes() {
 		if a.Name().Space() != xsd.XMLSchemaInstanceNS {
 			continue
@@ -678,16 +540,13 @@ func hintsOf(start *xmltree.StartElement, base string) []schemaDoc {
 		switch a.Name().Local() {
 		case "noNamespaceSchemaLocation":
 			for _, location := range fields {
-				hints = append(hints, schemaDoc{location: schemaloc.Resolve(base, location)})
+				hints = append(hints, parser.HintAt("", schemaloc.Resolve(base, location)))
 			}
 		case "schemaLocation":
 			// An odd trailing member pairs with nothing and names no document,
 			// so it is dropped rather than resolved against an empty namespace.
 			for i := 0; i+1 < len(fields); i += 2 {
-				hints = append(hints, schemaDoc{
-					namespace: fields[i],
-					location:  schemaloc.Resolve(base, fields[i+1]),
-				})
+				hints = append(hints, parser.HintAt(fields[i], schemaloc.Resolve(base, fields[i+1])))
 			}
 		}
 	}
