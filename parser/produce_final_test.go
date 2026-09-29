@@ -71,10 +71,6 @@ func TestProduceSimpleTypeFinalMapped(t *testing.T) {
 			want: []xsd.DerivationMethod{xsd.DerivationUnion}},
 		{name: "canonical order not lexical", final: ` final="union list"`,
 			want: []xsd.DerivationMethod{xsd.DerivationList, xsd.DerivationUnion}},
-		// substitution is a blockDefault keyword, never a finalDefault one, so it
-		// names no member of this set and is dropped like any other stray item.
-		{name: "unrecognized items ignored", final: ` final="substitution list"`,
-			want: []xsd.DerivationMethod{xsd.DerivationList}},
 		{name: "finalDefault fallback", finalDefault: ` finalDefault="union"`,
 			want: []xsd.DerivationMethod{xsd.DerivationUnion}},
 		{name: "finalDefault #all is all four keywords", finalDefault: ` finalDefault="#all"`, want: all},
@@ -115,10 +111,6 @@ func TestProduceComplexTypeFinalMapped(t *testing.T) {
 		{name: "one keyword", final: ` final="extension"`,
 			want: []xsd.DerivationMethod{xsd.DerivationExtension}},
 		{name: "canonical order not lexical", final: ` final="restriction extension"`, want: both},
-		// list and union are finalDefault keywords a complex type's {final} does not
-		// consume; they are ignored, never rejected.
-		{name: "list and union ignored", final: ` final="list union restriction"`,
-			want: []xsd.DerivationMethod{xsd.DerivationRestriction}},
 		{name: "finalDefault fallback", finalDefault: ` finalDefault="extension"`,
 			want: []xsd.DerivationMethod{xsd.DerivationExtension}},
 		// finalDefault's own vocabulary is the WIDER four-keyword one, so its "#all"
@@ -161,8 +153,6 @@ func TestProduceComplexTypeBlockMapped(t *testing.T) {
 		{name: "one keyword", block: ` block="restriction"`,
 			want: []xsd.DerivationMethod{xsd.DerivationRestriction}},
 		{name: "canonical order not lexical", block: ` block="restriction extension"`, want: both},
-		{name: "substitution ignored", block: ` block="substitution extension"`,
-			want: []xsd.DerivationMethod{xsd.DerivationExtension}},
 		{name: "blockDefault fallback", blockDefault: ` blockDefault="restriction"`,
 			want: []xsd.DerivationMethod{xsd.DerivationRestriction}},
 		// The element-side expansion of blockDefault="#all" has three members; this

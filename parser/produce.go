@@ -72,8 +72,9 @@ const (
 	// (facetCountValue), which facet compilation reaches only when an instance does
 	// (#1774), and a processContents lexical outside the skip/lax/strict enumeration
 	// Appendix A's wildcard attribute group declares (processContentsOf), which
-	// w-props-correct cannot reach because no wildcard exists yet (#950), and an id
-	// value outside xs:ID (rejectInvalidID).
+	// w-props-correct cannot reach because no wildcard exists yet (#950), an id
+	// value outside xs:ID (rejectInvalidID), and a block=/final= family value
+	// outside its s4s derivation-set type (rejectInvalidDerivationSet).
 	ruleDatatypeValid xsderr.Rule = "cvc-datatype-valid"
 	// ruleValidationRootValid is Validation Root Valid (ID/IDREF) (§3.3.4.5,
 	// cvc-id). The producer charges only clause 2 — no two elements of the
@@ -617,10 +618,11 @@ func (p *producer) chameleon() bool {
 //
 // Placement is charged before content: a <notation> standing where the grammar
 // admits none is reported for where it stands, not for the second <annotation>
-// it also carries. The two attribute guards run last, for the same reason: where
-// an element stands, and how many of a child it carries, are both answered ahead
-// of what its start tag spells — and an attribute name the grammar declares
-// nowhere ahead of what an id attribute's value spells.
+// it also carries. The four attribute guards run last, for the same reason:
+// where an element stands, and how many of a child it carries, are both answered
+// ahead of what its start tag spells — and an attribute name the grammar declares
+// nowhere, or prohibits on a nested <complexType>, ahead of what an id or a
+// block=/final= family attribute's value spells.
 //
 // <appinfo> and <documentation> are subject to rejectUndeclaredAttrs alone, and
 // the split is the lax-content rule above: their CONTENT is governed by no guard
@@ -647,7 +649,13 @@ func rejectS4SFaults(el *Element, ids map[string]*Element) error {
 	if err := rejectUndeclaredAttrs(el); err != nil {
 		return err
 	}
+	if err := rejectLocalComplexTypeAttrs(el); err != nil {
+		return err
+	}
 	if err := rejectInvalidID(el, ids); err != nil {
+		return err
+	}
+	if err := rejectInvalidDerivationSet(el); err != nil {
 		return err
 	}
 	for _, child := range el.Children() {
@@ -724,6 +732,198 @@ func rejectInvalidID(el *Element, ids map[string]*Element) error {
 			el.Name().Local(), id, first.Name().Local(), first.Loc())
 	}
 	ids[id] = el
+	return nil
+}
+
+// s4sDerivationSet is one of the four simple types the schema for schema
+// documents declares a block=/final= family attribute with. Each is the union
+// of an xs:token restriction whose one enumeration is "#all" and a list whose
+// item type restricts xs:derivationControl to members, so a value is in its
+// ·lexical space· exactly when, after whiteSpace = collapse, it is "#all" alone
+// or a whitespace-separated list of members. That makes "#all" beside another
+// token invalid (it is neither arm), the empty value and a repeated member valid
+// (an empty and a repeating list), and every token case-sensitive.
+//
+// members are transcribed from Appendix A, in the production's own enumeration
+// order, on the footing s4sAttrRosters' doc states (produce_s4sattrs.go): name
+// and line make each diffable against the spec text one lookup away. They
+// coincide member for member with the ·relevant set· of every LOCAL attribute
+// typed by them (elementBlockKeywords and its siblings below) and are still a
+// separate fact: those sets are §3.3.2.1/§3.4.2.1/§3.16.2.1 mapping facts and
+// these are Appendix A grammar facts, and the Default attributes are where the
+// two part — blockDefault is xs:blockSet on every property it feeds.
+type s4sDerivationSet struct {
+	name    string
+	members []xsd.DerivationMethod
+}
+
+var (
+	// s4sDerivationSetType is xs:derivationSet (xmlschema11-1.md:4498), a list
+	// of xs:reducedDerivationControl (:4488).
+	s4sDerivationSetType = s4sDerivationSet{"xs:derivationSet", []xsd.DerivationMethod{xsd.DerivationExtension, xsd.DerivationRestriction}}
+	// s4sBlockSet is xs:blockSet (xmlschema11-1.md:5017), whose list item type
+	// is an inline restriction of xs:derivationControl.
+	s4sBlockSet = s4sDerivationSet{"xs:blockSet", []xsd.DerivationMethod{xsd.DerivationExtension, xsd.DerivationRestriction, xsd.DerivationSubstitution}}
+	// s4sFullDerivationSet is xs:fullDerivationSet (xmlschema11-1.md:4528), a
+	// list of xs:typeDerivationControl (:4516).
+	s4sFullDerivationSet = s4sDerivationSet{"xs:fullDerivationSet", []xsd.DerivationMethod{xsd.DerivationExtension, xsd.DerivationRestriction, xsd.DerivationList, xsd.DerivationUnion}}
+	// s4sSimpleDerivationSet is xs:simpleDerivationSet (xmlschema11-2.md:3833),
+	// whose list item type is an inline restriction of xs:derivationControl.
+	s4sSimpleDerivationSet = s4sDerivationSet{"xs:simpleDerivationSet", []xsd.DerivationMethod{xsd.DerivationList, xsd.DerivationUnion, xsd.DerivationRestriction, xsd.DerivationExtension}}
+)
+
+// admits reports whether lexical is in s's ·lexical space·. Tokens are split on
+// the four characters §4.3.6 is whitespace for (xmlSpace) and on nothing else,
+// so a U+00A0 inside a value leaves one token that is no member.
+func (s s4sDerivationSet) admits(lexical string) bool {
+	items := strings.FieldsFunc(lexical, func(r rune) bool { return strings.ContainsRune(xmlSpace, r) })
+	if len(items) == 1 && items[0] == "#all" {
+		return true
+	}
+	for _, item := range items {
+		if !slices.ContainsFunc(s.members, func(m xsd.DerivationMethod) bool { return m.String() == item }) {
+			return false
+		}
+	}
+	return true
+}
+
+// spelled is s's members as the diagnostic lists them.
+func (s s4sDerivationSet) spelled() string {
+	names := make([]string, len(s.members))
+	for i, m := range s.members {
+		names[i] = m.String()
+	}
+	return strings.Join(names, ", ")
+}
+
+// derivationSetAttr is one block=/final= family attribute name paired with the
+// s4s type its owner's production declares it with.
+type derivationSetAttr struct {
+	name string
+	typ  s4sDerivationSet
+}
+
+// derivationSetAttrs returns the Appendix A production el's position types it
+// with and the block=/final= family attributes that production declares, in
+// declaration order, or nil attributes where it declares none:
+//
+//   - A top-level <element> (a child of <schema> or <override>) is
+//     xs:topLevelElement, which keeps xs:element's final and block
+//     (xmlschema11-1.md:5079-5080); every other <element>, the ref= form
+//     included, is xs:localElement (:5110), which prohibits final (:5125) and
+//     keeps block.
+//   - A top-level <complexType> (a child of <schema>, <redefine> or
+//     <override>) is xs:topLevelComplexType, which keeps xs:complexType's final
+//     and block (:4797-4798); a nested one is xs:localComplexType, which
+//     prohibits both (:4825-4826).
+//   - A top-level <simpleType> is xs:topLevelSimpleType, which keeps
+//     xs:simpleType's final (xmlschema11-2.md:3865); a nested one is
+//     xs:localSimpleType, which prohibits it (:3908).
+//   - <schema> declares finalDefault and blockDefault (xmlschema11-1.md:4569-4571).
+//
+// A prohibited attribute is left out rather than typed by the base production:
+// use="prohibited" removes its declaration, so nothing assesses its value and the
+// only fault is the attribute itself, which the form's own guard charges
+// (rejectLocalElementProhibitedAttrs, rejectRefElementUseProhibitedAttrs,
+// rejectLocalComplexTypeAttrs, rejectLocalSimpleTypeAttrs).
+func derivationSetAttrs(el *Element) (string, []derivationSetAttr) {
+	parent := el.parent
+	schemaChild := parent == nil || isXSD(parent, "schema") || isXSD(parent, "override")
+	topLevel := schemaChild || isXSD(parent, "redefine")
+	switch el.Name().Local() {
+	case "element":
+		if !schemaChild {
+			return "xs:localElement", []derivationSetAttr{{"block", s4sBlockSet}}
+		}
+		return "xs:topLevelElement", []derivationSetAttr{{"final", s4sDerivationSetType}, {"block", s4sBlockSet}}
+	case "complexType":
+		if !topLevel {
+			return "xs:localComplexType", nil
+		}
+		return "xs:topLevelComplexType", []derivationSetAttr{{"final", s4sDerivationSetType}, {"block", s4sDerivationSetType}}
+	case "simpleType":
+		if !topLevel {
+			return "xs:localSimpleType", nil
+		}
+		return "xs:topLevelSimpleType", []derivationSetAttr{{"final", s4sSimpleDerivationSet}}
+	case "schema":
+		return "xs:schema", []derivationSetAttr{{"finalDefault", s4sFullDerivationSet}, {"blockDefault", s4sBlockSet}}
+	}
+	return "", nil
+}
+
+// rejectInvalidDerivationSet rejects a block, final, blockDefault or
+// finalDefault attribute on el whose value is outside the s4s derivation-set
+// type el's production declares it with (derivationSetAttrs): block="foo",
+// final="substitution" on a top-level <element>, final="#All", block="#all
+// extension". §5.1's first bullet (xmlschema11-1.md:615) makes the document's
+// validity against the schema for schema documents normative and no src-* clause
+// covers the value, so it is charged cvc-datatype-valid (Datatypes §4.1.4),
+// reached through cvc-attribute, exactly as rejectInvalidID charges an id outside
+// xs:ID. It is located at el, the attribute's position (an xmltree.Attribute
+// carries its owner's). An attribute el's production prohibits is not checked
+// here at all, whatever its value: that is its form's prohibition guard's
+// charge, and no datatype fault exists beside it.
+//
+// It is what makes effectiveDerivationSet's inputs well-typed: once it has
+// passed, a local block=/final= its form declares names only members of its own
+// ·relevant set·, one its form prohibits is rejected by that form's guard before
+// any producer maps it, and only a Default attribute can carry a token the
+// property it feeds drops.
+func rejectInvalidDerivationSet(el *Element) error {
+	grammar, attrs := derivationSetAttrs(el)
+	for _, attr := range attrs {
+		lexical, ok := el.Attr(attr.name)
+		if !ok || attr.typ.admits(lexical) {
+			continue
+		}
+		return xsderr.New(ruleDatatypeValid, el.Loc(),
+			"<%s> %s %q is not in the ·lexical space· of %s, the type %s declares %s with (Structures §5.1, §A): its value is #all alone or a whitespace-separated list of %s",
+			el.Name().Local(), attr.name, lexical, attr.typ.name, grammar, attr.name, attr.typ.spelled())
+	}
+	return nil
+}
+
+// rejectLocalComplexTypeAttrs rejects a NESTED <complexType> — one written
+// anywhere but as a child of <schema>, <redefine> or <override> — that carries an
+// abstract, final or block attribute, each of which xs:localComplexType restricts
+// to use="prohibited" (xmlschema11-1.md:4824-4826). Each is legal on the
+// top-level form alone: xs:topLevelComplexType (:4804) keeps the declarations
+// xs:complexType makes (:4795-4798). Position decides the form, on the reading
+// rejectLocalSimpleTypeAttrs' doc gives for <simpleType>: <redefine>'s and
+// <override>'s content models reach the same global xs:complexType element
+// declaration the top level does.
+//
+// The fault carries NO numbered rule ID: src-ct's clauses (§3.4.3) say nothing
+// about these attributes, so it stands on §5.1 (xmlschema11-1.md:4296) directly,
+// the footing rejectProhibitedAttrs's doc derives; charging src-ct or
+// ct-props-correct would be a fabricated verdict (STYLE E2).
+//
+// It is keyed on the <complexType> and reached from rejectS4SFaults' walk, one
+// guard over every nested position — <element> at either level, <alternative> —
+// rather than one per producer that builds an anonymous complex type (STYLE
+// D3/T4). The attributes are checked in the grammar's own declaration order, so a
+// document writing several is always reported at the same one (STYLE D2).
+//
+// GAP(parser): the fourth attribute xs:localComplexType prohibits, name (:4823),
+// is not charged here: a nested <complexType name="..."> is accepted with its
+// name ignored. Charging it moves suite cases of its own (attQ006, ctA042), so it
+// is its own ratchet attribution and its own issue.
+func rejectLocalComplexTypeAttrs(el *Element) error {
+	if !isXSD(el, "complexType") {
+		return nil
+	}
+	parent := el.parent
+	if parent == nil || isXSD(parent, "schema") || isXSD(parent, "redefine") || isXSD(parent, "override") {
+		return nil
+	}
+	for _, attr := range [...]string{"abstract", "final", "block"} {
+		if _, ok := el.Attr(attr); !ok {
+			continue
+		}
+		return fmt.Errorf("parser: nested <complexType> at %s carries a %s attribute, which the schema for schema documents prohibits on the local form: xs:localComplexType restricts %s to use=\"prohibited\", and it is legal on the top-level form alone", el.Loc(), attr, attr)
+	}
 	return nil
 }
 
@@ -3126,17 +3326,25 @@ var simpleTypeFinalKeywords = []xsd.DerivationMethod{xsd.DerivationRestriction, 
 // 1), "#all" to the whole relevant set (case 2), and anything else to the
 // relevant-set members its whitespace-separated list names (case 3).
 //
-// Items outside relevant are IGNORED, never rejected, on both paths. Each table
-// says so of its own Default attribute — blockDefault "may include values other
+// The EBV's vocabulary is already checked when this runs: rejectInvalidDerivationSet
+// charges cvc-datatype-valid, in rejectS4SFaults' walk ahead of every producer,
+// on a block=/final=/blockDefault=/finalDefault= value outside the s4s type its
+// production declares it with, and a form that prohibits the attribute rejects it
+// before its producer maps it. Each local attribute's type has exactly its
+// ·relevant set· as members, so a local EBV names only members of relevant. A
+// Default EBV may name more, and those items are IGNORED here, as each table
+// says of its own Default attribute — blockDefault "may include values other
 // than restriction or extension", and "those values are ignored in the
 // determination of {prohibited substitutions} for complex type definitions (they
-// are used elsewhere)" — and the local attributes are treated the same way from
-// the other side: their vocabulary is fixed by the schema for schema documents,
-// which this producer runs no validation pass against, so an out-of-vocabulary
-// local token is a grammar fault nothing here is positioned to charge. It is
-// also what makes final="substitution" contribute nothing to {substitution group
-// exclusions} and a shared finalDefault="list" nothing to a complex type's
-// {final}.
+// are used elsewhere)". That is what makes a shared finalDefault="list"
+// contribute nothing to a complex type's {final} and blockDefault="substitution"
+// nothing to its {prohibited substitutions}.
+//
+// Case 2 compares the ·actual value·: the s4s types' "#all" arm is an xs:token,
+// whose whiteSpace = collapse makes block=" #all " the value "#all", and a valid
+// EBV holding "#all" holds no other token, so collapseTrim is that collapse.
+// Case 3's strings.Fields splits a valid EBV exactly as XML whitespace would:
+// every token of one is an ASCII keyword.
 //
 // The result is in relevant's own fixed order, not the attribute's lexical
 // order. These properties ARE sets drawn from a fixed set, so one set must have
@@ -3154,7 +3362,7 @@ func (p *producer) effectiveDerivationSet(elem *Element, local, fallback string,
 	if ebv == "" {
 		return nil // case 1
 	}
-	if ebv == "#all" {
+	if collapseTrim(ebv) == "#all" {
 		return slices.Clone(relevant) // case 2
 	}
 	items := strings.Fields(ebv)
@@ -3816,8 +4024,12 @@ func childElements(el *Element, space, local string) []*Element {
 // its R lexically — but neither names a declared component, since every
 // declared name is an NCName.
 func collapseTrim(lexical string) string {
-	return strings.Trim(lexical, "\x09\x0A\x0D\x20")
+	return strings.Trim(lexical, xmlSpace)
 }
+
+// xmlSpace is the four characters §4.3.6's whiteSpace facet is whitespace for:
+// #x9, #xA, #xD, #x20.
+const xmlSpace = "\x09\x0A\x0D\x20"
 
 // facetCountValue checks a length or digits facet element's value attribute
 // against the type the schema for schema documents declares for it:
