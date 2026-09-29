@@ -319,8 +319,11 @@
 // outside xs:nonNegativeInteger/xs:allNNI, a length, minLength, maxLength
 // or fractionDigits value outside xs:nonNegativeInteger or a totalDigits
 // value outside xs:positiveInteger, a processContents outside the
-// enumeration skip/lax/strict), which no Schema Representation Constraint
-// covers. A document that is simply not VALID against the schema for
+// enumeration skip/lax/strict, an id outside xs:ID), which no Schema
+// Representation Constraint covers — and cvc-id clause 2 where two elements
+// of ONE schema document carry the same id, the document's <schema> being
+// its validation root; the same id in two documents of an assembly is
+// valid. A document that is simply not VALID against the schema for
 // schema documents — a prohibited attribute on a top-level form, an
 // unprefixed attribute the element's grammar declares nowhere, a child
 // written where that element's content model admits none, a child
