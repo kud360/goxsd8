@@ -79,7 +79,7 @@ func assessedSubtreeRoot(schema *xsd.Schema, report *parser.AssemblyReport, doc 
 		return false
 	}
 	g := subtreeGate{schema: schema, dec: dec}
-	if !g.element(root, d) {
+	if !g.element(root, d, false) {
 		return false
 	}
 	return documentEnd(dec)
@@ -114,17 +114,22 @@ type subtreeGate struct {
 // condition below holds for it and, recursively, for every element under it:
 //
 //   - it carries no xsi:type and no xsi:nil (plainAttributes);
-//   - d is not abstract and carries no {type table}, no {identity-constraint
-//     definitions} and no fixed {value constraint} (assessedDeclaration);
+//   - d is not abstract and carries no {type table} and no fixed {value
+//     constraint} (assessedDeclaration);
 //   - d.{type definition} resolves;
 //   - for a Simple Type Definition, its closure reaches none of
 //     walkUnrecorded, the element carries no attribute but the four
 //     xsi: ones cvc-type clause 3.1.1 excepts, and no element [[child]];
 //   - for a Complex Type Definition, the conditions complex names.
-func (g *subtreeGate) element(start xml.StartElement, d xsd.ElementDeclaration) bool {
+//
+// constrained reports whether the declaration of an element above this one
+// carries {identity-constraint definitions}; element passes it on set from d
+// down, where complex refuses every ·defaulted attribute·.
+func (g *subtreeGate) element(start xml.StartElement, d xsd.ElementDeclaration, constrained bool) bool {
 	if !plainAttributes(start.Attr) || !assessedDeclaration(d) {
 		return false
 	}
+	constrained = constrained || len(d.IdentityConstraints()) > 0
 	td, ok := g.schema.ResolvedType(d.TypeDefinition())
 	if !ok {
 		return false
@@ -136,7 +141,7 @@ func (g *subtreeGate) element(start xml.StartElement, d xsd.ElementDeclaration) 
 		}
 		return g.leaf()
 	case xsd.ComplexType:
-		return g.complex(start, t)
+		return g.complex(start, t, constrained)
 	}
 	return false
 }
@@ -168,17 +173,17 @@ func notExcepted(a xml.Attr) bool {
 // assessedDeclaration reports whether d leaves no cvc-elt clause the walk does
 // not decide at depth: {abstract} false (clause 2, charged at the root alone),
 // no {type table} (clause 4's ·selected type definition· is then d.{type
-// definition}), no {identity-constraint definitions} (clause 6), and no fixed
-// {value constraint} (clause 5.2.2). A default one is admitted: clause 5.1 is
-// the walk's.
+// definition}), and no fixed {value constraint} (clause 5.2.2). A default one
+// is admitted: clause 5.1 is the walk's. So are {identity-constraint
+// definitions}: clause 6 (cvc-identity-constraint, §3.11.4) is the walk's,
+// which records every check it declines, and the one outcome it leaves
+// unrecorded, a field node that is a ·defaulted attribute·, is complex's to
+// refuse.
 func assessedDeclaration(d xsd.ElementDeclaration) bool {
 	if d.Abstract() {
 		return false
 	}
 	if _, ok := d.TypeTable(); ok {
-		return false
-	}
-	if len(d.IdentityConstraints()) > 0 {
 		return false
 	}
 	vc, ok := d.ValueConstraint()
@@ -195,12 +200,20 @@ func assessedDeclaration(d xsd.ElementDeclaration) bool {
 //   - every attribute the element carries that notExcepted names matches one
 //     of those uses by ·expanded name· (cvc-complex-type clause 2.1), so none
 //     is ·attributed to· the {attribute wildcard};
+//   - where constrained, the element has no ·defaulted attribute·
+//     (defaultedAttribute). §3.11.4 clause 3's Note has a default or fixed
+//     value play a part in a ·key-sequence·, but validate's
+//     icCheck.fieldAttributes reads only the attributes the instance carries,
+//     so a field selecting a defaulted one leaves the ·key-sequence· short
+//     with nothing charged and nothing recorded. The refusal is wider than
+//     that shape: it does not ask whether any {fields} path selects the
+//     attribute;
 //   - under a simple {content type}, its {simple type definition}'s closure
 //     reaches none of walkUnrecorded and there is no element [[child]];
 //   - under an empty one, there is no element [[child]];
 //   - under an element-only or mixed one, xsd.Schema.ContentMatcher decides it
 //     and every element [[child]] meets child's conditions.
-func (g *subtreeGate) complex(start xml.StartElement, t xsd.ComplexType) bool {
+func (g *subtreeGate) complex(start xml.StartElement, t xsd.ComplexType, constrained bool) bool {
 	if t.Abstract() {
 		return false
 	}
@@ -212,6 +225,9 @@ func (g *subtreeGate) complex(start xml.StartElement, t xsd.ComplexType) bool {
 		}
 		st, ok := g.schema.ResolvedSimpleType(ad.TypeDefinition())
 		if !ok || closureReaches(g.schema, st, walkUnrecorded) {
+			return false
+		}
+		if constrained && g.defaultedAttribute(u, start.Attr) {
 			return false
 		}
 	}
@@ -237,9 +253,26 @@ func (g *subtreeGate) complex(start xml.StartElement, t xsd.ComplexType) bool {
 		if !ok {
 			return false
 		}
-		return g.children(m)
+		return g.children(m, constrained)
 	}
 	return false
+}
+
+// defaultedAttribute reports whether u is a ·defaulted attribute· (§3.4.4.2)
+// of an element whose start tag carries attrs: u.{required} false, u's
+// ·effective value constraint· not ·absent·, and no attribute of attrs
+// matching u.{attribute declaration} by ·expanded name·. The definition's
+// clause 4, excluding the built-in xsi: declarations, holds for every member
+// of {attribute uses}.
+func (g *subtreeGate) defaultedAttribute(u xsd.AttributeUse, attrs []xml.Attr) bool {
+	if u.Required() {
+		return false
+	}
+	if _, ok := g.schema.EffectiveValueConstraint(u); !ok {
+		return false
+	}
+	n := u.DeclarationName()
+	return !slices.ContainsFunc(attrs, func(a xml.Attr) bool { return expandedName(a.Name) == n })
 }
 
 // leaf reads an element's content through to its end tag and reports whether
@@ -261,8 +294,9 @@ func (g *subtreeGate) leaf() bool {
 
 // children reads an element's content through to its end tag, advancing m over
 // each element [[child]] in document order, and reports whether every child
-// meets assessedChild and m accepts the whole sequence.
-func (g *subtreeGate) children(m *xsd.Matcher) bool {
+// meets child's conditions, constrained as element states, and m accepts the
+// whole sequence.
+func (g *subtreeGate) children(m *xsd.Matcher, constrained bool) bool {
 	for {
 		tok, err := g.dec.Token()
 		if err != nil {
@@ -270,7 +304,7 @@ func (g *subtreeGate) children(m *xsd.Matcher) bool {
 		}
 		switch t := tok.(type) {
 		case xml.StartElement:
-			if !g.child(m, t) {
+			if !g.child(m, t, constrained) {
 				return false
 			}
 		case xml.EndElement:
@@ -297,7 +331,7 @@ func (g *subtreeGate) children(m *xsd.Matcher) bool {
 //     clause 2.3.2 admitted the child as a ·substitution group· member, whose
 //     {substitution group exclusions} and the head's {disallowed
 //     substitutions} the walk never checks.
-func (g *subtreeGate) child(m *xsd.Matcher, start xml.StartElement) bool {
+func (g *subtreeGate) child(m *xsd.Matcher, start xml.StartElement, constrained bool) bool {
 	name := expandedName(start.Name)
 	a, ok := m.Next(name)
 	if !ok {
@@ -307,7 +341,7 @@ func (g *subtreeGate) child(m *xsd.Matcher, start xml.StartElement) bool {
 	if !ok || d.Name() != name {
 		return false
 	}
-	return g.element(start, d)
+	return g.element(start, d, constrained)
 }
 
 // rootStart reads dec up to the document element's start tag. A DOCTYPE — any
