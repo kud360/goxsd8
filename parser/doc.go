@@ -104,24 +104,31 @@
 //	func Parse(location string, opts ...Option) (*xsd.Schema, error)
 //	func ParseReport(location string, opts ...Option) (*xsd.Schema,
 //	    *AssemblyReport, error)
+//	func ParseSet(roots []Root, opts ...Option) (*xsd.Schema,
+//	    *AssemblyReport, error)
+//	    Roots: RootAt(location), HintAt(namespace, location).
 //	    Options: WithResolver(loader.Resolver) (default loader.Dir(".")),
 //	    WithBackend(value.Backend) (default builtin/strict),
 //	    WithLogger(*slog.Logger) (default silent).
 //
-// ParseReport is the entry point and Parse the wrapper that drops its
-// report. The [AssemblyReport] answers what the assembled
-// [xsd.Schema] cannot — which schema documents went into it, in
-// discovery order, which ·inter-schema-document references· could not be
-// followed to one, and what each discovery holds that no dispatch of
-// this producer maps to a component ([UnmappedConstruct]; several
-// regions of the vocabulary so far, not all of it, so its silence is not
-// yet coverage) — so a consumer reasoning about the DOCUMENT SET
-// (§4.2.1's schema(D)) does not have to re-walk §4.2's composition
-// edges, or re-derive what this package reads, itself. It is populated
-// even when an error is returned.
+// ParseSet is the entry point: it assembles several root locations into
+// ONE schema, each a schema document named outright (RootAt) or a schema
+// location hint followed as an <xs:import> of its namespace (HintAt), and
+// reports per root which hints named no document
+// ([AssemblyReport.UnfollowedRoots]). ParseReport is ParseSet over one
+// RootAt, and Parse the wrapper that drops its report. The
+// [AssemblyReport] answers what the assembled [xsd.Schema] cannot — which
+// schema documents went into it, in discovery order, which
+// ·inter-schema-document references· could not be followed to one, and
+// what each discovery holds that no dispatch of this producer maps to a
+// component ([UnmappedConstruct]; several regions of the vocabulary so
+// far, not all of it, so its silence is not yet coverage) — so a consumer
+// reasoning about the DOCUMENT SET (§4.2.1's schema(D)) does not have to
+// re-walk §4.2's composition edges, or re-derive what this package reads,
+// itself. It is populated even when an error is returned.
 //
-// Parse assembles the <xs:include>, <xs:override>, <xs:redefine> and
-// <xs:import> closure of the root document (§4.2.3, §4.2.5, §4.2.4,
+// ParseSet assembles the <xs:include>, <xs:override>, <xs:redefine> and
+// <xs:import> closure of every root document (§4.2.3, §4.2.5, §4.2.4,
 // §4.2.6.2), including chameleon coercion of a no-targetNamespace
 // <xs:include>d document into the including namespace (§F.1) — both the
 // components it declares and the unqualified QName references inside it.
@@ -292,9 +299,6 @@
 //     was never filed, and W3C Override/over021 is `accepted` on the
 //     strength of it. Over-rejects in the same direction as the entry
 //     above.
-//   - Assembling several root locations into one schema awaits a
-//     consumer; nothing in the CLI or validator needs it yet, so no
-//     multi-root entry point is exported (STYLE T5).
 //
 // # Planned instance-hint reader (not yet implemented)
 //

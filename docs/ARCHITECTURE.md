@@ -109,9 +109,9 @@ holds an ASCII-only second copy. Whether that one table is generated is
 
 `cmd/goxsd8` is a library CONSUMER, not a place to grow capability. A
 capability the CLI needs and the library does not export is a library gap to
-file, not CLI code to write. The CLI has twice taken the other branch —
-instance-hint reading and multi-root assembly, both under "Parsing & loading"
-below — and each copy now blocks an unexport the library wants. The
+file, not CLI code to write. The CLI has taken the other branch for
+instance-hint reading, under "Parsing & loading" below, and that copy blocks
+an unexport the library wants. The
 `validate` ENGINE imports no source's decoder (`encoding/xml`,
 `encoding/json`, BER) — only its adapter does, and `validate/imports_test.go`
 pins it. That ban is the engine's and not the library's: `parser/xmltree` is
@@ -397,18 +397,14 @@ Two access styles over the compiled model, one shared core:
 - `loader`: the IO seam. `Resolver` answers "give me the schema document
   for (namespace, location hint)"; helpers provided for files, HTTP, and
   in-memory maps, plus a chaining/catalog resolver. The loader dedupes by
-  resolved location. Two capabilities named on this seam are `parser`'s to
-  export, neither exists there, and `cmd/goxsd8` has shipped its own copy of
-  BOTH rather than waiting. The `xsi:schemaLocation` instance-hint reader is
+  resolved location. Multi-root assembly is `parser.ParseSet`, whose
+  `RootAt` and `HintAt` roots enter one assembly through one `Resolver`
+  (#1283). The `xsi:schemaLocation` instance-hint reader is the other
+  capability named on this seam, is `parser`'s to export, does not exist
+  there, and `cmd/goxsd8` has shipped its own copy rather than waiting:
   `cmd/goxsd8/validate.go`'s `instanceHints`/`hintsOf`, over
-  `internal/schemaloc` and `parser/xmltree` directly (#755). Multi-root
-  assembly is its `compileSet`, which has no entry point to call and so
-  synthesizes an `<xs:schema>` wrapper document as a STRING — one
-  `<xs:import>` or `<xs:include>` per `-schema` argument, `targetNamespace`
-  read back off each through `parser.ReadDocument` — and re-parses it (#671).
-  `loader/doc.go` states both in the present tense and `parser/doc.go` states
-  the second as awaiting a consumer; both sentences are drift, and the
-  consumer shipped.
+  `internal/schemaloc` and `parser/xmltree` directly (#755). `loader/doc.go`
+  states it in the present tense; that sentence is drift.
 
 - `parser`: the schema-document compiler — the M4 spine, and the only
   writer of `xsd` components. `Parse(location, opts…)` reads the root
@@ -440,12 +436,15 @@ Two access styles over the compiled model, one shared core:
   them. First, the backend is a caller-supplied `value.Backend` (`Produce`
   demands it explicitly; only `Parse` defaults it to `builtin/strict`, which
   is the one policy edge from `parser` to a concrete backend). Second, the
-  assembled **document set IS reported**, through the second entry point:
-  `ParseReport(location, opts…)` returns the components *and* an
-  `*AssemblyReport` naming every document read, in discovery order
-  (`AssembledDocument`), plus every ·inter-schema-document reference· (§4.2.1)
+  assembled **document set IS reported**, through the entry point:
+  `ParseSet(roots, opts…)` assembles several roots — `RootAt` documents and
+  `HintAt` schema location hints — into one schema and returns the components
+  *and* an `*AssemblyReport` naming every document read, in discovery order
+  (`AssembledDocument`), every ·inter-schema-document reference· (§4.2.1)
   the assembly could not follow to one (`UnfollowedDirective`,
-  `UnfollowedReason`). `Parse` is the report-free convenience wrapper.
+  `UnfollowedReason`), and every hint root that named no document
+  (`UnfollowedRoots`). `ParseReport(location, opts…)` is `ParseSet` over one
+  `RootAt`, and `Parse` its report-free convenience wrapper.
 
   That closes **#272**, the audit's longest-standing duplication finding.
   The conformance schema lane used to carry its own
@@ -685,12 +684,14 @@ compiles, is documented, and has **zero** callers module-wide.
   assembling function (`compile`) is unexported, and no exported API takes
   or returns a stage, so no consumer can exist. Either grow the composition
   seam the docs promise, or unexport the interfaces.
-- **`loader.FS`/`HTTP`** — no consumer, but **justified and not to be
-  filed**: the resolver helpers are declared library surface in
-  `loader/doc.go` for external users, which is the "documented contract it
-  fulfills" half of T5. Re-check, do not re-file. `Chain` left this list
-  when `cmd/goxsd8`'s `compileSet` took it, `Dir` and `Map` have consumers
-  in both tiers, and `ResolverFunc` is exercised by `parser`'s tests.
+- **`loader.FS`/`HTTP`/`Chain`/`Map`** — no non-test consumer, but
+  **justified and not to be filed**: the resolver helpers are declared
+  library surface in `loader/doc.go` for external users, which is the
+  "documented contract it fulfills" half of T5. Re-check, do not re-file.
+  `Chain` and `Map` returned to this list when `parser.ParseSet` replaced
+  `cmd/goxsd8`'s in-memory wrapper (#1283); `Map` is still every `parser`
+  test's resolver. `Dir` has consumers in both tiers, and `ResolverFunc` is
+  exercised by `parser`'s tests.
   `regex.FlavorFO` sat here on the same terms until `xpath` and `icpath`
   took it for their NCName prefix scanners (#979; `validate`'s scanner moved
   to `icpath`); the F&O functions it was built for still arrive at M6/M7.
@@ -717,11 +718,9 @@ compiles, is documented, and has **zero** callers module-wide.
   **#1029** landed the signal that replaces it
   (`parser.AssembledDocument.Unmapped`, whose one consumer today is
   `conformance/census_test.go`'s one-directional soundness hold) and
-  **#1051** is the blocked successor that deletes the model. It can no
-  longer unexport the whole set on its own: `cmd/goxsd8` reads a `-schema`
-  document's `targetNamespace` through `parser.ReadDocument` →
-  `Document.Root` → `Element.Attr`, a read the multi-root entry point above
-  would delete. `Text` has two readers inside `parser` (§4.2.5 override
+  **#1051** is the blocked successor that deletes the model; `cmd/goxsd8`
+  reads none of the raw tree since `parser.ParseSet` replaced its wrapper
+  (#1283). `Text` has two readers inside `parser` (§4.2.5 override
   canonicalization and the `<xs:notation>` content check), so the annotation
   deletion left it a type with a job, and whether it stays EXPORTED is
   #1051's question alone.

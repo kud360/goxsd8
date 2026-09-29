@@ -186,9 +186,10 @@
 // than rejected because src-include clause 2.4 and src-import make that skip
 // legal, which is why the usage block names it in a line and not as an error.
 //
-// validate composes its -schema documents into ONE schema set, through a
-// synthesized wrapper schema document that <import>s each document declaring a
-// target namespace of its own and <include>s each declaring none. Every
+// validate composes its -schema documents into ONE schema set, each a root of
+// one parser.ParseSet assembly read in its own target namespace, and an XML
+// instance's schema location hints join that assembly as roots of their own,
+// each followed as an <xs:import> of the namespace it pairs. Every
 // cross-document rule an ordinary assembly enforces therefore holds over the
 // set: two documents colliding on a name are sch-props-correct clause 2, and a
 // reference no document of the set supplies is src-resolve. A set that does not
@@ -230,16 +231,17 @@
 // (clause 4) and joins that instance's schema set alone.
 //
 // A hint that instance's set will not compose with — one pairing a namespace
-// with a document declaring another (src-import clause 3.1), or naming a
-// document that is not well-formed — is a fault of the INSTANCE that carried
-// it and never of the -schema set: clause 3 obliges a processor to dereference
-// no hint at all, so the hints of that instance are reported unusable on
-// stderr, naming it, and it is assessed against the -schema documents alone.
-// Exit 3 answers a -schema set that does not compile and nothing else.
+// with a document declaring another (src-import clause 3.1), a no-namespace
+// hint naming a document that declares one (clause 3.2), or naming a document
+// that is not well-formed — is a fault of the INSTANCE that carried it and
+// never of the -schema set: clause 3 obliges a processor to dereference no
+// hint at all, so the hints of that instance are reported unusable on stderr,
+// naming it, and it is assessed against the -schema documents alone. Exit 3
+// answers a -schema set that does not compile and nothing else.
 //
 // A hint naming a document that is NOT THERE is named on stderr too, against
 // the instance that carried it and by the location it resolved to, carrying no
-// rule ID and moving no exit code: src-import and src-include alike make a
+// rule ID and moving no exit code: src-import (§4.2.6.2) makes a
 // schemaLocation that resolves to nothing legal to skip, so that hint's
 // siblings still apply and the set still composes — short of whatever the
 // document would have declared, which is the fact the line carries and clause 3
