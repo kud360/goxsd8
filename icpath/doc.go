@@ -26,11 +26,12 @@
 //
 // The grammar above is not a stage of XPath 2.0, so hosting it in xpath would
 // put one package's name on two unrelated grammars. The lexer borrows XPath
-// 2.0's closed axis vocabulary (productions [30] and [33]) and its argument-free
-// KindTests, but only to CLASSIFY a step: the `child::` and `attribute::` spellings clause
-// 2.2 admits compile onto the abbreviated arms, every other axis and every KindTest is
-// charged, and the matcher evaluates the child and attribute axes alone. xpath serves
-// conditional type assignment and assertions; validate/doc.go states that
+// 2.0's closed axis vocabulary (productions [30] and [33]), its argument-free
+// KindTests, and FunctionCalls and predicate comparisons over StringLiterals, but only
+// to CLASSIFY a step: the `child::` and `attribute::` spellings clause 2.2 admits
+// compile onto the abbreviated arms, every other axis, every KindTest and every
+// FunctionCall is charged, and the matcher evaluates the child and attribute axes alone.
+// xpath serves conditional type assignment and assertions; validate/doc.go states that
 // identity-constraint paths are evaluated "directly and never through the XPath engine",
 // and that stays true with this package carrying them.
 //
@@ -70,14 +71,15 @@
 // spelled with the abbreviated or the unabbreviated head, and this package compiles
 // every such spelling. Every other {expression} is nil there — above all one this
 // package simply cannot read, and a legal XPath 2.0 expression no charged shape
-// covers, such as a FunctionCall — so "does not match production [1]" is
-// never on its own evidence of a violation. [SelectorViolation]'s doc carries the
+// covers, such as a KindTest with an argument — so "does not match production
+// [1]" is never on its own evidence of a violation. [SelectorViolation]'s doc carries the
 // argument for each shape.
 //
 // THE PREDICATES IT RECOGNIZES are the ones whose whole {expression} lexes as
 // tokens this lexer reads (production [5]'s, the two brackets, an axis head, an
-// argument-free KindTest and a white-space-split name): `a[b]` and `a[@b]` are
-// charged, `a[1]` and `a[b='c']` are not, because a digit and a quote open no
+// argument-free KindTest, a FunctionCall, a white-space-split name, and between
+// the brackets a '=' and a StringLiteral): `a[b]`, `a[@b]` and `a[b='c']` are
+// charged, `a[1]` and `a[b!='c']` are not, because a digit and a '!' open no
 // token and a stream this package cannot read whole is declined whatever it
 // holds. Under-charging is a rejection the processor can still make at validate
 // time; over-charging rejects a conforming schema before any instance exists.

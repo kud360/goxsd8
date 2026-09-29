@@ -139,12 +139,15 @@ type icFieldCursor struct {
 //
 // WHAT STILL ARRIVES HERE, now that parser charges c-selector-xpath and
 // c-fields-xpaths over the shapes [icpath.SelectorViolation] enumerates and
-// icpath compiles the `child::` and `attribute::` spellings clause 2.2 admits:
-// a legal XPath 2.0 expression neither subset admits that no charged shape
-// covers and icpath's lexer cannot read whole — a FunctionCall such as
-// `document("")`, a KindTest with an argument; a predicate whose {expression}
-// icpath's lexer cannot read whole; a non-expression icpath does not charge:
-// Steps with no separator, or a colon run it cannot read; a `.//` with no
+// icpath compiles the `child::` and `attribute::` spellings clause 2.2 admits
+// (#NNNN owns what follows): a legal XPath 2.0 expression neither subset admits
+// that no charged shape covers and icpath's lexer cannot read whole — a KindTest
+// with an argument (`element(a)`), a FunctionCall with a prefixed name or an
+// argument other than a StringLiteral (`p:f('x')`, `f(a)`), a Wildcard `*:a`,
+// and any other operator or literal outside a predicate; a predicate holding a
+// token icpath's lexer does not read (`a[1]`, `a[b!='c']`); a non-expression
+// icpath does not charge: Steps with no separator, the parent step `..`
+// among them (#1829), or a colon run it cannot read; a `.//` with no
 // element step left once the self steps are removed, which production [3]'s
 // bare `.` Step makes assembly-LEGAL and only this matcher cannot represent;
 // and — because a component assembled directly through
