@@ -134,3 +134,24 @@ func TestProduceContentModelExtensionRefused(t *testing.T) {
 		t.Fatalf("error = %v, want the refusal naming the <extension> and T", err)
 	}
 }
+
+// TestParseRedefineOriginalLeavesNamedMemoAlone pins that only a NAMED identity
+// moves a declaration to complexContentPending (enterContentModel). root.xsd
+// reaches r.xsd, which redefines lib.xsd's ct, BEFORE it reaches lib.xsd
+// plainly, so src-expredef clause 1.1's anonymous original is produced from
+// lib.xsd's declaration while that declaration's own named build has not
+// started. Were the original to mark it pending, run's later named build of it
+// would find that entry and fail as a producer fault instead of reaching the
+// sch-props-correct clause 2 collision the two claims on {urn:t}ct make.
+func TestParseRedefineOriginalLeavesNamedMemoAlone(t *testing.T) {
+	_, err := parseMap(t, "root.xsd", map[string]string{
+		"root.xsd": wrap("urn:t", `<xs:include schemaLocation="r.xsd"/><xs:include schemaLocation="lib.xsd"/>`),
+		"lib.xsd": wrap("urn:t", `<xs:complexType name="ct"><xs:sequence>`+
+			`<xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>`),
+		"r.xsd": wrap("urn:t", `<xs:redefine schemaLocation="lib.xsd">`+
+			`<xs:complexType name="ct"><xs:complexContent><xs:restriction base="tns:ct"><xs:sequence>`+
+			`<xs:element name="a" type="xs:string"/></xs:sequence></xs:restriction></xs:complexContent></xs:complexType>`+
+			`</xs:redefine>`),
+	})
+	mustRule(t, err, "sch-props-correct")
+}
