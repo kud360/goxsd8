@@ -107,6 +107,52 @@ func TestInstanceExecutorDecidesAssessedSubtreeRoot(t *testing.T) {
 				`<xs:simpleType name="U"><xs:union memberTypes="xs:int xs:ID"/></xs:simpleType>`,
 			`<known><a at="v">i1</a></known>`,
 		},
+		// cvc-elt clause 6 is the walk's at every depth (#1858).
+		{
+			"a satisfied unique on the root over its own value (cvc-identity-constraint clause 4.1)",
+			`<xs:element name="known" type="xs:string"><xs:unique name="u"><xs:selector xpath="."/><xs:field xpath="."/></xs:unique></xs:element>`,
+			`<known>x</known>`,
+		},
+		{
+			"a satisfied unique over child elements (cvc-identity-constraint clause 4.1)",
+			`<xs:element name="known"><xs:complexType><xs:sequence><xs:element name="a" type="xs:int" maxOccurs="2"/></xs:sequence></xs:complexType>` +
+				`<xs:unique name="u"><xs:selector xpath="a"/><xs:field xpath="."/></xs:unique></xs:element>`,
+			`<known><a>1</a><a>2</a></known>`,
+		},
+		{
+			"a satisfied key over child elements (cvc-identity-constraint clause 4.2)",
+			keyAndRef, `<known><a>1</a><a>2</a></known>`,
+		},
+		{
+			"a satisfied keyref over child elements (cvc-identity-constraint clause 4.3)",
+			keyAndRef, `<known><a>1</a><a>2</a><b>2</b><b>1</b></known>`,
+		},
+		{
+			"a satisfied key declared on an element below the root",
+			`<xs:element name="known"><xs:complexType><xs:sequence><xs:element name="c" maxOccurs="2"><xs:complexType><xs:sequence>` +
+				`<xs:element name="d" type="xs:int" maxOccurs="2"/></xs:sequence></xs:complexType>` +
+				`<xs:key name="k"><xs:selector xpath="d"/><xs:field xpath="."/></xs:key></xs:element></xs:sequence></xs:complexType></xs:element>`,
+			`<known><c><d>1</d><d>2</d></c><c><d>1</d></c></known>`,
+		},
+		{
+			// Present on every target, the attribute is no ·defaulted attribute·.
+			"a key over an attribute whose use carries a default, the attribute present",
+			`<xs:element name="known"><xs:complexType><xs:sequence><xs:element name="e" maxOccurs="2"><xs:complexType>` +
+				`<xs:attribute name="att" type="xs:string" default="a"/></xs:complexType></xs:element></xs:sequence></xs:complexType>` +
+				`<xs:key name="k"><xs:selector xpath="e"/><xs:field xpath="@att"/></xs:key></xs:element>`,
+			`<known><e att="1"/><e att="2"/></known>`,
+		},
+		{
+			// The refusal of a ·defaulted attribute· is scoped to the subtree of
+			// the declaration carrying the identity constraint.
+			"a ·defaulted attribute· outside every identity-constrained subtree",
+			`<xs:element name="known"><xs:complexType><xs:sequence>` +
+				`<xs:element name="c"><xs:complexType><xs:sequence><xs:element name="d" type="xs:int"/></xs:sequence></xs:complexType>` +
+				`<xs:unique name="u"><xs:selector xpath="d"/><xs:field xpath="."/></xs:unique></xs:element>` +
+				`<xs:element name="e"><xs:complexType><xs:attribute name="att" type="xs:string" default="a"/></xs:complexType></xs:element>` +
+				`</xs:sequence></xs:complexType></xs:element>`,
+			`<known><c><d>1</d></c><e/></known>`,
+		},
 	}
 	for _, tc := range cases {
 		if !exec(instanceCase(t, tc.schemaBody, tc.instance, true)).IsPass() {
@@ -117,6 +163,14 @@ func TestInstanceExecutorDecidesAssessedSubtreeRoot(t *testing.T) {
 		}
 	}
 }
+
+// keyAndRef declares <known> with int children <a>, a key k over them, and int
+// children <b>, a keyref r over them referring to k.
+const keyAndRef = `<xs:element name="known"><xs:complexType><xs:sequence>` +
+	`<xs:element name="a" type="xs:int" maxOccurs="2"/><xs:element name="b" type="xs:int" minOccurs="0" maxOccurs="2"/>` +
+	`</xs:sequence></xs:complexType>` +
+	`<xs:key name="k"><xs:selector xpath="a"/><xs:field xpath="."/></xs:key>` +
+	`<xs:keyref name="r" refer="k"><xs:selector xpath="b"/><xs:field xpath="."/></xs:keyref></xs:element>`
 
 // emptyRoot declares <known> with an anonymous complex type of empty {content
 // type} and nothing else.
@@ -213,6 +267,13 @@ func TestInstanceExecutorDecidesContentLessRoot(t *testing.T) {
 			`<known/>`,
 		},
 		{
+			// The field selects nothing, so the root's ·key-sequence· is short
+			// and it is outside the ·qualified node set· (§3.11.4 clause 4.1).
+			"a unique on a content-less root whose field selects no node (cvc-identity-constraint clause 4.1)",
+			`<xs:element name="known"><xs:complexType/><xs:unique name="u"><xs:selector xpath="."/><xs:field xpath="@a"/></xs:unique></xs:element>`,
+			`<known/>`,
+		},
+		{
 			"a content-less root carrying an attribute its use matches (cvc-complex-type clause 2.1)",
 			`<xs:element name="known"><xs:complexType><xs:attribute name="at" type="xs:string"/></xs:complexType></xs:element>`,
 			`<known at="v"/>`,
@@ -280,6 +341,27 @@ func TestInstanceExecutorChargesCvcIDBelowTheRoot(t *testing.T) {
 	}
 }
 
+// TestInstanceExecutorChargesIdentityConstraintBelowTheRoot is a regression
+// guard for the identity-constraint lift (#1858): with {identity-constraint
+// definitions} admitted, a duplicate key (cvc-identity-constraint clause 4.2.2)
+// and a dangling keyref (clause 4.3) over the root's children are still decided
+// INVALID. Both are the walk's charges (validate's icFrame.duplicates and
+// icCheck.keyrefs), so neither row passes through the gate.
+func TestInstanceExecutorChargesIdentityConstraintBelowTheRoot(t *testing.T) {
+	exec := newInstanceExec()
+	for _, tc := range []struct{ why, instance string }{
+		{"a duplicate key (cvc-identity-constraint clause 4.2.2)", `<known><a>1</a><a>1</a></known>`},
+		{"a dangling keyref (cvc-identity-constraint clause 4.3)", `<known><a>1</a><a>2</a><b>3</b></known>`},
+	} {
+		if !exec(instanceCase(t, keyAndRef, tc.instance, false)).IsPass() {
+			t.Errorf("%s: the walk charges cvc-identity-constraint; the executor must agree with a suite-invalid case", tc.why)
+		}
+		if exec(instanceCase(t, keyAndRef, tc.instance, true)).IsPass() {
+			t.Errorf("%s: the executor must Fail under a flipped expectation", tc.why)
+		}
+	}
+}
+
 // TestInstanceExecutorDeclinesOutsideAssessedSubtreeRoot pins each condition of
 // the assessed-subtree-root gate by name. Every row walks clean — no violation,
 // no unevaluated record — so it is assessedSubtreeRoot alone that keeps the
@@ -309,16 +391,6 @@ func TestInstanceExecutorDeclinesOutsideAssessedSubtreeRoot(t *testing.T) {
 			`<xs:element name="known" type="E"/><xs:complexType name="E"/>`, `<known ` + xsiNS + ` xsi:type="E"/>`,
 		},
 		{"a fixed {value constraint} on the root (cvc-elt clause 5.2.2)", `<xs:element name="known" type="xs:string" fixed="x"/>`, `<known>x</known>`},
-		{
-			"identity constraints on the root (cvc-elt clause 6)",
-			`<xs:element name="known" type="xs:string"><xs:unique name="u"><xs:selector xpath="."/><xs:field xpath="."/></xs:unique></xs:element>`,
-			`<known>x</known>`,
-		},
-		{
-			"identity constraints on a content-less root (cvc-elt clause 6)",
-			`<xs:element name="known"><xs:complexType/><xs:unique name="u"><xs:selector xpath="."/><xs:field xpath="@a"/></xs:unique></xs:element>`,
-			`<known/>`,
-		},
 		{
 			"a {type table} on the root (cvc-elt clause 4)",
 			`<xs:element name="known" type="xs:string"><xs:alternative type="xs:string"/></xs:element>`,
@@ -365,10 +437,13 @@ func TestInstanceExecutorDeclinesOutsideAssessedSubtreeRoot(t *testing.T) {
 			wantInt,
 		},
 		{
-			"identity constraints (cvc-elt clause 6)",
-			`<xs:element name="known"><xs:complexType><xs:sequence><xs:element name="a" type="xs:int"/></xs:sequence></xs:complexType>` +
-				`<xs:unique name="u"><xs:selector xpath="a"/><xs:field xpath="."/></xs:unique></xs:element>`,
-			wantInt,
+			// idZ011_a's shape: both <e> carry the default "a", so the unique is
+			// violated (§3.11.4 clause 3's Note), which validate does not see.
+			"a {fields} path selecting a ·defaulted attribute· (cvc-identity-constraint clause 3)",
+			`<xs:element name="known"><xs:complexType><xs:sequence><xs:element name="e" maxOccurs="2"><xs:complexType>` +
+				`<xs:attribute name="att" type="xs:string" default="a"/></xs:complexType></xs:element></xs:sequence></xs:complexType>` +
+				`<xs:unique name="u"><xs:selector xpath="e"/><xs:field xpath="@att"/></xs:unique></xs:element>`,
+			`<known><e/><e/></known>`,
 		},
 		{
 			"a fixed {value constraint} below the root (cvc-elt clause 5.2.2)",
@@ -438,6 +513,7 @@ func TestInstanceExecutorDeclinesOutsideAssessedSubtreeRoot(t *testing.T) {
 // the empty violation list as "valid": validate's cvc-elt clause 5.2.2.2.2
 // decline over a fixed {value constraint} it cannot compare in
 // xs:anySimpleType's value space (#1738 routed it into Unevaluated), an
+// identity constraint whose {selector} icpath does not compile, an
 // assertions facet, whose {test} validate records and never evaluates, and a
 // complex type's {assertions} (cvc-complex-type clause 6), which validate's
 // elementAssertions records the same way.
@@ -445,6 +521,14 @@ func TestInstanceExecutorDeclinesUnevaluatedRoot(t *testing.T) {
 	exec := newInstanceExec()
 	for _, tc := range []struct{ why, schemaBody, instance string }{
 		{"a fixed-value comparison withheld over xs:anySimpleType", `<xs:element name="known" type="xs:anySimpleType" fixed="x"/>`, `<known>x</known>`},
+		{
+			// A predicate icpath's lexer does not read (validate's icFrame
+			// GAP(xpath)): the unique is declined and recorded, not decided.
+			"an identity-constraint {selector} outside the ·selector subset· (§3.11.6.2)",
+			`<xs:element name="known"><xs:complexType><xs:sequence><xs:element name="a" type="xs:int" maxOccurs="2"/></xs:sequence></xs:complexType>` +
+				`<xs:unique name="u"><xs:selector xpath="a[1]"/><xs:field xpath="."/></xs:unique></xs:element>`,
+			`<known><a>1</a><a>1</a></known>`,
+		},
 		{
 			"an unevaluated assertions facet",
 			`<xs:element name="known" type="A"/><xs:simpleType name="A"><xs:restriction base="xs:string">` +
