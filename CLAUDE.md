@@ -8,7 +8,9 @@ agents. Follow this file exactly; it wins over your own preferences.
 
 **Never regress the ratchet.** Conformance expectations live in
 `conformance/testdata/expectations/`. Scores only move up. If your change
-makes a previously passing case fail, either fix it or revert your change.
+makes a previously passing case fail, either fix it or revert your change,
+unless the arbiter banks it as a superseded pass (`.claude/agents/arbiter.md`,
+"Ratchet integrity").
 Never edit an expectations file downward to make CI green.
 
 ## Ground truth
