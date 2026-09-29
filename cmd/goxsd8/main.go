@@ -15,11 +15,15 @@ import (
 // help and version are deliberately not members; doc.go states why.
 var subcommands = []string{"parse", "validate", "gen"}
 
-// usage is the terminal rendering of the CLI contract in doc.go: the
-// subcommand syntax, the common flags and the implementation status, which
-// the two state identically and change together. doc.go carries two things
-// the help path does not print — the argument vocabulary and the CLI's
-// relationship to the library.
+//go:generate go test -run ^TestDocRendersUsage$ -update .
+
+// usage is the one hand-written source of the CLI's usage contract: the
+// subcommand syntax, the common flags and the implementation status. Edit it
+// here, then run go generate: doc.go's # Usage section is rendered from it
+// (docUsageBlock, main_test.go) and TestDocRendersUsage fails until the two
+// match. The rest of doc.go — the argument vocabulary, the diagnostic line
+// shape and the CLI's relationship to the library, none of which the help
+// path prints — is hand-written there.
 const usage = `goxsd8 — XSD 1.1 schema compilation, instance validation, and code generation.
 
 Usage (contract; subcommands land with their milestones):
@@ -103,8 +107,8 @@ Usage (contract; subcommands land with their milestones):
       an ENTITY value must name: the internal subset, including
       its internal parameter entities. The external DTD subset is
       never fetched, so a name declared only there is charged with
-      a message saying the DTD was not fully read, not that the
-      name is undeclared.
+      a cvc-simple-type cause saying the DTD was not fully read, not
+      that the name is undeclared.
       Exit 0 when no instance was charged a violation and none left
       a check undecided, 1 invalid, 2 usage or I/O on an argument or
       on stdout, and 3 when the schema set does not compile.

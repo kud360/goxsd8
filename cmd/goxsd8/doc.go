@@ -23,35 +23,35 @@
 //	    arguments are several compilations, not one set.
 //	    Exit 0 when every one compiles; 1 when any is rejected, its
 //	    first error on stderr as <loc>: [<rule>] <message> (assembly
-//	    stops there, so a rejected schema is one error line); 2 when
-//	    an argument cannot be read, which is never a verdict about a
+//	    stops there, so a rejected schema is one error line); 2 when an
+//	    argument cannot be read, which is never a verdict about a
 //	    schema. The exit code is the worst of those outcomes.
 //	    Some errors have no rule to cite and print the producing
 //	    component's own message instead, carrying what location they
 //	    have inside the sentence rather than as the <loc>: prefix.
-//	    Nothing is stamped on that message — not a rule ID, and not
-//	    the goxsd8: <subcommand>: lead-in this binary's own diagnoses
-//	    open with — so the line opens however that component wrote
-//	    it, which for some is an internal package name. A document
-//	    whose root is not <xs:schema> and a rejection in the
-//	    s4s-grammar class (xsderr/doc.go) are examples, not the
-//	    whole class: an I/O fault reading a document the argument
-//	    REFERENCES prints the same way and is charged 1 like a
-//	    rejection, though nothing about the schema was decided.
+//	    Nothing is stamped on that message — not a rule ID, and not the
+//	    goxsd8: <subcommand>: lead-in this binary's own diagnoses open
+//	    with — so the line opens however that component wrote it, which
+//	    for some is an internal package name. A document whose root is
+//	    not <xs:schema> and a rejection in the s4s-grammar class
+//	    (xsderr/doc.go) are examples, not the whole class: an I/O fault
+//	    reading a document the argument REFERENCES prints the same way
+//	    and is charged 1 like a rejection, though nothing about the
+//	    schema was decided.
 //	    An <xs:include>, <xs:import>, <xs:override> or empty
 //	    <xs:redefine> whose schemaLocation resolves to no document is
 //	    named on stderr at its own position, with no rule ID and no
-//	    change of exit code: the skip is legal, so the summary above
-//	    is printed off a schema short of whatever that document
-//	    declares. -q does not silence it. The I/O fault above is not
-//	    that skip: it is charged 1, though the faulting run names the
-//	    directive on stderr too, before printing the fault. A bare
-//	    <xs:import>, which names no document, is not reported.
-//	    A REJECTED schema is named the same way, for the directives
-//	    assembly reached
-//	    before it stopped, in a line saying the assembly was rejected
-//	    rather than compiled and saying nothing about whether the
-//	    unread document had a part in that.
+//	    change of exit code: the skip is legal, so the summary above is
+//	    printed off a schema short of whatever that document declares.
+//	    -q does not silence it. The I/O fault above is not that skip:
+//	    it is charged 1, though the faulting run names the directive on
+//	    stderr too, before printing the fault.
+//	    A bare <xs:import>, which names no document, is not reported.
+//	    A REJECTED schema is named the same
+//	    way, for the directives assembly reached before it stopped, in
+//	    a line saying the assembly was rejected rather than compiled
+//	    and saying nothing about whether the unread document had a part
+//	    in that.
 //
 //	goxsd8 validate -schema <schema.xsd> [-schema <s2>]... <instance>...
 //	    Assess instances against the compiled set; every schema needs
@@ -82,8 +82,8 @@
 //	    an ENTITY value must name: the internal subset, including
 //	    its internal parameter entities. The external DTD subset is
 //	    never fetched, so a name declared only there is charged with
-//	    a message saying the DTD was not fully read, not that the
-//	    name is undeclared.
+//	    a cvc-simple-type cause saying the DTD was not fully read, not
+//	    that the name is undeclared.
 //	    Exit 0 when no instance was charged a violation and none left
 //	    a check undecided, 1 invalid, 2 usage or I/O on an argument or
 //	    on stdout, and 3 when the schema set does not compile.
@@ -182,6 +182,9 @@
 // document's own directory. That resolution is confined to no subtree: a
 // schema document may name any path the invoking user can read, so an
 // <xs:include schemaLocation="../../../etc/passwd"> is served like any other.
+// A directive whose schemaLocation resolves to no document is skipped rather
+// than rejected because src-include clause 2.4 and src-import make that skip
+// legal, which is why the usage block names it in a line and not as an error.
 //
 // validate composes its -schema documents into ONE schema set, through a
 // synthesized wrapper schema document that <import>s each document declaring a
@@ -209,12 +212,14 @@
 // aggregate by severity rather than by number, so a run whose instances mix
 // invalid with undecided exits 1: a gate acts on the verdict it has.
 //
-// An instance argument spelled - is standard input. -schema - is not
-// supported: a schema document's location is the base URI its own relative
-// <xs:include>, <xs:import> and <xs:override> references resolve against, and
-// standard input has none. That spelling is refused, exit 2, rather than
-// opened, so a file which happens to be named - is never compiled as the
-// schema set behind it; ./- is what names that file.
+// validate assesses its instances in argument order. An instance argument
+// spelled - is standard input, which has no extension to name a source format,
+// so it needs -format. -schema - is not supported: a schema document's
+// location is the base URI its own relative <xs:include>, <xs:import> and
+// <xs:override> references resolve against, and standard input has none. That
+// spelling is refused, exit 2, rather than opened, so a file which happens to
+// be named - is never compiled as the schema set behind it; ./- is what names
+// that file.
 //
 // validate follows an xsi:schemaLocation or xsi:noNamespaceSchemaLocation hint
 // carried by the DOCUMENT ELEMENT of an XML instance, and no other element's.
@@ -251,17 +256,45 @@
 // for is charged cvc-assess-elt (§3.3.4.6) instead of the run quietly
 // succeeding on a schema document the instance itself named.
 //
+// gen's -backend strict|native names the value backend, builtin/strict or
+// builtin/native, that the generated code is emitted against.
+//
 // There is no version entry point and none is planned before 1.0: run
 // go version -m $(which goxsd8) for the module version of a tagged build.
 // -v is not available for one, being already assigned to debug logging.
 //
 // The CLI is a thin shell over the library for the capabilities it runs
 // today: schema compilation and XML instance assessment are reachable through
-// parser, xsd, validate and validate/xmlsrc, and the README documents both
-// routes for them. The capabilities this page reserves have no library route
-// either — validate/jsonsrc (M8), codegen (M9) with codec (M10) and
-// validate/bersrc (M11) each export nothing yet, so for JSON instances, code
-// generation and BER instances there is no second route to document until
-// those milestones land. Error output is stable and line-oriented for
-// scripting.
+// parser, xsd, validate and validate/xmlsrc, which reads a DOCTYPE the way
+// validate does, and the README shows both routes for them. The capabilities
+// this page reserves have no library route either — validate/jsonsrc (M8),
+// codegen (M9) with codec (M10) and validate/bersrc (M11) each export nothing
+// yet, so for JSON instances, code generation and BER instances there is no
+// second route to document until those milestones land. Error output is
+// stable and line-oriented for scripting.
+//
+// # Diagnostic lines
+//
+// A diagnostic line is <loc>: [<rule>] <message>, on stderr for a schema error
+// and on stdout for a violation or a declined check. <loc> is
+// <file>:<line>:<col>, ? when unknown, and <rule> is the spec validation rule
+// ID. validate renders its violations the way parse renders a schema error,
+// the no-rule-to-cite exception included, which on validate's path is the line
+// naming the source fault that stopped the walk. A decimal element holding
+// "12,50" prints:
+//
+//	order.xml:3:3: [cvc-type] the ·initial value· of the element amount is not ·valid· with respect to its ·governing type definition· {http://www.w3.org/2001/XMLSchema}decimal, which cvc-type clause 3.1.3 requires as per String Valid (§3.16.4): ?: [cvc-datatype-valid] decimal: "12,50" is not in the lexical space (decimal-lexical-representation, §3.3.3.1)
+//
+// <rule> is the rule CHARGED, and for the content of an element or attribute
+// that is never cvc-datatype-valid: the charge is cvc-type (clause 3.1.3),
+// cvc-attribute (clause 3) or cvc-complex-type (clause 1.2), each of which
+// delegates through String Valid (§3.16.4) to Datatype Valid and carries that
+// verdict as a WRAPPED cause — rendered into the message, as above, and
+// reachable as an *xsderr.Error of its own through errors.As and
+// xsderr.RuleOf. Key a dispatcher on the outer rule.
 package main
+
+// The # Usage section of the package comment above is generated:
+// TestDocRendersUsage renders it from usage (main.go) and go generate rewrites
+// it. Edit usage, never that section; the rest of the package comment is
+// hand-written.
