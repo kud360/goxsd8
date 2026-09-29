@@ -100,7 +100,7 @@ type subtreeGate struct {
 //     definitions} and no fixed {value constraint} (assessedDeclaration);
 //   - d.{type definition} resolves;
 //   - for a Simple Type Definition, its closure reaches none of
-//     idOrEntityOrNotation, the element carries no attribute but the four
+//     walkUnrecorded, the element carries no attribute but the four
 //     xsi: ones cvc-type clause 3.1.1 excepts, and no element [[child]];
 //   - for a Complex Type Definition, the conditions complex names.
 func (g *subtreeGate) element(start xml.StartElement, d xsd.ElementDeclaration) bool {
@@ -113,7 +113,7 @@ func (g *subtreeGate) element(start xml.StartElement, d xsd.ElementDeclaration) 
 	}
 	switch t := td.(type) {
 	case *xsd.SimpleType:
-		if closureReaches(g.schema, t) || slices.ContainsFunc(start.Attr, notExcepted) {
+		if closureReaches(g.schema, t, walkUnrecorded) || slices.ContainsFunc(start.Attr, notExcepted) {
 			return false
 		}
 		return g.leaf()
@@ -173,12 +173,12 @@ func assessedDeclaration(d xsd.ElementDeclaration) bool {
 //   - t.{abstract} is false (cvc-type clause 2);
 //   - every one of t.{attribute uses} resolves to an {attribute declaration}
 //     whose {type definition} resolves to a simple type whose closure reaches
-//     none of idOrEntityOrNotation, present on the element or not;
+//     none of walkUnrecorded, present on the element or not;
 //   - every attribute the element carries that notExcepted names matches one
 //     of those uses by ·expanded name· (cvc-complex-type clause 2.1), so none
 //     is ·attributed to· the {attribute wildcard};
 //   - under a simple {content type}, its {simple type definition}'s closure
-//     reaches none of idOrEntityOrNotation and there is no element [[child]];
+//     reaches none of walkUnrecorded and there is no element [[child]];
 //   - under an empty one, there is no element [[child]];
 //   - under an element-only or mixed one, xsd.Schema.ContentMatcher decides it
 //     and every element [[child]] meets child's conditions.
@@ -193,7 +193,7 @@ func (g *subtreeGate) complex(start xml.StartElement, t xsd.ComplexType) bool {
 			return false
 		}
 		st, ok := g.schema.ResolvedSimpleType(ad.TypeDefinition())
-		if !ok || closureReaches(g.schema, st) {
+		if !ok || closureReaches(g.schema, st, walkUnrecorded) {
 			return false
 		}
 	}
@@ -208,7 +208,7 @@ func (g *subtreeGate) complex(start xml.StartElement, t xsd.ComplexType) bool {
 	}
 	switch ct := t.ContentType().(type) {
 	case xsd.SimpleContent:
-		if closureReaches(g.schema, ct.SimpleType) {
+		if closureReaches(g.schema, ct.SimpleType, walkUnrecorded) {
 			return false
 		}
 		return g.leaf()
