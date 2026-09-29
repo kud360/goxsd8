@@ -112,10 +112,10 @@ func TestTakeDeclineCensusLeavesDiscoveryUntouched(t *testing.T) {
 	}
 }
 
-// TestChargedIDsWritesTheChargeOnlyForALaneThatHasOne pins the
-// GOXSD_DECLINES=1 decided-disagreements rendering tools/lanepartition parses
-// (#1740): `<id>=<charge>` in case order for a lane with a charge probe, the
-// bare ID for a lane without one.
+// TestChargedIDsWritesTheChargeOnlyForALaneThatHasOne pins the GOXSD_DECLINES=1
+// decided-disagreements rendering tools/internal/declinecensus parses (#1740):
+// `<id>=<charge>` in case order for a lane with a charge probe, the bare ID for a
+// lane without one.
 func TestChargedIDsWritesTheChargeOnlyForALaneThatHasOne(t *testing.T) {
 	disagreed := []caseSpec{{id: "set/g/schema/a"}, {id: "set/g/schema/b"}}
 	charging := lane{name: "fake", charge: func(c caseSpec) string { return "rule-of-" + c.id[len(c.id)-1:] }}
