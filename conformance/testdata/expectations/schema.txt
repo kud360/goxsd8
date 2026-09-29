@@ -7079,7 +7079,7 @@ MS-Particles2006-07-15/particlesZ030_b/schema/particlesZ030_b pass
 MS-Particles2006-07-15/particlesZ030_c/schema/particlesZ030_c pass
 MS-Particles2006-07-15/particlesZ030_d/schema/particlesZ030_d pass
 MS-Particles2006-07-15/particlesZ031/schema/particlesZ031 pass
-MS-Particles2006-07-15/particlesZ033_a/schema/particlesZ033_a fail
+MS-Particles2006-07-15/particlesZ033_a/schema/particlesZ033_a pass
 MS-Particles2006-07-15/particlesZ033_c/schema/particlesZ033_c pass
 MS-Particles2006-07-15/particlesZ033_d/schema/particlesZ033_d pass
 MS-Particles2006-07-15/particlesZ033_e/schema/particlesZ033_e pass
