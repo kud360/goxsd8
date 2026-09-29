@@ -147,13 +147,13 @@ type icFieldCursor struct {
 // and any other operator or literal outside a predicate; a predicate holding a
 // token icpath's lexer does not read (`a[1]`, `a[b!='c']`); a non-expression
 // icpath does not charge: Steps with no separator, the parent step `..`
-// among them (#1829), a colon run it cannot read, or any other stream holding
-// a rune the lexer does not read (`a#b`, `f('x'`, `item()`); a `.//` with no
-// element step left once the self steps are removed, which production [3]'s
-// bare `.` Step makes assembly-LEGAL and only this matcher cannot represent;
-// and — because a component assembled directly through
-// [xsd.NewIdentityConstraint] reaches no assembler — any charged shape as
-// well.
+// among them (#1829), a colon run it cannot read, or any other stream the
+// lexer cannot read whole, an unread rune or an unfinished token (`a#b`,
+// `f('x'`, `item()`); a `.//` with no element step left once the self steps are
+// removed, which production [3]'s bare `.` Step makes assembly-LEGAL and only
+// this matcher cannot represent; and — because a component assembled directly
+// through [xsd.NewIdentityConstraint] reaches no assembler — any charged shape
+// as well.
 type icFrame struct {
 	ic       xsd.IdentityConstraint
 	sel      icpath.Expr
