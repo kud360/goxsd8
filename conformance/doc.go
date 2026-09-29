@@ -215,10 +215,12 @@
 //	    disagreements:`, where a lane with a charge probe (lane.charge; the
 //	    schema lane) writes each ID as `<id>=<charge>` — the rule
 //	    xsderr.RuleOf reads off the assembly's error, `(unruled)` for an error
-//	    carrying none, `(accepted)` for an assembly that succeeded. `go tool
-//	    lanepartition` reads these lines (#1740). Opt-in because a lane still
-//	    awaiting its milestone declines every case it claims and would bury
-//	    the run's other reporting.
+//	    carrying none, `(accepted)` for an assembly that succeeded.
+//	    tools/internal/declinecensus reads these lines for `go tool
+//	    lanepartition -log` (#1740) and `go tool casejoin -log` (#1785), so
+//	    a label renamed in reportDeclines is renamed there. Opt-in because a
+//	    lane still awaiting its milestone declines every case it claims and
+//	    would bury the run's other reporting.
 //
 // # Missing suite
 //

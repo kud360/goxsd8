@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -13,7 +14,9 @@ import (
 // withheld; a schema document named both by its own schemaTest and by the
 // instance case assessed against it — once inside an applicable group and
 // once inside a withheld one, so both counts have a duplicate to collapse;
-// and the declared outcomes the instance lane files its declared-valid row on.
+// the declared outcomes the instance lane files its declared-valid row on;
+// and, in g5, a schema case and an instance case the suite declares
+// indeterminate, which a fed run log lists as indeterminate declines.
 var fixtureSuite = map[string]string{
 	"suite.xml": `<testSuite xmlns:xlink="http://www.w3.org/1999/xlink">
   <testSetRef xlink:href="sets/s.testSet"/>
@@ -56,6 +59,16 @@ var fixtureSuite = map[string]string{
       <expected validity="invalid"/>
     </instanceTest>
   </testGroup>
+  <testGroup name="g5">
+    <schemaTest name="s5">
+      <schemaDocument xlink:href="../docs/d.xsd"/>
+      <expected validity="indeterminate"/>
+    </schemaTest>
+    <instanceTest name="i5">
+      <instanceDocument xlink:href="../docs/d1.xml"/>
+      <expected validity="indeterminate"/>
+    </instanceTest>
+  </testGroup>
 </testSet>`,
 }
 
@@ -71,10 +84,31 @@ var fixtureLanes = map[string]string{
 S/g2/instance/i2 fail
 S/g3/instance/i3 fail
 S/g4/instance/i4 pass
+S/g5/instance/i5 fail
 `,
 	"schema.txt": `S/g1/schema/s1 fail
 S/g4/schema/s4 fail
+S/g5/schema/s5 fail
 `,
+}
+
+// fixtureLog is a GOXSD_DECLINES=1 run's census over the fixture lanes, inside
+// the noise a real -v log carries around it: each lane lists its g5 case as an
+// indeterminate decline.
+const fixtureLog = `=== RUN   TestConformance
+    conformance_test.go:245: lane schema: decline candidates: [S/g1/schema/s1]
+    conformance_test.go:246: lane schema: indeterminate declines: [S/g5/schema/s5]
+    conformance_test.go:247: lane schema: decided disagreements: [S/g4/schema/s4=(accepted)]
+    conformance_test.go:245: lane instance: decline candidates: [S/g1/instance/i1 S/g2/instance/i2]
+    conformance_test.go:246: lane instance: indeterminate declines: [S/g5/instance/i5]
+    conformance_test.go:247: lane instance: decided disagreements: []
+--- PASS: TestConformance (1.00s)
+`
+
+// logFile writes body to a temp file and returns its path.
+func logFile(t *testing.T, body string) string {
+	t.Helper()
+	return filepath.Join(writeTree(t, map[string]string{"run.log": body}), "run.log")
 }
 
 // writeTree materializes a name-to-body map under a fresh temp directory and
@@ -261,10 +295,10 @@ func TestIDsAndJoinCountTheSameDistinctEntries(t *testing.T) {
 	wantRow(t, join, "withheld — no case produced, nothing to flip (#1412)", 2)
 }
 
-// TestJoinCaveatNamesAllThreeDirections holds the figure's caveat to every
-// direction it is wrong in. A caveat naming one of three is the false
+// TestJoinCaveatNamesAllFourDirections holds the figure's caveat to every
+// direction it is wrong in. A caveat naming one of four is the false
 // statement #1585 exists to prevent, with a smaller radius.
-func TestJoinCaveatNamesAllThreeDirections(t *testing.T) {
+func TestJoinCaveatNamesAllFourDirections(t *testing.T) {
 	got := runFixture(t, "", "join", "instance", "docs/a1.xml")
 	wantLines(t, got,
 		"BOUND FROM ABOVE",
@@ -273,12 +307,112 @@ func TestJoinCaveatNamesAllThreeDirections(t *testing.T) {
 		"UNDER-counts",
 		"Read only partly",
 		"declares VALID",
+		indeterminateOverCount,
 	)
 	header := strings.Index(got, "casejoin: ")
 	caveat := strings.Index(got, "BOUND FROM ABOVE")
 	body := strings.Index(got, "=== Join against")
 	if header >= caveat || caveat >= body {
 		t.Errorf("the caveat must sit under the header, ahead of the body (#1279):\n%s", got)
+	}
+}
+
+// indeterminateOverCount and indeterminateSubtracted open the caveat's
+// indeterminate direction without a run log and with one.
+const (
+	indeterminateOverCount  = "It OVER-counts on every lane by the cases the suite declares indeterminate"
+	indeterminateSubtracted = "Each banked fail the run log lists as an indeterminate decline is on its own row below"
+)
+
+// indeterminateRow is the label of the row a fed run log's indeterminate
+// declines are counted on.
+const indeterminateRow = "banked fail, run log lists it an indeterminate decline — never flips (#277)"
+
+// TestJoinCaveatNamesTheIndeterminateDirectionOnEveryLane holds the fourth
+// direction off the instance lane's early return: on the schema lane, with no
+// log fed, the caveat names the over-count and the flag and log that remove
+// it, and prints no indeterminate row, since an unread class is unknown and a
+// 0 there would read as a finding.
+func TestJoinCaveatNamesTheIndeterminateDirectionOnEveryLane(t *testing.T) {
+	got := runFixture(t, "", "join", "schema", "docs/d.xsd")
+	wantLines(t, got,
+		indeterminateOverCount,
+		"Pass -log with a GOXSD_DECLINES=1 conformance run's -v output",
+		"→ 1 candidate case(s) in lane schema",
+	)
+	wantRow(t, got, "banked fail — CANDIDATE", 1)
+	if strings.Contains(got, "indeterminate decline —") {
+		t.Errorf("an indeterminate row is printed with no run log fed:\n%s", got)
+	}
+}
+
+// TestJoinFedALogSubtractsIndeterminateDeclines is the row itself, on both
+// lanes: the case the run log lists as an indeterminate decline leaves the
+// candidates for its own row, and the caveat stops claiming the over-count
+// the row has removed.
+func TestJoinFedALogSubtractsIndeterminateDeclines(t *testing.T) {
+	for _, tc := range []struct{ lane, path, id string }{
+		{"instance", "docs/d1.xml", "S/g5/instance/i5"},
+		{"schema", "docs/d.xsd", "S/g5/schema/s5"},
+	} {
+		t.Run(tc.lane, func(t *testing.T) {
+			got := runFixture(t, "", "-log", logFile(t, fixtureLog), "join", tc.lane, tc.path)
+			wantLines(t, got,
+				"→ 0 candidate case(s) in lane "+tc.lane,
+				indeterminateSubtracted,
+			)
+			wantRow(t, got, indeterminateRow, 1)
+			wantRow(t, got, "banked fail — CANDIDATE", 0)
+			if strings.Contains(got, indeterminateOverCount) {
+				t.Errorf("the caveat claims the over-count the row removed:\n%s", got)
+			}
+			if strings.Contains(got, "\n  "+tc.id+"\n") {
+				t.Errorf("%s is listed as a candidate:\n%s", tc.id, got)
+			}
+		})
+	}
+}
+
+// TestJoinFedALogStillCountsTheOtherBankedFails holds the subtraction to the
+// indeterminate list alone: S/g1/instance/i1 and S/g2/instance/i2 are listed
+// as ordinary decline candidates and stay candidates, and the row prints its
+// 0 because a log was read.
+func TestJoinFedALogStillCountsTheOtherBankedFails(t *testing.T) {
+	got := runFixture(t, "", "-log", logFile(t, fixtureLog), "join", "instance", "docs/a1.xml")
+	wantLines(t, got, "→ 2 candidate case(s) in lane instance")
+	wantRow(t, got, indeterminateRow, 0)
+}
+
+// TestJoinRefusesAnUnusableLog holds every -log fault to an operational error
+// (exit 2), each opening with its subject (#1048): a log that cannot be read,
+// one with no listing for the lane, one listing it twice, a -log given to the
+// mode that names no lane, and a log listing as indeterminate a case the
+// catalog declares valid.
+func TestJoinRefusesAnUnusableLog(t *testing.T) {
+	noInstance := strings.Join(slices.DeleteFunc(strings.Split(fixtureLog, "\n"), func(l string) bool {
+		return strings.Contains(l, "lane instance:")
+	}), "\n")
+	validListed := strings.Replace(fixtureLog, "indeterminate declines: [S/g5/instance/i5]", "indeterminate declines: [S/g2/instance/i2 S/g5/instance/i5]", 1)
+	join := []string{"join", "instance", "docs/a1.xml"}
+	cases := []struct {
+		name, prefix, carries string
+		args                  []string
+	}{
+		{"unreadable", "reading run log", "no such file", append([]string{"-log", filepath.Join(t.TempDir(), "absent.log")}, join...)},
+		{"no listing for the lane", "run log ", `carries no "decline candidates" listing for lane instance`, append([]string{"-log", logFile(t, noInstance)}, join...)},
+		{"listed twice", "run log ", `lane instance lists "decline candidates" twice`, append([]string{"-log", logFile(t, fixtureLog+fixtureLog)}, join...)},
+		{"given to ids", "-log reads a lane's census", `mode "ids" names no lane`, []string{"-log", logFile(t, fixtureLog), "ids", "docs/a1.xml"}},
+		{"valid case listed indeterminate", "the run log lists S/g2/instance/i2 as indeterminate", "the catalog declares it valid", append([]string{"-log", logFile(t, validListed)}, join...)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var out strings.Builder
+			full := append([]string{"-suite", writeTree(t, fixtureSuite), "-expectations", writeTree(t, fixtureLanes)}, tc.args...)
+			err := run(&out, strings.NewReader(""), full)
+			if err == nil || !strings.HasPrefix(err.Error(), tc.prefix) || !strings.Contains(err.Error(), tc.carries) {
+				t.Errorf("run error = %v, want one opening %q and carrying %q; output:\n%s", err, tc.prefix, tc.carries, out.String())
+			}
+		})
 	}
 }
 
@@ -337,19 +471,24 @@ func TestCorpusAbsentModeReportsAndExitsCleanly(t *testing.T) {
 }
 
 // TestJoinRowsPartitionTheEntries holds the table to its own arithmetic: the
-// five classes are disjoint and cover every entry, so a reader may subtract
-// one row from another.
+// six classes are disjoint and cover every entry, so a reader may subtract
+// one row from another — and the indeterminate class is out of candidates().
 func TestJoinRowsPartitionTheEntries(t *testing.T) {
 	j := joined{
 		Lane:             instanceLane,
+		LogFed:           true,
 		WithheldIDs:      []string{"a"},
 		UnscoredIDs:      []string{"b", "c"},
 		BankedPassIDs:    []string{"d"},
+		IndeterminateIDs: []string{"h", "i"},
 		DeclaredValidIDs: []string{"e", "f"},
 		CandidateIDs:     []string{"g"},
 	}
-	if j.entries() != 7 {
-		t.Errorf("entries() = %d, want 7", j.entries())
+	if j.entries() != 9 {
+		t.Errorf("entries() = %d, want 9", j.entries())
+	}
+	if got := j.candidates(); !slices.Equal(got, []string{"e", "f", "g"}) {
+		t.Errorf("candidates() = %v, want the declared-valid and candidate classes only", got)
 	}
 	sum := 0
 	for _, r := range j.rows() {

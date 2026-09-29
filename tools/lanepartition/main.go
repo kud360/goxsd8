@@ -51,7 +51,6 @@
 package main
 
 import (
-	"bufio"
 	"cmp"
 	"encoding/json"
 	"errors"
@@ -60,11 +59,11 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strings"
 
 	"github.com/kud360/goxsd8/conformance"
+	"github.com/kud360/goxsd8/tools/internal/declinecensus"
 )
 
 // defaultSuite and defaultExpectations are the suite submodule and the
@@ -125,9 +124,9 @@ func run(stdout io.Writer, stdin io.Reader, args []string) error {
 	if err != nil {
 		return fmt.Errorf("reading the suite catalog (initialize it with `git submodule update --init %s`): %w", defaultSuite, err)
 	}
-	var census *runCensus
+	var census *declinecensus.Census
 	if *logPath != "" {
-		c, err := readCensus(*logPath, lane)
+		c, err := declinecensus.Read(*logPath, lane)
 		if err != nil {
 			return err
 		}
@@ -161,69 +160,6 @@ func bankedFails(file string) ([]string, error) {
 	}
 	slices.Sort(ids)
 	return ids, nil
-}
-
-// runCensus is one lane's GOXSD_DECLINES=1 listing, read off a run's log:
-// the three lists that partition that run's failures.
-type runCensus struct {
-	declined      []string
-	indeterminate []string
-	// decided maps each decided disagreement to what the run charged it — the
-	// text after `=`, empty on a lane that charges nothing.
-	decided map[string]string
-}
-
-// The three census lists, as reportDeclines in conformance_test.go labels
-// them. A rename there is a rename here, or every log reads as carrying no
-// listing.
-const (
-	listDeclined      = "decline candidates"
-	listIndeterminate = "indeterminate declines"
-	listDecided       = "decided disagreements"
-)
-
-// censusLine matches one census listing line wherever the test framework's
-// `file:line:` prefix puts it: the lane, the list's label, and the bracketed,
-// space-separated IDs %v renders.
-var censusLine = regexp.MustCompile(`lane (\S+): (` + listDeclined + `|` + listIndeterminate + `|` + listDecided + `): \[(.*)\]\s*$`)
-
-// readCensus reads lane's three census lists from a run log. Each must appear
-// exactly once: a missing one is a log from a run without GOXSD_DECLINES=1, or
-// from before the listing carried all three, and a repeated one is two runs
-// concatenated.
-func readCensus(path, lane string) (runCensus, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return runCensus{}, fmt.Errorf("reading run log: %w", err)
-	}
-	defer func() { _ = f.Close() }() // read-only handle: a close error changes nothing read
-	lists := map[string][]string{}
-	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 0, 64*1024), 64*1024*1024)
-	for sc.Scan() {
-		m := censusLine.FindStringSubmatch(sc.Text())
-		if m == nil || m[1] != lane {
-			continue
-		}
-		if _, dup := lists[m[2]]; dup {
-			return runCensus{}, fmt.Errorf("run log %s: lane %s lists %q twice — one run per log", path, lane, m[2])
-		}
-		lists[m[2]] = strings.Fields(m[3])
-	}
-	if err := sc.Err(); err != nil {
-		return runCensus{}, fmt.Errorf("reading run log %s: %w", path, err)
-	}
-	for _, label := range []string{listDeclined, listIndeterminate, listDecided} {
-		if _, ok := lists[label]; !ok {
-			return runCensus{}, fmt.Errorf("run log %s carries no %q listing for lane %s — run the suite with GOXSD_DECLINES=1 and -v", path, label, lane)
-		}
-	}
-	decided := map[string]string{}
-	for _, entry := range lists[listDecided] {
-		id, charge, _ := strings.Cut(entry, "=")
-		decided[id] = charge
-	}
-	return runCensus{declined: lists[listDeclined], indeterminate: lists[listIndeterminate], decided: decided}, nil
 }
 
 // A banked fail's declared validity, as the report can know it. notValid is
@@ -286,13 +222,13 @@ func (p partitioned) charged() bool {
 // fail with no catalog entry, or a log listing a case indeterminate that the
 // catalog declares valid, is an error: the file, the suite and the log are
 // then not one tree's.
-func partition(lane string, banked []string, entries []conformance.CatalogEntry, census *runCensus) (partitioned, error) {
+func partition(lane string, banked []string, entries []conformance.CatalogEntry, census *declinecensus.Census) (partitioned, error) {
 	catalog := make(map[string]conformance.CatalogEntry, len(entries))
 	for _, e := range entries {
 		catalog[e.ID] = e
 	}
 	p := partitioned{lane: lane, logFed: census != nil, banked: len(banked), cells: map[[2]string]int{}}
-	listed := census.listing()
+	listed := listingOf(census)
 	index := map[clusterKey]int{}
 	for _, id := range banked {
 		e, ok := catalog[id]
@@ -323,27 +259,27 @@ func partition(lane string, banked []string, entries []conformance.CatalogEntry,
 // censusListing is the census inverted to a lookup by case ID.
 type censusListing map[string]string
 
-// listing inverts the census's lists into one lookup of each listed ID's
+// listingOf inverts the census's lists into one lookup of each listed ID's
 // class. A nil census lists nothing.
-func (c *runCensus) listing() censusListing {
+func listingOf(c *declinecensus.Census) censusListing {
 	listed := censusListing{}
 	if c == nil {
 		return listed
 	}
-	for _, id := range c.declined {
+	for _, id := range c.Declined {
 		listed[id] = classDeclined
 	}
-	for _, id := range c.indeterminate {
+	for _, id := range c.Indeterminate {
 		listed[id] = classIndeterminate
 	}
-	for id := range c.decided {
+	for id := range c.Decided {
 		listed[id] = classDecided
 	}
 	return listed
 }
 
 // classOf is a banked fail's class and, for a decided case, its charge.
-func (l censusListing) classOf(id string, census *runCensus) (class, charge string) {
+func (l censusListing) classOf(id string, census *declinecensus.Census) (class, charge string) {
 	if census == nil {
 		return classBanked, ""
 	}
@@ -352,7 +288,7 @@ func (l censusListing) classOf(id string, census *runCensus) (class, charge stri
 		return classUnlisted, ""
 	}
 	if class == classDecided {
-		return class, census.decided[id]
+		return class, census.Decided[id]
 	}
 	return class, ""
 }
