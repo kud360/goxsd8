@@ -231,11 +231,12 @@ import (
 //     type (clause 4, §3.3.4.2 key-overrides), which is the walk's decision
 //     too; the gate then follows that type as the ·governing type definition·
 //     (key-governing-type-elem clause 3) through every condition below. It
-//     refuses an error from that predicate, governingType's one silent exit
-//     (#1093) an xsi:type reaches, and the two answers xsd gives without
-//     reading the declaration's {disallowed substitutions}, which the walk
-//     records nowhere (subtreeGate.governingType, blockingUnread).
-//     {identity-constraint definitions} are admitted, at every depth: clause 6
+//     refuses an error from that predicate, the one silent exit of validate's
+//     governingType (instanceOverride, #1093) an xsi:type reaches, and the two
+//     answers xsd gives without reading the declaration's {disallowed
+//     substitutions}, which the walk records nowhere
+//     (subtreeGate.governingType, blockingUnread). {identity-constraint
+//     definitions} are admitted, at every depth: clause 6
 //     (cvc-identity-constraint, §3.11.4) is the walk's, which records each
 //     check it declines in Result.Unevaluated, except the ·defaulted
 //     attribute· field node "Cases 7 and 8" below names, which the gate

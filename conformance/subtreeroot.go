@@ -219,16 +219,23 @@ func (g *subtreeGate) governingType(start xml.StartElement, d xsd.ElementDeclara
 // blocked:
 //
 //   - selected is ·xs:anyType·, which validlyDerived answers true for before
-//     reading blocked. For a complex t, extension or restriction in blocked can
-//     fail cos-ct-derived-ok clause 1 on a step of t's {base type definition}
-//     chain, which the gate does not walk (xs:anyType's own {prohibited
-//     substitutions} is the empty set, §3.4.7, and adds nothing); for a simple
-//     t, restriction in blocked can fail cos-st-derived-ok clause 2.1, the one
-//     keyword that constraint reads.
+//     reading blocked (the GAP(xsd) at its xs:anyType shortcut). For a complex
+//     t, extension or restriction in blocked can fail cos-ct-derived-ok clause
+//     1 on a step of t's {base type definition} chain, which the gate does not
+//     walk (xs:anyType's own {prohibited substitutions} is the empty set,
+//     §3.4.7, and adds nothing); for a simple t, restriction in blocked can
+//     fail cos-st-derived-ok clause 2.1, the one keyword that constraint
+//     reads.
 //   - selected is a Simple Type Definition and restriction is in blocked:
 //     derivedOKSimple runs cos-st-derived-ok under the empty blocking set (the
 //     GAP(xsd) on ValidlySubstitutable), reached for a simple t directly and
-//     for a complex t through cos-ct-derived-ok clause 2.3.2.2.
+//     for a complex t through cos-ct-derived-ok clause 2.3.2.2. This arm is
+//     conservative for a complex t: derivedOKComplex decides clause 1 and
+//     clause 2.2 exactly where t's {base type definition} chain reaches
+//     selected before any other simple type, and the gate refuses those too
+//     rather than walk the chain. MS-Element elemT058.v, a simpleContent
+//     extension of the declared simple type itself, is such a valid case the
+//     gate declines.
 //
 // Neither applies where t is selected itself, which clause 1 of both
 // constraints admits whatever blocked holds; t is a top-level type, so a name
