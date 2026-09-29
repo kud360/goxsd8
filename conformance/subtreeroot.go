@@ -4,6 +4,7 @@ import (
 	"encoding/xml"
 	"errors"
 	"io"
+	"os"
 	"path/filepath"
 	"slices"
 
@@ -12,29 +13,49 @@ import (
 	"github.com/kud360/goxsd8/xsd"
 )
 
-// This file holds the instance lane's third shape gate for the "valid"
-// observation (#1841): an ASSESSED SUBTREE ROOT, a validation root WITH content
-// whose every element and attribute the walk strictly assessed against a
-// declaration and a type it really has, with no clause of key-sva (§3.3.4.6),
-// cvc-elt (§3.3.4.3), cvc-type (§3.3.4.4) or cvc-complex-type (§3.4.4.2) left
-// undecided unrecorded. instance.go's "Why an EMPTY Result is evidence of
-// validity for THREE shapes only" states which clause each condition
-// discharges; this file is only the conditions, and simpleleaf.go holds the
-// helpers it shares with the two leaf-root gates.
+// This file holds the instance lane's one shape gate for the "valid"
+// observation: an ASSESSED SUBTREE ROOT (#1841), a validation root, with or
+// without content (#1855), whose every element and attribute the walk strictly
+// assessed against a declaration and a type it really has, with no clause of
+// key-sva (§3.3.4.6), cvc-elt (§3.3.4.3), cvc-type (§3.3.4.4) or
+// cvc-complex-type (§3.4.4.2) left undecided unrecorded. instance.go's "Why an
+// EMPTY Result is evidence of validity for ONE shape only" states which clause
+// each condition discharges; this file is only the conditions.
 //
 // The gate is computed per case and stored nowhere. It re-reads the instance
 // with encoding/xml and re-derives every child's ·attribution· through
 // xsd.Schema.ContentMatcher, independently of the walk, so it never rests on
 // what the walk did or did not record for a descendant.
 
+// versioningNS is the XML Schema versioning namespace §4.2.2 reads vc:minVersion,
+// vc:maxVersion, vc:typeAvailable, vc:typeUnavailable, vc:facetAvailable and
+// vc:facetUnavailable from. parser keeps its own copy unexported; the lane
+// declares the name here rather than parser exporting it for a gate that exists
+// only because of a parser GAP (#1002).
+const versioningNS = "http://www.w3.org/2007/XMLSchema-versioning"
+
+// walkUnrecorded are the builtin simple types whose presence anywhere in a
+// type's closure puts in play a clause the walk neither decides nor records a
+// decline for, at any depth. The gate excludes these alone: the ID family and
+// the ENTITY family are the walk's to decide and record at every depth
+// (instance.go, the cvc-elt clause 7 bullet).
+//
+// GAP(validate): an xs:NOTATION value is never checked against the schema's
+// notations. NOTATION's ·value space· is "the set of QNames of notations
+// declared in the current schema" (Datatypes §3.3.19, with
+// enumeration-required-notation), which no validate or backend site checks and
+// records no decline for — Override/over027/instance/over027.n01.xml, whose
+// NOTATION value names no declared notation, is suite-invalid and walks clean,
+// a false accept (#1901).
+var walkUnrecorded = []string{"NOTATION"}
+
 // assessedSubtreeRoot reports whether the instance document at doc, against
 // schema as assembled into report, has the assessed-subtree-root shape an empty
-// validate.Result may be read as "valid" for: a root with at least one element
-// or character information item [[child]] whose subtree meets every condition
-// subtreeGate.element names, in a document with no DOCTYPE, against an assembly no
-// version condition touched. Any failure to establish a condition — an
-// unreadable document, a decoder error, an unresolvable component — is a false,
-// never a guess.
+// validate.Result may be read as "valid" for: a root, with content or without,
+// whose subtree meets every condition subtreeGate.element names, in a document
+// with no DOCTYPE, against an assembly no version condition touched. Any
+// failure to establish a condition — an unreadable document, a decoder error,
+// an unresolvable component — is a false, never a guess.
 func assessedSubtreeRoot(schema *xsd.Schema, report *parser.AssemblyReport, doc string) bool {
 	if closureVersioned(report) {
 		return false
@@ -58,7 +79,7 @@ func assessedSubtreeRoot(schema *xsd.Schema, report *parser.AssemblyReport, doc 
 		return false
 	}
 	g := subtreeGate{schema: schema, dec: dec}
-	if !g.element(root, d) || !g.rootHadContent {
+	if !g.element(root, d) {
 		return false
 	}
 	return documentEnd(dec)
@@ -82,13 +103,10 @@ func documentEnd(dec *xml.Decoder) bool {
 }
 
 // subtreeGate is one assessedSubtreeRoot reading: the schema the subtree is
-// checked against and the decoder positioned inside it. rootHadContent is set
-// by the root's own content reading alone, which is the only depth that asks.
+// checked against and the decoder positioned inside it.
 type subtreeGate struct {
-	schema         *xsd.Schema
-	dec            *xml.Decoder
-	depth          int
-	rootHadContent bool
+	schema *xsd.Schema
+	dec    *xml.Decoder
 }
 
 // element reads the element whose start tag is start, and whose ·governing
@@ -225,8 +243,7 @@ func (g *subtreeGate) complex(start xml.StartElement, t xsd.ComplexType) bool {
 }
 
 // leaf reads an element's content through to its end tag and reports whether
-// no element started inside it, noting on the way whether the root held any
-// character data.
+// no element started inside it.
 func (g *subtreeGate) leaf() bool {
 	for {
 		tok, err := g.dec.Token()
@@ -236,8 +253,6 @@ func (g *subtreeGate) leaf() bool {
 		switch tok.(type) {
 		case xml.StartElement:
 			return false
-		case xml.CharData:
-			g.noteContent()
 		case xml.EndElement:
 			return true
 		}
@@ -254,24 +269,13 @@ func (g *subtreeGate) children(m *xsd.Matcher) bool {
 			return false
 		}
 		switch t := tok.(type) {
-		case xml.CharData:
-			g.noteContent()
 		case xml.StartElement:
-			g.noteContent()
 			if !g.child(m, t) {
 				return false
 			}
 		case xml.EndElement:
 			return m.Accepting()
 		}
-	}
-}
-
-// noteContent records a character or element information item [[child]] of
-// the root; below the root it records nothing.
-func (g *subtreeGate) noteContent() {
-	if g.depth == 0 {
-		g.rootHadContent = true
 	}
 }
 
@@ -303,8 +307,125 @@ func (g *subtreeGate) child(m *xsd.Matcher, start xml.StartElement) bool {
 	if !ok || d.Name() != name {
 		return false
 	}
-	g.depth++
-	ok = g.element(start, d)
-	g.depth--
-	return ok
+	return g.element(start, d)
+}
+
+// rootStart reads dec up to the document element's start tag. A DOCTYPE — any
+// xml.Directive — answers false: a DTD can default an attribute onto any
+// element, or declare the unparsed entities an ENTITY value is checked against,
+// and this reader sees neither.
+func rootStart(dec *xml.Decoder) (xml.StartElement, bool) {
+	for {
+		tok, err := dec.Token()
+		if err != nil {
+			return xml.StartElement{}, false
+		}
+		switch t := tok.(type) {
+		case xml.Directive:
+			return xml.StartElement{}, false
+		case xml.StartElement:
+			return t, true
+		}
+	}
+}
+
+// expandedName is n as the ·expanded name· the schema indexes by. encoding/xml
+// has already translated a bound prefix to its namespace name.
+func expandedName(n xml.Name) xsd.QName {
+	return xsd.QName{Space: n.Space, Local: n.Local}
+}
+
+// isNamespaceDeclaration reports whether a is a namespace declaration, which
+// the infoset carries in [namespace attributes] and not in [attributes].
+func isNamespaceDeclaration(a xml.Attr) bool {
+	return a.Name.Space == "xmlns" || (a.Name.Space == "" && a.Name.Local == "xmlns")
+}
+
+// isLocationHint reports whether a is xsi:schemaLocation or
+// xsi:noNamespaceSchemaLocation.
+func isLocationHint(a xml.Attr) bool {
+	return a.Name.Space == xsd.XMLSchemaInstanceNS &&
+		(a.Name.Local == "schemaLocation" || a.Name.Local == "noNamespaceSchemaLocation")
+}
+
+// closureReaches reports whether st's closure — its {base type definition}
+// chain, its {item type definition} and each of its {member type definitions},
+// transitively — holds a builtin named in names. A reference the
+// resolver cannot follow answers true, so an unreadable closure is excluded
+// rather than admitted.
+//
+// Item and Members are read once, off st itself: both are derived through the
+// {base type definition} chain (§3.16.2.1), so every restriction on that chain
+// reports the same ones. The recursion needs no visited set: a finalized
+// Schema's base chains and union memberships are acyclic (xsd's Phase B,
+// checkSimpleBaseAcyclic and checkUnionMembershipAcyclic).
+func closureReaches(r xsd.TypeResolver, st *xsd.SimpleType, names []string) bool {
+	for t := st; t != nil; {
+		if t.Name().Space == xsd.XMLSchemaNS && slices.Contains(names, t.Name().Local) {
+			return true
+		}
+		base, err := t.Base(r)
+		if err != nil {
+			return true
+		}
+		t = base
+	}
+	item, err := st.Item(r)
+	if err != nil {
+		return true
+	}
+	if item != nil && closureReaches(r, item, names) {
+		return true
+	}
+	members, err := st.Members(r)
+	if err != nil {
+		return true
+	}
+	return slices.ContainsFunc(members, func(m *xsd.SimpleType) bool { return closureReaches(r, m, names) })
+}
+
+// closureVersioned reports whether any schema document the assembly read
+// carries an attribute in versioningNS, on any element. It is a conservative
+// SUPERSET of the documents the #1002 GAP(parser) in parser/conditional.go can
+// mis-assemble — vc:maxVersion retained where §4.2.2 excludes it — because the
+// assembled components record nothing of which elements a version condition
+// touched: VC/vc006.n1 is suite-invalid and walks clean for exactly that reason.
+//
+// Each document is re-read from its parser.AssembledDocument.Location, which
+// for the loader.Dir resolver assembleCase uses is the on-disk path. A document
+// that will not open or decode answers true.
+func closureVersioned(report *parser.AssemblyReport) bool {
+	for _, d := range report.Documents() {
+		if documentVersioned(d.Location) {
+			return true
+		}
+	}
+	return false
+}
+
+// documentVersioned reports whether the document at path carries an attribute
+// in versioningNS, or cannot be read to say.
+func documentVersioned(path string) bool {
+	f, err := os.Open(path)
+	if err != nil {
+		return true
+	}
+	defer func() { _ = f.Close() }() // read-only handle: close error cannot affect the verdict
+	dec := xml.NewDecoder(f)
+	for {
+		tok, err := dec.Token()
+		if errors.Is(err, io.EOF) {
+			return false
+		}
+		if err != nil {
+			return true
+		}
+		start, ok := tok.(xml.StartElement)
+		if !ok {
+			continue
+		}
+		if slices.ContainsFunc(start.Attr, func(a xml.Attr) bool { return a.Name.Space == versioningNS }) {
+			return true
+		}
+	}
 }

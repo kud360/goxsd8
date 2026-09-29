@@ -387,11 +387,10 @@ type joined struct {
 	IndeterminateIDs []string
 	// DeclaredValidIDs are candidates, banked `fail` on the instance lane, that
 	// the suite declares VALID. They are counted apart from CandidateIDs because
-	// that lane's executor decides a document valid for three shapes alone — a
-	// simple leaf root (#1738), a complex empty leaf root (#1808) and an
-	// assessed subtree root (#1841) — so only a case of one of those shapes
-	// among them can flip. On any other lane the field is empty and such an
-	// entry is in CandidateIDs like any other.
+	// that lane's executor decides a document valid for one shape alone — an
+	// assessed subtree root, with content or without (#1841, #1855) — so only
+	// a case of that shape among them can flip. On any other lane the field is
+	// empty and such an entry is in CandidateIDs like any other.
 	DeclaredValidIDs []string
 	// CandidateIDs are the other banked `fail` entries. Together with
 	// DeclaredValidIDs they are the bound from above (candidates).
@@ -406,10 +405,9 @@ func (j joined) candidates() []string {
 	return all
 }
 
-// instanceLane is the one lane whose executor observes "valid" for three
-// shapes only: its banked `fail` on a case the suite declares VALID flips only
-// where that case is a simple leaf root (#1738), a complex empty leaf root
-// (#1808) or an assessed subtree root (#1841). Before #1738 such a case could
+// instanceLane is the one lane whose executor observes "valid" for one shape
+// only: its banked `fail` on a case the suite declares VALID flips only where
+// that case is an assessed subtree root (#1841, #1855). Before #1738 such a case could
 // not flip at all and the join subtracted it (#1561); it is now a candidate,
 // counted on a row of its own on this lane alone.
 const instanceLane = "instance"
@@ -635,7 +633,7 @@ func (j joined) rows() []row {
 		rows = append(rows, row{"  banked fail, run log lists it an indeterminate decline — never flips (#277)", len(j.IndeterminateIDs)})
 	}
 	if j.Lane == instanceLane {
-		rows = append(rows, row{"  banked fail, suite declares it VALID — CANDIDATE as one of the executor's three valid shapes (#1738, #1808, #1841)", len(j.DeclaredValidIDs)})
+		rows = append(rows, row{"  banked fail, suite declares it VALID — CANDIDATE as the executor's one valid shape (#1841, #1855)", len(j.DeclaredValidIDs)})
 	}
 	return append(rows, row{"  banked fail — CANDIDATE", len(j.CandidateIDs)})
 }
@@ -659,8 +657,8 @@ func printCaveat(w io.Writer, j joined) {
 		return
 	}
 	_, _ = fmt.Fprintln(w, "  On this lane a candidate the suite declares VALID flips only where the executor decides the")
-	_, _ = fmt.Fprintln(w, "  document valid, which it does for a simple or complex empty leaf root or an assessed subtree")
-	_, _ = fmt.Fprintln(w, "  root alone (#1738, #1808, #1841):")
+	_, _ = fmt.Fprintln(w, "  document valid, which it does for an assessed subtree root alone, with content or without")
+	_, _ = fmt.Fprintln(w, "  (#1841, #1855):")
 	_, _ = fmt.Fprintln(w, "  the figure includes them, and their own row below counts them, so read that row as the looser")
 	_, _ = fmt.Fprintln(w, "  part of the bound.")
 }
