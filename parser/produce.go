@@ -84,6 +84,13 @@ const (
 	// for every pair that does reach it as two named components; the two are the
 	// same rule seen at either collection point.
 	ruleSchPropsCorrect xsderr.Rule = "sch-props-correct"
+	// ruleParticleCorrect is Particle Correct (§3.9.6.1). The producer charges
+	// only clause 2.1 ({min occurs} greater than a numeric {max occurs}) and only
+	// where {max occurs} is math.MaxInt or more, which is the one case
+	// xsd.NewOccurs cannot compare, since occursOf hands it both values saturated
+	// to math.MaxInt. NewOccurs charges the same clause on every other pair; the
+	// two are the same rule seen from either side of the saturation.
+	ruleParticleCorrect xsderr.Rule = "p-props-correct"
 )
 
 // Produce maps the TOP-LEVEL <simpleType>, <element>, <attribute>,

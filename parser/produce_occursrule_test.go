@@ -140,7 +140,7 @@ func TestProduceOccursAttributeFaultsCharged(t *testing.T) {
 	}
 }
 
-// TestProduceOccursFaultMessageNamesTheRuleOnce pins that nonNegativeInt's
+// TestProduceOccursFaultMessageNamesTheRuleOnce pins that nonNegativeNumeral's
 // diagnostic does not repeat the rule ID in its own prose: xsderr already emits
 // the bracketed tag, and the format string used to append a second, now-wrong
 // copy of it (#932).

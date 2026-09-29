@@ -72,8 +72,9 @@ func TestProduceCollapseTrimRejectsNonXMLWhitespacePadding(t *testing.T) {
 			wantMsg:  "maxOccurs value",
 		},
 		{
-			// nonNegativeInt: the strconv.Atoi argument. Atoi rejects the padding
-			// itself, so the whole numeric family depends on this one trim.
+			// nonNegativeNumeral: the nonNegativeIntegerLexical argument. The
+			// digit scan rejects the padding itself, so the whole numeric family
+			// depends on this one trim.
 			name:     "nonNegativeInt minOccurs padded with U+00A0",
 			body:     `<xs:complexType name="T"><xs:sequence minOccurs="&#xA0;1"><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>`,
 			wantRule: "cvc-datatype-valid",
