@@ -140,7 +140,7 @@ type icFieldCursor struct {
 // WHAT STILL ARRIVES HERE, now that parser charges c-selector-xpath and
 // c-fields-xpaths over the shapes [icpath.SelectorViolation] enumerates and
 // icpath compiles the `child::` and `attribute::` spellings clause 2.2 admits
-// (#NNNN owns what follows): a legal XPath 2.0 expression neither subset admits
+// (#1887 owns what follows): a legal XPath 2.0 expression neither subset admits
 // that no charged shape covers and icpath's lexer cannot read whole — a KindTest
 // with an argument (`element(a)`), a FunctionCall with a prefixed name or an
 // argument other than a StringLiteral (`p:f('x')`, `f(a)`), a Wildcard `*:a`,
