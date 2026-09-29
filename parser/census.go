@@ -94,7 +94,8 @@ import (
 // for where it stands (rejectMisplacedNotation), a second <annotation> under one
 // parent for its cardinality (rejectRepeatedAnnotations), and any element it
 // reaches — the two lax-content wrappers included — for an unprefixed attribute
-// its own Appendix A production declares nowhere (rejectUndeclaredAttrs). Every
+// its own Appendix A production declares nowhere (rejectUndeclaredAttrs), and
+// for an id that is no xs:ID or repeats an earlier one (rejectInvalidID). Every
 // OTHER XSD-namespace name is what survives at the six — an <xs:element> written
 // under an <openContent>, an <import>, a <group ref>, an <assert>, an
 // <annotation> or an <any> is reported by nothing, and its PRESENCE where it

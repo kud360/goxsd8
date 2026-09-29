@@ -72,8 +72,15 @@ const (
 	// (facetCountValue), which facet compilation reaches only when an instance does
 	// (#1774), and a processContents lexical outside the skip/lax/strict enumeration
 	// Appendix A's wildcard attribute group declares (processContentsOf), which
-	// w-props-correct cannot reach because no wildcard exists yet (#950).
+	// w-props-correct cannot reach because no wildcard exists yet (#950), and an id
+	// value outside xs:ID (rejectInvalidID).
 	ruleDatatypeValid xsderr.Rule = "cvc-datatype-valid"
+	// ruleValidationRootValid is Validation Root Valid (ID/IDREF) (§3.3.4.5,
+	// cvc-id). The producer charges only clause 2 — no two elements of the
+	// validation root carry the same xs:ID value — over a schema document's own
+	// id attributes, read as an instance of the schema for schema documents
+	// (rejectInvalidID).
+	ruleValidationRootValid xsderr.Rule = "cvc-id"
 	// ruleSchPropsCorrect is the Schema Properties Correct Schema Component
 	// Constraint (§3.17.6.1). The producer charges only clause 2 ("None of the
 	// {type definitions}, … properties contains two or more schema components with
@@ -610,16 +617,21 @@ func (p *producer) chameleon() bool {
 //
 // Placement is charged before content: a <notation> standing where the grammar
 // admits none is reported for where it stands, not for the second <annotation>
-// it also carries. The attribute guard runs last of the three, for the same
-// reason: where an element stands, and how many of a child it carries, are both
-// answered ahead of what its start tag spells.
+// it also carries. The two attribute guards run last, for the same reason: where
+// an element stands, and how many of a child it carries, are both answered ahead
+// of what its start tag spells — and an attribute name the grammar declares
+// nowhere ahead of what an id attribute's value spells.
 //
 // <appinfo> and <documentation> are subject to rejectUndeclaredAttrs alone, and
 // the split is the lax-content rule above: their CONTENT is governed by no guard
 // here, their own start tag is still their own production's — xs:appinfo declares
 // source (:5720-:5731) and xs:documentation source and xml:lang (:5733-:5745),
-// neither of them through xs:annotated.
-func rejectS4SFaults(el *Element) error {
+// neither of them through xs:annotated, and neither declares id.
+//
+// ids is the document's ID table so far, threaded through the walk for
+// rejectInvalidID: the root call passes an empty one, and every element the walk
+// reaches is visited in document order.
+func rejectS4SFaults(el *Element, ids map[string]*Element) error {
 	if el.Name().Space() != xsd.XMLSchemaNS {
 		return nil
 	}
@@ -635,15 +647,83 @@ func rejectS4SFaults(el *Element) error {
 	if err := rejectUndeclaredAttrs(el); err != nil {
 		return err
 	}
+	if err := rejectInvalidID(el, ids); err != nil {
+		return err
+	}
 	for _, child := range el.Children() {
 		c, ok := child.(*Element)
 		if !ok {
 			continue
 		}
-		if err := rejectS4SFaults(c); err != nil {
+		if err := rejectS4SFaults(c, ids); err != nil {
 			return err
 		}
 	}
+	return nil
+}
+
+// rejectInvalidID rejects el's id attribute when its value is not a valid
+// xs:ID, and otherwise records it in ids, the document's ID table keyed by the
+// normalized value and holding the first element to carry each. Every XSD element
+// the schema for schema documents declares id on types it xs:ID (xs:annotated,
+// xmlschema11-1.md:4438; <schema> :4580; <annotation> :5759), and §5.1's first
+// bullet (sd-valid, :615) makes the document's validity against that schema
+// normative, so the attribute is judged as an instance of it:
+//
+//   - A value outside xs:ID's ·lexical space· — NCName's, the same pattern
+//     (xmlschema11-2.md:1916), so ncNameRE is the check — is charged
+//     cvc-datatype-valid (Datatypes §4.1.4), reached through cvc-attribute.
+//     The empty value is such a value: it is present, so unlike
+//     declarationName's empty name there is no absent attribute to conflate it
+//     with.
+//   - A value an earlier element of the SAME document already carries is
+//     charged cvc-id clause 2 (§3.3.4.5, :1372): the validation root is the
+//     document's <schema>, so its ID/IDREF table is this document's alone, and
+//     the same value in two documents of one assembly is valid. Uniqueness is
+//     not part of datatype validity (xmlschema11-2.md:1911), hence the second
+//     rule.
+//
+// Both compare the ·actual value·: xs:ID carries whiteSpace = collapse
+// (xmlschema11-2.md:1917), so id=" a " is valid and collides with id="a".
+// collapseTrim is that normalization for the reason declarationName gives — a
+// value collapse's interior folding would change is not an NCName either way,
+// and is rejected before it reaches ids.
+//
+// Both are located at the offending element, which is the id attribute's
+// position (an xmltree.Attribute carries its owner's). The walk that reaches el
+// stops at <appinfo> and <documentation>, so an element in their lax content is
+// never judged: §5.1 lets a processor treat invalid <annotation> descendants as
+// valid (:616).
+//
+// GAP(parser): an overridden document's ids are judged over Dold as fetched,
+// not over Dold′, which src-override clause 3's Note (xmlschema11-1.md:4171)
+// makes the document that must conform; #875 owns it. rejectS4SFaults walks
+// the raw root, and a substitute is judged in the overriding document's own
+// walk and table. The direction differs by reader, and both directions occur:
+// the ncNameRE check charges cvc-datatype-valid on an element §F.2 clause 1
+// substitutes away (false reject: Dold's <element name="x" id="1"/>
+// overridden by an x carrying no id); the ids lookup charges cvc-id on a
+// member Dold′ lacks (false reject: Dold's x and y both carrying id="dup",
+// x overridden by one carrying none) and misses a member Dold′ has (false
+// accept: Dold's y carrying id="foo", x overridden by one carrying the same
+// id="foo").
+func rejectInvalidID(el *Element, ids map[string]*Element) error {
+	lexical, ok := el.Attr("id")
+	if !ok {
+		return nil
+	}
+	id := collapseTrim(lexical)
+	if !ncNameRE.MatchString(id) {
+		return xsderr.New(ruleDatatypeValid, el.Loc(),
+			"<%s> id %q is not in the ·lexical space· of xs:ID, the type the schema for schema documents declares for it (Structures §5.1, §A): an xs:ID is an NCName, which carries no colon and begins with a letter or '_' (Datatypes §3.4.8)",
+			el.Name().Local(), id)
+	}
+	if first, dup := ids[id]; dup {
+		return xsderr.New(ruleValidationRootValid, el.Loc(),
+			"<%s> id %q duplicates the id of the <%s> at %s: an xs:ID value identifies one element of its schema document (cvc-id clause 2, Structures §3.3.4.5)",
+			el.Name().Local(), id, first.Name().Local(), first.Loc())
+	}
+	ids[id] = el
 	return nil
 }
 
@@ -764,7 +844,7 @@ func rejectRepeatedAnnotations(el *Element) error {
 // It runs rejectS4SFaults over the whole document first, before any name is
 // registered and before any body is walked.
 func (p *producer) prescan() error {
-	if err := rejectS4SFaults(p.schemaElem); err != nil {
+	if err := rejectS4SFaults(p.schemaElem, map[string]*Element{}); err != nil {
 		return err
 	}
 	for _, child := range p.schemaElem.Children() {

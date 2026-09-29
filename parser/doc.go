@@ -319,20 +319,24 @@
 // outside xs:nonNegativeInteger/xs:allNNI, a length, minLength, maxLength
 // or fractionDigits value outside xs:nonNegativeInteger or a totalDigits
 // value outside xs:positiveInteger, a processContents outside the
-// enumeration skip/lax/strict), which no Schema Representation Constraint
-// covers. A document that is simply not VALID against the schema for
-// schema documents — a prohibited attribute on a top-level form, an
-// unprefixed attribute the element's grammar declares nowhere, a child
-// written where that element's content model admits none, a child
-// repeated past its maxOccurs, a child whose name the model admits
-// nowhere — is §5.1's first bullet and carries NO rule ID at all: it is a
-// plain wrapped error naming the offending item and the grammar it
-// violates (parser's rejectProhibitedAttrs, rejectUndeclaredAttrs,
-// checkS4SChildOrder, rejectUnmappedTopLevel, rejectOutOfModelFacetChildren
-// and simpleTypeBody's own two alternative-count branches). An attribute in
-// ANOTHER namespace is admitted wherever it stands, which is the whole of
-// what xs:openAttrs' ##other wildcard admits. PLANNED (not yet
-// implemented): collecting them in document order rather than stopping at
-// the first — [Parse] and [Produce] both return only the first error
-// today.
+// enumeration skip/lax/strict, an id outside xs:ID), which no Schema
+// Representation Constraint covers — and cvc-id clause 2 where two elements
+// of ONE schema document carry the same id, the document's <schema> being
+// its validation root; the same id in two documents of an assembly is
+// valid. An overridden document's ids are judged as fetched, not as Dold′
+// (rejectInvalidID's GAP(parser) marker, #875). A document that is simply
+// not VALID against the schema for schema documents — a prohibited
+// attribute on a top-level form, an unprefixed attribute the element's
+// grammar declares nowhere, a child written where that element's content
+// model admits none, a child repeated past its maxOccurs, a child whose
+// name the model admits nowhere — is §5.1's first bullet and carries NO
+// rule ID at all: it is a plain wrapped error naming the offending item and
+// the grammar it violates (parser's rejectProhibitedAttrs,
+// rejectUndeclaredAttrs, checkS4SChildOrder, rejectUnmappedTopLevel,
+// rejectOutOfModelFacetChildren and simpleTypeBody's own two
+// alternative-count branches). An attribute in ANOTHER namespace is
+// admitted wherever it stands, which is the whole of what xs:openAttrs'
+// ##other wildcard admits. PLANNED (not yet implemented): collecting them
+// in document order rather than stopping at the first — [Parse] and
+// [Produce] both return only the first error today.
 package parser
