@@ -522,20 +522,21 @@ func positionsKey(states []int) string {
 //
 //   - 2026-08-04 (#282): walkEntries=688 ceilingHits=0 maxVisited=15
 //   - 2026-09-19 (#499): walkEntries=1987 ceilingHits=0 maxVisited=1002
-//   - 2026-09-29 (#1609): walkEntries=1985 ceilingHits=0 maxVisited=1002
+//   - 2026-09-29 (#1609, main afa784d): walkEntries=1985 ceilingHits=0 maxVisited=1002
+//   - 2026-09-29 (#1609, main 4ef04a9): walkEntries=1740 ceilingHits=0 maxVisited=1002
 //
 // Read both halves of that. No walk has ever reached the ceiling, so the bound
 // is inert on every content model the suite contains and the incompleteness it
 // guards is latent. But the deepest walk visits 1002 of the 4096 states it is
-// allowed at the 2026-09-29 point — a factor of 4.1 below the ceiling where it
-// was a factor of 273 on 2026-08-04 — and between those first two points
-// maxVisited grew 66.8× while the walk entries grew only 2.9×, so the walks that
-// reached this code went DEEPER rather than merely happening more often. Between
-// the last two points neither figure grew, over a window in which the schema
-// lane gained 231 passes. A single future content model, not a wider population,
-// is enough to cross. What drove either movement is not established here: each
-// window holds lane-widening landings, and no causal claim is made from a
-// correlation nobody checked.
+// allowed at the latest point (4ef04a9) — a factor of 4.1 below the ceiling
+// where it was a factor of 273 on 2026-08-04 — and between those first two
+// points maxVisited grew 66.8× while the walk entries grew only 2.9×, so the
+// walks that reached this code went DEEPER rather than merely happening more
+// often. Since the 2026-09-19 point maxVisited has not moved and walkEntries has
+// only fallen, to 1740 at the latest point. A single future content model, not
+// a wider population, is enough to cross. What drove either movement is not
+// established here: each window holds lane-widening landings, and no causal
+// claim is made from a correlation nobody checked.
 //
 // A margin that has moved that far between two measurements is not evidence for
 // an unexamined constant, which is why the ruling at contentModelRestricts'
@@ -922,7 +923,7 @@ func (s *Schema) contentModelRestricts(r, b contentAutomaton, scope contentRestr
 				// declines somewhere. Raising the constant moves where it declines,
 				// buying walks whose cost grows with the states they are newly allowed
 				// and no verdict anything has measured — ceilingHits is 0. Lowering it
-				// is pinned from below by the series' 2026-09-29 point: the deepest walk the
+				// is pinned from below by the series' 4ef04a9 point: the deepest walk the
 				// suite finishes visits maxVisited=1002 states, so any value below 1002
 				// starts declining walks that decide today. It is retired by a
 				// construction that decides containment without materializing the
@@ -931,7 +932,7 @@ func (s *Schema) contentModelRestricts(r, b contentAutomaton, scope contentRestr
 				// The review trigger is a RE-MEASUREMENT rather than a breach, because
 				// a breach is the one warning that arrives too late: the high-water
 				// mark moved 66.8× in six and a half weeks (2026-08-04 to 2026-09-19),
-				// and at the series' latest point (2026-09-29) it stands at a quarter
+				// and at the series' latest point (4ef04a9) it stands at a quarter
 				// of the ceiling. Re-run the three counters maxProductStates' doc
 				// names and reopen this ruling on EITHER ceilingHits > 0 or maxVisited
 				// at 2048, half the ceiling. Half is what #499's two measurements
