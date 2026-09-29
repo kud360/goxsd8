@@ -315,7 +315,7 @@ func TestPathSubsetUnsupportedDominates(t *testing.T) {
 		{".//.", false, "production [3]'s bare '.' Step derives it — assembly-legal, only unmatchable"},
 		{"child::a", false, "clause 2.2 admits the unabbreviated form of an abbreviated path"},
 		{"attribute::a", true, "and, for a field's final step, the attribute axis as well"},
-		{"", false, "an absent xpath attribute is no SCC violation"},
+		{"tid :*|a[1]", false, "a split name is charged only over a stream that lexes whole"},
 	} {
 		if err := violationOf(tc.expr, tc.field); err != nil {
 			t.Errorf("charging %q (field=%v) = %v, want nil — %s", tc.expr, tc.field, err, tc.why)
@@ -465,24 +465,132 @@ func TestRootRelativeNonInitialDescendantAndKindTestAreCharged(t *testing.T) {
 	}
 }
 
-// The '//' charges never reach a '/' or '//' that has no Step after it, nor the
-// admitted leading './/' pair: `. //.` is that pair before a '.' Step, and the
-// rest are no XPath 2.0 path expression at all, so each stays uncharged here and
-// is declined by the parse.
-func TestSteplessSlashesAndTheLeadingPairAreNotCharged(t *testing.T) {
+// An empty union member, a '/' or '//' with no Step after it and a name split
+// by white space are no XPath 2.0 expression at all, and are charged under
+// clause 1. The message is pinned by its opening up to the clause, so a charge
+// reached by another arm — root-relative, non-initial '//', unbound prefix —
+// fails the row. `tid` and `imp` are unbound throughout: the grammar charge
+// wraps no cause, so a split name read as a prefix and charged err:XPST0081
+// fails the row too. Where a member holds several faults the leftmost is
+// charged: `//a//` for its leading '//', `/ /a` for its first '/'.
+func TestNonExpressionsAreChargedUnderClause1(t *testing.T) {
+	msg := func(expr, fault string, field bool) string {
+		if field {
+			return fmt.Sprintf("the {fields} member %q %s, but c-fields-xpaths clause 1 requires it to satisfy xpath-valid", expr, fault)
+		}
+		return fmt.Sprintf("the {selector} %q %s, but c-selector-xpath clause 1 requires it to satisfy xpath-valid", expr, fault)
+	}
+	const empty = "has an empty operand where a Path is required"
+	sep := func(sp string) string { return fmt.Sprintf("has a %q with no Step after it", sp) }
+	split := func(name string) string { return fmt.Sprintf("has a name %q split by white space", name) }
+	type row struct {
+		expr  string
+		field bool
+		fault string
+	}
+	var rows []row
+	for _, field := range []bool{false, true} {
+		rows = append(rows,
+			row{"", field, empty},
+			row{"  ", field, empty},
+			row{"|", field, empty},
+			row{"| imp:iid", field, empty},
+			row{"a||b", field, empty},
+			row{"a|", field, empty},
+			row{"//", field, sep("//")},
+			row{"a//", field, sep("//")},
+			row{".//", field, sep("//")},
+			row{"a///b", field, sep("//")},
+			row{"a////b", field, sep("//")},
+			row{"a/ //b", field, sep("/")},
+			row{"////a", field, sep("//")},
+			row{"/ /a", field, sep("/")},
+			row{"//|a", field, sep("//")},
+			row{"./ /.", field, sep("/")},
+			row{"a/", field, sep("/")},
+			row{"tid :*", field, split("tid :*")},
+			row{"tid: *", field, split("tid: *")},
+			row{"tid : *", field, split("tid : *")},
+			row{"tid : x", field, split("tid : x")},
+			row{"child: :imp:iid", field, split("child: :")},
+			row{"attribute: :imp:sid", field, split("attribute: :")},
+			row{"a/tid :*", field, split("tid :*")},
+			row{"tid :*|//", field, split("tid :*")},
+			row{"a//|tid :*", field, sep("//")},
+		)
+	}
+	rows = append(rows, row{".///@*", true, sep("//")})
+	for _, tc := range rows {
+		err := violationOf(tc.expr, tc.field)
+		var e *xsderr.Error
+		if !errors.As(err, &e) {
+			t.Errorf("charging %q (field=%v) = %v, want an *xsderr.Error", tc.expr, tc.field, err)
+			continue
+		}
+		if want := msg(tc.expr, tc.fault, tc.field); !strings.HasPrefix(e.Msg, want) {
+			t.Errorf("charging %q (field=%v): message = %q, want it to open %q", tc.expr, tc.field, e.Msg, want)
+		}
+		if cause := errors.Unwrap(err); cause != nil {
+			t.Errorf("charging %q (field=%v) wraps %v; a grammar charge wraps no cause", tc.expr, tc.field, cause)
+		}
+		if _, ok := compileOf(tc.expr, tc.field, nil); ok {
+			t.Errorf("compiling %q (field=%v) succeeded; a charged {expression} must decline too", tc.expr, tc.field)
+		}
+	}
+	for _, field := range []bool{false, true} {
+		err := violationOf("//a//", field)
+		if err == nil || !strings.Contains(err.Error(), `is root-relative (it opens with "//")`) {
+			t.Errorf("charging %q (field=%v) = %v, want the leftmost fault, its leading '//', charged as root-relative", "//a//", field, err)
+		}
+	}
+}
+
+// What the clause-1 charges above do NOT reach, each stays uncharged. The
+// leading './/' pair before a Step is admitted, and a '//' with a Step after it
+// is no separator fault. Two Steps with no separator are left undecided,
+// because the lexer reads the legal `..` as the same two '.' tokens as `. .`
+// (#1829). A legal Wildcard `*:a`, a FunctionCall and colon residue a split
+// name does not spell open a token this lexer does not read, so the stream is
+// declined whatever else it holds. `child :: a` is an axis head, which is read
+// before any split name.
+func TestTheLeadingPairStepAdjacencyAndUnreadableRunsAreNotCharged(t *testing.T) {
 	p := []xsd.NamespaceBinding{
 		xsd.NewNamespaceBinding("xpns", "urn:x"),
 		xsd.NewNamespaceBinding("xpns1", "urn:x1"),
 	}
-	if err := FieldViolation(xsderr.Loc{}, xsd.NewXPathExpression(".///@*", nil, nil, nil)); err != nil {
-		t.Errorf(`FieldViolation(".///@*") = %v, want nil`, err)
-	}
-	for _, expr := range []string{"//", "a//", ".//", "a///b", "a////b", "a/ //b", "////a", "/ /a", "//|a", ". //.", "xpns1:* | .//xpns:*/.", ".//a"} {
+	for _, expr := range []string{
+		". //.", "xpns1:* | .//xpns:*/.", ".//a",
+		"..", ". .", "a b",
+		"*:a", "document('')", "(: tid :* :)", "a:b :c", "p:", ":a",
+		"child :: a",
+	} {
 		for _, field := range []bool{false, true} {
 			x := xsd.NewXPathExpression(expr, p, nil, nil)
 			if err := violationAt(xsderr.Loc{}, x, field); err != nil {
 				t.Errorf("charging %q (field=%v) = %v, want nil", expr, field, err)
 			}
+		}
+	}
+}
+
+// The split-name reader takes exactly its two runs and yields to the strict
+// readers: an axis head with white space around its '::' stays an axis head,
+// and an unsplit QName or Wildcard stays a NameTest.
+func TestTokenizeReadsASplitNameAsOneToken(t *testing.T) {
+	for _, tc := range []struct {
+		s    string
+		want []token
+	}{
+		{"tid :*", []token{{kind: 'W', text: "tid :*"}}},
+		{"tid : x/a", []token{{kind: 'W', text: "tid : x"}, {kind: '/'}, {kind: 'n', text: "a"}}},
+		{"child: :imp:iid", []token{{kind: 'W', text: "child: :"}, {kind: 'n', text: "imp:iid"}}},
+		{"child :: a", []token{{kind: 'C', text: "child"}, {kind: 'n', text: "a"}}},
+		{"tid:*", []token{{kind: 'n', text: "tid:*"}}},
+		{"a:b :c", []token{{kind: 'n', text: "a:b"}, {kind: '?'}, {kind: 'n', text: "c"}}},
+	} {
+		got := tokenize(tc.s)
+		if fmt.Sprint(got) != fmt.Sprint(tc.want) {
+			t.Errorf("tokenize(%q) = %v, want %v", tc.s, got, tc.want)
 		}
 	}
 }

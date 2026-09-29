@@ -896,9 +896,8 @@ const (
 // failing 2.1's grammar may still satisfy 2.2's "XPath expression involving the
 // child axis whose abbreviated form is as given above"; each shape below fails
 // both arms — a fault the unabbreviated spelling carries too, or an axis clause
-// 2.2 does not name — or, for a step with no NodeTest, is no XPath 2.0
-// expression under any spelling, which is why charging it cannot reject a
-// conforming schema. TestProduceIdentityConstraintPathFailsOpen pins the other
+// 2.2 does not name — or is no XPath 2.0 expression under any spelling, which
+// is why charging it cannot reject a conforming schema. TestProduceIdentityConstraintPathFailsOpen pins the other
 // side.
 //
 // The charge is positioned at the offending <selector>/<field> and never at the
@@ -1023,6 +1022,27 @@ func TestProduceIdentityConstraintPathViolations(t *testing.T) {
 		rule:     "c-fields-xpaths", // clause 2: production [7]'s Path is context-relative
 		line:     icFieldLine,
 		msg:      `the {fields} member "//@x" is root-relative (it opens with "//")`,
+	}, {
+		name:     "a '//' with no Step after it",
+		selector: "a//",
+		field:    "@x",
+		rule:     "c-selector-xpath", // clause 1: production [26] puts a StepExpr after every '//'
+		line:     icSelectorLine,
+		msg:      `the {selector} "a//" has a "//" with no Step after it`,
+	}, {
+		name:     "an empty field",
+		selector: "a",
+		field:    "",
+		rule:     "c-fields-xpaths", // clause 1: production [2] Expr is never empty
+		line:     icFieldLine,
+		msg:      `the {fields} member "" has an empty operand where a Path is required`,
+	}, {
+		name:     "a name split by white space",
+		selector: "tid :*",
+		field:    "@x",
+		rule:     "c-selector-xpath", // clause 1: production [37] Wildcard is ws: explicit
+		line:     icSelectorLine,
+		msg:      `the {selector} "tid :*" has a name "tid :*" split by white space`,
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1074,7 +1094,7 @@ func TestProduceIdentityConstraintPathFailsOpen(t *testing.T) {
 		{"a numeric predicate", "a[1]", "'1' opens no token, and a stream this lexer cannot read is declined and never charged"},
 		{"a quoted predicate", "a[b='c']", "the quotes open no token either, so the '[' is not read as a predicate"},
 		{"the leading pair before a self step", ". //.", "the './/' pair production [2] admits, then a '.' Step, so it is no non-initial '//'"},
-		{"a stepless '//'", "a//", "no XPath 2.0 path expression at all, so no clause-2 charge names it and it is declined"},
+		{"the parent step", "..", "legal XPath 2.0 outside both subsets, and lexed as the same two '.' tokens as `. .`, so no Step-adjacency charge names it"},
 		{"an unbound prefix before an unreadable step", "q:a/processing-instruction('x')", "unsupported dominates: a KindTest with an argument does not lex, so the prefix is not read in isolation"},
 		{"an unbound prefix on a path outside the subset", "q:a|.//.", "unsupported dominates: the stream lexes whole and still parses to nothing, so clause 1 is never reached"},
 	} {

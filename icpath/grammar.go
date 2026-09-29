@@ -133,8 +133,11 @@ func (r *names) recordUnbound(prefix string) {
 // c-fields-xpaths names — and 'X' for any of the other eleven; each carries
 // its keyword. 'K' is an argument-free KindTest (xpath20 production [54]), such
 // as `node()` or `text()`, carrying its spelling with the parentheses closed up.
-// '?' is one rune or run that opens no token of any sort, and exists so the lexer
-// is total.
+// 'W' is a name split by white space around its ':' — `tid :*`, `tid : x`, or an
+// axis keyword split from the second ':' of its '::' as in `child: :` — carrying
+// its source spelling. It is no XPath 2.0 token at all and has no axis reading,
+// whatever its NCName: scanSplitName documents the two runs it reads. '?' is one
+// rune or run that opens no token of any sort, and exists so the lexer is total.
 type token struct {
 	kind byte
 	text string
@@ -145,7 +148,10 @@ type token struct {
 // production [6]'s white space allowed around tokens though not inside them —
 // and into the axis heads and the argument-free KindTests scanAxisOrKind reads,
 // which are what clause 2.2's unabbreviated spellings and the residual shapes
-// charged beside them are written in.
+// charged beside them are written in, and the white-space-split names
+// scanSplitName reads, which are charged as no XPath 2.0 expression. The strict
+// readers go first, so `child :: a` is an axis head and `a:b` a NameTest, and a
+// split name is read only where neither is.
 //
 // It is TOTAL: every {expression} yields a stream, and a rune that opens no
 // token becomes one '?' token rather than ending the scan. A lexer that stopped
@@ -184,6 +190,11 @@ func tokenize(s string) []token {
 		default:
 			if t, j, ok := scanAxisOrKind(s, i); ok {
 				toks = append(toks, t)
+				i = j
+				continue
+			}
+			if j, ok := scanSplitName(s, i); ok {
+				toks = append(toks, token{kind: 'W', text: s[i:j]})
 				i = j
 				continue
 			}
@@ -230,6 +241,46 @@ func scanAxisOrKind(s string, i int) (token, int, bool) {
 		return token{}, i, false
 	}
 	return token{kind: 'K', text: s[i:j] + "()"}, k + 1, true
+}
+
+// scanSplitName reports the end of the white-space-split name starting at i,
+// and ok false where none does. It reads exactly two runs, each holding white
+// space no XPath 2.0 token admits:
+//
+//   - `NCName S? ':' S? (NCName | '*')` with at least one S non-empty — a QName
+//     (xpath20 production [78]) or a Wildcard (production [37], ws: explicit)
+//     split around its ':', as in `tid :*`, `tid: *` and `tid : x`;
+//   - `NCName S? ':' S ':'` — an axis keyword whose '::', one terminal of
+//     production [30] and [33], is split in two, as in `child: :`. What follows
+//     it lexes as usual.
+//
+// tokenize tries it only where scanAxisOrKind has not read an axis head or a
+// KindTest, and before scanNameTest; since both runs need a non-empty S, an
+// unsplit `a:b` or `tid:*` is never one. Any other colon residue — `a:b :c`,
+// `p:`, `:a` — is left to open no token.
+func scanSplitName(s string, i int) (int, bool) {
+	j := scanNCName(s, i)
+	if j == i {
+		return i, false
+	}
+	k := skipSpace(s, j)
+	if !strings.HasPrefix(s[k:], ":") {
+		return i, false
+	}
+	m := skipSpace(s, k+1)
+	if strings.HasPrefix(s[m:], ":") && m > k+1 {
+		return m + 1, true
+	}
+	if k == j && m == k+1 {
+		return i, false
+	}
+	if strings.HasPrefix(s[m:], "*") {
+		return m + 1, true
+	}
+	if n := scanNCName(s, m); n > m {
+		return n, true
+	}
+	return i, false
 }
 
 // kindKeyword reports whether name opens a KindTest that admits empty
@@ -280,8 +331,8 @@ func skipSpace(s string, i int) int {
 
 // fullyLexed reports whether every rune of the {expression} the stream came from
 // fell inside a token this package reads — production [5]'s, a predicate
-// bracket, an axis head or an argument-free KindTest. Nothing is charged over a
-// stream that fails this: see compile.
+// bracket, an axis head, an argument-free KindTest or a white-space-split name.
+// Nothing is charged over a stream that fails this: see compile.
 func fullyLexed(toks []token) bool {
 	for _, t := range toks {
 		if t.kind == '?' {
@@ -303,20 +354,22 @@ func fullyLexed(toks []token) bool {
 // production [3] Step spells none. A root-relative path, opened by '/' or '//',
 // is one production [2] and [7]'s context-relative Path never is. A '//'
 // anywhere but the leading './/' pair is §3.2.4 rule 3's descendant-or-self
-// step, which neither arm admits. An '@' or an axis head with no NodeTest after
-// it is no XPath 2.0 expression under any spelling, which fails clause 1.
+// step, which neither arm admits. Five shapes are no XPath 2.0 expression under
+// any spelling, which fails clause 1: an '@' or an axis head with no NodeTest
+// after it; an empty union member, which is the empty {expression} and an
+// operand missing on either side of '|'; a '/' or '//' with no Step after it,
+// save a '/' that is the whole member; and a white-space-split name.
 //
 // Where one member holds several of these faults, the LEFTMOST in token order is
 // the one charged: `self::node()` is charged for its axis and not its KindTest,
-// and `/@a` in a selector for its opening '/' and not its attribute.
+// `/@a` in a selector for its opening '/' and not its attribute, and `/ /a` for
+// its first '/', which no Step follows, and not as root-relative.
 //
 // What it does NOT decide is a child-axis or attribute-axis head clause 2.2
 // admits before a NameTest, which parse compiles onto the arm its abbreviated
-// spelling takes. Nor does it charge a '//' that no Step follows, a leading '/'
-// followed by '/' or '//', or a non-initial '//' right after a '/' or another
-// '//': none of them is an XPath 2.0 path expression at all, and the scan
-// leaves them to the parse's decline rather than naming them by a clause-2
-// reason.
+// spelling takes. Nor does it charge two Steps with no separator between them
+// (`. .`, `a b`): the lexer reads the legal parent step `..` as the same two
+// '.' tokens, so the parse declines all three.
 //
 // The scan is per union member, because production [1] is a union of Paths and a
 // member's final step is its own: `a/@b|c/@d` is two legal field Paths and reads
@@ -332,20 +385,45 @@ func shapeFault(toks []token, field bool) (string, bool) {
 		}
 	}
 	for _, m := range unionMembers(toks) {
+		// An empty member is no XPath 2.0 expression at all: production [2]
+		// Expr is one ExprSingle or more, and production [14] UnionExpr needs
+		// an operand on both sides of '|'. That covers the empty or white-space
+		// {expression} as well as `| a` and `a||b`.
+		if len(m) == 0 {
+			return fmt.Sprintf("has an empty operand where a Path is required, but %s clause 1 requires it to satisfy xpath-valid, whose clause 1 requires a valid XPath 2.0 expression — xpath20 production [2] Expr is never empty, and production [14] UnionExpr needs an operand on both sides of '|'", scc), true
+		}
 		for j, t := range m {
+			// A name split by white space around its ':' is no XPath 2.0
+			// expression at all: a QName (xpath20 production [78]) admits no
+			// white space, a Wildcard (production [37]) is ws: explicit, and '::'
+			// is one terminal of production [30] and [33]. It is charged here,
+			// before parse resolves any prefix, so its NCName is never read as a
+			// prefix and charged unbound.
+			if t.kind == 'W' {
+				return fmt.Sprintf("has a name %q split by white space, but %s clause 1 requires it to satisfy xpath-valid, whose clause 1 requires a valid XPath 2.0 expression — xpath20 production [78] QName admits no white space, production [37] Wildcard is ws: explicit, and '::' is one terminal", t.text, scc), true
+			}
+			// A '/' or '//' with no Step after it — the end of the member, or
+			// another '/' or '//' — is no XPath 2.0 expression at all: production
+			// [26] RelativePathExpr puts a StepExpr after every '/' and '//', and
+			// production [25] PathExpr admits a leading '//' only before one and a
+			// leading '/' alone only as the whole path. That lone '/' is legal, and
+			// is charged below as root-relative. Deciding this first at every
+			// token is what leaves the two arms below only separators a Step
+			// follows.
+			if (t.kind == '/' || t.kind == 'D') && !stepAfter(m, j) && !loneRoot(m) {
+				return fmt.Sprintf("has a %q with no Step after it, but %s clause 1 requires it to satisfy xpath-valid, whose clause 1 requires a valid XPath 2.0 expression — xpath20 production [26] RelativePathExpr puts a StepExpr after every '/' and '//', and production [25] PathExpr admits a lone '/' only as the whole path", spelling(t), scc), true
+			}
 			// A leading '/' or '//' makes the path root-relative (xpath20
 			// production [25] PathExpr and the expansions under it), and
 			// production [2] and [7]'s Path is context-relative, abbreviated or
 			// not: the only '//' either opens with is the one in the './/' pair.
-			if j == 0 && rootRelative(m) {
+			if j == 0 && (t.kind == '/' || t.kind == 'D') {
 				return fmt.Sprintf("is root-relative (it opens with %q), but %s clause 2 admits it under neither arm — xpath20 production [25] expands a leading %q to a step from the root, and production %s's Path is context-relative, its only leading '//' the './/' pair", spelling(t), scc, spelling(t), pathProduction(field)), true
 			}
 			// Every '//' but the leading './/' pair is non-initial, which xpath20
 			// §3.2.4 rule 3 expands to /descendant-or-self::node()/: an axis clause
 			// 2.2 does not name, in a place production [2] and [7] admit no '//'.
-			// One with a '/' or '//' on either side, or no Step after it, is no
-			// path expression at all and is left to the parse.
-			if j > 0 && t.kind == 'D' && (j != 1 || m[0].kind != '.') && m[j-1].kind != '/' && m[j-1].kind != 'D' && stepAfter(m, j) {
+			if j > 0 && t.kind == 'D' && (j != 1 || m[0].kind != '.') {
 				return fmt.Sprintf("has a non-initial '//', but %s clause 2 admits it under neither arm — xpath20 §3.2.4 rule 3 expands it to /descendant-or-self::node()/, and production %s admits '//' only in its leading './/' pair", scc, pathProduction(field)), true
 			}
 			// A KindTest is no NameTest (xpath20 production [35] NodeTest is
@@ -407,25 +485,15 @@ func nodeTestAfter(m []token, j int) bool {
 }
 
 // stepAfter reports whether a token opening a Step follows m[j]: anything but
-// the end of the member, a '/' or a '//'. A '/' or '//' with no Step after it
-// is no XPath 2.0 path expression, and shapeFault charges neither by a clause-2
-// reason.
+// the end of the member, a '/' or a '//'.
 func stepAfter(m []token, j int) bool {
 	return j+1 < len(m) && m[j+1].kind != '/' && m[j+1].kind != 'D'
 }
 
-// rootRelative reports whether the non-empty member is a root-relative XPath
-// 2.0 path: a leading '//' with a Step after it, or a leading '/' with a
-// Step or nothing after it — `/` alone is the root, and legal XPath 2.0
-// (xpath20 production [25]).
-func rootRelative(m []token) bool {
-	switch m[0].kind {
-	case 'D':
-		return stepAfter(m, 0)
-	case '/':
-		return len(m) == 1 || stepAfter(m, 0)
-	}
-	return false
+// loneRoot reports whether the member is `/` alone: the root, and legal XPath
+// 2.0 (xpath20 production [25]) although no Step follows its '/'.
+func loneRoot(m []token) bool {
+	return len(m) == 1 && m[0].kind == '/'
 }
 
 // spelling is the text of a '/' or '//' token, as a charge names it.
@@ -463,8 +531,8 @@ func namedAxes(field bool) string {
 }
 
 // unionMembers splits a token stream on production [1]'s '|' into its Paths. An
-// empty member is yielded like any other: it is no Path, which is the parse's
-// decline and not this scan's business.
+// empty member is yielded like any other, and an empty stream is one empty
+// member: shapeFault charges it, and parse declines it.
 func unionMembers(toks []token) [][]token {
 	var members [][]token
 	start := 0
@@ -538,7 +606,10 @@ func scanNCName(s string, i int) int {
 }
 
 // parse parses the token stream as production [1]'s union of Paths, declining an
-// empty union and any Path the grammar does not admit.
+// empty union and any Path the grammar does not admit. It is TOTAL over any
+// stream: compile reaches it only after shapeFault has charged the empty member
+// and the separator with no Step after it, and it still declines both rather
+// than rely on that order.
 func parse(toks []token, field bool, r *names) (Expr, bool) {
 	var x Expr
 	for _, m := range unionMembers(toks) {
@@ -573,7 +644,7 @@ func parsePath(toks []token, field bool, r *names) (path, bool) {
 		toks = toks[2:]
 	}
 	if len(toks) == 0 {
-		return path{}, false
+		return path{}, false // an empty member or `.//`: shapeFault charged both first
 	}
 	for len(toks) > 0 {
 		// A child-axis head before a NameTest is the unabbreviated spelling of
@@ -610,7 +681,7 @@ func parsePath(toks []token, field bool, r *names) (path, bool) {
 		}
 		toks = toks[1:]
 		if len(toks) == 0 {
-			return path{}, false // a trailing '/' has no Step after it
+			return path{}, false // shapeFault charged it first; kept so parse stays total
 		}
 	}
 	if p.anyDepth && len(p.steps) == 0 {
