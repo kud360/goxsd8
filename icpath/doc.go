@@ -75,12 +75,12 @@
 // argument for each shape.
 //
 // THE PREDICATES IT RECOGNIZES are the ones whose whole {expression} lexes as
-// tokens this lexer reads (production [5]'s, the two brackets, an axis head and
-// an argument-free KindTest): `a[b]` and `a[@b]` are charged, `a[1]` and
-// `a[b='c']` are not, because a digit and a quote open no token and a stream
-// this package cannot read whole is declined whatever it holds. Under-charging
-// is a rejection the processor can still make at validate time; over-charging
-// rejects a conforming schema before any instance exists.
+// tokens this lexer reads (production [5]'s, the two brackets, an axis head, an
+// argument-free KindTest and a white-space-split name): `a[b]` and `a[@b]` are
+// charged, `a[1]` and `a[b='c']` are not, because a digit and a quote open no
+// token and a stream this package cannot read whole is declined whatever it
+// holds. Under-charging is a rejection the processor can still make at validate
+// time; over-charging rejects a conforming schema before any instance exists.
 //
 // An unbound prefix is the one charged shape with a vocabulary of its own:
 // err:XPST0081 travels as the wrapped cause under the SCC charge, reached with

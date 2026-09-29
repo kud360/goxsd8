@@ -35,7 +35,7 @@ const ruleXPST0081 xsderr.Rule = "err:XPST0081"
 // the position of the <selector> element the {expression} was written on, which
 // this package cannot know and never reconstructs (STYLE E3).
 //
-// IT CHARGES TEN SHAPES, each of which fails clause 1 or both arms of clause 2;
+// IT CHARGES THIRTEEN SHAPES, each of which fails clause 1 or both arms of clause 2;
 // they are not every shape clause 2 proves. Clause 2 is a disjunction — 2.1's
 // literal BNF or 2.2's "XPath expression involving the child axis whose
 // abbreviated form is as given above" — and 2.2 is read syntactically: the
@@ -50,6 +50,16 @@ const ruleXPST0081 xsderr.Rule = "err:XPST0081"
 //   - a field's '@' with no NodeTest after it, and an axis head with none
 //     after it (`child::`, `attribute::`), each no XPath 2.0 expression at all
 //     and so failing xpath-valid's own clause 1;
+//   - on the same clause-1 terms, an empty union member — the empty
+//     {expression}, or an operand missing beside a `|` as in `| a` — which
+//     XPath 2.0's Expr and UnionExpr never derive;
+//   - a `/` or `//` with no Step after it — at the end of a Path, or before
+//     another `/` or `//` as in `a//`, `.//`, `./ /.` and `a////b` — save a `/`
+//     that is the whole Path, which XPath 2.0's RelativePathExpr never derives
+//     and so fails clause 1 too;
+//   - a name split by white space around its `:` (`tid :*`, `tid : x`, or
+//     `child: :` for `child::`), which no QName, Wildcard or axis spells and so
+//     fails clause 1 too, whatever its prefix would resolve to;
 //   - a predicate, which abbreviation neither introduces nor removes;
 //   - an attribute named anywhere in a selector, under either spelling, which
 //     clause 2.2 does not name for a selector at all;
@@ -69,10 +79,11 @@ const ruleXPST0081 xsderr.Rule = "err:XPST0081"
 //
 // Everything else is nil here and left to [CompileSelector] to decline at
 // validate time. That covers, above all, an {expression} this package cannot
-// read whole: a FunctionCall such as `document("")`, or a KindTest with an
-// argument (`element(a)`), whatever clause 1 or 2 says of it. It also covers a
-// `//` with no Step after it, and a `.//` path whose Steps are all `.`, which
-// production [3]'s bare `.` derives outright.
+// read whole: a FunctionCall such as `document("")`, a KindTest with an
+// argument (`element(a)`), or a Wildcard `*:a`, whatever clause 1 or 2 says of
+// it. It also covers two Steps with no separator between them, which this
+// package cannot tell from the parent step `..`, and a `.//` path whose Steps
+// are all `.`, which production [3]'s bare `.` derives outright.
 //
 // The result is an *[xsderr.Error] carrying the SCC as its rule, with the
 // clause it breaks in the message. For the unbound prefix it wraps a cause
@@ -172,9 +183,10 @@ func subject(field bool) string {
 
 // shapeViolation is the verdict a shapeFault proves. It carries no cause:
 // productions [2], [3] and [7] are the SCC's own text and no other vocabulary
-// states them, so a wrapped layer would put the same rule on both (STYLE E2). A
-// field's bare '@' and an axis head with no NodeTest break XPath 2.0's
-// production [31] or [29]/[32] instead. Their messages name the production, and
+// states them, so a wrapped layer would put the same rule on both (STYLE E2).
+// The clause-1 shapes — a field's bare '@', an axis head with no NodeTest, an
+// empty union member, a separator with no Step after it and a split name —
+// break an XPath 2.0 production instead. Their messages name the production, and
 // they wrap no err:XPST0003, because clause 1 delegates to the grammar —
 // xpath-valid's clause 1 is "a valid XPath 2.0 expression" — while err:XPST0003
 // is the vocabulary of the static errors its clause 2 excludes.

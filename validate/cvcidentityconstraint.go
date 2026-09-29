@@ -143,11 +143,13 @@ type icFieldCursor struct {
 // a legal XPath 2.0 expression neither subset admits that no charged shape
 // covers and icpath's lexer cannot read whole — a FunctionCall such as
 // `document("")`, a KindTest with an argument; a predicate whose {expression}
-// icpath's lexer cannot read whole; a `.//` with no element step left once the
-// self steps are removed, which production [3]'s bare `.` Step makes
-// assembly-LEGAL and only this matcher cannot represent; and — because a
-// component assembled directly through [xsd.NewIdentityConstraint] reaches no
-// assembler — any charged shape as well.
+// icpath's lexer cannot read whole; a non-expression icpath does not charge:
+// Steps with no separator, or a colon run it cannot read; a `.//` with no
+// element step left once the self steps are removed, which production [3]'s
+// bare `.` Step makes assembly-LEGAL and only this matcher cannot represent;
+// and — because a component assembled directly through
+// [xsd.NewIdentityConstraint] reaches no assembler — any charged shape as
+// well.
 type icFrame struct {
 	ic       xsd.IdentityConstraint
 	sel      icpath.Expr

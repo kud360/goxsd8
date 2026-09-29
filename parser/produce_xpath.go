@@ -1,6 +1,8 @@
 package parser
 
 import (
+	"fmt"
+
 	"github.com/kud360/goxsd8/icpath"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
@@ -27,11 +29,14 @@ import (
 //   - {base URI} is the host element's [[base URI]] — genuinely served here,
 //     xml:base and all, by the base URI ReadDocument composed for that element.
 //
-// An absent expression attribute yields an empty {expression}: the attribute's
-// "Required" status is a schema-for-schemas grammar concern this producer does
-// not validate, exactly as it does not validate a missing name= elsewhere. There
-// is no rejectable state at this layer (xsd.NewXPathExpression's own doc), so
-// there is no error to return.
+// An absent expression attribute yields an empty {expression}, the same record
+// a present exprAttr="" yields. There is no rejectable state at this layer
+// (xsd.NewXPathExpression's own doc), so there is no error to return. The
+// <selector>/<field> caller, constructIdentityConstraint, rejects an absent
+// xpath BEFORE calling this (requiredXPath), so the empty record it charges
+// under c-selector-xpath or c-fields-xpaths clause 1 is always one a present
+// xpath="" wrote. An absent test on <assert> or <assertion> is read as "" and
+// not validated.
 func (p *producer) buildXPathExpression(hostElem *Element, exprAttr string) xsd.XPathExpression {
 	expr, _ := hostElem.Attr(exprAttr)
 	baseURI := hostElem.baseURI
@@ -326,7 +331,9 @@ func (p *producer) buildIdentityConstraint(name xsd.QName, el *Element, category
 // clause 2 whichever of its two arms the author wrote under, and is nil for
 // everything else (icpath.SelectorViolation), so a conforming schema is never
 // rejected here for a path icpath cannot read; such a path is declined at
-// validate time instead.
+// validate time instead. A <selector>/<field> with no xpath attribute at all
+// never reaches icpath: requiredXPath rejects it first, as a grammar fault and
+// not under either SCC.
 //
 // A consumer assembling components directly through xsd.NewIdentityConstraint
 // gets no charge, which is this rule family's existing norm — xsd.NewTypeAlternative
@@ -340,6 +347,9 @@ func (p *producer) constructIdentityConstraint(name xsd.QName, el *Element, cate
 	if selectorEl == nil {
 		return xsd.IdentityConstraint{}, xsderr.New(ruleSrcIdentityConstraint, el.Loc(),
 			"<%s> has no <selector> child, but src-identity-constraint clause 2 requires one when name is present", local)
+	}
+	if err := requiredXPath(selectorEl); err != nil {
+		return xsd.IdentityConstraint{}, err
 	}
 	selector := p.buildXPathExpression(selectorEl, "xpath")
 	if err := icpath.SelectorViolation(selectorEl.Loc(), selector); err != nil {
@@ -356,6 +366,9 @@ func (p *producer) constructIdentityConstraint(name xsd.QName, el *Element, cate
 		fieldEl, ok := child.(*Element)
 		if !ok || !isXSD(fieldEl, "field") {
 			continue
+		}
+		if err := requiredXPath(fieldEl); err != nil {
+			return xsd.IdentityConstraint{}, err
 		}
 		field := p.buildXPathExpression(fieldEl, "xpath")
 		if err := icpath.FieldViolation(fieldEl.Loc(), field); err != nil {
@@ -380,6 +393,20 @@ func (p *producer) constructIdentityConstraint(name xsd.QName, el *Element, cate
 		referencedKey = &qn
 	}
 	return xsd.NewIdentityConstraint(el.Loc(), name, category, selector, fields, referencedKey)
+}
+
+// requiredXPath rejects a <selector> or <field> that carries no xpath attribute.
+// xs:selector (xmlschema11-1.md:5599) and xs:field (:5624) each declare xpath
+// use="required", and c-selector-xpath and c-fields-xpaths govern only an
+// {expression} the attribute wrote. A missing required attribute is therefore a
+// grammar fault with no dedicated Schema Representation Constraint, reported as
+// a plain error, as parse.go reports a directive with no schemaLocation. The
+// production name is the element name.
+func requiredXPath(el *Element) error {
+	if _, ok := el.Attr("xpath"); ok {
+		return nil
+	}
+	return fmt.Errorf("parser: <%s> at %s has no xpath attribute, which the schema for schema documents requires: xs:%s declares it use=\"required\"", el.Name().Local(), el.Loc(), el.Name().Local())
 }
 
 // identityConstraintCategoryOf maps an identity-constraint element's local name
