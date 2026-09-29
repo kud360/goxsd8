@@ -2169,7 +2169,7 @@ func (p *producer) groupParticles(group *Element, scopeParent xsd.ElementScopePa
 		case "group":
 			part, err = p.produceGroupRefParticle(el)
 		default:
-			return nil, fmt.Errorf("parser: unexpected model group child <%s>", el.Name().Local())
+			return nil, unexpectedModelGroupChild(group, el)
 		}
 		if err != nil {
 			return nil, err
@@ -2179,6 +2179,24 @@ func (p *producer) groupParticles(group *Element, scopeParent xsd.ElementScopePa
 		}
 	}
 	return particles, nil
+}
+
+// unexpectedModelGroupChild is groupParticles' fault for a child the model group
+// group's content model has no position for — an <attribute>, or an identity
+// constraint (#1817) — positioned at the child and naming group as its owner
+// (STYLE E3). An <all>'s content is xs:allModel (xmlschema11-1.md:5259); a
+// <choice>'s or a <sequence>'s, local (xs:explicitGroup, :5229) or a named
+// group's body (xs:simpleExplicitGroup, :5246), is xs:nestedParticle (:4657)
+// either way. §5.1's first bullet (:4296) binds and mints no rule ID, so the
+// error is plain (STYLE E2).
+func unexpectedModelGroupChild(group, child *Element) error {
+	owner := group.Name().Local()
+	grammar := "xs:nestedParticle (xmlschema11-1.md:4657), which admits <element>, <group>, <choice>, <sequence> and <any>"
+	if owner == "all" {
+		grammar = "xs:allModel (xmlschema11-1.md:5259), which admits <element>, <any> and <group>"
+	}
+	return fmt.Errorf("parser: unexpected model group child <%s> at %s under the <%s> at %s: its content after the optional <annotation> is %s",
+		child.Name().Local(), child.Loc(), owner, group.Loc(), grammar)
 }
 
 // produceElementParticle maps a local <element> to a Particle (§3.3.2.3). A
@@ -3061,11 +3079,44 @@ func (p *producer) prohibitedAttributeNames(parent *Element) ([]xsd.QName, error
 // reasons collectAttributeContent gives; a caller holding a typeSource builds
 // through its owner.
 func (p *producer) buildAttributeGroup(name xsd.QName, elem *Element) (xsd.AttributeGroupDefinition, error) {
+	if err := rejectAttributeGroupIdentityConstraint(elem); err != nil {
+		return xsd.AttributeGroupDefinition{}, err
+	}
 	content, wildcard, err := p.collectAttributeContent(elem, xsd.AttributeGroupScopeParent{Name: name})
 	if err != nil {
 		return xsd.AttributeGroupDefinition{}, err
 	}
 	return xsd.NewAttributeGroupDefinition(elem.Loc(), name, content, wildcard)
+}
+
+// rejectAttributeGroupIdentityConstraint rejects the first <unique>, <key> or
+// <keyref> child of the <attributeGroup> definition elem, in document order.
+// xs:namedAttributeGroup (xmlschema11-1.md:5502) is "annotation?" followed by
+// xs:attrDecls (:4720), "((attribute | attributeGroup)*, anyAttribute?)", and
+// the xs:identityConstraint group (:5660) is referenced from the
+// element-declaration types alone (§3.11.2, :2986), so the document is not fully
+// valid against the schema for schema documents. That is §5.1's first bullet
+// (:4296), which mints no rule ID, so the fault is a plain error (STYLE E2); it
+// is not src-identity-constraint's, whose clauses all hold of an identity
+// constraint written where one may be.
+//
+// It runs ahead of collectAttributeContent, whose src-attribute charges stand
+// behind the grammar on checkS4SChildOrder's run order (#1246).
+//
+// Only the three identity-constraint names are charged here (#1817). Every
+// other name xs:attrDecls does not admit — an <element>, an <assert> — is still
+// dropped by collectAttributeContent and reported by the census
+// (attributeGroupChildMapped); ordering the position against the whole
+// xs:namedAttributeGroup model is a widening of its own.
+func rejectAttributeGroupIdentityConstraint(elem *Element) error {
+	for c := range xsdChildren(elem) {
+		if !s4sIdentityConstraint(c.Name().Local()) {
+			continue
+		}
+		return fmt.Errorf("parser: <%s> at %s is not admitted among the children of the <attributeGroup> at %s: xs:namedAttributeGroup's content model (xmlschema11-1.md:5502) is (annotation?, ((attribute | attributeGroup)*, anyAttribute?)), and an identity constraint is admitted under an <element> alone (xmlschema11-1.md:5660)",
+			c.Name().Local(), c.Loc(), elem.Loc())
+	}
+	return nil
 }
 
 // collectAttributeContent maps container's OWN attribute content, in document

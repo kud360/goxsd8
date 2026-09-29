@@ -2,6 +2,7 @@ package parser_test
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -250,5 +251,81 @@ func TestProduceS4SIdentityConstraintChildOrderAccepted(t *testing.T) {
 		`</xs:element>`)
 	if _, err := produce(t, doc); err != nil {
 		t.Fatalf("Produce rejected identity constraints written in order: %v", err)
+	}
+}
+
+// TestProduceIdentityConstraintMisplacedRejected pins §5.1's first bullet
+// (xmlschema11-1.md:4296) on a <unique>, <key> or <keyref> written where
+// Appendix A admits none: under a top-level <attributeGroup>
+// (xs:namedAttributeGroup, :5502) and under an <all>, <choice> or <sequence>
+// (xs:allModel, :5259; xs:nestedParticle, :4657), local or a named group's body —
+// the shapes of idA/B/C024 and idA/B/C026-028 (#1817). The fault is positioned
+// at the constraint, names its owner, and carries no rule ID (STYLE E2).
+//
+// <schema> is line 1, each owner opens on line 3 and the constraint is line 4.
+func TestProduceIdentityConstraintMisplacedRejected(t *testing.T) {
+	constraints := []struct{ local, line string }{
+		{"unique", `<xs:unique name="c"><xs:selector xpath="a"/><xs:field xpath="@x"/></xs:unique>`},
+		{"key", `<xs:key name="c"><xs:selector xpath="a"/><xs:field xpath="@x"/></xs:key>`},
+		{"keyref", `<xs:keyref name="c" refer="tns:k"><xs:selector xpath="a"/><xs:field xpath="@x"/></xs:keyref>`},
+	}
+	// The <key> every <keyref> row refers to, written after the host so the host's
+	// line numbers hold.
+	const referenced = `<xs:element name="o"><xs:key name="k"><xs:selector xpath="a"/><xs:field xpath="@x"/></xs:key></xs:element>`
+	// A slice, not a map: subtest order is output (STYLE D2).
+	for _, host := range []struct {
+		name  string
+		open  []string // lines 2 and 3; line 3 is the constraint's owner
+		close []string
+		fault string // the diagnostic's opening: %[1]s the constraint, %[2]s the document
+		model string
+	}{
+		{
+			name:  "top-level attributeGroup",
+			open:  []string{`<xs:attribute name="a"/>`, `<xs:attributeGroup name="g">`},
+			close: []string{`</xs:attributeGroup>`},
+			fault: "parser: <%[1]s> at %[2]s:4:1 is not admitted among the children of the <attributeGroup> at %[2]s:3:1",
+			model: "xs:namedAttributeGroup's content model (xmlschema11-1.md:5502)",
+		},
+		{
+			name:  "local sequence",
+			open:  []string{`<xs:complexType name="t">`, `<xs:sequence>`},
+			close: []string{`</xs:sequence>`, `</xs:complexType>`},
+			fault: "parser: unexpected model group child <%[1]s> at %[2]s:4:1 under the <sequence> at %[2]s:3:1",
+			model: "xs:nestedParticle (xmlschema11-1.md:4657)",
+		},
+		{
+			name:  "choice body of a named group",
+			open:  []string{`<xs:group name="g">`, `<xs:choice>`},
+			close: []string{`</xs:choice>`, `</xs:group>`},
+			fault: "parser: unexpected model group child <%[1]s> at %[2]s:4:1 under the <choice> at %[2]s:3:1",
+			model: "xs:nestedParticle (xmlschema11-1.md:4657)",
+		},
+		{
+			name:  "all body of a named group",
+			open:  []string{`<xs:group name="g">`, `<xs:all>`},
+			close: []string{`</xs:all>`, `</xs:group>`},
+			fault: "parser: unexpected model group child <%[1]s> at %[2]s:4:1 under the <all> at %[2]s:3:1",
+			model: "xs:allModel (xmlschema11-1.md:5259)",
+		},
+	} {
+		for _, c := range constraints {
+			t.Run(host.name+"/"+c.local, func(t *testing.T) {
+				lines := slices.Concat(host.open, []string{c.line}, host.close, []string{referenced})
+				_, err := produce(t, s4sTopLevelDoc(lines...))
+				if err == nil {
+					t.Fatalf("Produce accepted a <%s> under a %s", c.local, host.name)
+				}
+				if rule, ok := xsderr.RuleOf(err); ok {
+					t.Errorf("error = %v, charged %s; want a plain grammar fault carrying no rule ID", err, rule)
+				}
+				if want := fmt.Sprintf(host.fault, c.local, produceURI); !strings.HasPrefix(err.Error(), want) {
+					t.Errorf("error = %v, want it to open %q", err, want)
+				}
+				if !strings.Contains(err.Error(), host.model) {
+					t.Errorf("error = %v, want it to cite %q", err, host.model)
+				}
+			})
+		}
 	}
 }

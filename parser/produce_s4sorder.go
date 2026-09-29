@@ -99,6 +99,13 @@ var s4sStructuralTail = slices.Concat([]s4sSlot{
 // inherited from xs:annotated (:4426).
 var s4sAnnotationFirst = []s4sSlot{{admits: s4sNames("annotation")}}
 
+// s4sIdentityConstraint admits the three members of Appendix A's
+// xs:identityConstraint group (xmlschema11-1.md:5660) — <unique>, <key> and
+// <keyref> — which only the element-declaration types reference. s4sElement
+// orders them, and rejectAttributeGroupIdentityConstraint (produce_complex.go)
+// charges them under a top-level <attributeGroup>, from this one list.
+var s4sIdentityConstraint = s4sNames("unique", "key", "keyref")
+
 // The fifteen models checkS4SChildOrder is charged with. Eight are the element
 // positions a complex type is written through — xs:complexTypeModel appearing
 // twice, once for each of its disjuncts a <complexType> can be dispatched on. The
@@ -238,7 +245,7 @@ var (
 		slots: slices.Concat(s4sAnnotationFirst, []s4sSlot{
 			{admits: s4sNames("simpleType", "complexType")},
 			{admits: s4sNames("alternative"), repeated: true},
-			{admits: s4sNames("unique", "key", "keyref"), repeated: true},
+			{admits: s4sIdentityConstraint, repeated: true},
 		}),
 	}
 
