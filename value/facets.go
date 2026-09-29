@@ -1,10 +1,13 @@
 package value
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
+	"math/big"
 	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/kud360/goxsd8/regex"
 	"github.com/kud360/goxsd8/xsd"
@@ -1033,7 +1036,7 @@ func boundRule(k xsd.FacetKind) xsderr.Rule {
 // decimal-only (cos-applicable-facets §4.1.5). Both are UPPER-BOUND (magnitude)
 // constraints, not exact-count matches: violation is candidate digits > limit.
 type digitsFacet struct {
-	limit int
+	limit integerLiteral
 	kind  xsd.FacetKind
 }
 
@@ -1060,9 +1063,9 @@ func (df digitsFacet) CheckValue(v Value) error {
 	if df.kind == xsd.FacetFractionDigits {
 		got = dc.FractionDigits()
 	}
-	if got > df.limit {
+	if df.limit.cmpInt(got) < 0 {
 		return xsderr.New(digitsRule(df.kind), xsderr.Loc{},
-			"value has %d %s, exceeds facet limit %d (%s)", got, df.kind, df.limit, digitsRule(df.kind))
+			"value has %d %s, exceeds facet limit %s (%s)", got, df.kind, df.limit, digitsRule(df.kind))
 	}
 	return nil
 }
@@ -1087,7 +1090,7 @@ func digitsRule(k xsd.FacetKind) xsderr.Rule {
 // the bound — captured in exempt at construction so CheckValue never measures
 // such a value (see lengthExemptPrimitive).
 type lengthFacet struct {
-	limit int
+	limit integerLiteral
 	kind  xsd.FacetKind
 	// exempt makes CheckValue accept any value unconditionally when st's
 	// {primitive type definition} is QName or NOTATION (clause 1.3 of
@@ -1166,20 +1169,21 @@ func (lf lengthFacet) CheckValue(v Value) error {
 	}
 	if lf.violates(l.Len()) {
 		return xsderr.New(lengthRule(lf.kind), xsderr.Loc{},
-			"value length %d violates the %s facet limit %d (%s)", l.Len(), lf.kind, lf.limit, lengthRule(lf.kind))
+			"value length %d violates the %s facet limit %s (%s)", l.Len(), lf.kind, lf.limit, lengthRule(lf.kind))
 	}
 	return nil
 }
 
 // violates maps a length to a violation per kind.
 func (lf lengthFacet) violates(n int) bool {
+	c := lf.limit.cmpInt(n)
 	switch lf.kind {
 	case xsd.FacetLength:
-		return n != lf.limit
+		return c != 0
 	case xsd.FacetMinLength:
-		return n < lf.limit
+		return c > 0
 	case xsd.FacetMaxLength:
-		return n > lf.limit
+		return c < 0
 	default:
 		panic(fmt.Sprintf("value: violates: %s is not a length facet", lf.kind))
 	}
@@ -1283,7 +1287,7 @@ func (tf explicitTimezoneFacet) CheckValue(v Value) error {
 // maxScale bounds it above (violation is scale > limit), minScale bounds it
 // below (violation is scale < limit).
 type scaleFacet struct {
-	limit int
+	limit integerLiteral
 	kind  xsd.FacetKind
 }
 
@@ -1318,18 +1322,19 @@ func (sf scaleFacet) CheckValue(v Value) error {
 	}
 	if sf.violates(scale) {
 		return xsderr.New(scaleRule(sf.kind), xsderr.Loc{},
-			"value scale %d violates the %s facet limit %d (%s)", scale, sf.kind, sf.limit, scaleRule(sf.kind))
+			"value scale %d violates the %s facet limit %s (%s)", scale, sf.kind, sf.limit, scaleRule(sf.kind))
 	}
 	return nil
 }
 
 // violates maps a ·scale· to a violation per kind (clause 1 of each rule).
 func (sf scaleFacet) violates(scale int) bool {
+	c := sf.limit.cmpInt(scale)
 	switch sf.kind {
 	case xsd.FacetMaxScale:
-		return scale > sf.limit
+		return c < 0
 	case xsd.FacetMinScale:
-		return scale < sf.limit
+		return c > 0
 	default:
 		panic(fmt.Sprintf("value: violates: %s is not a scale facet", sf.kind))
 	}
@@ -1348,35 +1353,63 @@ func scaleRule(k xsd.FacetKind) xsderr.Rule {
 	}
 }
 
-// facetInt parses a single-valued facet's plain xs:integer {value} (a scale
+// facetInt reads a single-valued facet's plain xs:integer {value} (a scale
 // bound that MAY be negative — no nonNegativeInteger constraint, unlike
 // facetCount), charging rule on a wrong value count or a non-integer literal.
-func facetInt(f xsd.Facet, rule xsderr.Rule) (int, error) {
+// xs:integer is unbounded (Datatypes §3.4.13), so a literal past math.MaxInt or
+// math.MinInt is a valid {value} and is returned whole, never charged.
+func facetInt(f xsd.Facet, rule xsderr.Rule) (integerLiteral, error) {
 	values := f.Values()
 	if len(values) != 1 {
-		return 0, xsderr.New(rule, xsderr.Loc{},
+		return "", xsderr.New(rule, xsderr.Loc{},
 			"%s facet must carry exactly one value, has %d", f.Kind(), len(values))
 	}
-	n, err := strconv.Atoi(values[0])
-	if err != nil {
-		return 0, xsderr.New(rule, xsderr.Loc{},
+	if _, ok := new(big.Int).SetString(values[0], 10); !ok {
+		return "", xsderr.New(rule, xsderr.Loc{},
 			"%s facet value %q is not an integer", f.Kind(), values[0])
 	}
-	return n, nil
+	return integerLiteral(values[0]), nil
 }
 
-// facetCount parses a single-valued facet's plain xs:nonNegativeInteger {value}
-// (a bare count for the digit and length facets), charging rule on rejection.
-func facetCount(f xsd.Facet, rule xsderr.Rule) (int, error) {
+// facetCount reads a single-valued facet's plain xs:nonNegativeInteger {value}
+// (a bare count for the digit and length facets), charging rule on a wrong value
+// count or a literal that is not an integer or is negative.
+// xs:nonNegativeInteger is unbounded (Datatypes §3.4.20), so a literal past
+// math.MaxInt is a valid {value} and is returned whole, never charged.
+func facetCount(f xsd.Facet, rule xsderr.Rule) (integerLiteral, error) {
 	values := f.Values()
 	if len(values) != 1 {
-		return 0, xsderr.New(rule, xsderr.Loc{},
+		return "", xsderr.New(rule, xsderr.Loc{},
 			"%s facet must carry exactly one value, has %d", f.Kind(), len(values))
 	}
-	n, err := strconv.Atoi(values[0])
-	if err != nil || n < 0 {
-		return 0, xsderr.New(rule, xsderr.Loc{},
+	n, ok := new(big.Int).SetString(values[0], 10)
+	if !ok || n.Sign() < 0 {
+		return "", xsderr.New(rule, xsderr.Loc{},
 			"%s facet value %q is not a nonNegativeInteger", f.Kind(), values[0])
 	}
-	return n, nil
+	return integerLiteral(values[0]), nil
+}
+
+// integerLiteral is an integer facet {value} held as the literal the document
+// wrote, which facetCount or facetInt has checked is an optional sign followed by
+// decimal digits. The value spaces of the length, digits and scale facets are
+// unbounded, so the literal is never narrowed to a host int: cmpInt compares it
+// exactly with the int an instance measures, and a rejection names the literal
+// itself.
+type integerLiteral string
+
+// cmpInt orders l against n by value: negative, zero or positive as l is less
+// than, equal to or greater than n. A literal past the host int's range is
+// beyond every n on its sign's side.
+func (l integerLiteral) cmpInt(n int) int {
+	v, err := strconv.Atoi(string(l))
+	if err == nil {
+		return cmp.Compare(v, n)
+	}
+	// l is checked at construction and Atoi reads the same syntax, so the only
+	// error left is strconv.ErrRange: l lies past math.MaxInt or math.MinInt.
+	if strings.HasPrefix(string(l), "-") {
+		return -1
+	}
+	return 1
 }

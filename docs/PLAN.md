@@ -20,7 +20,7 @@ one — appending is what this replaces.
 ## Status — 2026-09-29 (`/backlog`, the thirty-seventh)
 
 **The band held its order: rows 1–9 of the 2026-09-28 band landed in sequence, and
-row 10, #1779, is claimed and LIVE.** The window was `efaa5ad..2483129`: 9 landings,
+row 10, #1779, landed after the survey, as `2020409`.** The window was `efaa5ad..2483129`: 9 landings,
 each with its post-land pass, and no retro or audit. It banked **91 cases, 10.1
 per develop session**, with a **67% product share** (6 of 9: #1808, #1786, #1809,
 #1788, #1796, #1780). #1609 was a ruling reconfirmation, #1772 persona consumption
@@ -111,13 +111,14 @@ prediction of flips.
 
 ### Branch namespace, `origin` (report-only; a session never deletes a ref)
 
-`git ls-remote --heads origin` lists `main`, **`wip/issue-1779`** and
-**`chronicler-345`**. `go tool wipsurvey`, fed this pass's post-write walk after
+`git ls-remote --heads origin` listed `main`, **`wip/issue-1779`** and
+**`chronicler-345`** at the survey. `go tool wipsurvey`, fed this pass's post-write walk after
 a `git fetch origin`, prints one row and `none` under PARKED.
 
-- **`wip/issue-1779` is LIVE.** Its tip `4927f38` was pushed 14 minutes before
-  the survey, inside the 2h TTL. A concurrent `/develop` holds it (claim
-  `e427e6c`, grounding posted), so **#1779 is not startable**.
+- **`wip/issue-1779` was LIVE at the survey.** Its tip `4927f38` was pushed 14 minutes before
+  the survey, inside the 2h TTL. Its `/develop` then landed #1779 as `2020409` on `main` (`Ratchet:
+  unchanged`; expectations untouched), so **#1779 is not a row**. Re-run
+  `wipsurvey` for the branch's retirement.
 - **`chronicler-345`** is now 4 ahead and 53 behind, and no PR has it as its
   head. `git diff ae2cdc3 c9e7766` is still empty, so **nothing on it is missing
   from `main`**. A human may delete it. This is its third stamp flagged.
@@ -217,7 +218,7 @@ has no surface yet.
 ### Working band
 
 This is ordered for a `/develop` session: take the highest row you can start.
-**#1779 is claimed and LIVE, so it is not a row.** **Re-run `wipsurvey` before
+**#1779 landed as `2020409`, so it is not a row.** **Re-run `wipsurvey` before
 starting**, because this is a snapshot. Each row names one issue (#1636). A row
 that absorbs others says so, and the absorbed issues' bodies say so too.
 
