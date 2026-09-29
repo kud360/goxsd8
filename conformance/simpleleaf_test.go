@@ -446,7 +446,8 @@ func TestComplexEmptyDeclaration(t *testing.T) {
 		`<xs:element name="identity" type="E"><xs:key name="k"><xs:selector xpath="."/><xs:field xpath="@a"/></xs:key></xs:element>`+
 		`<xs:element name="table" type="E"><xs:alternative type="E"/></xs:element>`+
 		`<xs:element name="simpleType" type="xs:string"/>`+
-		`<xs:element name="abstractType"><xs:complexType abstract="true"/></xs:element>`+
+		`<xs:complexType name="A" abstract="true"/>`+
+		`<xs:element name="abstractType" type="A"/>`+
 		`<xs:element name="elementOnly"><xs:complexType><xs:sequence><xs:element name="c" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>`+
 		`<xs:element name="mixed"><xs:complexType mixed="true"><xs:sequence><xs:element name="c" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>`+
 		`<xs:element name="simpleContent"><xs:complexType><xs:simpleContent><xs:extension base="xs:string"/></xs:simpleContent></xs:complexType></xs:element>`+
