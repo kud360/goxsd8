@@ -100,8 +100,9 @@
 //
 // [Result] carries every violation charged so far as an *xsderr.Error
 // (cvc-* rule + instance and/or schema Loc), in document order. Nine rules
-// are charged today, at the ·validation root· and at every descendant whose
-// ·governing element declaration· the descent determines.
+// are charged today, at the ·validation root· and at every descendant the
+// descent assesses — against a ·governing element declaration·, against a
+// ·governing type definition· alone, or, ·laxly assessed·, against xs:anyType.
 //
 // Read the verdict off [Result.Violations]; [Result.Err] reports whether the
 // walk finished, not whether the document is valid. An empty Violations means
@@ -202,6 +203,15 @@
 // use (two independent rules over two properties, both charged), and a
 // ·defaulted attribute·'s own {lexical form} against its type.
 //
+// cvc-attribute clauses 3 and 4 are charged on the same terms against an
+// attribute ·attributed to· a strict or lax {attribute wildcard} under clause
+// 2.2 — the governing type's, or xs:anyType's lax one on a ·laxly assessed·
+// element (§3.4.7) — with the top-level declaration its ·expanded name·
+// ·resolves· to as its ·governing attribute declaration· (key-governing-ad
+// clause 3). A ·skipped· attribute, attributed to a skip wildcard, and one whose
+// name resolves no declaration have none, under strict as under lax, and are
+// not assessed (cvc-assess-elt clause 2.2).
+//
 // cvc-attribute is also charged against the one declaration clause 2.1 never
 // dispatches to and no {attribute use} reaches: the built-in declaration for
 // the type attribute (§3.2.7.1), at the xsi:type attribute's own Loc,
@@ -231,9 +241,8 @@
 // — validated against its {simple type definition} per String Valid, charged
 // against the root's own Loc.
 //
-// Everything not decidable is left undecided rather than guessed at: an
-// {attribute wildcard} to evaluate, a ·governing type definition· that is
-// not determinable, a {content type} whose shape xsd.Schema.ContentMatcher
+// Everything not decidable is left undecided rather than guessed at: a
+// ·governing type definition· that is not determinable, a {content type} whose shape xsd.Schema.ContentMatcher
 // declines, a declaration whose {type definition} is not a simple type, a
 // value whose ·validating type· String Valid clause 3 cannot decide, and —
 // the decline that matters most — a value.ValidateLexical error that is a fault
@@ -244,8 +253,8 @@
 // for every literal against xs:anySimpleType and xs:anyAtomicType (Datatypes
 // §4.1.4), so a typeless attribute (§3.2.2.2) is satisfied. Which declines are
 // recorded as [Unevaluated], and which are not, is [Unevaluated]'s own doc to
-// say. The first item of the list above, an {attribute wildcard}, also carries
-// an obligation that is this layer's ALONE: where the wildcard's {process
+// say. An {attribute wildcard} carries an obligation that is this layer's
+// ALONE: where the wildcard's {process
 // contents} is strict or lax and it does not carry ##defined, §3.4.6.4
 // key-dft-binding case 3 binds an item ·attributed· to it to a SYNTHESIZED
 // Attribute Use over the ·governing attribute declaration· its ·expanded name·

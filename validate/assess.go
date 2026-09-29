@@ -710,6 +710,10 @@ func (w *walk) element(e Element, g governance, parent *icCheck, inherited []inh
 // attributes·. Violations reach [Result] in that order, which is the order they
 // were found in.
 //
+// A ·laxly assessed· element (key-lva) is locally validated against
+// xs:anyType, whose {attribute wildcard} is lax over every namespace (§3.4.7),
+// so each of its attributes goes to clause 2.2 against that wildcard
+// ([walk.attribute]); it has no {attribute uses} for clauses 3 and 4 to read.
 // A ·governing type definition· this package could not determine selects
 // NEITHER arm and decides nothing at all: every attribute is walked (the log
 // records the visit) and none is charged or passed. That is the only nothing
@@ -734,7 +738,7 @@ func (w *walk) attributes(e Element, g governance) {
 	ct := g.complexType()
 	attrs := e.Attributes()
 	for _, a := range attrs {
-		w.attribute(a, e, ct)
+		w.attribute(a, e, g)
 	}
 	if ct == nil {
 		return
@@ -779,10 +783,19 @@ func (w *walk) simpleTypeAttributes(e Element, st *xsd.SimpleType) {
 // There is no third arm, so an attribute that matches neither violates clause
 // 2 outright.
 //
+// An element with no complex ·governing type definition· reaches clause 2 only
+// where it is ·laxly assessed·: against xs:anyType, which has no {attribute
+// uses} and whose {attribute wildcard} admits every ·expanded name· with
+// {process contents} lax (§3.4.7), so every attribute but the four clause 2
+// excepts is ·attributed to· that wildcard ([walk.wildcardAttribute]). One
+// whose type this package could not determine — unattributed included — is
+// walked and decided nothing about.
+//
 // e is the attribute's owner, carried for the namespace bindings a QName- or
 // NOTATION-valued lexical resolves against (elementContext).
-func (w *walk) attribute(a Attribute, e Element, governing *xsd.ComplexType) {
-	if governing == nil {
+func (w *walk) attribute(a Attribute, e Element, g governance) {
+	governing := g.complexType()
+	if governing == nil && !g.laxlyAssessed() {
 		w.logAttribute(a, "", "", "")
 		return
 	}
@@ -793,9 +806,14 @@ func (w *walk) attribute(a Attribute, e Element, governing *xsd.ComplexType) {
 		w.logAttribute(a, ruleCvcComplexType, "2", "exempt")
 		return
 	}
+	if governing == nil {
+		w.logAttribute(a, ruleCvcComplexType, "2.2", "satisfied")
+		w.wildcardAttribute(a, e, xsd.ProcessLax)
+		return
+	}
 	u, matched := attributeUseNamed(governing.AttributeUses(), a.Name())
 	if !matched {
-		w.unmatchedAttribute(a, *governing)
+		w.unmatchedAttribute(a, e, *governing)
 		return
 	}
 	w.matchedAttribute(a, e, u)
@@ -822,14 +840,14 @@ func (w *walk) attribute(a Attribute, e Element, governing *xsd.ComplexType) {
 // failing conjunct charges clause 2 in its own message, there being no third
 // arm of clause 2 to fall to.
 //
-// An admitted item records its assertion sites before the arm returns
-// ([walk.wildcardAttributeAssertions]): under a ***strict*** or ***lax***
-// wildcard the spec's ·attribute assessment· of it reaches cvc-attribute clause
-// 3 against the top-level declaration its ·expanded name· ·resolves· to, and
-// [walk.matchedAttribute] never sees it. A NON-admitted item records none: it is
-// ·attributed to· nothing (§3.4.4.4), so no wildcard sends it to any
-// declaration, and its own charge is the whole of what this element owes for it.
-func (w *walk) unmatchedAttribute(a Attribute, governing xsd.ComplexType) {
+// An admitted item is ·attributed to· the wildcard and goes on to
+// [walk.wildcardAttribute]: under a ***strict*** or ***lax*** wildcard it is
+// assessed against the top-level declaration its ·expanded name· ·resolves· to,
+// cvc-attribute clauses 3 and 4 with their assertion sites, and under
+// ***skip*** it is not assessed. A NON-admitted item is ·attributed to· nothing
+// (§3.4.4.4), so no wildcard sends it to any declaration, and its own charge is
+// the whole of what this element owes for it.
+func (w *walk) unmatchedAttribute(a Attribute, e Element, governing xsd.ComplexType) {
 	wild, has := governing.AttributeWildcard()
 	if !has {
 		w.res.violations = append(w.res.violations, xsderr.New(ruleCvcComplexType, a.Loc(),
@@ -845,8 +863,8 @@ func (w *walk) unmatchedAttribute(a Attribute, governing xsd.ComplexType) {
 		w.logAttribute(a, ruleCvcComplexType, "2.2.2", "charged")
 		return
 	}
-	w.wildcardAttributeAssertions(a, wild)
 	w.logAttribute(a, ruleCvcComplexType, "2.2", "satisfied")
+	w.wildcardAttribute(a, e, wild.ProcessContents())
 }
 
 // requiredAttributeUses charges clause 3 for each {required} attribute use

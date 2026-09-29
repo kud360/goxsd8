@@ -83,7 +83,7 @@ func isSpecial(st *xsd.SimpleType) bool {
 // or member scan that errors, on validatingType's terms — withholds the verdict
 // rather than charging, the same decline idRecord states for the [ID/IDREF
 // table]. RULED permanent by #774 (STYLE P3b), on the terms of
-// [walk.matchedAttribute]'s ungoverned-type decline: a candidacy or member scan
+// [walk.declaredAttribute]'s ungoverned-type decline: a candidacy or member scan
 // that errors is backend or type-scan coverage, not this package's.
 func (w *walk) entitiesDeclared(st *xsd.SimpleType, lexical string, owner Element, loc xsderr.Loc) (decided bool, verdict error) {
 	candidate, decided := w.candidate(st, valueRole.isEntity)

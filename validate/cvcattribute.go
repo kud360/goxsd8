@@ -48,24 +48,78 @@ const ruleCvcAu xsderr.Rule = "cvc-au"
 
 // matchedAttribute settles clause 2.1 for an attribute information item that
 // matched an attribute use, which is where cvc-complex-type sends it: to
-// cvc-attribute against the use's {attribute declaration} and to cvc-au
-// against the use itself. Both are charged here, in that order, and both can
-// fire for one attribute — they read two different {value constraint}s.
+// cvc-attribute against the use's {attribute declaration}
+// ([walk.declaredAttribute]) and to cvc-au against the use itself. Both are
+// charged here, in that order, and both can fire for one attribute — they read
+// two different {value constraint}s.
+//
+// A use whose {attribute declaration} does not resolve is declined. It is
+// unreachable on a *xsd.Schema that exists (Phase A charges src-resolve for a
+// dangling Ref), and a decline rather than a charge because a resolution that
+// failed says nothing about the attribute. It logs alone: no schema produces it.
+// cvc-au is asked only where cvc-attribute clause 3 was satisfied, the ·actual
+// value· it compares existing only then.
+func (w *walk) matchedAttribute(a Attribute, e Element, u xsd.AttributeUse) {
+	d, resolved := w.schema.ResolvedAttributeDeclaration(u)
+	if !resolved {
+		// Unreachable on a *xsd.Schema that exists (see the doc above), so it
+		// logs alone rather than recording an [Unevaluated] no schema can produce.
+		w.logAttribute(a, ruleCvcAttribute, "3", "declined")
+		return
+	}
+	st, valid := w.declaredAttribute(a, e, d)
+	if !valid {
+		return
+	}
+	if f, fixed := useFixed(u); fixed {
+		w.fixedAgreement(a, e, st, f)
+	}
+}
+
+// wildcardAttribute settles cvc-assess-elt (§3.3.4.6) clause 2 for an
+// attribute information item ·attributed to· an {attribute wildcard} whose
+// {process contents} is pc (cvc-complex-type clause 2.2): the {attribute
+// wildcard} of its element's ·governing type definition·
+// ([walk.unmatchedAttribute]), or xs:anyType's on a ·laxly assessed· element
+// ([walk.attribute], §3.4.7).
+//
+// Under ***strict*** or ***lax*** its ·governing attribute declaration· is the
+// top-level one its ·expanded name· ·resolves· to (key-governing-ad clause 3,
+// §3.10.4.1), and clause 2.1 assesses it against that declaration: cvc-attribute
+// clauses 3 and 4 ([walk.declaredAttribute]). Under ***skip*** it is ·skipped·
+// (key-skipped) and has no governing declaration, and a name that resolves no
+// declaration has none either, under lax and strict alike: clause 2.2 leaves
+// both unassessed, and nothing is charged or recorded. e-validity clause 1.1.3
+// does not reach the second — it names an item ·attributed to· a strict
+// ·wildcard particle·, and an {attribute wildcard} sits in no particle.
+func (w *walk) wildcardAttribute(a Attribute, e Element, pc xsd.ProcessContents) {
+	if pc == xsd.ProcessSkip {
+		return
+	}
+	d, found := w.topLevelAttribute(a)
+	if !found {
+		return
+	}
+	w.declaredAttribute(a, e, d)
+}
+
+// declaredAttribute charges cvc-attribute (§3.2.4.1) clauses 3 and 4 for the
+// attribute information item a against its ·governing attribute declaration·
+// d, and reports the {type definition} clause 3 was satisfied against — false
+// where clause 3 was charged or declined, leaving no ·actual value· for a later
+// fixed-value agreement to read. It is the one encoding of that assessment,
+// reached from both arms of cvc-complex-type clause 2 ([walk.matchedAttribute]
+// for 2.1, [walk.wildcardAttribute] for 2.2).
 //
 // The assertions facets clause 3's String Valid reaches on the declaration's
 // {type definition} are recorded before the lexical is read at all
 // ([walk.simpleAssertions], cvcassertion.go): they are a property of the type
 // and not of the verdict, so a charge, a pass and a decline record the same
-// sites.
+// sites, and each assessed attribute records them exactly once.
 //
-// The four declines below withhold a verdict rather than guess one, and every
-// one but the first is recorded as an [Unevaluated] at the attribute
-// ([walk.declineAttribute]):
+// The three declines below withhold a verdict rather than guess one, and each is
+// recorded as an [Unevaluated] at the attribute ([walk.declineAttribute]):
 //
-//   - a use whose {attribute declaration} does not resolve. Unreachable on a
-//     *xsd.Schema that exists (Phase A charges src-resolve for a dangling
-//     Ref), and a decline rather than a charge because a resolution that failed
-//     says nothing about the attribute. It logs alone: no schema produces it.
 //   - a {type definition} that is absent or COMPLEX. GAP(validate): §3.2.1
 //     types the slot as a Required Simple Type Definition, and both shapes still
 //     reach an assembled schema. [xsd.NewAttributeDeclaration] accepts a nil
@@ -91,20 +145,13 @@ const ruleCvcAu xsderr.Rule = "cvc-au"
 //     xs:anySimpleType is satisfied, not declined.
 //   - an ·ENTITY value· candidate whose ·validating type· this package cannot
 //     decide, on [walk.entitiesDeclared]'s terms.
-func (w *walk) matchedAttribute(a Attribute, e Element, u xsd.AttributeUse) {
-	d, resolved := w.schema.ResolvedAttributeDeclaration(u)
-	if !resolved {
-		// Unreachable on a *xsd.Schema that exists (see the doc above), so it
-		// logs alone rather than recording an [Unevaluated] no schema can produce.
-		w.logAttribute(a, ruleCvcAttribute, "3", "declined")
-		return
-	}
+func (w *walk) declaredAttribute(a Attribute, e Element, d xsd.AttributeDeclaration) (*xsd.SimpleType, bool) {
 	st, simple := w.schema.ResolvedSimpleType(d.TypeDefinition())
 	if !simple {
 		w.declineAttribute(a, ruleCvcAttribute, "3",
 			"the ·initial value· of the attribute %s was not decided against its declaration's {type definition}, which is absent or not a simple type definition, so cvc-attribute clause 3 is undecided",
 			a.Name())
-		return
+		return nil, false
 	}
 	w.simpleAssertions(st, a.Loc())
 	decided, verdict := w.stringValid(st, a.Value(), e, a.Loc())
@@ -112,22 +159,20 @@ func (w *walk) matchedAttribute(a Attribute, e Element, u xsd.AttributeUse) {
 		w.declineAttribute(a, ruleCvcAttribute, "3",
 			"the ·initial value· of the attribute %s was not decided against its declaration's {type definition} %s: String Valid (§3.16.4) was withheld, the value backend reporting a fault of the type rather than a verdict about the lexical or the ·validating type· String Valid clause 3 reads being undecidable, so cvc-attribute clause 3 is undecided",
 			a.Name(), st.Name())
-		return
+		return nil, false
 	}
 	if verdict != nil {
 		w.res.violations = append(w.res.violations, causedBy(ruleCvcAttribute, a.Loc(), verdict,
 			"the ·initial value· of the attribute %s is not ·valid· with respect to its declaration's {type definition} %s, which cvc-attribute clause 3 requires as per String Valid (§3.16.4)",
 			a.Name(), st.Name()))
 		w.logAttribute(a, ruleCvcAttribute, "3", "charged")
-		return
+		return nil, false
 	}
 	w.logAttribute(a, ruleCvcAttribute, "3", "satisfied")
 	if f, fixed := declarationFixed(d); fixed {
 		w.fixedAgreement(a, e, st, f)
 	}
-	if f, fixed := useFixed(u); fixed {
-		w.fixedAgreement(a, e, st, f)
-	}
+	return st, true
 }
 
 // instanceTypeResolves charges cvc-attribute (§3.2.4.1) against e's xsi:type
@@ -201,7 +246,7 @@ var qnameTypeName = xsd.QName{Space: xsd.XMLSchemaNS, Local: "QName"}
 // from, as an empty lexical, a colon structure no QName has and a part that is
 // no NCName fail xs:QName's lexical space (§3.3.18).
 //
-// It is [walk.matchedAttribute]'s clause 3 over the one declaration no
+// It is [walk.declaredAttribute]'s clause 3 over the one declaration no
 // attribute use carries, and declines on the same terms, reporting true so
 // clause 5 reads the lexical as it would with no clause 3 at all:
 //
@@ -213,7 +258,7 @@ var qnameTypeName = xsd.QName{Space: xsd.XMLSchemaNS, Local: "QName"}
 //     xs:QName leaves an xsi:type lexical outside its lexical space to clause
 //     5, which declines the ones [resolveInstanceQName] turns away and charges
 //     the rest as names no type carries. RULED permanent by #774 (STYLE P3b),
-//     on [walk.matchedAttribute]'s terms: mapping xs:QName is backend coverage,
+//     on [walk.declaredAttribute]'s terms: mapping xs:QName is backend coverage,
 //     not this package's.
 func (w *walk) instanceTypeLexical(a Attribute, e Element) bool {
 	st, simple := w.schema.ResolvedSimpleType(xsd.TypeDefinitionRef{Name: qnameTypeName})
