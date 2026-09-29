@@ -32,6 +32,13 @@
 // therefore join to ZERO, which is the right answer to a different question
 // from the four the enumeration reports.
 //
+// Fed a run log with -log — the -v output of a GOXSD_DECLINES=1 conformance
+// run — the join also subtracts, on every lane, each banked `fail` that run
+// lists under `indeterminate declines`: a case the suite declares
+// indeterminate is declined and always recorded `fail`, so it can never flip
+// (conformance/doc.go, #277). The catalog alone cannot tell such a case from
+// an invalid one, so without a log it stays a candidate and the caveat says so.
+//
 // # Which document edges are reported
 //
 // All of them. A case names its documents through two lists, and a path
@@ -47,12 +54,13 @@
 //
 // A candidate case count is a BOUND FROM ABOVE on the cases a change to the
 // censused construct could flip — never a prediction of flips, and never a
-// lane movement. The report says so where the figure is, and names the three
+// lane movement. The report says so where the figure is, and names the four
 // directions it is wrong in.
 //
 // # Usage
 //
 //	go tool suiteindex -paths '{*}*@{http://www.w3.org/2001/XMLSchema-instance}type' | go tool casejoin join instance
+//	go tool casejoin -log run.log join instance msData/schema/schA2_a.xsd
 //	go tool casejoin ids saxonData/Missing/missing001.v1.xml
 //	go tool casejoin -suite other/dir ids < paths.txt
 //
@@ -64,8 +72,10 @@
 // An absent suite submodule is a supported mode, not a failure (#659): the
 // tool says the corpus is not there, names the command that initializes it,
 // and exits 0. It exits 0 for a completed report whatever it finds, and 2 for
-// an operational error: an unusable mode, an unreadable catalog, or a lane
-// name no expectation file carries.
+// an operational error: an unusable mode, an unreadable catalog, a lane name
+// no expectation file carries, or a -log that cannot be read, is given to
+// `ids`, lists the lane's census other than exactly once, or lists a case the
+// catalog declares valid as indeterminate.
 package main
 
 import (
@@ -82,6 +92,7 @@ import (
 	"strings"
 
 	"github.com/kud360/goxsd8/conformance"
+	"github.com/kud360/goxsd8/tools/internal/declinecensus"
 )
 
 // defaultSuite is the W3C suite submodule at its fixed path in the tree, as
@@ -104,9 +115,10 @@ const defaultExpectations = "conformance/testdata/expectations"
 // present.
 const suiteIndexName = "suite.xml"
 
-const usage = `usage: casejoin [-suite dir] [-expectations dir] ids|join <lane> [path...]
+const usage = `usage: casejoin [-suite dir] [-expectations dir] [-log file] ids|join <lane> [path...]
   ids          every catalog case ID naming each path, withheld entries included
   join <lane>  the banked cases of <lane> naming those paths that could still flip
+  -log file    join only: a GOXSD_DECLINES=1 conformance run's -v output, subtracting its indeterminate declines
 paths come from the command line, or from stdin one per line when none is given`
 
 func main() {
@@ -124,12 +136,16 @@ func run(stdout io.Writer, stdin io.Reader, args []string) error {
 	flags.SetOutput(io.Discard)
 	suite := flags.String("suite", defaultSuite, "the suite checkout to read the catalog from")
 	expectations := flags.String("expectations", defaultExpectations, "the directory holding the per-lane expectation files")
+	logPath := flags.String("log", "", "a GOXSD_DECLINES=1 conformance run's -v output")
 	if err := flags.Parse(args); err != nil {
 		return fmt.Errorf("%w\n%s", err, usage)
 	}
 	mode, lane, rest, err := parseMode(flags.Args())
 	if err != nil {
 		return err
+	}
+	if mode == modeIDs && *logPath != "" {
+		return fmt.Errorf("-log reads a lane's census, and mode %q names no lane\n%s", modeIDs, usage)
 	}
 	index := filepath.Join(*suite, suiteIndexName)
 	if _, serr := os.Stat(index); errors.Is(serr, fs.ErrNotExist) {
@@ -154,7 +170,19 @@ func run(stdout io.Writer, stdin io.Reader, args []string) error {
 	if err != nil {
 		return err
 	}
-	printJoin(stdout, joinLane(lane, paths, found, banked), file)
+	var census *declinecensus.Census
+	if *logPath != "" {
+		c, err := declinecensus.Read(*logPath, lane)
+		if err != nil {
+			return err
+		}
+		census = &c
+	}
+	j, err := joinLane(lane, paths, found, banked, census)
+	if err != nil {
+		return err
+	}
+	printJoin(stdout, j, file)
 	return nil
 }
 
@@ -328,12 +356,15 @@ func loadLane(lane, file string) (map[string]conformance.Status, error) {
 // joined is one completed join: how the entries naming the given paths
 // partition against a lane's committed file.
 //
-// The five classes are DISJOINT and cover every entry, so the rows of the
+// The six classes are DISJOINT and cover every entry, so the rows of the
 // report sum to the entry count. Only facts that cannot be recomputed are
 // stored — each class holds its case IDs and the report counts them (STYLE
 // D3).
 type joined struct {
 	Lane string
+	// LogFed records whether a run log was read, which an empty
+	// IndeterminateIDs cannot: without one that class is unknown, not empty.
+	LogFed bool
 	// Paths are the paths given, and Unnamed those of them no catalog entry
 	// names at all.
 	Paths   []string
@@ -349,6 +380,11 @@ type joined struct {
 	// BankedPassIDs are entries this lane already records `pass`; they cannot
 	// flip upward.
 	BankedPassIDs []string
+	// IndeterminateIDs are entries banked `fail` that the fed run log lists as
+	// indeterminate declines: the suite declares them indeterminate, so the
+	// harness declines them and records `fail` whatever the engine does, and
+	// none can flip (#277). Empty unless LogFed.
+	IndeterminateIDs []string
 	// DeclaredValidIDs are candidates, banked `fail` on the instance lane, that
 	// the suite declares VALID. They are counted apart from CandidateIDs because
 	// that lane's executor decides a document valid for two shapes alone — a
@@ -404,23 +440,33 @@ func distinctEntries(paths []string, found map[string][]naming) []conformance.Ca
 }
 
 // joinLane partitions the entries naming paths against one lane's committed
-// file, in case-ID order throughout (STYLE D1).
-func joinLane(lane string, paths []string, found map[string][]naming, banked map[string]conformance.Status) joined {
-	j := joined{Lane: lane, Paths: paths}
+// file and, when census is not nil, that lane's run-log census, in case-ID
+// order throughout (STYLE D1).
+func joinLane(lane string, paths []string, found map[string][]naming, banked map[string]conformance.Status, census *declinecensus.Census) (joined, error) {
+	j := joined{Lane: lane, LogFed: census != nil, Paths: paths}
 	for _, p := range paths {
 		if len(found[p]) == 0 {
 			j.Unnamed = append(j.Unnamed, p)
 		}
 	}
+	indeterminate := map[string]struct{}{}
+	if census != nil {
+		for _, id := range census.Indeterminate {
+			indeterminate[id] = struct{}{}
+		}
+	}
 	for _, e := range distinctEntries(paths, found) {
-		j.classify(e, banked)
+		if err := j.classify(e, banked, indeterminate); err != nil {
+			return joined{}, err
+		}
 	}
 	slices.Sort(j.WithheldIDs)
 	slices.Sort(j.UnscoredIDs)
 	slices.Sort(j.BankedPassIDs)
+	slices.Sort(j.IndeterminateIDs)
 	slices.Sort(j.DeclaredValidIDs)
 	slices.Sort(j.CandidateIDs)
-	return j
+	return j, nil
 }
 
 // classify files one entry in the single class it belongs to.
@@ -430,32 +476,45 @@ func joinLane(lane string, paths []string, found map[string][]naming, banked map
 // survives for it decides nothing. A line that does survive one — a sanctioned
 // applicability removal a re-pin has just created — is deleted by the next
 // ratchet rather than flipped, so it is no candidate either.
-func (j *joined) classify(e conformance.CatalogEntry, banked map[string]conformance.Status) {
+//
+// A banked `fail` the run log lists as an indeterminate decline is filed
+// before the declared-valid test. An entry the catalog declares VALID listed
+// so is an error, as `go tool lanepartition` treats it: the log is then not
+// from this suite, and subtracting the case would hide a candidate.
+func (j *joined) classify(e conformance.CatalogEntry, banked map[string]conformance.Status, indeterminate map[string]struct{}) error {
 	if e.Withheld {
 		j.WithheldIDs = append(j.WithheldIDs, e.ID)
-		return
+		return nil
 	}
 	status, ok := banked[e.ID]
 	if !ok {
 		j.UnscoredIDs = append(j.UnscoredIDs, e.ID)
-		return
+		return nil
 	}
 	if status.IsPass() {
 		j.BankedPassIDs = append(j.BankedPassIDs, e.ID)
-		return
+		return nil
+	}
+	if _, listed := indeterminate[e.ID]; listed {
+		if e.DeclaredValid {
+			return fmt.Errorf("the run log lists %s as indeterminate but the catalog declares it valid — the log is not from this suite", e.ID)
+		}
+		j.IndeterminateIDs = append(j.IndeterminateIDs, e.ID)
+		return nil
 	}
 	if j.Lane == instanceLane && e.DeclaredValid {
 		j.DeclaredValidIDs = append(j.DeclaredValidIDs, e.ID)
-		return
+		return nil
 	}
 	j.CandidateIDs = append(j.CandidateIDs, e.ID)
+	return nil
 }
 
 // entries reports how many catalog entries named a path, which is the sum of
-// the five classes and is derived rather than stored (STYLE D3).
+// the six classes and is derived rather than stored (STYLE D3).
 func (j joined) entries() int {
 	return len(j.WithheldIDs) + len(j.UnscoredIDs) + len(j.BankedPassIDs) +
-		len(j.DeclaredValidIDs) + len(j.CandidateIDs)
+		len(j.IndeterminateIDs) + len(j.DeclaredValidIDs) + len(j.CandidateIDs)
 }
 
 // printAbsent renders the corpus-absent mode: why there was nothing to read,
@@ -538,7 +597,7 @@ func renderWithheld(e conformance.CatalogEntry) string {
 func printJoin(w io.Writer, j joined, file string) {
 	_, _ = fmt.Fprintf(w, "casejoin: %d path(s) → %d catalog entry(ies) → %d candidate case(s) in lane %s\n",
 		len(j.Paths), j.entries(), len(j.candidates()), j.Lane)
-	printCaveat(w, j.Lane)
+	printCaveat(w, j)
 
 	_, _ = fmt.Fprintf(w, "\n=== Join against %s ===\n", file)
 	for _, r := range j.rows() {
@@ -555,11 +614,13 @@ type row struct {
 	count int
 }
 
-// rows renders the partition, indented so the five disjoint classes read as
-// the parts of the entry count above them. The declared-valid row is printed
-// only on the instance lane, which alone files such a case apart (#1738); on
-// any other lane it would stand at zero and read as a claim that lane makes no
-// such cases.
+// rows renders the partition, indented so the six disjoint classes read as
+// the parts of the entry count above them. The indeterminate row is printed
+// only when a run log was fed, and then on every lane: without one the class
+// is unknown, and a 0 would read as a finding. The declared-valid row is
+// printed only on the instance lane, which alone files such a case apart
+// (#1738); on any other lane it would stand at zero and read as a claim that
+// lane makes no such cases.
 func (j joined) rows() []row {
 	rows := []row{
 		{"paths given", len(j.Paths)},
@@ -569,19 +630,22 @@ func (j joined) rows() []row {
 		{"  no line in " + j.Lane + ".txt — not banked by this lane", len(j.UnscoredIDs)},
 		{"  banked pass — cannot flip up", len(j.BankedPassIDs)},
 	}
+	if j.LogFed {
+		rows = append(rows, row{"  banked fail, run log lists it an indeterminate decline — never flips (#277)", len(j.IndeterminateIDs)})
+	}
 	if j.Lane == instanceLane {
 		rows = append(rows, row{"  banked fail, suite declares it VALID — CANDIDATE as a simple or complex empty leaf root (#1738, #1808)", len(j.DeclaredValidIDs)})
 	}
 	return append(rows, row{"  banked fail — CANDIDATE", len(j.CandidateIDs)})
 }
 
-// printCaveat states what the candidate count is and the three directions it
+// printCaveat states what the candidate count is and the four directions it
 // is wrong in, under the header rather than in a section of its own, because
 // that is where the reader holding the figure arrives (#1279). Unqualified the
 // figure is a false statement shipped in a tool's own output, which is the
-// defect #1585 exists to prevent — and one direction named of three would be
+// defect #1585 exists to prevent — and one direction named of four would be
 // the same defect with a smaller radius.
-func printCaveat(w io.Writer, lane string) {
+func printCaveat(w io.Writer, j joined) {
 	_, _ = fmt.Fprintln(w, "  read this as a BOUND FROM ABOVE on the cases a change could flip, never as a count of")
 	_, _ = fmt.Fprintln(w, "  flips and never as lane movement. It OVER-counts: a case is a candidate for naming a")
 	_, _ = fmt.Fprintln(w, "  censused fixture, whether or not the change reaches it, and the census behind those paths")
@@ -589,13 +653,30 @@ func printCaveat(w io.Writer, lane string) {
 	_, _ = fmt.Fprintln(w, "  population of resolved components. It UNDER-counts: a fixture that census could read only")
 	_, _ = fmt.Fprintln(w, "  partly hides every construct behind the fault, so cases naming it never reach this join —")
 	_, _ = fmt.Fprintln(w, "  read the census's own \"Read only partly\" count beside this figure.")
-	if lane != instanceLane {
+	printIndeterminateCaveat(w, j.LogFed)
+	if j.Lane != instanceLane {
 		return
 	}
 	_, _ = fmt.Fprintln(w, "  On this lane a candidate the suite declares VALID flips only where the executor decides the")
 	_, _ = fmt.Fprintln(w, "  document valid, which it does for a simple or complex empty leaf root alone (#1738, #1808):")
 	_, _ = fmt.Fprintln(w, "  the figure includes them, and their own row below counts them, so read that row as the looser")
 	_, _ = fmt.Fprintln(w, "  part of the bound.")
+}
+
+// printIndeterminateCaveat states the indeterminate direction, on every lane:
+// with no run log an over-count, naming the flag that removes it; with one, a
+// statement that the row below has removed it, since claiming the over-count
+// then would be false.
+func printIndeterminateCaveat(w io.Writer, logFed bool) {
+	if logFed {
+		_, _ = fmt.Fprintln(w, "  Each banked fail the run log lists as an indeterminate decline is on its own row below and")
+		_, _ = fmt.Fprintln(w, "  out of the figure: the suite declares it indeterminate, so it is declined and always recorded")
+		_, _ = fmt.Fprintln(w, "  fail, and never flips (#277).")
+		return
+	}
+	_, _ = fmt.Fprintln(w, "  It OVER-counts on every lane by the cases the suite declares indeterminate: each is declined")
+	_, _ = fmt.Fprintln(w, "  and always recorded fail, so it never flips (#277), and the catalog alone cannot tell one from")
+	_, _ = fmt.Fprintln(w, "  an invalid case. Pass -log with a GOXSD_DECLINES=1 conformance run's -v output to subtract them.")
 }
 
 // printIDSection lists one class's case IDs under its heading.
