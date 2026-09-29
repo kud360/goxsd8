@@ -760,7 +760,7 @@ func (p *producer) produceSimpleContent(id complexTypeIdentity, ctElem, sc *Elem
 	if err != nil {
 		return xsd.ComplexType{}, err
 	}
-	baseDef, err := base.component(derivation)
+	baseDef, err := baseComponent(base, derivation)
 	if err != nil {
 		return xsd.ComplexType{}, err
 	}
@@ -1133,7 +1133,7 @@ func (p *producer) complexContentType(derivation *Element, method xsd.Derivation
 	if method == xsd.DerivationRestriction {
 		return p.buildComplexContentType(derivation, effectiveMixed, scopeParent)
 	}
-	baseDef, err := base.component(derivation)
+	baseDef, err := baseComponent(base, derivation)
 	if err != nil {
 		return nil, err
 	}

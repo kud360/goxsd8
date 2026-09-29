@@ -112,7 +112,7 @@ func TestProduceRestrictionBaseCycle(t *testing.T) {
 }
 
 // TestProduceContentModelExtensionRefused pins the GAP(parser) marker on
-// resolvedBase.component: an anonymous <extension> of T inside T's own content
+// baseComponent: an anonymous <extension> of T inside T's own content
 // model reads T's unfinished {content type}, and is refused as a producer limit
 // charged to no rule, never as ct-props-correct clause 3.
 func TestProduceContentModelExtensionRefused(t *testing.T) {

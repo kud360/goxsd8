@@ -1910,8 +1910,8 @@ func (p *producer) namedComplexTypeIdentity(name xsd.QName, elem *Element) compl
 // component stores. The two are returned together because one decision fixes
 // both, and splitting them would let a caller pair a component with a slot that
 // does not name it (STYLE D3). A named complex base whose content model holds
-// this derivation is not finished yet, so its resolvedBase carries only the
-// {assertions} its complexContentPending entry holds. at is the
+// this derivation is not finished yet, so it resolves to the pendingBase arm,
+// which carries only the {assertions} its complexContentPending entry holds. at is the
 // <restriction>/<extension> carrying the base=, charged for a failure; id is
 // the identity of the type being built, which is what makes the redefine branch
 // below reachable.
@@ -1932,60 +1932,71 @@ func (p *producer) namedComplexTypeIdentity(name xsd.QName, elem *Element) compl
 func (p *producer) resolveBaseType(id complexTypeIdentity, at *Element, name xsd.QName) (resolvedBase, xsd.TypeDefinitionOrRef, error) {
 	if orig, owned, err := p.redefinedComplexBase(id, at, name); owned || err != nil {
 		if err != nil {
-			return resolvedBase{}, nil, err
+			return nil, nil, err
 		}
-		return resolvedBase{def: orig}, xsd.InlineTypeDefinition{Definition: orig}, nil
+		return finishedBase{def: orig}, xsd.InlineTypeDefinition{Definition: orig}, nil
 	}
 	if name == anyTypeName {
 		// The ur-type is declared by no document, so it is in no symbol table and
 		// in no build memo: symbols.anyType holds the very component the builder
 		// was seeded with (§3.4.7).
-		return resolvedBase{def: p.symbols.anyType}, xsd.TypeDefinitionRef{Name: name}, nil
+		return finishedBase{def: p.symbols.anyType}, xsd.TypeDefinitionRef{Name: name}, nil
 	}
 	if src, ok := p.symbols.complexTypes[name]; ok {
 		// A base whose content model is being built is reached from inside that
 		// content model, which is not a cycle (buildComplexType); only its
 		// {assertions} can be read.
 		if pending, ok := p.symbols.builtComplex[src.elem].(complexContentPending); ok {
-			return resolvedBase{name: name, pending: pending.assertions}, xsd.TypeDefinitionRef{Name: name}, nil
+			return pendingBase{name: name, assertions: pending.assertions}, xsd.TypeDefinitionRef{Name: name}, nil
 		}
 		// Unbuilt, built or on the base chain: buildComplexType handles the memo
 		// hit and the ct-props-correct clause 3 cycle rejection alike.
 		ct, err := src.owner.buildComplexType(name, src.elem)
 		if err != nil {
-			return resolvedBase{}, nil, err
+			return nil, nil, err
 		}
-		return resolvedBase{def: ct}, xsd.TypeDefinitionRef{Name: name}, nil
+		return finishedBase{def: ct}, xsd.TypeDefinitionRef{Name: name}, nil
 	}
 	if st, ok := p.symbols.built[name]; ok && st != nil {
-		return resolvedBase{def: st}, xsd.TypeDefinitionRef{Name: name}, nil
+		return finishedBase{def: st}, xsd.TypeDefinitionRef{Name: name}, nil
 	}
 	if src, ok := p.symbols.simpleTypes[name]; ok {
 		st, err := src.owner.buildSimpleType(name, src.elem)
 		if err != nil {
-			return resolvedBase{}, nil, err
+			return nil, nil, err
 		}
-		return resolvedBase{def: st}, xsd.TypeDefinitionRef{Name: name}, nil
+		return finishedBase{def: st}, xsd.TypeDefinitionRef{Name: name}, nil
 	}
-	return resolvedBase{}, nil, xsderr.New(ruleSrcResolve, at.Loc(),
+	return nil, nil, xsderr.New(ruleSrcResolve, at.Loc(),
 		"base type %s does not resolve to any type definition in scope (src-resolve clause 1.1)", name)
 }
 
 // resolvedBase is the {base type definition} COMPONENT resolveBaseType
-// identified, as far as a §3.4.2 mapping can read it when it asks. def is the
-// finished component, and is nil exactly when the base is a named complex type
-// whose own content model is still being built (complexContentPending): then
-// only its {assertions}, held in pending under its expanded name, are known, and
-// assertionsWithBase reads them. Every other read goes through component, which
-// refuses that case.
-type resolvedBase struct {
-	def     xsd.TypeDefinition
-	name    xsd.QName
-	pending []xsd.Assertion
+// identified, as far as a §3.4.2 mapping can read it when it asks, in one of two
+// arms: finishedBase holds the finished component, and pendingBase stands for a
+// named complex type whose own content model is still being built
+// (complexContentPending), of which only its {assertions} are known.
+// assertionsWithBase reads either arm; every other read goes through
+// baseComponent, which refuses the pending one. It is a sealed sum over a closed
+// set of resolution outcomes.
+type resolvedBase interface{ resolvedBase() }
+
+// finishedBase is a base whose component is finished.
+type finishedBase struct{ def xsd.TypeDefinition }
+
+// pendingBase is a named complex base reached from inside its own content model:
+// name is its expanded name, and assertions its final {assertions}, held by its
+// complexContentPending entry.
+type pendingBase struct {
+	name       xsd.QName
+	assertions []xsd.Assertion
 }
 
-// component returns the finished base for the mappings that read more than its
-// {assertions}: §3.4.2.2's simple-type tableau and §3.4.2.3.3 clause 4.2's
+func (finishedBase) resolvedBase() {}
+func (pendingBase) resolvedBase()  {}
+
+// baseComponent returns the finished base for the mappings that read more than
+// its {assertions}: §3.4.2.2's simple-type tableau and §3.4.2.3.3 clause 4.2's
 // extension content type. at is the derivation alternant charged when the base
 // is still being built.
 //
@@ -1996,11 +2007,14 @@ type resolvedBase struct {
 // xsd.NewComplexType takes a complete {content type} by value, so the recursion
 // has no fixed point to construct. No spec rule forbids the extension shape; the
 // refusal is this producer's limit, and no suite fixture reaches it.
-func (b resolvedBase) component(at *Element) (xsd.TypeDefinition, error) {
-	if b.def != nil {
+func baseComponent(base resolvedBase, at *Element) (xsd.TypeDefinition, error) {
+	switch b := base.(type) {
+	case finishedBase:
 		return b.def, nil
+	case pendingBase:
+		return nil, fmt.Errorf("parser: the <%s> at %s derives from %s from inside %s's own content model, and this producer cannot map a derivation that reads a base {content type} still being built", at.Name().Local(), at.Loc(), b.name, b.name)
 	}
-	return nil, fmt.Errorf("parser: the <%s> at %s derives from %s from inside %s's own content model, and this producer cannot map a derivation that reads a base {content type} still being built", at.Name().Local(), at.Loc(), b.name, b.name)
+	panic("parser: baseComponent: non-exhaustive resolvedBase switch")
 }
 
 // redefinedComplexBase builds src-expredef clause 1.1's ORIGINAL when at's base=

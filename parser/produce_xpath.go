@@ -442,16 +442,19 @@ func identityConstraintCategoryOf(local string) (xsd.IdentityConstraintCategory,
 // assertions FACET, which is not this property and is not inherited by the
 // complex type deriving from it). A named complex base whose content model is
 // still being built contributes the {assertions} its complexContentPending entry
-// holds, which are already final (see resolvedBase).
+// holds, which are already final (see pendingBase).
 func assertionsWithBase(base resolvedBase, own []xsd.Assertion) []xsd.Assertion {
-	if base.def == nil {
-		return append(slices.Clip(base.pending), own...) // clipped: never extends the memo's backing array
+	switch b := base.(type) {
+	case pendingBase:
+		return append(slices.Clip(b.assertions), own...) // clipped: never extends the memo's backing array
+	case finishedBase:
+		ct, ok := b.def.(xsd.ComplexType)
+		if !ok {
+			return own
+		}
+		return append(ct.Assertions(), own...) // Assertions() is a fresh copy, safe to extend
 	}
-	ct, ok := base.def.(xsd.ComplexType)
-	if !ok {
-		return own
-	}
-	return append(ct.Assertions(), own...) // Assertions() is a fresh copy, safe to extend
+	panic("parser: assertionsWithBase: non-exhaustive resolvedBase switch")
 }
 
 // assertionsOf maps the <assert> children of a <complexType> or of its
