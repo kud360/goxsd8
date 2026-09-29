@@ -94,24 +94,27 @@ func TestInstanceExecutorDeclinesOutsideSimpleLeafRoot(t *testing.T) {
 			`<xs:element name="known" type="xs:string"><xs:alternative type="xs:string"/></xs:element>`,
 			`<known>x</known>`,
 		},
+		// The three ID- and ENTITY-family rows are EMPTY roots whose ·initial
+		// value· a default {value constraint} supplies (cvc-elt clause 5.1): a
+		// root with content is the assessed-subtree-root gate's, which admits
+		// both families, the walk deciding them (#1857). A union whose ID,
+		// IDREF or ENTITY member never becomes the ·validating type· walks
+		// clean.
 		{
-			// An ID-typed root is not a row: the walk charges cvc-id for it today,
-			// so the gate would not be what declines it. A union whose ID member
-			// never becomes the ·validating type· walks clean instead.
 			"a union with an ID member (cvc-elt clause 7, cvc-id), even where another member validates",
-			`<xs:element name="known" type="U"/><xs:simpleType name="U"><xs:union memberTypes="xs:int xs:ID"/></xs:simpleType>`,
-			`<known>5</known>`,
+			`<xs:element name="known" type="U" default="5"/><xs:simpleType name="U"><xs:union memberTypes="xs:int xs:ID"/></xs:simpleType>`,
+			`<known/>`,
 		},
 		{
 			"a list whose {item type definition} has an IDREF member",
-			`<xs:element name="known" type="L"/><xs:simpleType name="L"><xs:list itemType="U"/></xs:simpleType>` +
+			`<xs:element name="known" type="L" default="1 2"/><xs:simpleType name="L"><xs:list itemType="U"/></xs:simpleType>` +
 				`<xs:simpleType name="U"><xs:union memberTypes="xs:int xs:IDREF"/></xs:simpleType>`,
-			`<known>1 2</known>`,
+			`<known/>`,
 		},
 		{
 			"a union with an ENTITY member, even where another member validates",
-			`<xs:element name="known" type="U"/><xs:simpleType name="U"><xs:union memberTypes="xs:int xs:ENTITY"/></xs:simpleType>`,
-			`<known>5</known>`,
+			`<xs:element name="known" type="U" default="5"/><xs:simpleType name="U"><xs:union memberTypes="xs:int xs:ENTITY"/></xs:simpleType>`,
+			`<known/>`,
 		},
 		{
 			"a NOTATION-derived type",
