@@ -193,15 +193,16 @@
 // alone is skipped for one. cvc-type's own clauses 1 and 2 are not evaluated.
 //
 // Three more are the root's attribute half, against its ·governing
-// type definition·'s {attribute uses}. cvc-complex-type (§3.4.4.2) clauses
-// 2 and 3 decide EXISTENCE and need no value space. Clause 4 and the two
-// rules clause 2.1 dispatches to — cvc-attribute (§3.2.4.1) clauses 3 and 4
-// and cvc-au (§3.5.4) — decide VALUES, and read them through the
-// value.Backend [New] takes: an attribute's lexical against its
-// declaration's {type definition} per String Valid (§3.16.4), its ·actual
-// value· against a fixed {value constraint} on the declaration and on the
-// use (two independent rules over two properties, both charged), and a
-// ·defaulted attribute·'s own {lexical form} against its type.
+// type definition·'s {attribute uses} and {attribute wildcard}.
+// cvc-complex-type (§3.4.4.2) clauses 2 and 3 decide EXISTENCE and need no
+// value space. Clause 4 and the two rules clause 2.1 dispatches to —
+// cvc-attribute (§3.2.4.1) clauses 3 and 4 and cvc-au (§3.5.4) — decide
+// VALUES, and read them through the value.Backend [New] takes: an
+// attribute's lexical against its declaration's {type definition} per
+// String Valid (§3.16.4), its ·actual value· against a fixed {value
+// constraint} on the declaration and on the use (two independent rules over
+// two properties, both charged), and a ·defaulted attribute·'s own {lexical
+// form} against its type.
 //
 // cvc-attribute clauses 3 and 4 are charged on the same terms against an
 // attribute ·attributed to· a strict or lax {attribute wildcard} under clause
@@ -212,16 +213,17 @@
 // name resolves no declaration have none, under strict as under lax, and are
 // not assessed (cvc-assess-elt clause 2.2).
 //
-// cvc-attribute is also charged against the one declaration clause 2.1 never
-// dispatches to and no {attribute use} reaches: the built-in declaration for
-// the type attribute (§3.2.7.1), at the xsi:type attribute's own Loc,
-// whatever the element's ·governing type definition· is and whether that type
-// is simple, complex or undetermined. Clause 3 reads its lexical through the
-// same value.Backend against that declaration's xs:QName {type definition}, so
-// an empty lexical, a colon structure no QName has, a part that is no NCName
-// and a prefix with no binding in scope are each charged there. Clause 5
-// charges a lexical clause 3 accepts whose ·actual value· ·resolves· to no type
-// definition, and needs no value space.
+// cvc-attribute is also charged against the built-in declaration for the type
+// attribute (§3.2.7.1), at the xsi:type attribute's own Loc, and that charge
+// sits outside cvc-type clause 3's dispatch: the declaration governs the item
+// whatever the element's ·governing type definition· is — simple, complex or
+// undetermined — and cvc-complex-type clause 2 excepts xsi:type by name, so
+// neither clause 2.1 nor clause 2.2 reaches it. Clause 3 reads its lexical
+// through the same value.Backend against that declaration's xs:QName {type
+// definition}, so an empty lexical, a colon structure no QName has, a part
+// that is no NCName and a prefix with no binding in scope are each charged
+// there. Clause 5 charges a lexical clause 3 accepts whose ·actual value·
+// ·resolves· to no type definition, and needs no value space.
 //
 // The seventh is the root's content half, against the same type's {content
 // type}. cvc-complex-type clause 1 decides what its {variety} admits —
