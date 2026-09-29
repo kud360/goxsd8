@@ -394,8 +394,9 @@ func TestOpenContentAttributedChildUnderASkipWildcardIsAssessedAgainstItsResolve
 // clause 3.3 over key-lva clause 2), against xs:anyType, whose {content type}
 // and {attribute uses} reject none of them. The clause 1.1.3 charge above is
 // the enclosing element's and is not repeated down the subtree: <anything>
-// under <stranger> is ·attributed to· nothing, since a ·laxly assessed· element
-// determines no {content type} to attribute against.
+// under <stranger> is ·attributed to· xs:anyType's LAX wildcard, resolves
+// nothing, and is ·laxly assessed· in its turn, which e-validity clause 1.1.3
+// does not reach.
 func TestALaxlyAssessedChildIsWalkedAndChargesNothingBelowItself(t *testing.T) {
 	log, visits := recordingLogger()
 	v, err := New(dSchema(t, nil, dWildcard(t, xsd.ProcessStrict)), testBackend(), WithLogger(log))
@@ -458,7 +459,11 @@ func TestDescendantAttributedToASkipWildcardIsNotAssessed(t *testing.T) {
 
 // An element whose own ·governing type definition· was not determined attributes
 // its [[children]] to nothing, so the descent stops being typed there rather
-// than resuming further down (clause 3.3 all the way down).
+// than resuming further down: each element below is unattributed, which is not
+// the ·laxly assessed· zero value, and hands its own [[children]] nothing
+// either. The second <kid> is what tells the two apart — ·laxly assessed·, its
+// parent would hand it xs:anyType's lax wildcard and it would resolve to the
+// top-level declaration whose KidType wants a <grand> (#1823).
 func TestDescendantOfAnUngovernedElementIsAssessedAgainstNothing(t *testing.T) {
 	schema := dSchema(t, func(b *xsd.SchemaBuilder) {
 		b.AddType(dType(t, "KidType", "", xsd.DerivationRestriction, nil,
@@ -472,4 +477,7 @@ func TestDescendantOfAnUngovernedElementIsAssessedAgainstNothing(t *testing.T) {
 	wantSilence(t, cAssess(t, schema, dElem("root", 1,
 		ElementChild(dElem("opaque", 2, ElementChild(dElem("kid", 3)))))),
 		"an ungoverned element attributes its [[children]] to nothing")
+	wantSilence(t, cAssess(t, schema, dElem("root", 1,
+		ElementChild(dElem("opaque", 2, ElementChild(dElem("kid", 3, ElementChild(dElem("kid", 4)))))))),
+		"an unattributed element attributes its [[children]] to nothing")
 }

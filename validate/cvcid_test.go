@@ -513,3 +513,93 @@ func TestUnreadableIDItemsAreRecorded(t *testing.T) {
 		Unevaluated{rule: ruleCvcID, loc: loc(2, 2), msg: "cvc-id clause 1 is undecided"},
 		Unevaluated{rule: ruleCvcID, loc: loc(3, 2), msg: "cvc-id clause 1 is undecided"})
 }
+
+// idLaxSchema is the fixture for an element ·laxly assessed· below the
+// validation root: <root>'s {content type} is a sequence of one lax wildcard,
+// 0..unbounded, and three top-level declarations a name below it can resolve
+// to.
+//
+//	root  RootType (named)  sequence( any lax * )
+//	thing xs:ID    ref xs:IDREF    num xs:int
+func idLaxSchema(t *testing.T) *xsd.Schema {
+	t.Helper()
+	o, err := xsd.NewUnboundedOccurs(xsderr.Loc{}, 0)
+	if err != nil {
+		t.Fatalf("NewUnboundedOccurs: %v", err)
+	}
+	wild, err := xsd.NewParticle(xsderr.Loc{}, o, xsd.ResolvedTerm{Term: *anyWildcard(t, xsd.ProcessLax)})
+	if err != nil {
+		t.Fatalf("NewParticle: %v", err)
+	}
+	return cSchemaFrom(t, dType(t, "RootType", "", xsd.DerivationRestriction, nil, cSequence(t, false, wild)),
+		func(b *xsd.SchemaBuilder) {
+			for _, st := range icSeeded(t) {
+				b.AddType(st)
+			}
+			for _, d := range [][2]string{{"thing", "ID"}, {"ref", "IDREF"}, {"num", "int"}} {
+				decl, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: d[0]},
+					xsd.TypeDefinitionRef{Name: icBuiltin(d[1])}, nil, xsd.NewGlobalScope(),
+					nil, false, nil, nil, nil, false, nil)
+				if err != nil {
+					t.Fatalf("building the top-level %s element declaration: %v", d[0], err)
+				}
+				b.AddElement(decl)
+			}
+		})
+}
+
+// idText is an element named local at line holding one run of text.
+func idText(local string, line int, text string) *testElement {
+	return icElem(xsd.QName{Local: local}, line, nil,
+		TextChild(&testText{data: text, loc: loc(line, 8)}))
+}
+
+// An element the lax wildcard admitted and no declaration governs is ·laxly
+// assessed· against xs:anyType (cvc-assess-elt clause 3, key-lva), whose own
+// lax wildcard attributes each of ITS [[children]] in turn, so a <thing> below
+// <unknown> resolves to its top-level declaration and its xs:ID value enters
+// the ID/IDREF table (§3.17.5.2) like any other. The dangling <ref> beside it
+// is then cvc-id clause 1's to charge: nothing below <unknown> was left unread,
+// so nothing suppresses it and nothing is recorded as withheld. Handing
+// <unknown>'s children no attribution instead fails the second assessment
+// (#1823).
+func TestAnIDBelowALaxlyAssessedElementIsRead(t *testing.T) {
+	schema := idLaxSchema(t)
+	unknown := func(id string) *testElement {
+		return icElem(xsd.QName{Local: "unknown"}, 2, nil, ElementChild(idText("thing", 3, id)))
+	}
+
+	icWantCharges(t, icAssess(t, schema, icElem(xsd.QName{Local: "root"}, 1, nil,
+		ElementChild(idText("ref", 4, "dangling")))),
+		icCharge(ruleCvcID, 4))
+
+	got, undecided := assessRecordedWith(t, testBackend(), schema, icElem(xsd.QName{Local: "root"}, 1, nil,
+		ElementChild(unknown("a")), ElementChild(idText("ref", 4, "dangling"))))
+	icWantCharges(t, got, icCharge(ruleCvcID, 4))
+	if len(undecided) != 0 {
+		t.Errorf("Unevaluated() = %v, want none: a ·laxly assessed· element withholds nothing", undecided)
+	}
+
+	icWantCharges(t, icAssess(t, schema, icElem(xsd.QName{Local: "root"}, 1, nil,
+		ElementChild(unknown("dangling")), ElementChild(idText("ref", 4, "dangling")))))
+}
+
+// The same attribution makes a resolving descendant ·strictly assessed·
+// (key-governing-ed clause 3 over a lax wildcard): <num> below <unknown> is
+// charged cvc-type clause 3.1.3 for a value its xs:int declaration rejects, and
+// so is one two ·laxly assessed· levels down, a name that resolves nothing being
+// laxly assessed again and never invalid.
+func TestAResolvingDescendantOfALaxlyAssessedElementIsStrictlyAssessed(t *testing.T) {
+	schema := idLaxSchema(t)
+
+	wantSilence(t, icAssess(t, schema, icElem(xsd.QName{Local: "root"}, 1, nil,
+		ElementChild(icElem(xsd.QName{Local: "unknown"}, 2, nil, ElementChild(idText("num", 3, "12")))))),
+		"12 is an xs:int")
+	got := icAssess(t, schema, icElem(xsd.QName{Local: "root"}, 1, nil,
+		ElementChild(icElem(xsd.QName{Local: "unknown"}, 2, nil, ElementChild(idText("num", 3, "abc"))))))
+	wantContentCharge(t, got, "cvc-type", "3.1.3", loc(3, 1))
+	got = icAssess(t, schema, icElem(xsd.QName{Local: "root"}, 1, nil,
+		ElementChild(icElem(xsd.QName{Local: "unknown"}, 2, nil,
+			ElementChild(icElem(xsd.QName{Local: "other"}, 3, nil, ElementChild(idText("num", 4, "abc"))))))))
+	wantContentCharge(t, got, "cvc-type", "3.1.3", loc(4, 1))
+}

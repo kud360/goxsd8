@@ -26108,7 +26108,7 @@ suntest/idc005.nogen/instance/idc005.nogen.n00 pass
 suntest/idc005.nogen/instance/idc005.nogen.n01 pass
 suntest/idc005.nogen/instance/idc005.nogen.v00 fail
 suntest/idc006.nogen/instance/idc006.nogen.n00 pass
-suntest/idc006.nogen/instance/idc006.nogen.n01 fail
+suntest/idc006.nogen/instance/idc006.nogen.n01 pass
 suntest/idc006.nogen/instance/idc006.nogen.v00 fail
 suntest/identitytestsuitetest001/instance/test.1.v fail
 suntest/identitytestsuitetest001/instance/test.2.n pass

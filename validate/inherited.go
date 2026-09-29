@@ -49,7 +49,11 @@ type inheritedAttribute struct {
 // hands down a set read off the top-level declarations alone, which a use of
 // its real type might contradict. No reader sees it: such an e attributes its
 // [[children]] to nothing, so no element below it is typed and no {type table}
-// is consulted ([walk.childGoverning]).
+// is consulted ([walk.childGoverning]). A ·laxly assessed· e hands down the
+// same top-level reading, and there it is the spec's: xs:anyType has no
+// {attribute uses} and a lax {attribute wildcard} (§3.4.7), so key-governing-ad
+// clause 3 resolves each attribute by name, and the {type table} of a child
+// that ·resolves· reads it ([walk.child]).
 func (w *walk) handedDown(e Element, g governance, inherited []inheritedAttribute) []inheritedAttribute {
 	attrs := e.Attributes()
 	var own []inheritedAttribute

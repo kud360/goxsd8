@@ -153,13 +153,10 @@ func (r *Result) Violations() []*xsderr.Error {
 //     subset, a field node with no readable value, and an undecided
 //     ·key-sequence· comparison (cvc-identity-constraint clauses 3 and 4).
 //
-// Three declines are NOT recorded, so an empty Unevaluated is not by itself a
+// Two declines are NOT recorded, so an empty Unevaluated is not by itself a
 // claim that the walk performed every check it reached: a ·governing type
-// definition· left undetermined other than by a withheld {type table} (#1093);
-// the element [[children]] of an element assessed against no type at all,
-// which this package leaves untyped where §3.3.4.6 would ·laxly assess· them
-// against xs:anyType's wildcard, suppressing cvc-id clause 1 unrecorded; and an
-// unresolvable {attribute declaration}, which no *xsd.Schema that exists
+// definition· left undetermined other than by a withheld {type table} (#1093),
+// and an unresolvable {attribute declaration}, which no *xsd.Schema that exists
 // carries.
 type Unevaluated struct {
 	rule xsderr.Rule
