@@ -2573,8 +2573,8 @@ func TestProduceElementSubstitutionGroupCircularRejected(t *testing.T) {
 // the ·effective block value· is block=, else the <schema>'s blockDefault, else
 // the empty string; "#all" names all three keywords; any other value names the
 // keywords its list contains (a token outside xs:blockSet is rejected, pinned in
-// produce_derivationset_test.go). The result is in the spec's canonical order whatever order the attribute
-// spells it in, so one set has one encoding.
+// produce_derivationset_test.go). The result is in the spec's canonical order
+// whatever order the attribute spells it in, so one set has one encoding.
 func TestProduceElementBlockMapped(t *testing.T) {
 	all := []xsd.DerivationMethod{xsd.DerivationExtension, xsd.DerivationRestriction, xsd.DerivationSubstitution}
 	for _, tc := range []struct {
