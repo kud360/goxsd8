@@ -136,8 +136,13 @@ func (r *names) recordUnbound(prefix string) {
 // 'W' is a name split by white space around its ':' — `tid :*`, `tid : x`, or an
 // axis keyword split from the second ':' of its '::' as in `child: :` — carrying
 // its source spelling. It is no XPath 2.0 token at all and has no axis reading,
-// whatever its NCName: scanSplitName documents the two runs it reads. '?' is one
-// rune or run that opens no token of any sort, and exists so the lexer is total.
+// whatever its NCName: scanSplitName documents the two runs it reads. 'F' is a
+// whole FunctionCall (xpath20 production [48]) of the narrow form
+// scanFunctionCall reads, carrying its source spelling. '=' is the GeneralComp
+// operator (production [22]) and 's' a StringLiteral (production [74]) carrying
+// its spelling, delimiters included; the lexer yields either only between a
+// predicate's brackets. '?' is one rune or run that opens no token of any sort,
+// and exists so the lexer is total.
 type token struct {
 	kind byte
 	text string
@@ -148,10 +153,18 @@ type token struct {
 // production [6]'s white space allowed around tokens though not inside them —
 // and into the axis heads and the argument-free KindTests scanAxisOrKind reads,
 // which are what clause 2.2's unabbreviated spellings and the residual shapes
-// charged beside them are written in, and the white-space-split names
-// scanSplitName reads, which are charged as no XPath 2.0 expression. A split
-// name is tried before scanNameTest, which would otherwise read its NCName
-// alone and leave the ':' to open no token.
+// charged beside them are written in, the FunctionCalls scanFunctionCall reads,
+// and the white-space-split names scanSplitName reads, which are charged as no
+// XPath 2.0 expression. A FunctionCall and a split name are tried before
+// scanNameTest, which would otherwise read the NCName alone and leave the '(' or
+// the ':' to open no token.
+//
+// '=' and a StringLiteral are read only between a '[' and its ']', where the
+// predicate they sit in is charged whatever they hold. Outside a predicate
+// neither completes any charged shape, and reading one there would hand a
+// leading '//' or a selector's '@' a stream such as `//='x'` to charge under
+// clause 2 although it is no XPath 2.0 expression; so there each opens no token,
+// and the stream is declined as before.
 //
 // It is TOTAL: every {expression} yields a stream, and a rune that opens no
 // token becomes one '?' token rather than ending the scan. A lexer that stopped
@@ -168,6 +181,7 @@ type token struct {
 // (§G.4.2.5), which does not admit '.'.
 func tokenize(s string) []token {
 	var toks []token
+	depth := 0
 	for i := 0; i < len(s); {
 		r, size := utf8.DecodeRuneInString(s[i:])
 		switch {
@@ -176,6 +190,24 @@ func tokenize(s string) []token {
 		case r == '|', r == '@', r == '.', r == '[', r == ']':
 			toks = append(toks, token{kind: byte(r)})
 			i += size
+			if r == '[' {
+				depth++
+			}
+			if r == ']' && depth > 0 {
+				depth--
+			}
+		case r == '=' && depth > 0:
+			toks = append(toks, token{kind: '='})
+			i += size
+		case (r == '"' || r == '\'') && depth > 0:
+			j, ok := scanStringLiteral(s, i)
+			if !ok {
+				toks = append(toks, token{kind: '?'})
+				i += size
+				continue
+			}
+			toks = append(toks, token{kind: 's', text: s[i:j]})
+			i = j
 		case r == '/':
 			if strings.HasPrefix(s[i:], "//") {
 				toks = append(toks, token{kind: 'D'})
@@ -190,6 +222,11 @@ func tokenize(s string) []token {
 		default:
 			if t, j, ok := scanAxisOrKind(s, i); ok {
 				toks = append(toks, t)
+				i = j
+				continue
+			}
+			if j, ok := scanFunctionCall(s, i); ok {
+				toks = append(toks, token{kind: 'F', text: s[i:j]})
 				i = j
 				continue
 			}
@@ -220,10 +257,10 @@ func tokenize(s string) []token {
 // first, so `child` alone is still an element NameTest and `attribute::` an axis
 // head while `attribute()` is a KindTest; and white space is admitted on both
 // sides of the '::', because in XPath 2.0 an axis keyword and '::' are two
-// tokens (production [30]'s `("child" "::")`). Every other '(' opens no token: a
-// KindTest with an argument, whose QNames, TypeNames and StringLiterals this
-// lexer does not read, or a function call is general XPath 2.0, which this
-// package does not read.
+// tokens (production [30]'s `("child" "::")`). A KindTest with an argument, whose
+// QNames, TypeNames and StringLiterals this reader does not read, is not read
+// here, and scanFunctionCall declines its reserved keyword too: its '(' opens no
+// token.
 func scanAxisOrKind(s string, i int) (token, int, bool) {
 	j := scanNCName(s, i)
 	if j == i {
@@ -282,6 +319,83 @@ func scanSplitName(s string, i int) (int, bool) {
 	return i, false
 }
 
+// scanFunctionCall reports the end of the FunctionCall starting at i, and ok
+// false where none does. It reads xpath20 production [48], `QName "("
+// (ExprSingle ("," ExprSingle)*)? ")"`, narrowed to what is XPath 2.0 whatever
+// the static context holds:
+//
+//   - the name is an NCName, never a prefixed QName, because a prefix this lexer
+//     read would be resolved nowhere, and an unbound one is clause 1's
+//     err:XPST0081 and not the clause-2 charge shapeFault makes;
+//   - the name is none of A.3's reserved function names, which before a '(' are a
+//     KindTest or a keyword and never a FunctionCall — so `element(a)` and
+//     `processing-instruction('x')` are not read here;
+//   - every argument is a StringLiteral (production [74]), the one ExprSingle
+//     read without a parser. A comment `(:` after the '(' is none, so `f (: c :)`
+//     is not read as a call either (xpath20 A.1.3, gn: parens).
+func scanFunctionCall(s string, i int) (int, bool) {
+	j := scanNCName(s, i)
+	if j == i || reservedFunctionName(s[i:j]) {
+		return i, false
+	}
+	k := skipSpace(s, j)
+	if !strings.HasPrefix(s[k:], "(") {
+		return i, false
+	}
+	k = skipSpace(s, k+1)
+	if strings.HasPrefix(s[k:], ")") {
+		return k + 1, true
+	}
+	for {
+		m, ok := scanStringLiteral(s, k)
+		if !ok {
+			return i, false
+		}
+		k = skipSpace(s, m)
+		if strings.HasPrefix(s[k:], ")") {
+			return k + 1, true
+		}
+		if !strings.HasPrefix(s[k:], ",") {
+			return i, false
+		}
+		k = skipSpace(s, k+1)
+	}
+}
+
+// scanStringLiteral reports the end of the StringLiteral starting at i, and ok
+// false where none does: xpath20 production [74], a run delimited by a quotation
+// mark or an apostrophe, in which the delimiter doubled is the escape of
+// productions [75] and [76] and not the end. An unterminated literal is none.
+func scanStringLiteral(s string, i int) (int, bool) {
+	if i >= len(s) || (s[i] != '"' && s[i] != '\'') {
+		return i, false
+	}
+	q := s[i]
+	for j := i + 1; j < len(s); j++ {
+		if s[j] != q {
+			continue
+		}
+		if j+1 < len(s) && s[j+1] == q {
+			j++
+			continue
+		}
+		return j + 1, true
+	}
+	return i, false
+}
+
+// reservedFunctionName reports whether name is one of xpath20 A.3's thirteen
+// Reserved Function Names, which "are not allowed as function names in an
+// unprefixed form because expression syntax takes precedence".
+func reservedFunctionName(name string) bool {
+	switch name {
+	case "attribute", "comment", "document-node", "element", "empty-sequence", "if", "item",
+		"node", "processing-instruction", "schema-attribute", "schema-element", "text", "typeswitch":
+		return true
+	}
+	return false
+}
+
 // kindKeyword reports whether name opens a KindTest that admits empty
 // parentheses: the switch is the whole of the xpath20 production [54] KindTest
 // alternatives whose argument is optional or absent — productions [55] to [60]
@@ -330,7 +444,8 @@ func skipSpace(s string, i int) int {
 
 // fullyLexed reports whether every rune of the {expression} the stream came from
 // fell inside a token this package reads — production [5]'s, a predicate
-// bracket, an axis head, an argument-free KindTest or a white-space-split name.
+// bracket, an axis head, an argument-free KindTest, a FunctionCall, a
+// white-space-split name, or a '=' or StringLiteral inside a predicate.
 // Nothing is charged over a stream that fails this: see compile.
 func fullyLexed(toks []token) bool {
 	for _, t := range toks {
@@ -350,7 +465,8 @@ func fullyLexed(toks []token) bool {
 // field only as a Path's final step. An axis head other than child — or, for a
 // field, attribute — is one clause 2.2 does not name, and clause 2.1 spells no
 // axis at all. A KindTest step is no NameTest (xpath20 production [35]), and
-// production [3] Step spells none. A root-relative path, opened by '/' or '//',
+// production [3] Step spells none, nor a FunctionCall, which xpath20 production
+// [27] makes a FilterExpr and no AxisStep. A root-relative path, opened by '/' or '//',
 // is one production [2] and [7]'s context-relative Path never is. A '//'
 // anywhere but the leading './/' pair is §3.2.4 rule 3's descendant-or-self
 // step, which neither arm admits. Five shapes are no XPath 2.0 expression under
@@ -431,6 +547,12 @@ func shapeFault(toks []token, field bool) (string, bool) {
 			// head, '@' or '/' precedes it.
 			if t.kind == 'K' {
 				return fmt.Sprintf("has a KindTest step %q, but %s clause 2 admits it under neither arm — %s, and xpath20 production [35] makes a KindTest no NameTest", t.text, scc, stepProductions(field)), true
+			}
+			// A FunctionCall is a PrimaryExpr (xpath20 production [41]), a
+			// FilterExpr's and never an AxisStep's (production [27]), so it is no
+			// Step of production [3] and no §3.2.4 abbreviation of one.
+			if t.kind == 'F' {
+				return fmt.Sprintf("has a FunctionCall %q, but %s clause 2 admits it under neither arm — %s, and xpath20 production [27] makes a FunctionCall a FilterExpr and no AxisStep", t.text, scc, stepProductions(field)), true
 			}
 			head := t.kind == 'C' || t.kind == 'A' || t.kind == 'X'
 			// An axis head with no NodeTest after it is no XPath 2.0 expression at
@@ -630,8 +752,8 @@ func parse(toks []token, field bool, r *names) (Expr, bool) {
 // The unabbreviated spellings clause 2.2 admits take the arms their abbreviated
 // twins take — `child::` NameTest the NameTest arm, `attribute::` NameTest the
 // '@' arm — so each compiles to the tree its abbreviated spelling compiles to,
-// by construction. Every other axis head, and every KindTest after an admitted
-// one, is charged before the parse is reached (shapeFault).
+// by construction. Every other axis head, and every KindTest or FunctionCall
+// after an admitted one, is charged before the parse is reached (shapeFault).
 //
 // A `.` Step is dropped as it is read (see path). The one shape dropping cannot
 // handle is a `.//` path whose every Step was a `.`, which leaves no element
