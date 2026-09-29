@@ -1989,7 +1989,7 @@ type resolvedBase struct {
 // extension content type. at is the derivation alternant charged when the base
 // is still being built.
 //
-// GAP(parser): a <simpleContent> derivation, or a <complexContent> <extension>,
+// GAP(parser): #1883 — a <simpleContent> derivation, or a <complexContent> <extension>,
 // whose base is a named complex type reached from inside that type's own content
 // model is refused rather than mapped. Both read the base's {content type}, which
 // is not finished until the content model holding this derivation is, and
