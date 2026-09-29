@@ -342,13 +342,23 @@ import (
 //     charges it nowhere.
 //   - cvc-type clause 2 (§3.3.4.4): a complex {type definition}'s {abstract}
 //     is false, at the root too, since the walk decides that clause nowhere.
-//   - cvc-elt clause 7 (cvc-id, §3.3.4.5): no element's value type — a Simple
-//     Type Definition, or a simple {content type}'s {simple type definition} —
-//     and no attribute use's {attribute declaration}.{type definition},
-//     whether the attribute is present or not, has a closure reaching
-//     idOrEntityOrNotation, so the [ID/IDREF table] is empty and both clauses
-//     hold vacuously. Each use's declaration must resolve, so an unresolvable
-//     {attribute declaration} is refused too.
+//   - cvc-elt clause 7 (cvc-id, §3.3.4.5): the walk's, at every depth. It
+//     reads each element's and attribute's item into the [ID/IDREF table]
+//     (validate's walk.idAttributes, walk.idDefaultedAttributes and
+//     walk.idElement, through walk.idRecord) and charges both clauses once, at
+//     the root (idTable.charge); every item it cannot read is recorded through
+//     walk.declineID. String Valid clause 3's ·declared entity name· check
+//     (key-vde) is the walk's too, decided per ENTITY value by
+//     walk.entitiesDeclared and recorded as an [Unevaluated] by its callers
+//     where undecided (walk.declineAttribute, walk.declineDefaulted,
+//     contentCheck.decline). What the gate still refuses is NOTATION
+//     (walkUnrecorded): no element's value type — a Simple Type Definition, or
+//     a simple {content type}'s {simple type definition} — and no attribute
+//     use's {attribute declaration}.{type definition}, whether the attribute is
+//     present or not, has a closure reaching it, since its ·value space·
+//     (Datatypes §3.3.19, enumeration-required-notation) is checked nowhere.
+//     Each use's declaration must resolve, so an unresolvable {attribute
+//     declaration} is refused too.
 //   - cvc-complex-type clause 2: every attribute beyond namespace declarations
 //     and the four xsi: names matches an attribute use (2.1), so none is
 //     ·attributed to· an {attribute wildcard}, whose ·attribute assessment·

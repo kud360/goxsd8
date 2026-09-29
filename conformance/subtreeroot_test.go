@@ -10,6 +10,11 @@ import (
 // xsiXS binds xsi and xs on an instance root, for an xsi:type naming a builtin.
 const xsiXS = xsiNS + ` xmlns:xs="http://www.w3.org/2001/XMLSchema"`
 
+// notationN declares the notation n and the simple type N, a NOTATION
+// enumeration admitting it alone (enumeration-required-notation).
+const notationN = `<xs:notation name="n" public="p"/>` +
+	`<xs:simpleType name="N"><xs:restriction base="xs:NOTATION"><xs:enumeration value="n"/></xs:restriction></xs:simpleType>`
+
 // TestInstanceExecutorDecidesAssessedSubtreeRoot proves the lane's third
 // "valid" observation (#1841): a root WITH content whose every element and
 // attribute meets the assessed-subtree-root gate, and whose walk charged
@@ -56,6 +61,32 @@ func TestInstanceExecutorDecidesAssessedSubtreeRoot(t *testing.T) {
 				`<xs:element name="a" type="xs:int" nillable="true"/></xs:sequence></xs:complexType></xs:element>`,
 			`<known><a>1</a></known>`,
 		},
+		// The three ID-family rows, one per closureReaches site, are admitted
+		// because the walk decides cvc-id at every depth and records each item it
+		// cannot read (#1857); NOTATION is the one name the sites still refuse.
+		{
+			"an ID on a child element, binding its parent (element value type)",
+			`<xs:element name="known"><xs:complexType><xs:sequence>` +
+				`<xs:element name="a" type="xs:ID" maxOccurs="2"/></xs:sequence></xs:complexType></xs:element>`,
+			`<known><a>i1</a><a>i2</a></known>`,
+		},
+		{
+			"an IDREFS list resolving to IDs on sibling attributes ({attribute uses})",
+			`<xs:element name="known"><xs:complexType><xs:sequence><xs:element name="a" maxOccurs="2"><xs:complexType>` +
+				`<xs:attribute name="id" type="xs:ID"/><xs:attribute name="refs" type="xs:IDREFS"/>` +
+				`</xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>`,
+			`<known><a id="i1"/><a id="i2" refs="i1 i2"/></known>`,
+		},
+		{
+			// Below the root: the root's own ID value binds its parent, which it
+			// has none of, so that binding is empty and cvc-id clause 1 charges.
+			"a union with an ID member as a child's simple {content type}",
+			`<xs:element name="known"><xs:complexType><xs:sequence><xs:element name="a"><xs:complexType>` +
+				`<xs:simpleContent><xs:extension base="U"><xs:attribute name="at" type="xs:string"/></xs:extension></xs:simpleContent>` +
+				`</xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>` +
+				`<xs:simpleType name="U"><xs:union memberTypes="xs:int xs:ID"/></xs:simpleType>`,
+			`<known><a at="v">i1</a></known>`,
+		},
 	}
 	for _, tc := range cases {
 		if !exec(instanceCase(t, tc.schemaBody, tc.instance, true)).IsPass() {
@@ -63,6 +94,29 @@ func TestInstanceExecutorDecidesAssessedSubtreeRoot(t *testing.T) {
 		}
 		if exec(instanceCase(t, tc.schemaBody, tc.instance, false)).IsPass() {
 			t.Errorf("%s: the executor must Fail under a flipped expectation (it decides for real)", tc.why)
+		}
+	}
+}
+
+// TestInstanceExecutorChargesCvcIDBelowTheRoot is a regression guard for the
+// ID-family lift (#1857): with ID and IDREF admitted at depth, a dangling IDREF
+// (cvc-id clause 1) and a duplicate ID (clause 2) in the subtree of the
+// ·validation root· are still decided INVALID. Both are the walk's charges at
+// the root (validate's idTable.charge), so neither row passes through the gate.
+func TestInstanceExecutorChargesCvcIDBelowTheRoot(t *testing.T) {
+	const idAndRef = `<xs:element name="known"><xs:complexType><xs:sequence><xs:element name="a" maxOccurs="2"><xs:complexType>` +
+		`<xs:attribute name="id" type="xs:ID"/><xs:attribute name="ref" type="xs:IDREF"/>` +
+		`</xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>`
+	exec := newInstanceExec()
+	for _, tc := range []struct{ why, instance string }{
+		{"a dangling IDREF (cvc-id clause 1)", `<known><a id="i1"/><a ref="i2"/></known>`},
+		{"a duplicate ID (cvc-id clause 2)", `<known><a id="i1"/><a id="i1"/></known>`},
+	} {
+		if !exec(instanceCase(t, idAndRef, tc.instance, false)).IsPass() {
+			t.Errorf("%s: the walk charges cvc-id at the validation root; the executor must agree with a suite-invalid case", tc.why)
+		}
+		if exec(instanceCase(t, idAndRef, tc.instance, true)).IsPass() {
+			t.Errorf("%s: the executor must Fail under a flipped expectation", tc.why)
 		}
 	}
 }
@@ -133,24 +187,26 @@ func TestInstanceExecutorDeclinesOutsideAssessedSubtreeRoot(t *testing.T) {
 			`<xs:element name="known"><xs:complexType><xs:sequence><xs:element name="a" type="xs:int" fixed="1"/></xs:sequence></xs:complexType></xs:element>`,
 			wantInt,
 		},
+		// The three NOTATION rows, one per closureReaches site, name a declared
+		// notation: the walk checks no NOTATION value against the schema's
+		// notations (Datatypes §3.3.19, enumeration-required-notation), so a
+		// value naming an undeclared one walks clean too (over027.n01).
 		{
-			"an ID-family closure in an element value type (cvc-id)",
-			`<xs:element name="known"><xs:complexType><xs:sequence><xs:element name="a" type="U"/></xs:sequence></xs:complexType></xs:element>` +
-				`<xs:simpleType name="U"><xs:union memberTypes="xs:int xs:ID"/></xs:simpleType>`,
-			wantInt,
+			"a NOTATION closure in an element value type below the root",
+			notationN + `<xs:element name="known"><xs:complexType><xs:sequence><xs:element name="a" type="N"/></xs:sequence></xs:complexType></xs:element>`,
+			`<known><a>n</a></known>`,
 		},
 		{
-			"an ID-family closure in a simple {content type} (cvc-id)",
-			`<xs:element name="known"><xs:complexType><xs:simpleContent><xs:extension base="U">` +
-				`<xs:attribute name="at" type="xs:string"/></xs:extension></xs:simpleContent></xs:complexType></xs:element>` +
-				`<xs:simpleType name="U"><xs:union memberTypes="xs:int xs:ID"/></xs:simpleType>`,
-			`<known at="v">1</known>`,
+			"a NOTATION closure in a simple {content type}",
+			notationN + `<xs:element name="known"><xs:complexType><xs:simpleContent><xs:extension base="N">` +
+				`<xs:attribute name="at" type="xs:string"/></xs:extension></xs:simpleContent></xs:complexType></xs:element>`,
+			`<known at="v">n</known>`,
 		},
 		{
-			"an ID-family closure in an attribute use's type the element does not carry (cvc-id)",
-			`<xs:element name="known"><xs:complexType><xs:sequence><xs:element name="a" type="xs:int"/></xs:sequence>` +
-				`<xs:attribute name="r" type="xs:IDREF"/></xs:complexType></xs:element>`,
-			wantInt,
+			"an attribute typed by a NOTATION enumeration below the root",
+			notationN + `<xs:element name="known"><xs:complexType><xs:sequence><xs:element name="a">` +
+				`<xs:complexType><xs:attribute name="n" type="N"/></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>`,
+			`<known><a n="n"/></known>`,
 		},
 		{
 			"an attribute matched by an attribute wildcard (cvc-complex-type clause 2.2)",
