@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode"
 )
 
 // This file is the M1 harness seam (issue #6): it discovers the W3C suite's
@@ -347,6 +348,71 @@ func parseRemovalAssertions(raw string) (map[string]RemovalAssertion, error) {
 			return nil, fmt.Errorf("entry %q: count %d is negative", entry, n)
 		}
 		out[name] = AssertRemovals(n)
+	}
+	return out, nil
+}
+
+// ratchetSupersededEnv names the arbiter's per-lane list of superseded passes
+// a ratchet run is to bank as `fail` (issue #1827), each by lane and case ID:
+//
+//	GOXSD_RATCHET_SUPERSEDED=instance:VC/vc002/instance/vc002.n1.xml
+//
+// It is gated exactly as ratchetRemovalsEnv is (issue #309): set without
+// GOXSD_RATCHET=1, TestConformance fails outright. Absent, no lane names any
+// case, so every regression refuses the merge.
+const ratchetSupersededEnv = "GOXSD_RATCHET_SUPERSEDED"
+
+// supersededAssertions resolves one run's per-lane superseded names, gated as
+// removalAssertions is: raw and set are ratchetSupersededEnv's os.LookupEnv pair
+// and ratcheting is whether GOXSD_RATCHET=1. A variable set WITHOUT the ratchet
+// is an error, checked before the value is parsed.
+func supersededAssertions(raw string, set, ratcheting bool) (map[string][]string, error) {
+	if !set {
+		return nil, nil
+	}
+	if !ratcheting {
+		return nil, fmt.Errorf(
+			"%s is set but GOXSD_RATCHET=1 is not: naming superseded passes is arbiter-only and never applies to a read-only run",
+			ratchetSupersededEnv)
+	}
+	return parseSupersededAssertions(raw)
+}
+
+// parseSupersededAssertions parses ratchetSupersededEnv's value, a
+// comma-separated list of `<lane>:<case-id>` entries, into each named lane's
+// case IDs. No banked case ID contains `,`, `:` or whitespace, so the first
+// `:` splits an entry unambiguously.
+//
+// Every malformed spelling is an error rather than a skipped entry — an empty
+// entry (the empty value included), a missing `:`, a name no lane carries, an
+// empty or whitespace-bearing ID, and a lane:ID pair named twice — because a
+// name nothing checks is an assertion no run made. The same ID in two lanes is
+// two names: lane populations overlap, and each lane's regression is its own.
+// The map is an internal lookup keyed by lane, never iterated into output
+// (STYLE D2).
+func parseSupersededAssertions(raw string) (map[string][]string, error) {
+	out := map[string][]string{}
+	for _, entry := range strings.Split(raw, ",") {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			return nil, fmt.Errorf("value %q: empty entry, want `<lane>:<case-id>`", raw)
+		}
+		name, id, ok := strings.Cut(entry, ":")
+		if !ok {
+			return nil, fmt.Errorf("entry %q: want `<lane>:<case-id>`", entry)
+		}
+		name = strings.TrimSpace(name)
+		if !isLaneName(name) {
+			return nil, fmt.Errorf("entry %q: no lane is named %q", entry, name)
+		}
+		id = strings.TrimSpace(id)
+		if id == "" || strings.ContainsFunc(id, unicode.IsSpace) {
+			return nil, fmt.Errorf("entry %q: case ID %q is not a case ID", entry, id)
+		}
+		if slices.Contains(out[name], id) {
+			return nil, fmt.Errorf("entry %q: case %q is named twice in lane %q", entry, id, name)
+		}
+		out[name] = append(out[name], id)
 	}
 	return out, nil
 }

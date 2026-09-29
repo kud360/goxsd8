@@ -39,7 +39,7 @@ func (s Status) String() string {
 }
 
 // Delta partitions a comparison of committed expectations against an observed
-// run into the five disjoint change classes the ratchet reasons about. Each
+// run into the six disjoint change classes the ratchet reasons about. Each
 // field lists case IDs in sorted order (STYLE D1); a case appears in at most
 // one field. Cases that are expected and still observed at the same status are
 // unchanged and appear in no field.
@@ -50,6 +50,13 @@ type Delta struct {
 	// Regressed lists cases expected to pass that the run now fails — never
 	// acceptable; their presence forbids any ratchet movement.
 	Regressed []string
+	// Superseded lists cases expected to pass that the run now fails AND that
+	// the arbiter's ratchet run named as superseded passes (issue #1827): a
+	// pass that held only because two defects cancelled out, until a fix
+	// exposed the second. Compare never fills it — no machinery can tell a
+	// superseded pass from a regression, so only supersede moves a case here
+	// out of Regressed, by name, on Ratchet's path.
+	Superseded []string
 	// New lists observed cases that carry no committed expectation yet.
 	New []string
 	// Vanished lists expected cases the run no longer produced and that
@@ -134,11 +141,12 @@ func parseStatus(tok string) (Status, error) {
 }
 
 // Compare partitions the observed run (actual) against committed expectations
-// into a Delta. The five classes are disjoint and every listed slice is sorted
-// (STYLE D1/D2): Improved (expected fail, now pass), Regressed (expected pass,
-// now fail), New (observed but unexpected), Removed (expected, and absent
+// into a Delta. It fills five of the six disjoint classes, every listed slice
+// sorted (STYLE D1/D2): Improved (expected fail, now pass), Regressed (expected
+// pass, now fail), New (observed but unexpected), Removed (expected, and absent
 // because discovery withheld it) and Vanished (expected, absent, and NOT
-// withheld).
+// withheld). Superseded is left empty: it is a naming, not a classification,
+// and supersede applies it.
 //
 // withheld carries the case IDs discovery deliberately did not produce because
 // the suite's own applicability metadata scopes them away from this processor
@@ -221,25 +229,66 @@ type RemovalAssertion struct {
 // claim an agent can make in prose.
 func AssertRemovals(n int) RemovalAssertion { return RemovalAssertion{n: n} }
 
+// supersede moves each named case out of d.Regressed into d.Superseded (issue
+// #1827). Every name must be in d.Regressed: a named case that is Vanished,
+// still passing, or was never banked `pass` is an assertion nothing checked,
+// and refuses rather than being skipped. A name given twice refuses too. The
+// case is named by ID, never counted, because a count would let one genuine
+// regression stand in for the asserted case. d is returned with both slices
+// sorted (STYLE D1); named may be in any order.
+func supersede(d Delta, named []string) (Delta, error) {
+	asked := make(map[string]struct{}, len(named))
+	for _, id := range named {
+		if _, dup := asked[id]; dup {
+			return Delta{}, fmt.Errorf("superseded case %q is named twice", id)
+		}
+		if !slices.Contains(d.Regressed, id) {
+			return Delta{}, fmt.Errorf("superseded case %q did not regress in this lane", id)
+		}
+		asked[id] = struct{}{}
+	}
+	var regressed []string
+	for _, id := range d.Regressed {
+		if _, ok := asked[id]; ok {
+			d.Superseded = append(d.Superseded, id)
+			continue
+		}
+		regressed = append(regressed, id)
+	}
+	d.Regressed = regressed
+	slices.Sort(d.Superseded)
+	return d, nil
+}
+
 // Ratchet computes the upward-only merge of expectations with an observed run.
 // Improved cases flip to pass and New cases are recorded at their observed
 // status; unchanged cases keep their expectation. The input maps are never
 // mutated.
 //
-// Three conditions abort the entire merge — the ratchet refuses to move at all
+// superseded names the cases this lane's run asserts are superseded passes
+// (issue #1827); nil names none. Each is banked `fail` — the one downward
+// movement Ratchet makes, and only for a case named by ID.
+//
+// Four conditions abort the entire merge — the ratchet refuses to move at all
 // rather than record a downgrade:
 //
 //   - any Regressed or Vanished case, unconditionally and whatever removals
-//     asserts;
+//     asserts — a regression superseded does not name stays Regressed;
 //   - a withheld ID the run also produced (Compare's runner-bug error);
+//   - a name in superseded that did not regress in this run, or is named
+//     twice (supersede's error);
 //   - a Removed count other than the one removals asserts, in either direction,
 //     which for the zero RemovalAssertion means any removal at all.
 //
 // Banking a sanctioned removal DELETES the case's line from the merged map: a
 // removal that were merely tolerated would be re-offered, and re-refused, on
 // every subsequent run.
-func Ratchet(expected, actual map[string]Status, withheld []string, removals RemovalAssertion) (map[string]Status, error) {
+func Ratchet(expected, actual map[string]Status, withheld []string, removals RemovalAssertion, superseded []string) (map[string]Status, error) {
 	d, err := Compare(expected, actual, withheld)
+	if err != nil {
+		return nil, fmt.Errorf("ratchet refuses to move: %w", err)
+	}
+	d, err = supersede(d, superseded)
 	if err != nil {
 		return nil, fmt.Errorf("ratchet refuses to move: %w", err)
 	}
@@ -263,6 +312,9 @@ func Ratchet(expected, actual map[string]Status, withheld []string, removals Rem
 	}
 	for _, id := range d.New {
 		merged[id] = actual[id]
+	}
+	for _, id := range d.Superseded {
+		merged[id] = Fail()
 	}
 	for _, id := range d.Removed {
 		delete(merged, id)
@@ -292,20 +344,21 @@ type laneRun struct {
 // once, and none of them wrote anything.
 //
 // runs is a slice so lanes merge and write in the caller's fixed order (STYLE
-// D1); removals is an internal lookup keyed by lane name, read by key and never
-// iterated (STYLE D2), so a lane it does not name asserts the zero
-// RemovalAssertion. dir is the directory holding the committed lane files.
+// D1); removals and superseded are internal lookups keyed by lane name, read by
+// key and never iterated (STYLE D2), so a lane removals does not name asserts
+// the zero RemovalAssertion and a lane superseded does not name supersedes
+// nothing. dir is the directory holding the committed lane files.
 //
 // The write phase is not itself transactional: WriteExpectations renames each
 // lane's file into place separately, so an I/O fault partway through can still
 // leave earlier lanes written. That is a failing disk rather than a refused
 // merge — the refusals this function exists to contain are all decided in the
 // first phase, before anything is opened for writing.
-func ratchetAll(dir string, runs []laneRun, withheld []string, removals map[string]RemovalAssertion) error {
+func ratchetAll(dir string, runs []laneRun, withheld []string, removals map[string]RemovalAssertion, superseded map[string][]string) error {
 	merged := make([]map[string]Status, len(runs))
 	var refused []error
 	for i, r := range runs {
-		m, err := Ratchet(r.expected, r.actual, withheld, removals[r.name])
+		m, err := Ratchet(r.expected, r.actual, withheld, removals[r.name], superseded[r.name])
 		if err != nil {
 			refused = append(refused, fmt.Errorf("lane %s: %w", r.name, err))
 			continue
