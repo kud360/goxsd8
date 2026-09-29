@@ -125,8 +125,8 @@ import (
 // All nine are unconditional: no verdict here can be overturned by anything in
 // the rest of the document, which is what makes them decidable while the engine
 // leaves most of the document undecided. They are every "not valid" this lane
-// observes; its "valid" is one of three gated shapes that charges none of them
-// ("Why an EMPTY Result is evidence of validity for THREE shapes only" below).
+// observes; its "valid" is the one gated shape that charges none of them ("Why
+// an EMPTY Result is evidence of validity for ONE shape only" below).
 //
 // # Charges at depth
 //
@@ -162,16 +162,13 @@ import (
 // xsd.Schema.ContentMatcher declines — a nested repetition whose occurrence
 // ranges admit more partitions than the walk carries cursors, an all group
 // holding an all group — each of which withholds clause 1.4 entirely rather than
-// matching part of a sequence, and a root with no character information item
-// [[child]] at all, whose ·initial value· cvc-elt clause 5.1 may take from a
-// {value constraint} instead — a decline case 9's clause 3.1.3 shares, over the
-// same ·initial value· and for the same reason. The value charges add their own: a
-// declaration whose {type definition} does not resolve to a simple type, and — the
-// one that would otherwise reject every value of a type the backend does not map
-// — a value.ValidateLexical error that is a fault of the type or of the backend
-// rather than a verdict about the lexical (value.IsDatatypeVerdict). Each of those is a
-// DECLINE inside validate, and a declined attribute charges nothing at all, so it
-// cannot arrive here.
+// matching part of a sequence. The value charges add their own: a declaration whose
+// {type definition} does not resolve to a simple type, and — the one that would
+// otherwise reject every value of a type the backend does not map — a
+// value.ValidateLexical error that is a fault of the type or of the backend rather than
+// a verdict about the lexical (value.IsDatatypeVerdict). Each of those is a DECLINE
+// inside validate, and a declined attribute charges nothing at all, so it cannot arrive
+// here.
 //
 // Case 2 fires through an ASSEMBLED schema: producer.produceElement maps
 // {abstract} from the top-level <element>'s abstract attribute (§3.3.2.1
@@ -181,7 +178,7 @@ import (
 // governing type is determinable is assessed for its attributes too — which is
 // among the reasons decidedNotValid pins no violation count.
 //
-// # Why an EMPTY Result is evidence of validity for THREE shapes only
+// # Why an EMPTY Result is evidence of validity for ONE shape only
 //
 // In general an empty Result — no violation charged — is UNDECIDABLE IN BOTH
 // DIRECTIONS and DECLINES. e-validity is a conjunction: local validity, AND no
@@ -197,125 +194,19 @@ import (
 // nothing, and a few of validate's declines record nothing in
 // Result.Unevaluated (validate.Unevaluated's own doc lists them).
 // The spec has no category for "this processor did not implement that check"
-// stronger than notKnown, so outside the three shapes below an empty Result
-// licenses no "valid" claim; equally it licenses no "invalid" one, so an
+// stronger than notKnown, so outside the shape below an empty Result licenses
+// no "valid" claim; equally it licenses no "invalid" one, so an
 // expected-invalid case declines exactly as an expected-valid one does.
 //
-// The first shape it DOES license "valid" for is a SIMPLE LEAF ROOT
-// (simpleLeafRoot, simpleleaf.go, #1738), and only where the walk also
-// recorded nothing in Result.Unevaluated. The gate reads the schema and the
-// instance independently of the walk, and discharges every clause of cvc-elt
-// (§3.3.4.3) the walk does not decide on its own:
-//
-//   - clause 1: the root's expanded name resolves to a TOP-LEVEL declaration.
-//   - clause 2: that declaration's {abstract} is false.
-//   - clause 3: its {nillable} is false and the root carries no xsi:nil, so
-//     3.1 holds and 3.2 is never live.
-//   - clause 4: the root carries no xsi:type, so no ·instance-specified type
-//     definition· exists and the ·selected type definition· governs; the
-//     declaration has no {type table}, so the selected type is its {type
-//     definition}.
-//   - clause 5.2.2: the declaration carries no fixed {value constraint}. A
-//     default one is admitted: clause 5.1 substitutes its {lexical form} for an
-//     empty root, and the walk decides cvc-type over that.
-//   - clause 6: the declaration has no {identity-constraint definitions}.
-//   - clause 7 (cvc-id, §3.3.4.5): the {type definition}'s closure — its base
-//     chain, list item and union members, transitively — holds no ID, IDREF,
-//     IDREFS, ENTITY, ENTITIES or NOTATION, and the root has no descendants or
-//     other attributes, so the [ID/IDREF table] is empty. The same exclusion
-//     keeps String Valid clause 3's ENTITY check and NOTATION's schema-dependent
-//     value space out of play.
-//
-// Clause 5's remaining conjunct is cvc-type (§3.3.4.4) against a {type
-// definition} that resolves to a Simple Type Definition: clause 1 holds by the
-// resolution and clause 2 is about complex types alone. Clause 3.1 is the
-// walk's own, and the gate is a second, independent check on its first two
-// sub-clauses: 3.1.1, the root carries no attribute beyond xsi:schemaLocation
-// and xsi:noNamespaceSchemaLocation (namespace declarations are not
-// [[attributes]]); 3.1.2, it has no element [[children]]. 3.1.3 — the ·initial
-// value· String Valid against the type — is decided by the walk, and its one
-// decline (validate's contentCheck.simpleTypeValue, String Valid withheld) is
-// the only decline reachable on this shape. It is RECORDED in
-// Result.Unevaluated, so an empty Unevaluated shows that 3.1.3 really was
-// decided. So are the assertions-facet sites of the type's closure, which
-// validate records and never evaluates.
-//
-// key-sva's attribute and children clauses are then vacuous or trivially met:
-// there are no children, and the two xsi: hints are ·valid· against the
-// built-in declarations' anyURI and list-of-anyURI types (§3.2.7), whose
-// lexical spaces admit every string (Datatypes §3.3.17). No descendant or
-// attribute can be invalid or notKnown, so e-validity reduces to the root's
-// local validity, which the walk and the gate have decided between them.
-//
-// The TRUST BOUNDARY is value.ValidateLexical: its verdict on the root's
-// ·initial value· is taken as Datatype Valid (Datatypes §4.1.4). The datatypes
-// lane is what grounds that verdict; this lane does not re-check it. A root of
-// xs:anySimpleType or xs:anyAtomicType never reaches it: Datatype Valid holds
-// for every literal against a ·special· datatype, and validate decides so
-// itself (#1788).
-//
-// The second shape is a COMPLEX EMPTY LEAF ROOT (complexEmptyLeafRoot,
-// simpleleaf.go, #1808), again only where the walk recorded nothing in
-// Result.Unevaluated. Its declaration conditions are the simple leaf root's
-// for cvc-elt clauses 1 to 4 and 6, discharged the same way; the rest differ:
-//
-//   - clause 5: the declaration carries NO {value constraint}, default or
-//     fixed, so clause 5.2 applies with its 5.2.2 vacuous, and clause 5.1's
-//     substitution of a {lexical form} into an empty {content type} never
-//     arises. 5.2.1 is cvc-type (§3.3.4.4) against a {type definition} that
-//     resolves to a Complex Type Definition T: clause 1 holds by the
-//     resolution, clause 2 because T.{abstract} is false, and clause 3.2
-//     dispatches to cvc-complex-type (§3.4.4.2).
-//   - clause 7 (cvc-id, §3.3.4.5): the root has no [[attributes]] beyond the
-//     two xsi: location hints, no [[children]] and so no descendants, so the
-//     [ID/IDREF table] is empty and both clauses hold vacuously.
-//
-// cvc-complex-type against T, whose {content type}.{variety} is empty, whose
-// {attribute uses} and {assertions} are empty and whose {attribute wildcard}
-// is absent — each read already folded over T's base chain (§3.4.2.4,
-// §3.4.2.5, cos-ct-extends):
-//
-//   - clause 1.1, "E has no character or element information item
-//     [[children]]": the peek (emptyContent) refuses any element and any
-//     character data, white space included, so the clause holds by the gate
-//     and the walk's own clause 1.1 charge is the second check.
-//   - clauses 2 and 3: vacuous — the root carries no attribute clause 2
-//     quantifies over, and there is no {required} use to miss.
-//   - clause 4: vacuous. A ·defaulted attribute· is by definition an Attribute
-//     Use of T, and T has none. This is the clause #1788 exists to record for
-//     other shapes; this one discharges it by having no uses at all rather than
-//     by trusting the walk.
-//   - clause 5: vacuous, with no [[children]] or [[attributes]] to quantify
-//     over.
-//   - clause 6: vacuous, T.{assertions} being empty. validate's
-//     elementAssertions records an Unevaluated for every assertion present, so
-//     an empty Unevaluated would refuse a non-empty {assertions} anyway; the
-//     gate refuses it on its own so that the discharge does not rest on that
-//     GAP's record.
-//
-// key-sva's attribute and children clauses are vacuous or trivially met exactly
-// as for the simple leaf root, so e-validity reduces to the root's local
-// validity, and no ·initial value· is read under any simple type, so this
-// shape crosses no TRUST BOUNDARY at all.
-//
-// This shape is not threatened by governingType's silent exits (#1093), which
-// withhold a type without a record. The two inside conditionallySelected are
-// unreachable, since the declaration has no {type table}; instanceOverride's
-// is too, since the root carries no xsi:type and governingType returns before
-// calling it; and selectedType's no-table branch failing ResolvedType is the
-// very resolution the gate performs itself as a precondition. With no
-// descendants, governingType runs once per case, at the root.
-//
-// The third shape is an ASSESSED SUBTREE ROOT (assessedSubtreeRoot,
-// subtreeroot.go, #1841): a root WITH content — at least one element or
-// character information item [[child]] — again only where the walk recorded
-// nothing in Result.Unevaluated. key-sva (§3.3.4.6) clauses 2 and 3 dispatch
-// assessment into every attribute and child, and sic-e-outcome (§3.3.5.1)
-// clause 1.1 recurses through them, so the gate holds EVERY element of the
-// subtree to its conditions, not the root alone. It re-reads the instance and
-// re-derives each child's ·attribution· with xsd.Schema.ContentMatcher,
-// independently of the walk, and discharges at every element each clause the
-// walk does not record deciding:
+// The one shape it DOES license "valid" for is an ASSESSED SUBTREE ROOT
+// (assessedSubtreeRoot, subtreeroot.go, #1841), with content or without
+// (#1855), and only where the walk recorded nothing in Result.Unevaluated.
+// key-sva (§3.3.4.6) clauses 2 and 3 dispatch assessment into every attribute
+// and child, and sic-e-outcome (§3.3.5.1) clause 1.1 recurses through them, so
+// the gate holds EVERY element of the subtree to its conditions, not the root
+// alone. It re-reads the instance and re-derives each child's ·attribution·
+// with xsd.Schema.ContentMatcher, independently of the walk, and discharges at
+// every element each clause the walk does not record deciding:
 //
 //   - key-sva clause 1 and cvc-elt clause 1: the root's declaration is the
 //     top-level one its name resolves to, and every other element's is the
@@ -337,11 +228,27 @@ import (
 //     the {type definition}, which the gate resolves itself, and none of
 //     governingType's silent exits (#1093) is reachable — no fixed {value
 //     constraint}, and no {identity-constraint definitions}. {nillable} is
-//     admitted: with no xsi:nil anywhere, clause 3.1 holds and 3.2 is never
-//     live. Clause 2 is refused outright below the root, where the walk
-//     charges it nowhere.
+//     admitted, at the root too: with no xsi:nil anywhere, clause 3.1 holds
+//     for a declaration whose {nillable} is false and clause 3.2.1 ("E has no
+//     xsi:nil attribute information item") for one whose {nillable} is true,
+//     and no element is ·nilled·. A default {value constraint} is admitted, at
+//     the root too: clause 5.1 substitutes its {lexical form} for the
+//     ·normalized value· of an element with neither element nor character
+//     [[children]], and the walk assesses cvc-type over that substituted value
+//     and settles 5.1.1 (validate's contentCheck.assessed and
+//     contentCheck.defaultValid). Clause 2 is refused outright below the root,
+//     where the walk charges it nowhere.
 //   - cvc-type clause 2 (§3.3.4.4): a complex {type definition}'s {abstract}
 //     is false, at the root too, since the walk decides that clause nowhere.
+//   - cvc-type clause 3.1 (§3.3.4.4), for a Simple Type Definition: 3.1.1, the
+//     element carries no attribute beyond namespace declarations and the four
+//     xsi: names, and 3.1.2, it has no element [[children]] — the gate refuses
+//     both, a second check on the walk's charges. 3.1.3 — the ·initial value·,
+//     or clause 5.1's substitute, String Valid against the type — is the
+//     walk's, the empty string of a content-less element included; its one
+//     decline (validate's contentCheck.simpleTypeValue, String Valid withheld)
+//     is RECORDED in Result.Unevaluated, as are the assertions-facet sites of
+//     the type's closure, which validate records and never evaluates.
 //   - cvc-elt clause 7 (cvc-id, §3.3.4.5): the walk's, at every depth. It
 //     reads each element's and attribute's item into the [ID/IDREF table]
 //     (validate's walk.idAttributes, walk.idDefaultedAttributes and
@@ -370,29 +277,52 @@ import (
 //   - cvc-complex-type clause 2: every attribute beyond namespace declarations
 //     and the four xsi: names matches an attribute use (2.1), so none is
 //     ·attributed to· an {attribute wildcard}, whose ·attribute assessment·
-//     against a resolved top-level declaration the gate does not audit.
-//     Clause 2.1's cvc-attribute and cvc-au, and clauses 3 and 4, are the
-//     walk's, which records each check it withholds.
+//     against a resolved top-level declaration the gate does not audit; a type
+//     carrying one is admitted wherever no attribute is ·attributed to· it, the
+//     wildcard then quantifying over nothing. Clause 2.1's cvc-attribute and
+//     cvc-au, and clauses 3 and 4 — a {required} use the element lacks, and a
+//     ·defaulted attribute· for each use it does not carry — are the walk's,
+//     which records each check it withholds, on an element with no
+//     [[attributes]] as on any other.
+//   - key-sva clause 2 for the xsi: attributes the gate admits: xsi:type and
+//     xsi:nil being refused, only xsi:schemaLocation and
+//     xsi:noNamespaceSchemaLocation remain, and each is ·valid· against its
+//     built-in declaration's anyURI or list-of-anyURI type (§3.2.7), whose
+//     lexical spaces admit every string (Datatypes §3.3.17).
 //   - cvc-complex-type clause 5: vacuous, no child being ·attributed to· a
 //     wildcard or an {open content}; so is e-validity clause 1.1.3.
-//   - cvc-complex-type clause 1.4 (cvc-complex-content): the walk's. The gate
-//     refuses a {content type} ContentMatcher declines and a child sequence it
-//     rejects or does not accept, a second check on the walk's charge.
+//   - cvc-complex-type clause 6: RECORDED, never decided. validate's
+//     elementAssertions records an Unevaluated for every member of a governing
+//     type's {assertions}, so an empty Unevaluated shows every one empty.
+//   - cvc-complex-type clause 1 (§3.4.4.2): the walk's, for an element with no
+//     [[children]] as for any other. An empty {content type} meets clause 1.1
+//     wherever the walk charged no character or element [[child]]; a simple one
+//     is clause 1.2's String Valid, decided and recorded as cvc-type clause
+//     3.1.3 is above; an element-only or mixed one is clause 1.4
+//     (cvc-complex-content), whose empty sequence is ·valid· only where the
+//     particle is emptiable (cvc-particle, "possibly empty"). The gate refuses
+//     a {content type} ContentMatcher declines and a child sequence it rejects
+//     or does not accept, a second check on the walk's charge.
 //
 // Every element is then ·strictly assessed· against a declaration and a type
 // the walk determined, and its [validity] is valid exactly where the walk
-// charged nothing for it, its attributes or its descendants. The TRUST
-// BOUNDARY is the simple leaf root's, at every ·initial value· and every
-// attribute value in the subtree.
+// charged nothing for it, its attributes or its descendants.
+//
+// The TRUST BOUNDARY is value.ValidateLexical: its verdict on every ·initial
+// value· and every attribute value in the subtree is taken as Datatype Valid
+// (Datatypes §4.1.4). The datatypes lane is what grounds that verdict; this
+// lane does not re-check it. A value of xs:anySimpleType or xs:anyAtomicType
+// never reaches it: Datatype Valid holds for every literal against a ·special·
+// datatype, and validate decides so itself (#1788).
 //
 // One more hazard sits outside the clauses altogether: the schema must be the
 // one the suite declared. The #1002 GAP(parser) retains elements vc:maxVersion
 // excludes, so a schema document carrying version conditionals can assemble
 // components a 1.1 processor must not see — VC/vc006.n1, suite-invalid, walks
-// clean for exactly that reason. All three gates decline any assembly one of
-// whose documents carries an attribute in the versioning namespace, a
-// conservative superset of that GAP. All three decline a DOCTYPE too, whose DTD
-// could default an attribute the gate does not see.
+// clean for exactly that reason. The gate declines any assembly one of whose
+// documents carries an attribute in the versioning namespace, a conservative
+// superset of that GAP. It declines a DOCTYPE too, whose DTD could default an
+// attribute the gate does not see.
 //
 // The one shape that looks like case 1 and is not: a root with no top-level
 // declaration whose xsi:type ·resolves·. Its ·instance-specified type
@@ -405,17 +335,17 @@ import (
 //
 // Every "not valid" observation this lane emits comes from one of the nine
 // charges above, each of which is unconditional. Its "valid" observation
-// is an empty Result — no violation, no unevaluated record — on one of the
-// three gated shapes, whose every applicable clause the section above names the
-// decider of; every other empty Result declines. So the lane can record a
-// still-failing gap for a suite-invalid case it cannot see the defect in, and
-// for a suite-valid case outside all three shapes, but it cannot
-// score a pass on a document it did not really reject, nor on one it did not
-// really decide valid — at the root or at any depth, the charges being the
-// same nine either way. The bound on the valid side is exactly as wide as the
-// gates are correct and ValidateLexical is right: a clause a gate should have
-// excluded and did not, or a Datatype Valid verdict the backend gets wrong, is
-// where a false pass could come from.
+// is an empty Result — no violation, no unevaluated record — on the gated
+// shape, whose every applicable clause the section above names the decider of;
+// every other empty Result declines. So the lane can record a still-failing
+// gap for a suite-invalid case it cannot see the defect in, and for a
+// suite-valid case outside that shape, but it cannot score a pass on a
+// document it did not really reject, nor on one it did not really decide valid
+// — at the root or at any depth, the charges being the same nine either way.
+// The bound on the valid side is exactly as wide as the gate is correct and
+// ValidateLexical is right: a clause the gate should have excluded and did
+// not, or a Datatype Valid verdict the backend gets wrong, is where a false
+// pass could come from.
 //
 // Case 3's ATTRIBUTE clauses are the ones whose unconditionality depends on a
 // schema COMPONENT being complete rather than on the instance alone: an
@@ -459,7 +389,7 @@ import (
 // outside the nine enumerated declines rather than being read as a verdict a
 // later slice's wider Assess might charge under an approximation; the COUNT is
 // not a condition, since one root can honestly carry several charges (see
-// decidedNotValid). An EMPTY violation set declines unless one shape's
+// decidedNotValid). An EMPTY violation set declines unless the shape's
 // conditions above all hold.
 
 // newInstanceExec builds the instance lane's executor. The strict backend is
@@ -476,9 +406,7 @@ func newInstanceExec() executor {
 // (Fail): it assembles the group's schema through the shared gate, assesses the
 // instance document against it, and reads the assessment only where the answer
 // is unconditional: a set of the nine decidable charges is "not valid", and an
-// empty Result on a simple leaf root (simpleLeafRoot), a complex empty leaf root
-// (complexEmptyLeafRoot) or an assessed subtree root (assessedSubtreeRoot) is
-// "valid".
+// empty Result on an assessed subtree root (assessedSubtreeRoot) is "valid".
 func execInstanceCase(backend value.Backend, c caseSpec) Status {
 	if c.schemaDoc == "" {
 		// The group declared no single schemaTest to take a schema from
@@ -506,13 +434,12 @@ func execInstanceCase(backend value.Backend, c caseSpec) Status {
 		}
 		return decideAgreement(false, c.expect.wantsValid())
 	}
-	// An empty Result is "valid" for the three gated shapes alone, and only
-	// where the walk recorded no check it reached and did not perform.
+	// An empty Result is "valid" for the gated shape alone, and only where the
+	// walk recorded no check it reached and did not perform.
 	if len(result.Unevaluated()) > 0 {
 		return Fail()
 	}
-	if !simpleLeafRoot(schema, report, c.doc) && !complexEmptyLeafRoot(schema, report, c.doc) &&
-		!assessedSubtreeRoot(schema, report, c.doc) {
+	if !assessedSubtreeRoot(schema, report, c.doc) {
 		return Fail()
 	}
 	return decideAgreement(true, c.expect.wantsValid())

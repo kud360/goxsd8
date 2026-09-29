@@ -540,9 +540,8 @@ func newSchemaCharge() func(caseSpec) string {
 // built, and the second the parser.AssemblyReport of the documents it read. The
 // schema lane reads the error alone; the instance lane needs the schema, and
 // takes it only where the error is nil, a schema the assembly rejected being not
-// the schema the suite declared — and the report, which its simpleLeafRoot,
-// complexEmptyLeafRoot and assessedSubtreeRoot gates scan for versioning
-// attributes the assembly may have mishandled.
+// the schema the suite declared — and the report, which its assessedSubtreeRoot
+// gate scans for versioning attributes the assembly may have mishandled.
 //
 // The resolver is a loader.Dir rooted at doc's own directory and the root is
 // named by its BASE name, because parser.ParseReport reads the root under
