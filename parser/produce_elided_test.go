@@ -40,7 +40,7 @@ var elidedFaults = []struct {
 	{
 		name: `unexpected model group child`,
 		body: `<xs:attribute name="z" type="xs:string"/>`,
-		want: `unexpected model group child`,
+		want: `unexpected model group child <attribute> at <loc> under the <sequence> at <loc>`,
 	},
 	{
 		name: `<all> occurrence outside the {0,1} enumeration`,
