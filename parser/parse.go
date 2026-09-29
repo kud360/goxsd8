@@ -14,12 +14,12 @@ import (
 	"github.com/kud360/goxsd8/xsderr"
 )
 
-// Option configures [Parse]. The zero set of options is a complete, usable
-// configuration: options only replace defaults, never combine into an invalid
-// one (STYLE T1).
+// Option configures [Parse], [ParseReport] and [ParseSet]. The zero set of
+// options is a complete, usable configuration: options only replace defaults,
+// never combine into an invalid one (STYLE T1).
 type Option func(*config)
 
-// config is the resolved [Parse] configuration. It is always valid — every
+// config is the resolved [ParseSet] configuration. It is always valid — every
 // field is non-nil from construction onward, since each Option either installs
 // a usable replacement or panics.
 type config struct {
@@ -44,7 +44,7 @@ func newConfig(opts []Option) config {
 }
 
 // WithResolver sets the [loader.Resolver] through which every schema document —
-// the root location and every <include>d location — is fetched (§4.3.2: how
+// every root location and every <include>d or <import>ed location — is fetched (§4.3.2: how
 // schema definitions are located is the processor's, hence the caller's,
 // business).
 //
@@ -148,36 +148,59 @@ func Parse(location string, opts ...Option) (*xsd.Schema, error) {
 // location; a failure to resolve the ROOT location, by contrast, is a plain I/O
 // error, since the caller named a document that must exist. Like [Produce],
 // ParseReport returns only the first error.
+//
+// It is [ParseSet] over the one root [RootAt](location).
 func ParseReport(location string, opts ...Option) (*xsd.Schema, *AssemblyReport, error) {
-	cfg := newConfig(opts)
-	root, resolved, err := readRootDocument(cfg.resolver, location)
-	if err != nil {
+	return ParseSet([]Root{RootAt(location)}, opts...)
+}
+
+// ParseSet assembles the schema rooted at every root of roots into ONE schema,
+// returns it finalized, and reports which schema documents went into it, exactly
+// as [ParseReport] does for one root — ParseReport is ParseSet over a single
+// [RootAt]. The report is never nil and is populated as far as assembly got even
+// when an error is returned: the roots before the one that failed, and their
+// closures, are in it.
+//
+// Several roots is implementation latitude, not a spec construct: §4.2.1 defines
+// schema(D) per single document, and how a processor assembles the components it
+// validates against is processor- and application-dependent (§4.3.2). ParseSet
+// takes the one assembly §4.2 already defines and enters every root into it, so
+// every cross-document rule a single root's closure is held to holds across the
+// set too: two roots declaring one expanded name collide under sch-props-correct
+// (§3.17.6.1) clause 2, and a QName in one root's document reaches another root's
+// namespace only if that document <xs:import>s it (src-resolve clause 4, §4.2.6.1)
+// — sharing a set licenses nothing.
+//
+// Roots are entered in caller order, each root's closure depth-first and
+// pre-order before the next root is read, so [AssemblyReport.Documents] lists
+// them in that order. Each root is read once per load-once identity, as a
+// directive's document is: a root repeated, or already reached through another
+// root's closure under the same namespace, is not composed again. How each root
+// is read, and what it charges, is its constructor's: see [RootAt] and [HintAt].
+// A HintAt root that resolves to no document is legal to skip and is reported by
+// [AssemblyReport.UnfollowedRoots]; [AssemblyReport.Unfollowed] keeps only the
+// directives of the assembled documents.
+//
+// An empty roots is a plain error, with an empty report. A nil Root panics, as a
+// nil [WithResolver] does: it is a caller bug, not a schema-validity condition.
+// Like [Produce], ParseSet returns only the first error.
+func ParseSet(roots []Root, opts ...Option) (*xsd.Schema, *AssemblyReport, error) {
+	for i, r := range roots {
+		if r == nil {
+			panic(fmt.Sprintf("parser: ParseSet: roots[%d] is a nil Root", i))
+		}
+	}
+	if len(roots) == 0 {
 		// Nothing was assembled: an empty report, not a nil one, so every caller
 		// reads the same shape on every path.
-		return nil, &AssemblyReport{}, fmt.Errorf("parser: reading root schema document %q: %w", location, err)
+		return nil, &AssemblyReport{}, errors.New("parser: ParseSet: no root locations given")
 	}
-	// §4.2.2: the root is pre-processed the moment it is read, before its own
-	// directives are followed and before any rule is read against it. The verdict
-	// travels back unwrapped — an src-cip fault is a schema-validity verdict about
-	// a document that WAS read, not the plain I/O error a root that cannot be
-	// reached returns above.
-	root, err = conditionalInclude(root)
-	if err != nil {
-		return nil, &AssemblyReport{}, err
-	}
-	if !root.IsSchema() {
-		return nil, &AssemblyReport{}, fmt.Errorf("parser: assembling a schema requires a <schema> document root at %q, got %s", location, root.Root().Name().Local())
-	}
-	// The root document's effective target namespace is its own: there is no
-	// including document to borrow one from (§4.2.3 clause 2.3 needs one).
-	rootTNS := attrOr(root.Root(), "targetNamespace")
+	cfg := newConfig(opts)
 	a := newAssembly(cfg)
-	// The root is reached by no directive, so it is keyed under its own effective
-	// namespace and discovered under the nil (identity) override set and the nil
-	// (identity) redefinition: nothing substitutes for, or excepts, its own
-	// declarations.
-	if err := a.discover(root, docKey{resolved: resolved, namespace: rootTNS}, rootTNS, nil, nil); err != nil {
-		return nil, a.report(), err
+	for _, r := range roots {
+		if err := r.enter(a); err != nil {
+			return nil, a.report(), err
+		}
 	}
 	schema, err := a.compile(cfg.backend)
 	return schema, a.report(), err
@@ -189,14 +212,14 @@ func ParseReport(location string, opts ...Option) (*xsd.Schema, *AssemblyReport,
 // other assembly state and is not redundant with the document's own
 // targetNamespace attribute (STYLE D3):
 //
-//   - the root document, and any <include>d document that declares a
+//   - every [RootAt] root document, and any <include>d document that declares a
 //     targetNamespace, is minted in its own;
 //   - a chameleon <include>d document (none of its own) is minted in the
 //     INCLUDER's effective namespace (§4.2.3 clause 2.3, §F.1);
-//   - an <import>ed document is ALWAYS minted in its own, coerced never — §F.1's
-//     transformation belongs to src-include clause 2.3 alone, so a bare
-//     <import> of a no-namespace document leaves its components in no namespace
-//     even when the importing document has one.
+//   - an <import>ed document, or a [HintAt] root's, is ALWAYS minted in its
+//     own, coerced never — §F.1's transformation belongs to src-include clause
+//     2.3 alone, so a bare <import> of a no-namespace document leaves its
+//     components in no namespace even when the importing document has one.
 //
 // Do not collapse this back into a single assembly-wide namespace: that field
 // was only ever true of an include-only closure.
@@ -288,9 +311,9 @@ type docKey struct {
 	override  string
 }
 
-// assembly is the multi-document build context for one [Parse] call: the
-// <include>/<import> closure of a root schema document, and the single builder
-// every one of those documents produces into.
+// assembly is the multi-document build context for one [ParseSet] call: the
+// <include>/<import> closure of every root, and the single builder every one of
+// those documents produces into.
 type assembly struct {
 	resolver loader.Resolver
 	log      *slog.Logger
@@ -332,10 +355,16 @@ type assembly struct {
 	// document contributes nothing TO docs, which is exactly why it needs its own
 	// record.
 	unfollowed []UnfollowedDirective
+
+	// unfollowedRoots holds every [HintAt] root the resolver returned no document
+	// for, in caller order, for [AssemblyReport.UnfollowedRoots]. It is a channel
+	// of its own rather than more unfollowed entries because a root has no
+	// directive element to be one (STYLE D3): nothing else records it.
+	unfollowedRoots []Root
 }
 
 // report renders the assembly's discovery state as the [AssemblyReport]
-// [ParseReport] returns. It is built from the docs SLICE, in append order, never
+// [ParseSet] returns. It is built from the docs SLICE, in append order, never
 // from the loaded index — a map iteration would make the reported order
 // nondeterministic (STYLE D2).
 func (a *assembly) report() *AssemblyReport {
@@ -343,7 +372,7 @@ func (a *assembly) report() *AssemblyReport {
 	for _, d := range a.docs {
 		docs = append(docs, AssembledDocument{Doc: d.doc, Location: d.resolved, Unmapped: d.unmapped})
 	}
-	return &AssemblyReport{documents: docs, unfollowed: a.unfollowed}
+	return &AssemblyReport{documents: docs, unfollowed: a.unfollowed, unfollowedRoots: a.unfollowedRoots}
 }
 
 // unfollowedAt records that the directive at el yielded no document, for reason.
@@ -519,7 +548,7 @@ func (a *assembly) compose(el *Element, tns string, ov *overrideSet, rd *redefin
 	// the document URI.
 	requested := schemaloc.Resolve(el.baseURI, hint)
 
-	f, err := a.fetch(requested, tns, ov, rd, el, rule)
+	f, err := a.fetch(requested, tns, ov, rd, directive{el}, rule)
 	if err != nil {
 		return err
 	}
@@ -547,10 +576,10 @@ func (a *assembly) compose(el *Element, tns string, ov *overrideSet, rd *redefin
 		// Unlike <import> (#275), the dedup outcome needs no clause 2 re-check here,
 		// because the namespace half of the key IS tns and every way an entry lands
 		// under {resolved, tns, ov} has already established that the document there
-		// declares tns or no targetNamespace at all: the root is discovered under its
-		// own (ParseReport); an <include>/<override>/<redefine> read reaching a second
+		// declares tns or no targetNamespace at all: a [RootAt] root is discovered under its
+		// own (documentRoot.enter); an <include>/<override>/<redefine> read reaching a second
 		// directive has passed the clause 2 test below, whose failure aborts the
-		// assembly outright; and an <import> read has passed src-import clause 3,
+		// assembly outright; and an <import> or [HintAt] read has passed src-import clause 3,
 		// which requires D2's targetNamespace to equal the namespace attribute it is
 		// keyed under (clause 3.1) or to be absent when there is none (clause 3.2).
 		// Both cases are clause 2.1 (own == tns) or clause 2.2/2.3 (own absent), so
@@ -623,7 +652,7 @@ func (a *assembly) importDocument(el *Element, tns string) error {
 	// The resolver is asked under the IMPORT's namespace, not the importing
 	// document's: that pair — target namespace and location hint — is exactly the
 	// "application schema reference strategy" input clause 2 describes.
-	f, err := a.fetch(requested, namespace, nil, nil, el, ruleSrcImport)
+	f, err := a.fetch(requested, namespace, nil, nil, directive{el}, ruleSrcImport)
 	if err != nil {
 		return err
 	}
@@ -646,13 +675,13 @@ func (a *assembly) importDocument(el *Element, tns string) error {
 		// <include> is what makes this reachable: it keys a no-targetNamespace
 		// document under the includer's namespace, which a later <import> naming that
 		// namespace then lands on.
-		return checkImportedNamespace(el, requested, namespace, hasNamespace, f.tns)
+		return checkImportedNamespace(el.Loc(), directiveWording, requested, namespace, hasNamespace, f.tns)
 	}
 	if !f.doc.IsSchema() {
 		return xsderr.New(ruleSrcImport, el.Loc(),
 			"schemaLocation %q resolves to a <%s> document element, but src-import clause 2 requires it to resolve to a <schema> element information item", hint, f.doc.Root().Name().Local())
 	}
-	if err := checkImportedNamespace(el, requested, namespace, hasNamespace, f.tns); err != nil {
+	if err := checkImportedNamespace(el.Loc(), directiveWording, requested, namespace, hasNamespace, f.tns); err != nil {
 		return err
 	}
 	// Clause 3 holds, so f.tns is the namespace the import declared. D2 is
@@ -696,31 +725,30 @@ func checkNoSelfImport(el *Element, namespace string, hasNamespace bool, tns str
 }
 
 // checkImportedNamespace enforces src-import clause 3 (§4.2.6.2) on a D2 that
-// the reference strategy did produce: the namespace the <import> declared and
-// the one D2 actually declares must agree. own is D2's targetNamespace with the
-// ·absent· namespace encoded as "".
-func checkImportedNamespace(el *Element, requested, namespace string, hasNamespace bool, own string) error {
+// the reference strategy did produce: the namespace the <import> — or the
+// [HintAt] root — declared and the one D2 actually declares must agree. own is
+// D2's targetNamespace with the ·absent· namespace encoded as "". A violation is
+// charged at at, worded by words.
+func checkImportedNamespace(at xsderr.Loc, words importWording, requested, namespace string, hasNamespace bool, own string) error {
 	if hasNamespace {
 		// Clause 3.1: identical to D2's targetNamespace.
 		if own == namespace {
 			return nil
 		}
-		return xsderr.New(ruleSrcImport, el.Loc(),
-			"<import>ed schema document %q has target namespace %q, but src-import clause 3.1 requires it to be identical to the namespace attribute's %q", requested, own, namespace)
+		return xsderr.New(ruleSrcImport, at, words.mismatch, requested, own, namespace)
 	}
 	// Clause 3.2: with no namespace attribute, D2 must have no targetNamespace.
 	if own == "" {
 		return nil
 	}
-	return xsderr.New(ruleSrcImport, el.Loc(),
-		"<import> has no namespace attribute, but the schema document %q it names has target namespace %q; src-import clause 3.2 requires it to have none", requested, own)
+	return xsderr.New(ruleSrcImport, at, words.unexpected, requested, own)
 }
 
 // fetch resolves requested through the assembly's resolver, under namespace, and
-// reads the schema document it names. It serves <include>, <override> and
-// <import> alike, so it is handed the rule the calling directive answers to and
-// reads the directive's element name off el rather than carrying a second,
-// stringly-typed kind.
+// reads the schema document it names. It serves <include>, <override>, <import>
+// and a [HintAt] root alike, so it is handed the rule the caller answers to and
+// reads everything else that differs between them off ref rather than carrying a
+// second, stringly-typed kind.
 //
 // namespace is what the resolver is asked under AND the namespace half of the
 // load-once key: for <include>/<override> the composing document's effective
@@ -731,8 +759,8 @@ func checkImportedNamespace(el *Element, requested, namespace string, hasNamespa
 //
 // It reports the outcome as a [fetched], which distinguishes the two ways a
 // directive can end in nothing to compose — outcomes neither the report nor the
-// remaining clauses may conflate, which is why only the first records an
-// [UnfollowedDirective]:
+// remaining clauses may conflate, which is why only the first is recorded, as an
+// [UnfollowedDirective] or, for a hint root, among the unfollowed roots:
 //
 //   - the location does not resolve at all — §4.2.3: "It is not an error for the
 //     actual value of the schemaLocation attribute to fail to resolve at all, in
@@ -761,18 +789,17 @@ func checkImportedNamespace(el *Element, requested, namespace string, hasNamespa
 // The load-once key travels back with the document because the RESOLVED location
 // in it, not the requested one, is the assembly's document identity and the
 // report's [AssembledDocument.Location].
-func (a *assembly) fetch(requested, namespace string, ov *overrideSet, rd *redefineSet, el *Element, rule xsderr.Rule) (fetched, error) {
+func (a *assembly) fetch(requested, namespace string, ov *overrideSet, rd *redefineSet, ref referrer, rule xsderr.Rule) (fetched, error) {
 	rc, resolved, err := a.resolver.Resolve(namespace, requested)
 	if errors.Is(err, loader.ErrNotFound) {
-		a.unfollowedAt(el, UnfollowedLocationUnresolved)
+		ref.unfollowed(a, UnfollowedLocationUnresolved)
 		a.log.Debug("composition skipped: schemaLocation does not resolve",
-			"rule", string(rule), "directive", el.Name().Local(),
-			"namespace", namespace, "location", requested, "at", el.Loc().String())
+			append([]any{"rule", string(rule), "namespace", namespace, "location", requested}, ref.logAttrs()...)...)
 		return fetched{}, nil
 	}
 	if err != nil {
-		a.unfollowedAt(el, UnfollowedLocationUnresolved)
-		return fetched{}, fmt.Errorf("parser: resolving <%s> schemaLocation %q at %s: %w", el.Name().Local(), requested, el.Loc(), err)
+		ref.unfollowed(a, UnfollowedLocationUnresolved)
+		return fetched{}, fmt.Errorf("parser: resolving %s: %w", ref.describe(requested), err)
 	}
 	// A read-only reader: a close failure cannot change what was already read, so
 	// it cannot affect the parse verdict (STYLE S3).
@@ -786,8 +813,8 @@ func (a *assembly) fetch(requested, namespace string, ov *overrideSet, rd *redef
 		// composed exactly once (see docKey). rd is nil for every directive but a
 		// non-empty <redefine>, and a nil reading excepts nothing.
 		prior.rds = append(prior.rds, rd)
-		a.log.Debug("schema document already loaded", "directive", el.Name().Local(),
-			"namespace", namespace, "location", requested, "resolved", resolved, "at", el.Loc().String())
+		a.log.Debug("schema document already loaded",
+			append([]any{"namespace", namespace, "location", requested, "resolved", resolved}, ref.logAttrs()...)...)
 		return fetched{key: key, tns: attrOr(prior.doc.Root(), "targetNamespace"), exists: true}, nil
 	}
 
@@ -799,9 +826,9 @@ func (a *assembly) fetch(requested, namespace string, ov *overrideSet, rd *redef
 		// composition violation, not a bare XML error. The document is nonetheless
 		// one the assembly never read, so the directive is recorded as unfollowed
 		// alongside the verdict.
-		a.unfollowedAt(el, UnfollowedUnreadable)
-		return fetched{}, xsderr.Wrap(rule, el.Loc(),
-			fmt.Errorf("the schema document %q named by this <%s> is not well-formed, but %s requires a well-formed information set: %w", requested, el.Name().Local(), rule, err))
+		ref.unfollowed(a, UnfollowedUnreadable)
+		return fetched{}, xsderr.Wrap(rule, ref.unreadableAt(requested, err),
+			fmt.Errorf("the schema document %q named by this %s is not well-formed, but %s requires a well-formed information set: %w", requested, ref.noun(), rule, err))
 	}
 	// §4.2.2: every composed document is pre-processed as it is read, on the same
 	// terms as the root — "conditional-inclusion pre-processing is always performed
@@ -918,8 +945,8 @@ func (a *assembly) compile(backend value.Backend) (*xsd.Schema, error) {
 	return builder.FinalizeWith(value.NewValueSpace(backend), builtin.NewRestrictionChecker(backend))
 }
 
-// readRootDocument resolves the location [Parse] was handed and reads the schema
-// document it names, returning the document and its RESOLVED location — the
+// readRootDocument resolves the location a [RootAt] root names and reads the
+// schema document it names, returning the document and its RESOLVED location — the
 // load-once dedup key the [loader.Resolver] contract defines, which seeds the
 // assembly's index so an <include> pointing back at the root does not re-load
 // it. It is the ROOT counterpart of assembly.fetch and deliberately does not

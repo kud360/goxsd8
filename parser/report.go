@@ -7,10 +7,11 @@ import (
 	"github.com/kud360/goxsd8/xsderr"
 )
 
-// AssemblyReport is what [ParseReport] observed while assembling one schema:
-// every schema document it read, in discovery order, and every
-// ·inter-schema-document reference· — <include>, <redefine>, <override>,
-// <import> (§4.2.1) — it could not follow to one of them.
+// AssemblyReport is what [ParseSet] — or [ParseReport], its single-root form —
+// observed while assembling one schema: every schema document it read, in
+// discovery order, every ·inter-schema-document reference· — <include>,
+// <redefine>, <override>, <import> (§4.2.1) — it could not follow to one of
+// them, and every [HintAt] root that named no document.
 //
 // It exists because §4.2.1's schema(D) is a property of a DOCUMENT SET, not of
 // the components the set yields: the assembled [xsd.Schema] carries components
@@ -22,15 +23,16 @@ import (
 // replaces.
 //
 // A report is always returned, and is populated as far as assembly got even
-// when [ParseReport] returns an error: a report of the documents read BEFORE a
+// when [ParseSet] returns an error: a report of the documents read BEFORE a
 // composition rule rejected the assembly is precisely what makes the failure
 // attributable.
 //
 // Its fields are unexported and it is constructed only by this package (STYLE
 // T1): a caller-built report would claim an assembly that never happened.
 type AssemblyReport struct {
-	documents  []AssembledDocument
-	unfollowed []UnfollowedDirective
+	documents       []AssembledDocument
+	unfollowed      []UnfollowedDirective
+	unfollowedRoots []Root
 }
 
 // Documents returns the schema documents the assembly read, in DISCOVERY order:
@@ -71,16 +73,42 @@ func (r *AssemblyReport) Documents() []AssembledDocument { return r.documents }
 //
 // A NON-EMPTY <xs:redefine> is the one directive for which an unresolved
 // location is also an error (src-redefine clause 1, §4.2.4): it is recorded here
-// too, and [ParseReport] returns the verdict alongside. An EMPTY one keeps
+// too, and [ParseSet] returns the verdict alongside. An EMPTY one keeps
 // <include>'s non-error skip, since clause 1's antecedent does not fire for it.
 //
 // It records references the assembly ATTEMPTED and came back empty from, which
 // is narrower than "every reference the document set contains":
-// [ParseReport] stops at its first error, so directives it never reached are
+// [ParseSet] stops at its first error, so directives it never reached are
 // neither followed nor reported.
+//
+// A root [ParseSet] was handed is never here, having no directive element to
+// be one: a [HintAt] root that named no document is among
+// [AssemblyReport.UnfollowedRoots] instead.
 //
 // The slice is the report's own; treat it as read-only.
 func (r *AssemblyReport) Unfollowed() []UnfollowedDirective { return r.unfollowed }
+
+// UnfollowedRoots returns the [HintAt] roots whose location the
+// [loader.Resolver] returned no document for, in the order [ParseSet] was handed
+// them. Each is the caller's own Root value, so a caller identifies it with ==
+// or names it by its Location.
+//
+// It is the per-root half of what [AssemblyReport.Unfollowed] is for directives:
+// §4.3.2 clause 3 obliges no processor to dereference a hint, and §4.2.6.2 makes
+// a reference strategy that fails no error, so a hint that named no document is
+// legal to skip and leaves the assembly short of whatever that document would
+// have declared. A resolver that FAILED rather than reported absence is recorded
+// here too, and [ParseSet] returns that error alongside.
+//
+// Two kinds of root never appear. A [RootAt] root that cannot be read is an
+// error, since the caller named a document that must exist. A HintAt root that
+// resolved to a document which cannot be read, or is not a <schema>, or declares
+// another namespace, yields an src-import verdict naming that document instead.
+// Like Unfollowed, it holds only roots the assembly reached: roots after the one
+// an error stopped it at are neither followed nor reported.
+//
+// The slice is the report's own; treat it as read-only.
+func (r *AssemblyReport) UnfollowedRoots() []Root { return r.unfollowedRoots }
 
 // AssembledDocument is one schema document read while assembling a schema —
 // one DISCOVERY of it, in the sense [AssemblyReport.Documents] describes.
@@ -117,7 +145,7 @@ type AssembledDocument struct {
 	// discoveries it never censused: a discovery is recorded when the document is
 	// READ, before any census is taken, so one the failure preempted carries an
 	// empty Unmapped meaning NOT COMPUTED rather than "nothing unmapped". Only a
-	// NIL ERROR from [ParseReport] says every discovery was censused.
+	// NIL ERROR from [ParseSet] says every discovery was censused.
 	//
 	// It is a property of the DISCOVERY, not of the document: the ·override
 	// pre-processing· in force over one discovery substitutes for declarations
@@ -147,7 +175,7 @@ type AssembledDocument struct {
 // Nothing a gating consumer can act on: since #1380 run rejects every <schema>
 // child name topLevelMapped declines (rejectUnmappedTopLevel), so a top-level
 // entry rides only on a document whose assembly FAILED — and
-// [AssembledDocument.Unmapped] is complete only when [ParseReport] returned a
+// [AssembledDocument.Unmapped] is complete only when [ParseSet] returned a
 // nil error, which is why the harness's soundness hold exempts the documents of
 // a rejected assembly outright. The arm stays because the census states the
 // dispatch vocabulary at EVERY position uniformly, off the same predicate run
@@ -226,7 +254,7 @@ const (
 	// UnfollowedLocationUnresolved is a schemaLocation that named no readable
 	// document: the [loader.Resolver] reported loader.ErrNotFound for it — the
 	// §4.2.3 clause 2.4 / §4.2.6.2 non-error — or failed for a reason of its own
-	// (a transport or permission fault), which [ParseReport] also returns as an
+	// (a transport or permission fault), which [ParseSet] also returns as an
 	// error. Either way no document came back, so no composition was performed.
 	UnfollowedLocationUnresolved UnfollowedReason = iota + 1
 
@@ -239,7 +267,7 @@ const (
 	// UnfollowedNoSchemaLocation is an <include>, <override> or <redefine>
 	// carrying no schemaLocation attribute. §4.2.1 makes those schemaLocations
 	// mandatory — they "are not hints: conforming processors must attempt to
-	// de-reference" — so this is a grammar fault, which [ParseReport] also
+	// de-reference" — so this is a grammar fault, which [ParseSet] also
 	// returns as an error, not a spec-sanctioned skip.
 	UnfollowedNoSchemaLocation
 
@@ -247,7 +275,7 @@ const (
 	// could not be read: an XML well-formedness fault, an I/O failure, or a
 	// document in an encoding this parser does not decode. src-include clause
 	// 1.1 and src-import clause 2 both require a well-formed information set, so
-	// [ParseReport] returns this as an error too.
+	// [ParseSet] returns this as an error too.
 	UnfollowedUnreadable
 )
 
