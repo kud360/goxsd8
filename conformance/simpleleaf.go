@@ -49,14 +49,18 @@ var idOrEntityOrNotation = []string{"ID", "IDREF", "IDREFS", "ENTITY", "ENTITIES
 
 // walkUnrecorded are the builtin simple types whose presence anywhere in a
 // type's closure puts in play a clause the walk neither decides nor records a
-// decline for, at any depth: NOTATION's ·value space· is "the set of QNames of
-// notations declared in the current schema" (Datatypes §3.3.19, with
+// decline for, at any depth. The assessed-subtree-root gate excludes these
+// alone: the ID family and the ENTITY family are the walk's to decide and
+// record at every depth (instance.go, the third shape's cvc-elt clause 7
+// bullet).
+//
+// GAP(validate): an xs:NOTATION value is never checked against the schema's
+// notations. NOTATION's ·value space· is "the set of QNames of notations
+// declared in the current schema" (Datatypes §3.3.19, with
 // enumeration-required-notation), which no validate or backend site checks and
-// no GAP marker records — Override/over027/instance/over027.n01.xml, whose
-// NOTATION value names no declared notation, is suite-invalid and walks clean.
-// The assessed-subtree-root gate excludes these alone: the ID family and the
-// ENTITY family are the walk's to decide and record at every depth (instance.go,
-// the third shape's cvc-elt clause 7 bullet).
+// records no decline for — Override/over027/instance/over027.n01.xml, whose
+// NOTATION value names no declared notation, is suite-invalid and walks clean,
+// a false accept (#1901).
 var walkUnrecorded = []string{"NOTATION"}
 
 // simpleLeafRoot reports whether the instance document at doc, against schema

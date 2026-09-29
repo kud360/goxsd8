@@ -61,9 +61,9 @@ func TestInstanceExecutorDecidesAssessedSubtreeRoot(t *testing.T) {
 				`<xs:element name="a" type="xs:int" nillable="true"/></xs:sequence></xs:complexType></xs:element>`,
 			`<known><a>1</a></known>`,
 		},
-		// The three ID-family rows, one per closureReaches site, are admitted
-		// because the walk decides cvc-id at every depth and records each item it
-		// cannot read (#1857); NOTATION is the one name the sites still refuse.
+		// The three ID-family rows, one per closureReaches site, are admitted on
+		// the terms of the third shape's cvc-elt clause 7 bullet (instance.go)
+		// (#1857).
 		{
 			"an ID on a child element, binding its parent (element value type)",
 			`<xs:element name="known"><xs:complexType><xs:sequence>` +
@@ -188,9 +188,8 @@ func TestInstanceExecutorDeclinesOutsideAssessedSubtreeRoot(t *testing.T) {
 			wantInt,
 		},
 		// The three NOTATION rows, one per closureReaches site, name a declared
-		// notation: the walk checks no NOTATION value against the schema's
-		// notations (Datatypes §3.3.19, enumeration-required-notation), so a
-		// value naming an undeclared one walks clean too (over027.n01).
+		// notation; a value naming an undeclared one would be refused all the
+		// same, for the reason walkUnrecorded's doc gives (simpleleaf.go).
 		{
 			"a NOTATION closure in an element value type below the root",
 			notationN + `<xs:element name="known"><xs:complexType><xs:sequence><xs:element name="a" type="N"/></xs:sequence></xs:complexType></xs:element>`,
