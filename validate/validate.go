@@ -231,6 +231,7 @@ func causedBy(rule xsderr.Rule, loc xsderr.Loc, cause error, format string, args
 		return xsderr.New(rule, loc, format, args...)
 	}
 	var rendered any = cause
+	//nolint:errorlint // only the cause ITSELF renders from its fields: a wrapper around a zero-Loc *xsderr.Error keeps its own %v rendering.
 	if inner, ok := cause.(*xsderr.Error); ok && inner.Loc == (xsderr.Loc{}) {
 		rendered = fmt.Sprintf("[%s] %s", inner.Rule, inner.Msg)
 	}

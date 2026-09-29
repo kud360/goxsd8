@@ -565,6 +565,7 @@ func TestDelegatingChargesWrapTheirCause(t *testing.T) {
 			// fields as "[rule] msg" — never as its Error(), which would put
 			// the zero Loc's "?: " inside a line the outer Loc already places
 			// (#1844).
+			//nolint:errorlint // identity, not chain membership: the rendering covers only a cause that IS the *xsderr.Error.
 			if inner != error(datatype) || datatype.Loc != (xsderr.Loc{}) {
 				t.Fatalf("wrapped cause = %#v, want itself the *xsderr.Error with the zero Loc this rendering covers", inner)
 			}
@@ -612,6 +613,7 @@ func TestCausedByRendersOnlyAnUnplacedCauseFromItsFields(t *testing.T) {
 			if v.Msg != tc.want {
 				t.Errorf("Msg = %q, want %q", v.Msg, tc.want)
 			}
+			//nolint:errorlint // identity, not chain membership: Unwrap must return the very cause passed in.
 			if errors.Unwrap(v) != tc.cause {
 				t.Errorf("Unwrap() = %v, want the identical cause %v", errors.Unwrap(v), tc.cause)
 			}
