@@ -184,7 +184,7 @@ func TestCompareRejectsACaseDiscoveryBothWithheldAndProduced(t *testing.T) {
 	if len(d.Removed) > 0 || len(d.Vanished) > 0 || len(d.New) > 0 {
 		t.Errorf("a contradicting Delta must be empty, got %+v", d)
 	}
-	if _, err := Ratchet(expected, actual, []string{"x"}, RemovalAssertion{}); err == nil {
+	if _, err := Ratchet(expected, actual, []string{"x"}, RemovalAssertion{}, nil); err == nil {
 		t.Error("Ratchet must propagate the contradiction, not merge past it")
 	}
 }
@@ -203,7 +203,7 @@ func TestRatchetBanksAssertedRemovalsByDeletingTheirLines(t *testing.T) {
 	actual := map[string]Status{"improved": Pass()}
 	withheld := []string{"removed-fail", "removed-pass"}
 
-	merged, err := Ratchet(expected, actual, withheld, AssertRemovals(2))
+	merged, err := Ratchet(expected, actual, withheld, AssertRemovals(2), nil)
 	if err != nil {
 		t.Fatalf("ratchet must bank an asserted removal: %v", err)
 	}
@@ -239,7 +239,7 @@ func TestRatchetRefusesUnassertedOrMiscountedRemovals(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			merged, err := Ratchet(expected, actual, withheld, tc.removals)
+			merged, err := Ratchet(expected, actual, withheld, tc.removals, nil)
 			if err == nil {
 				t.Fatal("ratchet must refuse a removal count the run did not assert")
 			}
@@ -251,7 +251,7 @@ func TestRatchetRefusesUnassertedOrMiscountedRemovals(t *testing.T) {
 
 	t.Run("asserting removals that did not happen refuses too", func(t *testing.T) {
 		steady := map[string]Status{"a": Pass()}
-		if _, err := Ratchet(steady, steady, nil, AssertRemovals(1)); err == nil {
+		if _, err := Ratchet(steady, steady, nil, AssertRemovals(1), nil); err == nil {
 			t.Fatal("an assertion no removal satisfies must refuse, not pass unnoticed")
 		}
 	})
@@ -265,13 +265,99 @@ func TestRatchetRefusesRegressionAndVanishWhateverTheRemovalAssertion(t *testing
 	withheld := []string{"removed"}
 
 	regressed := map[string]Status{"scored": Pass(), "removed": Fail()}
-	if _, err := Ratchet(regressed, map[string]Status{"scored": Fail()}, withheld, AssertRemovals(1)); err == nil {
+	if _, err := Ratchet(regressed, map[string]Status{"scored": Fail()}, withheld, AssertRemovals(1), nil); err == nil {
 		t.Error("a genuine regression must refuse the merge whatever the removal count says")
 	}
 
 	vanished := map[string]Status{"scored": Pass(), "removed": Fail()}
-	if _, err := Ratchet(vanished, map[string]Status{}, withheld, AssertRemovals(1)); err == nil {
+	if _, err := Ratchet(vanished, map[string]Status{}, withheld, AssertRemovals(1), nil); err == nil {
 		t.Error("a genuine vanish must refuse the merge whatever the removal count says")
+	}
+}
+
+// TestRatchetBanksANamedSupersededPassAsFail proves the one downward movement
+// the ratchet makes (issue #1827): a regressed case the run names is banked
+// `fail`, beside the ordinary upward flip of the same run. Compare alone must
+// not classify it Superseded — only the naming does.
+func TestRatchetBanksANamedSupersededPassAsFail(t *testing.T) {
+	expected := map[string]Status{"superseded": Pass(), "improved": Fail(), "kept": Pass()}
+	actual := map[string]Status{"superseded": Fail(), "improved": Pass(), "kept": Pass()}
+
+	d, err := Compare(expected, actual, nil)
+	if err != nil {
+		t.Fatalf("compare: %v", err)
+	}
+	assertSlice(t, "Compare's Superseded", d.Superseded, nil)
+	assertSlice(t, "Compare's Regressed", d.Regressed, []string{"superseded"})
+
+	named, err := supersede(d, []string{"superseded"})
+	if err != nil {
+		t.Fatalf("supersede: %v", err)
+	}
+	assertSlice(t, "Superseded", named.Superseded, []string{"superseded"})
+	assertSlice(t, "Regressed", named.Regressed, nil)
+
+	merged, err := Ratchet(expected, actual, nil, RemovalAssertion{}, []string{"superseded"})
+	if err != nil {
+		t.Fatalf("ratchet must bank a named, regressed case: %v", err)
+	}
+	if merged["superseded"] != Fail() {
+		t.Errorf("superseded = %v, want fail", merged["superseded"])
+	}
+	if merged["improved"] != Pass() || merged["kept"] != Pass() || len(merged) != 3 {
+		t.Errorf("merged lane = %v, want improved and kept at pass beside superseded", merged)
+	}
+}
+
+// TestRatchetRefusesAnUnnamedRegressionBesideANamedOne proves naming is per
+// case, never a count: naming one regressed case buys no tolerance for a second
+// regression in the same run, and the refusal names the unnamed one.
+func TestRatchetRefusesAnUnnamedRegressionBesideANamedOne(t *testing.T) {
+	expected := map[string]Status{"named": Pass(), "unnamed": Pass()}
+	actual := map[string]Status{"named": Fail(), "unnamed": Fail()}
+
+	merged, err := Ratchet(expected, actual, nil, RemovalAssertion{}, []string{"named"})
+	if err == nil {
+		t.Fatal("an unnamed regression must refuse the merge")
+	}
+	if merged != nil {
+		t.Errorf("refusal must return nil map, got %v", merged)
+	}
+	if !strings.Contains(err.Error(), "1 regressed [unnamed]") {
+		t.Errorf("the refusal must list exactly the unnamed regression: %v", err)
+	}
+}
+
+// TestRatchetRefusesANamedCaseThatDidNotRegress proves every name is checked:
+// a named case that is anything but Regressed in this lane is an assertion no
+// run confirmed, and refuses rather than being skipped.
+func TestRatchetRefusesANamedCaseThatDidNotRegress(t *testing.T) {
+	cases := []struct {
+		name     string
+		expected map[string]Status
+		actual   map[string]Status
+		named    []string
+	}{
+		{"still passing", map[string]Status{"x": Pass()}, map[string]Status{"x": Pass()}, []string{"x"}},
+		{"vanished", map[string]Status{"x": Pass()}, map[string]Status{}, []string{"x"}},
+		{"never banked pass", map[string]Status{"x": Fail()}, map[string]Status{"x": Fail()}, []string{"x"}},
+		{"new, never banked", map[string]Status{}, map[string]Status{"x": Fail()}, []string{"x"}},
+		{"not in the lane at all", map[string]Status{}, map[string]Status{}, []string{"x"}},
+		{"named twice", map[string]Status{"x": Pass()}, map[string]Status{"x": Fail()}, []string{"x", "x"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			merged, err := Ratchet(tc.expected, tc.actual, nil, RemovalAssertion{}, tc.named)
+			if err == nil {
+				t.Fatal("a name no regression answers must refuse the merge")
+			}
+			if merged != nil {
+				t.Errorf("refusal must return nil map, got %v", merged)
+			}
+			if !strings.HasPrefix(err.Error(), `ratchet refuses to move: superseded case "x" `) {
+				t.Errorf("the refusal must be supersede's, naming the case: %v", err)
+			}
+		})
 	}
 }
 
@@ -286,7 +372,7 @@ func TestRatchetImprovedFlipsAndNewRecorded(t *testing.T) {
 		"new-pass": Pass(),
 		"new-fail": Fail(),
 	}
-	merged, err := Ratchet(expected, actual, nil, RemovalAssertion{})
+	merged, err := Ratchet(expected, actual, nil, RemovalAssertion{}, nil)
 	if err != nil {
 		t.Fatalf("ratchet: %v", err)
 	}
@@ -309,7 +395,7 @@ func TestRatchetImprovedFlipsAndNewRecorded(t *testing.T) {
 func TestRatchetRefusesOnRegressed(t *testing.T) {
 	expected := map[string]Status{"x": Pass()}
 	actual := map[string]Status{"x": Fail()}
-	merged, err := Ratchet(expected, actual, nil, RemovalAssertion{})
+	merged, err := Ratchet(expected, actual, nil, RemovalAssertion{}, nil)
 	if err == nil {
 		t.Fatal("ratchet must refuse on a regressed case")
 	}
@@ -321,7 +407,7 @@ func TestRatchetRefusesOnRegressed(t *testing.T) {
 func TestRatchetRefusesOnVanished(t *testing.T) {
 	expected := map[string]Status{"x": Pass(), "gone": Pass()}
 	actual := map[string]Status{"x": Pass()}
-	merged, err := Ratchet(expected, actual, nil, RemovalAssertion{})
+	merged, err := Ratchet(expected, actual, nil, RemovalAssertion{}, nil)
 	if err == nil {
 		t.Fatal("ratchet must refuse on a vanished case")
 	}
@@ -333,7 +419,7 @@ func TestRatchetRefusesOnVanished(t *testing.T) {
 func TestRatchetDoesNotMutateInputs(t *testing.T) {
 	expected := map[string]Status{"improved": Fail()}
 	actual := map[string]Status{"improved": Pass(), "new": Pass()}
-	if _, err := Ratchet(expected, actual, nil, RemovalAssertion{}); err != nil {
+	if _, err := Ratchet(expected, actual, nil, RemovalAssertion{}, nil); err != nil {
 		t.Fatalf("ratchet: %v", err)
 	}
 	if expected["improved"] != Fail() {
@@ -432,7 +518,7 @@ func TestRatchetAllWritesNoLaneUnlessEveryLaneMerged(t *testing.T) {
 	// instance lane is asserted correctly and on its own would bank an upward
 	// flip.
 	wrong := map[string]RemovalAssertion{"schema": AssertRemovals(2), "instance": AssertRemovals(0)}
-	err := ratchetAll(dir, runs, withheld, wrong)
+	err := ratchetAll(dir, runs, withheld, wrong, nil)
 	if err == nil {
 		t.Fatal("a removal count one lane did not assert must refuse the run")
 	}
@@ -445,7 +531,7 @@ func TestRatchetAllWritesNoLaneUnlessEveryLaneMerged(t *testing.T) {
 	// Positive control: asserted right, every lane is written — the refusal
 	// above withheld the write, it did not merely fail to compute one.
 	right := map[string]RemovalAssertion{"schema": AssertRemovals(1)}
-	if err := ratchetAll(dir, runs, withheld, right); err != nil {
+	if err := ratchetAll(dir, runs, withheld, right, nil); err != nil {
 		t.Fatalf("every lane merged, so every lane must be written: %v", err)
 	}
 	assertLaneFile(t, dir, "schema", "kept pass\n")
@@ -463,7 +549,7 @@ func TestRatchetAllReportsEveryRefusal(t *testing.T) {
 		{name: "instance", expected: map[string]Status{"b": Pass()}, actual: map[string]Status{}},
 	}
 
-	err := ratchetAll(dir, runs, nil, nil)
+	err := ratchetAll(dir, runs, nil, nil, nil)
 	if err == nil {
 		t.Fatal("two vanished cases in two lanes must refuse the run")
 	}
@@ -479,6 +565,40 @@ func TestRatchetAllReportsEveryRefusal(t *testing.T) {
 	if len(entries) != 0 {
 		t.Errorf("a refused run wrote %d file(s): %v", len(entries), entries)
 	}
+}
+
+// TestRatchetAllThreadsSupersededNamesPerLane proves a superseded name binds
+// only the lane it names (issue #1827): one case regressed in two lanes and
+// named in one still refuses the run from the other, writing nothing, and named
+// in both is banked `fail` in both.
+func TestRatchetAllThreadsSupersededNamesPerLane(t *testing.T) {
+	const before = "x pass\n"
+	dir := t.TempDir()
+	seedLane(t, dir, "datatypes", before)
+	seedLane(t, dir, "instance", before)
+	runs := []laneRun{
+		{name: "datatypes", expected: map[string]Status{"x": Pass()}, actual: map[string]Status{"x": Fail()}},
+		{name: "instance", expected: map[string]Status{"x": Pass()}, actual: map[string]Status{"x": Fail()}},
+	}
+
+	err := ratchetAll(dir, runs, nil, nil, map[string][]string{"instance": {"x"}})
+	if err == nil {
+		t.Fatal("a regression the datatypes lane did not name must refuse the run")
+	}
+	if !strings.Contains(err.Error(), "lane datatypes: ratchet refuses to move: 1 regressed [x]") {
+		t.Errorf("the refusal must name the unnamed lane's regression: %v", err)
+	}
+	if strings.Contains(err.Error(), "lane instance") {
+		t.Errorf("the named lane merged and must not be reported refused: %v", err)
+	}
+	assertLaneFile(t, dir, "datatypes", before)
+	assertLaneFile(t, dir, "instance", before)
+
+	if err := ratchetAll(dir, runs, nil, nil, map[string][]string{"datatypes": {"x"}, "instance": {"x"}}); err != nil {
+		t.Fatalf("named in both lanes, both must be written: %v", err)
+	}
+	assertLaneFile(t, dir, "datatypes", "x fail\n")
+	assertLaneFile(t, dir, "instance", "x fail\n")
 }
 
 // seedLane writes a lane's committed file before a ratchetAll call, so the test

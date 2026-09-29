@@ -27,13 +27,16 @@ import (
 //     additionally lists, on either path, the withheld IDs no lane banked at
 //     all (doc.go "Sanctioned applicability removals").
 //   - GOXSD_RATCHET=1: additionally Ratchet each lane and rewrite its file;
-//     a Ratchet refusal (regression, vanished, or a removal count the run did not
-//     assert) fails the test. Arbiter only. Writing is all-or-nothing across
+//     a Ratchet refusal (an unnamed regression, vanished, a named superseded
+//     case that did not regress, or a removal count the run did not assert)
+//     fails the test. Arbiter only. Writing is all-or-nothing across
 //     lanes (ratchetAll, issue #581): every lane merges first, and one lane's
 //     refusal leaves every lane's file untouched.
 //   - GOXSD_RATCHET_REMOVALS=<lane>=<n>,…: arbiter-only, ratchet-path-only
 //     assertion of the sanctioned removals each lane is expected to bank; set
 //     without GOXSD_RATCHET=1 it fails the run rather than half-applying.
+//   - GOXSD_RATCHET_SUPERSEDED=<lane>:<id>,…: the same gate, naming the
+//     superseded passes each lane banks as `fail` (issue #1827).
 //   - GOXSD_CASE=<id>: narrow execution to one case across all lanes.
 //
 // At M1 no real executor is registered, so every case is a stub Fail and, with
@@ -41,6 +44,7 @@ import (
 func TestConformance(t *testing.T) {
 	ratcheting := os.Getenv("GOXSD_RATCHET") == "1"
 	removals := assertedRemovals(t, ratcheting)
+	superseded := assertedSuperseded(t, ratcheting)
 	index := suitePath()
 	if err := checkSuitePresent(index); err != nil {
 		endUnusableSuiteRun(t, err, ratcheting)
@@ -72,7 +76,7 @@ func TestConformance(t *testing.T) {
 		}
 		return
 	}
-	if err := ratchetAll(expectationsDir, runs, found.withheld, removals); err != nil {
+	if err := ratchetAll(expectationsDir, runs, found.withheld, removals, superseded); err != nil {
 		t.Error(err)
 	}
 }
@@ -88,6 +92,19 @@ func assertedRemovals(t *testing.T, ratcheting bool) map[string]RemovalAssertion
 	byLane, err := removalAssertions(raw, set, ratcheting)
 	if err != nil {
 		t.Fatalf("%s: %v", ratchetRemovalsEnv, err)
+	}
+	return byLane
+}
+
+// assertedSuperseded reads the arbiter's per-lane superseded names
+// (ratchetSupersededEnv) and ends the run on anything supersededAssertions
+// refuses, in assertedRemovals' shape.
+func assertedSuperseded(t *testing.T, ratcheting bool) map[string][]string {
+	t.Helper()
+	raw, set := os.LookupEnv(ratchetSupersededEnv)
+	byLane, err := supersededAssertions(raw, set, ratcheting)
+	if err != nil {
+		t.Fatalf("%s: %v", ratchetSupersededEnv, err)
 	}
 	return byLane
 }

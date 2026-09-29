@@ -491,7 +491,7 @@ func TestRunLaneRatchetRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load empty lane: %v", err)
 	}
-	merged, err := Ratchet(expected, actual, nil, RemovalAssertion{})
+	merged, err := Ratchet(expected, actual, nil, RemovalAssertion{}, nil)
 	if err != nil {
 		t.Fatalf("ratchet must accept all-New cases: %v", err)
 	}
@@ -526,7 +526,7 @@ func TestRunLaneRatchetRefusesRegression(t *testing.T) {
 	actual := runLane(l, fakeCases())
 
 	expected := map[string]Status{"set/g/instance/c": Pass()}
-	if _, err := Ratchet(expected, actual, nil, RemovalAssertion{}); err == nil {
+	if _, err := Ratchet(expected, actual, nil, RemovalAssertion{}, nil); err == nil {
 		t.Fatal("ratchet must refuse when an executor regresses a committed pass")
 	}
 }
@@ -809,6 +809,74 @@ func TestParseRemovalAssertionsRejectsAnythingThatWouldAssertNothing(t *testing.
 	}
 	if got["datatypes"] != (RemovalAssertion{}) {
 		t.Errorf("a lane the value does not name must assert nothing, got %v", got["datatypes"])
+	}
+}
+
+// TestSupersededAssertionsAreReachableOnlyFromARatchetRun pins the gate issue
+// #1827 copies from #309: superseded names apply on the ratchet path and
+// nowhere else, and a value set without GOXSD_RATCHET=1 ends the run before it
+// is parsed.
+func TestSupersededAssertionsAreReachableOnlyFromARatchetRun(t *testing.T) {
+	const one = "instance:VC/vc002/instance/vc002.n1.xml"
+	if _, err := supersededAssertions(one, true, false); err == nil {
+		t.Error("naming superseded passes without GOXSD_RATCHET=1 must end the run, not half-apply")
+	}
+	if _, err := supersededAssertions("nonsense", true, false); err == nil {
+		t.Error("the ratchet gate must be checked before the value is parsed")
+	}
+
+	for _, ratcheting := range []bool{false, true} {
+		unset, err := supersededAssertions("", false, ratcheting)
+		if err != nil {
+			t.Errorf("ratcheting=%v: an unset variable must be fine, got %v", ratcheting, err)
+		}
+		if len(unset) != 0 {
+			t.Errorf("ratcheting=%v: an unset variable must name nothing, got %v", ratcheting, unset)
+		}
+	}
+
+	named, err := supersededAssertions(one, true, true)
+	if err != nil {
+		t.Fatalf("a well-formed name on a ratchet run: %v", err)
+	}
+	if !slices.Equal(named["instance"], []string{"VC/vc002/instance/vc002.n1.xml"}) || len(named) != 1 {
+		t.Errorf("parsed names = %v, want only instance's vc002.n1", named)
+	}
+}
+
+// TestParseSupersededAssertionsRejectsMalformedSpellings proves every malformed
+// spelling is an error rather than a skipped entry: a name nothing checks would
+// let a run look like it asserted a case while the lane it meant still refuses.
+func TestParseSupersededAssertionsRejectsMalformedSpellings(t *testing.T) {
+	bad := []struct{ name, raw string }{
+		{"empty value", ""},
+		{"empty entry", "instance:a,,instance:b"},
+		{"trailing comma", "instance:a,"},
+		{"no colon", "instance"},
+		{"empty lane", ":a"},
+		{"no such lane", "instances:a"},
+		{"empty ID", "instance:"},
+		{"blank ID", "instance: "},
+		{"ID with inner space", "instance:a b"},
+		{"same ID named twice", "instance:a,instance:a"},
+	}
+	for _, tc := range bad {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := parseSupersededAssertions(tc.raw); err == nil {
+				t.Fatalf("%q must be rejected", tc.raw)
+			}
+		})
+	}
+
+	got, err := parseSupersededAssertions(" instance : b , instance:a,datatypes:a ")
+	if err != nil {
+		t.Fatalf("surrounding whitespace, and one ID in two lanes, must be accepted: %v", err)
+	}
+	if !slices.Equal(got["instance"], []string{"b", "a"}) || !slices.Equal(got["datatypes"], []string{"a"}) {
+		t.Errorf("parsed names = %v, want instance [b a] and datatypes [a]", got)
+	}
+	if got["schema"] != nil {
+		t.Errorf("a lane the value does not name must name nothing, got %v", got["schema"])
 	}
 }
 
