@@ -36,18 +36,32 @@ import (
 // only because of a parser GAP (#1002).
 const versioningNS = "http://www.w3.org/2007/XMLSchema-versioning"
 
-// idOrEntityOrNotation are the builtin simple types whose presence anywhere in
-// the root type's closure puts a clause outside the walk's recorded checks in
-// play: ID and IDREF/IDREFS feed the ·validation root·'s [ID/IDREF table]
-// (cvc-elt clause 7, cvc-id §3.3.4.5), ENTITY/ENTITIES String Valid clause 3's
-// ·declared entity name· check, and NOTATION a ·value space· that is "the set
-// of QNames of notations declared in the current schema" (Datatypes §3.3.19),
-// a schema-dependent check this gate does not audit the backend for. Each is
-// excluded by NAME, which covers every type that restricts, lists or unions
-// over one: the closure walk (closureReaches) visits the {base type
-// definition} chain, the {item type definition} and every {member type
-// definitions} entry.
+// idOrEntityOrNotation are the builtin simple types the two LEAF-root gates
+// (simpleLeafRoot, complexEmptyLeafRoot) exclude from the root type's closure.
+// Those gates discharge cvc-elt clause 7 (cvc-id, §3.3.4.5) by an EMPTY
+// [ID/IDREF table], which holds only with ID, IDREF and IDREFS absent; they keep
+// String Valid clause 3's ·declared entity name· check (key-vde) out of play by
+// excluding ENTITY and ENTITIES; and they exclude NOTATION on walkUnrecorded's
+// terms. Each is excluded by NAME, which covers every type that restricts,
+// lists or unions over one: closureReaches visits the {base type definition}
+// chain, the {item type definition} and every {member type definitions} entry.
 var idOrEntityOrNotation = []string{"ID", "IDREF", "IDREFS", "ENTITY", "ENTITIES", "NOTATION"}
+
+// walkUnrecorded are the builtin simple types whose presence anywhere in a
+// type's closure puts in play a clause the walk neither decides nor records a
+// decline for, at any depth. The assessed-subtree-root gate excludes these
+// alone: the ID family and the ENTITY family are the walk's to decide and
+// record at every depth (instance.go, the third shape's cvc-elt clause 7
+// bullet).
+//
+// GAP(validate): an xs:NOTATION value is never checked against the schema's
+// notations. NOTATION's ·value space· is "the set of QNames of notations
+// declared in the current schema" (Datatypes §3.3.19, with
+// enumeration-required-notation), which no validate or backend site checks and
+// records no decline for — Override/over027/instance/over027.n01.xml, whose
+// NOTATION value names no declared notation, is suite-invalid and walks clean,
+// a false accept (#1901).
+var walkUnrecorded = []string{"NOTATION"}
 
 // simpleLeafRoot reports whether the instance document at doc, against schema
 // as assembled into report, has the simple-leaf-root shape an empty
@@ -227,7 +241,7 @@ func simpleLeafDeclaration(schema *xsd.Schema, d xsd.ElementDeclaration) bool {
 	if !ok {
 		return false
 	}
-	return !closureReaches(schema, st)
+	return !closureReaches(schema, st, idOrEntityOrNotation)
 }
 
 // complexEmptyDeclaration reports whether d, the top-level declaration the root
@@ -286,7 +300,7 @@ func complexEmptyDeclaration(schema *xsd.Schema, d xsd.ElementDeclaration) bool 
 
 // closureReaches reports whether st's closure — its {base type definition}
 // chain, its {item type definition} and each of its {member type definitions},
-// transitively — holds a builtin named in idOrEntityOrNotation. A reference the
+// transitively — holds a builtin named in names. A reference the
 // resolver cannot follow answers true, so an unreadable closure is excluded
 // rather than admitted.
 //
@@ -295,9 +309,9 @@ func complexEmptyDeclaration(schema *xsd.Schema, d xsd.ElementDeclaration) bool 
 // reports the same ones. The recursion needs no visited set: a finalized
 // Schema's base chains and union memberships are acyclic (xsd's Phase B,
 // checkSimpleBaseAcyclic and checkUnionMembershipAcyclic).
-func closureReaches(r xsd.TypeResolver, st *xsd.SimpleType) bool {
+func closureReaches(r xsd.TypeResolver, st *xsd.SimpleType, names []string) bool {
 	for t := st; t != nil; {
-		if t.Name().Space == xsd.XMLSchemaNS && slices.Contains(idOrEntityOrNotation, t.Name().Local) {
+		if t.Name().Space == xsd.XMLSchemaNS && slices.Contains(names, t.Name().Local) {
 			return true
 		}
 		base, err := t.Base(r)
@@ -310,14 +324,14 @@ func closureReaches(r xsd.TypeResolver, st *xsd.SimpleType) bool {
 	if err != nil {
 		return true
 	}
-	if item != nil && closureReaches(r, item) {
+	if item != nil && closureReaches(r, item, names) {
 		return true
 	}
 	members, err := st.Members(r)
 	if err != nil {
 		return true
 	}
-	return slices.ContainsFunc(members, func(m *xsd.SimpleType) bool { return closureReaches(r, m) })
+	return slices.ContainsFunc(members, func(m *xsd.SimpleType) bool { return closureReaches(r, m, names) })
 }
 
 // closureVersioned reports whether any schema document the assembly read
