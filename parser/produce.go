@@ -694,6 +694,19 @@ func rejectS4SFaults(el *Element, ids map[string]*Element) error {
 // stops at <appinfo> and <documentation>, so an element in their lax content is
 // never judged: §5.1 lets a processor treat invalid <annotation> descendants as
 // valid (:616).
+//
+// GAP(parser): an overridden document's ids are judged over Dold as fetched,
+// not over Dold′, which src-override clause 3's Note (xmlschema11-1.md:4171)
+// makes the document that must conform; #875 owns it. rejectS4SFaults walks
+// the raw root, and a substitute is judged in the overriding document's own
+// walk and table. The direction differs by reader, and both directions occur:
+// the ncNameRE check charges cvc-datatype-valid on an element §F.2 clause 1
+// substitutes away (false reject: Dold's <element name="x" id="1"/>
+// overridden by an x carrying no id); the ids lookup charges cvc-id on a
+// member Dold′ lacks (false reject: Dold's x and y both carrying id="dup",
+// x overridden by one carrying none) and misses a member Dold′ has (false
+// accept: Dold's y carrying id="foo", x overridden by one carrying the same
+// id="foo").
 func rejectInvalidID(el *Element, ids map[string]*Element) error {
 	lexical, ok := el.Attr("id")
 	if !ok {
@@ -707,7 +720,7 @@ func rejectInvalidID(el *Element, ids map[string]*Element) error {
 	}
 	if first, dup := ids[id]; dup {
 		return xsderr.New(ruleValidationRootValid, el.Loc(),
-			"<%s> id %q duplicates the id of the <%s> at %s: an xs:ID value identifies one element of its schema document (Structures §3.3.4.5 clause 2)",
+			"<%s> id %q duplicates the id of the <%s> at %s: an xs:ID value identifies one element of its schema document (cvc-id clause 2, Structures §3.3.4.5)",
 			el.Name().Local(), id, first.Name().Local(), first.Loc())
 	}
 	ids[id] = el

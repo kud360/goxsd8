@@ -64,8 +64,9 @@ func TestProduceNonIDValueRejected(t *testing.T) {
 
 // TestProduceDuplicateIDRejected pins cvc-id clause 2 (§3.3.4.5) over one
 // schema document: the SECOND element carrying a value is charged, at its own
-// position, and the message names the first carrier. The padded row compares
-// ·actual values·: xs:ID's whiteSpace = collapse makes " a " and "a" one ID.
+// position, the message names the first carrier and cites the clause inline
+// (STYLE E4). The padded row compares ·actual values·: xs:ID's whiteSpace =
+// collapse makes " a " and "a" one ID.
 func TestProduceDuplicateIDRejected(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -82,6 +83,9 @@ func TestProduceDuplicateIDRejected(t *testing.T) {
 				`<xs:attribute name="a" id="`+tc.second+`" type="xs:string"/>`))
 			assertRule(t, err, "cvc-id")
 			assertIDFault(t, err, tc.wantMsg, 3)
+			if !strings.Contains(err.Error(), "cvc-id clause 2") {
+				t.Fatalf("message = %q, want the clause cited inline as \"cvc-id clause 2\" (STYLE E4)", err)
+			}
 		})
 	}
 }
