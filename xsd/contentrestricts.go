@@ -514,26 +514,32 @@ func positionsKey(states []int) string {
 // never on the verdict of a walk that finishes.
 //
 // The constant is MEASURED headroom rather than an unexamined guess, and the
-// headroom is NARROWING. Three counters — entries into contentModelRestricts,
-// the giveup branch below, and every insertion into the visited set so the
-// high-water mark comes from walks that finish — run over the full W3C suite
-// record walkEntries=1987 ceilingHits=0 maxVisited=1002 (#499). The same three
-// counters over the same suite submodule recorded walkEntries=688 ceilingHits=0
-// maxVisited=15 six and a half weeks earlier (#282).
+// headroom has narrowed once. Three counters — entries into
+// contentModelRestricts, the giveup branch below, and every insertion into the
+// visited set so the high-water mark comes from walks that finish — run over the
+// full W3C suite at the same submodule record this series, one point per
+// measurement:
+//
+//   - 2026-08-04 (#282): walkEntries=688 ceilingHits=0 maxVisited=15
+//   - 2026-09-19 (#499): walkEntries=1987 ceilingHits=0 maxVisited=1002
+//   - 2026-09-29 (#1609): walkEntries=1985 ceilingHits=0 maxVisited=1002
 //
 // Read both halves of that. No walk has ever reached the ceiling, so the bound
 // is inert on every content model the suite contains and the incompleteness it
-// guards is latent. But the deepest walk now visits 1002 of the 4096 states it
-// is allowed — a factor of 4.1 below the ceiling where it was a factor of 273 —
-// and maxVisited grew 66.8× while the walk entries grew only 2.9×, so the walks
-// that reach this code are going DEEPER rather than merely happening more often.
-// A single future content model, not a wider population, is now enough to cross.
-// What drove the growth is not established here: the window holds lane-widening
-// landings, and no causal claim is made from a correlation nobody checked.
+// guards is latent. But the deepest walk visits 1002 of the 4096 states it is
+// allowed at the 2026-09-29 point — a factor of 4.1 below the ceiling where it
+// was a factor of 273 on 2026-08-04 — and between those first two points
+// maxVisited grew 66.8× while the walk entries grew only 2.9×, so the walks that
+// reached this code went DEEPER rather than merely happening more often. Between
+// the last two points neither figure grew, over a window in which the schema
+// lane gained 231 passes. A single future content model, not a wider population,
+// is enough to cross. What drove either movement is not established here: each
+// window holds lane-widening landings, and no causal claim is made from a
+// correlation nobody checked.
 //
-// A margin that moved that far since it was last measured is not evidence for an
-// unexamined constant, which is why the ruling at contentModelRestricts' giveup
-// site names a re-measurement threshold instead of waiting for a breach.
+// A margin that has moved that far between two measurements is not evidence for
+// an unexamined constant, which is why the ruling at contentModelRestricts'
+// giveup site names a re-measurement threshold instead of waiting for a breach.
 const maxProductStates = 4096
 
 // contentRestrictionScope names WHICH of cos-content-act-restrict's two
@@ -916,7 +922,7 @@ func (s *Schema) contentModelRestricts(r, b contentAutomaton, scope contentRestr
 				// declines somewhere. Raising the constant moves where it declines,
 				// buying walks whose cost grows with the states they are newly allowed
 				// and no verdict anything has measured — ceilingHits is 0. Lowering it
-				// is pinned from below by the same measurement: the deepest walk the
+				// is pinned from below by the series' 2026-09-29 point: the deepest walk the
 				// suite finishes visits maxVisited=1002 states, so any value below 1002
 				// starts declining walks that decide today. It is retired by a
 				// construction that decides containment without materializing the
@@ -924,21 +930,23 @@ func (s *Schema) contentModelRestricts(r, b contentAutomaton, scope contentRestr
 				//
 				// The review trigger is a RE-MEASUREMENT rather than a breach, because
 				// a breach is the one warning that arrives too late: the high-water
-				// mark last moved 66.8× in six and a half weeks, and it now stands at
-				// a quarter of the ceiling. Re-run the three counters
-				// maxProductStates' doc names and reopen this ruling on EITHER
-				// ceilingHits > 0 or maxVisited at 2048, half the ceiling. Half is what
-				// those two measurements pick out: from 1002 it is barely a doubling
-				// away against the 66.8× already observed, and a walk that stops there
-				// still finishes and still decides. The two conditions are NOT
-				// independent: the ceiling check above precedes the insertion into
-				// visited, so maxVisited cannot exceed maxProductStates, and 2048 is a
-				// point on the same climb to the same ceiling. A high-water mark moving
-				// at anything like the observed rate crosses that factor-of-2 band
-				// between two measurements and reports ceilingHits > 0 without ever
-				// reading 2048, so the band fires with room left to act in only at
-				// measurement resolution, not in calendar time; when the re-measurement
-				// runs is #1609's. #499's grounding comment carries the recipe in full.
+				// mark moved 66.8× in six and a half weeks (2026-08-04 to 2026-09-19),
+				// and at the series' latest point (2026-09-29) it stands at a quarter
+				// of the ceiling. Re-run the three counters maxProductStates' doc
+				// names and reopen this ruling on EITHER ceilingHits > 0 or maxVisited
+				// at 2048, half the ceiling. Half is what #499's two measurements
+				// picked out: from 1002 it is barely a doubling away against the 66.8×
+				// observed between them, and a walk that stops there still finishes
+				// and still decides. The two conditions are NOT independent: the
+				// ceiling check above precedes the insertion into visited, so
+				// maxVisited cannot exceed maxProductStates, and 2048 is a point on
+				// the same climb to the same ceiling. A high-water mark moving at
+				// anything like the 2026-08-04 to 2026-09-19 rate crosses that
+				// factor-of-2 band between two measurements and reports ceilingHits > 0
+				// without ever reading 2048, so the band fires with room left to act in
+				// only at measurement resolution, not in calendar time; when the
+				// re-measurement runs is #1609's. #499's grounding comment carries the
+				// recipe in full.
 				return true
 			}
 			visited[next] = true
