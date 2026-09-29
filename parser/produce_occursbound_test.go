@@ -71,8 +71,9 @@ func TestProduceOccursAboveMaxIntAdmitted(t *testing.T) {
 // TestProduceOccursAboveMaxIntOrderKept pins that saturating at math.MaxInt does
 // not lose p-props-correct clause 2.1 (§3.9.6.1): {min occurs} greater than a
 // numeric {max occurs} is still charged when both values saturate to the same
-// host int (#1780). The message is pinned whole, so a swap of its two operands
-// fails the row.
+// host int, and every row names the document's values, never the saturated
+// math.MaxInt (STYLE E1, #1780). The message is pinned whole, so a swap of its
+// two operands fails the row.
 func TestProduceOccursAboveMaxIntOrderKept(t *testing.T) {
 	maxInt := strconv.Itoa(math.MaxInt)
 	maxIntPlusOne := strconv.FormatUint(uint64(math.MaxInt)+1, 10)
@@ -83,8 +84,7 @@ func TestProduceOccursAboveMaxIntOrderKept(t *testing.T) {
 		wantMsg string
 	}{
 		{
-			// Both past MaxInt: occursOf's own charge, since xsd.NewOccurs would
-			// receive MaxInt, MaxInt.
+			// Both past MaxInt: saturated, the pair would be MaxInt, MaxInt.
 			name:    "both past MaxInt, min greater",
 			attrs:   `minOccurs="79228162514264337593543950335" maxOccurs="79228162514244337593543950335"`,
 			wantMsg: "particle {min occurs} 79228162514264337593543950335 is greater than {max occurs} 79228162514244337593543950335",
@@ -104,11 +104,17 @@ func TestProduceOccursAboveMaxIntOrderKept(t *testing.T) {
 			wantMsg: "particle {min occurs} " + maxIntPlusOne + " is greater than {max occurs} " + maxInt,
 		},
 		{
-			// maxOccurs below MaxInt: saturation keeps the order, and xsd.NewOccurs
-			// charges the clause on the saturated min.
+			// maxOccurs below MaxInt: saturation keeps the order but would name
+			// MaxInt, a value the document never spelled.
 			name:    "min past MaxInt, max small",
 			attrs:   `minOccurs="99999999999999999999" maxOccurs="5"`,
-			wantMsg: "particle {min occurs} " + maxInt + " is greater than {max occurs} 5",
+			wantMsg: "particle {min occurs} 99999999999999999999 is greater than {max occurs} 5",
+		},
+		{
+			// Neither saturates: the message xsd.NewOccurs would give.
+			name:    "both small, min greater",
+			attrs:   `minOccurs="7" maxOccurs="5"`,
+			wantMsg: "particle {min occurs} 7 is greater than {max occurs} 5",
 		},
 	}
 	for _, tc := range cases {

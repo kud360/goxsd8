@@ -28,7 +28,7 @@ import (
 // clause 2 is conditioned on {max occurs} having a numeric value before clause
 // 2.1 compares it to {min occurs}. It therefore needs both occurrence values
 // already parsed, which is exactly and only the min-greater-than-max row — the
-// control below, charged by xsd.NewOccurs on a particle that does exist.
+// control below, charged by occursOf once both values are read.
 //
 // Every row REJECTS, before and after #932: this table pins the rule ID, which a
 // test asserting only that an error occurred cannot see.
@@ -112,10 +112,10 @@ func TestProduceOccursAttributeFaultsCharged(t *testing.T) {
 			wantLine: 3,
 		},
 		{
-			// UNCHANGED CONTROL, and the one row where a Particle exists to be
-			// constrained: both lexicals parse, xsd.NewOccurs is reached, and
-			// p-props-correct clause 2.1 rejects the range it builds. #901's
-			// landing depends on this charge staying put.
+			// UNCHANGED CONTROL, and the one row whose particle has properties to
+			// constrain: both lexicals parse, and occursOf charges p-props-correct
+			// clause 2.1 on the range they give. #901's landing depends on this
+			// charge staying put.
 			name: `<sequence> minOccurs greater than maxOccurs`,
 			body: "\n" + `<xs:complexType name="CT">` + "\n" +
 				`<xs:sequence minOccurs="2" maxOccurs="1"><xs:element name="a" type="xs:string"/></xs:sequence>` + "\n" +

@@ -85,11 +85,13 @@ const (
 	// same rule seen at either collection point.
 	ruleSchPropsCorrect xsderr.Rule = "sch-props-correct"
 	// ruleParticleCorrect is Particle Correct (§3.9.6.1). The producer charges
-	// only clause 2.1 ({min occurs} greater than a numeric {max occurs}) and only
-	// where {max occurs} is math.MaxInt or more, which is the one case
-	// xsd.NewOccurs cannot compare, since occursOf hands it both values saturated
-	// to math.MaxInt. NewOccurs charges the same clause on every other pair; the
-	// two are the same rule seen from either side of the saturation.
+	// only clause 2.1 ({min occurs} greater than a numeric {max occurs}), in
+	// occursOf, for every parsed minOccurs/maxOccurs pair: it orders the
+	// unsaturated numerals and names them, where xsd.NewOccurs, handed both
+	// saturated at math.MaxInt, could neither order a pair past it nor name the
+	// document's values. NewOccurs charges the same clause for a synthesized
+	// occurrence range, read from no attribute; the two are the same rule seen at
+	// either collection point.
 	ruleParticleCorrect xsderr.Rule = "p-props-correct"
 )
 

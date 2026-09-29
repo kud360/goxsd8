@@ -1830,7 +1830,7 @@ func (p *producer) produceGroupParticle(group *Element, scopeParent xsd.ElementS
 // {term} it denotes: resolution and the no-circular-groups check happen at
 // finalize (#173: src-resolve clause 1.5, mg-props-correct clause 2), and
 // neither VERDICT is ever duplicated here. Occurs-range correctness
-// (p-props-correct §3.9.6.1 clause 2.1) is enforced inside xsd.NewParticle.
+// (p-props-correct §3.9.6.1 clause 2.1) is enforced by occursOf.
 //
 // One mapping rule nonetheless has to LOOK through a reference produced here:
 // §3.4.2.3.3 clause 4.2.3 selects a sub-case by the {compositor} of the
@@ -3801,10 +3801,10 @@ func (p *producer) localTargetNS(el *Element, formDefaultAttr string) (string, e
 // caller omits the particle entirely rather than building a vacuous Occurs{0,0}.
 //
 // Each value reaches xsd.NewOccurs saturated at math.MaxInt (occursNumeral.int),
-// so a pair whose {max occurs} is math.MaxInt or more and whose {min occurs} is
-// greater still arrives there as the equal pair MaxInt, MaxInt. p-props-correct
-// clause 2.1 (§3.9.6.1) is decided for that pair here, on the unsaturated
-// numerals, before saturation hides the order (ruleParticleCorrect).
+// which can merge an inverted pair into an equal one and would name a saturated
+// value the document never spelled. p-props-correct clause 2.1 (§3.9.6.1) is
+// therefore decided here for every numeric pair, on the unsaturated numerals,
+// and the message names those values (ruleParticleCorrect).
 func occursOf(el *Element) (occ xsd.Occurs, elided bool, err error) {
 	minN := occursNumeral("1")
 	if minS, ok := el.Attr("minOccurs"); ok {
@@ -3830,7 +3830,7 @@ func occursOf(el *Element) (occ xsd.Occurs, elided bool, err error) {
 	if min == 0 && max == 0 {
 		return xsd.Occurs{}, true, nil
 	}
-	if min == max && minN.compare(maxN) > 0 {
+	if minN.compare(maxN) > 0 {
 		return xsd.Occurs{}, false, xsderr.New(ruleParticleCorrect, el.Loc(),
 			"particle {min occurs} %s is greater than {max occurs} %s", minN, maxN)
 	}
@@ -3877,9 +3877,8 @@ func (n occursNumeral) compare(m occursNumeral) int {
 // particle's PROPERTIES, and occursOf returns this error before reaching
 // xsd.NewOccurs/xsd.NewUnboundedOccurs, so no Occurs and no Particle is ever
 // built for it to constrain. p-props-correct clause 2.1 — {min occurs} greater
-// than a numeric {max occurs} — is charged on the two values this helper has
-// already read: by those constructors, and by occursOf for the one pair
-// saturation hides from them (#932).
+// than a numeric {max occurs} — is charged by occursOf on the two values this
+// helper has already read, before saturation (#932).
 func nonNegativeNumeral(lexical string, loc xsderr.Loc, attr string) (occursNumeral, error) {
 	s := collapseTrim(lexical)
 	if _, ok := nonNegativeIntegerLexical(s); !ok {
@@ -3918,8 +3917,8 @@ func nonNegativeInt(lexical string, loc xsderr.Loc, attr string) (int, error) {
 // generic "attribute value is not valid against its declared type" rule. It is
 // NOT cos-all-limited, which constrains where the resulting particle may appear
 // rather than what the element's attributes may say, and not p-props-correct,
-// which constrains an already-built particle's properties and is charged by
-// xsd.NewOccurs for max < min alone.
+// which constrains a particle's properties and is charged by occursOf for
+// min > max alone.
 //
 // Only the content-model <all> is checked: on the <all> body of a top-level named
 // <group>, Appendix A's xs:namedGroup makes both attributes use="prohibited", a
