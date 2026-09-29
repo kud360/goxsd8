@@ -222,6 +222,11 @@ import (
 //       particles are decidable; the body maps to {model group} genuinely (a
 //       missing body is the s4s-grammar rejection xs:namedGroup's content model
 //       requires, #884).
+//     - A <unique>, <key> or <keyref> is admitted under a top-level
+//       <attributeGroup>, in a top-level <group> that has no body, and under any
+//       <all>/<choice>/<sequence> (#1817): Appendix A admits an identity
+//       constraint under an <element> alone, and the producer rejects each of
+//       those three positions under §5.1's first bullet, with no rule ID.
 //     - Neither of those two requires the DEFINITION form (#1182). A top-level
 //       <group>/<attributeGroup> with no name=, or one carrying the ref= that
 //       xs:namedGroup/xs:namedAttributeGroup restricts to use="prohibited", is
@@ -1484,8 +1489,10 @@ func contentDecidable(parent *parser.Element) bool {
 // (localElementDecidable) — its identity constraints impose no condition of
 // their own, both forms being produced for local declarations too (#178, #240) —
 // <any> is fine, and a <group> is admitted in both shapes — produced in the ref
-// form (#177), rejected by the producer in the ref-less one (#1182). Any other
-// child declines.
+// form (#177), rejected by the producer in the ref-less one (#1182). A <unique>,
+// <key> or <keyref> child is admitted because groupParticles' default arm
+// rejects it (#1817). Any other child declines — that arm rejects most of them
+// too, but admitting them is a widening with a ratchet measurement of its own.
 func modelGroupDecidable(group *parser.Element) bool {
 	for _, child := range group.Children() {
 		el, ok := child.(*parser.Element)
@@ -1507,6 +1514,8 @@ func modelGroupDecidable(group *parser.Element) bool {
 			// Produced in the ref form (#177) and REJECTED in the ref-less one
 			// (#1182), by the same produceGroupRefParticle arms contentDecidable's
 			// <group> child reaches.
+		case "unique", "key", "keyref":
+			// REJECTED by groupParticles' default arm (#1817).
 		default:
 			// any other child: not produced — decline.
 			return false
@@ -1518,7 +1527,11 @@ func modelGroupDecidable(group *parser.Element) bool {
 // groupDecidable reports whether a top-level <group> (§3.7.2) is within the
 // producer's decidable subset: its single all/choice/sequence body's particles
 // must all be decidable. A missing body still produces genuinely (the producer
-// rejects it against xs:namedGroup's content model, #884), so it is admitted.
+// rejects it against xs:namedGroup's content model, #884), so it is admitted —
+// and so is a <unique>, <key> or <keyref> written in the body's place (#1817),
+// which rejectNamedGroupBody charges as the first child that is no body. One
+// written BESIDE a body still declines: buildDefinitionModelGroup reads the body
+// and drops that sibling unrejected.
 //
 // The DEFINITION FORM is not required either (#1182). A top-level <group> with
 // no name=, or one carrying the ref= xs:namedGroup restricts to
@@ -1540,6 +1553,10 @@ func groupDecidable(el *parser.Element) bool {
 			if !modelGroupDecidable(c) {
 				return false
 			}
+		case "unique", "key", "keyref":
+			if hasCompositorChild(el) {
+				return false
+			}
 		default:
 			// A <group> body is only all/choice/sequence; anything else is out of
 			// the produced shape — decline.
@@ -1547,6 +1564,23 @@ func groupDecidable(el *parser.Element) bool {
 		}
 	}
 	return true
+}
+
+// hasCompositorChild reports whether el has an XSD-namespace <all>, <choice> or
+// <sequence> child: a named <group>'s body, as the producer's compositorChild
+// finds it.
+func hasCompositorChild(el *parser.Element) bool {
+	for _, child := range el.Children() {
+		c, ok := child.(*parser.Element)
+		if !ok || c.Name().Space() != xsd.XMLSchemaNS {
+			continue
+		}
+		switch c.Name().Local() {
+		case "all", "choice", "sequence":
+			return true
+		}
+	}
+	return false
 }
 
 // attributeGroupDecidable reports whether a top-level <attributeGroup> (§3.6.2)
@@ -1561,6 +1595,11 @@ func groupDecidable(el *parser.Element) bool {
 // use="prohibited", and the producer charges both faults itself, so a top-level
 // <attributeGroup> missing the one or carrying the other is admitted here and
 // rejected there.
+//
+// A <unique>, <key> or <keyref> child is admitted on the same footing (#1817):
+// the producer's rejectAttributeGroupIdentityConstraint charges it. Every other
+// name xs:attrDecls does not admit still declines, since the producer drops it
+// unrejected.
 func attributeGroupDecidable(el *parser.Element) bool {
 	for _, child := range el.Children() {
 		c, ok := child.(*parser.Element)
@@ -1578,6 +1617,8 @@ func attributeGroupDecidable(el *parser.Element) bool {
 			// Produced in the ref form (#177) and REJECTED in the ref-less one
 			// (#1182), by the same attributeGroupMember arms attrDeclsDecidable's
 			// <attributeGroup> child reaches.
+		case "unique", "key", "keyref":
+			// REJECTED by rejectAttributeGroupIdentityConstraint (#1817).
 		default:
 			return false
 		}

@@ -44,13 +44,15 @@ const maxCensusViolationsLogged = 10
 //
 //   - a region the census does not walk yet;
 //   - a shape the producer REJECTS, which the gate declines anyway out of
-//     conservatism — a model group's non-particle child, a <redefine>/<override>
-//     child with no usable name. No census can report these: they are verdicts,
-//     not silences, so each is a gate widening with its own ratchet measurement.
-//     The examples that stood here before them are gone, each admitted by the
-//     widening that measured it: a <simpleType> naming none of §3.16.2.1's three
-//     alternatives (#786), a ref-less <group>/<attributeGroup> (#1182), a
-//     derivation alternant's out-of-model child (#1181).
+//     conservatism — a model group's non-particle child other than an identity
+//     constraint, a <redefine>/<override> child with no usable name. No census
+//     can report these: they are verdicts, not silences, so each is a gate
+//     widening with its own ratchet measurement. The examples that stood here
+//     before them are gone, each admitted by the widening that measured it: a
+//     <simpleType> naming none of §3.16.2.1's three alternatives (#786), a
+//     ref-less <group>/<attributeGroup> (#1182), a derivation alternant's
+//     out-of-model child (#1181), a <unique>/<key>/<keyref> under a model group or
+//     in place of a named <group>'s body (#1817).
 //
 // A third cause was the BULK of the residual until #1126 and is gone: a shape
 // the producer maps while every finalize pass quantifying over {type
@@ -63,7 +65,7 @@ const maxCensusViolationsLogged = 10
 // much census is left to write.
 //
 // Documents of a REJECTED assembly are exempt, and counted rather than asserted
-// about: no unmapped construct can make a rejected case accept anything. Three
+// about: no unmapped construct can make a rejected case accept anything. Four
 // admissions land there. schemaShapeDecidable's FIRST answer is not an allowlist
 // verdict at all but the unconditional-rejection short-circuit
 // (holdsMisplacedNotation), which admits a document precisely because the
@@ -75,6 +77,9 @@ const maxCensusViolationsLogged = 10
 // the allowlist admits every child a complex-type derivation alternant's own
 // content model does not admit (#1181), because checkS4SChildOrder rejects the
 // document over it while the census goes on reporting it beside that rejection.
+// The fourth is a <unique>, <key> or <keyref> under a top-level <attributeGroup>
+// (#1817), which attributeGroupChildMapped leaves unmapped and
+// rejectAttributeGroupIdentityConstraint rejects.
 func TestUnmappedCensusSoundAgainstShapeGate(t *testing.T) {
 	skipWithoutSuite(t)
 	found, err := parseSuite(suitePath())
@@ -118,7 +123,7 @@ func TestUnmappedCensusSoundAgainstShapeGate(t *testing.T) {
 			if perr != nil {
 				// The producer rejects this case, so nothing any of its documents
 				// holds decides anything vacuously — see the exemption paragraph
-				// above for the two admissions that land here.
+				// above for the admissions that land here.
 				exempt++
 				continue
 			}
