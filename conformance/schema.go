@@ -86,14 +86,15 @@ import (
 // Since #242 that qualifier binds over a CLOSURE, not one document. The assembly
 // reads the whole <include>/<override>/<import> closure, so a composed document
 // holding a skipped representation false-accepts exactly as a root one would. So
-// the harness runs parser.ParseReport, which reports the DOCUMENT SET it
-// assembled, and gates every document of that set on the allowlist below
-// (closureDecidable, conformance/schema_closure.go). Until #272 the harness
-// instead re-walked §4.2's composition edges itself, because parser.Parse could
-// not be asked which documents it read; the gated set is now the assembled set by
-// construction rather than by two walks agreeing, which is what closes the
-// under-gating hazard — a document the harness missed but the parser read would
-// be a document whose shape was never gated, the false accept back again.
+// the harness runs parser.ParseReport (parser.ParseSet for several roots), which
+// reports the DOCUMENT SET it assembled, and gates every document of that set on
+// the allowlist below (closureDecidable, conformance/schema_closure.go). Until
+// #272 the harness instead re-walked §4.2's composition edges itself, because
+// parser.Parse could not be asked which documents it read; the gated set is now
+// the assembled set by construction rather than by two walks agreeing, which is
+// what closes the under-gating hazard — a document the harness missed but the
+// parser read would be a document whose shape was never gated, the false accept
+// back again.
 //
 // # The decidable shape (the strict top-level allowlist)
 //
@@ -101,7 +102,7 @@ import (
 // of every document in its closure is confined to what the producer checks, and
 // the lane DECLINES (Fail) anything else:
 //
-//  1. Readability. parser.ReadDocument is run on the root before anything else,
+//  1. Readability. parser.ReadDocument is run on every declared root document,
 //     and the assembly reads every composed document through it. ANY error
 //     DECLINES the case (Fail), never a validity verdict: a ReadDocument error
 //     does not distinguish a genuine XML well-formedness fault from a parser
@@ -437,17 +438,17 @@ import (
 //
 // A schemaTest with MORE THAN ONE <ts:schemaDocument> child declares a SET of
 // documents to be loaded "one by one, in order" (xsts.xsd, the suite's own
-// catalog schema); the runner now carries all of them (caseSpec.extraDocs)
-// instead of silently keeping one. This lane decides such a case only when the
-// assembly from the FIRST document provably consumed every other declared one
-// — which requires the first document's own <include>/<override>/<import> to
-// name them, those being the only directives the assembly follows, and is then
-// just the composition case above. A <redefine> can never supply that reachability: a
-// document carrying one is DECLINED outright above, so nothing it names is ever
-// reached. Documents genuinely independent of each other need several roots merged
-// into one schema, which neither parser.ParseReport (one root) nor this harness
-// offers, so those cases are DECLINED (extraDocsInClosure) rather than decided
-// against a schema the suite did not declare.
+// catalog schema); the runner carries all of them (caseSpec.extraDocs), and this
+// lane decides the case on the whole set (#1840). The spec has no notion of
+// several roots — §4.2.1's schema(D) is per document — so the set is read as the
+// union of each root's schema(D) held to sch-props-correct (§3.17.6.1) as ONE
+// schema: parser.ParseSet, which charges clause 2 for one expanded name two roots
+// declare as distinct components. A declared document the FIRST one's own
+// <include>/<override>/<import>/<redefine> already reaches is not entered as a
+// root again (extraRoots), so such a case is just the composition case above.
+// Entering it again is not neutral: a document reached as a <redefine> or
+// <override> target and then read plainly contributes the very definitions the
+// directive replaced, and collides with them.
 
 // newSchemaExec builds the schema lane's executor. The strict backend is built
 // once here (mirroring newDatatypesExec's strictBackend := strict.New()): it maps
@@ -512,19 +513,20 @@ func newSchemaCharge() func(caseSpec) string {
 // verdict at all. It is the schema lane's decidability gate and the instance
 // lane's precondition alike (conformance/instance.go).
 //
-// It reads the root document to check the two preconditions parser.ParseReport
-// answers with a plain Go error rather than a validity verdict, runs
-// parser.ParseReport, and gates the WHOLE <xs:include>/<xs:override>/<xs:import>
-// closure it reports on the decidable top-level shape (closureDecidable, which
-// runs schemaShapeDecidable on every document the assembly consumed). The third
-// result, decidable, is false — and the caller DECLINES — under any of five
-// conditions: a root it cannot resolve; a root it cannot read (any ReadDocument
-// error, including a parser encoding limitation such as unsupported UTF-16); a
-// root element that is not <schema>; a closure holding one document outside the
-// producer's decidable subset, or missing one the case further declared; and a
-// case whose parse failed with a rejection its own unfollowed directives could
-// have fabricated (fabricatedRejection, #276/#404). The other three results say
-// nothing then.
+// It reads each declared document to check the two preconditions parser.ParseSet
+// answers with a plain Go error rather than a validity verdict (rootReadable),
+// runs parser.ParseReport from doc, re-assembles with parser.ParseSet when a
+// further declared document lies outside that closure (extraRoots), and gates
+// the WHOLE <xs:include>/<xs:override>/<xs:import> closure of every root on the
+// decidable top-level shape (closureDecidable, which runs schemaShapeDecidable on
+// every document the assembly consumed). The third result, decidable, is false —
+// and the caller DECLINES — under any of five conditions: a declared document it
+// cannot resolve; one it cannot read (any ReadDocument error, including a parser
+// encoding limitation such as unsupported UTF-16); one whose root element is not
+// <schema>; a closure holding one document outside the producer's decidable
+// subset; and a case whose parse failed with a rejection its own unfollowed
+// directives could have fabricated (fabricatedRejection, #276/#404). The other
+// three results say nothing then.
 //
 // Where decidable is true, the fourth result is the assembly's OWN error: nil is
 // genuine evidence of validity — no document of the assembly has any of the
@@ -548,41 +550,30 @@ func newSchemaCharge() func(caseSpec) string {
 func assembleCase(backend value.Backend, doc string, extraDocs []string) (*xsd.Schema, *parser.AssemblyReport, bool, error) {
 	resolver := loader.Dir(filepath.Dir(doc))
 	location := filepath.Base(doc)
-	rc, _, err := resolver.Resolve("", location)
-	if err != nil {
-		// Unreadable document: an honest recorded gap, not a validity verdict.
-		return nil, nil, false, nil
-	}
-	defer func() { _ = rc.Close() }() // read-only handle: close error cannot affect the verdict
-	root, err := parser.ReadDocument(location, rc)
-	if err != nil {
-		// A ReadDocument error is DECLINED, never treated as an observed-invalid
-		// verdict. The error does not distinguish a genuine XML well-formedness
-		// fault from a parser encoding LIMITATION: well-formed UTF-16 input (BOM
-		// FF FE) is currently rejected as "[xml-wf] invalid UTF-8" because UTF-16
-		// decoding is not yet implemented, so an "invalid" verdict here would be
-		// fabricated for a well-formed document — a wrong-reason pass that would
-		// silently flip pass→fail once UTF-16 decoding lands (a separate change).
-		// Declining on ANY ReadDocument error keeps the lane's verdicts honest.
-		return nil, nil, false, nil
-	}
-	// §3.17.2 does not require <schema> to be the document root, so a non-schema
-	// root is a Parse precondition fault (a plain Go error, not a
-	// sch-props-correct rejection), not decidable for this lane — decline.
-	if !root.IsSchema() {
+	if _, ok := rootReadable(resolver, location); !ok {
 		return nil, nil, false, nil
 	}
 	// ParseReport, not Parse: the verdict needs the DOCUMENT SET the assembly
 	// consumed, not only its components (#272).
 	schema, report, perr := parser.ParseReport(location, parser.WithResolver(resolver), parser.WithBackend(backend))
-	// Only decide when EVERY document of the <include>/<override>/<import> closure
-	// is confined to what the producer processes; otherwise a silently-skipped
-	// invalid representation, in the root or in any composed document, could
-	// false-accept.
-	if !closureDecidable(report) {
+	roots, ok := extraRoots(report, resolver, doc, extraDocs)
+	if !ok {
 		return nil, nil, false, nil
 	}
-	if !extraDocsInClosure(report, resolver, doc, extraDocs) {
+	if len(roots) > 0 {
+		// A declared document the first root's closure did not reach: the case is
+		// the union of every root's schema(D), assembled as ONE schema so
+		// sch-props-correct (§3.17.6.1) clause 2 and src-resolve clause 4 hold
+		// across the set (#1840). Its report is a superset of the first root's
+		// closure, so the gate below runs over every document either consumed.
+		schema, report, perr = parser.ParseSet(append([]parser.Root{parser.RootAt(location)}, roots...),
+			parser.WithResolver(resolver), parser.WithBackend(backend))
+	}
+	// Only decide when EVERY document of the <include>/<override>/<import> closure
+	// of every root is confined to what the producer processes; otherwise a
+	// silently-skipped invalid representation, in a root or in any composed
+	// document, could false-accept.
+	if !closureDecidable(report) {
 		return nil, nil, false, nil
 	}
 	// A directive that named no document is only half the fabricated-rejection
@@ -597,6 +588,37 @@ func assembleCase(backend value.Backend, doc string, extraDocs []string) (*xsd.S
 		return nil, nil, false, nil
 	}
 	return schema, report, true, perr
+}
+
+// rootReadable checks, for the document a root names at location, the two
+// preconditions parser.ParseSet answers with a plain Go error rather than a
+// validity verdict, and returns the location the resolver resolved it to. ok is
+// false — assembleCase DECLINES — when the document does not resolve, cannot be
+// read, or has a root element that is not <schema>. It holds every root of the
+// case to them alike, the first and every one extraRoots adds.
+func rootReadable(resolver loader.Resolver, location string) (resolved string, ok bool) {
+	rc, resolved, err := resolver.Resolve("", location)
+	if err != nil {
+		// Unreadable document: an honest recorded gap, not a validity verdict.
+		return "", false
+	}
+	defer func() { _ = rc.Close() }() // read-only handle: close error cannot affect the verdict
+	root, err := parser.ReadDocument(location, rc)
+	if err != nil {
+		// A ReadDocument error is DECLINED, never treated as an observed-invalid
+		// verdict. The error does not distinguish a genuine XML well-formedness
+		// fault from a parser encoding LIMITATION: well-formed UTF-16 input (BOM
+		// FF FE) is currently rejected as "[xml-wf] invalid UTF-8" because UTF-16
+		// decoding is not yet implemented, so an "invalid" verdict here would be
+		// fabricated for a well-formed document — a wrong-reason pass that would
+		// silently flip pass→fail once UTF-16 decoding lands (a separate change).
+		// Declining on ANY ReadDocument error keeps the lane's verdicts honest.
+		return "", false
+	}
+	// §3.17.2 does not require <schema> to be the document root, so a non-schema
+	// root is a Parse precondition fault (a plain Go error, not a
+	// sch-props-correct rejection), not decidable for this lane — decline.
+	return resolved, root.IsSchema()
 }
 
 // ruleSrcResolve is the rule the producer charges for a reference the assembled
@@ -684,50 +706,45 @@ func fabricatedRejection(report *parser.AssemblyReport, perr error) bool {
 	return ok && rule == ruleSrcResolve
 }
 
-// extraDocsInClosure reports whether every FURTHER document the case declares
-// beyond doc was consumed by the assembly rooted at doc — the only condition
-// under which parser.ParseReport, which is handed one root, nonetheless
-// assembles the whole declared set.
+// extraRoots returns a parser.RootAt root for every FURTHER document the case
+// declares beyond doc that the assembly rooted at doc did NOT consume, in
+// declared order; ok is false when one of them fails rootReadable.
 //
 // A schemaTest may list several <schemaDocument> children, and the suite's own
 // catalog schema defines that as "run as if the schema documents given were
-// loaded one by one, in order": the case is the SET, not any member of it. The
-// condition holds when the first document's own
-// <include>/<override>/<import>/<redefine> names the others — the four
-// directives the assembly follows — so it composes them. The check exists so
-// that a case whose documents the parser's OWN composition constructs already
-// link is decided on the declared set rather than declined for its member count.
-// When the condition does not hold (documents genuinely independent), the
-// harness has no mechanism to merge several roots into one schema, so any
-// verdict it emitted would be a verdict on a DIFFERENT schema than the one
-// declared. It therefore DECLINES, as it declines every other shape it cannot
-// decide for the right reason, rather than loading an arbitrary member or
-// ignoring the rest.
+// loaded one by one, in order": the case is the SET, not any member of it. A
+// declared document the first one's own <include>/<override>/<import>/<redefine>
+// already names is in the assembly already, so it yields no root: entering it
+// again would read a <redefine> or <override> target plainly a second time and
+// restore the definitions the directive replaced (#1840). Every other declared
+// document is a root of its own, which assembleCase enters after doc.
 //
 // Each extra document is resolved through the SAME resolver the parse used, under
 // a location string relative to the same root directory, so the resolved identity
-// compared against the report is in the report's own format (closureReached). A
-// path that will not resolve at all declines for the same reason as an
-// unresolvable root: an unreadable document is a gap, never a validity verdict.
-func extraDocsInClosure(report *parser.AssemblyReport, resolver loader.Resolver, doc string, extraDocs []string) bool {
-	root := filepath.Dir(doc)
+// compared against the report is in the report's own format (closureReached), and
+// the root is named by that location string, as doc's own is. ok is false when
+// one fails rootReadable, reached or not: each is a declared document of the
+// case, held to the preconditions doc is held to, since ParseSet would answer an
+// unreadable or non-<schema> root with a plain error the lane would misread as
+// "invalid".
+func extraRoots(report *parser.AssemblyReport, resolver loader.Resolver, doc string, extraDocs []string) (roots []parser.Root, ok bool) {
+	dir := filepath.Dir(doc)
 	for _, extra := range extraDocs {
-		location, err := filepath.Rel(root, extra)
+		rel, err := filepath.Rel(dir, extra)
 		if err != nil {
-			return false
+			return nil, false
 		}
-		rc, resolved, err := resolver.Resolve("", filepath.ToSlash(location))
-		if err != nil {
-			return false
+		location := filepath.ToSlash(rel)
+		resolved, ok := rootReadable(resolver, location)
+		if !ok {
+			return nil, false
 		}
-		// Read-only handle: a close failure cannot change what the assembly read,
-		// so it cannot affect the verdict (STYLE S3).
-		_ = rc.Close()
-		if !closureReached(report, resolved) {
-			return false
+		if closureReached(report, resolved) {
+			continue
 		}
+		roots = append(roots, parser.RootAt(location))
 	}
-	return true
+	return roots, true
 }
 
 // decideAgreement Passes iff the observed validity agrees with the suite's
