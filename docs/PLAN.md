@@ -573,8 +573,10 @@ has recorded; identity constraints and the ID/IDREF table (**#718**,
 itself M5. **#1738** (`f6ab5b1`, 2026-09-27) added **10,508**, the largest single
 lane move this project has recorded: the lane's first `valid` observation, for a
 simple leaf root. Its second slice, **#1808** (`cb0f6e3`, 2026-09-28, +34),
-admitted the complex empty leaf root. The third, a root WITH content, is **#1841**,
-the milestone's north star.
+admitted the complex empty leaf root. The third, **#1841** (`aad7b2c`, 2026-09-29,
++2204), admitted an assessed subtree root WITH content. Its successors lift that
+gate's exclusions one decision at a time, and a content-less root is one of them.
+Read them off the queue by `conformance/subtreeroot.go`.
 
 **Landings OUTSIDE this milestone keep moving this lane, by four distinct
 mechanisms, and a running total of them is not maintained here** — take the
@@ -670,12 +672,13 @@ here rather than overcounted. Read the count as a floor and never as the lane's
 remaining work.
 
 **The lane score is a floor built for soundness, and no jump has ever changed
-what the number means.** The lane's one "valid" observation is a violation-free
-`Result` with nothing unevaluated on a simple leaf root (#1738), whose every
-applicable `cvc-elt` clause the lane gate or the walk decides; any other
-violation-free `Result` DECLINES rather than passing, because `Assess` does not
-evaluate `e-validity`'s other conjuncts for it. **Every other passing case is an
-expected-INVALID one by construction**, not by measurement, and the failures
+what the number means.** The lane observes "valid" only for a violation-free
+`Result` with nothing unevaluated whose root passes one of the shape gates
+`conformance/instance.go` names (#1738, #1808, #1841). Each gate admits only
+shapes where the lane gate or the walk decides every applicable clause. Any
+other violation-free `Result` DECLINES rather than passing, because `Assess` does
+not evaluate `e-validity`'s other conjuncts for it. **Every other passing case is
+an expected-INVALID one by construction**, not by measurement, and the failures
 that remain are overwhelmingly declines rather than disagreements. The
 milestone's remaining slices are what turn declines into decisions.
 
