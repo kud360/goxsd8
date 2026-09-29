@@ -246,9 +246,10 @@ var qnameTypeName = xsd.QName{Space: xsd.XMLSchemaNS, Local: "QName"}
 // from, as an empty lexical, a colon structure no QName has and a part that is
 // no NCName fail xs:QName's lexical space (§3.3.18).
 //
-// It is [walk.declaredAttribute]'s clause 3 over the one declaration no
-// attribute use carries, and declines on the same terms, reporting true so
-// clause 5 reads the lexical as it would with no clause 3 at all:
+// It is [walk.declaredAttribute]'s clause 3 over the built-in declaration for
+// the type attribute, which no attribute use carries, and declines on the same
+// terms, reporting true so clause 5 reads the lexical as it would with no clause
+// 3 at all:
 //
 //   - a schema whose {type definitions} carry no simple xs:QName, which only
 //     one assembled through [xsd.SchemaBuilder.Finalize] without the built-in
