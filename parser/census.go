@@ -94,12 +94,14 @@ import (
 // for where it stands (rejectMisplacedNotation), a second <annotation> under one
 // parent for its cardinality (rejectRepeatedAnnotations), and any element it
 // reaches — the two lax-content wrappers included — for an unprefixed attribute
-// its own Appendix A production declares nowhere (rejectUndeclaredAttrs), and
-// for an id that is no xs:ID or repeats an earlier one (rejectInvalidID). Every
-// OTHER XSD-namespace name is what survives at the six — an <xs:element> written
-// under an <openContent>, an <import>, a <group ref>, an <assert>, an
-// <annotation> or an <any> is reported by nothing, and its PRESENCE where it
-// stands is rejected by nothing.
+// its own Appendix A production declares nowhere (rejectUndeclaredAttrs) or a
+// nested <complexType> prohibits (rejectLocalComplexTypeAttrs), and for an id
+// that is no xs:ID or repeats an earlier one (rejectInvalidID), and a
+// block=/final= family value outside the s4s type its production declares it
+// with (rejectInvalidDerivationSet). Every OTHER XSD-namespace name is what
+// survives at the six — an <xs:element> written under an <openContent>, an
+// <import>, a <group ref>, an <assert>, an <annotation> or an <any> is reported
+// by nothing, and its PRESENCE where it stands is rejected by nothing.
 //
 // This census is over element positions alone. The attribute axis is not censused
 // at any position, and it needs no accounting here because it is left with no

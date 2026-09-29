@@ -2572,9 +2572,9 @@ func TestProduceElementSubstitutionGroupCircularRejected(t *testing.T) {
 // TestProduceElementBlockMapped pins §3.3.2.1's {disallowed substitutions} row:
 // the ·effective block value· is block=, else the <schema>'s blockDefault, else
 // the empty string; "#all" names all three keywords; any other value names the
-// keywords its list contains, with unrecognized items IGNORED per the row's own
-// Note. The result is in the spec's canonical order whatever order the attribute
-// spells it in, so one set has one encoding.
+// keywords its list contains (a token outside xs:blockSet is rejected, pinned in
+// produce_derivationset_test.go). The result is in the spec's canonical order
+// whatever order the attribute spells it in, so one set has one encoding.
 func TestProduceElementBlockMapped(t *testing.T) {
 	all := []xsd.DerivationMethod{xsd.DerivationExtension, xsd.DerivationRestriction, xsd.DerivationSubstitution}
 	for _, tc := range []struct {
@@ -2589,8 +2589,6 @@ func TestProduceElementBlockMapped(t *testing.T) {
 		{name: "one keyword", block: `block="substitution"`, want: []xsd.DerivationMethod{xsd.DerivationSubstitution}},
 		{name: "canonical order not lexical", block: `block="substitution extension"`,
 			want: []xsd.DerivationMethod{xsd.DerivationExtension, xsd.DerivationSubstitution}},
-		{name: "unrecognized items ignored", block: `block="list union restriction"`,
-			want: []xsd.DerivationMethod{xsd.DerivationRestriction}},
 		{name: "blockDefault fallback", blockDefault: ` blockDefault="restriction"`,
 			want: []xsd.DerivationMethod{xsd.DerivationRestriction}},
 		{name: "block overrides blockDefault", blockDefault: ` blockDefault="#all"`, block: `block="extension"`,
@@ -2648,7 +2646,7 @@ func TestProduceElementBlockSubstitutionNarrowsGroup(t *testing.T) {
 // being {extension, restriction}". So it is the same ·effective value· case
 // analysis over a different attribute pair, and the one thing that is NOT the
 // same is the size of the set — "#all" is TWO keywords here, and substitution is
-// not one of them however the attribute spells it.
+// not one of them.
 func TestProduceElementFinalMapped(t *testing.T) {
 	all := []xsd.DerivationMethod{xsd.DerivationExtension, xsd.DerivationRestriction}
 	for _, tc := range []struct {
@@ -2663,12 +2661,9 @@ func TestProduceElementFinalMapped(t *testing.T) {
 		{name: "one keyword", final: `final="restriction"`, want: []xsd.DerivationMethod{xsd.DerivationRestriction}},
 		{name: "canonical order not lexical", final: `final="restriction extension"`, want: all},
 		{name: "the same set spelled the other way", final: `final="extension restriction"`, want: all},
-		// substitution is a member of {disallowed substitutions}' relevant set and
-		// NOT of this one, so it is ignored here exactly as list/union are —
-		// xsd.NewElementDeclaration would reject it as a tableau violation.
-		{name: "substitution ignored", final: `final="substitution extension"`,
-			want: []xsd.DerivationMethod{xsd.DerivationExtension}},
-		{name: "unrecognized items ignored", final: `final="list union restriction"`,
+		// finalDefault is xs:fullDerivationSet, so list and union are valid there
+		// and name no member of this set: they are dropped, never rejected.
+		{name: "finalDefault list and union ignored", finalDefault: ` finalDefault="list union restriction"`,
 			want: []xsd.DerivationMethod{xsd.DerivationRestriction}},
 		{name: "finalDefault fallback", finalDefault: ` finalDefault="extension"`,
 			want: []xsd.DerivationMethod{xsd.DerivationExtension}},
