@@ -58,7 +58,8 @@
 // loud and an improvement is harvestable. A missing lane file is an empty
 // lane, not an error. Expectation files are machine-written only — never
 // edited by hand, and NEVER edited downward. A line leaves a file only as a
-// sanctioned applicability removal (below).
+// sanctioned applicability removal, and a `pass` becomes `fail` only as a
+// superseded pass (both below).
 //
 // A suite case may declare validity="indeterminate": the Working Group could
 // not agree the case has one right answer, and the suite's own catalog DTD
@@ -81,19 +82,22 @@
 //	    Regressed (expected pass, now fail — never acceptable), New (no
 //	    expectation yet), Removed (a sanctioned applicability removal —
 //	    see below) and Vanished (expected case the run no longer produced
-//	    and did not withhold). withheld is the runner's authoritative list
-//	    of case IDs discovery declined to produce; an ID it does not name
-//	    can never be Removed. A withheld case the run also produced is a
+//	    and did not withhold). The sixth class, Superseded, Compare never
+//	    fills: only Ratchet's superseded names move a case there (below).
+//	    withheld is the runner's authoritative list of case IDs discovery
+//	    declined to produce; an ID it does not name can never be Removed. A withheld case the run also produced is a
 //	    runner bug and is returned as an error.
 //
-//	Ratchet(expected, actual, withheld, removals) (map[string]Status, error)
-//	    Upward-only merge: Improved flips to pass, New is recorded at its
-//	    observed status, and Removed cases have their lines DELETED. Any
+//	Ratchet(expected, actual, withheld, removals, superseded) (map[string]Status, error)
+//	    Merge, upward-only bar the cases superseded names: Improved flips
+//	    to pass, New is recorded at its observed status, Removed cases have
+//	    their lines DELETED, and Superseded cases are recorded fail. Any
 //	    Regressed or Vanished case aborts the entire merge with an error —
 //	    the ratchet refuses to move at all rather than record a downgrade —
-//	    and so does a Removed count other than the one removals asserts
-//	    (AssertRemovals; the zero RemovalAssertion asserts none). Ratchet
-//	    decides ONE lane; the runner merges every lane before it writes any,
+//	    and so do a Removed count other than the one removals asserts
+//	    (AssertRemovals; the zero RemovalAssertion asserts none) and a
+//	    superseded name that did not regress in the lane. Ratchet decides
+//	    ONE lane; the runner merges every lane before it writes any,
 //	    so a refusal here withholds every lane's file (issue #581).
 //
 //	WriteExpectations(path, m) error
@@ -151,6 +155,30 @@
 //	    already printed per lane as sanctioned removals on the read-only
 //	    path (issue #1514) — the ratchet path banks them instead of
 //	    printing them.
+//
+// # Superseded passes
+//
+// A banked `pass` that held only because two defects cancelled out, until a
+// correct fix to one exposed the other, is a SUPERSEDED PASS: not a regression,
+// and bankable as `fail` (issue #1827, a repo-owner ruling). No machinery can
+// tell one from a genuine regression, so the class is asserted BY CASE ID,
+// never by count — a count would let one genuine regression stand in for the
+// asserted case. The arbiter names each case per lane on the ratchet run:
+//
+//	GOXSD_RATCHET_SUPERSEDED=<lane>:<case-id>,...
+//	    e.g. `instance:VC/vc002/instance/vc002.n1.xml`. Ratchet moves each
+//	    named case out of Regressed into Superseded and banks it `fail`. A
+//	    regression it does not name still aborts; so does a named case that
+//	    is not Regressed in that lane (still passing, Vanished, or never
+//	    banked `pass`), and so does a malformed value — a missing `:`, an
+//	    unknown lane, an empty ID, a lane:ID pair named twice. One ID in two
+//	    lanes is two names. Gated as GOXSD_RATCHET_REMOVALS is: set without
+//	    GOXSD_RATCHET=1, the run FAILS. Unset, no case is named.
+//
+// When a name is justified is the arbiter's to rule (.claude/agents/arbiter.md,
+// "Ratchet integrity"); this package checks only that each name is a
+// regression of the lane it names. A read-only run takes no names, so it still
+// fails on a superseded case as Regressed.
 //
 // # Running
 //
