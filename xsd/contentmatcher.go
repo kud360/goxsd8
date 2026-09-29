@@ -379,22 +379,23 @@ type Matcher struct {
 //     budget of that many regions: at the ≈1.5 KB per region
 //     maxPartitionStates' doc measures, over a hundred gigabytes and over a
 //     hundred terabytes for ONE item. Four instance cases sit on those three,
-//     all banked fail, and three of the four are suite-declared VALID and
-//     cannot flip on that lane whatever the ceiling, a complex-typed root
-//     being outside the one shape it decides valid (#1738) — so what the
-//     residual costs the suite is one missed rejection, particlesZ035_a.i. It
-//     is retired by an encoding that carries a live partition set without
-//     enumerating its cover, never by moving the constant. Two findings reopen
-//     the ruling, and a case merely declining here is neither, since three
-//     already do. One is a schema whose partitionsBounded product lands BETWEEN
-//     the ceiling and what a measured per-region cost can afford — the plateau
-//     above 40804, the figure maxPartitionStates' doc derives, is empty today,
-//     so a model in it would mean a raise buys verdicts again. The other is a
-//     per-region cost measured low enough to bring one of the three counters
-//     named above inside an affordable ceiling. Re-measure rather than quoting
-//     these figures: the instrument is that corpus walk over buildable complex
-//     types, not suiteindex, which cannot reach a population defined by a
-//     resource product rather than by a name or a nesting.
+//     all banked fail, and three of the four are suite-declared VALID, which
+//     that lane decides valid for a complex-typed root with content only where
+//     a Matcher decides that content (#1841) — so what the residual costs the
+//     suite is one missed rejection, particlesZ035_a.i, and at most three
+//     valid observations. It is retired by an encoding that carries a live
+//     partition set without enumerating its cover, never by moving the
+//     constant. Two findings reopen the ruling, and a case merely declining
+//     here is neither, since three already do. One is a schema whose
+//     partitionsBounded product lands BETWEEN the ceiling and what a measured
+//     per-region cost can afford — the plateau above 40804, the figure
+//     maxPartitionStates' doc derives, is empty today, so a model in it would
+//     mean a raise buys verdicts again. The other is a per-region cost measured
+//     low enough to bring one of the three counters named above inside an
+//     affordable ceiling. Re-measure rather than quoting these figures: the
+//     instrument is that corpus walk over buildable complex types, not
+//     suiteindex, which cannot reach a population defined by a resource product
+//     rather than by a name or a nesting.
 func (s *Schema) ContentMatcher(t ComplexType) (*Matcher, bool) {
 	ec, ok := t.ContentType().(ElementContent)
 	if !ok {
