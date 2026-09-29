@@ -13,14 +13,15 @@ import (
 	"github.com/kud360/goxsd8/xsd"
 )
 
-// This file holds the instance lane's shape gates for the "valid" observation
-// it makes, one per shape: a SIMPLE LEAF ROOT (#1738) and a COMPLEX EMPTY LEAF
-// ROOT (#1808) — each a validation root whose ·governing element declaration·
-// and instance shape leave no clause of cvc-elt (§3.3.4.3) and key-sva
-// (§3.3.4.6) to decide beyond what an empty validate.Result has already shown
-// decided. instance.go's "Why an EMPTY Result is evidence of validity for TWO
-// shapes only" states which clause each condition below discharges; this file
-// is only the conditions.
+// This file holds two of the instance lane's three shape gates for the "valid"
+// observation it makes, one per shape: a SIMPLE LEAF ROOT (#1738) and a COMPLEX
+// EMPTY LEAF ROOT (#1808) — each a validation root whose ·governing element
+// declaration· and instance shape leave no clause of cvc-elt (§3.3.4.3) and
+// key-sva (§3.3.4.6) to decide beyond what an empty validate.Result has already
+// shown decided — and the helpers the third, subtreeroot.go's assessed subtree
+// root (#1841), shares with them. instance.go's "Why an EMPTY Result is evidence
+// of validity for THREE shapes only" states which clause each condition below
+// discharges; this file is only the conditions.
 //
 // Each gate is computed per case and stored nowhere. It reads the schema and
 // the documents independently of the walk, so the walk's own charges on the
@@ -108,38 +109,60 @@ func peekRoot(doc string, content func(*xml.Decoder) bool) (xsd.QName, bool) {
 	}
 	defer func() { _ = rc.Close() }() // read-only handle: close error cannot affect the verdict
 	dec := xml.NewDecoder(rc)
+	root, ok := rootStart(dec)
+	if !ok || !leafAttributes(root.Attr) || !content(dec) {
+		return xsd.QName{}, false
+	}
+	return expandedName(root.Name), true
+}
+
+// rootStart reads dec up to the document element's start tag. A DOCTYPE — any
+// xml.Directive — answers false: a DTD can default an attribute onto any
+// element, or declare the unparsed entities an ENTITY value is checked against,
+// and this reader sees neither.
+func rootStart(dec *xml.Decoder) (xml.StartElement, bool) {
 	for {
 		tok, err := dec.Token()
 		if err != nil {
-			return xsd.QName{}, false
+			return xml.StartElement{}, false
 		}
 		switch t := tok.(type) {
 		case xml.Directive:
-			return xsd.QName{}, false
+			return xml.StartElement{}, false
 		case xml.StartElement:
-			if !leafAttributes(t.Attr) || !content(dec) {
-				return xsd.QName{}, false
-			}
-			return xsd.QName{Space: t.Name.Space, Local: t.Name.Local}, true
+			return t, true
 		}
 	}
+}
+
+// expandedName is n as the ·expanded name· the schema indexes by. encoding/xml
+// has already translated a bound prefix to its namespace name.
+func expandedName(n xml.Name) xsd.QName {
+	return xsd.QName{Space: n.Space, Local: n.Local}
 }
 
 // leafAttributes reports whether attrs, a root start tag's attribute list, holds
 // nothing beyond namespace declarations and the two xsi: location hints.
 func leafAttributes(attrs []xml.Attr) bool {
 	for _, a := range attrs {
-		if a.Name.Space == "xmlns" || (a.Name.Space == "" && a.Name.Local == "xmlns") {
-			continue
-		}
-		if a.Name.Space != xsd.XMLSchemaInstanceNS {
-			return false
-		}
-		if a.Name.Local != "schemaLocation" && a.Name.Local != "noNamespaceSchemaLocation" {
+		if !isNamespaceDeclaration(a) && !isLocationHint(a) {
 			return false
 		}
 	}
 	return true
+}
+
+// isNamespaceDeclaration reports whether a is a namespace declaration, which
+// the infoset carries in [namespace attributes] and not in [attributes].
+func isNamespaceDeclaration(a xml.Attr) bool {
+	return a.Name.Space == "xmlns" || (a.Name.Space == "" && a.Name.Local == "xmlns")
+}
+
+// isLocationHint reports whether a is xsi:schemaLocation or
+// xsi:noNamespaceSchemaLocation.
+func isLocationHint(a xml.Attr) bool {
+	return a.Name.Space == xsd.XMLSchemaInstanceNS &&
+		(a.Name.Local == "schemaLocation" || a.Name.Local == "noNamespaceSchemaLocation")
 }
 
 // leafContent reads the root's content up to its end tag and reports whether no

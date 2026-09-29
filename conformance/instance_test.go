@@ -99,11 +99,11 @@ func TestInstanceExecutorDecidesAbstractRoot(t *testing.T) {
 
 // TestInstanceExecutorDeclinesUndecidableShapes proves every shape this slice
 // cannot decide is DECLINED in BOTH directions rather than guessed. The
-// load-bearing row is the first: a declared, non-abstract root with element
-// [[children]] charges NOTHING, and outside the simple-leaf-root shape an empty
-// validate.Result is not evidence of validity — §3.3.5.1's e-validity is a
-// conjunction whose descendant clauses Assess does not evaluate, so neither
-// "valid" nor "invalid" may be claimed.
+// load-bearing row is the first: a declared, non-abstract root with an element
+// [[child]] ·attributed to· a lax wildcard charges NOTHING, and outside the
+// three gated shapes an empty validate.Result is not evidence of validity —
+// §3.3.5.1's e-validity is a conjunction whose clauses for that child Assess does
+// not evaluate, so neither "valid" nor "invalid" may be claimed.
 func TestInstanceExecutorDeclinesUndecidableShapes(t *testing.T) {
 	exec := newInstanceExec()
 	cases := []struct {
@@ -112,9 +112,9 @@ func TestInstanceExecutorDeclinesUndecidableShapes(t *testing.T) {
 		instance   string
 	}{
 		{
-			"a declared, non-abstract root of a COMPLEX type charges nothing, and no charge is not a verdict outside the simple-leaf-root shape",
+			"a declared, non-abstract root of a COMPLEX type whose child a lax wildcard admits charges nothing, and no charge is not a verdict outside the three gated shapes",
 			`<xs:element name="known"><xs:complexType><xs:sequence>` +
-				`<xs:element name="a" type="xs:string" minOccurs="0"/>` +
+				`<xs:any processContents="lax" minOccurs="0"/>` +
 				`</xs:sequence></xs:complexType></xs:element>`,
 			`<known><a>x</a></known>`,
 		},
@@ -341,11 +341,17 @@ func TestInstanceExecutorAgreesWithSuite(t *testing.T) {
 	dir := filepath.Join(suiteRoot, "sunData", "ElemDecl", "typeDef", "typeDef00201m")
 	c := caseSpec{
 		kind:      kindInstance,
-		doc:       filepath.Join(dir, "typeDef00201m1.xml"),
+		doc:       filepath.Join(dir, "typeDef00201m1_p.xml"),
 		schemaDoc: filepath.Join(dir, "typeDef00201m.xsd"),
 		expect:    expectValid(),
 	}
-	// The root IS declared by that schema, so nothing is charged and the case
-	// declines — the honest recorded gap this slice is bounded to.
-	declinesBothPolarities(t, exec, c, "a declared root against a real suite schema")
+	// The root is a simple leaf root the walk charges nothing for, so the case is
+	// decided valid, and a flipped expectation disagrees.
+	if !exec(c).IsPass() {
+		t.Error("a declared simple leaf root against a real suite schema: the executor must agree with the suite-valid case")
+	}
+	c.expect = expectValidity(false)
+	if exec(c).IsPass() {
+		t.Error("the executor must Fail under a flipped expectation (it decides for real)")
+	}
 }

@@ -74,8 +74,10 @@ func TestInstanceExecutorDeclinesOutsideSimpleLeafRoot(t *testing.T) {
 		instance   string
 	}{
 		{
+			// Empty, because a root WITH content and no xsi:nil is the
+			// assessed-subtree-root gate's, which admits {nillable} there.
 			"a {nillable} declaration (cvc-elt clause 3, both arms deferred)",
-			`<xs:element name="known" type="xs:string" nillable="true"/>`, `<known>x</known>`,
+			`<xs:element name="known" type="xs:string" nillable="true"/>`, `<known/>`,
 		},
 		{
 			"a fixed {value constraint} (cvc-elt clause 5.2.2)",
