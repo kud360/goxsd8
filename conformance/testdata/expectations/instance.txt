@@ -3626,7 +3626,7 @@ MS-Particles2006-07-15/particlesEb036/instance/particlesEb036.v pass
 MS-Particles2006-07-15/particlesEb037/instance/particlesEb037.i pass
 MS-Particles2006-07-15/particlesEb038/instance/particlesEb038.v pass
 MS-Particles2006-07-15/particlesEb039/instance/particlesEb039.i pass
-MS-Particles2006-07-15/particlesEb041/instance/particlesEb041.v fail
+MS-Particles2006-07-15/particlesEb041/instance/particlesEb041.v pass
 MS-Particles2006-07-15/particlesEc001/instance/particlesEc001.v pass
 MS-Particles2006-07-15/particlesEc002/instance/particlesEc002.v pass
 MS-Particles2006-07-15/particlesEc003/instance/particlesEc003.i pass
