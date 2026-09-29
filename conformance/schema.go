@@ -87,13 +87,14 @@ import (
 // reads the whole <include>/<override>/<import> closure, so a composed document
 // holding a skipped representation false-accepts exactly as a root one would. So
 // the harness runs parser.ParseReport (parser.ParseSet for several roots), which
-// reports the DOCUMENT SET it assembled, and gates every document of that set on the allowlist below
-// (closureDecidable, conformance/schema_closure.go). Until #272 the harness
-// instead re-walked §4.2's composition edges itself, because parser.Parse could
-// not be asked which documents it read; the gated set is now the assembled set by
-// construction rather than by two walks agreeing, which is what closes the
-// under-gating hazard — a document the harness missed but the parser read would
-// be a document whose shape was never gated, the false accept back again.
+// reports the DOCUMENT SET it assembled, and gates every document of that set on
+// the allowlist below (closureDecidable, conformance/schema_closure.go). Until
+// #272 the harness instead re-walked §4.2's composition edges itself, because
+// parser.Parse could not be asked which documents it read; the gated set is now
+// the assembled set by construction rather than by two walks agreeing, which is
+// what closes the under-gating hazard — a document the harness missed but the
+// parser read would be a document whose shape was never gated, the false accept
+// back again.
 //
 // # The decidable shape (the strict top-level allowlist)
 //

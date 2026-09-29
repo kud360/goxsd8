@@ -11,13 +11,13 @@ import (
 // # Why the closure, not the root
 //
 // schema.go's false-accept guard (schemaShapeDecidable) must hold for EVERY
-// document the assembly consumes, in every root's closure, not just the roots. A single-document
-// lane could gate on the one document it read; a multi-document lane cannot,
-// because an <include>d document holding a representation the producer silently
-// SKIPS (§3.1.2) — an inline anonymous type, a list/union simpleType — or one it
-// builds with a rule judging it only in part would let a schema-INVALID assembly
-// "Parse" cleanly, a FALSE ACCEPT of exactly the kind schema.go's step-3
-// allowlist exists to prevent.
+// document the assembly consumes, in every root's closure, not just the roots. A
+// single-document lane could gate on the one document it read; a multi-document
+// lane cannot, because an <include>d document holding a representation the
+// producer silently SKIPS (§3.1.2) — an inline anonymous type, a list/union
+// simpleType — or one it builds with a rule judging it only in part would let a
+// schema-INVALID assembly "Parse" cleanly, a FALSE ACCEPT of exactly the kind
+// schema.go's step-3 allowlist exists to prevent.
 //
 // # Why the parser reports the closure instead of the harness re-walking it
 //

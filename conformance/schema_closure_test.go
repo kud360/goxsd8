@@ -505,9 +505,9 @@ func TestSchemaExecutorDecidesReachableExtraDocuments(t *testing.T) {
 // TestSchemaExecutorDecidesIndependentRoots proves a multi-document schemaTest
 // whose further documents the first one does NOT reach is decided on the union
 // of every root's schema(D), assembled as ONE schema (#1840). Each case must also
-// Fail under the flipped expectation, and each is built so that deciding on the
-// first document alone gives the other answer: a verdict on a subset of the
-// declared set cannot pass it.
+// Fail under the flipped expectation. The two invalid cases are built so that
+// deciding on the first document alone gives the other answer; the valid one
+// pins that a root an earlier root already reached composes once, not twice.
 func TestSchemaExecutorDecidesIndependentRoots(t *testing.T) {
 	exec := newSchemaExec()
 	cases := []struct {
