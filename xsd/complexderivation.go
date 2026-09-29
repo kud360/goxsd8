@@ -680,7 +680,9 @@ func (s *Schema) baseComplexType(c ComplexType) (ComplexType, bool) {
 //
 // GAP(xsd): where BOTH sides are simple, blocked is not read — derivedOKSimple
 // runs cos-st-derived-ok under the empty blocking set, so its clause 2.1 is
-// vacuous and a keyword in blocked does not turn a derivation away. The four
+// vacuous and a keyword in blocked does not turn a derivation away. A complex
+// sub over a simple super reaches it too, where derivedOKComplex hands
+// cos-ct-derived-ok clause 2.3.2.2 to derivedOKSimple. The four
 // in-package callers (declaredTypeRestricts, checkLocallyDeclaredAttributeTypes,
 // checkLocallyDeclaredElementTypes, checkTypeAlternativeSubstitutable) each read
 // the answer as an admission and charge on a FALSE, so a spurious TRUE only
@@ -706,6 +708,12 @@ func (s *Schema) baseComplexType(c ComplexType) (ComplexType, bool) {
 // spurious TRUE withholds that charge and admits a member declaration those
 // exclusions should have turned away — and it reads the answer ONLY as a
 // verdict, nothing downstream being typed off it.
+//
+// A seventh, outside this package, does not read the answer where this gap
+// can make it spuriously TRUE: the conformance lane's assessed-subtree-root
+// gate refuses an xsi:type against a simple ·selected type definition· whose
+// declaration blocks restriction. It also refuses the second spurious-TRUE
+// shape, the separate GAP(xsd) at validlyDerived's xs:anyType shortcut.
 func (s *Schema) ValidlySubstitutable(sub, super TypeDefinition, blocked []DerivationMethod) (bool, error) {
 	if sup, ok := super.(ComplexType); ok {
 		blocked = unionDerivationMethods(blocked, sup.prohibitedSubstitutions)
@@ -741,6 +749,17 @@ func (s *Schema) validlyDerived(sub, super TypeDefinition, blocked []DerivationM
 	switch sup := super.(type) {
 	case ComplexType:
 		if sup.Name() == anyTypeName {
+			// GAP(xsd): the xs:anyType shortcut answers TRUE before blocked is
+			// read, for a simple and a complex sub alike, so cos-ct-derived-ok
+			// clause 1 (extension or restriction on a step of a complex sub's
+			// {base type definition} chain) and cos-st-derived-ok clause 2.1
+			// (restriction, for a simple sub) never turn the derivation away.
+			// Through validate's instanceOverride an xsi:type naming another
+			// type under a declaration of type xs:anyType that blocks it
+			// ·overrides· anyway: cvc-elt clause 4 goes uncharged and the walk
+			// decides MS-Element elemT026-029 and elemT054-057 and MS-Particles
+			// particlesIg003.v valid, which the suite calls invalid. The
+			// conformance lane's subtree gate refuses this shape (blockingUnread).
 			return true, nil
 		}
 		sc, ok := sub.(ComplexType)

@@ -224,14 +224,23 @@ import (
 //     {disallowed substitutions} the walk never reads. No element is
 //     therefore assessed against no type.
 //   - cvc-elt clauses 2 to 6, at every element: {abstract} false, no xsi:nil,
-//     no xsi:type and no {type table} — so the ·governing type definition· is
-//     the {type definition}, which the gate resolves itself, and none of
-//     governingType's silent exits (#1093) is reachable — and no fixed {value
-//     constraint}. {identity-constraint definitions} are admitted, at every
-//     depth: clause 6 (cvc-identity-constraint, §3.11.4) is the walk's, which
-//     records each check it declines in Result.Unevaluated, except the
-//     ·defaulted attribute· field node "Cases 7 and 8" below names, which the
-//     gate refuses. {nillable} is admitted, at the root too: with no xsi:nil
+//     no {type table} — so the ·selected type definition· is the {type
+//     definition}, which the gate resolves itself — and no fixed {value
+//     constraint}. An xsi:type is admitted where the gate resolves it and
+//     xsd.Schema.ValidlySubstitutable answers that it ·overrides· the selected
+//     type (clause 4, §3.3.4.2 key-overrides), which is the walk's decision
+//     too; the gate then follows that type as the ·governing type definition·
+//     (key-governing-type-elem clause 3) through every condition below. It
+//     refuses an error from that predicate, the one silent exit of validate's
+//     governingType (instanceOverride, #1093) an xsi:type reaches, and the two
+//     answers xsd gives without reading the declaration's {disallowed
+//     substitutions}, which the walk records nowhere
+//     (subtreeGate.governingType, blockingUnread). {identity-constraint
+//     definitions} are admitted, at every depth: clause 6
+//     (cvc-identity-constraint, §3.11.4) is the walk's, which records each
+//     check it declines in Result.Unevaluated, except the ·defaulted
+//     attribute· field node "Cases 7 and 8" below names, which the gate
+//     refuses. {nillable} is admitted, at the root too: with no xsi:nil
 //     anywhere, clause 3.1 holds for a declaration whose {nillable} is false
 //     and clause 3.2.1 ("E has no xsi:nil attribute information item") for one
 //     whose {nillable} is true, and no element is ·nilled·. A default {value
@@ -287,11 +296,12 @@ import (
 //     ·defaulted attribute· for each use it does not carry — are the walk's,
 //     which records each check it withholds, on an element with no
 //     [[attributes]] as on any other.
-//   - key-sva clause 2 for the xsi: attributes the gate admits: xsi:type and
-//     xsi:nil being refused, only xsi:schemaLocation and
-//     xsi:noNamespaceSchemaLocation remain, and each is ·valid· against its
-//     built-in declaration's anyURI or list-of-anyURI type (§3.2.7), whose
-//     lexical spaces admit every string (Datatypes §3.3.17).
+//   - key-sva clause 2 for the xsi: attributes the gate admits: xsi:nil being
+//     refused, xsi:type is the walk's (cvc-attribute clauses 3 and 5, charged
+//     or recorded wherever it is no QName or ·resolves· to no type), and
+//     xsi:schemaLocation and xsi:noNamespaceSchemaLocation are each ·valid·
+//     against their built-in declaration's anyURI or list-of-anyURI type
+//     (§3.2.7), whose lexical spaces admit every string (Datatypes §3.3.17).
 //   - cvc-complex-type clause 5: vacuous, no child being ·attributed to· a
 //     wildcard or an {open content}; so is e-validity clause 1.1.3.
 //   - cvc-complex-type clause 6: RECORDED, never decided. validate's
