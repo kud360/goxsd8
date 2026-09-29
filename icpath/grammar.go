@@ -149,9 +149,9 @@ type token struct {
 // and into the axis heads and the argument-free KindTests scanAxisOrKind reads,
 // which are what clause 2.2's unabbreviated spellings and the residual shapes
 // charged beside them are written in, and the white-space-split names
-// scanSplitName reads, which are charged as no XPath 2.0 expression. The strict
-// readers go first, so `child :: a` is an axis head and `a:b` a NameTest, and a
-// split name is read only where neither is.
+// scanSplitName reads, which are charged as no XPath 2.0 expression. A split
+// name is tried before scanNameTest, which would otherwise read its NCName
+// alone and leave the ':' to open no token.
 //
 // It is TOTAL: every {expression} yields a stream, and a rune that opens no
 // token becomes one '?' token rather than ending the scan. A lexer that stopped
@@ -254,10 +254,9 @@ func scanAxisOrKind(s string, i int) (token, int, bool) {
 //     production [30] and [33], is split in two, as in `child: :`. What follows
 //     it lexes as usual.
 //
-// tokenize tries it only where scanAxisOrKind has not read an axis head or a
-// KindTest, and before scanNameTest; since both runs need a non-empty S, an
-// unsplit `a:b` or `tid:*` is never one. Any other colon residue — `a:b :c`,
-// `p:`, `:a` — is left to open no token.
+// Both runs need white space beside a lone ':', so neither is ever an unsplit
+// `a:b` or `tid:*`, nor an axis head, whose '::' is unsplit, nor a KindTest.
+// Any other colon residue — `a:b :c`, `p:`, `:a` — is left to open no token.
 func scanSplitName(s string, i int) (int, bool) {
 	j := scanNCName(s, i)
 	if j == i {

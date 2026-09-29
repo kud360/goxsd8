@@ -573,9 +573,10 @@ func TestTheLeadingPairStepAdjacencyAndUnreadableRunsAreNotCharged(t *testing.T)
 	}
 }
 
-// The split-name reader takes exactly its two runs and yields to the strict
-// readers: an axis head with white space around its '::' stays an axis head,
-// and an unsplit QName or Wildcard stays a NameTest.
+// The split-name reader takes exactly its two runs, whatever follows them: an
+// axis head with white space around an unsplit '::' stays an axis head, an
+// unsplit QName or Wildcard stays a NameTest, and colon residue it does not
+// spell opens no token.
 func TestTokenizeReadsASplitNameAsOneToken(t *testing.T) {
 	for _, tc := range []struct {
 		s    string

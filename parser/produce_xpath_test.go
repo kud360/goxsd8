@@ -897,8 +897,8 @@ const (
 // child axis whose abbreviated form is as given above"; each shape below fails
 // both arms — a fault the unabbreviated spelling carries too, or an axis clause
 // 2.2 does not name — or is no XPath 2.0 expression under any spelling, which
-// is why charging it cannot reject a conforming schema. TestProduceIdentityConstraintPathFailsOpen pins the other
-// side.
+// is why charging it cannot reject a conforming schema.
+// TestProduceIdentityConstraintPathFailsOpen pins the other side.
 //
 // The charge is positioned at the offending <selector>/<field> and never at the
 // <unique> above it (STYLE E3), which is what the line assertion proves.
