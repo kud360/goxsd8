@@ -89,6 +89,21 @@ func TestValidateViolationsGoToStdout(t *testing.T) {
 	}
 }
 
+// TestValidateRendersDelegatedVerdictWithoutPlaceholder pins the whole line a
+// delegating charge prints: the String Valid verdict it wraps carries no
+// position of its own, and renders as "[rule] msg" after the outer charge's
+// sentence rather than behind the zero Loc's "?: " (#1844).
+func TestValidateRendersDelegatedVerdictWithoutPlaceholder(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"validate", "-schema", orderSchema, invalidInstance}, &stdout, &stderr); code != exitInvalid {
+		t.Fatalf("code = %d, want %d (stderr %q)", code, exitInvalid, stderr.String())
+	}
+	const want = invalidInstance + `:5:3: [cvc-attribute] the ·initial value· of the attribute sku is not ·valid· with respect to its declaration's {type definition} {http://example.com/order}Sku, which cvc-attribute clause 3 requires as per String Valid (§3.16.4): [cvc-pattern-valid] value "nope" matches no member of the pattern facet (cvc-pattern-valid, §4.3.4.4)`
+	if line, _, _ := strings.Cut(stdout.String(), "\n"); line != want {
+		t.Errorf("first line =\n%s\nwant\n%s", line, want)
+	}
+}
+
 // TestValidateQuietDoesNotSuppressViolations pins the constraint #16 still
 // carries and doc.go states: -q suppresses a subcommand's INFORMATIONAL
 // output, and validate's violations are its product, not information about it.
