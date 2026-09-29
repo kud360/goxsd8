@@ -3,6 +3,7 @@ package validate
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"slices"
 	"strings"
@@ -559,9 +560,17 @@ func TestDelegatingChargesWrapTheirCause(t *testing.T) {
 			}
 
 			// The verdict is rendered into the message as well: a reader
-			// holding only the string has no chain to walk.
-			if !strings.HasSuffix(viol.Msg, ": "+inner.Error()) {
-				t.Errorf("Msg = %q, want it to end with the wrapped verdict %q", viol.Msg, inner.Error())
+			// holding only the string has no chain to walk. The wrapped
+			// verdict carries no position of its own, so it renders from its
+			// fields as "[rule] msg" — never as its Error(), which would put
+			// the zero Loc's "?: " inside a line the outer Loc already places
+			// (#1844).
+			if inner != error(datatype) || datatype.Loc != (xsderr.Loc{}) {
+				t.Fatalf("wrapped cause = %#v, want itself the *xsderr.Error with the zero Loc this rendering covers", inner)
+			}
+			want := fmt.Sprintf("[%s] %s", datatype.Rule, datatype.Msg)
+			if !strings.HasSuffix(viol.Msg, ": "+want) || strings.HasSuffix(viol.Msg, inner.Error()) {
+				t.Errorf("Msg = %q, want it to end with the wrapped verdict rendered as %q, without the zero Loc's placeholder", viol.Msg, want)
 			}
 			if !strings.Contains(viol.Msg, "cvc-datatype-valid") || !strings.Contains(viol.Msg, `"12,50"`) {
 				t.Errorf("Msg = %q, want the inner rule ID and the offending lexical still in it", viol.Msg)
@@ -579,5 +588,33 @@ func TestNonDelegatingChargeWrapsNothing(t *testing.T) {
 	viol := onlyCharge(t, got, "cvc-complex-content")
 	if errors.Unwrap(viol) != nil {
 		t.Errorf("Unwrap() = %v, want nil for a charge that delegates to no other rule", errors.Unwrap(viol))
+	}
+}
+
+// causedBy drops only the zero Loc's placeholder: a cause that is not itself an
+// *xsderr.Error, or is one with a position of its own, still renders as %v
+// renders it, position included (#1844). Every arm keeps the identical cause
+// as the wrapped one.
+func TestCausedByRendersOnlyAnUnplacedCauseFromItsFields(t *testing.T) {
+	placed := xsderr.New("cvc-datatype-valid", loc(2, 7), "boom")
+	for _, tc := range []struct {
+		name  string
+		cause error
+		want  string
+	}{
+		{"unplaced *xsderr.Error", xsderr.New("cvc-datatype-valid", xsderr.Loc{}, "boom"), "charged: [cvc-datatype-valid] boom"},
+		{"placed *xsderr.Error", placed, "charged: " + placed.Error()},
+		{"plain error", errors.New("boom"), "charged: boom"},
+		{"wrapped unplaced *xsderr.Error", fmt.Errorf("via: %w", xsderr.New("cvc-datatype-valid", xsderr.Loc{}, "boom")), "charged: via: ?: [cvc-datatype-valid] boom"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			v := causedBy("cvc-type", loc(1, 1), tc.cause, "charged")
+			if v.Msg != tc.want {
+				t.Errorf("Msg = %q, want %q", v.Msg, tc.want)
+			}
+			if errors.Unwrap(v) != tc.cause {
+				t.Errorf("Unwrap() = %v, want the identical cause %v", errors.Unwrap(v), tc.cause)
+			}
+		})
 	}
 }
