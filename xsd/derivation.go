@@ -1,7 +1,7 @@
 package xsd
 
 import (
-	"strconv"
+	"math/big"
 
 	"github.com/kud360/goxsd8/xsderr"
 )
@@ -765,18 +765,18 @@ func checkScaleValueRestriction(loc xsderr.Loc, t *SimpleType, baseEff []Effecti
 		return nil
 	}
 	return xsderr.New(rule, loc,
-		"simple type restriction's own %s {value} %d relaxes the {base type definition}'s effective %s {value} %d, which restriction may not do (%s)",
+		"simple type restriction's own %s {value} %s relaxes the {base type definition}'s effective %s {value} %s, which restriction may not do (%s)",
 		kind, ownV, kind, baseV, rule)
 }
 
 // scaleRelaxes reports whether an own scale {value} widens (relaxes) the base's,
 // which restriction forbids: for maxScale a larger value widens the space, for
 // minScale a smaller value does.
-func scaleRelaxes(kind FacetKind, own, base int) bool {
+func scaleRelaxes(kind FacetKind, own, base integerLiteral) bool {
 	if kind == FacetMaxScale {
-		return own > base
+		return own.cmp(base) > 0
 	}
-	return own < base
+	return own.cmp(base) < 0
 }
 
 // checkScaleFixed charges f-ms-fixed (§4.2.1) or f-mns-fixed (§4.3.1): if the
@@ -806,11 +806,11 @@ func checkScaleFixed(loc xsderr.Loc, t *SimpleType, baseEff []EffectiveFacet, ki
 	if err != nil {
 		return err
 	}
-	if ownV == baseV {
+	if ownV.cmp(baseV) == 0 {
 		return nil
 	}
 	return xsderr.New(rule, loc,
-		"simple type restriction sets %s {value} %d but the {base type definition}'s effective %s is {fixed} at %d and may not be overridden (%s)",
+		"simple type restriction sets %s {value} %s but the {base type definition}'s effective %s is {fixed} at %s and may not be overridden (%s)",
 		kind, ownV, kind, baseV, rule)
 }
 
@@ -841,11 +841,11 @@ func checkScaleConsistency(r TypeResolver, t *SimpleType) error {
 	if err != nil {
 		return err
 	}
-	if minV <= maxV {
+	if minV.cmp(maxV) <= 0 {
 		return nil
 	}
 	return xsderr.New(ruleMinScaleLEMaxScale, loc,
-		"simple type {facets} has minScale {value} %d greater than maxScale {value} %d, violating \"minScale less than or equal to maxScale\" (its spec anchor id %s is a copy-paste bug)",
+		"simple type {facets} has minScale {value} %s greater than maxScale {value} %s, violating \"minScale less than or equal to maxScale\" (its spec anchor id %s is a copy-paste bug)",
 		minV, maxV, ruleMinScaleLEMaxScale)
 }
 
@@ -963,7 +963,7 @@ func checkCountRestriction(loc xsderr.Loc, t *SimpleType, baseEff []EffectiveFac
 		return nil
 	}
 	return xsderr.New(rule, loc,
-		"simple type restriction's own %s {value} %d %s the {base type definition}'s effective %s {value} %d (%s)",
+		"simple type restriction's own %s {value} %s %s the {base type definition}'s effective %s {value} %s (%s)",
 		kind, ownV, countRequirement(kind), kind, baseV, rule)
 }
 
@@ -974,14 +974,15 @@ func checkCountRestriction(loc xsderr.Loc, t *SimpleType, baseEff []EffectiveFac
 // of whether {fixed} is true or false" (§4.3.1) — so any difference is a
 // violation, and length needs no separate {fixed}-inheritance check. minLength
 // may only move up; maxLength, totalDigits and fractionDigits only down.
-func countRelaxes(kind FacetKind, own, base int) bool {
+func countRelaxes(kind FacetKind, own, base integerLiteral) bool {
+	c := own.cmp(base)
 	if kind == FacetLength {
-		return own != base
+		return c != 0
 	}
 	if kind == FacetMinLength {
-		return own < base
+		return c < 0
 	}
-	return own > base
+	return c > 0
 }
 
 // countRequirement renders the requirement countRelaxes encodes, for the
@@ -1138,11 +1139,11 @@ func checkCountOrder(loc xsderr.Loc, eff []EffectiveFacet, lower, upper FacetKin
 	if err != nil {
 		return err
 	}
-	if lowerV <= upperV {
+	if lowerV.cmp(upperV) <= 0 {
 		return nil
 	}
 	return xsderr.New(rule, loc,
-		"simple type {facets} has %s {value} %d greater than %s {value} %d (%s)",
+		"simple type {facets} has %s {value} %s greater than %s {value} %s (%s)",
 		lower, lowerV, upper, upperV, rule)
 }
 
@@ -1169,9 +1170,9 @@ func checkLengthCoexistence(loc xsderr.Loc, eff []EffectiveFacet) error {
 		if err != nil {
 			return err
 		}
-		if minV > lengthV {
+		if minV.cmp(lengthV) > 0 {
 			return xsderr.New(ruleLengthMinLengthMaxLength, loc,
-				"simple type {facets} has minLength {value} %d greater than length {value} %d (%s clause 1.1)",
+				"simple type {facets} has minLength {value} %s greater than length {value} %s (%s clause 1.1)",
 				minV, lengthV, ruleLengthMinLengthMaxLength)
 		}
 	}
@@ -1183,11 +1184,11 @@ func checkLengthCoexistence(loc xsderr.Loc, eff []EffectiveFacet) error {
 	if err != nil {
 		return err
 	}
-	if lengthV <= maxV {
+	if lengthV.cmp(maxV) <= 0 {
 		return nil
 	}
 	return xsderr.New(ruleLengthMinLengthMaxLength, loc,
-		"simple type {facets} has length {value} %d greater than maxLength {value} %d (%s clause 2.1)",
+		"simple type {facets} has length {value} %s greater than maxLength {value} %s (%s clause 2.1)",
 		lengthV, maxV, ruleLengthMinLengthMaxLength)
 }
 
@@ -1307,7 +1308,7 @@ func checkLengthFreeStep(r TypeResolver, t *SimpleType, eff []EffectiveFacet, ki
 		if err != nil {
 			return err
 		}
-		if stepV != want {
+		if stepV.cmp(want) != 0 {
 			break
 		}
 		if _, specified := findFacet(s.ownFacets, FacetLength); !specified {
@@ -1320,7 +1321,7 @@ func checkLengthFreeStep(r TypeResolver, t *SimpleType, eff []EffectiveFacet, ki
 		s = next
 	}
 	return xsderr.New(ruleLengthMinLengthMaxLength, loc,
-		"simple type {facets} has length alongside %s {value} %d, but every derivation step at which %s held that {value} also specified length (%s clause %s)",
+		"simple type {facets} has length alongside %s {value} %s, but every derivation step at which %s held that {value} also specified length (%s clause %s)",
 		kind, want, kind, ruleLengthMinLengthMaxLength, clause)
 }
 
@@ -1453,24 +1454,26 @@ func singleValue(f Facet) (string, bool) {
 }
 
 // countValue reads a count facet's single xs:nonNegativeInteger {value} (length,
-// minLength, maxLength, totalDigits, fractionDigits). Like scaleValue it treats
-// a wrong value count or an out-of-space literal as a real validity rejection
-// charged as an *xsderr.Error — that {value} is user-supplied schema lexical data
-// reachable through the public NewFacet/NewSimpleType API — mirroring
-// value/facets.go's facetCount, which parses the identical {value}s at
-// instance-validation time.
-func countValue(f Facet, loc xsderr.Loc, rule xsderr.Rule) (int, error) {
+// minLength, maxLength, totalDigits, fractionDigits). xs:nonNegativeInteger is
+// unbounded (Datatypes §3.4.20), so a literal past math.MaxInt is a valid
+// {value} and is returned whole, never charged. Like scaleValue it treats a
+// wrong value count, or a literal that is not an integer or is negative, as a
+// real validity rejection charged under rule as an *xsderr.Error — that {value}
+// is user-supplied schema lexical data reachable through the public
+// NewFacet/NewSimpleType API — mirroring value/facets.go's facetCount, which
+// reads the identical {value}s at instance-validation time.
+func countValue(f Facet, loc xsderr.Loc, rule xsderr.Rule) (integerLiteral, error) {
 	v, ok := singleValue(f)
 	if !ok {
-		return 0, xsderr.New(rule, loc,
+		return "", xsderr.New(rule, loc,
 			"%s facet must carry exactly one value, has %d", f.kind, len(f.values))
 	}
-	n, err := strconv.Atoi(v)
-	if err != nil || n < 0 {
-		return 0, xsderr.New(rule, loc,
+	n, ok := new(big.Int).SetString(v, 10)
+	if !ok || n.Sign() < 0 {
+		return "", xsderr.New(rule, loc,
 			"%s facet value %q is not a nonNegativeInteger", f.kind, v)
 	}
-	return n, nil
+	return integerLiteral(v), nil
 }
 
 // findFacet returns the own Facet of the given kind and whether it is present.
@@ -1495,25 +1498,47 @@ func findEffectiveFacet(facets []EffectiveFacet, kind FacetKind) (Facet, bool) {
 }
 
 // scaleValue reads a scale facet's single xs:integer {value} (which may be
-// negative — no nonNegativeInteger constraint). That {value} is user-supplied
-// schema lexical data reachable through the public NewFacet/NewSimpleType API,
-// which accepts arbitrary lexical strings for scale kinds, so a wrong value count
-// or non-integer literal is a real validity rejection charged as an
-// *xsderr.Error, not a package logic error — mirroring value/facets.go's facetInt
-// for the exact same maxScale/minScale {value} parsing at instance-validation
-// time.
-func scaleValue(f Facet, loc xsderr.Loc, rule xsderr.Rule) (int, error) {
+// negative — no nonNegativeInteger constraint). xs:integer is unbounded in both
+// directions (Datatypes §3.4.13), so a literal past math.MaxInt or math.MinInt is
+// a valid {value} and is returned whole, never charged. That {value} is
+// user-supplied schema lexical data reachable through the public
+// NewFacet/NewSimpleType API, which accepts arbitrary lexical strings for scale
+// kinds, so a wrong value count or non-integer literal is a real validity
+// rejection charged as an *xsderr.Error, not a package logic error — mirroring
+// value/facets.go's facetInt for the exact same maxScale/minScale {value} at
+// instance-validation time.
+func scaleValue(f Facet, loc xsderr.Loc, rule xsderr.Rule) (integerLiteral, error) {
 	v, ok := singleValue(f)
 	if !ok {
-		return 0, xsderr.New(rule, loc,
+		return "", xsderr.New(rule, loc,
 			"%s facet must carry exactly one value, has %d", f.kind, len(f.values))
 	}
-	n, err := strconv.Atoi(v)
-	if err != nil {
-		return 0, xsderr.New(rule, loc,
+	if _, ok := new(big.Int).SetString(v, 10); !ok {
+		return "", xsderr.New(rule, loc,
 			"%s facet value %q is not an integer", f.kind, v)
 	}
-	return n, nil
+	return integerLiteral(v), nil
+}
+
+// integerLiteral is an integer facet {value} held as the literal the document
+// wrote, which countValue or scaleValue has checked is an optional sign followed
+// by decimal digits. The count and scale facets' value spaces are unbounded, so
+// the literal is never narrowed to a host int: cmp orders two of them by value,
+// exactly however large, and a rejection names the literal itself.
+type integerLiteral string
+
+// cmp orders l and m by value: negative, zero or positive as l is less than,
+// equal to or greater than m. Two spellings of one value, such as "+007" and
+// "7", compare equal.
+func (l integerLiteral) cmp(m integerLiteral) int {
+	return l.value().Cmp(m.value())
+}
+
+// value is the integer l spells. l is checked at construction, so SetString
+// cannot fail here.
+func (l integerLiteral) value() *big.Int {
+	v, _ := new(big.Int).SetString(string(l), 10)
+	return v
 }
 
 // unionMembershipHasList reports whether any type in u's transitive membership
