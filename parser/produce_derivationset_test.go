@@ -70,6 +70,12 @@ func TestProduceDerivationSetValueRejected(t *testing.T) {
 			wantLine: 2,
 		},
 		{
+			name:     `<element> final="Extension"`,
+			body:     `<xs:element name="e" type="xs:string" final="Extension"/>`,
+			wantMsg:  `<element> final "Extension" is not in the ·lexical space· of xs:derivationSet`,
+			wantLine: 2,
+		},
+		{
 			name:     `<complexType> block="substitution"`,
 			body:     `<xs:complexType name="ct" block="substitution"><xs:sequence/></xs:complexType>`,
 			wantMsg:  `<complexType> block "substitution" is not in the ·lexical space· of xs:derivationSet`,
