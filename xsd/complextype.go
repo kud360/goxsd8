@@ -50,16 +50,16 @@ import "github.com/kud360/goxsd8/xsderr"
 // Of the derivation-validity rules, derivation-ok-restriction (§3.4.6.3) IS
 // enforced, at finalize (Phase D, complexderivation.go, #262), clause 2.4.2's
 // cos-content-act-restrict (§3.4.6.4) delegate included (contentrestricts.go,
-// #263) — all five clauses, clause 5's {assertions} prefix included (#346); the
-// one latitude left there is the content models §3.4.6.3's own all-group
-// leniency licenses accepting provisionally. cos-ct-extends (§3.4.6.2) is
-// enforced too, at the same phase (complexextension.go, #264), clause
-// 1.4.3.2.2.2's cos-particle-extend (§3.9.6.2) delegate included — all seven
-// clauses of case 1, since the three §3.4.2 base folds they read are done
-// ({attribute uses} #401, {attribute wildcard} #265, {assertions} #346).
-// Clause 1.5 is decided for BOTH chain shapes as of #392: the pure-extension
-// chain by the identity re-ordering, and a chain mixing extension and
-// restriction steps by synthesizing the §3.4.6.2 Note's collapsed intermediate
+// #263) — all five clauses, clause 5's {assertions} prefix included (#346), and
+// an ·all· group on either side decided exactly (#1930); the latitude left there
+// is the provisional acceptances contentTypeRestricts enumerates. cos-ct-extends
+// (§3.4.6.2) is enforced too, at the same phase (complexextension.go, #264),
+// clause 1.4.3.2.2.2's cos-particle-extend (§3.9.6.2) delegate included — all
+// seven clauses of case 1, since the three §3.4.2 base folds they read are done
+// ({attribute uses} #401, {attribute wildcard} #265, {assertions} #346). Clause
+// 1.5 is decided for BOTH chain shapes as of #392: the pure-extension chain by
+// the identity re-ordering, and a chain mixing extension and restriction steps
+// by synthesizing the §3.4.6.2 Note's collapsed intermediate
 // (collapsedintermediate.go) and running derivation-ok-restriction against it.
 // None of them is touched HERE — they are cross-component finalize-phase
 // concerns, not tableau shape.

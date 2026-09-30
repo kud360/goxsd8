@@ -26,26 +26,26 @@ import (
 // file supplies both as languagePolicy: the unfolding of a numeric occurrence
 // range (unfoldExactly) and the rendering of an <all> group (addInterleave).
 //
-// WHY THE UNFOLDING IS NOT SHARED. maxMandatoryCopies /
-// maxOptionalCopies bound a range to two copies of each kind, which is
-// verdict-preserving for cos-nonambig — whose subject is which particle-
-// IDENTIFIER sets are live in one state, and two copies realize every such set —
-// and is NOT verdict-preserving here, because as a statement about LANGUAGE the
-// bound rewrites the range itself: e{3,6} would read as e{2,4} and e{0,100} as
-// e{0,2}. That rewrite is monotone in neither direction, and both directions are
-// reachable on a bare single element particle: e{3,6} under e{0,100} is a VALID
-// restriction whose fourth R-copy would find no live B-position and be rejected,
-// and e{5,5} under e{3,3} is an INVALID one both of whose sides would collapse to
-// two mandatory copies and become indistinguishable. Nothing licenses either
-// outcome — clause 1 is pure set containment naming no algorithm, Appendix J's
-// unfolding guidance is scoped by its own text to cos-nonambig, and §3.4.6.3's
-// "may provisionally accept the derivation" (xmlschema11-1.md:2041) licenses
-// ACCEPTANCE of an undecided case, never a rejection. So the constants are not
-// raised, which would only move the same two thresholds, but replaced for this
-// consumer: unfoldExactly emits {max occurs} copies of a bounded range and
-// {min occurs} copies plus a loop-back for an unbounded one, so the automaton
-// accepts exactly L and this walk DECIDES containment over the declared
-// {min occurs}/{max occurs} instead of over a truncated unfolding (#501).
+// WHY THE UNFOLDING IS NOT SHARED. maxMandatoryCopies / maxOptionalCopies bound a
+// range to two copies of each kind, which is verdict-preserving for cos-nonambig
+// — whose subject is which particle- IDENTIFIER sets are live in one state, and
+// two copies realize every such set — and is NOT verdict-preserving here, because
+// as a statement about LANGUAGE the bound rewrites the range itself: e{3,6} would
+// read as e{2,4} and e{0,100} as e{0,2}. That rewrite is monotone in neither
+// direction, and both directions are reachable on a bare single element particle:
+// e{3,6} under e{0,100} is a VALID restriction whose fourth R-copy would find no
+// live B-position and be rejected, and e{5,5} under e{3,3} is an INVALID one both
+// of whose sides would collapse to two mandatory copies and become
+// indistinguishable. Nothing licenses either outcome — clause 1 is pure set
+// containment naming no algorithm, Appendix J's unfolding guidance is scoped by
+// its own text to cos-nonambig, and §3.4.6.3's "may provisionally accept the
+// derivation" (xmlschema11-1.md:2041) licenses ACCEPTANCE of an undecided case,
+// never a rejection. So the constants are not raised, which would only move the
+// same two thresholds, but replaced for this consumer: unfoldExactly emits {max
+// occurs} copies of a bounded range and {min occurs} copies plus a loop-back for
+// an unbounded one, so the automaton accepts exactly L and this walk DECIDES
+// containment over the declared {min occurs}/{max occurs} instead of over a
+// truncated unfolding (#501).
 //
 // WHY THE <all> RENDERING IS NOT SHARED. addAll renders all(P1…Pn) as a star over
 // its members followed by a primed replay of one of them, which is exact for
@@ -61,10 +61,12 @@ import (
 // identifier set the first two do not, so every state of the exactly-unfolded
 // automaton offers an identifier set already present in the bounded one that
 // Phase C accepted: the "no two competing particles in one state" premise the
-// determinism note below rests on carries over unchanged. It is not load-bearing
-// for soundness in any case — R's live positions are ALL explored and B is
-// subset-constructed, which is the standard containment check over two NFAs, and
-// neither half needs a deterministic automaton.
+// determinism note below rests on carries over unchanged. That argument is the
+// unfolding's alone: addInterleave's states are not claimed to be among the ones
+// Phase C checked over addAll's star, and nothing needs them to be. The premise
+// is not load-bearing for soundness in any case — R's live positions are ALL
+// explored and B is subset-constructed, which is the standard containment check
+// over two NFAs, and neither half needs a deterministic automaton.
 //
 // WHY THE WALK NEEDS NO BACKTRACKING, AND WHY B IS STILL DETERMINIZED.
 // cos-nonambig (Phase C, which runs before this Phase D check) has already
@@ -580,11 +582,35 @@ func (a contentAutomaton) liveGroups(states []int) liveSet {
 // productState is one state of the product walk: a single state of R paired with
 // the SET of B states B's runs may be in, the set named by its subsetTable
 // identifier. Naming it rather than carrying it is what makes the state
-// comparable, so the visited set keys on the state itself and no string is built
-// per state (see subsetTable).
+// comparable, so the visited set keys on a pair of ints and no string is built
+// per state (see subsetTable). The visited set's keys carry R's futureClasses
+// class in r where the queue carries R's state.
 type productState struct {
 	r int
 	b int
+}
+
+// futureClasses numbers R's states by their future, indexed by state + 1 so
+// startState is entry 0: two states share a number exactly when they have the
+// same live positions and the same acceptance, which is everything the walk
+// reads off an R-state after entering it. Numbers are assigned in ascending
+// state order and the map is a lookup only (STYLE D2).
+func (a contentAutomaton) futureClasses() []int {
+	classes := make([]int, len(a.positions)+1)
+	ids := map[string]int{}
+	for st := startState; st < len(a.positions); st++ {
+		key := positionsKey(a.live(st))
+		if a.accepting(st) {
+			key = "accept " + key
+		}
+		id, ok := ids[key]
+		if !ok {
+			id = len(ids)
+			ids[key] = id
+		}
+		classes[st+1] = id
+	}
+	return classes
 }
 
 // subsetTable interns the B-state sets the walk reaches: equal sets share an
@@ -722,10 +748,17 @@ const (
 // reported separately; contentModelRestricts records which one failed only in
 // the comments at its two rejection sites.
 //
-// Four shapes are provisionally accepted rather than decided, each fail-open.
-// The first three lean on a licence, the second only where R's compositor is
-// ·all· (its marker states that the rest carries none); the fourth is a ruled
-// resource approximation carrying none:
+// An ·all· group on either side is DECIDED, like any other content model:
+// languagePolicy builds it as its exact interleave (addInterleave). That is
+// option (a) of §3.4.6.3's implementation-defined choice, "always detects
+// violations of clause 2.4.2 by examination of the schema in isolation", which
+// the provisional-acceptance sentence before it (xmlschema11-1.md:2041) permits
+// and does not require (#1930).
+//
+// Three shapes are provisionally accepted rather than decided, each fail-open.
+// The first is an assertion, the second leans on §3.4.6.3's licence only where
+// R's top compositor is ·all· (its marker states that the rest carries none),
+// and the third is a ruled resource approximation with the same split:
 //
 //   - a non-element {content type} on either side. 2.4.1 (restrictionVarietyPairOK)
 //     has already established both are element-only or mixed before this is
@@ -734,35 +767,13 @@ const (
 //     the automaton below does not model, so ignoring it would shrink B and
 //     manufacture clause-1 rejections; R's only widens R, which is harmless, but
 //     the pair is skipped together so the reason stays one reason.
-//   - an ·all· group anywhere in R's content model. §3.4.6.3 states this
-//     leniency in its own text — "If (1) the type definition being checked has
-//     T.{content type}.{particle}.{term}.{compositor} = all and (2) an
-//     implementation is unable to determine by examination of the schema in
-//     isolation whether or not clause 2.4.2 is satisfied, then the implementation
-//     may provisionally accept the derivation" — and precondition (2) genuinely
-//     holds for the machinery here: addAll models all(P1…Pn) as a star over its
-//     members followed by a primed replay of one of them, whose language is a
-//     SUPERSET of the star's and so of the interleave — a single-member ·all·
-//     already reads as that member repeated — so an R modelled that way admits
-//     sequences R does not, and charging their absence from B would false-reject.
-//     B needs no such leniency for the mirror-image reason: the same
-//     over-approximation makes B look larger, which can only accept. This is the
-//     NARROW §3.4.6.3 all-group allowance, not the broader implementation-defined
-//     (a)/(b)/(c) clause that the pre-#263 stub relied on; being spec-licensed
-//     rather than a deliberate incompleteness, it carries no GAP marker FOR THAT
-//     CALLER. The licence is §3.4.6.3's and names clause 2.4.2, so it does not
-//     travel with this function: a restrictsLanguage caller charging some other
-//     rule inherits the leniency's fail-open behaviour and must carry its own
-//     marker for it (checkModelGroupRedefinitions, redefinition.go).
-//   - a content model whose exact unfolding would exceed maxContentPositions on
-//     either side. This one alone is a RESOURCE ceiling rather than a modelling
-//     gap — it bounds the automaton's size, see maxContentPositions for what that
-//     does and does not bound — and it is the only path on which a declared
-//     occurrence range does not reach the walk. It claims no spec licence:
-//     §3.4.6.3's is gated on the ·all· compositor the bullet above has already
-//     claimed, so the sequence/choice models that reach it are unlicensed and it
-//     stands as a ruled permanent approximation instead. The marker at the branch
-//     itself states the ruling and what reopens it.
+//   - a content model whose exact construction would exceed maxContentPositions
+//     on either side. This one alone is a RESOURCE ceiling rather than a
+//     modelling gap — it bounds the automaton's size, see maxContentPositions for
+//     what that does and does not bound — and it is the only path on which a
+//     declared occurrence range or an ·all· group does not reach the walk. The
+//     marker at the branch itself states the ruling, the licence it has and
+//     lacks, and what reopens it.
 func (s *Schema) contentTypeRestricts(tct, bct ContentType, scope contentRestrictionScope) bool {
 	rc, ok := tct.(ElementContent)
 	if !ok {
@@ -790,9 +801,8 @@ func (s *Schema) contentTypeRestricts(tct, bct ContentType, scope contentRestric
 		// 2.4.2 and states no condition of its own, unlike the ·all·-scoped
 		// sentence at :2041, and this arm's cases split on that sentence's
 		// antecedent. Where T.{content type}.{particle}.{term}.{compositor} IS
-		// all, reached here rather than at usesAllCompositor below because this
-		// branch precedes it, the narrow :2041 sentence covers the case outright:
-		// its condition (1) holds and its condition (2) is this very inability.
+		// all, the narrow :2041 sentence covers the case outright: its condition
+		// (1) holds and its condition (2) is this very inability.
 		// Everywhere else the arm has no licence, exactly as
 		// contentModelRestricts' giveup site below has none: the (a)/(b)/(c)
 		// sentence says WHEN a processor already inside :2041's antecedent detects
@@ -854,21 +864,24 @@ func (s *Schema) contentTypeRestricts(tct, bct ContentType, scope contentRestric
 		// file's header). The ceiling therefore declines the whole question
 		// instead of answering a different one.
 		//
-		// No spec licence covers this branch, and this marker claims none.
-		// §3.4.6.3's provisional-acceptance sentence is gated by a two-conjunct
-		// antecedent — "If (1) the type definition being checked has T.{content
-		// type}.{particle}.{term}.{compositor} = all and (2) an implementation is
-		// unable to determine by examination of the schema in isolation whether or
-		// not clause 2.4.2 is satisfied" — and condition (1) cannot hold here, by
-		// construction: usesAllCompositor above claims every genuine ·all· case
-		// before this line is reached, so what remains is exactly the
-		// sequence/choice population that antecedent does not reach. Neither
-		// §3.4.6.3 nor §3.4.6.4 grants fail-open for that population anywhere.
-		// What the branch does guarantee is the direction enumerated below: it
-		// abandons the WHOLE walk rather than truncating one into a verdict,
-		// carrying the caveat contentModelRestricts' giveup site states, that a
-		// schema accepted provisionally with no runtime cross-check can be
-		// non-conforming with nothing left to say so.
+		// A spec licence covers one sub-population of this branch, and this marker
+		// claims none beyond it. §3.4.6.3's provisional-acceptance sentence is
+		// gated by a two-conjunct antecedent — "If (1) the type definition being
+		// checked has T.{content type}.{particle}.{term}.{compositor} = all and (2)
+		// an implementation is unable to determine by examination of the schema in
+		// isolation whether or not clause 2.4.2 is satisfied". An ·all· group
+		// reaches this line like any other content model (#1930), so an R whose
+		// top compositor is all and whose interleave exceeds the ceiling meets
+		// both conditions — (2) is this very inability — for its clause-2.4.2
+		// caller. Everything else here is outside that antecedent: a sequence or
+		// choice R, whatever B holds, and every restrictsLanguage or cos-ct-extends
+		// reader, since the licence names clause 2.4.2. Neither §3.4.6.3 nor
+		// §3.4.6.4 grants fail-open for that population anywhere. What the branch
+		// does guarantee is the direction enumerated below: it abandons the WHOLE
+		// walk rather than truncating one into a verdict, carrying the caveat
+		// contentModelRestricts' giveup site states, that a schema accepted
+		// provisionally with no runtime cross-check can be non-conforming with
+		// nothing left to say so.
 		//
 		// Fail-open for all three readers of this true, each of which charges only
 		// on false and reads nothing else out of it (STYLE P3a).
@@ -896,7 +909,12 @@ func (s *Schema) contentTypeRestricts(tct, bct ContentType, scope contentRestric
 		// the thousands to millions — so the incompleteness is live rather than
 		// latent, and it is retired by a construction that decides containment
 		// without materializing an automaton per occurrence, never by moving the
-		// constant.
+		// constant. Since ·all· groups reach this line (#1930), so does one more
+		// shape: an interleave's size is the PRODUCT of its members' state counts,
+		// and saxonData All all225 and all226 restrict to an ·all· of three
+		// members ranging to 15, 15 and 22 occurrences, 16 × 16 × 23 member-state
+		// vectors, past the ceiling. Both are suite-valid, so neither is the
+		// second reopening finding below.
 		//
 		// Two findings reopen the ruling, and a case merely arriving here is
 		// neither, since six already do. One is a containment procedure that
@@ -943,9 +961,18 @@ func (s *Schema) contentTypeRestricts(tct, bct ContentType, scope contentRestric
 // — is read off the R-position's {term}, and copies of one particle share it, so
 // the copies of one particle live in a state all transition into one B-set. The
 // copies are still enqueued SEPARATELY, each as its own R-state: they carry
-// different ·follow· sets, so nothing about the state space is collapsed, only
-// the recomputation of one answer per copy (#501). Iteration stays in ascending
-// R-position order, so the walk order is unchanged by the memo.
+// different ·follow· sets, so the per-particle memo collapses only the
+// recomputation of one answer per copy (#501), and the future quotient below
+// does not merge them either. Iteration stays in ascending R-position order, so
+// the walk order is unchanged by the memo.
+//
+// The visited set keys on R's FUTURE rather than on its position
+// (futureClasses): two R-states with the same ·follow· set and the same
+// acceptance continue identically against any B-set, so once one of them has
+// been paired with a B-set the other adds nothing. That quotient is exact, and
+// it is what keeps an ·all· affordable: addInterleave enters one member-state
+// vector by one position per member that can move into it, and every one of
+// them has that vector's future (#1930).
 //
 // Two walk-scoped memos, both keyed on a fact rather than caching a computation
 // whose inputs might drift (STYLE D3), and both bounded by maxProductStates
@@ -963,8 +990,9 @@ func (s *Schema) contentTypeRestricts(tct, bct ContentType, scope contentRestric
 func (s *Schema) contentModelRestricts(r, b contentAutomaton, scope contentRestrictionScope) bool {
 	subsets := newSubsetTable()
 	liveOf := map[int]liveSet{}
+	future := r.futureClasses()
 	start := productState{r: startState, b: subsets.intern([]int{startState})}
-	visited := map[productState]bool{start: true}
+	visited := map[productState]bool{{r: future[startState+1], b: start.b}: true}
 	queue := []productState{start}
 	for len(queue) > 0 {
 		cur := queue[0]
@@ -994,7 +1022,8 @@ func (s *Schema) contentModelRestricts(r, b contentAutomaton, scope contentRestr
 				target[r.positions[p].particleID] = id
 			}
 			next := productState{r: p, b: id}
-			if visited[next] {
+			seen := productState{r: future[p+1], b: id}
+			if visited[seen] {
 				continue
 			}
 			if len(visited) >= maxProductStates {
@@ -1007,13 +1036,14 @@ func (s *Schema) contentModelRestricts(r, b contentAutomaton, scope contentRestr
 				// the measurement, and the margin it has left — so the incompleteness
 				// is latent, and latent is not licensed.
 				//
-				// No spec licence covers this branch, and this marker claims none.
-				// §3.4.6.3's leniency for an undecidable clause 2.4.2 is gated by a
-				// two-conjunct antecedent — "If (1) the type definition being checked
-				// has T.{content type}.{particle}.{term}.{compositor} = all and (2) an
-				// implementation is unable to determine by examination of the schema in
-				// isolation whether or not clause 2.4.2 is satisfied, then the
-				// implementation may provisionally accept the derivation" — and the
+				// A spec licence covers one sub-population of this branch, and this
+				// marker claims none beyond it. §3.4.6.3's leniency for an undecidable
+				// clause 2.4.2 is gated by a two-conjunct antecedent — "If (1) the type
+				// definition being checked has T.{content
+				// type}.{particle}.{term}.{compositor} = all and (2) an implementation
+				// is unable to determine by examination of the schema in isolation
+				// whether or not clause 2.4.2 is satisfied, then the implementation may
+				// provisionally accept the derivation" — and the
 				// ·implementation-defined· sentence after it, "whether a processor (a)
 				// always detects violations of clause 2.4.2 by examination of the
 				// schema in isolation, (b) detects them only when some element
@@ -1023,11 +1053,13 @@ func (s *Schema) contentModelRestricts(r, b contentAutomaton, scope contentRestr
 				// not", says WHEN a processor already inside that antecedent detects
 				// them. It states no condition of its own and grants nothing outside
 				// it, and the all-compositor condition appears nowhere else in the
-				// document. Condition (1) cannot hold here, by construction:
-				// contentTypeRestricts claims every genuine ·all· case through
-				// usesAllCompositor before an automaton is built, so what reaches this
-				// line is exactly the sequence/choice population the antecedent does
-				// not cover. Reading (c) as a RESIDUAL CATCH-ALL detached from
+				// document. An ·all· group reaches this walk like any other content
+				// model (#1930), so an R whose top compositor is all meets condition
+				// (1) here and condition (2) is this very inability: that R, charged
+				// by its clause-2.4.2 caller, is covered outright. Everything else
+				// that reaches this line — a sequence or choice R, whatever B holds,
+				// and every reader charging a rule other than clause 2.4.2 — is
+				// outside the antecedent. Reading (c) as a RESIDUAL CATCH-ALL detached from
 				// condition (1) was this marker's own earlier position; it is ruled
 				// out, not merely unproved (#1378).
 				//
@@ -1088,7 +1120,7 @@ func (s *Schema) contentModelRestricts(r, b contentAutomaton, scope contentRestr
 				// recipe in full.
 				return true
 			}
-			visited[next] = true
+			visited[seen] = true
 			queue = append(queue, next)
 		}
 	}
