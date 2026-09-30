@@ -86,7 +86,8 @@ func (w Wildcard) ProcessContents() ProcessContents {
 // relates two wildcard particles through the same intersectNamespaceConstraint
 // (particleattribution.go, wildcardsOverlap), and the complex-content
 // restriction walk, which folds a base content model's live wildcards through
-// UnionNamespaceConstraint and relates the result by wildcardSubset
+// UnionNamespaceConstraint, relates the result by wildcardSubset, and splits the
+// restriction's wildcard through intersectNamespaceConstraint
 // (contentrestricts.go). It mirrors the inspection getters
 // NamespaceConstraint.Variety/Namespaces; to decide whether a name is admitted,
 // call NamespaceConstraint.AllowsName on the result — or, for cvc-wildcard
