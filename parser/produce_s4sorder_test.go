@@ -417,6 +417,35 @@ func TestProduceS4SChildOrderRejected(t *testing.T) {
 			wantOwner: "<alternative> at " + produceURI + ":3:1",
 			wantKind:  "out of the child order",
 		},
+		{
+			// xs:namedAttributeGroup puts "anyAttribute?" after the attribute block, so
+			// an <attribute> written once <anyAttribute> has matched cannot re-enter
+			// the block behind it (#1876).
+			name:     "attribute after the anyAttribute of a top-level attributeGroup",
+			topLevel: true,
+			lines: []string{
+				`<xs:attributeGroup name="g">`,
+				`<xs:anyAttribute/>`,
+				`<xs:attribute name="a"/>`,
+				`</xs:attributeGroup>`,
+			},
+			wantChild: "<attribute> at " + produceURI + ":4:1",
+			wantOwner: "<attributeGroup> at " + produceURI + ":2:1",
+			wantKind:  "out of the child order",
+		},
+		{
+			name:     "second anyAttribute of a top-level attributeGroup",
+			topLevel: true,
+			lines: []string{
+				`<xs:attributeGroup name="g">`,
+				`<xs:anyAttribute/>`,
+				`<xs:anyAttribute/>`,
+				`</xs:attributeGroup>`,
+			},
+			wantChild: "<anyAttribute> at " + produceURI + ":4:1",
+			wantOwner: "<attributeGroup> at " + produceURI + ":2:1",
+			wantKind:  "repeats a position",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			doc := s4sDoc(tc.lines...)
@@ -685,6 +714,85 @@ func TestProduceS4SChildNoPositionRejected(t *testing.T) {
 			wantChild: "<element> at " + produceURI + ":4:1",
 			wantOwner: "<alternative> at " + produceURI + ":3:1",
 		},
+		{
+			// xs:namedGroup is "(annotation?, (all | choice | sequence))": a child
+			// BESIDE the body fills no position of it, after the body or before it,
+			// and compositorChild's first-match read used to drop it (#1876).
+			name:     "unique after the body of a named group",
+			topLevel: true,
+			lines: []string{
+				`<xs:group name="g">`,
+				`<xs:sequence/>`,
+				`<xs:unique name="u"><xs:selector xpath="a"/><xs:field xpath="@x"/></xs:unique>`,
+				`</xs:group>`,
+			},
+			wantChild: "<unique> at " + produceURI + ":4:1",
+			wantOwner: "<group> at " + produceURI + ":2:1",
+		},
+		{
+			name:     "unique before the body of a named group",
+			topLevel: true,
+			lines: []string{
+				`<xs:group name="g">`,
+				`<xs:unique name="u"><xs:selector xpath="a"/><xs:field xpath="@x"/></xs:unique>`,
+				`<xs:sequence/>`,
+				`</xs:group>`,
+			},
+			wantChild: "<unique> at " + produceURI + ":3:1",
+			wantOwner: "<group> at " + produceURI + ":2:1",
+		},
+		{
+			name:     "element after the body of a named group",
+			topLevel: true,
+			lines: []string{
+				`<xs:group name="g">`,
+				`<xs:sequence/>`,
+				`<xs:element name="x"/>`,
+				`</xs:group>`,
+			},
+			wantChild: "<element> at " + produceURI + ":4:1",
+			wantOwner: "<group> at " + produceURI + ":2:1",
+		},
+		{
+			// attgD012's shape: xs:namedAttributeGroup carries xs:attrDecls alone, and
+			// collectAttributeContent used to drop an <element> in silence (#1876).
+			name:     "element child of a top-level attributeGroup",
+			topLevel: true,
+			lines: []string{
+				`<xs:attributeGroup name="g">`,
+				`<xs:attribute name="a"/>`,
+				`<xs:element name="x"/>`,
+				`</xs:attributeGroup>`,
+			},
+			wantChild: "<element> at " + produceURI + ":4:1",
+			wantOwner: "<attributeGroup> at " + produceURI + ":2:1",
+		},
+		{
+			// groupO025's shape: a model group reference is no attribute declaration.
+			name:     "group ref child of a top-level attributeGroup",
+			topLevel: true,
+			lines: []string{
+				`<xs:attributeGroup name="g">`,
+				`<xs:group ref="tns:G"/>`,
+				`</xs:attributeGroup>`,
+				`<xs:group name="G"><xs:sequence/></xs:group>`,
+			},
+			wantChild: "<group> at " + produceURI + ":3:1",
+			wantOwner: "<attributeGroup> at " + produceURI + ":2:1",
+		},
+		{
+			// The attribute tail of a complex type ends in "assert*"; xs:attrDecls
+			// does not.
+			name:     "assert child of a top-level attributeGroup",
+			topLevel: true,
+			lines: []string{
+				`<xs:attributeGroup name="g">`,
+				`<xs:assert test="true()"/>`,
+				`</xs:attributeGroup>`,
+			},
+			wantChild: "<assert> at " + produceURI + ":3:1",
+			wantOwner: "<attributeGroup> at " + produceURI + ":2:1",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			doc := s4sDoc(tc.lines...)
@@ -889,6 +997,17 @@ func TestProduceS4SChildOrderAccepted(t *testing.T) {
 				`</xs:element>` +
 				`<xs:attribute name="H" xmlns:o="urn:other"><o:hint/>` +
 				`<xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType></xs:attribute>`,
+		},
+		{
+			// Every position of xs:namedAttributeGroup filled, the attribute block
+			// interleaved, with a foreign child in it; and a named group's one body
+			// behind its annotation and beside a foreign child (#1876).
+			name: "top-level attributeGroup and named group in order",
+			body: `<xs:attributeGroup name="AG2" xmlns:o="urn:other"><xs:annotation/>` +
+				`<xs:attribute name="p"/><xs:attributeGroup ref="tns:AG"/><o:hint/><xs:attribute name="q"/>` +
+				`<xs:anyAttribute namespace="##other"/><o:hint/></xs:attributeGroup>` +
+				`<xs:group name="G" xmlns:o="urn:other"><xs:annotation/><o:hint/>` +
+				`<xs:choice><xs:element name="c"/></xs:choice><o:hint/></xs:group>`,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
