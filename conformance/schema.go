@@ -1,6 +1,9 @@
 package conformance
 
 import (
+	"fmt"
+	"io"
+	"os"
 	"path/filepath"
 
 	"github.com/kud360/goxsd8/builtin"
@@ -543,16 +546,17 @@ func newSchemaCharge() func(caseSpec) string {
 // the schema the suite declared — and the report, which its assessedSubtreeRoot
 // gate scans for versioning attributes the assembly may have mishandled.
 //
-// The resolver is a loader.Dir rooted at doc's own directory and the root is
-// named by its BASE name, because parser.ParseReport reads the root under
-// exactly the location string it is handed (readRootDocument in parser/parse.go):
-// passing the full path would give the root document a base URI of
-// "…/sunData/SType/x" instead of "x", and every <include> in it would then resolve
-// one directory tree away from where the resolver serves. The harness's own
-// precondition read below therefore uses the SAME resolver and the SAME location
-// string, so it reads byte-identically the document the assembly roots at.
+// The resolver is a loader.Dir rooted at doc's own directory, wrapped by
+// pinnedResolver, and the root is named by its BASE name, because
+// parser.ParseReport reads the root under exactly the location string it is handed
+// (readRootDocument in parser/parse.go): passing the full path would give the root
+// document a base URI of "…/sunData/SType/x" instead of "x", and every <include>
+// in it would then resolve one directory tree away from where the resolver serves.
+// The harness's own precondition read below therefore uses the SAME resolver and
+// the SAME location string, so it reads byte-identically the document the assembly
+// roots at.
 func assembleCase(backend value.Backend, doc string, extraDocs []string) (*xsd.Schema, *parser.AssemblyReport, bool, error) {
-	resolver := loader.Dir(filepath.Dir(doc))
+	resolver := pinnedResolver{dir: loader.Dir(filepath.Dir(doc))}
 	location := filepath.Base(doc)
 	if _, ok := rootReadable(resolver, location); !ok {
 		return nil, nil, false, nil
@@ -592,6 +596,50 @@ func assembleCase(backend value.Backend, doc string, extraDocs []string) (*xsd.S
 		return nil, nil, false, nil
 	}
 	return schema, report, true, perr
+}
+
+// The one location pinnedResolver serves from a committed copy, and that copy's
+// package-relative path.
+const (
+	xlinkLocation = "http://www.w3.org/XML/2008/06/xlink.xsd"
+	xlinkPinned   = "testdata/xlink/xlink.xsd"
+)
+
+// pinnedResolver is the resolver every assembleCase read goes through: dir, the
+// case's own loader.Dir, for every location but xlinkLocation, which it serves
+// from xlinkPinned and resolves to that on-disk path, so documentVersioned can
+// re-open it from the report.
+//
+// The suite's own catalog schema, common/xsts.xsd, imports the XLink namespace
+// from xlinkLocation, which no suite document supplies. src-import (§4.2.6.3)
+// makes a failed fetch no error, and §4.2.6.2/§4.3.2 leave location means to the
+// processor, so serving a copy of THAT document is sound; serving a subset of
+// its declarations is not (#1973). xlinkPinned is the full document, byte for
+// byte, CRLF line ends included: 9386 bytes, sha256
+// c83df86c7fdc16eb9c862b83dfb53fc1b1a4bcafd6e1d1217199e0188b82f24a, taken from
+// xmlresolver/xmlresolverdata src/data/www.w3.org/XML/2008/06/xlink.xsd and
+// byte-identical to kusala9/s100-schemas
+// schemas/S100/4.0.0/w3c/XML/2008/06/xlink.xsd. Its own import of the XML
+// namespace does not resolve and need not: the parser supplies that namespace
+// (parser/produce_xmlnamespace.go).
+//
+// A pinned copy that will not open answers loader.ErrNotFound, so the import is
+// merely unfollowed and a rejection resting on it declines (fabricatedRejection)
+// rather than deciding.
+type pinnedResolver struct {
+	dir loader.Resolver
+}
+
+// Resolve implements loader.Resolver.
+func (r pinnedResolver) Resolve(namespace, location string) (io.ReadCloser, string, error) {
+	if location != xlinkLocation {
+		return r.dir.Resolve(namespace, location)
+	}
+	f, err := os.Open(xlinkPinned)
+	if err != nil {
+		return nil, "", fmt.Errorf("conformance: opening pinned %s for %q: %w: %w", xlinkPinned, location, loader.ErrNotFound, err)
+	}
+	return f, xlinkPinned, nil
 }
 
 // rootReadable checks, for the document a root names at location, the two
