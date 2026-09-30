@@ -709,6 +709,9 @@ func positionsKey(states []int) string {
 //     like-for-like with 1002. #1930's build without that key reached 2273 on one
 //     ·all·:·all· walk (saxonData All all221-224); it never landed, so it fired
 //     nothing, but it is the headroom the quotient buys.
+//   - 2026-09-30 (#1609 with #1954, wip/issue-1954 at 6a68d1a plus #1954's
+//     element-name split): walkEntries=1674 ceilingHits=0 maxVisited=1188, in
+//     the future-class unit of the point above.
 //
 // Read both halves of that. No walk has ever reached the ceiling, so the bound
 // is inert on every content model the suite contains and the incompleteness it
@@ -718,10 +721,10 @@ func positionsKey(states []int) string {
 // maxVisited grew 66.8× while the walk entries grew only 2.9×, so the walks that
 // reached this code went DEEPER rather than merely happening more often. From
 // 2026-09-19 to 4ef04a9 maxVisited did not move and walkEntries only fell, to
-// 1740, and it has fallen again since, to 1687. A single future content model,
-// not a wider population, is enough to cross. What drove either movement is not
-// established here: each window holds lane-widening landings, and no causal
-// claim is made from a correlation nobody checked.
+// 1740, and it has fallen again since, to 1687 and then 1674. A single future
+// content model, not a wider population, is enough to cross. What drove either
+// movement is not established here: each window holds lane-widening landings,
+// and no causal claim is made from a correlation nobody checked.
 //
 // A margin that has moved that far between two measurements is not evidence for
 // an unexamined constant, which is why the ruling at contentModelRestricts'
@@ -979,10 +982,9 @@ func (s *Schema) contentTypeRestricts(tct, bct ContentType, scope contentRestric
 // — is read off the R-position's {term}, and copies of one particle share it, so
 // the copies of one particle live in a state all transition into the same
 // B-sets: one, or one per name or part of a wildcard coveringWildcardUnion
-// splits. The
-// copies are still enqueued SEPARATELY, each as its own R-state: they carry
-// different ·follow· sets, so the per-particle memo collapses only the
-// recomputation of one answer per copy (#501), and the future quotient below
+// splits. The copies are still enqueued SEPARATELY, each as its own R-state:
+// they carry different ·follow· sets, so the per-particle memo collapses only
+// the recomputation of one answer per copy (#501), and the future quotient below
 // does not merge them either. Iteration stays in ascending R-position order, so
 // the walk order is unchanged by the memo. Every transition of a state is
 // decided before any of its successors is enqueued, so a clause-1 or clause-2
@@ -1345,12 +1347,13 @@ func (s *Schema) matchPositions(p position, b contentAutomaton, live liveSet) []
 // top-level declaration, B = choice(<element ref="a"/>, any notQName="##defined")
 // under R = any is contained, and both src-redefine clause 6.2.2 and
 // derivation-ok-restriction charge it. On R's side a name a keyword of w's
-// excludes is still split off and walked, which can only add branches. Resolving them needs the declaration
-// graph, and for sibling the containing type, which restrictsLanguage's
-// model-group reader does not have. The readers are this function's three
-// (checkRestrictionContentType, checkExtensionTwoStepDerivable and
-// checkModelGroupRedefinitions, named in the marker above), each of which charges
-// on the false. No tracker is filed yet; #1954's MASON account asks for one.
+// excludes is still split off and walked, which can only add branches. Resolving
+// them needs the declaration graph, and for sibling the containing type, which
+// restrictsLanguage's model-group reader does not have. The readers are this
+// function's three (checkRestrictionContentType, checkExtensionTwoStepDerivable
+// and checkModelGroupRedefinitions, named in the marker above), each of which
+// charges on the false. No tracker is filed yet; #1954's MASON account asks for
+// one.
 //
 // A single live wildcard with no split-off name reaches the same false
 // positionAdmits already answered: its rest is sub, its union itself, and
