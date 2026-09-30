@@ -31,6 +31,7 @@ import (
 // relies on that admission: against a schema that satisfies
 // enumeration-valid-restriction every enumerated value names a declared
 // notation, so the enumeration-subtype arm of the check has no other way in.
+// #1963 owns the admission.
 const notationSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:notation name="foo" public="pubfoo"/>
   <xs:notation name="bar" public="pubbar"/>
@@ -172,6 +173,12 @@ func TestANotationValueResolvesAgainstTheInScopeNamespaces(t *testing.T) {
 // overrides over015a.xsd and declares bez outside the <override>, so bez is
 // declared and ·valid· (Override/over015.v01.xml), while qux, which neither
 // document declares, is charged.
+//
+// GAP(value): the spec rejects this schema and the parser admits it. The
+// override's Nota enumerates qux, which is outside the ·value space· of its
+// {base type definition} xs:NOTATION, so the schema breaks
+// enumeration-valid-restriction (Datatypes §4.3.5.5). The qux charge relies on
+// that admission, as notationSchema's bez does. #1963 owns the admission.
 func TestAnOverrideHostsNotationIsDeclared(t *testing.T) {
 	schema := parsedSchema(t, map[string]string{
 		"main.xsd": `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
