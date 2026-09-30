@@ -23,14 +23,15 @@ func unmappedNames(d parser.AssembledDocument) []string {
 // of the discovery — or written to one index for every document — reports the
 // wrong document's top level, or none at all.
 //
-// The undispatched child of each stands inside an <xs:list>, whose content model
-// is "(annotation?, simpleType?)" (xmlschema11-2.md:3957) and which no pass
+// The undispatched child of each stands inside an <xs:union>, whose content model
+// is "(annotation?, simpleType*)" (xmlschema11-2.md:3977) and which no pass
 // rejects a further child of, so both documents ASSEMBLE and the census here is
-// the silence it reports. A top-level one cannot serve: since #1380 run rejects
-// every <schema> child topLevelMapped declines (rejectUnmappedTopLevel), so the
-// assembly would fail and this test would assert about a report of a rejected
-// document instead — which [UnmappedConstruct] says is corroboration, not
-// coverage.
+// the silence it reports. An <xs:list> no longer serves: since #1951
+// checkS4SChildOrder walks it against s4sList. A top-level one cannot serve:
+// since #1380 run rejects every <schema> child topLevelMapped declines
+// (rejectUnmappedTopLevel), so the assembly would fail and this test would assert
+// about a report of a rejected document instead — which [UnmappedConstruct] says
+// is corroboration, not coverage.
 //
 // Everything on those top levels is in topLevelMapped's vocabulary and must stay
 // unreported: the four §4.2.1 directives, the six named declaration kinds,
@@ -43,12 +44,12 @@ func TestParseReportUnmappedNamesUndispatchedChildren(t *testing.T) {
 			`<xs:annotation><xs:documentation>mapped</xs:documentation></xs:annotation>`+
 				`<xs:defaultOpenContent mode="suffix"><xs:any namespace="urn:z"/></xs:defaultOpenContent>`+
 				`<xs:include schemaLocation="lib.xsd"/>`+
-				`<xs:simpleType name="mainList"><xs:list itemType="xs:string"><xs:field xpath="."/></xs:list></xs:simpleType>`+
+				`<xs:simpleType name="mainList"><xs:union memberTypes="xs:string"><xs:field xpath="."/></xs:union></xs:simpleType>`+
 				`<xs:element name="e" type="xs:string"/>`+
 				`<xs:notation name="n" public="image/jpeg"/>`),
 		"lib.xsd": wrap("urn:a",
 			`<xs:simpleType name="s"><xs:restriction base="xs:string"/></xs:simpleType>`+
-				`<xs:simpleType name="libList"><xs:list itemType="xs:string"><xs:selector xpath="."/></xs:list></xs:simpleType>`+
+				`<xs:simpleType name="libList"><xs:union memberTypes="xs:string"><xs:selector xpath="."/></xs:union></xs:simpleType>`+
 				`<xs:attributeGroup name="ag"/>`),
 	}
 	report, err := reportOf(t, "main.xsd", docs)
@@ -81,17 +82,17 @@ func TestParseReportUnmappedNamesUndispatchedChildren(t *testing.T) {
 
 // TestParseReportUnmappedIsDocumentOrder pins the census's order to the
 // document's, which is what makes it readable against the source at all: the
-// three undispatched children sit under three <xs:list>s interleaved with mapped
+// three undispatched children sit under three <xs:union>s interleaved with mapped
 // declarations of two other kinds, so a census gathered per KIND, or appended as
 // build order reached each site, comes back permuted (STYLE D2).
 func TestParseReportUnmappedIsDocumentOrder(t *testing.T) {
 	docs := map[string]string{
 		"main.xsd": wrap("urn:a",
-			`<xs:simpleType name="a"><xs:list itemType="xs:string"><xs:sequence/></xs:list></xs:simpleType>`+
+			`<xs:simpleType name="a"><xs:union memberTypes="xs:string"><xs:sequence/></xs:union></xs:simpleType>`+
 				`<xs:element name="e" type="xs:string"/>`+
-				`<xs:simpleType name="b"><xs:list itemType="xs:string"><xs:field xpath="."/></xs:list></xs:simpleType>`+
+				`<xs:simpleType name="b"><xs:union memberTypes="xs:string"><xs:field xpath="."/></xs:union></xs:simpleType>`+
 				`<xs:complexType name="ct"/>`+
-				`<xs:simpleType name="c"><xs:list itemType="xs:string"><xs:choice/></xs:list></xs:simpleType>`),
+				`<xs:simpleType name="c"><xs:union memberTypes="xs:string"><xs:choice/></xs:union></xs:simpleType>`),
 	}
 	report, err := reportOf(t, "main.xsd", docs)
 	if err != nil {

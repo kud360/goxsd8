@@ -9911,7 +9911,7 @@ MS-SimpleType2006-07-15/stD011/schema/stD011 pass
 MS-SimpleType2006-07-15/stD012/schema/stD012 pass
 MS-SimpleType2006-07-15/stD013/schema/stD013 pass
 MS-SimpleType2006-07-15/stD014/schema/stD014 pass
-MS-SimpleType2006-07-15/stD015/schema/stD015 fail
+MS-SimpleType2006-07-15/stD015/schema/stD015 pass
 MS-SimpleType2006-07-15/stD016/schema/stD016 pass
 MS-SimpleType2006-07-15/stD017/schema/stD017 pass
 MS-SimpleType2006-07-15/stD018/schema/stD018 pass

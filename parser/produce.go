@@ -2418,16 +2418,17 @@ func rejectLocalSimpleTypeAttrs(elem *Element) error {
 // model admits is not fully valid against the schema for schema documents whether
 // or not it also names an alternative.
 //
-// It dispatches on which of the three §3.16.2.1 alternatives the
-// element's body chooses — <list> to constructListType, <union> to
-// constructUnionType, <restriction> to the code below, which rejects the
-// XSD-namespace children §4.1.2's content model has no position for
-// (rejectOutOfModelFacetChildren) and then the two children sharing one expanded
-// name that src-simple-type clause 1 forbids
-// (rejectDuplicateRestrictionChildren), resolves the base, maps the own facets
-// and {final} (simpleTypeFinal), and constructs. It does NOT memoize — the
-// memo/cycle bookkeeping lives in buildSimpleType; an anonymous inline type has
-// no name to key on and is unreferenceable, so it is built here directly, once.
+// It dispatches on which of the three §3.16.2.1 alternatives the element's body
+// chooses — <list> to constructListType, <union> to constructUnionType,
+// <restriction> to the code below, which rejects the XSD-namespace children
+// §4.1.2's content model has no position for (rejectOutOfModelFacetChildren),
+// then the two children sharing one expanded name that src-simple-type clause 1
+// forbids (rejectDuplicateRestrictionChildren), then a child out of the order
+// s4sSimpleTypeRestriction gives the rest (#1951), resolves the base, maps the
+// own facets and {final} (simpleTypeFinal), and constructs. It does NOT memoize
+// — the memo/cycle bookkeeping lives in buildSimpleType; an anonymous inline
+// type has no name to key on and is unreferenceable, so it is built here
+// directly, once.
 //
 // It does NOT charge the facet-VALUE sub-clauses of cos-st-restricts (§3.16.6.2)
 // — facet applicability against the primitive, and the bound/enumeration
@@ -2463,6 +2464,9 @@ func (p *producer) constructSimpleType(name xsd.QName, elem *Element) (*xsd.Simp
 		return nil, err
 	}
 	if err := rejectDuplicateRestrictionChildren(body); err != nil {
+		return nil, err
+	}
+	if err := checkS4SChildOrder(body, s4sSimpleTypeRestriction); err != nil {
 		return nil, err
 	}
 	base, err := p.resolveBase(body)
@@ -2501,7 +2505,14 @@ func (p *producer) constructSimpleType(name xsd.QName, elem *Element) (*xsd.Simp
 // A <restriction> OF a named list type needs nothing here — it maps through the
 // ordinary restriction path, and map.std.list case 2 gives it the base's item,
 // which xsd.SimpleType.Item derives off the base chain (STYLE D3).
+//
+// The <list>'s children are ordered against s4sList first (checkS4SChildOrder,
+// #1951), ahead of listItem's src-simple-type clause 3, so a second inline
+// <simpleType> is charged rather than dropped behind the first.
 func (p *producer) constructListType(name xsd.QName, elem, list *Element) (*xsd.SimpleType, error) {
+	if err := checkS4SChildOrder(list, s4sList); err != nil {
+		return nil, err
+	}
 	item, err := p.listItem(list)
 	if err != nil {
 		return nil, err
@@ -2821,7 +2832,8 @@ func rejectOutOfModelFacetChildren(restriction *Element) error {
 // same children (STYLE E2): the clause's own preamble scopes it "in addition to
 // the conditions imposed … by the schema for schema documents". It runs BEHIND
 // that grammar check, the run order checkS4SChildOrder's doc fixes for every
-// src-* charge (#1246).
+// src-* charge (#1246), and AHEAD of the s4sSimpleTypeRestriction walk, one of
+// the two exceptions that doc names (#1951).
 //
 // Two shapes inside clause 1's reach are answered before this charge is, and
 // neither is a reason to narrow it. A second <annotation> is answered by
