@@ -92,7 +92,9 @@ import (
 // (produce.go) descends through every XSD-namespace element of the document but
 // not into <appinfo> or <documentation>, so at any depth a <notation> is charged
 // for where it stands (rejectMisplacedNotation), a second <annotation> under one
-// parent for its cardinality (rejectRepeatedAnnotations), and any element it
+// parent for its cardinality (rejectRepeatedAnnotations), an <annotation> after
+// another child of an <all>, <choice>, <sequence>, <group>, <attributeGroup>,
+// <list> or <union> for its position (rejectLateAnnotation), and any element it
 // reaches — the two lax-content wrappers included — for an unprefixed attribute
 // its own Appendix A production declares nowhere (rejectUndeclaredAttrs) or a
 // nested <complexType> prohibits (rejectLocalComplexTypeAttrs), and for an id

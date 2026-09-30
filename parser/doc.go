@@ -336,11 +336,11 @@
 // all: it is a plain wrapped error naming the offending item and the grammar
 // it violates (parser's rejectProhibitedAttrs, rejectLocalComplexTypeAttrs,
 // rejectLocalSimpleTypeAttrs, rejectLocalElementProhibitedAttrs,
-// rejectUndeclaredAttrs, checkS4SChildOrder, rejectUnmappedTopLevel,
-// rejectOutOfModelFacetChildren and simpleTypeBody's own two
-// alternative-count branches). An attribute in ANOTHER namespace is admitted
-// wherever it stands, which is the whole of what xs:openAttrs' ##other
-// wildcard admits. PLANNED (not yet implemented): collecting them in
+// rejectUndeclaredAttrs, checkS4SChildOrder, rejectLateAnnotation,
+// rejectUnmappedTopLevel, rejectOutOfModelFacetChildren and simpleTypeBody's
+// own two alternative-count branches). An attribute in ANOTHER namespace is
+// admitted wherever it stands, which is the whole of what xs:openAttrs'
+// ##other wildcard admits. PLANNED (not yet implemented): collecting them in
 // document order rather than stopping at the first — [Parse] and [Produce]
 // both return only the first error today.
 package parser
