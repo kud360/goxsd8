@@ -2418,15 +2418,17 @@ func rejectLocalSimpleTypeAttrs(elem *Element) error {
 // model admits is not fully valid against the schema for schema documents whether
 // or not it also names an alternative.
 //
-// It dispatches on which of the three §3.16.2.1 alternatives the element's body chooses —
-// <list> to constructListType, <union> to constructUnionType, <restriction> to the code
-// below, which rejects the XSD-namespace children §4.1.2's content model has no position
-// for (rejectOutOfModelFacetChildren), then the two children sharing one expanded name
-// that src-simple-type clause 1 forbids (rejectDuplicateRestrictionChildren), then a
-// child out of the order s4sSimpleTypeRestriction gives the rest (#1951), resolves the
-// base, maps the own facets and {final} (simpleTypeFinal), and constructs. It does NOT
-// memoize — the memo/cycle bookkeeping lives in buildSimpleType; an anonymous inline type
-// has no name to key on and is unreferenceable, so it is built here directly, once.
+// It dispatches on which of the three §3.16.2.1 alternatives the element's body
+// chooses — <list> to constructListType, <union> to constructUnionType,
+// <restriction> to the code below, which rejects the XSD-namespace children
+// §4.1.2's content model has no position for (rejectOutOfModelFacetChildren),
+// then the two children sharing one expanded name that src-simple-type clause 1
+// forbids (rejectDuplicateRestrictionChildren), then a child out of the order
+// s4sSimpleTypeRestriction gives the rest (#1951), resolves the base, maps the
+// own facets and {final} (simpleTypeFinal), and constructs. It does NOT memoize
+// — the memo/cycle bookkeeping lives in buildSimpleType; an anonymous inline
+// type has no name to key on and is unreferenceable, so it is built here
+// directly, once.
 //
 // It does NOT charge the facet-VALUE sub-clauses of cos-st-restricts (§3.16.6.2)
 // — facet applicability against the primitive, and the bound/enumeration

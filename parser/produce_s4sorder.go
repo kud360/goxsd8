@@ -611,8 +611,9 @@ func checkS4SChildOrder(owner *Element, m s4sModel) error {
 }
 
 // s4sAnnotationLedOwner admits the seven owners rejectLateAnnotation holds to
-// "annotation?" as their FIRST particle, the one fact about their order this
-// package enforces: <all> (xs:allModel, xmlschema11-1.md:5259), <choice> and
+// "annotation?" as their FIRST particle, the one fact about their order that
+// check enforces (rejectLateAnnotation's doc names the forms a full s4sModel
+// orders as well): <all> (xs:allModel, xmlschema11-1.md:5259), <choice> and
 // <sequence> (xs:explicitGroup, :5229, and xs:simpleExplicitGroup under a named
 // <group>), <group> (xs:namedGroup, :5187; xs:groupRef), <attributeGroup>
 // (xs:namedAttributeGroup, :5502; xs:attributeGroupRef), and <list> and <union>
