@@ -394,6 +394,42 @@ func TestContentRestrictsNestedAllGroup(t *testing.T) {
 	expectRule(t, restricts(seq("c", "a")), ruleDerivationOKRestriction)
 }
 
+// TestContentRestrictsFutureQuotient pins what the walk's visited set may
+// merge (futureClasses): only R-states with the same live positions AND the same
+// acceptance. In each row two R-states reach one B-set, since the base's
+// wildcard takes both x and y, and only the second of them leads to the
+// sequence the base lacks, so a quotient merging them skips the violation.
+//
+//   - "different live sets": x is followed by a, y by c, and the base admits no
+//     c. Merging on acceptance alone accepts.
+//   - "different acceptance": x and y are both followed by nothing, but only y
+//     ends a sequence, since x is followed by an empty <choice>, which accepts
+//     nothing. R is therefore {y}, a single item the two-item base does not
+//     accept. Merging on the live set alone accepts.
+func TestContentRestrictsFutureQuotient(t *testing.T) {
+	anySkip := func() Particle { return cAny(t, NamespaceConstraintAny, nil, ProcessSkip) }
+	one := func(g ModelGroup) Particle { return uOne(t, ResolvedTerm{Term: g}) }
+	for _, tc := range []struct {
+		name          string
+		base, derived ModelGroup
+	}{
+		{name: "different live sets",
+			base: uGroup(t, CompositorSequence, anySkip(), one(uGroup(t, CompositorChoice, cElem(t, "a", 1, 1), cElem(t, "b", 1, 1)))),
+			derived: uGroup(t, CompositorChoice,
+				one(uGroup(t, CompositorSequence, cElem(t, "x", 1, 1), cElem(t, "a", 1, 1))),
+				one(uGroup(t, CompositorSequence, cElem(t, "y", 1, 1), cElem(t, "c", 1, 1))))},
+		{name: "different acceptance",
+			base: uGroup(t, CompositorSequence, anySkip(), anySkip()),
+			derived: uGroup(t, CompositorChoice,
+				one(uGroup(t, CompositorSequence, cElem(t, "x", 1, 1), one(uGroup(t, CompositorChoice)))),
+				cElem(t, "y", 1, 1))},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			expectRule(t, cRestricts(t, tc.base, tc.derived), ruleDerivationOKRestriction)
+		})
+	}
+}
+
 // TestContentRestrictsSubsetConstruction pins the SUBSET construction itself:
 // contentModelRestricts must carry EVERY matched B-position forward, not one of
 // them. The base offers <e><a> or <any><b>; cos-nonambig leaves the ·element
