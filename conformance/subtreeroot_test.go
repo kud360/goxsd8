@@ -137,21 +137,13 @@ func TestInstanceExecutorDecidesAssessedSubtreeRoot(t *testing.T) {
 		{
 			// Present on every target, the attribute is no ·defaulted attribute·.
 			"a key over an attribute whose use carries a default, the attribute present",
-			`<xs:element name="known"><xs:complexType><xs:sequence><xs:element name="e" maxOccurs="2"><xs:complexType>` +
-				`<xs:attribute name="att" type="xs:string" default="a"/></xs:complexType></xs:element></xs:sequence></xs:complexType>` +
-				`<xs:key name="k"><xs:selector xpath="e"/><xs:field xpath="@att"/></xs:key></xs:element>`,
-			`<known><e att="1"/><e att="2"/></known>`,
+			defaultedAtt("key"), `<known><e att="1"/><e att="2"/></known>`,
 		},
 		{
-			// The refusal of a ·defaulted attribute· is scoped to the subtree of
-			// the declaration carrying the identity constraint.
-			"a ·defaulted attribute· outside every identity-constrained subtree",
-			`<xs:element name="known"><xs:complexType><xs:sequence>` +
-				`<xs:element name="c"><xs:complexType><xs:sequence><xs:element name="d" type="xs:int"/></xs:sequence></xs:complexType>` +
-				`<xs:unique name="u"><xs:selector xpath="d"/><xs:field xpath="."/></xs:unique></xs:element>` +
-				`<xs:element name="e"><xs:complexType><xs:attribute name="att" type="xs:string" default="a"/></xs:complexType></xs:element>` +
-				`</xs:sequence></xs:complexType></xs:element>`,
-			`<known><c><d>1</d></c><e/></known>`,
+			// The defaulted "a" fills the first <e>'s ·key-sequence· (§3.11.4
+			// clause 3's Note), so clause 4.2.1 holds.
+			"a key whose {fields} path selects a ·defaulted attribute·, the values distinct",
+			defaultedAtt("key"), `<known><e/><e att="b"/></known>`,
 		},
 	}
 	for _, tc := range cases {
@@ -343,23 +335,39 @@ func TestInstanceExecutorChargesCvcIDBelowTheRoot(t *testing.T) {
 
 // TestInstanceExecutorChargesIdentityConstraintBelowTheRoot is a regression
 // guard for the identity-constraint lift (#1858): with {identity-constraint
-// definitions} admitted, a duplicate key (cvc-identity-constraint clause 4.2.2)
-// and a dangling keyref (clause 4.3) over the root's children are still decided
-// INVALID. Both are the walk's charges (validate's icFrame.duplicates and
-// icCheck.keyrefs), so neither row passes through the gate.
+// definitions} admitted, a duplicate key (cvc-identity-constraint clause 4.2.2),
+// a dangling keyref (clause 4.3) and a unique whose two targets share a
+// ·defaulted attribute·'s value (clause 4.1) over the root's children are still
+// decided INVALID. Each is the walk's charge (validate's icFrame.duplicates and
+// icCheck.keyrefs), so no row passes through the gate.
 func TestInstanceExecutorChargesIdentityConstraintBelowTheRoot(t *testing.T) {
 	exec := newInstanceExec()
-	for _, tc := range []struct{ why, instance string }{
-		{"a duplicate key (cvc-identity-constraint clause 4.2.2)", `<known><a>1</a><a>1</a></known>`},
-		{"a dangling keyref (cvc-identity-constraint clause 4.3)", `<known><a>1</a><a>2</a><b>3</b></known>`},
+	for _, tc := range []struct{ why, schemaBody, instance string }{
+		{"a duplicate key (cvc-identity-constraint clause 4.2.2)", keyAndRef, `<known><a>1</a><a>1</a></known>`},
+		{"a dangling keyref (cvc-identity-constraint clause 4.3)", keyAndRef, `<known><a>1</a><a>2</a><b>3</b></known>`},
+		{
+			// idZ011_a's shape: both <e> carry the default "a" (§3.11.4 clause
+			// 3's Note, validate's icCheck.fieldDefaultedAttributes).
+			"a unique whose {fields} path selects a ·defaulted attribute· both targets share (cvc-identity-constraint clause 4.1)",
+			defaultedAtt("unique"), `<known><e/><e/></known>`,
+		},
 	} {
-		if !exec(instanceCase(t, keyAndRef, tc.instance, false)).IsPass() {
+		if !exec(instanceCase(t, tc.schemaBody, tc.instance, false)).IsPass() {
 			t.Errorf("%s: the walk charges cvc-identity-constraint; the executor must agree with a suite-invalid case", tc.why)
 		}
-		if exec(instanceCase(t, keyAndRef, tc.instance, true)).IsPass() {
+		if exec(instanceCase(t, tc.schemaBody, tc.instance, true)).IsPass() {
 			t.Errorf("%s: the executor must Fail under a flipped expectation", tc.why)
 		}
 	}
+}
+
+// defaultedAtt declares <known> with up to two children <e>, each with an
+// optional xs:string attribute att defaulting to "a", and an identity
+// constraint of category ic (unique or key) on <known> selecting e/@att.
+func defaultedAtt(ic string) string {
+	return `<xs:element name="known"><xs:complexType><xs:sequence><xs:element name="e" maxOccurs="2"><xs:complexType>` +
+		`<xs:attribute name="att" type="xs:string" default="a"/></xs:complexType></xs:element></xs:sequence></xs:complexType>` +
+		`<xs:` + ic + ` name="u"><xs:selector xpath="e"/><xs:field xpath="@att"/></xs:` + ic + `></xs:element>`
 }
 
 // TestInstanceExecutorDeclinesOutsideAssessedSubtreeRoot pins each condition of
@@ -432,15 +440,6 @@ func TestInstanceExecutorDeclinesOutsideAssessedSubtreeRoot(t *testing.T) {
 			`<xs:element name="known"><xs:complexType><xs:sequence><xs:element name="a" type="xs:int">` +
 				`<xs:alternative type="xs:int"/></xs:element></xs:sequence></xs:complexType></xs:element>`,
 			wantInt,
-		},
-		{
-			// idZ011_a's shape: both <e> carry the default "a", so the unique is
-			// violated (§3.11.4 clause 3's Note), which validate does not see.
-			"a {fields} path selecting a ·defaulted attribute· (cvc-identity-constraint clause 3)",
-			`<xs:element name="known"><xs:complexType><xs:sequence><xs:element name="e" maxOccurs="2"><xs:complexType>` +
-				`<xs:attribute name="att" type="xs:string" default="a"/></xs:complexType></xs:element></xs:sequence></xs:complexType>` +
-				`<xs:unique name="u"><xs:selector xpath="e"/><xs:field xpath="@att"/></xs:unique></xs:element>`,
-			`<known><e/><e/></known>`,
 		},
 		{
 			"a fixed {value constraint} below the root (cvc-elt clause 5.2.2)",

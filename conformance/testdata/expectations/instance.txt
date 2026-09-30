@@ -3045,8 +3045,8 @@ MS-IdentityConstraint2006-07-15/idF012/instance/idF012.v fail
 MS-IdentityConstraint2006-07-15/idF013/instance/idF013.v fail
 MS-IdentityConstraint2006-07-15/idF014/instance/idF014.v fail
 MS-IdentityConstraint2006-07-15/idF015/instance/idF015.i fail
-MS-IdentityConstraint2006-07-15/idF016/instance/idF016.i fail
-MS-IdentityConstraint2006-07-15/idF017/instance/idF017.i fail
+MS-IdentityConstraint2006-07-15/idF016/instance/idF016.i pass
+MS-IdentityConstraint2006-07-15/idF017/instance/idF017.i pass
 MS-IdentityConstraint2006-07-15/idF018/instance/idF018.i fail
 MS-IdentityConstraint2006-07-15/idF019/instance/idF019.v pass
 MS-IdentityConstraint2006-07-15/idF020/instance/idF020.v pass
@@ -3075,8 +3075,8 @@ MS-IdentityConstraint2006-07-15/idG007/instance/idG007.v pass
 MS-IdentityConstraint2006-07-15/idG008/instance/idG008.i pass
 MS-IdentityConstraint2006-07-15/idG009/instance/idG009.i pass
 MS-IdentityConstraint2006-07-15/idG010/instance/idG010.i pass
-MS-IdentityConstraint2006-07-15/idG011/instance/idG011.i fail
-MS-IdentityConstraint2006-07-15/idG012/instance/idG012.i fail
+MS-IdentityConstraint2006-07-15/idG011/instance/idG011.i pass
+MS-IdentityConstraint2006-07-15/idG012/instance/idG012.i pass
 MS-IdentityConstraint2006-07-15/idG013/instance/idG013.v pass
 MS-IdentityConstraint2006-07-15/idG014/instance/idG014.v pass
 MS-IdentityConstraint2006-07-15/idG015/instance/idG015.v pass
@@ -3105,8 +3105,8 @@ MS-IdentityConstraint2006-07-15/idH008/instance/idH008.v pass
 MS-IdentityConstraint2006-07-15/idH009/instance/idH009.v pass
 MS-IdentityConstraint2006-07-15/idH010/instance/idH010.i pass
 MS-IdentityConstraint2006-07-15/idH012/instance/idH012.i pass
-MS-IdentityConstraint2006-07-15/idH015/instance/idH015.v fail
-MS-IdentityConstraint2006-07-15/idH016/instance/idH016.v fail
+MS-IdentityConstraint2006-07-15/idH015/instance/idH015.v pass
+MS-IdentityConstraint2006-07-15/idH016/instance/idH016.v pass
 MS-IdentityConstraint2006-07-15/idH017/instance/idH017.v pass
 MS-IdentityConstraint2006-07-15/idH018/instance/idH018.v pass
 MS-IdentityConstraint2006-07-15/idH019/instance/idH019.v pass
@@ -3127,7 +3127,7 @@ MS-IdentityConstraint2006-07-15/idH034/instance/idH034.v pass
 MS-IdentityConstraint2006-07-15/idK001/instance/idK001.v pass
 MS-IdentityConstraint2006-07-15/idK002/instance/idK002.v pass
 MS-IdentityConstraint2006-07-15/idK003/instance/idK003.i pass
-MS-IdentityConstraint2006-07-15/idK004/instance/idK004.v fail
+MS-IdentityConstraint2006-07-15/idK004/instance/idK004.v pass
 MS-IdentityConstraint2006-07-15/idK005/instance/idK005.v pass
 MS-IdentityConstraint2006-07-15/idK006/instance/idK006.v pass
 MS-IdentityConstraint2006-07-15/idK007/instance/idK007.v pass
@@ -3252,7 +3252,7 @@ MS-IdentityConstraint2006-07-15/idZ007/instance/idZ007.v fail
 MS-IdentityConstraint2006-07-15/idZ008/instance/idZ008.i fail
 MS-IdentityConstraint2006-07-15/idZ010/instance/idZ010.i fail
 MS-IdentityConstraint2006-07-15/idZ011/instance/idZ011.i pass
-MS-IdentityConstraint2006-07-15/idZ011_a/instance/idZ011_a.i fail
+MS-IdentityConstraint2006-07-15/idZ011_a/instance/idZ011_a.i pass
 MS-IdentityConstraint2006-07-15/idZ012/instance/idZ012.i pass
 MS-IdentityConstraint2006-07-15/idZ015/instance/idZ015.i pass
 MS-ModelGroups2006-07-15/mgA001/instance/mgA001.v pass
