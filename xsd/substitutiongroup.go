@@ -132,8 +132,9 @@ func (s *Schema) affiliationChainReaches(m ElementDeclaration, head QName) bool 
 // method} of the type STEPPED FROM, which is the same shape cos-ct-derived-ok's
 // walk has (§3.4.6.5, derivedOKComplex): every level except the terminal target
 // is read. {derivation method} and {prohibited substitutions} are Complex Type
-// Definition properties (§3.4.1) — a simple type on the chain has neither and so
-// contributes nothing to either set, but the walk CONTINUES THROUGH it rather
+// Definition properties (§3.4.1) — a simple type on the chain has neither, yet a
+// restriction step from one counts as restriction in the first set (RULING
+// #1942, arm A; see the walk's simple arm), and the walk CONTINUES THROUGH it rather
 // than stopping there: key-derived follows the {base type definition} chain
 // whatever kind the current type is, and a simple type has a base too. So a
 // complex type based on a simple one (the <simpleContent> shape) still reaches
@@ -190,6 +191,7 @@ func (s *Schema) derivationAdmitsSubstitution(m, h ElementDeclaration) bool {
 		blocked = unionDerivationMethods(blocked, hc.prohibitedSubstitutions) // union member (2)
 	}
 	var methods []DerivationMethod
+	simpleRestricts := false
 	cur := memberType
 walk:
 	for step := 0; ; step++ {
@@ -228,6 +230,21 @@ walk:
 			// properties (§3.4.1) — but the ·derivation· runs THROUGH it: key-derived
 			// follows {base type definition} whatever kind the current type is, and
 			// a simple type's is the *SimpleType Base reports.
+			//
+			// A restriction step of it nonetheless counts as restriction in
+			// clause 2.3's union (RULING #1942, arm A). The letter of 2.3 defines
+			// {derivation method} for complex types only, so this reads intent:
+			// the explicit-values prose (§3.3.1, "rule out element declarations
+			// having types whose derivation from {type definition} involves any
+			// extension steps, or restriction steps") and cos-st-derived-ok clause
+			// 2.1, whose vocabulary names a simple step a restriction; the suite
+			// agrees (elemT063.i, disallowedsubst00501m2 Negative). A list or union
+			// step contributes nothing: the method is only extension|restriction.
+			// The blocking-set test is restrictionBlocked, shared with
+			// stRestrictionUnblocked; clause 2.3 does not read {final}.
+			if !isListOrUnionStep(c) {
+				simpleRestricts = true
+			}
 			base, err := c.Base(s)
 			if err != nil || base == nil {
 				// An absent base is xs:anySimpleType topping the chain short of
@@ -245,10 +262,24 @@ walk:
 			panic("xsd: derivationAdmitsSubstitution: non-exhaustive TypeDefinition switch")
 		}
 	}
+	if simpleRestricts && restrictionBlocked(blocked) {
+		return false
+	}
 	for _, d := range methods {
 		if containsDerivationMethod(blocked, d) {
 			return false
 		}
 	}
 	return true
+}
+
+// isListOrUnionStep reports whether t's own step from its {base type
+// definition} is a ·list· or ·union· construction (§3.16.2.1) rather than a
+// restriction.
+func isListOrUnionStep(t *SimpleType) bool {
+	switch t.derivation.(type) {
+	case ListDerivation, UnionDerivation:
+		return true
+	}
+	return false
 }

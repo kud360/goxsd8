@@ -415,12 +415,12 @@ func (g *subtreeGate) children(t xsd.ComplexType, m *xsd.Matcher) bool {
 //     cos-equiv-derived-ok-rec (§3.3.6.3) clauses 2.1 to 2.3 for the top-level
 //     declaration S the child's name ·resolves· to. S is the child's
 //     ·context-determined declaration· (key-governing-ed clause 2), and S with
-//     the child's subtree must meet element's conditions where substitutable
-//     holds. The ·locally declared type· (key-ldt-elem case 2, S ·implicitly
-//     contained·, key-impl-cont) is S's own {type definition}, so
-//     cvc-complex-type clause 5 holds wherever cvc-elt clause 4 does. A child
-//     carrying D's own name is the first arm's, cvc-accept clause 2.3.1
-//     attributing it to D, where element refuses an ·abstract· D;
+//     the child's subtree must meet element's conditions. The ·locally
+//     declared type· (key-ldt-elem case 2, S ·implicitly contained·,
+//     key-impl-cont) is S's own {type definition}, so cvc-complex-type clause
+//     5 holds wherever cvc-elt clause 4 does. A child carrying D's own name is
+//     the first arm's, cvc-accept clause 2.3.1 attributing it to D, where
+//     element refuses an ·abstract· D;
 //   - a skip Wildcard, or the {open content} with a skip {wildcard}: the child
 //     is ·skipped· with its whole subtree (key-sva clause 3.2, cvc-assess-elt
 //     clause 2), which is read past unchecked. A skipped child has no
@@ -446,7 +446,7 @@ func (g *subtreeGate) child(t xsd.ComplexType, m *xsd.Matcher, start xml.StartEl
 			return g.element(start, at)
 		}
 		s, ok := g.schema.Element(name)
-		return ok && g.substitutable(s, at) && g.element(start, s)
+		return ok && g.element(start, s)
 	case xsd.Wildcard:
 		pc := at.ProcessContents()
 		if pc == xsd.ProcessSkip {
@@ -460,73 +460,6 @@ func (g *subtreeGate) child(t xsd.ComplexType, m *xsd.Matcher, start xml.StartEl
 		return g.resolvedChild(t, start, false)
 	}
 	return false
-}
-
-// substitutable reports whether the gate takes the Matcher's cvc-accept clause
-// 2.3.2 admission of the member s for the head d as the spec's answer. It
-// refuses one shape: s.{type definition}'s {base type definition} chain takes a
-// step from a Simple Type Definition before it reaches d.{type definition}, and
-// restriction is in cos-equiv-derived-ok-rec clause 2.3's blocking union —
-// d.{disallowed substitutions}, or the {prohibited substitutions} of a
-// Complex Type Definition strictly between the two. The union's second member,
-// d.{type definition}'s own {prohibited substitutions}, is empty wherever such a
-// chain reaches it: a simple type's chain meets no complex type but
-// ·xs:anyType· (§3.4.7). An unresolvable type on either side is refused too.
-//
-// GAP(xsd): xsd's derivationAdmitsSubstitution counts no {derivation method}
-// for a Simple Type Definition step, so the Matcher admits a member whose
-// ·derivation· takes a simple restriction step while the blocking union holds
-// restriction. The suite reads that step as restriction: ElemDecl
-// disallowedsubst00501m2 Negative and MS-Element elemT063.i are invalid for it
-// and walk clean (#1942).
-//
-// The walk stops at d.{type definition}, by name, or by identity for an
-// anonymous simple type s inherits from d; an anonymous complex one is walked
-// past, which only refuses more. A complex chain reaching ·xs:anyType· short of
-// d.{type definition} involves no {derivation method}; it takes no simple step
-// and answers true. s.{type definition}'s own {prohibited substitutions} is not
-// in the union.
-func (g *subtreeGate) substitutable(s, d xsd.ElementDeclaration) bool {
-	head, ok := g.schema.ResolvedType(d.TypeDefinition())
-	if !ok {
-		return false
-	}
-	cur, ok := g.schema.ResolvedType(s.TypeDefinition())
-	if !ok {
-		return false
-	}
-	blocked := slices.Contains(d.DisallowedSubstitutions(), xsd.DerivationRestriction)
-	for step := 0; !sameType(cur, head); step++ {
-		c, complex := cur.(xsd.ComplexType)
-		if !complex {
-			return !blocked
-		}
-		if c.Name() == anyTypeName {
-			return true
-		}
-		prohibits := slices.Contains(c.ProhibitedSubstitutions(), xsd.DerivationRestriction)
-		blocked = blocked || (step > 0 && prohibits)
-		cur, ok = g.schema.ResolvedType(c.Base())
-		if !ok {
-			return false
-		}
-	}
-	return true
-}
-
-// sameType reports whether a and b are one type definition: the same non-empty
-// ·expanded name·, or the same anonymous Simple Type Definition. Two anonymous
-// Complex Type Definitions are reported distinct.
-func sameType(a, b xsd.TypeDefinition) bool {
-	if a.Name() != (xsd.QName{}) {
-		return a.Name() == b.Name()
-	}
-	sa, ok := a.(*xsd.SimpleType)
-	if !ok {
-		return false
-	}
-	sb, ok := b.(*xsd.SimpleType)
-	return ok && sa == sb
 }
 
 // resolvedChild reads through to its end tag a child whose start tag is start,

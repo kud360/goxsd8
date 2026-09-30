@@ -769,27 +769,26 @@ func TestInstanceExecutorDecidesSubstitutionGroupMember(t *testing.T) {
 		{"an unblocked member", `<xs:element name="h" type="A"/><xs:element name="m" substitutionGroup="h"/>`},
 		// child passes element the member s, not the particle's abstract {term}.
 		{"a member of an abstract head", `<xs:element name="h" type="A" abstract="true"/><xs:element name="m" type="R" substitutionGroup="h"/>`},
-		// substitutable's walk and sameType's name arm: a complex step reaching
-		// A takes no simple step (MS-Element elemT062.v and elemT064.v's sa2).
+		// A complex step reaching A takes no simple step (MS-Element elemT062.v
+		// and elemT064.v's sa2).
 		{
 			`a simpleContent extension of the head's simple type under block="restriction"`,
 			`<xs:element name="h" type="A" block="restriction"/><xs:element name="m" type="EA" substitutionGroup="h"/>` + extendsA,
 		},
-		// sameType's identity arm: m inherits h's anonymous simple type, so no
-		// step is taken and no {derivation method} is involved
+		// m inherits h's anonymous simple type, so no step is taken and no {derivation method} is involved
 		// (cos-equiv-derived-ok-rec clause 2.3).
 		{
 			`a member inheriting the head's anonymous simple type under block="restriction"`,
 			`<xs:element name="h" block="restriction"><xs:simpleType><xs:restriction base="xs:int"/></xs:simpleType></xs:element>` +
 				`<xs:element name="m" substitutionGroup="h"/>`,
 		},
-		// substitutable's blocking test: a simple step, restriction unblocked.
+		// A simple step, restriction unblocked (cos-equiv-derived-ok-rec clause 2.3).
 		{
 			`a simple restriction of the head's type under block="extension"`,
 			`<xs:element name="h" type="A" block="extension"/><xs:element name="m" type="R" substitutionGroup="h"/>`,
 		},
-		// substitutable's step > 0 guard: s.{type definition}'s own {prohibited
-		// substitutions} is not in clause 2.3's union.
+		// s.{type definition}'s own {prohibited substitutions} is not in clause
+		// 2.3's union.
 		{
 			"a member type prohibiting restriction itself, over a simple step",
 			`<xs:element name="h" type="A"/><xs:element name="m" type="ER" substitutionGroup="h"/>` +
@@ -824,6 +823,23 @@ func TestInstanceExecutorChargesSubstitutionGroupMember(t *testing.T) {
 			`<xs:element name="h" type="A" block="extension"/><xs:element name="m" type="EA" substitutionGroup="h"/>` + extendsA,
 			`<known><m>1</m></known>`,
 		},
+		// MS-Element elemT063.i's shape (#1942): a simple restriction of the
+		// head's type is restriction in clause 2.3's union, which the head's
+		// {disallowed substitutions} holds.
+		{
+			`a simple restriction of the head's type under block="restriction" (clause 2.3)`,
+			`<xs:element name="h" type="A" block="restriction"/><xs:element name="m" type="R" substitutionGroup="h"/>`,
+			`<known><m>1</m></known>`,
+		},
+		// The intermediate arm of the union: C, strictly between ER2 and A,
+		// prohibits restriction, and R's step below A is simple (#1942).
+		{
+			"an intermediate type prohibiting restriction, over a simple step (clause 2.3)",
+			`<xs:element name="h" type="A"/><xs:element name="m" type="ER2" substitutionGroup="h"/>` +
+				`<xs:complexType name="C" block="restriction"><xs:simpleContent><xs:extension base="R"/></xs:simpleContent></xs:complexType>` +
+				`<xs:complexType name="ER2"><xs:simpleContent><xs:extension base="C"/></xs:simpleContent></xs:complexType>`,
+			`<known><m>1</m></known>`,
+		},
 		{
 			"a member value valid against the head's type and not its own (cvc-type clause 3.1.3)",
 			`<xs:element name="h" type="xs:decimal"/><xs:element name="m" type="A" substitutionGroup="h"/>`,
@@ -836,42 +852,6 @@ func TestInstanceExecutorChargesSubstitutionGroupMember(t *testing.T) {
 		}
 		if exec(instanceCase(t, schemaBody, tc.instance, true)).IsPass() {
 			t.Errorf("%s: the executor must Fail under a flipped expectation", tc.why)
-		}
-	}
-}
-
-// TestInstanceExecutorDeclinesSimpleStepSubstitution pins the one member shape
-// the gate refuses (subtreeGate.substitutable, #1942): restriction is in
-// cos-equiv-derived-ok-rec clause 2.3's blocking union and the member type's
-// ·derivation· from the head's takes a Simple Type Definition step. The walk
-// admits the member and charges nothing, so each row declines; each is also
-// refused at the gate itself.
-func TestInstanceExecutorDeclinesSimpleStepSubstitution(t *testing.T) {
-	exec := newInstanceExec()
-	for _, tc := range []struct{ why, decls string }{
-		// MS-Element elemT063.i's shape; the blocking test's d.{disallowed
-		// substitutions} arm.
-		{
-			`a simple restriction of the head's type under block="restriction"`,
-			`<xs:element name="h" type="A" block="restriction"/><xs:element name="m" type="R" substitutionGroup="h"/>`,
-		},
-		// The blocking test's intermediate arm: C, strictly between ER2 and A,
-		// prohibits restriction, and R's step below A is simple.
-		{
-			"an intermediate type prohibiting restriction, over a simple step",
-			`<xs:element name="h" type="A"/><xs:element name="m" type="ER2" substitutionGroup="h"/>` +
-				`<xs:complexType name="C" block="restriction"><xs:simpleContent><xs:extension base="R"/></xs:simpleContent></xs:complexType>` +
-				`<xs:complexType name="ER2"><xs:simpleContent><xs:extension base="C"/></xs:simpleContent></xs:complexType>`,
-		},
-	} {
-		c := instanceCase(t, headKnown(tc.decls), `<known><m>1</m></known>`, true)
-		declinesBothPolarities(t, exec, c, tc.why)
-		schema, report, decidable, err := assembleCase(strict.New(), c.schemaDoc, nil)
-		if err != nil || !decidable {
-			t.Fatalf("%s: assembling the schema: decidable %v, err %v", tc.why, decidable, err)
-		}
-		if assessedSubtreeRoot(schema, report, c.doc) {
-			t.Errorf("%s: assessedSubtreeRoot = true, want false", tc.why)
 		}
 	}
 }

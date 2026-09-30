@@ -215,9 +215,8 @@ import (
 //     key-governing-ed clause 2). A ·substitution group· member cvc-accept
 //     clause 2.3.2 attributes to an element particle of another name takes the
 //     top-level declaration its name ·resolves· to, which the Matcher held
-//     ·substitutable· for the particle's {term} (cos-equiv-derived-ok-rec); the
-//     gate refuses it where that ·derivation· takes a simple step xsd counts
-//     no {derivation method} for (subtreeGate.substitutable, #1942). A child
+//     ·substitutable· for the particle's {term} (cos-equiv-derived-ok-rec, whose
+//     clause 2.3 counts a simple restriction step as restriction, #1942). A child
 //     ·attributed to· a strict or lax Wildcard or {open content} takes
 //     the top-level declaration its name ·resolves· to (clauses 3 and 4),
 //     admitted only where cvc-complex-type clause 5 is vacuous for it
