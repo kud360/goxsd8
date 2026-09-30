@@ -502,7 +502,7 @@ func uUPAOnly(t *testing.T, g ModelGroup) error {
 	if err != nil {
 		t.Fatalf("Finalize: %v", err)
 	}
-	a := &automaton{s: s, unfold: unfoldCopies}
+	a := &automaton{s: s, policy: attributionPolicy}
 	first, _, _, err := a.addModelGroup(g)
 	if err != nil {
 		return err

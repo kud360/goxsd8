@@ -69,7 +69,7 @@ const ruleCosNonambig xsderr.Rule = "cos-nonambig"
 // accepts, which it demonstrably changes (e{3,6} reads as e{2,4}). The other
 // consumer of this construction, contentrestricts.go's cos-content-act-restrict
 // walk, decides language containment and therefore selects its own exact
-// unfolding through automaton.unfold; these constants are not on its path
+// unfolding through its constructionPolicy; these constants are not on its path
 // (#501).
 //
 // The argument for that quantified claim: every unfolded copy of one source
@@ -116,22 +116,38 @@ type position struct {
 // follow is indexed by position, and every position set is an ascending []int, so
 // no map is consulted to decide which violation is reported (STYLE D1/D2).
 //
-// unfold is the construction policy for numeric occurrence ranges, not automaton
-// state: it is chosen once by the caller and read only by addParticle. The two
-// constraints decided over this construction need different unfoldings and
-// neither may be given the other's — cos-nonambig passes unfoldCopies, whose
-// two-copy bound is verdict-preserving for identifier-set competition, and
-// contentrestricts.go's cos-content-act-restrict walk passes unfoldExactly,
-// because that bound rewrites the accepted language (see maxMandatoryCopies).
-// Every construction site names its own, so no unfolding is inherited by
-// default.
+// policy is the construction policy, not automaton state: it is chosen once by
+// the caller and read only by addParticle and addModelGroup (see
+// constructionPolicy).
 type automaton struct {
 	s              *Schema
 	positions      []position
 	follow         [][]int
 	nextParticleID int
-	unfold         func(Occurs) (copies, mandatory int, loop bool)
+	policy         constructionPolicy
 }
+
+// constructionPolicy is how one consumer's automaton renders the two constructs
+// whose faithful rendering depends on the fact being decided: a numeric
+// occurrence range (unfold, read by addParticle) and an <all> group (all, read
+// by addModelGroup). The two constraints decided over this construction need
+// different renderings and neither may be given the other's. cos-nonambig takes
+// attributionPolicy: unfoldCopies, whose two-copy bound is verdict-preserving
+// for identifier-set competition, and addAll, whose star is exact for ·compete·
+// but a strict superset of the interleave's language. contentrestricts.go's
+// cos-content-act-restrict walk takes languagePolicy: unfoldExactly and
+// addInterleave, because both of attributionPolicy's renderings rewrite the
+// accepted language (see maxMandatoryCopies and addAll). The two halves are one
+// value so that no automaton pairs one consumer's unfolding with the other's
+// <all>, and every construction site names its policy, so none is inherited by
+// default.
+type constructionPolicy struct {
+	unfold func(Occurs) (copies, mandatory int, loop bool)
+	all    func(b *automaton, g ModelGroup) ([]int, []int, bool, error)
+}
+
+// attributionPolicy is cos-nonambig's constructionPolicy.
+var attributionPolicy = constructionPolicy{unfold: unfoldCopies, all: (*automaton).addAll}
 
 // checkContentModelsUnambiguous is the cos-nonambig half of Phase C. It walks the
 // compiled set in document order (STYLE D2) and returns the first violation.
@@ -170,7 +186,7 @@ func (s *Schema) checkContentModelUnambiguous(c ComplexType) error {
 	if !ok {
 		return nil
 	}
-	b := &automaton{s: s, unfold: unfoldCopies}
+	b := &automaton{s: s, policy: attributionPolicy}
 	first, _, _, err := b.addParticle(ec.Particle)
 	if err != nil {
 		return err
@@ -181,7 +197,7 @@ func (s *Schema) checkContentModelUnambiguous(c ComplexType) error {
 // checkModelGroupDefinitionUnambiguous charges cos-nonambig against one Model
 // Group Definition's {model group}.
 func (s *Schema) checkModelGroupDefinitionUnambiguous(mgd ModelGroupDefinition) error {
-	b := &automaton{s: s, unfold: unfoldCopies}
+	b := &automaton{s: s, policy: attributionPolicy}
 	first, _, _, err := b.addModelGroup(mgd.ModelGroup())
 	if err != nil {
 		return err
@@ -380,7 +396,7 @@ func wildcardsOverlap(a, b Wildcard) (bool, error) {
 // copy 1 did — which is precisely the statement that an unfolded copy is the same
 // source particle, at every depth beneath it as well as at its own leaf.
 func (b *automaton) addParticle(p Particle) ([]int, []int, bool, error) {
-	copies, mandatory, loop := b.unfold(p.Occurs())
+	copies, mandatory, loop := b.policy.unfold(p.Occurs())
 	if copies == 0 {
 		return nil, nil, true, nil // a vacuous {0,0} particle accepts only the empty sequence
 	}
@@ -410,7 +426,7 @@ func (b *automaton) addParticle(p Particle) ([]int, []int, bool, error) {
 	return seq.first, seq.last, seq.emptiable, nil
 }
 
-// unfoldCopies is the automaton.unfold policy cos-nonambig is decided over: how
+// unfoldCopies is the unfolding cos-nonambig is decided over (attributionPolicy): how
 // many copies of a particle's {term} fragment to emit for an occurrence range,
 // how many of them are mandatory, and whether the last one carries a loop-back
 // edge. See maxMandatoryCopies for why bounding the copy count changes no
@@ -491,7 +507,7 @@ func (b *automaton) addModelGroup(g ModelGroup) ([]int, []int, bool, error) {
 	case CompositorChoice:
 		return b.addChoice(g)
 	case CompositorAll:
-		return b.addAll(g)
+		return b.policy.all(b, g)
 	default:
 		panic("xsd: automaton.addModelGroup: non-exhaustive Compositor switch")
 	}
@@ -617,12 +633,12 @@ func (b *automaton) addAllMembers(g ModelGroup) (allFragment, error) {
 // other member, and its own residual to the outer one through the follow sets of
 // its ·last· positions.
 //
-// The sequences the fragment ACCEPTS are a superset of the star's own, which was
-// already a superset of the interleave: the primed alternation replays fragments
-// the star already admits, and the residual edges only add. That direction is the
-// one contentrestricts.go's walk requires of the automaton it reads (see its
-// DIRECTION OF EVERY APPROXIMATION note); the position count doubles, which that
-// file's modelGroupPositions accounts for.
+// The sequences the fragment ACCEPTS are a STRICT superset of the interleave:
+// all(a, b) admits a a, and a alone. That is harmless for ·compete·, the one fact
+// attributionPolicy renders it for, and wrong for any consumer that reads the
+// language, which is why contentrestricts.go's containment walk renders an <all>
+// through addInterleave instead (languagePolicy) and never reads this fragment
+// (#1930).
 //
 // Emptiability is NOT taken from the star form, which would always be emptiable:
 // an <all> accepts the empty sequence exactly when every member does, and that is

@@ -237,15 +237,11 @@ func (b *SchemaBuilder) AddRedefiningModelGroup(d, original ModelGroupDefinition
 // chain of its own: the pairing is a single edge from a named definition to an
 // off-index component.
 //
-// GAP(xsd): contentTypeRestricts provisionally accepts whenever an ·all· group is
-// reachable in R's content model, on a licence §3.4.6.3 grants
-// derivation-ok-restriction clause 2.4.2 BY NAME. §4.2.4 grants clause 6.2.2 no
-// such licence, so the leniency is an implementation incompleteness at this call
-// site rather than a spec-licensed one: a redefining <group> reaching an <all> is
-// accepted undecided. The direction is fail-open — a missed rejection, never a
-// fabricated one, since the star addAll models an ·all· with over-approximates
-// its language — and #743 owns the retirement. The same function's open-content
-// arm is inert here: the wrapper below never sets OpenContent.
+// An <all> on either side is decided exactly, through the same engine
+// (languagePolicy's interleave, #1930). What the engine still provisionally
+// accepts reaches this caller only through its two resource ceilings, whose
+// markers name this reader; its open-content arm is inert here, since the
+// wrapper below never sets OpenContent.
 func (s *Schema) checkModelGroupRedefinitions() error {
 	for _, r := range s.modelGroupRedefinitions {
 		d, ok := s.modelGroupIndex[r.name]
