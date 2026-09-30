@@ -579,6 +579,18 @@ func (a contentAutomaton) liveGroups(states []int) liveSet {
 	return set
 }
 
+// positionsOf returns, ascending, every live position whose group in[g] marks:
+// a whole source particle's copies, never some of them.
+func (l liveSet) positionsOf(in []bool) []int {
+	var out []int
+	for i, q := range l.positions {
+		if in[l.group[i]] {
+			out = append(out, q)
+		}
+	}
+	return out
+}
+
 // productState is one state of the product walk: a single state of R paired with
 // the SET of B states B's runs may be in, the set named by its subsetTable
 // identifier. Naming it rather than carrying it is what makes the state
@@ -619,8 +631,8 @@ func (a contentAutomaton) futureClasses() []int {
 //
 // It exists because the identity of a product state has to be tested once per
 // live R-position per state, while the SETS those states pair with are far
-// fewer — every R-position of one source particle transitions into the SAME set
-// (contentModelRestricts computes it once), so interning turns a per-transition
+// fewer — every R-position of one source particle transitions into the SAME sets
+// (contentModelRestricts computes them once), so interning turns a per-transition
 // canonical-string build, linear in the set's width, into one build per distinct
 // set reached.
 //
@@ -681,27 +693,33 @@ func positionsKey(states []int) string {
 // never on the verdict of a walk that finishes.
 //
 // The constant is MEASURED headroom rather than an unexamined guess, and the
-// headroom has narrowed once. Three counters — entries into
-// contentModelRestricts, the giveup branch below, and every insertion into the
-// visited set so the high-water mark comes from walks that finish — run over the
-// full W3C suite at the same submodule record this series, one point per
-// measurement:
+// headroom has narrowed. Three counters — entries into contentModelRestricts,
+// the giveup branch below, and every insertion into the visited set so the
+// high-water mark comes from walks that finish — run over the full W3C suite at
+// the same submodule record this series, one point per measurement:
 //
 //   - 2026-08-04 (#282): walkEntries=688 ceilingHits=0 maxVisited=15
 //   - 2026-09-19 (#499): walkEntries=1987 ceilingHits=0 maxVisited=1002
 //   - 2026-09-29 (#1609, main afa784d): walkEntries=1985 ceilingHits=0 maxVisited=1002
 //   - 2026-09-29 (#1609, main 4ef04a9): walkEntries=1740 ceilingHits=0 maxVisited=1002
+//   - 2026-09-30 (#1609 with #1939, main cf8a9f2 plus #1939's per-part split):
+//     walkEntries=1687 ceilingHits=0 maxVisited=1188, in a different unit: since
+//     #1930 the visited set keys on R's future class, so maxVisited counts (R
+//     future class, B-set) states, not (R position, B-set) ones, and is not
+//     like-for-like with 1002. #1930's build without that key reached 2273 on one
+//     ·all·:·all· walk (saxonData All all221-224); it never landed, so it fired
+//     nothing, but it is the headroom the quotient buys.
 //
 // Read both halves of that. No walk has ever reached the ceiling, so the bound
 // is inert on every content model the suite contains and the incompleteness it
-// guards is latent. But the deepest walk visits 1002 of the 4096 states it is
-// allowed at the latest point (4ef04a9) — a factor of 4.1 below the ceiling
-// where it was a factor of 273 on 2026-08-04 — and between those first two
-// points maxVisited grew 66.8× while the walk entries grew only 2.9×, so the
-// walks that reached this code went DEEPER rather than merely happening more
-// often. Since the 2026-09-19 point maxVisited has not moved and walkEntries has
-// only fallen, to 1740 at the latest point. A single future content model, not
-// a wider population, is enough to cross. What drove either movement is not
+// guards is latent. But the deepest walk visits 1188 of the 4096 states it is
+// allowed at the latest point (2026-09-30) — a factor of 3.4 below the ceiling
+// where it was a factor of 273 on 2026-08-04 — and between the first two points
+// maxVisited grew 66.8× while the walk entries grew only 2.9×, so the walks that
+// reached this code went DEEPER rather than merely happening more often. From
+// 2026-09-19 to 4ef04a9 maxVisited did not move and walkEntries only fell, to
+// 1740, and it has fallen again since, to 1687. A single future content model,
+// not a wider population, is enough to cross. What drove either movement is not
 // established here: each window holds lane-widening landings, and no causal
 // claim is made from a correlation nobody checked.
 //
@@ -947,7 +965,7 @@ func (s *Schema) contentTypeRestricts(tct, bct ContentType, scope contentRestric
 // contentModelRestricts walks the product of the two automata, deciding both
 // conditions of cos-content-act-restrict in one pass — or clause 1 alone, when
 // scope is restrictsLanguage. The walk is otherwise identical: clause 2 is a
-// per-transition test over the same matched set, never a separate traversal.
+// per-transition test over the same matched sets, never a separate traversal.
 //
 // States are drained FIFO from a slice seeded with the start pair, and each
 // state's R-positions are visited in ascending index order, so the walk order
@@ -959,12 +977,16 @@ func (s *Schema) contentTypeRestricts(tct, bct ContentType, scope contentRestric
 // of it. Everything a transition depends on — which B-positions match
 // (matchPositions), whether some matched binding subsumes (someBindingSubsumes)
 // — is read off the R-position's {term}, and copies of one particle share it, so
-// the copies of one particle live in a state all transition into one B-set. The
+// the copies of one particle live in a state all transition into the same
+// B-sets: one, or one per part of a wildcard coveringWildcardUnion splits. The
 // copies are still enqueued SEPARATELY, each as its own R-state: they carry
 // different ·follow· sets, so the per-particle memo collapses only the
 // recomputation of one answer per copy (#501), and the future quotient below
 // does not merge them either. Iteration stays in ascending R-position order, so
-// the walk order is unchanged by the memo.
+// the walk order is unchanged by the memo. Every transition of a state is
+// decided before any of its successors is enqueued, so a clause-1 or clause-2
+// rejection anywhere in the state is reached before the maxProductStates giveup
+// can provisionally accept it.
 //
 // The visited set keys on R's FUTURE rather than on its position
 // (futureClasses): two R-states with the same ·follow· set and the same
@@ -982,7 +1004,7 @@ func (s *Schema) contentTypeRestricts(tct, bct ContentType, scope contentRestric
 //     a FUNCTION of the subset, and many R-states pair with one subset, so
 //     without it the same union is rebuilt once per product state instead of once
 //     per distinct subset.
-//   - target, per state, from an R particle identifier to the subset its
+//   - target, per state, from an R particle identifier to the subsets its
 //     transition lands in — the per-source-particle collapse above.
 //
 // Both die with the walk; nothing survives into the Schema, and no automaton is
@@ -1007,22 +1029,29 @@ func (s *Schema) contentModelRestricts(r, b contentAutomaton, scope contentRestr
 			live = b.liveGroups(subsets.set(cur.b))
 			liveOf[cur.b] = live
 		}
-		target := map[int]int{}
+		target := map[int][]int{}
+		var edges []productState
 		for _, p := range r.live(cur.r) {
-			id, decided := target[r.positions[p].particleID]
+			ids, decided := target[r.positions[p].particleID]
 			if !decided {
-				matched := s.matchPositions(r.positions[p], b, live)
-				if len(matched) == 0 {
+				successors := s.matchPositions(r.positions[p], b, live)
+				if len(successors) == 0 {
 					return false // clause 1: R can continue where B cannot
 				}
-				if scope == restrictsFully && !s.someBindingSubsumes(b, matched, r.positions[p]) {
-					return false // clause 2, ctr-child-type-subsumption
+				for _, matched := range successors {
+					if scope == restrictsFully && !s.someBindingSubsumes(b, matched, r.positions[p]) {
+						return false // clause 2, ctr-child-type-subsumption
+					}
+					ids = append(ids, subsets.intern(matched))
 				}
-				id = subsets.intern(matched)
-				target[r.positions[p].particleID] = id
+				target[r.positions[p].particleID] = ids
 			}
-			next := productState{r: p, b: id}
-			seen := productState{r: future[p+1], b: id}
+			for _, id := range ids {
+				edges = append(edges, productState{r: p, b: id})
+			}
+		}
+		for _, next := range edges {
+			seen := productState{r: future[next.r+1], b: next.b}
 			if visited[seen] {
 				continue
 			}
@@ -1093,8 +1122,8 @@ func (s *Schema) contentModelRestricts(r, b contentAutomaton, scope contentRestr
 				// declines somewhere. Raising the constant moves where it declines,
 				// buying walks whose cost grows with the states they are newly allowed
 				// and no verdict anything has measured — ceilingHits is 0. Lowering it
-				// is pinned from below by the series' 4ef04a9 point: the deepest walk the
-				// suite finishes visits maxVisited=1002 states, so any value below 1002
+				// is pinned from below by the series' 2026-09-30 point: the deepest walk the
+				// suite finishes visits maxVisited=1188 states, so any value below 1188
 				// starts declining walks that decide today. It is retired by a
 				// construction that decides containment without materializing the
 				// product, never by raising the constant.
@@ -1102,11 +1131,11 @@ func (s *Schema) contentModelRestricts(r, b contentAutomaton, scope contentRestr
 				// The review trigger is a RE-MEASUREMENT rather than a breach, because
 				// a breach is the one warning that arrives too late: the high-water
 				// mark moved 66.8× in six and a half weeks (2026-08-04 to 2026-09-19),
-				// and at the series' latest point (4ef04a9) it stands at a quarter
-				// of the ceiling. Re-run the three counters maxProductStates' doc
+				// and at the series' latest point (2026-09-30) it stands at under a
+				// third of the ceiling. Re-run the three counters maxProductStates' doc
 				// names and reopen this ruling on EITHER ceilingHits > 0 or maxVisited
 				// at 2048, half the ceiling. Half is what #499's two measurements
-				// picked out: from 1002 it is barely a doubling away against the 66.8×
+				// picked out: from their 1002 it was barely a doubling away against the 66.8×
 				// observed between them, and a walk that stops there still finishes
 				// and still decides. The two conditions are NOT independent: the
 				// ceiling check above precedes the insertion into visited, so
@@ -1127,20 +1156,21 @@ func (s *Schema) contentModelRestricts(r, b contentAutomaton, scope contentRestr
 	return true
 }
 
-// matchPositions returns, in ascending order, every live B-position that admits
-// each item the R-position p admits, or, when none does and p is a wildcard,
-// coveringWildcardUnion's set of base wildcards that admit those items only
-// jointly (see the GAP(xsd) marker there, #1939). An empty result is a clause-1
-// failure: R can consume something no run of B can.
+// matchPositions returns the B-sets the R-position p's transition continues
+// into, each ascending. When some live B-position admits every item p admits, it
+// is one set: every live B-position that does. Otherwise, when p is a wildcard, it is
+// coveringWildcardUnion's split: one set per part of p's {namespace constraint}
+// that a different base wildcard admits. An empty result is a clause-1 failure:
+// R can consume something no run of B can.
 //
-// The result is a SET rather than one position because several B-positions may be
-// live and admit p at once (see this file's determinism note): copies of one
-// particle, and an ·element particle· beside a ·wildcard particle·, which 1.1
-// permits to compete. Members may therefore carry different {term}s and different
-// ·default bindings·, and neither caller may single one out. The walk continues
-// into the union of their ·follow· sets, and someBindingSubsumes examines EVERY
-// member, succeeding when any one of them ·subsumes· — never reading a binding
-// off a representative.
+// A set rather than one position, because several B-positions may be live and
+// admit p at once (see this file's determinism note): copies of one particle, and
+// an ·element particle· beside a ·wildcard particle·, which 1.1 permits to
+// compete. Members may therefore carry different {term}s and different ·default
+// bindings·, and neither caller may single one out. The walk continues into the
+// union of their ·follow· sets, and someBindingSubsumes examines EVERY member,
+// succeeding when any one of them ·subsumes· — never reading a binding off a
+// representative.
 //
 // The admits test runs once per SOURCE PARTICLE live in the state, not once per
 // unfolded copy: copies of one particle share a {term}, so they share the answer
@@ -1148,19 +1178,13 @@ func (s *Schema) contentModelRestricts(r, b contentAutomaton, scope contentRestr
 // the walk's hot loop — it is entered once per live R-position per product state
 // — and the collapse is what keeps its cost proportional to the number of
 // distinct particles rather than to the declared {max occurs} (#501).
-func (s *Schema) matchPositions(p position, b contentAutomaton, live liveSet) []int {
+func (s *Schema) matchPositions(p position, b contentAutomaton, live liveSet) [][]int {
 	admits := make([]bool, len(live.reps))
 	for g, q := range live.reps {
 		admits[g] = s.positionAdmits(b.positions[q], p)
 	}
-	var matched []int
-	for i, q := range live.positions {
-		if admits[live.group[i]] {
-			matched = append(matched, q)
-		}
-	}
-	if len(matched) > 0 {
-		return matched
+	if matched := live.positionsOf(admits); len(matched) > 0 {
+		return [][]int{matched}
 	}
 	w, isWildcard := p.term.(Wildcard)
 	if !isWildcard {
@@ -1177,33 +1201,76 @@ func (s *Schema) matchPositions(p position, b contentAutomaton, live liveSet) []
 // against a single ##any wildcard in the restriction — and the two base
 // wildcards are non-overlapping, so cos-nonambig leaves them both live.
 //
-// The union is COMPUTED, not assumed: the live wildcards' {namespace
+// Coverage is COMPUTED, not assumed: the live wildcards' {namespace
 // constraint}s are folded left through Attribute Wildcard Union (§3.10.6.3,
 // cos-aw-union) — the same left fold the constraint's own final paragraph
 // prescribes for more than two operands — and sub is then tested against the
 // result by the same cos-ns-subset relation positionAdmits uses for one base
-// wildcard. Both §3.10.6 relations are therefore exercised here: a covering union
-// returns every live wildcard as the matched set, while a union that does not
-// cover sub is a clause-1 failure, reported as the empty result matchPositions
-// and contentModelRestricts already read that way.
+// wildcard. A union that does not cover sub is a clause-1 failure, reported as
+// the empty result matchPositions and contentModelRestricts already read that
+// way.
 //
-// GAP(xsd): a covering union's matched set is not a set of runs B may take. Each
-// base wildcard admits only its own part of sub, but the walk advances every
-// member on the one R transition, so an item only one base wildcard admits is
-// counted towards the others' runs too. saxonData All/all244 is that shape: B =
-// all(any{one,two}{5,∞}, any{three}{0,2}) and R = all(any{one}{3,∞},
-// any{two,three}{2,2}), and R's (one, one, one, three, three) is read as
-// contained although B's first wildcard admits no three. #1939 owns splitting
-// sub into the part each base wildcard admits (derivation-ok-restriction clause
-// 2.4.2, cos-ns-subset). The extra members only enlarge B's state set and give
-// someBindingSubsumes more members to succeed on, so the walk answers true more
-// often and never less. Fail-open for all three readers of that true, each of
-// which charges only on false (STYLE P3a): checkRestrictionContentType
+// A covering union is then SPLIT, because it shows only that every name sub
+// admits is admitted by SOME base wildcard, never which base wildcard's {min
+// occurs}/{max occurs} an item counts towards (derivation-ok-restriction clause
+// 2.4.2, cos-content-act-restrict clause 1). Each distinct live wildcard particle
+// whose constraint C meets sub yields one part, sub ∩ C (Attribute Wildcard
+// Intersection, §3.10.6.4, cos-aw-intersect), and one result set: every live
+// position of every wildcard particle whose constraint meets that part. The
+// walk continues from EVERY set — universal over R's items, since each item sub
+// admits lies in some part, and existential over B's runs within a set. Where
+// the live wildcards are pairwise disjoint within sub, a part's set is its own
+// particle's positions alone, so an item counts towards the one base wildcard
+// that admits it. saxonData All/all244 is that shape: B = all(any{one,two}{5,∞},
+// any{three}{0,2}) and R = all(any{one}{3,∞}, any{two,three}{2,2}), and R's
+// (one, one, one, three, three) sends its three items to B's second wildcard
+// alone, leaving B's first at 3 of its 5.
+//
+// Why the result never makes the walk answer false where the exact check
+// answers true. The exact check (cos-content-act-restrict clause 1, with clause
+// 2 at each item) moves B, on an item n, to S(n): the live positions admitting
+// n. Every set returned here CONTAINS S(n) for some n in its part: a part is
+// non-empty only when it admits a namespace, hence infinitely many names, while
+// the element particles live beside the wildcards admit finitely many, so some
+// n in the part is admitted by wildcards alone, and the set holds every
+// wildcard particle that can admit a name of the part. A walk branch entering
+// such a set therefore shadows the exact branch taking n, through the same
+// R-states, with a B-set at least as large; and each of the walk's rejections
+// on that branch — no member accepting where R may end, no live position
+// admitting R's next item, no member's binding subsuming (someBindingSubsumes)
+// — quantifies over every member, so it holds of the smaller exact set too and
+// is an exact rejection. The argument is per branch and assumes no
+// monotonicity of the walk in its B-set: from a larger set matchPositions may
+// return a direct match where a smaller one would return a split, and the
+// argument covers that step the same way, since a direct match holds S(n) for
+// every name of sub that no element particle and no other live wildcard admits,
+// and such a name exists unless live wildcards overlap within sub — the first
+// shape the GAP(xsd) below records.
+//
+// Construction cost stays within maxProductStates (#499): one R transition
+// yields at most k sets, k the distinct live wildcard particles, where it
+// yielded one; no R position is added, each set is interned like any other
+// B-set, and every product state still counts against the one ceiling.
+//
+// GAP(xsd): two shapes are not decided and return a set wider than an item's
+// runs. Live base wildcards that overlap within sub put every overlapping
+// particle's positions into a part's set, so an item one of them admits also
+// counts towards the others' runs; cos-nonambig forbids two distinct wildcard
+// particles live after one prefix to ·overlap·, but addInterleave's states are
+// not among those Phase C checked, so the shape is not shown unreachable. And
+// the three unreachable error slots below return every live wildcard position
+// as one set, as the whole union did before the split. Both sets contain S(n)
+// for some n, so by the argument above the walk answers true more often and
+// never less. #1953 owns deciding them (derivation-ok-restriction clause 2.4.2,
+// cos-aw-intersect). Fail-open for all three readers of that true, each of which
+// charges only on false (STYLE P3a): checkRestrictionContentType
 // (complexderivation.go) charges derivation-ok-restriction clause 2.4.2;
 // checkExtensionTwoStepDerivable (complexextension.go) re-charges the same call
 // through checkDerivationOKRestriction as cos-ct-extends clause 1.5; and
 // checkModelGroupRedefinitions (redefinition.go) charges src-redefine clause
-// 6.2.2. Each loses a rejection it could have made and none gains one.
+// 6.2.2. Each loses a rejection it could have made and none gains one. The same
+// overlap met by matchPositions' direct match instead can leave a set holding
+// no S(n), and the direction there is unestablished.
 //
 // GAP(xsd): the verdict is exact for {namespaces} and for the defined/QName half
 // of {disallowed names}, but §3.10.6.3 has no sibling bullet, so the fold silently
@@ -1237,63 +1304,92 @@ func (s *Schema) matchPositions(p position, b contentAutomaton, live liveSet) []
 // caller, and cos-aw-union's binary primitive plus the caller's own loop is how
 // parser/produce_complex.go folds the intersection too (STYLE T4/T5).
 //
-// The positions and their constraints are gathered in ONE pass into two locals —
-// the {term} assertion is made once per live position, never repeated to recover
-// a constraint the fold needs — and both die with the call; nothing derivable is
-// stored (STYLE D3).
-//
-// The FOLD runs over the distinct source particles (liveSet's representatives),
-// while the RESULT names every live position they cover. Folding a repeated copy
-// would add nothing DIFFERENT: copies of one particle carry one identical
-// {namespace constraint} value (addParticle's allocator reset makes particleID
-// -> {term} a function), so re-including a copy would hand
-// UnionNamespaceConstraint an operand already in constraints, never a new one —
-// this is a claim about which OPERANDS the fold sees, not that §3.10.6.3's union
-// is idempotent as a relation: it is not (the sibling-keyword GAP above is
+// The fold and the split run over the distinct source particles (liveSet's
+// representatives), while every result set names each live position they cover.
+// Folding a repeated copy would add nothing DIFFERENT: copies of one particle
+// carry one identical {namespace constraint} value (addParticle's allocator
+// reset makes particleID -> {term} a function), so re-including a copy would
+// hand UnionNamespaceConstraint an operand already in constraints, never a new
+// one — this is a claim about which OPERANDS the fold sees, not that §3.10.6.3's
+// union is idempotent as a relation: it is not (the sibling-keyword GAP above is
 // exactly a case where folding drops a sibling keyword, so X ∪ X can differ from
 // X for a constraint that carries one). The guard is therefore on the number of
 // DISTINCT wildcard particles: one particle's copies are decided by
 // cos-ns-subset alone in positionAdmits, which has already answered for all of
-// them, exactly as a single wildcard is.
-func coveringWildcardUnion(sub NamespaceConstraint, b contentAutomaton, live liveSet) []int {
-	var wildcards []int
+// them, exactly as a single wildcard is. The locals die with the call; nothing
+// derivable is stored (STYLE D3).
+func coveringWildcardUnion(sub NamespaceConstraint, b contentAutomaton, live liveSet) [][]int {
+	var groups []int
 	var constraints []NamespaceConstraint
-	for i, q := range live.positions {
+	for g, q := range live.reps {
 		w, ok := b.positions[q].term.(Wildcard)
 		if !ok {
 			continue
 		}
-		wildcards = append(wildcards, q)
-		if q == live.reps[live.group[i]] {
-			constraints = append(constraints, w.NamespaceConstraint())
-		}
+		groups = append(groups, g)
+		constraints = append(constraints, w.NamespaceConstraint())
 	}
 	if len(constraints) < 2 {
 		return nil
 	}
+	// Every error below is unreachable: each operand is the {namespace
+	// constraint} of an already-built Wildcard, or sub's intersection with one,
+	// and the union or intersection of two such records always satisfies
+	// w-props-correct (see UnionNamespaceConstraint and
+	// intersectNamespaceConstraint). Should a future divergence reach one, the
+	// arm returns every live wildcard position as one set, the GAP(xsd) shape
+	// above, and the error DECIDES that verdict rather than being dropped (STYLE
+	// S3), exactly as contentTypeRestricts treats contentAutomatonOf's own
+	// unreachable error slot. The loc is the zero xsderr.Loc{} because this is a
+	// finalize-time decision with no source position of its own; nothing
+	// user-visible is charged to it.
+	undecided := [][]int{live.positionsOf(groupsIn(len(live.reps), groups))}
 	union := constraints[0]
 	for _, next := range constraints[1:] {
 		folded, err := UnionNamespaceConstraint(xsderr.Loc{}, union, next)
 		if err != nil {
-			// Unreachable: every operand is the {namespace constraint} of an
-			// already-built Wildcard, and the union of two such records always
-			// satisfies w-props-correct (see UnionNamespaceConstraint). Should a
-			// future divergence reach it, the union is undecided, so the arm
-			// resolves the way every approximation in this file resolves —
-			// towards accepting, i.e. the union is assumed to cover — and the
-			// error DECIDES that verdict rather than being dropped (STYLE S3),
-			// exactly as contentTypeRestricts treats contentAutomatonOf's own
-			// unreachable error slot. The loc is the zero xsderr.Loc{} because
-			// this is a finalize-time decision with no source position of its
-			// own; nothing user-visible is charged to it.
-			return wildcards
+			return undecided
 		}
 		union = folded
 	}
 	if !wildcardSubset(sub, union) {
 		return nil
 	}
-	return wildcards
+	var sets [][]int
+	for i, c := range constraints {
+		part, err := intersectNamespaceConstraint(xsderr.Loc{}, sub, c)
+		if err != nil {
+			return undecided
+		}
+		if !admitsSomeNamespace(part) {
+			continue
+		}
+		members := []int{groups[i]}
+		for j, other := range constraints {
+			if j == i {
+				continue
+			}
+			shared, err := intersectNamespaceConstraint(xsderr.Loc{}, part, other)
+			if err != nil {
+				return undecided
+			}
+			if admitsSomeNamespace(shared) {
+				members = append(members, groups[j])
+			}
+		}
+		sets = append(sets, live.positionsOf(groupsIn(len(live.reps), members)))
+	}
+	return sets
+}
+
+// groupsIn marks the given liveSet group indexes in a slice of n flags, the form
+// liveSet.positionsOf reads.
+func groupsIn(n int, groups []int) []bool {
+	in := make([]bool, n)
+	for _, g := range groups {
+		in[g] = true
+	}
+	return in
 }
 
 // positionAdmits reports whether the base particle at position general admits

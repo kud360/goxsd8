@@ -58,7 +58,7 @@ All/all240/schema/all240.xsd pass
 All/all241/schema/all241.xsd pass
 All/all242/schema/all242.xsd pass
 All/all243/schema/all243.xsd pass
-All/all244/schema/all244.xsd fail
+All/all244/schema/all244.xsd pass
 All/all301/schema/all301.xsd pass
 All/all302/schema/all302.xsd pass
 All/all303/schema/all303.xsd pass

@@ -254,6 +254,49 @@ func TestContentRestrictsWildcardUnionShortfall(t *testing.T) {
 	}
 }
 
+// TestContentRestrictsWildcardUnionCounts pins the per-part split in
+// coveringWildcardUnion: an item of a union-covered restriction wildcard
+// advances only the base wildcard that admits it, so it counts towards that
+// wildcard's occurrence range and no other's.
+//
+// The rejecting row is W3C saxonData All/all244's shape. B = all(any{one,two}
+// 5..unbounded, any{three} 0..2) and R = all(any{one} 3..unbounded,
+// any{two,three} 2..2): R admits (one, one, one, three, three), whose three items
+// only B's second wildcard admits, which leaves B's first at 3 of its 5. With
+// the covering union's every live wildcard advanced on one R transition, the
+// three items counted towards B's first wildcard too and the row was accepted.
+// The accepting row keeps the union, lowers B's first minimum to 2, which every
+// choice of R's covered items meets, and adds a required any{four} on both
+// sides, a live base wildcard that meets no part of R's {two,three}. An item
+// must advance no run outside its own part: a split that also advanced B's
+// any{four} would spend it on a two or three item and leave R's own four item
+// nothing to match.
+func TestContentRestrictsWildcardUnionCounts(t *testing.T) {
+	one, two := NamespaceName("http://one.uri/"), NamespaceName("http://two.uri/")
+	three, four := NamespaceName("http://three.uri/"), NamespaceName("http://four.uri/")
+	wild := func(o Occurs, ns ...Namespace) Particle {
+		return uParticle(t, o, ResolvedTerm{Term: uWildcard(t, NamespaceConstraintEnumeration, ns, ProcessStrict)})
+	}
+	derived := uGroup(t, CompositorAll,
+		wild(uUnbounded(t, 3), one),
+		wild(uOccurs(t, 2, 2), two, three))
+	all244 := uGroup(t, CompositorAll,
+		wild(uUnbounded(t, 5), one, two),
+		wild(uOccurs(t, 0, 2), three))
+	expectRule(t, cRestricts(t, all244, derived), ruleDerivationOKRestriction)
+	covered := uGroup(t, CompositorAll,
+		wild(uUnbounded(t, 2), one, two),
+		wild(uOccurs(t, 0, 2), three),
+		wild(uOccurs(t, 1, 1), four))
+	withFour := uGroup(t, CompositorAll,
+		wild(uUnbounded(t, 3), one),
+		wild(uOccurs(t, 2, 2), two, three),
+		wild(uOccurs(t, 1, 1), four))
+	if err := cRestricts(t, covered, withFour); err != nil {
+		t.Fatalf("a restriction wildcard whose every item some base wildcard counts was rejected: %v", err)
+	}
+}
+
 // cNillableElem is a once-occurring particle over a local element declaration
 // with the given {nillable}.
 func cNillableElem(t *testing.T, local string, nillable bool) Particle {
