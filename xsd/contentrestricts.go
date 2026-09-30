@@ -829,8 +829,8 @@ func (s *Schema) contentTypeRestricts(tct, bct ContentType, scope contentRestric
 		// a wildcard admitting a accepts b a, since S3 there is b and b a has no
 		// ·path·, where the empty prefix plus a would reject it. An existential
 		// decomposition with that per-E designated exclusion is a new automaton
-		// carrying its own soundness argument — the shape addAll needed for ·all·
-		// — and no algorithm for it is given: §3.4.6.3/.4 state only the
+		// carrying its own soundness argument — as addInterleave is for ·all· —
+		// and no algorithm for it is given: §3.4.6.3/.4 state only the
 		// containment, and Appendix J's construction guidance is scoped by its own
 		// text to cos-nonambig.
 		//
@@ -1128,8 +1128,10 @@ func (s *Schema) contentModelRestricts(r, b contentAutomaton, scope contentRestr
 }
 
 // matchPositions returns, in ascending order, every live B-position that admits
-// each item the R-position p admits. An empty result is a clause-1 failure: R
-// can consume something no run of B can.
+// each item the R-position p admits, or, when none does and p is a wildcard,
+// coveringWildcardUnion's set of base wildcards that admit those items only
+// jointly (see the GAP(xsd) marker there, #1939). An empty result is a clause-1
+// failure: R can consume something no run of B can.
 //
 // The result is a SET rather than one position because several B-positions may be
 // live and admit p at once (see this file's determinism note): copies of one
@@ -1181,10 +1183,27 @@ func (s *Schema) matchPositions(p position, b contentAutomaton, live liveSet) []
 // prescribes for more than two operands — and sub is then tested against the
 // result by the same cos-ns-subset relation positionAdmits uses for one base
 // wildcard. Both §3.10.6 relations are therefore exercised here: a covering union
-// returns every live wildcard as the matched set (each is a run B may take, and
-// none may be singled out — see matchPositions), while a union that does not cover
-// sub is a clause-1 failure, reported as the empty result matchPositions and
-// contentModelRestricts already read that way.
+// returns every live wildcard as the matched set, while a union that does not
+// cover sub is a clause-1 failure, reported as the empty result matchPositions
+// and contentModelRestricts already read that way.
+//
+// GAP(xsd): a covering union's matched set is not a set of runs B may take. Each
+// base wildcard admits only its own part of sub, but the walk advances every
+// member on the one R transition, so an item only one base wildcard admits is
+// counted towards the others' runs too. saxonData All/all244 is that shape: B =
+// all(any{one,two}{5,∞}, any{three}{0,2}) and R = all(any{one}{3,∞},
+// any{two,three}{2,2}), and R's (one, one, one, three, three) is read as
+// contained although B's first wildcard admits no three. #1939 owns splitting
+// sub into the part each base wildcard admits (derivation-ok-restriction clause
+// 2.4.2, cos-ns-subset). The extra members only enlarge B's state set and give
+// someBindingSubsumes more members to succeed on, so the walk answers true more
+// often and never less. Fail-open for all three readers of that true, each of
+// which charges only on false (STYLE P3a): checkRestrictionContentType
+// (complexderivation.go) charges derivation-ok-restriction clause 2.4.2;
+// checkExtensionTwoStepDerivable (complexextension.go) re-charges the same call
+// through checkDerivationOKRestriction as cos-ct-extends clause 1.5; and
+// checkModelGroupRedefinitions (redefinition.go) charges src-redefine clause
+// 6.2.2. Each loses a rejection it could have made and none gains one.
 //
 // GAP(xsd): the verdict is exact for {namespaces} and for the defined/QName half
 // of {disallowed names}, but §3.10.6.3 has no sibling bullet, so the fold silently
@@ -1230,12 +1249,12 @@ func (s *Schema) matchPositions(p position, b contentAutomaton, live liveSet) []
 // -> {term} a function), so re-including a copy would hand
 // UnionNamespaceConstraint an operand already in constraints, never a new one —
 // this is a claim about which OPERANDS the fold sees, not that §3.10.6.3's union
-// is idempotent as a relation: it is not (the GAP above is exactly a case where
-// folding drops a sibling keyword, so X ∪ X can differ from X for a constraint
-// that carries one). The guard is therefore on the number of DISTINCT wildcard
-// particles: one particle's copies are decided by cos-ns-subset alone in
-// positionAdmits, which has already answered for all of them, exactly as a
-// single wildcard is.
+// is idempotent as a relation: it is not (the sibling-keyword GAP above is
+// exactly a case where folding drops a sibling keyword, so X ∪ X can differ from
+// X for a constraint that carries one). The guard is therefore on the number of
+// DISTINCT wildcard particles: one particle's copies are decided by
+// cos-ns-subset alone in positionAdmits, which has already answered for all of
+// them, exactly as a single wildcard is.
 func coveringWildcardUnion(sub NamespaceConstraint, b contentAutomaton, live liveSet) []int {
 	var wildcards []int
 	var constraints []NamespaceConstraint

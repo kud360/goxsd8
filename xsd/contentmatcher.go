@@ -25,9 +25,10 @@ import (
 // because ·compete· is a question about the MODEL and this one is a question
 // about an INSTANCE. The two constructions are deliberately not shared:
 // automaton.addAll accepts a documented SUPERSET of the interleave language
-// (particleattribution.go), which is the right direction for a schema
-// constraint and a false accept for an instance one, and its unfolding bound
-// changes the accepted language outright (e{3,6} reads as e{2,4}).
+// (particleattribution.go), harmless only for ·compete·, which reads no
+// language, and a false accept for every consumer that reads one, an instance
+// walk included; and its unfolding bound changes the accepted language outright
+// (e{3,6} reads as e{2,4}).
 //
 // # One particle per item, and more than one partition
 //
