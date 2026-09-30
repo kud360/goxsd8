@@ -615,6 +615,47 @@ func TestContentRestrictsOccurrenceBoundsNested(t *testing.T) {
 	expectRule(t, cRestricts(t, pair(3, 3), pair(5, 5)), ruleDerivationOKRestriction)
 }
 
+// TestInterleavePositionsCountsConstruction pins that interleavePositions counts
+// what addInterleave emits, which is what makes maxContentPositions bound the
+// automaton rather than estimate it (see unfoldedPositions): for each ·all·
+// shape the count equals the built automaton's position table, and a wide ·all·
+// saturates one past the ceiling rather than being counted out.
+func TestInterleavePositionsCountsConstruction(t *testing.T) {
+	s := rSchema(t, nil)
+	all := func(ps ...Particle) ModelGroup { return uGroup(t, CompositorAll, ps...) }
+	for _, tc := range []struct {
+		name string
+		g    ModelGroup
+		want int
+	}{
+		{name: "one member", g: all(cElem(t, "a", 1, 1)), want: 1},
+		{name: "two members", g: all(cElem(t, "a", 1, 1), cElem(t, "b", 0, 1)), want: 4},
+		{name: "a repeated member", g: all(cElem(t, "a", 0, 3), cElem(t, "b", 1, 1)), want: 10},
+		{name: "an unbounded member", g: all(cUnbounded(t, "a", 2), cElem(t, "b", 1, 1), cElem(t, "c", 0, 1)), want: 20},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := uOne(t, ResolvedTerm{Term: tc.g})
+			if got := s.unfoldedPositions(p); got != tc.want {
+				t.Fatalf("unfoldedPositions = %d, want %d", got, tc.want)
+			}
+			a, err := s.contentAutomatonOf(ElementContent{Particle: p})
+			if err != nil {
+				t.Fatalf("contentAutomatonOf: %v", err)
+			}
+			if got := len(a.positions); got != tc.want {
+				t.Fatalf("addInterleave emitted %d positions, want the %d interleavePositions counts", got, tc.want)
+			}
+		})
+	}
+	wide := make([]Particle, 0, 13)
+	for _, name := range []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m"} {
+		wide = append(wide, cElem(t, name, 0, 1))
+	}
+	if got := s.unfoldedPositions(uOne(t, ResolvedTerm{Term: all(wide...)})); got != maxContentPositions+1 {
+		t.Fatalf("a 13-member ·all· of optional members (13 × 2^12 positions) counts %d, want the saturated %d", got, maxContentPositions+1)
+	}
+}
+
 // TestContentRestrictsBeyondPositionCeiling pins the direction of the
 // maxContentPositions giveup: a content model whose exact unfolding does not fit
 // is left undecided and provisionally ACCEPTED, never rejected. Both pairs here
