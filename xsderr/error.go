@@ -58,15 +58,20 @@ type Loc struct {
 	Col int
 }
 
-// String renders a Loc as "uri:line:col". The zero Loc renders as "?", and an
-// absent URI renders as "?".
+// String renders a Loc one dimension at a time, as "uri:line:col". The uri is
+// URI, or "?" when URI is empty. ":line" follows only when Line is known (at
+// least 1), and ":col" only when both Line and Col are known, so a known Col
+// without a known Line is not rendered, and the zero Loc renders "?".
 func (l Loc) String() string {
-	if l == (Loc{}) {
-		return "?"
-	}
 	uri := l.URI
 	if uri == "" {
 		uri = "?"
+	}
+	if l.Line < 1 {
+		return uri
+	}
+	if l.Col < 1 {
+		return fmt.Sprintf("%s:%d", uri, l.Line)
 	}
 	return fmt.Sprintf("%s:%d:%d", uri, l.Line, l.Col)
 }

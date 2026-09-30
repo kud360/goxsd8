@@ -19,8 +19,8 @@ type config struct {
 	uri string
 }
 
-// newConfig applies opts over the defaults: the document is unnamed, and
-// every Loc it produces renders "?:line:col".
+// newConfig applies opts over the defaults: the document is unnamed, so
+// every Loc it produces renders with "?" for its URI.
 func newConfig(opts []Option) config {
 	var cfg config
 	for _, opt := range opts {
