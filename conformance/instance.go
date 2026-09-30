@@ -154,9 +154,8 @@ import (
 // file assuming them: the attribute half of cvc-complex-type is reached only where
 // the governing type was determinable — the ·selected type definition·, which
 // a {type table} may have ·conditionally selected·, or the ·instance-specified·
-// one that ·overrides· it — only for attributes clause 2 quantifies over (the
-// four xsi: names are excepted), and never where an {attribute wildcard} leaves
-// an arm of the rule unevaluated. The content half adds its own: an element
+// one that ·overrides· it — and only for attributes clause 2 quantifies over
+// (the four xsi: names are excepted). The content half adds its own: an element
 // that is ·nilled· (clause 1 applies only where it is not, and cvc-elt clause
 // 3.2.3.1 decides its [[children]] instead), and a {content type} whose shape
 // xsd.Schema.ContentMatcher declines — a nested repetition whose occurrence
@@ -283,19 +282,27 @@ import (
 //     is walkUnrecorded, for the reason its doc gives: no element's value type
 //     — a Simple Type Definition, or a simple {content type}'s {simple type
 //     definition} — and no attribute use's {attribute declaration}.{type
-//     definition}, whether the attribute is present or not, has a closure
-//     reaching it. Each use's declaration must resolve, so an unresolvable
-//     {attribute declaration} is refused too.
+//     definition}, whether the attribute is present or not, and no
+//     wildcard-resolved declaration's, has a closure reaching it. Each use's
+//     declaration must resolve, so an unresolvable {attribute declaration} is
+//     refused too.
 //   - cvc-complex-type clause 2: every attribute beyond namespace declarations
-//     and the four xsi: names matches an attribute use (2.1), so none is
-//     ·attributed to· an {attribute wildcard}, whose ·attribute assessment·
-//     against a resolved top-level declaration the gate does not audit; a type
-//     carrying one is admitted wherever no attribute is ·attributed to· it, the
-//     wildcard then quantifying over nothing. Clause 2.1's cvc-attribute and
-//     cvc-au, and clauses 3 and 4 — a {required} use the element lacks, and a
-//     ·defaulted attribute· for each use it does not carry — are the walk's,
-//     which records each check it withholds, on an element with no
-//     [[attributes]] as on any other.
+//     and the four xsi: names matches an attribute use (2.1) or is
+//     ·attributed to· the {attribute wildcard} (2.2, cvc-wildcard §3.10.4.1)
+//     (#1860). Under skip it is ·skipped· and not assessed (key-sva clause
+//     2.2); under lax or strict a name that ·resolves· to a top-level
+//     declaration is assessed against it (key-sva clause 2.1), and one that
+//     resolves to none under lax is not assessed. That declaration's {type
+//     definition} is held to the walkUnrecorded exclusion a use's is. The gate
+//     refuses a strict wildcard's name that resolves to none, which the walk
+//     charges nothing for and records nothing of (subtreeGate.wildcardAttribute,
+//     #1912). Clause 2.1's cvc-attribute and cvc-au, clause 2.2's cvc-attribute
+//     clauses 3 and 4 against the resolved declaration, and clauses 3 and 4 — a
+//     {required} use the element lacks, and a ·defaulted attribute· for each use it
+//     does not carry — are the walk's, which records each check it withholds, on an
+//     element with no [[attributes]] as on any other. A wildcard-resolved
+//     declaration supplies no ·defaulted attribute· (key-dflt-att ranges over
+//     {attribute uses}).
 //   - key-sva clause 2 for the xsi: attributes the gate admits: xsi:nil being
 //     refused, xsi:type is the walk's (cvc-attribute clauses 3 and 5, charged
 //     or recorded wherever it is no QName or ·resolves· to no type), and

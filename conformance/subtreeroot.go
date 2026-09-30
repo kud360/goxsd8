@@ -16,12 +16,14 @@ import (
 
 // This file holds the instance lane's one shape gate for the "valid"
 // observation: an ASSESSED SUBTREE ROOT (#1841), a validation root, with or
-// without content (#1855), whose every element and attribute the walk strictly
-// assessed against a declaration and a type it really has, with no clause of
-// key-sva (§3.3.4.6), cvc-elt (§3.3.4.3), cvc-type (§3.3.4.4) or
-// cvc-complex-type (§3.4.4.2) left undecided unrecorded. instance.go's "Why an
-// EMPTY Result is evidence of validity for ONE shape only" states which clause
-// each condition discharges; this file is only the conditions.
+// without content (#1855), whose every element the walk strictly assessed
+// against a declaration and a type it really has, and every attribute against
+// its ·governing attribute declaration· where it has one (key-sva clause 2),
+// with no clause of key-sva (§3.3.4.6), cvc-elt (§3.3.4.3), cvc-type
+// (§3.3.4.4) or cvc-complex-type (§3.4.4.2) left undecided unrecorded.
+// instance.go's "Why an EMPTY Result is evidence of validity for ONE shape
+// only" states which clause each condition discharges; this file is only the
+// conditions.
 //
 // The gate is computed per case and stored nowhere. It re-reads the instance
 // with encoding/xml and re-derives every child's ·attribution· through
@@ -332,11 +334,10 @@ func assessedDeclaration(d xsd.ElementDeclaration) bool {
 //
 //   - t.{abstract} is false (cvc-type clause 2);
 //   - every one of t.{attribute uses} resolves to an {attribute declaration}
-//     whose {type definition} resolves to a simple type whose closure reaches
-//     none of walkUnrecorded, present on the element or not;
+//     that recordedAttributeType admits, present on the element or not;
 //   - every attribute the element carries that notExcepted names matches one
-//     of those uses by ·expanded name· (cvc-complex-type clause 2.1), so none
-//     is ·attributed to· the {attribute wildcard};
+//     of those uses by ·expanded name· (cvc-complex-type clause 2.1) or meets
+//     wildcardAttribute's conditions (clause 2.2);
 //   - where constrained, the element has no ·defaulted attribute·
 //     (defaultedAttribute). §3.11.4 clause 3's Note has a default or fixed
 //     value play a part in a ·key-sequence·, but validate's
@@ -357,11 +358,7 @@ func (g *subtreeGate) complex(start xml.StartElement, t xsd.ComplexType, constra
 	uses := t.AttributeUses()
 	for _, u := range uses {
 		ad, ok := g.schema.ResolvedAttributeDeclaration(u)
-		if !ok {
-			return false
-		}
-		st, ok := g.schema.ResolvedSimpleType(ad.TypeDefinition())
-		if !ok || closureReaches(g.schema, st, walkUnrecorded) {
+		if !ok || !g.recordedAttributeType(ad) {
 			return false
 		}
 		if constrained && g.defaultedAttribute(u, start.Attr) {
@@ -373,7 +370,10 @@ func (g *subtreeGate) complex(start xml.StartElement, t xsd.ComplexType, constra
 			continue
 		}
 		n := expandedName(a.Name)
-		if !slices.ContainsFunc(uses, func(u xsd.AttributeUse) bool { return u.DeclarationName() == n }) {
+		if slices.ContainsFunc(uses, func(u xsd.AttributeUse) bool { return u.DeclarationName() == n }) {
+			continue
+		}
+		if !g.wildcardAttribute(t, n) {
 			return false
 		}
 	}
@@ -393,6 +393,52 @@ func (g *subtreeGate) complex(start xml.StartElement, t xsd.ComplexType, constra
 		return g.children(m, constrained)
 	}
 	return false
+}
+
+// recordedAttributeType reports whether ad.{type definition} resolves to a
+// simple type whose closure reaches none of walkUnrecorded: the one condition
+// the gate puts on an attribute declaration the walk assesses an attribute
+// against, an {attribute uses} member's or a wildcard-resolved one's.
+func (g *subtreeGate) recordedAttributeType(ad xsd.AttributeDeclaration) bool {
+	st, ok := g.schema.ResolvedSimpleType(ad.TypeDefinition())
+	return ok && !closureReaches(g.schema, st, walkUnrecorded)
+}
+
+// wildcardAttribute reports whether an attribute named n that matches none of
+// t.{attribute uses} is one whose assessment the walk decides or records
+// (validate's walk.unmatchedAttribute and walk.wildcardAttribute): t has an
+// {attribute wildcard} that admits n (cvc-complex-type clause 2.2, cvc-wildcard
+// §3.10.4.1, xsd.Schema.AllowsAttributeWildcardName), and one of these holds:
+//
+//   - its {process contents} is skip: the attribute is ·skipped·
+//     (key-skipped), assessed against nothing, and cvc-assess-elt clause 2.2
+//     leaves it unassessed with nothing to decide;
+//   - n ·resolves· to a top-level attribute declaration (key-governing-ad
+//     clause 3) that recordedAttributeType admits: the walk charges or records
+//     cvc-attribute clauses 3 and 4 against it, under lax and strict alike;
+//   - n resolves to none under lax: the attribute has no ·governing attribute
+//     declaration· and is not assessed, which charges nothing (sic-e-outcome
+//     clause 1.1.3 reaches only a ·wildcard particle·).
+//
+// It refuses n resolving to none under strict. The walk charges nothing there
+// either, on the same reading, and records nothing, a reading the suite does
+// not share for seven of its invalid cases (#1912). A name the wildcard does
+// not admit, or a type with no {attribute wildcard}, is refused too, though the
+// walk charges clause 2 for both.
+func (g *subtreeGate) wildcardAttribute(t xsd.ComplexType, n xsd.QName) bool {
+	wild, ok := t.AttributeWildcard()
+	if !ok || !g.schema.AllowsAttributeWildcardName(wild, n) {
+		return false
+	}
+	pc := wild.ProcessContents()
+	if pc == xsd.ProcessSkip {
+		return true
+	}
+	ad, ok := g.schema.Attribute(n)
+	if !ok {
+		return pc == xsd.ProcessLax
+	}
+	return g.recordedAttributeType(ad)
 }
 
 // defaultedAttribute reports whether u is a ·defaulted attribute· (§3.4.4.2)
