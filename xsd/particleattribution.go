@@ -372,11 +372,23 @@ func wildcardsOverlap(a, b Wildcard) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("intersecting the {namespace constraint}s of two wildcard particles (cos-aw-intersect): %w", err)
 	}
+	return admitsSomeNamespace(c), nil
+}
+
+// admitsSomeNamespace reports whether c admits at least one namespace name:
+// {variety} any, or {variety} not, or {variety} enumeration with a non-empty
+// {namespaces}. It is the emptiness half of wildcardsOverlap's test, shared with
+// coveringWildcardUnion (contentrestricts.go), which asks it of the
+// intersections it splits a restriction wildcard into. {disallowed names} does
+// not enter: its QNames, and the names its defined and sibling keywords resolve
+// to in a finite schema, are finitely many, while an admitted namespace holds
+// infinitely many local names.
+func admitsSomeNamespace(c NamespaceConstraint) bool {
 	switch c.Variety() {
 	case NamespaceConstraintAny, NamespaceConstraintNot:
-		return true, nil
+		return true
 	default:
-		return len(c.namespaces) > 0, nil
+		return len(c.namespaces) > 0
 	}
 }
 
