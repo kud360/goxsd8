@@ -83,7 +83,7 @@ func assessedSubtreeRoot(schema *xsd.Schema, report *parser.AssemblyReport, doc 
 		return false
 	}
 	g := subtreeGate{schema: schema, dec: dec}
-	if !g.element(root, d, false) {
+	if !g.element(root, d) {
 		return false
 	}
 	return documentEnd(dec)
@@ -131,11 +131,7 @@ type subtreeGate struct {
 //     walkUnrecorded, the element carries no attribute but the four
 //     xsi: ones cvc-type clause 3.1.1 excepts, and no element [[child]];
 //   - for a Complex Type Definition, the conditions complex names.
-//
-// constrained reports whether the declaration of an element above this one
-// carries {identity-constraint definitions}; element passes it on set from d
-// down, where complex refuses every ·defaulted attribute·.
-func (g *subtreeGate) element(start xml.StartElement, d xsd.ElementDeclaration, constrained bool) bool {
+func (g *subtreeGate) element(start xml.StartElement, d xsd.ElementDeclaration) bool {
 	if !plainAttributes(start.Attr) || !assessedDeclaration(d) {
 		return false
 	}
@@ -146,7 +142,6 @@ func (g *subtreeGate) element(start xml.StartElement, d xsd.ElementDeclaration, 
 		}
 	}
 	defer func() { g.scope = g.scope[:mark] }()
-	constrained = constrained || len(d.IdentityConstraints()) > 0
 	td, ok := g.governingType(start, d)
 	if !ok {
 		return false
@@ -158,7 +153,7 @@ func (g *subtreeGate) element(start xml.StartElement, d xsd.ElementDeclaration, 
 		}
 		return g.leaf()
 	case xsd.ComplexType:
-		return g.complex(start, t, constrained)
+		return g.complex(start, t)
 	}
 	return false
 }
@@ -265,9 +260,7 @@ func notExcepted(a xml.Attr) bool {
 // definition}), and no fixed {value constraint} (clause 5.2.2). A default one
 // is admitted: clause 5.1 is the walk's. So are {identity-constraint
 // definitions}: clause 6 (cvc-identity-constraint, §3.11.4) is the walk's,
-// which records every check it declines, and the one outcome it leaves
-// unrecorded, a field node that is a ·defaulted attribute·, is complex's to
-// refuse.
+// which records every check it declines.
 func assessedDeclaration(d xsd.ElementDeclaration) bool {
 	if d.Abstract() {
 		return false
@@ -288,20 +281,12 @@ func assessedDeclaration(d xsd.ElementDeclaration) bool {
 //   - every attribute the element carries that notExcepted names matches one
 //     of those uses by ·expanded name· (cvc-complex-type clause 2.1) or meets
 //     wildcardAttribute's conditions (clause 2.2);
-//   - where constrained, the element has no ·defaulted attribute·
-//     (defaultedAttribute). §3.11.4 clause 3's Note has a default or fixed
-//     value play a part in a ·key-sequence·, but validate's
-//     icCheck.fieldAttributes reads only the attributes the instance carries,
-//     so a field selecting a defaulted one leaves the ·key-sequence· short
-//     with nothing charged and nothing recorded. The refusal is wider than
-//     that shape: it does not ask whether any {fields} path selects the
-//     attribute;
 //   - under a simple {content type}, its {simple type definition}'s closure
 //     reaches none of walkUnrecorded and there is no element [[child]];
 //   - under an empty one, there is no element [[child]];
 //   - under an element-only or mixed one, xsd.Schema.ContentMatcher decides it
 //     and every element [[child]] meets child's conditions.
-func (g *subtreeGate) complex(start xml.StartElement, t xsd.ComplexType, constrained bool) bool {
+func (g *subtreeGate) complex(start xml.StartElement, t xsd.ComplexType) bool {
 	if t.Abstract() {
 		return false
 	}
@@ -309,9 +294,6 @@ func (g *subtreeGate) complex(start xml.StartElement, t xsd.ComplexType, constra
 	for _, u := range uses {
 		ad, ok := g.schema.ResolvedAttributeDeclaration(u)
 		if !ok || !g.recordedAttributeType(ad) {
-			return false
-		}
-		if constrained && g.defaultedAttribute(u, start.Attr) {
 			return false
 		}
 	}
@@ -340,7 +322,7 @@ func (g *subtreeGate) complex(start xml.StartElement, t xsd.ComplexType, constra
 		if !ok {
 			return false
 		}
-		return g.children(t, m, constrained)
+		return g.children(t, m)
 	}
 	return false
 }
@@ -399,23 +381,6 @@ func (g *subtreeGate) wildcardAttribute(t xsd.ComplexType, n xsd.QName) bool {
 	return g.recordedAttributeType(ad) && !g.locallyDeclaredAttribute(t, n)
 }
 
-// defaultedAttribute reports whether u is a ·defaulted attribute· (§3.4.4.2)
-// of an element whose start tag carries attrs: u.{required} false, u's
-// ·effective value constraint· not ·absent·, and no attribute of attrs
-// matching u.{attribute declaration} by ·expanded name·. The definition's
-// clause 4, excluding the built-in xsi: declarations, holds for every member
-// of {attribute uses}.
-func (g *subtreeGate) defaultedAttribute(u xsd.AttributeUse, attrs []xml.Attr) bool {
-	if u.Required() {
-		return false
-	}
-	if _, ok := g.schema.EffectiveValueConstraint(u); !ok {
-		return false
-	}
-	n := u.DeclarationName()
-	return !slices.ContainsFunc(attrs, func(a xml.Attr) bool { return expandedName(a.Name) == n })
-}
-
 // leaf reads an element's content through to its end tag and reports whether
 // no element started inside it.
 func (g *subtreeGate) leaf() bool {
@@ -435,9 +400,9 @@ func (g *subtreeGate) leaf() bool {
 
 // children reads the content of an element governed by t through to its end
 // tag, advancing m, t's ContentMatcher, over each element [[child]] in document
-// order, and reports whether every child meets child's conditions, constrained
-// as element states, and m accepts the whole sequence.
-func (g *subtreeGate) children(t xsd.ComplexType, m *xsd.Matcher, constrained bool) bool {
+// order, and reports whether every child meets child's conditions and m
+// accepts the whole sequence.
+func (g *subtreeGate) children(t xsd.ComplexType, m *xsd.Matcher) bool {
 	for {
 		tok, err := g.dec.Token()
 		if err != nil {
@@ -445,7 +410,7 @@ func (g *subtreeGate) children(t xsd.ComplexType, m *xsd.Matcher, constrained bo
 		}
 		switch s := tok.(type) {
 		case xml.StartElement:
-			if !g.child(t, m, s, constrained) {
+			if !g.child(t, m, s) {
 				return false
 			}
 		case xml.EndElement:
@@ -481,7 +446,7 @@ func (g *subtreeGate) children(t xsd.ComplexType, m *xsd.Matcher, constrained bo
 //
 // A skip Wildcard answers false: the child is ·skipped· with its whole subtree
 // (key-governing-ed clause 3.2), which no clause of it decides (#1861).
-func (g *subtreeGate) child(t xsd.ComplexType, m *xsd.Matcher, start xml.StartElement, constrained bool) bool {
+func (g *subtreeGate) child(t xsd.ComplexType, m *xsd.Matcher, start xml.StartElement) bool {
 	name := expandedName(start.Name)
 	a, ok := m.Next(name)
 	if !ok {
@@ -490,15 +455,15 @@ func (g *subtreeGate) child(t xsd.ComplexType, m *xsd.Matcher, start xml.StartEl
 	switch at := a.(type) {
 	case xsd.ElementDeclaration:
 		if at.Name() == name {
-			return g.element(start, at, constrained)
+			return g.element(start, at)
 		}
 		s, ok := g.schema.Element(name)
-		return ok && g.substitutable(s, at) && g.element(start, s, constrained)
+		return ok && g.substitutable(s, at) && g.element(start, s)
 	case xsd.Wildcard:
 		pc := at.ProcessContents()
-		return pc != xsd.ProcessSkip && g.resolvedChild(t, start, pc == xsd.ProcessStrict, constrained)
+		return pc != xsd.ProcessSkip && g.resolvedChild(t, start, pc == xsd.ProcessStrict)
 	case *xsd.OpenContent:
-		return g.resolvedChild(t, start, false, constrained)
+		return g.resolvedChild(t, start, false)
 	}
 	return false
 }
@@ -598,7 +563,7 @@ func sameType(a, b xsd.TypeDefinition) bool {
 // child ·strictly assessed· against it (key-governing-type-elem), which takes
 // the walk's clause 1.1.3 charge away and leaves a subtree the gate does not
 // read.
-func (g *subtreeGate) resolvedChild(t xsd.ComplexType, start xml.StartElement, strictParticle, constrained bool) bool {
+func (g *subtreeGate) resolvedChild(t xsd.ComplexType, start xml.StartElement, strictParticle bool) bool {
 	d, ok := g.schema.Element(expandedName(start.Name))
 	if !ok {
 		if !strictParticle || slices.ContainsFunc(start.Attr, func(a xml.Attr) bool { return a.Name == xsiType }) {
@@ -609,7 +574,7 @@ func (g *subtreeGate) resolvedChild(t xsd.ComplexType, start xml.StartElement, s
 	if g.locallyDeclared(t, g.substitutionHeads(d)) {
 		return false
 	}
-	return g.element(start, d, constrained)
+	return g.element(start, d)
 }
 
 // substitutionHeads is d's ·expanded name· followed by the name of every
