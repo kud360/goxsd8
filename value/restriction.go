@@ -580,6 +580,11 @@ type notationDeclarer interface {
 	Notations() []xsd.Notation
 }
 
+// The build pins notationDeclarer to the resolver finalize passes: a renamed or
+// re-typed Schema.Notations would otherwise stop the probe matching silently,
+// and every NOTATION member would go unchecked.
+var _ notationDeclarer = (*xsd.Schema)(nil)
+
 // declaredNotationBackend is inner with xs:NOTATION's mapping narrowed to
 // NOTATION's ·value space·, "the set of QNames of notations declared in the
 // current schema" (Datatypes §3.3.19), which a leaf mapping holding no schema
