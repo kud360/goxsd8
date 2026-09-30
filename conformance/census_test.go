@@ -77,9 +77,10 @@ const maxCensusViolationsLogged = 10
 // the allowlist admits every child a complex-type derivation alternant's own
 // content model does not admit (#1181), because checkS4SChildOrder rejects the
 // document over it while the census goes on reporting it beside that rejection.
-// The fourth is a <unique>, <key> or <keyref> under a top-level <attributeGroup>
-// (#1817), which attributeGroupChildMapped leaves unmapped and
-// rejectAttributeGroupIdentityConstraint rejects.
+// The fourth is any child a top-level <attributeGroup> or a named <group> holds
+// outside its Appendix A content model (#1817, #1876), which the census's
+// attributeGroupChildMapped and namedGroup leave unmapped and checkS4SChildOrder
+// rejects.
 func TestUnmappedCensusSoundAgainstShapeGate(t *testing.T) {
 	skipWithoutSuite(t)
 	found, err := parseSuite(suitePath())

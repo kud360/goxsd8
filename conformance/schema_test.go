@@ -135,14 +135,27 @@ func TestSchemaShapeDecidableAccepts(t *testing.T) {
 		{"attributeGroup body holding a ref-less attributeGroup", `<xs:attributeGroup name="ag"><xs:attributeGroup name="inner"/></xs:attributeGroup>`},
 		// #1817 admits an identity constraint wherever Appendix A admits none and the
 		// producer rejects it with no rule ID: under a top-level <attributeGroup>
-		// (rejectAttributeGroupIdentityConstraint), in place of a named <group>'s
-		// body (rejectNamedGroupBody), and under an <all>/<choice>/<sequence>
+		// (checkS4SChildOrder since #1876), in place of a named <group>'s body
+		// (rejectNamedGroupBody), and under an <all>/<choice>/<sequence>
 		// (groupParticles' default arm). Each row was a decline before, at
 		// attributeGroupDecidable, groupDecidable and modelGroupDecidable.
 		{"top-level attributeGroup holding a unique", `<xs:attributeGroup name="ag"><xs:unique name="u"><xs:selector xpath="a"/><xs:field xpath="@x"/></xs:unique></xs:attributeGroup>`},
 		{"top-level group whose only child is a key", `<xs:group name="g"><xs:key name="k"><xs:selector xpath="a"/><xs:field xpath="@x"/></xs:key></xs:group>`},
 		{"named group's choice body holding a keyref", `<xs:group name="g"><xs:choice><xs:keyref name="r" refer="k"><xs:selector xpath="a"/><xs:field xpath="@x"/></xs:keyref></xs:choice></xs:group>`},
 		{"local sequence holding a unique", `<xs:complexType name="T"><xs:sequence><xs:unique name="u"><xs:selector xpath="a"/><xs:field xpath="@x"/></xs:unique></xs:sequence></xs:complexType>`},
+		// #1876 admits every other child of both definitions, since the producer
+		// rejects each wherever it stands: beside a named <group>'s body, before it
+		// or after it (checkS4SChildOrder), in its place (rejectNamedGroupBody,
+		// groupO010's shape), and anywhere under a top-level <attributeGroup>
+		// (checkS4SChildOrder; attgD012 and groupO025). The first two rows were
+		// declines #1817 pinned; every row was a decline before, at groupDecidable
+		// or attributeGroupDecidable.
+		{"named group holding a unique beside its body", `<xs:group name="g"><xs:sequence/><xs:unique name="u"><xs:selector xpath="a"/><xs:field xpath="@x"/></xs:unique></xs:group>`},
+		{"top-level attributeGroup holding an element", `<xs:attributeGroup name="ag"><xs:element name="e"/></xs:attributeGroup>`},
+		{"named group holding a unique before its body", `<xs:group name="g"><xs:unique name="u"><xs:selector xpath="a"/><xs:field xpath="@x"/></xs:unique><xs:sequence/></xs:group>`},
+		{"named group holding an element beside its body", `<xs:group name="g"><xs:sequence/><xs:element name="x"/></xs:group>`},
+		{"named group whose only child is an element", `<xs:group name="g"><xs:element name="x"/></xs:group>`},
+		{"top-level attributeGroup holding a group ref", `<xs:attributeGroup name="ag"><xs:group ref="g"/></xs:attributeGroup>`},
 		{"all decidable kinds together", `<xs:element name="e" type="T"/><xs:attribute name="a"/><xs:simpleType name="T"><xs:restriction base="xs:string"><xs:maxLength value="3"/></xs:restriction></xs:simpleType>`},
 		{"top-level notation (§3.14.2)", `<xs:notation name="n" public="-//x//y" system="x.dtd"/>`},
 		// #286/#505: <redefine> is admitted for all four redefinable kinds, each
@@ -367,12 +380,9 @@ func TestSchemaShapeDecidableDeclines(t *testing.T) {
 		{"inline complexType whose own content is undecidable", `<xs:element name="e"><xs:complexType><xs:sequence><xs:attributeGroup ref="ag"/></xs:sequence></xs:complexType></xs:element>`},
 		{"inline complexType using simpleContent that drops an <assertions>", `<xs:element name="e"><xs:complexType><xs:simpleContent><xs:restriction base="B"><xs:assertions test="true()"/></xs:restriction></xs:simpleContent></xs:complexType></xs:element>`},
 		{"inline complexType nesting an inline complexType the gate declines", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a"><xs:complexType><xs:simpleContent><xs:restriction base="B"><xs:assertions test="true()"/></xs:restriction></xs:simpleContent></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>`},
-		// #1817's admission is scoped to the positions the producer REJECTS. An
-		// identity constraint BESIDE a named <group>'s body is dropped by
-		// buildDefinitionModelGroup unrejected, and an <attributeGroup>'s other
-		// out-of-model children are dropped by collectAttributeContent.
-		{"named group holding a unique beside its body", `<xs:group name="g"><xs:sequence/><xs:unique name="u"><xs:selector xpath="a"/><xs:field xpath="@x"/></xs:unique></xs:group>`},
-		{"top-level attributeGroup holding an element", `<xs:attributeGroup name="ag"><xs:element name="e"/></xs:attributeGroup>`},
+		// groupDecidable's one surviving decline after #1876: a body whose own
+		// particles are outside the produced subset.
+		{"named group whose body is undecidable", `<xs:group name="g"><xs:sequence><xs:attributeGroup ref="ag"/></xs:sequence></xs:group>`},
 		{"one decidable + one undecidable child declines whole", `<xs:element name="e" type="xs:string"/>` + undecidable},
 		// A redefining <complexType> is gated by complexTypeDecidable like any
 		// other, so a shape THAT predicate declines declines the whole case; the

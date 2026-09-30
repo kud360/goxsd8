@@ -1572,13 +1572,11 @@ func modelGroupDecidable(group *parser.Element) bool {
 }
 
 // groupDecidable reports whether a top-level <group> (§3.7.2) is within the
-// producer's decidable subset: its single all/choice/sequence body's particles
-// must all be decidable. A missing body still produces genuinely (the producer
-// rejects it against xs:namedGroup's content model, #884), so it is admitted —
-// and so is a <unique>, <key> or <keyref> written in the body's place (#1817),
-// which rejectNamedGroupBody charges as the first child that is no body. One
-// written BESIDE a body still declines: buildDefinitionModelGroup reads the body
-// and drops that sibling unrejected.
+// producer's decidable subset: its all/choice/sequence body's particles must all
+// be decidable. Every other XSD-namespace child is admitted, because the producer
+// rejects it against xs:namedGroup's content model wherever it stands: a missing
+// body (#884) and a child in the body's place through rejectNamedGroupBody, a
+// child beside the body through checkS4SChildOrder (#1876).
 //
 // The DEFINITION FORM is not required either (#1182). A top-level <group> with
 // no name=, or one carrying the ref= xs:namedGroup restricts to
@@ -1600,34 +1598,12 @@ func groupDecidable(el *parser.Element) bool {
 			if !modelGroupDecidable(c) {
 				return false
 			}
-		case "unique", "key", "keyref":
-			if hasCompositorChild(el) {
-				return false
-			}
 		default:
-			// A <group> body is only all/choice/sequence; anything else is out of
-			// the produced shape — decline.
-			return false
+			// REJECTED by the producer, whether or not a body stands beside it
+			// (#1876).
 		}
 	}
 	return true
-}
-
-// hasCompositorChild reports whether el has an XSD-namespace <all>, <choice> or
-// <sequence> child: a named <group>'s body, as the producer's compositorChild
-// finds it.
-func hasCompositorChild(el *parser.Element) bool {
-	for _, child := range el.Children() {
-		c, ok := child.(*parser.Element)
-		if !ok || c.Name().Space() != xsd.XMLSchemaNS {
-			continue
-		}
-		switch c.Name().Local() {
-		case "all", "choice", "sequence":
-			return true
-		}
-	}
-	return false
 }
 
 // attributeGroupDecidable reports whether a top-level <attributeGroup> (§3.6.2)
@@ -1643,10 +1619,9 @@ func hasCompositorChild(el *parser.Element) bool {
 // <attributeGroup> missing the one or carrying the other is admitted here and
 // rejected there.
 //
-// A <unique>, <key> or <keyref> child is admitted on the same footing (#1817):
-// the producer's rejectAttributeGroupIdentityConstraint charges it. Every other
-// name xs:attrDecls does not admit still declines, since the producer drops it
-// unrejected.
+// Every other XSD-namespace child is admitted on the same footing (#1817,
+// #1876): the producer's checkS4SChildOrder walk rejects any name
+// xs:namedAttributeGroup does not admit.
 func attributeGroupDecidable(el *parser.Element) bool {
 	for _, child := range el.Children() {
 		c, ok := child.(*parser.Element)
@@ -1664,10 +1639,8 @@ func attributeGroupDecidable(el *parser.Element) bool {
 			// Produced in the ref form (#177) and REJECTED in the ref-less one
 			// (#1182), by the same attributeGroupMember arms attrDeclsDecidable's
 			// <attributeGroup> child reaches.
-		case "unique", "key", "keyref":
-			// REJECTED by rejectAttributeGroupIdentityConstraint (#1817).
 		default:
-			return false
+			// REJECTED by the producer's walk against xs:namedAttributeGroup (#1876).
 		}
 	}
 	return true
