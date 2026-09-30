@@ -674,42 +674,6 @@ func (s *Schema) baseComplexType(c ComplexType) (ComplexType, bool) {
 // {base type definition} produces (see validlyDerived) and never a verdict about
 // sub and super: a caller that cannot propagate it must not fold it into either
 // answer.
-//
-// GAP(xsd): #1926 — where BOTH sides are simple, blocked is not read — derivedOKSimple
-// runs cos-st-derived-ok under the empty blocking set, so its clause 2.1 is
-// vacuous and a keyword in blocked does not turn a derivation away. A complex
-// sub over a simple super reaches it too, where derivedOKComplex hands
-// cos-ct-derived-ok clause 2.3.2.2 to derivedOKSimple. The four in-package callers
-// (declaredTypeRestricts, checkLocallyDeclaredAttributeTypes,
-// checkLocallyDeclaredElementTypes, checkTypeAlternativeSubstitutable) each read the
-// answer as an admission and charge on a FALSE, so a spurious TRUE only withholds a
-// charge there — for the last of them, an e-props-correct clause 7 rejection of a
-// {type table} entry the declaration's {disallowed substitutions} should have blocked.
-// The fifth caller, [validate]'s instanceOverride, reads the answer two ways at once —
-// as the cvc-elt clause 4 verdict AND as which type governs every rule assessed below
-// it — so a spurious TRUE does not merely withhold the clause-4 charge, it can also
-// make the instance type GOVERNING and manufacture a downstream charge a
-// correctly-blocked answer would not have. The document-level argument still closes
-// it: a spurious TRUE is possible only where a real blocking keyword would have turned
-// the answer FALSE, and clause 4 is a validity REQUIREMENT (§3.3.4.3) — a document
-// whose instance-specified type is not genuinely ·validly substitutable· is already
-// not spec-valid regardless of what this gap answers, so the two readings never
-// diverge on a document the spec calls valid. What the gap costs is diagnostic
-// precision on an already-invalid document, never a false accept of a valid one.
-//
-// A SIXTH reader reaches the same defect without calling this method:
-// checkSubstitutionGroupTypes (substitutiongrouptypes.go) goes to validlyDerived
-// directly, over a head's {substitution group exclusions}. Its direction is the
-// in-package one — it charges e-props-correct clause 4 on a FALSE answer, so a
-// spurious TRUE withholds that charge and admits a member declaration those
-// exclusions should have turned away — and it reads the answer ONLY as a
-// verdict, nothing downstream being typed off it.
-//
-// A seventh, outside this package, does not read the answer where this gap
-// can make it spuriously TRUE: the conformance lane's assessed-subtree-root
-// gate refuses an xsi:type against a simple ·selected type definition· whose
-// declaration blocks restriction. It also refuses the second spurious-TRUE
-// shape, the separate GAP(xsd) at validlyDerived's xs:anyType shortcut.
 func (s *Schema) ValidlySubstitutable(sub, super TypeDefinition, blocked []DerivationMethod) (bool, error) {
 	if sup, ok := super.(ComplexType); ok {
 		blocked = unionDerivationMethods(blocked, sup.prohibitedSubstitutions)
@@ -728,53 +692,24 @@ func (s *Schema) ValidlySubstitutable(sub, super TypeDefinition, blocked []Deriv
 // settle the difference. Splitting it out is also what keeps the two readings
 // one engine rather than two case analyses (STYLE T4).
 //
-// A simple sub against the complex super ·xs:anyType· is answered true up front.
-// Every simple type IS derived from xs:anyType — xs:anySimpleType's {base type
-// definition} is xs:anyType — but this package models no anyType node inside the
-// simple-type graph (simpletype.go), so derivedOKSimple cannot see the last hop.
-// Answering false there would false-reject the extremely common shape of a
-// restriction that types an element the base left untyped (a bare <element>
-// defaults to xs:anyType, §3.3.2.1 case 4). The error result is the src-resolve
-// clause 1.1 rejection an unresolvable simple-type {base type definition}
-// produces (simpletyperef.go). It is UNREACHABLE for any schema that survived
-// finalize's earlier phases — Phase A charges that rule for every base a Schema
-// reaches — and is propagated rather than folded into the verdict because
-// folding it either way would be a made-up answer: false is a false reject, true
-// a false accept.
+// Neither constraint is short-circuited for the super ·xs:anyType·. A complex
+// sub reaches it through derivedOKComplex, whose walk reads clause 1 on every
+// step and ends at clause 2.2; a simple sub reaches it through simpleDerivedOK,
+// whose last hop is xs:anySimpleType's to its own {base type definition},
+// xs:anyType (§3.16.7.1).
+//
+// The error result is the src-resolve clause 1.1 rejection an unresolvable
+// simple-type {base type definition} produces (simpletyperef.go). It is
+// UNREACHABLE for any schema that survived finalize's earlier phases — Phase A
+// charges that rule for every base a Schema reaches — and is propagated rather
+// than folded into the verdict because folding it either way would be a made-up
+// answer: false is a false reject, true a false accept.
 func (s *Schema) validlyDerived(sub, super TypeDefinition, blocked []DerivationMethod) (bool, error) {
-	switch sup := super.(type) {
+	switch sb := sub.(type) {
 	case ComplexType:
-		if sup.Name() == anyTypeName {
-			// GAP(xsd): #1926 — the xs:anyType shortcut answers TRUE before blocked is
-			// read, for a simple and a complex sub alike, so cos-ct-derived-ok
-			// clause 1 (extension or restriction on a step of a complex sub's
-			// {base type definition} chain) and cos-st-derived-ok clause 2.1
-			// (restriction, for a simple sub) never turn the derivation away.
-			// Through validate's instanceOverride an xsi:type naming another
-			// type under a declaration of type xs:anyType that blocks it
-			// ·overrides· anyway: cvc-elt clause 4 goes uncharged and the walk
-			// decides MS-Element elemT026-029 and elemT054-057 and MS-Particles
-			// particlesIg003.v valid, which the suite calls invalid. The
-			// conformance lane's subtree gate refuses this shape (blockingUnread).
-			return true, nil
-		}
-		if ss, ok := sub.(*SimpleType); ok {
-			return s.simpleDerivedOK(ss, super, blocked)
-		}
-		sc, ok := sub.(ComplexType)
-		if !ok {
-			return false, nil
-		}
-		return s.derivedOKComplex(sc, super, blocked)
+		return s.derivedOKComplex(sb, super, blocked)
 	case *SimpleType:
-		if sc, ok := sub.(ComplexType); ok {
-			return s.derivedOKComplex(sc, super, blocked)
-		}
-		ss, ok := sub.(*SimpleType)
-		if !ok {
-			return false, nil
-		}
-		return s.simpleDerivedOK(ss, sup, blocked)
+		return s.simpleDerivedOK(sb, super, blocked)
 	default:
 		panic("xsd: validlyDerived: non-exhaustive TypeDefinition switch")
 	}

@@ -1,6 +1,7 @@
 package xsd
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/kud360/goxsd8/xsderr"
@@ -498,22 +499,54 @@ func TestDerivationOKRestrictionClause4Element(t *testing.T) {
 	}
 }
 
-// TestDerivationOKRestrictionClause4AnyTypeBase pins the ·xs:anyType· escape
-// clause 4 needs: a base that leaves an element untyped declares it xs:anyType
-// (§3.3.2.1 case 4), and EVERY type — simple types included — is validly
-// substitutable for xs:anyType. Rejecting here would false-reject the commonest
+// TestDerivationOKRestrictionClause4AnyTypeBase pins clause 4 against a base
+// that leaves an element untyped, which declares it xs:anyType (§3.3.2.1 case
+// 4): a simple type is validly substitutable for xs:anyType under {extension,
+// list, union}, since cos-st-derived-ok reads restriction alone; a
+// simpleContent EXTENSION of one is not, since cos-ct-derived-ok clause 1 reads
+// extension on its step. Rejecting the first would false-reject the commonest
 // restriction shape there is.
+//
+// The rejection surfaces as clause 2, not clause 4: clause 2.4.2's
+// ctr-child-type-subsumption reads the same relation first, through loc-testSubP
+// clause 4.5 (declaredTypeRestricts), and checkDerivationOKRestriction reports
+// the first failing clause.
 func TestDerivationOKRestrictionClause4AnyTypeBase(t *testing.T) {
-	err := dFinalize(t, func(b *SchemaBuilder) {
-		baseModel := uGroup(t, CompositorSequence,
-			uOne(t, ResolvedTerm{Term: uLocal(t, uq("e"), anyTypeName)}))
-		derivedModel := uGroup(t, CompositorSequence,
-			uOne(t, ResolvedTerm{Term: uLocal(t, uq("e"), uq("str"))}))
-		b.AddType(dType(t, uq("base"), anyTypeName, dElementContent(t, false, baseModel), nil, nil))
-		b.AddType(dType(t, uq("derived"), uq("base"), dElementContent(t, false, derivedModel), nil, nil))
-	})
-	if err != nil {
-		t.Fatalf("typing an element the base left as xs:anyType was rejected: %v", err)
+	for _, tc := range []struct {
+		name        string
+		derivedType QName
+		wantOK      bool
+	}{
+		{"a simple type for an element the base left as xs:anyType", uq("str"), true},
+		{"a simpleContent extension for an element the base left as xs:anyType", uq("ext"), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := dFinalize(t, func(b *SchemaBuilder) {
+				xstr := dPrimitive(t, uq("xstr"))
+				b.AddType(xstr)
+				ext, cerr := NewComplexType(xsderr.Loc{}, uq("ext"), uq("xstr"), nil, DerivationExtension, false,
+					nil, nil, nil, SimpleContent{SimpleType: xstr}, nil, nil)
+				if cerr != nil {
+					t.Fatalf("NewComplexType(ext): %v", cerr)
+				}
+				b.AddType(ext)
+				baseModel := uGroup(t, CompositorSequence,
+					uOne(t, ResolvedTerm{Term: uLocal(t, uq("e"), anyTypeName)}))
+				derivedModel := uGroup(t, CompositorSequence,
+					uOne(t, ResolvedTerm{Term: uLocal(t, uq("e"), tc.derivedType)}))
+				b.AddType(dType(t, uq("base"), anyTypeName, dElementContent(t, false, baseModel), nil, nil))
+				b.AddType(dType(t, uq("derived"), uq("base"), dElementContent(t, false, derivedModel), nil, nil))
+			})
+			if tc.wantOK && err != nil {
+				t.Fatalf("typing an element the base left as xs:anyType was rejected: %v", err)
+			}
+			if !tc.wantOK {
+				expectRule(t, err, ruleDerivationOKRestriction)
+				if !strings.Contains(err.Error(), "any branch of derivation-ok-restriction clause 2 ") {
+					t.Fatalf("want the clause 2.4.2 charge, which checkDerivationOKRestriction reaches before clause 4: %v", err)
+				}
+			}
+		})
 	}
 }
 
@@ -655,6 +688,72 @@ func dSimpleContentSchema(t *testing.T) *Schema {
 	return s
 }
 
+// TestDeclaredTypeRestrictsAnyTypeBase pins loc-testSubP clause 4.5 (c-vs-ct)
+// where G's declared type is xs:anyType: key-val-sub-type-restricts' constant
+// set {extension, list, union} admits a simple type and a restriction of
+// xs:anyType, and turns away a simpleContent extension, whose own step is
+// extension (cos-ct-derived-ok clause 1).
+func TestDeclaredTypeRestrictsAnyTypeBase(t *testing.T) {
+	s := dSimpleContentSchema(t)
+	general := uLocal(t, uq("a"), anyTypeName)
+	for _, tc := range []struct {
+		name     string
+		specific QName
+		want     bool
+	}{
+		{"xs:anyType itself", anyTypeName, true},
+		{"a simple type", uq("narrow"), true},
+		{"a simpleContent extension", uq("ext"), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := s.declaredTypeRestricts(uLocal(t, uq("a"), tc.specific), general); got != tc.want {
+				t.Fatalf("declaredTypeRestricts(%s, xs:anyType) = %v, want %v", tc.specific, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestValidlySubstitutableAnyType pins key-val-sub-type against the super
+// ·xs:anyType·, which no blocking set is short-circuited for: each step of a
+// complex sub's chain reads cos-ct-derived-ok clause 1, and a simple sub reads
+// cos-st-derived-ok clause 2.1 up to the xs:anySimpleType -> xs:anyType hop.
+func TestValidlySubstitutableAnyType(t *testing.T) {
+	s := dSimpleContentSchema(t)
+	anyType, _ := s.Type(anyTypeName)
+	extension := []DerivationMethod{DerivationExtension}
+	restriction := []DerivationMethod{DerivationRestriction}
+	for _, tc := range []struct {
+		name    string
+		sub     TypeDefinition
+		blocked []DerivationMethod
+		want    bool
+	}{
+		{"simpleContent extension, empty set", mustType(t, s, "ext"), nil, true},
+		{"simpleContent extension, {extension} (cos-ct-derived-ok 1)", mustType(t, s, "ext"), extension, false},
+		{"simpleContent extension, {restriction} (cos-ct-derived-ok 2.3.2.2)", mustType(t, s, "ext"), restriction, false},
+		{"simple type, {extension} (cos-st-derived-ok reads restriction alone)", mustType(t, s, "narrow"), extension, true},
+		{"simple type, {restriction} (cos-st-derived-ok 2.1)", mustType(t, s, "narrow"), restriction, false},
+		{"xs:anySimpleType, {restriction} (2.1 at the hop)", anySimpleType, restriction, false},
+		{"xs:anyType itself, {extension, restriction} (identity)", anyType, []DerivationMethod{DerivationExtension, DerivationRestriction}, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got, err := s.ValidlySubstitutable(tc.sub, anyType, tc.blocked); err != nil || got != tc.want {
+				t.Fatalf("ValidlySubstitutable(%s, xs:anyType, %v) = %v (err %v), want %v", typeDefinitionLabel(tc.sub), tc.blocked, got, err, tc.want)
+			}
+		})
+	}
+}
+
+// mustType looks a named type definition up in s or fails the test.
+func mustType(t *testing.T, s *Schema, local string) TypeDefinition {
+	t.Helper()
+	td, ok := s.Type(uq(local))
+	if !ok {
+		t.Fatalf("%s is not in the schema", local)
+	}
+	return td
+}
+
 // TestSimpleDerivedOK pins cos-st-derived-ok (§3.16.6.3) for a simple D against a
 // B that may be complex: ·xs:anyType· is reached through xs:anySimpleType, whose
 // own hop to it reads clause 2.1 too, and no other complex type is reached.
@@ -691,8 +790,7 @@ func TestSimpleDerivedOK(t *testing.T) {
 // simpleOf looks a named simple type up in s or fails the test.
 func simpleOf(t *testing.T, s *Schema, local string) *SimpleType {
 	t.Helper()
-	td, _ := s.Type(uq(local))
-	st, ok := td.(*SimpleType)
+	st, ok := mustType(t, s, local).(*SimpleType)
 	if !ok {
 		t.Fatalf("%s is not a simple type of the schema", local)
 	}
