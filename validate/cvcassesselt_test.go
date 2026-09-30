@@ -308,34 +308,36 @@ func TestBothWildcardKindsStrictChargeOnlyTheParticleAttributedChild(t *testing.
 // ·resolves· its ·expanded name· among the top-level element declarations, so a
 // child the {open content} took IS assessed against the type its declaration
 // supplies, and a defect in the child's own [[children]] is charged at the
-// child's position.
+// child's position. That holds under a strict and a lax {open content}
+// wildcard alike; only a skip one makes the child ·skipped· (#1969).
 func TestOpenContentAttributedChildIsAssessedAgainstItsResolvedDeclaration(t *testing.T) {
-	schema := cSchemaFrom(t, dType(t, "RootType", "", xsd.DerivationRestriction, nil,
-		cOpenContent(t, xsd.OpenContentInterleave, xsd.ProcessStrict,
-			cNamespaceConstraint(t, xsd.NamespaceConstraintAny), cParticle(t, "a", 1, 1))),
-		func(b *xsd.SchemaBuilder) {
-			b.AddType(dType(t, "OType", "", xsd.DerivationRestriction, nil,
-				cSequence(t, false, cParticle(t, "needed", 1, 1))))
-			b.AddElement(dTopLevel(t, "o", "OType"))
+	for _, pc := range []xsd.ProcessContents{xsd.ProcessStrict, xsd.ProcessLax} {
+		t.Run(pc.String(), func(t *testing.T) {
+			schema := cSchemaFrom(t, dType(t, "RootType", "", xsd.DerivationRestriction, nil,
+				cOpenContent(t, xsd.OpenContentInterleave, pc,
+					cNamespaceConstraint(t, xsd.NamespaceConstraintAny), cParticle(t, "a", 1, 1))),
+				func(b *xsd.SchemaBuilder) {
+					b.AddType(dType(t, "OType", "", xsd.DerivationRestriction, nil,
+						cSequence(t, false, cParticle(t, "needed", 1, 1))))
+					b.AddElement(dTopLevel(t, "o", "OType"))
+				})
+
+			// <o> resolves to the top-level declaration, whose OType wants a
+			// <needed> it does not carry.
+			got := cAssess(t, schema, dElem("root", 1,
+				ElementChild(dElem("a", 2)), ElementChild(dElem("o", 3))))
+
+			wantContentCharge(t, got, "cvc-complex-content", "1", loc(3, 1))
 		})
-
-	// <o> resolves to the top-level declaration, whose OType wants a <needed> it
-	// does not carry.
-	got := cAssess(t, schema, dElem("root", 1,
-		ElementChild(dElem("a", 2)), ElementChild(dElem("o", 3))))
-
-	wantContentCharge(t, got, "cvc-complex-content", "1", loc(3, 1))
+	}
 }
 
-// A skip {open content} wildcard does NOT end the descent: an item
-// cvc-complex-content clause 3.4 admitted is ·attributed to· the {open content}
-// record and never to a Wildcard (§3.4.4.4, key-att-to), so it is not ·skipped·
-// (§3.10.4.1, key-skipped) and cvc-assess-elt clause 3.2 never names it. A name
-// that ·resolves· to no top-level declaration leaves it to clause 3.3's ·lax
-// assessment·, which walks its subtree. The visit log is what says so — a
-// ·laxly assessed· child charges nothing, exactly as a ·skipped· one does, and
-// only the second leaves the subtree unvisited.
-func TestOpenContentAttributedChildUnderASkipWildcardIsLaxlyAssessed(t *testing.T) {
+// A child ·attributed to· a skip {open content} wildcard is ·skipped· with its
+// whole subtree, as one ·attributed to· a skip ·wildcard particle· is: the walk
+// never enters <x>, so neither it nor <junk> below it is visited (#1969). The
+// visit log is what says so — a ·laxly assessed· child charges nothing too, and
+// only a ·skipped· one leaves the subtree unvisited.
+func TestOpenContentAttributedChildUnderASkipWildcardIsNotAssessed(t *testing.T) {
 	schema := cSchemaFrom(t, dType(t, "RootType", "", xsd.DerivationRestriction, nil,
 		cOpenContent(t, xsd.OpenContentInterleave, xsd.ProcessSkip,
 			cNamespaceConstraint(t, xsd.NamespaceConstraintAny), cParticle(t, "a", 1, 1))), nil)
@@ -350,28 +352,34 @@ func TestOpenContentAttributedChildUnderASkipWildcardIsLaxlyAssessed(t *testing.
 		ElementChild(dElem("a", 2)),
 		ElementChild(dElem("x", 3, ElementChild(dElem("junk", 4))))))
 
-	wantSilence(t, res.Violations(), "a ·laxly assessed· item against xs:anyType charges nothing")
-	for _, want := range []string{
-		"assessing element validate.name=x validate.loc=instance.xml:3:1",
-		"assessing element validate.name=junk validate.loc=instance.xml:4:1",
-	} {
-		if !slices.Contains(*visits, want) {
-			t.Errorf("walk visited\n\t%s\nwant it to include\n\t%s", strings.Join(*visits, "\n\t"), want)
-		}
+	wantSilence(t, res.Violations(), "a ·skipped· item's schema-validity is not assessed")
+	want := []string{
+		"assessing element validate.name=root validate.loc=instance.xml:1:1",
+		"assessing content validate.name=a validate.loc=instance.xml:2:1 " +
+			"validate.rule=cvc-complex-content validate.clause=3 validate.outcome=attributed to element declaration a",
+		"assessing element validate.name=a validate.loc=instance.xml:2:1",
+		"assessing ID/IDREF table validate.name=a validate.loc=instance.xml:2:1 " +
+			"validate.rule=cvc-id validate.clause=1 validate.outcome=declined",
+		"assessing content validate.name=x validate.loc=instance.xml:3:1 " +
+			"validate.rule=cvc-complex-content validate.clause=3 validate.outcome=attributed to open content wildcard any",
+		"assessing element validate.name=x validate.loc=instance.xml:3:1 " +
+			"validate.rule=cvc-assess-elt validate.clause=3.2 validate.outcome=skipped",
+		"assessing content validate.name=root validate.loc=instance.xml:1:1 " +
+			"validate.rule=cvc-complex-content validate.clause=3 validate.outcome=accepted",
 	}
-	unwanted := "assessing element validate.name=x validate.loc=instance.xml:3:1 validate.rule=cvc-assess-elt validate.clause=3.2 validate.outcome=skipped"
-	if slices.Contains(*visits, unwanted) {
-		t.Errorf("walk visited\n\t%s\nwant it NOT to include\n\t%s", strings.Join(*visits, "\n\t"), unwanted)
+	if !slices.Equal(*visits, want) {
+		t.Errorf("walk visited\n\t%s\nwant\n\t%s",
+			strings.Join(*visits, "\n\t"), strings.Join(want, "\n\t"))
 	}
 }
 
-// Under a skip {open content} wildcard key-governing-ed clause 4 still
-// ·resolves· the child's ·expanded name· among the top-level element
-// declarations, as it does under a strict one: the item is not ·skipped·
-// (§3.10.4.1, key-skipped, over §3.4.4.4 key-att-to), so clause 4.1 does not
-// stop the resolution, and a defect in the child's own [[children]] is charged
-// against the type its declaration supplies, at the child's position.
-func TestOpenContentAttributedChildUnderASkipWildcardIsAssessedAgainstItsResolvedDeclaration(t *testing.T) {
+// A ·skipped· child runs no ·QName resolution· (key-governing-ed clause 4.1):
+// under a skip {open content} wildcard <o> is not assessed against the
+// top-level declaration its name would ·resolve· to, so the <needed> that
+// declaration's OType requires is charged nowhere. Under a strict {open
+// content} the same document is charged at 3:1
+// (TestOpenContentAttributedChildIsAssessedAgainstItsResolvedDeclaration).
+func TestOpenContentAttributedChildUnderASkipWildcardIsNotAssessedAgainstItsResolvedDeclaration(t *testing.T) {
 	schema := cSchemaFrom(t, dType(t, "RootType", "", xsd.DerivationRestriction, nil,
 		cOpenContent(t, xsd.OpenContentInterleave, xsd.ProcessSkip,
 			cNamespaceConstraint(t, xsd.NamespaceConstraintAny), cParticle(t, "a", 1, 1))),
@@ -381,12 +389,12 @@ func TestOpenContentAttributedChildUnderASkipWildcardIsAssessedAgainstItsResolve
 			b.AddElement(dTopLevel(t, "o", "OType"))
 		})
 
-	// <o> resolves to the top-level declaration, whose OType wants a <needed> it
-	// does not carry.
+	// <o> would resolve to the top-level declaration, whose OType wants a
+	// <needed> it does not carry.
 	got := cAssess(t, schema, dElem("root", 1,
 		ElementChild(dElem("a", 2)), ElementChild(dElem("o", 3))))
 
-	wantContentCharge(t, got, "cvc-complex-content", "1", loc(3, 1))
+	wantSilence(t, got, "a ·skipped· item has no ·governing element declaration· to be charged against")
 }
 
 // The ·laxly assessed· child is still recursed, unlike a ·skipped· one: its own

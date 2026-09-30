@@ -279,14 +279,15 @@
 // Every one of those charges reaches a DESCENDANT on the same terms, against
 // the ·governing type definition· the particle its parent's {content type}
 // ·attributes· it to supplies (§3.3.4.6 clause 3.1): an element particle's
-// {term}, or — for a strict or lax ·wildcard particle·, for a present {open
-// content} whatever its {wildcard}'s {process contents}, and for an item
-// admitted as a member of a ·substitution group· — the top-level declaration
-// its ·expanded name· ·resolves· to. Two shapes stop it: a child ·attributed
-// to· a skip ·wildcard particle·, which is ·skipped· along with every element
-// beneath it (clause 3.2) — an {open content} item is ·attributed to· the
-// record and never to a Wildcard (§3.4.4.4, key-att-to), so key-skipped does
-// not reach it (#1576) — and a child its parent ·attributes· to nothing, a
+// {term}, or — for a strict or lax ·wildcard particle· or {open content}
+// {wildcard}, and for an item admitted as a member of a ·substitution group· —
+// the top-level declaration its ·expanded name· ·resolves· to. Two shapes stop
+// it: a child ·attributed to· a skip ·wildcard particle· or to an {open
+// content} with a skip {wildcard}, which is ·skipped· along with every element
+// beneath it (cvc-assess-elt clauses 2 and 3.2) — for the {open content} a
+// reading and not a quotation, key-skipped naming a skip wildcard and never an
+// Open Content, which the ·default binding· of cos-content-act-restrict clause
+// 6 settles (#1969) — and a child its parent ·attributes· to nothing, a
 // parent whose own type this package could not determine or whose content it
 // declined or charged, which is assessed against nothing along with its whole
 // subtree. A child whose name ·resolves· to no declaration is neither: it is
