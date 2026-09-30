@@ -550,7 +550,7 @@ func rejectLateAnnotation(el *Element) error {
 		if c.Name().Local() != "annotation" {
 			continue
 		}
-		return fmt.Errorf("parser: <annotation> at %s follows the <%s> at %s among the children of the <%s> at %s: the schema for schema documents admits an <annotation> child of <%s> only as its first child, the \"annotation?\" its content model opens with",
+		return fmt.Errorf("parser: <annotation> at %s follows the <%s> at %s among the children of the <%s> at %s: xs:annotated's content model (xmlschema11-1.md:4426) is (annotation?), which every content model the schema for schema documents gives <%s> opens with and admits an <annotation> nowhere after",
 			c.Loc(), first.Name().Local(), first.Loc(), el.Name().Local(), el.Loc(), el.Name().Local())
 	}
 	return nil

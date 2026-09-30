@@ -275,18 +275,17 @@ var lateAnnotationOwners = []struct {
 }
 
 // TestProduceLateAnnotationRejected pins that an <annotation> written AFTER a
-// non-annotation child of each owner in lateAnnotationOwners is rejected: every
-// form of each opens its content model with "annotation?" and admits it nowhere
-// else (xmlschema11-1.md:5187, :5229, :5259, :5502; xmlschema11-2.md:3957,
-// :3977). The child before the <annotation> is never another <annotation>:
-// rejectRepeatedAnnotations already rejects that shape, so such a row would pass
-// without rejectLateAnnotation.
+// non-annotation child of each owner in lateAnnotationOwners is rejected, on the
+// content models s4sAnnotationLedOwner's doc cites. The child before the
+// <annotation> is never another <annotation>: rejectRepeatedAnnotations already
+// rejects that shape, so such a row would pass without rejectLateAnnotation.
 //
 // The fault is §5.1's first bullet and carries no rule ID (STYLE E2), so each row
 // wants a plain Go error. Each pins the message's opening subject and position as
 // a prefix — the <annotation> on line 4 — and the positions of the child it
 // follows (line 3) and of the owner (line 2), so a message naming the wrong
-// element, or swapping two of them, fails.
+// element, or swapping two of them, fails. Each also pins the production the
+// message names: xs:annotated, whose leading "annotation?" every owner inherits.
 func TestProduceLateAnnotationRejected(t *testing.T) {
 	for _, tc := range lateAnnotationOwners {
 		t.Run(tc.owner, func(t *testing.T) {
@@ -307,6 +306,9 @@ func TestProduceLateAnnotationRejected(t *testing.T) {
 			}
 			if want := fmt.Sprintf("children of the <%s> at %s:2:", tc.owner, produceURI); !strings.Contains(msg, want) {
 				t.Fatalf("error = %v, want it to contain %q", err, want)
+			}
+			if want := "xs:annotated's content model (xmlschema11-1.md:4426) is (annotation?)"; !strings.Contains(msg, want) {
+				t.Fatalf("error = %v, want it to name the production %q", err, want)
 			}
 		})
 	}
