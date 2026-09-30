@@ -869,9 +869,16 @@ func TestInstanceExecutorDecidesXsiType(t *testing.T) {
 		},
 		{"a restriction of a simple declared type below the root", xsiChild(`<xs:element name="a" type="xs:decimal"/>`), xsiKnown(`<a xsi:type="xs:int">1</a>`)},
 		{
-			// blockingUnread's identity exception: cos-st-derived-ok clause 1.
+			// cos-st-derived-ok clause 1: identity is admitted whatever blocked holds.
 			"the declared simple type itself under block=\"restriction\"",
 			xsiChild(`<xs:element name="a" type="xs:decimal" block="restriction"/>`), xsiKnown(`<a xsi:type="xs:decimal">1</a>`),
+		},
+		{
+			// MS-Element elemT058.v's shape: cos-ct-derived-ok clause 1 reads
+			// extension, not in {restriction}, and clause 2.2 ends the walk at the
+			// declared type before cos-st-derived-ok is reached.
+			"a simpleContent extension of the declared simple type under block=\"restriction\"",
+			xsiChild(`<xs:element name="a" type="xs:int" block="restriction"/>`), xsiKnown(`<a xsi:type="CI">1</a>`),
 		},
 		{
 			// elemT040's shape: cos-st-derived-ok reads restriction alone.
@@ -917,6 +924,28 @@ func TestInstanceExecutorChargesXsiType(t *testing.T) {
 			xsiChild(`<xs:element name="a" type="CA" block="extension"/>`), xsiKnown(`<a xsi:type="ECA"><x>1</x><z>2</z></a>`),
 		},
 		{
+			"a simple restriction of a simple declared type under block=\"restriction\" (cvc-elt clause 4, cos-st-derived-ok clause 2.1)",
+			xsiChild(`<xs:element name="a" type="xs:decimal" block="restriction"/>`), xsiKnown(`<a xsi:type="xs:int">1</a>`),
+		},
+		{
+			"a complex type over a simple declared type under block=\"restriction\" (cvc-elt clause 4, cos-ct-derived-ok clause 2.3.2.2)",
+			xsiChild(`<xs:element name="a" type="xs:decimal" block="restriction"/>`), xsiKnown(`<a xsi:type="CI">1</a>`),
+		},
+		{
+			"a complex type for an xs:anyType declaration under block=\"extension\" (cvc-elt clause 4, cos-ct-derived-ok clause 1)",
+			xsiChild(`<xs:element name="a" block="extension"/>`), xsiKnown(`<a xsi:type="ECA"><x>1</x><z>2</z></a>`),
+		},
+		{
+			// ECA's base CA restricts xs:anyType: clause 1 turns that step away.
+			"a complex type for an xs:anyType declaration under block=\"restriction\" (cvc-elt clause 4, cos-ct-derived-ok clause 1)",
+			xsiChild(`<xs:element name="a" block="restriction"/>`), xsiKnown(`<a xsi:type="ECA"><x>1</x><z>2</z></a>`),
+		},
+		{
+			// elemT026's shape.
+			"a simple type for an xs:anyType declaration under block=\"restriction\" (cvc-elt clause 4, cos-st-derived-ok clause 2.1)",
+			xsiChild(`<xs:element name="a" block="restriction"/>`), xsiKnown(`<a xsi:type="xs:int">1</a>`),
+		},
+		{
 			// Pinned: the walk DECIDES a QName lexical that resolves to no type.
 			"a QName naming no type definition (cvc-attribute clause 5)",
 			xsiChild(`<xs:element name="a" type="xs:int"/>`), xsiKnown(`<a xsi:type="Nope">1</a>`),
@@ -935,40 +964,6 @@ func TestInstanceExecutorChargesXsiType(t *testing.T) {
 		if exec(instanceCase(t, tc.schemaBody, tc.instance, true)).IsPass() {
 			t.Errorf("%s: the executor must Fail under a flipped expectation", tc.why)
 		}
-	}
-}
-
-// TestInstanceExecutorDeclinesUnrecordedOverride pins blockingUnread: every row
-// is an xsi:type xsd.Schema.ValidlySubstitutable answers TRUE for although the
-// declaration's {disallowed substitutions} blocks it, so the walk charges
-// nothing and records nothing, and the gate alone keeps the empty Result from
-// reading as "valid".
-func TestInstanceExecutorDeclinesUnrecordedOverride(t *testing.T) {
-	exec := newInstanceExec()
-	for _, tc := range []struct{ why, schemaBody, instance string }{
-		{
-			"a complex type for an xs:anyType declaration under block=\"extension\" (cos-ct-derived-ok clause 1)",
-			xsiChild(`<xs:element name="a" block="extension"/>`), xsiKnown(`<a xsi:type="ECA"><x>1</x><z>2</z></a>`),
-		},
-		{
-			"a complex type for an xs:anyType declaration under block=\"restriction\" (cos-ct-derived-ok clause 1)",
-			xsiChild(`<xs:element name="a" block="restriction"/>`), xsiKnown(`<a xsi:type="ECA"><x>1</x><z>2</z></a>`),
-		},
-		{
-			// elemT026's shape.
-			"a simple type for an xs:anyType declaration under block=\"restriction\" (cos-st-derived-ok clause 2.1)",
-			xsiChild(`<xs:element name="a" block="restriction"/>`), xsiKnown(`<a xsi:type="xs:int">1</a>`),
-		},
-		{
-			"a simple restriction of a simple declared type under block=\"restriction\" (cos-st-derived-ok clause 2.1)",
-			xsiChild(`<xs:element name="a" type="xs:decimal" block="restriction"/>`), xsiKnown(`<a xsi:type="xs:int">1</a>`),
-		},
-		{
-			"a complex type over a simple declared type under block=\"restriction\" (cos-ct-derived-ok clause 2.3.2.2)",
-			xsiChild(`<xs:element name="a" type="xs:decimal" block="restriction"/>`), xsiKnown(`<a xsi:type="CI">1</a>`),
-		},
-	} {
-		declinesBothPolarities(t, exec, instanceCase(t, tc.schemaBody, tc.instance, false), tc.why)
 	}
 }
 

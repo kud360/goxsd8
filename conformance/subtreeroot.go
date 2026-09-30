@@ -182,7 +182,6 @@ func (g *subtreeGate) element(start xml.StartElement, d xsd.ElementDeclaration, 
 //     walk's, charged under cvc-attribute clause 3 or 5 or, where the walk
 //     withholds clause 3, recorded in Result.Unevaluated, so no empty Result
 //     reaches the gate with it;
-//   - blockingUnread does not hold;
 //   - xsd.Schema.ValidlySubstitutable answers that T ·overrides· the selected
 //     type under d.{disallowed substitutions} (§3.3.4.2, key-overrides), which
 //     is cvc-elt clause 4. A false is the walk's cvc-elt charge. An error is
@@ -205,61 +204,11 @@ func (g *subtreeGate) governingType(start xml.StartElement, d xsd.ElementDeclara
 	if !ok {
 		return nil, false
 	}
-	blocked := d.DisallowedSubstitutions()
-	if blockingUnread(t, selected, blocked) {
-		return nil, false
-	}
-	overrides, err := g.schema.ValidlySubstitutable(t, selected, blocked)
+	overrides, err := g.schema.ValidlySubstitutable(t, selected, d.DisallowedSubstitutions())
 	if err != nil || !overrides {
 		return nil, false
 	}
 	return t, true
-}
-
-// blockingUnread reports whether xsd.Schema.ValidlySubstitutable may answer
-// TRUE for the ·instance-specified type definition· t against the ·selected
-// type definition· selected where the blocking keywords in blocked make the
-// answer FALSE. The walk reads that answer as cvc-elt clause 4 decided and
-// records nothing, so the gate refuses both shapes xsd decides without reading
-// blocked:
-//
-//   - selected is ·xs:anyType·, which validlyDerived answers true for before
-//     reading blocked (the GAP(xsd) at its xs:anyType shortcut). For a complex
-//     t, extension or restriction in blocked can fail cos-ct-derived-ok clause
-//     1 on a step of t's {base type definition} chain, which the gate does not
-//     walk (xs:anyType's own {prohibited substitutions} is the empty set,
-//     §3.4.7, and adds nothing); for a simple t, restriction in blocked can
-//     fail cos-st-derived-ok clause 2.1, the one keyword that constraint
-//     reads.
-//   - selected is a Simple Type Definition and restriction is in blocked:
-//     derivedOKSimple runs cos-st-derived-ok under the empty blocking set (the
-//     GAP(xsd) on ValidlySubstitutable), reached for a simple t directly and
-//     for a complex t through cos-ct-derived-ok clause 2.3.2.2. This arm is
-//     conservative for a complex t: derivedOKComplex decides clause 1 and
-//     clause 2.2 exactly where t's {base type definition} chain reaches
-//     selected before any other simple type, and the gate refuses those too
-//     rather than walk the chain. MS-Element elemT058.v, a simpleContent
-//     extension of the declared simple type itself, is such a valid case the
-//     gate declines.
-//
-// Neither applies where t is selected itself, which clause 1 of both
-// constraints admits whatever blocked holds; t is a top-level type, so a name
-// equal to selected's is that identity.
-func blockingUnread(t, selected xsd.TypeDefinition, blocked []xsd.DerivationMethod) bool {
-	if t.Name() == selected.Name() {
-		return false
-	}
-	restriction := slices.Contains(blocked, xsd.DerivationRestriction)
-	if _, simple := selected.(*xsd.SimpleType); simple {
-		return restriction
-	}
-	if selected.Name() != anyTypeName {
-		return false
-	}
-	if _, simple := t.(*xsd.SimpleType); simple {
-		return restriction
-	}
-	return restriction || slices.Contains(blocked, xsd.DerivationExtension)
 }
 
 // resolveQName maps lexical, an xs:QName lexical, to the ·expanded name· the

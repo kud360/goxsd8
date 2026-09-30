@@ -424,7 +424,10 @@ func TestScaleFacetSCCs(t *testing.T) {
 // TestDerivedOKSimple pins the cos-st-derived-ok (§3.16.6.3) relation directly:
 // identity (clause 1), the base-chain walk (clause 2.2.1/2.2.2), the
 // list/union-of-anySimpleType shortcut (clause 2.2.3), and the union-member
-// alternative (clause 2.2.4), plus its negative.
+// alternative (clause 2.2.4), plus its negative — and clause 2.1 on both of its
+// halves: restriction in the blocking set turns every step but identity away,
+// and restriction in D.{base type definition}.{final} does so under the empty
+// set.
 func TestDerivedOKSimple(t *testing.T) {
 	dec := mustPrim(t, "decimal")
 	str := mustPrim(t, "string")
@@ -432,23 +435,42 @@ func TestDerivedOKSimple(t *testing.T) {
 	int2 := mustST(t, "int2", RestrictionDerivation{}, intT, nil, nil)
 	listOverDec := mustST(t, "decList", listOf(dec), anySimpleType, constructedListFacets(), nil)
 	unionDecStr := mustST(t, "decStr", unionOf(dec, str), anySimpleType, nil, nil)
+	finalR := mustST(t, "finalR", RestrictionDerivation{}, dec, nil, []DerivationMethod{DerivationRestriction})
+	// underFinalR restricts a base whose {final} holds restriction. It is built
+	// UNCHECKED: st-props-correct clause 3 would reject it, and the row pins that
+	// cos-st-derived-ok clause 2.1 reads the same {final} on its own.
+	underFinalR, err := NewSimpleType(xsderr.Loc{}, QName{Local: "underFinalR"}, RestrictionDerivation{}, ownedBase(finalR), nil, nil)
+	if err != nil {
+		t.Fatalf("build underFinalR: %v", err)
+	}
+	restriction := []DerivationMethod{DerivationRestriction}
+	others := []DerivationMethod{DerivationExtension, DerivationList, DerivationUnion}
 
 	tests := []struct {
-		name string
-		d, b *SimpleType
-		want bool
+		name    string
+		d, b    *SimpleType
+		blocked []DerivationMethod
+		want    bool
 	}{
-		{"identity (1)", dec, dec, true},
-		{"direct base (2.2.1)", intT, dec, true},
-		{"base chain (2.2.2)", int2, dec, true},
-		{"list from anySimpleType (2.2.3)", listOverDec, anySimpleType, true},
-		{"union from anySimpleType (2.2.3)", unionDecStr, anySimpleType, true},
-		{"union member (2.2.4)", dec, unionDecStr, true},
-		{"unrelated (none)", str, dec, false},
+		{"identity (1)", dec, dec, nil, true},
+		{"direct base (2.2.1)", intT, dec, nil, true},
+		{"base chain (2.2.2)", int2, dec, nil, true},
+		{"list from anySimpleType (2.2.3)", listOverDec, anySimpleType, nil, true},
+		{"union from anySimpleType (2.2.3)", unionDecStr, anySimpleType, nil, true},
+		{"union member (2.2.4)", dec, unionDecStr, nil, true},
+		{"unrelated (none)", str, dec, nil, false},
+		{"identity under {restriction} (1)", dec, dec, restriction, true},
+		{"direct base under {restriction} (2.1)", intT, dec, restriction, false},
+		{"base chain under {restriction} (2.1)", int2, dec, restriction, false},
+		{"list from anySimpleType under {restriction} (2.1)", listOverDec, anySimpleType, restriction, false},
+		{"union member under {restriction} (2.1)", dec, unionDecStr, restriction, false},
+		{"base chain under {extension, list, union} (2.1 vacuous)", int2, dec, others, true},
+		{"union member under {extension, list, union} (2.1 vacuous)", dec, unionDecStr, others, true},
+		{"base {final} holds restriction (2.1)", underFinalR, finalR, nil, false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if got, err := derivedOKSimple(noSchema{}, tc.d, tc.b); err != nil || got != tc.want {
+			if got, err := derivedOKSimple(noSchema{}, tc.d, tc.b, tc.blocked); err != nil || got != tc.want {
 				t.Fatalf("derivedOKSimple = %v (err %v), want %v", got, err, tc.want)
 			}
 		})

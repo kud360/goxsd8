@@ -632,7 +632,7 @@ ElemDecl/typedef00801m2/instance/Negative pass
 ElemDecl/typedef00801m3/instance/Negative pass
 ElemDecl/typedef00802m1/instance/Negative pass
 ElemDecl/typedef00802m1/instance/Positive pass
-ElemDecl/typedef00802m2/instance/Negative fail
+ElemDecl/typedef00802m2/instance/Negative pass
 ElemDecl/typedef00901m1/instance/Negative pass
 ElemDecl/typedef00901m1/instance/Positive pass
 ElemDecl/typedef01101m1/instance/Negative fail
@@ -2788,7 +2788,7 @@ MS-Element2006-07-15/elemT014/instance/elemT014.v pass
 MS-Element2006-07-15/elemT015/instance/elemT015.v pass
 MS-Element2006-07-15/elemT016/instance/elemT016.v pass
 MS-Element2006-07-15/elemT017/instance/elemT017.i pass
-MS-Element2006-07-15/elemT018/instance/elemT018.i fail
+MS-Element2006-07-15/elemT018/instance/elemT018.i pass
 MS-Element2006-07-15/elemT019/instance/elemT019.i pass
 MS-Element2006-07-15/elemT020/instance/elemT020.i pass
 MS-Element2006-07-15/elemT021/instance/elemT021.i pass
@@ -2796,10 +2796,10 @@ MS-Element2006-07-15/elemT022/instance/elemT022.i pass
 MS-Element2006-07-15/elemT023/instance/elemT023.i pass
 MS-Element2006-07-15/elemT024/instance/elemT024.i pass
 MS-Element2006-07-15/elemT025/instance/elemT025.v pass
-MS-Element2006-07-15/elemT026/instance/elemT026.v fail
-MS-Element2006-07-15/elemT027/instance/elemT027.v fail
-MS-Element2006-07-15/elemT028/instance/elemT028.v fail
-MS-Element2006-07-15/elemT029/instance/elemT029.v fail
+MS-Element2006-07-15/elemT026/instance/elemT026.v pass
+MS-Element2006-07-15/elemT027/instance/elemT027.v pass
+MS-Element2006-07-15/elemT028/instance/elemT028.v pass
+MS-Element2006-07-15/elemT029/instance/elemT029.v pass
 MS-Element2006-07-15/elemT030/instance/elemT030.v pass
 MS-Element2006-07-15/elemT031/instance/elemT031.i pass
 MS-Element2006-07-15/elemT032/instance/elemT032.v pass
@@ -2816,7 +2816,7 @@ MS-Element2006-07-15/elemT042/instance/elemT042.v pass
 MS-Element2006-07-15/elemT043/instance/elemT043.v pass
 MS-Element2006-07-15/elemT044/instance/elemT044.v pass
 MS-Element2006-07-15/elemT045/instance/elemT045.i pass
-MS-Element2006-07-15/elemT046/instance/elemT046.i fail
+MS-Element2006-07-15/elemT046/instance/elemT046.i pass
 MS-Element2006-07-15/elemT047/instance/elemT047.i pass
 MS-Element2006-07-15/elemT048/instance/elemT048.i pass
 MS-Element2006-07-15/elemT049/instance/elemT049.i pass
@@ -2824,11 +2824,11 @@ MS-Element2006-07-15/elemT050/instance/elemT050.i pass
 MS-Element2006-07-15/elemT051/instance/elemT051.i pass
 MS-Element2006-07-15/elemT052/instance/elemT052.i pass
 MS-Element2006-07-15/elemT053/instance/elemT053.i pass
-MS-Element2006-07-15/elemT054/instance/elemT054.v fail
-MS-Element2006-07-15/elemT055/instance/elemT055.v fail
-MS-Element2006-07-15/elemT056/instance/elemT056.v fail
-MS-Element2006-07-15/elemT057/instance/elemT057.v fail
-MS-Element2006-07-15/elemT058/instance/elemT058.v fail
+MS-Element2006-07-15/elemT054/instance/elemT054.v pass
+MS-Element2006-07-15/elemT055/instance/elemT055.v pass
+MS-Element2006-07-15/elemT056/instance/elemT056.v pass
+MS-Element2006-07-15/elemT057/instance/elemT057.v pass
+MS-Element2006-07-15/elemT058/instance/elemT058.v pass
 MS-Element2006-07-15/elemT059/instance/elemT059.i pass
 MS-Element2006-07-15/elemT060/instance/elemT060.i pass
 MS-Element2006-07-15/elemT061/instance/elemT061.i pass
@@ -2844,7 +2844,7 @@ MS-Element2006-07-15/elemT070/instance/elemT070.i pass
 MS-Element2006-07-15/elemT071/instance/elemT071.v pass
 MS-Element2006-07-15/elemT072/instance/elemT072.v pass
 MS-Element2006-07-15/elemT073/instance/elemT073.v pass
-MS-Element2006-07-15/elemT074/instance/elemT074.i fail
+MS-Element2006-07-15/elemT074/instance/elemT074.i pass
 MS-Element2006-07-15/elemU001/instance/elemU001.v pass
 MS-Element2006-07-15/elemU002/instance/elemU002.v pass
 MS-Element2006-07-15/elemU003/instance/elemU003.v pass
@@ -3730,7 +3730,7 @@ MS-Particles2006-07-15/particlesIf005/instance/particlesIf005.v fail
 MS-Particles2006-07-15/particlesIf006/instance/particlesIf006.v fail
 MS-Particles2006-07-15/particlesIg001/instance/particlesIg001.v pass
 MS-Particles2006-07-15/particlesIg002/instance/particlesIg002.v pass
-MS-Particles2006-07-15/particlesIg003/instance/particlesIg003.v fail
+MS-Particles2006-07-15/particlesIg003/instance/particlesIg003.v pass
 MS-Particles2006-07-15/particlesIg005/instance/particlesIg005.v pass
 MS-Particles2006-07-15/particlesIg011/instance/particlesIg011.v pass
 MS-Particles2006-07-15/particlesIg012/instance/particlesIg012.v pass

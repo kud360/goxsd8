@@ -4505,11 +4505,11 @@ MS-Element2006-07-15/elemR003/schema/elemR003 pass
 MS-Element2006-07-15/elemR004/schema/elemR004 pass
 MS-Element2006-07-15/elemR005/schema/elemR005 pass
 MS-Element2006-07-15/elemR006/schema/elemR006 pass
-MS-Element2006-07-15/elemS001/schema/elemS001 fail
+MS-Element2006-07-15/elemS001/schema/elemS001 pass
 MS-Element2006-07-15/elemS002/schema/elemS002 pass
 MS-Element2006-07-15/elemS003/schema/elemS003 pass
 MS-Element2006-07-15/elemS004/schema/elemS004 pass
-MS-Element2006-07-15/elemS005/schema/elemS005 fail
+MS-Element2006-07-15/elemS005/schema/elemS005 pass
 MS-Element2006-07-15/elemS006/schema/elemS006 pass
 MS-Element2006-07-15/elemS007/schema/elemS007 pass
 MS-Element2006-07-15/elemS008/schema/elemS008 pass
