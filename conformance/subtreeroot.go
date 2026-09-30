@@ -40,19 +40,6 @@ import (
 // only because of a parser GAP (#1002).
 const versioningNS = "http://www.w3.org/2007/XMLSchema-versioning"
 
-// walkUnrecorded are the builtin simple types whose presence anywhere in a
-// type's closure makes the gate refuse the case. The ID family and the ENTITY
-// family are the walk's to decide and record at every depth (instance.go, the
-// cvc-elt clause 7 bullet), and are not listed.
-//
-// GAP(conformance): NOTATION stays listed although the walk now decides its
-// ·value space· — "the set of QNames of notations declared in the current
-// schema" (Datatypes §3.3.19) — at every depth, charging cvc-datatype-valid for
-// a value naming no declared notation and recording a decline where it cannot
-// decide (validate's walk.notationsDeclared). Lifting it admits the suite-valid
-// NOTATION cases as passes, a ratchet attribution of its own (#1904).
-var walkUnrecorded = []string{"NOTATION"}
-
 // assessedSubtreeRoot reports whether the instance document at doc, against
 // schema as assembled into report, has the assessed-subtree-root shape an empty
 // validate.Result may be read as "valid" for: a root, with content or without,
@@ -127,9 +114,8 @@ type subtreeGate struct {
 //     resolves, and an xsi:type the element carries meets governingType's
 //     conditions, the type it names then standing in for d.{type definition}
 //     in the two conditions below;
-//   - for a Simple Type Definition, its closure reaches none of
-//     walkUnrecorded, the element carries no attribute but the four
-//     xsi: ones cvc-type clause 3.1.1 excepts, and no element [[child]];
+//   - for a Simple Type Definition, the element carries no attribute but the
+//     four xsi: ones cvc-type clause 3.1.1 excepts, and no element [[child]];
 //   - for a Complex Type Definition, the conditions complex names.
 func (g *subtreeGate) element(start xml.StartElement, d xsd.ElementDeclaration) bool {
 	if !plainAttributes(start.Attr) || !assessedDeclaration(d) {
@@ -148,7 +134,7 @@ func (g *subtreeGate) element(start xml.StartElement, d xsd.ElementDeclaration) 
 	}
 	switch t := td.(type) {
 	case *xsd.SimpleType:
-		if closureReaches(g.schema, t, walkUnrecorded) || slices.ContainsFunc(start.Attr, notExcepted) {
+		if slices.ContainsFunc(start.Attr, notExcepted) {
 			return false
 		}
 		return g.leaf()
@@ -281,9 +267,8 @@ func assessedDeclaration(d xsd.ElementDeclaration) bool {
 //   - every attribute the element carries that notExcepted names matches one
 //     of those uses by ·expanded name· (cvc-complex-type clause 2.1) or meets
 //     wildcardAttribute's conditions (clause 2.2);
-//   - under a simple {content type}, its {simple type definition}'s closure
-//     reaches none of walkUnrecorded and there is no element [[child]];
-//   - under an empty one, there is no element [[child]];
+//   - under a simple or an empty {content type}, there is no element
+//     [[child]];
 //   - under an element-only or mixed one, xsd.Schema.ContentMatcher decides it
 //     and every element [[child]] meets child's conditions.
 func (g *subtreeGate) complex(start xml.StartElement, t xsd.ComplexType) bool {
@@ -309,13 +294,8 @@ func (g *subtreeGate) complex(start xml.StartElement, t xsd.ComplexType) bool {
 			return false
 		}
 	}
-	switch ct := t.ContentType().(type) {
-	case xsd.SimpleContent:
-		if closureReaches(g.schema, ct.SimpleType, walkUnrecorded) {
-			return false
-		}
-		return g.leaf()
-	case xsd.EmptyContent:
+	switch t.ContentType().(type) {
+	case xsd.SimpleContent, xsd.EmptyContent:
 		return g.leaf()
 	case xsd.ElementContent:
 		m, ok := g.schema.ContentMatcher(t)
@@ -328,12 +308,12 @@ func (g *subtreeGate) complex(start xml.StartElement, t xsd.ComplexType) bool {
 }
 
 // recordedAttributeType reports whether ad.{type definition} resolves to a
-// simple type whose closure reaches none of walkUnrecorded: the one condition
-// the gate puts on an attribute declaration the walk assesses an attribute
-// against, an {attribute uses} member's or a wildcard-resolved one's.
+// simple type: the one condition the gate puts on an attribute declaration the
+// walk assesses an attribute against, an {attribute uses} member's or a
+// wildcard-resolved one's.
 func (g *subtreeGate) recordedAttributeType(ad xsd.AttributeDeclaration) bool {
-	st, ok := g.schema.ResolvedSimpleType(ad.TypeDefinition())
-	return ok && !closureReaches(g.schema, st, walkUnrecorded)
+	_, ok := g.schema.ResolvedSimpleType(ad.TypeDefinition())
+	return ok
 }
 
 // wildcardAttribute reports whether an attribute named n that matches none of
@@ -577,11 +557,16 @@ func sameType(a, b xsd.TypeDefinition) bool {
 // It refuses a name that resolves to none under a lax Wildcard or the {open
 // content}: the walk charges nothing for the child, e-validity clause 1.1.3
 // naming a strict ·wildcard particle· alone, and what its ·laxly assessed·
-// subtree costs its ancestors is #1911's. An unresolved strict child with an
-// xsi:type is refused too: the type it names, where it resolves, makes the
-// child ·strictly assessed· against it (key-governing-type-elem), which takes
-// the walk's clause 1.1.3 charge away and leaves a subtree the gate does not
-// read.
+// subtree costs its ancestors is #1911's.
+//
+// GAP(conformance): an unresolved strict child with an xsi:type is refused,
+// whatever type the xsi:type names. Where it resolves, that type is the
+// child's ·governing type definition· (key-governing-type-elem clause 8), so
+// its parent's cvc-assess-elt clause 3.1 has it ·strictly assessed· against
+// that type (key-sva clause 1.2) and the spec decides it; the walk's e-validity
+// clause 1.1.3 charge is gone, and the gate does not read a subtree governed by
+// a type with no declaration. Its one reader, execInstanceCase, then Fails the
+// case: a suite-valid case of this shape scores no pass, and none a false one.
 func (g *subtreeGate) resolvedChild(t xsd.ComplexType, start xml.StartElement, strictParticle bool) bool {
 	d, ok := g.schema.Element(expandedName(start.Name))
 	if !ok {
@@ -747,42 +732,6 @@ func isNamespaceDeclaration(a xml.Attr) bool {
 func isLocationHint(a xml.Attr) bool {
 	return a.Name.Space == xsd.XMLSchemaInstanceNS &&
 		(a.Name.Local == "schemaLocation" || a.Name.Local == "noNamespaceSchemaLocation")
-}
-
-// closureReaches reports whether st's closure — its {base type definition}
-// chain, its {item type definition} and each of its {member type definitions},
-// transitively — holds a builtin named in names. A reference the
-// resolver cannot follow answers true, so an unreadable closure is excluded
-// rather than admitted.
-//
-// Item and Members are read once, off st itself: both are derived through the
-// {base type definition} chain (§3.16.2.1), so every restriction on that chain
-// reports the same ones. The recursion needs no visited set: a finalized
-// Schema's base chains and union memberships are acyclic (xsd's Phase B,
-// checkSimpleBaseAcyclic and checkUnionMembershipAcyclic).
-func closureReaches(r xsd.TypeResolver, st *xsd.SimpleType, names []string) bool {
-	for t := st; t != nil; {
-		if t.Name().Space == xsd.XMLSchemaNS && slices.Contains(names, t.Name().Local) {
-			return true
-		}
-		base, err := t.Base(r)
-		if err != nil {
-			return true
-		}
-		t = base
-	}
-	item, err := st.Item(r)
-	if err != nil {
-		return true
-	}
-	if item != nil && closureReaches(r, item, names) {
-		return true
-	}
-	members, err := st.Members(r)
-	if err != nil {
-		return true
-	}
-	return slices.ContainsFunc(members, func(m *xsd.SimpleType) bool { return closureReaches(r, m, names) })
 }
 
 // closureVersioned reports whether any schema document the assembly read

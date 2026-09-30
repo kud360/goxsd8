@@ -81,9 +81,10 @@ func TestInstanceExecutorDecidesAssessedSubtreeRoot(t *testing.T) {
 				`<xs:element name="a" type="xs:int" nillable="true"/></xs:sequence></xs:complexType></xs:element>`,
 			`<known><a>1</a></known>`,
 		},
-		// The three ID-family rows, one per closureReaches site, are admitted on
-		// the terms of the third shape's cvc-elt clause 7 bullet (instance.go)
-		// (#1857).
+		// The three ID-family rows, one per value-type site the gate reads (an
+		// element's simple type, an attribute's, a simple {content type}), are
+		// admitted on the terms of the third shape's cvc-elt clause 7 bullet
+		// (instance.go) (#1857).
 		{
 			"an ID on a child element, binding its parent (element value type)",
 			`<xs:element name="known"><xs:complexType><xs:sequence>` +
@@ -145,6 +146,23 @@ func TestInstanceExecutorDecidesAssessedSubtreeRoot(t *testing.T) {
 			"a key whose {fields} path selects a ·defaulted attribute·, the values distinct",
 			defaultedAtt("key"), `<known><e/><e att="b"/></known>`,
 		},
+		// The NOTATION rows, one per value-type site the gate reads and one
+		// through the lax {attribute wildcard}, name a declared notation the
+		// enumeration admits: String Valid is the walk's (#1904), NOTATION's
+		// ·value space· decided by walk.notationsDeclared (Datatypes §3.3.19).
+		// TestInstanceExecutorChargesNotation holds the undeclared values.
+		{"a NOTATION enumeration as the root's value type", notationN + `<xs:element name="known" type="N"/>`, `<known>n</known>`},
+		{
+			"a NOTATION enumeration as an element value type below the root",
+			notationN + `<xs:element name="known"><xs:complexType><xs:sequence><xs:element name="a" type="N"/></xs:sequence></xs:complexType></xs:element>`,
+			`<known><a>n</a></known>`,
+		},
+		{"a NOTATION enumeration as a simple {content type}", notationN + notationContent, `<known at="v">n</known>`},
+		{"an attribute typed by a NOTATION enumeration below the root", notationN + notationAttribute, `<known><a n="n"/></known>`},
+		{
+			"a lax {attribute wildcard}'s attribute resolving to a declaration typed by a NOTATION enumeration",
+			notationN + `<xs:attribute name="n" type="N"/>` + wildcardKnown("lax"), `<known n="n"><a>1</a></known>`,
+		},
 	}
 	for _, tc := range cases {
 		if !exec(instanceCase(t, tc.schemaBody, tc.instance, true)).IsPass() {
@@ -152,6 +170,44 @@ func TestInstanceExecutorDecidesAssessedSubtreeRoot(t *testing.T) {
 		}
 		if exec(instanceCase(t, tc.schemaBody, tc.instance, false)).IsPass() {
 			t.Errorf("%s: the executor must Fail under a flipped expectation (it decides for real)", tc.why)
+		}
+	}
+}
+
+// notationContent declares <known> with a simple {content type} of the NOTATION
+// enumeration N (notationN) and an xs:string attribute at; notationAttribute
+// declares <known> with one required child <a> carrying an attribute n of type
+// N.
+const (
+	notationContent = `<xs:element name="known"><xs:complexType><xs:simpleContent><xs:extension base="N">` +
+		`<xs:attribute name="at" type="xs:string"/></xs:extension></xs:simpleContent></xs:complexType></xs:element>`
+	notationAttribute = `<xs:element name="known"><xs:complexType><xs:sequence><xs:element name="a">` +
+		`<xs:complexType><xs:attribute name="n" type="N"/></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>`
+)
+
+// TestInstanceExecutorChargesNotation is a regression guard for the NOTATION
+// lift (#1904): the value bez, naming a notation N's enumeration does not admit
+// and the schema does not declare, is charged at each site the
+// decides rows admit — String Valid's cvc-enumeration-valid verdict (Datatypes
+// §4.3.5.4) wrapped under the rule each row names — so each is decided
+// INVALID. The walk charges it before the gate is asked, so no row here can
+// see the gate.
+func TestInstanceExecutorChargesNotation(t *testing.T) {
+	exec := newInstanceExec()
+	for _, tc := range []struct{ why, schemaBody, instance string }{
+		{"the root's value type (cvc-type clause 3.1.3)", notationN + `<xs:element name="known" type="N"/>`, `<known>bez</known>`},
+		{"a simple {content type} (cvc-complex-type clause 1.2)", notationN + notationContent, `<known at="v">bez</known>`},
+		{"an attribute below the root (cvc-attribute clause 3)", notationN + notationAttribute, `<known><a n="bez"/></known>`},
+		{
+			"a lax {attribute wildcard}'s attribute resolving a declaration (cvc-attribute clause 3)",
+			notationN + `<xs:attribute name="n" type="N"/>` + wildcardKnown("lax"), `<known n="bez"><a>1</a></known>`,
+		},
+	} {
+		if !exec(instanceCase(t, tc.schemaBody, tc.instance, false)).IsPass() {
+			t.Errorf("%s: the walk charges the undeclared NOTATION value; the executor must agree with a suite-invalid case", tc.why)
+		}
+		if exec(instanceCase(t, tc.schemaBody, tc.instance, true)).IsPass() {
+			t.Errorf("%s: the executor must Fail under a flipped expectation", tc.why)
 		}
 	}
 }
@@ -441,27 +497,6 @@ func TestInstanceExecutorDeclinesOutsideAssessedSubtreeRoot(t *testing.T) {
 			`<xs:element name="known"><xs:complexType><xs:sequence><xs:element name="a" type="xs:int" fixed="1"/></xs:sequence></xs:complexType></xs:element>`,
 			wantInt,
 		},
-		// The three NOTATION rows, one per closureReaches site, name a declared
-		// notation; a value naming an undeclared one would be refused all the
-		// same, for the reason walkUnrecorded's doc gives (subtreeroot.go).
-		{"a NOTATION closure in the root's value type", notationN + `<xs:element name="known" type="N"/>`, `<known>n</known>`},
-		{
-			"a NOTATION closure in an element value type below the root",
-			notationN + `<xs:element name="known"><xs:complexType><xs:sequence><xs:element name="a" type="N"/></xs:sequence></xs:complexType></xs:element>`,
-			`<known><a>n</a></known>`,
-		},
-		{
-			"a NOTATION closure in a simple {content type}",
-			notationN + `<xs:element name="known"><xs:complexType><xs:simpleContent><xs:extension base="N">` +
-				`<xs:attribute name="at" type="xs:string"/></xs:extension></xs:simpleContent></xs:complexType></xs:element>`,
-			`<known at="v">n</known>`,
-		},
-		{
-			"an attribute typed by a NOTATION enumeration below the root",
-			notationN + `<xs:element name="known"><xs:complexType><xs:sequence><xs:element name="a">` +
-				`<xs:complexType><xs:attribute name="n" type="N"/></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>`,
-			`<known><a n="n"/></known>`,
-		},
 		{
 			// A guard, not a charged row: the gate refused this shape before #1860
 			// too. The walk charges nothing and records nothing for it, a reading
@@ -469,16 +504,13 @@ func TestInstanceExecutorDeclinesOutsideAssessedSubtreeRoot(t *testing.T) {
 			"a strict {attribute wildcard}'s attribute whose name resolves no declaration (cvc-complex-type clause 2.2)",
 			wildcardKnown("strict"), `<known foo="1"><a>1</a></known>`,
 		},
-		{
-			"a lax {attribute wildcard}'s attribute resolving to a declaration typed by a NOTATION enumeration",
-			notationN + `<xs:attribute name="n" type="N"/>` + wildcardKnown("lax"), `<known n="n"><a>1</a></known>`,
-		},
 		// The wildcard-child refusals (#1931): subtreeGate.resolvedChild's.
 		{"a lax wildcard particle's child resolving no declaration (#1911)", wildcardChild("lax"), `<known><u>x</u></known>`},
 		{"an {open content} child resolving no declaration", openChild, `<known><u>x</u><a>1</a></known>`},
 		{
 			// Strictly assessed against N through the xsi:type, the child takes
-			// the walk's e-validity clause 1.1.3 charge away.
+			// the walk's e-validity clause 1.1.3 charge away; resolvedChild's
+			// GAP(conformance) xsi:type refusal declines it, not N's NOTATION.
 			"a strict wildcard particle's child resolving no declaration, typed by an xsi:type naming a NOTATION enumeration",
 			notationN + wildcardChild("strict"), `<known ` + xsiNS + `><u xsi:type="N">n</u></known>`,
 		},

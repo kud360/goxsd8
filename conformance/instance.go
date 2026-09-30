@@ -287,13 +287,22 @@ import (
 //     name· check (key-vde) is the walk's too, decided per ENTITY value by
 //     walk.entitiesDeclared and recorded as an [Unevaluated] by its callers
 //     where undecided (walk.declineAttribute, walk.declineDefaulted,
-//     contentCheck.decline). What the gate still refuses is walkUnrecorded, for
-//     the reason its doc gives: no element's value type — a Simple Type
-//     Definition, or a simple {content type}'s {simple type definition} — and
-//     no attribute use's {attribute declaration}.{type definition}, whether the
-//     attribute is present or not, and no wildcard-resolved declaration's, has
-//     a closure reaching it. Each use's declaration must resolve, so an
-//     unresolvable {attribute declaration} is refused too.
+//     contentCheck.decline). So is String Valid clause 2's NOTATION half,
+//     NOTATION's ·value space· being "the set of QNames of notations declared
+//     in the current schema" (Datatypes §3.3.19): walk.notationsDeclared
+//     charges cvc-datatype-valid for a value naming no declared notation, at
+//     every depth, and its callers record it where undecided; a value outside
+//     a NOTATION type's enumeration is the backend's cvc-enumeration-valid
+//     verdict (Datatypes §4.3.5.4), which Datatype Valid entails.
+//     A ·defaulted attribute· of a NOTATION-derived type is recorded, never
+//     decided (walk.defaultedAttribute). The gate therefore reads no simple
+//     type's closure: finalize's src-resolve pass (xsd's resolveSimpleType)
+//     resolves every {base type definition}, {item type definition} and
+//     {member type definitions} reference of every simple type a Schema holds,
+//     so no closure the walk reads is unreadable, and a String Valid the
+//     backend withholds is recorded by the callers above. Each use's
+//     declaration must resolve to a simple type (recordedAttributeType), so an
+//     unresolvable {attribute declaration} is refused.
 //   - cvc-complex-type clause 2: every attribute beyond namespace declarations
 //     and the four xsi: names matches an attribute use (2.1) or is
 //     ·attributed to· the {attribute wildcard} (2.2, cvc-wildcard §3.10.4.1)
@@ -301,7 +310,7 @@ import (
 //     2.2); under lax or strict a name that ·resolves· to a top-level
 //     declaration is assessed against it (key-sva clause 2.1), and one that
 //     resolves to none under lax is not assessed. That declaration's {type
-//     definition} is held to the walkUnrecorded exclusion a use's is. The gate
+//     definition} must resolve to a simple type, as a use's must. The gate
 //     refuses a strict wildcard's name that resolves to none, which the walk
 //     charges nothing for and records nothing of (#1912), and a resolved name
 //     whose ·locally declared type· is not ·absent·, for clause 5 below
