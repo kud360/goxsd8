@@ -89,7 +89,8 @@ var allowedCollisionCitations = []citationAllowance{
 	// {base type definition} chain. It absorbed the citation Phase E's copy of
 	// that descent used to carry (xsd/valueconstraintvalid.go, now 0).
 	{file: "xsd/componentwalk.go", number: 9, count: 1},
-	{file: "xsd/contentrestricts.go", number: 9, count: 3},
+	// #1930 removed usesAllCompositor and its third citation.
+	{file: "xsd/contentrestricts.go", number: 9, count: 2},
 	// #636: CheckDerivation's termination note, which records that its
 	// unguarded base-chain walks presuppose the acyclicity proof Phase B
 	// establishes — item 9's "then no traversal ever needs a `seen` set", read

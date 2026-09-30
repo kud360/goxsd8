@@ -295,31 +295,139 @@ func TestContentRestrictsNillableSubsumption(t *testing.T) {
 	}
 }
 
-// TestContentRestrictsAllGroupLeniency pins §3.4.6.3's all-group allowance: a
-// content model the position automaton models as a star cannot be decided
-// exactly, so an ·all· group in the RESTRICTION is provisionally accepted even
-// where the same shape under <sequence> is rejected. The two halves must move
-// together — the sequence half is what proves the all half is a leniency and not
-// a check that happens to pass.
-func TestContentRestrictsAllGroupLeniency(t *testing.T) {
-	base := uGroup(t, CompositorSequence, cElem(t, "a", 1, 1))
-	widened := []Particle{cElem(t, "a", 1, 1), cElem(t, "b", 1, 1)}
-	if err := cRestricts(t, base, uGroup(t, CompositorAll, widened...)); err != nil {
-		t.Fatalf("an ·all· restriction was declined, but §3.4.6.3 licenses provisional acceptance: %v", err)
+// TestContentRestrictsAllGroupDecided pins derivation-ok-restriction clause
+// 2.4.2 (cos-content-act-restrict clause 1) where an ·all· group appears on
+// either side: the interleave §3.8.4.1.3 defines is decided exactly, so a
+// restriction admitting a sequence the base does not is rejected whichever side
+// holds the ·all·, and one admitting only the base's sequences is accepted.
+//
+// The rejecting rows are the ones the pre-#1930 renderings got wrong. An ·all·
+// in R was provisionally accepted undecided ("all restriction widening a
+// sequence"), and an ·all· in B was modelled by addAll's star, which admits a
+// alone under all(a, b) and so accepted the three "drops a required member"
+// rows. The accepting rows guard the other direction: reordering the members
+// ("sequence reorders the members") and a choice restricting an all of optional
+// members are VALID in 1.1, where no pairwise Recurse rule survives.
+func TestContentRestrictsAllGroupDecided(t *testing.T) {
+	all := func(ps ...Particle) ModelGroup { return uGroup(t, CompositorAll, ps...) }
+	seq := func(ps ...Particle) ModelGroup { return uGroup(t, CompositorSequence, ps...) }
+	for _, tc := range []struct {
+		name           string
+		base, derived  ModelGroup
+		wantRestricted bool
+	}{
+		{name: "all:all drops a required member",
+			base: all(cElem(t, "a", 1, 1), cElem(t, "b", 1, 1)), derived: all(cElem(t, "a", 1, 1))},
+		{name: "all:all drops an optional member",
+			base: all(cElem(t, "a", 1, 1), cElem(t, "b", 0, 1)), derived: all(cElem(t, "a", 1, 1)), wantRestricted: true},
+		{name: "all:all narrows a member's range",
+			base: all(cElem(t, "a", 0, 3), cElem(t, "b", 1, 1)), derived: all(cElem(t, "b", 1, 1), cElem(t, "a", 1, 2)), wantRestricted: true},
+		{name: "all:all widens a member's range",
+			base: all(cElem(t, "a", 1, 2), cElem(t, "b", 1, 1)), derived: all(cElem(t, "a", 1, 3), cElem(t, "b", 1, 1))},
+		{name: "sequence under all drops a required member",
+			base: all(cElem(t, "a", 1, 1), cElem(t, "b", 1, 1)), derived: seq(cElem(t, "a", 1, 1))},
+		{name: "sequence reorders the members",
+			base: all(cElem(t, "a", 1, 1), cElem(t, "b", 1, 1)), derived: seq(cElem(t, "b", 1, 1), cElem(t, "a", 1, 1)), wantRestricted: true},
+		{name: "sequence under all repeats a member",
+			base: all(cElem(t, "a", 1, 1), cElem(t, "b", 1, 1)), derived: seq(cElem(t, "a", 1, 1), cElem(t, "a", 0, 1), cElem(t, "b", 1, 1))},
+		{name: "choice under all of required members",
+			base: all(cElem(t, "a", 1, 1), cElem(t, "b", 1, 1)), derived: uGroup(t, CompositorChoice, cElem(t, "a", 1, 1), cElem(t, "b", 1, 1))},
+		{name: "choice under all of optional members",
+			base: all(cElem(t, "a", 0, 1), cElem(t, "b", 0, 1)), derived: uGroup(t, CompositorChoice, cElem(t, "a", 1, 1), cElem(t, "b", 1, 1)), wantRestricted: true},
+		{name: "all restriction widening a sequence",
+			base: seq(cElem(t, "a", 1, 1)), derived: all(cElem(t, "a", 1, 1), cElem(t, "b", 1, 1))},
+		{name: "all restriction of one optional member",
+			base: seq(cElem(t, "a", 0, 1), cElem(t, "b", 0, 1)), derived: all(cElem(t, "a", 0, 1)), wantRestricted: true},
+		{name: "all restriction admitting the reverse order",
+			base: seq(cElem(t, "a", 0, 1), cElem(t, "b", 0, 1)), derived: all(cElem(t, "a", 0, 1), cElem(t, "b", 0, 1))},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := cRestricts(t, tc.base, tc.derived)
+			if tc.wantRestricted && err != nil {
+				t.Fatalf("a valid restriction of an ·all· content model was rejected: %v", err)
+			}
+			if !tc.wantRestricted {
+				expectRule(t, err, ruleDerivationOKRestriction)
+			}
+		})
 	}
-	expectRule(t, cRestricts(t, base, uGroup(t, CompositorSequence, widened...)), ruleDerivationOKRestriction)
 }
 
-// TestContentRestrictsAllGroupBaseDecided is the other side of that leniency: an
-// ·all· group in the BASE needs none, because the same star model makes the base
-// look LARGER, which can only accept. The restriction is therefore still decided
-// — and here declined, since <b> is not among the base's members at all.
+// TestContentRestrictsAllGroupBaseDecided restricts an ·all· base to one of its
+// members, and to an element that is not among them at all.
 func TestContentRestrictsAllGroupBaseDecided(t *testing.T) {
 	base := uGroup(t, CompositorAll, cElem(t, "a", 1, 1))
 	if err := cRestricts(t, base, uGroup(t, CompositorSequence, cElem(t, "a", 1, 1))); err != nil {
 		t.Fatalf("restricting an ·all· base to one of its members was rejected: %v", err)
 	}
 	expectRule(t, cRestricts(t, base, uGroup(t, CompositorSequence, cElem(t, "b", 1, 1))), ruleDerivationOKRestriction)
+}
+
+// TestContentRestrictsNestedAllGroup pins addInterleave's composition: an ·all·
+// member that is itself an ·all· (cos-all-limited clause 1.3, through a <group
+// ref>) interleaves its own members with its siblings', so c may come first
+// and b last, and every member at every depth is still required.
+func TestContentRestrictsNestedAllGroup(t *testing.T) {
+	restricts := func(derived ModelGroup) error {
+		return dFinalize(t, func(b *SchemaBuilder) {
+			inner := uGroup(t, CompositorAll, cElem(t, "b", 1, 1), cElem(t, "c", 1, 1))
+			mgd, err := NewModelGroupDefinition(xsderr.Loc{}, uq("g"), inner)
+			if err != nil {
+				t.Fatalf("NewModelGroupDefinition: %v", err)
+			}
+			b.AddModelGroup(mgd)
+			base := uGroup(t, CompositorAll, cElem(t, "a", 1, 1), uOne(t, ModelGroupRef{Name: uq("g")}))
+			b.AddType(dType(t, uq("base"), anyTypeName, dElementContent(t, false, base), nil, nil))
+			b.AddType(dType(t, uq("derived"), uq("base"), dElementContent(t, false, derived), nil, nil))
+		})
+	}
+	seq := func(names ...string) ModelGroup {
+		ps := make([]Particle, 0, len(names))
+		for _, n := range names {
+			ps = append(ps, cElem(t, n, 1, 1))
+		}
+		return uGroup(t, CompositorSequence, ps...)
+	}
+	if err := restricts(seq("c", "a", "b")); err != nil {
+		t.Fatalf("an order the nested interleave admits was rejected: %v", err)
+	}
+	expectRule(t, restricts(seq("c", "a")), ruleDerivationOKRestriction)
+}
+
+// TestContentRestrictsFutureQuotient pins what the walk's visited set may
+// merge (futureClasses): only R-states with the same live positions AND the same
+// acceptance. In each row two R-states reach one B-set, since the base's
+// wildcard takes both x and y, and only the second of them leads to the
+// sequence the base lacks, so a quotient merging them skips the violation.
+//
+//   - "different live sets": x is followed by a, y by c, and the base admits no
+//     c. Merging on acceptance alone accepts.
+//   - "different acceptance": x and y are both followed by nothing, but only y
+//     ends a sequence, since x is followed by an empty <choice>, which accepts
+//     nothing. R is therefore {y}, a single item the two-item base does not
+//     accept. Merging on the live set alone accepts.
+func TestContentRestrictsFutureQuotient(t *testing.T) {
+	anySkip := func() Particle { return cAny(t, NamespaceConstraintAny, nil, ProcessSkip) }
+	one := func(g ModelGroup) Particle { return uOne(t, ResolvedTerm{Term: g}) }
+	for _, tc := range []struct {
+		name          string
+		base, derived ModelGroup
+	}{
+		{name: "different live sets",
+			base: uGroup(t, CompositorSequence, anySkip(), one(uGroup(t, CompositorChoice, cElem(t, "a", 1, 1), cElem(t, "b", 1, 1)))),
+			derived: uGroup(t, CompositorChoice,
+				one(uGroup(t, CompositorSequence, cElem(t, "x", 1, 1), cElem(t, "a", 1, 1))),
+				one(uGroup(t, CompositorSequence, cElem(t, "y", 1, 1), cElem(t, "c", 1, 1))))},
+		{name: "different acceptance",
+			base: uGroup(t, CompositorSequence, anySkip(), anySkip()),
+			derived: uGroup(t, CompositorChoice,
+				one(uGroup(t, CompositorSequence, cElem(t, "x", 1, 1), one(uGroup(t, CompositorChoice)))),
+				cElem(t, "y", 1, 1))},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			expectRule(t, cRestricts(t, tc.base, tc.derived), ruleDerivationOKRestriction)
+		})
+	}
 }
 
 // TestContentRestrictsSubsetConstruction pins the SUBSET construction itself:
@@ -541,6 +649,47 @@ func TestContentRestrictsOccurrenceBoundsNested(t *testing.T) {
 		t.Fatalf("a valid restriction of a repeated group was rejected: %v", err)
 	}
 	expectRule(t, cRestricts(t, pair(3, 3), pair(5, 5)), ruleDerivationOKRestriction)
+}
+
+// TestInterleavePositionsCountsConstruction pins that interleavePositions counts
+// what addInterleave emits, which is what makes maxContentPositions bound the
+// automaton rather than estimate it (see unfoldedPositions): for each ·all·
+// shape the count equals the built automaton's position table, and a wide ·all·
+// saturates one past the ceiling rather than being counted out.
+func TestInterleavePositionsCountsConstruction(t *testing.T) {
+	s := rSchema(t, nil)
+	all := func(ps ...Particle) ModelGroup { return uGroup(t, CompositorAll, ps...) }
+	for _, tc := range []struct {
+		name string
+		g    ModelGroup
+		want int
+	}{
+		{name: "one member", g: all(cElem(t, "a", 1, 1)), want: 1},
+		{name: "two members", g: all(cElem(t, "a", 1, 1), cElem(t, "b", 0, 1)), want: 4},
+		{name: "a repeated member", g: all(cElem(t, "a", 0, 3), cElem(t, "b", 1, 1)), want: 10},
+		{name: "an unbounded member", g: all(cUnbounded(t, "a", 2), cElem(t, "b", 1, 1), cElem(t, "c", 0, 1)), want: 20},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := uOne(t, ResolvedTerm{Term: tc.g})
+			if got := s.unfoldedPositions(p); got != tc.want {
+				t.Fatalf("unfoldedPositions = %d, want %d", got, tc.want)
+			}
+			a, err := s.contentAutomatonOf(ElementContent{Particle: p})
+			if err != nil {
+				t.Fatalf("contentAutomatonOf: %v", err)
+			}
+			if got := len(a.positions); got != tc.want {
+				t.Fatalf("addInterleave emitted %d positions, want the %d interleavePositions counts", got, tc.want)
+			}
+		})
+	}
+	wide := make([]Particle, 0, 13)
+	for _, name := range []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m"} {
+		wide = append(wide, cElem(t, name, 0, 1))
+	}
+	if got := s.unfoldedPositions(uOne(t, ResolvedTerm{Term: all(wide...)})); got != maxContentPositions+1 {
+		t.Fatalf("a 13-member ·all· of optional members (13 × 2^12 positions) counts %d, want the saturated %d", got, maxContentPositions+1)
+	}
 }
 
 // TestContentRestrictsBeyondPositionCeiling pins the direction of the
