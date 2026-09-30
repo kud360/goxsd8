@@ -508,8 +508,8 @@ func execInstanceCase(backend value.Backend, c caseSpec) Status {
 // holds.
 //
 // The resolver is a loader.Dir rooted at the instance document's own directory,
-// mirroring assembleCase, so a case fixture is reached the same way whichever
-// lane reaches it.
+// mirroring assembleCase's read of its root, so a case fixture is reached the
+// same way whichever lane reaches it.
 func assessInstance(v *validate.Validator, doc string) (*validate.Result, bool) {
 	resolver := loader.Dir(filepath.Dir(doc))
 	rc, _, err := resolver.Resolve("", filepath.Base(doc))

@@ -742,7 +742,7 @@ func isLocationHint(a xml.Attr) bool {
 // touched: VC/vc006.n1 is suite-invalid and walks clean for exactly that reason.
 //
 // Each document is re-read from its parser.AssembledDocument.Location, which
-// for the loader.Dir resolver assembleCase uses is the on-disk path. A document
+// for the pinnedResolver assembleCase uses is an on-disk path. A document
 // that will not open or decode answers true.
 func closureVersioned(report *parser.AssemblyReport) bool {
 	for _, d := range report.Documents() {
