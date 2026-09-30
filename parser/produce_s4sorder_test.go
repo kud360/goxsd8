@@ -1018,3 +1018,345 @@ func TestProduceS4SChildOrderAccepted(t *testing.T) {
 		})
 	}
 }
+
+// TestProduceS4SSimpleTypeAndOpenContentModelsRejected pins the four models #1951
+// adds: xs:list (xmlschema11-2.md:2753), a <simpleType>'s xs:restriction (:2748),
+// xs:openContent (xmlschema11-1.md:1728) and xs:defaultOpenContent (:3787). Each
+// document assembled clean before them; the first row is stD015's shape.
+//
+// Each row pins the diagnostic's opening "parser: <child> at <loc>" as a PREFIX,
+// so a message naming the owner where it means the child fails here, and the
+// grammar the rejection quotes, so a fault charged by some other model does too.
+func TestProduceS4SSimpleTypeAndOpenContentModelsRejected(t *testing.T) {
+	const at = " at " + produceURI + ":"
+	const inline = `<xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType>`
+	// A slice, not a map: subtest order is output (STYLE D2).
+	for _, tc := range []struct {
+		name      string
+		lines     []string // the <schema>'s own children, from line 2
+		wantChild string   // "<local> at <uri>:<line>:1"
+		wantOwner string
+		grammar   string
+		wantKind  string
+	}{
+		{
+			name: "second simpleType of a list",
+			lines: []string{
+				`<xs:simpleType name="S">`,
+				`<xs:list>`,
+				`<xs:annotation/>`,
+				inline,
+				inline,
+				`</xs:list>`,
+				`</xs:simpleType>`,
+			},
+			wantChild: "<simpleType>" + at + "6:1",
+			wantOwner: "<list>" + at + "3:1",
+			grammar:   "xs:list",
+			wantKind:  "repeats a position",
+		},
+		{
+			name: "element child of a list with itemType",
+			lines: []string{
+				`<xs:simpleType name="S">`,
+				`<xs:list itemType="xs:string">`,
+				`<xs:element name="e"/>`,
+				`</xs:list>`,
+				`</xs:simpleType>`,
+			},
+			wantChild: "<element>" + at + "4:1",
+			wantOwner: "<list>" + at + "3:1",
+			grammar:   "xs:list",
+			wantKind:  "fills no position",
+		},
+		{
+			name: "annotation after a facet of a simpleType restriction",
+			lines: []string{
+				`<xs:simpleType name="S">`,
+				`<xs:restriction base="xs:string">`,
+				`<xs:maxLength value="3"/>`,
+				`<xs:annotation/>`,
+				`</xs:restriction>`,
+				`</xs:simpleType>`,
+			},
+			wantChild: "<annotation>" + at + "5:1",
+			wantOwner: "<restriction>" + at + "3:1",
+			grammar:   "xs:restriction",
+			wantKind:  "out of the child order",
+		},
+		{
+			name: "annotation after the inline base of a simpleType restriction",
+			lines: []string{
+				`<xs:simpleType name="S">`,
+				`<xs:restriction>`,
+				inline,
+				`<xs:annotation/>`,
+				`</xs:restriction>`,
+				`</xs:simpleType>`,
+			},
+			wantChild: "<annotation>" + at + "5:1",
+			wantOwner: "<restriction>" + at + "3:1",
+			grammar:   "xs:restriction",
+			wantKind:  "out of the child order",
+		},
+		{
+			name: "inline base after a facet of a simpleType restriction",
+			lines: []string{
+				`<xs:simpleType name="S">`,
+				`<xs:restriction>`,
+				`<xs:maxLength value="3"/>`,
+				inline,
+				`</xs:restriction>`,
+				`</xs:simpleType>`,
+			},
+			wantChild: "<simpleType>" + at + "5:1",
+			wantOwner: "<restriction>" + at + "3:1",
+			grammar:   "xs:restriction",
+			wantKind:  "out of the child order",
+		},
+		{
+			name: "annotation after the any of an openContent",
+			lines: []string{
+				`<xs:complexType name="C">`,
+				`<xs:openContent>`,
+				`<xs:any namespace="##other"/>`,
+				`<xs:annotation/>`,
+				`</xs:openContent>`,
+				`<xs:sequence/>`,
+				`</xs:complexType>`,
+			},
+			wantChild: "<annotation>" + at + "5:1",
+			wantOwner: "<openContent>" + at + "3:1",
+			grammar:   "xs:openContent",
+			wantKind:  "out of the child order",
+		},
+		{
+			name: "second any of an openContent",
+			lines: []string{
+				`<xs:complexType name="C">`,
+				`<xs:openContent>`,
+				`<xs:any namespace="##other"/>`,
+				`<xs:any namespace="##other"/>`,
+				`</xs:openContent>`,
+				`<xs:sequence/>`,
+				`</xs:complexType>`,
+			},
+			wantChild: "<any>" + at + "5:1",
+			wantOwner: "<openContent>" + at + "3:1",
+			grammar:   "xs:openContent",
+			wantKind:  "repeats a position",
+		},
+		{
+			name: "annotation after the any of a defaultOpenContent",
+			lines: []string{
+				`<xs:defaultOpenContent>`,
+				`<xs:any namespace="##other"/>`,
+				`<xs:annotation/>`,
+				`</xs:defaultOpenContent>`,
+				`<xs:complexType name="C"><xs:sequence/></xs:complexType>`,
+			},
+			wantChild: "<annotation>" + at + "4:1",
+			wantOwner: "<defaultOpenContent>" + at + "2:1",
+			grammar:   "xs:defaultOpenContent",
+			wantKind:  "out of the child order",
+		},
+		{
+			name: "second any of a defaultOpenContent",
+			lines: []string{
+				`<xs:defaultOpenContent>`,
+				`<xs:any namespace="##other"/>`,
+				`<xs:any namespace="##other"/>`,
+				`</xs:defaultOpenContent>`,
+				`<xs:complexType name="C"><xs:sequence/></xs:complexType>`,
+			},
+			wantChild: "<any>" + at + "4:1",
+			wantOwner: "<defaultOpenContent>" + at + "2:1",
+			grammar:   "xs:defaultOpenContent",
+			wantKind:  "repeats a position",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := produce(t, s4sTopLevelDoc(tc.lines...))
+			if err == nil {
+				t.Fatal("Produce accepted a document its s4s content model does not admit")
+			}
+			if rule, ok := xsderr.RuleOf(err); ok {
+				t.Errorf("error = %v, charged %s; want a plain grammar fault carrying no rule ID", err, rule)
+			}
+			if !strings.HasPrefix(err.Error(), "parser: "+tc.wantChild+" ") {
+				t.Errorf("error = %v, want it to open with the offending %s", err, tc.wantChild)
+			}
+			if !strings.Contains(err.Error(), tc.wantOwner) {
+				t.Errorf("error = %v, want it to name the owning %s", err, tc.wantOwner)
+			}
+			if !strings.Contains(err.Error(), tc.grammar+"'s content model") {
+				t.Errorf("error = %v, want it to quote %s's content model", err, tc.grammar)
+			}
+			if !strings.Contains(err.Error(), tc.wantKind) {
+				t.Errorf("error = %v, want the %q fault", err, tc.wantKind)
+			}
+		})
+	}
+}
+
+// TestProduceS4SSimpleTypeAndOpenContentGuardsKeepTheirVerdicts pins the guards
+// that charged these four owners before #1951 gave them models: on every shape
+// below the older guard answers, never the new walk — either because the model
+// admits the shape (src-simple-type clauses 2 and 3, src-ct clauses 3 and 4, the
+// mandatory <any>, each ruled no model fault by #1951's grounding), or because
+// the guard runs first on a shape both reach (checkS4SChildOrder's doc names the
+// two exceptions to its order this pins).
+func TestProduceS4SSimpleTypeAndOpenContentGuardsKeepTheirVerdicts(t *testing.T) {
+	const inline = `<xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType>`
+	const ct = `<xs:complexType name="C"><xs:sequence/></xs:complexType>`
+	// A slice, not a map: subtest order is output (STYLE D2).
+	for _, tc := range []struct {
+		name     string
+		body     string
+		wantRule string // "" for a plain grammar fault
+		want     string // a phrase of the older guard's message
+	}{
+		{
+			// rejectLateAnnotation, whose message a list keeps: why s4sAnnotationLedOwner
+			// still admits <list>.
+			name: "late annotation of a list",
+			body: `<xs:simpleType name="S"><xs:list>` + inline + `<xs:annotation/></xs:list></xs:simpleType>`,
+			want: "follows the <simpleType>",
+		},
+		{
+			name: "late annotation of a union",
+			body: `<xs:simpleType name="S"><xs:union memberTypes="xs:string">` + inline + `<xs:annotation/></xs:union></xs:simpleType>`,
+			want: "follows the <simpleType>",
+		},
+		{
+			name:     "itemType and an inline simpleType on a list",
+			body:     `<xs:simpleType name="S"><xs:list itemType="xs:string">` + inline + `</xs:list></xs:simpleType>`,
+			wantRule: "src-simple-type",
+			want:     "clause 3",
+		},
+		{
+			// The first exception: clause 1 runs ahead of the restriction's walk.
+			name:     "second simpleType of a simpleType restriction",
+			body:     `<xs:simpleType name="S"><xs:restriction><xs:annotation/>` + inline + inline + `</xs:restriction></xs:simpleType>`,
+			wantRule: "src-simple-type",
+			want:     "clause 1",
+		},
+		{
+			name:     "base and an inline simpleType on a simpleType restriction",
+			body:     `<xs:simpleType name="S"><xs:restriction base="xs:string">` + inline + `</xs:restriction></xs:simpleType>`,
+			wantRule: "src-simple-type",
+			want:     "clause 2",
+		},
+		{
+			// rejectOutOfModelFacetChildren answers an out-of-model name ahead of the
+			// late <annotation> the walk would charge.
+			name: "late annotation beside an out-of-model child of a simpleType restriction",
+			body: `<xs:simpleType name="S"><xs:restriction base="xs:string"><xs:maxLength value="3"/>` +
+				`<xs:annotation/><xs:encoding value="x"/></xs:restriction></xs:simpleType>`,
+			want: "<encoding>",
+		},
+		{
+			name:     "openContent with no any",
+			body:     `<xs:complexType name="C"><xs:openContent><xs:annotation/></xs:openContent><xs:sequence/></xs:complexType>`,
+			wantRule: "src-ct",
+			want:     "clause 3",
+		},
+		{
+			// The second exception: clause 3 runs ahead of the openContent's walk.
+			name:     "openContent with no any and an element child",
+			body:     `<xs:complexType name="C"><xs:openContent><xs:element name="e"/></xs:openContent><xs:sequence/></xs:complexType>`,
+			wantRule: "src-ct",
+			want:     "clause 3",
+		},
+		{
+			name:     "openContent mode none with an any",
+			body:     `<xs:complexType name="C"><xs:openContent mode="none"><xs:any/></xs:openContent><xs:sequence/></xs:complexType>`,
+			wantRule: "src-ct",
+			want:     "clause 4",
+		},
+		{
+			name:     "openContent mode none with two any",
+			body:     `<xs:complexType name="C"><xs:openContent mode="none"><xs:any/><xs:any/></xs:openContent><xs:sequence/></xs:complexType>`,
+			wantRule: "src-ct",
+			want:     "clause 4",
+		},
+		{
+			name: "defaultOpenContent with no any and an element child",
+			body: `<xs:defaultOpenContent><xs:element name="e"/></xs:defaultOpenContent>` + ct,
+			want: "has no <any> child",
+		},
+		{
+			name: "defaultOpenContent mode none with a late annotation",
+			body: `<xs:defaultOpenContent mode="none"><xs:any/><xs:annotation/></xs:defaultOpenContent>` + ct,
+			want: `has mode="none"`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := produce(t, wrap("urn:x", tc.body))
+			if err == nil {
+				t.Fatal("Produce accepted the document")
+			}
+			rule, ok := xsderr.RuleOf(err)
+			if string(rule) != tc.wantRule || ok != (tc.wantRule != "") {
+				t.Errorf("error = %v, charged %q; want %q", err, rule, tc.wantRule)
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("error = %v, want the older guard's %q", err, tc.want)
+			}
+		})
+	}
+}
+
+// TestProduceS4SSimpleTypeAndOpenContentModelsAccepted is the other side of the
+// four models: every position filled in order, the precisionDecimal scale facets
+// the facet position must hold (xsd-precisionDecimal.md), foreign children among
+// the facets (the "{any with namespace: ##other}" arm), and a child §4.2.2's
+// conditional-inclusion pre-pass removes before any walk — written where, kept,
+// it would be out of order.
+func TestProduceS4SSimpleTypeAndOpenContentModelsAccepted(t *testing.T) {
+	const inline = `<xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType>`
+	// A slice, not a map: subtest order is output (STYLE D2).
+	for _, tc := range []struct {
+		name string
+		body string
+	}{
+		{
+			name: "list annotation and inline item",
+			body: `<xs:simpleType name="S"><xs:list><xs:annotation/>` + inline + `</xs:list></xs:simpleType>`,
+		},
+		{
+			name: "simpleType restriction in order with foreign children among the facets",
+			body: `<xs:simpleType name="S" xmlns:o="urn:other"><xs:restriction><xs:annotation/>` + inline +
+				`<xs:minLength value="1"/><o:hint/><xs:maxLength value="8"/><o:hint/>` +
+				`<xs:enumeration value="a"/><xs:enumeration value="b"/></xs:restriction></xs:simpleType>`,
+		},
+		{
+			name: "precisionDecimal scale facets",
+			body: `<xs:simpleType name="S"><xs:restriction base="xs:precisionDecimal"><xs:annotation/>` +
+				`<xs:minScale value="1"/><xs:maxScale value="3"/></xs:restriction></xs:simpleType>`,
+		},
+		{
+			name: "late annotation excluded by vc:minVersion",
+			body: `<xs:simpleType name="S"><xs:restriction base="xs:string"><xs:maxLength value="3"/>` +
+				`<xs:annotation vc:minVersion="5.0"/></xs:restriction></xs:simpleType>`,
+		},
+		{
+			name: "openContent annotation and any, and mode none with annotation alone",
+			body: `<xs:complexType name="C"><xs:openContent><xs:annotation/><xs:any namespace="##other"/>` +
+				`</xs:openContent><xs:sequence/></xs:complexType>` +
+				`<xs:complexType name="N"><xs:openContent mode="none"><xs:annotation/>` +
+				`</xs:openContent><xs:sequence/></xs:complexType>`,
+		},
+		{
+			name: "defaultOpenContent annotation and any",
+			body: `<xs:defaultOpenContent><xs:annotation/><xs:any namespace="##other"/></xs:defaultOpenContent>` +
+				`<xs:complexType name="C"><xs:sequence/></xs:complexType>`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := produce(t, vcWrap("", tc.body)); err != nil {
+				t.Fatalf("Produce rejected a document its s4s content model admits: %v", err)
+			}
+		})
+	}
+}

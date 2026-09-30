@@ -7,12 +7,13 @@ package xsd
 // wildcard-set operations over the same record, and neither re-derives the
 // other's algebra.
 //
-// It stays UNEXPORTED. The only consumer is contentrestricts.go's
-// wildcard-versus-wildcard transition test, which is in-package (STYLE T5:
-// export nothing without a consumer). #52 owns the exported wildcard-set
-// surface and will generalize this relation there when a library consumer for
-// it exists; until then one unexported implementation is the whole of it, so
-// there is no second encoding to drift (STYLE T4).
+// It stays UNEXPORTED. Every consumer is in-package — contentrestricts.go's
+// wildcard-versus-wildcard transition test and its covering-union test,
+// attributerestriction.go and complexextension.go (STYLE T5: export nothing
+// without a consumer). #52 owns the exported wildcard-set surface and will
+// generalize this relation there when a library consumer for it exists; until
+// then one unexported implementation is the whole of it, so there is no
+// second encoding to drift (STYLE T4).
 
 // wildcardSubset is cos-ns-subset: "Given two Namespace Constraints sub and
 // super, sub is a wildcard subset of super if and only if ONE of the following

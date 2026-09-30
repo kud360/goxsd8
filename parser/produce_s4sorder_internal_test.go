@@ -30,6 +30,10 @@ var s4sModels = []struct {
 	{"field", s4sField},
 	{"namedGroup", s4sNamedGroup},
 	{"namedAttributeGroup", s4sNamedAttributeGroup},
+	{"list", s4sList},
+	{"simpleTypeRestriction", s4sSimpleTypeRestriction},
+	{"openContent", s4sOpenContent},
+	{"defaultOpenContent", s4sDefaultOpenContent},
 }
 
 // s4sProbe is the vocabulary the models above draw on: every element name they
@@ -45,7 +49,7 @@ var s4sProbe = []string{
 	"length", "minLength", "maxLength", "pattern", "enumeration", "whiteSpace",
 	"maxInclusive", "maxExclusive", "minInclusive", "minExclusive",
 	"totalDigits", "fractionDigits", "assertion", "assertions", "explicitTimezone",
-	"maxScale", "minScale", "selector", "field",
+	"maxScale", "minScale", "selector", "field", "any",
 }
 
 // TestS4SModelPositionsAreDisjoint pins the invariant checkS4SChildOrder's fault

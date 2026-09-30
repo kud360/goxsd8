@@ -195,7 +195,9 @@ func TestCensusModelGroupReportsNothingItselfAndDescends(t *testing.T) {
 
 // TestCensusSimpleTypeAlternatives pins the <list> and <union> vocabularies
 // (§3.16.2.1): each carries the one inline <simpleType> position listItem and
-// unionMembers read, and any other name is dropped in silence.
+// unionMembers read, and any other name is reported. Under the <union> that name
+// is dropped in silence; under the <list> checkS4SChildOrder also rejects the
+// document over it since #1951, which leaves the census unchanged (censusOf).
 func TestCensusSimpleTypeAlternatives(t *testing.T) {
 	got := censusOf(t, `<xs:simpleType name="l"><xs:list>`+
 		`<xs:annotation><xs:documentation>d</xs:documentation></xs:annotation>`+
