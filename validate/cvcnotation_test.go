@@ -49,6 +49,9 @@ const notationSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   </xs:element>
 </xs:schema>`
 
+// xsdNOTATION is how a charge names the built-in xs:NOTATION.
+const xsdNOTATION = "{" + xsd.XMLSchemaNS + "}NOTATION"
+
 // parsedSchema assembles the schema rooted at main.xsd among docs.
 func parsedSchema(t *testing.T, docs map[string]string) *xsd.Schema {
 	t.Helper()
@@ -73,8 +76,8 @@ func notationRoot(name xsd.QName, attr, lexical string, bindings map[string]stri
 
 // wantUndeclaredNotation fails unless got is exactly one cvc-attribute charge
 // at the attribute's 3:5 whose wrapped cause is the cvc-datatype-valid verdict
-// notationsDeclared words for value resolving to name.
-func wantUndeclaredNotation(t *testing.T, got []*xsderr.Error, value string, name xsd.QName) {
+// notationsDeclared words for value resolving to name against the type typ.
+func wantUndeclaredNotation(t *testing.T, got []*xsderr.Error, value string, name xsd.QName, typ string) {
 	t.Helper()
 	viol := onlyCharge(t, got, ruleCvcAttribute)
 	if viol.Loc != loc(3, 5) {
@@ -91,8 +94,9 @@ func wantUndeclaredNotation(t *testing.T, got []*xsderr.Error, value string, nam
 		t.Errorf("wrapped Loc = %s, want the attribute's %s", cause.Loc, loc(3, 5))
 	}
 	prefix := `the NOTATION value "` + value + `" resolves to the QName ` + name.String() + `, which names no notation declaration`
-	if !strings.HasPrefix(cause.Msg, prefix) {
-		t.Fatalf("wrapped Msg = %q, want it to open %q", cause.Msg, prefix)
+	suffix := "not Datatype Valid against " + typ
+	if !strings.HasPrefix(cause.Msg, prefix) || !strings.HasSuffix(cause.Msg, suffix) {
+		t.Fatalf("wrapped Msg = %q, want it to open %q and close %q", cause.Msg, prefix, suffix)
 	}
 }
 
@@ -110,6 +114,7 @@ func causeRule(viol *xsderr.Error) xsderr.Rule {
 func TestANotationValueMustNameADeclaredNotation(t *testing.T) {
 	schema := parsedSchema(t, map[string]string{"main.xsd": notationSchema})
 	root := xsd.QName{Local: "root"}
+	types := map[string]string{"enum": "FooBarBez", "direct": xsdNOTATION}
 	for _, attr := range []string{"enum", "direct"} {
 		t.Run(attr, func(t *testing.T) {
 			for _, declared := range []string{"foo", "bar", " foo "} {
@@ -117,7 +122,7 @@ func TestANotationValueMustNameADeclaredNotation(t *testing.T) {
 				wantSilence(t, got, declared+" names a declared notation")
 			}
 			got, _ := assessRecorded(t, schema, notationRoot(root, attr, "bez", nil))
-			wantUndeclaredNotation(t, got, "bez", xsd.QName{Local: "bez"})
+			wantUndeclaredNotation(t, got, "bez", xsd.QName{Local: "bez"}, types[attr])
 		})
 	}
 }
@@ -137,7 +142,8 @@ func TestAnEnumerationMissIsNotANotationCharge(t *testing.T) {
 // A NOTATION value's QName resolves against the owner's in-scope namespaces,
 // an unprefixed one taking the DEFAULT namespace (Datatypes §3.3.18) and not
 // the no-namespace reading an unprefixed attribute name gets: under a target
-// namespace, foo is declared only as {urn:n}foo.
+// namespace, foo is declared only as {urn:n}foo, and p:bar, which resolves,
+// names nothing.
 func TestANotationValueResolvesAgainstTheInScopeNamespaces(t *testing.T) {
 	schema := parsedSchema(t, map[string]string{"main.xsd": `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
     targetNamespace="urn:n" xmlns:n="urn:n">
@@ -156,7 +162,9 @@ func TestANotationValueResolvesAgainstTheInScopeNamespaces(t *testing.T) {
 	wantSilence(t, got, "foo takes the default namespace urn:n")
 
 	got, _ = assessRecorded(t, schema, notationRoot(root, "direct", "foo", nil))
-	wantUndeclaredNotation(t, got, "foo", xsd.QName{Local: "foo"})
+	wantUndeclaredNotation(t, got, "foo", xsd.QName{Local: "foo"}, xsdNOTATION)
+	got, _ = assessRecorded(t, schema, notationRoot(root, "direct", "p:bar", map[string]string{"p": "urn:n"}))
+	wantUndeclaredNotation(t, got, "p:bar", xsd.QName{Space: "urn:n", Local: "bar"}, xsdNOTATION)
 }
 
 // The declared set is the assembled schema's {notation declarations}, an
@@ -206,7 +214,7 @@ func TestAnOverrideHostsNotationIsDeclared(t *testing.T) {
 		wantSilence(t, got, declared+" is declared in the override host")
 	}
 	got, _ := assessRecorded(t, schema, notationRoot(root, "enum", "qux", nil))
-	wantUndeclaredNotation(t, got, "qux", xsd.QName{Local: "qux"})
+	wantUndeclaredNotation(t, got, "qux", xsd.QName{Local: "qux"}, "Nota")
 }
 
 // An element's ·initial value· is held to the same check under cvc-type clause
