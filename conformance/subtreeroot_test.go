@@ -473,24 +473,47 @@ func TestInstanceExecutorDeclinesOutsideAssessedSubtreeRoot(t *testing.T) {
 			"a lax {attribute wildcard}'s attribute resolving to a declaration typed by a NOTATION enumeration",
 			notationN + `<xs:attribute name="n" type="N"/>` + wildcardKnown("lax"), `<known n="n"><a>1</a></known>`,
 		},
+		// The wildcard-child refusals (#1931): subtreeGate.resolvedChild's.
+		{"a lax wildcard particle's child resolving no declaration (#1911)", wildcardChild("lax"), `<known><u>x</u></known>`},
+		{"an {open content} child resolving no declaration", openChild, `<known><u>x</u><a>1</a></known>`},
 		{
-			"a child attributed to a lax wildcard particle (cvc-complex-type clause 5)",
-			`<xs:element name="known"><xs:complexType><xs:sequence><xs:any processContents="lax"/></xs:sequence></xs:complexType></xs:element>` +
+			// Strictly assessed against N through the xsi:type, the child takes
+			// the walk's e-validity clause 1.1.3 charge away.
+			"a strict wildcard particle's child resolving no declaration, typed by an xsi:type naming a NOTATION enumeration",
+			notationN + wildcardChild("strict"), `<known ` + xsiNS + `><u xsi:type="N">n</u></known>`,
+		},
+		{
+			// ·locally declared type· key-ldt-elem case 2, through a <group ref>.
+			"a lax wildcard particle's child whose name a local declaration in the parent's content model carries (cvc-complex-type clause 5)",
+			`<xs:element name="known"><xs:complexType><xs:sequence><xs:any processContents="lax"/><xs:group ref="g"/></xs:sequence></xs:complexType></xs:element>` +
+				`<xs:group name="g"><xs:sequence><xs:element name="b" type="xs:string" minOccurs="0"/></xs:sequence></xs:group>` +
 				`<xs:element name="b" type="xs:string"/>`,
 			`<known><b>x</b></known>`,
 		},
 		{
-			"a child attributed to a strict wildcard particle (cvc-complex-type clause 5)",
-			`<xs:element name="known"><xs:complexType><xs:sequence><xs:any processContents="strict"/></xs:sequence></xs:complexType></xs:element>` +
-				`<xs:element name="b" type="xs:string"/>`,
+			// key-ldt-elem case 3: R's content model contains no b, its base's does.
+			"a strict wildcard particle's child whose name the restricted base's content model declares (cvc-complex-type clause 5)",
+			`<xs:complexType name="B"><xs:choice><xs:element name="b" type="xs:string"/><xs:any processContents="strict"/></xs:choice></xs:complexType>` +
+				`<xs:complexType name="R"><xs:complexContent><xs:restriction base="B"><xs:sequence><xs:any processContents="strict"/></xs:sequence></xs:restriction></xs:complexContent></xs:complexType>` +
+				`<xs:element name="known" type="R"/><xs:element name="b" type="xs:string"/>`,
 			`<known><b>x</b></known>`,
 		},
 		{
-			"a child attributed to the {open content} (cvc-complex-type clause 5)",
-			`<xs:element name="known"><xs:complexType><xs:openContent mode="interleave"><xs:any processContents="lax"/></xs:openContent>` +
-				`<xs:sequence><xs:element name="a" type="xs:int"/></xs:sequence></xs:complexType></xs:element>` +
-				`<xs:element name="b" type="xs:string"/>`,
-			`<known><b>x</b><a>1</a></known>`,
+			// key-impl-cont: the parent's content model contains the head h, whose
+			// ·substitution group· holds m.
+			"a strict wildcard particle's child whose substitution group head the parent's content model contains (cvc-complex-type clause 5)",
+			`<xs:element name="known"><xs:complexType><xs:sequence><xs:any processContents="strict"/><xs:element ref="h" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>` +
+				`<xs:element name="h" type="xs:string"/><xs:element name="m" substitutionGroup="h"/>`,
+			`<known><m>x</m></known>`,
+		},
+		{
+			// key-ldt-att case 3: the restriction prohibits its base's use of ta.
+			"a strict {attribute wildcard}'s attribute whose name the restricted base's attribute uses declare (cvc-complex-type clause 5)",
+			`<xs:complexType name="B"><xs:attribute ref="ta"/><xs:anyAttribute processContents="strict"/></xs:complexType>` +
+				`<xs:complexType name="R"><xs:complexContent><xs:restriction base="B">` +
+				`<xs:attribute ref="ta" use="prohibited"/><xs:anyAttribute processContents="strict"/></xs:restriction></xs:complexContent></xs:complexType>` +
+				`<xs:element name="known" type="R"/><xs:attribute name="ta" type="xs:int"/>`,
+			`<known ta="1"/>`,
 		},
 		{
 			"a child attributed through its substitution group head (cvc-accept clause 2.3.2)",
@@ -581,6 +604,91 @@ func TestAssessedSubtreeRootUnadmittedAttribute(t *testing.T) {
 		{"a name the wildcard does not admit", `<known foo="x"/>`, false},
 	} {
 		c := instanceCase(t, schemaBody, tc.instance, true)
+		schema, report, decidable, err := assembleCase(strict.New(), c.schemaDoc, nil)
+		if err != nil || !decidable {
+			t.Fatalf("%s: assembling the schema: decidable %v, err %v", tc.why, decidable, err)
+		}
+		if got := assessedSubtreeRoot(schema, report, c.doc); got != tc.want {
+			t.Errorf("%s: assessedSubtreeRoot = %v, want %v", tc.why, got, tc.want)
+		}
+	}
+}
+
+// wildcardChild declares <known>, whose content model is one wildcard particle
+// of {process contents} pc and declares no element, beside the top-level
+// declarations b of type xs:int and i of type xs:ID. Its ·locally declared
+// type· is ·absent· for every child (key-ldt-elem), as for the NIST2004-01-14
+// wrapper <out>.
+func wildcardChild(pc string) string {
+	return `<xs:element name="known"><xs:complexType><xs:sequence><xs:any processContents="` + pc + `"/></xs:sequence></xs:complexType></xs:element>` +
+		`<xs:element name="b" type="xs:int"/><xs:element name="i" type="xs:ID"/>`
+}
+
+// openChild declares <known> with one required child <a> of type xs:int and a
+// lax interleave {open content}, beside the top-level declaration b of type
+// xs:int, which the content model does not declare.
+const openChild = `<xs:element name="known"><xs:complexType><xs:openContent mode="interleave"><xs:any processContents="lax"/></xs:openContent>` +
+	`<xs:sequence><xs:element name="a" type="xs:int"/></xs:sequence></xs:complexType></xs:element>` +
+	`<xs:element name="b" type="xs:int"/>`
+
+// TestInstanceExecutorDecidesWildcardChild proves the gate admits a child
+// ·attributed to· a strict or lax ·wildcard particle· or to the {open content}
+// wherever its name ·resolves· to a top-level declaration and its ·locally
+// declared type· is ·absent·, which makes cvc-complex-type clause 5 vacuous
+// (#1931). Each row walks clean against the resolved declaration, and each is
+// refused with subtreeGate.resolvedChild answering false for a resolved name,
+// or with child answering false for the {open content} arm.
+func TestInstanceExecutorDecidesWildcardChild(t *testing.T) {
+	exec := newInstanceExec()
+	for _, tc := range []struct{ why, schemaBody, instance string }{
+		{"strict, a child resolving a declaration", wildcardChild("strict"), `<known><b>1</b></known>`},
+		{"lax, a child resolving a declaration", wildcardChild("lax"), `<known><b>1</b></known>`},
+		// NIST2004-01-14's shape: an ID-typed child binding the wrapper.
+		{"strict, a child resolving an xs:ID declaration", wildcardChild("strict"), `<known><i>i1</i></known>`},
+		{"an {open content} child resolving a declaration", openChild, `<known><b>1</b><a>1</a></known>`},
+	} {
+		if !exec(instanceCase(t, tc.schemaBody, tc.instance, true)).IsPass() {
+			t.Errorf("%s: the walk decides the wildcard child and the gate admits it; the executor must agree with a suite-valid case", tc.why)
+		}
+		if exec(instanceCase(t, tc.schemaBody, tc.instance, false)).IsPass() {
+			t.Errorf("%s: the executor must Fail under a flipped expectation (it decides for real)", tc.why)
+		}
+	}
+}
+
+// TestInstanceExecutorChargesWildcardChild is a regression guard for the
+// wildcard-child lift (#1931): the walk charges each row, so each is decided
+// INVALID whatever the gate answers.
+func TestInstanceExecutorChargesWildcardChild(t *testing.T) {
+	exec := newInstanceExec()
+	for _, tc := range []struct{ why, schemaBody, instance string }{
+		{"strict, a value not valid against the resolved declaration (cvc-type clause 3.1.3)", wildcardChild("strict"), `<known><b>x</b></known>`},
+		{"an {open content} child's value not valid against the resolved declaration", openChild, `<known><b>x</b><a>1</a></known>`},
+		{"strict, a child resolving no declaration (e-validity clause 1.1.3)", wildcardChild("strict"), `<known><u>x</u></known>`},
+	} {
+		if !exec(instanceCase(t, tc.schemaBody, tc.instance, false)).IsPass() {
+			t.Errorf("%s: the walk charges the child; the executor must agree with a suite-invalid case", tc.why)
+		}
+		if exec(instanceCase(t, tc.schemaBody, tc.instance, true)).IsPass() {
+			t.Errorf("%s: the executor must Fail under a flipped expectation", tc.why)
+		}
+	}
+}
+
+// TestAssessedSubtreeRootUnresolvedStrictChild pins, at the gate itself, its
+// answer for a strict ·wildcard particle·'s child resolving no declaration,
+// which no executor row can see: the walk charges e-validity clause 1.1.3 for
+// it first (TestInstanceExecutorChargesWildcardChild). With no xsi:type the gate
+// admits it, its subtree unread; the lax row is the refused control.
+func TestAssessedSubtreeRootUnresolvedStrictChild(t *testing.T) {
+	for _, tc := range []struct {
+		why, pc string
+		want    bool
+	}{
+		{"strict, a child resolving no declaration", "strict", true},
+		{"lax, a child resolving no declaration", "lax", false},
+	} {
+		c := instanceCase(t, wildcardChild(tc.pc), `<known><u><v/></u></known>`, true)
 		schema, report, decidable, err := assembleCase(strict.New(), c.schemaDoc, nil)
 		if err != nil || !decidable {
 			t.Fatalf("%s: assembling the schema: decidable %v, err %v", tc.why, decidable, err)

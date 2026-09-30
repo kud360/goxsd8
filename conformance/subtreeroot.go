@@ -28,7 +28,10 @@ import (
 // The gate is computed per case and stored nowhere. It re-reads the instance
 // with encoding/xml and re-derives every child's ·attribution· through
 // xsd.Schema.ContentMatcher, independently of the walk, so it never rests on
-// what the walk did or did not record for a descendant.
+// what the walk did or did not record for a descendant — save for a strict
+// ·wildcard particle·'s child resolving to no declaration and carrying no
+// xsi:type, which it admits unread because the walk charges that child's parent
+// for it (subtreeGate.resolvedChild).
 
 // versioningNS is the XML Schema versioning namespace §4.2.2 reads vc:minVersion,
 // vc:maxVersion, vc:typeAvailable, vc:typeUnavailable, vc:facetAvailable and
@@ -390,7 +393,7 @@ func (g *subtreeGate) complex(start xml.StartElement, t xsd.ComplexType, constra
 		if !ok {
 			return false
 		}
-		return g.children(m, constrained)
+		return g.children(t, m, constrained)
 	}
 	return false
 }
@@ -414,13 +417,21 @@ func (g *subtreeGate) recordedAttributeType(ad xsd.AttributeDeclaration) bool {
 //     (key-skipped), assessed against nothing, and cvc-assess-elt clause 2.2
 //     leaves it unassessed with nothing to decide;
 //   - n ·resolves· to a top-level attribute declaration (key-governing-ad
-//     clause 3) that recordedAttributeType admits: the walk charges or records
-//     cvc-attribute clauses 3 and 4 against it, under lax and strict alike;
+//     clause 3) that recordedAttributeType admits, and the attribute's
+//     ·locally declared type· within t is ·absent· (locallyDeclaredAttribute
+//     answers false), which makes cvc-complex-type clause 5 vacuous for it:
+//     the walk charges or records cvc-attribute clauses 3 and 4 against the
+//     declaration, under lax and strict alike;
 //   - n resolves to none under lax: the attribute has no ·governing attribute
 //     declaration· and is not assessed, which charges nothing (sic-e-outcome
-//     clause 1.1.3 reaches only a ·wildcard particle·).
+//     clause 1.1.3 reaches only a ·wildcard particle·), and clause 5 is
+//     vacuous for want of a ·governing type definition·.
 //
-// It refuses n resolving to none under strict. The walk charges nothing there
+// It refuses n resolving to a declaration where the ·locally declared type· is
+// not ·absent· — a base's attribute use a restriction prohibited (key-ldt-att
+// case 3): clause 5 then asks the declaration's {type definition} to be
+// ·validly substitutable· for that use's, which the walk never checks. It
+// refuses n resolving to none under strict. The walk charges nothing there
 // either, on the same reading, and records nothing, a reading the suite does
 // not share for seven of its invalid cases (#1912). A name the wildcard does
 // not admit, or a type with no {attribute wildcard}, is refused too, though the
@@ -438,7 +449,7 @@ func (g *subtreeGate) wildcardAttribute(t xsd.ComplexType, n xsd.QName) bool {
 	if !ok {
 		return pc == xsd.ProcessLax
 	}
-	return g.recordedAttributeType(ad)
+	return g.recordedAttributeType(ad) && !g.locallyDeclaredAttribute(t, n)
 }
 
 // defaultedAttribute reports whether u is a ·defaulted attribute· (§3.4.4.2)
@@ -475,19 +486,19 @@ func (g *subtreeGate) leaf() bool {
 	}
 }
 
-// children reads an element's content through to its end tag, advancing m over
-// each element [[child]] in document order, and reports whether every child
-// meets child's conditions, constrained as element states, and m accepts the
-// whole sequence.
-func (g *subtreeGate) children(m *xsd.Matcher, constrained bool) bool {
+// children reads the content of an element governed by t through to its end
+// tag, advancing m, t's ContentMatcher, over each element [[child]] in document
+// order, and reports whether every child meets child's conditions, constrained
+// as element states, and m accepts the whole sequence.
+func (g *subtreeGate) children(t xsd.ComplexType, m *xsd.Matcher, constrained bool) bool {
 	for {
 		tok, err := g.dec.Token()
 		if err != nil {
 			return false
 		}
-		switch t := tok.(type) {
+		switch s := tok.(type) {
 		case xml.StartElement:
-			if !g.child(m, t, constrained) {
+			if !g.child(t, m, s, constrained) {
 				return false
 			}
 		case xml.EndElement:
@@ -496,35 +507,200 @@ func (g *subtreeGate) children(m *xsd.Matcher, constrained bool) bool {
 	}
 }
 
-// child reads one element [[child]] whose start tag is start through to its
-// end tag, and reports whether m ·attributes· it (§3.4.4.4) to an element
-// particle whose {term} carries the child's own ·expanded name· — its
-// ·context-determined declaration· (§3.3.4.6 ·governing element declaration·
-// clause 2) — and whether that declaration and the child's subtree meet
-// element's conditions in turn. Every other attribution answers false:
+// child reads one element [[child]] whose start tag is start, of an element
+// governed by t, through to its end tag, and reports whether m ·attributes· it
+// (§3.4.4.4) to one of these, and the child meets that arm's conditions:
+//
+//   - an element particle whose {term} carries the child's own ·expanded
+//     name·: that {term} is its ·context-determined declaration· (§3.3.4.6
+//     key-governing-ed clause 2), which with the child's subtree must meet
+//     element's conditions. The ·locally declared type· (key-ldt-elem case 2)
+//     is that declaration's own {type definition}, so cvc-complex-type clause
+//     5 holds wherever cvc-elt clause 4 does;
+//   - a strict or lax Wildcard, or the {open content}: resolvedChild's
+//     conditions.
+//
+// Every other attribution answers false:
 //
 //   - a skip Wildcard: the child is ·skipped· with its whole subtree
-//     (§3.3.4.6 clause 3.2), which no clause of it decides;
-//   - a strict or lax Wildcard, or the {open content}: the child is governed by
-//     the top-level declaration its name ·resolves· to, if any, and
-//     cvc-complex-type clause 5 (§3.4.4.2) then asks that declaration to be
-//     consistent with the ·context-determined· one, which the walk never
-//     checks; with none, the child is the untyped element shape;
+//     (key-governing-ed clause 3.2), which no clause of it decides (#1861);
 //   - an element particle whose {term} carries another name: cvc-accept
 //     clause 2.3.2 admitted the child as a ·substitution group· member, whose
 //     {substitution group exclusions} and the head's {disallowed
-//     substitutions} the walk never checks.
-func (g *subtreeGate) child(m *xsd.Matcher, start xml.StartElement, constrained bool) bool {
+//     substitutions} the walk never checks (#1932).
+func (g *subtreeGate) child(t xsd.ComplexType, m *xsd.Matcher, start xml.StartElement, constrained bool) bool {
 	name := expandedName(start.Name)
 	a, ok := m.Next(name)
 	if !ok {
 		return false
 	}
-	d, ok := a.(xsd.ElementDeclaration)
-	if !ok || d.Name() != name {
+	switch at := a.(type) {
+	case xsd.ElementDeclaration:
+		return at.Name() == name && g.element(start, at, constrained)
+	case xsd.Wildcard:
+		pc := at.ProcessContents()
+		return pc != xsd.ProcessSkip && g.resolvedChild(t, start, pc == xsd.ProcessStrict, constrained)
+	case *xsd.OpenContent:
+		return g.resolvedChild(t, start, false, constrained)
+	}
+	return false
+}
+
+// resolvedChild reads through to its end tag a child whose start tag is start,
+// of an element governed by t, which is ·attributed to· a strict or lax
+// Wildcard or to t's {open content}, and reports whether one of these holds:
+//
+//   - its ·expanded name· ·resolves· to a top-level element declaration d
+//     (key-governing-ed clauses 3 and 4), its ·locally declared type· within
+//     t is ·absent· (locallyDeclared answers false for the names
+//     substitutionHeads gives), and d and the child's subtree meet element's
+//     conditions. The ldt being ·absent·, cvc-complex-type clause 5 is
+//     vacuous for the child; where it is not, clause 5 asks the child's
+//     ·governing type definition· to be ·validly substitutable· for it, which
+//     the walk never checks;
+//   - strictParticle holds — the child is ·attributed to· a strict ·wildcard
+//     particle· — its name resolves to none, and it carries no xsi:type: the
+//     child is ·laxly assessed· with a ·governing type definition· of none, so
+//     clause 5 is vacuous, and the walk charges e-validity clause 1.1.3
+//     (validate's walk.unresolvedStrictWildcardChild) for the parent, so no
+//     empty Result reaches the gate with it and the gate reads nothing below
+//     it.
+//
+// It refuses a name that resolves to none under a lax Wildcard or the {open
+// content}: the walk charges nothing for the child, e-validity clause 1.1.3
+// naming a strict ·wildcard particle· alone, and what its ·laxly assessed·
+// subtree costs its ancestors is #1911's. An unresolved strict child with an
+// xsi:type is refused too: the type it names, where it resolves, makes the
+// child ·strictly assessed· against it (key-governing-type-elem), which takes
+// the walk's clause 1.1.3 charge away and leaves a subtree the gate does not
+// read.
+func (g *subtreeGate) resolvedChild(t xsd.ComplexType, start xml.StartElement, strictParticle, constrained bool) bool {
+	d, ok := g.schema.Element(expandedName(start.Name))
+	if !ok {
+		if !strictParticle || slices.ContainsFunc(start.Attr, func(a xml.Attr) bool { return a.Name == xsiType }) {
+			return false
+		}
+		return g.dec.Skip() == nil
+	}
+	if g.locallyDeclared(t, g.substitutionHeads(d)) {
 		return false
 	}
 	return g.element(start, d, constrained)
+}
+
+// substitutionHeads is d's ·expanded name· followed by the name of every
+// declaration its {substitution group affiliations} chain reaches, transitively
+// (cos-equiv-derived-ok-rec clause 2.2): the names of every declaration whose
+// ·substitution group· (key-eq) d may be a member of. It is a SUPERSET of that
+// group's heads: clauses 2.1 and 2.3, the {disallowed substitutions} and
+// derivation-method conditions, are not read, so a head d is not
+// ·substitutable· for still names itself here, which only makes locallyDeclared
+// refuse more.
+//
+// A name already listed is not listed again, which also ends the walk. An
+// affiliation that resolves to no top-level declaration is listed and not
+// followed.
+func (g *subtreeGate) substitutionHeads(d xsd.ElementDeclaration) []xsd.QName {
+	names := []xsd.QName{d.Name()}
+	for i := 0; i < len(names); i++ {
+		h, ok := g.schema.Element(names[i])
+		if !ok {
+			continue
+		}
+		for _, a := range h.SubstitutionGroupAffiliationNames() {
+			if !slices.Contains(names, a) {
+				names = append(names, a)
+			}
+		}
+	}
+	return names
+}
+
+// locallyDeclared reports whether the ·locally declared type· (key-ldt-elem)
+// within t of an element whose name, with its ·substitution group· heads, is
+// names (substitutionHeads) may be non-·absent·: some Complex Type Definition
+// on onChain's walk from t has a content model that ·contains· (key-contain-xpx,
+// termContains) an element declaration named in names. A declaration named by a
+// head is one whose ·substitution group· the element's declaration may be in,
+// which key-impl-cont makes ·implicitly contained·. A local declaration sharing
+// a head's name counts too, though no local declaration has a ·substitution
+// group· member but itself: the superset only refuses more.
+func (g *subtreeGate) locallyDeclared(t xsd.ComplexType, names []xsd.QName) bool {
+	return g.onChain(t, func(c xsd.ComplexType) bool {
+		ec, ok := c.ContentType().(xsd.ElementContent)
+		return ok && g.termContains(ec.Particle.Term(), names)
+	})
+}
+
+// locallyDeclaredAttribute reports whether the ·locally declared type·
+// (key-ldt-att) within t of an attribute named n may be non-·absent·: some
+// Complex Type Definition on onChain's walk from t has an {attribute uses}
+// member whose {attribute declaration} is named n (case 2). For an attribute
+// matching none of t.{attribute uses}, that is a base's use the restriction
+// t, or a restriction between t and that base, prohibited.
+func (g *subtreeGate) locallyDeclaredAttribute(t xsd.ComplexType, n xsd.QName) bool {
+	return g.onChain(t, func(c xsd.ComplexType) bool {
+		return slices.ContainsFunc(c.AttributeUses(), func(u xsd.AttributeUse) bool { return u.DeclarationName() == n })
+	})
+}
+
+// onChain reports whether holds answers true for t or for a Complex Type
+// Definition on t's {base type definition} chain, which the ·locally declared
+// type· recursion (key-ldtype case 3) walks, stopping at ·xs:anyType· (case 1,
+// never offered to holds) or at a Simple Type Definition, which declares no
+// element and no attribute. A {base type definition} that does not resolve
+// answers true, so an unreadable chain is refused rather than read as ·absent·.
+// The walk needs no visited set: a finalized Schema's base chains are acyclic
+// but for ·xs:anyType·'s own, where it stops.
+func (g *subtreeGate) onChain(t xsd.ComplexType, holds func(xsd.ComplexType) bool) bool {
+	for c := t; c.Name() != anyTypeName; {
+		if holds(c) {
+			return true
+		}
+		base, ok := g.schema.ResolvedType(c.Base())
+		if !ok {
+			return true
+		}
+		next, complex := base.(xsd.ComplexType)
+		if !complex {
+			return false
+		}
+		c = next
+	}
+	return false
+}
+
+// termContains reports whether term, a particle's {term}, is or ·contains·,
+// directly or indirectly (key-contain-dpt, key-contain-ipx), an element
+// declaration named in names: an <element ref> by the name it references, a
+// <group ref> through the referenced definition's {model group}. A <group ref>
+// that resolves to no definition answers true. The recursion needs no visited
+// set: finalize rejects a circular group reference (mg-props-correct clause
+// 2).
+func (g *subtreeGate) termContains(term xsd.TermOrRef, names []xsd.QName) bool {
+	switch t := term.(type) {
+	case xsd.ElementDeclarationRef:
+		return slices.Contains(names, t.Name)
+	case xsd.ModelGroupRef:
+		def, ok := g.schema.ModelGroup(t.Name)
+		return !ok || g.groupContains(def.ModelGroup(), names)
+	case xsd.ResolvedTerm:
+		switch r := t.Term.(type) {
+		case xsd.ElementDeclaration:
+			return slices.Contains(names, r.Name())
+		case xsd.ModelGroup:
+			return g.groupContains(r, names)
+		case xsd.Wildcard:
+			return false
+		}
+	}
+	return true
+}
+
+// groupContains reports whether a member of mg.{particles} is or contains an
+// element declaration named in names (termContains).
+func (g *subtreeGate) groupContains(mg xsd.ModelGroup, names []xsd.QName) bool {
+	return slices.ContainsFunc(mg.Particles(), func(p xsd.Particle) bool { return g.termContains(p.Term(), names) })
 }
 
 // rootStart reads dec up to the document element's start tag. A DOCTYPE — any

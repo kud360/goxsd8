@@ -209,19 +209,24 @@ import (
 //
 //   - key-sva clause 1 and cvc-elt clause 1: the root's declaration is the
 //     top-level one its name resolves to, and every other element's is the
-//     {term} of the element particle its parent's {content type} ·attributes·
-//     it to, carrying the element's own name — the ·context-determined
-//     declaration· (§3.3.4.6 key-governing-ed clause 2), which the walk's
-//     childGoverning uses too. Every other attribution is refused: a skip
-//     Wildcard, whose subtree is ·skipped· (key-sva clause 3.2); a strict or
-//     lax Wildcard or the {open content}, under which cvc-complex-type clause
-//     5's consistency of the resolved declaration with the
-//     ·context-determined· one goes unchecked, and under which an unresolved
-//     name is the untyped element whose [[children]] the walk leaves untyped
-//     (#1823); and a ·substitution group· member cvc-accept clause 2.3.2
-//     admitted, whose {substitution group exclusions} and the head's
-//     {disallowed substitutions} the walk never reads. No element is
-//     therefore assessed against no type.
+//     one the walk's childGoverning takes too: the {term} of the element
+//     particle its parent's {content type} ·attributes· it to, carrying the
+//     element's own name — the ·context-determined declaration· (§3.3.4.6
+//     key-governing-ed clause 2) — or, for a child ·attributed to· a strict or
+//     lax Wildcard or to the {open content}, the top-level declaration its
+//     name ·resolves· to (clauses 3 and 4), admitted only where
+//     cvc-complex-type clause 5 is vacuous for it (subtreeGate.resolvedChild).
+//     A strict ·wildcard particle·'s child resolving to none, with no
+//     xsi:type, is admitted with its subtree unread: the walk charges
+//     e-validity clause 1.1.3 for its parent, so no empty Result carries it.
+//     Every other attribution is refused: a skip Wildcard, whose subtree is
+//     ·skipped· (key-sva clause 3.2, #1861); a lax Wildcard's or the {open
+//     content}'s child resolving to none, the untyped element whose
+//     [[children]] the walk leaves untyped (#1823, #1911); and a
+//     ·substitution group· member cvc-accept clause 2.3.2 admitted, whose
+//     {substitution group exclusions} and the head's {disallowed
+//     substitutions} the walk never reads (#1932). No element of a subtree
+//     whose Result is empty is therefore assessed against no type.
 //   - cvc-elt clauses 2 to 6, at every element: {abstract} false, no xsi:nil,
 //     no {type table} — so the ·selected type definition· is the {type
 //     definition}, which the gate resolves itself — and no fixed {value
@@ -271,21 +276,20 @@ import (
 //     ("Unreachable on a *xsd.Schema that exists"), which the gate refuses
 //     besides, since each use's declaration must resolve; and walk.child's
 //     "child its parent ·attributed to· nothing", which subtreeGate.child
-//     keeps out by refusing every attribution that is not an element particle
-//     naming the child, the walk attributing each child through the same
-//     xsd.Schema.ContentMatcher. Keep both refusals when editing the gate: the
-//     gate's reading of cvc-id clause 1 rests on them. String Valid clause 3's
-//     ·declared entity name· check (key-vde) is the walk's too, decided per
-//     ENTITY value by walk.entitiesDeclared and recorded as an [Unevaluated] by
-//     its callers where undecided (walk.declineAttribute,
-//     walk.declineDefaulted, contentCheck.decline). What the gate still refuses
-//     is walkUnrecorded, for the reason its doc gives: no element's value type
-//     — a Simple Type Definition, or a simple {content type}'s {simple type
-//     definition} — and no attribute use's {attribute declaration}.{type
-//     definition}, whether the attribute is present or not, and no
-//     wildcard-resolved declaration's, has a closure reaching it. Each use's
-//     declaration must resolve, so an unresolvable {attribute declaration} is
-//     refused too.
+//     keeps out by refusing every child its parent's xsd.Schema.ContentMatcher
+//     attributes to nothing, the walk attributing each child through the same
+//     matcher. Keep both refusals when editing the gate: the gate's reading of
+//     cvc-id clause 1 rests on them. String Valid clause 3's ·declared entity
+//     name· check (key-vde) is the walk's too, decided per ENTITY value by
+//     walk.entitiesDeclared and recorded as an [Unevaluated] by its callers
+//     where undecided (walk.declineAttribute, walk.declineDefaulted,
+//     contentCheck.decline). What the gate still refuses is walkUnrecorded, for
+//     the reason its doc gives: no element's value type — a Simple Type
+//     Definition, or a simple {content type}'s {simple type definition} — and
+//     no attribute use's {attribute declaration}.{type definition}, whether the
+//     attribute is present or not, and no wildcard-resolved declaration's, has
+//     a closure reaching it. Each use's declaration must resolve, so an
+//     unresolvable {attribute declaration} is refused too.
 //   - cvc-complex-type clause 2: every attribute beyond namespace declarations
 //     and the four xsi: names matches an attribute use (2.1) or is
 //     ·attributed to· the {attribute wildcard} (2.2, cvc-wildcard §3.10.4.1)
@@ -295,22 +299,37 @@ import (
 //     resolves to none under lax is not assessed. That declaration's {type
 //     definition} is held to the walkUnrecorded exclusion a use's is. The gate
 //     refuses a strict wildcard's name that resolves to none, which the walk
-//     charges nothing for and records nothing of (subtreeGate.wildcardAttribute,
-//     #1912). Clause 2.1's cvc-attribute and cvc-au, clause 2.2's cvc-attribute
-//     clauses 3 and 4 against the resolved declaration, and clauses 3 and 4 — a
-//     {required} use the element lacks, and a ·defaulted attribute· for each use it
-//     does not carry — are the walk's, which records each check it withholds, on an
-//     element with no [[attributes]] as on any other. A wildcard-resolved
-//     declaration supplies no ·defaulted attribute· (key-dflt-att ranges over
-//     {attribute uses}).
+//     charges nothing for and records nothing of (#1912), and a resolved name
+//     whose ·locally declared type· is not ·absent·, for clause 5 below
+//     (subtreeGate.wildcardAttribute). Clause 2.1's cvc-attribute and cvc-au,
+//     clause 2.2's cvc-attribute clauses 3 and 4 against the resolved declaration,
+//     and clauses 3 and 4 — a {required} use the element lacks, and a ·defaulted
+//     attribute· for each use it does not carry — are the walk's, which records
+//     each check it withholds, on an element with no [[attributes]] as on any
+//     other. A wildcard-resolved declaration supplies no ·defaulted attribute·
+//     (key-dflt-att ranges over {attribute uses}).
 //   - key-sva clause 2 for the xsi: attributes the gate admits: xsi:nil being
 //     refused, xsi:type is the walk's (cvc-attribute clauses 3 and 5, charged
 //     or recorded wherever it is no QName or ·resolves· to no type), and
 //     xsi:schemaLocation and xsi:noNamespaceSchemaLocation are each ·valid·
 //     against their built-in declaration's anyURI or list-of-anyURI type
 //     (§3.2.7), whose lexical spaces admit every string (Datatypes §3.3.17).
-//   - cvc-complex-type clause 5: vacuous, no child being ·attributed to· a
-//     wildcard or an {open content}; so is e-validity clause 1.1.3.
+//   - cvc-complex-type clause 5: vacuous for every child and attribute the
+//     gate admits, which the walk never checks. An element particle's child
+//     has its ·context-determined declaration·'s {type definition} for its
+//     ·locally declared type· (key-ldt-elem case 2), which cvc-elt clause 4
+//     already holds its ·governing type definition· to; an attribute matching
+//     a use has that use's {attribute declaration}'s {type definition} for
+//     both (key-ldt-att case 2, clause 2.1). A child ·attributed to· a strict
+//     or lax Wildcard or to the {open content}, and an attribute resolved
+//     through the {attribute wildcard}, is admitted only where its ·locally
+//     declared type· is ·absent· (key-ldt-elem and key-ldt-att, walking the
+//     {base type definition} chain, ·implicitly contained· ·substitution
+//     group· members included: subtreeGate.locallyDeclared and
+//     locallyDeclaredAttribute) or it has no ·governing type definition·.
+//     e-validity clause 1.1.3 is the walk's, charged for a strict ·wildcard
+//     particle·'s child resolving to none (validate's
+//     walk.unresolvedStrictWildcardChild).
 //   - cvc-complex-type clause 6: RECORDED, never decided. validate's
 //     elementAssertions records an Unevaluated for every member of a governing
 //     type's {assertions}, so an empty Unevaluated shows every one empty.
