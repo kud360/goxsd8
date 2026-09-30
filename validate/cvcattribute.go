@@ -459,7 +459,9 @@ func (w *walk) defaultedConstraint(u xsd.AttributeUse, attrs []Attribute) (xsd.V
 // schema alone settles, so clause 3 is asked here of a {lexical form} it
 // accepts: whether each ·ENTITY value· in it is a ·declared entity name· is the
 // DOCUMENT's to say ([walk.entitiesDeclared]), and a rejection there is the
-// wrapped cause on the same terms.
+// wrapped cause on the same terms. [walk.notationsDeclared] is not asked:
+// ValidDefault declines every {lexical form} whose type's closure reaches
+// NOTATION, so none reaches here accepted (#667).
 //
 // The type's assertion sites are recorded at the ELEMENT's location, on
 // [walk.simpleAssertions]'s terms: the attribute is absent, which is what makes

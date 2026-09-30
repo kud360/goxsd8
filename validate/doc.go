@@ -140,8 +140,8 @@
 // NOTATION's ·value space· (Datatypes §3.3.19), and that verdict is
 // cvc-datatype-valid, minted by this package (walk.notationsDeclared). Clause 4
 // never reaches it, ValidDefault declining every NOTATION {lexical form}.
-// Error() still renders that verdict into the message as well, for a reader who
-// holds only the string.
+// Error() still renders each wrapped verdict into the message as well, for a
+// reader who holds only the string.
 //
 // Whether a cause is there is read off Unwrap and never off the rule ID:
 // clauses 1.2 and 4 both charge under cvc-complex-type and both wrap the
