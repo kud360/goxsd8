@@ -1399,6 +1399,10 @@ func (p *producer) openContentType(owner *Element, explicit xsd.ContentType) (xs
 // <defaultOpenContent> is NOT governed by these clauses — src-ct is a constraint
 // on <complexType> — so its own mandatory <any> is checked as a grammar fault by
 // checkDefaultOpenContent instead, eagerly, before anything is produced.
+//
+// It then orders the <openContent>'s children against s4sOpenContent
+// (checkS4SChildOrder, #1951), behind the two clauses rather than ahead of them:
+// the exception that walk's doc records.
 func checkOpenContentAny(owner *Element) error {
 	oc := childElement(owner, xsd.XMLSchemaNS, "openContent")
 	if oc == nil {
@@ -1414,7 +1418,7 @@ func checkOpenContentAny(owner *Element) error {
 		return xsderr.New(ruleSrcCT, oc.Loc(),
 			`<openContent> whose mode is not "none" has no <any> child, but src-ct clause 3 requires one`)
 	}
-	return nil
+	return checkS4SChildOrder(oc, s4sOpenContent)
 }
 
 // wildcardElement selects §3.4.2.3.3 clause 5's ·wildcard element·, returning nil
@@ -1472,12 +1476,15 @@ func (p *producer) defaultOpenContentElem() *Element {
 	return childElement(p.schemaElem, xsd.XMLSchemaNS, "defaultOpenContent")
 }
 
-// checkDefaultOpenContent enforces the two schema for schema documents grammar
-// rules on this document's <defaultOpenContent>: its content model (annotation?,
-// any) makes the <any> child mandatory, and its mode attribute is restricted to
-// (interleave | suffix) — "none" is an <openContent> mode alone.
+// checkDefaultOpenContent enforces the schema for schema documents grammar on
+// this document's <defaultOpenContent>: its content model (annotation?, any)
+// makes the <any> child mandatory, its mode attribute is restricted to
+// (interleave | suffix) — "none" is an <openContent> mode alone — and the
+// children present are ordered against s4sDefaultOpenContent (checkS4SChildOrder,
+// #1951), in that order, so the first two keep their verdict on a document that
+// also breaks the third.
 //
-// Both are plain grammar faults rather than xsderr rule verdicts, because no
+// All three are plain grammar faults rather than xsderr rule verdicts, because no
 // Schema Component Constraint governs <defaultOpenContent> at all: it is pure
 // schema-document-level source grammar, consumed by §3.4.2.3.3
 // (dcl.ctd.ctcc.common) clause 5.2's mapping, while ct-props-correct (§3.4.6.1)
@@ -1507,14 +1514,10 @@ func (p *producer) checkDefaultOpenContent() error {
 		return fmt.Errorf("parser: <defaultOpenContent> at %s has no <any> child, but the schema for schema documents makes it mandatory: xs:defaultOpenContent's content model is (annotation?, any), whose <any> carries no minOccurs of its own — unlike xs:openContent's, which is minOccurs=\"0\"", def.Loc())
 	}
 	mode, present := def.Attr("mode")
-	if !present {
-		return nil
+	if present && !slices.Contains([]string{"interleave", "suffix"}, collapseTrim(mode)) {
+		return fmt.Errorf(`parser: <defaultOpenContent> at %s has mode=%q, but the schema for schema documents admits only interleave or suffix there: xs:defaultOpenContent restricts mode to that two-value enumeration, and "none" belongs to xs:openContent's alone`, def.Loc(), mode)
 	}
-	switch collapseTrim(mode) {
-	case "interleave", "suffix":
-		return nil
-	}
-	return fmt.Errorf(`parser: <defaultOpenContent> at %s has mode=%q, but the schema for schema documents admits only interleave or suffix there: xs:defaultOpenContent restricts mode to that two-value enumeration, and "none" belongs to xs:openContent's alone`, def.Loc(), mode)
+	return checkS4SChildOrder(def, s4sDefaultOpenContent)
 }
 
 // checkFormDefaults charges cvc-datatype-valid on this document's <schema>

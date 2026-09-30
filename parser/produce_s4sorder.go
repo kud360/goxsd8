@@ -99,31 +99,44 @@ var s4sStructuralTail = slices.Concat([]s4sSlot{
 // inherited from xs:annotated (:4426).
 var s4sAnnotationFirst = []s4sSlot{{admits: s4sNames("annotation")}}
 
+// s4sSimpleRestrictionGroup is the group xs:simpleRestrictionModel
+// (xmlschema11-2.md:3929) — "simpleType?, (facet | {any with namespace:
+// ##other})*" — held once for the two restrictions that carry it: a
+// <simpleContent>'s (s4sSimpleRestriction, ahead of the attribute tail) and a
+// <simpleType>'s (s4sSimpleTypeRestriction, alone) (STYLE T4). Its wildcard arm
+// needs no slot: checkS4SChildOrder skips every child outside the XSD namespace.
+var s4sSimpleRestrictionGroup = []s4sSlot{
+	{admits: s4sNames("simpleType")},
+	{admits: s4sFacetElement, repeated: true},
+}
+
 // s4sIdentityConstraint admits the three members of Appendix A's
 // xs:identityConstraint group (xmlschema11-1.md:5660) — <unique>, <key> and
 // <keyref> — which only the element-declaration types reference. s4sElement
 // orders them from this one list.
 var s4sIdentityConstraint = s4sNames("unique", "key", "keyref")
 
-// The seventeen models checkS4SChildOrder is charged with. Eight are the element
+// The twenty-one models checkS4SChildOrder is charged with. Eight are the element
 // positions a complex type is written through — xs:complexTypeModel appearing
 // twice, once for each of its disjuncts a <complexType> can be dispatched on. The
 // next four are the declarations whose own children were ordered against no
 // content model at all until #1076 and #1275: <element>, <attribute>,
 // <simpleType> and <alternative>. The next three are an identity constraint's
 // <unique>/<key>/<keyref> and the <selector> and <field> under it, ordered since
-// #1786. The last two are the top-level <group> and <attributeGroup>
-// definitions, ordered since #1876. Each model is quoted verbatim from its XML
-// Representation Summary, save s4sNamedGroup's, and its slots are that
-// quotation read left to right. The compositors, the ref= forms of <group> and
-// <attributeGroup>, <list> and <union> have no model here: rejectLateAnnotation
-// holds them to their leading "annotation?" alone.
+// #1786. The next two are the top-level <group> and <attributeGroup>
+// definitions, ordered since #1876. The last four are a <simpleType>'s <list>
+// and <restriction>, an <openContent> and a <defaultOpenContent>, ordered since
+// #1951. Each model is quoted verbatim from its XML Representation Summary, save
+// s4sNamedGroup's, and its slots are that quotation read left to right. The
+// compositors, the ref= forms of <group> and <attributeGroup>, and <union> have
+// no model here: rejectLateAnnotation holds them to their leading "annotation?"
+// alone.
 //
 // These are TRANSCRIBED from the spec, not generated (PRINCIPLES 26). Generating
 // them means flattening Appendix A itself — resolving xs:group refs and the
 // xs:restriction/xs:extension chains through xs:annotated — for the whole schema
-// for schema documents rather than these seventeen, which is its own tool and its
-// own grounding; the seventeen here are pinned against their quoted model text and
+// for schema documents rather than these twenty-one, which is its own tool and its
+// own grounding; the twenty-one here are pinned against their quoted model text and
 // against the disjointness their fault classification rests on (the tests beside
 // this file), and rejectProhibitedAttrs (produce.go) already transcribes s4s facts
 // on the same footing.
@@ -192,10 +205,7 @@ var (
 		grammar: "xs:simpleRestrictionType",
 		spec:    "xmlschema11-1.md:1692",
 		model:   "(annotation?, (simpleType?, (minExclusive | minInclusive | maxExclusive | maxInclusive | totalDigits | fractionDigits | length | minLength | maxLength | enumeration | whiteSpace | pattern | assertion | {any with namespace: ##other})*)?, ((attribute | attributeGroup)*, anyAttribute?), assert*)",
-		slots: slices.Concat(s4sAnnotationFirst, []s4sSlot{
-			{admits: s4sNames("simpleType")},
-			{admits: s4sFacetElement, repeated: true},
-		}, s4sAttributeTail),
+		slots:   slices.Concat(s4sAnnotationFirst, s4sSimpleRestrictionGroup, s4sAttributeTail),
 	}
 
 	// s4sSimpleExtension is xs:simpleExtensionType (:4979), the one alternant with
@@ -380,6 +390,55 @@ var (
 			{admits: s4sNames("anyAttribute")},
 		}),
 	}
+
+	// s4sList is the <list> element's own model (xmlschema11-2.md:3957):
+	// xs:annotated extended with a "simpleType?" position. Which of itemType= and
+	// that child is present is src-simple-type clause 3's (listItem), which the
+	// model leaves alone: it admits both, and neither.
+	s4sList = s4sModel{
+		grammar: "xs:list",
+		spec:    "xmlschema11-2.md:2753",
+		model:   "(annotation?, simpleType?)",
+		slots: slices.Concat(s4sAnnotationFirst, []s4sSlot{
+			{admits: s4sNames("simpleType")},
+		}),
+	}
+
+	// s4sSimpleTypeRestriction is the model of a <simpleType>'s <restriction>, the
+	// Datatypes element xs:restriction (xmlschema11-2.md:3940): xs:annotated
+	// extended with s4sSimpleRestrictionGroup and no attribute tail. Which of base=
+	// and the inline <simpleType> is present is src-simple-type clause 2's
+	// (resolveBase), which the model leaves alone as s4sList leaves clause 3.
+	s4sSimpleTypeRestriction = s4sModel{
+		grammar: "xs:restriction",
+		spec:    "xmlschema11-2.md:2748",
+		model:   "(annotation?, (simpleType?, (minExclusive | minInclusive | maxExclusive | maxInclusive | totalDigits | fractionDigits | length | minLength | maxLength | enumeration | whiteSpace | pattern | assertion | explicitTimezone | {any with namespace: ##other})*))",
+		slots:   slices.Concat(s4sAnnotationFirst, s4sSimpleRestrictionGroup),
+	}
+
+	// s4sOpenContent is the <openContent> element's own model (:4909). Whether its
+	// "any?" must or must not be filled turns on mode=, which is src-ct clauses 3
+	// and 4 (checkOpenContentAny) and no part of the model.
+	s4sOpenContent = s4sModel{
+		grammar: "xs:openContent",
+		spec:    "xmlschema11-1.md:1728",
+		model:   "(annotation?, any?)",
+		slots: slices.Concat(s4sAnnotationFirst, []s4sSlot{
+			{admits: s4sNames("any")},
+		}),
+	}
+
+	// s4sDefaultOpenContent is the <defaultOpenContent> element's own model
+	// (:4934). Its <any> is required, which s4sSlot cannot say, so an absent one is
+	// checkDefaultOpenContent's to charge; this model orders the children present.
+	s4sDefaultOpenContent = s4sModel{
+		grammar: "xs:defaultOpenContent",
+		spec:    "xmlschema11-1.md:3787",
+		model:   "(annotation?, any)",
+		slots: slices.Concat(s4sAnnotationFirst, []s4sSlot{
+			{admits: s4sNames("any")},
+		}),
+	}
 )
 
 // s4sVowelArticles is the indefinite article each vowel-letter name the models
@@ -393,6 +452,7 @@ var s4sVowelArticles = []struct{ local, article string }{
 	{"all", "an"},
 	{"alternative", "an"},
 	{"annotation", "an"},
+	{"any", "an"},
 	{"anyAttribute", "an"},
 	{"assert", "an"},
 	{"assertion", "an"},
@@ -466,15 +526,24 @@ func s4sArticle(local string) string {
 // The order is this walk FIRST: a document whose children the content model does
 // not admit is answered by the grammar fault, and no src-* verdict is reached
 // over a shape the grammar already rejects. That rule IS the membership, and it
-// takes no roster. Inside a production — the body that walks one of the seventeen
-// models above, and everything that body calls — EVERY src-* clause this parser
-// charges over the walked element or over anything beneath it is behind that
-// walk, with no exception, and a NEW charge takes the same order (#1246). The
-// families satisfying it today are examples of the rule and never its extent:
-// src-element, src-ct, src-attribute, src-ta, src-simple-type,
-// src-identity-constraint, src-resolve and src-wildcard among others. A landing
-// that adds a charge applies the rule to the site in hand; it does not come back
-// to lengthen that list.
+// takes no roster. Inside a production — the body that walks one of the
+// twenty-one models above, and everything that body calls — EVERY src-* clause
+// this parser charges over the walked element or over anything beneath it is
+// behind that walk, save the two exceptions below, and a NEW charge takes the
+// same order (#1246). The families satisfying it today are examples of the rule
+// and never its extent: src-element, src-ct, src-attribute, src-ta,
+// src-simple-type, src-identity-constraint, src-resolve and src-wildcard among
+// others. A landing that adds a charge applies the rule to the site in hand; it
+// does not come back to lengthen that list.
+//
+// The two exceptions are WALKS added behind charges that predate them, and there
+// are no others: s4sSimpleTypeRestriction's walk runs behind src-simple-type
+// clause 1 (rejectDuplicateRestrictionChildren), and s4sOpenContent's behind
+// src-ct clauses 3 and 4 (checkOpenContentAny). #1951's grounding ruled that
+// each clause keeps its verdict on a shape both reach — a <restriction>'s second
+// <simpleType>, an <openContent> whose missing or forbidden <any> sits beside a
+// child its model does not admit. src-simple-type clause 2 (resolveBase) stands
+// behind the <restriction>'s walk as the rule says.
 //
 // Charges from OUTSIDE a production are not in the class, since no walk has run
 // for them to stand behind — and some of them do land on an element a walk
@@ -558,14 +627,14 @@ var s4sAnnotationLedOwner = s4sNames("all", "choice", "sequence", "group", "attr
 //
 // It holds these owners to that ONE position rather than to full s4sModels, which
 // would also start charging every other order, cardinality and admission fault in
-// them — a <list>'s second <simpleType> among them — each a verdict of its own.
-// The top-level <group> and <attributeGroup> DEFINITIONS are walked against
-// s4sNamedGroup and s4sNamedAttributeGroup as well (#1876), in the producer
-// bodies that build them; this check still runs first there, over every form of
-// both, so a late <annotation> is charged here whichever form it sits in.
-// Children outside the XSD namespace are skipped, as checkS4SChildOrder skips
-// them. A second <annotation> after a first is rejectRepeatedAnnotations' fault,
-// which rejectS4SFaults charges first.
+// them, each a verdict of its own. The top-level <group> and <attributeGroup>
+// DEFINITIONS are walked against s4sNamedGroup and s4sNamedAttributeGroup as
+// well (#1876), and a <list> against s4sList (#1951), in the producer bodies
+// that build them; this check still runs first there, so a late <annotation> is
+// charged here with this message whichever form it sits in, and <list> stays in
+// s4sAnnotationLedOwner for that reason. Children outside the XSD namespace are
+// skipped, as checkS4SChildOrder skips them. A second <annotation> after a first
+// is rejectRepeatedAnnotations' fault, which rejectS4SFaults charges first.
 func rejectLateAnnotation(el *Element) error {
 	if el.Name().Space() != xsd.XMLSchemaNS || !s4sAnnotationLedOwner(el.Name().Local()) {
 		return nil

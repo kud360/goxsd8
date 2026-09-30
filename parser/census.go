@@ -104,7 +104,7 @@ import (
 // that is no xs:ID or repeats an earlier one (rejectInvalidID), and a
 // block=/final= family value outside the s4s type its production declares it
 // with (rejectInvalidDerivationSet). Every OTHER XSD-namespace name is what
-// survives at the six — an <xs:element> written under an <openContent>, an
+// survives at the six — an <xs:element> written under an <openContent>'s <any>, an
 // <import>, a <group ref>, an <assert>, an <annotation> or an <any> is reported
 // by nothing, and its PRESENCE where it stands is rejected by nothing.
 //
@@ -141,23 +141,19 @@ import (
 //     OVERRIDDEN document, whose own producer censuses them through
 //     topLevelDecls. A <redefine>'s are definitions of THIS document (§4.2.4
 //     clause 4.1.1) and are a region still to come;
-//   - an <openContent>'s own children and a <defaultOpenContent>'s, and those of
-//     the <any> under either — one silence reached over one code path.
-//     xs:openContent is "(annotation?, any?)" (§3.4.2, :1728) and
-//     xs:defaultOpenContent is "(annotation?, any)" (§3.17.2, :3787); the <any> of
-//     either has type xs:wildcard, which extends xs:annotated with attributes
-//     alone (Appendix A, :5356), leaving "(annotation?)" (§3.10.2, :2838). No
-//     s4sModel exists for any of the four positions, so checkS4SChildOrder is
-//     never invoked against them. checkOpenContentAny and openContentOf find the
-//     <any> by name and read the wrapper's mode attribute; wildcardElement reads
-//     appliesToEmpty off a <defaultOpenContent>; checkDefaultOpenContent charges
-//     that element for carrying no <any>, and for a mode outside
-//     interleave|suffix, and for nothing else; produceWildcard reads the <any>'s
-//     namespace, notNamespace, notQName and processContents attributes.
-//     complexContentChildMapped admits <openContent> while container holds no arm
-//     for it, and topLevelMapped admits <defaultOpenContent> while
-//     censusWalk.topLevel holds none, so a stray XSD-namespace sibling of either
-//     <any> — or a child of an <any> itself — is reported by nothing;
+//   - the children of the <any> under an <openContent> or a <defaultOpenContent>.
+//     The <any> has type xs:wildcard, which extends xs:annotated with attributes
+//     alone (Appendix A, :5356), leaving "(annotation?)" (§3.10.2, :2838), and no
+//     s4sModel orders it. The two wrappers' OWN children are not silences: since
+//     #1951 checkOpenContentAny and checkDefaultOpenContent walk them against
+//     s4sOpenContent, "(annotation?, any?)" (§3.4.2, :1728), and
+//     s4sDefaultOpenContent, "(annotation?, any)" (§3.17.2, :3787), so a stray
+//     XSD-namespace sibling of either <any> is rejected, though neither is
+//     reported: complexContentChildMapped admits <openContent> while container
+//     holds no arm for it, and topLevelMapped admits <defaultOpenContent> while
+//     censusWalk.topLevel holds none. produceWildcard reads the <any>'s
+//     namespace, notNamespace, notQName and processContents attributes and never
+//     its children, so a child of an <any> itself is reported by nothing;
 //   - an <include>'s or an <import>'s own children. Both hold "(annotation?)"
 //     alone — §4.2.3's summary at :4056 and §4.2.6's at :4181, Appendix A's
 //     xs:include (:5535) and xs:import (:5585) extending xs:annotated with the
