@@ -543,3 +543,58 @@ func TestEnumerationRestrictionSkipsFacetPreconditionFault(t *testing.T) {
 		t.Errorf("out-of-space member charged %s, want enumeration-valid-restriction (§4.3.5.5)", r)
 	}
 }
+
+// notationBackend maps xs:NOTATION to a parse that accepts any lexical, as a
+// leaf mapping holding no schema does.
+type notationBackend struct{}
+
+func (notationBackend) Mapping(typ xsd.QName) (Mapping, bool) {
+	if typ != notationName {
+		return Mapping{}, false
+	}
+	return Mapping{Parse: func(lexical string, _ Context) (Value, error) { return intValue(len(lexical)), nil }}, true
+}
+
+// notationSchema is a resolver that resolves no type and declares notations.
+type notationSchema struct {
+	noSchema
+	notations []xsd.Notation
+}
+
+func (s notationSchema) Notations() []xsd.Notation { return s.notations }
+
+// An enumeration member of a NOTATION restriction is in its base's value space
+// only where it names a notation the resolver's schema declares (Datatypes
+// §3.3.19, §4.3.5.5): foo passes against a schema declaring it, and fails
+// against one declaring only bar and against a resolver with no Notations
+// method, which declares none.
+func TestNotationMemberMustBeDeclaredByTheResolver(t *testing.T) {
+	notation := func(local string) xsd.Notation {
+		public := "pub" + local
+		n, err := xsd.NewNotation(xsderr.Loc{}, xsd.QName{Local: local}, nil, &public)
+		if err != nil {
+			t.Fatalf("NewNotation(%s): %v", local, err)
+		}
+		return n
+	}
+	st, err := newCheckedSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "derived"},
+		xsd.RestrictionDerivation{}, primType(t, "NOTATION", "collapse"),
+		[]xsd.Facet{xsd.NewEnumerationFacet([]xsd.EnumerationMember{xsd.NewEnumerationMember("foo", nil, nil)})}, nil)
+	if err != nil {
+		t.Fatalf("NewSimpleType: %v", err)
+	}
+	if err := CheckFacetRestriction(notationBackend{}, notationSchema{notations: []xsd.Notation{notation("foo")}}, st); err != nil {
+		t.Errorf("declared foo: %v, want nil", err)
+	}
+	for _, c := range []struct {
+		name string
+		r    xsd.TypeResolver
+	}{
+		{"bar declared", notationSchema{notations: []xsd.Notation{notation("bar")}}},
+		{"no Notations method", noSchema{}},
+	} {
+		if rule, _ := xsderr.RuleOf(CheckFacetRestriction(notationBackend{}, c.r, st)); rule != "enumeration-valid-restriction" {
+			t.Errorf("%s: rule %q, want enumeration-valid-restriction", c.name, rule)
+		}
+	}
+}
