@@ -464,7 +464,7 @@ func checkListGraph(r TypeResolver, t, base *SimpleType) error {
 	if err != nil {
 		return err
 	}
-	ok, err := derivedOKSimple(r, item, baseItem)
+	ok, err := derivedOKSimple(r, item, baseItem, nil)
 	if err != nil {
 		return err
 	}
@@ -594,7 +594,7 @@ func checkUnionGraph(r TypeResolver, t, base *SimpleType) error {
 			len(members), base.name, len(baseMembers))
 	}
 	for i, m := range members {
-		ok, err := derivedOKSimple(r, m, baseMembers[i])
+		ok, err := derivedOKSimple(r, m, baseMembers[i], nil)
 		if err != nil {
 			return err
 		}
@@ -607,19 +607,23 @@ func checkUnionGraph(r TypeResolver, t, base *SimpleType) error {
 }
 
 // derivedOKSimple reports whether d is validly derived from b per Type
-// Derivation OK (Simple) (Structures §3.16.6.3, cos-st-derived-ok) under the
-// empty set of blocking keywords — the "validly derived" relation invoked by
-// cos-st-restricts clauses 2.2.2.3 and 3.2.2.3. It is a relation, not a rejection
-// point: a false result is charged by its caller as a cos-st-restricts violation.
+// Derivation OK (Simple) (Structures §3.16.6.3, cos-st-derived-ok) subject to
+// the blocking keywords in blocked — the "validly derived" relation invoked by
+// cos-st-restricts clauses 2.2.2.3 and 3.2.2.3 (with no set) and by
+// key-val-sub-type (with the caller's). It is a relation, not a rejection point:
+// a false result is charged by its caller.
 //
-// With the empty blocking set, clause 2.1 (restriction not in S, or in
-// d.{base}.{final}) is vacuously satisfied, so only clause 1 (same type) and
-// clause 2.2's alternatives remain: 2.2.1 d.{base} = b; 2.2.2 d.{base} (never
-// xs:anyType, a Complex Type Definition absent from this package) is itself
-// validly derived from b; 2.2.3 d is a list or union and b is xs:anySimpleType;
-// 2.2.4 b is a union whose {facets} are empty and d is validly derived from a
-// member of b (recursion descends b's transitive membership, checking each
-// intervening union's {facets} emptiness at its own level, clause 2.2.4.3).
+// Clause 1 (same type) is decided first. Every other step, D ≠ B, must pass
+// clause 2.1 (stRestrictionUnblocked) and then one of clause 2.2's alternatives:
+// 2.2.1 d.{base} = b; 2.2.2 d.{base} (never xs:anyType, a Complex Type Definition
+// absent from this package) is itself validly derived from b given the same set;
+// 2.2.3 d is a list or union and b is xs:anySimpleType; 2.2.4 b is a union whose
+// {facets} are empty and d is validly derived from a member of b given the same
+// set (recursion descends b's transitive membership, checking each intervening
+// union's {facets} emptiness at its own level, clause 2.2.4.3). Clause 2.1 is
+// read on every step, so it also governs the outer step of a 2.2.4 descent.
+// A nil blocked is the empty set, which is what §3.16.6.3's closing Note makes
+// "validly derived" with no set mean.
 //
 // It walks d's {base} chain and b's members with no visited set (STYLE D4). The
 // base-chain side rests on the acyclicity proof CheckDerivation's doc states —
@@ -632,12 +636,16 @@ func checkUnionGraph(r TypeResolver, t, base *SimpleType) error {
 // r resolves each {base type definition} hop, so an unresolvable one is an
 // ERROR rather than a false "not derived": answering false for a base that
 // merely could not be found would reject a valid restriction.
-func derivedOKSimple(r TypeResolver, d, b *SimpleType) (bool, error) {
+func derivedOKSimple(r TypeResolver, d, b *SimpleType, blocked []DerivationMethod) (bool, error) {
 	if d == nil || b == nil {
 		return false, nil
 	}
 	if d == b {
 		return true, nil
+	}
+	unblocked, err := stRestrictionUnblocked(r, d, blocked)
+	if err != nil || !unblocked {
+		return false, err // clause 2.1
 	}
 	dBase, err := d.Base(r)
 	if err != nil {
@@ -657,7 +665,7 @@ func derivedOKSimple(r TypeResolver, d, b *SimpleType) (bool, error) {
 		}
 	}
 	if dBase != nil {
-		ok, err := derivedOKSimple(r, dBase, b)
+		ok, err := derivedOKSimple(r, dBase, b, blocked)
 		if err != nil || ok {
 			return ok, err
 		}
@@ -681,12 +689,44 @@ func derivedOKSimple(r TypeResolver, d, b *SimpleType) (bool, error) {
 		return false, err
 	}
 	for _, m := range members {
-		ok, err := derivedOKSimple(r, d, m)
+		ok, err := derivedOKSimple(r, d, m, blocked)
 		if err != nil || ok {
 			return ok, err
 		}
 	}
 	return false, nil
+}
+
+// stRestrictionUnblocked is cos-st-derived-ok clause 2.1 (§3.16.6.3) for one
+// step whose D is d and whose B is not d: "restriction is not in S, or in
+// D.{base type definition}.{final}". It reads the clause as "in neither": the
+// step passes only when restriction is in neither blocked nor d's base's {final}.
+// The literal wording is elliptical, and the suite settles it this way: MS-Element
+// elemT018.i, elemT046.i and elemT074.i and ElemDecl typedef00802m2 Negative
+// (xsi:type a restriction of a base with an empty {final}, under a declaration
+// blocking restriction) and MS-Element elemS001/elemS005 (a substitution group
+// member whose type restricts the head's, under final="restriction"/"#all") are
+// all invalid, which the "not in S, or not in {final}" reading would accept.
+//
+// When d is xs:anySimpleType its {base type definition} is xs:anyType, whose
+// {final} is empty (§3.4.7) and which this package does not model as a
+// *SimpleType, so the {final} half is vacuous there.
+//
+// Under a nil blocked the clause reduces to its {final} half, which
+// st-props-correct clause 3 (CheckDerivation) already demands of every simple
+// type: a no-set caller's answer changes only on a chain that clause rejects.
+func stRestrictionUnblocked(r TypeResolver, d *SimpleType, blocked []DerivationMethod) (bool, error) {
+	if containsDerivationMethod(blocked, DerivationRestriction) {
+		return false, nil
+	}
+	if d.IsAnySimpleType() {
+		return true, nil
+	}
+	base, err := d.Base(r)
+	if err != nil {
+		return false, err
+	}
+	return !finalContains(base.final, DerivationRestriction), nil
 }
 
 // isSpecialType reports whether t is one of the two special datatypes,

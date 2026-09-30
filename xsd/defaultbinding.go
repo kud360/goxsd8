@@ -637,7 +637,7 @@ func (s *Schema) checkAttributeUseSubsumes(n QName, r attributeRestriction, gene
 //
 // The blocking-keyword set the enclosing clause 3 works under is empty here —
 // clause 5.1 names cos-st-derived-ok with no set — so derivedOKSimple
-// (derivation.go) is used unchanged.
+// (derivation.go) is called with a nil blocked.
 //
 // An unresolvable or non-simple {type definition} on either side is SKIPPED
 // rather than rejected: a dangling type name was already charged src-resolve by
@@ -659,7 +659,7 @@ func (s *Schema) checkAttributeTypeDerivedOK(n QName, r attributeRestriction, ge
 	if !ok {
 		return nil
 	}
-	derived, err := derivedOKSimple(s, st, gt)
+	derived, err := derivedOKSimple(s, st, gt, nil)
 	if err != nil {
 		return err
 	}

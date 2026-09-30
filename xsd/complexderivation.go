@@ -19,14 +19,11 @@ const ruleDerivationOKRestriction xsderr.Rule = "derivation-ok-restriction"
 // which is documented as exactly key-val-sub-type's set K — the one place in
 // this package where sharing a token type across properties is intended.
 //
-// Note what is NOT in it: restriction. That is why derivedOKSimple
-// (derivation.go) is reusable unchanged for the simple half — cos-st-derived-ok
-// reads its set S at exactly one place, clause 2.1 ("restriction is not in S, or
-// in D.{base type definition}.{final}"), which is vacuously true for any set
-// without restriction, i.e. identical to the empty-set behaviour derivedOKSimple
-// already implements. The complex half is different: cos-ct-derived-ok's subset
-// contains extension and IS load-bearing there, which is why derivedOKComplex
-// takes the set as a parameter.
+// Note what is NOT in it: restriction. cos-st-derived-ok reads its set S at
+// exactly one place, clause 2.1 (stRestrictionUnblocked, derivation.go), and
+// only for restriction, so for a simple sub this set answers exactly as the
+// empty set does. The complex half is different: cos-ct-derived-ok's subset
+// contains extension and IS load-bearing there.
 var restrictionBlockingKeywords = []DerivationMethod{DerivationExtension, DerivationList, DerivationUnion}
 
 // checkComplexDerivations is Phase D of finalize: the complex-type derivation
@@ -344,7 +341,7 @@ func (s *Schema) restrictionSimpleContentOK(t, b ComplexType) (bool, error) {
 		return false, nil // clause 2.2.1
 	}
 	if bsc, ok := b.ContentType().(SimpleContent); ok {
-		derived, err := derivedOKSimple(s, tc.SimpleType, bsc.SimpleType)
+		derived, err := derivedOKSimple(s, tc.SimpleType, bsc.SimpleType, nil)
 		if err != nil || derived {
 			return derived, err // clause 2.2.2.1
 		}
@@ -774,7 +771,7 @@ func (s *Schema) validlyDerived(sub, super TypeDefinition, blocked []DerivationM
 		if !ok {
 			return false, nil
 		}
-		return derivedOKSimple(s, ss, sup)
+		return derivedOKSimple(s, ss, sup, nil)
 	default:
 		panic("xsd: validlyDerived: non-exhaustive TypeDefinition switch")
 	}
@@ -832,7 +829,7 @@ func (s *Schema) derivedOKComplex(d ComplexType, b TypeDefinition, blocked []Der
 			if !dOK || !bOK {
 				return false, nil
 			}
-			return derivedOKSimple(s, ds, bs)
+			return derivedOKSimple(s, ds, bs, nil)
 		}
 		d = next // clause 2.3.2.1
 	}
