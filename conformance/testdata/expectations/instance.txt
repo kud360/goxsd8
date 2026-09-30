@@ -24966,7 +24966,7 @@ Open/open022/instance/open022.v1.xml fail
 Open/open023/instance/open023.v1.xml fail
 Open/open024/instance/open024.v1.xml fail
 Open/open025/instance/open025.n1.xml pass
-Open/open025/instance/open025.v1.xml fail
+Open/open025/instance/open025.v1.xml pass
 Open/open027/instance/open027.n1.xml pass
 Open/open027/instance/open027.v1.xml pass
 Open/open027/instance/open027.v2.xml fail
@@ -25000,9 +25000,9 @@ Open/open045/instance/open045.n1.xml pass
 Open/open045/instance/open045.n2.xml pass
 Open/open045/instance/open045.v1.xml pass
 Open/open047/instance/open047.n1.xml pass
-Open/open047/instance/open047.v1.xml fail
-Open/open047/instance/open047.v2.xml fail
-Open/open047/instance/open047.v3.xml fail
+Open/open047/instance/open047.v1.xml pass
+Open/open047/instance/open047.v2.xml pass
+Open/open047/instance/open047.v3.xml pass
 Open/open201/instance/open201.v1.xml pass
 Open/open201/instance/open201.v2.xml pass
 Open/open202/instance/open202.n1.xml pass
@@ -25644,7 +25644,7 @@ Wild/wild073/instance/wild073.v2.xml pass
 Wild/wild073/instance/wild073.v3.xml pass
 Wild/wild074/instance/wild074.n1.xml pass
 Wild/wild074/instance/wild074.n2.xml pass
-Wild/wild074/instance/wild074.v1.xml fail
+Wild/wild074/instance/wild074.v1.xml pass
 Wild/wild075/instance/wild075.n1.xml fail
 Wild/wild075/instance/wild075.v1.xml pass
 Wild/wild076/instance/wild076.n1.xml fail
