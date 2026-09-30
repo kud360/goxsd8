@@ -168,12 +168,16 @@ counts.
    arms, a `RULING:` comment picks the arm and its constraints and quotes
    any earlier ruling it relies on; it names no implementation site (#1480).
    Then delegate to **mason**, always with worktree isolation, and put
-   WORKFLOW's commit-as-you-go clause in its prompt. Only once mason
-   reports, bring its branch onto `wip/issue-<N>` under WORKFLOW's **One
-   writer per checkout** hand-off clause — fast-forward or merge, never a
-   replay — and name the resulting SHA in that checkpoint's comment. If
-   the change added or altered public API in that same sense, warden
-   reviews the diff too (#1168). Post both verdicts on the issue.
+   WORKFLOW's commit-as-you-go clause in its prompt. Name the gate in
+   that prompt only as CLAUDE.md's gate, whole — never a subset of its
+   parts; the ratchet run is the arbiter's, and no part of the gate is
+   it. The same holds for every mason prompt this command sends: step
+   5's repair round and a lost round's re-delegation (#1959). Only once
+   mason reports, bring its branch onto `wip/issue-<N>` under WORKFLOW's
+   **One writer per checkout** hand-off clause — fast-forward or merge,
+   never a replay — and name the resulting SHA in that checkpoint's
+   comment. If the change added or altered public API in that same sense,
+   warden reviews the diff too (#1168). Post both verdicts on the issue.
 
    Mason may absorb adjacent work under docs/WORKFLOW.md's scope rule.
    Absorbed items belong in the commit body, not in a new issue.
