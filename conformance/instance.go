@@ -212,21 +212,24 @@ import (
 //     one the walk's childGoverning takes too: the {term} of the element
 //     particle its parent's {content type} ·attributes· it to, carrying the
 //     element's own name — the ·context-determined declaration· (§3.3.4.6
-//     key-governing-ed clause 2) — or, for a child ·attributed to· a strict or
-//     lax Wildcard or to the {open content}, the top-level declaration its
-//     name ·resolves· to (clauses 3 and 4), admitted only where
-//     cvc-complex-type clause 5 is vacuous for it (subtreeGate.resolvedChild).
-//     A strict ·wildcard particle·'s child resolving to none, with no
-//     xsi:type, is admitted with its subtree unread: the walk charges
-//     e-validity clause 1.1.3 for its parent, so no empty Result carries it.
-//     Every other attribution is refused: a skip Wildcard, whose subtree is
-//     ·skipped· (key-sva clause 3.2, #1861); a lax Wildcard's or the {open
-//     content}'s child resolving to none, the untyped element whose
-//     [[children]] the walk leaves untyped (#1823, #1911); and a
-//     ·substitution group· member cvc-accept clause 2.3.2 admitted, whose
-//     {substitution group exclusions} and the head's {disallowed
-//     substitutions} the walk never reads (#1932). No element of a subtree
-//     whose Result is empty is therefore assessed against no type.
+//     key-governing-ed clause 2). A ·substitution group· member cvc-accept
+//     clause 2.3.2 attributes to an element particle of another name takes the
+//     top-level declaration its name ·resolves· to, which the Matcher held
+//     ·substitutable· for the particle's {term} (cos-equiv-derived-ok-rec); the
+//     gate refuses it where that ·derivation· takes a simple step xsd counts
+//     no {derivation method} for (subtreeGate.substitutable, #1942). A child
+//     ·attributed to· a strict or lax Wildcard or to the {open content} takes
+//     the top-level declaration its name ·resolves· to (clauses 3 and 4),
+//     admitted only where cvc-complex-type clause 5 is vacuous for it
+//     (subtreeGate.resolvedChild). A strict ·wildcard particle·'s child
+//     resolving to none, with no xsi:type, is admitted with its subtree
+//     unread: the walk charges e-validity clause 1.1.3 for its parent, so no
+//     empty Result carries it. Every other attribution is refused: a skip
+//     Wildcard, whose subtree is ·skipped· (key-sva clause 3.2, #1861); and a
+//     lax Wildcard's or the {open content}'s child resolving to none, the
+//     untyped element whose [[children]] the walk leaves untyped (#1823,
+//     #1911). No element of a subtree whose Result is empty is therefore
+//     assessed against no type.
 //   - cvc-elt clauses 2 to 6, at every element: {abstract} false, no xsi:nil,
 //     no {type table} — so the ·selected type definition· is the {type
 //     definition}, which the gate resolves itself — and no fixed {value
@@ -315,10 +318,11 @@ import (
 //     against their built-in declaration's anyURI or list-of-anyURI type
 //     (§3.2.7), whose lexical spaces admit every string (Datatypes §3.3.17).
 //   - cvc-complex-type clause 5: vacuous for every child and attribute the
-//     gate admits, which the walk never checks. An element particle's child
-//     has its ·context-determined declaration·'s {type definition} for its
-//     ·locally declared type· (key-ldt-elem case 2), which cvc-elt clause 4
-//     already holds its ·governing type definition· to; an attribute matching
+//     gate admits, which the walk never checks. An element particle's child,
+//     a ·substitution group· member included, has its ·context-determined
+//     declaration·'s {type definition} for its ·locally declared type·
+//     (key-ldt-elem case 2, a member ·implicitly contained·), which cvc-elt
+//     clause 4 already holds its ·governing type definition· to; an attribute matching
 //     a use has that use's {attribute declaration}'s {type definition} for
 //     both (key-ldt-att case 2, clause 2.1). A child ·attributed to· a strict
 //     or lax Wildcard or to the {open content}, and an attribute resolved

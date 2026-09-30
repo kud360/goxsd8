@@ -410,6 +410,12 @@ func TestInstanceExecutorDeclinesOutsideAssessedSubtreeRoot(t *testing.T) {
 			`<known><b>x</b></known>`,
 		},
 		{
+			// cvc-accept clause 2.3.1 attributes <h> to h itself, not to a member.
+			"an abstract substitution group head used directly below the root (cvc-elt clause 2)",
+			headKnown(`<xs:element name="h" type="A" abstract="true"/><xs:element name="m" type="R" substitutionGroup="h"/>`),
+			`<known><h>1</h></known>`,
+		},
+		{
 			"an abstract complex type below the root (cvc-type clause 2)",
 			`<xs:element name="known"><xs:complexType><xs:sequence><xs:element name="a" type="T"/></xs:sequence></xs:complexType></xs:element>` +
 				`<xs:complexType name="T" abstract="true"><xs:sequence><xs:element name="c" type="xs:int"/></xs:sequence></xs:complexType>`,
@@ -514,12 +520,6 @@ func TestInstanceExecutorDeclinesOutsideAssessedSubtreeRoot(t *testing.T) {
 				`<xs:attribute ref="ta" use="prohibited"/><xs:anyAttribute processContents="strict"/></xs:restriction></xs:complexContent></xs:complexType>` +
 				`<xs:element name="known" type="R"/><xs:attribute name="ta" type="xs:int"/>`,
 			`<known ta="1"/>`,
-		},
-		{
-			"a child attributed through its substitution group head (cvc-accept clause 2.3.2)",
-			`<xs:element name="known"><xs:complexType><xs:sequence><xs:element ref="h"/></xs:sequence></xs:complexType></xs:element>` +
-				`<xs:element name="h" type="xs:string"/><xs:element name="m" substitutionGroup="h"/>`,
-			`<known><m>x</m></known>`,
 		},
 	}
 	for _, tc := range cases {
@@ -695,6 +695,138 @@ func TestAssessedSubtreeRootUnresolvedStrictChild(t *testing.T) {
 		}
 		if got := assessedSubtreeRoot(schema, report, c.doc); got != tc.want {
 			t.Errorf("%s: assessedSubtreeRoot = %v, want %v", tc.why, got, tc.want)
+		}
+	}
+}
+
+// headKnown declares <known>, whose content model is one element particle
+// referencing the top-level h, beside decls, which declare h and its
+// ·substitution group· member m, and the simple types A, an xs:int
+// restriction, and R, a restriction of A.
+func headKnown(decls string) string {
+	return `<xs:element name="known"><xs:complexType><xs:sequence><xs:element ref="h"/></xs:sequence></xs:complexType></xs:element>` +
+		`<xs:simpleType name="A"><xs:restriction base="xs:int"/></xs:simpleType>` +
+		`<xs:simpleType name="R"><xs:restriction base="A"/></xs:simpleType>` + decls
+}
+
+// extendsA declares EA, a simpleContent extension of A.
+const extendsA = `<xs:complexType name="EA"><xs:simpleContent><xs:extension base="A"/></xs:simpleContent></xs:complexType>`
+
+// TestInstanceExecutorDecidesSubstitutionGroupMember proves the gate admits a
+// child cvc-accept clause 2.3.2 ·attributes· to an element particle of another
+// name, as a member of its {term}'s ·substitution group·, and reads it on
+// against the member's declaration (key-governing-ed clause 2, #1932). Each row
+// names the subtreeGate condition that, removed, turns it into a decline.
+func TestInstanceExecutorDecidesSubstitutionGroupMember(t *testing.T) {
+	exec := newInstanceExec()
+	for _, tc := range []struct{ why, decls string }{
+		// child's lift itself: m inherits A.
+		{"an unblocked member", `<xs:element name="h" type="A"/><xs:element name="m" substitutionGroup="h"/>`},
+		// child passes element the member s, not the particle's abstract {term}.
+		{"a member of an abstract head", `<xs:element name="h" type="A" abstract="true"/><xs:element name="m" type="R" substitutionGroup="h"/>`},
+		// substitutable's walk and sameType's name arm: a complex step reaching
+		// A takes no simple step (MS-Element elemT062.v and elemT064.v's sa2).
+		{
+			`a simpleContent extension of the head's simple type under block="restriction"`,
+			`<xs:element name="h" type="A" block="restriction"/><xs:element name="m" type="EA" substitutionGroup="h"/>` + extendsA,
+		},
+		// sameType's identity arm: m inherits h's anonymous simple type, so no
+		// step is taken and no {derivation method} is involved
+		// (cos-equiv-derived-ok-rec clause 2.3).
+		{
+			`a member inheriting the head's anonymous simple type under block="restriction"`,
+			`<xs:element name="h" block="restriction"><xs:simpleType><xs:restriction base="xs:int"/></xs:simpleType></xs:element>` +
+				`<xs:element name="m" substitutionGroup="h"/>`,
+		},
+		// substitutable's blocking test: a simple step, restriction unblocked.
+		{
+			`a simple restriction of the head's type under block="extension"`,
+			`<xs:element name="h" type="A" block="extension"/><xs:element name="m" type="R" substitutionGroup="h"/>`,
+		},
+		// substitutable's step > 0 guard: s.{type definition}'s own {prohibited
+		// substitutions} is not in clause 2.3's union.
+		{
+			"a member type prohibiting restriction itself, over a simple step",
+			`<xs:element name="h" type="A"/><xs:element name="m" type="ER" substitutionGroup="h"/>` +
+				`<xs:complexType name="ER" block="restriction"><xs:simpleContent><xs:extension base="R"/></xs:simpleContent></xs:complexType>`,
+		},
+	} {
+		schemaBody := headKnown(tc.decls)
+		if !exec(instanceCase(t, schemaBody, `<known><m>1</m></known>`, true)).IsPass() {
+			t.Errorf("%s: the walk decides the member and the gate admits it; the executor must agree with a suite-valid case", tc.why)
+		}
+		if exec(instanceCase(t, schemaBody, `<known><m>1</m></known>`, false)).IsPass() {
+			t.Errorf("%s: the executor must Fail under a flipped expectation (it decides for real)", tc.why)
+		}
+	}
+}
+
+// TestInstanceExecutorChargesSubstitutionGroupMember is a regression guard for
+// the member lift (#1932): the walk charges each row, so each is decided
+// INVALID whatever the gate answers. In the first two the Matcher attributes
+// the member to nothing (cvc-accept clause 2.3.2, cos-equiv-derived-ok-rec
+// clauses 2.1 and 2.3).
+func TestInstanceExecutorChargesSubstitutionGroupMember(t *testing.T) {
+	exec := newInstanceExec()
+	for _, tc := range []struct{ why, decls, instance string }{
+		{
+			`a head under block="substitution" (clause 2.1)`,
+			`<xs:element name="h" type="A" block="substitution"/><xs:element name="m" type="R" substitutionGroup="h"/>`,
+			`<known><m>1</m></known>`,
+		},
+		{
+			`an extension under the head's block="extension" (clause 2.3)`,
+			`<xs:element name="h" type="A" block="extension"/><xs:element name="m" type="EA" substitutionGroup="h"/>` + extendsA,
+			`<known><m>1</m></known>`,
+		},
+		{
+			"a member value valid against the head's type and not its own (cvc-type clause 3.1.3)",
+			`<xs:element name="h" type="xs:decimal"/><xs:element name="m" type="A" substitutionGroup="h"/>`,
+			`<known><m>1.5</m></known>`,
+		},
+	} {
+		schemaBody := headKnown(tc.decls)
+		if !exec(instanceCase(t, schemaBody, tc.instance, false)).IsPass() {
+			t.Errorf("%s: the walk charges the child; the executor must agree with a suite-invalid case", tc.why)
+		}
+		if exec(instanceCase(t, schemaBody, tc.instance, true)).IsPass() {
+			t.Errorf("%s: the executor must Fail under a flipped expectation", tc.why)
+		}
+	}
+}
+
+// TestInstanceExecutorDeclinesSimpleStepSubstitution pins the one member shape
+// the gate refuses (subtreeGate.substitutable, #1942): restriction is in
+// cos-equiv-derived-ok-rec clause 2.3's blocking union and the member type's
+// ·derivation· from the head's takes a Simple Type Definition step. The walk
+// admits the member and charges nothing, so each row declines; each is also
+// refused at the gate itself.
+func TestInstanceExecutorDeclinesSimpleStepSubstitution(t *testing.T) {
+	exec := newInstanceExec()
+	for _, tc := range []struct{ why, decls string }{
+		// MS-Element elemT063.i's shape; the blocking test's d.{disallowed
+		// substitutions} arm.
+		{
+			`a simple restriction of the head's type under block="restriction"`,
+			`<xs:element name="h" type="A" block="restriction"/><xs:element name="m" type="R" substitutionGroup="h"/>`,
+		},
+		// The blocking test's intermediate arm: C, strictly between ER2 and A,
+		// prohibits restriction, and R's step below A is simple.
+		{
+			"an intermediate type prohibiting restriction, over a simple step",
+			`<xs:element name="h" type="A"/><xs:element name="m" type="ER2" substitutionGroup="h"/>` +
+				`<xs:complexType name="C" block="restriction"><xs:simpleContent><xs:extension base="R"/></xs:simpleContent></xs:complexType>` +
+				`<xs:complexType name="ER2"><xs:simpleContent><xs:extension base="C"/></xs:simpleContent></xs:complexType>`,
+		},
+	} {
+		c := instanceCase(t, headKnown(tc.decls), `<known><m>1</m></known>`, true)
+		declinesBothPolarities(t, exec, c, tc.why)
+		schema, report, decidable, err := assembleCase(strict.New(), c.schemaDoc, nil)
+		if err != nil || !decidable {
+			t.Fatalf("%s: assembling the schema: decidable %v, err %v", tc.why, decidable, err)
+		}
+		if assessedSubtreeRoot(schema, report, c.doc) {
+			t.Errorf("%s: assessedSubtreeRoot = true, want false", tc.why)
 		}
 	}
 }
