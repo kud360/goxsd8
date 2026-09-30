@@ -40,14 +40,13 @@
 // subtraction ([a-z-[m]], including name-escape bases like [\i-[:]]) — is
 // shared between flavors. Go RE2's counted-repeat limit (1000) is a
 // documented deviation surfaced as a translation error, not a silent
-// truncation. Block names resolve against a table tools/blockgen generates from
-// a pinned Unicode 15.0.0 Blocks.txt plus §G.4.2.3's superseded Unicode 3.1
-// names; a name production [96] admits that names none of those blocks is a
-// translation error too, because this module declines §G.4.2.4's "set of all
-// characters" meaning for it. Neither refusal is a verdict on the pattern, and
-// they are the two failures CheckSyntax below reports as no failure at all.
-// Each carries its own GAP(regex) marker — regex.go's on maxRepeat (#1474),
-// class.go's on blockSet (#1946).
+// truncation; that refusal is no verdict on the pattern, and it is the one
+// failure CheckSyntax below reports as no failure at all, under regex.go's
+// GAP(regex) marker on maxRepeat (#1474). Block names resolve against a table
+// tools/blockgen generates from a pinned Unicode 15.0.0 Blocks.txt plus
+// §G.4.2.3's superseded Unicode 3.1 names; a name production [96] admits that
+// names none of those blocks denotes the set of all characters under both \p
+// and \P (§G.4.2.4), and no warning is issued.
 //
 // # Contract (implemented from M3)
 //
@@ -66,10 +65,9 @@
 //	    regex: a schema-construction pass charging src-pattern-value on
 //	    every <pattern> facet a schema declares. It differs from Translate
 //	    in exactly one way, and that difference is its reason to exist —
-//	    an unimplemented-but-recognized construct (a block name that names
-//	    no block, a repeat count above the RE2 ceiling) is nil,
-//	    not an error, so such a schema is not rejected for a gap on this
-//	    side of the line.
+//	    an unimplemented-but-recognized construct (a repeat count above the
+//	    RE2 ceiling) is nil, not an error, so such a schema is not rejected
+//	    for a gap on this side of the line.
 //
 // Callers: the pattern facet uses flavor XSD; xpath's fn:matches/
 // fn:replace/fn:tokenize use flavor FO. Never cross them. The one pattern

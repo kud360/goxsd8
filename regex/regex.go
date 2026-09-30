@@ -94,16 +94,8 @@ func Translate(pattern string, flavor Flavor, flags string) (string, error) {
 // anything the Datatypes Appendix G grammar and its disambiguation rules
 // exclude — comes back as the same *xsderr.Error Translate returns. A construct
 // this module recognizes as well-formed but does not implement returns nil
-// instead: today that is a production [96] block name naming no block in the
-// generated unicodeBlocks table, whose §G.4.2.4 meaning of "the set of all
-// characters" this module declines, or a counted repetition whose bound is
-// above maxRepeat's RE2 ceiling of 1000, which maxRepeat's GAP(regex) marker
-// owns.
-//
-// GAP(regex): Translate refuses a production [96] block name that names no
-// block where §G.4.2.4 gives it the set of all characters, so CheckSyntax's
-// nil is the only half of that construct this module implements. Owned by
-// #1946.
+// instead: today that is only a counted repetition whose bound is above
+// maxRepeat's RE2 ceiling of 1000, which maxRepeat's GAP(regex) marker owns.
 //
 // That asymmetry is the whole point of the function, and it is why a
 // schema-construction pass calls this rather than Translate. Such a pass
@@ -115,10 +107,10 @@ func Translate(pattern string, flavor Flavor, flags string) (string, error) {
 // needs the compiled regex cannot proceed either way.
 //
 // A pattern carrying both classes of fault is classified by whichever the
-// left-to-right parse reaches first, so an unimplemented construct earlier in
+// left-to-right parse reaches first, so an over-ceiling repetition earlier in
 // the pattern masks a syntax defect later in it. That errs toward accepting a
-// schema this module cannot fully check, which is the direction the gaps
-// already err in.
+// schema this module cannot fully check, which is the direction the gap already
+// errs in.
 func CheckSyntax(pattern string, flavor Flavor, flags string) error {
 	_, err := Translate(pattern, flavor, flags)
 	if err != nil && !errors.Is(err, errUnsupported) {
@@ -404,11 +396,11 @@ func (p *parser) atomCategoryEscape(negate bool, start int) error {
 		return err
 	}
 	if strings.HasPrefix(name, "Is") {
-		set, err := blockSet(strings.TrimPrefix(name, "Is"))
+		set, neg, err := blockSet(strings.TrimPrefix(name, "Is"), negate)
 		if err != nil {
 			return p.errCause(start, err)
 		}
-		emitClass(&p.out, set, negate)
+		emitClass(&p.out, set, neg)
 		return nil
 	}
 	if !isCategoryName(name) {
