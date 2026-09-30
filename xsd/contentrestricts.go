@@ -1352,8 +1352,7 @@ func (s *Schema) matchPositions(p position, b contentAutomaton, live liveSet) []
 // restrictsLanguage's model-group reader does not have. The readers are this
 // function's three (checkRestrictionContentType, checkExtensionTwoStepDerivable
 // and checkModelGroupRedefinitions, named in the marker above), each of which
-// charges on the false. No tracker is filed yet; #1954's MASON account asks for
-// one.
+// charges on the false. Tracked by #1998.
 //
 // A single live wildcard with no split-off name reaches the same false
 // positionAdmits already answered: its rest is sub, its union itself, and
