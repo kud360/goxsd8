@@ -102,27 +102,28 @@ var s4sAnnotationFirst = []s4sSlot{{admits: s4sNames("annotation")}}
 // s4sIdentityConstraint admits the three members of Appendix A's
 // xs:identityConstraint group (xmlschema11-1.md:5660) — <unique>, <key> and
 // <keyref> — which only the element-declaration types reference. s4sElement
-// orders them, and rejectAttributeGroupIdentityConstraint (produce_complex.go)
-// charges them under a top-level <attributeGroup>, from this one list.
+// orders them from this one list.
 var s4sIdentityConstraint = s4sNames("unique", "key", "keyref")
 
-// The fifteen models checkS4SChildOrder is charged with. Eight are the element
+// The seventeen models checkS4SChildOrder is charged with. Eight are the element
 // positions a complex type is written through — xs:complexTypeModel appearing
 // twice, once for each of its disjuncts a <complexType> can be dispatched on. The
 // next four are the declarations whose own children were ordered against no
 // content model at all until #1076 and #1275: <element>, <attribute>,
-// <simpleType> and <alternative>. The last three are an identity constraint's
+// <simpleType> and <alternative>. The next three are an identity constraint's
 // <unique>/<key>/<keyref> and the <selector> and <field> under it, ordered since
-// #1786. Each model is quoted verbatim from its XML Representation Summary, and
-// its slots are that quotation read left to right. The compositors, <group>,
+// #1786. The last two are the top-level <group> and <attributeGroup>
+// definitions, ordered since #1876. Each model is quoted verbatim from its XML
+// Representation Summary, save s4sNamedGroup's, and its slots are that
+// quotation read left to right. The compositors, the ref= forms of <group> and
 // <attributeGroup>, <list> and <union> have no model here: rejectLateAnnotation
 // holds them to their leading "annotation?" alone.
 //
 // These are TRANSCRIBED from the spec, not generated (PRINCIPLES 26). Generating
 // them means flattening Appendix A itself — resolving xs:group refs and the
 // xs:restriction/xs:extension chains through xs:annotated — for the whole schema
-// for schema documents rather than these fifteen, which is its own tool and its
-// own grounding; the fifteen here are pinned against their quoted model text and
+// for schema documents rather than these seventeen, which is its own tool and its
+// own grounding; the seventeen here are pinned against their quoted model text and
 // against the disjointness their fault classification rests on (the tests beside
 // this file), and rejectProhibitedAttrs (produce.go) already transcribes s4s facts
 // on the same footing.
@@ -350,6 +351,35 @@ var (
 		model:   "(annotation?)",
 		slots:   s4sAnnotationFirst,
 	}
+
+	// s4sNamedGroup is xs:namedGroup (:5187), the model of a top-level <group>
+	// DEFINITION. Its model is read off Appendix A rather than quoted from the
+	// summary (:2274): the summary's "(all | choice | sequence)?" covers the ref=
+	// form too, while xs:namedGroup's inner choice is minOccurs="1". The slot
+	// carries no required notion either way, so an absent body is
+	// rejectNamedGroupBody's to charge.
+	s4sNamedGroup = s4sModel{
+		grammar: "xs:namedGroup",
+		spec:    "xmlschema11-1.md:5187",
+		model:   "(annotation?, (all | choice | sequence))",
+		slots: slices.Concat(s4sAnnotationFirst, []s4sSlot{
+			{admits: s4sNames("all", "choice", "sequence")},
+		}),
+	}
+
+	// s4sNamedAttributeGroup is xs:namedAttributeGroup (:5502), the model of a
+	// top-level <attributeGroup> definition: "annotation?" followed by xs:attrDecls
+	// (:4720), with no xs:assertions position. Its attribute block is one repeated
+	// position for s4sAttributeTail's reason.
+	s4sNamedAttributeGroup = s4sModel{
+		grammar: "xs:namedAttributeGroup",
+		spec:    "xmlschema11-1.md:2183",
+		model:   "(annotation?, ((attribute | attributeGroup)*, anyAttribute?))",
+		slots: slices.Concat(s4sAnnotationFirst, []s4sSlot{
+			{admits: s4sNames("attribute", "attributeGroup"), repeated: true},
+			{admits: s4sNames("anyAttribute")},
+		}),
+	}
 )
 
 // s4sVowelArticles is the indefinite article each vowel-letter name the models
@@ -436,7 +466,7 @@ func s4sArticle(local string) string {
 // The order is this walk FIRST: a document whose children the content model does
 // not admit is answered by the grammar fault, and no src-* verdict is reached
 // over a shape the grammar already rejects. That rule IS the membership, and it
-// takes no roster. Inside a production — the body that walks one of the fifteen
+// takes no roster. Inside a production — the body that walks one of the seventeen
 // models above, and everything that body calls — EVERY src-* clause this parser
 // charges over the walked element or over anything beneath it is behind that
 // walk, with no exception, and a NEW charge takes the same order (#1246). The
@@ -528,11 +558,14 @@ var s4sAnnotationLedOwner = s4sNames("all", "choice", "sequence", "group", "attr
 //
 // It holds these owners to that ONE position rather than to full s4sModels, which
 // would also start charging every other order, cardinality and admission fault in
-// them — a named <group>'s child beside its body and an <attributeGroup>'s
-// child outside xs:attrDecls (#1876), a <list>'s second <simpleType> — each a
-// verdict of its own. Children outside the XSD namespace are skipped, as
-// checkS4SChildOrder skips them. A second <annotation> after a first is
-// rejectRepeatedAnnotations' fault, which rejectS4SFaults charges first.
+// them — a <list>'s second <simpleType> among them — each a verdict of its own.
+// The top-level <group> and <attributeGroup> DEFINITIONS are walked against
+// s4sNamedGroup and s4sNamedAttributeGroup as well (#1876), in the producer
+// bodies that build them; this check still runs first there, over every form of
+// both, so a late <annotation> is charged here whichever form it sits in.
+// Children outside the XSD namespace are skipped, as checkS4SChildOrder skips
+// them. A second <annotation> after a first is rejectRepeatedAnnotations' fault,
+// which rejectS4SFaults charges first.
 func rejectLateAnnotation(el *Element) error {
 	if el.Name().Space() != xsd.XMLSchemaNS || !s4sAnnotationLedOwner(el.Name().Local()) {
 		return nil

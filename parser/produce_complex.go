@@ -1915,11 +1915,11 @@ func (p *producer) produceGroupRefParticle(el *Element) (*xsd.Particle, error) {
 // element is mapped exactly once however many demand-driven lookups reach it;
 // redefinedGroupRestricted calls it directly, for a value that reaches no
 // builder. The named form has exactly one <all>/<choice>/<sequence> child, whose
-// Model Group becomes {model group}; any other body is rejected as the
-// s4s-grammar fault it is, by rejectNamedGroupBody, before a component is built.
-// Occurrence on the child is irrelevant here — a model group definition carries
-// no {min occurs}/{max occurs} (§3.7.2 note); those live solely on a <group ref>
-// particle.
+// Model Group becomes {model group}; any other body, and any other child beside
+// it, is rejected as the s4s-grammar fault it is, by buildDefinitionModelGroup,
+// before a component is built. Occurrence on the child is irrelevant here — a
+// model group definition carries no {min occurs}/{max occurs} (§3.7.2 note);
+// those live solely on a <group ref> particle.
 //
 // name is also the {scope}.{parent} of every local element declaration in the
 // body: §3.3.2.3 dcl.elt.local's "otherwise" branch — an <element> within a
@@ -1964,7 +1964,13 @@ func (p *producer) produceModelGroupDefinition(name xsd.QName, el *Element) (xsd
 // that is not admitted rather than one phase later at the definition. A body
 // carrying TWO compositors is the other end of the same cardinality and the same
 // fault, charged here at the second (repeatedCompositorChild) once the first has
-// been read, so the message can name the sibling it collides with.
+// been read, so the message can name the sibling it collides with. With one body
+// found, checkS4SChildOrder walks the definition against s4sNamedGroup, charging
+// any other XSD-namespace child — a <unique> or an <element> beside the body,
+// before it or after it — on §5.1's first bullet and no rule ID (#1876). Only
+// that admission fault is left for the walk to find: the two cardinality faults
+// are answered above, and a late <annotation> by rejectLateAnnotation before any
+// producer runs.
 //
 // The rejection belongs HERE and not at produceModelGroupDefinition, which is not
 // the only caller: src-expredef clause 2 builds the ORIGINAL a redefining
@@ -1989,6 +1995,9 @@ func (p *producer) buildDefinitionModelGroup(el *Element, scopeParent xsd.Elemen
 	}
 	if dup := repeatedCompositorChild(el); dup != nil {
 		return xsd.ModelGroup{}, fmt.Errorf("parser: <%s> at %s is a second <all>, <choice> or <sequence> in the body of the named <group> at %s, which already carries the <%s> at %s: xs:namedGroup's content model (xmlschema11-1.md:5187) is (annotation?, (all | choice | sequence)), whose inner choice is minOccurs=\"1\" maxOccurs=\"1\" and so admits exactly one", dup.Name().Local(), dup.Loc(), el.Loc(), group.Name().Local(), group.Loc())
+	}
+	if err := checkS4SChildOrder(el, s4sNamedGroup); err != nil {
+		return xsd.ModelGroup{}, err
 	}
 	if err := rejectNamedGroupBodyOccurs(group, el); err != nil {
 		return xsd.ModelGroup{}, err
@@ -3093,11 +3102,19 @@ func (p *producer) prohibitedAttributeNames(parent *Element) ([]xsd.QName, error
 // re-mapping elem, so they carry that {scope}.{parent} whichever container
 // reaches them.
 //
+// elem's children are walked against s4sNamedAttributeGroup first, on §5.1's
+// first bullet and no rule ID (checkS4SChildOrder, #1876): a child
+// xs:namedAttributeGroup does not admit — an identity constraint (#1817), an
+// <element>, a <group>, an <assert> — or an <anyAttribute> repeated or followed
+// by the attribute block is charged rather than dropped by
+// collectAttributeContent, whose src-attribute charges stand behind that walk
+// (#1246).
+//
 // The receiver MUST be the producer of the document that declares elem, for the
 // reasons collectAttributeContent gives; a caller holding a typeSource builds
 // through its owner.
 func (p *producer) buildAttributeGroup(name xsd.QName, elem *Element) (xsd.AttributeGroupDefinition, error) {
-	if err := rejectAttributeGroupIdentityConstraint(elem); err != nil {
+	if err := checkS4SChildOrder(elem, s4sNamedAttributeGroup); err != nil {
 		return xsd.AttributeGroupDefinition{}, err
 	}
 	content, wildcard, err := p.collectAttributeContent(elem, xsd.AttributeGroupScopeParent{Name: name})
@@ -3105,36 +3122,6 @@ func (p *producer) buildAttributeGroup(name xsd.QName, elem *Element) (xsd.Attri
 		return xsd.AttributeGroupDefinition{}, err
 	}
 	return xsd.NewAttributeGroupDefinition(elem.Loc(), name, content, wildcard)
-}
-
-// rejectAttributeGroupIdentityConstraint rejects the first <unique>, <key> or
-// <keyref> child of the <attributeGroup> definition elem, in document order.
-// xs:namedAttributeGroup (xmlschema11-1.md:5502) is "annotation?" followed by
-// xs:attrDecls (:4720), "((attribute | attributeGroup)*, anyAttribute?)", and
-// the xs:identityConstraint group (:5660) is referenced from the
-// element-declaration types alone (§3.11.2, :2986), so the document is not fully
-// valid against the schema for schema documents. That is §5.1's first bullet
-// (:4296), which mints no rule ID, so the fault is a plain error (STYLE E2); it
-// is not src-identity-constraint's, whose clauses all hold of an identity
-// constraint written where one may be.
-//
-// It runs ahead of collectAttributeContent, whose src-attribute charges stand
-// behind the grammar on checkS4SChildOrder's run order (#1246).
-//
-// Only the three identity-constraint names are charged here (#1817). Every
-// other name xs:attrDecls does not admit — an <element>, an <assert> — is still
-// dropped by collectAttributeContent and reported by the census
-// (attributeGroupChildMapped); ordering the position against the whole
-// xs:namedAttributeGroup model is a widening of its own.
-func rejectAttributeGroupIdentityConstraint(elem *Element) error {
-	for c := range xsdChildren(elem) {
-		if !s4sIdentityConstraint(c.Name().Local()) {
-			continue
-		}
-		return fmt.Errorf("parser: <%s> at %s is not admitted among the children of the <attributeGroup> at %s: xs:namedAttributeGroup's content model (xmlschema11-1.md:5502) is (annotation?, ((attribute | attributeGroup)*, anyAttribute?)), and an identity constraint is admitted under an <element> alone (xmlschema11-1.md:5660)",
-			c.Name().Local(), c.Loc(), elem.Loc())
-	}
-	return nil
 }
 
 // collectAttributeContent maps container's OWN attribute content, in document

@@ -133,9 +133,10 @@ func TestCensusStopsAtRepeatedAlternative(t *testing.T) {
 
 // TestCensusNamedGroupBody pins the named <group> region (§3.7.2):
 // buildDefinitionModelGroup reads the compositor child and nothing else, so a
-// name xs:namedGroup does not admit is a silence — but only where a compositor
-// is there to be read. With none, rejectNamedGroupBody charges that very child,
-// and a census claiming it would call a named fault a silent skip.
+// name xs:namedGroup does not admit is unmapped, reported beside
+// checkS4SChildOrder's rejection of it (#1876) — but only where a compositor is
+// there to be read. With none, rejectNamedGroupBody charges that very child, and
+// the census does not claim it.
 //
 // A body carrying TWO compositors is refused outright since #1048, so the walk
 // stops there as well: reporting the <attribute> beside them would call a

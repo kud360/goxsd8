@@ -284,8 +284,8 @@ func TestProduceIdentityConstraintMisplacedRejected(t *testing.T) {
 			name:  "top-level attributeGroup",
 			open:  []string{`<xs:attribute name="a"/>`, `<xs:attributeGroup name="g">`},
 			close: []string{`</xs:attributeGroup>`},
-			fault: "parser: <%[1]s> at %[2]s:4:1 is not admitted among the children of the <attributeGroup> at %[2]s:3:1",
-			model: "xs:namedAttributeGroup's content model (xmlschema11-1.md:5502)",
+			fault: "parser: <%[1]s> at %[2]s:4:1 fills no position of the content model the schema for schema documents gives the <attributeGroup> at %[2]s:3:1",
+			model: "xs:namedAttributeGroup's content model (xmlschema11-1.md:2183)",
 		},
 		{
 			name:  "local sequence",
