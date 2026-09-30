@@ -19,32 +19,26 @@ import (
 // because a notation declaration and an <override> are what the check reads.
 
 // notationSchema declares the notations foo and bar in no namespace, an
-// enumeration subtype of NOTATION listing foo, bar and the undeclared bez, and
-// a root carrying an attribute of each: @enum of that subtype and @direct of
-// xs:NOTATION itself.
+// enumeration subtype of NOTATION listing both, and a root carrying an
+// attribute of each: @enum of that subtype and @direct of xs:NOTATION itself.
 //
-// GAP(value): the spec rejects this schema and the parser admits it. bez is
-// outside the ·value space· of its {base type definition} xs:NOTATION, which
-// enumeration-valid-restriction (Datatypes §4.3.5.5) forbids, but
-// value.restrictionCheck.checkEnumerationRestriction validates the member
-// through the backend's QName mapping, which knows no notations. The fixture
-// relies on that admission: against a schema that satisfies
-// enumeration-valid-restriction every enumerated value names a declared
-// notation, so the enumeration-subtype arm of the check has no other way in.
-// #1963 owns the admission.
+// Only @direct reaches the undeclared-name charge. The parser rejects an
+// enumeration member naming no declared notation under
+// enumeration-valid-restriction (Datatypes §4.3.5.5), so every value a parsed
+// enumeration subtype admits names a declared notation, and an undeclared one
+// is an enumeration miss first.
 const notationSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:notation name="foo" public="pubfoo"/>
   <xs:notation name="bar" public="pubbar"/>
-  <xs:simpleType name="FooBarBez">
+  <xs:simpleType name="FooBar">
     <xs:restriction base="xs:NOTATION">
       <xs:enumeration value="foo"/>
       <xs:enumeration value="bar"/>
-      <xs:enumeration value="bez"/>
     </xs:restriction>
   </xs:simpleType>
   <xs:element name="root">
     <xs:complexType>
-      <xs:attribute name="enum" type="FooBarBez"/>
+      <xs:attribute name="enum" type="FooBar"/>
       <xs:attribute name="direct" type="xs:NOTATION"/>
     </xs:complexType>
   </xs:element>
@@ -108,27 +102,26 @@ func causeRule(viol *xsderr.Error) xsderr.Rule {
 }
 
 // A value of an enumeration subtype of NOTATION, and a value of xs:NOTATION
-// itself, is ·valid· where it names a declared notation, and is charged
-// cvc-attribute clause 3 with a cvc-datatype-valid cause at the attribute where
-// it names none — bez passes the subtype's enumeration and still names no
-// declaration, so the charge is this check's and not the backend's.
+// itself, is ·valid· where it names a declared notation. A value of
+// xs:NOTATION naming none is charged cvc-attribute clause 3 with a
+// cvc-datatype-valid cause at the attribute — bez passes the backend's QName
+// mapping and still names no declaration, so the charge is this check's.
 func TestANotationValueMustNameADeclaredNotation(t *testing.T) {
 	schema := parsedSchema(t, map[string]string{"main.xsd": notationSchema})
 	root := xsd.QName{Local: "root"}
-	types := map[string]string{"enum": "FooBarBez", "direct": xsdNOTATION}
 	for _, attr := range []string{"enum", "direct"} {
 		t.Run(attr, func(t *testing.T) {
 			for _, declared := range []string{"foo", "bar", " foo "} {
 				got, _ := assessRecorded(t, schema, notationRoot(root, attr, declared, nil))
 				wantSilence(t, got, declared+" names a declared notation")
 			}
-			got, _ := assessRecorded(t, schema, notationRoot(root, attr, "bez", nil))
-			wantUndeclaredNotation(t, got, "bez", xsd.QName{Local: "bez"}, types[attr])
 		})
 	}
+	got, _ := assessRecorded(t, schema, notationRoot(root, "direct", "bez", nil))
+	wantUndeclaredNotation(t, got, "bez", xsd.QName{Local: "bez"}, xsdNOTATION)
 }
 
-// An enumeration miss stays the backend's charge: baz is outside FooBarBez's
+// An enumeration miss stays the backend's charge: baz is outside FooBar's
 // enumeration, so the cause is cvc-enumeration-valid and not this check's
 // cvc-datatype-valid.
 func TestAnEnumerationMissIsNotANotationCharge(t *testing.T) {
@@ -172,13 +165,9 @@ func TestANotationValueResolvesAgainstTheInScopeNamespaces(t *testing.T) {
 // ·override· host's own top-level declaration among them: over015.xsd
 // overrides over015a.xsd and declares bez outside the <override>, so bez is
 // declared and ·valid· (Override/over015.v01.xml), while qux, which neither
-// document declares, is charged.
-//
-// GAP(value): the spec rejects this schema and the parser admits it. The
-// override's Nota enumerates qux, which is outside the ·value space· of its
-// {base type definition} xs:NOTATION, so the schema breaks
-// enumeration-valid-restriction (Datatypes §4.3.5.5). The qux charge relies on
-// that admission, as notationSchema's bez does. #1963 owns the admission.
+// document declares, is charged against @direct, of xs:NOTATION itself: the
+// override's Nota cannot enumerate qux, since the parser rejects an
+// undeclared member under enumeration-valid-restriction (Datatypes §4.3.5.5).
 func TestAnOverrideHostsNotationIsDeclared(t *testing.T) {
 	schema := parsedSchema(t, map[string]string{
 		"main.xsd": `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
@@ -188,7 +177,6 @@ func TestAnOverrideHostsNotationIsDeclared(t *testing.T) {
       <xs:restriction base="xs:NOTATION">
         <xs:enumeration value="foo"/>
         <xs:enumeration value="bez"/>
-        <xs:enumeration value="qux"/>
       </xs:restriction>
     </xs:simpleType>
   </xs:override>
@@ -198,6 +186,7 @@ func TestAnOverrideHostsNotationIsDeclared(t *testing.T) {
   <xs:element name="root">
     <xs:complexType>
       <xs:attribute name="enum" type="Nota"/>
+      <xs:attribute name="direct" type="xs:NOTATION"/>
     </xs:complexType>
   </xs:element>
   <xs:simpleType name="Nota">
@@ -216,12 +205,14 @@ func TestAnOverrideHostsNotationIsDeclared(t *testing.T) {
 		t.Fatalf("Notations() = %v, want the host's top-level bez among them", names)
 	}
 	root := xsd.QName{Local: "root"}
-	for _, declared := range []string{"foo", "bez"} {
-		got, _ := assessRecorded(t, schema, notationRoot(root, "enum", declared, nil))
-		wantSilence(t, got, declared+" is declared in the override host")
+	for _, attr := range []string{"enum", "direct"} {
+		for _, declared := range []string{"foo", "bez"} {
+			got, _ := assessRecorded(t, schema, notationRoot(root, attr, declared, nil))
+			wantSilence(t, got, declared+" is declared in the override host")
+		}
 	}
-	got, _ := assessRecorded(t, schema, notationRoot(root, "enum", "qux", nil))
-	wantUndeclaredNotation(t, got, "qux", xsd.QName{Local: "qux"}, "Nota")
+	got, _ := assessRecorded(t, schema, notationRoot(root, "direct", "qux", nil))
+	wantUndeclaredNotation(t, got, "qux", xsd.QName{Local: "qux"}, xsdNOTATION)
 }
 
 // An element's ·initial value· is held to the same check under cvc-type clause
