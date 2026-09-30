@@ -23,9 +23,7 @@ func TestErrorRenderingUnknownLoc(t *testing.T) {
 	}
 }
 
-// TestLocString pins Loc.String's one-dimension-at-a-time rendering: a Line
-// or Col below 1 is unknown and is not rendered, and a Col is rendered only
-// beside a known Line (#1896).
+// TestLocString pins each arm of Loc.String's rendering (#1896).
 func TestLocString(t *testing.T) {
 	for _, tc := range []struct {
 		loc  Loc
