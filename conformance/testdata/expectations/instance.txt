@@ -25058,7 +25058,7 @@ Override/over020/instance/over020.v01.xml pass
 Override/over023/instance/over023.n01.xml pass
 Override/over023/instance/over023.n02.xml pass
 Override/over023/instance/over023.v01.xml pass
-Override/over027/instance/over027.n01.xml fail
+Override/over027/instance/over027.n01.xml pass
 Override/over028/instance/over028.n01.xml pass
 Override/over028/instance/over028.v01.xml pass
 Override/over029/instance/over029.n01.xml pass
