@@ -134,9 +134,14 @@
 // that is not a ·declared entity name· — the verdict is cvc-simple-type's own,
 // since that clause delegates to nothing. The first three read clause 2's
 // verdict off value.ValidateLexical directly; clause 4 reads it through
-// xsd.ValueSpace's ValidDefault, which returns the same error. Error() still
-// renders that verdict into the message as well, for a reader who holds only
-// the string.
+// xsd.ValueSpace's ValidDefault, which returns the same error. The first three
+// also charge the one clause 2 condition no backend can decide: a NOTATION
+// value whose QName names no notation declaration of the schema is outside
+// NOTATION's ·value space· (Datatypes §3.3.19), and that verdict is
+// cvc-datatype-valid, minted by this package (walk.notationsDeclared). Clause 4
+// never reaches it, ValidDefault declining every NOTATION {lexical form}.
+// Error() still renders that verdict into the message as well, for a reader who
+// holds only the string.
 //
 // Whether a cause is there is read off Unwrap and never off the rule ID:
 // clauses 1.2 and 4 both charge under cvc-complex-type and both wrap the
@@ -247,28 +252,29 @@
 // ·governing type definition· that is not determinable, a {content type} whose
 // shape xsd.Schema.ContentMatcher declines, a declaration whose {type
 // definition} is not a simple type, a value whose ·validating type· String Valid
-// clause 3 cannot decide, and — the decline that matters most — a
-// value.ValidateLexical error that is a fault of the type or of the backend
-// rather than a verdict about the lexical (value.IsDatatypeVerdict), which is
-// what keeps a value of a type this backend does not map from being rejected by
-// every document that carries one. The two ·special· datatypes are decided
-// instead, Datatype Valid holding for every literal against xs:anySimpleType and
-// xs:anyAtomicType (Datatypes §4.1.4), so a typeless attribute (§3.2.2.2) is
-// satisfied. Which declines are recorded as [Unevaluated], and which are not, is
-// [Unevaluated]'s own doc to say. An {attribute wildcard} carries an obligation
-// that is this layer's ALONE: where the wildcard's {process contents} is strict
-// or lax and it does not carry ##defined, §3.4.6.4 key-dft-binding case 3 binds
-// an item ·attributed· to it to a SYNTHESIZED Attribute Use over the ·governing
-// attribute declaration· its ·expanded name· ·resolves· to, which only an
-// assessment episode can ·resolve· — so xsd's static c-ran rendering reports the
-// keyword there by a ruling, not by an omission for this layer's carve to repair
-// (#267). A skip {attribute wildcard} is outside that obligation as squarely as
-// a ##defined one, and this layer owes it no case-3 rendering at all:
-// key-governing-ad (§3.2.4.2) clause 3 resolves by name only "provided the
-// attribute is not ·skipped·" and key-skipped makes such an item ·skipped·, so
-// it has no ·governing attribute declaration· to bind and case 6's keyword is
-// already the whole binding. cvcid.go's skippedAttribute encodes that reading
-// for the attribute side, as the paragraph below does for the element side.
+// clause 3 or the NOTATION check cannot decide, and — the decline that matters
+// most — a value.ValidateLexical error that is a fault of the type or of the
+// backend rather than a verdict about the lexical (value.IsDatatypeVerdict),
+// which is what keeps a value of a type this backend does not map from being
+// rejected by every document that carries one. The two ·special· datatypes are
+// decided instead, Datatype Valid holding for every literal against
+// xs:anySimpleType and xs:anyAtomicType (Datatypes §4.1.4), so a typeless
+// attribute (§3.2.2.2) is satisfied. Which declines are recorded as
+// [Unevaluated], and which are not, is [Unevaluated]'s own doc to say. An
+// {attribute wildcard} carries an obligation that is this layer's ALONE: where
+// the wildcard's {process contents} is strict or lax and it does not carry
+// ##defined, §3.4.6.4 key-dft-binding case 3 binds an item ·attributed· to it to
+// a SYNTHESIZED Attribute Use over the ·governing attribute declaration· its
+// ·expanded name· ·resolves· to, which only an assessment episode can ·resolve·
+// — so xsd's static c-ran rendering reports the keyword there by a ruling, not
+// by an omission for this layer's carve to repair (#267). A skip {attribute
+// wildcard} is outside that obligation as squarely as a ##defined one, and this
+// layer owes it no case-3 rendering at all: key-governing-ad (§3.2.4.2) clause 3
+// resolves by name only "provided the attribute is not ·skipped·" and
+// key-skipped makes such an item ·skipped·, so it has no ·governing attribute
+// declaration· to bind and case 6's keyword is already the whole binding.
+// cvcid.go's skippedAttribute encodes that reading for the attribute side, as
+// the paragraph below does for the element side.
 //
 // Every one of those charges reaches a DESCENDANT on the same terms, against
 // the ·governing type definition· the particle its parent's {content type}
