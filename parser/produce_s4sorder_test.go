@@ -1000,14 +1000,15 @@ func TestProduceS4SChildOrderAccepted(t *testing.T) {
 		},
 		{
 			// Every position of xs:namedAttributeGroup filled, the attribute block
-			// interleaved, with a foreign child in it; and a named group's one body
-			// behind its annotation and beside a foreign child (#1876).
+			// interleaved; and a named group's one body behind its annotation
+			// (#1876). Neither model has an ##other element position, so no foreign
+			// child is written here.
 			name: "top-level attributeGroup and named group in order",
-			body: `<xs:attributeGroup name="AG2" xmlns:o="urn:other"><xs:annotation/>` +
-				`<xs:attribute name="p"/><xs:attributeGroup ref="tns:AG"/><o:hint/><xs:attribute name="q"/>` +
-				`<xs:anyAttribute namespace="##other"/><o:hint/></xs:attributeGroup>` +
-				`<xs:group name="G" xmlns:o="urn:other"><xs:annotation/><o:hint/>` +
-				`<xs:choice><xs:element name="c"/></xs:choice><o:hint/></xs:group>`,
+			body: `<xs:attributeGroup name="AG2"><xs:annotation/>` +
+				`<xs:attribute name="p"/><xs:attributeGroup ref="tns:AG"/><xs:attribute name="q"/>` +
+				`<xs:anyAttribute namespace="##other"/></xs:attributeGroup>` +
+				`<xs:group name="G"><xs:annotation/>` +
+				`<xs:choice><xs:element name="c"/></xs:choice></xs:group>`,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

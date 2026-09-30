@@ -144,7 +144,8 @@ func TestSchemaShapeDecidableAccepts(t *testing.T) {
 		{"named group's choice body holding a keyref", `<xs:group name="g"><xs:choice><xs:keyref name="r" refer="k"><xs:selector xpath="a"/><xs:field xpath="@x"/></xs:keyref></xs:choice></xs:group>`},
 		{"local sequence holding a unique", `<xs:complexType name="T"><xs:sequence><xs:unique name="u"><xs:selector xpath="a"/><xs:field xpath="@x"/></xs:unique></xs:sequence></xs:complexType>`},
 		// #1876 admits every other child of both definitions, since the producer
-		// rejects each wherever it stands: beside a named <group>'s body, before it
+		// rejects each on every definition it builds (an unmatched <override>
+		// child it never builds is #1877's): beside a named <group>'s body, before it
 		// or after it (checkS4SChildOrder), in its place (rejectNamedGroupBody,
 		// groupO010's shape), and anywhere under a top-level <attributeGroup>
 		// (checkS4SChildOrder; attgD012 and groupO025). The first two rows were
