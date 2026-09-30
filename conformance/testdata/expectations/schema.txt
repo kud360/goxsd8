@@ -14423,7 +14423,7 @@ Notation/annotation00101m2/schema/annotation00101m2 pass
 Notation/annotation00101m3/schema/annotation00101m3 pass
 Notation/annotation00101m4/schema/annotation00101m4 pass
 Notation/name00101m1/schema/name00101m1 pass
-Notation/name00101m2/schema/name00101m2 fail
+Notation/name00101m2/schema/name00101m2 pass
 Notation/name00201m1/schema/name00201m1 pass
 Notation/publicid00101m1/schema/publicId00101m1 pass
 Notation/publicid00201m1/schema/publicId00201m1 pass
@@ -14819,7 +14819,7 @@ Simple/simple091/schema/simple091.xsd fail
 Simple/simple092/schema/simple092.xsd fail
 Simple/simple093/schema/simple093.xsd fail
 Simple/simple094/schema/simple094.xsd fail
-Simple/simple095/schema/simple095.xsd fail
+Simple/simple095/schema/simple095.xsd pass
 Subsgroup/subsgroup001/schema/subsgroup001.xsd pass
 Subsgroup/subsgroup002/schema/subsgroup002.xsd pass
 Subsgroup/subsgroup003/schema/subsgroup003a.xsd pass

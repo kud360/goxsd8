@@ -1,6 +1,7 @@
 package value
 
 import (
+	"errors"
 	"strconv"
 	"strings"
 	"testing"
@@ -541,5 +542,80 @@ func TestEnumerationRestrictionSkipsFacetPreconditionFault(t *testing.T) {
 	})
 	if r, _ := xsderr.RuleOf(restrict(t, bb, bounded, outOfSpace)); r != "enumeration-valid-restriction" {
 		t.Errorf("out-of-space member charged %s, want enumeration-valid-restriction (§4.3.5.5)", r)
+	}
+}
+
+// notationBackend maps xs:NOTATION to a parse that accepts any lexical, as a
+// leaf mapping holding no schema does.
+type notationBackend struct{}
+
+func (notationBackend) Mapping(typ xsd.QName) (Mapping, bool) {
+	if typ != notationName {
+		return Mapping{}, false
+	}
+	return Mapping{Parse: func(lexical string, _ Context) (Value, error) { return intValue(len(lexical)), nil }}, true
+}
+
+// notationSchema is a resolver that resolves no type and declares notations.
+type notationSchema struct {
+	noSchema
+	notations []xsd.Notation
+}
+
+func (s notationSchema) Notations() []xsd.Notation { return s.notations }
+
+// An enumeration member of a NOTATION restriction is in its base's value space
+// only where it names a notation the resolver's schema declares (Datatypes
+// §3.3.19, §4.3.5.5): foo passes against a schema declaring it and fails against
+// one declaring only bar. A resolver with no Notations method leaves the value
+// space unjudgeable, so foo passes against it (fail open,
+// xsd.SimpleTypeRestrictionChecker).
+func TestNotationMemberMustBeDeclaredByTheResolver(t *testing.T) {
+	notation := func(local string) xsd.Notation {
+		public := "pub" + local
+		n, err := xsd.NewNotation(xsderr.Loc{}, xsd.QName{Local: local}, nil, &public)
+		if err != nil {
+			t.Fatalf("NewNotation(%s): %v", local, err)
+		}
+		return n
+	}
+	st, err := newCheckedSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "derived"},
+		xsd.RestrictionDerivation{}, primType(t, "NOTATION", "collapse"),
+		[]xsd.Facet{xsd.NewEnumerationFacet([]xsd.EnumerationMember{xsd.NewEnumerationMember("foo", nil, nil)})}, nil)
+	if err != nil {
+		t.Fatalf("NewSimpleType: %v", err)
+	}
+	for _, c := range []struct {
+		name string
+		r    xsd.TypeResolver
+	}{
+		{"foo declared", notationSchema{notations: []xsd.Notation{notation("foo")}}},
+		{"no Notations method", noSchema{}},
+	} {
+		if err := CheckFacetRestriction(notationBackend{}, c.r, st); err != nil {
+			t.Errorf("%s: %v, want nil", c.name, err)
+		}
+	}
+	if rule, _ := xsderr.RuleOf(CheckFacetRestriction(notationBackend{}, notationSchema{notations: []xsd.Notation{notation("bar")}}, st)); rule != "enumeration-valid-restriction" {
+		t.Errorf("bar declared: rule %q, want enumeration-valid-restriction", rule)
+	}
+
+	// p:foo with p bound nowhere names no QName (§3.3.18), so it is rejected even
+	// though notationBackend's Parse accepts it and a no-namespace foo is declared:
+	// read with the unbound prefix dropped it would be {}foo and admitted.
+	unbound, err := newCheckedSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "unbound"},
+		xsd.RestrictionDerivation{}, primType(t, "NOTATION", "collapse"),
+		[]xsd.Facet{xsd.NewEnumerationFacet([]xsd.EnumerationMember{xsd.NewEnumerationMember("p:foo", nil, nil)})}, nil)
+	if err != nil {
+		t.Fatalf("NewSimpleType: %v", err)
+	}
+	err = CheckFacetRestriction(notationBackend{}, notationSchema{notations: []xsd.Notation{notation("foo")}}, unbound)
+	if rule, _ := xsderr.RuleOf(err); rule != "enumeration-valid-restriction" {
+		t.Fatalf("unbound p:foo: rule %q (%v), want enumeration-valid-restriction", rule, err)
+	}
+	var cause *xsderr.Error
+	if !errors.As(errors.Unwrap(err), &cause) || cause.Rule != "cvc-datatype-valid" ||
+		!strings.HasPrefix(cause.Msg, `the NOTATION value "p:foo" has a prefix no in-scope namespace binding declares`) {
+		t.Errorf("unbound p:foo: cause %v, want cvc-datatype-valid naming the unbound prefix of \"p:foo\"", errors.Unwrap(err))
 	}
 }

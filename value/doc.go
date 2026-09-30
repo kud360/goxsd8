@@ -157,6 +157,11 @@
 // Schema-less graph — one assembled entirely from live components, as
 // builtin.Seed produces — passes a resolver that resolves nothing, which is total
 // there because such a graph holds no by-name reference to look up.
+// [CheckFacetRestriction] also reads the resolver as the current schema's
+// {notation declarations}, NOTATION's value space (§3.3.19), through a Notations
+// method as *xsd.Schema has; against a resolver without one that value space
+// cannot be judged, so a NOTATION-valued member is held only to NOTATION's
+// lexical mapping and never rejected as undeclared.
 //
 // An UNRESOLVABLE reference surfaces as the src-resolve error xsd.SimpleType.Base
 // and its siblings produce. It is not a validity verdict about the literal — it says
