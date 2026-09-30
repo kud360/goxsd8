@@ -124,9 +124,11 @@ const (
 // nowhere — not on restrictionCheck, whose fields are the three resolved facts
 // one pass needs and not the capability that produced them. r is also the
 // current schema whose {notation declarations} make up NOTATION's value space
-// (§3.3.19), read through a Notations method as *xsd.Schema has; a resolver
-// without one declares no notation, so every NOTATION-valued enumeration member
-// is rejected against it.
+// (§3.3.19), read through a Notations method as *xsd.Schema has; against a
+// resolver without one that value space cannot be judged, so a NOTATION-valued
+// enumeration member is held only to NOTATION's lexical mapping, never rejected
+// as undeclared (xsd.SimpleTypeRestrictionChecker: a fault the implementation
+// cannot judge is never a rejection).
 func CheckFacetRestriction(b Backend, r xsd.TypeResolver, t *xsd.SimpleType) error {
 	base, err := t.Base(r)
 	if err != nil {
@@ -528,10 +530,11 @@ func minInclusiveRestrictionViolates(base xsd.FacetKind, ord Ordering) bool {
 // rather than a restrictionCheck field because only this check needs it, and its
 // caller has already established that b governs the base (an unmapped base
 // returns early there), so ValidateLexical's no-mapping error is unreachable from
-// here. Members run through b as declaredNotationBackend narrows it, because
-// NOTATION's value space is the notations r's schema declares (§3.3.19), which
-// b's leaf mapping cannot see: a member naming none is outside the base's value
-// space and charged here.
+// here. Where r answers notationDeclarer, members run through b as
+// declaredNotationBackend narrows it, because NOTATION's value space is the
+// notations r's schema declares (§3.3.19), which b's leaf mapping cannot see: a
+// member naming none is outside the base's value space and charged here. Where r
+// does not, members run through b un-narrowed.
 //
 // A facet-pipeline PRECONDITION fault in the BASE type's own facets is SKIPPED, not
 // charged (IsFacetPrecondition, ValidateLexical) — the same "skip, don't
@@ -544,7 +547,10 @@ func minInclusiveRestrictionViolates(base xsd.FacetKind, ord Ordering) bool {
 // would name a constraint with nothing to say about it and reject a schema whose
 // enumeration may be perfectly valid.
 func (rc restrictionCheck) checkEnumerationRestriction(b Backend, r xsd.TypeResolver) error {
-	declared := declaredNotationBackend{inner: b, declared: schemaNotations(r)}
+	memberBackend := b
+	if s, ok := r.(notationDeclarer); ok {
+		memberBackend = declaredNotationBackend{inner: b, declared: s.Notations()}
+	}
 	for _, own := range rc.owner.OwnFacets() {
 		if own.Kind() != xsd.FacetEnumeration {
 			continue
@@ -553,7 +559,7 @@ func (rc restrictionCheck) checkEnumerationRestriction(b Backend, r xsd.TypeReso
 		// ok=true; the second result is discarded deliberately.
 		members, _ := own.EnumerationMembers()
 		for _, em := range members {
-			_, err := ValidateLexical(declared, r, rc.base, em.Lexical(), newMemberContext(em))
+			_, err := ValidateLexical(memberBackend, r, rc.base, em.Lexical(), newMemberContext(em))
 			if IsFacetPrecondition(err) {
 				continue
 			}
@@ -567,20 +573,11 @@ func (rc restrictionCheck) checkEnumerationRestriction(b Backend, r xsd.TypeReso
 
 // notationDeclarer is the capability of a resolver that holds the current
 // schema's {notation declarations} (§3.17.1): *xsd.Schema answers it, and it is
-// the resolver the finalize pass hands CheckFacetRestriction.
+// the resolver the finalize pass hands CheckFacetRestriction. Against a
+// resolver that does not answer it, NOTATION's ·value space· cannot be judged,
+// so checkEnumerationRestriction runs members through the backend un-narrowed.
 type notationDeclarer interface {
 	Notations() []xsd.Notation
-}
-
-// schemaNotations is the {notation declarations} of the schema r resolves
-// against. A resolver that does not answer notationDeclarer is no schema, so it
-// declares no notation, and NOTATION's ·value space· against it is empty.
-func schemaNotations(r xsd.TypeResolver) []xsd.Notation {
-	s, ok := r.(notationDeclarer)
-	if !ok {
-		return nil
-	}
-	return s.Notations()
 }
 
 // declaredNotationBackend is inner with xs:NOTATION's mapping narrowed to

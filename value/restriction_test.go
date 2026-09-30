@@ -565,9 +565,10 @@ func (s notationSchema) Notations() []xsd.Notation { return s.notations }
 
 // An enumeration member of a NOTATION restriction is in its base's value space
 // only where it names a notation the resolver's schema declares (Datatypes
-// §3.3.19, §4.3.5.5): foo passes against a schema declaring it, and fails
-// against one declaring only bar and against a resolver with no Notations
-// method, which declares none.
+// §3.3.19, §4.3.5.5): foo passes against a schema declaring it and fails against
+// one declaring only bar. A resolver with no Notations method leaves the value
+// space unjudgeable, so foo passes against it (fail open,
+// xsd.SimpleTypeRestrictionChecker).
 func TestNotationMemberMustBeDeclaredByTheResolver(t *testing.T) {
 	notation := func(local string) xsd.Notation {
 		public := "pub" + local
@@ -583,18 +584,18 @@ func TestNotationMemberMustBeDeclaredByTheResolver(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSimpleType: %v", err)
 	}
-	if err := CheckFacetRestriction(notationBackend{}, notationSchema{notations: []xsd.Notation{notation("foo")}}, st); err != nil {
-		t.Errorf("declared foo: %v, want nil", err)
-	}
 	for _, c := range []struct {
 		name string
 		r    xsd.TypeResolver
 	}{
-		{"bar declared", notationSchema{notations: []xsd.Notation{notation("bar")}}},
+		{"foo declared", notationSchema{notations: []xsd.Notation{notation("foo")}}},
 		{"no Notations method", noSchema{}},
 	} {
-		if rule, _ := xsderr.RuleOf(CheckFacetRestriction(notationBackend{}, c.r, st)); rule != "enumeration-valid-restriction" {
-			t.Errorf("%s: rule %q, want enumeration-valid-restriction", c.name, rule)
+		if err := CheckFacetRestriction(notationBackend{}, c.r, st); err != nil {
+			t.Errorf("%s: %v, want nil", c.name, err)
 		}
+	}
+	if rule, _ := xsderr.RuleOf(CheckFacetRestriction(notationBackend{}, notationSchema{notations: []xsd.Notation{notation("bar")}}, st)); rule != "enumeration-valid-restriction" {
+		t.Errorf("bar declared: rule %q, want enumeration-valid-restriction", rule)
 	}
 }
