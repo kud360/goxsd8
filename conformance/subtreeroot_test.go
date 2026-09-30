@@ -463,10 +463,15 @@ func TestInstanceExecutorDeclinesOutsideAssessedSubtreeRoot(t *testing.T) {
 			`<known><a n="n"/></known>`,
 		},
 		{
-			"an attribute matched by an attribute wildcard (cvc-complex-type clause 2.2)",
-			`<xs:element name="known"><xs:complexType><xs:sequence><xs:element name="a" type="xs:int"/></xs:sequence>` +
-				`<xs:anyAttribute processContents="lax"/></xs:complexType></xs:element>`,
-			`<known foo="1"><a>1</a></known>`,
+			// A guard, not a charged row: the gate refused this shape before #1860
+			// too. The walk charges nothing and records nothing for it, a reading
+			// the suite does not share (#1912).
+			"a strict {attribute wildcard}'s attribute whose name resolves no declaration (cvc-complex-type clause 2.2)",
+			wildcardKnown("strict"), `<known foo="1"><a>1</a></known>`,
+		},
+		{
+			"a lax {attribute wildcard}'s attribute resolving to a declaration typed by a NOTATION enumeration",
+			notationN + `<xs:attribute name="n" type="N"/>` + wildcardKnown("lax"), `<known n="n"><a>1</a></known>`,
 		},
 		{
 			"a child attributed to a lax wildcard particle (cvc-complex-type clause 5)",
@@ -496,6 +501,93 @@ func TestInstanceExecutorDeclinesOutsideAssessedSubtreeRoot(t *testing.T) {
 	}
 	for _, tc := range cases {
 		declinesBothPolarities(t, exec, instanceCase(t, tc.schemaBody, tc.instance, false), tc.condition)
+	}
+}
+
+// wildcardKnown declares <known> with one required child <a> of type xs:int
+// and an {attribute wildcard} of {process contents} pc, beside top-level
+// attribute declarations ta of type xs:int and tf fixed to 1.
+func wildcardKnown(pc string) string {
+	return `<xs:element name="known"><xs:complexType><xs:sequence><xs:element name="a" type="xs:int"/></xs:sequence>` +
+		`<xs:anyAttribute processContents="` + pc + `"/></xs:complexType></xs:element>` +
+		`<xs:attribute name="ta" type="xs:int"/><xs:attribute name="tf" type="xs:int" fixed="1"/>`
+}
+
+// TestInstanceExecutorDecidesWildcardAttribute proves the gate admits an
+// attribute ·attributed to· the {attribute wildcard} (cvc-complex-type clause
+// 2.2) wherever the walk decides it (#1860): ·skipped· under skip, assessed
+// against the top-level declaration its name ·resolves· to under lax and
+// strict (key-sva clause 2.1, cvc-attribute clauses 3 and 4), and not
+// assessed under lax where it resolves to none (key-sva clause 2.2). Every row
+// is refused with subtreeGate.wildcardAttribute answering false.
+func TestInstanceExecutorDecidesWildcardAttribute(t *testing.T) {
+	exec := newInstanceExec()
+	for _, tc := range []struct{ why, pc, instance string }{
+		{"skip, a name resolving no declaration", "skip", `<known foo="x"><a>1</a></known>`},
+		// Assessed, "x" would be charged against ta's xs:int.
+		{"skip, a name resolving a declaration the value is not valid against", "skip", `<known ta="x"><a>1</a></known>`},
+		{"lax, a name resolving a declaration", "lax", `<known ta="1"><a>1</a></known>`},
+		{"lax, a name resolving a fixed declaration, the value agreeing", "lax", `<known tf="01"><a>1</a></known>`},
+		{"lax, a name resolving no declaration", "lax", `<known foo="x"><a>1</a></known>`},
+		{"strict, a name resolving a declaration", "strict", `<known ta="1"><a>1</a></known>`},
+	} {
+		schemaBody := wildcardKnown(tc.pc)
+		if !exec(instanceCase(t, schemaBody, tc.instance, true)).IsPass() {
+			t.Errorf("%s: the walk decides the wildcard attribute and the gate admits it; the executor must agree with a suite-valid case", tc.why)
+		}
+		if exec(instanceCase(t, schemaBody, tc.instance, false)).IsPass() {
+			t.Errorf("%s: the executor must Fail under a flipped expectation (it decides for real)", tc.why)
+		}
+	}
+}
+
+// TestInstanceExecutorChargesWildcardAttribute is a regression guard for the
+// wildcard-attribute lift (#1860): the walk charges each row (validate's
+// walk.unmatchedAttribute and walk.wildcardAttribute), so each is decided
+// INVALID whatever the gate answers, and none passes through it.
+func TestInstanceExecutorChargesWildcardAttribute(t *testing.T) {
+	exec := newInstanceExec()
+	for _, tc := range []struct{ why, schemaBody, instance string }{
+		{"lax, a value not valid against the resolved declaration (cvc-attribute clause 3)", wildcardKnown("lax"), `<known ta="x"><a>1</a></known>`},
+		{"strict, a value not valid against the resolved declaration (cvc-attribute clause 3)", wildcardKnown("strict"), `<known ta="x"><a>1</a></known>`},
+		{"strict, a value disagreeing with the resolved declaration's fixed one (cvc-attribute clause 4)", wildcardKnown("strict"), `<known tf="2"><a>1</a></known>`},
+		{
+			"a name the {attribute wildcard} does not admit (cvc-complex-type clause 2.2.2)",
+			`<xs:element name="known"><xs:complexType><xs:anyAttribute namespace="urn:other" processContents="skip"/></xs:complexType></xs:element>`,
+			`<known foo="x"/>`,
+		},
+	} {
+		if !exec(instanceCase(t, tc.schemaBody, tc.instance, false)).IsPass() {
+			t.Errorf("%s: the walk charges the attribute; the executor must agree with a suite-invalid case", tc.why)
+		}
+		if exec(instanceCase(t, tc.schemaBody, tc.instance, true)).IsPass() {
+			t.Errorf("%s: the executor must Fail under a flipped expectation", tc.why)
+		}
+	}
+}
+
+// TestAssessedSubtreeRootUnadmittedAttribute pins, at the gate itself, the
+// refusal of an attribute the {attribute wildcard} does not admit (cvc-wildcard,
+// §3.10.4.1), which no executor row can see: the walk charges cvc-complex-type
+// clause 2.2.2 for it first. The admitted name is the control.
+func TestAssessedSubtreeRootUnadmittedAttribute(t *testing.T) {
+	const schemaBody = `<xs:element name="known"><xs:complexType>` +
+		`<xs:anyAttribute namespace="urn:other" processContents="skip"/></xs:complexType></xs:element>`
+	for _, tc := range []struct {
+		why, instance string
+		want          bool
+	}{
+		{"a name the wildcard admits", `<known xmlns:o="urn:other" o:foo="x"/>`, true},
+		{"a name the wildcard does not admit", `<known foo="x"/>`, false},
+	} {
+		c := instanceCase(t, schemaBody, tc.instance, true)
+		schema, report, decidable, err := assembleCase(strict.New(), c.schemaDoc, nil)
+		if err != nil || !decidable {
+			t.Fatalf("%s: assembling the schema: decidable %v, err %v", tc.why, decidable, err)
+		}
+		if got := assessedSubtreeRoot(schema, report, c.doc); got != tc.want {
+			t.Errorf("%s: assessedSubtreeRoot = %v, want %v", tc.why, got, tc.want)
+		}
 	}
 }
 
