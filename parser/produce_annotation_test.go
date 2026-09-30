@@ -252,3 +252,76 @@ func TestProduceRepeatedAnnotationAccepted(t *testing.T) {
 		})
 	}
 }
+
+// lateAnnotationOwners are the seven owners rejectLateAnnotation holds to
+// "annotation?" as their first particle — the <all>, <choice> and <sequence>
+// compositors, a named <group>, a top-level <attributeGroup>, a <list> and a
+// <union> (#1941) — each with its open and close tags and the one non-annotation
+// child written beside the <annotation>, named by childName.
+var lateAnnotationOwners = []struct {
+	owner     string
+	open      string
+	child     string
+	childName string
+	close     string
+}{
+	{"all", `<xs:complexType name="ct"><xs:all>`, `<xs:element name="a"/>`, "element", `</xs:all></xs:complexType>`},
+	{"choice", `<xs:complexType name="ct"><xs:choice>`, `<xs:element name="a"/>`, "element", `</xs:choice></xs:complexType>`},
+	{"sequence", `<xs:complexType name="ct"><xs:sequence>`, `<xs:element name="a"/>`, "element", `</xs:sequence></xs:complexType>`},
+	{"group", `<xs:group name="g">`, `<xs:sequence/>`, "sequence", `</xs:group>`},
+	{"attributeGroup", `<xs:attributeGroup name="ag">`, `<xs:attribute name="a"/>`, "attribute", `</xs:attributeGroup>`},
+	{"list", `<xs:simpleType name="st"><xs:list>`, `<xs:simpleType><xs:restriction base="xs:integer"/></xs:simpleType>`, "simpleType", `</xs:list></xs:simpleType>`},
+	{"union", `<xs:simpleType name="st"><xs:union>`, `<xs:simpleType><xs:restriction base="xs:integer"/></xs:simpleType>`, "simpleType", `</xs:union></xs:simpleType>`},
+}
+
+// TestProduceLateAnnotationRejected pins that an <annotation> written AFTER a
+// non-annotation child of each owner in lateAnnotationOwners is rejected: every
+// form of each opens its content model with "annotation?" and admits it nowhere
+// else (xmlschema11-1.md:5187, :5229, :5259, :5502; xmlschema11-2.md:3957,
+// :3977). The child before the <annotation> is never another <annotation>:
+// rejectRepeatedAnnotations already rejects that shape, so such a row would pass
+// without rejectLateAnnotation.
+//
+// The fault is §5.1's first bullet and carries no rule ID (STYLE E2), so each row
+// wants a plain Go error. Each pins the message's opening subject and position as
+// a prefix — the <annotation> on line 4 — and the positions of the child it
+// follows (line 3) and of the owner (line 2), so a message naming the wrong
+// element, or swapping two of them, fails.
+func TestProduceLateAnnotationRejected(t *testing.T) {
+	for _, tc := range lateAnnotationOwners {
+		t.Run(tc.owner, func(t *testing.T) {
+			_, err := produce(t, wrap("urn:po", "\n"+tc.open+"\n"+tc.child+"\n<xs:annotation/>\n"+tc.close))
+			if err == nil {
+				t.Fatalf("Produce succeeded, want the <annotation> after the <%s>'s first child rejected", tc.owner)
+			}
+			var xe *xsderr.Error
+			if errors.As(err, &xe) {
+				t.Fatalf("error = %v (rule %s), want a plain Go error rather than a rule verdict", err, xe.Rule)
+			}
+			msg := err.Error()
+			if want := fmt.Sprintf("parser: <annotation> at %s:4:", produceURI); !strings.HasPrefix(msg, want) {
+				t.Fatalf("error = %v, want it to open %q (E3)", err, want)
+			}
+			if want := fmt.Sprintf("follows the <%s> at %s:3:", tc.childName, produceURI); !strings.Contains(msg, want) {
+				t.Fatalf("error = %v, want it to contain %q", err, want)
+			}
+			if want := fmt.Sprintf("children of the <%s> at %s:2:", tc.owner, produceURI); !strings.Contains(msg, want) {
+				t.Fatalf("error = %v, want it to contain %q", err, want)
+			}
+		})
+	}
+}
+
+// TestProduceLeadingAnnotationAccepted pins the other side of
+// rejectLateAnnotation: each owner in lateAnnotationOwners keeps producing with
+// its <annotation> written FIRST, ahead of the same child
+// TestProduceLateAnnotationRejected writes before it.
+func TestProduceLeadingAnnotationAccepted(t *testing.T) {
+	for _, tc := range lateAnnotationOwners {
+		t.Run(tc.owner, func(t *testing.T) {
+			if _, err := produce(t, wrap("urn:po", tc.open+"<xs:annotation/>"+tc.child+tc.close)); err != nil {
+				t.Fatalf("Produce: %v, want the leading <annotation> of the <%s> accepted", err, tc.owner)
+			}
+		})
+	}
+}
