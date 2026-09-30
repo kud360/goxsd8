@@ -22,6 +22,15 @@ hand. The F&O and XDM downloads are pinned to their dated 1.0/2nd-Edition
 URIs (the undated shortnames have moved to 3.x); the other seven track the
 editions XSD 1.1 §1.4 cites via their still-current undated shortnames.
 
+`ucd/Blocks-15.0.0.txt` is the Unicode Character Database's block table,
+the [Unicode Database] Datatypes §G.4.2.3 defines block escapes by. It is
+pinned, not fetched: `go tool fetchspecs` does not download it, and
+`tools/blockgen` reads it to generate `regex/gen_blocks.go`. The copy is
+byte-for-byte the system Perl 5.38.2 `unicore/Blocks.txt` (sha256
+`529dc5d0f6386d52f2f56e004bbfab48ce2d587eea9d38ba546c4052491bd820`), whose
+header names it `Blocks-15.0.0.txt`. Replace it only with another UCD
+version's `Blocks.txt` under its own versioned name, then regenerate (#1473).
+
 XML 1.1 and Namespaces in XML 1.1 are deliberately omitted: XSD §1.4 states
 their `NCName`/`Name`/whitespace definitions are identical to the 1.0
 editions here, so the 1.0 copies are the ground truth for grepping.

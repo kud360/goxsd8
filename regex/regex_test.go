@@ -130,6 +130,45 @@ func TestUnicodeBlockEscapes(t *testing.T) {
 	}
 }
 
+// TestGeneratedBlockEscapes pins unicodeBlocks' two sources: Unicode 15.0.0
+// Blocks.txt blocks the hand-authored table it replaced lacked, and the three
+// Unicode 3.1 names §G.4.2.3 lists as superseded, each at the first range the
+// spec gives it. PrivateUse is Unicode 3.0's #xE000-#xF8FF alone: the suite
+// expects \p{IsPrivateUse} to reject the supplementary planes' code points that
+// §G.4.2.3's further PrivateUse bullets list, which stay reachable through
+// SupplementaryPrivateUseArea-A/B.
+func TestGeneratedBlockEscapes(t *testing.T) {
+	cases := []struct {
+		pattern string
+		in, out []rune
+	}{
+		{`\p{IsThai}`, []rune{0x0E01, 0x0E7F}, []rune{'a', 0x0E80}},
+		{`[\p{IsOgham}]`, []rune{0x1680}, []rune{0x16A0}},
+		{`\p{IsGreek}`, []rune{0x0370, 0x03FF}, []rune{0x0400}},
+		{`\p{IsCombiningMarksforSymbols}`, []rune{0x20D0, 0x20FF}, []rune{0x2100}},
+		{`\p{IsPrivateUse}`,
+			[]rune{0xE000, 0xF8FF},
+			[]rune{0xF900, 0xF0000, 0xFFFFD, 0x100000, 0x10FFFD}},
+		{`\p{IsSupplementaryPrivateUseArea-A}`, []rune{0xF0000, 0xFFFFD}, []rune{0x100000}},
+		{`\p{IsSupplementaryPrivateUseArea-B}`, []rune{0x100000, 0x10FFFD}, []rune{0xFFFFD}},
+	}
+	for _, c := range cases {
+		t.Run(c.pattern, func(t *testing.T) {
+			re := mustCompile(t, mustTranslate(t, c.pattern, FlavorXSD, ""))
+			for _, in := range c.in {
+				if !re.MatchString(string(in)) {
+					t.Errorf("%s must match %U", c.pattern, in)
+				}
+			}
+			for _, out := range c.out {
+				if re.MatchString(string(out)) {
+					t.Errorf("%s must not match %U", c.pattern, out)
+				}
+			}
+		})
+	}
+}
+
 // TestNameCharEscapes covers the XML name-character multi-character escapes
 // \i (NameStartChar), \c (NameChar) and their complements \I/\C (Datatypes
 // §G.4.2.5), both standalone and as the base of a character-class subtraction —
@@ -363,19 +402,19 @@ func TestCheckSyntaxRejectsAppendixGDefects(t *testing.T) {
 		{`(abc`, "unclosed group"},
 		{`[abc`, "unclosed character class"},
 		{`abc\`, "trailing backslash"},
-		// An unrecognized Unicode CATEGORY is a syntax defect, not a gap in this
-		// module: Appendix G §G.4.2.2 enumerates the category names, and one
-		// outside that enumeration names nothing. It must NOT take the
-		// unsupported-block exit below.
+		// An unrecognized Unicode CATEGORY is a syntax defect, unlike an
+		// unrecognized block: Appendix G §G.4.2.2 enumerates the category names,
+		// and one outside that enumeration names nothing. It must NOT take the
+		// unrecognized-block exit below.
 		{`\p{Zork}`, "unrecognized Unicode category"},
 		{`[\p{Zork}]`, "unrecognized Unicode category"},
 		// IsBlock ::= 'Is' [a-zA-Z0-9#x2D]+ (production [96]) admits one or more
 		// hyphens, digits and Basic Latin letters and nothing else, so each of
 		// these names no block and matches no charProp. They must take the defect
-		// path, not the unsupported-block one, even though both run through
+		// path, not the unrecognized-block one, even though both run through
 		// blockSet — so each detail pins the offending name, not just the kind of
 		// defect. "\p{Is-}" below is the boundary on the other side: a hyphen IS
-		// production [96] material, so it stays the unsupported-block gap.
+		// production [96] material, so it stays an unrecognized block.
 		{`\p{Is}`, `malformed Unicode block name in \p{Is}`},
 		{`\p{IsThai$}`, `malformed Unicode block name in \p{IsThai$}`},
 		{`[\p{IsThai$}]`, `malformed Unicode block name in \p{IsThai$}`},
@@ -403,12 +442,13 @@ func TestCheckSyntaxRejectsAppendixGDefects(t *testing.T) {
 	}
 }
 
-// TestCheckSyntaxPassesUnsupportedBlocks pins the other half, the half that is
-// CheckSyntax's whole reason to exist: a block name outside class.go's curated
-// unicodeBlocks table is a gap in THIS module (GAP(regex), #1473), not a defect
-// in the pattern, so CheckSyntax reports nothing — while Translate, whose caller
-// needs the compiled regex and cannot proceed, keeps failing on it unchanged.
-func TestCheckSyntaxPassesUnsupportedBlocks(t *testing.T) {
+// TestCheckSyntaxPassesUnrecognizedBlocks pins the other half, the half that is
+// CheckSyntax's whole reason to exist: a name production [96] admits that names
+// no block unicodeBlocks holds is allowed by §G.4.2.4, not a defect in the
+// pattern, so CheckSyntax reports nothing — while Translate, which declines
+// §G.4.2.4's "set of all characters" meaning for it (GAP(regex), #1946), keeps
+// failing on it unchanged. "aA0-a9" is msData/regex/reK88.xsd's name, and names no block.
+func TestCheckSyntaxPassesUnrecognizedBlocks(t *testing.T) {
 	// Both the standalone atom path (regex.go's atomCategoryEscape) and the
 	// inside-a-class path (classparse.go's parseClassEscape) reach blockSet, and
 	// the sentinel has to survive each one's error wrapping. "\p{Is-}" and
@@ -417,13 +457,13 @@ func TestCheckSyntaxPassesUnsupportedBlocks(t *testing.T) {
 	// material outright, and a space is stripped by §G.4.2.3 normalization before
 	// the production is applied, so neither name is malformed — each is merely
 	// absent from the table.
-	for _, pat := range []string{`\p{IsThai}*`, `[\p{IsOgham}]+`, `[\p{IsRunic}a-z]`, `\P{IsTibetan}`, `\p{Is-}`, `\p{IsThai Extra}`} {
+	for _, pat := range []string{`\p{IsaA0-a9}*`, `[\p{IsaA0-a9}]+`, `[\p{IsNoSuchBlock}a-z]`, `\P{IsaA0-a9}`, `\p{Is-}`, `\p{IsThai Extra}`} {
 		t.Run(pat, func(t *testing.T) {
 			if err := CheckSyntax(pat, FlavorXSD, ""); err != nil {
-				t.Fatalf("CheckSyntax(%q) = %v, want nil: the block table is this module's gap, not the pattern's defect", pat, err)
+				t.Fatalf("CheckSyntax(%q) = %v, want nil: §G.4.2.4 allows an unrecognized block name", pat, err)
 			}
 			if _, err := Translate(pat, FlavorXSD, ""); err == nil {
-				t.Fatalf("Translate(%q) = nil error — the premise of this test is gone; Translate must keep surfacing the gap", pat)
+				t.Fatalf("Translate(%q) = nil error — the premise of this test is gone; Translate must keep refusing an unrecognized block", pat)
 			}
 		})
 	}
@@ -433,7 +473,7 @@ func TestCheckSyntaxPassesUnsupportedBlocks(t *testing.T) {
 // producer. Production [71] is QuantExact ::= [0-9]+ and [69] is quantRange ::=
 // QuantExact ',' QuantExact, neither capped, so each of these is a regExp and
 // the 1000 that stops it is maxRepeat's (GAP(regex), #1474) — the same
-// classification the block table gets, reached through a different path, and
+// classification an unrecognized block name gets, reached through a different path, and
 // the boundary case {1000} must stay translatable on the other side of it.
 func TestCheckSyntaxPassesCountedRepeatOverLimit(t *testing.T) {
 	for _, pat := range []string{"a{1001}", "a{0,2000}", "a{1001,2000}", "[0-9]{5000}", "(ab){2,1500}"} {

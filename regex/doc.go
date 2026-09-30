@@ -40,11 +40,14 @@
 // subtraction ([a-z-[m]], including name-escape bases like [\i-[:]]) — is
 // shared between flavors. Go RE2's counted-repeat limit (1000) is a
 // documented deviation surfaced as a translation error, not a silent
-// truncation. Block names resolve against a curated table that omits most of
-// the blocks Appendix G admits, so a spec-valid \p{IsX} can be a translation
-// error too. Neither refusal is a verdict on the pattern: each carries its own
-// GAP(regex) marker — regex.go's on maxRepeat, class.go's on blockSet — and
+// truncation. Block names resolve against a table tools/blockgen generates from
+// a pinned Unicode 15.0.0 Blocks.txt plus §G.4.2.3's superseded Unicode 3.1
+// names; a name production [96] admits that names none of those blocks is a
+// translation error too, because this module declines §G.4.2.4's "set of all
+// characters" meaning for it. Neither refusal is a verdict on the pattern, and
 // they are the two failures CheckSyntax below reports as no failure at all.
+// Each carries its own GAP(regex) marker — regex.go's on maxRepeat (#1474),
+// class.go's on blockSet (#1946).
 //
 // # Contract (implemented from M3)
 //
@@ -63,8 +66,8 @@
 //	    regex: a schema-construction pass charging src-pattern-value on
 //	    every <pattern> facet a schema declares. It differs from Translate
 //	    in exactly one way, and that difference is its reason to exist —
-//	    an unimplemented-but-recognized construct (a Unicode block outside
-//	    the curated table, a repeat count above the RE2 ceiling) is nil,
+//	    an unimplemented-but-recognized construct (a block name that names
+//	    no block, a repeat count above the RE2 ceiling) is nil,
 //	    not an error, so such a schema is not rejected for a gap on this
 //	    side of the line.
 //
