@@ -458,7 +458,7 @@ func (g *subtreeGate) children(t xsd.ComplexType, m *xsd.Matcher) bool {
 // oracle's intended reading (cvc-wildcard's final note; cos-element-consistent
 // clause 2.2) makes it ·skipped·. validate's childGoverning resolves and
 // assesses it, which can charge a child the intended reading skips; the fix is
-// validate's and is deferred to its own issue (#1861). Until then the {open
+// validate's and is deferred to its own issue (#1969). Until then the {open
 // content} arm reads no {process contents}: a skip {open content}'s child goes
 // to resolvedChild as a lax one's does, admitted only where the walk's
 // assessment of it is decided.
