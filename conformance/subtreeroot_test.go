@@ -402,11 +402,6 @@ func TestInstanceExecutorDeclinesOutsideAssessedSubtreeRoot(t *testing.T) {
 			`<known/>`,
 		},
 		{
-			"skip-wildcard subtree (cvc-assess-elt clause 3.2)",
-			`<xs:element name="known"><xs:complexType><xs:sequence><xs:any processContents="skip"/></xs:sequence></xs:complexType></xs:element>`,
-			`<known><b><c/></b></known>`,
-		},
-		{
 			"xsi:nil below the root (cvc-elt clause 3)",
 			`<xs:element name="known"><xs:complexType><xs:sequence><xs:element name="a" type="xs:int" nillable="true"/></xs:sequence></xs:complexType></xs:element>`,
 			`<known ` + xsiNS + `><a xsi:nil="false">1</a></known>`,
@@ -634,12 +629,17 @@ const openChild = `<xs:element name="known"><xs:complexType><xs:openContent mode
 // ·attributed to· a strict or lax ·wildcard particle· or to the {open content}
 // wherever its name ·resolves· to a top-level declaration and its ·locally
 // declared type· is ·absent·, which makes cvc-complex-type clause 5 vacuous
-// (#1931). Each row walks clean against the resolved declaration, and each is
-// refused with subtreeGate.resolvedChild answering false for a resolved name,
-// or with child answering false for the {open content} arm.
+// (#1931), and a skip ·wildcard particle·'s child whatever its subtree holds
+// (key-sva clause 3.2, #1861). Each row walks clean, and each is refused with
+// subtreeGate.resolvedChild answering false for a resolved name, or with child
+// answering false for the {open content} or skip Wildcard arm.
 func TestInstanceExecutorDecidesWildcardChild(t *testing.T) {
 	exec := newInstanceExec()
 	for _, tc := range []struct{ why, schemaBody, instance string }{
+		// Assessed, <b> would be charged against b's xs:int, <c> would resolve
+		// nothing, and <i>'s value is no xs:ID: skipped, none of it is read
+		// (cvc-assess-elt clause 2).
+		{"skip, a child with arbitrary undeclared content", wildcardChild("skip"), `<known><b u="x">x<c><i>not an ID</i></c></b></known>`},
 		{"strict, a child resolving a declaration", wildcardChild("strict"), `<known><b>1</b></known>`},
 		{"lax, a child resolving a declaration", wildcardChild("lax"), `<known><b>1</b></known>`},
 		// NIST2004-01-14's shape: an ID-typed child binding the wrapper.
@@ -664,6 +664,13 @@ func TestInstanceExecutorChargesWildcardChild(t *testing.T) {
 		{"strict, a value not valid against the resolved declaration (cvc-type clause 3.1.3)", wildcardChild("strict"), `<known><b>x</b></known>`},
 		{"an {open content} child's value not valid against the resolved declaration", openChild, `<known><b>x</b><a>1</a></known>`},
 		{"strict, a child resolving no declaration (e-validity clause 1.1.3)", wildcardChild("strict"), `<known><u>x</u></known>`},
+		{
+			// The name check survives skip (cvc-wildcard clause 1): the Matcher
+			// ·attributes· <u> to no particle (cvc-complex-type clause 1.4).
+			"skip, a child whose name the wildcard's namespace constraint refuses",
+			`<xs:element name="known"><xs:complexType><xs:sequence><xs:any namespace="urn:other" processContents="skip"/></xs:sequence></xs:complexType></xs:element>`,
+			`<known><u/></known>`,
+		},
 	} {
 		if !exec(instanceCase(t, tc.schemaBody, tc.instance, false)).IsPass() {
 			t.Errorf("%s: the walk charges the child; the executor must agree with a suite-invalid case", tc.why)

@@ -224,12 +224,15 @@ import (
 //     (subtreeGate.resolvedChild). A strict ·wildcard particle·'s child
 //     resolving to none, with no xsi:type, is admitted with its subtree
 //     unread: the walk charges e-validity clause 1.1.3 for its parent, so no
-//     empty Result carries it. Every other attribution is refused: a skip
-//     Wildcard, whose subtree is ·skipped· (key-sva clause 3.2, #1861); and a
-//     lax Wildcard's or the {open content}'s child resolving to none, the
-//     untyped element whose [[children]] the walk leaves untyped (#1823,
-//     #1911). No element of a subtree whose Result is empty is therefore
-//     assessed against no type.
+//     empty Result carries it. A skip Wildcard's child is admitted with its
+//     subtree unread: it is ·skipped· (key-sva clause 3.2, cvc-assess-elt
+//     clause 2) and has no [validity] to block its parent's (sic-e-outcome
+//     clause 1.1). A skip {open content}'s child is read as a lax one's
+//     (the validate gap subtreeGate.child marks). Every other attribution is
+//     refused: a lax Wildcard's or the {open content}'s child resolving to
+//     none, the untyped element whose [[children]] the walk leaves untyped
+//     (#1823, #1911). No element of a subtree whose Result is empty is
+//     therefore assessed against no type.
 //   - cvc-elt clauses 2 to 6, at every element: {abstract} false, no xsi:nil,
 //     no {type table} — so the ·selected type definition· is the {type
 //     definition}, which the gate resolves itself — and no fixed {value
