@@ -46,8 +46,9 @@ commit.
 S1/S2 (else blocks), S3 (dropped loop errors), E2 (missing rule ID), D2
 (map iteration into output), D3 (redundant state), T5 (unjustified
 exports), T6 (stale doc.go prose — render `go doc` for every package you
-touch before claiming its status section current), P3 (untracked
-fail-open). Check the diff against these before handoff.
+touch before claiming its status section current), P3 (an untracked
+fail-open, or disclosing prose with no `GAP(` in its block). Check the
+diff against these before handoff.
 
 Spec-derived data tables — builtin properties, hfn definitions, regex and
 facet tables, rule catalogs — are NEVER hand-typed: write or extend a
