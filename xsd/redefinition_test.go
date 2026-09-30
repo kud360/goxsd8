@@ -158,6 +158,12 @@ func TestSrcRedefineClause622(t *testing.T) {
 		{"an occurrence range widened",
 			uGroup(t, CompositorSequence, cElem(t, "a", 1, 3)),
 			uGroup(t, CompositorSequence, cElem(t, "a", 1, 5)), false},
+		{"an all group reordered as a sequence",
+			uGroup(t, CompositorAll, cElem(t, "a", 1, 1), cElem(t, "b", 1, 1)),
+			uGroup(t, CompositorSequence, cElem(t, "b", 1, 1), cElem(t, "a", 1, 1)), true},
+		{"an all group dropping a required member",
+			uGroup(t, CompositorAll, cElem(t, "a", 1, 1), cElem(t, "b", 1, 1)),
+			uGroup(t, CompositorAll, cElem(t, "a", 1, 1)), false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			err := mgdRedefines(t, tc.original, tc.redefining)

@@ -22,11 +22,11 @@ import (
 // reduce to one walk of the PRODUCT of the two content models' position
 // automata. The automata are particleattribution.go's construction, reused whole
 // rather than forked (STYLE T4): the same addParticle, the same first/follow/last
-// sets cos-nonambig is decided over. One thing is chosen differently — the
-// unfolding of a numeric occurrence range, which this file supplies as
-// unfoldExactly through automaton.unfold.
+// sets cos-nonambig is decided over. Two things are chosen differently, and this
+// file supplies both as languagePolicy: the unfolding of a numeric occurrence
+// range (unfoldExactly) and the rendering of an <all> group (addInterleave).
 //
-// WHY THE UNFOLDING IS THE ONE THING NOT SHARED. maxMandatoryCopies /
+// WHY THE UNFOLDING IS NOT SHARED. maxMandatoryCopies /
 // maxOptionalCopies bound a range to two copies of each kind, which is
 // verdict-preserving for cos-nonambig — whose subject is which particle-
 // IDENTIFIER sets are live in one state, and two copies realize every such set —
@@ -46,6 +46,15 @@ import (
 // {min occurs} copies plus a loop-back for an unbounded one, so the automaton
 // accepts exactly L and this walk DECIDES containment over the declared
 // {min occurs}/{max occurs} instead of over a truncated unfolding (#501).
+//
+// WHY THE <all> RENDERING IS NOT SHARED. addAll renders all(P1…Pn) as a star over
+// its members followed by a primed replay of one of them, which is exact for
+// ·compete· and a strict superset of the interleave §3.8.4.1.3 defines, so it
+// would make an ·all· in R admit sequences R does not (a false reject) and one in
+// B admit sequences B does not (a false accept). addInterleave builds the
+// interleave itself, so an <all> on either side is decided exactly, as
+// derivation-ok-restriction clause 2.4.2 asks of cos-content-act-restrict
+// (#1930).
 //
 // The exact unfolding does not step outside what cos-nonambig validated.
 // maxMandatoryCopies' own argument is that copies past the second realize no
@@ -118,8 +127,9 @@ type contentAutomaton struct {
 }
 
 // contentAutomatonOf builds the position automaton of one Content Type's
-// {particle}, unfolding every numeric occurrence range exactly (unfoldExactly),
-// so the automaton accepts exactly the sequences ·locally valid· with respect to
+// {particle} under languagePolicy — every numeric occurrence range unfolded
+// exactly and every <all> group built as its interleave — so the automaton
+// accepts exactly the sequences ·locally valid· with respect to
 // that content model and the walk below decides containment rather than
 // approximating it. Nothing here bounds the construction: the caller must have
 // cleared the content model through unfoldedPositions first.
@@ -127,7 +137,7 @@ type contentAutomaton struct {
 // It is finalize-scoped and memoized nowhere (STYLE D3), exactly as
 // checkContentModelsUnambiguous builds and discards one per content model.
 func (s *Schema) contentAutomatonOf(c ElementContent) (contentAutomaton, error) {
-	b := &automaton{s: s, unfold: unfoldExactly}
+	b := &automaton{s: s, policy: languagePolicy}
 	first, last, emptiable, err := b.addParticle(c.Particle)
 	if err != nil {
 		return contentAutomaton{}, err
@@ -135,9 +145,13 @@ func (s *Schema) contentAutomatonOf(c ElementContent) (contentAutomaton, error) 
 	return contentAutomaton{automaton: b, first: first, last: last, emptiable: emptiable}, nil
 }
 
-// unfoldExactly is the automaton.unfold policy cos-content-act-restrict is
-// decided over: the unfolding of a numeric occurrence range that preserves the
-// LANGUAGE of the particle, which is the only fact a containment walk reads.
+// languagePolicy is cos-content-act-restrict's constructionPolicy: both of its
+// renderings preserve the LANGUAGE of the content model, which is the only fact a
+// containment walk reads.
+var languagePolicy = constructionPolicy{unfold: unfoldExactly, all: (*automaton).addInterleave}
+
+// unfoldExactly is languagePolicy's unfolding of a numeric occurrence range: the
+// one that preserves the LANGUAGE of the particle.
 //
 // It is unfoldCopies (particleattribution.go) with the two copy caps removed, and
 // removing them is precisely what makes it language-exact. A bounded {m,n} emits
@@ -295,29 +309,156 @@ func (s *Schema) resolvedTermPositions(t Term) int {
 	}
 }
 
-// modelGroupPositions sums its members' unfolded positions, saturating as soon as
+// modelGroupPositions is termPositions for a model group, saturating as soon as
 // the running total passes the ceiling so a wide group under a wide range is not
 // summed to completion. Particles are walked in document order (STYLE D2).
 //
 // <sequence> and <choice> contribute each member's fragment exactly once —
 // addSequence and addChoice differ in the edges they draw, never in the positions
-// they emit. addAll emits each member's fragment TWICE, once for the star and
-// once for the primed alternation that carries the group's ·last· set, so an
-// <all> counts double. Keeping that factor in step with addAll is what makes this
-// count the automaton's size rather than an estimate of it.
+// they emit — so they count the sum of their members. An <all> is
+// interleavePositions'.
 func (s *Schema) modelGroupPositions(g ModelGroup) int {
-	copies := 1
 	if g.Compositor() == CompositorAll {
-		copies = 2
+		return s.interleavePositions(g)
 	}
 	total := 0
 	for _, p := range g.particles {
 		total += s.unfoldedPositions(p)
-		if total > maxContentPositions/copies {
+		if total > maxContentPositions {
 			return maxContentPositions + 1
 		}
 	}
-	return copies * total
+	return total
+}
+
+// interleavePositions is modelGroupPositions for an <all> group: an upper bound
+// on the positions addInterleave emits, saturating one past maxContentPositions.
+//
+// addInterleave emits one position per pair (v, i) of a reachable member-state
+// vector v and a member i whose own state v[i] is a position of member i's
+// fragment. With Pi the positions of member i's fragment, member i has 1 + Pi
+// states (not yet started, or just consumed one of its positions), so there are
+// at most Pi × Π(j≠i)(1 + Pj) such pairs for each i, and the count is their sum.
+// It is folded member by member — a prefix with S states and N positions extended
+// by a member of P positions has S(1 + P) states and N(1 + P) + P·S positions —
+// and every intermediate is a product of two factors at most one past the
+// ceiling, since each non-start vector is entered by at least one position and
+// so S ≤ N + 1.
+//
+// It is exact when every position of every member's fragment is reachable from
+// that fragment's start, which every shape but an unreachable tail behind an empty
+// <choice> satisfies, and an over-count there only sends the model to the
+// fail-open ceiling sooner.
+func (s *Schema) interleavePositions(g ModelGroup) int {
+	states, total := 1, 0
+	for _, p := range g.particles {
+		n := s.unfoldedPositions(p)
+		total = total*(1+n) + n*states
+		states *= 1 + n
+		if total > maxContentPositions {
+			return maxContentPositions + 1
+		}
+	}
+	return total
+}
+
+// addInterleave is languagePolicy's rendering of an <all> group: the exact
+// interleave §3.8.4.1.3 defines, L(all(P1…Pn)) = S1 × … × Sn over Si ∈ L(Pi),
+// where × interleaves (partitions a sequence into subsequences, not contiguous
+// blocks).
+//
+// Each member is built into its own fragment (a contentAutomaton over a scratch
+// automaton), and the interleave is the product of those fragments: a state is
+// a vector v holding one state per member — startState, or the member position
+// just consumed — and an item moves exactly one member i one step, from v[i] to a
+// position live there. The group accepts where every member does, so a member
+// contributes the empty sequence only when it is emptiable. Nesting composes: a
+// member that is itself an <all> (cos-all-limited clause 2) is built by this
+// same function inside its own fragment.
+//
+// The emitted automaton is a position automaton like every other fragment, so
+// the enclosing construction composes with it unchanged: position (v, i) is
+// entered only by consuming member i's position v[i], so it carries that
+// position's particle identifier and {term}, and its ·follow· set is every (w, j)
+// one step from v. Member fragments allocate their particle identifiers from this
+// automaton's allocator, in member order, so the identifier -> {term} function
+// the walk's per-source-particle collapse relies on holds across the whole
+// automaton, and a copy made by an enclosing addParticle replays them exactly.
+//
+// Vectors are enumerated breadth-first from the all-startState vector, members
+// in document order and a member's live positions ascending, so the position
+// numbering depends only on the content model (STYLE D1). The two maps are
+// lookups only and are never ranged (STYLE D2). The enumeration is finite
+// because the member fragments are, and its size is what interleavePositions
+// bounds: contentTypeRestricts refuses a content model past maxContentPositions
+// before this is ever reached.
+func (b *automaton) addInterleave(g ModelGroup) ([]int, []int, bool, error) {
+	members := make([]contentAutomaton, 0, len(g.particles))
+	for _, p := range g.particles {
+		m := &automaton{s: b.s, policy: b.policy, nextParticleID: b.nextParticleID}
+		first, last, emptiable, err := m.addParticle(p)
+		if err != nil {
+			return nil, nil, false, err
+		}
+		b.nextParticleID = m.nextParticleID
+		members = append(members, contentAutomaton{automaton: m, first: first, last: last, emptiable: emptiable})
+	}
+	start := make([]int, len(members))
+	for i := range start {
+		start[i] = startState
+	}
+	vectors := [][]int{start}
+	vectorIDs := map[string]int{positionsKey(start): 0}
+	entry := map[[2]int]int{} // (vector id, member) -> position in b
+	var entered []int         // position - base -> the vector id it enters
+	base := len(b.positions)
+	var successors [][]int // vector id -> ascending positions one step from it
+	for u := 0; u < len(vectors); u++ {
+		var next []int
+		for i, m := range members {
+			for _, q := range m.live(vectors[u][i]) {
+				w := slices.Clone(vectors[u])
+				w[i] = q
+				key := positionsKey(w)
+				wid, seen := vectorIDs[key]
+				if !seen {
+					wid = len(vectors)
+					vectorIDs[key] = wid
+					vectors = append(vectors, w)
+				}
+				pos, emitted := entry[[2]int{wid, i}]
+				if !emitted {
+					pos = len(b.positions)
+					entry[[2]int{wid, i}] = pos
+					b.positions = append(b.positions, m.positions[q])
+					b.follow = append(b.follow, nil)
+					entered = append(entered, wid)
+				}
+				next = append(next, pos)
+			}
+		}
+		slices.Sort(next)
+		successors = append(successors, next)
+	}
+	var last []int
+	for k, wid := range entered {
+		b.addFollow(base+k, successors[wid])
+		if interleaveAccepts(members, vectors[wid]) {
+			last = append(last, base+k)
+		}
+	}
+	return slices.Clone(successors[0]), last, interleaveAccepts(members, start), nil
+}
+
+// interleaveAccepts reports whether a member-state vector ends a sequence the
+// interleave accepts: every member's own state accepts.
+func interleaveAccepts(members []contentAutomaton, v []int) bool {
+	for i, m := range members {
+		if !m.accepting(v[i]) {
+			return false
+		}
+	}
+	return true
 }
 
 // startState is the automaton state before any element has been consumed. Every
@@ -697,9 +838,6 @@ func (s *Schema) contentTypeRestricts(tct, bct ContentType, scope contentRestric
 		// checkModelGroupRedefinitions (redefinition.go) does not reach this arm
 		// at all — modelGroupContent leaves {open content} ·absent·.
 		return true
-	}
-	if s.usesAllCompositor(rc.Particle.Term()) {
-		return true // §3.4.6.3's all-group leniency; see the doc above
 	}
 	if s.unfoldedPositions(rc.Particle) > maxContentPositions || s.unfoldedPositions(bc.Particle) > maxContentPositions {
 		// GAP(xsd): a content model whose exact unfolding would exceed
@@ -1268,44 +1406,4 @@ func elementPositionBinding(p position) defaultBinding {
 	default:
 		panic("xsd: elementPositionBinding: position {term} is neither an element declaration nor a wildcard")
 	}
-}
-
-// usesAllCompositor reports whether an ·all· group is reachable through a
-// particle's {term}, following <group ref> edges exactly as the automaton's own
-// addTerm does. It is what selects §3.4.6.3's all-group leniency (see
-// contentTypeRestricts).
-//
-// A top-level ·all· is the shape the spec's own wording names, and cos-all-limited
-// (§3.8.6.2) confines an ·all· to that position or to another ·all· reached
-// through a <group ref>, so the tree walk and the spec's "T.{content
-// type}.{particle}.{term}.{compositor} = all" agree on every content model the
-// grammar admits. The walk carries no visited set, licensed by Phase B's
-// checkModelGroupsAcyclic (PRINCIPLES 9).
-func (s *Schema) usesAllCompositor(t TermOrRef) bool {
-	switch t := t.(type) {
-	case ResolvedTerm:
-		g, ok := t.Term.(ModelGroup)
-		return ok && s.modelGroupUsesAllCompositor(g)
-	case ModelGroupRef:
-		mgd, ok := s.modelGroupIndex[t.Name]
-		return ok && s.modelGroupUsesAllCompositor(mgd.ModelGroup())
-	case ElementDeclarationRef:
-		return false // an element declaration holds no model group
-	default:
-		panic("xsd: usesAllCompositor: non-exhaustive TermOrRef switch")
-	}
-}
-
-// modelGroupUsesAllCompositor reports whether g or any group nested in it has
-// {compositor} = all. Particles are walked in document order (STYLE D2).
-func (s *Schema) modelGroupUsesAllCompositor(g ModelGroup) bool {
-	if g.Compositor() == CompositorAll {
-		return true
-	}
-	for _, p := range g.particles {
-		if s.usesAllCompositor(p.Term()) {
-			return true
-		}
-	}
-	return false
 }
