@@ -4824,7 +4824,7 @@ MS-Regex2006-07-15/reK77/instance/reK77.i pass
 MS-Regex2006-07-15/reK78/instance/reK78.v pass
 MS-Regex2006-07-15/reK84/instance/reK84.v pass
 MS-Regex2006-07-15/reK85/instance/reK85.i pass
-MS-Regex2006-07-15/reK88/instance/reK88.v fail
+MS-Regex2006-07-15/reK88/instance/reK88.v pass
 MS-Regex2006-07-15/reK9/instance/reK9.i pass
 MS-Regex2006-07-15/reL1/instance/reL1.v pass
 MS-Regex2006-07-15/reL10/instance/reL10.v pass
