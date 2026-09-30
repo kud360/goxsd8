@@ -229,6 +229,176 @@ func TestContentRestrictsWildcardUnion(t *testing.T) {
 	expectRule(t, cRestricts(t, halfOnly, anyOne), ruleDerivationOKRestriction)
 }
 
+// cAnyExcept is a once-occurring wildcard over the given namespaces whose
+// {disallowed names} holds the given QNames and no keyword.
+func cAnyExcept(t *testing.T, namespaces []Namespace, pc ProcessContents, disallowed ...QName) Particle {
+	t.Helper()
+	w, err := NewWildcard(xsderr.Loc{}, cNC(t, NamespaceConstraintEnumeration, namespaces, disallowed, nil), pc)
+	if err != nil {
+		t.Fatalf("NewWildcard: %v", err)
+	}
+	return uOne(t, ResolvedTerm{Term: w})
+}
+
+// TestContentRestrictsElementCoveredWildcard pins cos-content-act-restrict
+// clause 1 where R's wildcard is covered only by B's live ·element particles·
+// and live ·wildcard particles· together: the names B's wildcards leave out
+// (here by notQName) are exactly the names a live element particle admits.
+// Clause 1 is language containment, so the pair satisfies it whichever particle
+// admits each item, and src-redefine clause 6.2.2 (restrictsLanguage), which
+// charges clause 1 alone, accepts it at every {process contents}. The two
+// element-removed rows are the rejecting siblings: without the element
+// particle the name a is admitted by nothing in B.
+//
+// The "a must be followed by b" rows check that the name split off for the
+// element particle continues into that particle's ·follow· set: R's single
+// item a is a sequence B does not accept when B's element a requires b after
+// it, and is one B accepts when that b is optional. In "a also admitted by a
+// wildcard" B's element a is followed by b and its urn:upa wildcard by c, and R
+// follows every item with c, so R's item a is accepted only through the
+// wildcard: the set split off for a must hold every live position admitting a,
+// the wildcard's as well as the element's.
+func TestContentRestrictsElementCoveredWildcard(t *testing.T) {
+	a := uq("a")
+	ns := []Namespace{NamespaceName(uns)}
+	both := []Namespace{NamespaceName(uns), NamespaceName("")}
+	local := []Namespace{NamespaceName("")}
+	choice := func(ps ...Particle) Particle {
+		return uOne(t, ResolvedTerm{Term: uGroup(t, CompositorChoice, ps...)})
+	}
+	seq := func(ps ...Particle) ModelGroup { return uGroup(t, CompositorSequence, ps...) }
+	for _, pc := range []ProcessContents{ProcessSkip, ProcessLax, ProcessStrict} {
+		t.Run(pc.String(), func(t *testing.T) {
+			for _, tc := range []struct {
+				name          string
+				base, derived ModelGroup
+				wantSubset    bool
+			}{
+				{name: "one wildcard beside the element",
+					base:    seq(choice(cElem(t, "a", 1, 1), cAnyExcept(t, ns, pc, a))),
+					derived: seq(cAnyExcept(t, ns, pc)), wantSubset: true},
+				{name: "one wildcard, element removed",
+					base:    seq(cAnyExcept(t, ns, pc, a)),
+					derived: seq(cAnyExcept(t, ns, pc))},
+				{name: "two wildcards beside the element",
+					base:    seq(choice(cElem(t, "a", 1, 1), cAnyExcept(t, ns, pc, a), cAnyExcept(t, local, pc))),
+					derived: seq(cAnyExcept(t, both, pc)), wantSubset: true},
+				{name: "two wildcards, element removed",
+					base:    seq(choice(cAnyExcept(t, ns, pc, a), cAnyExcept(t, local, pc))),
+					derived: seq(cAnyExcept(t, both, pc))},
+				{name: "a must be followed by b",
+					base: seq(choice(
+						uOne(t, ResolvedTerm{Term: seq(cElem(t, "a", 1, 1), cElem(t, "b", 1, 1))}),
+						cAnyExcept(t, ns, pc, a))),
+					derived: seq(cAnyExcept(t, ns, pc))},
+				{name: "a may be followed by b",
+					base: seq(choice(
+						uOne(t, ResolvedTerm{Term: seq(cElem(t, "a", 1, 1), cElem(t, "b", 0, 1))}),
+						cAnyExcept(t, ns, pc, a))),
+					derived: seq(cAnyExcept(t, ns, pc)), wantSubset: true},
+				{name: "a also admitted by a wildcard",
+					base: seq(choice(
+						uOne(t, ResolvedTerm{Term: seq(cElem(t, "a", 1, 1), cElem(t, "b", 1, 1))}),
+						uOne(t, ResolvedTerm{Term: seq(cAnyExcept(t, ns, pc), cElem(t, "c", 1, 1))}),
+						uOne(t, ResolvedTerm{Term: seq(cAnyExcept(t, local, pc), cElem(t, "c", 1, 1))}))),
+					derived: seq(cAnyExcept(t, both, pc), cElem(t, "c", 1, 1)), wantSubset: true},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					err := mgdRedefines(t, tc.base, tc.derived)
+					if tc.wantSubset && err != nil {
+						t.Fatalf("a redefinition whose wildcard B's element and wildcard particles jointly cover was rejected: %v", err)
+					}
+					if !tc.wantSubset {
+						expectRule(t, err, ruleSrcRedefine)
+					}
+				})
+			}
+		})
+	}
+}
+
+// TestContentRestrictsElementCoveredSubstitution pins the names an ·element
+// particle· contributes to TestContentRestrictsElementCoveredWildcard's split:
+// its declaration's own name and every member of its ·substitution group·. B's
+// <element ref="head"/> admits member only when member is affiliated to head, so
+// B's wildcard excluding both names is covered by the element particle in the
+// first row and leaves member admitted by nothing in the second.
+func TestContentRestrictsElementCoveredSubstitution(t *testing.T) {
+	head, member := uq("head"), uq("member")
+	ns := []Namespace{NamespaceName(uns)}
+	redefines := func(affiliations ...QName) error {
+		return dFinalize(t, func(b *SchemaBuilder) {
+			b.AddElement(uGlobal(t, head, uq("T")))
+			b.AddElement(uGlobal(t, member, uq("T"), affiliations...))
+			original := uGroup(t, CompositorSequence, uOne(t, ResolvedTerm{Term: uGroup(t, CompositorChoice,
+				uOne(t, ElementDeclarationRef{Name: head}), cAnyExcept(t, ns, ProcessLax, head, member))}))
+			redefining := uGroup(t, CompositorSequence, cAnyExcept(t, ns, ProcessLax))
+			b.AddRedefiningModelGroup(dMGD(t, uq("g"), redefining), dMGD(t, uq("g"), original))
+		})
+	}
+	if err := redefines(head); err != nil {
+		t.Fatalf("a wildcard covered by a substitution group head and a wildcard was rejected: %v", err)
+	}
+	expectRule(t, redefines(), ruleSrcRedefine)
+}
+
+// TestContentRestrictsElementCoveredWildcardBinding pins cos-content-act-restrict
+// clause 2 on the item TestContentRestrictsElementCoveredWildcard splits off: an
+// item named a that R's wildcard admits and only B's ·element particle· admits.
+// Clause 1 holds for every row (the same pairs are accepted by src-redefine
+// clause 6.2.2 above), so derivation-ok-restriction's verdict is clause 2's.
+//
+//   - B's particle is a LOCAL a and no top-level a exists: R's ·default binding·
+//     for the item is its wildcard's keyword at every {process contents}
+//     (key-governing-ed resolves no declaration), B's is the Element Declaration,
+//     and loc-testSubP never lets an Element Declaration subsume a keyword. An
+//     exact rejection.
+//   - B's particle is <element ref="a"/> to a top-level a: under a skip wildcard
+//     R's binding is still the keyword (§3.10.4.1's closing Note), so the pair is
+//     an exact rejection too. Under a lax or strict one key-governing-ed clause 3
+//     may govern the item by that top-level a, which elementPositionBinding does
+//     not render (#345), and the pair is ACCEPTED fail-open, the GAP(xsd) at
+//     coveringWildcardUnion's element split. The skip row is its rejecting
+//     sibling.
+func TestContentRestrictsElementCoveredWildcardBinding(t *testing.T) {
+	a := uq("a")
+	ns := []Namespace{NamespaceName(uns)}
+	choice := func(ps ...Particle) Particle {
+		return uOne(t, ResolvedTerm{Term: uGroup(t, CompositorChoice, ps...)})
+	}
+	seq := func(ps ...Particle) ModelGroup { return uGroup(t, CompositorSequence, ps...) }
+	global := func(pc ProcessContents) error {
+		return dFinalize(t, func(b *SchemaBuilder) {
+			b.AddElement(uGlobal(t, a, uq("T")))
+			base := seq(choice(uOne(t, ElementDeclarationRef{Name: a}), cAnyExcept(t, ns, pc, a)))
+			b.AddType(dType(t, uq("base"), anyTypeName, dElementContent(t, false, base), nil, nil))
+			b.AddType(dType(t, uq("derived"), uq("base"), dElementContent(t, false, seq(cAnyExcept(t, ns, pc))), nil, nil))
+		})
+	}
+	for _, tc := range []struct {
+		pc             ProcessContents
+		wantRestricted bool
+	}{
+		{pc: ProcessSkip},
+		{pc: ProcessLax, wantRestricted: true},
+		{pc: ProcessStrict, wantRestricted: true},
+	} {
+		t.Run(tc.pc.String(), func(t *testing.T) {
+			local := cRestricts(t,
+				seq(choice(cElem(t, "a", 1, 1), cAnyExcept(t, ns, tc.pc, a))),
+				seq(cAnyExcept(t, ns, tc.pc)))
+			expectRule(t, local, ruleDerivationOKRestriction)
+			err := global(tc.pc)
+			if tc.wantRestricted && err != nil {
+				t.Fatalf("an item a top-level declaration may govern was charged clause 2: %v", err)
+			}
+			if !tc.wantRestricted {
+				expectRule(t, err, ruleDerivationOKRestriction)
+			}
+		})
+	}
+}
+
 // TestContentRestrictsWildcardUnionShortfall is the other side of
 // coveringWildcardUnion, and the half a union that is merely ASSUMED to cover
 // cannot decide: two live base wildcards whose cos-aw-union is a bounded

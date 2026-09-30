@@ -978,7 +978,8 @@ func (s *Schema) contentTypeRestricts(tct, bct ContentType, scope contentRestric
 // (matchPositions), whether some matched binding subsumes (someBindingSubsumes)
 // — is read off the R-position's {term}, and copies of one particle share it, so
 // the copies of one particle live in a state all transition into the same
-// B-sets: one, or one per part of a wildcard coveringWildcardUnion splits. The
+// B-sets: one, or one per name or part of a wildcard coveringWildcardUnion
+// splits. The
 // copies are still enqueued SEPARATELY, each as its own R-state: they carry
 // different ·follow· sets, so the per-particle memo collapses only the
 // recomputation of one answer per copy (#501), and the future quotient below
@@ -1038,11 +1039,11 @@ func (s *Schema) contentModelRestricts(r, b contentAutomaton, scope contentRestr
 				if len(successors) == 0 {
 					return false // clause 1: R can continue where B cannot
 				}
-				for _, matched := range successors {
-					if scope == restrictsFully && !s.someBindingSubsumes(b, matched, r.positions[p]) {
+				for _, next := range successors {
+					if scope == restrictsFully && !next.governable && !s.someBindingSubsumes(b, next.positions, r.positions[p]) {
 						return false // clause 2, ctr-child-type-subsumption
 					}
-					ids = append(ids, subsets.intern(matched))
+					ids = append(ids, subsets.intern(next.positions))
 				}
 				target[r.positions[p].particleID] = ids
 			}
@@ -1156,10 +1157,26 @@ func (s *Schema) contentModelRestricts(r, b contentAutomaton, scope contentRestr
 	return true
 }
 
+// successorSet is one B-set an R transition continues into, ascending, as
+// matchPositions returns it.
+//
+// governable marks a set coveringWildcardUnion split off for ONE expanded name
+// that a live ·element particle· admits, when R's wildcard is lax or strict and
+// that name ·resolves· to a top-level element declaration: key-governing-ed
+// clause 3 may then give the item a ·governing element declaration·, so R's
+// ·default binding· for it may be that declaration rather than the keyword
+// elementPositionBinding renders, and clause 2 is not charged on the set. The
+// GAP(xsd) at that split carries the residual.
+type successorSet struct {
+	positions  []int
+	governable bool
+}
+
 // matchPositions returns the B-sets the R-position p's transition continues
-// into, each ascending. When some live B-position admits every item p admits, it
-// is one set: every live B-position that does. Otherwise, when p is a wildcard, it is
-// coveringWildcardUnion's split: one set per part of p's {namespace constraint}
+// into. When some live B-position admits every item p admits, it is one set:
+// every live B-position that does. Otherwise, when p is a wildcard, it is
+// coveringWildcardUnion's split: one set per expanded name a live ·element
+// particle· admits, and one per part of the rest of p's {namespace constraint}
 // that a different base wildcard admits. An empty result is a clause-1 failure:
 // R can consume something no run of B can.
 //
@@ -1178,90 +1195,111 @@ func (s *Schema) contentModelRestricts(r, b contentAutomaton, scope contentRestr
 // the walk's hot loop — it is entered once per live R-position per product state
 // — and the collapse is what keeps its cost proportional to the number of
 // distinct particles rather than to the declared {max occurs} (#501).
-func (s *Schema) matchPositions(p position, b contentAutomaton, live liveSet) [][]int {
+func (s *Schema) matchPositions(p position, b contentAutomaton, live liveSet) []successorSet {
 	admits := make([]bool, len(live.reps))
 	for g, q := range live.reps {
 		admits[g] = s.positionAdmits(b.positions[q], p)
 	}
 	if matched := live.positionsOf(admits); len(matched) > 0 {
-		return [][]int{matched}
+		return []successorSet{{positions: matched}}
 	}
 	w, isWildcard := p.term.(Wildcard)
 	if !isWildcard {
 		return nil
 	}
-	return coveringWildcardUnion(w.NamespaceConstraint(), b, live)
+	return s.coveringWildcardUnion(w, b, live)
 }
 
 // coveringWildcardUnion is the one place positionAdmits is too weak to be used
 // alone: cos-ns-subset relates ONE Namespace Constraint to ONE other, but the
-// base may cover a restriction's wildcard with SEVERAL of its own. W3C suite
-// saxonData/Wild wild049 is exactly that — a base ·all· group carrying
-// namespace="##local" beside notNamespace="##local", whose union is every name,
-// against a single ##any wildcard in the restriction — and the two base
-// wildcards are non-overlapping, so cos-nonambig leaves them both live.
+// base may cover a restriction's wildcard w with SEVERAL of its own particles.
+// W3C suite saxonData/Wild wild049 is the all-wildcard shape — a base ·all·
+// group carrying namespace="##local" beside notNamespace="##local", whose union
+// is every name, against a single ##any wildcard in the restriction — and the
+// two base wildcards are non-overlapping, so cos-nonambig leaves them both live.
+// Live ·element particles· cover names too: clause 1 is language containment,
+// so a base wildcard carrying notQName="a" beside a live element particle a
+// covers the whole namespace between them (#1954).
 //
-// Coverage is COMPUTED, not assumed: the live wildcards' {namespace
+// The names element particles admit are SPLIT OFF first. Each live element
+// particle admits finitely many expanded names — its declaration's, and the
+// names of the top-level declarations in its ·substitution group· — so the
+// names sub (w's {namespace constraint}) admits among them form a finite list,
+// in live-group order and then {element declarations} order (STYLE D2), and
+// each is decided exactly: its set is S(n), every live position admitting n,
+// element and wildcard alike, by the same relations positionAdmits uses
+// (elementParticleAdmits, and cvc-wildcard-name through allowsName). The REST of
+// sub is sub with those names added to its {disallowed names}, and only the rest
+// is left to the wildcards. Admission here is cvc-wildcard-name on both sides:
+// the keyword half of {disallowed names} is not resolved into names, which the
+// GAP(xsd) on the keyword residual below records.
+//
+// Coverage of the rest is COMPUTED, not assumed: the live wildcards' {namespace
 // constraint}s are folded left through Attribute Wildcard Union (§3.10.6.3,
 // cos-aw-union) — the same left fold the constraint's own final paragraph
-// prescribes for more than two operands — and sub is then tested against the
-// result by the same cos-ns-subset relation positionAdmits uses for one base
-// wildcard. A union that does not cover sub is a clause-1 failure, reported as
-// the empty result matchPositions and contentModelRestricts already read that
-// way.
+// prescribes for more than two operands — and the rest is then tested against
+// the result by the same cos-ns-subset relation positionAdmits uses for one base
+// wildcard. A rest the union does not cover, or a sub with no live wildcard at
+// all, holds a name no live position admits — the rest admits a namespace,
+// hence infinitely many names, and no element particle is left to admit one — so
+// the empty result matchPositions and contentModelRestricts read as a clause-1
+// failure is an exact rejection there, modulo the two keyword markers below.
 //
-// A covering union is then SPLIT, because it shows only that every name sub
-// admits is admitted by SOME base wildcard, never which base wildcard's {min
-// occurs}/{max occurs} an item counts towards (derivation-ok-restriction clause
-// 2.4.2, cos-content-act-restrict clause 1). Each distinct live wildcard particle
-// whose constraint C meets sub yields one part, sub ∩ C (Attribute Wildcard
-// Intersection, §3.10.6.4, cos-aw-intersect), and one result set: every live
-// position of every wildcard particle whose constraint meets that part. The
-// walk continues from EVERY set — universal over R's items, since each item sub
-// admits lies in some part, and existential over B's runs within a set. Where
-// the live wildcards are pairwise disjoint within sub, a part's set is its own
-// particle's positions alone, so an item counts towards the one base wildcard
-// that admits it. saxonData All/all244 is that shape: B = all(any{one,two}{5,∞},
-// any{three}{0,2}) and R = all(any{one}{3,∞}, any{two,three}{2,2}), and R's
-// (one, one, one, three, three) sends its three items to B's second wildcard
-// alone, leaving B's first at 3 of its 5.
+// A covering union is then SPLIT, because it shows only that every name the
+// rest admits is admitted by SOME base wildcard, never which base wildcard's
+// {min occurs}/{max occurs} an item counts towards (derivation-ok-restriction
+// clause 2.4.2, cos-content-act-restrict clause 1). Each distinct live wildcard
+// particle whose constraint C meets the rest yields one part, rest ∩ C
+// (Attribute Wildcard Intersection, §3.10.6.4, cos-aw-intersect), and one result
+// set: every live position of every wildcard particle whose constraint meets
+// that part. The walk continues from EVERY set — universal over R's items, since
+// each item sub admits is a split-off name or lies in some part, and existential
+// over B's runs within a set. Where the live wildcards are pairwise disjoint
+// within the rest, a part's set is its own particle's positions alone, so an
+// item counts towards the one base wildcard that admits it. saxonData
+// All/all244 is that shape: B = all(any{one,two}{5,∞}, any{three}{0,2}) and R =
+// all(any{one}{3,∞}, any{two,three}{2,2}), and R's (one, one, one, three, three)
+// sends its three items to B's second wildcard alone, leaving B's first at 3 of
+// its 5.
 //
 // Why the result never makes the walk answer false where the exact check
 // answers true. The exact check (cos-content-act-restrict clause 1, with clause
 // 2 at each item) moves B, on an item n, to S(n): the live positions admitting
-// n. Every set returned here CONTAINS S(n) for some n in its part: a part is
-// non-empty only when it admits a namespace, hence infinitely many names, while
-// the element particles live beside the wildcards admit finitely many, so some
-// n in the part is admitted by wildcards alone, and the set holds every
-// wildcard particle that can admit a name of the part. A walk branch entering
-// such a set therefore shadows the exact branch taking n, through the same
-// R-states, with a B-set at least as large; and each of the walk's rejections
-// on that branch — no member accepting where R may end, no live position
-// admitting R's next item, no member's binding subsuming (someBindingSubsumes)
-// — quantifies over every member, so it holds of the smaller exact set too and
-// is an exact rejection. The argument is per branch and assumes no
-// monotonicity of the walk in its B-set: from a larger set matchPositions may
-// return a direct match where a smaller one would return a split, and the
-// argument covers that step the same way, since a direct match holds S(n) for
-// every name of sub that no element particle and no other live wildcard admits,
-// and such a name exists unless live wildcards overlap within sub — the first
-// shape the GAP(xsd) below records.
+// n. A split-off name's set IS S(n), or wider where a base wildcard's keyword
+// exclusions are read as admitting (allowsName). Every part's set CONTAINS S(n)
+// for some n in its part: a part is non-empty only when it admits a namespace,
+// hence infinitely many names, while no name of the rest is admitted by an
+// element particle, so some n in the part is admitted by wildcards alone, and
+// the set holds every wildcard particle that can admit a name of the part. A
+// walk branch entering such a set therefore shadows the exact branch taking n,
+// through the same R-states, with a B-set at least as large; and each of the
+// walk's rejections on that branch — no member accepting where R may end, no
+// live position admitting R's next item, no member's binding subsuming
+// (someBindingSubsumes) — quantifies over every member, so it holds of the
+// smaller exact set too and is an exact rejection. The argument is per branch
+// and assumes no monotonicity of the walk in its B-set: from a larger set
+// matchPositions may return a direct match where a smaller one would return a
+// split, and the argument covers that step the same way, since a direct match
+// holds S(n) for every name of sub that no element particle and no other live
+// wildcard admits, and such a name exists unless live wildcards overlap within
+// sub — the first shape the GAP(xsd) below records.
 //
 // Construction cost stays within maxProductStates (#499): one R transition
-// yields at most k sets, k the distinct live wildcard particles, where it
-// yielded one; no R position is added, each set is interned like any other
-// B-set, and every product state still counts against the one ceiling.
+// yields at most k + m sets, k the distinct live wildcard particles and m the
+// split-off names, where it yielded one; no R position is added, each set is
+// interned like any other B-set, and every product state still counts against
+// the one ceiling.
 //
 // GAP(xsd): two shapes are not decided and return a set wider than an item's
-// runs. Live base wildcards that overlap within sub put every overlapping
+// runs. Live base wildcards that overlap within the rest put every overlapping
 // particle's positions into a part's set, so an item one of them admits also
 // counts towards the others' runs; cos-nonambig forbids two distinct wildcard
 // particles live after one prefix to ·overlap·, but addInterleave's states are
 // not among those Phase C checked, so the shape is not shown unreachable. And
-// the three unreachable error slots below return every live wildcard position
-// as one set, as the whole union did before the split. Both sets contain S(n)
-// for some n, so by the argument above the walk answers true more often and
-// never less. #1953 owns deciding them (derivation-ok-restriction clause 2.4.2,
+// the four unreachable error slots below return every live wildcard position as
+// one set, as the whole union did before the split. Both sets contain S(n) for
+// some n, so by the argument above the walk answers true more often and never
+// less. #1953 owns deciding them (derivation-ok-restriction clause 2.4.2,
 // cos-aw-intersect). Fail-open for all three readers of that true, each of which
 // charges only on false (STYLE P3a): checkRestrictionContentType
 // (complexderivation.go) charges derivation-ok-restriction clause 2.4.2;
@@ -1291,14 +1329,32 @@ func (s *Schema) matchPositions(p position, b contentAutomaton, live liveSet) []
 //
 // The loss is therefore local to THIS call site, the one place the attribute-only
 // union algebra is applied to element wildcards, and only when more than one base
-// wildcard is live — a single one is decided by cos-ns-subset alone in
-// positionAdmits, where sibling IS compared. The local specs define no
-// multi-operand element-wildcard union that preserves the keyword, and inventing
-// one is not this seam's to do: #265 ruled the limitation PERMANENT rather than
-// open, on the oracle grounding recorded on that issue.
+// wildcard is live — a single one is never folded, and cos-ns-subset compares its
+// sibling, whether positionAdmits asks it of sub or this function of the rest.
+// The local specs define no multi-operand element-wildcard union that preserves
+// the keyword, and inventing one is not this seam's to do: #265 ruled the
+// limitation PERMANENT rather than open, on the oracle grounding recorded on that
+// issue.
 //
-// A single live wildcard is left to cos-ns-subset alone in positionAdmits, where
-// the relation is already exact; folding it here would only restate that verdict.
+// GAP(xsd): the keyword half of {disallowed names} is not resolved into names on
+// either side of the split, and the direction is a REJECTION where the language
+// is contained. On B's side cos-ns-subset's tail refuses a base wildcard
+// carrying defined or sibling for a rest that does not carry it too, though the
+// names those keywords exclude are finitely many (cvc-wildcard clauses 2.1 and
+// 3) and a live element particle may admit every one of them: with a the only
+// top-level declaration, B = choice(<element ref="a"/>, any notQName="##defined")
+// under R = any is contained, and both src-redefine clause 6.2.2 and
+// derivation-ok-restriction charge it. On R's side a name a keyword of w's
+// excludes is still split off and walked, which can only add branches. Resolving them needs the declaration
+// graph, and for sibling the containing type, which restrictsLanguage's
+// model-group reader does not have. The readers are this function's three
+// (checkRestrictionContentType, checkExtensionTwoStepDerivable and
+// checkModelGroupRedefinitions, named in the marker above), each of which charges
+// on the false. No tracker is filed yet; #1954's MASON account asks for one.
+//
+// A single live wildcard with no split-off name reaches the same false
+// positionAdmits already answered: its rest is sub, its union itself, and
+// cos-ns-subset refused that pair when matchPositions asked it directly.
 //
 // The fold is written out rather than delegated to an N-ary helper: it has one
 // caller, and cos-aw-union's binary primitive plus the caller's own loop is how
@@ -1313,37 +1369,47 @@ func (s *Schema) matchPositions(p position, b contentAutomaton, live liveSet) []
 // one — this is a claim about which OPERANDS the fold sees, not that §3.10.6.3's
 // union is idempotent as a relation: it is not (the sibling-keyword GAP above is
 // exactly a case where folding drops a sibling keyword, so X ∪ X can differ from
-// X for a constraint that carries one). The guard is therefore on the number of
-// DISTINCT wildcard particles: one particle's copies are decided by
-// cos-ns-subset alone in positionAdmits, which has already answered for all of
-// them, exactly as a single wildcard is. The locals die with the call; nothing
-// derivable is stored (STYLE D3).
-func coveringWildcardUnion(sub NamespaceConstraint, b contentAutomaton, live liveSet) [][]int {
+// X for a constraint that carries one). The fold and the split therefore see
+// one operand per DISTINCT wildcard particle, and a single particle's copies are
+// never folded with one another. The locals die with the call; nothing derivable
+// is stored (STYLE D3).
+func (s *Schema) coveringWildcardUnion(w Wildcard, b contentAutomaton, live liveSet) []successorSet {
+	sub := w.NamespaceConstraint()
 	var groups []int
 	var constraints []NamespaceConstraint
+	var elements []int
 	for g, q := range live.reps {
-		w, ok := b.positions[q].term.(Wildcard)
-		if !ok {
-			continue
+		switch t := b.positions[q].term.(type) {
+		case Wildcard:
+			groups = append(groups, g)
+			constraints = append(constraints, t.NamespaceConstraint())
+		case ElementDeclaration:
+			elements = append(elements, g)
+		default:
+			panic("xsd: coveringWildcardUnion: position {term} is neither an element declaration nor a wildcard")
 		}
-		groups = append(groups, g)
-		constraints = append(constraints, w.NamespaceConstraint())
 	}
-	if len(constraints) < 2 {
+	if len(constraints) == 0 {
 		return nil
 	}
+	names := s.elementCoveredNames(sub, b, live, elements)
 	// Every error below is unreachable: each operand is the {namespace
-	// constraint} of an already-built Wildcard, or sub's intersection with one,
-	// and the union or intersection of two such records always satisfies
-	// w-props-correct (see UnionNamespaceConstraint and
-	// intersectNamespaceConstraint). Should a future divergence reach one, the
-	// arm returns every live wildcard position as one set, the GAP(xsd) shape
-	// above, and the error DECIDES that verdict rather than being dropped (STYLE
-	// S3), exactly as contentTypeRestricts treats contentAutomatonOf's own
-	// unreachable error slot. The loc is the zero xsderr.Loc{} because this is a
-	// finalize-time decision with no source position of its own; nothing
-	// user-visible is charged to it.
-	undecided := [][]int{live.positionsOf(groupsIn(len(live.reps), groups))}
+	// constraint} of an already-built Wildcard, sub with names it admits added to
+	// its {disallowed names}, or the rest's intersection with one, and each such
+	// record satisfies w-props-correct (clause 4 holds of every added name, since
+	// sub admits it; see UnionNamespaceConstraint and intersectNamespaceConstraint
+	// for the other two). Should a future divergence reach one, the arm returns
+	// every live wildcard position as one set, the GAP(xsd) shape above, and the
+	// error DECIDES that verdict rather than being dropped (STYLE S3), exactly as
+	// contentTypeRestricts treats contentAutomatonOf's own unreachable error slot.
+	// The loc is the zero xsderr.Loc{} because this is a finalize-time decision
+	// with no source position of its own; nothing user-visible is charged to it.
+	undecided := []successorSet{{positions: live.positionsOf(groupsIn(len(live.reps), groups))}}
+	rest, err := NewNamespaceConstraint(xsderr.Loc{}, sub.variety, sub.namespaces,
+		append(slices.Clone(sub.disallowedNames), names...), sub.disallowedNameKeywords)
+	if err != nil {
+		return undecided
+	}
 	union := constraints[0]
 	for _, next := range constraints[1:] {
 		folded, err := UnionNamespaceConstraint(xsderr.Loc{}, union, next)
@@ -1352,12 +1418,15 @@ func coveringWildcardUnion(sub NamespaceConstraint, b contentAutomaton, live liv
 		}
 		union = folded
 	}
-	if !wildcardSubset(sub, union) {
+	if !wildcardSubset(rest, union) {
 		return nil
 	}
-	var sets [][]int
+	var sets []successorSet
+	for _, n := range names {
+		sets = append(sets, s.elementCoveredSet(n, w, b, live, elements, groups, constraints))
+	}
 	for i, c := range constraints {
-		part, err := intersectNamespaceConstraint(xsderr.Loc{}, sub, c)
+		part, err := intersectNamespaceConstraint(xsderr.Loc{}, rest, c)
 		if err != nil {
 			return undecided
 		}
@@ -1377,9 +1446,78 @@ func coveringWildcardUnion(sub NamespaceConstraint, b contentAutomaton, live liv
 				members = append(members, groups[j])
 			}
 		}
-		sets = append(sets, live.positionsOf(groupsIn(len(live.reps), members)))
+		sets = append(sets, successorSet{positions: live.positionsOf(groupsIn(len(live.reps), members))})
 	}
 	return sets
+}
+
+// elementCoveredNames lists, without repeats, the expanded names sub admits
+// (cvc-wildcard-name) that some live ·element particle· in elements admits: each
+// particle's declaration's own name, then every top-level declaration it admits
+// through its ·substitution group·, in {element declarations} order (STYLE D2).
+// A particle admits a name exactly when elementParticleAdmits would admit that
+// name's declaration, so the list is the finite set coveringWildcardUnion splits
+// off.
+func (s *Schema) elementCoveredNames(sub NamespaceConstraint, b contentAutomaton, live liveSet, elements []int) []QName {
+	var names []QName
+	add := func(n QName) {
+		if !sub.AllowsName(n) || slices.Contains(names, n) {
+			return
+		}
+		names = append(names, n)
+	}
+	for _, g := range elements {
+		head := b.positions[live.reps[g]].term.(ElementDeclaration).Name()
+		add(head)
+		for _, e := range s.elements {
+			if s.inSubstitutionGroupOf(e.Name(), head) {
+				add(e.Name())
+			}
+		}
+	}
+	return names
+}
+
+// elementCoveredSet is S(n) for one name coveringWildcardUnion splits off: every
+// live position of every element particle that admits n and of every wildcard
+// particle whose {namespace constraint} admits it (cvc-wildcard-name, as
+// positionAdmits asks it).
+//
+// GAP(xsd): clause 2 (ctr-child-type-subsumption) is not charged on the set when
+// w is lax or strict and n ·resolves· to a top-level element declaration. There
+// key-governing-ed clause 3 may make that declaration the item's ·governing
+// element declaration·, so R's ·default binding· for it is case 1's Element
+// Declaration rather than the keyword elementPositionBinding renders, and an
+// Element Declaration in B never subsumes a keyword (loc-testSubP clauses 1-4).
+// This is #345's gap met on the SPECIFIC side, against an element particle
+// rather than another keyword, and it is RULED permanent by #345: whether case 1
+// applies to a wildcard-attributed item is the assessment episode's fact. Where
+// it cannot apply — w is skip (§3.10.4.1's closing Note), or n resolves to no
+// top-level declaration, so key-governing-ed clauses 3 and 4 find none — the
+// keyword is R's exact binding and clause 2 is charged as elsewhere. The
+// direction is fail-open: contentModelRestricts reads governable only to skip a
+// clause-2 charge, and only under restrictsFully, whose readers are
+// checkRestrictionContentType (derivation-ok-restriction clause 2.4.2) and
+// checkExtensionTwoStepDerivable (cos-ct-extends clause 1.5), each charging on
+// false; checkModelGroupRedefinitions charges clause 1 alone and never reaches
+// the read. Each loses a rejection it could have made and neither gains one.
+func (s *Schema) elementCoveredSet(n QName, w Wildcard, b contentAutomaton, live liveSet, elements, groups []int, constraints []NamespaceConstraint) successorSet {
+	var members []int
+	for _, g := range elements {
+		if s.inSubstitutionGroupOf(n, b.positions[live.reps[g]].term.(ElementDeclaration).Name()) {
+			members = append(members, g)
+		}
+	}
+	for i, c := range constraints {
+		if c.AllowsName(n) {
+			members = append(members, groups[i])
+		}
+	}
+	_, global := s.Element(n)
+	return successorSet{
+		positions:  live.positionsOf(groupsIn(len(live.reps), members)),
+		governable: w.ProcessContents() != ProcessSkip && global,
+	}
 }
 
 // groupsIn marks the given liveSet group indexes in a slice of n flags, the form
@@ -1404,7 +1542,9 @@ func groupsIn(n int, groups []int) []bool {
 //     ·wildcard subset· of the base's (§3.10.6.2, cos-ns-subset).
 //   - element over wildcard: never. A wildcard admits an open set of expanded
 //     names, and one Element Declaration admits one name plus its ·substitution
-//     group·, so no base element particle covers a restriction wildcard.
+//     group·, so no base element particle ALONE covers a restriction wildcard.
+//     It can cover some of its names beside live base wildcards that cover the
+//     rest, which coveringWildcardUnion decides for the whole live set (#1954).
 //
 // Both approximations here resolve towards admitting. Substitution-group
 // membership is not one of them: inSubstitutionGroupOf decides
@@ -1529,11 +1669,14 @@ func (s *Schema) someBindingSubsumes(b contentAutomaton, matched []int, p positi
 // contain defined — is fail-open by ruling. Both reads of this function are in
 // someBindingSubsumes, as bindingSubsumes' general and specific arguments, and
 // its one consumer, contentModelRestricts, charges clause 2 on a false answer
-// and on nothing else. A keyword reaches the specific side only against another
-// keyword (positionAdmits: no element particle covers a wildcard), and on either
-// side keywordSubsumes answers a remainder keyword at least as permissively as
-// bindingSubsumes answers the case-1 Element Declaration in its place, so
-// reporting the keyword can only miss a charge.
+// and on nothing else. A keyword on the specific side meets another keyword,
+// and there keywordSubsumes answers a remainder keyword at least as permissively
+// as bindingSubsumes answers the case-1 Element Declaration in its place, on
+// either side, so reporting the keyword can only miss a charge. It also meets an
+// Element Declaration, in a set coveringWildcardUnion splits off for one name a
+// live ·element particle· admits, and there a keyword is never subsumed, so the
+// remainder keyword would manufacture the charge: that set is marked governable
+// and not charged instead, the GAP(xsd) at elementCoveredSet (#1954).
 //
 // This ruling does not cover a strict general keyword against a skip or a
 // ##defined lax specific one: both specific keywords are exact here, so
