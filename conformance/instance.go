@@ -242,18 +242,19 @@ import (
 //     governingType (instanceOverride, #1093) an xsi:type reaches
 //     (subtreeGate.governingType). {identity-constraint definitions} are
 //     admitted, at every depth: clause 6 (cvc-identity-constraint, §3.11.4) is
-//     the walk's, which records each check it declines in Result.Unevaluated,
-//     except the ·defaulted attribute· field node "Cases 7 and 8" below names,
-//     which the gate refuses. {nillable} is admitted, at the root too: with no
-//     xsi:nil anywhere, clause 3.1 holds for a declaration whose {nillable} is
-//     false and clause 3.2.1 ("E has no xsi:nil attribute information item")
-//     for one whose {nillable} is true, and no element is ·nilled·. A default
-//     {value constraint} is admitted, at the root too: clause 5.1 substitutes
-//     its {lexical form} for the ·normalized value· of an element with neither
-//     element nor character [[children]], and the walk assesses cvc-type over
-//     that substituted value and settles 5.1.1 (validate's
-//     contentCheck.assessed and contentCheck.defaultValid). Clause 2 is
-//     refused outright below the root, where the walk charges it nowhere.
+//     the walk's, which reads a ·defaulted attribute· field node as it reads a
+//     present one (validate's icCheck.fieldDefaultedAttributes) and records
+//     each check it declines in Result.Unevaluated. {nillable} is admitted, at
+//     the root too: with no xsi:nil anywhere, clause 3.1 holds for a
+//     declaration whose {nillable} is false and clause 3.2.1 ("E has no
+//     xsi:nil attribute information item") for one whose {nillable} is true,
+//     and no element is ·nilled·. A default {value constraint} is admitted, at
+//     the root too: clause 5.1 substitutes its {lexical form} for the
+//     ·normalized value· of an element with neither element nor character
+//     [[children]], and the walk assesses cvc-type over that substituted value
+//     and settles 5.1.1 (validate's contentCheck.assessed and
+//     contentCheck.defaultValid). Clause 2 is refused outright below the root,
+//     where the walk charges it nowhere.
 //   - cvc-type clause 2 (§3.3.4.4): a complex {type definition}'s {abstract}
 //     is false, at the root too, since the walk decides that clause nowhere.
 //   - cvc-type clause 3.1 (§3.3.4.4), for a Simple Type Definition: 3.1.1, the
@@ -404,18 +405,7 @@ import (
 // definition· was not determinable, a ·key-sequence· member pair validated
 // against two different simple types, and — for cvc-id clause 1 alone — an
 // [ID/IDREF table] any item of the subtree was declined for. Each is a DECLINE
-// inside validate, so it cannot arrive here. One case 7 input validate neither
-// decides nor declines: a {fields} node that is a ·defaulted attribute·, whose
-// [schema actual value] §3.11.4 clause 3's Note has play a part in a
-// ·key-sequence·. validate's icCheck.fieldAttributes reads only the attributes
-// the instance carries, so the ·key-sequence· goes short with nothing recorded:
-// a key is charged clause 4.2.1 for it, and a unique or keyref member drops out
-// of the ·qualified node set· uncharged. The "valid" side is closed by the
-// gate, which refuses every element with a ·defaulted attribute· under a
-// declaration carrying {identity-constraint definitions} (subtreeGate.complex).
-// The clause 4.2.1 charge is not closed: it is a false rejection this lane
-// reads as a "not valid" verdict, so a suite-invalid case of that shape can
-// score a pass on a defect it did not see.
+// inside validate, so it cannot arrive here.
 //
 // Case 3's clause 1 and case 6 do not share that dependency, and are not
 // declined with it: no finalize pass folds a {content type} at all, so a complex
