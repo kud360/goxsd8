@@ -369,8 +369,12 @@ func (c *icCheck) pendElement(t *icTarget, i int) {
 // cvc-wildcard rather than inferring it from the wildcard's presence, so an
 // attribute that wildcard does not admit is typed by key-governing-ad clause 3
 // instead and never arrives here as ·skipped·.
+//
+// The ·defaulted attributes· of c's element are offered too, after the
+// attributes it carries ([icCheck.fieldDefaultedAttributes]).
 func (c *icCheck) fieldAttributes(w *walk, t *icTarget, i int, sel icpath.Selection) {
-	for _, a := range c.e.Attributes() {
+	attrs := c.e.Attributes()
+	for _, a := range attrs {
 		if !sel.SelectsAttribute(a.Name()) {
 			continue
 		}
@@ -384,6 +388,57 @@ func (c *icCheck) fieldAttributes(w *walk, t *icTarget, i int, sel icpath.Select
 		}
 		m, present, decided := w.keyMember(st, a.Value(), c.e, false, false)
 		t.offer(w, i, a.Name(), a.Loc(), m, present, decided)
+	}
+	if ct := c.g.complexType(); ct != nil {
+		c.fieldDefaultedAttributes(w, t, i, sel, attrs, *ct)
+	}
+}
+
+// fieldDefaultedAttributes offers slot i each ·defaulted attribute· of c's
+// element that sel selects, ct being its governing Complex Type Definition and
+// attrs its [[attributes]]. §3.11.4 clause 3's first Note is explicit that "the
+// use of [schema actual value] ... means that default or fixed value
+// constraints may play a part in ·key-sequence·s", and Attribute Default Value
+// (§3.4.5.1, sic-attrDefault) puts the item in the PSVI with the ·effective
+// value constraint·'s {value}. Which uses are defaulted is
+// [walk.defaultedConstraint]'s to say (key-dflt-att), read here as
+// [walk.idDefaultedAttributes] reads it for cvc-id. The member is typed by the
+// use's declaration's {type definition} and compared by value, like any other.
+// The item is synthesized and has no source position, so it cites the owner's.
+// A wildcard attribute is never defaulted, so the ·skipped· arm above has no
+// counterpart here.
+//
+// GAP(validate): a use whose {attribute declaration} does not resolve, or whose
+// {type definition} is not a resolvable simple type, declines the slot. The
+// first is unreachable on a *xsd.Schema that exists and records nothing; the
+// second is the absent-or-COMPLEX {type definition} [walk.declaredAttribute]'s
+// doc records, and is recorded as an [Unevaluated] ([icTarget.decline]). The
+// decline withholds cvc-identity-constraint clauses 3 and 4 for that
+// constraint ([icFrame.qualify]). RULED permanent by #774 (STYLE P3b), on
+// cvcattribute.go's terms.
+func (c *icCheck) fieldDefaultedAttributes(w *walk, t *icTarget, i int, sel icpath.Selection, attrs []Attribute, ct xsd.ComplexType) {
+	for _, u := range ct.AttributeUses() {
+		if !sel.SelectsAttribute(u.DeclarationName()) {
+			continue
+		}
+		vc, defaulted := w.defaultedConstraint(u, attrs)
+		if !defaulted {
+			continue
+		}
+		d, resolved := w.schema.ResolvedAttributeDeclaration(u)
+		if !resolved {
+			// Unreachable on a *xsd.Schema that exists, so it records no
+			// [Unevaluated] no schema can produce.
+			t.slots[i].declined = true
+			continue
+		}
+		st, simple := w.schema.ResolvedSimpleType(d.TypeDefinition())
+		if !simple {
+			t.decline(w, i, u.DeclarationName(), c.e.Loc(), "it is a ·defaulted attribute· whose declaration's {type definition} is absent or not a simple type definition")
+			continue
+		}
+		m, present, decided := w.keyMember(st, vc.LexicalForm(), c.e, false, false)
+		t.offer(w, i, u.DeclarationName(), c.e.Loc(), m, present, decided)
 	}
 }
 
