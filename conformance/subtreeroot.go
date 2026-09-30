@@ -441,11 +441,27 @@ func (g *subtreeGate) children(t xsd.ComplexType, m *xsd.Matcher) bool {
 //     cvc-complex-type clause 5 holds wherever cvc-elt clause 4 does. A child
 //     carrying D's own name is the first arm's, cvc-accept clause 2.3.1
 //     attributing it to D, where element refuses an ·abstract· D;
+//   - a skip Wildcard: the child is ·skipped· with its whole subtree (key-sva
+//     clause 3.2, cvc-assess-elt clause 2), which is read past unchecked. A
+//     skipped child has no [validity], so it cannot block its parent's `valid`
+//     (sic-e-outcome clauses 1.1.2 and 1.1.3, the latter naming a strict
+//     particle alone), and with no ·governing type definition· it binds no ID
+//     or IDREF (key-eas clause 3). Its NAME is still checked: m.Next admits it
+//     only where the Wildcard's namespace constraint does (cvc-wildcard clause
+//     1);
 //   - a strict or lax Wildcard, or the {open content}: resolvedChild's
 //     conditions.
 //
-// A skip Wildcard answers false: the child is ·skipped· with its whole subtree
-// (key-governing-ed clause 3.2), which no clause of it decides (#1861).
+// GAP(validate): a child of a skip {open content} is assessed, not ·skipped·.
+// The literal text leaves it assessed (key-att-to attributes it to the {open
+// content}; key-skipped names "a skip wildcard" alone), a gap in the spec; the
+// oracle's intended reading (cvc-wildcard's final note; cos-element-consistent
+// clause 2.2) makes it ·skipped·. validate's childGoverning resolves and
+// assesses it, which can charge a child the intended reading skips; the fix is
+// validate's and is deferred to its own issue (#1861). Until then the {open
+// content} arm reads no {process contents}: a skip {open content}'s child goes
+// to resolvedChild as a lax one's does, admitted only where the walk's
+// assessment of it is decided.
 func (g *subtreeGate) child(t xsd.ComplexType, m *xsd.Matcher, start xml.StartElement) bool {
 	name := expandedName(start.Name)
 	a, ok := m.Next(name)
@@ -461,7 +477,10 @@ func (g *subtreeGate) child(t xsd.ComplexType, m *xsd.Matcher, start xml.StartEl
 		return ok && g.substitutable(s, at) && g.element(start, s)
 	case xsd.Wildcard:
 		pc := at.ProcessContents()
-		return pc != xsd.ProcessSkip && g.resolvedChild(t, start, pc == xsd.ProcessStrict)
+		if pc == xsd.ProcessSkip {
+			return g.dec.Skip() == nil
+		}
+		return g.resolvedChild(t, start, pc == xsd.ProcessStrict)
 	case *xsd.OpenContent:
 		return g.resolvedChild(t, start, false)
 	}
