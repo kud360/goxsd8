@@ -531,7 +531,9 @@ func (s *Schema) checkLocallyDeclaredAttributeTypes(t, b ComplexType, k locallyD
 
 // checkLocallyDeclaredElementTypes is the element half (key-ldt-elem).
 // Declarations are visited in the document order the content-model gatherer
-// yields (STYLE D2).
+// yields (STYLE D2). A pair sameDeclaredType identifies — T and B reaching one
+// declaration, whose anonymous type is then one component — passes before
+// ·validly substitutable· is asked.
 func (s *Schema) checkLocallyDeclaredElementTypes(t, b ComplexType, k locallyDeclaredTypeCheck) error {
 	for _, e := range s.contentModelDeclarations(t) {
 		name := e.decl.Name()
@@ -542,6 +544,9 @@ func (s *Schema) checkLocallyDeclaredElementTypes(t, b ComplexType, k locallyDec
 		base, ok := s.locallyDeclaredElementType(b, name)
 		if !ok {
 			continue // no ·locally declared type· in B: the clause's precondition fails
+		}
+		if sameDeclaredType(within, base) {
+			continue // cos-ct-derived-ok clause 2.1: one declaration's one type
 		}
 		substitutable, err := s.ValidlySubstitutable(within, base, k.blocked)
 		if err != nil {
@@ -869,4 +874,45 @@ func sameTypeDefinition(a, b TypeDefinition) bool {
 		return false
 	}
 	return na == nb
+}
+
+// sameDeclaredType decides cos-ct-derived-ok clause 2.1 for two DECLARATIONS'
+// {type definition}s: they are one component when sameTypeDefinition says so,
+// or when both are anonymous complex types whose {context}s name one component.
+// That second arm is the no-identity Note's "the type definitions associated
+// with two ... element declarations, which are discovered to be the same
+// declaration" (§3.4.6.5), and it covers an element's type taken by default
+// from its substitution-group head, which resolves to the head's one type.
+//
+// It is sound ONLY when both operands are declarations' {type definition}s
+// (key-ldt-elem case 2): NewElementDeclarationOwningTypes pins a declared
+// anonymous type's {context} to its own declaration (#340), but a type
+// alternative's inline type shares that same {context}, so an alternative
+// compared with its element's declared type would be reported identical
+// whatever it derives from. Never call it under ValidlySubstitutable, which
+// e-props-correct clause 7 asks of exactly that pair.
+//
+// An anonymous simple type needs no arm: derivedOKSimple already answers a
+// type identical to its base true.
+func sameDeclaredType(a, b TypeDefinition) bool {
+	if sameTypeDefinition(a, b) {
+		return true
+	}
+	ca, ok := a.(ComplexType)
+	if !ok {
+		return false
+	}
+	cb, ok := b.(ComplexType)
+	if !ok {
+		return false
+	}
+	xa, ok := ca.Context()
+	if !ok {
+		return false
+	}
+	xb, ok := cb.Context()
+	if !ok {
+		return false
+	}
+	return xa.ID() == xb.ID()
 }

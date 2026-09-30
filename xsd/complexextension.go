@@ -491,15 +491,14 @@ func (s *Schema) checkExtensionTwoStepDerivable(t ComplexType) error {
 //
 // It is not an optimisation, and skipping it would be a FALSE REJECT. Running
 // derivation-ok-restriction on a T and a structurally identical M charges clause
-// 2.4.2's ctr-child-type-subsumption and clause 4's ·validly substitutable· for
-// every element or attribute whose {type definition} is ANONYMOUS, because
-// sameTypeDefinition reports two anonymous types as different (§3.4.6.5's
-// no-identity Note) — so an anonymous type is not substitutable even for ITSELF,
-// and a type whose content model holds one would fail to restrict its own copy.
-// That shape is ordinary: a chain whose only restriction step is above an
-// extension of an empty-content base collapses to an M identical to T, and any
-// inline <complexType> in its content model would sink it (the W3C suite's
-// MS-Element elemZ015 is exactly that schema).
+// 2.4.2's ctr-child-type-subsumption for every element whose {type definition}
+// is ANONYMOUS, because sameTypeDefinition reports two anonymous types as
+// different (§3.4.6.5's no-identity Note) — so an anonymous type is not
+// substitutable even for ITSELF, and a type whose content model holds one would
+// fail to restrict its own copy. That shape is ordinary: a chain whose only
+// restriction step is above an extension of an empty-content base collapses to
+// an M identical to T, and any inline <complexType> in its content model would
+// sink it (the W3C suite's MS-Element elemZ015 is exactly that schema).
 //
 // The three predicates are this package's existing identity relations, the same
 // ones cos-ct-extends clause 1.2 and cos-particle-extend read (STYLE T4).
