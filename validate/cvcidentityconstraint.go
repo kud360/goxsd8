@@ -52,7 +52,8 @@ const ruleCvcIdentityConstraint xsderr.Rule = "cvc-identity-constraint"
 // ·Skipped· nodes need no filtering either (clause 1's "after omitting all
 // element nodes corresponding to element information items that are
 // ·skipped·"): [walk.child] returns before [walk.element] for a child
-// ·attributed to· a skip wildcard, so no icCheck is ever built for it or for
+// ·attributed to· a skip wildcard or to an {open content} with a skip
+// {wildcard} ([walk.childGoverning]), so no icCheck is ever built for it or for
 // anything beneath it, and its subtree contributes no target, no field value
 // and no node-table entry.
 

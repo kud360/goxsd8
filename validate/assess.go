@@ -108,8 +108,9 @@ const ruleCvcType xsderr.Rule = "cvc-type"
 // supplies (§3.3.4.6 clause 3.1 over §3.4.4.4, [walk.childGoverning]): its own
 // [[attributes]], its own [[children]] and its own ·initial value· reach the
 // same charges the root's do. Two shapes below the root are not: a child
-// ·attributed to· a skip Wildcard, which is ·skipped· along with every element
-// beneath it (clause 3.2), and a child its parent ·attributed· to nothing
+// ·attributed to· a skip Wildcard or to an {open content} with a skip
+// {wildcard}, which is ·skipped· along with every element beneath it (clause
+// 3.2, clause 2), and a child its parent ·attributed· to nothing
 // because this package could not type the parent or declined or charged its
 // content, which is walked against no type along with its whole subtree
 // ([walk.childGoverning]). A child whose name ·resolves· to no declaration is
@@ -378,15 +379,29 @@ func typeName(t xsd.TypeDefinition) string {
 // definition· to assess it against, determined exactly as the ·validation
 // root·'s are (declaredGovernance), and whether it is assessed at all.
 //
-// assess is false for one shape alone, clause 3.2's: a child ·attributed to· a
-// skip Wildcard — the {term} of a ·wildcard particle·, never the {wildcard} of
-// an {open content} — is not ·assessed·, and neither is any element below it —
-// ·skipped· (§3.10.4.1, key-skipped) holds for an item "attributed to a skip
-// wildcard or if one of its ancestor elements is". cvc-wildcard makes that a
-// hard stop and not a permissive pass: a skip wildcard leaves the item with no
-// ·governing element declaration· at all and runs no ·QName resolution· to look
-// for one, so skip and clause 3.3 are different outcomes and not two spellings
-// of one.
+// assess is false for a ·skipped· child: one ·attributed to· a skip Wildcard —
+// the {term} of a ·wildcard particle· — or to an {open content} whose
+// {wildcard} is skip is not ·assessed· (cvc-assess-elt clause 2), and neither is
+// any element below it — ·skipped· (§3.10.4.1, key-skipped) holds for an item
+// "attributed to a skip wildcard or if one of its ancestor elements is", so the
+// subtree binds no ID or IDREF and contributes nothing to an identity
+// constraint's ·target node set·. cvc-wildcard makes that a hard stop and not a
+// permissive pass: a skip wildcard leaves the item with no ·governing element
+// declaration· at all and runs no ·QName resolution· to look for one, so skip
+// and clause 3.3 are different outcomes and not two spellings of one.
+//
+// The {open content} half is a reading and not a quotation (#1969, reversing
+// #1576): key-skipped, clause 3.2 of ·strictly assessed· and cvc-wildcard name
+// a skip Wildcard and never an Open Content, and key-att-to ·attributes· the
+// item to the {open content} record. The ·default binding· of
+// cos-content-act-restrict (§3.4.6.4, key-dft-binding) clause 6 binds an item
+// ·attributed· to "an Open Content with a skip Wildcard" to the keyword skip,
+// beside a skip ·wildcard particle·'s, where a declaration key-governing-ed
+// clause 4 resolved would have bound it to that declaration by clause 1
+// instead. cos-element-consistent clause 2.2 likewise counts only an {open
+// content} "with a strict or lax Wildcard", which is evidence of the exclusion
+// and not a rule of assessment. The child's NAME is still checked, by
+// cvc-complex-content clause 2.4 or 3.4, before this is reached.
 //
 // The declaration the type is read off is key-governing-ed's, one case per
 // [xsd.Attribution] variant (STYLE T2's closed-sum exception):
@@ -409,17 +424,16 @@ func typeName(t xsd.TypeDefinition) string {
 //     strict, e-validity clause 1.1.3, charged by
 //     [walk.unresolvedStrictWildcardChild]; under lax, nothing, at the child or
 //     anywhere else.
-//   - clause 4, "otherwise", for an [*xsd.OpenContent]: the same ·resolution·,
-//     WHATEVER the {process contents} of the {open content}'s {wildcard}. An
-//     item cvc-complex-content clause 2.4 or 3.4 admitted is ·attributed to·
-//     the {open content} record and to no particle and no Wildcard (§3.4.4.4,
-//     key-att-to), so clause 3 never names it, clause 4.1's ·skipped· is false
-//     for it (key-skipped quantifies over an item "·attributed· to a skip
-//     wildcard"), and clause 4 carries it — to the declaration its ·expanded
-//     name· ·resolves· to, and to none where it resolves to none, which is
-//     cvc-assess-elt clause 3.3's ·lax assessment· and never clause 3.2's "not
-//     assessed" (#1576). What this arm does NOT share with the Wildcard one is
-//     e-validity clause 1.1.3, which quantifies over ·wildcard particles· alone
+//   - clause 4, "otherwise", for an [*xsd.OpenContent] whose {wildcard} is
+//     strict or lax: the same ·resolution·. An item cvc-complex-content clause
+//     2.4 or 3.4 admitted is ·attributed to· the {open content} record and to
+//     no particle (§3.4.4.4, key-att-to), so clause 3 never names it, and
+//     clause 4 carries it — to the declaration its ·expanded name· ·resolves·
+//     to, and to none where it resolves to none, which is cvc-assess-elt
+//     clause 3.3's ·lax assessment·. A skip {wildcard} makes the item ·skipped·
+//     instead, which is clause 4.1 and the assess=false above. What this arm
+//     does NOT share with the Wildcard one is e-validity clause 1.1.3, which
+//     quantifies over ·wildcard particles· alone
 //     ([walk.unresolvedStrictWildcardChild]).
 //
 // inherited is e's [inherited attributes], which a {type table} on the
@@ -445,6 +459,9 @@ func (w *walk) childGoverning(e Element, a xsd.Attribution, inherited []inherite
 		}
 		return w.resolvedGovernance(e, inherited), true
 	case *xsd.OpenContent:
+		if t.Wildcard().ProcessContents() == xsd.ProcessSkip {
+			return governance{}, false
+		}
 		return w.resolvedGovernance(e, inherited), true
 	default:
 		return governance{unattributed: true}, true
@@ -951,8 +968,10 @@ func (w *walk) declineAttribute(a Attribute, rule xsderr.Rule, clause, format st
 	w.decline("assessing attribute", a.Name(), a.Loc(), rule, clause, format, args...)
 }
 
-// logSkipped records the one child the walk does not assess at all: cvc-assess-elt
-// clause 3.2's, ·attributed to· a skip Wildcard. It is written here because
+// logSkipped records the one child the walk does not assess at all: a ·skipped·
+// one, ·attributed to· a skip Wildcard or to an {open content} with a skip
+// {wildcard} ([walk.childGoverning]). Both log clause 3.2, the clause that
+// stops the descent at a skip wildcard. It is written here because
 // [walk.element] is never reached for it, so its "assessing element" line —
 // which every other element gets, whatever was or was not decided about it
 // (STYLE L1) — has nowhere else to come from, and it carries the outcome that
