@@ -114,7 +114,9 @@ var s4sIdentityConstraint = s4sNames("unique", "key", "keyref")
 // <simpleType> and <alternative>. The last three are an identity constraint's
 // <unique>/<key>/<keyref> and the <selector> and <field> under it, ordered since
 // #1786. Each model is quoted verbatim from its XML Representation Summary, and
-// its slots are that quotation read left to right.
+// its slots are that quotation read left to right. The compositors, <group>,
+// <attributeGroup>, <list> and <union> have no model here: rejectLateAnnotation
+// holds them to their leading "annotation?" alone.
 //
 // These are TRANSCRIBED from the spec, not generated (PRINCIPLES 26). Generating
 // them means flattening Appendix A itself — resolving xs:group refs and the
@@ -505,6 +507,51 @@ func checkS4SChildOrder(owner *Element, m s4sModel) error {
 		}
 		return fmt.Errorf("parser: <%s> at %s is out of the child order the schema for schema documents requires of the <%s> at %s: %s's content model (%s) is %s, and %s <%s> may not follow the children written before it here",
 			local, el.Loc(), owner.Name().Local(), owner.Loc(), m.grammar, m.spec, m.model, s4sArticle(local), local)
+	}
+	return nil
+}
+
+// s4sAnnotationLedOwner admits the seven owners rejectLateAnnotation holds to
+// "annotation?" as their FIRST particle, the one fact about their order this
+// package enforces: <all> (xs:allModel, xmlschema11-1.md:5259), <choice> and
+// <sequence> (xs:explicitGroup, :5229, and xs:simpleExplicitGroup under a named
+// <group>), <group> (xs:namedGroup, :5187; xs:groupRef), <attributeGroup>
+// (xs:namedAttributeGroup, :5502; xs:attributeGroupRef), and <list> and <union>
+// (xmlschema11-2.md:3957, :3977, each extending xs:annotated). Every form of each
+// opens with "annotation?" and admits <annotation> nowhere else.
+var s4sAnnotationLedOwner = s4sNames("all", "choice", "sequence", "group", "attributeGroup", "list", "union")
+
+// rejectLateAnnotation rejects an <annotation> child of el written after another
+// XSD-namespace child of el, when el is one of the owners s4sAnnotationLedOwner
+// admits. It charges §5.1's FIRST bullet (xmlschema11-1.md:4296) and NO rule ID,
+// on the footing checkS4SChildOrder's doc derives (STYLE E2).
+//
+// It holds these owners to that ONE position rather than to full s4sModels, which
+// would also start charging every other order, cardinality and admission fault in
+// them — a named <group>'s child beside its body and an <attributeGroup>'s
+// child outside xs:attrDecls (#1876), a <list>'s second <simpleType> — each a
+// verdict of its own. Children outside the XSD namespace are skipped, as
+// checkS4SChildOrder skips them. A second <annotation> after a first is
+// rejectRepeatedAnnotations' fault, which rejectS4SFaults charges first.
+func rejectLateAnnotation(el *Element) error {
+	if el.Name().Space() != xsd.XMLSchemaNS || !s4sAnnotationLedOwner(el.Name().Local()) {
+		return nil
+	}
+	var first *Element
+	for _, child := range el.Children() {
+		c, ok := child.(*Element)
+		if !ok || c.Name().Space() != xsd.XMLSchemaNS {
+			continue
+		}
+		if first == nil {
+			first = c
+			continue
+		}
+		if c.Name().Local() != "annotation" {
+			continue
+		}
+		return fmt.Errorf("parser: <annotation> at %s follows the <%s> at %s among the children of the <%s> at %s: xs:annotated's content model (xmlschema11-1.md:4426) is (annotation?), which every content model the schema for schema documents gives <%s> opens with and admits an <annotation> nowhere after",
+			c.Loc(), first.Name().Local(), first.Loc(), el.Name().Local(), el.Loc(), el.Name().Local())
 	}
 	return nil
 }

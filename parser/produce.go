@@ -619,10 +619,10 @@ func (p *producer) chameleon() bool {
 // Placement is charged before content: a <notation> standing where the grammar
 // admits none is reported for where it stands, not for the second <annotation>
 // it also carries. The four attribute guards run last, for the same reason:
-// where an element stands, and how many of a child it carries, are both answered
-// ahead of what its start tag spells — and an attribute name the grammar declares
-// nowhere, or prohibits on a nested <complexType>, ahead of what an id or a
-// block=/final= family attribute's value spells.
+// where an element stands, and how many of a child it carries and where, are
+// all answered ahead of what its start tag spells — and an attribute name the
+// grammar declares nowhere, or prohibits on a nested <complexType>, ahead of
+// what an id or a block=/final= family attribute's value spells.
 //
 // <appinfo> and <documentation> are subject to rejectUndeclaredAttrs alone, and
 // the split is the lax-content rule above: their CONTENT is governed by no guard
@@ -644,6 +644,9 @@ func rejectS4SFaults(el *Element, ids map[string]*Element) error {
 		return err
 	}
 	if err := rejectRepeatedAnnotations(el); err != nil {
+		return err
+	}
+	if err := rejectLateAnnotation(el); err != nil {
 		return err
 	}
 	if err := rejectUndeclaredAttrs(el); err != nil {
