@@ -15256,7 +15256,7 @@ gMonth/d3_3_15si01/schema/d3_3_15si01s pass
 gMonthDay/d3_3_13v01/schema/d3_3_13v01s pass
 gYear/d3_3_12v01/schema/d3_3_12v01s pass
 gYearMonth/d3_3_11v01/schema/d3_3_11v01s pass
-introspection/introspection/schema/introspect-testSet-schema fail
+introspection/introspection/schema/introspect-testSet-schema pass
 list/d2_4_1_2si01/schema/d2_4_1_2si01s pass
 list/d2_4_1_2v01/schema/d2_4_1_2v01s pass
 rf-whiteSpace/d4_3_6ii01/schema/d4_3_6ii01s pass
