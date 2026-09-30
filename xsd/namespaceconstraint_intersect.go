@@ -7,11 +7,13 @@ import "github.com/kud360/goxsd8/xsderr"
 // Constraint that admits a namespace name (and expanded name) iff BOTH a and b
 // admit it. It is the binary primitive of the §3.6.2.2 "Common Rules for
 // Attribute Wildcards" combination (declare-attributeGroup-wildcard), which
-// Finalize's attribute group fold applies (attributegroupfold.go), and of
-// particleattribution.go's wildcard ·overlap· test; the spec's "more than two"
-// case (§3.10.6.4 final paragraph) is a plain left fold of this primitive done
-// by the caller, not by this function. Both callers are in this package, so it
-// is unexported (STYLE T5).
+// Finalize's attribute group fold applies (attributegroupfold.go), of
+// particleattribution.go's wildcard ·overlap· test, and of contentrestricts.go's
+// coveringWildcardUnion, which splits a restriction wildcard into the parts
+// each live base wildcard admits; the spec's "more than two" case (§3.10.6.4
+// final paragraph) is a plain left fold of this primitive done by the caller,
+// not by this function. Every caller is in this package, so it is unexported
+// (STYLE T5).
 //
 // The {variety}/{namespaces} result is the §3.10.6.4 five-case table:
 //
@@ -39,9 +41,11 @@ import "github.com/kud360/goxsd8/xsderr"
 // corresponding clause is an AND ("contained in BOTH"): wildcard intersection is
 // OR for defined, wildcard union is AND. The keyword sibling has no bullet in
 // this formula and is never propagated, because cos-aw-intersect combines
-// ATTRIBUTE wildcards only and w-props-correct clause 5 forbids sibling on one —
-// so an operand carrying it is unreachable here, and no defensive branch guards
-// against it.
+// ATTRIBUTE wildcards only and w-props-correct clause 5 forbids sibling on one.
+// The two element-wildcard callers, wildcardsOverlap and coveringWildcardUnion,
+// do pass operands carrying it; both read only the result's namespace names
+// (admitsSomeNamespace), which the keyword does not touch, so no defensive branch
+// guards against it.
 //
 // The result is built through NewNamespaceConstraint, so w-props-correct clauses
 // 1-4 (§3.10.6.1) are re-checked and {namespaces}/{disallowed names} are
@@ -116,9 +120,9 @@ func intersectDisallowedNames(a, b NamespaceConstraint) []QName {
 // both" that cos-aw-union (§3.10.6.3) specifies for the union operation.
 //
 // sibling is never propagated: this formula combines attribute wildcards only,
-// and w-props-correct clause 5 forbids sibling on one, so an operand carrying it
-// cannot reach here (rejectSiblingOnAttributeWildcard rejects it at the tableau
-// slot). Nothing therefore reads the operands' sibling membership.
+// and w-props-correct clause 5 forbids sibling on one. An element-wildcard
+// operand carrying it does reach here (see intersectNamespaceConstraint's two
+// element-wildcard callers), and nothing reads its sibling membership.
 func intersectDisallowedNameKeywords(a, b NamespaceConstraint) []DisallowedNameKeyword {
 	if !a.hasDisallowedNameKeyword(DisallowedNameDefined) && !b.hasDisallowedNameKeyword(DisallowedNameDefined) {
 		return nil
