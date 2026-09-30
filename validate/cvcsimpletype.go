@@ -144,7 +144,11 @@ func (w *walk) entitiesDeclared(st *xsd.SimpleType, lexical string, owner Elemen
 // runs over a lexical value.ValidateLexical has accepted, so an enumeration
 // subtype's facet (cvc-enumeration-valid, §4.3.5.4) has already been checked by
 // the backend, and it covers a type derived from NOTATION by enumeration and
-// xs:NOTATION itself alike. The verdict is cvc-datatype-valid at loc; it is not
+// xs:NOTATION itself alike. A parsed schema never gives the enumeration arm a
+// verdict to reach: finalize rejects an enumeration member naming no declared
+// notation under enumeration valid restriction (§4.3.5.5, value's
+// declaredNotationBackend), so a value the enumeration admits names a
+// declaration. The verdict is cvc-datatype-valid at loc; it is not
 // enumeration-required-notation, a schema component constraint this package
 // does not charge.
 //
