@@ -44,9 +44,10 @@
 // a pinned Unicode 15.0.0 Blocks.txt plus §G.4.2.3's superseded Unicode 3.1
 // names; a name production [96] admits that names none of those blocks is a
 // translation error too, because this module declines §G.4.2.4's "set of all
-// characters" meaning for it. Neither refusal is a verdict on the pattern —
-// regex.go's maxRepeat carries the ceiling's GAP(regex) marker — and they are
-// the two failures CheckSyntax below reports as no failure at all.
+// characters" meaning for it. Neither refusal is a verdict on the pattern, and
+// they are the two failures CheckSyntax below reports as no failure at all.
+// Each carries its own GAP(regex) marker — regex.go's on maxRepeat (#1474),
+// class.go's on blockSet (#1946).
 //
 // # Contract (implemented from M3)
 //

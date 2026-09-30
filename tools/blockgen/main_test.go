@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -71,16 +72,16 @@ func TestParseBlocksPinnedInput(t *testing.T) {
 		t.Errorf("%d blocks, want 327", len(blocks))
 	}
 	first, last := blocks[0], blocks[len(blocks)-1]
-	if first.key != "BasicLatin" || first.ranges[0] != (runeRange{0x0000, 0x007F}) {
+	if first != (block{"BasicLatin", runeRange{0x0000, 0x007F}}) {
 		t.Errorf("first block = %+v, want BasicLatin 0000..007F", first)
 	}
-	if last.key != "SupplementaryPrivateUseArea-B" || last.ranges[0] != (runeRange{0x100000, 0x10FFFF}) {
+	if last != (block{"SupplementaryPrivateUseArea-B", runeRange{0x100000, 0x10FFFF}}) {
 		t.Errorf("last block = %+v, want SupplementaryPrivateUseArea-B 100000..10FFFF", last)
 	}
 }
 
 // TestParseSupersededFromSpec pins §G.4.2.3's list as read from the local spec:
-// three names, PrivateUse folding the spec's three ranges into one entry.
+// three names, PrivateUse at the first of the spec's three ranges only.
 func TestParseSupersededFromSpec(t *testing.T) {
 	text, err := os.ReadFile(testDatatypes)
 	if err != nil {
@@ -91,22 +92,12 @@ func TestParseSupersededFromSpec(t *testing.T) {
 		t.Fatalf("parseSuperseded: %v", err)
 	}
 	want := []block{
-		{"Greek", []runeRange{{0x0370, 0x03FF}}},
-		{"CombiningMarksforSymbols", []runeRange{{0x20D0, 0x20FF}}},
-		{"PrivateUse", []runeRange{{0xE000, 0xF8FF}, {0xF0000, 0xFFFFD}, {0x100000, 0x10FFFD}}},
+		{"Greek", runeRange{0x0370, 0x03FF}},
+		{"CombiningMarksforSymbols", runeRange{0x20D0, 0x20FF}},
+		{"PrivateUse", runeRange{0xE000, 0xF8FF}},
 	}
-	if len(got) != len(want) {
-		t.Fatalf("got %d superseded names %+v, want %d", len(got), got, len(want))
-	}
-	for i := range want {
-		if got[i].key != want[i].key || len(got[i].ranges) != len(want[i].ranges) {
-			t.Fatalf("entry %d = %+v, want %+v", i, got[i], want[i])
-		}
-		for j := range want[i].ranges {
-			if got[i].ranges[j] != want[i].ranges[j] {
-				t.Errorf("entry %d range %d = %+v, want %+v", i, j, got[i].ranges[j], want[i].ranges[j])
-			}
-		}
+	if !slices.Equal(got, want) {
+		t.Fatalf("superseded = %+v, want %+v", got, want)
 	}
 }
 

@@ -3,7 +3,6 @@ package regex
 import (
 	"errors"
 	"fmt"
-	"slices"
 	"sort"
 	"strings"
 	"unicode"
@@ -233,6 +232,9 @@ func nameCharSet() runeSet {
 // hard error, never a fail-open to "all characters": goxsd8 must not accept a
 // literal that the pattern as written would reject (PRINCIPLES 20; the spec's
 // §G.4.2.4 permissive default is deliberately not taken).
+//
+// GAP(regex): for a block name that names no block, that refusal is the
+// decline blockSet's marker describes. Owned by #1946.
 func propSet(name string) (runeSet, error) {
 	if rest, ok := strings.CutPrefix(name, "Is"); ok {
 		return blockSet(rest)
@@ -268,6 +270,9 @@ func isCategoryName(name string) bool {
 // patterns eagerly without false-rejecting one the spec allows. Unexported: the
 // distinction is CheckSyntax's to make, and a caller reaching past it would be
 // asserting the classification itself.
+//
+// GAP(regex): the unrecognized-block producer (blockSet) declines §G.4.2.4's
+// default meaning rather than implementing it. Owned by #1946.
 var errUnsupported = errors.New("not supported by this implementation")
 
 // blockSet returns the code points of the Unicode block whose normalized name
@@ -279,6 +284,11 @@ var errUnsupported = errors.New("not supported by this implementation")
 // allows and gives the set of all characters. This module declines that meaning
 // (see propSet), so such a name is an error wrapping [errUnsupported]:
 // [CheckSyntax] passes it and [Translate] refuses it.
+//
+// GAP(regex): §G.4.2.4 makes \p{IsX} and \P{IsX} for an unrecognized block name
+// X "denote the set of all characters", with a warning, and allows an error
+// only ·at user option·; Translate refuses the pattern instead, so a literal
+// validated against it gets no verdict. Owned by #1946.
 func blockSet(nm string) (runeSet, error) {
 	key := normalizeBlockName(nm)
 	if !matchesIsBlock(key) {
@@ -289,13 +299,11 @@ func blockSet(nm string) (runeSet, error) {
 		// covers: a defect, not an unrecognized block.
 		return nil, fmt.Errorf("malformed Unicode block name in \\p{Is%s}", nm)
 	}
-	set, ok := unicodeBlocks[key]
+	r, ok := unicodeBlocks[key]
 	if !ok {
 		return nil, fmt.Errorf("unrecognized Unicode block %q: %w", nm, errUnsupported)
 	}
-	// unicodeBlocks is package state shared by every translation; the caller
-	// owns what it gets back.
-	return slices.Clone(set), nil
+	return runeSet{r}, nil
 }
 
 // matchesIsBlock reports whether name is admissible as the tail of an IsBlock:

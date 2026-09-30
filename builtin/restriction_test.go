@@ -263,7 +263,8 @@ func TestRestrictionCheckerPatternSyntax(t *testing.T) {
 		// A block name production [96] admits but no block carries is allowed
 		// by §G.4.2.4, not a defect in the schema: rejecting it would
 		// false-reject a pattern Appendix G defines. The lazy facet-compile path
-		// still surfaces it when a literal is actually validated.
+		// still refuses it when a literal is actually validated, declining
+		// §G.4.2.4's "set of all characters" meaning (GAP(regex), #1946).
 		{"unrecognized Unicode block", `\p{IsaA0-a9}*`, false},
 	}
 	for _, c := range cases {

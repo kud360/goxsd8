@@ -12,11 +12,20 @@
 //     (§G.4.2.3);
 //   - the Datatypes spec Markdown, for §G.4.2.3's list of Unicode 3.1 block
 //     names superseded in later versions, which implementors "are encouraged
-//     to support … for compatibility". A superseded name can span several
-//     ranges (PrivateUse spans three), so every table entry is a range list.
+//     to support … for compatibility". Only the FIRST range the list gives a
+//     name is taken: PrivateUse is #xE000-#xF8FF, Unicode 3.0's Private Use
+//     block, and its two further bullets (#xF0000-#xFFFFD, #x100000-#x10FFFD)
+//     are skipped. §G.4.2.3 only encourages superseded names and makes the
+//     choice of block definitions ·implementation-defined·, and the suite
+//     expects \p{IsPrivateUse} to exclude those supplementary planes, so
+//     folding them in regresses suite-invalid cases (#1473).
 //
 // Each block name is keyed by its ·normalized block name·: white space and
-// underbars stripped, hyphens and case retained (§G.4.2.3). A key outside
+// underbars stripped, hyphens and case retained (§G.4.2.3). normalize and
+// isBlockName restate regex's normalizeBlockName and matchesIsBlock, and a key
+// is reachable only while the two pairs agree: a tools/ main cannot import
+// those unexported functions, and exporting them from regex would add library
+// surface with no library consumer (STYLE T5). A key outside
 // production [96]'s [a-zA-Z0-9#x2D]+, or one that two entries share, is an
 // error rather than a silent skip or overwrite, so an input whose shape changes
 // stops the build instead of emitting a short or unreachable table. Output is
@@ -29,6 +38,7 @@ import (
 	"go/format"
 	"os"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -83,11 +93,10 @@ type runeRange struct {
 	lo, hi rune
 }
 
-// block is one table entry: a normalized block name and the ranges it covers,
-// in input order.
+// block is one table entry: a normalized block name and its code points.
 type block struct {
-	key    string
-	ranges []runeRange
+	key string
+	rng runeRange
 }
 
 var (
@@ -129,7 +138,7 @@ func parseBlocks(lines []string) (string, []block, error) {
 		if err != nil {
 			return "", nil, fmt.Errorf("line %d: %w", i+1, err)
 		}
-		blocks = append(blocks, block{key: normalize(d[3]), ranges: []runeRange{r}})
+		blocks = append(blocks, block{key: normalize(d[3]), rng: r})
 	}
 	if len(blocks) == 0 {
 		return "", nil, fmt.Errorf("no block entries")
@@ -138,8 +147,8 @@ func parseBlocks(lines []string) (string, []block, error) {
 }
 
 // parseSuperseded reads §G.4.2.3's superseded-name list from the Datatypes
-// Markdown. Bullets sharing a name are folded into one block, keyed where the
-// name first appears, so PrivateUse's three ranges become one entry.
+// Markdown. A bullet repeating an earlier bullet's name is skipped, so each
+// name keeps the first range the list gives it (see the package doc).
 func parseSuperseded(lines []string) ([]block, error) {
 	start := -1
 	for i, line := range lines {
@@ -161,24 +170,16 @@ func parseSuperseded(lines []string) ([]block, error) {
 		if err != nil {
 			return nil, fmt.Errorf("line %d: %w", i+1, err)
 		}
-		out = foldRange(out, normalize(m[3]), r)
+		key := normalize(m[3])
+		if slices.ContainsFunc(out, func(b block) bool { return b.key == key }) {
+			continue
+		}
+		out = append(out, block{key: key, rng: r})
 	}
 	if len(out) == 0 {
 		return nil, fmt.Errorf("§G.4.2.3's superseded block-name list is empty")
 	}
 	return out, nil
-}
-
-// foldRange appends r to the block keyed key, adding that block at the end
-// when no earlier bullet named it.
-func foldRange(out []block, key string, r runeRange) []block {
-	for i := range out {
-		if out[i].key == key {
-			out[i].ranges = append(out[i].ranges, r)
-			return out
-		}
-	}
-	return append(out, block{key: key, ranges: []runeRange{r}})
 }
 
 // parseRange reads an inclusive hexadecimal code-point interval.
@@ -252,20 +253,14 @@ func emit(version string, nUCD int, blocks []block) ([]byte, error) {
 	fmt.Fprintf(&b, "// unicodeBlocks maps each ·normalized block name· (Datatypes §G.4.2.3) to\n"+
 		"// the code points of its block: the %d blocks of Unicode %s's Blocks.txt\n"+
 		"// (docs/specs/ucd), then the Unicode 3.1 names §G.4.2.3 lists as superseded\n"+
-		"// in later versions, which it encourages supporting for compatibility.\n", nUCD, version)
-	b.WriteString("var unicodeBlocks = map[string]runeSet{\n")
+		"// in later versions, each at the first range it lists, which it encourages\n"+
+		"// supporting for compatibility.\n", nUCD, version)
+	b.WriteString("var unicodeBlocks = map[string]runeRange{\n")
 	for i, blk := range blocks {
 		if i == nUCD {
 			b.WriteString("\n// Superseded Unicode 3.1 block names (§G.4.2.3).\n")
 		}
-		fmt.Fprintf(&b, "%q: {", blk.key)
-		for j, r := range blk.ranges {
-			if j > 0 {
-				b.WriteString(", ")
-			}
-			fmt.Fprintf(&b, "{0x%04X, 0x%04X}", r.lo, r.hi)
-		}
-		b.WriteString("},\n")
+		fmt.Fprintf(&b, "%q: {0x%04X, 0x%04X},\n", blk.key, blk.rng.lo, blk.rng.hi)
 	}
 	b.WriteString("}\n")
 	src, err := format.Source([]byte(b.String()))

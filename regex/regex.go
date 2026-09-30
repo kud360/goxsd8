@@ -100,6 +100,11 @@ func Translate(pattern string, flavor Flavor, flags string) (string, error) {
 // above maxRepeat's RE2 ceiling of 1000, which maxRepeat's GAP(regex) marker
 // owns.
 //
+// GAP(regex): Translate refuses a production [96] block name that names no
+// block where §G.4.2.4 gives it the set of all characters, so CheckSyntax's
+// nil is the only half of that construct this module implements. Owned by
+// #1946.
+//
 // That asymmetry is the whole point of the function, and it is why a
 // schema-construction pass calls this rather than Translate. Such a pass
 // charges src-pattern-value (Datatypes §4.3.4.3) on every <pattern> facet a

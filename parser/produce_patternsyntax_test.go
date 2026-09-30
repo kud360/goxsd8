@@ -61,10 +61,11 @@ func TestParsePatternSyntaxRejectedWithoutAnyInstance(t *testing.T) {
 // Appendix G regExp that this module does not compile, and a check that
 // rejected on any translation failure would newly reject every schema carrying
 // one: \p{IsaA0-a9} (msData/regex/reK88.xsd) matches production [96] but names
-// no block, which §G.4.2.4 allows and regex declines to compile, and a{0,2000}
-// is production [71]'s uncapped QuantExact meeting the RE2 repeat ceiling
-// (GAP(regex), #1474). A rejection here would tell the schema author their
-// document violates src-pattern-value because goxsd8 cannot compile it.
+// no block, which §G.4.2.4 allows and regex declines to compile (GAP(regex),
+// #1946), and a{0,2000} is production [71]'s uncapped QuantExact meeting the
+// RE2 repeat ceiling (GAP(regex), #1474). A rejection here would tell the
+// schema author their document violates src-pattern-value because goxsd8 cannot
+// compile it.
 func TestParseUnimplementedButValidPatternAccepted(t *testing.T) {
 	for _, pat := range []string{`\p{IsaA0-a9}*`, `a{0,2000}`} {
 		t.Run(pat, func(t *testing.T) {

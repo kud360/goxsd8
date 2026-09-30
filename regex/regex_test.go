@@ -132,9 +132,11 @@ func TestUnicodeBlockEscapes(t *testing.T) {
 
 // TestGeneratedBlockEscapes pins unicodeBlocks' two sources: Unicode 15.0.0
 // Blocks.txt blocks the hand-authored table it replaced lacked, and the three
-// Unicode 3.1 names §G.4.2.3 lists as superseded, each at exactly the ranges the
-// spec gives it. U+FFFFE separates PrivateUse's second range (#xF0000-#xFFFFD)
-// from Supplementary Private Use Area-A (F0000..FFFFF).
+// Unicode 3.1 names §G.4.2.3 lists as superseded, each at the first range the
+// spec gives it. PrivateUse is Unicode 3.0's #xE000-#xF8FF alone: the suite
+// expects \p{IsPrivateUse} to reject the supplementary planes' code points that
+// §G.4.2.3's further PrivateUse bullets list, which stay reachable through
+// SupplementaryPrivateUseArea-A/B.
 func TestGeneratedBlockEscapes(t *testing.T) {
 	cases := []struct {
 		pattern string
@@ -145,9 +147,10 @@ func TestGeneratedBlockEscapes(t *testing.T) {
 		{`\p{IsGreek}`, []rune{0x0370, 0x03FF}, []rune{0x0400}},
 		{`\p{IsCombiningMarksforSymbols}`, []rune{0x20D0, 0x20FF}, []rune{0x2100}},
 		{`\p{IsPrivateUse}`,
-			[]rune{0xE000, 0xF8FF, 0xF0000, 0xFFFFD, 0x100000, 0x10FFFD},
-			[]rune{0xF900, 0xFFFFE, 0x10FFFE}},
-		{`\p{IsSupplementaryPrivateUseArea-A}`, []rune{0xFFFFE}, nil},
+			[]rune{0xE000, 0xF8FF},
+			[]rune{0xF900, 0xF0000, 0xFFFFD, 0x100000, 0x10FFFD}},
+		{`\p{IsSupplementaryPrivateUseArea-A}`, []rune{0xF0000, 0xFFFFD}, []rune{0x100000}},
+		{`\p{IsSupplementaryPrivateUseArea-B}`, []rune{0x100000, 0x10FFFD}, []rune{0xFFFFD}},
 	}
 	for _, c := range cases {
 		t.Run(c.pattern, func(t *testing.T) {
@@ -443,8 +446,8 @@ func TestCheckSyntaxRejectsAppendixGDefects(t *testing.T) {
 // CheckSyntax's whole reason to exist: a name production [96] admits that names
 // no block unicodeBlocks holds is allowed by §G.4.2.4, not a defect in the
 // pattern, so CheckSyntax reports nothing — while Translate, which declines
-// §G.4.2.4's "set of all characters" meaning for it (propSet), keeps failing on
-// it unchanged. "aA0-a9" is msData/regex/reK88.xsd's name, and names no block.
+// §G.4.2.4's "set of all characters" meaning for it (GAP(regex), #1946), keeps
+// failing on it unchanged. "aA0-a9" is msData/regex/reK88.xsd's name, and names no block.
 func TestCheckSyntaxPassesUnrecognizedBlocks(t *testing.T) {
 	// Both the standalone atom path (regex.go's atomCategoryEscape) and the
 	// inside-a-class path (classparse.go's parseClassEscape) reach blockSet, and
