@@ -62,9 +62,9 @@ import (
 // # The census is NAME-based
 //
 // A child dropped because the POSITION its name fills was already filled is not
-// reported — a second <anyAttribute> in an <attributeGroup>. Reporting it would
-// make the census's answer depend on how many siblings a name has, which no
-// reader can act on without re-walking the document itself.
+// reported. Reporting it would make the census's answer depend on how many
+// siblings a name has, which no reader can act on without re-walking the
+// document itself.
 //
 // # Scope
 //
@@ -83,7 +83,10 @@ import (
 // declines, so a top-level report now only ever rides on a document run went on
 // to reject. The reports are kept: retiring a region is a census change with a
 // measurement of its own, and [UnmappedConstruct] states what the top-level arm
-// is for once no accepted document can carry one.
+// is for once no accepted document can carry one. Since #1876 the body of a
+// top-level <group> and of a top-level <attributeGroup> are in it as well:
+// checkS4SChildOrder walks each against s4sNamedGroup and s4sNamedAttributeGroup,
+// so every name either region reports rides on a rejected document.
 //
 // NOT censused, each a widening of its own and each a region with its own
 // dispatch — the first three covered by a rejection at the position, the fourth
@@ -325,9 +328,10 @@ func (w *censusWalk) topLevel(decl *Element) {
 // namedGroup censuses a top-level <group> definition (§3.7.2). xs:namedGroup's
 // content model (xmlschema11-1.md:5187) is (annotation?, (all | choice |
 // sequence)), and buildDefinitionModelGroup reads the compositor child and
-// nothing else, so any other name is dropped in silence.
+// nothing else, so any other name is unmapped. It is reported beside
+// checkS4SChildOrder's rejection of the same child (#1876), per the Scope note.
 //
-// It is dropped ONLY when a body admits a read at all. With no compositor,
+// It is reported ONLY when a body admits a read at all. With no compositor,
 // rejectNamedGroupBody charges the first child xs:namedGroup does not admit, so
 // that child is named in a verdict rather than skipped and the census must not
 // claim it. With TWO, the definition is rejected outright

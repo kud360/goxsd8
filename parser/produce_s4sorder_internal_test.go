@@ -28,6 +28,8 @@ var s4sModels = []struct {
 	{"keybase", s4sKeybase},
 	{"selector", s4sSelector},
 	{"field", s4sField},
+	{"namedGroup", s4sNamedGroup},
+	{"namedAttributeGroup", s4sNamedAttributeGroup},
 }
 
 // s4sProbe is the vocabulary the models above draw on: every element name they
