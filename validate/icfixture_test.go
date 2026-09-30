@@ -38,6 +38,8 @@ import (
 // attribute declarations colliding with that type's own uses, which is what
 // catches a reader resolving an attribute by ·expanded name· at the top level
 // where the governing type's own {attribute use} is what governs it.
+// icWildcardSchema and icDefaultedAttrSchema each vary one more property, and
+// say which.
 
 const icNS = "urn:p"
 
@@ -506,6 +508,69 @@ func icWildcardSchemaWith(t *testing.T, wild *xsd.Wildcard, rootICs []xsd.Identi
 		t.Fatalf("finalizing the wildcard schema: %v", err)
 	}
 	return schema
+}
+
+// icDefaultedAttrSchema is the fourth shape: <root>'s children govern optional
+// xs:integer attributes whose declarations carry a default, so an element that
+// omits one has a ·defaulted attribute· (key-dflt-att) for a `@NameTest` field
+// to select. @dw is one no fixture's field selects, so offering it would fill
+// a slot twice. @dc's declaration names a COMPLEX {type definition}, which
+// only an assembly that reaches no a-props-correct check admits, so a field
+// selecting it has no simple type to read a value through.
+//
+//	root   RootType   sequence( ditem*, dref* )
+//	ditem  DItemType  empty, @dv xs:integer default "1", @dw default "9",
+//	                  @dc DRefType default "c"
+//	dref   DRefType   empty, @dr xs:integer default "2"
+func icDefaultedAttrSchema(t *testing.T, rootICs []xsd.IdentityConstraint) *xsd.Schema {
+	t.Helper()
+	defaulted := func(local string, typ xsd.QName, lexical string) xsd.AttributeUse {
+		vc := xsd.NewValueConstraint(xsd.ValueDefault, lexical, nil, nil)
+		return typedUse(t, local, typ, false, &vc, nil)
+	}
+	integer := icBuiltin("integer")
+	dItemType := icComplex(t, "DItemType", []xsd.AttributeUse{
+		defaulted("dv", integer, "1"),
+		defaulted("dw", integer, "9"),
+		defaulted("dc", xsd.QName{Local: "DRefType"}, "c"),
+	}, xsd.EmptyContent{})
+	dRefType := icComplex(t, "DRefType", []xsd.AttributeUse{defaulted("dr", integer, "2")}, xsd.EmptyContent{})
+	local := func(name, typ string) xsd.Particle {
+		return icRepeated(t, icLocal(t, "RootType", xsd.QName{Local: name}, xsd.QName{Local: typ}, false, nil))
+	}
+	rootType := icComplex(t, "RootType", nil, icContent(t, local("ditem", "DItemType"), local("dref", "DRefType")))
+	root, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "root"},
+		xsd.TypeDefinitionRef{Name: xsd.QName{Local: "RootType"}}, nil, xsd.NewGlobalScope(),
+		nil, false, rootICs, nil, nil, false, nil)
+	if err != nil {
+		t.Fatalf("building the root element declaration: %v", err)
+	}
+	b := xsd.NewSchemaBuilder()
+	for _, st := range icSeeded(t) {
+		b.AddType(st)
+	}
+	b.AddType(dItemType)
+	b.AddType(dRefType)
+	b.AddType(rootType)
+	b.AddElement(root)
+	for _, ic := range rootICs {
+		b.AddIdentityConstraint(ic)
+	}
+	schema, err := b.Finalize()
+	if err != nil {
+		t.Fatalf("finalizing the defaulted-attribute schema: %v", err)
+	}
+	return schema
+}
+
+// icDItem is <ditem/> at line, leaving its defaulted @dv absent unless dv is
+// given.
+func icDItem(line int, dv ...string) *testElement {
+	attrs := make([]Attribute, 0, len(dv))
+	for _, v := range dv {
+		attrs = append(attrs, icAttr(xsd.QName{Local: "dv"}, v, line))
+	}
+	return icElem(xsd.QName{Local: "ditem"}, line, attrs)
 }
 
 // icKid is <kid> at line, carrying the named no-namespace attributes, in

@@ -1,6 +1,7 @@
 package validate
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/kud360/goxsd8/xsd"
@@ -318,6 +319,62 @@ func TestDefaultedEmptyElementFillsItsKeySequence(t *testing.T) {
 	bare := icElem(xsd.QName{Local: "item"}, 4, nil)
 	icWantCharges(t, icAssess(t, schema, icRoot(idDefaulted(2), bare)),
 		icCharge(ruleCvcIdentityConstraint, 4))
+}
+
+// A `@NameTest` field selecting an absent ·defaulted attribute· reads the
+// ·effective value constraint·'s value into the ·key-sequence· (§3.11.4 clause
+// 3's first Note, sic-attrDefault), so each constraint below decides on it:
+// a key over one defaulted and one distinct explicit value is satisfied, not
+// charged clause 4.2.1 for a short sequence; a key and a unique each charge
+// the later of two targets sharing a value, one of them defaulted, under
+// clause 4.2.2 and 4.1 (the unique's pair "01" and default "1" are one
+// xs:integer value); and a keyref whose defaulted value matches no key is
+// charged clause 4.3 at its target.
+func TestFieldSelectsADefaultedAttribute(t *testing.T) {
+	key := icDef(t, "K", xsd.IdentityConstraintKey, "ditem", nil, "", "@dv")
+	unique := icDef(t, "U", xsd.IdentityConstraintUnique, "ditem", nil, "", "@dv")
+	keyref := icDef(t, "R", xsd.IdentityConstraintKeyref, "dref", nil, "K", "@dr")
+	dref := icElem(xsd.QName{Local: "dref"}, 3, nil)
+	// clause pins which clause the one charge in got was made under.
+	clause := func(t *testing.T, got []*xsderr.Error, want string) {
+		t.Helper()
+		if len(got) != 1 || !strings.Contains(got[0].Error(), "clause "+want+" ") {
+			t.Errorf("Violations() = %v, want one charged under clause %s", got, want)
+		}
+	}
+
+	t.Run("key over distinct values", func(t *testing.T) {
+		icWantCharges(t, icAssess(t, icDefaultedAttrSchema(t, []xsd.IdentityConstraint{key}),
+			icRoot(icDItem(2), icDItem(3, "5"))))
+	})
+	t.Run("key sharing a defaulted value", func(t *testing.T) {
+		got := icAssess(t, icDefaultedAttrSchema(t, []xsd.IdentityConstraint{key}), icRoot(icDItem(2), icDItem(3)))
+		icWantCharges(t, got, icCharge(ruleCvcIdentityConstraint, 3))
+		clause(t, got, "4.2.2")
+	})
+	t.Run("unique sharing a defaulted value", func(t *testing.T) {
+		got := icAssess(t, icDefaultedAttrSchema(t, []xsd.IdentityConstraint{unique}), icRoot(icDItem(2, "01"), icDItem(3)))
+		icWantCharges(t, got, icCharge(ruleCvcIdentityConstraint, 3))
+		clause(t, got, "4.1")
+	})
+	t.Run("keyref over a defaulted value", func(t *testing.T) {
+		schema := icDefaultedAttrSchema(t, []xsd.IdentityConstraint{key, keyref})
+		got := icAssess(t, schema, icRoot(icDItem(2, "1"), dref))
+		icWantCharges(t, got, icCharge(ruleCvcIdentityConstraint, 3))
+		clause(t, got, "4.3")
+		icWantCharges(t, icAssess(t, schema, icRoot(icDItem(2, "2"), dref)))
+	})
+	// A ·defaulted attribute· whose declaration's {type definition} is not
+	// simple has no [schema actual value] this processor can read, so the key
+	// declines at its owner rather than charging clause 4.2.1 for a short
+	// sequence (the GAP on icCheck.fieldDefaultedAttributes).
+	t.Run("defaulted attribute with a complex type declines", func(t *testing.T) {
+		complexKey := icDef(t, "C", xsd.IdentityConstraintKey, "ditem", nil, "", "@dc")
+		got, undecided := assessRecorded(t, icDefaultedAttrSchema(t, []xsd.IdentityConstraint{complexKey}), icRoot(icDItem(2)))
+		wantSilence(t, got, "a declined field charges nothing")
+		wantDeclines(t, icDeclines(undecided),
+			Unevaluated{rule: ruleCvcIdentityConstraint, loc: loc(2, 1), msg: "clauses 3 and 4 are undecided"})
+	})
 }
 
 // The rule ID is the BARE catalog name, with the clause in the message text.
