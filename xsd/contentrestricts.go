@@ -1261,7 +1261,7 @@ func (s *Schema) matchPositions(p position, b contentAutomaton, live liveSet) []
 // the three unreachable error slots below return every live wildcard position
 // as one set, as the whole union did before the split. Both sets contain S(n)
 // for some n, so by the argument above the walk answers true more often and
-// never less. #1939 owns deciding them (derivation-ok-restriction clause 2.4.2,
+// never less. #1953 owns deciding them (derivation-ok-restriction clause 2.4.2,
 // cos-aw-intersect). Fail-open for all three readers of that true, each of which
 // charges only on false (STYLE P3a): checkRestrictionContentType
 // (complexderivation.go) charges derivation-ok-restriction clause 2.4.2;
