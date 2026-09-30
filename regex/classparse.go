@@ -175,12 +175,9 @@ func (p *parser) parseClassEscape(open int) (rune, bool, runeSet, error) {
 		if err != nil {
 			return 0, false, nil, err
 		}
-		set, err := propSet(name)
+		set, err := propSet(name, c == 'P')
 		if err != nil {
 			return 0, false, nil, p.errCause(start, err)
-		}
-		if c == 'P' {
-			set = set.complement()
 		}
 		return 0, false, set, nil
 	case c >= '0' && c <= '9':

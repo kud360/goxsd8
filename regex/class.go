@@ -226,24 +226,33 @@ func nameCharSet() runeSet {
 		add(0xB7, 0xB7).add(0x300, 0x36F).add(0x203F, 0x2040)
 }
 
-// propSet returns the code-point set named by a \p{...}/\P{...} property body
-// (Datatypes §G.4.2.2/§G.4.2.3): a Unicode general category (L, Lu, Nd, …) or a
-// block escape (IsBasicLatin, …). An unrecognized category or block name is a
-// hard error, never a fail-open to "all characters": goxsd8 must not accept a
-// literal that the pattern as written would reject (PRINCIPLES 20; the spec's
-// §G.4.2.4 permissive default is deliberately not taken).
-//
-// GAP(regex): for a block name that names no block, that refusal is the
-// decline blockSet's marker describes. Owned by #1946.
-func propSet(name string) (runeSet, error) {
+// propSet returns the code-point set denoted by a \p{...} property body, or by a
+// \P{...} one when negate is set (Datatypes §G.4.2.2/§G.4.2.3): a Unicode
+// general category (L, Lu, Nd, …) or a block escape (IsBasicLatin, …). The
+// polarity goes in rather than being applied by the caller, because a block
+// name that names no block denotes all characters under \p and \P alike
+// (§G.4.2.4; see blockSet). An unrecognized general category matches neither
+// IsCategory nor IsBlock, so it is no regExp at all (§G.4.2.4) and an error.
+func propSet(name string, negate bool) (runeSet, error) {
 	if rest, ok := strings.CutPrefix(name, "Is"); ok {
-		return blockSet(rest)
+		set, neg, err := blockSet(rest, negate)
+		if err != nil {
+			return nil, err
+		}
+		if neg {
+			return set.complement(), nil
+		}
+		return set, nil
 	}
 	t, ok := unicode.Categories[name]
 	if !ok {
 		return nil, fmt.Errorf("unrecognized Unicode category %q", name)
 	}
-	return runeSet{}.addTable(t), nil
+	set := runeSet{}.addTable(t)
+	if negate {
+		return set.complement(), nil
+	}
+	return set, nil
 }
 
 // isCategoryName reports whether name is a Unicode general category that RE2
@@ -258,38 +267,33 @@ func isCategoryName(name string) bool {
 // Datatypes Appendix G but does not implement, as opposed to one Appendix G's
 // grammar genuinely excludes. The two are indistinguishable in a translation
 // FAILURE — both stop the translation — but not in a verdict about the pattern
-// AUTHOR: only the second is a src-pattern-value defect. §G.4.2.4 is explicit
-// about which side an unrecognized block name falls on — "any string of
-// hyphens, digits, and Basic Latin characters beginning with 'Is' will match
-// the non-terminal IsBlock and thus be allowed in a regular expression" — and
-// gives it "the set of all characters", so refusing one is this module
-// declining that meaning (propSet), not a grammar verdict. regex.go's maxRepeat
-// ceiling is the sentinel's other producer, and production [71]'s uncapped
-// QuantExact puts it on the same side. [CheckSyntax] tells the two classes
-// apart through this sentinel, so a schema-construction pass rejects malformed
+// AUTHOR: only the second is a src-pattern-value defect. Its one producer is
+// regex.go's maxRepeat ceiling, which production [71]'s uncapped QuantExact
+// puts on the recognized side. [CheckSyntax] tells the two classes apart
+// through this sentinel, so a schema-construction pass rejects malformed
 // patterns eagerly without false-rejecting one the spec allows. Unexported: the
 // distinction is CheckSyntax's to make, and a caller reaching past it would be
 // asserting the classification itself.
-//
-// GAP(regex): the unrecognized-block producer (blockSet) declines §G.4.2.4's
-// default meaning rather than implementing it. Owned by #1946.
 var errUnsupported = errors.New("not supported by this implementation")
 
-// blockSet returns the code points of the Unicode block whose normalized name
-// (Datatypes §G.4.2.3: whitespace and underbars stripped, hyphens and case
-// retained) matches nm, looked up in the generated unicodeBlocks: every block of
-// the Unicode version tools/blockgen reads, plus §G.4.2.3's superseded Unicode
-// 3.1 names. A name production [96] admits that the table does not hold —
-// \p{IsaA0-a9} — is a block this module does not recognize, which §G.4.2.4
-// allows and gives the set of all characters. This module declines that meaning
-// (see propSet), so such a name is an error wrapping [errUnsupported]:
-// [CheckSyntax] passes it and [Translate] refuses it.
+// blockSet resolves the block escape \p{Isnm}, or \P{Isnm} when negate is set,
+// and returns emitClass's operands: the set, and whether the emitted class
+// negates it. A name whose normalized form (Datatypes §G.4.2.3: whitespace and
+// underbars stripped, hyphens and case retained) is a key of the generated
+// unicodeBlocks — every block of the Unicode version tools/blockgen reads, plus
+// §G.4.2.3's superseded Unicode 3.1 names — yields that block and negate
+// unchanged, \P being the block's complement (dt-ccesblock).
 //
-// GAP(regex): §G.4.2.4 makes \p{IsX} and \P{IsX} for an unrecognized block name
-// X "denote the set of all characters", with a warning, and allows an error
-// only ·at user option·; Translate refuses the pattern instead, so a literal
-// validated against it gets no verdict. Owned by #1946.
-func blockSet(nm string) (runeSet, error) {
+// A name production [96] admits that the table does not hold — \p{IsaA0-a9} —
+// is a block this module does not recognize, and §G.4.2.4 makes \p{IsX} and
+// \P{IsX} EACH denote the set of all characters, so both yield all characters
+// and no negation: \P{IsX} is not the complement of \p{IsX} here, because
+// dt-ccesblock's complement relation holds only for a recognized X. The error
+// and the empty set §G.4.2.4 also allows are ·at user option· only, and this
+// module offers no such option. §G.4.2.4's warning is a "should" with no
+// mechanism named, and none is issued, as parser/conditional.go issues none for
+// src-cip's encouraged warning on an unknown versioning attribute.
+func blockSet(nm string, negate bool) (set runeSet, neg bool, err error) {
 	key := normalizeBlockName(nm)
 	if !matchesIsBlock(key) {
 		// A name outside production [96] matches neither IsBlock nor IsCategory,
@@ -297,13 +301,13 @@ func blockSet(nm string) (runeSet, error) {
 		// (§G.4.2.4). Such a name denotes no block, which puts it outside both
 		// what §G.4.2.4 allows an unrecognized name and what errUnsupported
 		// covers: a defect, not an unrecognized block.
-		return nil, fmt.Errorf("malformed Unicode block name in \\p{Is%s}", nm)
+		return nil, false, fmt.Errorf("malformed Unicode block name in \\p{Is%s}", nm)
 	}
 	r, ok := unicodeBlocks[key]
 	if !ok {
-		return nil, fmt.Errorf("unrecognized Unicode block %q: %w", nm, errUnsupported)
+		return runeSet{}.complement(), false, nil
 	}
-	return runeSet{r}, nil
+	return runeSet{r}, negate, nil
 }
 
 // matchesIsBlock reports whether name is admissible as the tail of an IsBlock:
