@@ -758,9 +758,12 @@ func (s *Schema) validlyDerived(sub, super TypeDefinition, blocked []DerivationM
 			// conformance lane's subtree gate refuses this shape (blockingUnread).
 			return true, nil
 		}
+		if ss, ok := sub.(*SimpleType); ok {
+			return s.simpleDerivedOK(ss, super, blocked)
+		}
 		sc, ok := sub.(ComplexType)
 		if !ok {
-			return false, nil // a simple type is derived from no complex type but xs:anyType
+			return false, nil
 		}
 		return s.derivedOKComplex(sc, super, blocked)
 	case *SimpleType:
@@ -771,7 +774,7 @@ func (s *Schema) validlyDerived(sub, super TypeDefinition, blocked []DerivationM
 		if !ok {
 			return false, nil
 		}
-		return derivedOKSimple(s, ss, sup, nil)
+		return s.simpleDerivedOK(ss, sup, blocked)
 	default:
 		panic("xsd: validlyDerived: non-exhaustive TypeDefinition switch")
 	}
@@ -823,15 +826,43 @@ func (s *Schema) derivedOKComplex(d ComplexType, b TypeDefinition, blocked []Der
 		}
 		next, ok := base.(ComplexType)
 		if !ok {
-			// clause 2.3.2.2: D's base is simple, so cos-st-derived-ok decides.
-			ds, dOK := base.(*SimpleType)
-			bs, bOK := b.(*SimpleType)
-			if !dOK || !bOK {
+			// clause 2.3.2.2: D's base is simple, so cos-st-derived-ok decides,
+			// subject to the same subset.
+			ds, ok := base.(*SimpleType)
+			if !ok {
 				return false, nil
 			}
-			return derivedOKSimple(s, ds, bs, nil)
+			return s.simpleDerivedOK(ds, b, subset)
 		}
 		d = next // clause 2.3.2.1
+	}
+}
+
+// simpleDerivedOK is Type Derivation OK (Simple) (§3.16.6.3, cos-st-derived-ok)
+// for the simple type d against a B that may be complex: whether d is validly
+// ·derived· from b subject to the blocking keywords in blocked. A simple B is
+// derivedOKSimple's. The one complex B a simple type derives from is
+// ·xs:anyType·, the {base type definition} of xs:anySimpleType (§3.16.7.1),
+// which this package does not model inside the simple-type graph: d reaches it
+// when it is validly derived from xs:anySimpleType and the last hop, from
+// xs:anySimpleType to xs:anyType, passes clause 2.1 (clause 2.2.1 holds there by
+// definition). Any other complex B is not an ancestor of a simple type, and
+// answers false.
+func (s *Schema) simpleDerivedOK(d *SimpleType, b TypeDefinition, blocked []DerivationMethod) (bool, error) {
+	switch bt := b.(type) {
+	case *SimpleType:
+		return derivedOKSimple(s, d, bt, blocked)
+	case ComplexType:
+		if bt.Name() != anyTypeName {
+			return false, nil
+		}
+		ok, err := derivedOKSimple(s, d, anySimpleType, blocked)
+		if err != nil || !ok {
+			return false, err
+		}
+		return stRestrictionUnblocked(s, anySimpleType, blocked) // the xs:anySimpleType -> xs:anyType hop
+	default:
+		panic("xsd: simpleDerivedOK: non-exhaustive TypeDefinition switch")
 	}
 }
 

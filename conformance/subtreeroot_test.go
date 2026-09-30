@@ -917,6 +917,14 @@ func TestInstanceExecutorChargesXsiType(t *testing.T) {
 			xsiChild(`<xs:element name="a" type="CA" block="extension"/>`), xsiKnown(`<a xsi:type="ECA"><x>1</x><z>2</z></a>`),
 		},
 		{
+			"a simple restriction of a simple declared type under block=\"restriction\" (cvc-elt clause 4, cos-st-derived-ok clause 2.1)",
+			xsiChild(`<xs:element name="a" type="xs:decimal" block="restriction"/>`), xsiKnown(`<a xsi:type="xs:int">1</a>`),
+		},
+		{
+			"a complex type over a simple declared type under block=\"restriction\" (cvc-elt clause 4, cos-ct-derived-ok clause 2.3.2.2)",
+			xsiChild(`<xs:element name="a" type="xs:decimal" block="restriction"/>`), xsiKnown(`<a xsi:type="CI">1</a>`),
+		},
+		{
 			// Pinned: the walk DECIDES a QName lexical that resolves to no type.
 			"a QName naming no type definition (cvc-attribute clause 5)",
 			xsiChild(`<xs:element name="a" type="xs:int"/>`), xsiKnown(`<a xsi:type="Nope">1</a>`),
@@ -958,14 +966,6 @@ func TestInstanceExecutorDeclinesUnrecordedOverride(t *testing.T) {
 			// elemT026's shape.
 			"a simple type for an xs:anyType declaration under block=\"restriction\" (cos-st-derived-ok clause 2.1)",
 			xsiChild(`<xs:element name="a" block="restriction"/>`), xsiKnown(`<a xsi:type="xs:int">1</a>`),
-		},
-		{
-			"a simple restriction of a simple declared type under block=\"restriction\" (cos-st-derived-ok clause 2.1)",
-			xsiChild(`<xs:element name="a" type="xs:decimal" block="restriction"/>`), xsiKnown(`<a xsi:type="xs:int">1</a>`),
-		},
-		{
-			"a complex type over a simple declared type under block=\"restriction\" (cos-ct-derived-ok clause 2.3.2.2)",
-			xsiChild(`<xs:element name="a" type="xs:decimal" block="restriction"/>`), xsiKnown(`<a xsi:type="CI">1</a>`),
 		},
 	} {
 		declinesBothPolarities(t, exec, instanceCase(t, tc.schemaBody, tc.instance, false), tc.why)
