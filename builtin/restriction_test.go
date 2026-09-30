@@ -260,11 +260,11 @@ func TestRestrictionCheckerPatternSyntax(t *testing.T) {
 		{"hyphen ends a range", `[!--]*`, true},
 		{"omitted lower bound", `[0-9]{,5}`, true},
 		{"well-formed", `[0-9]{1,5}`, false},
-		// A block name this module's curated table omits is a gap here
-		// (GAP(regex), #1473), not a defect in the schema: rejecting it would
+		// A block name production [96] admits but no block carries is allowed
+		// by §G.4.2.4, not a defect in the schema: rejecting it would
 		// false-reject a pattern Appendix G defines. The lazy facet-compile path
 		// still surfaces it when a literal is actually validated.
-		{"unsupported Unicode block", `\p{IsThai}*`, false},
+		{"unrecognized Unicode block", `\p{IsaA0-a9}*`, false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

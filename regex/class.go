@@ -3,6 +3,7 @@ package regex
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"unicode"
@@ -256,32 +257,28 @@ func isCategoryName(name string) bool {
 // grammar genuinely excludes. The two are indistinguishable in a translation
 // FAILURE — both stop the translation — but not in a verdict about the pattern
 // AUTHOR: only the second is a src-pattern-value defect. §G.4.2.4 is explicit
-// about which side the block table falls on — "any string of hyphens, digits,
-// and Basic Latin characters beginning with 'Is' will match the non-terminal
-// IsBlock and thus be allowed in a regular expression", with rejecting an
-// unrecognized one an ·at user option· deviation this module takes (propSet)
-// rather than a grammar verdict. regex.go's maxRepeat ceiling is the sentinel's
-// other producer, and production [71]'s uncapped QuantExact puts it on the same
-// side. [CheckSyntax] tells the two classes apart through this sentinel, so a
-// schema-construction pass rejects malformed patterns eagerly without
-// false-rejecting one the spec allows. Unexported: the distinction is
-// CheckSyntax's to make, and a caller reaching past it would be asserting the
-// classification itself.
+// about which side an unrecognized block name falls on — "any string of
+// hyphens, digits, and Basic Latin characters beginning with 'Is' will match
+// the non-terminal IsBlock and thus be allowed in a regular expression" — and
+// gives it "the set of all characters", so refusing one is this module
+// declining that meaning (propSet), not a grammar verdict. regex.go's maxRepeat
+// ceiling is the sentinel's other producer, and production [71]'s uncapped
+// QuantExact puts it on the same side. [CheckSyntax] tells the two classes
+// apart through this sentinel, so a schema-construction pass rejects malformed
+// patterns eagerly without false-rejecting one the spec allows. Unexported: the
+// distinction is CheckSyntax's to make, and a caller reaching past it would be
+// asserting the classification itself.
 var errUnsupported = errors.New("not supported by this implementation")
 
 // blockSet returns the code points of the Unicode block whose normalized name
 // (Datatypes §G.4.2.3: whitespace and underbars stripped, hyphens and case
-// retained) matches nm. Go's standard library exposes categories and scripts
-// but not blocks, and the block ranges are drawn from the Unicode database
-// rather than from the local goxsd8 specs, so unicodeBlocks is a curated,
-// hand-authored subset of high-frequency Appendix G blocks. An unrecognized
-// block name is an error (see propSet) wrapping [errUnsupported], because the
-// name may well be an Appendix G block this table simply omits.
-//
-// GAP(regex): unicodeBlocks covers a fraction of the blocks Appendix G admits,
-// so a pattern naming any other block — \p{IsThai}, \p{IsOgham}, \p{IsRunic}
-// and 71 further names across testdata/xsdtests — fails to translate even
-// though the spec defines it. Owned by #1473.
+// retained) matches nm, looked up in the generated unicodeBlocks: every block of
+// the Unicode version tools/blockgen reads, plus §G.4.2.3's superseded Unicode
+// 3.1 names. A name production [96] admits that the table does not hold —
+// \p{IsaA0-a9} — is a block this module does not recognize, which §G.4.2.4
+// allows and gives the set of all characters. This module declines that meaning
+// (see propSet), so such a name is an error wrapping [errUnsupported]:
+// [CheckSyntax] passes it and [Translate] refuses it.
 func blockSet(nm string) (runeSet, error) {
 	key := normalizeBlockName(nm)
 	if !matchesIsBlock(key) {
@@ -289,14 +286,16 @@ func blockSet(nm string) (runeSet, error) {
 		// so "\p{Is}", "\p{IsThai$}" and "\p{Is.}" are no regExp at all
 		// (§G.4.2.4). Such a name denotes no block, which puts it outside both
 		// what §G.4.2.4 allows an unrecognized name and what errUnsupported
-		// covers: a defect, not this table's gap.
+		// covers: a defect, not an unrecognized block.
 		return nil, fmt.Errorf("malformed Unicode block name in \\p{Is%s}", nm)
 	}
-	r, ok := unicodeBlocks[key]
+	set, ok := unicodeBlocks[key]
 	if !ok {
-		return nil, fmt.Errorf("unrecognized or unsupported Unicode block %q: %w", nm, errUnsupported)
+		return nil, fmt.Errorf("unrecognized Unicode block %q: %w", nm, errUnsupported)
 	}
-	return runeSet{r}, nil
+	// unicodeBlocks is package state shared by every translation; the caller
+	// owns what it gets back.
+	return slices.Clone(set), nil
 }
 
 // matchesIsBlock reports whether name is admissible as the tail of an IsBlock:
@@ -329,38 +328,6 @@ func normalizeBlockName(nm string) string {
 		b.WriteRune(r)
 	}
 	return b.String()
-}
-
-// unicodeBlocks maps normalized Unicode block names to their code-point ranges.
-// Hand-authored (see blockSet) subset of the blocks enumerated in the Unicode
-// database referenced by Datatypes Appendix G; the superseded XSD 1.0 aliases
-// the spec lists (Greek, PrivateUse, CombiningMarksforSymbols) are included for
-// compatibility.
-var unicodeBlocks = map[string]runeRange{
-	"BasicLatin":                {0x0000, 0x007F},
-	"Latin-1Supplement":         {0x0080, 0x00FF},
-	"LatinExtended-A":           {0x0100, 0x017F},
-	"LatinExtended-B":           {0x0180, 0x024F},
-	"IPAExtensions":             {0x0250, 0x02AF},
-	"SpacingModifierLetters":    {0x02B0, 0x02FF},
-	"CombiningDiacriticalMarks": {0x0300, 0x036F},
-	"GreekandCoptic":            {0x0370, 0x03FF},
-	"Greek":                     {0x0370, 0x03FF},
-	"Cyrillic":                  {0x0400, 0x04FF},
-	"Hebrew":                    {0x0590, 0x05FF},
-	"Arabic":                    {0x0600, 0x06FF},
-	"GeneralPunctuation":        {0x2000, 0x206F},
-	"SuperscriptsandSubscripts": {0x2070, 0x209F},
-	"CurrencySymbols":           {0x20A0, 0x20CF},
-	"CombiningMarksforSymbols":  {0x20D0, 0x20FF},
-	"LetterlikeSymbols":         {0x2100, 0x214F},
-	"NumberForms":               {0x2150, 0x218F},
-	"Arrows":                    {0x2190, 0x21FF},
-	"MathematicalOperators":     {0x2200, 0x22FF},
-	"Hiragana":                  {0x3040, 0x309F},
-	"Katakana":                  {0x30A0, 0x30FF},
-	"CJKUnifiedIdeographs":      {0x4E00, 0x9FFF},
-	"PrivateUse":                {0xE000, 0xF8FF},
 }
 
 // emitClass writes an RE2 character-class expression for the matched set. When

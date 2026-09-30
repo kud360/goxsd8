@@ -94,9 +94,11 @@ func Translate(pattern string, flavor Flavor, flags string) (string, error) {
 // anything the Datatypes Appendix G grammar and its disambiguation rules
 // exclude — comes back as the same *xsderr.Error Translate returns. A construct
 // this module recognizes as well-formed but does not implement returns nil
-// instead: today that is a Unicode block name outside class.go's curated
-// unicodeBlocks table, or a counted repetition whose bound is above maxRepeat's
-// RE2 ceiling of 1000. A GAP(regex) marker owns each of the two.
+// instead: today that is a production [96] block name naming no block in the
+// generated unicodeBlocks table, whose §G.4.2.4 meaning of "the set of all
+// characters" this module declines, or a counted repetition whose bound is
+// above maxRepeat's RE2 ceiling of 1000, which maxRepeat's GAP(regex) marker
+// owns.
 //
 // That asymmetry is the whole point of the function, and it is why a
 // schema-construction pass calls this rather than Translate. Such a pass
