@@ -869,9 +869,16 @@ func TestInstanceExecutorDecidesXsiType(t *testing.T) {
 		},
 		{"a restriction of a simple declared type below the root", xsiChild(`<xs:element name="a" type="xs:decimal"/>`), xsiKnown(`<a xsi:type="xs:int">1</a>`)},
 		{
-			// blockingUnread's identity exception: cos-st-derived-ok clause 1.
+			// cos-st-derived-ok clause 1: identity is admitted whatever blocked holds.
 			"the declared simple type itself under block=\"restriction\"",
 			xsiChild(`<xs:element name="a" type="xs:decimal" block="restriction"/>`), xsiKnown(`<a xsi:type="xs:decimal">1</a>`),
+		},
+		{
+			// MS-Element elemT058.v's shape: cos-ct-derived-ok clause 1 reads
+			// extension, not in {restriction}, and clause 2.2 ends the walk at the
+			// declared type before cos-st-derived-ok is reached.
+			"a simpleContent extension of the declared simple type under block=\"restriction\"",
+			xsiChild(`<xs:element name="a" type="xs:int" block="restriction"/>`), xsiKnown(`<a xsi:type="CI">1</a>`),
 		},
 		{
 			// elemT040's shape: cos-st-derived-ok reads restriction alone.

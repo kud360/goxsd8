@@ -239,20 +239,17 @@ import (
 //     too; the gate then follows that type as the ·governing type definition·
 //     (key-governing-type-elem clause 3) through every condition below. It
 //     refuses an error from that predicate, the one silent exit of validate's
-//     governingType (instanceOverride, #1093) an xsi:type reaches, and the two
-//     answers xsd gives without reading the declaration's {disallowed
-//     substitutions}, which the walk records nowhere
-//     (subtreeGate.governingType, blockingUnread). {identity-constraint
-//     definitions} are admitted, at every depth: clause 6
-//     (cvc-identity-constraint, §3.11.4) is the walk's, which records each
-//     check it declines in Result.Unevaluated, except the ·defaulted
-//     attribute· field node "Cases 7 and 8" below names, which the gate
-//     refuses. {nillable} is admitted, at the root too: with no xsi:nil
-//     anywhere, clause 3.1 holds for a declaration whose {nillable} is false
-//     and clause 3.2.1 ("E has no xsi:nil attribute information item") for one
-//     whose {nillable} is true, and no element is ·nilled·. A default {value
-//     constraint} is admitted, at the root too: clause 5.1 substitutes its
-//     {lexical form} for the ·normalized value· of an element with neither
+//     governingType (instanceOverride, #1093) an xsi:type reaches
+//     (subtreeGate.governingType). {identity-constraint definitions} are
+//     admitted, at every depth: clause 6 (cvc-identity-constraint, §3.11.4) is
+//     the walk's, which records each check it declines in Result.Unevaluated,
+//     except the ·defaulted attribute· field node "Cases 7 and 8" below names,
+//     which the gate refuses. {nillable} is admitted, at the root too: with no
+//     xsi:nil anywhere, clause 3.1 holds for a declaration whose {nillable} is
+//     false and clause 3.2.1 ("E has no xsi:nil attribute information item")
+//     for one whose {nillable} is true, and no element is ·nilled·. A default
+//     {value constraint} is admitted, at the root too: clause 5.1 substitutes
+//     its {lexical form} for the ·normalized value· of an element with neither
 //     element nor character [[children]], and the walk assesses cvc-type over
 //     that substituted value and settles 5.1.1 (validate's
 //     contentCheck.assessed and contentCheck.defaultValid). Clause 2 is
