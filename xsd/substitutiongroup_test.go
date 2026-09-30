@@ -271,6 +271,15 @@ func TestSubstitutionGroupClause23AnonymousMemberType(t *testing.T) {
 // cos-nonambig false-REJECTS a schema the spec accepts. The control differs only
 // in which method head disallows, so the verdict is attributable to the
 // intersection and not to the chain having been walked at all.
+//
+// The restriction row pins the #1942 reading (RULING arm A): B's restriction
+// step below A counts as restriction in clause 2.3's union, so a head blocking
+// restriction refuses the member too. The letter of clause 2.3 defines
+// {derivation method} for complex types only (§3.4.1), so this is a reading of
+// intent: the §3.3.1 prose on {disallowed substitutions} ("types whose
+// derivation from {type definition} involves any extension steps, or
+// restriction steps") and cos-st-derived-ok clause 2.1, whose vocabulary names
+// a simple step a restriction. The suite agrees (MS-Element elemT063.i).
 func TestSubstitutionGroupClause23SimpleTypeOnDerivationChain(t *testing.T) {
 	member := func(disallowed DerivationMethod) *Schema {
 		return sgSchema(t, func(b *SchemaBuilder) {
@@ -284,7 +293,37 @@ func TestSubstitutionGroupClause23SimpleTypeOnDerivationChain(t *testing.T) {
 		})
 	}
 	expectMembership(t, member(DerivationExtension), sq("member"), sq("head"), false)
-	expectMembership(t, member(DerivationRestriction), sq("member"), sq("head"), true)
+	expectMembership(t, member(DerivationRestriction), sq("member"), sq("head"), false)
+}
+
+// TestSubstitutionGroupClause23ListStepContributesNothing pins the list arm of
+// the #1942 reading: a ·list· construction step from xs:anySimpleType is not a
+// restriction, so a head typed xs:anySimpleType blocking restriction admits a
+// member typed by a list (RULING #1942: the method is only extension|restriction).
+// The restriction control, a restriction of that list, takes a restriction step
+// and is refused.
+func TestSubstitutionGroupClause23ListStepContributesNothing(t *testing.T) {
+	member := func(restrict bool) *Schema {
+		return sgSchema(t, func(b *SchemaBuilder) {
+			item := dPrimitive(t, sq("A"))
+			list, err := newCheckedSimpleType(xsderr.Loc{}, sq("L"), listOf(item), anySimpleType, constructedListFacets(), nil)
+			if err != nil {
+				t.Fatalf("list: %v", err)
+			}
+			b.AddType(anySimpleType)
+			b.AddType(item)
+			b.AddType(list)
+			memberType := list
+			if restrict {
+				memberType = sgSimple(t, sq("RL"), list)
+				b.AddType(memberType)
+			}
+			b.AddElement(sgElement(t, sq("head"), sgRef(anySimpleType.Name()), []DerivationMethod{DerivationRestriction}))
+			b.AddElement(sgElement(t, sq("member"), sgRef(memberType.Name()), nil, sq("head")))
+		})
+	}
+	expectMembership(t, member(false), sq("member"), sq("head"), true)
+	expectMembership(t, member(true), sq("member"), sq("head"), false)
 }
 
 // TestSubstitutionGroupClause23SimpleTypeChainNotReachingHead pins the other exit

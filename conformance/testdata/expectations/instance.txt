@@ -472,7 +472,7 @@ ElemDecl/disallowedsubst00301m2/instance/Negative pass
 ElemDecl/disallowedsubst00401m1/instance/Positive pass
 ElemDecl/disallowedsubst00401m2/instance/Negative pass
 ElemDecl/disallowedsubst00501m1/instance/Positive pass
-ElemDecl/disallowedsubst00501m2/instance/Negative fail
+ElemDecl/disallowedsubst00501m2/instance/Negative pass
 ElemDecl/disallowedsubst00502m1/instance/Positive pass
 ElemDecl/disallowedsubst00502m2/instance/Positive pass
 ElemDecl/disallowedsubst00502m3/instance/Negative pass
@@ -2833,7 +2833,7 @@ MS-Element2006-07-15/elemT059/instance/elemT059.i pass
 MS-Element2006-07-15/elemT060/instance/elemT060.i pass
 MS-Element2006-07-15/elemT061/instance/elemT061.i pass
 MS-Element2006-07-15/elemT062/instance/elemT062.v pass
-MS-Element2006-07-15/elemT063/instance/elemT063.i fail
+MS-Element2006-07-15/elemT063/instance/elemT063.i pass
 MS-Element2006-07-15/elemT064/instance/elemT064.v pass
 MS-Element2006-07-15/elemT065/instance/elemT065.i pass
 MS-Element2006-07-15/elemT066/instance/elemT066.v pass

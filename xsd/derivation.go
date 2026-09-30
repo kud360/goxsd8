@@ -716,7 +716,7 @@ func derivedOKSimple(r TypeResolver, d, b *SimpleType, blocked []DerivationMetho
 // st-props-correct clause 3 (CheckDerivation) already demands of every simple
 // type: a no-set caller's answer changes only on a chain that clause rejects.
 func stRestrictionUnblocked(r TypeResolver, d *SimpleType, blocked []DerivationMethod) (bool, error) {
-	if containsDerivationMethod(blocked, DerivationRestriction) {
+	if restrictionBlocked(blocked) {
 		return false, nil
 	}
 	if d.IsAnySimpleType() {
@@ -727,6 +727,15 @@ func stRestrictionUnblocked(r TypeResolver, d *SimpleType, blocked []DerivationM
 		return false, err
 	}
 	return !finalContains(base.final, DerivationRestriction), nil
+}
+
+// restrictionBlocked reports whether restriction is in the blocking set: the
+// set test cos-st-derived-ok clause 2.1's first half (stRestrictionUnblocked)
+// and cos-equiv-derived-ok-rec clause 2.3's simple arm
+// (Schema.derivationAdmitsSubstitution) share. Neither reads the {final} half
+// here.
+func restrictionBlocked(blocked []DerivationMethod) bool {
+	return containsDerivationMethod(blocked, DerivationRestriction)
 }
 
 // isSpecialType reports whether t is one of the two special datatypes,
