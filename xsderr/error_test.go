@@ -23,6 +23,27 @@ func TestErrorRenderingUnknownLoc(t *testing.T) {
 	}
 }
 
+// TestLocString pins each arm of Loc.String's rendering (#1896).
+func TestLocString(t *testing.T) {
+	for _, tc := range []struct {
+		loc  Loc
+		want string
+	}{
+		{Loc{}, "?"},
+		{Loc{URI: "u"}, "u"},
+		{Loc{URI: "u", Line: 3}, "u:3"},
+		{Loc{URI: "u", Col: 5}, "u"},
+		{Loc{URI: "u", Line: -1}, "u"},
+		{Loc{Line: 3, Col: 4}, "?:3:4"},
+		{Loc{Col: 5}, "?"},
+		{Loc{URI: "u", Line: 3, Col: 4}, "u:3:4"},
+	} {
+		if got := tc.loc.String(); got != tc.want {
+			t.Errorf("%#v.String() = %q, want %q", tc.loc, got, tc.want)
+		}
+	}
+}
+
 func TestWrapReachThrough(t *testing.T) {
 	sentinel := errors.New("underlying cause")
 	wrapped := Wrap("src-resolve", Loc{URI: "a.xsd", Line: 1, Col: 1}, sentinel)
