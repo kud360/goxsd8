@@ -41,18 +41,16 @@ import (
 const versioningNS = "http://www.w3.org/2007/XMLSchema-versioning"
 
 // walkUnrecorded are the builtin simple types whose presence anywhere in a
-// type's closure puts in play a clause the walk neither decides nor records a
-// decline for, at any depth. The gate excludes these alone: the ID family and
-// the ENTITY family are the walk's to decide and record at every depth
-// (instance.go, the cvc-elt clause 7 bullet).
+// type's closure makes the gate refuse the case. The ID family and the ENTITY
+// family are the walk's to decide and record at every depth (instance.go, the
+// cvc-elt clause 7 bullet), and are not listed.
 //
-// GAP(validate): an xs:NOTATION value is never checked against the schema's
-// notations. NOTATION's ·value space· is "the set of QNames of notations
-// declared in the current schema" (Datatypes §3.3.19, with
-// enumeration-required-notation), which no validate or backend site checks and
-// records no decline for — Override/over027/instance/over027.n01.xml, whose
-// NOTATION value names no declared notation, is suite-invalid and walks clean,
-// a false accept (#1901).
+// GAP(conformance): NOTATION stays listed although the walk now decides its
+// ·value space· — "the set of QNames of notations declared in the current
+// schema" (Datatypes §3.3.19) — at every depth, charging cvc-datatype-valid for
+// a value naming no declared notation and recording a decline where it cannot
+// decide (validate's walk.notationsDeclared). Lifting it admits the suite-valid
+// NOTATION cases as passes, a ratchet attribution of its own (#1904).
 var walkUnrecorded = []string{"NOTATION"}
 
 // assessedSubtreeRoot reports whether the instance document at doc, against

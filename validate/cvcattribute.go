@@ -20,7 +20,9 @@ import (
 // (cvcsimpletype.go): whiteSpace normalization (cl.1) and Datatype Valid (cl.2,
 // Datatypes §4.1.4) through value.ValidateLexical, in that order, then clause
 // 3's "every ·ENTITY value· in V is a ·declared entity name·" against the
-// document's [unparsedEntities] ([UnparsedEntities]).
+// document's [unparsedEntities] ([UnparsedEntities]), and last the clause 2
+// condition no backend decides, that a NOTATION value names a notation
+// declared in the schema ([walk.notationsDeclared]).
 //
 // GAP(validate): the [unparsedEntities] validate/xmlsrc presents is read from
 // the DOCTYPE's internal subset, its internal parameter entities expanded under
@@ -143,8 +145,9 @@ func (w *walk) wildcardAttribute(a Attribute, e Element, pc xsd.ProcessContents)
 //     ·special· datatypes never reach it: [walk.stringValid] decides them
 //     (isSpecial), so the typeless <attribute> §3.2.2.2's third tier types as
 //     xs:anySimpleType is satisfied, not declined.
-//   - an ·ENTITY value· candidate whose ·validating type· this package cannot
-//     decide, on [walk.entitiesDeclared]'s terms.
+//   - an ·ENTITY value· or NOTATION value candidate whose ·validating type·
+//     this package cannot decide, on [walk.entitiesDeclared]'s and
+//     [walk.notationsDeclared]'s terms.
 func (w *walk) declaredAttribute(a Attribute, e Element, d xsd.AttributeDeclaration) (*xsd.SimpleType, bool) {
 	st, simple := w.schema.ResolvedSimpleType(d.TypeDefinition())
 	if !simple {
@@ -157,7 +160,7 @@ func (w *walk) declaredAttribute(a Attribute, e Element, d xsd.AttributeDeclarat
 	decided, verdict := w.stringValid(st, a.Value(), e, a.Loc())
 	if !decided {
 		w.declineAttribute(a, ruleCvcAttribute, "3",
-			"the ·initial value· of the attribute %s was not decided against its declaration's {type definition} %s: String Valid (§3.16.4) was withheld, the value backend reporting a fault of the type rather than a verdict about the lexical or the ·validating type· String Valid clause 3 reads being undecidable, so cvc-attribute clause 3 is undecided",
+			"the ·initial value· of the attribute %s was not decided against its declaration's {type definition} %s: String Valid (§3.16.4) was withheld, the value backend reporting a fault of the type rather than a verdict about the lexical or the ·validating type· of an ·ENTITY value· or a NOTATION value being undecidable, so cvc-attribute clause 3 is undecided",
 			a.Name(), st.Name())
 		return nil, false
 	}
@@ -457,7 +460,9 @@ func (w *walk) defaultedConstraint(u xsd.AttributeUse, attrs []Attribute) (xsd.V
 // schema alone settles, so clause 3 is asked here of a {lexical form} it
 // accepts: whether each ·ENTITY value· in it is a ·declared entity name· is the
 // DOCUMENT's to say ([walk.entitiesDeclared]), and a rejection there is the
-// wrapped cause on the same terms.
+// wrapped cause on the same terms. [walk.notationsDeclared] is not asked:
+// ValidDefault declines every {lexical form} whose type's closure reaches
+// NOTATION, so none reaches here accepted (#667).
 //
 // The type's assertion sites are recorded at the ELEMENT's location, on
 // [walk.simpleAssertions]'s terms: the attribute is absent, which is what makes
