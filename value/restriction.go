@@ -589,12 +589,13 @@ var _ notationDeclarer = (*xsd.Schema)(nil)
 // NOTATION's ·value space·, "the set of QNames of notations declared in the
 // current schema" (Datatypes §3.3.19), which a leaf mapping holding no schema
 // cannot decide: a lexical inner's NOTATION mapping accepts is still rejected
-// where its QName names none of declared. checkEnumerationRestriction runs
-// every member through it, so enumeration valid restriction (§4.3.5.5) rejects
-// an undeclared member of a NOTATION-derived base whether NOTATION governs the
-// base itself, its list item or a union member, since each is decided by
-// xs:NOTATION's mapping. The instance-time counterpart is validate's
-// walk.notationsDeclared.
+// where its prefix is unbound or its QName names none of declared.
+// checkEnumerationRestriction runs every member through it against a
+// notationDeclarer resolver, so enumeration valid restriction (§4.3.5.5)
+// rejects an undeclared member of a NOTATION-derived base whether NOTATION
+// governs the base itself, its list item or a union member, since each is
+// decided by xs:NOTATION's mapping. The instance-time counterpart is
+// validate's walk.notationsDeclared.
 //
 // declared is the whole assembled set, so a notation from an included,
 // imported or overriding document counts wherever it sits in document order
@@ -617,7 +618,12 @@ func (d declaredNotationBackend) Mapping(typ xsd.QName) (Mapping, bool) {
 		if err != nil {
 			return nil, err
 		}
-		name := resolveNotationLexical(lexical, ctx)
+		name, ok := resolveNotationLexical(lexical, ctx)
+		if !ok {
+			return nil, xsderr.New(ruleCvcDatatypeValid, xsderr.Loc{},
+				"the NOTATION value %q has a prefix no in-scope namespace binding declares, so it resolves to no QName and is outside the ·value space· of NOTATION (Datatypes §3.3.18, §3.3.19)",
+				lexical)
+		}
 		if slices.ContainsFunc(d.declared, func(n xsd.Notation) bool { return n.Name() == name }) {
 			return v, nil
 		}
@@ -630,15 +636,19 @@ func (d declaredNotationBackend) Mapping(typ xsd.QName) (Mapping, bool) {
 
 // resolveNotationLexical is the expanded name a NOTATION lexical denotes: its
 // prefix, or the empty prefix of an unprefixed name, resolved against ctx
-// (§3.3.18). Its caller has had the lexical accepted by a NOTATION mapping, so
-// it is a QName whose prefix ctx binds.
-func resolveNotationLexical(lexical string, ctx Context) xsd.QName {
+// (§3.3.18). It reports false where ctx binds no namespace to the prefix: an
+// inner NOTATION mapping that does not itself reject an unbound prefix must not
+// turn p:n into the no-namespace n.
+func resolveNotationLexical(lexical string, ctx Context) (xsd.QName, bool) {
 	prefix, local, prefixed := strings.Cut(lexical, ":")
 	if !prefixed {
 		prefix, local = "", lexical
 	}
-	space, _ := ctx.LookupNamespace(prefix)
-	return xsd.QName{Space: space, Local: local}
+	space, ok := ctx.LookupNamespace(prefix)
+	if !ok {
+		return xsd.QName{}, false
+	}
+	return xsd.QName{Space: space, Local: local}, true
 }
 
 // isBoundKind reports whether kind is one of the four bound Constraining Facets

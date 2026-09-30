@@ -1,6 +1,7 @@
 package value
 
 import (
+	"errors"
 	"strconv"
 	"strings"
 	"testing"
@@ -597,5 +598,24 @@ func TestNotationMemberMustBeDeclaredByTheResolver(t *testing.T) {
 	}
 	if rule, _ := xsderr.RuleOf(CheckFacetRestriction(notationBackend{}, notationSchema{notations: []xsd.Notation{notation("bar")}}, st)); rule != "enumeration-valid-restriction" {
 		t.Errorf("bar declared: rule %q, want enumeration-valid-restriction", rule)
+	}
+
+	// p:foo with p bound nowhere names no QName (§3.3.18), so it is rejected even
+	// though notationBackend's Parse accepts it and a no-namespace foo is declared:
+	// read with the unbound prefix dropped it would be {}foo and admitted.
+	unbound, err := newCheckedSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "unbound"},
+		xsd.RestrictionDerivation{}, primType(t, "NOTATION", "collapse"),
+		[]xsd.Facet{xsd.NewEnumerationFacet([]xsd.EnumerationMember{xsd.NewEnumerationMember("p:foo", nil, nil)})}, nil)
+	if err != nil {
+		t.Fatalf("NewSimpleType: %v", err)
+	}
+	err = CheckFacetRestriction(notationBackend{}, notationSchema{notations: []xsd.Notation{notation("foo")}}, unbound)
+	if rule, _ := xsderr.RuleOf(err); rule != "enumeration-valid-restriction" {
+		t.Fatalf("unbound p:foo: rule %q (%v), want enumeration-valid-restriction", rule, err)
+	}
+	var cause *xsderr.Error
+	if !errors.As(errors.Unwrap(err), &cause) || cause.Rule != "cvc-datatype-valid" ||
+		!strings.HasPrefix(cause.Msg, `the NOTATION value "p:foo" has a prefix no in-scope namespace binding declares`) {
+		t.Errorf("unbound p:foo: cause %v, want cvc-datatype-valid naming the unbound prefix of \"p:foo\"", errors.Unwrap(err))
 	}
 }
