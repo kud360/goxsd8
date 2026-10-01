@@ -461,9 +461,12 @@ func TestInstanceExecutorDeclinesOutsideAssessedSubtreeRoot(t *testing.T) {
 			`<known/>`,
 		},
 		{
-			"xsi:nil below the root (cvc-elt clause 3)",
-			`<xs:element name="known"><xs:complexType><xs:sequence><xs:element name="a" type="xs:int" nillable="true"/></xs:sequence></xs:complexType></xs:element>`,
-			`<known ` + xsiNS + `><a xsi:nil="false">1</a></known>`,
+			// subtreeGate's nilValue: governed by §3.2.7's built-in declaration
+			// (key-governing-ad), the attribute is not ·valid· against xs:boolean
+			// (cvc-attribute clause 3), which the walk does not check on an
+			// element with no declaration.
+			"an xsi:nil with no ·actual value· on a lax wildcard particle's child resolving no declaration",
+			wildcardChild("lax"), `<known ` + xsiNS + `><u xsi:nil="maybe"/></known>`,
 		},
 		{
 			"an abstract declaration below the root (cvc-elt clause 2)",
@@ -612,6 +615,107 @@ func TestInstanceExecutorChargesFixedValueConstraint(t *testing.T) {
 		c.expect = expectValid()
 		if exec(c).IsPass() {
 			t.Errorf("%s: the executor must Fail under a flipped expectation", tc.why)
+		}
+	}
+}
+
+// nilInt declares <known> of type xs:int, {nillable} true; nilKnown declares
+// <known> with an optional {nillable} child <a> of type xs:int and an optional
+// {nillable} child <c>, whose type requires one child <d> of type xs:int and
+// declares an attribute at of type xs:string.
+const (
+	nilInt   = `<xs:element name="known" type="xs:int" nillable="true"/>`
+	nilKnown = `<xs:element name="known"><xs:complexType><xs:sequence>` +
+		`<xs:element name="a" type="xs:int" nillable="true" minOccurs="0"/>` +
+		`<xs:element name="c" nillable="true" minOccurs="0"><xs:complexType><xs:sequence><xs:element name="d" type="xs:int"/></xs:sequence>` +
+		`<xs:attribute name="at" type="xs:string"/></xs:complexType></xs:element>` +
+		`</xs:sequence></xs:complexType></xs:element>`
+)
+
+// TestInstanceExecutorDecidesXsiNil proves the gate admits an element carrying
+// xsi:nil wherever the walk decides cvc-elt clause 3 for it (#2053): a ·nilled·
+// one (key-nilled) with no [[children]] (3.2.3), and xsi:nil false under a
+// {nillable} declaration (3.2.2), read as if absent. Each row is decided VALID,
+// and each declines with subtreeGate refusing every xsi:nil again. The rows
+// whose content model rejects the empty sequence decline too with complex
+// reading a ·nilled· element's content through the ContentMatcher, which
+// cvc-complex-type clause 1, applying only to an element that is not ·nilled·,
+// does not ask.
+func TestInstanceExecutorDecidesXsiNil(t *testing.T) {
+	exec := newInstanceExec()
+	for _, tc := range []struct{ why, schemaBody, instance string }{
+		// "" is no xs:int, but cvc-type clause 3.1.3 skips a ·nilled· element.
+		{"a ·nilled· simple-typed root with no content", nilInt, `<known ` + xsiNS + ` xsi:nil="true"/>`},
+		{
+			"a ·nilled· root whose element-only content model rejects the empty sequence",
+			`<xs:element name="known" nillable="true"><xs:complexType><xs:sequence><xs:element name="d" type="xs:int"/></xs:sequence></xs:complexType></xs:element>`,
+			`<known ` + xsiNS + ` xsi:nil="1"/>`,
+		},
+		{"a ·nilled· child carrying a matched attribute, its required child absent", nilKnown, `<known ` + xsiNS + `><c xsi:nil="true" at="v"/></known>`},
+		{"a ·nilled· simple-typed child, its xsi:nil padded with white space", nilKnown, `<known ` + xsiNS + `><a xsi:nil=" true "/></known>`},
+		{"xsi:nil false on a {nillable} child with content (cvc-elt clause 3.2.2)", nilKnown, `<known ` + xsiNS + `><a xsi:nil="false">1</a></known>`},
+		{"xsi:nil 0 on a {nillable} root with content (cvc-elt clause 3.2.2)", nilInt, `<known ` + xsiNS + ` xsi:nil="0">1</known>`},
+	} {
+		if !exec(instanceCase(t, tc.schemaBody, tc.instance, true)).IsPass() {
+			t.Errorf("%s: the walk decides cvc-elt clause 3 and the gate admits the xsi:nil; the executor must agree with a suite-valid case", tc.why)
+		}
+		if exec(instanceCase(t, tc.schemaBody, tc.instance, false)).IsPass() {
+			t.Errorf("%s: the executor must Fail under a flipped expectation (it decides for real)", tc.why)
+		}
+	}
+}
+
+// TestInstanceExecutorChargesXsiNil is a regression guard for the xsi:nil lift
+// (#2053): each row is charged cvc-elt under the clause it names — by
+// validate's nilCheck, or its contentCheck for 3.2.3.1 — and decided INVALID
+// before the gate is read.
+func TestInstanceExecutorChargesXsiNil(t *testing.T) {
+	exec := newInstanceExec()
+	for _, tc := range []struct{ why, schemaBody, instance, clause string }{
+		{"a ·nilled· root with character content", nilInt, `<known ` + xsiNS + ` xsi:nil="true">1</known>`, "3.2.3.1"},
+		{"a ·nilled· child holding white space", nilKnown, `<known ` + xsiNS + `><a xsi:nil="true"> </a></known>`, "3.2.3.1"},
+		{"a ·nilled· child with an element child", nilKnown, `<known ` + xsiNS + `><c xsi:nil="true"><d>1</d></c></known>`, "3.2.3.1"},
+		{"xsi:nil false on a declaration whose {nillable} is false", knownRoot, `<known ` + xsiNS + ` xsi:nil="false">x</known>`, "3.1"},
+		{"xsi:nil true on a declaration whose {nillable} is false", knownRoot, `<known ` + xsiNS + ` xsi:nil="true"/>`, "3.1"},
+		{
+			"a ·nilled· root under a fixed {value constraint}",
+			`<xs:element name="known" type="xs:int" nillable="true" fixed="1"/>`, `<known ` + xsiNS + ` xsi:nil="true"/>`, "3.2.3.2",
+		},
+		{"an xsi:nil with no ·actual value· on a {nillable} root", nilInt, `<known ` + xsiNS + ` xsi:nil="maybe">1</known>`, "3.2"},
+	} {
+		c := instanceCase(t, tc.schemaBody, tc.instance, false)
+		if !chargedCvcElt(t, c, tc.clause) {
+			t.Errorf("%s: the walk must charge cvc-elt clause %s", tc.why, tc.clause)
+		}
+		if !exec(c).IsPass() {
+			t.Errorf("%s: the walk charges cvc-elt clause %s; the executor must agree with a suite-invalid case", tc.why, tc.clause)
+		}
+		c.expect = expectValid()
+		if exec(c).IsPass() {
+			t.Errorf("%s: the executor must Fail under a flipped expectation", tc.why)
+		}
+	}
+}
+
+// TestAssessedSubtreeRootNilled pins, at the gate itself, that a ·nilled·
+// element's content is read as a leaf: an element child is refused, which no
+// executor row can see because the walk charges cvc-elt clause 3.2.3.1 for it
+// first. The empty ·nilled· element is the control.
+func TestAssessedSubtreeRootNilled(t *testing.T) {
+	for _, tc := range []struct {
+		why, instance string
+		want          bool
+	}{
+		{"a ·nilled· child with no content", `<known ` + xsiNS + `><c xsi:nil="true"/></known>`, true},
+		{"a ·nilled· child with an element child", `<known ` + xsiNS + `><c xsi:nil="true"><d>1</d></c></known>`, false},
+	} {
+		c := instanceCase(t, nilKnown, tc.instance, true)
+		schema, report, decidable, err := assembleCase(strict.New(), c.schemaDoc, nil)
+		if err != nil || !decidable {
+			t.Fatalf("%s: assembling the schema: decidable %v, err %v", tc.why, decidable, err)
+		}
+		if got := assessedSubtreeRoot(schema, report, c.doc); got != tc.want {
+			t.Errorf("%s: assessedSubtreeRoot = %v, want %v", tc.why, got, tc.want)
 		}
 	}
 }
@@ -843,8 +947,11 @@ func TestAssessedSubtreeRootUnresolvedChild(t *testing.T) {
 			"lax, below a child resolving no declaration, an xsi:type bound by a prefix that child declares",
 			wildcardChild("lax"), `<known ` + xsiNS + `><u xmlns:z="http://www.w3.org/2001/XMLSchema"><b xsi:type="z:int">1</b></u></known>`, true,
 		},
-		{"lax, a child resolving no declaration carrying xsi:nil", wildcardChild("lax"), `<known ` + xsiNS + `><u xsi:nil="false"/></known>`, false},
-		{"lax, below a child resolving no declaration, xsi:nil", wildcardChild("lax"), `<known ` + xsiNS + `><u><v xsi:nil="false"/></u></known>`, false},
+		// key-nilled is relative to a declaration, so a laxly assessed element
+		// is never ·nilled·: its element child is read, not refused.
+		{"lax, a child resolving no declaration carrying xsi:nil true over an element child", wildcardChild("lax"), `<known ` + xsiNS + `><u xsi:nil="true"><v/></u></known>`, true},
+		{"lax, a child resolving no declaration carrying an xsi:nil with no ·actual value·", wildcardChild("lax"), `<known ` + xsiNS + `><u xsi:nil="maybe"/></known>`, false},
+		{"lax, below a child resolving no declaration, an xsi:nil with no ·actual value·", wildcardChild("lax"), `<known ` + xsiNS + `><u><v xsi:nil="maybe"/></u></known>`, false},
 		{
 			// The walk settles cvc-elt clause 5.2.2 for f, below the lax <u> too (#1979).
 			"lax, below a child resolving no declaration, a resolved declaration with a fixed {value constraint} (cvc-elt clause 5.2.2)",
@@ -1252,8 +1359,9 @@ type fixture struct{ name, content string }
 // TestAssessedSubtreeRootRootConditions pins the root conditions the walk
 // charges first — an undeclared root (cvc-assess-elt), an abstract declaration
 // (cvc-elt clause 2), an element child of a simple type (cvc-type clause
-// 3.1.2), an attribute outside the xsi: four (3.1.1), an xsi:nil (cvc-elt
-// clause 3), an xsi:type that does not resolve (cvc-attribute clause 3 or 5) or
+// 3.1.2), an attribute outside the xsi: four (3.1.1), an xsi:nil with no
+// ·actual value· (cvc-elt clause 3.1, the declaration not {nillable}), an
+// xsi:type that does not resolve (cvc-attribute clause 3 or 5) or
 // does not ·override· (cvc-elt clause 4) — at the gate itself, since it is a
 // precondition in its own right and not a restatement of those charges. No
 // executor row can see them, so the gate is called directly, with the declared
@@ -1276,7 +1384,7 @@ func TestAssessedSubtreeRootRootConditions(t *testing.T) {
 		{"an abstract declaration", `<abstract>x</abstract>`, false},
 		{"an element child of a simple type", `<known><a/></known>`, false},
 		{"an attribute outside the xsi: four", `<known foo="1">x</known>`, false},
-		{"an xsi:nil", `<known ` + xsiNS + ` xsi:nil="false">x</known>`, false},
+		{"an xsi:nil with no ·actual value·", `<known ` + xsiNS + ` xsi:nil="maybe">x</known>`, false},
 		// The walk charges each refused xsi:type below, so only a
 		// direct call sees the gate's own refusal.
 		{"an xsi:type naming the declared type", `<known ` + xsiXS + ` xsi:type="xs:string">1</known>`, true},
