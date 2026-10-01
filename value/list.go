@@ -41,8 +41,11 @@ var (
 // type definition}", and V is the ordered sequence of the values so identified.
 // Parse splits the ALREADY whiteSpace-normalized lexical (list's whiteSpace is
 // fixed collapse, §4.3.6.1 f-w-fixed, applied upstream by ValidateLexical's
-// whiteSpace stage before Parse runs) on whitespace via strings.Fields, then
-// decides each token against the item type.
+// whiteSpace stage before Parse runs) on #x20 alone — dv_list's
+// "space-delimited", and after collapse the only delimiter left — then decides
+// each token against the item type. A character Unicode calls a space and XML
+// does not (S, XML 1.0 [3]), such as U+0085, U+2028 or U+000C, is therefore
+// part of a token, for the item type to judge.
 //
 // Each token recurses through validateLexical — the FULL cvc-datatype-valid
 // rule against the item type — not through the item type's governing Mapping
@@ -108,9 +111,9 @@ func listMapping(b Backend, r xsd.TypeResolver, item *xsd.SimpleType) Mapping {
 			// So the union test below declares its members collapse and preserve
 			// (issue #326) without asserting either mode is observable at the item
 			// level, and no test pins an item type's own mode: in both shapes the
-			// exclusion is structural, not merely an artifact of Fields happening to
-			// leave a token with no whitespace for a mode to act on.
-			tokens := strings.Fields(lexical)
+			// exclusion is structural, not merely an artifact of the split happening
+			// to leave a token with no #x20 for a mode to act on.
+			tokens := strings.FieldsFunc(lexical, func(r rune) bool { return r == ' ' })
 			items := make([]Value, 0, len(tokens))
 			for _, tok := range tokens {
 				v, _, err := validateLexical(b, r, item, tok, ctx)

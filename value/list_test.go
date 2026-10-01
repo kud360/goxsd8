@@ -165,6 +165,41 @@ func TestValidateLexicalListItemErrorPropagates(t *testing.T) {
 	}
 }
 
+// TestValidateLexicalListSplitsOnXMLSpaceOnly pins dv_list's "space-delimited"
+// (§4.1.4 cl.2.2): after the list's fixed collapse only #x20 delimits, so an S
+// character (XML 1.0 [3]) separates items while a character Unicode alone calls
+// a space — NEL, LINE SEPARATOR, FORM FEED — stays inside its token.
+func TestValidateLexicalListSplitsOnXMLSpaceOnly(t *testing.T) {
+	item := primType(t, "myitem", "collapse")
+	leaf := listType(t, item)
+	b := stubItemBackend{item: item.Name()}
+
+	cases := []struct {
+		lexical string
+		items   int
+	}{
+		{"aa\tbb\r\ncc dd", 4},
+		{" aa  bb ", 2},
+		{"", 0},
+		{"ABC\u0085DEF", 1},
+		{"ABC DEF", 1},
+		{"ABC\fDEF", 1},
+	}
+	for _, tc := range cases {
+		v, err := ValidateLexical(b, noSchema{}, leaf, tc.lexical, nil)
+		if err != nil {
+			t.Fatalf("ValidateLexical(%q) = %v, want accept", tc.lexical, err)
+		}
+		lv, ok := v.(Lengthed)
+		if !ok {
+			t.Fatalf("ValidateLexical(%q) value %T does not implement Lengthed", tc.lexical, v)
+		}
+		if lv.Len() != tc.items {
+			t.Errorf("ValidateLexical(%q) has %d items, want %d", tc.lexical, lv.Len(), tc.items)
+		}
+	}
+}
+
 // TestValidateLexicalListItemTypeFacetsApply is the regression guard for issue
 // #224: dv_list (§4.1.4 cl.2.2) says each item is "Datatype Valid with respect
 // to the {item type definition}", which is the WHOLE cvc-datatype-valid rule
