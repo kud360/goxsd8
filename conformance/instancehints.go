@@ -162,6 +162,9 @@ func isInlineSchema(n xml.Name) bool {
 //     the parser accepts, and the suite declares the case invalid for that
 //     document rather than for the undeclared root.
 //
+// GAP(parser): character data after the document element is accepted, not
+// rejected as not well-formed, so a hinted document is read short (#2016).
+//
 // The resolver is assembleCase's: pinnedResolver over a loader.Dir rooted at
 // the instance's own directory, which every hint location is relative to
 // (instanceHints), so a location climbing above it is refused as unresolved.
@@ -192,6 +195,9 @@ func assembleHints(backend value.Backend, doc string, root xsd.QName, hints []pa
 // addB138 invalid on an unrelated wildcard charge. Each document is re-read
 // from its parser.AssembledDocument.Location, an on-disk path for
 // pinnedResolver, as closureVersioned does.
+//
+// GAP(parser): an empty prefixed namespace declaration (xmlns:p="") is
+// accepted, not rejected as not namespace-well-formed (#2015).
 func closurePrefixUndeclared(report *parser.AssemblyReport) bool {
 	return slices.ContainsFunc(report.Documents(), func(d parser.AssembledDocument) bool {
 		return documentCarries(d.Location, isPrefixUndeclaring)
