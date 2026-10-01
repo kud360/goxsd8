@@ -25,10 +25,15 @@ package xsd
 //     consequence: see its own doc.
 //
 // FAIL-OPEN CONTRACT, binding on every implementation: decided=false means "this
-// question was not answered". It is the answer for an ungoverned type, a lexical
-// the governing mapping cannot map, two incommensurable value spaces (ta and tb
-// resolving to different governing mappings), and a QName or NOTATION literal
-// whose prefix its ValueConstraint's captured context does not bind. A caller
+// question was not answered". It is the answer for a type no mapping governs, a
+// lexical the governing mapping cannot map, two incommensurable value spaces (ta
+// and tb resolving to different governing mappings), and a QName or NOTATION
+// literal whose prefix its ValueConstraint's captured context does not bind. A
+// comparison of two ·special· types (xs:anySimpleType, xs:anyAtomicType) is
+// not thereby undecided: an implementation may decide it over their mapping
+// union, NOT-same only where no member of that union makes the two {value}s the
+// same under the method's relation, and undecided where a member cannot answer.
+// A caller
 // treats undecided as "the clause is not competent to charge a failure" and
 // accepts; an implementation must never use undecided as licence to reject, must
 // never report a false NOT-same, and must never report a false NOT-valid: every

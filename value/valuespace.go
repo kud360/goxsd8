@@ -38,10 +38,15 @@ import (
 // through the full facet pipeline ([ValidateLexical]).
 //
 // It honors the fail-open contract [xsd.ValueSpace] states: every question it
-// cannot answer reports decided=false rather than a verdict, so an unsupported
-// type, an unmappable lexical, a cross-type comparison, or an error that belongs
-// to the type rather than to the value constraint can never turn into a schema
-// rejection.
+// cannot answer reports decided=false rather than a verdict, so a type no
+// backend mapping governs, an unmappable lexical, a cross-type comparison, or an
+// error that belongs to the type rather than to the value constraint can never
+// turn into a schema rejection. Two ·special· types (xs:anySimpleType,
+// xs:anyAtomicType) are the one ungoverned pair the comparisons decide: over
+// their mapping union, as [ConstraintMatches] does, under each comparison's own
+// relation. A ·special· type against an ordinary one stays undecided, and
+// [ValidDefault] still answers undecided for a ·special· type, for which
+// Datatype Valid is unconditionally true.
 //
 // It panics if b is nil, matching parser.WithBackend's guard: a nil backend is a
 // caller bug, not a schema-validity condition.
@@ -62,21 +67,43 @@ type valueSpace struct{ b Backend }
 // Identical is Datatypes §2.2.1's identity relation, which au-props-correct
 // clause 3 compares two {value}s under.
 func (vs valueSpace) Identical(r xsd.TypeResolver, ta *xsd.SimpleType, a xsd.ValueConstraint, tb *xsd.SimpleType, b xsd.ValueConstraint) (bool, bool) {
-	av, bv, ok := vs.values(r, ta, a, tb, b)
-	if !ok {
-		return false, false
-	}
-	return identical(av, bv)
+	return vs.compare(r, ta, a, tb, b, identical)
 }
 
 // EqualOrIdentical is the §2.2.1/§2.2.2 equal-or-identical union, which
 // loc-testSubP clauses 4.2 and 5.2.2 compare two {value}s under.
 func (vs valueSpace) EqualOrIdentical(r xsd.TypeResolver, ta *xsd.SimpleType, a xsd.ValueConstraint, tb *xsd.SimpleType, b xsd.ValueConstraint) (bool, bool) {
+	return vs.compare(r, ta, a, tb, b, equalOrIdentical)
+}
+
+// relation is one of the two sameness relations the comparisons answer under:
+// identical (§2.2.1, au-props-correct clause 3) or equalOrIdentical (§2.2.2,
+// loc-testSubP clauses 4.2 and 5.2.2, cvc-attribute clause 4). Those two
+// functions are its only values; it exists so one comparison path can carry
+// either without a flag.
+type relation func(a, b Value) (same, decided bool)
+
+// compare is the ONE gate both comparisons pass through (STYLE T4), deciding a
+// and b under rel.
+//
+// A pair whose types are BOTH ·special· is decided over the mapping union by
+// specialMatches before any whiteSpace or shared mapping is sought (#2040's
+// RULING, taken here by #1379): NOT-same holds exactly when no member admits
+// both raw literals as values the same under rel, so au-props-correct clause 3
+// scans the union under identity and loc-testSubP clauses 4.2 and 5.2.2 under
+// equal-or-identical. A pair with ONE ·special· side stays undecided: values
+// finds no governing mapping for it (#2087).
+//
+// Every other pair is mapped into one value space by values and compared there.
+func (vs valueSpace) compare(r xsd.TypeResolver, ta *xsd.SimpleType, a xsd.ValueConstraint, tb *xsd.SimpleType, b xsd.ValueConstraint, rel relation) (same, decided bool) {
+	if isSpecial(ta) && isSpecial(tb) {
+		return specialMatches(vs.b, ta, tb, a.LexicalForm(), constraintContext(a), b.LexicalForm(), constraintContext(b), rel)
+	}
 	av, bv, ok := vs.values(r, ta, a, tb, b)
 	if !ok {
 		return false, false
 	}
-	return equalOrIdentical(av, bv)
+	return rel(av, bv)
 }
 
 // ValidDefault is Simple Default Valid (§3.2.6.2, cos-valid-simple-default),
@@ -185,11 +212,15 @@ func (vs valueSpace) ValidDefault(r xsd.TypeResolver, t *xsd.SimpleType, vc xsd.
 // primitive's mapping covering its whole lexical space (see [Backend]). An
 // [Override] that narrows a primitive rejects in-space literals the same way, so
 // two literals only that primitive equates — "1" and "true" under a narrowed
-// xs:boolean — answer NOT-same, and both readers of this function,
-// validate's walk.fixedAgreement and contentCheck.fixedActualValue, charge on
-// NOT-same: under such a backend this residue is fail-CLOSED. xs:decimal, the
-// [Override] example, is covered by float, double and precisionDecimal, which
-// equate every pair of decimal literals that denote one value.
+// xs:boolean — answer NOT-same through specialMatches, and every reader of it
+// charges on NOT-same: validate's walk.fixedAgreement and
+// contentCheck.fixedActualValue through this function, and xsd's
+// checkAttributeUseValueConstraint (au-props-correct clause 3),
+// fixedValueConstraintSubsumes and attributeValueConstraintsAgree (loc-testSubP
+// clauses 4.2 and 5.2.2) through [NewValueSpace]'s comparisons. Under such a
+// backend this residue is fail-CLOSED at all five. xs:decimal, the [Override]
+// example, is covered by float, double and precisionDecimal, which equate every
+// pair of decimal literals that denote one value.
 //
 // For every other t, both sides are validated against t itself, so no
 // shared-mapping search is needed (contrast values, which compares two
@@ -216,7 +247,7 @@ func (vs valueSpace) ValidDefault(r xsd.TypeResolver, t *xsd.SimpleType, vc xsd.
 // cos-valid-simple-default obligation (§3.2.6.2), already charged at finalize.
 func ConstraintMatches(b Backend, r xsd.TypeResolver, t *xsd.SimpleType, lexical string, ctx Context, vc xsd.ValueConstraint) (same, decided bool) {
 	if isSpecial(t) {
-		return specialMatches(b, t, lexical, ctx, vc)
+		return specialMatches(b, t, t, lexical, ctx, vc.LexicalForm(), constraintContext(vc), equalOrIdentical)
 	}
 	av, err := ValidateLexical(b, r, t, lexical, ctx)
 	if err != nil {
@@ -229,22 +260,30 @@ func ConstraintMatches(b Backend, r xsd.TypeResolver, t *xsd.SimpleType, lexical
 	return equalOrIdentical(av, cv)
 }
 
-// specialMatches is [ConstraintMatches] for a ·special· t: the byte-identical
-// shortcut, then the scan of t's mapping union, folded in the order that doc
-// states — any member SAME is SAME, else any undecided member is undecided,
-// else NOT-same. The instance literal is parsed under ctx and vc's under
-// constraintContext(vc), as for every other t.
-func specialMatches(b Backend, t *xsd.SimpleType, lexical string, ctx Context, vc xsd.ValueConstraint) (same, decided bool) {
-	fixed := vc.LexicalForm()
-	if lexical == fixed {
+// specialMatches decides a pair of raw literals x and y — x parsed under xctx,
+// y under yctx — of the ·special· types tx and ty over their mapping union
+// under rel: the byte-identical shortcut, then the scan of every ·primitive·
+// member and, when tx and ty are BOTH xs:anySimpleType, every list member,
+// folded in the order [ConstraintMatches] states — any member SAME is SAME,
+// else any undecided member is undecided, else NOT-same. [ConstraintMatches]
+// hands it t twice under equalOrIdentical; valueSpace.compare hands it both
+// value constraints' types under either relation.
+//
+// The list members are scanned only where both types admit lists: a literal of
+// xs:anyAtomicType denotes no list value (Datatypes §3.2.2.2), so a list member
+// cannot equate it with anything.
+//
+// The byte-identical shortcut holds under both relations: xs:string is a member
+// of the union and maps one literal to one value identical to itself.
+func specialMatches(b Backend, tx, ty *xsd.SimpleType, x string, xctx Context, y string, yctx Context, rel relation) (same, decided bool) {
+	if x == y {
 		return true, true
 	}
-	cctx := constraintContext(vc)
-	same, decided = primitivesMatch(b, lexical, ctx, fixed, cctx)
-	if same || t != xsd.AnySimpleType() {
+	same, decided = primitivesMatch(b, x, xctx, y, yctx, rel)
+	if same || tx != xsd.AnySimpleType() || ty != xsd.AnySimpleType() {
 		return same, decided
 	}
-	listSame, listDecided := listsMatch(b, lexical, ctx, fixed, cctx)
+	listSame, listDecided := listsMatch(b, x, xctx, y, yctx, rel)
 	if listSame {
 		return true, true
 	}
@@ -252,11 +291,11 @@ func specialMatches(b Backend, t *xsd.SimpleType, lexical string, ctx Context, v
 }
 
 // primitivesMatch scans every ·primitive· mapping (primitiveNames) over the raw
-// literals x and y, folded as specialMatches states.
-func primitivesMatch(b Backend, x string, xctx Context, y string, yctx Context) (same, decided bool) {
+// literals x and y under rel, folded as specialMatches states.
+func primitivesMatch(b Backend, x string, xctx Context, y string, yctx Context, rel relation) (same, decided bool) {
 	decided = true
 	for _, name := range primitiveNames {
-		s, d := primitiveMatches(b, name, x, xctx, y, yctx)
+		s, d := primitiveMatches(b, name, x, xctx, y, yctx, rel)
 		if s {
 			return true, true
 		}
@@ -265,14 +304,14 @@ func primitivesMatch(b Backend, x string, xctx Context, y string, yctx Context) 
 	return false, decided
 }
 
-// primitiveMatches is one primitive member's pair. A literal the mapping's
-// Parse rejects with an *xsderr.Error is outside that primitive's lexical space,
-// so the member is decided not-same: for NOT-same, "not admitted" and "admitted,
-// different" are one fact. Any other Parse error, a primitive the backend does
-// not map, and a QName or NOTATION member without both contexts are undecided —
-// a nil [Context] makes a mapping reject every prefixed literal, which would
-// read as a decided non-admission.
-func primitiveMatches(b Backend, name xsd.QName, x string, xctx Context, y string, yctx Context) (same, decided bool) {
+// primitiveMatches is one primitive member's pair under rel. A literal the
+// mapping's Parse rejects with an *xsderr.Error is outside that primitive's
+// lexical space, so the member is decided not-same: for NOT-same, "not
+// admitted" and "admitted, different" are one fact. Any other Parse error, a
+// primitive the backend does not map, and a QName or NOTATION member without
+// both contexts are undecided — a nil [Context] makes a mapping reject every
+// prefixed literal, which would read as a decided non-admission.
+func primitiveMatches(b Backend, name xsd.QName, x string, xctx Context, y string, yctx Context, rel relation) (same, decided bool) {
 	if (name == qnameName || name == notationName) && (xctx == nil || yctx == nil) {
 		return false, false
 	}
@@ -288,7 +327,7 @@ func primitiveMatches(b Backend, name xsd.QName, x string, xctx Context, y strin
 	if err != nil {
 		return false, isLexicalRejection(err)
 	}
-	return equalOrIdentical(xv, yv)
+	return rel(xv, yv)
 }
 
 // isLexicalRejection reports whether a Parse error is the mapping's own
@@ -299,14 +338,14 @@ func isLexicalRejection(err error) bool {
 	return errors.As(err, &e)
 }
 
-// listsMatch is the list members' pair, for xs:anySimpleType alone. The most
-// permissive list type has a union of every primitive as its item type, so
-// each position is scanned by primitivesMatch on its own. Two lists differ when
-// their lengths differ (Datatypes §2.2.2) or either literal is no list literal,
-// and otherwise when any position is decided not-same; a list of one item
-// against an atomic value needs nothing here, primitivesMatch having already
-// compared that single token.
-func listsMatch(b Backend, x string, xctx Context, y string, yctx Context) (same, decided bool) {
+// listsMatch is the list members' pair under rel, for xs:anySimpleType alone.
+// The most permissive list type has a union of every primitive as its item
+// type, so each position is scanned by primitivesMatch on its own. Two lists
+// differ when their lengths differ (Datatypes §2.2.1, §2.2.2) or either literal
+// is no list literal, and otherwise when any position is decided not-same; a
+// list of one item against an atomic value needs nothing here, primitivesMatch
+// having already compared that single token.
+func listsMatch(b Backend, x string, xctx Context, y string, yctx Context, rel relation) (same, decided bool) {
 	xs, xok := listTokens(x)
 	ys, yok := listTokens(y)
 	if !xok || !yok || len(xs) != len(ys) {
@@ -314,7 +353,7 @@ func listsMatch(b Backend, x string, xctx Context, y string, yctx Context) (same
 	}
 	decided = true
 	for i := range xs {
-		s, d := primitivesMatch(b, xs[i], xctx, ys[i], yctx)
+		s, d := primitivesMatch(b, xs[i], xctx, ys[i], yctx, rel)
 		if d && !s {
 			return false, true
 		}
@@ -350,8 +389,8 @@ func isSpecial(t *xsd.SimpleType) bool {
 }
 
 // values maps both {lexical form}s to ·actual values· IN ONE VALUE SPACE, or
-// reports ok=false when it cannot — the single fail-open gate both methods pass
-// through (STYLE T4).
+// reports ok=false when it cannot — compare's fail-open path for every pair that
+// is not two ·special· types.
 //
 // The one space is the shared governing mapping of ta and tb (sharedMapping).
 // Each side is whiteSpace-normalized under ITS OWN type's effective mode before
