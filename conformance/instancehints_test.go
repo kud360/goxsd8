@@ -200,10 +200,10 @@ func TestInstanceExecutorDecidesNotWellFormedHintedSchema(t *testing.T) {
 // TestInstanceExecutorDeclinesRejectedHintedSchema proves every other rejection
 // of a hinted assembly is DECLINED in both polarities (#2058): a rejection of a
 // document that read (schA8.i's src-import clause 3.1), a resolver fault on a
-// composed document (#1201), a read failure wrapping a cause, and an unbound
-// prefix an internal-subset ATTLIST could have bound (#2073). Every row reaches
-// execInstanceCase's perr arm, and each is decided with wellFormednessFault
-// removed from it.
+// composed document (#1201), a read failure wrapping a cause, and a prefix
+// bound only by the namespace declaration an internal-subset ATTLIST defaults
+// (unboundPrefixCharge). Every row reaches execInstanceCase's perr arm, and
+// each is decided with wellFormednessFault removed from it.
 func TestInstanceExecutorDeclinesRejectedHintedSchema(t *testing.T) {
 	exec := newInstanceExec()
 	for _, tc := range []hintedRejection{
@@ -217,8 +217,12 @@ func TestInstanceExecutorDeclinesRejectedHintedSchema(t *testing.T) {
 		{"an encoding declaration the reader does not decode",
 			[]fixtureFile{{"s.xsd", `<?xml version="1.0" encoding="ISO-8859-1"?>` + xsdDoc("", knownRoot)}},
 			noNSHint},
-		{"an unbound element prefix",
-			[]fixtureFile{{"s.xsd", xsdDoc("", `<xs:annotation><xs:appinfo><p:x/></xs:appinfo></xs:annotation>`+knownRoot)}},
+		// #2067's shape: a well-formed document (XML 1.0 §5.1) the reader
+		// charges with an unbound prefix, as it applies no attribute default.
+		{"a namespace declaration an internal-subset ATTLIST defaults",
+			[]fixtureFile{{"s.xsd", `<!DOCTYPE xs:schema [` +
+				`<!ATTLIST xs:schema xmlns:xs CDATA #FIXED "http://www.w3.org/2001/XMLSchema">]>` +
+				`<xs:schema>` + knownRoot + `</xs:schema>`}},
 			noNSHint},
 	} {
 		c := hintedCase(t, tc.files, tc.instance, true)

@@ -510,16 +510,18 @@ func execInstanceCase(backend value.Backend, c caseSpec) Status {
 	}
 	// A schema document the assembly RETRIEVED and the reader rejected as not
 	// well-formed (wellFormednessFault) is recorded "not valid". That is a harness
-	// convention, not a spec verdict: §4.3.2 item 3 makes a failed attempt to use
-	// a schema location hint no error, but this document was retrieved and is in
-	// error, and §5.1 requires a conforming processor to report an error in a
-	// schema document used in constructing a schema while leaving any further
+	// convention, not a spec verdict: §4.3.2 item 3 makes a failed attempt to
+	// dereference a schema location hint no error, but this document was retrieved
+	// and is in error, and §5.1 requires a conforming processor to report an error
+	// in a schema document used in constructing a schema while leaving any further
 	// operation, assessment included, out of scope. Not-valid is how the harness
 	// records that report, as the schema lane's fabricatedRejection read arm does
 	// for a composed document. Every other perr declines: a resolver fault
 	// (#1201), a read failure wrapping a cause, which may be a reader limitation,
-	// an unbound-prefix charge (#2073), and every rejection of a document that did
-	// read (schA8.i's src-import clause 3.1).
+	// a prefix bound only by the namespace declaration an internal-subset ATTLIST
+	// defaults, and every rejection of a document that did read (schA8.i's
+	// src-import clause 3.1). A genuinely unbound prefix declines too, the gap
+	// wellFormednessFault's GAP(parser) marker tracks (#2073).
 	if wellFormednessFault(perr) {
 		return decideAgreement(false, c.expect.wantsValid())
 	}
