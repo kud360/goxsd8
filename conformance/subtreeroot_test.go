@@ -512,11 +512,6 @@ func TestInstanceExecutorDeclinesOutsideAssessedSubtreeRoot(t *testing.T) {
 			`<!DOCTYPE known [<?pi '?><!ENTITY e 'a>b'><?pi '?> <!ATTLIST known a CDATA 'x'>]><known/>`,
 		},
 		{
-			// rootStart's doc: encoding/xml fails on &g;, which §4.4.2 includes.
-			"a reference to a general entity an admitted DOCTYPE declares", aInt,
-			`<!DOCTYPE known [<!ENTITY g "1">]><known><a>&g;</a></known>`,
-		},
-		{
 			"a {type table} on the root (cvc-elt clause 4)",
 			`<xs:element name="known" type="xs:string"><xs:alternative type="xs:string"/></xs:element>`,
 			`<known>x</known>`,

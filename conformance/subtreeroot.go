@@ -726,13 +726,14 @@ func (g *subtreeGate) groupContains(mg xsd.ModelGroup, names []xsd.QName) bool {
 // The DOCTYPE that survives declares, in its internal subset alone, general
 // entities, notations, element types, comments and processing instructions.
 // None of these defaults an attribute (XML 1.0 §3.3.2), so the attributes the
-// reader sees are the [attributes] the walk assesses. Two of them still change
-// the infoset (§4.4), and neither is read here: an unparsed entity it declares
-// is one an ENTITY value may name, which the walk decides through
-// parser/xmltree's own read of the subset (key-vde, cvc-simple-type clause 3);
-// a reference to a general entity it declares is a decoder error here, encoding/xml
-// knowing no entity but the five predefined ones, so the reader answers false
-// for that document wherever the reference sits.
+// reader sees are the [attributes] the walk assesses. Its entities still
+// change the infoset (§4.4), and neither change is read here: an unparsed
+// entity it declares is one an ENTITY value may name, which the walk decides
+// through parser/xmltree's own read of the subset (key-vde, cvc-simple-type
+// clause 3); a reference to a general entity it declares is included text
+// (§4.4.2), which parser/xmltree rejects as not well-formed, encoding/xml
+// knowing no entity but the five predefined ones, and a document it rejects
+// reaches no verdict through either reader of rootStart (rawDecoder).
 func rootStart(dec *xml.Decoder) (xml.StartElement, bool) {
 	for {
 		tok, err := dec.Token()
