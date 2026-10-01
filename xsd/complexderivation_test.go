@@ -838,3 +838,88 @@ func TestDerivedOKComplexSimpleBase(t *testing.T) {
 		})
 	}
 }
+
+// ldtSchema finalizes the key-ldt-elem fixture: base B, a sequence of an
+// optional local e of type str and a lax ##any wildcard; T, a restriction of
+// B whose sequence holds only a reference to the top-level head h (str); and
+// the top-level e (narrow) in h's ·substitution group·. T's content model
+// therefore ·implicitly contains· the top-level e (key-impl-cont) while B's
+// contains the local one, and the two carry different types.
+func ldtSchema(t *testing.T) *Schema {
+	t.Helper()
+	b := NewSchemaBuilder()
+	b.AddType(dAnyType(t))
+	str := dPrimitive(t, uq("str"))
+	b.AddType(str)
+	b.AddType(dSimple(t, uq("narrow"), str))
+	b.AddElement(uGlobal(t, uq("h"), uq("str")))
+	b.AddElement(uGlobal(t, uq("e"), uq("narrow"), uq("h")))
+	lax := uWildcard(t, NamespaceConstraintAny, nil, ProcessLax)
+	baseModel := uGroup(t, CompositorSequence,
+		uParticle(t, uOccurs(t, 0, 1), ResolvedTerm{Term: uLocal(t, uq("e"), uq("str"))}),
+		uOne(t, ResolvedTerm{Term: lax}))
+	derivedModel := uGroup(t, CompositorSequence, uOne(t, ElementDeclarationRef{Name: uq("h")}))
+	b.AddType(dType(t, uq("B"), anyTypeName, dElementContent(t, false, baseModel), nil, nil))
+	b.AddType(dType(t, uq("T"), uq("B"), dElementContent(t, false, derivedModel), nil, nil))
+	s, err := b.Finalize()
+	if err != nil {
+		t.Fatalf("Finalize: %v", err)
+	}
+	return s
+}
+
+// TestLocallyDeclaredElementType pins key-ldt-elem's three cases on the
+// exported query, and the implicit-containment half that sets it apart from
+// the derivation check's explicitOnly walk: within T the name e is
+// ·implicitly contained· through h, so case 2 answers T's narrow at T itself
+// and never steps to B's str. Leaving the implicit gather out answers str,
+// which is the row "T, e" catching it.
+func TestLocallyDeclaredElementType(t *testing.T) {
+	s := ldtSchema(t)
+	complexType := func(name QName) ComplexType {
+		t.Helper()
+		td, ok := s.Type(name)
+		if !ok {
+			t.Fatalf("%s is not a type of the schema", name)
+		}
+		ct, ok := td.(ComplexType)
+		if !ok {
+			t.Fatalf("%s is not a ComplexType", name)
+		}
+		return ct
+	}
+	for _, tc := range []struct {
+		why    string
+		within QName
+		name   QName
+		want   QName // the zero QName: ·absent·
+	}{
+		{"case 2, implicitly contained through the head h", uq("T"), uq("e"), uq("narrow")},
+		{"case 2, a directly contained reference", uq("T"), uq("h"), uq("str")},
+		{"case 2, a directly contained local declaration", uq("B"), uq("e"), uq("str")},
+		{"case 3 then case 1: no declaration on the chain", uq("T"), uq("x"), QName{}},
+		{"case 1, xs:anyType", anyTypeName, uq("e"), QName{}},
+	} {
+		t.Run(tc.why, func(t *testing.T) {
+			got, ok := s.LocallyDeclaredElementType(complexType(tc.within), tc.name)
+			if tc.want == (QName{}) {
+				if ok {
+					t.Fatalf("LocallyDeclaredElementType(%s, %s) = %s, want ·absent·", tc.within, tc.name, typeDefinitionLabel(got))
+				}
+				return
+			}
+			if !ok {
+				t.Fatalf("LocallyDeclaredElementType(%s, %s) is ·absent·, want %s", tc.within, tc.name, tc.want)
+			}
+			if got.Name() != tc.want {
+				t.Fatalf("LocallyDeclaredElementType(%s, %s) = %s, want %s", tc.within, tc.name, typeDefinitionLabel(got), tc.want)
+			}
+		})
+	}
+	// The derivation check's walk leaves implicit containment out and so steps
+	// past T to B's local e.
+	got, ok := s.locallyDeclaredElementType(complexType(uq("T")), uq("e"), explicitOnly)
+	if !ok || got.Name() != uq("str") {
+		t.Fatalf("locallyDeclaredElementType(T, e, explicitOnly) = %v, %v, want str from B", got, ok)
+	}
+}
