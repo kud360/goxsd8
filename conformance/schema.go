@@ -541,9 +541,9 @@ func newSchemaCharge() func(caseSpec) string {
 // cannot resolve; one it cannot read (any ReadDocument error, including a
 // reader limitation such as an encoding it does not decode); one whose root
 // element is not <schema>; a closure holding one document outside the
-// producer's decidable subset; and a case whose parse failed with a rejection its own unfollowed
-// directives could have fabricated (fabricatedRejection, #276/#404). The other
-// three results say nothing then.
+// producer's decidable subset; and a case whose parse failed with a rejection its
+// own unfollowed directives could have fabricated (fabricatedRejection,
+// #276/#404). The other three results say nothing then.
 //
 // Where decidable is true, the fourth result is the assembly's OWN error: nil is
 // genuine evidence of validity — no document of the assembly has any of the
