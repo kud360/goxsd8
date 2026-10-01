@@ -557,6 +557,43 @@ func TestMalformedXMLIsErrorNotPanic(t *testing.T) {
 	}
 }
 
+// TestOnlyMiscFollowsTheDocumentElement pins XML 1.0 [1] document ::= prolog
+// element Misc*, with [27] Misc ::= Comment | PI | S: non-white-space
+// character data after the document element is a well-formedness fault located
+// at its first non-white-space character, counted across CRLF line ends the
+// decoder normalizes, while white space, a comment and a PI there are accepted.
+func TestOnlyMiscFollowsTheDocumentElement(t *testing.T) {
+	for _, tc := range []struct {
+		name, doc string
+		at        xsderr.Loc // zero: accepted
+	}{
+		{"text after CRLF lines", "<a>\r\n</a>\r\n\r\n  not well-formed\r\n", xsderr.Loc{URI: "t.xml", Line: 4, Col: 3}},
+		{"text on the end tag's line", "<a/> x", xsderr.Loc{URI: "t.xml", Line: 1, Col: 6}},
+		{"text after a comment", "<a/>\n<!-- c -->\nx", xsderr.Loc{URI: "t.xml", Line: 3, Col: 1}},
+		{"white space", "<a/>\r\n \t\n", xsderr.Loc{}},
+		{"comment", "<a/>\n<!-- c -->\n", xsderr.Loc{}},
+		{"processing instruction", "<a/>\n<?pi data?>\n", xsderr.Loc{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := collect(t, "t.xml", tc.doc)
+			if tc.at == (xsderr.Loc{}) {
+				if err != nil {
+					t.Fatalf("collect: %v, want the document accepted", err)
+				}
+				return
+			}
+			wantWellFormednessError(t, err)
+			if loc, _ := xsderr.LocOf(err); loc != tc.at {
+				t.Errorf("fault at %v, want %v, the first non-white-space character", loc, tc.at)
+			}
+			want := fmt.Sprintf("t.xml:%d:%d: [xml-wf] character data after the document element", tc.at.Line, tc.at.Col)
+			if !strings.HasPrefix(err.Error(), want) {
+				t.Errorf("error = %q, want it to open %q", err, want)
+			}
+		})
+	}
+}
+
 func TestEOFIsIdempotent(t *testing.T) {
 	r := xmltree.NewReader("t.xml", strings.NewReader("<a/>"))
 	for {
