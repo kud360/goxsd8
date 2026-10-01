@@ -405,8 +405,9 @@ import (
 // components a 1.1 processor must not see — VC/vc006.n1, suite-invalid, walks
 // clean for exactly that reason. The gate declines any assembly one of whose
 // documents carries an attribute in the versioning namespace, a conservative
-// superset of that GAP. It declines a DOCTYPE too, whose DTD could default an
-// attribute the gate does not see.
+// superset of that GAP. It declines a DOCTYPE too whose DTD could default an
+// attribute the gate does not see: one with an external subset, an <!ATTLIST
+// or a parameter-entity reference (rootStart).
 //
 // The one shape that looks like case 1 and is not: a root with no top-level
 // declaration whose xsi:type ·resolves·. Its ·instance-specified type

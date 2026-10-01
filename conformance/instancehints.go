@@ -52,8 +52,9 @@ func caseSchema(backend value.Backend, c caseSpec) (*xsd.Schema, *parser.Assembl
 // DECLINES — when the hints the root carries may not be the whole of what
 // §4.3.2 clause 5 makes global to the assessment:
 //
-//   - the document will not resolve or decode, or carries a DOCTYPE, whose DTD
-//     could default a hint onto any element (rootStart);
+//   - the document will not resolve or decode, or carries a DOCTYPE whose DTD
+//     could default a hint onto any element: one with an external subset, an
+//     <!ATTLIST or a parameter-entity reference (rootStart);
 //   - the root carries xml:base, which moves the base URI clause 4 resolves
 //     against;
 //   - an xsi:schemaLocation value has an odd member count, so one location
