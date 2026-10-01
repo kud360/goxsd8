@@ -1,10 +1,12 @@
 package validate
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/kud360/goxsd8/xsd"
+	"github.com/kud360/goxsd8/xsderr"
 )
 
 // These fixtures drive cvc-complex-type clause 5 for element [[children]]
@@ -262,5 +264,79 @@ func TestLocalGovernanceChargesAnOpenContentChild(t *testing.T) {
 				t.Errorf("Unevaluated() = %v, want none", unevaluated)
 			}
 		})
+	}
+}
+
+// ldtAltSchema declares zing with one local e of type Base and the {type
+// table} alt: Base blocks extension, Mid restricts Base, and Leaf extends Mid.
+func ldtAltSchema(t *testing.T, alt string) *xsd.Schema {
+	t.Helper()
+	return parsedSchema(t, map[string]string{"main.xsd": `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="Base" block="extension"><xs:sequence/><xs:attribute name="k"/></xs:complexType>
+  <xs:complexType name="Mid"><xs:complexContent><xs:restriction base="Base"><xs:sequence/></xs:restriction></xs:complexContent></xs:complexType>
+  <xs:complexType name="Leaf"><xs:complexContent><xs:extension base="Mid"><xs:sequence/></xs:extension></xs:complexContent></xs:complexType>
+  <xs:complexType name="zing"><xs:sequence><xs:element name="e" type="Base">` + alt + `</xs:element></xs:sequence></xs:complexType>
+  <xs:element name="doc" type="zing"/>
+</xs:schema>`})
+}
+
+// ldtAltDoc is <doc> holding one empty e at 4:3 that carries k="x" and attrs.
+func ldtAltDoc(attrs ...Attribute) *testElement {
+	attrs = append([]Attribute{&testAttribute{name: local("k"), value: "x", loc: loc(4, 9)}}, attrs...)
+	e := &testElement{name: local("e"), attrs: attrs, loc: loc(4, 3)}
+	return &testElement{name: local("doc"), kids: []Child{ElementChild(e)}, loc: loc(1, 1)}
+}
+
+// TestLocallyDeclaredTypeChargesAParticleChildOverASelection pins clause 5 for
+// a child a particle's own declaration governs, where it is NOT satisfied by
+// construction: the {type table} selects Mid and the xsi:type Leaf ·overrides·
+// Mid (cvc-elt clause 4 holds: e's {disallowed substitutions} and Mid's
+// {prohibited substitutions} are empty), but Leaf is not ·validly
+// substitutable· for the ·locally declared type· Base, whose {prohibited
+// substitutions} block the extension step from Mid (cos-ct-derived-ok clause
+// 1). The control, the same instance with no {type table}, is charged by
+// cvc-elt clause 4 instead, against Base itself, and not by clause 5.
+func TestLocallyDeclaredTypeChargesAParticleChildOverASelection(t *testing.T) {
+	t.Run("selected Mid, xsi:type Leaf", func(t *testing.T) {
+		got, unevaluated := assessRecorded(t, ldtAltSchema(t, `<xs:alternative test="@k = 'x'" type="Mid"/>`), ldtAltDoc(xsiTypeAttr("Leaf")))
+		viol := onlyCharge(t, got, ruleCvcComplexType)
+		if viol.Loc != loc(4, 3) {
+			t.Errorf("Loc = %s, want the child's %s", viol.Loc, loc(4, 3))
+		}
+		want := "the element e is a child of doc, and its ·governing type definition· Leaf is neither"
+		if !strings.HasPrefix(viol.Msg, want) || !strings.Contains(viol.Msg, "·locally declared type· Base within") {
+			t.Errorf("Msg = %q, want the prefix %q and the ·locally declared type· Base", viol.Msg, want)
+		}
+		if len(unevaluated) != 0 {
+			t.Errorf("Unevaluated() = %v, want none", unevaluated)
+		}
+	})
+	t.Run("no {type table}, xsi:type Leaf", func(t *testing.T) {
+		got, _ := assessRecorded(t, ldtAltSchema(t, ""), ldtAltDoc(xsiTypeAttr("Leaf")))
+		viol := onlyCharge(t, got, ruleCvcElt)
+		want := "the xsi:type attribute of the element e names the type definition Leaf, which is not ·validly substitutable· for the ·selected type definition· Base"
+		if !strings.HasPrefix(viol.Msg, want) {
+			t.Errorf("Msg = %q, want the prefix %q", viol.Msg, want)
+		}
+	})
+}
+
+// TestLocallyDeclaredTypeChargesAnXSErrorSelection pins the e-props-correct
+// clause 7.2 corner: a {type table} that selects ·xs:error· leaves a governing
+// type not ·validly substitutable· for the declared Base, so clause 5 charges
+// it beside cvc-type's own charges against ·xs:error· (clause 3.1.1 for the
+// attribute k, clause 3.1.3 for the empty value).
+func TestLocallyDeclaredTypeChargesAnXSErrorSelection(t *testing.T) {
+	got, _ := assessRecorded(t, ldtAltSchema(t, `<xs:alternative test="@k = 'x'" type="xs:error"/>`), ldtAltDoc())
+	var rules []xsderr.Rule
+	for _, v := range got {
+		rules = append(rules, v.Rule)
+	}
+	want := []xsderr.Rule{ruleCvcComplexType, ruleCvcType, ruleCvcType}
+	if !slices.Equal(rules, want) {
+		t.Fatalf("Violations() = %v, want the rules %v", got, want)
+	}
+	if !strings.HasPrefix(got[0].Msg, "the element e is a child of doc, and its ·governing type definition· {"+xsd.XMLSchemaNS+"}error is neither") {
+		t.Errorf("Msg = %q, want clause 5 charged against ·xs:error·", got[0].Msg)
 	}
 }

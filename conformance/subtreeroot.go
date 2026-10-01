@@ -464,7 +464,10 @@ func (g *subtreeGate) children(t xsd.ComplexType, m *xsd.Matcher) bool {
 //     key-governing-ed clause 2), which with the child's subtree must meet
 //     element's conditions. The ·locally declared type· (key-ldt-elem case 2)
 //     is that declaration's own {type definition}, so cvc-complex-type clause
-//     5 holds wherever cvc-elt clause 4 does;
+//     5 holds wherever cvc-elt clause 4 does for a declaration with no {type
+//     table}, the only kind element admits (assessedDeclaration). Under a {type
+//     table} it need not: an xsi:type ·overriding· a selection that is not the
+//     declared type can fail it (validate's walk.locallyDeclaredType);
 //   - an element particle whose {term} D carries another name: cvc-accept
 //     clause 2.3.2 admitted the child as a member of D's ·substitution group·,
 //     the Matcher deciding D top-level, D.{disallowed substitutions}, and
@@ -474,9 +477,9 @@ func (g *subtreeGate) children(t xsd.ComplexType, m *xsd.Matcher) bool {
 //     the child's subtree must meet element's conditions. The ·locally
 //     declared type· (key-ldt-elem case 2, S ·implicitly contained·,
 //     key-impl-cont) is S's own {type definition}, so cvc-complex-type clause
-//     5 holds wherever cvc-elt clause 4 does. A child carrying D's own name is
-//     the first arm's, cvc-accept clause 2.3.1 attributing it to D, where
-//     element refuses an ·abstract· D;
+//     5 holds wherever cvc-elt clause 4 does, on the first arm's terms. A
+//     child carrying D's own name is the first arm's, cvc-accept clause 2.3.1
+//     attributing it to D, where element refuses an ·abstract· D;
 //   - a skip Wildcard, or the {open content} with a skip {wildcard}: the child
 //     is ·skipped· with its whole subtree (key-sva clause 3.2, cvc-assess-elt
 //     clause 2), which is read past unchecked. A skipped child has no

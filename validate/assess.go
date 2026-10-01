@@ -575,14 +575,21 @@ func (w *walk) unresolvedStrictWildcardChild(content *contentCheck, child Elemen
 // xs:anyType answers ·absent· by case 1 — and a child with no ·governing type
 // definition· are both clause 5's ·absent· antecedent, and nothing is charged.
 // The clause quantifies over every child, whatever it was ·attributed to·. One
-// a particle's element declaration governs passes by construction: the
-// parent's content model contains that declaration, and cos-element-consistent
-// gives every same-named declaration it contains one type. One ·attributed to·
-// an {open content} with a non-·absent· ·locally declared type· passes by
-// construction too: key-governing-ed clause 4.3 has that type, or an xsi:type
-// ·overriding· it ·without limitation·, govern it ([walk.localGovernance]). It
-// is a child ·attributed to· a strict or lax Wildcard, governed by the
-// top-level declaration its name ·resolves· to or by its xsi:type alone
+// a particle's element declaration governs passes where its ·governing type
+// definition· is that declaration's {type definition}, a {type table}
+// selection other than ·xs:error· (e-props-correct clause 7.1), or an xsi:type
+// ·overriding· the declared type: the parent's content model contains that
+// declaration, and cos-element-consistent gives every same-named declaration
+// it contains one type. It can fail where the {type table} selected S, neither
+// ·xs:error· nor the declared type, and the xsi:type ·overrides· S:
+// key-overrides blocks under S's {prohibited substitutions} and not under the
+// declared type's. A selection of ·xs:error· (clause 7.2) is charged here too,
+// beside cvc-type's charges against it. One ·attributed to· an {open content}
+// with a non-·absent· ·locally declared type· passes by construction too:
+// key-governing-ed clause 4.3 has that type, or an xsi:type ·overriding· it
+// ·without limitation·, govern it ([walk.localGovernance]). It is a child
+// ·attributed to· a strict or lax Wildcard, governed by the top-level
+// declaration its name ·resolves· to or by its xsi:type alone
 // (key-governing-type-elem clause 8), that can fail.
 //
 // "The same as" is sameType. An error from [xsd.Schema.ValidlySubstitutable] is
