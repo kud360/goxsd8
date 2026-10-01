@@ -412,8 +412,9 @@ func isDeclName(t string) bool {
 	return !strings.ContainsAny(t, `"'[]%`)
 }
 
-// declSpace is the white space that separates the tokens of a markup
-// declaration: XML 1.0's S production.
+// declSpace is XML 1.0's S production: the white space that separates the
+// tokens of a markup declaration, and the only character data that may follow
+// the document element (see trailerFault).
 const declSpace = " \t\r\n"
 
 // declTokens splits a markup declaration body on white space, keeping each

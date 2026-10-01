@@ -1,6 +1,7 @@
 package xmltree
 
 import (
+	"bytes"
 	"encoding/xml"
 	"errors"
 	"io"
@@ -33,6 +34,9 @@ type Reader struct {
 	// stack holds one frame per currently-open element, so end tags match
 	// their starts and nested elements resolve against the right scope.
 	stack []frame
+	// ended records that the document element's end tag has been read, after
+	// which only Misc may appear (see trailerFault).
+	ended bool
 	// eof latches io.EOF so repeated Token calls keep returning it.
 	eof bool
 
@@ -152,6 +156,11 @@ func (r *Reader) classify(tok xml.Token, off int64) (Node, bool, error) {
 		}
 		return node, true, nil
 	case xml.CharData:
+		if r.ended {
+			if err := trailerFault(t, loc); err != nil {
+				return nil, false, err
+			}
+		}
 		return &CharData{data: string(t), offset: off, loc: loc}, true, nil
 	case xml.ProcInst:
 		if t.Target == "xml" {
@@ -307,7 +316,22 @@ func (r *Reader) endElement(t xml.EndElement, loc xsderr.Loc) (*EndElement, erro
 		return nil, xsderr.New(xsderr.RuleXMLWellFormed, loc, "end tag </%s> does not match open element %s", rawName(t.Name), qname(top.name))
 	}
 	r.stack = r.stack[:len(r.stack)-1]
+	r.ended = len(r.stack) == 0
 	return &EndElement{name: got, loc: loc}, nil
+}
+
+// trailerFault enforces XML 1.0 §2.1's well-formedness clause 1 for the text
+// after the document element: [1] document ::= prolog element Misc*, and [27]
+// Misc ::= Comment | PI | S, so character data there must be white space
+// (declSpace). text is one character-data token read after the document
+// element's end tag, starting at loc. The fault is located at loc, the token's
+// own start: text is decoded — line ends normalized (§2.11), references
+// replaced — so no index into it is an offset into the source.
+func trailerFault(text []byte, loc xsderr.Loc) error {
+	if len(bytes.TrimLeft(text, declSpace)) == 0 {
+		return nil
+	}
+	return xsderr.New(xsderr.RuleXMLWellFormed, loc, "character data after the document element: only comments, processing instructions and white space may follow it (XML 1.0 [1] document, [27] Misc)")
 }
 
 // currentScope is the scope in force for the innermost open element, or nil

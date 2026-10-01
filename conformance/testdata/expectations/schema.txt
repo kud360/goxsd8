@@ -964,7 +964,7 @@ MS-Additional2006-07-15/addB200b/schema/addB200b pass
 MS-Additional2006-07-15/addB200c/schema/addB200c pass
 MS-Additional2006-07-15/addB201/schema/addB201 pass
 MS-Additional2006-07-15/addB31/schema/addB31 pass
-MS-Additional2006-07-15/addB32/schema/addB32 fail
+MS-Additional2006-07-15/addB32/schema/addB32 pass
 MS-Additional2006-07-15/addC001/schema/addC001 pass
 MS-Additional2006-07-15/addC002/schema/addC002 fail
 MS-Additional2006-07-15/addD001/schema/addD001 pass
