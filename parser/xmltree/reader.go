@@ -7,6 +7,7 @@ import (
 	"sort"
 
 	"github.com/kud360/goxsd8/internal/xmldecl"
+	"github.com/kud360/goxsd8/internal/xmlenc"
 	"github.com/kud360/goxsd8/xsderr"
 )
 
@@ -24,7 +25,7 @@ type Reader struct {
 
 	// bom is what the document's byte-order mark said its encoding is — the
 	// evidence an encoding declaration must agree with (XML 1.0 §4.3.3).
-	bom bomEncoding
+	bom xmlenc.Mark
 
 	// stack holds one frame per currently-open element, so end tags match
 	// their starts and nested elements resolve against the right scope.
@@ -68,13 +69,13 @@ type frame struct {
 //
 // A leading byte-order mark is honoured per XML 1.0 §4.3.3: a UTF-16 document
 // is decoded to UTF-8 before the XML decoder sees it, and a UTF-8 mark is
-// dropped as the encoding signature it is. Locations are therefore offsets
-// into the decoded UTF-8 stream, not into the source bytes.
+// dropped as the encoding signature it is (internal/xmlenc). Locations are
+// therefore offsets into the decoded UTF-8 stream, not into the source bytes.
 func NewReader(uri string, r io.Reader) *Reader {
-	body, bom := decodeBOM(r)
+	body, bom := xmlenc.Decode(r)
 	pos := &posReader{r: xmldecl.As10(body)}
 	dec := xml.NewDecoder(pos)
-	dec.CharsetReader = bom.charsetReader
+	dec.CharsetReader = bom.CharsetReader
 	return &Reader{
 		uri: uri,
 		dec: dec,
@@ -224,17 +225,17 @@ func (r *Reader) AllDeclarationsProcessed() bool {
 // byte-order mark is the evidence of the encoding the entity was presented in.
 //
 // It catches the direction the XML decoder cannot: a declaration naming UTF-8
-// is the decoder's default and never reaches charsetReader, so a UTF-16 mark
-// contradicting it would otherwise pass unnoticed.
+// is the decoder's default and never reaches the mark's CharsetReader, so a
+// UTF-16 mark contradicting it would otherwise pass unnoticed.
 func (r *Reader) checkDeclaration(pi xml.ProcInst, loc xsderr.Loc) error {
 	if pi.Target != "xml" {
 		return nil
 	}
 	name := pseudoAttr(string(pi.Inst), "encoding")
-	if name == "" || r.bom.agreesWith(name) {
+	if name == "" || r.bom.AgreesWith(name) {
 		return nil
 	}
-	// bomEncoding.String names the mark itself, so the message states the
+	// xmlenc.Mark.String names the mark itself, so the message states the
 	// entity's actual encoding rather than repeating "byte-order mark".
 	return xsderr.New(xsderr.RuleXMLWellFormed, loc, "encoding declaration %q disagrees with the entity's actual encoding: %s", name, r.bom)
 }
