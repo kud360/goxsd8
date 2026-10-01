@@ -48,9 +48,9 @@ const versioningNS = "http://www.w3.org/2007/XMLSchema-versioning"
 // validate.Result may be read as "valid" for: a root, with content or without,
 // whose subtree meets every condition subtreeGate.element names, in a document
 // whose DTD, if any, defaults no attribute (rootStart), against an assembly no
-// version condition touched. Any
-// failure to establish a condition — an unreadable document, a decoder error,
-// an unresolvable component — is a false, never a guess.
+// version condition touched. Any failure to establish a condition — an
+// unreadable document, a decoder error, an unresolvable component — is a false,
+// never a guess.
 func assessedSubtreeRoot(schema *xsd.Schema, report *parser.AssemblyReport, doc string) bool {
 	if closureVersioned(report) {
 		return false
