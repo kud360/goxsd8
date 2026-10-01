@@ -1564,6 +1564,60 @@ func TestProduceQNameValueConstraintsComparedAsValues(t *testing.T) {
 	})
 }
 
+// TestProduceTypelessFixedValuesComparedOverTheUnion pins the ·special· pair
+// reaching a schema verdict (#1379): an <attribute> with no type= is typed
+// xs:anySimpleType (§3.2.2.2), so two fixed {value}s on it are compared over
+// that type's mapping union — under identity for au-props-correct (§3.5.6)
+// clause 3, which addB108 and attO025 exercise, and under equal-or-identical
+// for loc-testSubP (§3.4.6.4) clause 5.2.2, which derivation-ok-restriction
+// clause 3 charges.
+func TestProduceTypelessFixedValuesComparedOverTheUnion(t *testing.T) {
+	use := func(declFixed, useFixed string) string {
+		return wrap("urn:x", `<xs:attribute name="att" fixed="`+declFixed+`"/>`+
+			`<xs:complexType name="CT"><xs:sequence/><xs:attribute ref="tns:att" fixed="`+useFixed+`"/></xs:complexType>`)
+	}
+	restriction := func(baseFixed, restrFixed string) string {
+		return wrap("urn:x", `<xs:complexType name="B"><xs:attribute name="a" fixed="`+baseFixed+`"/></xs:complexType>`+
+			`<xs:complexType name="R"><xs:complexContent><xs:restriction base="tns:B">`+
+			`<xs:attribute name="a" fixed="`+restrFixed+`"/></xs:restriction></xs:complexContent></xs:complexType>`)
+	}
+	rejects := func(t *testing.T, doc string, rule xsderr.Rule, opening string) {
+		t.Helper()
+		_, err := produce(t, doc)
+		assertRule(t, err, rule)
+		if !strings.Contains(err.Error(), opening) {
+			t.Fatalf("error = %v, want it to contain %q", err, opening)
+		}
+	}
+
+	t.Run("au-props-correct 3: no member makes 123 and abc identical (addB108)", func(t *testing.T) {
+		rejects(t, use("123", "abc"), "au-props-correct",
+			`] complex type {urn:x}CT fixes attribute {urn:x}att to "abc", but the attribute declaration fixes it to "123"`)
+	})
+	t.Run("au-props-correct 3: nor 123 and 456 (attO025)", func(t *testing.T) {
+		rejects(t, use("123", "456"), "au-props-correct",
+			`] complex type {urn:x}CT fixes attribute {urn:x}att to "456", but the attribute declaration fixes it to "123"`)
+	})
+	t.Run("au-props-correct 3: decimal makes 1 and 1.0 identical", func(t *testing.T) {
+		if _, err := produce(t, use("1", "1.0")); err != nil {
+			t.Fatalf("Produce: %v, want 1 and 1.0 accepted as one identical {value}", err)
+		}
+	})
+	t.Run("au-props-correct 3: one instant at two offsets is not identical", func(t *testing.T) {
+		rejects(t, use("2000-01-01T12:00:00Z", "2000-01-01T13:00:00+01:00"), "au-props-correct",
+			`] complex type {urn:x}CT fixes attribute {urn:x}att to "2000-01-01T13:00:00+01:00", but the attribute declaration fixes it to "2000-01-01T12:00:00Z"`)
+	})
+	t.Run("loc-testSubP 5.2.2: one instant at two offsets is equal", func(t *testing.T) {
+		if _, err := produce(t, restriction("2000-01-01T12:00:00Z", "2000-01-01T13:00:00+01:00")); err != nil {
+			t.Fatalf("Produce: %v, want the equal {value}s accepted", err)
+		}
+	})
+	t.Run("loc-testSubP 5.2.2: no member makes 123 and abc equal", func(t *testing.T) {
+		rejects(t, restriction("123", "abc"), "derivation-ok-restriction",
+			`] complex type {urn:x}R restricts {urn:x}B and fixes attribute a to "abc", but the base fixes it to "123"`)
+	})
+}
+
 // xmlNS is the reserved prefix bound with no declaration anywhere (Namespaces
 // in XML §3), so it is in scope at — and captured by — every value constraint.
 const xmlNS = "http://www.w3.org/XML/1998/namespace"
