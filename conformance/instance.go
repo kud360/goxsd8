@@ -131,18 +131,25 @@ import (
 // # Charges at depth
 //
 // Cases 2 to 7 and case 9 are charged against a DESCENDANT on the same terms as
-// against the root (#790, #913), and stay unconditional there. §3.3.4.6 clause 3.1 has a
-// child assessed with respect to the ·governing element declaration· the
-// parent's content model ·attributed· it to, so a child validate charges is one
-// it was ·strictly assessed· against a declaration it really has, and its
-// [validity] is invalid (§3.3.5.1 clause 1.1.1). Every ancestor up to the root
-// is strictly assessed too — validate types a child only from a parent whose
-// own governing type it determined — and clause 1.1.2 makes an ancestor with an
-// invalid [[child]] invalid in turn, so the root's [validity] is invalid and the
-// document is not valid, whatever the unassessed rest of it holds. A charge
-// under a ·laxly assessed· ancestor, which clause 1.1.2 would NOT propagate,
-// cannot arise: validate charges nothing at all below an element whose
-// governing type it did not determine.
+// against the root (#790, #913), and stay unconditional there. The lane's
+// "valid" is §2.5's key-deep-valid-doc (#1911): the root's [validity] is valid
+// AND no element or attribute anywhere in the document has [validity] invalid
+// (clauses 3 and 4). §3.3.4.6 clause 3.1 has a child assessed with respect to
+// its ·governing element declaration· — the one the parent's content model
+// ·attributed· it to, or, under a lax wildcard or a ·laxly assessed· parent,
+// the top-level one its name ·resolves· to (#1823) — so a child validate
+// charges is one it ·strictly assessed· against a declaration it really has,
+// and its [validity] is invalid (§3.3.5.1 e-validity clause 1.1.1); an
+// attribute validate charges has a ·governing attribute declaration·, on a
+// ·laxly assessed· element too (#1891), and its [validity] is invalid
+// likewise. Either makes the document not deep-valid, whatever the unassessed
+// rest of it holds. Clause 1.1.2 makes a ·strictly assessed· ancestor with an
+// invalid [[child]] or [[attribute]] invalid in turn, but stops at the first
+// ·laxly assessed· one (cvc-assess-elt clause 3, key-lva): its [validity] is
+// notKnown (e-validity clause 2), never invalid (§2.5's Note), so the root may
+// stay valid and the document root-valid. decidedNotValid reads a charge at or
+// below a ·laxly assessed· element as "not valid" all the same, which is
+// deep-valid's reading and not root-valid's.
 //
 // Every {type table} a declaration carries IS built (#851), so validate never
 // guesses a tableless declaration's type: it ·conditionally selects· through the
@@ -187,15 +194,14 @@ import (
 // definition whose clauses 2 and 3 dispatch assessment recursively into every
 // attribute and child, which Assess follows only as far as it can type: where a
 // descendant's declaration or type is not determinable — a withheld {type
-// table} selection, an unresolvable {type definition}, a name no top-level
-// declaration matches under a wildcard and no xsi:type types either, a
-// ·skipped· subtree — the element and everything below it is decided against
-// nothing, and a few of validate's declines record nothing in
-// Result.Unevaluated (validate.Unevaluated's own doc lists them).
-// The spec has no category for "this processor did not implement that check"
-// stronger than notKnown, so outside the shape below an empty Result licenses
-// no "valid" claim; equally it licenses no "invalid" one, so an
-// expected-invalid case declines exactly as an expected-valid one does.
+// table} selection, an unresolvable {type definition}, a ·skipped· subtree —
+// the element and everything below it is decided against nothing, and a few of
+// validate's declines record nothing in Result.Unevaluated
+// (validate.Unevaluated's own doc lists them). The spec has no category for
+// "this processor did not implement that check" stronger than notKnown, so
+// outside the shape below an empty Result licenses no "valid" claim; equally it
+// licenses no "invalid" one, so an expected-invalid case declines exactly as an
+// expected-valid one does.
 //
 // The one shape it DOES license "valid" for is an ASSESSED SUBTREE ROOT
 // (assessedSubtreeRoot, subtreeroot.go, #1841), with content or without
@@ -227,11 +233,16 @@ import (
 //     subtree unread: it is ·skipped· (key-sva clause 3.2, cvc-assess-elt
 //     clause 2) and has no [validity] to block its parent's (sic-e-outcome
 //     clause 1.1). So is a skip {open content}'s child, which validate reads
-//     as ·skipped· too (#1969). Every other attribution is refused: a lax
-//     Wildcard's or {open content}'s child resolving to none, the untyped
-//     element whose [[children]] the walk leaves untyped (#1823, #1911). No
-//     element of a subtree whose Result is empty is therefore assessed against
-//     no type.
+//     as ·skipped· too (#1969). A lax Wildcard's or {open content}'s child
+//     resolving to none, with no xsi:type and no xsi:nil, is ·laxly assessed·
+//     (cvc-assess-elt clause 3, key-lva): the gate holds it and its subtree
+//     to every condition below against ·xs:anyType·, as the walk assesses
+//     them (subtreeGate.laxlyAssessed, #1823, #1891). Its [validity] is
+//     notKnown, which blocks no ancestor's valid (e-validity clause 1.1.3
+//     names a strict ·wildcard particle· alone) and leaves the document
+//     deep-valid (§2.5 Note, #1911). A child resolving to none with an
+//     xsi:type is refused, under strict and lax alike. No element of a
+//     subtree whose Result is empty is therefore assessed against no type.
 //   - cvc-elt clauses 2 to 6, at every element: {abstract} false, no xsi:nil,
 //     no {type table} — so the ·selected type definition· is the {type
 //     definition}, which the gate resolves itself — and no fixed {value
@@ -281,7 +292,9 @@ import (
 //     "child its parent ·attributed to· nothing", which subtreeGate.child
 //     keeps out by refusing every child its parent's xsd.Schema.ContentMatcher
 //     attributes to nothing, the walk attributing each child through the same
-//     matcher. Keep both refusals when editing the gate: the gate's reading of
+//     matcher — or, below a ·laxly assessed· parent, to ·xs:anyType·'s lax
+//     wildcard ahead of that site, as the gate's matcher over ·xs:anyType·
+//     does. Keep both refusals when editing the gate: the gate's reading of
 //     cvc-id clause 1 rests on them. String Valid clause 3's ·declared entity
 //     name· check (key-vde) is the walk's too, decided per ENTITY value by
 //     walk.entitiesDeclared and recorded as an [Unevaluated] by its callers
