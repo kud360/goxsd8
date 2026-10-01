@@ -17,15 +17,15 @@ read them. One stamp for the whole section, so a reader can tell staleness
 from wrongness at a glance. Never add a dated paragraph beside the old
 one — appending is what this replaces.
 
-## Status — 2026-10-01 (post-land restamp on `main` at `b846f7a`)
+## Status — 2026-10-01 (post-land restamp on `main` at `6e5a545`)
 
-**One landing since the last stamp (`c250ef3`).** **#1988** landed at `b846f7a`
-(PR #2031) as a LOG entry with no code, and closed `completed`. Its ruling keeps
-`xs:NOTATION` named directly in a declaration accepted. Its six cases (over027,
-simple090–simple094) stay banked `fail` as a PRINCIPLES 25 divergence, the same
-kind as #1809's. **Lean: product, unchanged.** M5's north star is #2025, and it
-is startable: `wip/issue-2013` surveys RETIRED on a fed run. M4 has none at this
-stamp, and the next `/backlog` names one.
+**One landing since the last stamp (`b846f7a`).** **#2025** landed at `6e5a545`
+(PR #2033): an `instance` case whose group declares no schemaTest is decided
+against the schema its root's xsi hints locate. It absorbed #763, closed both,
+and banked `instance` +15. **Lean: product, unchanged.** M5's north star is
+now **#1899**: with #2025 landed, the lane's largest cluster that one decision
+holds is `MS-Regex`'s 20 decided-and-wrong. M4 still has none at this stamp,
+and the next `/backlog` names one.
 
 **Two post-land passes are still not on `main`:** #1816's (open PR #1871) and
 #1908's (open PR #1929). #1823's LOG entry still has no branch. #2007 owns all
@@ -33,7 +33,7 @@ three.
 
 ### Conformance lanes
 
-**This table is `go tool lanestatus`, pasted verbatim, on `main` at `b846f7a`.**
+**This table is `go tool lanestatus`, pasted verbatim, on `main` at `6e5a545`.**
 It is the committed expectations census, which `docs/WORKFLOW.md` names as the
 lane score (#1120).
 
@@ -41,53 +41,63 @@ lane score (#1120).
 |---|---:|---:|---:|
 | `ber` | — | — | 0 |
 | `datatypes` | 1163 | 10 | 1173 |
-| `instance` | 25849 | 512 | 26361 |
+| `instance` | 25864 | 497 | 26361 |
 | `json` | — | — | 0 |
 | `schema` | 15271 | 127 | 15398 |
 | `xpath` | — | — | 0 |
 
-**No lane moved, and none regressed.** `git diff c250ef3 b846f7a` touches only
-`docs/`. **`datatypes ⊆ instance` is intended** (#1507). **An em dash means a
-lane with no cases yet, not a lane scoring zero.** `datatypes` is M3 and
-complete. `schema` is M4 and `instance` is M5, and both are active. `xpath`,
-`json` and `ber` wait on M6/M7, M8 and M11.
+**`instance` rose by 15 (25849 → 25864), and no lane regressed.** **`datatypes ⊆
+instance` is intended** (#1507). **An em dash means a lane with no cases yet,
+not a lane scoring zero.** `datatypes` is M3 and complete. `schema` is M4 and
+`instance` is M5, and both are active. `xpath`, `json` and `ber` wait on M6/M7,
+M8 and M11.
 
 ### What holds each active lane's failures
 
-**Measured on `b846f7a`** (suite `7bc3365`), with one read-only
-`GOXSD_DECLINES=1` conformance run (exit 0, nothing banked), fed to `go tool lanepartition
--log <run> <lane>` with a body-bearing issue walk. Every figure is a part of the
-banked fails and a bound from above, never a prediction of flips. The tool's
-owner matching is lexical, so the owners below are this restamp's reading.
+**Measured on `6e5a545`** (suite `7bc3365`), with one read-only
+`GOXSD_DECLINES=1` conformance run (exit 0, `--- PASS: TestConformance
+(264.62s)`, nothing banked), fed to `go tool lanepartition -log <run> <lane>`
+with a body-bearing issue walk. Every figure is a part of the banked fails and
+a bound from above, never a prediction of flips. The tool's owner matching is
+lexical, so the owners below are this restamp's reading.
 
 | lane | banked fail | declined | indeterminate (#277) | decided against the suite |
 |---|---:|---:|---:|---:|
-| `instance` | 512 | 479 | 5 | 28 |
+| `instance` | 497 | 464 | 5 | 28 |
 | `schema` | 127 | 15 | 11 | 101 |
 | `datatypes` | 10 | 6 | — | 4 |
 
-- **M5's north star is #2025.** `MS-Additional`'s declines are 39 (18 valid, 21
-  invalid), still the lane's largest non-XPath set. #2025 owns the decision that
-  holds 30 of them: `groupSchemaDocs` declines every instanceTest whose group
-  declares no schemaTest. Its judged change flips 13 named cases (5 of them
-  `MS-Additional`), all still banked `fail`. #2029 holds 3 more (addB196c,
-  addB196d, test93160). #2015 and #2016 then lift two of #2025's declines
-  (addB138, addB139, addB063). Next come `MS-Regex` 20 decided (#1899),
-  `MS-Attribute` 19 invalid, `VC` 18 valid (#1002, #1042), and `Complex` and
-  `ID_IDREF` 14 valid each. Of `MS-Attribute`'s 19, the 11 hint-less `attMd*` cases stay declined by
-  #2025's ruling and have no owner.
+- **M5's north star is #1899.** `MS-Regex`'s 20 suite-invalid cases decided
+  valid are the lane's largest non-XPath cluster held by one decision: #1899
+  owns 18 of them, a Unicode-version divergence or a defect, and #1856 owns 2.
+- **`MS-Additional`'s declines fell from 39 to 34** (21 invalid, 13 valid).
+  Their group declares no schemaTest for 25 of the 34, and #2025's ruled
+  declines hold those 25, each under its own refusal: #2015 lifts addB138 and
+  addB139, #2016 lifts addB063, and the hint-less ones have no stated schema
+  and stay declined. #2029 holds addB196c, addB196d and test93160. Which
+  refusal holds each of the rest is a manual probe until #2008 lands.
+- **`MS-Attribute`'s 19 invalid declines split in two.** attMd001–attMd011
+  (11) have no group schema, and 8 of them have no hint either, so they stay
+  declined by #2025's ruling. **attP010–attP020 and attLb005/attLc005 (8),
+  with attP011, attP015, attP019, attLb004 and attLc004 (5 valid), carry a
+  `fixed` on an untyped attribute**, which is #2029's shape. #2029's body
+  records them as an unprobed hypothesis that would raise its bound from 4 to
+  17.
+- Next come `VC` 18 valid (#1002, #1042), `Complex` 14 valid (no owner),
+  `ID_IDREF` 14 valid and `Id` 14 valid.
 - **The XPath clusters are M6's:** `Assert` 65 valid and 45 invalid,
   `assertion` 24 and 26, and `CTA` 29. #1042 owns them and is `blocked`.
-- **M4 has no north star at this stamp.** `schema`'s two largest decided
-  clusters are now both recorded PRINCIPLES 25 divergences, which stay banked
-  `fail` and have no work to take: **`MS-Wildcards` 49 (#1809)** and **#1988's 6**
-  (`Simple` simple090–simple094 and `Override/over027`). Next come `MS-Schema` 7
-  declined invalid (no owner), `MS-Particles` 7 decided (`particlesOb*`),
-  `MS-Schema` 6 indeterminate, and `Open` 5 (#1374).
+- **M4 has no north star at this stamp.** `schema` did not move. Its two largest
+  decided clusters are recorded PRINCIPLES 25 divergences, which stay banked
+  `fail` and have no work to take: **`MS-Wildcards` 49 (#1809)** and **#1988's
+  6** (`Simple` simple090–simple094 and `Override/over027`). Next come
+  `MS-Schema` 7 declined invalid (no owner), `MS-Particles` 7 decided
+  (`particlesOb*`), `MS-Schema` 6 indeterminate, and `Open` 5 (#1374).
 - **`instance`'s 22 suite-invalid decided cases** are 20 `MS-Regex` (#1899 18,
   #1856 2) and 2 `datatypes` cases. **Every false reject has an owner,
   unchanged:** `schema`'s 5 suite-valid decided cases (#462, #921, #1002) and
-  `instance`'s 6 (#771, #921).
+  `instance`'s 6 (#771's four, which #2025 does not reach because their groups
+  declare a schemaTest, and #921's two).
 - **`datatypes`' 10** are 6 declines and 4 decided, unchanged.
 
 ### Branch namespace, `origin` (report-only; a session never deletes a ref)
@@ -95,12 +105,10 @@ owner matching is lexical, so the owners below are this restamp's reading.
 `go tool wipsurvey`, fed this restamp's issue walk on an unshallowed clone,
 prints:
 
-- **No `wip/issue-<N>` is LIVE.** `wip/issue-1988` was deleted at merge.
-- **`wip/issue-2013` is RETIRED**, because #2013 is closed `not_planned`. An
-  unfed run printed it LIVE inside its tip's 2h lease (`09c04fc`, 04:09:45Z),
-  which is why #1988's session passed over #2025; the lease has no owner. Its
-  content is not on `main`, and #2025 supersedes it by merging that branch. It
-  is evidence until #2025 lands, and a human may delete it after that.
+- **No `wip/issue-<N>` is LIVE.** `wip/issue-2025` was deleted at merge.
+- **`wip/issue-2013` is RETIRED**, because #2013 is closed `not_planned`. #2025
+  merged it, so its content is on `main` as `6e5a545`, and a human may delete
+  it.
 - **`meta/post-land-1908`** (PR #1929) and **`meta/post-land-1816`** (PR #1871)
   are open post-land passes. #2007 owns landing them, and #1897 owns the survey
   gap that shows them as plain AHEAD OF MAIN rows.
@@ -115,22 +123,24 @@ prints:
 
 ### Marker census
 
-`go tool gapaudit`, fed a body-bearing walk of issues #1–#2031 (`rows 2031
-distinct 2031 min 1 max 2031 no gaps`), reports **77 markers across 10 areas,
+`go tool gapaudit`, fed a body-bearing walk of issues #1–#2033 (`rows 2033
+distinct 2033 min 1 max 2033 no gaps`), reports **79 markers across 10 areas,
 15 in group 1 and 33 in group 2, with zero dead ends**.
 
+- **The census rose from 77 to 79** because #2025 brought the two
+  `GAP(parser)` markers in `conformance/instancehints.go`. They cite #2015 and
+  #2016, both open, so neither is in group 1.
 - **The group-1 rows are unchanged from the last stamp.**
   `conformance/subtreeroot.go:500` is #1978's. The others are the
   `parser/doc.go:228` §5.3 policy row, `xsd/resolve.go:723`, and three
   `validate` rows whose owners do not yet cite them (`assess.go:1113` #1892,
-  `cvcid.go:258` #1093, `cvcidentityconstraint.go:131` #1887). The two
-  `GAP(parser)` markers that name #2015 and #2016 reach `main` with #2025.
-- **Group 2 fell from 34 to 33** because #1988 closed. #2029 is in group 2 and
-  has no marker: its ruling says whether one is written.
+  `cvcid.go:258` #1093, `cvcidentityconstraint.go:131` #1887).
+- **Group 2 is 33, unchanged.** #2029 is in it and has no marker: its ruling
+  says whether one is written.
 
 ### Milestones and queue
 
-**Counted from the REST walk above: 329 open and 727 closed.**
+**Counted from the REST walk above: 327 open and 729 closed.**
 
 | milestone | open | closed | state |
 |---|---:|---:|---|
@@ -138,27 +148,26 @@ distinct 2031 min 1 max 2031 no gaps`), reports **77 markers across 10 areas,
 | M2 — Foundation leaves | 0 | 5 | done |
 | M3 — Datatypes vertical slice | 0 | 12 | complete |
 | **M4 — Schema parsing** | **64** | **166** | active |
-| **M5 — Instance validation (XML)** | **22** | **71** | active |
+| **M5 — Instance validation (XML)** | **21** | **72** | active |
 | M6 — XPath required subset | 1 | 0 | not started |
 | M7–M12 | 0 | 0 | not started |
 
-Queue labels on open issues are **312 `ready`, 15 `blocked`, 0 `needs-replan`
-and 2 `epic`**, which sums to 329. `kind/gap` is 61.
+Queue labels on open issues, after this pass relabelled #2015 and #2016, are
+**313 `ready`, 12 `blocked`, 0 `needs-replan` and 2 `epic`**, which sums to
+327. `kind/gap` is 61.
 
-- **`blocked` is 15:** #16, #555, #763, #1002, #1042, #1051, #1374, #1609,
-  #1790, #1880, #1885, #1923, #2015, #2016 and #2022. None names #1988. **#763,
-  #2015 and #2016 wait on #2025:** #2025 absorbs #763, and the declines the
-  other two lift reach `main` only with it. #1609's arm 1 reads `schema` Pass
-  15271, which is not above 15292. **Five human decisions are outstanding:**
-  #1880 (which gates #1002), #1885, #1790, #1923 and #2022.
-- **Measured refactors, re-run on `b846f7a`, all flat:** #1958 2 definitions,
+- **`blocked` is 12:** #16, #555, #1002, #1042, #1051, #1374, #1609, #1790,
+  #1880, #1885, #1923 and #2022. None names #2025 or #763. #1609's arm 1 reads
+  `schema` Pass 15271, which is not above 15292. **Five human decisions are
+  outstanding:** #1880 (which gates #1002), #1885, #1790, #1923 and #2022.
+- **Measured refactors, re-run on `6e5a545`, all flat:** #1958 2 definitions,
   #1865 2 `importWording` values, #1757 1 arm, #1770 2 `isNotationName` lines
   (1 call and the definition). None enters the band on its figure.
 
 ### Persona consultations: not re-run this pass
 
 **The cartographer role-plays no persona and does not spawn one** (#416).
-Nothing was handed to this restamp, and #1988 changed no exported surface.
+Nothing was handed to this restamp, and #2025 changed no exported surface.
 **Eighteen persona findings stay open and unconsumed:** #1568–#1571,
 #1593–#1596, #1626, #1684, #1685, #1687, #1688, #1843, #1845, #1894, #1895 and
 #1898.
@@ -167,53 +176,57 @@ Nothing was handed to this restamp, and #1988 changed no exported surface.
 
 This is ordered for a `/develop` session: take the highest row you can start.
 **Run `wipsurvey` fed, before starting**, because this is a snapshot and an
-unfed run cannot print RETIRED. Each row names one issue (#1636). **Rows 1, 3
-and 7 share `conformance/subtreeroot.go` with #2008, so only one of them is
-taken at a time under WORKFLOW's same-file rule.** Row 1 is first: it merges a
-branch cut before #1979 moved that file, so it runs `go vet ./...` and `git grep
--n documentVersioned -- '*.go'` on the merged tree (#2026). Row 1 absorbs #763.
-Row 4 shares `xsd/contentrestricts.go` with #1998 and #1953 and absorbs them
-when it can.
+unfed run cannot print RETIRED. Each row names one issue (#1636). **Rows 2 and
+9 share `conformance/subtreeroot.go` with #2008, so only one of them is taken
+at a time under WORKFLOW's same-file rule.** Rows 7 and 8 share
+`parser/xmltree` and `conformance/instancehints.go`, and the session that takes
+one absorbs the other when it can. Row 5 shares `xsd/contentrestricts.go` with
+#1998 and #1953 and absorbs them when it can.
 
 **The ordering principle for this stamp:** M5's north star first, then by
-bound, then the false accepts, then the two process fixes whose sightings cost
-a round.
+bound, then the reproduced false accepts, then the two process fixes whose
+sightings cost a round.
 
 | # | issue | why here |
 |---|---|---|
-| 1 | #2025 | **M5's north star.** Land #2013's judged change by merging `wip/issue-2013` (RETIRED, not LIVE) and finishing the `documentVersioned` → `documentCarries` rename at every site `git grep` finds. `instance` +13 on named cases, all still `fail`. Unblocks #763, #2015 and #2016. **Startable now** |
-| 2 | #1899 | **M5, a ruling.** 18 suite-invalid `MS-Regex` cases decided valid: a Unicode-version divergence or a defect. `instance` bound 18, the lane's largest decided cluster. **Startable now** |
-| 3 | #2019 | **M5.** The raw re-reads decode UTF-16 through a leaf shared with `parser/xmltree`. `instance` bound 21 (19 suite-valid), `schema` 1, from a byte scan; s3_3_4v03i is held by this alone. Same file as row 1 (`rawDecoder`) |
-| 4 | #2000 | **M4, a reproduced false accept.** A local B particle is credited with a same-named head's substitution group. Absorbs #1998 and #1953 in `xsd/contentrestricts.go`. A non-comment change fires #1609's arm 3. **Startable now** |
-| 5 | #1982 | **M4, a reproduced false accept.** `checkS4SChildOrder` skips every foreign-namespace child. `schema` unmeasured. **Startable now** |
-| 6 | #1912 | **M5, a ruling.** 7 suite-invalid cases whose only fault is a strict-unresolved wildcard attribute. `instance` bound 7. **Startable now** |
-| 7 | #1978 | **M5.** Admit a strict or lax wildcard's unresolved child whose xsi:type resolves, and retire the group-1 marker at `subtreeroot.go:500`. Unmeasured. Same file as rows 1 and 3 |
-| 8 | #2026 | **Process: its first sighting cost a round and parked an accepted change (#2013).** `/develop` step 5 runs `go vet ./...` on a merged-forward tree before delegating any round. **Startable now** |
-| 9 | #1989 | **Process: six sightings, one of which cost the oracle a pass (#446).** `/develop` step 3 populates `testdata/xsdtests` before the oracle runs. **Startable now** |
+| 1 | #1899 | **M5's north star, a ruling.** 18 suite-invalid `MS-Regex` cases decided valid: a Unicode-version divergence or a defect. `instance` bound 18, the lane's largest single-decision cluster. **Startable now** |
+| 2 | #2019 | **M5.** The raw re-reads decode UTF-16 through a leaf shared with `parser/xmltree`. `instance` bound 21 (19 suite-valid), `schema` 1, from a byte scan; s3_3_4v03i is held by this alone. #2025 gave `documentCarries` a second caller, which the body records |
+| 3 | #2029 | **M5, a ruling.** The fixed {value constraint} comparison under the ·special· `xs:anySimpleType`. `instance` bound 4 by ID, and up to 17 if the 13 `MS-Attribute` attP/attL cases its body names as a hypothesis are confirmed. **Startable now** |
+| 4 | #1912 | **M5, a ruling.** 7 suite-invalid cases whose only fault is a strict-unresolved wildcard attribute. `instance` bound 7. **Startable now** |
+| 5 | #2000 | **M4, a reproduced false accept.** A local B particle is credited with a same-named head's substitution group. Absorbs #1998 and #1953 in `xsd/contentrestricts.go`. A non-comment change fires #1609's arm 3. **Startable now** |
+| 6 | #1982 | **M4, a reproduced false accept.** `checkS4SChildOrder` skips every foreign-namespace child. `schema` unmeasured. **Startable now** |
+| 7 | #2015 | **M5, a parser false accept**, unblocked by #2025. `xmlns:p=""` in an XML 1.0 document is rejected as `xml-wf`, and `closurePrefixUndeclared`'s decline is lifted. `instance` +2 named (addB138, addB139). Same files as row 8. **Startable now** |
+| 8 | #2016 | **M5, a parser false accept**, unblocked by #2025. Character data after the document element is rejected as `xml-wf`, and `assembleHints`' undeclared-root decline is lifted or narrowed. `instance` +1 named (addB063). Same files as row 7 |
+| 9 | #1978 | **M5.** Admit a strict or lax wildcard's unresolved child whose xsi:type resolves, and retire the group-1 marker at `subtreeroot.go:500`. Unmeasured. Same file as row 2 |
+| 10 | #2026 | **Process: its first sighting cost a round and parked an accepted change (#2013).** `/develop` step 5 runs `go vet ./...` on a merged-forward tree before delegating any round. **Startable now** |
+| 11 | #1989 | **Process: six sightings, one of which cost the oracle a pass (#446).** `/develop` step 3 populates `testdata/xsdtests` before the oracle runs; #2025's entry records the suite populated by hand again before mason's gate. **Startable now** |
 
 **Named below the band, on purpose.**
 - **Process, for the `/retro` on 2026-10-04:** **#1868 and #1948 first** (with
-  #1798 and #1781, the same class), then #2021 (the oracle's spec scope), #1990,
-  #1993, #1996 and #2010, then #1913, #1791 and #1812. #1880, #1885, #1923 and
-  #2022 wait on the owner.
+  #1798 and #1781, the same class), then #1812 (the arbiter's ratchet duty in
+  step 5, which #2025's brief contradicted, a third sighting of that
+  symptom), #2021 (the oracle's spec scope), #1990, #1993, #1996 and #2010,
+  then #1913 and #1791. #1880, #1885, #1923 and #2022 wait on the owner.
 - **#2006's trackers:** #2018 (5th-edition Names, xv001.v01 and xv004.v01) and
   #2020 (nine `strings.Fields` splits over list lexicals).
-- **Tooling:** #2008 (an `instance` decline names no refusing gate arm), #1935
-  (casejoin misses include/import-reached fixtures), #1897 (STRANDED PASS misses
+- **Tooling:** #2008 (an `instance` decline names no refusing arm, and #2025's
+  hint declines are refusals outside the gate it now names), #1935 (casejoin
+  misses include/import-reached fixtures), #1897 (STRANDED PASS misses
   post-land heads), #1464, #1838 and #1794.
 - **M4 with a small bound or `Ratchet: unchanged` expected:** #1998 and #1953
-  (absorbed by row 4), #1873, #1877, #1883, #1887, #1820, #1801 and #1777.
+  (absorbed by row 5), #1873, #1877, #1883, #1887, #1820, #1801 and #1777.
   **Conformance bookkeeping:** #1803, #1881, and #458 (three comment fixes).
   **#1987** is an unmeasured message refactor in `value`.
-- **M5 rulings and residue:** #2029 (`instance` bound 4, the anySimpleType
-  fixed comparison), #1856, #1892, #1093, #1848, #1849, #1824, #1825, and #771,
-  which may reuse #2025's hint-assembly path.
+- **M5 rulings and residue:** #1856, #1892, #1093, #1848, #1849, #1824, #1825,
+  and #771, whose four false rejects #2025 does not reach; its body now says
+  how the decide branch could reuse #2025's hint reader.
 - **Persona docs:** #1843, #1895, #1894 and #1898. **#1283 follow-ups:** #1864
   and #1865.
 - **Refactors.** #1958 is measured and flat. #1770 is flat and is the route
   #1765 and #1745 should take. #1757 is flat. #1735, #1736, #1701, #848 and
   #845 are unmeasured. #755 owns the single home of the xsi hint reader, which
-  #2025 adds a second copy of.
+  now has three copies (`cmd/goxsd8`, `conformance/instancehints.go` and the
+  planned `parser` one), and its body says where they disagree.
 - **#1790** waits on a human.
 
 ### Next planning action
@@ -223,21 +236,21 @@ a round.
    A human triages both `parked/untriaged-20260930-*` branches,
    `chronicler-345`, `meta/backlog-2026-10-01-b`, the six subagent branches
    under `wip/issue-1861-*`, `wip/issue-1926-*` and `wip/issue-1988-*`, and
-   `wip/issue-2013` once #2025 lands.
+   `wip/issue-2013`.
 2. **The next `/backlog` names M4's north star** from the `schema` partition.
    Its two largest decided clusters are permanent divergences (#1809, #1988), so
    the candidates are `MS-Schema` 7 declined invalid, which has no owner, and
    `MS-Particles` 7 decided.
-3. **#2025's post-land pass** relabels #2015 and #2016 `ready`, confirms #763
-   closed, and re-reads M5's north star from a fresh `lanepartition`.
-   `MS-Attribute`'s 19 invalid declines have no owner and are the candidate.
+3. **#2029's grounding confirms or discards the 13 `MS-Attribute` cases** by
+   ID. If they hold, #2029 is the north star after #1899.
 4. **The next `/retro` is Sunday 2026-10-04.** It reads four windows since the
    last retro: 73.7 cases per session at 89% product, 177.7 at 100%, 44.4 at
    90%, and 10.0 at 90% with two repair rounds. It also reads #1911's single
    landing at 132 cases, #2006's at 25, #2013's park after an accepted change,
-   #1979's first-round accept at 62, and #1988's no-code divergence. It rules
-   #1868 and #1948 together with #1798 and #1781, and the process filings
-   #1989, #1990, #1993, #1996, #2010, #2021 and #2026.
+   #1979's first-round accept at 62, #1988's no-code divergence, and #2025's
+   first-round accept at 15. It rules #1868 and #1948 together with #1798 and
+   #1781, #1812, and the process filings #1989, #1990, #1993, #1996, #2010,
+   #2021 and #2026.
 5. **Human decisions outstanding:** #1880, #1885, #1790, #1923 and #2022.
 
 ## Milestones
