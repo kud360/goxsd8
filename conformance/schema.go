@@ -1,10 +1,12 @@
 package conformance
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/kud360/goxsd8/builtin"
 	"github.com/kud360/goxsd8/builtin/strict"
@@ -287,11 +289,12 @@ import (
 //     step — an I/O or encoding failure on a COMPOSED document, reported as
 //     parser.UnfollowedUnreadable, and a rejection fabricated by components a
 //     directive did not bring in — and fabricatedRejection eliminates both, as
-//     the ONE site that discriminates on the error, by rule (xsderr.RuleOf)
-//     rather than by type. Every OTHER failure this step reads as a verdict, an
-//     unruled plain error included, with the single exception the GAP below
-//     states: an <include>/<override> carrying no schemaLocation at all is a
-//     §2.4 clause 1 grammar fault no Schema Representation Constraint covers
+//     the ONE site that discriminates on the error, by rule and, for
+//     src-resolve, by clause rather than by type. Every OTHER failure this
+//     step reads as a verdict, an unruled plain error included, with the
+//     single exception the GAP below states: an <include>/<override> carrying
+//     no schemaLocation at all is a §2.4 clause 1 grammar fault no Schema
+//     Representation Constraint covers
 //     (parse.go's compose), which STYLE E2 requires be charged WITHOUT a rule ID
 //     — an unruled error is this processor's spelling of "not valid against the
 //     schema for schema documents", not a signal that no verdict was reached
@@ -380,28 +383,29 @@ import (
 // an <import> with no schemaLocation, or an <include>, <override> or <import> whose
 // schemaLocation does not resolve — is REPORTED as unfollowed
 // (parser.AssemblyReport.Unfollowed) and declines the case only when the parse ALSO
-// fails src-resolve: the missing document's components are then absent from the
-// assembly and the reference that wanted them failed src-resolve clauses 1-3 at
-// finalize, a FABRICATED "invalid" verdict, the one direction that can corrupt the
-// ratchet. That conjunction is the whole hazard (#276): where the parse succeeds
-// despite the missing document, §4.2.3 clause 2.4's "not an error ... the inclusion
-// must not be performed" is simply in force and the case is decided normally — the
-// suite's own cl. 2.4 tests (MS-Schema schD8 and friends) depend on that. Where it
-// fails on a rule the shortfall cannot reach, the rejection is the document's own
-// and the case is likewise decided (#404, fabricatedRejection). The directives are
-// one hazard, not two: src-include clause 2.4 and src-import's "not an error" text
-// are parallel, and src-resolve clause 4 (cl.qnr.nsdeclared) licenses a
+// fails src-resolve outside clause 4 (#2054): the missing document's components are
+// then absent from the assembly and the reference that wanted them failed src-resolve
+// clauses 1-3 at finalize, a FABRICATED "invalid" verdict, the one direction that can
+// corrupt the ratchet. That conjunction is the whole hazard (#276): where the parse
+// succeeds despite the missing document, §4.2.3 clause 2.4's "not an error ... the
+// inclusion must not be performed" is simply in force and the case is decided
+// normally — the suite's own cl. 2.4 tests (MS-Schema schD8 and friends) depend on
+// that. Where it fails on a rule the shortfall cannot reach, the rejection is the
+// document's own and the case is likewise decided (#404, fabricatedRejection). The
+// directives are one hazard, not two: src-include clause 2.4 and src-import's "not an
+// error" text are parallel, and src-resolve clause 4 (cl.qnr.nsdeclared) licenses a
 // same-namespace reference (4.2.1) and a reference into a namespace with a PRESENT
 // <import> element (4.2.2) alike, whether or not that import's schemaLocation
 // resolved.
 //
-// Two import-adjacent gaps are the OTHER direction — fabricated "valid" — which
-// can only cost wins, never corrupt: src-resolve clause 4 (cl.qnr.nsdeclared,
-// §3.17.6.2) is not enforced, so a reference into a namespace the containing
-// document never imported still resolves if another document of the assembly
-// contributed it; and a namespace whose components are genuinely missing is not
-// reported as a §5.3 missing component. Both make the lane observe "valid" where
-// the suite says "invalid", which records a gap rather than a pass.
+// One import-adjacent gap is the OTHER direction — fabricated "valid" — which can
+// only cost wins, never corrupt: a namespace whose components are genuinely missing
+// is not reported as a §5.3 missing component. It makes the lane observe "valid"
+// where the suite says "invalid", which records a gap rather than a pass.
+// src-resolve clause 4 (cl.qnr.nsdeclared, §3.17.6.2) is enforced per containing
+// document (parser's licensedNamespace), and §4.2.6.1 keeps its charge out of
+// §5.3, so it decides the case even beside an unfollowed directive (#2054,
+// fabricatedRejection).
 //
 // An <xs:override> is admitted when every one of its children is itself a
 // decidable source declaration (overrideDecidable): those children become
@@ -723,19 +727,34 @@ const ruleSrcResolve xsderr.Rule = "src-resolve"
 // component at all. Reading it as a verdict is what the lane already does for
 // every other grammar fault.
 //
-// The shortfall arm stays SCAN-scoped: ANY unfollowed directive plus a
-// src-resolve failure declines, without asking whether that directive is the one
-// that would have supplied the component the reference wanted. Narrowing it
-// needs the reference's namespace on the error and the directive's namespace on
-// the report, and neither xsderr.Error nor parser.UnfollowedDirective carries
-// one — a data-shape change, where this is not (#404).
+// The shortfall arm exempts one src-resolve charge no shortfall can produce:
+// clause 4 (cl.qnr.nsdeclared), a reference into a namespace its own document
+// does not license. Clause 4.2.2 reads the containing document's <import>
+// namespace attributes, never whether an import was followed, and §4.2.6.1
+// says references into a namespace not imported "are *not* handled as if they
+// referred to "missing components"", so a clause 4 charge is the document's own
+// fault whatever its directives fetched. The producer charges it eagerly at the
+// reference (parser's licensedNamespace), before finalize charges clauses 1-3,
+// so it is the error a document holding both returns. The clause is read from
+// the error's Msg text (srcResolveClause4): xsderr.Error carries the bare rule
+// and no clause, and a structured marker would be an export (#2054). The read
+// arm does not take the exemption — an unreadable document declines on ANY
+// failure, clause 4 included.
+//
+// Otherwise the shortfall arm stays SCAN-scoped: ANY unfollowed directive plus
+// any other src-resolve failure declines, without asking whether that
+// directive is the one that would have supplied the component the reference
+// wanted. Narrowing it needs the reference's namespace on the error and the
+// directive's namespace on the report, and neither xsderr.Error nor
+// parser.UnfollowedDirective carries one — a data-shape change, where this is
+// not (#404).
 //
 // GAP(conformance): one non-verdict failure is invisible to BOTH arms, and the
 // caller then scores it "invalid". parser/parse.go's fetch records
 // parser.UnfollowedLocationUnresolved and returns an UNRULED plain error for a
 // resolver fault that is not loader.ErrNotFound — a permission or transport
 // error. The reason is not parser.UnfollowedUnreadable, so the read arm misses
-// it; the error carries no rule, so xsderr.RuleOf yields no src-resolve and the
+// it; the error is no *xsderr.Error, so it carries no src-resolve rule and the
 // shortfall arm misses it too. The two arms above assume every non-verdict a
 // composed document can produce is a READ failure; a RESOLVE failure that is not
 // mere absence is the one that is not. It cannot be told from the shape this
@@ -754,9 +773,21 @@ func fabricatedRejection(report *parser.AssemblyReport, perr error) bool {
 			return true
 		}
 	}
-	rule, ok := xsderr.RuleOf(perr)
-	return ok && rule == ruleSrcResolve
+	var e *xsderr.Error
+	if !errors.As(perr, &e) {
+		return false
+	}
+	return e.Rule == ruleSrcResolve && !strings.Contains(e.Msg, srcResolveClause4)
 }
+
+// srcResolveClause4 is the text parser's licensedNamespace writes into every
+// src-resolve clause 4 charge it makes — "src-resolve clause 4.1" for an
+// ·absent· namespace, "src-resolve clause 4.2" for a present one — and no other
+// src-resolve message carries. fabricatedRejection reads it to tell a clause 4
+// charge from every other src-resolve charge (#2054);
+// TestSchemaExecutorDecidesUnlicensedNamespaceBesideShortfall drives the real
+// parser, so rewording that message fails it.
+const srcResolveClause4 = "src-resolve clause 4."
 
 // extraRoots returns a parser.RootAt root for every FURTHER document the case
 // declares beyond doc that the assembly rooted at doc did NOT consume, in

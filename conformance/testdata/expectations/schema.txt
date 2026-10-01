@@ -9807,10 +9807,10 @@ MS-Schema2006-07-15/schZ007/schema/schZ007 pass
 MS-Schema2006-07-15/schZ008/schema/schZ008 pass
 MS-Schema2006-07-15/schZ009/schema/schZ009 pass
 MS-Schema2006-07-15/schZ010/schema/schZ010 pass
-MS-Schema2006-07-15/schZ011_a/schema/schZ011_a fail
-MS-Schema2006-07-15/schZ011_b/schema/schZ011_b fail
-MS-Schema2006-07-15/schZ011_c/schema/schZ011_c fail
-MS-Schema2006-07-15/schZ011_d/schema/schZ011_d fail
+MS-Schema2006-07-15/schZ011_a/schema/schZ011_a pass
+MS-Schema2006-07-15/schZ011_b/schema/schZ011_b pass
+MS-Schema2006-07-15/schZ011_c/schema/schZ011_c pass
+MS-Schema2006-07-15/schZ011_d/schema/schZ011_d pass
 MS-Schema2006-07-15/schZ012_a/schema/schZ012_a fail
 MS-Schema2006-07-15/schZ012_b/schema/schZ012_b pass
 MS-Schema2006-07-15/schZ012_c/schema/schZ012_c pass
