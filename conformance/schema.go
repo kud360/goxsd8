@@ -103,9 +103,11 @@ import (
 //
 // # The decidable shape (the strict top-level allowlist)
 //
-// assembleCase therefore admits a case only after confirming the whole shape
-// of every document in its closure is confined to what the producer checks, and
-// the lane DECLINES (Fail) anything else:
+// assembleCase therefore admits an ACCEPTED assembly only after confirming the
+// whole shape of every document in its closure is confined to what the producer
+// checks, and the lane DECLINES (Fail) anything else. A REJECTED assembly is
+// held to the same confinement unless its error is a grammarRejection, which no
+// out-of-subset construct can fabricate (step 3, #2076):
 //
 //  1. Readability. parser.ReadDocument is run on every declared root document,
 //     and the assembly reads every composed document through it. ANY error
@@ -144,10 +146,19 @@ import (
 //     such a document however its remaining shape reads, and no later slice can
 //     flip it — that permanence is what separates this from the ReadDocument
 //     limitation step 1 declines. Only a construct the producer rejects
-//     GENUINELY and UNCONDITIONALLY may be admitted this way; a non-nil error is
-//     NOT decidability on its own, since the producer also rejects for
-//     not-yet-implemented reasons and the allowlist below is what guards that
-//     direction.
+//     GENUINELY and UNCONDITIONALLY may be admitted this way.
+//
+//     The allowlist below is a guard against a skipped construct, so it binds
+//     an assembly the parser ACCEPTED, or rejected with an error a skip could
+//     have produced; it does not bind every non-nil error (#2076). A closure
+//     outside it is still decided when the assembly fails with a
+//     grammarRejection: an error carrying no rule — this processor's spelling of
+//     a §2.4 clause 1 sd-valid fault, which §5.1's first bullet makes the
+//     document's own — with no directive left unfollowed. A skip leaves a
+//     component missing, and the reference to it is charged src-resolve
+//     (§3.17.6.2, §5.3), a ruled error that still declines. grammarRejection
+//     lists every decline trigger by identifier, with whether the producer
+//     skips or rejects it.
 //
 //     Every top-level child element must otherwise be xsd:annotation,
 //     xsd:include, xsd:import, xsd:override, xsd:simpleType, xsd:element,
@@ -157,8 +168,9 @@ import (
 //     any document that declares one, so they are real verdicts rather than
 //     content-dependent ones) or xsd:notation or xsd:redefine. A NON-XSD element
 //     at top level closes the false-accept gap above by DECLINING the whole
-//     case: the producer passes over it unreported and unrejected, the open gap
-//     #1036 owns. An XSD-namespace name outside that list is admitted instead
+//     case unless the assembly fails with a grammarRejection: the producer
+//     passes over it unreported and unrejected, the open gap #1036 owns. An
+//     XSD-namespace name outside that list is admitted instead
 //     (#1380), those thirteen being exactly what <schema>'s content model admits
 //     and rejectUnmappedTopLevel charging every other — the same permanence
 //     argument the misplaced <notation> is admitted on. Within the allowed
@@ -268,27 +280,29 @@ import (
 //       correctly enforces, so a violation flows through as a real decidable
 //       rejection.
 //     - annotation: always allowed, no further check.
-//  4. Decide. When every document of the closure passes, observed =
-//     (parser.ParseReport's err == nil): a nil error is genuine evidence of
-//     validity (no document of the assembly has any of the violations checked
-//     above, so a real one would surface), and a non-nil error is a REAL,
-//     implemented rejection (src-include §4.2.3, src-import and
-//     src-import-noselfimport §4.2.6.2, sch-props-correct clause 2 duplicate-name
-//     §3.17.6.1, src-element §3.3.3, src-attribute §3.2.3, src-simple-type
-//     §3.16.3, src-override §4.2.5, src-resolve §3.17.6.2, st-props-correct,
-//     src-identity-constraint §3.11.3, c-props-correct §3.11.6.1, n-props-correct
-//     §3.14.6, and for the complex-type subset src-ct §3.4.3, cos-all-limited
-//     §3.8.6, src-wildcard §3.10.3, p-props-correct §3.9.6, cos-nonambig §3.8.6.4,
-//     cos-element-consistent §3.8.6.3, ct-props-correct §3.4.6.1 and
-//     derivation-ok-restriction §3.4.6.3), never a fabricated one — the shape
-//     allowlist excludes every case whose rejection would be a
-//     limitation-in-disguise. The case Passes iff observed agrees with the suite's
-//     declared validity.
+//  4. Decide. When every document of the closure passes, or the assembly
+//     failed with a grammarRejection (step 3), observed = (parser.ParseReport's
+//     err == nil): a nil error is genuine evidence of validity (no document of the
+//     assembly has any of the violations checked above, so a real one would
+//     surface), and a non-nil error is a REAL, implemented rejection (src-include
+//     §4.2.3, src-import and src-import-noselfimport §4.2.6.2, sch-props-correct
+//     clause 2 duplicate-name §3.17.6.1, src-element §3.3.3, src-attribute §3.2.3,
+//     src-simple-type §3.16.3, src-override §4.2.5, src-resolve §3.17.6.2,
+//     st-props-correct, src-identity-constraint §3.11.3, c-props-correct
+//     §3.11.6.1, n-props-correct §3.14.6, and for the complex-type subset src-ct
+//     §3.4.3, cos-all-limited §3.8.6, src-wildcard §3.10.3, p-props-correct
+//     §3.9.6, cos-nonambig §3.8.6.4, cos-element-consistent §3.8.6.3,
+//     ct-props-correct §3.4.6.1 and derivation-ok-restriction §3.4.6.3), never a
+//     fabricated one — the shape allowlist excludes every case whose rejection
+//     would be a limitation-in-disguise, and a grammarRejection is a fault of
+//     the document's own element tree. The case Passes iff observed agrees with
+//     the suite's declared validity.
 //
 //     Steps 1-3 rule out the non-verdict failure modes ACROSS THE WHOLE CLOSURE:
 //     the root was independently confirmed resolvable, readable and
 //     <schema>-rooted before the assembly ran, and every document the assembly
-//     did take in is reported and shape-gated. Two of those modes reach this
+//     did take in is reported and shape-gated, the gate yielding only to a
+//     grammarRejection. Two of those modes reach this
 //     step — a read failure on a COMPOSED document that may be a reader
 //     limitation, reported as parser.UnfollowedUnreadable, and a rejection
 //     fabricated by components a directive did not bring in — and
@@ -296,7 +310,8 @@ import (
 //     the ONE site that discriminates on the error, by rule and, for
 //     src-resolve, by clause rather than by type. Every OTHER failure this
 //     step reads as a verdict, an unruled plain error included, with the
-//     single exception the GAP below states: an <include>/<override> carrying
+//     exception the GAP below states and the #1883 limitation grammarRejection's
+//     GAP states: an <include>/<override> carrying
 //     no schemaLocation at all is a §2.4 clause 1 grammar fault no Schema
 //     Representation Constraint covers
 //     (parse.go's compose), which STYLE E2 requires be charged WITHOUT a rule ID
@@ -340,8 +355,11 @@ import (
 // # Why no false ratchet-corrupting pass is possible
 //
 // Every "invalid" verdict this lane emits comes from ONE source: parser.Parse
-// rejecting an assembly EVERY document of which already passed the allowlist.
-// A ReadDocument error produces an "invalid" verdict only on a COMPOSED
+// rejecting an assembly, either one EVERY document of which already passed the
+// allowlist or one whose error is a grammarRejection — a §2.4 clause 1 fault
+// that no construct the allowlist refuses can fabricate, since one the producer
+// skips leads to no unruled error, and one it rejects is charged that fault
+// itself. A ReadDocument error produces an "invalid" verdict only on a COMPOSED
 // document, and only when it is a well-formedness fault the reader charged
 // itself that no reader limitation produces (wellFormednessFault); every other
 // one declines (step 1), precisely because it can be a reader limitation rather
@@ -536,19 +554,22 @@ func newSchemaCharge() func(caseSpec) string {
 // further declared document lies outside that closure (extraRoots), and gates
 // the WHOLE <xs:include>/<xs:override>/<xs:import> closure of every root on the
 // decidable top-level shape (closureDecidable, which runs schemaShapeDecidable on
-// every document the assembly consumed). The third result, decidable, is false —
+// every document the assembly consumed) unless the assembly failed with a
+// grammarRejection (assemblyDeclined). The third result, decidable, is false —
 // and the caller DECLINES — under any of five conditions: a declared document it
 // cannot resolve; one it cannot read (any ReadDocument error, including a
 // reader limitation such as an encoding it does not decode); one whose root
 // element is not <schema>; a closure holding one document outside the
-// producer's decidable subset; and a case whose parse failed with a rejection its
-// own unfollowed directives could have fabricated (fabricatedRejection,
-// #276/#404). The other three results say nothing then.
+// producer's decidable subset, where the assembly succeeded or failed with
+// anything but a grammarRejection (#2076); and a case whose parse failed with a
+// rejection its own unfollowed directives could have fabricated
+// (fabricatedRejection, #276/#404). The other three results say nothing then.
 //
 // Where decidable is true, the fourth result is the assembly's OWN error: nil is
 // genuine evidence of validity — no document of the assembly has any of the
 // violations the allowlist confines it to, so a real one would surface — and
-// non-nil is a REAL implemented rejection. The first result is what the assembly
+// non-nil is a REAL implemented rejection, the closure confined to the
+// allowlist or the error a grammarRejection. The first result is what the assembly
 // built, and the second the parser.AssemblyReport of the documents it read. The
 // schema lane reads the error alone; the instance lane needs the schema, and
 // takes it only where the error is nil, a schema the assembly rejected being not
@@ -586,25 +607,94 @@ func assembleCase(backend value.Backend, doc string, extraDocs []string) (*xsd.S
 		schema, report, perr = parser.ParseSet(append([]parser.Root{parser.RootAt(location)}, roots...),
 			parser.WithResolver(resolver), parser.WithBackend(backend))
 	}
-	// Only decide when EVERY document of the <include>/<override>/<import> closure
-	// of every root is confined to what the producer processes; otherwise a
-	// silently-skipped invalid representation, in a root or in any composed
-	// document, could false-accept.
-	if !closureDecidable(report) {
-		return nil, nil, false, nil
-	}
-	// A directive that named no document is only half the fabricated-rejection
-	// hazard (#276): the missing components matter solely when something referred
-	// to them, and that shows up here, as a failed parse whose src-resolve clause
-	// 1-3 error the spec does not attach to the missing document (§5.3). A parse
-	// that SUCCEEDED past an unfollowed directive fabricated nothing — §4.2.3
-	// clause 2.4's "not an error ... the inclusion must not be performed" is
-	// exactly that outcome — so the case is still decided, and so is a parse that
-	// failed for a reason no unfollowed directive could have produced (#404).
-	if fabricatedRejection(report, perr) {
+	if assemblyDeclined(report, perr) {
 		return nil, nil, false, nil
 	}
 	return schema, report, true, perr
+}
+
+// assemblyDeclined reports whether an assembly that read the documents report
+// lists and returned perr is NO verdict, so its caller DECLINES: assembleCase's
+// gate after its precondition reads, shared with assembleHints. It holds in two
+// cases.
+//
+// The closure holds a document outside the producer's decidable subset
+// (closureDecidable) and perr is not a grammarRejection. A silently skipped
+// representation, in a root or in any composed document, could then make an
+// accept vacuous, or leave a component missing that a reference is then charged
+// src-resolve for.
+//
+// Or the rejection is one an unfollowed directive could have fabricated
+// (fabricatedRejection). A directive that named no document is only half that
+// hazard (#276): the missing components matter solely when something referred to
+// them, which shows up as a failed parse whose src-resolve clause 1-3 error the
+// spec does not attach to the missing document (§5.3). A parse that SUCCEEDED
+// past an unfollowed directive fabricated nothing — §4.2.3 clause 2.4's "not an
+// error ... the inclusion must not be performed" is exactly that outcome — so the
+// case is still decided, and so is a parse that failed for a reason no
+// unfollowed directive could have produced (#404).
+func assemblyDeclined(report *parser.AssemblyReport, perr error) bool {
+	if !closureDecidable(report) && !grammarRejection(report, perr) {
+		return true
+	}
+	return fabricatedRejection(report, perr)
+}
+
+// grammarRejection reports whether perr is a rejection the out-of-subset
+// constructs closureDecidable finds cannot have fabricated, so assembleCase may
+// read it as "invalid" whatever the closure holds (#2076). It holds when perr is
+// non-nil, carries no *xsderr.Error anywhere in its chain, and the assembly left
+// no ·inter-schema-document reference· unfollowed.
+//
+// An error carrying no rule is this processor's spelling of a §2.4 clause 1
+// sd-valid fault, restated at §5.1's first bullet (STYLE E2): a property of
+// one document's element tree, which a construct the producer passes over
+// cannot create, and which makes that document "in error" (§5.1) whatever the
+// rest of the closure holds. The rule a SKIPPED construct can reach is
+// src-resolve clauses 1-3 (§3.17.6.2), charged for a reference to the component
+// the skip left missing (§5.3); it always comes as an *xsderr.Error, so the
+// "no rule" test excludes it and everything else ruled with it.
+//
+// That direction claim quantifies over the decline triggers below, each of
+// which either SKIPS the construct (the assembly maps it to nothing and charges
+// nothing) or REJECTS it (with an unruled grammar fault of its own):
+//
+//   - schemaShapeDecidable: a top-level child outside the XSD namespace is
+//     SKIPPED by the producer's topLevelDecls (#1036).
+//   - overrideDecidable: a child outside the XSD namespace, a nameless child,
+//     and a child of an element type §F.2 clause 1 does not match on are all
+//     SKIPPED by parser's newOverrideSet.
+//   - redefineDecidable: a child outside the XSD namespace is SKIPPED by
+//     parser's newRedefineSet; a nameless child and one of an element type
+//     §4.2.4's content model does not admit are REJECTED by it.
+//   - simpleContentRestrictionDecidable, through silentlyDroppedFacetElement:
+//     the plural <assertions> is SKIPPED, folding into no facet.
+//   - modelGroupDecidable: every child it declines is REJECTED by parser's
+//     unexpectedModelGroupChild.
+//
+// Every other predicate of the allowlist declines only through one of these.
+// A skip leaves a component or a facet missing, and fewer components or facets
+// reach no unruled charge. A rejection is the unruled charge itself.
+//
+// The no-unfollowed condition is #1201's. A resolver fault that is not
+// loader.ErrNotFound records parser.UnfollowedLocationUnresolved and returns an
+// unruled plain error that is no grammar fault (fabricatedRejection's GAP);
+// declining every out-of-subset closure with an unfollowed directive keeps that
+// fault declined here, where closureDecidable declined it before this lift.
+//
+// GAP(conformance): an unruled error is read as a grammar fault here exactly as
+// step 4 of "The decidable shape" reads one for an in-subset closure, so the
+// unruled LIMITATION parser's baseComponent charges — a derivation reaching
+// its named base from inside that base's own content model, refused rather than
+// mapped (#1883) — scores "invalid" in an out-of-subset closure too. No skipped
+// construct produces it; it is a non-verdict this lift now also reads, and #1883
+// owns its retirement.
+func grammarRejection(report *parser.AssemblyReport, perr error) bool {
+	if perr == nil || len(report.Unfollowed()) > 0 {
+		return false
+	}
+	_, ruled := xsderr.RuleOf(perr)
+	return !ruled
 }
 
 // The one location pinnedResolver serves from a committed copy, and that copy's
@@ -903,9 +993,12 @@ func decideAgreement(observed, expected bool) Status {
 // hazard to the assembly that read it: either it is UNCONDITIONALLY REJECTED
 // (holdsMisplacedNotation, or the default arm's own grammar verdict below), or
 // every top-level child lies within the producer's decidable subset (the step-3
-// allowlist documented above). A single out-of-subset child declines the whole
-// case, since Produce would silently skip it (or reject it for a not-yet-
-// supported reason) rather than decide it genuinely.
+// allowlist documented above). A single out-of-subset child declines an ACCEPTED
+// assembly, and a rejected one whose error is not a grammarRejection, since
+// Produce would silently skip it — an accept made vacuous, or a component
+// missing that a reference is then charged src-resolve for — rather than decide
+// it genuinely. A grammarRejection is decided whatever this answers
+// (assemblyDeclined, #2076), so false here is not a decline on its own.
 //
 // The misplaced-<notation> short-circuit comes FIRST because it makes every
 // other question moot: a document carrying one is rejected before any producer
@@ -1031,8 +1124,10 @@ func schemaShapeDecidable(doc *parser.Document) bool {
 // still, at discovery, by <redefine>'s own content-model guard. Both are grammar
 // verdicts the spec licenses, not limitations awaiting a slice, so the "invalid"
 // they buy cannot flip once some later slice lands. That permanence is the whole
-// admission argument; a merely non-nil parse error is NOT one, since the
-// producer also rejects for not-yet-implemented reasons.
+// admission argument. A non-nil parse error decides an out-of-subset closure on
+// its own only as a grammarRejection, which also requires that no directive went
+// unfollowed (#2076); this short-circuit admits the document beside an
+// unfollowed directive too, leaving that to fabricatedRejection.
 //
 // The walk MIRRORS rejectS4SFaults' — XSD-namespace elements only, never
 // descending into <appinfo> or <documentation>, whose <xs:any

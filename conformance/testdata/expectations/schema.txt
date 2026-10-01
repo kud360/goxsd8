@@ -4696,7 +4696,7 @@ MS-Group2006-07-15/groupB003v/schema/groupB003v pass
 MS-Group2006-07-15/groupB004v/schema/groupB004v pass
 MS-Group2006-07-15/groupB005v/schema/groupB005v pass
 MS-Group2006-07-15/groupB006v/schema/groupB006v pass
-MS-Group2006-07-15/groupB007/schema/groupB007 fail
+MS-Group2006-07-15/groupB007/schema/groupB007 pass
 MS-Group2006-07-15/groupB008/schema/groupB008 pass
 MS-Group2006-07-15/groupB009v/schema/groupB009v pass
 MS-Group2006-07-15/groupB010v/schema/groupB010v pass
@@ -5780,9 +5780,9 @@ MS-ModelGroups2006-07-15/mgB003/schema/mgB003 pass
 MS-ModelGroups2006-07-15/mgB004/schema/mgB004 pass
 MS-ModelGroups2006-07-15/mgB006/schema/mgB006 pass
 MS-ModelGroups2006-07-15/mgB007/schema/mgB007 pass
-MS-ModelGroups2006-07-15/mgB008/schema/mgB008 fail
+MS-ModelGroups2006-07-15/mgB008/schema/mgB008 pass
 MS-ModelGroups2006-07-15/mgB009/schema/mgB009 pass
-MS-ModelGroups2006-07-15/mgB010/schema/mgB010 fail
+MS-ModelGroups2006-07-15/mgB010/schema/mgB010 pass
 MS-ModelGroups2006-07-15/mgC001/schema/mgC001 pass
 MS-ModelGroups2006-07-15/mgC002/schema/mgC002 pass
 MS-ModelGroups2006-07-15/mgC003/schema/mgC003 pass
@@ -6070,7 +6070,7 @@ MS-ModelGroups2006-07-15/mgP050/schema/mgP050 pass
 MS-ModelGroups2006-07-15/mgP055/schema/mgP055 pass
 MS-ModelGroups2006-07-15/mgP056/schema/mgP056 pass
 MS-ModelGroups2006-07-15/mgP057/schema/mgP057 pass
-MS-ModelGroups2006-07-15/mgP058/schema/mgP058 fail
+MS-ModelGroups2006-07-15/mgP058/schema/mgP058 pass
 MS-ModelGroups2006-07-15/mgP059/schema/mgP059 pass
 MS-ModelGroups2006-07-15/mgP060/schema/mgP060 pass
 MS-ModelGroups2006-07-15/mgP061/schema/mgP061 pass
@@ -15297,8 +15297,8 @@ suntest/test008/schema/test pass
 suntest/test009/schema/test pass
 suntest/xsd001/schema/xsd001 pass
 suntest/xsd002/schema/xsd002 pass
-suntest/xsd003-1.e/schema/xsd003-1.e fail
-suntest/xsd003-2.e/schema/xsd003-2.e fail
+suntest/xsd003-1.e/schema/xsd003-1.e pass
+suntest/xsd003-2.e/schema/xsd003-2.e pass
 suntest/xsd003a/schema/xsd003a pass
 suntest/xsd003b.e/schema/xsd003b.e pass
 suntest/xsd003b/schema/xsd003b pass
