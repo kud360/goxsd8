@@ -608,11 +608,13 @@ func (s *Schema) locallyDeclaredAttributeType(c ComplexType, name QName) (TypeDe
 // so a failed resolution is unreachable on this path, and no caller may read
 // false as anything but ·absent·.
 //
-// It is EXPORTED for validate's walk, which charges clause 5 and cannot
-// re-derive the answer without a third content-model walk and a second copy of
-// substitution-group membership (STYLE T4/T5). The schema-side check
-// derivation-ok-restriction clause 4 reads the same chain walk with implicit
-// containment left out (locallyDeclaredElementType).
+// It is EXPORTED for validate's walk, which charges clause 5, and governs an
+// {open content} child by the answer where it is non-·absent·
+// (key-governing-ed clause 4.3), and cannot re-derive the answer without a
+// third content-model walk and a second copy of substitution-group
+// membership (STYLE T4/T5). The schema-side check derivation-ok-restriction
+// clause 4 reads the same chain walk with implicit containment left out
+// (locallyDeclaredElementType).
 func (s *Schema) LocallyDeclaredElementType(within ComplexType, name QName) (TypeDefinition, bool) {
 	return s.locallyDeclaredElementType(within, name, withImplicit)
 }

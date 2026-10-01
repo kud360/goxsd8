@@ -224,7 +224,8 @@
 // (cvc-wildcard-name, §3.10.4.2) they decide, and a caller admitting a name
 // reaches for one of the two above instead. Schema.ValidlySubstitutable is
 // the derivation half's one exported entry point, for the instance-side
-// reader of key-val-sub-type that cvc-elt clause 4 needs, and that
+// reader of key-val-sub-type that cvc-elt clause 4 and
+// key-governing-type-elem clause 6 need (key-overrides), and that
 // cvc-complex-type clause 5 asks against the ·locally declared type·
 // Schema.LocallyDeclaredElementType answers (key-ldt-elem).
 // Schema.ElementDefaultValid is cos-valid-default's, for the one cvc-elt
