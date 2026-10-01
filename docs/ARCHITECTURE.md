@@ -11,19 +11,20 @@ Value implementations, parsing, validation, and generation live above them.
                  xsderr          (leaf: errors, rule IDs, locations)
                  xsd             (leaf: component model + query/walk APIs; imports xsderr only)
                  internal/...    (leaves: stdlib-only helpers, unexportable because they are
-                                  nobody's API — internal/schemaloc, the schemaLocation
-                                  resolver. Its "two packages must agree byte for byte"
-                                  justification EXPIRED when #272 deleted the conformance
-                                  closure walk, and internal/schemaloc/doc.go still names
-                                  that deleted walk as its second consumer. It has TWO
-                                  consumers again, and neither is the one named: parser's
-                                  assembly, and cmd/goxsd8's own xsi:schemaLocation hint
-                                  reader. #845's fold-back into parser is therefore blocked
-                                  on #755 moving that reader into the library — and
-                                  internal/xmldecl, a 1.x XMLDecl label read as 1.0
-                                  (XML 1.0 §2.8 Note), which parser/xmltree's reader
-                                  and the conformance harness's raw re-reads of the
-                                  same documents must admit alike)
+                                  nobody's API:
+                                  - internal/schemaloc, the schemaLocation resolver. Its
+                                    "two packages must agree byte for byte" justification
+                                    EXPIRED when #272 deleted the conformance closure walk,
+                                    and internal/schemaloc/doc.go still names that deleted
+                                    walk as its second consumer. It has TWO consumers again,
+                                    and neither is the one named: parser's assembly, and
+                                    cmd/goxsd8's own xsi:schemaLocation hint reader. #845's
+                                    fold-back into parser is therefore blocked on #755
+                                    moving that reader into the library.
+                                  - internal/xmldecl, a 1.x XMLDecl label read as 1.0
+                                    (XML 1.0 §2.8 Note), which parser/xmltree's reader and
+                                    the conformance harness's raw re-reads of the same
+                                    documents must admit alike.)
                  value           (value-space contracts, facet pipeline; imports xsd, xsderr, regex)
                  value/backendtest (conformance kit for any backend)
                  builtin         (the generated TypeSpec table and Seed; imports value, xsd, xsderr)
