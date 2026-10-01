@@ -504,7 +504,7 @@ func (g *subtreeGate) children(t xsd.ComplexType, m *xsd.Matcher) bool {
 // walk.localGovernance); resolvedChild reads the top-level declaration or
 // ·xs:anyType· instead, so it vets a type the walk does not assess against.
 // Its one reader, execInstanceCase, then Fails the case: a suite-valid case of
-// this shape scores no pass, and none a false one.
+// this shape scores no pass, and none a false one (#2080).
 func (g *subtreeGate) child(t xsd.ComplexType, m *xsd.Matcher, start xml.StartElement) bool {
 	name := expandedName(start.Name)
 	a, ok := m.Next(name)
