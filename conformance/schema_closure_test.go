@@ -1004,3 +1004,54 @@ func TestSchemaExecutorDecidesUnlicensedNamespaceBesideShortfall(t *testing.T) {
 		}
 	}
 }
+
+// TestSchemaExecutorReadArmSeparatesFaultFromLimitation pins #2067's narrowing
+// of fabricatedRejection's read arm: an <include> whose schemaLocation resolves
+// to a document the REAL parser cannot read is DECIDED invalid when the reader
+// charged the fault itself (src-include clause 1 makes a resource that resolves
+// but is no well-formed information set an error), and still DECLINED under
+// both polarities when the failure may be a reader limitation.
+//
+// The fault row is MS-Schema schB4's included document verbatim: <notwf>, an
+// element left unclosed at end of document. The limitation rows are an encoding
+// declaration the reader does not decode (#361) and a reference to a general
+// entity the DOCTYPE internal subset declares, in element content and in an
+// attribute value — the second being IRI/iri-001's <xs:pattern value="&URI;">,
+// a suite-valid case this arm must never decide invalid.
+//
+// Each row runs the real parser, so it also pins the chain shape
+// wellFormednessFault reads: the fault row is undecided with the read arm's
+// wellFormednessFault test removed, and every limitation row is decided invalid
+// with the read arm's loop deleted.
+func TestSchemaExecutorReadArmSeparatesFaultFromLimitation(t *testing.T) {
+	exec := newSchemaExec()
+	main := schemaSrc("urn:a", include("inc.xsd"))
+	t.Run("reader-charged fault decides", func(t *testing.T) {
+		doc := writeSchemaTree(t, "main.xsd", map[string]string{"main.xsd": main, "inc.xsd": "<notwf>\n"})
+		if !exec(caseSpec{kind: kindSchema, doc: doc, expect: expectValidity(false)}).IsPass() {
+			t.Error("an <include> of a document the reader charged not well-formed must be DECIDED invalid")
+		}
+		if exec(caseSpec{kind: kindSchema, doc: doc, expect: expectValidity(true)}).IsPass() {
+			t.Error("must Fail under a flipped expectation (decides for real)")
+		}
+	})
+	limitations := map[string]string{
+		"encoding declaration the reader does not decode": `<?xml version="1.0" encoding="ISO-8859-1"?>` +
+			schemaSrc("urn:a", decidableType),
+		"internal-subset entity in element content": `<!DOCTYPE xs:schema [<!ENTITY doc "text">]>` +
+			schemaSrc("urn:a", `<xs:annotation><xs:documentation>&doc;</xs:documentation></xs:annotation>`+decidableType),
+		"internal-subset entity in an attribute value (iri-001)": `<!DOCTYPE xs:schema [<!ENTITY URI "[a-z]+">]>` +
+			schemaSrc("urn:a", `<xs:simpleType name="uri"><xs:restriction base="xs:anyURI">`+
+				`<xs:pattern value="&URI;"/></xs:restriction></xs:simpleType>`),
+	}
+	for _, name := range slices.Sorted(maps.Keys(limitations)) {
+		t.Run(name, func(t *testing.T) {
+			doc := writeSchemaTree(t, "main.xsd", map[string]string{"main.xsd": main, "inc.xsd": limitations[name]})
+			for _, ev := range []bool{true, false} {
+				if exec(caseSpec{kind: kindSchema, doc: doc, expect: expectValidity(ev)}).IsPass() {
+					t.Errorf("a read failure that may be a reader limitation must be DECLINED (Fail) regardless of expectValid=%v", ev)
+				}
+			}
+		})
+	}
+}

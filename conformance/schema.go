@@ -110,17 +110,20 @@ import (
 //  1. Readability. parser.ReadDocument is run on every declared root document,
 //     and the assembly reads every composed document through it. ANY error
 //     DECLINES the case (Fail), never a validity verdict: a ReadDocument error
-//     does not distinguish a genuine XML well-formedness fault from a parser
-//     encoding LIMITATION. Well-formed UTF-16 input (BOM FF FE) is currently
-//     rejected as "invalid UTF-8" because UTF-16 decoding is not yet implemented,
-//     so treating that as observed-invalid would fabricate an "invalid" verdict
-//     for a well-formed document — a wrong-reason pass that would flip pass→fail
-//     once UTF-16 decoding lands (a separate change). So malformed XML is NOT a
+//     does not distinguish a genuine XML well-formedness fault from a reader
+//     LIMITATION. A well-formed document declaring an encoding the reader does
+//     not decode without a byte-order mark (#361), or referencing a general
+//     entity its DOCTYPE internal subset declares, is rejected as xml-wf, so
+//     treating that as observed-invalid would fabricate an "invalid" verdict for
+//     a well-formed document — a wrong-reason pass that would flip pass→fail
+//     once the reader lifts the limitation. So malformed XML is NOT a
 //     claimed schema-well-formedness sub-cohort here; it is a declined recorded
 //     gap. For a COMPOSED document the decline comes through the report: a
 //     document that resolved but could not be read is one the assembly never took
 //     in, recorded as parser.UnfollowedUnreadable, and the error it also returns
-//     completes the conjunction in step 4.
+//     completes the conjunction in step 4 — unless that error is a
+//     well-formedness fault the reader charged itself, which no limitation
+//     produces and which step 4 decides (fabricatedRejection, #2067).
 //  2. Root identity. If the root is not <schema> (IsSchema false) the case is
 //     DECLINED: §3.17.2 explicitly does NOT require <schema> to be the document
 //     root, so Parse's error there is a plain non-xsderr Go precondition fault,
@@ -286,9 +289,10 @@ import (
 //     the root was independently confirmed resolvable, readable and
 //     <schema>-rooted before the assembly ran, and every document the assembly
 //     did take in is reported and shape-gated. Two of those modes reach this
-//     step — an I/O or encoding failure on a COMPOSED document, reported as
-//     parser.UnfollowedUnreadable, and a rejection fabricated by components a
-//     directive did not bring in — and fabricatedRejection eliminates both, as
+//     step — a read failure on a COMPOSED document that may be a reader
+//     limitation, reported as parser.UnfollowedUnreadable, and a rejection
+//     fabricated by components a directive did not bring in — and
+//     fabricatedRejection eliminates both, as
 //     the ONE site that discriminates on the error, by rule and, for
 //     src-resolve, by clause rather than by type. Every OTHER failure this
 //     step reads as a verdict, an unruled plain error included, with the
@@ -337,9 +341,10 @@ import (
 //
 // Every "invalid" verdict this lane emits comes from ONE source: parser.Parse
 // rejecting an assembly EVERY document of which already passed the allowlist.
-// ReadDocument errors never produce an "invalid" verdict — they decline (step 1)
-// — precisely because a ReadDocument error can be a parser encoding limitation
-// (well-formed UTF-16 misread as invalid UTF-8) rather than a real violation, and
+// A ReadDocument error produces an "invalid" verdict only on a COMPOSED
+// document, and only when it is a well-formedness fault the reader charged
+// itself (wellFormednessFault); every other one declines (step 1), precisely
+// because it can be a reader limitation rather than a real violation, and
 // turning that into "invalid" would fabricate a verdict for a well-formed
 // document.
 //
@@ -663,12 +668,11 @@ func rootReadable(resolver loader.Resolver, location string) (resolved string, o
 	if err != nil {
 		// A ReadDocument error is DECLINED, never treated as an observed-invalid
 		// verdict. The error does not distinguish a genuine XML well-formedness
-		// fault from a parser encoding LIMITATION: well-formed UTF-16 input (BOM
-		// FF FE) is currently rejected as "[xml-wf] invalid UTF-8" because UTF-16
-		// decoding is not yet implemented, so an "invalid" verdict here would be
-		// fabricated for a well-formed document — a wrong-reason pass that would
-		// silently flip pass→fail once UTF-16 decoding lands (a separate change).
-		// Declining on ANY ReadDocument error keeps the lane's verdicts honest.
+		// fault from a reader LIMITATION (step 1 of "The decidable shape" at the
+		// top of this file), so an "invalid" verdict here could be fabricated for a
+		// well-formed document. Declining on ANY ReadDocument error keeps the
+		// lane's verdicts honest; a COMPOSED document's read is narrower
+		// (fabricatedRejection).
 		return "", false
 	}
 	// §3.17.2 does not require <schema> to be the document root, so a non-schema
@@ -713,11 +717,17 @@ const ruleSrcResolve xsderr.Rule = "src-resolve"
 //     clause 1 grammar faults are properties of one document's element tree.
 //   - A location that resolved to a document that could not be READ
 //     (parser.UnfollowedUnreadable) is charged src-include/src-import/
-//     src-redefine "not well-formed" — and a read failure does not distinguish a
-//     genuine well-formedness fault from a reader LIMITATION, an encoding this
-//     parser does not decode. That is step 1's own reasoning for declining an
-//     unreadable ROOT, and it holds whatever rule carries the failure, so any
-//     failure alongside such a directive declines.
+//     src-redefine "not well-formed", and that rule alone cannot distinguish a
+//     genuine well-formedness fault from a reader LIMITATION — an encoding
+//     declaration the reader does not decode, or a reference to a general entity
+//     declared in the DOCTYPE internal subset (IRI/iri-001's &URI;). The chain
+//     under it can: wellFormednessFault finds a charge the reader made itself,
+//     which wraps no cause, and that is a resource that resolved but is no
+//     well-formed information set, which src-include clause 1, src-import
+//     clause 2, src-redefine clause 2 and src-override clause 1 each make an
+//     error (MS-Schema schB4, schE5, schH5, #2067), so it decides. Any other
+//     failure alongside such a directive declines, on step 1's reasoning for an
+//     unreadable ROOT.
 //
 // Every other reason fabricates nothing, parser.UnfollowedNoSchemaLocation most
 // clearly: §4.2.1 makes that attribute mandatory ("not hints: conforming
@@ -738,8 +748,8 @@ const ruleSrcResolve xsderr.Rule = "src-resolve"
 // so it is the error a document holding both returns. The clause is read from
 // the error's Msg text (srcResolveClause4): xsderr.Error carries the bare rule
 // and no clause, and a structured marker would be an export (#2054). The read
-// arm does not take the exemption — an unreadable document declines on ANY
-// failure, clause 4 included.
+// arm does not take the exemption — an unreadable document that is not a
+// reader-charged fault declines on ANY failure, clause 4 included.
 //
 // Otherwise the shortfall arm stays SCAN-scoped: ANY unfollowed directive plus
 // any other src-resolve failure declines, without asking whether that
@@ -769,7 +779,7 @@ func fabricatedRejection(report *parser.AssemblyReport, perr error) bool {
 		return false
 	}
 	for _, u := range report.Unfollowed() {
-		if u.Reason == parser.UnfollowedUnreadable {
+		if u.Reason == parser.UnfollowedUnreadable && !wellFormednessFault(perr) {
 			return true
 		}
 	}
@@ -778,6 +788,29 @@ func fabricatedRejection(report *parser.AssemblyReport, perr error) bool {
 		return false
 	}
 	return e.Rule == ruleSrcResolve && !strings.Contains(e.Msg, srcResolveClause4)
+}
+
+// wellFormednessFault reports whether perr carries an XML well-formedness fault
+// the reader charged ITSELF: the first xsderr.RuleXMLWellFormed *xsderr.Error in
+// its chain, wrapping no cause. parser/xmltree and parser.ReadDocument build
+// every such charge with xsderr.New — an element left unclosed at end of
+// document, a mismatched or unexpected end tag, an unbound or reserved prefix,
+// nsc-NoPrefixUndecl, an encoding declaration the byte-order mark contradicts, a
+// document with no root element — and wrap a cause around every failure they
+// pass on from below: encoding/xml's syntax errors, among them its refusal of an
+// encoding declaration the reader does not decode and of a reference to an
+// entity declared in the DOCTYPE internal subset, and I/O faults. Those may be
+// reader limitations, so perr is no fault here; nor is a chain holding no xml-wf
+// charge at all. The shape is read rather than a marker because a structured
+// one would be an export (#2067).
+func wellFormednessFault(perr error) bool {
+	var e *xsderr.Error
+	for err := perr; errors.As(err, &e); err = e.Err {
+		if e.Rule == xsderr.RuleXMLWellFormed {
+			return e.Err == nil
+		}
+	}
+	return false
 }
 
 // srcResolveClause4 is the text parser's licensedNamespace writes into every
