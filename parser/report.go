@@ -272,10 +272,12 @@ const (
 	UnfollowedNoSchemaLocation
 
 	// UnfollowedUnreadable is a schemaLocation that resolved to a document which
-	// could not be read: an XML well-formedness fault, an I/O failure, or a
-	// document in an encoding this parser does not decode. src-include clause
-	// 1.1 and src-import clause 2 both require a well-formed information set, so
-	// [ParseSet] returns this as an error too.
+	// [ReadDocument] could not read: an XML well-formedness fault, an I/O
+	// failure, or a well-formed document the reader cannot read, such as one in
+	// an encoding it does not decode or one referencing a general entity its
+	// DOCTYPE internal subset declares. src-include clause 1.1 and src-import
+	// clause 2 both require a well-formed information set, so [ParseSet] returns
+	// this as an error too, wrapping ReadDocument's.
 	UnfollowedUnreadable
 )
 

@@ -9697,7 +9697,7 @@ MS-Schema2006-07-15/schB1/schema/schB1 pass
 MS-Schema2006-07-15/schB1i/schema/schB1i pass
 MS-Schema2006-07-15/schB2/schema/schB2 pass
 MS-Schema2006-07-15/schB3/schema/schB3 pass
-MS-Schema2006-07-15/schB4/schema/schB4 fail
+MS-Schema2006-07-15/schB4/schema/schB4 pass
 MS-Schema2006-07-15/schB5/schema/schB5 pass
 MS-Schema2006-07-15/schB8/schema/schB8 pass
 MS-Schema2006-07-15/schC2/schema/schC2 pass
@@ -9715,7 +9715,7 @@ MS-Schema2006-07-15/schE1i/schema/schE1i pass
 MS-Schema2006-07-15/schE2/schema/schE2 pass
 MS-Schema2006-07-15/schE3/schema/schE3 pass
 MS-Schema2006-07-15/schE4/schema/schE4 pass
-MS-Schema2006-07-15/schE5/schema/schE5 fail
+MS-Schema2006-07-15/schE5/schema/schE5 pass
 MS-Schema2006-07-15/schE6/schema/schE6 pass
 MS-Schema2006-07-15/schE9/schema/schE9 pass
 MS-Schema2006-07-15/schF1/schema/schF1 pass
@@ -9743,7 +9743,7 @@ MS-Schema2006-07-15/schH1/schema/schH1 pass
 MS-Schema2006-07-15/schH2/schema/schH2 pass
 MS-Schema2006-07-15/schH3/schema/schH3 pass
 MS-Schema2006-07-15/schH4/schema/schH4 pass
-MS-Schema2006-07-15/schH5/schema/schH5 fail
+MS-Schema2006-07-15/schH5/schema/schH5 pass
 MS-Schema2006-07-15/schH6/schema/schH6 pass
 MS-Schema2006-07-15/schH9/schema/schH9 pass
 MS-Schema2006-07-15/schI2/schema/schI2 pass
