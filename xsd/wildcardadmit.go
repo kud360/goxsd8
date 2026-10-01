@@ -215,7 +215,9 @@ func (s *Schema) topLevelDeclarationMatchesName(declared, name QName) bool {
 // §3.3.6.4 defines one for each declaration "in the {element declarations} of a
 // schema", which §3.17.1 restricts to top-level declarations — so only the
 // expanded-name ·match· applies to it, even when a same-named top-level
-// declaration exists with members of its own.
+// declaration exists with members of its own. contentrestricts.go's
+// elementParticleAdmits and elementCoveredSet ask it of a base ·element
+// particle·'s resolved {term}, which is either scope (cvc-accept clause 2.3).
 func (s *Schema) inlineDeclarationMatchesName(d ElementDeclaration, name QName) bool {
 	if d.Name() == name {
 		return true

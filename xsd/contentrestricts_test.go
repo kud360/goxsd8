@@ -714,10 +714,8 @@ func cGlobalRefModel(t *testing.T, name string) ModelGroup {
 // is admitted only under cos-equiv-derived-ok-rec clause 1, expanded-name
 // equality — which is what makes the removal of the global arm a real narrowing
 // rather than a relabelling. Its particle is named for a declaration the schema
-// does not declare globally, so the membership walk's own name lookup misses and
-// the LOCAL reading is what is under test; a local particle sharing a global
-// declaration's expanded name would be answered from that global one, since
-// inSubstitutionGroupOf takes names rather than components (substitutiongroup.go).
+// does not declare globally; a local particle in B sharing a top-level
+// declaration's expanded name is TestContentRestrictsLocalParticleSubstitution's.
 func TestContentRestrictsGlobalSubstitution(t *testing.T) {
 	globalRestriction := func(memberAffiliations []QName, derived ModelGroup) error {
 		return dFinalize(t, func(b *SchemaBuilder) {
@@ -737,6 +735,80 @@ func TestContentRestrictsGlobalSubstitution(t *testing.T) {
 	// A LOCAL declaration joins no substitution group, so a differently-named
 	// local particle is not admitted against the base's <element ref="head"/>.
 	expectRule(t, globalRestriction(affiliated, uGroup(t, CompositorSequence, cElem(t, "local", 1, 1))), ruleDerivationOKRestriction)
+}
+
+// TestContentRestrictsLocalParticleSubstitution pins that a LOCAL declaration in
+// B heads no ·substitution group· even when a top-level declaration of the same
+// expanded name heads one (cvc-accept clause 2.3.2 requires a top-level D;
+// #2000). The schema declares top-level a and m, m affiliated to a, and k, which
+// m is also affiliated to where a row says so.
+//
+//   - "element": B's particle is a local a or <element ref="a"/>, and R's is
+//     <element ref="m"/>. Only the ref admits m (elementParticleAdmits).
+//   - "wildcard": B is choice(a, lax urn:upa wildcard excluding m), and R one lax
+//     urn:upa wildcard. Only the ref leaves m covered (elementCoveredNames); the
+//     local row's every other name is covered, and item a is governable by the
+//     top-level a, so its clause-2 charge is not taken (the GAP(xsd) at
+//     elementCoveredSet) and the verdict is clause 1's on m.
+//   - "second head": B is choice(seq(local a, b), <element ref="k"/>, lax
+//     urn:upa wildcard excluding a, k and m), each branch but k's followed by b,
+//     and R is seq(lax urn:upa wildcard excluding k, b). m is split off through
+//     ref k, so elementCoveredSet decides which positions admit it: k's alone,
+//     whose follow set holds no b, so R's item m followed by b is charged.
+//     Crediting the local a with m would admit that b.
+func TestContentRestrictsLocalParticleSubstitution(t *testing.T) {
+	a, m, k := uq("a"), uq("m"), uq("k")
+	ns := []Namespace{NamespaceName(uns)}
+	ref := func(n QName) Particle { return uOne(t, ElementDeclarationRef{Name: n}) }
+	choice := func(ps ...Particle) Particle {
+		return uOne(t, ResolvedTerm{Term: uGroup(t, CompositorChoice, ps...)})
+	}
+	seq := func(ps ...Particle) ModelGroup { return uGroup(t, CompositorSequence, ps...) }
+	restricts := func(mAffiliations []QName, base, derived ModelGroup) error {
+		return dFinalize(t, func(b *SchemaBuilder) {
+			b.AddElement(uGlobal(t, a, uq("T")))
+			b.AddElement(uGlobal(t, k, uq("T")))
+			b.AddElement(uGlobal(t, m, uq("T"), mAffiliations...))
+			b.AddType(dType(t, uq("base"), anyTypeName, dElementContent(t, false, base), nil, nil))
+			b.AddType(dType(t, uq("derived"), uq("base"), dElementContent(t, false, derived), nil, nil))
+		})
+	}
+	toA := []QName{a}
+	for _, tc := range []struct {
+		name           string
+		mAffiliations  []QName
+		base, derived  ModelGroup
+		wantRestricted bool
+	}{
+		{name: "element local", mAffiliations: toA,
+			base: seq(cElem(t, "a", 1, 1)), derived: seq(ref(m))},
+		{name: "element local unaffiliated",
+			base: seq(cElem(t, "a", 1, 1)), derived: seq(ref(m))},
+		{name: "element ref", mAffiliations: toA,
+			base: seq(ref(a)), derived: seq(ref(m)), wantRestricted: true},
+		{name: "wildcard local", mAffiliations: toA,
+			base:    seq(choice(cElem(t, "a", 1, 1), cAnyExcept(t, ns, ProcessLax, m))),
+			derived: seq(cAnyExcept(t, ns, ProcessLax))},
+		{name: "wildcard ref", mAffiliations: toA,
+			base:    seq(choice(ref(a), cAnyExcept(t, ns, ProcessLax, m))),
+			derived: seq(cAnyExcept(t, ns, ProcessLax)), wantRestricted: true},
+		{name: "second head", mAffiliations: []QName{a, k},
+			base: seq(choice(
+				uOne(t, ResolvedTerm{Term: seq(cElem(t, "a", 1, 1), cElem(t, "b", 1, 1))}),
+				ref(k),
+				uOne(t, ResolvedTerm{Term: seq(cAnyExcept(t, ns, ProcessLax, a, k, m), cElem(t, "b", 1, 1))}))),
+			derived: seq(cAnyExcept(t, ns, ProcessLax, k), cElem(t, "b", 1, 1))},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := restricts(tc.mAffiliations, tc.base, tc.derived)
+			if tc.wantRestricted && err != nil {
+				t.Fatalf("m is in the top-level a's substitution group, so B's ref to a admits it: %v", err)
+			}
+			if !tc.wantRestricted {
+				expectRule(t, err, ruleDerivationOKRestriction)
+			}
+		})
+	}
 }
 
 // cNC builds a Namespace Constraint for the wildcardSubset table.

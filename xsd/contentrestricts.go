@@ -1224,8 +1224,9 @@ func (s *Schema) matchPositions(p position, b contentAutomaton, live liveSet) []
 // covers the whole namespace between them (#1954).
 //
 // The names element particles admit are SPLIT OFF first. Each live element
-// particle admits finitely many expanded names — its declaration's, and the
-// names of the top-level declarations in its ·substitution group· — so the
+// particle admits finitely many expanded names — its declaration's, and, for a
+// top-level declaration, the names of the declarations in its ·substitution
+// group· — so the
 // names sub (w's {namespace constraint}) admits among them form a finite list,
 // in live-group order and then {element declarations} order (STYLE D2), and
 // each is decided exactly: its set is S(n), every live position admitting n,
@@ -1455,9 +1456,12 @@ func (s *Schema) coveringWildcardUnion(w Wildcard, b contentAutomaton, live live
 
 // elementCoveredNames lists, without repeats, the expanded names sub admits
 // (cvc-wildcard-name) that some live ·element particle· in elements admits: each
-// particle's declaration's own name, then every top-level declaration it admits
-// through its ·substitution group·, in {element declarations} order (STYLE D2).
-// A particle admits a name exactly when elementParticleAdmits would admit that
+// particle's declaration's own name, then, when that declaration is top-level,
+// every top-level declaration it admits through its ·substitution group·, in
+// {element declarations} order (STYLE D2). A local declaration heads no
+// ·substitution group· (cvc-accept clause 2.3.2), so it contributes its own name
+// alone, even when a same-named top-level declaration has members (#2000). A
+// particle admits a name exactly when elementParticleAdmits would admit that
 // name's declaration, so the list is the finite set coveringWildcardUnion splits
 // off.
 func (s *Schema) elementCoveredNames(sub NamespaceConstraint, b contentAutomaton, live liveSet, elements []int) []QName {
@@ -1469,10 +1473,13 @@ func (s *Schema) elementCoveredNames(sub NamespaceConstraint, b contentAutomaton
 		names = append(names, n)
 	}
 	for _, g := range elements {
-		head := b.positions[live.reps[g]].term.(ElementDeclaration).Name()
-		add(head)
+		d := b.positions[live.reps[g]].term.(ElementDeclaration)
+		add(d.Name())
+		if d.ScopeVariety() != ScopeGlobal {
+			continue // a local declaration heads no substitution group
+		}
 		for _, e := range s.elements {
-			if s.inSubstitutionGroupOf(e.Name(), head) {
+			if s.inSubstitutionGroupOf(e.Name(), d.Name()) {
 				add(e.Name())
 			}
 		}
@@ -1506,7 +1513,7 @@ func (s *Schema) elementCoveredNames(sub NamespaceConstraint, b contentAutomaton
 func (s *Schema) elementCoveredSet(n QName, w Wildcard, b contentAutomaton, live liveSet, elements, groups []int, constraints []NamespaceConstraint) successorSet {
 	var members []int
 	for _, g := range elements {
-		if s.inSubstitutionGroupOf(n, b.positions[live.reps[g]].term.(ElementDeclaration).Name()) {
+		if s.inlineDeclarationMatchesName(b.positions[live.reps[g]].term.(ElementDeclaration), n) {
 			members = append(members, g)
 		}
 	}
@@ -1549,9 +1556,11 @@ func groupsIn(n int, groups []int) []bool {
 //     rest, which coveringWildcardUnion decides for the whole live set (#1954).
 //
 // Both approximations here resolve towards admitting. Substitution-group
-// membership is not one of them: inSubstitutionGroupOf decides
-// cos-equiv-derived-ok-rec exactly (substitutiongroup.go), so this clause reads
-// the true ·substitution group· whichever way membership pushes the verdict. And
+// membership is not one of them: elementParticleAdmits credits a top-level
+// declaration with its ·substitution group·, as inSubstitutionGroupOf decides
+// cos-equiv-derived-ok-rec (substitutiongroup.go), and a local one with none
+// (cvc-accept clause 2.3.2), so this clause reads the true ·substitution group·
+// whichever way membership pushes the verdict. And
 // the base's wildcard is asked through Wildcard.allowsName (cvc-wildcard-name)
 // rather than through allowsElementWildcardName's defined/sibling keyword
 // exclusions, for the same reason: the narrower test would shrink B and could
@@ -1577,21 +1586,27 @@ func (s *Schema) positionAdmits(general, specific position) bool {
 
 // elementParticleAdmits reports whether an ·element particle· whose {term} is
 // general admits every item whose ·governing element declaration· is specific:
-// specific is ·substitutable· for general through a ·substitution group·, which
-// already folds in plain expanded-name equality (cos-equiv-derived-ok-rec clause
-// 1, so no separate name test is needed here).
+// specific has general's expanded name (cvc-accept clause 2.3.1), or general is
+// top-level and specific is ·substitutable· for it through its ·substitution
+// group· (cvc-accept clause 2.3.2, cos-equiv-derived-ok-rec).
 //
-// There is NO approximation left here. Until #281 this function carried a second
-// arm admitting any two TOP-LEVEL declarations unconditionally, because no
-// producer mapped substitutionGroup= into {substitution group affiliations} and
-// charging the resulting non-membership false-rejected valid schemas (W3C
-// MS-Element elemZ027_a/_b/_e/_f, MS-Particles particlesZ008/Z028 — each a base
-// <element ref="head"/> restricted to a member of head's group). parser now maps
-// the attribute, so inSubstitutionGroupOf sees the affiliation edges it needs and
-// decides those pairings exactly; the escape hatch is gone, and a global pairing
-// with no affiliation chain between them is now correctly REJECTED.
+// A LOCAL general is credited with no substitution group (#2000):
+// inSubstitutionGroupOf resolves its head BY NAME through {element
+// declarations}, so asked directly it would answer a local declaration from a
+// same-named top-level one and credit it with that one's members.
+// inlineDeclarationMatchesName applies the scope guard before that lookup.
+//
+// Until #281 this function carried a second arm admitting any two TOP-LEVEL
+// declarations unconditionally, because no producer mapped substitutionGroup=
+// into {substitution group affiliations} and charging the resulting
+// non-membership false-rejected valid schemas (W3C MS-Element
+// elemZ027_a/_b/_e/_f, MS-Particles particlesZ008/Z028 — each a base <element
+// ref="head"/> restricted to a member of head's group). parser now maps the
+// attribute, so inSubstitutionGroupOf sees the affiliation edges it needs and
+// decides those pairings exactly; a global pairing with no affiliation chain
+// between them is REJECTED.
 func (s *Schema) elementParticleAdmits(general, specific ElementDeclaration) bool {
-	return s.inSubstitutionGroupOf(specific.Name(), general.Name())
+	return s.inlineDeclarationMatchesName(general, specific.Name())
 }
 
 // someBindingSubsumes is cos-content-act-restrict clause 2
