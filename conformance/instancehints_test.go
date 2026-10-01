@@ -80,8 +80,7 @@ func validityWord(valid bool) string {
 
 // TestInstanceExecutorDeclinesUnreadableHints proves every hinted shape the
 // lane cannot read completely is DECLINED in both directions (instanceHints,
-// assembleHints). Each row is decided — valid, or invalid on cvc-assess-elt —
-// with the condition it names removed.
+// assembleHints). Each row is decided with the condition it names removed.
 func TestInstanceExecutorDeclinesUnreadableHints(t *testing.T) {
 	exec := newInstanceExec()
 	skip := []fixtureFile{{"s.xsd", xsdDoc("", skipKnown)}, {"o.xsd", xsdDoc("", `<xs:element name="other" type="xs:int"/>`)}}
@@ -96,6 +95,10 @@ func TestInstanceExecutorDeclinesUnreadableHints(t *testing.T) {
 			`<known ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd"><c xsi:noNamespaceSchemaLocation="o.xsd"/></known>`},
 		{"an inline xs:schema below the root", skip,
 			`<known ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd"><xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"/></known>`},
+		// Decided invalid otherwise (cvc-type clause 3.1.2), with a DTD that
+		// could default a hint onto any element.
+		{"a DOCTYPE", known,
+			`<!DOCTYPE known []><known ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd"><x/></known>`},
 		{"an xml:base on the root", known,
 			`<known ` + xsiNS + ` xml:base="sub/" xsi:noNamespaceSchemaLocation="s.xsd">x</known>`},
 		{"an xsi:schemaLocation with an odd member count", known,
