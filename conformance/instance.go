@@ -244,15 +244,15 @@ import (
 //     xsi:type is refused, under strict and lax alike. No element of a
 //     subtree whose Result is empty is therefore assessed against no type.
 //   - cvc-elt clauses 2 to 6, at every element: {abstract} false, no xsi:nil,
-//     no {type table} — so the ·selected type definition· is the {type
-//     definition}, which the gate resolves itself — and no fixed {value
-//     constraint}. An xsi:type is admitted where the gate resolves it and
-//     xsd.Schema.ValidlySubstitutable answers that it ·overrides· the selected
-//     type (clause 4, §3.3.4.2 key-overrides), which is the walk's decision
-//     too; the gate then follows that type as the ·governing type definition·
-//     (key-governing-type-elem clause 3) through every condition below. It
-//     refuses an error from that predicate, the one silent exit of validate's
-//     governingType (instanceOverride, #1093) an xsi:type reaches
+//     and no {type table} — so the ·selected type definition· is the {type
+//     definition}, which the gate resolves itself. An xsi:type is admitted
+//     where the gate resolves it and xsd.Schema.ValidlySubstitutable answers
+//     that it ·overrides· the selected type (clause 4, §3.3.4.2
+//     key-overrides), which is the walk's decision too; the gate then follows
+//     that type as the ·governing type definition· (key-governing-type-elem
+//     clause 3) through every condition below. It refuses an error from that
+//     predicate, the one silent exit of validate's governingType
+//     (instanceOverride, #1093) an xsi:type reaches
 //     (subtreeGate.governingType). {identity-constraint definitions} are
 //     admitted, at every depth: clause 6 (cvc-identity-constraint, §3.11.4) is
 //     the walk's, which reads a ·defaulted attribute· field node as it reads a
@@ -261,13 +261,18 @@ import (
 //     the root too: with no xsi:nil anywhere, clause 3.1 holds for a
 //     declaration whose {nillable} is false and clause 3.2.1 ("E has no
 //     xsi:nil attribute information item") for one whose {nillable} is true,
-//     and no element is ·nilled·. A default {value constraint} is admitted, at
-//     the root too: clause 5.1 substitutes its {lexical form} for the
-//     ·normalized value· of an element with neither element nor character
+//     and no element is ·nilled·. A {value constraint} of either variety is
+//     admitted, at every depth: clause 5.1 substitutes its {lexical form} for
+//     the ·normalized value· of an element with neither element nor character
 //     [[children]], and the walk assesses cvc-type over that substituted value
 //     and settles 5.1.1 (validate's contentCheck.assessed and
-//     contentCheck.defaultValid). Clause 2 is refused outright below the root,
-//     where the walk charges it nowhere.
+//     contentCheck.defaultValid); over an element that has [[children]], a
+//     fixed one is clause 5.2.2's, which the walk settles too — 5.2.2.1, no
+//     element [[children]], and 5.2.2.2, the ·initial value· agreeing with it
+//     (validate's contentCheck.fixedValue) — recording in Result.Unevaluated
+//     the one comparison value.ConstraintMatches does not decide. Clause
+//     3.2.3.2, a ·nilled· element under a fixed one, never arises. Clause 2 is
+//     refused outright below the root, where the walk charges it nowhere.
 //   - cvc-type clause 2 (§3.3.4.4): a complex {type definition}'s {abstract}
 //     is false, at the root too, since the walk decides that clause nowhere.
 //   - cvc-type clause 3.1 (§3.3.4.4), for a Simple Type Definition: 3.1.1, the

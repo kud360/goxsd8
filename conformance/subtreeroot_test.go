@@ -446,7 +446,6 @@ func TestInstanceExecutorDeclinesOutsideAssessedSubtreeRoot(t *testing.T) {
 	}{
 		{"DOCTYPE present", aInt, `<!DOCTYPE known><known><a>1</a></known>`},
 		{"DOCTYPE present on a content-less root", emptyRoot, `<!DOCTYPE known><known/>`},
-		{"a fixed {value constraint} on the root (cvc-elt clause 5.2.2)", `<xs:element name="known" type="xs:string" fixed="x"/>`, `<known>x</known>`},
 		{
 			"a {type table} on the root (cvc-elt clause 4)",
 			`<xs:element name="known" type="xs:string"><xs:alternative type="xs:string"/></xs:element>`,
@@ -490,11 +489,6 @@ func TestInstanceExecutorDeclinesOutsideAssessedSubtreeRoot(t *testing.T) {
 			"a {type table} below the root (cvc-elt clause 4)",
 			`<xs:element name="known"><xs:complexType><xs:sequence><xs:element name="a" type="xs:int">` +
 				`<xs:alternative type="xs:int"/></xs:element></xs:sequence></xs:complexType></xs:element>`,
-			wantInt,
-		},
-		{
-			"a fixed {value constraint} below the root (cvc-elt clause 5.2.2)",
-			`<xs:element name="known"><xs:complexType><xs:sequence><xs:element name="a" type="xs:int" fixed="1"/></xs:sequence></xs:complexType></xs:element>`,
 			wantInt,
 		},
 		{
@@ -765,8 +759,9 @@ func TestAssessedSubtreeRootUnresolvedChild(t *testing.T) {
 		{"lax, a child resolving no declaration carrying xsi:nil", wildcardChild("lax"), `<known ` + xsiNS + `><u xsi:nil="false"/></known>`, false},
 		{"lax, below a child resolving no declaration, xsi:nil", wildcardChild("lax"), `<known ` + xsiNS + `><u><v xsi:nil="false"/></u></known>`, false},
 		{
+			// The walk settles cvc-elt clause 5.2.2 for f, below the lax <u> too (#1979).
 			"lax, below a child resolving no declaration, a resolved declaration with a fixed {value constraint} (cvc-elt clause 5.2.2)",
-			wildcardChild("lax") + `<xs:element name="f" type="xs:int" fixed="1"/>`, `<known><u><f>1</f></u></known>`, false,
+			wildcardChild("lax") + `<xs:element name="f" type="xs:int" fixed="1"/>`, `<known><u><f>1</f></u></known>`, true,
 		},
 	} {
 		c := instanceCase(t, tc.schemaBody, tc.instance, true)
