@@ -921,12 +921,13 @@ func TestProduceS4SChildOrderAccepted(t *testing.T) {
 				`</xs:simpleContent></xs:complexType>`,
 		},
 		{
-			// A child outside the XSD namespace is stepped over whatever position it
-			// sits in — #928's fault to charge if any — where an XSD-namespace name
-			// no position admits is rejected by the test above.
-			name: "a foreign-namespace child among the facets",
+			// xs:simpleRestrictionModel's "{any with namespace: ##other}" arm shares the
+			// repeated facet position, so a foreign child interleaves with the facets
+			// (#1982); under every other model TestProduceS4SForeignChildRejected
+			// rejects it.
+			name: "foreign-namespace children among the facets",
 			body: `<xs:complexType name="D" xmlns:o="urn:other"><xs:simpleContent>` +
-				`<xs:restriction base="tns:B"><o:hint/><xs:length value="5"/>` +
+				`<xs:restriction base="tns:B"><o:hint/><xs:length value="5"/><o:hint/>` +
 				`<xs:attribute name="a"/></xs:restriction></xs:simpleContent></xs:complexType>`,
 		},
 		{
@@ -986,17 +987,6 @@ func TestProduceS4SChildOrderAccepted(t *testing.T) {
 				`<xs:alternative test="true()"><xs:annotation/>` +
 				`<xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType></xs:alternative>` +
 				`<xs:alternative type="xs:string"/></xs:element>`,
-		},
-		{
-			// None of the three models has a wildcard position, and none needs one: the
-			// namespace guard steps over a foreign child wherever it sits.
-			name: "foreign-namespace children under the three declarations",
-			body: `<xs:element name="D" xmlns:o="urn:other"><o:hint/><xs:simpleType>` +
-				`<o:hint/><xs:restriction base="xs:string"/></xs:simpleType>` +
-				`<o:hint/><xs:unique name="u3"><xs:selector xpath="a"/><xs:field xpath="@x"/></xs:unique>` +
-				`</xs:element>` +
-				`<xs:attribute name="H" xmlns:o="urn:other"><o:hint/>` +
-				`<xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType></xs:attribute>`,
 		},
 		{
 			// Every position of xs:namedAttributeGroup filled, the attribute block
@@ -1358,5 +1348,282 @@ func TestProduceS4SSimpleTypeAndOpenContentModelsAccepted(t *testing.T) {
 				t.Fatalf("Produce rejected a document its s4s content model admits: %v", err)
 			}
 		})
+	}
+}
+
+// TestProduceS4SForeignChildRejected pins #1982: a child element outside the XSD
+// namespace fills a position of exactly one walked content model's positions —
+// xs:simpleRestrictionModel's "{any with namespace: ##other}" arm, at the facet
+// position of a <simpleContent>'s and a <simpleType>'s <restriction>. Under every
+// other model the walk reaches it is charged §5.1's first bullet (:4296), as an
+// XSD-namespace name no position admits is; a child in NO namespace is charged at
+// the facet position too, since ##other excludes ·absent·; and a foreign child
+// after the attribute tail of a <simpleContent> <restriction> is out of order,
+// since the wildcard arm shares the facet position the tail follows.
+//
+// Every row assembled clean before #1982. Each pins the diagnostic's opening
+// "parser: <child> at <loc>" as a PREFIX, the owner, the grammar quoted, and the
+// closing clause naming the fault and the child's namespace.
+func TestProduceS4SForeignChildRejected(t *testing.T) {
+	const at = " at " + produceURI + ":"
+	const o = `<o:hint xmlns:o="urn:other"/>`
+	const ct = `<xs:complexType name="C">`
+	const ctEnd = `</xs:complexType>`
+	const elem = `<xs:element name="e">`
+	const elemEnd = `</xs:element>`
+	// A complex type with simple content for the <simpleContent> <restriction>
+	// rows to derive from, on its own line 2.
+	const simpleBase = `<xs:complexType name="B"><xs:simpleContent><xs:extension base="xs:string"/></xs:simpleContent></xs:complexType>`
+	const foreign = `<{urn:other}hint>`
+	const noPosition = `which admits no element in namespace "urn:other" in any position`
+	// A slice, not a map: subtest order is output (STYLE D2).
+	for _, tc := range []struct {
+		name      string
+		lines     []string // the <schema>'s own children, from line 2
+		wantChild string   // "<name> at <uri>:<line>:1"
+		wantOwner string
+		grammar   string
+		wantTail  string
+	}{
+		{
+			name:      "after the body of a named group",
+			lines:     []string{`<xs:group name="g">`, `<xs:sequence/>`, o, `</xs:group>`},
+			wantChild: foreign + at + "4:1",
+			wantOwner: "<group>" + at + "2:1",
+			grammar:   "xs:namedGroup",
+			wantTail:  noPosition,
+		},
+		{
+			name:      "alone under a top-level attributeGroup",
+			lines:     []string{`<xs:attributeGroup name="g">`, o, `</xs:attributeGroup>`},
+			wantChild: foreign + at + "3:1",
+			wantOwner: "<attributeGroup>" + at + "2:1",
+			grammar:   "xs:namedAttributeGroup",
+			wantTail:  noPosition,
+		},
+		{
+			name:      "after the model group of an implicit-content complexType",
+			lines:     []string{ct, `<xs:sequence/>`, o, ctEnd},
+			wantChild: foreign + at + "4:1",
+			wantOwner: "<complexType>" + at + "2:1",
+			grammar:   "xs:complexTypeModel",
+			wantTail:  noPosition,
+		},
+		{
+			name:      "beside the simpleContent of a complexType",
+			lines:     []string{ct, `<xs:simpleContent><xs:extension base="xs:string"/></xs:simpleContent>`, o, ctEnd},
+			wantChild: foreign + at + "4:1",
+			wantOwner: "<complexType>" + at + "2:1",
+			grammar:   "xs:complexTypeModel",
+			wantTail:  noPosition,
+		},
+		{
+			name:      "beside the alternant of a simpleContent",
+			lines:     []string{ct, `<xs:simpleContent>`, `<xs:extension base="xs:string"/>`, o, `</xs:simpleContent>`, ctEnd},
+			wantChild: foreign + at + "5:1",
+			wantOwner: "<simpleContent>" + at + "3:1",
+			grammar:   "xs:simpleContent",
+			wantTail:  noPosition,
+		},
+		{
+			name:      "beside the alternant of a complexContent",
+			lines:     []string{ct, `<xs:complexContent>`, `<xs:extension base="xs:anyType"/>`, o, `</xs:complexContent>`, ctEnd},
+			wantChild: foreign + at + "5:1",
+			wantOwner: "<complexContent>" + at + "3:1",
+			grammar:   "xs:complexContent",
+			wantTail:  noPosition,
+		},
+		{
+			name:      "under a simpleContent extension",
+			lines:     []string{ct, `<xs:simpleContent>`, `<xs:extension base="xs:string">`, o, `</xs:extension>`, `</xs:simpleContent>`, ctEnd},
+			wantChild: foreign + at + "5:1",
+			wantOwner: "<extension>" + at + "4:1",
+			grammar:   "xs:simpleExtensionType",
+			wantTail:  noPosition,
+		},
+		{
+			// xs:restrictionType (:4831) offers xs:simpleRestrictionModel, and its
+			// ##other arm, as a choice xs:complexRestrictionType (:4850) drops.
+			name:      "under a complexContent restriction",
+			lines:     []string{ct, `<xs:complexContent>`, `<xs:restriction base="xs:anyType">`, o, `</xs:restriction>`, `</xs:complexContent>`, ctEnd},
+			wantChild: foreign + at + "5:1",
+			wantOwner: "<restriction>" + at + "4:1",
+			grammar:   "xs:complexRestrictionType",
+			wantTail:  noPosition,
+		},
+		{
+			name:      "under a complexContent extension",
+			lines:     []string{ct, `<xs:complexContent>`, `<xs:extension base="xs:anyType">`, o, `</xs:extension>`, `</xs:complexContent>`, ctEnd},
+			wantChild: foreign + at + "5:1",
+			wantOwner: "<extension>" + at + "4:1",
+			grammar:   "xs:extensionType",
+			wantTail:  noPosition,
+		},
+		{
+			name:      "under a top-level element",
+			lines:     []string{elem, o, elemEnd},
+			wantChild: foreign + at + "3:1",
+			wantOwner: "<element>" + at + "2:1",
+			grammar:   "xs:element",
+			wantTail:  noPosition,
+		},
+		{
+			// src-element clause 2.2 reaches the XSD namespace alone, so the
+			// grammar fault, carrying no rule ID, is the one charged.
+			name:      "under a local element ref",
+			lines:     []string{ct, `<xs:sequence>`, `<xs:element ref="tns:E">`, `<xs:annotation/>`, o, elemEnd, `</xs:sequence>`, ctEnd, `<xs:element name="E"/>`},
+			wantChild: foreign + at + "6:1",
+			wantOwner: "<element>" + at + "4:1",
+			grammar:   "xs:element",
+			wantTail:  noPosition,
+		},
+		{
+			name:      "under a top-level attribute",
+			lines:     []string{`<xs:attribute name="a">`, o, `</xs:attribute>`},
+			wantChild: foreign + at + "3:1",
+			wantOwner: "<attribute>" + at + "2:1",
+			grammar:   "xs:attribute",
+			wantTail:  noPosition,
+		},
+		{
+			name:      "beside the restriction of a simpleType",
+			lines:     []string{`<xs:simpleType name="S">`, `<xs:restriction base="xs:string"/>`, o, `</xs:simpleType>`},
+			wantChild: foreign + at + "4:1",
+			wantOwner: "<simpleType>" + at + "2:1",
+			grammar:   "xs:simpleType",
+			wantTail:  noPosition,
+		},
+		{
+			name:      "under an alternative",
+			lines:     []string{`<xs:element name="e" type="xs:string">`, `<xs:alternative test="true()" type="xs:string">`, o, `</xs:alternative>`, elemEnd},
+			wantChild: foreign + at + "4:1",
+			wantOwner: "<alternative>" + at + "3:1",
+			grammar:   "xs:altType",
+			wantTail:  noPosition,
+		},
+		{
+			name:      "after the fields of a unique",
+			lines:     []string{elem, `<xs:unique name="u">`, `<xs:selector xpath="a"/>`, `<xs:field xpath="@x"/>`, o, `</xs:unique>`, elemEnd},
+			wantChild: foreign + at + "6:1",
+			wantOwner: "<unique>" + at + "3:1",
+			grammar:   "xs:keybase",
+			wantTail:  noPosition,
+		},
+		{
+			name:      "under a selector",
+			lines:     []string{elem, `<xs:unique name="u">`, `<xs:selector xpath="a">`, o, `</xs:selector>`, `<xs:field xpath="@x"/>`, `</xs:unique>`, elemEnd},
+			wantChild: foreign + at + "5:1",
+			wantOwner: "<selector>" + at + "4:1",
+			grammar:   "xs:selector",
+			wantTail:  noPosition,
+		},
+		{
+			name:      "under a field",
+			lines:     []string{elem, `<xs:unique name="u">`, `<xs:selector xpath="a"/>`, `<xs:field xpath="@x">`, o, `</xs:field>`, `</xs:unique>`, elemEnd},
+			wantChild: foreign + at + "6:1",
+			wantOwner: "<field>" + at + "5:1",
+			grammar:   "xs:field",
+			wantTail:  noPosition,
+		},
+		{
+			name:      "under a list with itemType",
+			lines:     []string{`<xs:simpleType name="S">`, `<xs:list itemType="xs:string">`, o, `</xs:list>`, `</xs:simpleType>`},
+			wantChild: foreign + at + "4:1",
+			wantOwner: "<list>" + at + "3:1",
+			grammar:   "xs:list",
+			wantTail:  noPosition,
+		},
+		{
+			name:      "after the any of an openContent",
+			lines:     []string{ct, `<xs:openContent>`, `<xs:any namespace="##other"/>`, o, `</xs:openContent>`, `<xs:sequence/>`, ctEnd},
+			wantChild: foreign + at + "5:1",
+			wantOwner: "<openContent>" + at + "3:1",
+			grammar:   "xs:openContent",
+			wantTail:  noPosition,
+		},
+		{
+			name:      "after the any of a defaultOpenContent",
+			lines:     []string{`<xs:defaultOpenContent>`, `<xs:any namespace="##other"/>`, o, `</xs:defaultOpenContent>`, `<xs:complexType name="C"><xs:sequence/></xs:complexType>`},
+			wantChild: foreign + at + "4:1",
+			wantOwner: "<defaultOpenContent>" + at + "2:1",
+			grammar:   "xs:defaultOpenContent",
+			wantTail:  noPosition,
+		},
+		{
+			// ##other excludes ·absent·: the facet position's wildcard arm does not
+			// hold a child in no namespace.
+			name:      "no-namespace child among the facets of a simpleType restriction",
+			lines:     []string{`<xs:simpleType name="S">`, `<xs:restriction base="xs:string">`, `<xs:maxLength value="3"/>`, `<hint/>`, `</xs:restriction>`, `</xs:simpleType>`},
+			wantChild: "<hint>" + at + "5:1",
+			wantOwner: "<restriction>" + at + "3:1",
+			grammar:   "xs:restriction",
+			wantTail:  "which admits no element in no namespace in any position",
+		},
+		{
+			name:      "no-namespace child among the facets of a simpleContent restriction",
+			lines:     []string{simpleBase, `<xs:complexType name="D">`, `<xs:simpleContent>`, `<xs:restriction base="tns:B">`, `<xs:length value="5"/>`, `<hint/>`, `</xs:restriction>`, `</xs:simpleContent>`, ctEnd},
+			wantChild: "<hint>" + at + "7:1",
+			wantOwner: "<restriction>" + at + "5:1",
+			grammar:   "xs:simpleRestrictionType",
+			wantTail:  "which admits no element in no namespace in any position",
+		},
+		{
+			// The wildcard arm is the facet position's own, so the attribute tail
+			// closes it behind it.
+			name:      "foreign child after the assert of a simpleContent restriction",
+			lines:     []string{simpleBase, `<xs:complexType name="D">`, `<xs:simpleContent>`, `<xs:restriction base="tns:B">`, `<xs:assert test="true()"/>`, o, `</xs:restriction>`, `</xs:simpleContent>`, ctEnd},
+			wantChild: foreign + at + "7:1",
+			wantOwner: "<restriction>" + at + "5:1",
+			grammar:   "xs:simpleRestrictionType",
+			wantTail:  "and a " + foreign + " may not follow the children written before it here",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := produce(t, s4sTopLevelDoc(tc.lines...))
+			if err == nil {
+				t.Fatal("Produce accepted a child its s4s content model does not admit")
+			}
+			if rule, ok := xsderr.RuleOf(err); ok {
+				t.Errorf("error = %v, charged %s; want a plain grammar fault carrying no rule ID", err, rule)
+			}
+			if !strings.HasPrefix(err.Error(), "parser: "+tc.wantChild+" ") {
+				t.Errorf("error = %v, want it to open with the offending %s", err, tc.wantChild)
+			}
+			if !strings.Contains(err.Error(), tc.wantOwner) {
+				t.Errorf("error = %v, want it to name the owning %s", err, tc.wantOwner)
+			}
+			if !strings.Contains(err.Error(), tc.grammar+"'s content model") {
+				t.Errorf("error = %v, want it to quote %s's content model", err, tc.grammar)
+			}
+			if !strings.HasSuffix(err.Error(), tc.wantTail) {
+				t.Errorf("error = %v, want it to close %q", err, tc.wantTail)
+			}
+		})
+	}
+}
+
+// TestProduceLateAnnotationAfterForeignChildRejected pins rejectLateAnnotation's
+// half of #1982: a child outside the XSD namespace counts as a child written
+// before an <annotation>, which "annotation?" admits only first, and the
+// diagnostic names it by its expanded name.
+func TestProduceLateAnnotationAfterForeignChildRejected(t *testing.T) {
+	const at = " at " + produceURI + ":"
+	_, err := produce(t, s4sTopLevelDoc(
+		`<xs:complexType name="C">`,
+		`<xs:sequence>`,
+		`<o:hint xmlns:o="urn:other"/>`,
+		`<xs:annotation/>`,
+		`</xs:sequence>`,
+		`</xs:complexType>`,
+	))
+	if err == nil {
+		t.Fatal("Produce accepted an <annotation> written after a foreign child of a <sequence>")
+	}
+	if rule, ok := xsderr.RuleOf(err); ok {
+		t.Errorf("error = %v, charged %s; want a plain grammar fault carrying no rule ID", err, rule)
+	}
+	want := "parser: <annotation>" + at + "5:1 follows the <{urn:other}hint>" + at + "4:1 among the children of the <sequence>" + at + "3:1: "
+	if !strings.HasPrefix(err.Error(), want) {
+		t.Errorf("error = %v, want it to open %q", err, want)
 	}
 }

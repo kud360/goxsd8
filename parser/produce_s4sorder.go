@@ -9,15 +9,33 @@ import (
 )
 
 // s4sSlot is ONE position in a schema-for-schema-documents content model: the
-// child element local names that fill it, and whether the position repeats.
+// XSD-namespace local names that fill it, whether a child outside the XSD
+// namespace fills it too, and whether the position repeats.
 //
 // admits is a predicate rather than a name list because one position — the facet
 // choice of xs:simpleRestrictionModel (xmlschema11-2.md:3929) — is the
 // substitution group of xs:facet, whose membership this package already owns a
 // bridge for and may not retype (s4sFacetElement, STYLE T4).
+//
+// other is that same position's second arm, "<xs:any processContents="lax"
+// namespace="##other"/>" (:3935): a child in a namespace that is neither the XSD
+// namespace nor ·absent· fills it. It is the ONLY element wildcard any walked
+// model carries, so every other position admits XSD-namespace names alone.
 type s4sSlot struct {
 	admits   func(local string) bool
+	other    bool
 	repeated bool
+}
+
+// holds reports whether a child named {space}local fills s: an XSD-namespace
+// name when admits answers for it, any other name when s carries the ##other
+// arm and space is not ·absent·, which ##other excludes as it excludes the
+// target namespace of the schema for schema documents.
+func (s s4sSlot) holds(space, local string) bool {
+	if space == xsd.XMLSchemaNS {
+		return s.admits(local)
+	}
+	return s.other && space != ""
 }
 
 // s4sModel is one element's schema-for-schema-documents content model, as the
@@ -104,10 +122,14 @@ var s4sAnnotationFirst = []s4sSlot{{admits: s4sNames("annotation")}}
 // ##other})*" — held once for the two restrictions that carry it: a
 // <simpleContent>'s (s4sSimpleRestriction, ahead of the attribute tail) and a
 // <simpleType>'s (s4sSimpleTypeRestriction, alone) (STYLE T4). Its wildcard arm
-// needs no slot: checkS4SChildOrder skips every child outside the XSD namespace.
+// is the facet position's other flag, ONE repeated position with the facets
+// because both arms sit in one xs:choice: a foreign child interleaves with the
+// facets freely, and is out of order once the attribute tail has begun. These two
+// models are the only ones a child outside the XSD namespace fills a position
+// of; under every other model checkS4SChildOrder rejects it.
 var s4sSimpleRestrictionGroup = []s4sSlot{
 	{admits: s4sNames("simpleType")},
-	{admits: s4sFacetElement, repeated: true},
+	{admits: s4sFacetElement, other: true, repeated: true},
 }
 
 // s4sIdentityConstraint admits the three members of Appendix A's
@@ -217,7 +239,10 @@ var (
 		slots:   slices.Concat(s4sAnnotationFirst, s4sAttributeTail),
 	}
 
-	// s4sComplexRestriction is xs:complexRestrictionType (:4850).
+	// s4sComplexRestriction is xs:complexRestrictionType (:4850). The type it
+	// restricts, xs:restrictionType (:4831), offers xs:simpleRestrictionModel as
+	// an arm (:4841); xs:complexRestrictionType's own choice drops that arm, so this
+	// model carries neither the facet position nor its ##other wildcard.
 	s4sComplexRestriction = s4sModel{
 		grammar: "xs:complexRestrictionType",
 		spec:    "xmlschema11-1.md:1718",
@@ -507,9 +532,14 @@ func s4sArticle(local string) string {
 // one xs:choice (:4757) and only the one this document wrote is in play. The spec
 // sub-classifies the fault no further than "not fully valid", so the separation
 // from the order verdict is this check's own and reaches the message alone
-// (#1047). Children outside the XSD namespace are still skipped, on a reason of
-// their own: they are what xs:simpleRestrictionModel's "{any with namespace:
-// ##other}" position admits.
+// (#1047).
+//
+// A child outside the XSD namespace is walked like any other (#1982). Only
+// xs:simpleRestrictionModel's "{any with namespace: ##other}" arm admits one —
+// the facet position of s4sSimpleRestriction and s4sSimpleTypeRestriction, whose
+// other flag holds it — and a child in no namespace is not admitted even there.
+// Under every other model it fills no position, the same §5.1 first-bullet
+// fault, naming the child by its expanded name.
 //
 // WHERE this walk runs relative to a src-* clause charged over the same element
 // is this repo's decision and not the spec's, and every producer charging both
@@ -578,15 +608,15 @@ func checkS4SChildOrder(owner *Element, m s4sModel) error {
 	last := -1
 	for _, child := range owner.Children() {
 		el, ok := child.(*Element)
-		if !ok || el.Name().Space() != xsd.XMLSchemaNS {
+		if !ok {
 			continue
 		}
 		from := last + 1
 		if last >= 0 && m.slots[last].repeated {
 			from = last
 		}
-		local := el.Name().Local()
-		if at := s4sSlotAt(m.slots, from, local); at >= 0 {
+		space, local := el.Name().Space(), el.Name().Local()
+		if at := s4sSlotAt(m.slots, from, space, local); at >= 0 {
 			last = at
 			continue
 		}
@@ -595,19 +625,46 @@ func checkS4SChildOrder(owner *Element, m s4sModel) error {
 		// position it already filled, a maxOccurs fault, or one now behind the walk,
 		// an order fault. No name appears in two positions of any model above, so
 		// the first position admitting it is the only one.
-		filled := s4sSlotAt(m.slots, 0, local)
+		filled := s4sSlotAt(m.slots, 0, space, local)
+		if filled < 0 && space != xsd.XMLSchemaNS {
+			return fmt.Errorf("parser: <%s> at %s fills no position of the content model the schema for schema documents gives the <%s> at %s: %s's content model (%s) is %s, which admits no element %s in any position",
+				s4sChildName(el), el.Loc(), owner.Name().Local(), owner.Loc(), m.grammar, m.spec, m.model, s4sNamespacePhrase(space))
+		}
 		if filled < 0 {
 			return fmt.Errorf("parser: <%s> at %s fills no position of the content model the schema for schema documents gives the <%s> at %s: %s's content model (%s) is %s, which admits no <%s> in any position",
 				local, el.Loc(), owner.Name().Local(), owner.Loc(), m.grammar, m.spec, m.model, local)
 		}
+		name := s4sChildName(el)
 		if filled == last {
 			return fmt.Errorf("parser: <%s> at %s repeats a position the schema for schema documents admits at most once among the children of the <%s> at %s: %s's content model (%s) is %s",
-				local, el.Loc(), owner.Name().Local(), owner.Loc(), m.grammar, m.spec, m.model)
+				name, el.Loc(), owner.Name().Local(), owner.Loc(), m.grammar, m.spec, m.model)
 		}
 		return fmt.Errorf("parser: <%s> at %s is out of the child order the schema for schema documents requires of the <%s> at %s: %s's content model (%s) is %s, and %s <%s> may not follow the children written before it here",
-			local, el.Loc(), owner.Name().Local(), owner.Loc(), m.grammar, m.spec, m.model, s4sArticle(local), local)
+			name, el.Loc(), owner.Name().Local(), owner.Loc(), m.grammar, m.spec, m.model, s4sArticle(name), name)
 	}
 	return nil
+}
+
+// s4sChildName is how this file's diagnostics name the child element el: by its
+// local name in the XSD namespace, the vocabulary every quoted model spells, and
+// otherwise by its expanded name as xsd.QName spells it, so a child outside the
+// XSD namespace is never printed as the XSD element of the same local name. An
+// ·absent· namespace still prints bare, which is why checkS4SChildOrder's
+// fills-no-position fault states the namespace in words beside it.
+func s4sChildName(el *Element) string {
+	if el.Name().Space() == xsd.XMLSchemaNS {
+		return el.Name().Local()
+	}
+	return xsd.QName{Space: el.Name().Space(), Local: el.Name().Local()}.String()
+}
+
+// s4sNamespacePhrase names the namespace space for a diagnostic sentence:
+// "in namespace "<uri>"", or "in no namespace" when space is ·absent·.
+func s4sNamespacePhrase(space string) string {
+	if space == "" {
+		return "in no namespace"
+	}
+	return fmt.Sprintf("in namespace %q", space)
 }
 
 // s4sAnnotationLedOwner admits the seven owners rejectLateAnnotation holds to
@@ -622,7 +679,7 @@ func checkS4SChildOrder(owner *Element, m s4sModel) error {
 var s4sAnnotationLedOwner = s4sNames("all", "choice", "sequence", "group", "attributeGroup", "list", "union")
 
 // rejectLateAnnotation rejects an <annotation> child of el written after another
-// XSD-namespace child of el, when el is one of the owners s4sAnnotationLedOwner
+// element child of el, when el is one of the owners s4sAnnotationLedOwner
 // admits. It charges §5.1's FIRST bullet (xmlschema11-1.md:4296) and NO rule ID,
 // on the footing checkS4SChildOrder's doc derives (STYLE E2).
 //
@@ -633,9 +690,11 @@ var s4sAnnotationLedOwner = s4sNames("all", "choice", "sequence", "group", "attr
 // well (#1876), and a <list> against s4sList (#1951), in the producer bodies
 // that build them; this check still runs first there, so a late <annotation> is
 // charged here with this message whichever form it sits in, and <list> stays in
-// s4sAnnotationLedOwner for that reason. Children outside the XSD namespace are
-// skipped, as checkS4SChildOrder skips them. A second <annotation> after a first
-// is rejectRepeatedAnnotations' fault, which rejectS4SFaults charges first.
+// s4sAnnotationLedOwner for that reason. A child outside the XSD namespace counts
+// as a child written before a later <annotation> (#1982): none of these owners'
+// models has an element wildcard, so "annotation?" opens before it as before any
+// other child. A second <annotation> after a first is rejectRepeatedAnnotations'
+// fault, which rejectS4SFaults charges first.
 func rejectLateAnnotation(el *Element) error {
 	if el.Name().Space() != xsd.XMLSchemaNS || !s4sAnnotationLedOwner(el.Name().Local()) {
 		return nil
@@ -643,27 +702,27 @@ func rejectLateAnnotation(el *Element) error {
 	var first *Element
 	for _, child := range el.Children() {
 		c, ok := child.(*Element)
-		if !ok || c.Name().Space() != xsd.XMLSchemaNS {
+		if !ok {
 			continue
 		}
 		if first == nil {
 			first = c
 			continue
 		}
-		if c.Name().Local() != "annotation" {
+		if !isXSD(c, "annotation") {
 			continue
 		}
 		return fmt.Errorf("parser: <annotation> at %s follows the <%s> at %s among the children of the <%s> at %s: xs:annotated's content model (xmlschema11-1.md:4426) is (annotation?), which every content model the schema for schema documents gives <%s> opens with and admits an <annotation> nowhere after",
-			c.Loc(), first.Name().Local(), first.Loc(), el.Name().Local(), el.Loc(), el.Name().Local())
+			c.Loc(), s4sChildName(first), first.Loc(), el.Name().Local(), el.Loc(), el.Name().Local())
 	}
 	return nil
 }
 
-// s4sSlotAt returns the index of the first position at or after from that admits
-// local, or -1 when none does.
-func s4sSlotAt(slots []s4sSlot, from int, local string) int {
+// s4sSlotAt returns the index of the first position at or after from that holds
+// a child named {space}local, or -1 when none does.
+func s4sSlotAt(slots []s4sSlot, from int, space, local string) int {
 	for i := from; i < len(slots); i++ {
-		if slots[i].admits(local) {
+		if slots[i].holds(space, local) {
 			return i
 		}
 	}

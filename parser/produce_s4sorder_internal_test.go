@@ -5,6 +5,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/kud360/goxsd8/xsd"
 )
 
 // s4sModels is every content model checkS4SChildOrder is charged with, named as
@@ -58,20 +60,30 @@ var s4sProbe = []string{
 // that no longer matches from the walk's position is unambiguously either a
 // repeat of the position it already filled or a return to one behind it. A model
 // edit that puts a name in two positions turns that reasoning false silently, and
-// fails here instead.
+// fails here instead. The same holds for a child outside the XSD namespace, which
+// at most one position — a ##other arm — may hold.
 func TestS4SModelPositionsAreDisjoint(t *testing.T) {
 	for _, m := range s4sModels {
 		t.Run(m.name, func(t *testing.T) {
 			for _, local := range s4sProbe {
 				var at []int
 				for i, slot := range m.model.slots {
-					if slot.admits(local) {
+					if slot.holds(xsd.XMLSchemaNS, local) {
 						at = append(at, i)
 					}
 				}
 				if len(at) > 1 {
 					t.Errorf("%s admits <%s> at positions %v, want at most one", m.name, local, at)
 				}
+			}
+			var foreign []int
+			for i, slot := range m.model.slots {
+				if slot.holds("urn:other", "hint") {
+					foreign = append(foreign, i)
+				}
+			}
+			if len(foreign) > 1 {
+				t.Errorf("%s admits a child outside the XSD namespace at positions %v, want at most one", m.name, foreign)
 			}
 		})
 	}
@@ -109,7 +121,7 @@ func s4sVocabulary() []string {
 	for _, m := range s4sModels {
 		names = append(names, s4sModelName.FindAllString(s4sModelWildcard.ReplaceAllString(m.model.model, ""), -1)...)
 		for _, local := range s4sProbe {
-			if s4sSlotAt(m.model.slots, 0, local) >= 0 {
+			if s4sSlotAt(m.model.slots, 0, xsd.XMLSchemaNS, local) >= 0 {
 				names = append(names, local)
 			}
 		}

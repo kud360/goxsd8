@@ -373,9 +373,10 @@ func TestProduceRefElementDeclarationAttrAccepted(t *testing.T) {
 }
 
 // TestProduceRefElementChildAccepted is the other side of clause 2.2's child
-// half: the clause reaches the Schema namespace alone, and it excepts
-// <annotation> by name. A check written as "a ref= element has no children"
-// would reject both of these.
+// half: the clause excepts <annotation> by name. A check written as "a ref=
+// element has no children" would reject this. The clause reaches the Schema
+// namespace alone, and a foreign child is xs:element's grammar fault instead,
+// which TestProduceS4SForeignChildRejected pins without a rule ID (#1982).
 func TestProduceRefElementChildAccepted(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
@@ -385,12 +386,6 @@ func TestProduceRefElementChildAccepted(t *testing.T) {
 			name: "annotation child of a ref element",
 			lines: []string{
 				`<xs:element ref="tns:E"><xs:annotation/></xs:element>`,
-			},
-		},
-		{
-			name: "foreign-namespace child of a ref element",
-			lines: []string{
-				`<xs:element ref="tns:E" xmlns:o="urn:other"><xs:annotation/><o:hint/></xs:element>`,
 			},
 		},
 	} {
