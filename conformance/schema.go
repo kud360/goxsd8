@@ -1577,8 +1577,10 @@ func modelGroupDecidable(group *parser.Element) bool {
 // rejects it against xs:namedGroup's content model on every definition it builds:
 // a missing body (#884) and a child in the body's place through
 // rejectNamedGroupBody, a child beside the body through checkS4SChildOrder
-// (#1876). An <override> child that matches nothing is never built, so its
-// out-of-model child is NOT rejected (#1877).
+// (#1876). A child outside the XSD namespace is admitted on the same footing:
+// that walk rejects it too (#1982). An <override> child that matches nothing is
+// never built, so its out-of-model child, foreign or not, is NOT rejected
+// (#1877).
 //
 // The DEFINITION FORM is not required either (#1182). A top-level <group> with
 // no name=, or one carrying the ref= xs:namedGroup restricts to
@@ -1591,6 +1593,9 @@ func groupDecidable(el *parser.Element) bool {
 	for _, child := range el.Children() {
 		c, ok := child.(*parser.Element)
 		if !ok || c.Name().Space() != xsd.XMLSchemaNS {
+			// A foreign child is REJECTED by the walk against xs:namedGroup
+			// (#1982), save under the unmatched <override> the default arm marks
+			// (#1877).
 			continue
 		}
 		switch c.Name().Local() {
@@ -1603,8 +1608,8 @@ func groupDecidable(el *parser.Element) bool {
 		default:
 			// REJECTED by the producer, whether or not a body stands beside it
 			// (#1876). GAP(conformance): an unmatched <override> child is never
-			// built, so this admission reaches a document the producer accepts
-			// (#1877).
+			// built, so this admission, and the foreign child's above, reaches a
+			// document the producer accepts (#1877).
 		}
 	}
 	return true
@@ -1625,13 +1630,17 @@ func groupDecidable(el *parser.Element) bool {
 //
 // Every other XSD-namespace child is admitted on the same footing (#1817,
 // #1876): the producer's checkS4SChildOrder walk rejects any name
-// xs:namedAttributeGroup does not admit on every definition it builds. An
-// <override> child that matches nothing is never built, so its out-of-model
-// child is NOT rejected (#1877).
+// xs:namedAttributeGroup does not admit on every definition it builds, and so is
+// a child outside the XSD namespace (#1982). An <override> child that matches
+// nothing is never built, so its out-of-model child, foreign or not, is NOT
+// rejected (#1877).
 func attributeGroupDecidable(el *parser.Element) bool {
 	for _, child := range el.Children() {
 		c, ok := child.(*parser.Element)
 		if !ok || c.Name().Space() != xsd.XMLSchemaNS {
+			// A foreign child is REJECTED by the walk against
+			// xs:namedAttributeGroup (#1982), save under the unmatched <override>
+			// the default arm marks (#1877).
 			continue
 		}
 		switch c.Name().Local() {
@@ -1648,7 +1657,8 @@ func attributeGroupDecidable(el *parser.Element) bool {
 		default:
 			// REJECTED by the producer's walk against xs:namedAttributeGroup (#1876).
 			// GAP(conformance): an unmatched <override> child is never built, so
-			// this admission reaches a document the producer accepts (#1877).
+			// this admission, and the foreign child's above, reaches a document the
+			// producer accepts (#1877).
 		}
 	}
 	return true

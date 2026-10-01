@@ -2772,8 +2772,9 @@ func (p *producer) resolveBase(restriction *Element) (xsd.SimpleTypeOrRef, error
 // position for. Its wildcard position is namespace="##other", which EXCLUDES the
 // XSD namespace, so an XSD-namespace name the model does not list is admitted
 // nowhere in it and the producer would otherwise map a component out of an
-// s4s-invalid document (#972). Children outside the XSD namespace are the
-// wildcard's own and pass.
+// s4s-invalid document (#972). Children outside the XSD namespace pass here: the
+// s4sSimpleTypeRestriction walk behind this check holds them to the wildcard,
+// which admits none in no namespace (#1982).
 //
 // The admitted set is what this producer can MAP: <annotation>, the inline base
 // <simpleType>, and the xs:facet substitution group as facetKindOf answers for it
@@ -2846,8 +2847,9 @@ func rejectOutOfModelFacetChildren(restriction *Element) error {
 // remainder those two leave.
 //
 // Children outside the XSD namespace are skipped: the clause is scoped to "the
-// same expanded name in the Schema (xs) namespace", and they are what
-// xs:simpleRestrictionModel's "{any with namespace: ##other}" position admits.
+// same expanded name in the Schema (xs) namespace", and whether
+// xs:simpleRestrictionModel's "{any with namespace: ##other}" position admits
+// one is the s4sSimpleTypeRestriction walk's to answer (#1982).
 // The first duplicate in document order is the one reported (STYLE D2).
 func rejectDuplicateRestrictionChildren(restriction *Element) error {
 	// A slice, scanned linearly: the names surviving the three exceptions are the

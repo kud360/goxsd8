@@ -282,8 +282,9 @@ func (w *censusWalk) report(el *Element) {
 // xsdChildren yields el's child ELEMENTS in the XSD namespace, in document
 // order. Every site below walks its children through it: a non-element child
 // maps to nothing anywhere and is not a construct, and a foreign-namespace one
-// is the open question topLevelDecls' GAP(parser) marker owns (#1036), left the
-// same answer at every depth.
+// is not reported at any depth: at the top level it is the open question
+// topLevelDecls' GAP(parser) marker owns (#1036), and under an owner
+// checkS4SChildOrder walks it is that walk's to judge (#1982).
 func xsdChildren(el *Element) iter.Seq[*Element] {
 	return func(yield func(*Element) bool) {
 		for _, child := range el.Children() {

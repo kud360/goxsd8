@@ -236,17 +236,18 @@ func TestProduceS4SSelectorFieldChildRejected(t *testing.T) {
 
 // TestProduceS4SIdentityConstraintChildOrderAccepted is the other side: every
 // position of xs:keybase, xs:selector and xs:field filled, in order, on all three
-// elements, with foreign-namespace children wherever they stand, and the ref=
-// form carrying the <annotation> clause 4 admits.
+// elements, and the ref= form carrying the <annotation> clause 4 admits. None of
+// the three models has an ##other element position, so no foreign child is
+// written here (#1982).
 func TestProduceS4SIdentityConstraintChildOrderAccepted(t *testing.T) {
-	doc := wrap("", `<xs:element name="e" xmlns:o="urn:other">`+
-		`<xs:unique name="u"><xs:annotation/><o:hint/>`+
-		`<xs:selector xpath="a"><xs:annotation/><o:hint/></xs:selector>`+
-		`<xs:field xpath="@x"><o:hint/><xs:annotation/></xs:field>`+
+	doc := wrap("", `<xs:element name="e">`+
+		`<xs:unique name="u"><xs:annotation/>`+
+		`<xs:selector xpath="a"><xs:annotation/></xs:selector>`+
+		`<xs:field xpath="@x"><xs:annotation/></xs:field>`+
 		`<xs:field xpath="@y"><xs:annotation/></xs:field></xs:unique>`+
 		`<xs:key name="k"><xs:annotation/><xs:selector xpath="b"/><xs:field xpath="@x"/></xs:key>`+
 		`<xs:keyref name="r" refer="k"><xs:annotation/><xs:selector xpath="c"/>`+
-		`<xs:field xpath="@x"/><o:hint/></xs:keyref>`+
+		`<xs:field xpath="@x"/></xs:keyref>`+
 		`<xs:key ref="k"><xs:annotation/></xs:key>`+
 		`</xs:element>`)
 	if _, err := produce(t, doc); err != nil {

@@ -2037,9 +2037,10 @@ func (p *producer) buildDefinitionModelGroup(el *Element, scopeParent xsd.Elemen
 // offending item, its location and the Appendix A production (xsderr/doc.go,
 // #966).
 //
-// Foreign-namespace children are skipped rather than charged: xs:namedGroup
-// admits none of them either, but saying so is a different fault this check does
-// not claim, on checkS4SChildOrder's reasoning for the same skip.
+// Foreign-namespace children are skipped rather than charged here: xs:namedGroup
+// admits none of them either, but this check answers only for the body's place.
+// Beside a body, the s4sNamedGroup walk charges one as a child no position
+// admits (#1982); with no body, the missing body is the fault charged.
 func rejectNamedGroupBody(el *Element) error {
 	for _, child := range el.Children() {
 		c, ok := child.(*Element)
@@ -2421,9 +2422,9 @@ func rejectRefElementDeclarationAttrs(el *Element) error {
 // of which run first, so a document violating both halves is answered at the
 // attribute.
 //
-// A child outside the Schema namespace is admitted: the clause reaches that
-// namespace alone, and whether xs:element's grammar admits a foreign child at
-// all is the question checkS4SChildOrder steps over (#928), not this clause's.
+// A child outside the Schema namespace is not this clause's: the clause reaches
+// that namespace alone. xs:element's grammar admits no foreign child, and the
+// s4sElement walk ahead of this check charges one (#1982).
 func rejectRefElementChildren(el *Element) error {
 	for _, child := range el.Children() {
 		c, ok := child.(*Element)
