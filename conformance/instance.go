@@ -229,24 +229,26 @@ import (
 //     ·attributed to· a strict or lax Wildcard or {open content} takes
 //     the top-level declaration its name ·resolves· to (clauses 3 and 4),
 //     cvc-complex-type clause 5 being the walk's for it
-//     (subtreeGate.resolvedChild). A strict ·wildcard particle·'s child
-//     resolving to none, with no xsi:type, is admitted with its subtree
-//     unread: the walk charges e-validity clause 1.1.3 for its parent, so no
-//     empty Result carries it. A skip Wildcard's child is admitted with its
-//     subtree unread: it is ·skipped· (key-sva clause 3.2, cvc-assess-elt
-//     clause 2) and has no [validity] to block its parent's (sic-e-outcome
-//     clause 1.1). So is a skip {open content}'s child, which validate reads
-//     as ·skipped· too (#1969). A lax Wildcard's or {open content}'s child
-//     resolving to none, with no xsi:type, is ·laxly assessed· (cvc-assess-elt
-//     clause 3, key-lva): the gate holds it and its subtree to every condition
-//     below against ·xs:anyType·, as the walk assesses them, and it is never
-//     ·nilled·, key-nilled being relative to a declaration it lacks
-//     (subtreeGate.laxlyAssessed, #1823, #1891). Its [validity] is
-//     notKnown, which blocks no ancestor's valid (e-validity clause 1.1.3
-//     names a strict ·wildcard particle· alone) and leaves the document
-//     deep-valid (§2.5 Note, #1911). A child resolving to none with an
-//     xsi:type is refused, under strict and lax alike. No element of a
-//     subtree whose Result is empty is therefore assessed against no type.
+//     (subtreeGate.resolvedChild). An {open content}'s child whose ·locally
+//     declared type· is non-·absent· is refused, resolved name or not: clause
+//     4.3 withholds the declaration and that type governs it (subtreeGate.child,
+//     a GAP). A strict ·wildcard particle·'s child resolving to none, with no
+//     xsi:type, is admitted with its subtree unread: the walk charges e-validity
+//     clause 1.1.3 for its parent, so no empty Result carries it. A skip
+//     Wildcard's child is admitted with its subtree unread: it is ·skipped·
+//     (key-sva clause 3.2, cvc-assess-elt clause 2) and has no [validity] to
+//     block its parent's (sic-e-outcome clause 1.1). So is a skip {open
+//     content}'s child, which validate reads as ·skipped· too (#1969). A lax
+//     Wildcard's or {open content}'s child resolving to none, with no xsi:type,
+//     is ·laxly assessed· (cvc-assess-elt clause 3, key-lva): the gate holds it
+//     and its subtree to every condition below against ·xs:anyType·, as the walk
+//     assesses them, and it is never ·nilled·, key-nilled being relative to a
+//     declaration it lacks (subtreeGate.laxlyAssessed, #1823, #1891). Its
+//     [validity] is notKnown, which blocks no ancestor's valid (e-validity clause
+//     1.1.3 names a strict ·wildcard particle· alone) and leaves the document
+//     deep-valid (§2.5 Note, #1911). A child resolving to none with an xsi:type
+//     is refused, under strict and lax alike. No element of a subtree whose
+//     Result is empty is therefore assessed against no type.
 //   - cvc-elt clauses 2 to 6, at every element: {abstract} false and no {type
 //     table} — so the ·selected type definition· is the {type
 //     definition}, which the gate resolves itself. An xsi:type is admitted

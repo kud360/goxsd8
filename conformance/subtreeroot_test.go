@@ -580,6 +580,17 @@ func TestInstanceExecutorDeclinesOutsideAssessedSubtreeRoot(t *testing.T) {
 			"a strict wildcard particle's child resolving no declaration, typed by an xsi:type naming a NOTATION enumeration",
 			notationN + wildcardChild("strict"), `<known ` + xsiNS + `><u xsi:type="N">n</u></known>`,
 		},
+		// subtreeGate.child's GAP(conformance) {open content} refusal (#2071):
+		// the walk assesses each second e against the local xs:date, and the gate
+		// would read the top-level xs:string e, or ·xs:anyType·, instead.
+		{
+			"an {open content} child resolving a declaration, with a non-·absent· ·locally declared type· (key-governing-ed clause 4.3)",
+			ldtOpen(`<xs:element name="e" type="xs:string"/>`), `<known><e>2008-11-03</e><e>2008-11-04</e></known>`,
+		},
+		{
+			"an {open content} child resolving no declaration, with a non-·absent· ·locally declared type· (key-governing-ed clause 4.3)",
+			ldtOpen(""), `<known><e>2008-11-03</e><e>2008-11-04</e></known>`,
+		},
 		{
 			// key-ldt-att case 3: the restriction prohibits its base's use of ta.
 			"a strict {attribute wildcard}'s attribute whose name the restricted base's attribute uses declare (cvc-complex-type clause 5)",
@@ -897,6 +908,15 @@ func ldtChild(local, top, pc string) string {
 		`<xs:element name="e" type="` + top + `"/>`
 }
 
+// ldtOpen declares <known>, whose content model is a local e of xs:date under a
+// lax interleave {open content}, beside top: a second e is ·attributed to· the
+// {open content} with a non-·absent· ·locally declared type·, which
+// key-governing-ed clause 4.3 has govern it in place of any top-level e.
+func ldtOpen(top string) string {
+	return `<xs:element name="known"><xs:complexType><xs:openContent mode="interleave"><xs:any processContents="lax"/></xs:openContent>` +
+		`<xs:sequence><xs:element name="e" type="xs:date"/></xs:sequence></xs:complexType></xs:element>` + top
+}
+
 // ldtBase declares <known> of type R, a restriction of B that keeps only B's
 // strict wildcard, beside a top-level b of type top: R's content model contains
 // no b and B's carries a local b of xs:string, so a wildcard child b has that
@@ -908,15 +928,16 @@ func ldtBase(top string) string {
 }
 
 // TestInstanceExecutorDecidesWildcardChild proves the gate admits a child
-// ·attributed to· a strict or lax ·wildcard particle· or to a lax {open
-// content} wherever its name ·resolves· to a top-level declaration, the walk
-// deciding cvc-complex-type clause 5 for it (#1931, #2071), a skip ·wildcard
-// particle·'s or skip {open content}'s child whatever its subtree holds
-// (key-sva clause 3.2, #1861, #1969), and a lax one's child resolving to none,
-// ·laxly assessed· with its subtree (#1911). Each row walks clean, and each is
-// refused with subtreeGate.resolvedChild answering false for a resolved name,
-// with laxlyAssessed answering false for an unresolved one, or with child
-// answering false for the {open content} or skip Wildcard arm.
+// ·attributed to· a strict or lax ·wildcard particle·, or to a lax {open
+// content} with an ·absent· ·locally declared type· (#2071), wherever its name
+// ·resolves· to a top-level declaration, the walk deciding cvc-complex-type
+// clause 5 for it (#1931, #2071), a skip ·wildcard particle·'s or skip {open
+// content}'s child whatever its subtree holds (key-sva clause 3.2, #1861,
+// #1969), and a lax one's child resolving to none, ·laxly assessed· with its
+// subtree (#1911). Each row walks clean, and each is refused with
+// subtreeGate.resolvedChild answering false for a resolved name, with
+// laxlyAssessed answering false for an unresolved one, or with child answering
+// false for the {open content} or skip Wildcard arm.
 func TestInstanceExecutorDecidesWildcardChild(t *testing.T) {
 	exec := newInstanceExec()
 	for _, tc := range []struct{ why, schemaBody, instance string }{

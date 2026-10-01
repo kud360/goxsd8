@@ -358,7 +358,7 @@ func (g *subtreeGate) complex(start xml.StartElement, t xsd.ComplexType, nilled 
 		if !ok {
 			return false
 		}
-		return g.children(m)
+		return g.children(t, m)
 	}
 	return false
 }
@@ -434,11 +434,11 @@ func (g *subtreeGate) leaf() bool {
 	}
 }
 
-// children reads the content of an element through to its end tag, advancing
-// m, the ContentMatcher of the type governing it, over each element [[child]]
-// in document order, and reports whether every child meets child's conditions
-// and m accepts the whole sequence.
-func (g *subtreeGate) children(m *xsd.Matcher) bool {
+// children reads the content of an element governed by t through to its end
+// tag, advancing m, t's ContentMatcher, over each element [[child]] in document
+// order, and reports whether every child meets child's conditions and m
+// accepts the whole sequence.
+func (g *subtreeGate) children(t xsd.ComplexType, m *xsd.Matcher) bool {
 	for {
 		tok, err := g.dec.Token()
 		if err != nil {
@@ -446,7 +446,7 @@ func (g *subtreeGate) children(m *xsd.Matcher) bool {
 		}
 		switch s := tok.(type) {
 		case xml.StartElement:
-			if !g.child(m, s) {
+			if !g.child(t, m, s) {
 				return false
 			}
 		case xml.EndElement:
@@ -455,9 +455,9 @@ func (g *subtreeGate) children(m *xsd.Matcher) bool {
 	}
 }
 
-// child reads one element [[child]] whose start tag is start through to its end
-// tag, and reports whether m ·attributes· it (§3.4.4.4) to one of these, and
-// the child meets that arm's conditions:
+// child reads one element [[child]] whose start tag is start, of an element
+// governed by t, through to its end tag, and reports whether m ·attributes· it
+// (§3.4.4.4) to one of these, and the child meets that arm's conditions:
 //
 //   - an element particle whose {term} carries the child's own ·expanded
 //     name·: that {term} is its ·context-determined declaration· (§3.3.4.6
@@ -489,8 +489,20 @@ func (g *subtreeGate) children(m *xsd.Matcher) bool {
 //     {open content} half is validate's reading, not the spec's words
 //     (validate's walk.childGoverning, #1969);
 //   - a strict or lax Wildcard, or the {open content} with a strict or lax
-//     {wildcard}: resolvedChild's conditions.
-func (g *subtreeGate) child(m *xsd.Matcher, start xml.StartElement) bool {
+//     {wildcard}: resolvedChild's conditions, and for the {open content} the
+//     child's ·locally declared type· within t is ·absent·
+//     (xsd.Schema.LocallyDeclaredElementType answers false).
+//
+// GAP(conformance): a child ·attributed to· the {open content} with a strict or
+// lax {wildcard} and a non-·absent· ·locally declared type· is refused,
+// resolved name or not. key-governing-ed clause 4.3 gives it no ·governing
+// element declaration·, and that type, or an xsi:type ·overriding· it, governs
+// it (key-governing-type-elem clauses 6 and 7, validate's
+// walk.localGovernance); resolvedChild reads the top-level declaration or
+// ·xs:anyType· instead, so it vets a type the walk does not assess against.
+// Its one reader, execInstanceCase, then Fails the case: a suite-valid case of
+// this shape scores no pass, and none a false one.
+func (g *subtreeGate) child(t xsd.ComplexType, m *xsd.Matcher, start xml.StartElement) bool {
 	name := expandedName(start.Name)
 	a, ok := m.Next(name)
 	if !ok {
@@ -512,6 +524,9 @@ func (g *subtreeGate) child(m *xsd.Matcher, start xml.StartElement) bool {
 	case *xsd.OpenContent:
 		if at.Wildcard().ProcessContents() == xsd.ProcessSkip {
 			return g.dec.Skip() == nil
+		}
+		if _, local := g.schema.LocallyDeclaredElementType(t, name); local {
+			return false
 		}
 		return g.resolvedChild(start, false)
 	}

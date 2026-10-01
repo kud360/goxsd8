@@ -285,18 +285,22 @@
 // ·attributes· it to supplies (§3.3.4.6 clause 3.1): an element particle's
 // {term}, or — for a strict or lax ·wildcard particle· or {open content}
 // {wildcard}, and for an item admitted as a member of a ·substitution group· —
-// the top-level declaration its ·expanded name· ·resolves· to. Two shapes stop
-// it: a child ·attributed to· a skip ·wildcard particle· or to an {open
-// content} with a skip {wildcard}, which is ·skipped· along with every element
-// beneath it (cvc-assess-elt clauses 2 and 3.2) — for the {open content} a
-// reading and not a quotation, key-skipped naming a skip wildcard and never an
-// Open Content, which the ·default binding· of cos-content-act-restrict clause
-// 6 settles (#1969) — and a child its parent ·attributes· to nothing, a
-// parent whose own type this package could not determine or whose content it
-// declined or charged, which is assessed against nothing along with its whole
-// subtree. A child whose name ·resolves· to no declaration is neither: it is
-// ·laxly assessed· against xs:anyType, whose lax wildcard ·attributes· its own
-// [[children]] on the same resolving terms (key-lva, #1823).
+// the top-level declaration its ·expanded name· ·resolves· to. An item
+// ·attributed to· the {open content} whose ·locally declared type· is
+// non-·absent· is the exception: key-governing-ed clause 4.3 gives it no
+// declaration, and that type, or an xsi:type ·overriding· it, governs it,
+// resolved name or not. Two shapes stop it: a child ·attributed to· a skip
+// ·wildcard particle· or to an {open content} with a skip {wildcard}, which is
+// ·skipped· along with every element beneath it (cvc-assess-elt clauses 2 and
+// 3.2) — for the {open content} a reading and not a quotation, key-skipped
+// naming a skip wildcard and never an Open Content, which the ·default
+// binding· of cos-content-act-restrict clause 6 settles (#1969) — and a child
+// its parent ·attributes· to nothing, a parent whose own type this package
+// could not determine or whose content it declined or charged, which is
+// assessed against nothing along with its whole subtree. A child whose name
+// ·resolves· to no declaration, and that exception does not reach, is neither:
+// it is ·laxly assessed· against xs:anyType, whose lax wildcard ·attributes·
+// its own [[children]] on the same resolving terms (key-lva, #1823).
 //
 // The eighth is cvc-identity-constraint (§3.11.4), over the {identity-constraint
 // definitions} of the ·governing element declaration· of every element the

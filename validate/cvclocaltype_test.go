@@ -179,3 +179,88 @@ func TestLocallyDeclaredTypeAdmits(t *testing.T) {
 		})
 	}
 }
+
+// ldtOpenSchema is the arbiter's #2071 shape: zing declares a local e of
+// localType and a local f of xs:string under a lax interleave {open content},
+// beside a top-level e of topType. A second e is ·attributed to· the {open
+// content}, and key-governing-ed clause 4.3 withholds the top-level e from it.
+func ldtOpenSchema(t *testing.T, localType, topType string) *xsd.Schema {
+	t.Helper()
+	return parsedSchema(t, map[string]string{"main.xsd": `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="zing">
+    <xs:openContent mode="interleave"><xs:any namespace="##local" processContents="lax"/></xs:openContent>
+    <xs:sequence>
+      <xs:element name="e" type="` + localType + `"/>
+      <xs:element name="f" type="xs:string"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:element name="doc" type="zing"/>
+  <xs:element name="e" type="` + topType + `"/>
+</xs:schema>`})
+}
+
+// TestLocalGovernanceAdmitsAnOpenContentChild pins key-governing-ed clause 4.3
+// and key-governing-type-elem clauses 6 and 7 for an {open content} child: its
+// ·locally declared type· governs it, or an xsi:type ·overriding· that type,
+// and never the top-level declaration its name ·resolves· to. Each row walks
+// clean, and each fails with childGoverning's {open content} arm reading the
+// top-level e again: clause 5 charges xs:string, then xs:time, against the
+// local xs:date.
+func TestLocalGovernanceAdmitsAnOpenContentChild(t *testing.T) {
+	for _, tc := range []struct {
+		why    string
+		schema *xsd.Schema
+		doc    *testElement
+	}{
+		{"the ·locally declared type· xs:date governs, not the top-level xs:string",
+			ldtOpenSchema(t, "xs:date", "xs:string"), ldtDoc("2008-11-03", "", "e", "2008-11-04")},
+		{"an xsi:type of xs:date ·overrides· the ·locally declared type·, not the top-level xs:time",
+			ldtOpenSchema(t, "xs:date", "xs:time"), ldtDoc("2008-11-03", "", "e", "2008-11-04", xsiTypeAttr("xs:date"))},
+	} {
+		t.Run(tc.why, func(t *testing.T) {
+			got, unevaluated := assessRecorded(t, tc.schema, tc.doc)
+			if len(got) != 0 {
+				t.Errorf("Violations() = %v, want none", got)
+			}
+			if len(unevaluated) != 0 {
+				t.Errorf("Unevaluated() = %v, want none", unevaluated)
+			}
+		})
+	}
+}
+
+// TestLocalGovernanceChargesAnOpenContentChild pins the same reading from the
+// other side, each row a value the top-level e would have accepted had it
+// governed: hello against the ·locally declared type· xs:date, which fails with
+// childGoverning's {open content} arm reading the top-level xs:string e again,
+// and -5 against an xsi:type of xs:positiveInteger ·overriding· the local
+// xs:integer (clause 6), which fails with localGovernance's clause 6 arm
+// deleted.
+func TestLocalGovernanceChargesAnOpenContentChild(t *testing.T) {
+	for _, tc := range []struct {
+		why       string
+		schema    *xsd.Schema
+		doc       *testElement
+		governing string
+	}{
+		{"a value xs:string accepts, against the ·locally declared type· xs:date",
+			ldtOpenSchema(t, "xs:date", "xs:string"), ldtDoc("2008-11-03", "", "e", "hello"), "date"},
+		{"a value xs:integer accepts, against an xsi:type of xs:positiveInteger ·overriding· it",
+			ldtOpenSchema(t, "xs:integer", "xs:integer"), ldtDoc("1", "", "e", "-5", xsiTypeAttr("xs:positiveInteger")), "positiveInteger"},
+	} {
+		t.Run(tc.why, func(t *testing.T) {
+			got, unevaluated := assessRecorded(t, tc.schema, tc.doc)
+			viol := onlyCharge(t, got, ruleCvcType)
+			if viol.Loc != loc(4, 3) {
+				t.Errorf("Loc = %s, want the {open content} child's %s", viol.Loc, loc(4, 3))
+			}
+			want := "the ·initial value· of the element e is not ·valid· with respect to its ·governing type definition· {" + xsd.XMLSchemaNS + "}" + tc.governing + ","
+			if !strings.HasPrefix(viol.Msg, want) {
+				t.Errorf("Msg = %q, want the prefix %q", viol.Msg, want)
+			}
+			if len(unevaluated) != 0 {
+				t.Errorf("Unevaluated() = %v, want none", unevaluated)
+			}
+		})
+	}
+}
