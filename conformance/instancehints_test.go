@@ -103,8 +103,10 @@ func TestInstanceExecutorDeclinesUnreadableHints(t *testing.T) {
 			`<known ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd"><c xsi:noNamespaceSchemaLocation="o.xsd"/></known>`},
 		{"an inline xs:schema below the root", skip,
 			`<known ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd"><xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"/></known>`},
-		// Decided invalid otherwise (cvc-type clause 3.1.2), with a DTD that
-		// could default a hint onto any element.
+		// Decided invalid otherwise (cvc-type clause 3.1.2). The ATTLIST
+		// defaults nothing: the row pins rootStart's literal <!ATTLIST refusal
+		// (defaultsNoAttribute), which refuses any ATTLIST whether or not it
+		// defaults.
 		{"a DOCTYPE whose internal subset holds an <!ATTLIST", known,
 			`<!DOCTYPE known [<!ATTLIST known a CDATA #IMPLIED>]><known ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd"><x/></known>`},
 		{"an xml:base on the root", known,
@@ -114,7 +116,8 @@ func TestInstanceExecutorDeclinesUnreadableHints(t *testing.T) {
 		// Decided valid otherwise, against a schema short of missing.xsd.
 		{"a hint resolving to no document", known,
 			`<known ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd missing.xsd">x</known>`},
-		// addB063's shape: the hinted schema declares no root.
+		// Decided invalid otherwise, where a root no declaration governs is
+		// laxly assessed and notKnown (cvc-assess-elt clause 3, §3.3.5.1).
 		{"a hinted schema declaring no top-level element for the root", known,
 			`<unknown ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd"/>`},
 		// §4.3.2 clause 5: an inline xs:schema is global to the assessment,

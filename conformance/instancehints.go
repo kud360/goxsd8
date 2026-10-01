@@ -154,15 +154,10 @@ func isInlineSchema(n xml.Name) bool {
 //     rejection is one an unfollowed directive could have fabricated
 //     (fabricatedRejection);
 //   - the assembly succeeded and declares no top-level element for root. A
-//     root the hinted schema does not declare is charged cvc-assess-elt, and
-//     §4.3.2 clause 3's "less than complete ·assessment· outcomes" is exactly
-//     that charge when a hinted document was read short: addB063's hinted
-//     test72702.imp carries character data after its document element, which
-//     the parser accepts, and the suite declares the case invalid for that
-//     document rather than for the undeclared root.
-//
-// GAP(parser): character data after the document element is accepted, not
-// rejected as not well-formed, so a hinted document is read short (#2016).
+//     root no declaration governs is laxly assessed (cvc-assess-elt clause
+//     3), and §3.3.5.1 gives a root not strictly assessed [validity]
+//     notKnown, not invalid; no ruling licenses deciding such a case "not
+//     valid".
 //
 // The resolver is assembleCase's: pinnedResolver over a loader.Dir rooted at
 // the instance's own directory, which every hint location is relative to
