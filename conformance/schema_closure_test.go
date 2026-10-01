@@ -961,3 +961,46 @@ func TestSchemaExecutorDecidesFailureNoShortfallCouldFabricate(t *testing.T) {
 		}
 	}
 }
+
+// TestSchemaExecutorDecidesUnlicensedNamespaceBesideShortfall pins #2054's lift
+// of the shortfall arm, across the same four directives noD2Trees drives: a
+// reference into a namespace the document never <import>s is a src-resolve
+// clause 4 charge (cl.qnr.nsdeclared), and §4.2.6.1 says such references "are
+// *not* handled as if they referred to "missing components"", so no unfollowed
+// directive can fabricate it and the case must be DECIDED invalid.
+//
+// Each root also carries the reference TestSchemaExecutorDeclinesUnresolvedDirectiveTarget
+// declines on — tns:code, or b:code into the namespace the <import> names — and
+// writes it FIRST, so the decision rests on the producer charging clause 4 at
+// the reference, ahead of finalize's clause 1-3 charge for the shortfall. That
+// is MS-Schema schZ011's shape: bare imports of a, b and c, references into
+// all three and into an un-imported d. With d:code removed the roots are
+// exactly that test's trees, which still decline: it is this test's over-lift
+// guard.
+//
+// Both halves of clause 4 are driven: 4.2, a prefixed reference into the
+// un-imported urn:d, and 4.1, an unqualified reference into the ·absent·
+// namespace from a document that declares a targetNamespace and carries no
+// bare <import>. The parse runs through the REAL parser, so the clause
+// fabricatedRejection reads is the one parser's licensedNamespace writes:
+// rewording that message to drop "src-resolve clause 4." declines the row.
+func TestSchemaExecutorDecidesUnlicensedNamespaceBesideShortfall(t *testing.T) {
+	exec := newSchemaExec()
+	unlicensed := map[string]string{
+		"clause 4.2 (un-imported urn:d)":  `<xs:element name="root" type="d:code" xmlns:d="urn:d"/>`,
+		"clause 4.1 (·absent· namespace)": `<xs:element name="root" type="code"/>`,
+	}
+	for _, clause := range slices.Sorted(maps.Keys(unlicensed)) {
+		trees := noD2Trees(`<xs:element name="first" type="tns:code"/>`+unlicensed[clause],
+			`<xs:element name="first" type="b:code"/>`+unlicensed[clause])
+		for _, name := range slices.Sorted(maps.Keys(trees)) {
+			doc := writeSchemaTree(t, "main.xsd", trees[name])
+			if !exec(caseSpec{kind: kindSchema, doc: doc, expect: expectValidity(false)}).IsPass() {
+				t.Errorf("%s / %s: a reference its document does not license must be DECIDED invalid", clause, name)
+			}
+			if exec(caseSpec{kind: kindSchema, doc: doc, expect: expectValidity(true)}).IsPass() {
+				t.Errorf("%s / %s: must Fail under a flipped expectation (decides for real)", clause, name)
+			}
+		}
+	}
+}
