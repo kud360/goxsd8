@@ -181,8 +181,8 @@ func TestProduceSimpleTypeRestrictionModelAccepted(t *testing.T) {
 		},
 		{
 			// The wildcard position: namespace="##other" admits any namespace but the
-			// XSD one, which is the whole reason an XSD-namespace child is decidable
-			// here at all.
+			// XSD one and ·absent· (#1982), which is the whole reason an XSD-namespace
+			// child is decidable here at all.
 			name: "a child in another namespace",
 			body: `<xs:simpleType name="T"><xs:restriction base="xs:string">` +
 				`<xs:minLength value="1"/><foreign xmlns="urn:elsewhere"/>` +
