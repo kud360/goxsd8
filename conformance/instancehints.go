@@ -72,7 +72,7 @@ func instanceHints(doc string) (root xsd.QName, hints []parser.Root, ok bool) {
 		return xsd.QName{}, nil, false
 	}
 	defer func() { _ = rc.Close() }() // read-only handle: close error cannot affect the verdict
-	dec := xml.NewDecoder(rc)
+	dec := rawDecoder(rc)
 	start, ok := rootStart(dec)
 	if !ok || isInlineSchema(start.Name) {
 		return xsd.QName{}, nil, false

@@ -1,7 +1,6 @@
 package conformance
 
 import (
-	"bufio"
 	"encoding/xml"
 	"errors"
 	"io"
@@ -11,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/kud360/goxsd8/internal/xmldecl"
+	"github.com/kud360/goxsd8/internal/xmlenc"
 	"github.com/kud360/goxsd8/loader"
 	"github.com/kud360/goxsd8/parser"
 	"github.com/kud360/goxsd8/xsd"
@@ -28,13 +28,13 @@ import (
 // conditions.
 //
 // The gate is computed per case and stored nowhere. It re-reads the instance
-// with encoding/xml, admitting a 1.x version label as parser/xmltree does
-// (rawDecoder), and re-derives every child's ·attribution· through
-// xsd.Schema.ContentMatcher, independently of the walk, so it never rests on
-// what the walk did or did not record for a descendant — save for a strict
-// ·wildcard particle·'s child resolving to no declaration and carrying no
-// xsi:type, which it admits unread because the walk charges that child's parent
-// for it (subtreeGate.resolvedChild).
+// with encoding/xml, decoding a byte-order-marked UTF-16 document and admitting
+// a 1.x version label as parser/xmltree does (rawDecoder), and re-derives every
+// child's ·attribution· through xsd.Schema.ContentMatcher, independently of the
+// walk, so it never rests on what the walk did or did not record for a
+// descendant — save for a strict ·wildcard particle·'s child resolving to no
+// declaration and carrying no xsi:type, which it admits unread because the walk
+// charges that child's parent for it (subtreeGate.resolvedChild).
 
 // versioningNS is the XML Schema versioning namespace §4.2.2 reads vc:minVersion,
 // vc:maxVersion, vc:typeAvailable, vc:typeUnavailable, vc:facetAvailable and
@@ -687,42 +687,34 @@ func rootStart(dec *xml.Decoder) (xml.StartElement, bool) {
 	}
 }
 
-// rawDecoder is the one encoding/xml reader both of the lane's raw re-reads,
-// assessedSubtreeRoot and documentCarries, take over a document's bytes. It
-// drops one leading UTF-8 byte-order mark, as parser/xmltree's reader does (XML
-// 1.0 §4.3.3: an encoding signature, no part of the document), and so honours
-// xmldecl.As10's precondition that the mark is consumed before the declaration
-// is read; As10 then admits a 1.x version label as xmltree admits it. A UTF-8
-// document's label is therefore admitted here exactly when xmltree admits it,
-// with the mark or without. A UTF-16 document, which xmltree transcodes, is
-// read by neither re-read under any label — encoding/xml decodes UTF-8 alone,
-// and no CharsetReader is set — so each answers as it does for any document it
-// cannot read.
+// rawDecoder is the one encoding/xml reader the lane's raw re-reads —
+// assessedSubtreeRoot, documentCarries and instanceHints — take over a
+// document's bytes. It reads the leading byte-order mark through
+// internal/xmlenc, the decoding parser/xmltree's reader takes (XML 1.0 §4.3.3,
+// Appendix F.1): a UTF-16 document, either byte order, is transcoded to UTF-8,
+// a UTF-8 mark is dropped as the encoding signature it is, and an encoding
+// declaration that disagrees with the mark fails the read through the mark's
+// CharsetReader. The mark is thereby consumed before xmldecl.As10 meets the
+// declaration, as As10 requires, and As10 then admits a 1.x version label as
+// xmltree admits it — so a document's label is admitted here exactly when
+// xmltree admits it, in either encoding, with the mark or without.
+//
+// One disagreement xmltree rejects is read here: a UTF-16 mark under
+// encoding="UTF-8", which encoding/xml never hands to a CharsetReader and
+// xmltree's checkDeclaration catches on its own. No verdict rests on that
+// read: documentCarries re-reads only documents the assembly read through
+// xmltree, assessedSubtreeRoot runs only after assessInstance has read the
+// instance through it, and a case whose instance instanceHints read is
+// declined by that same assessInstance when xmltree rejects it.
 //
 // A read failure in the peek for the mark is reported by the decoder's first
-// read: bufio.Reader.Peek hands a failure out once and clears it, so dropping it
-// would let a re-read of the source answer for the failure.
+// read, as xmlenc.Decode latches it.
 func rawDecoder(r io.Reader) *xml.Decoder {
-	br := bufio.NewReader(r)
-	head, err := br.Peek(len(utf8Mark))
-	if err != nil && !errors.Is(err, io.EOF) {
-		return xml.NewDecoder(failedRead{err: err})
-	}
-	if string(head) == utf8Mark {
-		// Peek buffered the mark, so Discard cannot fail.
-		_, _ = br.Discard(len(utf8Mark))
-	}
-	return xml.NewDecoder(xmldecl.As10(br))
+	body, mark := xmlenc.Decode(r)
+	dec := xml.NewDecoder(xmldecl.As10(body))
+	dec.CharsetReader = mark.CharsetReader
+	return dec
 }
-
-// utf8Mark is the UTF-8 byte-order mark, EF BB BF (XML 1.0 Appendix F.1).
-const utf8Mark = "\xEF\xBB\xBF"
-
-// failedRead is a source whose every read reports err.
-type failedRead struct{ err error }
-
-// Read reports the failure.
-func (f failedRead) Read([]byte) (int, error) { return 0, f.err }
 
 // expandedName is n as the ·expanded name· the schema indexes by. encoding/xml
 // has already translated a bound prefix to its namespace name.

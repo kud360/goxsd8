@@ -10,7 +10,7 @@
 // encoding/xml rejects every version number but "1.0", so each reader that
 // hands a document to it wraps the stream in As10 first, once it has dropped a
 // leading byte-order mark: parser/xmltree's Reader, and the conformance
-// harness's two raw re-reads of the same documents (its rawDecoder), which must
+// harness's raw re-reads of the same documents (its rawDecoder), which must
 // admit exactly the label xmltree admits. The rewrite is byte-for-byte the same
 // length, so every offset, line and column after the declaration is the
 // source's own.

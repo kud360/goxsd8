@@ -2,7 +2,7 @@
 // origin of every xsderr.Loc in the module.
 //
 // It is independent of the rest of the module (leaf besides xsderr and the
-// stdlib-only internal/xmldecl) and used for both schema documents
+// stdlib-only internal/xmldecl and internal/xmlenc) and used for both schema documents
 // (parser) and XML instances (validate/xmlsrc).
 //
 // # Contract (implemented in M2)
@@ -25,11 +25,13 @@
 //     (STYLE T1).
 //   - Byte-order marks are honoured per XML 1.0 §4.3.3: a UTF-16 mark
 //     (FE FF, FF FE) selects a streaming transcode to UTF-8, a UTF-8
-//     mark is dropped as the encoding signature it is, and an encoding
-//     declaration that disagrees with the mark is that section's fatal
-//     error, reported as RuleXMLWellFormed. Locations are offsets into
-//     the decoded UTF-8 stream, not into the source bytes.
-//     GAP(xml): UTF-16 without a mark, declared only by encoding=, is
+//     mark is dropped as the encoding signature it is (both
+//     internal/xmlenc, shared with the conformance harness's raw
+//     re-reads), and an encoding declaration that disagrees with the
+//     mark is that section's fatal error, reported as
+//     RuleXMLWellFormed. Locations are offsets into the decoded UTF-8
+//     stream, not into the source bytes.
+//   - GAP(xml): UTF-16 without a mark, declared only by encoding=, is
 //     not decoded — it fails well-formedness rather than being read.
 //     Tracked by #361.
 //   - A document whose XML declaration specifies a 1.x version number
