@@ -175,15 +175,22 @@ func TestInstanceExecutorDeclinesUndecidableShapes(t *testing.T) {
 		"a schema document that is not <schema>-rooted")
 }
 
-// TestInstanceExecutorDeclinesCaseWithNoGroupSchema proves a case discovery could
-// not attach a schema to — a group not declaring exactly one schemaTest
-// (groupSchemaDocs) — is DECLINED rather than assessed against a guessed or empty
-// schema.
+// TestInstanceExecutorDeclinesCaseWithNoGroupSchema proves a case with no
+// stated schema — no group schema reference (groupSchemaDocs) AND no hint on
+// its root — is DECLINED rather than assessed against a guessed or empty
+// schema (#2013, absorbing #763). caseSchema must answer it not decidable:
+// with its "no hint" condition removed, ParseSet over no root answers a plain
+// error that caseSchema hands back as decidable — a schema rejection nobody
+// stated — and the executor then declines only because it reads every
+// rejection as a decline, which is why the assertion is on caseSchema.
 func TestInstanceExecutorDeclinesCaseWithNoGroupSchema(t *testing.T) {
 	exec := newInstanceExec()
 	c := instanceCase(t, knownRoot, `<unknown/>`, false)
 	c.schemaDoc = ""
-	declinesBothPolarities(t, exec, c, "an instance case with no group schema reference")
+	declinesBothPolarities(t, exec, c, "an instance case with no group schema reference and no hint")
+	if _, _, decidable, _ := caseSchema(strict.New(), c); decidable {
+		t.Error("a case with no group schema and no hint has no stated schema: caseSchema must answer it not decidable")
+	}
 }
 
 // abstractRootValidator is a validator over a schema whose one top-level element

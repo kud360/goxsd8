@@ -607,7 +607,7 @@ const (
 
 // pinnedResolver is the resolver every assembleCase read goes through: dir, the
 // case's own loader.Dir, for every location but xlinkLocation, which it serves
-// from xlinkPinned and resolves to that on-disk path, so documentVersioned can
+// from xlinkPinned and resolves to that on-disk path, so documentCarries can
 // re-open it from the report.
 //
 // The suite's own catalog schema, common/xsts.xsd, imports the XLink namespace

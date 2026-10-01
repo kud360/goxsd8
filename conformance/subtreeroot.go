@@ -688,7 +688,7 @@ func rootStart(dec *xml.Decoder) (xml.StartElement, bool) {
 }
 
 // rawDecoder is the one encoding/xml reader both of the lane's raw re-reads,
-// assessedSubtreeRoot and documentVersioned, take over a document's bytes. It
+// assessedSubtreeRoot and documentCarries, take over a document's bytes. It
 // drops one leading UTF-8 byte-order mark, as parser/xmltree's reader does (XML
 // 1.0 §4.3.3: an encoding signature, no part of the document), and so honours
 // xmldecl.As10's precondition that the mark is consumed before the declaration
@@ -755,16 +755,22 @@ func isLocationHint(a xml.Attr) bool {
 // that will not open or decode answers true.
 func closureVersioned(report *parser.AssemblyReport) bool {
 	for _, d := range report.Documents() {
-		if documentVersioned(d.Location) {
+		if documentCarries(d.Location, isVersioningAttr) {
 			return true
 		}
 	}
 	return false
 }
 
-// documentVersioned reports whether the document at path carries an attribute
-// in versioningNS, or cannot be read to say.
-func documentVersioned(path string) bool {
+// isVersioningAttr reports whether a is in versioningNS.
+func isVersioningAttr(a xml.Attr) bool {
+	return a.Name.Space == versioningNS
+}
+
+// documentCarries reports whether any element of the document at path carries
+// an attribute satisfying is, or the document cannot be read to say: one that
+// will not open or decode answers true.
+func documentCarries(path string, is func(xml.Attr) bool) bool {
 	f, err := os.Open(path)
 	if err != nil {
 		return true
@@ -783,7 +789,7 @@ func documentVersioned(path string) bool {
 		if !ok {
 			continue
 		}
-		if slices.ContainsFunc(start.Attr, func(a xml.Attr) bool { return a.Name.Space == versioningNS }) {
+		if slices.ContainsFunc(start.Attr, is) {
 			return true
 		}
 	}

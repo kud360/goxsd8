@@ -14,7 +14,7 @@ import (
 )
 
 // TestRawReadsAdmitTheLabelXmltreeAdmits pins that both raw re-reads,
-// assessedSubtreeRoot and documentVersioned, admit a UTF-8 document's 1.x
+// assessedSubtreeRoot and documentCarries, admit a UTF-8 document's 1.x
 // version label exactly when parser/xmltree admits it, a byte-order mark before
 // the label included (XML 1.0 §2.8 Note, §4.3.3). The marked 1.1 and 1.10 rows
 // fail when rawDecoder hands As10 the mark: As10 then meets no '<?xml', and
@@ -50,8 +50,8 @@ func TestRawReadsAdmitTheLabelXmltreeAdmits(t *testing.T) {
 		if got := assessedSubtreeRoot(schema, report, c.doc); got != tc.admit {
 			t.Errorf("%q: assessedSubtreeRoot = %v, want %v, as xmltree admits", tc.prolog, got, tc.admit)
 		}
-		if got := documentVersioned(c.doc); got == tc.admit {
-			t.Errorf("%q: documentVersioned = %v, want %v, as xmltree admits", tc.prolog, got, !tc.admit)
+		if got := documentCarries(c.doc, isVersioningAttr); got == tc.admit {
+			t.Errorf("%q: documentCarries(isVersioningAttr) = %v, want %v, as xmltree admits", tc.prolog, got, !tc.admit)
 		}
 	}
 }
@@ -80,8 +80,8 @@ func TestRawReadsRefuseUTF16(t *testing.T) {
 	if assessedSubtreeRoot(schema, report, c.doc) {
 		t.Errorf("assessedSubtreeRoot(%s) = true, want false for a UTF-16 document", filepath.Base(c.doc))
 	}
-	if !documentVersioned(c.doc) {
-		t.Errorf("documentVersioned(%s) = false, want true for a UTF-16 document", filepath.Base(c.doc))
+	if !documentCarries(c.doc, isVersioningAttr) {
+		t.Errorf("documentCarries(%s, isVersioningAttr) = false, want true for a UTF-16 document", filepath.Base(c.doc))
 	}
 }
 
@@ -103,7 +103,7 @@ func readAll(doc string) error {
 // TestRawDecoderReportsPeekFailure pins that a read failure met while peeking
 // for the mark reaches the decoder, from a source that fails once and then
 // reports no more data: dropped, the decoder's re-read would see a bare EOF,
-// which documentVersioned reads as a document with no versioning attribute.
+// which documentCarries reads as a document carrying no matching attribute.
 func TestRawDecoderReportsPeekFailure(t *testing.T) {
 	boom := errors.New("boom")
 	_, err := rawDecoder(&failOnce{err: boom}).Token()
