@@ -219,6 +219,9 @@ fixes whose sightings cost a round.
 - **M4, #1982's follow-up:** #2052 (a foreign child under a compositor,
   `xs:union`, or a group or attributeGroup ref is still skipped). Hypothesis,
   unreproduced; its ratchet is unmeasured.
+- **`parser/produce_s4sorder.go` doc fixes:** #1343 also carries #1982's
+  STYLE D3 finding (the two `##other` facts stated once, at `s4sSlot`'s doc).
+  Comment-only.
 - **Process, for the `/retro` on 2026-10-04:** **#1868 and #1948 first** (with
   #1798 and #1781, the same class), then #1812 (the arbiter's ratchet duty in
   step 5), #2021 (the oracle's spec scope), #1990, #1993, #1996, #2010 and
