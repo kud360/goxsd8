@@ -291,9 +291,10 @@ import (
 //     directive did not bring in — and fabricatedRejection eliminates both, as
 //     the ONE site that discriminates on the error, by rule and, for
 //     src-resolve, by clause rather than by type. Every OTHER failure this
-//     step reads as a verdict, an unruled plain error included, with the single exception the GAP below
-//     states: an <include>/<override> carrying no schemaLocation at all is a
-//     §2.4 clause 1 grammar fault no Schema Representation Constraint covers
+//     step reads as a verdict, an unruled plain error included, with the
+//     single exception the GAP below states: an <include>/<override> carrying
+//     no schemaLocation at all is a §2.4 clause 1 grammar fault no Schema
+//     Representation Constraint covers
 //     (parse.go's compose), which STYLE E2 requires be charged WITHOUT a rule ID
 //     — an unruled error is this processor's spelling of "not valid against the
 //     schema for schema documents", not a signal that no verdict was reached
