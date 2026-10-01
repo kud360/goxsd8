@@ -180,7 +180,7 @@ func (vs valueSpace) ValidDefault(r xsd.TypeResolver, t *xsd.SimpleType, vc xsd.
 // shortcut is sound only for these types: for any other type one literal can
 // denote two values, a QName under two sets of bindings (§3.3.18).
 //
-// GAP(value): narrowed primitive mappings. A Parse rejection with an
+// GAP(value): narrowed primitive mappings (#2045). A Parse rejection with an
 // *xsderr.Error is read as "not in the lexical space", which relies on each
 // primitive's mapping covering its whole lexical space (see [Backend]). An
 // [Override] that narrows a primitive rejects in-space literals the same way, so
