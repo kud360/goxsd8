@@ -746,10 +746,14 @@ func TestContentRestrictsGlobalSubstitution(t *testing.T) {
 //   - "element": B's particle is a local a or <element ref="a"/>, and R's is
 //     <element ref="m"/>. Only the ref admits m (elementParticleAdmits).
 //   - "wildcard": B is choice(a, lax urn:upa wildcard excluding m), and R one lax
-//     urn:upa wildcard. Only the ref leaves m covered (elementCoveredNames); the
-//     local row's every other name is covered, and item a is governable by the
-//     top-level a, so its clause-2 charge is not taken (the GAP(xsd) at
-//     elementCoveredSet) and the verdict is clause 1's on m.
+//     urn:upa wildcard. Only the ref leaves m covered; the local row's every
+//     other name is covered, and item a is governable by the top-level a, so its
+//     clause-2 charge is not taken (the GAP(xsd) at elementCoveredSet) and the
+//     verdict is clause 1's on m. The local row fails only with BOTH
+//     elementCoveredNames' and elementCoveredSet's guards removed: a name split
+//     off with no admitting position is charged as surely as one left in the
+//     rest, so elementCoveredNames' guard keeps its list exact and alone moves
+//     no row here.
 //   - "second head": B is choice(seq(local a, b), <element ref="k"/>, lax
 //     urn:upa wildcard excluding a, k and m), each branch but k's followed by b,
 //     and R is seq(lax urn:upa wildcard excluding k, b). m is split off through
