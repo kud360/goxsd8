@@ -1229,16 +1229,15 @@ func (s *Schema) matchPositions(p position, b contentAutomaton, live liveSet) []
 // The names element particles admit are SPLIT OFF first. Each live element
 // particle admits finitely many expanded names — its declaration's, and, for a
 // top-level declaration, the names of the declarations in its ·substitution
-// group· — so the
-// names sub (w's {namespace constraint}) admits among them form a finite list,
-// in live-group order and then {element declarations} order (STYLE D2), and
-// each is decided exactly: its set is S(n), every live position admitting n,
-// element and wildcard alike, by the same relations positionAdmits uses
-// (elementParticleAdmits, and cvc-wildcard-name through allowsName). The REST of
-// sub is sub with those names added to its {disallowed names}, and only the rest
-// is left to the wildcards. Admission here is cvc-wildcard-name on both sides:
-// the keyword half of {disallowed names} is not resolved into names, which the
-// GAP(xsd) on the keyword residual below records.
+// group· — so the names sub (w's {namespace constraint}) admits among them form
+// a finite list, in live-group order and then {element declarations} order
+// (STYLE D2), and each is decided exactly: its set is S(n), every live position
+// admitting n, element and wildcard alike, by the same relations positionAdmits
+// uses (elementParticleAdmits, and cvc-wildcard-name through allowsName). The
+// REST of sub is sub with those names added to its {disallowed names}, and only
+// the rest is left to the wildcards. Admission here is cvc-wildcard-name on both
+// sides: the keyword half of {disallowed names} is not resolved into names,
+// which the GAP(xsd) on the keyword residual below records.
 //
 // Coverage of the rest is COMPUTED, not assumed: the live wildcards' {namespace
 // constraint}s are folded left through Attribute Wildcard Union (§3.10.6.3,
@@ -1563,11 +1562,10 @@ func groupsIn(n int, groups []int) []bool {
 // declaration with its ·substitution group·, as inSubstitutionGroupOf decides
 // cos-equiv-derived-ok-rec (substitutiongroup.go), and a local one with none
 // (cvc-accept clause 2.3.2), so this clause reads the true ·substitution group·
-// whichever way membership pushes the verdict. And
-// the base's wildcard is asked through Wildcard.allowsName (cvc-wildcard-name)
-// rather than through allowsElementWildcardName's defined/sibling keyword
-// exclusions, for the same reason: the narrower test would shrink B and could
-// only add rejections.
+// whichever way membership pushes the verdict. And the base's wildcard is asked
+// through Wildcard.allowsName (cvc-wildcard-name) rather than through
+// allowsElementWildcardName's defined/sibling keyword exclusions, for the same
+// reason: the narrower test would shrink B and could only add rejections.
 func (s *Schema) positionAdmits(general, specific position) bool {
 	switch g := general.term.(type) {
 	case ElementDeclaration:
