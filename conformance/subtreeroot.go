@@ -47,9 +47,10 @@ const versioningNS = "http://www.w3.org/2007/XMLSchema-versioning"
 // schema as assembled into report, has the assessed-subtree-root shape an empty
 // validate.Result may be read as "valid" for: a root, with content or without,
 // whose subtree meets every condition subtreeGate.element names, in a document
-// with no DOCTYPE, against an assembly no version condition touched. Any
-// failure to establish a condition — an unreadable document, a decoder error,
-// an unresolvable component — is a false, never a guess.
+// whose DTD, if any, defaults no attribute (rootStart), against an assembly no
+// version condition touched. Any failure to establish a condition — an
+// unreadable document, a decoder error, an unresolvable component — is a false,
+// never a guess.
 func assessedSubtreeRoot(schema *xsd.Schema, report *parser.AssemblyReport, doc string) bool {
 	if closureVersioned(report) {
 		return false
@@ -713,10 +714,26 @@ func (g *subtreeGate) groupContains(mg xsd.ModelGroup, names []xsd.QName) bool {
 	return slices.ContainsFunc(mg.Particles(), func(p xsd.Particle) bool { return g.termContains(p.Term(), names) })
 }
 
-// rootStart reads dec up to the document element's start tag. A DOCTYPE — any
-// xml.Directive — answers false: a DTD can default an attribute onto any
-// element, or declare the unparsed entities an ENTITY value is checked against,
-// and this reader sees neither.
+// rootStart reads dec up to the document element's start tag. It answers false
+// for a DOCTYPE whose DTD could default an attribute the reader does not see
+// (defaultsNoAttribute), and for any other directive. That second refusal also
+// covers a DOCTYPE encoding/xml delimits short of its real end, as a quote
+// inside a processing instruction can make it: every markup declaration left
+// over arrives as a directive of its own, and a parameter-entity reference left
+// over needs a declaration, which carries a '%' either inside the DOCTYPE or in
+// a directive left over too.
+//
+// The DOCTYPE that survives declares, in its internal subset alone, general
+// entities, notations, element types, comments and processing instructions.
+// None of these defaults an attribute (XML 1.0 §3.3.2), so the attributes the
+// reader sees are the [attributes] the walk assesses. Its entities still
+// change the infoset (§4.4), and neither change is read here: an unparsed
+// entity it declares is one an ENTITY value may name, which the walk decides
+// through parser/xmltree's own read of the subset (key-vde, cvc-simple-type
+// clause 3); a reference to a general entity it declares is included text
+// (§4.4.2), which parser/xmltree rejects as not well-formed, encoding/xml
+// knowing no entity but the five predefined ones, and a document it rejects
+// reaches no verdict through either reader of rootStart (rawDecoder).
 func rootStart(dec *xml.Decoder) (xml.StartElement, bool) {
 	for {
 		tok, err := dec.Token()
@@ -725,11 +742,32 @@ func rootStart(dec *xml.Decoder) (xml.StartElement, bool) {
 		}
 		switch t := tok.(type) {
 		case xml.Directive:
-			return xml.StartElement{}, false
+			if !defaultsNoAttribute(t) {
+				return xml.StartElement{}, false
+			}
 		case xml.StartElement:
 			return t, true
 		}
 	}
+}
+
+// defaultsNoAttribute reports whether d is a DOCTYPE whose DTD can default no
+// attribute: an AttlistDecl is the one declaration that does (XML 1.0 §3.3.2),
+// and d answers false wherever one could hide. That is an ExternalID after the
+// document type name, whose external subset the reader does not read (§2.8
+// doctypedecl), an <!ATTLIST in the internal subset, and any '%' there: a
+// parameter-entity reference can expand to an AttlistDecl no literal scan sees
+// (§4.4.8). A '%' that is no reference — one in a SystemLiteral — is refused
+// with them. The header is the text before the first '[', so a '[' inside an
+// ExternalID's literal leaves the literal's opening half in the header, where
+// it is a third field.
+func defaultsNoAttribute(d xml.Directive) bool {
+	header, subset, _ := strings.Cut(string(d), "[")
+	fields := strings.Fields(header)
+	if len(fields) != 2 || fields[0] != "DOCTYPE" {
+		return false
+	}
+	return !strings.Contains(subset, "<!ATTLIST") && !strings.Contains(subset, "%")
 }
 
 // rawDecoder is the one encoding/xml reader the lane's raw re-reads —

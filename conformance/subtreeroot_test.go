@@ -430,6 +430,50 @@ func defaultedAtt(ic string) string {
 		`<xs:` + ic + ` name="u"><xs:selector xpath="e"/><xs:field xpath="@att"/></xs:` + ic + `></xs:element>`
 }
 
+// entityDefault declares <known>, empty, with an xs:ENTITY attribute ent
+// defaulting to pic (cvc-attribute clause 3 over a ·defaulted attribute·,
+// §3.4.2.4), and pics is the DOCTYPE whose internal subset declares pic an
+// unparsed entity of notation gif — id017's shape.
+const (
+	entityDefault = `<xs:element name="known"><xs:complexType>` +
+		`<xs:attribute name="ent" type="xs:ENTITY" default="pic"/></xs:complexType></xs:element>`
+	pics = `<!DOCTYPE known [<!ENTITY pic SYSTEM "pic.gif" NDATA gif><!NOTATION gif SYSTEM "gif">]>`
+)
+
+// TestInstanceExecutorDecidesInternalSubsetEntity proves the gate admits a
+// DOCTYPE whose DTD defaults no attribute (#2063): an xs:ENTITY default naming
+// the unparsed entity its internal subset declares is decided VALID (key-vde,
+// cvc-simple-type clause 3). With rootStart refusing every directive again the
+// row declines and this test fails.
+func TestInstanceExecutorDecidesInternalSubsetEntity(t *testing.T) {
+	exec := newInstanceExec()
+	c := instanceCase(t, entityDefault, pics+`<known/>`, true)
+	if !exec(c).IsPass() {
+		t.Error("an xs:ENTITY default naming a declared unparsed entity: the executor must agree with a suite-valid case")
+	}
+	c.expect = expectValidity(false)
+	if exec(c).IsPass() {
+		t.Error("an xs:ENTITY default naming a declared unparsed entity: the executor must Fail under a flipped expectation")
+	}
+}
+
+// TestInstanceExecutorChargesInternalSubsetEntity is a regression guard for
+// the DOCTYPE lift (#2063): under an admitted DOCTYPE, an xs:ENTITY default
+// naming no unparsed entity the subset declares is not a ·declared entity
+// name· (key-vde), which the walk charges under cvc-attribute clause 3, so the
+// row is decided INVALID and never reaches the gate.
+func TestInstanceExecutorChargesInternalSubsetEntity(t *testing.T) {
+	exec := newInstanceExec()
+	c := instanceCase(t, entityDefault, `<!DOCTYPE known [<!ENTITY other SYSTEM "o.gif" NDATA gif><!NOTATION gif SYSTEM "gif">]><known/>`, false)
+	if !exec(c).IsPass() {
+		t.Error("an xs:ENTITY default naming an undeclared entity: the walk charges it; the executor must agree with a suite-invalid case")
+	}
+	c.expect = expectValidity(true)
+	if exec(c).IsPass() {
+		t.Error("an xs:ENTITY default naming an undeclared entity: the executor must Fail under a flipped expectation")
+	}
+}
+
 // TestInstanceExecutorDeclinesOutsideAssessedSubtreeRoot pins each condition of
 // the assessed-subtree-root gate by name. Every row walks clean — no violation,
 // no unevaluated record — so it is assessedSubtreeRoot alone that keeps the
@@ -448,8 +492,25 @@ func TestInstanceExecutorDeclinesOutsideAssessedSubtreeRoot(t *testing.T) {
 		schemaBody string
 		instance   string
 	}{
-		{"DOCTYPE present", aInt, `<!DOCTYPE known><known><a>1</a></known>`},
-		{"DOCTYPE present on a content-less root", emptyRoot, `<!DOCTYPE known><known/>`},
+		// rootStart's defaultsNoAttribute: each DTD could default an attribute
+		// the gate does not see (XML 1.0 §3.3.2). The two internal-subset rows
+		// do default a="x" onto <known>, which emptyRoot's type does not admit.
+		{"a DOCTYPE naming an external subset by a SYSTEM id", aInt, `<!DOCTYPE known SYSTEM "k.dtd"><known><a>1</a></known>`},
+		{"a DOCTYPE naming an external subset by a PUBLIC id", aInt, `<!DOCTYPE known PUBLIC "-//k//EN" "k.dtd"><known><a>1</a></known>`},
+		{"a DOCTYPE whose internal subset holds an <!ATTLIST", emptyRoot, `<!DOCTYPE known [<!ATTLIST known a CDATA "x">]><known/>`},
+		{
+			// §4.4.8: %p; expands to an <!ATTLIST the subset spells only as
+			// &#60;!ATTLIST, which no literal scan sees.
+			"a DOCTYPE whose internal subset holds a parameter-entity reference", emptyRoot,
+			`<!DOCTYPE known [<!ENTITY % p "&#60;!ATTLIST known a CDATA 'x'>"> %p;]><known/>`,
+		},
+		{
+			// rootStart's doc: the quote in the PI ends encoding/xml's DOCTYPE
+			// at the second PI's ?>, so the <!ATTLIST arrives as a directive of
+			// its own.
+			"an <!ATTLIST after a DOCTYPE encoding/xml delimits short", emptyRoot,
+			`<!DOCTYPE known [<?pi '?><!ENTITY e 'a>b'><?pi '?> <!ATTLIST known a CDATA 'x'>]><known/>`,
+		},
 		{
 			"a {type table} on the root (cvc-elt clause 4)",
 			`<xs:element name="known" type="xs:string"><xs:alternative type="xs:string"/></xs:element>`,
