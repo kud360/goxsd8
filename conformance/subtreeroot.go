@@ -111,8 +111,7 @@ type subtreeGate struct {
 // condition below holds for it and, recursively, for every element under it:
 //
 //   - it carries no xsi:nil (plainAttributes);
-//   - d is not abstract and carries no {type table} and no fixed {value
-//     constraint} (assessedDeclaration);
+//   - d is not abstract and carries no {type table} (assessedDeclaration);
 //   - its ·governing type definition· is determined: d.{type definition}
 //     resolves, and an xsi:type the element carries meets governingType's
 //     conditions, the type it names then standing in for d.{type definition}
@@ -250,21 +249,24 @@ func notExcepted(a xml.Attr) bool {
 }
 
 // assessedDeclaration reports whether d leaves no cvc-elt clause the walk does
-// not decide at depth: {abstract} false (clause 2, charged at the root alone),
-// no {type table} (clause 4's ·selected type definition· is then d.{type
-// definition}), and no fixed {value constraint} (clause 5.2.2). A default one
-// is admitted: clause 5.1 is the walk's. So are {identity-constraint
-// definitions}: clause 6 (cvc-identity-constraint, §3.11.4) is the walk's,
-// which records every check it declines.
+// not decide at depth: {abstract} false (clause 2, charged at the root alone)
+// and no {type table} (clause 4's ·selected type definition· is then d.{type
+// definition}). A {value constraint} of either variety is admitted, at every
+// depth: clause 5.1 (an element with no [[children]], default or fixed) and
+// clause 5.2.2 (a fixed one over [[children]]: 5.2.2.1 no element children,
+// 5.2.2.2.1 a mixed type's lexical match, 5.2.2.2.2 a simple type's value
+// equality) are the walk's (validate's contentCheck.defaultValid and
+// contentCheck.fixedValue), which records the one comparison it declines.
+// Clause 3.2.3.2 never arises: plainAttributes refuses every xsi:nil.
+// {identity-constraint definitions} are admitted too: clause 6
+// (cvc-identity-constraint, §3.11.4) is the walk's, which records every check
+// it declines.
 func assessedDeclaration(d xsd.ElementDeclaration) bool {
 	if d.Abstract() {
 		return false
 	}
-	if _, ok := d.TypeTable(); ok {
-		return false
-	}
-	vc, ok := d.ValueConstraint()
-	return !ok || vc.Kind() != xsd.ValueFixed
+	_, ok := d.TypeTable()
+	return !ok
 }
 
 // complex reads an element governed by the Complex Type Definition t through to

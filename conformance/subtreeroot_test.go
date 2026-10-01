@@ -2,9 +2,13 @@ package conformance
 
 import (
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/kud360/goxsd8/builtin/strict"
+	"github.com/kud360/goxsd8/validate"
+	"github.com/kud360/goxsd8/xsderr"
 )
 
 // xsiNS binds xsi on an instance root.
@@ -446,7 +450,6 @@ func TestInstanceExecutorDeclinesOutsideAssessedSubtreeRoot(t *testing.T) {
 	}{
 		{"DOCTYPE present", aInt, `<!DOCTYPE known><known><a>1</a></known>`},
 		{"DOCTYPE present on a content-less root", emptyRoot, `<!DOCTYPE known><known/>`},
-		{"a fixed {value constraint} on the root (cvc-elt clause 5.2.2)", `<xs:element name="known" type="xs:string" fixed="x"/>`, `<known>x</known>`},
 		{
 			"a {type table} on the root (cvc-elt clause 4)",
 			`<xs:element name="known" type="xs:string"><xs:alternative type="xs:string"/></xs:element>`,
@@ -490,11 +493,6 @@ func TestInstanceExecutorDeclinesOutsideAssessedSubtreeRoot(t *testing.T) {
 			"a {type table} below the root (cvc-elt clause 4)",
 			`<xs:element name="known"><xs:complexType><xs:sequence><xs:element name="a" type="xs:int">` +
 				`<xs:alternative type="xs:int"/></xs:element></xs:sequence></xs:complexType></xs:element>`,
-			wantInt,
-		},
-		{
-			"a fixed {value constraint} below the root (cvc-elt clause 5.2.2)",
-			`<xs:element name="known"><xs:complexType><xs:sequence><xs:element name="a" type="xs:int" fixed="1"/></xs:sequence></xs:complexType></xs:element>`,
 			wantInt,
 		},
 		{
@@ -555,6 +553,89 @@ func TestInstanceExecutorDeclinesOutsideAssessedSubtreeRoot(t *testing.T) {
 	for _, tc := range cases {
 		declinesBothPolarities(t, exec, instanceCase(t, tc.schemaBody, tc.instance, false), tc.condition)
 	}
+}
+
+// fixedRoot declares <known> of type xs:int, fixed to 1; fixedBelow declares
+// <known> with one required child <a> of type xs:int, fixed to 1; fixedMixed
+// declares <known> of a mixed type with one optional child <c>, fixed to x.
+const (
+	fixedRoot  = `<xs:element name="known" type="xs:int" fixed="1"/>`
+	fixedBelow = `<xs:element name="known"><xs:complexType><xs:sequence><xs:element name="a" type="xs:int" fixed="1"/></xs:sequence></xs:complexType></xs:element>`
+	fixedMixed = `<xs:element name="known" fixed="x"><xs:complexType mixed="true"><xs:sequence>` +
+		`<xs:element name="c" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>`
+)
+
+// TestInstanceExecutorDecidesFixedValueConstraint proves the gate admits a
+// declaration carrying a fixed {value constraint}, at the root and below it,
+// where the walk settles cvc-elt clause 5 for it (#1979): each row is decided
+// VALID. With assessedDeclaration refusing ValueFixed again, every row
+// declines and this test fails.
+func TestInstanceExecutorDecidesFixedValueConstraint(t *testing.T) {
+	exec := newInstanceExec()
+	for _, tc := range []struct{ why, schemaBody, instance string }{
+		{"the root's ·initial value· equal to the fixed one (cvc-elt clause 5.2.2.2.2)", fixedRoot, `<known>1</known>`},
+		{"the root's ·initial value· lexically different, equal in value space (cvc-elt clause 5.2.2.2.2)", fixedRoot, `<known> 01 </known>`},
+		{"an empty root taking the fixed {lexical form} (cvc-elt clause 5.1)", fixedRoot, `<known/>`},
+		{"a mixed root's ·initial value· matching the fixed {lexical form} (cvc-elt clause 5.2.2.2.1)", fixedMixed, `<known>x</known>`},
+		{"a child's ·initial value· equal to the fixed one (cvc-elt clause 5.2.2.2.2)", fixedBelow, `<known><a>1</a></known>`},
+		{"a child's ·initial value· lexically different, equal in value space (cvc-elt clause 5.2.2.2.2)", fixedBelow, `<known><a>01</a></known>`},
+		{"an empty child taking the fixed {lexical form} (cvc-elt clause 5.1)", fixedBelow, `<known><a/></known>`},
+	} {
+		if !exec(instanceCase(t, tc.schemaBody, tc.instance, true)).IsPass() {
+			t.Errorf("%s: the walk settles cvc-elt clause 5 and the gate admits the fixed declaration; the executor must agree with a suite-valid case", tc.why)
+		}
+		if exec(instanceCase(t, tc.schemaBody, tc.instance, false)).IsPass() {
+			t.Errorf("%s: the executor must Fail under a flipped expectation (it decides for real)", tc.why)
+		}
+	}
+}
+
+// TestInstanceExecutorChargesFixedValueConstraint proves the walk, not the gate,
+// decides a fixed {value constraint} the [[children]] disagree with, at the root
+// and below it: each row is charged cvc-elt under the clause it names, and is
+// decided INVALID.
+func TestInstanceExecutorChargesFixedValueConstraint(t *testing.T) {
+	exec := newInstanceExec()
+	for _, tc := range []struct{ why, schemaBody, instance, clause string }{
+		{"the root's ·actual value· unequal to the fixed one", fixedRoot, `<known>2</known>`, "5.2.2.2.2"},
+		{"a mixed root's ·initial value· not matching the fixed {lexical form}", fixedMixed, `<known>y</known>`, "5.2.2.2.1"},
+		{"a mixed root with element [[children]]", fixedMixed, `<known>x<c/></known>`, "5.2.2.1"},
+		{"a child's ·actual value· unequal to the fixed one", fixedBelow, `<known><a>2</a></known>`, "5.2.2.2.2"},
+	} {
+		c := instanceCase(t, tc.schemaBody, tc.instance, false)
+		if !chargedCvcElt(t, c, tc.clause) {
+			t.Errorf("%s: the walk must charge cvc-elt clause %s", tc.why, tc.clause)
+		}
+		if !exec(c).IsPass() {
+			t.Errorf("%s: the walk charges cvc-elt clause %s; the executor must agree with a suite-invalid case", tc.why, tc.clause)
+		}
+		c.expect = expectValid()
+		if exec(c).IsPass() {
+			t.Errorf("%s: the executor must Fail under a flipped expectation", tc.why)
+		}
+	}
+}
+
+// chargedCvcElt reports whether assessing c's instance against its schema
+// charges cvc-elt with a message naming clause, the walk's spelling of the
+// clause it settled.
+func chargedCvcElt(t *testing.T, c caseSpec, clause string) bool {
+	t.Helper()
+	schema, _, decidable, err := assembleCase(strict.New(), c.schemaDoc, nil)
+	if err != nil || !decidable {
+		t.Fatalf("assembling the schema: decidable %v, err %v", decidable, err)
+	}
+	v, err := validate.New(schema, strict.New())
+	if err != nil {
+		t.Fatalf("validate.New: %v", err)
+	}
+	result, ok := assessInstance(v, c.doc)
+	if !ok {
+		t.Fatalf("assessing %s: declined", c.doc)
+	}
+	return slices.ContainsFunc(result.Violations(), func(e *xsderr.Error) bool {
+		return e.Rule == ruleCvcElt && strings.Contains(e.Msg, "cvc-elt clause "+clause+" ")
+	})
 }
 
 // wildcardKnown declares <known> with one required child <a> of type xs:int
@@ -765,8 +846,9 @@ func TestAssessedSubtreeRootUnresolvedChild(t *testing.T) {
 		{"lax, a child resolving no declaration carrying xsi:nil", wildcardChild("lax"), `<known ` + xsiNS + `><u xsi:nil="false"/></known>`, false},
 		{"lax, below a child resolving no declaration, xsi:nil", wildcardChild("lax"), `<known ` + xsiNS + `><u><v xsi:nil="false"/></u></known>`, false},
 		{
+			// The walk settles cvc-elt clause 5.2.2 for f, below the lax <u> too (#1979).
 			"lax, below a child resolving no declaration, a resolved declaration with a fixed {value constraint} (cvc-elt clause 5.2.2)",
-			wildcardChild("lax") + `<xs:element name="f" type="xs:int" fixed="1"/>`, `<known><u><f>1</f></u></known>`, false,
+			wildcardChild("lax") + `<xs:element name="f" type="xs:int" fixed="1"/>`, `<known><u><f>1</f></u></known>`, true,
 		},
 	} {
 		c := instanceCase(t, tc.schemaBody, tc.instance, true)
