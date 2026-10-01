@@ -246,7 +246,11 @@
 // attribute charges use: a simple {content type} has the root's ·initial
 // value· — every character information item [[child]] concatenated in order
 // — validated against its {simple type definition} per String Valid, charged
-// against the root's own Loc.
+// against the root's own Loc. Clause 5 asks each element [[child]]'s
+// ·governing type definition· to be the same as, or ·validly substitutable·
+// ·without limitation· for, its ·locally declared type· within the root's type
+// (key-ldt-elem, xsd.Schema.LocallyDeclaredElementType), charged against the
+// child's Loc; the clause's [[attributes]] half (key-ldt-att) is not evaluated.
 //
 // Everything not decidable is left undecided rather than guessed at: a
 // ·governing type definition· that is not determinable, a {content type} whose
