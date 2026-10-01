@@ -688,7 +688,7 @@ func rootStart(dec *xml.Decoder) (xml.StartElement, bool) {
 }
 
 // rawDecoder is the one encoding/xml reader both of the lane's raw re-reads,
-// assessedSubtreeRoot and documentVersioned, take over a document's bytes. It
+// assessedSubtreeRoot and documentCarries, take over a document's bytes. It
 // drops one leading UTF-8 byte-order mark, as parser/xmltree's reader does (XML
 // 1.0 §4.3.3: an encoding signature, no part of the document), and so honours
 // xmldecl.As10's precondition that the mark is consumed before the declaration
