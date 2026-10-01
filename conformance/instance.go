@@ -28,11 +28,14 @@ import (
 // carries the group's schema documents alongside it (caseSpec.schemaDoc and
 // schemaExtraDocs, groupSchemaDocs in conformance/runner.go) — the
 // <schemaDocument> list of the group's sibling schemaTest. A group declaring any
-// number of schemaTests other than exactly one yields no schema reference at all
-// and DECLINES, which is not a hypothetical shape: 55 groups of the pinned suite
-// declare NONE, so 55 instance cases decline for that reason alone.
+// number of schemaTests other than exactly one yields no schema reference at
+// all, which is not a hypothetical shape: 55 groups of the pinned suite declare
+// NONE. Such a case is assessed against the schema its root's
+// xsi:schemaLocation / xsi:noNamespaceSchemaLocation hints locate (caseSchema,
+// instancehints.go, #2013, §4.3.2 clauses 3-5), and DECLINES where it carries
+// no hint, a hint below its root, or an inline xs:schema.
 //
-// The schema is assembled by assembleCase, the very gate the schema lane
+// The group's schema is assembled by assembleCase, the very gate the schema lane
 // decides its own cases with, and this lane declines wherever that gate does —
 // plus one condition the schema lane does not have: it declines a schema
 // document set the assembly REJECTED. A schema the parser found schema-invalid
@@ -441,7 +444,9 @@ import (
 // declaring components with it, which is not the defect the suite meant to test.
 // assembleCase's fabricatedRejection bounds that for the SCHEMA lane, where the
 // fabricated verdict shows up as a failed parse, and does not transfer here,
-// where the parse succeeds and the charge lands anyway.
+// where the parse succeeds and the charge lands anyway. A schema assembled from
+// the instance's hints never reaches this charge at the root: assembleHints
+// declines a hinted schema declaring no top-level element for it.
 //
 // Three further declines close the ways a NON-verdict could reach that
 // comparison. An instance document that will not resolve or read is a recorded
@@ -468,18 +473,12 @@ func newInstanceExec() executor {
 }
 
 // execInstanceCase decides one instanceTest case, or honestly declines it
-// (Fail): it assembles the group's schema through the shared gate, assesses the
+// (Fail): it assembles the case's schema (caseSchema), assesses the
 // instance document against it, and reads the assessment only where the answer
 // is unconditional: a set of the nine decidable charges is "not valid", and an
 // empty Result on an assessed subtree root (assessedSubtreeRoot) is "valid".
 func execInstanceCase(backend value.Backend, c caseSpec) Status {
-	if c.schemaDoc == "" {
-		// The group declared no single schemaTest to take a schema from
-		// (groupSchemaDocs): a case with no stated schema, not a case with an
-		// invalid one.
-		return Fail()
-	}
-	schema, report, decidable, perr := assembleCase(backend, c.schemaDoc, c.schemaExtraDocs)
+	schema, report, decidable, perr := caseSchema(backend, c)
 	if !decidable || perr != nil {
 		return Fail()
 	}

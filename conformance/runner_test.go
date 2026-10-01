@@ -621,8 +621,8 @@ func TestMakeCaseSplitsSchemaDocuments(t *testing.T) {
 // instance lane (issue #713): the catalog names only the instance document, so an
 // instanceTest's caseSpec must carry the <schemaDocument> list of its group's
 // sibling schemaTest, resolved exactly as a schemaTest's own documents are —
-// without it execInstanceCase has no schema to assess against and declines every
-// case.
+// without it execInstanceCase has only the instance's own hints to assess
+// against, and declines every case that carries none (caseSchema).
 //
 // The three rows are the whole rule. Exactly one sibling schemaTest yields the
 // reference; a group with none and a group with two yield NOTHING, because
