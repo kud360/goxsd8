@@ -46,8 +46,9 @@ const ruleCvcAssessElt xsderr.Rule = "cvc-assess-elt"
 const ruleCvcElt xsderr.Rule = "cvc-elt"
 
 // ruleCvcComplexType is Element Locally Valid (Complex Type) (Structures
-// §3.4.4.2, cvc-complex-type). Clauses 2 and 3 — the attribute half — are
-// charged here; the clause number goes in the message on ruleCvcElt's terms.
+// §3.4.4.2, cvc-complex-type). Clauses 2 and 3 — the attribute half — and
+// clause 5 over element [[children]] are charged here; the clause number goes
+// in the message on ruleCvcElt's terms.
 const ruleCvcComplexType xsderr.Rule = "cvc-complex-type"
 
 // ruleCvcType is Element Locally Valid (Type) (Structures §3.3.4.4, cvc-type).
@@ -94,7 +95,9 @@ const ruleCvcType xsderr.Rule = "cvc-type"
 // 2, 3 and 4, and through clause 2.1 to the cvc-attribute (§3.2.4.1) and cvc-au
 // (§3.5.4) charges the value space decides (see [walk.attributes] and
 // cvcattribute.go). Its [[children]] go to clause 1, and through clause 1.4 to
-// cvc-complex-content (§3.4.4.3) over [xsd.Matcher] (see cvccomplexcontent.go).
+// cvc-complex-content (§3.4.4.3) over [xsd.Matcher] (see cvccomplexcontent.go),
+// and each element [[child]] to clause 5, its ·governing type definition·
+// against its ·locally declared type· ([walk.locallyDeclaredType]).
 //
 // Clause 3.1, for a SIMPLE one, is charged in three sub-clauses of its own:
 // 3.1.1, admitting no [[attributes]] but xsi:type, xsi:nil, xsi:schemaLocation
@@ -121,13 +124,14 @@ const ruleCvcType xsderr.Rule = "cvc-type"
 // ([walk.child], #1823).
 //
 // Nothing else is decided: the remaining cvc-elt clauses, cvc-type's own
-// clauses 1 and 2 (T ·non-absent·, and a complex T's {abstract}) and
-// cvc-complex-type's own clauses 5 and 6 are not evaluated, so a [Result]
-// carrying no violation says the root is declared, not abstract, and — where
-// its type was determinable — carries no attribute clause 2 or clause 3.1.1
-// rejects, no required attribute clause 3 misses, no attribute whose value this
-// backend could read and found invalid, and no content reject its ·governing
-// type definition· could settle, and says nothing else about the document.
+// clauses 1 and 2 (T ·non-absent·, and a complex T's {abstract}),
+// cvc-complex-type clause 5 over [[attributes]] (key-ldt-att) and clause 6 are
+// not evaluated, so a [Result] carrying no violation says the root is
+// declared, not abstract, and — where its type was determinable — carries no
+// attribute clause 2 or clause 3.1.1 rejects, no required attribute clause 3
+// misses, no attribute whose value this backend could read and found invalid,
+// no content reject its ·governing type definition· could settle and no child
+// clause 5 rejects, and says nothing else about the document.
 //
 // It panics if root is nil, on the same grounds as [ElementChild].
 func (v *Validator) Assess(root Element) *Result {
@@ -178,9 +182,11 @@ func (v *Validator) Assess(root Element) *Result {
 // (laxlyAssessed), and hasDecl TRUE with a nil typ is this package declining a
 // type it could not determine — a distinction cvcid.go needs, since only the
 // second could have hidden an ID. hasDecl false with a NON-nil typ is the third
-// shape, clause 1.2's: an element with no ·governing element declaration· whose
-// xsi:type ·resolved·, ·strictly assessed· against that type alone
-// (key-governing-type-elem clause 8). Every rule that reads the DECLARATION —
+// shape, clause 1.2's: an element with no ·governing element declaration·
+// ·strictly assessed· against a type alone — its ·locally declared type· or an
+// xsi:type ·overriding· it (key-governing-type-elem clauses 7 and 6,
+// [walk.localGovernance]), or else an xsi:type that ·resolved· (clause 8,
+// [walk.instanceGovernance]). Every rule that reads the DECLARATION —
 // cvc-elt, §3.11.4's {identity-constraint definitions} — is vacuous for it, and
 // every rule that reads the type applies in full.
 //
@@ -195,8 +201,8 @@ func (v *Validator) Assess(root Element) *Result {
 // ([walk.child]), an unattributed one hands them nothing (laxlyAssessed).
 //
 // instance is whether typ is E's ·instance-specified type definition· (§3.3.4.1,
-// key-itd) — the xsi:type-driven cases of key-governing-type-elem, clauses 3 and
-// 8 here. It is recorded rather than re-derived because governingType folds the
+// key-itd) — the xsi:type-driven cases of key-governing-type-elem, clauses 3, 6
+// and 8 here. It is recorded rather than re-derived because governingType folds the
 // decision away and nothing left in this struct can recover it: comparing typ
 // against decl.TypeDefinition() answers a DIFFERENT question, since a {type
 // table} may ·conditionally select· a type that differs from the declared one
@@ -431,13 +437,20 @@ func typeName(t xsd.TypeDefinition) string {
 //     clause 4 carries it — to the declaration its ·expanded name· ·resolves·
 //     to, and to none where it resolves to none, which is cvc-assess-elt
 //     clause 3.3's ·lax assessment·. A skip {wildcard} makes the item ·skipped·
-//     instead, which is clause 4.1 and the assess=false above. What this arm
-//     does NOT share with the Wildcard one is e-validity clause 1.1.3, which
-//     quantifies over ·wildcard particles· alone
+//     instead, which is clause 4.1 and the assess=false above. Clause 4.3
+//     withholds the declaration wherever the item's ·locally declared type·
+//     within parent ([xsd.Schema.LocallyDeclaredElementType]) is non-·absent·,
+//     resolved name or not: the item then has no ·governing element
+//     declaration·, and that type, or an xsi:type ·overriding· it, governs
+//     instead ([walk.localGovernance]). What this arm does NOT share with the
+//     Wildcard one is clause 4.3, which clause 3 does not carry, and e-validity
+//     clause 1.1.3, which quantifies over ·wildcard particles· alone
 //     ([walk.unresolvedStrictWildcardChild]).
 //
-// inherited is e's [inherited attributes], which a {type table} on the
-// declaration reads (cta.go) and nothing else here does.
+// parent is the enclosing element's complex ·governing type definition·, which
+// only the {open content} arm reads, and nil where it has none. inherited is
+// e's [inherited attributes], which a {type table} on the declaration reads
+// (cta.go) and nothing else here does.
 //
 // A nil attribution is a parent that attributed the child to nothing: a
 // ·governing type definition· this package could not determine, a ·nilled· or
@@ -446,7 +459,7 @@ func typeName(t xsd.TypeDefinition) string {
 // against nothing, and so is every element below it. A ·laxly assessed· parent
 // never reaches this arm, though its content check attributes nothing too:
 // [walk.child] hands its children xs:anyType's lax wildcard first (#1823).
-func (w *walk) childGoverning(e Element, a xsd.Attribution, inherited []inheritedAttribute) (governance, bool) {
+func (w *walk) childGoverning(e Element, a xsd.Attribution, parent *xsd.ComplexType, inherited []inheritedAttribute) (governance, bool) {
 	switch t := a.(type) {
 	case xsd.ElementDeclaration:
 		if t.Name() != e.Name() {
@@ -461,6 +474,11 @@ func (w *walk) childGoverning(e Element, a xsd.Attribution, inherited []inherite
 	case *xsd.OpenContent:
 		if t.Wildcard().ProcessContents() == xsd.ProcessSkip {
 			return governance{}, false
+		}
+		if parent != nil {
+			if ldt, local := w.schema.LocallyDeclaredElementType(*parent, e.Name()); local {
+				return w.localGovernance(e, ldt), true
+			}
 		}
 		return w.resolvedGovernance(e, inherited), true
 	default:
@@ -543,6 +561,120 @@ func (w *walk) unresolvedStrictWildcardChild(content *contentCheck, child Elemen
 	content.log(w, child.Name(), child.Loc(), ruleCvcAssessElt, "1.1.3", "charged")
 }
 
+// locallyDeclaredType settles cvc-complex-type (§3.4.4.2) clause 5 for one
+// element [[child]] of the element content is checking: where neither the
+// child's ·governing type definition· nor its ·locally declared type· within the
+// parent's is ·absent·, the first is the same as the second or ·validly
+// substitutable· for it ·without limitation· (key-val-sub-type-absolute, the
+// empty set of blocking keywords).
+//
+// The ·locally declared type· is [xsd.Schema.LocallyDeclaredElementType]'s
+// (key-ldt-elem), over the parent's ·governing type definition· as clause 5's
+// "E" reads it. A parent with no complex ·governing type definition· — a simple
+// one, one this package could not determine, a ·laxly assessed· one, whose
+// xs:anyType answers ·absent· by case 1 — and a child with no ·governing type
+// definition· are both clause 5's ·absent· antecedent, and nothing is charged.
+// The clause quantifies over every child, whatever it was ·attributed to·. One
+// a particle's element declaration governs passes where its ·governing type
+// definition· is that declaration's {type definition}, a {type table}
+// selection other than ·xs:error· (e-props-correct clause 7.1), or an xsi:type
+// ·overriding· the declared type: the parent's content model contains that
+// declaration, and cos-element-consistent gives every same-named declaration
+// it contains one type. It can fail where the {type table} selected S, neither
+// ·xs:error· nor the declared type, and the xsi:type ·overrides· S:
+// key-overrides blocks under S's {prohibited substitutions} and not under the
+// declared type's. A selection of ·xs:error· (clause 7.2) is charged here too,
+// beside cvc-type's charges against it. One ·attributed to· an {open content}
+// with a non-·absent· ·locally declared type· passes by construction too:
+// key-governing-ed clause 4.3 has that type, or an xsi:type ·overriding· it
+// ·without limitation·, govern it ([walk.localGovernance]). It is a child
+// ·attributed to· a strict or lax Wildcard, governed by the top-level
+// declaration its name ·resolves· to or by its xsi:type alone
+// (key-governing-type-elem clause 8), that can fail.
+//
+// "The same as" is sameType. An error from [xsd.Schema.ValidlySubstitutable] is
+// its src-resolve rejection and never a verdict about the pair, so it is
+// recorded as undecided and charges nothing.
+//
+// The charge carries the CHILD's location, where the mismatched item is; the
+// parent whose validity clause 5 decides is named in the message.
+func (w *walk) locallyDeclaredType(content *contentCheck, child Element, g governance) {
+	parent := content.g.complexType()
+	if parent == nil || g.typ == nil {
+		return
+	}
+	ldt, ok := w.schema.LocallyDeclaredElementType(*parent, child.Name())
+	if !ok {
+		return
+	}
+	if sameType(g.typ, ldt) {
+		content.log(w, child.Name(), child.Loc(), ruleCvcComplexType, "5", "satisfied")
+		return
+	}
+	substitutable, err := w.schema.ValidlySubstitutable(g.typ, ldt, nil)
+	if err != nil {
+		w.decline("assessing element", child.Name(), child.Loc(), ruleCvcComplexType, "5",
+			"cvc-complex-type clause 5 was not decided for the element %s: whether its ·governing type definition· %s is ·validly substitutable· for its ·locally declared type· %s within %s could not be settled: %v",
+			child.Name(), typeName(g.typ), typeName(ldt), content.e.Name(), err)
+		return
+	}
+	if substitutable {
+		content.log(w, child.Name(), child.Loc(), ruleCvcComplexType, "5", "satisfied")
+		return
+	}
+	w.res.violations = append(w.res.violations, xsderr.New(ruleCvcComplexType, child.Loc(),
+		"the element %s is a child of %s, and its ·governing type definition· %s is neither the same as nor ·validly substitutable· ·without limitation· for its ·locally declared type· %s within the parent's ·governing type definition·, as cvc-complex-type clause 5 requires (§3.4.4.2, key-ldt-elem)",
+		child.Name(), content.e.Name(), typeName(g.typ), typeName(ldt)))
+	content.log(w, child.Name(), child.Loc(), ruleCvcComplexType, "5", "charged")
+}
+
+// sameType repeats xsd's unexported sameDeclaredType across the package
+// boundary, under a weaker operand precondition: a is a ·governing type
+// definition·, which may be a {type table} selection, where sameDeclaredType
+// is sound only for two declarations' {type definition}s. It is not unified
+// with it, because the export would carry a precondition only one caller
+// meets.
+//
+// It is clause 5's "the same as" for a child's ·governing type
+// definition· a and its ·locally declared type· b. Named types are one
+// component when their ·expanded names· are equal. Two anonymous COMPLEX types
+// are one component when their {context}s name one component, which is the
+// only identity an anonymous complex type has: [xsd.Schema.ValidlySubstitutable]
+// answers false for a type against itself when both are anonymous complex
+// (cos-ct-derived-ok's no-identity Note), so without this a child governed by
+// the very declaration the ·locally declared type· is read off would be
+// charged. An anonymous simple type needs no arm here: cos-st-derived-ok answers
+// a type against itself true.
+//
+// A {type table} alternative's inline type shares its declaration's {context},
+// so it is reported the same as the declared type it may differ from. That is
+// no false accept: e-props-correct clause 7.1 already made such an
+// alternative ·validly substitutable· for the declared type under a blocking
+// set that contains clause 5's empty one, and the clause 7.2 exception,
+// xs:error, is named and never reaches the {context} arm.
+func sameType(a, b xsd.TypeDefinition) bool {
+	if a.Name() != (xsd.QName{}) || b.Name() != (xsd.QName{}) {
+		return a.Name() == b.Name()
+	}
+	ca, ok := a.(xsd.ComplexType)
+	if !ok {
+		return false
+	}
+	cb, ok := b.(xsd.ComplexType)
+	if !ok {
+		return false
+	}
+	xa, ok := ca.Context()
+	if !ok {
+		return false
+	}
+	xb, ok := cb.Context()
+	if !ok {
+		return false
+	}
+	return xa.ID() == xb.ID()
+}
+
 // resolvedGovernance is the ·governing element declaration· of an element that
 // is the one its ·expanded name· ·resolves· to among the schema's top-level
 // element declarations (cvc-resolve-instance, §3.17.6.3), together with the
@@ -584,6 +716,40 @@ func (w *walk) instanceGovernance(e Element) (governance, bool) {
 		return governance{}, false
 	}
 	return governance{typ: t, instance: true}, true
+}
+
+// localGovernance is the governance of an element with no ·governing element
+// declaration· because a non-·absent· ·locally declared type· ldt exists for
+// it (key-governing-ed clause 4.3): key-governing-type-elem clause 6, an
+// ·instance-specified type definition· that ·overrides· ldt, and otherwise
+// clause 7, ldt itself. With no ·governing element declaration· known,
+// ·overriding· is ·validly substitutable without limitation· (key-overrides
+// clause 2), and no cvc-elt clause is live to charge an xsi:type that does not
+// override: the element is ·strictly assessed· against ldt by cvc-assess-elt
+// clause 1.2 either way, which leaves cvc-complex-type clause 5 satisfied for
+// it by construction.
+//
+// An error from [xsd.Schema.ValidlySubstitutable] leaves clause 6 undecided:
+// it is recorded as [Unevaluated], and the element is unattributed and walked
+// against nothing, as [walk.child] walks one whose parent attributed it to
+// nothing, with cvc-id's clause 1 arm withheld on the same grounds.
+func (w *walk) localGovernance(e Element, ldt xsd.TypeDefinition) governance {
+	instance, specified := w.instanceTypeDefinition(e)
+	if !specified {
+		return governance{typ: ldt}
+	}
+	overrides, err := w.schema.ValidlySubstitutable(instance, ldt, nil)
+	if err != nil {
+		w.decline("assessing element", e.Name(), e.Loc(), ruleCvcAssessElt, "1.2",
+			"the ·governing type definition· of the element %s was not determined: whether its xsi:type %s ·overrides· its ·locally declared type· %s (key-governing-type-elem clause 6) could not be settled: %v",
+			e.Name(), typeName(instance), typeName(ldt), err)
+		w.ids.declined = true
+		return governance{unattributed: true}
+	}
+	if overrides {
+		return governance{typ: instance, instance: true}
+	}
+	return governance{typ: ldt}
 }
 
 // walk is the state of one [Validator.Assess] call, held here and not on the
@@ -1103,12 +1269,13 @@ func (w *walk) child(c Child, content *contentCheck, id *icCheck, inherited []in
 			w.element(e, w.resolvedGovernance(e, inherited), id, inherited)
 			return
 		}
-		g, assess := w.childGoverning(e, a, inherited)
+		g, assess := w.childGoverning(e, a, content.g.complexType(), inherited)
 		if !assess {
 			w.logSkipped(e)
 			return
 		}
 		w.unresolvedStrictWildcardChild(content, e, a, g)
+		w.locallyDeclaredType(content, e, g)
 		if a == nil {
 			// GAP(validate): a child its parent ·attributed to· nothing is one
 			// this package gave up typing and not one §3.3.4.6 leaves untyped,
