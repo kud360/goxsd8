@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/kud360/goxsd8/internal/xmldecl"
 	"github.com/kud360/goxsd8/loader"
 	"github.com/kud360/goxsd8/parser"
 	"github.com/kud360/goxsd8/xsd"
@@ -26,7 +27,8 @@ import (
 // conditions.
 //
 // The gate is computed per case and stored nowhere. It re-reads the instance
-// with encoding/xml and re-derives every child's ·attribution· through
+// with encoding/xml, admitting a 1.x version label as parser/xmltree does
+// (xmldecl.As10), and re-derives every child's ·attribution· through
 // xsd.Schema.ContentMatcher, independently of the walk, so it never rests on
 // what the walk did or did not record for a descendant — save for a strict
 // ·wildcard particle·'s child resolving to no declaration and carrying no
@@ -56,7 +58,7 @@ func assessedSubtreeRoot(schema *xsd.Schema, report *parser.AssemblyReport, doc 
 		return false
 	}
 	defer func() { _ = rc.Close() }() // read-only handle: close error cannot affect the verdict
-	dec := xml.NewDecoder(rc)
+	dec := xml.NewDecoder(xmldecl.As10(rc))
 	root, ok := rootStart(dec)
 	if !ok {
 		return false
@@ -721,14 +723,16 @@ func closureVersioned(report *parser.AssemblyReport) bool {
 }
 
 // documentVersioned reports whether the document at path carries an attribute
-// in versioningNS, or cannot be read to say.
+// in versioningNS, or cannot be read to say. A 1.x version label is admitted as
+// parser/xmltree admits it (xmldecl.As10), so the documents Parse read are the
+// documents this can read.
 func documentVersioned(path string) bool {
 	f, err := os.Open(path)
 	if err != nil {
 		return true
 	}
 	defer func() { _ = f.Close() }() // read-only handle: close error cannot affect the verdict
-	dec := xml.NewDecoder(f)
+	dec := xml.NewDecoder(xmldecl.As10(f))
 	for {
 		tok, err := dec.Token()
 		if errors.Is(err, io.EOF) {
