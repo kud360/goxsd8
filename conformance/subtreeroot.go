@@ -110,7 +110,7 @@ type subtreeGate struct {
 // element declaration· is d, through to its end tag, and reports whether every
 // condition below holds for it and, recursively, for every element under it:
 //
-//   - it carries no xsi:nil (plainAttributes);
+//   - an xsi:nil it carries has an ·actual value· (nilValue);
 //   - d is not abstract and carries no {type table} (assessedDeclaration);
 //   - its ·governing type definition· is determined: d.{type definition}
 //     resolves, and an xsi:type the element carries meets governingType's
@@ -118,9 +118,20 @@ type subtreeGate struct {
 //     in the two conditions below;
 //   - for a Simple Type Definition, the element carries no attribute but the
 //     four xsi: ones cvc-type clause 3.1.1 excepts, and no element [[child]];
-//   - for a Complex Type Definition, the conditions complex names.
+//   - for a Complex Type Definition, the conditions complex names, the element
+//     being ·nilled· (key-nilled) where d.{nillable} is true and its xsi:nil's
+//     ·actual value· is true.
+//
+// An xsi:nil is otherwise the walk's: validate's nilCheck charges cvc-elt
+// clause 3.1 for one on a declaration whose {nillable} is false, whatever its
+// value, and clause 3.2.3.2 for a ·nilled· element under a fixed {value
+// constraint}; its contentCheck charges clause 3.2.3.1 for a ·nilled· element's
+// character or element [[child]]. An xsi:nil whose ·actual value· is false is
+// clause 3.2.2, which holds as 3.2.1 does, and the element is read as if it
+// carried none.
 func (g *subtreeGate) element(start xml.StartElement, d xsd.ElementDeclaration) bool {
-	if !plainAttributes(start.Attr) || !assessedDeclaration(d) {
+	isNil, ok := nilValue(start.Attr)
+	if !ok || !assessedDeclaration(d) {
 		return false
 	}
 	defer g.enter(start)()
@@ -135,7 +146,7 @@ func (g *subtreeGate) element(start xml.StartElement, d xsd.ElementDeclaration) 
 		}
 		return g.leaf()
 	case xsd.ComplexType:
-		return g.complex(start, t)
+		return g.complex(start, t, isNil && d.Nillable())
 	}
 	return false
 }
@@ -232,10 +243,34 @@ var (
 // anyTypeName is the ·expanded name· of ·xs:anyType·.
 var anyTypeName = xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"}
 
-// plainAttributes reports whether attrs, one start tag's attribute list, holds
-// no xsi:nil.
-func plainAttributes(attrs []xml.Attr) bool {
-	return !slices.ContainsFunc(attrs, func(a xml.Attr) bool { return a.Name == xsiNil })
+// nilValue reports the ·actual value· of the xsi:nil attrs, one start tag's
+// attribute list, carries — false where it carries none — and false for ok
+// where its lexical has no ·actual value·: after the whiteSpace collapse
+// xs:boolean fixes, it is none of boolean-lexical-mapping's four literals
+// (Datatypes §3.3.2.2), the type §3.2.7's built-in declaration gives xsi:nil.
+//
+// The gate refuses such a lexical wherever it sits. Under a ·governing element
+// declaration· the walk charges it (validate's nilCheck, cvc-elt clause 3.1 or
+// 3.2), so no empty Result reaches the gate with it.
+//
+// GAP(conformance): on a ·laxly assessed· element (laxlyAssessed), which has no
+// declaration to be ·nilled· against, such an xsi:nil is still governed by
+// that built-in declaration (key-governing-ad) and so not ·valid· (cvc-attribute
+// clause 3), which the walk charges nothing for and records nothing of. The
+// refusal leaves execInstanceCase Failing the case: a suite-invalid case of this
+// shape scores no pass, and none a false one.
+func nilValue(attrs []xml.Attr) (value, ok bool) {
+	i := slices.IndexFunc(attrs, func(a xml.Attr) bool { return a.Name == xsiNil })
+	if i < 0 {
+		return false, true
+	}
+	switch strings.Trim(attrs[i].Value, " \t\r\n") {
+	case "true", "1":
+		return true, true
+	case "false", "0":
+		return false, true
+	}
+	return false, false
 }
 
 // notExcepted reports whether a is an attribute information item that neither
@@ -257,7 +292,9 @@ func notExcepted(a xml.Attr) bool {
 // 5.2.2.2.1 a mixed type's lexical match, 5.2.2.2.2 a simple type's value
 // equality) are the walk's (validate's contentCheck.defaultValid and
 // contentCheck.fixedValue), which records the one comparison it declines.
-// Clause 3.2.3.2 never arises: plainAttributes refuses every xsi:nil.
+// {nillable} is admitted, either way: clause 3 is the walk's — 3.1, 3.2 and
+// 3.2.3.2 in validate's nilCheck, 3.2.3.1 in its contentCheck — and element
+// reads a ·nilled· element's [[children]] as complex says.
 // {identity-constraint definitions} are admitted too: clause 6
 // (cvc-identity-constraint, §3.11.4) is the walk's, which records every check
 // it declines.
@@ -269,8 +306,8 @@ func assessedDeclaration(d xsd.ElementDeclaration) bool {
 	return !ok
 }
 
-// complex reads an element governed by the Complex Type Definition t through to
-// its end tag, and reports whether:
+// complex reads an element governed by the Complex Type Definition t, ·nilled·
+// where nilled is true, through to its end tag, and reports whether:
 //
 //   - t.{abstract} is false (cvc-type clause 2);
 //   - every one of t.{attribute uses} resolves to an {attribute declaration}
@@ -278,11 +315,15 @@ func assessedDeclaration(d xsd.ElementDeclaration) bool {
 //   - every attribute the element carries that notExcepted names matches one
 //     of those uses by ·expanded name· (cvc-complex-type clause 2.1) or meets
 //     wildcardAttribute's conditions (clause 2.2);
-//   - under a simple or an empty {content type}, there is no element
-//     [[child]];
-//   - under an element-only or mixed one, xsd.Schema.ContentMatcher decides it
-//     and every element [[child]] meets child's conditions.
-func (g *subtreeGate) complex(start xml.StartElement, t xsd.ComplexType) bool {
+//   - for a ·nilled· element, there is no element [[child]]: cvc-complex-type
+//     clause 1 applies only to an element that is not ·nilled·, so the
+//     {content type} is not read, and cvc-elt clause 3.2.3.1, no character or
+//     element [[child]], is the walk's (validate's contentCheck);
+//   - otherwise, under a simple or an empty {content type}, there is no
+//     element [[child]];
+//   - otherwise, under an element-only or mixed one, xsd.Schema.ContentMatcher
+//     decides it and every element [[child]] meets child's conditions.
+func (g *subtreeGate) complex(start xml.StartElement, t xsd.ComplexType, nilled bool) bool {
 	if t.Abstract() {
 		return false
 	}
@@ -304,6 +345,9 @@ func (g *subtreeGate) complex(start xml.StartElement, t xsd.ComplexType) bool {
 		if !g.wildcardAttribute(t, n) {
 			return false
 		}
+	}
+	if nilled {
+		return g.leaf()
 	}
 	switch t.ContentType().(type) {
 	case xsd.SimpleContent, xsd.EmptyContent:
@@ -526,19 +570,20 @@ func (g *subtreeGate) resolvedChild(t xsd.ComplexType, start xml.StartElement, s
 
 // laxlyAssessed reads through to its end tag an element whose start tag is
 // start, which has neither a ·governing element declaration· nor a ·governing
-// type definition· and is not ·skipped·, and reports whether it carries no
-// xsi:nil and it and its subtree meet complex's conditions against
-// ·xs:anyType·. Such an element is ·laxly assessed· (cvc-assess-elt clause 3,
-// key-lva): locally validated against ·xs:anyType· and its [[attributes]] and
-// [[children]] assessed by key-sva clauses 2 and 3, which is validate's
-// walk.child and walk.attribute for a laxly assessed parent (#1823, #1891). Its
-// [validity] is notKnown (e-validity clause 2), which blocks no ancestor's
-// valid: e-validity clause 1.1.3 counts notKnown only under a strict ·wildcard
-// particle·. What it does decide is every charge at or below it, which
-// instance.go's "Charges at depth" reads as "not valid" (§2.5
-// key-deep-valid-doc, #1911).
+// type definition· and is not ·skipped·, and reports whether an xsi:nil it
+// carries has an ·actual value· (nilValue) and it and its subtree meet
+// complex's conditions against ·xs:anyType·, never ·nilled·: key-nilled is
+// relative to a declaration, and it has none. Such an element is ·laxly
+// assessed· (cvc-assess-elt clause 3, key-lva): locally validated against
+// ·xs:anyType· and its [[attributes]] and [[children]] assessed by key-sva
+// clauses 2 and 3, which is validate's walk.child and walk.attribute for a
+// laxly assessed parent (#1823, #1891). Its [validity] is notKnown (e-validity
+// clause 2), which blocks no ancestor's valid: e-validity clause 1.1.3 counts
+// notKnown only under a strict ·wildcard particle·. What it does decide is
+// every charge at or below it, which instance.go's "Charges at depth" reads as
+// "not valid" (§2.5 key-deep-valid-doc, #1911).
 func (g *subtreeGate) laxlyAssessed(start xml.StartElement) bool {
-	if !plainAttributes(start.Attr) {
+	if _, ok := nilValue(start.Attr); !ok {
 		return false
 	}
 	td, ok := g.schema.Type(anyTypeName)
@@ -550,7 +595,7 @@ func (g *subtreeGate) laxlyAssessed(start xml.StartElement) bool {
 		return false
 	}
 	defer g.enter(start)()
-	return g.complex(start, anyType)
+	return g.complex(start, anyType, false)
 }
 
 // substitutionHeads is d's ·expanded name· followed by the name of every

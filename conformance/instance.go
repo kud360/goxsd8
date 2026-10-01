@@ -237,17 +237,18 @@ import (
 //     clause 2) and has no [validity] to block its parent's (sic-e-outcome
 //     clause 1.1). So is a skip {open content}'s child, which validate reads
 //     as ·skipped· too (#1969). A lax Wildcard's or {open content}'s child
-//     resolving to none, with no xsi:type and no xsi:nil, is ·laxly assessed·
-//     (cvc-assess-elt clause 3, key-lva): the gate holds it and its subtree
-//     to every condition below against ·xs:anyType·, as the walk assesses
-//     them (subtreeGate.laxlyAssessed, #1823, #1891). Its [validity] is
+//     resolving to none, with no xsi:type, is ·laxly assessed· (cvc-assess-elt
+//     clause 3, key-lva): the gate holds it and its subtree to every condition
+//     below against ·xs:anyType·, as the walk assesses them, and it is never
+//     ·nilled·, key-nilled being relative to a declaration it lacks
+//     (subtreeGate.laxlyAssessed, #1823, #1891). Its [validity] is
 //     notKnown, which blocks no ancestor's valid (e-validity clause 1.1.3
 //     names a strict ·wildcard particle· alone) and leaves the document
 //     deep-valid (§2.5 Note, #1911). A child resolving to none with an
 //     xsi:type is refused, under strict and lax alike. No element of a
 //     subtree whose Result is empty is therefore assessed against no type.
-//   - cvc-elt clauses 2 to 6, at every element: {abstract} false, no xsi:nil,
-//     and no {type table} — so the ·selected type definition· is the {type
+//   - cvc-elt clauses 2 to 6, at every element: {abstract} false and no {type
+//     table} — so the ·selected type definition· is the {type
 //     definition}, which the gate resolves itself. An xsi:type is admitted
 //     where the gate resolves it and xsd.Schema.ValidlySubstitutable answers
 //     that it ·overrides· the selected type (clause 4, §3.3.4.2
@@ -260,11 +261,15 @@ import (
 //     admitted, at every depth: clause 6 (cvc-identity-constraint, §3.11.4) is
 //     the walk's, which reads a ·defaulted attribute· field node as it reads a
 //     present one (validate's icCheck.fieldDefaultedAttributes) and records
-//     each check it declines in Result.Unevaluated. {nillable} is admitted, at
-//     the root too: with no xsi:nil anywhere, clause 3.1 holds for a
-//     declaration whose {nillable} is false and clause 3.2.1 ("E has no
-//     xsi:nil attribute information item") for one whose {nillable} is true,
-//     and no element is ·nilled·. A {value constraint} of either variety is
+//     each check it declines in Result.Unevaluated. {nillable} and xsi:nil are
+//     admitted, at every depth (#2053): clause 3 is the walk's — validate's
+//     nilCheck charges 3.1, an xsi:nil on a declaration whose {nillable} is
+//     false, 3.2, one with no ·actual value·, and 3.2.3.2, a ·nilled· element
+//     under a fixed {value constraint}, and its contentCheck charges 3.2.3.1, a
+//     ·nilled· element's character or element [[child]]. An xsi:nil false
+//     under a {nillable} declaration is 3.2.2, read as if absent. The gate
+//     refuses an xsi:nil with no ·actual value· itself, wherever it sits
+//     (subtreeGate's nilValue). A {value constraint} of either variety is
 //     admitted, at every depth: clause 5.1 substitutes its {lexical form} for
 //     the ·normalized value· of an element with neither element nor character
 //     [[children]], and the walk assesses cvc-type over that substituted value
@@ -273,9 +278,9 @@ import (
 //     fixed one is clause 5.2.2's, which the walk settles too — 5.2.2.1, no
 //     element [[children]], and 5.2.2.2, the ·initial value· agreeing with it
 //     (validate's contentCheck.fixedValue) — recording in Result.Unevaluated
-//     the one comparison value.ConstraintMatches does not decide. Clause
-//     3.2.3.2, a ·nilled· element under a fixed one, never arises. Clause 2 is
-//     refused outright below the root, where the walk charges it nowhere.
+//     the one comparison value.ConstraintMatches does not decide; clause 5 is
+//     gated on an element that is not ·nilled·, as the walk reads it. Clause 2
+//     is refused outright below the root, where the walk charges it nowhere.
 //   - cvc-type clause 2 (§3.3.4.4): a complex {type definition}'s {abstract}
 //     is false, at the root too, since the walk decides that clause nowhere.
 //   - cvc-type clause 3.1 (§3.3.4.4), for a Simple Type Definition: 3.1.1, the
@@ -341,9 +346,11 @@ import (
 //     each check it withholds, on an element with no [[attributes]] as on any
 //     other. A wildcard-resolved declaration supplies no ·defaulted attribute·
 //     (key-dflt-att ranges over {attribute uses}).
-//   - key-sva clause 2 for the xsi: attributes the gate admits: xsi:nil being
-//     refused, xsi:type is the walk's (cvc-attribute clauses 3 and 5, charged
-//     or recorded wherever it is no QName or ·resolves· to no type), and
+//   - key-sva clause 2 for the xsi: attributes the gate admits: xsi:nil is
+//     ·valid· against its built-in declaration's xs:boolean (§3.2.7) wherever
+//     it has an ·actual value·, which the gate requires (subtreeGate's
+//     nilValue); xsi:type is the walk's (cvc-attribute clauses 3 and 5,
+//     charged or recorded wherever it is no QName or ·resolves· to no type); and
 //     xsi:schemaLocation and xsi:noNamespaceSchemaLocation are each ·valid·
 //     against their built-in declaration's anyURI or list-of-anyURI type
 //     (§3.2.7), whose lexical spaces admit every string (Datatypes §3.3.17).
@@ -375,7 +382,11 @@ import (
 //     (cvc-complex-content), whose empty sequence is ·valid· only where the
 //     particle is emptiable (cvc-particle, "possibly empty"). The gate refuses
 //     a {content type} ContentMatcher declines and a child sequence it rejects
-//     or does not accept, a second check on the walk's charge.
+//     or does not accept, a second check on the walk's charge. Clause 1
+//     applies only to an element that is not ·nilled·: a ·nilled· one's
+//     [[children]] are cvc-elt clause 3.2.3.1's, which the walk charges, and
+//     the gate reads them without its ContentMatcher, refusing an element
+//     [[child]] (subtreeGate.complex).
 //
 // Every element is then ·strictly assessed· against a declaration and a type
 // the walk determined, and its [validity] is valid exactly where the walk
