@@ -314,13 +314,18 @@ type fixedConstraint struct {
 // under the schema document's, so "1" and "01" agree as one xs:integer and
 // "a:x" and "b:x" agree exactly when both prefixes name one namespace.
 //
+// A ·special· st agrees where the two literals are byte-identical and is
+// undecided otherwise, its lexical mapping not being a function (Datatypes
+// §3.2.1.2), as [value.ConstraintMatches] states.
+//
 // An undecided answer charges nothing and is recorded as an [Unevaluated].
-// GAP(validate): that covers a type this backend does not govern — a ·special·
-// one included, whose value space has no lexical mapping that is a function
-// (Datatypes §3.2.1.2) — and a {lexical form} outside its own type's lexical
-// space (a schema fault cos-valid-simple-default charges at assembly, not the
-// instance's). Charging on undecided would reject a document for a gap in the
-// processor. RULED permanent by #774 (STYLE P3b): cos-valid-simple-default
+// GAP(validate): that covers a type this backend does not govern, a ·special·
+// st whose two literals differ, and a {lexical form} outside its own type's
+// lexical space (a schema fault cos-valid-simple-default charges at assembly,
+// not the instance's). Charging on undecided would reject a document for a gap
+// in the processor. The ·special· residue is RULED permanent by #2029 (STYLE
+// P3b): differing literals may denote one value, so no verdict exists to give.
+// The rest is RULED permanent by #774 (STYLE P3b): cos-valid-simple-default
 // (§3.2.6.2) is a Schema Component Constraint, and a schema assembled through
 // [xsd.SchemaBuilder.Finalize] rather than FinalizeWith carries an undecided
 // value space, so that check may never have run; the instance walk has no
@@ -329,7 +334,7 @@ func (w *walk) fixedAgreement(a Attribute, e Element, st *xsd.SimpleType, f fixe
 	same, decided := value.ConstraintMatches(w.backend, w.schema, st, a.Value(), elementContext{owner: e}, f.vc)
 	if !decided {
 		w.declineAttribute(a, f.rule, f.clause,
-			"the ·actual value· of the attribute %s was not compared with the {value} of the fixed {value constraint} %q on its %s: value.ConstraintMatches could not decide the comparison, a fault of the type or of the value backend rather than a verdict about the value, so %s is undecided",
+			"the ·actual value· of the attribute %s was not compared with the {value} of the fixed {value constraint} %q on its %s: value.ConstraintMatches could not decide the comparison, a fault of the type or of the value backend, or two differing literals of a ·special· type whose lexical mapping is not a function, rather than a verdict about the value, so %s is undecided",
 			a.Name(), f.vc.LexicalForm(), f.owner, citation(f.rule, f.clause))
 		return
 	}

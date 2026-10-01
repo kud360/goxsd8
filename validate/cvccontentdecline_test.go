@@ -118,9 +118,10 @@ func TestWithheldSimpleContentValueIsRecorded(t *testing.T) {
 // An undecided comparison against a fixed {value constraint} (cvc-elt clause
 // 5.2.2.2.2) is recorded after the cvc-type clause 3.1.3 record the same
 // undecided type makes: a decline sets no charge, so it silences no later
-// clause, and each withheld clause is its own record. Over xs:anySimpleType the
-// comparison alone is undecided — its value space has no lexical mapping that
-// is a function (Datatypes §3.2.1.2) — while clause 3.1.3 is decided.
+// clause, and each withheld clause is its own record. Over xs:anySimpleType a
+// comparison of DIFFERING literals alone is undecided — its value space has no
+// lexical mapping that is a function (Datatypes §3.2.1.2), so "1.0" may denote
+// the "1" it is compared with — while clause 3.1.3 is decided.
 func TestUndecidedFixedValueComparisonIsRecorded(t *testing.T) {
 	fixed := xsd.NewValueConstraint(xsd.ValueFixed, "1.5", nil, nil)
 	got, undecided := assessRecordedWith(t, gapBackend(icBuiltin("decimal")),
@@ -130,10 +131,23 @@ func TestUndecidedFixedValueComparisonIsRecorded(t *testing.T) {
 		Unevaluated{rule: ruleCvcType, loc: loc(1, 1), msg: "cvc-type clause 3.1.3"},
 		Unevaluated{rule: ruleCvcElt, loc: loc(1, 1), msg: "cvc-elt clause 5.2.2.2.2"})
 
-	fixed = xsd.NewValueConstraint(xsd.ValueFixed, "x", nil, nil)
-	got, undecided = assessRecorded(t, simpleTypedSchema(t, icBuiltin("anySimpleType"), &fixed, false), cRoot("#x"))
+	fixed = xsd.NewValueConstraint(xsd.ValueFixed, "1", nil, nil)
+	got, undecided = assessRecorded(t, simpleTypedSchema(t, icBuiltin("anySimpleType"), &fixed, false), cRoot("#1.0"))
 	wantSilence(t, got, "an undecided comparison charges nothing")
 	wantDeclines(t, undecided, Unevaluated{rule: ruleCvcElt, loc: loc(1, 1), msg: "cvc-elt clause 5.2.2.2.2"})
+}
+
+// Over a ·special· ·governing type definition· cvc-elt clause 5.2.2.2.2 is
+// DECIDED satisfied where the ·initial value· and the fixed {lexical form} are
+// byte-identical: one literal maps identically on both sides, however many
+// values it may denote (Datatypes §3.2.1.2, §3.2.2.2; #2029).
+func TestSpecialFixedValueAgreesOnIdenticalLiterals(t *testing.T) {
+	fixed := xsd.NewValueConstraint(xsd.ValueFixed, "x", nil, nil)
+	for _, typ := range []string{"anySimpleType", "anyAtomicType"} {
+		got, undecided := assessRecorded(t, simpleTypedSchema(t, icBuiltin(typ), &fixed, false), cRoot("#x"))
+		wantSilence(t, got, "identical literals agree against xs:"+typ)
+		wantDeclines(t, undecided)
+	}
 }
 
 // A {content type} xsd.Schema.ContentMatcher declines leaves each element

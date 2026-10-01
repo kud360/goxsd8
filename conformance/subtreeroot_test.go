@@ -1114,15 +1114,16 @@ func TestInstanceExecutorChargesXsiType(t *testing.T) {
 // whose walk RECORDED a check it did not perform declines rather than reading
 // the empty violation list as "valid": validate's cvc-elt clause 5.2.2.2.2
 // decline over a fixed {value constraint} it cannot compare in
-// xs:anySimpleType's value space (#1738 routed it into Unevaluated), an
-// identity constraint whose {selector} icpath does not compile, an
-// assertions facet, whose {test} validate records and never evaluates, and a
-// complex type's {assertions} (cvc-complex-type clause 6), which validate's
-// elementAssertions records the same way.
+// xs:anySimpleType's value space, a differing literal (#1738 routed it into
+// Unevaluated; #2029 decides an identical one), an identity constraint whose
+// {selector} icpath does not compile, an assertions facet, whose {test}
+// validate records and never evaluates, and a complex type's {assertions}
+// (cvc-complex-type clause 6), which validate's elementAssertions records the
+// same way.
 func TestInstanceExecutorDeclinesUnevaluatedRoot(t *testing.T) {
 	exec := newInstanceExec()
 	for _, tc := range []struct{ why, schemaBody, instance string }{
-		{"a fixed-value comparison withheld over xs:anySimpleType", `<xs:element name="known" type="xs:anySimpleType" fixed="x"/>`, `<known>x</known>`},
+		{"a fixed-value comparison of differing literals withheld over xs:anySimpleType", `<xs:element name="known" type="xs:anySimpleType" fixed="1"/>`, `<known>1.0</known>`},
 		{
 			// A predicate icpath's lexer does not read (validate's icFrame
 			// GAP(xpath)): the unique is declined and recorded, not decided.

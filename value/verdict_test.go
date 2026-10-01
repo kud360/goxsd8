@@ -148,6 +148,68 @@ func TestConstraintMatchesFailsOpen(t *testing.T) {
 	}
 }
 
+// TestConstraintMatchesSpecialTypesAgreeOnIdenticalLiterals pins the ·special·
+// branch (#2029): xs:anySimpleType's and xs:anyAtomicType's lexical mapping is
+// not a function (Datatypes §3.2.1.2, §3.2.2.2), so byte-identical literals are
+// the same value and any other pair is undecided — never NOT-same, and never
+// normalized, these types having no whiteSpace (§4.3.6).
+//
+// Each type is run under two backends: one that maps nothing, and one that
+// maps the ·special· type's own name as an integer. The second would decide
+// "1" vs "01" same and "1" vs "2" NOT-same if the branch fell through to the
+// pipeline, so every undecided row fails without the branch being terminal.
+func TestConstraintMatchesSpecialTypesAgreeOnIdenticalLiterals(t *testing.T) {
+	for _, st := range []*xsd.SimpleType{xsd.AnySimpleType(), xsd.AnyAtomicType()} {
+		for _, bc := range []struct {
+			name string
+			b    Backend
+		}{
+			{"unmapped", emptyBackend{}},
+			{"mapped as int", intBackend{mapped: st.Name()}},
+		} {
+			b := bc.b
+			for _, tc := range []struct {
+				name     string
+				lexical  string
+				fixed    string
+				wantSame bool
+				decided  bool
+			}{
+				{"byte-identical literals", "fixed", "fixed", true, true},
+				{"byte-identical empty literals", "", "", true, true},
+				{"two literals one decimal may denote", "1", "1.0", false, false},
+				{"two literals one integer would denote", "1", "01", false, false},
+				{"two literals no integer shares", "1", "2", false, false},
+				{"literals differing only in whitespace", " 1 ", "1", false, false},
+			} {
+				t.Run(st.Name().Local+"/"+bc.name+"/"+tc.name, func(t *testing.T) {
+					same, decided := ConstraintMatches(b, noSchema{}, st, tc.lexical, nil, vsFixed(tc.fixed))
+					if same != tc.wantSame || decided != tc.decided {
+						t.Errorf("ConstraintMatches(%q, %q) = (%t, %t), want (%t, %t)",
+							tc.lexical, tc.fixed, same, decided, tc.wantSame, tc.decided)
+					}
+				})
+			}
+		}
+	}
+}
+
+// TestConstraintMatchesShortcutIsSpecialOnly pins that the identical-literal
+// shortcut is confined to the ·special· pair: for QName one literal under two
+// sets of bindings is two values (§3.3.18), so "p:x" against "p:x" is decided
+// NOT-same when p names different namespaces on the two sides.
+func TestConstraintMatchesShortcutIsSpecialOnly(t *testing.T) {
+	qname := vsPrim(t, "QName")
+	b := qnameBackend{mapped: qname.Name()}
+	instance := nsContext{bindings: map[string]string{"p": "urn:one"}}
+
+	same, decided := ConstraintMatches(b, noSchema{}, qname, "p:x", instance,
+		vsFixedIn("p:x", nil, binding("p", "urn:two")))
+	if !decided || same {
+		t.Errorf("ConstraintMatches = (%t, %t), want (false, true): one literal, two namespaces", same, decided)
+	}
+}
+
 // TestConstraintMatchesResolvesEachSideInItsOwnContext pins the asymmetry: the
 // instance literal resolves against the namespace bindings in scope where the
 // ATTRIBUTE was written and the fixed {lexical form} against those in scope where

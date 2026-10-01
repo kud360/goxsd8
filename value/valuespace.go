@@ -173,7 +173,23 @@ func (vs valueSpace) ValidDefault(r xsd.TypeResolver, t *xsd.SimpleType, vc xsd.
 // reporting "not the same value" for what is really "not a value at all" would
 // charge clause 4 as well for one defect. For vc's side it is the schema's own
 // cos-valid-simple-default obligation (§3.2.6.2), already charged at finalize.
+//
+// A ·special· t (xs:anySimpleType, xs:anyAtomicType) never reaches the pipeline:
+// its lexical mapping is not a function (Datatypes §3.2.1.2, §3.2.2.2), so no
+// mapping is authoritative and differing literals prove nothing — "1" and "1.0"
+// may denote one decimal. ConstraintMatches answers SAME where lexical and
+// vc.{lexical form} are byte-identical, since one literal maps identically on
+// both sides, and undecided otherwise; it never answers NOT-same for a ·special·
+// t. Neither side is normalized, these types having no whiteSpace (§4.3.6). The
+// shortcut is sound only for them: for any other type one literal can denote two
+// values, a QName under two sets of bindings (§3.3.18).
 func ConstraintMatches(b Backend, r xsd.TypeResolver, t *xsd.SimpleType, lexical string, ctx Context, vc xsd.ValueConstraint) (same, decided bool) {
+	if isSpecial(t) {
+		if lexical == vc.LexicalForm() {
+			return true, true
+		}
+		return false, false
+	}
 	av, err := ValidateLexical(b, r, t, lexical, ctx)
 	if err != nil {
 		return false, false
@@ -183,6 +199,15 @@ func ConstraintMatches(b Backend, r xsd.TypeResolver, t *xsd.SimpleType, lexical
 		return false, false
 	}
 	return equalOrIdentical(av, cv)
+}
+
+// isSpecial reports whether t is one of the two ·special· datatypes,
+// xs:anySimpleType and xs:anyAtomicType (Datatypes §2.4, dt-special), by the
+// pointer identity [xsd.AnySimpleType] and [xsd.AnyAtomicType] make
+// load-bearing. A union or a caller-built type that merely looks like one is
+// not ·special·.
+func isSpecial(t *xsd.SimpleType) bool {
+	return t == xsd.AnySimpleType() || t == xsd.AnyAtomicType()
 }
 
 // values maps both {lexical form}s to ·actual values· IN ONE VALUE SPACE, or
