@@ -165,8 +165,8 @@ func TestTypelessAttributeIsDecided(t *testing.T) {
 // Every attribute-side decline is RECORDED as an [Unevaluated] at the item it
 // withheld a verdict on, under the rule it would have been charged under: a
 // {type definition} the backend does not map (cvc-attribute clause 3), a fixed
-// comparison of DIFFERING literals over a ·special· type, whose value space has
-// no lexical mapping that is a function (cvc-attribute clause 4, cvc-au), and a
+// comparison over a ·special· type under a backend that leaves one member of its
+// mapping union (here xs:string) unmapped (cvc-attribute clause 4, cvc-au), and a
 // ·defaulted attribute· whose {lexical form} the value space cannot read
 // (cvc-complex-type clause 4, at the element).
 func TestAttributeDeclinesAreRecorded(t *testing.T) {
@@ -175,9 +175,9 @@ func TestAttributeDeclinesAreRecorded(t *testing.T) {
 	wantSilence(t, got, "a withheld String Valid verdict charges nothing")
 	wantDeclines(t, undecided, Unevaluated{rule: ruleCvcAttribute, loc: loc(1, 10), msg: "cvc-attribute clause 3"})
 
-	fixed := xsd.NewValueConstraint(xsd.ValueFixed, "1", nil, nil)
+	fixed := xsd.NewValueConstraint(xsd.ValueFixed, "37", nil, nil)
 	both := []xsd.AttributeUse{typedUse(t, "n", icBuiltin("anySimpleType"), false, &fixed, &fixed)}
-	got, undecided = assessRecorded(t, typedSchema(t, both), valuedRoot("n", "1.0"))
+	got, undecided = assessRecordedWith(t, gapBackend(icBuiltin("string")), typedSchema(t, both), valuedRoot("n", "36"))
 	wantSilence(t, got, "an undecided comparison charges nothing")
 	wantDeclines(t, undecided,
 		Unevaluated{rule: ruleCvcAttribute, loc: loc(1, 10), msg: "cvc-attribute clause 4"},
@@ -203,6 +203,33 @@ func TestSpecialFixedAttributeAgreesOnIdenticalLiterals(t *testing.T) {
 		got, undecided := assessRecorded(t, typedSchema(t, both), valuedRoot("n", "x"))
 		wantSilence(t, got, "identical literals agree against xs:"+typ.Local)
 		wantDeclines(t, undecided)
+	}
+}
+
+// Over a ·special· type DIFFERING literals are decided over the type's mapping
+// union (Datatypes §3.2.1.2, §3.2.2.2; #2040): "1.0" agrees with a fixed "1",
+// both being one xs:decimal, while "36" against a fixed "37" is a value no
+// primitive or list type shares, so cvc-attribute clause 4 and cvc-au are each
+// charged against the {value constraint} that demands it.
+func TestSpecialFixedAttributeIsDecidedOverTheMappingUnion(t *testing.T) {
+	one := xsd.NewValueConstraint(xsd.ValueFixed, "1", nil, nil)
+	for _, typ := range []xsd.QName{icBuiltin("anySimpleType"), icBuiltin("anyAtomicType")} {
+		both := []xsd.AttributeUse{typedUse(t, "n", typ, false, &one, &one)}
+		got, undecided := assessRecorded(t, typedSchema(t, both), valuedRoot("n", "1.0"))
+		wantSilence(t, got, `"1.0" and "1" are one xs:decimal against xs:`+typ.Local)
+		wantDeclines(t, undecided)
+	}
+
+	fixed := xsd.NewValueConstraint(xsd.ValueFixed, "37", nil, nil)
+	decl := []xsd.AttributeUse{typedUse(t, "n", icBuiltin("anySimpleType"), false, &fixed, nil)}
+	got := onlyCharge(t, assessTyped(t, valuedRoot("n", "36"), decl), ruleCvcAttribute)
+	if !strings.HasPrefix(got.Msg, `the ·actual value· of the attribute n is neither equal nor identical to the {value} of the fixed {value constraint} "37"`) || !strings.Contains(got.Msg, "clause 4") {
+		t.Errorf("Msg = %q, want clause 4 charged against the attribute n and the fixed \"37\"", got.Msg)
+	}
+	use := []xsd.AttributeUse{typedUse(t, "n", icBuiltin("anySimpleType"), false, nil, &fixed)}
+	got = onlyCharge(t, assessTyped(t, valuedRoot("n", "36"), use), ruleCvcAu)
+	if !strings.HasPrefix(got.Msg, `the ·actual value· of the attribute n is neither equal nor identical to the {value} of the fixed {value constraint} "37" on its attribute use`) {
+		t.Errorf("Msg = %q, want cvc-au charged against the attribute n and the use's fixed \"37\"", got.Msg)
 	}
 }
 

@@ -65,9 +65,10 @@ func (w *walk) stringValid(st *xsd.SimpleType, lexical string, owner Element, lo
 // lexical spaces are every Char sequence and both {facets} are empty (#1788).
 // Their value spaces are another matter, the lexical mapping "not a function"
 // (Datatypes §3.2.1.2, §3.2.2.2), so what needs a special type's ·actual value·
-// still declines: a ·key-sequence· member ([walk.keyMember]), and a fixed-value
-// comparison ([walk.fixedAgreement], [contentCheck.fixedActualValue]) unless its
-// two literals are byte-identical, which [value.ConstraintMatches] decides same.
+// still declines as a ·key-sequence· member ([walk.keyMember]). A fixed-value
+// comparison ([walk.fixedAgreement], [contentCheck.fixedActualValue]) is decided
+// by [value.ConstraintMatches] over the mapping's union of primitive and list
+// mappings, and declines only where a member of it cannot answer.
 func isSpecial(st *xsd.SimpleType) bool {
 	return st == xsd.AnySimpleType() || st == xsd.AnyAtomicType()
 }

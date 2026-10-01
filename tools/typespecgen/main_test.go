@@ -11,6 +11,7 @@ const (
 	testStructures = "../../docs/specs/md/xmlschema11-2.md"
 	testPrecision  = "../../docs/specs/md/xsd-precisionDecimal.md"
 	testCommitted  = "../../builtin/gen_typespec.go"
+	testPrimitives = "../../value/gen_primitives.go"
 )
 
 func generate(t *testing.T) []byte {
@@ -45,5 +46,38 @@ func TestCommittedUpToDate(t *testing.T) {
 	}
 	if string(generate(t)) != string(want) {
 		t.Fatalf("%s is stale; run `go generate ./...`", testCommitted)
+	}
+}
+
+// TestPrimitivesCommittedUpToDate is TestCommittedUpToDate for the -primitives
+// output, value/gen_primitives.go.
+func TestPrimitivesCommittedUpToDate(t *testing.T) {
+	types, err := builtins.Parse(testStructures, testPrecision)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	got, err := emitPrimitives(types)
+	if err != nil {
+		t.Fatalf("emitPrimitives: %v", err)
+	}
+	want, err := os.ReadFile(testPrimitives)
+	if err != nil {
+		t.Fatalf("reading committed file: %v", err)
+	}
+	if string(got) != string(want) {
+		t.Fatalf("%s is stale; run `go generate ./...`", testPrimitives)
+	}
+}
+
+// TestPrimitivesCount pins emitPrimitives' guard: a selection that misses a
+// primitive (here precisionDecimal, dropped from the parse) is an error, not a
+// short table.
+func TestPrimitivesCount(t *testing.T) {
+	types, err := builtins.Parse(testStructures, testPrecision)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if _, err := emitPrimitives(types[:len(types)-1]); err == nil {
+		t.Fatal("emitPrimitives accepted 19 primitives, want an error")
 	}
 }

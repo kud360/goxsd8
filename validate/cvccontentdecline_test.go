@@ -118,10 +118,10 @@ func TestWithheldSimpleContentValueIsRecorded(t *testing.T) {
 // An undecided comparison against a fixed {value constraint} (cvc-elt clause
 // 5.2.2.2.2) is recorded after the cvc-type clause 3.1.3 record the same
 // undecided type makes: a decline sets no charge, so it silences no later
-// clause, and each withheld clause is its own record. Over xs:anySimpleType a
-// comparison of DIFFERING literals alone is undecided — its value space has no
-// lexical mapping that is a function (Datatypes §3.2.1.2), so "1.0" may denote
-// the "1" it is compared with — while clause 3.1.3 is decided.
+// clause, and each withheld clause is its own record. Over xs:anySimpleType,
+// under a backend that leaves xs:string unmapped, a comparison of DIFFERING
+// literals alone is undecided — one member of its mapping union cannot answer
+// (Datatypes §3.2.1.2) — while clause 3.1.3 is decided.
 func TestUndecidedFixedValueComparisonIsRecorded(t *testing.T) {
 	fixed := xsd.NewValueConstraint(xsd.ValueFixed, "1.5", nil, nil)
 	got, undecided := assessRecordedWith(t, gapBackend(icBuiltin("decimal")),
@@ -131,8 +131,9 @@ func TestUndecidedFixedValueComparisonIsRecorded(t *testing.T) {
 		Unevaluated{rule: ruleCvcType, loc: loc(1, 1), msg: "cvc-type clause 3.1.3"},
 		Unevaluated{rule: ruleCvcElt, loc: loc(1, 1), msg: "cvc-elt clause 5.2.2.2.2"})
 
-	fixed = xsd.NewValueConstraint(xsd.ValueFixed, "1", nil, nil)
-	got, undecided = assessRecorded(t, simpleTypedSchema(t, icBuiltin("anySimpleType"), &fixed, false), cRoot("#1.0"))
+	fixed = xsd.NewValueConstraint(xsd.ValueFixed, "37", nil, nil)
+	got, undecided = assessRecordedWith(t, gapBackend(icBuiltin("string")),
+		simpleTypedSchema(t, icBuiltin("anySimpleType"), &fixed, false), cRoot("#36"))
 	wantSilence(t, got, "an undecided comparison charges nothing")
 	wantDeclines(t, undecided, Unevaluated{rule: ruleCvcElt, loc: loc(1, 1), msg: "cvc-elt clause 5.2.2.2.2"})
 }
@@ -147,6 +148,26 @@ func TestSpecialFixedValueAgreesOnIdenticalLiterals(t *testing.T) {
 		got, undecided := assessRecorded(t, simpleTypedSchema(t, icBuiltin(typ), &fixed, false), cRoot("#x"))
 		wantSilence(t, got, "identical literals agree against xs:"+typ)
 		wantDeclines(t, undecided)
+	}
+}
+
+// Over a ·special· ·governing type definition· DIFFERING literals are decided
+// over the type's mapping union (Datatypes §3.2.1.2, §3.2.2.2; #2040): "1.0"
+// satisfies a fixed "1", both being one xs:decimal, and "36" against a fixed
+// "37" is charged under cvc-elt clause 5.2.2.2.2.
+func TestSpecialFixedValueIsDecidedOverTheMappingUnion(t *testing.T) {
+	one := xsd.NewValueConstraint(xsd.ValueFixed, "1", nil, nil)
+	for _, typ := range []string{"anySimpleType", "anyAtomicType"} {
+		got, undecided := assessRecorded(t, simpleTypedSchema(t, icBuiltin(typ), &one, false), cRoot("#1.0"))
+		wantSilence(t, got, `"1.0" and "1" are one xs:decimal against xs:`+typ)
+		wantDeclines(t, undecided)
+	}
+
+	fixed := xsd.NewValueConstraint(xsd.ValueFixed, "37", nil, nil)
+	got, _ := assessRecorded(t, simpleTypedSchema(t, icBuiltin("anySimpleType"), &fixed, false), cRoot("#36"))
+	if len(got) != 1 || got[0].Rule != ruleCvcElt ||
+		!strings.HasPrefix(got[0].Msg, `the ·actual value· of the element root is neither equal nor identical to the {value} of the fixed {value constraint} "37"`) {
+		t.Fatalf("Violations() = %v, want one cvc-elt clause 5.2.2.2.2 charge against root and the fixed \"37\"", got)
 	}
 }
 
