@@ -324,23 +324,14 @@ func (r *Reader) endElement(t xml.EndElement, loc xsderr.Loc) (*EndElement, erro
 // after the document element: [1] document ::= prolog element Misc*, and [27]
 // Misc ::= Comment | PI | S, so character data there must be white space
 // (declSpace). text is one character-data token read after the document
-// element's end tag, starting at loc. The fault is located at text's first
-// non-white-space character, counted from loc over text itself: the decoder has
-// already normalized line ends (§2.11), so an index into text is no offset into
-// the source.
+// element's end tag, starting at loc. The fault is located at loc, the token's
+// own start: text is decoded — line ends normalized (§2.11), references
+// replaced — so no index into it is an offset into the source.
 func trailerFault(text []byte, loc xsderr.Loc) error {
-	rest := bytes.TrimLeft(text, declSpace)
-	if len(rest) == 0 {
+	if len(bytes.TrimLeft(text, declSpace)) == 0 {
 		return nil
 	}
-	lead := text[:len(text)-len(rest)]
-	at := loc
-	at.Col += len(lead)
-	if nl := bytes.LastIndexByte(lead, '\n'); nl >= 0 {
-		at.Line += bytes.Count(lead, []byte{'\n'})
-		at.Col = len(lead) - nl
-	}
-	return xsderr.New(xsderr.RuleXMLWellFormed, at, "character data after the document element: only comments, processing instructions and white space may follow it (XML 1.0 [1] document, [27] Misc)")
+	return xsderr.New(xsderr.RuleXMLWellFormed, loc, "character data after the document element: only comments, processing instructions and white space may follow it (XML 1.0 [1] document, [27] Misc)")
 }
 
 // currentScope is the scope in force for the innermost open element, or nil

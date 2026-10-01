@@ -46,8 +46,9 @@
 //     in both.
 //   - After the document element only comments, processing instructions
 //     and white space may appear (XML 1.0 [1] document, [27] Misc):
-//     non-white-space character data there is rejected as
-//     RuleXMLWellFormed at its first non-white-space character.
+//     a character-data run there holding anything but white space is
+//     rejected as RuleXMLWellFormed at the run's start, the character
+//     after the preceding markup.
 //   - The DOCTYPE's internal subset is read for its unparsed entity
 //     declarations (<!ENTITY name SYSTEM|PUBLIC ... NDATA notation>), the
 //     document's [unparsed entities] property, answered by
