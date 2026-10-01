@@ -1,6 +1,7 @@
 package conformance
 
 import (
+	"bufio"
 	"encoding/xml"
 	"errors"
 	"io"
@@ -28,7 +29,7 @@ import (
 //
 // The gate is computed per case and stored nowhere. It re-reads the instance
 // with encoding/xml, admitting a 1.x version label as parser/xmltree does
-// (xmldecl.As10), and re-derives every child's ·attribution· through
+// (rawDecoder), and re-derives every child's ·attribution· through
 // xsd.Schema.ContentMatcher, independently of the walk, so it never rests on
 // what the walk did or did not record for a descendant — save for a strict
 // ·wildcard particle·'s child resolving to no declaration and carrying no
@@ -58,7 +59,7 @@ func assessedSubtreeRoot(schema *xsd.Schema, report *parser.AssemblyReport, doc 
 		return false
 	}
 	defer func() { _ = rc.Close() }() // read-only handle: close error cannot affect the verdict
-	dec := xml.NewDecoder(xmldecl.As10(rc))
+	dec := rawDecoder(rc)
 	root, ok := rootStart(dec)
 	if !ok {
 		return false
@@ -684,6 +685,43 @@ func rootStart(dec *xml.Decoder) (xml.StartElement, bool) {
 	}
 }
 
+// rawDecoder is the one encoding/xml reader both of the lane's raw re-reads,
+// assessedSubtreeRoot and documentVersioned, take over a document's bytes. It
+// drops one leading UTF-8 byte-order mark, as parser/xmltree's reader does (XML
+// 1.0 §4.3.3: an encoding signature, no part of the document), and so honours
+// xmldecl.As10's precondition that the mark is consumed before the declaration
+// is read; As10 then admits a 1.x version label as xmltree admits it. A UTF-8
+// document's label is therefore admitted here exactly when xmltree admits it,
+// with the mark or without. A UTF-16 document, which xmltree transcodes, is
+// read by neither re-read under any label — encoding/xml decodes UTF-8 alone,
+// and no CharsetReader is set — so each answers as it does for any document it
+// cannot read.
+//
+// A read failure in the peek for the mark is reported by the decoder's first
+// read: bufio.Reader.Peek hands a failure out once and clears it, so dropping it
+// would let a re-read of the source answer for the failure.
+func rawDecoder(r io.Reader) *xml.Decoder {
+	br := bufio.NewReader(r)
+	head, err := br.Peek(len(utf8Mark))
+	if err != nil && !errors.Is(err, io.EOF) {
+		return xml.NewDecoder(failedRead{err: err})
+	}
+	if string(head) == utf8Mark {
+		// Peek buffered the mark, so Discard cannot fail.
+		_, _ = br.Discard(len(utf8Mark))
+	}
+	return xml.NewDecoder(xmldecl.As10(br))
+}
+
+// utf8Mark is the UTF-8 byte-order mark, EF BB BF (XML 1.0 Appendix F.1).
+const utf8Mark = "\xEF\xBB\xBF"
+
+// failedRead is a source whose every read reports err.
+type failedRead struct{ err error }
+
+// Read reports the failure.
+func (f failedRead) Read([]byte) (int, error) { return 0, f.err }
+
 // expandedName is n as the ·expanded name· the schema indexes by. encoding/xml
 // has already translated a bound prefix to its namespace name.
 func expandedName(n xml.Name) xsd.QName {
@@ -723,16 +761,14 @@ func closureVersioned(report *parser.AssemblyReport) bool {
 }
 
 // documentVersioned reports whether the document at path carries an attribute
-// in versioningNS, or cannot be read to say. A 1.x version label is admitted as
-// parser/xmltree admits it (xmldecl.As10), so the documents Parse read are the
-// documents this can read.
+// in versioningNS, or cannot be read to say.
 func documentVersioned(path string) bool {
 	f, err := os.Open(path)
 	if err != nil {
 		return true
 	}
 	defer func() { _ = f.Close() }() // read-only handle: close error cannot affect the verdict
-	dec := xml.NewDecoder(xmldecl.As10(f))
+	dec := rawDecoder(f)
 	for {
 		tok, err := dec.Token()
 		if errors.Is(err, io.EOF) {
