@@ -150,9 +150,10 @@ func isInlineSchema(n xml.Name) bool {
 //   - a hint resolved to no document (parser.AssemblyReport.UnfollowedRoots,
 //     legal to skip under §4.2.6.2), so the schema is short of a document the
 //     instance named;
-//   - the closure leaves the decidable subset (closureDecidable), or the
-//     rejection is one an unfollowed directive could have fabricated
-//     (fabricatedRejection);
+//   - assemblyDeclined, assembleCase's own gate, refuses the outcome: the
+//     closure leaves the decidable subset (closureDecidable) and the assembly
+//     did not fail with a grammarRejection, or the rejection is one an
+//     unfollowed directive could have fabricated (fabricatedRejection);
 //   - the assembly succeeded and declares no top-level element for root. A
 //     root the hinted schema does not declare is charged cvc-assess-elt, and
 //     §4.3.2 clause 3's "less than complete ·assessment· outcomes" is exactly
@@ -170,7 +171,7 @@ func isInlineSchema(n xml.Name) bool {
 func assembleHints(backend value.Backend, doc string, root xsd.QName, hints []parser.Root) (*xsd.Schema, *parser.AssemblyReport, bool, error) {
 	resolver := pinnedResolver{dir: loader.Dir(filepath.Dir(doc))}
 	schema, report, perr := parser.ParseSet(hints, parser.WithResolver(resolver), parser.WithBackend(backend))
-	if len(report.UnfollowedRoots()) > 0 || !closureDecidable(report) || fabricatedRejection(report, perr) {
+	if len(report.UnfollowedRoots()) > 0 || assemblyDeclined(report, perr) {
 		return nil, nil, false, nil
 	}
 	if perr != nil {

@@ -14,10 +14,16 @@ import (
 // document the assembly consumes, in every root's closure, not just the roots. A
 // single-document lane could gate on the one document it read; a multi-document
 // lane cannot, because an <include>d document holding a representation the
-// producer silently SKIPS (§3.1.2) — an inline anonymous type, a list/union
-// simpleType — or one it builds with a rule judging it only in part would let a
-// schema-INVALID assembly "Parse" cleanly, a FALSE ACCEPT of exactly the kind
-// schema.go's step-3 allowlist exists to prevent.
+// producer silently SKIPS (§3.1.2), or one it builds with a rule judging it only
+// in part, would let a schema-INVALID assembly "Parse" cleanly, a FALSE ACCEPT
+// of exactly the kind schema.go's step-3 allowlist exists to prevent; a skipped
+// one can also leave a component missing that a reference in another document
+// is then charged src-resolve for (§5.3).
+//
+// The guard binds those two outcomes only. An assembly REJECTED with a
+// grammarRejection — a §2.4 clause 1 fault, charged unruled with no directive
+// left unfollowed — is decided whatever the closure holds (assemblyDeclined,
+// #2076), since no skipped construct can produce one.
 //
 // # Why the parser reports the closure instead of the harness re-walking it
 //
@@ -64,8 +70,11 @@ import (
 
 // closureDecidable reports whether every schema document the assembly consumed
 // lies within the producer's decidable subset (schemaShapeDecidable, the step-3
-// allowlist schema.go documents). One out-of-subset document declines the whole
-// case, wherever in the closure it sits — that is the false-accept guard.
+// allowlist schema.go documents). One out-of-subset document, wherever in the
+// closure it sits, declines a case whose assembly was ACCEPTED or rejected with
+// an error a skip could have produced — the false-accept guard. It does not
+// decline every outcome: an assembly rejected with a grammarRejection is decided
+// whatever this answers (assemblyDeclined, #2076).
 //
 // The same document can appear twice in the report (once per namespace or
 // ·override pre-processing· it was reached under, parser.AssemblyReport's own
