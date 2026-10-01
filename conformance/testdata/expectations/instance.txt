@@ -948,7 +948,7 @@ MS-Additional2006-07-15/addB056/instance/addB056.v pass
 MS-Additional2006-07-15/addB057/instance/addB057.i pass
 MS-Additional2006-07-15/addB058/instance/addB058.v pass
 MS-Additional2006-07-15/addB059/instance/addB059.v pass
-MS-Additional2006-07-15/addB063/instance/addB063.i fail
+MS-Additional2006-07-15/addB063/instance/addB063.i pass
 MS-Additional2006-07-15/addB065/instance/addB065.i pass
 MS-Additional2006-07-15/addB066/instance/addB066.i pass
 MS-Additional2006-07-15/addB067/instance/addB067.v pass

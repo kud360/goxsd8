@@ -68,8 +68,9 @@ func (s *scope) lookup(prefix string) (uri string, ok bool) {
 // non-"xmlns" prefix declared anywhere in the chain, plus the reserved "xml",
 // which is bound whether or not it is declared. Candidacy is not bindingness —
 // a candidate may be shadowed or explicitly undeclared (xmlns:p="", XML 1.1
-// only) further down — so a caller must resolve each one through lookup and keep only those
-// that resolve. Order is unspecified; the exported enumerator sorts.
+// only) further down — so a caller must resolve each one through lookup and
+// keep only those that resolve. Order is unspecified; the exported enumerator
+// sorts.
 //
 // The empty prefix is excluded: the default namespace is a separate fact,
 // answered by lookup(""), and never one of these candidates. The reserved

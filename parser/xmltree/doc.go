@@ -44,6 +44,11 @@
 //     is rejected as RuleXMLWellFormed in any other document, which is XML
 //     1.0 (nsc-NoPrefixUndecl). The default declaration xmlns="" is legal
 //     in both.
+//   - After the document element only comments, processing instructions
+//     and white space may appear (XML 1.0 [1] document, [27] Misc):
+//     a character-data run there holding anything but white space is
+//     rejected as RuleXMLWellFormed at the run's start, the character
+//     after the preceding markup.
 //   - The DOCTYPE's internal subset is read for its unparsed entity
 //     declarations (<!ENTITY name SYSTEM|PUBLIC ... NDATA notation>), the
 //     document's [unparsed entities] property, answered by
