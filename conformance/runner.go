@@ -851,13 +851,16 @@ func caseDocs(kind string, t validityTest, setDir string) (doc string, extra []s
 // groupSchemaDocs resolves the schema documents an instanceTest is assessed
 // against: the <schemaDocument> list of its test group's sibling schemaTest.
 //
-// Any count other than EXACTLY ONE schemaTest yields NO schema reference, so
-// execInstanceCase declines the case rather than picking a sibling or inventing a
-// document. A multi-document list it passes through whole, which assembleCase
-// decides on as one set. Of the 9952 groups the pinned suite yields instance
-// cases from, 55 declare NO schemaTest (MS-Additional2006-07-15/addA006 and 54
-// siblings) and so decline here, one case each; none declares more than one, so
-// that arm is defensive against a re-pin rather than exercised today.
+// Any count other than EXACTLY ONE schemaTest yields NO schema reference rather
+// than a picked sibling or an invented document. The instance lane then
+// assesses the case against the schema its own root's hints locate, and
+// declines one with no hint, a hint below its root or an inline xs:schema
+// (caseSchema, #2013's RULING). A multi-document list it passes through whole,
+// which assembleCase decides on as one set. Of the 9952 groups the pinned suite
+// yields instance cases from, 55 declare NO schemaTest
+// (MS-Additional2006-07-15/addA006 and 54 siblings), one case each; none
+// declares more than one, so that arm is defensive against a re-pin rather
+// than exercised today.
 //
 // It yields nothing for a schemaTest either: that case's own doc and extraDocs
 // are its schema documents already (STYLE D3).

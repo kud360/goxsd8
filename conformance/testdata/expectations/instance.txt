@@ -927,8 +927,8 @@ MGroupDef/targetns00101m1/instance/Positive pass
 MGroupDef/targetns00101m2/instance/Negative pass
 MGroupDef/targetns00101m2/instance/Positive pass
 MS-Additional2006-07-15/addA005/instance/addA005.v pass
-MS-Additional2006-07-15/addA006/instance/addA006.v fail
-MS-Additional2006-07-15/addA008/instance/addA008.v fail
+MS-Additional2006-07-15/addA006/instance/addA006.v pass
+MS-Additional2006-07-15/addA008/instance/addA008.v pass
 MS-Additional2006-07-15/addB002/instance/addB002.i pass
 MS-Additional2006-07-15/addB003/instance/addB003.i pass
 MS-Additional2006-07-15/addB011/instance/addB011.i pass
@@ -980,7 +980,7 @@ MS-Additional2006-07-15/addB129/instance/addB129.v pass
 MS-Additional2006-07-15/addB130/instance/addB130.v pass
 MS-Additional2006-07-15/addB131/instance/addB131.v pass
 MS-Additional2006-07-15/addB132/instance/addB132.v pass
-MS-Additional2006-07-15/addB134/instance/addB134.v fail
+MS-Additional2006-07-15/addB134/instance/addB134.v pass
 MS-Additional2006-07-15/addB135/instance/addB135.v fail
 MS-Additional2006-07-15/addB136/instance/addB136.v pass
 MS-Additional2006-07-15/addB138/instance/addB138.i fail
@@ -991,7 +991,7 @@ MS-Additional2006-07-15/addB143/instance/addB143.i pass
 MS-Additional2006-07-15/addB145/instance/addB145.v pass
 MS-Additional2006-07-15/addB148/instance/addB148.v pass
 MS-Additional2006-07-15/addB149/instance/addB149.i pass
-MS-Additional2006-07-15/addB155/instance/addB155.v fail
+MS-Additional2006-07-15/addB155/instance/addB155.v pass
 MS-Additional2006-07-15/addB156/instance/addB156.i fail
 MS-Additional2006-07-15/addB157/instance/addB157.v fail
 MS-Additional2006-07-15/addB158/instance/addB158.i fail
@@ -1054,7 +1054,7 @@ MS-Additional2006-07-15/addD001/instance/addD001.v pass
 MS-Additional2006-07-15/addD002/instance/addD002.v pass
 MS-Additional2006-07-15/addD004/instance/addD004.v pass
 MS-Additional2006-07-15/addD004a/instance/addD004a.v pass
-MS-Additional2006-07-15/adda007/instance/adda007.v fail
+MS-Additional2006-07-15/adda007/instance/adda007.v pass
 MS-Additional2006-07-15/isDefault001/instance/isDefault001.v pass
 MS-Additional2006-07-15/isDefault002/instance/isDefault002.v pass
 MS-Additional2006-07-15/isDefault003/instance/isDefault003.v pass
@@ -3969,7 +3969,7 @@ MS-Particles2006-07-15/particlesZ008/instance/particlesZ008.v pass
 MS-Particles2006-07-15/particlesZ012/instance/particlesZ012.v pass
 MS-Particles2006-07-15/particlesZ015/instance/particlesZ015.i pass
 MS-Particles2006-07-15/particlesZ016/instance/particlesZ016.i pass
-MS-Particles2006-07-15/particlesZ025/instance/particlesZ025.v fail
+MS-Particles2006-07-15/particlesZ025/instance/particlesZ025.v pass
 MS-Particles2006-07-15/particlesZ034_a1/instance/particlesZ034_a1.v pass
 MS-Particles2006-07-15/particlesZ034_a2/instance/particlesZ034_a2.i pass
 MS-Particles2006-07-15/particlesZ034_a3/instance/particlesZ034_a3.i pass
@@ -5414,7 +5414,7 @@ MS-Regex2006-07-15/reZ006v/instance/reZ006v.v pass
 MS-Schema2006-07-15/schA1/instance/schA1.v fail
 MS-Schema2006-07-15/schA2/instance/schA2.i fail
 MS-Schema2006-07-15/schA3/instance/schA3.v pass
-MS-Schema2006-07-15/schA4/instance/schA4.v fail
+MS-Schema2006-07-15/schA4/instance/schA4.v pass
 MS-Schema2006-07-15/schA5/instance/schA5.i fail
 MS-Schema2006-07-15/schA7/instance/schA7.i fail
 MS-Schema2006-07-15/schA8/instance/schA8.i fail
@@ -5534,13 +5534,13 @@ MS-SimpleType2006-07-15/stZ054/instance/stZ054.v pass
 MS-SimpleType2006-07-15/stZ056/instance/stZ056.i pass
 MS-SimpleType2006-07-15/stZ057/instance/stZ057.v pass
 MS-SimpleType2006-07-15/stZ058/instance/stZ058.v fail
-MS-SimpleType2006-07-15/stZ059/instance/stZ059.i fail
-MS-SimpleType2006-07-15/stZ060/instance/stZ060.i fail
-MS-SimpleType2006-07-15/stZ061/instance/stZ061.i fail
+MS-SimpleType2006-07-15/stZ059/instance/stZ059.i pass
+MS-SimpleType2006-07-15/stZ060/instance/stZ060.i pass
+MS-SimpleType2006-07-15/stZ061/instance/stZ061.i pass
 MS-SimpleType2006-07-15/stZ062/instance/stZ062.v fail
-MS-SimpleType2006-07-15/stZ063/instance/stZ063.v fail
-MS-SimpleType2006-07-15/stZ064/instance/stZ064.i fail
-MS-SimpleType2006-07-15/stZ066/instance/stZ066.i fail
+MS-SimpleType2006-07-15/stZ063/instance/stZ063.v pass
+MS-SimpleType2006-07-15/stZ064/instance/stZ064.i pass
+MS-SimpleType2006-07-15/stZ066/instance/stZ066.i pass
 MS-SimpleType2006-07-15/stZ071/instance/stZ071.v pass
 MS-SimpleType2006-07-15/stZ072/instance/stZ072.v pass
 MS-SimpleType2006-07-15/stZ073ba/instance/stZ073b.i pass

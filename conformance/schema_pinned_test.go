@@ -14,7 +14,7 @@ import (
 
 // TestPinnedResolverServesXLink pins what pinnedResolver serves for
 // xlinkLocation: the committed copy, byte for byte as its doc records, under a
-// resolved location documentVersioned can re-open.
+// resolved location documentCarries can re-open.
 func TestPinnedResolverServesXLink(t *testing.T) {
 	const wantSHA = "c83df86c7fdc16eb9c862b83dfb53fc1b1a4bcafd6e1d1217199e0188b82f24a"
 	r := pinnedResolver{dir: loader.Dir(t.TempDir())}
@@ -34,8 +34,8 @@ func TestPinnedResolverServesXLink(t *testing.T) {
 	if resolved != xlinkPinned {
 		t.Errorf("resolved = %q, want %q", resolved, xlinkPinned)
 	}
-	if documentVersioned(resolved) {
-		t.Errorf("documentVersioned(%q) = true, want false: the resolved location must open", resolved)
+	if documentCarries(resolved, isVersioningAttr) {
+		t.Errorf("documentCarries(%q, isVersioningAttr) = true, want false: the resolved location must open", resolved)
 	}
 }
 
