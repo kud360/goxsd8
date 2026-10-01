@@ -601,8 +601,9 @@ func (s *Schema) locallyDeclaredAttributeType(c ComplexType, name QName) (TypeDe
 // indirectly or ·implicitly· (key-impl-cont), as key-ldt-elem case 2 says;
 // case 3 is the step to the next type on the chain. (nil, false) means ·absent·
 // and nothing else: case 1, the chain reaching ·xs:anyType·; a chain ending at a
-// simple {base type definition}; or no type on it containing such a
-// declaration. It is never an undecided answer: a finalized Schema has resolved
+// simple {base type definition}; no type on it containing such a
+// declaration; or a matched declaration whose own {type definition} is
+// ·absent· (§5.3). It is never an undecided answer: a finalized Schema has resolved
 // every {type definition} and {base type definition} the chain reads (Phase A),
 // so a failed resolution is unreachable on this path, and no caller may read
 // false as anything but ·absent·.
