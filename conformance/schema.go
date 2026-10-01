@@ -815,8 +815,7 @@ func fabricatedRejection(report *parser.AssemblyReport, perr error) bool {
 // GAP(parser): a composed document whose prefix is genuinely unbound — no DTD
 // could have bound it — is declined here rather than decided invalid, because
 // the charge does not say whether the document carried a DTD. Retiring it
-// needs the reader to apply internal-subset attribute defaults, which no open
-// issue owns.
+// needs the reader to apply internal-subset attribute defaults (#2073).
 //
 // The shape is read rather than a marker because a structured one would be an
 // export (#2067).
