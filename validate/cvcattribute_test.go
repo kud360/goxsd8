@@ -165,19 +165,19 @@ func TestTypelessAttributeIsDecided(t *testing.T) {
 // Every attribute-side decline is RECORDED as an [Unevaluated] at the item it
 // withheld a verdict on, under the rule it would have been charged under: a
 // {type definition} the backend does not map (cvc-attribute clause 3), a fixed
-// comparison over a ·special· type, whose value space has no lexical mapping
-// that is a function (cvc-attribute clause 4, cvc-au), and a ·defaulted
-// attribute· whose {lexical form} the value space cannot read (cvc-complex-type
-// clause 4, at the element).
+// comparison of DIFFERING literals over a ·special· type, whose value space has
+// no lexical mapping that is a function (cvc-attribute clause 4, cvc-au), and a
+// ·defaulted attribute· whose {lexical form} the value space cannot read
+// (cvc-complex-type clause 4, at the element).
 func TestAttributeDeclinesAreRecorded(t *testing.T) {
 	decimal := []xsd.AttributeUse{typedUse(t, "n", icBuiltin("decimal"), false, nil, nil)}
 	got, undecided := assessRecordedWith(t, gapBackend(icBuiltin("decimal")), typedSchema(t, decimal), valuedRoot("n", "1.5"))
 	wantSilence(t, got, "a withheld String Valid verdict charges nothing")
 	wantDeclines(t, undecided, Unevaluated{rule: ruleCvcAttribute, loc: loc(1, 10), msg: "cvc-attribute clause 3"})
 
-	fixed := xsd.NewValueConstraint(xsd.ValueFixed, "x", nil, nil)
+	fixed := xsd.NewValueConstraint(xsd.ValueFixed, "1", nil, nil)
 	both := []xsd.AttributeUse{typedUse(t, "n", icBuiltin("anySimpleType"), false, &fixed, &fixed)}
-	got, undecided = assessRecorded(t, typedSchema(t, both), valuedRoot("n", "x"))
+	got, undecided = assessRecorded(t, typedSchema(t, both), valuedRoot("n", "1.0"))
 	wantSilence(t, got, "an undecided comparison charges nothing")
 	wantDeclines(t, undecided,
 		Unevaluated{rule: ruleCvcAttribute, loc: loc(1, 10), msg: "cvc-attribute clause 4"},
@@ -189,6 +189,21 @@ func TestAttributeDeclinesAreRecorded(t *testing.T) {
 		&testElement{name: xsd.QName{Local: "root"}, loc: loc(1, 1)})
 	wantSilence(t, got, "an undecided default charges nothing")
 	wantDeclines(t, undecided, Unevaluated{rule: ruleCvcComplexType, loc: loc(1, 1), msg: "cvc-complex-type clause 4"})
+}
+
+// Over a ·special· type cvc-attribute clause 4 and cvc-au are DECIDED satisfied
+// where the attribute's literal and the fixed {lexical form} are byte-identical:
+// one literal maps identically on both sides, however many values it may denote
+// (Datatypes §3.2.1.2, §3.2.2.2; #2029). A typeless attribute with a fixed value
+// is this case.
+func TestSpecialFixedAttributeAgreesOnIdenticalLiterals(t *testing.T) {
+	fixed := xsd.NewValueConstraint(xsd.ValueFixed, "x", nil, nil)
+	for _, typ := range []xsd.QName{icBuiltin("anySimpleType"), icBuiltin("anyAtomicType")} {
+		both := []xsd.AttributeUse{typedUse(t, "n", typ, false, &fixed, &fixed)}
+		got, undecided := assessRecorded(t, typedSchema(t, both), valuedRoot("n", "x"))
+		wantSilence(t, got, "identical literals agree against xs:"+typ.Local)
+		wantDeclines(t, undecided)
+	}
 }
 
 // cvc-attribute clause 4 compares ·actual values·: "01" and "1" are one
