@@ -535,13 +535,13 @@ func (s *Schema) checkLocallyDeclaredAttributeTypes(t, b ComplexType, k locallyD
 // declaration, whose anonymous type is then one component — passes before
 // ·validly substitutable· is asked.
 func (s *Schema) checkLocallyDeclaredElementTypes(t, b ComplexType, k locallyDeclaredTypeCheck) error {
-	for _, e := range s.contentModelDeclarations(t) {
+	for _, e := range s.contentModelDeclarations(t, explicitOnly) {
 		name := e.decl.Name()
 		within, ok := s.ResolvedType(e.decl.TypeDefinition())
 		if !ok {
 			continue // absent or unresolvable: not decidable by this clause
 		}
-		base, ok := s.locallyDeclaredElementType(b, name)
+		base, ok := s.locallyDeclaredElementType(b, name, explicitOnly)
 		if !ok {
 			continue // no ·locally declared type· in B: the clause's precondition fails
 		}
@@ -589,20 +589,61 @@ func (s *Schema) locallyDeclaredAttributeType(c ComplexType, name QName) (TypeDe
 	}
 }
 
-// locallyDeclaredElementType is the ·locally declared type· of an element within
-// a Complex Type Definition (§3.4.6.4, key-ldt-elem), with the same three cases
-// as key-ldt-att over the ·content model· rather than {attribute uses}.
+// LocallyDeclaredElementType is the ·locally declared type· of an element
+// information item named name within the Complex Type Definition within
+// (§3.4.6.4, key-ldt-elem), the type cvc-complex-type clause 5 (§3.4.4.2) asks an
+// element's ·governing type definition· to be the same as, or ·validly
+// substitutable· for ·without limitation·.
 //
-// It deliberately does NOT fold in ·implicitly contained· substitution-group
-// members. Including them would only ever add pairs to compare and so could only
-// ever cause a false reject; excluding them under-approximates the element set,
-// which is fail-open.
-func (s *Schema) locallyDeclaredElementType(c ComplexType, name QName) (TypeDefinition, bool) {
+// The answer is (T, true) where T is the {type definition} of the element
+// declaration named name that the ·content model· of the first type on within's
+// {base type definition} chain to ·contain· one at all contains — directly,
+// indirectly or ·implicitly· (key-impl-cont), as key-ldt-elem case 2 says;
+// case 3 is the step to the next type on the chain. (nil, false) means ·absent·
+// and nothing else: case 1, the chain reaching ·xs:anyType·; a chain ending at a
+// simple {base type definition}; no type on it containing such a
+// declaration; or a matched declaration whose own {type definition} is
+// ·absent· (§5.3). It is never an undecided answer: a finalized Schema has resolved
+// every {type definition} and {base type definition} the chain reads (Phase A),
+// so a failed resolution is unreachable on this path, and no caller may read
+// false as anything but ·absent·.
+//
+// It is EXPORTED for validate's walk, which charges clause 5, and governs an
+// {open content} child by the answer where it is non-·absent·
+// (key-governing-ed clause 4.3), and cannot re-derive the answer without a
+// third content-model walk and a second copy of substitution-group
+// membership (STYLE T4/T5). The schema-side check derivation-ok-restriction
+// clause 4 reads the same chain walk with implicit containment left out
+// (locallyDeclaredElementType).
+func (s *Schema) LocallyDeclaredElementType(within ComplexType, name QName) (TypeDefinition, bool) {
+	return s.locallyDeclaredElementType(within, name, withImplicit)
+}
+
+// containment says which declarations a ·content model· is read as ·containing·
+// for key-ldt-elem case 2: those it contains directly or indirectly, or those
+// and the ones it contains ·implicitly· (key-impl-cont) too.
+type containment bool
+
+const (
+	explicitOnly containment = false
+	withImplicit containment = true
+)
+
+// locallyDeclaredElementType is the key-ldt-elem chain walk behind
+// LocallyDeclaredElementType, which is the definition and passes withImplicit.
+// The derivation check checkLocallyDeclaredElementTypes passes explicitOnly:
+// its answer then under-approximates the ·locally declared type· by leaving
+// ·implicitly contained· substitution-group members out, which can only drop
+// pairs that clause to compare and so is fail-open there.
+//
+// The chain walk carries no visited set (Phase B licenses it) and the xs:anyType
+// case-1 test terminates the one self-derivation §3.4.7 permits.
+func (s *Schema) locallyDeclaredElementType(c ComplexType, name QName, k containment) (TypeDefinition, bool) {
 	for {
 		if c.Name() == anyTypeName {
 			return nil, false // case 1
 		}
-		for _, e := range s.contentModelDeclarations(c) {
+		for _, e := range s.contentModelDeclarations(c, k) {
 			if e.decl.Name() == name {
 				return s.ResolvedType(e.decl.TypeDefinition()) // case 2
 			}
@@ -616,17 +657,22 @@ func (s *Schema) locallyDeclaredElementType(c ComplexType, name QName) (TypeDefi
 }
 
 // contentModelDeclarations returns, in document order, the element declarations
-// c's ·content model· ·contains· directly or indirectly. It reuses
-// elementconsistent.go's gatherer rather than writing a second content-model walk
-// (STYLE T4); the component keys that gatherer assigns de-duplicate a declaration
-// reached by several paths, which is exactly the identity key-ldtype needs.
-func (s *Schema) contentModelDeclarations(c ComplexType) []containedElement {
+// c's ·content model· ·contains· directly or indirectly, followed under
+// withImplicit by the ones it contains ·implicitly· (gatherImplicitElements). It
+// reuses elementconsistent.go's gatherers rather than writing a second
+// content-model walk (STYLE T4); the component keys those gatherers assign
+// de-duplicate a declaration reached by several paths, which is exactly the
+// identity key-ldtype needs.
+func (s *Schema) contentModelDeclarations(c ComplexType, k containment) []containedElement {
 	ec, ok := c.ContentType().(ElementContent)
 	if !ok {
 		return nil
 	}
 	var contents groupContents
 	s.gatherTermContents(ec.Particle.Term(), c.Name(), "", &contents)
+	if k == withImplicit {
+		s.gatherImplicitElements(&contents)
+	}
 	return contents.elements
 }
 
@@ -894,6 +940,9 @@ func sameTypeDefinition(a, b TypeDefinition) bool {
 //
 // An anonymous simple type needs no arm: derivedOKSimple already answers a
 // type identical to its base true.
+//
+// validate's sameType is its twin across the package boundary, the same two
+// arms under a weaker operand precondition: check the other when editing either.
 func sameDeclaredType(a, b TypeDefinition) bool {
 	if sameTypeDefinition(a, b) {
 		return true

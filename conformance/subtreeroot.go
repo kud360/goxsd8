@@ -464,7 +464,10 @@ func (g *subtreeGate) children(t xsd.ComplexType, m *xsd.Matcher) bool {
 //     key-governing-ed clause 2), which with the child's subtree must meet
 //     element's conditions. The ·locally declared type· (key-ldt-elem case 2)
 //     is that declaration's own {type definition}, so cvc-complex-type clause
-//     5 holds wherever cvc-elt clause 4 does;
+//     5 holds wherever cvc-elt clause 4 does for a declaration with no {type
+//     table}, the only kind element admits (assessedDeclaration). Under a {type
+//     table} it need not: an xsi:type ·overriding· a selection that is not the
+//     declared type can fail it (validate's walk.locallyDeclaredType);
 //   - an element particle whose {term} D carries another name: cvc-accept
 //     clause 2.3.2 admitted the child as a member of D's ·substitution group·,
 //     the Matcher deciding D top-level, D.{disallowed substitutions}, and
@@ -474,9 +477,9 @@ func (g *subtreeGate) children(t xsd.ComplexType, m *xsd.Matcher) bool {
 //     the child's subtree must meet element's conditions. The ·locally
 //     declared type· (key-ldt-elem case 2, S ·implicitly contained·,
 //     key-impl-cont) is S's own {type definition}, so cvc-complex-type clause
-//     5 holds wherever cvc-elt clause 4 does. A child carrying D's own name is
-//     the first arm's, cvc-accept clause 2.3.1 attributing it to D, where
-//     element refuses an ·abstract· D;
+//     5 holds wherever cvc-elt clause 4 does, on the first arm's terms. A
+//     child carrying D's own name is the first arm's, cvc-accept clause 2.3.1
+//     attributing it to D, where element refuses an ·abstract· D;
 //   - a skip Wildcard, or the {open content} with a skip {wildcard}: the child
 //     is ·skipped· with its whole subtree (key-sva clause 3.2, cvc-assess-elt
 //     clause 2), which is read past unchecked. A skipped child has no
@@ -489,7 +492,19 @@ func (g *subtreeGate) children(t xsd.ComplexType, m *xsd.Matcher) bool {
 //     {open content} half is validate's reading, not the spec's words
 //     (validate's walk.childGoverning, #1969);
 //   - a strict or lax Wildcard, or the {open content} with a strict or lax
-//     {wildcard}: resolvedChild's conditions.
+//     {wildcard}: resolvedChild's conditions, and for the {open content} the
+//     child's ·locally declared type· within t is ·absent·
+//     (xsd.Schema.LocallyDeclaredElementType answers false).
+//
+// GAP(conformance): a child ·attributed to· the {open content} with a strict or
+// lax {wildcard} and a non-·absent· ·locally declared type· is refused,
+// resolved name or not. key-governing-ed clause 4.3 gives it no ·governing
+// element declaration·, and that type, or an xsi:type ·overriding· it, governs
+// it (key-governing-type-elem clauses 6 and 7, validate's
+// walk.localGovernance); resolvedChild reads the top-level declaration or
+// ·xs:anyType· instead, so it vets a type the walk does not assess against.
+// Its one reader, execInstanceCase, then Fails the case: a suite-valid case of
+// this shape scores no pass, and none a false one (#2080).
 func (g *subtreeGate) child(t xsd.ComplexType, m *xsd.Matcher, start xml.StartElement) bool {
 	name := expandedName(start.Name)
 	a, ok := m.Next(name)
@@ -508,29 +523,30 @@ func (g *subtreeGate) child(t xsd.ComplexType, m *xsd.Matcher, start xml.StartEl
 		if pc == xsd.ProcessSkip {
 			return g.dec.Skip() == nil
 		}
-		return g.resolvedChild(t, start, pc == xsd.ProcessStrict)
+		return g.resolvedChild(start, pc == xsd.ProcessStrict)
 	case *xsd.OpenContent:
 		if at.Wildcard().ProcessContents() == xsd.ProcessSkip {
 			return g.dec.Skip() == nil
 		}
-		return g.resolvedChild(t, start, false)
+		if _, local := g.schema.LocallyDeclaredElementType(t, name); local {
+			return false
+		}
+		return g.resolvedChild(start, false)
 	}
 	return false
 }
 
 // resolvedChild reads through to its end tag a child whose start tag is start,
-// of an element governed by t, which is ·attributed to· a strict or lax
-// Wildcard or to t's {open content} with a strict or lax {wildcard}, and
-// reports whether one of these holds:
+// which is ·attributed to· a strict or lax Wildcard or to an {open content}
+// with a strict or lax {wildcard}, and reports whether one of these holds:
 //
 //   - its ·expanded name· ·resolves· to a top-level element declaration d
-//     (key-governing-ed clauses 3 and 4), its ·locally declared type· within
-//     t is ·absent· (locallyDeclared answers false for the names
-//     substitutionHeads gives), and d and the child's subtree meet element's
-//     conditions. The ldt being ·absent·, cvc-complex-type clause 5 is
-//     vacuous for the child; where it is not, clause 5 asks the child's
-//     ·governing type definition· to be ·validly substitutable· for it, which
-//     the walk never checks;
+//     (key-governing-ed clauses 3 and 4), and d and the child's subtree meet
+//     element's conditions. cvc-complex-type clause 5 is the walk's: it
+//     charges a child whose ·governing type definition· is neither the same
+//     as nor ·validly substitutable· for its non-·absent· ·locally declared
+//     type· within the parent's type (validate's walk.locallyDeclaredType),
+//     so no empty Result reaches the gate with such a child;
 //   - strictParticle holds — the child is ·attributed to· a strict ·wildcard
 //     particle· — its name resolves to none, and it carries no xsi:type: the
 //     child is ·laxly assessed· with a ·governing type definition· of none, so
@@ -552,7 +568,7 @@ func (g *subtreeGate) child(t xsd.ComplexType, m *xsd.Matcher, start xml.StartEl
 // subtree governed by a type with no declaration. Its one reader,
 // execInstanceCase, then Fails the case: a suite-valid case of this shape
 // scores no pass, and none a false one.
-func (g *subtreeGate) resolvedChild(t xsd.ComplexType, start xml.StartElement, strictParticle bool) bool {
+func (g *subtreeGate) resolvedChild(start xml.StartElement, strictParticle bool) bool {
 	d, ok := g.schema.Element(expandedName(start.Name))
 	if !ok {
 		if slices.ContainsFunc(start.Attr, func(a xml.Attr) bool { return a.Name == xsiType }) {
@@ -562,9 +578,6 @@ func (g *subtreeGate) resolvedChild(t xsd.ComplexType, start xml.StartElement, s
 			return g.dec.Skip() == nil
 		}
 		return g.laxlyAssessed(start)
-	}
-	if g.locallyDeclared(t, g.substitutionHeads(d)) {
-		return false
 	}
 	return g.element(start, d)
 }
@@ -597,50 +610,6 @@ func (g *subtreeGate) laxlyAssessed(start xml.StartElement) bool {
 	}
 	defer g.enter(start)()
 	return g.complex(start, anyType, false)
-}
-
-// substitutionHeads is d's ·expanded name· followed by the name of every
-// declaration its {substitution group affiliations} chain reaches, transitively
-// (cos-equiv-derived-ok-rec clause 2.2): the names of every declaration whose
-// ·substitution group· (key-eq) d may be a member of. It is a SUPERSET of that
-// group's heads: clauses 2.1 and 2.3, the {disallowed substitutions} and
-// derivation-method conditions, are not read, so a head d is not
-// ·substitutable· for still names itself here, which only makes locallyDeclared
-// refuse more.
-//
-// A name already listed is not listed again, which also ends the walk. An
-// affiliation that resolves to no top-level declaration is listed and not
-// followed.
-func (g *subtreeGate) substitutionHeads(d xsd.ElementDeclaration) []xsd.QName {
-	names := []xsd.QName{d.Name()}
-	for i := 0; i < len(names); i++ {
-		h, ok := g.schema.Element(names[i])
-		if !ok {
-			continue
-		}
-		for _, a := range h.SubstitutionGroupAffiliationNames() {
-			if !slices.Contains(names, a) {
-				names = append(names, a)
-			}
-		}
-	}
-	return names
-}
-
-// locallyDeclared reports whether the ·locally declared type· (key-ldt-elem)
-// within t of an element whose name, with its ·substitution group· heads, is
-// names (substitutionHeads) may be non-·absent·: some Complex Type Definition
-// on onChain's walk from t has a content model that ·contains· (key-contain-xpx,
-// termContains) an element declaration named in names. A declaration named by a
-// head is one whose ·substitution group· the element's declaration may be in,
-// which key-impl-cont makes ·implicitly contained·. A local declaration sharing
-// a head's name counts too, though no local declaration has a ·substitution
-// group· member but itself: the superset only refuses more.
-func (g *subtreeGate) locallyDeclared(t xsd.ComplexType, names []xsd.QName) bool {
-	return g.onChain(t, func(c xsd.ComplexType) bool {
-		ec, ok := c.ContentType().(xsd.ElementContent)
-		return ok && g.termContains(ec.Particle.Term(), names)
-	})
 }
 
 // locallyDeclaredAttribute reports whether the ·locally declared type·
@@ -679,39 +648,6 @@ func (g *subtreeGate) onChain(t xsd.ComplexType, holds func(xsd.ComplexType) boo
 		c = next
 	}
 	return false
-}
-
-// termContains reports whether term, a particle's {term}, is or ·contains·,
-// directly or indirectly (key-contain-dpt, key-contain-ipx), an element
-// declaration named in names: an <element ref> by the name it references, a
-// <group ref> through the referenced definition's {model group}. A <group ref>
-// that resolves to no definition answers true. The recursion needs no visited
-// set: finalize rejects a circular group reference (mg-props-correct clause
-// 2).
-func (g *subtreeGate) termContains(term xsd.TermOrRef, names []xsd.QName) bool {
-	switch t := term.(type) {
-	case xsd.ElementDeclarationRef:
-		return slices.Contains(names, t.Name)
-	case xsd.ModelGroupRef:
-		def, ok := g.schema.ModelGroup(t.Name)
-		return !ok || g.groupContains(def.ModelGroup(), names)
-	case xsd.ResolvedTerm:
-		switch r := t.Term.(type) {
-		case xsd.ElementDeclaration:
-			return slices.Contains(names, r.Name())
-		case xsd.ModelGroup:
-			return g.groupContains(r, names)
-		case xsd.Wildcard:
-			return false
-		}
-	}
-	return true
-}
-
-// groupContains reports whether a member of mg.{particles} is or contains an
-// element declaration named in names (termContains).
-func (g *subtreeGate) groupContains(mg xsd.ModelGroup, names []xsd.QName) bool {
-	return slices.ContainsFunc(mg.Particles(), func(p xsd.Particle) bool { return g.termContains(p.Term(), names) })
 }
 
 // rootStart reads dec up to the document element's start tag. It answers false

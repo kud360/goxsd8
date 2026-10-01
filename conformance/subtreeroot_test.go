@@ -580,29 +580,16 @@ func TestInstanceExecutorDeclinesOutsideAssessedSubtreeRoot(t *testing.T) {
 			"a strict wildcard particle's child resolving no declaration, typed by an xsi:type naming a NOTATION enumeration",
 			notationN + wildcardChild("strict"), `<known ` + xsiNS + `><u xsi:type="N">n</u></known>`,
 		},
+		// subtreeGate.child's GAP(conformance) {open content} refusal (#2071):
+		// the walk assesses each second e against the local xs:date, and the gate
+		// would read the top-level xs:string e, or ·xs:anyType·, instead.
 		{
-			// ·locally declared type· key-ldt-elem case 2, through a <group ref>.
-			"a lax wildcard particle's child whose name a local declaration in the parent's content model carries (cvc-complex-type clause 5)",
-			`<xs:element name="known"><xs:complexType><xs:sequence><xs:any processContents="lax"/><xs:group ref="g"/></xs:sequence></xs:complexType></xs:element>` +
-				`<xs:group name="g"><xs:sequence><xs:element name="b" type="xs:string" minOccurs="0"/></xs:sequence></xs:group>` +
-				`<xs:element name="b" type="xs:string"/>`,
-			`<known><b>x</b></known>`,
+			"an {open content} child resolving a declaration, with a non-·absent· ·locally declared type· (key-governing-ed clause 4.3)",
+			ldtOpen(`<xs:element name="e" type="xs:string"/>`), `<known><e>2008-11-03</e><e>2008-11-04</e></known>`,
 		},
 		{
-			// key-ldt-elem case 3: R's content model contains no b, its base's does.
-			"a strict wildcard particle's child whose name the restricted base's content model declares (cvc-complex-type clause 5)",
-			`<xs:complexType name="B"><xs:choice><xs:element name="b" type="xs:string"/><xs:any processContents="strict"/></xs:choice></xs:complexType>` +
-				`<xs:complexType name="R"><xs:complexContent><xs:restriction base="B"><xs:sequence><xs:any processContents="strict"/></xs:sequence></xs:restriction></xs:complexContent></xs:complexType>` +
-				`<xs:element name="known" type="R"/><xs:element name="b" type="xs:string"/>`,
-			`<known><b>x</b></known>`,
-		},
-		{
-			// key-impl-cont: the parent's content model contains the head h, whose
-			// ·substitution group· holds m.
-			"a strict wildcard particle's child whose substitution group head the parent's content model contains (cvc-complex-type clause 5)",
-			`<xs:element name="known"><xs:complexType><xs:sequence><xs:any processContents="strict"/><xs:element ref="h" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>` +
-				`<xs:element name="h" type="xs:string"/><xs:element name="m" substitutionGroup="h"/>`,
-			`<known><m>x</m></known>`,
+			"an {open content} child resolving no declaration, with a non-·absent· ·locally declared type· (key-governing-ed clause 4.3)",
+			ldtOpen(""), `<known><e>2008-11-03</e><e>2008-11-04</e></known>`,
 		},
 		{
 			// key-ldt-att case 3: the restriction prohibits its base's use of ta.
@@ -910,17 +897,47 @@ func openChild(pc string) string {
 		`<xs:element name="b" type="xs:int"/>`
 }
 
+// ldtChild declares <known>, whose content model is a local e of type local
+// and then a wildcard particle of {process contents} pc, beside a top-level e of
+// type top: a wildcard child named e has the local e's type for its ·locally
+// declared type· (key-ldt-elem case 2), which cvc-complex-type clause 5 holds
+// the top-level e's to. It is saxonData/Wild's wild061 shape.
+func ldtChild(local, top, pc string) string {
+	return `<xs:element name="known"><xs:complexType><xs:sequence><xs:element name="e" type="` + local + `"/>` +
+		`<xs:any processContents="` + pc + `"/></xs:sequence></xs:complexType></xs:element>` +
+		`<xs:element name="e" type="` + top + `"/>`
+}
+
+// ldtOpen declares <known>, whose content model is a local e of xs:date under a
+// lax interleave {open content}, beside top: a second e is ·attributed to· the
+// {open content} with a non-·absent· ·locally declared type·, which
+// key-governing-ed clause 4.3 has govern it in place of any top-level e.
+func ldtOpen(top string) string {
+	return `<xs:element name="known"><xs:complexType><xs:openContent mode="interleave"><xs:any processContents="lax"/></xs:openContent>` +
+		`<xs:sequence><xs:element name="e" type="xs:date"/></xs:sequence></xs:complexType></xs:element>` + top
+}
+
+// ldtBase declares <known> of type R, a restriction of B that keeps only B's
+// strict wildcard, beside a top-level b of type top: R's content model contains
+// no b and B's carries a local b of xs:string, so a wildcard child b has that
+// for its ·locally declared type· by key-ldt-elem case 3.
+func ldtBase(top string) string {
+	return `<xs:complexType name="B"><xs:choice><xs:element name="b" type="xs:string"/><xs:any processContents="strict"/></xs:choice></xs:complexType>` +
+		`<xs:complexType name="R"><xs:complexContent><xs:restriction base="B"><xs:sequence><xs:any processContents="strict"/></xs:sequence></xs:restriction></xs:complexContent></xs:complexType>` +
+		`<xs:element name="known" type="R"/><xs:element name="b" type="` + top + `"/>`
+}
+
 // TestInstanceExecutorDecidesWildcardChild proves the gate admits a child
-// ·attributed to· a strict or lax ·wildcard particle· or to a lax {open
-// content} wherever its name ·resolves· to a top-level declaration and its
-// ·locally declared type· is ·absent·, which makes cvc-complex-type clause 5
-// vacuous (#1931), a skip ·wildcard particle·'s or skip {open content}'s child
-// whatever its subtree holds (key-sva clause 3.2, #1861, #1969), and a lax
-// one's child resolving to none, ·laxly assessed· with its subtree (#1911).
-// Each row walks clean, and each is refused with subtreeGate.resolvedChild
-// answering false for a resolved name, with laxlyAssessed answering false for
-// an unresolved one, or with child answering false for the {open content} or
-// skip Wildcard arm.
+// ·attributed to· a strict or lax ·wildcard particle·, or to a lax {open
+// content} with an ·absent· ·locally declared type· (#2071), wherever its name
+// ·resolves· to a top-level declaration, the walk deciding cvc-complex-type
+// clause 5 for it (#1931, #2071), a skip ·wildcard particle·'s or skip {open
+// content}'s child whatever its subtree holds (key-sva clause 3.2, #1861,
+// #1969), and a lax one's child resolving to none, ·laxly assessed· with its
+// subtree (#1911). Each row walks clean, and each is refused with
+// subtreeGate.resolvedChild answering false for a resolved name, with
+// laxlyAssessed answering false for an unresolved one, or with child answering
+// false for the {open content} or skip Wildcard arm.
 func TestInstanceExecutorDecidesWildcardChild(t *testing.T) {
 	exec := newInstanceExec()
 	for _, tc := range []struct{ why, schemaBody, instance string }{
@@ -944,6 +961,31 @@ func TestInstanceExecutorDecidesWildcardChild(t *testing.T) {
 		// resolving none again (laxly assessed), and <b> strictly assessed
 		// against b (#1823).
 		{"lax, a child resolving no declaration over a subtree the walk assesses", wildcardChild("lax"), `<known><u foo="x">t<v><w/></v><b>1</b></u></known>`},
+		// cvc-complex-type clause 5 satisfied, each ·locally declared type·
+		// non-·absent· (key-ldt-elem, #2071).
+		{"strict, a child whose type is its ·locally declared type· (clause 5)",
+			ldtChild("xs:date", "xs:date", "strict"), `<known><e>2008-11-03</e><e>2008-11-04</e></known>`},
+		{"lax, a child whose type is ·validly substitutable· for its ·locally declared type· (clause 5, wild063.v1)",
+			ldtChild("xs:integer", "xs:positiveInteger", "lax"), `<known><e>-1</e><e>12</e></known>`},
+		{"strict, a child whose ·locally declared type· the restricted base declares (key-ldt-elem case 3)",
+			ldtBase("xs:string"), `<known><b>x</b></known>`},
+		{
+			// key-ldt-elem case 2 through a <group ref>.
+			"lax, a child whose name a local declaration in a referenced group carries (clause 5)",
+			`<xs:element name="known"><xs:complexType><xs:sequence><xs:any processContents="lax"/><xs:group ref="g"/></xs:sequence></xs:complexType></xs:element>` +
+				`<xs:group name="g"><xs:sequence><xs:element name="b" type="xs:string" minOccurs="0"/></xs:sequence></xs:group>` +
+				`<xs:element name="b" type="xs:string"/>`,
+			`<known><b>x</b></known>`,
+		},
+		{
+			// key-impl-cont: the parent's content model contains the head h, whose
+			// ·substitution group· holds m, so m's own type is its ·locally
+			// declared type·.
+			"strict, a child the parent's content model ·implicitly contains· (clause 5)",
+			`<xs:element name="known"><xs:complexType><xs:sequence><xs:any processContents="strict"/><xs:element ref="h" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>` +
+				`<xs:element name="h" type="xs:string"/><xs:element name="m" substitutionGroup="h"/>`,
+			`<known><m>x</m></known>`,
+		},
 	} {
 		if !exec(instanceCase(t, tc.schemaBody, tc.instance, true)).IsPass() {
 			t.Errorf("%s: the walk decides the wildcard child and the gate admits it; the executor must agree with a suite-valid case", tc.why)
@@ -978,6 +1020,17 @@ func TestInstanceExecutorChargesWildcardChild(t *testing.T) {
 			`<xs:element name="known"><xs:complexType><xs:sequence><xs:any namespace="urn:other" processContents="skip"/></xs:sequence></xs:complexType></xs:element>`,
 			`<known><u/></known>`,
 		},
+		// cvc-complex-type clause 5 (#2071): each child's ·governing type
+		// definition· is not ·validly substitutable· for its ·locally declared
+		// type·.
+		{"strict, a child of xs:time whose ·locally declared type· is xs:date (wild061.n1)",
+			ldtChild("xs:date", "xs:time", "strict"), `<known><e>2008-11-03</e><e>12:20:02</e></known>`},
+		{"strict, a child of xs:int whose ·locally declared type· the restricted base declares xs:string (key-ldt-elem case 3)",
+			ldtBase("xs:int"), `<known><b>1</b></known>`},
+		{"lax, a child resolving no declaration whose xsi:type is not its ·locally declared type· (wild062.n3)",
+			`<xs:element name="known"><xs:complexType><xs:sequence><xs:element name="f" type="xs:string"/>` +
+				`<xs:any processContents="lax"/></xs:sequence></xs:complexType></xs:element>`,
+			`<known ` + xsiXS + `><f>x</f><f xsi:type="xs:int">1</f></known>`},
 	} {
 		if !exec(instanceCase(t, tc.schemaBody, tc.instance, false)).IsPass() {
 			t.Errorf("%s: the walk charges the child; the executor must agree with a suite-invalid case", tc.why)
