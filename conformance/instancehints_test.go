@@ -109,6 +109,16 @@ func TestInstanceExecutorDeclinesUnreadableHints(t *testing.T) {
 		// addB063's shape: the hinted schema declares no root.
 		{"a hinted schema declaring no top-level element for the root", known,
 			`<unknown ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd"/>`},
+		// §4.3.2 clause 5: an inline xs:schema is global to the assessment,
+		// the document element included. Decided valid otherwise: s.xsd
+		// imports a declaration of the root itself, so no undeclared-root
+		// decline masks the row.
+		{"an inline xs:schema as the root carrying a hint",
+			[]fixtureFile{
+				{"s.xsd", xsdDoc("", `<xs:import namespace="http://www.w3.org/2001/XMLSchema" schemaLocation="x.xsd"/>`)},
+				{"x.xsd", xsdDoc("http://www.w3.org/2001/XMLSchema", `<xs:element name="schema"/>`)},
+			},
+			`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd"/>`},
 		// addB139's shape: xmlns:p="" is not namespace-well-formed.
 		{"a hinted schema carrying an empty prefixed namespace declaration",
 			[]fixtureFile{{"s.xsd", `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:f="">` + knownRoot + `</xs:schema>`}},
