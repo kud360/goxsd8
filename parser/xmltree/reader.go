@@ -6,6 +6,7 @@ import (
 	"io"
 	"sort"
 
+	"github.com/kud360/goxsd8/internal/xmldecl"
 	"github.com/kud360/goxsd8/xsderr"
 )
 
@@ -60,13 +61,18 @@ type frame struct {
 // (xsderr.Loc.URI); it is not opened or resolved here — it is only threaded
 // into every Loc the reader emits.
 //
+// A document whose XML declaration specifies a 1.x version number other than
+// 1.0 is read as a 1.0 document (XML 1.0 §2.8 Note), through
+// xmldecl.As10's same-length rewrite of that number, so locations are
+// unchanged by it.
+//
 // A leading byte-order mark is honoured per XML 1.0 §4.3.3: a UTF-16 document
 // is decoded to UTF-8 before the XML decoder sees it, and a UTF-8 mark is
 // dropped as the encoding signature it is. Locations are therefore offsets
 // into the decoded UTF-8 stream, not into the source bytes.
 func NewReader(uri string, r io.Reader) *Reader {
 	body, bom := decodeBOM(r)
-	pos := &posReader{r: body}
+	pos := &posReader{r: xmldecl.As10(body)}
 	dec := xml.NewDecoder(pos)
 	dec.CharsetReader = bom.charsetReader
 	return &Reader{

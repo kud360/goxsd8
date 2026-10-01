@@ -1,9 +1,9 @@
 // Package xmltree is a streaming, position-tracking XML reader: the
 // origin of every xsderr.Loc in the module.
 //
-// It is independent of the rest of the module (leaf besides xsderr) and
-// used for both schema documents (parser) and XML instances
-// (validate/xmlsrc).
+// It is independent of the rest of the module (leaf besides xsderr and the
+// stdlib-only internal/xmldecl) and used for both schema documents
+// (parser) and XML instances (validate/xmlsrc).
 //
 // # Contract (implemented in M2)
 //
@@ -32,6 +32,12 @@
 //     GAP(xml): UTF-16 without a mark, declared only by encoding=, is
 //     not decoded — it fails well-formedness rather than being read.
 //     Tracked by #361.
+//   - A document whose XML declaration specifies a 1.x version number
+//     other than 1.0 is read as a 1.0 document (XML 1.0 §2.8 Note), by a
+//     same-length rewrite of that number (internal/xmldecl), so locations
+//     are the source's own. Only the label is admitted: a 1.1-only
+//     feature, such as a C0 character reference, is read as XML 1.0 reads
+//     it.
 //   - The DOCTYPE's internal subset is read for its unparsed entity
 //     declarations (<!ENTITY name SYSTEM|PUBLIC ... NDATA notation>), the
 //     document's [unparsed entities] property, answered by
