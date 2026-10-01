@@ -43,7 +43,10 @@ import (
 // partial components survived would decide a different question. (The suite's
 // own metadata is not consulted for this: the assembly's verdict is the fact,
 // and a group whose schemaTest declares a non-valid expectation therefore
-// declines through the same test as any other failed assembly.)
+// declines through the same test as any other failed assembly.) One rejection
+// is decided "not valid" rather than declined: a schema document the assembly
+// retrieved and the reader charged not well-formed (wellFormednessFault), a
+// harness convention execInstanceCase states (#2058).
 //
 // # The only outcomes this slice can DECIDE
 //
@@ -128,8 +131,10 @@ import (
 // All nine are unconditional: no verdict here can be overturned by anything in
 // the rest of the document, which is what makes them decidable while the engine
 // leaves most of the document undecided. They are every "not valid" this lane
-// observes; its "valid" is the one gated shape that charges none of them ("Why
-// an EMPTY Result is evidence of validity for ONE shape only" below).
+// observes of an assessment, the not-well-formed schema document above being
+// the one "not valid" it records without one; its "valid" is the one gated
+// shape that charges none of them ("Why an EMPTY Result is evidence of validity
+// for ONE shape only" below).
 //
 // # Charges at depth
 //
@@ -420,7 +425,9 @@ import (
 // # Why no false pass is possible
 //
 // Every "not valid" observation this lane emits comes from one of the nine
-// charges above, each of which is unconditional. Its "valid" observation
+// charges above, each of which is unconditional, or from a schema document the
+// reader charged not well-formed, recorded before any assessment under
+// execInstanceCase's harness convention. Its "valid" observation
 // is an empty Result — no violation, no unevaluated record — on the gated
 // shape, whose every applicable clause the section above names the decider of;
 // every other empty Result declines. So the lane can record a still-failing
@@ -494,10 +501,32 @@ func newInstanceExec() executor {
 // (Fail): it assembles the case's schema (caseSchema), assesses the
 // instance document against it, and reads the assessment only where the answer
 // is unconditional: a set of the nine decidable charges is "not valid", and an
-// empty Result on an assessed subtree root (assessedSubtreeRoot) is "valid".
+// empty Result on an assessed subtree root (assessedSubtreeRoot) is "valid". An
+// assembly rejected for a not-well-formed schema document is "not valid" without
+// an assessment; every other rejected assembly declines.
 func execInstanceCase(backend value.Backend, c caseSpec) Status {
 	schema, report, decidable, perr := caseSchema(backend, c)
-	if !decidable || perr != nil {
+	if !decidable {
+		return Fail()
+	}
+	// A schema document the assembly RETRIEVED and the reader rejected as not
+	// well-formed (wellFormednessFault) is recorded "not valid". That is a harness
+	// convention, not a spec verdict: §4.3.2 item 3 makes a failed attempt to
+	// dereference a schema location hint no error, but this document was retrieved
+	// and is in error, and §5.1 requires a conforming processor to report an error
+	// in a schema document used in constructing a schema while leaving any further
+	// operation, assessment included, out of scope. Not-valid is how the harness
+	// records that report, as the schema lane's fabricatedRejection read arm does
+	// for a composed document. Every other perr declines: a resolver fault
+	// (#1201), a read failure wrapping a cause, which may be a reader limitation,
+	// a prefix bound only by the namespace declaration an internal-subset ATTLIST
+	// defaults, and every rejection of a document that did read (schA8.i's
+	// src-import clause 3.1). A genuinely unbound prefix declines too, the gap
+	// wellFormednessFault's GAP(parser) marker tracks (#2073).
+	if wellFormednessFault(perr) {
+		return decideAgreement(false, c.expect.wantsValid())
+	}
+	if perr != nil {
 		return Fail()
 	}
 	v, err := validate.New(schema, backend)
