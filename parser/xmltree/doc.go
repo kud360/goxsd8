@@ -27,11 +27,11 @@
 //     (FE FF, FF FE) selects a streaming transcode to UTF-8, a UTF-8
 //     mark is dropped as the encoding signature it is (both
 //     internal/xmlenc, shared with the conformance harness's raw
-//     re-reads), and an encoding
-//     declaration that disagrees with the mark is that section's fatal
-//     error, reported as RuleXMLWellFormed. Locations are offsets into
-//     the decoded UTF-8 stream, not into the source bytes.
-//     GAP(xml): UTF-16 without a mark, declared only by encoding=, is
+//     re-reads), and an encoding declaration that disagrees with the
+//     mark is that section's fatal error, reported as
+//     RuleXMLWellFormed. Locations are offsets into the decoded UTF-8
+//     stream, not into the source bytes.
+//   - GAP(xml): UTF-16 without a mark, declared only by encoding=, is
 //     not decoded — it fails well-formedness rather than being read.
 //     Tracked by #361.
 //   - A document whose XML declaration specifies a 1.x version number

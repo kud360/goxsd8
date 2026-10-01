@@ -2,6 +2,7 @@ package conformance
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -13,14 +14,14 @@ import (
 	"github.com/kud360/goxsd8/parser/xmltree"
 )
 
-// TestRawReadsAdmitTheLabelXmltreeAdmits pins that both raw re-reads,
-// assessedSubtreeRoot and documentCarries, admit a UTF-8 document's 1.x
-// version label exactly when parser/xmltree admits it, a byte-order mark before
-// the label included (XML 1.0 §2.8 Note, §4.3.3). The marked 1.1 and 1.10 rows
-// fail when rawDecoder hands As10 the mark: As10 then meets no '<?xml', and
-// encoding/xml stops on the unrewritten label with `unsupported version`. The
-// doubled-mark 1.1 row fails if the mark is read past more than once: xmltree
-// drops one mark and refuses that document.
+// TestRawReadsAdmitTheLabelXmltreeAdmits pins that the raw re-reads,
+// assessedSubtreeRoot, documentCarries and instanceHints, admit a UTF-8
+// document's 1.x version label exactly when parser/xmltree admits it, a
+// byte-order mark before the label included (XML 1.0 §2.8 Note, §4.3.3). The
+// marked 1.1 and 1.10 rows fail when rawDecoder hands As10 the mark: As10 then
+// meets no '<?xml', and encoding/xml stops on the unrewritten label with
+// `unsupported version`. The doubled-mark 1.1 row fails if the mark is read
+// past more than once: xmltree drops one mark and refuses that document.
 func TestRawReadsAdmitTheLabelXmltreeAdmits(t *testing.T) {
 	const mark = "\xEF\xBB\xBF"
 	const body = `<known>x</known>`
@@ -53,36 +54,61 @@ func TestRawReadsAdmitTheLabelXmltreeAdmits(t *testing.T) {
 		if got := documentCarries(c.doc, isVersioningAttr); got == tc.admit {
 			t.Errorf("%q: documentCarries(isVersioningAttr) = %v, want %v, as xmltree admits", tc.prolog, got, !tc.admit)
 		}
+		if _, _, got := instanceHints(c.doc); got != tc.admit {
+			t.Errorf("%q: instanceHints ok = %v, want %v, as xmltree admits", tc.prolog, got, tc.admit)
+		}
 	}
 }
 
-// TestRawReadsRefuseUTF16 pins rawDecoder's doc: a UTF-16 document, which
-// xmltree reads, is read by neither raw re-read, under any label, and each
-// answers as for an unreadable document.
-func TestRawReadsRefuseUTF16(t *testing.T) {
-	doc := `<?xml version="1.0" encoding="UTF-16"?><known>x</known>`
-	units := utf16.Encode([]rune(doc))
-	raw := []byte{0xFF, 0xFE}
-	for _, u := range units {
-		raw = append(raw, byte(u), byte(u>>8))
+// TestRawReadsDecodeUTF16 pins that the raw re-reads, assessedSubtreeRoot,
+// documentCarries and instanceHints, read a byte-order-marked UTF-16 document,
+// in either byte order, exactly as parser/xmltree reads it (XML 1.0 §4.3.3,
+// Appendix F.1). The 1.1 rows pin that the transcode happens before As10 meets
+// the label, so the label is admitted as xmltree admits it; XML 1.0 rules
+// nothing on UTF-16 by version, so the rows differ in the label alone. Every
+// row fails when rawDecoder reads the bytes without xmlenc.Decode: encoding/xml
+// reads the mark as invalid UTF-8.
+func TestRawReadsDecodeUTF16(t *testing.T) {
+	for _, version := range []string{"1.0", "1.1"} {
+		for _, bigEnd := range []bool{false, true} {
+			doc := `<?xml version="` + version + `" encoding="UTF-16"?><known>x</known>`
+			raw := utf16Marked(doc, bigEnd)
+			row := fmt.Sprintf("version %s, big-endian %v", version, bigEnd)
+			if err := readAll(string(raw)); err != nil {
+				t.Fatalf("%s: xmltree rejects the row: %v", row, err)
+			}
+			c := instanceCase(t, knownRoot, "", true)
+			if err := os.WriteFile(c.doc, raw, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			schema, report, decidable, err := assembleCase(strict.New(), c.schemaDoc, nil)
+			if err != nil || !decidable {
+				t.Fatalf("%s: assembling the schema: decidable %v, err %v", row, decidable, err)
+			}
+			if !assessedSubtreeRoot(schema, report, c.doc) {
+				t.Errorf("%s: assessedSubtreeRoot(%s) = false, want true, as xmltree reads it", row, filepath.Base(c.doc))
+			}
+			if documentCarries(c.doc, isVersioningAttr) {
+				t.Errorf("%s: documentCarries(%s, isVersioningAttr) = true, want false, as xmltree reads it", row, filepath.Base(c.doc))
+			}
+			if _, _, ok := instanceHints(c.doc); !ok {
+				t.Errorf("%s: instanceHints(%s) ok = false, want true, as xmltree reads it", row, filepath.Base(c.doc))
+			}
+		}
 	}
-	if err := readAll(string(raw)); err != nil {
-		t.Fatalf("xmltree rejects the UTF-16 row: %v", err)
+}
+
+// utf16Marked encodes doc as UTF-16 in the given byte order behind its mark.
+func utf16Marked(doc string, bigEnd bool) []byte {
+	var raw []byte
+	for _, u := range utf16.Encode(append([]rune{0xFEFF}, []rune(doc)...)) {
+		hi, lo := byte(u>>8), byte(u)
+		if !bigEnd {
+			hi, lo = lo, hi
+		}
+		raw = append(raw, hi, lo)
 	}
-	c := instanceCase(t, knownRoot, "", true)
-	if err := os.WriteFile(c.doc, raw, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	schema, report, decidable, err := assembleCase(strict.New(), c.schemaDoc, nil)
-	if err != nil || !decidable {
-		t.Fatalf("assembling the schema: decidable %v, err %v", decidable, err)
-	}
-	if assessedSubtreeRoot(schema, report, c.doc) {
-		t.Errorf("assessedSubtreeRoot(%s) = true, want false for a UTF-16 document", filepath.Base(c.doc))
-	}
-	if !documentCarries(c.doc, isVersioningAttr) {
-		t.Errorf("documentCarries(%s, isVersioningAttr) = false, want true for a UTF-16 document", filepath.Base(c.doc))
-	}
+	return raw
 }
 
 // readAll reads doc through parser/xmltree to its end and returns the fault
