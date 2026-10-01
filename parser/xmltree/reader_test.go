@@ -571,3 +571,72 @@ func TestEOFIsIdempotent(t *testing.T) {
 		t.Errorf("second post-EOF Token = %v, want io.EOF", err)
 	}
 }
+
+// TestVersion1xIsReadAs10 pins XML 1.0 §2.8's Note: a document whose
+// declaration specifies a 1.x version number other than 1.0 is read as the 1.0
+// document it would be under a 1.0 label, nodes and locations alike, in either
+// quote style, and with a minor version longer than one digit.
+func TestVersion1xIsReadAs10(t *testing.T) {
+	body := "\n<a x='1'>\n  <b>t</b>\n</a>"
+	cases := []struct{ name, decl, same string }{
+		{"double-quoted 1.1", `<?xml version="1.1"?>`, `<?xml version="1.0"?>`},
+		{"single-quoted 1.1", `<?xml version='1.1' encoding='UTF-8'?>`, `<?xml version='1.0' encoding='UTF-8'?>`},
+		{"spaced Eq", "<?xml\tversion = \"1.9\" ?>", "<?xml\tversion = \"1.0\" ?>"},
+		{"two-digit minor version", `<?xml version="1.10" standalone="yes"?>`, `<?xml version="1.0"  standalone="yes"?>`},
+		{"two-digit minor version before ?>", `<?xml version="1.01"?>`, `<?xml version="1.0" ?>`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := collect(t, "t.xml", tc.decl+body)
+			if err != nil {
+				t.Fatalf("collect(%s): %v", tc.decl, err)
+			}
+			want, err := collect(t, "t.xml", tc.same+body)
+			if err != nil {
+				t.Fatalf("collect(%s): %v", tc.same, err)
+			}
+			sameNodes(t, got, want)
+		})
+	}
+}
+
+// TestVersionLabelRejectedOutside1x pins the other side of §2.8: only a 1.x
+// VersionNum ([26] '1.' [0-9]+) is read as 1.0, so any other label is still a
+// well-formedness fault.
+func TestVersionLabelRejectedOutside1x(t *testing.T) {
+	for _, decl := range []string{
+		`<?xml version="2.0"?>`,
+		`<?xml version="1.1a"?>`,
+		`<?xml version="1."?>`,
+		// The two-digit rewrite would make this one well-formed by supplying
+		// the S that [23] requires before encoding.
+		`<?xml version="1.10"encoding="UTF-8"?>`,
+	} {
+		t.Run(decl, func(t *testing.T) {
+			_, err := collect(t, "t.xml", decl+"<a/>")
+			wantWellFormednessError(t, err)
+		})
+	}
+}
+
+// TestFaultAfterDeclarationLocatedAlikeUnder10And11 pins that the label's
+// rewrite moves no location: a fault after the declaration, on its own line
+// and on the next, is reported at the same line:col with the same message
+// under a 1.0 and a 1.1 label.
+func TestFaultAfterDeclarationLocatedAlikeUnder10And11(t *testing.T) {
+	for _, body := range []string{"<a></b>", "\n<a>\n  <b></c>\n</a>"} {
+		_, err10 := collect(t, "t.xml", `<?xml version="1.0"?>`+body)
+		_, err11 := collect(t, "t.xml", `<?xml version="1.1"?>`+body)
+		if err10 == nil || err11 == nil {
+			t.Fatalf("body %q: errors = %v / %v, want a fault under both labels", body, err10, err11)
+		}
+		loc10, _ := xsderr.LocOf(err10)
+		loc11, ok := xsderr.LocOf(err11)
+		if !ok || loc11 != loc10 {
+			t.Errorf("body %q: 1.1 fault at %v (located %v), want the 1.0 fault's %v", body, loc11, ok, loc10)
+		}
+		if err11.Error() != err10.Error() {
+			t.Errorf("body %q: 1.1 fault %q, want the 1.0 fault %q", body, err11, err10)
+		}
+	}
+}

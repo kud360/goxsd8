@@ -138,7 +138,7 @@
 // ones that broke off partway, and the ones that held no element at all.
 //
 // The axis is grouped because ungrouped it is not a report anyone reads:
-// `*@*` over the suite is 172,565 attribute occurrences, which one line each
+// `*@*` over the suite is 172,637 attribute occurrences, which one line each
 // renders unreadable, and 185 pairs, which a table renders in a screenful
 // (#1391). Its first section is that table — pair, occurrence count, fixture
 // count, in name order — and its second lists each pair's fixtures in path
