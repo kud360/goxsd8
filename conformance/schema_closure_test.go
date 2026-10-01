@@ -10,6 +10,7 @@ import (
 
 	"github.com/kud360/goxsd8/loader"
 	"github.com/kud360/goxsd8/parser"
+	"github.com/kud360/goxsd8/xsderr"
 )
 
 // schemaSrc wraps body in a <schema> with the xs prefix bound and, when tns is
@@ -38,13 +39,14 @@ func override(location, body string) string {
 // closureGateIn assembles root over an in-memory document set (loader.Map is
 // keyed by the exact location string, so it pins the resolution chain the
 // assembly computes) and reports the two facts execSchemaCase decides on: whether
-// the case is DECLINED — either some assembled document is out of the producer's
-// decidable subset, or an unfollowed reference coincides with a failure it could
-// have fabricated (#276, #404) — and whether any ·inter-schema-document reference·
-// went unfollowed at all.
+// the case is DECLINED — assemblyDeclined: some assembled document is out of the
+// producer's decidable subset and the failure is no grammarRejection (#2076), or
+// an unfollowed reference coincides with a failure it could have fabricated
+// (#276, #404) — and whether any ·inter-schema-document reference· went
+// unfollowed at all.
 //
-// It calls the two production predicates rather than restating them, so a table
-// entry below cannot pass against a gate the executor does not run.
+// It calls the production gate rather than restating it, so a table entry below
+// cannot pass against a gate the executor does not run.
 //
 // The second output is not derivable from the first and is asserted separately on
 // purpose: it is what records a directive that named NO document, which leaves no
@@ -53,7 +55,7 @@ func closureGateIn(t *testing.T, root string, docs map[string]string) (declined,
 	t.Helper()
 	_, report, perr := parser.ParseReport(root, parser.WithResolver(loader.Map(docs)))
 	unfollowed = len(report.Unfollowed()) > 0
-	return !closureDecidable(report) || fabricatedRejection(report, perr), unfollowed
+	return assemblyDeclined(report, perr), unfollowed
 }
 
 // undecidable is a top-level element OUTSIDE the XSD namespace. <schema>'s
@@ -704,6 +706,131 @@ func TestSchemaExecutorDeclinesUndecidableInclusion(t *testing.T) {
 			if exec(caseSpec{kind: kindSchema, doc: doc, expect: expectValidity(ev)}).IsPass() {
 				t.Errorf("%s: must be DECLINED (Fail) regardless of expectValid=%v", name, ev)
 			}
+		}
+	}
+}
+
+// undecidableGrammarFaults are the out-of-subset trees
+// TestSchemaExecutorDecidesGrammarFaultInUndecidableClosure decides: each holds
+// the undecidable const somewhere in its closure and an unruled §2.4 clause 1
+// grammar fault — a <complexType> under an <element> carrying the name=
+// xs:localComplexType prohibits, MS-ModelGroups mgB010's shape.
+func undecidableGrammarFaults() map[string]map[string]string {
+	fault := `<xs:element name="root"><xs:complexType name="bad"/></xs:element>`
+	return map[string]map[string]string{
+		"fault beside the undecidable child": {
+			"main.xsd": schemaSrc("urn:a", undecidable+fault),
+		},
+		"fault in the root, undecidable child in an included document": {
+			"main.xsd": schemaSrc("urn:a", include("lib.xsd")+fault),
+			"lib.xsd":  schemaSrc("urn:a", undecidable),
+		},
+		"fault in an included document, undecidable child in the root": {
+			"main.xsd": schemaSrc("urn:a", include("lib.xsd")+undecidable),
+			"lib.xsd":  schemaSrc("urn:a", fault),
+		},
+	}
+}
+
+// TestSchemaExecutorDecidesGrammarFaultInUndecidableClosure pins #2076's lift:
+// an assembly REJECTED with a grammarRejection is DECIDED invalid even though its
+// closure holds a document schemaShapeDecidable refuses. The refused child is
+// one the producer skips, and a skip charges no unruled error, so the rejection
+// is the document's own under §2.4 clause 1 (§5.1's first bullet).
+//
+// What makes it able to fail: with the grammarRejection arm removed from
+// assemblyDeclined, closureDecidable alone declines every tree and neither
+// assertion holds. The flipped-expectation half keeps the first from passing on
+// a decline.
+func TestSchemaExecutorDecidesGrammarFaultInUndecidableClosure(t *testing.T) {
+	exec := newSchemaExec()
+	trees := undecidableGrammarFaults()
+	for _, name := range slices.Sorted(maps.Keys(trees)) {
+		_, report, perr := parser.ParseReport("main.xsd", parser.WithResolver(loader.Map(trees[name])))
+		if closureDecidable(report) {
+			t.Fatalf("%s: premise: the closure must hold an undecidable document", name)
+		}
+		if _, ruled := xsderr.RuleOf(perr); perr == nil || ruled {
+			t.Fatalf("%s: premise: the assembly must fail with an unruled grammar fault, got %v", name, perr)
+		}
+		doc := writeSchemaTree(t, "main.xsd", trees[name])
+		if !exec(caseSpec{kind: kindSchema, doc: doc, expect: expectValidity(false)}).IsPass() {
+			t.Errorf("%s: a grammar fault in an undecidable closure must be DECIDED invalid", name)
+		}
+		if exec(caseSpec{kind: kindSchema, doc: doc, expect: expectValidity(true)}).IsPass() {
+			t.Errorf("%s: must Fail under a flipped expectation (decides for real)", name)
+		}
+	}
+}
+
+// TestSchemaExecutorDeclinesSkipFabricatedRejection pins the hazard #2076's lift
+// must leave declined: a declaration the producer SKIPS is missing from the
+// assembly, so a reference to it elsewhere is charged src-resolve (§3.17.6.2,
+// §5.3) — an "invalid" resting on what this producer did not build rather than
+// on the document under test. The skipped declaration is a top-level element
+// outside the XSD namespace named like one (#1036), the one producer skip a
+// reference can name; it stands in for any declaration a skip leaves missing.
+//
+// What makes it able to fail: with grammarRejection's "no rule" condition
+// removed, the src-resolve error decides the case invalid and the
+// expectValid=false polarity Passes.
+func TestSchemaExecutorDeclinesSkipFabricatedRejection(t *testing.T) {
+	exec := newSchemaExec()
+	reference := `<xs:element name="root" type="tns:code"/>`
+	skipped := `<z:simpleType name="code" xmlns:z="urn:z"><z:restriction base="xs:string"/></z:simpleType>`
+	trees := map[string]map[string]string{
+		"skipped declaration in the root": {
+			"main.xsd": schemaSrc("urn:a", skipped+reference),
+		},
+		"skipped declaration in an included document": {
+			"main.xsd": schemaSrc("urn:a", include("lib.xsd")+reference),
+			"lib.xsd":  schemaSrc("urn:a", skipped),
+		},
+	}
+	for _, name := range slices.Sorted(maps.Keys(trees)) {
+		_, report, perr := parser.ParseReport("main.xsd", parser.WithResolver(loader.Map(trees[name])))
+		if closureDecidable(report) {
+			t.Fatalf("%s: premise: the closure must hold an undecidable document", name)
+		}
+		if rule, _ := xsderr.RuleOf(perr); rule != ruleSrcResolve {
+			t.Fatalf("%s: premise: the assembly must fail src-resolve, got %v", name, perr)
+		}
+		doc := writeSchemaTree(t, "main.xsd", trees[name])
+		for _, ev := range []bool{true, false} {
+			if exec(caseSpec{kind: kindSchema, doc: doc, expect: expectValidity(ev)}).IsPass() {
+				t.Errorf("%s: must be DECLINED (Fail) regardless of expectValid=%v", name, ev)
+			}
+		}
+	}
+}
+
+// TestSchemaExecutorDeclinesResolverFaultInUndecidableClosure pins the #1201
+// boundary of #2076's lift. An <include> naming a path through a regular file
+// fails with ENOTDIR, a resolver fault that is not loader.ErrNotFound: the
+// assembly records parser.UnfollowedLocationUnresolved and returns an unruled
+// plain error that is an I/O failure, not a grammar fault. In an out-of-subset
+// closure that must stay declined, as it was before the lift; in an in-subset
+// one it is fabricatedRejection's GAP, which this test does not touch.
+//
+// What makes it able to fail: with grammarRejection's no-unfollowed condition
+// removed, the unruled error decides the case invalid and the expectValid=false
+// polarity Passes.
+func TestSchemaExecutorDeclinesResolverFaultInUndecidableClosure(t *testing.T) {
+	exec := newSchemaExec()
+	doc := writeSchemaTree(t, "main.xsd", map[string]string{
+		"main.xsd": schemaSrc("urn:a", include("lib.xsd/inner.xsd")+undecidable),
+		"lib.xsd":  schemaSrc("urn:a", decidableType),
+	})
+	_, report, perr := parser.ParseReport(filepath.Base(doc), parser.WithResolver(loader.Dir(filepath.Dir(doc))))
+	if _, ruled := xsderr.RuleOf(perr); perr == nil || ruled || errors.Is(perr, loader.ErrNotFound) {
+		t.Fatalf("premise: the assembly must fail with an unruled resolver fault that is not ErrNotFound, got %v", perr)
+	}
+	if u := report.Unfollowed(); len(u) != 1 || u[0].Reason != parser.UnfollowedLocationUnresolved {
+		t.Fatalf("premise: the <include> must be recorded unfollowed as unresolved, got %+v", u)
+	}
+	for _, ev := range []bool{true, false} {
+		if exec(caseSpec{kind: kindSchema, doc: doc, expect: expectValidity(ev)}).IsPass() {
+			t.Errorf("must be DECLINED (Fail) regardless of expectValid=%v", ev)
 		}
 	}
 }
