@@ -39,7 +39,11 @@
 //     same-length rewrite of that number (internal/xmldecl), so locations
 //     are the source's own. Only the label is admitted: a 1.1-only
 //     feature, such as a C0 character reference, is read as XML 1.0 reads
-//     it.
+//     it. The one exception is prefix undeclaration: xmlns:p="" undeclares
+//     p in a document labelled version="1.1" (Namespaces in XML 1.1), and
+//     is rejected as RuleXMLWellFormed in any other document, which is XML
+//     1.0 (nsc-NoPrefixUndecl). The default declaration xmlns="" is legal
+//     in both.
 //   - The DOCTYPE's internal subset is read for its unparsed entity
 //     declarations (<!ENTITY name SYSTEM|PUBLIC ... NDATA notation>), the
 //     document's [unparsed entities] property, answered by

@@ -75,9 +75,9 @@ func TestInScopePrefixesAgreesWithLookupOnShadowing(t *testing.T) {
 }
 
 func TestInScopePrefixesDropsUndeclaredPrefix(t *testing.T) {
-	// xmlns:p="" undeclares p (Namespaces in XML 1.1); it must not be enumerated
-	// as a binding to the empty namespace name.
-	starts := startElements(t, `<a xmlns:p="urn:p"><b xmlns:p=""/></a>`)
+	// xmlns:p="" undeclares p in an XML 1.1 document (Namespaces in XML 1.1);
+	// it must not be enumerated as a binding to the empty namespace name.
+	starts := startElements(t, `<?xml version="1.1"?><a xmlns:p="urn:p"><b xmlns:p=""/></a>`)
 	if got, want := formatPrefixes(starts[1].InScopePrefixes()),
 		"xml="+xmltree.XMLNamespaceURI; got != want {
 		t.Errorf("prefixes after undeclaration = %q, want %q", got, want)

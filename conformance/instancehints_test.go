@@ -2,7 +2,10 @@ package conformance
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/kud360/goxsd8/builtin/strict"
 )
 
 // fixtureFile is one document a hintedCase writes beside its instance.
@@ -57,6 +60,11 @@ func TestInstanceExecutorDecidesFromHints(t *testing.T) {
 		// cvc-type clause 3.1.2: an element [[child]] under a simple type.
 		{"noNamespaceSchemaLocation, a leaf root with an element child", noNS,
 			`<known ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd"><x/></known>`, false},
+		// Namespaces in XML 1.1 lets a 1.1 document undeclare a prefix, so the
+		// closure is read and decided like any other.
+		{"noNamespaceSchemaLocation, an XML 1.1 schema undeclaring a prefix",
+			[]fixtureFile{{"s.xsd", `<?xml version="1.1"?><xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:f="">` + knownRoot + `</xs:schema>`}},
+			`<known ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd">x</known>`, true},
 		{"schemaLocation, a valid leaf root", withNS,
 			`<t:known xmlns:t="urn:t" ` + xsiNS + ` xsi:schemaLocation="urn:t s.xsd">x</t:known>`, true},
 		{"schemaLocation, a leaf root with an element child", withNS,
@@ -119,11 +127,24 @@ func TestInstanceExecutorDeclinesUnreadableHints(t *testing.T) {
 				{"x.xsd", xsdDoc("http://www.w3.org/2001/XMLSchema", `<xs:element name="schema"/>`)},
 			},
 			`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd"/>`},
-		// addB139's shape: xmlns:p="" is not namespace-well-formed.
-		{"a hinted schema carrying an empty prefixed namespace declaration",
-			[]fixtureFile{{"s.xsd", `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:f="">` + knownRoot + `</xs:schema>`}},
-			`<known ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd">x</known>`},
 	} {
 		declinesBothPolarities(t, exec, hintedCase(t, tc.files, tc.instance, true), tc.why)
+	}
+}
+
+// TestHintedSchemaUndeclaringPrefixIsRejected pins addB139's shape: an XML 1.0
+// hinted schema carrying xmlns:f="" is decidable, and its assembly is the
+// parser's rejection under nsc-NoPrefixUndecl rather than a decline or a schema
+// built as if the declaration were legal.
+func TestHintedSchemaUndeclaringPrefixIsRejected(t *testing.T) {
+	c := hintedCase(t,
+		[]fixtureFile{{"s.xsd", `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:f="">` + knownRoot + `</xs:schema>`}},
+		`<known `+xsiNS+` xsi:noNamespaceSchemaLocation="s.xsd">x</known>`, false)
+	_, _, decidable, perr := caseSchema(strict.New(), c)
+	if !decidable {
+		t.Fatal("caseSchema declined, want the closure read and decided")
+	}
+	if perr == nil || !strings.Contains(perr.Error(), "[xml-wf] namespace declaration xmlns:f has an empty value") {
+		t.Errorf("caseSchema error = %v, want the parser's xml-wf rejection of xmlns:f=\"\"", perr)
 	}
 }
