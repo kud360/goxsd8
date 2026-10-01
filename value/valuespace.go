@@ -45,7 +45,7 @@ import (
 // xs:anyAtomicType) are the one ungoverned pair the comparisons decide: over
 // their mapping union, as [ConstraintMatches] does, under each comparison's own
 // relation. A ·special· type against an ordinary one stays undecided, and
-// [ValidDefault] still answers undecided for a ·special· type, for which
+// ValidDefault still answers undecided for a ·special· type, for which
 // Datatype Valid is unconditionally true.
 //
 // It panics if b is nil, matching parser.WithBackend's guard: a nil backend is a
