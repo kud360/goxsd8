@@ -100,11 +100,12 @@ func TestInstanceExecutorDecidesAbstractRoot(t *testing.T) {
 // TestInstanceExecutorDeclinesUndecidableShapes proves every shape this slice
 // cannot decide is DECLINED in BOTH directions rather than guessed. The
 // load-bearing row is the first: a declared, non-abstract root with an element
-// [[child]] ·attributed to· a lax wildcard, resolving no declaration, charges
-// NOTHING, and outside the gated shape an empty validate.Result is not evidence
-// of validity — §3.3.5.1's e-validity is a conjunction whose clauses for that
-// child Assess does not evaluate, so neither "valid" nor "invalid" may be
-// claimed.
+// [[child]] ·attributed to· a lax wildcard, resolving no declaration and typed
+// by an xsi:type, charges NOTHING, and outside the gated shape an empty
+// validate.Result is not evidence of validity — the gate does not decide that
+// child (subtreeGate.resolvedChild's GAP(conformance)), so neither "valid" nor
+// "invalid" may be claimed. Without the xsi:type the child is ·laxly assessed·
+// and the gate decides it (#1911).
 func TestInstanceExecutorDeclinesUndecidableShapes(t *testing.T) {
 	exec := newInstanceExec()
 	cases := []struct {
@@ -113,11 +114,11 @@ func TestInstanceExecutorDeclinesUndecidableShapes(t *testing.T) {
 		instance   string
 	}{
 		{
-			"a declared, non-abstract root of a COMPLEX type whose unresolved child a lax wildcard admits charges nothing, and no charge is not a verdict outside the gated shape",
+			"a declared, non-abstract root of a COMPLEX type whose unresolved, xsi:type-typed child a lax wildcard admits charges nothing, and no charge is not a verdict outside the gated shape",
 			`<xs:element name="known"><xs:complexType><xs:sequence>` +
 				`<xs:any processContents="lax" minOccurs="0"/>` +
 				`</xs:sequence></xs:complexType></xs:element>`,
-			`<known><a>x</a></known>`,
+			`<known xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema"><a xsi:type="xs:string">x</a></known>`,
 		},
 		{
 			// An undeclared root whose xsi:type ·resolves· determines a ·governing
