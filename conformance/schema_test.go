@@ -419,9 +419,11 @@ func TestSchemaShapeDecidableDeclines(t *testing.T) {
 
 // TestSchemaExecutorReadErrorDeclines proves a ReadDocument failure is DECLINED
 // (Fail) for BOTH polarities, never turned into an observed-invalid verdict: the
-// error cannot distinguish a genuine XML well-formedness fault from a parser
-// encoding limitation (e.g. well-formed UTF-16 misread as invalid UTF-8), so
-// claiming "invalid" would fabricate a verdict for a possibly-well-formed document.
+// error cannot distinguish a genuine XML well-formedness fault from a reader
+// limitation (e.g. an encoding declaration the reader does not decode), so
+// claiming "invalid" would fabricate a verdict for a possibly-well-formed
+// document. A COMPOSED document's read is narrower (#2067,
+// TestSchemaExecutorReadArmSeparatesFaultFromLimitation); this is the ROOT's.
 func TestSchemaExecutorReadErrorDeclines(t *testing.T) {
 	exec := newSchemaExec()
 	dir := t.TempDir()

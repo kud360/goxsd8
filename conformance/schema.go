@@ -538,10 +538,10 @@ func newSchemaCharge() func(caseSpec) string {
 // decidable top-level shape (closureDecidable, which runs schemaShapeDecidable on
 // every document the assembly consumed). The third result, decidable, is false —
 // and the caller DECLINES — under any of five conditions: a declared document it
-// cannot resolve; one it cannot read (any ReadDocument error, including a parser
-// encoding limitation such as unsupported UTF-16); one whose root element is not
-// <schema>; a closure holding one document outside the producer's decidable
-// subset; and a case whose parse failed with a rejection its own unfollowed
+// cannot resolve; one it cannot read (any ReadDocument error, including a
+// reader limitation such as an encoding it does not decode); one whose root
+// element is not <schema>; a closure holding one document outside the
+// producer's decidable subset; and a case whose parse failed with a rejection its own unfollowed
 // directives could have fabricated (fabricatedRejection, #276/#404). The other
 // three results say nothing then.
 //

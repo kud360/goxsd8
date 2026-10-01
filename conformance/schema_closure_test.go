@@ -146,16 +146,17 @@ func TestClosureGateOverAssembledDocuments(t *testing.T) {
 			},
 		},
 		{
-			// The document resolved but could not be read, which may be a parser
-			// encoding limitation rather than a real well-formedness fault, so no
-			// verdict may be taken from it: recorded as unfollowed, and declined
-			// through the conjunction with the error the assembly returns.
-			name: "malformed included document declines (could be an encoding limitation)",
+			// The document resolved but could not be read, so it is recorded as
+			// unfollowed. Its unclosed <xs:schema> is a fault the reader charges
+			// itself, never a reader limitation, so the error the assembly returns
+			// is a src-include clause 1 verdict and is decided (#2067);
+			// TestSchemaExecutorReadArmSeparatesFaultFromLimitation drives the
+			// limitations that still decline.
+			name: "malformed included document is decided (src-include clause 1, #2067)",
 			docs: map[string]string{
 				"main.xsd":   schemaSrc("urn:a", include("broken.xsd")),
 				"broken.xsd": `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="e"/>`,
 			},
-			wantDeclined:   true,
 			wantUnfollowed: true,
 		},
 		{
@@ -197,12 +198,11 @@ func TestClosureGateOverAssembledDocuments(t *testing.T) {
 			wantUnfollowed: true,
 		},
 		{
-			name: "malformed <import>ed document declines (could be an encoding limitation)",
+			name: "malformed <import>ed document is decided (src-import clause 2, #2067)",
 			docs: map[string]string{
 				"main.xsd":   schemaSrc("urn:a", `<xs:import namespace="urn:b" schemaLocation="broken.xsd"/>`),
 				"broken.xsd": `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="e"/>`,
 			},
-			wantDeclined:   true,
 			wantUnfollowed: true,
 		},
 		{
