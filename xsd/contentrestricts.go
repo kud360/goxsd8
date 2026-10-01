@@ -712,16 +712,19 @@ func positionsKey(states []int) string {
 //   - 2026-09-30 (#1609 with #1954, wip/issue-1954 at 6a68d1a plus #1954's
 //     element-name split): walkEntries=1674 ceilingHits=0 maxVisited=1188, in
 //     the future-class unit of the point above.
+//   - 2026-10-01 (#1609 with #2000, wip/issue-2000 at 378418a, main f1353a0
+//     plus #2000's local-particle guard): walkEntries=1673 ceilingHits=0
+//     maxVisited=1188, in the future-class unit.
 //
 // Read both halves of that. No walk has ever reached the ceiling, so the bound
 // is inert on every content model the suite contains and the incompleteness it
 // guards is latent. But the deepest walk visits 1188 of the 4096 states it is
-// allowed at the latest point (2026-09-30) — a factor of 3.4 below the ceiling
+// allowed at the latest point (2026-10-01) — a factor of 3.4 below the ceiling
 // where it was a factor of 273 on 2026-08-04 — and between the first two points
 // maxVisited grew 66.8× while the walk entries grew only 2.9×, so the walks that
 // reached this code went DEEPER rather than merely happening more often. From
 // 2026-09-19 to 4ef04a9 maxVisited did not move and walkEntries only fell, to
-// 1740, and it has fallen again since, to 1687 and then 1674. A single future
+// 1740, and it has fallen again since, to 1687, 1674 and 1673. A single future
 // content model, not a wider population, is enough to cross. What drove either
 // movement is not established here: each window holds lane-widening landings,
 // and no causal claim is made from a correlation nobody checked.
@@ -1125,7 +1128,7 @@ func (s *Schema) contentModelRestricts(r, b contentAutomaton, scope contentRestr
 				// declines somewhere. Raising the constant moves where it declines,
 				// buying walks whose cost grows with the states they are newly allowed
 				// and no verdict anything has measured — ceilingHits is 0. Lowering it
-				// is pinned from below by the series' 2026-09-30 point: the deepest walk the
+				// is pinned from below by the series' 2026-10-01 point: the deepest walk the
 				// suite finishes visits maxVisited=1188 states, so any value below 1188
 				// starts declining walks that decide today. It is retired by a
 				// construction that decides containment without materializing the
@@ -1134,7 +1137,7 @@ func (s *Schema) contentModelRestricts(r, b contentAutomaton, scope contentRestr
 				// The review trigger is a RE-MEASUREMENT rather than a breach, because
 				// a breach is the one warning that arrives too late: the high-water
 				// mark moved 66.8× in six and a half weeks (2026-08-04 to 2026-09-19),
-				// and at the series' latest point (2026-09-30) it stands at under a
+				// and at the series' latest point (2026-10-01) it stands at under a
 				// third of the ceiling. Re-run the three counters maxProductStates' doc
 				// names and reopen this ruling on EITHER ceilingHits > 0 or maxVisited
 				// at 2048, half the ceiling. Half is what #499's two measurements
@@ -1224,17 +1227,17 @@ func (s *Schema) matchPositions(p position, b contentAutomaton, live liveSet) []
 // covers the whole namespace between them (#1954).
 //
 // The names element particles admit are SPLIT OFF first. Each live element
-// particle admits finitely many expanded names — its declaration's, and the
-// names of the top-level declarations in its ·substitution group· — so the
-// names sub (w's {namespace constraint}) admits among them form a finite list,
-// in live-group order and then {element declarations} order (STYLE D2), and
-// each is decided exactly: its set is S(n), every live position admitting n,
-// element and wildcard alike, by the same relations positionAdmits uses
-// (elementParticleAdmits, and cvc-wildcard-name through allowsName). The REST of
-// sub is sub with those names added to its {disallowed names}, and only the rest
-// is left to the wildcards. Admission here is cvc-wildcard-name on both sides:
-// the keyword half of {disallowed names} is not resolved into names, which the
-// GAP(xsd) on the keyword residual below records.
+// particle admits finitely many expanded names — its declaration's, and, for a
+// top-level declaration, the names of the declarations in its ·substitution
+// group· — so the names sub (w's {namespace constraint}) admits among them form
+// a finite list, in live-group order and then {element declarations} order
+// (STYLE D2), and each is decided exactly: its set is S(n), every live position
+// admitting n, element and wildcard alike, by the same relations positionAdmits
+// uses (elementParticleAdmits, and cvc-wildcard-name through allowsName). The
+// REST of sub is sub with those names added to its {disallowed names}, and only
+// the rest is left to the wildcards. Admission here is cvc-wildcard-name on both
+// sides: the keyword half of {disallowed names} is not resolved into names,
+// which the GAP(xsd) on the keyword residual below records.
 //
 // Coverage of the rest is COMPUTED, not assumed: the live wildcards' {namespace
 // constraint}s are folded left through Attribute Wildcard Union (§3.10.6.3,
@@ -1455,9 +1458,12 @@ func (s *Schema) coveringWildcardUnion(w Wildcard, b contentAutomaton, live live
 
 // elementCoveredNames lists, without repeats, the expanded names sub admits
 // (cvc-wildcard-name) that some live ·element particle· in elements admits: each
-// particle's declaration's own name, then every top-level declaration it admits
-// through its ·substitution group·, in {element declarations} order (STYLE D2).
-// A particle admits a name exactly when elementParticleAdmits would admit that
+// particle's declaration's own name, then, when that declaration is top-level,
+// every top-level declaration it admits through its ·substitution group·, in
+// {element declarations} order (STYLE D2). A local declaration heads no
+// ·substitution group· (cvc-accept clause 2.3.2), so it contributes its own name
+// alone, even when a same-named top-level declaration has members (#2000). A
+// particle admits a name exactly when elementParticleAdmits would admit that
 // name's declaration, so the list is the finite set coveringWildcardUnion splits
 // off.
 func (s *Schema) elementCoveredNames(sub NamespaceConstraint, b contentAutomaton, live liveSet, elements []int) []QName {
@@ -1469,10 +1475,13 @@ func (s *Schema) elementCoveredNames(sub NamespaceConstraint, b contentAutomaton
 		names = append(names, n)
 	}
 	for _, g := range elements {
-		head := b.positions[live.reps[g]].term.(ElementDeclaration).Name()
-		add(head)
+		d := b.positions[live.reps[g]].term.(ElementDeclaration)
+		add(d.Name())
+		if d.ScopeVariety() != ScopeGlobal {
+			continue // a local declaration heads no substitution group
+		}
 		for _, e := range s.elements {
-			if s.inSubstitutionGroupOf(e.Name(), head) {
+			if s.inSubstitutionGroupOf(e.Name(), d.Name()) {
 				add(e.Name())
 			}
 		}
@@ -1506,7 +1515,7 @@ func (s *Schema) elementCoveredNames(sub NamespaceConstraint, b contentAutomaton
 func (s *Schema) elementCoveredSet(n QName, w Wildcard, b contentAutomaton, live liveSet, elements, groups []int, constraints []NamespaceConstraint) successorSet {
 	var members []int
 	for _, g := range elements {
-		if s.inSubstitutionGroupOf(n, b.positions[live.reps[g]].term.(ElementDeclaration).Name()) {
+		if s.inlineDeclarationMatchesName(b.positions[live.reps[g]].term.(ElementDeclaration), n) {
 			members = append(members, g)
 		}
 	}
@@ -1549,13 +1558,14 @@ func groupsIn(n int, groups []int) []bool {
 //     rest, which coveringWildcardUnion decides for the whole live set (#1954).
 //
 // Both approximations here resolve towards admitting. Substitution-group
-// membership is not one of them: inSubstitutionGroupOf decides
-// cos-equiv-derived-ok-rec exactly (substitutiongroup.go), so this clause reads
-// the true ·substitution group· whichever way membership pushes the verdict. And
-// the base's wildcard is asked through Wildcard.allowsName (cvc-wildcard-name)
-// rather than through allowsElementWildcardName's defined/sibling keyword
-// exclusions, for the same reason: the narrower test would shrink B and could
-// only add rejections.
+// membership is not one of them: elementParticleAdmits credits a top-level
+// declaration with its ·substitution group·, as inSubstitutionGroupOf decides
+// cos-equiv-derived-ok-rec (substitutiongroup.go), and a local one with none
+// (cvc-accept clause 2.3.2), so this clause reads the true ·substitution group·
+// whichever way membership pushes the verdict. And the base's wildcard is asked
+// through Wildcard.allowsName (cvc-wildcard-name) rather than through
+// allowsElementWildcardName's defined/sibling keyword exclusions, for the same
+// reason: the narrower test would shrink B and could only add rejections.
 func (s *Schema) positionAdmits(general, specific position) bool {
 	switch g := general.term.(type) {
 	case ElementDeclaration:
@@ -1577,21 +1587,27 @@ func (s *Schema) positionAdmits(general, specific position) bool {
 
 // elementParticleAdmits reports whether an ·element particle· whose {term} is
 // general admits every item whose ·governing element declaration· is specific:
-// specific is ·substitutable· for general through a ·substitution group·, which
-// already folds in plain expanded-name equality (cos-equiv-derived-ok-rec clause
-// 1, so no separate name test is needed here).
+// specific has general's expanded name (cvc-accept clause 2.3.1), or general is
+// top-level and specific is ·substitutable· for it through its ·substitution
+// group· (cvc-accept clause 2.3.2, cos-equiv-derived-ok-rec).
 //
-// There is NO approximation left here. Until #281 this function carried a second
-// arm admitting any two TOP-LEVEL declarations unconditionally, because no
-// producer mapped substitutionGroup= into {substitution group affiliations} and
-// charging the resulting non-membership false-rejected valid schemas (W3C
-// MS-Element elemZ027_a/_b/_e/_f, MS-Particles particlesZ008/Z028 — each a base
-// <element ref="head"/> restricted to a member of head's group). parser now maps
-// the attribute, so inSubstitutionGroupOf sees the affiliation edges it needs and
-// decides those pairings exactly; the escape hatch is gone, and a global pairing
-// with no affiliation chain between them is now correctly REJECTED.
+// A LOCAL general is credited with no substitution group (#2000):
+// inSubstitutionGroupOf resolves its head BY NAME through {element
+// declarations}, so asked directly it would answer a local declaration from a
+// same-named top-level one and credit it with that one's members.
+// inlineDeclarationMatchesName applies the scope guard before that lookup.
+//
+// Until #281 this function carried a second arm admitting any two TOP-LEVEL
+// declarations unconditionally, because no producer mapped substitutionGroup=
+// into {substitution group affiliations} and charging the resulting
+// non-membership false-rejected valid schemas (W3C MS-Element
+// elemZ027_a/_b/_e/_f, MS-Particles particlesZ008/Z028 — each a base <element
+// ref="head"/> restricted to a member of head's group). parser now maps the
+// attribute, so inSubstitutionGroupOf sees the affiliation edges it needs and
+// decides those pairings exactly; a global pairing with no affiliation chain
+// between them is REJECTED.
 func (s *Schema) elementParticleAdmits(general, specific ElementDeclaration) bool {
-	return s.inSubstitutionGroupOf(specific.Name(), general.Name())
+	return s.inlineDeclarationMatchesName(general, specific.Name())
 }
 
 // someBindingSubsumes is cos-content-act-restrict clause 2
