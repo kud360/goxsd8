@@ -149,10 +149,13 @@ func TestConstraintMatchesFailsOpen(t *testing.T) {
 }
 
 // TestConstraintMatchesSpecialTypesAgreeOnIdenticalLiterals pins the ·special·
-// branch (#2029): xs:anySimpleType's and xs:anyAtomicType's lexical mapping is
-// not a function (Datatypes §3.2.1.2, §3.2.2.2), so byte-identical literals are
-// the same value and any other pair is undecided — never NOT-same, and never
-// normalized, these types having no whiteSpace (§4.3.6).
+// branch (#2029) under backends that map no ·primitive·: xs:anySimpleType's and
+// xs:anyAtomicType's lexical mapping is not a function (Datatypes §3.2.1.2,
+// §3.2.2.2), so byte-identical literals are the same value and, with every
+// primitive member of the mapping union unmapped, any other pair is undecided
+// — never NOT-same, and never normalized, these types having no whiteSpace
+// (§4.3.6). TestConstraintMatchesSpecialTypesUnderStrict pins the decided
+// answers a backend mapping every primitive gives (#2040).
 //
 // Each type is run under two backends: one that maps nothing, and one that
 // maps the ·special· type's own name as an integer. The second would decide

@@ -565,14 +565,14 @@ func (c *contentCheck) fixedLexical(w *walk, f xsd.ValueConstraint) {
 // D.{value constraint}.{value}.
 //
 // A governing type that is neither leaves clause 5.2.2.2 with no applicable case
-// and charges nothing. A ·special· governing type agrees on byte-identical
-// literals and is undecided otherwise ([value.ConstraintMatches]). An undecided
-// comparison charges nothing, on [walk.fixedAgreement]'s terms and for the same
-// reasons: an ungoverned type, a ·special· one whose literals differ, or a
-// {lexical form} outside its own type's lexical space is a gap in this processor,
-// a mapping that is not a function, or a schema fault cos-valid-default charges
-// at assembly, not the instance's. It is recorded as an [Unevaluated] instead
-// ([contentCheck.decline]), the clause having been reached and not performed.
+// and charges nothing. A ·special· governing type is decided over its mapping
+// union ([value.ConstraintMatches]). An undecided comparison charges nothing, on
+// [walk.fixedAgreement]'s terms and for the same reasons: an ungoverned type, a
+// ·special· one whose literals some member of that union cannot compare, or a
+// {lexical form} outside its own type's lexical space is a gap in this processor
+// or a schema fault cos-valid-default charges at assembly, not the instance's.
+// It is recorded as an [Unevaluated] instead ([contentCheck.decline]), the
+// clause having been reached and not performed.
 func (c *contentCheck) fixedActualValue(w *walk, f xsd.ValueConstraint) {
 	st := c.g.valueType()
 	if st == nil {
@@ -581,7 +581,7 @@ func (c *contentCheck) fixedActualValue(w *walk, f xsd.ValueConstraint) {
 	same, decided := value.ConstraintMatches(w.backend, w.schema, st, c.initial.String(), elementContext{owner: c.e}, f)
 	if !decided {
 		c.decline(w, c.e.Name(), c.e.Loc(), ruleCvcElt, "5.2.2.2.2",
-			"the ·actual value· of the element %s was not compared with the {value} of the fixed {value constraint} %q of its ·governing element declaration·: value.ConstraintMatches could not decide the comparison, a fault of the type or of the value backend, or two differing literals of a ·special· type whose lexical mapping is not a function, rather than a verdict about the value, so cvc-elt clause 5.2.2.2.2 is undecided",
+			"the ·actual value· of the element %s was not compared with the {value} of the fixed {value constraint} %q of its ·governing element declaration·: value.ConstraintMatches could not decide the comparison, a fault of the type or of the value backend, or two literals of a ·special· type that some member of its lexical mapping cannot compare, rather than a verdict about the value, so cvc-elt clause 5.2.2.2.2 is undecided",
 			c.e.Name(), f.LexicalForm())
 		return
 	}

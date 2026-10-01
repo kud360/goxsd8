@@ -1,6 +1,12 @@
 package value
 
-import "github.com/kud360/goxsd8/xsd"
+import (
+	"errors"
+	"strings"
+
+	"github.com/kud360/goxsd8/xsd"
+	"github.com/kud360/goxsd8/xsderr"
+)
 
 // This file is the adapter that lets package xsd — a pure leaf that cannot
 // import this one (PRINCIPLES 1) — answer the Structures constraints that reach
@@ -153,14 +159,37 @@ func (vs valueSpace) ValidDefault(r xsd.TypeResolver, t *xsd.SimpleType, vc xsd.
 // never charge a violation off a fault of the type or of the backend.
 //
 // A ·special· t (xs:anySimpleType, xs:anyAtomicType) never reaches the pipeline:
-// its lexical mapping is not a function (Datatypes §3.2.1.2, §3.2.2.2), so no
-// mapping is authoritative and differing literals prove nothing — "1" and "1.0"
-// may denote one decimal. ConstraintMatches answers SAME where lexical and
-// vc.{lexical form} are byte-identical, since one literal maps identically on
-// both sides, and undecided otherwise; it never answers NOT-same for a ·special·
-// t. Neither side is normalized, these types having no whiteSpace (§4.3.6). The
-// shortcut is sound only for them: for any other type one literal can denote two
-// values, a QName under two sets of bindings (§3.3.18).
+// its lexical mapping is not a function but the union of every ·primitive·
+// mapping and, for xs:anySimpleType alone, every list mapping (Datatypes
+// §3.2.1.2, §3.2.2.2), so "1" and "1.0" may denote one decimal. Each member of
+// that union answers the (same, decided) pair primitiveMatches documents, and
+// ConstraintMatches answers:
+//
+//   - SAME where lexical and vc.{lexical form} are byte-identical, or where some
+//     member maps both to values that are equal or identical;
+//   - NOT-same where every member is decided and none says same;
+//   - undecided otherwise — in particular where the backend does not map a
+//     primitive, where a member's two values carry neither [Identical] nor [Eq],
+//     and for QName and NOTATION where ctx is nil.
+//
+// Both literals are tested RAW, and no member's own whiteSpace runs first:
+// Structures §3.1 gives xs:anySimpleType the preserve normalization, and
+// neither type has a whiteSpace facet (§4.3.6). That breaks Parse's
+// "normalized" precondition harmlessly — a Parse that over-admits a raw literal
+// can only add a SAME or an undecided, never a NOT-same. The byte-identical
+// shortcut is sound only for these types: for any other type one literal can
+// denote two values, a QName under two sets of bindings (§3.3.18).
+//
+// GAP(value): narrowed primitive mappings (#2045). A Parse rejection with an
+// *xsderr.Error is read as "not in the lexical space", which relies on each
+// primitive's mapping covering its whole lexical space (see [Backend]). An
+// [Override] that narrows a primitive rejects in-space literals the same way, so
+// two literals only that primitive equates — "1" and "true" under a narrowed
+// xs:boolean — answer NOT-same, and both readers of this function,
+// validate's walk.fixedAgreement and contentCheck.fixedActualValue, charge on
+// NOT-same: under such a backend this residue is fail-CLOSED. xs:decimal, the
+// [Override] example, is covered by float, double and precisionDecimal, which
+// equate every pair of decimal literals that denote one value.
 //
 // For every other t, both sides are validated against t itself, so no
 // shared-mapping search is needed (contrast values, which compares two
@@ -178,18 +207,16 @@ func (vs valueSpace) ValidDefault(r xsd.TypeResolver, t *xsd.SimpleType, vc xsd.
 // (§3.3.18, constraintContext). One shared context would decide a QName agreement
 // wrongly in both directions.
 //
-// A side that fails to validate is undecided, never a mismatch. For the instance
-// side that is not a lost verdict: a literal outside t's lexical space already
-// fails cvc-attribute clause 3, which the caller charges in its own right, and
-// reporting "not the same value" for what is really "not a value at all" would
-// charge clause 4 as well for one defect. For vc's side it is the schema's own
+// For a t that is not ·special·, a side that fails to validate is undecided,
+// never a mismatch. For the instance side that is not a lost verdict: a
+// literal outside t's lexical space already fails cvc-attribute clause 3,
+// which the caller charges in its own right, and reporting "not the same
+// value" for what is really "not a value at all" would charge clause 4 as well
+// for one defect. For vc's side it is the schema's own
 // cos-valid-simple-default obligation (§3.2.6.2), already charged at finalize.
 func ConstraintMatches(b Backend, r xsd.TypeResolver, t *xsd.SimpleType, lexical string, ctx Context, vc xsd.ValueConstraint) (same, decided bool) {
 	if isSpecial(t) {
-		if lexical == vc.LexicalForm() {
-			return true, true
-		}
-		return false, false
+		return specialMatches(b, t, lexical, ctx, vc)
 	}
 	av, err := ValidateLexical(b, r, t, lexical, ctx)
 	if err != nil {
@@ -200,6 +227,117 @@ func ConstraintMatches(b Backend, r xsd.TypeResolver, t *xsd.SimpleType, lexical
 		return false, false
 	}
 	return equalOrIdentical(av, cv)
+}
+
+// specialMatches is [ConstraintMatches] for a ·special· t: the byte-identical
+// shortcut, then the scan of t's mapping union, folded in the order that doc
+// states — any member SAME is SAME, else any undecided member is undecided,
+// else NOT-same. The instance literal is parsed under ctx and vc's under
+// constraintContext(vc), as for every other t.
+func specialMatches(b Backend, t *xsd.SimpleType, lexical string, ctx Context, vc xsd.ValueConstraint) (same, decided bool) {
+	fixed := vc.LexicalForm()
+	if lexical == fixed {
+		return true, true
+	}
+	cctx := constraintContext(vc)
+	same, decided = primitivesMatch(b, lexical, ctx, fixed, cctx)
+	if same || t != xsd.AnySimpleType() {
+		return same, decided
+	}
+	listSame, listDecided := listsMatch(b, lexical, ctx, fixed, cctx)
+	if listSame {
+		return true, true
+	}
+	return false, decided && listDecided
+}
+
+// primitivesMatch scans every ·primitive· mapping (primitiveNames) over the raw
+// literals x and y, folded as specialMatches states.
+func primitivesMatch(b Backend, x string, xctx Context, y string, yctx Context) (same, decided bool) {
+	decided = true
+	for _, name := range primitiveNames {
+		s, d := primitiveMatches(b, name, x, xctx, y, yctx)
+		if s {
+			return true, true
+		}
+		decided = decided && d
+	}
+	return false, decided
+}
+
+// primitiveMatches is one primitive member's pair. A literal the mapping's
+// Parse rejects with an *xsderr.Error is outside that primitive's lexical space,
+// so the member is decided not-same: for NOT-same, "not admitted" and "admitted,
+// different" are one fact. Any other Parse error, a primitive the backend does
+// not map, and a QName or NOTATION member without both contexts are undecided —
+// a nil [Context] makes a mapping reject every prefixed literal, which would
+// read as a decided non-admission.
+func primitiveMatches(b Backend, name xsd.QName, x string, xctx Context, y string, yctx Context) (same, decided bool) {
+	if (name == qnameName || name == notationName) && (xctx == nil || yctx == nil) {
+		return false, false
+	}
+	m, ok := b.Mapping(name)
+	if !ok {
+		return false, false
+	}
+	xv, err := m.Parse(x, xctx)
+	if err != nil {
+		return false, isLexicalRejection(err)
+	}
+	yv, err := m.Parse(y, yctx)
+	if err != nil {
+		return false, isLexicalRejection(err)
+	}
+	return equalOrIdentical(xv, yv)
+}
+
+// isLexicalRejection reports whether a Parse error is the mapping's own
+// rejection of the literal — an *xsderr.Error, per the [Mapping] contract —
+// rather than a fault of the backend.
+func isLexicalRejection(err error) bool {
+	var e *xsderr.Error
+	return errors.As(err, &e)
+}
+
+// listsMatch is the list members' pair, for xs:anySimpleType alone. The most
+// permissive list type has a union of every primitive as its item type, so
+// each position is scanned by primitivesMatch on its own. Two lists differ when
+// their lengths differ (Datatypes §2.2.2) or either literal is no list literal,
+// and otherwise when any position is decided not-same; a list of one item
+// against an atomic value needs nothing here, primitivesMatch having already
+// compared that single token.
+func listsMatch(b Backend, x string, xctx Context, y string, yctx Context) (same, decided bool) {
+	xs, xok := listTokens(x)
+	ys, yok := listTokens(y)
+	if !xok || !yok || len(xs) != len(ys) {
+		return false, true
+	}
+	decided = true
+	for i := range xs {
+		s, d := primitivesMatch(b, xs[i], xctx, ys[i], yctx)
+		if d && !s {
+			return false, true
+		}
+		decided = decided && d
+	}
+	return decided, decided
+}
+
+// listTokens splits a raw literal into the item literals of a list (Datatypes
+// §2.4.1.2, "space-separated ·literals·"): "" is the empty list, and a literal with a
+// leading, trailing or doubled #x20 is no list literal, since no whiteSpace runs
+// before a ·special· type's mapping (Structures §3.1).
+func listTokens(lit string) ([]string, bool) {
+	if lit == "" {
+		return nil, true
+	}
+	tokens := strings.Split(lit, " ")
+	for _, tok := range tokens {
+		if tok == "" {
+			return nil, false
+		}
+	}
+	return tokens, true
 }
 
 // isSpecial reports whether t is one of the two ·special· datatypes,

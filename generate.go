@@ -4,7 +4,8 @@ package goxsd8
 // Deterministic: running twice produces byte-identical output.
 //
 // The builtin TypeSpec table carries its own go:generate directive in
-// builtin/gen.go (M1, tools/typespecgen); the rule catalog (xsderr) gains
+// builtin/gen.go (M1, tools/typespecgen), and value/gen.go runs the same tool
+// for the primitive-name slice; the rule catalog (xsderr) gains
 // one when it lands (M2). This file only carries the module-wide spec
 // conversion.
 

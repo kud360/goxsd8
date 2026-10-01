@@ -180,11 +180,9 @@
 // fixed constraint's {lexical form} through one type's pipeline — each under its
 // own namespace context, the instance's and the schema document's — and compares
 // the ·actual values· under the same equal-or-identical union, answering undecided
-// on the same fail-open terms as everything below, with one exception: for a
-// ·special· type (xs:anySimpleType, xs:anyAtomicType), whose lexical mapping is not
-// a function (Datatypes §3.2.1.2, §3.2.2.2), it skips the pipeline and answers
-// SAME where the two literals are byte-identical and undecided otherwise, never
-// NOT-same.
+// on the same fail-open terms as everything below; a ·special· type
+// (xs:anySimpleType, xs:anyAtomicType) skips the pipeline and is decided over its
+// mapping union, as [ConstraintMatches] states.
 //
 // [NewValueSpace] is what lets package xsd — a pure leaf that cannot import this
 // one — decide the Structures constraints that reach into a value space. Two
