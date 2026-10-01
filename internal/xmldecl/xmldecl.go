@@ -19,23 +19,35 @@ import "io"
 // is still an XMLDecl only when the source's quote was followed by S or the
 // '?' of '?>', so it is applied only then; any other byte there is a malformed
 // declaration, left for the decoder to reject.
-func As10(r io.Reader) io.Reader {
-	return &reader{src: r}
+func As10(r io.Reader) *Reader {
+	return &Reader{src: r}
 }
 
-// reader is As10's stream: head holds the declaration bytes read ahead and not
+// Reader is As10's stream: head holds the declaration bytes read ahead and not
 // yet handed out, already rewritten.
-type reader struct {
+type Reader struct {
 	src     io.Reader
 	head    []byte
 	scanned bool
+	// version is the declaration's VersionNum as the source spells it, before
+	// the rewrite; empty when the stream opens with no declaration head As10
+	// recognises.
+	version string
 	// err is the read failure, io.EOF included, that ended the read-ahead; it
 	// is reported once head is drained, without reading src again.
 	err error
 }
 
+// Version returns the source's XML declaration VersionNum (XML 1.0 [26]) as
+// the source spells it, "1.1" for a document As10 presents as "1.0", or ""
+// when the stream opens with no declaration head As10 recognises, which XML
+// 1.0 reads as version 1.0. It is final once Read has returned any byte.
+func (x *Reader) Version() string {
+	return x.version
+}
+
 // Read serves the read-ahead first, then the source.
-func (x *reader) Read(p []byte) (int, error) {
+func (x *Reader) Read(p []byte) (int, error) {
 	if !x.scanned {
 		x.scanned = true
 		x.scan()
@@ -52,7 +64,7 @@ func (x *reader) Read(p []byte) (int, error) {
 }
 
 // scan reads the declaration head into x.head and rewrites its VersionNum.
-func (x *reader) scan() {
+func (x *Reader) scan() {
 	if !x.literal("<?xml") {
 		return
 	}
@@ -80,12 +92,13 @@ func (x *reader) scan() {
 			return
 		}
 	}
+	x.version = string(x.head[start-len("1.") : len(x.head)-1])
 	x.rewrite(start, len(x.head)-1-start, quote)
 }
 
 // rewrite turns the n minor-version digits at x.head[start:], which the closing
 // quote follows, into "0".
-func (x *reader) rewrite(start, n int, quote byte) {
+func (x *Reader) rewrite(start, n int, quote byte) {
 	switch {
 	case n == 0, n == 1 && x.head[start] == '0':
 		// "1." is no VersionNum, and "1.0" needs nothing.
@@ -107,7 +120,7 @@ func (x *reader) rewrite(start, n int, quote byte) {
 
 // literal reads len(s) bytes and reports whether they spell s, stopping at the
 // first that does not.
-func (x *reader) literal(s string) bool {
+func (x *Reader) literal(s string) bool {
 	for i := 0; i < len(s); i++ {
 		b, ok := x.next()
 		if !ok || b != s[i] {
@@ -119,7 +132,7 @@ func (x *reader) literal(s string) bool {
 
 // afterSpace reads past any S ([3]) and returns the first byte that is not
 // one, reporting whether any S preceded it.
-func (x *reader) afterSpace() (byte, bool, bool) {
+func (x *Reader) afterSpace() (byte, bool, bool) {
 	spaced := false
 	for {
 		b, ok := x.next()
@@ -132,7 +145,7 @@ func (x *reader) afterSpace() (byte, bool, bool) {
 
 // next reads one byte from the source into the read-ahead, latching the read
 // failure that ends it.
-func (x *reader) next() (byte, bool) {
+func (x *Reader) next() (byte, bool) {
 	var b [1]byte
 	if _, err := io.ReadFull(x.src, b[:]); err != nil {
 		x.err = err

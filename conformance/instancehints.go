@@ -152,8 +152,6 @@ func isInlineSchema(n xml.Name) bool {
 //   - the closure leaves the decidable subset (closureDecidable), or the
 //     rejection is one an unfollowed directive could have fabricated
 //     (fabricatedRejection);
-//   - a document of the closure carries an empty prefixed namespace
-//     declaration (closurePrefixUndeclared);
 //   - the assembly succeeded and declares no top-level element for root. A
 //     root the hinted schema does not declare is charged cvc-assess-elt, and
 //     §4.3.2 clause 3's "less than complete ·assessment· outcomes" is exactly
@@ -174,9 +172,6 @@ func assembleHints(backend value.Backend, doc string, root xsd.QName, hints []pa
 	if len(report.UnfollowedRoots()) > 0 || !closureDecidable(report) || fabricatedRejection(report, perr) {
 		return nil, nil, false, nil
 	}
-	if closurePrefixUndeclared(report) {
-		return nil, nil, false, nil
-	}
 	if perr != nil {
 		return schema, report, true, perr
 	}
@@ -184,28 +179,4 @@ func assembleHints(backend value.Backend, doc string, root xsd.QName, hints []pa
 		return nil, nil, false, nil
 	}
 	return schema, report, true, nil
-}
-
-// closurePrefixUndeclared reports whether any schema document the assembly read
-// carries a prefixed namespace declaration with an empty value (xmlns:p=""), or
-// cannot be read to say. Namespaces in XML 1.0's "No Prefix Undeclaring"
-// constraint makes such a document not namespace-well-formed, the parser
-// accepts it, and the suite declares addB138 and addB139 invalid for exactly
-// that: assessed against what the parser built, addB139 comes out valid and
-// addB138 invalid on an unrelated wildcard charge. Each document is re-read
-// from its parser.AssembledDocument.Location, an on-disk path for
-// pinnedResolver, as closureVersioned does.
-//
-// GAP(parser): an empty prefixed namespace declaration (xmlns:p="") is
-// accepted, not rejected as not namespace-well-formed (#2015).
-func closurePrefixUndeclared(report *parser.AssemblyReport) bool {
-	return slices.ContainsFunc(report.Documents(), func(d parser.AssembledDocument) bool {
-		return documentCarries(d.Location, isPrefixUndeclaring)
-	})
-}
-
-// isPrefixUndeclaring reports whether a is a prefixed namespace declaration
-// with an empty value.
-func isPrefixUndeclaring(a xml.Attr) bool {
-	return a.Name.Space == "xmlns" && a.Value == ""
 }

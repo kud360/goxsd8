@@ -5,7 +5,8 @@
 //
 // # Contract
 //
-//	func As10(r io.Reader) io.Reader
+//	func As10(r io.Reader) *Reader
+//	func (x *Reader) Version() string
 //
 // encoding/xml rejects every version number but "1.0", so each reader that
 // hands a document to it wraps the stream in As10 first, once it has dropped a
@@ -18,7 +19,10 @@
 // Only the label is admitted. A 1.1 feature the document then uses — a C0
 // character reference, NEL or U+2028 as a line end — is a non-1.0 feature, and
 // §2.8 accepts a 1.x document only "provided they do not use any non-1.0
-// features"; it stays whatever the 1.0 reader makes of it.
+// features"; it stays whatever the 1.0 reader makes of it. Version reports the
+// label the source carried, for a reader that decides a version-dependent
+// constraint itself: parser/xmltree admits a prefix undeclaration
+// (xmlns:p="") only in a document labelled 1.1 (nsc-NoPrefixUndecl).
 //
 // It depends on nothing but the standard library.
 package xmldecl
