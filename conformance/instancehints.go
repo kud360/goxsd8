@@ -4,7 +4,6 @@ import (
 	"encoding/xml"
 	"errors"
 	"io"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -195,33 +194,12 @@ func assembleHints(backend value.Backend, doc string, root xsd.QName, hints []pa
 // pinnedResolver, as closureVersioned does.
 func closurePrefixUndeclared(report *parser.AssemblyReport) bool {
 	return slices.ContainsFunc(report.Documents(), func(d parser.AssembledDocument) bool {
-		return prefixUndeclared(d.Location)
+		return documentCarries(d.Location, isPrefixUndeclaring)
 	})
 }
 
-// prefixUndeclared reports whether the document at path carries an empty
-// prefixed namespace declaration on any element, or cannot be read to say.
-func prefixUndeclared(path string) bool {
-	f, err := os.Open(path)
-	if err != nil {
-		return true
-	}
-	defer func() { _ = f.Close() }() // read-only handle: close error cannot affect the verdict
-	dec := xml.NewDecoder(f)
-	for {
-		tok, err := dec.Token()
-		if errors.Is(err, io.EOF) {
-			return false
-		}
-		if err != nil {
-			return true
-		}
-		start, ok := tok.(xml.StartElement)
-		if !ok {
-			continue
-		}
-		if slices.ContainsFunc(start.Attr, func(a xml.Attr) bool { return a.Name.Space == "xmlns" && a.Value == "" }) {
-			return true
-		}
-	}
+// isPrefixUndeclaring reports whether a is a prefixed namespace declaration
+// with an empty value.
+func isPrefixUndeclaring(a xml.Attr) bool {
+	return a.Name.Space == "xmlns" && a.Value == ""
 }
