@@ -17,7 +17,7 @@ read them. One stamp for the whole section, so a reader can tell staleness
 from wrongness at a glance. Never add a dated paragraph beside the old
 one — appending is what this replaces.
 
-## Status — 2026-10-01 (post-land restamp on `main` at `bcbcf8a`)
+## Status — 2026-10-01 (post-land restamp on `main` at `a221141`)
 
 **Two iterations since the forty-third stamp (`ab05256`).** **#2006**, M4's
 north star, landed at `2d6f222` and banked **`schema` +9, `instance` +16**.
@@ -28,13 +28,13 @@ behind. #2025 replaces #2013 and lands that branch by merge. **Lean: product,
 unchanged.** M5's north star is #2025. M4 has none at this stamp, because #2006
 was it and the next `/backlog` names its successor.
 
-**Three post-land passes are still not on `main`:** #1816's (open PR #1871),
-#1908's (open PR #1929), and #2006's (open PR #2024). #1823's LOG entry still
-has no branch. #2007 owns the first two and the LOG entry.
+**Two post-land passes are still not on `main`:** #1816's (open PR #1871) and
+#1908's (open PR #1929). #1823's LOG entry still has no branch. #2007 owns all
+three. #2006's pass landed as `a221141` (PR #2024).
 
 ### Conformance lanes
 
-**This table is `go tool lanestatus`, pasted verbatim, on `main` at `bcbcf8a`.**
+**This table is `go tool lanestatus`, pasted verbatim, on `main` at `a221141`.**
 It is the committed expectations census, which `docs/WORKFLOW.md` names as the
 lane score (#1120).
 
@@ -48,7 +48,7 @@ lane score (#1120).
 | `xpath` | — | — | 0 |
 
 **`instance` gained 16, `schema` gained 9, and no lane regressed.** All 25 are
-#2006's (`git diff ab05256 bcbcf8a -- conformance/testdata/expectations/`).
+#2006's (`git diff ab05256 a221141 -- conformance/testdata/expectations/`).
 **`datatypes ⊆ instance` is intended** (#1507). **An em dash means a lane with
 no cases yet, not a lane scoring zero.** `datatypes` is M3 and complete.
 `schema` is M4 and `instance` is M5, and both are active. `xpath`, `json` and
@@ -56,7 +56,7 @@ no cases yet, not a lane scoring zero.** `datatypes` is M3 and complete.
 
 ### What holds each active lane's failures
 
-**Measured on `bcbcf8a`** (suite `7bc3365`) with one read-only
+**Measured on `bcbcf8a`**, whose tree differs from `a221141` only in `docs/LOG` (suite `7bc3365`), with one read-only
 `GOXSD_DECLINES=1` conformance run (exit 0, nothing banked), fed to `go tool
 lanepartition -log <run> <lane>` with a body-bearing issue walk. Every figure is
 a part of the banked fails and a bound from above, never a prediction of flips.
@@ -100,10 +100,10 @@ reading.
 - **`wip/issue-2013` is RETIRED**, because #2013 is closed `not_planned`. Its
   content is not on `main`, and #2025 supersedes it by merging that branch. It
   is evidence until #2025 lands, and a human may delete it after that.
-- **`meta/post-land-2006`** (PR #2024), **`meta/post-land-1908`** (PR #1929) and
-  **`meta/post-land-1816`** (PR #1871) are open post-land passes. #2007 owns
-  landing the last two, and #1897 owns the survey gap that shows them as plain
-  AHEAD OF MAIN rows.
+- **`meta/post-land-1908`** (PR #1929) and **`meta/post-land-1816`** (PR #1871)
+  are open post-land passes. #2007 owns landing them, and #1897 owns the survey
+  gap that shows them as plain AHEAD OF MAIN rows. `meta/post-land-2006` merged
+  as PR #2024 and is gone.
 - **`meta/backlog-2026-10-01-b`** still prints as STRANDED PASS. PR #2011
   squash-merged it as `a0adf07`, so a human may delete it.
 - **`parked/untriaged-20260930-215455`**, **`parked/untriaged-20260930-110432`**
@@ -149,7 +149,7 @@ and 2 `epic`**, which sums to 330. `kind/gap` is 62.
   above 15292, and #2006 touched no `xsd/contentrestricts.go`. **Five human
   decisions are outstanding:** #1880 (which gates #1002), #1885, #1790, #1923
   and #2022.
-- **Measured refactors, re-run on `bcbcf8a`, all flat:** #1958 2 definitions,
+- **Measured refactors, re-run on `a221141`, all flat:** #1958 2 definitions,
   #1865 2 `importWording` values, #1757 1 arm, #1770 2 encodings with 1
   `isNotationName` caller. None enters the band on its figure.
 
@@ -216,9 +216,8 @@ a round.
 
 ### Next planning action
 
-1. **The orchestrating session lands or supersedes the open post-land passes:**
-   PR #2024 (#2006), and through #2007 PR #1929 (#1908), PR #1871 (#1816) and
-   #1823's missing LOG entry. A human triages both `parked/untriaged-20260930-*`
+1. **The orchestrating session lands or supersedes the open post-land passes
+   (#2007):** PR #1929 (#1908), PR #1871 (#1816) and #1823's missing LOG entry. A human triages both `parked/untriaged-20260930-*`
    branches, `chronicler-345`, `meta/backlog-2026-10-01-b`, the four
    `wip/issue-1861-*` / `wip/issue-1926-*` subagent branches, and
    `wip/issue-2013` once #2025 lands.
