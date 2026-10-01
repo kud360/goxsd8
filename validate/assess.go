@@ -621,7 +621,14 @@ func (w *walk) locallyDeclaredType(content *contentCheck, child Element, g gover
 	content.log(w, child.Name(), child.Loc(), ruleCvcComplexType, "5", "charged")
 }
 
-// sameType is clause 5's "the same as" for a child's ·governing type
+// sameType repeats xsd's unexported sameDeclaredType across the package
+// boundary, under a weaker operand precondition: a is a ·governing type
+// definition·, which may be a {type table} selection, where sameDeclaredType
+// is sound only for two declarations' {type definition}s. It is not unified
+// with it, because the export would carry a precondition only one caller
+// meets.
+//
+// It is clause 5's "the same as" for a child's ·governing type
 // definition· a and its ·locally declared type· b. Named types are one
 // component when their ·expanded names· are equal. Two anonymous COMPLEX types
 // are one component when their {context}s name one component, which is the
