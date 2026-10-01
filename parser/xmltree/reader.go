@@ -22,6 +22,9 @@ type Reader struct {
 	uri string
 	dec *xml.Decoder
 	pos *posReader
+	// decl is the version-label rewrite the decoder reads through; it keeps
+	// the source's own label, which prefix undeclaration depends on.
+	decl *xmldecl.Reader
 
 	// bom is what the document's byte-order mark said its encoding is — the
 	// evidence an encoding declaration must agree with (XML 1.0 §4.3.3).
@@ -65,7 +68,8 @@ type frame struct {
 // A document whose XML declaration specifies a 1.x version number other than
 // 1.0 is read as a 1.0 document (XML 1.0 §2.8 Note), through
 // xmldecl.As10's same-length rewrite of that number, so locations are
-// unchanged by it.
+// unchanged by it. The label still decides one constraint: only a document
+// labelled 1.1 may undeclare a prefix (see checkUndeclarations).
 //
 // A leading byte-order mark is honoured per XML 1.0 §4.3.3: a UTF-16 document
 // is decoded to UTF-8 before the XML decoder sees it, and a UTF-8 mark is
@@ -73,14 +77,16 @@ type frame struct {
 // therefore offsets into the decoded UTF-8 stream, not into the source bytes.
 func NewReader(uri string, r io.Reader) *Reader {
 	body, bom := xmlenc.Decode(r)
-	pos := &posReader{r: xmldecl.As10(body)}
+	decl := xmldecl.As10(body)
+	pos := &posReader{r: decl}
 	dec := xml.NewDecoder(pos)
 	dec.CharsetReader = bom.CharsetReader
 	return &Reader{
-		uri: uri,
-		dec: dec,
-		pos: pos,
-		bom: bom,
+		uri:  uri,
+		dec:  dec,
+		pos:  pos,
+		decl: decl,
+		bom:  bom,
 	}
 }
 
@@ -244,8 +250,11 @@ func (r *Reader) checkDeclaration(pi xml.ProcInst, loc xsderr.Loc) error {
 // its declarations establish, pushes an open-element frame, and returns the
 // node.
 func (r *Reader) startElement(t xml.StartElement, loc xsderr.Loc) (*StartElement, error) {
-	parent := r.currentScope()
-	child := parent.child(bindingsOf(t.Attr))
+	bindings := bindingsOf(t.Attr)
+	if err := r.checkUndeclarations(bindings, loc); err != nil {
+		return nil, err
+	}
+	child := r.currentScope().child(bindings)
 
 	if t.Name.Space == xmlnsPrefix {
 		return nil, xsderr.New(xsderr.RuleXMLWellFormed, loc, "%q is a reserved prefix and cannot name an element", xmlnsPrefix)
@@ -263,6 +272,24 @@ func (r *Reader) startElement(t xml.StartElement, loc xsderr.Loc) (*StartElement
 
 	r.stack = append(r.stack, frame{name: name, scope: child, loc: loc})
 	return &StartElement{name: name, attrs: attrs, scope: child, loc: loc}, nil
+}
+
+// checkUndeclarations enforces Namespaces in XML 1.0's nsc-NoPrefixUndecl: "In
+// a namespace declaration for a prefix ... the attribute value MUST NOT be
+// empty." Undeclaring a prefix with xmlns:p="" is a Namespaces in XML 1.1
+// feature, so the constraint holds unless the document is labelled
+// version="1.1"; a document with no XML declaration is XML 1.0. The default
+// namespace declaration xmlns="" is exempt (xml-names §6.2).
+func (r *Reader) checkUndeclarations(bindings []binding, loc xsderr.Loc) error {
+	if r.decl.Version() == "1.1" {
+		return nil
+	}
+	for _, b := range bindings {
+		if b.prefix != "" && b.uri == "" {
+			return xsderr.New(xsderr.RuleXMLWellFormed, loc, "namespace declaration xmlns:%s has an empty value: only an XML 1.1 document may undeclare a prefix (nsc-NoPrefixUndecl)", b.prefix)
+		}
+	}
+	return nil
 }
 
 // endElement matches an end tag against the open element and pops it.

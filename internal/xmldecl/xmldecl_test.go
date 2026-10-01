@@ -45,6 +45,27 @@ func TestAs10(t *testing.T) {
 	}
 }
 
+// TestVersion pins that Version reports the source's VersionNum, not the
+// rewritten one, and "" where no declaration head is recognised.
+func TestVersion(t *testing.T) {
+	for _, tc := range []struct{ in, want string }{
+		{`<?xml version="1.1"?><a/>`, "1.1"},
+		{`<?xml version='1.10' standalone='no'?><a/>`, "1.10"},
+		{`<?xml version="1.0"?><a/>`, "1.0"},
+		{`<a/>`, ""},
+		{`<?xml encoding="UTF-8" version="1.1"?>`, ""},
+		{`<?xml version="1.1a"?>`, ""},
+	} {
+		x := As10(strings.NewReader(tc.in))
+		if _, err := io.ReadAll(x); err != nil {
+			t.Fatalf("ReadAll(%q): %v", tc.in, err)
+		}
+		if got := x.Version(); got != tc.want {
+			t.Errorf("As10(%q).Version() = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
 // TestAs10ReportsSourceFailure pins that a failure ending the read-ahead is
 // reported after the bytes read before it, and not swallowed.
 func TestAs10ReportsSourceFailure(t *testing.T) {

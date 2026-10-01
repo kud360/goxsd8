@@ -2,6 +2,7 @@ package xmltree_test
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -569,6 +570,42 @@ func TestEOFIsIdempotent(t *testing.T) {
 	}
 	if _, err := r.Token(); !errors.Is(err, io.EOF) {
 		t.Errorf("second post-EOF Token = %v, want io.EOF", err)
+	}
+}
+
+// TestPrefixUndeclarationIs11Only pins nsc-NoPrefixUndecl: in a document that
+// is XML 1.0 — no declaration, or any label but 1.1 — a prefixed namespace
+// declaration with an empty value is a located well-formedness fault at its
+// element's start tag, while under a 1.1 label it undeclares the prefix
+// (Namespaces in XML 1.1). The default declaration xmlns="" is legal in 1.0.
+func TestPrefixUndeclarationIs11Only(t *testing.T) {
+	body := "<a xmlns:p='urn:p'>\n  <b xmlns:p=''/>\n</a>"
+	for _, tc := range []struct {
+		name, doc string
+		line      int // 0: accepted
+	}{
+		{"no declaration", body, 2},
+		{"version 1.0", "<?xml version='1.0'?>\n" + body, 3},
+		{"version 1.10", "<?xml version='1.10'?>\n" + body, 3},
+		{"version 1.1", "<?xml version='1.1'?>\n" + body, 0},
+		{"default undeclared in 1.0", "<?xml version='1.0'?>\n<a xmlns='urn:d'>\n  <b xmlns=''/>\n</a>", 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := collect(t, "t.xml", tc.doc)
+			if tc.line == 0 {
+				if err != nil {
+					t.Fatalf("collect: %v, want the document accepted", err)
+				}
+				return
+			}
+			wantWellFormednessError(t, err)
+			if loc, _ := xsderr.LocOf(err); loc != (xsderr.Loc{URI: "t.xml", Line: tc.line, Col: 3}) {
+				t.Errorf("fault at %v, want t.xml:%d:3, the start tag of <b>", loc, tc.line)
+			}
+			if want := fmt.Sprintf("t.xml:%d:3: [xml-wf] namespace declaration xmlns:p has an empty value", tc.line); !strings.HasPrefix(err.Error(), want) {
+				t.Errorf("error = %q, want it to open %q", err, want)
+			}
+		})
 	}
 }
 

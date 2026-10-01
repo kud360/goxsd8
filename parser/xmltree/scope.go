@@ -38,8 +38,10 @@ func (s *scope) child(bindings []binding) *scope {
 // The reserved prefix "xml" always resolves to XMLNamespaceURI without a
 // declaration. The empty prefix resolves to the default namespace, or to ""
 // (no namespace) when no default is in scope. A non-empty prefix explicitly
-// undeclared with xmlns:p="" (Namespaces in XML 1.1) or never declared is
-// unbound: ok is false and the caller reports an error with location.
+// undeclared with xmlns:p="", which only an XML 1.1 document can carry
+// (Namespaces in XML 1.1; Reader.checkUndeclarations rejects it in XML 1.0 by
+// nsc-NoPrefixUndecl), or never declared is unbound: ok is false and the
+// caller reports an error with location.
 func (s *scope) lookup(prefix string) (uri string, ok bool) {
 	if prefix == xmlPrefix {
 		return XMLNamespaceURI, true
@@ -65,8 +67,8 @@ func (s *scope) lookup(prefix string) (uri string, ok bool) {
 // prefixes returns the distinct CANDIDATE prefixes of scope s: every non-empty,
 // non-"xmlns" prefix declared anywhere in the chain, plus the reserved "xml",
 // which is bound whether or not it is declared. Candidacy is not bindingness —
-// a candidate may be shadowed or explicitly undeclared (xmlns:p="") further
-// down — so a caller must resolve each one through lookup and keep only those
+// a candidate may be shadowed or explicitly undeclared (xmlns:p="", XML 1.1
+// only) further down — so a caller must resolve each one through lookup and keep only those
 // that resolve. Order is unspecified; the exported enumerator sorts.
 //
 // The empty prefix is excluded: the default namespace is a separate fact,
@@ -120,8 +122,8 @@ func (n Namespace) URI() string { return n.uri }
 //
 // Every candidate prefix is resolved through the same scope lookup LookupPrefix
 // uses, so the two can never disagree: a shadowed binding reports its innermost
-// namespace name, and a prefix explicitly undeclared with xmlns:p="" is absent
-// from the result entirely.
+// namespace name, and a prefix explicitly undeclared with xmlns:p="" (legal in
+// an XML 1.1 document only) is absent from the result entirely.
 func (e *StartElement) InScopePrefixes() []Namespace {
 	candidates := e.scope.prefixes()
 	slices.Sort(candidates)
