@@ -505,6 +505,13 @@ func TestInstanceExecutorDeclinesOutsideAssessedSubtreeRoot(t *testing.T) {
 			`<!DOCTYPE known [<!ENTITY % p "&#60;!ATTLIST known a CDATA 'x'>"> %p;]><known/>`,
 		},
 		{
+			// rootStart's doc: the quote in the PI ends encoding/xml's DOCTYPE
+			// at the second PI's ?>, so the <!ATTLIST arrives as a directive of
+			// its own.
+			"an <!ATTLIST after a DOCTYPE encoding/xml delimits short", emptyRoot,
+			`<!DOCTYPE known [<?pi '?><!ENTITY e 'a>b'><?pi '?> <!ATTLIST known a CDATA 'x'>]><known/>`,
+		},
+		{
 			// rootStart's doc: encoding/xml fails on &g;, which §4.4.2 includes.
 			"a reference to a general entity an admitted DOCTYPE declares", aInt,
 			`<!DOCTYPE known [<!ENTITY g "1">]><known><a>&g;</a></known>`,

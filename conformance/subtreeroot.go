@@ -716,10 +716,12 @@ func (g *subtreeGate) groupContains(mg xsd.ModelGroup, names []xsd.QName) bool {
 
 // rootStart reads dec up to the document element's start tag. It answers false
 // for a DOCTYPE whose DTD could default an attribute the reader does not see
-// (defaultsNoAttribute), for any other directive, and for character data other
-// than white space ahead of the document element, which a well-formed prolog
-// never holds and a DOCTYPE encoding/xml delimited short of its real end leaves
-// behind.
+// (defaultsNoAttribute), and for any other directive. That second refusal also
+// covers a DOCTYPE encoding/xml delimits short of its real end, as a quote
+// inside a processing instruction can make it: every markup declaration left
+// over arrives as a directive of its own, and a parameter-entity reference left
+// over needs a declaration, which carries a '%' either inside the DOCTYPE or in
+// a directive left over too.
 //
 // The DOCTYPE that survives declares, in its internal subset alone, general
 // entities, notations, element types, comments and processing instructions.
@@ -740,10 +742,6 @@ func rootStart(dec *xml.Decoder) (xml.StartElement, bool) {
 		switch t := tok.(type) {
 		case xml.Directive:
 			if !defaultsNoAttribute(t) {
-				return xml.StartElement{}, false
-			}
-		case xml.CharData:
-			if strings.Trim(string(t), " \t\r\n") != "" {
 				return xml.StartElement{}, false
 			}
 		case xml.StartElement:
