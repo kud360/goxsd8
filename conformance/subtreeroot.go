@@ -121,13 +121,7 @@ func (g *subtreeGate) element(start xml.StartElement, d xsd.ElementDeclaration) 
 	if !plainAttributes(start.Attr) || !assessedDeclaration(d) {
 		return false
 	}
-	mark := len(g.scope)
-	for _, a := range start.Attr {
-		if isNamespaceDeclaration(a) {
-			g.scope = append(g.scope, a)
-		}
-	}
-	defer func() { g.scope = g.scope[:mark] }()
+	defer g.enter(start)()
 	td, ok := g.governingType(start, d)
 	if !ok {
 		return false
@@ -142,6 +136,18 @@ func (g *subtreeGate) element(start xml.StartElement, d xsd.ElementDeclaration) 
 		return g.complex(start, t)
 	}
 	return false
+}
+
+// enter pushes the namespace declarations start carries onto g.scope, and
+// returns the function that pops them again at start's end tag.
+func (g *subtreeGate) enter(start xml.StartElement) func() {
+	mark := len(g.scope)
+	for _, a := range start.Attr {
+		if isNamespaceDeclaration(a) {
+			g.scope = append(g.scope, a)
+		}
+	}
+	return func() { g.scope = g.scope[:mark] }
 }
 
 // governingType is the ·governing type definition· (key-governing-type-elem) of
@@ -481,33 +487,65 @@ func (g *subtreeGate) child(t xsd.ComplexType, m *xsd.Matcher, start xml.StartEl
 //     clause 5 is vacuous, and the walk charges e-validity clause 1.1.3
 //     (validate's walk.unresolvedStrictWildcardChild) for the parent, so no
 //     empty Result reaches the gate with it and the gate reads nothing below
-//     it.
+//     it;
+//   - strictParticle does not hold — the child is ·attributed to· a lax
+//     Wildcard or {open content} — its name resolves to none, it carries no
+//     xsi:type, and laxlyAssessed holds for it (#1911).
 //
-// It refuses a name that resolves to none under a lax Wildcard or the {open
-// content}: the walk charges nothing for the child, e-validity clause 1.1.3
-// naming a strict ·wildcard particle· alone, and what its ·laxly assessed·
-// subtree costs its ancestors is #1911's.
-//
-// GAP(conformance): an unresolved strict child with an xsi:type is refused,
+// GAP(conformance): an unresolved child with an xsi:type is refused, under a
+// strict ·wildcard particle· and a lax Wildcard or {open content} alike,
 // whatever type the xsi:type names. Where it resolves, that type is the
 // child's ·governing type definition· (key-governing-type-elem clause 8), so
 // its parent's cvc-assess-elt clause 3.1 has it ·strictly assessed· against
-// that type (key-sva clause 1.2) and the spec decides it; the walk's e-validity
-// clause 1.1.3 charge is gone, and the gate does not read a subtree governed by
-// a type with no declaration. Its one reader, execInstanceCase, then Fails the
-// case: a suite-valid case of this shape scores no pass, and none a false one.
+// that type (key-sva clause 1.2) and the spec decides it; under strict the
+// walk's e-validity clause 1.1.3 charge is gone, and the gate does not read a
+// subtree governed by a type with no declaration. Its one reader,
+// execInstanceCase, then Fails the case: a suite-valid case of this shape
+// scores no pass, and none a false one.
 func (g *subtreeGate) resolvedChild(t xsd.ComplexType, start xml.StartElement, strictParticle bool) bool {
 	d, ok := g.schema.Element(expandedName(start.Name))
 	if !ok {
-		if !strictParticle || slices.ContainsFunc(start.Attr, func(a xml.Attr) bool { return a.Name == xsiType }) {
+		if slices.ContainsFunc(start.Attr, func(a xml.Attr) bool { return a.Name == xsiType }) {
 			return false
 		}
-		return g.dec.Skip() == nil
+		if strictParticle {
+			return g.dec.Skip() == nil
+		}
+		return g.laxlyAssessed(start)
 	}
 	if g.locallyDeclared(t, g.substitutionHeads(d)) {
 		return false
 	}
 	return g.element(start, d)
+}
+
+// laxlyAssessed reads through to its end tag an element whose start tag is
+// start, which has neither a ·governing element declaration· nor a ·governing
+// type definition· and is not ·skipped·, and reports whether it carries no
+// xsi:nil and it and its subtree meet complex's conditions against
+// ·xs:anyType·. Such an element is ·laxly assessed· (cvc-assess-elt clause 3,
+// key-lva): locally validated against ·xs:anyType· and its [[attributes]] and
+// [[children]] assessed by key-sva clauses 2 and 3, which is validate's
+// walk.child and walk.attribute for a laxly assessed parent (#1823, #1891). Its
+// [validity] is notKnown (e-validity clause 2), which blocks no ancestor's
+// valid: e-validity clause 1.1.3 counts notKnown only under a strict ·wildcard
+// particle·. What it does decide is every charge at or below it, which
+// instance.go's "Charges at depth" reads as "not valid" (§2.5
+// key-deep-valid-doc, #1911).
+func (g *subtreeGate) laxlyAssessed(start xml.StartElement) bool {
+	if !plainAttributes(start.Attr) {
+		return false
+	}
+	td, ok := g.schema.Type(anyTypeName)
+	if !ok {
+		return false
+	}
+	anyType, ok := td.(xsd.ComplexType)
+	if !ok {
+		return false
+	}
+	defer g.enter(start)()
+	return g.complex(start, anyType)
 }
 
 // substitutionHeads is d's ·expanded name· followed by the name of every
