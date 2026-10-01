@@ -484,22 +484,38 @@ func (s *Schema) elementDeclarationSubsumes(general, specific ElementDeclaration
 // The remaining outcome — both fixed — is 4.2's "with an equal or identical value",
 // a VALUE-space test: "1" and "01" are the same xs:integer value, so the
 // {lexical form}s ValueConstraint carries cannot decide it (valueconstraint.go).
-// The schema's installed ValueSpace (valuespace.go) decides it instead, in the
-// two declarations' own types; an undecided verdict accepts, so the comparison
-// can only NARROW what this clause admits.
+// The schema's installed ValueSpace (valuespace.go) decides it instead, in each
+// declaration's elementValueType; an undecided verdict accepts, so the comparison
+// can only NARROW what this clause admits. Two ·special· types are decided over
+// their mapping union (the ValueSpace contract).
 //
-// GAP(xsd): what remains fail-open here is exactly what the ValueSpace declines
-// to decide — a type no backend mapping governs, a {lexical form} that mapping
-// cannot map, two types resolving to DIFFERENT governing mappings (an
-// incommensurable cross-type comparison), and a QName or NOTATION lexical whose
-// prefix has no binding in the context its ValueConstraint captured (see package
-// value's own GAP(value) marker; a resolvable one IS compared). A {type
-// definition} that is absent, unresolvable, or COMPLEX (a simple-content complex
-// type still bearing a value constraint) is skipped here for the same reason
-// ResolvedSimpleType's other callers skip it: there is no simple type to name the
-// value space. Every one of those accepts, so none is ever a false reject. No
-// issue owns this residual: the landing that built the value comparison and the
-// one that narrowed it to the QName and NOTATION context are both closed.
+// GAP(xsd): what remains fail-open here is what the ValueSpace declines to
+// decide, and every one of those accepts:
+//
+//   - a type no backend mapping governs, other than the ·special· pair. RULED
+//     permanent by #1379 (STYLE P3b): which types a backend maps is backend
+//     coverage, and charging loc-testSubP for a type the processor cannot read
+//     would blame the schema for a gap in the processor — #774's ruling at
+//     validate's matchedAttribute, transferred.
+//   - a {lexical form} the governing mapping cannot map. RULED permanent by
+//     #1379 (STYLE P3b): such a literal is not Datatype Valid, which
+//     checkSimpleDefault charges under a-props-correct, au-props-correct or
+//     e-props-correct clause 2 (cos-valid-simple-default clause 1); where
+//     ValidDefault stays undecided too, it is undecided for the type, not for
+//     this comparison. "Not a value" is never "not the same value".
+//   - a QName or NOTATION lexical whose prefix has no binding in the context its
+//     ValueConstraint captured: package value's own GAP(value) marker owns it,
+//     and #667 the routing that retires it; such a literal also fails
+//     cos-valid-simple-default clause 1. A resolvable prefix IS compared.
+//   - two types resolving to DIFFERENT governing mappings, a list or union type,
+//     and a ·special· type against an ordinary one (#2087).
+//   - an absent or unresolvable {type definition}. RULED permanent by #1379
+//     (STYLE P3b): Phase A charges src-resolve for a dangling name, and an
+//     absent one names no value space at all.
+//   - a MIXED complex {type definition}, whose {value} cos-valid-default clause 2
+//     reads with no simple type to name a value space (#2087). An element-only
+//     or empty one admits no {value constraint} at all, which e-props-correct
+//     clause 2 charges (cos-valid-default clause 2.1).
 func (s *Schema) fixedValueConstraintSubsumes(general, specific ElementDeclaration) bool {
 	gvc, present := general.ValueConstraint()
 	if !present || gvc.Kind() != ValueFixed {
@@ -509,16 +525,38 @@ func (s *Schema) fixedValueConstraintSubsumes(general, specific ElementDeclarati
 	if !present || svc.Kind() != ValueFixed {
 		return false
 	}
-	gt, ok := s.ResolvedSimpleType(general.TypeDefinition())
+	gt, ok := s.elementValueType(general)
 	if !ok {
 		return true
 	}
-	st, ok := s.ResolvedSimpleType(specific.TypeDefinition())
+	st, ok := s.elementValueType(specific)
 	if !ok {
 		return true
 	}
 	same, decided := s.valueSpace.EqualOrIdentical(s, st, svc, gt, gvc)
 	return same || !decided
+}
+
+// elementValueType is the Simple Type Definition naming the value space of e's
+// {value constraint}.{value}: e's {type definition} itself when simple, or its
+// {content type}.{simple type definition} when it is a complex type with simple
+// content — the same pick cos-valid-default clause 1 makes
+// (checkComplexDefaultValid). ok is false for an absent or unresolvable {type
+// definition} and for a complex one whose {content type} is not simple.
+func (s *Schema) elementValueType(e ElementDeclaration) (*SimpleType, bool) {
+	t, ok := s.ResolvedType(e.TypeDefinition())
+	if !ok {
+		return nil, false
+	}
+	if st, isSimple := t.(*SimpleType); isSimple {
+		return st, true
+	}
+	c, isComplex := t.(ComplexType)
+	if !isComplex {
+		return nil, false
+	}
+	sc, isSimpleContent := c.ContentType().(SimpleContent)
+	return sc.SimpleType, isSimpleContent
 }
 
 // identityConstraintsSuperset is loc-testSubP clause 4.3: every member of
@@ -683,20 +721,24 @@ func (s *Schema) checkAttributeTypeDerivedOK(n QName, r attributeRestriction, ge
 // (valueconstraint.go) cannot decide; the schema's installed ValueSpace
 // (valuespace.go) decides it, in each side's own attribute {type definition},
 // and an undecided verdict accepts, so the comparison can only NARROW what this
-// clause admits.
+// clause admits. Two ·special· types — what every typeless <attribute> gets
+// (§3.2.2.2) — are decided over their mapping union (the ValueSpace contract).
 //
-// GAP(xsd): what remains fail-open is exactly what the ValueSpace declines to
-// decide — an ungoverned type, an unmappable {lexical form}, two types resolving
-// to DIFFERENT governing mappings (an incommensurable cross-type comparison,
-// which clause 5.1 permits: S's type need only be DERIVED from G's), and a QName
-// or NOTATION lexical whose prefix has no binding in the context its
-// ValueConstraint captured (see package value's own GAP(value) marker; a
-// resolvable one IS compared) — plus a {type definition} that is absent,
-// unresolvable, or complex, skipped exactly as ResolvedSimpleType's other callers skip
-// it. Every one of those accepts, so none is ever a false reject. No issue owns
-// this residual, exactly as at fixedValueConstraintSubsumes' clause 4.2 twin:
-// the landing that built the value comparison and the one that narrowed it to
-// the QName and NOTATION context are both closed.
+// GAP(xsd): what remains fail-open is what the ValueSpace declines to decide,
+// and every one of those accepts. Four declines are fixedValueConstraintSubsumes'
+// clause 4.2 twin's, on the terms stated there: a type no backend mapping
+// governs other than the ·special· pair and a {lexical form} the governing
+// mapping cannot map are each RULED permanent by #1379 (STYLE P3b); an unbound
+// QName or NOTATION prefix is package value's GAP(value) marker's, retired by
+// #667; and an absent or unresolvable {type definition} is RULED permanent by
+// #1379 (STYLE P3b), src-resolve charging the dangling name. The rest are not
+// permanent and belong to #2087: two types resolving to DIFFERENT governing
+// mappings, a list or union type, and a ·special· type against an ordinary
+// one — all of which clause 5.1 permits, since S's type need only be DERIVED
+// from G's; and a by-name type= resolving to a COMPLEX type, which §3.2.2.2's
+// "the simple type definition ·resolved· to" makes a src-resolve failure this
+// package does not charge (an inline complex type is rejected at construction,
+// a-props-correct clause 1).
 func (s *Schema) checkAttributeValueConstraintSubsumes(n QName, r attributeRestriction, general, specific AttributeUse) error {
 	gvc, present := s.EffectiveValueConstraint(general)
 	if !present || gvc.Kind() != ValueFixed {
