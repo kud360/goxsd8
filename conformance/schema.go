@@ -122,8 +122,8 @@ import (
 //     document that resolved but could not be read is one the assembly never took
 //     in, recorded as parser.UnfollowedUnreadable, and the error it also returns
 //     completes the conjunction in step 4 — unless that error is a
-//     well-formedness fault the reader charged itself, which no limitation
-//     produces and which step 4 decides (fabricatedRejection, #2067).
+//     well-formedness fault the reader charged itself of a kind no reader
+//     limitation produces, which step 4 decides (wellFormednessFault, #2067).
 //  2. Root identity. If the root is not <schema> (IsSchema false) the case is
 //     DECLINED: §3.17.2 explicitly does NOT require <schema> to be the document
 //     root, so Parse's error there is a plain non-xsderr Go precondition fault,
@@ -343,10 +343,10 @@ import (
 // rejecting an assembly EVERY document of which already passed the allowlist.
 // A ReadDocument error produces an "invalid" verdict only on a COMPOSED
 // document, and only when it is a well-formedness fault the reader charged
-// itself (wellFormednessFault); every other one declines (step 1), precisely
-// because it can be a reader limitation rather than a real violation, and
-// turning that into "invalid" would fabricate a verdict for a well-formed
-// document.
+// itself that no reader limitation produces (wellFormednessFault); every other
+// one declines (step 1), precisely because it can be a reader limitation rather
+// than a real violation, and turning that into "invalid" would fabricate a
+// verdict for a well-formed document.
 //
 // A "valid" verdict coincides only with a truly-valid ground truth: a truly-valid
 // assembly (by definition) has none of the checked violations, so Parse
@@ -719,13 +719,15 @@ const ruleSrcResolve xsderr.Rule = "src-resolve"
 //     (parser.UnfollowedUnreadable) is charged src-include/src-import/
 //     src-redefine "not well-formed", and that rule alone cannot distinguish a
 //     genuine well-formedness fault from a reader LIMITATION — an encoding
-//     declaration the reader does not decode, or a reference to a general entity
-//     declared in the DOCTYPE internal subset (IRI/iri-001's &URI;). The chain
+//     declaration the reader does not decode, a reference to a general entity
+//     declared in the DOCTYPE internal subset (IRI/iri-001's &URI;), or a prefix
+//     bound only by a namespace declaration an <!ATTLIST defaults. The chain
 //     under it can: wellFormednessFault finds a charge the reader made itself,
-//     which wraps no cause, and that is a resource that resolved but is no
-//     well-formed information set, which src-include clause 1, src-import
-//     clause 2, src-redefine clause 2 and src-override clause 1 each make an
-//     error (MS-Schema schB4, schE5, schH5, #2067), so it decides. Any other
+//     which wraps no cause, of a kind no DTD the reader skips could have
+//     averted, and that is a resource that resolved but is no well-formed
+//     information set, which src-include clause 1, src-import clause 2,
+//     src-redefine clause 2 and src-override clause 1 each make an error
+//     (MS-Schema schB4, schE5, schH5, #2067), so it decides. Any other
 //     failure alongside such a directive declines, on step 1's reasoning for an
 //     unreadable ROOT.
 //
@@ -749,7 +751,7 @@ const ruleSrcResolve xsderr.Rule = "src-resolve"
 // the error's Msg text (srcResolveClause4): xsderr.Error carries the bare rule
 // and no clause, and a structured marker would be an export (#2054). The read
 // arm does not take the exemption — an unreadable document that is not a
-// reader-charged fault declines on ANY failure, clause 4 included.
+// wellFormednessFault declines on ANY failure, clause 4 included.
 //
 // Otherwise the shortfall arm stays SCAN-scoped: ANY unfollowed directive plus
 // any other src-resolve failure declines, without asking whether that
@@ -791,27 +793,50 @@ func fabricatedRejection(report *parser.AssemblyReport, perr error) bool {
 }
 
 // wellFormednessFault reports whether perr carries an XML well-formedness fault
-// the reader charged ITSELF: the first xsderr.RuleXMLWellFormed *xsderr.Error in
-// its chain, wrapping no cause. parser/xmltree and parser.ReadDocument build
-// every such charge with xsderr.New — an element left unclosed at end of
-// document, a mismatched or unexpected end tag, an unbound or reserved prefix,
-// nsc-NoPrefixUndecl, an encoding declaration the byte-order mark contradicts, a
-// document with no root element — and wrap a cause around every failure they
-// pass on from below: encoding/xml's syntax errors, among them its refusal of an
-// encoding declaration the reader does not decode and of a reference to an
-// entity declared in the DOCTYPE internal subset, and I/O faults. Those may be
-// reader limitations, so perr is no fault here; nor is a chain holding no xml-wf
-// charge at all. The shape is read rather than a marker because a structured
-// one would be an export (#2067).
+// the reader charged ITSELF and no reader limitation can produce: the first
+// xsderr.RuleXMLWellFormed *xsderr.Error in its chain, wrapping no cause and
+// charging no unbound prefix. parser/xmltree and parser.ReadDocument build every
+// charge of their own with xsderr.New and wrap a cause around every failure
+// they pass on from below: encoding/xml's syntax errors, among them its refusal
+// of an encoding declaration the reader does not decode and of a reference to
+// an entity declared in the DOCTYPE internal subset, and I/O faults. Those may
+// be reader limitations, so perr is no fault here; nor is a chain holding no
+// xml-wf charge at all.
+//
+// Of the cause-free charges, an element left unclosed at end of document, a
+// mismatched or unexpected end tag, a reserved prefix, nsc-NoPrefixUndecl, an
+// encoding declaration the byte-order mark contradicts and a document with no
+// root element are faults whatever the document's DTD declares. An unbound
+// prefix is not: an <!ATTLIST can default the namespace declaration that binds
+// it (XML 1.0 §3.3.2), a non-validating processor must supply that default
+// from the internal subset (§5.1), and the reader applies no attribute default,
+// so it charges a well-formed document (unboundPrefixCharge).
+//
+// GAP(parser): a composed document whose prefix is genuinely unbound — no DTD
+// could have bound it — is declined here rather than decided invalid, because
+// the charge does not say whether the document carried a DTD. Retiring it
+// needs the reader to apply internal-subset attribute defaults, which no open
+// issue owns.
+//
+// The shape is read rather than a marker because a structured one would be an
+// export (#2067).
 func wellFormednessFault(perr error) bool {
 	var e *xsderr.Error
 	for err := perr; errors.As(err, &e); err = e.Err {
 		if e.Rule == xsderr.RuleXMLWellFormed {
-			return e.Err == nil
+			return e.Err == nil && !strings.HasPrefix(e.Msg, unboundPrefixCharge)
 		}
 	}
 	return false
 }
+
+// unboundPrefixCharge opens every message parser/xmltree's reader writes for a
+// prefix no in-scope namespace declaration binds — on an element, an end tag or
+// an attribute — and no other xml-wf charge it makes. wellFormednessFault reads
+// it to keep that charge from deciding;
+// TestSchemaExecutorReadArmSeparatesFaultFromLimitation drives the real parser,
+// so rewording that message fails it.
+const unboundPrefixCharge = "unbound namespace prefix"
 
 // srcResolveClause4 is the text parser's licensedNamespace writes into every
 // src-resolve clause 4 charge it makes — "src-resolve clause 4.1" for an

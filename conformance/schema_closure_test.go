@@ -1017,7 +1017,10 @@ func TestSchemaExecutorDecidesUnlicensedNamespaceBesideShortfall(t *testing.T) {
 // declaration the reader does not decode (#361) and a reference to a general
 // entity the DOCTYPE internal subset declares, in element content and in an
 // attribute value — the second being IRI/iri-001's <xs:pattern value="&URI;">,
-// a suite-valid case this arm must never decide invalid.
+// a suite-valid case this arm must never decide invalid — and an xs prefix
+// bound only by the xmlns:xs an internal-subset <!ATTLIST defaults, a
+// well-formed document (XML 1.0 §5.1) the reader charges with an unbound
+// prefix wrapping no cause, because it applies no attribute default.
 //
 // Each row runs the real parser, so it also pins the chain shape
 // wellFormednessFault reads: the fault row is undecided with the read arm's
@@ -1043,6 +1046,9 @@ func TestSchemaExecutorReadArmSeparatesFaultFromLimitation(t *testing.T) {
 		"internal-subset entity in an attribute value (iri-001)": `<!DOCTYPE xs:schema [<!ENTITY URI "[a-z]+">]>` +
 			schemaSrc("urn:a", `<xs:simpleType name="uri"><xs:restriction base="xs:anyURI">`+
 				`<xs:pattern value="&URI;"/></xs:restriction></xs:simpleType>`),
+		"namespace declaration an internal-subset ATTLIST defaults": `<!DOCTYPE xs:schema [` +
+			`<!ATTLIST xs:schema xmlns:xs CDATA #FIXED "http://www.w3.org/2001/XMLSchema">]>` +
+			`<xs:schema targetNamespace="urn:a">` + decidableType + `</xs:schema>`,
 	}
 	for _, name := range slices.Sorted(maps.Keys(limitations)) {
 		t.Run(name, func(t *testing.T) {
