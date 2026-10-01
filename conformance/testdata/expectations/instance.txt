@@ -5533,11 +5533,11 @@ MS-SimpleType2006-07-15/stZ053/instance/stZ053.v pass
 MS-SimpleType2006-07-15/stZ054/instance/stZ054.v pass
 MS-SimpleType2006-07-15/stZ056/instance/stZ056.i pass
 MS-SimpleType2006-07-15/stZ057/instance/stZ057.v pass
-MS-SimpleType2006-07-15/stZ058/instance/stZ058.v fail
+MS-SimpleType2006-07-15/stZ058/instance/stZ058.v pass
 MS-SimpleType2006-07-15/stZ059/instance/stZ059.i pass
 MS-SimpleType2006-07-15/stZ060/instance/stZ060.i pass
 MS-SimpleType2006-07-15/stZ061/instance/stZ061.i pass
-MS-SimpleType2006-07-15/stZ062/instance/stZ062.v fail
+MS-SimpleType2006-07-15/stZ062/instance/stZ062.v pass
 MS-SimpleType2006-07-15/stZ063/instance/stZ063.v pass
 MS-SimpleType2006-07-15/stZ064/instance/stZ064.i pass
 MS-SimpleType2006-07-15/stZ066/instance/stZ066.i pass
