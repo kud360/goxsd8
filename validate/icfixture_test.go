@@ -15,7 +15,7 @@ import (
 //	root    RootType  sequence( item*, box*, ref*, tabled* )
 //	box     BoxType   sequence( item*, ref* )          — a subtree of its own
 //	item    ItemType  sequence( name?, tag?, utag?, tabled? ),
-//	                  @id @k @p:id @xid @ref @refs,
+//	                  @id @k @p:id @xid @ref @refs @tok @ub,
 //	                  @uid @usi @uref @upl @unest @lur  — icUnionTypes
 //	ref     RefType   empty,                           @r
 //	name    xs:string (or a nillable declaration of it)
@@ -312,6 +312,8 @@ func icSchema(t *testing.T, ns string, nillable bool, rootICs, boxICs []xsd.Iden
 		icUse(t, xsd.QName{Local: "xid"}, "ID"),
 		icUse(t, xsd.QName{Local: "ref"}, "IDREF"),
 		icUse(t, xsd.QName{Local: "refs"}, "IDREFS"),
+		icUse(t, xsd.QName{Local: "tok"}, "token"),
+		icUse(t, xsd.QName{Local: "ub"}, "unsignedByte"),
 		icUseOf(t, named("uid"), named("UID")),
 		icUseOf(t, named("usi"), named("USI")),
 		icUseOf(t, named("uref"), named("URef")),
