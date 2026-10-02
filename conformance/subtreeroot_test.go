@@ -1424,9 +1424,18 @@ func TestInstanceExecutorChargesAbstractComplexType(t *testing.T) {
 // {selector} icpath does not compile, an assertions facet, whose {test}
 // validate records and never evaluates, and a complex type's {assertions}
 // (cvc-complex-type clause 6), which validate's elementAssertions records the
-// same way.
+// same way. Each refusal names the rules of the records behind it (#2106):
+// the first three cases differ only in the Unevaluated rule they record, and
+// the last records cvc-assertions-valid, cvc-assertion, cvc-assertions-valid
+// in document order, so its token names each rule once, in first-occurrence
+// order rather than sorted.
 func TestInstanceExecutorDeclinesUnevaluatedRoot(t *testing.T) {
-	for _, tc := range []struct{ why, schemaBody, instance string }{
+	const assertedString = `<xs:simpleType name="A"><xs:restriction base="xs:string">` +
+		`<xs:assertion test="true()"/></xs:restriction></xs:simpleType>`
+	for _, tc := range []struct {
+		why, schemaBody, instance string
+		want                      refusal
+	}{
 		{
 			// A predicate icpath's lexer does not read (validate's icFrame
 			// GAP(xpath)): the unique is declined and recorded, not decided.
@@ -1434,20 +1443,30 @@ func TestInstanceExecutorDeclinesUnevaluatedRoot(t *testing.T) {
 			`<xs:element name="known"><xs:complexType><xs:sequence><xs:element name="a" type="xs:int" maxOccurs="2"/></xs:sequence></xs:complexType>` +
 				`<xs:unique name="u"><xs:selector xpath="a[1]"/><xs:field xpath="."/></xs:unique></xs:element>`,
 			`<known><a>1</a><a>1</a></known>`,
+			"unevaluated:cvc-identity-constraint",
 		},
 		{
 			"an unevaluated assertions facet",
-			`<xs:element name="known" type="A"/><xs:simpleType name="A"><xs:restriction base="xs:string">` +
-				`<xs:assertion test="true()"/></xs:restriction></xs:simpleType>`,
+			`<xs:element name="known" type="A"/>` + assertedString,
 			`<known>x</known>`,
+			"unevaluated:cvc-assertions-valid",
 		},
 		{
 			"an unevaluated {assertions} member on a content-less root",
 			`<xs:element name="known"><xs:complexType><xs:assert test="true()"/></xs:complexType></xs:element>`,
 			`<known/>`,
+			"unevaluated:cvc-assertion",
+		},
+		{
+			"an assertions facet, an {assertions} member, and the facet again, in document order",
+			`<xs:element name="known"><xs:complexType><xs:sequence>` +
+				`<xs:element name="a" type="A"/><xs:element name="b"><xs:complexType><xs:assert test="true()"/></xs:complexType></xs:element>` +
+				`<xs:element name="c" type="A"/></xs:sequence></xs:complexType></xs:element>` + assertedString,
+			`<known><a>x</a><b/><c>y</c></known>`,
+			"unevaluated:cvc-assertions-valid,cvc-assertion",
 		},
 	} {
-		declinesBothPolarities(t, instanceCase(t, tc.schemaBody, tc.instance, false), tc.why, refuseUnevaluated)
+		declinesBothPolarities(t, instanceCase(t, tc.schemaBody, tc.instance, false), tc.why, tc.want)
 	}
 }
 
