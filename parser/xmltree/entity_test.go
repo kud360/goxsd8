@@ -1,0 +1,213 @@
+package xmltree_test
+
+import (
+	"errors"
+	"fmt"
+	"strings"
+	"testing"
+
+	"github.com/kud360/goxsd8/parser/xmltree"
+	"github.com/kud360/goxsd8/xsderr"
+)
+
+// render writes nodes as one line: a start tag as <{uri}local a="v">, an end
+// tag as </local>, and character data quoted.
+func render(nodes []xmltree.Node) string {
+	var b strings.Builder
+	for _, n := range nodes {
+		switch n := n.(type) {
+		case *xmltree.StartElement:
+			b.WriteString("<" + nameOf(n.Name()))
+			for _, a := range n.Attributes() {
+				fmt.Fprintf(&b, " %s=%q", nameOf(a.Name()), a.Value())
+			}
+			b.WriteString(">")
+		case *xmltree.EndElement:
+			b.WriteString("</" + n.Name().Local() + ">")
+		case *xmltree.CharData:
+			fmt.Fprintf(&b, "%q", n.Data())
+		}
+	}
+	return b.String()
+}
+
+// nameOf renders n as {uri}local, or local in no namespace.
+func nameOf(n xmltree.Name) string {
+	if n.Space() == "" {
+		return n.Local()
+	}
+	return "{" + n.Space() + "}" + n.Local()
+}
+
+// TestInternalEntityIsIncluded reads a reference to an internal general entity
+// as its replacement text (XML 1.0 §4.4.2, §4.4.5, §3.3.3): in content, parsed
+// as content, so markup in it is elements resolved against the scope in force
+// at the reference; in an attribute value, normalized, each white-space
+// character in the replacement text a #x20 while a character reference in the
+// value's own source stays the character it names; nested, expanded at
+// inclusion and not at declaration (§4.5); and under the FIRST declaration of
+// a name (§4.2).
+func TestInternalEntityIsIncluded(t *testing.T) {
+	for _, tc := range []struct {
+		name, subset, root, want string
+	}{
+		{"content", `<!ENTITY e "text">`, `<r>a&e;b</r>`, `<r>"atextb"</r>`},
+		{"content markup, scoped at the reference", `<!ENTITY e "x<p:b c='1'>y</p:b>z">`,
+			`<r xmlns:p="urn:p">a&e;b</r>`, `<r>"ax"<{urn:p}b c="1">"y"</b>"zb"</r>`},
+		{"attribute value normalized", `<!ENTITY e "a&#10;b	c">`,
+			`<r v="[&e;]" w="&#10;&e;"/>`, `<r v="[a b c]" w="\na b c"></r>`},
+		{"nested, in content", `<!ENTITY d "[0-9]"><!ENTITY h "(&d;|A)">`, `<r>&h;</r>`, `<r>"([0-9]|A)"</r>`},
+		{"nested, in an attribute value", `<!ENTITY d "[0-9]"><!ENTITY h "(&d;|A)">`,
+			`<r v="&h;"/>`, `<r v="([0-9]|A)"></r>`},
+		{"nested, in an attribute of an included element", `<!ENTITY d "[0-9]"><!ENTITY b "<b v='&d;'/>">`,
+			`<r>&b;</r>`, `<r><b v="[0-9]"></b></r>`},
+		{"first declaration binds", `<!ENTITY a "1"><!ENTITY a "2">`, `<r v="&a;">&a;</r>`, `<r v="1">"1"</r>`},
+		{"predefined entity left to inclusion", `<!ENTITY e "a&amp;b&lt;c/>">`, `<r v="&e;">&e;</r>`,
+			`<r v="a&b<c/>">"a&b<c/>"</r>`},
+		{"doubly escaped '<' in an attribute value", `<!ENTITY e "&#38;#60;">`, `<r v="&e;"/>`, `<r v="<"></r>`},
+		{"CDATA in replacement text", `<!ENTITY e "<![CDATA[&x;]]>">`, `<r>&e;</r>`, `<r>"&x;"</r>`},
+		{"line end in the literal", "<!ENTITY e \"a\r\nb&#65;\rc\">", `<r>&e;</r>`, `<r>"a\nbA\nc"</r>`},
+		{"line end in the source beside a reference", `<!ENTITY e "x">`, "<r v=\"a\r\n&e;\">a\r\n&e;</r>",
+			`<r v="a x">"a\nx"</r>`},
+		{"character reference to #xD in the literal", `<!ENTITY e "a&#13;b">`, `<r>&e;</r>`, `<r>"a\rb"</r>`},
+		{"empty replacement text", `<!ENTITY e "">`, `<r>&e;</r>`, `<r></r>`},
+		{"after an unread parameter entity, standalone", `<!ENTITY % p SYSTEM "p.ent"> %p; <!ENTITY e "x">`,
+			`<r>&e;</r>`, `<r>"x"</r>`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			decl := `<?xml version="1.0"?>`
+			if strings.Contains(tc.name, "standalone") {
+				decl = `<?xml version="1.0" standalone="yes"?>`
+			}
+			nodes, err := collect(t, "doc.xml", decl+`<!DOCTYPE r [`+tc.subset+`]>`+tc.root)
+			if err != nil {
+				t.Fatalf("Token: %v", err)
+			}
+			if got := render(nodes); got != tc.want {
+				t.Errorf("read %s\n want %s", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestIncludedNodesAreLocatedAtTheReference locates every node an inclusion
+// produces where the reference is, and the text after the reference where it
+// is in the source.
+func TestIncludedNodesAreLocatedAtTheReference(t *testing.T) {
+	nodes, err := collect(t, "doc.xml", "<!DOCTYPE r [<!ENTITY e \"x<b/>\">]><r>a\n  &e;b</r>")
+	if err != nil {
+		t.Fatalf("Token: %v", err)
+	}
+	if got, want := render(nodes), `<r>"a\n  x"<b></b>"b"</r>`; got != want {
+		t.Fatalf("read %s, want %s", got, want)
+	}
+	wantLoc(t, nodes[1], 1, 38)
+	wantLoc(t, nodes[2], 2, 3)
+	wantLoc(t, nodes[3], 2, 3)
+	wantLoc(t, nodes[4], 2, 6)
+}
+
+// TestEntityInclusionFaults charges what XML 1.0 makes not well-formed in an
+// inclusion as a fault the reader charges itself, wrapping no cause: a
+// recursive pair (WFC No Recursion), in content and in an attribute value; a
+// '<' in replacement text an attribute value includes, at any depth (WFC No <
+// in Attribute Values); replacement text that is not balanced content (§4.3.2);
+// and a reference outside the document element.
+func TestEntityInclusionFaults(t *testing.T) {
+	for _, tc := range []struct {
+		name, subset, root, msg string
+	}{
+		{"recursive pair in content", `<!ENTITY a "x&b;"><!ENTITY b "&a;">`, `<r>&a;</r>`, "entity a references itself"},
+		{"recursive pair in an attribute value", `<!ENTITY a "x&b;"><!ENTITY b "&a;">`, `<r v="&b;"/>`, "entity b references itself"},
+		{"'<' in an attribute value", `<!ENTITY e "&#60;">`, `<r v="&e;"/>`, "No < in Attribute Values"},
+		{"'<' one level down", `<!ENTITY i "&#60;"><!ENTITY o "x&i;">`, `<r v="&o;"/>`, "entity i, referenced in an attribute value"},
+		{"element left open", `<!ENTITY e "<b>">`, `<r>&e;</r>`, "element b opened in the replacement text of entity e does not close"},
+		{"element closed outside", `<!ENTITY e "</r>">`, `<r>&e;</r>`, "closes an element the entity did not open"},
+		{"reference after the document element", `<!ENTITY e "x">`, `<r/>&e;`, "entity reference outside the document element"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := collect(t, "doc.xml", `<!DOCTYPE r [`+tc.subset+`]>`+tc.root)
+			wantWellFormednessError(t, err)
+			var e *xsderr.Error
+			if !errors.As(err, &e) || e.Err != nil {
+				t.Errorf("error %v: want a charge wrapping no cause", err)
+			}
+			if !strings.Contains(fmt.Sprint(err), tc.msg) {
+				t.Errorf("error %v: want it to say %q", err, tc.msg)
+			}
+		})
+	}
+}
+
+// TestEntityReferenceRefusedUnread refuses, and charges as no fault of the
+// document's (a wrapped cause), a reference to an entity the reader did not
+// read the declaration of: one declared after a reference to a parameter
+// entity it did not read, outside a standalone document (XML 1.0 §5.1). Such
+// a document may be well-formed (WFC Entity Declared binds only a document
+// with no unread parameter-entity reference or a standalone one), so the
+// refusal is the reader's policy and names no constraint; the standalone row of
+// TestInternalEntityIsIncluded reads the same subset. A reference in replacement
+// text to an entity that is not internal, and one past the expansion bounds,
+// are refused alike.
+func TestEntityReferenceRefusedUnread(t *testing.T) {
+	laughs := `<!ENTITY l0 "lol">`
+	for i := 1; i <= 9; i++ {
+		laughs += fmt.Sprintf(`<!ENTITY l%d "%s">`, i, strings.Repeat(fmt.Sprintf("&l%d;", i-1), 10))
+	}
+	// sizeBound is the reader's maxGEExpansion: the bytes of replacement text
+	// one document may include.
+	const sizeBound = 1 << 20
+	big := `<!ENTITY big "` + strings.Repeat("x", sizeBound) + `">`
+	chain := func(n int) string {
+		var b strings.Builder
+		for i := 0; i < n; i++ {
+			fmt.Fprintf(&b, `<!ENTITY c%d "&c%d;">`, i, i+1)
+		}
+		fmt.Fprintf(&b, `<!ENTITY c%d "end">`, n)
+		return b.String()
+	}
+	for _, tc := range []struct {
+		name, subset, root, msg string
+	}{
+		{"declared after an unread parameter entity", `<!ENTITY % p SYSTEM "p.ent"> %p; <!ENTITY e "x">`, `<r>&e;</r>`, "invalid character entity &e;"},
+		{"external entity in replacement text", `<!ENTITY x SYSTEM "x.ent"><!ENTITY e "&x;">`, `<r>&e;</r>`, "invalid character entity &x;"},
+		{"external entity in an attribute value", `<!ENTITY x SYSTEM "x.ent"><!ENTITY e "&x;">`, `<r v="&e;"/>`, "entity &x;, which is not an internal entity"},
+		{"billion laughs in content", laughs, `<r>&l9;</r>`, "expansion bound"},
+		{"billion laughs in an attribute value", laughs, `<r v="&l9;"/>`, "expansion bound"},
+		{"nesting past the depth bound", chain(64), `<r>&c0;</r>`, "expansion bound"},
+		{"past the size bound, summed over the document", big, `<r>&big;<b v="&big;"/></r>`, "expansion bound"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := collect(t, "doc.xml", `<!DOCTYPE r [`+tc.subset+`]>`+tc.root)
+			wantWellFormednessError(t, err)
+			var e *xsderr.Error
+			if !errors.As(err, &e) || e.Err == nil {
+				t.Errorf("error %v: want a refusal wrapping its cause", err)
+			}
+			if !strings.Contains(fmt.Sprint(err), tc.msg) {
+				t.Errorf("error %v: want it to say %q", err, tc.msg)
+			}
+			if strings.Contains(fmt.Sprint(err), "Entity Declared") || strings.Contains(fmt.Sprint(err), "entdeclared") {
+				t.Errorf("error %v names WFC Entity Declared, which the document need not break", err)
+			}
+		})
+	}
+	t.Run("replacement text at the size bound", func(t *testing.T) {
+		nodes, err := collect(t, "doc.xml", `<!DOCTYPE r [`+big+`]><r>&big;</r>`)
+		if err != nil {
+			t.Fatalf("Token: %v", err)
+		}
+		if got := len(nodes[1].(*xmltree.CharData).Data()); got != sizeBound {
+			t.Errorf("read %d bytes, want %d", got, sizeBound)
+		}
+	})
+	t.Run("nesting at the depth bound", func(t *testing.T) {
+		nodes, err := collect(t, "doc.xml", `<!DOCTYPE r [`+chain(63)+`]><r>&c0;</r>`)
+		if err != nil {
+			t.Fatalf("Token: %v", err)
+		}
+		if got, want := render(nodes), `<r>"end"</r>`; got != want {
+			t.Errorf("read %s, want %s", got, want)
+		}
+	})
+}

@@ -645,7 +645,7 @@ ID_IDREF/s3_3_4v27/schema/s3_3_4v27s pass
 ID_IDREF/s3_3_4v28/schema/s3_3_4v28s pass
 ID_IDREF/s3_3_4v29/schema/s3_3_4v29s pass
 ID_IDREF/s3_3_4v30/schema/s3_3_4v30s pass
-IRI/iri-001/schema/iri-001 fail
+IRI/iri-001/schema/iri-001 pass
 Id/id001/schema/id001.xsd pass
 Id/id002/schema/id002.xsd pass
 Id/id003/schema/id003.xsd pass
