@@ -184,13 +184,19 @@ counts.
 
 5. **Judge.** `git fetch origin main` first and merge it forward if it
    moved — before the arbiter, per WORKFLOW's **After the verdict**, where
-   it costs no round instead of one. Then delegate to **arbiter**. On
-   reject: one repair round by mason, briefed from the whole posted
-   verdict — never from a partial finding set, and never before the
-   verdict is posted (#1426) — then re-judge in full. On a second reject:
-   park per WORKFLOW, then go to step 6's log entry and stop. On accept,
-   dispose of the verdict's remaining findings per WORKFLOW's **After the
-   verdict** before step 6.
+   it costs no round instead of one. After every merge forward that
+   precedes an arbiter round — this one, and the re-judge step 6's
+   Landing precondition 2 calls for — run `go vet ./...` on the committed
+   merged tree before you delegate; it type-checks the test files
+   `go build` skips, and must exit 0, else make the follow-up fixes the
+   merge implies per WORKFLOW's **Merge-conflict resolution**, as a
+   follow-up commit and never an amend (#2026). Then delegate to
+   **arbiter**. On reject: one repair round by mason, briefed from the
+   whole posted verdict — never from a partial finding set, and never
+   before the verdict is posted (#1426) — then re-judge in full. On a
+   second reject: park per WORKFLOW, then go to step 6's log entry and
+   stop. On accept, dispose of the verdict's remaining findings per
+   WORKFLOW's **After the verdict** before step 6.
 
 6. **Land.** Delegate the log entry to **chronicler** first — isolated,
    and brought onto the branch like any subagent's commits — so it rides
