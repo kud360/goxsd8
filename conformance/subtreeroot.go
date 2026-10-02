@@ -45,27 +45,28 @@ import (
 // only because of a parser GAP (#1002).
 const versioningNS = "http://www.w3.org/2007/XMLSchema-versioning"
 
-// assessedSubtreeRoot reports whether the instance document at doc, against
-// schema as assembled into report, has the assessed-subtree-root shape an empty
+// assessedSubtreeRoot admits the instance document at doc, against schema as
+// assembled into report, where it has the assessed-subtree-root shape an empty
 // validate.Result may be read as "valid" for: a root, with content or without,
 // whose subtree meets every condition subtreeGate.element names, in a document
 // whose DTD, if any, defaults no attribute (rootStart), against an assembly no
-// version condition touched. Any failure to establish a condition — an
-// unreadable document, a decoder error, an unresolvable component — is a false,
-// never a guess.
-func assessedSubtreeRoot(schema *xsd.Schema, report *parser.AssemblyReport, doc string) bool {
+// version condition touched. It answers the zero refusal where it admits the
+// document, and otherwise the refusal naming the first condition it could not
+// establish — a versioned assembly, an unreadable document, a decoder error,
+// an unresolvable component — never a guess.
+func assessedSubtreeRoot(schema *xsd.Schema, report *parser.AssemblyReport, doc string) refusal {
 	if closureVersioned(report) {
-		return false
+		return refuseVersioned
 	}
 	rc, _, err := loader.Dir(filepath.Dir(doc)).Resolve("", filepath.Base(doc))
 	if err != nil {
-		return false
+		return refuseGateUnresolved
 	}
 	defer func() { _ = rc.Close() }() // read-only handle: close error cannot affect the verdict
 	dec := rawDecoder(rc)
-	root, ok := rootStart(dec)
-	if !ok {
-		return false
+	root, why := rootStart(dec)
+	if why != "" {
+		return why
 	}
 	// cvc-elt clause 1 (§3.3.4.6 ·governing element declaration· clause 4): the
 	// root's declaration is the top-level one its ·expanded name· resolves to. A
@@ -73,28 +74,29 @@ func assessedSubtreeRoot(schema *xsd.Schema, report *parser.AssemblyReport, doc 
 	// declaration.
 	d, ok := schema.Element(expandedName(root.Name))
 	if !ok {
-		return false
+		return refuseUndeclaredRoot
 	}
 	g := subtreeGate{schema: schema, dec: dec}
-	if !g.element(root, d) {
-		return false
+	if why := g.element(root, d); why != "" {
+		return why
 	}
 	return documentEnd(dec)
 }
 
 // documentEnd reads dec past the document element to the end of the document,
-// answering false for a directive or a decoder error there.
-func documentEnd(dec *xml.Decoder) bool {
+// refusing a directive (refuseEpilogDirective) or a decoder error
+// (refuseDecode) there.
+func documentEnd(dec *xml.Decoder) refusal {
 	for {
 		tok, err := dec.Token()
 		if errors.Is(err, io.EOF) {
-			return true
+			return ""
 		}
 		if err != nil {
-			return false
+			return refuseDecode
 		}
 		if _, ok := tok.(xml.Directive); ok {
-			return false
+			return refuseEpilogDirective
 		}
 	}
 }
@@ -103,6 +105,11 @@ func documentEnd(dec *xml.Decoder) bool {
 // checked against, the decoder positioned inside it, and the namespace
 // declarations of every element open above that position, outermost first,
 // which resolveQName reads.
+//
+// Each of its reading methods answers a refusal: the zero value where the
+// conditions its doc comment names hold, and otherwise the token
+// (instance.go's refuse* constants) naming the first exit the reading
+// reached that refused. A decoder error is refuseDecode wherever it arrives.
 type subtreeGate struct {
 	schema *xsd.Schema
 	dec    *xml.Decoder
@@ -110,10 +117,11 @@ type subtreeGate struct {
 }
 
 // element reads the element whose start tag is start, and whose ·governing
-// element declaration· is d, through to its end tag, and reports whether every
+// element declaration· is d, through to its end tag, and refuses unless every
 // condition below holds for it and, recursively, for every element under it:
 //
-//   - an xsi:nil it carries has an ·actual value· (nilValue);
+//   - an xsi:nil it carries has an ·actual value· (nilValue,
+//     refuseNilLexical);
 //   - d is not abstract and carries no {type table} (assessedDeclaration);
 //   - its ·governing type definition· is determined: d.{type definition}
 //     resolves, and an xsi:type the element carries meets governingType's
@@ -129,37 +137,43 @@ type subtreeGate struct {
 // character or element [[child]]. An xsi:nil whose ·actual value· is false is
 // clause 3.2.2, which holds as 3.2.1 does, and the element is read as if it
 // carried none.
-func (g *subtreeGate) element(start xml.StartElement, d xsd.ElementDeclaration) bool {
+func (g *subtreeGate) element(start xml.StartElement, d xsd.ElementDeclaration) refusal {
 	isNil, ok := nilValue(start.Attr)
-	if !ok || !assessedDeclaration(d) {
-		return false
+	if !ok {
+		return refuseNilLexical
+	}
+	if why := assessedDeclaration(d); why != "" {
+		return why
 	}
 	defer g.enter(start)()
-	td, ok := g.governingType(start, d)
-	if !ok {
-		return false
+	td, why := g.governingType(start, d)
+	if why != "" {
+		return why
 	}
 	return g.governed(start, td, isNil && d.Nillable())
 }
 
 // governed reads through to its end tag an element whose start tag is start and
 // whose ·governing type definition· is td, ·nilled· where nilled is true, and
-// reports whether:
+// refuses unless:
 //
 //   - for a Simple Type Definition, the element carries no attribute but the
-//     four xsi: ones cvc-type clause 3.1.1 excepts, and no element [[child]];
+//     four xsi: ones cvc-type clause 3.1.1 excepts (refuseSimpleAttribute),
+//     and no element [[child]] (leaf);
 //   - for a Complex Type Definition, it meets complex's conditions.
-func (g *subtreeGate) governed(start xml.StartElement, td xsd.TypeDefinition, nilled bool) bool {
+//
+// A td that is neither is refuseTypeKind.
+func (g *subtreeGate) governed(start xml.StartElement, td xsd.TypeDefinition, nilled bool) refusal {
 	switch t := td.(type) {
 	case *xsd.SimpleType:
 		if slices.ContainsFunc(start.Attr, notExcepted) {
-			return false
+			return refuseSimpleAttribute
 		}
 		return g.leaf()
 	case xsd.ComplexType:
 		return g.complex(start, t, nilled)
 	}
-	return false
+	return refuseTypeKind
 }
 
 // enter pushes the namespace declarations start carries onto g.scope, and
@@ -176,48 +190,64 @@ func (g *subtreeGate) enter(start xml.StartElement) func() {
 
 // governingType is the ·governing type definition· (key-governing-type-elem) of
 // the element whose start tag is start and whose ·governing element
-// declaration· is d, determined here independently of the walk, and false
+// declaration· is d, determined here independently of the walk, and a refusal
 // wherever the gate does not determine it. d carries no {type table}
 // (assessedDeclaration), so its ·selected type definition· is d.{type
-// definition}, which must resolve.
+// definition}, which must resolve (refuseTypeUnresolved).
 //
 // With no xsi:type the selected type governs (clause 4). With one, the gate
 // follows its ·instance-specified type definition· T (clause 3) where all of
-// these hold, and answers false otherwise:
+// these hold, and refuses otherwise:
 //
 //   - the lexical names a type: it resolves as a QName against the namespace
 //     bindings in scope (§3.17.6.3, cvc-resolve-instance) and the schema has a
 //     top-level type definition of that name. A lexical that does not is the
 //     walk's, charged under cvc-attribute clause 3 or 5 or, where the walk
 //     withholds clause 3, recorded in Result.Unevaluated, so no empty Result
-//     reaches the gate with it;
+//     reaches the gate with it (refuseXsiTypeUnresolved);
 //   - xsd.Schema.ValidlySubstitutable answers that T ·overrides· the selected
 //     type under d.{disallowed substitutions} (§3.3.4.2, key-overrides), which
-//     is cvc-elt clause 4. A false is the walk's cvc-elt charge. An error is
-//     validate's instanceOverride decline, which leaves the governing type
-//     undetermined and records nothing, so the gate refuses it itself.
-func (g *subtreeGate) governingType(start xml.StartElement, d xsd.ElementDeclaration) (xsd.TypeDefinition, bool) {
+//     is cvc-elt clause 4. A false is the walk's cvc-elt charge
+//     (refuseXsiTypeNotOverride). An error is validate's instanceOverride
+//     decline, which leaves the governing type undetermined and records
+//     nothing, so the gate refuses it itself (refuseXsiTypeUndecided).
+func (g *subtreeGate) governingType(start xml.StartElement, d xsd.ElementDeclaration) (xsd.TypeDefinition, refusal) {
 	selected, ok := g.schema.ResolvedType(d.TypeDefinition())
 	if !ok {
-		return nil, false
+		return nil, refuseTypeUnresolved
 	}
 	i := slices.IndexFunc(start.Attr, func(a xml.Attr) bool { return a.Name == xsiType })
 	if i < 0 {
-		return selected, true
+		return selected, ""
 	}
-	name, ok := g.resolveQName(start.Attr[i].Value)
+	t, why := g.instanceType(start.Attr[i].Value)
+	if why != "" {
+		return nil, why
+	}
+	overrides, err := g.schema.ValidlySubstitutable(t, selected, d.DisallowedSubstitutions())
+	if err != nil {
+		return nil, refuseXsiTypeUndecided
+	}
+	if !overrides {
+		return nil, refuseXsiTypeNotOverride
+	}
+	return t, ""
+}
+
+// instanceType is the top-level type definition an xsi:type whose value is
+// lexical names, resolved against the namespace bindings in g.scope
+// (resolveQName), and refuseXsiTypeUnresolved where lexical resolves to no
+// QName or the schema has no type of that name.
+func (g *subtreeGate) instanceType(lexical string) (xsd.TypeDefinition, refusal) {
+	name, ok := g.resolveQName(lexical)
 	if !ok {
-		return nil, false
+		return nil, refuseXsiTypeUnresolved
 	}
 	t, ok := g.schema.Type(name)
 	if !ok {
-		return nil, false
+		return nil, refuseXsiTypeUnresolved
 	}
-	overrides, err := g.schema.ValidlySubstitutable(t, selected, d.DisallowedSubstitutions())
-	if err != nil || !overrides {
-		return nil, false
-	}
-	return t, true
+	return t, ""
 }
 
 // resolveQName maps lexical, an xs:QName lexical, to the ·expanded name· the
@@ -294,34 +324,37 @@ func notExcepted(a xml.Attr) bool {
 	return a.Name.Space != xsd.XMLSchemaInstanceNS || (a.Name.Local != "type" && a.Name.Local != "nil")
 }
 
-// assessedDeclaration reports whether d leaves no cvc-elt clause the walk does
-// not decide at depth: {abstract} false (clause 2, charged at the root alone)
-// and no {type table} (clause 4's ·selected type definition· is then d.{type
-// definition}). A {value constraint} of either variety is admitted, at every
-// depth: clause 5.1 (an element with no [[children]], default or fixed) and
-// clause 5.2.2 (a fixed one over [[children]]: 5.2.2.1 no element children,
-// 5.2.2.2.1 a mixed type's lexical match, 5.2.2.2.2 a simple type's value
-// equality) are the walk's (validate's contentCheck.defaultValid and
-// contentCheck.fixedValue), which records the one comparison it declines.
-// {nillable} is admitted, either way: clause 3 is the walk's — 3.1, 3.2 and
-// 3.2.3.2 in validate's nilCheck, 3.2.3.1 in its contentCheck — and element
-// reads a ·nilled· element's [[children]] as complex says.
-// {identity-constraint definitions} are admitted too: clause 6
+// assessedDeclaration refuses a d that leaves a cvc-elt clause the walk does
+// not decide at depth: {abstract} true (clause 2, charged at the root alone;
+// refuseAbstract) or a {type table} (clause 4's ·selected type definition· is
+// otherwise d.{type definition}; refuseTypeTable). A {value constraint} of
+// either variety is admitted, at every depth: clause 5.1 (an element with no
+// [[children]], default or fixed) and clause 5.2.2 (a fixed one over
+// [[children]]: 5.2.2.1 no element children, 5.2.2.2.1 a mixed type's lexical
+// match, 5.2.2.2.2 a simple type's value equality) are the walk's (validate's
+// contentCheck.defaultValid and contentCheck.fixedValue), which records the
+// one comparison it declines. {nillable} is admitted, either way: clause 3 is
+// the walk's — 3.1, 3.2 and 3.2.3.2 in validate's nilCheck, 3.2.3.1 in its
+// contentCheck — and element reads a ·nilled· element's [[children]] as
+// complex says. {identity-constraint definitions} are admitted too: clause 6
 // (cvc-identity-constraint, §3.11.4) is the walk's, which records every check
 // it declines.
-func assessedDeclaration(d xsd.ElementDeclaration) bool {
+func assessedDeclaration(d xsd.ElementDeclaration) refusal {
 	if d.Abstract() {
-		return false
+		return refuseAbstract
 	}
-	_, ok := d.TypeTable()
-	return !ok
+	if _, ok := d.TypeTable(); ok {
+		return refuseTypeTable
+	}
+	return ""
 }
 
 // complex reads an element governed by the Complex Type Definition t, ·nilled·
-// where nilled is true, through to its end tag, and reports whether:
+// where nilled is true, through to its end tag, and refuses unless:
 //
 //   - every one of t.{attribute uses} resolves to an {attribute declaration}
-//     that recordedAttributeType admits, present on the element or not;
+//     (refuseAttributeUse) that recordedAttributeType admits, present on the
+//     element or not;
 //   - every attribute the element carries that notExcepted names matches one
 //     of those uses by ·expanded name· (cvc-complex-type clause 2.1) or meets
 //     wildcardAttribute's conditions (clause 2.2);
@@ -332,13 +365,19 @@ func assessedDeclaration(d xsd.ElementDeclaration) bool {
 //   - otherwise, under a simple or an empty {content type}, there is no
 //     element [[child]];
 //   - otherwise, under an element-only or mixed one, xsd.Schema.ContentMatcher
-//     decides it and every element [[child]] meets child's conditions.
-func (g *subtreeGate) complex(start xml.StartElement, t xsd.ComplexType, nilled bool) bool {
+//     decides it (refuseContentMatcher) and every element [[child]] meets
+//     child's conditions.
+//
+// A {content type} of none of these kinds is refuseContentType.
+func (g *subtreeGate) complex(start xml.StartElement, t xsd.ComplexType, nilled bool) refusal {
 	uses := t.AttributeUses()
 	for _, u := range uses {
 		ad, ok := g.schema.ResolvedAttributeDeclaration(u)
-		if !ok || !g.recordedAttributeType(ad) {
-			return false
+		if !ok {
+			return refuseAttributeUse
+		}
+		if why := g.recordedAttributeType(ad); why != "" {
+			return why
 		}
 	}
 	for _, a := range start.Attr {
@@ -349,8 +388,8 @@ func (g *subtreeGate) complex(start xml.StartElement, t xsd.ComplexType, nilled 
 		if slices.ContainsFunc(uses, func(u xsd.AttributeUse) bool { return u.DeclarationName() == n }) {
 			continue
 		}
-		if !g.wildcardAttribute(t, n) {
-			return false
+		if why := g.wildcardAttribute(t, n); why != "" {
+			return why
 		}
 	}
 	if nilled {
@@ -362,24 +401,26 @@ func (g *subtreeGate) complex(start xml.StartElement, t xsd.ComplexType, nilled 
 	case xsd.ElementContent:
 		m, ok := g.schema.ContentMatcher(t)
 		if !ok {
-			return false
+			return refuseContentMatcher
 		}
 		return g.children(t, m)
 	}
-	return false
+	return refuseContentType
 }
 
-// recordedAttributeType reports whether ad.{type definition} resolves to a
-// simple type: the one condition the gate puts on an attribute declaration the
-// walk assesses an attribute against, an {attribute uses} member's or a
-// wildcard-resolved one's.
-func (g *subtreeGate) recordedAttributeType(ad xsd.AttributeDeclaration) bool {
-	_, ok := g.schema.ResolvedSimpleType(ad.TypeDefinition())
-	return ok
+// recordedAttributeType refuses an ad whose {type definition} does not resolve
+// to a simple type (refuseAttributeType): the one condition the gate puts on
+// an attribute declaration the walk assesses an attribute against, an
+// {attribute uses} member's or a wildcard-resolved one's.
+func (g *subtreeGate) recordedAttributeType(ad xsd.AttributeDeclaration) refusal {
+	if _, ok := g.schema.ResolvedSimpleType(ad.TypeDefinition()); !ok {
+		return refuseAttributeType
+	}
+	return ""
 }
 
-// wildcardAttribute reports whether an attribute named n that matches none of
-// t.{attribute uses} is one whose assessment the walk decides or records
+// wildcardAttribute admits an attribute named n that matches none of
+// t.{attribute uses} where its assessment is one the walk decides or records
 // (validate's walk.unmatchedAttribute and walk.wildcardAttribute): t has an
 // {attribute wildcard} that admits n (cvc-complex-type clause 2.2, cvc-wildcard
 // §3.10.4.1, xsd.Schema.AllowsAttributeWildcardName), and one of these holds:
@@ -401,69 +442,83 @@ func (g *subtreeGate) recordedAttributeType(ad xsd.AttributeDeclaration) bool {
 // It refuses n resolving to a declaration where the ·locally declared type· is
 // not ·absent· — a base's attribute use a restriction prohibited (key-ldt-att
 // case 3): clause 5 then asks the declaration's {type definition} to be
-// ·validly substitutable· for that use's, which the walk never checks. It
-// refuses n resolving to none under strict. The walk charges nothing there
-// either, on the same reading, and records nothing, a reading the suite does
-// not share for seven of its invalid cases (#1912). A name the wildcard does
-// not admit, or a type with no {attribute wildcard}, is refused too, though the
-// walk charges clause 2 for both.
-func (g *subtreeGate) wildcardAttribute(t xsd.ComplexType, n xsd.QName) bool {
+// ·validly substitutable· for that use's, which the walk never checks
+// (refuseAttributeLDT). It refuses n resolving to none under strict
+// (refuseStrictAttribute). The walk charges nothing there either, on the same
+// reading, and records nothing, a reading the suite does not share for seven
+// of its invalid cases (#1912). A name the wildcard does not admit, or a type
+// with no {attribute wildcard}, is refused too (refuseAttributeUnadmitted),
+// though the walk charges clause 2 for both.
+func (g *subtreeGate) wildcardAttribute(t xsd.ComplexType, n xsd.QName) refusal {
 	wild, ok := t.AttributeWildcard()
 	if !ok || !g.schema.AllowsAttributeWildcardName(wild, n) {
-		return false
+		return refuseAttributeUnadmitted
 	}
 	pc := wild.ProcessContents()
 	if pc == xsd.ProcessSkip {
-		return true
+		return ""
 	}
 	ad, ok := g.schema.Attribute(n)
 	if !ok {
-		return pc == xsd.ProcessLax
+		if pc == xsd.ProcessLax {
+			return ""
+		}
+		return refuseStrictAttribute
 	}
-	return g.recordedAttributeType(ad) && !g.locallyDeclaredAttribute(t, n)
+	if why := g.recordedAttributeType(ad); why != "" {
+		return why
+	}
+	if g.locallyDeclaredAttribute(t, n) {
+		return refuseAttributeLDT
+	}
+	return ""
 }
 
-// leaf reads an element's content through to its end tag and reports whether
-// no element started inside it.
-func (g *subtreeGate) leaf() bool {
+// leaf reads an element's content through to its end tag and refuses an
+// element started inside it (refuseElementChild).
+func (g *subtreeGate) leaf() refusal {
 	for {
 		tok, err := g.dec.Token()
 		if err != nil {
-			return false
+			return refuseDecode
 		}
 		switch tok.(type) {
 		case xml.StartElement:
-			return false
+			return refuseElementChild
 		case xml.EndElement:
-			return true
+			return ""
 		}
 	}
 }
 
 // children reads the content of an element governed by t through to its end
 // tag, advancing m, t's ContentMatcher, over each element [[child]] in document
-// order, and reports whether every child meets child's conditions and m
-// accepts the whole sequence.
-func (g *subtreeGate) children(t xsd.ComplexType, m *xsd.Matcher) bool {
+// order, and refuses unless every child meets child's conditions and m accepts
+// the whole sequence (refuseContentIncomplete).
+func (g *subtreeGate) children(t xsd.ComplexType, m *xsd.Matcher) refusal {
 	for {
 		tok, err := g.dec.Token()
 		if err != nil {
-			return false
+			return refuseDecode
 		}
 		switch s := tok.(type) {
 		case xml.StartElement:
-			if !g.child(t, m, s) {
-				return false
+			if why := g.child(t, m, s); why != "" {
+				return why
 			}
 		case xml.EndElement:
-			return m.Accepting()
+			if !m.Accepting() {
+				return refuseContentIncomplete
+			}
+			return ""
 		}
 	}
 }
 
 // child reads one element [[child]] whose start tag is start, of an element
-// governed by t, through to its end tag, and reports whether m ·attributes· it
-// (§3.4.4.4) to one of these, and the child meets that arm's conditions:
+// governed by t, through to its end tag, and refuses unless m ·attributes· it
+// (§3.4.4.4; refuseContentRejected) to one of these, and the child meets that
+// arm's conditions:
 //
 //   - an element particle whose {term} carries the child's own ·expanded
 //     name·: that {term} is its ·context-determined declaration· (§3.3.4.6
@@ -478,14 +533,15 @@ func (g *subtreeGate) children(t xsd.ComplexType, m *xsd.Matcher) bool {
 //     clause 2.3.2 admitted the child as a member of D's ·substitution group·,
 //     the Matcher deciding D top-level, D.{disallowed substitutions}, and
 //     cos-equiv-derived-ok-rec (§3.3.6.3) clauses 2.1 to 2.3 for the top-level
-//     declaration S the child's name ·resolves· to. S is the child's
-//     ·context-determined declaration· (key-governing-ed clause 2), and S with
-//     the child's subtree must meet element's conditions. The ·locally
-//     declared type· (key-ldt-elem case 2, S ·implicitly contained·,
-//     key-impl-cont) is S's own {type definition}, so cvc-complex-type clause
-//     5 holds wherever cvc-elt clause 4 does, on the first arm's terms. A
-//     child carrying D's own name is the first arm's, cvc-accept clause 2.3.1
-//     attributing it to D, where element refuses an ·abstract· D;
+//     declaration S the child's name ·resolves· to (refuseMemberUnresolved
+//     where it resolves to none). S is the child's ·context-determined
+//     declaration· (key-governing-ed clause 2), and S with the child's subtree
+//     must meet element's conditions. The ·locally declared type·
+//     (key-ldt-elem case 2, S ·implicitly contained·, key-impl-cont) is S's
+//     own {type definition}, so cvc-complex-type clause 5 holds wherever
+//     cvc-elt clause 4 does, on the first arm's terms. A child carrying D's
+//     own name is the first arm's, cvc-accept clause 2.3.1 attributing it to
+//     D, where element refuses an ·abstract· D;
 //   - a skip Wildcard, or the {open content} with a skip {wildcard}: the child
 //     is ·skipped· with its whole subtree (key-sva clause 3.2, cvc-assess-elt
 //     clause 2), which is read past unchecked. A skipped child has no
@@ -509,13 +565,16 @@ func (g *subtreeGate) children(t xsd.ComplexType, m *xsd.Matcher) bool {
 // it (key-governing-type-elem clauses 6 and 7, validate's
 // walk.localGovernance); resolvedChild reads the top-level declaration or
 // ·xs:anyType· instead, so it vets a type the walk does not assess against.
-// Its one reader, execInstanceCase, then Fails the case: a suite-valid case of
-// this shape scores no pass, and none a false one (#2080).
-func (g *subtreeGate) child(t xsd.ComplexType, m *xsd.Matcher, start xml.StartElement) bool {
+// Its one reader, execInstanceCase, then Fails the case (refuseOpenContentLDT):
+// a suite-valid case of this shape scores no pass, and none a false one
+// (#2080).
+//
+// An attribution of none of these kinds is refuseAttribution.
+func (g *subtreeGate) child(t xsd.ComplexType, m *xsd.Matcher, start xml.StartElement) refusal {
 	name := expandedName(start.Name)
 	a, ok := m.Next(name)
 	if !ok {
-		return false
+		return refuseContentRejected
 	}
 	switch at := a.(type) {
 	case xsd.ElementDeclaration:
@@ -523,28 +582,40 @@ func (g *subtreeGate) child(t xsd.ComplexType, m *xsd.Matcher, start xml.StartEl
 			return g.element(start, at)
 		}
 		s, ok := g.schema.Element(name)
-		return ok && g.element(start, s)
+		if !ok {
+			return refuseMemberUnresolved
+		}
+		return g.element(start, s)
 	case xsd.Wildcard:
 		pc := at.ProcessContents()
 		if pc == xsd.ProcessSkip {
-			return g.dec.Skip() == nil
+			return g.skip()
 		}
 		return g.resolvedChild(start, pc == xsd.ProcessStrict)
 	case *xsd.OpenContent:
 		if at.Wildcard().ProcessContents() == xsd.ProcessSkip {
-			return g.dec.Skip() == nil
+			return g.skip()
 		}
 		if _, local := g.schema.LocallyDeclaredElementType(t, name); local {
-			return false
+			return refuseOpenContentLDT
 		}
 		return g.resolvedChild(start, false)
 	}
-	return false
+	return refuseAttribution
+}
+
+// skip reads past the element whose start tag the decoder just returned,
+// subtree and end tag included, unchecked, refusing a decoder error there.
+func (g *subtreeGate) skip() refusal {
+	if g.dec.Skip() != nil {
+		return refuseDecode
+	}
+	return ""
 }
 
 // resolvedChild reads through to its end tag a child whose start tag is start,
 // which is ·attributed to· a strict or lax Wildcard or to an {open content}
-// with a strict or lax {wildcard}, and reports whether one of these holds:
+// with a strict or lax {wildcard}, and refuses unless one of these holds:
 //
 //   - its ·expanded name· ·resolves· to a top-level element declaration d
 //     (key-governing-ed clauses 3 and 4), and d and the child's subtree meet
@@ -567,7 +638,7 @@ func (g *subtreeGate) child(t xsd.ComplexType, m *xsd.Matcher, start xml.StartEl
 //   - strictParticle does not hold — the child is ·attributed to· a lax
 //     Wildcard or {open content} — its name resolves to none, it carries no
 //     xsi:type, and laxlyAssessed holds for it (#1911).
-func (g *subtreeGate) resolvedChild(start xml.StartElement, strictParticle bool) bool {
+func (g *subtreeGate) resolvedChild(start xml.StartElement, strictParticle bool) refusal {
 	d, ok := g.schema.Element(expandedName(start.Name))
 	if ok {
 		return g.element(start, d)
@@ -576,18 +647,19 @@ func (g *subtreeGate) resolvedChild(start xml.StartElement, strictParticle bool)
 		return g.instanceTyped(start, start.Attr[i].Value)
 	}
 	if strictParticle {
-		return g.dec.Skip() == nil
+		return g.skip()
 	}
 	return g.laxlyAssessed(start)
 }
 
 // instanceTyped reads through to its end tag a wildcard's child whose start tag
 // is start, which has no ·governing element declaration· and whose xsi:type
-// carries lexical, and reports whether an xsi:nil it carries has an ·actual
-// value· (nilValue), lexical names a top-level type definition T against the
-// namespace bindings in scope at start (resolveQName), and the child and its
-// subtree meet governed's conditions against T, never ·nilled·: key-nilled is
-// relative to a declaration, and it has none.
+// carries lexical, and refuses unless an xsi:nil it carries has an ·actual
+// value· (nilValue, refuseNilLexical), lexical names a top-level type
+// definition T against the namespace bindings in scope at start
+// (instanceType), and the child and its subtree meet governed's conditions
+// against T, never ·nilled·: key-nilled is relative to a declaration, and it
+// has none.
 //
 // T is the child's ·governing type definition·, so the child is ·strictly
 // assessed· against it (cvc-assess-elt clause 1) under a strict and a lax
@@ -611,47 +683,44 @@ func (g *subtreeGate) resolvedChild(start xml.StartElement, strictParticle bool)
 // An xsi:type naming no type definition leaves the child with no ·governing
 // type definition·. The walk charges cvc-attribute clause 5 for it, but the
 // gate refuses it too rather than read a subtree it cannot type.
-func (g *subtreeGate) instanceTyped(start xml.StartElement, lexical string) bool {
+func (g *subtreeGate) instanceTyped(start xml.StartElement, lexical string) refusal {
 	if _, ok := nilValue(start.Attr); !ok {
-		return false
+		return refuseNilLexical
 	}
 	defer g.enter(start)()
-	name, ok := g.resolveQName(lexical)
-	if !ok {
-		return false
-	}
-	t, ok := g.schema.Type(name)
-	if !ok {
-		return false
+	t, why := g.instanceType(lexical)
+	if why != "" {
+		return why
 	}
 	return g.governed(start, t, false)
 }
 
 // laxlyAssessed reads through to its end tag an element whose start tag is
 // start, which has neither a ·governing element declaration· nor a ·governing
-// type definition· and is not ·skipped·, and reports whether an xsi:nil it
-// carries has an ·actual value· (nilValue) and it and its subtree meet
-// complex's conditions against ·xs:anyType·, never ·nilled·: key-nilled is
-// relative to a declaration, and it has none. Such an element is ·laxly
-// assessed· (cvc-assess-elt clause 3, key-lva): locally validated against
-// ·xs:anyType· and its [[attributes]] and [[children]] assessed by key-sva
-// clauses 2 and 3, which is validate's walk.child and walk.attribute for a
-// laxly assessed parent (#1823, #1891). Its [validity] is notKnown (e-validity
-// clause 2), which blocks no ancestor's valid: e-validity clause 1.1.3 counts
-// notKnown only under a strict ·wildcard particle·. What it does decide is
-// every charge at or below it, which instance.go's "Charges at depth" reads as
-// "not valid" (§2.5 key-deep-valid-doc, #1911).
-func (g *subtreeGate) laxlyAssessed(start xml.StartElement) bool {
+// type definition· and is not ·skipped·, and refuses unless an xsi:nil it
+// carries has an ·actual value· (nilValue, refuseLaxNilLexical) and it and its
+// subtree meet complex's conditions against ·xs:anyType· (refuseAnyType where
+// the schema has none), never ·nilled·: key-nilled is relative to a
+// declaration, and it has none. Such an element is ·laxly assessed·
+// (cvc-assess-elt clause 3, key-lva): locally validated against ·xs:anyType·
+// and its [[attributes]] and [[children]] assessed by key-sva clauses 2 and 3,
+// which is validate's walk.child and walk.attribute for a laxly assessed
+// parent (#1823, #1891). Its [validity] is notKnown (e-validity clause 2),
+// which blocks no ancestor's valid: e-validity clause 1.1.3 counts notKnown
+// only under a strict ·wildcard particle·. What it does decide is every charge
+// at or below it, which instance.go's "Charges at depth" reads as "not valid"
+// (§2.5 key-deep-valid-doc, #1911).
+func (g *subtreeGate) laxlyAssessed(start xml.StartElement) refusal {
 	if _, ok := nilValue(start.Attr); !ok {
-		return false
+		return refuseLaxNilLexical
 	}
 	td, ok := g.schema.Type(anyTypeName)
 	if !ok {
-		return false
+		return refuseAnyType
 	}
 	anyType, ok := td.(xsd.ComplexType)
 	if !ok {
-		return false
+		return refuseAnyType
 	}
 	defer g.enter(start)()
 	return g.complex(start, anyType, false)
@@ -695,9 +764,10 @@ func (g *subtreeGate) onChain(t xsd.ComplexType, holds func(xsd.ComplexType) boo
 	return false
 }
 
-// rootStart reads dec up to the document element's start tag. It answers false
-// for a DOCTYPE whose DTD could default an attribute the reader does not see
-// (defaultsNoAttribute), and for any other directive. That second refusal also
+// rootStart reads dec up to the document element's start tag. It refuses
+// (refuseDoctype) a DOCTYPE whose DTD could default an attribute the reader
+// does not see (defaultsNoAttribute), and any other directive, and a decoder
+// error before that tag (refuseDecode). The directive refusal also
 // covers a DOCTYPE encoding/xml delimits short of its real end, as a quote
 // inside a processing instruction can make it: every markup declaration left
 // over arrives as a directive of its own, and a parameter-entity reference left
@@ -714,21 +784,22 @@ func (g *subtreeGate) onChain(t xsd.ComplexType, holds func(xsd.ComplexType) boo
 // clause 3); a reference to a general entity it declares is included text
 // (§4.4.2), which parser/xmltree includes and encoding/xml, knowing no entity
 // but the five predefined ones, refuses, so a document holding one reaches no
-// verdict through either reader of rootStart (rawDecoder): each answers true
-// only once dec has read the whole document, and false on dec's error.
-func rootStart(dec *xml.Decoder) (xml.StartElement, bool) {
+// verdict through either reader of rootStart (rawDecoder): each admits the
+// document only once dec has read the whole of it, and refuses it on dec's
+// error.
+func rootStart(dec *xml.Decoder) (xml.StartElement, refusal) {
 	for {
 		tok, err := dec.Token()
 		if err != nil {
-			return xml.StartElement{}, false
+			return xml.StartElement{}, refuseDecode
 		}
 		switch t := tok.(type) {
 		case xml.Directive:
 			if !defaultsNoAttribute(t) {
-				return xml.StartElement{}, false
+				return xml.StartElement{}, refuseDoctype
 			}
 		case xml.StartElement:
-			return t, true
+			return t, ""
 		}
 	}
 }

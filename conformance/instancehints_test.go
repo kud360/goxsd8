@@ -46,7 +46,7 @@ const skipKnown = `<xs:element name="known"><xs:complexType><xs:sequence>` +
 // declines with caseSchema's hint arm removed, as every no-group-schema case
 // did before it.
 func TestInstanceExecutorDecidesFromHints(t *testing.T) {
-	exec := newInstanceExec()
+	exec := newInstanceExec().status()
 	noNS := []fixtureFile{{"s.xsd", xsdDoc("", knownRoot)}}
 	withNS := []fixtureFile{{"s.xsd", xsdDoc("urn:t", knownRoot)}}
 	for _, tc := range []struct {
@@ -90,36 +90,43 @@ func validityWord(valid bool) string {
 // lane cannot read completely is DECLINED in both directions (instanceHints,
 // assembleHints). Each row is decided with the condition it names removed.
 func TestInstanceExecutorDeclinesUnreadableHints(t *testing.T) {
-	exec := newInstanceExec()
 	skip := []fixtureFile{{"s.xsd", xsdDoc("", skipKnown)}, {"o.xsd", xsdDoc("", `<xs:element name="other" type="xs:int"/>`)}}
 	known := []fixtureFile{{"s.xsd", xsdDoc("", knownRoot)}}
 	for _, tc := range []struct {
 		why      string
 		files    []fixtureFile
 		instance string
+		refused  refusal
 	}{
 		// §4.3.2 clause 5: a hint below the root is global to the assessment.
 		{"a hint on a non-root element", skip,
-			`<known ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd"><c xsi:noNamespaceSchemaLocation="o.xsd"/></known>`},
+			`<known ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd"><c xsi:noNamespaceSchemaLocation="o.xsd"/></known>`,
+			refuseHintBelowRoot},
 		{"an inline xs:schema below the root", skip,
-			`<known ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd"><xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"/></known>`},
+			`<known ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd"><xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"/></known>`,
+			refuseInlineSchema},
 		// Decided invalid otherwise (cvc-type clause 3.1.2). The ATTLIST
 		// defaults nothing: the row pins rootStart's literal <!ATTLIST refusal
 		// (defaultsNoAttribute), which refuses any ATTLIST whether or not it
 		// defaults.
 		{"a DOCTYPE whose internal subset holds an <!ATTLIST", known,
-			`<!DOCTYPE known [<!ATTLIST known a CDATA #IMPLIED>]><known ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd"><x/></known>`},
+			`<!DOCTYPE known [<!ATTLIST known a CDATA #IMPLIED>]><known ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd"><x/></known>`,
+			refuseDoctype},
 		{"an xml:base on the root", known,
-			`<known ` + xsiNS + ` xml:base="sub/" xsi:noNamespaceSchemaLocation="s.xsd">x</known>`},
+			`<known ` + xsiNS + ` xml:base="sub/" xsi:noNamespaceSchemaLocation="s.xsd">x</known>`,
+			refuseXMLBase},
 		{"an xsi:schemaLocation with an odd member count", known,
-			`<known ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd" xsi:schemaLocation="urn:t">x</known>`},
+			`<known ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd" xsi:schemaLocation="urn:t">x</known>`,
+			refuseOddLocation},
 		// Decided valid otherwise, against a schema short of missing.xsd.
 		{"a hint resolving to no document", known,
-			`<known ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd missing.xsd">x</known>`},
+			`<known ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd missing.xsd">x</known>`,
+			refuseHintUnfollowed},
 		// Decided invalid otherwise, where a root no declaration governs is
 		// laxly assessed and notKnown (cvc-assess-elt clause 3, §3.3.5.1).
 		{"a hinted schema declaring no top-level element for the root", known,
-			`<unknown ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd"/>`},
+			`<unknown ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd"/>`,
+			refuseHintUndeclared},
 		// §4.3.2 clause 5: an inline xs:schema is global to the assessment,
 		// the document element included. Decided valid otherwise: s.xsd
 		// imports a declaration of the root itself, so no undeclared-root
@@ -129,9 +136,10 @@ func TestInstanceExecutorDeclinesUnreadableHints(t *testing.T) {
 				{"s.xsd", xsdDoc("", `<xs:import namespace="http://www.w3.org/2001/XMLSchema" schemaLocation="x.xsd"/>`)},
 				{"x.xsd", xsdDoc("http://www.w3.org/2001/XMLSchema", `<xs:element name="schema"/>`)},
 			},
-			`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd"/>`},
+			`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd"/>`,
+			refuseInlineSchema},
 	} {
-		declinesBothPolarities(t, exec, hintedCase(t, tc.files, tc.instance, true), tc.why)
+		declinesBothPolarities(t, hintedCase(t, tc.files, tc.instance, true), tc.why, tc.refused)
 	}
 }
 
@@ -143,9 +151,9 @@ func TestHintedSchemaUndeclaringPrefixIsRejected(t *testing.T) {
 	c := hintedCase(t,
 		[]fixtureFile{{"s.xsd", `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:f="">` + knownRoot + `</xs:schema>`}},
 		`<known `+xsiNS+` xsi:noNamespaceSchemaLocation="s.xsd">x</known>`, false)
-	_, _, decidable, perr := caseSchema(strict.New(), c)
-	if !decidable {
-		t.Fatal("caseSchema declined, want the closure read and decided")
+	_, _, why, perr := caseSchema(strict.New(), c)
+	if why != "" {
+		t.Fatalf("caseSchema declined as %q, want the closure read and decided", why)
 	}
 	if perr == nil || !strings.Contains(perr.Error(), "[xml-wf] namespace declaration xmlns:f has an empty value") {
 		t.Errorf("caseSchema error = %v, want the parser's xml-wf rejection of xmlns:f=\"\"", perr)
@@ -153,11 +161,14 @@ func TestHintedSchemaUndeclaringPrefixIsRejected(t *testing.T) {
 }
 
 // hintedRejection is one hinted case whose assembly caseSchema reads as
-// decidable and rejected, so execInstanceCase's perr arm is the gate it meets.
+// decidable and rejected, so execInstanceCase's perr arm is the gate it meets,
+// and the refusal that arm names where it declines the case — none for a case
+// it decides.
 type hintedRejection struct {
 	why      string
 	files    []fixtureFile
 	instance string
+	refused  refusal
 }
 
 // noNSHint is a <known> root hinting s.xsd through xsi:noNamespaceSchemaLocation.
@@ -167,9 +178,9 @@ const noNSHint = `<known ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd">x</
 // error, so no earlier gate declines it ahead of execInstanceCase's perr arm.
 func reachesPerrArm(t *testing.T, c caseSpec, why string) {
 	t.Helper()
-	_, _, decidable, perr := caseSchema(strict.New(), c)
-	if !decidable || perr == nil {
-		t.Fatalf("%s: caseSchema = (decidable %v, %v), want a decidable rejection", why, decidable, perr)
+	_, _, refused, perr := caseSchema(strict.New(), c)
+	if refused != "" || perr == nil {
+		t.Fatalf("%s: caseSchema = (refused %q, %v), want a decidable rejection", why, refused, perr)
 	}
 }
 
@@ -179,14 +190,14 @@ func reachesPerrArm(t *testing.T, c caseSpec, why string) {
 // addB139's xmlns:f="" in an XML 1.0 document, and addB124's element left
 // unclosed. Each row declines in both polarities with the decide arm removed.
 func TestInstanceExecutorDecidesNotWellFormedHintedSchema(t *testing.T) {
-	exec := newInstanceExec()
+	exec := newInstanceExec().status()
 	for _, tc := range []hintedRejection{
 		{"an XML 1.0 schema undeclaring a prefix",
 			[]fixtureFile{{"s.xsd", `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:f="">` + knownRoot + `</xs:schema>`}},
-			noNSHint},
+			noNSHint, ""},
 		{"a schema leaving an element unclosed",
 			[]fixtureFile{{"s.xsd", xsdDoc("", `<xs:simpleType name="t"><xs:restriction base="xs:string"><xs:whiteSpace value="collapse"></xs:restriction></xs:simpleType>`+knownRoot)}},
-			noNSHint},
+			noNSHint, ""},
 	} {
 		c := hintedCase(t, tc.files, tc.instance, false)
 		reachesPerrArm(t, c, tc.why)
@@ -208,28 +219,28 @@ func TestInstanceExecutorDecidesNotWellFormedHintedSchema(t *testing.T) {
 // (unboundPrefixCharge). Every row reaches execInstanceCase's perr arm, and
 // each is decided with wellFormednessFault removed from it.
 func TestInstanceExecutorDeclinesRejectedHintedSchema(t *testing.T) {
-	exec := newInstanceExec()
 	for _, tc := range []hintedRejection{
 		{"a hinted document whose targetNamespace is not the hint's namespace",
 			[]fixtureFile{{"s.xsd", xsdDoc("urn:other", knownRoot)}},
-			`<t:known xmlns:t="urn:t" ` + xsiNS + ` xsi:schemaLocation="urn:t s.xsd">x</t:known>`},
+			`<t:known xmlns:t="urn:t" ` + xsiNS + ` xsi:schemaLocation="urn:t s.xsd">x</t:known>`,
+			refuseSchemaError},
 		// ENOTDIR from loader.Dir: a resolver fault, not loader.ErrNotFound.
 		{"an <include> whose location the resolver faults on",
 			[]fixtureFile{{"s.xsd", xsdDoc("", `<xs:include schemaLocation="s.xsd/x.xsd"/>`+knownRoot)}},
-			noNSHint},
+			noNSHint, refuseSchemaError},
 		{"an encoding declaration the reader does not decode",
 			[]fixtureFile{{"s.xsd", `<?xml version="1.0" encoding="ISO-8859-1"?>` + xsdDoc("", knownRoot)}},
-			noNSHint},
+			noNSHint, refuseSchemaError},
 		// #2067's shape: a well-formed document (XML 1.0 §5.1) the reader
 		// charges with an unbound prefix, as it applies no attribute default.
 		{"a namespace declaration an internal-subset ATTLIST defaults",
 			[]fixtureFile{{"s.xsd", `<!DOCTYPE xs:schema [` +
 				`<!ATTLIST xs:schema xmlns:xs CDATA #FIXED "http://www.w3.org/2001/XMLSchema">]>` +
 				`<xs:schema>` + knownRoot + `</xs:schema>`}},
-			noNSHint},
+			noNSHint, refuseUnboundPrefix},
 	} {
 		c := hintedCase(t, tc.files, tc.instance, true)
 		reachesPerrArm(t, c, tc.why)
-		declinesBothPolarities(t, exec, c, tc.why)
+		declinesBothPolarities(t, c, tc.why, tc.refused)
 	}
 }

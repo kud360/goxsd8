@@ -896,13 +896,29 @@ func fabricatedRejection(report *parser.AssemblyReport, perr error) bool {
 // The shape is read rather than a marker because a structured one would be an
 // export (#2067).
 func wellFormednessFault(perr error) bool {
+	e, ok := firstWellFormednessCharge(perr)
+	return ok && e.Err == nil && !strings.HasPrefix(e.Msg, unboundPrefixCharge)
+}
+
+// unboundPrefix reports whether the first xsderr.RuleXMLWellFormed charge in
+// perr's chain is the unbound-prefix one: the arm wellFormednessFault's
+// GAP(parser) declines, which the instance lane names as
+// refuseUnboundPrefix.
+func unboundPrefix(perr error) bool {
+	e, ok := firstWellFormednessCharge(perr)
+	return ok && strings.HasPrefix(e.Msg, unboundPrefixCharge)
+}
+
+// firstWellFormednessCharge is the first *xsderr.Error in perr's chain that
+// carries xsderr.RuleXMLWellFormed, and false where it holds none.
+func firstWellFormednessCharge(perr error) (*xsderr.Error, bool) {
 	var e *xsderr.Error
 	for err := perr; errors.As(err, &e); err = e.Err {
 		if e.Rule == xsderr.RuleXMLWellFormed {
-			return e.Err == nil && !strings.HasPrefix(e.Msg, unboundPrefixCharge)
+			return e, true
 		}
 	}
-	return false
+	return nil, false
 }
 
 // unboundPrefixCharge opens every message parser/xmltree's reader writes for a

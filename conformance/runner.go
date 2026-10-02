@@ -188,6 +188,17 @@ const (
 // as a known gap so nothing surfaces as a spurious pass (acceptance #2).
 type executor func(caseSpec) Status
 
+// laneExecutor is what a lane runs per case: an executor's Status and, for a
+// case it declines, the refusal that declined it where the executor names one
+// (#2008). The instance lane's executor names every refusal; namesNoRefusal
+// lifts an executor that names none.
+type laneExecutor func(caseSpec) (Status, refusal)
+
+// namesNoRefusal is e as a laneExecutor whose every refusal is the zero one.
+func namesNoRefusal(e executor) laneExecutor {
+	return func(c caseSpec) (Status, refusal) { return e(c), "" }
+}
+
 // lane is one conformance lane: the subset of suite cases its selector claims,
 // executed by exec and ratcheted against
 // conformance/testdata/expectations/<name>.txt. A later milestone activates a
@@ -212,7 +223,7 @@ type executor func(caseSpec) Status
 type lane struct {
 	name    string
 	selects func(caseSpec) bool
-	exec    executor
+	exec    laneExecutor
 	// charge names what this lane's executor charged a case it DECIDED, for the
 	// decline census's GOXSD_DECLINES=1 listing of decided disagreements
 	// (reportDeclines, issue #1740): the rule a rejection carries, or a
@@ -245,12 +256,12 @@ func selectsKind(k string) func(caseSpec) bool {
 // than rerouting them away from schema/instance (issue #1507).
 func defaultLanes() []lane {
 	return []lane{
-		{name: "datatypes", selects: selectsDatatypes, exec: newDatatypesExec()},
-		{name: "schema", selects: selectsKind(kindSchema), exec: newSchemaExec(), charge: newSchemaCharge()},
+		{name: "datatypes", selects: selectsDatatypes, exec: namesNoRefusal(newDatatypesExec())},
+		{name: "schema", selects: selectsKind(kindSchema), exec: namesNoRefusal(newSchemaExec()), charge: newSchemaCharge()},
 		{name: "instance", selects: selectsKind(kindInstance), exec: newInstanceExec()},
-		{name: "xpath", selects: selectsNone, exec: stubFail},
-		{name: "json", selects: selectsNone, exec: stubFail},
-		{name: "ber", selects: selectsNone, exec: stubFail},
+		{name: "xpath", selects: selectsNone, exec: namesNoRefusal(stubFail)},
+		{name: "json", selects: selectsNone, exec: namesNoRefusal(stubFail)},
+		{name: "ber", selects: selectsNone, exec: namesNoRefusal(stubFail)},
 	}
 }
 
@@ -439,7 +450,7 @@ func runLane(l lane, cases []caseSpec) map[string]Status {
 			actual[c.id] = Fail()
 			continue
 		}
-		actual[c.id] = l.exec(c)
+		actual[c.id], _ = l.exec(c)
 	}
 	return actual
 }

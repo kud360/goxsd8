@@ -48,10 +48,11 @@ const declinesEnv = "GOXSD_DECLINES"
 // no executor decided at all. The three fields are disjoint and together hold
 // every failure the run recorded, each in case-ID order (STYLE D1/D2).
 type declineCensus struct {
-	// candidates lists the cases this run declined and recorded fail. This is
+	// candidates lists the cases this run declined and recorded fail, each with
+	// the refusal the lane's executor named for it, if it names one. This is
 	// the harvest queue: an engine widening may have already made some of them
 	// decidable without any reader edit.
-	candidates []string
+	candidates []declinedCase
 	// indeterminate lists the cases declined by the issue #277 convention — the
 	// Working Group left them undecided, so runLane never dispatches them. They
 	// are NOT candidates, because no executor may ever score them a pass, but
@@ -81,14 +82,33 @@ func takeDeclineCensus(l lane, cases []caseSpec, actual map[string]Status) decli
 			census.indeterminate = append(census.indeterminate, c.id)
 			continue
 		}
-		if l.exec(flipExpectation(c)).IsPass() {
+		st, why := l.exec(flipExpectation(c))
+		if st.IsPass() {
 			census.disagreed = append(census.disagreed, c)
 			continue
 		}
-		census.candidates = append(census.candidates, c.id)
+		census.candidates = append(census.candidates, declinedCase{id: c.id, why: why})
 	}
 	return census
 }
+
+// declinedCase is one decline candidate: its case ID, and the refusal the
+// probe's executor run named for it — empty for a lane whose executor names
+// none (namesNoRefusal). A decline returns before the executor reads the
+// declared outcome, so the probe's flipped run declines at the same refusal
+// as the scored run did, and the census reads the reason without running the
+// executor a second time (#2008).
+type declinedCase struct {
+	id  string
+	why refusal
+}
+
+// refusal names the exit at which a lane's executor declined a case, as a
+// short token the GOXSD_DECLINES=1 listing writes after the case ID
+// (conformance/doc.go). The zero value names none: the executor decided the
+// case, or names no refusals at all. It reports only and scores nothing. The
+// instance lane's tokens are the refuse* constants (instance.go).
+type refusal string
 
 // flipExpectation returns a COPY of c carrying the other decided outcome. It is
 // the census probe's one moving part: an executor that decides c reaches its

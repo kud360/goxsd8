@@ -333,10 +333,10 @@ func TestRunLaneDeclinesIndeterminateWithoutExecuting(t *testing.T) {
 	l := lane{
 		name:    "fake",
 		selects: selectsKind(kindSchema),
-		exec: func(c caseSpec) Status {
+		exec: namesNoRefusal(func(c caseSpec) Status {
 			dispatched = append(dispatched, c.id)
 			return Pass()
-		},
+		}),
 	}
 	cases := []caseSpec{
 		{id: "set/g/schema/decided", kind: kindSchema, expect: expectInvalid()},
@@ -378,7 +378,7 @@ func TestMakeCaseCarriesIndeterminateThrough(t *testing.T) {
 }
 
 func TestRunLaneSelectsOnlyClaimedCases(t *testing.T) {
-	l := lane{name: "fake", selects: selectsKind(kindSchema), exec: passSchema}
+	l := lane{name: "fake", selects: selectsKind(kindSchema), exec: namesNoRefusal(passSchema)}
 	actual := runLane(l, fakeCases())
 
 	if len(actual) != 2 {
@@ -415,12 +415,12 @@ func TestRunLaneScoresAnOverlappingCaseInEveryClaimingLane(t *testing.T) {
 	wideLane := lane{
 		name:    "wide",
 		selects: func(caseSpec) bool { return true },
-		exec:    func(caseSpec) Status { return Pass() },
+		exec:    namesNoRefusal(func(caseSpec) Status { return Pass() }),
 	}
 	narrowLane := lane{
 		name:    "narrow",
 		selects: selectsKind(kindInstance),
-		exec:    func(caseSpec) Status { return Fail() },
+		exec:    namesNoRefusal(func(caseSpec) Status { return Fail() }),
 	}
 
 	wide := runLane(wideLane, cases)
@@ -483,7 +483,7 @@ func TestDatatypesLaneIsASubsetOfInstanceLane(t *testing.T) {
 // real committed path): a fresh lane starts empty, records observed New cases,
 // and reloads byte-stably.
 func TestRunLaneRatchetRoundTrip(t *testing.T) {
-	l := lane{name: "fake", selects: func(caseSpec) bool { return true }, exec: passSchema}
+	l := lane{name: "fake", selects: func(caseSpec) bool { return true }, exec: namesNoRefusal(passSchema)}
 	actual := runLane(l, fakeCases())
 
 	path := filepath.Join(t.TempDir(), "fake.txt")
@@ -522,7 +522,7 @@ func TestRunLaneRatchetRoundTrip(t *testing.T) {
 // refusal: a case committed as pass that the lane now fails blocks the merge.
 func TestRunLaneRatchetRefusesRegression(t *testing.T) {
 	// Lane executor fails the instance case; commit it as an expected pass.
-	l := lane{name: "fake", selects: func(caseSpec) bool { return true }, exec: passSchema}
+	l := lane{name: "fake", selects: func(caseSpec) bool { return true }, exec: namesNoRefusal(passSchema)}
 	actual := runLane(l, fakeCases())
 
 	expected := map[string]Status{"set/g/instance/c": Pass()}

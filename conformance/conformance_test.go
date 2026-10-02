@@ -258,7 +258,7 @@ func reportDeclines(t *testing.T, l lane, cases []caseSpec, actual map[string]St
 	if os.Getenv(declinesEnv) != "1" {
 		return
 	}
-	t.Logf("lane %s: decline candidates: %v", l.name, census.candidates)
+	t.Logf("lane %s: decline candidates: %v", l.name, refusedIDs(census.candidates))
 	t.Logf("lane %s: indeterminate declines: %v", l.name, census.indeterminate)
 	t.Logf("lane %s: decided disagreements: %v", l.name, chargedIDs(l, census.disagreed))
 }
@@ -276,6 +276,22 @@ func chargedIDs(l lane, disagreed []caseSpec) []string {
 			continue
 		}
 		out = append(out, c.id+"="+l.charge(c))
+	}
+	return out
+}
+
+// refusedIDs renders a census's decline candidates for the GOXSD_DECLINES=1
+// listing: each case's ID, followed by `=` and the refusal the probe's
+// executor run named where it named one (#2008). The refusal rides on the
+// census's own probe, so the listing re-runs nothing.
+func refusedIDs(candidates []declinedCase) []string {
+	out := make([]string, 0, len(candidates))
+	for _, c := range candidates {
+		if c.why == "" {
+			out = append(out, c.id)
+			continue
+		}
+		out = append(out, c.id+"="+string(c.why))
 	}
 	return out
 }
