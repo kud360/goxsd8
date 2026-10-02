@@ -17,18 +17,18 @@ read them. One stamp for the whole section, so a reader can tell staleness
 from wrongness at a glance. Never add a dated paragraph beside the old
 one — appending is what this replaces.
 
-## Status — 2026-10-02 (post-land restamp after #1978, on `main` at `e5ff753`)
+## Status — 2026-10-02 (post-land restamp after #2077, on `main` at `29ebec5`)
 
-**One landing since the last stamp (`53b7f39`): #1978 at `e5ff753`.** The gate
-now admits a strict or lax wildcard's child that resolves no declaration but
-carries a resolving xsi:type, and reads its subtree against that type
-(`subtreeGate.instanceTyped`: key-governing-type-elem clause 8, or clause 6
-where the ·locally declared type· is non-·absent·). **`instance` +6** (addB116.v,
-elemZ014.v, elemZ017.v, elemZ033b.v, wildZ004.v, wild063.v2), exactly the
-grounding's prediction, accepted in round 2 after one repair round. **M5's
-largest decline owner that is startable now is #2095 (5 declines), filed at
-this pass; M4 declines 2 and has no measured open-work north star.** **Lean:
-product, unchanged.**
+**One landing since the last stamp (`e5ff753`): #2077 at `29ebec5`.**
+`parser/xmltree` now includes the replacement text of an internal general
+entity declared in the internal subset, in content (§4.4.2) and in attribute
+values (§3.3.3), and the harness's `documentCarries` re-read goes through the
+same reader. **`schema` +1 and `instance` +12** (`iri-001` and its twelve
+URI-3986 instances), the grounding's full bound, accepted in round 1 after a
+prose-only warden repair. **The IRI north star is retired: `schema` now
+declines 1 (particlesZ009, dismissed on #2067's thread), so M4 has no
+measured open-work north star. M5's largest startable decline owner is #2095
+(5 declines), whose lease is LIVE.** **Lean: product, unchanged.**
 
 **Two post-land passes are still not on `main`:** #1816's (open PR #1871) and
 #1908's (open PR #1929). #1823's LOG entry still has no branch. #2007 owns all
@@ -36,7 +36,7 @@ three.
 
 ### Conformance lanes
 
-**This table is `go tool lanestatus`, pasted verbatim, on `main` at `e5ff753`.**
+**This table is `go tool lanestatus`, pasted verbatim, on `main` at `29ebec5`.**
 It is the committed expectations census, which `docs/WORKFLOW.md` names as the
 lane score (#1120).
 
@@ -44,12 +44,12 @@ lane score (#1120).
 |---|---:|---:|---:|
 | `ber` | — | — | 0 |
 | `datatypes` | 1163 | 10 | 1173 |
-| `instance` | 25986 | 375 | 26361 |
+| `instance` | 25998 | 363 | 26361 |
 | `json` | — | — | 0 |
-| `schema` | 15287 | 111 | 15398 |
+| `schema` | 15288 | 110 | 15398 |
 | `xpath` | — | — | 0 |
 
-**`instance` moved +6; `schema` and `datatypes` did not move.**
+**`instance` moved +12 and `schema` +1; `datatypes` did not move.**
 **`datatypes ⊆ instance` is intended** (#1507). **An em dash means a lane with
 no cases yet, not a lane scoring zero.** `datatypes` is M3 and complete.
 `schema` is M4 and `instance` is M5, and both are active. `xpath`, `json` and
@@ -57,16 +57,16 @@ no cases yet, not a lane scoring zero.** `datatypes` is M3 and complete.
 
 ### What holds each active lane's failures
 
-**Measured on `e5ff753`** (suite `7bc3365`) by one read-only `GOXSD_DECLINES=1`
-conformance run (`--- PASS: TestConformance (315.74s)`), fed to `go tool
+**Measured on `29ebec5`** (suite `7bc3365`) by one read-only `GOXSD_DECLINES=1`
+conformance run (`--- PASS: TestConformance (225.93s)`), fed to `go tool
 lanepartition -log <run> <lane>`. Every figure is a part of the banked fails
 and a bound from above, never a prediction of flips. The tool matches owners
 lexically, so the owners named below are this restamp's reading.
 
 | lane | banked fail | declined | indeterminate (#277) | decided against the suite |
 |---|---:|---:|---:|---:|
-| `instance` | 375 | 342 | 5 | 28 |
-| `schema` | 111 | 2 | 11 | 98 |
+| `instance` | 363 | 330 | 5 | 28 |
+| `schema` | 110 | 1 | 11 | 98 |
 | `datatypes` | 10 | 6 | — | 4 |
 
 - **Recorded PRINCIPLES 25 divergences stay banked `fail` and have no work to
@@ -78,30 +78,30 @@ lexically, so the owners named below are this restamp's reading.
   Negative, `attgD024.i`, `ctL020.i`, `wildO006.i`, `wildP002.i`) from any
   declined cluster they fall in. `MS-Regex` decides 20 against the suite: the
   other 2 are #1856's.
-- **M4 has no measured open-work north star.** `schema` declines 2:
-  `iri-001`, the one suite-valid decline, is #2077's, and particlesZ009 is
-  dismissed on #2067's thread. The decided-and-wrong clusters are recorded
-  divergences (`MS-Wildcards` 49, `Simple` 5), `blocked` (`Open` 5, #1374) or
-  ruled permanent (5 of `MS-Particles`' 7, #345). The largest that are
-  unattributed are `MS-Additional` (2 invalid accepted, 4 indeterminate) and
+- **M4 has no measured open-work north star.** `schema` declines 1:
+  particlesZ009, dismissed on #2067's thread. `iri-001` left with #2077. The
+  decided-and-wrong clusters are recorded divergences (`MS-Wildcards` 49,
+  `Simple` 5), `blocked` (`Open` 5, #1374) or ruled permanent (5 of
+  `MS-Particles`' 7, #345). The largest that are unattributed are
+  `MS-Additional` (2 invalid accepted, 4 indeterminate) and
   `TypeAlternativeTests` (4 invalid accepted, read as M6's). `MS-Attribute` has
   1 invalid accepted. The next `/backlog` names which single decision holds
   them, or says none does.
 - **M5 has no measured north star by test set.** The largest open-work
-  `instance` decline owner that is not M6's or claimed is **#2095** (the walk
-  charges cvc-type clause 2 nowhere, so the gate refuses an abstract complex
-  governing type): **5 declines across four test sets**, complex021.n1,
-  typedef01101m1 Negative, ctI048.i, ctI049.i and elemZ015.i, all confirmed
-  declined by this run. `MS-IdentityConstraint`'s 13 unattributed declines are
-  the largest single-set cluster, and #2008 is what attributes them.
+  `instance` decline owner that is not M6's is **#2095** (the walk charges
+  cvc-type clause 2 nowhere, so the gate refuses an abstract complex governing
+  type): **5 declines across four test sets**, and its lease is LIVE.
+  `MS-IdentityConstraint`'s 13 unattributed declines are the largest
+  single-set cluster, and #2008 is what attributes them.
+- **`IRI` declines 0:** #2077 banked all twelve. **`Id` declines 2**
+  (id022.v01 and id022.n01), unattributed.
 - **`MS-Additional` declines 22** (12 invalid, 10 valid), all hint-less groups
   declined under #2025's ruling. **`MS-Attribute` declines 11 invalid**
   (attMd001–attMd011), also #2025's.
 - **`Wild` declines 1:** wild082.v1, type alternatives plus `xs:assertion`
-  (M6). wild063.v2 is banked `pass` since #1978. **#2081 carries a ratchet
-  hazard:** wild062.n3 is a banked pass decided for a reason the spec's clause
-  ordering does not give, and its body conditions the ratchet on an oracle
-  ruling. It has no measured flip.
+  (M6). **#2081 carries a ratchet hazard:** wild062.n3 is a banked pass decided
+  for a reason the spec's clause ordering does not give, and its body
+  conditions the ratchet on an oracle ruling. It has no measured flip.
 - **The XPath clusters are M6's:** `Assert` 65 valid and 45 invalid,
   `assertion` 24 and 26, and `CTA` 29 valid and 1 invalid. #1042 owns them and
   is `blocked`. `TypeAlternativeTests` 11 valid declines are unowned and read as
@@ -109,9 +109,6 @@ lexically, so the owners named below are this restamp's reading.
 - **`VC` declines 18 valid and 10 invalid** (#1002, #1042, both `blocked`).
 - **`MS-IdentityConstraint` declines 14** (9 invalid, 5 valid). #2062 owns
   `idF018.i`; the other 13 need a manual probe until #2008 lands.
-- **`IRI` declines 12** (6 and 6), every one in group `iri-001`, with
-  `schema`'s `iri-001`: **#2077** owns all 13, and its lease is LIVE.
-  **`Id` declines 2** (id022.v01 and id022.n01), unattributed.
 - **`Wildcard` declines 5 invalid, all `pscontents` Negative:** 00102m1 and
   00102m2 are #1912's, #2071's grounding read 00201m1 and 00301m2 as instances
   that are not well-formed, and 00302m2 is unattributed. **`MS-Element`
@@ -130,11 +127,11 @@ lexically, so the owners named below are this restamp's reading.
 
 ### Branch namespace, `origin` (report-only; a session never deletes a ref)
 
-`go tool wipsurvey` was fed this restamp's issue walk (`rows 2096 distinct 2096
-min 1 max 2096`, no gaps). It prints:
+`go tool wipsurvey` was fed this restamp's issue walk (`rows 2101 distinct 2101
+min 1 max 2101`, no gaps). It prints:
 
-- **`wip/issue-2077` is LIVE**, tip pushed 21 minutes before the survey.
-  `wip/issue-1978` was deleted at merge.
+- **`wip/issue-2095` is LIVE**, tip pushed 17 minutes before the survey.
+  `wip/issue-2077` was deleted at merge.
 - **`wip/issue-2013` is RETIRED**, because #2013 is closed `not_planned`. Its
   content is on `main` as `6e5a545`, and a human may delete it.
 - **`meta/post-land-1908`** (PR #1929) and **`meta/post-land-1816`** (PR #1871)
@@ -155,11 +152,10 @@ min 1 max 2096`, no gaps). It prints:
 ### Marker census
 
 `go tool gapaudit`, fed the same walk, reports **82 markers across 10 areas, 14
-in group 1 and 33 in group 2, with zero dead ends.**
+in group 1 and 34 in group 2, with zero dead ends.**
 
-- **`resolvedChild`'s group-1 marker is gone** with #1978. #2095 entered group
-  2: it is a gap no marker names, and its landing deletes a gated-shape bullet
-  rather than a marker.
+- **#2077 deleted no marker and left group 2** on closing. #2099 and #2100
+  entered group 2: each is a gap no marker names.
 - **`xsd/defaultbinding.go`'s `fixedValueConstraintSubsumes` marker** stays in
   group 1 only because its citations (#1379's P3b rulings, #2087, #667) sit in
   bullets below its opening paragraph, which `gapaudit` does not read; #2087's
@@ -180,37 +176,38 @@ in group 1 and 33 in group 2, with zero dead ends.**
 
 ### Milestones and queue
 
-**Counted from the REST walk above: 334 open and 748 closed.**
+**Counted from the REST walk above: 336 open and 749 closed.**
 
 | milestone | open | closed | state |
 |---|---:|---:|---|
 | M1 — Spec infrastructure | 0 | 3 | done |
 | M2 — Foundation leaves | 0 | 5 | done |
 | M3 — Datatypes vertical slice | 0 | 12 | complete |
-| **M4 — Schema parsing** | **65** | **171** | active |
-| **M5 — Instance validation (XML)** | **21** | **82** | active |
+| **M4 — Schema parsing** | **64** | **172** | active |
+| **M5 — Instance validation (XML)** | **23** | **82** | active |
 | M6 — XPath required subset | 1 | 0 | not started |
 | M7–M12 | 0 | 0 | not started |
 
-Open issues carry **320 `ready`, 12 `blocked`, 0 `needs-replan` and 2
-`epic`**, which sums to 334. `kind/gap` is 66.
+Open issues carry **322 `ready`, 12 `blocked`, 0 `needs-replan` and 2
+`epic`**, which sums to 336. `kind/gap` is 67.
 
 - **`blocked` is 12:** #16, #555, #1002, #1042, #1051, #1374, #1609, #1790,
-  #1880, #1885, #1923 and #2022. None names #1978. **#1609 is unfired:**
-  `schema` Pass reads 15287, which is not above 15292. Its Total is unchanged,
-  and `e5ff753` changes no line of `xsd/contentrestricts.go`. **Five human
+  #1880, #1885, #1923 and #2022. None names #2077. **#1609 is unfired:**
+  `schema` Pass reads 15288, which is not above 15292. Its Total is unchanged,
+  and `29ebec5` changes no line of `xsd/contentrestricts.go`. **Five human
   decisions are outstanding:** #1880 (which gates #1002), #1885, #1790, #1923
   and #2022.
-- **Measured refactors, re-run on `e5ff753`, all flat:** #2041 has 3
+- **Measured refactors, re-run on `29ebec5`, all flat:** #2041 has 3
   definitions of the ·special· identity test, #1958 has 2 definitions, #1865
   has 2 `importWording` values, #1757 has 1 arm, #1770 has 2 `isNotationName`
-  lines (1 call and the definition), and #363 has 2 copies. None enters the
-  band on its figure.
+  lines (1 call and the definition), and #363 has 2 copies. #2101, filed at
+  this pass, has 1 cause-free invariant site and 1 two-field kind encoding.
+  None enters the band on its figure.
 
 ### Persona consultations: not re-run this pass
 
 **The cartographer role-plays no persona and does not spawn one** (#416).
-Nothing was handed to this restamp, and #1978 changed no exported surface.
+Nothing was handed to this restamp, and #2077 changed no exported surface.
 **Eighteen persona findings stay open and unconsumed:** #1568–#1571,
 #1593–#1596, #1626, #1684, #1685, #1687, #1688, #1843, #1845, #1894, #1895 and
 #1898.
@@ -221,8 +218,8 @@ This is ordered for a `/develop` session: take the highest row you can start.
 **Run `wipsurvey` fed before starting**, because this band is a snapshot and an
 unfed run cannot print RETIRED. Each row names one issue (#1636).
 
-- **Rows 2, 3 and 4 share `conformance/subtreeroot.go`'s gate**, also with
-  #2061 and #2080. Rows 2 and 4 also share `validate/assess.go`. The session
+- **Rows 1, 2 and 3 share `conformance/subtreeroot.go`'s gate**, also with
+  #2061 and #2080. Rows 1 and 3 also share `validate/assess.go`. The session
   that takes one absorbs another when it can.
 
 **The ordering principle for this stamp:** named bounds first, largest first,
@@ -231,16 +228,23 @@ governance fix, then the two process fixes whose sightings cost a round.
 
 | # | issue | why here |
 |---|---|---|
-| 1 | #2077 | **M4's and M5's largest decline owner.** The reader refuses an internal general entity reference. It owns `iri-001`: `schema` 1 and `instance` 12, a ceiling unprobed past the read. Shares the internal-subset scan with #2073. **Claimed: its lease is LIVE (`wip/issue-2077`); take a lower row unless it expires** |
-| 2 | #2095 | **M5, bound 5, measured, every candidate confirmed declined on `e5ff753`.** The walk charges cvc-type clause 2 (an abstract complex governing type) nowhere, and the gate refuses the shape. Filed at this pass. **Startable now** |
-| 3 | #2008 | **M5 tooling that names the next north star.** An `instance` decline names its refusing `subtreeGate` arm. Without it, `MS-IdentityConstraint`'s 13 unattributed declines and `id022` each need a manual probe. Its arm list now includes #1978's `instanceTyped` and `governed`. **Startable now** |
-| 4 | #2081 | **M5, the clause-7 arm alone since #1978.** The walk governs an unresolved wildcard child with a non-·absent· ·locally declared type· and no overriding xsi:type by that type, and the gate follows. **The oracle rules first**: if a non-overriding xsi:type charges nothing, wild062.n3's banked pass is lost, and the body says what then. No measured flip. **Startable now** |
-| 5 | #2026 | **Process: its first sighting cost a round and parked an accepted change (#2013).** `/develop` step 5 runs `go vet ./...` on a merged-forward tree before delegating any round. **Startable now** |
-| 6 | #1989 | **Process: seven sightings, one of which cost the oracle a pass (#446).** `/develop` step 3 populates `testdata/xsdtests` before the oracle runs. **Startable now** |
+| 1 | #2095 | **M5, bound 5, measured, every candidate confirmed declined.** The walk charges cvc-type clause 2 (an abstract complex governing type) nowhere, and the gate refuses the shape. **Claimed: its lease is LIVE (`wip/issue-2095`); take a lower row unless it expires** |
+| 2 | #2008 | **M5 tooling that names the next north star.** An `instance` decline names its refusing `subtreeGate` arm. Without it, `MS-IdentityConstraint`'s 13 unattributed declines and `id022` each need a manual probe. Its arm list includes #1978's `instanceTyped` and `governed`. **Startable now** |
+| 3 | #2081 | **M5, the clause-7 arm alone since #1978.** The walk governs an unresolved wildcard child with a non-·absent· ·locally declared type· and no overriding xsi:type by that type, and the gate follows. **The oracle rules first**: if a non-overriding xsi:type charges nothing, wild062.n3's banked pass is lost, and the body says what then. No measured flip. **Startable now** |
+| 4 | #2026 | **Process: its first sighting cost a round and parked an accepted change (#2013).** `/develop` step 5 runs `go vet ./...` on a merged-forward tree before delegating any round. **Startable now** |
+| 5 | #1989 | **Process: seven sightings, one of which cost the oracle a pass (#446).** `/develop` step 3 populates `testdata/xsdtests` before the oracle runs. **Startable now** |
 
 **Named below the band, on purpose.**
+- **#2077's follow-ups, all in `parser/xmltree`, `Ratchet` unmeasured:**
+  #2099 (`kind/gap`, M5: literal white space in an attribute value is never
+  normalized per §3.3.3, and two comments say it is; same functions as #2073),
+  #2100 (`kind/gap`, M5, low: a mid-document `<?xml` PI and a `<!DOCTYPE` in
+  content are not rejected) and #2101 (`kind/refactor`: the start-tag re-read
+  invariant's cause and `entityDecl`'s closed kind; same file as #1765 and
+  #1733). #2073, #1733, #1765 and #1770 carry Notes current against
+  `doctype.go`'s reshape.
 - **#1978's follow-ups:** #2081 and #2080 are restated against the landed
-  reading, #2008's arm list is current, #2095 is row 2, and #2096 (`kind/process`:
+  reading, #2008's arm list is current, #2095 is row 1, and #2096 (`kind/process`:
   a grounding ruling did not reach mason's doc and cost a round; first
   sighting) goes to the `/retro`.
 - **#1379's follow-ups:** #2087 (`kind/gap`, M4's fixed-value comparisons
@@ -251,15 +255,15 @@ governance fix, then the two process fixes whose sightings cost a round.
   and #667, and `xsd/defaultbinding.go` with #1757 and #1624.
 - **#2016's follow-ups, all `kind/gap` fail-opens in `parser/xmltree`, `Ratchet`
   unmeasured:** #753 and #2089. Both touch `classify`'s `xml.CharData` arm, so
-  one session can take both.
+  one session can take both; #2100 touches the same `Token` switch.
 - **#2076's follow-ups, all disposed of on its thread:** #1883, #1201, #1051
   (`blocked`) and #2066.
 - **#2071's other follow-up:** #2080 (the gate's {open content} refusal of a
   child with a non-·absent· ·locally declared type·; `Ratchet: unchanged`
-  expected, **bound 0 measured**, soundness only). Same function as rows 2-4.
+  expected, **bound 0 measured**, soundness only). Same function as rows 1-3.
 - **#2067's other follow-up:** #2073 (M4: the reader applies no internal-subset
-  attribute default; `Ratchet: unchanged` expected). Same scan as row 1. #2075
-  is the process filing; see the `/retro` list.
+  attribute default; `Ratchet: unchanged` expected). #2075 is the process
+  filing; see the `/retro` list.
 - **#2063's follow-up:** #2070 (`suiteindex` cannot census a DOCTYPE or its
   internal subset). Same tool as #1536, #1794 and #1464.
 - **#2054's follow-ups:** #2066 (`commentwrap` skips a list item's second
@@ -273,7 +277,7 @@ governance fix, then the two process fixes whose sightings cost a round.
   unreproduced, ratchet unmeasured.
 - **`parser/produce_s4sorder.go` doc fixes:** #1343, comment-only.
 - **Process, for the `/retro` on 2026-10-04:** **#1868 and #1948 first** (with
-  #1798, #1781 and now #2096, the same family), then #1812 (with #2058's
+  #1798, #1781 and #2096, the same family), then #1812 (with #2058's
   sighting on its thread), #2075, #2021, #1990, #1993, #1996, #2010 and #2047,
   then #1913 and #1791. #1880, #1885, #1923 and #2022 wait on the owner.
 - **#2006's trackers:** #2018 (5th-edition Names, xv001.v01 and xv004.v01) and
@@ -296,11 +300,11 @@ governance fix, then the two process fixes whose sightings cost a round.
   #1849, #1824, #1825, and #771.
 - **Persona docs:** #1843, #1895, #1894 and #1898. **#1283 follow-ups:** #1864
   and #1865.
-- **Refactors.** #2041, #1958, #1865, #1770, #1757 and #363 are measured and
-  flat at `e5ff753`. #2041 needs a warden pre-flight on the `xsd` export it
-  adds. #1770 is the route #1765 and #1745 should take. #1735, #1736, #1701,
-  #848 and #845 are unmeasured. #755 owns the single home of the xsi hint
-  reader, which has three copies.
+- **Refactors.** #2041, #1958, #1865, #1770, #1757, #363 and #2101 are
+  measured and flat at `29ebec5`. #2041 needs a warden pre-flight on the `xsd`
+  export it adds. #1770 is the route #1765 and #1745 should take. #1735,
+  #1736, #1701, #848 and #845 are unmeasured. #755 owns the single home of the
+  xsi hint reader, which has three copies.
 - **#1790** waits on a human.
 
 ### Next planning action
@@ -316,12 +320,12 @@ governance fix, then the two process fixes whose sightings cost a round.
    ·governing element declaration·, is charged by any rule. The ruling also
    settles #2080's residue and the reading validate's `walk.localGovernance`
    already ships.
-3. **The next `/backlog` re-derives both north stars.** M4 declines 2, so it
-   partitions `schema`'s decided-and-wrong clusters that are neither recorded
-   nor ruled (`MS-Additional` 6, `TypeAlternativeTests` 4) and says whether one
-   decision holds them, and it measures #2092's bound. M5's waits on #2008, so
-   the `MS-IdentityConstraint` declines can be attributed without a manual
-   probe.
+3. **The next `/backlog` re-derives both north stars.** M4 declines 1 and has
+   none, so it partitions `schema`'s decided-and-wrong clusters that are
+   neither recorded nor ruled (`MS-Additional` 6, `TypeAlternativeTests` 4) and
+   says whether one decision holds them, and it measures #2092's and #2099's
+   bounds. M5's waits on #2008, so the `MS-IdentityConstraint` declines can be
+   attributed without a manual probe.
 4. **The next `/retro` is Sunday 2026-10-04.** It reads four windows since the
    last retro: 73.7 cases per session at 89% product, 177.7 at 100%, 44.4 at
    90%, and 10.0 at 90% with two repair rounds. It also reads these landings:
@@ -341,6 +345,8 @@ governance fix, then the two process fixes whose sightings cost a round.
      first-round accept at 2, whose grounding corrected the body's attribution.
    - #1978's round-2 accept at 6, whose repair round restated a grounding
      ruling the code had not carried (#2096).
+   - #2077's first-round accept at 13, whose warden revise was repaired after
+     the verdict in a prose-only round.
 
    Each landing came in exactly at its measured prediction. The retro rules
    #1868 and #1948 together with #1798, #1781 and #2096, then #1812, then the
