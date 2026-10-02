@@ -1,6 +1,7 @@
 package xmltree
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/xml"
 	"errors"
@@ -41,11 +42,19 @@ type Reader struct {
 	eof bool
 
 	// entities maps each general entity name the DOCTYPE's internal subset
-	// declares to whether that entity is unparsed. It holds the parsed ones
-	// too because the FIRST declaration of a name binds (XML 1.0 §4.2), so a
-	// later NDATA declaration of a name already declared parsed declares no
-	// unparsed entity. It is a lookup index only, never iterated.
-	entities map[string]bool
+	// declares to that name's FIRST declaration, which binds (XML 1.0 §4.2):
+	// a later NDATA declaration of a name already declared parsed declares no
+	// unparsed entity, and a later literal gives an internal entity no second
+	// replacement text. It is a lookup index only, never iterated. dec.Entity
+	// names the internal entities among them to the decoder, which otherwise
+	// refuses a reference to any of them (see included).
+	entities map[string]entityDecl
+	// spent counts the bytes of replacement text included so far, against
+	// maxGEExpansion.
+	spent int
+	// pending holds the nodes one reference's inclusion produced beyond the
+	// first, which Token returns before reading on.
+	pending []Node
 	// declsUnread is the inverse of [all declarations processed]: the DOCTYPE
 	// named an external subset, or its internal subset referenced a parameter
 	// entity that was not read (see doctypeEntities). Inverted so that the
@@ -82,7 +91,7 @@ type frame struct {
 func NewReader(uri string, r io.Reader) *Reader {
 	body, bom := xmlenc.Decode(r)
 	decl := xmldecl.As10(body)
-	pos := &posReader{r: decl}
+	pos := &posReader{r: bufio.NewReader(decl)}
 	dec := xml.NewDecoder(pos)
 	dec.CharsetReader = bom.CharsetReader
 	return &Reader{
@@ -97,10 +106,17 @@ func NewReader(uri string, r io.Reader) *Reader {
 // Token advances to the next element or character-data node and returns it.
 // It returns io.EOF at the end of a well-formed document. Comments, processing
 // instructions, and directives are skipped; a DOCTYPE directive's entity declarations
-// are read on the way past (see HasUnparsedEntity). Malformed input, unbound namespace
-// prefixes, and mismatched or unclosed tags are returned as errors carrying an
-// xsderr.Loc — never as a panic (see the fuzz target).
+// are read on the way past (see HasUnparsedEntity), and a reference to an
+// internal entity one declares is replaced by the nodes its replacement text
+// parses to (see included). Malformed input, unbound namespace prefixes, and
+// mismatched or unclosed tags are returned as errors carrying an xsderr.Loc — never
+// as a panic (see the fuzz target).
 func (r *Reader) Token() (Node, error) {
+	if len(r.pending) > 0 {
+		node := r.pending[0]
+		r.pending = r.pending[1:]
+		return node, nil
+	}
 	if r.eof {
 		return nil, io.EOF
 	}
@@ -108,6 +124,7 @@ func (r *Reader) Token() (Node, error) {
 		// InputOffset before RawToken is the offset of the token's first
 		// byte; RawToken then advances the decoder past it.
 		off := r.dec.InputOffset()
+		r.pos.release(off)
 		tok, err := r.dec.RawToken()
 		if err != nil {
 			return r.handleReadErr(err)
@@ -144,6 +161,13 @@ func (r *Reader) classify(tok xml.Token, off int64) (Node, bool, error) {
 	loc := r.locAt(off)
 	switch t := tok.(type) {
 	case xml.StartElement:
+		if r.dec.Entity != nil {
+			attrs, err := r.expandAttrs(t.Attr, r.source(off), true, loc, nil)
+			if err != nil {
+				return nil, false, err
+			}
+			t.Attr = attrs
+		}
 		node, err := r.startElement(t, loc)
 		if err != nil {
 			return nil, false, err
@@ -156,6 +180,11 @@ func (r *Reader) classify(tok xml.Token, off int64) (Node, bool, error) {
 		}
 		return node, true, nil
 	case xml.CharData:
+		if r.dec.Entity != nil {
+			if raw := r.source(off); refersToEntity(raw) {
+				return r.included(raw, off, loc)
+			}
+		}
 		if r.ended {
 			if err := trailerFault(t, loc); err != nil {
 				return nil, false, err
@@ -194,9 +223,16 @@ func (r *Reader) declareEntities(d xml.Directive) {
 			continue
 		}
 		if r.entities == nil {
-			r.entities = make(map[string]bool)
+			r.entities = make(map[string]entityDecl)
 		}
-		r.entities[decl.name] = decl.unparsed
+		r.entities[decl.name] = decl
+		if !decl.value.readable {
+			continue
+		}
+		if r.dec.Entity == nil {
+			r.dec.Entity = make(map[string]string)
+		}
+		r.dec.Entity[decl.name] = ""
 	}
 }
 
@@ -218,7 +254,7 @@ func (r *Reader) declareEntities(d xml.Directive) {
 // 1.0 §5.1). An unparsed entity declared only where the reader did not read
 // is reported false, and AllDeclarationsProcessed then reports false too.
 func (r *Reader) HasUnparsedEntity(name string) bool {
-	return r.entities[name]
+	return r.entities[name].unparsed
 }
 
 // AllDeclarationsProcessed reports the document information item's [all
@@ -432,14 +468,38 @@ func (r *Reader) locAt(off int64) xsderr.Loc {
 // posReader wraps the input, counting bytes and recording the offset of every
 // newline so line/column can be derived without keeping the content. It grows
 // with the number of lines, not the document size.
+//
+// It also keeps the source of the token being read: raw holds every byte read
+// from offset base on, and release drops the bytes before a token's start.
+// Being an io.ByteReader, it is read one byte at a time by the decoder, which
+// then reads ahead of the token it returns by at most the one byte it unreads,
+// so raw holds one token and that byte.
 type posReader struct {
-	r        io.Reader
+	r        *bufio.Reader
 	off      int64
 	newlines []int64
+	raw      []byte
+	base     int64
 }
 
-// Read reads from the underlying reader, recording newline offsets as bytes
-// pass through.
+// ReadByte reads one byte from the underlying reader, recording it as Read
+// does.
+func (p *posReader) ReadByte() (byte, error) {
+	b, err := p.r.ReadByte()
+	if err != nil {
+		return 0, err
+	}
+	if b == '\n' {
+		p.newlines = append(p.newlines, p.off)
+	}
+	p.raw = append(p.raw, b)
+	p.off++
+	return b, nil
+}
+
+// Read reads from the underlying reader, recording newline offsets and the
+// source as bytes pass through. The decoder reads through ReadByte; Read is
+// what it hands a CharsetReader, which xmlenc.Mark's returns unwrapped.
 func (p *posReader) Read(b []byte) (int, error) {
 	n, err := p.r.Read(b)
 	for i := 0; i < n; i++ {
@@ -447,6 +507,19 @@ func (p *posReader) Read(b []byte) (int, error) {
 			p.newlines = append(p.newlines, p.off+int64(i))
 		}
 	}
+	p.raw = append(p.raw, b[:n]...)
 	p.off += int64(n)
 	return n, err
+}
+
+// release drops the source before offset off, the start of the next token.
+func (p *posReader) release(off int64) {
+	p.raw = p.raw[off-p.base:]
+	p.base = off
+}
+
+// span returns the source from offset from to offset to, both within the
+// token being read.
+func (p *posReader) span(from, to int64) string {
+	return string(p.raw[from-p.base : to-p.base])
 }
