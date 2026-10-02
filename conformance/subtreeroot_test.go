@@ -563,19 +563,6 @@ func TestInstanceExecutorDeclinesOutsideAssessedSubtreeRoot(t *testing.T) {
 			wildcardKnown("strict"), `<known foo="1"><a>1</a></known>`,
 			refuseStrictAttribute,
 		},
-		// subtreeGate.child's GAP(conformance) {open content} refusal (#2071):
-		// the walk assesses each second e against the local xs:date, and the gate
-		// would read the top-level xs:string e, or ·xs:anyType·, instead.
-		{
-			"an {open content} child resolving a declaration, with a non-·absent· ·locally declared type· (key-governing-ed clause 4.3)",
-			ldtOpen(`<xs:element name="e" type="xs:string"/>`), `<known><e>2008-11-03</e><e>2008-11-04</e></known>`,
-			refuseOpenContentLDT,
-		},
-		{
-			"an {open content} child resolving no declaration, with a non-·absent· ·locally declared type· (key-governing-ed clause 4.3)",
-			ldtOpen(""), `<known><e>2008-11-03</e><e>2008-11-04</e></known>`,
-			refuseOpenContentLDT,
-		},
 		{
 			// key-ldt-att case 3: the restriction prohibits its base's use of ta.
 			"a strict {attribute wildcard}'s attribute whose name the restricted base's attribute uses declare (cvc-complex-type clause 5)",
@@ -894,13 +881,118 @@ func ldtChild(local, top, pc string) string {
 		`<xs:element name="e" type="` + top + `"/>`
 }
 
-// ldtOpen declares <known>, whose content model is a local e of xs:date under a
-// lax interleave {open content}, beside top: a second e is ·attributed to· the
-// {open content} with a non-·absent· ·locally declared type·, which
-// key-governing-ed clause 4.3 has govern it in place of any top-level e.
-func ldtOpen(top string) string {
+// ldtOpen declares <known>, whose content model is a local e of type local under
+// a lax interleave {open content}, beside top: a second e is ·attributed to·
+// the {open content} with local for its non-·absent· ·locally declared type·,
+// which key-governing-ed clause 4.3 has govern it in place of any top-level e.
+func ldtOpen(local, top string) string {
 	return `<xs:element name="known"><xs:complexType><xs:openContent mode="interleave"><xs:any processContents="lax"/></xs:openContent>` +
-		`<xs:sequence><xs:element name="e" type="xs:date"/></xs:sequence></xs:complexType></xs:element>` + top
+		`<xs:sequence><xs:element name="e" type="` + local + `"/></xs:sequence></xs:complexType></xs:element>` + top
+}
+
+// ldtOpenChoice declares <known>, whose content model is a choice of a local a
+// and a local e of type local under a lax interleave {open content}, beside
+// decls: after <a> an e is ·attributed to· the {open content} with local for its
+// ·locally declared type·, and no particle child carries local.
+func ldtOpenChoice(local, decls string) string {
+	return `<xs:element name="known"><xs:complexType><xs:openContent mode="interleave"><xs:any processContents="lax"/></xs:openContent>` +
+		`<xs:choice><xs:element name="a"/><xs:element name="e" type="` + local + `"/></xs:choice></xs:complexType></xs:element>` + decls
+}
+
+// openLDTDerived declares B, an empty complex type, and T, an extension of B
+// adding an attribute x of xs:int, so T ·overrides· B (key-overrides clause 2);
+// and C, a complex type requiring one child c, which ·overrides· neither B nor
+// xs:date.
+const openLDTDerived = `<xs:complexType name="B"/>` +
+	`<xs:complexType name="T"><xs:complexContent><xs:extension base="B"><xs:attribute name="x" type="xs:int"/></xs:extension></xs:complexContent></xs:complexType>` +
+	`<xs:complexType name="C"><xs:sequence><xs:element name="c"/></xs:sequence></xs:complexType>`
+
+// TestInstanceExecutorDecidesOpenContentLDT proves the gate admits an {open
+// content}'s child whose ·locally declared type· is non-·absent· (#2080),
+// reading it against the type validate's walk.localGovernance governs it by:
+// key-governing-type-elem clause 7's ·locally declared type·, or clause 6's
+// xsi:type ·overriding· it (key-overrides clause 2). Each row is decided
+// VALID, and each second e reaches subtreeGate.localTyped: a single e is the
+// particle's. The xsi:type rows fail if the gate reads the other type: B
+// admits no attribute x (refuseAttributeUnadmitted), and C requires a child
+// <c> (refuseContentIncomplete).
+func TestInstanceExecutorDecidesOpenContentLDT(t *testing.T) {
+	exec := newInstanceExec().status()
+	for _, tc := range []struct{ why, schemaBody, instance string }{
+		{"a child resolving a declaration of another type (clause 7)",
+			ldtOpen("xs:date", `<xs:element name="e" type="xs:string"/>`), `<known><e>2008-11-03</e><e>2008-11-04</e></known>`},
+		{"a child resolving no declaration (clause 7)",
+			ldtOpen("xs:date", ""), `<known><e>2008-11-03</e><e>2008-11-04</e></known>`},
+		{"a child whose xsi:type ·overrides· its ·locally declared type· (clause 6)",
+			ldtOpen("B", openLDTDerived), `<known ` + xsiNS + `><e/><e xsi:type="T" x="1"/></known>`},
+		{"a child whose xsi:type does not ·override· its ·locally declared type· (clause 7)",
+			ldtOpen("xs:date", openLDTDerived), `<known ` + xsiNS + `><e>2008-11-03</e><e xsi:type="C">2008-11-04</e></known>`},
+	} {
+		if !exec(instanceCase(t, tc.schemaBody, tc.instance, true)).IsPass() {
+			t.Errorf("%s: the walk decides the {open content} child and the gate admits it; the executor must agree with a suite-valid case", tc.why)
+		}
+		if exec(instanceCase(t, tc.schemaBody, tc.instance, false)).IsPass() {
+			t.Errorf("%s: the executor must Fail under a flipped expectation (it decides for real)", tc.why)
+		}
+	}
+}
+
+// TestInstanceExecutorChargesOpenContentLDT proves the walk decides an {open
+// content}'s child against its non-·absent· ·locally declared type· (#2080):
+// each row is decided INVALID. The lexical row is cvc-type clause 3.1.3
+// against the local xs:date, where the top-level xs:string e admits it. The
+// abstract row is cvc-type clause 2 against the ·locally declared type· T,
+// which only the {open content}'s child <e> carries, the particle child <a>
+// being of ·xs:anyType·.
+func TestInstanceExecutorChargesOpenContentLDT(t *testing.T) {
+	exec := newInstanceExec().status()
+	for _, tc := range []struct{ why, schemaBody, instance string }{
+		{"a lexical outside the ·locally declared type· (cvc-type clause 3.1.3)",
+			ldtOpen("xs:date", `<xs:element name="e" type="xs:string"/>`), `<known><e>2008-11-03</e><e>x</e></known>`},
+		{"an abstract complex ·locally declared type· (cvc-type clause 2)",
+			ldtOpenChoice("T", `<xs:complexType name="T" abstract="true"/>`), `<known><a/><e/></known>`},
+	} {
+		if !exec(instanceCase(t, tc.schemaBody, tc.instance, false)).IsPass() {
+			t.Errorf("%s: the walk charges the {open content} child; the executor must agree with a suite-invalid case", tc.why)
+		}
+		if exec(instanceCase(t, tc.schemaBody, tc.instance, true)).IsPass() {
+			t.Errorf("%s: the executor must Fail under a flipped expectation", tc.why)
+		}
+	}
+}
+
+// TestAssessedSubtreeRootOpenContentLDT pins, at the gate itself, its answer
+// for an {open content}'s child whose ·locally declared type· is non-·absent·
+// (subtreeGate.localTyped, #2080): it admits an abstract complex one, whose
+// cvc-type clause 2 charge is the walk's (TestInstanceExecutorChargesOpenContentLDT),
+// and refuses an xsi:type naming no type definition, an xsi:nil with no ·actual
+// value·, and what governed refuses against the ·locally declared type·.
+func TestAssessedSubtreeRootOpenContentLDT(t *testing.T) {
+	for _, tc := range []struct {
+		why, schemaBody, instance string
+		want                      refusal
+	}{
+		{"an abstract complex ·locally declared type·",
+			ldtOpenChoice("T", `<xs:complexType name="T" abstract="true"/>`), `<known><a/><e/></known>`, ""},
+		{"an xsi:type naming no type definition",
+			ldtOpen("xs:date", ""), `<known ` + xsiNS + `><e>2008-11-03</e><e xsi:type="Z">2008-11-04</e></known>`, refuseXsiTypeUnresolved},
+		// The child's own binding of z must reach resolveQName for its xsi:type.
+		{"an xsi:type bound by a prefix the child declares itself",
+			ldtOpen("xs:date", ""), `<known ` + xsiNS + `><e>2008-11-03</e><e xmlns:z="http://www.w3.org/2001/XMLSchema" xsi:type="z:date">2008-11-04</e></known>`, ""},
+		{"an xsi:nil with no ·actual value·",
+			ldtOpen("xs:date", ""), `<known ` + xsiNS + `><e>2008-11-03</e><e xsi:nil="maybe">2008-11-04</e></known>`, refuseNilLexical},
+		{"an element child under a simple ·locally declared type·",
+			ldtOpen("xs:date", ""), `<known><e>2008-11-03</e><e><v/></e></known>`, refuseElementChild},
+	} {
+		c := instanceCase(t, tc.schemaBody, tc.instance, true)
+		schema, report, decidable, err := assembleCase(strict.New(), c.schemaDoc, nil)
+		if err != nil || !decidable {
+			t.Fatalf("%s: assembling the schema: decidable %v, err %v", tc.why, decidable, err)
+		}
+		if got := assessedSubtreeRoot(schema, report, c.doc); got != tc.want {
+			t.Errorf("%s: assessedSubtreeRoot = %q, want %q", tc.why, got, tc.want)
+		}
+	}
 }
 
 // ldtBase declares <known> of type R, a restriction of B that keeps only B's

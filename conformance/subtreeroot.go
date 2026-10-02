@@ -20,14 +20,16 @@ import (
 // This file holds the instance lane's one shape gate for the "valid"
 // observation: an ASSESSED SUBTREE ROOT (#1841), a validation root, with or
 // without content (#1855), whose every element the walk strictly assessed
-// against a type it really has, through a declaration or, for a wildcard's
-// child resolving none, an xsi:type (#1978), or laxly assessed against
-// ·xs:anyType· (#1911), and every attribute against its ·governing attribute
-// declaration· where it has one (key-sva clause 2), with no clause of
-// key-sva (§3.3.4.6), cvc-elt (§3.3.4.3), cvc-type (§3.3.4.4) or
-// cvc-complex-type (§3.4.4.2) left undecided unrecorded. instance.go's "Why
-// an EMPTY Result is evidence of validity for ONE shape only" states which
-// clause each condition discharges; this file is only the conditions.
+// against a type it really has, through a declaration, through an xsi:type for
+// a wildcard's child resolving none (#1978), or through its ·locally declared
+// type· or an xsi:type ·overriding· it for an {open content}'s child with one
+// (#2080), or laxly assessed against ·xs:anyType· (#1911), and every attribute
+// against its ·governing attribute declaration· where it has one (key-sva
+// clause 2), with no clause of key-sva (§3.3.4.6), cvc-elt (§3.3.4.3),
+// cvc-type (§3.3.4.4) or cvc-complex-type (§3.4.4.2) left undecided
+// unrecorded. instance.go's "Why an EMPTY Result is evidence of validity for
+// ONE shape only" states which clause each condition discharges; this file is
+// only the conditions.
 //
 // The gate is computed per case and stored nowhere. It re-reads the instance
 // with encoding/xml, decoding a byte-order-marked UTF-16 document and admitting
@@ -294,12 +296,13 @@ var anyTypeName = xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"}
 // declaration· the walk charges it (validate's nilCheck, cvc-elt clause 3.1 or
 // 3.2), so no empty Result reaches the gate with it.
 //
-// GAP(conformance): on a ·laxly assessed· element (laxlyAssessed), which has no
-// declaration to be ·nilled· against, such an xsi:nil is still governed by
-// that built-in declaration (key-governing-ad) and so not ·valid· (cvc-attribute
-// clause 3), which the walk charges nothing for and records nothing of. The
-// refusal leaves execInstanceCase Failing the case: a suite-invalid case of this
-// shape scores no pass, and none a false one.
+// GAP(conformance): on an element with no declaration to be ·nilled· against —
+// ·laxly assessed· (laxlyAssessed), or ·strictly assessed· against an xsi:type
+// (instanceTyped) or a ·locally declared type· (localTyped) — such an xsi:nil is
+// still governed by that built-in declaration (key-governing-ad) and so not
+// ·valid· (cvc-attribute clause 3), which the walk charges nothing for and
+// records nothing of. The refusal leaves execInstanceCase Failing the case: a
+// suite-invalid case of this shape scores no pass, and none a false one.
 func nilValue(attrs []xml.Attr) (value, ok bool) {
 	i := slices.IndexFunc(attrs, func(a xml.Attr) bool { return a.Name == xsiNil })
 	if i < 0 {
@@ -554,20 +557,13 @@ func (g *subtreeGate) children(t xsd.ComplexType, m *xsd.Matcher) refusal {
 //     {open content} half is validate's reading, not the spec's words
 //     (validate's walk.childGoverning, #1969);
 //   - a strict or lax Wildcard, or the {open content} with a strict or lax
-//     {wildcard}: resolvedChild's conditions, and for the {open content} the
-//     child's ·locally declared type· within t is ·absent·
-//     (xsd.Schema.LocallyDeclaredElementType answers false).
-//
-// GAP(conformance): a child ·attributed to· the {open content} with a strict or
-// lax {wildcard} and a non-·absent· ·locally declared type· is refused,
-// resolved name or not. key-governing-ed clause 4.3 gives it no ·governing
-// element declaration·, and that type, or an xsi:type ·overriding· it, governs
-// it (key-governing-type-elem clauses 6 and 7, validate's
-// walk.localGovernance); resolvedChild reads the top-level declaration or
-// ·xs:anyType· instead, so it vets a type the walk does not assess against.
-// Its one reader, execInstanceCase, then Fails the case (refuseOpenContentLDT):
-// a suite-valid case of this shape scores no pass, and none a false one
-// (#2080).
+//     {wildcard} where the child's ·locally declared type· within t is ·absent·
+//     (xsd.Schema.LocallyDeclaredElementType answers false): resolvedChild's
+//     conditions;
+//   - the {open content} with a strict or lax {wildcard} where that ·locally
+//     declared type· is non-·absent·: localTyped's conditions against it,
+//     resolved name or not, key-governing-ed clause 4.3 giving the child no
+//     ·governing element declaration· (validate's walk.childGoverning).
 //
 // An attribution of none of these kinds is refuseAttribution.
 func (g *subtreeGate) child(t xsd.ComplexType, m *xsd.Matcher, start xml.StartElement) refusal {
@@ -596,8 +592,8 @@ func (g *subtreeGate) child(t xsd.ComplexType, m *xsd.Matcher, start xml.StartEl
 		if at.Wildcard().ProcessContents() == xsd.ProcessSkip {
 			return g.skip()
 		}
-		if _, local := g.schema.LocallyDeclaredElementType(t, name); local {
-			return refuseOpenContentLDT
+		if ldt, local := g.schema.LocallyDeclaredElementType(t, name); local {
+			return g.localTyped(start, ldt)
 		}
 		return g.resolvedChild(start, false)
 	}
@@ -615,7 +611,8 @@ func (g *subtreeGate) skip() refusal {
 
 // resolvedChild reads through to its end tag a child whose start tag is start,
 // which is ·attributed to· a strict or lax Wildcard or to an {open content}
-// with a strict or lax {wildcard}, and refuses unless one of these holds:
+// with a strict or lax {wildcard} and an ·absent· ·locally declared type·
+// within the parent's type, and refuses unless one of these holds:
 //
 //   - its ·expanded name· ·resolves· to a top-level element declaration d
 //     (key-governing-ed clauses 3 and 4), and d and the child's subtree meet
@@ -693,6 +690,62 @@ func (g *subtreeGate) instanceTyped(start xml.StartElement, lexical string) refu
 		return why
 	}
 	return g.governed(start, t, false)
+}
+
+// localTyped reads through to its end tag an {open content}'s child whose start
+// tag is start, which has no ·governing element declaration· because its
+// ·locally declared type· ldt within the parent's type is non-·absent·
+// (key-governing-ed clause 4.3), and refuses unless an xsi:nil it carries has an
+// ·actual value· (nilValue, refuseNilLexical), localType determines its
+// ·governing type definition·, and the child and its subtree meet governed's
+// conditions against that type, never ·nilled·: key-nilled is relative to a
+// declaration, and it has none. The child is ·strictly assessed· against that
+// type (cvc-assess-elt clause 1.2), as validate's walk.localGovernance assesses
+// it, so cvc-complex-type clause 5 holds for it by construction, and cvc-type
+// clause 2, for an abstract complex type, is the walk's charge.
+func (g *subtreeGate) localTyped(start xml.StartElement, ldt xsd.TypeDefinition) refusal {
+	if _, ok := nilValue(start.Attr); !ok {
+		return refuseNilLexical
+	}
+	defer g.enter(start)()
+	td, why := g.localType(start, ldt)
+	if why != "" {
+		return why
+	}
+	return g.governed(start, td, false)
+}
+
+// localType is the ·governing type definition· (key-governing-type-elem) of the
+// element whose start tag is start, which has no ·governing element
+// declaration· and the non-·absent· ·locally declared type· ldt, and a refusal
+// wherever the gate does not determine it. With no xsi:type, ldt governs
+// (clause 7). With one, the type T it names (instanceType;
+// refuseXsiTypeUnresolved where it names none) governs where it ·overrides· ldt
+// (clause 6), which with no declaration known is ·validly substitutable without
+// limitation· (key-overrides clause 2): xsd.Schema.ValidlySubstitutable under
+// no blocking keywords. Otherwise ldt governs (clause 7): with no declaration,
+// no cvc-elt clause is live to charge an xsi:type that does not override, so
+// the walk charges nothing for it and the gate admits it, unlike
+// governingType's refuseXsiTypeNotOverride. An error from that predicate is
+// refused (refuseXsiTypeUndecided): the walk records it in Result.Unevaluated
+// and assesses the child against nothing.
+func (g *subtreeGate) localType(start xml.StartElement, ldt xsd.TypeDefinition) (xsd.TypeDefinition, refusal) {
+	i := slices.IndexFunc(start.Attr, func(a xml.Attr) bool { return a.Name == xsiType })
+	if i < 0 {
+		return ldt, ""
+	}
+	t, why := g.instanceType(start.Attr[i].Value)
+	if why != "" {
+		return nil, why
+	}
+	overrides, err := g.schema.ValidlySubstitutable(t, ldt, nil)
+	if err != nil {
+		return nil, refuseXsiTypeUndecided
+	}
+	if !overrides {
+		return ldt, ""
+	}
+	return t, ""
 }
 
 // laxlyAssessed reads through to its end tag an element whose start tag is
