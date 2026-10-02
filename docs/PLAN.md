@@ -17,17 +17,17 @@ read them. One stamp for the whole section, so a reader can tell staleness
 from wrongness at a glance. Never add a dated paragraph beside the old
 one — appending is what this replaces.
 
-## Status — 2026-10-02 (post-land restamp after #2062, on `main` at `bad5f96`)
+## Status — 2026-10-02 (post-land restamp after #2115, on `main` at `7d51720`)
 
-**Two landings since the last stamp (`46f80e7`).** #2080 landed at `29b04d9`
-with `Ratchet: unchanged`. #2062 landed at `bad5f96` with `instance` +9: `fill`
-now charges cvc-identity-constraint clause 3 for a field node whose determined
-·governing type definition· is neither simple nor simple-content, nilled or
-not, instead of declining it. #2062 was the last stamp's row 1 and M5's north
-star. **`cvc-identity-constraint` now holds 1 decline, #774's ruled one**, so
-M5 has no measured north star until the next `/backlog` re-derives one. **The
-band is #2115 then #2121,** both in `validate/cvcidentityconstraint.go`.
-#2121 was filed at this pass from #2062's oracle hazard. **Lean: product.**
+**One landing since the last stamp (`bad5f96`).** #2115 landed at `7d51720`
+with `Ratchet: unchanged`: `sameKeyMember` now compares a union key-sequence
+member, and each list-of-union item, by its ·validating type·'s primitive
+(key-vtype clauses 1 and 2), and its marker narrows to two arms `RULED
+permanent by #2115`. **`cvc-identity-constraint` still holds 1 decline,
+elemZ015.i at `keyMember`'s ·special·-type decline**, and #2124 now owns it
+(oracle first). M5 has no larger measured north star until the next
+`/backlog` re-derives one. **The band is #2124 then #2121,** both in
+`validate/cvcidentityconstraint.go` and both oracle-first. **Lean: product.**
 The process filings wait on Sunday's `/retro`.
 
 **#2081 stays `needs-replan`.** Its grounding ruled that no rule charges a
@@ -40,7 +40,7 @@ three.
 
 ### Conformance lanes
 
-**This table is `go tool lanestatus`, pasted verbatim, on `main` at `bad5f96`.**
+**This table is `go tool lanestatus`, pasted verbatim, on `main` at `7d51720`.**
 It is the committed expectations census, which `docs/WORKFLOW.md` names as the
 lane score (#1120).
 
@@ -53,7 +53,7 @@ lane score (#1120).
 | `schema` | 15288 | 110 | 15398 |
 | `xpath` | — | — | 0 |
 
-**`instance` moved +9 (#2062); no other lane moved.** **`datatypes ⊆
+**No lane moved since `bad5f96`.** **`datatypes ⊆
 instance` is intended** (#1507). **An em dash means a lane with no cases yet,
 not a lane scoring zero.** `datatypes` is M3 and complete. `schema` is M4
 and `instance` is M5, and both are active.
@@ -63,14 +63,15 @@ and `instance` is M5, and both are active.
 
 **Measured on `5100897`** (suite `7bc3365`) by one read-only `GOXSD_DECLINES=1`
 conformance run (`--- PASS: TestConformance (353.63s)`), fed to `go tool
-lanepartition -log <run> <lane>`. At `bad5f96` the `instance` figures are that
+lanepartition -log <run> <lane>`. At `7d51720` the `instance` figures are that
 partition less #2111's 11 flips and #2062's 9: each ratchet write is exactly
 those lines, each a `<unevaluated:cvc-identity-constraint>` decline. #2062's
-grounding re-ran the decline census and its landing read 306 declines after.
-No other lane's expectations moved. Every figure is a part of the banked fails
-and a bound from above, never a prediction of flips. `instance` clusters carry
-their refusal token in `<…>`. The tool matches owners lexically, so the owners
-named below are this restamp's reading.
+grounding re-ran the decline census and its landing read 306 declines after;
+#2115 wrote no expectations line. No other lane's expectations moved. Every
+figure is a part of the banked fails and a bound from above, never a
+prediction of flips. `instance` clusters carry their refusal token in `<…>`.
+The tool matches owners lexically, so the owners named below are this
+restamp's reading.
 
 | lane | banked fail | declined | indeterminate (#277) | decided against the suite |
 |---|---:|---:|---:|---:|
@@ -96,13 +97,15 @@ named below are this restamp's reading.
   - **The 4 `cvc-complex-content` ones are ruled permanent:** `MS-Particles`
     particlesZ035_a and particlesZ036_b1, _b2 and _c reach
     `ContentMatcher`'s `maxPartitionStates` decline, RULED permanent by #1601.
-  - **The 1 `cvc-identity-constraint` one is ruled permanent:**
-    `MS-Element/elemZ015.i`, an untyped attribute field, the ·special·-type
-    decline #774 ruled. #2111 and #2062 decided the other 20. #2115 owns
-    `sameKeyMember`'s residue (union, list-of-union, `xs:anySimpleType` and
-    `xs:anyAtomicType` members, neither Eq nor Identical, and the re-read
-    failure arm), and no measured decline carries it. #2121 owns clause 3's
-    count of absent-valued nodes; its ·nilled· arms bound 0.
+  - **The 1 `cvc-identity-constraint` one is #2124's:**
+    `MS-Element/elemZ015.i` (suite-invalid), an untyped attribute field, at
+    `keyMember`'s ·special·-type decline, `RULED permanent by #774`. #2124
+    asks the oracle whether that ruling stands against #2111's line that
+    anySimpleType values carry their own primitive. #2111 and #2062 decided the
+    other 20. #2115 decided union and list-of-union members, and
+    `sameKeyMember`'s residue (neither Eq nor Identical, and the re-read
+    failure arm) is `RULED permanent by #2115`. #2121 owns clause 3's count of
+    absent-valued nodes; its ·nilled· arms bound 0.
 - **`<type-table>` is 38, all valid:** `CTA` 27 and `TypeAlternativeTests` 11.
   The gate refuses any declaration with a {type table}, and the selection is
   XPath, so they read as M6's. No open issue names `TypeAlternativeTests`.
@@ -141,12 +144,12 @@ named below are this restamp's reading.
 
 ### Branch namespace, `origin` (report-only; a session never deletes a ref)
 
-`go tool wipsurvey` was fed this restamp's issue walk (1088 issues; the walk
-stamp reads `rows 2120 distinct 2120 min 1 max 2120 no gaps`, taken before
-#2121 was filed). It prints:
+`go tool wipsurvey` was fed this restamp's issue walk (1089 issues; the walk
+stamp reads `rows 2123 distinct 2123 min 1 max 2123 no gaps`, taken before
+#2124 was filed). It prints:
 
-- **No `wip/issue-<N>` branch is LIVE.** `wip/issue-2080` and `wip/issue-2062`
-  were deleted at merge.
+- **No `wip/issue-<N>` branch is LIVE.** `wip/issue-2115` was deleted at
+  merge.
 - **`wip/issue-2081` is RETIRED**, because #2081 is labelled `needs-replan`. It
   holds no code: #2081 parked at grounding.
 - **`wip/issue-2013` is RETIRED**, because #2013 is closed `not_planned`. Its
@@ -169,10 +172,10 @@ stamp reads `rows 2120 distinct 2120 min 1 max 2120 no gaps`, taken before
 ### Marker census
 
 `go tool gapaudit`, fed the same walk, reports **82 markers across 10 areas, 13
-in group 1 and 31 in group 2, with zero dead ends.** #2080 deleted its marker
-and `nilValue`'s left group 1 by citing #2061. #2080 and #2062 left group 2
-when they closed. #2121, filed after the walk, enters group 2 on the next fed
-run: no marker cites it.
+in group 1 and 32 in group 2, with zero dead ends.** #2121 entered group 2.
+`sameKeyMember`'s marker cites `RULED permanent by #2115` and is in neither
+group. #2124, filed after the walk, enters group 2 on the next fed run:
+`keyMember`'s marker cites #774's ruling, not #2124.
 
 - **`xsd/defaultbinding.go`'s `fixedValueConstraintSubsumes` marker** stays in
   group 1 only because its citations (#1379's P3b rulings, #2087, #667) sit in
@@ -193,7 +196,7 @@ run: no marker cites it.
 
 ### Milestones and queue
 
-**Counted from the REST walk above, plus #2121: 332 open and 757 closed.**
+**Counted from the REST walk above, plus #2124: 332 open and 758 closed.**
 
 | milestone | open | closed | state |
 |---|---:|---:|---|
@@ -201,7 +204,7 @@ run: no marker cites it.
 | M2 — Foundation leaves | 0 | 5 | done |
 | M3 — Datatypes vertical slice | 0 | 12 | complete |
 | **M4 — Schema parsing** | **64** | **172** | active |
-| **M5 — Instance validation (XML)** | **21** | **88** | active |
+| **M5 — Instance validation (XML)** | **21** | **89** | active |
 | M6 — XPath required subset | 1 | 0 | not started |
 | M7–M12 | 0 | 0 | not started |
 
@@ -209,14 +212,13 @@ Open issues carry **317 `ready`, 12 `blocked`, 1 `needs-replan` and 2
 `epic`**, which sums to 332. `kind/gap` is 66.
 
 - **`blocked` is 12:** #16, #555, #1002, #1042, #1051, #1374, #1609, #1790,
-  #1880, #1885, #1923 and #2022. None names #2080 or #2062. **#1609 is
-  unfired:** `schema` Pass reads 15288, which is not above 15292, its Total is
-  unchanged, and neither `29b04d9` nor `bad5f96` changes a line of
-  `xsd/contentrestricts.go`. **Five human decisions are outstanding:** #1880
+  #1880, #1885, #1923 and #2022. None names #2115. **#1609 is unfired:**
+  `schema` Pass reads 15288, which is not above 15292, its Total is
+  unchanged, and `7d51720` changes no line of `xsd/contentrestricts.go`. **Five human decisions are outstanding:** #1880
   (which gates #1002), #1885, #1790, #1923 and #2022.
 - **`needs-replan` is 1: #2081**, parked at grounding with no code written.
   The next planning action below names the replan.
-- **Measured refactors, re-run on `bad5f96`, all flat:** #2041 has 3
+- **Measured refactors, re-run on `7d51720`, all flat:** #2041 has 3
   definitions of the ·special· identity test, #1958 has 2 definitions, #1865
   has 2 `importWording` values, #1757 has 1 arm, #1770 has 2 `isNotationName`
   lines (1 call and the definition), #363 has 2 copies, and #2101 has 1
@@ -226,7 +228,7 @@ Open issues carry **317 `ready`, 12 `blocked`, 1 `needs-replan` and 2
 ### Persona consultations: not re-run this pass
 
 **The cartographer role-plays no persona and does not spawn one** (#416).
-Nothing was handed to this restamp, and neither landing changed the exported
+Nothing was handed to this restamp, and #2115 did not change the exported
 surface. **Eighteen persona findings stay open and unconsumed:** #1568–#1571,
 #1593–#1596, #1626, #1684, #1685, #1687, #1688, #1843, #1845, #1894, #1895 and
 #1898.
@@ -240,24 +242,29 @@ unfed run cannot print RETIRED. Each row names one issue (#1636).
 - **Rows 1 and 2 share `validate/cvcidentityconstraint.go`**, and both bodies
   say so. The session that takes one absorbs the other when it can.
 
-**The ordering principle for this stamp:** M5 has no measured north star, so
-the band is the soundness work in the file the last two M5 landings moved,
-unmeasured residue first. No process issue enters the band. #2007 is the
+**The ordering principle for this stamp:** M5 has no larger measured north
+star, so the band is the work left in the file the last three M5 landings
+moved, the measured bound first: #2124 holds the lane's one remaining
+`cvc-identity-constraint` decline (bound 1), and #2121 expects `unchanged`
+(bound 0). No process issue enters the band. #2007 is the
 orchestrating session's (next planning action 1), and every other open one is
 queued for the `/retro` on 2026-10-04 or waits on the owner.
 
 | # | issue | why here |
 |---|---|---|
-| 1 | #2115 | **`sameKeyMember`'s residue after #2111; bound unmeasured, and no measured decline carries it.** Union and list-of-union members by the ·validating type·'s primitive, `xs:anySimpleType`/`xs:anyAtomicType` by the value's own, and the type-chain or re-read failure arm decided or carried as a P3b ruling. Carries #2062's VERDICT finding 1 (`fill`'s doc, comment-only). **Startable now** |
+| 1 | #2124 | **`instance` bound 1 (elemZ015.i, suite-invalid), the lane's last `cvc-identity-constraint` decline.** `keyMember` declines every `xs:anySimpleType`/`xs:anyAtomicType` field node under `RULED permanent by #774`. **The oracle rules first**, between "the lexical mapping is not a function" and #2111's "anySimpleType values carry their own primitive", with #2040's mapping-union reading as prior art. A decided arm likely exports a `value` comparison, so a warden pre-flight comes before mason. **Startable now** |
 | 2 | #2121 | **Same file as row 1; `Ratchet: unchanged` expected, bound 0 measured for the ·nilled· arms, 82 banked passes as regression surface.** `icSlot.record` counts only non-absent values toward clause 3's "at most one". **The oracle rules first** on three shapes. **Startable now** |
 
 **Named below the band, on purpose.**
-- **#2062's follow-ups, disposed of on its thread:** VERDICT finding 1 rides
-  #2115 (row 1) as an Acceptance row, and the oracle's clause 3 hazard is
-  #2121 (row 2).
+- **#2115's follow-ups, disposed of on its thread:** the ·special·-type arm
+  is #2124 (row 1). Mason's untested `ValidatingType`-fails-alone case was
+  dismissed (the verdict discharged it structurally), and the worktree feed
+  refusal is a sighting on #2047.
+- **#2062's follow-ups:** VERDICT finding 1 landed with #2115, and the
+  oracle's clause 3 hazard is #2121 (row 2).
 - **#2080's follow-ups:** #2061 (widened to all three declaration-less
   `nilValue` sites, cited by the marker) and #2081's same-file note restated.
-- **#2111's follow-ups:** #2115 (row 1).
+- **#2111's follow-ups:** #2115 (landed) and #2124 (row 1).
 - **#2106's follow-ups:** #2111 and #2062 (both landed). #1042's thread
   carries the measured 180. #1996 has a new sighting.
 - **#2081 is `needs-replan`.** Its grounding's oracle ruled no rule charges a
@@ -326,13 +333,14 @@ queued for the `/retro` on 2026-10-04 or waits on the owner.
   unmeasured message refactor in `value`.
 - **`value`, `Ratchet: unchanged`:** #2045, whose premise covers five
   fail-closed readers of `specialMatches`. Same file as #2041 and #2087.
+  #2124 (row 1) may add a sixth reader, and its body says so.
 - **`internal/xmlenc`, both low priority:** #361 and #363.
 - **M5 rulings and residue:** #1856 (`MS-Regex` 2), #1892, #1093, #1848,
   #1849, #1825, and #771.
 - **Persona docs:** #1843, #1895, #1894 and #1898. **#1283 follow-ups:** #1864
   and #1865.
 - **Refactors.** #2041, #1958, #1865, #1770, #1757, #363 and #2101 are
-  measured and flat at `bad5f96`. #2041 needs a warden pre-flight on the `xsd`
+  measured and flat at `7d51720`. #2041 needs a warden pre-flight on the `xsd`
   export it adds. #1770 is the route #1765 and #1745 should take. #1735,
   #1736, #1701, #848 and #845 are unmeasured. #755 owns the single home of the
   xsi hint reader, which has three copies.
@@ -347,7 +355,7 @@ queued for the `/retro` on 2026-10-04 or waits on the owner.
    under `wip/issue-1861-*`, `wip/issue-1926-*`, `wip/issue-1988-*` and
    `wip/issue-2008-*`, and `wip/issue-2013`.
 2. **The next `/backlog` re-derives M5's north star.** `cvc-identity-constraint`
-   holds only #774's ruled decline, and the 180 assertion declines are #1042's
+   holds only elemZ015.i (#2124), and the 180 assertion declines are #1042's
    (`blocked`). It reads whether one decision holds the `<type-table>` 38 short
    of XPath, `MS-Additional`'s 22 and `MS-Attribute`'s 11 under #2025's ruling,
    or `<abstract>`'s 7, and takes a fresh `GOXSD_DECLINES=1` partition on the
@@ -356,9 +364,10 @@ queued for the `/retro` on 2026-10-04 or waits on the owner.
    (PRINCIPLES 25) under its oracle ruling. The replan chooses between filing
    the divergence as an explicit tracker the arbiter can cite, a human ruling,
    or closing #2081 `not_planned`.
-4. **#2115's grounding takes its `casejoin join instance` bound** and decides or
-   rules the re-read failure arm; **#2121's asks the oracle first** on its
-   three shapes. The session that takes one absorbs the other when it can.
+4. **#2124's and #2121's groundings each ask the oracle first:** #2124 on a
+   ·special·-typed key member's [schema actual value], #2121 on its three
+   shapes. A deciding ruling on #2124 sends its export to a warden pre-flight.
+   The session that takes one absorbs the other when it can.
 5. **The next `/backlog` re-derives M4's north star.** M4 declines 1 and has
    none, so it partitions `schema`'s decided-and-wrong clusters that are
    neither recorded nor ruled (`MS-Additional` 6, `TypeAlternativeTests` 4) and
@@ -394,6 +403,8 @@ queued for the `/retro` on 2026-10-04 or waits on the owner.
      residue an owner (#2115) and touched comments only.
    - #2080's first-round accept at 0 (soundness), and #2062's first-round
      accept at 9, each with one non-blocking finding.
+   - #2115's first-round accept at 0 (soundness), with no findings, after a
+     grounding that ruled the anySimpleType arm out of scope.
 
    Each landing came in exactly at its measured prediction. The retro rules
    #1868 and #1948 together with #1798, #1781 and #2096, then #1812, then the
