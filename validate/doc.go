@@ -195,7 +195,10 @@
 // validated against that type per String Valid (§3.16.4), through the same
 // value.Backend and with the same declines as the simple-content charge below.
 // The first two apply to a ·nilled· element as much as to any other; the third
-// alone is skipped for one. cvc-type's own clauses 1 and 2 are not evaluated.
+// alone is skipped for one. Clause 2 is charged under the same rule, at every
+// element whose ·governing type definition· is a complex type with {abstract}
+// true, whichever clause of key-governing-type-elem settled that type; the
+// element is still assessed against it. Clause 1 is not evaluated.
 //
 // Three more are the root's attribute half, against its ·governing
 // type definition·'s {attribute uses} and {attribute wildcard}.

@@ -52,10 +52,11 @@ const ruleCvcElt xsderr.Rule = "cvc-elt"
 const ruleCvcComplexType xsderr.Rule = "cvc-complex-type"
 
 // ruleCvcType is Element Locally Valid (Type) (Structures §3.3.4.4, cvc-type).
-// Clause 3.1's three sub-clauses — the arm taken where the ·governing type
-// definition· is a Simple Type Definition — are charged under it; the clause
-// number goes in the message on ruleCvcElt's terms, the catalog carrying the
-// bare name.
+// Clause 2, a complex ·governing type definition· whose {abstract} is true
+// ([walk.abstractType]), and clause 3.1's three sub-clauses — the arm taken
+// where the ·governing type definition· is a Simple Type Definition — are
+// charged under it; the clause number goes in the message on ruleCvcElt's
+// terms, the catalog carrying the bare name.
 const ruleCvcType xsderr.Rule = "cvc-type"
 
 // Assess walks root's subtree once — the element, then its [[attributes]],
@@ -87,8 +88,10 @@ const ruleCvcType xsderr.Rule = "cvc-type"
 // name — and so is never charged.
 //
 // Where the root's ·governing type definition· is determinable (see
-// governingType), the root itself is additionally assessed against it, through
-// cvc-type (§3.3.4.4) clause 3's dispatch on that type.
+// governingType), the root itself is additionally assessed against it: cvc-type
+// (§3.3.4.4) clause 2 is charged where that type is complex and its {abstract}
+// is true, without halting the walk ([walk.abstractType]); clause 3 dispatches
+// on that type.
 //
 // Clause 3.2, for a COMPLEX type, assesses it in both directions
 // cvc-complex-type (§3.4.4.2) quantifies in. Its [[attributes]] go to clauses
@@ -124,10 +127,10 @@ const ruleCvcType xsderr.Rule = "cvc-type"
 // ([walk.child], #1823).
 //
 // Nothing else is decided: the remaining cvc-elt clauses, cvc-type's own
-// clauses 1 and 2 (T ·non-absent·, and a complex T's {abstract}),
-// cvc-complex-type clause 5 over [[attributes]] (key-ldt-att) and clause 6 are
-// not evaluated, so a [Result] carrying no violation says the root is
-// declared, not abstract, and — where its type was determinable — carries no
+// clause 1 (T ·non-absent·), cvc-complex-type clause 5 over [[attributes]]
+// (key-ldt-att) and clause 6 are not evaluated, so a [Result] carrying no
+// violation says the root is declared, not abstract, and — where its type was
+// determinable — is governed by no abstract complex type, carries no
 // attribute clause 2 or clause 3.1.1 rejects, no required attribute clause 3
 // misses, no attribute whose value this backend could read and found invalid,
 // no content reject its ·governing type definition· could settle and no child
@@ -859,6 +862,7 @@ func (w *walk) element(e Element, g governance, parent *icCheck, inherited []inh
 	if w.log.Enabled(context.Background(), slog.LevelDebug) {
 		w.log.Debug("assessing element", slog.Any("name", e.Name()), slog.Any("loc", e.Loc()))
 	}
+	w.abstractType(e, g)
 	isNilled := w.nilCheck(e, g)
 	id := w.identityCheck(e, g, parent)
 	w.idAttributes(id)
@@ -877,6 +881,36 @@ func (w *walk) element(e Element, g governance, parent *icCheck, inherited []inh
 	id.substitute(content)
 	w.idElement(id)
 	w.identityExit(id)
+}
+
+// abstractType settles cvc-type (§3.3.4.4) clause 2 for e: where its
+// ·governing type definition· is a Complex Type Definition, that type's
+// {abstract} is false. g.typ is the type key-governing-type-elem settled,
+// whichever clause settled it — the declaration's ·selected type definition·
+// (clause 4), an xsi:type ·overriding· it (clause 3), a ·locally declared type·
+// or an xsi:type ·overriding· that (clauses 7 and 6), or an xsi:type alone
+// (clause 8) — so an xsi:type that failed cvc-elt clause 4 is never charged
+// here: governingType fell back to the selected type, and only that type's
+// {abstract} is read. A Simple Type Definition has no {abstract}, and an
+// element with no ·governing type definition· — ·laxly assessed· against
+// xs:anyType, which is not abstract, or one this package could not type — has
+// none to read.
+//
+// [walk.element] is the one path every element takes, once, so the clause is
+// charged once per element: the cvc-type evaluation cvc-elt clauses 5.1.2 and
+// 5.2.1 call for is the content check's reading of clause 3 over the ·initial
+// value· (cvccomplexcontent.go), which never calls back here. The charge does
+// not halt the walk: ·strictly assessed· (key-sva) gates on cvc-type clause 1
+// alone, so e's [[attributes]] and [[children]] are still assessed against the
+// abstract type.
+func (w *walk) abstractType(e Element, g governance) {
+	ct := g.complexType()
+	if ct == nil || !ct.Abstract() {
+		return
+	}
+	w.res.violations = append(w.res.violations, xsderr.New(ruleCvcType, e.Loc(),
+		"the element %s is governed by the complex type definition %s, whose {abstract} is true, but cvc-type clause 2 requires a complex ·governing type definition·'s {abstract} to be false",
+		e.Name(), typeName(g.typ)))
 }
 
 // attributes assesses E.[[attributes]] against the arm of cvc-type (§3.3.4.4)

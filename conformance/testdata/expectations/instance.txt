@@ -432,7 +432,7 @@ Complex/complex014/instance/complex014.n2.xml pass
 Complex/complex014/instance/complex014.v1.xml pass
 Complex/complex014/instance/complex014.v2.xml pass
 Complex/complex015/instance/complex015.n1.xml pass
-Complex/complex021/instance/complex021.n1.xml fail
+Complex/complex021/instance/complex021.n1.xml pass
 Complex/complex022/instance/complex022.n1.xml pass
 Complex/complex022/instance/complex022.n2.xml pass
 Complex/unique001/instance/unique001.n1.xml pass
@@ -635,7 +635,7 @@ ElemDecl/typedef00802m1/instance/Positive pass
 ElemDecl/typedef00802m2/instance/Negative pass
 ElemDecl/typedef00901m1/instance/Negative pass
 ElemDecl/typedef00901m1/instance/Positive pass
-ElemDecl/typedef01101m1/instance/Negative fail
+ElemDecl/typedef01101m1/instance/Negative pass
 ElemDecl/typedef01101m1/instance/Positive pass
 ElemDecl/typedef01201m1/instance/Negative pass
 ElemDecl/typedef01201m1/instance/Positive pass
@@ -1483,8 +1483,8 @@ MS-ComplexType2006-07-15/ctI044/instance/ctI044.v pass
 MS-ComplexType2006-07-15/ctI045/instance/ctI045.i pass
 MS-ComplexType2006-07-15/ctI046/instance/ctI046.v pass
 MS-ComplexType2006-07-15/ctI047/instance/ctI047.v pass
-MS-ComplexType2006-07-15/ctI048/instance/ctI048.i fail
-MS-ComplexType2006-07-15/ctI049/instance/ctI049.i fail
+MS-ComplexType2006-07-15/ctI048/instance/ctI048.i pass
+MS-ComplexType2006-07-15/ctI049/instance/ctI049.i pass
 MS-ComplexType2006-07-15/ctI050/instance/ctI050.v pass
 MS-ComplexType2006-07-15/ctJ001/instance/ctJ001.v pass
 MS-ComplexType2006-07-15/ctK001/instance/ctK001.v pass
