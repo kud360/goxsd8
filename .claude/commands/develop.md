@@ -86,6 +86,9 @@ counts.
    file path and identifier and record what any hit was (duplicate or
    adjacent).
 
+   Before delegating the oracle, run `git submodule update --init
+   testdata/xsdtests` in the checkout it reads (#1989).
+
    Grounding is posted as ONE `GROUNDING:` comment — the only durable copy
    — with each block headed by the agent that wrote it:
    - the **oracle** answers the spec — the clauses and rule IDs in scope —
