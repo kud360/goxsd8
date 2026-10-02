@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
 )
@@ -437,35 +438,37 @@ func TestIdentityConstraintDeclinesAreRecorded(t *testing.T) {
 		Unevaluated{rule: ruleCvcIdentityConstraint, loc: loc(5, 1), msg: "clauses 3 and 4 are undecided"})
 }
 
-// A ·key-sequence· comparison sameKeyMember cannot make — two members validated
-// against different simple types, here xs:string and xs:ID — withholds the
-// clause that reads it, and is recorded: clause 4.2.2 against the later ·target
-// node· of a key, and clause 4.3 against a keyref member. The xs:string/xs:string
-// control is the decided answer the first record stands in for.
+// A ·key-sequence· comparison sameKeyMember cannot make — a member validated
+// against a union, here xs:string against UID, whose ·active basic member· the
+// member does not keep (sameKeyMember's GAP) — withholds the clause that reads
+// it, and is recorded: clause 4.2.2 against the later ·target node· of a key,
+// and clause 4.3 against a keyref member. The xs:string/xs:string control is the
+// decided answer the first record stands in for.
 func TestUndecidedKeySequenceComparisonsAreRecorded(t *testing.T) {
-	key := icDef(t, "K", xsd.IdentityConstraintKey, ".//item", nil, "", "@id|@xid")
+	key := icDef(t, "K", xsd.IdentityConstraintKey, ".//item", nil, "", "@id|@uid")
 	schema := icSchema(t, "", false, []xsd.IdentityConstraint{key}, nil)
 	icWantCharges(t, icAssess(t, schema, icRoot(icIDed(2, "a"), icIDed(3, "a"))), icCharge(ruleCvcIdentityConstraint, 3))
-	got, undecided := assessRecorded(t, schema, icRoot(icIDed(2, "a"), idItem(3, "xid", "a")))
+	got, undecided := assessRecorded(t, schema, icRoot(icIDed(2, "a"), idItem(3, "uid", "a")))
 	wantSilence(t, got, "an undecided comparison charges nothing")
 	wantDeclines(t, icDeclines(undecided), Unevaluated{rule: ruleCvcIdentityConstraint, loc: loc(3, 1), msg: "clause 4.2.2 is undecided"})
 
-	unique := icDef(t, "U", xsd.IdentityConstraintUnique, "item", nil, "", "@xid")
-	keyref := icDef(t, "R", xsd.IdentityConstraintKeyref, "item", nil, "U", "@ref")
+	unique := icDef(t, "U", xsd.IdentityConstraintUnique, "item", nil, "", "@uid")
+	keyref := icDef(t, "R", xsd.IdentityConstraintKeyref, "item", nil, "U", "@id")
 	got, undecided = assessRecorded(t, icSchema(t, "", false, []xsd.IdentityConstraint{unique, keyref}, nil),
-		icRoot(idItem(2, "xid", "a"), idItem(3, "ref", "a")))
+		icRoot(idItem(2, "uid", "a"), idItem(3, "id", "a")))
 	wantSilence(t, got, "an undecided lookup charges nothing")
 	wantDeclines(t, icDeclines(undecided), Unevaluated{rule: ruleCvcIdentityConstraint, loc: loc(3, 1), msg: "clause 4.3 is undecided"})
 }
 
 // §3.11.5's conflict resolution drops two child entries sharing a
 // ·key-sequence·, so a keyref member matching that sequence is charged under
-// clause 4.3. Where the comparison between the two could not be made, both
-// entries are kept CONTESTED, and a member matching only a contested entry is
-// recorded as undecided rather than passing on an entry the proviso may have
-// removed. Without the contested mark, the second document walks clean.
+// clause 4.3. Where the comparison between the two could not be made — here an
+// xs:string member against a UID one, sameKeyMember's GAP — both entries are
+// kept CONTESTED, and a member matching only a contested entry is recorded as
+// undecided rather than passing on an entry the proviso may have removed.
+// Without the contested mark, the second document walks clean.
 func TestKeyrefMatchingOnlyAContestedEntryIsRecorded(t *testing.T) {
-	unique := icDef(t, "U", xsd.IdentityConstraintUnique, "item", nil, "", "@id|@xid")
+	unique := icDef(t, "U", xsd.IdentityConstraintUnique, "item", nil, "", "@id|@uid")
 	keyref := icDef(t, "R", xsd.IdentityConstraintKeyref, "item", nil, "U", "@id")
 	schema := icSchema(t, "", false, []xsd.IdentityConstraint{keyref}, []xsd.IdentityConstraint{unique})
 	box := func(line int, item *testElement) *testElement {
@@ -476,7 +479,96 @@ func TestKeyrefMatchingOnlyAContestedEntryIsRecorded(t *testing.T) {
 	icWantCharges(t, got, icCharge(ruleCvcIdentityConstraint, 2))
 	wantDeclines(t, icDeclines(undecided))
 
-	got, undecided = assessRecorded(t, schema, icRoot(icIDed(2, "a"), box(3, icIDed(4, "a")), box(5, idItem(6, "xid", "a"))))
+	got, undecided = assessRecorded(t, schema, icRoot(icIDed(2, "a"), box(3, icIDed(4, "a")), box(5, idItem(6, "uid", "a"))))
 	wantSilence(t, got, "a match on a contested entry charges nothing")
 	wantDeclines(t, icDeclines(undecided), Unevaluated{rule: ruleCvcIdentityConstraint, loc: loc(2, 1), msg: "clause 4.3 is undecided"})
+}
+
+// Two members of different ·primitive· datatypes are neither identical nor
+// equal (Datatypes §2.2.1, §2.2.2), so an xs:string "1" and an xs:integer "1"
+// are two ·key-sequences· and the unique is satisfied — decided, so nothing is
+// recorded. Under the aliased backend, which maps xs:string with xs:decimal's
+// mapping, the two VALUES compare equal: only the primitives tell them apart.
+func TestKeyMembersOfDifferentPrimitivesAreDistinct(t *testing.T) {
+	unique := icDef(t, "U", xsd.IdentityConstraintUnique, ".//item", nil, "", "@id|@k")
+	schema := icSchema(t, "", false, []xsd.IdentityConstraint{unique}, nil)
+	doc := icRoot(idItem(2, "id", "1"), idItem(3, "k", "1"))
+
+	aliased := aliasedBackend{base: testBackend(), from: icBuiltin("string"), to: icBuiltin("decimal")}
+	for _, backend := range []value.Backend{testBackend(), aliased} {
+		got, undecided := assessRecordedWith(t, backend, schema, doc)
+		wantSilence(t, got, "members of different primitives are distinct")
+		wantDeclines(t, icDeclines(undecided))
+	}
+}
+
+// aliasedBackend is base with from mapped by to's mapping.
+type aliasedBackend struct {
+	base     value.Backend
+	from, to xsd.QName
+}
+
+func (b aliasedBackend) Mapping(typ xsd.QName) (value.Mapping, bool) {
+	if typ == b.from {
+		return b.base.Mapping(b.to)
+	}
+	return b.base.Mapping(typ)
+}
+
+// Two members validated against different types derived from ONE ·primitive·
+// are compared in that primitive's value space (Datatypes §2.2.1), so each
+// charged pair below is one ·key-sequence· and the unique charges clause 4.1 at
+// the later: xs:string and xs:ID; xs:integer "01" and xs:unsignedByte "1", one
+// xs:decimal value; and xs:string "a b" and xs:token " a  b ", which xs:token's
+// own whiteSpace collapses before the xs:string value is read. The uncharged
+// pair is that normalization's other side: xs:string " a b" keeps its space.
+func TestKeyMembersOfOnePrimitiveCompareInItsValueSpace(t *testing.T) {
+	for _, tc := range []struct {
+		fields       string
+		first, later [2]string
+		charged      bool
+	}{
+		{"@id|@xid", [2]string{"id", "a"}, [2]string{"xid", "a"}, true},
+		{"@k|@ub", [2]string{"k", "01"}, [2]string{"ub", "1"}, true},
+		{"@id|@tok", [2]string{"id", "a b"}, [2]string{"tok", " a  b "}, true},
+		{"@id|@tok", [2]string{"id", " a b"}, [2]string{"tok", "a b"}, false},
+	} {
+		unique := icDef(t, "U", xsd.IdentityConstraintUnique, ".//item", nil, "", tc.fields)
+		got, undecided := assessRecorded(t, icSchema(t, "", false, []xsd.IdentityConstraint{unique}, nil),
+			icRoot(idItem(2, tc.first[0], tc.first[1]), idItem(3, tc.later[0], tc.later[1])))
+		wantDeclines(t, icDeclines(undecided))
+		if !tc.charged {
+			wantSilence(t, got, "distinct xs:string values are two key-sequences")
+			continue
+		}
+		icWantCharges(t, got, icCharge(ruleCvcIdentityConstraint, 3))
+		if !strings.Contains(got[0].Error(), "clause 4.1 ") {
+			t.Errorf("Violations() = %v, want the charge made under clause 4.1", got)
+		}
+	}
+}
+
+// A list of one item is not distinguished from the atomic value it holds
+// (Structures §3.11.4, the paragraph after cvc-identity-constraint), so an
+// xs:IDREFS keyref member "a" resolves against an xs:ID unique member "a". A
+// list of two items has the length of no atomic value (Datatypes §2.2.1,
+// §2.2.2), so "a b" resolves against nothing and clause 4.3 charges it.
+func TestSingletonListMatchesAnAtomicKeyMember(t *testing.T) {
+	unique := icDef(t, "U", xsd.IdentityConstraintUnique, "item", nil, "", "@xid")
+	keyref := icDef(t, "R", xsd.IdentityConstraintKeyref, "item", nil, "U", "@refs")
+	schema := icSchema(t, "", false, []xsd.IdentityConstraint{unique, keyref}, nil)
+	doc := func(refs string) *testElement {
+		return icRoot(idItem(2, "xid", "a"), idItem(3, "xid", "b"), idItem(4, "refs", refs))
+	}
+
+	got, undecided := assessRecorded(t, schema, doc("a"))
+	wantSilence(t, got, "a singleton list resolves against its atomic item")
+	wantDeclines(t, icDeclines(undecided))
+
+	got, undecided = assessRecorded(t, schema, doc("a b"))
+	icWantCharges(t, got, icCharge(ruleCvcIdentityConstraint, 4))
+	if !strings.Contains(got[0].Error(), "clause 4.3 ") {
+		t.Errorf("Violations() = %v, want the charge made under clause 4.3", got)
+	}
+	wantDeclines(t, icDeclines(undecided))
 }

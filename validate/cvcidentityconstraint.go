@@ -201,6 +201,13 @@ type icSlot struct {
 // space its own type governs, never a lexical (Datatypes §2.2, and see
 // [walk.sameKeyMember]).
 //
+// lexical and owner are the lexical v was read off and the element whose
+// namespace bindings were in scope for it. They are read only where the two
+// members of a pair were validated against different simple types, which
+// [walk.primitiveItems] answers by re-reading lexical in the ·primitive· value
+// space; v alone cannot answer it, since a backend may map a derived type into a
+// space of its own.
+//
 // element and nillable travel with it for clause 4.2.3 alone, which asks
 // whether an ELEMENT member "was assessed as ·valid· by reference to an element
 // declaration whose {nillable} is true". The spec's own Note licenses reading
@@ -209,6 +216,8 @@ type icSlot struct {
 type icKeyMember struct {
 	st       *xsd.SimpleType
 	v        value.Value
+	lexical  string
+	owner    Element
 	element  bool
 	nillable bool
 }
@@ -580,7 +589,7 @@ func (w *walk) keyMember(st *xsd.SimpleType, lexical string, owner Element, elem
 	if err != nil {
 		return icKeyMember{}, false, value.IsDatatypeVerdict(err)
 	}
-	return icKeyMember{st: st, v: v, element: element, nillable: nillable}, true, true
+	return icKeyMember{st: st, v: v, lexical: lexical, owner: owner, element: element, nillable: nillable}, true, true
 }
 
 // offer takes one candidate field node's answer — the node named name at loc —
@@ -882,33 +891,213 @@ func (w *walk) sameKeySequence(a, b icKeySequence) (same, decided bool) {
 // one xs:integer key, and a lexical comparison in its place would report them
 // as two.
 //
-// The comparison is refused unless both members were validated against the SAME
-// [xsd.SimpleType] node, which a compiled schema shares one of per type
-// (xsd/simpletype.go). §2.2.1 makes values of different ·primitive· datatypes
-// "artificially distinct" even where they look alike, and a backend's mapping
-// for a derived type may in addition represent values in a space of its own, so
-// two values parsed under two mappings are not comparable by asking one of them
-// — the answer would be a decided NOT-same, which is the one outcome clause 4.3
-// turns into a rejection. Declining costs recall in the other three clauses,
-// which charge on a decided SAME, and nothing at all in correctness.
+// Two members validated against the SAME [xsd.SimpleType] node, which a compiled
+// schema shares one of per type (xsd/simpletype.go), are compared by asking one
+// value about the other ([sameValue]). Two validated against different nodes are
+// not: a backend's mapping for a derived type may represent values in a space of
+// its own, so asking one of them would answer a decided NOT-same, which is the
+// one outcome clause 4.3 turns into a rejection. That pair is compared in the
+// ·primitive· value space instead ([walk.sameAcrossTypes]).
 //
-// The equal-or-identical union itself is Datatypes §2.2.2's — "all comparisons
-// for 'sameness' prescribed by this specification test for either equality or
-// identity, not for identity alone" — over the two capability interfaces
-// package value publishes for exactly this question.
+// GAP(validate): a pair neither path can compare declines (decided=false)
+// instead: a union-typed member, or a list member whose {item type definition}
+// is a union, since icKeyMember keeps the union and not the member type the
+// value was validated as, whose ·primitive· is the relevant one; an
+// xs:anySimpleType or xs:anyAtomicType member, whose {primitive type
+// definition} is absent; and a value with neither value.Eq nor value.Identical.
+// The readers of the answer, all through [walk.sameKeySequence], charge only on
+// a decided one: [icFrame.duplicates] charges clause 4.1/4.2.2 on a decided
+// same and records the decline instead; [resolveEntryConflicts] keeps both
+// entries, marked contested; [icBinding.lookup] reports the member undecided,
+// which [icCheck.keyrefs] records instead of charging clause 4.3. So a decline
+// withholds a charge and manufactures none. No open issue owns this residue
+// yet; #2111, which decided the cross-type pairs above it, is provenance.
 func (w *walk) sameKeyMember(a, b icKeyMember) (same, decided bool) {
-	if a.st != b.st {
-		return false, false
+	if a.st == b.st {
+		return sameValue(a.v, b.v)
 	}
-	id, hasIdentical := a.v.(value.Identical)
-	if hasIdentical && id.Identical(b.v) {
+	return w.sameAcrossTypes(a, b)
+}
+
+// sameValue is the equal-or-identical union of Datatypes §2.2.2 — "all
+// comparisons for 'sameness' prescribed by this specification test for either
+// equality or identity, not for identity alone" — over the two capability
+// interfaces package value publishes for exactly this question. decided is false
+// where a has neither.
+func sameValue(a, b value.Value) (same, decided bool) {
+	id, hasIdentical := a.(value.Identical)
+	if hasIdentical && id.Identical(b) {
 		return true, true
 	}
-	eq, hasEq := a.v.(value.Eq)
-	if hasEq && eq.Eq(b.v) {
+	eq, hasEq := a.(value.Eq)
+	if hasEq && eq.Eq(b) {
 		return true, true
 	}
 	return false, hasIdentical || hasEq
+}
+
+// sameAcrossTypes compares two members validated against different simple
+// types, each read as the sequence of its atomic values in their ·primitive·
+// value spaces ([walk.primitiveItems]):
+//
+//   - an atomic member is a sequence of one, per the paragraph of Structures
+//     §3.11.4 after cvc-identity-constraint: "single atomic values are not
+//     distinguished from lists with single items";
+//   - sequences of different lengths are neither identical nor equal (Datatypes
+//     §2.2.1, §2.2.2: two lists are the same only if they "have the same
+//     length"), so a list of two items, or of none, matches no atomic member;
+//   - items of different ·primitive· datatypes are "artificially distinct" and
+//     "artificially unequal" (§2.2.1, §2.2.2), whatever they look like;
+//   - items of one ·primitive· are compared by that primitive's own identity and
+//     equality, whichever types derived from it they were validated against.
+//
+// Two sequences are the same where every item pair is identical or every item
+// pair is equal — lists are equal "if and only if they have the same length and
+// their items are pairwise equal" (§2.2.2), and identical likewise (§2.2.1) —
+// which for two atomic members is [sameValue]'s union. decided is false where
+// either member cannot be read, or an item has neither capability.
+func (w *walk) sameAcrossTypes(a, b icKeyMember) (same, decided bool) {
+	as, ok := w.primitiveItems(a)
+	if !ok {
+		return false, false
+	}
+	bs, ok := w.primitiveItems(b)
+	if !ok {
+		return false, false
+	}
+	if len(as) != len(bs) {
+		return false, true
+	}
+	for i := range as {
+		if as[i].primitive.Name() != bs[i].primitive.Name() {
+			return false, true
+		}
+	}
+	identical, equal := true, true
+	for i := range as {
+		id, hasIdentical := as[i].v.(value.Identical)
+		eq, hasEq := as[i].v.(value.Eq)
+		if !hasIdentical && !hasEq {
+			return false, false
+		}
+		identical = identical && hasIdentical && id.Identical(bs[i].v)
+		equal = equal && hasEq && eq.Eq(bs[i].v)
+	}
+	return identical || equal, true
+}
+
+// icPrimitiveItem is one atomic value of a ·key-sequence· member, read in the
+// value space of its type's {primitive type definition}. Two primitives are
+// compared by {name}, which is unique among the ·primitive· datatypes.
+type icPrimitiveItem struct {
+	primitive *xsd.SimpleType
+	v         value.Value
+}
+
+// primitiveItems reads m as the sequence of its atomic values, each in the value
+// space of its own type's ·primitive·: one item for an atomic member, one per
+// list item for a list member.
+//
+// Each item is read off the lexical m's OWN type normalized, under that type's
+// whiteSpace facet ([normalizedLexical]): an xs:token member written " a  b " is
+// the value "a b", and re-reading the raw lexical under xs:string, whose
+// whiteSpace is preserve, would read a different value. A list's whiteSpace is
+// collapse (§4.3.6.1), so its items are its normalized lexical's tokens, which
+// hold no white space for an item type's own normalization to change. The
+// namespace bindings are m's owner's, as [walk.keyMember] read them.
+//
+// ok is false for the residue [walk.sameKeyMember]'s GAP names, and where a
+// resolution or the re-reading fails: on a lexical m's own type accepted, that
+// is a fault of the type or of the backend and not a verdict about the lexical.
+func (w *walk) primitiveItems(m icKeyMember) ([]icPrimitiveItem, bool) {
+	variety, err := m.st.Variety(w.schema)
+	if err != nil {
+		return nil, false
+	}
+	ctx := elementContext{owner: m.owner}
+	switch variety.(type) {
+	case xsd.Atomic:
+		normalized, ok := normalizedLexical(w.schema, m.st, m.lexical)
+		if !ok {
+			return nil, false
+		}
+		item, ok := w.primitiveItem(m.st, normalized, ctx)
+		return []icPrimitiveItem{item}, ok
+	case xsd.List:
+		itemType, err := m.st.Item(w.schema)
+		if err != nil {
+			return nil, false
+		}
+		tokens := strings.FieldsFunc(m.lexical, isXMLSpace)
+		items := make([]icPrimitiveItem, 0, len(tokens))
+		for _, token := range tokens {
+			item, ok := w.primitiveItem(itemType, token, ctx)
+			if !ok {
+				return nil, false
+			}
+			items = append(items, item)
+		}
+		return items, true
+	}
+	return nil, false
+}
+
+// primitiveItem reads one normalized atomic lexical, accepted by st, in the value
+// space of st's {primitive type definition}. ok is false where that property is
+// absent — a union, xs:anySimpleType, xs:anyAtomicType — or where the chain does
+// not resolve or the primitive's mapping rejects the lexical, each a decline.
+func (w *walk) primitiveItem(st *xsd.SimpleType, lexical string, ctx value.Context) (icPrimitiveItem, bool) {
+	primitive, err := st.Primitive(w.schema)
+	if err != nil || primitive == nil {
+		return icPrimitiveItem{}, false
+	}
+	v, err := value.ValidateLexical(w.backend, w.schema, primitive, lexical, ctx)
+	if err != nil {
+		return icPrimitiveItem{}, false
+	}
+	return icPrimitiveItem{primitive: primitive, v: v}, true
+}
+
+// normalizedLexical is lexical under the whiteSpace facet in force on st
+// (Datatypes §4.3.6), which an atomic type with a ·primitive· always carries
+// (§3.16.7.4). ok is false where st carries no single recognized {value}.
+//
+// It reads the facet itself because package value's own resolution is
+// unexported, and the pipeline's normalized lexical is not among
+// value.ValidateLexical's results.
+func normalizedLexical(r xsd.TypeResolver, st *xsd.SimpleType, lexical string) (string, bool) {
+	facets, err := st.EffectiveFacets(r)
+	if err != nil {
+		return "", false
+	}
+	for _, ef := range facets {
+		if ef.Facet().Kind() != xsd.FacetWhiteSpace {
+			continue
+		}
+		values := ef.Facet().Values()
+		if len(values) != 1 {
+			return "", false
+		}
+		switch values[0] {
+		case "preserve":
+			return lexical, true
+		case "replace":
+			return strings.Map(replaceXMLSpace, lexical), true
+		case "collapse":
+			return collapseXMLWhitespace(lexical), true
+		}
+		return "", false
+	}
+	return "", false
+}
+
+// replaceXMLSpace is whiteSpace = replace on one rune (§4.3.6): each of
+// xmlWhitespace's characters becomes a space.
+func replaceXMLSpace(r rune) rune {
+	if isXMLSpace(r) {
+		return ' '
+	}
+	return r
 }
 
 // icTable is one element's [identity-constraint table] (§3.11.5): one binding
