@@ -540,8 +540,9 @@ func (w *walk) identityExit(c *icCheck) {
 //
 // No ·governing type definition· at all (a {type table} carrying a {test} the
 // §3.12.6 evaluator declines, an unresolvable slot, an xsi:type whose
-// ·override· could not be decided, or an element this walk assessed against no
-// declaration) declines rather than contribute a value, recorded as an
+// ·override· could not be decided, an element this walk ·attributed· to nothing
+// (unattributed), or one ·laxly assessed· with no ·instance-specified type
+// definition·) declines rather than contribute a value, recorded as an
 // [Unevaluated] ([icTarget.decline]).
 //
 // A determined one that is neither a simple type definition nor a complex type
