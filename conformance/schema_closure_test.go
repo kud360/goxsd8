@@ -1141,13 +1141,16 @@ func TestSchemaExecutorDecidesUnlicensedNamespaceBesideShortfall(t *testing.T) {
 //
 // The fault row is MS-Schema schB4's included document verbatim: <notwf>, an
 // element left unclosed at end of document. The limitation rows are an encoding
-// declaration the reader does not decode (#361) and a reference to a general
-// entity the DOCTYPE internal subset declares, in element content and in an
-// attribute value — the second being IRI/iri-001's <xs:pattern value="&URI;">,
-// a suite-valid case this arm must never decide invalid — and an xs prefix
-// bound only by the xmlns:xs an internal-subset <!ATTLIST defaults, a
-// well-formed document (XML 1.0 §5.1) the reader charges with an unbound
-// prefix wrapping no cause, because it applies no attribute default.
+// declaration the reader does not decode (#361) and an xs prefix bound only by
+// the xmlns:xs an internal-subset <!ATTLIST defaults, a well-formed document
+// (XML 1.0 §5.1) the reader charges with an unbound prefix wrapping no cause,
+// because it applies no attribute default.
+//
+// The included rows were limitation rows until the reader included internal
+// general entities (#2077): a reference to one the DOCTYPE internal subset
+// declares, in element content and in an attribute value — the second being
+// IRI/iri-001's <xs:pattern value="&URI;">, a suite-valid case. Their documents
+// now read, so each is DECIDED valid, the read arm never reached.
 //
 // Each row runs the real parser, so it also pins the chain shape
 // wellFormednessFault reads: the fault row is undecided with the read arm's
@@ -1168,11 +1171,6 @@ func TestSchemaExecutorReadArmSeparatesFaultFromLimitation(t *testing.T) {
 	limitations := map[string]string{
 		"encoding declaration the reader does not decode": `<?xml version="1.0" encoding="ISO-8859-1"?>` +
 			schemaSrc("urn:a", decidableType),
-		"internal-subset entity in element content": `<!DOCTYPE xs:schema [<!ENTITY doc "text">]>` +
-			schemaSrc("urn:a", `<xs:annotation><xs:documentation>&doc;</xs:documentation></xs:annotation>`+decidableType),
-		"internal-subset entity in an attribute value (iri-001)": `<!DOCTYPE xs:schema [<!ENTITY URI "[a-z]+">]>` +
-			schemaSrc("urn:a", `<xs:simpleType name="uri"><xs:restriction base="xs:anyURI">`+
-				`<xs:pattern value="&URI;"/></xs:restriction></xs:simpleType>`),
 		"namespace declaration an internal-subset ATTLIST defaults": `<!DOCTYPE xs:schema [` +
 			`<!ATTLIST xs:schema xmlns:xs CDATA #FIXED "http://www.w3.org/2001/XMLSchema">]>` +
 			`<xs:schema targetNamespace="urn:a">` + decidableType + `</xs:schema>`,
@@ -1184,6 +1182,24 @@ func TestSchemaExecutorReadArmSeparatesFaultFromLimitation(t *testing.T) {
 				if exec(caseSpec{kind: kindSchema, doc: doc, expect: expectValidity(ev)}).IsPass() {
 					t.Errorf("a read failure that may be a reader limitation must be DECLINED (Fail) regardless of expectValid=%v", ev)
 				}
+			}
+		})
+	}
+	included := map[string]string{
+		"internal-subset entity in element content": `<!DOCTYPE xs:schema [<!ENTITY doc "text">]>` +
+			schemaSrc("urn:a", `<xs:annotation><xs:documentation>&doc;</xs:documentation></xs:annotation>`+decidableType),
+		"internal-subset entity in an attribute value (iri-001)": `<!DOCTYPE xs:schema [<!ENTITY URI "[a-z]+">]>` +
+			schemaSrc("urn:a", `<xs:simpleType name="uri"><xs:restriction base="xs:anyURI">`+
+				`<xs:pattern value="&URI;"/></xs:restriction></xs:simpleType>`),
+	}
+	for _, name := range slices.Sorted(maps.Keys(included)) {
+		t.Run(name, func(t *testing.T) {
+			doc := writeSchemaTree(t, "main.xsd", map[string]string{"main.xsd": main, "inc.xsd": included[name]})
+			if !exec(caseSpec{kind: kindSchema, doc: doc, expect: expectValidity(true)}).IsPass() {
+				t.Error("an <include> of a document whose internal-subset entities the reader includes must be DECIDED valid")
+			}
+			if exec(caseSpec{kind: kindSchema, doc: doc, expect: expectValidity(false)}).IsPass() {
+				t.Error("must Fail under a flipped expectation (decides for real)")
 			}
 		})
 	}

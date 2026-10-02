@@ -49,9 +49,10 @@ func (d *Document) IsSchema() bool {
 // opened or resolved here (it may even be a filesystem path).
 //
 // It errors only on XML well-formedness faults (delegated to xmltree's reader,
-// carrying an xsderr.Loc), on I/O, and on a rootless document; it never panics
-// on malformed input, and it produces no xsd components — recognizing the root
-// as a <schema> (IsSchema) and producing components are later concerns.
+// carrying an xsderr.Loc), on I/O, on a rootless document, or on a document the
+// reader refuses (see parser/xmltree's Contract); it never panics on malformed
+// input, and it produces no xsd components — recognizing the root as a <schema>
+// (IsSchema) and producing components are later concerns.
 //
 // The Document it returns is S1, the RAW document. ·Conditional-inclusion
 // pre-processing· (§4.2.2) is not applied here: it is applied by [Parse] to

@@ -49,19 +49,44 @@
 //     a character-data run there holding anything but white space is
 //     rejected as RuleXMLWellFormed at the run's start, the character
 //     after the preceding markup.
-//   - The DOCTYPE's internal subset is read for its unparsed entity
-//     declarations (<!ENTITY name SYSTEM|PUBLIC ... NDATA notation>), the
-//     document's [unparsed entities] property, answered by
-//     Reader.HasUnparsedEntity and final once the document element's start
-//     tag is read. It surfaces as no Node: a prolog fact is not part of the
-//     element/character-data stream. Internal parameter entities are
-//     expanded, bounded in depth and size. The external subset is never
-//     read, by design (#1668), nor is an external parameter entity; a
-//     declaration after a parameter-entity reference that is not read is not
-//     processed unless standalone="yes" (XML 1.0 §5.1). An entity declared
-//     only where the reader did not read is not a member, and
-//     Reader.AllDeclarationsProcessed, the [all declarations processed]
-//     property, then reports false.
+//   - The DOCTYPE's internal subset is read for its general entity
+//     declarations, the first declaration of a name binding (XML 1.0 §4.2).
+//     Its unparsed entities (<!ENTITY name SYSTEM|PUBLIC ... NDATA
+//     notation>) are the document's [unparsed entities] property, answered
+//     by Reader.HasUnparsedEntity and final once the document element's
+//     start tag is read; the subset itself surfaces as no Node, a prolog
+//     fact not being part of the element/character-data stream. Internal
+//     parameter entities are expanded, bounded in depth and size. The
+//     external subset is never read, by design (#1668), nor is an external
+//     parameter entity; a declaration after a parameter-entity reference
+//     that is not read is not processed unless standalone="yes" (XML 1.0
+//     §5.1). An entity declared only where the reader did not read is not a
+//     member, and Reader.AllDeclarationsProcessed, the [all declarations
+//     processed] property, then reports false.
+//   - A reference to an internal general entity is replaced by its
+//     replacement text (XML 1.0 §4.4.2, §4.4.5): in content, parsed as
+//     content in the scope in force at the reference, its nodes located at
+//     the reference; in an attribute value, normalized per §3.3.3 together
+//     with the rest of that value. Nested references expand at inclusion
+//     (§4.5). A recursive reference, a '<' in replacement text an attribute
+//     value includes, and replacement text that is not balanced content are
+//     RuleXMLWellFormed faults. A reference past the reader's bound on
+//     nesting depth or on replacement text included per document is refused,
+//     as is a reference to an entity that is not internal or whose
+//     declaration the reader did not read, wrapping a cause: the reader does
+//     not decide whether the document is well-formed.
+//   - Every error the reader returns but io.EOF is a RuleXMLWellFormed
+//     *xsderr.Error, and whether it wraps a cause says what it decides. One wrapping no
+//     cause is a charge the reader makes itself and a definite fault whatever
+//     the document's DTD declares — an entity it includes is one whose
+//     internal-subset declaration it read, which binds before the external
+//     subset's (XML 1.0 §2.8, §4.2) — except the unbound-prefix charge: an
+//     <!ATTLIST can default the namespace declaration that binds the prefix
+//     (§3.3.2), a non-validating processor must supply that default from the
+//     internal subset (§5.1), and the reader applies no attribute default.
+//     One wrapping a cause — an encoding/xml syntax error, among them its
+//     refusal of an encoding declaration the reader does not decode, an I/O
+//     fault, or one of the refusals above — may be a limit of this reader.
 //
 // Fuzz targets guard the reader against panics on malformed input
 // (PRINCIPLES 24); malformed XML is an error value, never a crash.

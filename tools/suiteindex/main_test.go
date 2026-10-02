@@ -829,7 +829,7 @@ func TestScanFixtureCensusesEveryAttributeName(t *testing.T) {
 // TestReportGroupsTheNameAxis pins the shape `@*` reports in, which is the
 // one thing #1391 changed about the output: the pairs with their counts, then
 // each pair's fixtures, and no per-occurrence section at all. One line per
-// occurrence is what the corpus makes unreadable at 172,630 of them.
+// occurrence is what the corpus makes unreadable at 172,648 of them.
 func TestReportGroupsTheNameAxis(t *testing.T) {
 	root := t.TempDir()
 	writeFixture(t, root, "a/one.xsd", xsPrefixDoc)
@@ -1914,8 +1914,8 @@ func TestSuiteAttributeNameAxis(t *testing.T) {
 	}
 	// The second figure below is why the axis report is grouped and the first
 	// is what it is grouped into: one line per occurrence is not a report.
-	if len(groups) != 185 || occurrences != 172630 {
-		t.Errorf("axis = %d pair(s), %d attribute occurrence(s); want 185, 172630", len(groups), occurrences)
+	if len(groups) != 185 || occurrences != 172648 {
+		t.Errorf("axis = %d pair(s), %d attribute occurrence(s); want 185, 172648", len(groups), occurrences)
 	}
 
 	want := map[pairName]pairGroup{

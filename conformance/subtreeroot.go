@@ -13,6 +13,7 @@ import (
 	"github.com/kud360/goxsd8/internal/xmlenc"
 	"github.com/kud360/goxsd8/loader"
 	"github.com/kud360/goxsd8/parser"
+	"github.com/kud360/goxsd8/parser/xmltree"
 	"github.com/kud360/goxsd8/xsd"
 )
 
@@ -716,9 +717,10 @@ func (g *subtreeGate) onChain(t xsd.ComplexType, holds func(xsd.ComplexType) boo
 // entity it declares is one an ENTITY value may name, which the walk decides
 // through parser/xmltree's own read of the subset (key-vde, cvc-simple-type
 // clause 3); a reference to a general entity it declares is included text
-// (§4.4.2), which parser/xmltree rejects as not well-formed, encoding/xml
-// knowing no entity but the five predefined ones, and a document it rejects
-// reaches no verdict through either reader of rootStart (rawDecoder).
+// (§4.4.2), which parser/xmltree includes and encoding/xml, knowing no entity
+// but the five predefined ones, refuses, so a document holding one reaches no
+// verdict through either reader of rootStart (rawDecoder): each answers true
+// only once dec has read the whole document, and false on dec's error.
 func rootStart(dec *xml.Decoder) (xml.StartElement, bool) {
 	for {
 		tok, err := dec.Token()
@@ -756,23 +758,22 @@ func defaultsNoAttribute(d xml.Directive) bool {
 }
 
 // rawDecoder is the one encoding/xml reader the lane's raw re-reads —
-// assessedSubtreeRoot, documentCarries and instanceHints — take over a
-// document's bytes. It reads the leading byte-order mark through
-// internal/xmlenc, the decoding parser/xmltree's reader takes (XML 1.0 §4.3.3,
-// Appendix F.1): a UTF-16 document, either byte order, is transcoded to UTF-8,
-// a UTF-8 mark is dropped as the encoding signature it is, and an encoding
-// declaration that disagrees with the mark fails the read through the mark's
-// CharsetReader. The mark is thereby consumed before xmldecl.As10 meets the
-// declaration, as As10 requires, and As10 then admits a 1.x version label as
-// xmltree admits it — so a document's label is admitted here exactly when
-// xmltree admits it, in either encoding, with the mark or without.
+// assessedSubtreeRoot and instanceHints — take over a document's bytes. It
+// reads the leading byte-order mark through internal/xmlenc, the decoding
+// parser/xmltree's reader takes (XML 1.0 §4.3.3, Appendix F.1): a UTF-16
+// document, either byte order, is transcoded to UTF-8, a UTF-8 mark is dropped
+// as the encoding signature it is, and an encoding declaration that disagrees
+// with the mark fails the read through the mark's CharsetReader. The mark is
+// thereby consumed before xmldecl.As10 meets the declaration, as As10
+// requires, and As10 then admits a 1.x version label as xmltree admits it — so
+// a document's label is admitted here exactly when xmltree admits it, in
+// either encoding, with the mark or without.
 //
 // One disagreement xmltree rejects is read here: a UTF-16 mark under
 // encoding="UTF-8", which encoding/xml never hands to a CharsetReader and
 // xmltree's checkDeclaration catches on its own. No verdict rests on that
-// read: documentCarries re-reads only documents the assembly read through
-// xmltree, assessedSubtreeRoot runs only after assessInstance has read the
-// instance through it, and a case whose instance instanceHints read is
+// read: assessedSubtreeRoot runs only after assessInstance has read the
+// instance through xmltree, and a case whose instance instanceHints read is
 // declined by that same assessInstance when xmltree rejects it.
 //
 // A read failure in the peek for the mark is reported by the decoder's first
@@ -823,33 +824,39 @@ func closureVersioned(report *parser.AssemblyReport) bool {
 }
 
 // isVersioningAttr reports whether a is in versioningNS.
-func isVersioningAttr(a xml.Attr) bool {
-	return a.Name.Space == versioningNS
+func isVersioningAttr(a xmltree.Attribute) bool {
+	return a.Name().Space() == versioningNS
 }
 
 // documentCarries reports whether any element of the document at path carries
 // an attribute satisfying is, or the document cannot be read to say: one that
-// will not open or decode answers true.
-func documentCarries(path string, is func(xml.Attr) bool) bool {
+// will not open or read answers true.
+//
+// It reads through parser/xmltree, the reader the assembly read the document
+// with, and not through rawDecoder: an element or attribute that a reference
+// to an internal general entity includes (XML 1.0 §4.4.2) is one the assembly
+// saw, and encoding/xml, which knows no entity but the five predefined ones,
+// would refuse the document instead of reading it.
+func documentCarries(path string, is func(xmltree.Attribute) bool) bool {
 	f, err := os.Open(path)
 	if err != nil {
 		return true
 	}
 	defer func() { _ = f.Close() }() // read-only handle: close error cannot affect the verdict
-	dec := rawDecoder(f)
+	r := xmltree.NewReader(path, f)
 	for {
-		tok, err := dec.Token()
+		tok, err := r.Token()
 		if errors.Is(err, io.EOF) {
 			return false
 		}
 		if err != nil {
 			return true
 		}
-		start, ok := tok.(xml.StartElement)
+		start, ok := tok.(*xmltree.StartElement)
 		if !ok {
 			continue
 		}
-		if slices.ContainsFunc(start.Attr, is) {
+		if slices.ContainsFunc(start.Attributes(), is) {
 			return true
 		}
 	}

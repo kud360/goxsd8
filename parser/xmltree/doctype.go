@@ -6,12 +6,16 @@ import (
 )
 
 // entityDecl is one general entity declaration of a DOCTYPE's internal
-// subset: the entity's name, and whether it is UNPARSED — an external entity
+// subset: the entity's name, whether it is UNPARSED — an external entity
 // carrying an NDATA notation name, which is what an ·ENTITY value· must name
-// (Structures §3.16.4 key-vde).
+// (Structures §3.16.4 key-vde) — and, for an internal entity, its replacement
+// text, which a reference to it includes (XML 1.0 §4.4.2, §4.4.5). value is
+// unreadable for every other entity: an external one, unparsed or not, and
+// one whose definition is malformed.
 type entityDecl struct {
 	name     string
 	unparsed bool
+	value    entityValue
 }
 
 // Bounds on parameter-entity expansion. A reference past either one is
@@ -82,24 +86,24 @@ func hasExternalID(header string) bool {
 }
 
 // subsetScan is one read of a DOCTYPE's internal subset. pes maps each
-// parameter entity declared so far to its definition, keeping the first
+// parameter entity declared so far to its replacement text, keeping the first
 // declaration of a name (XML 1.0 §4.2); it is a lookup index only, never
 // iterated. depth counts the expansions in progress, and spent the bytes of
 // replacement text scanned so far. decls collects the general entity
 // declarations read, and unread records that some declaration was not.
 type subsetScan struct {
 	standalone bool
-	pes        map[string]paramEntity
+	pes        map[string]entityValue
 	depth      int
 	spent      int
 	decls      []entityDecl
 	unread     bool
 }
 
-// paramEntity is one parameter entity's definition: its replacement text, and
-// whether it has one the scan can read — false for an external entity, a
-// malformed definition, or a literal whose replacement text cannot be built.
-type paramEntity struct {
+// entityValue is one entity's replacement text, and whether it has one the
+// reader can read — false for an external entity, a malformed definition, or
+// a literal whose replacement text cannot be built.
+type entityValue struct {
 	text     string
 	readable bool
 }
@@ -220,7 +224,7 @@ func (sc *subsetScan) declare(body string) {
 		return
 	}
 	if sc.pes == nil {
-		sc.pes = make(map[string]paramEntity)
+		sc.pes = make(map[string]entityValue)
 	}
 	sc.pes[name] = pe
 }
@@ -230,28 +234,40 @@ func (sc *subsetScan) declare(body string) {
 // The entity is readable only when its PEDef is one EntityValue literal whose
 // replacement text can be built (see replacementText): an ExternalID, or
 // anything malformed, declares an entity this scan never reads.
-func paramEntityOf(body string) (string, paramEntity, bool) {
+func paramEntityOf(body string) (string, entityValue, bool) {
 	if body == "" || !strings.ContainsRune(declSpace, rune(body[0])) {
-		return "", paramEntity{}, false
+		return "", entityValue{}, false
 	}
 	toks := declTokens(body)
 	if len(toks) < 3 || toks[0] != "%" || !isDeclName(toks[1]) {
-		return "", paramEntity{}, false
+		return "", entityValue{}, false
 	}
-	if len(toks) != 3 || !isLiteral(toks[2]) {
-		return toks[1], paramEntity{}, true
+	if len(toks) != 3 {
+		return toks[1], entityValue{}, true
 	}
-	text, ok := replacementText(toks[2][1 : len(toks[2])-1])
-	return toks[1], paramEntity{text: text, readable: ok}, true
+	return toks[1], literalValue(toks[2]), true
 }
 
-// replacementText builds an internal parameter entity's replacement text from
-// its literal entity value (XML 1.0 §4.5): each character reference is
-// replaced by the character it names, and a general entity reference is left
-// as it stands (§4.4.7, bypassed). It reports false for a literal holding a
-// parameter-entity reference, which the internal subset forbids inside a
-// markup declaration (WFC PEs in Internal Subset), or a character reference
-// that is malformed or names no Char (WFC Legal Character).
+// literalValue is the value a definition token gives an entity: the
+// replacement text it builds when it is one EntityValue literal (see
+// replacementText), and unreadable when it is any other token.
+func literalValue(tok string) entityValue {
+	if !isLiteral(tok) {
+		return entityValue{}
+	}
+	text, ok := replacementText(tok[1 : len(tok)-1])
+	return entityValue{text: text, readable: ok}
+}
+
+// replacementText builds an internal entity's replacement text from its
+// literal entity value (XML 1.0 §4.5): each line end the literal spells is
+// normalized to #xA (§2.11), each character reference is replaced by the
+// character it names, and a general entity reference is left as it stands
+// (§4.4.7, bypassed), for the reader to expand where the entity is included.
+// It reports false for a literal holding a parameter-entity reference, which
+// the internal subset forbids inside a markup declaration (WFC PEs in Internal
+// Subset), or a character reference that is malformed or names no Char (WFC
+// Legal Character).
 func replacementText(lit string) (string, bool) {
 	if strings.ContainsRune(lit, '%') {
 		return "", false
@@ -260,10 +276,10 @@ func replacementText(lit string) (string, bool) {
 	for {
 		amp := strings.IndexByte(lit, '&')
 		if amp < 0 {
-			b.WriteString(lit)
+			b.WriteString(lineEnds.Replace(lit))
 			return b.String(), true
 		}
-		b.WriteString(lit[:amp])
+		b.WriteString(lineEnds.Replace(lit[:amp]))
 		lit = lit[amp:]
 		if !strings.HasPrefix(lit, "&#") {
 			b.WriteByte('&')
@@ -282,6 +298,10 @@ func replacementText(lit string) (string, bool) {
 		lit = lit[end+1:]
 	}
 }
+
+// lineEnds normalizes XML 1.0 §2.11's line ends, #xD#xA and a lone #xD, to
+// #xA.
+var lineEnds = strings.NewReplacer("\r\n", "\n", "\r", "\n")
 
 // charRef reads the digits of a character reference — what XML 1.0 CharRef
 // holds between "&#" and ";" — reporting false unless they name a Char (XML
@@ -338,7 +358,8 @@ func markupDecl(s string) (body, after string, closed bool) {
 // for a body too short to name one. A general entity is unparsed only when its
 // definition is exactly an ExternalID followed by an NDataDecl (XML 1.0
 // EntityDef); any other definition, a malformed one included, is a parsed
-// entity.
+// entity. A parsed entity is internal, with a readable value, only when its
+// definition is exactly one EntityValue literal whose replacement text builds.
 func entityDeclOf(body string) (entityDecl, bool) {
 	if body == "" || !strings.ContainsRune(declSpace, rune(body[0])) {
 		return entityDecl{}, false
@@ -347,7 +368,11 @@ func entityDeclOf(body string) (entityDecl, bool) {
 	if len(toks) < 2 || strings.HasPrefix(toks[0], "%") {
 		return entityDecl{}, false
 	}
-	return entityDecl{name: toks[0], unparsed: unparsedDef(toks[1:])}, true
+	d := entityDecl{name: toks[0], unparsed: unparsedDef(toks[1:])}
+	if len(toks) == 2 {
+		d.value = literalValue(toks[1])
+	}
+	return d, true
 }
 
 // unparsedDef reports whether def, the tokens of an entity definition, reads

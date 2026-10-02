@@ -23,6 +23,7 @@ func FuzzReader(f *testing.F) {
 		"<a>\r\n<b/>\r\n</a>",
 		"not xml at all",
 		"<!-- c --><?pi ?><a>&amp;</a>",
+		`<!DOCTYPE a [<!ENTITY d "[0-9]"><!ENTITY e "x<b c='&d;'>&d;</b>">]><a v="&e;">&e;</a>`,
 	}
 	for _, s := range seeds {
 		f.Add(s)
