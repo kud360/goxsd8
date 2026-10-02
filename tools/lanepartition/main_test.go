@@ -185,6 +185,90 @@ func TestALogSplitsDeclinesFromDecidedAndClustersByCharge(t *testing.T) {
 	}
 }
 
+// TestALogNamingRefusalsSplitsADeclinedCluster is #2008's clustering: a
+// decline candidate listed as `<id>=<refusal>` is the case <id>, clustered by
+// its refusal as a decided case is by its charge, so A's three invalid
+// declines split two ways, and a refusal is no rule to reconcile against.
+// The same log with the refusals stripped keeps them one cluster.
+func TestALogNamingRefusalsSplitsADeclinedCluster(t *testing.T) {
+	const declined = "decline candidates: [A/g/schema/i1 B/g/schema/v1]"
+	reasoned := strings.Replace(fixtureLog, declined,
+		"decline candidates: [A/g/schema/i1=abstract A/g/schema/i2=abstract A/g/schema/i3=type-table B/g/schema/v1=open-content-ldt(#2080)]", 1)
+	reasoned = strings.Replace(reasoned, "decided disagreements: [A/g/schema/i2=(accepted) A/g/schema/i3=(accepted) ", "decided disagreements: [", 1)
+	issues := `[{"number": 6, "state": "OPEN", "title": "t", "body": "abstract and type-table"}]`
+	got, err := runFixture(t, issues, "-log", logFile(t, reasoned), "schema")
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	wantTableRow(t, got, "declined", "1", "3", "0", "4")
+	wantClusters(t, got,
+		"2 declined invalid A <abstract> — no open issue names it",
+		"2 decided and wrong valid A [src-ct] — no open issue names it",
+		"1 declined valid B <open-content-ldt(#2080)> — no open issue names it",
+		"1 declined invalid A <type-table> — no open issue names it",
+		"1 indeterminate indeterminate A — no open issue names it",
+		"1 in no census list invalid B — no open issue names it",
+	)
+	if !strings.Contains(got, "[charged] or <refusal>") || !strings.Contains(got, "A declined case's <refusal> names the exit") {
+		t.Errorf("report does not say what a <refusal> is:\n%s", got)
+	}
+
+	stripped := strings.NewReplacer("=abstract", "", "=type-table", "", "=open-content-ldt(#2080)", "").Replace(reasoned)
+	got, err = runFixture(t, "", "-log", logFile(t, stripped), "schema")
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	wantClusters(t, got,
+		"3 declined invalid A",
+		"2 decided and wrong valid A [src-ct]",
+		"1 declined valid B",
+		"1 indeterminate indeterminate A",
+		"1 in no census list invalid B",
+	)
+}
+
+// TestALogNamingNoRefusalRendersAsBefore pins a log from before #2008, which
+// names no refusal, to the report the command printed for it before #2008,
+// byte for byte but for the temp paths: wantPreRefusalReport is that output,
+// taken from origin/main at 1c06295 over this fixture.
+func TestALogNamingNoRefusalRendersAsBefore(t *testing.T) {
+	suite, lanes, log := writeTree(t, fixtureSuite), writeTree(t, fixtureLanes), logFile(t, fixtureLog)
+	var out strings.Builder
+	if err := run(&out, strings.NewReader(""), []string{"-suite", suite, "-expectations", lanes, "-log", log, "schema"}); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	got := strings.NewReplacer(lanes, "<lanes>", log, "<log>").Replace(out.String())
+	if got != wantPreRefusalReport {
+		t.Errorf("report =\n%s\nwant, as before #2008,\n%s", got, wantPreRefusalReport)
+	}
+}
+
+// wantPreRefusalReport is TestALogNamingNoRefusalRendersAsBefore's golden.
+const wantPreRefusalReport = "lanepartition: lane schema — 8 banked fail(s) in <lanes>/schema.txt, 6 cluster(s)\n" +
+	"  every figure is a part of the committed file's banked fails — the lane's score, which\n" +
+	"  `go tool lanestatus` prints — and nothing a run did moves it.\n" +
+	"  Classes read from the GOXSD_DECLINES=1 census in <log>. A banked fail in no census\n" +
+	"  list is one that run passed or did not produce; with the census's own listed cases this\n" +
+	"  file does not bank fail (1), it measures how far the log's tree is from the file's.\n" +
+	"  A decided case's [charge] is the rule xsderr.RuleOf read off the assembly's error;\n" +
+	"  (accepted) charges nothing — the assembly succeeded — and (unruled) names no rule.\n" +
+	"\n" +
+	"=== Banked fails by class and declared validity ===\n" +
+	"                                       valid               invalid         indeterminate    total\n" +
+	"  declined                                 1                     1                     0        2\n" +
+	"  indeterminate                            0                     0                     1        1\n" +
+	"  decided and wrong                        2                     2                     0        4\n" +
+	"  in no census list                        0                     1                     0        1\n" +
+	"\n" +
+	"=== Clusters, largest first: count  class  declared  test set  [charged]  — open issues naming it ===\n" +
+	"  (no issue list on stdin: nothing reconciled)\n" +
+	"       2  decided and wrong  valid  A  [src-ct]\n" +
+	"       2  decided and wrong  invalid  A  [(accepted)]\n" +
+	"       1  declined  valid  B\n" +
+	"       1  declined  invalid  A\n" +
+	"       1  indeterminate  indeterminate  A\n" +
+	"       1  in no census list  invalid  B\n"
+
 // TestAnIssueListNamesOpenIssuesByTestSetOrRule reconciles clusters against
 // the fed list: an OPEN issue whose body names the test set or the charged
 // rule as a whole token. A closed one is not named, `src-ct-extends` does not

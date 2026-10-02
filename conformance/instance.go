@@ -500,27 +500,92 @@ import (
 // decidedNotValid). An EMPTY violation set declines unless the shape's
 // conditions above all hold.
 
+// The instance lane's refusals: one token per exit at which execInstanceCase
+// declines a case, which the GOXSD_DECLINES=1 listing writes after the case's
+// ID (#2008). Each names the condition the function it is returned from states
+// in its doc comment; a token ending in (#N) names the open issue that owns the
+// arm. refuseDecode alone is returned at several sites, every one a decoder
+// error in an encoding/xml re-read of the instance.
+const (
+	// caseSchema (instancehints.go).
+	refuseGroupAssembly   refusal = "group-assembly"       // assembleCase declined the group's schema
+	refuseNoHint          refusal = "no-hint"              // no group schema, and the root carries no hint
+	refuseHintsUnresolved refusal = "hints-unresolved"     // instanceHints: the instance will not resolve
+	refuseInlineSchema    refusal = "inline-schema"        // instanceHints: an element is an inline xs:schema
+	refuseXMLBase         refusal = "xml-base"             // hintsOf: the root carries xml:base
+	refuseOddLocation     refusal = "odd-schemaLocation"   // hintsOf: an odd xsi:schemaLocation member count
+	refuseHintBelowRoot   refusal = "hint-below-root"      // belowRootHintFree: a hint below the root
+	refuseHintUnfollowed  refusal = "hint-unfollowed"      // assembleHints: a hint resolved to no document
+	refuseHintAssembly    refusal = "hint-assembly"        // assembleHints: assemblyDeclined refused the outcome
+	refuseHintUndeclared  refusal = "hint-undeclared-root" // assembleHints: no top-level declaration for the root
+	refuseDoctype         refusal = "doctype"              // rootStart: a directive defaultsNoAttribute refuses
+	refuseDecode          refusal = "decode"               // an encoding/xml decoder error, at any re-read site
+
+	// execInstanceCase and assessInstance.
+	refuseUnboundPrefix      refusal = "unbound-prefix(#2073)" // perr: a schema document's unbound-prefix charge
+	refuseSchemaError        refusal = "schema-error"          // perr: any other assembly error
+	refuseValidator          refusal = "validator"             // validate.New failed
+	refuseInstanceUnresolved refusal = "instance-unresolved"   // assessInstance: the instance will not resolve
+	refuseInstanceUnread     refusal = "instance-unread"       // assessInstance: xmlsrc.Validate failed
+	refuseWalkStopped        refusal = "walk-stopped"          // assessInstance: validate.Result.Err
+	refuseUndecidedRule      refusal = "undecided-rule"        // decidedNotValid: a charge outside the nine
+	refuseUnevaluated        refusal = "unevaluated"           // validate.Result.Unevaluated is not empty
+
+	// assessedSubtreeRoot's pre-gate refusals (subtreeroot.go).
+	refuseVersioned       refusal = "versioned"        // closureVersioned
+	refuseGateUnresolved  refusal = "gate-unresolved"  // the instance will not resolve for the re-read
+	refuseUndeclaredRoot  refusal = "undeclared-root"  // no top-level declaration for the root
+	refuseEpilogDirective refusal = "epilog-directive" // documentEnd: a directive after the root
+
+	// subtreeGate and the free functions it calls (subtreeroot.go).
+	refuseNilLexical          refusal = "nil-lexical"                 // nilValue: no ·actual value·, at element or instanceTyped
+	refuseLaxNilLexical       refusal = "lax-nil-lexical(#2061)"      // nilValue: no ·actual value·, at laxlyAssessed
+	refuseAbstract            refusal = "abstract"                    // assessedDeclaration: {abstract}
+	refuseTypeTable           refusal = "type-table"                  // assessedDeclaration: a {type table}
+	refuseTypeUnresolved      refusal = "type-unresolved"             // governingType: d.{type definition}
+	refuseXsiTypeUnresolved   refusal = "xsi-type-unresolved"         // governingType, instanceTyped: no type of that name
+	refuseXsiTypeUndecided    refusal = "xsi-type-undecided"          // governingType: ValidlySubstitutable errs
+	refuseXsiTypeNotOverride  refusal = "xsi-type-not-overriding"     // governingType: T does not ·override·
+	refuseSimpleAttribute     refusal = "simple-attribute"            // governed: an attribute on a simple-typed element
+	refuseTypeKind            refusal = "type-kind"                   // governed: neither simple nor complex
+	refuseAttributeUse        refusal = "attribute-use-unresolved"    // complex: an {attribute uses} member
+	refuseAttributeType       refusal = "attribute-type"              // recordedAttributeType
+	refuseContentMatcher      refusal = "content-matcher"             // complex: ContentMatcher declines
+	refuseContentType         refusal = "content-type"                // complex: an unknown {content type}
+	refuseAttributeUnadmitted refusal = "attribute-unadmitted"        // wildcardAttribute: no wildcard admits it
+	refuseStrictAttribute     refusal = "strict-attribute-unresolved" // wildcardAttribute: strict, no declaration
+	refuseAttributeLDT        refusal = "attribute-ldt"               // wildcardAttribute: locallyDeclaredAttribute
+	refuseElementChild        refusal = "element-child"               // leaf: an element child
+	refuseContentIncomplete   refusal = "content-incomplete"          // children: m does not accept
+	refuseContentRejected     refusal = "content-rejected"            // child: m.Next refuses
+	refuseMemberUnresolved    refusal = "member-unresolved"           // child: a substitution-group member
+	refuseAttribution         refusal = "attribution"                 // child: an unknown attribution
+	refuseOpenContentLDT      refusal = "open-content-ldt(#2080)"     // child: the {open content} arm's ldt
+	refuseAnyType             refusal = "any-type"                    // laxlyAssessed: no ·xs:anyType·
+)
+
 // newInstanceExec builds the instance lane's executor. The strict backend is
 // built once here, exactly as newSchemaExec does it: it maps all 20 primitives,
 // so parser.Parse's internal builtin.Seed precondition holds for every case.
-func newInstanceExec() executor {
+func newInstanceExec() laneExecutor {
 	backend := strict.New()
-	return func(c caseSpec) Status {
+	return func(c caseSpec) (Status, refusal) {
 		return execInstanceCase(backend, c)
 	}
 }
 
 // execInstanceCase decides one instanceTest case, or honestly declines it
-// (Fail): it assembles the case's schema (caseSchema), assesses the
-// instance document against it, and reads the assessment only where the answer
-// is unconditional: a set of the nine decidable charges is "not valid", and an
-// empty Result on an assessed subtree root (assessedSubtreeRoot) is "valid". An
-// assembly rejected for a not-well-formed schema document is "not valid" without
-// an assessment; every other rejected assembly declines.
-func execInstanceCase(backend value.Backend, c caseSpec) Status {
-	schema, report, decidable, perr := caseSchema(backend, c)
-	if !decidable {
-		return Fail()
+// (Fail, with the refusal naming the exit): it assembles the case's schema
+// (caseSchema), assesses the instance document against it, and reads the
+// assessment only where the answer is unconditional: a set of the nine
+// decidable charges is "not valid", and an empty Result on an assessed subtree
+// root (assessedSubtreeRoot) is "valid". An assembly rejected for a
+// not-well-formed schema document is "not valid" without an assessment; every
+// other rejected assembly declines. A decided case carries no refusal.
+func execInstanceCase(backend value.Backend, c caseSpec) (Status, refusal) {
+	schema, report, why, perr := caseSchema(backend, c)
+	if why != "" {
+		return Fail(), why
 	}
 	// A schema document the assembly RETRIEVED and the reader rejected as not
 	// well-formed (wellFormednessFault) is recorded "not valid". That is a harness
@@ -537,65 +602,68 @@ func execInstanceCase(backend value.Backend, c caseSpec) Status {
 	// src-import clause 3.1). A genuinely unbound prefix declines too, the gap
 	// wellFormednessFault's GAP(parser) marker tracks (#2073).
 	if wellFormednessFault(perr) {
-		return decideAgreement(false, c.expect.wantsValid())
+		return decideAgreement(false, c.expect.wantsValid()), ""
+	}
+	if unboundPrefix(perr) {
+		return Fail(), refuseUnboundPrefix
 	}
 	if perr != nil {
-		return Fail()
+		return Fail(), refuseSchemaError
 	}
 	v, err := validate.New(schema, backend)
 	if err != nil {
 		// Only a nil schema reaches here, which a nil perr should have excluded;
 		// declining rather than trusting it keeps the lane's verdicts honest.
-		return Fail()
+		return Fail(), refuseValidator
 	}
-	result, ok := assessInstance(v, c.doc)
-	if !ok {
-		return Fail()
+	result, why := assessInstance(v, c.doc)
+	if why != "" {
+		return Fail(), why
 	}
 	if violations := result.Violations(); len(violations) > 0 {
 		if !decidedNotValid(violations) {
-			return Fail()
+			return Fail(), refuseUndecidedRule
 		}
-		return decideAgreement(false, c.expect.wantsValid())
+		return decideAgreement(false, c.expect.wantsValid()), ""
 	}
 	// An empty Result is "valid" for the gated shape alone, and only where the
 	// walk recorded no check it reached and did not perform.
 	if len(result.Unevaluated()) > 0 {
-		return Fail()
+		return Fail(), refuseUnevaluated
 	}
-	if !assessedSubtreeRoot(schema, report, c.doc) {
-		return Fail()
+	if why := assessedSubtreeRoot(schema, report, c.doc); why != "" {
+		return Fail(), why
 	}
-	return decideAgreement(true, c.expect.wantsValid())
+	return decideAgreement(true, c.expect.wantsValid()), ""
 }
 
 // assessInstance reads the instance document at doc and assesses it against v,
-// or declines (ok false). It declines on three conditions, none of which is a
-// verdict about the document: a document that will not resolve or that the
-// reader rejects for any reason, a caller fault or a document malformed before
-// its document element (xmlsrc.Validate's own error channel), and a walk that
-// STOPPED on a source fault mid-document (validate.Result.Err), whose empty
-// violation list records how far the walk got rather than what the document
-// holds.
+// or declines, naming the refusal. It declines on three conditions, none of
+// which is a verdict about the document: a document that will not resolve or
+// that the reader rejects for any reason, a caller fault or a document
+// malformed before its document element (xmlsrc.Validate's own error channel),
+// and a walk that STOPPED on a source fault mid-document (validate.Result.Err),
+// whose empty violation list records how far the walk got rather than what the
+// document holds.
 //
 // The resolver is a loader.Dir rooted at the instance document's own directory,
 // mirroring assembleCase's read of its root, so a case fixture is reached the
 // same way whichever lane reaches it.
-func assessInstance(v *validate.Validator, doc string) (*validate.Result, bool) {
+func assessInstance(v *validate.Validator, doc string) (*validate.Result, refusal) {
 	resolver := loader.Dir(filepath.Dir(doc))
 	rc, _, err := resolver.Resolve("", filepath.Base(doc))
 	if err != nil {
-		return nil, false
+		return nil, refuseInstanceUnresolved
 	}
 	defer func() { _ = rc.Close() }() // read-only handle: close error cannot affect the verdict
 	result, err := xmlsrc.Validate(v, rc, xmlsrc.WithURI(doc))
 	if err != nil {
-		return nil, false
+		return nil, refuseInstanceUnread
 	}
 	if result.Err() != nil {
-		return nil, false
+		return nil, refuseWalkStopped
 	}
-	return result, true
+	return result, ""
 }
 
 // These are the nine rules validate.Validator.Assess charges, and the whole of

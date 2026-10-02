@@ -243,7 +243,12 @@
 //	    disagreements:`, where a lane with a charge probe (lane.charge; the
 //	    schema lane) writes each ID as `<id>=<charge>` — the rule
 //	    xsderr.RuleOf reads off the assembly's error, `(unruled)` for an error
-//	    carrying none, `(accepted)` for an assembly that succeeded.
+//	    carrying none, `(accepted)` for an assembly that succeeded. A lane
+//	    whose executor names its refusals (the instance lane) writes each
+//	    decline candidate as `<id>=<refusal>` — the token naming the exit
+//	    that declined it, one of instance.go's refuse* constants, read off
+//	    the census's own probe run (#2008); the schema and datatypes lanes
+//	    list candidates by ID alone.
 //	    tools/internal/declinecensus reads these lines for `go tool
 //	    lanepartition -log` (#1740) and `go tool casejoin -log` (#1785), so
 //	    a label renamed in reportDeclines is renamed there. Opt-in because a

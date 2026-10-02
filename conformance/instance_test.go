@@ -46,17 +46,32 @@ func writeFixture(t *testing.T, path, content string) {
 	}
 }
 
-// declinesBothPolarities asserts the executor records Fail for c AND for c with
-// its declared outcome flipped — the exact test declines.go's census applies, and
-// the only honest reading of "no verdict was reached". Asserting one polarity
-// would pass for an executor that decided the case wrongly.
-func declinesBothPolarities(t *testing.T, exec executor, c caseSpec, why string) {
+// declinesBothPolarities asserts the instance lane's executor records Fail for
+// c AND for c with its declared outcome flipped — the exact test declines.go's
+// census applies, and the only honest reading of "no verdict was reached" —
+// naming the refusal want under both (#2008). Asserting one polarity would
+// pass for an executor that decided the case wrongly; asserting no refusal
+// would pass for one that attributed the decline to the wrong exit.
+func declinesBothPolarities(t *testing.T, c caseSpec, why string, want refusal) {
 	t.Helper()
+	exec := newInstanceExec()
 	for _, valid := range []bool{true, false} {
 		c.expect = expectValidity(valid)
-		if exec(c).IsPass() {
+		st, got := exec(c)
+		if st.IsPass() {
 			t.Errorf("%s: must Fail (decline) regardless of expectValid=%v", why, valid)
 		}
+		if got != want {
+			t.Errorf("%s: declined as %q under expectValid=%v, want %q", why, got, valid, want)
+		}
+	}
+}
+
+// status is e's Status alone, for a test asserting what the executor decided.
+func (e laneExecutor) status() executor {
+	return func(c caseSpec) Status {
+		st, _ := e(c)
+		return st
 	}
 }
 
@@ -69,7 +84,7 @@ func declinesBothPolarities(t *testing.T, exec executor, c caseSpec, why string)
 // with a suite-valid one — never pass under both, which is what a decline looks
 // like.
 func TestInstanceExecutorDecidesUndeclaredRoot(t *testing.T) {
-	exec := newInstanceExec()
+	exec := newInstanceExec().status()
 	if !exec(instanceCase(t, knownRoot, `<unknown/>`, false)).IsPass() {
 		t.Error("an undeclared root is not valid: the executor must agree with a suite-invalid case")
 	}
@@ -84,7 +99,7 @@ func TestInstanceExecutorDecidesUndeclaredRoot(t *testing.T) {
 // fails and the document is NOT VALID whatever else it holds. It decides nothing
 // unless producer.produceElement maps {abstract} off the attribute (#761).
 func TestInstanceExecutorDecidesAbstractRoot(t *testing.T) {
-	exec := newInstanceExec()
+	exec := newInstanceExec().status()
 	const abstractRoot = `<xs:element name="known" type="xs:string" abstract="true"/>`
 	if !exec(instanceCase(t, abstractRoot, `<known/>`, false)).IsPass() {
 		t.Error("an abstract root is not valid: the executor must agree with a suite-invalid case")
@@ -100,11 +115,11 @@ func TestInstanceExecutorDecidesAbstractRoot(t *testing.T) {
 // TestInstanceExecutorDeclinesUndecidableShapes proves every shape this slice
 // cannot decide is DECLINED in BOTH directions rather than guessed.
 func TestInstanceExecutorDeclinesUndecidableShapes(t *testing.T) {
-	exec := newInstanceExec()
 	cases := []struct {
 		why        string
 		schemaBody string
 		instance   string
+		refused    refusal
 	}{
 		{
 			// An undeclared root whose xsi:type ·resolves· determines a ·governing
@@ -115,10 +130,11 @@ func TestInstanceExecutorDeclinesUndecidableShapes(t *testing.T) {
 			"an undeclared root typed by a resolved xsi:type charges nothing",
 			knownRoot + `<xs:complexType name="T"/>`,
 			`<unknown xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="T"/>`,
+			refuseUndeclaredRoot,
 		},
 		{
 			"an instance document the reader rejects is a gap, not a well-formedness verdict",
-			knownRoot, `<unknown`,
+			knownRoot, `<unknown`, refuseInstanceUnread,
 		},
 		{
 			// The witness must be a shape the producer BUILDS WITHOUT ERROR, or
@@ -138,16 +154,18 @@ func TestInstanceExecutorDeclinesUndecidableShapes(t *testing.T) {
 				`<xs:element type="xs:string"/>` +
 				`</xs:override>`,
 			`<unknown/>`,
+			refuseGroupAssembly,
 		},
 		{
 			"a schema the assembly REJECTED is not the schema the suite declared",
 			knownRoot + `<xs:simpleType name="T"><xs:restriction base="xs:string"/></xs:simpleType>` +
 				`<xs:simpleType name="T"><xs:restriction base="xs:int"/></xs:simpleType>`,
 			`<unknown/>`,
+			refuseSchemaError,
 		},
 	}
 	for _, tc := range cases {
-		declinesBothPolarities(t, exec, instanceCase(t, tc.schemaBody, tc.instance, false), tc.why)
+		declinesBothPolarities(t, instanceCase(t, tc.schemaBody, tc.instance, false), tc.why, tc.refused)
 	}
 
 	// The non-<schema> schema document needs a root instanceCase's wrapper cannot
@@ -157,25 +175,24 @@ func TestInstanceExecutorDeclinesUndecidableShapes(t *testing.T) {
 	instancePath := filepath.Join(dir, "i.xml")
 	writeFixture(t, schemaPath, `<notaschema/>`)
 	writeFixture(t, instancePath, `<unknown/>`)
-	declinesBothPolarities(t, exec, caseSpec{kind: kindInstance, doc: instancePath, schemaDoc: schemaPath},
-		"a schema document that is not <schema>-rooted")
+	declinesBothPolarities(t, caseSpec{kind: kindInstance, doc: instancePath, schemaDoc: schemaPath},
+		"a schema document that is not <schema>-rooted", refuseGroupAssembly)
 }
 
 // TestInstanceExecutorDeclinesCaseWithNoGroupSchema proves a case with no
 // stated schema — no group schema reference (groupSchemaDocs) AND no hint on
 // its root — is DECLINED rather than assessed against a guessed or empty
-// schema (#2013, absorbing #763). caseSchema must answer it not decidable:
+// schema (#2013, absorbing #763). caseSchema must refuse it (refuseNoHint):
 // with its "no hint" condition removed, ParseSet over no root answers a plain
 // error that caseSchema hands back as decidable — a schema rejection nobody
 // stated — and the executor then declines only because it reads every
 // rejection as a decline, which is why the assertion is on caseSchema.
 func TestInstanceExecutorDeclinesCaseWithNoGroupSchema(t *testing.T) {
-	exec := newInstanceExec()
 	c := instanceCase(t, knownRoot, `<unknown/>`, false)
 	c.schemaDoc = ""
-	declinesBothPolarities(t, exec, c, "an instance case with no group schema reference and no hint")
-	if _, _, decidable, _ := caseSchema(strict.New(), c); decidable {
-		t.Error("a case with no group schema and no hint has no stated schema: caseSchema must answer it not decidable")
+	declinesBothPolarities(t, c, "an instance case with no group schema reference and no hint", refuseNoHint)
+	if _, _, why, _ := caseSchema(strict.New(), c); why != refuseNoHint {
+		t.Errorf("a case with no group schema and no hint has no stated schema: caseSchema refused it as %q, want %q", why, refuseNoHint)
 	}
 }
 
@@ -216,9 +233,9 @@ func TestAssessInstanceDeclinesFaultedWalk(t *testing.T) {
 
 	whole := filepath.Join(dir, "whole.xml")
 	writeFixture(t, whole, `<e><a/></e>`)
-	result, ok := assessInstance(v, whole)
-	if !ok {
-		t.Fatal("a walk that reached the end of the document must be accepted")
+	result, why := assessInstance(v, whole)
+	if why != "" {
+		t.Fatalf("a walk that reached the end of the document must be accepted, refused as %q", why)
 	}
 	if !decidedNotValid(result.Violations()) {
 		t.Errorf("an abstract root charges cvc-elt clause 2, which is decidable; got %d violation(s)", len(result.Violations()))
@@ -226,8 +243,8 @@ func TestAssessInstanceDeclinesFaultedWalk(t *testing.T) {
 
 	faulted := filepath.Join(dir, "faulted.xml")
 	writeFixture(t, faulted, `<e><a></b></e>`)
-	if _, ok := assessInstance(v, faulted); ok {
-		t.Error("a walk stopped by a source fault mid-document must be DECLINED, whatever it charged before stopping")
+	if _, why := assessInstance(v, faulted); why != refuseWalkStopped {
+		t.Errorf("a walk stopped by a source fault mid-document must be DECLINED, whatever it charged before stopping: refused as %q, want %q", why, refuseWalkStopped)
 	}
 }
 
@@ -332,7 +349,7 @@ func TestParsedAnonymousExtensionIsNotFalselyRejected(t *testing.T) {
 // Skips when the submodule is absent.
 func TestInstanceExecutorAgreesWithSuite(t *testing.T) {
 	skipWithoutSuite(t)
-	exec := newInstanceExec()
+	exec := newInstanceExec().status()
 	dir := filepath.Join(suiteRoot, "sunData", "ElemDecl", "typeDef", "typeDef00201m")
 	c := caseSpec{
 		kind:      kindInstance,
