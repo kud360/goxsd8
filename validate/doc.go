@@ -314,7 +314,9 @@
 // set· is wider than its ·qualified node set· (4.2.1), an element member from a
 // {nillable} declaration (4.2.3), and a keyref matching no entry of its
 // {referenced key}'s node table (4.3), with clause 3 charging a field that
-// selects more than one valued node. The node tables clause 4.3 reads are
+// selects more than one valued node or any node whose ·governing type
+// definition· is neither a simple type definition nor a complex type
+// definition with {variety} simple. The node tables clause 4.3 reads are
 // §3.11.5's, assembled bottom-up as the walk leaves each element and
 // conflict-resolved on the way.
 //
@@ -336,8 +338,10 @@
 // cvc-id clause 1 additionally declines for the whole document once any item of
 // the subtree did, since an unread declaration is exactly what an empty binding
 // would misreport. A ·nilled· element is not such an item: its [schema actual
-// value] is ·absent· (§3.3.5.4), so it is outside the ·eligible item set· and
-// leaves a ·key-sequence· short, and both rules read it as the spec does.
+// value] is ·absent· (§3.3.5.4), so it is outside the ·eligible item set·, and
+// as a field node of a simple-valued ·governing type definition· it leaves a
+// ·key-sequence· short; a ·nilled· field node of any other determined type is
+// charged under clause 3 like any other. Both rules read it as the spec does.
 //
 // The rest of the cvc- decisions land on the walk [Validator.Assess]
 // already makes. Non-fatal warnings get an accessor of their own the day
