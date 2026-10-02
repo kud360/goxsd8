@@ -251,9 +251,15 @@ import (
 //     declaration it lacks (subtreeGate.laxlyAssessed, #1823, #1891). Its
 //     [validity] is notKnown, which blocks no ancestor's valid (e-validity clause
 //     1.1.3 names a strict ·wildcard particle· alone) and leaves the document
-//     deep-valid (§2.5 Note, #1911). A child resolving to none with an xsi:type
-//     is refused, under strict and lax alike. No element of a subtree whose
-//     Result is empty is therefore assessed against no type.
+//     deep-valid (§2.5 Note, #1911). A child resolving to none whose xsi:type
+//     names a type definition, under strict and lax alike, has that type as its
+//     ·governing type definition· (key-governing-type-elem clause 8) and is
+//     ·strictly assessed· against it (cvc-assess-elt clause 1), as the walk
+//     assesses it: the gate holds it and its subtree to every condition below
+//     against that type, never ·nilled·, there being no declaration
+//     (subtreeGate.instanceTyped, #1978). One whose xsi:type names none is
+//     refused. No element of a subtree whose Result is empty is therefore
+//     assessed against no type.
 //   - cvc-elt clauses 2 to 6, at every element: {abstract} false and no {type
 //     table} — so the ·selected type definition· is the {type
 //     definition}, which the gate resolves itself. An xsi:type is admitted
@@ -394,9 +400,10 @@ import (
 //     the gate reads them without its ContentMatcher, refusing an element
 //     [[child]] (subtreeGate.complex).
 //
-// Every element is then ·strictly assessed· against a declaration and a type
-// the walk determined, and its [validity] is valid exactly where the walk
-// charged nothing for it, its attributes or its descendants.
+// Every element but a ·laxly assessed· one is then ·strictly assessed· against
+// a type the walk determined, through a declaration or, for a wildcard's child
+// resolving none, through its xsi:type, and its [validity] is valid exactly
+// where the walk charged nothing for it, its attributes or its descendants.
 //
 // The TRUST BOUNDARY is value.ValidateLexical: its verdict on every ·initial
 // value· and every attribute value in the subtree is taken as Datatype Valid
