@@ -120,13 +120,14 @@ import (
 //     a reference to an undefined ID) (#718). cvc-elt clause 7 reads it AT THE
 //     ROOT ALONE, and it makes the root not locally ·valid· exactly as case 2
 //     does.
-//  9. cvc-type (§3.3.4.4) clause 3.1, when an element's ·governing type
-//     definition· is a Simple Type Definition and it carries an attribute
-//     beyond the four xsi: names (3.1.1), an element information item [[child]]
-//     (3.1.2), or — where it is not ·nilled· — an ·initial value· that is not
-//     ·valid· per String Valid against that type (3.1.3) (#913). The element is
-//     then not locally ·valid· with respect to its ·governing type definition·,
-//     so case 3's chain applies unchanged.
+//  9. cvc-type (§3.3.4.4) clause 2, when an element's ·governing type
+//     definition· is a Complex Type Definition whose {abstract} is true
+//     (#2095); clause 3.1, when it is a Simple Type Definition and the element
+//     carries an attribute beyond the four xsi: names (3.1.1), an element
+//     information item [[child]] (3.1.2), or — where it is not ·nilled· — an
+//     ·initial value· that is not ·valid· per String Valid against that type
+//     (3.1.3) (#913). The element is then not locally ·valid· with respect to
+//     its ·governing type definition·, so case 3's chain applies unchanged.
 //
 // All nine are unconditional: no verdict here can be overturned by anything in
 // the rest of the document, which is what makes them decidable while the engine
@@ -297,8 +298,10 @@ import (
 //     the one comparison value.ConstraintMatches does not decide; clause 5 is
 //     gated on an element that is not ·nilled·, as the walk reads it. Clause 2
 //     is refused outright below the root, where the walk charges it nowhere.
-//   - cvc-type clause 2 (§3.3.4.4): a complex {type definition}'s {abstract}
-//     is false, at the root too, since the walk decides that clause nowhere.
+//   - cvc-type clause 2 (§3.3.4.4): the walk's, at every element. It charges
+//     an element whose ·governing type definition· is a complex type with
+//     {abstract} true, however that type was determined (validate's
+//     walk.abstractType), so no empty Result carries one.
 //   - cvc-type clause 3.1 (§3.3.4.4), for a Simple Type Definition: 3.1.1, the
 //     element carries no attribute beyond namespace declarations and the four
 //     xsi: names, and 3.1.2, it has no element [[children]] — the gate refuses

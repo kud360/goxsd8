@@ -319,7 +319,6 @@ func assessedDeclaration(d xsd.ElementDeclaration) bool {
 // complex reads an element governed by the Complex Type Definition t, ·nilled·
 // where nilled is true, through to its end tag, and reports whether:
 //
-//   - t.{abstract} is false (cvc-type clause 2);
 //   - every one of t.{attribute uses} resolves to an {attribute declaration}
 //     that recordedAttributeType admits, present on the element or not;
 //   - every attribute the element carries that notExcepted names matches one
@@ -334,9 +333,6 @@ func assessedDeclaration(d xsd.ElementDeclaration) bool {
 //   - otherwise, under an element-only or mixed one, xsd.Schema.ContentMatcher
 //     decides it and every element [[child]] meets child's conditions.
 func (g *subtreeGate) complex(start xml.StartElement, t xsd.ComplexType, nilled bool) bool {
-	if t.Abstract() {
-		return false
-	}
 	uses := t.AttributeUses()
 	for _, u := range uses {
 		ad, ok := g.schema.ResolvedAttributeDeclaration(u)
@@ -609,8 +605,7 @@ func (g *subtreeGate) resolvedChild(start xml.StartElement, strictParticle bool)
 // reaches the gate with such a child unless clause 6 selects T: the gate's
 // reading against T is the walk's. With no declaration there is no ·selected
 // type definition· for T to ·override·, so governingType's cvc-elt clause 4
-// test has no counterpart here; an ·abstract· T is refused by complex
-// (cvc-type clause 2).
+// test has no counterpart here.
 //
 // An xsi:type naming no type definition leaves the child with no ·governing
 // type definition·. The walk charges cvc-attribute clause 5 for it, but the

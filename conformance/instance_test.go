@@ -98,15 +98,7 @@ func TestInstanceExecutorDecidesAbstractRoot(t *testing.T) {
 }
 
 // TestInstanceExecutorDeclinesUndecidableShapes proves every shape this slice
-// cannot decide is DECLINED in BOTH directions rather than guessed. The
-// load-bearing row is the first: a declared, non-abstract root with an element
-// [[child]] ·attributed to· a lax wildcard, resolving no declaration and typed
-// by an xsi:type naming an ·abstract· complex type, charges NOTHING — the walk
-// does not charge cvc-type clause 2 on a child governed through
-// key-governing-type-elem clause 8 — and outside the gated shape an empty
-// validate.Result is not evidence of validity: the gate refuses that child
-// (subtreeGate.complex), so neither "valid" nor "invalid" may be claimed.
-// Typed by a non-abstract type, the child is decided (#1978).
+// cannot decide is DECLINED in BOTH directions rather than guessed.
 func TestInstanceExecutorDeclinesUndecidableShapes(t *testing.T) {
 	exec := newInstanceExec()
 	cases := []struct {
@@ -114,14 +106,6 @@ func TestInstanceExecutorDeclinesUndecidableShapes(t *testing.T) {
 		schemaBody string
 		instance   string
 	}{
-		{
-			"a declared, non-abstract root of a COMPLEX type whose unresolved child a lax wildcard admits, typed by an abstract complex xsi:type, charges nothing, and no charge is not a verdict outside the gated shape",
-			`<xs:element name="known"><xs:complexType><xs:sequence>` +
-				`<xs:any processContents="lax" minOccurs="0"/>` +
-				`</xs:sequence></xs:complexType></xs:element>` +
-				`<xs:complexType name="T" abstract="true"/>`,
-			`<known xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><a xsi:type="T"/></known>`,
-		},
 		{
 			// An undeclared root whose xsi:type ·resolves· determines a ·governing
 			// type definition· of its own (key-governing-type-elem clause 8), so it

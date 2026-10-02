@@ -542,18 +542,6 @@ func TestInstanceExecutorDeclinesOutsideAssessedSubtreeRoot(t *testing.T) {
 			`<known><h>1</h></known>`,
 		},
 		{
-			"an abstract complex type below the root (cvc-type clause 2)",
-			`<xs:element name="known"><xs:complexType><xs:sequence><xs:element name="a" type="T"/></xs:sequence></xs:complexType></xs:element>` +
-				`<xs:complexType name="T" abstract="true"><xs:sequence><xs:element name="c" type="xs:int"/></xs:sequence></xs:complexType>`,
-			`<known><a><c>1</c></a></known>`,
-		},
-		{
-			"an abstract complex type at the root (cvc-type clause 2)",
-			`<xs:element name="known" type="T"/>` +
-				`<xs:complexType name="T" abstract="true"><xs:sequence><xs:element name="c" type="xs:int"/></xs:sequence></xs:complexType>`,
-			`<known><c>1</c></known>`,
-		},
-		{
 			"a {type table} below the root (cvc-elt clause 4)",
 			`<xs:element name="known"><xs:complexType><xs:sequence><xs:element name="a" type="xs:int">` +
 				`<xs:alternative type="xs:int"/></xs:element></xs:sequence></xs:complexType></xs:element>`,
@@ -1113,10 +1101,12 @@ func TestAssessedSubtreeRootUnresolvedChild(t *testing.T) {
 			wildcardChild("lax") + `<xs:complexType name="T"><xs:sequence><xs:element name="v"/></xs:sequence></xs:complexType>`,
 			`<known ` + xsiNS + `><u xsi:type="T" xsi:nil="true"><v/></u></known>`, true,
 		},
-		// cvc-type clause 2: the walk does not charge it on a clause-8 child.
+		// cvc-type clause 2 is the walk's, on a clause-8 child too, so the gate
+		// admits the child (#2095); TestInstanceExecutorChargesAbstractComplexType
+		// pins the walk's charge.
 		{
 			"lax, a child resolving no declaration whose xsi:type names an abstract complex type",
-			wildcardChild("lax") + `<xs:complexType name="T" abstract="true"/>`, `<known ` + xsiNS + `><u xsi:type="T"/></known>`, false,
+			wildcardChild("lax") + `<xs:complexType name="T" abstract="true"/>`, `<known ` + xsiNS + `><u xsi:type="T"/></known>`, true,
 		},
 	} {
 		c := instanceCase(t, tc.schemaBody, tc.instance, true)
@@ -1371,6 +1361,44 @@ func TestInstanceExecutorChargesXsiType(t *testing.T) {
 	} {
 		if !exec(instanceCase(t, tc.schemaBody, tc.instance, false)).IsPass() {
 			t.Errorf("%s: the walk charges the xsi:type; the executor must agree with a suite-invalid case", tc.why)
+		}
+		if exec(instanceCase(t, tc.schemaBody, tc.instance, true)).IsPass() {
+			t.Errorf("%s: the executor must Fail under a flipped expectation", tc.why)
+		}
+	}
+}
+
+// TestInstanceExecutorChargesAbstractComplexType proves the walk, not the
+// gate, decides cvc-type clause 2 (#2095): an element whose ·governing type
+// definition· is a complex type with {abstract} true is decided INVALID, at the
+// root and below it, whether its declaration names the type
+// (key-governing-type-elem clause 4), its xsi:type ·overrides· with it (clause
+// 3), or its xsi:type alone governs a lax wildcard's child resolving no
+// declaration (clause 8). With subtreeGate.complex refusing an abstract type
+// and the walk not charging it, every row declines and this test fails.
+func TestInstanceExecutorChargesAbstractComplexType(t *testing.T) {
+	exec := newInstanceExec()
+	const abstractT = `<xs:complexType name="T" abstract="true"><xs:sequence><xs:element name="c" type="xs:int"/></xs:sequence></xs:complexType>`
+	for _, tc := range []struct{ why, schemaBody, instance string }{
+		{"an abstract complex type at the root", `<xs:element name="known" type="T"/>` + abstractT, `<known><c>1</c></known>`},
+		{
+			"an abstract complex type below the root",
+			`<xs:element name="known"><xs:complexType><xs:sequence><xs:element name="a" type="T"/></xs:sequence></xs:complexType></xs:element>` + abstractT,
+			`<known><a><c>1</c></a></known>`,
+		},
+		{
+			"an xsi:type overriding with an abstract complex type below the root",
+			`<xs:element name="known"><xs:complexType><xs:sequence><xs:element name="a" type="B"/></xs:sequence></xs:complexType></xs:element>` +
+				`<xs:complexType name="B"/><xs:complexType name="T" abstract="true"><xs:complexContent><xs:extension base="B"/></xs:complexContent></xs:complexType>`,
+			`<known ` + xsiNS + `><a xsi:type="T"/></known>`,
+		},
+		{
+			"a lax wildcard's child resolving no declaration whose xsi:type names an abstract complex type",
+			wildcardChild("lax") + `<xs:complexType name="T" abstract="true"/>`, `<known ` + xsiNS + `><u xsi:type="T"/></known>`,
+		},
+	} {
+		if !exec(instanceCase(t, tc.schemaBody, tc.instance, false)).IsPass() {
+			t.Errorf("%s: the walk charges cvc-type clause 2; the executor must agree with a suite-invalid case", tc.why)
 		}
 		if exec(instanceCase(t, tc.schemaBody, tc.instance, true)).IsPass() {
 			t.Errorf("%s: the executor must Fail under a flipped expectation", tc.why)
