@@ -439,13 +439,13 @@ func TestIdentityConstraintDeclinesAreRecorded(t *testing.T) {
 }
 
 // A ·key-sequence· comparison sameKeyMember cannot make — a member value with
-// neither value.Eq nor value.Identical, which opaqueBackend gives every
+// neither value.Eq nor value.Identical, which opaqueStrings gives every
 // xs:string value — withholds the clause that reads it, and is recorded:
 // clause 4.2.2 against the later ·target node· of a key, and clause 4.3 against
 // a keyref member. Each document also runs under the test backend, whose
 // decided answer is what the record stands in for.
 func TestUndecidedKeySequenceComparisonsAreRecorded(t *testing.T) {
-	opaque := opaqueBackend{base: testBackend()}
+	opaque := opaqueStrings()
 	key := icDef(t, "K", xsd.IdentityConstraintKey, ".//item", nil, "", "@id")
 	schema := icSchema(t, "", false, []xsd.IdentityConstraint{key}, nil)
 	doc := icRoot(icIDed(2, "a"), icIDed(3, "a"))
@@ -470,10 +470,10 @@ func TestUndecidedKeySequenceComparisonsAreRecorded(t *testing.T) {
 // ·key-sequence·, so a keyref member matching that sequence is charged under
 // clause 4.3: under the test backend the xs:token entry of the first <box> and
 // the xs:string entry of the second are one xs:string value. Under
-// opaqueBackend the comparison between the two cannot be made — re-read in the
+// opaqueStrings the comparison between the two cannot be made — re-read in the
 // xs:string value space, the first has neither value.Eq nor value.Identical —
 // so both entries are kept CONTESTED. The keyref member matches the xs:token
-// entry decidedly, since opaqueBackend maps xs:token by the test backend's
+// entry decidedly, since opaqueStrings maps xs:token by the test backend's
 // xs:string mapping, and is recorded as undecided rather than passing on an
 // entry the proviso may have removed. Without the contested mark, that
 // document walks clean.
@@ -490,25 +490,41 @@ func TestKeyrefMatchingOnlyAContestedEntryIsRecorded(t *testing.T) {
 	icWantCharges(t, got, icCharge(ruleCvcIdentityConstraint, 2))
 	wantDeclines(t, icDeclines(undecided))
 
-	got, undecided = assessRecordedWith(t, opaqueBackend{base: testBackend()}, schema, doc)
+	got, undecided = assessRecordedWith(t, opaqueStrings(), schema, doc)
 	wantSilence(t, got, "a match on a contested entry charges nothing")
 	wantDeclines(t, icDeclines(undecided), Unevaluated{rule: ruleCvcIdentityConstraint, loc: loc(2, 1), msg: "clause 4.3 is undecided"})
 }
 
-// opaqueBackend is base with every xs:string value wrapped in an opaqueValue,
-// and xs:token mapped by base's own xs:string mapping, so an xs:token member
-// keeps the capabilities its value re-read in the xs:string ·primitive· value
-// space loses.
+// opaqueBackend is base with every value of typ wrapped in an opaqueValue.
 type opaqueBackend struct {
 	base value.Backend
+	typ  xsd.QName
+}
+
+// opaqueOver is the test backend with typ mapped by via's mapping, every value
+// of typ an opaqueValue: typ keeps a space of its own, as a backend may give a
+// derived type, while via and the ·primitive· keep their capabilities.
+func opaqueOver(typ, via string) value.Backend {
+	return opaqueBackend{
+		base: aliasedBackend{base: testBackend(), from: icBuiltin(typ), to: icBuiltin(via)},
+		typ:  icBuiltin(typ),
+	}
+}
+
+// opaqueStrings is the test backend with every xs:string value an
+// opaqueValue, and xs:token mapped by the test backend's own xs:string
+// mapping, so an xs:token member keeps the capabilities its value re-read in
+// the xs:string ·primitive· value space loses.
+func opaqueStrings() value.Backend {
+	return opaqueBackend{
+		base: aliasedBackend{base: testBackend(), from: icBuiltin("token"), to: icBuiltin("string")},
+		typ:  icBuiltin("string"),
+	}
 }
 
 func (b opaqueBackend) Mapping(typ xsd.QName) (value.Mapping, bool) {
-	if typ == icBuiltin("token") {
-		return b.base.Mapping(icBuiltin("string"))
-	}
 	m, ok := b.base.Mapping(typ)
-	if !ok || typ != icBuiltin("string") {
+	if !ok || typ != b.typ {
 		return m, ok
 	}
 	return value.Mapping{Parse: func(lexical string, ctx value.Context) (value.Value, error) {
@@ -613,6 +629,100 @@ func TestSingletonListMatchesAnAtomicKeyMember(t *testing.T) {
 		t.Errorf("Violations() = %v, want the charge made under clause 4.3", got)
 	}
 	wantDeclines(t, icDeclines(undecided))
+}
+
+// A union-typed member is compared in the ·primitive· value space of its
+// ·validating type· (key-vtype clause 1), the member that accepted its lexical
+// (#2111's oracle ruling): a UPlain "01" validated as xs:integer is one
+// xs:decimal value with an xs:integer "1", and a UPlain "1" is distinct from an
+// xs:string "1" (Datatypes §2.2.1, §2.2.2) while a UPlain "a", validated as
+// xs:string, is not distinct from one. UNest reaches its xs:integer and xs:ID
+// members through a union member. Every row is decided, so nothing is recorded.
+func TestUnionKeyMemberComparesByItsValidatingType(t *testing.T) {
+	for _, tc := range []struct {
+		fields       string
+		first, later [2]string
+		charged      bool
+	}{
+		{"@k|@upl", [2]string{"k", "1"}, [2]string{"upl", "01"}, true},
+		{"@k|@upl", [2]string{"k", "1"}, [2]string{"upl", "2"}, false},
+		{"@id|@upl", [2]string{"id", "1"}, [2]string{"upl", "1"}, false},
+		{"@id|@upl", [2]string{"id", "a"}, [2]string{"upl", "a"}, true},
+		{"@k|@unest", [2]string{"k", "1"}, [2]string{"unest", "01"}, true},
+		{"@id|@unest", [2]string{"id", "a"}, [2]string{"unest", "a"}, true},
+		{"@id|@unest", [2]string{"id", "1"}, [2]string{"unest", "1"}, false},
+	} {
+		t.Run(tc.first[0]+"="+tc.first[1]+","+tc.later[0]+"="+tc.later[1], func(t *testing.T) {
+			unique := icDef(t, "U", xsd.IdentityConstraintUnique, ".//item", nil, "", tc.fields)
+			got, undecided := assessRecorded(t, icSchema(t, "", false, []xsd.IdentityConstraint{unique}, nil),
+				icRoot(idItem(2, tc.first[0], tc.first[1]), idItem(3, tc.later[0], tc.later[1])))
+			wantDeclines(t, icDeclines(undecided))
+			if !tc.charged {
+				wantSilence(t, got, "members of different primitives, or unequal ones, are two key-sequences")
+				return
+			}
+			icWantClause41(t, got, 3, 2)
+		})
+	}
+}
+
+// icWantClause41 fails unless got is exactly one clause 4.1 charge, made
+// against the <item> ·target node· at later for sharing the ·key-sequence· of
+// the one at earlier.
+func icWantClause41(t *testing.T, got []*xsderr.Error, later, earlier int) {
+	t.Helper()
+	icWantCharges(t, got, icCharge(ruleCvcIdentityConstraint, later))
+	prefix := loc(later, 1).String() + ": [cvc-identity-constraint] the ·target node· item has a ·key-sequence· equal or identical to the one at " + loc(earlier, 1).String() + ","
+	if !strings.HasPrefix(got[0].Error(), prefix) || !strings.Contains(got[0].Error(), "clause 4.1 ") {
+		t.Errorf("Violations() = %v, want a clause 4.1 charge opening %q", got, prefix)
+	}
+}
+
+// A list member whose {item type definition} is a union is compared item by
+// item, each item in the ·primitive· value space of its own ·validating type·
+// (key-vtype clause 2). LUPlain "x 01" holds an xs:string and an xs:integer
+// item, so it matches an LURef "x 01" — whose second item URef validates as
+// xs:string — in its first item and not its second, and the lists are
+// distinct; LUPlain "x y" holds two xs:string items and matches LURef "x y",
+// which the xs:IDREF item "x" and xs:IDREF item "y" read as xs:string values,
+// and the unique charges clause 4.1. Every row is decided, so nothing is
+// recorded.
+func TestListOfUnionKeyMemberComparesItemByItem(t *testing.T) {
+	unique := icDef(t, "U", xsd.IdentityConstraintUnique, ".//item", nil, "", "@lup|@lur")
+	schema := icSchema(t, "", false, []xsd.IdentityConstraint{unique}, nil)
+	doc := func(lup, lur string) *testElement {
+		return icRoot(idItem(2, "xid", "x"), idItem(3, "xid", "y"), idItem(4, "lup", lup), idItem(5, "lur", lur))
+	}
+
+	t.Run("mixed", func(t *testing.T) {
+		got, undecided := assessRecorded(t, schema, doc("x 01", "x 01"))
+		wantDeclines(t, icDeclines(undecided))
+		wantSilence(t, got, "an xs:integer item is distinct from an xs:string one")
+	})
+	t.Run("strings", func(t *testing.T) {
+		got, undecided := assessRecorded(t, schema, doc("x y", "x y"))
+		wantDeclines(t, icDeclines(undecided))
+		icWantClause41(t, got, 5, 4)
+	})
+}
+
+// Two members validated against ONE union node are compared by their
+// ·validating types· too, never by asking one value about the other: the two
+// URef "a" values below are xs:IDREF values in a space of opaqueOver's own,
+// with neither value.Eq nor value.Identical, yet both are the xs:string value
+// "a", so the unique charges clause 4.1 at the later. An LURef list of the
+// same item is the same pair one item deep.
+func TestOneUnionNodeComparesInItsMembersPrimitive(t *testing.T) {
+	opaque := opaqueOver("IDREF", "string")
+	for _, field := range []string{"uref", "lur"} {
+		t.Run(field, func(t *testing.T) {
+			unique := icDef(t, "U", xsd.IdentityConstraintUnique, ".//item", nil, "", "@"+field)
+			got, undecided := assessRecordedWith(t, opaque, icSchema(t, "", false, []xsd.IdentityConstraint{unique}, nil),
+				icRoot(idItem(2, "xid", "a"), idItem(3, field, "a"), idItem(4, field, "a")))
+			wantDeclines(t, icDeclines(undecided))
+			icWantClause41(t, got, 4, 3)
+		})
+	}
 }
 
 // icTypedFieldSchema declares <root> over item*, each item over an optional

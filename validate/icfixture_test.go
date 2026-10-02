@@ -16,7 +16,7 @@ import (
 //	box     BoxType   sequence( item*, ref* )          — a subtree of its own
 //	item    ItemType  sequence( name?, tag?, utag?, tabled? ),
 //	                  @id @k @p:id @xid @ref @refs @tok @ub,
-//	                  @uid @usi @uref @upl @unest @lur  — icUnionTypes
+//	                  @uid @usi @uref @upl @unest @lur @lup — icUnionTypes
 //	ref     RefType   empty,                           @r
 //	name    xs:string (or a nillable declaration of it)
 //	tag     xs:ID     an ID-governed ELEMENT
@@ -274,6 +274,7 @@ func icDef(t *testing.T, name string, cat xsd.IdentityConstraintCategory, select
 //	UPlain  union( integer, string )   neither, so nothing to record
 //	UNest   union( integer, UID    )   a union member of a union
 //	LURef   list of URef              key-vtype clause 2, per item
+//	LUPlain list of UPlain            items of two primitives in one list
 //
 // The pairing with xs:string is what makes the member scan observable: every
 // literal is valid against the union whichever member takes it, so a difference
@@ -288,6 +289,7 @@ func icUnionTypes(t *testing.T) []*xsd.SimpleType {
 		icUnion(t, "UPlain", icBuiltin("integer"), icBuiltin("string")),
 		icUnion(t, "UNest", icBuiltin("integer"), named("UID")),
 		icList(t, "LURef", named("URef")),
+		icList(t, "LUPlain", named("UPlain")),
 	}
 }
 
@@ -320,6 +322,7 @@ func icSchema(t *testing.T, ns string, nillable bool, rootICs, boxICs []xsd.Iden
 		icUseOf(t, named("upl"), named("UPlain")),
 		icUseOf(t, named("unest"), named("UNest")),
 		icUseOf(t, named("lur"), named("LURef")),
+		icUseOf(t, named("lup"), named("LUPlain")),
 	}, icContent(t, icOptional(t, nameDecl), icOptional(t, tagDecl), icOptional(t, utagDecl),
 		icOptional(t, icDefaulted(t, "ItemType", in("dtag"), icBuiltin("ID"), "d1")),
 		icOptional(t, icTabled(t, "ItemType", in("tabled")))))

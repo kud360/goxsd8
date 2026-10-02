@@ -224,10 +224,13 @@ const (
 //
 // lexical and owner are the lexical v was read off and the element whose
 // namespace bindings were in scope for it. They are read only where the two
-// members of a pair were validated against different simple types, which
+// members of a pair were validated against different simple types, or against
+// one whose values lie in more than one value space, which
 // [walk.primitiveItems] answers by re-reading lexical in the ·primitive· value
-// space; v alone cannot answer it, since a backend may map a derived type into a
-// space of its own.
+// space of its ·validating type·; v alone cannot answer it, since a backend may
+// map a derived type into a space of its own. st stays the declared type, a
+// union included: the ·validating type· is identified per comparison, so a
+// failure to identify it declines that comparison and never the member.
 //
 // element and nillable travel with it for clause 4.2.3 alone, which asks
 // whether an ELEMENT member "was assessed as ·valid· by reference to an element
@@ -960,32 +963,59 @@ func (w *walk) sameKeySequence(a, b icKeySequence) (same, decided bool) {
 //
 // Two members validated against the SAME [xsd.SimpleType] node, which a compiled
 // schema shares one of per type (xsd/simpletype.go), are compared by asking one
-// value about the other ([sameValue]). Two validated against different nodes are
-// not: a backend's mapping for a derived type may represent values in a space of
-// its own, so asking one of them would answer a decided NOT-same, which is the
-// one outcome clause 4.3 turns into a rejection. That pair is compared in the
-// ·primitive· value space instead ([walk.sameAcrossTypes]).
+// value about the other ([sameValue]), where that node implies one value space
+// ([walk.oneValueSpace]). Every other pair is not: a backend's mapping for a
+// derived type may represent values in a space of its own, so asking one of
+// them would answer a decided NOT-same, which is the one outcome clause 4.3
+// turns into a rejection. That pair is compared in the ·primitive· value space
+// instead ([walk.sameAcrossTypes]), which reads a union-typed member, and each
+// item of a list member whose {item type definition} is a union, by its
+// ·validating type· (key-vtype clauses 1 and 2, [walk.basicType]).
 //
 // GAP(validate): a pair neither path can compare declines (decided=false)
-// instead (#2115): a union-typed member, or a list member whose {item type
-// definition} is a union, since icKeyMember keeps the union and not the member
-// type the value was validated as, whose ·primitive· is the relevant one; an
-// xs:anySimpleType or xs:anyAtomicType member, whose {primitive type
-// definition} is absent; a value with neither value.Eq nor value.Identical; and
-// a member whose type chain does not resolve or whose re-reading in its
-// ·primitive· value space fails ([walk.primitiveItems]). The readers of the
-// answer, all through [walk.sameKeySequence], charge only on a decided one:
-// [icFrame.duplicates] charges clause 4.1/4.2.2 on a decided same and records
-// the decline instead; [resolveEntryConflicts] keeps both entries, marked
-// contested; [icBinding.lookup] reports the member undecided, which
+// instead: a value with neither value.Eq nor value.Identical; and a member
+// whose type chain or ·validating type· does not resolve, or whose re-reading
+// in its ·primitive· value space fails ([walk.primitiveItems]). RULED permanent
+// by #2115 (STYLE P3b), on #774's terms: the first is backend coverage, and
+// every failure of the second is a fault of the type or of the backend on a
+// lexical the member's own type accepted, never a verdict about the lexical,
+// so a decided NOT-same there would be a clause 4.3 false reject. The readers
+// of the answer, all through [walk.sameKeySequence], charge only on a decided
+// one: [icFrame.duplicates] charges clause 4.1/4.2.2 on a decided same and
+// records the decline instead; [resolveEntryConflicts] keeps both entries,
+// marked contested; [icBinding.lookup] reports the member undecided, which
 // [icCheck.keyrefs] records instead of charging clause 4.3. So a decline
-// withholds a charge and manufactures none. #2111 decided the cross-type pairs
-// above it.
+// withholds a charge and manufactures none.
 func (w *walk) sameKeyMember(a, b icKeyMember) (same, decided bool) {
-	if a.st == b.st {
+	if a.st == b.st && w.oneValueSpace(a.st) {
 		return sameValue(a.v, b.v)
 	}
 	return w.sameAcrossTypes(a, b)
+}
+
+// oneValueSpace reports that every value validated against st lies in one
+// value space: neither st nor, for a list, its {item type definition} is a
+// union. A union is not one, nor a list of one: each value, or each item, lies
+// in the space of the member that validated it (key-vtype clauses 1 and 2), and
+// two of those may be two members' spaces. false where the type chain does not
+// resolve, which sends the pair to [walk.sameAcrossTypes] to decline.
+func (w *walk) oneValueSpace(st *xsd.SimpleType) bool {
+	variety, err := st.Variety(w.schema)
+	if err != nil {
+		return false
+	}
+	if _, isList := variety.(xsd.List); isList {
+		item, err := st.Item(w.schema)
+		if err != nil {
+			return false
+		}
+		variety, err = item.Variety(w.schema)
+		if err != nil {
+			return false
+		}
+	}
+	_, isUnion := variety.(xsd.Union)
+	return !isUnion
 }
 
 // sameValue is the equal-or-identical union of Datatypes §2.2.2 — "all
@@ -1006,8 +1036,9 @@ func sameValue(a, b value.Value) (same, decided bool) {
 }
 
 // sameAcrossTypes compares two members validated against different simple
-// types, each read as the sequence of its atomic values in their ·primitive·
-// value spaces ([walk.primitiveItems]):
+// types, or against one whose values lie in more than one value space
+// ([walk.oneValueSpace]), each read as the sequence of its atomic values
+// in their ·primitive· value spaces ([walk.primitiveItems]):
 //
 //   - an atomic member is a sequence of one, per the paragraph of Structures
 //     §3.11.4 after cvc-identity-constraint: "single atomic values are not
@@ -1064,43 +1095,56 @@ type icPrimitiveItem struct {
 }
 
 // primitiveItems reads m as the sequence of its atomic values, each in the value
-// space of its own type's ·primitive·: one item for an atomic member, one per
-// list item for a list member.
+// space of its own ·validating type·'s ·primitive·: one item for an atomic
+// member, one per list item for a list member. The ·validating type· of a
+// union-typed member is the ·active basic member· that accepted its lexical
+// (key-vtype clause 1), and each item of a list member is read the same way
+// against the {item type definition} (clause 2), so one union yields items of
+// as many primitives as its members have ([walk.basicType]).
 //
-// Each item is read off the lexical m's OWN type normalized, under that type's
-// whiteSpace facet ([normalizedLexical]): an xs:token member written " a  b " is
-// the value "a b", and re-reading the raw lexical under xs:string, whose
-// whiteSpace is preserve, would read a different value. A list's whiteSpace is
-// collapse (§4.3.6.1), so its items are its normalized lexical's tokens, which
-// hold no white space for an item type's own normalization to change. The
-// namespace bindings are m's owner's, as [walk.keyMember] read them.
+// Each item is read off the lexical the validating type normalized, under that
+// type's whiteSpace facet ([normalizedLexical]): an xs:token member written
+// " a  b " is the value "a b", and re-reading the raw lexical under xs:string,
+// whose whiteSpace is preserve, would read a different value. A list's
+// whiteSpace is collapse (§4.3.6.1), so its items are its normalized lexical's
+// tokens, which hold no white space for an item type's own normalization to
+// change. The namespace bindings are m's owner's, as [walk.keyMember] read
+// them.
 //
-// ok is false for the residue [walk.sameKeyMember]'s GAP names, and where a
-// resolution or the re-reading fails: on a lexical m's own type accepted, that
-// is a fault of the type or of the backend and not a verdict about the lexical.
+// ok is false where a resolution or the re-reading fails: on a lexical m's own
+// type accepted, that is a fault of the type or of the backend and not a
+// verdict about the lexical ([walk.sameKeyMember]'s GAP).
 func (w *walk) primitiveItems(m icKeyMember) ([]icPrimitiveItem, bool) {
-	variety, err := m.st.Variety(w.schema)
+	ctx := elementContext{owner: m.owner}
+	st, ok := w.basicType(m.st, m.lexical, m.owner)
+	if !ok {
+		return nil, false
+	}
+	variety, err := st.Variety(w.schema)
 	if err != nil {
 		return nil, false
 	}
-	ctx := elementContext{owner: m.owner}
 	switch variety.(type) {
 	case xsd.Atomic:
-		normalized, ok := normalizedLexical(w.schema, m.st, m.lexical)
+		normalized, ok := normalizedLexical(w.schema, st, m.lexical)
 		if !ok {
 			return nil, false
 		}
-		item, ok := w.primitiveItem(m.st, normalized, ctx)
+		item, ok := w.primitiveItem(st, normalized, ctx)
 		return []icPrimitiveItem{item}, ok
 	case xsd.List:
-		itemType, err := m.st.Item(w.schema)
+		itemType, err := st.Item(w.schema)
 		if err != nil {
 			return nil, false
 		}
 		tokens := strings.FieldsFunc(m.lexical, isXMLSpace)
 		items := make([]icPrimitiveItem, 0, len(tokens))
 		for _, token := range tokens {
-			item, ok := w.primitiveItem(itemType, token, ctx)
+			basic, ok := w.basicType(itemType, token, m.owner)
+			if !ok {
+				return nil, false
+			}
+			item, ok := w.primitiveItem(basic, token, ctx)
 			if !ok {
 				return nil, false
 			}
@@ -1111,10 +1155,28 @@ func (w *walk) primitiveItems(m icKeyMember) ([]icPrimitiveItem, bool) {
 	return nil, false
 }
 
+// basicType is the ·validating type· of lexical against st (key-vtype clause
+// 1, Structures §3.16.4): st itself unless st is a union, otherwise the ·active
+// basic member· [walk.validatingType] identifies. A non-union st is returned
+// without re-running its verdict, which [walk.keyMember] already ran. ok is
+// false where st's chain does not resolve or the identification fails, which
+// declines only the comparison that asked: keyMember's slot decision never
+// runs through here, so a slot it decided stays decided.
+func (w *walk) basicType(st *xsd.SimpleType, lexical string, owner Element) (*xsd.SimpleType, bool) {
+	variety, err := st.Variety(w.schema)
+	if err != nil {
+		return nil, false
+	}
+	if _, isUnion := variety.(xsd.Union); !isUnion {
+		return st, true
+	}
+	return w.validatingType(st, lexical, owner)
+}
+
 // primitiveItem reads one normalized atomic lexical, accepted by st, in the value
 // space of st's {primitive type definition}. ok is false where that property is
-// absent — a union, xs:anySimpleType, xs:anyAtomicType — or where the chain does
-// not resolve or the primitive's mapping rejects the lexical, each a decline.
+// absent ([xsd.SimpleType.Primitive]'s nil), where the chain does not resolve,
+// or where the primitive's mapping rejects the lexical, each a decline.
 func (w *walk) primitiveItem(st *xsd.SimpleType, lexical string, ctx value.Context) (icPrimitiveItem, bool) {
 	primitive, err := st.Primitive(w.schema)
 	if err != nil || primitive == nil {
