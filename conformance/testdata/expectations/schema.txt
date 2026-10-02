@@ -883,7 +883,7 @@ MS-Additional2006-07-15/addB104/schema/addB104 pass
 MS-Additional2006-07-15/addB105/schema/addB105 pass
 MS-Additional2006-07-15/addB106/schema/addB106 pass
 MS-Additional2006-07-15/addB107/schema/addB107 pass
-MS-Additional2006-07-15/addB108/schema/addB108 fail
+MS-Additional2006-07-15/addB108/schema/addB108 pass
 MS-Additional2006-07-15/addB109/schema/addB109 pass
 MS-Additional2006-07-15/addB110/schema/addB110 pass
 MS-Additional2006-07-15/addB111/schema/addB111 pass
@@ -1314,7 +1314,7 @@ MS-Attribute2006-07-15/attO021/schema/attO021 pass
 MS-Attribute2006-07-15/attO022/schema/attO022 pass
 MS-Attribute2006-07-15/attO023/schema/attO023 pass
 MS-Attribute2006-07-15/attO024/schema/attO024 pass
-MS-Attribute2006-07-15/attO025/schema/attO025 fail
+MS-Attribute2006-07-15/attO025/schema/attO025 pass
 MS-Attribute2006-07-15/attP001/schema/attP001 pass
 MS-Attribute2006-07-15/attP002/schema/attP002 pass
 MS-Attribute2006-07-15/attP003/schema/attP003 pass
