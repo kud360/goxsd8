@@ -237,9 +237,12 @@ import (
 //     the top-level declaration its name ·resolves· to (clauses 3 and 4),
 //     cvc-complex-type clause 5 being the walk's for it
 //     (subtreeGate.resolvedChild). An {open content}'s child whose ·locally
-//     declared type· is non-·absent· is refused, resolved name or not: clause
-//     4.3 withholds the declaration and that type governs it (subtreeGate.child,
-//     a GAP). A strict ·wildcard particle·'s child resolving to none, with no
+//     declared type· is non-·absent· has no declaration, resolved name or not
+//     (clause 4.3): that type governs it, or an xsi:type ·overriding· it
+//     (key-governing-type-elem clauses 6 and 7), and the gate holds it and its
+//     subtree to every condition below against that type, never ·nilled·, as
+//     the walk's localGovernance assesses them (subtreeGate.localTyped, #2080).
+//     A strict ·wildcard particle·'s child resolving to none, with no
 //     xsi:type, is admitted with its subtree unread: the walk charges e-validity
 //     clause 1.1.3 for its parent, so no empty Result carries it. A skip
 //     Wildcard's child is admitted with its subtree unread: it is ·skipped·
@@ -541,13 +544,13 @@ const (
 	refuseEpilogDirective refusal = "epilog-directive" // documentEnd: a directive after the root
 
 	// subtreeGate and the free functions it calls (subtreeroot.go).
-	refuseNilLexical          refusal = "nil-lexical"                 // nilValue: no ·actual value·, at element or instanceTyped
+	refuseNilLexical          refusal = "nil-lexical"                 // nilValue: no ·actual value·, at element, instanceTyped or localTyped
 	refuseLaxNilLexical       refusal = "lax-nil-lexical(#2061)"      // nilValue: no ·actual value·, at laxlyAssessed
 	refuseAbstract            refusal = "abstract"                    // assessedDeclaration: {abstract}
 	refuseTypeTable           refusal = "type-table"                  // assessedDeclaration: a {type table}
 	refuseTypeUnresolved      refusal = "type-unresolved"             // governingType: d.{type definition}
-	refuseXsiTypeUnresolved   refusal = "xsi-type-unresolved"         // governingType, instanceTyped: no type of that name
-	refuseXsiTypeUndecided    refusal = "xsi-type-undecided"          // governingType: ValidlySubstitutable errs
+	refuseXsiTypeUnresolved   refusal = "xsi-type-unresolved"         // governingType, instanceTyped, localType: no type of that name
+	refuseXsiTypeUndecided    refusal = "xsi-type-undecided"          // governingType, localType: ValidlySubstitutable errs
 	refuseXsiTypeNotOverride  refusal = "xsi-type-not-overriding"     // governingType: T does not ·override·
 	refuseSimpleAttribute     refusal = "simple-attribute"            // governed: an attribute on a simple-typed element
 	refuseTypeKind            refusal = "type-kind"                   // governed: neither simple nor complex
@@ -563,7 +566,6 @@ const (
 	refuseContentRejected     refusal = "content-rejected"            // child: m.Next refuses
 	refuseMemberUnresolved    refusal = "member-unresolved"           // child: a substitution-group member
 	refuseAttribution         refusal = "attribution"                 // child: an unknown attribution
-	refuseOpenContentLDT      refusal = "open-content-ldt(#2080)"     // child: the {open content} arm's ldt
 	refuseAnyType             refusal = "any-type"                    // laxlyAssessed: no ·xs:anyType·
 )
 
