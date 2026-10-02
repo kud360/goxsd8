@@ -557,7 +557,9 @@ func (g *subtreeGate) child(t xsd.ComplexType, m *xsd.Matcher, start xml.StartEl
 //     type· within the parent's type (validate's walk.locallyDeclaredType),
 //     so no empty Result reaches the gate with such a child;
 //   - its name resolves to none and it carries an xsi:type: instanceTyped's
-//     conditions, under a strict and a lax wildcard alike;
+//     conditions, under a strict and a lax wildcard alike, its ·locally
+//     declared type· ·absent· or not (key-governing-type-elem clause 8 or 6,
+//     the latter read soundly through the walk's clause 5 charge);
 //   - strictParticle holds — the child is ·attributed to· a strict ·wildcard
 //     particle· — its name resolves to none, and it carries no xsi:type: the
 //     child is ·laxly assessed· with a ·governing type definition· of none, so
@@ -583,24 +585,32 @@ func (g *subtreeGate) resolvedChild(start xml.StartElement, strictParticle bool)
 }
 
 // instanceTyped reads through to its end tag a wildcard's child whose start tag
-// is start, which has no ·governing element declaration· and a ·locally
-// declared type· that is ·absent·, and whose xsi:type carries lexical, and
-// reports whether an xsi:nil it carries has an ·actual value· (nilValue),
-// lexical names a top-level type definition T against the namespace bindings
-// in scope at start (resolveQName), and the child and its subtree meet
-// governed's conditions against T, never ·nilled·: key-nilled is relative to a
-// declaration, and it has none.
+// is start, which has no ·governing element declaration· and whose xsi:type
+// carries lexical, and reports whether an xsi:nil it carries has an ·actual
+// value· (nilValue), lexical names a top-level type definition T against the
+// namespace bindings in scope at start (resolveQName), and the child and its
+// subtree meet governed's conditions against T, never ·nilled·: key-nilled is
+// relative to a declaration, and it has none.
 //
-// T is the child's ·governing type definition· (key-governing-type-elem clause
-// 8), so the child is ·strictly assessed· against it (cvc-assess-elt clause 1)
-// under a strict and a lax wildcard alike, and e-validity reads its own
-// [validity] (key-sva clause 1.2): under strict the walk's e-validity clause
-// 1.1.3 charge does not arise for it, and under lax it is not ·laxly assessed·
-// (key-lva clause 1). That is validate's walk.childGoverning reading
-// (instanceGovernance). With no declaration there is no ·selected type
-// definition· for T to ·override·, so governingType's cvc-elt clause 4 test
-// has no counterpart here; an ·abstract· T is refused by complex (cvc-type
-// clause 2).
+// T is the child's ·governing type definition·, so the child is ·strictly
+// assessed· against it (cvc-assess-elt clause 1) under a strict and a lax
+// wildcard alike, and e-validity reads its own [validity] (key-sva clause
+// 1.2): under strict the walk's e-validity clause 1.1.3 charge does not arise
+// for it, and under lax it is not ·laxly assessed· (key-lva clause 1). Where
+// the child's ·locally declared type· within the parent's type is ·absent·,
+// key-governing-type-elem clause 8 selects T, which is validate's
+// walk.childGoverning reading (instanceGovernance). A child ·attributed to· a
+// Wildcard reaches here with a non-·absent· one too — child asks
+// LocallyDeclaredElementType only on its {open content} arm — and clause 6
+// selects T only where T ·overrides· that type, which with no declaration is
+// key-overrides clause 2's ·validly substitutable without limitation·. That is
+// exactly cvc-complex-type clause 5's condition, which the walk charges for a
+// T failing it (validate's walk.locallyDeclaredType), so no empty Result
+// reaches the gate with such a child unless clause 6 selects T: the gate's
+// reading against T is the walk's. With no declaration there is no ·selected
+// type definition· for T to ·override·, so governingType's cvc-elt clause 4
+// test has no counterpart here; an ·abstract· T is refused by complex
+// (cvc-type clause 2).
 //
 // An xsi:type naming no type definition leaves the child with no ·governing
 // type definition·. The walk charges cvc-attribute clause 5 for it, but the

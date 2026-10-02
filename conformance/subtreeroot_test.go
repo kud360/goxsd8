@@ -913,6 +913,14 @@ func ldtBase(top string) string {
 		`<xs:element name="known" type="R"/><xs:element name="b" type="` + top + `"/>`
 }
 
+// ldtUnresolved declares <known>, whose content model is a local c of xs:int
+// and then a lax wildcard particle, with no top-level c: a wildcard child named
+// c resolves no declaration and has xs:int for its ·locally declared type·
+// (key-ldt-elem case 2), so an xsi:type on it governs by key-governing-type-elem
+// clause 6, not clause 8.
+const ldtUnresolved = `<xs:element name="known"><xs:complexType><xs:sequence><xs:element name="c" type="xs:int"/>` +
+	`<xs:any processContents="lax"/></xs:sequence></xs:complexType></xs:element>`
+
 // TestInstanceExecutorDecidesWildcardChild proves the gate admits a child
 // ·attributed to· a strict or lax ·wildcard particle·, or to a lax {open
 // content} with an ·absent· ·locally declared type· (#2071), wherever its name
@@ -982,6 +990,11 @@ func TestInstanceExecutorDecidesWildcardChild(t *testing.T) {
 				`<xs:element name="h" type="xs:string"/><xs:element name="m" substitutionGroup="h"/>`,
 			`<known><m>x</m></known>`,
 		},
+		// key-governing-type-elem clause 6: xs:byte ·overrides· the ·locally
+		// declared type· xs:int (key-overrides clause 2), so it governs the
+		// second <c>, which resolves no declaration (wild063.v2's shape).
+		{"lax, a child resolving no declaration whose xsi:type ·overrides· its ·locally declared type· (clause 6)",
+			ldtUnresolved, `<known ` + xsiXS + `><c>1</c><c xsi:type="xs:byte">1</c></known>`},
 	} {
 		if !exec(instanceCase(t, tc.schemaBody, tc.instance, true)).IsPass() {
 			t.Errorf("%s: the walk decides the wildcard child and the gate admits it; the executor must agree with a suite-valid case", tc.why)
@@ -1034,6 +1047,12 @@ func TestInstanceExecutorChargesWildcardChild(t *testing.T) {
 			`<xs:element name="known"><xs:complexType><xs:sequence><xs:element name="f" type="xs:string"/>` +
 				`<xs:any processContents="lax"/></xs:sequence></xs:complexType></xs:element>`,
 			`<known ` + xsiXS + `><f>x</f><f xsi:type="xs:int">1</f></known>`},
+		// The walk's clause 5 charge is what makes the gate's reading against
+		// the xsi:type sound: xs:string does not ·override· xs:int, so clause 7
+		// governs, yet "x" is valid against the xs:string the gate reads, which
+		// would admit it were the walk not to charge clause 5.
+		{"lax, a child resolving no declaration whose xsi:type does not ·override· its ·locally declared type· (clause 5)",
+			ldtUnresolved, `<known ` + xsiXS + `><c>1</c><c xsi:type="xs:string">x</c></known>`},
 	} {
 		if !exec(instanceCase(t, tc.schemaBody, tc.instance, false)).IsPass() {
 			t.Errorf("%s: the walk charges the child; the executor must agree with a suite-invalid case", tc.why)
