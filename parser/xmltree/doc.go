@@ -70,11 +70,23 @@
 //     with the rest of that value. Nested references expand at inclusion
 //     (§4.5). A recursive reference, a '<' in replacement text an attribute
 //     value includes, and replacement text that is not balanced content are
-//     RuleXMLWellFormed faults; a reference past the reader's bound on
+//     RuleXMLWellFormed faults. A reference past the reader's bound on
 //     nesting depth or on replacement text included per document is refused,
 //     as is a reference to an entity that is not internal or whose
-//     declaration the reader did not read — processor policy, not a verdict
-//     that the document is not well-formed.
+//     declaration the reader did not read, wrapping a cause: the reader does
+//     not decide whether the document is well-formed.
+//   - Every error the reader returns but io.EOF is a RuleXMLWellFormed
+//     *xsderr.Error, and whether it wraps a cause says what it decides. One wrapping no
+//     cause is a charge the reader makes itself and a definite fault whatever
+//     the document's DTD declares — an entity it includes is one whose
+//     internal-subset declaration it read, which binds before the external
+//     subset's (XML 1.0 §2.8, §4.2) — except the unbound-prefix charge: an
+//     <!ATTLIST can default the namespace declaration that binds the prefix
+//     (§3.3.2), a non-validating processor must supply that default from the
+//     internal subset (§5.1), and the reader applies no attribute default.
+//     One wrapping a cause — an encoding/xml syntax error, among them its
+//     refusal of an encoding declaration the reader does not decode, an I/O
+//     fault, or one of the refusals above — may be a limit of this reader.
 //
 // Fuzz targets guard the reader against panics on malformed input
 // (PRINCIPLES 24); malformed XML is an error value, never a crash.

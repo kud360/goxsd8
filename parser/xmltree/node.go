@@ -81,10 +81,14 @@ func (c *CharData) Data() string { return c.data }
 
 // Offset returns the byte offset of the content's first byte in the input
 // stream, so a downstream decode error on this content can cite the exact
-// position (the contract's "byte offset" for character content).
+// position (the contract's "byte offset" for character content). Content
+// beginning in an entity's replacement text answers the offset of the
+// outermost reference that includes it (XML 1.0 §4.4.2).
 func (c *CharData) Offset() int64 { return c.offset }
 
-// Loc reports the position of the content's first byte.
+// Loc reports the position of the content's first byte, or, for content
+// beginning in an entity's replacement text, of the outermost reference that
+// includes it (XML 1.0 §4.4.2).
 func (c *CharData) Loc() xsderr.Loc { return c.loc }
 
 func (c *CharData) node() {}
