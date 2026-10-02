@@ -900,18 +900,20 @@ func (w *walk) sameKeySequence(a, b icKeySequence) (same, decided bool) {
 // ·primitive· value space instead ([walk.sameAcrossTypes]).
 //
 // GAP(validate): a pair neither path can compare declines (decided=false)
-// instead: a union-typed member, or a list member whose {item type definition}
-// is a union, since icKeyMember keeps the union and not the member type the
-// value was validated as, whose ·primitive· is the relevant one; an
+// instead (#2115): a union-typed member, or a list member whose {item type
+// definition} is a union, since icKeyMember keeps the union and not the member
+// type the value was validated as, whose ·primitive· is the relevant one; an
 // xs:anySimpleType or xs:anyAtomicType member, whose {primitive type
-// definition} is absent; and a value with neither value.Eq nor value.Identical.
-// The readers of the answer, all through [walk.sameKeySequence], charge only on
-// a decided one: [icFrame.duplicates] charges clause 4.1/4.2.2 on a decided
-// same and records the decline instead; [resolveEntryConflicts] keeps both
-// entries, marked contested; [icBinding.lookup] reports the member undecided,
-// which [icCheck.keyrefs] records instead of charging clause 4.3. So a decline
-// withholds a charge and manufactures none. No open issue owns this residue
-// yet; #2111, which decided the cross-type pairs above it, is provenance.
+// definition} is absent; a value with neither value.Eq nor value.Identical; and
+// a member whose type chain does not resolve or whose re-reading in its
+// ·primitive· value space fails ([walk.primitiveItems]). The readers of the
+// answer, all through [walk.sameKeySequence], charge only on a decided one:
+// [icFrame.duplicates] charges clause 4.1/4.2.2 on a decided same and records
+// the decline instead; [resolveEntryConflicts] keeps both entries, marked
+// contested; [icBinding.lookup] reports the member undecided, which
+// [icCheck.keyrefs] records instead of charging clause 4.3. So a decline
+// withholds a charge and manufactures none. #2111 decided the cross-type pairs
+// above it.
 func (w *walk) sameKeyMember(a, b icKeyMember) (same, decided bool) {
 	if a.st == b.st {
 		return sameValue(a.v, b.v)

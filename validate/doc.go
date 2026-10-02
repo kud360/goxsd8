@@ -332,7 +332,7 @@
 // not read what the rule quantifies over — a path outside the subset, a field
 // node or an ID-bearing item with no determinable ·governing type definition·,
 // a ·key-sequence· member pair with no ·primitive· value space to compare in (a
-// union-typed member, xs:anySimpleType, xs:anyAtomicType) — and
+// union-typed member or list item, xs:anySimpleType, xs:anyAtomicType) — and
 // cvc-id clause 1 additionally declines for the whole document once any item of
 // the subtree did, since an unread declaration is exactly what an empty binding
 // would misreport. A ·nilled· element is not such an item: its [schema actual
