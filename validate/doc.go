@@ -316,7 +316,10 @@
 // {referenced key}'s node table (4.3), with clause 3 charging a field that
 // selects more than one valued node or any node whose ·governing type
 // definition· is neither a simple type definition nor a complex type
-// definition with {variety} simple. The node tables clause 4.3 reads are
+// definition with {variety} simple. Two members validated against different
+// types, or against a union, are compared in the value spaces of their
+// ·primitive· datatypes, a union-typed member and each item of a list of unions
+// read by its own ·validating type· (§3.16.4). The node tables clause 4.3 reads are
 // §3.11.5's, assembled bottom-up as the walk leaves each element and
 // conflict-resolved on the way.
 //
@@ -333,8 +336,10 @@
 // Both of the last two decline rather than charge wherever this package could
 // not read what the rule quantifies over — a path outside the subset, a field
 // node or an ID-bearing item with no determinable ·governing type definition·,
-// a ·key-sequence· member pair with no ·primitive· value space to compare in (a
-// union-typed member or list item, xs:anySimpleType, xs:anyAtomicType) — and
+// a field node of type xs:anySimpleType or xs:anyAtomicType, whose lexical
+// names no one ·actual value·, a ·key-sequence· member pair this package could
+// not compare in one value space (a value with neither equality nor identity,
+// or a type chain or ·validating type· that does not resolve) — and
 // cvc-id clause 1 additionally declines for the whole document once any item of
 // the subtree did, since an unread declaration is exactly what an empty binding
 // would misreport. A ·nilled· element is not such an item: its [schema actual
