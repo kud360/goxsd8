@@ -178,24 +178,45 @@ type icTarget struct {
 
 // icSlot is what one {fields} member selected for one ·target node·.
 //
-// Clause 3 bounds the sequence a field evaluates to at "at most one node with a
-// non-absent [schema actual value]", so the three states here are the whole of
-// it: filled (exactly one), neither filled nor extra (none, which shortens the
-// ·key-sequence· and drops the node out of the ·qualified node set·), and extra
-// (more than one, which violates clause 3 outright).
+// Clause 3 admits a field's node sequence only if it holds "at most one node
+// whose ·governing· type definition is either a simple type definition or a
+// complex type definition with {variety} simple, and no other nodes" (beside
+// ·skipped· ones, which never reach a slot). filled is the one valued node the
+// ·key-sequence· takes; a slot neither filled nor charged selected none, which
+// shortens the ·key-sequence· and drops the node out of the ·qualified node
+// set·; charge is the first clause 3 violation, if any. loc is that charge's
+// node where there is one, and the filled member's otherwise.
 //
-// declined is not a fourth state of the rule but this processor's own: a field
-// node whose ·governing type definition· could not be determined has no
-// [schema actual value] to read (§3.3.5.4, which defines the property only "if
-// and only if a governing type definition is known"), and a lexical comparison
-// in its place is licensed nowhere.
+// declined is not a state of the rule but this processor's own: a field node
+// whose ·governing type definition· could not be determined has no [schema
+// actual value] to read (§3.3.5.4, which defines the property only "if and
+// only if a governing type definition is known"), and a lexical comparison in
+// its place is licensed nowhere.
 type icSlot struct {
 	filled   bool
 	member   icKeyMember
-	extra    bool
+	charge   icClause3
 	declined bool
 	loc      xsderr.Loc
 }
+
+// icClause3 is which of cvc-identity-constraint clause 3's bounds a field's
+// node sequence broke first: none, a second valued node, or a node of a type
+// clause 3 admits as none of its nodes.
+type icClause3 uint8
+
+const (
+	// icClause3None is a sequence within clause 3's bounds.
+	icClause3None icClause3 = iota
+	// icClause3Valued is a second node with a non-absent [schema actual
+	// value], over clause 3's "at most one".
+	icClause3Valued
+	// icClause3Other is a node whose ·governing type definition· is determined
+	// and is neither a simple type definition nor a complex type definition
+	// with {content type}.{variety} simple, one of clause 3's "other nodes",
+	// ·nilled· or not.
+	icClause3Other
+)
 
 // icKeyMember is one member of a ·key-sequence·: an ·actual value· in the value
 // space its own type governs, never a lexical (Datatypes §2.2, and see
@@ -514,21 +535,28 @@ func (w *walk) identityExit(c *icCheck) {
 }
 
 // fill records c's element as the field node it was selected as, from its own
-// ·governing type definition· and its own ·initial value·.
+// ·governing type definition· and its own ·initial value·, in one of two arms
+// before any value is read.
 //
-// A ·governing type definition· that is not a simple type definition and not a
-// complex type with {content type}.{variety} simple — governance.valueType's
-// nil, including the case where no type was determinable at all (a {type
-// table} carrying a {test} the §3.12.6 evaluator declines, an unresolvable
-// slot, an xsi:type whose ·override· could not be decided) — declines rather
-// than contribute a value, recorded as an [Unevaluated] ([icTarget.decline]).
+// No ·governing type definition· at all (a {type table} carrying a {test} the
+// §3.12.6 evaluator declines, an unresolvable slot, an xsi:type whose
+// ·override· could not be decided, or an element this walk assessed against no
+// declaration) declines rather than contribute a value, recorded as an
+// [Unevaluated] ([icTarget.decline]).
 //
-// An element that is ·nilled· (§3.3.4.3, key-nilled) contributes an ABSENT
-// value, and withholds nothing: §3.3.5.4 gives it an absent [schema actual
-// value], and §3.11.4 clause 3's own Note names a field evaluating to "a
-// sequence consisting only of ·skipped· or ·nilled· nodes" as leaving the
-// ·key-sequence· short, which keeps the target out of the ·qualified node set·
-// ([icFrame.keyOnly] charges a key for it under clause 4.2.1).
+// A determined one that is neither a simple type definition nor a complex type
+// with {content type}.{variety} simple — governance.valueType's nil — makes
+// the node one of cvc-identity-constraint clause 3's "other nodes", and the
+// slot is charged for it ([icSlot.other]), ·nilled· or not: clause 3's list is
+// closed and reads only the governing type.
+//
+// An element of a simple-valued type that is ·nilled· (§3.3.4.3, key-nilled)
+// contributes an ABSENT value, and withholds nothing: §3.3.5.4 gives it an
+// absent [schema actual value], and §3.11.4 clause 3's own Note names a field
+// evaluating to "a sequence consisting only of ·skipped· or ·nilled· nodes" as
+// leaving the ·key-sequence· short, which keeps the target out of the
+// ·qualified node set· ([icFrame.keyOnly] charges a key for it under clause
+// 4.2.1).
 //
 // An EMPTY element whose declaration carries a {value constraint} is not among
 // them: cvc-elt clause 5.1 replaces the item assessed with one whose ·normalized
@@ -538,19 +566,29 @@ func (c *icCheck) fill(w *walk) {
 	if len(c.pending) == 0 {
 		return
 	}
-	m, present, decided := w.elementKeyMember(c)
+	var m icKeyMember
+	present, decided := false, false
+	switch {
+	case c.g.typ == nil:
+		// decided stays false, which offer records as the decline.
+	case c.g.valueType() == nil:
+		for _, p := range c.pending {
+			p.target.slots[p.index].other(c.e.Loc())
+		}
+		return
+	default:
+		m, present, decided = w.elementKeyMember(c)
+	}
 	for _, p := range c.pending {
 		p.target.offer(w, p.index, c.e.Name(), c.e.Loc(), m, present, decided)
 	}
 }
 
 // elementKeyMember is the ·key-sequence· member c's element contributes as a
-// field node, on fill's terms.
+// field node, on fill's terms: fill calls it only where the ·governing type
+// definition· is simple-valued.
 func (w *walk) elementKeyMember(c *icCheck) (icKeyMember, bool, bool) {
 	st := c.g.valueType()
-	if st == nil {
-		return icKeyMember{}, false, false
-	}
 	if nilled(c.e, c.g) {
 		return icKeyMember{}, false, true
 	}
@@ -614,16 +652,35 @@ func (t *icTarget) decline(w *walk, i int, name xsd.QName, loc xsderr.Loc, why s
 }
 
 // record takes one decided field node's answer into the slot, per clause 3's
-// bound of at most one valued node.
+// bound of at most one valued node: a second one is charged at its own loc,
+// unless the slot already carries a charge.
 func (s *icSlot) record(m icKeyMember, present bool, loc xsderr.Loc) {
 	if !present {
 		return
 	}
 	if s.filled {
-		s.extra, s.loc = true, loc
+		s.charge3(icClause3Valued, loc)
 		return
 	}
-	s.filled, s.member, s.loc = true, m, loc
+	s.filled, s.member = true, m
+	if s.charge == icClause3None {
+		s.loc = loc
+	}
+}
+
+// other charges the slot for a field node at loc that clause 3 admits as none
+// of its nodes (icClause3Other), unless the slot already carries a charge.
+func (s *icSlot) other(loc xsderr.Loc) {
+	s.charge3(icClause3Other, loc)
+}
+
+// charge3 records the slot's clause 3 charge as c at loc; the first charge
+// wins, and its loc is the one reported.
+func (s *icSlot) charge3(c icClause3, loc xsderr.Loc) {
+	if s.charge != icClause3None {
+		return
+	}
+	s.charge, s.loc = c, loc
 }
 
 // sequence is the target's ·key-sequence·: the values of its filled slots, in
@@ -683,8 +740,9 @@ func (c *icCheck) evaluate(w *walk) {
 }
 
 // qualify is clause 4's ·qualified node set·: the members of the ·target node
-// set· whose ·key-sequence· is as long as {fields}. It charges clause 3 for a
-// field that selected more than one valued node on the way.
+// set· whose ·key-sequence· is as long as {fields}. It charges clause 3 on the
+// way for a field that selected more than one valued node or a node clause 3
+// admits as none of its nodes (icSlot.charge).
 //
 // It reports ok=false where the frame must not settle any further clause: a
 // slot this processor declined (icSlot.declined), and a clause 3 charge, after
@@ -701,10 +759,9 @@ func (f *icFrame) qualify(w *walk, host Element) ([]*icTarget, bool) {
 			if s.declined {
 				return nil, false
 			}
-			if s.extra {
+			if s.charge != icClause3None {
 				w.res.violations = append(w.res.violations, xsderr.New(ruleCvcIdentityConstraint, s.loc,
-					"the field %q of the identity constraint %s declared on %s selects more than one node with a non-absent [schema actual value] for the ·target node· %s, but cvc-identity-constraint clause 3 admits at most one",
-					f.ic.Fields()[i].Expression(), f.ic.Name(), host.Name(), t.e.Name()))
+					s.charge.message(), f.ic.Fields()[i].Expression(), f.ic.Name(), host.Name(), t.e.Name()))
 				ok = false
 				continue
 			}
@@ -720,6 +777,15 @@ func (f *icFrame) qualify(w *walk, host Element) ([]*icTarget, bool) {
 		return nil, false
 	}
 	return q, true
+}
+
+// message is the format of the clause 3 charge c, over the field's
+// expression, the constraint's name, the host's and the ·target node·'s.
+func (c icClause3) message() string {
+	if c == icClause3Other {
+		return "the field %q of the identity constraint %s declared on %s selects, for the ·target node· %s, a node whose ·governing type definition· is neither a simple type definition nor a complex type definition with {variety} simple, which cvc-identity-constraint clause 3 admits as none of its nodes"
+	}
+	return "the field %q of the identity constraint %s declared on %s selects more than one node with a non-absent [schema actual value] for the ·target node· %s, but cvc-identity-constraint clause 3 admits at most one"
 }
 
 // duplicates is clause 4.1 for a unique and clause 4.2.2 for a key, which are
