@@ -507,7 +507,8 @@ func renderLogNote(w io.Writer, p partitioned, logPath string) {
 	}
 	if p.refused() {
 		_, _ = fmt.Fprintln(w, "  A declined case's <refusal> names the exit at which the executor declined it, one of")
-		_, _ = fmt.Fprintln(w, "  conformance/instance.go's refuse* tokens; one ending (#N) names the open issue owning it.")
+		_, _ = fmt.Fprintln(w, "  conformance/instance.go's refuse* tokens; one ending (#N) names the open issue owning it,")
+		_, _ = fmt.Fprintln(w, "  and unevaluated:<rule>[,<rule>…] names the rules of the checks the walk did not perform.")
 	}
 }
 

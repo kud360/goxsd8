@@ -247,8 +247,11 @@
 //	    whose executor names its refusals (the instance lane) writes each
 //	    decline candidate as `<id>=<refusal>` — the token naming the exit
 //	    that declined it, one of instance.go's refuse* constants, read off
-//	    the census's own probe run (#2008); the schema and datatypes lanes
-//	    list candidates by ID alone.
+//	    the census's own probe run (#2008). An unevaluated decline's token
+//	    is `unevaluated:<rule>[,<rule>…]`, each distinct
+//	    validate.Unevaluated.Rule of the records behind it once, in the
+//	    order the result first lists it (#2106). The schema and datatypes
+//	    lanes list candidates by ID alone.
 //	    tools/internal/declinecensus reads these lines for `go tool
 //	    lanepartition -log` (#1740) and `go tool casejoin -log` (#1785), so
 //	    a label renamed in reportDeclines is renamed there. Opt-in because a

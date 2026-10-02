@@ -3,6 +3,7 @@ package conformance
 import (
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/kud360/goxsd8/builtin/strict"
 	"github.com/kud360/goxsd8/loader"
@@ -505,7 +506,9 @@ import (
 // ID (#2008). Each names the condition the function it is returned from states
 // in its doc comment; a token ending in (#N) names the open issue that owns the
 // arm. refuseDecode alone is returned at several sites, every one a decoder
-// error in an encoding/xml re-read of the instance.
+// error in an encoding/xml re-read of the instance. refuseUnevaluated alone is
+// never written bare: unevaluatedRefusal suffixes it with the rules of the
+// records that caused it (#2106).
 const (
 	// caseSchema (instancehints.go).
 	refuseGroupAssembly   refusal = "group-assembly"       // assembleCase declined the group's schema
@@ -529,7 +532,7 @@ const (
 	refuseInstanceUnread     refusal = "instance-unread"       // assessInstance: xmlsrc.Validate failed
 	refuseWalkStopped        refusal = "walk-stopped"          // assessInstance: validate.Result.Err
 	refuseUndecidedRule      refusal = "undecided-rule"        // decidedNotValid: a charge outside the nine
-	refuseUnevaluated        refusal = "unevaluated"           // validate.Result.Unevaluated is not empty
+	refuseUnevaluated        refusal = "unevaluated"           // validate.Result.Unevaluated is not empty; see unevaluatedRefusal
 
 	// assessedSubtreeRoot's pre-gate refusals (subtreeroot.go).
 	refuseVersioned       refusal = "versioned"        // closureVersioned
@@ -628,13 +631,28 @@ func execInstanceCase(backend value.Backend, c caseSpec) (Status, refusal) {
 	}
 	// An empty Result is "valid" for the gated shape alone, and only where the
 	// walk recorded no check it reached and did not perform.
-	if len(result.Unevaluated()) > 0 {
-		return Fail(), refuseUnevaluated
+	if unevaluated := result.Unevaluated(); len(unevaluated) > 0 {
+		return Fail(), unevaluatedRefusal(unevaluated)
 	}
 	if why := assessedSubtreeRoot(schema, report, c.doc); why != "" {
 		return Fail(), why
 	}
 	return decideAgreement(true, c.expect.wantsValid()), ""
+}
+
+// unevaluatedRefusal is refuseUnevaluated's token for records, the checks an
+// assessment reached and did not perform: `unevaluated:<rule>[,<rule>…]`,
+// naming each distinct Unevaluated.Rule once, in the order records first lists
+// it (#2106). The token carries no whitespace and no `=`, so the
+// GOXSD_DECLINES=1 listing's `<id>=<refusal>` entry still parses as one field.
+func unevaluatedRefusal(records []validate.Unevaluated) refusal {
+	var rules []string
+	for _, u := range records {
+		if rule := string(u.Rule()); !slices.Contains(rules, rule) {
+			rules = append(rules, rule)
+		}
+	}
+	return refuseUnevaluated + refusal(":"+strings.Join(rules, ","))
 }
 
 // assessInstance reads the instance document at doc and assesses it against v,
