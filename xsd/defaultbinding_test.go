@@ -354,9 +354,9 @@ func TestElementDeclarationSubsumesFixedValues(t *testing.T) {
 }
 
 // TestElementDeclarationSubsumesFixedValuesSkipsUnresolvedType pins clause 4.2's
-// other fail-open branch: a {type definition} that names no simple type leaves
-// the clause with no value space to compare in, so it accepts without consulting
-// the ValueSpace at all.
+// other fail-open branch: a {type definition} that names no simple type — here
+// xs:anyType, whose {content type} is mixed — leaves the clause with no value
+// space to compare in, so it accepts without consulting the ValueSpace at all.
 func TestElementDeclarationSubsumesFixedValuesSkipsUnresolvedType(t *testing.T) {
 	gvc := NewValueConstraint(ValueFixed, "7", nil, nil)
 	svc := NewValueConstraint(ValueFixed, "07", nil, nil)
@@ -366,11 +366,50 @@ func TestElementDeclarationSubsumesFixedValuesSkipsUnresolvedType(t *testing.T) 
 		t.Fatalf("FinalizeWith: %v", err)
 	}
 	if !s.fixedValueConstraintSubsumes(vcElem(t, "g", anyTypeName, &gvc), vcElem(t, "s", anyTypeName, &svc)) {
-		t.Fatal("a complex {type definition} names no value space, so clause 4.2 must accept")
+		t.Fatal("a mixed complex {type definition} names no value space, so clause 4.2 must accept")
 	}
 	if vs.calls != 0 {
 		t.Fatalf("the ValueSpace was consulted %d time(s) with no simple type to compare in", vs.calls)
 	}
+}
+
+// TestElementDeclarationSubsumesFixedValuesInSimpleContent pins that clause 4.2
+// compares in a simple-content complex type's {content type}.{simple type
+// definition}, the type cos-valid-default clause 1 names for it (#1379): a
+// decided NOT-same rejects, and the ValueSpace is handed that simple type.
+func TestElementDeclarationSubsumesFixedValuesInSimpleContent(t *testing.T) {
+	gvc := NewValueConstraint(ValueFixed, "7", nil, nil)
+	svc := NewValueConstraint(ValueFixed, "8", nil, nil)
+	vs := &recordingValueSpace{stubValueSpace: stubValueSpace{same: false, decided: true}}
+	s, err := vcSchema(t, vs, func(b *SchemaBuilder) {
+		content := dPrimitive(t, uq("content"))
+		b.AddType(content)
+		b.AddType(dType(t, uq("sc"), anyTypeName, SimpleContent{SimpleType: content}, nil, nil))
+	})
+	if err != nil {
+		t.Fatalf("FinalizeWith: %v", err)
+	}
+	if s.fixedValueConstraintSubsumes(vcElem(t, "g", uq("sc"), &gvc), vcElem(t, "s", uq("content"), &svc)) {
+		t.Fatal("a decided NOT-same in the simple content's type must fail clause 4.2")
+	}
+	if vs.calls != 1 {
+		t.Fatalf("the ValueSpace was consulted %d time(s), want 1", vs.calls)
+	}
+	if vs.ta == nil || vs.ta.Name() != uq("content") || vs.tb == nil || vs.tb.Name() != uq("content") {
+		t.Fatalf("compared in (%v, %v), want both sides in content", vs.ta, vs.tb)
+	}
+}
+
+// recordingValueSpace is stubValueSpace recording the two types the last
+// EqualOrIdentical was handed.
+type recordingValueSpace struct {
+	stubValueSpace
+	ta, tb *SimpleType
+}
+
+func (r *recordingValueSpace) EqualOrIdentical(res TypeResolver, ta *SimpleType, a ValueConstraint, tb *SimpleType, b ValueConstraint) (bool, bool) {
+	r.ta, r.tb = ta, tb
+	return r.stubValueSpace.EqualOrIdentical(res, ta, a, tb, b)
 }
 
 // TestAttributeValueConstraintSubsumesFixedValues pins loc-testSubP clause

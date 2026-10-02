@@ -25,23 +25,28 @@ package xsd
 //     consequence: see its own doc.
 //
 // FAIL-OPEN CONTRACT, binding on every implementation: decided=false means "this
-// question was not answered". It is the answer for an ungoverned type, a lexical
-// the governing mapping cannot map, two incommensurable value spaces (ta and tb
-// resolving to different governing mappings), and a QName or NOTATION literal
-// whose prefix its ValueConstraint's captured context does not bind. A caller
-// treats undecided as "the clause is not competent to charge a failure" and
-// accepts; an implementation must never use undecided as licence to reject, must
-// never report a false NOT-same, and must never report a false NOT-valid: every
-// reader turns a decided negative into a refusal, but not always the same kind of
-// refusal. checkSimpleDefault (valueconstraintvalid.go) reads ValidDefault for
-// a-props-correct cl.2, au-props-correct cl.2 and e-props-correct cl.2;
-// checkAttributeUseValueConstraint (valueconstraintvalid.go) reads Identical for
-// au-props-correct cl.3; and defaultbinding.go reads EqualOrIdentical for
-// loc-testSubP cl.4.2 and cl.5.2.2 — all four charge a SCHEMA rejection. But
-// validate/cvcattribute.go's defaultedAttribute also reads ValidDefault, for
-// cvc-complex-type cl.4, and charges an INSTANCE violation during document
-// assessment instead. Either way a decided negative is refused, never let
-// through (PRINCIPLES 20's direction, applied to value spaces).
+// question was not answered". It is the answer for a type no mapping governs, a
+// lexical the governing mapping cannot map, two incommensurable value spaces (ta
+// and tb resolving to different governing mappings), and a QName or NOTATION
+// literal whose prefix its ValueConstraint's captured context does not bind. A
+// comparison of two ·special· types (xs:anySimpleType, xs:anyAtomicType) is
+// not thereby undecided: an implementation may decide it over their mapping
+// union, NOT-same only where no member of that union makes the two {value}s the
+// same under the method's relation, and undecided where a member cannot answer.
+// A caller treats undecided as "the clause is not competent to charge a failure"
+// and accepts; an implementation must never use undecided as licence to reject,
+// must never report a false NOT-same, and must never report a false NOT-valid:
+// every reader turns a decided negative into a refusal, but not always the same
+// kind of refusal. checkSimpleDefault (valueconstraintvalid.go) reads
+// ValidDefault for a-props-correct cl.2, au-props-correct cl.2 and
+// e-props-correct cl.2; checkAttributeUseValueConstraint
+// (valueconstraintvalid.go) reads Identical for au-props-correct cl.3; and
+// defaultbinding.go reads EqualOrIdentical for loc-testSubP cl.4.2 and cl.5.2.2 —
+// all four charge a SCHEMA rejection. But validate/cvcattribute.go's
+// defaultedAttribute also reads ValidDefault, for cvc-complex-type cl.4, and
+// charges an INSTANCE violation during document assessment instead. Either way a
+// decided negative is refused, never let through (PRINCIPLES 20's direction,
+// applied to value spaces).
 //
 // That contract is the deliberate OPPOSITE of the other capability installed at
 // the same seam, [SimpleTypeRestrictionChecker], and the two must not be

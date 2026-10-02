@@ -190,7 +190,10 @@
 // under the identity relation (§2.2.1), loc-testSubP (§3.4.6.4) clauses 4.2 and
 // 5.2.2 under the equal-or-identical union (§2.2.2). It maps each side's {lexical
 // form} through the governing mapping of the type that constrains it and compares
-// the values with the [Identical]/[Eq] capabilities they carry.
+// the values with the [Identical]/[Eq] capabilities they carry. A pair of two
+// ·special· types has no governing mapping and is decided over their mapping
+// union instead, as [ConstraintMatches] decides one, under the comparison's own
+// relation.
 //
 // The other two VALIDATE one Value Constraint against one type: a-props-correct
 // (§3.2.6.1) clause 2 and au-props-correct clause 2, both charging Simple Default
@@ -199,8 +202,10 @@
 // union varieties the comparisons refuse.
 //
 // It answers "undecided" — never a verdict — for everything it cannot decide: an
-// ungoverned type (the ·special· xs:anySimpleType and xs:anyAtomicType included,
-// for which Datatype Valid is unconditionally true), an unmappable lexical, the
+// ungoverned type (on the one-sided check, the ·special· xs:anySimpleType and
+// xs:anyAtomicType included, for which Datatype Valid is unconditionally true;
+// on the comparisons, a ·special· type paired with an ordinary one, and a member
+// of the mapping union that cannot answer), an unmappable lexical, the
 // context-dependent QName and NOTATION spaces on the one-sided check (the
 // comparisons resolve them, under the bindings each value constraint captured,
 // and answer undecided only for a prefix that resolves to nothing), a

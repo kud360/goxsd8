@@ -108,8 +108,9 @@ func TestValueSpaceRefusesIncommensurableSpaces(t *testing.T) {
 }
 
 // TestValueSpaceRefusesUngovernedAndNonAtomic pins the remaining fail-open
-// gates: a type no mapping governs, and the list and union varieties, whose
-// governing mappings are synthesized per type.
+// gates: a type no mapping governs — a ·special· one included when the other
+// side is ordinary — and the list and union varieties, whose governing mappings
+// are synthesized per type.
 func TestValueSpaceRefusesUngovernedAndNonAtomic(t *testing.T) {
 	prim := vsPrim(t, "int")
 	vs := NewValueSpace(intBackend{mapped: prim.Name()})
@@ -134,7 +135,7 @@ func TestValueSpaceRefusesUngovernedAndNonAtomic(t *testing.T) {
 		{"a type no backend mapping governs", unmapped},
 		{"the list variety", lst},
 		{"the union variety", uni},
-		{"xs:anySimpleType, which has no variety at all", xsd.AnySimpleType()},
+		{"xs:anySimpleType against an ordinary type (#2087)", xsd.AnySimpleType()},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if _, decided := vs.Identical(noSchema{}, tc.ta, vsFixed("1"), prim, vsFixed("1")); decided {
