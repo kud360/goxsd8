@@ -468,8 +468,8 @@ import (
 // Cases 7 and 8 carry their own, and validate declines rather than charging at
 // every one: an identity constraint whose {selector} or {fields} fall outside
 // the §3.11.6.2/§3.11.6.3 path subset, a field node whose ·governing type
-// definition· was not determinable, a ·key-sequence· member pair validated
-// against two different simple types, and — for cvc-id clause 1 alone — an
+// definition· was not determinable, a ·key-sequence· member pair with no
+// ·primitive· value space to compare in, and — for cvc-id clause 1 alone — an
 // [ID/IDREF table] any item of the subtree was declined for. Each is a DECLINE
 // inside validate, so it cannot arrive here.
 //
