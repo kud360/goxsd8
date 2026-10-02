@@ -810,8 +810,9 @@ const ruleSrcResolve xsderr.Rule = "src-resolve"
 //     src-redefine "not well-formed", and that rule alone cannot distinguish a
 //     genuine well-formedness fault from a reader LIMITATION — an encoding
 //     declaration the reader does not decode, a reference to a general entity
-//     declared in the DOCTYPE internal subset (IRI/iri-001's &URI;), or a prefix
-//     bound only by a namespace declaration an <!ATTLIST defaults. The chain
+//     the reader does not include (an external one, or one declared after a
+//     parameter-entity reference it does not read), or a prefix bound only by
+//     a namespace declaration an <!ATTLIST defaults. The chain
 //     under it can: wellFormednessFault finds a charge the reader made itself,
 //     which wraps no cause, of a kind no DTD the reader skips could have
 //     averted, and that is a resource that resolved but is no well-formed
@@ -889,14 +890,21 @@ func fabricatedRejection(report *parser.AssemblyReport, perr error) bool {
 // charge of their own with xsderr.New and wrap a cause around every failure
 // they pass on from below: encoding/xml's syntax errors, among them its refusal
 // of an encoding declaration the reader does not decode and of a reference to
-// an entity declared in the DOCTYPE internal subset, and I/O faults. Those may
-// be reader limitations, so perr is no fault here; nor is a chain holding no
-// xml-wf charge at all.
+// a general entity the reader does not include, and I/O faults. The reader's
+// own refusal of such a reference inside replacement text, and of one past its
+// bound on entity expansion, wraps a cause too. Those may be reader
+// limitations, so perr is no fault here; nor is a chain holding no xml-wf
+// charge at all.
 //
 // Of the cause-free charges, an element left unclosed at end of document, a
 // mismatched or unexpected end tag, a reserved prefix, nsc-NoPrefixUndecl, an
-// encoding declaration the byte-order mark contradicts and a document with no
-// root element are faults whatever the document's DTD declares. An unbound
+// encoding declaration the byte-order mark contradicts, a document with no
+// root element, a recursive entity reference, a '<' in replacement text an
+// attribute value includes, replacement text that is not balanced content and
+// an entity reference outside the document element are faults whatever the
+// document's DTD declares: an entity the reader includes is one whose
+// internal-subset declaration it read, which binds before the external
+// subset's (XML 1.0 §2.8, §4.2). An unbound
 // prefix is not: an <!ATTLIST can default the namespace declaration that binds
 // it (XML 1.0 §3.3.2), a non-validating processor must supply that default
 // from the internal subset (§5.1), and the reader applies no attribute default,
@@ -923,7 +931,7 @@ func wellFormednessFault(perr error) bool {
 // unboundPrefixCharge opens every message parser/xmltree's reader writes for a
 // prefix no in-scope namespace declaration binds — on an element, an end tag or
 // an attribute — and no other xml-wf charge it makes. wellFormednessFault reads
-// it to keep that charge from deciding;
+// it to keep that charge from deciding; the <!ATTLIST row of
 // TestSchemaExecutorReadArmSeparatesFaultFromLimitation drives the real parser,
 // so rewording that message fails it.
 const unboundPrefixCharge = "unbound namespace prefix"

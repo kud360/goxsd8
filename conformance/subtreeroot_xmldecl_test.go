@@ -14,11 +14,12 @@ import (
 	"github.com/kud360/goxsd8/parser/xmltree"
 )
 
-// TestRawReadsAdmitTheLabelXmltreeAdmits pins that the raw re-reads,
-// assessedSubtreeRoot, documentCarries and instanceHints, admit a UTF-8
-// document's 1.x version label exactly when parser/xmltree admits it, a
-// byte-order mark before the label included (XML 1.0 §2.8 Note, §4.3.3). The
-// marked 1.1 and 1.10 rows fail when rawDecoder hands As10 the mark: As10 then
+// TestRawReadsAdmitTheLabelXmltreeAdmits pins that the harness's re-reads,
+// assessedSubtreeRoot and instanceHints through rawDecoder and documentCarries
+// through parser/xmltree itself, admit a UTF-8 document's 1.x version label
+// exactly when parser/xmltree admits it, a byte-order mark before the label
+// included (XML 1.0 §2.8 Note, §4.3.3). The marked 1.1 and 1.10 rows fail when
+// rawDecoder hands As10 the mark: As10 then
 // meets no '<?xml', and encoding/xml stops on the unrewritten label with
 // `unsupported version`. The doubled-mark 1.1 row fails if the mark is read
 // past more than once: xmltree drops one mark and refuses that document.
@@ -60,14 +61,15 @@ func TestRawReadsAdmitTheLabelXmltreeAdmits(t *testing.T) {
 	}
 }
 
-// TestRawReadsDecodeUTF16 pins that the raw re-reads, assessedSubtreeRoot,
-// documentCarries and instanceHints, read a byte-order-marked UTF-16 document,
-// in either byte order, exactly as parser/xmltree reads it (XML 1.0 §4.3.3,
+// TestRawReadsDecodeUTF16 pins that the harness's re-reads, assessedSubtreeRoot
+// and instanceHints through rawDecoder and documentCarries through
+// parser/xmltree itself, read a byte-order-marked UTF-16 document, in either
+// byte order, exactly as parser/xmltree reads it (XML 1.0 §4.3.3,
 // Appendix F.1). The 1.1 rows pin that the transcode happens before As10 meets
 // the label, so the label is admitted as xmltree admits it; XML 1.0 rules
 // nothing on UTF-16 by version, so the rows differ in the label alone. Every
-// row fails when rawDecoder reads the bytes without xmlenc.Decode: encoding/xml
-// reads the mark as invalid UTF-8.
+// row's rawDecoder assertions fail when rawDecoder reads the bytes without
+// xmlenc.Decode: encoding/xml reads the mark as invalid UTF-8.
 func TestRawReadsDecodeUTF16(t *testing.T) {
 	for _, version := range []string{"1.0", "1.1"} {
 		for _, bigEnd := range []bool{false, true} {
@@ -128,8 +130,8 @@ func readAll(doc string) error {
 
 // TestRawDecoderReportsPeekFailure pins that a read failure met while peeking
 // for the mark reaches the decoder, from a source that fails once and then
-// reports no more data: dropped, the decoder's re-read would see a bare EOF,
-// which documentCarries reads as a document carrying no matching attribute.
+// reports no more data: dropped, the decoder's re-read would see a bare EOF in
+// place of the failure that ended the document.
 func TestRawDecoderReportsPeekFailure(t *testing.T) {
 	boom := errors.New("boom")
 	_, err := rawDecoder(&failOnce{err: boom}).Token()
@@ -150,4 +152,36 @@ func (f *failOnce) Read([]byte) (int, error) {
 	}
 	f.done = true
 	return 0, f.err
+}
+
+// TestDocumentCarriesReadsIncludedMarkup pins that documentCarries reads a
+// document referencing internal general entities as parser/xmltree includes
+// them (XML 1.0 §4.4.2): a vc: attribute only an entity's replacement text
+// carries is found, and a document whose entities carry none answers false
+// rather than failing closed. The second row fails when documentCarries reads
+// through rawDecoder, which refuses every such reference and so answers true;
+// the first when that decoder is made to read on past them (Strict false),
+// keeping each reference as text and the markup in it unread.
+func TestDocumentCarriesReadsIncludedMarkup(t *testing.T) {
+	const vc = `xmlns:vc="` + versioningNS + `"`
+	for _, tc := range []struct {
+		name, doc string
+		want      bool
+	}{
+		{"vc: attribute only replacement text carries",
+			`<!DOCTYPE r [<!ENTITY e "<a vc:minVersion='1.1'/>">]><r ` + vc + `>&e;</r>`, true},
+		{"entities carrying no vc: attribute",
+			`<!DOCTYPE r [<!ENTITY e "<a b='&d;'/>"><!ENTITY d "x">]><r ` + vc + ` v="&d;">&e;</r>`, false},
+	} {
+		path := filepath.Join(t.TempDir(), "doc.xsd")
+		if err := os.WriteFile(path, []byte(tc.doc), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := readAll(tc.doc); err != nil {
+			t.Fatalf("%s: xmltree rejects the row: %v", tc.name, err)
+		}
+		if got := documentCarries(path, isVersioningAttr); got != tc.want {
+			t.Errorf("%s: documentCarries = %v, want %v", tc.name, got, tc.want)
+		}
+	}
 }
