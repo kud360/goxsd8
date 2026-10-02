@@ -709,16 +709,16 @@ func defaultsNoAttribute(d xml.Directive) bool {
 }
 
 // rawDecoder is the one encoding/xml reader the lane's raw re-reads —
-// assessedSubtreeRoot and instanceHints — take over a
-// document's bytes. It reads the leading byte-order mark through
-// internal/xmlenc, the decoding parser/xmltree's reader takes (XML 1.0 §4.3.3,
-// Appendix F.1): a UTF-16 document, either byte order, is transcoded to UTF-8,
-// a UTF-8 mark is dropped as the encoding signature it is, and an encoding
-// declaration that disagrees with the mark fails the read through the mark's
-// CharsetReader. The mark is thereby consumed before xmldecl.As10 meets the
-// declaration, as As10 requires, and As10 then admits a 1.x version label as
-// xmltree admits it — so a document's label is admitted here exactly when
-// xmltree admits it, in either encoding, with the mark or without.
+// assessedSubtreeRoot and instanceHints — take over a document's bytes. It
+// reads the leading byte-order mark through internal/xmlenc, the decoding
+// parser/xmltree's reader takes (XML 1.0 §4.3.3, Appendix F.1): a UTF-16
+// document, either byte order, is transcoded to UTF-8, a UTF-8 mark is dropped
+// as the encoding signature it is, and an encoding declaration that disagrees
+// with the mark fails the read through the mark's CharsetReader. The mark is
+// thereby consumed before xmldecl.As10 meets the declaration, as As10
+// requires, and As10 then admits a 1.x version label as xmltree admits it — so
+// a document's label is admitted here exactly when xmltree admits it, in
+// either encoding, with the mark or without.
 //
 // One disagreement xmltree rejects is read here: a UTF-16 mark under
 // encoding="UTF-8", which encoding/xml never hands to a CharsetReader and

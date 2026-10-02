@@ -19,10 +19,10 @@ import (
 // through parser/xmltree itself, admit a UTF-8 document's 1.x version label
 // exactly when parser/xmltree admits it, a byte-order mark before the label
 // included (XML 1.0 §2.8 Note, §4.3.3). The marked 1.1 and 1.10 rows fail when
-// rawDecoder hands As10 the mark: As10 then
-// meets no '<?xml', and encoding/xml stops on the unrewritten label with
-// `unsupported version`. The doubled-mark 1.1 row fails if the mark is read
-// past more than once: xmltree drops one mark and refuses that document.
+// rawDecoder hands As10 the mark: As10 then meets no '<?xml', and encoding/xml
+// stops on the unrewritten label with `unsupported version`. The doubled-mark
+// 1.1 row fails if the mark is read past more than once: xmltree drops one
+// mark and refuses that document.
 func TestRawReadsAdmitTheLabelXmltreeAdmits(t *testing.T) {
 	const mark = "\xEF\xBB\xBF"
 	const body = `<known>x</known>`

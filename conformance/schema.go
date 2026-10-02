@@ -904,11 +904,11 @@ func fabricatedRejection(report *parser.AssemblyReport, perr error) bool {
 // an entity reference outside the document element are faults whatever the
 // document's DTD declares: an entity the reader includes is one whose
 // internal-subset declaration it read, which binds before the external
-// subset's (XML 1.0 §2.8, §4.2). An unbound
-// prefix is not: an <!ATTLIST can default the namespace declaration that binds
-// it (XML 1.0 §3.3.2), a non-validating processor must supply that default
-// from the internal subset (§5.1), and the reader applies no attribute default,
-// so it charges a well-formed document (unboundPrefixCharge).
+// subset's (XML 1.0 §2.8, §4.2). An unbound prefix is not: an <!ATTLIST can
+// default the namespace declaration that binds it (XML 1.0 §3.3.2), a
+// non-validating processor must supply that default from the internal subset
+// (§5.1), and the reader applies no attribute default, so it charges a
+// well-formed document (unboundPrefixCharge).
 //
 // GAP(parser): a composed or hinted schema document whose prefix is genuinely
 // unbound — no DTD could have bound it — is declined here rather than decided
