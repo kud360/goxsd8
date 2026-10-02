@@ -438,50 +438,92 @@ func TestIdentityConstraintDeclinesAreRecorded(t *testing.T) {
 		Unevaluated{rule: ruleCvcIdentityConstraint, loc: loc(5, 1), msg: "clauses 3 and 4 are undecided"})
 }
 
-// A ·key-sequence· comparison sameKeyMember cannot make — a member validated
-// against a union, here xs:string against UID, whose ·active basic member· the
-// member does not keep (sameKeyMember's GAP) — withholds the clause that reads
-// it, and is recorded: clause 4.2.2 against the later ·target node· of a key,
-// and clause 4.3 against a keyref member. The xs:string/xs:string control is the
-// decided answer the first record stands in for.
+// A ·key-sequence· comparison sameKeyMember cannot make — a member value with
+// neither value.Eq nor value.Identical, which opaqueBackend gives every
+// xs:string value — withholds the clause that reads it, and is recorded:
+// clause 4.2.2 against the later ·target node· of a key, and clause 4.3 against
+// a keyref member. Each document also runs under the test backend, whose
+// decided answer is what the record stands in for.
 func TestUndecidedKeySequenceComparisonsAreRecorded(t *testing.T) {
-	key := icDef(t, "K", xsd.IdentityConstraintKey, ".//item", nil, "", "@id|@uid")
+	opaque := opaqueBackend{base: testBackend()}
+	key := icDef(t, "K", xsd.IdentityConstraintKey, ".//item", nil, "", "@id")
 	schema := icSchema(t, "", false, []xsd.IdentityConstraint{key}, nil)
-	icWantCharges(t, icAssess(t, schema, icRoot(icIDed(2, "a"), icIDed(3, "a"))), icCharge(ruleCvcIdentityConstraint, 3))
-	got, undecided := assessRecorded(t, schema, icRoot(icIDed(2, "a"), idItem(3, "uid", "a")))
+	doc := icRoot(icIDed(2, "a"), icIDed(3, "a"))
+	icWantCharges(t, icAssess(t, schema, doc), icCharge(ruleCvcIdentityConstraint, 3))
+	got, undecided := assessRecordedWith(t, opaque, schema, doc)
 	wantSilence(t, got, "an undecided comparison charges nothing")
 	wantDeclines(t, icDeclines(undecided), Unevaluated{rule: ruleCvcIdentityConstraint, loc: loc(3, 1), msg: "clause 4.2.2 is undecided"})
 
-	unique := icDef(t, "U", xsd.IdentityConstraintUnique, "item", nil, "", "@uid")
-	keyref := icDef(t, "R", xsd.IdentityConstraintKeyref, "item", nil, "U", "@id")
-	got, undecided = assessRecorded(t, icSchema(t, "", false, []xsd.IdentityConstraint{unique, keyref}, nil),
-		icRoot(idItem(2, "uid", "a"), idItem(3, "id", "a")))
+	unique := icDef(t, "U", xsd.IdentityConstraintUnique, "item", nil, "", "@id")
+	keyref := icDef(t, "R", xsd.IdentityConstraintKeyref, "ref", nil, "U", "@r")
+	schema = icSchema(t, "", false, []xsd.IdentityConstraint{unique, keyref}, nil)
+	doc = icRoot(icIDed(2, "a"), icElem(xsd.QName{Local: "ref"}, 3, []Attribute{icAttr(xsd.QName{Local: "r"}, "a", 3)}))
+	got, undecided = assessRecorded(t, schema, doc)
+	wantSilence(t, got, "a keyref member equal to a unique one resolves")
+	wantDeclines(t, icDeclines(undecided))
+	got, undecided = assessRecordedWith(t, opaque, schema, doc)
 	wantSilence(t, got, "an undecided lookup charges nothing")
 	wantDeclines(t, icDeclines(undecided), Unevaluated{rule: ruleCvcIdentityConstraint, loc: loc(3, 1), msg: "clause 4.3 is undecided"})
 }
 
 // §3.11.5's conflict resolution drops two child entries sharing a
 // ·key-sequence·, so a keyref member matching that sequence is charged under
-// clause 4.3. Where the comparison between the two could not be made — here an
-// xs:string member against a UID one, sameKeyMember's GAP — both entries are
-// kept CONTESTED, and a member matching only a contested entry is recorded as
-// undecided rather than passing on an entry the proviso may have removed.
-// Without the contested mark, the second document walks clean.
+// clause 4.3: under the test backend the xs:token entry of the first <box> and
+// the xs:string entry of the second are one xs:string value. Under
+// opaqueBackend the comparison between the two cannot be made — re-read in the
+// xs:string value space, the first has neither value.Eq nor value.Identical —
+// so both entries are kept CONTESTED. The keyref member matches the xs:token
+// entry decidedly, since opaqueBackend maps xs:token by the test backend's
+// xs:string mapping, and is recorded as undecided rather than passing on an
+// entry the proviso may have removed. Without the contested mark, that
+// document walks clean.
 func TestKeyrefMatchingOnlyAContestedEntryIsRecorded(t *testing.T) {
-	unique := icDef(t, "U", xsd.IdentityConstraintUnique, "item", nil, "", "@id|@uid")
-	keyref := icDef(t, "R", xsd.IdentityConstraintKeyref, "item", nil, "U", "@id")
+	unique := icDef(t, "U", xsd.IdentityConstraintUnique, "item", nil, "", "@id|@tok")
+	keyref := icDef(t, "R", xsd.IdentityConstraintKeyref, "item", nil, "U", "@tok")
 	schema := icSchema(t, "", false, []xsd.IdentityConstraint{keyref}, []xsd.IdentityConstraint{unique})
 	box := func(line int, item *testElement) *testElement {
 		return icElem(xsd.QName{Local: "box"}, line, nil, ElementChild(item))
 	}
+	doc := icRoot(idItem(2, "tok", "a"), box(3, idItem(4, "tok", "a")), box(5, icIDed(6, "a")))
 
-	got, undecided := assessRecorded(t, schema, icRoot(icIDed(2, "a"), box(3, icIDed(4, "a")), box(5, icIDed(6, "a"))))
+	got, undecided := assessRecorded(t, schema, doc)
 	icWantCharges(t, got, icCharge(ruleCvcIdentityConstraint, 2))
 	wantDeclines(t, icDeclines(undecided))
 
-	got, undecided = assessRecorded(t, schema, icRoot(icIDed(2, "a"), box(3, icIDed(4, "a")), box(5, idItem(6, "uid", "a"))))
+	got, undecided = assessRecordedWith(t, opaqueBackend{base: testBackend()}, schema, doc)
 	wantSilence(t, got, "a match on a contested entry charges nothing")
 	wantDeclines(t, icDeclines(undecided), Unevaluated{rule: ruleCvcIdentityConstraint, loc: loc(2, 1), msg: "clause 4.3 is undecided"})
+}
+
+// opaqueBackend is base with every xs:string value wrapped in an opaqueValue,
+// and xs:token mapped by base's own xs:string mapping, so an xs:token member
+// keeps the capabilities its value re-read in the xs:string ·primitive· value
+// space loses.
+type opaqueBackend struct {
+	base value.Backend
+}
+
+func (b opaqueBackend) Mapping(typ xsd.QName) (value.Mapping, bool) {
+	if typ == icBuiltin("token") {
+		return b.base.Mapping(icBuiltin("string"))
+	}
+	m, ok := b.base.Mapping(typ)
+	if !ok || typ != icBuiltin("string") {
+		return m, ok
+	}
+	return value.Mapping{Parse: func(lexical string, ctx value.Context) (value.Value, error) {
+		v, err := m.Parse(lexical, ctx)
+		if err != nil {
+			return nil, err
+		}
+		return opaqueValue{v: v}, nil
+	}}, true
+}
+
+// opaqueValue is a value with neither value.Eq nor value.Identical, the
+// backend coverage sameKeyMember declines on.
+type opaqueValue struct {
+	v value.Value
 }
 
 // Two members of different ·primitive· datatypes are neither identical nor
