@@ -19,13 +19,14 @@ import (
 // This file holds the instance lane's one shape gate for the "valid"
 // observation: an ASSESSED SUBTREE ROOT (#1841), a validation root, with or
 // without content (#1855), whose every element the walk strictly assessed
-// against a declaration and a type it really has, and every attribute against
-// its ·governing attribute declaration· where it has one (key-sva clause 2),
-// with no clause of key-sva (§3.3.4.6), cvc-elt (§3.3.4.3), cvc-type
-// (§3.3.4.4) or cvc-complex-type (§3.4.4.2) left undecided unrecorded.
-// instance.go's "Why an EMPTY Result is evidence of validity for ONE shape
-// only" states which clause each condition discharges; this file is only the
-// conditions.
+// against a type it really has, through a declaration or, for a wildcard's
+// child resolving none, an xsi:type (#1978), or laxly assessed against
+// ·xs:anyType· (#1911), and every attribute against its ·governing attribute
+// declaration· where it has one (key-sva clause 2), with no clause of
+// key-sva (§3.3.4.6), cvc-elt (§3.3.4.3), cvc-type (§3.3.4.4) or
+// cvc-complex-type (§3.4.4.2) left undecided unrecorded. instance.go's "Why
+// an EMPTY Result is evidence of validity for ONE shape only" states which
+// clause each condition discharges; this file is only the conditions.
 //
 // The gate is computed per case and stored nowhere. It re-reads the instance
 // with encoding/xml, decoding a byte-order-marked UTF-16 document and admitting
@@ -115,13 +116,10 @@ type subtreeGate struct {
 //   - d is not abstract and carries no {type table} (assessedDeclaration);
 //   - its ·governing type definition· is determined: d.{type definition}
 //     resolves, and an xsi:type the element carries meets governingType's
-//     conditions, the type it names then standing in for d.{type definition}
-//     in the two conditions below;
-//   - for a Simple Type Definition, the element carries no attribute but the
-//     four xsi: ones cvc-type clause 3.1.1 excepts, and no element [[child]];
-//   - for a Complex Type Definition, the conditions complex names, the element
-//     being ·nilled· (key-nilled) where d.{nillable} is true and its xsi:nil's
-//     ·actual value· is true.
+//     conditions, the type it names then standing in for d.{type definition};
+//   - the element and its subtree meet governed's conditions against that
+//     type, the element being ·nilled· (key-nilled) where d.{nillable} is true
+//     and its xsi:nil's ·actual value· is true.
 //
 // An xsi:nil is otherwise the walk's: validate's nilCheck charges cvc-elt
 // clause 3.1 for one on a declaration whose {nillable} is false, whatever its
@@ -140,6 +138,17 @@ func (g *subtreeGate) element(start xml.StartElement, d xsd.ElementDeclaration) 
 	if !ok {
 		return false
 	}
+	return g.governed(start, td, isNil && d.Nillable())
+}
+
+// governed reads through to its end tag an element whose start tag is start and
+// whose ·governing type definition· is td, ·nilled· where nilled is true, and
+// reports whether:
+//
+//   - for a Simple Type Definition, the element carries no attribute but the
+//     four xsi: ones cvc-type clause 3.1.1 excepts, and no element [[child]];
+//   - for a Complex Type Definition, it meets complex's conditions.
+func (g *subtreeGate) governed(start xml.StartElement, td xsd.TypeDefinition, nilled bool) bool {
 	switch t := td.(type) {
 	case *xsd.SimpleType:
 		if slices.ContainsFunc(start.Attr, notExcepted) {
@@ -147,7 +156,7 @@ func (g *subtreeGate) element(start xml.StartElement, d xsd.ElementDeclaration) 
 		}
 		return g.leaf()
 	case xsd.ComplexType:
-		return g.complex(start, t, isNil && d.Nillable())
+		return g.complex(start, t, nilled)
 	}
 	return false
 }
@@ -547,6 +556,10 @@ func (g *subtreeGate) child(t xsd.ComplexType, m *xsd.Matcher, start xml.StartEl
 //     as nor ·validly substitutable· for its non-·absent· ·locally declared
 //     type· within the parent's type (validate's walk.locallyDeclaredType),
 //     so no empty Result reaches the gate with such a child;
+//   - its name resolves to none and it carries an xsi:type: instanceTyped's
+//     conditions, under a strict and a lax wildcard alike, its ·locally
+//     declared type· ·absent· or not (key-governing-type-elem clause 8 or 6,
+//     the latter read soundly through the walk's clause 5 charge);
 //   - strictParticle holds — the child is ·attributed to· a strict ·wildcard
 //     particle· — its name resolves to none, and it carries no xsi:type: the
 //     child is ·laxly assessed· with a ·governing type definition· of none, so
@@ -557,29 +570,65 @@ func (g *subtreeGate) child(t xsd.ComplexType, m *xsd.Matcher, start xml.StartEl
 //   - strictParticle does not hold — the child is ·attributed to· a lax
 //     Wildcard or {open content} — its name resolves to none, it carries no
 //     xsi:type, and laxlyAssessed holds for it (#1911).
-//
-// GAP(conformance): an unresolved child with an xsi:type is refused, under a
-// strict ·wildcard particle· and a lax Wildcard or {open content} alike,
-// whatever type the xsi:type names. Where it resolves, that type is the
-// child's ·governing type definition· (key-governing-type-elem clause 8), so
-// its parent's cvc-assess-elt clause 3.1 has it ·strictly assessed· against
-// that type (key-sva clause 1.2) and the spec decides it; under strict the
-// walk's e-validity clause 1.1.3 charge is gone, and the gate does not read a
-// subtree governed by a type with no declaration. Its one reader,
-// execInstanceCase, then Fails the case: a suite-valid case of this shape
-// scores no pass, and none a false one.
 func (g *subtreeGate) resolvedChild(start xml.StartElement, strictParticle bool) bool {
 	d, ok := g.schema.Element(expandedName(start.Name))
-	if !ok {
-		if slices.ContainsFunc(start.Attr, func(a xml.Attr) bool { return a.Name == xsiType }) {
-			return false
-		}
-		if strictParticle {
-			return g.dec.Skip() == nil
-		}
-		return g.laxlyAssessed(start)
+	if ok {
+		return g.element(start, d)
 	}
-	return g.element(start, d)
+	if i := slices.IndexFunc(start.Attr, func(a xml.Attr) bool { return a.Name == xsiType }); i >= 0 {
+		return g.instanceTyped(start, start.Attr[i].Value)
+	}
+	if strictParticle {
+		return g.dec.Skip() == nil
+	}
+	return g.laxlyAssessed(start)
+}
+
+// instanceTyped reads through to its end tag a wildcard's child whose start tag
+// is start, which has no ·governing element declaration· and whose xsi:type
+// carries lexical, and reports whether an xsi:nil it carries has an ·actual
+// value· (nilValue), lexical names a top-level type definition T against the
+// namespace bindings in scope at start (resolveQName), and the child and its
+// subtree meet governed's conditions against T, never ·nilled·: key-nilled is
+// relative to a declaration, and it has none.
+//
+// T is the child's ·governing type definition·, so the child is ·strictly
+// assessed· against it (cvc-assess-elt clause 1) under a strict and a lax
+// wildcard alike, and e-validity reads its own [validity] (key-sva clause
+// 1.2): under strict the walk's e-validity clause 1.1.3 charge does not arise
+// for it, and under lax it is not ·laxly assessed· (key-lva clause 1). Where
+// the child's ·locally declared type· within the parent's type is ·absent·,
+// key-governing-type-elem clause 8 selects T, which is validate's
+// walk.childGoverning reading (instanceGovernance). A child ·attributed to· a
+// Wildcard reaches here with a non-·absent· one too — child asks
+// LocallyDeclaredElementType only on its {open content} arm — and clause 6
+// selects T only where T ·overrides· that type, which with no declaration is
+// key-overrides clause 2's ·validly substitutable without limitation·. That is
+// exactly cvc-complex-type clause 5's condition, which the walk charges for a
+// T failing it (validate's walk.locallyDeclaredType), so no empty Result
+// reaches the gate with such a child unless clause 6 selects T: the gate's
+// reading against T is the walk's. With no declaration there is no ·selected
+// type definition· for T to ·override·, so governingType's cvc-elt clause 4
+// test has no counterpart here; an ·abstract· T is refused by complex
+// (cvc-type clause 2).
+//
+// An xsi:type naming no type definition leaves the child with no ·governing
+// type definition·. The walk charges cvc-attribute clause 5 for it, but the
+// gate refuses it too rather than read a subtree it cannot type.
+func (g *subtreeGate) instanceTyped(start xml.StartElement, lexical string) bool {
+	if _, ok := nilValue(start.Attr); !ok {
+		return false
+	}
+	defer g.enter(start)()
+	name, ok := g.resolveQName(lexical)
+	if !ok {
+		return false
+	}
+	t, ok := g.schema.Type(name)
+	if !ok {
+		return false
+	}
+	return g.governed(start, t, false)
 }
 
 // laxlyAssessed reads through to its end tag an element whose start tag is

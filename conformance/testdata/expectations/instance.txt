@@ -970,7 +970,7 @@ MS-Additional2006-07-15/addB105/instance/addB105.i pass
 MS-Additional2006-07-15/addB109/instance/addB109.i pass
 MS-Additional2006-07-15/addB114/instance/addB114.i pass
 MS-Additional2006-07-15/addB115/instance/addB115.i pass
-MS-Additional2006-07-15/addB116/instance/addB116.v fail
+MS-Additional2006-07-15/addB116/instance/addB116.v pass
 MS-Additional2006-07-15/addB120/instance/addB120.i fail
 MS-Additional2006-07-15/addB122/instance/addB122.v pass
 MS-Additional2006-07-15/addB123/instance/addB123.i pass
@@ -2874,10 +2874,10 @@ MS-Element2006-07-15/elemZ002/instance/elemZ002.v pass
 MS-Element2006-07-15/elemZ003/instance/elemZ003.v pass
 MS-Element2006-07-15/elemZ009/instance/elemZ009.v pass
 MS-Element2006-07-15/elemZ010/instance/elemZ010.v pass
-MS-Element2006-07-15/elemZ014/instance/elemZ014.v fail
+MS-Element2006-07-15/elemZ014/instance/elemZ014.v pass
 MS-Element2006-07-15/elemZ015/instance/elemZ015.i fail
 MS-Element2006-07-15/elemZ016/instance/elemZ016.i pass
-MS-Element2006-07-15/elemZ017/instance/elemZ017.v fail
+MS-Element2006-07-15/elemZ017/instance/elemZ017.v pass
 MS-Element2006-07-15/elemZ018/instance/elemZ018.v pass
 MS-Element2006-07-15/elemZ019/instance/elemZ019.v pass
 MS-Element2006-07-15/elemZ020/instance/elemZ020.v pass
@@ -2892,7 +2892,7 @@ MS-Element2006-07-15/elemZ022a/instance/elemZ022a.i pass
 MS-Element2006-07-15/elemZ022b/instance/elemZ022b.v pass
 MS-Element2006-07-15/elemZ023/instance/elemZ023.i pass
 MS-Element2006-07-15/elemZ029/instance/elemZ029.v pass
-MS-Element2006-07-15/elemZ033b/instance/elemZ033b.v fail
+MS-Element2006-07-15/elemZ033b/instance/elemZ033b.v pass
 MS-Errata102006-07-15/errA001/instance/errA001.v pass
 MS-Errata102006-07-15/errA002/instance/errA002.i pass
 MS-Errata102006-07-15/errA003/instance/errA003.v pass
@@ -5658,7 +5658,7 @@ MS-Wildcards2006-07-15/wildP006/instance/wildP006.v pass
 MS-Wildcards2006-07-15/wildZ001/instance/wildZ001.i pass
 MS-Wildcards2006-07-15/wildZ002/instance/wildZ002.v pass
 MS-Wildcards2006-07-15/wildZ003/instance/wildZ003.v pass
-MS-Wildcards2006-07-15/wildZ004/instance/wildZ004.v fail
+MS-Wildcards2006-07-15/wildZ004/instance/wildZ004.v pass
 MS-Wildcards2006-07-15/wildZ005/instance/wildZ005.i pass
 MS-Wildcards2006-07-15/wildZ006/instance/wildZ006.i pass
 MS-Wildcards2006-07-15/wildZ007/instance/wildZ007.v pass
@@ -25621,7 +25621,7 @@ Wild/wild062/instance/wild062.v1.xml pass
 Wild/wild063/instance/wild063.n1.xml pass
 Wild/wild063/instance/wild063.n2.xml pass
 Wild/wild063/instance/wild063.v1.xml pass
-Wild/wild063/instance/wild063.v2.xml fail
+Wild/wild063/instance/wild063.v2.xml pass
 Wild/wild064/instance/wild064.n1.xml pass
 Wild/wild064/instance/wild064.v1.xml pass
 Wild/wild064/instance/wild064.v2.xml pass
