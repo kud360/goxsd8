@@ -566,20 +566,6 @@ func TestInstanceExecutorDeclinesOutsideAssessedSubtreeRoot(t *testing.T) {
 			"a strict {attribute wildcard}'s attribute whose name resolves no declaration (cvc-complex-type clause 2.2)",
 			wildcardKnown("strict"), `<known foo="1"><a>1</a></known>`,
 		},
-		// The wildcard-child refusals (#1931): subtreeGate.resolvedChild's.
-		{
-			// resolvedChild's GAP(conformance) xsi:type refusal, under lax as
-			// under strict (#1911).
-			"a lax wildcard particle's child resolving no declaration, typed by an xsi:type",
-			wildcardChild("lax"), `<known ` + xsiXS + `><u xsi:type="xs:int">1</u></known>`,
-		},
-		{
-			// Strictly assessed against N through the xsi:type, the child takes
-			// the walk's e-validity clause 1.1.3 charge away; resolvedChild's
-			// GAP(conformance) xsi:type refusal declines it, not N's NOTATION.
-			"a strict wildcard particle's child resolving no declaration, typed by an xsi:type naming a NOTATION enumeration",
-			notationN + wildcardChild("strict"), `<known ` + xsiNS + `><u xsi:type="N">n</u></known>`,
-		},
 		// subtreeGate.child's GAP(conformance) {open content} refusal (#2071):
 		// the walk assesses each second e against the local xs:date, and the gate
 		// would read the top-level xs:string e, or ·xs:anyType·, instead.
@@ -927,17 +913,27 @@ func ldtBase(top string) string {
 		`<xs:element name="known" type="R"/><xs:element name="b" type="` + top + `"/>`
 }
 
+// ldtUnresolved declares <known>, whose content model is a local c of xs:int
+// and then a lax wildcard particle, with no top-level c: a wildcard child named
+// c resolves no declaration and has xs:int for its ·locally declared type·
+// (key-ldt-elem case 2), so an xsi:type on it governs by key-governing-type-elem
+// clause 6, not clause 8.
+const ldtUnresolved = `<xs:element name="known"><xs:complexType><xs:sequence><xs:element name="c" type="xs:int"/>` +
+	`<xs:any processContents="lax"/></xs:sequence></xs:complexType></xs:element>`
+
 // TestInstanceExecutorDecidesWildcardChild proves the gate admits a child
 // ·attributed to· a strict or lax ·wildcard particle·, or to a lax {open
 // content} with an ·absent· ·locally declared type· (#2071), wherever its name
 // ·resolves· to a top-level declaration, the walk deciding cvc-complex-type
 // clause 5 for it (#1931, #2071), a skip ·wildcard particle·'s or skip {open
 // content}'s child whatever its subtree holds (key-sva clause 3.2, #1861,
-// #1969), and a lax one's child resolving to none, ·laxly assessed· with its
-// subtree (#1911). Each row walks clean, and each is refused with
+// #1969), a lax one's child resolving to none, ·laxly assessed· with its
+// subtree (#1911), and a strict or lax one's child resolving to none whose
+// xsi:type governs it (#1978). Each row walks clean, and each is refused with
 // subtreeGate.resolvedChild answering false for a resolved name, with
-// laxlyAssessed answering false for an unresolved one, or with child answering
-// false for the {open content} or skip Wildcard arm.
+// laxlyAssessed answering false for an unresolved one, with instanceTyped
+// answering false for an unresolved one carrying an xsi:type, or with child
+// answering false for the {open content} or skip Wildcard arm.
 func TestInstanceExecutorDecidesWildcardChild(t *testing.T) {
 	exec := newInstanceExec()
 	for _, tc := range []struct{ why, schemaBody, instance string }{
@@ -961,6 +957,14 @@ func TestInstanceExecutorDecidesWildcardChild(t *testing.T) {
 		// resolving none again (laxly assessed), and <b> strictly assessed
 		// against b (#1823).
 		{"lax, a child resolving no declaration over a subtree the walk assesses", wildcardChild("lax"), `<known><u foo="x">t<v><w/></v><b>1</b></u></known>`},
+		// Its xsi:type is the ·governing type definition· (key-governing-type-elem
+		// clause 8): ·strictly assessed· against it (cvc-assess-elt clause 1),
+		// under strict with no e-validity clause 1.1.3 charge (#1978).
+		{"lax, a child resolving no declaration, typed by an xsi:type", wildcardChild("lax"), `<known ` + xsiXS + `><u xsi:type="xs:int">1</u></known>`},
+		{
+			"strict, a child resolving no declaration, typed by an xsi:type naming a NOTATION enumeration",
+			notationN + wildcardChild("strict"), `<known ` + xsiNS + `><u xsi:type="N">n</u></known>`,
+		},
 		// cvc-complex-type clause 5 satisfied, each ·locally declared type·
 		// non-·absent· (key-ldt-elem, #2071).
 		{"strict, a child whose type is its ·locally declared type· (clause 5)",
@@ -986,6 +990,11 @@ func TestInstanceExecutorDecidesWildcardChild(t *testing.T) {
 				`<xs:element name="h" type="xs:string"/><xs:element name="m" substitutionGroup="h"/>`,
 			`<known><m>x</m></known>`,
 		},
+		// key-governing-type-elem clause 6: xs:byte ·overrides· the ·locally
+		// declared type· xs:int (key-overrides clause 2), so it governs the
+		// second <c>, which resolves no declaration (wild063.v2's shape).
+		{"lax, a child resolving no declaration whose xsi:type ·overrides· its ·locally declared type· (clause 6)",
+			ldtUnresolved, `<known ` + xsiXS + `><c>1</c><c xsi:type="xs:byte">1</c></known>`},
 	} {
 		if !exec(instanceCase(t, tc.schemaBody, tc.instance, true)).IsPass() {
 			t.Errorf("%s: the walk decides the wildcard child and the gate admits it; the executor must agree with a suite-valid case", tc.why)
@@ -1005,6 +1014,13 @@ func TestInstanceExecutorChargesWildcardChild(t *testing.T) {
 		{"strict, a value not valid against the resolved declaration (cvc-type clause 3.1.3)", wildcardChild("strict"), `<known><b>x</b></known>`},
 		{"an {open content} child's value not valid against the resolved declaration", openChild("lax"), `<known><b>x</b><a>1</a></known>`},
 		{"strict, a child resolving no declaration (e-validity clause 1.1.3)", wildcardChild("strict"), `<known><u>x</u></known>`},
+		// Against the xsi:type governing it (key-governing-type-elem clause 8,
+		// cvc-type clause 3.1.3, #1978).
+		{"lax, a child resolving no declaration, a value not valid against its xsi:type", wildcardChild("lax"), `<known ` + xsiXS + `><u xsi:type="xs:int">x</u></known>`},
+		{
+			"strict, a child resolving no declaration, a NOTATION value its xsi:type's enumeration does not admit (cvc-enumeration-valid)",
+			notationN + wildcardChild("strict"), `<known ` + xsiNS + `><u xsi:type="N">bez</u></known>`,
+		},
 		// §2.5 key-deep-valid-doc clauses 3 and 4: invalid below a ·laxly
 		// assessed· <u>, notKnown, which clause 1.1.2 does not propagate past
 		// (#1911).
@@ -1031,6 +1047,12 @@ func TestInstanceExecutorChargesWildcardChild(t *testing.T) {
 			`<xs:element name="known"><xs:complexType><xs:sequence><xs:element name="f" type="xs:string"/>` +
 				`<xs:any processContents="lax"/></xs:sequence></xs:complexType></xs:element>`,
 			`<known ` + xsiXS + `><f>x</f><f xsi:type="xs:int">1</f></known>`},
+		// The walk's clause 5 charge is what makes the gate's reading against
+		// the xsi:type sound: xs:string does not ·override· xs:int, so clause 7
+		// governs, yet "x" is valid against the xs:string the gate reads, which
+		// would admit it were the walk not to charge clause 5.
+		{"lax, a child resolving no declaration whose xsi:type does not ·override· its ·locally declared type· (clause 5)",
+			ldtUnresolved, `<known ` + xsiXS + `><c>1</c><c xsi:type="xs:string">x</c></known>`},
 	} {
 		if !exec(instanceCase(t, tc.schemaBody, tc.instance, false)).IsPass() {
 			t.Errorf("%s: the walk charges the child; the executor must agree with a suite-invalid case", tc.why)
@@ -1048,7 +1070,10 @@ func TestInstanceExecutorChargesWildcardChild(t *testing.T) {
 // its subtree unread. Under lax it reads the subtree as ·laxly assessed·
 // against ·xs:anyType· (subtreeGate.laxlyAssessed, #1911), and the refused rows
 // are each a condition element puts on an element at or below the lax child,
-// which the gate holds there too.
+// which the gate holds there too. Under either, a child carrying an xsi:type is
+// read against the type it names (subtreeGate.instanceTyped, #1978); one naming
+// no type definition is refused, which no executor row can see either, the walk
+// charging cvc-attribute clause 5 for it first.
 func TestAssessedSubtreeRootUnresolvedChild(t *testing.T) {
 	for _, tc := range []struct {
 		why, schemaBody, instance string
@@ -1070,6 +1095,28 @@ func TestAssessedSubtreeRootUnresolvedChild(t *testing.T) {
 			// The walk settles cvc-elt clause 5.2.2 for f, below the lax <u> too (#1979).
 			"lax, below a child resolving no declaration, a resolved declaration with a fixed {value constraint} (cvc-elt clause 5.2.2)",
 			wildcardChild("lax") + `<xs:element name="f" type="xs:int" fixed="1"/>`, `<known><u><f>1</f></u></known>`, true,
+		},
+		{"strict, a child resolving no declaration whose xsi:type names no type definition", wildcardChild("strict"), `<known ` + xsiNS + `><u xsi:type="Z">1</u></known>`, false},
+		{"lax, a child resolving no declaration whose xsi:type names no type definition", wildcardChild("lax"), `<known ` + xsiNS + `><u xsi:type="Z">1</u></known>`, false},
+		// The child's own binding of z must reach resolveQName for its xsi:type.
+		{
+			"strict, a child resolving no declaration, its xsi:type bound by a prefix it declares itself",
+			wildcardChild("strict"), `<known ` + xsiNS + `><u xmlns:z="http://www.w3.org/2001/XMLSchema" xsi:type="z:int">1</u></known>`, true,
+		},
+		{"lax, a child resolving no declaration, an xsi:type naming a simple type over an element child", wildcardChild("lax"), `<known ` + xsiXS + `><u xsi:type="xs:int"><v/></u></known>`, false},
+		{"lax, a child resolving no declaration, an xsi:type naming a simple type and an attribute", wildcardChild("lax"), `<known ` + xsiXS + `><u xsi:type="xs:int" a="1">1</u></known>`, false},
+		{"strict, a child resolving no declaration, an xsi:type with an xsi:nil with no ·actual value·", wildcardChild("strict"), `<known ` + xsiXS + `><u xsi:type="xs:int" xsi:nil="maybe">1</u></known>`, false},
+		// Never ·nilled·: with no declaration, key-nilled does not apply, so the
+		// complex type's content model is read and <v> is admitted under T.
+		{
+			"lax, a child resolving no declaration, xsi:nil true over the element child its xsi:type's complex type admits",
+			wildcardChild("lax") + `<xs:complexType name="T"><xs:sequence><xs:element name="v"/></xs:sequence></xs:complexType>`,
+			`<known ` + xsiNS + `><u xsi:type="T" xsi:nil="true"><v/></u></known>`, true,
+		},
+		// cvc-type clause 2: the walk does not charge it on a clause-8 child.
+		{
+			"lax, a child resolving no declaration whose xsi:type names an abstract complex type",
+			wildcardChild("lax") + `<xs:complexType name="T" abstract="true"/>`, `<known ` + xsiNS + `><u xsi:type="T"/></known>`, false,
 		},
 	} {
 		c := instanceCase(t, tc.schemaBody, tc.instance, true)
