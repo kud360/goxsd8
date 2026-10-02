@@ -302,7 +302,8 @@ var anyTypeName = xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"}
 // still governed by that built-in declaration (key-governing-ad) and so not
 // ·valid· (cvc-attribute clause 3), which the walk charges nothing for and
 // records nothing of. The refusal leaves execInstanceCase Failing the case: a
-// suite-invalid case of this shape scores no pass, and none a false one.
+// suite-invalid case of this shape scores no pass, and none a false one
+// (#2061).
 func nilValue(attrs []xml.Attr) (value, ok bool) {
 	i := slices.IndexFunc(attrs, func(a xml.Attr) bool { return a.Name == xsiNil })
 	if i < 0 {
