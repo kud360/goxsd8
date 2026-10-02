@@ -11,7 +11,10 @@ import (
 // Census is one lane's GOXSD_DECLINES=1 listing: the three lists that
 // partition that run's failures.
 type Census struct {
-	Declined      []string
+	// Declined maps each decline candidate to the refusal the run named for
+	// it — the text after `=`, empty on a lane whose executor names none and
+	// in a log from before the instance lane named its refusals (#2008).
+	Declined      map[string]string
 	Indeterminate []string
 	// Decided maps each decided disagreement to what the run charged it — the
 	// text after `=`, empty on a lane that charges nothing.
@@ -63,10 +66,16 @@ func Read(path, lane string) (Census, error) {
 			return Census{}, fmt.Errorf("run log %s carries no %q listing for lane %s — run the suite with GOXSD_DECLINES=1 and -v", path, label, lane)
 		}
 	}
-	decided := map[string]string{}
-	for _, entry := range lists[listDecided] {
-		id, charge, _ := strings.Cut(entry, "=")
-		decided[id] = charge
+	return Census{Declined: byID(lists[listDeclined]), Indeterminate: lists[listIndeterminate], Decided: byID(lists[listDecided])}, nil
+}
+
+// byID maps each `<id>` or `<id>=<text>` entry of one listing to its text,
+// empty where the entry carries none.
+func byID(entries []string) map[string]string {
+	out := map[string]string{}
+	for _, entry := range entries {
+		id, text, _ := strings.Cut(entry, "=")
+		out[id] = text
 	}
-	return Census{Declined: lists[listDeclined], Indeterminate: lists[listIndeterminate], Decided: decided}, nil
+	return out
 }

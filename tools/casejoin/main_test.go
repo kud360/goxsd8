@@ -375,11 +375,18 @@ func TestJoinFedALogSubtractsIndeterminateDeclines(t *testing.T) {
 // TestJoinFedALogStillCountsTheOtherBankedFails holds the subtraction to the
 // indeterminate list alone: S/g1/instance/i1 and S/g2/instance/i2 are listed
 // as ordinary decline candidates and stay candidates, and the row prints its
-// 0 because a log was read.
+// 0 because a log was read. A log whose instance decline candidates name
+// their refusals (`<id>=<refusal>`, #2008) reads the same.
 func TestJoinFedALogStillCountsTheOtherBankedFails(t *testing.T) {
-	got := runFixture(t, "", "-log", logFile(t, fixtureLog), "join", "instance", "docs/a1.xml")
-	wantLines(t, got, "→ 2 candidate case(s) in lane instance")
-	wantRow(t, got, indeterminateRow, 0)
+	reasoned := strings.Replace(fixtureLog, "decline candidates: [S/g1/instance/i1 S/g2/instance/i2]",
+		"decline candidates: [S/g1/instance/i1=abstract S/g2/instance/i2=open-content-ldt(#2080)]", 1)
+	for _, tc := range []struct{ name, log string }{{"without refusals", fixtureLog}, {"naming refusals", reasoned}} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := runFixture(t, "", "-log", logFile(t, tc.log), "join", "instance", "docs/a1.xml")
+			wantLines(t, got, "→ 2 candidate case(s) in lane instance")
+			wantRow(t, got, indeterminateRow, 0)
+		})
+	}
 }
 
 // TestJoinRefusesAnUnusableLog holds every -log fault to an operational error

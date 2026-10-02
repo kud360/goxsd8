@@ -2,7 +2,8 @@
 // a conformance run's -v log: the three sorted case-ID lists
 // conformance/doc.go's "The decline census" section defines — decline
 // candidates, indeterminate declines, and decided disagreements — which
-// partition that run's recorded failures.
+// partition that run's recorded failures, with the refusal a decline
+// candidate's entry names and the charge a decided disagreement's names.
 //
 // It is the one reader of that listing for every tool that takes a run log
 // (`go tool lanepartition -log`, `go tool casejoin -log`), so the tools cannot
