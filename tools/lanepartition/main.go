@@ -25,7 +25,10 @@
 // naming it, splits not-valid into invalid and indeterminate by the second
 // list, and on a lane whose run charges a rule — the schema lane — clusters
 // each decided disagreement by its charge, in the words conformance/doc.go's
-// "The decline census" section owns. A banked fail no list names is one the
+// "The decline census" section owns. On a lane whose run names its refusals —
+// the instance lane — it clusters each decline by the refusal that declined
+// it (#2008); a log whose listing names none partitions as it did before
+// refusals were named. A banked fail no list names is one the
 // run passed or did not produce; the log is from a tree whose engine differs
 // from the file's, and the report counts such cases rather than guessing
 // their class.
@@ -191,16 +194,18 @@ var (
 )
 
 // cluster is one set of banked fails sharing a class, a declared validity, a
-// test set and — for a decided case on a lane whose run charges one — a
-// charge.
+// test set and a reason.
 type cluster struct {
 	clusterKey
 	ids []string
 }
 
-// clusterKey is what the cases of one cluster share.
+// clusterKey is what the cases of one cluster share. reason is what the run's
+// listing names after the case's ID: for a decided case on a lane whose run
+// charges one, the charge; for a declined case on a lane whose run names one,
+// the refusal; otherwise empty. The class tells the two apart.
 type clusterKey struct {
-	class, declared, testSet, charge string
+	class, declared, testSet, reason string
 }
 
 // partitioned is one completed partition of a lane's banked fails.
@@ -215,7 +220,13 @@ type partitioned struct {
 
 // charged reports whether the run charged any of this lane's decided cases.
 func (p partitioned) charged() bool {
-	return slices.ContainsFunc(p.chunks, func(c cluster) bool { return c.charge != "" })
+	return slices.ContainsFunc(p.chunks, func(c cluster) bool { return c.class == classDecided && c.reason != "" })
+}
+
+// refused reports whether the run named the refusal of any of this lane's
+// declined cases.
+func (p partitioned) refused() bool {
+	return slices.ContainsFunc(p.chunks, func(c cluster) bool { return c.class == classDeclined && c.reason != "" })
 }
 
 // partition classes every banked fail and groups them into clusters. A banked
@@ -235,14 +246,14 @@ func partition(lane string, banked []string, entries []conformance.CatalogEntry,
 		if !ok {
 			return partitioned{}, fmt.Errorf("banked case %s has no catalog entry — the suite checkout is not the one %s.txt was banked against", id, lane)
 		}
-		class, charge := listed.classOf(id, census)
+		class, reason := listed.classOf(id, census)
 		declared, err := declaredOf(e, class, census != nil)
 		if err != nil {
 			return partitioned{}, err
 		}
 		p.cells[[2]string{class, declared}]++
 		testSet, _, _ := strings.Cut(id, "/")
-		key := clusterKey{class: class, declared: declared, testSet: testSet, charge: charge}
+		key := clusterKey{class: class, declared: declared, testSet: testSet, reason: reason}
 		i, seen := index[key]
 		if !seen {
 			i = len(p.chunks)
@@ -266,7 +277,7 @@ func listingOf(c *declinecensus.Census) censusListing {
 	if c == nil {
 		return listed
 	}
-	for _, id := range c.Declined {
+	for id := range c.Declined {
 		listed[id] = classDeclined
 	}
 	for _, id := range c.Indeterminate {
@@ -278,8 +289,9 @@ func listingOf(c *declinecensus.Census) censusListing {
 	return listed
 }
 
-// classOf is a banked fail's class and, for a decided case, its charge.
-func (l censusListing) classOf(id string, census *declinecensus.Census) (class, charge string) {
+// classOf is a banked fail's class and its reason: for a decided case its
+// charge, for a declined case its refusal.
+func (l censusListing) classOf(id string, census *declinecensus.Census) (class, reason string) {
 	if census == nil {
 		return classBanked, ""
 	}
@@ -287,8 +299,11 @@ func (l censusListing) classOf(id string, census *declinecensus.Census) (class, 
 	if !ok {
 		return classUnlisted, ""
 	}
-	if class == classDecided {
+	switch class {
+	case classDecided:
 		return class, census.Decided[id]
+	case classDeclined:
+		return class, census.Declined[id]
 	}
 	return class, ""
 }
@@ -326,14 +341,14 @@ func declaredOf(e conformance.CatalogEntry, class string, logFed bool) (string, 
 }
 
 // compareClusters ranks the larger cluster first, and clusters of one size by
-// class, declared validity, test set and charge, in that order.
+// class, declared validity, test set and reason, in that order.
 func compareClusters(a, b cluster) int {
 	return cmp.Or(
 		cmp.Compare(len(b.ids), len(a.ids)),
 		cmp.Compare(slices.Index(classOrder, a.class), slices.Index(classOrder, b.class)),
 		cmp.Compare(slices.Index(declaredOrder, a.declared), slices.Index(declaredOrder, b.declared)),
 		strings.Compare(a.testSet, b.testSet),
-		strings.Compare(a.charge, b.charge),
+		strings.Compare(a.reason, b.reason),
 	)
 }
 
@@ -444,15 +459,34 @@ func render(w io.Writer, p partitioned, file, logPath string, issues []ghIssue, 
 		_, _ = fmt.Fprintf(w, " %8d\n", total)
 	}
 
-	_, _ = fmt.Fprintln(w, "\n=== Clusters, largest first: count  class  declared  test set  [charged]  — open issues naming it ===")
+	_, _ = fmt.Fprintln(w, "\n=== "+clustersHeading(p)+" ===")
 	renderFeedNote(w, issues, feedErr)
 	for _, c := range p.chunks {
 		_, _ = fmt.Fprintf(w, "  %6d  %s  %s  %s", len(c.ids), c.class, c.declared, c.testSet)
-		if c.charge != "" {
-			_, _ = fmt.Fprintf(w, "  [%s]", c.charge)
+		if c.reason != "" {
+			_, _ = fmt.Fprintf(w, "  %s", bracketed(c))
 		}
 		_, _ = fmt.Fprintln(w, renderIssues(c, issues, feedErr))
 	}
+}
+
+// clustersHeading names the cluster columns, the refusal one only where the
+// run named a refusal, so a log naming none renders as it did before #2008.
+func clustersHeading(p partitioned) string {
+	if p.refused() {
+		return "Clusters, largest first: count  class  declared  test set  [charged] or <refusal>  — open issues naming it"
+	}
+	return "Clusters, largest first: count  class  declared  test set  [charged]  — open issues naming it"
+}
+
+// bracketed renders a cluster's reason: a decided case's charge in square
+// brackets, a declined case's refusal in angle brackets, so neither reads as
+// the other.
+func bracketed(c cluster) string {
+	if c.class == classDeclined {
+		return "<" + c.reason + ">"
+	}
+	return "[" + c.reason + "]"
 }
 
 // renderLogNote says what the class column means for this report: without a
@@ -470,6 +504,10 @@ func renderLogNote(w io.Writer, p partitioned, logPath string) {
 	if p.charged() {
 		_, _ = fmt.Fprintln(w, "  A decided case's [charge] is the rule xsderr.RuleOf read off the assembly's error;")
 		_, _ = fmt.Fprintln(w, "  (accepted) charges nothing — the assembly succeeded — and (unruled) names no rule.")
+	}
+	if p.refused() {
+		_, _ = fmt.Fprintln(w, "  A declined case's <refusal> names the exit at which the executor declined it, one of")
+		_, _ = fmt.Fprintln(w, "  conformance/instance.go's refuse* tokens; one ending (#N) names the open issue owning it.")
 	}
 }
 
@@ -498,7 +536,8 @@ func renderFeedNote(w io.Writer, issues []ghIssue, feedErr error) {
 
 // renderIssues is one cluster's reconciliation: the open issues naming its
 // test set, then those naming its charged rule. A parenthesized charge is no
-// rule and is not searched for.
+// rule and is not searched for, and neither is a refusal, which is no rule
+// either.
 func renderIssues(c cluster, issues []ghIssue, feedErr error) string {
 	if feedErr != nil || issues == nil {
 		return ""
@@ -507,9 +546,9 @@ func renderIssues(c cluster, issues []ghIssue, feedErr error) string {
 	if found := naming(issues, c.testSet); len(found) > 0 {
 		parts = append(parts, c.testSet+": "+strings.Join(found, " "))
 	}
-	if c.charge != "" && !strings.HasPrefix(c.charge, "(") {
-		if found := naming(issues, c.charge); len(found) > 0 {
-			parts = append(parts, c.charge+": "+strings.Join(found, " "))
+	if c.class == classDecided && c.reason != "" && !strings.HasPrefix(c.reason, "(") {
+		if found := naming(issues, c.reason); len(found) > 0 {
+			parts = append(parts, c.reason+": "+strings.Join(found, " "))
 		}
 	}
 	if len(parts) == 0 {

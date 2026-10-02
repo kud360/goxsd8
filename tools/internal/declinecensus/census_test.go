@@ -1,6 +1,7 @@
 package declinecensus
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -9,13 +10,14 @@ import (
 )
 
 // fixtureLog is two lanes' listings inside the noise a real -v log carries
-// around them, the schema lane's decided cases charged.
+// around them, the schema lane's decided cases charged and the instance
+// lane's decline candidates naming their refusals.
 const fixtureLog = `=== RUN   TestConformance
     conformance_test.go:172: lane schema: 9 cases
     conformance_test.go:245: lane schema: decline candidates: [A/g/schema/i1 B/g/schema/v1]
     conformance_test.go:246: lane schema: indeterminate declines: [A/g/schema/n1]
     conformance_test.go:247: lane schema: decided disagreements: [A/g/schema/i2=(accepted) A/g/schema/v1=src-ct]
-    conformance_test.go:245: lane instance: decline candidates: []
+    conformance_test.go:245: lane instance: decline candidates: [I/g/instance/a=abstract I/g/instance/b=open-content-ldt(#2080)]
     conformance_test.go:246: lane instance: indeterminate declines: [I/g/instance/n]
     conformance_test.go:247: lane instance: decided disagreements: [I/g/instance/d]
 --- PASS: TestConformance (1.00s)
@@ -39,7 +41,7 @@ func TestReadTakesOnlyTheNamedLanesLists(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Read schema: %v", err)
 	}
-	if want := []string{"A/g/schema/i1", "B/g/schema/v1"}; !slices.Equal(schema.Declined, want) {
+	if want := map[string]string{"A/g/schema/i1": "", "B/g/schema/v1": ""}; !maps.Equal(schema.Declined, want) {
 		t.Errorf("schema Declined = %v, want %v", schema.Declined, want)
 	}
 	if want := []string{"A/g/schema/n1"}; !slices.Equal(schema.Indeterminate, want) {
@@ -52,8 +54,13 @@ func TestReadTakesOnlyTheNamedLanesLists(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Read instance: %v", err)
 	}
-	if len(instance.Declined) != 0 || !slices.Equal(instance.Indeterminate, []string{"I/g/instance/n"}) {
-		t.Errorf("instance census = %+v, want no decline and one indeterminate case", instance)
+	// An `<id>=<refusal>` entry is the case <id>, its refusal kept apart
+	// (#2008): read whole, it would be an ID no catalog carries.
+	if want := map[string]string{"I/g/instance/a": "abstract", "I/g/instance/b": "open-content-ldt(#2080)"}; !maps.Equal(instance.Declined, want) {
+		t.Errorf("instance Declined = %v, want %v", instance.Declined, want)
+	}
+	if !slices.Equal(instance.Indeterminate, []string{"I/g/instance/n"}) {
+		t.Errorf("instance Indeterminate = %v, want one indeterminate case", instance.Indeterminate)
 	}
 	if charge, ok := instance.Decided["I/g/instance/d"]; !ok || charge != "" {
 		t.Errorf("instance Decided = %v, want I/g/instance/d uncharged", instance.Decided)

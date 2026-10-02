@@ -28,19 +28,27 @@ import (
 // (STYLE T4).
 
 // caseSchema assembles the schema c is assessed against, with assembleCase's
-// four results: the group's schema documents where discovery attached them,
-// and otherwise the schema the instance's own hints locate (#2013, §4.3.2
-// clauses 3-5). A case with neither — no group schema AND no hint — has no
-// stated schema at all and is not decidable: ParseSet over no root answers a
-// plain error, which read as a verdict would be a schema rejection nobody
-// stated.
-func caseSchema(backend value.Backend, c caseSpec) (*xsd.Schema, *parser.AssemblyReport, bool, error) {
+// four results, its decidable false reported as the refusal that declined the
+// case: the group's schema documents where discovery attached them
+// (refuseGroupAssembly), and otherwise the schema the instance's own hints
+// locate (#2013, §4.3.2 clauses 3-5). A case with neither — no group schema
+// AND no hint — has no stated schema at all and is not decidable
+// (refuseNoHint): ParseSet over no root answers a plain error, which read as a
+// verdict would be a schema rejection nobody stated.
+func caseSchema(backend value.Backend, c caseSpec) (*xsd.Schema, *parser.AssemblyReport, refusal, error) {
 	if c.schemaDoc != "" {
-		return assembleCase(backend, c.schemaDoc, c.schemaExtraDocs)
+		schema, report, decidable, perr := assembleCase(backend, c.schemaDoc, c.schemaExtraDocs)
+		if !decidable {
+			return nil, nil, refuseGroupAssembly, nil
+		}
+		return schema, report, "", perr
 	}
-	root, hints, ok := instanceHints(c.doc)
-	if !ok || len(hints) == 0 {
-		return nil, nil, false, nil
+	root, hints, why := instanceHints(c.doc)
+	if why != "" {
+		return nil, nil, why, nil
+	}
+	if len(hints) == 0 {
+		return nil, nil, refuseNoHint, nil
 	}
 	return assembleHints(backend, c.doc, root, hints)
 }
@@ -48,9 +56,9 @@ func caseSchema(backend value.Backend, c caseSpec) (*xsd.Schema, *parser.Assembl
 // instanceHints reads the schema location hints off the document element of
 // the instance at doc, each resolved against the instance's base URI through
 // internal/schemaloc (§4.3.2 clause 4), in the order its attributes carry them,
-// together with that element's ·expanded name·. ok is false — the caller
-// DECLINES — when the hints the root carries may not be the whole of what
-// §4.3.2 clause 5 makes global to the assessment:
+// together with that element's ·expanded name·. It names a refusal — the
+// caller DECLINES — when the hints the root carries may not be the whole of
+// what §4.3.2 clause 5 makes global to the assessment:
 //
 //   - the document will not resolve or decode, or carries a DOCTYPE whose DTD
 //     could default a hint onto any element: one with an external subset, an
@@ -65,35 +73,42 @@ func caseSchema(backend value.Backend, c caseSpec) (*xsd.Schema, *parser.Assembl
 //     ordering family, several decided VALID on suite-invalid fixtures
 //     otherwise).
 //
-// A root carrying no hint is ok with no hints; caseSchema declines that shape
-// too.
-func instanceHints(doc string) (root xsd.QName, hints []parser.Root, ok bool) {
+// A root carrying no hint names no refusal and returns no hints; caseSchema
+// declines that shape too.
+func instanceHints(doc string) (root xsd.QName, hints []parser.Root, why refusal) {
 	rc, _, err := loader.Dir(filepath.Dir(doc)).Resolve("", filepath.Base(doc))
 	if err != nil {
-		return xsd.QName{}, nil, false
+		return xsd.QName{}, nil, refuseHintsUnresolved
 	}
 	defer func() { _ = rc.Close() }() // read-only handle: close error cannot affect the verdict
 	dec := rawDecoder(rc)
-	start, ok := rootStart(dec)
-	if !ok || isInlineSchema(start.Name) {
-		return xsd.QName{}, nil, false
+	start, why := rootStart(dec)
+	if why != "" {
+		return xsd.QName{}, nil, why
 	}
-	hints, ok = hintsOf(start, filepath.Base(doc))
-	if !ok || !belowRootHintFree(dec) {
-		return xsd.QName{}, nil, false
+	if isInlineSchema(start.Name) {
+		return xsd.QName{}, nil, refuseInlineSchema
 	}
-	return expandedName(start.Name), hints, true
+	hints, why = hintsOf(start, filepath.Base(doc))
+	if why != "" {
+		return xsd.QName{}, nil, why
+	}
+	if why := belowRootHintFree(dec); why != "" {
+		return xsd.QName{}, nil, why
+	}
+	return expandedName(start.Name), hints, ""
 }
 
 // hintsOf reads root's hints, resolving each location against base, the
 // instance's base URI as the resolver serving it spells it: xsi:schemaLocation
 // pairs a namespace with a location, and xsi:noNamespaceSchemaLocation names a
-// location whose document has no target namespace, parser.HintAt's "". ok is
-// false for an xml:base on root and for an odd xsi:schemaLocation member count.
-func hintsOf(root xml.StartElement, base string) (hints []parser.Root, ok bool) {
+// location whose document has no target namespace, parser.HintAt's "". It
+// refuses an xml:base on root (refuseXMLBase) and an odd xsi:schemaLocation
+// member count (refuseOddLocation).
+func hintsOf(root xml.StartElement, base string) (hints []parser.Root, why refusal) {
 	for _, a := range root.Attr {
 		if a.Name.Space == xmlPrefixNS && a.Name.Local == "base" {
-			return nil, false
+			return nil, refuseXMLBase
 		}
 		if !isLocationHint(a) {
 			continue
@@ -106,33 +121,37 @@ func hintsOf(root xml.StartElement, base string) (hints []parser.Root, ok bool) 
 			continue
 		}
 		if len(fields)%2 != 0 {
-			return nil, false
+			return nil, refuseOddLocation
 		}
 		for i := 0; i < len(fields); i += 2 {
 			hints = append(hints, parser.HintAt(fields[i], schemaloc.Resolve(base, fields[i+1])))
 		}
 	}
-	return hints, true
+	return hints, ""
 }
 
 // belowRootHintFree reads dec, positioned just past the document element's
-// start tag, to the end of the document, and reports whether it decodes and no
-// element there carries a hint or is an inline xs:schema.
-func belowRootHintFree(dec *xml.Decoder) bool {
+// start tag, to the end of the document, and names the refusal where it does
+// not decode (refuseDecode) or an element there is an inline xs:schema
+// (refuseInlineSchema) or carries a hint (refuseHintBelowRoot).
+func belowRootHintFree(dec *xml.Decoder) refusal {
 	for {
 		tok, err := dec.Token()
 		if errors.Is(err, io.EOF) {
-			return true
+			return ""
 		}
 		if err != nil {
-			return false
+			return refuseDecode
 		}
 		start, ok := tok.(xml.StartElement)
 		if !ok {
 			continue
 		}
-		if isInlineSchema(start.Name) || slices.ContainsFunc(start.Attr, isLocationHint) {
-			return false
+		if isInlineSchema(start.Name) {
+			return refuseInlineSchema
+		}
+		if slices.ContainsFunc(start.Attr, isLocationHint) {
+			return refuseHintBelowRoot
 		}
 	}
 }
@@ -143,37 +162,41 @@ func isInlineSchema(n xml.Name) bool {
 }
 
 // assembleHints assembles the schema the hints locate, the instance lane's
-// counterpart of assembleCase for a case with no group schema, and reports
-// whether the outcome may be read on assembleCase's terms. decidable is false —
-// the caller DECLINES — when:
+// counterpart of assembleCase for a case with no group schema, and names the
+// refusal where the outcome may not be read on assembleCase's terms — the
+// caller DECLINES — which is when:
 //
 //   - a hint resolved to no document (parser.AssemblyReport.UnfollowedRoots,
 //     legal to skip under §4.2.6.2), so the schema is short of a document the
-//     instance named;
+//     instance named (refuseHintUnfollowed);
 //   - assemblyDeclined, assembleCase's own gate, refuses the outcome: the
 //     closure leaves the decidable subset (closureDecidable) and the assembly
 //     did not fail with a grammarRejection, or the rejection is one an
-//     unfollowed directive could have fabricated (fabricatedRejection);
-//   - the assembly succeeded and declares no top-level element for root. A
-//     root no declaration governs is laxly assessed (cvc-assess-elt clause
-//     3), and §3.3.5.1 gives a root not strictly assessed [validity]
-//     notKnown, not invalid; no ruling licenses deciding such a case "not
-//     valid".
+//     unfollowed directive could have fabricated (fabricatedRejection)
+//     (refuseHintAssembly);
+//   - the assembly succeeded and declares no top-level element for root
+//     (refuseHintUndeclared). A root no declaration governs is laxly
+//     assessed (cvc-assess-elt clause 3), and §3.3.5.1 gives a root not
+//     strictly assessed [validity] notKnown, not invalid; no ruling
+//     licenses deciding such a case "not valid".
 //
 // The resolver is assembleCase's: pinnedResolver over a loader.Dir rooted at
 // the instance's own directory, which every hint location is relative to
 // (instanceHints), so a location climbing above it is refused as unresolved.
-func assembleHints(backend value.Backend, doc string, root xsd.QName, hints []parser.Root) (*xsd.Schema, *parser.AssemblyReport, bool, error) {
+func assembleHints(backend value.Backend, doc string, root xsd.QName, hints []parser.Root) (*xsd.Schema, *parser.AssemblyReport, refusal, error) {
 	resolver := pinnedResolver{dir: loader.Dir(filepath.Dir(doc))}
 	schema, report, perr := parser.ParseSet(hints, parser.WithResolver(resolver), parser.WithBackend(backend))
-	if len(report.UnfollowedRoots()) > 0 || assemblyDeclined(report, perr) {
-		return nil, nil, false, nil
+	if len(report.UnfollowedRoots()) > 0 {
+		return nil, nil, refuseHintUnfollowed, nil
+	}
+	if assemblyDeclined(report, perr) {
+		return nil, nil, refuseHintAssembly, nil
 	}
 	if perr != nil {
-		return schema, report, true, perr
+		return schema, report, "", perr
 	}
 	if _, ok := schema.Element(root); !ok {
-		return nil, nil, false, nil
+		return nil, nil, refuseHintUndeclared, nil
 	}
-	return schema, report, true, nil
+	return schema, report, "", nil
 }

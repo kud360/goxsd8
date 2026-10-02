@@ -29,7 +29,7 @@ const notationN = `<xs:notation name="n" public="p"/>` +
 // suite-valid case and disagrees with a suite-invalid one.
 // TestInstanceExecutorDecidesContentLessRoot holds the roots with no content.
 func TestInstanceExecutorDecidesAssessedSubtreeRoot(t *testing.T) {
-	exec := newInstanceExec()
+	exec := newInstanceExec().status()
 	cases := []struct {
 		why        string
 		schemaBody string
@@ -197,7 +197,7 @@ const (
 // INVALID. The walk charges it before the gate is asked, so no row here can
 // see the gate.
 func TestInstanceExecutorChargesNotation(t *testing.T) {
-	exec := newInstanceExec()
+	exec := newInstanceExec().status()
 	for _, tc := range []struct{ why, schemaBody, instance string }{
 		{"the root's value type (cvc-type clause 3.1.3)", notationN + `<xs:element name="known" type="N"/>`, `<known>bez</known>`},
 		{"a simple {content type} (cvc-complex-type clause 1.2)", notationN + notationContent, `<known at="v">bez</known>`},
@@ -236,7 +236,7 @@ const emptyRoot = `<xs:element name="known"><xs:complexType/></xs:element>`
 // suite-valid case and disagrees with a suite-invalid one;
 // TestInstanceExecutorChargesContentLessRoot holds the invalid counterparts.
 func TestInstanceExecutorDecidesContentLessRoot(t *testing.T) {
-	exec := newInstanceExec()
+	exec := newInstanceExec().status()
 	cases := []struct {
 		why        string
 		schemaBody string
@@ -346,7 +346,7 @@ func TestInstanceExecutorDecidesContentLessRoot(t *testing.T) {
 // content-less root the walk charges, so it is decided INVALID, never read as
 // an empty Result.
 func TestInstanceExecutorChargesContentLessRoot(t *testing.T) {
-	exec := newInstanceExec()
+	exec := newInstanceExec().status()
 	for _, tc := range []struct{ why, schemaBody, instance string }{
 		{"an empty int-typed root (cvc-type clause 3.1.3 over \"\")", `<xs:element name="known" type="xs:int"/>`, `<known/>`},
 		{
@@ -379,7 +379,7 @@ func TestInstanceExecutorChargesCvcIDBelowTheRoot(t *testing.T) {
 	const idAndRef = `<xs:element name="known"><xs:complexType><xs:sequence><xs:element name="a" maxOccurs="2"><xs:complexType>` +
 		`<xs:attribute name="id" type="xs:ID"/><xs:attribute name="ref" type="xs:IDREF"/>` +
 		`</xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>`
-	exec := newInstanceExec()
+	exec := newInstanceExec().status()
 	for _, tc := range []struct{ why, instance string }{
 		{"a dangling IDREF (cvc-id clause 1)", `<known><a id="i1"/><a ref="i2"/></known>`},
 		{"a duplicate ID (cvc-id clause 2)", `<known><a id="i1"/><a id="i1"/></known>`},
@@ -401,7 +401,7 @@ func TestInstanceExecutorChargesCvcIDBelowTheRoot(t *testing.T) {
 // decided INVALID. Each is the walk's charge (validate's icFrame.duplicates and
 // icCheck.keyrefs), so no row passes through the gate.
 func TestInstanceExecutorChargesIdentityConstraintBelowTheRoot(t *testing.T) {
-	exec := newInstanceExec()
+	exec := newInstanceExec().status()
 	for _, tc := range []struct{ why, schemaBody, instance string }{
 		{"a duplicate key (cvc-identity-constraint clause 4.2.2)", keyAndRef, `<known><a>1</a><a>1</a></known>`},
 		{"a dangling keyref (cvc-identity-constraint clause 4.3)", keyAndRef, `<known><a>1</a><a>2</a><b>3</b></known>`},
@@ -446,7 +446,7 @@ const (
 // cvc-simple-type clause 3). With rootStart refusing every directive again the
 // row declines and this test fails.
 func TestInstanceExecutorDecidesInternalSubsetEntity(t *testing.T) {
-	exec := newInstanceExec()
+	exec := newInstanceExec().status()
 	c := instanceCase(t, entityDefault, pics+`<known/>`, true)
 	if !exec(c).IsPass() {
 		t.Error("an xs:ENTITY default naming a declared unparsed entity: the executor must agree with a suite-valid case")
@@ -463,7 +463,7 @@ func TestInstanceExecutorDecidesInternalSubsetEntity(t *testing.T) {
 // name· (key-vde), which the walk charges under cvc-attribute clause 3, so the
 // row is decided INVALID and never reaches the gate.
 func TestInstanceExecutorChargesInternalSubsetEntity(t *testing.T) {
-	exec := newInstanceExec()
+	exec := newInstanceExec().status()
 	c := instanceCase(t, entityDefault, `<!DOCTYPE known [<!ENTITY other SYSTEM "o.gif" NDATA gif><!NOTATION gif SYSTEM "gif">]><known/>`, false)
 	if !exec(c).IsPass() {
 		t.Error("an xs:ENTITY default naming an undeclared entity: the walk charges it; the executor must agree with a suite-invalid case")
@@ -486,23 +486,24 @@ func TestInstanceExecutorDeclinesOutsideAssessedSubtreeRoot(t *testing.T) {
 		aInt    = `<xs:element name="known"><xs:complexType><xs:sequence><xs:element name="a" type="xs:int"/></xs:sequence></xs:complexType></xs:element>`
 		wantInt = `<known><a>1</a></known>`
 	)
-	exec := newInstanceExec()
 	cases := []struct {
 		condition  string
 		schemaBody string
 		instance   string
+		refused    refusal
 	}{
 		// rootStart's defaultsNoAttribute: each DTD could default an attribute
 		// the gate does not see (XML 1.0 §3.3.2). The two internal-subset rows
 		// do default a="x" onto <known>, which emptyRoot's type does not admit.
-		{"a DOCTYPE naming an external subset by a SYSTEM id", aInt, `<!DOCTYPE known SYSTEM "k.dtd"><known><a>1</a></known>`},
-		{"a DOCTYPE naming an external subset by a PUBLIC id", aInt, `<!DOCTYPE known PUBLIC "-//k//EN" "k.dtd"><known><a>1</a></known>`},
-		{"a DOCTYPE whose internal subset holds an <!ATTLIST", emptyRoot, `<!DOCTYPE known [<!ATTLIST known a CDATA "x">]><known/>`},
+		{"a DOCTYPE naming an external subset by a SYSTEM id", aInt, `<!DOCTYPE known SYSTEM "k.dtd"><known><a>1</a></known>`, refuseDoctype},
+		{"a DOCTYPE naming an external subset by a PUBLIC id", aInt, `<!DOCTYPE known PUBLIC "-//k//EN" "k.dtd"><known><a>1</a></known>`, refuseDoctype},
+		{"a DOCTYPE whose internal subset holds an <!ATTLIST", emptyRoot, `<!DOCTYPE known [<!ATTLIST known a CDATA "x">]><known/>`, refuseDoctype},
 		{
 			// §4.4.8: %p; expands to an <!ATTLIST the subset spells only as
 			// &#60;!ATTLIST, which no literal scan sees.
 			"a DOCTYPE whose internal subset holds a parameter-entity reference", emptyRoot,
 			`<!DOCTYPE known [<!ENTITY % p "&#60;!ATTLIST known a CDATA 'x'>"> %p;]><known/>`,
+			refuseDoctype,
 		},
 		{
 			// rootStart's doc: the quote in the PI ends encoding/xml's DOCTYPE
@@ -510,16 +511,19 @@ func TestInstanceExecutorDeclinesOutsideAssessedSubtreeRoot(t *testing.T) {
 			// its own.
 			"an <!ATTLIST after a DOCTYPE encoding/xml delimits short", emptyRoot,
 			`<!DOCTYPE known [<?pi '?><!ENTITY e 'a>b'><?pi '?> <!ATTLIST known a CDATA 'x'>]><known/>`,
+			refuseDoctype,
 		},
 		{
 			"a {type table} on the root (cvc-elt clause 4)",
 			`<xs:element name="known" type="xs:string"><xs:alternative type="xs:string"/></xs:element>`,
 			`<known>x</known>`,
+			refuseTypeTable,
 		},
 		{
 			"a {type table} on a content-less root (cvc-elt clause 4)",
 			`<xs:element name="known" type="E"><xs:alternative type="E"/></xs:element><xs:complexType name="E"/>`,
 			`<known/>`,
+			refuseTypeTable,
 		},
 		{
 			// subtreeGate's nilValue: governed by §3.2.7's built-in declaration
@@ -528,24 +532,28 @@ func TestInstanceExecutorDeclinesOutsideAssessedSubtreeRoot(t *testing.T) {
 			// element with no declaration.
 			"an xsi:nil with no ·actual value· on a lax wildcard particle's child resolving no declaration",
 			wildcardChild("lax"), `<known ` + xsiNS + `><u xsi:nil="maybe"/></known>`,
+			refuseLaxNilLexical,
 		},
 		{
 			"an abstract declaration below the root (cvc-elt clause 2)",
 			`<xs:element name="known"><xs:complexType><xs:sequence><xs:element ref="b"/></xs:sequence></xs:complexType></xs:element>` +
 				`<xs:element name="b" type="xs:string" abstract="true"/>`,
 			`<known><b>x</b></known>`,
+			refuseAbstract,
 		},
 		{
 			// cvc-accept clause 2.3.1 attributes <h> to h itself, not to a member.
 			"an abstract substitution group head used directly below the root (cvc-elt clause 2)",
 			headKnown(`<xs:element name="h" type="A" abstract="true"/><xs:element name="m" type="R" substitutionGroup="h"/>`),
 			`<known><h>1</h></known>`,
+			refuseAbstract,
 		},
 		{
 			"a {type table} below the root (cvc-elt clause 4)",
 			`<xs:element name="known"><xs:complexType><xs:sequence><xs:element name="a" type="xs:int">` +
 				`<xs:alternative type="xs:int"/></xs:element></xs:sequence></xs:complexType></xs:element>`,
 			wantInt,
+			refuseTypeTable,
 		},
 		{
 			// A guard, not a charged row: the gate refused this shape before #1860
@@ -553,6 +561,7 @@ func TestInstanceExecutorDeclinesOutsideAssessedSubtreeRoot(t *testing.T) {
 			// the suite does not share (#1912).
 			"a strict {attribute wildcard}'s attribute whose name resolves no declaration (cvc-complex-type clause 2.2)",
 			wildcardKnown("strict"), `<known foo="1"><a>1</a></known>`,
+			refuseStrictAttribute,
 		},
 		// subtreeGate.child's GAP(conformance) {open content} refusal (#2071):
 		// the walk assesses each second e against the local xs:date, and the gate
@@ -560,10 +569,12 @@ func TestInstanceExecutorDeclinesOutsideAssessedSubtreeRoot(t *testing.T) {
 		{
 			"an {open content} child resolving a declaration, with a non-·absent· ·locally declared type· (key-governing-ed clause 4.3)",
 			ldtOpen(`<xs:element name="e" type="xs:string"/>`), `<known><e>2008-11-03</e><e>2008-11-04</e></known>`,
+			refuseOpenContentLDT,
 		},
 		{
 			"an {open content} child resolving no declaration, with a non-·absent· ·locally declared type· (key-governing-ed clause 4.3)",
 			ldtOpen(""), `<known><e>2008-11-03</e><e>2008-11-04</e></known>`,
+			refuseOpenContentLDT,
 		},
 		{
 			// key-ldt-att case 3: the restriction prohibits its base's use of ta.
@@ -573,10 +584,11 @@ func TestInstanceExecutorDeclinesOutsideAssessedSubtreeRoot(t *testing.T) {
 				`<xs:attribute ref="ta" use="prohibited"/><xs:anyAttribute processContents="strict"/></xs:restriction></xs:complexContent></xs:complexType>` +
 				`<xs:element name="known" type="R"/><xs:attribute name="ta" type="xs:int"/>`,
 			`<known ta="1"/>`,
+			refuseAttributeLDT,
 		},
 	}
 	for _, tc := range cases {
-		declinesBothPolarities(t, exec, instanceCase(t, tc.schemaBody, tc.instance, false), tc.condition)
+		declinesBothPolarities(t, instanceCase(t, tc.schemaBody, tc.instance, false), tc.condition, tc.refused)
 	}
 }
 
@@ -596,7 +608,7 @@ const (
 // VALID. With assessedDeclaration refusing ValueFixed again, every row
 // declines and this test fails.
 func TestInstanceExecutorDecidesFixedValueConstraint(t *testing.T) {
-	exec := newInstanceExec()
+	exec := newInstanceExec().status()
 	for _, tc := range []struct{ why, schemaBody, instance string }{
 		{"the root's ·initial value· equal to the fixed one (cvc-elt clause 5.2.2.2.2)", fixedRoot, `<known>1</known>`},
 		{"the root's ·initial value· lexically different, equal in value space (cvc-elt clause 5.2.2.2.2)", fixedRoot, `<known> 01 </known>`},
@@ -620,7 +632,7 @@ func TestInstanceExecutorDecidesFixedValueConstraint(t *testing.T) {
 // and below it: each row is charged cvc-elt under the clause it names, and is
 // decided INVALID.
 func TestInstanceExecutorChargesFixedValueConstraint(t *testing.T) {
-	exec := newInstanceExec()
+	exec := newInstanceExec().status()
 	for _, tc := range []struct{ why, schemaBody, instance, clause string }{
 		{"the root's ·actual value· unequal to the fixed one", fixedRoot, `<known>2</known>`, "5.2.2.2.2"},
 		{"a mixed root's ·initial value· not matching the fixed {lexical form}", fixedMixed, `<known>y</known>`, "5.2.2.2.1"},
@@ -664,7 +676,7 @@ const (
 // cvc-complex-type clause 1, applying only to an element that is not ·nilled·,
 // does not ask.
 func TestInstanceExecutorDecidesXsiNil(t *testing.T) {
-	exec := newInstanceExec()
+	exec := newInstanceExec().status()
 	for _, tc := range []struct{ why, schemaBody, instance string }{
 		// "" is no xs:int, but cvc-type clause 3.1.3 skips a ·nilled· element.
 		{"a ·nilled· simple-typed root with no content", nilInt, `<known ` + xsiNS + ` xsi:nil="true"/>`},
@@ -692,7 +704,7 @@ func TestInstanceExecutorDecidesXsiNil(t *testing.T) {
 // validate's nilCheck, or its contentCheck for 3.2.3.1 — and decided INVALID
 // before the gate is read.
 func TestInstanceExecutorChargesXsiNil(t *testing.T) {
-	exec := newInstanceExec()
+	exec := newInstanceExec().status()
 	for _, tc := range []struct{ why, schemaBody, instance, clause string }{
 		{"a ·nilled· root with character content", nilInt, `<known ` + xsiNS + ` xsi:nil="true">1</known>`, "3.2.3.1"},
 		{"a ·nilled· child holding white space", nilKnown, `<known ` + xsiNS + `><a xsi:nil="true"> </a></known>`, "3.2.3.1"},
@@ -726,10 +738,10 @@ func TestInstanceExecutorChargesXsiNil(t *testing.T) {
 func TestAssessedSubtreeRootNilled(t *testing.T) {
 	for _, tc := range []struct {
 		why, instance string
-		want          bool
+		want          refusal
 	}{
-		{"a ·nilled· child with no content", `<known ` + xsiNS + `><c xsi:nil="true"/></known>`, true},
-		{"a ·nilled· child with an element child", `<known ` + xsiNS + `><c xsi:nil="true"><d>1</d></c></known>`, false},
+		{"a ·nilled· child with no content", `<known ` + xsiNS + `><c xsi:nil="true"/></known>`, ""},
+		{"a ·nilled· child with an element child", `<known ` + xsiNS + `><c xsi:nil="true"><d>1</d></c></known>`, refuseElementChild},
 	} {
 		c := instanceCase(t, nilKnown, tc.instance, true)
 		schema, report, decidable, err := assembleCase(strict.New(), c.schemaDoc, nil)
@@ -737,7 +749,7 @@ func TestAssessedSubtreeRootNilled(t *testing.T) {
 			t.Fatalf("%s: assembling the schema: decidable %v, err %v", tc.why, decidable, err)
 		}
 		if got := assessedSubtreeRoot(schema, report, c.doc); got != tc.want {
-			t.Errorf("%s: assessedSubtreeRoot = %v, want %v", tc.why, got, tc.want)
+			t.Errorf("%s: assessedSubtreeRoot = %q, want %q", tc.why, got, tc.want)
 		}
 	}
 }
@@ -755,9 +767,9 @@ func chargedCvcElt(t *testing.T, c caseSpec, clause string) bool {
 	if err != nil {
 		t.Fatalf("validate.New: %v", err)
 	}
-	result, ok := assessInstance(v, c.doc)
-	if !ok {
-		t.Fatalf("assessing %s: declined", c.doc)
+	result, why := assessInstance(v, c.doc)
+	if why != "" {
+		t.Fatalf("assessing %s: declined as %q", c.doc, why)
 	}
 	return slices.ContainsFunc(result.Violations(), func(e *xsderr.Error) bool {
 		return e.Rule == ruleCvcElt && strings.Contains(e.Msg, "cvc-elt clause "+clause+" ")
@@ -781,7 +793,7 @@ func wildcardKnown(pc string) string {
 // assessed under lax where it resolves to none (key-sva clause 2.2). Every row
 // is refused with subtreeGate.wildcardAttribute answering false.
 func TestInstanceExecutorDecidesWildcardAttribute(t *testing.T) {
-	exec := newInstanceExec()
+	exec := newInstanceExec().status()
 	for _, tc := range []struct{ why, pc, instance string }{
 		{"skip, a name resolving no declaration", "skip", `<known foo="x"><a>1</a></known>`},
 		// Assessed, "x" would be charged against ta's xs:int.
@@ -806,7 +818,7 @@ func TestInstanceExecutorDecidesWildcardAttribute(t *testing.T) {
 // walk.unmatchedAttribute and walk.wildcardAttribute), so each is decided
 // INVALID whatever the gate answers, and none passes through it.
 func TestInstanceExecutorChargesWildcardAttribute(t *testing.T) {
-	exec := newInstanceExec()
+	exec := newInstanceExec().status()
 	for _, tc := range []struct{ why, schemaBody, instance string }{
 		{"lax, a value not valid against the resolved declaration (cvc-attribute clause 3)", wildcardKnown("lax"), `<known ta="x"><a>1</a></known>`},
 		{"strict, a value not valid against the resolved declaration (cvc-attribute clause 3)", wildcardKnown("strict"), `<known ta="x"><a>1</a></known>`},
@@ -835,10 +847,10 @@ func TestAssessedSubtreeRootUnadmittedAttribute(t *testing.T) {
 		`<xs:anyAttribute namespace="urn:other" processContents="skip"/></xs:complexType></xs:element>`
 	for _, tc := range []struct {
 		why, instance string
-		want          bool
+		want          refusal
 	}{
-		{"a name the wildcard admits", `<known xmlns:o="urn:other" o:foo="x"/>`, true},
-		{"a name the wildcard does not admit", `<known foo="x"/>`, false},
+		{"a name the wildcard admits", `<known xmlns:o="urn:other" o:foo="x"/>`, ""},
+		{"a name the wildcard does not admit", `<known foo="x"/>`, refuseAttributeUnadmitted},
 	} {
 		c := instanceCase(t, schemaBody, tc.instance, true)
 		schema, report, decidable, err := assembleCase(strict.New(), c.schemaDoc, nil)
@@ -846,7 +858,7 @@ func TestAssessedSubtreeRootUnadmittedAttribute(t *testing.T) {
 			t.Fatalf("%s: assembling the schema: decidable %v, err %v", tc.why, decidable, err)
 		}
 		if got := assessedSubtreeRoot(schema, report, c.doc); got != tc.want {
-			t.Errorf("%s: assessedSubtreeRoot = %v, want %v", tc.why, got, tc.want)
+			t.Errorf("%s: assessedSubtreeRoot = %q, want %q", tc.why, got, tc.want)
 		}
 	}
 }
@@ -923,7 +935,7 @@ const ldtUnresolved = `<xs:element name="known"><xs:complexType><xs:sequence><xs
 // answering false for an unresolved one carrying an xsi:type, or with child
 // answering false for the {open content} or skip Wildcard arm.
 func TestInstanceExecutorDecidesWildcardChild(t *testing.T) {
-	exec := newInstanceExec()
+	exec := newInstanceExec().status()
 	for _, tc := range []struct{ why, schemaBody, instance string }{
 		// Assessed, <b> would be charged against b's xs:int, <c> would resolve
 		// nothing, and <i>'s value is no xs:ID: skipped, none of it is read
@@ -997,7 +1009,7 @@ func TestInstanceExecutorDecidesWildcardChild(t *testing.T) {
 // wildcard-child lift (#1931): the walk charges each row, so each is decided
 // INVALID whatever the gate answers.
 func TestInstanceExecutorChargesWildcardChild(t *testing.T) {
-	exec := newInstanceExec()
+	exec := newInstanceExec().status()
 	for _, tc := range []struct{ why, schemaBody, instance string }{
 		{"strict, a value not valid against the resolved declaration (cvc-type clause 3.1.3)", wildcardChild("strict"), `<known><b>x</b></known>`},
 		{"an {open content} child's value not valid against the resolved declaration", openChild("lax"), `<known><b>x</b><a>1</a></known>`},
@@ -1065,48 +1077,48 @@ func TestInstanceExecutorChargesWildcardChild(t *testing.T) {
 func TestAssessedSubtreeRootUnresolvedChild(t *testing.T) {
 	for _, tc := range []struct {
 		why, schemaBody, instance string
-		want                      bool
+		want                      refusal
 	}{
-		{"strict, a child resolving no declaration", wildcardChild("strict"), `<known><u><v/></u></known>`, true},
-		{"lax, a child resolving no declaration", wildcardChild("lax"), `<known><u><v/></u></known>`, true},
+		{"strict, a child resolving no declaration", wildcardChild("strict"), `<known><u><v/></u></known>`, ""},
+		{"lax, a child resolving no declaration", wildcardChild("lax"), `<known><u><v/></u></known>`, ""},
 		// u's own binding of z must reach resolveQName for b's xsi:type.
 		{
 			"lax, below a child resolving no declaration, an xsi:type bound by a prefix that child declares",
-			wildcardChild("lax"), `<known ` + xsiNS + `><u xmlns:z="http://www.w3.org/2001/XMLSchema"><b xsi:type="z:int">1</b></u></known>`, true,
+			wildcardChild("lax"), `<known ` + xsiNS + `><u xmlns:z="http://www.w3.org/2001/XMLSchema"><b xsi:type="z:int">1</b></u></known>`, "",
 		},
 		// key-nilled is relative to a declaration, so a laxly assessed element
 		// is never ·nilled·: its element child is read, not refused.
-		{"lax, a child resolving no declaration carrying xsi:nil true over an element child", wildcardChild("lax"), `<known ` + xsiNS + `><u xsi:nil="true"><v/></u></known>`, true},
-		{"lax, a child resolving no declaration carrying an xsi:nil with no ·actual value·", wildcardChild("lax"), `<known ` + xsiNS + `><u xsi:nil="maybe"/></known>`, false},
-		{"lax, below a child resolving no declaration, an xsi:nil with no ·actual value·", wildcardChild("lax"), `<known ` + xsiNS + `><u><v xsi:nil="maybe"/></u></known>`, false},
+		{"lax, a child resolving no declaration carrying xsi:nil true over an element child", wildcardChild("lax"), `<known ` + xsiNS + `><u xsi:nil="true"><v/></u></known>`, ""},
+		{"lax, a child resolving no declaration carrying an xsi:nil with no ·actual value·", wildcardChild("lax"), `<known ` + xsiNS + `><u xsi:nil="maybe"/></known>`, refuseLaxNilLexical},
+		{"lax, below a child resolving no declaration, an xsi:nil with no ·actual value·", wildcardChild("lax"), `<known ` + xsiNS + `><u><v xsi:nil="maybe"/></u></known>`, refuseLaxNilLexical},
 		{
 			// The walk settles cvc-elt clause 5.2.2 for f, below the lax <u> too (#1979).
 			"lax, below a child resolving no declaration, a resolved declaration with a fixed {value constraint} (cvc-elt clause 5.2.2)",
-			wildcardChild("lax") + `<xs:element name="f" type="xs:int" fixed="1"/>`, `<known><u><f>1</f></u></known>`, true,
+			wildcardChild("lax") + `<xs:element name="f" type="xs:int" fixed="1"/>`, `<known><u><f>1</f></u></known>`, "",
 		},
-		{"strict, a child resolving no declaration whose xsi:type names no type definition", wildcardChild("strict"), `<known ` + xsiNS + `><u xsi:type="Z">1</u></known>`, false},
-		{"lax, a child resolving no declaration whose xsi:type names no type definition", wildcardChild("lax"), `<known ` + xsiNS + `><u xsi:type="Z">1</u></known>`, false},
+		{"strict, a child resolving no declaration whose xsi:type names no type definition", wildcardChild("strict"), `<known ` + xsiNS + `><u xsi:type="Z">1</u></known>`, refuseXsiTypeUnresolved},
+		{"lax, a child resolving no declaration whose xsi:type names no type definition", wildcardChild("lax"), `<known ` + xsiNS + `><u xsi:type="Z">1</u></known>`, refuseXsiTypeUnresolved},
 		// The child's own binding of z must reach resolveQName for its xsi:type.
 		{
 			"strict, a child resolving no declaration, its xsi:type bound by a prefix it declares itself",
-			wildcardChild("strict"), `<known ` + xsiNS + `><u xmlns:z="http://www.w3.org/2001/XMLSchema" xsi:type="z:int">1</u></known>`, true,
+			wildcardChild("strict"), `<known ` + xsiNS + `><u xmlns:z="http://www.w3.org/2001/XMLSchema" xsi:type="z:int">1</u></known>`, "",
 		},
-		{"lax, a child resolving no declaration, an xsi:type naming a simple type over an element child", wildcardChild("lax"), `<known ` + xsiXS + `><u xsi:type="xs:int"><v/></u></known>`, false},
-		{"lax, a child resolving no declaration, an xsi:type naming a simple type and an attribute", wildcardChild("lax"), `<known ` + xsiXS + `><u xsi:type="xs:int" a="1">1</u></known>`, false},
-		{"strict, a child resolving no declaration, an xsi:type with an xsi:nil with no ·actual value·", wildcardChild("strict"), `<known ` + xsiXS + `><u xsi:type="xs:int" xsi:nil="maybe">1</u></known>`, false},
+		{"lax, a child resolving no declaration, an xsi:type naming a simple type over an element child", wildcardChild("lax"), `<known ` + xsiXS + `><u xsi:type="xs:int"><v/></u></known>`, refuseElementChild},
+		{"lax, a child resolving no declaration, an xsi:type naming a simple type and an attribute", wildcardChild("lax"), `<known ` + xsiXS + `><u xsi:type="xs:int" a="1">1</u></known>`, refuseSimpleAttribute},
+		{"strict, a child resolving no declaration, an xsi:type with an xsi:nil with no ·actual value·", wildcardChild("strict"), `<known ` + xsiXS + `><u xsi:type="xs:int" xsi:nil="maybe">1</u></known>`, refuseNilLexical},
 		// Never ·nilled·: with no declaration, key-nilled does not apply, so the
 		// complex type's content model is read and <v> is admitted under T.
 		{
 			"lax, a child resolving no declaration, xsi:nil true over the element child its xsi:type's complex type admits",
 			wildcardChild("lax") + `<xs:complexType name="T"><xs:sequence><xs:element name="v"/></xs:sequence></xs:complexType>`,
-			`<known ` + xsiNS + `><u xsi:type="T" xsi:nil="true"><v/></u></known>`, true,
+			`<known ` + xsiNS + `><u xsi:type="T" xsi:nil="true"><v/></u></known>`, "",
 		},
 		// cvc-type clause 2 is the walk's, on a clause-8 child too, so the gate
 		// admits the child (#2095); TestInstanceExecutorChargesAbstractComplexType
 		// pins the walk's charge.
 		{
 			"lax, a child resolving no declaration whose xsi:type names an abstract complex type",
-			wildcardChild("lax") + `<xs:complexType name="T" abstract="true"/>`, `<known ` + xsiNS + `><u xsi:type="T"/></known>`, true,
+			wildcardChild("lax") + `<xs:complexType name="T" abstract="true"/>`, `<known ` + xsiNS + `><u xsi:type="T"/></known>`, "",
 		},
 	} {
 		c := instanceCase(t, tc.schemaBody, tc.instance, true)
@@ -1115,7 +1127,7 @@ func TestAssessedSubtreeRootUnresolvedChild(t *testing.T) {
 			t.Fatalf("%s: assembling the schema: decidable %v, err %v", tc.why, decidable, err)
 		}
 		if got := assessedSubtreeRoot(schema, report, c.doc); got != tc.want {
-			t.Errorf("%s: assessedSubtreeRoot = %v, want %v", tc.why, got, tc.want)
+			t.Errorf("%s: assessedSubtreeRoot = %q, want %q", tc.why, got, tc.want)
 		}
 	}
 }
@@ -1139,7 +1151,7 @@ const extendsA = `<xs:complexType name="EA"><xs:simpleContent><xs:extension base
 // against the member's declaration (key-governing-ed clause 2, #1932). Each row
 // names the subtreeGate condition that, removed, turns it into a decline.
 func TestInstanceExecutorDecidesSubstitutionGroupMember(t *testing.T) {
-	exec := newInstanceExec()
+	exec := newInstanceExec().status()
 	for _, tc := range []struct{ why, decls string }{
 		// child's lift itself: m inherits A.
 		{"an unblocked member", `<xs:element name="h" type="A"/><xs:element name="m" substitutionGroup="h"/>`},
@@ -1187,7 +1199,7 @@ func TestInstanceExecutorDecidesSubstitutionGroupMember(t *testing.T) {
 // the member to nothing (cvc-accept clause 2.3.2, cos-equiv-derived-ok-rec
 // clauses 2.1 and 2.3).
 func TestInstanceExecutorChargesSubstitutionGroupMember(t *testing.T) {
-	exec := newInstanceExec()
+	exec := newInstanceExec().status()
 	for _, tc := range []struct{ why, decls, instance string }{
 		{
 			`a head under block="substitution" (clause 2.1)`,
@@ -1256,7 +1268,7 @@ func xsiKnown(child string) string {
 // (key-governing-type-elem clause 3, #1859). Each row names the gate condition
 // that, removed or inverted, turns it into a decline.
 func TestInstanceExecutorDecidesXsiType(t *testing.T) {
-	exec := newInstanceExec()
+	exec := newInstanceExec().status()
 	for _, tc := range []struct{ why, schemaBody, instance string }{
 		{"xsi:type naming the root's declared type", knownRoot, `<known ` + xsiXS + ` xsi:type="xs:string">x</known>`},
 		{
@@ -1317,7 +1329,7 @@ func TestInstanceExecutorDecidesXsiType(t *testing.T) {
 // (cvc-attribute clause 5) or is no QName (clause 3): each row is decided
 // INVALID.
 func TestInstanceExecutorChargesXsiType(t *testing.T) {
-	exec := newInstanceExec()
+	exec := newInstanceExec().status()
 	for _, tc := range []struct{ why, schemaBody, instance string }{
 		{"a type not derived from the declared one (cvc-elt clause 4)", xsiChild(`<xs:element name="a" type="xs:int"/>`), xsiKnown(`<a xsi:type="xs:boolean">1</a>`)},
 		{
@@ -1377,7 +1389,7 @@ func TestInstanceExecutorChargesXsiType(t *testing.T) {
 // declaration (clause 8). With subtreeGate.complex refusing an abstract type
 // and the walk not charging it, every row declines and this test fails.
 func TestInstanceExecutorChargesAbstractComplexType(t *testing.T) {
-	exec := newInstanceExec()
+	exec := newInstanceExec().status()
 	const abstractT = `<xs:complexType name="T" abstract="true"><xs:sequence><xs:element name="c" type="xs:int"/></xs:sequence></xs:complexType>`
 	for _, tc := range []struct{ why, schemaBody, instance string }{
 		{"an abstract complex type at the root", `<xs:element name="known" type="T"/>` + abstractT, `<known><c>1</c></known>`},
@@ -1414,7 +1426,6 @@ func TestInstanceExecutorChargesAbstractComplexType(t *testing.T) {
 // (cvc-complex-type clause 6), which validate's elementAssertions records the
 // same way.
 func TestInstanceExecutorDeclinesUnevaluatedRoot(t *testing.T) {
-	exec := newInstanceExec()
 	for _, tc := range []struct{ why, schemaBody, instance string }{
 		{
 			// A predicate icpath's lexer does not read (validate's icFrame
@@ -1436,7 +1447,7 @@ func TestInstanceExecutorDeclinesUnevaluatedRoot(t *testing.T) {
 			`<known/>`,
 		},
 	} {
-		declinesBothPolarities(t, exec, instanceCase(t, tc.schemaBody, tc.instance, false), tc.why)
+		declinesBothPolarities(t, instanceCase(t, tc.schemaBody, tc.instance, false), tc.why, refuseUnevaluated)
 	}
 }
 
@@ -1454,7 +1465,6 @@ func TestInstanceExecutorDeclinesVersionedSchema(t *testing.T) {
 			` xmlns:vc="http://www.w3.org/2007/XMLSchema-versioning">`
 		vOther = `<xs:element name="other" type="xs:string" vc:minVersion="1.0"/></xs:schema>`
 	)
-	exec := newInstanceExec()
 	for _, tc := range []struct {
 		why, instance string
 		// docs are the schema documents written beside the instance, the first
@@ -1501,8 +1511,8 @@ func TestInstanceExecutorDeclinesVersionedSchema(t *testing.T) {
 		}
 		instancePath := filepath.Join(dir, "i.xml")
 		writeFixture(t, instancePath, tc.instance)
-		declinesBothPolarities(t, exec,
-			caseSpec{kind: kindInstance, doc: instancePath, schemaDoc: filepath.Join(dir, tc.docs[0].name)}, tc.why)
+		declinesBothPolarities(t,
+			caseSpec{kind: kindInstance, doc: instancePath, schemaDoc: filepath.Join(dir, tc.docs[0].name)}, tc.why, refuseVersioned)
 	}
 }
 
@@ -1511,7 +1521,7 @@ func TestInstanceExecutorDeclinesVersionedSchema(t *testing.T) {
 // same composition with no versioning-namespace attribute anywhere is decided,
 // so it is the attribute those rows decline for and not the composition.
 func TestInstanceExecutorDecidesUnversionedComposition(t *testing.T) {
-	exec := newInstanceExec()
+	exec := newInstanceExec().status()
 	for _, tc := range []struct {
 		why       string
 		other     fixture
@@ -1565,22 +1575,23 @@ func TestAssessedSubtreeRootRootConditions(t *testing.T) {
 		`<xs:simpleType name="int"><xs:restriction base="xs:string"/></xs:simpleType>`
 	for _, tc := range []struct {
 		why, instance string
-		want          bool
+		want          refusal
 	}{
-		{"a declared root", `<known>x</known>`, true},
-		{"a declared content-less root", `<known/>`, true},
-		{"an undeclared root", `<unknown>x</unknown>`, false},
-		{"an abstract declaration", `<abstract>x</abstract>`, false},
-		{"an element child of a simple type", `<known><a/></known>`, false},
-		{"an attribute outside the xsi: four", `<known foo="1">x</known>`, false},
-		{"an xsi:nil with no ·actual value·", `<known ` + xsiNS + ` xsi:nil="maybe">x</known>`, false},
+		{"a declared root", `<known>x</known>`, ""},
+		{"a declared content-less root", `<known/>`, ""},
+		{"an undeclared root", `<unknown>x</unknown>`, refuseUndeclaredRoot},
+		{"an abstract declaration", `<abstract>x</abstract>`, refuseAbstract},
+		{"an element child of a simple type", `<known><a/></known>`, refuseElementChild},
+		{"an attribute outside the xsi: four", `<known foo="1">x</known>`, refuseSimpleAttribute},
+		{"an xsi:nil with no ·actual value·", `<known ` + xsiNS + ` xsi:nil="maybe">x</known>`, refuseNilLexical},
 		// The walk charges each refused xsi:type below, so only a
 		// direct call sees the gate's own refusal.
-		{"an xsi:type naming the declared type", `<known ` + xsiXS + ` xsi:type="xs:string">1</known>`, true},
-		{"an xsi:type naming no type definition", `<known ` + xsiXS + ` xsi:type="Nope">1</known>`, false},
-		{"an xsi:type whose prefix is unbound", `<known ` + xsiNS + ` xsi:type="xs:int">1</known>`, false},
-		{"an xsi:type that does not ·override· the declared type", `<known ` + xsiXS + ` xsi:type="xs:int">1</known>`, false},
-		{"a malformed document", `<known>`, false},
+		{"an xsi:type naming the declared type", `<known ` + xsiXS + ` xsi:type="xs:string">1</known>`, ""},
+		{"an xsi:type naming no type definition", `<known ` + xsiXS + ` xsi:type="Nope">1</known>`, refuseXsiTypeUnresolved},
+		{"an xsi:type whose prefix is unbound", `<known ` + xsiNS + ` xsi:type="xs:int">1</known>`, refuseXsiTypeUnresolved},
+		{"an xsi:type that does not ·override· the declared type", `<known ` + xsiXS + ` xsi:type="xs:int">1</known>`, refuseXsiTypeNotOverride},
+		{"a malformed document", `<known>`, refuseDecode},
+		{"a directive after the root", `<known>x</known><!DOCTYPE known>`, refuseEpilogDirective},
 	} {
 		c := instanceCase(t, schemaBody, tc.instance, true)
 		schema, report, decidable, err := assembleCase(strict.New(), c.schemaDoc, nil)
@@ -1588,7 +1599,37 @@ func TestAssessedSubtreeRootRootConditions(t *testing.T) {
 			t.Fatalf("%s: assembling the schema: decidable %v, err %v", tc.why, decidable, err)
 		}
 		if got := assessedSubtreeRoot(schema, report, c.doc); got != tc.want {
-			t.Errorf("%s: assessedSubtreeRoot = %v, want %v", tc.why, got, tc.want)
+			t.Errorf("%s: assessedSubtreeRoot = %q, want %q", tc.why, got, tc.want)
+		}
+	}
+}
+
+// TestAssessedSubtreeRootContentRefusals pins, at the gate itself, the
+// refusal each {content type} exit names (#2008): a child sequence the
+// ContentMatcher does not accept, a child it does not ·attribute·, and a
+// decoder error between children. The walk charges cvc-complex-type clause 2.4
+// for the first two before the gate is asked, and the reader rejects the
+// third, so no executor row can see them. The accepted sequence is the
+// control.
+func TestAssessedSubtreeRootContentRefusals(t *testing.T) {
+	const schemaBody = `<xs:element name="known"><xs:complexType><xs:sequence>` +
+		`<xs:element name="a" type="xs:int"/></xs:sequence></xs:complexType></xs:element>`
+	for _, tc := range []struct {
+		why, instance string
+		want          refusal
+	}{
+		{"an accepted child sequence", `<known><a>1</a></known>`, ""},
+		{"a child sequence short of its required child", `<known/>`, refuseContentIncomplete},
+		{"a child no particle ·attributes·", `<known><b/></known>`, refuseContentRejected},
+		{"a decoder error after a child", `<known><a>1</a>`, refuseDecode},
+	} {
+		c := instanceCase(t, schemaBody, tc.instance, true)
+		schema, report, decidable, err := assembleCase(strict.New(), c.schemaDoc, nil)
+		if err != nil || !decidable {
+			t.Fatalf("%s: assembling the schema: decidable %v, err %v", tc.why, decidable, err)
+		}
+		if got := assessedSubtreeRoot(schema, report, c.doc); got != tc.want {
+			t.Errorf("%s: assessedSubtreeRoot = %q, want %q", tc.why, got, tc.want)
 		}
 	}
 }

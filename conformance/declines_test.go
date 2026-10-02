@@ -23,19 +23,20 @@ func censusCases() []caseSpec {
 // censusExec is a fake executor with the exact shape every real one in this
 // package has: a case whose observation it can produce is DECIDED by comparing
 // that observation with the declared outcome, and every other case is DECLINED
-// with a bare Fail() that never reads the outcome. observations names the cases
-// it can decide and the validity it observes for each.
-func censusExec(observations map[string]bool, calls *[]string) executor {
-	return func(c caseSpec) Status {
+// with a Fail() that never reads the outcome, naming the refusal
+// "refused-<last letter of its ID>". observations names the cases it can
+// decide and the validity it observes for each.
+func censusExec(observations map[string]bool, calls *[]string) laneExecutor {
+	return func(c caseSpec) (Status, refusal) {
 		*calls = append(*calls, c.id)
 		observed, decidable := observations[c.id]
 		if !decidable {
-			return Fail()
+			return Fail(), refusal("refused-" + c.id[len(c.id)-1:])
 		}
 		if observed == c.expect.wantsValid() {
-			return Pass()
+			return Pass(), ""
 		}
-		return Fail()
+		return Fail(), ""
 	}
 }
 
@@ -64,7 +65,9 @@ func TestTakeDeclineCensusSeparatesDeclinesFromDecisions(t *testing.T) {
 	calls = nil
 	census := takeDeclineCensus(l, cases, actual)
 
-	wantCandidates := []string{"set/g/schema/declineB", "set/g/schema/zdeclineA"}
+	// Each candidate carries the refusal the probe's own run named, so no
+	// second run is needed to read it (#2008).
+	wantCandidates := []declinedCase{{"set/g/schema/declineB", "refused-B"}, {"set/g/schema/zdeclineA", "refused-A"}}
 	if !slices.Equal(census.candidates, wantCandidates) {
 		t.Errorf("candidates = %v, want %v", census.candidates, wantCandidates)
 	}
@@ -126,6 +129,18 @@ func TestChargedIDsWritesTheChargeOnlyForALaneThatHasOne(t *testing.T) {
 	want = []string{"set/g/schema/a", "set/g/schema/b"}
 	if got := chargedIDs(lane{name: "fake"}, disagreed); !slices.Equal(got, want) {
 		t.Errorf("non-charging lane: chargedIDs = %v, want %v", got, want)
+	}
+}
+
+// TestRefusedIDsWritesTheRefusalWhereTheExecutorNamedOne pins the
+// GOXSD_DECLINES=1 decline-candidates rendering tools/internal/declinecensus
+// parses (#2008): `<id>=<refusal>` for a candidate whose executor named one,
+// the bare ID for one whose executor names none, in census order.
+func TestRefusedIDsWritesTheRefusalWhereTheExecutorNamedOne(t *testing.T) {
+	candidates := []declinedCase{{"set/g/instance/a", refuseAbstract}, {"set/g/schema/b", ""}}
+	want := []string{"set/g/instance/a=abstract", "set/g/schema/b"}
+	if got := refusedIDs(candidates); !slices.Equal(got, want) {
+		t.Errorf("refusedIDs = %v, want %v", got, want)
 	}
 }
 
