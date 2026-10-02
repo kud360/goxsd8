@@ -572,3 +572,91 @@ func TestSingletonListMatchesAnAtomicKeyMember(t *testing.T) {
 	}
 	wantDeclines(t, icDeclines(undecided))
 }
+
+// icTypedFieldSchema declares <root> over item*, each item over an optional
+// <cx> whose declaration is untyped (xs:anyType, mixed) and an optional <ec>
+// of an anonymous complex type with empty content, both {nillable} true, then
+// an optional xs:string <s>, with one identity constraint of the given
+// category over the selector "item" and the one field given.
+func icTypedFieldSchema(t *testing.T, category, field string) *xsd.Schema {
+	t.Helper()
+	return parsedSchema(t, map[string]string{"main.xsd": `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="item" maxOccurs="unbounded">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="cx" nillable="true" minOccurs="0"/>
+              <xs:element name="ec" nillable="true" minOccurs="0"><xs:complexType/></xs:element>
+              <xs:element name="s" type="xs:string" minOccurs="0"/>
+            </xs:sequence>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+    <xs:` + category + ` name="C"><xs:selector xpath="item"/><xs:field xpath="` + field + `"/></xs:` + category + `>
+  </xs:element>
+</xs:schema>`})
+}
+
+// icTypedField is <root><item><local .../></item></root>, the field node at
+// line 3 carrying attrs, with xs bound to the XSD namespace for an xsi:type.
+func icTypedField(local string, attrs ...Attribute) *testElement {
+	node := icElem(xsd.QName{Local: local}, 3, attrs)
+	node.bindings = map[string]string{"xs": xsd.XMLSchemaNS}
+	return icRoot(icElem(xsd.QName{Local: "item"}, 2, nil, ElementChild(node)))
+}
+
+// A field node whose ·governing type definition· is determined and is neither
+// a simple type definition nor a complex type definition with {variety} simple
+// is one of cvc-identity-constraint clause 3's "other nodes", ·nilled· or not,
+// for a unique and a key alike: it is charged once, at the field node, and
+// nothing is recorded as undecided — clause 3's list is closed and reads only
+// the governing type. Without fill's split each charged row declines instead.
+//
+// The xsi:type row is idF018's instance 1: an ·override· to xs:string makes a
+// ·nilled· <cx> simple-valued, so it shortens the unique's ·key-sequence· and
+// is charged nothing — the check reads the governing type, not the
+// declaration's.
+func TestFieldNodeOfNonSimpleTypeIsChargedUnderClause3(t *testing.T) {
+	xsiNil := icAttr(xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: "nil"}, "true", 3)
+	xsiString := icAttr(xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: "type"}, "xs:string", 3)
+	charged := []struct {
+		name, category, field string
+		doc                   *testElement
+	}{
+		{"unique over anyType", "unique", "cx", icTypedField("cx")},
+		{"unique over nilled anyType", "unique", "cx", icTypedField("cx", xsiNil)},
+		{"key over anyType", "key", "cx", icTypedField("cx")},
+		{"key over nilled anyType", "key", "cx", icTypedField("cx", xsiNil)},
+		{"unique over empty content", "unique", "ec", icTypedField("ec")},
+		{"key over nilled empty content", "key", "ec", icTypedField("ec", xsiNil)},
+	}
+	for _, c := range charged {
+		t.Run(c.name, func(t *testing.T) {
+			got, undecided := assessRecorded(t, icTypedFieldSchema(t, c.category, c.field), c.doc)
+			icWantCharges(t, got, icCharge(ruleCvcIdentityConstraint, 3))
+			want := `instance.xml:3:1: [cvc-identity-constraint] the field "` + c.field + `" of the identity constraint C declared on root selects, for the ·target node· item, a node whose ·governing type definition· is neither`
+			if len(got) == 1 && !strings.HasPrefix(got[0].Error(), want) {
+				t.Errorf("Violations()[0] = %q, want it to open %q", got[0].Error(), want)
+			}
+			wantDeclines(t, undecided)
+		})
+	}
+	// The first clause 3 charge a slot takes is the one reported, at its own
+	// node: a valued <s> after the <cx> neither moves it nor adds a second.
+	t.Run("unique over anyType then a valued node", func(t *testing.T) {
+		s := icElem(xsd.QName{Local: "s"}, 4, nil, TextChild(&testText{data: "a", loc: loc(4, 4)}))
+		doc := icRoot(icElem(xsd.QName{Local: "item"}, 2, nil,
+			ElementChild(icElem(xsd.QName{Local: "cx"}, 3, nil)), ElementChild(s)))
+		got, undecided := assessRecorded(t, icTypedFieldSchema(t, "unique", "*"), doc)
+		icWantCharges(t, got, icCharge(ruleCvcIdentityConstraint, 3))
+		wantDeclines(t, undecided)
+	})
+	t.Run("unique over nilled xsi:type xs:string", func(t *testing.T) {
+		got, undecided := assessRecorded(t, icTypedFieldSchema(t, "unique", "cx"), icTypedField("cx", xsiNil, xsiString))
+		wantSilence(t, got, "a nilled node of a simple governing type only shortens the key-sequence")
+		wantDeclines(t, undecided)
+	})
+}
