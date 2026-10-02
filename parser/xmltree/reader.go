@@ -1,7 +1,6 @@
 package xmltree
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/xml"
 	"errors"
@@ -91,7 +90,7 @@ type frame struct {
 func NewReader(uri string, r io.Reader) *Reader {
 	body, bom := xmlenc.Decode(r)
 	decl := xmldecl.As10(body)
-	pos := &posReader{r: bufio.NewReader(decl)}
+	pos := &posReader{r: decl}
 	dec := xml.NewDecoder(pos)
 	dec.CharsetReader = bom.CharsetReader
 	return &Reader{
@@ -470,36 +469,19 @@ func (r *Reader) locAt(off int64) xsderr.Loc {
 // with the number of lines, not the document size.
 //
 // It also keeps the source of the token being read: raw holds every byte read
-// from offset base on, and release drops the bytes before a token's start.
-// Being an io.ByteReader, it is read one byte at a time by the decoder, which
-// then reads ahead of the token it returns by at most the one byte it unreads,
-// so raw holds one token and that byte.
+// from offset base on, and release drops the bytes before a token's start. The
+// decoder reads through a buffer of its own, so raw holds one token and at
+// most that buffer's read-ahead past it.
 type posReader struct {
-	r        *bufio.Reader
+	r        io.Reader
 	off      int64
 	newlines []int64
 	raw      []byte
 	base     int64
 }
 
-// ReadByte reads one byte from the underlying reader, recording it as Read
-// does.
-func (p *posReader) ReadByte() (byte, error) {
-	b, err := p.r.ReadByte()
-	if err != nil {
-		return 0, err
-	}
-	if b == '\n' {
-		p.newlines = append(p.newlines, p.off)
-	}
-	p.raw = append(p.raw, b)
-	p.off++
-	return b, nil
-}
-
 // Read reads from the underlying reader, recording newline offsets and the
-// source as bytes pass through. The decoder reads through ReadByte; Read is
-// what it hands a CharsetReader, which xmlenc.Mark's returns unwrapped.
+// source as bytes pass through.
 func (p *posReader) Read(b []byte) (int, error) {
 	n, err := p.r.Read(b)
 	for i := 0; i < n; i++ {
