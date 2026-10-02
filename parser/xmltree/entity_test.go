@@ -66,7 +66,7 @@ func TestInternalEntityIsIncluded(t *testing.T) {
 			`<r v="a&b<c/>">"a&b<c/>"</r>`},
 		{"doubly escaped '<' in an attribute value", `<!ENTITY e "&#38;#60;">`, `<r v="&e;"/>`, `<r v="<"></r>`},
 		{"CDATA in replacement text", `<!ENTITY e "<![CDATA[&x;]]>">`, `<r>&e;</r>`, `<r>"&x;"</r>`},
-		{"line end in the literal", "<!ENTITY e \"a\r\nb\">", `<r>&e;</r>`, `<r>"a\nb"</r>`},
+		{"line end in the literal", "<!ENTITY e \"a\r\nb&#65;\rc\">", `<r>&e;</r>`, `<r>"a\nbA\nc"</r>`},
 		{"line end in the source beside a reference", `<!ENTITY e "x">`, "<r v=\"a\r\n&e;\">a\r\n&e;</r>",
 			`<r v="a x">"a\nx"</r>`},
 		{"character reference to #xD in the literal", `<!ENTITY e "a&#13;b">`, `<r>&e;</r>`, `<r>"a\rb"</r>`},
@@ -154,6 +154,10 @@ func TestEntityReferenceRefusedUnread(t *testing.T) {
 	for i := 1; i <= 9; i++ {
 		laughs += fmt.Sprintf(`<!ENTITY l%d "%s">`, i, strings.Repeat(fmt.Sprintf("&l%d;", i-1), 10))
 	}
+	// sizeBound is the reader's maxGEExpansion: the bytes of replacement text
+	// one document may include.
+	const sizeBound = 1 << 20
+	big := `<!ENTITY big "` + strings.Repeat("x", sizeBound) + `">`
 	chain := func(n int) string {
 		var b strings.Builder
 		for i := 0; i < n; i++ {
@@ -171,6 +175,7 @@ func TestEntityReferenceRefusedUnread(t *testing.T) {
 		{"billion laughs in content", laughs, `<r>&l9;</r>`, "expansion bound"},
 		{"billion laughs in an attribute value", laughs, `<r v="&l9;"/>`, "expansion bound"},
 		{"nesting past the depth bound", chain(64), `<r>&c0;</r>`, "expansion bound"},
+		{"past the size bound, summed over the document", big, `<r>&big;<b v="&big;"/></r>`, "expansion bound"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := collect(t, "doc.xml", `<!DOCTYPE r [`+tc.subset+`]>`+tc.root)
@@ -187,6 +192,15 @@ func TestEntityReferenceRefusedUnread(t *testing.T) {
 			}
 		})
 	}
+	t.Run("replacement text at the size bound", func(t *testing.T) {
+		nodes, err := collect(t, "doc.xml", `<!DOCTYPE r [`+big+`]><r>&big;</r>`)
+		if err != nil {
+			t.Fatalf("Token: %v", err)
+		}
+		if got := len(nodes[1].(*xmltree.CharData).Data()); got != sizeBound {
+			t.Errorf("read %d bytes, want %d", got, sizeBound)
+		}
+	})
 	t.Run("nesting at the depth bound", func(t *testing.T) {
 		nodes, err := collect(t, "doc.xml", `<!DOCTYPE r [`+chain(63)+`]><r>&c0;</r>`)
 		if err != nil {
