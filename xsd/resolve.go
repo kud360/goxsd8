@@ -715,11 +715,13 @@ func (s *Schema) resolveAttributeUse(u AttributeUse, loc xsderr.Loc, _ string) e
 // that uses the affected declaration. It documents the reading without scoring
 // it — see the GAP below.
 //
-// So a dangling affiliation stays in the property as an ·absent· member, and the
-// two walks that read it already behave as §5.3 requires: affiliationChainReaches
+// So a dangling affiliation stays in the property as an ·absent· member, and
+// the walks that read it behave as §5.3 requires. affiliationChainReaches
 // (substitutiongroup.go) skips a member it cannot look up, so no chain runs
 // through an absent component, and checkSubstitutionGroupsAcyclic contributes no
-// edges for one.
+// edges for one. On the validation side the instance walk charges cvc-elt clause
+// 1 for an element whose ·governing element declaration· has such a member and
+// falls back to ·lax assessment· (validate's walk.absentAffiliation).
 //
 // GAP(xsd): the OTHER reference slots are not yet §5.3-aligned — a dangling
 // {type definition}, <element ref>, <attribute ref>, <group ref>, keyref, or a

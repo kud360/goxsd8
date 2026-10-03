@@ -262,12 +262,11 @@ func (w *walk) idDefaultedAttributes(c *icCheck, attrs []Attribute, ct xsd.Compl
 // definition}, an xsi:type whose ·override· could not be decided) declines
 // instead, recorded as an [Unevaluated] ([walk.declineID]). An element with NO
 // ·governing element declaration· is not that shape. A ·laxly assessed· one,
-// a declared element whose ·selected type definition· is §5.3's ·absent· one
-// among them ([walk.declaredGovernance]), is assessed against xs:anyType,
-// whose complex {content type} is not derived from ID and so contributes
-// nothing under clause 3, and its [[children]] are read in their own turn
-// ([walk.child]). An undecided one ([governance]) is [walk.child]'s
-// decline, not this one's.
+// a declared element §5.3 falls back to ·lax assessment· among them
+// ([walk.declaredGovernance]), is assessed against xs:anyType, whose complex
+// {content type} is not derived from ID and so contributes nothing under
+// clause 3, and its [[children]] are read in their own turn ([walk.child]). An
+// undecided one ([governance]) is [walk.child]'s decline, not this one's.
 //
 // A ·nilled· element contributes nothing and withholds nothing: §3.3.5.4 gives
 // it an absent [schema actual value], and clause 2 of the ·eligible item set·

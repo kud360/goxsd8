@@ -153,47 +153,47 @@
 // neither a declaration nor a ·governing type definition·. cvc-assess-elt
 // carries one charge more, at every element the descent types: e-validity
 // (§3.3.5.1) clause 1.1.3, for an element [[child]] ·attributed to· a strict
-// ·wildcard particle· that ·resolves· to no declaration, or to one whose
-// ·selected type definition· is ·absent· (§5.3). e-validity has no
-// catalog ID of its own and none is minted for it, so the message names the
-// clause against e-validity while the error carries cvc-assess-elt.
+// ·wildcard particle· that ·resolves· to no declaration, or to one §5.3 sends
+// to ·lax assessment·. e-validity has no catalog ID of its own and none is
+// minted for it, so the message names the clause against e-validity while the
+// error carries cvc-assess-elt.
 //
 // The second is cvc-elt (§3.3.4.3), in five clauses, at the root and at every
 // descendant the descent types. Clause 1 is charged as Structures §5.3
-// (Missing Sub-components) directs, for an element whose ·selected type
-// definition· names a substitution group head no declaration carries, and the
-// element then falls back to ·lax assessment· against xs:anyType; a nil
-// {type definition} on a directly built declaration is recorded as an
-// [Unevaluated] instead (cta.go). Clause 2 decides {abstract}: an element whose
-// ·governing element declaration· is abstract, whether the root's top-level
-// declaration, a particle's, or the one a strict or lax wildcard's child
-// ·resolves· to. Clause 3 decides xsi:nil: an xsi:nil attribute on a
+// (Missing Sub-components) directs, for an element whose ·governing element
+// declaration· has a {substitution group affiliations} member, or whose
+// ·selected type definition· names a substitution group head, that no
+// declaration carries, and the element then falls back to ·lax assessment·
+// against xs:anyType; a nil {type definition} on a directly built declaration is
+// recorded as an [Unevaluated] instead (cta.go). Clause 2 decides {abstract}: an
+// element whose ·governing element declaration· is abstract, whether the root's
+// top-level declaration, a particle's, or the one a strict or lax wildcard's
+// child ·resolves· to. Clause 3 decides xsi:nil: an xsi:nil attribute on a
 // declaration whose {nillable} is false (3.1), one whose lexical is outside
 // xs:boolean's lexical space (3.2), and a ·nilled· element carrying character or
-// element [[children]] (3.2.3.1) or a fixed {value constraint} (3.2.3.2).
-// Clause 4 decides xsi:type: an ·instance-specified type definition· that
-// ·resolves· but is not ·validly substitutable· for the ·selected type
-// definition· subject to the declaration's {disallowed substitutions}
+// element [[children]] (3.2.3.1) or a fixed {value constraint} (3.2.3.2). Clause
+// 4 decides xsi:type: an ·instance-specified type definition· that ·resolves·
+// but is not ·validly substitutable· for the ·selected type definition· subject
+// to the declaration's {disallowed substitutions}
 // ([xsd.Schema.ValidlySubstitutable]). One that resolves AND overrides becomes
 // the ·governing type definition· the rest of the assessment reads, and one that
 // does not resolve at all charges no clause of cvc-elt and leaves the selected
 // type governing — the Note under cvc-elt is explicit that the two failures
 // share that fallback and differ only in the charge. That second failure is
 // charged against the ATTRIBUTE instead, under cvc-attribute clause 3 or 5
-// below, which leaves the fallback exactly as it is. Clause 5 is a case split
-// on whether the element is EMPTY and its declaration carries a {value
-// constraint}, and both arms are decided. Clause 5.2's, for an element that
-// HAS [[children]]: 5.2.1's ordinary cvc-type dispatch, and 5.2.2 for a fixed
-// constraint — no element [[children]] (5.2.2.1), and an ·initial value·
-// matching the {lexical form} under a mixed {content type} (5.2.2.2.1) or an
-// ·actual value· equal or identical to the {value} under a simple one
-// (5.2.2.2.2). Clause 5.1's, for an empty one: the item assessed is the one
-// carrying D.{value constraint}.{lexical form} as its ·normalized value·, which
-// 5.1.2 sends to the same cvc-type dispatch and which the [ID/IDREF table] and
-// a ·key-sequence· read in place of the empty ·initial value·; and 5.1.1
-// charges Element Default Valid (Immediate) (§3.3.6.2) over that constraint
-// where the ·governing type definition· is an ·instance-specified· one, which
-// is the xsi:type case alone.
+// below, which leaves the fallback exactly as it is. Clause 5 is a case split on
+// whether the element is EMPTY and its declaration carries a {value constraint},
+// and both arms are decided. Clause 5.2's, for an element that HAS [[children]]:
+// 5.2.1's ordinary cvc-type dispatch, and 5.2.2 for a fixed constraint — no
+// element [[children]] (5.2.2.1), and an ·initial value· matching the {lexical
+// form} under a mixed {content type} (5.2.2.2.1) or an ·actual value· equal or
+// identical to the {value} under a simple one (5.2.2.2.2). Clause 5.1's, for an
+// empty one: the item assessed is the one carrying D.{value constraint}.{lexical
+// form} as its ·normalized value·, which 5.1.2 sends to the same cvc-type
+// dispatch and which the [ID/IDREF table] and a ·key-sequence· read in place of
+// the empty ·initial value·; and 5.1.1 charges Element Default Valid (Immediate)
+// (§3.3.6.2) over that constraint where the ·governing type definition· is an
+// ·instance-specified· one, which is the xsi:type case alone.
 //
 // The third is cvc-type (§3.3.4.4) clause 3.1, the arm taken where the
 // ·governing type definition· is a Simple Type Definition rather than a complex

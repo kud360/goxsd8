@@ -262,7 +262,7 @@ func TestUnresolvedNameUnderAStrictWildcardChargesTheEnclosingElement(t *testing
 func TestAbsentSelectionUnderAStrictWildcardNamesItsCause(t *testing.T) {
 	schema := dSchema(t, func(b *xsd.SchemaBuilder) {
 		kid, err := xsd.NewElementDeclaration(xsderr.Loc{}, local("kid"), absentHead, nil,
-			xsd.NewGlobalScope(), nil, false, nil, []xsd.QName{absentHead.Head}, nil, false, nil)
+			xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil)
 		if err != nil {
 			t.Fatalf("building the top-level kid element declaration: %v", err)
 		}
@@ -280,7 +280,7 @@ func TestAbsentSelectionUnderAStrictWildcardNamesItsCause(t *testing.T) {
 	if got[1].Rule != "cvc-assess-elt" || got[1].Loc != loc(2, 1) {
 		t.Errorf("violations[1] = %s at %s, want cvc-assess-elt at the child %s", got[1].Rule, got[1].Loc, loc(2, 1))
 	}
-	const prefix = "the element information item kid is ·attributed to· a ***strict*** ·wildcard particle· but ·resolves· to a top-level element declaration whose ·selected type definition· is ·absent· (§5.3"
+	const prefix = "the element information item kid is ·attributed to· a ***strict*** ·wildcard particle· but ·resolves· to a top-level element declaration that has or contains an ·absent· component — an ·absent· ·selected type definition· or {substitution group affiliations} member (§5.3"
 	if !strings.HasPrefix(got[1].Msg, prefix) {
 		t.Errorf("Msg = %q, want it to open %q", got[1].Msg, prefix)
 	}
