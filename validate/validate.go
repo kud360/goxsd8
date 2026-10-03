@@ -141,7 +141,7 @@ func (r *Result) Violations() []*xsderr.Error {
 //   - the ·governing type definition· (assess.go, cta.go): each withheld one,
 //     not one per alternative the {type table} scan never tried — a {test}
 //     outside the §3.12.6 subset (key-cta-ta-select), a selected {type
-//     definition} that resolves to nothing (cvc-elt clause 1, §5.3), and an
+//     definition} that is nil (cvc-elt clause 1, §5.3), and an
 //     undecided ·override· of the ·selected type definition· (cvc-elt clause
 //     4) or of a ·locally declared type· (cvc-assess-elt clause 1.2);
 //   - content (cvccomplexcontent.go): String Valid (§3.16.4) over an element's

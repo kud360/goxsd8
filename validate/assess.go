@@ -83,7 +83,10 @@ const ruleCvcType xsderr.Rule = "cvc-type"
 //
 // cvc-elt clause 1 (D ·non-absent·, E and D sharing an ·expanded name·) is
 // satisfied by construction — D is the declaration found BY that expanded
-// name — and so is never charged.
+// name. It is charged only as §5.3 directs, "as if clause 1 ... had failed",
+// for a ·selected type definition· that is ·absent·, at the root as at every
+// descendant, and the element is then ·laxly assessed·
+// ([walk.resolvedSelection]).
 //
 // Where the root's ·governing type definition· is determinable (see
 // governingType), the root itself is additionally assessed against it: cvc-type
@@ -174,16 +177,18 @@ func (v *Validator) Assess(root Element) *Result {
 //
 // The zero value is an element assessed against nothing: no declaration, no
 // type. It is cvc-assess-elt clause 3.3's ·lax assessment· against xs:anyType
-// (laxlyAssessed), and hasDecl TRUE with a nil typ is this package declining a
-// type it could not determine — a distinction cvcid.go needs, since only the
-// second could have hidden an ID. hasDecl false with a NON-nil typ is the third
-// shape, clause 1.2's: an element with no ·governing element declaration·
-// ·strictly assessed· against a type alone — its ·locally declared type· or an
-// xsi:type ·overriding· it (key-governing-type-elem clauses 7 and 6,
+// (laxlyAssessed) — also the fall back §5.3 gives a declared element whose
+// ·selected type definition· is ·absent· ([walk.declaredGovernance]) — and
+// hasDecl TRUE with a nil typ is this package declining a type it could not
+// determine — a distinction cvcid.go needs, since only the second could have
+// hidden an ID. hasDecl false with a NON-nil typ is the third shape, clause
+// 1.2's: an element with no ·governing element declaration· ·strictly assessed·
+// against a type alone — its ·locally declared type· or an xsi:type
+// ·overriding· it (key-governing-type-elem clauses 7 and 6,
 // [walk.localGovernance]), or else an xsi:type that ·resolved· (clause 8,
-// [walk.instanceGovernance]). Every rule that reads the DECLARATION —
-// cvc-elt, §3.11.4's {identity-constraint definitions} — is vacuous for it, and
-// every rule that reads the type applies in full.
+// [walk.instanceGovernance]). Every rule that reads the DECLARATION — cvc-elt,
+// §3.11.4's {identity-constraint definitions} — is vacuous for it, and every
+// rule that reads the type applies in full.
 //
 // unattributed is the fourth shape, and it is none of cvc-assess-elt's
 // outcomes: an element its parent ·attributed· to nothing ([walk.childGoverning]'s
@@ -270,18 +275,33 @@ func (g governance) valueType() *xsd.SimpleType {
 
 // declaredGovernance pairs a ·governing element declaration· with the
 // ·governing type definition· it supplies for e (governingType), whose
-// [inherited attributes] are inherited.
+// [inherited attributes] are inherited. The ·selected type definition· is
+// settled first ([walk.selectedType]), and it ends the pairing two ways. One
+// this package could not determine leaves d with no type: the decline
+// [governance] distinguishes. One determined ·absent· is §5.3's: cvc-elt
+// clause 1 is already charged, and e falls back to ·lax assessment· — the zero
+// [governance], with no declaration, so no xsi:type, {nillable}, {abstract}
+// or identity constraint of d is read for it.
 func (w *walk) declaredGovernance(e Element, d xsd.ElementDeclaration, inherited []inheritedAttribute) governance {
-	t, instance := w.governingType(e, d, inherited)
+	selected, ok := w.selectedType(e, d, inherited)
+	if !ok {
+		return governance{decl: d, hasDecl: true}
+	}
+	if selected == nil {
+		return governance{}
+	}
+	t, instance := w.governingType(e, d, selected)
 	return governance{decl: d, hasDecl: true, typ: t, instance: instance}
 }
 
 // governingType is the ·governing type definition· (§3.3.4.6) of an
-// element information item whose ·governing element declaration· is d; it is nil
-// wherever this package cannot determine that type, and the element's attributes
-// are then assessed against nothing. The second result is whether the type
-// returned is E's ·instance-specified type definition· (governance.instance),
-// which only clause 3 below supplies and which no later comparison can recover.
+// element information item whose ·governing element declaration· is d and whose
+// ·selected type definition·, determined and not ·absent·, is selected; it is
+// nil wherever this package cannot determine that type, and the element's
+// attributes are then assessed against nothing. The second result is whether
+// the type returned is E's ·instance-specified type definition·
+// (governance.instance), which only clause 3 below supplies and which no later
+// comparison can recover.
 //
 // It walks key-governing-type-elem's cases in their own order, this package
 // stipulating no type of its own: clause 3, an ·instance-specified type
@@ -297,23 +317,27 @@ func (w *walk) declaredGovernance(e Element, d xsd.ElementDeclaration, inherited
 // the second violates clause 4 and is charged here (instanceOverride).
 //
 // The ·selected type definition· is settled BEFORE any xsi:type is read, in
-// both cases: ·overriding· is a relation TO the selected type, so an
-// undetermined selected type decides nothing about it.
+// both cases, by [walk.declaredGovernance]: ·overriding· is a relation TO the
+// selected type, so an undetermined selected type decides nothing about it, and
+// neither does an ·absent· one (§5.3), whose element is ·laxly assessed·
+// without this being called.
 //
 // Each decline below withholds a type that could differ from the declaration's,
 // and assessing the element against the WRONG type is a false reject in both
 // directions — an attribute the real governing type declares looks unmatched, a
-// child its real {content type} admits looks unattributable. Its exits that
-// return no type are five, of three kinds, and each records one [Unevaluated]
-// at the element:
+// child its real {content type} admits looks unattributable. The exits that
+// leave a declared element with no type are five, of three kinds — the first
+// two selectedType's, before this is called, the third this function's — and
+// each records one [Unevaluated] at the element:
 //
 //   - A {test} in a {type table} that the §3.12.6 required-subset evaluator
 //     cannot evaluate (conditionallySelected, cta.go), under key-cta-ta-select.
-//   - A {type definition} slot of the ·selected type definition· that resolves
-//     to nothing (resolvedSelection, cta.go), under cvc-elt clause 1: the
-//     declaration's own (key-selected-type clause 2), the one of the
-//     alternative that ·successfully selects·, or the {default type
-//     definition}'s — three exits, each reachable from a finalized Schema.
+//   - A nil {type definition} slot of the ·selected type definition·
+//     (resolvedSelection, cta.go), under cvc-elt clause 1: the declaration's
+//     own (key-selected-type clause 2), the one of the alternative that
+//     ·successfully selects·, or the {default type definition}'s — three
+//     exits, each reachable from a finalized Schema of directly built
+//     components.
 //   - An error from [xsd.Schema.ValidlySubstitutable] deciding the ·override·
 //     (instanceOverride), under cvc-elt clause 4. It is unreachable.
 //
@@ -323,11 +347,7 @@ func (w *walk) declaredGovernance(e Element, d xsd.ElementDeclaration, inherited
 // value· §3.11.4 clause 3 and §3.17.5.2 read. No reader narrows further on the
 // type's {name}: an anonymous governing type is assessed exactly as a named
 // one, for both halves (#1116).
-func (w *walk) governingType(e Element, d xsd.ElementDeclaration, inherited []inheritedAttribute) (xsd.TypeDefinition, bool) {
-	selected, ok := w.selectedType(e, d, inherited)
-	if !ok {
-		return nil, false
-	}
+func (w *walk) governingType(e Element, d xsd.ElementDeclaration, selected xsd.TypeDefinition) (xsd.TypeDefinition, bool) {
 	instance, specified := w.instanceTypeDefinition(e)
 	if !specified {
 		return selected, false

@@ -30,8 +30,11 @@ const ruleKeyCTATASelect xsderr.Rule = "key-cta-ta-select"
 
 // selectedType is the ·selected type definition· S of an element information
 // item E whose ·governing element declaration· is d (§3.3.4.1,
-// key-selected-type); ok is false wherever this package cannot determine it,
-// which is governingType's own decline and carries its consequences unchanged.
+// key-selected-type). ok is false wherever this package cannot determine it,
+// which is [walk.declaredGovernance]'s decline and carries its consequences
+// unchanged. ok true with a nil S is S determined and ·absent· (§5.3), which
+// resolvedSelection has already charged and [walk.declaredGovernance] answers
+// with ·lax assessment·.
 //
 // The rule has exactly two cases and they are taken in its order: clause 1,
 // a declaration WITH a {type table}, whose table ·conditionally selects· S;
@@ -47,34 +50,57 @@ func (w *walk) selectedType(e Element, d xsd.ElementDeclaration, inherited []inh
 
 // resolvedSelection is the type definition a {type definition} slot that
 // key-selected-type reads for e names, through [xsd.Schema.ResolvedType]; slot
-// names that slot for the message. A slot that resolves to nothing is one of
-// governingType's declines, and it is RECORDED: as one [Unevaluated] under
-// cvc-elt clause 1 at e's own location, nothing downstream charging the element
-// whose type it withholds.
+// names that slot for the message. A finalized Schema reaches a slot that
+// resolves to nothing two ways, and they end differently.
 //
-// A finalized Schema reaches it two ways, and ResolvedType answers not-ok for
-// both. Finalize accepts a [xsd.SubstitutionGroupHeadTypeRef] whose head names
-// no declaration (§5.3 Missing Sub-components, xsd's
-// resolveTypeDefinitionSlot), and a nil {type definition}, the ·absent· slot of
-// a declaration built without the parser's §3.3.2.1 defaulting (the
-// declaration's own slot alone: xsd.NewTypeAlternative rejects nil). §5.3 makes
-// validating an element against a component holding such an ·absent· value "as
-// if clause 1 of Element Locally Valid (Element) had failed", with a fall back
-// to ·lax assessment·.
+// A [xsd.SubstitutionGroupHeadTypeRef] whose head names no declaration, which
+// Finalize accepts (xsd's resolveTypeDefinitionSlot), is an ·absent· value
+// where a component is mandated (§5.3 Missing Sub-components), so S is ·absent·
+// and §5.3 makes validating e "as if clause 1 of Element Locally Valid
+// (Element) had failed", falling back to ·lax assessment·. That is cvc-elt
+// clause 1 CHARGED at e's own location, and a nil S returned with ok true for
+// [walk.declaredGovernance] to assess e laxly. The parser never builds this
+// shape: it gives the member of an unresolvable substitutionGroup head
+// xs:anyType.
 //
-// GAP(validate): neither effect is applied on either route — the absent head
-// (§5.3) or the nil slot (the sch-props-correct clause 1 xsd defers) — so the
-// record names the clause and charges nothing, and the element is assessed
-// against nothing rather than laxly. Tracked by #2166.
+// A nil {type definition}, the ·absent· slot of a declaration built without the
+// parser's §3.3.2.1 defaulting (the declaration's own slot, or the slot of a
+// head a SubstitutionGroupHeadTypeRef names; xsd.NewTypeAlternative rejects
+// nil), is declined instead: RECORDED as one [Unevaluated] under cvc-elt clause
+// 1 at e's own location, with ok false. GAP(validate): that slot is the
+// sch-props-correct clause 1 fault xsd's Finalize defers, so the instance walk
+// neither charges cvc-elt clause 1 for it nor assesses e laxly, and e is
+// assessed against nothing. RULED permanent by #2166 (STYLE P3b), on #774's
+// terms: the charge belongs to xsd's deferred schema check, not to the
+// instance walk.
 func (w *walk) resolvedSelection(e Element, ref xsd.TypeDefinitionOrRef, slot string) (xsd.TypeDefinition, bool) {
 	t, ok := w.schema.ResolvedType(ref)
-	if !ok {
-		w.decline("assessing element", e.Name(), e.Loc(), ruleCvcElt, "1",
-			"the ·selected type definition· of the element %s was not determined, so it has no ·governing type definition· and was assessed against nothing: %s resolves to no type definition, an ·absent· value where a component is mandated, which Structures §5.3 (Missing Sub-components) treats as if cvc-elt clause 1 had failed, falling back to ·lax assessment· — neither of which was applied",
-			e.Name(), slot)
-		return nil, false
+	if ok {
+		return t, true
 	}
-	return t, true
+	if w.absentHead(ref) {
+		w.res.violations = append(w.res.violations, xsderr.New(ruleCvcElt, e.Loc(),
+			"the ·selected type definition· of the element %s is ·absent·: %s names a substitution group head with no element declaration in the schema, a missing sub-component that Structures §5.3 (Missing Sub-components) treats as if cvc-elt clause 1 had failed, so the element is ·laxly assessed·",
+			e.Name(), slot))
+		w.logDecision("assessing element", e.Name(), e.Loc(), ruleCvcElt, "1", "charged")
+		return nil, true
+	}
+	w.decline("assessing element", e.Name(), e.Loc(), ruleCvcElt, "1",
+		"the ·selected type definition· of the element %s was not determined, so it has no ·governing type definition· and was assessed against nothing: %s resolves to no type definition, an ·absent· (nil) {type definition} that sch-props-correct clause 1 leaves to the schema check, so cvc-elt clause 1 (Structures §5.3) is not charged here",
+		e.Name(), slot)
+	return nil, false
+}
+
+// absentHead reports whether ref is a [xsd.SubstitutionGroupHeadTypeRef] whose
+// head names no element declaration in the schema: §5.3's ·absent· head, as
+// against a head that exists and whose own slot is nil.
+func (w *walk) absentHead(ref xsd.TypeDefinitionOrRef) bool {
+	head, isHead := ref.(xsd.SubstitutionGroupHeadTypeRef)
+	if !isHead {
+		return false
+	}
+	_, found := w.schema.Element(head.Head)
+	return !found
 }
 
 // conditionallySelected is the type a Type Table ·conditionally selects· for e
@@ -104,8 +130,9 @@ func (w *walk) resolvedSelection(e Element, ref xsd.TypeDefinitionOrRef, slot st
 // the element's own location: nothing downstream charges the element, so
 // without the record an element whose ·governing type definition· was withheld
 // is byte-identical at the [Result] API to one that passed every rule (#56).
-// The other withhold here, a selected {type definition} that resolves to
-// nothing, is resolvedSelection's, and recorded there under cvc-elt.
+// A selected {type definition} that resolves to nothing is resolvedSelection's:
+// an ·absent· head charged there under cvc-elt clause 1, a nil slot withheld
+// and recorded there under cvc-elt.
 //
 // A DYNAMIC OR TYPE ERROR INSIDE AN EVALUABLE {test} IS NOT RECORDED, because
 // it is not a withhold: key-cta-ta-select clause 2 says such a {test} "is
