@@ -17,18 +17,19 @@ read them. One stamp for the whole section, so a reader can tell staleness
 from wrongness at a glance. Never add a dated paragraph beside the old
 one — appending is what this replaces.
 
-## Status — 2026-10-03 (post-land pass after #814, on `main` at `698ea54`)
+## Status — 2026-10-03 (post-land pass after #1824, on `main` at `2adfc92`)
 
-**#814 landed at `698ea54`, `Ratchet: unchanged`.** Five `validate`
-residuals are discharged and item 4 was withdrawn at grounding. **M5 has no
-north star.** The `<abstract>` cluster was the last one held by open,
-unblocked work. The largest unowned cluster is `<no-hint>` 15, which waits on
-an oracle question (next planning action 4). **#1856, the one measured
-product bound, is parked `needs-replan`** after two rejections on F&O flag
-`i` (next planning action 2). **The band is #1824 alone. Lean: debt.** It is
-`Ratchet: unchanged` doc debt in `validate`, because no startable measured
-product bound remains. The process filings wait on the `/retro` on
-2026-10-04, and the next `/backlog` re-partitions and refills the band.
+**#1824 landed at `2adfc92`, `Ratchet: unchanged`.** Five comment-only
+`validate` follow-ups are discharged, and `walk.child`'s `GAP(validate)` marker
+now names #1892. **M5 has no north star.** The `<abstract>` cluster was the
+last one held by open, unblocked work. The largest unowned cluster is
+`<no-hint>` 15, which waits on an oracle question (next planning action 4).
+**#1856, the one measured product bound, is parked `needs-replan`** after two
+rejections on F&O flag `i` (next planning action 2). **The band is three M5
+`validate` gaps: #2061, #1093 then #1892. Lean: product residue.** The doc debt
+the last band held is spent, and no measured product bound is startable. The
+process filings wait on the `/retro` on 2026-10-04, and the next `/backlog`
+re-partitions and refills the band.
 
 **#2081 stays `needs-replan` on GitHub.** Its replan restates the body and
 relabels it `blocked` on the owner's ruling. The permission classifier
@@ -36,7 +37,7 @@ refused that write, so the owner posts it (next planning action 1).
 
 ### Conformance lanes
 
-**This table is `go tool lanestatus`, pasted verbatim, on `main` at `698ea54`.**
+**This table is `go tool lanestatus`, pasted verbatim, on `main` at `2adfc92`.**
 It is the committed expectations census, which `docs/WORKFLOW.md` names as the
 lane score (#1120).
 
@@ -123,10 +124,11 @@ owners lexically, so the owners named below are this stamp's reading.
 
 ### Branch namespace, `origin` (report-only; a session never deletes a ref)
 
-`go tool wipsurvey` was fed this pass's issue walk, stamped `rows 2144
-distinct 2144 min 1 max 2144 no gaps`, after `git fetch origin`. It prints:
+`go tool wipsurvey` was fed this pass's issue walk, stamped `rows 1096
+distinct 1096 min 1 max 2142` (issues only, pull requests dropped), after `git
+fetch origin`. It prints:
 
-- **No `wip/issue-<N>` is LIVE or CLAIMED.** `wip/issue-814` was deleted at
+- **No `wip/issue-<N>` is LIVE or CLAIMED.** `wip/issue-1824` was deleted at
   merge.
 - **`wip/issue-1856` is RETIRED** (`needs-replan`). It holds the parked work
   at `556c5a4`, which is the replan's evidence.
@@ -150,18 +152,19 @@ distinct 2144 min 1 max 2144 no gaps`, after `git fetch origin`. It prints:
 
 ### Marker census
 
-`go tool gapaudit`, fed the same walk, reports **83 markers across 10 areas, 13
-in group 1 and 31 in group 2, with zero dead ends.** #814 was not a
-`kind/gap` issue, and its landing added and removed no marker.
+`go tool gapaudit`, fed the same walk, reports **83 markers across 10 areas, 12
+in group 1 and 30 in group 2, with zero dead ends.** #1824 named #1892 at
+`validate/assess.go`'s marker, which takes that row out of group 1 and #1892
+out of group 2.
 
-- **The group-1 rows are unchanged:**
+- **The group-1 rows:**
   - the `parser/doc.go` §5.3 policy row and `xsd/resolve.go`'s §5.3
     reference-slot row;
   - three `value/valuespace.go` rows: needsContext, union member facet
     compilation (#462 is cited past its first paragraph) and the unbound
     prefix;
-  - three `validate` rows whose owners do not yet cite them: `assess.go`
-    #1892, `cvcid.go` #1093 and `cvcidentityconstraint.go` #1887;
+  - two `validate` rows whose owners do not yet cite them: `cvcid.go` #1093
+    and `cvcidentityconstraint.go` #1887;
   - two `xsd/contentrestricts.go` rows, `xsd/defaultbinding.go` (#2087 owns
     the citation fix) and `xsd/derivation.go`'s #555 row;
   - `tools/landcheck/keywords.go`'s abbreviation row.
@@ -171,7 +174,7 @@ in group 1 and 31 in group 2, with zero dead ends.** #814 was not a
 
 ### Milestones and queue
 
-**Counted from the REST walk above: 331 open issues.**
+**Counted from the REST walk above: 330 open issues.**
 
 | milestone | open | closed | state |
 |---|---:|---:|---|
@@ -183,29 +186,29 @@ in group 1 and 31 in group 2, with zero dead ends.** #814 was not a
 | M6 — XPath required subset | 1 | 0 | not started |
 | M7–M12 | 0 | 0 | not started |
 
-Open issues carry **315 `ready`, 12 `blocked`, 2 `needs-replan` and 2
-`epic`**, which sums to 331. `kind/gap` is 64 and `kind/bug` is 35.
+Open issues carry **314 `ready`, 12 `blocked`, 2 `needs-replan` and 2
+`epic`**, which sums to 330. `kind/gap` is 64 and `kind/bug` is 35.
 
 - **`blocked` is 12:** #16, #555, #1002, #1042, #1051, #1374, #1609, #1790,
-  #1880, #1885, #1923 and #2022. **#814's landing unblocks none:** no
+  #1880, #1885, #1923 and #2022. **#1824's landing unblocks none:** no
   `## Depends on` names it.
   - **#1609 is unfired.** `schema` Pass reads 15288, which is not above
-    15292. Total is 15398, and `698ea54` touches no `xsd/` file.
+    15292. Total is 15398, and `2adfc92` touches no `xsd/` file.
   - **No owner comment has been posted since 2026-10-01 on any of the five
     human decisions:** #1880 (which gates #1002), #1885, #1790, #1923 and
     #2022.
 - **`needs-replan` is 2: #2081 and #1856.** Next planning actions 1 and 2
   carry them.
-- **No measured refactor was re-run.** `698ea54` touches only `validate/cvcid.go`,
-  `validate/cvcidentityconstraint.go` and their tests, and none of their
-  commands reads those files. They stand as measured: #2041 3 on `4fcf97c`;
-  #1958 2, #1865 2, #1757 1, #1770 2, #363 2, and #2101 1 and 1, all on
-  `0f69cdb`. All are flat, and none enters the band on its figure.
+- **No measured refactor was re-run.** `2adfc92` edits only comments in
+  `validate/assess.go`, `cvccomplexcontent.go`, `doc.go` and `validate.go`,
+  and no refactor's command reads those files. They stand as measured: #2041
+  3 on `4fcf97c`; #1958 2, #1865 2, #1757 1, #1770 2, #363 2, and #2101 1 and
+  1, all on `0f69cdb`. All are flat, and none enters the band on its figure.
 
 ### Persona consultations: not re-run this pass
 
 **The cartographer role-plays no persona and does not spawn one** (#416).
-**No persona story was handed to this pass**, and `698ea54` adds no exported
+**No persona story was handed to this pass**, and `2adfc92` adds no exported
 identifier. **Eighteen findings from the 2026-09-17 to 2026-09-29
 consultations are open and unconsumed:** #1568–#1571, #1593–#1596, #1626,
 #1684, #1685, #1687, #1688, #1843, #1845, #1894, #1895 and #1898. Open
@@ -219,21 +222,21 @@ This is ordered for a `/develop` session: take the highest row you can start.
 unfed run cannot print RETIRED. Each row names one issue (#1636).
 
 **The ordering principle for this stamp:** no startable measured product
-bound remains. #1856's is parked for replan, and M5's north star is vacated
-until the next `/backlog` re-runs the partition. The band is therefore the
-doc debt in the files the recent landings edited. No process issue enters
-the band. #2007 belongs to the orchestrating session, and every other process
+bound remains, and the `validate` doc debt the last band held is spent. The
+band is the M5 `validate` residue, product first: a missing charge, then the
+unrecorded declines, then the marker's ruling. No process issue enters the
+band. #2007 belongs to the orchestrating session, and every other process
 issue is queued for the `/retro` on 2026-10-04 or waits on the owner.
 
 | # | issue | why here |
 |---|---|---|
-| 1 | #1824 | **`Ratchet: unchanged`, comments only.** Five `validate` doc follow-ups. Item 5 restates `Validator.Assess`'s guarantee sentence, which #2127 left with no clear subject. **Startable now** |
+| 1 | #2061 | **M5 product gap, bound unmeasured.** An `xsi:nil` with no ·actual value· on an element with no governing declaration is charged nothing. Its body also names `conformance/subtreeroot.go`, and its Acceptance carries the measuring recipe. **Startable now** |
+| 2 | #1093 | **M5 gap.** `governingType`'s exits that withhold a type and record nothing; landing it rewrites `Unevaluated`'s first not-recorded item, which #1824 amended. **Startable now** |
+| 3 | #1892 | **`walk.child`'s `GAP(validate)` marker, now citing it:** resolve under key-governing-ed clause 4 or rule. Shares `validate/assess.go` with #1093; whichever lands second re-reads the other. **Startable now** |
 
 **Named below the band, on purpose.**
 - **#1856 and #2081 are `needs-replan`** (next planning actions 1 and 2).
-- **M5 residue:** #2061 (declaration-less `nilValue`; its body also names
-  `conformance/subtreeroot.go`; bound unmeasured), #1892, #1093, #1848, #1849,
-  #1825 and #771.
+- **M5 residue:** #1848, #1849, #1825 and #771.
 - **`parser/xmltree` gaps, `Ratchet` unmeasured:** #2099, #2100, #753 and
   #2089 (one `classify` session can take #753 and #2089). #2101 is the
   refactor beside them.
@@ -304,11 +307,14 @@ issue is queued for the `/retro` on 2026-10-04 or waits on the owner.
    a gate-only re-judge after a forward merge), **#2127's** (round 1,
    `instance` +7 at its bound, no findings), **#1856's park** (two rejections
    on F&O flag `i`, a path the grounding never scoped), **#2132's** (round
-   1, unchanged, test-only) **and #814's** (round 1, unchanged, with three
-   stale premises corrected at grounding in a body accreted over seven weeks):
+   1, unchanged, test-only), **#814's** (round 1, unchanged, with three
+   stale premises corrected at grounding in a body accreted over seven weeks)
+   **and #1824's** (round 1, unchanged, comment-only, with the verdict's N1
+   on whether STYLE D3 pointers in public doc text may lead to unexported
+   docs):
    - four windows: 73.7 cases per session at 89% product, 177.7 at 100%, 44.4
      at 90%, and 10.0 at 90% with two repair rounds;
-   - every landing through #814's first-round accept at 0;
+   - every landing through #1824's first-round accept at 0;
    - #2081's park at grounding;
    - #2124's first develop session, which posted GROUNDING and RULING, then
      stopped with no RESUME and no code.
