@@ -90,8 +90,8 @@ func TestInstanceExecutorDecidesFromHints(t *testing.T) {
 //
 // A root that is locally valid against its type is decided valid, the empty
 // Result read through assessedSubtreeRoot as a declared root's is
-// (subtreeGate.undeclaredRoot, #2156): the last assertion, which declines as
-// undeclared-root with that method refusing unconditionally.
+// (subtreeGate.undeclaredRoot, #2156). The last assertion pins that decision:
+// it declines as undeclared-root with that method refusing unconditionally.
 func TestInstanceExecutorDecidesBuiltinTypedRoot(t *testing.T) {
 	exec := newInstanceExec()
 	for _, tc := range []struct {
@@ -243,10 +243,10 @@ func TestInstanceExecutorReadsHintsBelowRoot(t *testing.T) {
 			`<known ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd"><o:c xmlns:o="urn:o" xsi:schemaLocation="urn:o o.xsd">x</o:c></known>`,
 			false},
 		// A later hint for urn:o names o2.xsd, whose <o:d> would make "x"
-		// invalid: decided invalid following it too (union), or following it
-		// instead of o.xsd (last-wins). The later hint sits on an element in
-		// urn:p, which no hint supplied: decided invalid with the namespace
-		// taken from the element rather than the hint.
+		// invalid: decided invalid with hintsOf's covered test removed for
+		// xsi:schemaLocation, following both documents. The later hint sits on
+		// an element in urn:p, which no hint supplied: decided invalid with
+		// the namespace taken from the element rather than the hint.
 		{"a later hint below the root for a namespace an earlier one supplied",
 			`<known ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd"><o:c xmlns:o="urn:o" xsi:schemaLocation="urn:o o.xsd">1</o:c>` +
 				`<p:e xmlns:p="urn:p" xsi:schemaLocation="urn:o o2.xsd"/><o:d xmlns:o="urn:o">x</o:d></known>`,

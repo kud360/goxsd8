@@ -75,9 +75,9 @@ func caseSchema(backend value.Backend, c caseSpec) (*xsd.Schema, *parser.Assembl
 // schema — where the group's assembly errs (its perr is what the caller reads,
 // as without hints), the instance has a shape instanceHints refuses, no root
 // hint names an uncovered namespace (a hint below the root is never read on
-// this path), or the widened assembly declines or errs
-// (src-import clause 3.1, a hinted document whose targetNamespace is not the
-// hint's). A hint resolving to no document is skipped by parser.ParseSet itself
+// this path), or the widened assembly declines or errs (src-import clause 3.1,
+// a hinted document whose targetNamespace is not the hint's). A hint resolving
+// to no document is skipped by parser.ParseSet itself
 // (parser.AssemblyReport.UnfollowedRoots), and the widened assembly is used
 // without it.
 func groupSchema(backend value.Backend, c caseSpec) (*xsd.Schema, *parser.AssemblyReport, refusal, error) {
