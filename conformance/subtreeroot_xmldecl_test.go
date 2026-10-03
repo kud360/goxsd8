@@ -49,7 +49,7 @@ func TestRawReadsAdmitTheLabelXmltreeAdmits(t *testing.T) {
 		if err != nil || !decidable {
 			t.Fatalf("%q: assembling the schema: decidable %v, err %v", tc.prolog, decidable, err)
 		}
-		if got := assessedSubtreeRoot(schema, report, c.doc); (got == "") != tc.admit {
+		if got := assessedSubtreeRoot(strict.New(), schema, report, c.doc); (got == "") != tc.admit {
 			t.Errorf("%q: assessedSubtreeRoot refused as %q, want admitted %v, as xmltree admits", tc.prolog, got, tc.admit)
 		}
 		if got := documentCarries(c.doc, isVersioningAttr); got == tc.admit {
@@ -87,7 +87,7 @@ func TestRawReadsDecodeUTF16(t *testing.T) {
 			if err != nil || !decidable {
 				t.Fatalf("%s: assembling the schema: decidable %v, err %v", row, decidable, err)
 			}
-			if why := assessedSubtreeRoot(schema, report, c.doc); why != "" {
+			if why := assessedSubtreeRoot(strict.New(), schema, report, c.doc); why != "" {
 				t.Errorf("%s: assessedSubtreeRoot(%s) refused as %q, want admitted, as xmltree reads it", row, filepath.Base(c.doc), why)
 			}
 			if documentCarries(c.doc, isVersioningAttr) {
