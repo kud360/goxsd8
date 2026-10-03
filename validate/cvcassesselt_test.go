@@ -237,7 +237,7 @@ func TestUnresolvedNameUnderAStrictWildcardChargesTheEnclosingElement(t *testing
 	// The clause is named against the rule that STATES it and not against the
 	// Rule the error carries: cvc-assess-elt has a clause 1.1.3 of its own
 	// (key-sva's) and this is not it.
-	for _, want := range []string{"e-validity clause 1.1.3", "notKnown", "the enclosing element root"} {
+	for _, want := range []string{"·resolves· to no top-level element declaration", "e-validity clause 1.1.3", "notKnown", "the enclosing element root"} {
 		if !strings.Contains(got[0].Msg, want) {
 			t.Errorf("Msg = %q, want it to name %s", got[0].Msg, want)
 		}
@@ -252,6 +252,41 @@ func TestUnresolvedNameUnderAStrictWildcardChargesTheEnclosingElement(t *testing
 
 	wantSilence(t, cAssess(t, dSchema(t, nil, dWildcard(t, xsd.ProcessLax)), doc()),
 		"e-validity clause 1.1.3 names a strict wildcard particle alone")
+}
+
+// A name under a strict wildcard that DOES ·resolve·, to a declaration whose
+// ·selected type definition· is ·absent· (§5.3), is ·laxly assessed· too, so
+// e-validity clause 1.1.3 charges the enclosing element all the same — but the
+// message names §5.3 as the cause, not an unresolved name. The cvc-elt clause 1
+// charge comes first, at the same child, from the resolution itself.
+func TestAbsentSelectionUnderAStrictWildcardNamesItsCause(t *testing.T) {
+	schema := dSchema(t, func(b *xsd.SchemaBuilder) {
+		kid, err := xsd.NewElementDeclaration(xsderr.Loc{}, local("kid"), absentHead, nil,
+			xsd.NewGlobalScope(), nil, false, nil, []xsd.QName{absentHead.Head}, nil, false, nil)
+		if err != nil {
+			t.Fatalf("building the top-level kid element declaration: %v", err)
+		}
+		b.AddElement(kid)
+	}, dWildcard(t, xsd.ProcessStrict))
+
+	got := cAssess(t, schema, dElem("root", 1, ElementChild(dElem("kid", 2))))
+
+	if len(got) != 2 {
+		t.Fatalf("Violations() = %v, want the cvc-elt clause 1 charge then the e-validity clause 1.1.3 one", got)
+	}
+	if got[0].Rule != "cvc-elt" || got[0].Loc != loc(2, 1) {
+		t.Errorf("violations[0] = %s at %s, want cvc-elt at the child %s", got[0].Rule, got[0].Loc, loc(2, 1))
+	}
+	if got[1].Rule != "cvc-assess-elt" || got[1].Loc != loc(2, 1) {
+		t.Errorf("violations[1] = %s at %s, want cvc-assess-elt at the child %s", got[1].Rule, got[1].Loc, loc(2, 1))
+	}
+	const prefix = "the element information item kid is ·attributed to· a ***strict*** ·wildcard particle· but ·resolves· to a top-level element declaration whose ·selected type definition· is ·absent· (§5.3"
+	if !strings.HasPrefix(got[1].Msg, prefix) {
+		t.Errorf("Msg = %q, want it to open %q", got[1].Msg, prefix)
+	}
+	if !strings.Contains(got[1].Msg, "the enclosing element root") {
+		t.Errorf("Msg = %q, want it to name the enclosing element root", got[1].Msg)
+	}
 }
 
 // The same clause is WITHHELD for an item the {open content} took: an item
