@@ -504,13 +504,13 @@ import (
 // a well-formedness verdict. A validate.Result whose Err is non-nil is a walk
 // that STOPPED on a source fault mid-document, so what it did or did not charge
 // records how far the walk got and not what the document holds: the walk keeps
-// going after a charge such as an abstract declaration's, so a Result can carry BOTH a decidable
-// violation and a truncated walk. And a violation set that holds any rule
-// outside the nine enumerated declines rather than being read as a verdict a
-// later slice's wider Assess might charge under an approximation; the COUNT is
-// not a condition, since one root can honestly carry several charges (see
-// decidedNotValid). An EMPTY violation set declines unless the shape's
-// conditions above all hold.
+// going after a charge such as an abstract declaration's, so a Result can carry
+// BOTH a decidable violation and a truncated walk. And a violation set that
+// holds any rule outside the nine enumerated declines rather than being read as
+// a verdict a later slice's wider Assess might charge under an approximation;
+// the COUNT is not a condition, since one root can honestly carry several
+// charges (see decidedNotValid). An EMPTY violation set declines unless the
+// shape's conditions above all hold.
 
 // The instance lane's refusals: one token per exit at which execInstanceCase
 // declines a case, which the GOXSD_DECLINES=1 listing writes after the case's

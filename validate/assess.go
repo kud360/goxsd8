@@ -128,12 +128,12 @@ const ruleCvcType xsderr.Rule = "cvc-type"
 // clause 1 (T ·non-absent·), cvc-complex-type clause 5 over [[attributes]]
 // (key-ldt-att) and clause 6 are not evaluated, so a [Result] carrying no
 // violation says the root is declared, no element is governed by an abstract
-// declaration, and — where its type was
-// determinable — is governed by no abstract complex type, carries no
-// attribute clause 2 or clause 3.1.1 rejects, no required attribute clause 3
-// misses, no attribute whose value this backend could read and found invalid,
-// no content reject its ·governing type definition· could settle and no child
-// clause 5 rejects, and says nothing else about the document.
+// declaration, and — where its type was determinable — is governed by no
+// abstract complex type, carries no attribute clause 2 or clause 3.1.1
+// rejects, no required attribute clause 3 misses, no attribute whose value
+// this backend could read and found invalid, no content reject its ·governing
+// type definition· could settle and no child clause 5 rejects, and says
+// nothing else about the document.
 //
 // It panics if root is nil, on the same grounds as [ElementChild].
 func (v *Validator) Assess(root Element) *Result {

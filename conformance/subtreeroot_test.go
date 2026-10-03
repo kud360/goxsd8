@@ -430,9 +430,9 @@ func TestInstanceExecutorChargesIdentityConstraintBelowTheRoot(t *testing.T) {
 // never reaches the gate. With validate's walk.abstractDeclaration call
 // deleted, each row is decided VALID instead, the gate admitting the
 // declaration: the walk's charge is the only thing between an abstract
-// declaration and a false pass. The concrete member substituting for the head is the control:
-// the walk charges nothing for it and the gate admits it, so it is decided
-// VALID.
+// declaration and a false pass. The concrete member substituting for the head
+// is the control: the walk charges nothing for it and the gate admits it, so it
+// is decided VALID.
 func TestInstanceExecutorChargesAbstractDeclarationBelowTheRoot(t *testing.T) {
 	exec := newInstanceExec().status()
 	group := headKnown(`<xs:element name="h" type="A" abstract="true"/><xs:element name="m" type="R" substitutionGroup="h"/>`)
