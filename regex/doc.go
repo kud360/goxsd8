@@ -38,15 +38,17 @@
 // \i \c (NameStartChar/NameChar, §G.4.2.5) and their complements \I \C,
 // \p{…}/\P{…} including Unicode blocks (\p{IsBasicLatin}), and class
 // subtraction ([a-z-[m]], including name-escape bases like [\i-[:]]) — is
-// shared between flavors. Go RE2's counted-repeat limit (1000) is a
-// documented deviation surfaced as a translation error, not a silent
-// truncation; that refusal is no verdict on the pattern, and it is the one
-// failure CheckSyntax below reports as no failure at all, under regex.go's
-// GAP(regex) marker on maxRepeat (#1474). Block names resolve against a table
-// tools/blockgen generates from a pinned Unicode 15.0.0 Blocks.txt plus
-// §G.4.2.3's superseded Unicode 3.1 names; a name production [96] admits that
-// names none of those blocks denotes the set of all characters under both \p
-// and \P (§G.4.2.4), and no warning is issued.
+// shared between flavors, except that under FlavorFO with flag i a negated
+// group's subtraction [^P-[C]] still matches the complement of (P minus C),
+// under parseClassBody's GAP(regex) marker (#2148). Go RE2's counted-repeat
+// limit (1000) is a documented deviation surfaced as a translation error, not
+// a silent truncation; that refusal is no verdict on the pattern, and it is
+// the one failure CheckSyntax below reports as no failure at all, under
+// regex.go's GAP(regex) marker on maxRepeat (#1474). Block names resolve
+// against a table tools/blockgen generates from a pinned Unicode 15.0.0
+// Blocks.txt plus §G.4.2.3's superseded Unicode 3.1 names; a name production
+// [96] admits that names none of those blocks denotes the set of all
+// characters under both \p and \P (§G.4.2.4), and no warning is issued.
 //
 // # Contract (implemented from M3)
 //

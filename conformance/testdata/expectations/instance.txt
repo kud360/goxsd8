@@ -4151,12 +4151,12 @@ MS-Regex2006-07-15/RegexTest_41/instance/RegexTest_41.v pass
 MS-Regex2006-07-15/RegexTest_42/instance/RegexTest_42.v pass
 MS-Regex2006-07-15/RegexTest_420/instance/RegexTest_420.i pass
 MS-Regex2006-07-15/RegexTest_421/instance/RegexTest_421.i pass
-MS-Regex2006-07-15/RegexTest_422/instance/RegexTest_422.i fail
+MS-Regex2006-07-15/RegexTest_422/instance/RegexTest_422.i pass
 MS-Regex2006-07-15/RegexTest_424/instance/RegexTest_424.i pass
 MS-Regex2006-07-15/RegexTest_425/instance/RegexTest_425.i pass
 MS-Regex2006-07-15/RegexTest_426/instance/RegexTest_426.i pass
 MS-Regex2006-07-15/RegexTest_429/instance/RegexTest_429.i pass
-MS-Regex2006-07-15/RegexTest_430/instance/RegexTest_430.i fail
+MS-Regex2006-07-15/RegexTest_430/instance/RegexTest_430.i pass
 MS-Regex2006-07-15/RegexTest_433/instance/RegexTest_433.i pass
 MS-Regex2006-07-15/RegexTest_434/instance/RegexTest_434.i pass
 MS-Regex2006-07-15/RegexTest_438/instance/RegexTest_438.i pass
