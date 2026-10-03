@@ -242,9 +242,9 @@
 // is not charged twice. That lexical is read as cvc-elt clause 3 reads it, off
 // the four literals and not through the value.Backend, so this is the one
 // cvc-attribute clause 3 charge that wraps no String Valid verdict as its
-// cause. Neither built-in declaration's charge reaches an element its parent
-// ·attributed· to nothing — one walked against nothing below a decline or a
-// charge — since the true schema may ·skip· that element's attributes
+// cause. Neither built-in declaration's charge reaches an undecided element —
+// one whose governance this package could not decide, walked against nothing
+// below a decline — since the true schema may ·skip· that element's attributes
 // (key-governing-ad clause 3 and its Note).
 //
 // The seventh is the root's content half, against the same type's {content
@@ -311,12 +311,24 @@
 // ·skipped· along with every element beneath it (cvc-assess-elt clauses 2 and
 // 3.2) — for the {open content} a reading and not a quotation, key-skipped
 // naming a skip wildcard and never an Open Content, which the ·default
-// binding· of cos-content-act-restrict clause 6 settles (#1969) — and a child
-// its parent ·attributes· to nothing, a parent whose own type this package
-// could not determine or whose content it declined or charged, which is
-// assessed against nothing along with its whole subtree. A child whose name
-// ·resolves· to no declaration, and that exception does not reach, is neither:
-// it is ·laxly assessed· against xs:anyType (key-lva, walk.child, #1823).
+// binding· of cos-content-act-restrict clause 6 settles (#1969) — and an
+// undecided child, whose governance this package could not decide at all: a
+// child of a parent whose own type it could not determine, or whose clause 1.4
+// xsd.Schema.ContentMatcher does not decide, which is assessed against nothing
+// along with its whole subtree and withholds cvc-id clause 1 (#1892).
+//
+// A child its parent DECIDEDLY ·attributes· to nothing — a ·nilled· or
+// simple-typed parent, an empty or simple {content type}, an item no particle
+// or {open content} admits, and, by this package's reading rather than the
+// spec's, any child after the parent's content is charged, the matcher not
+// being advanced past a charge — is governed per key-governing-ed clause 4,
+// which carries no attribution condition: by its ·locally declared type·
+// within the parent's complex type where that is non-·absent· (clause 4.3;
+// key-governing-type-elem clauses 6 and 7), else by the declaration its name
+// ·resolves· to, else by its xsi:type alone (key-governing-type-elem clause
+// 8), else it is ·laxly assessed·. A child whose name ·resolves· to no
+// declaration, and that exception does not reach, is likewise ·laxly
+// assessed· against xs:anyType (key-lva, walk.child, #1823).
 //
 // The eighth is cvc-identity-constraint (§3.11.4), over the {identity-constraint
 // definitions} of the ·governing element declaration· of every element the

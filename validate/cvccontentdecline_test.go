@@ -171,12 +171,12 @@ func TestSpecialFixedValueIsDecidedOverTheMappingUnion(t *testing.T) {
 	}
 }
 
-// A {content type} xsd.Schema.ContentMatcher declines leaves each element
-// [[child]] unmatched, and each is recorded under cvc-complex-content at the
-// CHILD's own location — where a charge against it would have sat. The model
-// is two repeating sibling groups past the matcher's region ceiling
-// (xsd.maxPartitionStates), the shape its GAP(xsd) decline names.
-func TestUndecidedContentModelIsRecordedPerChild(t *testing.T) {
+// declinedContent is a {content type} xsd.Schema.ContentMatcher declines: two
+// repeating sibling groups, over a and c, around a b, past the matcher's
+// region ceiling (xsd.maxPartitionStates), the shape its GAP(xsd) decline
+// names.
+func declinedContent(t *testing.T) xsd.ContentType {
+	t.Helper()
 	group := func(max int, leaf string) xsd.Particle {
 		t.Helper()
 		unbounded, err := xsd.NewUnboundedOccurs(xsderr.Loc{}, 1)
@@ -201,7 +201,14 @@ func TestUndecidedContentModelIsRecordedPerChild(t *testing.T) {
 		}
 		return gp
 	}
-	schema := cSchema(t, cSequence(t, false, group(1000, "a"), cParticle(t, "b", 1, 1), group(1000, "c")))
+	return cSequence(t, false, group(1000, "a"), cParticle(t, "b", 1, 1), group(1000, "c"))
+}
+
+// A {content type} xsd.Schema.ContentMatcher declines leaves each element
+// [[child]] unmatched, and each is recorded under cvc-complex-content at the
+// CHILD's own location — where a charge against it would have sat.
+func TestUndecidedContentModelIsRecordedPerChild(t *testing.T) {
+	schema := cSchema(t, declinedContent(t))
 
 	got, undecided := assessRecorded(t, schema, cRoot("a", "b"))
 	wantSilence(t, got, "an unmatched child charges nothing")

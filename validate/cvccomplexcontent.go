@@ -94,8 +94,8 @@ const ruleCvcComplexContent xsderr.Rule = "cvc-complex-content"
 // 3.2's. Both being nil is a ·governing type definition· this package could not
 // determine, which decides NEITHER arm: every child is walked and none is
 // charged or passed by a type, and none is ·attributed to· anything either, so
-// the whole subtree below such an element is walked against no type in its turn
-// ([walk.childGoverning]). A ·laxly assessed· element, which has no type to
+// the whole subtree below such an element is walked against no type in its turn,
+// undecided ([walk.child]). A ·laxly assessed· element, which has no type to
 // determine, is the one exception ([walk.child]). The two cvc-elt clauses below
 // still apply — they read the DECLARATION and not the type. A nil matcher
 // beside a non-nil governing is none of those states: it is clause 1.4 alone
@@ -369,33 +369,38 @@ func (c *contentCheck) text(w *walk, t Text) {
 // what clause 1.4 ·attributed· the item to (§3.4.4.4) for the walk's own descent
 // into it (cvc-assess-elt clause 3.1, [walk.childGoverning]).
 //
-// The attribution is nil wherever nothing attributed the item: a check with no
-// ·governing type definition· — a ·laxly assessed· parent's included, whose
-// attribution [walk.child] supplies instead — a simple one, a ·nilled·
-// element, an element already charged, a {variety} that admits no element
-// information item [[child]] at all, and a clause 1.4 that declined or
-// charged. A nilled element's child is still WALKED — the charge is against
-// the parent, not the child, and the child's own subtree is assessed against
-// nothing rather than skipped.
-func (c *contentCheck) element(w *walk, child Element) xsd.Attribution {
+// The attribution is nil wherever nothing attributed the item, and undecided
+// reports the two nils that are this package's own declines rather than the
+// spec's outcomes: a check with no ·governing type definition· this package
+// could determine — a ·laxly assessed· parent's included, whose attribution
+// [walk.child] supplies before it reads undecided — and a clause 1.4
+// [xsd.Schema.ContentMatcher] does not decide. Every other nil is decided: a
+// simple ·governing type definition·, a ·nilled· element, a {variety} that
+// admits no element information item [[child]] at all, a clause 1.4 that
+// charged, and an element already charged — that last by this package's
+// reading, not the spec's: the matcher is not advanced past a charge, so a
+// later child is read as attributed to nothing. Either way the child is still WALKED —
+// every charge here is against the parent, not the child — and how it is
+// governed is the package promise the package doc states.
+func (c *contentCheck) element(w *walk, child Element) (a xsd.Attribution, undecided bool) {
 	if c.charged {
-		return nil
+		return nil, false
 	}
 	if c.nilled {
 		c.charge(w, ruleCvcElt, "3.2.3.1", child.Loc(),
 			"the element %s has xsi:nil = true, so it is ·nilled·, but it has the element information item %s among its [[children]], and cvc-elt clause 3.2.3.1 admits no character or element information item [[children]] on a ·nilled· element",
 			c.e.Name(), child.Name())
-		return nil
+		return nil, false
 	}
 	c.sawElement = true
 	if st := c.g.simpleType(); st != nil {
 		c.charge(w, ruleCvcType, "3.1.2", child.Loc(),
 			"the element %s has the element information item %s among its [[children]], but its ·governing type definition· %s is a Simple Type Definition, and cvc-type clause 3.1.2 admits no element information item [[children]] on such an element",
 			c.e.Name(), child.Name(), typeName(st))
-		return nil
+		return nil, false
 	}
 	if c.governing() == nil {
-		return nil
+		return nil, true
 	}
 	switch c.governing().ContentType().Variety() {
 	case xsd.ContentEmpty:
@@ -409,7 +414,7 @@ func (c *contentCheck) element(w *walk, child Element) xsd.Attribution {
 	case xsd.ContentElementOnly, xsd.ContentMixed:
 		return c.match(w, child)
 	}
-	return nil
+	return nil, false
 }
 
 // match advances the content model over one element information item (clause
@@ -423,30 +428,33 @@ func (c *contentCheck) element(w *walk, child Element) xsd.Attribution {
 // satisfies NEITHER half — no ·path· in {particle} at its position and not
 // ·valid· with respect to {open content}.{wildcard} — which is clause 2 or
 // clause 3 failing as a whole.
-func (c *contentCheck) match(w *walk, child Element) xsd.Attribution {
+//
+// Its two results are [contentCheck.element]'s, undecided only for the nil
+// matcher.
+func (c *contentCheck) match(w *walk, child Element) (xsd.Attribution, bool) {
 	clause := c.contentClause()
 	if c.matcher == nil {
 		c.decline(w, child.Name(), child.Loc(), ruleCvcComplexContent, clause,
 			"the element information item %s among the [[children]] of %s was not matched against the {content type} of its ·governing type definition·: xsd.Schema.ContentMatcher does not decide that {content type}'s shape, so whether the sequence is ·valid· with respect to it as cvc-complex-content clause %s requires is undecided",
 			child.Name(), c.e.Name(), clause)
-		return nil
+		return nil, true
 	}
 	if a, ok := c.matcher.Next(child.Name()); ok {
 		if w.log.Enabled(context.Background(), slog.LevelDebug) {
 			c.log(w, child.Name(), child.Loc(), ruleCvcComplexContent, clause, "attributed to "+attributedTo(a))
 		}
-		return a
+		return a, false
 	}
 	if c.openContent() != nil {
 		c.charge(w, ruleCvcComplexContent, clause, child.Loc(),
 			"the element information item %s is ·attributed to· no particle of the {content type} of %s at its position in the [[children]], and its ·expanded name· is not ·valid· with respect to that {content type}'s {open content} wildcard either, so the sequence is not ·valid· with respect to that {content type} as cvc-complex-content clause %s requires (Item Valid (Wildcard), §3.10.4.1)",
 			child.Name(), c.e.Name(), clause)
-		return nil
+		return nil, false
 	}
 	c.charge(w, ruleCvcComplexContent, "1", child.Loc(),
 		"the element information item %s is ·attributed to· no particle of the {content type} of %s at its position in the [[children]], so the sequence is not ·valid· with respect to that {content type} as cvc-complex-content clause 1 requires (Element Sequence Accepted (Particle), §3.9.4.3)",
 		child.Name(), c.e.Name())
-	return nil
+	return nil, false
 }
 
 // end settles the clauses that only exhausted [[children]] can settle.

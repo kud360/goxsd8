@@ -470,10 +470,10 @@ var (
 // — ·laxly assessed·, or ·strictly assessed· against an xsi:type or a ·locally
 // declared type· — as cvc-attribute clause 3 against the built-in declaration
 // that governs the attribute (key-governing-ad, validate's
-// walk.instanceNilLexical). An element it leaves unattributed is assessed
-// against nothing and charged nothing, and arrives only beside a decline or a
-// charge already in the Result (#2159). element alone reads the value, for
-// key-nilled, and refuses a lexical it cannot read rather than guess one.
+// walk.instanceNilLexical). An element it leaves undecided is assessed against
+// nothing and charged nothing, and arrives only beside a decline already in the
+// Result (#2159, #1892). element alone reads the value, for key-nilled, and
+// refuses a lexical it cannot read rather than guess one.
 func nilValue(attrs []xml.Attr) (value, ok bool) {
 	i := slices.IndexFunc(attrs, func(a xml.Attr) bool { return a.Name == xsiNil })
 	if i < 0 {

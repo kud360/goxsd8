@@ -107,9 +107,9 @@ import (
 //     charged attribute's [validity] is invalid, and e-validity's conjunction
 //     (§3.3.5.1 clause 1.1.1.2) fails for the root on an invalid attribute of
 //     its own whatever else holds. None of them is charged against an element
-//     validate leaves unattributed — in the main one its parent ·attributed· to
-//     nothing, whose attributes the true schema may ·skip· — which validate
-//     reaches only beside a decline or a charge already in the Result (#2159).
+//     validate leaves undecided — one whose governance it could not decide,
+//     whose attributes the true schema may ·skip· — which validate reaches only
+//     beside a decline already in the Result (#2159, #1892).
 //  5. cvc-au (§3.5.4), when a matched attribute's ·actual value· disagrees with
 //     a fixed {value constraint} on the attribute USE — a different property
 //     from case 4's, which is why both can be charged for one attribute (#766).
@@ -355,13 +355,18 @@ import (
 //     nothing, neither of which arises under this gate:
 //     walk.idDefaultedAttributes' unresolved {attribute declaration}
 //     ("Unreachable on a *xsd.Schema that exists"), which the gate refuses
-//     besides, since each use's declaration must resolve; and walk.child's
-//     "child its parent ·attributed to· nothing", which subtreeGate.child
-//     keeps out by refusing every child its parent's xsd.Schema.ContentMatcher
-//     attributes to nothing, the walk attributing each child through the same
-//     matcher — or, below a ·laxly assessed· parent, to ·xs:anyType·'s lax
-//     wildcard ahead of that site, as the gate's matcher over ·xs:anyType·
-//     does. Keep both refusals when editing the gate: the gate's reading of
+//     besides, since each use's declaration must resolve (refuseAttributeUse);
+//     and walk.child's undecided child, which arises only below a parent whose
+//     {content type} xsd.Schema.ContentMatcher declines, which the gate
+//     refuses (refuseContentMatcher), or below a parent whose ·governing type
+//     definition· is undetermined, which the gate refuses too, admitting no
+//     element whose type it cannot determine — or, below a ·laxly assessed·
+//     parent, the walk attributes the child to ·xs:anyType·'s lax wildcard
+//     ahead of that site, as the gate's matcher over ·xs:anyType· does. A
+//     third site, walk.localGovernance's undecided exit, sets ids.declined
+//     beside its own walk.decline record and is unreachable for a finalized
+//     Schema, so it is no site that records nothing. Keep refuseContentMatcher
+//     and refuseAttributeUse when editing the gate: the gate's reading of
 //     cvc-id clause 1 rests on them. String Valid clause 3's ·declared entity
 //     name· check (key-vde) is the walk's too, decided per ENTITY value by
 //     walk.entitiesDeclared and recorded as an [Unevaluated] by its callers
@@ -372,16 +377,16 @@ import (
 //     charges cvc-datatype-valid for a value naming no declared notation, at
 //     every depth, and its callers record it where undecided; a value outside
 //     a NOTATION type's enumeration is the backend's cvc-enumeration-valid
-//     verdict (Datatypes §4.3.5.4), which Datatype Valid entails.
-//     A ·defaulted attribute· of a NOTATION-derived type is recorded, never
-//     decided (walk.defaultedAttribute). The gate therefore reads no simple
-//     type's closure: finalize's src-resolve pass (xsd's resolveSimpleType)
-//     resolves every {base type definition}, {item type definition} and
-//     {member type definitions} reference of every simple type a Schema holds,
-//     so no closure the walk reads is unreadable, and a String Valid the
-//     backend withholds is recorded by the callers above. Each use's
-//     declaration must resolve to a simple type (recordedAttributeType), so an
-//     unresolvable {attribute declaration} is refused.
+//     verdict (Datatypes §4.3.5.4), which Datatype Valid entails. A ·defaulted
+//     attribute· of a NOTATION-derived type is recorded, never decided
+//     (walk.defaultedAttribute). The gate therefore reads no simple type's
+//     closure: finalize's src-resolve pass (xsd's resolveSimpleType) resolves
+//     every {base type definition}, {item type definition} and {member type
+//     definitions} reference of every simple type a Schema holds, so no
+//     closure the walk reads is unreadable, and a String Valid the backend
+//     withholds is recorded by the callers above. Each use's declaration must
+//     resolve to a simple type (recordedAttributeType), so an unresolvable
+//     {attribute declaration} is refused.
 //   - cvc-complex-type clause 2: every attribute beyond namespace declarations
 //     and the four xsi: names matches an attribute use (2.1) or is
 //     ·attributed to· the {attribute wildcard} (2.2, cvc-wildcard §3.10.4.1)
@@ -407,11 +412,11 @@ import (
 //     none, key-governing-ad); xsi:type is the walk's (cvc-attribute clauses 3 and 5,
 //     charged or recorded wherever it is no QName or ·resolves· to no type).
 //     Neither cvc-attribute charge reaches an element the walk leaves
-//     unattributed (case 4 above), and none needs to: such an element arrives
-//     only beside a decline or a charge, so no empty Result carries one; and
-//     xsi:schemaLocation and xsi:noNamespaceSchemaLocation are each ·valid·
-//     against their built-in declaration's anyURI or list-of-anyURI type
-//     (§3.2.7), whose lexical spaces admit every string (Datatypes §3.3.17).
+//     undecided (case 4 above), and none needs to: such an element arrives
+//     only beside a decline, so no empty Result carries one; and xsi:schemaLocation
+//     and xsi:noNamespaceSchemaLocation are each ·valid· against their built-in
+//     declaration's anyURI or list-of-anyURI type (§3.2.7), whose lexical spaces
+//     admit every string (Datatypes §3.3.17).
 //   - cvc-complex-type clause 5: the walk's for every element [[child]],
 //     which charges one whose ·governing type definition· is neither the same
 //     as nor ·validly substitutable· ·without limitation· for its non-·absent·
