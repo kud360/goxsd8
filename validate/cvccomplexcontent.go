@@ -96,8 +96,7 @@ const ruleCvcComplexContent xsderr.Rule = "cvc-complex-content"
 // charged or passed by a type, and none is ·attributed to· anything either, so
 // the whole subtree below such an element is walked against no type in its turn
 // ([walk.childGoverning]). A ·laxly assessed· element, which has no type to
-// determine, is the one exception: [walk.child] hands its [[children]] the
-// attribution xs:anyType's lax wildcard makes. The two cvc-elt clauses below
+// determine, is the one exception ([walk.child]). The two cvc-elt clauses below
 // still apply — they read the DECLARATION and not the type. A nil matcher
 // beside a non-nil governing is none of those states: it is clause 1.4 alone
 // declining — a shape [xsd.Schema.ContentMatcher] does not decide — while
