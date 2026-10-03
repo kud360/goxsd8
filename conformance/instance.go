@@ -269,8 +269,13 @@ import (
 //     declared type· is ·absent·, and by clause 6 where a Wildcard's child has a
 //     non-·absent· one: with no declaration, ·overriding· it is cvc-complex-type
 //     clause 5's condition, which the walk charges, so an empty Result implies
-//     clause 6 holds. One whose xsi:type names none is refused. No element of a
-//     subtree whose Result is empty is therefore assessed against no type.
+//     clause 6 holds. One whose xsi:type names none is refused. A root
+//     resolving to none whose xsi:type names a type definition has it as its
+//     ·governing type definition· by clause 8 and is held to the same
+//     conditions against it, never ·nilled· (subtreeGate.undeclaredRoot,
+//     #2156); a root resolving to none with no such xsi:type is refused. No
+//     element of a subtree whose Result is empty is therefore assessed against
+//     no type.
 //   - cvc-elt clauses 2 to 6, at every element: {abstract} false, and a
 //     ·selected type definition· the gate determines itself (§3.3.4.1
 //     key-selected-type): the {type definition}, or the type a {type table}
@@ -503,7 +508,11 @@ import (
 // the instance's hints never reaches this charge at the root: assembleHints
 // declines a hinted schema declaring no top-level element for it. Nor does the
 // built-ins schema: builtinsSchema hands it only to a root whose xsi:type
-// resolves in it.
+// resolves in it. A root undeclared for that reason whose xsi:type resolves is
+// not charged at all: it is ·strictly assessed· against that type
+// (assessedSubtreeRoot, #2156), and a "valid" the missing declaration's
+// constraints would have overturned is the other direction, which can only
+// cost wins: the lane observes "valid" where the suite says "invalid".
 //
 // Three further declines close the ways a NON-verdict could reach that
 // comparison. An instance document that will not resolve or read is a recorded
@@ -561,10 +570,10 @@ const (
 	// assessedSubtreeRoot's pre-gate refusals (subtreeroot.go).
 	refuseVersioned       refusal = "versioned"        // closureVersioned
 	refuseGateUnresolved  refusal = "gate-unresolved"  // the instance will not resolve for the re-read
-	refuseUndeclaredRoot  refusal = "undeclared-root"  // no top-level declaration for the root
 	refuseEpilogDirective refusal = "epilog-directive" // documentEnd: a directive after the root
 
 	// subtreeGate and the free functions it calls (subtreeroot.go).
+	refuseUndeclaredRoot      refusal = "undeclared-root"             // undeclaredRoot: no declaration, no resolving xsi:type
 	refuseNilLexical          refusal = "nil-lexical"                 // nilValue: no ·actual value·, at element
 	refuseTypeTableUndecided  refusal = "type-table-undecided"        // selectedType: CompileCTATest declines a {test} it reached
 	refuseTypeTableWhitespace refusal = "type-table-whitespace"       // selectedType: ctaAttributes cannot normalize a value

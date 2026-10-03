@@ -112,6 +112,46 @@ func TestInstanceExecutorDecidesAbstractRoot(t *testing.T) {
 	// under a non-abstract declaration charges nothing and is decided VALID.
 }
 
+// TestInstanceExecutorDecidesXsiTypedUndeclaredRoot proves a root with no
+// top-level declaration whose xsi:type ·resolves· is decided against that type
+// (#2156): it is the root's ·governing type definition· (key-governing-type-elem
+// clause 8), the root is ·strictly assessed· against it (cvc-assess-elt clause
+// 1), so it is NOT the undeclared-root case above, and cvc-type decides it. An
+// xsi:nil on it has no effect, whatever its value: key-nilled needs a
+// declaration whose {nillable} is true, so cvc-type clause 3.1.3 reads its empty
+// content against xs:int as if xsi:nil were absent. Every valid row declines as
+// undeclared-root with subtreeGate.undeclaredRoot refusing unconditionally.
+func TestInstanceExecutorDecidesXsiTypedUndeclaredRoot(t *testing.T) {
+	const schemaBody = knownRoot + `<xs:complexType name="T"/>` +
+		`<xs:simpleType name="I"><xs:restriction base="xs:int"/></xs:simpleType>`
+	exec := newInstanceExec()
+	for _, tc := range []struct {
+		why, instance string
+		valid         bool
+	}{
+		{"an undeclared root typed by a resolved complex xsi:type",
+			`<unknown ` + xsiNS + ` xsi:type="T"/>`, true},
+		{"an undeclared root typed by a resolved simple xsi:type",
+			`<unknown ` + xsiNS + ` xsi:type="I">1</unknown>`, true},
+		{"an undeclared root whose content its simple xsi:type rejects",
+			`<unknown ` + xsiNS + ` xsi:type="I">x</unknown>`, false},
+		{"an xsi:nil true on an undeclared root, its content valid",
+			`<unknown ` + xsiNS + ` xsi:type="I" xsi:nil="true">1</unknown>`, true},
+		{"an xsi:nil true on an undeclared root does not nil its empty content",
+			`<unknown ` + xsiNS + ` xsi:type="I" xsi:nil="true"/>`, false},
+	} {
+		for _, expect := range []bool{true, false} {
+			st, why := exec(instanceCase(t, schemaBody, tc.instance, expect))
+			if why != "" {
+				t.Errorf("%s: declined as %q under expectValid=%v, want decided %s", tc.why, why, expect, validityWord(tc.valid))
+			}
+			if st.IsPass() != (expect == tc.valid) {
+				t.Errorf("%s: under expectValid=%v the executor answered pass=%v, want it decided %s", tc.why, expect, st.IsPass(), validityWord(tc.valid))
+			}
+		}
+	}
+}
+
 // TestInstanceExecutorDeclinesUndecidableShapes proves every shape this slice
 // cannot decide is DECLINED in BOTH directions rather than guessed.
 func TestInstanceExecutorDeclinesUndecidableShapes(t *testing.T) {
@@ -121,17 +161,6 @@ func TestInstanceExecutorDeclinesUndecidableShapes(t *testing.T) {
 		instance   string
 		refused    refusal
 	}{
-		{
-			// An undeclared root whose xsi:type ·resolves· determines a ·governing
-			// type definition· of its own (key-governing-type-elem clause 8), so it
-			// is ·strictly assessed· against that type and is NOT the
-			// undeclared-root case above. It charges nothing here, and no charge is
-			// not a verdict.
-			"an undeclared root typed by a resolved xsi:type charges nothing",
-			knownRoot + `<xs:complexType name="T"/>`,
-			`<unknown xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="T"/>`,
-			refuseUndeclaredRoot,
-		},
 		{
 			"an instance document the reader rejects is a gap, not a well-formedness verdict",
 			knownRoot, `<unknown`, refuseInstanceUnread,
