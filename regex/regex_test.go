@@ -104,6 +104,46 @@ func TestCharClassSubtraction(t *testing.T) {
 	}
 }
 
+// TestNegatedGroupSubtraction pins production [76] for a negCharGroup base:
+// G-C is "the set of all characters in C(G) that are not in C(C)"
+// (Datatypes Appendix G), so [^P-[C]] is (complement of P) minus C, never the
+// complement of (P minus C) (cvc-pattern-valid, #1856). The rows marked
+// fail-before accepted their miss when the subtraction was folded inside the
+// negation; the rest are no-change guards. "[a-z-[^c-x-[a]]]" carries a
+// negated operand with a subtraction of its own, the classMatchedSet path: its
+// operand is (complement of c-x) minus a, so a survives the outer subtraction.
+func TestNegatedGroupSubtraction(t *testing.T) {
+	cases := []struct {
+		pattern     string
+		match, miss []string
+	}{
+		// fail-before: a, g.
+		{`[^cde-[ag]]`, []string{"b", "f"}, []string{"a", "g", "c"}},
+		// fail-before: the RegexTest_422 instance string.
+		{`([^0-9-[a-zAE-Z]]|[\w-[a-zAF-Z]])+`, nil, []string{"azBCDE1234567890BCDEFza"}},
+		// fail-before: a.
+		{`[a-z-[^c-x-[a]]]`, []string{"a", "c", "x"}, []string{"b", "y", "z"}},
+		{`[a-z-[^aeiou]]`, []string{"a", "e", "i", "o", "u"}, []string{"b", "z", "A"}},
+		// fail-before: " " (\s leaves the complement of \w); "a" is the
+		// RegexTest_424 guard.
+		{`([\p{Ll}-[aeiou]]|[^\w-[\s]])+`, []string{"b", "!"}, []string{"a", " "}},
+		{`[\w-[^aeiou]]`, []string{"a", "u"}, []string{"b", "!"}},
+	}
+	for _, c := range cases {
+		re := mustCompile(t, mustTranslate(t, c.pattern, FlavorXSD, ""))
+		for _, m := range c.match {
+			if !re.MatchString(m) {
+				t.Errorf("%s must match %q", c.pattern, m)
+			}
+		}
+		for _, m := range c.miss {
+			if re.MatchString(m) {
+				t.Errorf("%s must not match %q", c.pattern, m)
+			}
+		}
+	}
+}
+
 func TestUnicodeBlockEscapes(t *testing.T) {
 	basic := mustCompile(t, mustTranslate(t, `\p{IsBasicLatin}+`, FlavorXSD, ""))
 	if !basic.MatchString("Az09") {
@@ -272,6 +312,7 @@ func TestErrorsSurfaceNeverSilentlyAccepted(t *testing.T) {
 		{"unclosed-group", "(abc", FlavorFO, "", ruleFOPattern},
 		{"unclosed-class", "[abc", FlavorXSD, "", ruleXSDPattern},
 		{"empty-negated-class", "[^]", FlavorXSD, "", ruleXSDPattern},
+		{"empty-negated-class-subtraction", "[^-[bc]]", FlavorXSD, "", ruleXSDPattern},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
