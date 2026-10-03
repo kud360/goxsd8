@@ -559,15 +559,6 @@ func TestInstanceExecutorDeclinesOutsideAssessedSubtreeRoot(t *testing.T) {
 			refuseDoctype,
 		},
 		{
-			// subtreeGate's nilValue: governed by §3.2.7's built-in declaration
-			// (key-governing-ad), the attribute is not ·valid· against xs:boolean
-			// (cvc-attribute clause 3), which the walk does not check on an
-			// element with no declaration.
-			"an xsi:nil with no ·actual value· on a lax wildcard particle's child resolving no declaration",
-			wildcardChild("lax"), `<known ` + xsiNS + `><u xsi:nil="maybe"/></known>`,
-			refuseLaxNilLexical,
-		},
-		{
 			// A guard, not a charged row: the gate refused this shape before #1860
 			// too. The walk charges nothing and records nothing for it, a reading
 			// the suite does not share (#1912).
@@ -963,6 +954,14 @@ func TestInstanceExecutorChargesOpenContentLDT(t *testing.T) {
 			ldtOpen("xs:date", `<xs:element name="e" type="xs:string"/>`), `<known><e>2008-11-03</e><e>x</e></known>`},
 		{"an abstract complex ·locally declared type· (cvc-type clause 2)",
 			ldtOpenChoice("T", `<xs:complexType name="T" abstract="true"/>`), `<known><a/><e/></known>`},
+		// cvc-attribute clause 3 against the built-in declaration for the nil
+		// attribute (§3.2.7.2, key-governing-ad, #2061), under the ·locally
+		// declared type· (key-governing-type-elem clause 7) and under an xsi:type
+		// ·overriding· it (clause 6).
+		{"an xsi:nil with no ·actual value· (cvc-attribute clause 3)",
+			ldtOpen("xs:date", ""), `<known ` + xsiNS + `><e>2008-11-03</e><e xsi:nil="maybe">2008-11-04</e></known>`},
+		{"an xsi:nil with no ·actual value· beside an ·overriding· xsi:type (cvc-attribute clause 3)",
+			ldtOpen("xs:date", ""), `<known ` + xsiXS + `><e>2008-11-03</e><e xsi:type="xs:date" xsi:nil="maybe">2008-11-04</e></known>`},
 	} {
 		if !exec(instanceCase(t, tc.schemaBody, tc.instance, false)).IsPass() {
 			t.Errorf("%s: the walk charges the {open content} child; the executor must agree with a suite-invalid case", tc.why)
@@ -977,8 +976,8 @@ func TestInstanceExecutorChargesOpenContentLDT(t *testing.T) {
 // for an {open content}'s child whose ·locally declared type· is non-·absent·
 // (subtreeGate.localTyped, #2080): it admits an abstract complex one, whose
 // cvc-type clause 2 charge is the walk's (TestInstanceExecutorChargesOpenContentLDT),
-// and refuses an xsi:type naming no type definition, an xsi:nil with no ·actual
-// value·, and what governed refuses against the ·locally declared type·.
+// and refuses an xsi:type naming no type definition and what governed refuses
+// against the ·locally declared type·.
 func TestAssessedSubtreeRootOpenContentLDT(t *testing.T) {
 	for _, tc := range []struct {
 		why, schemaBody, instance string
@@ -991,8 +990,6 @@ func TestAssessedSubtreeRootOpenContentLDT(t *testing.T) {
 		// The child's own binding of z must reach resolveQName for its xsi:type.
 		{"an xsi:type bound by a prefix the child declares itself",
 			ldtOpen("xs:date", ""), `<known ` + xsiNS + `><e>2008-11-03</e><e xmlns:z="http://www.w3.org/2001/XMLSchema" xsi:type="z:date">2008-11-04</e></known>`, ""},
-		{"an xsi:nil with no ·actual value·",
-			ldtOpen("xs:date", ""), `<known ` + xsiNS + `><e>2008-11-03</e><e xsi:nil="maybe">2008-11-04</e></known>`, refuseNilLexical},
 		{"an element child under a simple ·locally declared type·",
 			ldtOpen("xs:date", ""), `<known><e>2008-11-03</e><e><v/></e></known>`, refuseElementChild},
 	} {
@@ -1157,6 +1154,15 @@ func TestInstanceExecutorChargesWildcardChild(t *testing.T) {
 		// would admit it were the walk not to charge clause 5.
 		{"lax, a child resolving no declaration whose xsi:type does not ·override· its ·locally declared type· (clause 5)",
 			ldtUnresolved, `<known ` + xsiXS + `><c>1</c><c xsi:type="xs:string">x</c></known>`},
+		// cvc-attribute clause 3 against the built-in declaration for the nil
+		// attribute (§3.2.7.2), which governs an xsi:nil on an element with no
+		// declaration too (key-governing-ad, #2061): ·laxly assessed·, or
+		// ·strictly assessed· against its xsi:type (key-governing-type-elem
+		// clause 8).
+		{"lax, a child resolving no declaration carrying an xsi:nil with no ·actual value·", wildcardChild("lax"), `<known ` + xsiNS + `><u xsi:nil="maybe"/></known>`},
+		{"lax, below a child resolving no declaration, an xsi:nil with no ·actual value·", wildcardChild("lax"), `<known ` + xsiNS + `><u><v xsi:nil="maybe"/></u></known>`},
+		{"strict, a child resolving no declaration, an xsi:type with an xsi:nil with no ·actual value·", wildcardChild("strict"), `<known ` + xsiXS + `><u xsi:type="xs:int" xsi:nil="maybe">1</u></known>`},
+		{"lax, a child resolving no declaration, an xsi:type with an xsi:nil with no ·actual value·", wildcardChild("lax"), `<known ` + xsiXS + `><u xsi:type="xs:int" xsi:nil="maybe">1</u></known>`},
 	} {
 		if !exec(instanceCase(t, tc.schemaBody, tc.instance, false)).IsPass() {
 			t.Errorf("%s: the walk charges the child; the executor must agree with a suite-invalid case", tc.why)
@@ -1193,8 +1199,6 @@ func TestAssessedSubtreeRootUnresolvedChild(t *testing.T) {
 		// key-nilled is relative to a declaration, so a laxly assessed element
 		// is never ·nilled·: its element child is read, not refused.
 		{"lax, a child resolving no declaration carrying xsi:nil true over an element child", wildcardChild("lax"), `<known ` + xsiNS + `><u xsi:nil="true"><v/></u></known>`, ""},
-		{"lax, a child resolving no declaration carrying an xsi:nil with no ·actual value·", wildcardChild("lax"), `<known ` + xsiNS + `><u xsi:nil="maybe"/></known>`, refuseLaxNilLexical},
-		{"lax, below a child resolving no declaration, an xsi:nil with no ·actual value·", wildcardChild("lax"), `<known ` + xsiNS + `><u><v xsi:nil="maybe"/></u></known>`, refuseLaxNilLexical},
 		{
 			// The walk settles cvc-elt clause 5.2.2 for f, below the lax <u> too (#1979).
 			"lax, below a child resolving no declaration, a resolved declaration with a fixed {value constraint} (cvc-elt clause 5.2.2)",
@@ -1209,7 +1213,6 @@ func TestAssessedSubtreeRootUnresolvedChild(t *testing.T) {
 		},
 		{"lax, a child resolving no declaration, an xsi:type naming a simple type over an element child", wildcardChild("lax"), `<known ` + xsiXS + `><u xsi:type="xs:int"><v/></u></known>`, refuseElementChild},
 		{"lax, a child resolving no declaration, an xsi:type naming a simple type and an attribute", wildcardChild("lax"), `<known ` + xsiXS + `><u xsi:type="xs:int" a="1">1</u></known>`, refuseSimpleAttribute},
-		{"strict, a child resolving no declaration, an xsi:type with an xsi:nil with no ·actual value·", wildcardChild("strict"), `<known ` + xsiXS + `><u xsi:type="xs:int" xsi:nil="maybe">1</u></known>`, refuseNilLexical},
 		// Never ·nilled·: with no declaration, key-nilled does not apply, so the
 		// complex type's content model is read and <v> is admitted under T.
 		{

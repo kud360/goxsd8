@@ -125,19 +125,19 @@
 // cvc-simple-type) carry the delegated verdict as their wrapped cause, so
 // errors.Unwrap/Is/As reach the inner *xsderr.Error and [xsderr.RuleOf] reads
 // the inner rule ID off it instead of a consumer scraping the message for one.
-// cvc-attribute clause 3, cvc-type clause 3.1.3, cvc-complex-type clause 1.2
-// and cvc-complex-type clause 4 over a ·defaulted attribute·'s {lexical form}
-// each wrap the String Valid verdict. Where clause 2 fails, that is the
-// Datatype Valid (Datatypes §4.1.4) verdict, whose own rule is
-// cvc-datatype-valid or one of the facet rules under it, and no intermediate
-// cvc-simple-type node sits between. Where clause 3 fails — an ·ENTITY value·
-// that is not a ·declared entity name· — the verdict is cvc-simple-type's own,
-// since that clause delegates to nothing. The first three read clause 2's
-// verdict off value.ValidateLexical directly; clause 4 reads it through
-// xsd.ValueSpace's ValidDefault, which returns the same error. The first three
-// also charge the one clause 2 condition no backend can decide: a NOTATION
-// value whose QName names no notation declaration of the schema is outside
-// NOTATION's ·value space· (Datatypes §3.3.19), and that verdict is
+// cvc-attribute clause 3 (but for xsi:nil's, below), cvc-type clause 3.1.3,
+// cvc-complex-type clause 1.2 and cvc-complex-type clause 4 over a ·defaulted
+// attribute·'s {lexical form} each wrap the String Valid verdict. Where clause
+// 2 fails, that is the Datatype Valid (Datatypes §4.1.4) verdict, whose own
+// rule is cvc-datatype-valid or one of the facet rules under it, and no
+// intermediate cvc-simple-type node sits between. Where clause 3 fails — an
+// ·ENTITY value· that is not a ·declared entity name· — the verdict is
+// cvc-simple-type's own, since that clause delegates to nothing. The first
+// three read clause 2's verdict off value.ValidateLexical directly; clause 4
+// reads it through xsd.ValueSpace's ValidDefault, which returns the same error.
+// The first three also charge the one clause 2 condition no backend can decide:
+// a NOTATION value whose QName names no notation declaration of the schema is
+// outside NOTATION's ·value space· (Datatypes §3.3.19), and that verdict is
 // cvc-datatype-valid, minted by this package (walk.notationsDeclared). Clause 4
 // never reaches it, ValidDefault declining every NOTATION {lexical form}.
 // Error() still renders each wrapped verdict into the message as well, for a
@@ -233,7 +233,16 @@
 // definition}, so an empty lexical, a colon structure no QName has, a part
 // that is no NCName and a prefix with no binding in scope are each charged
 // there. Clause 5 charges a lexical clause 3 accepts whose ·actual value·
-// ·resolves· to no type definition, and needs no value space.
+// ·resolves· to no type definition, and needs no value space. Clause 3 is
+// charged on the same terms against the built-in declaration for the nil
+// attribute (§3.2.7.2), at the xsi:nil attribute's own Loc, for a lexical
+// outside xs:boolean's four literals on an element with no ·governing element
+// declaration· — ·laxly assessed·, or ·strictly assessed· against a type alone.
+// Under a declaration the same lexical is cvc-elt clause 3's charge above, and
+// is not charged twice. That lexical is read as cvc-elt clause 3 reads it, off
+// the four literals and not through the value.Backend, so this is the one
+// cvc-attribute clause 3 charge that wraps no String Valid verdict as its
+// cause.
 //
 // The seventh is the root's content half, against the same type's {content
 // type}. cvc-complex-type clause 1 decides what its {variety} admits —

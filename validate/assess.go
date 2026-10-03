@@ -968,9 +968,12 @@ func (w *walk) abstractType(e Element, g governance) {
 // declaration (§3.2.7.1) and not by e's type, so neither arm of cvc-type clause
 // 3 and neither arm of cvc-complex-type clause 2 reaches it, and the charge is
 // the same under a simple governing type, a complex one, and none at all
-// ([walk.instanceTypeResolves], cvcattribute.go).
+// ([walk.instanceTypeResolves], cvcattribute.go). cvc-attribute clause 3
+// against an xsi:nil attribute sits beside it, on the same grounds, wherever e
+// has no ·governing element declaration· ([walk.instanceNilLexical]).
 func (w *walk) attributes(e Element, g governance) {
 	w.instanceTypeResolves(e)
+	w.instanceNilLexical(e, g)
 	if st := g.simpleType(); st != nil {
 		w.simpleTypeAttributes(e, st)
 		return
