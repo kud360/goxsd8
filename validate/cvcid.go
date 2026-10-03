@@ -190,7 +190,7 @@ func (w *walk) idAttributes(c *icCheck) {
 	ct := c.g.complexType()
 	attrs := c.e.Attributes()
 	for _, a := range attrs {
-		st, typed := w.attributeType(c.e, c.g, a)
+		st, typed := w.attributeType(c.g, a)
 		if typed {
 			w.idRecord(st, a.Value(), c.e, c.node, a.Loc())
 		}
@@ -659,7 +659,7 @@ var (
 // matches. Reaching it on an unread use would govern the attribute by whichever
 // type the schema happens to ALSO declare at the top level, that declaration
 // being a DIFFERENT component from the use's {attribute declaration}.
-func (w *walk) attributeType(e Element, g governance, a Attribute) (*xsd.SimpleType, bool) {
+func (w *walk) attributeType(g governance, a Attribute) (*xsd.SimpleType, bool) {
 	if ct := g.complexType(); ct != nil {
 		if u, matched := attributeUseNamed(ct.AttributeUses(), a.Name()); matched {
 			d, resolved := w.schema.ResolvedAttributeDeclaration(u)
