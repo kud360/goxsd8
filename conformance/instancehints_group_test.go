@@ -133,6 +133,38 @@ func TestGroupSchemaWithholdsCoveredHint(t *testing.T) {
 	}
 }
 
+// TestGroupSchemaReadsRootHintsAlone pins that a group case reads its root's
+// hints alone (uncoveredHints, #771's GAP(conformance) in instance.go): an
+// instance carrying a hint below the root still has its root's uncovered hint
+// added, and the hint below the root is not. Run against each mutation: with
+// the below-root hint instanceHints reads appended to uncoveredHints' result,
+// <o:c> is assessed against o.xsd's xs:int and decided not valid; with
+// instanceHints again refusing any instance that carries a hint below its
+// root, h.xsd is not added.
+func TestGroupSchemaReadsRootHintsAlone(t *testing.T) {
+	group := fixtureFile{"g.xsd", xsdDoc("urn:a", laxKnown)}
+	files := append([]fixtureFile{group, hintB}, hintedO...)
+	instance := `<a:known ` + hintPairAB + `><o:c xmlns:o="urn:o" xsi:schemaLocation="urn:o o.xsd">x</o:c></a:known>`
+	exec := newInstanceExec()
+	for _, valid := range []bool{true, false} {
+		c := groupedCase(t, files, instance, valid)
+		schema, _, refused, perr := caseSchema(strict.New(), c)
+		if refused != "" || perr != nil {
+			t.Fatalf("caseSchema = (refused %q, %v), want the widened schema", refused, perr)
+		}
+		if _, ok := schema.Attribute(xsd.QName{Space: "urn:b", Local: "att"}); !ok {
+			t.Errorf("the assembled schema declares no {urn:b}att, want the root's uncovered hint added")
+		}
+		st, why := exec(c)
+		if why != "" {
+			t.Errorf("declined as %q under expectValid=%v, want decided valid", why, valid)
+		}
+		if st.IsPass() != valid {
+			t.Errorf("under expectValid=%v the executor answered pass=%v, want it decided valid, <o:c> laxly assessed", valid, st.IsPass())
+		}
+	}
+}
+
 // TestGroupSchemaFallsBackFromHints pins that a hint that cannot be followed,
 // or a widened assembly that declines or errs, never declines a group case and
 // never decides it invalid (§4.3.2 clause 3); a followed hint's components are
