@@ -251,6 +251,34 @@ func TestUnevaluableTestIsRecordedAsUnevaluated(t *testing.T) {
 	}
 }
 
+// The withhold TestUnevaluableTestIsRecordedAsUnevaluated reads off the
+// [Result] is logged as well as recorded: one "declined" line at root under
+// key-cta-ta-select clause 2, the {test} evaluation the compiler declined.
+func TestUnevaluableTestLogsTheDecline(t *testing.T) {
+	log, visits := recordingLogger()
+	v, err := New(ctaSchema(t,
+		ctaAlt{"@kind = 'cd'", "First"},
+		ctaAlt{"count(@kind) > 0", "Second"},
+		ctaAlt{"@kind = 'book'", "First"}), testBackend(), WithLogger(log))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	res := v.Assess(ctaRoot("book"))
+	if got := res.Unevaluated(); len(got) == 0 || got[0].Rule() != ruleKeyCTATASelect {
+		t.Fatalf("Unevaluated() = %v, want the withheld type's key-cta-ta-select record first", messages(got))
+	}
+	const want = "assessing element validate.name=root validate.loc=instance.xml:1:1 validate.rule=key-cta-ta-select validate.clause=2 validate.outcome=declined"
+	var lines []string
+	for _, line := range *visits {
+		if strings.Contains(line, "validate.rule=key-cta-ta-select") {
+			lines = append(lines, line)
+		}
+	}
+	if len(lines) != 1 || lines[0] != want {
+		t.Errorf("walk logged key-cta-ta-select\n\t%s\nwant exactly one line\n\t%s", strings.Join(lines, "\n\t"), want)
+	}
+}
+
 // A dynamic or type error inside a {test} this engine CAN evaluate is a
 // decided false, not a withhold: key-cta-ta-select clause 2 makes it "treated
 // as if it had evaluated (without error) to false", so the alternative was
