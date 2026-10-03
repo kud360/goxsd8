@@ -62,7 +62,7 @@ const versioningNS = "http://www.w3.org/2007/XMLSchema-versioning"
 // backend is the one the walk was given (execInstanceCase's validate.New), in
 // which a Type Alternative's {test} evaluates (subtreeGate.selectedType).
 func assessedSubtreeRoot(backend value.Backend, schema *xsd.Schema, report *parser.AssemblyReport, doc string) refusal {
-	if closureVersioned(report) {
+	if closureVersioned(report, doc) {
 		return refuseVersioned
 	}
 	rc, _, err := loader.Dir(filepath.Dir(doc)).Resolve("", filepath.Base(doc))
@@ -1100,16 +1100,16 @@ func defaultsNoAttribute(d xml.Directive) bool {
 }
 
 // rawDecoder is the one encoding/xml reader the lane's raw re-reads —
-// assessedSubtreeRoot and instanceHints — take over a document's bytes. It
-// reads the leading byte-order mark through internal/xmlenc, the decoding
-// parser/xmltree's reader takes (XML 1.0 §4.3.3, Appendix F.1): a UTF-16
-// document, either byte order, is transcoded to UTF-8, a UTF-8 mark is dropped
-// as the encoding signature it is, and an encoding declaration that disagrees
-// with the mark fails the read through the mark's CharsetReader. The mark is
-// thereby consumed before xmldecl.As10 meets the declaration, as As10
-// requires, and As10 then admits a 1.x version label as xmltree admits it — so
-// a document's label is admitted here exactly when xmltree admits it, in
-// either encoding, with the mark or without.
+// assessedSubtreeRoot, and instanceHints through recordingDecoder — take over
+// a document's bytes. It reads the leading byte-order mark through
+// internal/xmlenc, the decoding parser/xmltree's reader takes (XML 1.0 §4.3.3,
+// Appendix F.1): a UTF-16 document, either byte order, is transcoded to UTF-8,
+// a UTF-8 mark is dropped as the encoding signature it is, and an encoding
+// declaration that disagrees with the mark fails the read through the mark's
+// CharsetReader. The mark is thereby consumed before xmldecl.As10 meets the
+// declaration, as As10 requires, and As10 then admits a 1.x version label as
+// xmltree admits it — so a document's label is admitted here exactly when
+// xmltree admits it, in either encoding, with the mark or without.
 //
 // One disagreement xmltree rejects is read here: a UTF-16 mark under
 // encoding="UTF-8", which encoding/xml never hands to a CharsetReader and
@@ -1121,8 +1121,17 @@ func defaultsNoAttribute(d xml.Directive) bool {
 // A read failure in the peek for the mark is reported by the decoder's first
 // read, as xmlenc.Decode latches it.
 func rawDecoder(r io.Reader) *xml.Decoder {
+	return recordingDecoder(r, io.Discard)
+}
+
+// recordingDecoder is rawDecoder writing to w every byte of the decoded UTF-8
+// stream the decoder reads, in order, so byte k written to w is the byte at
+// the decoder's InputOffset k. The mark's CharsetReader hands back the stream
+// it is given, so a declaration naming UTF-16 changes no offset. instanceHints
+// cuts an inline xs:schema out of the instance through it (hintReader).
+func recordingDecoder(r io.Reader, w io.Writer) *xml.Decoder {
 	body, mark := xmlenc.Decode(r)
-	dec := xml.NewDecoder(xmldecl.As10(body))
+	dec := xml.NewDecoder(io.TeeReader(xmldecl.As10(body), w))
 	dec.CharsetReader = mark.CharsetReader
 	return dec
 }
@@ -1154,11 +1163,18 @@ func isLocationHint(a xml.Attr) bool {
 // touched: VC/vc006.n1 is suite-invalid and walks clean for exactly that reason.
 //
 // Each document is re-read from its parser.AssembledDocument.Location, which
-// for the pinnedResolver assembleCase uses is an on-disk path. A document
-// that will not open or decode answers true.
-func closureVersioned(report *parser.AssemblyReport) bool {
+// for the pinnedResolver assembleCase uses is an on-disk path. An inline
+// xs:schema of the instance at doc has a location naming no file
+// (inlineLocation), and the instance itself is read in its place: every
+// attribute of the inline document is one of the instance's, so that reading
+// stays a superset. A document that will not open or decode answers true.
+func closureVersioned(report *parser.AssemblyReport, doc string) bool {
 	for _, d := range report.Documents() {
-		if documentCarries(d.Location, isVersioningAttr) {
+		path := d.Location
+		if isInlineLocation(doc, path) {
+			path = doc
+		}
+		if documentCarries(path, isVersioningAttr) {
 			return true
 		}
 	}

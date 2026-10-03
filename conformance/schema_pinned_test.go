@@ -83,7 +83,7 @@ func TestAssembleCaseResolvesXLinkImport(t *testing.T) {
 	if !decidable || perr != nil {
 		t.Fatalf("assembleCase = decidable %v, error %v; want decidable, nil", decidable, perr)
 	}
-	if closureVersioned(report) {
+	if closureVersioned(report, doc) {
 		t.Errorf("closureVersioned = true, want false: every document the assembly read must re-open")
 	}
 }

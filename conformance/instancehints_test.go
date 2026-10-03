@@ -170,9 +170,23 @@ func TestInstanceExecutorDeclinesUnreadableHints(t *testing.T) {
 		{"a hint below the root resolving to no document", below,
 			`<known ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd"><o:c xmlns:o="urn:o" xsi:schemaLocation="urn:o missing.xsd">1</o:c></known>`,
 			refuseHintUnfollowed},
-		{"an inline xs:schema below the root", skip,
-			`<known ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd"><xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"/></known>`,
+		// Decided valid otherwise, the inner one read as the outer's content.
+		{"an inline xs:schema inside another", skip,
+			`<known ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd"><xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">` +
+				`<xs:annotation><xs:appinfo><xs:schema/></xs:appinfo></xs:annotation></xs:schema></known>`,
 			refuseInlineSchema},
+		// §4.3.2 clause 4: xml:base would move the base URI the inline
+		// document's own locations resolve against. Decided valid otherwise.
+		{"an xml:base on an ancestor of an inline xs:schema", skip,
+			`<known ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd"><a xml:base="sub/"><xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"/></a></known>`,
+			refuseXMLBase},
+		// A prefix undeclaration is legal in the XML 1.1 instance and not in
+		// the inline document, which carries no declaration and is XML 1.0
+		// (nsc-NoPrefixUndecl), so it does not read. Decided invalid otherwise,
+		// the reader's charge read as wellFormednessFault's "not valid".
+		{"an inline xs:schema that does not read as a schema document", skip,
+			`<?xml version="1.1"?><known ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd"><xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p=""/></known>`,
+			refuseInlineUnread},
 		// Decided invalid otherwise (cvc-type clause 3.1.2). The ATTLIST
 		// defaults nothing: the row pins rootStart's literal <!ATTLIST refusal
 		// (defaultsNoAttribute), which refuses any ATTLIST whether or not it
@@ -195,17 +209,6 @@ func TestInstanceExecutorDeclinesUnreadableHints(t *testing.T) {
 		{"a hinted schema declaring no top-level element for the root", known,
 			`<unknown ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd"/>`,
 			refuseHintUndeclared},
-		// §4.3.2 clause 5: an inline xs:schema is global to the assessment,
-		// the document element included. Decided valid otherwise: s.xsd
-		// imports a declaration of the root itself, so no undeclared-root
-		// decline masks the row.
-		{"an inline xs:schema as the root carrying a hint",
-			[]fixtureFile{
-				{"s.xsd", xsdDoc("", `<xs:import namespace="http://www.w3.org/2001/XMLSchema" schemaLocation="x.xsd"/>`)},
-				{"x.xsd", xsdDoc("http://www.w3.org/2001/XMLSchema", `<xs:element name="schema"/>`)},
-			},
-			`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd"/>`,
-			refuseInlineSchema},
 	} {
 		declinesBothPolarities(t, hintedCase(t, tc.files, tc.instance, true), tc.why, tc.refused)
 	}
@@ -238,7 +241,8 @@ func TestInstanceExecutorReadsHintsBelowRoot(t *testing.T) {
 		valid    bool
 	}{
 		// Declined hint-below-root before #2171; decided valid with
-		// belowRootHints' hints left out of instanceHints' result.
+		// the hints of every element below the root left out of
+		// hintReader.element's result.
 		{"a hint below the root for a namespace no earlier hint supplied",
 			`<known ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd"><o:c xmlns:o="urn:o" xsi:schemaLocation="urn:o o.xsd">x</o:c></known>`,
 			false},
@@ -261,7 +265,7 @@ func TestInstanceExecutorReadsHintsBelowRoot(t *testing.T) {
 				`<o:c xmlns:o="urn:o" xsi:schemaLocation="urn:o o.xsd">x</o:c></known>`,
 			false},
 		// An xml:base scopes its own element's subtree alone: declined
-		// xml-base with belowRootHints' EndElement arm removed.
+		// xml-base with hintReader.read's EndElement arm removed.
 		{"an xml:base on an earlier sibling of a hinted element",
 			`<known ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd"><a xml:base="sub/"/><o:c xmlns:o="urn:o" xsi:schemaLocation="urn:o o.xsd">x</o:c></known>`,
 			false},
@@ -277,6 +281,92 @@ func TestInstanceExecutorReadsHintsBelowRoot(t *testing.T) {
 			}
 		}
 	}
+}
+
+// xsOpen opens an inline xs:schema for namespace urn:o.
+const xsOpen = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:o">`
+
+// TestInstanceExecutorReadsInlineSchema proves a case with no group schema is
+// decided against a schema its inline xs:schema documents are part of, below
+// the root, beside a hint for the same namespace, and as the root itself
+// (instanceHints, #2180, §4.3.2, §5.1). Each row is decided in both polarities
+// and agrees with the validity it states. Every row declines inline-schema
+// with the change reverted; each valid row declines versioned with
+// closureVersioned reading an inline location from disk.
+func TestInstanceExecutorReadsInlineSchema(t *testing.T) {
+	files := append([]fixtureFile{{"s.xsd", xsdDoc("", laxKnown)}}, hintedO...)
+	exec := newInstanceExec()
+	for _, tc := range []struct {
+		why      string
+		files    []fixtureFile
+		instance string
+		valid    bool
+	}{
+		// Decided valid, <o:c> laxly assessed, with the inline document left
+		// out of the assembly.
+		{"an inline xs:schema below the root", files,
+			`<known ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd">` + xsOpen + `<xs:element name="c" type="xs:int"/></xs:schema><o:c xmlns:o="urn:o">x</o:c></known>`,
+			false},
+		{"an inline xs:schema below the root, its element valid", files,
+			`<known ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd">` + xsOpen + `<xs:element name="c" type="xs:int"/></xs:schema><o:c xmlns:o="urn:o">1</o:c></known>`,
+			true},
+		// The hint supplies urn:o and the inline document is read beside it:
+		// decided valid with inline documents put through hintsOf's
+		// first-wins test.
+		{"an inline xs:schema beside a hint for the same namespace", files,
+			`<known ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd" xsi:schemaLocation="urn:o o.xsd">` + xsOpen + `<xs:element name="e" type="xs:int"/></xs:schema>` +
+				`<o:c xmlns:o="urn:o">1</o:c><o:e xmlns:o="urn:o">x</o:e></known>`,
+			false},
+		{"an inline xs:schema beside a hint for the same namespace, both valid", files,
+			`<known ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd" xsi:schemaLocation="urn:o o.xsd">` + xsOpen + `<xs:element name="e" type="xs:int"/></xs:schema>` +
+				`<o:c xmlns:o="urn:o">1</o:c><o:e xmlns:o="urn:o">2</o:e></known>`,
+			true},
+		// t is bound on the root alone: declined with inheritedBindings'
+		// result left out of the inline document.
+		{"an inline xs:schema naming a type through an ancestor's prefix", files,
+			`<known xmlns:t="http://www.w3.org/2001/XMLSchema" ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd">` + xsOpen + `<xs:element name="c" type="t:int"/></xs:schema>` +
+				`<o:c xmlns:o="urn:o">x</o:c></known>`,
+			false},
+		// s.xsd imports a declaration of the root itself, so no
+		// undeclared-root decline masks the row.
+		{"an inline xs:schema as the root carrying a hint",
+			[]fixtureFile{
+				{"s.xsd", xsdDoc("", `<xs:import namespace="http://www.w3.org/2001/XMLSchema" schemaLocation="x.xsd"/>`)},
+				{"x.xsd", xsdDoc("http://www.w3.org/2001/XMLSchema", `<xs:element name="schema"/>`)},
+			},
+			`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd"/>`,
+			true},
+	} {
+		for _, expect := range []bool{tc.valid, !tc.valid} {
+			st, why := exec(hintedCase(t, tc.files, tc.instance, expect))
+			if why != "" {
+				t.Errorf("%s: declined as %q under expectValid=%v, want decided %s", tc.why, why, expect, validityWord(tc.valid))
+				continue
+			}
+			if st.IsPass() != (expect == tc.valid) {
+				t.Errorf("%s: under expectValid=%v the executor answered pass=%v, want it decided %s", tc.why, expect, st.IsPass(), validityWord(tc.valid))
+			}
+		}
+	}
+}
+
+// TestInlineSchemaCollisionIsSchemaError proves an inline xs:schema declaring
+// a component a hinted document for the same namespace declares too is read,
+// not left out as a later hint is, so the assembly is the schema error
+// sch-props-correct clause 2 makes it and the case declines (refuseSchemaError).
+// The error cites the inline document at the instance's own line and column of
+// the second declaration: it reads 2:5, the line counted from the inline
+// document's own start, with closeSchema's padding removed.
+func TestInlineSchemaCollisionIsSchemaError(t *testing.T) {
+	c := hintedCase(t, append([]fixtureFile{{"s.xsd", xsdDoc("", laxKnown)}}, hintedO...),
+		`<known `+xsiNS+` xsi:noNamespaceSchemaLocation="s.xsd" xsi:schemaLocation="urn:o o.xsd">`+"\n"+
+			`  `+xsOpen+"\n"+`    <xs:element name="c" type="xs:int"/></xs:schema><o:c xmlns:o="urn:o">1</o:c></known>`, true)
+	reachesPerrArm(t, c, "a collision")
+	_, _, _, perr := caseSchema(strict.New(), c)
+	if want := "i.xml#inline-1:3:5: [sch-props-correct]"; !strings.HasPrefix(perr.Error(), want) {
+		t.Errorf("caseSchema error = %v, want it to open %q", perr, want)
+	}
+	declinesBothPolarities(t, c, "a collision", refuseSchemaError)
 }
 
 // TestHintedSchemaUndeclaringPrefixIsRejected pins addB139's shape: an XML 1.0
