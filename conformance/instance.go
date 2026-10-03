@@ -40,17 +40,19 @@ import (
 // DECLINES otherwise (builtinsSchema, #2151).
 //
 // The group's schema is assembled by assembleCase, the very gate the schema lane
-// decides its own cases with, and this lane declines wherever that gate does —
-// plus one condition the schema lane does not have: it declines a schema
-// document set the assembly REJECTED. A schema the parser found schema-invalid
-// is not the schema the suite declared, so an assessment against whatever
-// partial components survived would decide a different question. (The suite's
-// own metadata is not consulted for this: the assembly's verdict is the fact,
-// and a group whose schemaTest declares a non-valid expectation therefore
-// declines through the same test as any other failed assembly.) One rejection
-// is decided "not valid" rather than declined: a schema document the assembly
-// retrieved and the reader charged not well-formed (wellFormednessFault), a
-// harness convention execInstanceCase states (#2058).
+// decides its own cases with, widened by the root's hints for every namespace
+// that assembly's documents leave uncovered (groupSchema, instancehints.go,
+// #771), and this lane declines wherever that gate does — plus one condition the
+// schema lane does not have: it declines a schema document set the assembly
+// REJECTED. A schema the parser found schema-invalid is not the schema the suite
+// declared, so an assessment against whatever partial components survived would
+// decide a different question. (The suite's own metadata is not consulted for
+// this: the assembly's verdict is the fact, and a group whose schemaTest
+// declares a non-valid expectation therefore declines through the same test as
+// any other failed assembly.) One rejection is decided "not valid" rather than
+// declined: a schema document the assembly retrieved and the reader charged not
+// well-formed (wellFormednessFault), a harness convention execInstanceCase
+// states (#2058).
 //
 // # The only outcomes this slice can DECIDE
 //
@@ -504,8 +506,15 @@ import (
 // declaring components with it, which is not the defect the suite meant to test.
 // assembleCase's fabricatedRejection bounds that for the SCHEMA lane, where the
 // fabricated verdict shows up as a failed parse, and does not transfer here,
-// where the parse succeeds and the charge lands anyway. A schema assembled from
-// the instance's hints never reaches this charge at the root: assembleHints
+// where the parse succeeds and the charge lands anyway. The same holds of a
+// component only the instance's own hints locate: groupSchema adds a root hint's
+// document to the group's schema where no document of the group's closure has
+// the hint's namespace, and withholds every other hint — one for a covered
+// namespace, every hint of an instance instanceHints refuses (one carrying a
+// hint below its root, say), and every hint where the widened assembly declines
+// or errs — so an element only such a hint declares is still charged as
+// undeclared. A schema assembled from the instance's hints alone, for a group
+// with no schemaTest, never reaches this charge at the root: assembleHints
 // declines a hinted schema declaring no top-level element for it. Nor does the
 // built-ins schema: builtinsSchema hands it only to a root whose xsi:type
 // resolves in it. A root undeclared for that reason whose xsi:type resolves is
