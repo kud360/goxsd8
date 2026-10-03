@@ -137,7 +137,6 @@ type subtreeGate struct {
 //
 //   - an xsi:nil it carries has an ·actual value· (nilValue,
 //     refuseNilLexical);
-//   - d is not abstract (assessedDeclaration);
 //   - its ·selected type definition· is determined (selectedType): d.{type
 //     definition}, or the type d.{type table} ·conditionally selects·;
 //   - its ·governing type definition· is determined: an xsi:type the element
@@ -158,13 +157,22 @@ type subtreeGate struct {
 // character or element [[child]]. An xsi:nil whose ·actual value· is false is
 // clause 3.2.2, which holds as 3.2.1 does, and the element is read as if it
 // carried none.
+//
+// No property of d is refused by itself. {abstract} is cvc-elt clause 2, which
+// the walk charges at every element (validate's walk.abstractDeclaration), so
+// an abstract d never reaches the gate in an empty Result. A {type table} is
+// read through selectedType, and clause 4 against the type it selects through
+// governingType. A {value constraint} of either variety is clause 5.1 (an
+// element with no [[children]]) or 5.2.2 (a fixed one over [[children]]),
+// which the walk settles (validate's contentCheck.defaultValid and
+// contentCheck.fixedValue), recording the one comparison it declines.
+// {nillable} is clause 3, the walk's as above. {identity-constraint
+// definitions} are clause 6 (cvc-identity-constraint, §3.11.4), the walk's,
+// which records every check it declines.
 func (g *subtreeGate) element(start xml.StartElement, d xsd.ElementDeclaration, inherited []xml.Attr) refusal {
 	isNil, ok := nilValue(start.Attr)
 	if !ok {
 		return refuseNilLexical
-	}
-	if why := assessedDeclaration(d); why != "" {
-		return why
 	}
 	defer g.enter(start)()
 	selected, why := g.selectedType(start, d, inherited)
@@ -448,29 +456,6 @@ func notExcepted(a xml.Attr) bool {
 	return a.Name.Space != xsd.XMLSchemaInstanceNS || (a.Name.Local != "type" && a.Name.Local != "nil")
 }
 
-// assessedDeclaration refuses a d that leaves a cvc-elt clause the walk does
-// not decide at depth: {abstract} true (clause 2, charged at the root alone;
-// refuseAbstract). A {type table} is admitted: element reads the element
-// against the type it ·conditionally selects· (selectedType), and clause 4
-// against that type (governingType). A {value constraint} of
-// either variety is admitted, at every depth: clause 5.1 (an element with no
-// [[children]], default or fixed) and clause 5.2.2 (a fixed one over
-// [[children]]: 5.2.2.1 no element children, 5.2.2.2.1 a mixed type's lexical
-// match, 5.2.2.2.2 a simple type's value equality) are the walk's (validate's
-// contentCheck.defaultValid and contentCheck.fixedValue), which records the
-// one comparison it declines. {nillable} is admitted, either way: clause 3 is
-// the walk's — 3.1, 3.2 and 3.2.3.2 in validate's nilCheck, 3.2.3.1 in its
-// contentCheck — and element reads a ·nilled· element's [[children]] as
-// complex says. {identity-constraint definitions} are admitted too: clause 6
-// (cvc-identity-constraint, §3.11.4) is the walk's, which records every check
-// it declines.
-func assessedDeclaration(d xsd.ElementDeclaration) refusal {
-	if d.Abstract() {
-		return refuseAbstract
-	}
-	return ""
-}
-
 // complex reads an element governed by the Complex Type Definition t, ·nilled·
 // where nilled is true, through to its end tag, and refuses unless:
 //
@@ -752,7 +737,7 @@ func (g *subtreeGate) children(t xsd.ComplexType, m *xsd.Matcher, inherited []xm
 //     own {type definition}, so cvc-complex-type clause 5 holds wherever
 //     cvc-elt clause 4 does, on the first arm's terms. A child carrying D's
 //     own name is the first arm's, cvc-accept clause 2.3.1 attributing it to
-//     D, where element refuses an ·abstract· D;
+//     D, where the walk charges an ·abstract· D (cvc-elt clause 2);
 //   - a skip Wildcard, or the {open content} with a skip {wildcard}: the child
 //     is ·skipped· with its whole subtree (key-sva clause 3.2, cvc-assess-elt
 //     clause 2), which is read past unchecked. A skipped child has no

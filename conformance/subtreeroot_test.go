@@ -421,6 +421,51 @@ func TestInstanceExecutorChargesIdentityConstraintBelowTheRoot(t *testing.T) {
 	}
 }
 
+// TestInstanceExecutorChargesAbstractDeclarationBelowTheRoot is a regression
+// guard for the gate's dropped {abstract} refusal (#2127): an element below the
+// root whose ·governing element declaration· has {abstract} true — reached by a
+// particle, as a substitution group head used directly (cvc-accept clause
+// 2.3.1), or by a strict wildcard's ·resolution· (key-governing-ed clause 3) —
+// is the walk's cvc-elt clause 2 charge, so each row is decided INVALID and
+// never reaches the gate. With validate's walk.abstractDeclaration call
+// deleted, each row is decided VALID instead, the gate admitting the
+// declaration: the walk's charge is the only thing between an abstract
+// declaration and a false pass. The concrete member substituting for the head is the control:
+// the walk charges nothing for it and the gate admits it, so it is decided
+// VALID.
+func TestInstanceExecutorChargesAbstractDeclarationBelowTheRoot(t *testing.T) {
+	exec := newInstanceExec().status()
+	group := headKnown(`<xs:element name="h" type="A" abstract="true"/><xs:element name="m" type="R" substitutionGroup="h"/>`)
+	for _, tc := range []struct{ why, schemaBody, instance string }{
+		{
+			"an abstract declaration below the root",
+			`<xs:element name="known"><xs:complexType><xs:sequence><xs:element ref="b"/></xs:sequence></xs:complexType></xs:element>` +
+				`<xs:element name="b" type="xs:string" abstract="true"/>`,
+			`<known><b>x</b></known>`,
+		},
+		{"an abstract substitution group head used directly below the root", group, `<known><h>1</h></known>`},
+		{
+			"a strict wildcard's child resolving to an abstract declaration",
+			`<xs:element name="known"><xs:complexType><xs:sequence><xs:any processContents="strict"/></xs:sequence></xs:complexType></xs:element>` +
+				`<xs:element name="b" type="xs:string" abstract="true"/>`,
+			`<known><b>x</b></known>`,
+		},
+	} {
+		if !exec(instanceCase(t, tc.schemaBody, tc.instance, false)).IsPass() {
+			t.Errorf("%s: the walk charges cvc-elt clause 2; the executor must agree with a suite-invalid case", tc.why)
+		}
+		if exec(instanceCase(t, tc.schemaBody, tc.instance, true)).IsPass() {
+			t.Errorf("%s: the executor must Fail under a flipped expectation", tc.why)
+		}
+	}
+	if !exec(instanceCase(t, group, `<known><m>1</m></known>`, true)).IsPass() {
+		t.Error("a concrete member substituting for the abstract head: the executor must agree with a suite-valid case")
+	}
+	if exec(instanceCase(t, group, `<known><m>1</m></known>`, false)).IsPass() {
+		t.Error("a concrete member substituting for the abstract head: the executor must Fail under a flipped expectation")
+	}
+}
+
 // defaultedAtt declares <known> with up to two children <e>, each with an
 // optional xs:string attribute att defaulting to "a", and an identity
 // constraint of category ic (unique or key) on <known> selecting e/@att.
@@ -523,20 +568,6 @@ func TestInstanceExecutorDeclinesOutsideAssessedSubtreeRoot(t *testing.T) {
 			refuseLaxNilLexical,
 		},
 		{
-			"an abstract declaration below the root (cvc-elt clause 2)",
-			`<xs:element name="known"><xs:complexType><xs:sequence><xs:element ref="b"/></xs:sequence></xs:complexType></xs:element>` +
-				`<xs:element name="b" type="xs:string" abstract="true"/>`,
-			`<known><b>x</b></known>`,
-			refuseAbstract,
-		},
-		{
-			// cvc-accept clause 2.3.1 attributes <h> to h itself, not to a member.
-			"an abstract substitution group head used directly below the root (cvc-elt clause 2)",
-			headKnown(`<xs:element name="h" type="A" abstract="true"/><xs:element name="m" type="R" substitutionGroup="h"/>`),
-			`<known><h>1</h></known>`,
-			refuseAbstract,
-		},
-		{
 			// A guard, not a charged row: the gate refused this shape before #1860
 			// too. The walk charges nothing and records nothing for it, a reading
 			// the suite does not share (#1912).
@@ -573,7 +604,7 @@ const (
 // TestInstanceExecutorDecidesFixedValueConstraint proves the gate admits a
 // declaration carrying a fixed {value constraint}, at the root and below it,
 // where the walk settles cvc-elt clause 5 for it (#1979): each row is decided
-// VALID. With assessedDeclaration refusing ValueFixed again, every row
+// VALID. With subtreeGate.element refusing ValueFixed again, every row
 // declines and this test fails.
 func TestInstanceExecutorDecidesFixedValueConstraint(t *testing.T) {
 	exec := newInstanceExec().status()
@@ -1648,16 +1679,17 @@ func TestInstanceExecutorDecidesUnversionedComposition(t *testing.T) {
 type fixture struct{ name, content string }
 
 // TestAssessedSubtreeRootRootConditions pins the root conditions the walk
-// charges first — an undeclared root (cvc-assess-elt), an abstract declaration
-// (cvc-elt clause 2), an element child of a simple type (cvc-type clause
-// 3.1.2), an attribute outside the xsi: four (3.1.1), an xsi:nil with no
-// ·actual value· (cvc-elt clause 3.1, the declaration not {nillable}), an
-// xsi:type that does not resolve (cvc-attribute clause 3 or 5) or
-// does not ·override· (cvc-elt clause 4) — at the gate itself, since it is a
-// precondition in its own right and not a restatement of those charges. No
-// executor row can see them, so the gate is called directly, with the declared
-// root, with content and without, as the controls. A decoder error is refused
-// too.
+// charges first — an undeclared root (cvc-assess-elt), an element child of a
+// simple type (cvc-type clause 3.1.2), an attribute outside the xsi: four
+// (3.1.1), an xsi:nil with no ·actual value· (cvc-elt clause 3.1, the
+// declaration not {nillable}), an xsi:type that does not resolve
+// (cvc-attribute clause 3 or 5) or does not ·override· (cvc-elt clause 4) — at
+// the gate itself, since it is a precondition in its own right and not a
+// restatement of those charges. No executor row can see them, so the gate is
+// called directly, with the declared root, with content and without, as the
+// controls. A decoder error is refused too. An abstract declaration (cvc-elt
+// clause 2) is admitted: the walk charges it at every element, so the gate
+// refuses it nowhere (#2127).
 //
 // The no-namespace simple type int is there for the unbound-prefix row: a
 // gate that dropped an unbound prefix rather than refusing it would resolve
@@ -1672,7 +1704,7 @@ func TestAssessedSubtreeRootRootConditions(t *testing.T) {
 		{"a declared root", `<known>x</known>`, ""},
 		{"a declared content-less root", `<known/>`, ""},
 		{"an undeclared root", `<unknown>x</unknown>`, refuseUndeclaredRoot},
-		{"an abstract declaration", `<abstract>x</abstract>`, refuseAbstract},
+		{"an abstract declaration", `<abstract>x</abstract>`, ""},
 		{"an element child of a simple type", `<known><a/></known>`, refuseElementChild},
 		{"an attribute outside the xsi: four", `<known foo="1">x</known>`, refuseSimpleAttribute},
 		{"an xsi:nil with no ·actual value·", `<known ` + xsiNS + ` xsi:nil="maybe">x</known>`, refuseNilLexical},
