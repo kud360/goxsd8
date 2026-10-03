@@ -17,18 +17,18 @@ read them. One stamp for the whole section, so a reader can tell staleness
 from wrongness at a glance. Never add a dated paragraph beside the old
 one — appending is what this replaces.
 
-## Status — 2026-10-03 (post-land after #2171, on `main` at `f5153bd`)
+## Status — 2026-10-03 (post-land after #2168, on `main` at `e7aa23e`)
 
-**M5's north star is #2180, bound `instance` ≤ +6.** It decides the
-`MS-Additional` `<inline-schema>` declines (addB142, addB166–addB169 and
-addB181), or rules them permanent. The oracle rules first whether §4.3.2 admits
-an inline `xs:schema` as a schema source at all. #2171 landed `instance` +6, and
-its four suite-invalid siblings are recorded divergences. Outside #1042's
-assertion declines (`blocked`, M6), the 6 `<inline-schema>` are the largest
-`instance` cluster that is not ruled, recorded or `blocked`. **The band is #2180,
-#2168, #2176 then #2174. Lean: product.** Every row is M5 work. #2168 is claimed,
-so #2180 and #2176 are the startable rows. The process filings wait on the
-`/retro` on 2026-10-04.
+**M5's north star is #2180, bound `instance` ≤ +6, and it is claimed:
+`wip/issue-2180` is LIVE.** It decides the `MS-Additional` `<inline-schema>`
+declines (addB142, addB166–addB169 and addB181), or rules them permanent. The
+oracle rules first whether §4.3.2 admits an inline `xs:schema` as a schema
+source at all. Outside #1042's assertion declines (`blocked`, M6), the 6
+`<inline-schema>` are the largest `instance` cluster that is not ruled,
+recorded or `blocked`. **The band is #2180, #2176 then #2174. Lean: product.**
+Every row is M5 work. #2168 landed (`unchanged`, logging only). #2180 is
+claimed, so #2176 and #2174 are the startable rows. The process filings wait on
+the `/retro` on 2026-10-04.
 
 **#2081 stays `needs-replan` on GitHub.** Its replan restates the body and
 relabels it `blocked` on the owner's ruling. The permission classifier refused
@@ -36,7 +36,7 @@ that write to an earlier pass, so the owner posts it (next planning action 1).
 
 ### Conformance lanes
 
-**This table is `go tool lanestatus`, pasted verbatim, on `main` at `f5153bd`.**
+**This table is `go tool lanestatus`, pasted verbatim, on `main` at `e7aa23e`.**
 It is the committed expectations census, which `docs/WORKFLOW.md` names as the
 lane score (#1120).
 
@@ -49,9 +49,9 @@ lane score (#1120).
 | `schema` | 15288 | 110 | 15398 |
 | `xpath` | — | — | 0 |
 
-**`f5153bd` (#2171) moved `instance` +6.** **`datatypes ⊆ instance` is
-intended** (#1507). **An em dash means a lane with no cases yet, not a lane
-scoring zero.** `datatypes` is M3 and complete. `schema` is M4 and `instance`
+**`e7aa23e` (#2168) moved no lane; `f5153bd` (#2171) moved `instance` +6.**
+**`datatypes ⊆ instance` is intended** (#1507). **An em dash means a lane with
+no cases yet, not a lane scoring zero.** `datatypes` is M3 and complete. `schema` is M4 and `instance`
 is M5, and both are active. `xpath`, `json` and `ber` wait on M6/M7, M8 and M11.
 
 ### What holds each active lane's failures
@@ -62,6 +62,8 @@ regressed or vanished), fed to `go tool lanepartition -log <run> <lane>`. Every
 figure is a part of the banked fails and a bound from above, never a prediction
 of flips. `instance` clusters carry their refusal token in `<…>`. The tool
 matches owners lexically, so the owners named below are this stamp's reading.
+It was not re-run at `e7aa23e`: #2168 adds a log line, leaves every
+`Unevaluated` record byte-identical and banked `unchanged`.
 
 | lane | banked fail | declined | indeterminate (#277) | decided against the suite |
 |---|---:|---:|---:|---:|
@@ -116,11 +118,11 @@ matches owners lexically, so the owners named below are this stamp's reading.
 
 ### Branch namespace, `origin` (report-only; a session never deletes a ref)
 
-`go tool wipsurvey` was fed this pass's REST walk, stamped `rows 2179 distinct
-2179 min 1 max 2179 no gaps` (pull requests included), after `git fetch
-origin` in a shallow clone. It prints:
+`go tool wipsurvey` was fed this pass's REST walk, stamped `rows 2182 distinct
+2182 min 1 max 2182 no gaps` (pull requests included), after `git fetch
+origin` in a complete clone. It prints:
 
-- **`wip/issue-2168` is LIVE.** Leave it to its session. `wip/issue-2171` was
+- **`wip/issue-2180` is LIVE.** Leave it to its session. `wip/issue-2168` was
   deleted at its merge.
 - **`wip/issue-2081` is RETIRED** (`needs-replan`) and holds no code.
 - **`wip/issue-2013` is RETIRED** (closed `not_planned`). Its content is on
@@ -143,7 +145,7 @@ origin` in a shallow clone. It prints:
 ### Marker census
 
 `go tool gapaudit`, fed the same walk, reports **86 markers across 10 areas, 12
-in group 1 and 30 in group 2, with zero dead ends** at `f5153bd`. #2176 is in
+in group 1 and 30 in group 2, with zero dead ends** at `e7aa23e`. #2176 is in
 group 2, filed with no marker of its own. `refuseInlineSchema` carries no
 `GAP(` marker, so #2180 is not in this walk's feed and adds no group-2 row
 (`kind/feature`).
@@ -166,7 +168,7 @@ group 2, filed with no marker of its own. `refuseInlineSchema` carries no
 
 ### Milestones and queue
 
-**Counted from GitHub after this pass's filing: 331 open issues.**
+**Counted from GitHub during this pass: 330 open issues.**
 
 | milestone | open | closed | state |
 |---|---:|---:|---|
@@ -174,29 +176,29 @@ group 2, filed with no marker of its own. `refuseInlineSchema` carries no
 | M2 — Foundation leaves | 0 | 5 | done |
 | M3 — Datatypes vertical slice | 0 | 12 | complete |
 | **M4 — Schema parsing** | **64** | **172** | active |
-| **M5 — Instance validation (XML)** | **20** | **102** | active |
+| **M5 — Instance validation (XML)** | **19** | **103** | active |
 | M6 — XPath required subset | 1 | 0 | not started |
 | M7–M12 | 0 | 0 | not started |
 
-Open issues carry **316 `ready`, 12 `blocked`, 1 `needs-replan` and 2
-`epic`**, which sums to 331. `kind/gap` is 63 and `kind/bug` is 36.
+Open issues carry **315 `ready`, 12 `blocked`, 1 `needs-replan` and 2
+`epic`**, which sums to 330. `kind/gap` is 63 and `kind/bug` is 35.
 
 - **`blocked` is 12:** #16, #555, #1002, #1042, #1051, #1374, #1609, #1790,
-  #1880, #1885, #1923 and #2022. No `## Depends on` names #2171.
+  #1880, #1885, #1923 and #2022. No `## Depends on` names #2168.
   - **#1609 is unfired.** `schema` Pass reads 15288, which is not above
-    15292, and `f5153bd` touches no line of `xsd/contentrestricts.go`.
+    15292, and `e7aa23e` touches no line of `xsd/contentrestricts.go`.
   - **No owner comment has been posted since 2026-10-01 on any of the five
     human decisions:** #1880 (which gates #1002), #1885, #1790, #1923 and
     #2022.
 - **`needs-replan` is 1: #2081.** Next planning action 1 carries it.
-- **Measured refactors are flat**, each command re-run at `f5153bd`: #2041 3,
+- **Measured refactors are flat**, each command re-run at `e7aa23e`: #2041 3,
   #1958 2, #1865 2, #1770 2, #1757 1, #363 2, and #2101 1 and 1. None enters
   the band on its figure.
 
 ### Persona consultations: not re-run this pass
 
 **The cartographer role-plays no persona and does not spawn one** (#416).
-**No persona story was handed to this pass**, and `f5153bd` adds no exported
+**No persona story was handed to this pass**, and `e7aa23e` adds no exported
 identifier. **Eighteen findings from the 2026-09-17 to 2026-09-29
 consultations are open and unconsumed:** #1568–#1571, #1593–#1596, #1626,
 #1684, #1685, #1687, #1688, #1843, #1845, #1894, #1895 and #1898. Open
@@ -217,10 +219,9 @@ orchestrating session, and every other process issue is queued for the
 
 | # | issue | why here |
 |---|---|---|
-| 1 | #2180 | **M5 north star, bound `instance` ≤ +6.** Decide an instance carrying an inline `xs:schema`, or rule `<inline-schema>` permanent. The oracle rules first whether §4.3.2 admits an inline schema source, and the grounding says what makes each suite-invalid case invalid before claiming it. **Startable now** |
-| 2 | #2168 | **M5 bug, `unchanged`.** The `key-cta-ta-select` decline in `walk.conditionallySelected` records without logging, against `walk.decline`'s doc. **Claimed: `wip/issue-2168` is LIVE**. Take the next row unless its lease expires |
-| 3 | #2176 | **M5 gap, bound 0.** An element whose {substitution group affiliations} holds an ·absent· member is strictly assessed with no charge. §5.3 charges `cvc-elt` clause 1 and falls back to ·lax assessment·, through the arm #2166 built. **Startable now** |
-| 4 | #2174 | **M5 gap, comment-only expected.** Rule or retire the three undetermined-type `GAP(validate)` markers: `walk.child`'s and `walk.localGovernance`'s (`validate/assess.go`) and `idElement`'s (`validate/cvcid.go`). Rows 2–4 and #1463 all edit `validate/assess.go` or a sibling, and each body records the overlap. **Startable now** |
+| 1 | #2180 | **M5 north star, bound `instance` ≤ +6.** Decide an instance carrying an inline `xs:schema`, or rule `<inline-schema>` permanent. The oracle rules first whether §4.3.2 admits an inline schema source, and the grounding says what makes each suite-invalid case invalid before claiming it. **Claimed: `wip/issue-2180` is LIVE**. Take the next row unless its lease expires |
+| 2 | #2176 | **M5 gap, bound 0.** An element whose {substitution group affiliations} holds an ·absent· member is strictly assessed with no charge. §5.3 charges `cvc-elt` clause 1 and falls back to ·lax assessment·, through the arm #2166 built. **Startable now** |
+| 3 | #2174 | **M5 gap, comment-only expected.** Rule or retire the three undetermined-type `GAP(validate)` markers: `walk.child`'s and `walk.localGovernance`'s (`validate/assess.go`) and `idElement`'s (`validate/cvcid.go`). Rows 2–3 and #1463 all edit `validate/assess.go` or a sibling, and each body records the overlap. **Startable now** |
 
 **Named below the band, on purpose.**
 - **#2081 is `needs-replan`** (next planning action 1). **#2148** (FlavorFO +
@@ -282,12 +283,14 @@ orchestrating session, and every other process issue is queued for the
    #2081 `not_planned`.
 2. **The orchestrating session lands or supersedes the open post-land passes
    (#2007):** PR #1929 (#1908), PR #1871 (#1816), #1823's missing LOG entry
-   and #1892's, which #2007 now names. A human triages both `parked/untriaged-20260930-*` branches,
-   `chronicler-345`, `meta/backlog-2026-10-01-b`, the eight subagent branches
-   and `wip/issue-2013`.
-3. **#2180's grounding settles M5's next north star.** The oracle rules whether
-   an inline `xs:schema` is a schema source §4.3.2 admits. The grounding then
-   says which of the six a reading decides, or the decline is ruled permanent.
+   and #1892's, which #2007 now names. A human triages both
+   `parked/untriaged-20260930-*` branches, `chronicler-345`,
+   `meta/backlog-2026-10-01-b`, the eight subagent branches and
+   `wip/issue-2013`.
+3. **#2180's grounding, now in flight, settles M5's next north star.** The
+   oracle rules whether an inline `xs:schema` is a schema source §4.3.2 admits.
+   The grounding then says which of the six a reading decides, or the decline
+   is ruled permanent.
    Outside #2180 and the assertion clusters (#1042, M6), every remaining
    `instance` decline cluster of more than 5 is ruled, recorded or `blocked`
    (`VC` `<versioned>` 10, #1002).
@@ -322,10 +325,11 @@ orchestrating session, and every other process issue is queued for the
    sighting of whether a read-only reviewer owes gate part 4), **#2166's**
    (round 2 after one reject for a false cause in a wildcard message,
    unchanged at its prediction 0, scope narrowed to route 1 at grounding on
-   #774's precedent, #2142's fifth sighting) **and #2171's** (round 1,
+   #774's precedent, #2142's fifth sighting), **#2171's** (round 1,
    `instance` +6 at the grounding probe's prediction, the issue's hypothesis
    measured false at grounding with four divergences recorded, #2142's sixth
-   sighting):
+   sighting) **and #2168's** (round 1, unchanged, no findings, no oracle, a
+   grounding RULING that chose the doc arm for the assertion sites):
    - four windows: 73.7 cases per session at 89% product, 177.7 at 100%, 44.4
      at 90%, and 10.0 at 90% with two repair rounds;
    - every landing through #1093's second-round accept at 0;
