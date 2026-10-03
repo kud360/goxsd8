@@ -25,32 +25,34 @@ func ctaRoot(tests ...string) string {
 	return ctaTypes + `<xs:element name="known">` + alts + `<xs:alternative type="B"/></xs:element>`
 }
 
-// ctaInherited declares <known> carrying the inheritable attribute kind,
-// defaulted to def where def is not empty, over one child <inner> whose {type
-// table} selects A where @kind = 'a' and B otherwise.
-func ctaInherited(def string) string {
-	use := `<xs:attribute ref="kind"/>`
-	if def != "" {
-		use = `<xs:attribute ref="kind" default="` + def + `"/>`
-	}
-	return `<xs:complexType name="A"><xs:sequence><xs:element name="a" type="xs:int"/></xs:sequence></xs:complexType>` +
-		`<xs:complexType name="B"><xs:sequence><xs:element name="b" type="xs:int"/></xs:sequence></xs:complexType>` +
+// ctaInherited declares the top-level inheritable attribute kind and <known>,
+// whose type declares attrs, over one child <inner> whose {type table} selects
+// A where @kind = 'a' and B otherwise; A and B each take an optional kind.
+func ctaInherited(attrs string) string {
+	return `<xs:complexType name="A"><xs:sequence><xs:element name="a" type="xs:int"/></xs:sequence><xs:attribute ref="kind"/></xs:complexType>` +
+		`<xs:complexType name="B"><xs:sequence><xs:element name="b" type="xs:int"/></xs:sequence><xs:attribute ref="kind"/></xs:complexType>` +
 		`<xs:attribute name="kind" type="xs:string" inheritable="true"/>` +
 		`<xs:element name="known"><xs:complexType><xs:sequence><xs:element name="inner">` +
 		`<xs:alternative test="@kind = 'a'" type="A"/><xs:alternative type="B"/>` +
-		`</xs:element></xs:sequence>` + use + `</xs:complexType></xs:element>`
+		`</xs:element></xs:sequence>` + attrs + `</xs:complexType></xs:element>`
 }
+
+// kindUse is an {attribute uses} member referencing kind.
+const kindUse = `<xs:attribute ref="kind"/>`
 
 // TestInstanceExecutorDecidesTypeTable proves the gate admits a declaration
 // carrying a {type table}, at the root and below it, reading the element
 // against the type the table ·conditionally selects· (§3.3.4.1
 // key-selected-type clause 1, key-cta-select) and not against the declared
 // {type definition} (#2126): each row is decided VALID, and under the flipped
-// expectation it Fails. Every row's instance is valid against the selected type
-// alone, so a gate reading any other one refuses it at content-rejected or
-// content-incomplete; the inherited rows select A only through [inherited
-// attributes] (§3.3.5.6, key-cta-ta-select clause 1.1.3), so a gate handing
-// down none reads B.
+// expectation it Fails; with assessedDeclaration refusing a {type table} again,
+// every row declines. Each row choosing between A and B is valid against the
+// selected one alone, so a gate selecting the other refuses it at
+// content-rejected: the inherited rows select A only through [inherited
+// attributes] (§3.3.5.6, key-cta-ta-select clause 1.1.3), and select B only
+// where the child's own attribute shadows the inherited one (clause 1.1.3) or
+// the parent's attribute is ·skipped· and so not ·potentially inherited·
+// (key-p-inherited clause 3.2).
 func TestInstanceExecutorDecidesTypeTable(t *testing.T) {
 	exec := newInstanceExec().status()
 	for _, tc := range []struct{ why, schemaBody, instance string }{
@@ -73,9 +75,16 @@ func TestInstanceExecutorDecidesTypeTable(t *testing.T) {
 				`<xs:alternative type="xs:int"/></xs:element></xs:sequence></xs:complexType></xs:element>`,
 			`<known><a>1</a></known>`,
 		},
-		{"an inherited attribute selects a child's type", ctaInherited(""), `<known kind="a"><inner><a>1</a></inner></known>`},
-		{"a defaulted inheritable attribute selects a child's type", ctaInherited("a"), `<known><inner><a>1</a></inner></known>`},
-		{"an inherited attribute leaves the {test} false", ctaInherited(""), `<known kind="b"><inner><b>1</b></inner></known>`},
+		{"an inherited attribute selects a child's type", ctaInherited(kindUse), `<known kind="a"><inner><a>1</a></inner></known>`},
+		{"a defaulted inheritable attribute selects a child's type", ctaInherited(`<xs:attribute ref="kind" default="a"/>`), `<known><inner><a>1</a></inner></known>`},
+		{"an inherited attribute leaves the {test} false", ctaInherited(kindUse), `<known kind="b"><inner><b>1</b></inner></known>`},
+		{"the child's own attribute shadows an inherited one", ctaInherited(kindUse), `<known kind="a"><inner kind="b"><b>1</b></inner></known>`},
+		{
+			// key-p-inherited clause 3.2 reads no declaration for a ·skipped·
+			// attribute, so it is not ·potentially inherited·.
+			"a skip {attribute wildcard}'s attribute is not inherited",
+			ctaInherited(`<xs:anyAttribute processContents="skip"/>`), `<known kind="a"><inner><b>1</b></inner></known>`,
+		},
 	} {
 		if !exec(instanceCase(t, tc.schemaBody, tc.instance, true)).IsPass() {
 			t.Errorf("%s: the walk selects the type and the gate reads the element against it; the executor must agree with a suite-valid case", tc.why)

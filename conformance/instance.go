@@ -278,38 +278,37 @@ import (
 //     that decline in Result.Unevaluated, so no empty Result reaches the gate
 //     with it. A ·nilled· element ·xs:error· governs is refused too: the walk
 //     charges cvc-type clause 3.1.3 for one that is not ·nilled· alone
-//     (§3.16.7.3, key-error). An xsi:type is admitted
-//     where the gate resolves it and xsd.Schema.ValidlySubstitutable answers
-//     that it ·overrides· the selected type (clause 4, §3.3.4.2
-//     key-overrides), which is the walk's decision too; the gate then follows
-//     that type as the ·governing type definition· (key-governing-type-elem
-//     clause 3) through every condition below. It refuses an error from that
-//     predicate, the one silent exit of validate's governingType
-//     (instanceOverride, #1093) an xsi:type reaches
+//     (§3.16.7.3, key-error). An xsi:type is admitted where the gate resolves it
+//     and xsd.Schema.ValidlySubstitutable answers that it ·overrides· the
+//     selected type (clause 4, §3.3.4.2 key-overrides), which is the walk's
+//     decision too; the gate then follows that type as the ·governing type
+//     definition· (key-governing-type-elem clause 3) through every condition
+//     below. It refuses an error from that predicate, the one silent exit of
+//     validate's governingType (instanceOverride, #1093) an xsi:type reaches
 //     (subtreeGate.governingType). {identity-constraint definitions} are
 //     admitted, at every depth: clause 6 (cvc-identity-constraint, §3.11.4) is
 //     the walk's, which reads a ·defaulted attribute· field node as it reads a
-//     present one (validate's icCheck.fieldDefaultedAttributes) and records
-//     each check it declines in Result.Unevaluated. {nillable} and xsi:nil are
+//     present one (validate's icCheck.fieldDefaultedAttributes) and records each
+//     check it declines in Result.Unevaluated. {nillable} and xsi:nil are
 //     admitted, at every depth (#2053): clause 3 is the walk's — validate's
 //     nilCheck charges 3.1, an xsi:nil on a declaration whose {nillable} is
 //     false, 3.2, one with no ·actual value·, and 3.2.3.2, a ·nilled· element
 //     under a fixed {value constraint}, and its contentCheck charges 3.2.3.1, a
-//     ·nilled· element's character or element [[child]]. An xsi:nil false
-//     under a {nillable} declaration is 3.2.2, read as if absent. The gate
-//     refuses an xsi:nil with no ·actual value· itself, wherever it sits
-//     (subtreeGate's nilValue). A {value constraint} of either variety is
-//     admitted, at every depth: clause 5.1 substitutes its {lexical form} for
-//     the ·normalized value· of an element with neither element nor character
-//     [[children]], and the walk assesses cvc-type over that substituted value
-//     and settles 5.1.1 (validate's contentCheck.assessed and
-//     contentCheck.defaultValid); over an element that has [[children]], a
-//     fixed one is clause 5.2.2's, which the walk settles too — 5.2.2.1, no
-//     element [[children]], and 5.2.2.2, the ·initial value· agreeing with it
-//     (validate's contentCheck.fixedValue) — recording in Result.Unevaluated
-//     the one comparison value.ConstraintMatches does not decide; clause 5 is
-//     gated on an element that is not ·nilled·, as the walk reads it. Clause 2
-//     is refused outright below the root, where the walk charges it nowhere.
+//     ·nilled· element's character or element [[child]]. An xsi:nil false under
+//     a {nillable} declaration is 3.2.2, read as if absent. The gate refuses an
+//     xsi:nil with no ·actual value· itself, wherever it sits (subtreeGate's
+//     nilValue). A {value constraint} of either variety is admitted, at every
+//     depth: clause 5.1 substitutes its {lexical form} for the ·normalized
+//     value· of an element with neither element nor character [[children]], and
+//     the walk assesses cvc-type over that substituted value and settles 5.1.1
+//     (validate's contentCheck.assessed and contentCheck.defaultValid); over an
+//     element that has [[children]], a fixed one is clause 5.2.2's, which the
+//     walk settles too — 5.2.2.1, no element [[children]], and 5.2.2.2, the
+//     ·initial value· agreeing with it (validate's contentCheck.fixedValue) —
+//     recording in Result.Unevaluated the one comparison value.ConstraintMatches
+//     does not decide; clause 5 is gated on an element that is not ·nilled·, as
+//     the walk reads it. Clause 2 is refused outright below the root, where the
+//     walk charges it nowhere.
 //   - cvc-type clause 2 (§3.3.4.4): the walk's, at every element. It charges
 //     an element whose ·governing type definition· is a complex type with
 //     {abstract} true, however that type was determined (validate's
