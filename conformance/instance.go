@@ -220,9 +220,9 @@ import (
 // attribute and child, which Assess follows only as far as it can type: where a
 // descendant's declaration or type is not determinable — a withheld {type
 // table} selection, an unresolvable {type definition}, a ·skipped· subtree —
-// the element and everything below it is decided against nothing, and a few of
-// validate's declines record nothing in Result.Unevaluated
-// (validate.Unevaluated's own doc lists them). The spec has no category for
+// the element and everything below it is decided against nothing, and one of
+// validate's declines records nothing in Result.Unevaluated
+// (validate.Unevaluated's own doc names it). The spec has no category for
 // "this processor did not implement that check" stronger than notKnown, so
 // outside the shape below an empty Result licenses no "valid" claim; equally it
 // licenses no "invalid" one, so an expected-invalid case declines exactly as an
@@ -303,9 +303,9 @@ import (
 //     selected type (clause 4, §3.3.4.2 key-overrides), which is the walk's
 //     decision too; the gate then follows that type as the ·governing type
 //     definition· (key-governing-type-elem clause 3) through every condition
-//     below. It refuses an error from that predicate, the one silent exit of
-//     validate's governingType (instanceOverride, #1093) an xsi:type reaches
-//     (subtreeGate.governingType). {identity-constraint definitions} are
+//     below. It refuses an error from that predicate
+//     (subtreeGate.governingType), which validate's instanceOverride records
+//     in Result.Unevaluated. {identity-constraint definitions} are
 //     admitted, at every depth: clause 6 (cvc-identity-constraint, §3.11.4) is
 //     the walk's, which reads a ·defaulted attribute· field node as it reads a
 //     present one (validate's icCheck.fieldDefaultedAttributes) and records each

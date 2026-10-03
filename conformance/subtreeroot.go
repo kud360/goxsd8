@@ -380,9 +380,9 @@ func attributeNamed(attrs []xml.Attr, n xml.Name) bool {
 //   - xsd.Schema.ValidlySubstitutable answers that T ·overrides· the selected
 //     type under d.{disallowed substitutions} (§3.3.4.2, key-overrides), which
 //     is cvc-elt clause 4. A false is the walk's cvc-elt charge
-//     (refuseXsiTypeNotOverride). An error is validate's instanceOverride
-//     decline, which leaves the governing type undetermined and records
-//     nothing, so the gate refuses it itself (refuseXsiTypeUndecided).
+//     (refuseXsiTypeNotOverride). An error is refused
+//     (refuseXsiTypeUndecided): validate's instanceOverride records it in
+//     Result.Unevaluated and leaves the governing type undetermined.
 func (g *subtreeGate) governingType(start xml.StartElement, d xsd.ElementDeclaration, selected xsd.TypeDefinition) (xsd.TypeDefinition, refusal) {
 	i := slices.IndexFunc(start.Attr, func(a xml.Attr) bool { return a.Name == xsiType })
 	if i < 0 {

@@ -134,12 +134,16 @@ func (r *Result) Violations() []*xsderr.Error {
 // One record is one SITE, not one skipped evaluation: the assertion sites are
 // collected statically off the ·governing type definition· (cvcassertion.go),
 // so several records may share a Loc and the count is not a claim about how
-// many evaluations a real evaluator would have run. The CTA site (cta.go) is
-// reached by the walk rather than collected, and is likewise one record per
-// withheld ·conditionally selected· type and not one per alternative the scan
-// never tried. Every other site is reached by the walk too, one record per
-// withheld check at the item it withheld a verdict on:
+// many evaluations a real evaluator would have run. Every other site is reached
+// by the walk, one record per withheld check at the item it withheld a verdict
+// on:
 //
+//   - the ·governing type definition· (assess.go, cta.go): each withheld one,
+//     not one per alternative the {type table} scan never tried — a {test}
+//     outside the §3.12.6 subset (key-cta-ta-select), a selected {type
+//     definition} that resolves to nothing (cvc-elt clause 1, §5.3), and an
+//     undecided ·override· of the ·selected type definition· (cvc-elt clause
+//     4) or of a ·locally declared type· (cvc-assess-elt clause 1.2);
 //   - content (cvccomplexcontent.go): String Valid (§3.16.4) over an element's
 //     ·initial value· (cvc-type clause 3.1.3, cvc-complex-type clause 1.2), a
 //     fixed {value constraint} comparison (cvc-elt clause 5.2.2.2.2), and an
@@ -148,17 +152,15 @@ func (r *Result) Violations() []*xsderr.Error {
 //   - attributes (cvcattribute.go): cvc-attribute clauses 3, 4 and 5, cvc-au,
 //     and a ·defaulted attribute·'s {lexical form} (cvc-complex-type clause 4);
 //   - the ID/IDREF table (cvcid.go): each item that could have been in the
-//     ·eligible item set· and could not be read (cvc-id clause 1);
+//     ·eligible item set· and could not be read (cvc-id clause 1), an element
+//     whose ·governing type definition· was withheld among them;
 //   - identity constraints (cvcidentityconstraint.go): a path outside the
 //     subset, a field node with no readable value, and an undecided
 //     ·key-sequence· comparison (cvc-identity-constraint clauses 3 and 4).
 //
-// Two declines are NOT recorded, so an empty Unevaluated is not by itself a
-// claim that the walk performed every check it reached: a ·governing type
-// definition· left undetermined other than by a withheld {type table} (#1093),
-// though the same element's ID/IDREF-table decline is recorded (cvcid.go), and
-// an unresolvable {attribute declaration}, which no *xsd.Schema that exists
-// carries.
+// One decline is NOT recorded, so an empty Unevaluated is not by itself a claim
+// that the walk performed every check it reached: an unresolvable {attribute
+// declaration}, which no *xsd.Schema that exists carries.
 type Unevaluated struct {
 	rule xsderr.Rule
 	loc  xsderr.Loc

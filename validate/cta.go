@@ -1,6 +1,8 @@
 package validate
 
 import (
+	"fmt"
+
 	"github.com/kud360/goxsd8/xpath"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
@@ -38,9 +40,37 @@ const ruleKeyCTATASelect xsderr.Rule = "key-cta-ta-select"
 func (w *walk) selectedType(e Element, d xsd.ElementDeclaration, inherited []inheritedAttribute) (xsd.TypeDefinition, bool) {
 	table, tabled := d.TypeTable()
 	if !tabled {
-		return w.schema.ResolvedType(d.TypeDefinition())
+		return w.resolvedSelection(e, d.TypeDefinition(), "the {type definition} of its ·governing element declaration·")
 	}
 	return w.conditionallySelected(e, table, inherited)
+}
+
+// resolvedSelection is the type definition a {type definition} slot that
+// key-selected-type reads for e names, through [xsd.Schema.ResolvedType]; slot
+// names that slot for the message. A slot that resolves to nothing is one of
+// governingType's declines, and it is RECORDED: as one [Unevaluated] under
+// cvc-elt clause 1 at e's own location, nothing downstream charging the element
+// whose type it withholds.
+//
+// A finalized Schema reaches it two ways, and ResolvedType answers not-ok for
+// both. Finalize accepts a [xsd.SubstitutionGroupHeadTypeRef] whose head names
+// no declaration (§5.3 Missing Sub-components, xsd's
+// resolveTypeDefinitionSlot), and a nil {type definition}, the ·absent· slot of
+// a declaration built without the parser's §3.3.2.1 defaulting (the
+// declaration's own slot alone: xsd.NewTypeAlternative rejects nil). §5.3 makes
+// validating an element against a component holding such an ·absent· value "as
+// if clause 1 of Element Locally Valid (Element) had failed", with a fall back
+// to ·lax assessment·. This package applies neither, so the record names the
+// clause and charges nothing.
+func (w *walk) resolvedSelection(e Element, ref xsd.TypeDefinitionOrRef, slot string) (xsd.TypeDefinition, bool) {
+	t, ok := w.schema.ResolvedType(ref)
+	if !ok {
+		w.decline("assessing element", e.Name(), e.Loc(), ruleCvcElt, "1",
+			"the ·selected type definition· of the element %s was not determined, so it has no ·governing type definition· and was assessed against nothing: %s resolves to no type definition, an ·absent· value where a component is mandated, which Structures §5.3 (Missing Sub-components) treats as if cvc-elt clause 1 had failed, falling back to ·lax assessment· — neither of which was applied",
+			e.Name(), slot)
+		return nil, false
+	}
+	return t, true
 }
 
 // conditionallySelected is the type a Type Table ·conditionally selects· for e
@@ -67,10 +97,11 @@ func (w *walk) selectedType(e Element, d xsd.ElementDeclaration, inherited []inh
 // can only cost a rejection.
 //
 // That withhold is RECORDED, as one [Unevaluated] under ruleKeyCTATASelect at
-// the element's own location, and it is the only thing here that is: nothing
-// downstream charges the element, so without the record an element whose
-// ·governing type definition· was withheld is byte-identical at the [Result]
-// API to one that passed every rule (#56).
+// the element's own location: nothing downstream charges the element, so
+// without the record an element whose ·governing type definition· was withheld
+// is byte-identical at the [Result] API to one that passed every rule (#56).
+// The other withhold here, a selected {type definition} that resolves to
+// nothing, is resolvedSelection's, and recorded there under cvc-elt.
 //
 // A DYNAMIC OR TYPE ERROR INSIDE AN EVALUABLE {test} IS NOT RECORDED, because
 // it is not a withhold: key-cta-ta-select clause 2 says such a {test} "is
@@ -105,9 +136,12 @@ func (w *walk) conditionallySelected(e Element, table xsd.TypeTable, inherited [
 		if !compiled.Evaluate(w.backend, w.schema, attr) {
 			continue
 		}
-		return w.schema.ResolvedType(alt.TypeDefinition())
+		return w.resolvedSelection(e, alt.TypeDefinition(), fmt.Sprintf(
+			"the {type definition} of alternative %d of %d in the {alternatives} of the {type table} of its ·governing element declaration·, which ·successfully selects· it,",
+			i+1, len(alts)))
 	}
-	return w.schema.ResolvedType(table.DefaultTypeDefinition().TypeDefinition())
+	return w.resolvedSelection(e, table.DefaultTypeDefinition().TypeDefinition(),
+		"the {type definition} of the {default type definition} of the {type table} of its ·governing element declaration·, which the table ·conditionally selects· because no alternative ·successfully selects· a type definition,")
 }
 
 // ctaAttributes is the attribute sequence a {test} evaluates against, the two
