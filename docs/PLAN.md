@@ -17,16 +17,19 @@ read them. One stamp for the whole section, so a reader can tell staleness
 from wrongness at a glance. Never add a dated paragraph beside the old
 one — appending is what this replaces.
 
-## Status — 2026-10-03 (post-land after #2180, on `main` at `aa2595a`)
+## Status — 2026-10-03 (post-land after #2176, on `main` at `d1799df`)
 
-**M5 has no unblocked north star larger than #2018's `instance` ≤ +2.** #2180
-decided the `MS-Additional` `<inline-schema>` cluster: 3 passes, 1 recorded
-divergence (addB166.i) and 2 declines under written rulings (addB142.i,
-addB181.i). Every `instance` decline cluster of more than 5 is now ruled,
-recorded or `blocked`: #1042's 180 assertion declines (M6) and `VC`
-`<versioned>` 11 (#1002). **The band is #2176, #2174 then #2018. Lean:
-product.** Every row is M5 work. #2176 is claimed (`wip/issue-2176` is LIVE),
-so #2174 is the startable row, then #2018. The process filings wait on the
+**M5's largest open bound is `instance` +2, and it now sits behind a
+three-issue chain: #1770 → #2187 → #2188.** #2018's grounding
+(issuecomment-5974461710) found that `encoding/xml`'s 4th-edition name check
+cannot be lifted, so the read arm became a 5th-edition tokenizer (#2187, on
+#1770's leaf) and the move of the four decoder sites onto it (#2188, `instance`
++2: xv001.v01 and xv004.v01). Both are `blocked`; #1770 is `ready` and heads
+the chain. #2018 itself now takes the gap arm (`wip/issue-2018` is LIVE). Every
+other `instance` decline cluster of more than 5 is ruled, recorded or
+`blocked`: #1042's 180 assertion declines (M6) and `VC` `<versioned>` 11
+(#1002). **The band is #2174, #1770 then #2018. Lean: product.** #2176 landed
+at `d1799df`, unchanged at its bound 0. The process filings wait on the
 `/retro` on 2026-10-04.
 
 **#2081 stays `needs-replan` on GitHub.** Its replan restates the body and
@@ -35,7 +38,7 @@ that write to an earlier pass, so the owner posts it (next planning action 1).
 
 ### Conformance lanes
 
-**This table is `go tool lanestatus`, pasted verbatim, on `main` at `aa2595a`.**
+**This table is `go tool lanestatus`, pasted verbatim, on `main` at `d1799df`.**
 It is the committed expectations census, which `docs/WORKFLOW.md` names as the
 lane score (#1120).
 
@@ -48,7 +51,8 @@ lane score (#1120).
 | `schema` | 15288 | 110 | 15398 |
 | `xpath` | — | — | 0 |
 
-**`aa2595a` (#2180) moved `instance` +3** (addB167.i, addB168.v, addB169.v).
+**`d1799df` (#2176) moved nothing**, at its bound 0. The last movement was
+`aa2595a` (#2180), `instance` +3.
 **`datatypes ⊆ instance` is intended** (#1507). **An em dash means a lane with
 no cases yet, not a lane scoring zero.** `datatypes` is M3 and complete. `schema` is M4 and `instance`
 is M5, and both are active. `xpath`, `json` and `ber` wait on M6/M7, M8 and M11.
@@ -61,10 +65,10 @@ conformance run, fed to `go tool lanepartition -log <run> <lane>`. The
 outcomes, which its VERDICT measured (issuecomment-5974152333): 6
 `<inline-schema>` declines left, 3 became passes, 1 became a decided
 disagreement and 2 became declines under other tokens. #2168 left every
-`Unevaluated` record byte-identical. Every figure is a part of the banked fails
-and a bound from above, never a prediction of flips. `instance` clusters carry
-their refusal token in `<…>`. The tool matches owners lexically, so the owners
-named below are this stamp's reading.
+`Unevaluated` record byte-identical, and #2176 moved no line. Every figure is a
+part of the banked fails and a bound from above, never a prediction of flips.
+`instance` clusters carry their refusal token in `<…>`. The tool matches owners
+lexically, so the owners named below are this stamp's reading.
 
 | lane | banked fail | declined | indeterminate (#277) | decided against the suite |
 |---|---:|---:|---:|---:|
@@ -72,8 +76,9 @@ named below are this stamp's reading.
 | `schema` | 110 | 1 | 11 | 98 |
 | `datatypes` | 10 | 6 | — | 4 |
 
-- **M5 has no measured open-work north star above #2018's 2.** #2180 retired
-  the `<inline-schema>` cluster. Only a nested inline `xs:schema` still
+- **M5's north star is `XmlVersions`' 2, held by one decision: a 5th-edition
+  Name check at every decoder site** (#2188, behind #2187 and #1770). #2180
+  retired the `<inline-schema>` cluster. Only a nested inline `xs:schema` still
   declines `<inline-schema>`.
   - **addB142.i `<hint-undeclared-root>` is ruled.** An undeclared root is
     ·laxly assessed· and its [validity] is notKnown (#2013's oracle ruling,
@@ -109,8 +114,9 @@ named below are this stamp's reading.
 - **`VC` declines 28:** 14 assertion ones (#1042), 11 `<versioned>` and 3
   `<schema-error>` (#1002 and #1042, both `blocked`). `ConditionalInclusion` 1 is
   `<versioned>` too.
-- **`XmlVersions` declines 6.** #2018 owns xv001.v01 and xv004.v01. Its body
-  sizes the read arm as likely more than one session.
+- **`XmlVersions` declines 6.** xv001.v01 and xv004.v01 are #2188's (+2,
+  `blocked` on #2187, which is `blocked` on #1770). #2018 now lands the gap
+  arm: `GAP(xml)` markers at the four decoder sites, naming #2188.
 - **`Wildcard` declines 5 invalid.** `pscontents00102m1` and `m2` are #1912's.
   00201m1, 00301m2 and 00302m2 are unattributed.
 - **M4 has no measured open-work north star.**
@@ -132,11 +138,11 @@ named below are this stamp's reading.
 
 ### Branch namespace, `origin` (report-only; a session never deletes a ref)
 
-`go tool wipsurvey` was fed this pass's REST walk, stamped `rows 2184 distinct
-2184 min 1 max 2184 no gaps` (pull requests included), after `git fetch
+`go tool wipsurvey` was fed this pass's REST walk, stamped `rows 2188 distinct
+2188 min 1 max 2188 no gaps` (pull requests included), after `git fetch
 --prune origin`. It prints:
 
-- **`wip/issue-2176` is LIVE.** Leave it to its session. `wip/issue-2180` was
+- **`wip/issue-2018` is LIVE.** Leave it to its session. `wip/issue-2176` was
   deleted at its merge.
 - **`wip/issue-2081` is RETIRED** (`needs-replan`) and holds no code.
 - **`wip/issue-2013` is RETIRED** (closed `not_planned`). Its content is on
@@ -159,8 +165,9 @@ named below are this stamp's reading.
 ### Marker census
 
 `go tool gapaudit`, fed the same walk, reports **86 markers across 10 areas, 12
-in group 1 and 30 in group 2, with zero dead ends** at `aa2595a`. #2176 is in
-group 2, filed with no marker of its own. #2180 added no `GAP(` marker.
+in group 1 and 29 in group 2, with zero dead ends** at `d1799df`. #2176 left
+group 2 at its close and added no `GAP(` marker; it restated the `parser/doc.go`
+§5.3 bullet and `xsd/resolve.go`'s paragraph above its marker.
 
 - **The group-1 rows:**
   - the `parser/doc.go` §5.3 policy row and `xsd/resolve.go`'s §5.3
@@ -180,7 +187,7 @@ group 2, filed with no marker of its own. #2180 added no `GAP(` marker.
 
 ### Milestones and queue
 
-**Counted from GitHub during this pass: 329 open issues.**
+**Counted from GitHub during this pass: 330 open issues.**
 
 | milestone | open | closed | state |
 |---|---:|---:|---|
@@ -188,29 +195,31 @@ group 2, filed with no marker of its own. #2180 added no `GAP(` marker.
 | M2 — Foundation leaves | 0 | 5 | done |
 | M3 — Datatypes vertical slice | 0 | 12 | complete |
 | **M4 — Schema parsing** | **64** | **172** | active |
-| **M5 — Instance validation (XML)** | **18** | **104** | active |
+| **M5 — Instance validation (XML)** | **19** | **105** | active |
 | M6 — XPath required subset | 1 | 0 | not started |
 | M7–M12 | 0 | 0 | not started |
 
-Open issues carry **314 `ready`, 12 `blocked`, 1 `needs-replan` and 2
-`epic`**, which sums to 329. `kind/gap` is 63 and `kind/bug` is 35.
+Open issues carry **313 `ready`, 14 `blocked`, 1 `needs-replan` and 2
+`epic`**, which sums to 330. `kind/gap` is 62 and `kind/bug` is 35.
 
-- **`blocked` is 12:** #16, #555, #1002, #1042, #1051, #1374, #1609, #1790,
-  #1880, #1885, #1923 and #2022. No `## Depends on` names #2180.
+- **`blocked` is 14:** #16, #555, #1002, #1042, #1051, #1374, #1609, #1790,
+  #1880, #1885, #1923, #2022, #2187 and #2188. No `## Depends on` names #2176.
+  - **#2187 waits on #1770, and #2188 on #2187.** #2018's session filed both
+    from its grounding.
   - **#1609 is unfired.** `schema` Pass reads 15288, which is not above
-    15292, and `aa2595a` touches no line of `xsd/contentrestricts.go`.
+    15292, and `d1799df` touches no line of `xsd/contentrestricts.go`.
   - **No owner comment has been posted since 2026-10-01 on any of the five
     human decisions:** #1880 (which gates #1002), #1885, #1790, #1923 and
     #2022.
 - **`needs-replan` is 1: #2081.** Next planning action 1 carries it.
-- **Measured refactors are flat**, each command re-run at `aa2595a`: #2041 3,
-  #1958 2, #1865 2, #1770 2, #1757 1, #363 2, and #2101 1 and 1. None enters
-  the band on its figure.
+- **Measured refactors are flat**, each command re-run at `d1799df`: #2041 3,
+  #1958 2, #1865 2, #1770 2, #1757 1, #363 2, and #2101 1 and 1. #1770 enters
+  the band on its new consumer (#2187), not on its figure.
 
 ### Persona consultations: not re-run this pass
 
 **The cartographer role-plays no persona and does not spawn one** (#416).
-**No persona story was handed to this pass**, and `aa2595a` adds no exported
+**No persona story was handed to this pass**, and `d1799df` adds no exported
 identifier. **Eighteen findings from the 2026-09-17 to 2026-09-29
 consultations are open and unconsumed:** #1568–#1571, #1593–#1596, #1626,
 #1684, #1685, #1687, #1688, #1843, #1845, #1894, #1895 and #1898. Open
@@ -223,25 +232,29 @@ This is ordered for a `/develop` session: take the highest row you can start.
 **Run `wipsurvey` fed before starting**, because this band is a snapshot and an
 unfed run cannot print RETIRED. Each row names one issue (#1636).
 
-**The ordering principle for this stamp:** M5 soundness work whose bound is
-expected at 0 leads, a behaviour change ahead of a marker ruling. M5's largest
-startable lane bound follows it. No process issue enters the band. #2007
+**The ordering principle for this stamp:** the startable M5 row leads. The
+head of the chain behind M5's largest bound follows it, ranked as product
+because it removes the cap on `instance` +2 and not on its refactor figure.
+The claimed row comes last. No process issue enters the band. #2007
 belongs to the orchestrating session, and every other process issue is queued
 for the `/retro` on 2026-10-04 or waits on the owner.
 
 | # | issue | why here |
 |---|---|---|
-| 1 | #2176 | **M5 gap, bound 0.** An element whose {substitution group affiliations} holds an ·absent· member is strictly assessed with no charge. §5.3 charges `cvc-elt` clause 1 and falls back to ·lax assessment·, through the arm #2166 built. **Claimed: `wip/issue-2176` is LIVE.** Take the next row unless its lease expires |
-| 2 | #2174 | **M5 gap, comment-only expected.** Rule or retire the three undetermined-type `GAP(validate)` markers: `walk.child`'s and `walk.localGovernance`'s (`validate/assess.go`) and `idElement`'s (`validate/cvcid.go`). Rows 1–2 and #1463 all edit `validate/assess.go` or a sibling, and each body records the overlap. **Startable now** |
-| 3 | #2018 | **M5 gap, bound `instance` ≤ +2** (`XmlVersions` xv001.v01 and xv004.v01). A 5th-edition `Name` is read, or the 4th-edition restriction becomes a `GAP(xml)` marker. The grounding chooses the arm, and its body sizes the read arm as likely more than one session. The harness re-reads now share `recordingDecoder` (#2180), and the body says so. **Startable now** |
+| 1 | #2174 | **M5 gap, comment-only expected.** Rule or retire the three undetermined-type `GAP(validate)` markers: `walk.child`'s and `walk.localGovernance`'s (`validate/assess.go`) and `idElement`'s (`validate/cvcid.go`). #2176's `walk.absentAffiliation` routes to the zero `governance`, not the undecided shape, so the producer list is unchanged (body re-cited at `d1799df`). It may absorb #1463 in the same file. **Startable now** |
+| 2 | #1770 | **Heads M5's `instance` +2 chain.** One `internal/` leaf for XML 1.0 5e [4]/[4a], read by `regex` and `parser/xmltree`. #2187 (the 5e tokenizer) checks names through it, and #2188 then moves the four decoder sites for xv001.v01 and xv004.v01. `Ratchet: unchanged` on its own. It shares `parser/xmltree/doctype.go` with #2101. **Startable now** |
+| 3 | #2018 | **M5 gap arm, `Ratchet: unchanged`.** `GAP(xml)` markers at the four decoder sites, naming #2188; the read arm left this issue at grounding (issuecomment-5974461710). **Claimed: `wip/issue-2018` is LIVE.** Take a higher row unless its lease expires |
 
 **Named below the band, on purpose.**
 - **#2081 is `needs-replan`** (next planning action 1). **#2148** (FlavorFO +
   `i` class subtraction) and **#2147** (FlavorFO `i` rule 4 and the fold
   relation) share `regex/classparse.go`, are `Ratchet: unchanged`, and have no
   consumer until M6's `fn:matches`.
-- **M5 residue:** #1848, #1849 and #1825. **#1463** is the `validate`
-  comment-citation sweep. Any landing in `validate/assess.go` may absorb it.
+- **M5 residue:** #1848 (a precisionDecimal false reject and a silent
+  ·scale· wrap; the next M5 row once the band clears), #1849 and #1825.
+  **#1463** is the `validate` comment-citation sweep, its sites re-cited at
+  `d1799df`. Any landing in `validate/assess.go` may absorb it.
+- **#2187 and #2188** are `blocked` behind row 2.
 - **`parser/xmltree` gaps, `Ratchet` unmeasured:** #2099, #2100, #753 and
   #2089 (one `classify` session can take #753 and #2089). #2101 is the
   refactor beside them.
@@ -252,7 +265,7 @@ for the `/retro` on 2026-10-04 or waits on the owner.
   - #2073, #2052, #1873, #1877, #1883, #1887, #1820, #1801 and #1777.
 - **Conformance bookkeeping:** #1803, #1881 and #785. **Doc and comment
   fixes:** #1343 and #1502 (the latter shares `xsd/resolve.go`'s §5.3
-  paragraph with #2176).
+  paragraph, which #2176 restated at `d1799df`).
 - **`value`, `Ratchet: unchanged`:** #2045. It shares a file with #2041 and
   #2087.
 - **`internal/xmlenc`, both low priority:** #361 and #363.
@@ -261,8 +274,8 @@ for the `/retro` on 2026-10-04 or waits on the owner.
 - **Tooling:** #2070, #2066 and #678 (`commentwrap`), #1935, #1897, #1464,
   #1838 and #1794.
 - **Refactors:**
-  - #2041, #1958, #1865, #1770, #1757, #363 and #2101 are measured and
-    flat.
+  - #2041, #1958, #1865, #1757, #363 and #2101 are measured and flat.
+    #1770 is flat too and is banded as row 2.
   - #1735, #1736, #1701, #848 and #845 are unmeasured.
   - #755 owns the xsi hint reader's single home. Its body now carries
     #2180's inline-schema reading and the verdict's `isInlineLocation` note.
@@ -300,11 +313,13 @@ for the `/retro` on 2026-10-04 or waits on the owner.
    `parked/untriaged-20260930-*` branches, `chronicler-345`,
    `meta/backlog-2026-10-01-b`, the eight subagent branches and
    `wip/issue-2013`.
-3. **The next `/backlog` re-runs the failure partition on `aa2595a` or
-   later, and names M5's next north star.** This stamp's `instance` row is
-   carried forward by hand from `f5153bd`. If no unblocked cluster above
-   #2018's 2 appears, the band should lean toward M4 or toward unblocking
-   #1042 (M6), which holds 180 of `instance`'s declines.
+3. **The next `/backlog` re-runs the failure partition on `d1799df` or
+   later, and confirms M5's north star.** This stamp's `instance` row is
+   carried forward by hand from `f5153bd`. If no unblocked cluster above the
+   `XmlVersions` 2 appears, the band should lean toward M4 or toward
+   unblocking #1042 (M6), which holds 180 of `instance`'s declines. It also
+   sizes #2187 (about 2,000 lines by #2018's grounding), which may need a
+   split before it is startable.
 4. **The `/retro` on Sunday 2026-10-04 reads these windows and landings.**
    Each landing below was accepted in round 1 unless it says otherwise:
    - the windows and landings the previous stamps listed;
@@ -354,6 +369,9 @@ for the `/retro` on 2026-10-04 or waits on the owner.
      oracle ruling that §4.3.2 admits both arms. One new divergence was
      recorded. Two non-blocking findings went to #755's body and a dismissal
      on #2180's thread;
+   - **#2176's**, unchanged at its bound 0, no findings, 1 mason round. The
+     grounding counted four re-based fixtures where the mason re-based five;
+   - **#2018's grounding**, which split the read arm into #2187 and #2188;
    - four windows: 73.7 cases per session at 89% product, 177.7 at 100%, 44.4
      at 90%, and 10.0 at 90% with two repair rounds;
    - every landing through #1093's second-round accept at 0;
