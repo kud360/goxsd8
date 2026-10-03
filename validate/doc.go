@@ -70,10 +70,11 @@
 //     declines withholds the element's ·governing type definition·
 //     instead of falling back to the declared type, and is recorded as an
 //     [Unevaluated] under key-cta-ta-select (§3.12.4) — nothing else
-//     reports it, since a withheld type charges the element nothing. A
-//     dynamic or type error inside a {test} the evaluator DOES compile is
-//     recorded by nothing: clause 2 of that rule makes it a decided false,
-//     so the alternative was tried and the scan continues.
+//     in the [Result] reports it, since a withheld type charges the
+//     element nothing. A dynamic or type error inside a {test} the
+//     evaluator DOES compile is recorded by nothing: clause 2 of that rule
+//     makes it a decided false, so the alternative was tried and the scan
+//     continues.
 //   - Identity constraints: node tables propagate UPWARD — a keyref on
 //     element E resolves only against key sequences sourced within E's
 //     own subtree; selector/field paths honor xpathDefaultNamespace for
