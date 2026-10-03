@@ -586,6 +586,15 @@ func newSchemaCharge() func(caseSpec) string {
 // the SAME location string, so it reads byte-identically the document the assembly
 // roots at.
 func assembleCase(backend value.Backend, doc string, extraDocs []string) (*xsd.Schema, *parser.AssemblyReport, bool, error) {
+	return assembleCaseWith(backend, doc, extraDocs, nil)
+}
+
+// assembleCaseWith is assembleCase with hints, parser.HintAt roots, entered
+// after every root assembleCase enters, through the same resolver and under the
+// same gate. The instance lane passes the hints its instance's root carries for
+// namespaces the group's own closure leaves uncovered (groupSchema); every other
+// caller passes none.
+func assembleCaseWith(backend value.Backend, doc string, extraDocs []string, hints []parser.Root) (*xsd.Schema, *parser.AssemblyReport, bool, error) {
 	resolver := pinnedResolver{dir: loader.Dir(filepath.Dir(doc))}
 	location := filepath.Base(doc)
 	if _, ok := rootReadable(resolver, location); !ok {
@@ -598,9 +607,10 @@ func assembleCase(backend value.Backend, doc string, extraDocs []string) (*xsd.S
 	if !ok {
 		return nil, nil, false, nil
 	}
+	roots = append(roots, hints...)
 	if len(roots) > 0 {
-		// A declared document the first root's closure did not reach: the case is
-		// the union of every root's schema(D), assembled as ONE schema so
+		// A declared document the first root's closure did not reach, or a hint:
+		// the case is the union of every root's schema(D), assembled as ONE schema so
 		// sch-props-correct (§3.17.6.1) clause 2 and src-resolve clause 4 hold
 		// across the set (#1840). Its report is a superset of the first root's
 		// closure, so the gate below runs over every document either consumed.
