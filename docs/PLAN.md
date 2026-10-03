@@ -17,19 +17,18 @@ read them. One stamp for the whole section, so a reader can tell staleness
 from wrongness at a glance. Never add a dated paragraph beside the old
 one — appending is what this replaces.
 
-## Status — 2026-10-03 (post-land pass after #2132, on `main` at `f2b6282`)
+## Status — 2026-10-03 (post-land pass after #814, on `main` at `698ea54`)
 
-**#2132 landed at `f2b6282`, test-only, `Ratchet: unchanged`.**
-`TestInstanceExecutorDecidesTypeTable` now pins the subtree gate's
-key-p-inherited 3.2 arm, and its first-true-wins row can now fail. **M5 has
-no north star.** The `<abstract>` cluster was the last one held by open,
+**#814 landed at `698ea54`, `Ratchet: unchanged`.** Five `validate`
+residuals are discharged and item 4 was withdrawn at grounding. **M5 has no
+north star.** The `<abstract>` cluster was the last one held by open,
 unblocked work. The largest unowned cluster is `<no-hint>` 15, which waits on
 an oracle question (next planning action 4). **#1856, the one measured
 product bound, is parked `needs-replan`** after two rejections on F&O flag
-`i` (next planning action 2). **The band is #814 then #1824. Lean: debt.** It
-is `Ratchet: unchanged` test and doc debt in `validate`, because no startable
-measured product bound remains. The process filings wait on the `/retro` on
-2026-10-04.
+`i` (next planning action 2). **The band is #1824 alone. Lean: debt.** It is
+`Ratchet: unchanged` doc debt in `validate`, because no startable measured
+product bound remains. The process filings wait on the `/retro` on
+2026-10-04, and the next `/backlog` re-partitions and refills the band.
 
 **#2081 stays `needs-replan` on GitHub.** Its replan restates the body and
 relabels it `blocked` on the owner's ruling. The permission classifier
@@ -37,7 +36,7 @@ refused that write, so the owner posts it (next planning action 1).
 
 ### Conformance lanes
 
-**This table is `go tool lanestatus`, pasted verbatim, on `main` at `f2b6282`.**
+**This table is `go tool lanestatus`, pasted verbatim, on `main` at `698ea54`.**
 It is the committed expectations census, which `docs/WORKFLOW.md` names as the
 lane score (#1120).
 
@@ -124,10 +123,10 @@ owners lexically, so the owners named below are this stamp's reading.
 
 ### Branch namespace, `origin` (report-only; a session never deletes a ref)
 
-`go tool wipsurvey` was fed this pass's issue walk, stamped `rows 2141
-distinct 2141 min 1 max 2141 no gaps`, after `git fetch origin`. It prints:
+`go tool wipsurvey` was fed this pass's issue walk, stamped `rows 2144
+distinct 2144 min 1 max 2144 no gaps`, after `git fetch origin`. It prints:
 
-- **No `wip/issue-<N>` is LIVE or CLAIMED.** `wip/issue-2132` was deleted at
+- **No `wip/issue-<N>` is LIVE or CLAIMED.** `wip/issue-814` was deleted at
   merge.
 - **`wip/issue-1856` is RETIRED** (`needs-replan`). It holds the parked work
   at `556c5a4`, which is the replan's evidence.
@@ -152,7 +151,7 @@ distinct 2141 min 1 max 2141 no gaps`, after `git fetch origin`. It prints:
 ### Marker census
 
 `go tool gapaudit`, fed the same walk, reports **83 markers across 10 areas, 13
-in group 1 and 31 in group 2, with zero dead ends.** #2132 was not a
+in group 1 and 31 in group 2, with zero dead ends.** #814 was not a
 `kind/gap` issue, and its landing added and removed no marker.
 
 - **The group-1 rows are unchanged:**
@@ -172,8 +171,7 @@ in group 1 and 31 in group 2, with zero dead ends.** #2132 was not a
 
 ### Milestones and queue
 
-**Counted from the REST walk above, plus #2142, which this pass filed: 332
-open issues.**
+**Counted from the REST walk above: 331 open issues.**
 
 | milestone | open | closed | state |
 |---|---:|---:|---|
@@ -181,34 +179,33 @@ open issues.**
 | M2 — Foundation leaves | 0 | 5 | done |
 | M3 — Datatypes vertical slice | 0 | 12 | complete |
 | **M4 — Schema parsing** | **64** | **172** | active |
-| **M5 — Instance validation (XML)** | **19** | **94** | active |
+| **M5 — Instance validation (XML)** | **18** | **95** | active |
 | M6 — XPath required subset | 1 | 0 | not started |
 | M7–M12 | 0 | 0 | not started |
 
-Open issues carry **316 `ready`, 12 `blocked`, 2 `needs-replan` and 2
-`epic`**, which sums to 332. `kind/gap` is 64 and `kind/bug` is 35.
+Open issues carry **315 `ready`, 12 `blocked`, 2 `needs-replan` and 2
+`epic`**, which sums to 331. `kind/gap` is 64 and `kind/bug` is 35.
 
 - **`blocked` is 12:** #16, #555, #1002, #1042, #1051, #1374, #1609, #1790,
-  #1880, #1885, #1923 and #2022. **#2132's landing unblocks none:** no
+  #1880, #1885, #1923 and #2022. **#814's landing unblocks none:** no
   `## Depends on` names it.
   - **#1609 is unfired.** `schema` Pass reads 15288, which is not above
-    15292. Total is 15398, and `f2b6282` touches no `xsd/` file.
+    15292. Total is 15398, and `698ea54` touches no `xsd/` file.
   - **No owner comment has been posted since 2026-10-01 on any of the five
     human decisions:** #1880 (which gates #1002), #1885, #1790, #1923 and
     #2022.
 - **`needs-replan` is 2: #2081 and #1856.** Next planning actions 1 and 2
   carry them.
-- **No measured refactor was re-run.** `f2b6282` touches only
-  `conformance/subtreeroot_cta_test.go`, and none of their commands reads it.
-  They stand as measured: #2041 3 on `4fcf97c`; #1958 2, #1865 2, #1757 1,
-  #1770 2, #363 2, and #2101 1 and 1, all on `0f69cdb`. All are flat, and none
-  enters the band on its figure. #814 is `kind/refactor` with cost of delay
-  unmeasured.
+- **No measured refactor was re-run.** `698ea54` touches only `validate/cvcid.go`,
+  `validate/cvcidentityconstraint.go` and their tests, and none of their
+  commands reads those files. They stand as measured: #2041 3 on `4fcf97c`;
+  #1958 2, #1865 2, #1757 1, #1770 2, #363 2, and #2101 1 and 1, all on
+  `0f69cdb`. All are flat, and none enters the band on its figure.
 
 ### Persona consultations: not re-run this pass
 
 **The cartographer role-plays no persona and does not spawn one** (#416).
-**No persona story was handed to this pass**, and `f2b6282` adds no exported
+**No persona story was handed to this pass**, and `698ea54` adds no exported
 identifier. **Eighteen findings from the 2026-09-17 to 2026-09-29
 consultations are open and unconsumed:** #1568–#1571, #1593–#1596, #1626,
 #1684, #1685, #1687, #1688, #1843, #1845, #1894, #1895 and #1898. Open
@@ -221,20 +218,16 @@ This is ordered for a `/develop` session: take the highest row you can start.
 **Run `wipsurvey` fed before starting**, because this band is a snapshot and an
 unfed run cannot print RETIRED. Each row names one issue (#1636).
 
-**Both rows are `validate` sweeps.** Item 6 of #814 and item 5 of #1824 were
-folded in by the last two post-land passes.
-
 **The ordering principle for this stamp:** no startable measured product
 bound remains. #1856's is parked for replan, and M5's north star is vacated
-until the next `/backlog` re-runs the partition. The band is therefore test
-and doc debt in the files the recent landings edited. No process issue enters
+until the next `/backlog` re-runs the partition. The band is therefore the
+doc debt in the files the recent landings edited. No process issue enters
 the band. #2007 belongs to the orchestrating session, and every other process
 issue is queued for the `/retro` on 2026-10-04 or waits on the owner.
 
 | # | issue | why here |
 |---|---|---|
-| 1 | #814 | **`Ratchet: unchanged`.** Six sub-threshold residuals in `validate/cvcid.go` and the identity-constraint tests. Item 6 pins clause 3's "zero or more ·skipped· nodes" beside a valued one. **Startable now** |
-| 2 | #1824 | **`Ratchet: unchanged`, comments only.** Five `validate` doc follow-ups. Item 5 restates `Validator.Assess`'s guarantee sentence, which #2127 left with no clear subject. **Startable now** |
+| 1 | #1824 | **`Ratchet: unchanged`, comments only.** Five `validate` doc follow-ups. Item 5 restates `Validator.Assess`'s guarantee sentence, which #2127 left with no clear subject. **Startable now** |
 
 **Named below the band, on purpose.**
 - **#1856 and #2081 are `needs-replan`** (next planning actions 1 and 2).
@@ -297,10 +290,10 @@ issue is queued for the `/retro` on 2026-10-04 or waits on the owner.
    entry. A human triages both `parked/untriaged-20260930-*` branches,
    `chronicler-345`, `meta/backlog-2026-10-01-b`, the eight subagent branches
    and `wip/issue-2013`.
-4. **The next `/backlog` names M5's north star.** It re-runs the
-   `GOXSD_DECLINES=1` partition this stamp carried forward from `0f69cdb`.
-   It also asks whether the `<no-hint>` 15 is one decision: whether an
-   instance group with no schemaTest and no hint is decided against the
+4. **The next `/backlog` names M5's north star and refills the band.** It
+   re-runs the `GOXSD_DECLINES=1` partition this stamp carried forward from
+   `0f69cdb`. It also asks whether the `<no-hint>` 15 is one decision: whether
+   an instance group with no schemaTest and no hint is decided against the
    built-in components alone, under §4.3.2 and #2025's ruling. It files that
    issue only if the oracle says the processor may. It measures #2061's
    bound by the recipe in its Acceptance.
@@ -310,11 +303,12 @@ issue is queued for the `/retro` on 2026-10-04 or waits on the owner.
    pre-flight that chose the route), **#2121's** (round 1, unchanged, with
    a gate-only re-judge after a forward merge), **#2127's** (round 1,
    `instance` +7 at its bound, no findings), **#1856's park** (two rejections
-   on F&O flag `i`, a path the grounding never scoped) **and #2132's** (round
-   1, unchanged, test-only):
+   on F&O flag `i`, a path the grounding never scoped), **#2132's** (round
+   1, unchanged, test-only) **and #814's** (round 1, unchanged, with three
+   stale premises corrected at grounding in a body accreted over seven weeks):
    - four windows: 73.7 cases per session at 89% product, 177.7 at 100%, 44.4
      at 90%, and 10.0 at 90% with two repair rounds;
-   - every landing through #2132's first-round accept at 0;
+   - every landing through #814's first-round accept at 0;
    - #2081's park at grounding;
    - #2124's first develop session, which posted GROUNDING and RULING, then
      stopped with no RESUME and no code.
