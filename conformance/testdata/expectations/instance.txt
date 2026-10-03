@@ -451,7 +451,7 @@ DefaultFixed/s2_7_2ii01/instance/s2_7_2ii01i pass
 DefaultFixed/s2_7_2v01/instance/s2_7_2v01i pass
 EDCWildcard/s3_8_6ii01/instance/s3_8_6ii01i pass
 EDCWildcard/s3_8_6v01/instance/s3_8_6v01i pass
-ElemDecl/abstract00101m/instance/abstract00101m1_n fail
+ElemDecl/abstract00101m/instance/abstract00101m1_n pass
 ElemDecl/abstract00101m/instance/abstract00101m1_p pass
 ElemDecl/abstract00201m1/instance/Negative pass
 ElemDecl/abstract00201m2/instance/Positive pass
@@ -2738,7 +2738,7 @@ MS-Element2006-07-15/QFE1700f2/instance/QFE1700f2.v pass
 MS-Element2006-07-15/QFE1700f3/instance/QFE1700f3.i pass
 MS-Element2006-07-15/QFE1700g1/instance/QFE1700g1.i pass
 MS-Element2006-07-15/QFE1700g2/instance/QFE1700g2.v pass
-MS-Element2006-07-15/elemO001/instance/elemO001.i fail
+MS-Element2006-07-15/elemO001/instance/elemO001.i pass
 MS-Element2006-07-15/elemO002/instance/elemO002.v pass
 MS-Element2006-07-15/elemO003/instance/elemO003.v pass
 MS-Element2006-07-15/elemO004/instance/elemO004.v pass
@@ -3558,7 +3558,7 @@ MS-Particles2006-07-15/particlesDb007/instance/particlesDb007.v pass
 MS-Particles2006-07-15/particlesDb008/instance/particlesDb008.i pass
 MS-Particles2006-07-15/particlesDb009/instance/particlesDb009.i pass
 MS-Particles2006-07-15/particlesDb010/instance/particlesDb010.i pass
-MS-Particles2006-07-15/particlesDb011/instance/particlesDb011.i fail
+MS-Particles2006-07-15/particlesDb011/instance/particlesDb011.i pass
 MS-Particles2006-07-15/particlesDc001/instance/particlesDc001.v pass
 MS-Particles2006-07-15/particlesDc002/instance/particlesDc002.v pass
 MS-Particles2006-07-15/particlesDc003/instance/particlesDc003.v pass
@@ -5523,7 +5523,7 @@ MS-SimpleType2006-07-15/stZ037/instance/stZ037.i pass
 MS-SimpleType2006-07-15/stZ039/instance/stZ039.i pass
 MS-SimpleType2006-07-15/stZ040/instance/stZ040.v pass
 MS-SimpleType2006-07-15/stZ043/instance/stZ043.v pass
-MS-SimpleType2006-07-15/stZ044/instance/stZ044.i fail
+MS-SimpleType2006-07-15/stZ044/instance/stZ044.i pass
 MS-SimpleType2006-07-15/stZ045/instance/stZ045.v pass
 MS-SimpleType2006-07-15/stZ046/instance/stZ046.v pass
 MS-SimpleType2006-07-15/stZ050/instance/stZ050.v pass
@@ -25412,9 +25412,9 @@ Simple/simple085/instance/simple085.v01.xml pass
 Simple/simple086/instance/simple086.n01.xml pass
 Simple/simple086/instance/simple086.n02.xml pass
 Simple/simple086/instance/simple086.v01.xml pass
-Subsgroup/subsgroup001/instance/subsgroup001.n1.xml fail
+Subsgroup/subsgroup001/instance/subsgroup001.n1.xml pass
 Subsgroup/subsgroup001/instance/subsgroup001.v1.xml pass
-Subsgroup/subsgroup002/instance/subsgroup002.n1.xml fail
+Subsgroup/subsgroup002/instance/subsgroup002.n1.xml pass
 Subsgroup/subsgroup002/instance/subsgroup002.v1.xml pass
 Subsgroup/subsgroup003/instance/subsgroup003.v1.xml pass
 TargetNS/target001/instance/target001.n1.xml pass
@@ -26277,7 +26277,7 @@ suntest/xsd006/instance/xsd006.n09 pass
 suntest/xsd006/instance/xsd006.n10 pass
 suntest/xsd006/instance/xsd006.n11 pass
 suntest/xsd006/instance/xsd006.v00 pass
-suntest/xsd008/instance/xsd008.n00 fail
+suntest/xsd008/instance/xsd008.n00 pass
 suntest/xsd008/instance/xsd008.n01 pass
 suntest/xsd008/instance/xsd008.n02 pass
 suntest/xsd008/instance/xsd008.v00 pass
