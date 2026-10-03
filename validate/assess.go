@@ -120,20 +120,18 @@ const ruleCvcType xsderr.Rule = "cvc-type"
 // ([walk.childGoverning]). A child whose name ·resolves· to no declaration is
 // neither: it is clause 3.3's ·lax assessment· against xs:anyType, whose
 // {content type} and {attribute uses} constrain nothing any of these charges
-// reads, and whose lax wildcard ·attributes· each of its own [[children]] in
-// turn, so a descendant whose name ·resolves· is ·strictly assessed· below it
-// ([walk.child], #1823).
+// reads ([walk.child], #1823).
 //
 // Nothing else is decided: the remaining cvc-elt clauses, cvc-type's own
 // clause 1 (T ·non-absent·), cvc-complex-type clause 5 over [[attributes]]
 // (key-ldt-att) and clause 6 are not evaluated, so a [Result] carrying no
-// violation says the root is declared, no element is governed by an abstract
-// declaration, and — where its type was determinable — is governed by no
-// abstract complex type, carries no attribute clause 2 or clause 3.1.1
-// rejects, no required attribute clause 3 misses, no attribute whose value
-// this backend could read and found invalid, no content reject its ·governing
-// type definition· could settle and no child clause 5 rejects, and says
-// nothing else about the document.
+// violation says that the root is declared, and that every element is governed
+// by no abstract declaration and — where its type was determinable — is
+// governed by no abstract complex type, carries no attribute clause 2 or
+// clause 3.1.1 rejects and no attribute whose value this backend could read
+// and found invalid, lacks no required attribute clause 3 asks for, and has no
+// content reject its ·governing type definition· could settle and no child
+// clause 5 rejects. It says nothing else about the document.
 //
 // It panics if root is nil, on the same grounds as [ElementChild].
 func (v *Validator) Assess(root Element) *Result {
@@ -218,8 +216,8 @@ type governance struct {
 // 3's ·laxly assessed· one (key-lva): no ·governing element declaration·, no
 // ·governing type definition·, and not unattributed — the zero value and
 // nothing else. Such an element is locally validated against xs:anyType
-// (key-lva clause 1), and its [[children]] are assessed as that type's
-// {content type} ·attributes· them, to a lax wildcard ([walk.child]).
+// (key-lva clause 1); what that hands its [[children]] is [walk.child]'s to
+// say.
 func (g governance) laxlyAssessed() bool {
 	return !g.hasDecl && g.typ == nil && !g.unattributed
 }
@@ -454,8 +452,8 @@ func typeName(t xsd.TypeDefinition) string {
 // simple-typed parent, an element already charged, or a child clause 1.4
 // declined or rejected. It leaves the child unattributed ([governance]), walked
 // against nothing, and so is every element below it. A ·laxly assessed· parent
-// never reaches this arm, though its content check attributes nothing too:
-// [walk.child] hands its children xs:anyType's lax wildcard first (#1823).
+// never reaches this arm, though its content check attributes nothing too
+// ([walk.child]).
 func (w *walk) childGoverning(e Element, a xsd.Attribution, parent *xsd.ComplexType, inherited []inheritedAttribute) (governance, bool) {
 	switch t := a.(type) {
 	case xsd.ElementDeclaration:
@@ -827,8 +825,8 @@ func (c elementContext) LookupNamespace(prefix string) (string, bool) {
 // ·governing type definition· this package could not determine therefore ends
 // the typed descent at e — neither arm of clause 3 is live, a check with no
 // type attributes nothing — and e's subtree is walked against nothing
-// throughout. A ·laxly assessed· e has no type either and does NOT end it:
-// xs:anyType's lax wildcard ·attributes· its [[children]] ([walk.child]).
+// throughout. A ·laxly assessed· e has no type either and does NOT end it
+// ([walk.child]).
 //
 // cvc-complex-type clause 6 sits between the two halves and decides nothing:
 // [walk.elementAssertions] records e's {assertions} as [Unevaluated] and
@@ -1338,11 +1336,12 @@ func (w *walk) child(c Child, content *contentCheck, id *icCheck, inherited []in
 		if a == nil {
 			// GAP(validate): a child its parent ·attributed to· nothing is one
 			// this package gave up typing and not one §3.3.4.6 leaves untyped,
-			// so an ID anywhere beneath it is a declaration cvc-id never saw.
-			// The whole consumer set of that decline is idTable.charge's clause
-			// 1 arm, which stops charging an empty binding; clause 2 keeps
-			// charging, because an unseen item can only ADD members to a
-			// binding and never take one away (cvcid.go).
+			// so an ID anywhere beneath it is a declaration cvc-id never saw
+			// (#1892). The whole consumer set of that decline is
+			// idTable.charge's clause 1 arm, which stops charging an empty
+			// binding; clause 2 keeps charging, because an unseen item can
+			// only ADD members to a binding and never take one away
+			// (cvcid.go).
 			//
 			// It records no [Unevaluated] of its own. A clause 1.4 the matcher
 			// declined is content.element's cvc-complex-content record, a parent

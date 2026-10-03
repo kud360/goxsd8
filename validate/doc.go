@@ -304,8 +304,7 @@
 // could not determine or whose content it declined or charged, which is
 // assessed against nothing along with its whole subtree. A child whose name
 // ·resolves· to no declaration, and that exception does not reach, is neither:
-// it is ·laxly assessed· against xs:anyType, whose lax wildcard ·attributes·
-// its own [[children]] on the same resolving terms (key-lva, #1823).
+// it is ·laxly assessed· against xs:anyType (key-lva, walk.child, #1823).
 //
 // The eighth is cvc-identity-constraint (§3.11.4), over the {identity-constraint
 // definitions} of the ·governing element declaration· of every element the
@@ -345,12 +344,9 @@
 // value·, save two such members with byte-identical lexicals, which are the
 // same — and cvc-id clause 1 additionally declines for the whole document once
 // any item of the subtree did, since an unread declaration is exactly what an
-// empty binding would misreport. A ·nilled· element is not such an item: its
-// [schema actual value] is ·absent· (§3.3.5.4), so it is outside the ·eligible
-// item set·, and as a field node of a simple-valued ·governing type definition·
-// it leaves a ·key-sequence· short while still counting toward clause 3's "at
-// most one"; a ·nilled· field node of any other determined type is charged
-// under clause 3 like any other. Both rules read it as the spec does.
+// empty binding would misreport. What a ·nilled· element is to each rule is
+// walk.idElement's doc to say for cvc-id and icCheck.fill's for
+// cvc-identity-constraint.
 //
 // The rest of the cvc- decisions land on the walk [Validator.Assess]
 // already makes. Non-fatal warnings get an accessor of their own the day
