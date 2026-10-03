@@ -210,7 +210,20 @@ func (w *walk) declaredAttribute(a Attribute, e Element, d xsd.AttributeDeclarat
 // assessed against its ·selected type definition· (the Note under cvc-elt,
 // [walk.instanceTypeDefinition]). Neither clause carries such fallback wording,
 // and each charges whether or not that fallback succeeds.
-func (w *walk) instanceTypeResolves(e Element) {
+//
+// An unattributed e ([governance]) is charged and declined NOTHING under either
+// clause: the dispatch that would have settled e was never made, and the true
+// schema may make it an item it ·skips·, whose attributes key-governing-ad
+// clause 3 and its Note leave with no ·governing attribute declaration·. A
+// Result whose only defect is a decline must not also carry a definitive
+// charge on such an item. Nothing is recorded in the charge's place: an
+// unattributed element sits below a record or a violation ([walk.child]), or
+// carries its own decline ([walk.localGovernance]). [walk.attribute] logs the
+// item ungoverned.
+func (w *walk) instanceTypeResolves(e Element, g governance) {
+	if g.unattributed {
+		return
+	}
 	a, present := instanceAttribute(e, "type")
 	if !present {
 		return
@@ -250,8 +263,12 @@ func (w *walk) instanceTypeResolves(e Element) {
 // cvc-elt clause 3.1 or 3.2 already makes the element invalid for the same
 // lexical, and the one defect is charged once. The lexical is read through
 // [instanceBooleanOf] and not the injected value.Backend, on [nilled]'s grounds.
+//
+// An unattributed e ([governance]) is charged nothing either, on
+// [walk.instanceTypeResolves]'s grounds: it is no element cvc-assess-elt
+// assessed, so the declaration-less shapes above do not include it.
 func (w *walk) instanceNilLexical(e Element, g governance) {
-	if g.hasDecl {
+	if g.hasDecl || g.unattributed {
 		return
 	}
 	a, present := instanceAttribute(e, "nil")
