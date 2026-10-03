@@ -133,11 +133,13 @@ func TestGroupSchemaWithholdsCoveredHint(t *testing.T) {
 	}
 }
 
-// TestGroupSchemaFallsBackFromHints pins that a hint never declines a group
-// case and never decides it invalid (§4.3.2 clause 3): where the widened
-// assembly cannot be read the group's own schema is used, and a hint resolving
-// to no document is skipped. Each row's root is declared by groupA and valid,
-// so the case is decided valid. Against each mutation, run:
+// TestGroupSchemaFallsBackFromHints pins that a hint that cannot be followed,
+// or a widened assembly that declines or errs, never declines a group case and
+// never decides it invalid (§4.3.2 clause 3); a followed hint's components are
+// assessed like any other. Where the widened assembly cannot be read the
+// group's own schema is used, and a hint resolving to no document is skipped.
+// Each row's root is declared by groupA and valid, so the case is decided
+// valid. Against each mutation, run:
 //
 //   - the widened assembly's error returned instead of falling back: the
 //     src-import clause 3.1 row declines as schema-error.

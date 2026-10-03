@@ -67,15 +67,17 @@ func caseSchema(backend value.Backend, c caseSpec) (*xsd.Schema, *parser.Assembl
 // a namespace. A chameleon-included document takes its includer's namespace,
 // which the includer's own targetNamespace already covers.
 //
-// Hints never decline the case and never decide it invalid: §4.3.2 clause 3
-// makes a hint that cannot be followed no error, so every failure falls back to
-// the group's own schema — where the group's assembly errs (its perr is what
-// the caller reads, as without hints), the instance has a shape instanceHints
-// refuses, no root hint names an uncovered namespace, or the widened assembly
-// declines or errs (src-import clause 3.1, a hinted document whose
-// targetNamespace is not the hint's). A hint resolving to no document is skipped
-// by parser.ParseSet itself (parser.AssemblyReport.UnfollowedRoots), and the
-// widened assembly is used without it.
+// A hint that cannot be followed, or a widened assembly that declines or errs,
+// never declines the case and never decides it invalid; a followed hint's
+// components are assessed like any other. §4.3.2 clause 3 makes a hint that
+// cannot be followed no error, so every failure falls back to the group's own
+// schema — where the group's assembly errs (its perr is what the caller reads,
+// as without hints), the instance has a shape instanceHints refuses, no root
+// hint names an uncovered namespace, or the widened assembly declines or errs
+// (src-import clause 3.1, a hinted document whose targetNamespace is not the
+// hint's). A hint resolving to no document is skipped by parser.ParseSet itself
+// (parser.AssemblyReport.UnfollowedRoots), and the widened assembly is used
+// without it.
 func groupSchema(backend value.Backend, c caseSpec) (*xsd.Schema, *parser.AssemblyReport, refusal, error) {
 	schema, report, decidable, perr := assembleCase(backend, c.schemaDoc, c.schemaExtraDocs)
 	if !decidable {

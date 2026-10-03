@@ -528,15 +528,22 @@ import (
 // namespace, every hint of an instance instanceHints refuses (one carrying a
 // hint below its root, say), and every hint where the widened assembly declines
 // or errs — so an element only such a hint declares is still charged as
-// undeclared. A schema assembled from the instance's hints alone, for a group
-// with no schemaTest, never reaches this charge at the root: assembleHints
-// declines a hinted schema declaring no top-level element for it. Nor does the
-// built-ins schema: builtinsSchema hands it only to a root whose xsi:type
-// resolves in it. A root undeclared for that reason whose xsi:type resolves is
-// not charged at all: it is ·strictly assessed· against that type
-// (assessedSubtreeRoot, #2156), and a "valid" the missing declaration's
-// constraints would have overturned is the other direction, which can only
-// cost wins: the lane observes "valid" where the suite says "invalid".
+// undeclared. GAP(conformance): each such hint is withheld — one for a covered
+// namespace, every hint of a refused instance, every hint where the widened
+// assembly declines or errs, and an xsi:noNamespaceSchemaLocation hint withheld
+// because a chameleon-included document counts "" as covered
+// (closureNamespaces). RULED permanent by #771 (STYLE P3b): §4.3.2 clause 3
+// makes every hint optional, and sch-props-correct clause 2 with §4.2.6.2's
+// Note permits keeping the components already held for a namespace. A schema
+// assembled from the instance's hints alone, for a group with no schemaTest,
+// never reaches this charge at the root: assembleHints declines a hinted schema
+// declaring no top-level element for it. Nor does the built-ins schema:
+// builtinsSchema hands it only to a root whose xsi:type resolves in it. A root
+// undeclared for that reason whose xsi:type resolves is not charged at all: it
+// is ·strictly assessed· against that type (assessedSubtreeRoot, #2156), and a
+// "valid" the missing declaration's constraints would have overturned is the
+// other direction, which can only cost wins: the lane observes "valid" where the
+// suite says "invalid".
 //
 // Three further declines close the ways a NON-verdict could reach that
 // comparison. An instance document that will not resolve or read is a recorded
