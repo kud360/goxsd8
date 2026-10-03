@@ -1,6 +1,7 @@
 package validate
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -517,6 +518,23 @@ func TestAbsentDefaultTypeIsChargedAndLaxlyAssessed(t *testing.T) {
 		return xsd.TypeDefinitionRef{Name: local("Fallback")},
 			absentHeadTable(t, xsd.TypeDefinitionRef{Name: local("First")}, absentHead)
 	}), "cd", "the {type definition} of the {default type definition} of the {type table} of its ·governing element declaration·, which the table ·conditionally selects· because no alternative ·successfully selects· a type definition,")
+}
+
+// The §5.3 charge logs its decision at root on the "assessing element" event
+// (STYLE L1), as the nil-slot decline logs its own (rootTypeDeclined).
+func TestAbsentSelectionLogsTheCharge(t *testing.T) {
+	log, visits := recordingLogger()
+	v, err := New(absentHeadSchema(t, func() (xsd.TypeDefinitionOrRef, *xsd.TypeTable) {
+		return absentHead, nil
+	}), testBackend(), WithLogger(log))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	v.Assess(selectionRoot("book"))
+	const want = "assessing element validate.name=root validate.loc=instance.xml:1:1 validate.rule=cvc-elt validate.clause=1 validate.outcome=charged"
+	if !slices.Contains(*visits, want) {
+		t.Errorf("walk logged\n\t%s\nwant a line\n\t%s", strings.Join(*visits, "\n\t"), want)
+	}
 }
 
 // wantNilSelectionDeclined fails unless assessing selectionRoot("book")
