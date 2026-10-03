@@ -23,7 +23,7 @@ import (
 // with the [[children]] that decide which of them applies (cvccomplexcontent.go).
 // Clause 1 is never charged: the ·absent· {type definition} §5.3 routes to it
 // is recorded where the selected type is read ([walk.resolvedSelection],
-// cta.go).
+// cta.go), whose GAP(validate) marker #2166 tracks.
 
 // nilled reports whether e is ·nilled· with respect to its ·governing element
 // declaration· (§3.3.4.3, key-nilled): E has xsi:nil = true AND D.{nillable} =

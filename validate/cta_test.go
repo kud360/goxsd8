@@ -410,6 +410,10 @@ func absentHeadTable(t *testing.T, alt, dflt xsd.TypeDefinitionOrRef) *xsd.TypeT
 // slot and §5.3, and then the cvc-id record the untyped element costs the
 // ID/IDREF table. Without the cvc-elt record the Result is the cvc-id record
 // alone, which reports no withheld type.
+//
+// The silence it asserts is the incomplete behaviour [walk.resolvedSelection]'s
+// GAP(validate) marker names: §5.3 wants cvc-elt clause 1 charged and the
+// element laxly assessed, tracked by #2166.
 func wantAbsentSelection(t *testing.T, schema *xsd.Schema, kind, slot string) {
 	t.Helper()
 	v, err := New(schema, testBackend())

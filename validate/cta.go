@@ -60,8 +60,12 @@ func (w *walk) selectedType(e Element, d xsd.ElementDeclaration, inherited []inh
 // declaration's own slot alone: xsd.NewTypeAlternative rejects nil). §5.3 makes
 // validating an element against a component holding such an ·absent· value "as
 // if clause 1 of Element Locally Valid (Element) had failed", with a fall back
-// to ·lax assessment·. This package applies neither, so the record names the
-// clause and charges nothing.
+// to ·lax assessment·.
+//
+// GAP(validate): neither effect is applied on either route — the absent head
+// (§5.3) or the nil slot (the sch-props-correct clause 1 xsd defers) — so the
+// record names the clause and charges nothing, and the element is assessed
+// against nothing rather than laxly. Tracked by #2166.
 func (w *walk) resolvedSelection(e Element, ref xsd.TypeDefinitionOrRef, slot string) (xsd.TypeDefinition, bool) {
 	t, ok := w.schema.ResolvedType(ref)
 	if !ok {
