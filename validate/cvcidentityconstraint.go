@@ -220,7 +220,9 @@ const (
 
 // icKeyMember is one member of a ·key-sequence·: an ·actual value· in the value
 // space its own type governs, never a lexical (Datatypes §2.2, and see
-// [walk.sameKeyMember]).
+// [walk.sameKeyMember]). The one exception is a member of a ·special· st, whose
+// lexical names no one ·actual value·: v is nil, and lexical alone is compared
+// ([sameSpecialMember]).
 //
 // lexical and owner are the lexical v was read off and the element whose
 // namespace bindings were in scope for it. They are read only where the two
@@ -618,14 +620,24 @@ func (w *walk) elementKeyMember(c *icCheck) (icKeyMember, bool, bool) {
 // cvc-datatype-valid exactly as a genuine rejection does. Reading one as
 // "absent" would silently shorten a ·key-sequence·, and a short one is what
 // clause 4.2.1 charges a key for. RULED permanent by #774 (STYLE P3b), on
-// cvcattribute.go's terms: an ungoverned type is backend coverage. A ·special·
-// type declines here too, though String Valid decides it (isSpecial): its
-// lexical mapping is "not a function" (Datatypes §3.2.1.2), so a lexical names
-// no one ·actual value· to compare. The caller records the decline
-// ([icTarget.offer]).
+// cvcattribute.go's terms: an ungoverned type is backend coverage. The caller
+// records the decline ([icTarget.offer]).
+//
+// A ·special· st (isSpecial) is decided PRESENT with no v: String Valid holds
+// for every literal against it, so the [schema actual value] is not ·absent·,
+// but its lexical mapping is "not a function" (Datatypes §3.2.1.2, §3.2.2.2),
+// so the lexical names no one ·actual value· either: the oracle ruled which one
+// it contributes undecidable from the spec text. The member carries its
+// lexical, which is already its normalized value — neither type has a
+// whiteSpace facet (§4.3.6) — and [sameSpecialMember] decides a pair on it only
+// where both lexicals are byte-identical, declining every other pair it is in,
+// RULED permanent by #2124 (STYLE P3b).
 func (w *walk) keyMember(st *xsd.SimpleType, lexical string, owner Element, element, nillable bool) (icKeyMember, bool, bool) {
 	if st == nil {
 		return icKeyMember{}, false, false
+	}
+	if isSpecial(st) {
+		return icKeyMember{st: st, lexical: lexical, owner: owner, element: element, nillable: nillable}, true, true
 	}
 	v, err := value.ValidateLexical(w.backend, w.schema, st, lexical, elementContext{owner: owner})
 	if err != nil {
@@ -986,11 +998,43 @@ func (w *walk) sameKeySequence(a, b icKeySequence) (same, decided bool) {
 // marked contested; [icBinding.lookup] reports the member undecided, which
 // [icCheck.keyrefs] records instead of charging clause 4.3. So a decline
 // withholds a charge and manufactures none.
+//
+// A pair with a ·special· member is decided by [sameSpecialMember] alone and
+// never reaches either path.
 func (w *walk) sameKeyMember(a, b icKeyMember) (same, decided bool) {
+	if isSpecial(a.st) || isSpecial(b.st) {
+		return sameSpecialMember(a, b)
+	}
 	if a.st == b.st && w.oneValueSpace(a.st) {
 		return sameValue(a.v, b.v)
 	}
 	return w.sameAcrossTypes(a, b)
+}
+
+// sameSpecialMember compares a pair of which at least one member's type is
+// ·special· ([walk.keyMember]). Two ·special· members whose lexicals are
+// byte-identical are SAME: xs:string is a member of the lexical mapping's union
+// (Datatypes §3.2.1.2, §3.2.2.2) and maps one literal to one value identical to
+// itself, so cvc-identity-constraint clause 4.1's "equal or identical" holds
+// under one reading of the mapping, and under no reading is a literal unequal to
+// itself save NaN under float, which "equal or identical" absorbs.
+//
+// GAP(validate): every other such pair declines (decided=false) — two ·special·
+// members with differing lexicals, which are equal under xs:decimal and unequal
+// under xs:string ("1" and "1.0"), and a ·special· member paired with an
+// ordinary one. RULED permanent by #2124 (STYLE P3b): the oracle ruled the
+// [schema actual value] of a ·special·-typed field node undecidable from the
+// spec text, since Datatypes §3.2.1.2 and Structures §3.11.4 clause 3 name no
+// one ·actual value· for it and equality across ·primitive· datatypes is always
+// false (§2.2.1, §2.2.2). No NOT-same is ever answered here: the mapping-union
+// fold that could reach one (value's specialMatches) answers a false one under
+// a narrowed primitive [value.Override] (#2045), and needs each member's own
+// namespace context besides.
+func sameSpecialMember(a, b icKeyMember) (same, decided bool) {
+	if isSpecial(a.st) && isSpecial(b.st) && a.lexical == b.lexical {
+		return true, true
+	}
+	return false, false
 }
 
 // oneValueSpace reports that every value validated against st lies in one

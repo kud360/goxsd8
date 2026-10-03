@@ -336,17 +336,19 @@
 // Both of the last two decline rather than charge wherever this package could
 // not read what the rule quantifies over — a path outside the subset, a field
 // node or an ID-bearing item with no determinable ·governing type definition·,
-// a field node of type xs:anySimpleType or xs:anyAtomicType, whose lexical
-// names no one ·actual value·, a ·key-sequence· member pair this package could
-// not compare in one value space (a value with neither equality nor identity,
-// or a type chain or ·validating type· that does not resolve) — and
-// cvc-id clause 1 additionally declines for the whole document once any item of
-// the subtree did, since an unread declaration is exactly what an empty binding
-// would misreport. A ·nilled· element is not such an item: its [schema actual
-// value] is ·absent· (§3.3.5.4), so it is outside the ·eligible item set·, and
-// as a field node of a simple-valued ·governing type definition· it leaves a
-// ·key-sequence· short; a ·nilled· field node of any other determined type is
-// charged under clause 3 like any other. Both rules read it as the spec does.
+// a ·key-sequence· member pair this package could not compare in one value
+// space (a value with neither equality nor identity, or a type chain or
+// ·validating type· that does not resolve), and a pair with a member of type
+// xs:anySimpleType or xs:anyAtomicType, whose lexical names no one ·actual
+// value·, save two such members with byte-identical lexicals, which are the
+// same — and cvc-id clause 1 additionally declines for the whole document once
+// any item of the subtree did, since an unread declaration is exactly what an
+// empty binding would misreport. A ·nilled· element is not such an item: its
+// [schema actual value] is ·absent· (§3.3.5.4), so it is outside the ·eligible
+// item set·, and as a field node of a simple-valued ·governing type definition·
+// it leaves a ·key-sequence· short; a ·nilled· field node of any other
+// determined type is charged under clause 3 like any other. Both rules read it
+// as the spec does.
 //
 // The rest of the cvc- decisions land on the walk [Validator.Assess]
 // already makes. Non-fatal warnings get an accessor of their own the day
