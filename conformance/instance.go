@@ -34,11 +34,11 @@ import (
 // NONE. Such a case is assessed against the schema its xsi:schemaLocation /
 // xsi:noNamespaceSchemaLocation hints locate, read off every element in document
 // order with the first hint for a namespace winning (caseSchema,
-// instancehints.go, #2013, #2171, §4.3.2 clauses 3-5), and DECLINES where it
-// carries an inline xs:schema. One carrying no hint at all is assessed against
-// the built-in components alone where its root's xsi:type names a built-in type
-// definition (key-governing-type-elem clause 8), and DECLINES otherwise
-// (builtinsSchema, #2151).
+// instancehints.go, #2013, #2171, §4.3.2 clauses 3-5), together with every
+// inline xs:schema it carries, each read as a schema document (#2180). One
+// carrying neither is assessed against the built-in components alone where its
+// root's xsi:type names a built-in type definition (key-governing-type-elem
+// clause 8), and DECLINES otherwise (builtinsSchema, #2151).
 //
 // The group's schema is assembled by assembleCase, the very gate the schema lane
 // decides its own cases with, widened by the root's hints for every namespace
@@ -532,21 +532,22 @@ import (
 // document to the group's schema where no document of the group's closure has
 // the hint's namespace, and withholds every other hint — one for a covered
 // namespace, every hint below the root, every hint of an instance
-// instanceHints refuses (one carrying an inline xs:schema, say), and every hint
-// where the widened assembly declines or errs — so an element only such a hint
-// declares is still charged as undeclared. GAP(conformance): each such hint is
-// withheld — one for a covered namespace, one below the root, every hint of a
-// refused instance, every hint where the widened assembly declines or errs,
-// and an xsi:noNamespaceSchemaLocation hint withheld because a
-// chameleon-included document counts "" as covered (closureNamespaces). RULED
-// permanent by #771 (STYLE P3b): §4.3.2 clause 3 makes every hint optional, and
-// sch-props-correct clause 2 with §4.2.6.2's Note permits keeping the components
-// already held for a namespace. A schema assembled from the instance's hints
-// alone, for a group with no schemaTest, never reaches this charge at the root:
-// assembleHints declines a hinted schema declaring no top-level element for it.
-// Nor does the built-ins schema: builtinsSchema hands it only to a root whose
-// xsi:type resolves in it. A root undeclared for that reason whose xsi:type
-// resolves is not charged at all: it is ·strictly assessed· against that type
+// instanceHints refuses or that carries an inline xs:schema (uncoveredHints),
+// and every hint where the widened assembly declines or errs — so an element
+// only such a hint declares is still charged as undeclared. GAP(conformance):
+// each such hint is withheld — one for a covered namespace, one below the root,
+// every hint of a refused instance or of one carrying an inline xs:schema,
+// every hint where the widened assembly declines or errs, and an
+// xsi:noNamespaceSchemaLocation hint withheld because a chameleon-included
+// document counts "" as covered (closureNamespaces). RULED permanent by #771
+// (STYLE P3b): §4.3.2 clause 3 makes every hint optional, and sch-props-correct
+// clause 2 with §4.2.6.2's Note permits keeping the components already held for
+// a namespace. A schema assembled from the instance's hints alone, for a group
+// with no schemaTest, never reaches this charge at the root: assembleHints
+// declines a hinted schema declaring no top-level element for it. Nor does the
+// built-ins schema: builtinsSchema hands it only to a root whose xsi:type
+// resolves in it. A root undeclared for that reason whose xsi:type resolves is
+// not charged at all: it is ·strictly assessed· against that type
 // (assessedSubtreeRoot, #2156), and a "valid" the missing declaration's
 // constraints would have overturned is the other direction, which can only cost
 // wins: the lane observes "valid" where the suite says "invalid".
@@ -577,8 +578,9 @@ const (
 	// caseSchema (instancehints.go).
 	refuseGroupAssembly   refusal = "group-assembly"       // assembleCase declined the group's schema
 	refuseHintsUnresolved refusal = "hints-unresolved"     // instanceHints: the instance will not resolve
-	refuseInlineSchema    refusal = "inline-schema"        // instanceHints: an element is an inline xs:schema
-	refuseXMLBase         refusal = "xml-base"             // instanceHints, belowRootHints: xml:base on the root, or in scope of a hint
+	refuseInlineSchema    refusal = "inline-schema"        // hintReader: an inline xs:schema inside another
+	refuseInlineUnread    refusal = "inline-schema-unread" // assembleHints: an inline xs:schema rootReadable refuses
+	refuseXMLBase         refusal = "xml-base"             // instanceHints, hintReader: xml:base on the root, or in scope of a hint or an inline xs:schema
 	refuseOddLocation     refusal = "odd-schemaLocation"   // hintsOf: an odd xsi:schemaLocation member count
 	refuseHintUnfollowed  refusal = "hint-unfollowed"      // assembleHints: a hint resolved to no document
 	refuseHintAssembly    refusal = "hint-assembly"        // assembleHints: assemblyDeclined refused the outcome
@@ -586,8 +588,8 @@ const (
 	refuseDoctype         refusal = "doctype"              // rootStart: a directive defaultsNoAttribute refuses
 	refuseDecode          refusal = "decode"               // an encoding/xml decoder error, at any re-read site
 
-	// builtinsSchema (instancehints.go): no group schema, and the root carries
-	// no hint.
+	// builtinsSchema (instancehints.go): no group schema, and the instance
+	// carries no hint and no inline xs:schema.
 	refuseNoHint                  refusal = "no-hint"                       // no xsi:type, and no unknownXsi attribute
 	refuseNoHintXsiTypeUnresolved refusal = "no-hint-xsi-type-unresolved"   // an xsi:type naming no built-in type definition
 	refuseNoHintUnknownXsi        refusal = "no-hint-unknown-xsi-attribute" // no xsi:type, and an unknownXsi attribute
