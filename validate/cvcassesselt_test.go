@@ -357,6 +357,8 @@ func TestOpenContentAttributedChildUnderASkipWildcardIsNotAssessed(t *testing.T)
 		"assessing element validate.name=root validate.loc=instance.xml:1:1",
 		"assessing content validate.name=a validate.loc=instance.xml:2:1 " +
 			"validate.rule=cvc-complex-content validate.clause=3 validate.outcome=attributed to element declaration a",
+		"assessing element validate.name=a validate.loc=instance.xml:2:1 " +
+			"validate.rule=cvc-elt validate.clause=1 validate.outcome=declined",
 		"assessing element validate.name=a validate.loc=instance.xml:2:1",
 		"assessing ID/IDREF table validate.name=a validate.loc=instance.xml:2:1 " +
 			"validate.rule=cvc-id validate.clause=1 validate.outcome=declined",
@@ -494,7 +496,8 @@ func TestDescendantOfAnUngovernedElementIsAssessedAgainstNothing(t *testing.T) {
 // dispatch that would have settled the element was never made, so the item may
 // be one the true schema ·skips· (key-governing-ad clause 3 and its Note), and
 // cvc-attribute clauses 3 and 5 are not charged against it. The parent's own
-// decline is the whole of the Result's undecidedness. Each row fails with
+// two declines, its withheld type (cvc-elt) and its ID/IDREF-table entry
+// (cvc-id), are the whole of the Result's undecidedness. Each row fails with
 // [walk.instanceNilLexical]'s or [walk.instanceTypeResolves]'s unattributed
 // guard removed, the cvc-attribute charge then reaching [Result] (#2159).
 func TestUnattributedElementXSIAttributesAreChargedNothing(t *testing.T) {
@@ -518,8 +521,8 @@ func TestUnattributedElementXSIAttributesAreChargedNothing(t *testing.T) {
 			got, unevaluated := assessRecorded(t, schema, dElem("root", 1,
 				ElementChild(dElem("opaque", 2, ElementChild(kid)))))
 			wantSilence(t, got, "an unattributed element's xsi attributes are charged nothing")
-			if len(unevaluated) != 1 || unevaluated[0].Loc() != loc(2, 1) {
-				t.Errorf("Unevaluated() = %v, want the one record at <opaque>'s %s", messages(unevaluated), loc(2, 1))
+			if len(unevaluated) != 2 || unevaluated[0].Loc() != loc(2, 1) || unevaluated[1].Loc() != loc(2, 1) {
+				t.Errorf("Unevaluated() = %v, want the two records at <opaque>'s %s", messages(unevaluated), loc(2, 1))
 			}
 		})
 	}

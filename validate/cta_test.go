@@ -352,3 +352,114 @@ func namedTypeAlternative(t *testing.T, test *xsd.XPathExpression, typeName xsd.
 	}
 	return ta
 }
+
+// absentHead is the {type definition} §3.3.2.1 dcl.elt.common clause 3 induces
+// from a substitutionGroup naming no declaration: a head reference Finalize
+// accepts as an ·absent· component (§5.3 Missing Sub-components) and
+// [xsd.Schema.ResolvedType] resolves to nothing.
+var absentHead = xsd.SubstitutionGroupHeadTypeRef{Head: local("nosuchhead")}
+
+// absentHeadSchema is ctaSchema's cohort with "root" declared by declare, so
+// each test below can place absentHead in the one {type definition} slot
+// key-selected-type reads for it.
+func absentHeadSchema(t *testing.T, declare func() (xsd.TypeDefinitionOrRef, *xsd.TypeTable)) *xsd.Schema {
+	t.Helper()
+	b := xsd.NewSchemaBuilder()
+	for _, st := range ctaBuiltins(t) {
+		b.AddType(st)
+	}
+	b.AddType(ctaFallbackType(t))
+	b.AddType(ctaCandidateType(t, "First"))
+	typ, table := declare()
+	d, err := xsd.NewElementDeclaration(xsderr.Loc{}, local("root"), typ, table, xsd.NewGlobalScope(),
+		nil, false, nil, []xsd.QName{absentHead.Head}, nil, false, nil)
+	if err != nil {
+		t.Fatalf("building the root element declaration: %v", err)
+	}
+	b.AddElement(d)
+	schema, err := b.Finalize()
+	if err != nil {
+		t.Fatalf("finalizing a schema whose substitution group head is ·absent· (§5.3): %v", err)
+	}
+	return schema
+}
+
+// absentHeadTable is a {type table} whose one alternative tests @kind = 'book'
+// and names alt, and whose {default type definition} names dflt.
+func absentHeadTable(t *testing.T, alt, dflt xsd.TypeDefinitionOrRef) *xsd.TypeTable {
+	t.Helper()
+	test := xsd.NewXPathExpression("@kind = 'book'", nil, nil, nil)
+	a, err := xsd.NewTypeAlternative(xsderr.Loc{}, &test, alt)
+	if err != nil {
+		t.Fatalf("NewTypeAlternative: %v", err)
+	}
+	d, err := xsd.NewTypeAlternative(xsderr.Loc{}, nil, dflt)
+	if err != nil {
+		t.Fatalf("NewTypeAlternative (default): %v", err)
+	}
+	table, err := xsd.NewTypeTable(xsderr.Loc{}, []xsd.TypeAlternative{a}, d)
+	if err != nil {
+		t.Fatalf("NewTypeTable: %v", err)
+	}
+	return &table
+}
+
+// wantAbsentSelection fails unless assessing <root kind="…"/> against schema
+// charges nothing and records exactly two [Unevaluated]: the withheld
+// ·selected type definition· under cvc-elt at the element, its message naming
+// slot and §5.3, and then the cvc-id record the untyped element costs the
+// ID/IDREF table. Without the cvc-elt record the Result is the cvc-id record
+// alone, which reports no withheld type.
+func wantAbsentSelection(t *testing.T, schema *xsd.Schema, kind, slot string) {
+	t.Helper()
+	v, err := New(schema, testBackend())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	res := v.Assess(ctaRoot(kind))
+	if res.Err() != nil {
+		t.Fatalf("Err() = %v, want nil", res.Err())
+	}
+	wantSilence(t, res.Violations(), "an ·absent· selected type is recorded, not charged")
+	got := res.Unevaluated()
+	if len(got) != 2 || got[0].Rule() != ruleCvcElt || got[1].Rule() != ruleCvcID {
+		t.Fatalf("Unevaluated() = %v, want a cvc-elt record for the withheld type, then cvc-id's", messages(got))
+	}
+	if got[0].Loc() != loc(1, 1) {
+		t.Errorf("Loc() = %s, want the element's %s", got[0].Loc(), loc(1, 1))
+	}
+	for _, want := range []string{"the element root was not determined", slot, "cvc-elt clause 1", "§5.3"} {
+		if !strings.Contains(got[0].Msg(), want) {
+			t.Errorf("Msg() = %q, want it to name %s", got[0].Msg(), want)
+		}
+	}
+}
+
+// A declaration with no {type table} whose own {type definition} resolves to
+// nothing leaves key-selected-type clause 2 without a type: recorded.
+func TestAbsentDeclaredTypeIsRecordedAsUnevaluated(t *testing.T) {
+	wantAbsentSelection(t, absentHeadSchema(t, func() (xsd.TypeDefinitionOrRef, *xsd.TypeTable) {
+		return absentHead, nil
+	}), "book", "the {type definition} of its ·governing element declaration· resolves")
+}
+
+// An alternative that ·successfully selects· a {type definition} resolving to
+// nothing leaves key-cta-select clause 1 without a type: recorded under
+// cvc-elt, not key-cta-ta-select, because the selection itself succeeded.
+func TestAbsentSelectedAlternativeTypeIsRecordedAsUnevaluated(t *testing.T) {
+	wantAbsentSelection(t, absentHeadSchema(t, func() (xsd.TypeDefinitionOrRef, *xsd.TypeTable) {
+		return xsd.TypeDefinitionRef{Name: local("Fallback")},
+			absentHeadTable(t, absentHead, xsd.TypeDefinitionRef{Name: local("Fallback")})
+	}), "book", "the {type definition} of alternative 1 of 1 ")
+}
+
+// A {default type definition} whose {type definition} resolves to nothing
+// leaves key-cta-select clause 2 without a type: recorded. The alternative's
+// {test} is false over kind="cd" and its own type, First, resolves, so only the
+// default can be what declined.
+func TestAbsentDefaultTypeIsRecordedAsUnevaluated(t *testing.T) {
+	wantAbsentSelection(t, absentHeadSchema(t, func() (xsd.TypeDefinitionOrRef, *xsd.TypeTable) {
+		return xsd.TypeDefinitionRef{Name: local("Fallback")},
+			absentHeadTable(t, xsd.TypeDefinitionRef{Name: local("First")}, absentHead)
+	}), "cd", "the {type definition} of the {default type definition}")
+}

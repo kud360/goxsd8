@@ -151,10 +151,12 @@ func sampleTree() *testElement {
 // wantVisits is sampleTree's every information item, once each, in the order
 // cvc-assess-elt (§3.3.4.6) fixes: the element, then its [[attributes]], then
 // its [[children]] in document order, recursively. Every key is qualified by
-// the "validate" group New installs (STYLE L1). The last line is not a visit:
-// rootSchema's declaration carries no {type definition}, so the root's type is
-// undetermined and its ID/IDREF-table decline is recorded as it leaves.
+// the "validate" group New installs (STYLE L1). The first and last lines are
+// not visits: rootSchema's declaration carries no {type definition}, so the
+// root's type is undetermined, which is recorded as it is settled, and its
+// ID/IDREF-table decline is recorded as it leaves.
 var wantVisits = []string{
+	rootTypeDeclined,
 	"assessing element validate.name=root validate.loc=instance.xml:1:1",
 	"assessing attribute validate.name=id validate.loc=instance.xml:1:23",
 	"assessing attribute validate.name={urn:p}lang validate.loc=instance.xml:1:31",
@@ -166,6 +168,10 @@ var wantVisits = []string{
 	"assessing element validate.name=c validate.loc=instance.xml:5:6",
 	"assessing ID/IDREF table validate.name=root validate.loc=instance.xml:1:1 validate.rule=cvc-id validate.clause=1 validate.outcome=declined",
 }
+
+// rootTypeDeclined is the line the root's undetermined ·selected type
+// definition· logs before the root is visited (walk.resolvedSelection).
+const rootTypeDeclined = "assessing element validate.name=root validate.loc=instance.xml:1:1 validate.rule=cvc-elt validate.clause=1 validate.outcome=declined"
 
 func TestAssessWalksEveryNodeOnceInDocumentOrder(t *testing.T) {
 	log, visits := recordingLogger()
@@ -307,8 +313,9 @@ func TestAssessChargesAnAbstractRoot(t *testing.T) {
 		t.Errorf("Msg = %q, want it to name the expanded name", got.Msg)
 	}
 	want := slices.Clone(wantVisits)
-	want[0] = "assessing element validate.name=abstractRoot validate.loc=instance.xml:1:1"
-	want[len(want)-1] = strings.Replace(want[len(want)-1], "name=root", "name=abstractRoot", 1)
+	for _, i := range []int{0, 1, len(want) - 1} {
+		want[i] = strings.Replace(want[i], "name=root", "name=abstractRoot", 1)
+	}
 	if !slices.Equal(*visits, want) {
 		t.Errorf("walk visited\n\t%s\nwant\n\t%s",
 			strings.Join(*visits, "\n\t"), strings.Join(want, "\n\t"))
@@ -365,6 +372,7 @@ func TestAssessStopsAtASourceFault(t *testing.T) {
 		t.Errorf("Err() = %v, want it to wrap %v", res.Err(), fault)
 	}
 	want := []string{
+		rootTypeDeclined,
 		"assessing element validate.name=root validate.loc=instance.xml:1:1",
 		"assessing element validate.name=a validate.loc=instance.xml:2:3",
 	}
@@ -401,7 +409,7 @@ func TestAssessPanicsOnZeroChild(t *testing.T) {
 		}
 		// The walk stops at the empty child: root is visited, the sibling
 		// past it is not.
-		want := []string{"assessing element validate.name=root validate.loc=instance.xml:1:1"}
+		want := []string{rootTypeDeclined, "assessing element validate.name=root validate.loc=instance.xml:1:1"}
 		if !slices.Equal(*visits, want) {
 			t.Errorf("walk visited\n\t%s\nwant\n\t%s",
 				strings.Join(*visits, "\n\t"), strings.Join(want, "\n\t"))

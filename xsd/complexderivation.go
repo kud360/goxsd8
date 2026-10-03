@@ -721,10 +721,9 @@ func (s *Schema) baseComplexType(c ComplexType) (ComplexType, bool) {
 // complexBlockingSubset both build fresh slices, so a caller may pass a slice it
 // goes on to reuse.
 //
-// The error is the src-resolve clause 1.1 rejection an unresolvable simple-type
-// {base type definition} produces (see validlyDerived) and never a verdict about
-// sub and super: a caller that cannot propagate it must not fold it into either
-// answer.
+// The error is validlyDerived's, an unresolvable simple-type reference (see
+// there), and never a verdict about sub and super: a caller that cannot
+// propagate it must not fold it into either answer.
 func (s *Schema) ValidlySubstitutable(sub, super TypeDefinition, blocked []DerivationMethod) (bool, error) {
 	if sup, ok := super.(ComplexType); ok {
 		blocked = unionDerivationMethods(blocked, sup.prohibitedSubstitutions)
@@ -749,12 +748,15 @@ func (s *Schema) ValidlySubstitutable(sub, super TypeDefinition, blocked []Deriv
 // whose last hop is xs:anySimpleType's to its own {base type definition},
 // xs:anyType (§3.16.7.1).
 //
-// The error result is the src-resolve clause 1.1 rejection an unresolvable
-// simple-type {base type definition} produces (simpletyperef.go). It is
-// UNREACHABLE for any schema that survived finalize's earlier phases — Phase A
-// charges that rule for every base a Schema reaches — and is propagated rather
-// than folded into the verdict because folding it either way would be a made-up
-// answer: false is a false reject, true a false accept.
+// The error result is the failure to resolve a simple-type reference — a
+// {base type definition}, an itemType= or a memberTypes= naming nothing or a
+// complex type (simpletyperef.go, src-resolve clause 1.1). It is UNREACHABLE
+// for any schema that survived finalize's earlier phases — Phase A rejects
+// every such reference a Schema reaches (resolveSimpleType), which is this
+// package's policy and not src-resolve's, a definition that rejects nothing —
+// and is propagated rather than folded into the verdict because folding it
+// either way would be a made-up answer: false is a false reject, true a false
+// accept.
 func (s *Schema) validlyDerived(sub, super TypeDefinition, blocked []DerivationMethod) (bool, error) {
 	switch sb := sub.(type) {
 	case ComplexType:

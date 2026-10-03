@@ -452,9 +452,10 @@ func resolveTypeName(r TypeResolver, ref QName, loc xsderr.Loc, ctx string) (Typ
 // spec clause: an OWNER-OF-OWNER chain, where the named head's own {type
 // definition} is itself a SubstitutionGroupHeadTypeRef. The producer walks to
 // the TERMINAL head precisely so that never happens, and ResolvedType's read is
-// DEPTH-1 on the strength of it; rejecting the chain here is what makes ResolvedType's
-// not-ok branch unreachable for any schema that survived finalize, rather than a
-// silent fail-open (STYLE P3).
+// DEPTH-1 on the strength of it; rejecting the chain here is what makes
+// ResolvedType's owner-of-owner branch unreachable for any schema that survived
+// finalize, rather than a silent fail-open (STYLE P3). Its ·absent·-head branch
+// stays reachable, by the §5.3 reading above.
 func (s *Schema) resolveTypeDefinitionSlot(ref TypeDefinitionOrRef, loc xsderr.Loc, ctx string) error {
 	switch r := ref.(type) {
 	case nil:
