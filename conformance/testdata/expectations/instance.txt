@@ -379,7 +379,7 @@ CType/psubstitutions00104m/instance/pSubstitutions00104m1_p pass
 CType/psubstitutions00104m/instance/pSubstitutions00104m2_n pass
 CType/psubstitutions00104m/instance/pSubstitutions00104m2_p pass
 CType/targetns00101m/instance/targetNS00101m1_n pass
-CType/targetns00101m/instance/targetNS00101m1_p fail
+CType/targetns00101m/instance/targetNS00101m1_p pass
 Complex/complex003/instance/complex003.n1.xml pass
 Complex/complex003/instance/complex003.v1.xml pass
 Complex/complex004/instance/complex004.n1.xml pass
@@ -1016,7 +1016,7 @@ MS-Additional2006-07-15/addB175/instance/addB175.i pass
 MS-Additional2006-07-15/addB176/instance/addB176.v pass
 MS-Additional2006-07-15/addB181/instance/addB181.i fail
 MS-Additional2006-07-15/addB182/instance/addB182.v pass
-MS-Additional2006-07-15/addB187/instance/addB187.v fail
+MS-Additional2006-07-15/addB187/instance/addB187.v pass
 MS-Additional2006-07-15/addB188/instance/addB188.i pass
 MS-Additional2006-07-15/addB191/instance/addB191.v fail
 MS-Additional2006-07-15/addB196a/instance/addB196a.v pass
@@ -1528,7 +1528,7 @@ MS-ComplexType2006-07-15/ctZ009_a/instance/ctZ009_a.v pass
 MS-ComplexType2006-07-15/ctZ009_b/instance/ctZ009_b.v pass
 MS-ComplexType2006-07-15/ctZ009_c/instance/ctZ009_c.i pass
 MS-ComplexType2006-07-15/ctZ009_d/instance/ctZ009_d.v pass
-MS-ComplexType2006-07-15/ctZ011_a/instance/ctZ011_a.v fail
+MS-ComplexType2006-07-15/ctZ011_a/instance/ctZ011_a.v pass
 MS-ComplexType2006-07-15/ctZ011_b/instance/ctZ011_b.v pass
 MS-ComplexType2006-07-15/ctZ013a/instance/ctZ013a.v pass
 MS-ComplexType2006-07-15/ctZ013b/instance/ctZ013b.v pass
@@ -25353,12 +25353,12 @@ SType/st_final00103m3/instance/Negative pass
 SType/st_final00103m3/instance/Positive pass
 SType/st_name00101m/instance/ST_name00101m1_n pass
 SType/st_name00101m/instance/ST_name00101m1_p pass
-SType/st_name00401m/instance/ST_name00401m1_p fail
+SType/st_name00401m/instance/ST_name00401m1_p pass
 SType/st_targetns00101m/instance/ST_targetNS00101m1_n pass
-SType/st_targetns00101m/instance/ST_targetNS00101m1_p fail
+SType/st_targetns00101m/instance/ST_targetNS00101m1_p pass
 SType/st_targetns00101m/instance/ST_targetNS00101m2_n pass
 SType/st_targetns00101m/instance/ST_targetNS00101m2_p fail
-SType/st_targetns00201m/instance/ST_targetNS00201m1_p fail
+SType/st_targetns00201m/instance/ST_targetNS00201m1_p pass
 SType/st_variety00101m1/instance/Negative pass
 SType/st_variety00101m1/instance/Positive pass
 SType/st_variety00101m2/instance/Negative pass
