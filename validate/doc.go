@@ -314,14 +314,14 @@
 // set· is wider than its ·qualified node set· (4.2.1), an element member from a
 // {nillable} declaration (4.2.3), and a keyref matching no entry of its
 // {referenced key}'s node table (4.3), with clause 3 charging a field that
-// selects more than one valued node or any node whose ·governing type
-// definition· is neither a simple type definition nor a complex type
-// definition with {variety} simple. Two members validated against different
-// types, or against a union, are compared in the value spaces of their
-// ·primitive· datatypes, a union-typed member and each item of a list of unions
-// read by its own ·validating type· (§3.16.4). The node tables clause 4.3 reads are
-// §3.11.5's, assembled bottom-up as the walk leaves each element and
-// conflict-resolved on the way.
+// selects more than one node whose ·governing type definition· is a simple type
+// definition or a complex type definition with {variety} simple, whatever their
+// values, or any node whose ·governing type definition· is neither. Two members
+// validated against different types, or against a union, are compared in the value
+// spaces of their ·primitive· datatypes, a union-typed member and each item of a
+// list of unions read by its own ·validating type· (§3.16.4). The node tables
+// clause 4.3 reads are §3.11.5's, assembled bottom-up as the walk leaves each
+// element and conflict-resolved on the way.
 //
 // The ninth is cvc-id (§3.3.4.5), charged at the ·validation root· alone
 // (cvc-elt clause 7): the [ID/IDREF table] of §3.17.5.2 is assembled across the
@@ -346,9 +346,9 @@
 // empty binding would misreport. A ·nilled· element is not such an item: its
 // [schema actual value] is ·absent· (§3.3.5.4), so it is outside the ·eligible
 // item set·, and as a field node of a simple-valued ·governing type definition·
-// it leaves a ·key-sequence· short; a ·nilled· field node of any other
-// determined type is charged under clause 3 like any other. Both rules read it
-// as the spec does.
+// it leaves a ·key-sequence· short while still counting toward clause 3's "at
+// most one"; a ·nilled· field node of any other determined type is charged
+// under clause 3 like any other. Both rules read it as the spec does.
 //
 // The rest of the cvc- decisions land on the walk [Validator.Assess]
 // already makes. Non-fatal warnings get an accessor of their own the day
