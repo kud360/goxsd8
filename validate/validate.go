@@ -156,7 +156,8 @@ func (r *Result) Violations() []*xsderr.Error {
 // Two declines are NOT recorded, so an empty Unevaluated is not by itself a
 // claim that the walk performed every check it reached: a ·governing type
 // definition· left undetermined other than by a withheld {type table} (#1093),
-// and an unresolvable {attribute declaration}, which no *xsd.Schema that exists
+// though the same element's ID/IDREF-table decline is recorded (cvcid.go), and
+// an unresolvable {attribute declaration}, which no *xsd.Schema that exists
 // carries.
 type Unevaluated struct {
 	rule xsderr.Rule
