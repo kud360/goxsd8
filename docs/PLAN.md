@@ -17,20 +17,17 @@ read them. One stamp for the whole section, so a reader can tell staleness
 from wrongness at a glance. Never add a dated paragraph beside the old
 one — appending is what this replaces.
 
-## Status — 2026-10-03 (post-land after #1093, on `main` at `d59e6cc`)
+## Status — 2026-10-03 (post-land after #771, on `main` at `2e95f02`)
 
-**M5's north star is #771's decide branch, bound `instance` ≤ +6, and a
-session holds it: `wip/issue-771` is LIVE.** The largest remaining `instance`
-clusters are #1042's assertion declines (`blocked`, M6). Outside them, the
-largest startable slice is #771's six suite-valid cases whose components sit
-in a document only the instance's own root hint names: four decided against
-the suite (`ElemDecl` targetNS00101m1_p, `SType` ST_targetNS00101m2_p,
-`MS-Particles` particlesB013.v, `MS-Schema` schA1.v) and two declined
-(`attgD034.v`, `ctL021.v`). #771's body prefers the decide branch, which
-reuses #2025's `instanceHints`. **The band is #771, #1892, #2166 then #2168.
-Lean: product.** Every row is M5 work; #771 and #1892 are both LIVE, so #2166
-is the first startable row. The process filings wait on the `/retro` on
-2026-10-04.
+**M5's north star is #2171, bound `instance` ≤ +11.** It reads `xsi` hints
+below the document element for a no-schemaTest instance, so the `MS-Additional`
+addB156–addB166 ordering family stops declining `<hint-below-root>`. #771 spent
+the previous north star at its bound (+6). The largest `instance` clusters are
+still #1042's assertion declines (`blocked`, M6), and every other decline
+cluster of more than 5 is ruled, recorded or `blocked`. **The band is #2171,
+#1892, #2166 then #2168. Lean: product.** Every row is M5 work. #1892 is LIVE,
+so #2171 is the first startable row. The process filings wait on the `/retro`
+on 2026-10-04.
 
 **#2081 stays `needs-replan` on GitHub.** Its replan restates the body and
 relabels it `blocked` on the owner's ruling. The permission classifier refused
@@ -38,7 +35,7 @@ that write to an earlier pass, so the owner posts it (next planning action 1).
 
 ### Conformance lanes
 
-**This table is `go tool lanestatus`, pasted verbatim, on `main` at `d59e6cc`.**
+**This table is `go tool lanestatus`, pasted verbatim, on `main` at `2e95f02`.**
 It is the committed expectations census, which `docs/WORKFLOW.md` names as the
 lane score (#1120).
 
@@ -46,42 +43,42 @@ lane score (#1120).
 |---|---:|---:|---:|
 | `ber` | — | — | 0 |
 | `datatypes` | 1163 | 10 | 1173 |
-| `instance` | 26078 | 283 | 26361 |
+| `instance` | 26084 | 277 | 26361 |
 | `json` | — | — | 0 |
 | `schema` | 15288 | 110 | 15398 |
 | `xpath` | — | — | 0 |
 
-**`d59e6cc` (#1093) moved no lane.** **`datatypes ⊆ instance` is intended**
+**`2e95f02` (#771) moved `instance` +6.** **`datatypes ⊆ instance` is intended**
 (#1507). **An em dash means a lane with no cases yet, not a lane scoring
 zero.** `datatypes` is M3 and complete. `schema` is M4 and `instance` is M5,
 and both are active. `xpath`, `json` and `ber` wait on M6/M7, M8 and M11.
 
 ### What holds each active lane's failures
 
-**Measured on `c2495f3`** (suite `7bc3365`) by one read-only `GOXSD_DECLINES=1`
-conformance run (`--- PASS: TestConformance (381.35s)`, nothing improved,
-regressed or vanished), fed to `go tool lanepartition -log <run> <lane>`. Not
-re-measured at `82cc465` or `d59e6cc`: neither arbiter's ratchet run banked
-anything, `82cc465` removes charges only on elements whose Result already
-carries a record or a violation, and `d59e6cc` adds records only on shapes the
-parser never emits. Every figure is a part of the banked fails and a bound
-from above, never a prediction of flips. `instance` clusters carry their
-refusal token in `<…>`. The tool matches owners lexically, so the owners named
-below are this stamp's reading.
+**Measured on `2e95f02`** (suite `7bc3365`) by one read-only `GOXSD_DECLINES=1`
+conformance run (`--- PASS: TestConformance (642.62s)`, nothing improved,
+regressed or vanished), fed to `go tool lanepartition -log <run> <lane>`. Every
+figure is a part of the banked fails and a bound from above, never a prediction
+of flips. `instance` clusters carry their refusal token in `<…>`. The tool
+matches owners lexically, so the owners named below are this stamp's reading.
 
 | lane | banked fail | declined | indeterminate (#277) | decided against the suite |
 |---|---:|---:|---:|---:|
-| `instance` | 283 | 252 | 5 | 26 |
+| `instance` | 277 | 250 | 5 | 22 |
 | `schema` | 110 | 1 | 11 | 98 |
 | `datatypes` | 10 | 6 | — | 4 |
 
-- **M5's north star: #771's hint-only shape, 6 suite-valid, bound `instance`
-  ≤ +6.** The four decided ones are the lane's only suite-valid decided
-  disagreements besides #921's two `gMonth`. `attgD034.v` and `ctL021.v`
-  decline `<strict-attribute-unresolved>`, and #1912's RULING keeps them
-  declined until their hinted documents are read. That every root hint
-  suffices is the grounding's to confirm, per #771's body.
-- **`<unevaluated:…>` is 184 of `instance`'s 252 declines.**
+- **M5's north star: #2171, `MS-Additional` `<hint-below-root>` 11** (6 valid
+  under the suite's 1.1 entry, 5 invalid). #2025's oracle ruling declined them
+  because deciding while ignoring a below-root hint is wrong (§4.3.2 clause 5);
+  #2171 reads those hints instead. Its body marks as a hypothesis that #771's
+  covered-namespace filter decides the five invalid ones. The 5
+  `<inline-schema>` (addB142, addB167–addB169, addB181) stay out of scope, and
+  the 2 `<schema-error>` invalid are unattributed.
+- **#771 decided its six.** The four decided against the suite are gone, and
+  `attgD034.v` and `ctL021.v` no longer decline. The lane's only suite-valid
+  decided disagreements are now #921's two `gMonth`.
+- **`<unevaluated:…>` is 184 of `instance`'s 250 declines.**
   - **The 180 assertion-bearing ones are #1042's** (`blocked`, M6). The two
     largest `instance` clusters are `Assert` `<unevaluated:cvc-assertion>`: 44
     valid and 30 invalid.
@@ -94,10 +91,6 @@ below are this stamp's reading.
 - **#2151's `<no-hint>` residue is ruled and has no work to take:**
   `MS-Attribute` attMd001–011 `<no-hint-unknown-xsi-attribute>` 11 invalid and
   `MS-Additional` addB199 `<no-hint-xsi-type-unresolved>` 1 invalid.
-- **`MS-Additional`'s `<hint-below-root>` 11 and `<inline-schema>` 5 decline
-  under #2025's oracle ruling.** Hints below the root are global per §4.3.2
-  clause 5, so deciding while ignoring them would be wrong. Its
-  `<schema-error>` 2 invalid are unattributed.
 - **`MS-Schema` 4 `<schema-error>` are read as #921's.**
 - **`VC` declines 28:** 14 assertion ones (#1042), 11 `<versioned>` and 3
   `<schema-error>` (#1002, #1042, both `blocked`). `ConditionalInclusion` 1 is
@@ -116,21 +109,19 @@ below are this stamp's reading.
   need a full XPath 2.0 grammar (M6). The rest are single cases: `MS-Additional`
   addB070a and addB082, attD002, groupO026, notatE002, s3_4_1si02s,
   d3_4_26si11s and complex018. No one decision holds them.
-- **Every false reject has an owner, unchanged:** `schema`'s 5 suite-valid
-  decided cases (#462, #921, #1002) and `instance`'s 6 (#771's four and #921's
-  two).
+- **Every false reject has an owner:** `schema`'s 5 suite-valid decided cases
+  (#462, #921, #1002) and `instance`'s 2 (#921).
 - **`datatypes`' 10** are 6 declines and 4 decided (#1848, #1794, #594),
   unchanged.
 
 ### Branch namespace, `origin` (report-only; a session never deletes a ref)
 
-`go tool wipsurvey` was fed this pass's REST walk, stamped `rows 2168 distinct
-2168 min 1 max 2168 no gaps` (pull requests included), after `git fetch
+`go tool wipsurvey` was fed this pass's REST walk, stamped `rows 2170 distinct
+2170 min 1 max 2170 no gaps` (pull requests included), after `git fetch
 origin` in a shallow clone. It prints:
 
-- **`wip/issue-771` and `wip/issue-1892` are LIVE** (tips pushed within the
-  claim TTL; #1892 claimed at `5da5e6a`). Leave both to their sessions.
-  `wip/issue-1093` was deleted at #1093's merge.
+- **`wip/issue-1892` is LIVE.** Leave it to its session. `wip/issue-771` was
+  deleted at #771's merge.
 - **`wip/issue-2081` is RETIRED** (`needs-replan`) and holds no code.
 - **`wip/issue-2013` is RETIRED** (closed `not_planned`). Its content is on
   `main` as `6e5a545`, and a human may delete it.
@@ -151,10 +142,10 @@ origin` in a shallow clone. It prints:
 
 ### Marker census
 
-`go tool gapaudit`, fed the same walk, reports **85 markers across 10 areas, 12
-in group 1 and 29 in group 2, with zero dead ends.** #1093 closed and added one
-marker, `validate/cta.go`'s `walk.resolvedSelection` block, which names #2166;
-#2166's Acceptance carries its retirement.
+`go tool gapaudit`, fed the same walk, reports **86 markers across 10 areas, 12
+in group 1 and 29 in group 2, with zero dead ends.** #771 closed and added one
+marker: `conformance/instance.go`'s `GAP(conformance)` block, which is RULED
+permanent by #771 and so tracked.
 
 - **The group-1 rows:**
   - the `parser/doc.go` §5.3 policy row and `xsd/resolve.go`'s §5.3
@@ -163,9 +154,8 @@ marker, `validate/cta.go`'s `walk.resolvedSelection` block, which names #2166;
     compilation (#462 is cited past its first paragraph) and the unbound
     prefix;
   - two `validate` rows whose owners do not yet cite them: `cvcid.go`
-    (`idElement`; #1093 closed without touching it, and the row's "unresolvable
-    {type definition}" item is now #2166's Acceptance) and
-    `cvcidentityconstraint.go` #1887;
+    (`idElement`; the row's "unresolvable {type definition}" item is #2166's
+    Acceptance) and `cvcidentityconstraint.go` #1887;
   - two `xsd/contentrestricts.go` rows, `xsd/defaultbinding.go` (#2087 owns
     the citation fix) and `xsd/derivation.go`'s #555 row;
   - `tools/landcheck/keywords.go`'s abbreviation row.
@@ -175,7 +165,7 @@ marker, `validate/cta.go`'s `walk.resolvedSelection` block, which names #2166;
 
 ### Milestones and queue
 
-**Counted from the same REST walk: 331 open issues.**
+**Counted from GitHub after this pass's filing: 331 open issues.**
 
 | milestone | open | closed | state |
 |---|---:|---:|---|
@@ -183,30 +173,30 @@ marker, `validate/cta.go`'s `walk.resolvedSelection` block, which names #2166;
 | M2 — Foundation leaves | 0 | 5 | done |
 | M3 — Datatypes vertical slice | 0 | 12 | complete |
 | **M4 — Schema parsing** | **64** | **172** | active |
-| **M5 — Instance validation (XML)** | **18** | **100** | active |
+| **M5 — Instance validation (XML)** | **19** | **100** | active |
 | M6 — XPath required subset | 1 | 0 | not started |
 | M7–M12 | 0 | 0 | not started |
 
 Open issues carry **316 `ready`, 12 `blocked`, 1 `needs-replan` and 2
-`epic`**, which sums to 331. `kind/gap` is 63 and `kind/bug` is 37.
+`epic`**, which sums to 331. `kind/gap` is 63 and `kind/bug` is 36.
 
 - **`blocked` is 12:** #16, #555, #1002, #1042, #1051, #1374, #1609, #1790,
-  #1880, #1885, #1923 and #2022. No `## Depends on` names #1093.
+  #1880, #1885, #1923 and #2022. No `## Depends on` names #771.
   - **#1609 is unfired.** `schema` Pass reads 15288, which is not above
-    15292. Total is 15398, and `d59e6cc` touches no line of
+    15292. Total is 15398, and `2e95f02` touches no line of
     `xsd/contentrestricts.go`.
   - **No owner comment has been posted since 2026-10-01 on any of the five
     human decisions:** #1880 (which gates #1002), #1885, #1790, #1923 and
     #2022.
 - **`needs-replan` is 1: #2081.** Next planning action 1 carries it.
-- **Measured refactors are flat**, each command re-run at `d59e6cc`: #2041 3,
+- **Measured refactors are flat**, each command re-run at `2e95f02`: #2041 3,
   #1958 2, #1865 2, #1770 2, #1757 1, #363 2, and #2101 1 and 1. None enters
   the band on its figure.
 
 ### Persona consultations: not re-run this pass
 
 **The cartographer role-plays no persona and does not spawn one** (#416).
-**No persona story was handed to this pass**, and `d59e6cc` adds no exported
+**No persona story was handed to this pass**, and `2e95f02` adds no exported
 identifier. **Eighteen findings from the 2026-09-17 to 2026-09-29
 consultations are open and unconsumed:** #1568–#1571, #1593–#1596, #1626,
 #1684, #1685, #1687, #1688, #1843, #1845, #1894, #1895 and #1898. Open
@@ -226,7 +216,7 @@ queued for the `/retro` on 2026-10-04 or waits on the owner.
 
 | # | issue | why here |
 |---|---|---|
-| 1 | #771 | **M5 north star, bound `instance` ≤ +6.** The decide branch: read the root's own hints for a schemaTest group, reusing #2025's `instanceHints`, so its four false rejects and `attgD034.v`/`ctL021.v` are decided. Its pin keeps the three now-passing siblings out of any decline predicate. **Claimed: `wip/issue-771` is LIVE** — take the next row unless its lease expires |
+| 1 | #2171 | **M5 north star, bound `instance` ≤ +11.** Read hints below the document element on the no-schemaTest path, retiring or narrowing `<hint-below-root>`. The grounding must say what makes each suite-invalid sibling invalid before any of the five is claimed. **Startable now** |
 | 2 | #1892 | **`walk.child`'s `GAP(validate)` marker:** resolve under key-governing-ed clause 4 or rule. Also retires or rewords `walk.localGovernance`'s block that #2159 added, and restates #2159's `unattributed` guard if it replaces that field. **Claimed: `wip/issue-1892` is LIVE** — take the next row unless its lease expires |
 | 3 | #2166 | **M5 gap, `unchanged` expected.** Charge `cvc-elt` clause 1 for an ·absent· selected type and ·laxly assess· the element (§5.3), retiring `walk.resolvedSelection`'s `GAP(validate)` that #1093 added. Its grounding rules whether #774 keeps the nil-slot route a decline. **Startable now** |
 | 4 | #2168 | **M5 bug, `unchanged`.** The `key-cta-ta-select` decline in `walk.conditionallySelected` records without logging, against `walk.decline`'s doc. Shares `validate/cta.go` with #2166: the session that takes #2166 absorbs it under WORKFLOW's Scope rule when it can. **Startable now** |
@@ -247,8 +237,8 @@ queued for the `/retro` on 2026-10-04 or waits on the owner.
     #1609's arm 3;
   - #2073, #2052, #1873, #1877, #1883, #1887, #1820, #1801 and #1777.
 - **Conformance bookkeeping:** #1803, #1881 (also carrying #2156's
-  `instancehints_test.go` doc fragment) and #785. **Doc and comment fixes:**
-  #1343.
+  `instancehints_test.go` doc fragment, which #2171 may absorb) and #785.
+  **Doc and comment fixes:** #1343.
 - **`value`, `Ratchet: unchanged`:** #2045. It shares a file with #2041 and
   #2087.
 - **`internal/xmlenc`, both low priority:** #361 and #363.
@@ -260,14 +250,16 @@ queued for the `/retro` on 2026-10-04 or waits on the owner.
   - #2041, #1958, #1865, #1770, #1757, #363 and #2101 are measured and
     flat.
   - #1735, #1736, #1701, #848 and #845 are unmeasured.
-  - #755 owns the xsi hint reader's single home.
+  - #755 owns the xsi hint reader's single home; its body now records the
+    per-path answers #771 gave the harness copy.
 - **Process, for the `/retro` on 2026-10-04:**
   - first, #1868 (carrying #1856's grounding-scope instance) and #1948,
     with #1798, #1781 and #2096;
   - then #1812 with #2133 (how a subagent's commits leave its container);
   - then #2142 (the oracle is never handed the issue body; four sightings,
     none costing a round) with #2021;
-  - then #2075, #1990, #1993, #1996, #2010 and #2047;
+  - then #2075, #1990, #1993, #1996, #2010 and #2047 (which now also carries
+    #771's unfed-`wipsurvey` sighting);
   - then #1913 and #1791.
 
   #1880, #1885, #1923, #2022 and #1790 wait on the owner.
@@ -289,12 +281,11 @@ queued for the `/retro` on 2026-10-04 or waits on the owner.
    entry. A human triages both `parked/untriaged-20260930-*` branches,
    `chronicler-345`, `meta/backlog-2026-10-01-b`, the eight subagent branches
    and `wip/issue-2013`.
-3. **#771's grounding settles M5's north star.** It confirms which of the six
-   a root-hint read decides, and whether adding hinted documents to a
-   schemaTest group's assembly moves any other verdict. Outside #771 and the
-   assertion clusters (#1042, M6), every remaining `instance` decline cluster
-   of more than 5 is ruled, recorded or `blocked` (`VC` `<versioned>` 10,
-   #1002).
+3. **#2171's grounding settles M5's north star.** It says which of the eleven
+   a whole-document hint read decides, and whether the 1.0/1.1 split on addB156
+   and addB158 needs the versioned route. Outside #2171 and the assertion
+   clusters (#1042, M6), every remaining `instance` decline cluster of more
+   than 5 is ruled, recorded or `blocked` (`VC` `<versioned>` 10, #1002).
 4. **The `/retro` on Sunday 2026-10-04 reads the windows and landings the
    previous stamps listed, plus #2124's** (a TAKEOVER that landed in round 1
    at `instance` +1), **#2126's** (round 1, `instance` +38, with a warden
@@ -314,10 +305,12 @@ queued for the `/retro` on 2026-10-04 or waits on the owner.
    +6 at its prediction, one P2 comment finding folded into #1881, with the
    oracle striking two `## Spec` citations at grounding), **#2159's**
    (round 1, unchanged at its prediction 0, one P3/P3a wording finding handed
-   to #1892's body, #2142's third sighting) **and #1093's** (round 2 after a
+   to #1892's body, #2142's third sighting), **#1093's** (round 2 after a
    reject for three missing `GAP` disclosures, unchanged at its prediction 0,
    a premise replaced at grounding, tracker #2166 filed, #2142's fourth
-   sighting):
+   sighting) **and #771's** (round 2 after a reject for a missing `GAP`
+   disclosure and an over-broad guarantee, `instance` +6 at the grounding
+   probe's prediction case for case, a re-judge after a forward merge):
    - four windows: 73.7 cases per session at 89% product, 177.7 at 100%, 44.4
      at 90%, and 10.0 at 90% with two repair rounds;
    - every landing through #1093's second-round accept at 0;
@@ -750,9 +743,9 @@ moved it more than #790's descent did.
 **Every suite-VALID `instance` case the lane decides wrong has an owner, and the
 suite-INVALID ones it decides valid are a class the subtree gate made.** Read the
 counts from the Status section's partition, never from this paragraph. The
-suite-valid false rejects are #771's (led by schema documents that only the
-instance's own `xsi:schemaLocation` names, which the harness never assembles) and
-#921's (two `gMonth` cases with an unmodeled `queried` status). The suite-invalid
+suite-valid false rejects are #921's (two `gMonth` cases with an unmodeled
+`queried` status); #771 decided the ones whose schema documents only the
+instance's own `xsi:schemaLocation` names. The suite-invalid
 admissions are cases #1841's gate admits on a `value.ValidateLexical` verdict
 inside its trust boundary. Each scores Fail, and none is a false pass. The
 18 `MS-Regex` cases among them, each holding an astral code point, are #1899's
