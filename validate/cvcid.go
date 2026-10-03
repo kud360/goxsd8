@@ -84,9 +84,11 @@ type roleValue struct {
 // declined records that some item of the subtree could have been in the
 // ·eligible item set· and could not be read — see idTable.charge for which of
 // the two clauses that suppresses, and why it suppresses only one. Each site
-// that sets it records its own [Unevaluated] ([walk.declineID]), except the two
-// whose decline is recorded elsewhere or cannot arise (idDefaultedAttributes'
-// unresolved use, walk.child's unattributed child).
+// that sets it records its own [Unevaluated] ([walk.declineID]), except the
+// three whose decline is recorded elsewhere or cannot arise
+// (idDefaultedAttributes' unresolved use, walk.child's undecided child, and
+// walk.localGovernance's undecided ·override·, recorded by its own
+// walk.decline).
 type idTable struct {
 	entries  []*idEntry
 	index    map[string]*idEntry
@@ -262,7 +264,7 @@ func (w *walk) idDefaultedAttributes(c *icCheck, attrs []Attribute, ct xsd.Compl
 // ·governing element declaration· is not that shape. A ·laxly assessed· one is
 // assessed against xs:anyType, whose complex {content type} is not derived from
 // ID and so contributes nothing under clause 3, and its [[children]] are read
-// in their own turn ([walk.child]). An unattributed one ([governance]) is
+// in their own turn ([walk.child]). An undecided one ([governance]) is
 // [walk.child]'s decline, not this one's.
 //
 // A ·nilled· element contributes nothing and withholds nothing: §3.3.5.4 gives
