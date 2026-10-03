@@ -107,9 +107,11 @@ func TestCharClassSubtraction(t *testing.T) {
 // TestNegatedGroupSubtraction pins production [76] for a negCharGroup base:
 // G-C is "the set of all characters in C(G) that are not in C(C)"
 // (Datatypes Appendix G), so [^P-[C]] is (complement of P) minus C, never the
-// complement of (P minus C) (cvc-pattern-valid, #1856). The rows marked
-// fail-before accepted their miss when the subtraction was folded inside the
-// negation; the rest are no-change guards. "[a-z-[^c-x-[a]]]" carries a
+// complement of (P minus C) (cvc-pattern-valid, #1856). Every row runs under
+// FlavorXSD and under FlavorFO with no flags, the FO pattern anchored as
+// ^(...)$ because fn:matches is unanchored. The rows marked fail-before
+// accepted their miss, under both flavors, when the subtraction was folded
+// inside the negation; the rest are no-change guards. "[a-z-[^c-x-[a]]]" carries a
 // negated operand with a subtraction of its own, the classMatchedSet path: its
 // operand is (complement of c-x) minus a, so a survives the outer subtraction.
 func TestNegatedGroupSubtraction(t *testing.T) {
@@ -129,17 +131,46 @@ func TestNegatedGroupSubtraction(t *testing.T) {
 		{`([\p{Ll}-[aeiou]]|[^\w-[\s]])+`, []string{"b", "!"}, []string{"a", " "}},
 		{`[\w-[^aeiou]]`, []string{"a", "u"}, []string{"b", "!"}},
 	}
+	flavors := []struct {
+		name   string
+		flavor Flavor
+		wrap   func(string) string
+	}{
+		{"xsd", FlavorXSD, func(p string) string { return p }},
+		{"fo", FlavorFO, func(p string) string { return "^(" + p + ")$" }},
+	}
+	for _, fl := range flavors {
+		t.Run(fl.name, func(t *testing.T) {
+			for _, c := range cases {
+				re := mustCompile(t, mustTranslate(t, fl.wrap(c.pattern), fl.flavor, ""))
+				for _, m := range c.match {
+					if !re.MatchString(m) {
+						t.Errorf("%s must match %q", c.pattern, m)
+					}
+				}
+				for _, m := range c.miss {
+					if re.MatchString(m) {
+						t.Errorf("%s must not match %q", c.pattern, m)
+					}
+				}
+			}
+		})
+	}
+}
+
+// TestNegatedGroupSubtractionFoldCaseUnchanged pins FlavorFO with flag i to the
+// emission origin/main had before #1856: parseClassBody's GAP(regex) marker
+// keeps that combination off the complement-then-subtract path, so [^P-[C]]
+// there still matches the complement of (P minus C) and admits C, the defect
+// #2148 owns. Both rows fail when the foldCase gate is removed.
+func TestNegatedGroupSubtractionFoldCaseUnchanged(t *testing.T) {
+	cases := []struct{ pattern, want string }{
+		{`[^Q-[x]]`, `(?i)[^Q]`},
+		{`[^cde-[ag]]`, `(?i)[^c-e]`},
+	}
 	for _, c := range cases {
-		re := mustCompile(t, mustTranslate(t, c.pattern, FlavorXSD, ""))
-		for _, m := range c.match {
-			if !re.MatchString(m) {
-				t.Errorf("%s must match %q", c.pattern, m)
-			}
-		}
-		for _, m := range c.miss {
-			if re.MatchString(m) {
-				t.Errorf("%s must not match %q", c.pattern, m)
-			}
+		if got := mustTranslate(t, c.pattern, FlavorFO, "i"); got != c.want {
+			t.Errorf("Translate(%q, FlavorFO, \"i\") = %q, want %q", c.pattern, got, c.want)
 		}
 	}
 }
