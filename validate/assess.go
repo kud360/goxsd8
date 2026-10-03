@@ -1337,10 +1337,11 @@ func (w *walk) child(c Child, content *contentCheck, id *icCheck, inherited []in
 			// GAP(validate): a child its parent ·attributed to· nothing is one
 			// this package gave up typing and not one §3.3.4.6 leaves untyped,
 			// so an ID anywhere beneath it is a declaration cvc-id never saw
-			// (#1892). The whole consumer set of that decline is idTable.charge's clause
-			// 1 arm, which stops charging an empty binding; clause 2 keeps
-			// charging, because an unseen item can only ADD members to a
-			// binding and never take one away (cvcid.go).
+			// (#1892). The whole consumer set of that decline is
+			// idTable.charge's clause 1 arm, which stops charging an empty
+			// binding; clause 2 keeps charging, because an unseen item can
+			// only ADD members to a binding and never take one away
+			// (cvcid.go).
 			//
 			// It records no [Unevaluated] of its own. A clause 1.4 the matcher
 			// declined is content.element's cvc-complex-content record, a parent
