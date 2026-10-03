@@ -460,23 +460,16 @@ func typeName(t xsd.TypeDefinition) string {
 //     clause 1.1.3, which quantifies over ·wildcard particles· alone
 //     ([walk.unresolvedStrictWildcardChild]).
 //
-// parent is the enclosing element's complex ·governing type definition·, which
-// only the {open content} arm and the nil one below read, and nil where it has
-// none — a ·nilled· parent's included, clause 4.3 reading the type and not
-// cvc-complex-type clause 1's nil gate. inherited is e's [inherited
-// attributes], which a {type table} on the declaration reads (cta.go) and
-// nothing else here does.
+// parent is the enclosing element's complex ·governing type definition·,
+// ·nilled· or not (clause 4.3 reads the type, not cvc-complex-type clause 1's
+// nil gate), and nil where it has none; only the {open content} arm and the
+// nil arm read it. inherited is e's [inherited attributes], which a {type
+// table} on the declaration reads (cta.go) and nothing else here does.
 //
-// A nil attribution is a parent that DECIDEDLY attributed the child to
-// nothing — a ·nilled· or simple-typed parent, one already charged, an empty or
-// simple {content type}, or an item no particle or {open content} admits
-// ([contentCheck.element]) — and it is governed as the package doc promises:
-// key-governing-ed clause 4 carries no attribution condition, so the child
-// takes the {open content} arm's reading (localOrResolvedGovernance), its
-// ·locally declared type· within parent, else the declaration its name
-// ·resolves· to, else ·lax assessment·. An undecided child never reaches here,
-// and neither does a ·laxly assessed· parent's, though its content check
-// attributes nothing too ([walk.child]).
+// A nil attribution is one [contentCheck.element] decided, governed as the
+// package doc promises through [walk.localOrResolvedGovernance]. An undecided
+// child never reaches here, and neither does a ·laxly assessed· parent's
+// ([walk.child]).
 func (w *walk) childGoverning(e Element, a xsd.Attribution, parent *xsd.ComplexType, inherited []inheritedAttribute) (governance, bool) {
 	switch t := a.(type) {
 	case xsd.ElementDeclaration:

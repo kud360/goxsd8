@@ -355,25 +355,30 @@ import (
 //     nothing, neither of which arises under this gate:
 //     walk.idDefaultedAttributes' unresolved {attribute declaration}
 //     ("Unreachable on a *xsd.Schema that exists"), which the gate refuses
-//     besides, since each use's declaration must resolve; and walk.child's
-//     undecided child, which subtreeGate.child keeps out by refusing every
-//     child its parent's xsd.Schema.ContentMatcher attributes to nothing, the
-//     walk attributing each child through the same matcher — or, below a
-//     ·laxly assessed· parent, to ·xs:anyType·'s lax wildcard ahead of that
-//     site, as the gate's matcher over ·xs:anyType· does. Keep both refusals
-//     when editing the gate: the gate's reading of cvc-id clause 1 rests on
-//     them. String Valid clause 3's ·declared entity name· check (key-vde) is
-//     the walk's too, decided per ENTITY value by walk.entitiesDeclared and
-//     recorded as an [Unevaluated] by its callers where undecided
-//     (walk.declineAttribute, walk.declineDefaulted, contentCheck.decline). So
-//     is String Valid clause 2's NOTATION half, NOTATION's ·value space· being
-//     "the set of QNames of notations declared in the current schema"
-//     (Datatypes §3.3.19): walk.notationsDeclared charges cvc-datatype-valid
-//     for a value naming no declared notation, at every depth, and its callers
-//     record it where undecided; a value outside a NOTATION type's enumeration
-//     is the backend's cvc-enumeration-valid verdict (Datatypes §4.3.5.4),
-//     which Datatype Valid entails. A ·defaulted attribute· of a
-//     NOTATION-derived type is recorded, never decided
+//     besides, since each use's declaration must resolve (refuseAttributeUse);
+//     and walk.child's undecided child, which arises only below a parent whose
+//     {content type} xsd.Schema.ContentMatcher declines, which the gate
+//     refuses (refuseContentMatcher), or below a parent whose ·governing type
+//     definition· is undetermined, which the gate refuses too, admitting no
+//     element whose type it cannot determine — or, below a ·laxly assessed·
+//     parent, the walk attributes the child to ·xs:anyType·'s lax wildcard
+//     ahead of that site, as the gate's matcher over ·xs:anyType· does. A
+//     third site, walk.localGovernance's undecided exit, sets ids.declined
+//     beside its own walk.decline record and is unreachable for a finalized
+//     Schema, so it is no site that records nothing. Keep refuseContentMatcher
+//     and refuseAttributeUse when editing the gate: the gate's reading of
+//     cvc-id clause 1 rests on them. String Valid clause 3's ·declared entity
+//     name· check (key-vde) is the walk's too, decided per ENTITY value by
+//     walk.entitiesDeclared and recorded as an [Unevaluated] by its callers
+//     where undecided (walk.declineAttribute, walk.declineDefaulted,
+//     contentCheck.decline). So is String Valid clause 2's NOTATION half,
+//     NOTATION's ·value space· being "the set of QNames of notations declared
+//     in the current schema" (Datatypes §3.3.19): walk.notationsDeclared
+//     charges cvc-datatype-valid for a value naming no declared notation, at
+//     every depth, and its callers record it where undecided; a value outside
+//     a NOTATION type's enumeration is the backend's cvc-enumeration-valid
+//     verdict (Datatypes §4.3.5.4), which Datatype Valid entails. A ·defaulted
+//     attribute· of a NOTATION-derived type is recorded, never decided
 //     (walk.defaultedAttribute). The gate therefore reads no simple type's
 //     closure: finalize's src-resolve pass (xsd's resolveSimpleType) resolves
 //     every {base type definition}, {item type definition} and {member type

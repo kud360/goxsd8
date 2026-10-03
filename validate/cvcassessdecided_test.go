@@ -13,8 +13,8 @@ import (
 // so each is governed by its ·locally declared type· within the parent's
 // complex type where that is non-·absent· (clause 4.3, key-governing-type-elem
 // clause 7), else by the declaration its name ·resolves· to, else ·laxly
-// assessed· — and none withholds cvc-id clause 1. Each row fails with
-// walk.child treating that child as undecided, the pre-#1892 behaviour.
+// assessed· — and none withholds cvc-id clause 1. Each row fails if
+// walk.child treats that child as undecided.
 
 // decidedSchema declares "root" over the type named rootType with the given
 // {nillable}, beside the seeded builtins, a top-level <kid> over KidType —
@@ -72,15 +72,16 @@ func rootNilled(kids ...Child) *testElement {
 	return e
 }
 
-// Each row's parent attributes the child at line 3 to nothing for a reason the
-// spec decides, and the child is then governed per key-governing-ed clause 4:
-// <kid> by the top-level declaration its name ·resolves· to, whose KidType it
-// fails at its own position under cvc-complex-content clause 1, and <a> by its
-// ·locally declared type· KidType within RootType, which it fails the same way
-// although no top-level <a> exists. The parent's own charge comes first, at the
-// child, or at the text run of line 2 for the charged-sibling rows. Every row
-// fails with the fix reverted: the child is then assessed against nothing and
-// its cvc-complex-content charge is absent.
+// Each row's parent decidedly attributes the child at line 3 to nothing — by
+// the spec, or for the charged-sibling rows by this package's reading
+// (contentCheck.element) — and the child is then governed per key-governing-ed
+// clause 4: <kid> by the top-level declaration its name ·resolves· to, whose
+// KidType it fails at its own position under cvc-complex-content clause 1, and
+// <a> by its ·locally declared type· KidType within RootType, which it fails
+// the same way although no top-level <a> exists. The parent's own charge comes
+// first, at the child, or at the text run of line 2 for the charged-sibling
+// rows. Every row fails if walk.child treats the child as undecided: it is then
+// assessed against nothing and its cvc-complex-content charge is absent.
 func TestDecidedlyUnattributedChildIsGovernedPerClause4(t *testing.T) {
 	elementOnly := decidedRootType(t, cSequence(t, false, cParticle(t, "x", 0, 1)))
 	localA := decidedRootType(t, cSequence(t, false, dTyped(t, "RootType", "a", "KidType")))

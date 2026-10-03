@@ -375,9 +375,11 @@ func (c *contentCheck) text(w *walk, t Text) {
 // could determine — a ·laxly assessed· parent's included, whose attribution
 // [walk.child] supplies before it reads undecided — and a clause 1.4
 // [xsd.Schema.ContentMatcher] does not decide. Every other nil is decided: a
-// simple ·governing type definition·, a ·nilled· element, an element already
-// charged, a {variety} that admits no element information item [[child]] at
-// all, and a clause 1.4 that charged. Either way the child is still WALKED —
+// simple ·governing type definition·, a ·nilled· element, a {variety} that
+// admits no element information item [[child]] at all, a clause 1.4 that
+// charged, and an element already charged — that last by this package's
+// reading, not the spec's: the matcher is not advanced past a charge, so a
+// later child is read as attributed to nothing. Either way the child is still WALKED —
 // every charge here is against the parent, not the child — and how it is
 // governed is the package promise the package doc states.
 func (c *contentCheck) element(w *walk, child Element) (a xsd.Attribution, undecided bool) {
