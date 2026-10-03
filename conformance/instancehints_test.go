@@ -145,16 +145,31 @@ func validityWord(valid bool) string {
 func TestInstanceExecutorDeclinesUnreadableHints(t *testing.T) {
 	skip := []fixtureFile{{"s.xsd", xsdDoc("", skipKnown)}, {"o.xsd", xsdDoc("", `<xs:element name="other" type="xs:int"/>`)}}
 	known := []fixtureFile{{"s.xsd", xsdDoc("", knownRoot)}}
+	below := append([]fixtureFile{{"s.xsd", xsdDoc("", laxKnown)}}, hintedO...)
 	for _, tc := range []struct {
 		why      string
 		files    []fixtureFile
 		instance string
 		refused  refusal
 	}{
-		// §4.3.2 clause 5: a hint below the root is global to the assessment.
-		{"a hint on a non-root element", skip,
-			`<known ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd"><c xsi:noNamespaceSchemaLocation="o.xsd"/></known>`,
-			refuseHintBelowRoot},
+		// §4.3.2 clause 4: xml:base moves the base URI a hint below the root
+		// resolves against, on the hinted element or an ancestor. Each is
+		// decided invalid otherwise, against o.xsd's xs:int <o:c>.
+		{"an xml:base on an ancestor of a hinted element", below,
+			`<known ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd"><a xml:base="./"><o:c xmlns:o="urn:o" xsi:schemaLocation="urn:o o.xsd">x</o:c></a></known>`,
+			refuseXMLBase},
+		{"an xml:base on a hinted element below the root", below,
+			`<known ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd"><o:c xmlns:o="urn:o" xml:base="./" xsi:schemaLocation="urn:o o.xsd">x</o:c></known>`,
+			refuseXMLBase},
+		// Decided valid otherwise, <o:c> laxly assessed with no declaration.
+		{"an xsi:schemaLocation below the root with an odd member count", below,
+			`<known ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd"><o:c xmlns:o="urn:o" xsi:schemaLocation="urn:o">1</o:c></known>`,
+			refuseOddLocation},
+		// Decided valid otherwise, against a schema short of missing.xsd: a
+		// hint below the root for a namespace no earlier hint supplied.
+		{"a hint below the root resolving to no document", below,
+			`<known ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd"><o:c xmlns:o="urn:o" xsi:schemaLocation="urn:o missing.xsd">1</o:c></known>`,
+			refuseHintUnfollowed},
 		{"an inline xs:schema below the root", skip,
 			`<known ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd"><xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"/></known>`,
 			refuseInlineSchema},
@@ -193,6 +208,74 @@ func TestInstanceExecutorDeclinesUnreadableHints(t *testing.T) {
 			refuseInlineSchema},
 	} {
 		declinesBothPolarities(t, hintedCase(t, tc.files, tc.instance, true), tc.why, tc.refused)
+	}
+}
+
+// laxKnown declares <known> with any number of children of any name, each
+// ·laxly assessed· by a lax Wildcard: a child no hint declares is valid, and
+// one a followed hint declares is assessed against that declaration.
+const laxKnown = `<xs:element name="known"><xs:complexType><xs:sequence>` +
+	`<xs:any processContents="lax" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType></xs:element>`
+
+// hintedO is two documents for namespace urn:o: o.xsd declares <o:c> and
+// o2.xsd <o:d>, each an xs:int, so content "x" is invalid wherever a
+// declaration governs and valid where none does.
+var hintedO = []fixtureFile{
+	{"o.xsd", xsdDoc("urn:o", `<xs:element name="c" type="xs:int"/>`)},
+	{"o2.xsd", xsdDoc("urn:o", `<xs:element name="d" type="xs:int"/>`)},
+}
+
+// TestInstanceExecutorReadsHintsBelowRoot proves a case with no group schema
+// is decided against the hints of every element, in document order, the first
+// hint for a namespace winning (instanceHints, §4.3.2 clauses 3-5, #2171). Each
+// row is decided in both polarities and agrees with the validity it states.
+func TestInstanceExecutorReadsHintsBelowRoot(t *testing.T) {
+	files := append([]fixtureFile{{"s.xsd", xsdDoc("", laxKnown)}}, hintedO...)
+	exec := newInstanceExec()
+	for _, tc := range []struct {
+		why      string
+		instance string
+		valid    bool
+	}{
+		// Declined hint-below-root before #2171; decided valid with
+		// belowRootHints' hints left out of instanceHints' result.
+		{"a hint below the root for a namespace no earlier hint supplied",
+			`<known ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd"><o:c xmlns:o="urn:o" xsi:schemaLocation="urn:o o.xsd">x</o:c></known>`,
+			false},
+		// A later hint for urn:o names o2.xsd, whose <o:d> would make "x"
+		// invalid: decided invalid following it too (union), or following it
+		// instead of o.xsd (last-wins). The later hint sits on an element in
+		// urn:p, which no hint supplied: decided invalid with the namespace
+		// taken from the element rather than the hint.
+		{"a later hint below the root for a namespace an earlier one supplied",
+			`<known ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd"><o:c xmlns:o="urn:o" xsi:schemaLocation="urn:o o.xsd">1</o:c>` +
+				`<p:e xmlns:p="urn:p" xsi:schemaLocation="urn:o o2.xsd"/><o:d xmlns:o="urn:o">x</o:d></known>`,
+			true},
+		// Declined hint-unfollowed with hintsOf's covered test removed.
+		{"a later hint for a supplied namespace resolving to no document",
+			`<known ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd"><o:c xmlns:o="urn:o" xsi:schemaLocation="urn:o o.xsd">x</o:c>` +
+				`<o:c xmlns:o="urn:o" xsi:schemaLocation="urn:o missing.xsd">1</o:c></known>`,
+			false},
+		{"a hint repeated below the root, the same location",
+			`<known ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd"><o:c xmlns:o="urn:o" xsi:schemaLocation="urn:o o.xsd">1</o:c>` +
+				`<o:c xmlns:o="urn:o" xsi:schemaLocation="urn:o o.xsd">x</o:c></known>`,
+			false},
+		// An xml:base scopes its own element's subtree alone: declined
+		// xml-base with belowRootHints' EndElement arm removed.
+		{"an xml:base on an earlier sibling of a hinted element",
+			`<known ` + xsiNS + ` xsi:noNamespaceSchemaLocation="s.xsd"><a xml:base="sub/"/><o:c xmlns:o="urn:o" xsi:schemaLocation="urn:o o.xsd">x</o:c></known>`,
+			false},
+	} {
+		for _, expect := range []bool{tc.valid, !tc.valid} {
+			st, why := exec(hintedCase(t, files, tc.instance, expect))
+			if why != "" {
+				t.Errorf("%s: declined as %q under expectValid=%v, want decided %s", tc.why, why, expect, validityWord(tc.valid))
+				continue
+			}
+			if st.IsPass() != (expect == tc.valid) {
+				t.Errorf("%s: under expectValid=%v the executor answered pass=%v, want it decided %s", tc.why, expect, st.IsPass(), validityWord(tc.valid))
+			}
+		}
 	}
 }
 
