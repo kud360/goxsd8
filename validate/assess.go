@@ -84,9 +84,10 @@ const ruleCvcType xsderr.Rule = "cvc-type"
 // cvc-elt clause 1 (D ·non-absent·, E and D sharing an ·expanded name·) is
 // satisfied by construction — D is the declaration found BY that expanded
 // name. It is charged only as §5.3 directs, "as if clause 1 ... had failed",
-// for a ·selected type definition· that is ·absent·, at the root as at every
-// descendant, and the element is then ·laxly assessed·
-// ([walk.resolvedSelection]).
+// for an ·absent· {substitution group affiliations} member of D
+// ([walk.absentAffiliation]) or an ·absent· ·selected type definition·
+// ([walk.resolvedSelection]), at the root as at every descendant, and the
+// element is then ·laxly assessed·.
 //
 // Where the root's ·governing type definition· is determinable (see
 // governingType), the root itself is additionally assessed against it: cvc-type
@@ -178,7 +179,8 @@ func (v *Validator) Assess(root Element) *Result {
 // The zero value is an element assessed against nothing: no declaration, no
 // type. It is cvc-assess-elt clause 3.3's ·lax assessment· against xs:anyType
 // (laxlyAssessed) — also the fall back §5.3 gives a declared element whose
-// ·selected type definition· is ·absent· ([walk.declaredGovernance]) — and
+// {substitution group affiliations} has an ·absent· member or whose ·selected
+// type definition· is ·absent· ([walk.declaredGovernance]) — and
 // hasDecl TRUE with a nil typ is this package declining a type it could not
 // determine — a distinction cvcid.go needs, since only the second could have
 // hidden an ID. hasDecl false with a NON-nil typ is the third shape, clause
@@ -276,14 +278,19 @@ func (g governance) valueType() *xsd.SimpleType {
 
 // declaredGovernance pairs a ·governing element declaration· with the
 // ·governing type definition· it supplies for e (governingType), whose
-// [inherited attributes] are inherited. The ·selected type definition· is
-// settled first ([walk.selectedType]), and it ends the pairing two ways. One
-// this package could not determine leaves d with no type: the decline
-// [governance] distinguishes. One determined ·absent· is §5.3's: cvc-elt
-// clause 1 is already charged, and e falls back to ·lax assessment· — the zero
-// [governance], with no declaration, so no xsi:type, {nillable}, {abstract}
-// or identity constraint of d is read for it.
+// [inherited attributes] are inherited. Two §5.3 (Missing Sub-components)
+// routes end the pairing in ·lax assessment· — the zero [governance], with no
+// declaration, so no xsi:type, {nillable}, {abstract} or identity constraint of
+// d is read for e — each with cvc-elt clause 1 already charged: an ·absent·
+// member of d's {substitution group affiliations}, checked first and whatever
+// d's {type definition} is ([walk.absentAffiliation]), and then an ·absent·
+// ·selected type definition· ([walk.selectedType]). A ·selected type
+// definition· this package could not determine leaves d with no type instead:
+// the decline [governance] distinguishes.
 func (w *walk) declaredGovernance(e Element, d xsd.ElementDeclaration, inherited []inheritedAttribute) governance {
+	if w.absentAffiliation(e, d) {
+		return governance{}
+	}
 	selected, ok := w.selectedType(e, d, inherited)
 	if !ok {
 		return governance{decl: d, hasDecl: true}
@@ -293,6 +300,29 @@ func (w *walk) declaredGovernance(e Element, d xsd.ElementDeclaration, inherited
 	}
 	t, instance := w.governingType(e, d, selected)
 	return governance{decl: d, hasDecl: true, typ: t, instance: instance}
+}
+
+// absentAffiliation reports whether a member of d's {substitution group
+// affiliations} names no element declaration in the schema, and charges it.
+// Finalize keeps such a name as an ·absent· member (§5.3 Missing
+// Sub-components, xsd's resolveElementDecl), and §5.3 makes validating e
+// against a component "any of whose properties has or contains such an
+// ·absent· value" proceed "as if clause 1 of Element Locally Valid (Element)
+// had failed", falling back to ·lax assessment·: cvc-elt clause 1 is CHARGED at
+// e's own location, naming the first such head in document order, whatever
+// the present members beside it.
+func (w *walk) absentAffiliation(e Element, d xsd.ElementDeclaration) bool {
+	for _, head := range d.SubstitutionGroupAffiliationNames() {
+		if _, found := w.schema.Element(head); found {
+			continue
+		}
+		w.res.violations = append(w.res.violations, xsderr.New(ruleCvcElt, e.Loc(),
+			"the ·governing element declaration· of the element %s has an ·absent· member in its {substitution group affiliations}: the substitution group head %s names no element declaration in the schema, a missing sub-component that Structures §5.3 (Missing Sub-components) treats as if cvc-elt clause 1 had failed, so the element is ·laxly assessed·",
+			e.Name(), head))
+		w.logDecision("assessing element", e.Name(), e.Loc(), ruleCvcElt, "1", "charged")
+		return true
+	}
+	return false
 }
 
 // governingType is the ·governing type definition· (§3.3.4.6) of an
@@ -321,7 +351,8 @@ func (w *walk) declaredGovernance(e Element, d xsd.ElementDeclaration, inherited
 // both cases, by [walk.declaredGovernance]: ·overriding· is a relation TO the
 // selected type, so an undetermined selected type decides nothing about it, and
 // neither does an ·absent· one (§5.3), whose element is ·laxly assessed·
-// without this being called.
+// without this being called — as is one whose declaration has an ·absent·
+// {substitution group affiliations} member, before its selected type is read.
 //
 // Each decline below withholds a type that could differ from the declaration's,
 // and assessing the element against the WRONG type is a false reject in both
@@ -539,11 +570,12 @@ func (w *walk) localOrResolvedGovernance(e Element, parent *xsd.ComplexType, inh
 // that holds. An unresolved name under a strict wildcard has neither a
 // ·governing element declaration· nor a ·governing type definition·, which is
 // cvc-assess-elt clause 3.3's ·lax assessment· against xs:anyType. A name that
-// ·resolves· to a declaration whose ·selected type definition· is ·absent·
-// falls back to the same ·lax assessment· by §5.3 ([walk.declaredGovernance]),
-// its cvc-elt clause 1 charge already made at the child. The schema lookup
-// below tells the two apart, since the zero [governance] both leave carries no
-// trace of the declaration.
+// ·resolves· to a declaration with an ·absent· {substitution group
+// affiliations} member or ·selected type definition· falls back to the same
+// ·lax assessment· by §5.3 ([walk.declaredGovernance]), its cvc-elt clause 1
+// charge already made at the child. The schema lookup below tells the two
+// apart, since the zero [governance] both leave carries no trace of the
+// declaration.
 //
 // The child itself is charged NOTHING here and is not halted: [walk.element]
 // still runs over it, so its [[attributes]] and its [[children]] are assessed
@@ -607,7 +639,7 @@ func (w *walk) unresolvedStrictWildcardChild(content *contentCheck, child Elemen
 	}
 	cause := "·resolves· to no top-level element declaration"
 	if _, declared := w.schema.Element(child.Name()); declared {
-		cause = "·resolves· to a top-level element declaration whose ·selected type definition· is ·absent· (§5.3 Missing Sub-components, charged under cvc-elt clause 1)"
+		cause = "·resolves· to a top-level element declaration that has or contains an ·absent· component — an ·absent· ·selected type definition· or {substitution group affiliations} member (§5.3 Missing Sub-components, charged under cvc-elt clause 1)"
 	}
 	w.res.violations = append(w.res.violations, xsderr.New(ruleCvcAssessElt, child.Loc(),
 		"the element information item %s is ·attributed to· a ***strict*** ·wildcard particle· but %s, so it is ·laxly assessed· and its [validity] is ***notKnown***, which e-validity clause 1.1.3 (§3.3.5.1) makes the enclosing element %s invalid for",
