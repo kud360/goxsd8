@@ -797,7 +797,7 @@ func (w *walk) instanceGovernance(e Element) (governance, bool) {
 // outside xs:boolean is lost. [walk.instanceTypeResolves] loses nothing, the
 // xsi:type having ·resolved· to reach this exit, which satisfies its clauses 3
 // and 5 both. The exit is unreachable for a finalized Schema, for the reason
-// xsd's validlyDerived states (#1892).
+// xsd's validlyDerived states (#2174).
 func (w *walk) localGovernance(e Element, ldt xsd.TypeDefinition) governance {
 	instance, specified := w.instanceTypeDefinition(e)
 	if !specified {
@@ -1413,7 +1413,7 @@ func (w *walk) child(c Child, content *contentCheck, id *icCheck, inherited []in
 			// undetermined, or its parent's clause 1.4 one
 			// [xsd.Schema.ContentMatcher] does not decide — and not one
 			// §3.3.4.6 leaves ungoverned, so an ID anywhere beneath it is a
-			// declaration cvc-id never saw (#1892). Its consumers:
+			// declaration cvc-id never saw (#2174). Its consumers:
 			// idTable.charge's clause 1 arm, which stops charging an empty
 			// binding, while clause 2 keeps charging, because an unseen item
 			// can only ADD members to a binding and never take one away
