@@ -138,8 +138,9 @@ func TestGroupSchemaWithholdsCoveredHint(t *testing.T) {
 // instance carrying a hint below the root still has its root's uncovered hint
 // added, and the hint below the root is not. Run against each mutation: with
 // the below-root hint instanceHints reads appended to uncoveredHints' result,
-// <o:c> is assessed against o.xsd's xs:int and decided not valid; with the
-// refuseHintBelowRoot decline #2171 retired restored, h.xsd is not added.
+// <o:c> is assessed against o.xsd's xs:int and decided not valid; with
+// instanceHints again refusing any instance that carries a hint below its
+// root, h.xsd is not added.
 func TestGroupSchemaReadsRootHintsAlone(t *testing.T) {
 	group := fixtureFile{"g.xsd", xsdDoc("urn:a", laxKnown)}
 	files := append([]fixtureFile{group, hintB}, hintedO...)
