@@ -89,13 +89,25 @@ import (
 //     locally ·valid· with respect to that type, so cvc-type clause 3.2 fails, so
 //     cvc-elt clause 5 fails, and e-validity clause 1.1.1.1 gives the root
 //     [validity] invalid exactly as case 2 does.
-//  4. cvc-attribute (§3.2.4.1) clause 3 or clause 4, when one of the root's
-//     [[attributes]] matched an attribute use and its lexical is not ·valid· per
-//     String Valid (§3.16.4) against the declaration's {type definition}, or its
-//     ·actual value· disagrees with a fixed {value constraint} on that
-//     declaration (#766). Such an attribute's [validity] is invalid, and
-//     e-validity's conjunction (§3.3.5.1 clause 1.1.1.2) fails for the root on
-//     an invalid attribute of its own whatever else holds.
+//  4. cvc-attribute (§3.2.4.1), against an attribute of the root that has a
+//     ·governing attribute declaration·: clause 3, when its lexical is not
+//     ·valid· per String Valid (§3.16.4) against the declaration's {type
+//     definition}, and clause 4, when its ·actual value· disagrees with a fixed
+//     {value constraint} on that declaration (#766). That declaration is the one
+//     a matched attribute use carries; the top-level one a name ·attributed to·
+//     a strict or lax {attribute wildcard} ·resolves· to (cvc-complex-type clause
+//     2.2, key-governing-ad clause 3), clause 3 and clause 4 both (#1891); the
+//     built-in one for xsi:type (§3.2.7.1), clause 3 when its lexical is no
+//     xs:QName and clause 5 when the QName ·resolves· to no type definition; and
+//     the built-in one for xsi:nil (§3.2.7.2), clause 3 when its lexical is no
+//     xs:boolean, on an element with no ·governing element declaration· — under
+//     one, cvc-elt clause 3 (case 2) charges that lexical instead (#2061). A
+//     charged attribute's [validity] is invalid, and e-validity's conjunction
+//     (§3.3.5.1 clause 1.1.1.2) fails for the root on an invalid attribute of
+//     its own whatever else holds. None of them is charged against an element
+//     validate leaves unattributed — in the main one its parent ·attributed· to
+//     nothing, whose attributes the true schema may ·skip· — which validate
+//     reaches only beside a decline or a charge already in the Result (#2159).
 //  5. cvc-au (§3.5.4), when a matched attribute's ·actual value· disagrees with
 //     a fixed {value constraint} on the attribute USE — a different property
 //     from case 4's, which is why both can be charged for one attribute (#766).
@@ -391,7 +403,10 @@ import (
 //     it has an ·actual value·, and one without is the walk's (cvc-elt clause
 //     3.1 or 3.2 under a declaration, cvc-attribute clause 3 on an element with
 //     none, key-governing-ad); xsi:type is the walk's (cvc-attribute clauses 3 and 5,
-//     charged or recorded wherever it is no QName or ·resolves· to no type); and
+//     charged or recorded wherever it is no QName or ·resolves· to no type).
+//     Neither cvc-attribute charge reaches an element the walk leaves
+//     unattributed (case 4 above), and none needs to: such an element arrives
+//     only beside a decline or a charge, so no empty Result carries one; and
 //     xsi:schemaLocation and xsi:noNamespaceSchemaLocation are each ·valid·
 //     against their built-in declaration's anyURI or list-of-anyURI type
 //     (§3.2.7), whose lexical spaces admit every string (Datatypes §3.3.17).

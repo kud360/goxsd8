@@ -727,7 +727,19 @@ func (w *walk) instanceGovernance(e Element) (governance, bool) {
 // An error from [xsd.Schema.ValidlySubstitutable] leaves clause 6 undecided:
 // it is recorded as [Unevaluated], and the element is unattributed and walked
 // against nothing, as [walk.child] walks one whose parent attributed it to
-// nothing, with cvc-id's clause 1 arm withheld on the same grounds.
+// nothing, with cvc-id's clause 1 arm withheld on the same grounds. That exit is
+// unreachable for a finalized schema (the error is src-resolve clause 1.1's,
+// which finalize charges first).
+//
+// GAP(validate): the element at that exit IS attributed — to the {open content}
+// wildcard — and is no item the true schema may ·skip·, so key-governing-ad
+// keeps its xsi:nil governed by the built-in declaration (§3.2.7.2), and
+// cvc-attribute clause 3 against a lexical outside xs:boolean would be a correct
+// charge. Marking it unattributed withholds that charge, since
+// [walk.instanceNilLexical] charges no unattributed element, and withholds
+// [walk.instanceTypeResolves]'s cvc-attribute clause 3 too, whose clause 5 the
+// ·resolved· xsi:type satisfies. Retiring the marker is #1892's, which owns the
+// unattributed shape; the direction of the withholding is unestablished.
 func (w *walk) localGovernance(e Element, ldt xsd.TypeDefinition) governance {
 	instance, specified := w.instanceTypeDefinition(e)
 	if !specified {
@@ -970,9 +982,11 @@ func (w *walk) abstractType(e Element, g governance) {
 // the same under a simple governing type, a complex one, and none at all
 // ([walk.instanceTypeResolves], cvcattribute.go). cvc-attribute clause 3
 // against an xsi:nil attribute sits beside it, on the same grounds, wherever e
-// has no ·governing element declaration· ([walk.instanceNilLexical]).
+// has no ·governing element declaration· ([walk.instanceNilLexical]). Neither
+// charges an unattributed e ([governance]), which no cvc-assess-elt clause
+// assessed and whose attributes the true schema may ·skip·.
 func (w *walk) attributes(e Element, g governance) {
-	w.instanceTypeResolves(e)
+	w.instanceTypeResolves(e, g)
 	w.instanceNilLexical(e, g)
 	if st := g.simpleType(); st != nil {
 		w.simpleTypeAttributes(e, st)

@@ -464,14 +464,16 @@ var (
 // xs:boolean fixes, it is none of boolean-lexical-mapping's four literals
 // (Datatypes §3.3.2.2), the type §3.2.7's built-in declaration gives xsi:nil.
 //
-// The walk charges such a lexical wherever it sits, so no empty Result reaches
-// the gate with one: under a ·governing element declaration· as cvc-elt clause
-// 3.1 or 3.2 (validate's nilCheck), and on an element with none — ·laxly
-// assessed·, or ·strictly assessed· against an xsi:type or a ·locally declared
-// type· — as cvc-attribute clause 3 against the built-in declaration that
-// governs the attribute (key-governing-ad, validate's
-// walk.instanceNilLexical). element alone reads the value, for key-nilled, and
-// refuses a lexical it cannot read rather than guess one.
+// The walk charges such a lexical on every element it assesses, so no empty
+// Result reaches the gate with one: under a ·governing element declaration· as
+// cvc-elt clause 3.1 or 3.2 (validate's nilCheck), and on an element with none
+// — ·laxly assessed·, or ·strictly assessed· against an xsi:type or a ·locally
+// declared type· — as cvc-attribute clause 3 against the built-in declaration
+// that governs the attribute (key-governing-ad, validate's
+// walk.instanceNilLexical). An element it leaves unattributed is assessed
+// against nothing and charged nothing, and arrives only beside a decline or a
+// charge already in the Result (#2159). element alone reads the value, for
+// key-nilled, and refuses a lexical it cannot read rather than guess one.
 func nilValue(attrs []xml.Attr) (value, ok bool) {
 	i := slices.IndexFunc(attrs, func(a xml.Attr) bool { return a.Name == xsiNil })
 	if i < 0 {

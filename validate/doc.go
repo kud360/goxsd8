@@ -242,7 +242,10 @@
 // is not charged twice. That lexical is read as cvc-elt clause 3 reads it, off
 // the four literals and not through the value.Backend, so this is the one
 // cvc-attribute clause 3 charge that wraps no String Valid verdict as its
-// cause.
+// cause. Neither built-in declaration's charge reaches an element its parent
+// ·attributed· to nothing — one walked against nothing below a decline or a
+// charge — since the true schema may ·skip· that element's attributes
+// (key-governing-ad clause 3 and its Note).
 //
 // The seventh is the root's content half, against the same type's {content
 // type}. cvc-complex-type clause 1 decides what its {variety} admits —
