@@ -72,8 +72,9 @@ lexically, so the owners named below are this stamp's reading.
 - **M5's north star: #2171, `MS-Additional` `<hint-below-root>` 11** (6 valid
   under the suite's 1.1 entry, 5 invalid). #2025's oracle ruling declined them
   because deciding while ignoring a below-root hint is wrong (§4.3.2 clause 5);
-  #2171 reads those hints instead. Its body marks as a hypothesis that #771's
-  covered-namespace filter decides the five invalid ones. The 5
+  #2171 reads those hints instead, first per namespace. Its grounding measured
+  false the hypothesis that this decides the five invalid ones: addB166 is
+  `<inline-schema>`, and the other four are decided valid (below). The 5
   `<inline-schema>` (addB142, addB167–addB169, addB181) stay out of scope, and
   the 2 `<schema-error>` invalid are unattributed.
 - **The lane's only suite-valid decided disagreements are #921's two
@@ -88,7 +89,9 @@ lexically, so the owners named below are this stamp's reading.
 - **Recorded PRINCIPLES 25 divergences stay banked `fail` and have no work to
   take.** On `schema` they are `MS-Wildcards` 49 (#1809) and #1988's 6. On
   `instance` they are `MS-Regex` 18 (#1899), every `MS-Regex` case decided
-  against the suite, and #1912's 7, all `<strict-attribute-unresolved>`.
+  against the suite, #1912's 7, all `<strict-attribute-unresolved>`, and
+  #2171's 4, `MS-Additional` addB159, addB161, addB162 and addB164, decided
+  valid where no rule charges a late hint (§4.3.2 clause 5, `instanceHints`).
 - **#2151's `<no-hint>` residue is ruled and has no work to take:**
   `MS-Attribute` attMd001–011 `<no-hint-unknown-xsi-attribute>` 11 invalid and
   `MS-Additional` addB199 `<no-hint-xsi-type-unresolved>` 1 invalid.
