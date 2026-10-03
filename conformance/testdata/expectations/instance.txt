@@ -577,7 +577,7 @@ ElemDecl/substgrpexcl00401m4/instance/Positive pass
 ElemDecl/substgrpexcl00401m5/instance/Positive pass
 ElemDecl/substgrpexcl00401m6/instance/Positive pass
 ElemDecl/substgrpexcl00402m7/instance/Positive pass
-ElemDecl/targetns00101m/instance/targetNS00101m1_p fail
+ElemDecl/targetns00101m/instance/targetNS00101m1_p pass
 ElemDecl/targetns00201m/instance/targetNS00201m1_n pass
 ElemDecl/targetns00201m/instance/targetNS00201m1_p pass
 ElemDecl/targetns00301m1/instance/Negative pass
@@ -1268,7 +1268,7 @@ MS-AttributeGroup2006-07-15/attgD030/instance/attgD030.i pass
 MS-AttributeGroup2006-07-15/attgD031/instance/attgD031.v pass
 MS-AttributeGroup2006-07-15/attgD032/instance/attgD032.v pass
 MS-AttributeGroup2006-07-15/attgD033/instance/attgD033.v pass
-MS-AttributeGroup2006-07-15/attgD034/instance/attgD034.v fail
+MS-AttributeGroup2006-07-15/attgD034/instance/attgD034.v pass
 MS-AttributeGroup2006-07-15/attgD035/instance/attgD035.i pass
 MS-AttributeGroup2006-07-15/attgD036/instance/attgD036.v pass
 MS-AttributeGroup2006-07-15/attgD042/instance/attgD042.i pass
@@ -1508,7 +1508,7 @@ MS-ComplexType2006-07-15/ctL017/instance/ctL017.v pass
 MS-ComplexType2006-07-15/ctL018/instance/ctL018.v pass
 MS-ComplexType2006-07-15/ctL019/instance/ctL019.v pass
 MS-ComplexType2006-07-15/ctL020/instance/ctL020.i fail
-MS-ComplexType2006-07-15/ctL021/instance/ctL021.v fail
+MS-ComplexType2006-07-15/ctL021/instance/ctL021.v pass
 MS-ComplexType2006-07-15/ctL022/instance/ctL022.v pass
 MS-ComplexType2006-07-15/ctM002/instance/ctM002.v pass
 MS-ComplexType2006-07-15/ctN001/instance/ctN001.v pass
@@ -3492,7 +3492,7 @@ MS-Particles2006-07-15/particlesB009/instance/particlesB009.v pass
 MS-Particles2006-07-15/particlesB010/instance/particlesB010.v pass
 MS-Particles2006-07-15/particlesB011/instance/particlesB011.i pass
 MS-Particles2006-07-15/particlesB012/instance/particlesB012.i pass
-MS-Particles2006-07-15/particlesB013/instance/particlesB013.v fail
+MS-Particles2006-07-15/particlesB013/instance/particlesB013.v pass
 MS-Particles2006-07-15/particlesB014/instance/particlesB014.v pass
 MS-Particles2006-07-15/particlesB015/instance/particlesB015.i pass
 MS-Particles2006-07-15/particlesC001/instance/particlesC001.v pass
@@ -5411,7 +5411,7 @@ MS-Regex2006-07-15/reZ005i/instance/reZ005i.i pass
 MS-Regex2006-07-15/reZ005v/instance/reZ005v.v pass
 MS-Regex2006-07-15/reZ006i/instance/reZ006i.i pass
 MS-Regex2006-07-15/reZ006v/instance/reZ006v.v pass
-MS-Schema2006-07-15/schA1/instance/schA1.v fail
+MS-Schema2006-07-15/schA1/instance/schA1.v pass
 MS-Schema2006-07-15/schA2/instance/schA2.i fail
 MS-Schema2006-07-15/schA3/instance/schA3.v pass
 MS-Schema2006-07-15/schA4/instance/schA4.v pass
@@ -25357,7 +25357,7 @@ SType/st_name00401m/instance/ST_name00401m1_p pass
 SType/st_targetns00101m/instance/ST_targetNS00101m1_n pass
 SType/st_targetns00101m/instance/ST_targetNS00101m1_p pass
 SType/st_targetns00101m/instance/ST_targetNS00101m2_n pass
-SType/st_targetns00101m/instance/ST_targetNS00101m2_p fail
+SType/st_targetns00101m/instance/ST_targetNS00101m2_p pass
 SType/st_targetns00201m/instance/ST_targetNS00201m1_p pass
 SType/st_variety00101m1/instance/Negative pass
 SType/st_variety00101m1/instance/Positive pass
