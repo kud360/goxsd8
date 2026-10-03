@@ -268,9 +268,17 @@ import (
 //     clause 5's condition, which the walk charges, so an empty Result implies
 //     clause 6 holds. One whose xsi:type names none is refused. No element of a
 //     subtree whose Result is empty is therefore assessed against no type.
-//   - cvc-elt clauses 2 to 6, at every element: {abstract} false and no {type
-//     table} — so the ·selected type definition· is the {type
-//     definition}, which the gate resolves itself. An xsi:type is admitted
+//   - cvc-elt clauses 2 to 6, at every element: {abstract} false, and a
+//     ·selected type definition· the gate determines itself (§3.3.4.1
+//     key-selected-type): the {type definition}, or the type a {type table}
+//     ·conditionally selects· (key-cta-select), evaluating each {test} it
+//     reaches as the walk does, over the element's [[attributes]] and its
+//     [inherited attributes] (§3.3.5.6), and refusing where a {test} it reaches
+//     is one the evaluator declines (subtreeGate.selectedType). The walk records
+//     that decline in Result.Unevaluated, so no empty Result reaches the gate
+//     with it. A ·nilled· element ·xs:error· governs is refused too: the walk
+//     charges cvc-type clause 3.1.3 for one that is not ·nilled· alone
+//     (§3.16.7.3, key-error). An xsi:type is admitted
 //     where the gate resolves it and xsd.Schema.ValidlySubstitutable answers
 //     that it ·overrides· the selected type (clause 4, §3.3.4.2
 //     key-overrides), which is the walk's decision too; the gate then follows
@@ -547,8 +555,10 @@ const (
 	refuseNilLexical          refusal = "nil-lexical"                 // nilValue: no ·actual value·, at element, instanceTyped or localTyped
 	refuseLaxNilLexical       refusal = "lax-nil-lexical(#2061)"      // nilValue: no ·actual value·, at laxlyAssessed
 	refuseAbstract            refusal = "abstract"                    // assessedDeclaration: {abstract}
-	refuseTypeTable           refusal = "type-table"                  // assessedDeclaration: a {type table}
-	refuseTypeUnresolved      refusal = "type-unresolved"             // governingType: d.{type definition}
+	refuseTypeTableUndecided  refusal = "type-table-undecided"        // selectedType: CompileCTATest declines a {test} it reached
+	refuseTypeTableWhitespace refusal = "type-table-whitespace"       // selectedType: ctaAttributes cannot normalize a value
+	refuseTypeUnresolved      refusal = "type-unresolved"             // selectedType: the selected {type definition}
+	refuseErrorType           refusal = "error-type"                  // element: ·xs:error· governs
 	refuseXsiTypeUnresolved   refusal = "xsi-type-unresolved"         // governingType, instanceTyped, localType: no type of that name
 	refuseXsiTypeUndecided    refusal = "xsi-type-undecided"          // governingType, localType: ValidlySubstitutable errs
 	refuseXsiTypeNotOverride  refusal = "xsi-type-not-overriding"     // governingType: T does not ·override·
@@ -636,7 +646,7 @@ func execInstanceCase(backend value.Backend, c caseSpec) (Status, refusal) {
 	if unevaluated := result.Unevaluated(); len(unevaluated) > 0 {
 		return Fail(), unevaluatedRefusal(unevaluated)
 	}
-	if why := assessedSubtreeRoot(schema, report, c.doc); why != "" {
+	if why := assessedSubtreeRoot(backend, schema, report, c.doc); why != "" {
 		return Fail(), why
 	}
 	return decideAgreement(true, c.expect.wantsValid()), ""

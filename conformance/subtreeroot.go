@@ -14,6 +14,8 @@ import (
 	"github.com/kud360/goxsd8/loader"
 	"github.com/kud360/goxsd8/parser"
 	"github.com/kud360/goxsd8/parser/xmltree"
+	"github.com/kud360/goxsd8/value"
+	"github.com/kud360/goxsd8/xpath"
 	"github.com/kud360/goxsd8/xsd"
 )
 
@@ -56,7 +58,10 @@ const versioningNS = "http://www.w3.org/2007/XMLSchema-versioning"
 // document, and otherwise the refusal naming the first condition it could not
 // establish — a versioned assembly, an unreadable document, a decoder error,
 // an unresolvable component — never a guess.
-func assessedSubtreeRoot(schema *xsd.Schema, report *parser.AssemblyReport, doc string) refusal {
+//
+// backend is the one the walk was given (execInstanceCase's validate.New), in
+// which a Type Alternative's {test} evaluates (subtreeGate.selectedType).
+func assessedSubtreeRoot(backend value.Backend, schema *xsd.Schema, report *parser.AssemblyReport, doc string) refusal {
 	if closureVersioned(report) {
 		return refuseVersioned
 	}
@@ -78,8 +83,10 @@ func assessedSubtreeRoot(schema *xsd.Schema, report *parser.AssemblyReport, doc 
 	if !ok {
 		return refuseUndeclaredRoot
 	}
-	g := subtreeGate{schema: schema, dec: dec}
-	if why := g.element(root, d); why != "" {
+	g := subtreeGate{schema: schema, backend: backend, dec: dec}
+	// key-p-inherited clause 2: the ·validation root· has no [inherited
+	// attributes].
+	if why := g.element(root, d, nil); why != "" {
 		return why
 	}
 	return documentEnd(dec)
@@ -104,30 +111,42 @@ func documentEnd(dec *xml.Decoder) refusal {
 }
 
 // subtreeGate is one assessedSubtreeRoot reading: the schema the subtree is
-// checked against, the decoder positioned inside it, and the namespace
-// declarations of every element open above that position, outermost first,
-// which resolveQName reads.
+// checked against, the backend a {test} evaluates in, the decoder positioned
+// inside it, and the namespace declarations of every element open above that
+// position, outermost first, which resolveQName reads.
 //
 // Each of its reading methods answers a refusal: the zero value where the
 // conditions its doc comment names hold, and otherwise the token
 // (instance.go's refuse* constants) naming the first exit the reading
 // reached that refused. A decoder error is refuseDecode wherever it arrives.
+//
+// Every method that reads an element takes inherited, that element's
+// [inherited attributes] (§3.3.5.6, e-inherited_attributes) as handedDown
+// composes them, which only selectedType reads.
 type subtreeGate struct {
-	schema *xsd.Schema
-	dec    *xml.Decoder
-	scope  []xml.Attr
+	schema  *xsd.Schema
+	backend value.Backend
+	dec     *xml.Decoder
+	scope   []xml.Attr
 }
 
-// element reads the element whose start tag is start, and whose ·governing
-// element declaration· is d, through to its end tag, and refuses unless every
-// condition below holds for it and, recursively, for every element under it:
+// element reads the element whose start tag is start, whose ·governing element
+// declaration· is d and whose [inherited attributes] are inherited, through to
+// its end tag, and refuses unless every condition below holds for it and,
+// recursively, for every element under it:
 //
 //   - an xsi:nil it carries has an ·actual value· (nilValue,
 //     refuseNilLexical);
-//   - d is not abstract and carries no {type table} (assessedDeclaration);
-//   - its ·governing type definition· is determined: d.{type definition}
-//     resolves, and an xsi:type the element carries meets governingType's
-//     conditions, the type it names then standing in for d.{type definition};
+//   - d is not abstract (assessedDeclaration);
+//   - its ·selected type definition· is determined (selectedType): d.{type
+//     definition}, or the type d.{type table} ·conditionally selects·;
+//   - its ·governing type definition· is determined: an xsi:type the element
+//     carries meets governingType's conditions against the selected type, the
+//     type it names then standing in for it;
+//   - that type is not ·xs:error· (refuseErrorType): §3.16.7.3 says an item it
+//     governs "will be invalid", which the walk charges as cvc-type clause
+//     3.1.3 for an element that is not ·nilled· and, as that clause reads, not
+//     for one that is, so the gate claims neither;
 //   - the element and its subtree meet governed's conditions against that
 //     type, the element being ·nilled· (key-nilled) where d.{nillable} is true
 //     and its xsi:nil's ·actual value· is true.
@@ -139,7 +158,7 @@ type subtreeGate struct {
 // character or element [[child]]. An xsi:nil whose ·actual value· is false is
 // clause 3.2.2, which holds as 3.2.1 does, and the element is read as if it
 // carried none.
-func (g *subtreeGate) element(start xml.StartElement, d xsd.ElementDeclaration) refusal {
+func (g *subtreeGate) element(start xml.StartElement, d xsd.ElementDeclaration, inherited []xml.Attr) refusal {
 	isNil, ok := nilValue(start.Attr)
 	if !ok {
 		return refuseNilLexical
@@ -148,16 +167,23 @@ func (g *subtreeGate) element(start xml.StartElement, d xsd.ElementDeclaration) 
 		return why
 	}
 	defer g.enter(start)()
-	td, why := g.governingType(start, d)
+	selected, why := g.selectedType(start, d, inherited)
 	if why != "" {
 		return why
 	}
-	return g.governed(start, td, isNil && d.Nillable())
+	td, why := g.governingType(start, d, selected)
+	if why != "" {
+		return why
+	}
+	if td.Name() == errorTypeName {
+		return refuseErrorType
+	}
+	return g.governed(start, td, isNil && d.Nillable(), inherited)
 }
 
-// governed reads through to its end tag an element whose start tag is start and
-// whose ·governing type definition· is td, ·nilled· where nilled is true, and
-// refuses unless:
+// governed reads through to its end tag an element whose start tag is start,
+// whose ·governing type definition· is td and whose [inherited attributes] are
+// inherited, ·nilled· where nilled is true, and refuses unless:
 //
 //   - for a Simple Type Definition, the element carries no attribute but the
 //     four xsi: ones cvc-type clause 3.1.1 excepts (refuseSimpleAttribute),
@@ -165,7 +191,7 @@ func (g *subtreeGate) element(start xml.StartElement, d xsd.ElementDeclaration) 
 //   - for a Complex Type Definition, it meets complex's conditions.
 //
 // A td that is neither is refuseTypeKind.
-func (g *subtreeGate) governed(start xml.StartElement, td xsd.TypeDefinition, nilled bool) refusal {
+func (g *subtreeGate) governed(start xml.StartElement, td xsd.TypeDefinition, nilled bool, inherited []xml.Attr) refusal {
 	switch t := td.(type) {
 	case *xsd.SimpleType:
 		if slices.ContainsFunc(start.Attr, notExcepted) {
@@ -173,7 +199,7 @@ func (g *subtreeGate) governed(start xml.StartElement, td xsd.TypeDefinition, ni
 		}
 		return g.leaf()
 	case xsd.ComplexType:
-		return g.complex(start, t, nilled)
+		return g.complex(start, t, nilled, inherited)
 	}
 	return refuseTypeKind
 }
@@ -190,12 +216,106 @@ func (g *subtreeGate) enter(start xml.StartElement) func() {
 	return func() { g.scope = g.scope[:mark] }
 }
 
+// selectedType is the ·selected type definition· (§3.3.4.1, key-selected-type)
+// of the element whose start tag is start, whose ·governing element
+// declaration· is d and whose [inherited attributes] are inherited, determined
+// here independently of the walk — validate's walk.selectedType and
+// walk.conditionallySelected are its counterparts — and a refusal wherever the
+// gate does not determine it. Clause 2: d with no {type table} selects d.{type
+// definition}. Clause 1: d.{type table} ·conditionally selects· it
+// (key-cta-select): the {alternatives} are tried in order, the first whose
+// {test} evaluates to true (key-cta-ta-select) supplies it, and with none, the
+// {default type definition}'s {type definition} does. Every {test} reads
+// ctaAttributes' sequence, through xpath.CompileCTATest and
+// xpath.CTATest.Evaluate, the pair the walk evaluates with, in the walk's
+// backend; a dynamic or type error inside an evaluable {test} is the false
+// key-cta-ta-select clause 2 makes it, inside Evaluate.
+//
+// The scan stops at the first alternative whose {test} is true, so one behind
+// it is never compiled and costs nothing. One CompileCTATest declines before
+// any succeeds leaves the selection undetermined, the walk's withhold, and the
+// gate refuses it (refuseTypeTableUndecided) rather than fall through to a
+// type the table may not select. So does an attribute value ctaAttributes
+// cannot read as its [[normalized value]] (refuseTypeTableWhitespace), at the
+// first {test} evaluated. A selected {type definition} that does not resolve
+// is refuseTypeUnresolved.
+func (g *subtreeGate) selectedType(start xml.StartElement, d xsd.ElementDeclaration, inherited []xml.Attr) (xsd.TypeDefinition, refusal) {
+	table, tabled := d.TypeTable()
+	if !tabled {
+		return g.resolvedType(d.TypeDefinition())
+	}
+	attrs, normalized := ctaAttributes(start, inherited)
+	for _, alt := range table.Alternatives() {
+		test, _ := alt.Test()
+		compiled, evaluable := xpath.CompileCTATest(test, g.schema)
+		if !evaluable {
+			return nil, refuseTypeTableUndecided
+		}
+		if !normalized {
+			return nil, refuseTypeTableWhitespace
+		}
+		if compiled.Evaluate(g.backend, g.schema, attrs) {
+			return g.resolvedType(alt.TypeDefinition())
+		}
+	}
+	return g.resolvedType(table.DefaultTypeDefinition().TypeDefinition())
+}
+
+// resolvedType is the type definition ref names in g.schema, and
+// refuseTypeUnresolved where it names none.
+func (g *subtreeGate) resolvedType(ref xsd.TypeDefinitionOrRef) (xsd.TypeDefinition, refusal) {
+	t, ok := g.schema.ResolvedType(ref)
+	if !ok {
+		return nil, refuseTypeUnresolved
+	}
+	return t, ""
+}
+
+// ctaAttributes is the attribute sequence a {test} evaluates against for the
+// element whose start tag is start and whose [inherited attributes] are
+// inherited — validate's ctaAttributes, spelled the same: first the element's
+// own [[attributes]] in source order, xsi: ones included and namespace
+// declarations not (key-cta-ta-select clause 1.1.2), then each member of
+// inherited whose ·expanded name· none of those has (clause 1.1.3).
+//
+// normalized is false where a value in the sequence holds #x9, #xA or #xD. A
+// {test} reads the [[normalized value]] (XML 1.0 §3.3.3), which maps a literal
+// white-space character to #x20 and keeps one a character reference names,
+// and encoding/xml hands both over alike, unmapped, so such a value is not
+// read as either.
+func ctaAttributes(start xml.StartElement, inherited []xml.Attr) (xpath.Attributes, bool) {
+	var seq []xml.Attr
+	for _, a := range start.Attr {
+		if !isNamespaceDeclaration(a) {
+			seq = append(seq, a)
+		}
+	}
+	own := len(seq)
+	for _, a := range inherited {
+		if !attributeNamed(seq[:own], a.Name) {
+			seq = append(seq, a)
+		}
+	}
+	normalized := !slices.ContainsFunc(seq, func(a xml.Attr) bool { return strings.ContainsAny(a.Value, "\t\n\r") })
+	return func(yield func(xsd.QName, string) bool) {
+		for _, a := range seq {
+			if !yield(expandedName(a.Name), a.Value) {
+				return
+			}
+		}
+	}, normalized
+}
+
+// attributeNamed reports whether attrs holds an attribute named n.
+func attributeNamed(attrs []xml.Attr, n xml.Name) bool {
+	return slices.ContainsFunc(attrs, func(a xml.Attr) bool { return a.Name == n })
+}
+
 // governingType is the ·governing type definition· (key-governing-type-elem) of
-// the element whose start tag is start and whose ·governing element
-// declaration· is d, determined here independently of the walk, and a refusal
-// wherever the gate does not determine it. d carries no {type table}
-// (assessedDeclaration), so its ·selected type definition· is d.{type
-// definition}, which must resolve (refuseTypeUnresolved).
+// the element whose start tag is start, whose ·governing element declaration·
+// is d and whose ·selected type definition· is selected (selectedType),
+// determined here independently of the walk, and a refusal wherever the gate
+// does not determine it.
 //
 // With no xsi:type the selected type governs (clause 4). With one, the gate
 // follows its ·instance-specified type definition· T (clause 3) where all of
@@ -213,11 +333,7 @@ func (g *subtreeGate) enter(start xml.StartElement) func() {
 //     (refuseXsiTypeNotOverride). An error is validate's instanceOverride
 //     decline, which leaves the governing type undetermined and records
 //     nothing, so the gate refuses it itself (refuseXsiTypeUndecided).
-func (g *subtreeGate) governingType(start xml.StartElement, d xsd.ElementDeclaration) (xsd.TypeDefinition, refusal) {
-	selected, ok := g.schema.ResolvedType(d.TypeDefinition())
-	if !ok {
-		return nil, refuseTypeUnresolved
-	}
+func (g *subtreeGate) governingType(start xml.StartElement, d xsd.ElementDeclaration, selected xsd.TypeDefinition) (xsd.TypeDefinition, refusal) {
 	i := slices.IndexFunc(start.Attr, func(a xml.Attr) bool { return a.Name == xsiType })
 	if i < 0 {
 		return selected, ""
@@ -283,8 +399,12 @@ var (
 	xsiNil  = xml.Name{Space: xsd.XMLSchemaInstanceNS, Local: "nil"}
 )
 
-// anyTypeName is the ·expanded name· of ·xs:anyType·.
-var anyTypeName = xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"}
+// anyTypeName and errorTypeName are the ·expanded names· of ·xs:anyType· and
+// ·xs:error· (§3.16.7.3, key-error).
+var (
+	anyTypeName   = xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"}
+	errorTypeName = xsd.QName{Space: xsd.XMLSchemaNS, Local: "error"}
+)
 
 // nilValue reports the ·actual value· of the xsi:nil attrs, one start tag's
 // attribute list, carries — false where it carries none — and false for ok
@@ -330,8 +450,9 @@ func notExcepted(a xml.Attr) bool {
 
 // assessedDeclaration refuses a d that leaves a cvc-elt clause the walk does
 // not decide at depth: {abstract} true (clause 2, charged at the root alone;
-// refuseAbstract) or a {type table} (clause 4's ·selected type definition· is
-// otherwise d.{type definition}; refuseTypeTable). A {value constraint} of
+// refuseAbstract). A {type table} is admitted: element reads the element
+// against the type it ·conditionally selects· (selectedType), and clause 4
+// against that type (governingType). A {value constraint} of
 // either variety is admitted, at every depth: clause 5.1 (an element with no
 // [[children]], default or fixed) and clause 5.2.2 (a fixed one over
 // [[children]]: 5.2.2.1 no element children, 5.2.2.2.1 a mixed type's lexical
@@ -346,9 +467,6 @@ func notExcepted(a xml.Attr) bool {
 func assessedDeclaration(d xsd.ElementDeclaration) refusal {
 	if d.Abstract() {
 		return refuseAbstract
-	}
-	if _, ok := d.TypeTable(); ok {
-		return refuseTypeTable
 	}
 	return ""
 }
@@ -370,10 +488,12 @@ func assessedDeclaration(d xsd.ElementDeclaration) refusal {
 //     element [[child]];
 //   - otherwise, under an element-only or mixed one, xsd.Schema.ContentMatcher
 //     decides it (refuseContentMatcher) and every element [[child]] meets
-//     child's conditions.
+//     child's conditions, each child's [inherited attributes] being what
+//     handedDown composes from the element's start tag, t and inherited, the
+//     element's own.
 //
 // A {content type} of none of these kinds is refuseContentType.
-func (g *subtreeGate) complex(start xml.StartElement, t xsd.ComplexType, nilled bool) refusal {
+func (g *subtreeGate) complex(start xml.StartElement, t xsd.ComplexType, nilled bool, inherited []xml.Attr) refusal {
 	uses := t.AttributeUses()
 	for _, u := range uses {
 		ad, ok := g.schema.ResolvedAttributeDeclaration(u)
@@ -407,9 +527,94 @@ func (g *subtreeGate) complex(start xml.StartElement, t xsd.ComplexType, nilled 
 		if !ok {
 			return refuseContentMatcher
 		}
-		return g.children(t, m)
+		return g.children(t, m, g.handedDown(start, t, inherited))
 	}
 	return refuseContentType
+}
+
+// handedDown is the [inherited attributes] of every element [[child]] of the
+// element whose start tag is start, whose ·governing type definition· is t and
+// whose own [inherited attributes] are inherited (§3.3.5.6,
+// e-inherited_attributes) — validate's walk.handedDown, composed in its order
+// and with its shadowing: first the element's own attributes that are
+// ·potentially inherited· (key-p-inherited, inheritable), then each ·defaulted
+// attribute· (key-dflt-att) whose use's {inheritable} is true, then each member
+// of inherited whose ·expanded name· none of those has. An attribute that is not
+// ·potentially inherited· shadows nothing.
+//
+// A ·laxly assessed· element reaches here with t ·xs:anyType·, whose empty
+// {attribute uses} and lax {attribute wildcard} (§3.4.7) leave inheritable the
+// top-level reading the walk gives an element with no ·governing type
+// definition·.
+func (g *subtreeGate) handedDown(start xml.StartElement, t xsd.ComplexType, inherited []xml.Attr) []xml.Attr {
+	var own []xml.Attr
+	for _, a := range start.Attr {
+		if !isNamespaceDeclaration(a) && g.inheritable(t, a.Name) {
+			own = append(own, a)
+		}
+	}
+	for _, u := range t.AttributeUses() {
+		if !g.schema.ResolvedInheritable(u) {
+			continue
+		}
+		vc, defaulted := g.defaulted(start, u)
+		if !defaulted {
+			continue
+		}
+		n := u.DeclarationName()
+		own = append(own, xml.Attr{Name: xml.Name{Space: n.Space, Local: n.Local}, Value: vc.LexicalForm()})
+	}
+	nearest := len(own)
+	for _, a := range inherited {
+		if !attributeNamed(own[:nearest], a.Name) {
+			own = append(own, a)
+		}
+	}
+	return own
+}
+
+// inheritable is key-p-inherited clause 3 for an attribute named n on an
+// element governed by t — validate's walk.inheritable: the {inheritable} of
+// the t.{attribute uses} member n matches (clause 3.1), false where t's skip
+// {attribute wildcard} admits it unmatched (·skipped·, key-skipped, assessed
+// against no declaration), and otherwise the {inheritable} of the top-level
+// declaration n ·resolves· to, false where it resolves to none (clause 3.2).
+func (g *subtreeGate) inheritable(t xsd.ComplexType, name xml.Name) bool {
+	n := expandedName(name)
+	uses := t.AttributeUses()
+	if i := slices.IndexFunc(uses, func(u xsd.AttributeUse) bool { return u.DeclarationName() == n }); i >= 0 {
+		return g.schema.ResolvedInheritable(uses[i])
+	}
+	if wild, ok := t.AttributeWildcard(); ok && wild.ProcessContents() == xsd.ProcessSkip && g.schema.AllowsAttributeWildcardName(wild, n) {
+		return false
+	}
+	d, ok := g.schema.Attribute(n)
+	return ok && d.Inheritable()
+}
+
+// defaulted reports whether u, a member of the {attribute uses} of the type
+// governing the element whose start tag is start, supplies that element a
+// ·defaulted attribute· (key-dflt-att clauses 2 to 5), and if so its
+// ·effective value constraint· — validate's walk.defaultedConstraint.
+func (g *subtreeGate) defaulted(start xml.StartElement, u xsd.AttributeUse) (xsd.ValueConstraint, bool) {
+	if u.Required() {
+		return xsd.ValueConstraint{}, false
+	}
+	vc, constrained := g.schema.EffectiveValueConstraint(u)
+	if !constrained {
+		return xsd.ValueConstraint{}, false
+	}
+	n := u.DeclarationName()
+	name := xml.Name{Space: n.Space, Local: n.Local}
+	// Clause 4: none of the four xsi: names (§3.2.7), which notExcepted
+	// excepts.
+	if !notExcepted(xml.Attr{Name: name}) {
+		return xsd.ValueConstraint{}, false
+	}
+	if attributeNamed(start.Attr, name) { // clause 5
+		return xsd.ValueConstraint{}, false
+	}
+	return vc, true
 }
 
 // recordedAttributeType refuses an ad whose {type definition} does not resolve
@@ -499,7 +704,7 @@ func (g *subtreeGate) leaf() refusal {
 // tag, advancing m, t's ContentMatcher, over each element [[child]] in document
 // order, and refuses unless every child meets child's conditions and m accepts
 // the whole sequence (refuseContentIncomplete).
-func (g *subtreeGate) children(t xsd.ComplexType, m *xsd.Matcher) refusal {
+func (g *subtreeGate) children(t xsd.ComplexType, m *xsd.Matcher, inherited []xml.Attr) refusal {
 	for {
 		tok, err := g.dec.Token()
 		if err != nil {
@@ -507,7 +712,7 @@ func (g *subtreeGate) children(t xsd.ComplexType, m *xsd.Matcher) refusal {
 		}
 		switch s := tok.(type) {
 		case xml.StartElement:
-			if why := g.child(t, m, s); why != "" {
+			if why := g.child(t, m, s, inherited); why != "" {
 				return why
 			}
 		case xml.EndElement:
@@ -530,9 +735,11 @@ func (g *subtreeGate) children(t xsd.ComplexType, m *xsd.Matcher) refusal {
 //     element's conditions. The ·locally declared type· (key-ldt-elem case 2)
 //     is that declaration's own {type definition}, so cvc-complex-type clause
 //     5 holds wherever cvc-elt clause 4 does for a declaration with no {type
-//     table}, the only kind element admits (assessedDeclaration). Under a {type
-//     table} it need not: an xsi:type ·overriding· a selection that is not the
-//     declared type can fail it (validate's walk.locallyDeclaredType);
+//     table}. Under a {type table} it need not: a selection of ·xs:error·
+//     (e-props-correct clause 7.2) fails it, and so can an xsi:type
+//     ·overriding· a selection that is not the declared type. The walk charges
+//     both (validate's walk.locallyDeclaredType), so no empty Result reaches
+//     the gate with such a child;
 //   - an element particle whose {term} D carries another name: cvc-accept
 //     clause 2.3.2 admitted the child as a member of D's ·substitution group·,
 //     the Matcher deciding D top-level, D.{disallowed substitutions}, and
@@ -567,7 +774,7 @@ func (g *subtreeGate) children(t xsd.ComplexType, m *xsd.Matcher) refusal {
 //     ·governing element declaration· (validate's walk.childGoverning).
 //
 // An attribution of none of these kinds is refuseAttribution.
-func (g *subtreeGate) child(t xsd.ComplexType, m *xsd.Matcher, start xml.StartElement) refusal {
+func (g *subtreeGate) child(t xsd.ComplexType, m *xsd.Matcher, start xml.StartElement, inherited []xml.Attr) refusal {
 	name := expandedName(start.Name)
 	a, ok := m.Next(name)
 	if !ok {
@@ -576,27 +783,27 @@ func (g *subtreeGate) child(t xsd.ComplexType, m *xsd.Matcher, start xml.StartEl
 	switch at := a.(type) {
 	case xsd.ElementDeclaration:
 		if at.Name() == name {
-			return g.element(start, at)
+			return g.element(start, at, inherited)
 		}
 		s, ok := g.schema.Element(name)
 		if !ok {
 			return refuseMemberUnresolved
 		}
-		return g.element(start, s)
+		return g.element(start, s, inherited)
 	case xsd.Wildcard:
 		pc := at.ProcessContents()
 		if pc == xsd.ProcessSkip {
 			return g.skip()
 		}
-		return g.resolvedChild(start, pc == xsd.ProcessStrict)
+		return g.resolvedChild(start, pc == xsd.ProcessStrict, inherited)
 	case *xsd.OpenContent:
 		if at.Wildcard().ProcessContents() == xsd.ProcessSkip {
 			return g.skip()
 		}
 		if ldt, local := g.schema.LocallyDeclaredElementType(t, name); local {
-			return g.localTyped(start, ldt)
+			return g.localTyped(start, ldt, inherited)
 		}
-		return g.resolvedChild(start, false)
+		return g.resolvedChild(start, false, inherited)
 	}
 	return refuseAttribution
 }
@@ -636,18 +843,18 @@ func (g *subtreeGate) skip() refusal {
 //   - strictParticle does not hold — the child is ·attributed to· a lax
 //     Wildcard or {open content} — its name resolves to none, it carries no
 //     xsi:type, and laxlyAssessed holds for it (#1911).
-func (g *subtreeGate) resolvedChild(start xml.StartElement, strictParticle bool) refusal {
+func (g *subtreeGate) resolvedChild(start xml.StartElement, strictParticle bool, inherited []xml.Attr) refusal {
 	d, ok := g.schema.Element(expandedName(start.Name))
 	if ok {
-		return g.element(start, d)
+		return g.element(start, d, inherited)
 	}
 	if i := slices.IndexFunc(start.Attr, func(a xml.Attr) bool { return a.Name == xsiType }); i >= 0 {
-		return g.instanceTyped(start, start.Attr[i].Value)
+		return g.instanceTyped(start, start.Attr[i].Value, inherited)
 	}
 	if strictParticle {
 		return g.skip()
 	}
-	return g.laxlyAssessed(start)
+	return g.laxlyAssessed(start, inherited)
 }
 
 // instanceTyped reads through to its end tag a wildcard's child whose start tag
@@ -681,7 +888,7 @@ func (g *subtreeGate) resolvedChild(start xml.StartElement, strictParticle bool)
 // An xsi:type naming no type definition leaves the child with no ·governing
 // type definition·. The walk charges cvc-attribute clause 5 for it, but the
 // gate refuses it too rather than read a subtree it cannot type.
-func (g *subtreeGate) instanceTyped(start xml.StartElement, lexical string) refusal {
+func (g *subtreeGate) instanceTyped(start xml.StartElement, lexical string, inherited []xml.Attr) refusal {
 	if _, ok := nilValue(start.Attr); !ok {
 		return refuseNilLexical
 	}
@@ -690,7 +897,7 @@ func (g *subtreeGate) instanceTyped(start xml.StartElement, lexical string) refu
 	if why != "" {
 		return why
 	}
-	return g.governed(start, t, false)
+	return g.governed(start, t, false, inherited)
 }
 
 // localTyped reads through to its end tag an {open content}'s child whose start
@@ -704,7 +911,7 @@ func (g *subtreeGate) instanceTyped(start xml.StartElement, lexical string) refu
 // type (cvc-assess-elt clause 1.2), as validate's walk.localGovernance assesses
 // it, so cvc-complex-type clause 5 holds for it by construction, and cvc-type
 // clause 2, for an abstract complex type, is the walk's charge.
-func (g *subtreeGate) localTyped(start xml.StartElement, ldt xsd.TypeDefinition) refusal {
+func (g *subtreeGate) localTyped(start xml.StartElement, ldt xsd.TypeDefinition, inherited []xml.Attr) refusal {
 	if _, ok := nilValue(start.Attr); !ok {
 		return refuseNilLexical
 	}
@@ -713,7 +920,7 @@ func (g *subtreeGate) localTyped(start xml.StartElement, ldt xsd.TypeDefinition)
 	if why != "" {
 		return why
 	}
-	return g.governed(start, td, false)
+	return g.governed(start, td, false, inherited)
 }
 
 // localType is the ·governing type definition· (key-governing-type-elem) of the
@@ -764,7 +971,7 @@ func (g *subtreeGate) localType(start xml.StartElement, ldt xsd.TypeDefinition) 
 // only under a strict ·wildcard particle·. What it does decide is every charge
 // at or below it, which instance.go's "Charges at depth" reads as "not valid"
 // (§2.5 key-deep-valid-doc, #1911).
-func (g *subtreeGate) laxlyAssessed(start xml.StartElement) refusal {
+func (g *subtreeGate) laxlyAssessed(start xml.StartElement, inherited []xml.Attr) refusal {
 	if _, ok := nilValue(start.Attr); !ok {
 		return refuseLaxNilLexical
 	}
@@ -777,7 +984,7 @@ func (g *subtreeGate) laxlyAssessed(start xml.StartElement) refusal {
 		return refuseAnyType
 	}
 	defer g.enter(start)()
-	return g.complex(start, anyType, false)
+	return g.complex(start, anyType, false, inherited)
 }
 
 // locallyDeclaredAttribute reports whether the ·locally declared type·

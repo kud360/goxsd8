@@ -514,18 +514,6 @@ func TestInstanceExecutorDeclinesOutsideAssessedSubtreeRoot(t *testing.T) {
 			refuseDoctype,
 		},
 		{
-			"a {type table} on the root (cvc-elt clause 4)",
-			`<xs:element name="known" type="xs:string"><xs:alternative type="xs:string"/></xs:element>`,
-			`<known>x</known>`,
-			refuseTypeTable,
-		},
-		{
-			"a {type table} on a content-less root (cvc-elt clause 4)",
-			`<xs:element name="known" type="E"><xs:alternative type="E"/></xs:element><xs:complexType name="E"/>`,
-			`<known/>`,
-			refuseTypeTable,
-		},
-		{
 			// subtreeGate's nilValue: governed by §3.2.7's built-in declaration
 			// (key-governing-ad), the attribute is not ·valid· against xs:boolean
 			// (cvc-attribute clause 3), which the walk does not check on an
@@ -547,13 +535,6 @@ func TestInstanceExecutorDeclinesOutsideAssessedSubtreeRoot(t *testing.T) {
 			headKnown(`<xs:element name="h" type="A" abstract="true"/><xs:element name="m" type="R" substitutionGroup="h"/>`),
 			`<known><h>1</h></known>`,
 			refuseAbstract,
-		},
-		{
-			"a {type table} below the root (cvc-elt clause 4)",
-			`<xs:element name="known"><xs:complexType><xs:sequence><xs:element name="a" type="xs:int">` +
-				`<xs:alternative type="xs:int"/></xs:element></xs:sequence></xs:complexType></xs:element>`,
-			wantInt,
-			refuseTypeTable,
 		},
 		{
 			// A guard, not a charged row: the gate refused this shape before #1860
@@ -735,7 +716,7 @@ func TestAssessedSubtreeRootNilled(t *testing.T) {
 		if err != nil || !decidable {
 			t.Fatalf("%s: assembling the schema: decidable %v, err %v", tc.why, decidable, err)
 		}
-		if got := assessedSubtreeRoot(schema, report, c.doc); got != tc.want {
+		if got := assessedSubtreeRoot(strict.New(), schema, report, c.doc); got != tc.want {
 			t.Errorf("%s: assessedSubtreeRoot = %q, want %q", tc.why, got, tc.want)
 		}
 	}
@@ -844,7 +825,7 @@ func TestAssessedSubtreeRootUnadmittedAttribute(t *testing.T) {
 		if err != nil || !decidable {
 			t.Fatalf("%s: assembling the schema: decidable %v, err %v", tc.why, decidable, err)
 		}
-		if got := assessedSubtreeRoot(schema, report, c.doc); got != tc.want {
+		if got := assessedSubtreeRoot(strict.New(), schema, report, c.doc); got != tc.want {
 			t.Errorf("%s: assessedSubtreeRoot = %q, want %q", tc.why, got, tc.want)
 		}
 	}
@@ -989,7 +970,7 @@ func TestAssessedSubtreeRootOpenContentLDT(t *testing.T) {
 		if err != nil || !decidable {
 			t.Fatalf("%s: assembling the schema: decidable %v, err %v", tc.why, decidable, err)
 		}
-		if got := assessedSubtreeRoot(schema, report, c.doc); got != tc.want {
+		if got := assessedSubtreeRoot(strict.New(), schema, report, c.doc); got != tc.want {
 			t.Errorf("%s: assessedSubtreeRoot = %q, want %q", tc.why, got, tc.want)
 		}
 	}
@@ -1218,7 +1199,7 @@ func TestAssessedSubtreeRootUnresolvedChild(t *testing.T) {
 		if err != nil || !decidable {
 			t.Fatalf("%s: assembling the schema: decidable %v, err %v", tc.why, decidable, err)
 		}
-		if got := assessedSubtreeRoot(schema, report, c.doc); got != tc.want {
+		if got := assessedSubtreeRoot(strict.New(), schema, report, c.doc); got != tc.want {
 			t.Errorf("%s: assessedSubtreeRoot = %q, want %q", tc.why, got, tc.want)
 		}
 	}
@@ -1709,7 +1690,7 @@ func TestAssessedSubtreeRootRootConditions(t *testing.T) {
 		if err != nil || !decidable {
 			t.Fatalf("%s: assembling the schema: decidable %v, err %v", tc.why, decidable, err)
 		}
-		if got := assessedSubtreeRoot(schema, report, c.doc); got != tc.want {
+		if got := assessedSubtreeRoot(strict.New(), schema, report, c.doc); got != tc.want {
 			t.Errorf("%s: assessedSubtreeRoot = %q, want %q", tc.why, got, tc.want)
 		}
 	}
@@ -1739,7 +1720,7 @@ func TestAssessedSubtreeRootContentRefusals(t *testing.T) {
 		if err != nil || !decidable {
 			t.Fatalf("%s: assembling the schema: decidable %v, err %v", tc.why, decidable, err)
 		}
-		if got := assessedSubtreeRoot(schema, report, c.doc); got != tc.want {
+		if got := assessedSubtreeRoot(strict.New(), schema, report, c.doc); got != tc.want {
 			t.Errorf("%s: assessedSubtreeRoot = %q, want %q", tc.why, got, tc.want)
 		}
 	}
