@@ -489,3 +489,38 @@ func TestDescendantOfAnUngovernedElementIsAssessedAgainstNothing(t *testing.T) {
 		ElementChild(dElem("opaque", 2, ElementChild(dElem("kid", 3, ElementChild(dElem("kid", 4)))))))),
 		"an unattributed element attributes its [[children]] to nothing")
 }
+
+// An unattributed element's xsi:nil and xsi:type are charged nothing: the
+// dispatch that would have settled the element was never made, so the item may
+// be one the true schema ·skips· (key-governing-ad clause 3 and its Note), and
+// cvc-attribute clauses 3 and 5 are not charged against it. The parent's own
+// decline is the whole of the Result's undecidedness. Each row fails with
+// [walk.instanceNilLexical]'s or [walk.instanceTypeResolves]'s unattributed
+// guard removed, the cvc-attribute charge then reaching [Result] (#2159).
+func TestUnattributedElementXSIAttributesAreChargedNothing(t *testing.T) {
+	// The builtins are seeded so that xs:QName is there for clause 3 to charge
+	// "1bad" against rather than decline.
+	schema := dSchema(t, func(b *xsd.SchemaBuilder) {
+		for _, st := range icSeeded(t) {
+			b.AddType(st)
+		}
+	}, cParticle(t, "opaque", 1, 1))
+	for _, tc := range []struct {
+		why  string
+		attr Attribute
+	}{
+		{"xsi:nil outside xs:boolean", xsiNilAttr("maybe")},
+		{"xsi:type naming no type definition", xsiTypeAttr("nosuch")},
+		{"xsi:type outside xs:QName", xsiTypeAttr("1bad")},
+	} {
+		t.Run(tc.why, func(t *testing.T) {
+			kid := icElem(xsd.QName{Local: "kid"}, 3, []Attribute{tc.attr})
+			got, unevaluated := assessRecorded(t, schema, dElem("root", 1,
+				ElementChild(dElem("opaque", 2, ElementChild(kid)))))
+			wantSilence(t, got, "an unattributed element's xsi attributes are charged nothing")
+			if len(unevaluated) != 1 || unevaluated[0].Loc() != loc(2, 1) {
+				t.Errorf("Unevaluated() = %v, want the one record at <opaque>'s %s", messages(unevaluated), loc(2, 1))
+			}
+		})
+	}
+}
