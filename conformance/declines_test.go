@@ -137,8 +137,8 @@ func TestChargedIDsWritesTheChargeOnlyForALaneThatHasOne(t *testing.T) {
 // parses (#2008): `<id>=<refusal>` for a candidate whose executor named one,
 // the bare ID for one whose executor names none, in census order.
 func TestRefusedIDsWritesTheRefusalWhereTheExecutorNamedOne(t *testing.T) {
-	candidates := []declinedCase{{"set/g/instance/a", refuseAbstract}, {"set/g/schema/b", ""}}
-	want := []string{"set/g/instance/a=abstract", "set/g/schema/b"}
+	candidates := []declinedCase{{"set/g/instance/a", refuseErrorType}, {"set/g/schema/b", ""}}
+	want := []string{"set/g/instance/a=error-type", "set/g/schema/b"}
 	if got := refusedIDs(candidates); !slices.Equal(got, want) {
 		t.Errorf("refusedIDs = %v, want %v", got, want)
 	}

@@ -45,7 +45,7 @@ const kindUse = `<xs:attribute ref="kind"/>`
 // against the type the table ·conditionally selects· (§3.3.4.1
 // key-selected-type clause 1, key-cta-select) and not against the declared
 // {type definition} (#2126): each row is decided VALID, and under the flipped
-// expectation it Fails; with assessedDeclaration refusing a {type table} again,
+// expectation it Fails; with subtreeGate.element refusing a {type table} again,
 // every row declines. Each row choosing between A and B is valid against the
 // selected one alone, so a gate selecting the other refuses it at
 // content-rejected: the inherited rows select A only through [inherited

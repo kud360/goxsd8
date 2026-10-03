@@ -307,8 +307,9 @@ import (
 //     ·initial value· agreeing with it (validate's contentCheck.fixedValue) —
 //     recording in Result.Unevaluated the one comparison value.ConstraintMatches
 //     does not decide; clause 5 is gated on an element that is not ·nilled·, as
-//     the walk reads it. Clause 2 is refused outright below the root, where the
-//     walk charges it nowhere.
+//     the walk reads it. Clause 2 is the walk's, at every element: it charges
+//     an element whose ·governing element declaration· has {abstract} true
+//     (validate's walk.abstractDeclaration), so no empty Result carries one.
 //   - cvc-type clause 2 (§3.3.4.4): the walk's, at every element. It charges
 //     an element whose ·governing type definition· is a complex type with
 //     {abstract} true, however that type was determined (validate's
@@ -502,14 +503,14 @@ import (
 // gap, on ReadDocument's own reasoning in schema.go — a reader limitation is not
 // a well-formedness verdict. A validate.Result whose Err is non-nil is a walk
 // that STOPPED on a source fault mid-document, so what it did or did not charge
-// records how far the walk got and not what the document holds: the abstract-root
-// branch keeps walking after charging, so a Result can carry BOTH a decidable
-// violation and a truncated walk. And a violation set that holds any rule
-// outside the nine enumerated declines rather than being read as a verdict a
-// later slice's wider Assess might charge under an approximation; the COUNT is
-// not a condition, since one root can honestly carry several charges (see
-// decidedNotValid). An EMPTY violation set declines unless the shape's
-// conditions above all hold.
+// records how far the walk got and not what the document holds: the walk keeps
+// going after a charge such as an abstract declaration's, so a Result can carry
+// BOTH a decidable violation and a truncated walk. And a violation set that
+// holds any rule outside the nine enumerated declines rather than being read as
+// a verdict a later slice's wider Assess might charge under an approximation;
+// the COUNT is not a condition, since one root can honestly carry several
+// charges (see decidedNotValid). An EMPTY violation set declines unless the
+// shape's conditions above all hold.
 
 // The instance lane's refusals: one token per exit at which execInstanceCase
 // declines a case, which the GOXSD_DECLINES=1 listing writes after the case's
@@ -553,7 +554,6 @@ const (
 	// subtreeGate and the free functions it calls (subtreeroot.go).
 	refuseNilLexical          refusal = "nil-lexical"                 // nilValue: no ·actual value·, at element, instanceTyped or localTyped
 	refuseLaxNilLexical       refusal = "lax-nil-lexical(#2061)"      // nilValue: no ·actual value·, at laxlyAssessed
-	refuseAbstract            refusal = "abstract"                    // assessedDeclaration: {abstract}
 	refuseTypeTableUndecided  refusal = "type-table-undecided"        // selectedType: CompileCTATest declines a {test} it reached
 	refuseTypeTableWhitespace refusal = "type-table-whitespace"       // selectedType: ctaAttributes cannot normalize a value
 	refuseTypeUnresolved      refusal = "type-unresolved"             // selectedType: the selected {type definition}
