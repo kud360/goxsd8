@@ -127,12 +127,13 @@ func (w *walk) absentHead(ref xsd.TypeDefinitionOrRef) bool {
 // can only cost a rejection.
 //
 // That withhold is RECORDED, as one [Unevaluated] under ruleKeyCTATASelect at
-// the element's own location: nothing downstream charges the element, so
-// without the record an element whose ·governing type definition· was withheld
-// is byte-identical at the [Result] API to one that passed every rule (#56).
-// A selected {type definition} that resolves to nothing is resolvedSelection's:
-// an ·absent· head charged there under cvc-elt clause 1, a nil slot withheld
-// and recorded there under cvc-elt.
+// the element's own location, and logged as declined at clause 2, the {test}
+// evaluation the compiler declined ([walk.decline]): nothing downstream charges
+// the element, so without the record an element whose ·governing type
+// definition· was withheld is byte-identical at the [Result] API to one that
+// passed every rule (#56). A selected {type definition} that resolves to
+// nothing is resolvedSelection's: an ·absent· head charged there under cvc-elt
+// clause 1, a nil slot withheld and recorded there under cvc-elt.
 //
 // A DYNAMIC OR TYPE ERROR INSIDE AN EVALUABLE {test} IS NOT RECORDED, because
 // it is not a withhold: key-cta-ta-select clause 2 says such a {test} "is
@@ -159,9 +160,9 @@ func (w *walk) conditionallySelected(e Element, table xsd.TypeTable, inherited [
 		test, _ := alt.Test()
 		compiled, evaluable := xpath.CompileCTATest(test, w.schema)
 		if !evaluable {
-			w.res.unevaluated = append(w.res.unevaluated, newUnevaluated(ruleKeyCTATASelect, e.Loc(),
+			w.decline("assessing element", e.Name(), e.Loc(), ruleKeyCTATASelect, "2",
 				"alternative %d of %d in the {alternatives} of the {type table} of %s's ·governing element declaration·, whose {test} is %q, was not evaluated: this engine's §3.12.6 required-subset compiler declined it, which ta-props-correct clause 2 licenses (a conforming processor may but is not required to support XPath outside that subset), so whether it ·successfully selects· its {type definition} is undecided and the type the table ·conditionally selects· (§3.3.4.1, key-cta-select) is withheld along with it, together with every alternative behind it",
-				i+1, len(alts), e.Name(), test.Expression()))
+				i+1, len(alts), e.Name(), test.Expression())
 			return nil, false
 		}
 		if !compiled.Evaluate(w.backend, w.schema, attr) {
