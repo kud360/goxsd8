@@ -64,7 +64,14 @@ func TestInstanceExecutorDecidesTypeTable(t *testing.T) {
 			// which makes the {test} false and not undecided.
 			"a {test} raising a dynamic error is false", ctaRoot("xs:integer(@kind) = 1"), `<known kind="x"><b>1</b></known>`,
 		},
-		{"the first true {test} wins", ctaRoot("@kind = 'a'", "@kind"), `<known kind="a"><a>1</a></known>`},
+		{
+			// Both {test}s are true and select different types, so a scan
+			// taking the later one reads <a> against B.
+			"the first true {test} wins",
+			ctaTypes + `<xs:element name="known"><xs:alternative test="@kind = 'a'" type="A"/>` +
+				`<xs:alternative test="@kind" type="B"/><xs:alternative type="B"/></xs:element>`,
+			`<known kind="a"><a>1</a></known>`,
+		},
 		{
 			"a {type table} on a content-less root",
 			`<xs:complexType name="E"/><xs:element name="known" type="E"><xs:alternative type="E"/></xs:element>`, `<known/>`,
@@ -84,6 +91,13 @@ func TestInstanceExecutorDecidesTypeTable(t *testing.T) {
 			// attribute, so it is not ·potentially inherited·.
 			"a skip {attribute wildcard}'s attribute is not inherited",
 			ctaInherited(`<xs:anyAttribute processContents="skip"/>`), `<known kind="a"><inner><b>1</b></inner></known>`,
+		},
+		{
+			// key-p-inherited clause 3.2: no {attribute uses} member of known's
+			// type matches kind, and the lax {attribute wildcard} admitting it
+			// resolves it to the inheritable top-level declaration.
+			"a wildcard-admitted top-level inheritable attribute is inherited",
+			ctaInherited(`<xs:anyAttribute processContents="lax"/>`), `<known kind="a"><inner><a>1</a></inner></known>`,
 		},
 	} {
 		if !exec(instanceCase(t, tc.schemaBody, tc.instance, true)).IsPass() {
