@@ -513,6 +513,20 @@ func TestKeyrefMatchingOnlyAContestedEntryIsRecorded(t *testing.T) {
 	got, undecided = assessRecordedWith(t, opaqueStrings(), schema, doc)
 	wantSilence(t, got, "a match on a contested entry charges nothing")
 	wantDeclines(t, icDeclines(undecided), Unevaluated{rule: ruleCvcIdentityConstraint, loc: loc(2, 1), msg: "clause 4.3 is undecided"})
+
+	// The boxes swapped: the xs:token entry the keyref member matches is now
+	// the LATER of the undecided pair, so it is resolveEntryConflicts's j side
+	// that marks it contested. With that side's mark made a no-op, the match
+	// passes decidedly and this document walks clean.
+	swapped := icRoot(idItem(2, "tok", "a"), box(3, icIDed(4, "a")), box(5, idItem(6, "tok", "a")))
+
+	got, undecided = assessRecorded(t, schema, swapped)
+	icWantCharges(t, got, icCharge(ruleCvcIdentityConstraint, 2))
+	wantDeclines(t, icDeclines(undecided))
+
+	got, undecided = assessRecordedWith(t, opaqueStrings(), schema, swapped)
+	wantSilence(t, got, "a match on the later contested entry charges nothing")
+	wantDeclines(t, icDeclines(undecided), Unevaluated{rule: ruleCvcIdentityConstraint, loc: loc(2, 1), msg: "clause 4.3 is undecided"})
 }
 
 // opaqueBackend is base with every value of typ wrapped in an opaqueValue.
