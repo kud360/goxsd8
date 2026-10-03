@@ -314,6 +314,34 @@ func TestSkipWildcardAttributeLengthensNoKeySequence(t *testing.T) {
 		icCharge(ruleCvcIdentityConstraint, 3), icChargeAttr(ruleCvcID, 3))
 }
 
+// cvc-identity-constraint clause 3 admits "zero or more ·skipped· nodes"
+// beside a field's one simple-valued node, so a field selecting a ·skipped·
+// attribute AND a declared, valued one on the same ·target node· is charged
+// nothing under clause 3, and the valued one fills the slot, in either
+// document order: icCheck.fieldAttributes passes the ·skipped· one by. Each
+// <item> below carries @v beside a @s the ***skip*** wildcard admits, and the
+// plain <item> after it shares its @v, so the one charge is clause 4.2.2's
+// duplicate — which only a slot filled from @v can produce. Offering the
+// ·skipped· attribute as an absent, decided member instead fails both
+// documents with a clause 3 charge at the attribute.
+func TestSkippedFieldAttributeBesideAValuedOneFillsTheSlot(t *testing.T) {
+	key := icDef(t, "K", xsd.IdentityConstraintKey, "item", nil, "", "@v|@s")
+	uses := []xsd.AttributeUse{icUse(t, xsd.QName{Local: "v"}, "string")}
+	schema := icWildcardSchemaWith(t, anyWildcard(t, xsd.ProcessSkip), uses, []xsd.IdentityConstraint{key})
+
+	v := func(line int) Attribute { return icAttr(xsd.QName{Local: "v"}, "a", line) }
+	s := func(line int) Attribute { return icAttr(xsd.QName{Local: "s"}, "x", line) }
+	item := func(line int, attrs ...Attribute) *testElement {
+		return icElem(xsd.QName{Local: "item"}, line, attrs)
+	}
+
+	skippedFirst := icRoot(item(2, s(2), v(2)), item(3, v(3)))
+	icWantCharges(t, icAssess(t, schema, skippedFirst), icCharge(ruleCvcIdentityConstraint, 3))
+
+	valuedFirst := icRoot(item(2, v(2), s(2)), item(3, v(3)))
+	icWantCharges(t, icAssess(t, schema, valuedFirst), icCharge(ruleCvcIdentityConstraint, 3))
+}
+
 // A field node that is an EMPTY element whose declaration carries a {value
 // constraint} contributes the ·actual value· of that constraint's {lexical form}
 // to the ·key-sequence·, which is exactly what §3.11.4's Note calls for: "default
