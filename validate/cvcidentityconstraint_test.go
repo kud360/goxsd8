@@ -62,8 +62,8 @@ func TestKeyChargesAnAbsentFieldAndUniqueDoesNot(t *testing.T) {
 		icAssess(t, icSchema(t, "", false, []xsd.IdentityConstraint{unique}, nil), icRoot(icIDed(2, "a"), bare)))
 }
 
-// Clause 3 admits at most one node with a non-absent [schema actual value] per
-// field, so a field selecting two of them is charged at the second — the
+// Clause 3 admits at most one node of a simple ·governing type definition· per
+// field, so a field selecting two valued ones is charged at the second — the
 // attribute information item that is one too many, not the ·target node·.
 func TestKeyChargesAFieldSelectingTwoValuedNodes(t *testing.T) {
 	key := icDef(t, "K", xsd.IdentityConstraintKey, ".//item", nil, "", "@*")
@@ -922,4 +922,187 @@ func TestOtherSpecialKeyMemberPairsDecline(t *testing.T) {
 		wantDeclines(t, icDeclines(undecided),
 			Unevaluated{rule: ruleCvcIdentityConstraint, loc: loc(3, 1), msg: "clause 4.3 is undecided"})
 	})
+}
+
+// icCountSchema declares <root> over item*, each <item> carrying xs:integer
+// attributes @a and @b over any number of nillable xs:integer <v>, with one
+// identity constraint of the given category, named C, over the selector "item"
+// and the one field given.
+func icCountSchema(t *testing.T, category, field string) *xsd.Schema {
+	t.Helper()
+	return parsedSchema(t, map[string]string{"main.xsd": `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="item" maxOccurs="unbounded">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="v" type="xs:integer" nillable="true" minOccurs="0" maxOccurs="unbounded"/>
+            </xs:sequence>
+            <xs:attribute name="a" type="xs:integer"/>
+            <xs:attribute name="b" type="xs:integer"/>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+    <xs:` + category + ` name="C"><xs:selector xpath="item"/><xs:field xpath="` + field + `"/></xs:` + category + `>
+  </xs:element>
+</xs:schema>`})
+}
+
+// icCountValues is <root><item> at line 2 over one <v> per entry of vs, the
+// k-th at line 3+k: the entry "nil" is a ·nilled· <v>, any other its text.
+func icCountValues(vs ...string) *testElement {
+	kids := make([]Child, 0, len(vs))
+	for k, s := range vs {
+		line := 3 + k
+		if s == "nil" {
+			xsiNil := icAttr(xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: "nil"}, "true", line)
+			kids = append(kids, ElementChild(icElem(xsd.QName{Local: "v"}, line, []Attribute{xsiNil})))
+			continue
+		}
+		kids = append(kids, ElementChild(icElem(xsd.QName{Local: "v"}, line, nil,
+			TextChild(&testText{data: s, loc: loc(line, 4)}))))
+	}
+	return icRoot(icElem(xsd.QName{Local: "item"}, 2, nil, kids...))
+}
+
+// icCountAttributes is <root><item/></root> carrying each attribute given, the
+// k-th at line 2+k, so a charge names which one it was made against.
+func icCountAttributes(names []string, values ...string) *testElement {
+	attrs := make([]Attribute, 0, len(names))
+	for k, n := range names {
+		attrs = append(attrs, icAttr(xsd.QName{Local: n}, values[k], 2+k))
+	}
+	return icRoot(icElem(xsd.QName{Local: "item"}, 2, attrs))
+}
+
+// icWantClause3Count fails unless got is the charges before, then exactly one
+// clause 3 charge for more than one simple-valued node, made against the field
+// node at at and opening with its subject — the field, the constraint C, its
+// host <root> and the ·target node· <item>.
+func icWantClause3Count(t *testing.T, got []*xsderr.Error, field string, at xsderr.Loc, before ...struct {
+	rule xsderr.Rule
+	loc  xsderr.Loc
+},
+) {
+	t.Helper()
+	icWantCharges(t, got, append(before, icChargeAt(ruleCvcIdentityConstraint, at))...)
+	prefix := at.String() + `: [cvc-identity-constraint] the field "` + field + `" of the identity constraint C declared on root selects, for the ·target node· item, more than one node whose ·governing type definition· is a simple type definition`
+	if last := got[len(got)-1].Error(); !strings.HasPrefix(last, prefix) {
+		t.Errorf("Violations()[%d] = %q, want it to open %q", len(got)-1, last, prefix)
+	}
+}
+
+// cvc-identity-constraint clause 3 counts a field's nodes by ·governing type
+// definition· (#2121's oracle ruling): it admits "at most one node whose
+// ·governing· type definition is either a simple type definition or a complex
+// type definition with {variety} simple", and a ·nilled· node (key-nilled) or
+// one whose lexical lies outside its lexical space keeps its governing type —
+// §3.3.5.4 makes only its [schema actual value] ·absent·. So a second such node
+// is charged at its own position whatever either value is, through element and
+// attribute field nodes alike, and nothing is recorded as undecided. The
+// invalid lexical "x" is also charged at its own node, by the rule that owns
+// it; that charge is listed before the clause 3 one.
+func TestClause3CountsSimpleValuedNodesWhateverTheirValues(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		vs   []string
+	}{
+		{"two nilled", []string{"nil", "nil"}},
+		{"nilled then valued", []string{"nil", "1"}},
+		{"valued then nilled", []string{"1", "nil"}},
+		{"absent then valued", []string{"x", "1"}},
+		{"valued then absent", []string{"1", "x"}},
+		{"two absent", []string{"x", "x"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, undecided := assessRecorded(t, icCountSchema(t, "unique", "v"), icCountValues(tc.vs...))
+			wantDeclines(t, icDeclines(undecided))
+			var before []struct {
+				rule xsderr.Rule
+				loc  xsderr.Loc
+			}
+			for k, s := range tc.vs {
+				if s == "x" {
+					before = append(before, icCharge(ruleCvcType, 3+k))
+				}
+			}
+			icWantClause3Count(t, got, "v", loc(4, 1), before...)
+		})
+	}
+	// An attribute field node reaches the same count through keyMember: an
+	// ·absent·-valued @a first still charges the valued @b after it, at @b.
+	for _, tc := range []struct {
+		name    string
+		a, b    string
+		invalid int // the line of the attribute holding "x"
+	}{
+		{"absent then valued attribute", "x", "1", 2},
+		{"valued then absent attribute", "1", "x", 3},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, undecided := assessRecorded(t, icCountSchema(t, "unique", "@a|@b"),
+				icCountAttributes([]string{"a", "b"}, tc.a, tc.b))
+			wantDeclines(t, icDeclines(undecided))
+			icWantClause3Count(t, got, "@a|@b", loc(3, 2), icChargeAttr(ruleCvcAttribute, tc.invalid))
+		})
+	}
+}
+
+// The one simple-valued node clause 3 admits is admitted whatever its value: a
+// lone ·nilled· or ·absent·-valued field node is charged nothing under clause
+// 3 and contributes no ·key-sequence· member, so a unique charges nothing and a
+// key charges its ·target node· under clause 4.2.1 for the short
+// ·key-sequence·.
+func TestClause3AdmitsOneSimpleValuedNodeWhateverItsValue(t *testing.T) {
+	want421 := func(t *testing.T, got []*xsderr.Error) {
+		t.Helper()
+		if len(got) == 2 && !strings.Contains(got[1].Error(), "clause 4.2.1 ") {
+			t.Errorf("Violations() = %v, want the key charged under clause 4.2.1", got)
+		}
+	}
+	t.Run("unique over one nilled", func(t *testing.T) {
+		got, undecided := assessRecorded(t, icCountSchema(t, "unique", "v"), icCountValues("nil"))
+		wantDeclines(t, icDeclines(undecided))
+		wantSilence(t, got, "one nilled node is within clause 3's bound")
+	})
+	t.Run("unique over one absent attribute", func(t *testing.T) {
+		got, undecided := assessRecorded(t, icCountSchema(t, "unique", "@a|@b"), icCountAttributes([]string{"a"}, "x"))
+		wantDeclines(t, icDeclines(undecided))
+		icWantCharges(t, got, icChargeAttr(ruleCvcAttribute, 2))
+	})
+	t.Run("key over one absent attribute", func(t *testing.T) {
+		got, undecided := assessRecorded(t, icCountSchema(t, "key", "@a|@b"), icCountAttributes([]string{"a"}, "x"))
+		wantDeclines(t, icDeclines(undecided))
+		icWantCharges(t, got, icChargeAttr(ruleCvcAttribute, 2), icCharge(ruleCvcIdentityConstraint, 2))
+		want421(t, got)
+	})
+	t.Run("key over one absent element", func(t *testing.T) {
+		got, undecided := assessRecorded(t, icCountSchema(t, "key", "v"), icCountValues("x"))
+		wantDeclines(t, icDeclines(undecided))
+		icWantCharges(t, got, icCharge(ruleCvcType, 3), icCharge(ruleCvcIdentityConstraint, 2))
+		want421(t, got)
+	})
+}
+
+// Two ·special·-typed (xs:anySimpleType, xs:anyAtomicType) field nodes for one
+// ·target node· are two nodes of a simple ·governing type definition·, so
+// clause 3 charges the second at its own position, as icClause3Valued itself.
+// The two lexicals are byte-identical and differ by position only, so the
+// charge is the count's and no comparison's. Before #2124, keyMember declined
+// each such node instead, recording a clause 3 decline and charging nothing.
+func TestTwoSpecialFieldNodesAreChargedUnderClause3(t *testing.T) {
+	for _, tc := range []struct{ field, second string }{
+		{"@ast|@aat", "aat"},
+		{"@ast|@r", "r"},
+	} {
+		t.Run(tc.field, func(t *testing.T) {
+			unique := `<xs:unique name="C"><xs:selector xpath="item"/><xs:field xpath="` + tc.field + `"/></xs:unique>`
+			got, undecided := assessRecorded(t, icSpecialSchema(t, unique),
+				icCountAttributes([]string{"ast", tc.second}, "x", "x"))
+			wantDeclines(t, icDeclines(undecided))
+			icWantClause3Count(t, got, tc.field, loc(3, 2))
+		})
+	}
 }
