@@ -105,10 +105,12 @@ func TestTypeOfDeclinesAbsentSubstitutionGroupHead(t *testing.T) {
 }
 
 // TestResolveRejectsOwnerOfOwnerHeadTypeChain is the Phase A invariant that
-// makes ResolvedType's not-ok branch unreachable for any schema that survived
-// finalize (STYLE P3): the arm must name the OWNER, and a head that inherits its
-// own type is not one. It is a representation invariant, so it is charged to
-// xsderr.RuleComponentInvariant and not to a spec rule.
+// makes ResolvedType's owner-of-owner branch unreachable for any schema that
+// survived finalize (STYLE P3): the arm must name the OWNER, and a head that
+// inherits its own type is not one. The ·absent·-head branch stays reachable
+// (TestResolveAllowsAbsentSubstitutionGroupHeadType). It is a representation
+// invariant, so it is charged to xsderr.RuleComponentInvariant and not to a
+// spec rule.
 func TestResolveRejectsOwnerOfOwnerHeadTypeChain(t *testing.T) {
 	owner, _ := sghOwner(t, sq("owner"))
 	middle := sgElement(t, sq("middle"), SubstitutionGroupHeadTypeRef{Head: sq("owner")}, nil, sq("owner"))

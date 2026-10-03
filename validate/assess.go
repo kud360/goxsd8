@@ -303,11 +303,19 @@ func (w *walk) declaredGovernance(e Element, d xsd.ElementDeclaration, inherited
 // Each decline below withholds a type that could differ from the declaration's,
 // and assessing the element against the WRONG type is a false reject in both
 // directions — an attribute the real governing type declares looks unmatched, a
-// child its real {content type} admits looks unattributable.
+// child its real {content type} admits looks unattributable. Its exits that
+// return no type are five, of three kinds, and each records one [Unevaluated]
+// at the element:
 //
 //   - A {test} in a {type table} that the §3.12.6 required-subset evaluator
-//     cannot evaluate (selectedType, cta.go).
-//   - A {type definition} slot that resolves to nothing.
+//     cannot evaluate (conditionallySelected, cta.go), under key-cta-ta-select.
+//   - A {type definition} slot of the ·selected type definition· that resolves
+//     to nothing (resolvedSelection, cta.go), under cvc-elt clause 1: the
+//     declaration's own (key-selected-type clause 2), the one of the
+//     alternative that ·successfully selects·, or the {default type
+//     definition}'s — three exits, each reachable from a finalized Schema.
+//   - An error from [xsd.Schema.ValidlySubstitutable] deciding the ·override·
+//     (instanceOverride), under cvc-elt clause 4. It is unreachable.
 //
 // The type this returns is the governing one for EVERY reader, and they narrow
 // it separately from here on: governance.complexType and governance.simpleType
@@ -341,18 +349,27 @@ func (w *walk) governingType(e Element, d xsd.ElementDeclaration, inherited []in
 // complex/complex case alone, which is [xsd.Schema.ValidlySubstitutable]'s to
 // apply and deliberately not re-applied here.
 //
-// An error from that predicate is the src-resolve clause 1.1 rejection an
-// unresolvable simple-type {base type definition} produces, and is neither
-// charged nor folded into an answer: it leaves the override undecided, so no
-// clause 4 charge is made and NO type is returned, which is governingType's own
-// decline and carries its consequences unchanged. Returning the selected type on
-// an undecided override would assess an element that may carry a derived type's
+// An error from that predicate is never a verdict about the pair, so it is
+// neither charged nor folded into an answer: it leaves the override undecided,
+// so no clause 4 charge is made and NO type is returned, which is
+// governingType's own decline and carries its consequences unchanged. It is
+// recorded as [Unevaluated] under cvc-elt clause 4, the clause left undecided,
+// as [walk.locallyDeclaredType] and [walk.localGovernance] record the same
+// error under the clause each decides. Returning the selected type on an
+// undecided override would assess an element that may carry a derived type's
 // content against the base, which is the reject governingType's own doc rules
-// out; charging clause 4 would reject a document for a fault in the schema's own
-// base chain.
+// out; charging clause 4 would reject a document for a fault in the schema's
+// own base chain.
+//
+// No test drives that exit and none can: the error is unreachable for a
+// finalized Schema, for the reason xsd's validlyDerived states, and both
+// operands are components w.schema holds.
 func (w *walk) instanceOverride(e Element, d xsd.ElementDeclaration, instance, selected xsd.TypeDefinition) (xsd.TypeDefinition, bool) {
 	overrides, err := w.schema.ValidlySubstitutable(instance, selected, d.DisallowedSubstitutions())
 	if err != nil {
+		w.decline("assessing element", e.Name(), e.Loc(), ruleCvcElt, "4",
+			"the ·governing type definition· of the element %s was not determined: whether its xsi:type %s ·overrides· its ·selected type definition· %s (cvc-elt clause 4, §3.3.4.2 key-overrides) could not be settled: %v",
+			e.Name(), typeName(instance), typeName(selected), err)
 		return nil, false
 	}
 	if overrides {
@@ -588,8 +605,9 @@ func (w *walk) unresolvedStrictWildcardChild(content *contentCheck, child Elemen
 // (key-governing-type-elem clause 8), that can fail.
 //
 // "The same as" is sameType. An error from [xsd.Schema.ValidlySubstitutable] is
-// its src-resolve rejection and never a verdict about the pair, so it is
-// recorded as undecided and charges nothing.
+// never a verdict about the pair, so it is recorded as undecided and charges
+// nothing. That exit is unreachable for a finalized Schema, for the reason
+// xsd's validlyDerived states.
 //
 // The charge carries the CHILD's location, where the mismatched item is; the
 // parent whose validity clause 5 decides is named in the message.
@@ -728,8 +746,8 @@ func (w *walk) instanceGovernance(e Element) (governance, bool) {
 // it is recorded as [Unevaluated], and the element is unattributed and walked
 // against nothing, as [walk.child] walks one whose parent attributed it to
 // nothing, with cvc-id's clause 1 arm withheld on the same grounds. That exit is
-// unreachable for a finalized schema (the error is src-resolve clause 1.1's,
-// which finalize charges first).
+// unreachable for a finalized Schema, for the reason xsd's validlyDerived
+// states.
 //
 // GAP(validate): the element at that exit IS attributed — to the {open content}
 // wildcard — and is no item the true schema may ·skip·, so key-governing-ad

@@ -137,11 +137,10 @@ func (w *walk) simpleAssertions(st *xsd.SimpleType, loc xsderr.Loc) {
 // no charge here to be wrong about: the same type fails value.ValidateLexical
 // at every recording site, which declines there.
 //
-// No test drives those three arms and none can: src-resolve clause 1.1 rejects
-// an itemType= or memberTypes= that resolves to nothing (or to a complex type)
-// when the Schema is finalized, so a finalized w.schema reaches none of them.
-// They are the safe answer for a resolver that is not one, which
-// [xsd.SimpleType.Variety] admits by taking a TypeResolver.
+// No test drives those three arms and none can: each error is an unresolvable
+// simple-type reference, unreachable for a finalized Schema for the reason
+// xsd's validlyDerived states. They are the safe answer for a resolver that is
+// not one, which [xsd.SimpleType.Variety] admits by taking a TypeResolver.
 func (w *walk) assertionSites(st *xsd.SimpleType, loc xsderr.Loc) []Unevaluated {
 	if st == nil {
 		return nil
