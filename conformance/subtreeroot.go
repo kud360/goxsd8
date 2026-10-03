@@ -365,7 +365,7 @@ func (g *subtreeGate) governingType(start xml.StartElement, d xsd.ElementDeclara
 // (resolveQName), and refuseXsiTypeUnresolved where lexical resolves to no
 // QName or the schema has no type of that name.
 func (g *subtreeGate) instanceType(lexical string) (xsd.TypeDefinition, refusal) {
-	name, ok := g.resolveQName(lexical)
+	name, ok := resolveQName(g.scope, lexical)
 	if !ok {
 		return nil, refuseXsiTypeUnresolved
 	}
@@ -377,12 +377,14 @@ func (g *subtreeGate) instanceType(lexical string) (xsd.TypeDefinition, refusal)
 }
 
 // resolveQName maps lexical, an xs:QName lexical, to the ·expanded name· the
-// namespace declarations in g.scope bind it to after whiteSpace collapse: an
-// unprefixed name takes the default namespace, or none where no default
-// namespace declaration is in scope. A lexical with an empty prefix or local
-// part, or whose prefix no declaration in scope binds, answers false; any
-// other malformation yields a name no type definition carries.
-func (g *subtreeGate) resolveQName(lexical string) (xsd.QName, bool) {
+// namespace declarations in scope bind it to after whiteSpace collapse, the
+// last declaration of a prefix winning: an unprefixed name takes the default
+// namespace, or none where no default namespace declaration is in scope. A
+// lexical with an empty prefix or local part, or whose prefix no declaration
+// in scope binds, answers false; any other malformation yields a name no type
+// definition carries. Only namespace declarations in scope are read, so a
+// start tag's whole attribute list may be passed.
+func resolveQName(scope []xml.Attr, lexical string) (xsd.QName, bool) {
 	prefix, local, prefixed := strings.Cut(strings.Trim(lexical, " \t\r\n"), ":")
 	decl := xml.Name{Space: "xmlns", Local: prefix}
 	if !prefixed {
@@ -392,9 +394,9 @@ func (g *subtreeGate) resolveQName(lexical string) (xsd.QName, bool) {
 	if local == "" || (prefixed && prefix == "") {
 		return xsd.QName{}, false
 	}
-	for i := len(g.scope) - 1; i >= 0; i-- {
-		if g.scope[i].Name == decl {
-			return xsd.QName{Space: g.scope[i].Value, Local: local}, true
+	for i := len(scope) - 1; i >= 0; i-- {
+		if scope[i].Name == decl {
+			return xsd.QName{Space: scope[i].Value, Local: local}, true
 		}
 	}
 	return xsd.QName{Local: local}, !prefixed

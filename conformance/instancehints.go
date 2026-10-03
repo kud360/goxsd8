@@ -21,7 +21,9 @@ import (
 // (§2.7.3, §4.3.2), assembled through parser.ParseSet and parser.HintAt
 // (#2013). §4.3.2 clause 3 lets a processor dereference hints and obliges it to
 // dereference none, so every shape below that the lane cannot read completely
-// DECLINES rather than deciding against a partial schema.
+// DECLINES rather than deciding against a partial schema. A root carrying no
+// hint is assessed against the built-in components alone where its xsi:type
+// names a built-in type definition (builtinsSchema, #2151).
 //
 // The reader is a second copy of cmd/goxsd8's instanceHints/hintsOf, narrowed
 // to what the lane can decide; #755 owns the single home both should share
@@ -30,11 +32,10 @@ import (
 // caseSchema assembles the schema c is assessed against, with assembleCase's
 // four results, its decidable false reported as the refusal that declined the
 // case: the group's schema documents where discovery attached them
-// (refuseGroupAssembly), and otherwise the schema the instance's own hints
-// locate (#2013, §4.3.2 clauses 3-5). A case with neither — no group schema
-// AND no hint — has no stated schema at all and is not decidable
-// (refuseNoHint): ParseSet over no root answers a plain error, which read as a
-// verdict would be a schema rejection nobody stated.
+// (refuseGroupAssembly), otherwise the schema the instance's own hints locate
+// (#2013, §4.3.2 clauses 3-5), and for a case with neither — no group schema
+// AND no hint — the built-in components where builtinsSchema finds the case
+// decidable against them.
 func caseSchema(backend value.Backend, c caseSpec) (*xsd.Schema, *parser.AssemblyReport, refusal, error) {
 	if c.schemaDoc != "" {
 		schema, report, decidable, perr := assembleCase(backend, c.schemaDoc, c.schemaExtraDocs)
@@ -48,15 +49,89 @@ func caseSchema(backend value.Backend, c caseSpec) (*xsd.Schema, *parser.Assembl
 		return nil, nil, why, nil
 	}
 	if len(hints) == 0 {
+		return builtinsSchema(backend, root)
+	}
+	return assembleHints(backend, c.doc, expandedName(root.Name), hints)
+}
+
+// builtinsSchemaDoc is the package-relative path of a schema document with no
+// children and no targetNamespace: the schema assembled from it holds the
+// built-in components alone, which every schema contains — the built-in type
+// definitions (§3.4.7, §3.16.7), all in the XSD namespace, and the four xsi:
+// attribute declarations (§3.2.7) — and no element declaration.
+const builtinsSchemaDoc = "testdata/builtins/builtins.xsd"
+
+// builtinsSchema is what caseSchema answers for a case with no group schema
+// whose document element, root, carries no hint: the schema assembled from
+// builtinsSchemaDoc through assembleCase, handed out only where the spec
+// decides the case against the built-in components, and otherwise the refusal
+// naming the arm that leaves it undecided — the caller DECLINES (#2151). With
+// no hint to follow, and §4.3.2 clause 3 obliging a processor to follow none,
+// the built-in components every schema holds are the whole schema. The arms:
+//
+//   - root's xsi:type, resolved against the namespace declarations root
+//     carries (resolveQName) — its whole [in-scope namespaces] but xml:, root
+//     being the document element — names a type definition of that schema,
+//     so a built-in one in the XSD namespace. With no ·governing element
+//     declaration·, it is root's ·governing type definition·
+//     (key-governing-type-elem clause 8, key-itd), root is ·strictly assessed·
+//     against it (cvc-assess-elt clause 1), and cvc-type decides root. The
+//     schema is handed out.
+//   - root's xsi:type resolves to no QName, or to one naming no built-in type
+//     definition (refuseNoHintXsiTypeUnresolved). key-itd clause 3 fails, so
+//     root has no ·governing type definition·, is ·laxly assessed·
+//     (cvc-assess-elt clause 3), and its [validity] is notKnown (e-validity
+//     clause 2). cvc-attribute clause 5 charges the xsi:type attribute, not
+//     root.
+//   - root carries no xsi:type, and an attribute in the xsi namespace whose
+//     local name is none of §3.2.7's four (unknownXsi,
+//     refuseNoHintUnknownXsi). Root is ·laxly assessed· against xs:anyType,
+//     whose lax attribute wildcard admits the attribute, and no declaration
+//     exists to assess it (cvc-assess-elt clause 2.2): no rule charges it, so
+//     a suite expectation of invalid is a suite expectation (PRINCIPLES 25),
+//     not a verdict.
+//   - root carries neither (refuseNoHint): a ·laxly assessed· root, its
+//     [validity] notKnown (#2013).
+//
+// Handed the schema, the walk would decide either undecided arm on its
+// cvc-assess-elt charge for a root with no top-level declaration and no
+// resolving xsi:type, a ·strict assessment· the spec does not make there.
+func builtinsSchema(backend value.Backend, root xml.StartElement) (*xsd.Schema, *parser.AssemblyReport, refusal, error) {
+	i := slices.IndexFunc(root.Attr, func(a xml.Attr) bool { return a.Name == xsiType })
+	if i < 0 {
+		if slices.ContainsFunc(root.Attr, unknownXsi) {
+			return nil, nil, refuseNoHintUnknownXsi, nil
+		}
 		return nil, nil, refuseNoHint, nil
 	}
-	return assembleHints(backend, c.doc, root, hints)
+	name, ok := resolveQName(root.Attr, root.Attr[i].Value)
+	if !ok {
+		return nil, nil, refuseNoHintXsiTypeUnresolved, nil
+	}
+	schema, report, decidable, perr := assembleCase(backend, builtinsSchemaDoc, nil)
+	if !decidable {
+		return nil, nil, refuseBuiltinsAssembly, nil
+	}
+	if perr != nil {
+		return schema, report, "", perr
+	}
+	if _, ok := schema.Type(name); !ok {
+		return nil, nil, refuseNoHintXsiTypeUnresolved, nil
+	}
+	return schema, report, "", nil
+}
+
+// unknownXsi reports whether a is an attribute in the xsi namespace whose
+// local name is none of the four §3.2.7 declares, compared case-sensitively,
+// so xsi:Type is one.
+func unknownXsi(a xml.Attr) bool {
+	return a.Name.Space == xsd.XMLSchemaInstanceNS && notExcepted(a)
 }
 
 // instanceHints reads the schema location hints off the document element of
 // the instance at doc, each resolved against the instance's base URI through
 // internal/schemaloc (§4.3.2 clause 4), in the order its attributes carry them,
-// together with that element's ·expanded name·. It names a refusal — the
+// together with that element's start tag. It names a refusal — the
 // caller DECLINES — when the hints the root carries may not be the whole of
 // what §4.3.2 clause 5 makes global to the assessment:
 //
@@ -74,29 +149,29 @@ func caseSchema(backend value.Backend, c caseSpec) (*xsd.Schema, *parser.Assembl
 //     otherwise).
 //
 // A root carrying no hint names no refusal and returns no hints; caseSchema
-// declines that shape too.
-func instanceHints(doc string) (root xsd.QName, hints []parser.Root, why refusal) {
+// hands that shape to builtinsSchema.
+func instanceHints(doc string) (root xml.StartElement, hints []parser.Root, why refusal) {
 	rc, _, err := loader.Dir(filepath.Dir(doc)).Resolve("", filepath.Base(doc))
 	if err != nil {
-		return xsd.QName{}, nil, refuseHintsUnresolved
+		return xml.StartElement{}, nil, refuseHintsUnresolved
 	}
 	defer func() { _ = rc.Close() }() // read-only handle: close error cannot affect the verdict
 	dec := rawDecoder(rc)
 	start, why := rootStart(dec)
 	if why != "" {
-		return xsd.QName{}, nil, why
+		return xml.StartElement{}, nil, why
 	}
 	if isInlineSchema(start.Name) {
-		return xsd.QName{}, nil, refuseInlineSchema
+		return xml.StartElement{}, nil, refuseInlineSchema
 	}
 	hints, why = hintsOf(start, filepath.Base(doc))
 	if why != "" {
-		return xsd.QName{}, nil, why
+		return xml.StartElement{}, nil, why
 	}
 	if why := belowRootHintFree(dec); why != "" {
-		return xsd.QName{}, nil, why
+		return xml.StartElement{}, nil, why
 	}
-	return expandedName(start.Name), hints, ""
+	return start, hints, ""
 }
 
 // hintsOf reads root's hints, resolving each location against base, the

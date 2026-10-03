@@ -180,19 +180,49 @@ func TestInstanceExecutorDeclinesUndecidableShapes(t *testing.T) {
 }
 
 // TestInstanceExecutorDeclinesCaseWithNoGroupSchema proves a case with no
-// stated schema — no group schema reference (groupSchemaDocs) AND no hint on
-// its root — is DECLINED rather than assessed against a guessed or empty
-// schema (#2013, absorbing #763). caseSchema must refuse it (refuseNoHint):
-// with its "no hint" condition removed, ParseSet over no root answers a plain
-// error that caseSchema hands back as decidable — a schema rejection nobody
-// stated — and the executor then declines only because it reads every
-// rejection as a decline, which is why the assertion is on caseSchema.
+// group schema reference (groupSchemaDocs) and no hint on its root is DECLINED
+// wherever the built-in components alone leave its root ·laxly assessed· and
+// its [validity] notKnown (#2013, #2151), each arm under builtinsSchema's own
+// refusal, in caseSchema and in the executor. Handed the built-ins schema,
+// every row is decided "not valid" on the walk's cvc-assess-elt charge for a
+// root with no top-level declaration and no resolving xsi:type, a ·strict
+// assessment· the spec does not make there. TestInstanceExecutorDecidesBuiltinTypedRoot
+// pins the shape that is decided.
 func TestInstanceExecutorDeclinesCaseWithNoGroupSchema(t *testing.T) {
-	c := instanceCase(t, knownRoot, `<unknown/>`, false)
-	c.schemaDoc = ""
-	declinesBothPolarities(t, c, "an instance case with no group schema reference and no hint", refuseNoHint)
-	if _, _, why, _ := caseSchema(strict.New(), c); why != refuseNoHint {
-		t.Errorf("a case with no group schema and no hint has no stated schema: caseSchema refused it as %q, want %q", why, refuseNoHint)
+	const xsdNS = `xmlns:xsd="http://www.w3.org/2001/XMLSchema"`
+	for _, tc := range []struct {
+		why      string
+		instance string
+		refused  refusal
+	}{
+		{"a root with no xsi:type", `<unknown/>`, refuseNoHint},
+		// xsi:nil is one of §3.2.7's four, and a plain attribute is in no
+		// namespace: neither is unknownXsi.
+		{"a root carrying xsi:nil and no xsi:type",
+			`<unknown ` + xsiNS + ` xsi:nil="false"/>`, refuseNoHint},
+		{"a root carrying a no-namespace attribute and no xsi:type",
+			`<unknown blah="x"/>`, refuseNoHint},
+		// addB199: key-itd clause 3 fails, cvc-assess-elt clause 3.
+		{"a root whose xsi:type names no built-in type",
+			`<a ` + xsiNS + ` ` + xsdNS + ` xsi:type="xsd:str&#x0400;ing">x</a>`, refuseNoHintXsiTypeUnresolved},
+		{"a root whose xsi:type prefix no declaration binds",
+			`<a ` + xsiNS + ` xsi:type="xsd:int">1</a>`, refuseNoHintXsiTypeUnresolved},
+		// An unprefixed name with no default namespace declaration is in no
+		// namespace, where no built-in type is.
+		{"a root whose xsi:type is unprefixed, with no default namespace",
+			`<a ` + xsiNS + ` xsi:type="int">1</a>`, refuseNoHintXsiTypeUnresolved},
+		// attMd001-attMd011: cvc-complex-type clause 2 excepts the four names
+		// case-sensitively; xs:anyType's lax wildcard admits the rest.
+		{"a root carrying xsi:Type and no xsi:type",
+			`<doc ` + xsiNS + ` ` + xsdNS + ` xsi:Type="xsd:int">1</doc>`, refuseNoHintUnknownXsi},
+		{"a root carrying xsi:blah and no xsi:type",
+			`<doc ` + xsiNS + ` xsi:blah="foo.xsd">abc</doc>`, refuseNoHintUnknownXsi},
+	} {
+		c := hintedCase(t, nil, tc.instance, false)
+		declinesBothPolarities(t, c, tc.why, tc.refused)
+		if _, _, why, _ := caseSchema(strict.New(), c); why != tc.refused {
+			t.Errorf("%s: caseSchema refused it as %q, want %q", tc.why, why, tc.refused)
+		}
 	}
 }
 
