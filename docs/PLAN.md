@@ -89,7 +89,9 @@ It was not re-run at `e7aa23e`: #2168 adds a log line, leaves every
   `instance` they are `MS-Regex` 18 (#1899), every `MS-Regex` case decided
   against the suite, #1912's 7, all `<strict-attribute-unresolved>`, and
   #2171's 4, `MS-Additional` addB159, addB161, addB162 and addB164, decided
-  valid where no rule charges a late hint (§4.3.2 clause 5, `instanceHints`).
+  valid where no rule charges a late hint (§4.3.2 clause 5, `instanceHints`),
+  and #2180's addB166, suite status queried, decided valid where no rule
+  charges a late hint or a late inline `xs:schema`.
 - **#2151's `<no-hint>` residue is ruled and has no work to take:**
   `MS-Attribute` attMd001–011 `<no-hint-unknown-xsi-attribute>` 11 invalid and
   `MS-Additional` addB199 `<no-hint-xsi-type-unresolved>` 1 invalid.

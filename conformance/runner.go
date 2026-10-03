@@ -865,8 +865,8 @@ func caseDocs(kind string, t validityTest, setDir string) (doc string, extra []s
 // Any count other than EXACTLY ONE schemaTest yields NO schema reference rather
 // than a picked sibling or an invented document. The instance lane then
 // assesses the case against the schema its own hints locate, read off every
-// element, and declines one with an inline xs:schema (caseSchema, #2013's
-// RULING, #2171). A multi-document list it passes through whole,
+// element, with every inline xs:schema it carries (caseSchema, #2013's
+// RULING, #2171, #2180). A multi-document list it passes through whole,
 // which assembleCase decides on as one set. Of the 9952 groups the pinned suite
 // yields instance cases from, 55 declare NO schemaTest
 // (MS-Additional2006-07-15/addA006 and 54 siblings), one case each; none

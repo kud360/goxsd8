@@ -55,7 +55,7 @@ func TestRawReadsAdmitTheLabelXmltreeAdmits(t *testing.T) {
 		if got := documentCarries(c.doc, isVersioningAttr); got == tc.admit {
 			t.Errorf("%q: documentCarries(isVersioningAttr) = %v, want %v, as xmltree admits", tc.prolog, got, !tc.admit)
 		}
-		if _, _, got := instanceHints(c.doc); (got == "") != tc.admit {
+		if _, _, _, got := instanceHints(c.doc); (got == "") != tc.admit {
 			t.Errorf("%q: instanceHints refused as %q, want admitted %v, as xmltree admits", tc.prolog, got, tc.admit)
 		}
 	}
@@ -93,7 +93,7 @@ func TestRawReadsDecodeUTF16(t *testing.T) {
 			if documentCarries(c.doc, isVersioningAttr) {
 				t.Errorf("%s: documentCarries(%s, isVersioningAttr) = true, want false, as xmltree reads it", row, filepath.Base(c.doc))
 			}
-			if _, _, why := instanceHints(c.doc); why != "" {
+			if _, _, _, why := instanceHints(c.doc); why != "" {
 				t.Errorf("%s: instanceHints(%s) refused as %q, want admitted, as xmltree reads it", row, filepath.Base(c.doc), why)
 			}
 		}

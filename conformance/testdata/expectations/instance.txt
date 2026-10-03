@@ -1003,10 +1003,10 @@ MS-Additional2006-07-15/addB163/instance/addB163.v pass
 MS-Additional2006-07-15/addB164/instance/addB164.i fail
 MS-Additional2006-07-15/addB165/instance/addB165.v pass
 MS-Additional2006-07-15/addB166/instance/addB166.i fail
-MS-Additional2006-07-15/addB167/instance/addB167.i fail
-MS-Additional2006-07-15/addB168/instance/addB168.v fail
+MS-Additional2006-07-15/addB167/instance/addB167.i pass
+MS-Additional2006-07-15/addB168/instance/addB168.v pass
 MS-Additional2006-07-15/addB169.1/instance/addB169.1.v pass
-MS-Additional2006-07-15/addB169/instance/addB169.v fail
+MS-Additional2006-07-15/addB169/instance/addB169.v pass
 MS-Additional2006-07-15/addB170/instance/addB170.i pass
 MS-Additional2006-07-15/addB171/instance/addB171.i pass
 MS-Additional2006-07-15/addB172/instance/addB172.i pass
