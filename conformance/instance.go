@@ -33,8 +33,11 @@ import (
 // all, which is not a hypothetical shape: 55 groups of the pinned suite declare
 // NONE. Such a case is assessed against the schema its root's
 // xsi:schemaLocation / xsi:noNamespaceSchemaLocation hints locate (caseSchema,
-// instancehints.go, #2013, §4.3.2 clauses 3-5), and DECLINES where it carries
-// no hint, a hint below its root, or an inline xs:schema.
+// instancehints.go, #2013, §4.3.2 clauses 3-5), and DECLINES where it carries a
+// hint below its root or an inline xs:schema. One carrying no hint at all is
+// assessed against the built-in components alone where its root's xsi:type
+// names a built-in type definition (key-governing-type-elem clause 8), and
+// DECLINES otherwise (builtinsSchema, #2151).
 //
 // The group's schema is assembled by assembleCase, the very gate the schema lane
 // decides its own cases with, and this lane declines wherever that gate does —
@@ -496,7 +499,9 @@ import (
 // fabricated verdict shows up as a failed parse, and does not transfer here,
 // where the parse succeeds and the charge lands anyway. A schema assembled from
 // the instance's hints never reaches this charge at the root: assembleHints
-// declines a hinted schema declaring no top-level element for it.
+// declines a hinted schema declaring no top-level element for it. Nor does the
+// built-ins schema: builtinsSchema hands it only to a root whose xsi:type
+// resolves in it.
 //
 // Three further declines close the ways a NON-verdict could reach that
 // comparison. An instance document that will not resolve or read is a recorded
@@ -523,7 +528,6 @@ import (
 const (
 	// caseSchema (instancehints.go).
 	refuseGroupAssembly   refusal = "group-assembly"       // assembleCase declined the group's schema
-	refuseNoHint          refusal = "no-hint"              // no group schema, and the root carries no hint
 	refuseHintsUnresolved refusal = "hints-unresolved"     // instanceHints: the instance will not resolve
 	refuseInlineSchema    refusal = "inline-schema"        // instanceHints: an element is an inline xs:schema
 	refuseXMLBase         refusal = "xml-base"             // hintsOf: the root carries xml:base
@@ -534,6 +538,13 @@ const (
 	refuseHintUndeclared  refusal = "hint-undeclared-root" // assembleHints: no top-level declaration for the root
 	refuseDoctype         refusal = "doctype"              // rootStart: a directive defaultsNoAttribute refuses
 	refuseDecode          refusal = "decode"               // an encoding/xml decoder error, at any re-read site
+
+	// builtinsSchema (instancehints.go): no group schema, and the root carries
+	// no hint.
+	refuseNoHint                  refusal = "no-hint"                       // no xsi:type, and no unknownXsi attribute
+	refuseNoHintXsiTypeUnresolved refusal = "no-hint-xsi-type-unresolved"   // an xsi:type naming no built-in type definition
+	refuseNoHintUnknownXsi        refusal = "no-hint-unknown-xsi-attribute" // no xsi:type, and an unknownXsi attribute
+	refuseBuiltinsAssembly        refusal = "builtins-assembly"             // assembleCase declined builtinsSchemaDoc
 
 	// execInstanceCase and assessInstance.
 	refuseUnboundPrefix      refusal = "unbound-prefix(#2073)" // perr: a schema document's unbound-prefix charge

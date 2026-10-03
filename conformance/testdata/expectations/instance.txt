@@ -1046,8 +1046,8 @@ MS-Additional2006-07-15/addB200a/instance/addB200a.i pass
 MS-Additional2006-07-15/addB200b/instance/addB200b.i pass
 MS-Additional2006-07-15/addB200c/instance/addB200c.i pass
 MS-Additional2006-07-15/addB201/instance/addB201.i pass
-MS-Additional2006-07-15/addB202a/instance/addB202a.i fail
-MS-Additional2006-07-15/addB202b/instance/addB202b.i fail
+MS-Additional2006-07-15/addB202a/instance/addB202a.i pass
+MS-Additional2006-07-15/addB202b/instance/addB202b.i pass
 MS-Additional2006-07-15/addB31/instance/addB31.v pass
 MS-Additional2006-07-15/addC001/instance/addC001.v pass
 MS-Additional2006-07-15/addD001/instance/addD001.v pass

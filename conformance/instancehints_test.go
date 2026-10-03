@@ -79,6 +79,51 @@ func TestInstanceExecutorDecidesFromHints(t *testing.T) {
 	}
 }
 
+// TestInstanceExecutorDecidesBuiltinTypedRoot proves a case with no group
+// schema and no hint whose root's xsi:type names a built-in type definition is
+// decided against the built-in components alone (builtinsSchema, #2151): that
+// type governs the root (key-governing-type-elem clause 8, key-itd), which is
+// ·strictly assessed· against it, and content outside its lexical space is
+// invalid by cvc-type clause 3.1.3. Each decided row declines as no-hint with
+// caseSchema's builtinsSchema arm removed. The prefix is resolved against the
+// root's own namespace declarations, whichever prefix binds the XSD namespace.
+//
+// A root that is locally valid against its type still declines, at
+// assessedSubtreeRoot's undeclared-root gate, which reads "valid" only off a
+// declared root: the last assertion pins that the built-ins schema does not
+// widen the "valid" observation.
+func TestInstanceExecutorDecidesBuiltinTypedRoot(t *testing.T) {
+	exec := newInstanceExec()
+	for _, tc := range []struct {
+		why      string
+		instance string
+	}{
+		// addB202a.i.
+		{"a hexBinary root with a non-hex character",
+			`<a ` + xsiNS + ` xmlns:xsd="http://www.w3.org/2001/XMLSchema" xsi:type="xsd:hexBinary">adf&#x0400;789</a>`},
+		// addB202b.i.
+		{"a date root outside the date lexical space",
+			`<a ` + xsiNS + ` xmlns:xsd="http://www.w3.org/2001/XMLSchema" xsi:type="xsd:date">2005-01-0&#x0400;1</a>`},
+		{"an int root, the XSD namespace bound to another prefix",
+			`<a ` + xsiNS + ` xmlns:p="http://www.w3.org/2001/XMLSchema" xsi:type="p:int">x</a>`},
+		{"an int root, the XSD namespace the default namespace",
+			`<a ` + xsiNS + ` xmlns="http://www.w3.org/2001/XMLSchema" xsi:type="int">x</a>`},
+	} {
+		for _, valid := range []bool{false, true} {
+			st, why := exec(hintedCase(t, nil, tc.instance, valid))
+			if why != "" {
+				t.Errorf("%s: declined as %q under expectValid=%v, want decided not valid", tc.why, why, valid)
+			}
+			if st.IsPass() == valid {
+				t.Errorf("%s: under expectValid=%v the executor answered pass=%v, want it decided not valid", tc.why, valid, st.IsPass())
+			}
+		}
+	}
+
+	valid := hintedCase(t, nil, `<a `+xsiNS+` xmlns:xsd="http://www.w3.org/2001/XMLSchema" xsi:type="xsd:int">1</a>`, true)
+	declinesBothPolarities(t, valid, "a root locally valid against its built-in xsi:type", refuseUndeclaredRoot)
+}
+
 func validityWord(valid bool) string {
 	if valid {
 		return "valid"
