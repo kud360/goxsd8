@@ -79,7 +79,7 @@ func Translate(pattern string, flavor Flavor, flags string) (string, error) {
 		if stripX {
 			in = stripInsignificantWhitespace(pattern)
 		}
-		p := &parser{in: in, flavor: flavor, fold: strings.ContainsRune(flags, 'i')}
+		p := &parser{in: in, flavor: flavor}
 		if err := p.translateBody(); err != nil {
 			return "", err
 		}
@@ -186,14 +186,11 @@ func stripInsignificantWhitespace(s string) string {
 }
 
 // parser is a single-pass recursive-descent translator over one pattern. It
-// reads in[pos:] and appends the RE2 translation to out. fold is the F&O i
-// flag: the RE2 output carries (?i), so a character set the translator
-// materializes by complement or subtraction is fold-closed first (foldClosed).
+// reads in[pos:] and appends the RE2 translation to out.
 type parser struct {
 	in     string
 	pos    int
 	flavor Flavor
-	fold   bool
 	out    strings.Builder
 }
 
