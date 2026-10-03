@@ -21,9 +21,11 @@ import (
 // where the governing type is settled ([walk.governingType], assess.go), because
 // the same resolution decides the charge and the type. Clause 5's two arms live
 // with the [[children]] that decide which of them applies (cvccomplexcontent.go).
-// Clause 1 is charged where the selected type is read ([walk.resolvedSelection],
-// cta.go), for the ·absent· one §5.3 routes to it, and the element is then ·laxly
-// assessed· ([walk.declaredGovernance]).
+// Clause 1 is charged for the two ·absent· components §5.3 routes to it, and
+// the element is then ·laxly assessed· ([walk.declaredGovernance]): an ·absent·
+// {substitution group affiliations} member, before the selected type is read
+// ([walk.absentAffiliation], assess.go), and an ·absent· selected type, where
+// it is read ([walk.resolvedSelection], cta.go).
 
 // nilled reports whether e is ·nilled· with respect to its ·governing element
 // declaration· (§3.3.4.3, key-nilled): E has xsi:nil = true AND D.{nillable} =

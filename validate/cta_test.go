@@ -390,19 +390,25 @@ func namedTypeAlternative(t *testing.T, test *xsd.XPathExpression, typeName xsd.
 // directly built declaration carries it.
 var absentHead = xsd.SubstitutionGroupHeadTypeRef{Head: local("nosuchhead")}
 
-// absentHeadSchema is selectionSchema with "root" a member of absentHead's
-// substitution group and no declaration of that head.
+// absentHeadSchema is selectionSchema with "root" in no substitution group and
+// no declaration of absentHead's head, so an absentHead that declare places in
+// a {type definition} slot is the only ·absent· component root's declaration
+// has: Finalize does not require a [xsd.SubstitutionGroupHeadTypeRef]'s head to
+// be among the declaration's {substitution group affiliations}, and an ·absent·
+// affiliation would be charged before the ·selected type definition· is read
+// ([walk.absentAffiliation]).
 func absentHeadSchema(t *testing.T, declare func() (xsd.TypeDefinitionOrRef, *xsd.TypeTable)) *xsd.Schema {
 	t.Helper()
-	return selectionSchema(t, absentHead.Head, nil, declare)
+	return selectionSchema(t, nil, nil, declare)
 }
 
-// selectionSchema is ctaSchema's cohort with "root" declared by declare, in
-// head's substitution group, beside the declarations extra and a top-level
-// "child" typed Fallback — so each test below can place one shape in the
-// {type definition} slot key-selected-type reads for root, and tell from
-// selectionRoot's child whether root's [[children]] were assessed at all.
-func selectionSchema(t *testing.T, head xsd.QName, extra []xsd.ElementDeclaration, declare func() (xsd.TypeDefinitionOrRef, *xsd.TypeTable)) *xsd.Schema {
+// selectionSchema is ctaSchema's cohort with "root" declared by declare, with
+// heads as its {substitution group affiliations}, beside the declarations extra
+// and a top-level "child" typed Fallback — so each test below can place one
+// shape in the {type definition} slot key-selected-type reads for root, and
+// tell from selectionRoot's child whether root's [[children]] were assessed at
+// all.
+func selectionSchema(t *testing.T, heads []xsd.QName, extra []xsd.ElementDeclaration, declare func() (xsd.TypeDefinitionOrRef, *xsd.TypeTable)) *xsd.Schema {
 	t.Helper()
 	b := xsd.NewSchemaBuilder()
 	for _, st := range ctaBuiltins(t) {
@@ -412,7 +418,7 @@ func selectionSchema(t *testing.T, head xsd.QName, extra []xsd.ElementDeclaratio
 	b.AddType(ctaCandidateType(t, "First"))
 	typ, table := declare()
 	d, err := xsd.NewElementDeclaration(xsderr.Loc{}, local("root"), typ, table, xsd.NewGlobalScope(),
-		nil, false, nil, []xsd.QName{head}, nil, false, nil)
+		nil, false, nil, heads, nil, false, nil)
 	if err != nil {
 		t.Fatalf("building the root element declaration: %v", err)
 	}
@@ -481,21 +487,28 @@ func absentHeadTable(t *testing.T, alt, dflt xsd.TypeDefinitionOrRef) *xsd.TypeT
 	return &table
 }
 
-// wantAbsentSelection fails unless assessing selectionRoot(kind) against schema
-// charges exactly two violations and records no [Unevaluated]. The first is
-// cvc-elt at root's own location, its message opening on root's ·absent·
-// ·selected type definition· and slot, the slot key-selected-type read, and
-// naming clause 1 and §5.3: the charge §5.3 makes "as if clause 1 of Element
-// Locally Valid (Element) had failed". The second is cvc-complex-type at the
-// child's kind attribute, which only the ·lax assessment· §5.3 falls back to
-// reaches: root assessed against nothing attributes its child to nothing, and
-// the child is then assessed against nothing too. No cvc-id record follows,
-// because a ·laxly assessed· element is no withheld type ([walk.idElement]).
+// wantAbsentSelection is wantMissingCharged for root's ·absent· ·selected type
+// definition·, its message opening on that type and on slot, the slot
+// key-selected-type read.
 func wantAbsentSelection(t *testing.T, schema *xsd.Schema, kind, slot string) {
+	t.Helper()
+	wantMissingCharged(t, schema, kind, "the ·selected type definition· of the element root is ·absent·: "+slot+" names a substitution group head")
+}
+
+// wantMissingCharged fails unless assessing selectionRoot(kind) against schema
+// charges exactly two violations and records no [Unevaluated]. The first is
+// cvc-elt at root's own location, its message opening with opening and naming
+// clause 1 and §5.3: the charge §5.3 makes "as if clause 1 of Element Locally
+// Valid (Element) had failed". The second is cvc-complex-type at the child's
+// kind attribute, which only the ·lax assessment· §5.3 falls back to reaches:
+// root assessed against nothing attributes its child to nothing, and the child
+// is then assessed against nothing too. No cvc-id record follows, because a
+// ·laxly assessed· element is no withheld type ([walk.idElement]).
+func wantMissingCharged(t *testing.T, schema *xsd.Schema, kind, opening string) {
 	t.Helper()
 	res := selectionResult(t, schema, kind)
 	if got := res.Unevaluated(); len(got) != 0 {
-		t.Errorf("Unevaluated() = %v, want none: an ·absent· selected type is charged and laxly assessed, not withheld", messages(got))
+		t.Errorf("Unevaluated() = %v, want none: an ·absent· component is charged and laxly assessed, not withheld", messages(got))
 	}
 	got := res.Violations()
 	if len(got) != 2 {
@@ -504,7 +517,6 @@ func wantAbsentSelection(t *testing.T, schema *xsd.Schema, kind, slot string) {
 	if got[0].Rule != ruleCvcElt || got[0].Loc != loc(1, 1) {
 		t.Errorf("Violations()[0] = %v, want cvc-elt at root's %s", got[0], loc(1, 1))
 	}
-	opening := "the ·selected type definition· of the element root is ·absent·: " + slot + " names a substitution group head"
 	if !strings.HasPrefix(got[0].Msg, opening) {
 		t.Errorf("Msg = %q, want it to open %q", got[0].Msg, opening)
 	}
@@ -599,7 +611,7 @@ func wantNilSelectionDeclined(t *testing.T, schema *xsd.Schema) {
 // sch-props-correct clause 1 fault xsd defers, not §5.3's missing
 // sub-component, so it keeps its decline (#774's terms).
 func TestNilDeclaredTypeIsDeclined(t *testing.T) {
-	wantNilSelectionDeclined(t, selectionSchema(t, absentHead.Head, nil, func() (xsd.TypeDefinitionOrRef, *xsd.TypeTable) {
+	wantNilSelectionDeclined(t, selectionSchema(t, nil, nil, func() (xsd.TypeDefinitionOrRef, *xsd.TypeTable) {
 		return nil, nil
 	}))
 }
@@ -613,7 +625,90 @@ func TestNilHeadTypeIsDeclined(t *testing.T) {
 	if err != nil {
 		t.Fatalf("building the head element declaration: %v", err)
 	}
-	wantNilSelectionDeclined(t, selectionSchema(t, local("head"), []xsd.ElementDeclaration{head}, func() (xsd.TypeDefinitionOrRef, *xsd.TypeTable) {
+	wantNilSelectionDeclined(t, selectionSchema(t, []xsd.QName{local("head")}, []xsd.ElementDeclaration{head}, func() (xsd.TypeDefinitionOrRef, *xsd.TypeTable) {
 		return xsd.SubstitutionGroupHeadTypeRef{Head: local("head")}, nil
 	}))
+}
+
+// presentHead is a top-level "head" declaration typed Fallback, so a "root"
+// typed Fallback in its substitution group satisfies e-props-correct clause 4
+// and resolves every affiliation naming it.
+func presentHead(t *testing.T) xsd.ElementDeclaration {
+	t.Helper()
+	head, err := xsd.NewElementDeclaration(xsderr.Loc{}, local("head"), xsd.TypeDefinitionRef{Name: local("Fallback")}, nil,
+		xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil)
+	if err != nil {
+		t.Fatalf("building the head element declaration: %v", err)
+	}
+	return head
+}
+
+// affiliationSchema is selectionSchema with "root" typed Fallback, whose
+// {type definition} resolves, affiliated to heads beside a declared
+// presentHead.
+func affiliationSchema(t *testing.T, heads ...xsd.QName) *xsd.Schema {
+	t.Helper()
+	return selectionSchema(t, heads, []xsd.ElementDeclaration{presentHead(t)}, func() (xsd.TypeDefinitionOrRef, *xsd.TypeTable) {
+		return xsd.TypeDefinitionRef{Name: local("Fallback")}, nil
+	})
+}
+
+// absentAffiliationOpening is the opening of the cvc-elt clause 1 charge for
+// root's ·absent· {substitution group affiliations} member nosuchhead, which
+// pins the subject and the head it names in that order (#1048).
+const absentAffiliationOpening = "the ·governing element declaration· of the element root has an ·absent· member in its {substitution group affiliations}: the substitution group head nosuchhead names no element declaration"
+
+// A {substitution group affiliations} member naming no declaration is an
+// ·absent· value of root's declaration (§5.3 Missing Sub-components): cvc-elt
+// clause 1 is charged and root is ·laxly assessed·, although its {type
+// definition}, Fallback, resolves — strict assessment against Fallback would
+// have charged root's own kind attribute and never reached the child's.
+func TestAbsentAffiliationIsChargedAndLaxlyAssessed(t *testing.T) {
+	wantMissingCharged(t, affiliationSchema(t, absentHead.Head), "book", absentAffiliationOpening)
+}
+
+// The ·absent· member is charged wherever it sits among present ones: placed
+// SECOND, behind an affiliation that resolves, it still charges.
+func TestAbsentAffiliationBehindAPresentOneIsCharged(t *testing.T) {
+	wantMissingCharged(t, affiliationSchema(t, local("head"), absentHead.Head), "book", absentAffiliationOpening)
+}
+
+// An ·absent· affiliation that is ALSO the head root's {type definition} names
+// is one missing sub-component, charged once: the affiliation is checked
+// first, and the ·selected type definition· is then never read.
+func TestAbsentAffiliationAndAbsentTypeHeadChargeOnce(t *testing.T) {
+	wantMissingCharged(t, selectionSchema(t, []xsd.QName{absentHead.Head}, nil, func() (xsd.TypeDefinitionOrRef, *xsd.TypeTable) {
+		return absentHead, nil
+	}), "book", absentAffiliationOpening)
+}
+
+// Affiliations that all resolve charge nothing under cvc-elt, and root is
+// ·strictly assessed· against Fallback: its own kind attribute, which
+// Fallback declares no use for, is charged at root.
+func TestPresentAffiliationIsStrictlyAssessed(t *testing.T) {
+	res := selectionResult(t, affiliationSchema(t, local("head")), "book")
+	got := res.Violations()
+	for _, v := range got {
+		if v.Rule == ruleCvcElt {
+			t.Errorf("Violations() = %v, want no cvc-elt: every affiliation resolves", got)
+		}
+	}
+	if len(got) == 0 || got[0].Rule != ruleCvcComplexType || got[0].Loc != loc(1, 7) {
+		t.Errorf("Violations() = %v, want cvc-complex-type first, at root's kind attribute %s: root was not strictly assessed against Fallback", got, loc(1, 7))
+	}
+}
+
+// The affiliation charge logs its decision at root on the "assessing element"
+// event (STYLE L1), as the ·absent· selected type's does.
+func TestAbsentAffiliationLogsTheCharge(t *testing.T) {
+	log, visits := recordingLogger()
+	v, err := New(affiliationSchema(t, absentHead.Head), testBackend(), WithLogger(log))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	v.Assess(selectionRoot("book"))
+	const want = "assessing element validate.name=root validate.loc=instance.xml:1:1 validate.rule=cvc-elt validate.clause=1 validate.outcome=charged"
+	if !slices.Contains(*visits, want) {
+		t.Errorf("walk logged\n\t%s\nwant a line\n\t%s", strings.Join(*visits, "\n\t"), want)
+	}
 }
