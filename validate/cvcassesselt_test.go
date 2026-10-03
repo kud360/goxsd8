@@ -504,7 +504,7 @@ func TestDescendantAttributedToASkipWildcardIsNotAssessed(t *testing.T) {
 
 // An element whose own ·governing type definition· was not determined attributes
 // its [[children]] to nothing, so the descent stops being typed there rather
-// than resuming further down: each element below is unattributed, which is not
+// than resuming further down: each element below is undecided, which is not
 // the ·laxly assessed· zero value, and hands its own [[children]] nothing
 // either. The second <kid> is what tells the two apart — ·laxly assessed·, its
 // parent would hand it xs:anyType's lax wildcard and it would resolve to the
@@ -524,18 +524,18 @@ func TestDescendantOfAnUngovernedElementIsAssessedAgainstNothing(t *testing.T) {
 		"an ungoverned element attributes its [[children]] to nothing")
 	wantSilence(t, cAssess(t, schema, dElem("root", 1,
 		ElementChild(dElem("opaque", 2, ElementChild(dElem("kid", 3, ElementChild(dElem("kid", 4)))))))),
-		"an unattributed element attributes its [[children]] to nothing")
+		"an undecided element attributes its [[children]] to nothing")
 }
 
-// An unattributed element's xsi:nil and xsi:type are charged nothing: the
-// dispatch that would have settled the element was never made, so the item may
-// be one the true schema ·skips· (key-governing-ad clause 3 and its Note), and
+// An undecided element's xsi:nil and xsi:type are charged nothing: this
+// package could not decide the element's governance, so the item may be one
+// the true schema ·skips· (key-governing-ad clause 3 and its Note), and
 // cvc-attribute clauses 3 and 5 are not charged against it. The parent's own
 // two declines, its withheld type (cvc-elt) and its ID/IDREF-table entry
 // (cvc-id), are the whole of the Result's undecidedness. Each row fails with
-// [walk.instanceNilLexical]'s or [walk.instanceTypeResolves]'s unattributed
+// [walk.instanceNilLexical]'s or [walk.instanceTypeResolves]'s undecided
 // guard removed, the cvc-attribute charge then reaching [Result] (#2159).
-func TestUnattributedElementXSIAttributesAreChargedNothing(t *testing.T) {
+func TestUndecidedElementXSIAttributesAreChargedNothing(t *testing.T) {
 	// The builtins are seeded so that xs:QName is there for clause 3 to charge
 	// "1bad" against rather than decline.
 	schema := dSchema(t, func(b *xsd.SchemaBuilder) {
@@ -555,7 +555,7 @@ func TestUnattributedElementXSIAttributesAreChargedNothing(t *testing.T) {
 			kid := icElem(xsd.QName{Local: "kid"}, 3, []Attribute{tc.attr})
 			got, unevaluated := assessRecorded(t, schema, dElem("root", 1,
 				ElementChild(dElem("opaque", 2, ElementChild(kid)))))
-			wantSilence(t, got, "an unattributed element's xsi attributes are charged nothing")
+			wantSilence(t, got, "an undecided element's xsi attributes are charged nothing")
 			if len(unevaluated) != 2 || unevaluated[0].Loc() != loc(2, 1) || unevaluated[1].Loc() != loc(2, 1) {
 				t.Errorf("Unevaluated() = %v, want the two records at <opaque>'s %s", messages(unevaluated), loc(2, 1))
 			}

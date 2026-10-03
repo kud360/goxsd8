@@ -211,17 +211,17 @@ func (w *walk) declaredAttribute(a Attribute, e Element, d xsd.AttributeDeclarat
 // [walk.instanceTypeDefinition]). Neither clause carries such fallback wording,
 // and each charges whether or not that fallback succeeds.
 //
-// An unattributed e ([governance]) is charged and declined NOTHING under either
-// clause: the dispatch that would have settled e was never made, and the true
-// schema may make it an item it ·skips·, whose attributes key-governing-ad
-// clause 3 and its Note leave with no ·governing attribute declaration·. A
-// Result whose only defect is a decline must not also carry a definitive
-// charge on such an item. Nothing is recorded in the charge's place: an
-// unattributed element sits below a record or a violation ([walk.child]), or
-// carries its own decline ([walk.localGovernance]). [walk.attribute] logs the
-// item ungoverned.
+// An undecided e ([governance]) is charged and declined NOTHING under either
+// clause: this package could not decide e's governance, and the true schema may
+// make it an item it ·skips·, whose attributes key-governing-ad clause 3 and
+// its Note leave with no ·governing attribute declaration·. A Result whose only
+// defect is a decline must not also carry a definitive charge on such an item.
+// Nothing is recorded in the charge's place: an undecided element sits below a
+// record ([walk.child]), or carries its own decline ([walk.localGovernance]).
+// [walk.attribute] logs the item ungoverned. A child its parent decidedly
+// ·attributed· to nothing is not undecided and is charged here like any other.
 func (w *walk) instanceTypeResolves(e Element, g governance) {
-	if g.unattributed {
+	if g.undecided {
 		return
 	}
 	a, present := instanceAttribute(e, "type")
@@ -264,11 +264,11 @@ func (w *walk) instanceTypeResolves(e Element, g governance) {
 // lexical, and the one defect is charged once. The lexical is read through
 // [instanceBooleanOf] and not the injected value.Backend, on [nilled]'s grounds.
 //
-// An unattributed e ([governance]) is charged nothing either, on
-// [walk.instanceTypeResolves]'s grounds: it is no element cvc-assess-elt
-// assessed, so the declaration-less shapes above do not include it.
+// An undecided e ([governance]) is charged nothing either, on
+// [walk.instanceTypeResolves]'s grounds: whether cvc-assess-elt assesses it
+// is undecided, so the declaration-less shapes above do not include it.
 func (w *walk) instanceNilLexical(e Element, g governance) {
-	if g.hasDecl || g.unattributed {
+	if g.hasDecl || g.undecided {
 		return
 	}
 	a, present := instanceAttribute(e, "nil")

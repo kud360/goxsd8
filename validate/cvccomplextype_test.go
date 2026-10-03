@@ -497,14 +497,17 @@ func TestSimpleTypedRootReachesNoComplexTypeClause(t *testing.T) {
 
 // A descendant's governing type comes from the particle it is ·attributed to·
 // in its parent's {content type} (§3.3.4.6 clause 3.1), and a child its parent
-// attributed to NOTHING is assessed against nothing: the same stray attribute
-// that is charged on the root is silent below one.
+// decidedly attributed to NOTHING is governed per key-governing-ed clause 4:
+// <child> has no ·locally declared type· and its name ·resolves· to no
+// declaration, so it is ·laxly assessed· against xs:anyType, whose lax
+// {attribute wildcard} admits the same stray attribute that is charged on the
+// root (#1892).
 //
 // The child here is that shape because it is charged: governedSchema's type has
 // an empty {content type}, which admits no element information item
 // [[children]] at all (clause 1.1). That charge is the root's, at the child's
 // position, and it names no attribute.
-func TestDescendantAttributesOfAnUnattributedChildAreNotAssessed(t *testing.T) {
+func TestDescendantAttributesOfAnUnattributedChildAreLaxlyAssessed(t *testing.T) {
 	child := &testElement{
 		name:  xsd.QName{Local: "child"},
 		attrs: []Attribute{&testAttribute{name: local("stray"), value: "v", loc: loc(2, 3)}},
