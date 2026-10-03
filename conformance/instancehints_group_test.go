@@ -180,8 +180,8 @@ func TestGroupSchemaFallsBackFromHints(t *testing.T) {
 // rejected is read as without hints, though the instance hints an uncovered
 // namespace: the rejection is the group's documents' own, and execInstanceCase
 // declines it as schema-error. With groupSchema's perr arm removed, run, the
-// widened assembly errs too, the fallback hands the group's schema out without
-// its error, and the case is decided.
+// widened assembly errs too, the fallback hands out the group's assembly
+// without its error, and the case declines as validator instead.
 func TestGroupSchemaRejectionIgnoresHints(t *testing.T) {
 	// sch-props-correct clause 2: two top-level declarations of {urn:a}known.
 	group := fixtureFile{"g.xsd", xsdDoc("urn:a", knownRoot+knownRoot)}

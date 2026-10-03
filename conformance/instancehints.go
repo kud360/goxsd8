@@ -89,10 +89,10 @@ func groupSchema(backend value.Backend, c caseSpec) (*xsd.Schema, *parser.Assemb
 		return schema, report, "", nil
 	}
 	hinted, hintedReport, decidable, perr := assembleCaseWith(backend, c.schemaDoc, c.schemaExtraDocs, hints)
-	if !decidable || perr != nil {
-		return schema, report, "", nil
+	if decidable && perr == nil {
+		return hinted, hintedReport, "", nil
 	}
-	return hinted, hintedReport, "", nil
+	return schema, report, "", nil
 }
 
 // uncoveredHints returns, as parser.HintAt roots, the hints of c's instance root
