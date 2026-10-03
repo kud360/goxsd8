@@ -236,10 +236,30 @@ func TestUnreadablePathDeclinesTheWholeConstraint(t *testing.T) {
 	icWantCharges(t, icAssess(t, schema, icRoot(icIDed(2, "a"), icIDed(3, "a"), ref)))
 }
 
-// A keyref whose {referenced key} has no node table anywhere in the subtree is
-// charged: "there is a node table associated with the {referenced key}" is the
-// first half of clause 4.3, and a key whose own element never occurred fails it.
+// A keyref whose {referenced key} has no node table at all is charged:
+// "there is a node table associated with the {referenced key}" is the first
+// conjunct of cvc-identity-constraint clause 4.3, and a key declared only on
+// <box> has none at a <root> holding no <box>. Neither the key's element nor
+// any binding of it occurred, which is what separates this from
+// TestKeyrefChargesAgainstAnEmptyNodeTable: making icCheck.keyrefs skip a
+// keyref whose binding is not found fails this test and passes that one.
 func TestKeyrefChargesWhenTheReferencedKeyNeverOccurred(t *testing.T) {
+	key := icDef(t, "K", xsd.IdentityConstraintKey, "item", nil, "", "@id")
+	keyref := icDef(t, "R", xsd.IdentityConstraintKeyref, "ref", nil, "K", "@r")
+	schema := icSchema(t, "", false, []xsd.IdentityConstraint{keyref}, []xsd.IdentityConstraint{key})
+
+	ref := icElem(xsd.QName{Local: "ref"}, 2, []Attribute{icAttr(xsd.QName{Local: "r"}, "a", 2)})
+	icWantCharges(t, icAssess(t, schema, icRoot(ref)), icCharge(ruleCvcIdentityConstraint, 2))
+}
+
+// A keyref whose {referenced key} has a node table with NO entries is charged:
+// the key is declared on the <box> that occurs, so its table is present, and
+// the selector selects no <item>, so the second conjunct of
+// cvc-identity-constraint clause 4.3 — some entry's ·key-sequence· equal to
+// the keyref member's — fails on an empty table. Making icCheck.keyrefs skip a
+// found binding with no entries fails this test and passes
+// TestKeyrefChargesWhenTheReferencedKeyNeverOccurred.
+func TestKeyrefChargesAgainstAnEmptyNodeTable(t *testing.T) {
 	key := icDef(t, "K", xsd.IdentityConstraintKey, "item", nil, "", "@id")
 	keyref := icDef(t, "R", xsd.IdentityConstraintKeyref, "ref", nil, "K", "@r")
 	schema := icSchema(t, "", false, nil, []xsd.IdentityConstraint{key, keyref})
