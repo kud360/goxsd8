@@ -66,13 +66,21 @@ func instanceNil(e Element) (instanceBoolean, bool) {
 	if !present {
 		return instanceBooleanUnreadable, false
 	}
-	switch collapseXMLWhitespace(a.Value()) {
+	return instanceBooleanOf(a.Value()), true
+}
+
+// instanceBooleanOf maps lexical, an xs:boolean-typed instance attribute's
+// ·initial value·, to its ·actual value·: boolean-lexical-mapping's four
+// literals (Datatypes §3.3.2.2) after the whiteSpace = collapse xs:boolean
+// fixes, and instanceBooleanUnreadable for every other lexical.
+func instanceBooleanOf(lexical string) instanceBoolean {
+	switch collapseXMLWhitespace(lexical) {
 	case "true", "1":
-		return instanceBooleanTrue, true
+		return instanceBooleanTrue
 	case "false", "0":
-		return instanceBooleanFalse, true
+		return instanceBooleanFalse
 	}
-	return instanceBooleanUnreadable, true
+	return instanceBooleanUnreadable
 }
 
 // nilCheck settles cvc-elt clause 3 for one element and reports whether e is
@@ -97,7 +105,10 @@ func instanceNil(e Element) (instanceBoolean, bool) {
 //     (cvccomplexcontent.go).
 //
 // An element with no ·governing element declaration· reaches no arm: cvc-elt is
-// a rule ABOUT a declaration, and one that is ·absent· charges nothing.
+// a rule ABOUT a declaration, and one that is ·absent· charges nothing. An
+// xsi:nil with no ·actual value· on such an element is charged against the
+// attribute instead, under cvc-attribute clause 3 ([walk.instanceNilLexical],
+// cvcattribute.go).
 //
 // Whether E is ·nilled· is [nilled]'s to decide and is not re-derived from the
 // arms above (STYLE T4): the arms charge, and the one fact they all report is

@@ -236,6 +236,38 @@ func (w *walk) instanceTypeResolves(e Element) {
 	}
 }
 
+// instanceNilLexical charges cvc-attribute (§3.2.4.1) clause 3 against e's
+// xsi:nil attribute where e has no ·governing element declaration·: its
+// ·initial value· String Valid (§3.16.4) against xs:boolean, the {type
+// definition} of the built-in declaration for the nil attribute (§3.2.7.2). The
+// attribute is governed by that declaration whatever e's assessment
+// (key-governing-ad, and the Note under it), so it is charged on a ·laxly
+// assessed· element (key-lva) and on one ·strictly assessed· against a type
+// alone — its ·locally declared type·, or an xsi:type ·overriding· it or
+// standing in for an ·absent· one (key-governing-type-elem clauses 6-8).
+//
+// Under a ·governing element declaration· it charges nothing: [walk.nilCheck]'s
+// cvc-elt clause 3.1 or 3.2 already makes the element invalid for the same
+// lexical, and the one defect is charged once. The lexical is read through
+// [instanceBooleanOf] and not the injected value.Backend, on [nilled]'s grounds.
+func (w *walk) instanceNilLexical(e Element, g governance) {
+	if g.hasDecl {
+		return
+	}
+	a, present := instanceAttribute(e, "nil")
+	if !present {
+		return
+	}
+	if instanceBooleanOf(a.Value()) != instanceBooleanUnreadable {
+		w.logAttribute(a, ruleCvcAttribute, "3", "satisfied")
+		return
+	}
+	w.res.violations = append(w.res.violations, xsderr.New(ruleCvcAttribute, a.Loc(),
+		"the xsi:nil attribute of the element %s has the ·initial value· %q, which is not ·valid· with respect to xs:boolean, the {type definition} of the built-in declaration for the nil attribute (§3.2.7.2), as cvc-attribute clause 3 requires per String Valid (§3.16.4): after the whiteSpace collapse it is none of the literals true, false, 1 and 0",
+		e.Name(), a.Value()))
+	w.logAttribute(a, ruleCvcAttribute, "3", "charged")
+}
+
 // qnameTypeName is xs:QName, the {type definition} of the built-in declaration
 // for the type attribute (§3.2.7.1).
 var qnameTypeName = xsd.QName{Space: xsd.XMLSchemaNS, Local: "QName"}

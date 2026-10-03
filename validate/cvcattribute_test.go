@@ -682,3 +682,65 @@ func TestLaxlyAssessedElementAttributesAreAssessedAgainstTheirResolvedDeclaratio
 			"an element whose type was not determined decides nothing about its attributes")
 	})
 }
+
+// xsiNilAttr is an xsi:nil attribute carrying lexical, at 4:20.
+func xsiNilAttr(lexical string) Attribute {
+	return &testAttribute{name: xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: "nil"}, value: lexical, loc: loc(4, 20)}
+}
+
+// cvc-attribute (§3.2.4.1) clause 3 charges an xsi:nil lexical outside
+// xs:boolean's lexical space, String Valid against the built-in declaration for
+// the nil attribute (§3.2.7.2), on an element with no ·governing element
+// declaration·: key-governing-ad keeps the attribute governed by that
+// declaration however the element is assessed. One row per shape: ·laxly
+// assessed· (key-lva); ·strictly assessed· against an xsi:type with no
+// ·locally declared type· (key-governing-type-elem clause 8); and an {open
+// content} child against its ·locally declared type· or an xsi:type
+// ·overriding· it (clauses 7 and 6). Every charged row fails with
+// [walk.attributes]'s call to [walk.instanceNilLexical] deleted, no violation
+// being charged at all; the silent lexicals guard against charging one
+// xs:boolean admits (#2061). The opening is pinned as a prefix so that the
+// element name and the lexical cannot trade places unseen (#1048).
+func TestDeclarationlessXSINilChargesClauseThree(t *testing.T) {
+	typed := func(lexical string) []Attribute { return []Attribute{xsiTypeAttr("xs:int"), xsiNilAttr(lexical)} }
+	for _, tc := range []struct {
+		why    string
+		schema *xsd.Schema
+		name   string
+		doc    func(lexical string) *testElement
+	}{
+		{"·laxly assessed· under a lax Wildcard", ldtSchema(t, "xs:date", "xs:date", "lax"), "u",
+			func(lexical string) *testElement { return ldtDoc("2008-11-03", "", "u", "", xsiNilAttr(lexical)) }},
+		{"xsi:typed under a strict Wildcard", ldtSchema(t, "xs:date", "xs:date", "strict"), "u",
+			func(lexical string) *testElement { return ldtDoc("2008-11-03", "", "u", "1", typed(lexical)...) }},
+		{"xsi:typed under a lax Wildcard", ldtSchema(t, "xs:date", "xs:date", "lax"), "u",
+			func(lexical string) *testElement { return ldtDoc("2008-11-03", "", "u", "1", typed(lexical)...) }},
+		{"the ·locally declared type· of an {open content} child", ldtOpenSchema(t, "xs:date", "xs:date"), "e",
+			func(lexical string) *testElement {
+				return ldtDoc("2008-11-03", "", "e", "2008-11-04", xsiNilAttr(lexical))
+			}},
+		{"an xsi:type ·overriding· an {open content} child's ·locally declared type·", ldtOpenSchema(t, "xs:date", "xs:date"), "e",
+			func(lexical string) *testElement {
+				return ldtDoc("2008-11-03", "", "e", "2008-11-04", xsiTypeAttr("xs:date"), xsiNilAttr(lexical))
+			}},
+	} {
+		t.Run(tc.why, func(t *testing.T) {
+			got, unevaluated := assessRecorded(t, tc.schema, tc.doc("maybe"))
+			wantAttributeCharge(t, got, loc(4, 20), `the xsi:nil attribute of the element `+tc.name+
+				` has the ·initial value· "maybe", which is not ·valid· with respect to xs:boolean`)
+			if !strings.Contains(got[0].Msg, "cvc-attribute clause 3") {
+				t.Errorf("Msg = %q, want it to name cvc-attribute clause 3 inline (STYLE E4)", got[0].Msg)
+			}
+			if len(unevaluated) != 0 {
+				t.Errorf("Unevaluated() = %v, want none", unevaluated)
+			}
+			for _, lexical := range []string{"false", "0", " \t true \n "} {
+				got, unevaluated := assessRecorded(t, tc.schema, tc.doc(lexical))
+				wantSilence(t, got, "a collapsed boolean literal has an ·actual value·, and no declaration makes the element ·nilled·")
+				if len(unevaluated) != 0 {
+					t.Errorf("xsi:nil=%q: Unevaluated() = %v, want none", lexical, unevaluated)
+				}
+			}
+		})
+	}
+}

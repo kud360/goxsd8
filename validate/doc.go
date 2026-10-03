@@ -233,7 +233,13 @@
 // definition}, so an empty lexical, a colon structure no QName has, a part
 // that is no NCName and a prefix with no binding in scope are each charged
 // there. Clause 5 charges a lexical clause 3 accepts whose ·actual value·
-// ·resolves· to no type definition, and needs no value space.
+// ·resolves· to no type definition, and needs no value space. Clause 3 is
+// charged on the same terms against the built-in declaration for the nil
+// attribute (§3.2.7.2), at the xsi:nil attribute's own Loc, for a lexical
+// outside xs:boolean's four literals on an element with no ·governing element
+// declaration· — ·laxly assessed·, or ·strictly assessed· against a type alone.
+// Under a declaration the same lexical is cvc-elt clause 3's charge above, and
+// is not charged twice.
 //
 // The seventh is the root's content half, against the same type's {content
 // type}. cvc-complex-type clause 1 decides what its {variety} admits —
