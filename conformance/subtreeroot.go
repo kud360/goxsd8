@@ -422,18 +422,14 @@ var (
 // xs:boolean fixes, it is none of boolean-lexical-mapping's four literals
 // (Datatypes §3.3.2.2), the type §3.2.7's built-in declaration gives xsi:nil.
 //
-// The gate refuses such a lexical wherever it sits. Under a ·governing element
-// declaration· the walk charges it (validate's nilCheck, cvc-elt clause 3.1 or
-// 3.2), so no empty Result reaches the gate with it.
-//
-// GAP(conformance): on an element with no declaration to be ·nilled· against —
-// ·laxly assessed· (laxlyAssessed), or ·strictly assessed· against an xsi:type
-// (instanceTyped) or a ·locally declared type· (localTyped) — such an xsi:nil is
-// still governed by that built-in declaration (key-governing-ad) and so not
-// ·valid· (cvc-attribute clause 3), which the walk charges nothing for and
-// records nothing of. The refusal leaves execInstanceCase Failing the case: a
-// suite-invalid case of this shape scores no pass, and none a false one
-// (#2061).
+// The walk charges such a lexical wherever it sits, so no empty Result reaches
+// the gate with one: under a ·governing element declaration· as cvc-elt clause
+// 3.1 or 3.2 (validate's nilCheck), and on an element with none — ·laxly
+// assessed·, or ·strictly assessed· against an xsi:type or a ·locally declared
+// type· — as cvc-attribute clause 3 against the built-in declaration that
+// governs the attribute (key-governing-ad, validate's
+// walk.instanceNilLexical). element alone reads the value, for key-nilled, and
+// refuses a lexical it cannot read rather than guess one.
 func nilValue(attrs []xml.Attr) (value, ok bool) {
 	i := slices.IndexFunc(attrs, func(a xml.Attr) bool { return a.Name == xsiNil })
 	if i < 0 {
@@ -846,8 +842,7 @@ func (g *subtreeGate) resolvedChild(start xml.StartElement, strictParticle bool,
 
 // instanceTyped reads through to its end tag a wildcard's child whose start tag
 // is start, which has no ·governing element declaration· and whose xsi:type
-// carries lexical, and refuses unless an xsi:nil it carries has an ·actual
-// value· (nilValue, refuseNilLexical), lexical names a top-level type
+// carries lexical, and refuses unless lexical names a top-level type
 // definition T against the namespace bindings in scope at start
 // (instanceType), and the child and its subtree meet governed's conditions
 // against T, never ·nilled·: key-nilled is relative to a declaration, and it
@@ -876,9 +871,6 @@ func (g *subtreeGate) resolvedChild(start xml.StartElement, strictParticle bool,
 // type definition·. The walk charges cvc-attribute clause 5 for it, but the
 // gate refuses it too rather than read a subtree it cannot type.
 func (g *subtreeGate) instanceTyped(start xml.StartElement, lexical string, inherited []xml.Attr) refusal {
-	if _, ok := nilValue(start.Attr); !ok {
-		return refuseNilLexical
-	}
 	defer g.enter(start)()
 	t, why := g.instanceType(lexical)
 	if why != "" {
@@ -890,8 +882,7 @@ func (g *subtreeGate) instanceTyped(start xml.StartElement, lexical string, inhe
 // localTyped reads through to its end tag an {open content}'s child whose start
 // tag is start, which has no ·governing element declaration· because its
 // ·locally declared type· ldt within the parent's type is non-·absent·
-// (key-governing-ed clause 4.3), and refuses unless an xsi:nil it carries has an
-// ·actual value· (nilValue, refuseNilLexical), localType determines its
+// (key-governing-ed clause 4.3), and refuses unless localType determines its
 // ·governing type definition·, and the child and its subtree meet governed's
 // conditions against that type, never ·nilled·: key-nilled is relative to a
 // declaration, and it has none. The child is ·strictly assessed· against that
@@ -899,9 +890,6 @@ func (g *subtreeGate) instanceTyped(start xml.StartElement, lexical string, inhe
 // it, so cvc-complex-type clause 5 holds for it by construction, and cvc-type
 // clause 2, for an abstract complex type, is the walk's charge.
 func (g *subtreeGate) localTyped(start xml.StartElement, ldt xsd.TypeDefinition, inherited []xml.Attr) refusal {
-	if _, ok := nilValue(start.Attr); !ok {
-		return refuseNilLexical
-	}
 	defer g.enter(start)()
 	td, why := g.localType(start, ldt)
 	if why != "" {
@@ -945,9 +933,8 @@ func (g *subtreeGate) localType(start xml.StartElement, ldt xsd.TypeDefinition) 
 
 // laxlyAssessed reads through to its end tag an element whose start tag is
 // start, which has neither a ·governing element declaration· nor a ·governing
-// type definition· and is not ·skipped·, and refuses unless an xsi:nil it
-// carries has an ·actual value· (nilValue, refuseLaxNilLexical) and it and its
-// subtree meet complex's conditions against ·xs:anyType· (refuseAnyType where
+// type definition· and is not ·skipped·, and refuses unless it and its subtree
+// meet complex's conditions against ·xs:anyType· (refuseAnyType where
 // the schema has none), never ·nilled·: key-nilled is relative to a
 // declaration, and it has none. Such an element is ·laxly assessed·
 // (cvc-assess-elt clause 3, key-lva): locally validated against ·xs:anyType·
@@ -959,9 +946,6 @@ func (g *subtreeGate) localType(start xml.StartElement, ldt xsd.TypeDefinition) 
 // at or below it, which instance.go's "Charges at depth" reads as "not valid"
 // (§2.5 key-deep-valid-doc, #1911).
 func (g *subtreeGate) laxlyAssessed(start xml.StartElement, inherited []xml.Attr) refusal {
-	if _, ok := nilValue(start.Attr); !ok {
-		return refuseLaxNilLexical
-	}
 	td, ok := g.schema.Type(anyTypeName)
 	if !ok {
 		return refuseAnyType

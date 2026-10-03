@@ -299,8 +299,9 @@ import (
 //     under a fixed {value constraint}, and its contentCheck charges 3.2.3.1, a
 //     ·nilled· element's character or element [[child]]. An xsi:nil false under
 //     a {nillable} declaration is 3.2.2, read as if absent. The gate refuses an
-//     xsi:nil with no ·actual value· itself, wherever it sits (subtreeGate's
-//     nilValue). A {value constraint} of either variety is admitted, at every
+//     xsi:nil with no ·actual value· on a declared element itself
+//     (subtreeGate's nilValue), behind the walk's 3.1 or 3.2 charge for it. A
+//     {value constraint} of either variety is admitted, at every
 //     depth: clause 5.1 substitutes its {lexical form} for the ·normalized
 //     value· of an element with neither element nor character [[children]], and
 //     the walk assesses cvc-type over that substituted value and settles 5.1.1
@@ -382,8 +383,9 @@ import (
 //     (key-dflt-att ranges over {attribute uses}).
 //   - key-sva clause 2 for the xsi: attributes the gate admits: xsi:nil is
 //     ·valid· against its built-in declaration's xs:boolean (§3.2.7) wherever
-//     it has an ·actual value·, which the gate requires (subtreeGate's
-//     nilValue); xsi:type is the walk's (cvc-attribute clauses 3 and 5,
+//     it has an ·actual value·, and one without is the walk's (cvc-elt clause
+//     3.1 or 3.2 under a declaration, cvc-attribute clause 3 on an element with
+//     none, key-governing-ad); xsi:type is the walk's (cvc-attribute clauses 3 and 5,
 //     charged or recorded wherever it is no QName or ·resolves· to no type); and
 //     xsi:schemaLocation and xsi:noNamespaceSchemaLocation are each ·valid·
 //     against their built-in declaration's anyURI or list-of-anyURI type
@@ -563,8 +565,7 @@ const (
 	refuseEpilogDirective refusal = "epilog-directive" // documentEnd: a directive after the root
 
 	// subtreeGate and the free functions it calls (subtreeroot.go).
-	refuseNilLexical          refusal = "nil-lexical"                 // nilValue: no ·actual value·, at element, instanceTyped or localTyped
-	refuseLaxNilLexical       refusal = "lax-nil-lexical(#2061)"      // nilValue: no ·actual value·, at laxlyAssessed
+	refuseNilLexical          refusal = "nil-lexical"                 // nilValue: no ·actual value·, at element
 	refuseTypeTableUndecided  refusal = "type-table-undecided"        // selectedType: CompileCTATest declines a {test} it reached
 	refuseTypeTableWhitespace refusal = "type-table-whitespace"       // selectedType: ctaAttributes cannot normalize a value
 	refuseTypeUnresolved      refusal = "type-unresolved"             // selectedType: the selected {type definition}
