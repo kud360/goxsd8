@@ -5,11 +5,21 @@ import "unicode/utf8"
 // parseClassBody parses a charClassExpr (Datatypes productions [75]-[82])
 // starting at '[' and returns a member set together with whether emitClass
 // negates it. A negCharGroup with no subtraction returns its positive set and
-// true, so a common negated class stays a compact RE2 [^...]. Production [76]'s
-// G-C is "the set of all characters in C(G) that are not in C(C)", and G may be
-// a negCharGroup, so a subtraction applies after the negation: [^P-[C]]
+// true, so a common negated class stays a compact RE2 [^...]. Production [76]
+// charGroup ::= ( posCharGroup | negCharGroup ) ( '-' charClassExpr )? makes
+// G-C "the set of all characters in C(G) that are not in C(C)" with G possibly
+// a negCharGroup, so the subtraction applies after the negation: [^P-[C]]
 // materializes (complement of P) minus C and returns false (cvc-pattern-valid,
 // #1856).
+//
+// GAP(regex): under FlavorFO with flag i (p.foldCase) [^P-[C]] keeps the
+// subtraction inside the negation, so it matches the complement of (P minus C)
+// and admits every member of C, which the spec's set excludes. A materialized
+// complement is no fix there: RE2's (?i) folds it, so [^Q-[x]]'s complement
+// carries q and matches Q again. FlavorFO with flag i therefore keeps its
+// earlier emission on every route, nested operands included, until #2148 makes
+// the subtraction fold-aware; the rule-4 deviation that (?i) folds \p{..} and
+// \w is #2147's.
 func (p *parser) parseClassBody() (runeSet, bool, error) {
 	open := p.pos
 	p.pos++ // consume '['
@@ -47,7 +57,7 @@ func (p *parser) parseClassBody() (runeSet, bool, error) {
 		if err != nil {
 			return nil, false, err
 		}
-		if neg {
+		if neg && !p.foldCase {
 			set = set.complement()
 			neg = false
 		}
