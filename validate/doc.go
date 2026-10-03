@@ -152,12 +152,18 @@
 // neither a declaration nor a ·governing type definition·. cvc-assess-elt
 // carries one charge more, at every element the descent types: e-validity
 // (§3.3.5.1) clause 1.1.3, for an element [[child]] ·attributed to· a strict
-// ·wildcard particle· that ·resolves· to no declaration. e-validity has no
+// ·wildcard particle· that ·resolves· to no declaration, or to one whose
+// ·selected type definition· is ·absent· (§5.3). e-validity has no
 // catalog ID of its own and none is minted for it, so the message names the
 // clause against e-validity while the error carries cvc-assess-elt.
 //
-// The second is cvc-elt (§3.3.4.3), in four clauses, at the root and at every
-// descendant the descent types. Clause 2 decides {abstract}: an element whose
+// The second is cvc-elt (§3.3.4.3), in five clauses, at the root and at every
+// descendant the descent types. Clause 1 is charged as Structures §5.3
+// (Missing Sub-components) directs, for an element whose ·selected type
+// definition· names a substitution group head no declaration carries, and the
+// element then falls back to ·lax assessment· against xs:anyType; a nil
+// {type definition} on a directly built declaration is recorded as an
+// [Unevaluated] instead (cta.go). Clause 2 decides {abstract}: an element whose
 // ·governing element declaration· is abstract, whether the root's top-level
 // declaration, a particle's, or the one a strict or lax wildcard's child
 // ·resolves· to. Clause 3 decides xsi:nil: an xsi:nil attribute on a
