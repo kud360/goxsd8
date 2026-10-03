@@ -147,18 +147,20 @@
 // clauses 1.2 and 4 both charge under cvc-complex-type and both wrap the
 // verdict; the rule's other clauses wrap nothing.
 //
-// Two come from [Validator.Assess]'s dispatch on the root's ·governing
+// The first comes from [Validator.Assess]'s dispatch on the root's ·governing
 // element declaration·: cvc-assess-elt (§3.3.4.6) for a root that determines
-// neither a declaration nor a ·governing type definition·, and cvc-elt
-// (§3.3.4.3) clause 2 for one whose declaration is abstract. cvc-assess-elt
+// neither a declaration nor a ·governing type definition·. cvc-assess-elt
 // carries one charge more, at every element the descent types: e-validity
 // (§3.3.5.1) clause 1.1.3, for an element [[child]] ·attributed to· a strict
 // ·wildcard particle· that ·resolves· to no declaration. e-validity has no
 // catalog ID of its own and none is minted for it, so the message names the
 // clause against e-validity while the error carries cvc-assess-elt.
 //
-// cvc-elt carries three more clauses, at the root and at every descendant the
-// descent types. Clause 3 decides xsi:nil: an xsi:nil attribute on a
+// The second is cvc-elt (§3.3.4.3), in four clauses, at the root and at every
+// descendant the descent types. Clause 2 decides {abstract}: an element whose
+// ·governing element declaration· is abstract, whether the root's top-level
+// declaration, a particle's, or the one a strict or lax wildcard's child
+// ·resolves· to. Clause 3 decides xsi:nil: an xsi:nil attribute on a
 // declaration whose {nillable} is false (3.1), one whose lexical is outside
 // xs:boolean's lexical space (3.2), and a ·nilled· element carrying character or
 // element [[children]] (3.2.3.1) or a fixed {value constraint} (3.2.3.2).

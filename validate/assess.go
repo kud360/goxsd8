@@ -67,21 +67,19 @@ const ruleCvcType xsderr.Rule = "cvc-type"
 // It decides the ·governing element declaration· of the validation root,
 // which is the declaration root's ·expanded name· ·resolves· to among the
 // schema's top-level element declarations (§3.3.4.6, ·governing element
-// declaration· clause 4), and charges two rules over that dispatch:
+// declaration· clause 4). Where there is no such declaration and no xsi:type
+// ·resolving· to a type definition, no ·governing type definition· can exist
+// either (key-governing-type-elem clause 8) and cvc-assess-elt clause 1 cannot
+// apply: cvc-assess-elt is charged and the subtree is not walked. Clause 3
+// would have the root ·laxly assessed· against xs:anyType, which this package
+// does for a descendant and not for the root; charging instead is §5.2 strict
+// wildcard validation. An undeclared root whose xsi:type DOES resolve is
+// ·strictly assessed· against that type alone (clause 1.2), with no
+// declaration to read cvc-elt against.
 //
-//   - No such declaration and no xsi:type ·resolving· to a type definition, so
-//     no ·governing type definition· can exist either (key-governing-type-elem
-//     clause 8) and cvc-assess-elt clause 1 cannot apply: cvc-assess-elt is
-//     charged and the subtree is not walked. Clause 3 would have the root
-//     ·laxly assessed· against xs:anyType, which this package does for a
-//     descendant and not for the root; charging instead is §5.2 strict
-//     wildcard validation. An undeclared root whose xsi:type DOES resolve is
-//     ·strictly assessed· against that type alone (clause 1.2), with no
-//     declaration to read cvc-elt against.
-//   - A declaration whose {abstract} is true: cvc-elt clause 2 is charged
-//     and the walk still runs. ·Strictly assessed· clauses 2 and 3 assess
-//     [[attributes]] and [[children]] whatever clause 1.1.2's evaluation
-//     returned, so an abstract root does not silence its subtree.
+// A declaration whose {abstract} is true is charged cvc-elt clause 2 at the
+// root as at every descendant, and the walk still runs
+// ([walk.abstractDeclaration]).
 //
 // cvc-elt clause 1 (D ·non-absent·, E and D sharing an ·expanded name·) is
 // satisfied by construction — D is the declaration found BY that expanded
@@ -129,12 +127,13 @@ const ruleCvcType xsderr.Rule = "cvc-type"
 // Nothing else is decided: the remaining cvc-elt clauses, cvc-type's own
 // clause 1 (T ·non-absent·), cvc-complex-type clause 5 over [[attributes]]
 // (key-ldt-att) and clause 6 are not evaluated, so a [Result] carrying no
-// violation says the root is declared, not abstract, and — where its type was
-// determinable — is governed by no abstract complex type, carries no
-// attribute clause 2 or clause 3.1.1 rejects, no required attribute clause 3
-// misses, no attribute whose value this backend could read and found invalid,
-// no content reject its ·governing type definition· could settle and no child
-// clause 5 rejects, and says nothing else about the document.
+// violation says the root is declared, no element is governed by an abstract
+// declaration, and — where its type was determinable — is governed by no
+// abstract complex type, carries no attribute clause 2 or clause 3.1.1
+// rejects, no required attribute clause 3 misses, no attribute whose value
+// this backend could read and found invalid, no content reject its ·governing
+// type definition· could settle and no child clause 5 rejects, and says
+// nothing else about the document.
 //
 // It panics if root is nil, on the same grounds as [ElementChild].
 func (v *Validator) Assess(root Element) *Result {
@@ -148,11 +147,6 @@ func (v *Validator) Assess(root Element) *Result {
 	var g governance
 	d, found := v.Schema().Element(root.Name())
 	if found {
-		if d.Abstract() {
-			w.res.violations = append(w.res.violations, xsderr.New(ruleCvcElt, root.Loc(),
-				"the validation root %s is governed by an element declaration whose {abstract} is true, but cvc-elt clause 2 requires it to be false: an abstract declaration validates no element information item",
-				root.Name()))
-		}
 		g = w.declaredGovernance(root, d, nil)
 	}
 	if !found {
@@ -862,6 +856,7 @@ func (w *walk) element(e Element, g governance, parent *icCheck, inherited []inh
 	if w.log.Enabled(context.Background(), slog.LevelDebug) {
 		w.log.Debug("assessing element", slog.Any("name", e.Name()), slog.Any("loc", e.Loc()))
 	}
+	w.abstractDeclaration(e, g)
 	w.abstractType(e, g)
 	isNilled := w.nilCheck(e, g)
 	id := w.identityCheck(e, g, parent)
@@ -881,6 +876,36 @@ func (w *walk) element(e Element, g governance, parent *icCheck, inherited []inh
 	id.substitute(content)
 	w.idElement(id)
 	w.identityExit(id)
+}
+
+// abstractDeclaration settles cvc-elt (§3.3.4.3) clause 2 for e: its
+// ·governing element declaration·'s {abstract} is false. §3.3.1 lets an
+// abstract declaration appear in a content model only so substitution can
+// replace it, and forbids it ever to ·validate· element content itself.
+//
+// g.decl is key-governing-ed's declaration whichever route settled it, so the
+// clause is charged at every depth: the validation root's top-level declaration
+// ([Validator.Assess]), a particle's ·context-determined declaration· used
+// directly (cvc-accept clause 2.3.1), and the declaration a strict or lax
+// wildcard's child ·resolves· to (key-governing-ed clause 3). A member that
+// substitutes for an abstract head is governed by the member and not by the
+// head (cvc-accept clause 2.3.2, [walk.childGoverning]), so only an abstract
+// member is charged. An element with no ·governing element declaration· — one a
+// skip wildcard ·skipped·, one ·laxly assessed·, one governed by a type alone,
+// or one unattributed — has no {abstract} to read.
+//
+// [walk.element] is the one path every element takes, once, so the clause is
+// charged once per element. The charge does not halt the walk: ·strictly
+// assessed· clauses 2 and 3 assess [[attributes]] and [[children]] whatever
+// clause 1.1.2's evaluation returned, so an abstract declaration does not
+// silence its element's subtree.
+func (w *walk) abstractDeclaration(e Element, g governance) {
+	if !g.hasDecl || !g.decl.Abstract() {
+		return
+	}
+	w.res.violations = append(w.res.violations, xsderr.New(ruleCvcElt, e.Loc(),
+		"the element %s is governed by an element declaration whose {abstract} is true, but cvc-elt clause 2 requires it to be false: an abstract declaration validates no element information item",
+		e.Name()))
 }
 
 // abstractType settles cvc-type (§3.3.4.4) clause 2 for e: where its
