@@ -402,6 +402,14 @@ func (w *walk) idCandidate(st *xsd.SimpleType) (candidate, decided bool) {
 // gives a role in family. String Valid clause 3 asks it of ENTITY and ENTITIES,
 // and [walk.notationsDeclared] of NOTATION (cvcsimpletype.go), on the same
 // terms.
+//
+// It recurses into a list's {item type definition} and into each union's
+// {member type definitions} with no visited set (STYLE D4). [New] takes only a
+// finalized [xsd.Schema], and finalization has proved both walks finite: Phase
+// B's checkUnionMembershipAcyclic charges cos-st-restricts clause 3.3 on a
+// circular membership, and cos-st-restricts clause 2.1 rejects an item type
+// that is a list or has a list in its transitive membership, so the list arm
+// is entered at most once on any path.
 func (w *walk) candidate(st *xsd.SimpleType, family func(valueRole) bool) (candidate, decided bool) {
 	if st == nil {
 		return false, true
@@ -452,6 +460,11 @@ func (w *walk) candidate(st *xsd.SimpleType, family func(valueRole) bool) (candi
 // exactly one. It answers for the chain alone and walks into no {item type
 // definition} or {member type definitions} — those are candidate's and
 // roleValues's, which need them for different questions.
+//
+// The chain walk carries no cycle guard (STYLE D4): Phase B's
+// checkSimpleBaseAcyclic has rejected every circular {base type definition}
+// chain, a type naming itself included, before [New] can be handed the schema,
+// and the walk stops at xs:anySimpleType, the one type with no base.
 func (w *walk) namedRole(st *xsd.SimpleType) (role valueRole, list, decided bool) {
 	for t := st; t != nil; {
 		switch t.Name() {
@@ -474,9 +487,6 @@ func (w *walk) namedRole(st *xsd.SimpleType) (role valueRole, list, decided bool
 		base, err := t.Base(w.schema)
 		if err != nil {
 			return roleNone, false, false
-		}
-		if base == t {
-			break
 		}
 		t = base
 	}
