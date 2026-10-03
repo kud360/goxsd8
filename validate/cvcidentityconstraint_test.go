@@ -236,10 +236,30 @@ func TestUnreadablePathDeclinesTheWholeConstraint(t *testing.T) {
 	icWantCharges(t, icAssess(t, schema, icRoot(icIDed(2, "a"), icIDed(3, "a"), ref)))
 }
 
-// A keyref whose {referenced key} has no node table anywhere in the subtree is
-// charged: "there is a node table associated with the {referenced key}" is the
-// first half of clause 4.3, and a key whose own element never occurred fails it.
+// A keyref whose {referenced key} has no node table at all is charged:
+// "there is a node table associated with the {referenced key}" is the first
+// conjunct of cvc-identity-constraint clause 4.3, and a key declared only on
+// <box> has none at a <root> holding no <box>. Neither the key's element nor
+// any binding of it occurred, which is what separates this from
+// TestKeyrefChargesAgainstAnEmptyNodeTable: making icCheck.keyrefs skip a
+// keyref whose binding is not found fails this test and passes that one.
 func TestKeyrefChargesWhenTheReferencedKeyNeverOccurred(t *testing.T) {
+	key := icDef(t, "K", xsd.IdentityConstraintKey, "item", nil, "", "@id")
+	keyref := icDef(t, "R", xsd.IdentityConstraintKeyref, "ref", nil, "K", "@r")
+	schema := icSchema(t, "", false, []xsd.IdentityConstraint{keyref}, []xsd.IdentityConstraint{key})
+
+	ref := icElem(xsd.QName{Local: "ref"}, 2, []Attribute{icAttr(xsd.QName{Local: "r"}, "a", 2)})
+	icWantCharges(t, icAssess(t, schema, icRoot(ref)), icCharge(ruleCvcIdentityConstraint, 2))
+}
+
+// A keyref whose {referenced key} has a node table with NO entries is charged:
+// the key is declared on the <box> that occurs, so its table is present, and
+// the selector selects no <item>, so the second conjunct of
+// cvc-identity-constraint clause 4.3 — some entry's ·key-sequence· equal to
+// the keyref member's — fails on an empty table. Making icCheck.keyrefs skip a
+// found binding with no entries fails this test and passes
+// TestKeyrefChargesWhenTheReferencedKeyNeverOccurred.
+func TestKeyrefChargesAgainstAnEmptyNodeTable(t *testing.T) {
 	key := icDef(t, "K", xsd.IdentityConstraintKey, "item", nil, "", "@id")
 	keyref := icDef(t, "R", xsd.IdentityConstraintKeyref, "ref", nil, "K", "@r")
 	schema := icSchema(t, "", false, nil, []xsd.IdentityConstraint{key, keyref})
@@ -292,6 +312,34 @@ func TestSkipWildcardAttributeLengthensNoKeySequence(t *testing.T) {
 	// declaration is xs:ID, so the id it also binds is charged alongside it.
 	icWantCharges(t, icAssess(t, icWildcardSchema(t, xsd.ProcessLax, []xsd.IdentityConstraint{key}), twice),
 		icCharge(ruleCvcIdentityConstraint, 3), icChargeAttr(ruleCvcID, 3))
+}
+
+// cvc-identity-constraint clause 3 admits "zero or more ·skipped· nodes"
+// beside a field's one simple-valued node, so a field selecting a ·skipped·
+// attribute AND a declared, valued one on the same ·target node· is charged
+// nothing under clause 3, and the valued one fills the slot, in either
+// document order: icCheck.fieldAttributes passes the ·skipped· one by. Each
+// <item> below carries @v beside a @s the ***skip*** wildcard admits, and the
+// plain <item> after it shares its @v, so the one charge is clause 4.2.2's
+// duplicate — which only a slot filled from @v can produce. Offering the
+// ·skipped· attribute as an absent, decided member instead fails both
+// documents with a clause 3 charge at the attribute.
+func TestSkippedFieldAttributeBesideAValuedOneFillsTheSlot(t *testing.T) {
+	key := icDef(t, "K", xsd.IdentityConstraintKey, "item", nil, "", "@v|@s")
+	uses := []xsd.AttributeUse{icUse(t, xsd.QName{Local: "v"}, "string")}
+	schema := icWildcardSchemaWith(t, anyWildcard(t, xsd.ProcessSkip), uses, []xsd.IdentityConstraint{key})
+
+	v := func(line int) Attribute { return icAttr(xsd.QName{Local: "v"}, "a", line) }
+	s := func(line int) Attribute { return icAttr(xsd.QName{Local: "s"}, "x", line) }
+	item := func(line int, attrs ...Attribute) *testElement {
+		return icElem(xsd.QName{Local: "item"}, line, attrs)
+	}
+
+	skippedFirst := icRoot(item(2, s(2), v(2)), item(3, v(3)))
+	icWantCharges(t, icAssess(t, schema, skippedFirst), icCharge(ruleCvcIdentityConstraint, 3))
+
+	valuedFirst := icRoot(item(2, v(2), s(2)), item(3, v(3)))
+	icWantCharges(t, icAssess(t, schema, valuedFirst), icCharge(ruleCvcIdentityConstraint, 3))
 }
 
 // A field node that is an EMPTY element whose declaration carries a {value
@@ -492,6 +540,20 @@ func TestKeyrefMatchingOnlyAContestedEntryIsRecorded(t *testing.T) {
 
 	got, undecided = assessRecordedWith(t, opaqueStrings(), schema, doc)
 	wantSilence(t, got, "a match on a contested entry charges nothing")
+	wantDeclines(t, icDeclines(undecided), Unevaluated{rule: ruleCvcIdentityConstraint, loc: loc(2, 1), msg: "clause 4.3 is undecided"})
+
+	// The boxes swapped: the xs:token entry the keyref member matches is now
+	// the LATER of the undecided pair, so it is resolveEntryConflicts's j side
+	// that marks it contested. With that side's mark made a no-op, the match
+	// passes decidedly and this document walks clean.
+	swapped := icRoot(idItem(2, "tok", "a"), box(3, icIDed(4, "a")), box(5, idItem(6, "tok", "a")))
+
+	got, undecided = assessRecorded(t, schema, swapped)
+	icWantCharges(t, got, icCharge(ruleCvcIdentityConstraint, 2))
+	wantDeclines(t, icDeclines(undecided))
+
+	got, undecided = assessRecordedWith(t, opaqueStrings(), schema, swapped)
+	wantSilence(t, got, "a match on the later contested entry charges nothing")
 	wantDeclines(t, icDeclines(undecided), Unevaluated{rule: ruleCvcIdentityConstraint, loc: loc(2, 1), msg: "clause 4.3 is undecided"})
 }
 

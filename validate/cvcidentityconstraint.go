@@ -442,7 +442,7 @@ func (c *icCheck) fieldAttributes(w *walk, t *icTarget, i int, sel icpath.Select
 		if !sel.SelectsAttribute(a.Name()) {
 			continue
 		}
-		st, typed := w.attributeType(c.e, c.g, a)
+		st, typed := w.attributeType(c.g, a)
 		if !typed {
 			if w.skippedAttribute(c.g, a) {
 				continue

@@ -326,7 +326,7 @@ func TestSkipWildcardAttributeBindsNoID(t *testing.T) {
 // id charge lands after both, at the ·validation root·.
 func TestSkipWildcardBindsAnIDItDoesNotAdmit(t *testing.T) {
 	twice := icRoot(idItem(2, "wid", "a"), idItem(3, "wid", "a"))
-	elsewhere := icWildcardSchemaWith(t, nsWildcard(t, xsd.ProcessSkip, "urn:elsewhere"), nil)
+	elsewhere := icWildcardSchemaWith(t, nsWildcard(t, xsd.ProcessSkip, "urn:elsewhere"), nil, nil)
 
 	icWantCharges(t, icAssess(t, elsewhere, twice),
 		icChargeAttr(ruleCvcComplexType, 2), icChargeAttr(ruleCvcComplexType, 3),
