@@ -812,3 +812,114 @@ func TestFieldNodeOfNonSimpleTypeIsChargedUnderClause3(t *testing.T) {
 		wantDeclines(t, undecided)
 	})
 }
+
+// icSpecialSchema declares <root> over item*, each <item> carrying an untyped
+// @ast (xs:anySimpleType, §3.2.2.2), an @aat of xs:anyAtomicType, an xs:string
+// @s and an untyped @r, over an optional <v> of xs:anySimpleType, with the
+// identity constraints ics declared on <root>.
+func icSpecialSchema(t *testing.T, ics string) *xsd.Schema {
+	t.Helper()
+	return parsedSchema(t, map[string]string{"main.xsd": `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="item" maxOccurs="unbounded">
+          <xs:complexType>
+            <xs:sequence><xs:element name="v" type="xs:anySimpleType" minOccurs="0"/></xs:sequence>
+            <xs:attribute name="ast"/>
+            <xs:attribute name="aat" type="xs:anyAtomicType"/>
+            <xs:attribute name="s" type="xs:string"/>
+            <xs:attribute name="r"/>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+    ` + ics + `
+  </xs:element>
+</xs:schema>`})
+}
+
+// icSpecialUnique is a unique named U over item with the one field given.
+func icSpecialUnique(field string) string {
+	return `<xs:unique name="U"><xs:selector xpath="item"/><xs:field xpath="` + field + `"/></xs:unique>`
+}
+
+// Two ·key-sequence· members of the ·special· types whose lexicals are
+// byte-identical are SAME (#2124's oracle ruling: SAME under the xs:string
+// member of the lexical mapping's union, Datatypes §3.2.1.2, §3.2.2.2), so the
+// unique charges clause 4.1 at the later ·target node· and records nothing —
+// either type against itself and against the other, the first row the shape of
+// MS-Element2006-07-15 elemZ015.i. Before #2124 each row declined at the field
+// node, charging nothing and recording a clause 3 decline per member.
+func TestByteIdenticalSpecialKeyMembersAreSame(t *testing.T) {
+	for _, tc := range []struct {
+		fields       string
+		first, later [2]string
+	}{
+		{"@ast", [2]string{"ast", "true"}, [2]string{"ast", "true"}},
+		{"@aat", [2]string{"aat", "true"}, [2]string{"aat", "true"}},
+		{"@ast|@aat", [2]string{"ast", "1.0"}, [2]string{"aat", "1.0"}},
+	} {
+		t.Run(tc.fields+":"+tc.first[0]+","+tc.later[0], func(t *testing.T) {
+			got, undecided := assessRecorded(t, icSpecialSchema(t, icSpecialUnique(tc.fields)),
+				icRoot(idItem(2, tc.first[0], tc.first[1]), idItem(3, tc.later[0], tc.later[1])))
+			wantDeclines(t, icDeclines(undecided))
+			icWantClause41(t, got, 3, 2)
+		})
+	}
+	// An ELEMENT field node reaches the same comparison through
+	// elementKeyMember: a key charges clause 4.2.2 at the later.
+	t.Run("key over an element", func(t *testing.T) {
+		valued := func(line int, text string) *testElement {
+			v := icElem(xsd.QName{Local: "v"}, line+1, nil, TextChild(&testText{data: text, loc: loc(line+1, 4)}))
+			return icElem(xsd.QName{Local: "item"}, line, nil, ElementChild(v))
+		}
+		key := `<xs:key name="K"><xs:selector xpath="item"/><xs:field xpath="v"/></xs:key>`
+		got, undecided := assessRecorded(t, icSpecialSchema(t, key), icRoot(valued(2, "x"), valued(4, "x")))
+		wantDeclines(t, icDeclines(undecided))
+		icWantCharges(t, got, icCharge(ruleCvcIdentityConstraint, 4))
+		if !strings.Contains(got[0].Error(), "clause 4.2.2 ") {
+			t.Errorf("Violations() = %v, want the charge made under clause 4.2.2", got)
+		}
+	})
+}
+
+// Every other pair with a ·special· member stays undecided (#2124's ruling) and
+// declines, charging nothing: "1" and "1.0" are equal under xs:decimal and
+// unequal under xs:string, and a ·special· member against an xs:string one has
+// no one value space to be compared in. The decline is recorded against the
+// later ·target node·, and is never a NOT-same: a keyref member "1.0" against a
+// unique member "1" records clause 4.3 as undecided rather than charging it.
+func TestOtherSpecialKeyMemberPairsDecline(t *testing.T) {
+	for _, tc := range []struct {
+		fields       string
+		first, later [2]string
+	}{
+		{"@ast", [2]string{"ast", "1"}, [2]string{"ast", "1.0"}},
+		{"@ast|@aat", [2]string{"ast", "1"}, [2]string{"aat", "01"}},
+		{"@ast|@s", [2]string{"ast", "a"}, [2]string{"s", "a"}},
+		{"@s|@aat", [2]string{"s", "a"}, [2]string{"aat", "a"}},
+	} {
+		t.Run(tc.fields+":"+tc.first[1]+","+tc.later[1], func(t *testing.T) {
+			got, undecided := assessRecorded(t, icSpecialSchema(t, icSpecialUnique(tc.fields)),
+				icRoot(idItem(2, tc.first[0], tc.first[1]), idItem(3, tc.later[0], tc.later[1])))
+			wantSilence(t, got, "an undecided special pair charges nothing")
+			wantDeclines(t, icDeclines(undecided),
+				Unevaluated{rule: ruleCvcIdentityConstraint, loc: loc(3, 1), msg: "clause 4.1 is undecided"})
+		})
+	}
+	t.Run("keyref", func(t *testing.T) {
+		ics := icSpecialUnique("@ast") +
+			`<xs:keyref name="R" refer="U"><xs:selector xpath="item"/><xs:field xpath="@r"/></xs:keyref>`
+		schema := icSpecialSchema(t, ics)
+
+		got, undecided := assessRecorded(t, schema, icRoot(idItem(2, "ast", "1"), idItem(3, "r", "1")))
+		wantSilence(t, got, "a byte-identical special keyref member resolves")
+		wantDeclines(t, icDeclines(undecided))
+
+		got, undecided = assessRecorded(t, schema, icRoot(idItem(2, "ast", "1"), idItem(3, "r", "1.0")))
+		wantSilence(t, got, "an undecided special lookup charges nothing")
+		wantDeclines(t, icDeclines(undecided),
+			Unevaluated{rule: ruleCvcIdentityConstraint, loc: loc(3, 1), msg: "clause 4.3 is undecided"})
+	})
+}
