@@ -2875,7 +2875,7 @@ MS-Element2006-07-15/elemZ003/instance/elemZ003.v pass
 MS-Element2006-07-15/elemZ009/instance/elemZ009.v pass
 MS-Element2006-07-15/elemZ010/instance/elemZ010.v pass
 MS-Element2006-07-15/elemZ014/instance/elemZ014.v pass
-MS-Element2006-07-15/elemZ015/instance/elemZ015.i fail
+MS-Element2006-07-15/elemZ015/instance/elemZ015.i pass
 MS-Element2006-07-15/elemZ016/instance/elemZ016.i pass
 MS-Element2006-07-15/elemZ017/instance/elemZ017.v pass
 MS-Element2006-07-15/elemZ018/instance/elemZ018.v pass
