@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"unicode"
 
 	"github.com/kud360/goxsd8/xsderr"
 )
@@ -140,6 +141,52 @@ func TestNegatedGroupSubtraction(t *testing.T) {
 			if re.MatchString(m) {
 				t.Errorf("%s must not match %q", c.pattern, m)
 			}
+		}
+	}
+}
+
+// TestNegatedGroupSubtractionFold pins F&O §7.6.1 flag i, rule 2 on the sets
+// the translator materializes: a charRange stands for its members and their
+// case-variants in a negative group and in a subtraction alike, so a
+// complemented or subtracted set must be fold-closed before RE2's (?i) sees it
+// (#1856). The rows marked fail-before matched a case-variant (or missed one)
+// while the materialized set was built from the unfolded operands.
+func TestNegatedGroupSubtractionFold(t *testing.T) {
+	cases := []struct {
+		pattern     string
+		match, miss []string
+	}{
+		// fail-before: Q, q, x, X.
+		{`^[^Q-[x]]$`, []string{"b", "B"}, []string{"Q", "q", "x", "X"}},
+		// fail-before: Q, q (the classMatchedSet negated-operand path).
+		{`^[A-Z-[^q]]$`, []string{"Q", "q"}, []string{"A", "a", "b"}},
+		// fail-before: a, A (a positive operand subtracted from a positive group).
+		{`^[aA-[a]]$`, nil, []string{"a", "A"}},
+		{`^[^Q]$`, []string{"b"}, []string{"Q", "q"}},
+		{`^[A-Z-[IO]]$`, []string{"A", "B", "a", "b"}, []string{"I", "O", "i", "o"}},
+	}
+	for _, c := range cases {
+		re := mustCompile(t, mustTranslate(t, c.pattern, FlavorFO, "i"))
+		for _, m := range c.match {
+			if !re.MatchString(m) {
+				t.Errorf("%s with flag i must match %q", c.pattern, m)
+			}
+		}
+		for _, m := range c.miss {
+			if re.MatchString(m) {
+				t.Errorf("%s with flag i must not match %q", c.pattern, m)
+			}
+		}
+	}
+}
+
+// TestFoldSpan pins the bound foldClosed walks: every code point with a
+// case-variant lies inside foldSpan.
+func TestFoldSpan(t *testing.T) {
+	first, last := foldSpan()
+	for c := rune(0); c <= maxRune; c++ {
+		if unicode.SimpleFold(c) != c && (c < first || c > last) {
+			t.Fatalf("%U has a case-variant outside foldSpan %U-%U", c, first, last)
 		}
 	}
 }

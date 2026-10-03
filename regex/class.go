@@ -124,6 +124,31 @@ func (s runeSet) subtract(o runeSet) runeSet {
 	return s.intersect(o.complement())
 }
 
+// foldClosed returns the set with every case-variant of its members added, a
+// case-variant being any other code point on the member's unicode.SimpleFold
+// orbit: the relation RE2's (?i) matches a class member under, so RE2 reads a
+// fold-closed set the same with or without (?i). Only code points inside the
+// span of unicode.CaseRanges have a variant (TestFoldSpan pins that), so
+// the walk visits no others.
+func (s runeSet) foldClosed() runeSet {
+	first, last := foldSpan()
+	out := append(runeSet{}, s...)
+	for _, r := range s.normalize() {
+		for c := max(r.lo, first); c <= min(r.hi, last); c++ {
+			for f := unicode.SimpleFold(c); f != c; f = unicode.SimpleFold(f) {
+				out = out.add(f, f)
+			}
+		}
+	}
+	return out.normalize()
+}
+
+// foldSpan returns the first and last code point unicode.CaseRanges covers,
+// the bound foldClosed walks within.
+func foldSpan() (first, last rune) {
+	return rune(unicode.CaseRanges[0].Lo), rune(unicode.CaseRanges[len(unicode.CaseRanges)-1].Hi)
+}
+
 // intersect returns the normalized intersection of two sets.
 func (s runeSet) intersect(o runeSet) runeSet {
 	a := s.normalize()

@@ -9,7 +9,10 @@ import "unicode/utf8"
 // G-C is "the set of all characters in C(G) that are not in C(C)", and G may be
 // a negCharGroup, so a subtraction applies after the negation: [^P-[C]]
 // materializes (complement of P) minus C and returns false (cvc-pattern-valid,
-// #1856).
+// #1856). Under the F&O i flag both operands are fold-closed first: a charRange
+// stands for its members and their case-variants, in a negative group and a
+// subtraction alike (F&O §7.6.1 flag i, rule 2), and a fold-closed result reads
+// the same under RE2's (?i).
 func (p *parser) parseClassBody() (runeSet, bool, error) {
 	open := p.pos
 	p.pos++ // consume '['
@@ -47,6 +50,10 @@ func (p *parser) parseClassBody() (runeSet, bool, error) {
 		if err != nil {
 			return nil, false, err
 		}
+		if p.fold {
+			set = set.foldClosed()
+			sub = sub.foldClosed()
+		}
 		if neg {
 			set = set.complement()
 			neg = false
@@ -62,7 +69,8 @@ func (p *parser) parseClassBody() (runeSet, bool, error) {
 
 // classMatchedSet parses a nested charClassExpr used as a subtraction operand
 // and returns the actual set of characters it matches (its own negation
-// applied).
+// applied). Under the F&O i flag a negated operand is fold-closed before it is
+// complemented, so [^q] leaves out both q and Q (F&O §7.6.1 flag i, rule 2).
 func (p *parser) classMatchedSet() (runeSet, error) {
 	if p.peek() != '[' {
 		return nil, p.errf(p.pos, "expected '[' after a character-class subtraction operator")
@@ -72,6 +80,9 @@ func (p *parser) classMatchedSet() (runeSet, error) {
 		return nil, err
 	}
 	if neg {
+		if p.fold {
+			set = set.foldClosed()
+		}
 		return set.complement(), nil
 	}
 	return set, nil
