@@ -441,10 +441,13 @@ func TestAnonymousGoverningTypeStillDecidesContent(t *testing.T) {
 	wantContentCharge(t, got, "cvc-complex-content", "1", loc(2, 1))
 }
 
-// A child the content model REJECTED is ·attributed to· no particle, so its own
-// [[children]] are assessed against nothing: the one charge is the parent's, at
-// the child's position, and the subtree below it draws none.
-func TestRejectedChildAttributesItsSubtreeToNothing(t *testing.T) {
+// A child the content model REJECTED is ·attributed to· no particle, and
+// key-governing-ed clause 4 governs it instead: <deep> has no ·locally declared
+// type· and ·resolves· to no declaration, so it is ·laxly assessed· against
+// xs:anyType, whose mixed {content type} admits its text. The one charge is
+// the parent's, at the child's position, and the subtree below it draws none
+// (#1892).
+func TestRejectedChildChargesOnlyItsParent(t *testing.T) {
 	schema := cSchema(t, cSequence(t, false, cParticle(t, "a", 1, 1)))
 	root := cRoot("a")
 	child := &testElement{
