@@ -152,7 +152,8 @@
 // neither a declaration nor a ·governing type definition·. cvc-assess-elt
 // carries one charge more, at every element the descent types: e-validity
 // (§3.3.5.1) clause 1.1.3, for an element [[child]] ·attributed to· a strict
-// ·wildcard particle· that ·resolves· to no declaration. e-validity has no
+// ·wildcard particle· that ·resolves· to no declaration, or to one whose
+// ·selected type definition· is ·absent· (§5.3). e-validity has no
 // catalog ID of its own and none is minted for it, so the message names the
 // clause against e-validity while the error carries cvc-assess-elt.
 //

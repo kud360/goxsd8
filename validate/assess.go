@@ -524,14 +524,21 @@ func (w *walk) childGoverning(e Element, a xsd.Attribution, parent *xsd.ComplexT
 // own [validity] is ***notKnown*** takes the ENCLOSING element off clause 1.1's
 // arm, and clause 1.2 makes its [validity] invalid.
 //
-// The child itself is charged NOTHING and is not halted. An unresolved name
-// under a strict wildcard has neither a ·governing element declaration· nor a
-// ·governing type definition·, which is cvc-assess-elt clause 3.3's ·lax
-// assessment· against xs:anyType: [walk.element] still runs over it, so its
-// [[attributes]] and its [[children]] are assessed in their turn — unlike the
-// ·skipped· child clause 3.2 stops at. Its [validity] is notKnown by
-// e-validity clause 2, "otherwise", an item not ·strictly assessed· having no
-// clause 1 to reach.
+// Two causes leave such a child ·laxly assessed·, and the message names the one
+// that holds. An unresolved name under a strict wildcard has neither a
+// ·governing element declaration· nor a ·governing type definition·, which is
+// cvc-assess-elt clause 3.3's ·lax assessment· against xs:anyType. A name that
+// ·resolves· to a declaration whose ·selected type definition· is ·absent·
+// falls back to the same ·lax assessment· by §5.3 ([walk.declaredGovernance]),
+// its cvc-elt clause 1 charge already made at the child. The schema lookup
+// below tells the two apart, since the zero [governance] both leave carries no
+// trace of the declaration.
+//
+// The child itself is charged NOTHING here and is not halted: [walk.element]
+// still runs over it, so its [[attributes]] and its [[children]] are assessed
+// in their turn — unlike the ·skipped· child clause 3.2 stops at. Its
+// [validity] is notKnown by e-validity clause 2, "otherwise", an item not
+// ·strictly assessed· having no clause 1 to reach.
 //
 // The [xsd.Wildcard] assertion below is the whole of "·attributed to· a
 // ·wildcard particle·" and is exact by itself: an item cvc-complex-content
@@ -546,15 +553,15 @@ func (w *walk) childGoverning(e Element, a xsd.Attribution, parent *xsd.ComplexT
 // by the type's shape.
 //
 // The guard after it (governance.laxlyAssessed) rules out [governance]'s other
-// shapes alongside the genuine unresolved-name one: hasDecl true is this
-// package declining a type it could not determine, not an unresolved-name
-// story at all, and typ non-nil with hasDecl false is clause 1.2's xsi:type-
-// driven ·strict assessment· (key-governing-type-elem clause 8) — a ·governing
-// type definition· WAS determined there, from xsi:type rather than from
-// ·resolution·, so neither clause 3.3's lax path nor this clause is live. The
-// unattributed shape never arrives beside a Wildcard. Only the zero value — no
-// declaration, no type at all — is the unresolved-name shape this function
-// charges.
+// shapes: hasDecl true is this package declining a type it could not
+// determine, not a ·lax assessment· at all, and typ non-nil with hasDecl false
+// is clause 1.2's xsi:type-driven ·strict assessment· (key-governing-type-elem
+// clause 8) — a ·governing type definition· WAS determined there, from
+// xsi:type rather than from ·resolution·, so neither the lax path nor this
+// clause is live. The unattributed shape never arrives beside a Wildcard. Only
+// the zero value — no declaration, no type at all — is charged, and it is both
+// causes above: an unresolved name, and a resolved one §5.3 sent to ·lax
+// assessment·.
 //
 // notKnown is read off the governance the descent just determined, and no
 // subtree state is kept: clause 1.1.3 quantifies over E.[[children]] and
@@ -587,9 +594,13 @@ func (w *walk) unresolvedStrictWildcardChild(content *contentCheck, child Elemen
 	if !g.laxlyAssessed() {
 		return
 	}
+	cause := "·resolves· to no top-level element declaration"
+	if _, declared := w.schema.Element(child.Name()); declared {
+		cause = "·resolves· to a top-level element declaration whose ·selected type definition· is ·absent· (§5.3 Missing Sub-components, charged under cvc-elt clause 1)"
+	}
 	w.res.violations = append(w.res.violations, xsderr.New(ruleCvcAssessElt, child.Loc(),
-		"the element information item %s is ·attributed to· a ***strict*** ·wildcard particle· but ·resolves· to no top-level element declaration, so it is ·laxly assessed· and its [validity] is ***notKnown***, which e-validity clause 1.1.3 (§3.3.5.1) makes the enclosing element %s invalid for",
-		child.Name(), content.e.Name()))
+		"the element information item %s is ·attributed to· a ***strict*** ·wildcard particle· but %s, so it is ·laxly assessed· and its [validity] is ***notKnown***, which e-validity clause 1.1.3 (§3.3.5.1) makes the enclosing element %s invalid for",
+		child.Name(), cause, content.e.Name()))
 	content.log(w, child.Name(), child.Loc(), ruleCvcAssessElt, "1.1.3", "charged")
 }
 
