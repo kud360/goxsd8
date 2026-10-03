@@ -304,8 +304,7 @@
 // could not determine or whose content it declined or charged, which is
 // assessed against nothing along with its whole subtree. A child whose name
 // ·resolves· to no declaration, and that exception does not reach, is neither:
-// it is ·laxly assessed· against xs:anyType, whose lax wildcard ·attributes·
-// its own [[children]] on the same resolving terms (key-lva, #1823).
+// it is ·laxly assessed· against xs:anyType (key-lva, walk.child, #1823).
 //
 // The eighth is cvc-identity-constraint (§3.11.4), over the {identity-constraint
 // definitions} of the ·governing element declaration· of every element the

@@ -120,9 +120,7 @@ const ruleCvcType xsderr.Rule = "cvc-type"
 // ([walk.childGoverning]). A child whose name ·resolves· to no declaration is
 // neither: it is clause 3.3's ·lax assessment· against xs:anyType, whose
 // {content type} and {attribute uses} constrain nothing any of these charges
-// reads, and whose lax wildcard ·attributes· each of its own [[children]] in
-// turn, so a descendant whose name ·resolves· is ·strictly assessed· below it
-// ([walk.child], #1823).
+// reads ([walk.child], #1823).
 //
 // Nothing else is decided: the remaining cvc-elt clauses, cvc-type's own
 // clause 1 (T ·non-absent·), cvc-complex-type clause 5 over [[attributes]]
@@ -218,8 +216,8 @@ type governance struct {
 // 3's ·laxly assessed· one (key-lva): no ·governing element declaration·, no
 // ·governing type definition·, and not unattributed — the zero value and
 // nothing else. Such an element is locally validated against xs:anyType
-// (key-lva clause 1), and its [[children]] are assessed as that type's
-// {content type} ·attributes· them, to a lax wildcard ([walk.child]).
+// (key-lva clause 1); what that hands its [[children]] is [walk.child]'s to
+// say.
 func (g governance) laxlyAssessed() bool {
 	return !g.hasDecl && g.typ == nil && !g.unattributed
 }
@@ -454,8 +452,8 @@ func typeName(t xsd.TypeDefinition) string {
 // simple-typed parent, an element already charged, or a child clause 1.4
 // declined or rejected. It leaves the child unattributed ([governance]), walked
 // against nothing, and so is every element below it. A ·laxly assessed· parent
-// never reaches this arm, though its content check attributes nothing too:
-// [walk.child] hands its children xs:anyType's lax wildcard first (#1823).
+// never reaches this arm, though its content check attributes nothing too
+// ([walk.child]).
 func (w *walk) childGoverning(e Element, a xsd.Attribution, parent *xsd.ComplexType, inherited []inheritedAttribute) (governance, bool) {
 	switch t := a.(type) {
 	case xsd.ElementDeclaration:
@@ -827,8 +825,8 @@ func (c elementContext) LookupNamespace(prefix string) (string, bool) {
 // ·governing type definition· this package could not determine therefore ends
 // the typed descent at e — neither arm of clause 3 is live, a check with no
 // type attributes nothing — and e's subtree is walked against nothing
-// throughout. A ·laxly assessed· e has no type either and does NOT end it:
-// xs:anyType's lax wildcard ·attributes· its [[children]] ([walk.child]).
+// throughout. A ·laxly assessed· e has no type either and does NOT end it
+// ([walk.child]).
 //
 // cvc-complex-type clause 6 sits between the two halves and decides nothing:
 // [walk.elementAssertions] records e's {assertions} as [Unevaluated] and
