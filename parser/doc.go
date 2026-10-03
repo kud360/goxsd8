@@ -255,8 +255,8 @@
 //     {type definition}, <element ref>, <attribute ref>, <group ref>,
 //     keyref, and a simple type's base=, itemType= or memberTypes= —
 //     still reject, and each would also need that fallback on the
-//     validation side, which of them only a {type definition} naming an
-//     ·absent· substitution group head has (validate's
+//     validation side, which among them only a {type definition} naming
+//     an ·absent· substitution group head has (validate's
 //     walk.resolvedSelection) — a shape only a directly built declaration
 //     carries, since this package gives such a member xs:anyType. This
 //     bullet is the one place the reason is written down; the marker in
