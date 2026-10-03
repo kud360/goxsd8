@@ -88,10 +88,10 @@ func TestInstanceExecutorDecidesFromHints(t *testing.T) {
 // caseSchema's builtinsSchema arm removed. The prefix is resolved against the
 // root's own namespace declarations, whichever prefix binds the XSD namespace.
 //
-// A root that is locally valid against its type still declines, at
-// assessedSubtreeRoot's undeclared-root gate, which reads "valid" only off a
-// declared root: the last assertion pins that the built-ins schema does not
-// widen the "valid" observation.
+// A root that is locally valid against its type is decided valid, the empty
+// Result read through assessedSubtreeRoot as a declared root's is
+// (subtreeGate.undeclaredRoot, #2156): the last assertion, which declines as
+// undeclared-root with that method refusing unconditionally.
 func TestInstanceExecutorDecidesBuiltinTypedRoot(t *testing.T) {
 	exec := newInstanceExec()
 	for _, tc := range []struct {
@@ -120,8 +120,16 @@ func TestInstanceExecutorDecidesBuiltinTypedRoot(t *testing.T) {
 		}
 	}
 
-	valid := hintedCase(t, nil, `<a `+xsiNS+` xmlns:xsd="http://www.w3.org/2001/XMLSchema" xsi:type="xsd:int">1</a>`, true)
-	declinesBothPolarities(t, valid, "a root locally valid against its built-in xsi:type", refuseUndeclaredRoot)
+	const valid = `<a ` + xsiNS + ` xmlns:xsd="http://www.w3.org/2001/XMLSchema" xsi:type="xsd:int">1</a>`
+	for _, expect := range []bool{true, false} {
+		st, why := exec(hintedCase(t, nil, valid, expect))
+		if why != "" {
+			t.Errorf("a root locally valid against its built-in xsi:type: declined as %q under expectValid=%v, want decided valid", why, expect)
+		}
+		if st.IsPass() != expect {
+			t.Errorf("a root locally valid against its built-in xsi:type: under expectValid=%v the executor answered pass=%v, want it decided valid", expect, st.IsPass())
+		}
+	}
 }
 
 func validityWord(valid bool) string {

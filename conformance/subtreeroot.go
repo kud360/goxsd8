@@ -23,15 +23,15 @@ import (
 // observation: an ASSESSED SUBTREE ROOT (#1841), a validation root, with or
 // without content (#1855), whose every element the walk strictly assessed
 // against a type it really has, through a declaration, through an xsi:type for
-// a wildcard's child resolving none (#1978), or through its ·locally declared
-// type· or an xsi:type ·overriding· it for an {open content}'s child with one
-// (#2080), or laxly assessed against ·xs:anyType· (#1911), and every attribute
-// against its ·governing attribute declaration· where it has one (key-sva
-// clause 2), with no clause of key-sva (§3.3.4.6), cvc-elt (§3.3.4.3),
-// cvc-type (§3.3.4.4) or cvc-complex-type (§3.4.4.2) left undecided
-// unrecorded. instance.go's "Why an EMPTY Result is evidence of validity for
-// ONE shape only" states which clause each condition discharges; this file is
-// only the conditions.
+// a wildcard's child resolving none (#1978) or for a root resolving none
+// (#2156), or through its ·locally declared type· or an xsi:type ·overriding·
+// it for an {open content}'s child with one (#2080), or laxly assessed against
+// ·xs:anyType· (#1911), and every attribute against its ·governing attribute
+// declaration· where it has one (key-sva clause 2), with no clause of key-sva
+// (§3.3.4.6), cvc-elt (§3.3.4.3), cvc-type (§3.3.4.4) or cvc-complex-type
+// (§3.4.4.2) left undecided unrecorded. instance.go's "Why an EMPTY Result is
+// evidence of validity for ONE shape only" states which clause each condition
+// discharges; this file is only the conditions.
 //
 // The gate is computed per case and stored nowhere. It re-reads the instance
 // with encoding/xml, decoding a byte-order-marked UTF-16 document and admitting
@@ -52,7 +52,7 @@ const versioningNS = "http://www.w3.org/2007/XMLSchema-versioning"
 // assessedSubtreeRoot admits the instance document at doc, against schema as
 // assembled into report, where it has the assessed-subtree-root shape an empty
 // validate.Result may be read as "valid" for: a root, with content or without,
-// whose subtree meets every condition subtreeGate.element names, in a document
+// whose subtree meets every condition subtreeGate.root names, in a document
 // whose DTD, if any, defaults no attribute (rootStart), against an assembly no
 // version condition touched. It answers the zero refusal where it admits the
 // document, and otherwise the refusal naming the first condition it could not
@@ -75,21 +75,63 @@ func assessedSubtreeRoot(backend value.Backend, schema *xsd.Schema, report *pars
 	if why != "" {
 		return why
 	}
-	// cvc-elt clause 1 (§3.3.4.6 ·governing element declaration· clause 4): the
-	// root's declaration is the top-level one its ·expanded name· resolves to. A
-	// root with none is the untyped element shape, assessed against no
-	// declaration.
-	d, ok := schema.Element(expandedName(root.Name))
-	if !ok {
-		return refuseUndeclaredRoot
-	}
 	g := subtreeGate{schema: schema, backend: backend, dec: dec}
-	// key-p-inherited clause 2: the ·validation root· has no [inherited
-	// attributes].
-	if why := g.element(root, d, nil); why != "" {
+	if why := g.root(root); why != "" {
 		return why
 	}
 	return documentEnd(dec)
+}
+
+// root reads the document element, whose start tag is start, through to its
+// end tag, and refuses unless it meets element's conditions against its
+// ·governing element declaration· or, with none, undeclaredRoot's. cvc-elt
+// clause 1 (§3.3.4.6 ·governing element declaration· clause 4): the root's
+// declaration is the top-level one its ·expanded name· resolves to. The
+// ·validation root· has no [inherited attributes] (key-p-inherited clause 2).
+func (g *subtreeGate) root(start xml.StartElement) refusal {
+	d, ok := g.schema.Element(expandedName(start.Name))
+	if !ok {
+		return g.undeclaredRoot(start)
+	}
+	return g.element(start, d, nil)
+}
+
+// undeclaredRoot reads through to its end tag a document element whose start
+// tag is start and which has no ·governing element declaration·, and refuses
+// unless it carries an xsi:type naming a top-level type definition T against
+// its own namespace declarations (instanceType), and it and its subtree meet
+// governed's conditions against T. T is its ·governing type definition·
+// (key-governing-type-elem clause 8, key-itd), so it is ·strictly assessed·
+// against T (cvc-assess-elt clause 1) and cvc-type decides it, as the walk
+// assesses it: the gate's reading against T is the one a declared root's
+// governing type gets. With no declaration there is no ·selected type
+// definition· for T to ·override·, so governingType's cvc-elt clause 4 test has
+// no counterpart here, and no cvc-elt clause is evaluated for it.
+//
+// It is never ·nilled·: key-nilled needs a declaration whose {nillable} is
+// true, so an xsi:nil it carries has no effect, whatever its value, and
+// cvc-type and cvc-complex-type clause 1 read it as if absent. An xsi:nil with
+// no ·actual value· is the walk's cvc-attribute clause 3 charge (nilValue). A
+// T that is ·xs:error· is the walk's cvc-type clause 3.1.3 charge, there being
+// no ·nilled· reading to except it, so element's refuseErrorType has no
+// counterpart here either.
+//
+// A root with no xsi:type, or one naming no type definition, has no ·governing
+// type definition· and is refused (refuseUndeclaredRoot). The walk charges
+// cvc-assess-elt for such a root, so no empty Result reaches the gate with one,
+// and the refusal keeps the gate from reading "valid" off a root it cannot
+// type.
+func (g *subtreeGate) undeclaredRoot(start xml.StartElement) refusal {
+	i := slices.IndexFunc(start.Attr, func(a xml.Attr) bool { return a.Name == xsiType })
+	if i < 0 {
+		return refuseUndeclaredRoot
+	}
+	defer g.enter(start)()
+	t, why := g.instanceType(start.Attr[i].Value)
+	if why != "" {
+		return refuseUndeclaredRoot
+	}
+	return g.governed(start, t, false, nil)
 }
 
 // documentEnd reads dec past the document element to the end of the document,

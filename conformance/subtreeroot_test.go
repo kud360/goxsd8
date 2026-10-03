@@ -1682,17 +1682,17 @@ func TestInstanceExecutorDecidesUnversionedComposition(t *testing.T) {
 type fixture struct{ name, content string }
 
 // TestAssessedSubtreeRootRootConditions pins the root conditions the walk
-// charges first — an undeclared root (cvc-assess-elt), an element child of a
-// simple type (cvc-type clause 3.1.2), an attribute outside the xsi: four
-// (3.1.1), an xsi:nil with no ·actual value· (cvc-elt clause 3.1, the
-// declaration not {nillable}), an xsi:type that does not resolve
-// (cvc-attribute clause 3 or 5) or does not ·override· (cvc-elt clause 4) — at
-// the gate itself, since it is a precondition in its own right and not a
-// restatement of those charges. No executor row can see them, so the gate is
-// called directly, with the declared root, with content and without, as the
-// controls. A decoder error is refused too. An abstract declaration (cvc-elt
-// clause 2) is admitted: the walk charges it at every element, so the gate
-// refuses it nowhere (#2127).
+// charges first — an undeclared root with no resolving xsi:type
+// (cvc-assess-elt), an element child of a simple type (cvc-type clause 3.1.2),
+// an attribute outside the xsi: four (3.1.1), an xsi:nil with no ·actual
+// value· (cvc-elt clause 3.1, the declaration not {nillable}), an xsi:type
+// that does not resolve (cvc-attribute clause 3 or 5) or does not ·override·
+// (cvc-elt clause 4) — at the gate itself, since it is a precondition in its
+// own right and not a restatement of those charges. No executor row can see
+// them, so the gate is called directly, with the declared root, with content
+// and without, as the controls. A decoder error is refused too. An abstract
+// declaration (cvc-elt clause 2) is admitted: the walk charges it at every
+// element, so the gate refuses it nowhere (#2127).
 //
 // The no-namespace simple type int is there for the unbound-prefix row: a
 // gate that dropped an unbound prefix rather than refusing it would resolve
@@ -1707,6 +1707,13 @@ func TestAssessedSubtreeRootRootConditions(t *testing.T) {
 		{"a declared root", `<known>x</known>`, ""},
 		{"a declared content-less root", `<known/>`, ""},
 		{"an undeclared root", `<unknown>x</unknown>`, refuseUndeclaredRoot},
+		// An undeclared root is read against the type its xsi:type names
+		// (key-governing-type-elem clause 8, #2156), every refusal below it
+		// applying; one naming none, or bound to no namespace, still declines.
+		{"an undeclared root typed by a resolved xsi:type", `<unknown ` + xsiXS + ` xsi:type="xs:int">1</unknown>`, ""},
+		{"an undeclared root with an element child of its xsi:type", `<unknown ` + xsiXS + ` xsi:type="xs:int"><a/></unknown>`, refuseElementChild},
+		{"an undeclared root whose xsi:type names no type definition", `<unknown ` + xsiXS + ` xsi:type="Nope">1</unknown>`, refuseUndeclaredRoot},
+		{"an undeclared root whose xsi:type prefix is unbound", `<unknown ` + xsiNS + ` xsi:type="xs:int">1</unknown>`, refuseUndeclaredRoot},
 		{"an abstract declaration", `<abstract>x</abstract>`, ""},
 		{"an element child of a simple type", `<known><a/></known>`, refuseElementChild},
 		{"an attribute outside the xsi: four", `<known foo="1">x</known>`, refuseSimpleAttribute},
