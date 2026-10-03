@@ -17,16 +17,17 @@ read them. One stamp for the whole section, so a reader can tell staleness
 from wrongness at a glance. Never add a dated paragraph beside the old
 one — appending is what this replaces.
 
-## Status — 2026-10-03 (post-land after #2151, on `main` at `91f83ce`)
+## Status — 2026-10-03 (post-land after #2061, on `main` at `44d6a52`)
 
 **M5's north star is #2156:** the 6 suite-valid `instance` cases that decline
 `<undeclared-root>`. Every one of them has a root `xsi:type` that resolves in
 its assembly, so one gate widening (key-governing-type-elem clause 8) decides
-all six, bound `instance` ≤ +6. **#2151 landed at `instance` +2** (addB202a.i,
-addB202b.i). The oracle ruled its other 12 undecidable, and they stay declined
-under their own tokens. **The band is #2156, #2061, #1093 then #1892. Lean:
-product.** Every row is M5 work, and the process filings wait on the `/retro`
-on 2026-10-04.
+all six, bound `instance` ≤ +6. **#2061 landed at `instance` unchanged, its
+bound:** the walk now charges cvc-attribute clause 3 for an `xsi:nil` with no
+·actual value· on an element with no ·governing element declaration·, and the
+gate's three declaration-less nil refusals are retired. **The band is #2156,
+#2159, #1093 then #1892. Lean: product.** Every row is M5 work, and the
+process filings wait on the `/retro` on 2026-10-04.
 
 **#2081 stays `needs-replan` on GitHub.** Its replan restates the body and
 relabels it `blocked` on the owner's ruling. The permission classifier refused
@@ -36,7 +37,7 @@ that write to an earlier pass, so the owner posts it (next planning action 1).
 
 ### Conformance lanes
 
-**This table is `go tool lanestatus`, pasted verbatim, on `main` at `91f83ce`.**
+**This table is `go tool lanestatus`, pasted verbatim, on `main` at `44d6a52`.**
 It is the committed expectations census, which `docs/WORKFLOW.md` names as the
 lane score (#1120).
 
@@ -49,20 +50,23 @@ lane score (#1120).
 | `schema` | 15288 | 110 | 15398 |
 | `xpath` | — | — | 0 |
 
-**`instance` moved +2 at `91f83ce` (#2151); no other lane has moved since
-`4fcf97c`.** **`datatypes ⊆ instance` is intended** (#1507). **An em dash means
-a lane with no cases yet, not a lane scoring zero.** `datatypes` is M3 and
-complete. `schema` is M4 and `instance` is M5, and both are active. `xpath`,
-`json` and `ber` wait on M6/M7, M8 and M11.
+**No lane has moved since `91f83ce` (#2151, `instance` +2).** **`datatypes ⊆
+instance` is intended** (#1507). **An em dash means a lane with no cases yet,
+not a lane scoring zero.** `datatypes` is M3 and complete. `schema` is M4 and
+`instance` is M5, and both are active. `xpath`, `json` and `ber` wait on M6/M7,
+M8 and M11.
 
 ### What holds each active lane's failures
 
 **Measured on `91f83ce`** (suite `7bc3365`) by one read-only `GOXSD_DECLINES=1`
 conformance run (`--- PASS: TestConformance (478.96s)`, nothing improved,
-regressed or vanished), fed to `go tool lanepartition -log <run> <lane>`. Every
-figure is a part of the banked fails and a bound from above, never a prediction
-of flips. `instance` clusters carry their refusal token in `<…>`. The tool
-matches owners lexically, so the owners named below are this stamp's reading.
+regressed or vanished), fed to `go tool lanepartition -log <run> <lane>`. It
+stands at `44d6a52`: #2061 retired only the declaration-less `nil-lexical`
+refusals, under which #2061's grounding found no `instance` case declining.
+Every figure is a part of the banked fails and a bound from above, never a
+prediction of flips. `instance` clusters carry their refusal token in `<…>`. The
+tool matches owners lexically, so the owners named below are this stamp's
+reading.
 
 | lane | banked fail | declined | indeterminate (#277) | decided against the suite |
 |---|---:|---:|---:|---:|
@@ -75,9 +79,8 @@ matches owners lexically, so the owners named below are this stamp's reading.
   (targetNS00101m1_p), `MS-Additional` addB187.v and `MS-ComplexType`
   ctZ011_a.v. `assessedSubtreeRoot` reads "valid" only off a declared root, and
   each of these roots is undeclared with an `xsi:type` naming a type its
-  assembly holds. ctZ011_a.v joined at `91f83ce` (it was `<no-hint>`), and
-  #2151's oracle ruled it valid under `xs:anyType`. #771 overlaps on the
-  `SType`/`CType` two; its body names #2156.
+  assembly holds. #2151's oracle ruled ctZ011_a.v valid under `xs:anyType`.
+  #771 overlaps on the `SType`/`CType` two; its body names #2156.
 - **#2151's `<no-hint>` 15 is spent.** 2 were decided and banked `pass`. The
   rest stay declined, as the oracle ruled: `MS-Attribute` attMd001–011
   `<no-hint-unknown-xsi-attribute>` 11 invalid (lax root, no charging rule; the
@@ -127,12 +130,12 @@ matches owners lexically, so the owners named below are this stamp's reading.
 
 ### Branch namespace, `origin` (report-only; a session never deletes a ref)
 
-`go tool wipsurvey` was fed this pass's REST walk, stamped `rows 2155 distinct
-2155 min 1 max 2155 no gaps` (pull requests included), after `git fetch
+`go tool wipsurvey` was fed this pass's REST walk, stamped `rows 2159 distinct
+2159 min 1 max 2159 no gaps` (pull requests included), after `git fetch
 origin`. It prints:
 
-- **No `wip/issue-<N>` is LIVE, CLAIMED or EXPIRED.** `wip/issue-2151` was
-  deleted at #2151's merge.
+- **No `wip/issue-<N>` is LIVE, CLAIMED or EXPIRED.** `wip/issue-2061` was
+  deleted at #2061's merge.
 - **`wip/issue-2081` is RETIRED** (`needs-replan`) and holds no code.
 - **`wip/issue-2013` is RETIRED** (closed `not_planned`). Its content is on
   `main` as `6e5a545`, and a human may delete it.
@@ -153,10 +156,10 @@ origin`. It prints:
 
 ### Marker census
 
-`go tool gapaudit`, fed the same walk, reports **84 markers across 10 areas, 12
-in group 1 and 30 in group 2, with zero dead ends.** #2151 added no marker and
-cites none; its closing took it out of group 2. #2156, filed after the run, has
-no marker yet and joins group 2.
+`go tool gapaudit`, fed the same walk, reports **83 markers across 10 areas, 12
+in group 1 and 32 in group 2, with zero dead ends.** #2061 retired `nilValue`'s
+`GAP(conformance)` and its closing took it out of group 2. #2156 and #2159 have
+no marker yet and sit in group 2.
 
 - **The group-1 rows:**
   - the `parser/doc.go` §5.3 policy row and `xsd/resolve.go`'s §5.3
@@ -175,8 +178,7 @@ no marker yet and joins group 2.
 
 ### Milestones and queue
 
-**Counted from a REST walk of the open issues, plus #2156 filed after it: 332
-open issues.**
+**Counted from the same REST walk: 332 open issues.**
 
 | milestone | open | closed | state |
 |---|---:|---:|---|
@@ -184,7 +186,7 @@ open issues.**
 | M2 — Foundation leaves | 0 | 5 | done |
 | M3 — Datatypes vertical slice | 0 | 12 | complete |
 | **M4 — Schema parsing** | **64** | **172** | active |
-| **M5 — Instance validation (XML)** | **19** | **96** | active |
+| **M5 — Instance validation (XML)** | **19** | **97** | active |
 | M6 — XPath required subset | 1 | 0 | not started |
 | M7–M12 | 0 | 0 | not started |
 
@@ -192,22 +194,21 @@ Open issues carry **317 `ready`, 12 `blocked`, 1 `needs-replan` and 2
 `epic`**, which sums to 332. `kind/gap` is 65 and `kind/bug` is 36.
 
 - **`blocked` is 12:** #16, #555, #1002, #1042, #1051, #1374, #1609, #1790,
-  #1880, #1885, #1923 and #2022. No `## Depends on` names #2151.
+  #1880, #1885, #1923 and #2022. No `## Depends on` names #2061.
   - **#1609 is unfired.** `schema` Pass reads 15288, which is not above
-    15292. Total is 15398, and `91f83ce` touches no `xsd/` file.
+    15292. Total is 15398, and `44d6a52` touches no `xsd/` file.
   - **No owner comment has been posted since 2026-10-01 on any of the five
     human decisions:** #1880 (which gates #1002), #1885, #1790, #1923 and
     #2022.
 - **`needs-replan` is 1: #2081.** Next planning action 1 carries it.
-- **Measured refactors are flat.** `91f83ce` touches only `conformance/` and
-  the LOG, and no measured refactor's command reads `conformance/`. They carry
-  their figures: #2041 3, #1958 2, #1865 2, #1770 2, #1757 1, #363 2, and
-  #2101 1 and 1. None enters the band on its figure.
+- **Measured refactors are flat**, each command re-run at `44d6a52`: #2041 3,
+  #1958 2, #1865 2, #1770 2, #1757 1, #363 2, and #2101 1 and 1. None enters
+  the band on its figure.
 
 ### Persona consultations: not re-run this pass
 
 **The cartographer role-plays no persona and does not spawn one** (#416).
-**No persona story was handed to this pass**, and `91f83ce` adds no exported
+**No persona story was handed to this pass**, and `44d6a52` adds no exported
 identifier. **Eighteen findings from the 2026-09-17 to 2026-09-29
 consultations are open and unconsumed:** #1568–#1571, #1593–#1596, #1626,
 #1684, #1685, #1687, #1688, #1843, #1845, #1894, #1895 and #1898. Open
@@ -221,16 +222,17 @@ This is ordered for a `/develop` session: take the highest row you can start.
 unfed run cannot print RETIRED. Each row names one issue (#1636).
 
 **The ordering principle for this stamp:** M5's north star leads, then M5
-soundness gaps whose bound is measured or expected at 0. No process issue
-enters the band. #2007 belongs to the orchestrating session, and every other
-process issue is queued for the `/retro` on 2026-10-04 or waits on the owner.
+soundness gaps whose bound is measured or expected at 0, a live false-rejection
+surface ahead of a withhold argued unreachable. No process issue enters the
+band. #2007 belongs to the orchestrating session, and every other process issue
+is queued for the `/retro` on 2026-10-04 or waits on the owner.
 
 | # | issue | why here |
 |---|---|---|
 | 1 | #2156 | **M5 north star, `<undeclared-root>` 6, bound `instance` ≤ +6.** Decide an undeclared root whose `xsi:type` resolves (key-governing-type-elem clause 8) instead of declining it. Shares `conformance/subtreeroot.go` with #771. **Startable now** |
-| 2 | #2061 | **M5 soundness, bound 0, measured.** The corpus's one non-boolean `xsi:nil` lexical, wild042.n1, already banks `pass`. A missing cvc-attribute clause 3 charge on declaration-less elements retires three gate refusals. **Startable now** |
+| 2 | #2159 | **M5 soundness, `unchanged` expected.** An `unattributed` element's `xsi:nil` and `xsi:type` are charged cvc-attribute although the true schema may skip it, a false rejection beside an `Unevaluated` record; also restates `conformance/instance.go`'s case 4. Shares `walk.childGoverning`'s nil arm with #1892. **Startable now** |
 | 3 | #1093 | **M5 gap, `unchanged` expected.** `governingType`'s exits that withhold a type and record nothing. **Startable now** |
-| 4 | #1892 | **`walk.child`'s `GAP(validate)` marker:** resolve under key-governing-ed clause 4 or rule. Shares `validate/assess.go` with #1093, so whichever lands second re-reads the other. **Startable now** |
+| 4 | #1892 | **`walk.child`'s `GAP(validate)` marker:** resolve under key-governing-ed clause 4 or rule. Shares `validate/assess.go` with #1093 and #2159, so whichever lands later re-reads the others. **Startable now** |
 
 **Named below the band, on purpose.**
 - **#2081 is `needs-replan`** (next planning action 1). **#2148** (FlavorFO +
@@ -307,12 +309,13 @@ process issue is queued for the `/retro` on 2026-10-04 or waits on the owner.
    unchanged, with three stale premises corrected at grounding in a body
    accreted over seven weeks), **#1824's** (round 1, unchanged,
    comment-only, with the verdict's N1 on whether STYLE D3 pointers in public
-   doc text may lead to unexported docs) **and #2151's** (round 1, `instance`
+   doc text may lead to unexported docs), **#2151's** (round 1, `instance`
    +2 at its prediction, no findings, with the oracle splitting two arms into
-   three at grounding):
+   three at grounding) **and #2061's** (round 1, unchanged at its bound 0, one
+   non-blocking finding filed as #2159):
    - four windows: 73.7 cases per session at 89% product, 177.7 at 100%, 44.4
      at 90%, and 10.0 at 90% with two repair rounds;
-   - every landing through #2151's first-round accept at 0;
+   - every landing through #2061's first-round accept at 0;
    - #2081's park at grounding;
    - #2124's first develop session, which posted GROUNDING and RULING, then
      stopped with no RESUME and no code.
