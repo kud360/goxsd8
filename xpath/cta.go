@@ -781,12 +781,11 @@ func (c ctaCompare) holdsPair(l, r value.Value, env ctaEnv) ctaAnswer {
 //
 // An AttrName, untyped or typed, evaluates to a sequence of attribute NODES
 // rather than to atomic values, so it takes rule 2 ("a sequence whose first
-// item is a node") whenever
-// its NameTest matches at all and rule 1 (the empty sequence) when it matches
-// nothing, and no type of its own is involved. Rule 2 holds whatever the
-// sequence's LENGTH, which is what a wildcard NameTest makes observable. Every
-// other operand is a singleton atomic value or the empty sequence, which
-// ctaBoolean decides.
+// item is a node") whenever its NameTest matches at all and rule 1 (the empty
+// sequence) when it matches nothing, and no type of its own is involved. Rule
+// 2 holds whatever the sequence's LENGTH, which is what a wildcard NameTest
+// makes observable. Every other operand is a singleton atomic value or the
+// empty sequence, which ctaBoolean decides.
 func (e ctaEffectiveBoolean) eval(env ctaEnv) ctaAnswer {
 	switch n := e.operand.(type) {
 	case ctaAttr:

@@ -259,20 +259,22 @@ func (w *walk) assertionValues(e Element, attrs []Attribute, ct xsd.ComplexType)
 // not evaluated at all — a facet assertion reads its value through `$value`
 // (clause 1.1), which the grammar xpath evaluates has no production for
 // (#1042) — so the assertions facet contributes nothing to the Datatype Valid
-// (§4.1.4) verdict its clause 3 folds it into. The withheld value is a conjunct of datatype-validity, and its readers are NOT only
+// (§4.1.4) verdict its clause 3 folds it into. The withheld value is a
+// conjunct of datatype-validity, and its readers are NOT only
 // w.res.violations and [Result.Violations] — which charge on a violation
-// PRESENT and so lose a rejection. [walk.validatingType] and [walk.roleValues]
-// (cvcid.go) classify a value by its ·validating type·, which cvc-datatype-valid
-// clause 2.3 makes the FIRST member of a union the value is Datatype Valid
-// against: an unchecked assertion can leave an earlier member ·validating· that
-// the spec rejects, binding an ·ID value· the spec's §3.17.5.2 table has none
-// of, which cvc-id clause 2 then charges as a duplicate, or an ·ENTITY value·
-// String Valid clause 3 then charges as undeclared (cvcsimpletype.go). [walk.keyMember]
-// (cvcidentityconstraint.go) reads a PRESENT [schema actual value] where the
-// spec's is ·absent· for the same reason, lengthening a ·key-sequence· into the
-// duplicate arm of cvc-identity-constraint clause 4. Both of those are FALSE
-// REJECTS, so this hook is not fail-open, and the direction over the whole
-// consumer set is not established here (STYLE P3a).
+// PRESENT and so lose a rejection. [walk.validatingType] and
+// [walk.roleValues] (cvcid.go) classify a value by its ·validating type·,
+// which cvc-datatype-valid clause 2.3 makes the FIRST member of a union the
+// value is Datatype Valid against: an unchecked assertion can leave an
+// earlier member ·validating· that the spec rejects, binding an ·ID value·
+// the spec's §3.17.5.2 table has none of, which cvc-id clause 2 then charges
+// as a duplicate, or an ·ENTITY value· String Valid clause 3 then charges as
+// undeclared (cvcsimpletype.go). [walk.keyMember] (cvcidentityconstraint.go)
+// reads a PRESENT [schema actual value] where the spec's is ·absent· for the
+// same reason, lengthening a ·key-sequence· into the duplicate arm of
+// cvc-identity-constraint clause 4. Both of those are FALSE REJECTS, so this
+// hook is not fail-open, and the direction over the whole consumer set is
+// not established here (STYLE P3a).
 func (w *walk) simpleAssertions(st *xsd.SimpleType, event string, name xsd.QName, loc xsderr.Loc) {
 	for _, s := range w.assertionSites(st) {
 		w.decline(event, name, loc, ruleCvcAssertionsValid, "",
