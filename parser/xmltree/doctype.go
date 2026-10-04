@@ -91,13 +91,20 @@ const (
 // after a general entity's ExternalID ([76]), and an entity value literal
 // with a '%' or '&' that opens no PEReference or Reference ([9] EntityValue,
 // [66]–[69]) or a character reference naming no Char (WFC: Legal Character),
-// whether or not the entity is ever referenced. These checks run on after a
-// declined reference, as §5.1 requires.
+// whether or not the entity is ever referenced. So is an element type
+// declaration that is no [45] elementdecl (see readElementDecl) — a missing
+// S, a name that is no Name, a contentspec that is not 'EMPTY', 'ANY', a [51]
+// Mixed or a [47] children model ([46]–[50]) — and an attribute-list
+// declaration that is no [52] AttlistDecl (see readAttlistDecl) — a missing S,
+// a name that is no Name, an AttType that is no [54]–[59] AttType, a missing
+// [60] DefaultDecl, and a default value that is no [10] AttValue, a '<' in it
+// among them. A validity constraint on either declaration is no fault. These
+// checks run on after a declined reference, as §5.1 requires.
 //
-// GAP(xml): the bodies of <!ELEMENT> and <!ATTLIST> declarations ([45]–[60])
-// are checked for nothing but a parameter-entity reference, a '<' and the '>'
-// that closes them: a declaration that breaks its production there is stepped
-// over where it is not well-formed. Tracked by #2225.
+// GAP(xml): an entity reference in an attribute default is checked for its
+// syntax alone, not for WFC: Entity Declared, Parsed Entity, No Recursion, No
+// External Entity References or No < in Attribute Values (see attValueFault).
+// Tracked by #2257.
 func doctypeEntities(directive string, standalone bool, loc xsderr.Loc) (decls []entityDecl, unread bool, err error) {
 	rest, ok := strings.CutPrefix(directive, "DOCTYPE")
 	if !ok {
@@ -246,12 +253,24 @@ func (sc *subsetScan) markup(s string) (after string, closed bool, err error) {
 		return after, true, nil
 	case strings.HasPrefix(s, "<!NOTATION"):
 		return sc.notation(s)
-	case strings.HasPrefix(s, "<!ELEMENT"), strings.HasPrefix(s, "<!ATTLIST"):
-		body, after, closed, err := sc.markupDecl(s[len("<!"):])
+	case strings.HasPrefix(s, "<!ELEMENT"):
+		body, after, closed, err := sc.markupDecl(s[len("<!ELEMENT"):])
 		if err != nil || !closed {
 			return "", closed, err
 		}
-		return after, true, sc.noPEReference(body)
+		if err := sc.noPEReference(body); err != nil {
+			return "", true, err
+		}
+		return after, true, sc.readElementDecl(body)
+	case strings.HasPrefix(s, "<!ATTLIST"):
+		body, after, closed, err := sc.markupDecl(s[len("<!ATTLIST"):])
+		if err != nil || !closed {
+			return "", closed, err
+		}
+		if err := sc.noPEReference(body); err != nil {
+			return "", true, err
+		}
+		return after, true, sc.readAttlistDecl(body)
 	}
 	return "", true, sc.stray(s)
 }
@@ -349,6 +368,322 @@ func isPubidLiteral(t string) bool {
 // pubidOther is every PubidChar that is not an ASCII letter or digit (XML 1.0
 // [13] PubidChar).
 const pubidOther = " \r\n-'()+,./:=?;!*#@$_%"
+
+// readElementDecl reads body, an <!ELEMENT> declaration's text after its
+// keyword, against XML 1.0 [45] elementdecl, S Name S contentspec S?,
+// returning the fault of a body that does not match it. contentspec ([46]) is
+// 'EMPTY', 'ANY', Mixed ([51], see mixed) or children ([47], see children),
+// its keywords in upper case. The validity constraints on the declaration —
+// one declaration per element type (VC: Unique Element Type Declaration), no
+// name repeated in Mixed (VC: No Duplicate Types) and proper group/PE nesting
+// — bind a validating processor only, and none is checked.
+func (sc *subsetScan) readElementDecl(body string) error {
+	rest, ok := cutSpace(body)
+	if !ok {
+		return xsderr.New(xsderr.RuleXMLWellFormed, sc.loc, "%s holds an <!ELEMENT> declaration with no S after its keyword (XML 1.0 [45] elementdecl)", sc.where())
+	}
+	name, rest := tokenRun(rest)
+	if !isName(name) {
+		return xsderr.New(xsderr.RuleXMLWellFormed, sc.loc, "%s holds an <!ELEMENT> declaration whose element type name %q is not a Name (XML 1.0 [45] elementdecl, [5] Name)", sc.where(), name)
+	}
+	spec, ok := cutSpace(rest)
+	if !ok {
+		return xsderr.New(xsderr.RuleXMLWellFormed, sc.loc, "%s holds an <!ELEMENT> declaration of %q with %q where S and a contentspec must stand (XML 1.0 [45] elementdecl)", sc.where(), name, excerpt(rest))
+	}
+	spec = strings.TrimRight(spec, declSpace)
+	if spec == "EMPTY" || spec == "ANY" {
+		return nil
+	}
+	tail, ok, rule := "", false, "[46] contentspec"
+	switch {
+	case strings.HasPrefix(spec, "(") && strings.HasPrefix(strings.TrimLeft(spec[1:], declSpace), "#PCDATA"):
+		tail, ok = mixed(spec)
+		rule += ", [51] Mixed"
+	case strings.HasPrefix(spec, "("):
+		tail, ok = children(spec)
+		rule += ", [47] children, [48] cp, [49] choice, [50] seq"
+	}
+	if ok && tail == "" {
+		return nil
+	}
+	return xsderr.New(xsderr.RuleXMLWellFormed, sc.loc, "%s holds an <!ELEMENT> declaration of %q whose content specification %q is not 'EMPTY', 'ANY', Mixed or children (XML 1.0 %s)", sc.where(), name, spec, rule)
+}
+
+// mixed reads spec, a content specification that opens with '(' S? '#PCDATA',
+// against XML 1.0 [51] Mixed, returning what follows it, or reports false:
+// '(' S? '#PCDATA' (S? '|' S? Name)* S? ')*', or '(' S? '#PCDATA' S? ')'. A
+// Mixed naming an element type closes with ")*", no S inside it, and
+// "(#PCDATA)" takes no '?' or '+'.
+func mixed(spec string) (rest string, ok bool) {
+	s := strings.TrimPrefix(strings.TrimLeft(spec[1:], declSpace), "#PCDATA")
+	names := false
+	for {
+		after, bar := strings.CutPrefix(strings.TrimLeft(s, declSpace), "|")
+		if !bar {
+			break
+		}
+		name, after := tokenRun(strings.TrimLeft(after, declSpace))
+		if !isName(name) {
+			return "", false
+		}
+		s, names = after, true
+	}
+	s = strings.TrimLeft(s, declSpace)
+	if rest, ok := strings.CutPrefix(s, ")*"); ok {
+		return rest, true
+	}
+	if rest, ok := strings.CutPrefix(s, ")"); ok && !names {
+		return rest, true
+	}
+	return "", false
+}
+
+// children reads spec, a content specification that opens with '(', against
+// XML 1.0 [47] children, (choice | seq) ('?' | '*' | '+')?, returning what
+// follows it, or reports false. A content particle ([48] cp) is a Name or a
+// nested choice or seq, its occurrence indicator, if any, right after it with
+// no S between. A group's first separator decides it: a choice ([49]) joins
+// its cps with '|' alone, a seq ([50]) with ',' alone or holds a single cp, so
+// `(a|b,c)` and `()` are neither. S may stand around each separator and
+// parenthesis. seps keeps one entry per open group, the separator it uses or
+// 0 before its first, so nesting depth costs no recursion.
+func children(spec string) (rest string, ok bool) {
+	seps := []byte{0}
+	s := spec[1:]
+	for {
+		s = strings.TrimLeft(s, declSpace)
+		if after, open := strings.CutPrefix(s, "("); open {
+			seps = append(seps, 0)
+			s = after
+			continue
+		}
+		name, after := tokenRun(s)
+		if !isName(name) {
+			return "", false
+		}
+		s = occurrence(after)
+		for {
+			s = strings.TrimLeft(s, declSpace)
+			if s == "" {
+				return "", false
+			}
+			top := len(seps) - 1
+			if c := s[0]; c == '|' || c == ',' {
+				if seps[top] != 0 && seps[top] != c {
+					return "", false
+				}
+				seps[top] = c
+				s = s[1:]
+				break
+			}
+			if s[0] != ')' {
+				return "", false
+			}
+			seps = seps[:top]
+			s = occurrence(s[1:])
+			if len(seps) == 0 {
+				return s, true
+			}
+		}
+	}
+}
+
+// occurrence is s past the occurrence indicator, '?', '*' or '+', it opens
+// with, if any (XML 1.0 [47] children, [48] cp).
+func occurrence(s string) string {
+	if s != "" && strings.IndexByte("?*+", s[0]) >= 0 {
+		return s[1:]
+	}
+	return s
+}
+
+// readAttlistDecl reads body, an <!ATTLIST> declaration's text after its
+// keyword, against XML 1.0 [52] AttlistDecl, S Name AttDef* S?, returning the
+// fault of a body that does not match it; one with no AttDef matches. Each
+// AttDef is attDef's. The validity constraints on the declaration — duplicate
+// enumeration tokens (VC: No Duplicate Tokens), more than one ID attribute
+// (VC: One ID per Element Type), an ID attribute's default (VC: ID Attribute
+// Default), an undeclared notation (VC: Notation Attributes) — bind a
+// validating processor only, and none is checked.
+func (sc *subsetScan) readAttlistDecl(body string) error {
+	rest, ok := cutSpace(body)
+	if !ok {
+		return xsderr.New(xsderr.RuleXMLWellFormed, sc.loc, "%s holds an <!ATTLIST> declaration with no S after its keyword (XML 1.0 [52] AttlistDecl)", sc.where())
+	}
+	elem, rest := tokenRun(rest)
+	if !isName(elem) {
+		return xsderr.New(xsderr.RuleXMLWellFormed, sc.loc, "%s holds an <!ATTLIST> declaration whose element type name %q is not a Name (XML 1.0 [52] AttlistDecl, [5] Name)", sc.where(), elem)
+	}
+	for {
+		def, spaced := cutSpace(rest)
+		if def == "" {
+			return nil
+		}
+		if !spaced {
+			return xsderr.New(xsderr.RuleXMLWellFormed, sc.loc, "%s holds an <!ATTLIST> declaration of %q with %q where S and an AttDef, or '>', must stand (XML 1.0 [52] AttlistDecl, [53] AttDef)", sc.where(), elem, excerpt(def))
+		}
+		var err error
+		if rest, err = sc.attDef(elem, def); err != nil {
+			return err
+		}
+	}
+}
+
+// attDef reads the attribute definition def opens, in the <!ATTLIST>
+// declaration of elem, after the S before it: XML 1.0 [53] AttDef, Name S
+// AttType S DefaultDecl (see defaultDecl), returning what follows it. AttType
+// ([54]) is 'CDATA' ([55] StringType), a [56] TokenizedType keyword, or an
+// EnumeratedType ([57]): 'NOTATION' S and a parenthesized list of Names ([58]
+// NotationType) or a parenthesized list of Nmtokens ([59] Enumeration, [7]
+// Nmtoken), see enumeration. Keywords are in upper case.
+func (sc *subsetScan) attDef(elem, def string) (rest string, err error) {
+	name, rest := tokenRun(def)
+	if !isName(name) {
+		return "", xsderr.New(xsderr.RuleXMLWellFormed, sc.loc, "%s holds an <!ATTLIST> declaration of %q whose attribute name %q is not a Name (XML 1.0 [53] AttDef, [5] Name)", sc.where(), elem, name)
+	}
+	typ, ok := cutSpace(rest)
+	kw, rest := tokenRun(typ)
+	switch {
+	case !ok: // no S before the AttType
+	case kw == "NOTATION":
+		list, spaced := cutSpace(rest)
+		after, listed := enumeration(list, isName)
+		if !spaced || !listed {
+			return "", xsderr.New(xsderr.RuleXMLWellFormed, sc.loc, "%s holds an <!ATTLIST> declaration of %q whose attribute %q has %q where S and a parenthesized list of Names must follow 'NOTATION' (XML 1.0 [58] NotationType, [5] Name)", sc.where(), elem, name, excerpt(list))
+		}
+		rest = after
+	case kw == "" && strings.HasPrefix(typ, "("):
+		after, listed := enumeration(typ, isNmtoken)
+		if !listed {
+			return "", xsderr.New(xsderr.RuleXMLWellFormed, sc.loc, "%s holds an <!ATTLIST> declaration of %q whose attribute %q has the enumerated type %q, which is no Enumeration (XML 1.0 [59] Enumeration, [7] Nmtoken)", sc.where(), elem, name, excerpt(typ))
+		}
+		rest = after
+	default:
+		ok = isTypeKeyword(kw)
+	}
+	if !ok {
+		return "", xsderr.New(xsderr.RuleXMLWellFormed, sc.loc, "%s holds an <!ATTLIST> declaration of %q whose attribute %q has %q where S and an AttType must stand (XML 1.0 [53] AttDef, [54] AttType, [55] StringType, [56] TokenizedType, [57] EnumeratedType)", sc.where(), elem, name, excerpt(typ))
+	}
+	return sc.defaultDecl(elem, name, rest)
+}
+
+// isTypeKeyword reports whether kw is an AttType keyword that stands alone: a
+// [55] StringType or a [56] TokenizedType.
+func isTypeKeyword(kw string) bool {
+	switch kw {
+	case "CDATA", "ID", "IDREF", "IDREFS", "ENTITY", "ENTITIES", "NMTOKEN", "NMTOKENS":
+		return true
+	}
+	return false
+}
+
+// enumeration reads the parenthesized list s opens, '(' S? tok (S? '|' S?
+// tok)* S? ')', each tok a run valid accepts — a Name in a [58] NotationType,
+// an Nmtoken in a [59] Enumeration — returning what follows it, or reports
+// false.
+func enumeration(s string, valid func(string) bool) (rest string, ok bool) {
+	s, ok = strings.CutPrefix(s, "(")
+	if !ok {
+		return "", false
+	}
+	for {
+		tok, after := tokenRun(strings.TrimLeft(s, declSpace))
+		if !valid(tok) {
+			return "", false
+		}
+		s = strings.TrimLeft(after, declSpace)
+		if rest, ok := strings.CutPrefix(s, ")"); ok {
+			return rest, true
+		}
+		if s, ok = strings.CutPrefix(s, "|"); !ok {
+			return "", false
+		}
+	}
+}
+
+// defaultDecl reads the S and DefaultDecl that s, the text after attribute
+// name's AttType in the <!ATTLIST> declaration of elem, opens with: XML 1.0
+// [53] AttDef, [60] DefaultDecl, '#REQUIRED', '#IMPLIED', or an AttValue
+// literal with '#FIXED' S before it or not, its text attValueFault's. It
+// returns what follows the DefaultDecl.
+func (sc *subsetScan) defaultDecl(elem, name, s string) (rest string, err error) {
+	at, ok := cutSpace(s)
+	kw, lit := tokenRun(at)
+	switch kw {
+	case "#REQUIRED", "#IMPLIED":
+		if ok {
+			return lit, nil
+		}
+	case "#FIXED":
+		var spaced bool
+		lit, spaced = cutSpace(lit)
+		ok = ok && spaced
+	case "": // an AttValue with no keyword before it
+	default:
+		ok = false
+	}
+	end := -1
+	if ok && lit != "" && (lit[0] == '"' || lit[0] == '\'') {
+		end = strings.IndexByte(lit[1:], lit[0])
+	}
+	if end < 0 {
+		return "", xsderr.New(xsderr.RuleXMLWellFormed, sc.loc, "%s holds an <!ATTLIST> declaration of %q whose attribute %q has %q where S and a DefaultDecl, '#REQUIRED', '#IMPLIED' or an AttValue with ('#FIXED' S)? before it, must stand (XML 1.0 [53] AttDef, [60] DefaultDecl)", sc.where(), elem, name, excerpt(at))
+	}
+	if err := sc.attValueFault(elem, name, lit[1:1+end]); err != nil {
+		return "", err
+	}
+	return lit[end+2:], nil
+}
+
+// attValueFault returns the fault of lit, the text between the quotes of
+// attribute name's default value in the <!ATTLIST> declaration of elem, when
+// it is no XML 1.0 [10] AttValue: it holds no '<', and every '&' in it opens a
+// Reference, an EntityRef or a CharRef naming a Char (see reference). A '>'
+// and a '%' are data in it: an AttValue recognizes no parameter-entity
+// reference.
+//
+// GAP(xml): an entity reference in a default value is checked for its syntax
+// alone, whatever the entity it names: WFC: Entity Declared (the declaration
+// must precede the reference), Parsed Entity and No Recursion, which [68]
+// EntityRef imposes, and No External Entity References and No < in Attribute
+// Values, which [60] DefaultDecl imposes on that entity's replacement text,
+// are not checked. Tracked by #2257.
+func (sc *subsetScan) attValueFault(elem, name, lit string) error {
+	what := "an <!ATTLIST> declaration of " + strconv.Quote(elem) + " whose attribute " + strconv.Quote(name) + " has a default value"
+	for {
+		i := strings.IndexAny(lit, "<&")
+		if i < 0 {
+			return nil
+		}
+		if lit[i] == '<' {
+			return xsderr.New(xsderr.RuleXMLWellFormed, sc.loc, "%s holds %s with a '<' in it (XML 1.0 [10] AttValue)", sc.where(), what)
+		}
+		after, err := sc.reference(lit[i+1:], what, "[10] AttValue")
+		if err != nil {
+			return err
+		}
+		lit = after
+	}
+}
+
+// cutSpace reports whether s opens with S (XML 1.0 [3]), returning s with its
+// leading S removed.
+func cutSpace(s string) (rest string, spaced bool) {
+	rest = strings.TrimLeft(s, declSpace)
+	return rest, len(rest) < len(s)
+}
+
+// tokenRun splits s before its first S, quote, parenthesis or content-model
+// punctuation ('|', ',', '?', '*', '+'), returning the run before it — in a
+// well-formed <!ELEMENT> or <!ATTLIST> declaration a Name, an Nmtoken or a
+// keyword — and what follows it.
+func tokenRun(s string) (tok, rest string) {
+	end := strings.IndexAny(s, declSpace+`"'()|,?*+`)
+	if end < 0 {
+		return s, ""
+	}
+	return s[:end], s[end:]
+}
 
 // noPEReference returns the fault of a parameter-entity reference standing
 // outside the literals of body, a markup declaration's text: in the internal
@@ -474,17 +809,30 @@ func (sc *subsetScan) entityValueFault(lit string) error {
 			}
 			return xsderr.New(xsderr.RuleXMLWellFormed, sc.loc, "%s holds an entity value literal with a '%%' that opens no PEReference (XML 1.0 [9] EntityValue, [69] PEReference)", sc.where())
 		}
-		end := strings.IndexByte(rest, ';')
-		if end < 0 || !isReference(rest[:end]) {
-			return xsderr.New(xsderr.RuleXMLWellFormed, sc.loc, "%s holds an entity value literal with a '&' that opens no Reference (XML 1.0 [9] EntityValue, [67] Reference, [68] EntityRef, [66] CharRef)", sc.where())
+		after, err := sc.reference(rest, "an entity value literal", "[9] EntityValue")
+		if err != nil {
+			return err
 		}
-		if digits, ok := strings.CutPrefix(rest[:end], "#"); ok {
-			if _, legal := charRef(digits); !legal {
-				return xsderr.New(xsderr.RuleXMLWellFormed, sc.loc, "%s holds an entity value literal whose character reference &#%s; names no XML character (XML 1.0 [66] CharRef, WFC: Legal Character)", sc.where(), digits)
-			}
-		}
-		lit = rest[end+1:]
+		lit = after
 	}
+}
+
+// reference reads the Reference whose '&' has just been consumed from rest, in
+// the literal what describes, whose production is rule, returning what follows
+// its ';', or the fault of a '&' that opens no Reference: an EntityRef, '&'
+// Name ';' ([68]), or a CharRef ([66]), '&#' [0-9]+ ';' or '&#x' [0-9a-fA-F]+
+// ';', naming a Char (WFC: Legal Character).
+func (sc *subsetScan) reference(rest, what, rule string) (after string, err error) {
+	end := strings.IndexByte(rest, ';')
+	if end < 0 || !isReference(rest[:end]) {
+		return "", xsderr.New(xsderr.RuleXMLWellFormed, sc.loc, "%s holds %s with a '&' that opens no Reference (XML 1.0 %s, [67] Reference, [68] EntityRef, [66] CharRef)", sc.where(), what, rule)
+	}
+	if digits, ok := strings.CutPrefix(rest[:end], "#"); ok {
+		if _, legal := charRef(digits); !legal {
+			return "", xsderr.New(xsderr.RuleXMLWellFormed, sc.loc, "%s holds %s whose character reference &#%s; names no XML character (XML 1.0 [66] CharRef, WFC: Legal Character)", sc.where(), what, digits)
+		}
+	}
+	return rest[end+1:], nil
 }
 
 // isReference reports whether ref, the text between a Reference's '&' and
@@ -564,9 +912,13 @@ func (sc *subsetScan) subsetEnd(after string) error {
 	return xsderr.New(xsderr.RuleXMLWellFormed, sc.loc, "DOCTYPE holds %q between its internal subset's ']' and '>', where only S may stand (XML 1.0 [28] doctypedecl)", excerpt(rest))
 }
 
-// excerpt is the run non-empty s opens, up to the next S, '<' or ']' after its
-// first byte and at most maxExcerpt runes, for a fault message to quote.
+// excerpt is the run s opens, up to the next S, '<' or ']' after its first
+// byte and at most maxExcerpt runes, for a fault message to quote; "" when s
+// is.
 func excerpt(s string) string {
+	if s == "" {
+		return ""
+	}
 	if end := strings.IndexAny(s[1:], declSpace+"<]"); end >= 0 {
 		s = s[:end+1]
 	}
@@ -752,15 +1104,31 @@ func (sc *subsetScan) markupDecl(s string) (body, after string, closed bool, err
 // ([4]) and every later one a NameChar ([4a]), both internal/xmlname's tables.
 // It checks the DOCTYPE's document type name, an entity's declared name, the
 // name a PEReference carries, between declarations or in an entity value, the
-// name an EntityRef in an entity value carries and the notation name an
-// NDataDecl closes on, rejecting `1x`, `g&h` and `a×b` (U+00D7 is in neither
-// production).
+// name an EntityRef in an entity value or an attribute default carries, the
+// notation name an NDataDecl closes on, and the element type, attribute and
+// notation names of <!ELEMENT> and <!ATTLIST> declarations, rejecting `1x`,
+// `g&h` and `a×b` (U+00D7 is in neither production).
 func isName(t string) bool {
 	if t == "" {
 		return false
 	}
 	for i, r := range t {
 		if !unicode.Is(xmlname.NameStartChar, r) && (i == 0 || !unicode.Is(xmlname.NameCharExtra, r)) {
+			return false
+		}
+	}
+	return true
+}
+
+// isNmtoken reports whether t is an XML 1.0 Nmtoken (production [7]): one or
+// more NameChars ([4a]), a NameStartChar or one of internal/xmlname's
+// NameCharExtra, in any position, so `1x` is one and `a×b` is not.
+func isNmtoken(t string) bool {
+	if t == "" {
+		return false
+	}
+	for _, r := range t {
+		if !unicode.In(r, xmlname.NameStartChar, xmlname.NameCharExtra) {
 			return false
 		}
 	}

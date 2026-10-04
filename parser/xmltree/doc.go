@@ -83,7 +83,13 @@
 //     ([74]) or anything but one after a general entity's ExternalID
 //     ([76]), and an entity value literal whose '&' opens no Reference
 //     ([66]–[68]) or whose character reference names no Char (WFC: Legal
-//     Character), referenced or not; replacement text ending inside a
+//     Character), referenced or not; an <!ELEMENT> that is no [45]
+//     elementdecl, its contentspec no 'EMPTY', 'ANY', Mixed or children
+//     ([46]–[51]); an <!ATTLIST> that is no [52] AttlistDecl, an AttDef
+//     missing its S, AttType or DefaultDecl ([53]–[60]), or a default value
+//     that is no [10] AttValue, holding a '<', a '&' that opens no Reference
+//     or a character reference naming no Char — a validity constraint on
+//     either declaration is no fault; replacement text ending inside a
 //     comment, processing instruction or markup declaration; and a '<' in
 //     the DOCTYPE header, a subset no ']' closes, or text other than S
 //     between that ']' and '>' ([28] doctypedecl). A processing instruction
@@ -98,9 +104,10 @@
 //     1.0 §5.1). An entity declared only where the reader did not read is
 //     not a member, and Reader.AllDeclarationsProcessed, the [all
 //     declarations processed] property, then reports false.
-//   - GAP(xml): <!ELEMENT> and <!ATTLIST> bodies ([45]–[60]) are checked
-//     only for a parameter-entity reference, a '<' and their closing '>'.
-//     Tracked by #2225.
+//   - GAP(xml): an entity reference in an <!ATTLIST> default value is
+//     checked for its syntax alone: WFC: Entity Declared, Parsed Entity, No
+//     Recursion, No External Entity References and No < in Attribute Values
+//     are not checked against the entity it names. Tracked by #2257.
 //   - A reference to an internal general entity is replaced by its
 //     replacement text (XML 1.0 §4.4.2, §4.4.5): in content, parsed as
 //     content in the scope in force at the reference, its nodes located at
