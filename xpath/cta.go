@@ -1115,21 +1115,64 @@ func ctaConvert(lexical string, from, to *xsd.SimpleType, env ctaEnv) ctaItem {
 // lexical the spec guarantees maps back to that same value (Datatypes
 // §2.3.1), so a conversion is one more datatype validation and never a
 // backend-specific value translation this package would have to know the
-// representations for. A value carrying no [value.Canonical] cannot be
-// converted at all, which is err:XPTY0004 — the "casting is not supported"
-// arm of xpath-functions.md §17 — and so ctaRaised. That is unreachable for
-// the target set [CompileCTATest] admits: the canonical mapping is absent
-// only for xs:QName and xs:NOTATION (value.Mapping), and a cast whose target
-// has either as its primitive is declined at compile time.
+// representations for. ctaCanonical renders it. A value it cannot render
+// cannot be converted, which is ctaRaised on either of two terms:
+//
+//   - no canonical mapping on from's chain, which is err:XPTY0004 — the
+//     "casting is not supported" arm of xpath-functions.md §17. That is
+//     unreachable for the target set [CompileCTATest] admits: the canonical
+//     mapping is absent only for xs:QName and xs:NOTATION (value.Mapping),
+//     and a cast whose target has either as its primitive is declined at
+//     compile time.
+//   - a canonical form beyond the backend's capacity (xmlschema11-2 §5.4,
+//     the strict backend's precisionDecimal zero of a huge ·scale·), a
+//     dynamic error raised as an implementation limit — indicated, never
+//     rendered as a padded or substitute lexical. No compiled test converts
+//     out of xs:precisionDecimal: it has no xpath20.md B.2 row, and castsFrom
+//     declines a cast from a typed attribute that is not xs:string.
 func ctaPromote(v value.Value, from, to *xsd.SimpleType, env ctaEnv) ctaItem {
 	if from.Name() == to.Name() {
 		return ctaSingleton(v)
 	}
-	canonical, renders := v.(value.Canonical)
-	if !renders {
+	lexical, rendered := ctaCanonical(v, from, env)
+	if !rendered {
 		return ctaRaised{}
 	}
-	return ctaValidate(canonical.Canonical(), to, env)
+	return ctaValidate(lexical, to, env)
+}
+
+// ctaCanonical renders v, a value of type from, through the backend's
+// [value.Mapping.Canonical] — the (string, error) channel, because
+// [value.Canonical]'s string-only one has no outcome for a form beyond the
+// backend's capacity, and a value whose type can reach one does not carry it.
+//
+// The mapping is the nearest one on from's {base type definition} chain, from
+// itself included, which is the mapping that produced v (value.Backend's
+// nearest-mapped-ancestor rule, which value.ValidateLexical applies).
+// [value.Mapping] is keyed by name, so an anonymous or user-derived from
+// reaches its builtin ancestor's. A mapping whose Canonical is nil, or errors
+// on v, does not end the walk: its error is per-value (value.Mapping), and a
+// partial-domain one says only that v has no form in THAT type's lexical
+// space, so the next mapped ancestor's wider canonical mapping is asked —
+// xs:yearMonthDuration's P0M has none of its own (§3.4.26.1 Note) and renders
+// through xs:duration's as PT0S. Reporting false when no mapping on the chain
+// renders v, or the chain cannot be walked, is the caller's ctaRaised.
+func ctaCanonical(v value.Value, from *xsd.SimpleType, env ctaEnv) (string, bool) {
+	for at := from; at != nil; {
+		m, mapped := env.backend.Mapping(at.Name())
+		if mapped && m.Canonical != nil {
+			lexical, err := m.Canonical(v)
+			if err == nil {
+				return lexical, true
+			}
+		}
+		base, err := at.Base(env.types)
+		if err != nil {
+			return "", false
+		}
+		at = base
+	}
+	return "", false
 }
 
 // ctaValidate casts lexical into st, which xpath-functions.md §17.1.1 makes
@@ -1192,8 +1235,11 @@ func (op ctaComparator) holdsSign(sign int) bool {
 // The compared string is the value's ·canonical representation·, which is the
 // identity for xs:string and xs:anyURI (f-stringCanmap, f-anyURICanmap) and so
 // is the string the cast produced — whiteSpace-collapsed where the operand's
-// own type collapses, as `cast as xs:token` does. A value carrying no
-// [value.Canonical] is err:XPTY0004 on ctaPromote's terms.
+// own type collapses, as `cast as xs:token` does. It is read through
+// [value.Canonical], not ctaCanonical's mapping walk: an identity canonical
+// form has no beyond-capacity case, and the string-only capability needs no
+// type to find a mapping by. A value carrying none is err:XPTY0004, the
+// "casting is not supported" arm ctaPromote also raises on.
 func (op ctaComparator) holdsCollated(l, r value.Value) ctaAnswer {
 	ls, lRenders := l.(value.Canonical)
 	rs, rRenders := r.(value.Canonical)
