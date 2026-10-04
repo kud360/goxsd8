@@ -197,8 +197,7 @@ func (r *Reader) classify(tok xml.Token, off int64) (Node, bool, error) {
 		}
 		return nil, false, r.checkDeclaration(t, loc)
 	case xml.Directive:
-		r.declareEntities(t)
-		return nil, false, nil
+		return nil, false, r.declareEntities(t, loc)
 	default:
 		// xml.Comment: not part of the element/character-data stream the
 		// parser consumes.
@@ -209,12 +208,16 @@ func (r *Reader) classify(tok xml.Token, off int64) (Node, bool, error) {
 // declareEntities records the general entity declarations of a DOCTYPE
 // directive at the document level, keeping the first declaration of each name,
 // and whether any declaration went unread. A directive inside an element is no
-// DOCTYPE and declares nothing.
-func (r *Reader) declareEntities(d xml.Directive) {
+// DOCTYPE and declares nothing. A DOCTYPE that is not well-formed where
+// doctypeEntities checks it is a RuleXMLWellFormed fault at loc.
+func (r *Reader) declareEntities(d xml.Directive, loc xsderr.Loc) error {
 	if len(r.stack) > 0 {
-		return
+		return nil
 	}
-	decls, unread := doctypeEntities(string(d), r.standalone)
+	decls, unread, err := doctypeEntities(string(d), r.standalone, loc)
+	if err != nil {
+		return err
+	}
 	if unread {
 		r.declsUnread = true
 	}
@@ -234,6 +237,7 @@ func (r *Reader) declareEntities(d xml.Directive) {
 		}
 		r.dec.Entity[decl.name] = ""
 	}
+	return nil
 }
 
 // HasUnparsedEntity reports whether name is the name of an unparsed entity —
