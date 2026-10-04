@@ -65,8 +65,16 @@
 //     once the document element's start tag is read; the subset itself
 //     surfaces as no Node, a prolog fact not being part of the
 //     element/character-data stream. Internal parameter entities are
-//     expanded, bounded in depth and size. The external subset is never
-//     read, by design (#1668), nor is an external parameter entity; a
+//     expanded, bounded in depth and size. Text between declarations that
+//     is neither S nor a PEReference, in the subset or in an expanded
+//     parameter entity's replacement text — a '%' run that is no
+//     PEReference among it — is rejected as RuleXMLWellFormed at the
+//     directive ([28b] intSubset, [28a] DeclSep, [69] PEReference, WFC: PE
+//     Between Declarations), as is text other than S between the subset's
+//     ']' and '>' ([28] doctypedecl); the grammar inside a comment, a
+//     processing instruction or a markup declaration other than <!ENTITY>
+//     is not checked beyond its closing delimiter. The external subset is
+//     never read, by design (#1668), nor is an external parameter entity; a
 //     declaration after a parameter-entity reference that is not read is
 //     not processed unless standalone="yes" (XML 1.0 §5.1). An entity
 //     declared only where the reader did not read is not a member, and

@@ -1029,3 +1029,42 @@ func TestValidateNeverReadsTheExternalDTDSubset(t *testing.T) {
 		t.Errorf("internal parameter entity: code = %d, want %d (stdout %q, stderr %q)", code, exitOK, stdout.String(), stderr.String())
 	}
 }
+
+// TestValidateStrayDTDTextIsNotWellFormed pins that text between internal
+// subset declarations which is neither S nor a PEReference — at depth 0, in a
+// parameter entity's replacement text, or a '%' run that is no PEReference
+// under standalone="yes" — makes the instance not well-formed, charged the
+// invalid code with an [xml-wf] verdict, though the ENTITY value names an
+// unparsed entity declared beside it; the same subset without the stray text
+// validates.
+func TestValidateStrayDTDTextIsNotWellFormed(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name, body string) string {
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	schema := write("ent.xsd", `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="r"><xs:complexType><xs:attribute name="ent" type="xs:ENTITY"/></xs:complexType></xs:element></xs:schema>`)
+	const decls = `<!NOTATION n SYSTEM 'x'><!ENTITY pic SYSTEM 'u' NDATA n>`
+	for _, tc := range []struct {
+		doc  string
+		want int
+	}{
+		{`<!DOCTYPE r [` + decls + `]><r ent="pic"/>`, exitOK},
+		{`<!DOCTYPE r [` + decls + ` junk]><r ent="pic"/>`, exitInvalid},
+		{`<!DOCTYPE r [<!NOTATION n SYSTEM 'x'><!ENTITY % p "<!ENTITY pic SYSTEM 'u' NDATA n> junk"> %p;]><r ent="pic"/>`, exitInvalid},
+		{`<?xml version="1.0" standalone="yes"?><!DOCTYPE r [%1x; ` + decls + `]><r ent="pic"/>`, exitInvalid},
+	} {
+		var stdout, stderr bytes.Buffer
+		code := run([]string{"validate", "-schema", schema, write("i.xml", tc.doc)}, &stdout, &stderr)
+		if code != tc.want {
+			t.Errorf("%s: code = %d, want %d (stdout %q, stderr %q)", tc.doc, code, tc.want, stdout.String(), stderr.String())
+			continue
+		}
+		if tc.want == exitInvalid && !strings.Contains(stdout.String(), "[xml-wf]") {
+			t.Errorf("%s: stdout = %q, want an [xml-wf] verdict", tc.doc, stdout.String())
+		}
+	}
+}
