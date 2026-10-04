@@ -28,7 +28,10 @@ Value implementations, parsing, validation, and generation live above them.
                                   - internal/xmlenc, byte-order-mark detection, the UTF-16
                                     transcoder and the mark/declaration agreement (XML 1.0
                                     §4.3.3, App. F.1), which the same two readers must
-                                    decode alike.)
+                                    decode alike.
+                                  - internal/xmlname, XML 1.0 5e [4] NameStartChar and
+                                    [4a] NameChar, which regex's \i/\c and
+                                    parser/xmltree's DOCTYPE name checks both read.)
                  value           (value-space contracts, facet pipeline; imports xsd, xsderr, regex)
                  value/backendtest (conformance kit for any backend)
                  builtin         (the generated TypeSpec table and Seed; imports value, xsd, xsderr)
@@ -36,12 +39,13 @@ Value implementations, parsing, validation, and generation live above them.
                                   also imports builtin, for xs:NCName's generated pattern)
                  regex           (one engine, XSD + F&O flavors)
                  parser/xmltree  (position-tracking XML; imports xsderr,
-                                  internal/xmldecl and internal/xmlenc only, and
-                                  nothing else in the module — independent of the
-                                  schema pipeline, not of the error currency. A
-                                  stdlib-only internal/ leaf is the one kind of
-                                  further edge it may take; it never imports regex
-                                  — see the XML-production ruling below)
+                                  internal/xmldecl, internal/xmlenc and
+                                  internal/xmlname only, and nothing else in the
+                                  module — independent of the schema pipeline, not
+                                  of the error currency. A stdlib-only internal/
+                                  leaf is the one kind of further edge it may take;
+                                  it never imports regex — see the XML-production
+                                  ruling below)
                  loader          (schema resolution interfaces)
                  xpath           (XPath 2.0 engine; imports xsd, value, regex, xsderr)
                  icpath          (the §3.11.6.2/§3.11.6.3 identity-constraint path
@@ -84,7 +88,7 @@ backend: `New` takes the `value.Backend` as a required parameter, so
 `validate/bersrc` are destinations, on `[1]`'s terms.
 
 Only `xsderr`, `xsd`, `internal/schemaloc`, `internal/xmldecl`,
-`internal/xmlenc`, `value`, `value/backendtest`, `regex`, `builtin`,
+`internal/xmlenc`, `internal/xmlname`, `value`, `value/backendtest`, `regex`, `builtin`,
 `builtin/strict`, `loader`, `parser`, `parser/xmltree`, `xpath`, `icpath`,
 `validate`, `validate/xmlsrc`, `conformance` and `cmd/goxsd8` carry code
 today.
@@ -112,11 +116,10 @@ same shape one level down.
 stdlib-only `internal/<name>` leaf**; do not export it from either reader,
 and do not add an edge between them. `parser/xmltree` in particular never
 imports `regex` to reach one. The Name productions ([4] `NameStartChar`,
-[4a] `NameChar`) are the first case: `regex`'s `\i`/`\c` sets and
-`parser/xmltree`'s DOCTYPE name checks (#1745, #1765) both need them, and
-today `regex/class.go` holds them whole while `xmltree`'s `isNotationName`
-holds an ASCII-only second copy. Whether that one table is generated is
-#989's question, asked once of the table's home.
+[4a] `NameChar`) live in `internal/xmlname`, read by `regex`'s `\i`/`\c`
+sets and `parser/xmltree`'s DOCTYPE name checks; a further Name check
+(#1765, #2187) reads the same leaf. Whether that table is generated is
+#989's question, asked of `internal/xmlname`.
 
 `cmd/goxsd8` is a library CONSUMER, not a place to grow capability. A
 capability the CLI needs and the library does not export is a library gap to
@@ -484,7 +487,8 @@ flag** (PRINCIPLES 10):
 Character-class handling (`\d \w \p{…}`, subtraction `[a-z-[m]]`) is
 shared. The package sits just above the leaves: it imports only `xsderr`
 (so its `FORX0001`/`FORX0002`/`src-pattern-value` failures are rule-tagged
-per STYLE T2), otherwise stdlib.
+per STYLE T2) and `internal/xmlname` (the Name productions behind `\i`/`\c`),
+otherwise stdlib.
 
 ## XPath (`xpath`)
 

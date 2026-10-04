@@ -28,7 +28,7 @@ func drained(t *testing.T, doc string) *xmltree.Reader {
 
 // HasUnparsedEntity answers from the internal subset's <!ENTITY> declarations,
 // and only an external general entity with an NDATA notation is unparsed —
-// whatever Name the notation carries, NameChars and a non-ASCII one included: a
+// whatever Name the notation carries, NameChars and non-ASCII ones included: a
 // parameter entity, a parsed external entity and an internal one are not
 // members — the last even where an NDATA keyword follows its literal — nor is
 // a name that appears only inside a literal, a processing instruction or a
@@ -38,7 +38,8 @@ func drained(t *testing.T, doc string) *xmltree.Reader {
 // is not NDATA — nor one that is not well-formed (XML 1.0 [75], [76], [5]): no
 // S between SYSTEM or PUBLIC and its first literal, between two literals, or
 // between the literal and NDATA, a literal with text run on after it, a
-// notation name carrying '&' or starting with a digit. A reference to
+// notation name carrying '&' or U+00D7 '×', or starting with a digit or with
+// U+203F '‿', a NameChar that is no NameStartChar. A reference to
 // a parameter entity that is not read — here an external one — cuts the scan
 // off, so a declaration after it is not a member (XML 1.0 §5.1).
 func TestHasUnparsedEntityReadsTheInternalSubset(t *testing.T) {
@@ -49,6 +50,10 @@ func TestHasUnparsedEntityReadsTheInternalSubset(t *testing.T) {
   <!ENTITY pub PUBLIC "-//x//y" 'pub.gif' NDATA gif>
   <!ENTITY namechars SYSTEM "x" NDATA _g-i.f:9>
   <!ENTITY accented SYSTEM "x" NDATA ïmage>
+  <!ENTITY cjk SYSTEM "x" NDATA 画像>
+  <!ENTITY undertie SYSTEM "x" NDATA a‿·b>
+  <!ENTITY times SYSTEM "x" NDATA a×b>
+  <!ENTITY undertiefirst SYSTEM "x" NDATA ‿b>
   <!ENTITY % pe SYSTEM "pe.gif" NDATA gif>
   <!ENTITY parsed SYSTEM "parsed.xml">
   <!ENTITY text "a literal naming NDATA gif">
@@ -82,6 +87,7 @@ func TestHasUnparsedEntityReadsTheInternalSubset(t *testing.T) {
 		{"onelit", false}, {"bare", false}, {"bracket", false}, {"trailing", false},
 		{"keyword", false}, {"nos", false}, {"runon", false}, {"amp", false}, {"digit", false},
 		{"nospace", false}, {"pubnospace", false}, {"publits", false},
+		{"cjk", true}, {"undertie", true}, {"times", false}, {"undertiefirst", false},
 	} {
 		if got := r.HasUnparsedEntity(tc.name); got != tc.want {
 			t.Errorf("HasUnparsedEntity(%q) = %t, want %t", tc.name, got, tc.want)
