@@ -10,13 +10,13 @@ import (
 	"github.com/kud360/goxsd8/xsderr"
 )
 
-// entityDecl is one general entity declaration of a DOCTYPE's internal
-// subset: the entity's name, whether it is UNPARSED — an external entity
-// carrying an NDATA notation name, which is what an ·ENTITY value· must name
-// (Structures §3.16.4 key-vde) — and, for an internal entity, its replacement
-// text, which a reference to it includes (XML 1.0 §4.4.2, §4.4.5). value is
-// unreadable for every other entity: an external one, unparsed or not, and
-// one whose definition is malformed.
+// entityDecl is one entity declaration of a DOCTYPE's internal subset, read
+// by readEntityDecl: the entity's name, whether it is UNPARSED — an external
+// general entity carrying an NDATA notation name, which is what an ·ENTITY
+// value· must name (Structures §3.16.4 key-vde) — and, for an internal entity,
+// its replacement text, which a reference to it includes (XML 1.0 §4.4.2,
+// §4.4.5, §4.4.8). value is unreadable for an external entity, unparsed or
+// not.
 type entityDecl struct {
 	name     string
 	unparsed bool
@@ -54,16 +54,16 @@ const (
 // entity is internal and already declared: its replacement text is the
 // literal with each character reference replaced (§4.5), enlarged by one space
 // either side (§4.4.8). A reference it does not read — to an external or
-// undeclared parameter entity, to one whose replacement text it cannot build,
-// or past maxPEDepth or maxPEExpansion, which a recursive reference (WFC No
-// Recursion) always reaches — reports unread. Unless standalone, the rest of
-// the internal subset is then only checked for well-formedness, which §5.1
-// requires of the entire internal subset: it binds no parameter entity,
-// records no general entity and expands no parameter-entity reference, since
-// §5.1 forbids processing an entity declaration that follows a reference to a
-// parameter entity that is not read, except when standalone="yes". A
-// conditional section in replacement text, which this scan does not read, is
-// declined the same way and ends the text it appears in.
+// undeclared parameter entity, or past maxPEDepth or maxPEExpansion, which a
+// recursive reference (WFC No Recursion) always reaches — reports unread.
+// Unless standalone, the rest of the internal subset is then only checked for
+// well-formedness, which §5.1 requires of the entire internal subset: it binds
+// no parameter entity, records no general entity and expands no
+// parameter-entity reference, since §5.1 forbids processing an entity
+// declaration that follows a reference to a parameter entity that is not read,
+// except when standalone="yes". A conditional section in replacement text,
+// which this scan does not read, is declined the same way and ends the text it
+// appears in.
 //
 // Every fault below is a RuleXMLWellFormed fault at loc, which ends the read
 // and declares nothing. Between declarations, in the internal subset and in an
@@ -79,19 +79,25 @@ const (
 // PI, [17] PITarget), a notation declaration that is no [82] NotationDecl, a
 // '<' outside the literals of any markup declaration, a parameter-entity
 // reference inside any markup declaration, an entity value literal included
-// (WFC: PEs in Internal Subset), any other '%' in an entity value literal ([9]
-// EntityValue) and an internal subset or replacement text that ends inside a
-// comment, processing instruction or markup declaration ([28b] intSubset, WFC:
-// PE Between Declarations) are faults too. A declaration it cannot read
-// declares no unparsed entity, which leaves an ·ENTITY value· naming that
-// entity undeclared rather than declared.
+// (WFC: PEs in Internal Subset), and an internal subset or replacement text
+// that ends inside a comment, processing instruction or markup declaration
+// ([28b] intSubset, WFC: PE Between Declarations) are faults too. So is an
+// entity declaration that is no [70] EntityDecl (see readEntityDecl): no S
+// after its keyword, a declared name that is no Name ([71] GEDecl, [72]
+// PEDecl, [5]), no definition, one that is neither an EntityValue nor an
+// ExternalID ([73] EntityDef, [74] PEDef, [75] ExternalID, [11]
+// SystemLiteral, [12] PubidLiteral), a token after an EntityValue, an
+// NDataDecl in a parameter entity's PEDef ([74]), anything but one NDataDecl
+// after a general entity's ExternalID ([76]), and an entity value literal
+// with a '%' or '&' that opens no PEReference or Reference ([9] EntityValue,
+// [66]–[69]) or a character reference naming no Char (WFC: Legal Character),
+// whether or not the entity is ever referenced. These checks run on after a
+// declined reference, as §5.1 requires.
 //
 // GAP(xml): the bodies of <!ELEMENT> and <!ATTLIST> declarations ([45]–[60])
 // are checked for nothing but a parameter-entity reference, a '<' and the '>'
-// that closes them, and an <!ENTITY> declaration ([70]–[76]) for nothing
-// beyond those and what entityDeclOf and paramEntityOf read: a declaration
-// that breaks its production there is stepped over, or declares nothing, where
-// it is not well-formed. Tracked by #2225.
+// that closes them: a declaration that breaks its production there is stepped
+// over where it is not well-formed. Tracked by #2225.
 func doctypeEntities(directive string, standalone bool, loc xsderr.Loc) (decls []entityDecl, unread bool, err error) {
 	rest, ok := strings.CutPrefix(directive, "DOCTYPE")
 	if !ok {
@@ -161,8 +167,7 @@ type subsetScan struct {
 }
 
 // entityValue is one entity's replacement text, and whether it has one the
-// reader can read — false for an external entity, a malformed definition, or
-// a literal whose replacement text cannot be built.
+// reader can read — false for an external entity.
 type entityValue struct {
 	text     string
 	readable bool
@@ -231,11 +236,12 @@ func (sc *subsetScan) markup(s string) (after string, closed bool, err error) {
 		if err := sc.noPEReference(body); err != nil {
 			return "", true, err
 		}
-		if err := sc.entityValuePercent(body); err != nil {
+		d, pe, err := sc.readEntityDecl(body)
+		if err != nil {
 			return "", true, err
 		}
 		if !sc.checkOnly {
-			sc.declare(body)
+			sc.declare(d, pe)
 		}
 		return after, true, nil
 	case strings.HasPrefix(s, "<!NOTATION"):
@@ -348,7 +354,8 @@ const pubidOther = " \r\n-'()+,./:=?;!*#@$_%"
 // outside the literals of body, a markup declaration's text: in the internal
 // subset one must not occur within a markup declaration (XML 1.0 WFC: PEs in
 // Internal Subset), and every parameter entity this scan reads is internal.
-// The one literal that recognizes such a reference is entityValuePercent's.
+// The one literal that recognizes such a reference is an entity value's (see
+// entityValueFault).
 func (sc *subsetScan) noPEReference(body string) error {
 	for {
 		pct := outsideQuotes(body, "%")
@@ -362,29 +369,152 @@ func (sc *subsetScan) noPEReference(body string) error {
 	}
 }
 
-// entityValuePercent returns the fault of a '%' in the EntityValue literal of
-// body, an <!ENTITY> declaration's text after its keyword: the literal its
-// name is followed by. XML 1.0 §2.8 recognizes parameter-entity references in
-// an entity value literal, alone among literals, so a PEReference there breaks
-// WFC: PEs in Internal Subset, and any other '%' is no [9] EntityValue. An
-// ExternalID's SystemLiteral and PubidLiteral recognize none and are not read.
-func (sc *subsetScan) entityValuePercent(body string) error {
-	toks := declTokens(body)
-	if len(toks) > 0 && toks[0] == "%" {
+// readEntityDecl reads body, an <!ENTITY> declaration's text after its
+// keyword, against XML 1.0 [70] EntityDecl, returning the declaration and
+// whether it declares a parameter entity, or the fault of a body that matches
+// neither [71] GEDecl, S Name S EntityDef S?, nor [72] PEDecl, S '%' S Name S
+// PEDef S?. Its tokens are entityDefTokens', so a missing S runs two tokens
+// into one that matches nothing: `a"x"`, `SYSTEM"x"` and `"x"NDATA` are
+// faults. EntityDef ([73]) is one EntityValue literal ([9], see
+// readEntityValue) or an ExternalID ([75]): 'SYSTEM' S SystemLiteral ([11]),
+// or 'PUBLIC' S PubidLiteral ([12], [13]) S SystemLiteral, its keywords in
+// upper case. An EntityValue ends the definition; an ExternalID may be
+// followed by an NDataDecl ([76]), 'NDATA' S Name, in a general entity's
+// EntityDef alone, never in a PEDef ([74]). The notation the NDataDecl names
+// need not be declared: VC: Notation Declared binds a validating processor
+// only. A SystemLiteral and a PubidLiteral recognize no reference.
+func (sc *subsetScan) readEntityDecl(body string) (entityDecl, bool, error) {
+	if body == "" || !strings.ContainsRune(declSpace, rune(body[0])) {
+		return entityDecl{}, false, xsderr.New(xsderr.RuleXMLWellFormed, sc.loc, "%s holds an <!ENTITY> declaration with no S after its keyword (XML 1.0 [71] GEDecl, [72] PEDecl)", sc.where())
+	}
+	toks := entityDefTokens(body)
+	pe := len(toks) > 0 && toks[0] == "%"
+	decl, defn := "[71] GEDecl", "[73] EntityDef"
+	if pe {
 		toks = toks[1:]
+		decl, defn = "[72] PEDecl", "[74] PEDef"
 	}
-	if len(toks) < 2 || toks[1][0] != '"' && toks[1][0] != '\'' {
-		return nil
+	if len(toks) == 0 || !isName(toks[0]) {
+		name := ""
+		if len(toks) > 0 {
+			name = toks[0]
+		}
+		return entityDecl{}, false, xsderr.New(xsderr.RuleXMLWellFormed, sc.loc, "%s holds an <!ENTITY> declaration whose name %q is not a Name (XML 1.0 %s, [5] Name)", sc.where(), name, decl)
 	}
-	lit := toks[1][1:]
-	pct := strings.IndexByte(lit, '%')
-	if pct < 0 {
-		return nil
+	d := entityDecl{name: toks[0]}
+	def := toks[1:]
+	if len(def) == 0 {
+		return entityDecl{}, false, xsderr.New(xsderr.RuleXMLWellFormed, sc.loc, "%s holds an <!ENTITY> declaration of %q with no definition (XML 1.0 %s, %s)", sc.where(), d.name, decl, defn)
 	}
-	if name, _, ok := peReference(lit[pct+1:]); ok {
-		return sc.peInMarkup(name)
+	if q := def[0][0]; q == '"' || q == '\'' {
+		text, err := sc.readEntityValue(def)
+		if err != nil {
+			return entityDecl{}, false, err
+		}
+		d.value = entityValue{text: text, readable: true}
+		return d, pe, nil
 	}
-	return xsderr.New(xsderr.RuleXMLWellFormed, sc.loc, "%s holds an entity value literal with a '%%' that opens no PEReference (XML 1.0 [9] EntityValue, [69] PEReference)", sc.where())
+	n, err := sc.externalID(def)
+	if err != nil {
+		return entityDecl{}, false, err
+	}
+	ndata := def[n:]
+	if len(ndata) == 0 {
+		return d, pe, nil
+	}
+	if pe {
+		return entityDecl{}, false, xsderr.New(xsderr.RuleXMLWellFormed, sc.loc, "%s holds a parameter entity declaration with %q after its ExternalID, where a PEDef admits no NDataDecl (XML 1.0 [72] PEDecl, [74] PEDef)", sc.where(), ndata[0])
+	}
+	if len(ndata) != 2 || ndata[0] != "NDATA" || !isName(ndata[1]) {
+		return entityDecl{}, false, xsderr.New(xsderr.RuleXMLWellFormed, sc.loc, "%s holds an <!ENTITY> declaration with %q after its ExternalID, where only an NDataDecl, 'NDATA' S Name, may stand (XML 1.0 [71] GEDecl, [73] EntityDef, [76] NDataDecl)", sc.where(), strings.Join(ndata, " "))
+	}
+	d.unparsed = true
+	return d, false, nil
+}
+
+// readEntityValue reads def, an entity definition's tokens opening with a quote,
+// as one EntityValue literal and nothing after it (XML 1.0 [73] EntityDef,
+// [74] PEDef), returning its replacement text, or the fault of a definition
+// that is not: a literal with text run on after it, a token after it, or a
+// literal entityValueFault refuses.
+func (sc *subsetScan) readEntityValue(def []string) (string, error) {
+	if !isLiteral(def[0]) {
+		return "", xsderr.New(xsderr.RuleXMLWellFormed, sc.loc, "%s holds an <!ENTITY> declaration whose entity value %q is no quoted literal followed by S or '>' (XML 1.0 [9] EntityValue, [71] GEDecl, [72] PEDecl)", sc.where(), def[0])
+	}
+	lit := def[0][1 : len(def[0])-1]
+	if err := sc.entityValueFault(lit); err != nil {
+		return "", err
+	}
+	if len(def) > 1 {
+		return "", xsderr.New(xsderr.RuleXMLWellFormed, sc.loc, "%s holds an <!ENTITY> declaration with %q after its entity value, which ends the definition (XML 1.0 [73] EntityDef, [74] PEDef)", sc.where(), def[1])
+	}
+	return replacementText(lit), nil
+}
+
+// entityValueFault returns the fault of lit, the text between an entity value
+// literal's quotes, when it is no [9] EntityValue: every '%' and '&' in it must
+// open a PEReference ([69]) or a Reference ([67]). XML 1.0 §2.8 recognizes
+// parameter-entity references in an entity value literal, alone among
+// literals, so a PEReference there breaks WFC: PEs in Internal Subset, and any
+// other '%' is no EntityValue. A '&' must open an EntityRef, '&' Name ';'
+// ([68]), whether or not the entity is declared (§4.4.7 bypasses it), or a
+// CharRef ([66]), '&#' [0-9]+ ';' or '&#x' [0-9a-fA-F]+ ';', naming a Char
+// (WFC: Legal Character), which binds at the declaration: the replacement text
+// holds the character (§4.5), whether or not the entity is ever referenced.
+func (sc *subsetScan) entityValueFault(lit string) error {
+	for {
+		i := strings.IndexAny(lit, "%&")
+		if i < 0 {
+			return nil
+		}
+		mark, rest := lit[i], lit[i+1:]
+		if mark == '%' {
+			if name, _, ok := peReference(rest); ok {
+				return sc.peInMarkup(name)
+			}
+			return xsderr.New(xsderr.RuleXMLWellFormed, sc.loc, "%s holds an entity value literal with a '%%' that opens no PEReference (XML 1.0 [9] EntityValue, [69] PEReference)", sc.where())
+		}
+		end := strings.IndexByte(rest, ';')
+		if end < 0 || !isReference(rest[:end]) {
+			return xsderr.New(xsderr.RuleXMLWellFormed, sc.loc, "%s holds an entity value literal with a '&' that opens no Reference (XML 1.0 [9] EntityValue, [67] Reference, [68] EntityRef, [66] CharRef)", sc.where())
+		}
+		if digits, ok := strings.CutPrefix(rest[:end], "#"); ok {
+			if _, legal := charRef(digits); !legal {
+				return xsderr.New(xsderr.RuleXMLWellFormed, sc.loc, "%s holds an entity value literal whose character reference &#%s; names no XML character (XML 1.0 [66] CharRef, WFC: Legal Character)", sc.where(), digits)
+			}
+		}
+		lit = rest[end+1:]
+	}
+}
+
+// isReference reports whether ref, the text between a Reference's '&' and
+// ';', reads as an EntityRef's Name ([68], [5]) or a CharRef's '#' and decimal
+// digits, or '#x' and hexadecimal ones ([66]), whatever character they name.
+func isReference(ref string) bool {
+	digits, ok := strings.CutPrefix(ref, "#")
+	if !ok {
+		return isName(ref)
+	}
+	set := "0123456789"
+	if hex, ok := strings.CutPrefix(digits, "x"); ok {
+		digits, set = hex, "0123456789abcdefABCDEF"
+	}
+	return digits != "" && strings.Trim(digits, set) == ""
+}
+
+// externalID reads the ExternalID def, an entity definition's tokens, opens
+// with — 'SYSTEM' S SystemLiteral or 'PUBLIC' S PubidLiteral S SystemLiteral
+// (XML 1.0 [75], [11], [12], [13]) — returning how many tokens it spans, or the
+// fault of a definition that opens no ExternalID: a keyword in another case
+// among them, or one run on into its literal.
+func (sc *subsetScan) externalID(def []string) (int, error) {
+	switch {
+	case def[0] == "SYSTEM" && len(def) > 1 && isLiteral(def[1]):
+		return 2, nil
+	case def[0] == "PUBLIC" && len(def) > 2 && isPubidLiteral(def[1]) && isLiteral(def[2]):
+		return 3, nil
+	}
+	return 0, xsderr.New(xsderr.RuleXMLWellFormed, sc.loc, "%s holds an <!ENTITY> declaration whose definition %q is neither an entity value literal nor an ExternalID, 'SYSTEM' S SystemLiteral or 'PUBLIC' S PubidLiteral S SystemLiteral (XML 1.0 [73] EntityDef, [74] PEDef, [75] ExternalID, [11] SystemLiteral, [12] PubidLiteral)", sc.where(), strings.Join(def, " "))
 }
 
 // peInMarkup is the fault of the parameter-entity reference to name standing
@@ -513,56 +643,22 @@ func (sc *subsetScan) decline() {
 	}
 }
 
-// declare records one <!ENTITY ...> body: a parameter entity into pes, a
-// general one into decls. The first declaration of a name binds (XML 1.0
-// §4.2); for a general entity that is the Reader's to apply.
-func (sc *subsetScan) declare(body string) {
-	name, pe, isPE := paramEntityOf(body)
-	if !isPE {
-		if d, general := entityDeclOf(body); general {
-			sc.decls = append(sc.decls, d)
-		}
+// declare records one <!ENTITY> declaration d, read by readEntityDecl: a
+// parameter entity's value into pes, when pe, and a general entity into decls.
+// The first declaration of a name binds (XML 1.0 §4.2); for a general entity
+// that is the Reader's to apply.
+func (sc *subsetScan) declare(d entityDecl, pe bool) {
+	if !pe {
+		sc.decls = append(sc.decls, d)
 		return
 	}
-	if _, bound := sc.pes[name]; bound {
+	if _, bound := sc.pes[d.name]; bound {
 		return
 	}
 	if sc.pes == nil {
 		sc.pes = make(map[string]entityValue)
 	}
-	sc.pes[name] = pe
-}
-
-// paramEntityOf reads one <!ENTITY ...> body as a parameter entity
-// declaration, <!ENTITY % name PEDef>, reporting false for any other body —
-// one whose name is not a Name among them, which is no PEDecl (XML 1.0 [72],
-// [5]) and declares nothing. The entity is readable only when its PEDef is
-// one EntityValue literal whose replacement text can be built (see
-// replacementText): an ExternalID, or anything malformed, declares an entity
-// this scan never reads.
-func paramEntityOf(body string) (string, entityValue, bool) {
-	if body == "" || !strings.ContainsRune(declSpace, rune(body[0])) {
-		return "", entityValue{}, false
-	}
-	toks := declTokens(body)
-	if len(toks) < 3 || toks[0] != "%" || !isName(toks[1]) {
-		return "", entityValue{}, false
-	}
-	if len(toks) != 3 {
-		return toks[1], entityValue{}, true
-	}
-	return toks[1], literalValue(toks[2]), true
-}
-
-// literalValue is the value a definition token gives an entity: the
-// replacement text it builds when it is one EntityValue literal (see
-// replacementText), and unreadable when it is any other token.
-func literalValue(tok string) entityValue {
-	if !isLiteral(tok) {
-		return entityValue{}
-	}
-	text, ok := replacementText(tok[1 : len(tok)-1])
-	return entityValue{text: text, readable: ok}
+	sc.pes[d.name] = d.value
 }
 
 // replacementText builds an internal entity's replacement text from its
@@ -570,16 +666,15 @@ func literalValue(tok string) entityValue {
 // normalized to #xA (§2.11), each character reference is replaced by the
 // character it names, and a general entity reference is left as it stands
 // (§4.4.7, bypassed), for the reader to expand where the entity is included.
-// It reports false for a character reference that is malformed or names no
-// Char (WFC Legal Character). The literal holds no '%': markup faults the
-// declaration before it is read (see entityValuePercent).
-func replacementText(lit string) (string, bool) {
+// The literal is one entityValueFault passed: it holds no '%', and every '&'
+// in it opens a Reference whose character reference names a Char.
+func replacementText(lit string) string {
 	var b strings.Builder
 	for {
 		amp := strings.IndexByte(lit, '&')
 		if amp < 0 {
 			b.WriteString(lineEnds.Replace(lit))
-			return b.String(), true
+			return b.String()
 		}
 		b.WriteString(lineEnds.Replace(lit[:amp]))
 		lit = lit[amp:]
@@ -589,13 +684,7 @@ func replacementText(lit string) (string, bool) {
 			continue
 		}
 		end := strings.IndexByte(lit, ';')
-		if end < 0 {
-			return "", false
-		}
-		r, ok := charRef(lit[len("&#"):end])
-		if !ok {
-			return "", false
-		}
+		r, _ := charRef(lit[len("&#"):end])
 		b.WriteRune(r)
 		lit = lit[end+1:]
 	}
@@ -658,61 +747,12 @@ func (sc *subsetScan) markupDecl(s string) (body, after string, closed bool, err
 	return s[:end], s[end+1:], true, nil
 }
 
-// entityDeclOf reads one <!ENTITY ...> body. It reports false for a parameter
-// entity declaration (<!ENTITY % name ...>), which declares no general entity
-// at all, for a keyword run on into the name with no white space between, for
-// a body too short to name one, and for a name that is not a Name — `1x`,
-// `a&b`, or `a"b"` with a literal run on into it — which is no GEDecl (XML 1.0
-// [71], [5]) and declares nothing, internal or unparsed. A general entity is
-// unparsed only when its definition is exactly an ExternalID followed by an
-// NDataDecl (XML 1.0 EntityDef); any other definition, a malformed one
-// included, is a parsed entity. A parsed entity is internal, with a readable
-// value, only when its definition is exactly one EntityValue literal whose
-// replacement text builds.
-func entityDeclOf(body string) (entityDecl, bool) {
-	if body == "" || !strings.ContainsRune(declSpace, rune(body[0])) {
-		return entityDecl{}, false
-	}
-	toks := entityDefTokens(body)
-	if len(toks) < 2 || !isName(toks[0]) {
-		return entityDecl{}, false
-	}
-	d := entityDecl{name: toks[0], unparsed: unparsedDef(toks[1:])}
-	if len(toks) == 2 {
-		d.value = literalValue(toks[1])
-	}
-	return d, true
-}
-
-// unparsedDef reports whether def, the tokens of an entity definition, reads
-// by position as `SYSTEM lit NDATA Name` or `PUBLIC lit lit NDATA Name` and
-// nothing more: XML 1.0's ExternalID followed by an NDataDecl.
-func unparsedDef(def []string) bool {
-	var lits int
-	switch def[0] {
-	case "SYSTEM":
-		lits = 1
-	case "PUBLIC":
-		lits = 2
-	default:
-		return false
-	}
-	if len(def) != 1+lits+2 {
-		return false
-	}
-	for _, t := range def[1 : 1+lits] {
-		if !isLiteral(t) {
-			return false
-		}
-	}
-	return def[1+lits] == "NDATA" && isName(def[2+lits])
-}
-
 // isName reports whether t, a declaration token, is an XML 1.0 Name
 // (production [5]): it is not empty, its first character is a NameStartChar
 // ([4]) and every later one a NameChar ([4a]), both internal/xmlname's tables.
 // It checks the DOCTYPE's document type name, an entity's declared name, the
-// name a PEReference between declarations carries and the notation name an
+// name a PEReference carries, between declarations or in an entity value, the
+// name an EntityRef in an entity value carries and the notation name an
 // NDataDecl closes on, rejecting `1x`, `g&h` and `a×b` (U+00D7 is in neither
 // production).
 func isName(t string) bool {
@@ -747,15 +787,15 @@ func declTokens(s string) []string {
 	return splitDecl(s, false)
 }
 
-// entityDefTokens is declTokens for a general entity's <!ENTITY> body, except
-// that every token ends only at white space. Text run on after a literal's
-// closing quote with no S between — `"x"NDATA`, which XML 1.0 NDataDecl [76]
-// forbids — stays in the literal's token, which isLiteral then refuses; a
-// literal run on after a keyword — `SYSTEM"x"`, which ExternalID [75] forbids
-// — stays in the keyword's token, which unparsedDef then refuses. The DOCTYPE
-// header's ExternalID (hasExternalID) and a parameter entity's body keep
-// declTokens' split, where every token ends at a quote as well as at white
-// space; the header's name does not (see doctypeName).
+// entityDefTokens is declTokens for an <!ENTITY> body, general or parameter,
+// except that every token ends only at white space. Text run on after a
+// literal's closing quote with no S between — `"x"NDATA`, which XML 1.0
+// NDataDecl [76] forbids — stays in the literal's token, which isLiteral then
+// refuses; a literal run on after a keyword — `SYSTEM"x"`, which ExternalID
+// [75] forbids — stays in the keyword's token, which readEntityDecl then
+// refuses. The DOCTYPE header's ExternalID (hasExternalID) keeps declTokens'
+// split, where every token ends at a quote as well as at white space; the
+// header's name does not (see doctypeName).
 func entityDefTokens(s string) []string {
 	return splitDecl(s, true)
 }

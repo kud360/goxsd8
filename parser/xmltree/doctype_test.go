@@ -28,23 +28,15 @@ func drained(t *testing.T, doc string) *xmltree.Reader {
 
 // HasUnparsedEntity answers from the internal subset's <!ENTITY> declarations,
 // and only an external general entity with an NDATA notation is unparsed —
-// whatever Name the notation carries, NameChars and non-ASCII ones included: a
-// parameter entity, a parsed external entity and an internal one are not
-// members — the last even where an NDATA keyword follows its literal — nor is
-// a name that appears only inside a literal, a processing instruction or a
-// comment, nor a declaration whose ExternalID and NDataDecl do not read by
-// position — PUBLIC with one literal, an unquoted system identifier, a
-// notation name carrying ']', a token after the notation name, a keyword that
-// is not NDATA — nor one that is not well-formed (XML 1.0 [75], [76], [5]): no
-// S between SYSTEM or PUBLIC and its first literal, between two literals, or
-// between the literal and NDATA, a literal with text run on after it, a
-// notation name carrying '&' or U+00D7 '×', or starting with a digit or with
-// U+203F '‿', a NameChar that is no NameStartChar. Nor is an entity whose
-// declared name is not a Name (XML 1.0 [71] GEDecl, [5]) — `1x`, `a&b`, or
-// `a"b"`, a literal run on into it, which leaves a later `a` declared — while
-// one whose name holds U+0133, a NameStartChar in [4], is. A reference to
-// a parameter entity that is not read — here an external one — ends
-// processing, so a declaration after it is not a member (XML 1.0 §5.1).
+// whatever Name the notation carries, NameChars and non-ASCII ones included,
+// and whether its ExternalID is SYSTEM or PUBLIC: a parameter entity, a parsed
+// external entity and an internal one are not members — the last even where
+// its literal spells NDATA — nor is a name that appears only inside a literal,
+// a processing instruction or a comment, while an entity whose name holds
+// U+0133, a NameStartChar in [4], is. A reference to a parameter entity that
+// is not read — here an external one — ends processing, so a declaration after
+// it is not a member (XML 1.0 §5.1). The <!ENTITY> declarations that are no
+// [70] EntityDecl are TestEntityDeclIsWellFormed's rows, each a fault.
 func TestHasUnparsedEntityReadsTheInternalSubset(t *testing.T) {
 	r := drained(t, `<?xml version="1.0"?>
 <!DOCTYPE r SYSTEM "r.dtd" [
@@ -55,27 +47,9 @@ func TestHasUnparsedEntityReadsTheInternalSubset(t *testing.T) {
   <!ENTITY accented SYSTEM "x" NDATA ïmage>
   <!ENTITY cjk SYSTEM "x" NDATA 画像>
   <!ENTITY undertie SYSTEM "x" NDATA a‿·b>
-  <!ENTITY times SYSTEM "x" NDATA a×b>
-  <!ENTITY undertiefirst SYSTEM "x" NDATA ‿b>
-  <!ENTITY % pe SYSTEM "pe.gif" NDATA gif>
+  <!ENTITY % pe SYSTEM "pe.gif">
   <!ENTITY parsed SYSTEM "parsed.xml">
   <!ENTITY text "a literal naming NDATA gif">
-  <!ENTITY internal "a literal" NDATA gif>
-  <!ENTITY onelit PUBLIC "x" NDATA gif>
-  <!ENTITY bare SYSTEM x NDATA gif>
-  <!ENTITY bracket SYSTEM "x" NDATA gif]>
-  <!ENTITY trailing SYSTEM "x" NDATA gif gif>
-  <!ENTITY keyword SYSTEM "x" XNDATA gif>
-  <!ENTITY nos SYSTEM "x"NDATA gif>
-  <!ENTITY runon SYSTEM "x"y"" NDATA gif>
-  <!ENTITY nospace SYSTEM"x" NDATA gif>
-  <!ENTITY pubnospace PUBLIC"p" "x" NDATA gif>
-  <!ENTITY publits PUBLIC "p""x" NDATA gif>
-  <!ENTITY amp SYSTEM "x" NDATA g&h>
-  <!ENTITY digit SYSTEM "x" NDATA 1gif>
-  <!ENTITY 1x SYSTEM "x" NDATA gif>
-  <!ENTITY a&b SYSTEM "x" NDATA gif>
-  <!ENTITY a"b" SYSTEM "x" NDATA gif>
   <!ENTITY a SYSTEM "x" NDATA gif>
   <!ENTITY Dĳkstra SYSTEM "x" NDATA gif>
   <!ATTLIST r a CDATA "<!ENTITY inattlist SYSTEM 'x' NDATA gif>">
@@ -90,13 +64,9 @@ func TestHasUnparsedEntityReadsTheInternalSubset(t *testing.T) {
 		want bool
 	}{
 		{"pic", true}, {"pub", true}, {"namechars", true}, {"accented", true}, {"after", false},
-		{"pe", false}, {"parsed", false}, {"text", false}, {"internal", false}, {"inattlist", false},
+		{"pe", false}, {"parsed", false}, {"text", false}, {"inattlist", false},
 		{"inpi", false}, {"incomment", false}, {"gif", false}, {"undeclared", false},
-		{"onelit", false}, {"bare", false}, {"bracket", false}, {"trailing", false},
-		{"keyword", false}, {"nos", false}, {"runon", false}, {"amp", false}, {"digit", false},
-		{"nospace", false}, {"pubnospace", false}, {"publits", false},
-		{"cjk", true}, {"undertie", true}, {"times", false}, {"undertiefirst", false},
-		{"1x", false}, {"a&b", false}, {`a"b"`, false}, {"a", true}, {"Dĳkstra", true},
+		{"cjk", true}, {"undertie", true}, {"a", true}, {"Dĳkstra", true},
 	} {
 		if got := r.HasUnparsedEntity(tc.name); got != tc.want {
 			t.Errorf("HasUnparsedEntity(%q) = %t, want %t", tc.name, got, tc.want)
@@ -241,16 +211,15 @@ func TestAllDeclarationsProcessed(t *testing.T) {
 		{`<!DOCTYPE r [%x; <!ENTITY % x "">` + late + `]><r/>`, false, false},
 		{`<!DOCTYPE r [<!ENTITY % x SYSTEM "x.ent"><!ENTITY % x "">%x; ` + late + `]><r/>`, false, false},
 		{`<!DOCTYPE r [<!ENTITY % a "&#37;a;"> %a; ` + late + `]><r/>`, false, false},
-		{`<!DOCTYPE r [<!ENTITY % nul "&#0;"> %nul; ` + late + `]><r/>`, false, false},
-		{`<!DOCTYPE r [<!ENTITY % c "<![INCLUDE[` + late + `]]>"> %c;]><r/>`, false, false},
+		{`<!DOCTYPE r [<!ENTITY % c '<![INCLUDE[` + late + `]]>'> %c;]><r/>`, false, false},
 		{`<!DOCTYPE r [<!ENTITY % x SYSTEM "x.ent"> ` + late + ` %x;]><r/>`, false, true},
 		{no + `<!DOCTYPE r [<!ENTITY % x SYSTEM "x.ent"> %x; ` + late + `]><r/>`, false, false},
 		{yes + `<!DOCTYPE r [<!ENTITY % x SYSTEM "x.ent"> %x; ` + late + `]><r/>`, false, true},
 		{yes + `<!DOCTYPE r [%undeclared; ` + late + `]><r/>`, false, true},
 		{yes + `<!DOCTYPE r [<!ENTITY % c "<![INCLUDE[]]>"> %c; ` + late + `]><r/>`, false, true},
 		{yes + `<!DOCTYPE r [` + late + `]><r/>`, true, true},
-		{`<!DOCTYPE r [%undeclared; <!ENTITY % p "` + late + `"> %p;]><r/>`, false, false},
-		{`<!DOCTYPE r [<!ENTITY % p "` + late + `"> %undeclared; %p;]><r/>`, false, false},
+		{`<!DOCTYPE r [%undeclared; <!ENTITY % p '` + late + `'> %p;]><r/>`, false, false},
+		{`<!DOCTYPE r [<!ENTITY % p '` + late + `'> %undeclared; %p;]><r/>`, false, false},
 		{`<!DOCTYPE r [<!ENTITY % p "junk"> %undeclared; %p; <!ENTITY % q "junk"> %q;]><r/>`, false, false},
 		{peBlowUp(""), false, false},
 		{peBlowUp(yes), false, true},
@@ -355,7 +324,6 @@ func TestSubsetStrayTextIsNotWellFormed(t *testing.T) {
 		{decl + `<!DOCTYPE r [` + notation + `<!ENTITY % p "x"> %p; ` + pic + `]><r/>`, inPE + `"x"` + peRule + `)`},
 		{decl + `<!DOCTYPE r [%1x; ` + notation + pic + `]><r/>`, subset + `"%1x;"` + subsetRule + `, [69] PEReference)`},
 		{yes + `<!DOCTYPE r [%1x; ` + notation + pic + `]><r/>`, subset + `"%1x;"` + subsetRule + `, [69] PEReference)`},
-		{decl + `<!DOCTYPE r [<!ENTITY % 1p "` + pic + `"> %1p;]><r/>`, subset + `"%1p;"` + subsetRule + `, [69] PEReference)`},
 		{decl + `<!DOCTYPE r [<!ENTITY % open "&#60;"> %open ` + pic + `]><r/>`, subset + `"%open"` + subsetRule + `, [69] PEReference)`},
 		{decl + `<!DOCTYPE r [<!ENTITY % p "<!-- -->"> % p; ` + pic + `]><r/>`, subset + `"%"` + subsetRule + `, [69] PEReference)`},
 		{decl + `<!DOCTYPE r [<!ENTITY % p "]"> %p; ` + notation + pic + `]><r/>`, inPE + `"]"` + peRule + `)`},
@@ -529,6 +497,179 @@ func TestSubsetMarkupControls(t *testing.T) {
 			t.Run(doc, func(t *testing.T) {
 				if !drained(t, doc).HasUnparsedEntity("pic") {
 					t.Errorf("HasUnparsedEntity(%q) = false, want true", "pic")
+				}
+			})
+		}
+	}
+}
+
+// An <!ENTITY> declaration that is no XML 1.0 [70] EntityDecl is not
+// well-formed, at depth 0, in replacement text and after a declined reference
+// alike (§5.1): no S after its keyword ([71] GEDecl, [72] PEDecl), a declared
+// name that is no Name, a literal run on into it among them ([5]), no
+// definition, an entity value literal with text run on after it ([9]), a token
+// after an EntityValue ([73] EntityDef, [74] PEDef), a definition that opens no
+// ExternalID — an unquoted, missing or run-on literal, a keyword in lower case,
+// PUBLIC with one literal or a PubidChar outside [13] ([75], [11], [12], [13])
+// — an NDataDecl in a PEDef ([74]), anything but one 'NDATA' S Name after a
+// general entity's ExternalID ([76], [5]), a '&' that opens no EntityRef or
+// CharRef ([67], [68], [66]) and a character reference naming no Char (WFC:
+// Legal Character), referenced or not. Each is a fault at the directive that
+// declares nothing.
+func TestEntityDeclIsWellFormed(t *testing.T) {
+	const decl = "<?xml version=\"1.0\"?>\n"
+	const head = decl + `<!DOCTYPE r [<!NOTATION n SYSTEM 'x'><!ENTITY pic SYSTEM 'u' NDATA n>`
+	const tail = `]><r ent="pic"/>`
+	const subset = `t.xml:2:1: [xml-wf] DOCTYPE internal subset holds `
+	const inPE = `t.xml:2:1: [xml-wf] replacement text of a parameter entity referenced between DOCTYPE declarations holds `
+	const noS = `an <!ENTITY> declaration with no S after its keyword (XML 1.0 [71] GEDecl, [72] PEDecl)`
+	name := func(n, rule string) string {
+		return fmt.Sprintf(`an <!ENTITY> declaration whose name %q is not a Name (XML 1.0 %s, [5] Name)`, n, rule)
+	}
+	noDef := func(n, rules string) string {
+		return fmt.Sprintf(`an <!ENTITY> declaration of %q with no definition (XML 1.0 %s)`, n, rules)
+	}
+	value := func(v string) string {
+		return fmt.Sprintf(`an <!ENTITY> declaration whose entity value %q is no quoted literal followed by S or '>' (XML 1.0 [9] EntityValue, [71] GEDecl, [72] PEDecl)`, v)
+	}
+	after := func(tok string) string {
+		return fmt.Sprintf(`an <!ENTITY> declaration with %q after its entity value, which ends the definition (XML 1.0 [73] EntityDef, [74] PEDef)`, tok)
+	}
+	extID := func(def string) string {
+		return fmt.Sprintf(`an <!ENTITY> declaration whose definition %q is neither an entity value literal nor an ExternalID, 'SYSTEM' S SystemLiteral or 'PUBLIC' S PubidLiteral S SystemLiteral (XML 1.0 [73] EntityDef, [74] PEDef, [75] ExternalID, [11] SystemLiteral, [12] PubidLiteral)`, def)
+	}
+	const peNData = `a parameter entity declaration with "NDATA" after its ExternalID, where a PEDef admits no NDataDecl (XML 1.0 [72] PEDecl, [74] PEDef)`
+	nData := func(rest string) string {
+		return fmt.Sprintf(`an <!ENTITY> declaration with %q after its ExternalID, where only an NDataDecl, 'NDATA' S Name, may stand (XML 1.0 [71] GEDecl, [73] EntityDef, [76] NDataDecl)`, rest)
+	}
+	const ref = `an entity value literal with a '&' that opens no Reference (XML 1.0 [9] EntityValue, [67] Reference, [68] EntityRef, [66] CharRef)`
+	legal := func(digits string) string {
+		return fmt.Sprintf(`an entity value literal whose character reference &#%s; names no XML character (XML 1.0 [66] CharRef, WFC: Legal Character)`, digits)
+	}
+	const ext = `<!ENTITY % ext SYSTEM "x.ent"> %ext; `
+	for _, tc := range []struct {
+		doc  string
+		want string // the whole error
+	}{
+		{head + `<!ENTITYa "x">` + tail, subset + noS},
+		{head + `<!ENTITY% p "x">` + tail, subset + noS},
+		{head + `<!ENTITY 1x SYSTEM "x">` + tail, subset + name("1x", "[71] GEDecl")},
+		{head + `<!ENTITY 1x SYSTEM "x" NDATA n>` + tail, subset + name("1x", "[71] GEDecl")},
+		{head + `<!ENTITY a&b SYSTEM "x" NDATA n>` + tail, subset + name("a&b", "[71] GEDecl")},
+		{head + `<!ENTITY a"b" SYSTEM "x" NDATA n>` + tail, subset + name(`a"b"`, "[71] GEDecl")},
+		{head + `<!ENTITY a"x">` + tail, subset + name(`a"x"`, "[71] GEDecl")},
+		{head + `<!ENTITY >` + tail, subset + name("", "[71] GEDecl")},
+		{head + `<!ENTITY % 1p "x">` + tail, subset + name("1p", "[72] PEDecl")},
+		{head + `<!ENTITY a>` + tail, subset + noDef("a", "[71] GEDecl, [73] EntityDef")},
+		{head + `<!ENTITY % p >` + tail, subset + noDef("p", "[72] PEDecl, [74] PEDef")},
+		{head + `<!ENTITY a "x"NDATA n>` + tail, subset + value(`"x"NDATA`)},
+		{head + `<!ENTITY a "x"y"">` + tail, subset + value(`"x"y""`)},
+		{head + `<!ENTITY a "x" "%x;">` + tail, subset + after(`"%x;"`)},
+		{head + `<!ENTITY a "x" "y">` + tail, subset + after(`"y"`)},
+		{head + `<!ENTITY a "x" NDATA n>` + tail, subset + after("NDATA")},
+		{head + `<!ENTITY internal "a literal" NDATA n>` + tail, subset + after("NDATA")},
+		{head + `<!ENTITY % p "x" "y">` + tail, subset + after(`"y"`)},
+		{head + `<!ENTITY a SYSTEM x NDATA n>` + tail, subset + extID("SYSTEM x NDATA n")},
+		{head + `<!ENTITY a SYSTEM>` + tail, subset + extID("SYSTEM")},
+		{head + `<!ENTITY onelit PUBLIC "x" NDATA n>` + tail, subset + extID(`PUBLIC "x" NDATA n`)},
+		{head + `<!ENTITY a PUBLIC "p">` + tail, subset + extID(`PUBLIC "p"`)},
+		{head + `<!ENTITY nos SYSTEM "x"NDATA n>` + tail, subset + extID(`SYSTEM "x"NDATA n`)},
+		{head + `<!ENTITY runon SYSTEM "x"y"" NDATA n>` + tail, subset + extID(`SYSTEM "x"y"" NDATA n`)},
+		{head + `<!ENTITY nospace SYSTEM"x" NDATA n>` + tail, subset + extID(`SYSTEM"x" NDATA n`)},
+		{head + `<!ENTITY pubnospace PUBLIC"p" "x" NDATA n>` + tail, subset + extID(`PUBLIC"p" "x" NDATA n`)},
+		{head + `<!ENTITY publits PUBLIC "p""x" NDATA n>` + tail, subset + extID(`PUBLIC "p""x" NDATA n`)},
+		{head + `<!ENTITY a system "x">` + tail, subset + extID(`system "x"`)},
+		{head + `<!ENTITY a FOO "x">` + tail, subset + extID(`FOO "x"`)},
+		{head + `<!ENTITY a PUBLIC "p{" "s">` + tail, subset + extID(`PUBLIC "p{" "s"`)},
+		{head + `<!ENTITY a PUBLIC 'it's'' "s">` + tail, subset + extID(`PUBLIC 'it's'' "s"`)},
+		{head + `<!ENTITY a PUBLIC "p" s>` + tail, subset + extID(`PUBLIC "p" s`)},
+		{head + `<!ENTITY % p SYSTEM x>` + tail, subset + extID("SYSTEM x")},
+		{head + `<!ENTITY % p SYSTEM "x" NDATA n>` + tail, subset + peNData},
+		{head + `<!ENTITY % pe SYSTEM "pe.gif" NDATA n>` + tail, subset + peNData},
+		{head + `<!ENTITY a SYSTEM "x" NDATA n n>` + tail, subset + nData("NDATA n n")},
+		{head + `<!ENTITY a SYSTEM "x" NDATA>` + tail, subset + nData("NDATA")},
+		{head + `<!ENTITY bracket SYSTEM "x" NDATA n]>` + tail, subset + nData("NDATA n]")},
+		{head + `<!ENTITY keyword SYSTEM "x" XNDATA n>` + tail, subset + nData("XNDATA n")},
+		{head + `<!ENTITY a SYSTEM "x" ndata n>` + tail, subset + nData("ndata n")},
+		{head + `<!ENTITY amp SYSTEM "x" NDATA g&h>` + tail, subset + nData("NDATA g&h")},
+		{head + `<!ENTITY digit SYSTEM "x" NDATA 1gif>` + tail, subset + nData("NDATA 1gif")},
+		{head + `<!ENTITY times SYSTEM "x" NDATA a×b>` + tail, subset + nData("NDATA a×b")},
+		{head + `<!ENTITY undertiefirst SYSTEM "x" NDATA ‿b>` + tail, subset + nData("NDATA ‿b")},
+		{head + `<!ENTITY a "&;">` + tail, subset + ref},
+		{head + `<!ENTITY a "a & b">` + tail, subset + ref},
+		{head + `<!ENTITY a "&b">` + tail, subset + ref},
+		{head + `<!ENTITY a "&1b;">` + tail, subset + ref},
+		{head + `<!ENTITY a "&#;">` + tail, subset + ref},
+		{head + `<!ENTITY a "&#x;">` + tail, subset + ref},
+		{head + `<!ENTITY a "&#X41;">` + tail, subset + ref},
+		{head + `<!ENTITY a "&#12a;">` + tail, subset + ref},
+		{head + `<!ENTITY a "&#xG;">` + tail, subset + ref},
+		{head + `<!ENTITY a "&#-1;">` + tail, subset + ref},
+		{head + `<!ENTITY a "&#0;">` + tail, subset + legal("0")},
+		{head + `<!ENTITY a "&#1;">` + tail, subset + legal("1")},
+		{head + `<!ENTITY a "&#xD800;">` + tail, subset + legal("xD800")},
+		{head + `<!ENTITY a "&#xFFFE;">` + tail, subset + legal("xFFFE")},
+		{head + `<!ENTITY a "&#xFFFF;">` + tail, subset + legal("xFFFF")},
+		{head + `<!ENTITY a "&#x110000;">` + tail, subset + legal("x110000")},
+		{head + `<!ENTITY a "&#99999999999;">` + tail, subset + legal("99999999999")},
+		{head + `<!ENTITY % nul "&#0;"> %nul;` + tail, subset + legal("0")},
+		{head + `<!ENTITY % p "<!ENTITY a 'x' 'y'>"> %p;` + tail, inPE + after(`'y'`)},
+		{head + ext + `<!ENTITY a "x" NDATA n>` + tail, subset + after("NDATA")},
+		{head + ext + `<!ENTITY a SYSTEM "x" NDATA n n>` + tail, subset + nData("NDATA n n")},
+		{head + ext + `<!ENTITY a "&#0;">` + tail, subset + legal("0")},
+	} {
+		t.Run(tc.doc, func(t *testing.T) {
+			wantSubsetFault(t, tc.doc, tc.want)
+		})
+	}
+}
+
+// An <!ENTITY> declaration that matches XML 1.0 [70] EntityDecl reads, pic
+// declared after it and every declaration processed: an internal general or
+// parameter entity, an ExternalID of either kind with or without an NDataDecl,
+// whose notation need not be declared (VC: Notation Declared binds a
+// validating processor only), a '%' a character reference spells, a reference
+// to an undeclared entity, which an entity value bypasses (§4.4.7), character
+// references to Chars, the predefined entities, a non-BMP character, '<' and
+// '>' in an entity value, '%' and '#' in a SystemLiteral, '%' in a
+// PubidLiteral and "'" in a '"'-quoted one ([13]), empty literals, S of every
+// kind before '>' and a name declared twice.
+func TestEntityDeclControls(t *testing.T) {
+	const notation = `<!NOTATION n SYSTEM 'x'>`
+	const pic = `<!ENTITY pic SYSTEM 'u' NDATA n>`
+	for _, markup := range []string{
+		`<!ENTITY a "x">`,
+		`<!ENTITY % p "x">`,
+		`<!ENTITY % p SYSTEM "x">`,
+		`<!ENTITY a PUBLIC "p" "s" NDATA n>`,
+		`<!ENTITY a PUBLIC "p" 's'>`,
+		`<!ENTITY a "&#37;x;">`,
+		`<!ENTITY a "&b;">`,
+		`<!ENTITY a "&amp;&lt;&gt;&apos;&quot;">`,
+		`<!ENTITY a "&#x9;&#xa;&#65;&#x10FFFD;&#xFFFD;">`,
+		`<!ENTITY a "𝄞">`,
+		`<!ENTITY a "<b>x</b>">`,
+		`<!ENTITY a SYSTEM "%p;">`,
+		`<!ENTITY a SYSTEM "x#frag">`,
+		`<!ENTITY a PUBLIC "50%" "s">`,
+		`<!ENTITY a PUBLIC "it's" "s">`,
+		`<!ENTITY a SYSTEM "x" NDATA undeclared>`,
+		`<!ENTITY a ""><!ENTITY b SYSTEM ''><!ENTITY c PUBLIC '' "">`,
+		"<!ENTITY\ta\r\nSYSTEM\n\"x\"\tNDATA n \t\r\n>",
+		`<!ENTITY a "x" ><!ENTITY % p 'y'  >`,
+		`<!ENTITY a "x"><!ENTITY a "y">`,
+	} {
+		for _, doc := range []string{
+			`<!DOCTYPE r [` + notation + markup + pic + `]><r/>`,
+			`<!DOCTYPE r [` + notation + pic + markup + `]><r/>`,
+		} {
+			t.Run(doc, func(t *testing.T) {
+				r := drained(t, doc)
+				if !r.HasUnparsedEntity("pic") {
+					t.Errorf("HasUnparsedEntity(%q) = false, want true", "pic")
+				}
+				if !r.AllDeclarationsProcessed() {
+					t.Error("AllDeclarationsProcessed() = false, want true: every declaration is read")
 				}
 			})
 		}
