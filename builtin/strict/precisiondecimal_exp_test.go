@@ -177,7 +177,7 @@ func TestPrecisionDecimalFacetsUnboundedScale(t *testing.T) {
 // TestPrecisionDecimalCanonicalUnboundedExponent pins the canonical form of a
 // value whose ·scale· lies past the host int (§6): the scientific exponent is
 // printed whole, and a zero takes the GAP(datatypes) spelling zeroCanonical
-// documents, which maps back to an identical value.
+// documents (#2201), which maps back to an identical value.
 func TestPrecisionDecimalCanonicalUnboundedExponent(t *testing.T) {
 	cases := []struct {
 		lexical, want string
