@@ -201,7 +201,6 @@ func TestAllDeclarationsProcessed(t *testing.T) {
 		{`<!DOCTYPE r [` + late + `]><r/>`, true, true},
 		{`<!DOCTYPE r SYSTEM "x.dtd"><r/>`, false, false},
 		{`<!DOCTYPE r PUBLIC "-//x//y" "x.dtd"><r/>`, false, false},
-		{`<!DOCTYPE r SYSTEM "x.dtd"><!ELEMENT r ANY><r/>`, false, false},
 		{`<!DOCTYPE r SYSTEM "x.dtd" [` + late + `]><r/>`, false, true},
 		{`<!DOCTYPE r SYSTEM "[%x;]"><r/>`, false, false},
 		{`<!DOCTYPE r [<!ENTITY % p "<!ENTITY late SYSTEM 'l' NDATA n>"> %p;]><r/>`, true, true},
@@ -287,6 +286,57 @@ func TestDoctypeNameIsAName(t *testing.T) {
 			wantWellFormednessError(t, err)
 			if !strings.HasPrefix(err.Error(), tc.want) {
 				t.Errorf("error = %q, want it to open %q", err, tc.want)
+			}
+		})
+	}
+}
+
+// A directive outside the document element is a doctypedecl, '<!DOCTYPE' S
+// Name, or the document is not well-formed (XML 1.0 [22] prolog, [27] Misc,
+// [28] doctypedecl): a keyword run on into the name, with or without an
+// internal subset after it, another keyword, the keyword in lower case, a
+// markup declaration outside the internal subset, and a directive after the
+// document element are faults located at the directive, and the run-on
+// subset declares nothing. The keyword followed by any S character reads,
+// its subset declaring pic.
+func TestDirectiveIsDoctypedecl(t *testing.T) {
+	const decl = "<?xml version=\"1.0\"?>\n"
+	const subset = ` [<!NOTATION n SYSTEM 'x'><!ENTITY pic SYSTEM 'u' NDATA n>]`
+	const rule = ` is no doctypedecl, '<!DOCTYPE' S Name, and no other directive may stand outside the document element (XML 1.0 [22] prolog, [27] Misc, [28] doctypedecl)`
+	for _, tc := range []struct {
+		doc  string
+		want string // the whole error
+	}{
+		{decl + `<!DOCTYPEr><r/>`, `t.xml:2:1: [xml-wf] directive "<!DOCTYPEr"` + rule},
+		{decl + `<!DOCTYPEr` + subset + `><r/>`, `t.xml:2:1: [xml-wf] directive "<!DOCTYPEr"` + rule},
+		{decl + `<!FOO><r/>`, `t.xml:2:1: [xml-wf] directive "<!FOO"` + rule},
+		{decl + `<!doctype r><r/>`, `t.xml:2:1: [xml-wf] directive "<!doctype"` + rule},
+		{decl + `<r/><!FOO>`, `t.xml:2:5: [xml-wf] directive "<!FOO"` + rule},
+		{decl + `<!DOCTYPE r SYSTEM "x.dtd"><!ELEMENT r ANY><r/>`, `t.xml:2:28: [xml-wf] directive "<!ELEMENT"` + rule},
+	} {
+		t.Run(tc.doc, func(t *testing.T) {
+			wantSubsetFault(t, tc.doc, tc.want)
+		})
+	}
+	for _, doc := range []string{
+		"<!DOCTYPE r><r/>",
+		"<!DOCTYPE\tr><r/>",
+		"<!DOCTYPE\nr><r/>",
+		"<!DOCTYPE\rr><r/>",
+		"<!DOCTYPE\r\nr><r/>",
+	} {
+		t.Run(doc, func(t *testing.T) {
+			drained(t, decl+doc)
+		})
+	}
+	for _, doc := range []string{
+		"<!DOCTYPE r" + subset + "><r/>",
+		"<!DOCTYPE\tr" + subset + "><r/>",
+		"<!DOCTYPE\rr" + subset + "><r/>",
+	} {
+		t.Run(doc, func(t *testing.T) {
+			if !drained(t, decl+doc).HasUnparsedEntity("pic") {
+				t.Errorf(`HasUnparsedEntity("pic") = false, want true`)
 			}
 		})
 	}

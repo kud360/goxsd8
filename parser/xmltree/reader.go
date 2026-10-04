@@ -106,7 +106,7 @@ func NewReader(uri string, r io.Reader) *Reader {
 
 // Token advances to the next element or character-data node and returns it.
 // It returns io.EOF at the end of a well-formed document. Comments, processing
-// instructions, and directives are skipped; a DOCTYPE directive's entity declarations
+// instructions, and the DOCTYPE directive are skipped; its entity declarations
 // are read on the way past (see HasUnparsedEntity), and a reference to an
 // internal entity one declares is replaced by the nodes its replacement text
 // parses to (see included). Malformed input, unbound namespace prefixes, and
@@ -212,9 +212,9 @@ func (r *Reader) classify(tok xml.Token, off int64) (Node, bool, error) {
 // through '>': the subset is read from it rather than from the decoder's
 // Directive token, which replaces each comment with one space, so that a
 // comment's own grammar can be checked (XML 1.0 [15] Comment). A directive
-// inside an element is no DOCTYPE and declares nothing. A DOCTYPE that is not
-// well-formed where doctypeEntities checks it is a RuleXMLWellFormed fault at
-// loc.
+// inside an element is no DOCTYPE and declares nothing. At the document level,
+// a directive that is no doctypedecl, and a DOCTYPE that is not well-formed
+// where doctypeEntities checks it, is a RuleXMLWellFormed fault at loc.
 func (r *Reader) declareEntities(raw string, loc xsderr.Loc) error {
 	if len(r.stack) > 0 {
 		return nil

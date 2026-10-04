@@ -39,12 +39,13 @@ const (
 // DOCTYPE, in document order, and reports whether some declaration went
 // unread: the inverse of the document's [all declarations processed] (XML
 // Infoset §2.1). directive is the directive's source between its "<!" and its
-// closing '>', comments included (see Reader.declareEntities). A directive
-// that is not a DOCTYPE declares none and leaves nothing unread. standalone
-// is the XML declaration's standalone="yes" (XML 1.0 §2.9 SDDecl). A DOCTYPE
-// whose document type name is missing or is not a Name (XML 1.0 [28]
-// doctypedecl, [5] Name) is not well-formed: a RuleXMLWellFormed fault at
-// loc, the directive's start.
+// closing '>', comments included (see Reader.declareEntities). standalone is
+// the XML declaration's standalone="yes" (XML 1.0 §2.9 SDDecl). A directive
+// that is no doctypedecl — one whose keyword is not "DOCTYPE", in that case,
+// or is run on into the text after it with no S between, `<!DOCTYPEr>` — and
+// a DOCTYPE whose document type name is missing or is not a Name (XML 1.0
+// [22] prolog, [27] Misc, [28] doctypedecl, [5] Name) are not well-formed: a
+// RuleXMLWellFormed fault at loc, the directive's start.
 //
 // The external DTD subset is never read, by design (XML 1.0 §5.1 and §5.2
 // oblige a non-validating processor to read the document entity alone;
@@ -107,8 +108,8 @@ const (
 // Tracked by #2257.
 func doctypeEntities(directive string, standalone bool, loc xsderr.Loc) (decls []entityDecl, unread bool, err error) {
 	rest, ok := strings.CutPrefix(directive, "DOCTYPE")
-	if !ok {
-		return nil, false, nil
+	if _, spaced := cutSpace(rest); !ok || !spaced && rest != "" {
+		return nil, false, xsderr.New(xsderr.RuleXMLWellFormed, loc, "directive %q is no doctypedecl, '<!DOCTYPE' S Name, and no other directive may stand outside the document element (XML 1.0 [22] prolog, [27] Misc, [28] doctypedecl)", "<!"+excerpt(directive))
 	}
 	header := rest
 	open := outsideQuotes(rest, "[<")

@@ -40,7 +40,10 @@
 //     against XML 1.0 5th edition's [5] Name (internal/xmltok); a name
 //     outside it is RuleXMLWellFormed. So is a DOCTYPE whose document type
 //     name is missing or outside [5] (XML 1.0 [28] doctypedecl, checked
-//     against internal/xmlname at the directive).
+//     against internal/xmlname at the directive), and, at the directive, a
+//     directive outside the document element that is no doctypedecl: a
+//     keyword other than "DOCTYPE" in that case, <!FOO> or <!doctype r>, or
+//     one with no S after it, <!DOCTYPEr> ([22] prolog, [27] Misc, [28]).
 //   - A document whose XML declaration specifies a 1.x version number
 //     other than 1.0 is read as a 1.0 document (XML 1.0 §2.8 Note), by a
 //     same-length rewrite of that number (internal/xmldecl), so locations
