@@ -1,6 +1,7 @@
 package strict
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -174,30 +175,50 @@ func TestPrecisionDecimalFacetsUnboundedScale(t *testing.T) {
 	}
 }
 
-// TestPrecisionDecimalCanonicalUnboundedExponent pins the canonical form of a
-// value whose ·scale· lies past the host int (§6): the scientific exponent is
-// printed whole, and a zero takes the GAP(datatypes) spelling zeroCanonical
-// documents (#2201), which maps back to an identical value.
+// TestPrecisionDecimalCanonicalUnboundedExponent pins Mapping.Canonical
+// (canonicalPrecisionDecimal) on a value whose ·scale· is huge (§6): a nonzero value's scientific exponent is
+// printed whole, while a zero above maxZeroCanonicalScale — one whose ·scale·
+// lies past the host int included — is the beyond-capacity error (xmlschema11-2
+// §5.4), never a padded form or a "0.0E-(aP−1)" spelling, and never a validity
+// verdict. A zero AT the bound still renders, and round-trips.
 func TestPrecisionDecimalCanonicalUnboundedExponent(t *testing.T) {
 	cases := []struct {
-		lexical, want string
-		zero          bool
+		lexical, want string // want "" is the beyond-capacity error
 	}{
-		{"1E-99999999999999999999", "1.0E-99999999999999999999", false},
-		{"-1.50E99999999999999999999", "-1.50E99999999999999999999", false},
-		{"0E-99999999999999999999", "0.0E-99999999999999999998", true},
-		{"-0.0E-99999999999999999999", "-0.0E-99999999999999999999", true},
+		{"1E-99999999999999999999", "1.0E-99999999999999999999"},
+		{"-1.50E99999999999999999999", "-1.50E99999999999999999999"},
+		{"0E-1048577", ""},
+		{"0E-99999999999", ""},
+		{"0E-9223372036854775809", ""},
+		{"0E-99999999999999999999", ""},
+		{"-0.0E-99999999999999999999", ""},
 	}
 	for _, c := range cases {
 		t.Run(c.lexical, func(t *testing.T) {
-			v := pdValue(t, c.lexical)
-			got := v.Canonical()
-			if got != c.want {
-				t.Fatalf("Canonical(%q) = %q, want %q", c.lexical, got, c.want)
+			got, err := canonicalPrecisionDecimal(pdValue(t, c.lexical))
+			if c.want != "" {
+				if err != nil || got != c.want {
+					t.Fatalf("Canonical(%q) = %q, %v; want %q", c.lexical, got, err, c.want)
+				}
+				return
 			}
-			if c.zero && !pdValue(t, got).Identical(v) {
-				t.Errorf("Parse(Canonical(%q)) is not Identical to the value", c.lexical)
+			if !errors.Is(err, errPrecisionDecimalCapacity) || got != "" {
+				t.Fatalf("Canonical(%q) = %q, %v; want the beyond-capacity error", c.lexical, got, err)
+			}
+			if rule, verdict := xsderr.RuleOf(err); verdict {
+				t.Errorf("Canonical(%q): error carries rule %s; a beyond-capacity decline is no validity verdict", c.lexical, rule)
 			}
 		})
 	}
+
+	t.Run("0E-1048576 renders at the bound", func(t *testing.T) {
+		v := pdValue(t, "0E-1048576")
+		got, err := canonicalPrecisionDecimal(v)
+		if err != nil {
+			t.Fatalf("Canonical(0E-1048576): %v", err)
+		}
+		if len(got) != maxZeroCanonicalScale+4 || !pdValue(t, got).Identical(v) {
+			t.Errorf("Canonical(0E-1048576) has length %d and does not round-trip to the value", len(got))
+		}
+	})
 }

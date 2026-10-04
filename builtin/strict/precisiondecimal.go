@@ -2,6 +2,8 @@ package strict
 
 import (
 	"cmp"
+	"errors"
+	"fmt"
 	"math"
 	"math/big"
 	"regexp"
@@ -65,9 +67,10 @@ const (
 // or wrapped, and no operation materialises 10^·scale·. It is value.Ordered with a
 // PARTIAL order (§3.1: NaN incomparable with everything including itself),
 // value.Eq, value.Identical (scale-sensitive), value.Scaled and value.DigitCounted
-// (totalDigits) — and value.Canonical. It is deliberately NOT
-// value.Lengthed/TimezoneAware: no precisionDecimal-applicable facet needs them
-// (§3.3).
+// (totalDigits). It is deliberately NOT value.Lengthed/TimezoneAware: no
+// precisionDecimal-applicable facet needs them (§3.3). Nor is it value.Canonical:
+// a zero's canonical form can lie beyond this processor's capacity
+// (zeroCanonical), which only Mapping.Canonical's error can say.
 //
 // maxScale/minScale, precisionDecimal's two extension facets (§4.2/§4.3), are
 // enforced at instance validation by value/facets.go's scaleFacet, which reads
@@ -320,17 +323,18 @@ func (p precisionDecimalVal) FractionDigits() int {
 }
 
 // canonicalPrecisionDecimal is the Mapping.Canonical wrapper: it rejects a foreign
-// value as an *xsderr.Error rather than panicking (warden guardrail).
+// value as an *xsderr.Error rather than panicking (warden guardrail), and passes
+// on canonical's beyond-capacity error unchanged.
 func canonicalPrecisionDecimal(v value.Value) (string, error) {
 	p, ok := v.(precisionDecimalVal)
 	if !ok {
 		return "", xsderr.New(ruleDatatypeValid, xsderr.Loc{},
 			"precisionDecimal canonical: value of type %T is not a strict precisionDecimal", v)
 	}
-	return p.Canonical(), nil
+	return p.canonical()
 }
 
-// Canonical renders the canonical pDecimalRep (·precisionDecimalCanonicalMap·, §6):
+// canonical renders the canonical pDecimalRep (·precisionDecimalCanonicalMap·, §6):
 // the specials map to their fixed literal (step 2); an integer with ·scale· 0 in
 // [1E−6, 1E6] renders as a bare numeral (step 3); a positive ·scale· in range renders
 // with the decimal point placed and trailing zeros PADDED to the scale (step 4, so 3
@@ -338,14 +342,19 @@ func canonicalPrecisionDecimal(v value.Value) (string, error) {
 // the range — renders in scientific notation (step 5; a zero by zeroCanonical).
 // Trailing zeros are canonical, never stripped: that is how the canonical form is
 // quantum-preserving even though Eq is quantum-blind.
-func (p precisionDecimalVal) Canonical() string {
+//
+// The one error is zeroCanonical's beyond-capacity one. It is why
+// precisionDecimalVal does not implement [value.Canonical]: that string-only
+// signature has no outcome for a canonical form this processor will not produce,
+// so the form is reachable only through this mapping's [value.Mapping.Canonical].
+func (p precisionDecimalVal) canonical() (string, error) {
 	switch p.kind {
 	case pdNaN:
-		return "NaN"
+		return "NaN", nil
 	case pdPosInf:
-		return "INF"
+		return "INF", nil
 	case pdNegInf:
-		return "-INF"
+		return "-INF", nil
 	case pdNumeric:
 		// Rendered by the numeric algorithm below.
 	}
@@ -358,7 +367,11 @@ func (p precisionDecimalVal) Canonical() string {
 	// Zero has no log10 (§4.1) and is excluded from steps 3/4 by the 1E−6 lower
 	// bound, so it takes step 5 (zeroCanonical).
 	if p.coefficient.Sign() == 0 {
-		return sign + p.zeroCanonical()
+		unsigned, err := p.zeroCanonical()
+		if err != nil {
+			return "", err
+		}
+		return sign + unsigned, nil
 	}
 
 	digits := p.coefficient.String()
@@ -366,30 +379,45 @@ func (p precisionDecimalVal) Canonical() string {
 		// In range, adjusted = (D − 1) − aP ≥ −6 bounds aP by len(digits) + 5, so
 		// intOf always holds it; the scientific form below is the guard's fallback.
 		if s, ok := intOf(p.scale); ok {
-			return sign + plainCanonical(digits, s)
+			return sign + plainCanonical(digits, s), nil
 		}
 	}
-	return sign + p.scientificCanonical(digits)
+	return sign + p.scientificCanonical(digits), nil
 }
+
+// maxZeroCanonicalScale is the largest ·scale· aP whose zero zeroCanonical
+// renders, which bounds that canonical form, aP + 4 bytes long, at about 1 MiB.
+// Any figure at or above 369, the maxScale a minimally conforming processor must
+// support (xsd-precisionDecimal §5.1, implementation-limits), is conformant.
+const maxZeroCanonicalScale = 1 << 20
+
+// errPrecisionDecimalCapacity marks a zero whose canonical form lies beyond this
+// processor's capacity (xmlschema11-2 §5.4): the value is valid and HAS a
+// canonical form, which this processor declines to produce rather than quietly
+// change. It is a plain error, never a validity verdict ([value.Mapping]: no
+// cvc-* rule reads canonical form, and §5.4 forbids treating the value as
+// invalid). It is unexported: no consumer tells it from errNoYearMonthCanonical's
+// "no canonical form" yet (STYLE T5), but wrapping it keeps the case
+// errors.Is-identifiable inside the package.
+var errPrecisionDecimalCapacity = errors.New("precisionDecimal canonical: canonical form beyond this processor's capacity")
 
 // zeroCanonical renders the unsigned canonical form of a zero (step 5) as
 // scientificCanonicalMap(0) = "0.0E0": the mantissa "0.0" (f = 1) padded with
 // aP − 1 trailing zeros to preserve ·scale· aP.
 //
-// GAP(datatypes): a zero whose ·scale· lies past the host int has a canonical form
-// longer than any string, so it renders as the literal "0.0E-(aP−1)" instead: that
-// maps back to the same (0, aP, ·sign·) triple (§3.2) but is not the §6 canonical
-// spelling. A zero whose ·scale· the host int holds still pads aP − 1 zeros
-// however large aP is. #2201 owns both residuals.
-func (p precisionDecimalVal) zeroCanonical() string {
+// A ·scale· above maxZeroCanonicalScale, one past the host int included, is
+// errPrecisionDecimalCapacity (xmlschema11-2 §5.4). It is decided on the
+// *big.Int before any aP − 1 arithmetic or allocation, so no ·scale· is wrapped
+// and no padding proportional to it is built.
+func (p precisionDecimalVal) zeroCanonical() (string, error) {
 	if p.scale.Cmp(big.NewInt(1)) <= 0 {
-		return "0.0E0"
+		return "0.0E0", nil
 	}
-	if s, ok := intOf(p.scale); ok {
-		return "0.0" + strings.Repeat("0", s-1) + "E0"
+	if p.scale.Cmp(big.NewInt(maxZeroCanonicalScale)) > 0 {
+		return "", fmt.Errorf("%w (zero of ·scale· %s, above the bound %d; xmlschema11-2 §5.4)",
+			errPrecisionDecimalCapacity, p.scale, maxZeroCanonicalScale)
 	}
-	exp := new(big.Int).Sub(p.scale, big.NewInt(1))
-	return "0.0E-" + exp.String()
+	return "0.0" + strings.Repeat("0", int(p.scale.Int64())-1) + "E0", nil
 }
 
 // plainCanonical renders steps 3 and 4 for a magnitude string digits of ·scale·
