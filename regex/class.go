@@ -6,6 +6,8 @@ import (
 	"sort"
 	"strings"
 	"unicode"
+
+	"github.com/kud360/goxsd8/internal/xmlname"
 )
 
 // maxRune is the largest Unicode code point; the universe for complementing a
@@ -198,32 +200,20 @@ func multiEscSet(c byte) runeSet {
 	return nil
 }
 
-// nameStartSet is the set \i denotes: the XML NameStartChar (production [4] of
-// [XML 1.0] Fifth Edition, docs/specs/md/xml.md), i.e. the initial characters
-// of a name (Datatypes §G.4.2.5: "\i | the set of initial name characters,
-// those matched by NameStartChar"). \I is its complement.
-//
-// Which edition of XML supplies the productions is implementation-defined
-// (Datatypes §H.1 clause 1). This module takes [XML 1.0] Fifth Edition, the
-// edition the local spec corpus carries, and takes it HERE — every consumer of
-// \i and \c inherits the one choice rather than restating it.
+// nameStartSet is the set \i denotes: the XML NameStartChar, production [4]
+// (Datatypes §G.4.2.5: "\i | the set of initial name characters, those matched
+// by NameStartChar"). \I is its complement. The production, and the XML
+// edition it is taken from (Datatypes §H.1 clause 1), are internal/xmlname's.
 func nameStartSet() runeSet {
-	return runeSet{}.
-		add(':', ':').add('A', 'Z').add('_', '_').add('a', 'z').
-		add(0xC0, 0xD6).add(0xD8, 0xF6).add(0xF8, 0x2FF).
-		add(0x370, 0x37D).add(0x37F, 0x1FFF).add(0x200C, 0x200D).
-		add(0x2070, 0x218F).add(0x2C00, 0x2FEF).add(0x3001, 0xD7FF).
-		add(0xF900, 0xFDCF).add(0xFDF0, 0xFFFD).add(0x10000, 0xEFFFF)
+	return runeSet{}.addTable(xmlname.NameStartChar)
 }
 
-// nameCharSet is the set \c denotes: the XML NameChar (production [4a] of
-// [XML 1.0] Fifth Edition, docs/specs/md/xml.md), i.e. NameStartChar plus the
-// continuation characters (Datatypes §G.4.2.5: "\c | the set of name
-// characters, those matched by NameChar"). \C is its complement.
+// nameCharSet is the set \c denotes: the XML NameChar, production [4a], i.e.
+// NameStartChar plus the continuation characters (Datatypes §G.4.2.5: "\c |
+// the set of name characters, those matched by NameChar"). \C is its
+// complement.
 func nameCharSet() runeSet {
-	return nameStartSet().
-		add('-', '-').add('.', '.').add('0', '9').
-		add(0xB7, 0xB7).add(0x300, 0x36F).add(0x203F, 0x2040)
+	return nameStartSet().addTable(xmlname.NameCharExtra)
 }
 
 // propSet returns the code-point set denoted by a \p{...} property body, or by a

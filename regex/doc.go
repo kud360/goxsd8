@@ -6,7 +6,8 @@
 // descent parser/translator core serves both; a flavor flag selects the
 // semantics (PRINCIPLES 10). The package sits just above the leaves: it
 // imports only xsderr (so its FORX0001/FORX0002/src-pattern-value failures
-// are rule-tagged per STYLE T2), otherwise stdlib.
+// are rule-tagged per STYLE T2) and internal/xmlname (the NameStartChar and
+// NameChar productions behind \i and \c), otherwise stdlib.
 //
 // # Flavors
 //
