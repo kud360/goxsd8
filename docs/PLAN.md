@@ -731,8 +731,8 @@ non-backtracking content matcher (**#715**, 193 → 520); `cvc-complex-type`
 clause 1.2's ·initial value· against String Valid (**#775**, 532 → 535), which
 also closed #759 and landed `docs/STYLE.md` **E4**; **the descent (#790,
 535 → 1017)**, which threads each descendant's ·context-determined declaration·
-into the recursive walk (§3.3.4.6 clause 3.1) — the largest single move any lane
-has recorded; identity constraints and the ID/IDREF table (**#718**,
+into the recursive walk (key-sva (§3.3.4.6) clause 3.1) — the largest single
+move any lane has recorded; identity constraints and the ID/IDREF table (**#718**,
 1017 → 1133); `xsi:type` and `xsi:nil` deciding rather than declining (**#716**,
 +183); and a union-governed item classified by its ·validating type· (**#813**,
 +9, unioned onto #716's). #913's cvc-type clause 3.1 landing added **9409**,

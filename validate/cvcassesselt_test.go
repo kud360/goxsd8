@@ -111,8 +111,8 @@ func dElem(local string, line int, kids ...Child) *testElement {
 // A child ·attributed to· an element particle is assessed against that
 // particle's {term}, its own [[children]] against that declaration's {content
 // type} — recursively, so a defect TWO levels below the validation root is
-// charged at its own position (cvc-assess-elt clause 3.1 over key-governing-ed
-// clause 2).
+// charged at its own position (key-sva (§3.3.4.6) clause 3.1 over
+// key-governing-ed clause 2).
 func TestDescendantContentIsAssessedAtDepth(t *testing.T) {
 	schema := dSchema(t, func(b *xsd.SchemaBuilder) {
 		b.AddType(dType(t, "KidType", "", xsd.DerivationRestriction, nil,
@@ -235,8 +235,8 @@ func TestUnresolvedNameUnderAStrictWildcardChargesTheEnclosingElement(t *testing
 		t.Errorf("Loc = %s, want the CHILD's position %s", got[0].Loc, loc(2, 1))
 	}
 	// The clause is named against the rule that STATES it and not against the
-	// Rule the error carries: cvc-assess-elt has a clause 1.1.3 of its own
-	// (key-sva's) and this is not it.
+	// Rule the error carries: key-sva (§3.3.4.6) has a clause 1.1.3 of its own
+	// and this is not it.
 	for _, want := range []string{"·resolves· to no top-level element declaration", "e-validity clause 1.1.3", "notKnown", "the enclosing element root"} {
 		if !strings.Contains(got[0].Msg, want) {
 			t.Errorf("Msg = %q, want it to name %s", got[0].Msg, want)

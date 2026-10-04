@@ -226,9 +226,9 @@
 // 2.2 — the governing type's, or xs:anyType's lax one on a ·laxly assessed·
 // element (§3.4.7) — with the top-level declaration its ·expanded name·
 // ·resolves· to as its ·governing attribute declaration· (key-governing-ad
-// clause 3). A ·skipped· attribute, attributed to a skip wildcard, and one whose
-// name resolves no declaration have none, under strict as under lax, and are
-// not assessed (cvc-assess-elt clause 2.2).
+// clause 3). A ·skipped· attribute, attributed to a skip wildcard, and one
+// whose name resolves no declaration have none, under strict as under lax, and
+// are not assessed (key-sva (§3.3.4.6) clause 2.2).
 //
 // cvc-attribute is also charged against the built-in declaration for the type
 // attribute (§3.2.7.1), at the xsi:type attribute's own Loc, and that charge
@@ -306,24 +306,24 @@
 //
 // Every one of those charges reaches a DESCENDANT on the same terms, against
 // the ·governing type definition· the particle its parent's {content type}
-// ·attributes· it to supplies (§3.3.4.6 clause 3.1): an element particle's
-// {term}, or — for a strict or lax ·wildcard particle· or {open content}
-// {wildcard}, and for an item admitted as a member of a ·substitution group· —
-// the top-level declaration its ·expanded name· ·resolves· to. An item
+// ·attributes· it to supplies (key-sva (§3.3.4.6) clause 3.1): an element
+// particle's {term}, or — for a strict or lax ·wildcard particle· or {open
+// content} {wildcard}, and for an item admitted as a member of a ·substitution
+// group· — the top-level declaration its ·expanded name· ·resolves· to. An item
 // ·attributed to· the {open content} whose ·locally declared type· is
 // non-·absent· is the exception: key-governing-ed clause 4.3 gives it no
 // declaration, and that type, or an xsi:type ·overriding· it, governs it,
 // resolved name or not. Two shapes stop it: a child ·attributed to· a skip
 // ·wildcard particle· or to an {open content} with a skip {wildcard}, which is
-// ·skipped· along with every element beneath it (cvc-assess-elt clauses 2 and
-// 3.2) — for the {open content} a reading and not a quotation, key-skipped
-// naming a skip wildcard and never an Open Content, which the ·default
-// binding· of cos-content-act-restrict clause 6 settles (#1969) — and an
-// undecided child, whose governance this package could not decide at all: a
-// child of a parent whose own type it could not determine, ·nilled· or not
-// (#2211), or whose clause 1.4 xsd.Schema.ContentMatcher does not decide,
-// which is assessed against nothing along with its whole subtree and withholds
-// cvc-id clause 1 (#1892).
+// ·skipped· along with every element beneath it (cvc-assess-elt clause 2,
+// key-sva (§3.3.4.6) clause 3.2) — for the {open content} a reading and not a
+// quotation, key-skipped naming a skip wildcard and never an Open Content,
+// which the ·default binding· of cos-content-act-restrict clause 6 settles
+// (#1969) — and an undecided child, whose governance this package could not
+// decide at all: a child of a parent whose own type it could not determine,
+// ·nilled· or not (#2211), or whose clause 1.4 xsd.Schema.ContentMatcher does
+// not decide, which is assessed against nothing along with its whole subtree
+// and withholds cvc-id clause 1 (#1892).
 //
 // A child its parent DECIDEDLY ·attributes· to nothing — a ·nilled· parent
 // whose type this package determined, a simple-typed parent, an empty or

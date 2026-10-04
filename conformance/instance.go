@@ -162,22 +162,22 @@ import (
 // against the root (#790, #913), and stay unconditional there. The lane's
 // "valid" is §2.5's key-deep-valid-doc (#1911): the root's [validity] is valid
 // AND no element or attribute anywhere in the document has [validity] invalid
-// (clauses 3 and 4). §3.3.4.6 clause 3.1 has a child assessed with respect to
-// its ·governing element declaration· — the one the parent's content model
-// ·attributed· it to, or, under a lax wildcard or a ·laxly assessed· parent,
-// the top-level one its name ·resolves· to (#1823) — so a child validate
-// charges is one it ·strictly assessed· against a declaration it really has,
-// and its [validity] is invalid (§3.3.5.1 e-validity clause 1.1.1); an
-// attribute validate charges has a ·governing attribute declaration·, on a
-// ·laxly assessed· element too (#1891), and its [validity] is invalid
-// likewise. Either makes the document not deep-valid, whatever the unassessed
-// rest of it holds. Clause 1.1.2 makes a ·strictly assessed· ancestor with an
-// invalid [[child]] or [[attribute]] invalid in turn, but stops at the first
-// ·laxly assessed· one (cvc-assess-elt clause 3, key-lva): its [validity] is
-// notKnown (e-validity clause 2), never invalid (§2.5's Note), so the root may
-// stay valid and the document root-valid. decidedNotValid reads a charge at or
-// below a ·laxly assessed· element as "not valid" all the same, which is
-// deep-valid's reading and not root-valid's.
+// (clauses 3 and 4). key-sva (§3.3.4.6) clause 3.1 has a child assessed with
+// respect to its ·governing element declaration· — the one the parent's content
+// model ·attributed· it to, or, under a lax wildcard or a ·laxly assessed·
+// parent, the top-level one its name ·resolves· to (#1823) — so a child
+// validate charges is one it ·strictly assessed· against a declaration it
+// really has, and its [validity] is invalid (§3.3.5.1 e-validity clause 1.1.1);
+// an attribute validate charges has a ·governing attribute declaration·, on a
+// ·laxly assessed· element too (#1891), and its [validity] is invalid likewise.
+// Either makes the document not deep-valid, whatever the unassessed rest of it
+// holds. Clause 1.1.2 makes a ·strictly assessed· ancestor with an invalid
+// [[child]] or [[attribute]] invalid in turn, but stops at the first ·laxly
+// assessed· one (cvc-assess-elt clause 3, key-lva): its [validity] is notKnown
+// (e-validity clause 2), never invalid (§2.5's Note), so the root may stay
+// valid and the document root-valid. decidedNotValid reads a charge at or below
+// a ·laxly assessed· element as "not valid" all the same, which is deep-valid's
+// reading and not root-valid's.
 //
 // Every {type table} a declaration carries IS built (#851), so validate never
 // guesses a tableless declaration's type: it ·conditionally selects· through the

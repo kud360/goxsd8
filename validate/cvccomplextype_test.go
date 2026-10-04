@@ -496,10 +496,10 @@ func TestSimpleTypedRootReachesNoComplexTypeClause(t *testing.T) {
 }
 
 // A descendant's governing type comes from the particle it is ·attributed to·
-// in its parent's {content type} (§3.3.4.6 clause 3.1), and a child its parent
-// decidedly attributed to NOTHING is governed per key-governing-ed clause 4:
-// <child> has no ·locally declared type· and its name ·resolves· to no
-// declaration, so it is ·laxly assessed· against xs:anyType, whose lax
+// in its parent's {content type} (key-sva (§3.3.4.6) clause 3.1), and a child
+// its parent decidedly attributed to NOTHING is governed per key-governing-ed
+// clause 4: <child> has no ·locally declared type· and its name ·resolves· to
+// no declaration, so it is ·laxly assessed· against xs:anyType, whose lax
 // {attribute wildcard} admits the same stray attribute that is charged on the
 // root (#1892).
 //

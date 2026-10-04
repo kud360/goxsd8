@@ -156,8 +156,8 @@ func TestNilledSimpleTypedElementSkipsTheValueCheck(t *testing.T) {
 
 // Clause 3.1 reaches a DESCENDANT on the same terms as the root: the child here
 // is typed by the element declaration its parent's content model ·attributed·
-// it to (§3.3.4.6 clause 3.1), and its own ·initial value· is charged against
-// its own type, at its own location.
+// it to (key-sva (§3.3.4.6) clause 3.1), and its own ·initial value· is charged
+// against its own type, at its own location.
 func TestSimpleTypeChargesADescendant(t *testing.T) {
 	schema := descendantSimpleTypeSchema(t)
 
@@ -208,7 +208,7 @@ func descendantSimpleTypeSchema(t *testing.T) *xsd.Schema {
 	})
 }
 
-// The other entry point: cvc-assess-elt clause 1.2, an element with no
+// The other entry point: key-sva (§3.3.4.6) clause 1.2, an element with no
 // ·governing element declaration· at all whose xsi:type ·resolves· to a simple
 // type. key-governing-type-elem clause 8 makes that the ·governing type
 // definition·, so clause 3.1 applies with no declaration behind it.

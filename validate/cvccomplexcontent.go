@@ -366,8 +366,8 @@ func (c *contentCheck) text(w *walk, t Text) {
 // element settles clauses 1.1, 1.2 and 1.4 for one element information item of
 // the sequence — or cvc-type clause 3.1.2, under a simple ·governing type
 // definition·, or cvc-elt clause 3.2.3.1, for a ·nilled· element — and reports
-// what clause 1.4 ·attributed· the item to (§3.4.4.4) for the walk's own descent
-// into it (cvc-assess-elt clause 3.1, [walk.childGoverning]).
+// what clause 1.4 ·attributed· the item to (§3.4.4.4) for the walk's own
+// descent into it (key-sva (§3.3.4.6) clause 3.1, [walk.childGoverning]).
 //
 // The attribution is nil wherever nothing attributed the item, and undecided
 // reports the two nils that are this package's own declines rather than the

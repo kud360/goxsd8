@@ -662,9 +662,9 @@ func (g *subtreeGate) recordedAttributeType(ad xsd.AttributeDeclaration) refusal
 // {attribute wildcard} that admits n (cvc-complex-type clause 2.2, cvc-wildcard
 // §3.10.4.1, xsd.Schema.AllowsAttributeWildcardName), and one of these holds:
 //
-//   - its {process contents} is skip: the attribute is ·skipped·
-//     (key-skipped), assessed against nothing, and cvc-assess-elt clause 2.2
-//     leaves it unassessed with nothing to decide;
+//   - its {process contents} is skip: the attribute is ·skipped· (key-skipped),
+//     assessed against nothing, and key-sva (§3.3.4.6) clause 2.2 leaves it
+//     unassessed with nothing to decide;
 //   - n ·resolves· to a top-level attribute declaration (key-governing-ad
 //     clause 3) that recordedAttributeType admits, and the attribute's
 //     ·locally declared type· within t is ·absent· (locallyDeclaredAttribute
@@ -931,9 +931,9 @@ func (g *subtreeGate) instanceTyped(start xml.StartElement, lexical string, inhe
 // ·governing type definition·, and the child and its subtree meet governed's
 // conditions against that type, never ·nilled·: key-nilled is relative to a
 // declaration, and it has none. The child is ·strictly assessed· against that
-// type (cvc-assess-elt clause 1.2), as validate's walk.localGovernance assesses
-// it, so cvc-complex-type clause 5 holds for it by construction, and cvc-type
-// clause 2, for an abstract complex type, is the walk's charge.
+// type (key-sva (§3.3.4.6) clause 1.2), as validate's walk.localGovernance
+// assesses it, so cvc-complex-type clause 5 holds for it by construction, and
+// cvc-type clause 2, for an abstract complex type, is the walk's charge.
 func (g *subtreeGate) localTyped(start xml.StartElement, ldt xsd.TypeDefinition, inherited []xml.Attr) refusal {
 	defer g.enter(start)()
 	td, why := g.localType(start, ldt)
