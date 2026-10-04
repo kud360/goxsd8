@@ -204,7 +204,7 @@ func TestPrecisionDecimalNaN(t *testing.T) {
 // absent iff numericalValue is special).
 func TestPrecisionDecimalScale(t *testing.T) {
 	m := pdMapping(t)
-	cases := map[string]int{"3": 0, "3.00": 2, "3.0e2": -1, "0.05": 2}
+	cases := map[string]int64{"3": 0, "3.00": 2, "3.0e2": -1, "0.05": 2}
 	for lex, want := range cases {
 		s, ok := parsePD(t, m, lex).(value.Scaled)
 		if !ok {
@@ -215,14 +215,14 @@ func TestPrecisionDecimalScale(t *testing.T) {
 			t.Errorf("Scale(%q): ok=false, want a present scale", lex)
 			continue
 		}
-		if got != want {
+		if !got.IsInt64() || got.Int64() != want {
 			t.Errorf("Scale(%q) = %d, want %d", lex, got, want)
 		}
 	}
 	for _, lex := range []string{"INF", "-INF", "NaN"} {
 		s := parsePD(t, m, lex).(value.Scaled)
-		if _, present := s.Scale(); present {
-			t.Errorf("Scale(%q): ok=true, want absent for a special value", lex)
+		if got, present := s.Scale(); present || got != nil {
+			t.Errorf("Scale(%q) = (%v, %v), want (nil, false) for a special value", lex, got, present)
 		}
 	}
 }

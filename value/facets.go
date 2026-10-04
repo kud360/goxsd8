@@ -1,13 +1,10 @@
 package value
 
 import (
-	"cmp"
 	"errors"
 	"fmt"
 	"math/big"
 	"regexp"
-	"strconv"
-	"strings"
 
 	"github.com/kud360/goxsd8/regex"
 	"github.com/kud360/goxsd8/xsd"
@@ -1285,7 +1282,9 @@ func (tf explicitTimezoneFacet) CheckValue(v Value) error {
 // is facet-valid w.r.t. both facets regardless of {value} (clause 2 of each
 // rule). Only a numeric value's ·scale· is compared against limit (clause 1):
 // maxScale bounds it above (violation is scale > limit), minScale bounds it
-// below (violation is scale < limit).
+// below (violation is scale < limit). Both are unbounded integers — ·scale·
+// arrives from value.Scaled as a *big.Int — and are compared whole, so neither
+// is narrowed to a host int.
 type scaleFacet struct {
 	limit integerLiteral
 	kind  xsd.FacetKind
@@ -1327,9 +1326,11 @@ func (sf scaleFacet) CheckValue(v Value) error {
 	return nil
 }
 
-// violates maps a ·scale· to a violation per kind (clause 1 of each rule).
-func (sf scaleFacet) violates(scale int) bool {
-	c := sf.limit.cmpInt(scale)
+// violates maps a ·scale· to a violation per kind (clause 1 of each rule). Both
+// ·scale· (xsd-precisionDecimal §3.1) and {value} are unbounded integers, and
+// cmpBig compares them exactly.
+func (sf scaleFacet) violates(scale *big.Int) bool {
+	c := sf.limit.cmpBig(scale)
 	switch sf.kind {
 	case xsd.FacetMaxScale:
 		return c < 0
@@ -1393,23 +1394,24 @@ func facetCount(f xsd.Facet, rule xsderr.Rule) (integerLiteral, error) {
 // integerLiteral is an integer facet {value} held as the literal the document
 // wrote, which facetCount or facetInt has checked is an optional sign followed by
 // decimal digits. The value spaces of the length, digits and scale facets are
-// unbounded, so the literal is never narrowed to a host int: cmpInt compares it
-// exactly with the int an instance measures, and a rejection names the literal
-// itself.
+// unbounded, so the literal is never narrowed to a host int: cmpBig compares it
+// exactly with the integer an instance measures (cmpInt for an int measure),
+// and a rejection names the literal itself.
 type integerLiteral string
 
 // cmpInt orders l against n by value: negative, zero or positive as l is less
-// than, equal to or greater than n. A literal past the host int's range is
-// beyond every n on its sign's side.
+// than, equal to or greater than n.
 func (l integerLiteral) cmpInt(n int) int {
-	v, err := strconv.Atoi(string(l))
-	if err == nil {
-		return cmp.Compare(v, n)
+	return l.cmpBig(big.NewInt(int64(n)))
+}
+
+// cmpBig orders l against n by value: negative, zero or positive as l is less
+// than, equal to or greater than n.
+func (l integerLiteral) cmpBig(n *big.Int) int {
+	v, ok := new(big.Int).SetString(string(l), 10)
+	if !ok {
+		// facetCount and facetInt admit only literals SetString reads.
+		panic(fmt.Sprintf("value: cmpBig: %q is not an integer literal", string(l)))
 	}
-	// l is checked at construction and Atoi reads the same syntax, so the only
-	// error left is strconv.ErrRange: l lies past math.MaxInt or math.MinInt.
-	if strings.HasPrefix(string(l), "-") {
-		return -1
-	}
-	return 1
+	return v.Cmp(n)
 }
