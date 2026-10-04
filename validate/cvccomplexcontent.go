@@ -382,15 +382,30 @@ func (c *contentCheck) text(w *walk, t Text) {
 // later child is read as attributed to nothing. Either way the child is still WALKED —
 // every charge here is against the parent, not the child — and how it is
 // governed is the package promise the package doc states.
+//
+// A ·nilled· element whose type this package could not determine
+// ([governance.typeUndetermined], the declined shape) is charged cvc-elt clause
+// 3.2.3.1 all the same — the clause reads no type — but its child is reported
+// undecided, on both arms that charge reaches it by, because what governs the
+// child is the parent's type's to say: key-governing-ed clause 4.3 reads the
+// parent's ·locally declared type·, and key-p-inherited clause 3 the
+// ·attribution· of the parent's attributes to that type, which is the
+// [inherited attributes] a child's {type table} selects on (key-cta-ta-select
+// clause 1.1.3). A decided child there would be governed by its top-level
+// declaration and selected on attributes read by ·expanded name·, wrong in
+// both directions (#2211). The Result stays honest through the records already
+// made: this charge at the child, and the parent's own [Unevaluated] records
+// for the type it declined (key-cta-ta-select, or cvc-elt clause 1 or 4) and
+// for cvc-id ([walk.idElement]).
 func (c *contentCheck) element(w *walk, child Element) (a xsd.Attribution, undecided bool) {
 	if c.charged {
-		return nil, false
+		return nil, c.g.typeUndetermined()
 	}
 	if c.nilled {
 		c.charge(w, ruleCvcElt, "3.2.3.1", child.Loc(),
 			"the element %s has xsi:nil = true, so it is ·nilled·, but it has the element information item %s among its [[children]], and cvc-elt clause 3.2.3.1 admits no character or element information item [[children]] on a ·nilled· element",
 			c.e.Name(), child.Name())
-		return nil, false
+		return nil, c.g.typeUndetermined()
 	}
 	c.sawElement = true
 	if st := c.g.simpleType(); st != nil {

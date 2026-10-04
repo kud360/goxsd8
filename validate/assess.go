@@ -235,7 +235,8 @@ func (g governance) laxlyAssessed() bool {
 // element's ·governing type definition·: the declined shape (hasDecl with a nil
 // typ) or the undecided one. It is false for every outcome cvc-assess-elt
 // itself gives, a ·laxly assessed· element included, whose absent type is the
-// spec's and not this package's. Its one reader is [walk.attributeType].
+// spec's and not this package's. Its readers are [walk.attributeType] and
+// [contentCheck.element], the second for a ·nilled· element's children.
 func (g governance) typeUndetermined() bool {
 	return g.undecided || g.hasDecl && g.typ == nil
 }

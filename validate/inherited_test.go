@@ -331,3 +331,126 @@ func TestSkippedSubtreeInheritsNothing(t *testing.T) {
 		}
 	}
 }
+
+// nilFixture is a schema whose validation root <p> is {nillable}, typed PType,
+// with a {type table} whose one alternative and {default type definition} both
+// name PType, under the {test} test: "count(@wid) > 0" is one the §3.12.6
+// evaluator declines (key-cta-ta-select), leaving <p>'s ·governing type
+// definition· undetermined, and "@lang = 'de'" one it decides, the control.
+// PType's one attribute use refers to the top-level lang with the use's own
+// {inheritable} use, the top-level declaration's being decl. PType's sequence
+// holds a lax wildcard, so a <leaf> child of a ·nilled· <p> has no ·locally
+// declared type· within PType and ·resolves· to the tabled top-level <leaf>
+// (inhLeaf); localLeaf gives it a LOCAL <leaf> typed Fallback instead, which is
+// that ·locally declared type· (key-ldt-elem).
+func nilFixture(t *testing.T, test string, use, decl, localLeaf bool) *xsd.Schema {
+	t.Helper()
+	leaf := dWildcard(t, xsd.ProcessLax)
+	if localLeaf {
+		leaf = dTyped(t, "PType", "leaf", "Fallback")
+	}
+	x := xsd.NewXPathExpression(test, nil, nil, nil)
+	table, err := xsd.NewTypeTable(xsderr.Loc{},
+		[]xsd.TypeAlternative{namedTypeAlternative(t, &x, local("PType"))},
+		namedTypeAlternative(t, nil, local("PType")))
+	if err != nil {
+		t.Fatalf("building the type table: %v", err)
+	}
+	p, err := xsd.NewElementDeclaration(xsderr.Loc{}, local("p"),
+		xsd.TypeDefinitionRef{Name: local("PType")}, &table, xsd.NewGlobalScope(),
+		nil, true, nil, nil, nil, false, nil)
+	if err != nil {
+		t.Fatalf("building the p element declaration: %v", err)
+	}
+	b := xsd.NewSchemaBuilder()
+	for _, st := range ctaBuiltins(t) {
+		b.AddType(st)
+	}
+	b.AddType(ctaFallbackType(t))
+	b.AddType(ctaCandidateType(t, "First"))
+	b.AddType(dType(t, "PType", "", xsd.DerivationRestriction,
+		[]xsd.AttributeUse{inhRefUse(t, &use, nil)}, cSequence(t, false, leaf)))
+	b.AddElement(inhLeaf(t))
+	b.AddElement(p)
+	b.AddAttribute(inhGlobal(t, decl))
+	schema, err := b.Finalize()
+	if err != nil {
+		t.Fatalf("finalizing the nilled-parent schema: %v", err)
+	}
+	return schema
+}
+
+// nilDoc is <p lang="de" xsi:nil="true"> over kids.
+func nilDoc(kids ...Child) *testElement {
+	p := dElem("p", 1, kids...)
+	p.attrs = []Attribute{
+		&testAttribute{name: local("lang"), value: "de", loc: loc(1, 5)},
+		&testAttribute{name: xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: "nil"}, value: "true", loc: loc(1, 15)},
+	}
+	return p
+}
+
+// A ·nilled· <p> whose ·governing type definition· this package could not
+// determine walks its <leaf> undecided (contentCheck.element, #2211): cvc-elt
+// clause 3.2.3.1 is charged at the child as for any ·nilled· parent, and
+// <p>'s key-cta-ta-select and cvc-id [Unevaluated] records stand for the type
+// it declined. The control rows decide <p>'s {test} and show what each fixture
+// discriminates; each declined row fails with contentCheck.element reporting
+// the child decided, as it did before #2211.
+//
+//   - Inheritable by the declaration only: the true type's use hands lang down
+//     to nobody, but a read by ·expanded name· would, and <leaf> would select
+//     First and be charged needFirst at line 3 — an over-reject.
+//   - Inheritable by the use only: the true type hands lang down and <leaf>
+//     selects First, but a read by ·expanded name· would not, and <leaf> would
+//     be governed by its Fallback default instead — the lost charge. Fallback,
+//     like First, admits no element [[child]], so <leaf>'s <x> is charged
+//     cvc-complex-type clause 1.1 under either, and its absence is what shows
+//     <leaf> was governed by neither.
+//   - A local <leaf>: the true type governs it by its ·locally declared type·
+//     Fallback (key-governing-ed clause 4.3), which has no {type table}; read
+//     without the parent's type it would resolve to the tabled top-level <leaf>
+//     and select First on an inherited lang.
+//   - A text [[child]] before <leaf>: the parent is already charged when
+//     <leaf> arrives, the second arm contentCheck.element reports through.
+func TestNilledUndeterminedParentsChildIsUndecided(t *testing.T) {
+	const declined, decided = "count(@wid) > 0", "@lang = 'de'"
+	leaf := func(kids ...Child) Child { return ElementChild(dElem("leaf", 3, kids...)) }
+	x := ElementChild(dElem("x", 4))
+	text := TextChild(&testText{data: "t", loc: loc(2, 1)})
+	for _, tc := range []struct {
+		why                  string
+		test                 string
+		use, decl, localLeaf bool
+		doc                  *testElement
+		nilAt                int  // the line cvc-elt clause 3.2.3.1 is charged at
+		selected             bool // <leaf> selects First, in a control row alone
+	}{
+		{"declaration only, decided", decided, false, true, false, nilDoc(leaf()), 3, false},
+		{"declaration only, declined", declined, false, true, false, nilDoc(leaf()), 3, false},
+		{"use only, decided", decided, true, false, false, nilDoc(leaf(x)), 3, true},
+		{"use only, declined", declined, true, false, false, nilDoc(leaf(x)), 3, false},
+		{"local leaf, decided", decided, true, true, true, nilDoc(leaf()), 3, false},
+		{"local leaf, declined", declined, true, true, true, nilDoc(leaf()), 3, false},
+		{"charged before the child, declined", declined, false, true, false, nilDoc(text, leaf()), 2, false},
+	} {
+		t.Run(tc.why, func(t *testing.T) {
+			got, unevaluated := assessRecorded(t, nilFixture(t, tc.test, tc.use, tc.decl, tc.localLeaf), tc.doc)
+			inhWantSelected(t, got, tc.selected, tc.why)
+			if tc.selected {
+				// First, like Fallback, admits no element [[child]]: <x> is
+				// charged cvc-complex-type clause 1.1 at its own line.
+				icWantCharges(t, got, icCharge(ruleCvcElt, tc.nilAt),
+					icCharge(ruleCvcComplexType, 3), icCharge(ruleCvcComplexType, 4))
+				return
+			}
+			icWantCharges(t, got, icCharge(ruleCvcElt, tc.nilAt))
+			if tc.test == decided {
+				return
+			}
+			wantDeclines(t, unevaluated,
+				Unevaluated{rule: ruleKeyCTATASelect, loc: loc(1, 1), msg: "count(@wid) > 0"},
+				Unevaluated{rule: ruleCvcID, loc: loc(1, 1), msg: ""})
+		})
+	}
+}

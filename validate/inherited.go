@@ -47,13 +47,14 @@ type inheritedAttribute struct {
 //
 // An e whose ·governing type definition· this package could not determine
 // hands down a set read off the top-level declarations alone, which a use of
-// its real type might contradict. No reader sees it: such an e attributes its
-// [[children]] to nothing, so no element below it is typed and no {type table}
-// is consulted ([walk.childGoverning]). A ·laxly assessed· e hands down the
-// same top-level reading, and there it is the spec's: xs:anyType has no
-// {attribute uses} and a lax {attribute wildcard} (§3.4.7), so key-governing-ad
-// clause 3 resolves each attribute by name, and the {type table} of a child
-// that ·resolves· reads it ([walk.child]).
+// its real type might contradict. No reader sees it: every element [[child]]
+// of such an e, ·nilled· or not, is [walk.child]'s undecided shape
+// ([contentCheck.element]), which consults no {type table} and hands its own
+// [[children]] the same undecided shape, so no element below e is typed (#2211).
+// A ·laxly assessed· e hands down the same top-level reading, and there it is
+// the spec's: xs:anyType has no {attribute uses} and a lax {attribute wildcard}
+// (§3.4.7), so key-governing-ad clause 3 resolves each attribute by name, and
+// the {type table} of a child that ·resolves· reads it ([walk.child]).
 func (w *walk) handedDown(e Element, g governance, inherited []inheritedAttribute) []inheritedAttribute {
 	attrs := e.Attributes()
 	var own []inheritedAttribute
@@ -96,8 +97,8 @@ func (w *walk) handedDown(e Element, g governance, inherited []inheritedAttribut
 // is ·attributed to· (clause 3.1), or where it is attributed to none, the
 // {inheritable} of its ·governing attribute declaration· (clause 3.2).
 //
-// The attribution is [walk.attributeType]'s (cvcid.go), arm for arm, and reads
-// the same three encodings: attributeUseNamed for clause 2.1's match,
+// The attribution is [walk.attributeType]'s (cvcid.go), arm for arm but one, and
+// reads the same three encodings: attributeUseNamed for clause 2.1's match,
 // skippedAttribute for the item key-governing-ad (§3.2.4.2) clause 3 leaves
 // with no declaration, and the top-level resolution for every other. The two
 // differ in what they read off the result — attributeType the {type
@@ -106,20 +107,14 @@ func (w *walk) handedDown(e Element, g governance, inherited []inheritedAttribut
 // differ from its declaration's: a use's own inheritable attribute wins over
 // the declaration's (§3.2.2.3 ref.att.local).
 //
-// GAP(validate): the one arm this does not share is attributeType's decline for
-// an element whose ·governing type definition· this package could not determine
-// ([governance.typeUndetermined]); this still reads such an element's
-// attributes by ·expanded name·, although key-governing-ad clause 2's
-// ·context-determined declaration·, from a use of the undetermined type, may
-// come first. Its one reader is [walk.handedDown], whose result reaches a
-// {type table} ([walk.conditionallySelected]) only through a child walked as
-// decided. Every child [contentCheck.element] attributes under such a parent
-// is [walk.child]'s undecided shape, which selects nothing; the exception is a
-// child it charges instead of matching — a ·nilled· parent's, under cvc-elt
-// clause 3.2.3.1 — whose own {type table} may then select on an attribute the
-// true type would not hand down, or miss one it would. The direction is
-// unestablished, and that Result is already invalid by the charge. No issue
-// owns it yet.
+// The one arm this does not share is attributeType's decline for an element
+// whose ·governing type definition· this package could not determine
+// ([governance.typeUndetermined]): this reads such an element's attributes by
+// ·expanded name·, although key-governing-ad clause 2's ·context-determined
+// declaration·, from a use of the undetermined type, may come first. It needs
+// no decline, because its one reader is [walk.handedDown], whose result for
+// such an element no {type table} reads: every child of it, a ·nilled· one's
+// included, is walked undecided ([contentCheck.element], #2211).
 func (w *walk) inheritable(g governance, a Attribute) bool {
 	if ct := g.complexType(); ct != nil {
 		if u, matched := attributeUseNamed(ct.AttributeUses(), a.Name()); matched {
