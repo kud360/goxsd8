@@ -1,9 +1,10 @@
 package strict
 
 import (
+	"cmp"
+	"math"
 	"math/big"
 	"regexp"
-	"strconv"
 	"strings"
 
 	"github.com/kud360/goxsd8/value"
@@ -59,11 +60,14 @@ const (
 // coefficient × 10^(-scale) with coefficient an integer ≥ 0; scale is preserved
 // VERBATIM from the lexical, so 3, 3.0 and 3.00 are distinct values (coefficient/
 // scale (3,0), (30,1), (300,2)) that nonetheless compare numerically equal
-// (PRINCIPLES 18). It is value.Ordered with a PARTIAL order (§3.1: NaN incomparable
-// with everything including itself), value.Eq, value.Identical (scale-sensitive),
-// value.Scaled and value.DigitCounted (totalDigits) — and value.Canonical. It is
-// deliberately NOT value.Lengthed/TimezoneAware: no precisionDecimal-applicable
-// facet needs them (§3.3).
+// (PRINCIPLES 18). ·scale· is an unbounded integer held as a *big.Int (§3.1), so a
+// literal whose exponent lies past the host int is decided exactly, never charged
+// or wrapped, and no operation materialises 10^·scale·. It is value.Ordered with a
+// PARTIAL order (§3.1: NaN incomparable with everything including itself),
+// value.Eq, value.Identical (scale-sensitive), value.Scaled and value.DigitCounted
+// (totalDigits) — and value.Canonical. It is deliberately NOT
+// value.Lengthed/TimezoneAware: no precisionDecimal-applicable facet needs them
+// (§3.3).
 //
 // maxScale/minScale, precisionDecimal's two extension facets (§4.2/§4.3), are
 // enforced at instance validation by value/facets.go's scaleFacet, which reads
@@ -75,7 +79,10 @@ type precisionDecimalVal struct {
 	// coefficient is the integer significand magnitude (≥ 0); numeric arm only.
 	coefficient *big.Int
 	// scale is ·scale· (aP), kept verbatim from the lexical; numeric arm only.
-	scale int
+	// It is an unbounded integer (§3.1 vp-pd-precision): the exponent it derives
+	// from is an unbounded noDecimalPtNumeral (§3.2), so it is never narrowed to
+	// a host int. Never mutated after parsePrecisionDecimal builds it.
+	scale *big.Int
 	// sign is ·sign·; numeric arm only. Stored, not derived (distinguishes ±0).
 	sign pdSign
 }
@@ -112,14 +119,14 @@ func parsePrecisionDecimal(lexical string, _ value.Context) (value.Value, error)
 		body = body[1:]
 	}
 
-	exp := 0
+	// The exponent is an unbounded noDecimalPtNumeral (pDecimalRep, §3.2), read
+	// whole: no exponent the lexical space admits is charged or narrowed.
+	exp := new(big.Int)
 	if i := strings.IndexAny(body, "Ee"); i >= 0 {
-		e, err := strconv.Atoi(body[i+1:])
-		if err != nil {
+		if _, ok := exp.SetString(body[i+1:], 10); !ok {
 			return nil, xsderr.New(ruleDatatypeValid, xsderr.Loc{},
-				"precisionDecimal: %q has an out-of-range exponent (pDecimalRep, §3.2)", lexical)
+				"precisionDecimal: %q has no exponent digits (pDecimalRep, §3.2)", lexical)
 		}
-		exp = e
 		body = body[:i]
 	}
 
@@ -139,40 +146,56 @@ func parsePrecisionDecimal(lexical string, _ value.Context) (value.Value, error)
 
 	// ·scale· (step 2): decimalPtPrecision (len fracPart) for a plain numeral,
 	// scientificPrecision (that count minus the exponent) for scientific notation.
-	return precisionDecimalVal{kind: pdNumeric, coefficient: coeff, scale: len(fracPart) - exp, sign: sign}, nil
+	scale := big.NewInt(int64(len(fracPart)))
+	return precisionDecimalVal{kind: pdNumeric, coefficient: coeff, scale: scale.Sub(scale, exp), sign: sign}, nil
 }
 
-// numericalValue returns the exact ·numericalValue· as a reduced rational (numeric
-// arm only): ± coefficient × 10^(-scale). big.Rat reduction makes the value
-// quantum-blind — 3.00 (300/100) and 3 (3/1) reduce to the same 3 — which is what
-// Eq/Cmp compare (§3.1: "ordered … as their numericalValue values are ordered").
-func (p precisionDecimalVal) numericalValue() *big.Rat {
-	r := new(big.Rat).SetInt(p.coefficient)
-	pow := new(big.Int).Exp(bigTen, big.NewInt(int64(abs(p.scale))), nil)
-	switch {
-	case p.scale > 0:
-		r.Quo(r, new(big.Rat).SetInt(pow))
-	case p.scale < 0:
-		r.Mul(r, new(big.Rat).SetInt(pow))
+// signum is the sign of ·numericalValue· (numeric arm only): 0 for a zero of either
+// ·sign·, which §3.1 orders equal, else −1 or +1 by the stored ·sign·.
+func (p precisionDecimalVal) signum() int {
+	if p.coefficient.Sign() == 0 {
+		return 0
 	}
 	if p.sign == signNegative {
-		r.Neg(r)
+		return -1
 	}
-	return r
+	return 1
 }
 
-// abs returns the absolute value of n.
-func abs(n int) int {
-	if n < 0 {
-		return -n
+// adjusted is the adjusted exponent of a nonzero numeric value: (D − 1) − ·scale·
+// for a D-digit coefficient, so 10^adjusted ≤ |numericalValue| < 10^(adjusted+1).
+// It is computed without materialising any power of ten (#1849).
+func (p precisionDecimalVal) adjusted() *big.Int {
+	adj := big.NewInt(int64(len(p.coefficient.String()) - 1))
+	return adj.Sub(adj, p.scale)
+}
+
+// cmpMagnitude orders |numericalValue| of two nonzero numeric values: by adjusted
+// exponent first, and on a tie by coefficient after aligning the scales. Equal
+// adjusted exponents force the two scales to differ by exactly the difference of
+// the coefficients' digit counts, so the one power of ten built here is bounded by
+// the literals' lengths, never by their exponents (#1849).
+func (p precisionDecimalVal) cmpMagnitude(o precisionDecimalVal) int {
+	if c := p.adjusted().Cmp(o.adjusted()); c != 0 {
+		return c
 	}
-	return n
+	pc, oc := p.coefficient, o.coefficient
+	shift := len(oc.String()) - len(pc.String())
+	if shift > 0 {
+		pc = new(big.Int).Mul(pc, new(big.Int).Exp(bigTen, big.NewInt(int64(shift)), nil))
+	}
+	if shift < 0 {
+		oc = new(big.Int).Mul(oc, new(big.Int).Exp(bigTen, big.NewInt(int64(-shift)), nil))
+	}
+	return pc.Cmp(oc)
 }
 
 // Cmp is the PARTIAL order on precisionDecimal (§3.1): −INF < every numeric value <
 // +INF, numeric values order by ·numericalValue· (scale-blind), and NaN is
 // Incomparable with everything, itself included. A non-precisionDecimal argument is
-// Incomparable rather than a spurious order (rf-ordered).
+// Incomparable rather than a spurious order (rf-ordered). Two numeric values order
+// by signum, then by magnitude (cmpMagnitude), so the comparison costs time in the
+// literals' lengths and never in their exponents' magnitudes (#1849).
 func (p precisionDecimalVal) Cmp(other value.Value) value.Ordering {
 	o, ok := other.(precisionDecimalVal)
 	if !ok {
@@ -203,7 +226,11 @@ func (p precisionDecimalVal) Cmp(other value.Value) value.Ordering {
 	case pdNumeric, pdNaN:
 		// both numeric (o NaN returned above); compare numericalValue below.
 	}
-	switch p.numericalValue().Cmp(o.numericalValue()) {
+	c := cmp.Compare(p.signum(), o.signum())
+	if c == 0 && p.signum() != 0 {
+		c = p.signum() * p.cmpMagnitude(o)
+	}
+	switch c {
 	case -1:
 		return value.Less
 	case 1:
@@ -233,16 +260,30 @@ func (p precisionDecimalVal) Identical(other value.Value) bool {
 	if p.kind != pdNumeric {
 		return true // NaN ≡ NaN, INF ≡ INF, −INF ≡ −INF
 	}
-	return p.sign == o.sign && p.scale == o.scale && p.coefficient.Cmp(o.coefficient) == 0
+	return p.sign == o.sign && p.scale.Cmp(o.scale) == 0 && p.coefficient.Cmp(o.coefficient) == 0
 }
 
-// Scale returns ·scale· (§3.1); ok is false for the special values, whose ·scale·
-// is absent, encoding the spec's "absent iff numericalValue is a special value".
-func (p precisionDecimalVal) Scale() (int, bool) {
+// Scale returns ·scale· (§3.1) as a fresh *big.Int the caller owns; ok is false,
+// and scale nil, for the special values, whose ·scale· is absent, encoding the
+// spec's "absent iff numericalValue is a special value".
+func (p precisionDecimalVal) Scale() (*big.Int, bool) {
 	if p.kind != pdNumeric {
+		return nil, false
+	}
+	return new(big.Int).Set(p.scale), true
+}
+
+// intOf returns n as an int when the host int holds it exactly, and ok false
+// otherwise: it never truncates.
+func intOf(n *big.Int) (int, bool) {
+	if !n.IsInt64() {
 		return 0, false
 	}
-	return p.scale, true
+	v := n.Int64()
+	if int64(int(v)) != v {
+		return 0, false
+	}
+	return int(v), true
 }
 
 // TotalDigits is the value cvc-totalDigits-valid reads (§4.1): for a nonzero numeric
@@ -263,12 +304,19 @@ func (p precisionDecimalVal) TotalDigits() int {
 // FractionDigits satisfies the value.DigitCounted interface but is inert for
 // precisionDecimal: the fractionDigits facet is NOT applicable to this type (§3.3),
 // so the facet pipeline never invokes it. It reports ·scale· (0 for the specials) as
-// a spec-consistent value rather than a placeholder.
+// a spec-consistent value rather than a placeholder; a ·scale· past the host int,
+// which no caller can reach, reports math.MaxInt or math.MinInt on its sign's side.
 func (p precisionDecimalVal) FractionDigits() int {
 	if p.kind != pdNumeric {
 		return 0
 	}
-	return p.scale
+	if n, ok := intOf(p.scale); ok {
+		return n
+	}
+	if p.scale.Sign() < 0 {
+		return math.MinInt
+	}
+	return math.MaxInt
 }
 
 // canonicalPrecisionDecimal is the Mapping.Canonical wrapper: it rejects a foreign
@@ -287,9 +335,9 @@ func canonicalPrecisionDecimal(v value.Value) (string, error) {
 // [1E−6, 1E6] renders as a bare numeral (step 3); a positive ·scale· in range renders
 // with the decimal point placed and trailing zeros PADDED to the scale (step 4, so 3
 // with scale 2 → "3.00"); everything else — a negative scale, or a magnitude outside
-// the range — renders in scientific notation, likewise padded to preserve the scale
-// (step 5). Trailing zeros are canonical, never stripped: that is how the canonical
-// form is quantum-preserving even though Eq is quantum-blind.
+// the range — renders in scientific notation (step 5; a zero by zeroCanonical).
+// Trailing zeros are canonical, never stripped: that is how the canonical form is
+// quantum-preserving even though Eq is quantum-blind.
 func (p precisionDecimalVal) Canonical() string {
 	switch p.kind {
 	case pdNaN:
@@ -308,59 +356,85 @@ func (p precisionDecimalVal) Canonical() string {
 	}
 
 	// Zero has no log10 (§4.1) and is excluded from steps 3/4 by the 1E−6 lower
-	// bound, so it takes step 5 with scientificCanonicalMap(0) = "0.0E0": the
-	// mantissa "0.0" (f = 1) padded with aP − 1 trailing zeros to preserve ·scale·.
+	// bound, so it takes step 5 (zeroCanonical).
 	if p.coefficient.Sign() == 0 {
-		pad := p.scale - 1
-		if pad < 0 {
-			pad = 0
-		}
-		return sign + "0.0" + strings.Repeat("0", pad) + "E0"
+		return sign + p.zeroCanonical()
 	}
 
 	digits := p.coefficient.String()
-	if p.scale >= 0 && p.inCanonicalRange() {
-		if p.scale == 0 {
-			return sign + digits // step 3: bare numeral
+	if p.scale.Sign() >= 0 && p.inCanonicalRange() {
+		// In range, adjusted = (D − 1) − aP ≥ −6 bounds aP by len(digits) + 5, so
+		// intOf always holds it; the scientific form below is the guard's fallback.
+		if s, ok := intOf(p.scale); ok {
+			return sign + plainCanonical(digits, s)
 		}
-		for len(digits) <= p.scale { // step 4: decimal point, trailing zeros preserved
-			digits = "0" + digits
-		}
-		return sign + digits[:len(digits)-p.scale] + "." + digits[len(digits)-p.scale:]
 	}
 	return sign + p.scientificCanonical(digits)
 }
 
+// zeroCanonical renders the unsigned canonical form of a zero (step 5) as
+// scientificCanonicalMap(0) = "0.0E0": the mantissa "0.0" (f = 1) padded with
+// aP − 1 trailing zeros to preserve ·scale· aP.
+//
+// GAP(datatypes): a zero whose ·scale· lies past the host int has a canonical form
+// longer than any string, so it renders as the literal "0.0E-(aP−1)" instead: that
+// maps back to the same (0, aP, ·sign·) triple (§3.2) but is not the §6 canonical
+// spelling. A zero whose ·scale· the host int holds still pads aP − 1 zeros
+// however large aP is. #2201 owns both residuals.
+func (p precisionDecimalVal) zeroCanonical() string {
+	if p.scale.Cmp(big.NewInt(1)) <= 0 {
+		return "0.0E0"
+	}
+	if s, ok := intOf(p.scale); ok {
+		return "0.0" + strings.Repeat("0", s-1) + "E0"
+	}
+	exp := new(big.Int).Sub(p.scale, big.NewInt(1))
+	return "0.0E-" + exp.String()
+}
+
+// plainCanonical renders steps 3 and 4 for a magnitude string digits of ·scale·
+// s ≥ 0 in [1E−6, 1E6]: a bare numeral for s = 0, else the decimal point placed s
+// digits from the right, left-padded with zeros, trailing zeros preserved.
+func plainCanonical(digits string, s int) string {
+	if s == 0 {
+		return digits // step 3: bare numeral
+	}
+	for len(digits) <= s { // step 4: decimal point, trailing zeros preserved
+		digits = "0" + digits
+	}
+	return digits[:len(digits)-s] + "." + digits[len(digits)-s:]
+}
+
 // inCanonicalRange reports whether |numericalValue| lies in [1E−6, 1E6], the range in
 // which precisionDecimalCanonicalMap steps 3 and 4 use plain (non-scientific) forms.
-// Called only for a nonzero numeric value with scale ≥ 0. With |nV| = C × 10^(-aP):
-// |nV| ≤ 1E6 ⟺ C ≤ 10^(aP+6), and |nV| ≥ 1E−6 ⟺ C ≥ 10^(aP−6) (automatic for aP ≤ 6).
+// Called only for a nonzero numeric value with scale ≥ 0. With 10^adjusted ≤ |nV| <
+// 10^(adjusted+1): |nV| ≥ 1E−6 ⟺ adjusted ≥ −6, and
+// |nV| ≤ 1E6 ⟺ adjusted < 6, or adjusted = 6 with |nV| exactly 1E6 (a coefficient
+// that is 1 followed only by zeros). No power of ten is materialised.
 func (p precisionDecimalVal) inCanonicalRange() bool {
-	upper := new(big.Int).Exp(bigTen, big.NewInt(int64(p.scale+6)), nil)
-	if p.coefficient.Cmp(upper) > 0 {
+	adj := p.adjusted()
+	if adj.Cmp(big.NewInt(-6)) < 0 {
 		return false
 	}
-	if p.scale <= 6 {
+	switch adj.Cmp(big.NewInt(6)) {
+	case -1:
 		return true
+	case 0:
+		return strings.TrimRight(p.coefficient.String(), "0") == "1"
 	}
-	lower := new(big.Int).Exp(bigTen, big.NewInt(int64(p.scale-6)), nil)
-	return p.coefficient.Cmp(lower) >= 0
+	return false
 }
 
 // scientificCanonical renders precisionDecimalCanonicalMap step 5 for a nonzero
 // magnitude: strip the coefficient's trailing zeros to the minimal significand C'
 // (a factor of 10^k), form the one-leading-digit mantissa m with exponent
-// exp = (len(C')−1) + k − scale, then append aP + exp − f trailing zeros (f = m's
-// fractional-digit count) so the printed scale matches ·scale·. digits is the
-// coefficient magnitude string. The sign is prepended by the caller.
+// exp = (len(C')−1) + k − aP, the adjusted exponent, then append aP + exp − f
+// trailing zeros (f = m's fractional-digit count) so the printed scale matches
+// ·scale·. That pad is (len(C')−1) + k − f = len(digits) − 1 − f, free of aP, so
+// it is bounded by the literal's length. digits is the coefficient magnitude
+// string, which has no leading zero. The sign is prepended by the caller.
 func (p precisionDecimalVal) scientificCanonical(digits string) string {
-	cPrime := digits
-	k := 0
-	for len(cPrime) > 1 && cPrime[len(cPrime)-1] == '0' {
-		cPrime = cPrime[:len(cPrime)-1]
-		k++
-	}
-	exp := len(cPrime) - 1 + k - p.scale
+	cPrime := strings.TrimRight(digits, "0")
 
 	mantissa, frac := cPrime, 0
 	if len(cPrime) == 1 {
@@ -370,9 +444,9 @@ func (p precisionDecimalVal) scientificCanonical(digits string) string {
 		mantissa, frac = cPrime[:1]+"."+cPrime[1:], len(cPrime)-1
 	}
 
-	pad := p.scale + exp - frac
+	pad := len(digits) - 1 - frac
 	if pad < 0 {
 		pad = 0
 	}
-	return mantissa + strings.Repeat("0", pad) + "E" + strconv.Itoa(exp)
+	return mantissa + strings.Repeat("0", pad) + "E" + p.adjusted().String()
 }
