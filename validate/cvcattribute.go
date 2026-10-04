@@ -78,7 +78,7 @@ func (w *walk) matchedAttribute(a Attribute, e Element, u xsd.AttributeUse) {
 	}
 }
 
-// wildcardAttribute settles cvc-assess-elt (§3.3.4.6) clause 2 for an
+// wildcardAttribute settles key-sva (§3.3.4.6) clause 2 for an
 // attribute information item ·attributed to· an {attribute wildcard} whose
 // {process contents} is pc (cvc-complex-type clause 2.2): the {attribute
 // wildcard} of its element's ·governing type definition·
@@ -188,10 +188,11 @@ func (w *walk) declaredAttribute(a Attribute, e Element, d xsd.AttributeDeclarat
 // [walk.matchedAttribute], because no attribute use ever matches xsi:type —
 // cvc-complex-type clause 2 excepts the four Built-in Attribute Declarations by
 // name (isInstanceAttribute) and §3.2.6.4 no-xsi forbids a schema to
-// redeclare them. That exception is clause 2's own quantifier and nothing
-// wider: the Note under §3.2.4.2 keeps an xsi:type attribute governed by its
-// built-in declaration whatever the element's ·governing type definition· is,
-// so cvc-assess-elt clause 2 (§3.3.4.6) walks the item through cvc-attribute
+// redeclare them. That exception is cvc-complex-type clause 2's own quantifier
+// and nothing wider: the Note under §3.2.4.2 keeps an xsi:type attribute
+// governed by its built-in declaration whatever the element's ·governing type
+// definition· is, so key-sva (§3.3.4.6) clause 2.1 assesses the item through
+// cvc-assess-attr (§3.2.4.3), whose clause 2 evaluates it against cvc-attribute
 // regardless, and this is the one site that walk reaches it at. It is called
 // for BOTH arms of cvc-type clause 3 for the same reason: the governing type
 // decides nothing about an attribute it never governs.
