@@ -843,7 +843,9 @@ func (w *walk) instanceGovernance(e Element) (governance, bool) {
 // satisfied for it by construction.
 //
 // An error from [xsd.Schema.ValidlySubstitutable] leaves clause 6 undecided:
-// it is recorded as [Unevaluated], and the element takes [governance]'s
+// it is recorded as [Unevaluated] under cvc-assess-elt, whose debug line names
+// no clause because the clause undecided is key-governing-type-elem's and not
+// cvc-assess-elt's ([walk.logDecision]), and the element takes [governance]'s
 // undecided shape, walked against nothing with its subtree as [walk.child]
 // walks an undecided child, with cvc-id's clause 1 arm withheld on the same
 // grounds.
@@ -871,7 +873,7 @@ func (w *walk) localGovernance(e Element, ldt xsd.TypeDefinition) governance {
 	}
 	overrides, err := w.schema.ValidlySubstitutable(instance, ldt, nil)
 	if err != nil {
-		w.decline("assessing element", e.Name(), e.Loc(), ruleCvcAssessElt, "1.2",
+		w.decline("assessing element", e.Name(), e.Loc(), ruleCvcAssessElt, "",
 			"the ·governing type definition· of the element %s was not determined: whether its xsi:type %s ·overrides· its ·locally declared type· %s (key-governing-type-elem clause 6) could not be settled: %v",
 			e.Name(), typeName(instance), typeName(ldt), err)
 		w.ids.declined = true
