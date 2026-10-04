@@ -132,6 +132,8 @@ func TestElementAndAttlistDeclAreWellFormed(t *testing.T) {
 		{head + `<!ATTLIST r a CDATA #FIXED #IMPLIED>` + tail, subset + dflt("#FIXED")},
 		{head + `<!ATTLIST r a CDATA #FIXED>` + tail, subset + dflt("#FIXED")},
 		{head + `<!ATTLIST r a CDATA v>` + tail, subset + dflt("v")},
+		{head + `<!ATTLIST r a CDATA #BOGUS"v">` + tail, subset + dflt(`#BOGUS"v"`)},
+		{head + `<!ATTLIST r a CDATA v"x">` + tail, subset + dflt(`v"x"`)},
 		{head + `<!ATTLIST r a (x|y)#IMPLIED>` + tail, subset + dflt("#IMPLIED")},
 		{head + `<!ATTLIST r a CDATA #IMPLIED"v">` + tail, subset + attDef(`"v"`)},
 		{head + `<!ATTLIST r a CDATA "v"b CDATA #IMPLIED>` + tail, subset + attDef("b")},
