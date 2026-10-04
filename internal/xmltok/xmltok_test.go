@@ -127,6 +127,53 @@ func TestSyntaxErrors(t *testing.T) {
 	}
 }
 
+// TestDirectiveProcessingInstruction pins the departure doc.go states: a
+// processing instruction at a directive's top level is read through its "?>"
+// and kept whole, whatever '>', '<' or quote it holds, and the '?' opening it
+// closes nothing. Each row first checks that encoding/xml reads it otherwise,
+// so the row cannot pass on encoding/xml's directive reader. One inside a
+// markup declaration is not recognized: the differential's accepted rows pin
+// that.
+func TestDirectiveProcessingInstruction(t *testing.T) {
+	for _, subset := range []string{
+		`<?x a > b?><!ENTITY e 'v'>`,
+		`<?x it's?>`,
+		`<?x say "a?>`,
+		`<?x a < b?>`,
+		`<?>?>`,
+	} {
+		doc := `<!DOCTYPE r [` + subset + `]><r/>`
+		t.Run(doc, func(t *testing.T) {
+			want := []xml.Token{
+				xml.Directive(`DOCTYPE r [` + subset + `]`),
+				xml.StartElement{Name: xml.Name{Local: "r"}, Attr: []xml.Attr{}},
+				xml.EndElement{Name: xml.Name{Local: "r"}},
+			}
+			std, err := drain(xml.NewDecoder(strings.NewReader(doc)))
+			if err == nil && reflect.DeepEqual(std, want) {
+				t.Fatalf("encoding/xml reads %q alike: the row no longer tests the departure", doc)
+			}
+			got, err := drain(NewDecoder(strings.NewReader(doc)))
+			if err != nil {
+				t.Fatalf("Token on %q: %v", doc, err)
+			}
+			if !reflect.DeepEqual(got, want) {
+				t.Errorf("Token on %q = %#v, want %#v", doc, got, want)
+			}
+		})
+	}
+	const open = `<!DOCTYPE r [<?x a > b]><r/>`
+	d := NewDecoder(strings.NewReader(open))
+	_, err := drain(d)
+	var se *xml.SyntaxError
+	if !errors.As(err, &se) || se.Msg != "unexpected EOF" {
+		t.Fatalf("Token on %q: err = %v, want the *xml.SyntaxError unexpected EOF", open, err)
+	}
+	if got := d.InputOffset(); got != int64(len(open)) {
+		t.Errorf("Token on %q: InputOffset after error = %d, want %d", open, got, len(open))
+	}
+}
+
 // drain reads every token, copied, up to the first error, returning io.EOF
 // as nil.
 func drain(d interface{ Token() (xml.Token, error) }) ([]xml.Token, error) {
@@ -161,6 +208,8 @@ var accepted = []string{
 	`<!DOCTYPE a [<!ENTITY e "v"> <!-- c > --> <!ATTLIST a b CDATA "x>y">]><a>&lt;&gt;&amp;&apos;&quot;</a>`,
 	`<!DOCTYPE a SYSTEM "a.dtd"><a/>`,
 	`<!DOCTYPE a [<!ELEMENT a (#PCDATA)> <x <y>>]><a/>`,
+	`<!DOCTYPE a [<!ENTITY e <?x > 'v'>]><a/>`,
+	`<!DOCTYPE a [<!ATTLIST a b CDATA "<?x"> <?x?>]><a/>`,
 	`<a>&#65;&#x42;&#x1F600;&#10;</a>`,
 	"<a b=\"line\r\nend\">\r\n\r</a>",
 	`<日本語 属性="値">テキスト</日本語>`,
