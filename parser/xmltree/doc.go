@@ -83,15 +83,15 @@
 //     doctypedecl). A processing instruction between the subset's
 //     declarations runs to the "?>" that alone closes it ([16] PI),
 //     whatever '>', '<' or quote it holds (internal/xmltok), and one no
-//     "?>" closes fails as the decoder's syntax error at the end of input. The external subset is never read, by design
-//     (#1668), nor is an external parameter entity; after a
-//     parameter-entity reference that is not read, unless standalone="yes",
-//     the rest of the internal subset is checked for well-formedness alone,
-//     binding no parameter entity, declaring no general entity and
-//     expanding no reference (XML 1.0 §5.1). An entity declared only where
-//     the reader did not read is not a member, and
-//     Reader.AllDeclarationsProcessed, the [all declarations processed]
-//     property, then reports false.
+//     "?>" closes fails as the decoder's syntax error at the end of input.
+//     The external subset is never read, by design (#1668), nor is an
+//     external parameter entity; after a parameter-entity reference that is
+//     not read, unless standalone="yes", the rest of the internal subset is
+//     checked for well-formedness alone, binding no parameter entity,
+//     declaring no general entity and expanding no reference (XML 1.0
+//     §5.1). An entity declared only where the reader did not read is not a
+//     member, and Reader.AllDeclarationsProcessed, the [all declarations
+//     processed] property, then reports false.
 //   - GAP(xml): <!ELEMENT> and <!ATTLIST> bodies ([45]–[60]) are checked
 //     only for a parameter-entity reference, a '<' and their closing '>',
 //     and <!ENTITY> grammar ([70]–[76]) only for those and as far as the
