@@ -202,16 +202,18 @@ func (t ctaTypes) castTarget(name xsd.QName) (*xsd.SimpleType, bool) {
 }
 
 // castsFrom reports whether this engine casts the operand v at all, which is
-// false for exactly one shape: a TYPED attribute (ctaTypedAttr) whose
-// {primitive type definition} is not xs:string. Every other operand casts as
-// [CompileCTATest] states.
+// false for exactly one shape: a TYPED operand read off the instance — an
+// attribute (ctaTypedAttr) or `$value` (ctaValueVar) — whose {primitive type
+// definition} is not xs:string. Every other operand casts as [CompileCTATest]
+// states, the statically empty `$value` (ctaEmptyValue) among them: it holds
+// no item to convert.
 //
 // The string family is admitted because xpath-functions.md §17.1.1 makes a
 // cast from xs:string one datatype validation of the value's own string, which
 // ctaPromote performs exactly: the ·canonical representation· of an xs:string
 // value is that string (f-stringCanmap).
 //
-// GAP(xpath): a cast from any OTHER typed attribute is declined, because
+// GAP(xpath): a cast from any OTHER typed operand is declined, because
 // xpath-functions.md §17 defines most casts between primitives over the VALUE,
 // not over a re-validated canonical lexical — xs:decimal to xs:integer
 // truncates (§17.1.3.4) where the round-trip ctaPromote would perform raises
@@ -220,17 +222,23 @@ func (t ctaTypes) castTarget(name xsd.QName) (*xsd.SimpleType, bool) {
 // is the withhold [CompileAssertionTest] reports: the assertion is declined,
 // never charged and never satisfied. (#1042)
 func (t ctaTypes) castsFrom(v ctaValue) bool {
-	attr, typed := v.(ctaTypedAttr)
-	if !typed {
+	var st *xsd.SimpleType
+	switch n := v.(type) {
+	case ctaTypedAttr:
+		st = n.st
+	case ctaValueVar:
+		st = n.atom
+	default:
 		return true
 	}
-	p, resolved := t.primitive(attr.st)
+	p, resolved := t.primitive(st)
 	return resolved && p.Name() == ctaBuiltin("string")
 }
 
-// typedAttribute reports whether this engine reads an attribute of type st as
-// a typed operand, which is [AttributeTypes]' answer classified the way
-// castTarget classifies a cast target — by its {primitive type definition},
+// typedAtomic reports whether this engine reads a value of type st off the
+// instance as a typed operand — an attribute whose type [AttributeTypes]
+// answered, or one item of `$value` (valueVariable) — classified the way
+// castTarget classifies a cast target: by its {primitive type definition},
 // which is ·absent· for EXACTLY the types whose atomized value is not one
 // atomic value of a type known at compile time:
 //
@@ -245,10 +253,10 @@ func (t ctaTypes) castsFrom(v ctaValue) bool {
 // into a comparison type that differs from its own and would raise where XPath
 // does not.
 //
-// GAP(xpath): each of those attribute types declines the whole assertion,
-// never charges it and never satisfies it — the withhold
-// [CompileAssertionTest] reports. (#1042)
-func (t ctaTypes) typedAttribute(st *xsd.SimpleType) bool {
+// GAP(xpath): each of those types declines the whole assertion, never charges
+// it and never satisfies it — the withhold [CompileAssertionTest] reports.
+// (#1042)
+func (t ctaTypes) typedAtomic(st *xsd.SimpleType) bool {
 	if st == nil {
 		return false
 	}
@@ -257,6 +265,32 @@ func (t ctaTypes) typedAttribute(st *xsd.SimpleType) bool {
 		return false
 	}
 	return p.Name() != ctaBuiltin("QName") && p.Name() != ctaBuiltin("NOTATION")
+}
+
+// valueVariable classifies the {simple type definition} st of a simple
+// {content type} as `$value`'s static type (cvc-assertion clause 2.3.1), which
+// is the XDM representation of an ·actual value· of st (Datatypes dt-xdmrep):
+//
+//   - an st typedAtomic admits is one atomic value of st;
+//   - a list whose {item type definition} typedAtomic admits is the sequence
+//     of its items, each of that item type — "a sequence of one or more atomic
+//     values" (cvc-assertion clause 2.3.1's Note), or none for an empty list;
+//   - anything else declines: a union, whose value takes the type of its
+//     ·active basic member·, which only the instance decides; a list of such a
+//     union; and every other st typedAtomic declines.
+//
+// GAP(xpath): each of those declines the whole assertion on [CompileAssertionTest]'s
+// withhold. A ·special· st's `$value` is an xs:untypedAtomic value, which the
+// assertion façade has no input for. (#1042)
+func (t ctaTypes) valueVariable(st *xsd.SimpleType) (ctaValue, bool) {
+	if t.typedAtomic(st) {
+		return ctaValueVar{atom: st}, true
+	}
+	item, err := st.Item(t.resolver)
+	if err != nil || item == nil || !t.typedAtomic(item) {
+		return nil, false
+	}
+	return ctaValueVar{atom: item, listed: true}, true
 }
 
 // ctaTyping is which of the three outcomes settling a comparison's type
@@ -294,6 +328,9 @@ const (
 // makes a constructed ctaCompare B.2-legal by construction, so evaluation
 // never meets an operand pair its operator does not admit.
 func (t ctaTypes) comparison(op ctaComparator, l, r ctaValue) (*xsd.SimpleType, ctaTyping) {
+	if st, empty := t.againstEmpty(l, r); empty {
+		return st, ctaTypeSettled
+	}
 	st, typing := t.converted(l, r)
 	if typing != ctaTypeSettled {
 		return nil, typing
@@ -322,6 +359,9 @@ func (t ctaTypes) comparison(op ctaComparator, l, r ctaValue) (*xsd.SimpleType, 
 // Type Alternative's attribute is, and that façade declines every value
 // comparison (ctaFacade.comparesValues).
 func (t ctaTypes) valueComparison(op ctaComparator, l, r ctaValue) (*xsd.SimpleType, ctaTyping) {
+	if st, empty := t.againstEmpty(l, r); empty {
+		return st, ctaTypeSettled
+	}
 	st, typing := t.shared(t.valueOperand(l), t.valueOperand(r))
 	if typing != ctaTypeSettled {
 		return nil, typing
@@ -334,13 +374,41 @@ func (t ctaTypes) valueComparison(op ctaComparator, l, r ctaValue) (*xsd.SimpleT
 }
 
 // valueOperand is the type one value-comparison operand is compared from: its
-// own, or xs:string for an xs:untypedAtomic one (§3.5.1 step 4).
+// own, or xs:string for an xs:untypedAtomic one (§3.5.1 step 4) — and for a
+// statically empty one, which againstEmpty asks it of and which converts
+// nothing in any type.
 func (t ctaTypes) valueOperand(v ctaValue) *xsd.SimpleType {
 	typed, isTyped := ctaStaticOf(v).(ctaTyped)
 	if !isTyped {
 		return t.str
 	}
 	return typed.st
+}
+
+// againstEmpty settles a comparison one of whose operands is the statically
+// empty sequence (ctaEmptySequence), reporting false where neither is.
+//
+// No operator is ever applied there: a general comparison over an empty
+// operand forms no pair and is false (§3.5.2), and a value comparison is the
+// empty sequence (§3.5.1 step 2). So B.2 is not consulted, and the type
+// answered is only what the OTHER operand is converted into before nothing is
+// compared with it — valueOperand's answer for it: its own type, which
+// converts nothing, or xs:string for an xs:untypedAtomic or empty one, which
+// casts every lexical.
+func (t ctaTypes) againstEmpty(l, r ctaValue) (*xsd.SimpleType, bool) {
+	if ctaIsEmpty(l) {
+		return t.valueOperand(r), true
+	}
+	if ctaIsEmpty(r) {
+		return t.valueOperand(l), true
+	}
+	return nil, false
+}
+
+// ctaIsEmpty reports whether v is the statically empty sequence.
+func ctaIsEmpty(v ctaValue) bool {
+	_, empty := ctaStaticOf(v).(ctaEmptySequence)
+	return empty
 }
 
 // converted settles the type alone, leaving B.2's operator rows to comparison.
