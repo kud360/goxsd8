@@ -38,5 +38,5 @@
 //
 // It is a fork of Go 1.26's encoding/xml/xml.go and read.go's Skip, under
 // the BSD license in this directory's LICENSE file. It depends on the standard
-// library and internal/xmlname only.
+// library, internal/xmlname and internal/xmlchar (XML 1.0 [2] Char) only.
 package xmltok

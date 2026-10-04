@@ -19,6 +19,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/kud360/goxsd8/internal/xmlchar"
 	"github.com/kud360/goxsd8/internal/xmlname"
 )
 
@@ -763,7 +764,7 @@ func (d *Decoder) text(quote int, cdata bool) []byte {
 			return nil
 		}
 		buf = buf[size:]
-		if !isInCharacterRange(r) {
+		if !xmlchar.IsChar(r) {
 			d.err = d.syntaxError(fmt.Sprintf("illegal character code %U", r))
 			return nil
 		}
@@ -851,16 +852,6 @@ func (d *Decoder) entityRef(before int) (text string, have, ok bool) {
 	}
 	text, have = d.Entity[s]
 	return text, have, true
-}
-
-// isInCharacterRange reports whether r is an XML 1.0 [2] Char.
-func isInCharacterRange(r rune) bool {
-	return r == 0x09 ||
-		r == 0x0A ||
-		r == 0x0D ||
-		r >= 0x20 && r <= 0xD7FF ||
-		r >= 0xE000 && r <= 0xFFFD ||
-		r >= 0x10000 && r <= 0x10FFFF
 }
 
 // nsname reads a Name and splits it at its one colon into prefix (Space)

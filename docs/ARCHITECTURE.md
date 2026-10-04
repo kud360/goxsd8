@@ -12,9 +12,10 @@ Value implementations, parsing, validation, and generation live above them.
                  xsd             (leaf: component model + query/walk APIs; imports xsderr only)
                  internal/...    (leaves: helpers over the standard library, unexportable
                                   because they are nobody's API. Each imports only the
-                                  standard library, except internal/xmltok, whose one
-                                  module edge is internal/xmlname, the one
-                                  internal-on-internal edge:
+                                  standard library, except internal/xmltok, whose
+                                  two module edges, to internal/xmlname and
+                                  internal/xmlchar, are the only
+                                  internal-on-internal edges:
                                   - internal/schemaloc, the schemaLocation resolver. Its
                                     "two packages must agree byte for byte" justification
                                     EXPIRED when #272 deleted the conformance closure walk,
@@ -35,6 +36,9 @@ Value implementations, parsing, validation, and generation live above them.
                                   - internal/xmlname, XML 1.0 5e [4] NameStartChar and
                                     [4a] NameChar, which regex's \i/\c and
                                     parser/xmltree's DOCTYPE name checks both read.
+                                  - internal/xmlchar, XML 1.0 [2] Char, which
+                                    parser/xmltree's character-reference check and
+                                    internal/xmltok's text check both read.
                                   - internal/xmltok, encoding/xml's strict tokenizer
                                     forked to check names against internal/xmlname's
                                     5e tables. Only its tests import it until #2188
@@ -47,8 +51,9 @@ Value implementations, parsing, validation, and generation live above them.
                                   also imports builtin, for xs:NCName's generated pattern)
                  regex           (one engine, XSD + F&O flavors)
                  parser/xmltree  (position-tracking XML; imports xsderr,
-                                  internal/xmldecl, internal/xmlenc and
-                                  internal/xmlname only, and nothing else in the
+                                  internal/xmldecl, internal/xmlenc,
+                                  internal/xmlname and internal/xmlchar only,
+                                  and nothing else in the
                                   module — independent of the schema pipeline, not
                                   of the error currency. A stdlib-only internal/
                                   leaf is the one kind of further edge it may take;
@@ -96,8 +101,8 @@ backend: `New` takes the `value.Backend` as a required parameter, so
 `validate/bersrc` are destinations, on `[1]`'s terms.
 
 Only `xsderr`, `xsd`, `internal/schemaloc`, `internal/xmldecl`,
-`internal/xmlenc`, `internal/xmlname`, `internal/xmltok`, `value`,
-`value/backendtest`, `regex`, `builtin`, `builtin/strict`, `loader`,
+`internal/xmlenc`, `internal/xmlname`, `internal/xmlchar`,
+`internal/xmltok`, `value`, `value/backendtest`, `regex`, `builtin`, `builtin/strict`, `loader`,
 `parser`, `parser/xmltree`, `xpath`, `icpath`, `validate`,
 `validate/xmlsrc`, `conformance` and `cmd/goxsd8` carry code today.
 
@@ -127,7 +132,9 @@ imports `regex` to reach one. The Name productions ([4] `NameStartChar`,
 [4a] `NameChar`) live in `internal/xmlname`, read by `regex`'s `\i`/`\c`
 sets and `parser/xmltree`'s DOCTYPE name checks; a further Name check
 (#1765, #2187) reads the same leaf. Whether that table is generated is
-#989's question, asked of `internal/xmlname`.
+#989's question, asked of `internal/xmlname`. [2] `Char` lives in
+`internal/xmlchar`, read by `parser/xmltree`'s character-reference check and
+`internal/xmltok`'s text check (#2187).
 
 `cmd/goxsd8` is a library CONSUMER, not a place to grow capability. A
 capability the CLI needs and the library does not export is a library gap to
