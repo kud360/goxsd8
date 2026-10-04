@@ -1,7 +1,8 @@
 // Package xmlname holds the XML 1.0 Fifth Edition name-character productions,
 // [4] NameStartChar and [4a] NameChar (docs/specs/md/xml.md §2.3), once for
 // every library package that reads them: regex's \i and \c escapes (Datatypes
-// §G.4.2.5) and parser/xmltree's DOCTYPE name checks.
+// §G.4.2.5), parser/xmltree's DOCTYPE name checks and internal/xmltok's
+// element, attribute, PI-target and entity-reference name checks.
 //
 // # Contract
 //
