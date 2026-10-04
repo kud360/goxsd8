@@ -346,6 +346,11 @@ func hintsOf(el xml.StartElement, base string, covered map[string]bool) (hints [
 // resolver spells it, supplied, the namespaces hints have supplied so far
 // (hintsOf), and what the pass has read — hints, inline, and pending, the
 // inline xs:schema whose end tag it has yet to reach.
+//
+// GAP(xml): dec is encoding/xml, which checks names against XML 1.0
+// 4th-edition character tables, not the 5th-edition NameStartChar [4] and
+// NameChar [4a] of Name [5] (xml.md), so a 5th-edition Name such as Dĳkstra
+// (U+0133) fails the pass as XML syntax. Tracked by #2188.
 type hintReader struct {
 	dec      *xml.Decoder
 	seen     *window
