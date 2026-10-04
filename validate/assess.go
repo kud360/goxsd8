@@ -413,9 +413,14 @@ func (w *walk) governingType(e Element, d xsd.ElementDeclaration, selected xsd.T
 // out; charging clause 4 would reject a document for a fault in the schema's
 // own base chain.
 //
-// No test drives that exit and none can: the error is unreachable for a
-// finalized Schema, for the reason xsd's validlyDerived states, and both
-// operands are components w.schema holds.
+// GAP(validate): no test drives that exit and none can: the error is
+// unreachable for a finalized Schema, for the reason xsd's validlyDerived
+// states, and both operands are components w.schema holds. RULED permanent by
+// #2174 (STYLE P3b), in [walk.localGovernance]'s form: a decline and not a
+// panic, the reason being xsd's invariant and not the spec's. It is producer
+// (b3) of the undetermined type [walk.idElement]'s marker declines and of the
+// undecided children below it, which [walk.child]'s marker covers, and those
+// two markers name its consumers.
 func (w *walk) instanceOverride(e Element, d xsd.ElementDeclaration, instance, selected xsd.TypeDefinition) (xsd.TypeDefinition, bool) {
 	overrides, err := w.schema.ValidlySubstitutable(instance, selected, d.DisallowedSubstitutions())
 	if err != nil {
@@ -678,10 +683,16 @@ func (w *walk) unresolvedStrictWildcardChild(content *contentCheck, child Elemen
 // declaration its name ·resolves· to or by its xsi:type alone
 // (key-governing-type-elem clause 8), that can fail.
 //
-// "The same as" is sameType. An error from [xsd.Schema.ValidlySubstitutable] is
-// never a verdict about the pair, so it is recorded as undecided and charges
-// nothing. That exit is unreachable for a finalized Schema, for the reason
-// xsd's validlyDerived states.
+// "The same as" is sameType.
+//
+// GAP(validate): an error from [xsd.Schema.ValidlySubstitutable] is never a
+// verdict about the pair, so it is recorded as undecided and charges nothing.
+// That exit is unreachable for a finalized Schema, for the reason xsd's
+// validlyDerived states. RULED permanent by #2174 (STYLE P3b), in
+// [walk.localGovernance]'s form: a decline and not a panic, the reason being
+// xsd's invariant and not the spec's. Its one consumer is this function's own
+// cvc-complex-type clause 5 charge, which it loses, fail-open: the function
+// returns nothing, and the child's governance is settled before it is called.
 //
 // The charge carries the CHILD's location, where the mismatched item is; the
 // parent whose validity clause 5 decides is named in the message.
@@ -822,14 +833,22 @@ func (w *walk) instanceGovernance(e Element) (governance, bool) {
 // walks an undecided child, with cvc-id's clause 1 arm withheld on the same
 // grounds.
 //
-// GAP(validate): the undecided shape withholds cvc-attribute clauses 3 and 5
-// from the element's xsi attributes, and key-governing-ad keeps them governed
-// by their built-in declarations (§3.2.7) here. The withholding is fail-open
-// against [walk.instanceNilLexical]: its clause 3 charge of an xsi:nil lexical
-// outside xs:boolean is lost. [walk.instanceTypeResolves] loses nothing, the
-// xsi:type having ·resolved· to reach this exit, which satisfies its clauses 3
-// and 5 both. The exit is unreachable for a finalized Schema, for the reason
-// xsd's validlyDerived states (#2174).
+// GAP(validate): the exit is unreachable for a finalized Schema, for the reason
+// xsd's validlyDerived states, and it is kept as a decline rather than a panic
+// because that reason is xsd's invariant and not the spec's. RULED permanent
+// by #2174 (STYLE P3b), as are the two other declines of this error,
+// [walk.instanceOverride] and [walk.locallyDeclaredType], in the same form. The
+// undecided shape withholds cvc-attribute clauses 3 and 5 from the element's
+// xsi attributes, and key-governing-ad keeps them governed by their built-in
+// declarations (§3.2.7) here. The withholding is fail-open against
+// [walk.instanceNilLexical]: its clause 3 charge of an xsi:nil lexical outside
+// xs:boolean is lost. [walk.instanceTypeResolves] loses nothing, the xsi:type
+// having ·resolved· to reach this exit, which satisfies its clauses 3 and 5
+// both. Its other consumers are the ones the marker on [walk.child]'s
+// undecided branch names, this element being that marker's producer (c), and
+// they are not all fail-open: [idTable.charge] keeps charging clause 2 over
+// attributes [walk.attributeType] reads by ·expanded name·, which is
+// fail-CLOSED.
 func (w *walk) localGovernance(e Element, ldt xsd.TypeDefinition) governance {
 	instance, specified := w.instanceTypeDefinition(e)
 	if !specified {
@@ -1444,18 +1463,46 @@ func (w *walk) child(c Child, content *contentCheck, id *icCheck, inherited []in
 		}
 		if undecided {
 			// GAP(validate): an undecided child ([governance]) is one this
-			// package could not decide the governance of — its parent's type
-			// undetermined, or its parent's clause 1.4 one
-			// [xsd.Schema.ContentMatcher] does not decide — and not one
-			// §3.3.4.6 leaves ungoverned, so an ID anywhere beneath it is a
-			// declaration cvc-id never saw (#2174). Its consumers:
-			// idTable.charge's clause 1 arm, which stops charging an empty
-			// binding, while clause 2 keeps charging, because an unseen item
-			// can only ADD members to a binding and never take one away
-			// (cvcid.go); and the readers of the undecided shape, which charge
-			// it nothing — cvc-attribute clauses 3 and 5 against its xsi
-			// attributes (cvcattribute.go) and every type-reading rule, its
-			// subtree being undecided in turn.
+			// package could not decide the governance of, and not one §3.3.4.6
+			// leaves ungoverned: its true attribution may leave it ·skipped·,
+			// governed by a ·locally declared type·, or governed by a
+			// ·context-determined declaration· (key-governing-ed clauses 2 and
+			// 4, key-governing-type-elem clauses 5 to 7), and it is walked
+			// against nothing. RULED permanent by #2174 (STYLE P3b): the shape has no
+			// retirement route of its own and retires with its last producer.
+			// Those are (a1) [contentCheck.match]'s nil matcher beside a
+			// determined parent type, [xsd.Schema.ContentMatcher] declining
+			// at the maxPartitionStates ceiling #1601 ruled permanent or at
+			// flatten's dangling-reference arm, unreachable on a finalized
+			// Schema; a parent whose ·governing type definition· was not
+			// determined, by (b1) [walk.conditionallySelected]'s key-cta-ta-select
+			// decline, which ta-props-correct clause 2 licenses, (b2)
+			// [walk.resolvedSelection]'s nil {type definition} slot, which #2166
+			// ruled permanent, or (b3) [walk.instanceOverride]'s
+			// [xsd.Schema.ValidlySubstitutable] error, unreachable for the reason
+			// xsd's validlyDerived states; and, transitively, a parent itself
+			// undecided, which adds (c) [walk.localGovernance]'s ValidlySubstitutable
+			// error, unreachable for the same reason.
+			//
+			// Its consumers, and the direction each charges in: [idTable.charge]
+			// withholds its clause 1 arm (w.ids.declined below), fail-open, since a
+			// declaration beneath the child may be one cvc-id never read. It keeps
+			// charging clause 2, and that is fail-CLOSED here: [walk.idAttributes] reads
+			// the child's attributes by ·expanded name· through [walk.attributeType]'s
+			// top-level fallback, which can ADD a member the true attribution would not,
+			// as can [icCheck.fieldAttributes] for cvc-identity-constraint;
+			// walk.attributeType's own marker carries that gap.
+			// [walk.instanceTypeResolves] and [walk.instanceNilLexical] charge it
+			// nothing, so cvc-attribute clauses 3 and 5 against its xsi attributes are
+			// lost, fail-open. [governance.laxlyAssessed] is false for it, so its own
+			// [[children]] come back to this branch and not to the lax arm above: the
+			// shape is NOT ·lax assessment· (cvc-assess-elt clause 3, key-lva), which
+			// would resolve them by name against xs:anyType's lax wildcard, and it
+			// accepts more than lax assessment would. Its nil type leaves
+			// [walk.abstractType], [walk.attribute], [contentCheck.element] and
+			// [walk.idElement] nothing to decide, [icCheck.fill] declines any field slot
+			// the child would fill, and [walk.locallyDeclaredType] is not consulted
+			// (above).
 			//
 			// It records no [Unevaluated] of its own. A clause 1.4 the matcher
 			// declined is content.element's cvc-complex-content record, and a
