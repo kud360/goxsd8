@@ -320,22 +320,24 @@
 // naming a skip wildcard and never an Open Content, which the ·default
 // binding· of cos-content-act-restrict clause 6 settles (#1969) — and an
 // undecided child, whose governance this package could not decide at all: a
-// child of a parent whose own type it could not determine, or whose clause 1.4
-// xsd.Schema.ContentMatcher does not decide, which is assessed against nothing
-// along with its whole subtree and withholds cvc-id clause 1 (#1892).
+// child of a parent whose own type it could not determine, ·nilled· or not
+// (#2211), or whose clause 1.4 xsd.Schema.ContentMatcher does not decide,
+// which is assessed against nothing along with its whole subtree and withholds
+// cvc-id clause 1 (#1892).
 //
-// A child its parent DECIDEDLY ·attributes· to nothing — a ·nilled· or
-// simple-typed parent, an empty or simple {content type}, an item no particle
-// or {open content} admits, and, by this package's reading rather than the
-// spec's, any child after the parent's content is charged, the matcher not
-// being advanced past a charge — is governed per key-governing-ed clause 4,
-// which carries no attribution condition: by its ·locally declared type·
-// within the parent's complex type where that is non-·absent· (clause 4.3;
-// key-governing-type-elem clauses 6 and 7), else by the declaration its name
-// ·resolves· to, else by its xsi:type alone (key-governing-type-elem clause
-// 8), else it is ·laxly assessed·. A child whose name ·resolves· to no
-// declaration, and that exception does not reach, is likewise ·laxly
-// assessed· against xs:anyType (key-lva, walk.child, #1823).
+// A child its parent DECIDEDLY ·attributes· to nothing — a ·nilled· parent
+// whose type this package determined, a simple-typed parent, an empty or
+// simple {content type}, an item no particle or {open content} admits, and,
+// by this package's reading rather than the spec's, any child after the
+// parent's content is charged, the matcher not being advanced past a charge
+// — is governed per key-governing-ed clause 4, which carries no attribution
+// condition: by its ·locally declared type· within the parent's complex type
+// where that is non-·absent· (clause 4.3; key-governing-type-elem clauses 6
+// and 7), else by the declaration its name ·resolves· to, else by its
+// xsi:type alone (key-governing-type-elem clause 8), else it is ·laxly
+// assessed·. A child whose name ·resolves· to no declaration, and that
+// exception does not reach, is likewise ·laxly assessed· against xs:anyType
+// (key-lva, walk.child, #1823).
 //
 // The eighth is cvc-identity-constraint (§3.11.4), over the {identity-constraint
 // definitions} of the ·governing element declaration· of every element the
