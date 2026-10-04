@@ -5,6 +5,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/kud360/goxsd8/internal/xmlchar"
 	"github.com/kud360/goxsd8/internal/xmlname"
 )
 
@@ -316,9 +317,7 @@ func charRef(digits string) (rune, bool) {
 		return 0, false
 	}
 	r := rune(n)
-	legal := r == 0x9 || r == 0xA || r == 0xD ||
-		(r >= 0x20 && r <= 0xD7FF) || (r >= 0xE000 && r <= 0xFFFD) || (r >= 0x10000 && r <= 0x10FFFF)
-	return r, legal
+	return r, xmlchar.IsChar(r)
 }
 
 // outsideQuotes reports the index of the first c in s that is not inside a
