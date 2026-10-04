@@ -214,9 +214,7 @@ func peBlowUp(xmlDecl string) string {
 // and the first declined reference cuts off every entity declaration after it
 // (XML 1.0 §5.1) unless the XML declaration says standalone="yes", which
 // admits them without making the DTD read. An external subset cuts nothing
-// off: the internal subset is read before it. A parameter entity whose
-// declared name is not a Name, `1p`, is no PEDecl (XML 1.0 [72], [5]): it
-// declares nothing, so a reference to it is to an undeclared entity.
+// off: the internal subset is read before it.
 func TestAllDeclarationsProcessed(t *testing.T) {
 	const late = `<!ENTITY late SYSTEM "late.bin" NDATA n>`
 	const yes = `<?xml version="1.0" standalone="yes"?>`
@@ -234,7 +232,6 @@ func TestAllDeclarationsProcessed(t *testing.T) {
 		{`<!DOCTYPE r SYSTEM "x.dtd" [` + late + `]><r/>`, false, true},
 		{`<!DOCTYPE r SYSTEM "[%x;]"><r/>`, false, false},
 		{`<!DOCTYPE r [<!ENTITY % p "<!ENTITY late SYSTEM 'l' NDATA n>"> %p;]><r/>`, true, true},
-		{`<!DOCTYPE r [<!ENTITY % 1p "<!ENTITY late SYSTEM 'l' NDATA n>"> %1p;]><r/>`, false, false},
 		{`<!DOCTYPE r [<!ENTITY % x SYSTEM "x.ent"> %x; ` + late + `]><r/>`, false, false},
 		{`<!DOCTYPE r [<!ENTITY % x PUBLIC "-//x//y" "x.ent"> %x; ` + late + `]><r/>`, false, false},
 		{`<!DOCTYPE r [%undeclared; ` + late + `]><r/>`, false, false},
@@ -243,7 +240,6 @@ func TestAllDeclarationsProcessed(t *testing.T) {
 		{`<!DOCTYPE r [<!ENTITY % a "&#37;a;"> %a; ` + late + `]><r/>`, false, false},
 		{`<!DOCTYPE r [<!ENTITY % q "<!ENTITY late SYSTEM 'l' NDATA n>"><!ENTITY % pct "%q;"> %pct;]><r/>`, false, false},
 		{`<!DOCTYPE r [<!ENTITY % nul "&#0;"> %nul; ` + late + `]><r/>`, false, false},
-		{`<!DOCTYPE r [<!ENTITY % open "&#60;"> %open ` + late + `]><r/>`, false, false},
 		{`<!DOCTYPE r [<!ENTITY % c "<![INCLUDE[` + late + `]]>"> %c;]><r/>`, false, false},
 		{`<!DOCTYPE r [<!ENTITY % x SYSTEM "x.ent"> ` + late + ` %x;]><r/>`, false, true},
 		{no + `<!DOCTYPE r [<!ENTITY % x SYSTEM "x.ent"> %x; ` + late + `]><r/>`, false, false},
@@ -325,6 +321,85 @@ func TestDoctypeNameIsAName(t *testing.T) {
 			wantWellFormednessError(t, err)
 			if !strings.HasPrefix(err.Error(), tc.want) {
 				t.Errorf("error = %q, want it to open %q", err, tc.want)
+			}
+		})
+	}
+}
+
+// Between declarations only S and PEReferences may stand (XML 1.0 [28b]
+// intSubset, [28a] DeclSep), and a parameter entity referenced there must
+// expand to the same (WFC: PE Between Declarations): stray text before or
+// after a declaration, at depth 0 or in replacement text, a replacement text
+// that is stray whole, a '%' run that is no PEReference ([69]) — standalone
+// or not — a ']' in replacement text, a start tag, and text other than S
+// between the subset's ']' and '>' ([28] doctypedecl) are faults located at
+// the directive, even where a declaration around them would read.
+func TestSubsetStrayTextIsNotWellFormed(t *testing.T) {
+	const decl = "<?xml version=\"1.0\"?>\n"
+	const yes = "<?xml version=\"1.0\" standalone=\"yes\"?>\n"
+	const notation = `<!NOTATION n SYSTEM 'x'>`
+	const pic = `<!ENTITY pic SYSTEM 'u' NDATA n>`
+	const subset = `t.xml:2:1: [xml-wf] DOCTYPE internal subset holds `
+	const subsetRule = ` between declarations, which is no markup declaration, PEReference or S (XML 1.0 [28b] intSubset, [28a] DeclSep`
+	const inPE = `t.xml:2:1: [xml-wf] replacement text of a parameter entity referenced between DOCTYPE declarations holds `
+	const peRule = ` between declarations, which is no markup declaration, PEReference or S (XML 1.0 WFC: PE Between Declarations, [31] extSubsetDecl`
+	for _, tc := range []struct {
+		doc  string
+		want string // the whole error
+	}{
+		{decl + `<!DOCTYPE r [` + notation + pic + ` junk]><r/>`, subset + `"junk"` + subsetRule + `)`},
+		{decl + `<!DOCTYPE r [junk ` + notation + pic + `]><r/>`, subset + `"junk"` + subsetRule + `)`},
+		{decl + `<!DOCTYPE r [` + notation + `<!ENTITY % p "` + pic + ` junk"> %p;]><r/>`, inPE + `"junk"` + peRule + `)`},
+		{decl + `<!DOCTYPE r [` + notation + `<!ENTITY % p "junk ` + pic + `"> %p;]><r/>`, inPE + `"junk"` + peRule + `)`},
+		{decl + `<!DOCTYPE r [` + notation + `<!ENTITY % p "x"> %p; ` + pic + `]><r/>`, inPE + `"x"` + peRule + `)`},
+		{decl + `<!DOCTYPE r [%1x; ` + notation + pic + `]><r/>`, subset + `"%1x;"` + subsetRule + `, [69] PEReference)`},
+		{yes + `<!DOCTYPE r [%1x; ` + notation + pic + `]><r/>`, subset + `"%1x;"` + subsetRule + `, [69] PEReference)`},
+		{decl + `<!DOCTYPE r [<!ENTITY % 1p "` + pic + `"> %1p;]><r/>`, subset + `"%1p;"` + subsetRule + `, [69] PEReference)`},
+		{decl + `<!DOCTYPE r [<!ENTITY % open "&#60;"> %open ` + pic + `]><r/>`, subset + `"%open"` + subsetRule + `, [69] PEReference)`},
+		{decl + `<!DOCTYPE r [<!ENTITY % p "%q;"> % p; ` + pic + `]><r/>`, subset + `"%"` + subsetRule + `, [69] PEReference)`},
+		{decl + `<!DOCTYPE r [<!ENTITY % p "]"> %p; ` + notation + pic + `]><r/>`, inPE + `"]"` + peRule + `)`},
+		{decl + `<!DOCTYPE r [<r/> ` + notation + pic + `]><r/>`, subset + `"<r/>"` + subsetRule + `)`},
+		{decl + `<!DOCTYPE r [` + notation + pic + `] junk><r/>`, `t.xml:2:1: [xml-wf] DOCTYPE holds "junk" between its internal subset's ']' and '>', where only S may stand (XML 1.0 [28] doctypedecl)`},
+		{decl + `<!DOCTYPE r [` + notation + pic + `] ]><r/>`, `t.xml:2:1: [xml-wf] DOCTYPE holds "]" between its internal subset's ']' and '>', where only S may stand (XML 1.0 [28] doctypedecl)`},
+	} {
+		t.Run(tc.doc, func(t *testing.T) {
+			_, err := collect(t, "t.xml", tc.doc)
+			wantWellFormednessError(t, err)
+			if err.Error() != tc.want {
+				t.Errorf("error = %q, want %q", err, tc.want)
+			}
+		})
+	}
+}
+
+// What may stand between declarations is never stray: S of every kind, before
+// and after the subset's ']', a PEReference expanding to a declaration, a
+// comment or processing instruction holding any text, a '%' or ']' inside an
+// ATTLIST default, a ']' or PEReference inside an EntityValue literal, and
+// INCLUDE, IGNORE and PE-keyword conditional sections in an internal parameter
+// entity's replacement text, with the ']' and ']]>' that close them, which XML
+// 1.0 leaves unresolved there (ruled on #1733): each section is declined, as
+// doctypeEntities states, never rejected. pic is declared in every one.
+func TestSubsetDeclSepIsNotStray(t *testing.T) {
+	const yes = `<?xml version="1.0" standalone="yes"?>`
+	const notation = `<!NOTATION n SYSTEM 'x'>`
+	const pic = `<!ENTITY pic SYSTEM 'u' NDATA n>`
+	for _, doc := range []string{
+		`<!DOCTYPE r [` + notation + pic + `]><r/>`,
+		`<!DOCTYPE r [` + notation + `<!ENTITY % p "` + pic + `"> %p;]><r/>`,
+		"<!DOCTYPE r [ \t\r\n" + notation + "\n\t" + pic + "\r\n] \t\n><r/>",
+		`<!DOCTYPE r [` + notation + `<?pi junk % ] ?>` + pic + `]><r/>`,
+		`<!DOCTYPE r [` + notation + `<!ENTITY % p "<!-- junk ] --><?pi junk ] ?>"> %p;` + pic + `]><r/>`,
+		`<!DOCTYPE r [` + notation + `<!ATTLIST r a CDATA "junk % ] %p;">` + pic + `]><r/>`,
+		`<!DOCTYPE r [` + notation + `<!ENTITY g "junk ] %p;"><!ENTITY % q "%p;">` + pic + `]><r/>`,
+		`<!DOCTYPE r [` + notation + pic + `<!ENTITY % c "<![INCLUDE[ <!ENTITY e 'v'> ]]> junk"> %c;]><r/>`,
+		`<!DOCTYPE r [` + notation + pic + `<!ENTITY % c "<![IGNORE[ junk ] % ]]>"> %c;]><r/>`,
+		`<!DOCTYPE r [` + notation + pic + `<!ENTITY % k "INCLUDE"><!ENTITY % c "<![%k;[ junk ]]>"> %c;]><r/>`,
+		yes + `<!DOCTYPE r [` + notation + `<!ENTITY % c "<![IGNORE[ junk ] % ]]> junk"> %c; ` + pic + `]><r/>`,
+	} {
+		t.Run(doc, func(t *testing.T) {
+			if !drained(t, doc).HasUnparsedEntity("pic") {
+				t.Errorf("HasUnparsedEntity(%q) = false, want true", "pic")
 			}
 		})
 	}

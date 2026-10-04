@@ -60,8 +60,15 @@ const (
 // conditional section, which the internal subset cannot hold and this scan
 // does not read, is declined the same way and ends the text it appears in.
 //
-// It reads markup and nothing else: a comment, a processing instruction and
-// any markup declaration other than <!ENTITY> are stepped over whole. A
+// Between declarations, in the internal subset and in an expanded parameter
+// entity's replacement text alike, only S and PEReferences may stand (XML 1.0
+// [28b] intSubset, [28a] DeclSep, WFC: PE Between Declarations): any other
+// text — a '%' run that is no PEReference ([69]) and a ']' in replacement text
+// among it — is a RuleXMLWellFormed fault at loc, which ends the read and
+// declares nothing, and so is text other than S between the subset's closing
+// ']' and the directive's '>' ([28] doctypedecl). A comment, a processing
+// instruction and any markup declaration other than <!ENTITY> are stepped over
+// whole, their grammar unchecked beyond the delimiter that closes them. A
 // declaration it cannot read declares no unparsed entity, which leaves an
 // ·ENTITY value· naming that entity undeclared rather than declared.
 func doctypeEntities(directive string, standalone bool, loc xsderr.Loc) (decls []entityDecl, unread bool, err error) {
@@ -77,9 +84,12 @@ func doctypeEntities(directive string, standalone bool, loc xsderr.Loc) (decls [
 	if name := doctypeName(header); !isName(name) {
 		return nil, false, xsderr.New(xsderr.RuleXMLWellFormed, loc, "DOCTYPE document type name %q is not a Name (XML 1.0 [28] doctypedecl, [5] Name)", name)
 	}
-	sc := subsetScan{standalone: standalone, unread: hasExternalID(header)}
-	if open >= 0 {
-		sc.scan(rest[open+1:])
+	sc := subsetScan{standalone: standalone, loc: loc, unread: hasExternalID(header)}
+	if open < 0 {
+		return nil, sc.unread, nil
+	}
+	if _, err := sc.scan(rest[open+1:]); err != nil {
+		return nil, false, err
 	}
 	return sc.decls, sc.unread, nil
 }
@@ -110,9 +120,11 @@ func hasExternalID(header string) bool {
 // declaration of a name (XML 1.0 §4.2); it is a lookup index only, never
 // iterated. depth counts the expansions in progress, and spent the bytes of
 // replacement text scanned so far. decls collects the general entity
-// declarations read, and unread records that some declaration was not.
+// declarations read, and unread records that some declaration was not. loc is
+// the directive's start, where every fault the scan finds is located.
 type subsetScan struct {
 	standalone bool
+	loc        xsderr.Loc
 	pes        map[string]entityValue
 	depth      int
 	spent      int
@@ -130,64 +142,117 @@ type entityValue struct {
 
 // scan reads s — the internal subset, or a parameter entity's enlarged
 // replacement text — and reports whether the whole scan stops, which a
-// declined reference makes it do unless standalone. Only the internal subset
-// itself ends at a ']'. A comment, processing instruction or markup
-// declaration left open where replacement text ends is declined (see
-// unclosed).
-func (sc *subsetScan) scan(s string) (stop bool) {
+// declined reference makes it do unless standalone, or the fault that ends the
+// whole read (see stray and subsetEnd). Only the internal subset itself ends
+// at a ']'. A comment, processing instruction or markup declaration left open
+// where replacement text ends is declined (see unclosed).
+func (sc *subsetScan) scan(s string) (stop bool, err error) {
 	for s != "" {
 		switch {
 		case s[0] == ']' && sc.depth == 0:
-			return false
+			return false, sc.subsetEnd(s[1:])
 		case strings.HasPrefix(s, "<!--"):
 			end := strings.Index(s, "-->")
 			if end < 0 {
-				return sc.unclosed()
+				return sc.unclosed(), nil
 			}
 			s = s[end+len("-->"):]
 		case strings.HasPrefix(s, "<?"):
 			end := strings.Index(s, "?>")
 			if end < 0 {
-				return sc.unclosed()
+				return sc.unclosed(), nil
 			}
 			s = s[end+len("?>"):]
 		case strings.HasPrefix(s, "<!["):
-			return sc.decline()
+			return sc.decline(), nil
 		case strings.HasPrefix(s, "<!ENTITY"):
 			body, after, closed := markupDecl(s[len("<!ENTITY"):])
 			if !closed && sc.depth > 0 {
-				return sc.decline()
+				return sc.decline(), nil
 			}
 			sc.declare(body)
 			s = after
 		case strings.HasPrefix(s, "<!"):
 			_, after, closed := markupDecl(s[len("<!"):])
 			if !closed {
-				return sc.unclosed()
+				return sc.unclosed(), nil
 			}
 			s = after
 		case s[0] == '%':
 			name, after, ok := peReference(s[1:])
 			if !ok {
-				return sc.decline()
+				return false, sc.stray(s)
 			}
-			if sc.expand(name) {
-				return true
+			if stop, err := sc.expand(name); stop || err != nil {
+				return stop, err
 			}
 			s = after
-		default:
+		case strings.ContainsRune(declSpace, rune(s[0])):
 			s = s[1:]
+		default:
+			return false, sc.stray(s)
 		}
 	}
-	return false
+	return false, nil
 }
 
+// stray is the fault of s, text standing between declarations that opens no
+// markup declaration, comment, processing instruction or PEReference and is
+// not S. In the internal subset it matches no alternative of XML 1.0 [28b]
+// intSubset or [28a] DeclSep; in a parameter entity's replacement text it
+// breaks WFC: PE Between Declarations, which requires that text to match [31]
+// extSubsetDecl. A '%' run that is no '%' Name ';' ([69] PEReference) is
+// stray, and so is a ']' in replacement text. Either way the document is not
+// well-formed, a fatal error (XML 1.0 §1.2), so the fault ends the whole read
+// where a decline would only cut the scan off.
+func (sc *subsetScan) stray(s string) error {
+	where, rule := "DOCTYPE internal subset", "XML 1.0 [28b] intSubset, [28a] DeclSep"
+	if sc.depth > 0 {
+		where = "replacement text of a parameter entity referenced between DOCTYPE declarations"
+		rule = "XML 1.0 WFC: PE Between Declarations, [31] extSubsetDecl"
+	}
+	if s[0] == '%' {
+		rule += ", [69] PEReference"
+	}
+	return xsderr.New(xsderr.RuleXMLWellFormed, sc.loc, "%s holds %q between declarations, which is no markup declaration, PEReference or S (%s)", where, excerpt(s), rule)
+}
+
+// subsetEnd checks what follows the ']' closing the internal subset, up to the
+// directive's closing '>': S alone may stand there (XML 1.0 [28]
+// doctypedecl), and any other text is a fault.
+func (sc *subsetScan) subsetEnd(after string) error {
+	rest := strings.TrimLeft(after, declSpace)
+	if rest == "" {
+		return nil
+	}
+	return xsderr.New(xsderr.RuleXMLWellFormed, sc.loc, "DOCTYPE holds %q between its internal subset's ']' and '>', where only S may stand (XML 1.0 [28] doctypedecl)", excerpt(rest))
+}
+
+// excerpt is the run non-empty s opens, up to the next S, '<' or ']' after its
+// first byte and at most maxExcerpt runes, for a fault message to quote.
+func excerpt(s string) string {
+	if end := strings.IndexAny(s[1:], declSpace+"<]"); end >= 0 {
+		s = s[:end+1]
+	}
+	runes := 0
+	for i := range s {
+		if runes == maxExcerpt {
+			return s[:i]
+		}
+		runes++
+	}
+	return s
+}
+
+// maxExcerpt bounds the runes of stray text a fault message quotes.
+const maxExcerpt = 32
+
 // peReference reads the Name and ';' of a PEReference whose '%' has just been
-// consumed, returning what follows it. It reports false when no ';' closes a
-// run that could be a Name.
+// consumed, returning what follows it. It reports false unless a ';' closes a
+// run that is a Name (XML 1.0 [69] PEReference, [5] Name).
 func peReference(s string) (name, after string, ok bool) {
 	end := strings.IndexByte(s, ';')
-	if end < 1 || !isDeclName(s[:end]) || strings.ContainsAny(s[:end], declSpace+"<>&;") {
+	if end < 0 || !isName(s[:end]) {
 		return "", "", false
 	}
 	return s[:end], s[end+1:], true
@@ -196,17 +261,17 @@ func peReference(s string) (name, after string, ok bool) {
 // expand reads the replacement text of the parameter entity a reference
 // names, or declines the reference when that text cannot be read within
 // bounds.
-func (sc *subsetScan) expand(name string) (stop bool) {
+func (sc *subsetScan) expand(name string) (stop bool, err error) {
 	pe, declared := sc.pes[name]
 	cost := len(pe.text) + len("  ")
 	if !declared || !pe.readable || sc.depth == maxPEDepth || sc.spent+cost > maxPEExpansion {
-		return sc.decline()
+		return sc.decline(), nil
 	}
 	sc.spent += cost
 	sc.depth++
-	stop = sc.scan(" " + pe.text + " ")
+	stop, err = sc.scan(" " + pe.text + " ")
 	sc.depth--
-	return stop
+	return stop, err
 }
 
 // unclosed ends the read of s at a construct s opens and never closes. In
@@ -425,9 +490,10 @@ func unparsedDef(def []string) bool {
 // isName reports whether t, a declaration token, is an XML 1.0 Name
 // (production [5]): it is not empty, its first character is a NameStartChar
 // ([4]) and every later one a NameChar ([4a]), both internal/xmlname's tables.
-// It checks the DOCTYPE's document type name, an entity's declared name and
-// the notation name an NDataDecl closes on, rejecting `1x`, `g&h` and `a×b`
-// (U+00D7 is in neither production).
+// It checks the DOCTYPE's document type name, an entity's declared name, the
+// name a PEReference between declarations carries and the notation name an
+// NDataDecl closes on, rejecting `1x`, `g&h` and `a×b` (U+00D7 is in neither
+// production).
 func isName(t string) bool {
 	if t == "" {
 		return false
@@ -446,12 +512,6 @@ func isName(t string) bool {
 // none.
 func isLiteral(t string) bool {
 	return len(t) >= 2 && (t[0] == '"' || t[0] == '\'') && strings.IndexByte(t[1:], t[0]) == len(t)-2
-}
-
-// isDeclName reports whether t, one of declTokens' tokens, can be a Name: it
-// holds no quote, no subset bracket and no parameter-entity reference.
-func isDeclName(t string) bool {
-	return !strings.ContainsAny(t, `"'[]%`)
 }
 
 // declSpace is XML 1.0's S production: the white space that separates the
