@@ -11,6 +11,7 @@ import (
 
 	"github.com/kud360/goxsd8/internal/xmldecl"
 	"github.com/kud360/goxsd8/internal/xmlenc"
+	"github.com/kud360/goxsd8/internal/xmltok"
 	"github.com/kud360/goxsd8/loader"
 	"github.com/kud360/goxsd8/parser"
 	"github.com/kud360/goxsd8/parser/xmltree"
@@ -34,7 +35,7 @@ import (
 // discharges; this file is only the conditions.
 //
 // The gate is computed per case and stored nowhere. It re-reads the instance
-// with encoding/xml, decoding a byte-order-marked UTF-16 document and admitting
+// with internal/xmltok, decoding a byte-order-marked UTF-16 document and admitting
 // a 1.x version label as parser/xmltree does (rawDecoder), and re-derives every
 // child's ·attribution· through xsd.Schema.ContentMatcher, independently of the
 // walk, so it never rests on what the walk did or did not record for a
@@ -137,7 +138,7 @@ func (g *subtreeGate) undeclaredRoot(start xml.StartElement) refusal {
 // documentEnd reads dec past the document element to the end of the document,
 // refusing a directive (refuseEpilogDirective) or a decoder error
 // (refuseDecode) there.
-func documentEnd(dec *xml.Decoder) refusal {
+func documentEnd(dec *xmltok.Decoder) refusal {
 	for {
 		tok, err := dec.Token()
 		if errors.Is(err, io.EOF) {
@@ -168,7 +169,7 @@ func documentEnd(dec *xml.Decoder) refusal {
 type subtreeGate struct {
 	schema  *xsd.Schema
 	backend value.Backend
-	dec     *xml.Decoder
+	dec     *xmltok.Decoder
 	scope   []xml.Attr
 }
 
@@ -1063,7 +1064,7 @@ func (g *subtreeGate) onChain(t xsd.ComplexType, holds func(xsd.ComplexType) boo
 // verdict through either reader of rootStart (rawDecoder): each admits the
 // document only once dec has read the whole of it, and refuses it on dec's
 // error.
-func rootStart(dec *xml.Decoder) (xml.StartElement, refusal) {
+func rootStart(dec *xmltok.Decoder) (xml.StartElement, refusal) {
 	for {
 		tok, err := dec.Token()
 		if err != nil {
@@ -1099,7 +1100,7 @@ func defaultsNoAttribute(d xml.Directive) bool {
 	return !strings.Contains(subset, "<!ATTLIST") && !strings.Contains(subset, "%")
 }
 
-// rawDecoder is the one encoding/xml reader the lane's raw re-reads —
+// rawDecoder is the one internal/xmltok reader the lane's raw re-reads —
 // assessedSubtreeRoot, and instanceHints through recordingDecoder — take over
 // a document's bytes. It reads the leading byte-order mark through
 // internal/xmlenc, the decoding parser/xmltree's reader takes (XML 1.0 §4.3.3,
@@ -1120,7 +1121,7 @@ func defaultsNoAttribute(d xml.Directive) bool {
 //
 // A read failure in the peek for the mark is reported by the decoder's first
 // read, as xmlenc.Decode latches it.
-func rawDecoder(r io.Reader) *xml.Decoder {
+func rawDecoder(r io.Reader) *xmltok.Decoder {
 	return recordingDecoder(r, io.Discard)
 }
 
@@ -1129,15 +1130,9 @@ func rawDecoder(r io.Reader) *xml.Decoder {
 // the decoder's InputOffset k. The mark's CharsetReader hands back the stream
 // it is given, so a declaration naming UTF-16 changes no offset. instanceHints
 // cuts an inline xs:schema out of the instance through it (hintReader).
-//
-// GAP(xml): this decoder, and rawDecoder through it, is encoding/xml, which
-// checks names against XML 1.0 4th-edition character tables, not the
-// 5th-edition NameStartChar [4] and NameChar [4a] of Name [5] (xml.md), so a
-// 5th-edition Name such as Dĳkstra (U+0133) fails the read as XML syntax.
-// Tracked by #2188.
-func recordingDecoder(r io.Reader, w io.Writer) *xml.Decoder {
+func recordingDecoder(r io.Reader, w io.Writer) *xmltok.Decoder {
 	body, mark := xmlenc.Decode(r)
-	dec := xml.NewDecoder(io.TeeReader(xmldecl.As10(body), w))
+	dec := xmltok.NewDecoder(io.TeeReader(xmldecl.As10(body), w))
 	dec.CharsetReader = mark.CharsetReader
 	return dec
 }
