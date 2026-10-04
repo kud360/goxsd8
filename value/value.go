@@ -111,20 +111,21 @@ type TimezoneAware interface {
 // Canonical representations are an optional convenience the spec provides
 // "for the use of other applications" (Datatypes, dt-canonical-representation);
 // they are NOT required for schema processing itself. So this capability is
-// exercised by callers that want a normalized string — internally for facet
-// deduplication and enumeration comparison, and it MAY be surfaced to users —
-// but it is not mandatory infrastructure. A backend whose type has no canonical
-// mapping (e.g. QName, see [Mapping]) simply does not implement it, and a nil
-// [Mapping.Canonical] is legitimate.
+// exercised by callers that want a normalized string, and it MAY be surfaced to
+// users, but it is not mandatory infrastructure. A backend whose type has no
+// canonical mapping (e.g. QName, see [Mapping]) simply does not implement it,
+// and a nil [Mapping.Canonical] is legitimate.
 //
-// This capability reports only the whole-type "has / has no canonical form"
-// distinction: its string-only signature carries no error channel, so the
-// partial-domain case — a VALID value of a type that DOES have a canonical
-// mapping but whose own would-be canonical form falls outside its lexical space
+// Its string-only signature carries no error channel, so neither per-value case
+// [Mapping.Canonical] reports by error is expressible here: the partial-domain
+// case — a VALID value of a type that DOES have a canonical mapping but whose
+// own would-be canonical form falls outside its lexical space
 // (dt-canonical-mapping, §2.3.1's "(where possible)"; e.g. yearMonthDuration
-// ·months·=0∧·seconds·=0, §3.4.26.1 Note) — is expressible only through
-// [Mapping.Canonical]'s (string, error) return, never here. The two are
-// therefore not redundant encodings of the same thing.
+// ·months·=0∧·seconds·=0, §3.4.26.1 Note) — and the beyond-capacity case, a
+// canonical form the backend declines to produce (Datatypes §5.4). A value
+// whose type can reach the beyond-capacity case does not implement this
+// capability at all, since no string answers for it. The two are therefore
+// not redundant encodings of the same thing.
 type Canonical interface {
 	// Canonical returns the value's canonical lexical representation.
 	Canonical() string
