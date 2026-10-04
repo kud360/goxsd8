@@ -17,17 +17,16 @@ read them. One stamp for the whole section, so a reader can tell staleness
 from wrongness at a glance. Never add a dated paragraph beside the old
 one — appending is what this replaces.
 
-## Status — 2026-10-04 (post-land after #2192, on `main` at `6d6c414`)
+## Status — 2026-10-04 (post-land after #1765, on `main` at `8911d00`)
 
-**M5 has no startable north star left.** #2192 landed at `6d6c414`, `Ratchet:
-unchanged`: `walk.attributeType` declines an attribute's type when its
-element's governing type is undetermined, so cvc-id clause 2 and
-cvc-identity-constraint 4.1/4.2.2 no longer false-reject through the top-level
-fallback. The `fd45a7e` partition still holds: every `instance` cluster of more
-than 5 is ruled, recorded or `blocked`. The largest are #1042's assertion
-declines (M6), and the next is `VC` `<versioned>` 11 (#1002). **The band is
-#1765 then #2211. Lean: product.** The process filings wait on the `/retro`,
-due today.
+**M5 has no startable north star left.** #1765 landed at `8911d00`, absorbing
+#2191, `Ratchet: unchanged`: `parser/xmltree` checks entity, parameter-entity
+and DOCTYPE names against Name [5] through `isName`, and `doctypeEntities` now
+returns an `[xml-wf]` error through `Token`'s directive arm. The `fd45a7e`
+partition still holds: every `instance` cluster of more than 5 is ruled,
+recorded or `blocked`. The largest are #1042's assertion declines (M6), and the
+next is `VC` `<versioned>` 11 (#1002). **The band is #2211 then #1733. Lean:
+product.** The process filings wait on the `/retro`, due today.
 
 **#2081 stays `needs-replan` on GitHub.** Its replan restates the body and
 relabels it `blocked` on the owner's ruling. The permission classifier refused
@@ -35,7 +34,7 @@ that write to an earlier pass, so the owner posts it (next planning action 1).
 
 ### Conformance lanes
 
-**This table is `go tool lanestatus`, pasted verbatim, on `main` at `6d6c414`.**
+**This table is `go tool lanestatus`, pasted verbatim, on `main` at `8911d00`.**
 The table is the committed expectations census,
 which `docs/WORKFLOW.md` names as the lane score (#1120).
 
@@ -48,7 +47,7 @@ which `docs/WORKFLOW.md` names as the lane score (#1120).
 | `schema` | 15288 | 110 | 15398 |
 | `xpath` | — | — | 0 |
 
-**`6d6c414` (#2192) moved no lane, as predicted (bound 0).** The last move was
+**`8911d00` (#1765) moved no lane, as predicted (bound 0).** The last move was
 `fd45a7e` (#2188), `instance` +2: XmlVersions/xv001.v01 and xv004.v01.
 **`datatypes ⊆ instance` is intended** (#1507). **An em dash means a lane with
 no cases yet, not a lane scoring zero.** `datatypes` is M3 and complete.
@@ -59,8 +58,8 @@ no cases yet, not a lane scoring zero.** `datatypes` is M3 and complete.
 
 **Measured on `fd45a7e`** (suite `7bc3365`) by one read-only `GOXSD_DECLINES=1`
 conformance run, fed to `go tool lanepartition -log <run> <lane>` together with
-that pass's REST walk. It was not re-run on `6d6c414`, which banked nothing and
-whose PREDICTION found 0 candidate cases. Every figure is a part of the banked fails and a bound
+that pass's REST walk. It was not re-run on `6d6c414` or `8911d00`, each of
+which banked nothing at a PREDICTION of 0 candidate cases. Every figure is a part of the banked fails and a bound
 from above, never a prediction of flips. `instance` clusters carry their refusal
 token in `<…>`. The tool matches owners lexically, so the owners named below are
 this stamp's reading.
@@ -139,7 +138,7 @@ this stamp's reading.
 After `git fetch --prune origin`, `go tool wipsurvey` was fed the issues its two
 leases name (#2013, #2081), read from GitHub this pass. It prints:
 
-- **No `wip/issue-*` branch is LIVE.** `wip/issue-2192` was deleted at its
+- **No `wip/issue-*` branch is LIVE.** `wip/issue-1765` was deleted at its
   merge.
 - **`wip/issue-2081` is RETIRED** (`needs-replan`) and holds no code.
 - **`wip/issue-2013` is RETIRED** (closed `not_planned`). Its content is on
@@ -161,13 +160,14 @@ leases name (#2013, #2081), read from GitHub this pass. It prints:
 
 ### Marker census
 
-`go tool gapaudit`, run unfed at `6d6c414`, reports **90 markers across 11
-areas** (validate 25, xsd 31). That is a census only: groups 1 and 2 were not
-reconciled this pass. The last fed run, at `fd45a7e`, reported 89 markers, 11
-in group 1, 31 in group 2 and zero dead ends. `6d6c414` retired the marker
-citing #2192 and added two: `walk.attributeType`'s (`RULED permanent by
-#2174`) and `walk.inheritable`'s ownerless `GAP(validate)`
-(`validate/inherited.go`), which #2211 owns and whose landing repoints it.
+`go tool gapaudit`, run unfed at `8911d00`, reports **90 markers across 11
+areas** (validate 25, xsd 31, parser 8). That is a census only: groups 1 and 2
+were not reconciled this pass. `8911d00` added and retired no marker. The last
+fed run, at `fd45a7e`, reported 89 markers, 11 in group 1, 31 in group 2 and
+zero dead ends. `6d6c414` retired the marker citing #2192 and added two:
+`walk.attributeType`'s (`RULED permanent by #2174`) and `walk.inheritable`'s
+ownerless `GAP(validate)` (`validate/inherited.go`), which #2211 owns and whose
+landing repoints it.
 
 - **The group-1 rows at `fd45a7e`:**
   - the `parser/doc.go` §5.3 policy row and `xsd/resolve.go`'s §5.3
@@ -186,7 +186,7 @@ citing #2192 and added two: `walk.attributeType`'s (`RULED permanent by
 
 ### Milestones and queue
 
-**Counted from GitHub during this pass: 329 open issues.**
+**Counted from GitHub during this pass: 328 open issues.**
 
 | milestone | open | closed | state |
 |---|---:|---:|---|
@@ -194,31 +194,32 @@ citing #2192 and added two: `walk.attributeType`'s (`RULED permanent by
 | M2 — Foundation leaves | 0 | 5 | done |
 | M3 — Datatypes vertical slice | 0 | 12 | complete |
 | **M4 — Schema parsing** | **64** | **172** | active |
-| **M5 — Instance validation (XML)** | **15** | **114** | active |
+| **M5 — Instance validation (XML)** | **14** | **116** | active |
 | M6 — XPath required subset | 1 | 0 | not started |
 | M7–M12 | 0 | 0 | not started |
 
-Open issues carry **314 `ready`, 12 `blocked`, 1 `needs-replan` and 2
-`epic`**, which sums to 329. `kind/gap` is 64 and `kind/bug` is 33.
+Open issues carry **313 `ready`, 12 `blocked`, 1 `needs-replan` and 2
+`epic`**, which sums to 328. `kind/gap` is 63 and `kind/bug` is 33.
 
 - **`blocked` is 12:** #16, #555, #1002, #1042, #1051, #1374, #1609, #1790,
   #1880, #1885, #1923 and #2022.
-  - **No `blocked` body names #2192**, so this landing unblocked nothing.
+  - **No `blocked` body names #1765 or #2191**, so this landing unblocked
+    nothing.
   - **#1609 is unfired.** `schema` Pass reads 15288, which is not above
-    15292, and `6d6c414` touches no line of `xsd/contentrestricts.go`.
+    15292, and `8911d00` touches no line of `xsd/contentrestricts.go`.
   - **No owner comment has been posted since 2026-10-01 on any of the five
     human decisions:** #1880 (which gates #1002), #1885, #1790, #1923 and
     #2022.
 - **`needs-replan` is 1: #2081.** Next planning action 1 carries it.
-- **Measured refactors are flat.** #2041 3 was re-run at `6d6c414`, since its
-  command counts every `.go` file. #2101 (1 and 1), #363 2, #2205 2, #1958 2,
-  #1865 2 and #1757 1 are carried, since `6d6c414` touches no file their
-  commands count.
+- **Measured refactors are flat.** Re-run at `8911d00`: #2101 (1 and 1), whose
+  commands count `parser/xmltree` files, and #2041 3 and #363 2, whose commands
+  count every `.go` file. #2205 2, #1958 2, #1865 2 and #1757 1 are carried,
+  since `8911d00` touches no file their commands count.
 
 ### Persona consultations: not re-run this pass
 
 **The cartographer role-plays no persona and does not spawn one** (#416).
-**No persona story was handed to this pass.** `6d6c414` adds and changes no
+**No persona story was handed to this pass.** `8911d00` adds and changes no
 exported identifier. **Eighteen findings from the 2026-09-17 to 2026-09-29
 consultations are open and unconsumed:** #1568–#1571, #1593–#1596, #1626,
 #1684, #1685, #1687, #1688, #1843, #1845, #1894, #1895 and #1898. Open
@@ -232,16 +233,16 @@ This is ordered for a `/develop` session: take the highest row you can start.
 unfed run cannot print RETIRED. Each row names one issue (#1636).
 
 **The ordering principle for this stamp:** no M5 cluster above 5 is startable,
-so the `doctype.go` Name checks lead as one session, and the owner for
-#2192's ownerless `validate` marker follows. Both are M5 and `Ratchet:
-unchanged` expected. No process issue enters the band. #2007 belongs to the
-orchestrating session, and every other process issue is queued for the
-`/retro` due today or waits on the owner.
+so the owner for #2192's ownerless `validate` marker leads, and the
+`doctype.go` well-formedness rejects follow as one session on the `[xml-wf]`
+channel #1765 built. Both are M5 and `Ratchet: unchanged` expected. No process
+issue enters the band. #2007 belongs to the orchestrating session, and every
+other process issue is queued for the `/retro` due today or waits on the owner.
 
 | # | issue | why here |
 |---|---|---|
-| 1 | #1765 | **M5 gap, fail-open, `Ratchet: unchanged` expected.** An `<!ENTITY>` name token is checked against no Name [5] (`1x`, `a&b`, `a"b"` declare entities, re-verified at `bcfe717`). The predicate is `internal/xmlname` through `isNotationName`, renamed when it serves more than one site. Absorb #2191 (the document type name and a PE name, the same function one site over); #1733, #2198 and #2101 share the file or the `[xml-wf]` channel and may follow under the Scope rule. **Startable now** |
-| 2 | #2211 | **M5 gap, owns an ownerless marker (STYLE P3).** `walk.inheritable` still reads an undetermined element's attributes by expanded name, unlike `walk.attributeType` since #2192. Grounding first runs the nilled-parent reach claim, then chooses keep-and-state or decline; the marker is repointed. `Ratchet: unchanged` expected. **Startable now** |
+| 1 | #2211 | **M5 gap, owns an ownerless marker (STYLE P3).** `walk.inheritable` still reads an undetermined element's attributes by expanded name, unlike `walk.attributeType` since #2192. Grounding first runs the nilled-parent reach claim, then chooses keep-and-state or decline; the marker is repointed. `Ratchet: unchanged` expected. **Startable now** |
+| 2 | #1733 | **M5 gap, fail-open, `Ratchet: unchanged` expected.** Stray text between internal-subset declarations, at depth 0 or in a PE's replacement text, is stepped over, so the entities around it are still declared. It now also carries `peReference`'s `isDeclName`-only screen (`%1x;`, probed on `8911d00`). `doctypeEntities` already returns `[xml-wf]` through `Token` since #1765; `scan` needs a way to report up to it. #2198 (ill-formed UTF-8 in the directive) and #2214 (`<!DOCTYPEr>`, `<!FOO>`) use the same channel in the same file and may be absorbed under the Scope rule. **Startable now** |
 
 **Named below the band, on purpose.**
 - **#2081 is `needs-replan`** (next planning action 1). **#2148** (FlavorFO +
@@ -263,10 +264,9 @@ orchestrating session, and every other process issue is queued for the
   refactor beside them. #2089, #2099 and #2100 each name an `encoding/xml`
   limit that `internal/xmltok` could now lift.
 - **`parser/xmltree` DOCTYPE well-formedness, `Ratchet: unchanged` expected:**
-  #2191 (absorbed by row 2), #1733 (stray text between declarations) and
-  #2198 (ill-formed UTF-8 in the directive). #1733 and #2198
-  both need `declareEntities` to raise `[xml-wf]` at the directive, so take
-  them together.
+  #2198 (ill-formed UTF-8 in the directive) and #2214 (a top-level directive
+  that is not `'<!DOCTYPE' S`). Row 2 may absorb either; whichever it leaves
+  takes the same `doctypeEntities` error channel.
 - **M4, `Ratchet: unchanged` expected or a small bound:**
   - #2087 and #2092;
   - #1998 and #1953 in `xsd/contentrestricts.go`, either of which fires
@@ -418,6 +418,10 @@ orchestrating session, and every other process issue is queued for the
      disclosed an ownerless `GAP(validate)` on `walk.inheritable`, filed by
      the post-land pass as #2211. The session took `wip/issue-2192` over the
      harness-designated `claude/*` branch, a first sighting that cost no round;
+   - **#1765's**, absorbing #2191, unchanged at its bound 0, accepted in round
+     1 with no repair. It built the `doctypeEntities` `[xml-wf]` error channel.
+     The post-land pass folded `peReference`'s screen into #1733 and filed
+     `<!DOCTYPEr>` / `<!FOO>` as #2214;
    - four windows: 73.7 cases per session at 89% product, 177.7 at 100%, 44.4
      at 90%, and 10.0 at 90% with two repair rounds;
    - every landing through #1093's second-round accept at 0;
