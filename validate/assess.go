@@ -416,12 +416,12 @@ func (w *walk) governingType(e Element, d xsd.ElementDeclaration, selected xsd.T
 //
 // GAP(validate): no test drives that exit and none can: the error is
 // unreachable for a finalized Schema, for the reason xsd's validlyDerived
-// states, and both operands are components w.schema holds. RULED permanent by
-// #2174 (STYLE P3b), in [walk.localGovernance]'s form: a decline and not a
-// panic, the reason being xsd's invariant and not the spec's. It is producer
-// (b3) of the undetermined type [walk.idElement]'s marker declines and of the
-// undecided children below it, which [walk.child]'s marker covers, and those
-// two markers name its consumers.
+// states, and both operands are components w.schema holds.
+// RULED permanent by #2174 (STYLE P3b), in [walk.localGovernance]'s form: a
+// decline and not a panic, the reason being xsd's invariant and not the
+// spec's. It is producer (b3) of the undetermined type [walk.idElement]'s
+// marker declines and of the undecided children below it, which
+// [walk.child]'s marker covers, and those two markers name its consumers.
 func (w *walk) instanceOverride(e Element, d xsd.ElementDeclaration, instance, selected xsd.TypeDefinition) (xsd.TypeDefinition, bool) {
 	overrides, err := w.schema.ValidlySubstitutable(instance, selected, d.DisallowedSubstitutions())
 	if err != nil {
@@ -838,20 +838,19 @@ func (w *walk) instanceGovernance(e Element) (governance, bool) {
 //
 // GAP(validate): the exit is unreachable for a finalized Schema, for the reason
 // xsd's validlyDerived states, and it is kept as a decline rather than a panic
-// because that reason is xsd's invariant and not the spec's. RULED permanent
-// by #2174 (STYLE P3b), as are the two other declines of this error,
-// [walk.instanceOverride] and [walk.locallyDeclaredType], in the same form. The
-// undecided shape withholds cvc-attribute clauses 3 and 5 from the element's
-// xsi attributes, and key-governing-ad keeps them governed by their built-in
-// declarations (§3.2.7) here. The withholding is fail-open against
+// because that reason is xsd's invariant and not the spec's.
+// RULED permanent by #2174 (STYLE P3b), as are the two other declines of this
+// error, [walk.instanceOverride] and [walk.locallyDeclaredType], in the same
+// form. The undecided shape withholds cvc-attribute clauses 3 and 5 from the
+// element's xsi attributes, and key-governing-ad keeps them governed by their
+// built-in declarations (§3.2.7) here. The withholding is fail-open against
 // [walk.instanceNilLexical]: its clause 3 charge of an xsi:nil lexical outside
 // xs:boolean is lost. [walk.instanceTypeResolves] loses nothing, the xsi:type
 // having ·resolved· to reach this exit, which satisfies its clauses 3 and 5
-// both. Its other consumers are the ones the marker on [walk.child]'s
-// undecided branch names, this element being that marker's producer (c), and
-// they are not all fail-open: [idTable.charge] keeps charging clause 2 over
-// attributes [walk.attributeType] reads by ·expanded name·, which is
-// fail-CLOSED.
+// both. Its other consumers are the ones the marker on [walk.child]'s undecided
+// branch names, this element being that marker's producer (c), and they are not
+// all fail-open: [idTable.charge] keeps charging clause 2 over attributes
+// [walk.attributeType] reads by ·expanded name·, which is fail-CLOSED.
 func (w *walk) localGovernance(e Element, ldt xsd.TypeDefinition) governance {
 	instance, specified := w.instanceTypeDefinition(e)
 	if !specified {

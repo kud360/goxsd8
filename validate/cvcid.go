@@ -257,10 +257,10 @@ func (w *walk) idDefaultedAttributes(c *icCheck, attrs []Attribute, ct xsd.Compl
 // value constraints may play a part", and cvc-elt clause 5.1 is what puts the
 // substituted item in the ·eligible item set· (#853).
 //
-// GAP(validate): a declaration whose type was not determinable declines
-// instead, recorded as an [Unevaluated] ([walk.declineID]). RULED permanent by
-// #2174 (STYLE P3b): the decline has no retirement route of its own and
-// retires with its last producer. Those are (b1) [walk.conditionallySelected]'s
+// GAP(validate): a declaration whose type was not determinable declines,
+// recorded as an [Unevaluated] ([walk.declineID]). RULED permanent by #2174
+// (STYLE P3b): the decline has no retirement route of its own and retires with
+// its last producer. Those are (b1) [walk.conditionallySelected]'s
 // key-cta-ta-select decline of a {test} the §3.12.6 evaluator cannot evaluate,
 // which ta-props-correct clause 2 licenses, (b2) [walk.resolvedSelection]'s
 // ·absent· (nil) {type definition} slot, which #2166 ruled permanent, and (b3)
