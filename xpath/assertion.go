@@ -10,7 +10,7 @@ import (
 // grammar is compiled and evaluated against the element it guards, which
 // cvc-assertion (§3.13.4.1) asks of it. It is the first slice of tier 2
 // (doc.go) and nothing wider: the grammar is the Type Alternative one, and only
-// the attribute step differs — an assertion's instance is TYPED.
+// the façade differs (ctaFacade) — an assertion's instance is TYPED.
 //
 // cvc-assertion clause 1 builds the XDM instance from the partial ·PSVI· of E,
 // so each attribute carries the type its ·governing attribute declaration·
@@ -79,7 +79,10 @@ type AssertionTest struct{ root ctaExpr }
 //     xs:anyAtomicType — or whose {primitive type definition} is xs:QName or
 //     xs:NOTATION, which carry no ·canonical representation· to convert
 //     through. The variety is classified here, not trusted to attrs;
-//   - a cast whose operand is a typed attribute outside the xs:string family.
+//   - a cast whose operand is a typed attribute outside the xs:string family;
+//   - a general comparison whose comparison type's {primitive type definition}
+//     is a date/time one, which without an implicit timezone this engine cannot
+//     order (ctaAssertionFacade.admitsComparison).
 //
 // An XPath STATIC error is declined too and never reported: the
 // static-error question about an assertion is the schema assembler's, and
@@ -163,8 +166,8 @@ func (f ctaAssertionFacade) attribute(test ctaNameTest, types ctaTypes) (ctaValu
 // timezone, provided by the dynamic context ..., is assumed to be present as
 // part of the value." cvc-xpath clause 7 (§3.13.4.2) makes that implicit
 // timezone implementation-defined but constant per ·assessment· episode. This
-// engine has no implicit timezone, so ctaCompare decides a timezoned operand
-// against an untimezoned one as value.Incomparable — false for every
+// engine has no implicit timezone, so ctaCompare finds a timezoned operand and
+// an untimezoned one value.Incomparable and unequal — false for every
 // comparator but !=, which it decides true — and an assertion would be charged
 // (or satisfied) on that: `@d < @e or @d >= @e` over two xs:date attributes
 // 2000-01-01 and 2000-01-01Z is a tautology this engine would answer false.
