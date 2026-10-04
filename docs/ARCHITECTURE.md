@@ -10,8 +10,11 @@ Value implementations, parsing, validation, and generation live above them.
 ```
                  xsderr          (leaf: errors, rule IDs, locations)
                  xsd             (leaf: component model + query/walk APIs; imports xsderr only)
-                 internal/...    (leaves: stdlib-only helpers, unexportable because they are
-                                  nobody's API:
+                 internal/...    (leaves: helpers over the standard library, unexportable
+                                  because they are nobody's API. Each imports only the
+                                  standard library, except internal/xmltok, whose one
+                                  module edge is internal/xmlname, the one
+                                  internal-on-internal edge:
                                   - internal/schemaloc, the schemaLocation resolver. Its
                                     "two packages must agree byte for byte" justification
                                     EXPIRED when #272 deleted the conformance closure walk,
@@ -31,7 +34,12 @@ Value implementations, parsing, validation, and generation live above them.
                                     decode alike.
                                   - internal/xmlname, XML 1.0 5e [4] NameStartChar and
                                     [4a] NameChar, which regex's \i/\c and
-                                    parser/xmltree's DOCTYPE name checks both read.)
+                                    parser/xmltree's DOCTYPE name checks both read.
+                                  - internal/xmltok, encoding/xml's strict tokenizer
+                                    forked to check names against internal/xmlname's
+                                    5e tables. Only its tests import it until #2188
+                                    moves parser/xmltree's and the conformance
+                                    harness's decoders onto it.)
                  value           (value-space contracts, facet pipeline; imports xsd, xsderr, regex)
                  value/backendtest (conformance kit for any backend)
                  builtin         (the generated TypeSpec table and Seed; imports value, xsd, xsderr)
@@ -88,10 +96,10 @@ backend: `New` takes the `value.Backend` as a required parameter, so
 `validate/bersrc` are destinations, on `[1]`'s terms.
 
 Only `xsderr`, `xsd`, `internal/schemaloc`, `internal/xmldecl`,
-`internal/xmlenc`, `internal/xmlname`, `value`, `value/backendtest`, `regex`, `builtin`,
-`builtin/strict`, `loader`, `parser`, `parser/xmltree`, `xpath`, `icpath`,
-`validate`, `validate/xmlsrc`, `conformance` and `cmd/goxsd8` carry code
-today.
+`internal/xmlenc`, `internal/xmlname`, `internal/xmltok`, `value`,
+`value/backendtest`, `regex`, `builtin`, `builtin/strict`, `loader`,
+`parser`, `parser/xmltree`, `xpath`, `icpath`, `validate`,
+`validate/xmlsrc`, `conformance` and `cmd/goxsd8` carry code today.
 
 **The module has two tiers, and the dependency rules govern the first.**
 The **library** is what a consumer imports — the packages above plus
