@@ -102,7 +102,9 @@ const (
 // checks run on after a declined reference, as §5.1 requires.
 //
 // GAP(xml): an entity reference in an attribute default is checked for its
-// syntax alone (see attValueFault). Tracked by #2073.
+// syntax alone, not for WFC: Entity Declared, Parsed Entity, No Recursion, No
+// External Entity References or No < in Attribute Values (see attValueFault).
+// Tracked by #2257.
 func doctypeEntities(directive string, standalone bool, loc xsderr.Loc) (decls []entityDecl, unread bool, err error) {
 	rest, ok := strings.CutPrefix(directive, "DOCTYPE")
 	if !ok {
@@ -642,9 +644,10 @@ func (sc *subsetScan) defaultDecl(elem, name, s string) (rest string, err error)
 //
 // GAP(xml): an entity reference in a default value is checked for its syntax
 // alone, whatever the entity it names: WFC: Entity Declared (the declaration
-// must precede the reference), No External Entity References and No < in
-// Attribute Values, which bind that entity's replacement text, are not
-// checked. Tracked by #2073.
+// must precede the reference), Parsed Entity and No Recursion, which [68]
+// EntityRef imposes, and No External Entity References and No < in Attribute
+// Values, which [60] DefaultDecl imposes on that entity's replacement text,
+// are not checked. Tracked by #2257.
 func (sc *subsetScan) attValueFault(elem, name, lit string) error {
 	what := "an <!ATTLIST> declaration of " + strconv.Quote(elem) + " whose attribute " + strconv.Quote(name) + " has a default value"
 	for {

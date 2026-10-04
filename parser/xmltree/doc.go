@@ -105,9 +105,9 @@
 //     not a member, and Reader.AllDeclarationsProcessed, the [all
 //     declarations processed] property, then reports false.
 //   - GAP(xml): an entity reference in an <!ATTLIST> default value is
-//     checked for its syntax alone: WFC: Entity Declared, No External
-//     Entity References and No < in Attribute Values are not checked
-//     against the entity it names. Tracked by #2073.
+//     checked for its syntax alone: WFC: Entity Declared, Parsed Entity, No
+//     Recursion, No External Entity References and No < in Attribute Values
+//     are not checked against the entity it names. Tracked by #2257.
 //   - A reference to an internal general entity is replaced by its
 //     replacement text (XML 1.0 §4.4.2, §4.4.5): in content, parsed as
 //     content in the scope in force at the reference, its nodes located at
