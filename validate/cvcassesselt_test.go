@@ -9,12 +9,12 @@ import (
 	"github.com/kud360/goxsd8/xsderr"
 )
 
-// The fixtures below drive the RECURSIVE half of cvc-assess-elt (§3.3.4.6)
-// clause 3: a child of an already-assessed element is assessed against the
-// ·governing element declaration· the parent's own content model ·attributed·
-// it to (§3.4.4.4), one arm per [xsd.Attribution] variant. Every schema is
-// built through the exported constructors and FINALIZED, so each content model
-// is one cos-nonambig admitted and each substitution group edge is one
+// The fixtures below drive the RECURSIVE half of key-sva (§3.3.4.6) clause 3:
+// a child of an already-assessed element is assessed against the ·governing
+// element declaration· the parent's own content model ·attributed· it to
+// (§3.4.4.4), one arm per [xsd.Attribution] variant. Every schema is built
+// through the exported constructors and FINALIZED, so each content model is
+// one cos-nonambig admitted and each substitution group edge is one
 // e-props-correct clause 4 admitted.
 
 // dType builds a NAMED complex type over content, carrying uses, derived from

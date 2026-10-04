@@ -28,7 +28,7 @@ import (
 // declines to catalog "would be read as a citation of a rule the spec does not
 // state". It folds here rather than into cvc-complex-content because the clause
 // is a property of ·assessment· — it reads a child's [validity] and the
-// ·attribution· cvc-assess-elt clause 3 dispatched on, not the element
+// ·attribution· key-sva (§3.3.4.6) clause 3 dispatched on, not the element
 // sequence's validity against a {content type} (#717).
 //
 // That message names "e-validity clause 1.1.3" and never "cvc-assess-elt
@@ -460,7 +460,7 @@ func typeName(t xsd.TypeDefinition) string {
 	return name.String()
 }
 
-// childGoverning is cvc-assess-elt (§3.3.4.6) clause 3 for one child element
+// childGoverning is key-sva (§3.3.4.6) clause 3 for one child element
 // information item, read off the ·attribution· its parent's content model just
 // gave it (§3.4.4.4): the ·governing element declaration· and ·governing type
 // definition· to assess it against, determined exactly as the ·validation
