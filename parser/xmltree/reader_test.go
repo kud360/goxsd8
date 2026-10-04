@@ -597,6 +597,72 @@ func TestOnlyMiscFollowsTheDocumentElement(t *testing.T) {
 	}
 }
 
+// TestIllFormedUTF8InMarkupIsError pins XML 1.0 §4.3.3: an ill-formed UTF-8
+// code unit sequence in a comment, processing instruction or directive — the
+// DOCTYPE and its internal subset included, an unreferenced entity value and
+// an NDATA name among them — is a well-formedness fault located at the
+// sequence's first byte, and an unparsed entity whose declaration holds one is
+// not declared. Well-formed sequences read, U+FFFD spelled as one included:
+// the check is UTF-8 validity, not a byte value.
+func TestIllFormedUTF8InMarkupIsError(t *testing.T) {
+	for _, tc := range []struct {
+		name, doc string
+		bad       string // the ill-formed sequence; "" when the document reads
+	}{
+		{"document type name", "<!DOCTYPE r\xff><r/>", "\xff"},
+		{"comment in the subset", "<!DOCTYPE r [<!-- \xff -->]><r/>", "\xff"},
+		{"NDATA name", "<!DOCTYPE r [<!ENTITY bad SYSTEM 'u' NDATA a\xffb>]><r/>", "\xff"},
+		{"unreferenced entity value", "<!DOCTYPE r [<!ENTITY e \"a\xffb\">]><r/>", "\xff"},
+		{"system literal", "<!DOCTYPE r SYSTEM 'a\xffb'><r/>", "\xff"},
+		{"PI in the subset", "<!DOCTYPE r [<?pi \xff?>]><r/>", "\xff"},
+		{"element declaration", "<!DOCTYPE r [<!ELEMENT r\xff ANY>]><r/>", "\xff"},
+		{"overlong sequence", "<!DOCTYPE r [<!ENTITY e \"a\xc0\xafb\">]><r/>", "\xc0\xaf"},
+		{"surrogate", "<!DOCTYPE r [<!ENTITY e \"a\xed\xa0\x80b\">]><r/>", "\xed\xa0\x80"},
+		{"truncated sequence", "<!DOCTYPE r [<!ENTITY e \"a\xe2\x82b\">]><r/>", "\xe2\x82"},
+		{"comment before the document element", "<!-- \xff --><r/>", "\xff"},
+		{"PI before the document element", "<?pi \xff?><r/>", "\xff"},
+		{"comment in content", "<r>\n<!-- \xff --></r>", "\xff"},
+		{"PI in content", "<r><?pi \xff?></r>", "\xff"},
+		{"directive in content", "<r><!DOCTYPE x\xff></r>", "\xff"},
+		{"comment after the document element", "<r/>\n\n<!-- \xff -->", "\xff"},
+		{"non-ASCII entity value", "<!DOCTYPE r [<!ENTITY e \"aéb\">]><r/>", ""},
+		{"non-ASCII document type name", "<!DOCTYPE ré><ré/>", ""},
+		{"supplementary character in a comment and a PI", "<!-- \U0001D11E --><?pi \U0001D11E?><r/>", ""},
+		{"U+FFFD in an NDATA name", "<!DOCTYPE r [<!ENTITY bad SYSTEM 'u' NDATA a�b>]><r/>", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := xmltree.NewReader("t.xml", strings.NewReader(tc.doc))
+			var err error
+			for err == nil {
+				_, err = r.Token()
+			}
+			if tc.bad == "" {
+				if !errors.Is(err, io.EOF) {
+					t.Fatalf("Token: %v, want the document read to io.EOF", err)
+				}
+				if strings.Contains(tc.doc, "NDATA") && !r.HasUnparsedEntity("bad") {
+					t.Errorf("HasUnparsedEntity(%q) = false, want the well-formed declaration read", "bad")
+				}
+				return
+			}
+			wantWellFormednessError(t, err)
+			at := strings.Index(tc.doc, tc.bad)
+			line := 1 + strings.Count(tc.doc[:at], "\n")
+			col := at - strings.LastIndexByte(tc.doc[:at], '\n')
+			if loc, _ := xsderr.LocOf(err); loc != (xsderr.Loc{URI: "t.xml", Line: line, Col: col}) {
+				t.Errorf("fault at %v, want t.xml:%d:%d, the sequence's first byte", loc, line, col)
+			}
+			want := fmt.Sprintf("t.xml:%d:%d: [xml-wf] ill-formed UTF-8 byte sequence", line, col)
+			if !strings.HasPrefix(err.Error(), want) {
+				t.Errorf("error = %q, want it to open %q, at the sequence's first byte", err, want)
+			}
+			if r.HasUnparsedEntity("bad") {
+				t.Errorf("HasUnparsedEntity(%q) = true after the fault, want false", "bad")
+			}
+		})
+	}
+}
+
 func TestEOFIsIdempotent(t *testing.T) {
 	r := xmltree.NewReader("t.xml", strings.NewReader("<a/>"))
 	for {
