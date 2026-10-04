@@ -39,7 +39,10 @@ func drained(t *testing.T, doc string) *xmltree.Reader {
 // S between SYSTEM or PUBLIC and its first literal, between two literals, or
 // between the literal and NDATA, a literal with text run on after it, a
 // notation name carrying '&' or U+00D7 '×', or starting with a digit or with
-// U+203F '‿', a NameChar that is no NameStartChar. A reference to
+// U+203F '‿', a NameChar that is no NameStartChar. Nor is an entity whose
+// declared name is not a Name (XML 1.0 [71] GEDecl, [5]) — `1x`, `a&b`, or
+// `a"b"`, a literal run on into it, which leaves a later `a` declared — while
+// one whose name holds U+0133, a NameStartChar in [4], is. A reference to
 // a parameter entity that is not read — here an external one — cuts the scan
 // off, so a declaration after it is not a member (XML 1.0 §5.1).
 func TestHasUnparsedEntityReadsTheInternalSubset(t *testing.T) {
@@ -70,6 +73,11 @@ func TestHasUnparsedEntityReadsTheInternalSubset(t *testing.T) {
   <!ENTITY publits PUBLIC "p""x" NDATA gif>
   <!ENTITY amp SYSTEM "x" NDATA g&h>
   <!ENTITY digit SYSTEM "x" NDATA 1gif>
+  <!ENTITY 1x SYSTEM "x" NDATA gif>
+  <!ENTITY a&b SYSTEM "x" NDATA gif>
+  <!ENTITY a"b" SYSTEM "x" NDATA gif>
+  <!ENTITY a SYSTEM "x" NDATA gif>
+  <!ENTITY Dĳkstra SYSTEM "x" NDATA gif>
   <!ATTLIST r a CDATA "<!ENTITY inattlist SYSTEM 'x' NDATA gif>">
   <?pi <!ENTITY inpi SYSTEM "x" NDATA gif> ?>
   <!-- <!ENTITY incomment SYSTEM "x" NDATA gif> -->
@@ -88,6 +96,7 @@ func TestHasUnparsedEntityReadsTheInternalSubset(t *testing.T) {
 		{"keyword", false}, {"nos", false}, {"runon", false}, {"amp", false}, {"digit", false},
 		{"nospace", false}, {"pubnospace", false}, {"publits", false},
 		{"cjk", true}, {"undertie", true}, {"times", false}, {"undertiefirst", false},
+		{"1x", false}, {"a&b", false}, {`a"b"`, false}, {"a", true}, {"Dĳkstra", true},
 	} {
 		if got := r.HasUnparsedEntity(tc.name); got != tc.want {
 			t.Errorf("HasUnparsedEntity(%q) = %t, want %t", tc.name, got, tc.want)
@@ -205,10 +214,9 @@ func peBlowUp(xmlDecl string) string {
 // and the first declined reference cuts off every entity declaration after it
 // (XML 1.0 §5.1) unless the XML declaration says standalone="yes", which
 // admits them without making the DTD read. An external subset cuts nothing
-// off: the internal subset is read before it. A header whose document type
-// name is a literal is read with the literal's token ending at its closing
-// quote, as the header always has been: `"r"SYSTEM` names an external subset
-// and `"r"x SYSTEM` does not.
+// off: the internal subset is read before it. A parameter entity whose
+// declared name is not a Name, `1p`, is no PEDecl (XML 1.0 [72], [5]): it
+// declares nothing, so a reference to it is to an undeclared entity.
 func TestAllDeclarationsProcessed(t *testing.T) {
 	const late = `<!ENTITY late SYSTEM "late.bin" NDATA n>`
 	const yes = `<?xml version="1.0" standalone="yes"?>`
@@ -225,8 +233,8 @@ func TestAllDeclarationsProcessed(t *testing.T) {
 		{`<!DOCTYPE r SYSTEM "x.dtd"><!ELEMENT r ANY><r/>`, false, false},
 		{`<!DOCTYPE r SYSTEM "x.dtd" [` + late + `]><r/>`, false, true},
 		{`<!DOCTYPE r SYSTEM "[%x;]"><r/>`, false, false},
-		{`<!DOCTYPE "r"SYSTEM "x.dtd"><r/>`, false, false},
-		{`<!DOCTYPE "r"x SYSTEM "x.dtd"><r/>`, true, false},
+		{`<!DOCTYPE r [<!ENTITY % p "<!ENTITY late SYSTEM 'l' NDATA n>"> %p;]><r/>`, true, true},
+		{`<!DOCTYPE r [<!ENTITY % 1p "<!ENTITY late SYSTEM 'l' NDATA n>"> %1p;]><r/>`, false, false},
 		{`<!DOCTYPE r [<!ENTITY % x SYSTEM "x.ent"> %x; ` + late + `]><r/>`, false, false},
 		{`<!DOCTYPE r [<!ENTITY % x PUBLIC "-//x//y" "x.ent"> %x; ` + late + `]><r/>`, false, false},
 		{`<!DOCTYPE r [%undeclared; ` + late + `]><r/>`, false, false},
@@ -282,5 +290,42 @@ func TestParameterEntityDepthBound(t *testing.T) {
 		if got := r.AllDeclarationsProcessed(); got != tc.read {
 			t.Errorf("depth %d: AllDeclarationsProcessed() = %t, want %t", tc.depth, got, tc.read)
 		}
+	}
+}
+
+// A DOCTYPE's document type name is a Name or the document is not well-formed
+// (XML 1.0 [28] doctypedecl, [5] Name): a name starting with a digit, one
+// holding '&', a missing one, a literal, and one with a literal run on into it
+// with no S between are faults located at the directive, while a name
+// starting with U+00C0, a NameStartChar in [4], reads.
+func TestDoctypeNameIsAName(t *testing.T) {
+	const decl = "<?xml version=\"1.0\"?>\n"
+	for _, tc := range []struct {
+		doc  string
+		want string // the error's opening; "" when the document reads
+	}{
+		{`<!DOCTYPE r><r/>`, ""},
+		{`<!DOCTYPE Àr><Àr/>`, ""},
+		{`<!DOCTYPE r[]><r/>`, ""},
+		{`<!DOCTYPE 1r><r/>`, `t.xml:2:1: [xml-wf] DOCTYPE document type name "1r" is not a Name`},
+		{`<!DOCTYPE a&b><r/>`, `t.xml:2:1: [xml-wf] DOCTYPE document type name "a&b" is not a Name`},
+		{`<!DOCTYPE><r/>`, `t.xml:2:1: [xml-wf] DOCTYPE document type name "" is not a Name`},
+		{`<!DOCTYPE [<!ENTITY e "x">]><r/>`, `t.xml:2:1: [xml-wf] DOCTYPE document type name "" is not a Name`},
+		{`<!DOCTYPE "r"SYSTEM "x.dtd"><r/>`, `t.xml:2:1: [xml-wf] DOCTYPE document type name "\"r\"SYSTEM" is not a Name`},
+		{`<!DOCTYPE r"x"><r/>`, `t.xml:2:1: [xml-wf] DOCTYPE document type name "r\"x\"" is not a Name`},
+	} {
+		t.Run(tc.doc, func(t *testing.T) {
+			_, err := collect(t, "t.xml", decl+tc.doc)
+			if tc.want == "" {
+				if err != nil {
+					t.Fatalf("collect: %v, want the document read", err)
+				}
+				return
+			}
+			wantWellFormednessError(t, err)
+			if !strings.HasPrefix(err.Error(), tc.want) {
+				t.Errorf("error = %q, want it to open %q", err, tc.want)
+			}
+		})
 	}
 }

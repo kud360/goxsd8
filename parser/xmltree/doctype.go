@@ -7,6 +7,7 @@ import (
 
 	"github.com/kud360/goxsd8/internal/xmlchar"
 	"github.com/kud360/goxsd8/internal/xmlname"
+	"github.com/kud360/goxsd8/xsderr"
 )
 
 // entityDecl is one general entity declaration of a DOCTYPE's internal
@@ -39,7 +40,9 @@ const (
 // unread: the inverse of the document's [all declarations processed] (XML
 // Infoset §2.1). A directive that is not a DOCTYPE declares none and leaves
 // nothing unread. standalone is the XML declaration's standalone="yes" (XML
-// 1.0 §2.9 SDDecl).
+// 1.0 §2.9 SDDecl). A DOCTYPE whose document type name is missing or is not a
+// Name (XML 1.0 [28] doctypedecl, [5] Name) is not well-formed: a
+// RuleXMLWellFormed fault at loc, the directive's start.
 //
 // The external DTD subset is never read, by design (XML 1.0 §5.1 and §5.2
 // oblige a non-validating processor to read the document entity alone;
@@ -61,21 +64,37 @@ const (
 // any markup declaration other than <!ENTITY> are stepped over whole. A
 // declaration it cannot read declares no unparsed entity, which leaves an
 // ·ENTITY value· naming that entity undeclared rather than declared.
-func doctypeEntities(directive string, standalone bool) (decls []entityDecl, unread bool) {
+func doctypeEntities(directive string, standalone bool, loc xsderr.Loc) (decls []entityDecl, unread bool, err error) {
 	rest, ok := strings.CutPrefix(directive, "DOCTYPE")
 	if !ok {
-		return nil, false
+		return nil, false, nil
 	}
 	header := rest
 	open := outsideQuotes(rest, '[')
 	if open >= 0 {
 		header = rest[:open]
 	}
+	if name := doctypeName(header); !isName(name) {
+		return nil, false, xsderr.New(xsderr.RuleXMLWellFormed, loc, "DOCTYPE document type name %q is not a Name (XML 1.0 [28] doctypedecl, [5] Name)", name)
+	}
 	sc := subsetScan{standalone: standalone, unread: hasExternalID(header)}
 	if open >= 0 {
 		sc.scan(rest[open+1:])
 	}
-	return sc.decls, sc.unread
+	return sc.decls, sc.unread, nil
+}
+
+// doctypeName is a DOCTYPE header's first token, the document type name, or
+// "" when the header holds none. The token runs on to the next white space, as
+// entityDefTokens' do: XML 1.0 [28] doctypedecl admits only S, '[' or '>'
+// after the Name, so a header with a quote run on into its name, `r"x"`, holds
+// a token that is no Name.
+func doctypeName(header string) string {
+	toks := splitDecl(header, true)
+	if len(toks) == 0 {
+		return ""
+	}
+	return toks[0]
 }
 
 // hasExternalID reports whether a DOCTYPE header — the text after the DOCTYPE
@@ -231,16 +250,18 @@ func (sc *subsetScan) declare(body string) {
 }
 
 // paramEntityOf reads one <!ENTITY ...> body as a parameter entity
-// declaration, <!ENTITY % name PEDef>, reporting false for any other body.
-// The entity is readable only when its PEDef is one EntityValue literal whose
-// replacement text can be built (see replacementText): an ExternalID, or
-// anything malformed, declares an entity this scan never reads.
+// declaration, <!ENTITY % name PEDef>, reporting false for any other body —
+// one whose name is not a Name among them, which is no PEDecl (XML 1.0 [72],
+// [5]) and declares nothing. The entity is readable only when its PEDef is
+// one EntityValue literal whose replacement text can be built (see
+// replacementText): an ExternalID, or anything malformed, declares an entity
+// this scan never reads.
 func paramEntityOf(body string) (string, entityValue, bool) {
 	if body == "" || !strings.ContainsRune(declSpace, rune(body[0])) {
 		return "", entityValue{}, false
 	}
 	toks := declTokens(body)
-	if len(toks) < 3 || toks[0] != "%" || !isDeclName(toks[1]) {
+	if len(toks) < 3 || toks[0] != "%" || !isName(toks[1]) {
 		return "", entityValue{}, false
 	}
 	if len(toks) != 3 {
@@ -353,18 +374,21 @@ func markupDecl(s string) (body, after string, closed bool) {
 
 // entityDeclOf reads one <!ENTITY ...> body. It reports false for a parameter
 // entity declaration (<!ENTITY % name ...>), which declares no general entity
-// at all, for a keyword run on into the name with no white space between, and
-// for a body too short to name one. A general entity is unparsed only when its
-// definition is exactly an ExternalID followed by an NDataDecl (XML 1.0
-// EntityDef); any other definition, a malformed one included, is a parsed
-// entity. A parsed entity is internal, with a readable value, only when its
-// definition is exactly one EntityValue literal whose replacement text builds.
+// at all, for a keyword run on into the name with no white space between, for
+// a body too short to name one, and for a name that is not a Name — `1x`,
+// `a&b`, or `a"b"` with a literal run on into it — which is no GEDecl (XML 1.0
+// [71], [5]) and declares nothing, internal or unparsed. A general entity is
+// unparsed only when its definition is exactly an ExternalID followed by an
+// NDataDecl (XML 1.0 EntityDef); any other definition, a malformed one
+// included, is a parsed entity. A parsed entity is internal, with a readable
+// value, only when its definition is exactly one EntityValue literal whose
+// replacement text builds.
 func entityDeclOf(body string) (entityDecl, bool) {
 	if body == "" || !strings.ContainsRune(declSpace, rune(body[0])) {
 		return entityDecl{}, false
 	}
 	toks := entityDefTokens(body)
-	if len(toks) < 2 || strings.HasPrefix(toks[0], "%") {
+	if len(toks) < 2 || !isName(toks[0]) {
 		return entityDecl{}, false
 	}
 	d := entityDecl{name: toks[0], unparsed: unparsedDef(toks[1:])}
@@ -395,15 +419,19 @@ func unparsedDef(def []string) bool {
 			return false
 		}
 	}
-	return def[1+lits] == "NDATA" && isNotationName(def[2+lits])
+	return def[1+lits] == "NDATA" && isName(def[2+lits])
 }
 
-// isNotationName reports whether t, the token an NDataDecl closes on, is an
-// XML 1.0 Name (production [5]): its first character is a NameStartChar ([4])
-// and every later one a NameChar ([4a]), both internal/xmlname's tables. It
-// rejects the notation names `g&h`, `1gif` and `a×b` (U+00D7 is in neither
-// production).
-func isNotationName(t string) bool {
+// isName reports whether t, a declaration token, is an XML 1.0 Name
+// (production [5]): it is not empty, its first character is a NameStartChar
+// ([4]) and every later one a NameChar ([4a]), both internal/xmlname's tables.
+// It checks the DOCTYPE's document type name, an entity's declared name and
+// the notation name an NDataDecl closes on, rejecting `1x`, `g&h` and `a×b`
+// (U+00D7 is in neither production).
+func isName(t string) bool {
+	if t == "" {
+		return false
+	}
 	for i, r := range t {
 		if !unicode.Is(xmlname.NameStartChar, r) && (i == 0 || !unicode.Is(xmlname.NameCharExtra, r)) {
 			return false
@@ -444,8 +472,9 @@ func declTokens(s string) []string {
 // forbids — stays in the literal's token, which isLiteral then refuses; a
 // literal run on after a keyword — `SYSTEM"x"`, which ExternalID [75] forbids
 // — stays in the keyword's token, which unparsedDef then refuses. The DOCTYPE
-// header and a parameter entity's body keep declTokens' split, where every
-// token ends at a quote as well as at white space.
+// header's ExternalID (hasExternalID) and a parameter entity's body keep
+// declTokens' split, where every token ends at a quote as well as at white
+// space; the header's name does not (see doctypeName).
 func entityDefTokens(s string) []string {
 	return splitDecl(s, true)
 }

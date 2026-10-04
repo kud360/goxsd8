@@ -38,7 +38,9 @@
 //   - Element, attribute and PI target names and entity references, in
 //     the document and in an entity's replacement text, are checked
 //     against XML 1.0 5th edition's [5] Name (internal/xmltok); a name
-//     outside it is RuleXMLWellFormed.
+//     outside it is RuleXMLWellFormed. So is a DOCTYPE whose document type
+//     name is missing or outside [5] (XML 1.0 [28] doctypedecl, checked
+//     against internal/xmlname at the directive).
 //   - A document whose XML declaration specifies a 1.x version number
 //     other than 1.0 is read as a 1.0 document (XML 1.0 §2.8 Note), by a
 //     same-length rewrite of that number (internal/xmldecl), so locations
@@ -55,19 +57,21 @@
 //     rejected as RuleXMLWellFormed at the run's start, the character
 //     after the preceding markup.
 //   - The DOCTYPE's internal subset is read for its general entity
-//     declarations, the first declaration of a name binding (XML 1.0 §4.2).
-//     Its unparsed entities (<!ENTITY name SYSTEM|PUBLIC ... NDATA
-//     notation>) are the document's [unparsed entities] property, answered
-//     by Reader.HasUnparsedEntity and final once the document element's
-//     start tag is read; the subset itself surfaces as no Node, a prolog
-//     fact not being part of the element/character-data stream. Internal
-//     parameter entities are expanded, bounded in depth and size. The
-//     external subset is never read, by design (#1668), nor is an external
-//     parameter entity; a declaration after a parameter-entity reference
-//     that is not read is not processed unless standalone="yes" (XML 1.0
-//     §5.1). An entity declared only where the reader did not read is not a
-//     member, and Reader.AllDeclarationsProcessed, the [all declarations
-//     processed] property, then reports false.
+//     declarations, the first declaration of a name binding (XML 1.0 §4.2);
+//     an <!ENTITY> whose declared name, general or parameter, is not a Name
+//     ([71], [72], [5]) declares nothing. Its unparsed entities (<!ENTITY
+//     name SYSTEM|PUBLIC ... NDATA notation>) are the document's [unparsed
+//     entities] property, answered by Reader.HasUnparsedEntity and final
+//     once the document element's start tag is read; the subset itself
+//     surfaces as no Node, a prolog fact not being part of the
+//     element/character-data stream. Internal parameter entities are
+//     expanded, bounded in depth and size. The external subset is never
+//     read, by design (#1668), nor is an external parameter entity; a
+//     declaration after a parameter-entity reference that is not read is
+//     not processed unless standalone="yes" (XML 1.0 §5.1). An entity
+//     declared only where the reader did not read is not a member, and
+//     Reader.AllDeclarationsProcessed, the [all declarations processed]
+//     property, then reports false.
 //   - A reference to an internal general entity is replaced by its
 //     replacement text (XML 1.0 §4.4.2, §4.4.5): in content, parsed as
 //     content in the scope in force at the reference, its nodes located at
