@@ -696,7 +696,7 @@ var (
 // true type may not give the attribute, which [idTable.charge]'s clause 2 can
 // charge as a duplicate, and [icCheck.fieldAttributes] offers a member under a
 // type that may not be the attribute's, which cvc-identity-constraint clause
-// 4.1 or 4.2.2 can charge as equal to another. No issue owns it yet.
+// 4.1 or 4.2.2 can charge as equal to another. Tracked by #2192.
 func (w *walk) attributeType(g governance, a Attribute) (*xsd.SimpleType, bool) {
 	if ct := g.complexType(); ct != nil {
 		if u, matched := attributeUseNamed(ct.AttributeUses(), a.Name()); matched {
