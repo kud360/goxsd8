@@ -1,6 +1,7 @@
 package strict
 
 import (
+	"cmp"
 	"math/big"
 	"regexp"
 	"strconv"
@@ -142,37 +143,52 @@ func parsePrecisionDecimal(lexical string, _ value.Context) (value.Value, error)
 	return precisionDecimalVal{kind: pdNumeric, coefficient: coeff, scale: len(fracPart) - exp, sign: sign}, nil
 }
 
-// numericalValue returns the exact ·numericalValue· as a reduced rational (numeric
-// arm only): ± coefficient × 10^(-scale). big.Rat reduction makes the value
-// quantum-blind — 3.00 (300/100) and 3 (3/1) reduce to the same 3 — which is what
-// Eq/Cmp compare (§3.1: "ordered … as their numericalValue values are ordered").
-func (p precisionDecimalVal) numericalValue() *big.Rat {
-	r := new(big.Rat).SetInt(p.coefficient)
-	pow := new(big.Int).Exp(bigTen, big.NewInt(int64(abs(p.scale))), nil)
-	switch {
-	case p.scale > 0:
-		r.Quo(r, new(big.Rat).SetInt(pow))
-	case p.scale < 0:
-		r.Mul(r, new(big.Rat).SetInt(pow))
+// signum is the sign of ·numericalValue· (numeric arm only): 0 for a zero of either
+// ·sign·, which §3.1 orders equal, else −1 or +1 by the stored ·sign·.
+func (p precisionDecimalVal) signum() int {
+	if p.coefficient.Sign() == 0 {
+		return 0
 	}
 	if p.sign == signNegative {
-		r.Neg(r)
+		return -1
 	}
-	return r
+	return 1
 }
 
-// abs returns the absolute value of n.
-func abs(n int) int {
-	if n < 0 {
-		return -n
+// adjusted is the adjusted exponent of a nonzero numeric value: (D − 1) − ·scale·
+// for a D-digit coefficient, so 10^adjusted ≤ |numericalValue| < 10^(adjusted+1).
+// It is computed without materialising any power of ten (#1849).
+func (p precisionDecimalVal) adjusted() *big.Int {
+	adj := big.NewInt(int64(len(p.coefficient.String()) - 1))
+	return adj.Sub(adj, big.NewInt(int64(p.scale)))
+}
+
+// cmpMagnitude orders |numericalValue| of two nonzero numeric values: by adjusted
+// exponent first, and on a tie by coefficient after aligning the scales. Equal
+// adjusted exponents force the two scales to differ by exactly the difference of
+// the coefficients' digit counts, so the one power of ten built here is bounded by
+// the literals' lengths, never by their exponents (#1849).
+func (p precisionDecimalVal) cmpMagnitude(o precisionDecimalVal) int {
+	if c := p.adjusted().Cmp(o.adjusted()); c != 0 {
+		return c
 	}
-	return n
+	pc, oc := p.coefficient, o.coefficient
+	shift := len(oc.String()) - len(pc.String())
+	if shift > 0 {
+		pc = new(big.Int).Mul(pc, new(big.Int).Exp(bigTen, big.NewInt(int64(shift)), nil))
+	}
+	if shift < 0 {
+		oc = new(big.Int).Mul(oc, new(big.Int).Exp(bigTen, big.NewInt(int64(-shift)), nil))
+	}
+	return pc.Cmp(oc)
 }
 
 // Cmp is the PARTIAL order on precisionDecimal (§3.1): −INF < every numeric value <
 // +INF, numeric values order by ·numericalValue· (scale-blind), and NaN is
 // Incomparable with everything, itself included. A non-precisionDecimal argument is
-// Incomparable rather than a spurious order (rf-ordered).
+// Incomparable rather than a spurious order (rf-ordered). Two numeric values order
+// by signum, then by magnitude (cmpMagnitude), so the comparison costs time in the
+// literals' lengths and never in their exponents' magnitudes (#1849).
 func (p precisionDecimalVal) Cmp(other value.Value) value.Ordering {
 	o, ok := other.(precisionDecimalVal)
 	if !ok {
@@ -203,7 +219,11 @@ func (p precisionDecimalVal) Cmp(other value.Value) value.Ordering {
 	case pdNumeric, pdNaN:
 		// both numeric (o NaN returned above); compare numericalValue below.
 	}
-	switch p.numericalValue().Cmp(o.numericalValue()) {
+	c := cmp.Compare(p.signum(), o.signum())
+	if c == 0 && p.signum() != 0 {
+		c = p.signum() * p.cmpMagnitude(o)
+	}
+	switch c {
 	case -1:
 		return value.Less
 	case 1:
