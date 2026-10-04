@@ -535,18 +535,79 @@ func TestSubsetMarkupControls(t *testing.T) {
 	}
 }
 
-// GAP(xml): encoding/xml ends the directive at the '>' inside this processing
-// instruction, so the subset the scan sees stops inside an open PI. That is
-// declined, never a fault: the declarations before it are read and
-// AllDeclarationsProcessed reports false, though the document is well-formed
-// and declares nothing more. Tracked by #2226.
-func TestSubsetCutInsideAProcessingInstructionDeclines(t *testing.T) {
-	r := drained(t, `<!DOCTYPE r [<!NOTATION n SYSTEM 'x'><!ENTITY pic SYSTEM 'u' NDATA n><?x a > b?>]><r/>`)
-	if !r.HasUnparsedEntity("pic") {
-		t.Errorf("HasUnparsedEntity(%q) = false, want true: it is declared before the cut", "pic")
+// Only "?>" closes a processing instruction in the internal subset (XML 1.0
+// [16] PI): a '>', '<' or quote inside one is data, so the DOCTYPE reads as one
+// directive whose every declaration is processed (§5.1), the declarations
+// after the PI included, and no prolog text is left behind it. The rows with a
+// '>', '<' or quote in the PI failed with "unexpected EOF", or dropped what
+// followed the '>' and read "]>" as prolog character data, before the decoder
+// read the PI whole; the rest are controls, read either way: a PI holding none
+// of these, a comment holding a quote and a '>', and a PI in the prolog
+// outside the DOCTYPE. The pic rows that drop pic without the fix are the
+// truncation shape #2214 and #753 must keep reading.
+func TestSubsetProcessingInstructionHoldsMarkupCharacters(t *testing.T) {
+	const notation = `<!NOTATION n SYSTEM 'x'>`
+	const pic = `<!ENTITY pic SYSTEM 'u' NDATA n>`
+	for _, tc := range []struct {
+		doc     string
+		text    string // the document element's character data
+		wantPic bool
+	}{
+		{`<!DOCTYPE r [<?x it's?>]><r/>`, "", false},
+		{`<!DOCTYPE r [<?x say "a?>]><r/>`, "", false},
+		{`<!DOCTYPE r [<?x a < b?>]><r/>`, "", false},
+		{`<!DOCTYPE r [<?x a > b?>` + notation + pic + `]><r ent="pic"/>`, "", true},
+		{`<!DOCTYPE r [` + notation + pic + `<?x a > b?>]><r ent="pic"/>`, "", true},
+		{`<!DOCTYPE r [<?x a > b?><!ENTITY e 'v'>]><r>&e;</r>`, "v", false},
+		{`<!DOCTYPE r [<?x 'a' > "b" <c>?>` + notation + pic + `]><r ent="pic"/>`, "", true},
+		{`<!DOCTYPE r [<?x a b?>` + notation + pic + `]><r ent="pic"/>`, "", true},
+		{`<!DOCTYPE r [<!-- it's > -->` + notation + pic + `]><r ent="pic"/>`, "", true},
+		{`<?xml-stylesheet href='a'?><!DOCTYPE r [` + notation + pic + `]><?y '>?><r ent="pic"/>`, "", true},
+	} {
+		t.Run(tc.doc, func(t *testing.T) {
+			r := xmltree.NewReader("t.xml", strings.NewReader(tc.doc))
+			var text strings.Builder
+			for started := false; ; {
+				n, err := r.Token()
+				if errors.Is(err, io.EOF) {
+					break
+				}
+				if err != nil {
+					t.Fatalf("Token: %v", err)
+				}
+				switch n := n.(type) {
+				case *xmltree.StartElement:
+					started = true
+				case *xmltree.CharData:
+					if !started {
+						t.Errorf("prolog character data %q, want none", n.Data())
+					}
+					text.WriteString(n.Data())
+				}
+			}
+			if text.String() != tc.text {
+				t.Errorf("character data = %q, want %q", text.String(), tc.text)
+			}
+			if got := r.HasUnparsedEntity("pic"); got != tc.wantPic {
+				t.Errorf("HasUnparsedEntity(%q) = %v, want %v", "pic", got, tc.wantPic)
+			}
+			if !r.AllDeclarationsProcessed() {
+				t.Error("AllDeclarationsProcessed() = false, want true: every declaration is read")
+			}
+		})
 	}
-	if r.AllDeclarationsProcessed() {
-		t.Error("AllDeclarationsProcessed() = true, want false: the cut is declined")
+}
+
+// A processing instruction in the internal subset that no "?>" closes is not
+// well-formed (XML 1.0 [16] PI, [28b] intSubset), whatever '>' and ']' follow
+// it: the decoder reads it to the end of input and faults there.
+func TestSubsetUnclosedProcessingInstructionIsNotWellFormed(t *testing.T) {
+	const doc = `<!DOCTYPE r [<?x a > b]><r/>`
+	_, err := collect(t, "t.xml", doc)
+	wantWellFormednessError(t, err)
+	const want = `t.xml:1:29: [xml-wf] XML syntax error on line 1: unexpected EOF`
+	if err == nil || err.Error() != want {
+		t.Errorf("error = %v, want %q", err, want)
 	}
 }
 

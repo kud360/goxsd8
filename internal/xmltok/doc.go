@@ -28,9 +28,15 @@
 // non-strict mode (Strict, AutoClose, HTMLEntity), DefaultSpace, InputPos,
 // NewTokenDecoder and the Unmarshal machinery are not carried.
 //
-// One departure besides the name tables: an end of input is recognised with
+// Two departures besides the name tables. An end of input is recognised with
 // errors.Is, so an input or CharsetReader error that wraps io.EOF reads as end
-// of input where encoding/xml compares it by identity.
+// of input where encoding/xml compares it by identity. And a processing
+// instruction at a directive's top level, outside every markup declaration in
+// it, is read through the "?>" that alone closes it ([16] PI) and kept whole in
+// the xml.Directive: a '>', '<' or quote inside it neither ends the directive
+// nor nests nor opens a literal, where encoding/xml ends a DOCTYPE at such a
+// '>' and reads its internal subset on as top-level tokens, or runs on to the
+// end of input from such a quote.
 //
 // Its consumers are parser/xmltree's Reader and entity replacement-text
 // reader, and the conformance harness's raw re-reads (subtreeroot.go's

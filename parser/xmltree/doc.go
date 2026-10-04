@@ -80,24 +80,22 @@
 //     replacement text ending inside a comment, processing instruction or
 //     markup declaration; and a '<' in the DOCTYPE header, a subset no ']'
 //     closes, or text other than S between that ']' and '>' ([28]
-//     doctypedecl). The external subset is never read, by design
-//     (#1668), nor is an external parameter entity; after a
-//     parameter-entity reference that is not read, unless standalone="yes",
-//     the rest of the internal subset is checked for well-formedness alone,
-//     binding no parameter entity, declaring no general entity and
-//     expanding no reference (XML 1.0 §5.1). An entity declared only where
-//     the reader did not read is not a member, and
-//     Reader.AllDeclarationsProcessed, the [all declarations processed]
-//     property, then reports false.
+//     doctypedecl). A processing instruction between the subset's
+//     declarations runs to the "?>" that alone closes it ([16] PI),
+//     whatever '>', '<' or quote it holds (internal/xmltok), and one no
+//     "?>" closes fails as the decoder's syntax error at the end of input.
+//     The external subset is never read, by design (#1668), nor is an
+//     external parameter entity; after a parameter-entity reference that is
+//     not read, unless standalone="yes", the rest of the internal subset is
+//     checked for well-formedness alone, binding no parameter entity,
+//     declaring no general entity and expanding no reference (XML 1.0
+//     §5.1). An entity declared only where the reader did not read is not a
+//     member, and Reader.AllDeclarationsProcessed, the [all declarations
+//     processed] property, then reports false.
 //   - GAP(xml): <!ELEMENT> and <!ATTLIST> bodies ([45]–[60]) are checked
 //     only for a parameter-entity reference, a '<' and their closing '>',
 //     and <!ENTITY> grammar ([70]–[76]) only for those and as far as the
 //     entity's name and definition are read. Tracked by #2225.
-//   - GAP(xml): encoding/xml ends a DOCTYPE directive at a '>' inside a
-//     processing instruction; a comment, processing instruction or markup
-//     declaration left open where the subset's text ends is therefore
-//     declined, reported through AllDeclarationsProcessed, never rejected.
-//     Tracked by #2226.
 //   - A reference to an internal general entity is replaced by its
 //     replacement text (XML 1.0 §4.4.2, §4.4.5): in content, parsed as
 //     content in the scope in force at the reference, its nodes located at

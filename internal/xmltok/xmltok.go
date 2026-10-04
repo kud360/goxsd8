@@ -425,7 +425,8 @@ func (d *Decoder) cdata() (xml.Token, error) {
 
 // directive reads a directive (<!DOCTYPE ...>, <!ENTITY ...>, ...) after its
 // "<!", whose first byte is b, through the '>' that closes it. Quoted '<' and
-// '>' do not nest; a comment inside it becomes one space.
+// '>' do not nest; a comment inside it becomes one space, and a processing
+// instruction at its top level is kept whole (see directiveMarkup).
 func (d *Decoder) directive(b byte) (xml.Token, error) {
 	d.buf.Reset()
 	d.buf.WriteByte(b)
@@ -443,16 +444,17 @@ func (d *Decoder) directive(b byte) (xml.Token, error) {
 			if !st.step(b) {
 				break
 			}
-			next, isComment, ok := d.directiveComment()
+			next, skipped, ok := d.directiveMarkup(st.depth == 0)
 			if !ok {
 				return nil, d.err
 			}
-			if isComment {
+			if skipped {
 				break
 			}
-			// A '<' opening no comment nests, and the byte that broke the
-			// "!--" match is handled next. The close test above cannot
-			// apply to it: depth is now positive.
+			// A '<' opening no comment or top-level processing instruction
+			// nests, and the byte that broke the "!--" match is handled
+			// next. The close test above cannot apply to it: depth is now
+			// positive.
 			st.depth++
 			b = next
 		}
@@ -483,16 +485,24 @@ func (st *directiveState) step(b byte) bool {
 	return false
 }
 
-// directiveComment follows an unquoted '<' in a directive. On "!--" it reads
-// the comment through "-->" and replaces the '<' and the comment with one
-// space, so the markup on either side is not joined. Otherwise it writes the
-// matched part of "!--" and returns the byte that broke the match.
-func (d *Decoder) directiveComment() (next byte, isComment, ok bool) {
+// directiveMarkup follows an unquoted '<' in a directive and reports whether
+// it read a construct whole. At the directive's top level (top), outside every
+// markup declaration, a '?' opens a processing instruction, which it writes
+// through the "?>" that alone closes it ([16] PI), so a '>', '<' or quote in it
+// neither closes the directive, nests nor opens a literal ([28b] intSubset,
+// [29] markupdecl). On "!--" it reads the comment through "-->" and replaces
+// the '<' and the comment with one space, so the markup on either side is not
+// joined. Otherwise it writes the matched part of "!--" and returns the byte
+// that broke the match.
+func (d *Decoder) directiveMarkup(top bool) (next byte, skipped, ok bool) {
 	const open = "!--"
 	for i := range len(open) {
 		b, ok := d.mustgetc()
 		if !ok {
 			return 0, false, false
+		}
+		if i == 0 && b == '?' && top {
+			return 0, true, d.directivePI()
 		}
 		if b != open[i] {
 			d.buf.WriteString(open[:i])
@@ -513,6 +523,25 @@ func (d *Decoder) directiveComment() (next byte, isComment, ok bool) {
 	}
 	d.buf.WriteByte(' ')
 	return 0, true, true
+}
+
+// directivePI writes a processing instruction in a directive, its '<' already
+// written, from its '?' through the "?>" that closes it, reporting false at an
+// error. The '?' opening it closes nothing: "<?>" is still open.
+func (d *Decoder) directivePI() bool {
+	d.buf.WriteByte('?')
+	var prev byte
+	for {
+		b, ok := d.mustgetc()
+		if !ok {
+			return false
+		}
+		d.buf.WriteByte(b)
+		if prev == '?' && b == '>' {
+			return true
+		}
+		prev = b
+	}
 }
 
 // startElement reads a start tag after its '<': [40] STag ::= '<' Name (S

@@ -80,10 +80,11 @@ const (
 // '<' outside the literals of any markup declaration, a parameter-entity
 // reference inside any markup declaration, an entity value literal included
 // (WFC: PEs in Internal Subset), any other '%' in an entity value literal ([9]
-// EntityValue) and replacement text that ends inside a comment, processing
-// instruction or markup declaration (WFC: PE Between Declarations) are faults
-// too. A declaration it cannot read declares no unparsed entity, which leaves
-// an ·ENTITY value· naming that entity undeclared rather than declared.
+// EntityValue) and an internal subset or replacement text that ends inside a
+// comment, processing instruction or markup declaration ([28b] intSubset, WFC:
+// PE Between Declarations) are faults too. A declaration it cannot read
+// declares no unparsed entity, which leaves an ·ENTITY value· naming that
+// entity undeclared rather than declared.
 //
 // GAP(xml): the bodies of <!ELEMENT> and <!ATTLIST> declarations ([45]–[60])
 // are checked for nothing but a parameter-entity reference, a '<' and the '>'
@@ -91,12 +92,6 @@ const (
 // beyond those and what entityDeclOf and paramEntityOf read: a declaration
 // that breaks its production there is stepped over, or declares nothing, where
 // it is not well-formed. Tracked by #2225.
-//
-// GAP(xml): encoding/xml ends the directive at a '>' inside a processing
-// instruction, so the subset text this scan reads may be cut short: a comment,
-// processing instruction or markup declaration left open where the internal
-// subset's own text ends is declined, not a fault, and the ']' missing behind
-// it is no fault either. Tracked by #2226.
 func doctypeEntities(directive string, standalone bool, loc xsderr.Loc) (decls []entityDecl, unread bool, err error) {
 	rest, ok := strings.CutPrefix(directive, "DOCTYPE")
 	if !ok {
@@ -177,8 +172,7 @@ type entityValue struct {
 // replacement text — and returns the fault that ends the whole read, if any
 // (see stray, markup, unclosed and subsetEnd). Only the internal subset itself
 // ends at a ']', and it must: text that runs out before one is no [28]
-// doctypedecl, unless a construct left open there declined it first (see
-// unclosed).
+// doctypedecl.
 func (sc *subsetScan) scan(s string) error {
 	for s != "" {
 		switch {
@@ -491,22 +485,22 @@ func (sc *subsetScan) expand(name string) error {
 	return err
 }
 
-// unclosed ends the read of s at the comment, processing instruction or markup
-// declaration s opens and never closes. In replacement text that is a fault: a
-// parameter entity referenced between declarations must expand to complete
-// markup declarations (XML 1.0 WFC: PE Between Declarations, [31]
-// extSubsetDecl).
-//
-// GAP(xml): in the internal subset itself the construct is declined, and the
-// ']' the subset then never reaches is no fault: encoding/xml ends the
-// directive at a '>' inside a processing instruction, so the open construct
-// may be the decoder's cut rather than the document's. Tracked by #2226.
+// unclosed is the fault of the comment, processing instruction or markup
+// declaration s opens and never closes. In replacement text it breaks XML 1.0
+// WFC: PE Between Declarations: a parameter entity referenced between
+// declarations must expand to complete markup declarations ([31]
+// extSubsetDecl). In the internal subset itself it is no [28b] intSubset,
+// whose every markupdecl ([29]) closes before the subset's ']'. The decoder
+// ends a DOCTYPE directive only outside every such construct (internal/xmltok
+// reads a processing instruction there through its "?>"), so through the
+// Reader the internal subset never ends inside one, and that fault is reached
+// from doctypeEntities alone.
 func (sc *subsetScan) unclosed(s string) error {
+	rule := "XML 1.0 [28b] intSubset, [29] markupdecl"
 	if sc.depth > 0 {
-		return xsderr.New(xsderr.RuleXMLWellFormed, sc.loc, "%s leaves %q open where it ends (XML 1.0 WFC: PE Between Declarations, [31] extSubsetDecl)", sc.where(), excerpt(s))
+		rule = "XML 1.0 WFC: PE Between Declarations, [31] extSubsetDecl"
 	}
-	sc.decline()
-	return nil
+	return xsderr.New(xsderr.RuleXMLWellFormed, sc.loc, "%s leaves %q open where it ends (%s)", sc.where(), excerpt(s), rule)
 }
 
 // decline records a reference or construct the scan does not read. Unless
