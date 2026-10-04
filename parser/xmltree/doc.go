@@ -57,45 +57,50 @@
 //     rejected as RuleXMLWellFormed at the run's start, the character
 //     after the preceding markup.
 //   - The DOCTYPE's internal subset is read for its general entity
-//     declarations, the first declaration of a name binding (XML 1.0 §4.2);
-//     an <!ENTITY> whose declared name, general or parameter, is not a Name
-//     ([71], [72], [5]) declares nothing. Its unparsed entities (<!ENTITY
-//     name SYSTEM|PUBLIC ... NDATA notation>) are the document's [unparsed
-//     entities] property, answered by Reader.HasUnparsedEntity and final
-//     once the document element's start tag is read; the subset itself
-//     surfaces as no Node, a prolog fact not being part of the
-//     element/character-data stream. Internal parameter entities are
-//     expanded, bounded in depth and size. Rejected as RuleXMLWellFormed at
-//     the directive, in the subset or in an expanded parameter entity's
-//     replacement text: text between declarations that is neither S nor a
-//     PEReference — a '%' run that is no PEReference, or a '<!' opening no
-//     markup declaration, among it ([28b] intSubset, [28a] DeclSep, [69]
-//     PEReference, WFC: PE Between Declarations); a comment holding "--"
-//     ([15]); a processing instruction whose target is no Name or is "xml"
-//     in any case ([16], [17]); a notation declaration that is no [82]
-//     NotationDecl; a '<' outside a markup declaration's literals ([45],
-//     [52], [70], [82]); a parameter-entity reference inside a markup
-//     declaration, an entity value literal included (WFC: PEs in Internal
-//     Subset), and any other '%' in an entity value literal ([9]);
-//     replacement text ending inside a comment, processing instruction or
-//     markup declaration; and a '<' in the DOCTYPE header, a subset no ']'
-//     closes, or text other than S between that ']' and '>' ([28]
-//     doctypedecl). A processing instruction between the subset's
-//     declarations runs to the "?>" that alone closes it ([16] PI),
-//     whatever '>', '<' or quote it holds (internal/xmltok), and one no
-//     "?>" closes fails as the decoder's syntax error at the end of input.
-//     The external subset is never read, by design (#1668), nor is an
-//     external parameter entity; after a parameter-entity reference that is
-//     not read, unless standalone="yes", the rest of the internal subset is
-//     checked for well-formedness alone, binding no parameter entity,
-//     declaring no general entity and expanding no reference (XML 1.0
-//     §5.1). An entity declared only where the reader did not read is not a
-//     member, and Reader.AllDeclarationsProcessed, the [all declarations
-//     processed] property, then reports false.
+//     declarations, the first declaration of a name binding (XML 1.0 §4.2).
+//     Its unparsed entities (<!ENTITY name SYSTEM|PUBLIC ... NDATA
+//     notation>) are the document's [unparsed entities] property, answered
+//     by Reader.HasUnparsedEntity and final once the document element's
+//     start tag is read; the subset itself surfaces as no Node, a prolog
+//     fact not being part of the element/character-data stream. Internal
+//     parameter entities are expanded, bounded in depth and size. Rejected
+//     as RuleXMLWellFormed at the directive, in the subset or in an
+//     expanded parameter entity's replacement text: text between
+//     declarations that is neither S nor a PEReference — a '%' run that is
+//     no PEReference, or a '<!' opening no markup declaration, among it
+//     ([28b] intSubset, [28a] DeclSep, [69] PEReference, WFC: PE Between
+//     Declarations); a comment holding "--" ([15]); a processing
+//     instruction whose target is no Name or is "xml" in any case ([16],
+//     [17]); a notation declaration that is no [82] NotationDecl; a '<'
+//     outside a markup declaration's literals ([45], [52], [70], [82]); a
+//     parameter-entity reference inside a markup declaration, an entity
+//     value literal included (WFC: PEs in Internal Subset), and any other
+//     '%' in an entity value literal ([9]); an <!ENTITY> that is no [70]
+//     EntityDecl — no S after its keyword, a declared name, general or
+//     parameter, that is no Name ([71], [72], [5]), a missing definition,
+//     one that is neither one EntityValue nor an ExternalID ([73], [74],
+//     [75], [11], [12], [13]), an NDataDecl in a parameter entity's PEDef
+//     ([74]) or anything but one after a general entity's ExternalID
+//     ([76]), and an entity value literal whose '&' opens no Reference
+//     ([66]–[68]) or whose character reference names no Char (WFC: Legal
+//     Character), referenced or not; replacement text ending inside a
+//     comment, processing instruction or markup declaration; and a '<' in
+//     the DOCTYPE header, a subset no ']' closes, or text other than S
+//     between that ']' and '>' ([28] doctypedecl). A processing instruction
+//     between the subset's declarations runs to the "?>" that alone closes
+//     it ([16] PI), whatever '>', '<' or quote it holds (internal/xmltok),
+//     and one no "?>" closes fails as the decoder's syntax error at the end
+//     of input. The external subset is never read, by design (#1668), nor
+//     is an external parameter entity; after a parameter-entity reference
+//     that is not read, unless standalone="yes", the rest of the internal
+//     subset is checked for well-formedness alone, binding no parameter
+//     entity, declaring no general entity and expanding no reference (XML
+//     1.0 §5.1). An entity declared only where the reader did not read is
+//     not a member, and Reader.AllDeclarationsProcessed, the [all
+//     declarations processed] property, then reports false.
 //   - GAP(xml): <!ELEMENT> and <!ATTLIST> bodies ([45]–[60]) are checked
-//     only for a parameter-entity reference, a '<' and their closing '>',
-//     and <!ENTITY> grammar ([70]–[76]) only for those and as far as the
-//     entity's name and definition are read. Tracked by #2225.
+//     only for a parameter-entity reference, a '<' and their closing '>'.
+//     Tracked by #2225.
 //   - A reference to an internal general entity is replaced by its
 //     replacement text (XML 1.0 §4.4.2, §4.4.5): in content, parsed as
 //     content in the scope in force at the reference, its nodes located at
