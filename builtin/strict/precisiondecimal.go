@@ -335,9 +335,9 @@ func canonicalPrecisionDecimal(v value.Value) (string, error) {
 // [1E−6, 1E6] renders as a bare numeral (step 3); a positive ·scale· in range renders
 // with the decimal point placed and trailing zeros PADDED to the scale (step 4, so 3
 // with scale 2 → "3.00"); everything else — a negative scale, or a magnitude outside
-// the range — renders in scientific notation, likewise padded to preserve the scale
-// (step 5). Trailing zeros are canonical, never stripped: that is how the canonical
-// form is quantum-preserving even though Eq is quantum-blind.
+// the range — renders in scientific notation (step 5; a zero by zeroCanonical).
+// Trailing zeros are canonical, never stripped: that is how the canonical form is
+// quantum-preserving even though Eq is quantum-blind.
 func (p precisionDecimalVal) Canonical() string {
 	switch p.kind {
 	case pdNaN:
@@ -380,8 +380,7 @@ func (p precisionDecimalVal) Canonical() string {
 // longer than any string, so it renders as the literal "0.0E-(aP−1)" instead: that
 // maps back to the same (0, aP, ·sign·) triple (§3.2) but is not the §6 canonical
 // spelling. A zero whose ·scale· the host int holds still pads aP − 1 zeros
-// however large aP is. No tracker owns this yet: #1848's post-land pass files
-// one, and repoints this marker at it.
+// however large aP is. #2201 owns both residuals.
 func (p precisionDecimalVal) zeroCanonical() string {
 	if p.scale.Cmp(big.NewInt(1)) <= 0 {
 		return "0.0E0"
