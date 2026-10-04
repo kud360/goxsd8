@@ -393,9 +393,9 @@ func TestSubsetDeclSepIsNotStray(t *testing.T) {
 		`<!DOCTYPE r [` + notation + `<!ATTLIST r a CDATA "junk % ] %p;">` + pic + `]><r/>`,
 		`<!DOCTYPE r [` + notation + `<!ENTITY g "junk ] %p;"><!ENTITY % q "%p;">` + pic + `]><r/>`,
 		`<!DOCTYPE r [` + notation + pic + `<!ENTITY % c "<![INCLUDE[ <!ENTITY e 'v'> ]]> junk"> %c;]><r/>`,
-		`<!DOCTYPE r [` + notation + pic + `<!ENTITY % c "<![IGNORE[ junk ] % ]]>"> %c;]><r/>`,
-		`<!DOCTYPE r [` + notation + pic + `<!ENTITY % k "INCLUDE"><!ENTITY % c "<![%k;[ junk ]]>"> %c;]><r/>`,
-		yes + `<!DOCTYPE r [` + notation + `<!ENTITY % c "<![IGNORE[ junk ] % ]]> junk"> %c; ` + pic + `]><r/>`,
+		`<!DOCTYPE r [` + notation + pic + `<!ENTITY % c "<![IGNORE[ junk ] &#37; ]]>"> %c;]><r/>`,
+		`<!DOCTYPE r [` + notation + pic + `<!ENTITY % k "INCLUDE"><!ENTITY % c "<![&#37;k;[ junk ]]>"> %c;]><r/>`,
+		yes + `<!DOCTYPE r [` + notation + `<!ENTITY % c "<![IGNORE[ junk ] &#37; ]]> junk"> %c; ` + pic + `]><r/>`,
 	} {
 		t.Run(doc, func(t *testing.T) {
 			if !drained(t, doc).HasUnparsedEntity("pic") {
