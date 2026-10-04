@@ -43,8 +43,8 @@ func drained(t *testing.T, doc string) *xmltree.Reader {
 // declared name is not a Name (XML 1.0 [71] GEDecl, [5]) — `1x`, `a&b`, or
 // `a"b"`, a literal run on into it, which leaves a later `a` declared — while
 // one whose name holds U+0133, a NameStartChar in [4], is. A reference to
-// a parameter entity that is not read — here an external one — cuts the scan
-// off, so a declaration after it is not a member (XML 1.0 §5.1).
+// a parameter entity that is not read — here an external one — ends
+// processing, so a declaration after it is not a member (XML 1.0 §5.1).
 func TestHasUnparsedEntityReadsTheInternalSubset(t *testing.T) {
 	r := drained(t, `<?xml version="1.0"?>
 <!DOCTYPE r SYSTEM "r.dtd" [
@@ -523,12 +523,13 @@ func TestSubsetCutInsideAProcessingInstructionDeclines(t *testing.T) {
 
 // What may stand between declarations is never stray: S of every kind, before
 // and after the subset's ']', a PEReference expanding to a declaration, a
-// comment or processing instruction holding any text, a '%' or ']' inside an
-// ATTLIST default, a ']' or PEReference inside an EntityValue literal, and
-// INCLUDE, IGNORE and PE-keyword conditional sections in an internal parameter
-// entity's replacement text, with the ']' and ']]>' that close them, which XML
-// 1.0 leaves unresolved there (ruled on #1733): each section is declined, as
-// doctypeEntities states, never rejected. pic is declared in every one.
+// comment or processing instruction holding text that would be stray between
+// declarations, a '%' or ']' inside an ATTLIST default, a ']' or PEReference
+// inside an EntityValue literal, and INCLUDE, IGNORE and PE-keyword
+// conditional sections in an internal parameter entity's replacement text,
+// with the ']' and ']]>' that close them, which XML 1.0 leaves unresolved
+// there (ruled on #1733): each section is declined, as doctypeEntities states,
+// never rejected. pic is declared in every one.
 func TestSubsetDeclSepIsNotStray(t *testing.T) {
 	const yes = `<?xml version="1.0" standalone="yes"?>`
 	const notation = `<!NOTATION n SYSTEM 'x'>`

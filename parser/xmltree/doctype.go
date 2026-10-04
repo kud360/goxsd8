@@ -372,9 +372,11 @@ func (sc *subsetScan) where() string {
 // intSubset or [28a] DeclSep; in a parameter entity's replacement text it
 // breaks WFC: PE Between Declarations, which requires that text to match [31]
 // extSubsetDecl. A '%' run that is no '%' Name ';' ([69] PEReference) is
-// stray, and so is a ']' in replacement text. Either way the document is not
-// well-formed, a fatal error (XML 1.0 §1.2), so the fault ends the whole read
-// where a decline would only cut the scan off.
+// stray, and so is a ']' in replacement text, and so is a '<' opening no
+// comment, processing instruction or markup declaration, a conditional
+// section in the internal subset itself among them. Either way the document is
+// not well-formed, a fatal error (XML 1.0 §1.2), so the fault ends the whole
+// read where a decline would only end processing.
 func (sc *subsetScan) stray(s string) error {
 	rule := "XML 1.0 [28b] intSubset, [28a] DeclSep"
 	if sc.depth > 0 {
