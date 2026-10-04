@@ -213,3 +213,38 @@ func TestCompileCTATestStillDeclinesAssertionOnlyForms(t *testing.T) {
 		}
 	}
 }
+
+// A general comparison whose comparison type is in the date/time family
+// DECLINES at CompileAssertionTest and still compiles under CompileCTATest:
+// without an implicit timezone (F&O §10.4, cvc-xpath clause 7) the engine
+// decides `@d < @e or @d >= @e` over @d=2000-01-01 and @e=2000-01-01Z false,
+// a tautology an assertion would be charged on. Each type below reaches the
+// decline through its {primitive type definition}, xs:dateTimeStamp through
+// xs:dateTime's.
+func TestCompileAssertionTestDeclinesDateTimeComparisons(t *testing.T) {
+	uses := asUses(t, map[string]string{
+		"d": "date", "e": "date", "dt": "dateTime", "dts": "dateTimeStamp", "tm": "time",
+		"gym": "gYearMonth", "gy": "gYear", "gmd": "gMonthDay", "gd": "gDay", "gm": "gMonth", "s": "string",
+	})
+	for _, expr := range []string{
+		"@d < @e or @d >= @e",
+		"@d = @e",
+		"@dt < xs:dateTime('2000-01-01T00:00:00')",
+		"@dts != xs:dateTime('2000-01-01T00:00:00')",
+		"@tm <= xs:time('00:00:00')",
+		"@gym = xs:gYearMonth('2000-01')",
+		"@gy = xs:gYear('2000')",
+		"@gmd = xs:gMonthDay('--01-01')",
+		"@gd = xs:gDay('---01')",
+		"@gm = xs:gMonth('--01')",
+		"@s cast as xs:date < xs:date('2000-01-01')",
+	} {
+		record := ctaExprRecord(expr, "", "xs", xsd.XMLSchemaNS)
+		if _, ok := CompileAssertionTest(record, seededTypes, uses); ok {
+			t.Errorf("CompileAssertionTest(%q): compiled, want declined (a date/time comparison type)", expr)
+		}
+		if _, ok := CompileCTATest(record, seededTypes); !ok {
+			t.Errorf("CompileCTATest(%q): declined, want compiled (the Type Alternative façade admits every comparison type)", expr)
+		}
+	}
+}

@@ -95,7 +95,7 @@ type AssertionTest struct{ root ctaExpr }
 //
 // types is read as [CompileCTATest] reads it and stored nowhere.
 func CompileAssertionTest(expr xsd.XPathExpression, types xsd.TypeResolver, attrs AttributeTypes) (AssertionTest, bool) {
-	root, defect := compileCTATest(expr, types, assertionStep(attrs))
+	root, defect := compileCTATest(expr, types, ctaAssertionFacade{attrs: attrs})
 	if defect.kind != ctaNoDefect {
 		return AssertionTest{}, false
 	}
@@ -124,25 +124,64 @@ func (t AssertionTest) Evaluate(b value.Backend, types xsd.TypeResolver, attrs T
 	return ctaEval(t.root, ctaEnv{backend: b, types: types, input: ctaTypedInput{attrs: attrs}}) == ctaTrue
 }
 
-// assertionStep is the assertion façade's attribute step: a QName NameTest
-// whose name attrs types with a type this engine reads as one atomic value
-// (ctaTypes.typedAttribute) compiles to a ctaTypedAttr, and every other
-// NameTest declines.
+// ctaAssertionFacade is the assertion façade compileCTATest parses for: its
+// attribute nodes are typed by attrs, and it declines the comparison types it
+// cannot yet decide.
+type ctaAssertionFacade struct{ attrs AttributeTypes }
+
+func (ctaAssertionFacade) ctaFacade() {}
+
+// attribute compiles a QName NameTest whose name attrs types with a type this
+// engine reads as one atomic value (ctaTypes.typedAttribute) to a
+// ctaTypedAttr, and declines every other NameTest.
 //
 // An unbound prefix's ctaUnresolvedName reaches attrs like any other name; no
-// attribute use can carry it, so the step declines and the parse ends
+// attribute use can carry it, so the façade declines it and the parse ends
 // unsupported, which an assertion withholds on exactly as it would on the
 // static error.
-func assertionStep(attrs AttributeTypes) ctaAttributeStep {
-	return func(test ctaNameTest, types ctaTypes) (ctaValue, bool) {
-		exact, isExact := test.(ctaExactName)
-		if !isExact {
-			return nil, false
-		}
-		st, typed := attrs(exact.name)
-		if !typed || !types.typedAttribute(st) {
-			return nil, false
-		}
-		return ctaTypedAttr{name: exact.name, st: st}, true
+func (f ctaAssertionFacade) attribute(test ctaNameTest, types ctaTypes) (ctaValue, bool) {
+	exact, isExact := test.(ctaExactName)
+	if !isExact {
+		return nil, false
 	}
+	st, typed := f.attrs(exact.name)
+	if !typed || !types.typedAttribute(st) {
+		return nil, false
+	}
+	return ctaTypedAttr{name: exact.name, st: st}, true
+}
+
+// admitsComparison declines a comparison type whose {primitive type
+// definition} is in the date/time family — xs:dateTime (and so
+// xs:dateTimeStamp), xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay,
+// xs:gDay, xs:gMonth — or cannot be resolved, and admits every other.
+//
+// GAP(xpath): F&O §10.4 (xpath-functions.md, "Comparison Operators on
+// Duration, Date and Time Values") makes those comparisons a TOTAL order: "If
+// either operand to a comparison function on date or time values does not have
+// an (explicit) timezone then, for the purpose of the operation, an implicit
+// timezone, provided by the dynamic context ..., is assumed to be present as
+// part of the value." cvc-xpath clause 7 (§3.13.4.2) makes that implicit
+// timezone implementation-defined but constant per ·assessment· episode. This
+// engine has no implicit timezone, so ctaCompare decides a timezoned operand
+// against an untimezoned one as value.Incomparable — false for every
+// comparator but !=, which it decides true — and an assertion would be charged
+// (or satisfied) on that: `@d < @e or @d >= @e` over two xs:date attributes
+// 2000-01-01 and 2000-01-01Z is a tautology this engine would answer false.
+// The direction is the withhold: the {test} declines at
+// [CompileAssertionTest], and the assertion is neither charged nor shown
+// satisfied (PRINCIPLES 20). A Type Alternative's façade still evaluates them.
+// (#1042)
+func (ctaAssertionFacade) admitsComparison(types ctaTypes, c *xsd.SimpleType) bool {
+	p, resolved := types.primitive(c)
+	if !resolved {
+		return false
+	}
+	switch p.Name() {
+	case ctaBuiltin("dateTime"), ctaBuiltin("time"), ctaBuiltin("date"),
+		ctaBuiltin("gYearMonth"), ctaBuiltin("gYear"), ctaBuiltin("gMonthDay"),
+		ctaBuiltin("gDay"), ctaBuiltin("gMonth"):
+		return false
+	}
+	return true
 }
