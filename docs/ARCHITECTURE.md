@@ -17,14 +17,12 @@ Value implementations, parsing, validation, and generation live above them.
                                   internal/xmlchar, are the only
                                   internal-on-internal edges:
                                   - internal/schemaloc, the schemaLocation resolver. Its
-                                    "two packages must agree byte for byte" justification
-                                    EXPIRED when #272 deleted the conformance closure walk,
-                                    and internal/schemaloc/doc.go still names that deleted
-                                    walk as its second consumer. It has TWO consumers again,
-                                    and neither is the one named: parser's assembly, and
-                                    cmd/goxsd8's own xsi:schemaLocation hint reader. #845's
-                                    fold-back into parser is therefore blocked on #755
-                                    moving that reader into the library.
+                                    doc.go still justifies it by the conformance closure
+                                    walk #272 deleted (#1286). Its consumers are parser's
+                                    assembly and the two copies of the xsi:schemaLocation
+                                    hint reader, cmd/goxsd8's and the conformance
+                                    harness's. #845's fold-back into parser waits on #755
+                                    giving that reader one home in the library.
                                   - internal/xmldecl, a 1.x XMLDecl label read as 1.0
                                     (XML 1.0 §2.8 Note), which parser/xmltree's reader and
                                     the conformance harness's raw re-reads of the same
@@ -49,7 +47,8 @@ Value implementations, parsing, validation, and generation live above them.
                  value/backendtest (conformance kit for any backend)
                  builtin         (the generated TypeSpec table and Seed; imports value, xsd, xsderr)
    builtin/strict  builtin/native  <user backends>   (implement value contracts; builtin/strict
-                                  also imports builtin, for xs:NCName's generated pattern)
+                                  also imports builtin and regex, to compile xs:NCName's
+                                  generated pattern)
                  regex           (one engine, XSD + F&O flavors)
                  parser/xmltree  (position-tracking XML; imports xsderr,
                                   internal/xmldecl, internal/xmlenc,
@@ -74,7 +73,7 @@ Value implementations, parsing, validation, and generation live above them.
                                   the caller supplies none)
                  validate        (instance validation; adapters xmlsrc, jsonsrc, bersrc) [2]
                  codegen  codec  (generation; dataset ser/de)               [1]
-                 conformance     (harness + ratchet; test-only)
+                 conformance     (harness + ratchet; repo infrastructure)
                  cmd/goxsd8      (the CLI; help, parse and validate ship, gen does not)
 ```
 
@@ -127,9 +126,9 @@ it can reach neither the library nor the published surface — no per-helper
 argument for standing it up is owed. `tools/hfnextract/internal` is the
 same shape one level down.
 
-**Give an XML 1.0 production two library packages read one home in a
-stdlib-only `internal/<name>` leaf**; do not export it from either reader,
-and do not add an edge between them. `parser/xmltree` in particular never
+**Give an XML 1.0 or Namespaces in XML production two library packages read
+one home in a stdlib-only `internal/<name>` leaf**; do not export it from
+either reader, and do not add an edge between them. `parser/xmltree` in particular never
 imports `regex` to reach one. The Name productions ([4] `NameStartChar`,
 [4a] `NameChar`) live in `internal/xmlname`, read by `regex`'s `\i`/`\c`
 sets and `parser/xmltree`'s DOCTYPE name checks; a further Name check
@@ -141,8 +140,7 @@ sets and `parser/xmltree`'s DOCTYPE name checks; a further Name check
 `cmd/goxsd8` is a library CONSUMER, not a place to grow capability. A
 capability the CLI needs and the library does not export is a library gap to
 file, not CLI code to write. The CLI has taken the other branch for
-instance-hint reading, under "Parsing & loading" below, and that copy blocks
-an unexport the library wants. The
+instance-hint reading, under "Parsing & loading" below (#755). The
 `validate` ENGINE imports no source's decoder (`encoding/xml`,
 `encoding/json`, BER) — only its adapter does, and `validate/imports_test.go`
 pins it. That ban is the engine's and not the library's: `parser/xmltree` is
@@ -187,9 +185,10 @@ raw literal
 ```
 
 List and union varieties recurse: lists apply the pipeline per item against
-the item type before list-level facets; unions try DirectMembers in order
-(not flattened members — intervening restrictions carry facets, and pattern
-normalization uses the *validating member's* whiteSpace).
+the item type before list-level facets; unions try their `{member type
+definitions}` (`SimpleType.Members`) in order (not flattened members —
+intervening restrictions carry facets, and pattern normalization uses the
+*validating member's* whiteSpace).
 
 ## Builtin types: generated table + pluggable backends
 
@@ -395,14 +394,9 @@ Two access styles over the compiled model, one shared core:
   a consumer that needs only `Element` receives only that.
 - **Walk**: traversal of a type's effective content model. The algebra
   ships (type-derivation validity, substitution-group acceptance, wildcard
-  admission, attribute-use lookup) — **mostly unexported, with four
-  deliberate entry points M5 needed**: `Schema.ValidlySubstitutable` (the
-  derivation half, for `cvc-elt` clause 4), `Schema.ElementDefaultValid`
-  (`cos-valid-default`, for `cvc-elt` clause 5.1.1),
-  `Schema.AllowsAttributeWildcardName` (`cvc-wildcard` for an attribute
-  wildcard; the element half is decided inside `Matcher` below) and
-  `NamespaceConstraint.AllowsName`/`AllowsNamespace` beneath it.
-  `xsd/doc.go`'s "Walk API" section is authoritative on which. Of the two
+  admission, attribute-use lookup) — **mostly unexported, with a few
+  deliberate entry points the validator needs**; `xsd/doc.go`'s "Walk API"
+  section names them and is authoritative on which. Of the two
   drivers over it one ships and one does not:
   - a **pull** driver — `Matcher`, the instance-guided advance of the
     content model one child at a time (the validation consumer) —
@@ -431,11 +425,15 @@ Two access styles over the compiled model, one shared core:
   resolved location. Multi-root assembly is `parser.ParseSet`, whose
   `RootAt` and `HintAt` roots enter one assembly through one `Resolver`
   (#1283). The `xsi:schemaLocation` instance-hint reader is the other
-  capability named on this seam, is `parser`'s to export, does not exist
-  there, and `cmd/goxsd8` has shipped its own copy rather than waiting:
-  `cmd/goxsd8/validate.go`'s `instanceHints`/`hintsOf`, over
-  `internal/schemaloc` and `parser/xmltree` directly (#755). `loader/doc.go`
-  states it in the present tense; that sentence is drift.
+  capability named on this seam, is `parser`'s to export, and does not exist
+  there. Two copies stand in for it, both over `internal/schemaloc`:
+  `cmd/goxsd8/validate.go`'s `instanceHints`/`hintsOf`, and
+  `conformance/instancehints.go`'s. They have already diverged — on an odd
+  `xsi:schemaLocation` member count the CLI drops the trailing member where
+  the harness declines, and only the harness reads hints below the document
+  element and inline `xs:schema` documents — and #755 owns the one home both
+  retire into. `loader/doc.go` states the reader in the present tense; that
+  sentence is drift (#1286).
 
 - `parser`: the schema-document compiler — the M4 spine, and the only
   writer of `xsd` components. `Parse(location, opts…)` reads the root
@@ -481,9 +479,9 @@ Two access styles over the compiled model, one shared core:
   The conformance schema lane used to carry its own
   `<include>`/`<import>`/`<override>` walk in order to gate every document in
   a closure; location resolution was de-duplicated first, onto
-  `internal/schemaloc.Resolve` (#259), and the walk itself is now gone.
-  `conformance/schema_closure.go` fell from 396 lines to **106** — two
-  functions, `closureDecidable` and `closureReached`, that read the report.
+  `internal/schemaloc.Resolve` (#259), and the walk itself is now gone:
+  `conformance/schema_closure.go` holds two functions, `closureDecidable`
+  and `closureReached`, that read the report.
   The gated set is the assembled set *by construction* rather than by two
   walks agreeing, so no new composition feature has to be ported twice.
 
@@ -730,10 +728,10 @@ compiles, is documented, and has **zero** callers module-wide.
 - **`validate.Validator.Schema()`** — exported for "the read-only view of
   the compiled schema an adapter needs" (its godoc), but no
   adapter uses it and, per `validate/doc.go`, none can: adapters build
-  infoset values and never resolve declarations. Its two call sites are
-  both inside `validate`, and its own doc's second sentence ("The walk
-  reads the `*xsd.Schema` itself and not this narrowing") is falsified by
-  `Validator.Assess`, which reads the narrowing. Filed as **#848**:
+  infoset values and never resolve declarations. Its one call site is
+  inside `validate`, in `Validator.Assess`, which reads the narrowing and
+  so falsifies its own doc's second sentence ("The walk reads the
+  `*xsd.Schema` itself and not this narrowing"). Filed as **#848**:
   unexport, or name the real consumer. Whichever way it goes, settle
   `xsd.ElementResolver` with it: this method's return type is that
   interface's only consumer module-wide, and its sibling

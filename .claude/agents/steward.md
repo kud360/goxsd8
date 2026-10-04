@@ -70,11 +70,11 @@ copies, call sites, allocations — and the command that reproduces it, or
 `AUDIT:` summary with one verdict per package — sound / drift noted /
 refactor filed.
 
-**You cannot file issues or merge a PR yourself.** Your tools are
-read-only and GitHub has been unreachable from your context on every audit
-so far. That seam is intended, not a workaround: return issue-ready
-write-ups and push your `meta: audit <date>` doc commit to a branch, and
-the orchestrating session files and lands them.
+**You cannot file issues or merge a PR yourself.** Read issues and threads
+over repository-scoped REST (docs/ROUTINES.md); never write to GitHub. That
+seam is intended, not a workaround: return issue-ready write-ups and your
+`meta: audit <date>` doc commit, and the orchestrating session files and
+lands them.
 
 You may edit docs — ARCHITECTURE.md and drifted process docs — in that
 commit. The ratchet-integrity rules (CLAUDE.md's one rule, arbiter.md's
