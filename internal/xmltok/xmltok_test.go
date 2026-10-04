@@ -250,13 +250,27 @@ var rejected = []string{
 	`<a b `,
 }
 
-// charsetReader converts the "x-ok" charset by passing the input through and
-// fails on any other.
+// charsetReader converts the "x-upper" charset by upper-casing ASCII
+// letters, so a decoder that failed to switch readers reads lower case, and
+// fails on any other charset.
 func charsetReader(charset string, input io.Reader) (io.Reader, error) {
-	if charset == "x-ok" {
-		return input, nil
+	if charset == "x-upper" {
+		return upper{input}, nil
 	}
 	return nil, fmt.Errorf("no converter for %q", charset)
+}
+
+// upper upper-cases the ASCII letters of r.
+type upper struct{ r io.Reader }
+
+func (u upper) Read(p []byte) (int, error) {
+	n, err := u.r.Read(p)
+	for i, c := range p[:n] {
+		if 'a' <= c && c <= 'z' {
+			p[i] = c - 'a' + 'A'
+		}
+	}
+	return n, err
 }
 
 // entities is the Entity map both decoders read in the differential.
@@ -264,7 +278,7 @@ var entities = map[string]string{"e": "<expanded>"}
 
 // charsetDocs are read with charsetReader installed.
 var charsetDocs = []string{
-	`<?xml version="1.0" encoding="x-ok"?><a>x</a>`,
+	`<?xml version="1.0" encoding="x-upper"?><a b="c">x</a>`,
 	`<?xml version="1.0" encoding="x-bad"?><a>x</a>`,
 	`<?xml version="1.0" encoding="utf-8"?><a/>`,
 	`<?xml version="1.0" encoding="UtF-8"?><a/>`,
