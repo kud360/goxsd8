@@ -35,7 +35,8 @@ import (
 // clause 1.1.3": ·strictly assessed· (key-sva) has a clause 1.1.3 of its own,
 // a different condition entirely, so spelling the carried Rule beside the
 // borrowed clause number would cite the wrong sentence. STYLE E4's grep is
-// served by the rule that STATES the clause.
+// served by the rule that STATES the clause. The charge's debug line carries
+// this Rule and no clause for the same reason ([walk.logDecision]).
 const ruleCvcAssessElt xsderr.Rule = "cvc-assess-elt"
 
 // ruleCvcElt is Element Locally Valid (Element) (Structures §3.3.4.3,
@@ -597,7 +598,7 @@ func (w *walk) localOrResolvedGovernance(e Element, parent *xsd.ComplexType, inh
 //
 // The child itself is charged NOTHING here and is not halted: [walk.element]
 // still runs over it, so its [[attributes]] and its [[children]] are assessed
-// in their turn — unlike the ·skipped· child clause 3.2 stops at. Its
+// in their turn — unlike the ·skipped· child key-sva clause 3.2 stops at. Its
 // [validity] is notKnown by e-validity clause 2, "otherwise", an item not
 // ·strictly assessed· having no clause 1 to reach.
 //
@@ -663,7 +664,7 @@ func (w *walk) unresolvedStrictWildcardChild(content *contentCheck, child Elemen
 	w.res.violations = append(w.res.violations, xsderr.New(ruleCvcAssessElt, child.Loc(),
 		"the element information item %s is ·attributed to· a ***strict*** ·wildcard particle· but %s, so it is ·laxly assessed· and its [validity] is ***notKnown***, which e-validity clause 1.1.3 (§3.3.5.1) makes the enclosing element %s invalid for",
 		child.Name(), cause, content.e.Name()))
-	content.log(w, child.Name(), child.Loc(), ruleCvcAssessElt, "1.1.3", "charged")
+	content.log(w, child.Name(), child.Loc(), ruleCvcAssessElt, "", "charged")
 }
 
 // locallyDeclaredType settles cvc-complex-type (§3.4.4.2) clause 5 for one
@@ -842,7 +843,9 @@ func (w *walk) instanceGovernance(e Element) (governance, bool) {
 // satisfied for it by construction.
 //
 // An error from [xsd.Schema.ValidlySubstitutable] leaves clause 6 undecided:
-// it is recorded as [Unevaluated], and the element takes [governance]'s
+// it is recorded as [Unevaluated] under cvc-assess-elt, whose debug line names
+// no clause because the clause undecided is key-governing-type-elem's and not
+// cvc-assess-elt's ([walk.logDecision]), and the element takes [governance]'s
 // undecided shape, walked against nothing with its subtree as [walk.child]
 // walks an undecided child, with cvc-id's clause 1 arm withheld on the same
 // grounds.
@@ -870,7 +873,7 @@ func (w *walk) localGovernance(e Element, ldt xsd.TypeDefinition) governance {
 	}
 	overrides, err := w.schema.ValidlySubstitutable(instance, ldt, nil)
 	if err != nil {
-		w.decline("assessing element", e.Name(), e.Loc(), ruleCvcAssessElt, "1.2",
+		w.decline("assessing element", e.Name(), e.Loc(), ruleCvcAssessElt, "",
 			"the ·governing type definition· of the element %s was not determined: whether its xsi:type %s ·overrides· its ·locally declared type· %s (key-governing-type-elem clause 6) could not be settled: %v",
 			e.Name(), typeName(instance), typeName(ldt), err)
 		w.ids.declined = true
@@ -1295,7 +1298,11 @@ func (w *walk) logAttribute(a Attribute, rule xsderr.Rule, clause, outcome strin
 //
 // An empty clause drops the key rather than emitting it empty: cvc-au is one
 // undivided sentence with no numbered clauses, so there is no clause to name
-// and a "clause=" with nothing after it would read as a missing value.
+// and a "clause=" with nothing after it would read as a missing value. A
+// decision settled by a clause of some anchor other than rule passes it empty
+// too, the clause going in the message: beside rule it would cite rule's
+// sentence of that number, or one rule does not have (e-validity clause 1.1.3
+// under [ruleCvcAssessElt]).
 func (w *walk) logDecision(event string, name xsd.QName, loc xsderr.Loc, rule xsderr.Rule, clause, outcome string) {
 	if !w.log.Enabled(context.Background(), slog.LevelDebug) {
 		return
@@ -1335,8 +1342,11 @@ func (w *walk) declineAttribute(a Attribute, rule xsderr.Rule, clause, format st
 
 // logSkipped records the one child the walk does not assess at all: a ·skipped·
 // one, ·attributed to· a skip Wildcard or to an {open content} with a skip
-// {wildcard} ([walk.childGoverning]). Both log clause 3.2, the clause that
-// stops the descent at a skip wildcard. It is written here because
+// {wildcard} ([walk.childGoverning]). Both log cvc-assess-elt clause 2, "If E
+// is ·skipped·, then E must not be ·assessed·", the clause that stops the
+// descent at a skip wildcard: key-sva (§3.3.4.6) clause 3.2 is the definition
+// clause that names the skip, and key-skipped (§3.10.4.1) extends the
+// ·skipped· outcome to every descendant. It is written here because
 // [walk.element] is never reached for it, so its "assessing element" line —
 // which every other element gets, whatever was or was not decided about it
 // (STYLE L1) — has nowhere else to come from, and it carries the outcome that
@@ -1347,7 +1357,7 @@ func (w *walk) logSkipped(e Element) {
 	}
 	w.log.LogAttrs(context.Background(), slog.LevelDebug, "assessing element",
 		slog.Any("name", e.Name()), slog.Any("loc", e.Loc()),
-		slog.String("rule", string(ruleCvcAssessElt)), slog.String("clause", "3.2"),
+		slog.String("rule", string(ruleCvcAssessElt)), slog.String("clause", "2"),
 		slog.String("outcome", "skipped"))
 }
 
@@ -1447,12 +1457,12 @@ func (w *walk) children(e Element, content *contentCheck, id *icCheck, inherited
 // as a broken document.
 //
 // A ·skipped· child stops here and not one level down, which is what makes it
-// the whole SUBTREE that is not ·assessed· (clause 3.2): [walk.element] is the
-// only path to a child's own [[children]], so declining to call it leaves every
-// element below the skipped one unvisited, whatever its own attribution would
-// have been. It is also what keeps inherited, the child's [inherited
-// attributes], from reaching a child e-inherited_attributes gives none: one
-// attributed to a skip Wildcard.
+// the whole SUBTREE that is not ·assessed· (key-sva clause 3.2, cvc-assess-elt
+// clause 2): [walk.element] is the only path to a child's own [[children]], so
+// declining to call it leaves every element below the skipped one unvisited,
+// whatever its own attribution would have been. It is also what keeps
+// inherited, the child's [inherited attributes], from reaching a child
+// e-inherited_attributes gives none: one attributed to a skip Wildcard.
 //
 // A child [contentCheck.element] reports undecided never reaches
 // [walk.childGoverning]: it takes [governance]'s undecided shape here, and
