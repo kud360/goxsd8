@@ -137,6 +137,40 @@ func TestAnUntypedItemDeclinesClauseOneAndNotClauseTwo(t *testing.T) {
 		icChargeAttr(ruleCvcID, 4))
 }
 
+// An attribute of an element whose ·governing type definition· was not
+// determined binds no ·ID value·: key-governing-ad (§3.2.4.2) clause 2's
+// ·context-determined declaration·, from a use of that type, comes before
+// clause 3's resolution by ·expanded name·, so the top-level xs:ID declaration
+// of @wid is not the attribute's, and the true one — T's xs:string use, which
+// every alternative of <e>'s undecided {type table} names — makes the two
+// "a"s no duplicate. cvc-id clause 2 is therefore not charged, and clause 1
+// stays withheld by <e>'s own record (#2192).
+//
+// The children of <e> are the UNDECIDED shape ([governance]), whose governance
+// this package could not decide at all, and their @wid binds nothing either:
+// whatever attributes them, a use or a skip {attribute wildcard} of their true
+// type may come before the top-level declaration.
+func TestAnUndeterminedTypesAttributeBindsNoIDByItsExpandedName(t *testing.T) {
+	got, undecided := assessRecorded(t, icTabledAttrSchema(t, nil), icRoot(icTabledE(2, "a"), icTabledE(3, "a")))
+	wantSilence(t, got, "@wid is xs:string under T whichever alternative selects")
+	var ids []Unevaluated
+	for _, u := range undecided {
+		if u.Rule() == ruleCvcID {
+			ids = append(ids, u)
+		}
+	}
+	wantDeclines(t, ids,
+		Unevaluated{rule: ruleCvcID, loc: loc(2, 1), msg: "cvc-id clause 1 is undecided"},
+		Unevaluated{rule: ruleCvcID, loc: loc(3, 1), msg: "cvc-id clause 1 is undecided"})
+
+	kid := func(line int) *testElement {
+		return icElem(xsd.QName{Local: "kid"}, line, []Attribute{icAttr(xsd.QName{Local: "wid"}, "a", line)})
+	}
+	parent := icElem(xsd.QName{Local: "e"}, 2, nil, ElementChild(kid(3)), ElementChild(kid(4)))
+	wantSilence(t, icAssess(t, icTabledAttrSchema(t, nil), icRoot(parent)),
+		"an undecided <kid>'s @wid is not known to be the top-level xs:ID")
+}
+
 // An attribute of an ANONYMOUS governing type is read off THAT type's own
 // {attribute uses}, not off a top-level declaration of the same ·expanded
 // name·: the two are different components, and only the use's {attribute
@@ -296,7 +330,7 @@ func TestANilledElementWithholdsNoIDCheck(t *testing.T) {
 }
 
 // An attribute a ***skip*** {attribute wildcard} admits has no ·governing·
-// declaration (§3.10.4.1's Note), so cvc-assess-elt clause 2.2 leaves it
+// declaration (§3.10.4.1's Note), so key-sva (§3.3.4.6) clause 2.2 leaves it
 // unassessed and §3.17.5.2 clause 3 keeps it out of the ·eligible item set·:
 // two of them sharing a lexical bind no ·ID value· and cvc-id clause 2 charges
 // nothing (#1043).
@@ -516,11 +550,12 @@ func TestUnreadableIDItemsAreRecorded(t *testing.T) {
 
 // idLaxSchema is the fixture for an element ·laxly assessed· below the
 // validation root: <root>'s {content type} is a sequence of one lax wildcard,
-// 0..unbounded, and three top-level declarations a name below it can resolve
-// to.
+// 0..unbounded, three top-level element declarations a name below it can
+// resolve to, and one top-level attribute declaration.
 //
 //	root  RootType (named)  sequence( any lax * )
 //	thing xs:ID    ref xs:IDREF    num xs:int
+//	top-level               @wid xs:ID
 func idLaxSchema(t *testing.T) *xsd.Schema {
 	t.Helper()
 	o, err := xsd.NewUnboundedOccurs(xsderr.Loc{}, 0)
@@ -545,6 +580,7 @@ func idLaxSchema(t *testing.T) *xsd.Schema {
 				}
 				b.AddElement(decl)
 			}
+			b.AddAttribute(icTopAttribute(t, "wid", "ID"))
 		})
 }
 
@@ -582,6 +618,32 @@ func TestAnIDBelowALaxlyAssessedElementIsRead(t *testing.T) {
 
 	icWantCharges(t, icAssess(t, schema, icElem(xsd.QName{Local: "root"}, 1, nil,
 		ElementChild(unknown("dangling")), ElementChild(idText("ref", 4, "dangling")))))
+}
+
+// An element whose governance was DECIDED keeps key-governing-ad (§3.2.4.2)
+// clause 3 for an attribute no use governs, so walk.attributeType's decline for
+// an undetermined ·governing type definition· reaches neither shape below
+// (#2192). A ·laxly assessed· <unknown> is assessed against xs:anyType, whose
+// {attribute wildcard} is lax (§3.4.7); a <num> its top-level declaration
+// governs has the SIMPLE type xs:int, with no {attribute wildcard} to be
+// ·skipped· by. Either way @wid ·resolves· by ·expanded name· to the top-level
+// xs:ID declaration, the two "a"s bind one id twice, and cvc-id clause 2
+// charges it. The <num>s are also charged cvc-type clause 3.1.1, which admits
+// no attribute but the xsi ones on a simple-typed element.
+func TestADecidedElementsAttributeResolvesByItsExpandedName(t *testing.T) {
+	withWid := func(local string, line int, text string) *testElement {
+		return icElem(xsd.QName{Local: local}, line, []Attribute{icAttr(xsd.QName{Local: "wid"}, "a", line)},
+			TextChild(&testText{data: text, loc: loc(line, 8)}))
+	}
+	doc := func(local, text string) *testElement {
+		return icElem(xsd.QName{Local: "root"}, 1, nil,
+			ElementChild(withWid(local, 2, text)), ElementChild(withWid(local, 3, text)))
+	}
+
+	icWantCharges(t, icAssess(t, idLaxSchema(t), doc("unknown", "")),
+		icChargeAttr(ruleCvcID, 3))
+	icWantCharges(t, icAssess(t, idLaxSchema(t), doc("num", "12")),
+		icChargeAttr(ruleCvcType, 2), icChargeAttr(ruleCvcType, 3), icChargeAttr(ruleCvcID, 3))
 }
 
 // The same attribution makes a resolving descendant ·strictly assessed·
