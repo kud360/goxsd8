@@ -9,6 +9,7 @@ import (
 
 	"github.com/kud360/goxsd8/internal/xmldecl"
 	"github.com/kud360/goxsd8/internal/xmlenc"
+	"github.com/kud360/goxsd8/internal/xmltok"
 	"github.com/kud360/goxsd8/xsderr"
 )
 
@@ -21,7 +22,7 @@ import (
 // A Reader is single-use and not safe for concurrent use.
 type Reader struct {
 	uri string
-	dec *xml.Decoder
+	dec *xmltok.Decoder
 	pos *posReader
 	// decl is the version-label rewrite the decoder reads through; it keeps
 	// the source's own label, which prefix undeclaration depends on.
@@ -87,20 +88,11 @@ type frame struct {
 // is decoded to UTF-8 before the XML decoder sees it, and a UTF-8 mark is
 // dropped as the encoding signature it is (internal/xmlenc). Locations are
 // therefore offsets into the decoded UTF-8 stream, not into the source bytes.
-//
-// GAP(xml): names outside the DOCTYPE — element, attribute and PI target
-// names and entity references — are read by encoding/xml, which checks them
-// against XML 1.0 4th-edition character tables, not the 5th-edition
-// NameStartChar [4] and NameChar [4a] of Name [5] (xml.md), so a 5th-edition
-// Name such as Dĳkstra (U+0133) is rejected as RuleXMLWellFormed. The
-// DOCTYPE's own names are read by doctypeEntities and are not affected;
-// names in an entity's replacement text are marked at content.include.
-// Tracked by #2188.
 func NewReader(uri string, r io.Reader) *Reader {
 	body, bom := xmlenc.Decode(r)
 	decl := xmldecl.As10(body)
 	pos := &posReader{r: decl}
-	dec := xml.NewDecoder(pos)
+	dec := xmltok.NewDecoder(pos)
 	dec.CharsetReader = bom.CharsetReader
 	return &Reader{
 		uri:  uri,

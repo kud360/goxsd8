@@ -25735,10 +25735,10 @@ XPathDefaultNSonKeyKeyRefUnique/s3_11_2v03/instance/s3_11_2v03i pass
 XPathDefaultNSonKeyKeyRefUnique/s3_11_2v04/instance/s3_11_2v04i pass
 XPathDefaultNSonKeyKeyRefUnique/s3_11_2v05/instance/s3_11_2v05i pass
 XPathDefaultNSonKeyKeyRefUnique/s3_11_2v06/instance/s3_11_2v06i pass
-XmlVersions/xv001/instance/xv001.v01.xml fail
+XmlVersions/xv001/instance/xv001.v01.xml pass
 XmlVersions/xv002/instance/xv002.v01.xml pass
 XmlVersions/xv003/instance/xv003.v01.xml fail
-XmlVersions/xv004/instance/xv004.v01.xml fail
+XmlVersions/xv004/instance/xv004.v01.xml pass
 XmlVersions/xv005/instance/xv005.n01.xml pass
 XmlVersions/xv005/instance/xv005.n02.xml pass
 XmlVersions/xv005/instance/xv005.v01.xml pass

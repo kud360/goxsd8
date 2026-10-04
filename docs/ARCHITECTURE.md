@@ -41,9 +41,10 @@ Value implementations, parsing, validation, and generation live above them.
                                     internal/xmltok's text check both read.
                                   - internal/xmltok, encoding/xml's strict tokenizer
                                     forked to check names against internal/xmlname's
-                                    5e tables. Only its tests import it until #2188
-                                    moves parser/xmltree's and the conformance
-                                    harness's decoders onto it.)
+                                    5e tables, which parser/xmltree's reader and
+                                    entity replacement-text reader and the
+                                    conformance harness's raw re-reads, its
+                                    instance hint reader among them, decode with.)
                  value           (value-space contracts, facet pipeline; imports xsd, xsderr, regex)
                  value/backendtest (conformance kit for any backend)
                  builtin         (the generated TypeSpec table and Seed; imports value, xsd, xsderr)
@@ -52,11 +53,12 @@ Value implementations, parsing, validation, and generation live above them.
                  regex           (one engine, XSD + F&O flavors)
                  parser/xmltree  (position-tracking XML; imports xsderr,
                                   internal/xmldecl, internal/xmlenc,
-                                  internal/xmlname and internal/xmlchar only,
-                                  and nothing else in the
+                                  internal/xmlname, internal/xmlchar and
+                                  internal/xmltok only, and nothing else in the
                                   module — independent of the schema pipeline, not
-                                  of the error currency. A stdlib-only internal/
-                                  leaf is the one kind of further edge it may take;
+                                  of the error currency. An internal/ leaf whose
+                                  own module edges, if any, are internal/ leaves
+                                  is the one kind of further edge it may take;
                                   it never imports regex — see the XML-production
                                   ruling below)
                  loader          (schema resolution interfaces)
@@ -144,8 +146,8 @@ an unexport the library wants. The
 `validate` ENGINE imports no source's decoder (`encoding/xml`,
 `encoding/json`, BER) — only its adapter does, and `validate/imports_test.go`
 pins it. That ban is the engine's and not the library's: `parser/xmltree` is
-the module's one `encoding/xml` reader, and `parser` and `validate/xmlsrc`
-both sit above it.
+the library's one XML reader, decoding through `internal/xmltok`, and `parser`
+and `validate/xmlsrc` both sit above it.
 
 ## Lexical space vs value space
 

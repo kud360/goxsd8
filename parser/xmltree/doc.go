@@ -2,9 +2,9 @@
 // origin of every xsderr.Loc in the module.
 //
 // It is independent of the rest of the module (leaf besides xsderr and the
-// stdlib-only internal/xmldecl, internal/xmlenc, internal/xmlname and
-// internal/xmlchar) and used for both schema documents (parser) and XML
-// instances (validate/xmlsrc).
+// internal/ leaves internal/xmldecl, internal/xmlenc, internal/xmlname,
+// internal/xmlchar and internal/xmltok) and used for both schema documents
+// (parser) and XML instances (validate/xmlsrc).
 //
 // # Contract (implemented in M2)
 //
@@ -35,14 +35,10 @@
 //   - GAP(xml): UTF-16 without a mark, declared only by encoding=, is
 //     not decoded — it fails well-formedness rather than being read.
 //     Tracked by #361.
-//   - GAP(xml): names outside the DOCTYPE — element, attribute and PI
-//     target names and entity references — and names in an entity's
-//     replacement text are checked by encoding/xml against XML 1.0
-//     4th-edition character tables, not the 5th-edition NameStartChar [4]
-//     and NameChar [4a] of Name [5], so a 5th-edition Name such as Dĳkstra
-//     (U+0133) is rejected as RuleXMLWellFormed. The DOCTYPE's own names
-//     are read by doctypeEntities and are not affected. Tracked by
-//     #2188.
+//   - Element, attribute and PI target names and entity references, in
+//     the document and in an entity's replacement text, are checked
+//     against XML 1.0 5th edition's [5] Name (internal/xmltok); a name
+//     outside it is RuleXMLWellFormed.
 //   - A document whose XML declaration specifies a 1.x version number
 //     other than 1.0 is read as a 1.0 document (XML 1.0 §2.8 Note), by a
 //     same-length rewrite of that number (internal/xmldecl), so locations

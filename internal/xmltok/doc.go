@@ -32,9 +32,9 @@
 // errors.Is, so an input or CharsetReader error that wraps io.EOF reads as end
 // of input where encoding/xml compares it by identity.
 //
-// Its consumers are the decoders #2188 moves onto it: parser/xmltree's Reader
-// and entity replacement-text reader, and the conformance harness's raw
-// re-reads (subtreeroot.go). Until then only its tests import it.
+// Its consumers are parser/xmltree's Reader and entity replacement-text
+// reader, and the conformance harness's raw re-reads (subtreeroot.go's
+// rawDecoder, and the instance hint reader through recordingDecoder).
 //
 // It is a fork of Go 1.26's encoding/xml/xml.go and read.go's Skip, under
 // the BSD license in this directory's LICENSE file. It depends on the standard
