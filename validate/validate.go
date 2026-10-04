@@ -131,13 +131,15 @@ func (r *Result) Violations() []*xsderr.Error {
 // violation list, or append it to the violations of a Result and turn a
 // skipped check into a false reject.
 //
-// One record is one SITE, not one skipped evaluation: the assertion sites are
-// collected statically off the ·governing type definition· (cvcassertion.go),
-// so several records may share a Loc and the count is not a claim about how
-// many evaluations a real evaluator would have run. Every other site is reached
-// by the walk, one record per withheld check at the item it withheld a verdict
-// on:
+// One record is one SITE, not one skipped evaluation: the assertions-facet
+// sites are collected statically off a simple type's closure
+// (cvcassertion.go), so several records may share a Loc and the count is not a
+// claim about how many evaluations a real evaluator would have run. Every
+// other site is reached by the walk, one record per withheld check at the item
+// it withheld a verdict on:
 //
+//   - assertions (cvcassertion.go): each {assertions} member of a complex
+//     ·governing type definition· left unevaluated (cvc-assertion);
 //   - the ·governing type definition· (assess.go, cta.go): each withheld one,
 //     not one per alternative the {type table} scan never tried — a {test}
 //     outside the §3.12.6 subset (key-cta-ta-select), a selected {type

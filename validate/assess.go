@@ -963,9 +963,10 @@ func (c elementContext) LookupNamespace(prefix string) (string, bool) {
 // throughout. A ·laxly assessed· e has no type either and does NOT end it
 // ([walk.child]).
 //
-// cvc-complex-type clause 6 sits between the two halves and decides nothing:
-// [walk.elementAssertions] records e's {assertions} as [Unevaluated] and
-// charges no violation (cvcassertion.go).
+// cvc-complex-type clause 6 sits between the two halves:
+// [walk.elementAssertions] evaluates each of e's {assertions} the XPath
+// evaluator compiles, charging cvc-assertion for one that does not hold, and
+// declines the rest (cvcassertion.go).
 //
 // parent is the enclosing element's identity-constraint state, nil at the
 // ·validation root·. It is what carries the {selector} and {fields} evaluations
@@ -1320,10 +1321,7 @@ func (w *walk) logDecision(event string, name xsd.QName, loc xsderr.Loc, rule xs
 // Every decline site of the package calls it, directly or through
 // [contentCheck.decline], [walk.declineAttribute], [walk.declineID] or
 // [icTarget.decline], except the ones [Unevaluated]'s own doc names as not
-// recorded and the assertion sites, [walk.elementAssertions] and
-// [walk.simpleAssertions], which record without logging: their records are a
-// static collection of sites rather than one check declined at an item, and
-// #1042, which retires both, deletes this exception.
+// recorded.
 func (w *walk) decline(event string, name xsd.QName, loc xsderr.Loc, rule xsderr.Rule, clause, format string, args ...any) {
 	w.res.unevaluated = append(w.res.unevaluated, newUnevaluated(rule, loc, format, args...))
 	w.logDecision(event, name, loc, rule, clause, "declined")

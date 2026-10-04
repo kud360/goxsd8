@@ -201,6 +201,64 @@ func (t ctaTypes) castTarget(name xsd.QName) (*xsd.SimpleType, bool) {
 	return st, true
 }
 
+// castsFrom reports whether this engine casts the operand v at all, which is
+// false for exactly one shape: a TYPED attribute (ctaTypedAttr) whose
+// {primitive type definition} is not xs:string. Every other operand casts as
+// [CompileCTATest] states.
+//
+// The string family is admitted because xpath-functions.md §17.1.1 makes a
+// cast from xs:string one datatype validation of the value's own string, which
+// ctaPromote performs exactly: the ·canonical representation· of an xs:string
+// value is that string (f-stringCanmap).
+//
+// GAP(xpath): a cast from any OTHER typed attribute is declined, because
+// xpath-functions.md §17 defines most casts between primitives over the VALUE,
+// not over a re-validated canonical lexical — xs:decimal to xs:integer
+// truncates (§17.1.3.4) where the round-trip ctaPromote would perform raises
+// err:FORG0001 for "3.5" — and an assertion a raised cast makes false is a
+// charge (cvc-assertion), so the round-trip would fabricate one. The direction
+// is the withhold [CompileAssertionTest] reports: the assertion is declined,
+// never charged and never satisfied. (#1042)
+func (t ctaTypes) castsFrom(v ctaValue) bool {
+	attr, typed := v.(ctaTypedAttr)
+	if !typed {
+		return true
+	}
+	p, resolved := t.primitive(attr.st)
+	return resolved && p.Name() == ctaBuiltin("string")
+}
+
+// typedAttribute reports whether this engine reads an attribute of type st as
+// a typed operand, which is [AttributeTypes]' answer classified the way
+// castTarget classifies a cast target — by its {primitive type definition},
+// which is ·absent· for EXACTLY the types whose atomized value is not one
+// atomic value of a type known at compile time:
+//
+//   - a list or union {variety}: a list atomizes to a sequence, and a union's
+//     value takes the type of its ·validating· member, which only the instance
+//     decides;
+//   - xs:anySimpleType and xs:anyAtomicType, whose lexical mapping is not a
+//     function (Datatypes §3.2.1.2, §3.2.2.2).
+//
+// An xs:QName or xs:NOTATION primitive is declined as well: neither has a
+// ·canonical representation· (value.Mapping), so ctaPromote cannot convert one
+// into a comparison type that differs from its own and would raise where XPath
+// does not.
+//
+// GAP(xpath): each of those attribute types declines the whole assertion,
+// never charges it and never satisfies it — the withhold
+// [CompileAssertionTest] reports. (#1042)
+func (t ctaTypes) typedAttribute(st *xsd.SimpleType) bool {
+	if st == nil {
+		return false
+	}
+	p, resolved := t.primitive(st)
+	if !resolved {
+		return false
+	}
+	return p.Name() != ctaBuiltin("QName") && p.Name() != ctaBuiltin("NOTATION")
+}
+
 // ctaTyping is which of the three outcomes settling a comparison's type
 // reached, and the three are three DIFFERENT directions rather than degrees of
 // one (STYLE P3):
@@ -208,10 +266,11 @@ func (t ctaTypes) castTarget(name xsd.QName) (*xsd.SimpleType, bool) {
 //   - ctaTypeSettled carries the type both operands are converted into.
 //   - ctaTypeErrored is err:XPTY0004 — no one type serves both operands, which
 //     is a raised type error and so a ctaTypeError node, decided false for the
-//     whole {test} by key-cta-ta-select clause 2.
-//   - ctaTypeDeclined is [CompileCTATest]'s WITHHOLD: this engine will not
-//     decide the pair at all, and the caller's ·governing type definition· is
-//     left undetermined rather than settled on a wrong answer.
+//     whole {test} by key-cta-ta-select clause 2 or by cvc-assertion.
+//   - ctaTypeDeclined is the compile-time WITHHOLD of [CompileCTATest] and
+//     [CompileAssertionTest]: this engine will not decide the pair at all, and
+//     the caller leaves the element's ·governing type definition· undetermined
+//     or the assertion unevaluated rather than settled on a wrong answer.
 //
 // ctaTypeErrored is the zero value, so a fault that returns no type reports
 // the error direction and never the withhold by accident.
@@ -249,8 +308,8 @@ func (t ctaTypes) comparison(op ctaComparator, l, r ctaValue) (*xsd.SimpleType, 
 // converted settles the type alone, leaving B.2's operator rows to comparison.
 //
 // Two rules cover the three operand shapes this grammar builds, because an
-// operand is either xs:untypedAtomic (an uncast attribute) or typed (a
-// Literal, a cast, a constructor function):
+// operand is either xs:untypedAtomic (an uncast untyped attribute) or typed (a
+// Literal, a cast, a constructor function, a typed attribute):
 //
 //   - BOTH xs:untypedAtomic: clause 1, "the values are cast to the type
 //     xs:string".
