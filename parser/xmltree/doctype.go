@@ -38,11 +38,13 @@ const (
 // doctypeEntities reads the general entity declarations of one directive's
 // DOCTYPE, in document order, and reports whether some declaration went
 // unread: the inverse of the document's [all declarations processed] (XML
-// Infoset §2.1). A directive that is not a DOCTYPE declares none and leaves
-// nothing unread. standalone is the XML declaration's standalone="yes" (XML
-// 1.0 §2.9 SDDecl). A DOCTYPE whose document type name is missing or is not a
-// Name (XML 1.0 [28] doctypedecl, [5] Name) is not well-formed: a
-// RuleXMLWellFormed fault at loc, the directive's start.
+// Infoset §2.1). directive is the directive's source between its "<!" and its
+// closing '>', comments included (see Reader.declareEntities). A directive
+// that is not a DOCTYPE declares none and leaves nothing unread. standalone
+// is the XML declaration's standalone="yes" (XML 1.0 §2.9 SDDecl). A DOCTYPE
+// whose document type name is missing or is not a Name (XML 1.0 [28]
+// doctypedecl, [5] Name) is not well-formed: a RuleXMLWellFormed fault at
+// loc, the directive's start.
 //
 // The external DTD subset is never read, by design (XML 1.0 §5.1 and §5.2
 // oblige a non-validating processor to read the document entity alone;
@@ -54,23 +56,44 @@ const (
 // either side (§4.4.8). A reference it does not read — to an external or
 // undeclared parameter entity, to one whose replacement text it cannot build,
 // or past maxPEDepth or maxPEExpansion, which a recursive reference (WFC No
-// Recursion) always reaches — reports unread and, unless standalone, ends the scan:
+// Recursion) always reaches — reports unread. Unless standalone, the rest of
+// the internal subset is then only checked for well-formedness, which §5.1
+// requires of the entire internal subset: it binds no parameter entity,
+// records no general entity and expands no parameter-entity reference, since
 // §5.1 forbids processing an entity declaration that follows a reference to a
 // parameter entity that is not read, except when standalone="yes". A
-// conditional section, which the internal subset cannot hold and this scan
-// does not read, is declined the same way and ends the text it appears in.
+// conditional section in replacement text, which this scan does not read, is
+// declined the same way and ends the text it appears in.
 //
-// Between declarations, in the internal subset and in an expanded parameter
-// entity's replacement text alike, only S and PEReferences may stand (XML 1.0
-// [28b] intSubset, [28a] DeclSep, WFC: PE Between Declarations): any other
-// text — a '%' run that is no PEReference ([69]) and a ']' in replacement text
-// among it — is a RuleXMLWellFormed fault at loc, which ends the read and
-// declares nothing, and so is text other than S between the subset's closing
-// ']' and the directive's '>' ([28] doctypedecl). A comment, a processing
-// instruction and any markup declaration other than <!ENTITY> are stepped over
-// whole, their grammar unchecked beyond the delimiter that closes them. A
-// declaration it cannot read declares no unparsed entity, which leaves an
-// ·ENTITY value· naming that entity undeclared rather than declared.
+// Every fault below is a RuleXMLWellFormed fault at loc, which ends the read
+// and declares nothing. Between declarations, in the internal subset and in an
+// expanded parameter entity's replacement text alike, only S and PEReferences
+// may stand (XML 1.0 [28b] intSubset, [28a] DeclSep, WFC: PE Between
+// Declarations): any other text — a '%' run that is no PEReference ([69]), a
+// '<!' opening no markup declaration, a conditional section in the internal
+// subset itself, and a ']' in replacement text among it — is a fault, and so
+// is a subset no ']' closes or text other than S between that ']' and the
+// directive's '>' ([28] doctypedecl). A comment holding "--" ([15] Comment), a
+// processing instruction whose target is no Name or is "xml" in any case ([16]
+// PI, [17] PITarget), a notation declaration that is no [82] NotationDecl, a
+// parameter-entity reference inside any markup declaration (WFC: PEs in
+// Internal Subset) and replacement text that ends inside a comment, processing
+// instruction or markup declaration (WFC: PE Between Declarations) are faults
+// too. A declaration it cannot read declares no unparsed entity, which leaves
+// an ·ENTITY value· naming that entity undeclared rather than declared.
+//
+// GAP(xml): the bodies of <!ELEMENT> and <!ATTLIST> declarations ([45]–[60])
+// are checked for nothing but a parameter-entity reference and the '>' that
+// closes them, and an <!ENTITY> declaration ([70]–[76]) for nothing beyond what
+// entityDeclOf and paramEntityOf read: a declaration that breaks its
+// production there is stepped over, or declares nothing, where it is not
+// well-formed. Tracked by #2225.
+//
+// GAP(xml): encoding/xml ends the directive at a '>' inside a processing
+// instruction, so the subset text this scan reads may be cut short: a comment,
+// processing instruction or markup declaration left open where the internal
+// subset's own text ends is declined, not a fault, and the ']' missing behind
+// it is no fault either. Tracked by #2226.
 func doctypeEntities(directive string, standalone bool, loc xsderr.Loc) (decls []entityDecl, unread bool, err error) {
 	rest, ok := strings.CutPrefix(directive, "DOCTYPE")
 	if !ok {
@@ -88,7 +111,7 @@ func doctypeEntities(directive string, standalone bool, loc xsderr.Loc) (decls [
 	if open < 0 {
 		return nil, sc.unread, nil
 	}
-	if _, err := sc.scan(rest[open+1:]); err != nil {
+	if err := sc.scan(rest[open+1:]); err != nil {
 		return nil, false, err
 	}
 	return sc.decls, sc.unread, nil
@@ -120,8 +143,11 @@ func hasExternalID(header string) bool {
 // declaration of a name (XML 1.0 §4.2); it is a lookup index only, never
 // iterated. depth counts the expansions in progress, and spent the bytes of
 // replacement text scanned so far. decls collects the general entity
-// declarations read, and unread records that some declaration was not. loc is
-// the directive's start, where every fault the scan finds is located.
+// declarations read, and unread records that some declaration was not.
+// checkOnly records that a declined reference has ended processing, outside a
+// standalone document (XML 1.0 §5.1): the scan reads on only to check
+// well-formedness. loc is the directive's start, where every fault the scan
+// finds is located.
 type subsetScan struct {
 	standalone bool
 	loc        xsderr.Loc
@@ -130,6 +156,7 @@ type subsetScan struct {
 	spent      int
 	decls      []entityDecl
 	unread     bool
+	checkOnly  bool
 }
 
 // entityValue is one entity's replacement text, and whether it has one the
@@ -141,59 +168,202 @@ type entityValue struct {
 }
 
 // scan reads s — the internal subset, or a parameter entity's enlarged
-// replacement text — and reports whether the whole scan stops, which a
-// declined reference makes it do unless standalone, or the fault that ends the
-// whole read (see stray and subsetEnd). Only the internal subset itself ends
-// at a ']'. A comment, processing instruction or markup declaration left open
-// where replacement text ends is declined (see unclosed).
-func (sc *subsetScan) scan(s string) (stop bool, err error) {
+// replacement text — and returns the fault that ends the whole read, if any
+// (see stray, markup, unclosed and subsetEnd). Only the internal subset itself
+// ends at a ']', and it must: text that runs out before one is no [28]
+// doctypedecl, unless a construct left open there declined it first (see
+// unclosed).
+func (sc *subsetScan) scan(s string) error {
 	for s != "" {
 		switch {
 		case s[0] == ']' && sc.depth == 0:
-			return false, sc.subsetEnd(s[1:])
-		case strings.HasPrefix(s, "<!--"):
-			end := strings.Index(s, "-->")
-			if end < 0 {
-				return sc.unclosed(), nil
+			return sc.subsetEnd(s[1:])
+		case s[0] == '<':
+			after, closed, err := sc.markup(s)
+			if err != nil {
+				return err
 			}
-			s = s[end+len("-->"):]
-		case strings.HasPrefix(s, "<?"):
-			end := strings.Index(s, "?>")
-			if end < 0 {
-				return sc.unclosed(), nil
-			}
-			s = s[end+len("?>"):]
-		case strings.HasPrefix(s, "<!["):
-			return sc.decline(), nil
-		case strings.HasPrefix(s, "<!ENTITY"):
-			body, after, closed := markupDecl(s[len("<!ENTITY"):])
-			if !closed && sc.depth > 0 {
-				return sc.decline(), nil
-			}
-			sc.declare(body)
-			s = after
-		case strings.HasPrefix(s, "<!"):
-			_, after, closed := markupDecl(s[len("<!"):])
 			if !closed {
-				return sc.unclosed(), nil
+				return sc.unclosed(s)
 			}
 			s = after
 		case s[0] == '%':
 			name, after, ok := peReference(s[1:])
 			if !ok {
-				return false, sc.stray(s)
+				return sc.stray(s)
 			}
-			if stop, err := sc.expand(name); stop || err != nil {
-				return stop, err
+			if err := sc.expand(name); err != nil {
+				return err
 			}
 			s = after
 		case strings.ContainsRune(declSpace, rune(s[0])):
 			s = s[1:]
 		default:
-			return false, sc.stray(s)
+			return sc.stray(s)
 		}
 	}
-	return false, nil
+	if sc.depth > 0 {
+		return nil
+	}
+	return xsderr.New(xsderr.RuleXMLWellFormed, sc.loc, "DOCTYPE internal subset is closed by no ']' before the directive's '>' (XML 1.0 [28] doctypedecl)")
+}
+
+// markup reads the comment, processing instruction or markup declaration s
+// opens with its '<', returning what follows it and whether it closes in s,
+// or the fault that ends the whole read. A conditional section in replacement
+// text is declined and ends that text, reported as closed with nothing after
+// it; one in the internal subset itself, which [28b] intSubset does not admit,
+// is stray, as is a '<' opening none of these.
+func (sc *subsetScan) markup(s string) (after string, closed bool, err error) {
+	switch {
+	case strings.HasPrefix(s, "<!--"):
+		return sc.comment(s)
+	case strings.HasPrefix(s, "<?"):
+		return sc.pi(s)
+	case strings.HasPrefix(s, "<![") && sc.depth > 0:
+		sc.decline()
+		return "", true, nil
+	case strings.HasPrefix(s, "<!ENTITY"):
+		body, after, closed := markupDecl(s[len("<!ENTITY"):])
+		if !closed {
+			return "", false, nil
+		}
+		if err := sc.noPEReference(body); err != nil {
+			return "", true, err
+		}
+		if !sc.checkOnly {
+			sc.declare(body)
+		}
+		return after, true, nil
+	case strings.HasPrefix(s, "<!NOTATION"):
+		return sc.notation(s)
+	case strings.HasPrefix(s, "<!ELEMENT"), strings.HasPrefix(s, "<!ATTLIST"):
+		body, after, closed := markupDecl(s[len("<!"):])
+		if !closed {
+			return "", false, nil
+		}
+		return after, true, sc.noPEReference(body)
+	}
+	return "", true, sc.stray(s)
+}
+
+// comment reads the comment s opens: XML 1.0 [15] Comment, in which "--" may
+// stand only as part of the closing "-->". Parameter-entity references are
+// not recognized in it.
+func (sc *subsetScan) comment(s string) (after string, closed bool, err error) {
+	body := s[len("<!--"):]
+	end := strings.Index(body, "--")
+	if end < 0 || end+len("--") == len(body) {
+		return "", false, nil
+	}
+	if body[end+len("--")] != '>' {
+		return "", true, xsderr.New(xsderr.RuleXMLWellFormed, sc.loc, "%s holds a comment with \"--\" inside it (XML 1.0 [15] Comment)", sc.where())
+	}
+	return body[end+len("-->"):], true, nil
+}
+
+// pi reads the processing instruction s opens: XML 1.0 [16] PI, whose target
+// — the text up to its first S, or all of it — must be a Name other than
+// "xml" in any case ([17] PITarget). Parameter-entity references are not
+// recognized in it.
+func (sc *subsetScan) pi(s string) (after string, closed bool, err error) {
+	body := s[len("<?"):]
+	end := strings.Index(body, "?>")
+	if end < 0 {
+		return "", false, nil
+	}
+	target := body[:end]
+	if sp := strings.IndexAny(target, declSpace); sp >= 0 {
+		target = target[:sp]
+	}
+	if !isName(target) || strings.EqualFold(target, "xml") {
+		return "", true, xsderr.New(xsderr.RuleXMLWellFormed, sc.loc, "%s holds a processing instruction whose target %q is no PITarget (XML 1.0 [16] PI, [17] PITarget)", sc.where(), target)
+	}
+	return body[end+len("?>"):], true, nil
+}
+
+// notation reads the notation declaration s opens, which must match XML 1.0
+// [82] NotationDecl: '<!NOTATION' S Name S, then an ExternalID ([75]) or a
+// PublicID ([83]), then S? '>'.
+func (sc *subsetScan) notation(s string) (after string, closed bool, err error) {
+	body, after, closed := markupDecl(s[len("<!NOTATION"):])
+	if !closed {
+		return "", false, nil
+	}
+	if err := sc.noPEReference(body); err != nil {
+		return "", true, err
+	}
+	if !notationDecl(body) {
+		return "", true, xsderr.New(xsderr.RuleXMLWellFormed, sc.loc, "%s holds a <!NOTATION> declaration that is no Name followed by an ExternalID or PublicID (XML 1.0 [82] NotationDecl, [75] ExternalID, [83] PublicID, [12] PubidLiteral)", sc.where())
+	}
+	return after, true, nil
+}
+
+// notationDecl reports whether body, a <!NOTATION> declaration's text after
+// its keyword, reads by position as S Name S, then 'SYSTEM' S SystemLiteral,
+// 'PUBLIC' S PubidLiteral S SystemLiteral or 'PUBLIC' S PubidLiteral, then S?
+// (XML 1.0 [82], [75], [83], [11], [12]). Every token ends only at white space,
+// so a literal run on into a keyword or another literal is no literal.
+func notationDecl(body string) bool {
+	if body == "" || !strings.ContainsRune(declSpace, rune(body[0])) {
+		return false
+	}
+	toks := splitDecl(body, true)
+	if len(toks) < 3 || !isName(toks[0]) {
+		return false
+	}
+	switch toks[1] {
+	case "SYSTEM":
+		return len(toks) == 3 && isLiteral(toks[2])
+	case "PUBLIC":
+		return isPubidLiteral(toks[2]) && (len(toks) == 3 || len(toks) == 4 && isLiteral(toks[3]))
+	}
+	return false
+}
+
+// isPubidLiteral reports whether t, one of splitDecl's tokens, is a quoted
+// literal holding PubidChars only (XML 1.0 [12] PubidLiteral, [13] PubidChar).
+// isLiteral keeps a "'"-quoted literal free of "'".
+func isPubidLiteral(t string) bool {
+	if !isLiteral(t) {
+		return false
+	}
+	for _, c := range []byte(t[1 : len(t)-1]) {
+		alnum := 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' || '0' <= c && c <= '9'
+		if !alnum && strings.IndexByte(pubidOther, c) < 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// pubidOther is every PubidChar that is not an ASCII letter or digit (XML 1.0
+// [13] PubidChar).
+const pubidOther = " \r\n-'()+,./:=?;!*#@$_%"
+
+// noPEReference returns the fault of a parameter-entity reference standing
+// outside the literals of body, a markup declaration's text: in the internal
+// subset one must not occur within a markup declaration (XML 1.0 WFC: PEs in
+// Internal Subset), and every parameter entity this scan reads is internal.
+func (sc *subsetScan) noPEReference(body string) error {
+	for {
+		pct := outsideQuotes(body, '%')
+		if pct < 0 {
+			return nil
+		}
+		body = body[pct+1:]
+		if name, _, ok := peReference(body); ok {
+			return xsderr.New(xsderr.RuleXMLWellFormed, sc.loc, "%s holds the parameter-entity reference %%%s; inside a markup declaration (XML 1.0 WFC: PEs in Internal Subset)", sc.where(), name)
+		}
+	}
+}
+
+// where names the text the scan is reading, for a fault message.
+func (sc *subsetScan) where() string {
+	if sc.depth > 0 {
+		return "replacement text of a parameter entity referenced between DOCTYPE declarations"
+	}
+	return "DOCTYPE internal subset"
 }
 
 // stray is the fault of s, text standing between declarations that opens no
@@ -206,15 +376,14 @@ func (sc *subsetScan) scan(s string) (stop bool, err error) {
 // well-formed, a fatal error (XML 1.0 §1.2), so the fault ends the whole read
 // where a decline would only cut the scan off.
 func (sc *subsetScan) stray(s string) error {
-	where, rule := "DOCTYPE internal subset", "XML 1.0 [28b] intSubset, [28a] DeclSep"
+	rule := "XML 1.0 [28b] intSubset, [28a] DeclSep"
 	if sc.depth > 0 {
-		where = "replacement text of a parameter entity referenced between DOCTYPE declarations"
 		rule = "XML 1.0 WFC: PE Between Declarations, [31] extSubsetDecl"
 	}
 	if s[0] == '%' {
 		rule += ", [69] PEReference"
 	}
-	return xsderr.New(xsderr.RuleXMLWellFormed, sc.loc, "%s holds %q between declarations, which is no markup declaration, PEReference or S (%s)", where, excerpt(s), rule)
+	return xsderr.New(xsderr.RuleXMLWellFormed, sc.loc, "%s holds %q between declarations, which is no markup declaration, PEReference or S (%s)", sc.where(), excerpt(s), rule)
 }
 
 // subsetEnd checks what follows the ']' closing the internal subset, up to the
@@ -260,38 +429,51 @@ func peReference(s string) (name, after string, ok bool) {
 
 // expand reads the replacement text of the parameter entity a reference
 // names, or declines the reference when that text cannot be read within
-// bounds.
-func (sc *subsetScan) expand(name string) (stop bool, err error) {
+// bounds. Once checkOnly, it expands nothing: the reference follows one that
+// was not read (XML 1.0 §5.1).
+func (sc *subsetScan) expand(name string) error {
+	if sc.checkOnly {
+		return nil
+	}
 	pe, declared := sc.pes[name]
 	cost := len(pe.text) + len("  ")
 	if !declared || !pe.readable || sc.depth == maxPEDepth || sc.spent+cost > maxPEExpansion {
-		return sc.decline(), nil
+		sc.decline()
+		return nil
 	}
 	sc.spent += cost
 	sc.depth++
-	stop, err = sc.scan(" " + pe.text + " ")
+	err := sc.scan(" " + pe.text + " ")
 	sc.depth--
-	return stop, err
+	return err
 }
 
-// unclosed ends the read of s at a construct s opens and never closes. In
-// replacement text that construct is declined: a parameter entity referenced
-// between declarations must expand to complete markup declarations (XML 1.0
-// WFC PE Between Declarations), so the text is not well-formed and the scan
-// must not read on past it. In the internal subset itself only the scan ends.
-func (sc *subsetScan) unclosed() (stop bool) {
-	if sc.depth == 0 {
-		return false
+// unclosed ends the read of s at the comment, processing instruction or markup
+// declaration s opens and never closes. In replacement text that is a fault: a
+// parameter entity referenced between declarations must expand to complete
+// markup declarations (XML 1.0 WFC: PE Between Declarations, [31]
+// extSubsetDecl).
+//
+// GAP(xml): in the internal subset itself the construct is declined, and the
+// ']' the subset then never reaches is no fault: encoding/xml ends the
+// directive at a '>' inside a processing instruction, so the open construct
+// may be the decoder's cut rather than the document's. Tracked by #2226.
+func (sc *subsetScan) unclosed(s string) error {
+	if sc.depth > 0 {
+		return xsderr.New(xsderr.RuleXMLWellFormed, sc.loc, "%s leaves %q open where it ends (XML 1.0 WFC: PE Between Declarations, [31] extSubsetDecl)", sc.where(), excerpt(s))
 	}
-	return sc.decline()
+	sc.decline()
+	return nil
 }
 
-// decline records a reference or construct the scan does not read, and
-// reports whether the scan stops there: XML 1.0 §5.1 forbids processing the
-// entity declarations after it unless standalone="yes".
-func (sc *subsetScan) decline() (stop bool) {
+// decline records a reference or construct the scan does not read. Unless
+// standalone="yes", the scan reads on only to check well-formedness: XML 1.0
+// §5.1 forbids processing the entity declarations after it.
+func (sc *subsetScan) decline() {
 	sc.unread = true
-	return !sc.standalone
+	if !sc.standalone {
+		sc.checkOnly = true
+	}
 }
 
 // declare records one <!ENTITY ...> body: a parameter entity into pes, a

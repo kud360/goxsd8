@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"sort"
+	"strings"
 
 	"github.com/kud360/goxsd8/internal/xmldecl"
 	"github.com/kud360/goxsd8/internal/xmlenc"
@@ -197,7 +198,7 @@ func (r *Reader) classify(tok xml.Token, off int64) (Node, bool, error) {
 		}
 		return nil, false, r.checkDeclaration(t, loc)
 	case xml.Directive:
-		return nil, false, r.declareEntities(t, loc)
+		return nil, false, r.declareEntities(r.source(off), loc)
 	default:
 		// xml.Comment: not part of the element/character-data stream the
 		// parser consumes.
@@ -207,14 +208,20 @@ func (r *Reader) classify(tok xml.Token, off int64) (Node, bool, error) {
 
 // declareEntities records the general entity declarations of a DOCTYPE
 // directive at the document level, keeping the first declaration of each name,
-// and whether any declaration went unread. A directive inside an element is no
-// DOCTYPE and declares nothing. A DOCTYPE that is not well-formed where
-// doctypeEntities checks it is a RuleXMLWellFormed fault at loc.
-func (r *Reader) declareEntities(d xml.Directive, loc xsderr.Loc) error {
+// and whether any declaration went unread. raw is the directive's source, "<!"
+// through '>': the subset is read from it rather than from the decoder's
+// Directive token, which replaces each comment with one space, so that a
+// comment's own grammar can be checked (XML 1.0 [15] Comment). A directive
+// inside an element is no DOCTYPE and declares nothing. A DOCTYPE that is not
+// well-formed where doctypeEntities checks it is a RuleXMLWellFormed fault at
+// loc.
+func (r *Reader) declareEntities(raw string, loc xsderr.Loc) error {
 	if len(r.stack) > 0 {
 		return nil
 	}
-	decls, unread, err := doctypeEntities(string(d), r.standalone, loc)
+	body, _ := strings.CutPrefix(raw, "<!")
+	body, _ = strings.CutSuffix(body, ">")
+	decls, unread, err := doctypeEntities(body, r.standalone, loc)
 	if err != nil {
 		return err
 	}

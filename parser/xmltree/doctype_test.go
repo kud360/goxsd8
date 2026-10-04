@@ -214,7 +214,10 @@ func peBlowUp(xmlDecl string) string {
 // and the first declined reference cuts off every entity declaration after it
 // (XML 1.0 §5.1) unless the XML declaration says standalone="yes", which
 // admits them without making the DTD read. An external subset cuts nothing
-// off: the internal subset is read before it.
+// off: the internal subset is read before it. After a declined reference the
+// rest of the subset is only checked: a parameter entity declared there is not
+// bound, and one declared before it is not expanded, so neither declares late
+// and neither's "junk" is read as stray text.
 func TestAllDeclarationsProcessed(t *testing.T) {
 	const late = `<!ENTITY late SYSTEM "late.bin" NDATA n>`
 	const yes = `<?xml version="1.0" standalone="yes"?>`
@@ -247,14 +250,9 @@ func TestAllDeclarationsProcessed(t *testing.T) {
 		{yes + `<!DOCTYPE r [%undeclared; ` + late + `]><r/>`, false, true},
 		{yes + `<!DOCTYPE r [<!ENTITY % c "<![INCLUDE[]]>"> %c; ` + late + `]><r/>`, false, true},
 		{yes + `<!DOCTYPE r [` + late + `]><r/>`, true, true},
-		{`<!DOCTYPE r [<!ENTITY % p "<!ENTITY late SYSTEM 'l' NDATA n"> %p;]><r/>`, false, false},
-		{`<!DOCTYPE r [<!ENTITY % p "<!ENTITY pic SYSTEM 'u' NDATA n"> %p; ` + late + `]><r/>`, false, false},
-		{yes + `<!DOCTYPE r [<!ENTITY % p "<!ENTITY pic SYSTEM 'u' NDATA n"> %p; ` + late + `]><r/>`, false, true},
-		{`<!DOCTYPE r [<!ENTITY % p "<!ELEMENT r ANY"> %p; ` + late + `]><r/>`, false, false},
-		{`<!DOCTYPE r [<!ENTITY % p "<!--"> %p; ` + late + `]><r/>`, false, false},
-		{yes + `<!DOCTYPE r [<!ENTITY % p "<!--"> %p; ` + late + `]><r/>`, false, true},
-		{`<!DOCTYPE r [<!ENTITY % p "<?pi"> %p; ` + late + `]><r/>`, false, false},
-		{yes + `<!DOCTYPE r [<!ENTITY % p "<?pi"> %p; ` + late + `]><r/>`, false, true},
+		{`<!DOCTYPE r [%undeclared; <!ENTITY % p "` + late + `"> %p;]><r/>`, false, false},
+		{`<!DOCTYPE r [<!ENTITY % p "` + late + `"> %undeclared; %p;]><r/>`, false, false},
+		{`<!DOCTYPE r [<!ENTITY % p "junk"> %undeclared; %p; <!ENTITY % q "junk"> %q;]><r/>`, false, false},
 		{peBlowUp(""), false, false},
 		{peBlowUp(yes), false, true},
 	} {
@@ -331,9 +329,13 @@ func TestDoctypeNameIsAName(t *testing.T) {
 // expand to the same (WFC: PE Between Declarations): stray text before or
 // after a declaration, at depth 0 or in replacement text, a replacement text
 // that is stray whole, a '%' run that is no PEReference ([69]) — standalone
-// or not — a ']' in replacement text, a start tag, and text other than S
-// between the subset's ']' and '>' ([28] doctypedecl) are faults located at
-// the directive, even where a declaration around them would read.
+// or not — a ']' in replacement text, a start tag, a '<!' opening no markup
+// declaration, a conditional section in the internal subset itself, which
+// [28b] does not admit, and text other than S between the subset's ']' and
+// '>' ([28] doctypedecl) are faults located at the directive, even where a
+// declaration around them would read. Stray text after a declined reference is
+// a fault whether or not the document is standalone: §5.1 has the entire
+// internal subset checked.
 func TestSubsetStrayTextIsNotWellFormed(t *testing.T) {
 	const decl = "<?xml version=\"1.0\"?>\n"
 	const yes = "<?xml version=\"1.0\" standalone=\"yes\"?>\n"
@@ -359,16 +361,163 @@ func TestSubsetStrayTextIsNotWellFormed(t *testing.T) {
 		{decl + `<!DOCTYPE r [<!ENTITY % p "%q;"> % p; ` + pic + `]><r/>`, subset + `"%"` + subsetRule + `, [69] PEReference)`},
 		{decl + `<!DOCTYPE r [<!ENTITY % p "]"> %p; ` + notation + pic + `]><r/>`, inPE + `"]"` + peRule + `)`},
 		{decl + `<!DOCTYPE r [<r/> ` + notation + pic + `]><r/>`, subset + `"<r/>"` + subsetRule + `)`},
+		{decl + `<!DOCTYPE r [` + notation + pic + `<!FOO x>]><r/>`, subset + `"<!FOO"` + subsetRule + `)`},
+		{decl + `<!DOCTYPE r [<![INCLUDE[ ` + notation + pic + ` ]]>]><r/>`, subset + `"<![INCLUDE["` + subsetRule + `)`},
+		{decl + `<!DOCTYPE r [` + notation + pic + `%undeclared; junk]><r/>`, subset + `"junk"` + subsetRule + `)`},
+		{yes + `<!DOCTYPE r [` + notation + pic + `%undeclared; junk]><r/>`, subset + `"junk"` + subsetRule + `)`},
 		{decl + `<!DOCTYPE r [` + notation + pic + `] junk><r/>`, `t.xml:2:1: [xml-wf] DOCTYPE holds "junk" between its internal subset's ']' and '>', where only S may stand (XML 1.0 [28] doctypedecl)`},
 		{decl + `<!DOCTYPE r [` + notation + pic + `] ]><r/>`, `t.xml:2:1: [xml-wf] DOCTYPE holds "]" between its internal subset's ']' and '>', where only S may stand (XML 1.0 [28] doctypedecl)`},
 	} {
 		t.Run(tc.doc, func(t *testing.T) {
-			_, err := collect(t, "t.xml", tc.doc)
-			wantWellFormednessError(t, err)
-			if err.Error() != tc.want {
-				t.Errorf("error = %q, want %q", err, tc.want)
-			}
+			wantSubsetFault(t, tc.doc, tc.want)
 		})
+	}
+}
+
+// wantSubsetFault reads doc to its first error, which must be the
+// well-formedness fault want, whole, and must leave pic undeclared: a faulty
+// subset declares nothing.
+func wantSubsetFault(t *testing.T, doc, want string) {
+	t.Helper()
+	r := xmltree.NewReader("t.xml", strings.NewReader(doc))
+	var err error
+	for err == nil {
+		_, err = r.Token()
+	}
+	if errors.Is(err, io.EOF) {
+		t.Fatalf("read to EOF, want the fault %q", want)
+	}
+	wantWellFormednessError(t, err)
+	if err.Error() != want {
+		t.Errorf("error = %q, want %q", err, want)
+	}
+	if r.HasUnparsedEntity("pic") {
+		t.Errorf("HasUnparsedEntity(%q) = true, want false: the subset is not well-formed", "pic")
+	}
+}
+
+// The markup the internal subset holds must match its own production, at depth
+// 0 and in replacement text alike, and the subset must close, or the document
+// is not well-formed: a comment holding "--" ([15] Comment), a processing
+// instruction whose target is "xml" in any case or no Name ([16] PI, [17]
+// PITarget), a notation declaration that is no NotationDecl ([82], [75],
+// [83], [12] PubidLiteral), a parameter-entity reference inside any markup
+// declaration (WFC: PEs in Internal Subset), replacement text that ends inside
+// a comment, processing instruction or markup declaration (WFC: PE Between
+// Declarations), standalone or not, and a subset no ']' closes ([28]
+// doctypedecl). The check runs on after a declined reference (§5.1). Each is a
+// fault at the directive that declares nothing.
+func TestSubsetMarkupIsWellFormed(t *testing.T) {
+	const decl = "<?xml version=\"1.0\"?>\n"
+	const yes = "<?xml version=\"1.0\" standalone=\"yes\"?>\n"
+	const head = decl + `<!DOCTYPE r [<!NOTATION n SYSTEM 'x'><!ENTITY pic SYSTEM 'u' NDATA n>`
+	const tail = `]><r ent="pic"/>`
+	const subset = `t.xml:2:1: [xml-wf] DOCTYPE internal subset `
+	const inPE = `t.xml:2:1: [xml-wf] replacement text of a parameter entity referenced between DOCTYPE declarations `
+	const comment = `holds a comment with "--" inside it (XML 1.0 [15] Comment)`
+	const target = ` is no PITarget (XML 1.0 [16] PI, [17] PITarget)`
+	const notation = `holds a <!NOTATION> declaration that is no Name followed by an ExternalID or PublicID (XML 1.0 [82] NotationDecl, [75] ExternalID, [83] PublicID, [12] PubidLiteral)`
+	const peRef = ` inside a markup declaration (XML 1.0 WFC: PEs in Internal Subset)`
+	const open = ` open where it ends (XML 1.0 WFC: PE Between Declarations, [31] extSubsetDecl)`
+	const unclosedSubset = subset + `is closed by no ']' before the directive's '>' (XML 1.0 [28] doctypedecl)`
+	for _, tc := range []struct {
+		doc  string
+		want string // the whole error
+	}{
+		{head + `<!-- a -- b -->` + tail, subset + comment},
+		{head + `<!-- a --->` + tail, subset + comment},
+		{head + `<!ENTITY % p "<!-- a -- b -->"> %p;` + tail, inPE + comment},
+		{head + `<?xml x?>` + tail, subset + `holds a processing instruction whose target "xml"` + target},
+		{head + `<?XmL?>` + tail, subset + `holds a processing instruction whose target "XmL"` + target},
+		{head + `<?1x y?>` + tail, subset + `holds a processing instruction whose target "1x"` + target},
+		{head + `<? x?>` + tail, subset + `holds a processing instruction whose target ""` + target},
+		{head + `<!ENTITY % p "<?xml x?>"> %p;` + tail, inPE + `holds a processing instruction whose target "xml"` + target},
+		{head + `<!NOTATION n SYSTEM>` + tail, subset + notation},
+		{head + `<!NOTATION n>` + tail, subset + notation},
+		{head + `<!NOTATIONm SYSTEM 'x'>` + tail, subset + notation},
+		{head + `<!NOTATION 1m SYSTEM 'x'>` + tail, subset + notation},
+		{head + `<!NOTATION m SYSTEM'x'>` + tail, subset + notation},
+		{head + `<!NOTATION m SYSTEM 'x' 'y'>` + tail, subset + notation},
+		{head + `<!NOTATION m PUBLIC 'p''s'>` + tail, subset + notation},
+		{head + `<!NOTATION m PUBLIC 'p' 's' 't'>` + tail, subset + notation},
+		{head + `<!NOTATION m PUBLIC 'p{'>` + tail, subset + notation},
+		{head + "<!NOTATION m PUBLIC 'p\tq'>" + tail, subset + notation},
+		{head + `<!NOTATION m PUBLIC>` + tail, subset + notation},
+		{head + `<!NOTATION m FOO 'x'>` + tail, subset + notation},
+		{head + `<!ENTITY % p "<!NOTATION m SYSTEM>"> %p;` + tail, inPE + notation},
+		{head + `<!ENTITY % s "SYSTEM 'x'"><!NOTATION m %s;>` + tail, subset + `holds the parameter-entity reference %s;` + peRef},
+		{head + `<!ENTITY % c "ANY"><!ELEMENT r %c;>` + tail, subset + `holds the parameter-entity reference %c;` + peRef},
+		{head + `<!ENTITY % a "x CDATA #IMPLIED"><!ATTLIST r %a;>` + tail, subset + `holds the parameter-entity reference %a;` + peRef},
+		{head + `<!ENTITY % m "n"><!ENTITY e SYSTEM 'x' NDATA %m;>` + tail, subset + `holds the parameter-entity reference %m;` + peRef},
+		{head + `<!ENTITY % p "<!ELEMENT r &#37;c;>"> %p;` + tail, inPE + `holds the parameter-entity reference %c;` + peRef},
+		{head + `<!ENTITY % p "<!-- x"> %p; ` + tail, inPE + `leaves "<!--"` + open},
+		{head + `<!ENTITY % p "<?pi"> %p; ` + tail, inPE + `leaves "<?pi"` + open},
+		{head + `<!ENTITY % p "<!ENTITY late SYSTEM 'l' NDATA n"> %p;` + tail, inPE + `leaves "<!ENTITY"` + open},
+		{head + `<!ENTITY % p "<!ELEMENT r ANY"> %p;` + tail, inPE + `leaves "<!ELEMENT"` + open},
+		{head + `<!ENTITY % p "<!ATTLIST r a CDATA #IMPLIED"> %p;` + tail, inPE + `leaves "<!ATTLIST"` + open},
+		{head + `<!ENTITY % p "<!NOTATION m SYSTEM 'x'"> %p;` + tail, inPE + `leaves "<!NOTATION"` + open},
+		{yes + `<!DOCTYPE r [<!NOTATION n SYSTEM 'x'><!ENTITY pic SYSTEM 'u' NDATA n><!ENTITY % p "<!--"> %p;` + tail, inPE + `leaves "<!--"` + open},
+		{yes + `<!DOCTYPE r [<!NOTATION n SYSTEM 'x'><!ENTITY pic SYSTEM 'u' NDATA n><!ENTITY % p "<?pi"> %p;` + tail, inPE + `leaves "<?pi"` + open},
+		{head + `<!ENTITY a "b">><r ent="pic"/>`, unclosedSubset},
+		{decl + `<!DOCTYPE r [><r/>`, unclosedSubset},
+		{head + `%undeclared; <!NOTATION m SYSTEM>` + tail, subset + notation},
+		{head + `%undeclared; <!-- a -- b -->` + tail, subset + comment},
+		{head + `%undeclared; <!ENTITY a "b">><r ent="pic"/>`, unclosedSubset},
+	} {
+		t.Run(tc.doc, func(t *testing.T) {
+			wantSubsetFault(t, tc.doc, tc.want)
+		})
+	}
+}
+
+// Markup that matches its production reads, pic declared after it: an
+// <!ELEMENT> with mixed and children content, an <!ATTLIST> with enumerated
+// and #FIXED defaults, a NOTATION with a PublicID alone or with an ExternalID
+// of either kind, a PI whose target only starts with "xml", or that has no
+// data, and comments holding single '-'s, empty or ending "- -->".
+func TestSubsetMarkupControls(t *testing.T) {
+	const notation = `<!NOTATION n SYSTEM 'x'>`
+	const pic = `<!ENTITY pic SYSTEM 'u' NDATA n>`
+	for _, markup := range []string{
+		`<!ELEMENT r (#PCDATA|a)*><!ELEMENT a (b,(c|d)+)?><!ELEMENT b (#PCDATA)>`,
+		`<!ATTLIST r t (x|y) 'x' f CDATA #FIXED "v" g NOTATION (n) #IMPLIED>`,
+		`<!NOTATION m PUBLIC 'p'>`,
+		`<!NOTATION m PUBLIC "-//A//DTD x 1.0//EN" 's'>`,
+		"<!NOTATION m PUBLIC \"it's (a)+,./:=?;!*#@$_%\r\n\" ''>",
+		`<!NOTATION m SYSTEM "" >`,
+		"<!NOTATION\tm\nSYSTEM\r\n'%m;'>",
+		`<?xml-stylesheet href=a?>`,
+		`<?xmlfoo?>`,
+		`<?x ?>`,
+		`<!---->`,
+		`<!-- a - b - -->`,
+		`<!ENTITY % p "<!-- a - b --><?xml-stylesheet x?><!NOTATION m PUBLIC 'p'>"> %p;`,
+	} {
+		for _, doc := range []string{
+			`<!DOCTYPE r [` + notation + markup + pic + `]><r/>`,
+			`<!DOCTYPE r [` + notation + pic + markup + `]><r/>`,
+		} {
+			t.Run(doc, func(t *testing.T) {
+				if !drained(t, doc).HasUnparsedEntity("pic") {
+					t.Errorf("HasUnparsedEntity(%q) = false, want true", "pic")
+				}
+			})
+		}
+	}
+}
+
+// GAP(xml): encoding/xml ends the directive at the '>' inside this processing
+// instruction, so the subset the scan sees stops inside an open PI. That is
+// declined, never a fault: the declarations before it are read and
+// AllDeclarationsProcessed reports false, though the document is well-formed
+// and declares nothing more. Tracked by #2226.
+func TestSubsetCutInsideAProcessingInstructionDeclines(t *testing.T) {
+	r := drained(t, `<!DOCTYPE r [<!NOTATION n SYSTEM 'x'><!ENTITY pic SYSTEM 'u' NDATA n><?x a > b?>]><r/>`)
+	if !r.HasUnparsedEntity("pic") {
+		t.Errorf("HasUnparsedEntity(%q) = false, want true: it is declared before the cut", "pic")
+	}
+	if r.AllDeclarationsProcessed() {
+		t.Error("AllDeclarationsProcessed() = true, want false: the cut is declined")
 	}
 }
 

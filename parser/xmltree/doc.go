@@ -65,21 +65,36 @@
 //     once the document element's start tag is read; the subset itself
 //     surfaces as no Node, a prolog fact not being part of the
 //     element/character-data stream. Internal parameter entities are
-//     expanded, bounded in depth and size. Text between declarations that
-//     is neither S nor a PEReference, in the subset or in an expanded
-//     parameter entity's replacement text — a '%' run that is no
-//     PEReference among it — is rejected as RuleXMLWellFormed at the
-//     directive ([28b] intSubset, [28a] DeclSep, [69] PEReference, WFC: PE
-//     Between Declarations), as is text other than S between the subset's
-//     ']' and '>' ([28] doctypedecl); the grammar inside a comment, a
-//     processing instruction or a markup declaration other than <!ENTITY>
-//     is not checked beyond its closing delimiter. The external subset is
-//     never read, by design (#1668), nor is an external parameter entity; a
-//     declaration after a parameter-entity reference that is not read is
-//     not processed unless standalone="yes" (XML 1.0 §5.1). An entity
-//     declared only where the reader did not read is not a member, and
+//     expanded, bounded in depth and size. Rejected as RuleXMLWellFormed at
+//     the directive, in the subset or in an expanded parameter entity's
+//     replacement text: text between declarations that is neither S nor a
+//     PEReference — a '%' run that is no PEReference, or a '<!' opening no
+//     markup declaration, among it ([28b] intSubset, [28a] DeclSep, [69]
+//     PEReference, WFC: PE Between Declarations); a comment holding "--"
+//     ([15]); a processing instruction whose target is no Name or is "xml"
+//     in any case ([16], [17]); a notation declaration that is no [82]
+//     NotationDecl; a parameter-entity reference inside a markup
+//     declaration (WFC: PEs in Internal Subset); replacement text ending
+//     inside a comment, processing instruction or markup declaration; and
+//     a subset no ']' closes, or text other than S between that ']' and
+//     '>' ([28] doctypedecl). The external subset is never read, by design
+//     (#1668), nor is an external parameter entity; after a
+//     parameter-entity reference that is not read, unless standalone="yes",
+//     the rest of the internal subset is checked for well-formedness alone,
+//     binding no parameter entity, declaring no general entity and
+//     expanding no reference (XML 1.0 §5.1). An entity declared only where
+//     the reader did not read is not a member, and
 //     Reader.AllDeclarationsProcessed, the [all declarations processed]
 //     property, then reports false.
+//   - GAP(xml): <!ELEMENT> and <!ATTLIST> bodies ([45]–[60]) are checked
+//     only for a parameter-entity reference and their closing '>', and
+//     <!ENTITY> grammar ([70]–[76]) only as far as the entity's name and
+//     definition are read. Tracked by #2225.
+//   - GAP(xml): encoding/xml ends a DOCTYPE directive at a '>' inside a
+//     processing instruction; a comment, processing instruction or markup
+//     declaration left open where the subset's text ends is therefore
+//     declined, reported through AllDeclarationsProcessed, never rejected.
+//     Tracked by #2226.
 //   - A reference to an internal general entity is replaced by its
 //     replacement text (XML 1.0 §4.4.2, §4.4.5): in content, parsed as
 //     content in the scope in force at the reference, its nodes located at
