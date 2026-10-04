@@ -176,11 +176,12 @@ func TestPrecisionDecimalFacetsUnboundedScale(t *testing.T) {
 }
 
 // TestPrecisionDecimalCanonicalUnboundedExponent pins Mapping.Canonical
-// (canonicalPrecisionDecimal) on a value whose ·scale· is huge (§6): a nonzero value's scientific exponent is
-// printed whole, while a zero above maxZeroCanonicalScale — one whose ·scale·
-// lies past the host int included — is the beyond-capacity error (xmlschema11-2
-// §5.4), never a padded form or a "0.0E-(aP−1)" spelling, and never a validity
-// verdict. A zero AT the bound still renders, and round-trips.
+// (canonicalPrecisionDecimal) on a value whose ·scale· is huge (§6): a nonzero
+// value's scientific exponent is printed whole, while a zero above
+// maxZeroCanonicalScale — one whose ·scale· lies past the host int included —
+// is the beyond-capacity error (xmlschema11-2 §5.4), never a padded form or a
+// "0.0E-(aP−1)" spelling, and never a validity verdict. A zero AT the bound
+// still renders, and round-trips.
 func TestPrecisionDecimalCanonicalUnboundedExponent(t *testing.T) {
 	cases := []struct {
 		lexical, want string // want "" is the beyond-capacity error
@@ -203,7 +204,7 @@ func TestPrecisionDecimalCanonicalUnboundedExponent(t *testing.T) {
 				return
 			}
 			if !errors.Is(err, errPrecisionDecimalCapacity) || got != "" {
-				t.Fatalf("Canonical(%q) = %q, %v; want the beyond-capacity error", c.lexical, got, err)
+				t.Fatalf("Canonical(%q) = %d bytes %.40q…, %v; want the beyond-capacity error", c.lexical, len(got), got, err)
 			}
 			if rule, verdict := xsderr.RuleOf(err); verdict {
 				t.Errorf("Canonical(%q): error carries rule %s; a beyond-capacity decline is no validity verdict", c.lexical, rule)
