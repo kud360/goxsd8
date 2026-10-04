@@ -519,6 +519,67 @@ func icWildcardSchemaWith(t *testing.T, wild *xsd.Wildcard, uses []xsd.Attribute
 	return schema
 }
 
+// icTabledAttrSchema is the shape whose <e> has a {type table} the engine cannot
+// decide, the key-cta-ta-select decline of a {test} outside the §3.12.6
+// required subset, so its ·governing type definition· is not determined. Every
+// alternative and the {default type definition} name T, so whichever one the
+// spec selects, @wid is governed by T's xs:string use; the schema ALSO
+// declares @wid at the top level as xs:ID, which is what a reading by
+// ·expanded name· reaches instead (#2192).
+//
+//	root  RootType (named)  sequence( e* )
+//	e     T, {type table} [ count(@wid) > 0 => T ], default T
+//	T     (named)           empty, @wid xs:string
+//	top-level               @wid xs:ID
+func icTabledAttrSchema(t *testing.T, rootICs []xsd.IdentityConstraint) *xsd.Schema {
+	t.Helper()
+	typ := xsd.QName{Local: "T"}
+	test := xsd.NewXPathExpression("count(@wid) > 0", nil, nil, nil)
+	table, err := xsd.NewTypeTable(xsderr.Loc{}, []xsd.TypeAlternative{namedTypeAlternative(t, &test, typ)},
+		namedTypeAlternative(t, nil, typ))
+	if err != nil {
+		t.Fatalf("building the type table: %v", err)
+	}
+	scope, err := xsd.NewLocalScope(xsderr.Loc{}, xsd.ComplexTypeScopeParent{Name: xsd.QName{Local: "RootType"}})
+	if err != nil {
+		t.Fatalf("NewLocalScope: %v", err)
+	}
+	e, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "e"},
+		xsd.TypeDefinitionRef{Name: typ}, &table, scope, nil, false, nil, nil, nil, false, nil)
+	if err != nil {
+		t.Fatalf("building the e element declaration: %v", err)
+	}
+	rootType := icComplex(t, "RootType", nil, icContent(t, icRepeated(t, e)))
+	root, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "root"},
+		xsd.TypeDefinitionRef{Name: xsd.QName{Local: "RootType"}}, nil, xsd.NewGlobalScope(),
+		nil, false, rootICs, nil, nil, false, nil)
+	if err != nil {
+		t.Fatalf("building the root element declaration: %v", err)
+	}
+
+	b := xsd.NewSchemaBuilder()
+	for _, st := range icSeeded(t) {
+		b.AddType(st)
+	}
+	b.AddType(icComplex(t, "T", []xsd.AttributeUse{icUse(t, xsd.QName{Local: "wid"}, "string")}, xsd.EmptyContent{}))
+	b.AddType(rootType)
+	b.AddElement(root)
+	b.AddAttribute(icTopAttribute(t, "wid", "ID"))
+	for _, ic := range rootICs {
+		b.AddIdentityConstraint(ic)
+	}
+	schema, err := b.Finalize()
+	if err != nil {
+		t.Fatalf("finalizing the tabled-attribute schema: %v", err)
+	}
+	return schema
+}
+
+// icTabledE is <e wid="..."> at line, under icTabledAttrSchema.
+func icTabledE(line int, wid string) *testElement {
+	return icElem(xsd.QName{Local: "e"}, line, []Attribute{icAttr(xsd.QName{Local: "wid"}, wid, line)})
+}
+
 // icDefaultedAttrSchema is the fourth shape: <root>'s children govern optional
 // xs:integer attributes whose declarations carry a default, so an element that
 // omits one has a ·defaulted attribute· (key-dflt-att) for a `@NameTest` field

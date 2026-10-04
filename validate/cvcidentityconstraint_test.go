@@ -486,6 +486,27 @@ func TestIdentityConstraintDeclinesAreRecorded(t *testing.T) {
 		Unevaluated{rule: ruleCvcIdentityConstraint, loc: loc(5, 1), msg: "clauses 3 and 4 are undecided"})
 }
 
+// A `@wid` field node on an element whose ·governing type definition· was not
+// determined is not typed by the top-level declaration its ·expanded name·
+// resolves to (key-governing-ad clause 3), clause 2's ·context-determined
+// declaration· from a use of the undetermined type coming first: here T's
+// xs:string use, under which "a" and " a" are distinct, while the top-level
+// xs:ID would collapse them into one value. The slot declines instead, so
+// neither a unique's clause 4.1 nor a key's 4.2.2 is charged, nor is cvc-id
+// clause 2 for the same two values, and each decline is recorded at the
+// attribute (#2192).
+func TestAnUndeterminedTypesAttributeFieldDeclines(t *testing.T) {
+	doc := icRoot(icTabledE(2, "a"), icTabledE(3, " a"))
+	for _, cat := range []xsd.IdentityConstraintCategory{xsd.IdentityConstraintUnique, xsd.IdentityConstraintKey} {
+		ic := icDef(t, "U", cat, "e", nil, "", "@wid")
+		got, undecided := assessRecorded(t, icTabledAttrSchema(t, []xsd.IdentityConstraint{ic}), doc)
+		wantSilence(t, got, "@wid is xs:string under T, so \"a\" and \" a\" differ")
+		wantDeclines(t, icDeclines(undecided),
+			Unevaluated{rule: ruleCvcIdentityConstraint, loc: loc(2, 2), msg: "its ·governing type definition· could not be determined"},
+			Unevaluated{rule: ruleCvcIdentityConstraint, loc: loc(3, 2), msg: "its ·governing type definition· could not be determined"})
+	}
+}
+
 // A ·key-sequence· comparison sameKeyMember cannot make — a member value with
 // neither value.Eq nor value.Identical, which opaqueStrings gives every
 // xs:string value — withholds the clause that reads it, and is recorded:
