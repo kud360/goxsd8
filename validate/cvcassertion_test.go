@@ -268,6 +268,19 @@ func TestAssertionComparesTypedValues(t *testing.T) {
 	}
 }
 
+// A VALUE comparison is evaluated as §3.13.2's own example writes it:
+// `@min le @max` over two xs:int attributes is charged for min="6" max="5" —
+// the d4_3_15ii01 shape — and holds for min="5" max="6".
+func TestValueComparisonAssertionIsEvaluated(t *testing.T) {
+	schema := aTyped(t, []string{"min", "int", "max", "int"}, "@min le @max")
+
+	wantAssertionCharge(t, aAssess(t, schema, aRoot("min", "6", "max", "5")),
+		`the element root is not ·valid· with respect to assertion 1 of 1 in the {assertions} of the ·governing type definition· RootType, whose {test} is "@min le @max",`)
+	if res := aAssess(t, schema, aRoot("min", "5", "max", "6")); len(res.Violations()) != 0 || len(res.Unevaluated()) != 0 {
+		t.Errorf("5 le 6: Violations() = %v, Unevaluated() = %v, want both empty", res.Violations(), messages(res.Unevaluated()))
+	}
+}
+
 // An admitted {test} that RAISES is charged, never declined: `@b = 'true'`
 // over an xs:boolean @b compares xs:boolean with xs:string, err:XPTY0004, and
 // cvc-assertion is satisfied only by a {test} that is true "without raising
@@ -282,7 +295,7 @@ func TestAssertionRaisingATypeErrorIsCharged(t *testing.T) {
 // recorded under cvc-assertion at the element, never charged, never satisfied
 // — whatever the attribute values would have made of it.
 func TestOutOfFamilyAssertionIsDeclined(t *testing.T) {
-	for _, expr := range []string{"$value > 0", "@x le 5", "count(@*) = 1", "@* = 5", "@y = 5"} {
+	for _, expr := range []string{"$value > 0", "@x eq 5 eq 5", "count(@*) = 1", "@* = 5", "@y = 5"} {
 		schema := aTyped(t, []string{"x", "integer"}, expr)
 		res := aAssess(t, schema, aRoot("x", "500"))
 		wantRecords(t, res, "cvc-assertion", loc(1, 1), "whose {test} is "+strconv.Quote(expr)+", was not evaluated: this engine's XPath evaluator declined it")

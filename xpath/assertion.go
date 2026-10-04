@@ -21,9 +21,11 @@ import (
 // façades build different nodes for one [17] ta-AttrName and take different
 // attribute inputs, and why neither tree can be fed the other's input.
 //
-// `$value` (cvc-assertion clause 2.2) and the eq/ne/lt/le/gt/ge value
-// comparisons are outside the grammar, so a {test} using either is declined
-// here as any other expression outside it is.
+// The assertion façade widens the grammar by ONE production the Type
+// Alternative façade declines: the eq/ne/lt/le/gt/ge value comparisons
+// (xpath20.md §3.5.1, [23] ValueComp), in [11] ta-BooleanExpr's comparator
+// position. `$value` (cvc-assertion clause 2.2) is outside the grammar, so a
+// {test} using it is declined here as any other expression outside it is.
 
 // AttributeTypes answers, for the element information item E whose assertions
 // are being compiled, the {type definition} an attribute of E with the
@@ -66,9 +68,10 @@ type AssertionTest struct{ root ctaExpr }
 // evaluate. Its consumer is validate's cvc-assertion site
 // (validate/cvcassertion.go), which declines the assertion on ok false.
 //
-// The grammar is [CompileCTATest]'s and so is every decline it states, under
-// the same static context (xpath-valid clause 2.2), plus these, each of which
-// is the same withhold:
+// The grammar is [CompileCTATest]'s with the value comparisons added, and
+// every decline [CompileCTATest] states is this one's too, under the same
+// static context (xpath-valid clause 2.2), plus these, each of which is the
+// same withhold:
 //
 //   - an attribute NameTest that is not a QName: a [37] Wildcard can match an
 //     attribute ·attributed to· an {attribute wildcard}, whose type is not
@@ -80,9 +83,9 @@ type AssertionTest struct{ root ctaExpr }
 //     xs:NOTATION, which carry no ·canonical representation· to convert
 //     through. The variety is classified here, not trusted to attrs;
 //   - a cast whose operand is a typed attribute outside the xs:string family;
-//   - a general comparison whose comparison type's {primitive type definition}
-//     is a date/time one, which without an implicit timezone this engine cannot
-//     order (ctaAssertionFacade.admitsComparison).
+//   - a general or value comparison whose comparison type's {primitive type
+//     definition} is a date/time one, which without an implicit timezone this
+//     engine cannot order (ctaAssertionFacade.admitsComparison).
 //
 // An XPath STATIC error is declined too and never reported: the
 // static-error question about an assertion is the schema assembler's, and
@@ -90,11 +93,10 @@ type AssertionTest struct{ root ctaExpr }
 //
 // GAP(xpath): unlike a Type Alternative's, an assertion's {test} has no
 // required subset to stop at — §3.13 admits full XPath 2.0 — so every decline
-// above is this engine's limit and not the spec's license: `$value`, the value
-// comparisons, paths and axes beyond the attribute step, and the F&O function
-// library among them. The direction is the withhold: the caller records the
-// assertion as unevaluated and neither charges it nor shows it satisfied
-// (PRINCIPLES 20). (#1042)
+// above is this engine's limit and not the spec's license: `$value`, paths and
+// axes beyond the attribute step, and the F&O function library among them. The
+// direction is the withhold: the caller records the assertion as unevaluated
+// and neither charges it nor shows it satisfied (PRINCIPLES 20). (#1042)
 //
 // types is read as [CompileCTATest] reads it and stored nowhere.
 func CompileAssertionTest(expr xsd.XPathExpression, types xsd.TypeResolver, attrs AttributeTypes) (AssertionTest, bool) {
@@ -134,6 +136,11 @@ type ctaAssertionFacade struct{ attrs AttributeTypes }
 
 func (ctaAssertionFacade) ctaFacade() {}
 
+// comparesValues is true: an assertion's {test} is full XPath 2.0 (§3.13), so
+// [23] ValueComp is in its grammar, and the §3.13.2 example `@min le @max`
+// writes one.
+func (ctaAssertionFacade) comparesValues() bool { return true }
+
 // attribute compiles a QName NameTest whose name attrs types with a type this
 // engine reads as one atomic value (ctaTypes.typedAttribute) to a
 // ctaTypedAttr, and declines every other NameTest.
@@ -166,15 +173,15 @@ func (f ctaAssertionFacade) attribute(test ctaNameTest, types ctaTypes) (ctaValu
 // timezone, provided by the dynamic context ..., is assumed to be present as
 // part of the value." cvc-xpath clause 7 (§3.13.4.2) makes that implicit
 // timezone implementation-defined but constant per ·assessment· episode. This
-// engine has no implicit timezone, so ctaCompare finds a timezoned operand and
-// an untimezoned one value.Incomparable and unequal — false for every
-// comparator but !=, which it decides true — and an assertion would be charged
-// (or satisfied) on that: `@d < @e or @d >= @e` over two xs:date attributes
-// 2000-01-01 and 2000-01-01Z is a tautology this engine would answer false.
-// The direction is the withhold: the {test} declines at
-// [CompileAssertionTest], and the assertion is neither charged nor shown
-// satisfied (PRINCIPLES 20). A Type Alternative's façade still evaluates them.
-// (#1042)
+// engine has no implicit timezone, so ctaHoldsPair finds a timezoned operand
+// and an untimezoned one value.Incomparable and unequal — false for every
+// operator but != and ne, which it decides true — for a general and a value
+// comparison alike, and an assertion would be charged (or satisfied) on that:
+// `@d < @e or @d >= @e` over two xs:date attributes 2000-01-01 and 2000-01-01Z
+// is a tautology this engine would answer false. The direction is the
+// withhold: the {test} declines at [CompileAssertionTest], and the assertion
+// is neither charged nor shown satisfied (PRINCIPLES 20). A Type Alternative's
+// façade still evaluates them. (#1042)
 func (ctaAssertionFacade) admitsComparison(types ctaTypes, c *xsd.SimpleType) bool {
 	p, resolved := types.primitive(c)
 	if !resolved {

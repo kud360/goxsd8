@@ -163,13 +163,13 @@ func asUnion(t *testing.T) *xsd.SimpleType {
 
 // CompileAssertionTest DECLINES — ok false, never a tree that answers false —
 // every {test} whose operand types it cannot fix, every construct outside the
-// §3.12.6 grammar ($value and the value comparators among them), and every
+// §3.12.6 grammar and its value comparisons ($value among them), and every
 // decline CompileCTATest itself makes.
 func TestCompileAssertionTestDeclines(t *testing.T) {
 	union := asUnion(t)
 	types := asUses(t, map[string]string{
 		"x": "integer", "l": "NMTOKENS", "any": "anySimpleType", "atom": "anyAtomicType",
-		"q": "QName", "n": "NOTATION", "f": "float",
+		"q": "QName", "n": "NOTATION", "f": "float", "d": "date", "e": "date",
 	})
 	uses := func(name xsd.QName) (*xsd.SimpleType, bool) {
 		if name == uq("u") {
@@ -194,12 +194,54 @@ func TestCompileAssertionTestDeclines(t *testing.T) {
 		{"xs:integer(@x) = 5", "the constructor spelling of the same cast"},
 		{"@f = 1e0", "B.1 rule 1.1's xs:float to xs:double promotion, CompileCTATest's own decline"},
 		{"$value > 0", "$value is outside the grammar"},
-		{"@x le 5", "a value comparison is outside the grammar"},
-		{"@x eq 5", "likewise eq"},
+		{"@x eq 5 eq 5", "ValueComp is non-associative, so a second one is an unparsed tail"},
+		{"@d lt @e", "a value comparison in the date/time family, on the general comparison's arm"},
 		{"count(@x) = 1", "a function call outside fn:not and the constructors"},
 	} {
 		if _, ok := CompileAssertionTest(ctaExprRecord(tc.expr, "", "xs", xsd.XMLSchemaNS, "a", "http://example.com/a"), seededTypes, uses); ok {
 			t.Errorf("CompileAssertionTest(%q): compiled, want declined (%s)", tc.expr, tc.why)
+		}
+	}
+}
+
+// The value comparisons (xpath20.md §3.5.1) evaluate over typed attributes:
+// `@min le @max` is §3.13.2's own example, decided in the attributes' xs:int
+// values, so min="10" max="9" fails it where the string reading would hold.
+// An EMPTY operand makes the comparison the empty sequence, whose effective
+// boolean value is false, so fn:not over it is TRUE — the row that tells the
+// empty sequence apart from err:XPTY0004, which fn:not propagates. A pair of
+// operand types B.2 gives the operator no row for is err:XPTY0004, false under
+// fn:not as well.
+func TestAssertionEvaluatesValueComparisons(t *testing.T) {
+	uses := asUses(t, map[string]string{"x": "integer", "min": "int", "max": "int", "s": "string", "b": "boolean", "dur": "duration"})
+	for _, tc := range []struct {
+		expr  string
+		attrs []asTyped
+		want  bool
+	}{
+		{"@min le @max", []asTyped{{uq("min"), "int", "6"}, {uq("max"), "int", "5"}}, false},
+		{"@min le @max", []asTyped{{uq("min"), "int", "5"}, {uq("max"), "int", "6"}}, true},
+		{"@min le @max", []asTyped{{uq("min"), "int", "10"}, {uq("max"), "int", "9"}}, false},
+		{"@min le @max", []asTyped{{uq("min"), "int", "5"}, {uq("max"), "int", "5"}}, true},
+		{"@min lt @max", []asTyped{{uq("min"), "int", "5"}, {uq("max"), "int", "5"}}, false},
+		{"@x eq 5", []asTyped{{uq("x"), "integer", "+05"}}, true},
+		{"@x ne 5", []asTyped{{uq("x"), "integer", "5"}}, false},
+		{"@x gt 4.5", []asTyped{{uq("x"), "integer", "5"}}, true},
+		{"@x ge 5", []asTyped{{uq("x"), "integer", "4"}}, false},
+		{"@s eq 'abc'", []asTyped{{uq("s"), "string", "abc"}}, true},
+		{"@b eq xs:boolean('1')", []asTyped{{uq("b"), "boolean", "true"}}, true},
+		{"@x eq 5", nil, false},
+		{"not(@x eq 5)", nil, true},
+		{"@x eq 5 or @min le @max", []asTyped{{uq("min"), "int", "1"}, {uq("max"), "int", "2"}}, true},
+		{"@x eq 'a'", []asTyped{{uq("x"), "integer", "5"}}, false},
+		{"not(@x eq 'a')", []asTyped{{uq("x"), "integer", "5"}}, false},
+		{"@dur lt @dur", []asTyped{{uq("dur"), "duration", "P1D"}}, false},
+		{"not(@dur lt @dur)", []asTyped{{uq("dur"), "duration", "P1D"}}, false},
+		{"@dur eq @dur", []asTyped{{uq("dur"), "duration", "P1D"}}, true},
+	} {
+		got := asCompile(t, tc.expr, uses).Evaluate(backend(), seededTypes, asValues(t, tc.attrs...))
+		if got != tc.want {
+			t.Errorf("Evaluate(%q) over %v = %v, want %v", tc.expr, tc.attrs, got, tc.want)
 		}
 	}
 }

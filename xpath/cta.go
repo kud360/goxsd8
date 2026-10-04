@@ -11,11 +11,14 @@ import (
 // This file evaluates the RESTRICTED expression subset a Type Alternative's
 // {test} is written in — the "Test XPath expressions" grammar ta-props-correct
 // clause 2.1 (§3.12.6) fixes, productions [8] ta-Test through [18]
-// ta-ConstructorFunction — and nothing wider. It is not a stage of a general
-// XPath 2.0 evaluator: the productions below reach no axis but attribute, no
-// predicate, no variable and no function but fn:not, so evaluating them
-// directly is exact where a fail-open delegation to a general engine would be
-// a guess.
+// ta-ConstructorFunction — and nothing wider, but for the one production the
+// assertion façade adds and the Type Alternative one declines: [11]'s
+// Comparator position also takes xpath20.md [23] ValueComp ('eq' | 'ne' | 'lt'
+// | 'le' | 'gt' | 'ge'), evaluated as §3.5.1's value comparison
+// (ctaValueCompare). It is not a stage of a general XPath 2.0 evaluator: the
+// productions below reach no axis but attribute, no predicate, no variable and
+// no function but fn:not, so evaluating them directly is exact where a
+// fail-open delegation to a general engine would be a guess.
 //
 //	[8]  Test                ::= OrExpr
 //	[9]  OrExpr              ::= AndExpr ( 'or' AndExpr )*
@@ -395,6 +398,24 @@ type ctaCompare struct {
 	right      ctaValue
 }
 
+// ctaValueCompare is a value comparison (xpath20.md §3.5.1), [10]
+// ComparisonExpr's ValueComp arm, which only the assertion façade admits
+// (ctaFacade.comparesValues). Its comparison type — the one type §3.5.1 converts
+// both atomized operands into — was settled at compile time by
+// ctaTypes.valueComparison, so the node is B.2-legal by construction as a
+// ctaCompare is.
+//
+// It is a node of its own and not a ctaCompare with a flag, because the two
+// quantify differently over the same operand sequences: a general comparison is
+// existential over them, and a value comparison admits at most one item per
+// operand and answers the EMPTY SEQUENCE for an empty one (ctaValueCompare.eval).
+type ctaValueCompare struct {
+	op         ctaComparator
+	comparison *xsd.SimpleType
+	left       ctaValue
+	right      ctaValue
+}
+
 // ctaEffectiveBoolean is [11] ta-BooleanExpr's third arm with its Comparator
 // ABSENT — a bare ValueExpr standing in a boolean position, whose value is its
 // ·effective boolean value· (xpath20.md §2.4.3, fn:boolean).
@@ -412,6 +433,7 @@ func (ctaOr) ctaExpr()               {}
 func (ctaAnd) ctaExpr()              {}
 func (ctaNot) ctaExpr()              {}
 func (ctaCompare) ctaExpr()          {}
+func (ctaValueCompare) ctaExpr()     {}
 func (ctaEffectiveBoolean) ctaExpr() {}
 func (ctaTypeError) ctaExpr()        {}
 
@@ -457,10 +479,14 @@ type ctaFacade interface {
 	// types are the compile's own, for a façade that classifies the type it
 	// reads.
 	attribute(test ctaNameTest, types ctaTypes) (ctaValue, bool)
-	// admitsComparison reports whether the façade evaluates a general
-	// comparison whose operands ctaTypes.comparison settled into c, reporting
-	// false where it declines the whole expression on the same withhold terms.
+	// admitsComparison reports whether the façade evaluates a comparison —
+	// general or value — whose operands ctaTypes.comparison or
+	// ctaTypes.valueComparison settled into c, reporting false where it declines
+	// the whole expression on the same withhold terms.
 	admitsComparison(types ctaTypes, c *xsd.SimpleType) bool
+	// comparesValues reports whether the façade admits xpath20.md [23]
+	// ValueComp at all, which §3.12.6's grammar has no production for.
+	comparesValues() bool
 }
 
 // ctaTypeAlternativeFacade is a Type Alternative's façade: every NameTest is
@@ -477,6 +503,11 @@ func (ctaTypeAlternativeFacade) attribute(test ctaNameTest, _ ctaTypes) (ctaValu
 func (ctaTypeAlternativeFacade) admitsComparison(ctaTypes, *xsd.SimpleType) bool {
 	return true
 }
+
+// comparesValues is false: [13] ta-Comparator spells the general comparators
+// alone, and a value comparison is outside the required subset §3.12.6's Note
+// licenses a processor to decline.
+func (ctaTypeAlternativeFacade) comparesValues() bool { return false }
 
 // ctaNameTest is the sealed sum of [36] NameTest's arms as [17] ta-AttrName
 // reaches them, matching one ·expanded name· at a time on the ATTRIBUTE axis,
@@ -618,9 +649,11 @@ func ctaStaticOf(v ctaValue) ctaStatic {
 	}
 }
 
-// ctaComparator is one operator of [13] ta-Comparator. All six are GENERAL
-// comparisons (xpath20.md §3.5.2), never the eq/ne/lt/le/gt/ge value
-// comparisons, which this grammar has no production for.
+// ctaComparator is one of the six comparison operators: a [13] ta-Comparator
+// spelling in a general comparison (xpath20.md §3.5.2, ctaCompare), or a [23]
+// ValueComp spelling in a value comparison (§3.5.1, ctaValueCompare). Each is
+// named for the B.2 rows both spellings of it read — `=` and `eq` the
+// `A eq B` row — and the node it sits on is what says how it quantifies.
 type ctaComparator byte
 
 const (
@@ -688,6 +721,8 @@ func ctaEval(x ctaExpr, env ctaEnv) ctaAnswer {
 	case ctaNot:
 		return ctaEval(n.operand, env).negated()
 	case ctaCompare:
+		return n.eval(env)
+	case ctaValueCompare:
 		return n.eval(env)
 	case ctaEffectiveBoolean:
 		return n.eval(env)
@@ -777,7 +812,7 @@ func (c ctaCompare) eval(env ctaEnv) ctaAnswer {
 	}
 	for _, lv := range l.vs {
 		for _, rv := range r.vs {
-			if got := c.holdsPair(lv, rv, env); got != ctaFalse {
+			if got := ctaHoldsPair(c.op, c.comparison, lv, rv, env); got != ctaFalse {
 				return got
 			}
 		}
@@ -785,17 +820,70 @@ func (c ctaCompare) eval(env ctaEnv) ctaAnswer {
 	return ctaFalse
 }
 
-// holdsPair decides one PAIR of the existential above, which is §3.5.2 clause
-// 3's value comparison — both values having reached c.comparison already, where
-// clause 2's casts happened.
-func (c ctaCompare) holdsPair(l, r value.Value, env ctaEnv) ctaAnswer {
-	if ctaStringLike(c.comparison) {
-		return c.op.holdsCollated(l, r)
+// ctaHoldsPair decides op between two values both already converted into the
+// comparison type c. It is the one decision both comparison nodes reach: one
+// PAIR of a general comparison's existential is §3.5.2 clause 3's value
+// comparison, and a value comparison (§3.5.1) is that same application of the
+// operator to its two singletons.
+func ctaHoldsPair(op ctaComparator, c *xsd.SimpleType, l, r value.Value, env ctaEnv) ctaAnswer {
+	if ctaStringLike(c) {
+		return op.holdsCollated(l, r)
 	}
-	if c.comparison.Name() == ctaBuiltin("boolean") {
-		return c.op.holdsBoolean(l, r, c.comparison, env)
+	if c.Name() == ctaBuiltin("boolean") {
+		return op.holdsBoolean(l, r, c, env)
 	}
-	return c.op.holdsBetween(l, r)
+	return op.holdsBetween(l, r)
+}
+
+// eval decides one value comparison (xpath20.md §3.5.1), whose steps are
+// applied to each operand in order, the left one first — the order is
+// implementation-dependent, and fixing it fixes which answer a pair of faulty
+// operands gets (STYLE D1):
+//
+//   - an operand that raised is the error;
+//   - step 2, an EMPTY atomized operand: "the result of the value comparison is
+//     an empty sequence";
+//   - step 3, an operand of more than one item: err:XPTY0004.
+//
+// Step 4's xs:untypedAtomic cast and the conversion to the least common type
+// both happened in converting each operand into c.comparison
+// (ctaTypes.valueComparison), so what remains is the operator, on the one pair.
+//
+// The empty sequence is answered as ctaFalse, and that is exact rather than an
+// approximation: every consumer of an [11] ta-BooleanExpr takes its ·effective
+// boolean value· — §3.6's and/or and fn:not over their operands, and clause 3
+// of cvc-assertion over the {test} — and the effective boolean value of the
+// empty sequence is false (§2.4.3 rule 1). So `not(@x eq 1)` over an E without
+// @x is true, where an err:XPTY0004 under the same fn:not would stay an error.
+func (c ctaValueCompare) eval(env ctaEnv) ctaAnswer {
+	l, settled, single := ctaSingletonOperand(c.left, c.comparison, env)
+	if !single {
+		return settled
+	}
+	r, settled, single := ctaSingletonOperand(c.right, c.comparison, env)
+	if !single {
+		return settled
+	}
+	return ctaHoldsPair(c.op, c.comparison, l, r, env)
+}
+
+// ctaSingletonOperand evaluates one value-comparison operand into c, reporting
+// its one atomic value, or false with the answer the whole comparison takes
+// without applying its operator: ctaError for a raised operand or one of two
+// or more items (§3.5.1 step 3, err:XPTY0004), and ctaFalse — the empty
+// sequence, read as ctaValueCompare.eval states — for an empty one (step 2).
+func ctaSingletonOperand(v ctaValue, c *xsd.SimpleType, env ctaEnv) (value.Value, ctaAnswer, bool) {
+	atoms, converted := ctaItemOf(v, c, env).(ctaAtoms)
+	if !converted {
+		return nil, ctaError, false
+	}
+	if len(atoms.vs) == 0 {
+		return nil, ctaFalse, false
+	}
+	if len(atoms.vs) > 1 {
+		return nil, ctaError, false // err:XPTY0004
+	}
+	return atoms.vs[0], ctaFalse, true
 }
 
 // eval decides the ·effective boolean value· of a bare ValueExpr (xpath20.md

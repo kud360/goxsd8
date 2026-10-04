@@ -305,6 +305,44 @@ func (t ctaTypes) comparison(op ctaComparator, l, r ctaValue) (*xsd.SimpleType, 
 	return st, ctaTypeSettled
 }
 
+// valueComparison settles the type a value comparison of l against r with
+// operator op converts BOTH its operands into, per xpath20.md §3.5.1, and
+// reports ctaTypeErrored where B.2 admits no such comparison — the same
+// err:XPTY0004 comparison reports, decided here for the same reason.
+//
+// It differs from comparison in one rule only, and the difference is §3.5.1's
+// own: step 4 casts an xs:untypedAtomic operand to xs:string whatever the
+// other operand is, where §3.5.2 clause 2 chooses its target from the other
+// operand (untypedAgainst). "The purpose of this rule is to make value
+// comparisons transitive." Both operands are then typed, and "converted to
+// their least common type by a combination of type promotion and subtype
+// substitution", which is shared — and B.2's rows decide the rest.
+//
+// No operand the assertion façade builds is xs:untypedAtomic today: only a
+// Type Alternative's attribute is, and that façade declines every value
+// comparison (ctaFacade.comparesValues).
+func (t ctaTypes) valueComparison(op ctaComparator, l, r ctaValue) (*xsd.SimpleType, ctaTyping) {
+	st, typing := t.shared(t.valueOperand(l), t.valueOperand(r))
+	if typing != ctaTypeSettled {
+		return nil, typing
+	}
+	admitted, err := t.admitsComparison(op, st)
+	if err != nil || !admitted {
+		return nil, ctaTypeErrored
+	}
+	return st, ctaTypeSettled
+}
+
+// valueOperand is the type one value-comparison operand is compared from: its
+// own, or xs:string for an xs:untypedAtomic one (§3.5.1 step 4).
+func (t ctaTypes) valueOperand(v ctaValue) *xsd.SimpleType {
+	typed, isTyped := ctaStaticOf(v).(ctaTyped)
+	if !isTyped {
+		return t.str
+	}
+	return typed.st
+}
+
 // converted settles the type alone, leaving B.2's operator rows to comparison.
 //
 // Two rules cover the three operand shapes this grammar builds, because an

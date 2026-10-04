@@ -36,13 +36,15 @@
 //     in tier 1's grammar over the element's TYPED attributes
 //     (AttributeTypes; cvc-assertion clause 1, §3.13.4.1), and
 //     AssertionTest.Evaluate decides it over their ·actual values·
-//     (TypedAttributes). It declines what tier 1 declines, plus a
+//     (TypedAttributes). Its grammar is tier 1's plus xpath20.md's value
+//     comparisons (§3.5.1, eq/ne/lt/le/gt/ge), which a Type Alternative's
+//     {test} still declines. It declines what tier 1 declines, plus a
 //     wildcard NameTest, an attribute with no fixed atomic type (a list,
 //     a union, a ·special· type, an xs:QName or xs:NOTATION primitive),
 //     a cast from a typed attribute outside the xs:string family, and a
-//     general comparison in a date/time type, which has no implicit
-//     timezone to order by (F&O §10.4). `$value`, the value comparisons,
-//     axes, predicates, quantified expressions and the function core are
+//     general or value comparison in a date/time type, which has no
+//     implicit timezone to order by (F&O §10.4). `$value`, axes,
+//     predicates, quantified expressions and the function core are
 //     PLANNED (#1042).
 //  3. The full grammar (docs/specs/md/xpath20.md) and function library
 //     (docs/specs/md/xpath-functions.md) — M7 onward, ratcheted.

@@ -90,15 +90,15 @@ const ruleCvcAssertionsValid xsderr.Rule = "cvc-assertions-valid"
 // recorded as an [Unevaluated] under cvc-assertion at e through
 // [walk.decline], never charged and never shown satisfied. The residue is: a
 // {test} xpath declines, whose GAP(xpath) markers name the grammar and type
-// residue (`$value`, the value comparisons, paths, the function library);
-// every assertion of an e one of whose attributes matching an {attribute use}
-// has no ·actual value· ([walk.assertionValues]); and a {test} naming a
-// ·defaulted attribute· e does not carry, whether the partial ·PSVI·
-// cvc-assertion clause 1.2 builds from holds one being unruled
-// ([walk.assertionTypes]). Fail-open: the withheld value is clause 6's own
-// verdict, whose whole consumer set inside this package is w.res.violations
-// and its one reader [Result.Violations], which charge on a violation PRESENT,
-// so a decline can only cost a rejection and can manufacture none. (#1042)
+// residue (`$value`, paths, the function library); every assertion of an e one
+// of whose attributes matching an {attribute use} has no ·actual value·
+// ([walk.assertionValues]); and a {test} naming a ·defaulted attribute· e does
+// not carry, whether the partial ·PSVI· cvc-assertion clause 1.2 builds from
+// holds one being unruled ([walk.assertionTypes]). Fail-open: the withheld
+// value is clause 6's own verdict, whose whole consumer set inside this
+// package is w.res.violations and its one reader [Result.Violations], which
+// charge on a violation PRESENT, so a decline can only cost a rejection and
+// can manufacture none. (#1042)
 func (w *walk) elementAssertions(e Element, g governance) {
 	ct := g.complexType()
 	if ct == nil {
