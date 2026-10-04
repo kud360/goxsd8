@@ -36,10 +36,12 @@ spec reading, the warden's the shape, the arbiter's the bar, a `RULING:`
 the arm. Every claim a ruling makes about the tree — a site, a count, a
 destination, which check answers first — is a hypothesis: check it before
 you build on it, and report a mismatch in your account rather than working
-around it (#863, #1480). Grep for existing structures before adding a
-parallel one (STYLE T4), and read the `doc.go` contract of every package
-you touch: your change keeps it true or changes it explicitly in the same
-commit.
+around it (#863, #1480). A grounding's ruling on how the change reads an
+input is a requirement: the doc comment of the function it governs states
+it, and your account names that site (#2096). Grep for existing structures
+before adding a parallel one (STYLE T4), and read the `doc.go` contract of
+every package you touch: your change keeps it true or changes it explicitly
+in the same commit.
 
 ## What trips you most
 
@@ -111,10 +113,10 @@ you can observe — plus the destination `wip/issue-<N>` branch by name and
 no SHA of its own, the shape you chose and the alternative it beats, the
 spec rules implemented, the cases that moved, what you absorbed beyond the
 issue body, the gate result, expected ratchet movement, and what you want
-scrutinized hardest. You never push and never switch branches, so how your
-commits arrive on the destination — fast-forward or merge — and under what
-SHA is the orchestrator's checkpoint comment to state, never yours to
-predict (#1099).
+scrutinized hardest. You never push and never switch branches, whatever a
+brief asks, so how your commits arrive on the destination — fast-forward or
+merge — and under what SHA is the orchestrator's, never yours to predict
+(#1099, #2133).
 
 **On a repair round, disposition every numbered item of the verdict** —
 delivered with its evidence, or not delivered with the reason. Withdrawing

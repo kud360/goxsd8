@@ -2,6 +2,12 @@
 description: Reconcile GitHub issues with reality and keep the ready queue value-ordered, consulting the user personas for API/CLI-facing work. Doc-only commit; no code changes.
 ---
 
+**Claim the pass before anyone surveys** (#2010). `git fetch --prune
+origin` and read the age of every `origin/meta/backlog-*` tip: one younger
+than WORKFLOW's 2h claim TTL is a pass in flight, so stop. Otherwise cut
+`meta/backlog-<YYYYMMDD-HHMM>` from `origin/main`, commit an empty claim
+on it and push it; the pass lands from that branch.
+
 Delegate to the **cartographer** for its full /backlog pass: survey
 reality, reconcile the issue list against it, reconcile the branch
 namespace, and **rewrite docs/PLAN.md's Status section by replacement** —

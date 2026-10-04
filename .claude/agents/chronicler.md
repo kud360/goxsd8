@@ -32,6 +32,10 @@ moves (#1417).
 - Next — discharged before landing / owed to the post-land pass
 ```
 
+The heading's outcome is one clause, not the entry's summary: `grep '^## '`
+over a month is how a later session finds an entry, and a heading that
+carries a paragraph returns paragraphs.
+
 **Friction is what the documents did not predict.** A documented setup
 step, a cost a retro has already ruled on, a `docs/PLAN.md` Status stale
 between stamps — those are the process working, and they earn a clause
