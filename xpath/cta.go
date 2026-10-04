@@ -164,7 +164,7 @@ type CTATest struct{ root ctaExpr }
 // never element, so an unprefixed NameTest is always in no namespace
 // (xpath20.md §3.2.1.2, PRINCIPLES 15).
 func CompileCTATest(expr xsd.XPathExpression, types xsd.TypeResolver) (CTATest, bool) {
-	root, defect := compileCTATest(expr, types)
+	root, defect := compileCTATest(expr, types, ctaUntypedStep)
 	if defect.kind != ctaNoDefect {
 		return CTATest{}, false
 	}
@@ -225,7 +225,7 @@ const ruleXPST0081 xsderr.Rule = "err:XPST0081"
 // no schema document and so has no position to report — the real one is the
 // <alternative>'s, attached by the assembler that charges over this.
 func CTATestStaticError(expr xsd.XPathExpression, types xsd.TypeResolver) error {
-	_, defect := compileCTATest(expr, types)
+	_, defect := compileCTATest(expr, types, ctaUntypedStep)
 	if defect.kind != ctaStaticError {
 		// An untyped nil, never a nil *xsderr.Error in an error interface: a
 		// caller's `!= nil` must mean what it says.
@@ -234,16 +234,21 @@ func CTATestStaticError(expr xsd.XPathExpression, types xsd.TypeResolver) error 
 	return defect.static
 }
 
-// compileCTATest is the ONE traversal the two entry points above are façades
-// over (STYLE T4): it tokenizes the {expression}, resolves the builtin
-// datatypes the compiler names, indexes the {namespace bindings} and parses [8]
-// ta-Test, reporting the tree and what — if anything — was wrong with it.
+// compileCTATest is the ONE traversal the entry points above and
+// [CompileAssertionTest] are façades over (STYLE T4): it tokenizes the
+// {expression}, resolves the builtin datatypes the compiler names, indexes the
+// {namespace bindings} and parses [8] ta-Test, reporting the tree and what — if
+// anything — was wrong with it.
+//
+// step is what one [17] ta-AttrName compiles to, and it is the only thing the
+// façades differ in: ctaUntypedStep for a Type Alternative, whose instance is
+// untyped, and assertionStep for an assertion, whose attributes are typed.
 //
 // Name resolution never fails a parse — it records and carries on — so a parse
 // that failed at all failed for another reason, and is ctaUnsupported with
 // whatever an unbound prefix recorded along the way DISCARDED. That is where
-// "unsupported dominates static" is enforced, once, for both façades.
-func compileCTATest(expr xsd.XPathExpression, types xsd.TypeResolver) (ctaExpr, ctaDefect) {
+// "unsupported dominates static" is enforced, once, for every façade.
+func compileCTATest(expr xsd.XPathExpression, types xsd.TypeResolver, step ctaAttributeStep) (ctaExpr, ctaDefect) {
 	toks, ok := ctaTokenize(expr.Expression())
 	if !ok {
 		return nil, ctaDefect{kind: ctaUnsupported}
@@ -259,7 +264,7 @@ func compileCTATest(expr xsd.XPathExpression, types xsd.TypeResolver) (ctaExpr, 
 	if defaultNS, present := expr.DefaultNamespace(); present {
 		names.defaultNamespace = defaultNS
 	}
-	p := ctaParser{toks: toks, names: names, types: known}
+	p := ctaParser{toks: toks, names: names, types: known, step: step}
 	root, ok := p.test()
 	if !ok {
 		return nil, ctaDefect{kind: ctaUnsupported}
@@ -323,20 +328,41 @@ const (
 // types with, threaded as a parameter and stored nowhere (ARCHITECTURE), so
 // one compiled [CTATest] serves any resolver that answers for its components.
 func (t CTATest) Evaluate(b value.Backend, types xsd.TypeResolver, attrs Attributes) bool {
-	return ctaEval(t.root, ctaEnv{backend: b, types: types, attrs: attrs}) == ctaTrue
+	return ctaEval(t.root, ctaEnv{backend: b, types: types, input: ctaLexicalInput{attrs: attrs}}) == ctaTrue
 }
 
-// ctaEnv is the dynamic context of one [CTATest.Evaluate] call. cvc-xpath
-// (§3.13.4.2) fixes the rest of it — context item E, context position and size
-// 1, no variable values — and none of that is representable in this grammar,
-// which reaches no context item and has no VarRef production, so the
-// attributes, the value spaces and the type knowledge the casts need are the
-// whole of what evaluation reads.
+// ctaEnv is the dynamic context of one [CTATest.Evaluate] or
+// [AssertionTest.Evaluate] call. cvc-xpath (§3.13.4.2) fixes the rest of it —
+// context item E, context position and size 1, no variable values — and none of
+// that is representable in this grammar, which reaches no context item and has
+// no VarRef production, so the attributes, the value spaces and the type
+// knowledge the casts need are the whole of what evaluation reads.
 type ctaEnv struct {
 	backend value.Backend
 	types   xsd.TypeResolver
-	attrs   Attributes
+	input   ctaInput
 }
+
+// ctaInput is the sealed sum of the two attribute inputs an evaluation reads,
+// one per façade: E's attributes as LEXICALS for a Type Alternative, whose
+// instance is untyped (key-cta-ta-select clause 1's Note), and as TYPED values
+// for an assertion (cvc-assertion clause 1, §3.13.4.1). The two are one field
+// and not two nil-able ones, so no environment carries both.
+//
+// Each façade pairs its own tree with its own input: [CTATest.Evaluate] builds
+// ctaLexicalInput over a tree of ctaAttr nodes, and [AssertionTest.Evaluate]
+// builds ctaTypedInput over a tree of ctaTypedAttr nodes, so a node never meets
+// the other input.
+type ctaInput interface{ ctaInput() }
+
+// ctaLexicalInput is a Type Alternative's attribute input.
+type ctaLexicalInput struct{ attrs Attributes }
+
+// ctaTypedInput is an assertion's attribute input.
+type ctaTypedInput struct{ attrs TypedAttributes }
+
+func (ctaLexicalInput) ctaInput() {}
+func (ctaTypedInput) ctaInput()   {}
 
 // ctaExpr is the sealed sum of the BOOLEAN-valued nodes of the compiled tree.
 // The grammar closes the set (STYLE T2's schema-closed-set exception), so
@@ -389,18 +415,46 @@ func (ctaEffectiveBoolean) ctaExpr() {}
 func (ctaTypeError) ctaExpr()        {}
 
 // ctaValue is the sealed sum of the ITEM-valued nodes: the two arms of [16]
-// ta-SimpleValue, and the cast that [15] ta-CastExpr's tail and [18]
+// ta-SimpleValue — its AttrName arm in the untyped and the typed form, one per
+// façade (ctaAttributeStep) — and the cast that [15] ta-CastExpr's tail and [18]
 // ta-ConstructorFunction both build over one of them.
 type ctaValue interface{ ctaValue() }
 
-// ctaAttr is [17] ta-AttrName: the attribute step whose NameTest selects a
-// SEQUENCE of E's attributes, in document order, out of what [Attributes]
-// yields.
+// ctaAttr is [17] ta-AttrName over an UNTYPED instance: the attribute step
+// whose NameTest selects a SEQUENCE of E's attributes, in document order, out
+// of what [Attributes] yields.
 //
 // The NameTest is settled at compile time, so evaluation carries no axis and no
 // prefix of its own — every name it could resolve is already an ·expanded name·
 // (ctaNameTest).
 type ctaAttr struct{ test ctaNameTest }
+
+// ctaTypedAttr is [17] ta-AttrName over a TYPED instance, which is an
+// assertion's (assertionStep): the attribute E carries under the ·expanded
+// name· name, at most one, whose typed value is of type st — the {type
+// definition} [AttributeTypes] answered for that name at compile time, which is
+// why the node carries it and the operand's static type is st rather than
+// xs:untypedAtomic.
+//
+// Only a QName NameTest builds one: a [37] Wildcard arm can match an attribute
+// ·attributed to· an {attribute wildcard}, whose type is not fixed at compile
+// time, so assertionStep declines it.
+type ctaTypedAttr struct {
+	name xsd.QName
+	st   *xsd.SimpleType
+}
+
+// ctaAttributeStep compiles one [17] ta-AttrName whose NameTest resolved to
+// test into its node, reporting false where the façade declines it — which
+// declines the whole expression on [CompileCTATest]'s withhold terms. The types
+// are the compile's own, for a step that classifies the type it reads.
+type ctaAttributeStep func(test ctaNameTest, types ctaTypes) (ctaValue, bool)
+
+// ctaUntypedStep is a Type Alternative's step: every NameTest is admitted and
+// reads E's attributes untyped.
+func ctaUntypedStep(test ctaNameTest, _ ctaTypes) (ctaValue, bool) {
+	return ctaAttr{test: test}, true
+}
 
 // ctaNameTest is the sealed sum of [36] NameTest's arms as [17] ta-AttrName
 // reaches them, matching one ·expanded name· at a time on the ATTRIBUTE axis,
@@ -500,15 +554,16 @@ type ctaCast struct {
 	allowsEmpty bool
 }
 
-func (ctaAttr) ctaValue()    {}
-func (ctaLiteral) ctaValue() {}
-func (ctaCast) ctaValue()    {}
+func (ctaAttr) ctaValue()      {}
+func (ctaTypedAttr) ctaValue() {}
+func (ctaLiteral) ctaValue()   {}
+func (ctaCast) ctaValue()      {}
 
 // ctaStatic is one operand's static type, which is what xpath20.md §3.5.2's
 // casting rules dispatch on. It is a sealed sum of the two states this grammar
-// can produce and not a datatype: an uncast attribute has no type ANNOTATION
-// at all, because key-cta-ta-select clause 1 labels every node of the
-// constructed instance untyped.
+// can produce and not a datatype: an uncast UNTYPED attribute has no type
+// ANNOTATION at all, because key-cta-ta-select clause 1 labels every node of
+// the constructed instance untyped.
 type ctaStatic interface{ ctaStatic() }
 
 // ctaUntypedAtomic is an uncast attribute operand, which atomizes to a single
@@ -517,22 +572,25 @@ type ctaStatic interface{ ctaStatic() }
 // untypedAtomic").
 type ctaUntypedAtomic struct{}
 
-// ctaTyped is an operand carrying a datatype: a Literal, or the result of a
-// cast or a constructor function. It carries the COMPONENT alone — st.Name()
-// is the name, and storing both would be two encodings of one fact (STYLE D3).
+// ctaTyped is an operand carrying a datatype: a Literal, the result of a cast
+// or a constructor function, or a typed attribute. It carries the COMPONENT
+// alone — st.Name() is the name, and storing both would be two encodings of one
+// fact (STYLE D3).
 type ctaTyped struct{ st *xsd.SimpleType }
 
 func (ctaUntypedAtomic) ctaStatic() {}
 func (ctaTyped) ctaStatic()         {}
 
-// ctaStaticOf reports the static type of one [14] ta-ValueExpr. The default
-// arm is unreachable: every branch of the ctaValue sum above is named.
+// ctaStaticOf reports the static type of one [14] ta-ValueExpr. ctaAttr is the
+// one untyped arm.
 func ctaStaticOf(v ctaValue) ctaStatic {
 	switch n := v.(type) {
 	case ctaLiteral:
 		return ctaTyped{st: n.st}
 	case ctaCast:
 		return ctaTyped{st: n.target}
+	case ctaTypedAttr:
+		return ctaTyped{st: n.st}
 	default:
 		return ctaUntypedAtomic{}
 	}
@@ -720,8 +778,9 @@ func (c ctaCompare) holdsPair(l, r value.Value, env ctaEnv) ctaAnswer {
 // eval decides the ·effective boolean value· of a bare ValueExpr (xpath20.md
 // §2.4.3, the fn:boolean rules quoted there).
 //
-// An AttrName evaluates to a sequence of attribute NODES rather than to atomic
-// values, so it takes rule 2 ("a sequence whose first item is a node") whenever
+// An AttrName, untyped or typed, evaluates to a sequence of attribute NODES
+// rather than to atomic values, so it takes rule 2 ("a sequence whose first
+// item is a node") whenever
 // its NameTest matches at all and rule 1 (the empty sequence) when it matches
 // nothing, and no type of its own is involved. Rule 2 holds whatever the
 // sequence's LENGTH, which is what a wildcard NameTest makes observable. Every
@@ -731,6 +790,8 @@ func (e ctaEffectiveBoolean) eval(env ctaEnv) ctaAnswer {
 	switch n := e.operand.(type) {
 	case ctaAttr:
 		return ctaAnswerOf(len(ctaMatchedAttributes(n, env)) != 0)
+	case ctaTypedAttr:
+		return ctaAnswerOf(len(ctaMatchedTyped(n, env)) != 0)
 	case ctaLiteral:
 		return ctaBoolean(e.operand, n.st, env)
 	case ctaCast:
@@ -873,13 +934,13 @@ func ctaValidated(i ctaItem) (value.Value, bool) {
 // converted into type c — the type the enclosing operator compares or reads it
 // in.
 //
-// The three arms are the three ways an item acquires a type:
+// The four arms are the four ways an item acquires a type:
 //
-//   - an ATTRIBUTE is xs:untypedAtomic, which §3.5.2's casting rules cast
-//     STRAIGHT to c (clause 1's xs:string, or clause 2's type chosen from the
-//     other operand). No intermediate type exists to cast through.
-//   - a LITERAL carries its own type and is converted to c, which is a no-op
-//     wherever the two coincide.
+//   - an UNTYPED attribute is xs:untypedAtomic, which §3.5.2's casting rules
+//     cast STRAIGHT to c (clause 1's xs:string, or clause 2's type chosen from
+//     the other operand). No intermediate type exists to cast through.
+//   - a TYPED attribute and a LITERAL carry their own type and are converted to
+//     c, which is a no-op wherever the two coincide.
 //   - a CAST evaluates its operand IN THE TARGET TYPE first, because that cast
 //     is the expression the author wrote and its failure is the author's
 //     err:FORG0001, and only then converts the result to c. Evaluating it
@@ -891,6 +952,8 @@ func ctaItemOf(v ctaValue, c *xsd.SimpleType, env ctaEnv) ctaItem {
 	switch n := v.(type) {
 	case ctaAttr:
 		return ctaAttrItem(n, c, env)
+	case ctaTypedAttr:
+		return ctaTypedAttrItem(n, c, env)
 	case ctaLiteral:
 		return ctaConvert(n.text, n.st, c, env)
 	case ctaCast:
@@ -908,15 +971,59 @@ func ctaItemOf(v ctaValue, c *xsd.SimpleType, env ctaEnv) ctaItem {
 // The whole sequence is walked: a QName NameTest matches at most one attribute
 // because no element carries two of one ·expanded name·, and a [37] Wildcard
 // arm has no such bound.
+//
+// The input is ctaLexicalInput by construction (ctaInput); the other arm
+// matches nothing and is unreachable.
 func ctaMatchedAttributes(n ctaAttr, env ctaEnv) []string {
+	in, lexical := env.input.(ctaLexicalInput)
+	if !lexical {
+		return nil
+	}
 	var matched []string
-	env.attrs(func(name xsd.QName, lexical string) bool {
+	in.attrs(func(name xsd.QName, lexical string) bool {
 		if n.test.matches(name) {
 			matched = append(matched, lexical)
 		}
 		return true
 	})
 	return matched
+}
+
+// ctaMatchedTyped is ctaMatchedAttributes for a typed attribute: the typed
+// values [TypedAttributes] yields under n's ·expanded name·, at most one, each
+// of type n.st by the caller's obligation that type states.
+//
+// The input is ctaTypedInput by construction (ctaInput); the other arm matches
+// nothing and is unreachable.
+func ctaMatchedTyped(n ctaTypedAttr, env ctaEnv) []value.Value {
+	in, typed := env.input.(ctaTypedInput)
+	if !typed {
+		return nil
+	}
+	var matched []value.Value
+	in.attrs(func(name xsd.QName, v value.Value) bool {
+		if name == n.name {
+			matched = append(matched, v)
+		}
+		return true
+	})
+	return matched
+}
+
+// ctaTypedAttrItem converts the matched typed value into c on ctaPromote's
+// terms, which is B.1's promotion or §3.5.2's conversion into the comparison
+// type — never a re-validation of the attribute's lexical, which has none here.
+func ctaTypedAttrItem(n ctaTypedAttr, c *xsd.SimpleType, env ctaEnv) ctaItem {
+	matched := ctaMatchedTyped(n, env)
+	vs := make([]value.Value, 0, len(matched))
+	for _, v := range matched {
+		converted, ok := ctaValidated(ctaPromote(v, n.st, c, env))
+		if !ok {
+			return ctaRaised{}
+		}
+		vs = append(vs, converted)
+	}
+	return ctaAtoms{vs: vs}
 }
 
 // ctaAttrItem casts the matched attributes into c, which §3.5.2's casting rules
