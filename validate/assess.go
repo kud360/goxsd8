@@ -122,9 +122,10 @@ const ruleCvcType xsderr.Rule = "cvc-type"
 // which is walked against no type along with its whole subtree ([governance],
 // [walk.child]). A child its parent ·attributed· to nothing on any other
 // ground, and a child whose name ·resolves· to no declaration, are neither:
-// the package doc states how each is governed, the second being clause 3.3's
-// ·lax assessment· against xs:anyType, whose {content type} and {attribute
-// uses} constrain nothing any of these charges reads (#1823).
+// the package doc states how each is governed, the second being ·strictly
+// assessed· (key-sva) clause 3.3's ·lax assessment· against xs:anyType, whose
+// {content type} and {attribute uses} constrain nothing any of these charges
+// reads (#1823).
 //
 // Nothing else is decided: the remaining cvc-elt clauses, cvc-type's own
 // clause 1 (T ·non-absent·), cvc-complex-type clause 5 over [[attributes]]
@@ -177,15 +178,15 @@ func (v *Validator) Assess(root Element) *Result {
 // §3.11.4 quantifies over and the {nillable} its clause 4.2.3 reads.
 //
 // The zero value is an element assessed against nothing: no declaration, no
-// type. It is cvc-assess-elt clause 3.3's ·lax assessment· against xs:anyType
-// (laxlyAssessed) — also the fall back §5.3 gives a declared element whose
-// {substitution group affiliations} has an ·absent· member or whose ·selected
-// type definition· is ·absent· ([walk.declaredGovernance]) — and
-// hasDecl TRUE with a nil typ is this package declining a type it could not
-// determine — a distinction cvcid.go needs, since only the second could have
-// hidden an ID. hasDecl false with a NON-nil typ is the third shape, clause
-// 1.2's: an element with no ·governing element declaration· ·strictly assessed·
-// against a type alone — its ·locally declared type· or an xsi:type
+// type. It is cvc-assess-elt clause 3's ·lax assessment· (key-lva) against
+// xs:anyType (laxlyAssessed) — also the fall back §5.3 gives a declared
+// element whose {substitution group affiliations} has an ·absent· member or
+// whose ·selected type definition· is ·absent· ([walk.declaredGovernance]) —
+// and hasDecl TRUE with a nil typ is this package declining a type it could
+// not determine — a distinction cvcid.go needs, since only the second could
+// have hidden an ID. hasDecl false with a NON-nil typ is the third shape,
+// clause 1.2's: an element with no ·governing element declaration· ·strictly
+// assessed· against a type alone — its ·locally declared type· or an xsi:type
 // ·overriding· it (key-governing-type-elem clauses 7 and 6,
 // [walk.localGovernance]), or else an xsi:type that ·resolved· (clause 8,
 // [walk.instanceGovernance]). Every rule that reads the DECLARATION — cvc-elt,
@@ -463,7 +464,8 @@ func typeName(t xsd.TypeDefinition) string {
 // constraint's ·target node set·. cvc-wildcard makes that a hard stop and not a
 // permissive pass: a skip wildcard leaves the item with no ·governing element
 // declaration· at all and runs no ·QName resolution· to look for one, so skip
-// and clause 3.3 are different outcomes and not two spellings of one.
+// and ·strictly assessed· (key-sva) clause 3.3 are different outcomes and not
+// two spellings of one.
 //
 // The {open content} half is a reading and not a quotation (#1969, reversing
 // #1576): key-skipped, clause 3.2 of ·strictly assessed· and cvc-wildcard name
@@ -504,16 +506,16 @@ func typeName(t xsd.TypeDefinition) string {
 //     2.4 or 3.4 admitted is ·attributed to· the {open content} record and to
 //     no particle (§3.4.4.4, key-att-to), so clause 3 never names it, and
 //     clause 4 carries it — to the declaration its ·expanded name· ·resolves·
-//     to, and to none where it resolves to none, which is cvc-assess-elt
-//     clause 3.3's ·lax assessment·. A skip {wildcard} makes the item ·skipped·
-//     instead, which is clause 4.1 and the assess=false above. Clause 4.3
-//     withholds the declaration wherever the item's ·locally declared type·
-//     within parent ([xsd.Schema.LocallyDeclaredElementType]) is non-·absent·,
-//     resolved name or not: the item then has no ·governing element
-//     declaration·, and that type, or an xsi:type ·overriding· it, governs
-//     instead ([walk.localGovernance]). What this arm does NOT share with the
-//     Wildcard one is clause 4.3, which clause 3 does not carry, and e-validity
-//     clause 1.1.3, which quantifies over ·wildcard particles· alone
+//     to, and to none where it resolves to none, which is ·strictly assessed·
+//     (key-sva) clause 3.3's ·lax assessment·. A skip {wildcard} makes the
+//     item ·skipped· instead, which is clause 4.1 and the assess=false above.
+//     Clause 4.3 withholds the declaration wherever the item's ·locally
+//     declared type· within parent ([xsd.Schema.LocallyDeclaredElementType])
+//     is non-·absent·, resolved name or not: the item then has no ·governing
+//     element declaration·, and that type, or an xsi:type ·overriding· it,
+//     governs instead ([walk.localGovernance]). What this arm does NOT share
+//     with the Wildcard one is clause 4.3, which clause 3 does not carry, and
+//     e-validity clause 1.1.3, which quantifies over ·wildcard particles· alone
 //     ([walk.unresolvedStrictWildcardChild]).
 //
 // parent is the enclosing element's complex ·governing type definition·,
@@ -574,8 +576,8 @@ func (w *walk) localOrResolvedGovernance(e Element, parent *xsd.ComplexType, inh
 // Two causes leave such a child ·laxly assessed·, and the message names the one
 // that holds. An unresolved name under a strict wildcard has neither a
 // ·governing element declaration· nor a ·governing type definition·, which is
-// cvc-assess-elt clause 3.3's ·lax assessment· against xs:anyType. A name that
-// ·resolves· to a declaration with an ·absent· {substitution group
+// cvc-assess-elt clause 3's ·lax assessment· (key-lva) against xs:anyType. A
+// name that ·resolves· to a declaration with an ·absent· {substitution group
 // affiliations} member or ·selected type definition· falls back to the same
 // ·lax assessment· by §5.3 ([walk.declaredGovernance]), its cvc-elt clause 1
 // charge already made at the child. The schema lookup below tells the two
@@ -606,10 +608,11 @@ func (w *walk) localOrResolvedGovernance(e Element, parent *xsd.ComplexType, inh
 // story at all, and typ non-nil with hasDecl false is clause 1.2's xsi:type-
 // driven ·strict assessment· (key-governing-type-elem clause 8) — a ·governing
 // type definition· WAS determined there, from xsi:type rather than from
-// ·resolution·, so neither clause 3.3's lax path nor this clause is live. The
-// undecided shape never arrives beside a Wildcard. Only the zero value — no
-// declaration, no type at all — is charged, and it is both causes above: an
-// unresolved name, and a resolved one §5.3 sent to ·lax assessment·.
+// ·resolution·, so neither ·strictly assessed· (key-sva) clause 3.3's lax path
+// nor this clause is live. The undecided shape never arrives beside a
+// Wildcard. Only the zero value — no declaration, no type at all — is charged,
+// and it is both causes above: an unresolved name, and a resolved one §5.3
+// sent to ·lax assessment·.
 //
 // notKnown is read off the governance the descent just determined, and no
 // subtree state is kept: clause 1.1.3 quantifies over E.[[children]] and
@@ -778,12 +781,12 @@ func sameType(a, b xsd.TypeDefinition) bool {
 // element declarations (cvc-resolve-instance, §3.17.6.3), together with the
 // type that declaration supplies. A name that resolves to nothing leaves the
 // element with no declaration to read a type off, which is cvc-assess-elt
-// clause 3.3 and no charge of its own: an unresolved name is the enclosing
-// element's business where it is anyone's (§3.3.5.1 clause 1.1.3,
-// [walk.unresolvedStrictWildcardChild]) and never the child's —
-// unless the element's own xsi:type supplies a ·governing type definition·
-// (instanceGovernance), which makes it clause 1.2's ·strictly assessed· rather
-// than clause 3.3's ·laxly assessed·.
+// clause 3's ·lax assessment· (key-lva) and no charge of its own: an
+// unresolved name is the enclosing element's business where it is anyone's
+// (§3.3.5.1 clause 1.1.3, [walk.unresolvedStrictWildcardChild]) and never the
+// child's — unless the element's own xsi:type supplies a ·governing type
+// definition· (instanceGovernance), which makes it ·strictly assessed· by
+// key-sva clause 1.2 rather than ·laxly assessed· by cvc-assess-elt clause 3.
 func (w *walk) resolvedGovernance(e Element, inherited []inheritedAttribute) governance {
 	d, found := w.schema.Element(e.Name())
 	if !found {
@@ -1129,7 +1132,7 @@ func (w *walk) attributes(e Element, g governance) {
 // isInstanceAttribute is the one encoding of those four names (STYLE T4). The
 // list cvc-complex-type clause 2 excepts by name and the list this clause
 // excepts by name are the same four §3.2.7 Built-in Attribute Declarations, and
-// §3.2.6 a-props-correct forbids a schema to redeclare any of them.
+// §3.2.6.4 no-xsi forbids a schema to redeclare any of them.
 func (w *walk) simpleTypeAttributes(e Element, st *xsd.SimpleType) {
 	for _, a := range e.Attributes() {
 		if isInstanceAttribute(a.Name()) {
@@ -1368,7 +1371,7 @@ func hasAttributeNamed(attrs []Attribute, n xsd.QName) bool {
 // isInstanceAttribute reports whether n is one of the four attributes
 // cvc-complex-type clause 2 excepts by name — xsi:type, xsi:nil,
 // xsi:schemaLocation, xsi:noNamespaceSchemaLocation, the Built-in Attribute
-// Declarations of §3.2.7, which §3.2.6 a-props-correct forbids a schema to
+// Declarations of §3.2.7, which §3.2.6.4 no-xsi forbids a schema to
 // redeclare.
 func isInstanceAttribute(n xsd.QName) bool {
 	if n.Space != xsd.XMLSchemaInstanceNS {

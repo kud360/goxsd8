@@ -35,7 +35,7 @@ import (
 // The ·actual value· is read directly rather than through the injected
 // value.Backend, on the same grounds cvc-resolve-instance's QName is
 // (instanceTypeDefinition): xsi:nil is one of the Built-in Attribute
-// Declarations §3.2.7 fixes as xs:boolean-typed and §3.2.6 a-props-correct
+// Declarations §3.2.7 fixes as xs:boolean-typed and §3.2.6.4 no-xsi
 // forbids a schema to redeclare, so its lexical space is the four literals of
 // boolean-lexical-mapping (Datatypes §3.3.2.2) after the whiteSpace = collapse
 // its type fixes, and no backend may widen or narrow it. A lexical outside those
@@ -340,7 +340,7 @@ func resolveInstanceQName(e Element, lexical string) (xsd.QName, bool) {
 // instanceAttribute reports e's attribute information item in the XML Schema
 // instance namespace with the given [[local name]], and whether e carries one.
 // The four names it is asked for are the Built-in Attribute Declarations of
-// §3.2.7, which §3.2.6 a-props-correct forbids a schema to redeclare, so the
+// §3.2.7, which §3.2.6.4 no-xsi forbids a schema to redeclare, so the
 // ·expanded name· settles which item is meant with no resolution of its own.
 func instanceAttribute(e Element, local string) (Attribute, bool) {
 	name := xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: local}

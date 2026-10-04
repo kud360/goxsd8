@@ -208,12 +208,12 @@ func TestDescendantAttributedToAResolvingWildcardIsAssessed(t *testing.T) {
 }
 
 // A name that ·resolves· to no top-level declaration leaves the child with no
-// ·governing element declaration·, which is cvc-assess-elt clause 3.3 — ·laxly
-// assessed· against xs:anyType — and no charge of its own, under a STRICT
-// wildcard as much as under a lax one. What an unresolved name under a strict
-// wildcard costs is the ENCLOSING element's [validity] (§3.3.5.1, e-validity
-// clause 1.1.3), which is charged against <root> here and at the CHILD's
-// location, that being where the unresolved name is.
+// ·governing element declaration·, which is ·strictly assessed· (key-sva)
+// clause 3.3 — ·laxly assessed· against xs:anyType — and no charge of its
+// own, under a STRICT wildcard as much as under a lax one. What an unresolved
+// name under a strict wildcard costs is the ENCLOSING element's [validity]
+// (§3.3.5.1, e-validity clause 1.1.3), which is charged against <root> here
+// and at the CHILD's location, that being where the unresolved name is.
 //
 // Under LAX the same document charges nothing anywhere: clause 1.1.3 names a
 // ***strict*** ·wildcard particle· and no other, and the child is ·laxly
@@ -436,7 +436,7 @@ func TestOpenContentAttributedChildUnderASkipWildcardIsNotAssessedAgainstItsReso
 
 // The ·laxly assessed· child is still recursed, unlike a ·skipped· one: its own
 // [[children]] and [[attributes]] are assessed in their turn (cvc-assess-elt
-// clause 3.3 over key-lva clause 2), against xs:anyType, whose {content type}
+// clause 3, key-lva clause 2), against xs:anyType, whose {content type}
 // and {attribute uses} reject none of them. The clause 1.1.3 charge above is
 // the enclosing element's and is not repeated down the subtree: <anything>
 // under <stranger> is ·attributed to· xs:anyType's LAX wildcard, resolves
@@ -467,8 +467,9 @@ func TestALaxlyAssessedChildIsWalkedAndChargesNothingBelowItself(t *testing.T) {
 // A child ·attributed to· a skip Wildcard is not ·assessed· at all (clause
 // 3.2), and neither is any element below it: ·skipped· (§3.10.4.1 key-skipped)
 // holds for every descendant of a skipped item, which the walk gets by not
-// descending at all. The log is what distinguishes this from clause 3.3 — both
-// charge nothing, and only one of them leaves the subtree unvisited.
+// descending at all. The log is what distinguishes this from ·strictly
+// assessed· (key-sva) clause 3.3 — both charge nothing, and only one of them
+// leaves the subtree unvisited.
 func TestDescendantAttributedToASkipWildcardIsNotAssessed(t *testing.T) {
 	schema := dSchema(t, func(b *xsd.SchemaBuilder) {
 		b.AddType(dType(t, "KidType", "", xsd.DerivationRestriction, nil,
