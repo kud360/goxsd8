@@ -3,6 +3,9 @@ package xmltree
 import (
 	"strconv"
 	"strings"
+	"unicode"
+
+	"github.com/kud360/goxsd8/internal/xmlname"
 )
 
 // entityDecl is one general entity declaration of a DOCTYPE's internal
@@ -56,10 +59,7 @@ const (
 // It reads markup and nothing else: a comment, a processing instruction and
 // any markup declaration other than <!ENTITY> are stepped over whole. A
 // declaration it cannot read declares no unparsed entity, which leaves an
-// ·ENTITY value· naming that entity undeclared rather than declared. One
-// not-well-formed declaration is read all the same: a notation name that
-// breaks the Name production only in a non-ASCII character, the GAP(xml)
-// isNotationName carries.
+// ·ENTITY value· naming that entity undeclared rather than declared.
 func doctypeEntities(directive string, standalone bool) (decls []entityDecl, unread bool) {
 	rest, ok := strings.CutPrefix(directive, "DOCTYPE")
 	if !ok {
@@ -400,23 +400,13 @@ func unparsedDef(def []string) bool {
 }
 
 // isNotationName reports whether t, the token an NDataDecl closes on, is an
-// XML 1.0 Name (production [5]) in its ASCII characters: the first is a
-// NameStartChar ([4]: ':', A-Z, '_', a-z) and every later one a NameChar ([4a]:
-// those, '-', '.', 0-9). It rejects the notation names `g&h` and `1gif`.
-//
-// GAP(xml): a non-ASCII character is admitted without the range check of
-// NameStartChar [4] and NameChar [4a], so a notation name breaking Name only
-// in one — '×' (#xD7), say — reads as a Name and its entity as unparsed. The
-// direction is fail-OPEN against the set's one reader: validate's
-// (*walk).entitiesDeclared, reached through xmltree.Reader.HasUnparsedEntity
-// and validate/xmlsrc's element.HasUnparsedEntity, raises no cvc-simple-type
-// clause 3 error for an ·ENTITY value· naming that entity. Owned by #1745.
+// XML 1.0 Name (production [5]): its first character is a NameStartChar ([4])
+// and every later one a NameChar ([4a]), both internal/xmlname's tables. It
+// rejects the notation names `g&h`, `1gif` and `a×b` (U+00D7 is in neither
+// production).
 func isNotationName(t string) bool {
-	for i := 0; i < len(t); i++ {
-		c := t[i]
-		start := c == ':' || c == '_' || ('A' <= c && c <= 'Z') || ('a' <= c && c <= 'z')
-		later := i > 0 && (c == '-' || c == '.' || ('0' <= c && c <= '9'))
-		if c < 0x80 && !start && !later {
+	for i, r := range t {
+		if !unicode.Is(xmlname.NameStartChar, r) && (i == 0 || !unicode.Is(xmlname.NameCharExtra, r)) {
 			return false
 		}
 	}

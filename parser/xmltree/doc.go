@@ -2,8 +2,8 @@
 // origin of every xsderr.Loc in the module.
 //
 // It is independent of the rest of the module (leaf besides xsderr and the
-// stdlib-only internal/xmldecl and internal/xmlenc) and used for both schema documents
-// (parser) and XML instances (validate/xmlsrc).
+// stdlib-only internal/xmldecl, internal/xmlenc and internal/xmlname) and used
+// for both schema documents (parser) and XML instances (validate/xmlsrc).
 //
 // # Contract (implemented in M2)
 //
