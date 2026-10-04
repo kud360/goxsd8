@@ -94,7 +94,6 @@ whole repository from this pass's REST walk (`rows 2231 distinct 2231 min 1 max
 - **`wip/issue-2013` is RETIRED** (#2013 closed `not_planned`). Its content is
   on `main` as `6e5a545` (#2025), so a human may delete it.
 - **`wip/issue-2081` is RETIRED** (`needs-replan`) and holds no code.
-- **`postland-2222`** (1 ahead) is PR #2229, the open post-land pass for #2222.
 - **`meta/post-land-1908`** (PR #1929) and **`meta/post-land-1816`** (PR #1871)
   are open post-land passes, which #2007 owns landing.
 - **`meta/backlog-2026-10-01-b`** prints STRANDED, but PR #2011 squash-merged it
@@ -201,16 +200,15 @@ sequence them. No process issue enters the band.
 - **Refactors:** #2041, #1958, #1865, #1757, #363, #2101 and #2205 are measured
   flat. #989, #1735, #1736, #1701, #848, #845 and #755 are unmeasured.
 - **Process, for the `/retro` due today:** #1868 and #1948, with #1798, #1781
-  and #2096. Then #1812 with #2133 (#2229 folds #2222's brief friction into
-  #1812). Then #2142 with #2021. Then #2223, #2075, #1990, #1993, #1996, #2010
+  and #2096. Then #1812 with #2133 (#1812 now also carries #2222's brief
+  friction). Then #2142 with #2021. Then #2223, #2075, #1990, #1993, #1996, #2010
   and #2047. Then #1913 and #1791.
 
 ### Next planning action
 
-1. **The post-land pass for #2219 (`302688a`) lands its LOG entry.** Its one
-   owed follow-up is already filed as #2231, and PR #2229 (#2222's pass) is open.
-   The orchestrating session lands both and closes #2007's open passes
-   (PR #1929 and PR #1871).
+1. **The post-land pass for #2219 (`302688a`) lands its LOG entry.**
+   Its one owed follow-up is already filed as #2231. The orchestrating session
+   lands that entry and closes #2007's open passes (PR #1929 and PR #1871).
 2. **The owner posts #2081's replan**, as the previous stamp spelled out:
    - restate the body;
    - swap `needs-replan` for `blocked` on the owner's ruling;
