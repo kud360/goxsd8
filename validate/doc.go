@@ -82,12 +82,15 @@
 //   - Union values validate against DirectMembers in order, with the
 //     validating member's whiteSpace driving pattern normalization
 //     (PRINCIPLES 11).
-//   - Assertions are VISITED at every variety level and evaluated at none.
-//     Complex type, list item and list, union member and union, atomic: each
-//     {assertions} site the assessment reaches is recorded as an
-//     [Unevaluated] carrying the rule it answers to — cvc-assertion
-//     (§3.13.4.1) or cvc-assertions-valid (§4.3.13.3) — and none is ever
-//     reported as satisfied (PRINCIPLES 12, cvcassertion.go).
+//   - Assertions are VISITED at every variety level. A complex type's
+//     {assertions} member is EVALUATED where xpath compiles its {test}
+//     over the element's typed attributes, and charged under cvc-assertion
+//     (§3.13.4.1) where it is false or raises; one xpath does not compile
+//     is recorded as an [Unevaluated] under cvc-assertion. List item and
+//     list, union member and union, atomic: each assertions-facet site is
+//     recorded as an [Unevaluated] under cvc-assertions-valid (§4.3.13.3)
+//     and evaluated at none. No unevaluated site is ever reported as
+//     satisfied (PRINCIPLES 12, cvcassertion.go).
 //   - A *Validator is safe for concurrent use by multiple goroutines: [New]
 //     builds it once from an already-finalized [xsd.Schema] and a
 //     [value.Backend], and every [Validator.Assess] call builds and drops
@@ -100,7 +103,7 @@
 // # Contract (M5, landing rule by rule)
 //
 // [Result] carries every violation charged so far as an *xsderr.Error
-// (cvc-* rule + instance and/or schema Loc), in document order. Nine rules
+// (cvc-* rule + instance and/or schema Loc), in document order. Ten rules
 // are charged today, at the ·validation root· and at every descendant the
 // descent assesses — against a ·governing element declaration·, against a
 // ·governing type definition· alone, or, ·laxly assessed·, against xs:anyType.
@@ -380,6 +383,16 @@
 // empty binding would misreport. What a ·nilled· element is to each rule is
 // walk.idElement's doc to say for cvc-id and icCheck.fill's for
 // cvc-identity-constraint.
+//
+// The tenth is cvc-assertion (§3.13.4.1), cvc-complex-type clause 6, at every
+// element whose ·governing type definition· is a complex type with
+// {assertions}: each member whose {test} xpath compiles — the §3.12.6 grammar
+// over the element's attributes, read TYPED by their {attribute uses}' types —
+// is evaluated over their ·actual values· and charged where it is false or
+// raises a dynamic or type error. A member xpath declines, every member of an
+// element one of whose use-matched attributes has no ·actual value·, and one
+// naming a ·defaulted attribute· the element does not carry are recorded as
+// [Unevaluated] under cvc-assertion instead (cvcassertion.go).
 //
 // The rest of the cvc- decisions land on the walk [Validator.Assess]
 // already makes. Non-fatal warnings get an accessor of their own the day

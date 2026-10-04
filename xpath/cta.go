@@ -618,10 +618,11 @@ const (
 // the node that raised. A node that raises therefore reports it rather than
 // deciding for the whole expression: fn:not propagates it and xpath20.md
 // §3.6's truth tables say what and/or do with it, and only
-// [CTATest.Evaluate] substitutes false for it.
+// [CTATest.Evaluate] and [AssertionTest.Evaluate] substitute false for it —
+// the second because cvc-assertion's subject is the {test} too.
 //
-// ctaFalse is the zero value, which is what the nil root of a zero CTATest
-// answers.
+// ctaFalse is the zero value, which is what the nil root of a zero CTATest or
+// AssertionTest answers.
 type ctaAnswer byte
 
 const (
@@ -643,7 +644,7 @@ func ctaAnswerOf(b bool) ctaAnswer {
 // effective boolean value of its operand, fn:not raises the same error."
 // fn:not is a function and not a logical operator, so no truth table lets it
 // absorb its operand's error into a boolean; only the {test} as a whole
-// absorbs it, at [CTATest.Evaluate].
+// absorbs it, at [CTATest.Evaluate] or [AssertionTest.Evaluate].
 func (a ctaAnswer) negated() ctaAnswer {
 	if a == ctaError {
 		return ctaError
@@ -910,7 +911,8 @@ type ctaAtoms struct{ vs []value.Value }
 // operand under a cast written without `?`, from a cast over a sequence of two
 // or more items, or from a cast this processor does not support. Which of them
 // it was is not carried: key-cta-ta-select clause 2 (§3.12.4) gives them all
-// the same consequence, and the {test} is where that consequence is applied.
+// the same consequence, as cvc-assertion (§3.13.4.1) does for an assertion,
+// and the {test} is where that consequence is applied.
 type ctaRaised struct{}
 
 func (ctaAtoms) ctaItem()  {}

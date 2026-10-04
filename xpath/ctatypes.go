@@ -266,10 +266,11 @@ func (t ctaTypes) typedAttribute(st *xsd.SimpleType) bool {
 //   - ctaTypeSettled carries the type both operands are converted into.
 //   - ctaTypeErrored is err:XPTY0004 — no one type serves both operands, which
 //     is a raised type error and so a ctaTypeError node, decided false for the
-//     whole {test} by key-cta-ta-select clause 2.
-//   - ctaTypeDeclined is [CompileCTATest]'s WITHHOLD: this engine will not
-//     decide the pair at all, and the caller's ·governing type definition· is
-//     left undetermined rather than settled on a wrong answer.
+//     whole {test} by key-cta-ta-select clause 2 or by cvc-assertion.
+//   - ctaTypeDeclined is the compile-time WITHHOLD of [CompileCTATest] and
+//     [CompileAssertionTest]: this engine will not decide the pair at all, and
+//     the caller leaves the element's ·governing type definition· undetermined
+//     or the assertion unevaluated rather than settled on a wrong answer.
 //
 // ctaTypeErrored is the zero value, so a fault that returns no type reports
 // the error direction and never the withhold by accident.
