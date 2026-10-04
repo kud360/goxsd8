@@ -156,7 +156,7 @@ func (w *walk) declaredAttribute(a Attribute, e Element, d xsd.AttributeDeclarat
 			a.Name())
 		return nil, false
 	}
-	w.simpleAssertions(st, a.Loc())
+	w.simpleAssertions(st, "assessing attribute", a.Name(), a.Loc())
 	decided, verdict := w.stringValid(st, a.Value(), e, a.Loc())
 	if !decided {
 		w.declineAttribute(a, ruleCvcAttribute, "3",
@@ -538,7 +538,7 @@ func (w *walk) defaultedAttribute(e Element, u xsd.AttributeUse, vc xsd.ValueCon
 			vc.LexicalForm(), u.DeclarationName(), e.Name())
 		return
 	}
-	w.simpleAssertions(st, e.Loc())
+	w.simpleAssertions(st, "assessing attribute use", u.DeclarationName(), e.Loc())
 	var cause error
 	decided := true
 	if !isSpecial(st) {

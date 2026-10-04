@@ -1,15 +1,21 @@
 package validate
 
 import (
+	"fmt"
+
+	"github.com/kud360/goxsd8/value"
+	"github.com/kud360/goxsd8/xpath"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
 )
 
-// This file visits every {assertions} site the assessment reaches and records
-// it as an [Unevaluated], never as a satisfied check. Nothing here charges a
-// violation and nothing here reads an instance value: there is no XPath
-// evaluator for an assertion's {test} yet (#1042), and the two GAP markers
-// below state, separately, what each of the two hooks withholds.
+// This file settles cvc-complex-type (§3.4.4.2) clause 6 — each assertion in
+// the {assertions} of a complex ·governing type definition· — by EVALUATING its
+// {test} wherever xpath compiles it, and records every assertions-facet site of
+// a simple type as an [Unevaluated] without evaluating any. Both halves decline
+// through [walk.decline], so every site this file does not decide is recorded
+// and logged at the item it was reached at, and the two GAP markers below
+// state, separately, what each of the two hooks still withholds.
 //
 // The two rules are DISTINCT and are never conflated. cvc-assertion
 // (§3.13.4.1) is the complex-type variety, reached from cvc-complex-type
@@ -55,63 +61,237 @@ const ruleCvcAssertion xsderr.Rule = "cvc-assertion"
 // misreport every simple-type assertion the day evaluation lands.
 const ruleCvcAssertionsValid xsderr.Rule = "cvc-assertions-valid"
 
-// elementAssertions records one site per assertion in the {assertions} of e's
-// ·governing type definition·, which is cvc-complex-type (§3.4.4.2) clause 6:
-// "E is ·valid· with respect to each of the assertions in T.{assertions} as
-// per Assertion Satisfied (§3.13.4.1)". A governing type that is not a Complex
-// Type Definition has no {assertions} property at all — a simple one's
-// assertions are facets, and reach ruleCvcAssertionsValid instead.
+// elementAssertions settles cvc-complex-type (§3.4.4.2) clause 6 for e: "E is
+// ·valid· with respect to each of the assertions in T.{assertions} as per
+// Assertion Satisfied (§3.13.4.1)", T being e's ·governing type definition·. A
+// governing type that is not a Complex Type Definition has no {assertions}
+// property at all — a simple one's assertions are facets, and reach
+// ruleCvcAssertionsValid instead.
 //
 // {assertions} is read whole and its base chain is never walked: cos-ct-extends
 // clause 1.7 and derivation-ok-restriction clause 5 both make B.{assertions} a
 // prefix of T.{assertions}, so unioning the chain here would report every
-// inherited assertion once per derivation step.
+// inherited assertion once per derivation step. Every one of them, inherited
+// or not, is compiled against T's OWN {attribute uses} ([walk.assertionTypes]),
+// because the instance it reads is e's as T types it: a restriction that
+// narrows an attribute's type narrows it for the base's assertions too. Each is
+// compiled per element and cached nowhere.
 //
-// GAP(validate): cvc-complex-type clause 6 is not evaluated — cvc-assertion
-// (§3.13.4.1) needs an XPath evaluator for an assertion's {test} and this
-// module has none (#1042) — so the element is neither charged under
-// cvc-assertion nor shown ·valid· with respect to it. Fail-open: the withheld
-// value is clause 6's own verdict, whose whole consumer set inside this
-// package is w.res.violations and its one reader [Result.Violations]: neither
-// is written here, both charge on a violation PRESENT, and no other reader of
-// the walk consults clause 6's outcome. The skip can therefore only cost a
-// rejection and can manufacture none.
+// Each assertion takes exactly one of three outcomes: DECLINED, where
+// [xpath.CompileAssertionTest] reports false or e's attributes cannot be read;
+// CHARGED under cvc-assertion, where [xpath.AssertionTest.Evaluate] reports
+// false — the {test} was false or raised a dynamic or type error, which
+// cvc-assertion's opening sentence treats alike ("evaluates to true ... without
+// raising any dynamic error or type error"); and SATISFIED otherwise. The log
+// names no clause: cvc-assertion's verdict is that opening sentence, and its
+// numbered clauses only build the evaluation's context.
+//
+// GAP(validate): an assertion this package does not evaluate is DECLINED —
+// recorded as an [Unevaluated] under cvc-assertion at e through
+// [walk.decline], never charged and never shown satisfied. The residue is: a
+// {test} xpath declines, whose GAP(xpath) markers name the grammar and type
+// residue (`$value`, the value comparisons, paths, the function library);
+// every assertion of an e one of whose attributes matching an {attribute use}
+// has no ·actual value· ([walk.assertionValues]); and a {test} naming a
+// ·defaulted attribute· e does not carry, whether the partial ·PSVI·
+// cvc-assertion clause 1.2 builds from holds one being unruled
+// ([walk.assertionTypes]). Fail-open: the withheld value is clause 6's own
+// verdict, whose whole consumer set inside this package is w.res.violations
+// and its one reader [Result.Violations], which charge on a violation PRESENT,
+// so a decline can only cost a rejection and can manufacture none. (#1042)
 func (w *walk) elementAssertions(e Element, g governance) {
 	ct := g.complexType()
 	if ct == nil {
 		return
 	}
 	assertions := ct.Assertions()
+	if len(assertions) == 0 {
+		return
+	}
+	attrs := e.Attributes()
+	values, lacking, valued := w.assertionValues(e, attrs, *ct)
 	for i, a := range assertions {
-		w.res.unevaluated = append(w.res.unevaluated, newUnevaluated(ruleCvcAssertion, e.Loc(),
-			"assertion %d of %d in the {assertions} of the ·governing type definition· %s, whose {test} is %q, was not evaluated, so the element %s is not shown ·valid· with respect to it as cvc-complex-type clause 6 requires (Assertion Satisfied, §3.13.4.1)",
-			i+1, len(assertions), typeName(*ct), a.Test().Expression(), e.Name()))
+		site := fmt.Sprintf("assertion %d of %d in the {assertions} of the ·governing type definition· %s, whose {test} is %q,",
+			i+1, len(assertions), typeName(*ct), a.Test().Expression())
+		if !valued {
+			w.decline("assessing element", e.Name(), e.Loc(), ruleCvcAssertion, "",
+				"%s was not evaluated: the attribute %s of the element %s has no ·actual value· for the data model instance cvc-assertion clause 1 builds, so whether the element is ·valid· with respect to it, as cvc-complex-type clause 6 requires, is undecided",
+				site, lacking, e.Name())
+			continue
+		}
+		test, compiled := xpath.CompileAssertionTest(a.Test(), w.schema, w.assertionTypes(attrs, *ct))
+		if !compiled {
+			w.decline("assessing element", e.Name(), e.Loc(), ruleCvcAssertion, "",
+				"%s was not evaluated: this engine's XPath evaluator declined it, so whether the element %s is ·valid· with respect to it, as cvc-complex-type clause 6 requires (Assertion Satisfied, §3.13.4.1), is undecided",
+				site, e.Name())
+			continue
+		}
+		if test.Evaluate(w.backend, w.schema, values.yield) {
+			w.logDecision("assessing element", e.Name(), e.Loc(), ruleCvcAssertion, "", "satisfied")
+			continue
+		}
+		w.res.violations = append(w.res.violations, xsderr.New(ruleCvcAssertion, e.Loc(),
+			"the element %s is not ·valid· with respect to %s which did not evaluate to true without raising a dynamic or type error, as Assertion Satisfied (§3.13.4.1) requires of each assertion cvc-complex-type clause 6 quantifies over",
+			e.Name(), site))
+		w.logDecision("assessing element", e.Name(), e.Loc(), ruleCvcAssertion, "", "charged")
 	}
 }
 
-// simpleAssertions records every assertions-facet site st carries, at loc — the
-// location of the attribute or element whose lexical is being decided against
-// st, an assertion component carrying no Loc of its own (#35).
+// assertionType is the {type definition} of the {attribute declaration} of
+// the use u, which an assertion {test} reads that use's attribute as. resolved
+// is false where the declaration or the type does not resolve to a simple
+// type; typed is false there and for a ·special· type (isSpecial) too, whose
+// lexical mapping is not a function and which xpath declines besides. It is
+// the ONE lookup [walk.assertionTypes] and [walk.assertionValues] share, so
+// the type a {test} is compiled against and the type its values are mapped
+// under cannot disagree, which [xpath.TypedAttributes] makes the caller's
+// obligation.
+//
+// The two results are apart because the two readers treat them apart: an
+// unresolved type leaves an attribute of that use with no ·actual value·,
+// while a ·special· one leaves it with an ·actual value· no {test} this engine
+// compiles can read.
+func (w *walk) assertionType(u xsd.AttributeUse) (st *xsd.SimpleType, resolved, typed bool) {
+	d, resolved := w.schema.ResolvedAttributeDeclaration(u)
+	if !resolved {
+		return nil, false, false
+	}
+	st, simple := w.schema.ResolvedSimpleType(d.TypeDefinition())
+	if !simple {
+		return nil, false, false
+	}
+	return st, true, !isSpecial(st)
+}
+
+// assertionTypes is the [xpath.AttributeTypes] of an element whose
+// [[attributes]] are attrs and whose ·governing type definition· is ct: the
+// type of the {attribute use} of ct matching the name (cvc-complex-type clause
+// 2.1's match, attributeUseNamed), on [walk.assertionType]'s terms. A name no
+// use matches has no type fixed at compile time — only an {attribute wildcard}
+// can admit it — and answers false.
+//
+// So does the name of a ·defaulted attribute· of the element
+// ([walk.defaultedConstraint], key-dflt-att), under the GAP elementAssertions
+// states: whether the instance holds it is unruled, so a {test} naming it is
+// declined rather than read as the empty sequence. A use the element does not
+// carry and that supplies no default answers its type: the attribute is
+// absent, and the empty sequence is what the {test} reads.
+func (w *walk) assertionTypes(attrs []Attribute, ct xsd.ComplexType) xpath.AttributeTypes {
+	return func(name xsd.QName) (*xsd.SimpleType, bool) {
+		u, matched := attributeUseNamed(ct.AttributeUses(), name)
+		if !matched {
+			return nil, false
+		}
+		if _, defaulted := w.defaultedConstraint(u, attrs); defaulted {
+			return nil, false
+		}
+		st, _, typed := w.assertionType(u)
+		return st, typed
+	}
+}
+
+// assertionValue is one attribute's ·actual value· as an assertion {test}
+// reads it.
+type assertionValue struct {
+	name xsd.QName
+	v    value.Value
+}
+
+// assertionInput is the typed attributes one element's assertions read, in
+// document order.
+type assertionInput []assertionValue
+
+// yield is the input as an [xpath.TypedAttributes].
+func (in assertionInput) yield(yield func(xsd.QName, value.Value) bool) {
+	for _, a := range in {
+		if !yield(a.name, a.v) {
+			return
+		}
+	}
+}
+
+// assertionValues is the typed attribute input of e's assertions: the ·actual
+// value· of each attribute of attrs that matches an {attribute use} of ct, in
+// document order, mapped under the type [walk.assertionType] resolves for that
+// use. It reports false, naming the first attribute lacking one, where any
+// such attribute has no ·actual value·: its declaration or {type definition}
+// does not resolve, or cvc-attribute clause 3 charged or declined its lexical
+// — String Valid ([walk.stringValid]), the same check re-run here because the
+// walk keeps no ·actual values·. Omitting such an attribute instead would make
+// `@a` the empty sequence and could fabricate a charge.
+//
+// An attribute matching no use is not read: no {test}
+// [xpath.CompileAssertionTest] admits can name it ([walk.assertionTypes]), so
+// its own ·actual value· decides nothing here. One whose use
+// [walk.assertionType] does not type is checked and not read, on the same
+// grounds.
+func (w *walk) assertionValues(e Element, attrs []Attribute, ct xsd.ComplexType) (assertionInput, xsd.QName, bool) {
+	var in assertionInput
+	for _, a := range attrs {
+		u, matched := attributeUseNamed(ct.AttributeUses(), a.Name())
+		if !matched {
+			continue
+		}
+		st, resolved, typed := w.assertionType(u)
+		if !resolved {
+			return nil, a.Name(), false
+		}
+		decided, verdict := w.stringValid(st, a.Value(), e, a.Loc())
+		if !decided || verdict != nil {
+			return nil, a.Name(), false
+		}
+		if !typed {
+			continue
+		}
+		v, err := value.ValidateLexical(w.backend, w.schema, st, a.Value(), elementContext{owner: e})
+		if err != nil {
+			return nil, a.Name(), false
+		}
+		in = append(in, assertionValue{name: a.Name(), v: v})
+	}
+	return in, xsd.QName{}, true
+}
+
+// simpleAssertions records every assertions-facet site st carries through
+// [walk.decline], under event for the item named name at loc — the attribute
+// or element whose lexical is being decided against st, an assertion component
+// carrying no Loc of its own (#35).
 //
 // GAP(validate): DIRECTION UNESTABLISHED. cvc-assertions-valid (§4.3.13.3) is
-// not evaluated (#1042), so the assertions facet contributes nothing to the
-// Datatype Valid (§4.1.4) verdict its clause 3 folds it into. The withheld
-// value is a conjunct of datatype-validity, and its readers are NOT only
+// not evaluated at all — a facet assertion reads its value through `$value`
+// (clause 1.1), which the grammar xpath evaluates has no production for
+// (#1042) — so the assertions facet contributes nothing to the Datatype Valid
+// (§4.1.4) verdict its clause 3 folds it into. The withheld value is a
+// conjunct of datatype-validity, and its readers are NOT only
 // w.res.violations and [Result.Violations] — which charge on a violation
-// PRESENT and so lose a rejection. [walk.validatingType] and [walk.roleValues]
-// (cvcid.go) classify a value by its ·validating type·, which cvc-datatype-valid
-// clause 2.3 makes the FIRST member of a union the value is Datatype Valid
-// against: an unchecked assertion can leave an earlier member ·validating· that
-// the spec rejects, binding an ·ID value· the spec's §3.17.5.2 table has none
-// of, which cvc-id clause 2 then charges as a duplicate, or an ·ENTITY value·
-// String Valid clause 3 then charges as undeclared (cvcsimpletype.go). [walk.keyMember]
-// (cvcidentityconstraint.go) reads a PRESENT [schema actual value] where the
-// spec's is ·absent· for the same reason, lengthening a ·key-sequence· into the
-// duplicate arm of cvc-identity-constraint clause 4. Both of those are FALSE
-// REJECTS, so this hook is not fail-open, and the direction over the whole
-// consumer set is not established here (STYLE P3a).
-func (w *walk) simpleAssertions(st *xsd.SimpleType, loc xsderr.Loc) {
-	w.res.unevaluated = append(w.res.unevaluated, w.assertionSites(st, loc)...)
+// PRESENT and so lose a rejection. [walk.validatingType] and
+// [walk.roleValues] (cvcid.go) classify a value by its ·validating type·,
+// which cvc-datatype-valid clause 2.3 makes the FIRST member of a union the
+// value is Datatype Valid against: an unchecked assertion can leave an
+// earlier member ·validating· that the spec rejects, binding an ·ID value·
+// the spec's §3.17.5.2 table has none of, which cvc-id clause 2 then charges
+// as a duplicate, or an ·ENTITY value· String Valid clause 3 then charges as
+// undeclared (cvcsimpletype.go). [walk.keyMember] (cvcidentityconstraint.go)
+// reads a PRESENT [schema actual value] where the spec's is ·absent· for the
+// same reason, lengthening a ·key-sequence· into the duplicate arm of
+// cvc-identity-constraint clause 4. Both of those are FALSE REJECTS, so this
+// hook is not fail-open, and the direction over the whole consumer set is
+// not established here (STYLE P3a).
+func (w *walk) simpleAssertions(st *xsd.SimpleType, event string, name xsd.QName, loc xsderr.Loc) {
+	for _, s := range w.assertionSites(st) {
+		w.decline(event, name, loc, ruleCvcAssertionsValid, "",
+			"assertion %d of %d in the {value} of the assertions facet of the simple type %s, whose {test} is %q, was not evaluated, so the value at this location is not shown facet-valid with respect to that facet as cvc-assertions-valid requires (Datatypes §4.3.13.3, reached from cvc-datatype-valid clause 3)",
+			s.i+1, s.n, typeName(s.st), s.test)
+	}
+}
+
+// assertionSite is one member of the {value} of one assertions facet: the
+// simple type the facet is effective on, the member's position i among n, and
+// its {test}'s {expression}.
+type assertionSite struct {
+	st   *xsd.SimpleType
+	i, n int
+	test string
 }
 
 // assertionSites is the site set of one simple type, in cvc-datatype-valid
@@ -141,32 +321,32 @@ func (w *walk) simpleAssertions(st *xsd.SimpleType, loc xsderr.Loc) {
 // simple-type reference, unreachable for a finalized Schema for the reason
 // xsd's validlyDerived states. They are the safe answer for a resolver that is
 // not one, which [xsd.SimpleType.Variety] admits by taking a TypeResolver.
-func (w *walk) assertionSites(st *xsd.SimpleType, loc xsderr.Loc) []Unevaluated {
+func (w *walk) assertionSites(st *xsd.SimpleType) []assertionSite {
 	if st == nil {
 		return nil
 	}
 	variety, err := st.Variety(w.schema)
 	if err != nil {
-		return w.ownAssertionSites(st, loc)
+		return w.ownAssertionSites(st)
 	}
-	var sites []Unevaluated
+	var sites []assertionSite
 	switch variety.(type) {
 	case xsd.List:
 		item, err := st.Item(w.schema)
 		if err != nil {
-			return w.ownAssertionSites(st, loc)
+			return w.ownAssertionSites(st)
 		}
-		sites = w.assertionSites(item, loc)
+		sites = w.assertionSites(item)
 	case xsd.Union:
 		members, err := st.Members(w.schema)
 		if err != nil {
-			return w.ownAssertionSites(st, loc)
+			return w.ownAssertionSites(st)
 		}
 		for _, m := range members {
-			sites = append(sites, w.assertionSites(m, loc)...)
+			sites = append(sites, w.assertionSites(m)...)
 		}
 	}
-	return append(sites, w.ownAssertionSites(st, loc)...)
+	return append(sites, w.ownAssertionSites(st)...)
 }
 
 // ownAssertionSites is one type's OWN assertions-facet sites, read off
@@ -175,21 +355,27 @@ func (w *walk) assertionSites(st *xsd.SimpleType, loc xsderr.Loc) []Unevaluated 
 // Assertions followed by the restriction's own, and cos-assertions-restriction
 // (§4.3.13.4) requires that prefix, so the effective facet already carries
 // every inherited assertion exactly once.
-func (w *walk) ownAssertionSites(st *xsd.SimpleType, loc xsderr.Loc) []Unevaluated {
+//
+// An EffectiveFacets error yields no sites, which is where assertionSites'
+// "those sites survive the break" stops applying: the type's own facets are
+// unreadable too. It is unreachable for a finalized Schema, whose src-resolve
+// pass resolves every {base type definition} the effective facets fold over,
+// on the terms assertionSites states for its three arms; and the type fails
+// value.ValidateLexical at every recording site, which declines there, so the
+// lost sites under-report a type that is declined anyway.
+func (w *walk) ownAssertionSites(st *xsd.SimpleType) []assertionSite {
 	facets, err := st.EffectiveFacets(w.schema)
 	if err != nil {
 		return nil
 	}
-	var sites []Unevaluated
+	var sites []assertionSite
 	for _, ef := range facets {
 		assertions, isAssertions := ef.Facet().Assertions()
 		if !isAssertions {
 			continue
 		}
 		for i, a := range assertions {
-			sites = append(sites, newUnevaluated(ruleCvcAssertionsValid, loc,
-				"assertion %d of %d in the {value} of the assertions facet of the simple type %s, whose {test} is %q, was not evaluated, so the value at this location is not shown facet-valid with respect to that facet as cvc-assertions-valid requires (Datatypes §4.3.13.3, reached from cvc-datatype-valid clause 3)",
-				i+1, len(assertions), typeName(st), a.Test().Expression()))
+			sites = append(sites, assertionSite{st: st, i: i, n: len(assertions), test: a.Test().Expression()})
 		}
 	}
 	return sites

@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- A schema whose complex type carries an <xs:assert>. This engine evaluates
-     no {test}, so an instance of it is charged nothing and records one
+<!-- A schema whose complex type carries an <xs:assert> whose {test} is a
+     quantified expression, outside what this engine's XPath evaluator
+     compiles. An instance of it is charged nothing and records one
      Result.Unevaluated under cvc-assertion: the undecided outcome the CLI
      must not report as a clean pass. -->
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
@@ -12,7 +13,7 @@
 
   <xs:complexType name="BoxType">
     <xs:attribute name="width" type="xs:int"/>
-    <xs:assert test="@width &gt; 0"/>
+    <xs:assert test="every $w in @width satisfies $w &gt; 0"/>
   </xs:complexType>
 
 </xs:schema>

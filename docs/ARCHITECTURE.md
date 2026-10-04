@@ -84,7 +84,8 @@ identifier for any of them and they import nothing from this module, so the
 edges drawn above do not exist yet in `go list -deps`. Read every
 present-tense sentence in their sections below as "will", not "does".
 `xpath` has left this note: it exports the CTA compile, evaluate and
-statically-check entry points and imports `xsd`, `value`, `regex` and
+statically-check entry points, and the assertion compile and evaluate ones,
+and imports `xsd`, `value`, `regex` and
 `xsderr` for real (its section says which tiers are shipped).
 
 **[2] The infoset seam, the assessment skeleton and the XML adapter ship;
@@ -507,17 +508,22 @@ otherwise stdlib.
 
 ## XPath (`xpath`)
 
-**Status: the CTA required subset ships; the rest is the destination.**
-`go doc` renders four identifiers — `CompileCTATest`, `CTATest`,
-`Attributes` and `CTATestStaticError` — which compile, evaluate and
+**Status: the CTA required subset ships, and over the same grammar the
+first slice of assertion evaluation; the rest is the destination.**
+`go doc` renders eight identifiers. Four — `CompileCTATest`, `CTATest`,
+`Attributes` and `CTATestStaticError` — compile, evaluate and
 statically check §3.12.6's `ta-Test` grammar for a Type Alternative's
 `{test}`. They have two consumers in two phases: `parser` calls
 `CTATestStaticError` at schema construction, charging `ta-props-correct`
 clause 2 over `xpath-valid` clause 2 for a `{test}` with an XPath static
 error — wrapping the `*xsderr.Error` this package returns, which carries
 the XPath code (`err:XPST0081`) as its own rule — and `validate` compiles
-and evaluates the same `{test}` at ·assessment· time. Read the tiers below
-as "does" for tier 1 and "will" for tiers 2 and 3.
+and evaluates the same `{test}` at ·assessment· time. Four more —
+`CompileAssertionTest`, `AssertionTest`, `AttributeTypes` and
+`TypedAttributes` — compile and evaluate an assertion `{test}` written in
+that grammar over the element's TYPED attributes, for `validate`'s
+`cvc-assertion` charge. Read the tiers below as "does" for tier 1 and for
+tier 2's first slice, and "will" for the rest.
 
 Full XPath 2.0 is the destination; the engine grows outward from the
 XSD-required subset:
@@ -526,7 +532,9 @@ XSD-required subset:
    shipped, less the shapes that compile-time-decline, which `xpath/doc.go`
    enumerates,
 2. assertion essentials — axes, predicates, quantified expressions, typed
-   comparisons, the F&O function core,
+   comparisons, the F&O function core; its first slice, tier 1's grammar
+   over typed attributes, ships, and `xpath/doc.go` enumerates what it
+   declines,
 3. the full grammar and function library, tracked by its own conformance
    lane.
 
@@ -535,7 +543,9 @@ static analyzer sees. **Fail-open**: an unsupported construct can never
 cause a false rejection; every fallback site is a greppable
 `// GAP(xpath): …`. A CTA `{test}` outside the implemented subset is
 declined at COMPILE time, and its caller withholds the element's
-·governing type definition· rather than reading the test as unmatched.
+·governing type definition· rather than reading the test as unmatched; an
+assertion `{test}` outside it is declined the same way, and its caller
+records it as unevaluated.
 Dynamic errors (type mismatch, bad pattern) make an assertion definitively
 unsatisfied and a CTA `{test}` definitively false (`key-cta-ta-select`
 clause 2) — they are NOT fail-open (PRINCIPLES 20). `$value` binds a typed

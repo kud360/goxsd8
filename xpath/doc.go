@@ -31,8 +31,19 @@
 //     grammar over the same traversal, which is a different question
 //     with a different owner — see below.
 //  2. Assertion essentials: axes, predicates, quantified expressions,
-//     typed comparisons, the F&O function core — M6. PLANNED; nothing
-//     of it is exported.
+//     typed comparisons, the F&O function core — M6. FIRST SLICE
+//     SHIPPED: CompileAssertionTest compiles an assertion {test} written
+//     in tier 1's grammar over the element's TYPED attributes
+//     (AttributeTypes; cvc-assertion clause 1, §3.13.4.1), and
+//     AssertionTest.Evaluate decides it over their ·actual values·
+//     (TypedAttributes). It declines what tier 1 declines, plus a
+//     wildcard NameTest, an attribute with no fixed atomic type (a list,
+//     a union, a ·special· type, an xs:QName or xs:NOTATION primitive),
+//     a cast from a typed attribute outside the xs:string family, and a
+//     general comparison in a date/time type, which has no implicit
+//     timezone to order by (F&O §10.4). `$value`, the value comparisons,
+//     axes, predicates, quantified expressions and the function core are
+//     PLANNED (#1042).
 //  3. The full grammar (docs/specs/md/xpath20.md) and function library
 //     (docs/specs/md/xpath-functions.md) — M7 onward, ratcheted.
 //     PLANNED.
@@ -53,9 +64,10 @@
 // definition· rather than assessing it against a guess — never
 // "unmatched", which would fall through to another alternative or to
 // the {default type definition} and select a type the rule may not have
-// selected. An assertion whose expression falls outside the implemented
-// subset evaluates as satisfied. Every fail-open site carries a
-// greppable marker:
+// selected. An assertion whose {test} falls outside the implemented
+// subset is DECLINED at compile time too, and its caller records it as
+// unevaluated — never satisfied and never charged. Every fail-open site
+// carries a greppable marker:
 //
 //	// GAP(xpath): <construct>
 //

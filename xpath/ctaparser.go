@@ -17,8 +17,10 @@ import (
 // parses, and the whole grammar is both reached and evaluated: no method here
 // is a stub, because no compile-time decline is production-level. xpath/doc.go
 // owns the enumeration of what declines; every decline reaching this file is
-// ctaTypes answering ctaTypeDeclined for a comparison type or a cast target it
-// will not serve, which the production that asked propagates unchanged.
+// ctaTypes answering ctaTypeDeclined for a comparison type, a cast target or a
+// cast operand it will not serve, or the façade (ctaFacade) declining a
+// NameTest or a settled comparison type, which the production that asked
+// propagates unchanged.
 
 // ctaFunctionNS is the default function namespace of a {test}'s static context
 // (xpath-valid clause 2.2.4, §3.13.6.2), which an unprefixed [12]
@@ -481,6 +483,10 @@ type ctaParser struct {
 	pos   int
 	names ctaNames
 	types ctaTypes
+	// facade compiles each [17] ta-AttrName, which is the one production whose
+	// node differs between the façades, and admits each settled comparison type
+	// (compileCTATest).
+	facade ctaFacade
 	// defect is what name resolution found wrong, which is the one defect kind
 	// the walk itself has to carry: every other one is the false a production
 	// returns. It lives here rather than on ctaNames because a value receiver
@@ -608,6 +614,9 @@ func (p *ctaParser) booleanExpr() (ctaExpr, bool) {
 	if typing == ctaTypeErrored {
 		return ctaTypeError{}, true
 	}
+	if !p.facade.admitsComparison(p.types, comparison) {
+		return nil, false
+	}
 	return ctaCompare{op: op, comparison: comparison, left: left, right: right}, true
 }
 
@@ -693,7 +702,7 @@ func (p *ctaParser) castExpr() (ctaValue, bool) {
 		allowsEmpty = true
 	}
 	target, admitted := p.types.castTarget(p.typeName(text))
-	if !admitted {
+	if !admitted || !p.types.castsFrom(v) {
 		return nil, false
 	}
 	return ctaCast{operand: v, target: target, allowsEmpty: allowsEmpty}, true
@@ -727,7 +736,7 @@ func (p *ctaParser) constructorFunction() (ctaValue, bool) {
 	}
 	p.advance()
 	target, admitted := p.types.castTarget(name)
-	if !admitted {
+	if !admitted || !p.types.castsFrom(arg) {
 		return nil, false
 	}
 	return ctaCast{operand: arg, target: target, allowsEmpty: true}, true
@@ -760,6 +769,8 @@ func (p *ctaParser) simpleValue() (ctaValue, bool) {
 // and xpath20.md's [37] Wildcard, which [17] reaches because it names NameTest
 // rather than a QName. ctaWildcardTok is accepted HERE and by no other
 // production, so no other position in this grammar admits a `*`.
+//
+// The node the resolved NameTest becomes is p.facade's, which may decline it.
 func (p *ctaParser) attrName() (ctaValue, bool) {
 	switch {
 	case p.at(ctaAtTok):
@@ -774,10 +785,10 @@ func (p *ctaParser) attrName() (ctaValue, bool) {
 	switch p.peek(0).kind {
 	case ctaNameTok:
 		p.advance()
-		return ctaAttr{test: ctaExactName{name: p.attributeName(text)}}, true
+		return p.facade.attribute(ctaExactName{name: p.attributeName(text)}, p.types)
 	case ctaWildcardTok:
 		p.advance()
-		return ctaAttr{test: p.wildcardTest(text)}, true
+		return p.facade.attribute(p.wildcardTest(text), p.types)
 	default:
 		return nil, false
 	}

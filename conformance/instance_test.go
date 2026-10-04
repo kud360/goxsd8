@@ -327,13 +327,47 @@ func TestDecidedNotValidEnumeratesTheDecidableCharges(t *testing.T) {
 		{"cvc-complex-type alone", []*xsderr.Error{charge(ruleCvcComplexType)}, true},
 		{"cvc-attribute alone", []*xsderr.Error{charge(ruleCvcAttribute)}, true},
 		{"cvc-au alone", []*xsderr.Error{charge(ruleCvcAu)}, true},
-		{"a rule outside the enumeration", []*xsderr.Error{charge("cvc-assertion")}, false},
+		{"cvc-assertion alone", []*xsderr.Error{charge(ruleCvcAssertion)}, true},
+		{"a rule outside the enumeration", []*xsderr.Error{charge("cvc-assertions-valid")}, false},
 		{"two charges, both enumerated", []*xsderr.Error{charge(ruleCvcAttribute), charge(ruleCvcAu)}, true},
-		{"one enumerated, one not", []*xsderr.Error{charge(ruleCvcElt), charge("cvc-assertion")}, false},
+		{"one enumerated, one not", []*xsderr.Error{charge(ruleCvcElt), charge("cvc-assertions-valid")}, false},
 	}
 	for _, tc := range cases {
 		if got := decidedNotValid(tc.violations); got != tc.want {
 			t.Errorf("%s: decidedNotValid = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+// TestInstanceExecutorDecidesEvaluatedAssertions proves the lane reads
+// cvc-assertion as a verdict (#2232): an {assertions} member whose {test}
+// validate evaluates decides the case both ways, at the root and below it —
+// "not valid" where the {test} is false or raises a type error, "valid" where
+// it holds. With cvc-assertion outside decidableRules the invalid rows decline
+// as undecided-rule and this test fails.
+func TestInstanceExecutorDecidesEvaluatedAssertions(t *testing.T) {
+	exec := newInstanceExec().status()
+	const typed = `<xs:complexType name="T"><xs:attribute name="x" type="xs:integer"/><xs:attribute name="b" type="xs:boolean"/>` +
+		`<xs:assert test="@x > 300"/></xs:complexType>`
+	const raises = `<xs:complexType name="T"><xs:attribute name="b" type="xs:boolean"/><xs:assert test="@b = 'true'"/></xs:complexType>`
+	for _, tc := range []struct {
+		why, schemaBody, instance string
+		valid                     bool
+	}{
+		{"a false {test} at the root", `<xs:element name="known" type="T"/>` + typed, `<known x="200"/>`, false},
+		{"a {test} raising err:XPTY0004 at the root", `<xs:element name="known" type="T"/>` + raises, `<known b="true"/>`, false},
+		{
+			"a false {test} below the root",
+			`<xs:element name="known"><xs:complexType><xs:sequence><xs:element name="a" type="T"/></xs:sequence></xs:complexType></xs:element>` + typed,
+			`<known><a x="1"/></known>`, false,
+		},
+		{"a true {test} at the root", `<xs:element name="known" type="T"/>` + typed, `<known x="500"/>`, true},
+	} {
+		if !exec(instanceCase(t, tc.schemaBody, tc.instance, tc.valid)).IsPass() {
+			t.Errorf("%s: the executor must agree with a suite-%s case", tc.why, map[bool]string{true: "valid", false: "invalid"}[tc.valid])
+		}
+		if exec(instanceCase(t, tc.schemaBody, tc.instance, !tc.valid)).IsPass() {
+			t.Errorf("%s: the executor must Fail under a flipped expectation", tc.why)
 		}
 	}
 }

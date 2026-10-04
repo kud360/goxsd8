@@ -1530,8 +1530,9 @@ func TestInstanceExecutorChargesAbstractComplexType(t *testing.T) {
 // the empty violation list as "valid": an identity constraint whose
 // {selector} icpath does not compile, an assertions facet, whose {test}
 // validate records and never evaluates, and a complex type's {assertions}
-// (cvc-complex-type clause 6), which validate's elementAssertions records the
-// same way. Each refusal names the rules of the records behind it (#2106):
+// (cvc-complex-type clause 6) whose {test} true() — a function call — is
+// outside what validate's XPath evaluator compiles, so elementAssertions
+// declines it. Each refusal names the rules of the records behind it (#2106):
 // the first three cases differ only in the Unevaluated rule they record, and
 // the last records cvc-assertions-valid, cvc-assertion, cvc-assertions-valid
 // in document order, so its token names each rule once, in first-occurrence

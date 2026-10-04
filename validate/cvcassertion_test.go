@@ -1,6 +1,7 @@
 package validate
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
@@ -177,10 +178,11 @@ func messages(us []Unevaluated) []string {
 }
 
 // cvc-complex-type clause 6 sends E to cvc-assertion (§3.13.4.1) once per
-// assertion in T.{assertions}. Each is recorded at the ELEMENT's location, in
-// {assertions} order, and none is charged: an element whose only defect could
-// be an assertion is not rejected.
-func TestComplexTypeAssertionsAreRecordedNeverCharged(t *testing.T) {
+// assertion in T.{assertions}. One xpath DECLINES — `@a = @b` names attributes
+// T has no use for, and `count(*) = 0` is outside the grammar — is recorded at
+// the ELEMENT's location, in {assertions} order, and none is charged: an
+// element whose only defect could be an undecided assertion is not rejected.
+func TestDeclinedComplexTypeAssertionsAreRecordedNeverCharged(t *testing.T) {
 	schema := aSchema(t, aComplexType(t, nil, xsd.EmptyContent{},
 		aAssertions("@a = @b", "count(*) = 0")))
 
@@ -195,6 +197,127 @@ func TestComplexTypeAssertionsAreRecordedNeverCharged(t *testing.T) {
 	if !strings.Contains(res.Unevaluated()[0].Msg(), "assertion 1 of 2") {
 		t.Errorf("Msg = %q, want the assertion's position in {assertions} named", res.Unevaluated()[0].Msg())
 	}
+}
+
+// aRoot is <root> carrying the attributes name/lexical pairs give, in that
+// order, at columns 10, 20, ….
+func aRoot(pairs ...string) *testElement {
+	e := &testElement{name: local("root"), loc: loc(1, 1)}
+	for i := 0; i+1 < len(pairs); i += 2 {
+		e.attrs = append(e.attrs, &testAttribute{name: local(pairs[i]), value: pairs[i+1], loc: loc(1, 10*(i/2+1))})
+	}
+	return e
+}
+
+// aTyped builds RootType with one optional use per name/type pair, over a
+// builtin type each, and the assertions given.
+func aTyped(t *testing.T, pairs []string, exprs ...string) *xsd.Schema {
+	t.Helper()
+	var uses []xsd.AttributeUse
+	for i := 0; i+1 < len(pairs); i += 2 {
+		uses = append(uses, typedUse(t, pairs[i], icBuiltin(pairs[i+1]), false, nil, nil))
+	}
+	return aSchema(t, aComplexType(t, uses, xsd.EmptyContent{}, aAssertions(exprs...)))
+}
+
+// wantAssertionCharge fails unless res charged exactly one violation, under
+// cvc-assertion at <root>, whose message OPENS with the element and the
+// assertion's position — the subject a swapped argument would move — and
+// recorded nothing.
+func wantAssertionCharge(t *testing.T, res *Result, opening string) {
+	t.Helper()
+	if got := res.Unevaluated(); len(got) != 0 {
+		t.Fatalf("Unevaluated() = %v, want none: an evaluated assertion is not a decline", messages(got))
+	}
+	got := res.Violations()
+	if len(got) != 1 {
+		t.Fatalf("Violations() = %v, want one cvc-assertion charge", got)
+	}
+	if got[0].Rule != "cvc-assertion" || got[0].Loc != loc(1, 1) {
+		t.Errorf("charge = %s at %s, want cvc-assertion at %s", got[0].Rule, got[0].Loc, loc(1, 1))
+	}
+	if !strings.HasPrefix(got[0].Msg, opening) {
+		t.Errorf("Msg = %q, want it to open %q", got[0].Msg, opening)
+	}
+}
+
+// An assertion inside the grammar xpath compiles is EVALUATED over the
+// element's TYPED attributes (cvc-assertion clause 1): `@x > 300` with x an
+// xs:integer holds for 500, is charged for 200, and is charged for an absent
+// x — the empty sequence forms no pair, so the general comparison is false.
+func TestAdmittedAssertionIsEvaluated(t *testing.T) {
+	schema := aTyped(t, []string{"x", "integer"}, "@x > 300")
+
+	if res := aAssess(t, schema, aRoot("x", "500")); len(res.Violations()) != 0 || len(res.Unevaluated()) != 0 {
+		t.Errorf("x=500: Violations() = %v, Unevaluated() = %v, want both empty: the assertion holds",
+			res.Violations(), messages(res.Unevaluated()))
+	}
+	wantAssertionCharge(t, aAssess(t, schema, aRoot("x", "200")),
+		`the element root is not ·valid· with respect to assertion 1 of 1 in the {assertions} of the ·governing type definition· RootType, whose {test} is "@x > 300",`)
+	wantAssertionCharge(t, aAssess(t, schema, aRoot()), "the element root is not ·valid· with respect to assertion 1 of 1")
+}
+
+// Attributes are compared TYPED: as xs:int values 10 <= 9 is false and
+// charged, where the xs:string comparison an untyped reading makes holds.
+func TestAssertionComparesTypedValues(t *testing.T) {
+	schema := aTyped(t, []string{"min", "int", "max", "int"}, "@min <= @max")
+
+	wantAssertionCharge(t, aAssess(t, schema, aRoot("min", "10", "max", "9")), "the element root is not ·valid·")
+	if res := aAssess(t, schema, aRoot("min", "9", "max", "10")); len(res.Violations()) != 0 || len(res.Unevaluated()) != 0 {
+		t.Errorf("9 <= 10: Violations() = %v, Unevaluated() = %v, want both empty", res.Violations(), messages(res.Unevaluated()))
+	}
+}
+
+// An admitted {test} that RAISES is charged, never declined: `@b = 'true'`
+// over an xs:boolean @b compares xs:boolean with xs:string, err:XPTY0004, and
+// cvc-assertion is satisfied only by a {test} that is true "without raising
+// any dynamic error or type error".
+func TestAssertionRaisingATypeErrorIsCharged(t *testing.T) {
+	schema := aTyped(t, []string{"b", "boolean"}, "@b = 'true'")
+
+	wantAssertionCharge(t, aAssess(t, schema, aRoot("b", "true")), "the element root is not ·valid·")
+}
+
+// A {test} outside what xpath compiles is DECLINED through walk.decline —
+// recorded under cvc-assertion at the element, never charged, never satisfied
+// — whatever the attribute values would have made of it.
+func TestOutOfFamilyAssertionIsDeclined(t *testing.T) {
+	for _, expr := range []string{"$value > 0", "@x le 5", "count(@*) = 1", "@* = 5", "@y = 5"} {
+		schema := aTyped(t, []string{"x", "integer"}, expr)
+		res := aAssess(t, schema, aRoot("x", "500"))
+		wantRecords(t, res, "cvc-assertion", loc(1, 1), "whose {test} is "+strconv.Quote(expr)+", was not evaluated: this engine's XPath evaluator declined it")
+	}
+}
+
+// An element one of whose use-matched attributes has no ·actual value· has
+// every assertion DECLINED: reading `@x` as the empty sequence would make
+// `not(@x)` true and `@x > 300` false on a value the instance does carry. The
+// cvc-attribute clause 3 charge stands beside the record.
+func TestAssertionOverAnAttributeWithoutActualValueIsDeclined(t *testing.T) {
+	schema := aTyped(t, []string{"x", "integer"}, "@x > 300")
+
+	res := aAssess(t, schema, aRoot("x", "many"))
+
+	if got := res.Violations(); len(got) != 1 || got[0].Rule != "cvc-attribute" {
+		t.Fatalf("Violations() = %v, want the cvc-attribute clause 3 charge alone", got)
+	}
+	got := res.Unevaluated()
+	if len(got) != 1 || got[0].Rule() != "cvc-assertion" ||
+		!strings.Contains(got[0].Msg(), "the attribute x of the element root has no ·actual value·") {
+		t.Fatalf("Unevaluated() = %v, want the assertion declined for x's missing ·actual value·", messages(got))
+	}
+}
+
+// A {test} naming a ·defaulted attribute· the element does not carry is
+// declined, whether the partial PSVI holds it being unruled; carried, the same
+// attribute is read like any other.
+func TestAssertionNamingAnUncarriedDefaultedAttributeIsDeclined(t *testing.T) {
+	dflt := xsd.NewValueConstraint(xsd.ValueDefault, "500", nil, nil)
+	uses := []xsd.AttributeUse{typedUse(t, "x", integerType(), false, nil, &dflt)}
+	schema := aSchema(t, aComplexType(t, uses, xsd.EmptyContent{}, aAssertions("@x > 300")))
+
+	wantRecords(t, aAssess(t, schema, aRoot()), "cvc-assertion", loc(1, 1), "XPath evaluator declined it")
+	wantAssertionCharge(t, aAssess(t, schema, aRoot("x", "200")), "the element root is not ·valid·")
 }
 
 // A complex type with no {assertions} records nothing: the visit is per
