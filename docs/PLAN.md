@@ -17,20 +17,20 @@ read them. One stamp for the whole section, so a reader can tell staleness
 from wrongness at a glance. Never add a dated paragraph beside the old
 one — appending is what this replaces.
 
-## Status — 2026-10-04 (backlog, on `main` at `302688a`)
+## Status — 2026-10-04 (backlog, on `main` at `ea1a27d`)
 
-**The band leans toward opening M6's assertion tier, because no M5 cluster
-above 5 is startable.** The last seven landings (#2192, #1765, #2211, #1733,
-#2195, #2222 and #2219) each banked 0 cases. The largest decision still holding
-`instance` failures is assertion evaluation. It holds 180 of 234 declines, and
-its tracker #1042 was `blocked` on an evaluator that no issue owned. #2232 now
-owns that evaluator's first slice and leads the band. **Lean: product.** Behind
-#2232, the band carries M5's `parser/xmltree` DOCTYPE residue, led by #2226's
-false reject. The process filings wait on the `/retro` due today.
+**The band still leads with M6's assertion evaluator, and its first slice is
+in flight.** #2232 is LIVE on `wip/issue-2232`; its grounding split it, so this
+landing is Tier A only, bounded at 16 `instance` cases. A session that starts
+now takes row 2. Behind #2232 the band is M5's `parser/xmltree` DOCTYPE
+residue, which banks nothing and is ordered by false reject first. **Lean:
+product,** as the eleventh `/retro` dialled it: product share 78% and 120.6
+cases banked per develop session over its window, and the process queue it
+ruled is empty except two issues waiting on the owner.
 
 ### Conformance lanes
 
-**This table is `go tool lanestatus`, pasted verbatim, on `main` at `302688a`.**
+**This table is `go tool lanestatus`, pasted verbatim, on `main` at `ea1a27d`.**
 It is the committed expectations census, which `docs/WORKFLOW.md` names as the
 lane score (#1120).
 
@@ -65,11 +65,15 @@ and a bound from above.
 - **`instance`'s north star is assertion evaluation: 180 of 234 declines are
   `<unevaluated:…>` assertion declines.** The two largest clusters are `Assert`
   `<unevaluated:cvc-assertion>`, 44 valid and 30 invalid. #1042 is the GAP
-  tracker (`blocked`, M6), and **#2232 is the first slice of the evaluator it
-  waits on.** `go tool suiteindex -paths 'assert|assertion' | go tool casejoin
-  join instance` bounds the candidates at **179** (80 banked `fail` and 99 that
-  the suite declares valid) on `302688a`. That census is lexical, and #2232's
-  grounding derives the share its expression family reaches.
+  tracker (`blocked`, M6). **#2232 is the evaluator's first slice, and its
+  grounding ruled it down to Tier A** (issuecomment-5980399822):
+  complex-type `cvc-assertion` over the grammar `CompileCTATest` already
+  parses, attributes typed, bound **16** (10 invalid, 6 valid).
+  `$value`, value comparators and simple-type `cvc-assertions-valid` are Tier
+  B, which the post-land pass after #2232 files. The lexical bound for the
+  whole family, `go tool suiteindex -paths 'assert|assertion' | go tool
+  casejoin join instance`, is **179** on `302688a` (80 banked `fail`, 99 the
+  suite declares valid); no commit since touches an expectations file.
 - **Every other `instance` cluster above 5 is ruled, recorded or `blocked`.**
   These are: `MS-Regex` 18 (#1899), #1912's 7, `MS-Attribute`'s 11
   `<no-hint-unknown-xsi-attribute>` (#2151), and `VC` `<versioned>` 11 (#1002,
@@ -87,17 +91,22 @@ and a bound from above.
 ### Branch namespace, `origin` (report-only; a session never deletes a ref)
 
 After `git fetch --prune --unshallow origin`, `go tool wipsurvey` was fed the
-whole repository from this pass's REST walk (`rows 2231 distinct 2231 min 1 max
-2231 no gaps`).
+whole repository from this pass's REST walk (`rows 2236 distinct 2236 min 1 max
+2236 no gaps`).
 
-- **No `wip/issue-*` branch is LIVE.**
+- **`wip/issue-2232` is LIVE** (tip 3 minutes old at the survey). Do not start
+  #2232.
 - **`wip/issue-2013` is RETIRED** (#2013 closed `not_planned`). Its content is
   on `main` as `6e5a545` (#2025), so a human may delete it.
-- **`wip/issue-2081` is RETIRED** (`needs-replan`) and holds no code.
-- **`meta/post-land-1908`** (PR #1929) and **`meta/post-land-1816`** (PR #1871)
-  are open post-land passes, which #2007 owns landing.
-- **`meta/backlog-2026-10-01-b`** prints STRANDED, but PR #2011 squash-merged it
-  as `a0adf07`. #1897 owns that survey gap.
+- **`wip/issue-2081` is RETIRED** (`needs-replan` at the survey) and holds no
+  code. This pass replanned #2081 to `blocked`, so a later survey classifies
+  the branch by its lease instead; it is a parked grounding with nothing to
+  keep, and a human may delete it.
+- **`meta/post-land-1816`** and **`meta/post-land-1908`** print AHEAD OF MAIN,
+  but their PRs (#1871, #1929) are closed and the eleventh `/retro`
+  transcribed both entries into `docs/LOG/2026-09.md`, so a human may delete
+  them. **`meta/backlog-2026-10-01-b`** prints STRANDED, but PR #2011
+  squash-merged it as `a0adf07`; #1897 owns that survey gap.
 - **Human triage:** `chronicler-345` (4 ahead), the two
   `parked/untriaged-20260930-*` branches, and the eight subagent branches the
   survey skips (`wip/issue-{1861,1926,2008}-{mason,chronicler}`,
@@ -106,20 +115,17 @@ whole repository from this pass's REST walk (`rows 2231 distinct 2231 min 1 max
 
 ### Marker census
 
-`go tool gapaudit`, fed the whole repository at `302688a`, reports **95 markers
-across 11 areas** (xsd 31, validate 24, xml 11). That is 6 more than at
-`fd45a7e`: the six `GAP(xml)` markers #2219 placed, citing #2225 and #2226.
-**Group 1 has 11 rows and zero dead ends.** These are the same rows as at
-`fd45a7e`: the two §5.3 rows, three `value/valuespace.go` rows,
+`go tool gapaudit`, fed the whole repository at `ea1a27d`, reports **95 markers
+across 11 areas** (xsd 31, validate 24, xml 11), unchanged since `302688a`.
+**Group 1 has 11 rows and zero dead ends:** the two §5.3 rows
+(`parser/doc.go`, `xsd/resolve.go`), three `value/valuespace.go` rows,
 `validate/cvcidentityconstraint.go`, two `xsd/contentrestricts.go` rows,
 `xsd/defaultbinding.go`, `xsd/derivation.go` and `tools/landcheck`. **Group 2
-has 33 rows.** Each new row (#2198, #2206, #2214 and #2231) is a gap whose
-landing writes no marker, or, for #2231, takes over #2225's marker per its
-Acceptance.
+has 30 rows**, each a `kind/gap` issue no marker cites.
 
 ### Milestones and queue
 
-**Counted from GitHub during this pass: 331 open issues.**
+**Counted from GitHub during this pass: 312 open issues.**
 
 | milestone | open | closed | state |
 |---|---:|---:|---|
@@ -128,21 +134,23 @@ Acceptance.
 | M3 — Datatypes vertical slice | 0 | 12 | complete |
 | **M4 — Schema parsing** | **64** | **172** | active |
 | **M5 — Instance validation (XML)** | **14** | **120** | active |
-| **M6 — XPath required subset** | **2** | **0** | opened by #2232 |
+| **M6 — XPath required subset** | **2** | **0** | #2232 in flight |
 | M7–M12 | 0 | 0 | not started |
 
-Open issues carry **316 `ready`, 12 `blocked`, 1 `needs-replan` and 2
-`epic`**, which sums to 331.
+Open issues carry **298 `ready`, 12 `blocked`, 0 `needs-replan` and 2
+`epic`**, which sums to 312. Open `kind/process` is 2 (#1885, #1880), both
+`blocked` on the owner.
 
 - **`blocked` is 12:** #16, #555, #1002, #1042, #1051, #1374, #1609, #1790,
-  #1880, #1885, #1923 and #2022. No dependency or trigger fired:
+  #1880, #1885, #2022 and #2081. No dependency or trigger fired:
   - #1609's `schema` Pass still reads 15288, not above 15292;
   - no commit since `30d907d` touches `xsd/contentrestricts.go`;
-  - no human ruling has been posted on #1880, #1885, #1790, #1923 or #2022.
-
-  #1042's `## Depends on` now names #2232.
-- **`needs-replan` is 1: #2081.** Next planning action 2 carries it.
-- **Measured refactors, all re-run on `302688a`, all flat:**
+  - no human ruling has been posted on #1880, #1885, #1790 or #2022.
+- **#2081 is replanned and `blocked`** (issuecomment-5980885599). Its change is
+  spec-correct and measured at `instance` −1 (wild062.n3, which the oracle
+  reads as a suite bug), and no Ratchet-integrity class can bank that loss, so
+  it waits on the owner's ruling.
+- **Measured refactors, all re-run on `ea1a27d`, all flat:**
   - #2101: 1 and 1
   - #2041: 3
   - #363: 2
@@ -153,10 +161,12 @@ Open issues carry **316 `ready`, 12 `blocked`, 1 `needs-replan` and 2
 
 ### Persona consultations: not run this pass
 
-The published surface has not changed since the last consultation, per the log.
-No persona story was handed to this pass. Eighteen persona findings from the
-2026-09-17 to 2026-09-29 consultations are still open and unconsumed: #1568–#1571,
-#1593–#1596, #1626, #1684, #1685, #1687, #1688, #1843, #1845, #1894, #1895 and #1898.
+No persona story was handed to this pass, and none is folded. The published
+surface has not changed since the last consultation, per the log; #2232 Tier
+A may change `xpath`'s, which makes the pass after it the one to consult.
+Eighteen persona findings from the 2026-09-17 to 2026-09-29 consultations are
+still open and unconsumed: #1568–#1571, #1593–#1596, #1626, #1684, #1685,
+#1687, #1688, #1843, #1845, #1894, #1895 and #1898.
 
 ### Working band
 
@@ -164,13 +174,14 @@ This is ordered for a `/develop` session: take the highest row you can start.
 **Run `wipsurvey` fed before starting.** Each row names one issue (#1636).
 
 **The ordering principle for this stamp:** the decision that holds the most
-failures leads. Next come false rejects. Then come the `doctype.go` residue
-and precisionDecimal's capacity defect, in the order their `## Notes`
-sequence them. No process issue enters the band.
+failures leads, and it is claimed. Next come false rejects. Then come the
+`doctype.go` residue and precisionDecimal's capacity defect, in the order
+their `## Notes` sequence them. No process or tooling issue enters the band:
+the retro ruled the process queue and logged no round cost against the rest.
 
 | # | issue | why here |
 |---|---|---|
-| 1 | #2232 | **The north star.** M6 feature, `instance` up, bound 179. Assertion evaluation for the first expression family, end to end. Its grounding does three things. It rules on the family and on whether assertion attributes are typed, so an oracle and a warden pre-flight are needed. It derives the prediction. It splits the family if it outgrows one session. **Startable now** |
+| 1 | #2232 | **The north star, LIVE on `wip/issue-2232`.** M6 feature, Tier A only per its grounding's ruling, `instance` up, bound 16. Its post-land pass files Tier B. **Not startable: claimed** |
 | 2 | #2226 | **M5 false reject, `Ratchet: unchanged` expected.** `<!DOCTYPE r [<?x it's?>]><r/>` fails with `unexpected EOF`, and a `>` inside a subset PI drops every later declaration. #2214 and #753 half (a) must land after it or keep its truncation control green. **Startable now** |
 | 3 | #2231 | **M5 gap, fail-open.** The `<!ENTITY>` grammar [70]–[76] is unchecked, and the live probe shows `<!ENTITY a "x" "%x;">` read with `pic` true. It takes over the `GAP(xml)` clause that #2225's marker misnames. It may absorb #2101 (`entityDecl`). **Startable now** |
 | 4 | #2201 | **Capacity defect, `Ratchet: unchanged` expected.** A precisionDecimal zero's canonical form pads ·scale· − 1 zeros, which is about 100 GB for `0E-99999999999`. Reachability through `xpath/cta.go` is a hypothesis for the grounding. It shares `Canonical()` with #2206, which it may absorb. **Startable now** |
@@ -186,7 +197,8 @@ sequence them. No process issue enters the band.
 - **The `parser/xmltree` gaps whose `Ratchet` is unmeasured:** #2099, #2100,
   #753 and #2089. One `classify` session can take #753 and #2089. #2101 is the
   refactor beside them.
-- **`regex`, with no consumer until #2232's F&O-core slice:** #2148 and #2147.
+- **`regex`, with no consumer until a later assertion slice reaches the F&O
+  core:** #2148 and #2147.
 - **M5 residue:** #1825. **M4, `Ratchet: unchanged` expected or a small bound:**
   #2087, #2092, #2073, #2052, #1873, #1877, #1883, #1887, #1820, #1801 and #1777.
   #1998 and #1953 are in `xsd/contentrestricts.go`, and either of them fires
@@ -195,33 +207,25 @@ sequence them. No process issue enters the band.
   later slices may reach them.
 - **Conformance bookkeeping:** #1803, #1881 and #785. **Doc fixes:** #1343 and
   #1502. **`value`:** #2045. **`internal/xmlenc`:** #361 and #363.
-- **Persona docs:** #1843, #1895, #1894 and #1898. **Tooling:** #2203, #2070,
-  #2066, #678, #1935, #1897, #1464, #1838 and #1794.
+- **Persona docs:** #1843, #1895, #1894 and #1898.
+- **Tooling:** #2235 first (the Survey input walk as one command; the retro
+  logged forty-odd guard refusals at no round cost), then #2203, #2070, #2066,
+  #678, #1935, #1897, #1464, #1838 and #1794.
 - **Refactors:** #2041, #1958, #1865, #1757, #363, #2101 and #2205 are measured
   flat. #989, #1735, #1736, #1701, #848, #845 and #755 are unmeasured.
-- **Process, for the `/retro` due today:** #1868 and #1948, with #1798, #1781
-  and #2096. Then #1812 with #2133 (#1812 now also carries #2222's brief
-  friction). Then #2142 with #2021. Then #2223, #2075, #1990, #1993, #1996, #2010
-  and #2047. Then #1913 and #1791.
 
 ### Next planning action
 
-1. **The post-land pass for #2219 (`302688a`) lands its LOG entry.**
-   Its one owed follow-up is already filed as #2231. The orchestrating session
-   lands that entry and closes #2007's open passes (PR #1929 and PR #1871).
-2. **The owner posts #2081's replan**, as the previous stamp spelled out:
-   - restate the body;
-   - swap `needs-replan` for `blocked` on the owner's ruling;
-   - or close #2081 `not_planned`.
-
-   Human decisions are also outstanding on #1880, #1885, #1790, #1923 and #2022.
-3. **The `/retro` due today, Sunday 2026-10-04,** reads every landing through
-   #2219. It rules the process queue in the order listed above. Its dial covers
-   the seven 0-case landings since `fd45a7e`.
-4. **When #2232 lands, the `/backlog` files tier 2's next slice** (child-axis
-   paths) from #2232's measured residue. It re-runs `lanepartition` on a fresh
-   `GOXSD_DECLINES=1` run, because that landing is the first since `fd45a7e`
-   expected to bank cases.
+1. **When #2232 Tier A lands, its post-land pass files Tier B** (`$value`,
+   value comparators, simple-type `cvc-assertions-valid`) from the ruling on
+   #2232's thread, and the next `/backlog` re-runs `lanepartition` on a fresh
+   `GOXSD_DECLINES=1` run: that landing is the first since `fd45a7e` expected
+   to bank cases. Consult the personas then if `go tool surface` shows #2232
+   changed the published surface.
+2. **The eleventh `/retro`'s Part 2 (steward)** owes #1080, #841 and #1265.
+3. **Owner decisions outstanding:** #2081 (the wild062.n3 loss), #1880 (frees
+   #1002's 11 `VC` cases), #1885, #1790 and #2022; and the branch deletions
+   listed under Branch namespace.
 
 ## Milestones
 
@@ -698,14 +702,15 @@ and `cvc-assertions-valid` (§4.3.13.3) and retires the `GAP(validate)` markers
 `## Depends on` is a trigger rather than an issue — an XPath 2.0 evaluator able
 to run an assertion `{test}` — so nothing in the queue can start it.
 
-**Tier 2 is carved one slice at a time, and #2232 is the first.** It wires
-assertion evaluation end to end for the smallest expression family, which is
-the §3.12.6 grammar plus `$value` (that family is a hypothesis its grounding
-rules on). Every later slice only widens the grammar. In order of the suite's
-`{test}` frequency, the later slices are child-axis paths, arithmetic, the F&O
-core, `castable as`, then quantified and predicate expressions. The `/backlog`
-files the next slice when the one before it lands, and #1042 closes when no
-assertion decline is left.
+**Tier 2 is carved one slice at a time, and #2232 is the first.** Its
+grounding split it: #2232 is **Tier A**, complex-type `cvc-assertion` over the
+grammar `CompileCTATest` already parses, with attributes evaluated typed.
+**Tier B** is `$value`, the value comparators and simple-type
+`cvc-assertions-valid`, filed when Tier A lands. Every later slice only widens
+the grammar. In order of the suite's `{test}` frequency, the later slices are
+child-axis paths, arithmetic, the F&O core, `castable as`, then quantified and
+predicate expressions. Each slice is filed when the one before it lands, and
+#1042 closes when no assertion decline is left.
 
 **#56 LANDED on 2026-08-28 at `3160813`**, ten days after #719 unblocked it and
 `Ratchet: unchanged` as its body predicted. It records the CTA compile-time
