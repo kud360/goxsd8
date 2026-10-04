@@ -1,6 +1,9 @@
 package validate
 
 import (
+	"go/ast"
+	goparser "go/parser"
+	"go/token"
 	"slices"
 	"strings"
 	"testing"
@@ -303,6 +306,33 @@ func TestDynamicErrorInAnEvaluableTestRecordsNothing(t *testing.T) {
 			t.Errorf("Unevaluated() = %v, want none: %s is a decided false, not a withhold", messages(got), tc.why)
 		}
 		ctaWantGoverned(t, res.Violations(), tc.governed)
+	}
+}
+
+// A Type Alternative's {test} reads its instance UNTYPED (key-cta-ta-select
+// clause 1's Note), so cta.go compiles through xpath.CompileCTATest alone and
+// never through the assertion façade, whose typed attributes would change
+// what a comparison means. The pin reads cta.go's selectors, because the two
+// façades share one grammar and a behavioral fixture here — whose element has
+// no typed use to read — answers alike under both.
+func TestTypeAlternativesNeverCompileAsAssertions(t *testing.T) {
+	f, err := goparser.ParseFile(token.NewFileSet(), "cta.go", nil, 0)
+	if err != nil {
+		t.Fatalf("parsing cta.go: %v", err)
+	}
+	var compiles []string
+	ast.Inspect(f, func(n ast.Node) bool {
+		sel, isSel := n.(*ast.SelectorExpr)
+		if !isSel {
+			return true
+		}
+		if pkg, isIdent := sel.X.(*ast.Ident); isIdent && pkg.Name == "xpath" && strings.HasPrefix(sel.Sel.Name, "Compile") {
+			compiles = append(compiles, sel.Sel.Name)
+		}
+		return true
+	})
+	if !slices.Equal(compiles, []string{"CompileCTATest"}) {
+		t.Errorf("cta.go compiles through xpath.%v, want CompileCTATest alone", compiles)
 	}
 }
 

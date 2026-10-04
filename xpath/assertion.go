@@ -85,6 +85,14 @@ type AssertionTest struct{ root ctaExpr }
 // static-error question about an assertion is the schema assembler's, and
 // [CTATestStaticError] answers it for a Type Alternative only.
 //
+// GAP(xpath): unlike a Type Alternative's, an assertion's {test} has no
+// required subset to stop at — §3.13 admits full XPath 2.0 — so every decline
+// above is this engine's limit and not the spec's license: `$value`, the value
+// comparisons, paths and axes beyond the attribute step, and the F&O function
+// library among them. The direction is the withhold: the caller records the
+// assertion as unevaluated and neither charges it nor shows it satisfied
+// (PRINCIPLES 20). (#1042)
+//
 // types is read as [CompileCTATest] reads it and stored nowhere.
 func CompileAssertionTest(expr xsd.XPathExpression, types xsd.TypeResolver, attrs AttributeTypes) (AssertionTest, bool) {
 	root, defect := compileCTATest(expr, types, assertionStep(attrs))
