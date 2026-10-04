@@ -52,7 +52,7 @@ func TestHasUnparsedEntityReadsTheInternalSubset(t *testing.T) {
   <!ENTITY text "a literal naming NDATA gif">
   <!ENTITY a SYSTEM "x" NDATA gif>
   <!ENTITY Dĳkstra SYSTEM "x" NDATA gif>
-  <!ATTLIST r a CDATA "<!ENTITY inattlist SYSTEM 'x' NDATA gif>">
+  <!ATTLIST r a CDATA "&#60;!ENTITY inattlist SYSTEM 'x' NDATA gif>">
   <?pi <!ENTITY inpi SYSTEM "x" NDATA gif> ?>
   <!-- <!ENTITY incomment SYSTEM "x" NDATA gif> -->
   %pe;
