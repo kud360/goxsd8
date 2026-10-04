@@ -442,6 +442,10 @@ func TestOpenContentAttributedChildUnderASkipWildcardIsNotAssessedAgainstItsReso
 // under <stranger> is ·attributed to· xs:anyType's LAX wildcard, resolves
 // nothing, and is ·laxly assessed· in its turn, which e-validity clause 1.1.3
 // does not reach.
+//
+// The charge's own line names cvc-assess-elt, the Rule it carries, and no
+// clause: cvc-assess-elt has no clause 1.1.3, and the one key-sva has is a
+// different condition, so the e-validity clause stays in the message.
 func TestALaxlyAssessedChildIsWalkedAndChargesNothingBelowItself(t *testing.T) {
 	log, visits := recordingLogger()
 	v, err := New(dSchema(t, nil, dWildcard(t, xsd.ProcessStrict)), testBackend(), WithLogger(log))
@@ -455,6 +459,8 @@ func TestALaxlyAssessedChildIsWalkedAndChargesNothingBelowItself(t *testing.T) {
 		t.Fatalf("Violations() = %v, want exactly the one clause 1.1.3 charge", res.Violations())
 	}
 	for _, want := range []string{
+		"assessing content validate.name=stranger validate.loc=instance.xml:2:1 " +
+			"validate.rule=cvc-assess-elt validate.outcome=charged",
 		"assessing element validate.name=stranger validate.loc=instance.xml:2:1",
 		"assessing element validate.name=anything validate.loc=instance.xml:3:1",
 	} {

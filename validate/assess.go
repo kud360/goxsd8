@@ -35,7 +35,8 @@ import (
 // clause 1.1.3": ·strictly assessed· (key-sva) has a clause 1.1.3 of its own,
 // a different condition entirely, so spelling the carried Rule beside the
 // borrowed clause number would cite the wrong sentence. STYLE E4's grep is
-// served by the rule that STATES the clause.
+// served by the rule that STATES the clause. The charge's debug line carries
+// this Rule and no clause for the same reason ([walk.logDecision]).
 const ruleCvcAssessElt xsderr.Rule = "cvc-assess-elt"
 
 // ruleCvcElt is Element Locally Valid (Element) (Structures §3.3.4.3,
@@ -663,7 +664,7 @@ func (w *walk) unresolvedStrictWildcardChild(content *contentCheck, child Elemen
 	w.res.violations = append(w.res.violations, xsderr.New(ruleCvcAssessElt, child.Loc(),
 		"the element information item %s is ·attributed to· a ***strict*** ·wildcard particle· but %s, so it is ·laxly assessed· and its [validity] is ***notKnown***, which e-validity clause 1.1.3 (§3.3.5.1) makes the enclosing element %s invalid for",
 		child.Name(), cause, content.e.Name()))
-	content.log(w, child.Name(), child.Loc(), ruleCvcAssessElt, "1.1.3", "charged")
+	content.log(w, child.Name(), child.Loc(), ruleCvcAssessElt, "", "charged")
 }
 
 // locallyDeclaredType settles cvc-complex-type (§3.4.4.2) clause 5 for one
@@ -1295,7 +1296,11 @@ func (w *walk) logAttribute(a Attribute, rule xsderr.Rule, clause, outcome strin
 //
 // An empty clause drops the key rather than emitting it empty: cvc-au is one
 // undivided sentence with no numbered clauses, so there is no clause to name
-// and a "clause=" with nothing after it would read as a missing value.
+// and a "clause=" with nothing after it would read as a missing value. A
+// decision settled by a clause of some anchor other than rule passes it empty
+// too, the clause going in the message: beside rule it would cite rule's
+// sentence of that number, or one rule does not have (e-validity clause 1.1.3
+// under [ruleCvcAssessElt]).
 func (w *walk) logDecision(event string, name xsd.QName, loc xsderr.Loc, rule xsderr.Rule, clause, outcome string) {
 	if !w.log.Enabled(context.Background(), slog.LevelDebug) {
 		return
