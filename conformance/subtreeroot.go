@@ -1129,6 +1129,12 @@ func rawDecoder(r io.Reader) *xml.Decoder {
 // the decoder's InputOffset k. The mark's CharsetReader hands back the stream
 // it is given, so a declaration naming UTF-16 changes no offset. instanceHints
 // cuts an inline xs:schema out of the instance through it (hintReader).
+//
+// GAP(xml): this decoder, and rawDecoder through it, is encoding/xml, which
+// checks names against XML 1.0 4th-edition character tables, not the
+// 5th-edition NameStartChar [4] and NameChar [4a] of Name [5] (xml.md), so a
+// 5th-edition Name such as Dĳkstra (U+0133) fails the read as XML syntax.
+// Tracked by #2188.
 func recordingDecoder(r io.Reader, w io.Writer) *xml.Decoder {
 	body, mark := xmlenc.Decode(r)
 	dec := xml.NewDecoder(io.TeeReader(xmldecl.As10(body), w))
