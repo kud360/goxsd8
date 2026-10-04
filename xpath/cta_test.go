@@ -2,6 +2,7 @@ package xpath
 
 import (
 	"errors"
+	"runtime"
 	"testing"
 
 	"github.com/kud360/goxsd8/builtin"
@@ -1402,6 +1403,74 @@ func TestEvaluateDurationSubtypeOrdering(t *testing.T) {
 		if got != tc.want {
 			t.Errorf("Evaluate(%q) = %v, want %v", tc.expr, got, tc.want)
 		}
+	}
+}
+
+// TestEvaluateYearMonthDurationZeroPromotes pins ctaCanonical's walk past a
+// mapping that cannot render the value: xs:yearMonthDuration's own canonical
+// mapping has no form for P0M (§3.4.26.1 Note), so the promotion into
+// xs:duration renders it through xs:duration's mapping, "PT0S", and the
+// comparison decides. Stopping the walk at the nearest mapped type raises
+// instead, and both rows answer false.
+func TestEvaluateYearMonthDurationZeroPromotes(t *testing.T) {
+	attrs := ctaAttrs(at("z", "P0M"), at("d", "PT0S"))
+	for _, tc := range []struct {
+		expr string
+		want bool
+	}{
+		{"@z cast as xs:yearMonthDuration = @d cast as xs:duration", true},
+		{"not(@z cast as xs:yearMonthDuration != @d cast as xs:duration)", true},
+	} {
+		got := compile(t, tc.expr, "xs", xsd.XMLSchemaNS).Evaluate(backend(), seededTypes, attrs)
+		if got != tc.want {
+			t.Errorf("Evaluate(%q) = %v, want %v", tc.expr, got, tc.want)
+		}
+	}
+}
+
+// TestPromotePrecisionDecimalZeroBeyondCapacity calls ctaPromote directly — no
+// compiled test reaches it with an xs:precisionDecimal operand, which has no
+// B.2 row (TestComparisonOperatorLegality) — with a zero whose ·scale·
+// 99999999999 has a canonical form of about 100 GB. The promotion raises on
+// the backend's beyond-capacity error (xmlschema11-2 §5.4) inside the test's
+// budget and well under ctaPromoteAllocBound, where rendering it would pad
+// 99999999999 zeros. The ·scale· 2 row is the control: the same call renders a
+// small zero and casts it into xs:string.
+func TestPromotePrecisionDecimalZeroBeyondCapacity(t *testing.T) {
+	// ctaPromoteAllocBound is far above the walk's and the error's own
+	// allocations and far below the 100 GB the padded form needs.
+	const ctaPromoteAllocBound = 1 << 20
+	env := ctaEnv{backend: backend(), types: seededTypes}
+	types := compileTypes(t)
+	from, _ := types.castTarget(ctaBuiltin("precisionDecimal"))
+	to, _ := types.castTarget(ctaBuiltin("string"))
+	m, _ := backend().Mapping(ctaBuiltin("precisionDecimal"))
+
+	control, err := m.Parse("0.00", nil)
+	if err != nil {
+		t.Fatalf("Parse(0.00): %v", err)
+	}
+	cast, converted := ctaValidated(ctaPromote(control, from, to, env))
+	if !converted {
+		t.Fatal("ctaPromote(0.00 → xs:string) raised, want the canonical 0.0E0 padded to ·scale· 2")
+	}
+	if s, _ := cast.(value.Canonical); s == nil || s.Canonical() != "0.00E0" {
+		t.Fatalf("ctaPromote(0.00 → xs:string) = %v, want 0.00E0", cast)
+	}
+
+	huge, err := m.Parse("0E-99999999999", nil)
+	if err != nil {
+		t.Fatalf("Parse(0E-99999999999): %v", err)
+	}
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	got := ctaPromote(huge, from, to, env)
+	runtime.ReadMemStats(&after)
+	if _, raised := got.(ctaRaised); !raised {
+		t.Fatalf("ctaPromote(0E-99999999999 → xs:string) = %#v, want ctaRaised", got)
+	}
+	if allocated := after.TotalAlloc - before.TotalAlloc; allocated >= ctaPromoteAllocBound {
+		t.Errorf("ctaPromote(0E-99999999999 → xs:string) allocated %d bytes, want below %d", allocated, ctaPromoteAllocBound)
 	}
 }
 
