@@ -8,13 +8,13 @@
 //	func As10(r io.Reader) *Reader
 //	func (x *Reader) Version() string
 //
-// encoding/xml rejects every version number but "1.0", so each reader that
-// hands a document to it wraps the stream in As10 first, once it has dropped a
-// leading byte-order mark: parser/xmltree's Reader, and the conformance
-// harness's raw re-reads of the same documents (its rawDecoder), which must
-// admit exactly the label xmltree admits. The rewrite is byte-for-byte the same
-// length, so every offset, line and column after the declaration is the
-// source's own.
+// internal/xmltok, as encoding/xml, rejects every version number but "1.0",
+// so each reader that hands a document to it wraps the stream in As10 first,
+// once it has dropped a leading byte-order mark: parser/xmltree's Reader, and
+// the conformance harness's raw re-reads of the same documents (its
+// rawDecoder), which must admit exactly the label xmltree admits. The rewrite
+// is byte-for-byte the same length, so every offset, line and column after the
+// declaration is the source's own.
 //
 // Only the label is admitted. A 1.1 feature the document then uses — a C0
 // character reference, NEL or U+2028 as a line end — is a non-1.0 feature, and

@@ -717,3 +717,49 @@ func TestFaultAfterDeclarationLocatedAlikeUnder10And11(t *testing.T) {
 		}
 	}
 }
+
+// TestNamesAreFifthEdition pins the reader's name check to XML 1.0 5th
+// edition [5] Name over [4] NameStartChar and [4a] NameChar (xml.md §2.3): a
+// name 5e admits and 4th edition's Appendix B tables do not (U+0133 lies in
+// [#xF8-#x2FF]) reads as an element and attribute name, in the document and in
+// an internal entity's replacement text; a name [4] does not admit ('-' is
+// only a NameChar) is a well-formedness fault, located at the decoder's offset
+// after the name in the document and at the reference in replacement text.
+func TestNamesAreFifthEdition(t *testing.T) {
+	const ref = `<!DOCTYPE r [<!ENTITY e "<-04-29/>">]><r>`
+	for _, tc := range []struct {
+		name, doc string
+		want      string     // the rendered nodes when accepted, else the error's opening
+		at        xsderr.Loc // zero: accepted
+	}{
+		{"5e name in the document", `<Dĳkstra vrĳtag="0"/>`, `<Dĳkstra vrĳtag="0"></Dĳkstra>`, xsderr.Loc{}},
+		{"5e name in replacement text", `<!DOCTYPE r [<!ENTITY e "<Dĳkstra vrĳtag='0'/>">]><r>&e;</r>`,
+			`<r><Dĳkstra vrĳtag="0"></Dĳkstra></r>`, xsderr.Loc{}},
+		{"name outside [4] in the document", `<-04-29/>`,
+			"t.xml:1:8: [xml-wf] XML syntax error on line 1: invalid XML name: -04-29",
+			xsderr.Loc{URI: "t.xml", Line: 1, Col: 8}},
+		{"name outside [4] in replacement text", ref + `&e;</r>`,
+			"t.xml:1:42: [xml-wf] in the replacement text of entity e: XML syntax error on line 1: invalid XML name: -04-29",
+			xsderr.Loc{URI: "t.xml", Line: 1, Col: len(ref) + 1}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			nodes, err := collect(t, "t.xml", tc.doc)
+			if tc.at == (xsderr.Loc{}) {
+				if err != nil {
+					t.Fatalf("collect: %v, want the document read", err)
+				}
+				if got := render(nodes); got != tc.want {
+					t.Errorf("read %s\n want %s", got, tc.want)
+				}
+				return
+			}
+			wantWellFormednessError(t, err)
+			if loc, _ := xsderr.LocOf(err); loc != tc.at {
+				t.Errorf("fault at %v, want %v", loc, tc.at)
+			}
+			if !strings.HasPrefix(err.Error(), tc.want) {
+				t.Errorf("error = %q, want it to open %q", err, tc.want)
+			}
+		})
+	}
+}

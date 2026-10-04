@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/kud360/goxsd8/internal/xmltok"
 	"github.com/kud360/goxsd8/xsderr"
 )
 
@@ -174,19 +175,13 @@ func (c *content) chars(s string, at func(int) int64, src bool, open []string) e
 // offset ref, as content (XML 1.0 §4.4.2, §4.3.2 well-formed parsed entity):
 // an element it opens must close in it, and it closes none it did not open.
 // Every node it produces is located at the reference.
-//
-// GAP(xml): the replacement text is read by encoding/xml, which checks names
-// against XML 1.0 4th-edition character tables, not the 5th-edition
-// NameStartChar [4] and NameChar [4a] of Name [5] (xml.md), so a 5th-edition
-// Name such as Dĳkstra (U+0133) in it is rejected as RuleXMLWellFormed.
-// Tracked by #2188.
 func (c *content) include(name, text string, ref int64, open []string) error {
 	loc := c.r.locAt(ref)
 	open, err := c.r.charge(name, text, loc, open)
 	if err != nil {
 		return err
 	}
-	dec := xml.NewDecoder(strings.NewReader(text))
+	dec := xmltok.NewDecoder(strings.NewReader(text))
 	dec.Entity = c.r.dec.Entity
 	depth := len(c.r.stack)
 	at := func(int) int64 { return ref }

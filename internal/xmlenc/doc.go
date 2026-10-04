@@ -13,11 +13,11 @@
 //	func (Mark) CharsetReader(name string, input io.Reader) (io.Reader, error)
 //	func (Mark) String() string
 //
-// Every reader that hands a document to encoding/xml takes its mark detection
-// and transcoder from here: parser/xmltree's Reader, and the conformance
-// harness's raw re-reads of the same documents (its rawDecoder), which must
-// read a UTF-16 document exactly when xmltree reads it. The Mark is the
-// evidence an encoding declaration must agree with: AgreesWith is §4.3.3's
+// Every reader that hands a document to internal/xmltok takes its mark
+// detection and transcoder from here: parser/xmltree's Reader, and the
+// conformance harness's raw re-reads of the same documents (its rawDecoder),
+// which must read a UTF-16 document exactly when xmltree reads it. The Mark is
+// the evidence an encoding declaration must agree with: AgreesWith is §4.3.3's
 // name table, and CharsetReader reports a disagreement through the decoder.
 //
 // GAP(xml): only a mark is taken as evidence of an entity's encoding. A

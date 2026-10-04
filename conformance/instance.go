@@ -571,8 +571,8 @@ import (
 // ID (#2008). Each names the condition the function it is returned from states
 // in its doc comment; a token ending in (#N) names the open issue that owns the
 // arm. refuseDecode alone is returned at several sites, every one a decoder
-// error in an encoding/xml re-read of the instance. refuseUnevaluated alone is
-// never written bare: unevaluatedRefusal suffixes it with the rules of the
+// error in an internal/xmltok re-read of the instance. refuseUnevaluated alone
+// is never written bare: unevaluatedRefusal suffixes it with the rules of the
 // records that caused it (#2106).
 const (
 	// caseSchema (instancehints.go).
@@ -586,7 +586,7 @@ const (
 	refuseHintAssembly    refusal = "hint-assembly"        // assembleHints: assemblyDeclined refused the outcome
 	refuseHintUndeclared  refusal = "hint-undeclared-root" // assembleHints: no top-level declaration for the root
 	refuseDoctype         refusal = "doctype"              // rootStart: a directive defaultsNoAttribute refuses
-	refuseDecode          refusal = "decode"               // an encoding/xml decoder error, at any re-read site
+	refuseDecode          refusal = "decode"               // an internal/xmltok decoder error, at any re-read site
 
 	// builtinsSchema (instancehints.go): no group schema, and the instance
 	// carries no hint and no inline xs:schema.
