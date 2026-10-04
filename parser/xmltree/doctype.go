@@ -73,21 +73,24 @@ const (
 // '<!' opening no markup declaration, a conditional section in the internal
 // subset itself, and a ']' in replacement text among it — is a fault, and so
 // is a subset no ']' closes or text other than S between that ']' and the
-// directive's '>' ([28] doctypedecl). A comment holding "--" ([15] Comment), a
+// directive's '>' ([28] doctypedecl), and so is a '<' in the DOCTYPE header,
+// before the subset ([28]). A comment holding "--" ([15] Comment), a
 // processing instruction whose target is no Name or is "xml" in any case ([16]
 // PI, [17] PITarget), a notation declaration that is no [82] NotationDecl, a
-// parameter-entity reference inside any markup declaration (WFC: PEs in
-// Internal Subset) and replacement text that ends inside a comment, processing
+// '<' outside the literals of any markup declaration, a parameter-entity
+// reference inside any markup declaration, an entity value literal included
+// (WFC: PEs in Internal Subset), any other '%' in an entity value literal ([9]
+// EntityValue) and replacement text that ends inside a comment, processing
 // instruction or markup declaration (WFC: PE Between Declarations) are faults
 // too. A declaration it cannot read declares no unparsed entity, which leaves
 // an ·ENTITY value· naming that entity undeclared rather than declared.
 //
 // GAP(xml): the bodies of <!ELEMENT> and <!ATTLIST> declarations ([45]–[60])
-// are checked for nothing but a parameter-entity reference and the '>' that
-// closes them, and an <!ENTITY> declaration ([70]–[76]) for nothing beyond what
-// entityDeclOf and paramEntityOf read: a declaration that breaks its
-// production there is stepped over, or declares nothing, where it is not
-// well-formed. Tracked by #2225.
+// are checked for nothing but a parameter-entity reference, a '<' and the '>'
+// that closes them, and an <!ENTITY> declaration ([70]–[76]) for nothing
+// beyond those and what entityDeclOf and paramEntityOf read: a declaration
+// that breaks its production there is stepped over, or declares nothing, where
+// it is not well-formed. Tracked by #2225.
 //
 // GAP(xml): encoding/xml ends the directive at a '>' inside a processing
 // instruction, so the subset text this scan reads may be cut short: a comment,
@@ -100,12 +103,15 @@ func doctypeEntities(directive string, standalone bool, loc xsderr.Loc) (decls [
 		return nil, false, nil
 	}
 	header := rest
-	open := outsideQuotes(rest, '[')
+	open := outsideQuotes(rest, "[<")
 	if open >= 0 {
 		header = rest[:open]
 	}
 	if name := doctypeName(header); !isName(name) {
 		return nil, false, xsderr.New(xsderr.RuleXMLWellFormed, loc, "DOCTYPE document type name %q is not a Name (XML 1.0 [28] doctypedecl, [5] Name)", name)
+	}
+	if open >= 0 && rest[open] == '<' {
+		return nil, false, xsderr.New(xsderr.RuleXMLWellFormed, loc, "DOCTYPE holds %q before its internal subset, where only S, its name and an ExternalID may stand (XML 1.0 [28] doctypedecl)", excerpt(rest[open:]))
 	}
 	sc := subsetScan{standalone: standalone, loc: loc, unread: hasExternalID(header)}
 	if open < 0 {
@@ -224,11 +230,14 @@ func (sc *subsetScan) markup(s string) (after string, closed bool, err error) {
 		sc.decline()
 		return "", true, nil
 	case strings.HasPrefix(s, "<!ENTITY"):
-		body, after, closed := markupDecl(s[len("<!ENTITY"):])
-		if !closed {
-			return "", false, nil
+		body, after, closed, err := sc.markupDecl(s[len("<!ENTITY"):])
+		if err != nil || !closed {
+			return "", closed, err
 		}
 		if err := sc.noPEReference(body); err != nil {
+			return "", true, err
+		}
+		if err := sc.entityValuePercent(body); err != nil {
 			return "", true, err
 		}
 		if !sc.checkOnly {
@@ -238,9 +247,9 @@ func (sc *subsetScan) markup(s string) (after string, closed bool, err error) {
 	case strings.HasPrefix(s, "<!NOTATION"):
 		return sc.notation(s)
 	case strings.HasPrefix(s, "<!ELEMENT"), strings.HasPrefix(s, "<!ATTLIST"):
-		body, after, closed := markupDecl(s[len("<!"):])
-		if !closed {
-			return "", false, nil
+		body, after, closed, err := sc.markupDecl(s[len("<!"):])
+		if err != nil || !closed {
+			return "", closed, err
 		}
 		return after, true, sc.noPEReference(body)
 	}
@@ -286,9 +295,9 @@ func (sc *subsetScan) pi(s string) (after string, closed bool, err error) {
 // [82] NotationDecl: '<!NOTATION' S Name S, then an ExternalID ([75]) or a
 // PublicID ([83]), then S? '>'.
 func (sc *subsetScan) notation(s string) (after string, closed bool, err error) {
-	body, after, closed := markupDecl(s[len("<!NOTATION"):])
-	if !closed {
-		return "", false, nil
+	body, after, closed, err := sc.markupDecl(s[len("<!NOTATION"):])
+	if err != nil || !closed {
+		return "", closed, err
 	}
 	if err := sc.noPEReference(body); err != nil {
 		return "", true, err
@@ -345,17 +354,49 @@ const pubidOther = " \r\n-'()+,./:=?;!*#@$_%"
 // outside the literals of body, a markup declaration's text: in the internal
 // subset one must not occur within a markup declaration (XML 1.0 WFC: PEs in
 // Internal Subset), and every parameter entity this scan reads is internal.
+// The one literal that recognizes such a reference is entityValuePercent's.
 func (sc *subsetScan) noPEReference(body string) error {
 	for {
-		pct := outsideQuotes(body, '%')
+		pct := outsideQuotes(body, "%")
 		if pct < 0 {
 			return nil
 		}
 		body = body[pct+1:]
 		if name, _, ok := peReference(body); ok {
-			return xsderr.New(xsderr.RuleXMLWellFormed, sc.loc, "%s holds the parameter-entity reference %%%s; inside a markup declaration (XML 1.0 WFC: PEs in Internal Subset)", sc.where(), name)
+			return sc.peInMarkup(name)
 		}
 	}
+}
+
+// entityValuePercent returns the fault of a '%' in the EntityValue literal of
+// body, an <!ENTITY> declaration's text after its keyword: the literal its
+// name is followed by. XML 1.0 §2.8 recognizes parameter-entity references in
+// an entity value literal, alone among literals, so a PEReference there breaks
+// WFC: PEs in Internal Subset, and any other '%' is no [9] EntityValue. An
+// ExternalID's SystemLiteral and PubidLiteral recognize none and are not read.
+func (sc *subsetScan) entityValuePercent(body string) error {
+	toks := declTokens(body)
+	if len(toks) > 0 && toks[0] == "%" {
+		toks = toks[1:]
+	}
+	if len(toks) < 2 || toks[1][0] != '"' && toks[1][0] != '\'' {
+		return nil
+	}
+	lit := toks[1][1:]
+	pct := strings.IndexByte(lit, '%')
+	if pct < 0 {
+		return nil
+	}
+	if name, _, ok := peReference(lit[pct+1:]); ok {
+		return sc.peInMarkup(name)
+	}
+	return xsderr.New(xsderr.RuleXMLWellFormed, sc.loc, "%s holds an entity value literal with a '%%' that opens no PEReference (XML 1.0 [9] EntityValue, [69] PEReference)", sc.where())
+}
+
+// peInMarkup is the fault of the parameter-entity reference to name standing
+// inside a markup declaration (XML 1.0 WFC: PEs in Internal Subset).
+func (sc *subsetScan) peInMarkup(name string) error {
+	return xsderr.New(xsderr.RuleXMLWellFormed, sc.loc, "%s holds the parameter-entity reference %%%s; inside a markup declaration (XML 1.0 WFC: PEs in Internal Subset)", sc.where(), name)
 }
 
 // where names the text the scan is reading, for a fault message.
@@ -535,14 +576,10 @@ func literalValue(tok string) entityValue {
 // normalized to #xA (§2.11), each character reference is replaced by the
 // character it names, and a general entity reference is left as it stands
 // (§4.4.7, bypassed), for the reader to expand where the entity is included.
-// It reports false for a literal holding a parameter-entity reference, which
-// the internal subset forbids inside a markup declaration (WFC PEs in Internal
-// Subset), or a character reference that is malformed or names no Char (WFC
-// Legal Character).
+// It reports false for a character reference that is malformed or names no
+// Char (WFC Legal Character). The literal holds no '%': markup faults the
+// declaration before it is read (see entityValuePercent).
 func replacementText(lit string) (string, bool) {
-	if strings.ContainsRune(lit, '%') {
-		return "", false
-	}
 	var b strings.Builder
 	for {
 		amp := strings.IndexByte(lit, '&')
@@ -590,9 +627,9 @@ func charRef(digits string) (rune, bool) {
 	return r, xmlchar.IsChar(r)
 }
 
-// outsideQuotes reports the index of the first c in s that is not inside a
-// quoted literal, or -1.
-func outsideQuotes(s string, c byte) int {
+// outsideQuotes reports the index of the first byte of set in s that is not
+// inside a quoted literal, or -1.
+func outsideQuotes(s, set string) int {
 	var quote byte
 	for i := 0; i < len(s); i++ {
 		switch {
@@ -602,7 +639,7 @@ func outsideQuotes(s string, c byte) int {
 			}
 		case s[i] == '"' || s[i] == '\'':
 			quote = s[i]
-		case s[i] == c:
+		case strings.IndexByte(set, s[i]) >= 0:
 			return i
 		}
 	}
@@ -612,13 +649,19 @@ func outsideQuotes(s string, c byte) int {
 // markupDecl splits s at the '>' closing the markup declaration it is inside
 // of, returning the declaration's body and what follows it, and reports
 // whether that '>' is in s. A declaration with no closing '>' runs to the end
-// of s.
-func markupDecl(s string) (body, after string, closed bool) {
-	end := outsideQuotes(s, '>')
+// of s. A '<' outside the declaration's literals is a fault: no markup
+// declaration admits one (XML 1.0 [45] elementdecl, [52] AttlistDecl, [70]
+// EntityDecl, [82] NotationDecl). A comment there is one, and is not skipped:
+// a quote inside it would open a literal the declaration never closes.
+func (sc *subsetScan) markupDecl(s string) (body, after string, closed bool, err error) {
+	end := outsideQuotes(s, "<>")
 	if end < 0 {
-		return s, "", false
+		return s, "", false, nil
 	}
-	return s[:end], s[end+1:], true
+	if s[end] == '<' {
+		return "", "", true, xsderr.New(xsderr.RuleXMLWellFormed, sc.loc, "%s holds %q inside a markup declaration, outside its literals, where no markup declaration admits a '<' (XML 1.0 [45] elementdecl, [52] AttlistDecl, [70] EntityDecl, [82] NotationDecl)", sc.where(), excerpt(s[end:]))
+	}
+	return s[:end], s[end+1:], true, nil
 }
 
 // entityDeclOf reads one <!ENTITY ...> body. It reports false for a parameter

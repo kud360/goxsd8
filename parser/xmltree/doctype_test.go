@@ -241,7 +241,6 @@ func TestAllDeclarationsProcessed(t *testing.T) {
 		{`<!DOCTYPE r [%x; <!ENTITY % x "">` + late + `]><r/>`, false, false},
 		{`<!DOCTYPE r [<!ENTITY % x SYSTEM "x.ent"><!ENTITY % x "">%x; ` + late + `]><r/>`, false, false},
 		{`<!DOCTYPE r [<!ENTITY % a "&#37;a;"> %a; ` + late + `]><r/>`, false, false},
-		{`<!DOCTYPE r [<!ENTITY % q "<!ENTITY late SYSTEM 'l' NDATA n>"><!ENTITY % pct "%q;"> %pct;]><r/>`, false, false},
 		{`<!DOCTYPE r [<!ENTITY % nul "&#0;"> %nul; ` + late + `]><r/>`, false, false},
 		{`<!DOCTYPE r [<!ENTITY % c "<![INCLUDE[` + late + `]]>"> %c;]><r/>`, false, false},
 		{`<!DOCTYPE r [<!ENTITY % x SYSTEM "x.ent"> ` + late + ` %x;]><r/>`, false, true},
@@ -358,7 +357,7 @@ func TestSubsetStrayTextIsNotWellFormed(t *testing.T) {
 		{yes + `<!DOCTYPE r [%1x; ` + notation + pic + `]><r/>`, subset + `"%1x;"` + subsetRule + `, [69] PEReference)`},
 		{decl + `<!DOCTYPE r [<!ENTITY % 1p "` + pic + `"> %1p;]><r/>`, subset + `"%1p;"` + subsetRule + `, [69] PEReference)`},
 		{decl + `<!DOCTYPE r [<!ENTITY % open "&#60;"> %open ` + pic + `]><r/>`, subset + `"%open"` + subsetRule + `, [69] PEReference)`},
-		{decl + `<!DOCTYPE r [<!ENTITY % p "%q;"> % p; ` + pic + `]><r/>`, subset + `"%"` + subsetRule + `, [69] PEReference)`},
+		{decl + `<!DOCTYPE r [<!ENTITY % p "<!-- -->"> % p; ` + pic + `]><r/>`, subset + `"%"` + subsetRule + `, [69] PEReference)`},
 		{decl + `<!DOCTYPE r [<!ENTITY % p "]"> %p; ` + notation + pic + `]><r/>`, inPE + `"]"` + peRule + `)`},
 		{decl + `<!DOCTYPE r [<r/> ` + notation + pic + `]><r/>`, subset + `"<r/>"` + subsetRule + `)`},
 		{decl + `<!DOCTYPE r [` + notation + pic + `<!FOO x>]><r/>`, subset + `"<!FOO"` + subsetRule + `)`},
@@ -401,12 +400,16 @@ func wantSubsetFault(t *testing.T, doc, want string) {
 // is not well-formed: a comment holding "--" ([15] Comment), a processing
 // instruction whose target is "xml" in any case or no Name ([16] PI, [17]
 // PITarget), a notation declaration that is no NotationDecl ([82], [75],
-// [83], [12] PubidLiteral), a parameter-entity reference inside any markup
-// declaration (WFC: PEs in Internal Subset), replacement text that ends inside
-// a comment, processing instruction or markup declaration (WFC: PE Between
-// Declarations), standalone or not, and a subset no ']' closes ([28]
-// doctypedecl). The check runs on after a declined reference (§5.1). Each is a
-// fault at the directive that declares nothing.
+// [83], [12] PubidLiteral), a '<' outside a markup declaration's literals, a
+// comment's among them ([45], [52], [70], [82]), a parameter-entity reference
+// inside any markup declaration, an entity value literal included, declared or
+// not (WFC: PEs in Internal Subset), any other '%' in an entity value literal
+// ([9] EntityValue), replacement text that ends inside a comment, processing
+// instruction or markup declaration (WFC: PE Between Declarations), standalone
+// or not, a '<' in the DOCTYPE header, a comment's among them, and a subset no
+// ']' closes ([28] doctypedecl). A quote inside such a comment must not leave
+// the declaration open, or hide the subset. The check runs on after a declined
+// reference (§5.1). Each is a fault at the directive that declares nothing.
 func TestSubsetMarkupIsWellFormed(t *testing.T) {
 	const decl = "<?xml version=\"1.0\"?>\n"
 	const yes = "<?xml version=\"1.0\" standalone=\"yes\"?>\n"
@@ -420,6 +423,9 @@ func TestSubsetMarkupIsWellFormed(t *testing.T) {
 	const peRef = ` inside a markup declaration (XML 1.0 WFC: PEs in Internal Subset)`
 	const open = ` open where it ends (XML 1.0 WFC: PE Between Declarations, [31] extSubsetDecl)`
 	const unclosedSubset = subset + `is closed by no ']' before the directive's '>' (XML 1.0 [28] doctypedecl)`
+	const lt = ` inside a markup declaration, outside its literals, where no markup declaration admits a '<' (XML 1.0 [45] elementdecl, [52] AttlistDecl, [70] EntityDecl, [82] NotationDecl)`
+	const percent = `holds an entity value literal with a '%' that opens no PEReference (XML 1.0 [9] EntityValue, [69] PEReference)`
+	const header = `t.xml:2:1: [xml-wf] DOCTYPE holds "<!--" before its internal subset, where only S, its name and an ExternalID may stand (XML 1.0 [28] doctypedecl)`
 	for _, tc := range []struct {
 		doc  string
 		want string // the whole error
@@ -463,6 +469,24 @@ func TestSubsetMarkupIsWellFormed(t *testing.T) {
 		{head + `%undeclared; <!NOTATION m SYSTEM>` + tail, subset + notation},
 		{head + `%undeclared; <!-- a -- b -->` + tail, subset + comment},
 		{head + `%undeclared; <!ENTITY a "b">><r ent="pic"/>`, unclosedSubset},
+		{head + `<!ENTITY % x 'y'><!ENTITY a "%x;">` + tail, subset + `holds the parameter-entity reference %x;` + peRef},
+		{head + `<!ENTITY a 'v%u;w'>` + tail, subset + `holds the parameter-entity reference %u;` + peRef},
+		{head + `<!ENTITY % q "<!ENTITY late SYSTEM 'l' NDATA n>"><!ENTITY % pct "%q;"> %pct;` + tail, subset + `holds the parameter-entity reference %q;` + peRef},
+		{head + `<!ENTITY % p "<!ENTITY a '&#37;x;'>"> %p;` + tail, inPE + `holds the parameter-entity reference %x;` + peRef},
+		{head + `%undeclared; <!ENTITY a "%x;">` + tail, subset + `holds the parameter-entity reference %x;` + peRef},
+		{head + `<!ENTITY a "50%">` + tail, subset + percent},
+		{head + `<!ENTITY % p '% x;'>` + tail, subset + percent},
+		{head + `<!NOTATION m SYSTEM 'x' <!-- ' -->>` + tail, subset + `holds "<!--"` + lt},
+		{head + `<!ELEMENT r ANY <!-- ' -->>` + tail, subset + `holds "<!--"` + lt},
+		{head + `<!ATTLIST r a CDATA #IMPLIED <!-- " -->>` + tail, subset + `holds "<!--"` + lt},
+		{head + `<!ENTITY e SYSTEM 'u' <!-- c --> NDATA n>` + tail, subset + `holds "<!--"` + lt},
+		{head + `<!ELEMENT r <a>>` + tail, subset + `holds "<a>>"` + lt},
+		{head + `<!ENTITY % p "<!ELEMENT r ANY <!-- ' -->>"> %p;` + tail, inPE + `holds "<!--"` + lt},
+		{head + `%undeclared; <!NOTATION m SYSTEM 'x' <!-- ' -->>` + tail, subset + `holds "<!--"` + lt},
+		{decl + `<!DOCTYPE r <!-- ' --> [<!NOTATION n SYSTEM 'x'><!ENTITY pic SYSTEM 'u' NDATA n>]><r ent="pic"/>`, header},
+		{decl + `<!DOCTYPE r <!-- c --> [<!NOTATION n SYSTEM 'x'><!ENTITY pic SYSTEM 'u' NDATA n>]><r ent="pic"/>`, header},
+		{decl + `<!DOCTYPE r SYSTEM 'x' <!-- ' --> [<!NOTATION n SYSTEM 'x'><!ENTITY pic SYSTEM 'u' NDATA n>]><r ent="pic"/>`, header},
+		{decl + `<!DOCTYPE r <!-- ' -->><r/>`, header},
 	} {
 		t.Run(tc.doc, func(t *testing.T) {
 			wantSubsetFault(t, tc.doc, tc.want)
@@ -474,7 +498,10 @@ func TestSubsetMarkupIsWellFormed(t *testing.T) {
 // <!ELEMENT> with mixed and children content, an <!ATTLIST> with enumerated
 // and #FIXED defaults, a NOTATION with a PublicID alone or with an ExternalID
 // of either kind, a PI whose target only starts with "xml", or that has no
-// data, and comments holding single '-'s, empty or ending "- -->".
+// data, comments holding single '-'s, empty or ending "- -->", a '%' in an
+// ExternalID's literals, which recognize no parameter-entity reference, and a
+// '%' a character reference spells, or a comment, inside an entity value
+// literal.
 func TestSubsetMarkupControls(t *testing.T) {
 	const notation = `<!NOTATION n SYSTEM 'x'>`
 	const pic = `<!ENTITY pic SYSTEM 'u' NDATA n>`
@@ -492,6 +519,8 @@ func TestSubsetMarkupControls(t *testing.T) {
 		`<!---->`,
 		`<!-- a - b - -->`,
 		`<!ENTITY % p "<!-- a - b --><?xml-stylesheet x?><!NOTATION m PUBLIC 'p'>"> %p;`,
+		`<!ENTITY s SYSTEM 'a%x;b'><!ENTITY t PUBLIC 'p' '%'><!ENTITY u SYSTEM '%u;' NDATA n>`,
+		`<!ENTITY g "&#37;x; <!-- ' -->"><!ENTITY % q '&#37;g;'>`,
 	} {
 		for _, doc := range []string{
 			`<!DOCTYPE r [` + notation + markup + pic + `]><r/>`,
@@ -524,12 +553,12 @@ func TestSubsetCutInsideAProcessingInstructionDeclines(t *testing.T) {
 // What may stand between declarations is never stray: S of every kind, before
 // and after the subset's ']', a PEReference expanding to a declaration, a
 // comment or processing instruction holding text that would be stray between
-// declarations, a '%' or ']' inside an ATTLIST default, a ']' or PEReference
-// inside an EntityValue literal, and INCLUDE, IGNORE and PE-keyword
-// conditional sections in an internal parameter entity's replacement text,
-// with the ']' and ']]>' that close them, which XML 1.0 leaves unresolved
-// there (ruled on #1733): each section is declined, as doctypeEntities states,
-// never rejected. pic is declared in every one.
+// declarations, a '%' or ']' inside an ATTLIST default, a ']' or a '%' a
+// character reference spells inside an EntityValue literal, and INCLUDE,
+// IGNORE and PE-keyword conditional sections in an internal parameter entity's
+// replacement text, with the ']' and ']]>' that close them, which XML 1.0
+// leaves unresolved there (ruled on #1733): each section is declined, as
+// doctypeEntities states, never rejected. pic is declared in every one.
 func TestSubsetDeclSepIsNotStray(t *testing.T) {
 	const yes = `<?xml version="1.0" standalone="yes"?>`
 	const notation = `<!NOTATION n SYSTEM 'x'>`
@@ -541,7 +570,7 @@ func TestSubsetDeclSepIsNotStray(t *testing.T) {
 		`<!DOCTYPE r [` + notation + `<?pi junk % ] ?>` + pic + `]><r/>`,
 		`<!DOCTYPE r [` + notation + `<!ENTITY % p "<!-- junk ] --><?pi junk ] ?>"> %p;` + pic + `]><r/>`,
 		`<!DOCTYPE r [` + notation + `<!ATTLIST r a CDATA "junk % ] %p;">` + pic + `]><r/>`,
-		`<!DOCTYPE r [` + notation + `<!ENTITY g "junk ] %p;"><!ENTITY % q "%p;">` + pic + `]><r/>`,
+		`<!DOCTYPE r [` + notation + `<!ENTITY g "junk ] &#37;p;"><!ENTITY % q "&#37;p;">` + pic + `]><r/>`,
 		`<!DOCTYPE r [` + notation + pic + `<!ENTITY % c "<![INCLUDE[ <!ENTITY e 'v'> ]]> junk"> %c;]><r/>`,
 		`<!DOCTYPE r [` + notation + pic + `<!ENTITY % c "<![IGNORE[ junk ] &#37; ]]>"> %c;]><r/>`,
 		`<!DOCTYPE r [` + notation + pic + `<!ENTITY % k "INCLUDE"><!ENTITY % c "<![&#37;k;[ junk ]]>"> %c;]><r/>`,

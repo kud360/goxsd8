@@ -73,11 +73,14 @@
 //     PEReference, WFC: PE Between Declarations); a comment holding "--"
 //     ([15]); a processing instruction whose target is no Name or is "xml"
 //     in any case ([16], [17]); a notation declaration that is no [82]
-//     NotationDecl; a parameter-entity reference inside a markup
-//     declaration (WFC: PEs in Internal Subset); replacement text ending
-//     inside a comment, processing instruction or markup declaration; and
-//     a subset no ']' closes, or text other than S between that ']' and
-//     '>' ([28] doctypedecl). The external subset is never read, by design
+//     NotationDecl; a '<' outside a markup declaration's literals ([45],
+//     [52], [70], [82]); a parameter-entity reference inside a markup
+//     declaration, an entity value literal included (WFC: PEs in Internal
+//     Subset), and any other '%' in an entity value literal ([9]);
+//     replacement text ending inside a comment, processing instruction or
+//     markup declaration; and a '<' in the DOCTYPE header, a subset no ']'
+//     closes, or text other than S between that ']' and '>' ([28]
+//     doctypedecl). The external subset is never read, by design
 //     (#1668), nor is an external parameter entity; after a
 //     parameter-entity reference that is not read, unless standalone="yes",
 //     the rest of the internal subset is checked for well-formedness alone,
@@ -87,9 +90,9 @@
 //     Reader.AllDeclarationsProcessed, the [all declarations processed]
 //     property, then reports false.
 //   - GAP(xml): <!ELEMENT> and <!ATTLIST> bodies ([45]–[60]) are checked
-//     only for a parameter-entity reference and their closing '>', and
-//     <!ENTITY> grammar ([70]–[76]) only as far as the entity's name and
-//     definition are read. Tracked by #2225.
+//     only for a parameter-entity reference, a '<' and their closing '>',
+//     and <!ENTITY> grammar ([70]–[76]) only for those and as far as the
+//     entity's name and definition are read. Tracked by #2225.
 //   - GAP(xml): encoding/xml ends a DOCTYPE directive at a '>' inside a
 //     processing instruction; a comment, processing instruction or markup
 //     declaration left open where the subset's text ends is therefore
