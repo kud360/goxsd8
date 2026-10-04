@@ -41,9 +41,9 @@
 //     a union, a ·special· type, an xs:QName or xs:NOTATION primitive),
 //     a cast from a typed attribute outside the xs:string family, and a
 //     general comparison in a date/time type, which has no implicit
-//     timezone to order by (F&O §10.4).
-//     `$value`, the value comparisons, axes, predicates, quantified
-//     expressions and the function core are PLANNED (#1042).
+//     timezone to order by (F&O §10.4). `$value`, the value comparisons,
+//     axes, predicates, quantified expressions and the function core are
+//     PLANNED (#1042).
 //  3. The full grammar (docs/specs/md/xpath20.md) and function library
 //     (docs/specs/md/xpath-functions.md) — M7 onward, ratcheted.
 //     PLANNED.
