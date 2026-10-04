@@ -32,6 +32,12 @@
 //     mark is that section's fatal error, reported as
 //     RuleXMLWellFormed. Locations are offsets into the decoded UTF-8
 //     stream, not into the source bytes.
+//   - An ill-formed UTF-8 code unit sequence anywhere in the decoded
+//     stream is §4.3.3's fatal error, reported as RuleXMLWellFormed: in
+//     character data, attribute values and names by the decoder
+//     (internal/xmltok), and in a comment, processing instruction or
+//     directive, the DOCTYPE and its internal subset included, by the
+//     reader at the sequence's first byte.
 //   - GAP(xml): UTF-16 without a mark, declared only by encoding=, is
 //     not decoded — it fails well-formedness rather than being read.
 //     Tracked by #361.

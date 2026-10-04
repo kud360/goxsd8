@@ -7,6 +7,7 @@ import (
 	"io"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/kud360/goxsd8/internal/xmldecl"
 	"github.com/kud360/goxsd8/internal/xmlenc"
@@ -106,12 +107,12 @@ func NewReader(uri string, r io.Reader) *Reader {
 
 // Token advances to the next element or character-data node and returns it.
 // It returns io.EOF at the end of a well-formed document. Comments, processing
-// instructions, and the DOCTYPE directive are skipped; its entity declarations
-// are read on the way past (see HasUnparsedEntity), and a reference to an
-// internal entity one declares is replaced by the nodes its replacement text
-// parses to (see included). Malformed input, unbound namespace prefixes, and
-// mismatched or unclosed tags are returned as errors carrying an xsderr.Loc — never
-// as a panic (see the fuzz target).
+// instructions, and the DOCTYPE directive are skipped, once checked for
+// ill-formed UTF-8 (checkUTF8); its entity declarations are read on the way past
+// (see HasUnparsedEntity), and a reference to an internal entity one declares is
+// replaced by the nodes its replacement text parses to (see included). Malformed
+// input, unbound namespace prefixes, and mismatched or unclosed tags are returned
+// as errors carrying an xsderr.Loc — never as a panic (see the fuzz target).
 func (r *Reader) Token() (Node, error) {
 	if len(r.pending) > 0 {
 		node := r.pending[0]
@@ -193,17 +194,46 @@ func (r *Reader) classify(tok xml.Token, off int64) (Node, bool, error) {
 		}
 		return &CharData{data: string(t), offset: off, loc: loc}, true, nil
 	case xml.ProcInst:
+		if err := r.checkUTF8(r.source(off), off); err != nil {
+			return nil, false, err
+		}
 		if t.Target == "xml" {
 			r.standalone = pseudoAttr(string(t.Inst), "standalone") == "yes"
 		}
 		return nil, false, r.checkDeclaration(t, loc)
 	case xml.Directive:
-		return nil, false, r.declareEntities(r.source(off), loc)
+		raw := r.source(off)
+		if err := r.checkUTF8(raw, off); err != nil {
+			return nil, false, err
+		}
+		return nil, false, r.declareEntities(raw, loc)
 	default:
 		// xml.Comment: not part of the element/character-data stream the
 		// parser consumes.
-		return nil, false, nil
+		return nil, false, r.checkUTF8(r.source(off), off)
 	}
+}
+
+// checkUTF8 checks raw, the source of a comment, processing instruction or
+// directive whose first byte is at offset off, for an ill-formed UTF-8 code
+// unit sequence, which XML 1.0 §4.3.3 makes a fatal error in an entity encoded
+// in UTF-8: a RuleXMLWellFormed fault located at the sequence's first byte.
+// The decoder checks character data, attribute values and names itself and
+// the bodies of these three tokens never. The check is UTF-8 validity, not a
+// byte value: a byte decodes as utf8.RuneError of width 1 exactly where
+// utf8.ValidString fails. A well-formed sequence encoding no Char ([2]) is not
+// this check's.
+func (r *Reader) checkUTF8(raw string, off int64) error {
+	for i, c := range raw {
+		if c != utf8.RuneError {
+			continue
+		}
+		if _, n := utf8.DecodeRuneInString(raw[i:]); n != 1 {
+			continue
+		}
+		return xsderr.New(xsderr.RuleXMLWellFormed, r.locAt(off+int64(i)), "ill-formed UTF-8 byte sequence in markup (XML 1.0 §4.3.3)")
+	}
+	return nil
 }
 
 // declareEntities records the general entity declarations of a DOCTYPE
