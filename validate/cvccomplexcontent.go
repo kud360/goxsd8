@@ -669,7 +669,7 @@ func (c *contentCheck) fixedActualValue(w *walk, f xsd.ValueConstraint) {
 // same condition [contentCheck.simpleTypeValue] gates clause 3.1.3 on.
 func (c *contentCheck) stringValid(w *walk, st *xsd.SimpleType) (decided bool, verdict error) {
 	if !c.nilled {
-		w.simpleAssertions(st, c.e.Loc())
+		w.simpleAssertions(st, "assessing element", c.e.Name(), c.e.Loc())
 	}
 	return w.stringValid(st, c.assessed(), c.e, c.e.Loc())
 }
