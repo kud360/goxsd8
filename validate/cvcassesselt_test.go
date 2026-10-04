@@ -400,7 +400,7 @@ func TestOpenContentAttributedChildUnderASkipWildcardIsNotAssessed(t *testing.T)
 		"assessing content validate.name=x validate.loc=instance.xml:3:1 " +
 			"validate.rule=cvc-complex-content validate.clause=3 validate.outcome=attributed to open content wildcard any",
 		"assessing element validate.name=x validate.loc=instance.xml:3:1 " +
-			"validate.rule=cvc-assess-elt validate.clause=3.2 validate.outcome=skipped",
+			"validate.rule=cvc-assess-elt validate.clause=2 validate.outcome=skipped",
 		"assessing content validate.name=root validate.loc=instance.xml:1:1 " +
 			"validate.rule=cvc-complex-content validate.clause=3 validate.outcome=accepted",
 	}
@@ -464,12 +464,12 @@ func TestALaxlyAssessedChildIsWalkedAndChargesNothingBelowItself(t *testing.T) {
 	}
 }
 
-// A child ·attributed to· a skip Wildcard is not ·assessed· at all (clause
-// 3.2), and neither is any element below it: ·skipped· (§3.10.4.1 key-skipped)
-// holds for every descendant of a skipped item, which the walk gets by not
-// descending at all. The log is what distinguishes this from ·strictly
-// assessed· (key-sva) clause 3.3 — both charge nothing, and only one of them
-// leaves the subtree unvisited.
+// A child ·attributed to· a skip Wildcard is not ·assessed· at all (key-sva
+// clause 3.2, cvc-assess-elt clause 2), and neither is any element below it:
+// ·skipped· (§3.10.4.1 key-skipped) holds for every descendant of a skipped
+// item, which the walk gets by not descending at all. The log is what
+// distinguishes this from ·strictly assessed· (key-sva) clause 3.3 — both
+// charge nothing, and only one of them leaves the subtree unvisited.
 func TestDescendantAttributedToASkipWildcardIsNotAssessed(t *testing.T) {
 	schema := dSchema(t, func(b *xsd.SchemaBuilder) {
 		b.AddType(dType(t, "KidType", "", xsd.DerivationRestriction, nil,
@@ -493,7 +493,7 @@ func TestDescendantAttributedToASkipWildcardIsNotAssessed(t *testing.T) {
 		"assessing content validate.name=kid validate.loc=instance.xml:2:1 " +
 			"validate.rule=cvc-complex-content validate.clause=1 validate.outcome=attributed to wildcard any",
 		"assessing element validate.name=kid validate.loc=instance.xml:2:1 " +
-			"validate.rule=cvc-assess-elt validate.clause=3.2 validate.outcome=skipped",
+			"validate.rule=cvc-assess-elt validate.clause=2 validate.outcome=skipped",
 		"assessing content validate.name=root validate.loc=instance.xml:1:1 " +
 			"validate.rule=cvc-complex-content validate.clause=1 validate.outcome=accepted",
 	}
