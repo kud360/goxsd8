@@ -42,10 +42,12 @@ const ruleDatatypeValid xsderr.Rule = "cvc-datatype-valid"
 //     3, 3.0, 3.00 are distinct and +0 ≠ −0, yet NaN ≡ NaN — PRINCIPLES 18),
 //     [value.Scaled] (·scale· kept verbatim), [value.DigitCounted] (totalDigits
 //     counts the coefficient's digits, trailing zeros included; fractionDigits is
-//     inert — not an applicable facet, §3.3) and [value.Canonical]. Deliberately
-//     NOT [value.Lengthed]/[value.TimezoneAware]. The maxScale/minScale facets are
-//     applicable per spec but not yet enforced (see the GAP marker in
-//     precisiondecimal.go).
+//     inert — not an applicable facet, §3.3). Deliberately NOT
+//     [value.Lengthed]/[value.TimezoneAware], and NOT [value.Canonical]: a zero
+//     whose ·scale· exceeds 2^20 has a canonical form beyond this processor's
+//     capacity (xmlschema11-2 §5.4), which only its [value.Mapping.Canonical]
+//     error can report. The maxScale/minScale facets are enforced by
+//     value/facets.go's scaleFacet through [value.Scaled].
 //   - xs:boolean — [value.Eq], [value.Identical] and [value.Canonical]. It is
 //     deliberately NOT [value.Ordered] (ordered=false, §3.3.2.3).
 //   - xs:string — [value.Eq], [value.Lengthed] (character count) and

@@ -42,6 +42,12 @@ type Context interface {
 // verdict — no cvc-* rule reads canonical form (§2.3.1 Note) — so it is a plain
 // fmt.Errorf, not an *xsderr.Error. This per-value "valid, no canonical form"
 // case stays textually separate from the whole-type "no Canonical func" case.
+//
+// The same plain error also reports a VALID value whose canonical form exists
+// but lies beyond the backend's capacity (Datatypes §5.4: indicated, never
+// quietly changed, never treated as invalid) — e.g. the strict backend's
+// precisionDecimal zero of a huge ·scale·, whose canonical form pads ·scale· − 1
+// zeros.
 type Mapping struct {
 	// Parse maps a normalized lexical form to a value, or returns an
 	// *xsderr.Error describing why the lexical is not in the type's space.
@@ -50,8 +56,9 @@ type Mapping struct {
 	// Canonical maps a value back to its canonical lexical form. It is nil for
 	// types that have no canonical mapping (whole-type case); when non-nil it may
 	// still return a plain non-*xsderr.Error for one valid value that has no
-	// canonical form of its own (partial-domain case, §2.3.1's "(where possible)").
-	// Such an error is not a validity verdict — see the [Mapping] doc.
+	// canonical form of its own (partial-domain case, §2.3.1's "(where possible)")
+	// or whose canonical form is beyond the backend's capacity (§5.4). Such an
+	// error is not a validity verdict — see the [Mapping] doc.
 	Canonical func(v Value) (string, error)
 }
 
