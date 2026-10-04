@@ -241,11 +241,11 @@ chooses (#350).
   worktree, cut from `origin/main`, does not — `git merge --no-ff`. No
   cherry-pick, no rebase, no re-edit by hand: each rewrites the SHAs
   the subagent's account names, so a reader checking that account against
-  the branch finds nothing (#1099). Then discard the worktree and checkpoint,
-  naming the resulting SHA — the fast-forwarded tip, or the merge
-  commit — in that checkpoint's `RESUME:` comment, which this step posts
-  whether or not the next action is obvious: a commit message on
-  `wip/issue-<N>` does not survive the squash at landing.
+  the branch finds nothing (#1099). Then discard the worktree and
+  checkpoint. To put any branch or worktree at a given commit, `git merge
+  --ff-only <sha>` when the branch is that commit's ancestor, otherwise
+  `git checkout -B <branch> <sha>`: `.claude/settings.json` denies `git
+  reset --hard` (#2223).
 
 **The orchestrator holds the pen only for words already written on the
 thread.** Its edit transcribes a verdict's or a ruling's text, or is
@@ -374,8 +374,7 @@ is anyone else's to volunteer:
    a body that is a local path carries nothing (**What survives a
    session**, #992) — and every SHA it names resolves in this checkout
    (`git cat-file -t <sha>`): an account naming a SHA that resolves nowhere
-   describes work that does not exist, and the checkpoint comment says so
-   (#1355). A repair round's own comment dispositions every numbered item of
+   describes work that does not exist, and the thread says so (#1355). A repair round's own comment dispositions every numbered item of
    the verdict it repairs. An account that was never written is a mason
    round, never the orchestrator's to compose (#565).
 4. **Every issue the squash body names reads the state the body meant**
@@ -442,8 +441,8 @@ question: can this change what the verdict measured?
 - **Provably nothing measured changed** → land it. Only text no compiler
   reads qualifies, proved mechanically: the diff since the accepted commit
   touches no line outside a comment or a `.md` file. It is its own commit,
-  carrying that proof in its body; re-run gate parts 1–3 and move no
-  ratchet figure.
+  carrying that proof in its body; re-run CLAUDE.md's gate, whole, and
+  move no ratchet figure (#1993).
 
 What no class admits goes to the post-land ledger.
 

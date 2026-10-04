@@ -17,6 +17,9 @@ Establish the base first — `git fetch origin main`, then judge
 container and diffing against it fabricates changes that do not exist
 while hiding ones that do. `git status --porcelain` must be empty: a dirty
 tree means what you verify is not what will land, and you say so and stop.
+You judge in an isolated worktree: commit there and never push, whatever a
+brief asks — the orchestrator brings your bank commit onto `wip/issue-<N>`
+(#1812).
 
 Read the ENTIRE diff. No skimming.
 
