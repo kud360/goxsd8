@@ -57,7 +57,7 @@ import (
 //
 // # The only outcomes this slice can DECIDE
 //
-// validate.Validator.Assess charges exactly nine rules, about the ·validation
+// validate.Validator.Assess charges exactly ten rules, about the ·validation
 // root· and about any descendant the descent reaches (see "Charges at depth"
 // below):
 //
@@ -147,8 +147,15 @@ import (
 //     ·initial value· that is not ·valid· per String Valid against that type
 //     (3.1.3) (#913). The element is then not locally ·valid· with respect to
 //     its ·governing type definition·, so case 3's chain applies unchanged.
+//  10. cvc-assertion (§3.13.4.1), when an assertion in the {assertions} of an
+//     element's complex ·governing type definition· has a {test} validate's
+//     XPath evaluator compiles and that {test} is false or raises a dynamic or
+//     type error, which the rule treats alike (#2232). cvc-complex-type clause
+//     6 reads it, so case 3's chain applies unchanged. An assertion whose
+//     {test} the evaluator declines is recorded, never charged, and a facet
+//     assertion's cvc-assertions-valid is never charged at all.
 //
-// All nine are unconditional: no verdict here can be overturned by anything in
+// All ten are unconditional: no verdict here can be overturned by anything in
 // the rest of the document, which is what makes them decidable while the engine
 // leaves most of the document undecided. They are every "not valid" this lane
 // observes of an assessment, the not-well-formed schema document above being
@@ -158,8 +165,8 @@ import (
 //
 // # Charges at depth
 //
-// Cases 2 to 7 and case 9 are charged against a DESCENDANT on the same terms as
-// against the root (#790, #913), and stay unconditional there. The lane's
+// Cases 2 to 7, case 9 and case 10 are charged against a DESCENDANT on the same
+// terms as against the root (#790, #913), and stay unconditional there. The lane's
 // "valid" is §2.5's key-deep-valid-doc (#1911): the root's [validity] is valid
 // AND no element or attribute anywhere in the document has [validity] invalid
 // (clauses 3 and 4). key-sva (§3.3.4.6) clause 3.1 has a child assessed with
@@ -434,9 +441,11 @@ import (
 //     subtreeGate.locallyDeclaredAttribute). e-validity clause 1.1.3 is the
 //     walk's, charged for a strict ·wildcard particle·'s child resolving to
 //     none (validate's walk.unresolvedStrictWildcardChild).
-//   - cvc-complex-type clause 6: RECORDED, never decided. validate's
-//     elementAssertions records an Unevaluated for every member of a governing
-//     type's {assertions}, so an empty Unevaluated shows every one empty.
+//   - cvc-complex-type clause 6: the walk's, at every element. validate's
+//     elementAssertions charges cvc-assertion for a member of a governing
+//     type's {assertions} whose {test} it evaluates and finds not true (case
+//     10), and records an Unevaluated for every member it does not evaluate, so
+//     an empty Result shows every member evaluated and satisfied.
 //   - cvc-complex-type clause 1 (§3.4.4.2): the walk's, for an element with no
 //     [[children]] as for any other. An empty {content type} meets clause 1.1
 //     wherever the walk charged no character or element [[child]]; a simple one
@@ -482,7 +491,7 @@ import (
 //
 // # Why no false pass is possible
 //
-// Every "not valid" observation this lane emits comes from one of the nine
+// Every "not valid" observation this lane emits comes from one of the ten
 // charges above, each of which is unconditional, or from a schema document the
 // reader charged not well-formed, recorded before any assessment under
 // execInstanceCase's harness convention. Its "valid" observation
@@ -492,7 +501,7 @@ import (
 // gap for a suite-invalid case it cannot see the defect in, and for a
 // suite-valid case outside that shape, but it cannot score a pass on a
 // document it did not really reject, nor on one it did not really decide valid
-// — at the root or at any depth, the charges being the same nine either way.
+// — at the root or at any depth, the charges being the same ten either way.
 // The bound on the valid side is exactly as wide as the gate is correct and
 // ValidateLexical is right: a clause the gate should have excluded and did
 // not, or a Datatype Valid verdict the backend gets wrong, is where a false
@@ -560,7 +569,7 @@ import (
 // records how far the walk got and not what the document holds: the walk keeps
 // going after a charge such as an abstract declaration's, so a Result can carry
 // BOTH a decidable violation and a truncated walk. And a violation set that
-// holds any rule outside the nine enumerated declines rather than being read as
+// holds any rule outside the ten enumerated declines rather than being read as
 // a verdict a later slice's wider Assess might charge under an approximation;
 // the COUNT is not a condition, since one root can honestly carry several
 // charges (see decidedNotValid). An EMPTY violation set declines unless the
@@ -602,7 +611,7 @@ const (
 	refuseInstanceUnresolved refusal = "instance-unresolved"   // assessInstance: the instance will not resolve
 	refuseInstanceUnread     refusal = "instance-unread"       // assessInstance: xmlsrc.Validate failed
 	refuseWalkStopped        refusal = "walk-stopped"          // assessInstance: validate.Result.Err
-	refuseUndecidedRule      refusal = "undecided-rule"        // decidedNotValid: a charge outside the nine
+	refuseUndecidedRule      refusal = "undecided-rule"        // decidedNotValid: a charge outside the ten
 	refuseUnevaluated        refusal = "unevaluated"           // validate.Result.Unevaluated is not empty; see unevaluatedRefusal
 
 	// assessedSubtreeRoot's pre-gate refusals (subtreeroot.go).
@@ -650,7 +659,7 @@ func newInstanceExec() laneExecutor {
 // execInstanceCase decides one instanceTest case, or honestly declines it
 // (Fail, with the refusal naming the exit): it assembles the case's schema
 // (caseSchema), assesses the instance document against it, and reads the
-// assessment only where the answer is unconditional: a set of the nine
+// assessment only where the answer is unconditional: a set of the ten
 // decidable charges is "not valid", and an empty Result on an assessed subtree
 // root (assessedSubtreeRoot) is "valid". An assembly rejected for a
 // not-well-formed schema document is "not valid" without an assessment; every
@@ -754,11 +763,11 @@ func assessInstance(v *validate.Validator, doc string) (*validate.Result, refusa
 	return result, ""
 }
 
-// These are the nine rules validate.Validator.Assess charges, and the whole of
-// what this lane may read as a verdict. All nine are catalog IDs in their BARE
+// These are the ten rules validate.Validator.Assess charges, and the whole of
+// what this lane may read as a verdict. All ten are catalog IDs in their BARE
 // form: the charged clause lives in the message text, not in a dotted rule ID,
 // so matching the rule alone is the only stable match — and it is the right
-// one, since a root failing ANY clause of any of the nine is not locally valid
+// one, since a root failing ANY clause of any of the ten is not locally valid
 // and so not valid (§3.3.5.1 e-validity clause 1.1.1.1).
 const (
 	ruleCvcAssessElt      xsderr.Rule = "cvc-assess-elt"
@@ -771,6 +780,8 @@ const (
 
 	ruleCvcIdentityConstraint xsderr.Rule = "cvc-identity-constraint"
 	ruleCvcID                 xsderr.Rule = "cvc-id"
+
+	ruleCvcAssertion xsderr.Rule = "cvc-assertion"
 )
 
 // decidableRules collects them for the membership test below, so growing the
@@ -778,7 +789,7 @@ const (
 // != comparisons silently admits a rule someone forgot to add to it.
 var decidableRules = []xsderr.Rule{
 	ruleCvcAssessElt, ruleCvcElt, ruleCvcType, ruleCvcComplexType, ruleCvcComplexContent,
-	ruleCvcAttribute, ruleCvcAu, ruleCvcIdentityConstraint, ruleCvcID,
+	ruleCvcAttribute, ruleCvcAu, ruleCvcIdentityConstraint, ruleCvcID, ruleCvcAssertion,
 }
 
 // decidedNotValid reports whether the violations one assessment charged
