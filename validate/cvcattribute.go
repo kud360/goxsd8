@@ -187,7 +187,7 @@ func (w *walk) declaredAttribute(a Attribute, e Element, d xsd.AttributeDeclarat
 // It is reached from [walk.attributes] (assess.go) and never through
 // [walk.matchedAttribute], because no attribute use ever matches xsi:type —
 // cvc-complex-type clause 2 excepts the four Built-in Attribute Declarations by
-// name (isInstanceAttribute) and §3.2.6 a-props-correct forbids a schema to
+// name (isInstanceAttribute) and §3.2.6.4 no-xsi forbids a schema to
 // redeclare them. That exception is clause 2's own quantifier and nothing
 // wider: the Note under §3.2.4.2 keeps an xsi:type attribute governed by its
 // built-in declaration whatever the element's ·governing type definition· is,
@@ -442,7 +442,7 @@ func citation(rule xsderr.Rule, clause string) string {
 // their own order: membership in {attribute uses} is the range, then
 // {required} = false (clause 2), then a non-·absent· ·effective value
 // constraint· (clause 3), then not one of the four Built-in Attribute
-// Declarations (clause 4, isInstanceAttribute — §3.2.6 a-props-correct forbids
+// Declarations (clause 4, isInstanceAttribute — §3.2.6.4 no-xsi forbids
 // a schema to redeclare those names, so the name settles it), then no
 // attribute information item matching the declaration per clause 2.1
 // (clause 5).

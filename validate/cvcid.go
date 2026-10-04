@@ -257,16 +257,29 @@ func (w *walk) idDefaultedAttributes(c *icCheck, attrs []Attribute, ct xsd.Compl
 // value constraints may play a part", and cvc-elt clause 5.1 is what puts the
 // substituted item in the ·eligible item set· (#853).
 //
-// GAP(validate): a declaration whose type was not determinable (a {type table}
-// carrying a {test} the §3.12.6 evaluator declines, an ·absent· (nil) {type
-// definition}, an xsi:type whose ·override· could not be decided) declines
-// instead, recorded as an [Unevaluated] ([walk.declineID]). An element with NO
-// ·governing element declaration· is not that shape. A ·laxly assessed· one,
-// a declared element §5.3 falls back to ·lax assessment· among them
-// ([walk.declaredGovernance]), is assessed against xs:anyType, whose complex
-// {content type} is not derived from ID and so contributes nothing under
-// clause 3, and its [[children]] are read in their own turn ([walk.child]). An
-// undecided one ([governance]) is [walk.child]'s decline, not this one's.
+// GAP(validate): a declaration whose type was not determinable declines,
+// recorded as an [Unevaluated] ([walk.declineID]). RULED permanent by #2174
+// (STYLE P3b): the decline has no retirement route of its own and retires with
+// its last producer. Those are (b1) [walk.conditionallySelected]'s
+// key-cta-ta-select decline of a {test} the §3.12.6 evaluator cannot evaluate,
+// which ta-props-correct clause 2 licenses, (b2) [walk.resolvedSelection]'s
+// ·absent· (nil) {type definition} slot, which #2166 ruled permanent, and (b3)
+// [walk.instanceOverride]'s [xsd.Schema.ValidlySubstitutable] error,
+// unreachable for the reason xsd's validlyDerived states. Its consumers, and
+// the direction each charges in: [idTable.charge] withholds its clause 1 arm
+// (the decline sets declined), fail-open, and keeps charging clause 2, which
+// is fail-CLOSED here, because [walk.idAttributes] reads the element's
+// attributes by ·expanded name· through [walk.attributeType]'s top-level
+// fallback, as [icCheck.fieldAttributes] does for cvc-identity-constraint;
+// walk.attributeType's own marker carries that gap. The element's [[children]]
+// are [walk.child]'s undecided branch, whose marker names that shape's
+// consumers. An element with NO ·governing element declaration· is not that
+// shape. A ·laxly assessed· one, a declared element §5.3 falls back to ·lax
+// assessment· among them ([walk.declaredGovernance]), is assessed against
+// xs:anyType, whose complex {content type} is not derived from ID and so
+// contributes nothing under clause 3, and its [[children]] are read in their
+// own turn ([walk.child]). An undecided one ([governance]) is [walk.child]'s
+// decline, not this one's.
 //
 // A ·nilled· element contributes nothing and withholds nothing: §3.3.5.4 gives
 // it an absent [schema actual value], and clause 2 of the ·eligible item set·
@@ -672,6 +685,18 @@ var (
 // matches. Reaching it on an unread use would govern the attribute by whichever
 // type the schema happens to ALSO declare at the top level, that declaration
 // being a DIFFERENT component from the use's {attribute declaration}.
+//
+// GAP(validate): the top-level fallback is also reached for an element whose
+// ·governing type definition· this package could not determine — the declined
+// shape [walk.idElement]'s marker names and the undecided one [walk.child]'s
+// names — and there it reads an attribute by ·expanded name· although
+// key-governing-ad clause 2's ·context-determined declaration·, from a use of
+// the undetermined type, or a skip {attribute wildcard} of it, may come first.
+// That direction is fail-CLOSED: [walk.idAttributes] adds an ·ID value· the
+// true type may not give the attribute, which [idTable.charge]'s clause 2 can
+// charge as a duplicate, and [icCheck.fieldAttributes] offers a member under a
+// type that may not be the attribute's, which cvc-identity-constraint clause
+// 4.1 or 4.2.2 can charge as equal to another. Tracked by #2192.
 func (w *walk) attributeType(g governance, a Attribute) (*xsd.SimpleType, bool) {
 	if ct := g.complexType(); ct != nil {
 		if u, matched := attributeUseNamed(ct.AttributeUses(), a.Name()); matched {
