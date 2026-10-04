@@ -418,36 +418,33 @@ func TestNilledUndeterminedParentsChildIsUndecided(t *testing.T) {
 	leaf := func(kids ...Child) Child { return ElementChild(dElem("leaf", 3, kids...)) }
 	x := ElementChild(dElem("x", 4))
 	text := TextChild(&testText{data: "t", loc: loc(2, 1)})
-	type charge = struct {
-		rule xsderr.Rule
-		loc  xsderr.Loc
-	}
-	nilAt := func(line int) charge { return icCharge(ruleCvcElt, line) }
 	for _, tc := range []struct {
 		why                  string
 		test                 string
 		use, decl, localLeaf bool
 		doc                  *testElement
-		want                 []charge
+		nilAt                int  // the line cvc-elt clause 3.2.3.1 is charged at
+		selected             bool // <leaf> selects First, in a control row alone
 	}{
-		{"declaration only, decided", decided, false, true, false, nilDoc(leaf()),
-			[]charge{nilAt(3)}},
-		{"declaration only, declined", declined, false, true, false, nilDoc(leaf()),
-			[]charge{nilAt(3)}},
-		{"use only, decided", decided, true, false, false, nilDoc(leaf(x)),
-			[]charge{nilAt(3), icCharge(ruleCvcComplexType, 3), icCharge(ruleCvcComplexType, 4)}},
-		{"use only, declined", declined, true, false, false, nilDoc(leaf(x)),
-			[]charge{nilAt(3)}},
-		{"local leaf, decided", decided, true, true, true, nilDoc(leaf()),
-			[]charge{nilAt(3)}},
-		{"local leaf, declined", declined, true, true, true, nilDoc(leaf()),
-			[]charge{nilAt(3)}},
-		{"charged before the child, declined", declined, false, true, false, nilDoc(text, leaf()),
-			[]charge{nilAt(2)}},
+		{"declaration only, decided", decided, false, true, false, nilDoc(leaf()), 3, false},
+		{"declaration only, declined", declined, false, true, false, nilDoc(leaf()), 3, false},
+		{"use only, decided", decided, true, false, false, nilDoc(leaf(x)), 3, true},
+		{"use only, declined", declined, true, false, false, nilDoc(leaf(x)), 3, false},
+		{"local leaf, decided", decided, true, true, true, nilDoc(leaf()), 3, false},
+		{"local leaf, declined", declined, true, true, true, nilDoc(leaf()), 3, false},
+		{"charged before the child, declined", declined, false, true, false, nilDoc(text, leaf()), 2, false},
 	} {
 		t.Run(tc.why, func(t *testing.T) {
 			got, unevaluated := assessRecorded(t, nilFixture(t, tc.test, tc.use, tc.decl, tc.localLeaf), tc.doc)
-			icWantCharges(t, got, tc.want...)
+			inhWantSelected(t, got, tc.selected, tc.why)
+			if tc.selected {
+				// First, like Fallback, admits no element [[child]]: <x> is
+				// charged cvc-complex-type clause 1.1 at its own line.
+				icWantCharges(t, got, icCharge(ruleCvcElt, tc.nilAt),
+					icCharge(ruleCvcComplexType, 3), icCharge(ruleCvcComplexType, 4))
+				return
+			}
+			icWantCharges(t, got, icCharge(ruleCvcElt, tc.nilAt))
 			if tc.test == decided {
 				return
 			}
