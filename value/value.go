@@ -1,6 +1,9 @@
 package value
 
-import "math/big"
+import (
+	"iter"
+	"math/big"
+)
 
 // Value is the open representation of a typed XSD value. It is deliberately
 // not a sealed interface (PRINCIPLES 2): backends bring their own value types.
@@ -76,6 +79,16 @@ type Lengthed interface {
 	// Len returns the value's length in the units its primitive defines
 	// (characters, list items, or octets).
 	Len() int
+}
+
+// Listed is a list-variety value (Datatypes §4.1.4 clause 2.2, dv_list): the
+// ordered sequence of its items, each a value of the list's {item type
+// definition}. It is how a consumer reads a list value's items without a type
+// switch over a backend's concrete types (STYLE T2) — xpath's XDM
+// representation of a list (Datatypes dt-xdmrep) is the sequence it ranges.
+type Listed interface {
+	// Items yields the list's items in order.
+	Items() iter.Seq[Value]
 }
 
 // DigitCounted is a value the totalDigits and fractionDigits facets constrain
