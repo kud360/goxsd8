@@ -16,6 +16,17 @@ heartbeat.
 ref ends the iteration, whatever the survey said when it ran (#1460). Then
 push the heartbeat WORKFLOW's lease invariant requires before a round.
 
+**A brief carries the issue and never narrows the delegate's own file.**
+Paste the body's `## Goal`, `## Spec` and `## Acceptance` and every thread
+comment that declares itself normative into the request verbatim: the
+oracle has no tool that reads GitHub (#2142). A brief names the gate only
+as CLAUDE.md's gate, whole (#1959); never bars or reshapes a duty the
+delegate's agent file assigns it, the arbiter's ratchet run on accept above
+all (#1812); never asks a subagent to push, since its commits leave its
+worktree only through WORKFLOW's hand-off (#2133); and never names a
+`Co-Authored-By` model — each commit names the model that wrote it
+(#1996).
+
 **Lost rounds.** A delegated round — mason's, the arbiter's, any agent's —
 is lost when it ends without its report: the agent returned without one,
 or the session that delegated it is gone. Elapsed time is not a
@@ -81,8 +92,8 @@ counts.
      `--force-with-lease=<ref>:` push answers the same (#1743).
 
 3. **Ground.** Read the whole thread first: a comment that declares itself
-   normative for the issue binds as the body does, and goes into every
-   request below (#654). Search the open queue for this issue's primary
+   normative for the issue binds as the body does (#654). Search the open
+   queue for this issue's primary
    file path and identifier and record what any hit was (duplicate or
    adjacent).
 
@@ -101,6 +112,26 @@ counts.
      verdict will apply.
 
    Grounding rules bars, not designs: where the code goes is mason's.
+
+   **A grounding statement holds only over what the grounding checked.** A
+   licence, a precedent named for reuse, a marker's disposition or a
+   proposed discriminator is checked against everything it speaks for, and
+   says what that was; what was not checked is written as unmeasured, for
+   mason to measure before the verdict. That population is:
+   - the inputs the probe actually ran, not the change it licenses (#1948);
+   - a reused helper's accepted value range, against the new site's
+     declared type (#1781);
+   - a `GAP(` marker's quoted wording, not the issue's cases, with an owner
+     named for any remainder the landing leaves (#1798);
+   - every input domain the exported entry point admits — flavours, flags,
+     the position an attribute sits at — not only the ones that move the
+     ratchet (#1868);
+   - what the input the check reads represents: which document
+     `xs:override` makes it judge, and which absent or defaulted state
+     shares its encoding (#1868);
+   - for a fault-versus-limitation discriminator, each behaviour a
+     conforming processor must supply that this one lacks, and the bucket
+     the discriminator puts a well-formed input exercising it in (#2075).
 
    **ACCEPTANCE** — rule every bullet as the filer wrote it, against the
    current tree. Two questions, and a bullet fails on either: **can this
@@ -171,16 +202,14 @@ counts.
    arms, a `RULING:` comment picks the arm and its constraints and quotes
    any earlier ruling it relies on; it names no implementation site (#1480).
    Then delegate to **mason**, always with worktree isolation, and put
-   WORKFLOW's commit-as-you-go clause in its prompt. Name the gate in
-   that prompt only as CLAUDE.md's gate, whole — never a subset of its
-   parts; the ratchet run is the arbiter's, and no part of the gate is
-   it. The same holds for every mason prompt this command sends: step
-   5's repair round and a lost round's re-delegation (#1959). Only once
-   mason reports, bring its branch onto `wip/issue-<N>` under WORKFLOW's
-   **One writer per checkout** hand-off clause — fast-forward or merge,
-   never a replay — and name the resulting SHA in that checkpoint's
-   comment. If the change added or altered public API in that same sense,
-   warden reviews the diff too (#1168). Post both verdicts on the issue.
+   WORKFLOW's commit-as-you-go clause in its prompt — and in every mason
+   prompt this command sends, step 5's repair round and a lost round's
+   re-delegation included. The ratchet run is the arbiter's, and no part
+   of the gate is it. Only once mason reports, bring its branch onto
+   `wip/issue-<N>` under WORKFLOW's **One writer per checkout** hand-off
+   clause — fast-forward or merge, never a replay. If the change added or
+   altered public API in that same sense, warden reviews the diff too
+   (#1168). Post both verdicts on the issue.
 
    Mason may absorb adjacent work under docs/WORKFLOW.md's scope rule.
    Absorbed items belong in the commit body, not in a new issue.
@@ -194,7 +223,10 @@ counts.
    `go build` skips, and must exit 0, else make the follow-up fixes the
    merge implies per WORKFLOW's **Merge-conflict resolution**, as a
    follow-up commit and never an amend (#2026). Then delegate to
-   **arbiter**. On reject: one repair round by mason, briefed from the
+   **arbiter**, with worktree isolation like any subagent that writes: on
+   accept it runs and banks the ratchet as its agent file requires, and its
+   bank commit comes onto `wip/issue-<N>` under the same hand-off clause as
+   mason's (#1812). On reject: one repair round by mason, briefed from the
    whole posted verdict — never from a partial finding set, and never
    before the verdict is posted (#1426) — then re-judge in full. On a
    second reject: park per WORKFLOW, then go to step 6's log entry and

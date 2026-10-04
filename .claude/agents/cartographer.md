@@ -36,7 +36,9 @@ Cheap and targeted, not a full backlog run. Three duties:
    a completed pass and a skipped one are indistinguishable from `git log`,
    and a session has already concluded — and committed — the wrong one
    (#400). If the pass restamps `docs/PLAN.md`, step 6's replacement rule
-   governs; there is no post-land variant of it.
+   governs; there is no post-land variant of it, and a live `/backlog`
+   claim (`.claude/commands/backlog.md`) owns the restamp, so leave it
+   (#2010).
 
 A hand-off is not a disposition. "Its right home is whichever issue next
 touches X" tracks nothing (#330). The log's Friction bullet is a ledger
@@ -146,7 +148,9 @@ Fill every section; write "n/a" or "none" rather than dropping one.
 <rule IDs / docs/specs/md anchors the change implements — or "n/a">
 
 ## Acceptance
-<tests / conformance cases that prove it done — the ratchet lane it moves>
+<tests / conformance cases that prove it done — the ratchet lane it moves;
+ a test bullet says which rows fail with the fix removed and which guard
+ against over-charging or pin existing behaviour (#1913)>
 
 ## Surface
 <exported-identifier additions or changes — or "none">
