@@ -1,5 +1,7 @@
 package value
 
+import "math/big"
+
 // Value is the open representation of a typed XSD value. It is deliberately
 // not a sealed interface (PRINCIPLES 2): backends bring their own value types.
 // What a value can do is discovered through the small capability interfaces in
@@ -87,12 +89,14 @@ type DigitCounted interface {
 
 // Scaled is a value that retains a decimal scale as part of its identity.
 // precisionDecimal keeps its lexical scale in the value: 3, 3.0 and 3.00 are
-// distinct, numerically equal values (xsd-precisionDecimal). The special
-// values (NaN, ±INF) have no scale and report ok=false.
+// distinct, numerically equal values (xsd-precisionDecimal). ·scale· is an
+// unbounded integer (xsd-precisionDecimal §3.1, vp-pd-precision), so it is
+// never narrowed to a host int.
 type Scaled interface {
-	// Scale returns the value's scale; ok is false for values (specials) that
-	// carry no scale.
-	Scale() (scale int, ok bool)
+	// Scale returns the value's ·scale·. scale is a fresh value the caller owns;
+	// ok is false, and scale nil, for a value whose ·scale· is absent (the
+	// specials NaN/±INF).
+	Scale() (scale *big.Int, ok bool)
 }
 
 // TimezoneAware is a date/time-family value the explicitTimezone facet

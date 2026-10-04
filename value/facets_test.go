@@ -1,6 +1,7 @@
 package value
 
 import (
+	"math/big"
 	"testing"
 
 	"github.com/kud360/goxsd8/xsd"
@@ -46,15 +47,20 @@ func TestLengthExemptPrimitive(t *testing.T) {
 }
 
 // scaledStub is a test-only value.Scaled: a numeric value carrying an explicit
-// ·scale· (present), or a special (present=false) whose ·scale· is absent —
-// modeling precisionDecimal's numeric vs NaN/±INF arms without pulling in the
-// strict backend.
-type scaledStub struct {
-	scale   int
-	present bool
+// ·scale·, or, with a nil scale, a special whose ·scale· is absent — modeling
+// precisionDecimal's numeric vs NaN/±INF arms without pulling in the strict
+// backend.
+type scaledStub struct{ scale *big.Int }
+
+func (s scaledStub) Scale() (*big.Int, bool) {
+	if s.scale == nil {
+		return nil, false
+	}
+	return new(big.Int).Set(s.scale), true
 }
 
-func (s scaledStub) Scale() (int, bool) { return s.scale, s.present }
+// scaled is a scaledStub whose ·scale· is n.
+func scaled(n int64) scaledStub { return scaledStub{scale: big.NewInt(n)} }
 
 // TestScaleFacetCheckValue exercises both polarities of both scale facets
 // (cvc-maxScale-valid xsd-precisionDecimal.md §4.2.3, cvc-minScale-valid §4.3.3)
@@ -69,20 +75,20 @@ func TestScaleFacetCheckValue(t *testing.T) {
 		v        scaledStub
 		wantRule xsderr.Rule // "" means accept
 	}{
-		{"maxScale within bound", xsd.FacetMaxScale, "2", scaledStub{scale: 2, present: true}, ""},
-		{"maxScale below bound", xsd.FacetMaxScale, "2", scaledStub{scale: 1, present: true}, ""},
-		{"maxScale exceeds bound", xsd.FacetMaxScale, "2", scaledStub{scale: 3, present: true}, "cvc-maxScale-valid"},
-		{"maxScale negative bound rejects", xsd.FacetMaxScale, "-1", scaledStub{scale: 0, present: true}, "cvc-maxScale-valid"},
-		{"maxScale negative bound accepts", xsd.FacetMaxScale, "-1", scaledStub{scale: -2, present: true}, ""},
-		{"minScale within bound", xsd.FacetMinScale, "2", scaledStub{scale: 2, present: true}, ""},
-		{"minScale above bound", xsd.FacetMinScale, "2", scaledStub{scale: 3, present: true}, ""},
-		{"minScale below bound", xsd.FacetMinScale, "2", scaledStub{scale: 1, present: true}, "cvc-minScale-valid"},
-		{"minScale negative bound accepts", xsd.FacetMinScale, "-1", scaledStub{scale: -1, present: true}, ""},
-		{"minScale negative bound rejects", xsd.FacetMinScale, "-1", scaledStub{scale: -2, present: true}, "cvc-minScale-valid"},
+		{"maxScale within bound", xsd.FacetMaxScale, "2", scaled(2), ""},
+		{"maxScale below bound", xsd.FacetMaxScale, "2", scaled(1), ""},
+		{"maxScale exceeds bound", xsd.FacetMaxScale, "2", scaled(3), "cvc-maxScale-valid"},
+		{"maxScale negative bound rejects", xsd.FacetMaxScale, "-1", scaled(0), "cvc-maxScale-valid"},
+		{"maxScale negative bound accepts", xsd.FacetMaxScale, "-1", scaled(-2), ""},
+		{"minScale within bound", xsd.FacetMinScale, "2", scaled(2), ""},
+		{"minScale above bound", xsd.FacetMinScale, "2", scaled(3), ""},
+		{"minScale below bound", xsd.FacetMinScale, "2", scaled(1), "cvc-minScale-valid"},
+		{"minScale negative bound accepts", xsd.FacetMinScale, "-1", scaled(-1), ""},
+		{"minScale negative bound rejects", xsd.FacetMinScale, "-1", scaled(-2), "cvc-minScale-valid"},
 		// Vacuous pass (clause 2): a special (absent ·scale·) passes both facets
 		// regardless of {value}, even a bound that would reject any numeric scale.
-		{"maxScale special vacuous", xsd.FacetMaxScale, "-5", scaledStub{present: false}, ""},
-		{"minScale special vacuous", xsd.FacetMinScale, "5", scaledStub{present: false}, ""},
+		{"maxScale special vacuous", xsd.FacetMaxScale, "-5", scaledStub{}, ""},
+		{"minScale special vacuous", xsd.FacetMinScale, "5", scaledStub{}, ""},
 	}
 	for _, c := range cases {
 		sf, err := newScaleFacet(xsd.NewFacet(c.kind, []string{c.limit}, false))
@@ -242,7 +248,7 @@ func TestFacetRejectionIsNotAPrecondition(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newScaleFacet: %v", err)
 	}
-	rejection := sf.CheckValue(scaledStub{scale: 3, present: true})
+	rejection := sf.CheckValue(scaled(3))
 	if rejection == nil {
 		t.Fatal("CheckValue(scale 3 under maxScale 2) = nil, want a cvc-maxScale-valid rejection")
 	}
