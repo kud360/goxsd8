@@ -174,12 +174,11 @@ const builtinsSchemaDoc = "testdata/builtins/builtins.xsd"
 //     clause 2). cvc-attribute clause 5 charges the xsi:type attribute, not
 //     root.
 //   - root carries no xsi:type, and an attribute in the xsi namespace whose
-//     local name is none of §3.2.7's four (unknownXsi,
-//     refuseNoHintUnknownXsi). Root is ·laxly assessed· against xs:anyType,
-//     whose lax attribute wildcard admits the attribute, and no declaration
-//     exists to assess it (cvc-assess-elt clause 2.2): no rule charges it, so
-//     a suite expectation of invalid is a suite expectation (PRINCIPLES 25),
-//     not a verdict.
+//     local name is none of §3.2.7's four (unknownXsi, refuseNoHintUnknownXsi).
+//     Root is ·laxly assessed· against xs:anyType, whose lax attribute wildcard
+//     admits the attribute, and no declaration exists to assess it (key-sva
+//     (§3.3.4.6) clause 2.2): no rule charges it, so a suite expectation of
+//     invalid is a suite expectation (PRINCIPLES 25), not a verdict.
 //   - root carries neither (refuseNoHint): a ·laxly assessed· root, its
 //     [validity] notKnown (#2013).
 //

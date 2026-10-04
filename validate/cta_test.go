@@ -442,9 +442,9 @@ func selectionSchema(t *testing.T, heads []xsd.QName, extra []xsd.ElementDeclara
 // selectionRoot is <root kind="…"><child kind="x"/></root>. The child's kind
 // attribute is cvc-complex-type clause 2's charge against Fallback, which
 // selectionSchema's top-level "child" declares, so it is charged exactly where
-// the child is assessed against that declaration — and root's ·lax
-// assessment· against xs:anyType does that, through the lax wildcard its
-// [[children]] are ·attributed to· (key-lva, cvc-assess-elt clause 3.1).
+// the child is assessed against that declaration — and root's ·lax assessment·
+// against xs:anyType does that, through the lax wildcard its [[children]] are
+// ·attributed to· (key-lva clause 2, key-sva (§3.3.4.6) clause 3.1).
 func selectionRoot(kind string) *testElement {
 	child := &testElement{name: local("child"), loc: loc(2, 3),
 		attrs: []Attribute{&testAttribute{name: local("kind"), value: "x", loc: loc(2, 10)}}}

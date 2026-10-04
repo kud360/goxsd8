@@ -613,12 +613,12 @@ const (
 // An attribute ·attributed to· a strict or lax {attribute wildcard}
 // (cvc-complex-type clause 2.2) has for its ·governing attribute declaration·
 // the top-level one its ·expanded name· ·resolves· to (key-governing-ad clause
-// 3), and cvc-assess-elt (§3.3.4.6) clause 2.1 assesses it against that
-// declaration: cvc-attribute (§3.2.4.1) clause 3 for a lexical outside its
-// {type definition} and clause 4 for a fixed {value constraint} it disagrees
-// with. Under skip the item is ·skipped· and nothing is assessed, and a name
-// resolving no declaration has no governing declaration under strict either
-// (clause 2.2; e-validity clause 1.1.3 names only a ·wildcard particle·).
+// 3), and key-sva (§3.3.4.6) clause 2.1 assesses it against that declaration:
+// cvc-attribute (§3.2.4.1) clause 3 for a lexical outside its {type definition}
+// and clause 4 for a fixed {value constraint} it disagrees with. Under skip the
+// item is ·skipped· and nothing is assessed, and a name resolving no
+// declaration has no governing declaration under strict either (clause 2.2;
+// e-validity clause 1.1.3 names only a ·wildcard particle·).
 //
 // The charged rows fail with [walk.unmatchedAttribute]'s call to
 // [walk.wildcardAttribute] removed; the silent rows guard against

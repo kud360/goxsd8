@@ -466,7 +466,7 @@ func TestRejectedChildChargesOnlyItsParent(t *testing.T) {
 // {open content} (§3.4.1) of the given {mode}, whose {wildcard} carries nc and
 // {process contents} pc. This file passes skip throughout, which keeps the open
 // half's own children out of the charges under test: an item ·attributed to· a
-// skip wildcard is not ·assessed· (cvc-assess-elt clause 3.2), which is
+// skip wildcard is not ·assessed· (key-sva (§3.3.4.6) clause 3.2), which is
 // cvcassesselt_test.go's subject and not this file's.
 func cOpenContent(t *testing.T, mode xsd.OpenContentMode, pc xsd.ProcessContents, nc xsd.NamespaceConstraint, particles ...xsd.Particle) xsd.ContentType {
 	t.Helper()
