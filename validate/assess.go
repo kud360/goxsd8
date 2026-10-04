@@ -74,7 +74,7 @@ const ruleCvcType xsderr.Rule = "cvc-type"
 // would have the root ·laxly assessed· against xs:anyType, which this package
 // does for a descendant and not for the root; charging instead is §5.2 strict
 // wildcard validation. An undeclared root whose xsi:type DOES resolve is
-// ·strictly assessed· against that type alone (clause 1.2), with no
+// ·strictly assessed· against that type alone (key-sva clause 1.2), with no
 // declaration to read cvc-elt against.
 //
 // A declaration whose {abstract} is true is charged cvc-elt clause 2 at the
@@ -113,19 +113,19 @@ const ruleCvcType xsderr.Rule = "cvc-type"
 //
 // A DESCENDANT is assessed the same way, against the ·governing element
 // declaration· the particle its parent's content model ·attributes· it to
-// supplies (§3.3.4.6 clause 3.1 over §3.4.4.4, [walk.childGoverning]): its own
-// [[attributes]], its own [[children]] and its own ·initial value· reach the
-// same charges the root's do. Two shapes below the root are not: a child
-// ·attributed to· a skip Wildcard or to an {open content} with a skip
-// {wildcard}, which is ·skipped· along with every element beneath it (clause
-// 3.2, clause 2), and a child whose governance this package could not decide,
-// which is walked against no type along with its whole subtree ([governance],
-// [walk.child]). A child its parent ·attributed· to nothing on any other
-// ground, and a child whose name ·resolves· to no declaration, are neither:
-// the package doc states how each is governed, the second being ·strictly
-// assessed· (key-sva) clause 3.3's ·lax assessment· against xs:anyType, whose
-// {content type} and {attribute uses} constrain nothing any of these charges
-// reads (#1823).
+// supplies (key-sva (§3.3.4.6) clause 3.1 over §3.4.4.4,
+// [walk.childGoverning]): its own [[attributes]], its own [[children]] and its
+// own ·initial value· reach the same charges the root's do. Two shapes below
+// the root are not: a child ·attributed to· a skip Wildcard or to an {open
+// content} with a skip {wildcard}, which is ·skipped· along with every element
+// beneath it (clause 3.2, clause 2), and a child whose governance this package
+// could not decide, which is walked against no type along with its whole
+// subtree ([governance], [walk.child]). A child its parent ·attributed· to
+// nothing on any other ground, and a child whose name ·resolves· to no
+// declaration, are neither: the package doc states how each is governed, the
+// second being ·strictly assessed· (key-sva) clause 3.3's ·lax assessment·
+// against xs:anyType, whose {content type} and {attribute uses} constrain
+// nothing any of these charges reads (#1823).
 //
 // Nothing else is decided: the remaining cvc-elt clauses, cvc-type's own
 // clause 1 (T ·non-absent·), cvc-complex-type clause 5 over [[attributes]]
@@ -179,12 +179,12 @@ func (v *Validator) Assess(root Element) *Result {
 //
 // The zero value is an element assessed against nothing: no declaration, no
 // type. It is cvc-assess-elt clause 3's ·lax assessment· (key-lva) against
-// xs:anyType (laxlyAssessed) — also the fall back §5.3 gives a declared
-// element whose {substitution group affiliations} has an ·absent· member or
-// whose ·selected type definition· is ·absent· ([walk.declaredGovernance]) —
-// and hasDecl TRUE with a nil typ is this package declining a type it could
-// not determine — a distinction cvcid.go needs, since only the second could
-// have hidden an ID. hasDecl false with a NON-nil typ is the third shape,
+// xs:anyType (laxlyAssessed) — also the fall back §5.3 gives a declared element
+// whose {substitution group affiliations} has an ·absent· member or whose
+// ·selected type definition· is ·absent· ([walk.declaredGovernance]) — and
+// hasDecl TRUE with a nil typ is this package declining a type it could not
+// determine — a distinction cvcid.go needs, since only the second could have
+// hidden an ID. hasDecl false with a NON-nil typ is the third shape, key-sva
 // clause 1.2's: an element with no ·governing element declaration· ·strictly
 // assessed· against a type alone — its ·locally declared type· or an xsi:type
 // ·overriding· it (key-governing-type-elem clauses 7 and 6,
@@ -229,6 +229,15 @@ type governance struct {
 // clause 1); what that hands its [[children]] is [walk.child]'s to say.
 func (g governance) laxlyAssessed() bool {
 	return !g.hasDecl && g.typ == nil && !g.undecided
+}
+
+// typeUndetermined reports that this package could not determine the
+// element's ·governing type definition·: the declined shape (hasDecl with a nil
+// typ) or the undecided one. It is false for every outcome cvc-assess-elt
+// itself gives, a ·laxly assessed· element included, whose absent type is the
+// spec's and not this package's. Its one reader is [walk.attributeType].
+func (g governance) typeUndetermined() bool {
+	return g.undecided || g.hasDecl && g.typ == nil
 }
 
 // complexType narrows the ·governing type definition· to the Complex Type
@@ -414,14 +423,15 @@ func (w *walk) governingType(e Element, d xsd.ElementDeclaration, selected xsd.T
 // out; charging clause 4 would reject a document for a fault in the schema's
 // own base chain.
 //
-// GAP(validate): no test drives that exit and none can: the error is
-// unreachable for a finalized Schema, for the reason xsd's validlyDerived
-// states, and both operands are components w.schema holds.
-// RULED permanent by #2174 (STYLE P3b), in [walk.localGovernance]'s form: a
-// decline and not a panic, the reason being xsd's invariant and not the
-// spec's. It is producer (b3) of the undetermined type [walk.idElement]'s
-// marker declines and of the undecided children below it, which
-// [walk.child]'s marker covers, and those two markers name its consumers.
+// GAP(validate): an [xsd.Schema.ValidlySubstitutable] error declines the
+// override, an exit unreachable for a finalized Schema, for the reason xsd's
+// validlyDerived states, both operands being components w.schema holds; no
+// test drives it and none can. RULED permanent by #2174 (STYLE P3b), in
+// [walk.localGovernance]'s form: a decline and not a panic, the reason being
+// xsd's invariant and not the spec's. It is producer (b3) of the
+// undetermined type [walk.idElement]'s marker declines and of the undecided
+// children below it, which [walk.child]'s marker covers, and those two
+// markers name its consumers.
 func (w *walk) instanceOverride(e Element, d xsd.ElementDeclaration, instance, selected xsd.TypeDefinition) (xsd.TypeDefinition, bool) {
 	overrides, err := w.schema.ValidlySubstitutable(instance, selected, d.DisallowedSubstitutions())
 	if err != nil {
@@ -604,15 +614,15 @@ func (w *walk) localOrResolvedGovernance(e Element, parent *xsd.ComplexType, inh
 //
 // The guard after it (governance.laxlyAssessed) rules out [governance]'s other
 // shapes alongside the genuine unresolved-name one: hasDecl true is this
-// package declining a type it could not determine, not an unresolved-name
-// story at all, and typ non-nil with hasDecl false is clause 1.2's xsi:type-
+// package declining a type it could not determine, not an unresolved-name story
+// at all, and typ non-nil with hasDecl false is key-sva clause 1.2's xsi:type-
 // driven ·strict assessment· (key-governing-type-elem clause 8) — a ·governing
 // type definition· WAS determined there, from xsi:type rather than from
 // ·resolution·, so neither ·strictly assessed· (key-sva) clause 3.3's lax path
-// nor this clause is live. The undecided shape never arrives beside a
-// Wildcard. Only the zero value — no declaration, no type at all — is charged,
-// and it is both causes above: an unresolved name, and a resolved one §5.3
-// sent to ·lax assessment·.
+// nor this clause is live. The undecided shape never arrives beside a Wildcard.
+// Only the zero value — no declaration, no type at all — is charged, and it is
+// both causes above: an unresolved name, and a resolved one §5.3 sent to ·lax
+// assessment·.
 //
 // notKnown is read off the governance the descent just determined, and no
 // subtree state is kept: clause 1.1.3 quantifies over E.[[children]] and
@@ -820,15 +830,15 @@ func (w *walk) instanceGovernance(e Element) (governance, bool) {
 }
 
 // localGovernance is the governance of an element with no ·governing element
-// declaration· because a non-·absent· ·locally declared type· ldt exists for
-// it (key-governing-ed clause 4.3): key-governing-type-elem clause 6, an
+// declaration· because a non-·absent· ·locally declared type· ldt exists for it
+// (key-governing-ed clause 4.3): key-governing-type-elem clause 6, an
 // ·instance-specified type definition· that ·overrides· ldt, and otherwise
 // clause 7, ldt itself. With no ·governing element declaration· known,
 // ·overriding· is ·validly substitutable without limitation· (key-overrides
 // clause 2), and no cvc-elt clause is live to charge an xsi:type that does not
-// override: the element is ·strictly assessed· against ldt by cvc-assess-elt
-// clause 1.2 either way, which leaves cvc-complex-type clause 5 satisfied for
-// it by construction.
+// override: the element is ·strictly assessed· against ldt by key-sva
+// (§3.3.4.6) clause 1.2 either way, which leaves cvc-complex-type clause 5
+// satisfied for it by construction.
 //
 // An error from [xsd.Schema.ValidlySubstitutable] leaves clause 6 undecided:
 // it is recorded as [Unevaluated], and the element takes [governance]'s
@@ -848,9 +858,10 @@ func (w *walk) instanceGovernance(e Element) (governance, bool) {
 // xs:boolean is lost. [walk.instanceTypeResolves] loses nothing, the xsi:type
 // having ·resolved· to reach this exit, which satisfies its clauses 3 and 5
 // both. Its other consumers are the ones the marker on [walk.child]'s undecided
-// branch names, this element being that marker's producer (c), and they are not
-// all fail-open: [idTable.charge] keeps charging clause 2 over attributes
-// [walk.attributeType] reads by ·expanded name·, which is fail-CLOSED.
+// branch names, this element being that marker's producer (c), and that marker
+// states each one's direction: [idTable.charge]'s clause 2 among them is
+// fail-open, [walk.attributeType] declining every attribute of an undecided
+// element rather than reading it by ·expanded name·.
 func (w *walk) localGovernance(e Element, ldt xsd.TypeDefinition) governance {
 	instance, specified := w.instanceTypeDefinition(e)
 	if !specified {
@@ -943,7 +954,7 @@ func (c elementContext) LookupNamespace(prefix string) (string, bool) {
 //
 // The type is not propagated to the children as it stands: each of them gets
 // its OWN, off the particle e's {content type} ·attributes· it to (§3.4.4.4,
-// [walk.childGoverning]), which is cvc-assess-elt clause 3.1's "the one
+// [walk.childGoverning]), which is key-sva (§3.3.4.6) clause 3.1's "the one
 // identified in the course of checking the local validity of the parent". A
 // ·governing type definition· this package could not determine therefore ends
 // the typed descent at e — neither arm of clause 3 is live, a check with no
@@ -1430,7 +1441,7 @@ func (w *walk) children(e Element, content *contentCheck, id *icCheck, inherited
 // where the item sits in its parent's {content type} is a fact about the
 // PARENT — and then, for an element, as a subtree of its own, against the
 // ·governing type definition· that same content check just ·attributed· it
-// (cvc-assess-elt clause 3.1, [walk.childGoverning]). A Child holding
+// (key-sva (§3.3.4.6) clause 3.1, [walk.childGoverning]). A Child holding
 // neither arm is an adapter bug, not a fault in the source, so it panics
 // rather than reaching [Result.Err] — that field means the walk stopped on a
 // source fault, and a CLI would otherwise report a bug in an adapter to a user
@@ -1489,11 +1500,11 @@ func (w *walk) child(c Child, content *contentCheck, id *icCheck, inherited []in
 			// Its consumers, and the direction each charges in: [idTable.charge]
 			// withholds its clause 1 arm (w.ids.declined below), fail-open, since a
 			// declaration beneath the child may be one cvc-id never read. It keeps
-			// charging clause 2, and that is fail-CLOSED here: [walk.idAttributes] reads
-			// the child's attributes by ·expanded name· through [walk.attributeType]'s
-			// top-level fallback, which can ADD a member the true attribution would not,
-			// as can [icCheck.fieldAttributes] for cvc-identity-constraint;
-			// walk.attributeType's own marker carries that gap.
+			// charging clause 2 over what remains, fail-open too: [walk.attributeType]
+			// declines every attribute of the child rather than reading it by ·expanded
+			// name· (key-governing-ad clause 2 before clause 3), so [walk.idAttributes]
+			// adds no member for it and [icCheck.fieldAttributes] declines a field over
+			// it; walk.attributeType's own marker carries that decline.
 			// [walk.instanceTypeResolves] and [walk.instanceNilLexical] charge it
 			// nothing, so cvc-attribute clauses 3 and 5 against its xsi attributes are
 			// lost, fail-open. [governance.laxlyAssessed] is false for it, so its own

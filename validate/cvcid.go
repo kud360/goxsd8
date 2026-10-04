@@ -267,15 +267,17 @@ func (w *walk) idDefaultedAttributes(c *icCheck, attrs []Attribute, ct xsd.Compl
 // [walk.instanceOverride]'s [xsd.Schema.ValidlySubstitutable] error,
 // unreachable for the reason xsd's validlyDerived states. Its consumers, and
 // the direction each charges in: [idTable.charge] withholds its clause 1 arm
-// (the decline sets declined), fail-open, and keeps charging clause 2, which
-// is fail-CLOSED here, because [walk.idAttributes] reads the element's
-// attributes by ·expanded name· through [walk.attributeType]'s top-level
-// fallback, as [icCheck.fieldAttributes] does for cvc-identity-constraint;
-// walk.attributeType's own marker carries that gap. The element's [[children]]
-// are [walk.child]'s undecided branch, whose marker names that shape's
-// consumers. An element with NO ·governing element declaration· is not that
-// shape. A ·laxly assessed· one, a declared element §5.3 falls back to ·lax
-// assessment· among them ([walk.declaredGovernance]), is assessed against
+// (the decline sets declined), fail-open, and keeps charging clause 2 over what
+// remains, which is fail-open too: [walk.idAttributes] records none of the
+// element's attributes, [walk.attributeType] declining every one of them rather
+// than resolving it by ·expanded name· (key-governing-ad clause 2 before clause
+// 3), so a duplicate an attribute would have made is lost and none is added;
+// [icCheck.fieldAttributes] declines a field over them on the same decline.
+// walk.attributeType's own marker carries that decline. The element's
+// [[children]] are [walk.child]'s undecided branch, whose marker names that
+// shape's consumers. An element with NO ·governing element declaration· is not
+// that shape. A ·laxly assessed· one, a declared element §5.3 falls back to
+// ·lax assessment· among them ([walk.declaredGovernance]), is assessed against
 // xs:anyType, whose complex {content type} is not derived from ID and so
 // contributes nothing under clause 3, and its [[children]] are read in their
 // own turn ([walk.child]). An undecided one ([governance]) is [walk.child]'s
@@ -648,7 +650,7 @@ var (
 // A ***skip*** {attribute wildcard} reports false without resolving anything:
 // §3.10.4.1's Note performs QName resolution only for an item ·attributed to· a
 // strict or lax wildcard, so a ·skipped· item has NO ·governing· declaration,
-// cvc-assess-elt (§3.3.4.6) clause 2.2 leaves it unassessed, and §3.17.5.2
+// key-sva (§3.3.4.6) clause 2.2 leaves it unassessed, and §3.17.5.2
 // clause 3 excludes it from the ·eligible item set·. Two such attributes
 // sharing a lexical bind no ·ID value· between them, so cvc-id clause 2 charges
 // no duplicate for them (#1043).
@@ -669,9 +671,9 @@ var (
 // present, and that is deliberate rather than an omission: key-governing-ad
 // clause 3 resolves by name for every attribute that is not ·skipped·, and an
 // attribute matching neither a use nor a wildcard is ·attributed· to nothing
-// (§3.4.4.4) and so is not. It covers the element whose ·governing type
-// definition· is not complex at all, where g.complexType() is nil and there is
-// no {attribute wildcard} to be skip; and it covers the ·laxly assessed·
+// (§3.4.4.4) and so is not. It covers the element whose DETERMINED ·governing
+// type definition· is not complex at all, where g.complexType() is nil and there
+// is no {attribute wildcard} to be skip; and it covers the ·laxly assessed·
 // element, since the {attribute wildcard} of xs:anyType is ***lax*** (§3.4.7)
 // and lax resolves. An attribute matching neither a use nor a wildcard also
 // violates cvc-complex-type clause 2, which [walk.unmatchedAttribute] charges
@@ -686,18 +688,27 @@ var (
 // type the schema happens to ALSO declare at the top level, that declaration
 // being a DIFFERENT component from the use's {attribute declaration}.
 //
-// GAP(validate): the top-level fallback is also reached for an element whose
-// ·governing type definition· this package could not determine — the declined
-// shape [walk.idElement]'s marker names and the undecided one [walk.child]'s
-// names — and there it reads an attribute by ·expanded name· although
-// key-governing-ad clause 2's ·context-determined declaration·, from a use of
-// the undetermined type, or a skip {attribute wildcard} of it, may come first.
-// That direction is fail-CLOSED: [walk.idAttributes] adds an ·ID value· the
-// true type may not give the attribute, which [idTable.charge]'s clause 2 can
-// charge as a duplicate, and [icCheck.fieldAttributes] offers a member under a
-// type that may not be the attribute's, which cvc-identity-constraint clause
-// 4.1 or 4.2.2 can charge as equal to another. Tracked by #2192.
+// GAP(validate): an element whose ·governing type definition· this package
+// could not determine ([governance.typeUndetermined]) — the declined shape
+// [walk.idElement]'s marker names and the undecided one [walk.child]'s names —
+// reports false for every attribute, before either arm is asked. Its true type
+// is unknown, and key-governing-ad (§3.2.4.2) clause 2's ·context-determined
+// declaration·, from a use of that type, comes before clause 3's resolution by
+// ·expanded name·, while a skip {attribute wildcard} of it would leave the
+// attribute with no ·governing attribute declaration· at all (key-skipped), so
+// the top-level declaration is not known to be the attribute's. The decline is
+// fail-open against both readers: [walk.idAttributes] adds no ·ID value· or
+// ·IDREF value· for the attribute, so [idTable.charge]'s cvc-id clause 2 can
+// only lose a duplicate, and its clause 1 arm is withheld already, every
+// producer of either shape setting w.ids.declined; [icCheck.fieldAttributes]
+// declines the field slot ([icTarget.decline]), which withholds
+// cvc-identity-constraint clauses 3 and 4 — 4.1 and 4.2.2 among them — for that
+// constraint. RULED permanent by #2174 (STYLE P3b): the decline consumes the
+// shapes that ruling keeps and retires with their last producer.
 func (w *walk) attributeType(g governance, a Attribute) (*xsd.SimpleType, bool) {
+	if g.typeUndetermined() {
+		return nil, false
+	}
 	if ct := g.complexType(); ct != nil {
 		if u, matched := attributeUseNamed(ct.AttributeUses(), a.Name()); matched {
 			d, resolved := w.schema.ResolvedAttributeDeclaration(u)

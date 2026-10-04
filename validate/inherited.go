@@ -105,6 +105,21 @@ func (w *walk) handedDown(e Element, g governance, inherited []inheritedAttribut
 // ([xsd.Schema.ResolvedInheritable]), which clause 3.1 names and which may
 // differ from its declaration's: a use's own inheritable attribute wins over
 // the declaration's (§3.2.2.3 ref.att.local).
+//
+// GAP(validate): the one arm this does not share is attributeType's decline for
+// an element whose ·governing type definition· this package could not determine
+// ([governance.typeUndetermined]); this still reads such an element's
+// attributes by ·expanded name·, although key-governing-ad clause 2's
+// ·context-determined declaration·, from a use of the undetermined type, may
+// come first. Its one reader is [walk.handedDown], whose result reaches a
+// {type table} ([walk.conditionallySelected]) only through a child walked as
+// decided. Every child [contentCheck.element] attributes under such a parent
+// is [walk.child]'s undecided shape, which selects nothing; the exception is a
+// child it charges instead of matching — a ·nilled· parent's, under cvc-elt
+// clause 3.2.3.1 — whose own {type table} may then select on an attribute the
+// true type would not hand down, or miss one it would. The direction is
+// unestablished, and that Result is already invalid by the charge. No issue
+// owns it yet.
 func (w *walk) inheritable(g governance, a Attribute) bool {
 	if ct := g.complexType(); ct != nil {
 		if u, matched := attributeUseNamed(ct.AttributeUses(), a.Name()); matched {
