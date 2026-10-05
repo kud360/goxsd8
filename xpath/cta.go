@@ -570,11 +570,6 @@ type ctaFacade interface {
 	// types are the compile's own, for a façade that classifies the type it
 	// reads.
 	attribute(test ctaNameTest, types ctaTypes) (ctaValue, bool)
-	// admitsComparison reports whether the façade evaluates a comparison —
-	// general or value — whose operands ctaTypes.comparison or
-	// ctaTypes.valueComparison settled into c, reporting false where it declines
-	// the whole expression on the same withhold terms.
-	admitsComparison(types ctaTypes, c *xsd.SimpleType) bool
 	// comparesValues reports whether the façade admits xpath20.md [23]
 	// ValueComp at all, which §3.12.6's grammar has no production for.
 	comparesValues() bool
@@ -593,19 +588,14 @@ type ctaFacade interface {
 }
 
 // ctaTypeAlternativeFacade is a Type Alternative's façade: every attribute
-// NameTest is admitted and reads E's attributes untyped, every settled
-// comparison type is evaluated, and no production beyond §3.12.6's grammar is
-// admitted.
+// NameTest is admitted and reads E's attributes untyped, and no production
+// beyond §3.12.6's grammar is admitted.
 type ctaTypeAlternativeFacade struct{}
 
 func (ctaTypeAlternativeFacade) ctaFacade() {}
 
 func (ctaTypeAlternativeFacade) attribute(test ctaNameTest, _ ctaTypes) (ctaValue, bool) {
 	return ctaAttr{test: test}, true
-}
-
-func (ctaTypeAlternativeFacade) admitsComparison(ctaTypes, *xsd.SimpleType) bool {
-	return true
 }
 
 // comparesValues is false: [13] ta-Comparator spells the general comparators
@@ -955,7 +945,10 @@ func (n ctaAnd) eval(env ctaEnv) ctaAnswer {
 //
 // xs:boolean takes a third route for the same kind of reason: the operator
 // functions B.2 names for it are defined over the two values themselves and
-// not over an order the value space carries (holdsBoolean).
+// not over an order the value space carries (holdsBoolean). The date/time
+// family takes a fourth, because F&O §10.4's operator functions compare under
+// the implicit timezone and the value space carries none
+// (holdsAtImplicitTimezone).
 func (c ctaCompare) eval(env ctaEnv) ctaAnswer {
 	l, leftAtoms := ctaItemOf(c.left, c.comparison, env).(ctaAtoms)
 	r, rightAtoms := ctaItemOf(c.right, c.comparison, env).(ctaAtoms)
@@ -984,7 +977,27 @@ func ctaHoldsPair(op ctaComparator, c *xsd.SimpleType, l, r value.Value, env cta
 	if c.Name() == ctaBuiltin("boolean") {
 		return op.holdsBoolean(l, r, c, env)
 	}
+	if ctaDateTimeFamily(c) {
+		return op.holdsAtImplicitTimezone(l, r, c, env)
+	}
 	return op.holdsBetween(l, r)
+}
+
+// ctaDateTimeFamily reports whether c, a comparison type, is one of the eight
+// primitives F&O §10.4's date and time comparison functions are defined over:
+// xs:dateTime (and so xs:dateTimeStamp, by subtype substitution), xs:time,
+// xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay and xs:gMonth. A
+// comparison type in the family is always the primitive itself, because only
+// the two duration subtypes are ever answered below their primitive
+// (ctaTypes.shared, ctaTypes.untypedAgainst), so the name decides.
+func ctaDateTimeFamily(c *xsd.SimpleType) bool {
+	switch c.Name() {
+	case ctaBuiltin("dateTime"), ctaBuiltin("time"), ctaBuiltin("date"),
+		ctaBuiltin("gYearMonth"), ctaBuiltin("gYear"), ctaBuiltin("gMonthDay"),
+		ctaBuiltin("gDay"), ctaBuiltin("gMonth"):
+		return true
+	}
+	return false
 }
 
 // eval decides one value comparison (xpath20.md §3.5.1), whose steps are
@@ -1720,6 +1733,68 @@ func (op ctaComparator) holdsBetween(l, r value.Value) ctaAnswer {
 		return ctaError
 	}
 	return ctaAnswerOf(op.holdsOrdering(ord.Cmp(r)))
+}
+
+// ctaImplicitTimezone is the implicit timezone of every evaluation's dynamic
+// context (xpath20.md dt-timezone), spelled as the timezoneFrag it appends to
+// an untimezoned lexical: Z, the zero offset PT0S. Structures §3.13.4.2
+// cvc-xpath clause 7 makes it ·implementation-defined· — the
+// implementation-defined list's item 12 for XPath evaluation generally — and
+// constant during an ·assessment· episode; a package constant is that.
+const ctaImplicitTimezone = "Z"
+
+// holdsAtImplicitTimezone decides op between two values of c, a date/time
+// comparison type (ctaDateTimeFamily), as F&O §10.4 defines its comparison
+// functions: "If either operand to a comparison function on date or time
+// values does not have an (explicit) timezone then, for the purpose of the
+// operation, an implicit timezone, provided by the dynamic context ..., is
+// assumed to be present as part of the value." Each operand without one is
+// given ctaImplicitTimezone (ctaAtImplicitTimezone), and the two timezoned
+// values are then decided by holdsBetween, which is total over them.
+//
+// The value space's own partial order is left as it is, because the facets
+// read it: a mixed pair is never equal there and is [value.Incomparable]
+// within fourteen hours, which is right for minInclusive and wrong for XPath,
+// so the substitution happens here and per operand, and never by reading the
+// pair's Incomparable.
+//
+// Which operators reach here is B.2's answer, settled at compile time: the g*
+// types have eq and ne alone, so an ordering over them is the err:XPTY0004
+// node and never this decision.
+func (op ctaComparator) holdsAtImplicitTimezone(l, r value.Value, c *xsd.SimpleType, env ctaEnv) ctaAnswer {
+	left, lPlaced := ctaAtImplicitTimezone(l, c, env)
+	if !lPlaced {
+		return ctaError
+	}
+	right, rPlaced := ctaAtImplicitTimezone(r, c, env)
+	if !rPlaced {
+		return ctaError
+	}
+	return op.holdsBetween(left, right)
+}
+
+// ctaAtImplicitTimezone is v, a value of the date/time primitive c, with
+// ctaImplicitTimezone in place of a missing timezone: v itself where it has
+// one, and otherwise the value of its ·canonical representation· with
+// ctaImplicitTimezone appended, validated against c — the round-trip
+// ctaPromote converts through, so this package translates no backend value.
+// It reports false, the caller's ctaError, for a value that is not
+// [value.TimezoneAware], one whose canonical form does not render, and one
+// whose timezoned lexical c does not validate: each is a fault of the backend,
+// since every untimezoned lexical of the family takes a timezoneFrag.
+func ctaAtImplicitTimezone(v value.Value, c *xsd.SimpleType, env ctaEnv) (value.Value, bool) {
+	tz, aware := v.(value.TimezoneAware)
+	if !aware {
+		return nil, false
+	}
+	if tz.HasTimezone() {
+		return v, true
+	}
+	lexical, rendered := ctaCanonical(v, c, env)
+	if !rendered {
+		return nil, false
+	}
+	return ctaValidated(ctaValidate(lexical+ctaImplicitTimezone, c, env))
 }
 
 // holdsBoolean decides op between two xs:boolean values, which B.2 gives all
