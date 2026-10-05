@@ -107,7 +107,11 @@ type Attribute struct {
 // applies to element names, never to attribute names.
 func (a Attribute) Name() Name { return a.name }
 
-// Value returns the attribute's value with references expanded.
+// Value returns the attribute's normalized value per XML 1.0 §3.3.3, the
+// attribute read as CDATA: a character reference is the character it names, a
+// reference to a general entity is the normalized value of its replacement
+// text, and each literal white-space character is #x20, a line end (§2.11) one
+// #x20. No further white space is trimmed or collapsed.
 func (a Attribute) Value() string { return a.value }
 
 // Loc reports the owning element's start position (see Attribute).

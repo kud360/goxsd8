@@ -7,11 +7,12 @@ import (
 )
 
 // qnamePads are the paddings a QName-valued attribute's ·actual value· sheds
-// under xs:QName's fixed whiteSpace = collapse (Datatypes §3.3.18.1). The
-// control characters are character references on purpose: XML attribute-value
-// normalization (XML 1.0 §3.3.3) turns a LITERAL tab, CR or LF into #x20 before
-// the producer sees the string, so only a reference delivers the raw character
-// to bindQName.
+// under xs:QName's fixed whiteSpace = collapse (Datatypes §3.3.18.1). Only the
+// character-reference row delivers a raw tab, CR or LF to bindQName: XML
+// attribute-value normalization (XML 1.0 §3.3.3) turns a LITERAL one into #x20
+// before the producer sees the string. The literal row is coverage, not a pin
+// of that normalization, which collapse would hide; parser/xmltree's
+// TestAttributeValueIsNormalized pins it.
 var qnamePads = []struct {
 	name, before, after string
 }{
@@ -19,6 +20,7 @@ var qnamePads = []struct {
 	{"trailing space", "", " "},
 	{"both ends, addB106's shape", "    ", " "},
 	{"tab, CR and LF references", "&#9;&#13;&#10;", "&#10;&#9;&#13;"},
+	{"literal tab, CR and LF", "\t\r\n", "\n\t\r"},
 }
 
 // TestProduceQNameAttributeCollapsed reads every padding in qnamePads on base=
