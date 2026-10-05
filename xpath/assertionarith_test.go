@@ -16,7 +16,7 @@ import (
 // whose typed value is xs:untypedAtomic.
 func aaUses(t *testing.T) AttributeTypes {
 	t.Helper()
-	return asUses(t, map[string]string{"i": "integer", "m": "decimal", "d": "double", "f": "float", "u": "anySimpleType"})
+	return asUses(t, map[string]string{"i": "integer", "m": "decimal", "d": "double", "f": "float", "g": "float", "u": "anySimpleType"})
 }
 
 // aaEval compiles expr for an element with empty content over aaUses and
@@ -136,6 +136,24 @@ func TestArithmeticOperators(t *testing.T) {
 		if got := aaEval(t, tc.expr, tc.attrs...); got != tc.want {
 			t.Errorf("Evaluate(%q) over %v = %v, want %v", tc.expr, tc.attrs, got, tc.want)
 		}
+	}
+}
+
+// An xs:float operation is computed over the operands' xs:float values and
+// rounded to xs:float once (ctaNumericKind.bits, ctaRounded). Parsing each
+// xs:float lexical as an xs:double instead lands on a different product for
+// these two, 2.0534678E0; skipping the xs:float rounding of an `idiv` quotient
+// leaves 3E38 idiv 0.1 finite, where in xs:float it overflows to INF and
+// raises err:FOAR0002 (F&O §6.2.5), which fn:not propagates.
+func TestArithmeticFloatPrecision(t *testing.T) {
+	f := asTyped{uq("f"), "float", "1.5149502"}
+	g := asTyped{uq("g"), "float", "1.3554688"}
+	if !aaEval(t, "@f * @g = xs:float('2.0534675')", f, g) {
+		t.Error("Evaluate(@f * @g = xs:float('2.0534675')) over f=1.5149502, g=1.3554688 = false, want true")
+	}
+	big, tenth := asTyped{uq("f"), "float", "3E38"}, asTyped{uq("g"), "float", "0.1"}
+	if aaEval(t, "not(@f idiv @g = 1)", big, tenth) {
+		t.Error("Evaluate(not(@f idiv @g = 1)) over f=3E38, g=0.1 = true, want false (err:FOAR0002)")
 	}
 }
 
