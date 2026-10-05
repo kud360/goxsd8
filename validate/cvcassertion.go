@@ -68,24 +68,16 @@ const ruleCvcAssertionsValid xsderr.Rule = "cvc-assertions-valid"
 // property at all — a simple one's assertions are facets, and reach
 // ruleCvcAssertionsValid instead.
 //
-// {assertions} is read whole and its base chain is never walked: cos-ct-extends
-// clause 1.7 and derivation-ok-restriction clause 5 both make B.{assertions} a
-// prefix of T.{assertions}, so unioning the chain here would report every
-// inherited assertion once per derivation step. Every one of them, inherited
-// or not, is compiled against T's OWN {attribute uses} ([walk.assertionTypes]),
-// because the instance it reads is e's as T types it: a restriction that
-// narrows an attribute's type narrows it for the base's assertions too. Each is
-// compiled per element and cached nowhere.
-//
-// Every one is compiled against T's {content type} too, which fixes `$value`'s
-// static type (cvc-assertion clause 2.3.1.3), and evaluated with the binding
-// [walk.assertionValue] gives it: invalid says whether e is known to be invalid
-// in the partial ·PSVI· by now (clause 2.3.1.1) — the caller's count of the
-// violations recorded since e was entered — and content is e's own content
+// asserts is e's clause 6 state, opened when e was entered
+// ([walk.compileAssertions], which compiles every {test}) and nil where T has
+// no {assertions}. Each compiled test is evaluated with the binding
+// [walk.assertionValue] gives `$value`: invalid says whether e is known to be
+// invalid in the partial ·PSVI· by now (clause 2.3.1.1) — the caller's count of
+// the violations recorded since e was entered — and content is e's own content
 // check, exhausted, which holds the ·initial value· and the ·nilled· answer.
 //
 // Each assertion takes exactly one of three outcomes: DECLINED, where
-// [xpath.CompileAssertionTest] reports false or e's attributes or `$value`
+// [xpath.CompileAssertionTest] reported false or e's attributes or `$value`
 // cannot be read; CHARGED under cvc-assertion, where
 // [xpath.AssertionTest.Evaluate] reports false — the {test} was false or raised
 // a dynamic or type error, which cvc-assertion's opening sentence treats alike
@@ -105,28 +97,23 @@ const ruleCvcAssertionsValid xsderr.Rule = "cvc-assertions-valid"
 // consumer set inside this package is w.res.violations and its one reader
 // [Result.Violations], which charge on a violation PRESENT, so a decline can
 // only cost a rejection and can manufacture none. (#1042)
-func (w *walk) elementAssertions(e Element, g governance, content *contentCheck, invalid bool) {
-	ct := g.complexType()
-	if ct == nil {
-		return
-	}
-	assertions := ct.Assertions()
-	if len(assertions) == 0 {
+func (w *walk) elementAssertions(e Element, asserts *assertionCheck, content *contentCheck, invalid bool) {
+	if asserts == nil {
 		return
 	}
 	attrs := e.Attributes()
-	in, lack := w.assertionValues(e, attrs, *ct, content, invalid)
-	for i, a := range assertions {
+	in, lack := w.assertionValues(e, attrs, asserts.ct, content, invalid)
+	for i, c := range asserts.tests {
 		site := fmt.Sprintf("assertion %d of %d in the {assertions} of the ·governing type definition· %s, whose {test} is %q,",
-			i+1, len(assertions), typeName(*ct), a.Test().Expression())
+			i+1, len(asserts.tests), typeName(asserts.ct), c.a.Test().Expression())
 		if lack != nil {
 			w.decline("assessing element", e.Name(), e.Loc(), ruleCvcAssertion, "",
 				"%s was not evaluated: %s, so whether the element is ·valid· with respect to it, as cvc-complex-type clause 6 requires, is undecided",
 				site, lack.declined(e.Name()))
 			continue
 		}
-		test, compiled := xpath.CompileAssertionTest(a.Test(), w.schema, ct.ContentType(), w.assertionTypes(*ct))
-		if !compiled {
+		test := c.test
+		if test == nil {
 			w.decline("assessing element", e.Name(), e.Loc(), ruleCvcAssertion, "",
 				"%s was not evaluated: this engine's XPath evaluator declined it, so whether the element %s is ·valid· with respect to it, as cvc-complex-type clause 6 requires (Assertion Satisfied, §3.13.4.1), is undecided",
 				site, e.Name())
@@ -141,6 +128,56 @@ func (w *walk) elementAssertions(e Element, g governance, content *contentCheck,
 			e.Name(), site))
 		w.logDecision("assessing element", e.Name(), e.Loc(), ruleCvcAssertion, "", "charged")
 	}
+}
+
+// assertionCheck is one element's cvc-complex-type clause 6 state, opened when
+// the element is entered ([walk.compileAssertions]) and settled once its
+// [[children]] are exhausted ([walk.elementAssertions]): the ·governing type
+// definition· ct whose {assertions} are evaluated, and each of them with its
+// compiled {test}, in {assertions} order.
+type assertionCheck struct {
+	ct    xsd.ComplexType
+	tests []assertionTest
+}
+
+// assertionTest is one member of ct.{assertions} and its {test} as
+// [xpath.CompileAssertionTest] compiled it, nil where that declined.
+type assertionTest struct {
+	a    xsd.Assertion
+	test *xpath.AssertionTest
+}
+
+// compileAssertions compiles every assertion of g's complex ·governing type
+// definition· when e is entered, and is nil where there is none to compile: g
+// is not complex, or its {assertions} is empty. Every input a compile reads is
+// STATIC — the {test}, T's {content type} and T's {attribute uses} — so
+// nothing the [[children]] carry can change a compiled tree, and compiling
+// before they arrive is what lets the walk know which of them a {test} reads.
+//
+// {assertions} is read whole and its base chain is never walked: cos-ct-extends
+// clause 1.7 and derivation-ok-restriction clause 5 both make B.{assertions} a
+// prefix of T.{assertions}, so unioning the chain here would report every
+// inherited assertion once per derivation step. Every one of them, inherited
+// or not, is compiled against T's OWN {attribute uses} ([walk.assertionTypes]),
+// because the instance it reads is e's as T types it: a restriction that
+// narrows an attribute's type narrows it for the base's assertions too, and
+// against T's {content type}, which fixes `$value`'s static type
+// (cvc-assertion clause 2.3.1.3). Each is compiled per element and cached
+// nowhere.
+func (w *walk) compileAssertions(g governance) *assertionCheck {
+	ct := g.complexType()
+	if ct == nil || len(ct.Assertions()) == 0 {
+		return nil
+	}
+	check := &assertionCheck{ct: *ct}
+	for _, a := range ct.Assertions() {
+		c := assertionTest{a: a}
+		if test, compiled := xpath.CompileAssertionTest(a.Test(), w.schema, ct.ContentType(), w.assertionTypes(*ct)); compiled {
+			c.test = &test
+		}
+		check.tests = append(check.tests, c)
+	}
+	return check
 }
 
 // assertionType is the {type definition} of the {attribute declaration} of

@@ -968,9 +968,11 @@ func (c elementContext) LookupNamespace(prefix string) (string, bool) {
 // ([walk.child]).
 //
 // cvc-complex-type clause 6 comes after both halves: [walk.elementAssertions]
-// evaluates each of e's {assertions} the XPath evaluator compiles, charging
+// evaluates each of e's {assertions} the XPath evaluator compiled, charging
 // cvc-assertion for one that does not hold, and declines the rest
-// (cvcassertion.go). It waits for the [[children]] because cvc-assertion
+// (cvcassertion.go). The {test}s are compiled before the [[children]] arrive
+// ([walk.compileAssertions]), because everything a compile reads is static;
+// the evaluation waits for the [[children]] because cvc-assertion
 // clause 1.1 validates e "normally, except that assertions are not checked"
 // before any {test} is evaluated, and clause 2.3 binds `$value` to what that
 // leaves: e's [schema actual value], known only once its character
@@ -1008,6 +1010,7 @@ func (w *walk) element(e Element, g governance, parent *icCheck, inherited []inh
 	w.idAttributes(id)
 	w.attributes(e, g)
 	content := w.contentCheck(e, g, isNilled)
+	asserts := w.compileAssertions(g)
 	w.children(e, content, id, w.handedDown(e, g, inherited))
 	if w.res.err != nil {
 		// A walk that stopped on a source fault never settles §3.11.4 or
@@ -1018,7 +1021,7 @@ func (w *walk) element(e Element, g governance, parent *icCheck, inherited []inh
 		// ·PSVI· (cvc-assertion clause 1.2) those [[children]] are part of.
 		return
 	}
-	w.elementAssertions(e, g, content, len(w.res.violations) > violationsBefore)
+	w.elementAssertions(e, asserts, content, len(w.res.violations) > violationsBefore)
 	id.substitute(content)
 	w.idElement(id)
 	w.identityExit(id)
