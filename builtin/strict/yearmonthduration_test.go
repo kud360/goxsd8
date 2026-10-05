@@ -6,6 +6,7 @@ import (
 	"github.com/kud360/goxsd8/builtin"
 	"github.com/kud360/goxsd8/builtin/strict"
 	"github.com/kud360/goxsd8/value"
+	"github.com/kud360/goxsd8/xpath"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
 )
@@ -96,11 +97,11 @@ func TestYearMonthDurationZeroNoCanonical(t *testing.T) {
 func TestYearMonthDurationSeededPattern(t *testing.T) {
 	st := seededType(t, "yearMonthDuration")
 
-	if _, err := value.ValidateLexical(strict.New(), noSchema{}, st, "P1Y2M", nil); err != nil {
+	if _, err := value.ValidateLexical(strict.New(), noSchema{}, st, "P1Y2M", nil, xpath.FacetAssertions()); err != nil {
 		t.Fatalf("year-month yearMonthDuration should validate: %v", err)
 	}
 
-	_, err := value.ValidateLexical(strict.New(), noSchema{}, st, "P1DT2H", nil)
+	_, err := value.ValidateLexical(strict.New(), noSchema{}, st, "P1DT2H", nil, xpath.FacetAssertions())
 	if err == nil {
 		t.Fatal("day-time literal must be rejected for yearMonthDuration, got nil")
 	}

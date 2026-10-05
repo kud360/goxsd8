@@ -85,18 +85,18 @@ func TestValidateLexicalHoldsNotationToTheSchemasDeclarations(t *testing.T) {
 		{"union member", unionType2(t, "nota", notation), "bez"},
 	}
 	for _, c := range routes {
-		if _, err := ValidateLexical(b, schema, c.st, "foo", notationScope{}); err != nil {
+		if _, err := ValidateLexical(b, schema, c.st, "foo", notationScope{}, assertionsUndecided{}); err != nil {
 			t.Errorf("%s: ValidateLexical(foo) = %v, want the declared foo accepted", c.name, err)
 		}
-		_, err := ValidateLexical(b, schema, c.st, c.lexical, notationScope{})
+		_, err := ValidateLexical(b, schema, c.st, c.lexical, notationScope{}, assertionsUndecided{})
 		wantUndeclaredBez(t, c.name+": ValidateLexical", err)
-		_, _, err = ValidatingType(b, schema, c.st, c.lexical, notationScope{})
+		_, _, err = ValidatingType(b, schema, c.st, c.lexical, notationScope{}, assertionsUndecided{})
 		wantUndeclaredBez(t, c.name+": ValidatingType", err)
 
-		if _, err := ValidateLexical(b, noSchema{}, c.st, c.lexical, notationScope{}); err != nil {
+		if _, err := ValidateLexical(b, noSchema{}, c.st, c.lexical, notationScope{}, assertionsUndecided{}); err != nil {
 			t.Errorf("%s: ValidateLexical against no notationDeclarer = %v, want %q accepted", c.name, err, c.lexical)
 		}
-		if _, _, err := ValidatingType(b, noSchema{}, c.st, c.lexical, notationScope{}); err != nil {
+		if _, _, err := ValidatingType(b, noSchema{}, c.st, c.lexical, notationScope{}, assertionsUndecided{}); err != nil {
 			t.Errorf("%s: ValidatingType against no notationDeclarer = %v, want %q accepted", c.name, err, c.lexical)
 		}
 	}
@@ -105,18 +105,18 @@ func TestValidateLexicalHoldsNotationToTheSchemasDeclarations(t *testing.T) {
 	// dispatch falls through to the next member (Datatype Valid 2.3), which
 	// becomes the ·validating type·.
 	u := unionType2(t, "notaOrString", notation, str)
-	got, _, err := ValidatingType(b, schema, u, "bez", notationScope{})
+	got, _, err := ValidatingType(b, schema, u, "bez", notationScope{}, assertionsUndecided{})
 	if err != nil || got != str {
 		t.Errorf("ValidatingType(union(NOTATION, string), bez) = (%v, %v), want the string member", got, err)
 	}
-	got, _, err = ValidatingType(b, noSchema{}, u, "bez", notationScope{})
+	got, _, err = ValidatingType(b, noSchema{}, u, "bez", notationScope{}, assertionsUndecided{})
 	if err != nil || got != notation {
 		t.Errorf("ValidatingType(union(NOTATION, string), bez) against no notationDeclarer = (%v, %v), want the NOTATION member", got, err)
 	}
 
 	// A nil Context binds no prefix, the empty one included, so even the
 	// declared foo resolves to no QName under one, whatever b's mapping admits.
-	_, err = ValidateLexical(b, schema, notation, "foo", nil)
+	_, err = ValidateLexical(b, schema, notation, "foo", nil, assertionsUndecided{})
 	if rule, _ := xsderr.RuleOf(err); rule != ruleCvcDatatypeValid {
 		t.Errorf("ValidateLexical(foo) under a nil Context = %v, want a cvc-datatype-valid verdict", err)
 	}
@@ -140,5 +140,26 @@ func TestConstraintMatchesAnUndeclaredNotationFixedValueIsUndecided(t *testing.T
 	}
 	if same, decided := ConstraintMatches(b, noSchema{}, notation, "bez", notationScope{}, fixed); !same || !decided {
 		t.Errorf("ConstraintMatches(bez, fixed bez) against no notationDeclarer = (%t, %t), want (true, true)", same, decided)
+	}
+}
+
+// The declared-set decision runs before the assertions stage, so an
+// undeclared NOTATION value is the cvc-datatype-valid verdict and never
+// reaches an assertion: under an evaluator that fails every {test} the
+// verdict is still NOTATION's, and no call is made. A declared foo reaches the
+// assertion and is its verdict.
+func TestValidateLexicalDecidesNotationBeforeAssertions(t *testing.T) {
+	b := lexicalBackend{}
+	schema := declaringFoo(t)
+	st := asserting(t, "assertedNota", primType(t, "NOTATION", "collapse"), "fail")
+	var calls []assertionCall
+	_, err := ValidateLexical(b, schema, st, "bez", notationScope{}, scripted(&calls))
+	wantUndeclaredBez(t, "asserted NOTATION", err)
+	if len(calls) != 0 {
+		t.Errorf("assertion calls for the undeclared bez = %d, want 0", len(calls))
+	}
+	_, err = ValidateLexical(b, schema, st, "foo", notationScope{}, scripted(&calls))
+	if rule, _ := xsderr.RuleOf(err); rule != ruleCvcAssertionsValid || len(calls) != 1 {
+		t.Errorf("ValidateLexical(foo) = %v after %d calls, want a cvc-assertions-valid verdict after 1", err, len(calls))
 	}
 }

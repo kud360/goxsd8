@@ -16,6 +16,7 @@ import (
 	"github.com/kud360/goxsd8/builtin"
 	"github.com/kud360/goxsd8/builtin/strict"
 	"github.com/kud360/goxsd8/value"
+	"github.com/kud360/goxsd8/xpath"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
 )
@@ -949,7 +950,7 @@ func fixesTimezone(st *xsd.SimpleType) bool {
 func decideLexicalByFacets(backend value.Backend, st *xsd.SimpleType, values []string, c caseSpec) Status {
 	observedValid := true
 	for _, v := range values {
-		if _, err := value.ValidateLexical(backend, noSchema{}, st, v, nil); err != nil {
+		if _, err := value.ValidateLexical(backend, noSchema{}, st, v, nil, xpath.FacetAssertions()); err != nil {
 			mustNotBeFacetPrecondition(err, c, v)
 			observedValid = false
 			break
@@ -1123,7 +1124,7 @@ func execListCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c ca
 			return Fail()
 		}
 		for _, v := range lt.values {
-			if _, verr := value.ValidateLexical(backend, noSchema{}, leaf, v, nil); verr != nil {
+			if _, verr := value.ValidateLexical(backend, noSchema{}, leaf, v, nil, xpath.FacetAssertions()); verr != nil {
 				mustNotBeFacetPrecondition(verr, c, v)
 				observedValid = false
 				break
@@ -1218,7 +1219,7 @@ func execFacetsCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c 
 	if err != nil {
 		return Fail()
 	}
-	_, verr := value.ValidateLexical(backend, noSchema{}, leaf, raw, ctx)
+	_, verr := value.ValidateLexical(backend, noSchema{}, leaf, raw, ctx, xpath.FacetAssertions())
 	mustNotBeFacetPrecondition(verr, c, raw)
 	observedValid := verr == nil
 	if observedValid == c.expect.wantsValid() {
@@ -1289,7 +1290,7 @@ func execNotationFacetsCase(backend value.Backend, sym map[xsd.QName]*xsd.Simple
 	if err != nil {
 		return Fail()
 	}
-	_, verr := value.ValidateLexical(backend, noSchema{}, leaf, raw, ctx)
+	_, verr := value.ValidateLexical(backend, noSchema{}, leaf, raw, ctx, xpath.FacetAssertions())
 	mustNotBeFacetPrecondition(verr, c, raw)
 	observedValid := verr == nil
 	if observedValid == c.expect.wantsValid() {
@@ -1416,7 +1417,7 @@ func execPDecimalCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, 
 	// unlike the QName cohort, no prefix resolution is involved.
 	observedValid := true
 	for _, v := range values {
-		if _, verr := value.ValidateLexical(backend, noSchema{}, leaf, v, nil); verr != nil {
+		if _, verr := value.ValidateLexical(backend, noSchema{}, leaf, v, nil, xpath.FacetAssertions()); verr != nil {
 			mustNotBeFacetPrecondition(verr, c, v)
 			observedValid = false
 			break
@@ -1471,7 +1472,7 @@ func execD34Case(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c cas
 	// integer), so a nil value.Context suffices — no prefix resolution is involved.
 	observedValid := true
 	for _, e := range elems {
-		if _, verr := value.ValidateLexical(backend, noSchema{}, leaves[e.typeKey], e.value, nil); verr != nil {
+		if _, verr := value.ValidateLexical(backend, noSchema{}, leaves[e.typeKey], e.value, nil, xpath.FacetAssertions()); verr != nil {
 			mustNotBeFacetPrecondition(verr, c, e.value)
 			observedValid = false
 			break
@@ -1814,7 +1815,7 @@ func execAnyURIShapeCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleTyp
 	// "http://a/x%20y" (§3.3.17.2 Note: no percent-decoding), so the case is invalid.
 	observedValid := true
 	for _, l := range leaves {
-		if _, verr := value.ValidateLexical(backend, noSchema{}, synth[l.typeName], l.value, nil); verr != nil {
+		if _, verr := value.ValidateLexical(backend, noSchema{}, synth[l.typeName], l.value, nil, xpath.FacetAssertions()); verr != nil {
 			mustNotBeFacetPrecondition(verr, c, l.value)
 			observedValid = false
 			break

@@ -62,7 +62,7 @@ func asValues(t *testing.T, attrs ...asTyped) TypedAttributes {
 			vs = append(vs, Untyped(a.lexical))
 			continue
 		}
-		v, err := value.ValidateLexical(backend(), seededTypes, st, a.lexical, nil)
+		v, err := value.ValidateLexical(backend(), seededTypes, st, a.lexical, nil, FacetAssertions())
 		if err != nil {
 			t.Fatalf("mapping %q as xs:%s: %v", a.lexical, a.typ, err)
 		}
@@ -240,7 +240,7 @@ func TestAssertionReadsSpecialAttributesUntyped(t *testing.T) {
 // false and its fn:not false too.
 func TestAssertionRaisesOnWrongArm(t *testing.T) {
 	uses := asUses(t, map[string]string{"x": "anySimpleType", "i": "integer"})
-	v, err := value.ValidateLexical(backend(), seededTypes, asBuiltin(t, "integer"), "5", nil)
+	v, err := value.ValidateLexical(backend(), seededTypes, asBuiltin(t, "integer"), "5", nil, FacetAssertions())
 	if err != nil {
 		t.Fatalf("mapping 5: %v", err)
 	}
@@ -374,7 +374,7 @@ func asTypesWith(extra ...*xsd.SimpleType) ctaTestTypes {
 // asBind maps lexical against st and binds it to $value, or fails the test.
 func asBind(t *testing.T, st *xsd.SimpleType, lexical string) ValueBinding {
 	t.Helper()
-	v, err := value.ValidateLexical(backend(), seededTypes, st, lexical, nil)
+	v, err := value.ValidateLexical(backend(), seededTypes, st, lexical, nil, FacetAssertions())
 	if err != nil {
 		t.Fatalf("mapping %q against %s: %v", lexical, st.Name(), err)
 	}
@@ -477,7 +477,7 @@ func TestAssertionValueOverListContent(t *testing.T) {
 		if !ok {
 			t.Fatalf("CompileAssertionTest(%q) over a list: declined, want compiled", tc.expr)
 		}
-		v, err := value.ValidateLexical(backend(), types, list, tc.lexical, nil)
+		v, err := value.ValidateLexical(backend(), types, list, tc.lexical, nil, FacetAssertions())
 		if err != nil {
 			t.Fatalf("mapping %q against the list: %v", tc.lexical, err)
 		}
@@ -497,7 +497,7 @@ func TestAssertionValueOverListContent(t *testing.T) {
 // [BindValue]'s obligation and raises. Each row fails with ctaTypes.valueVariable
 // declining a ·special· type.
 func TestAssertionValueOverSpecialContent(t *testing.T) {
-	five, err := value.ValidateLexical(backend(), seededTypes, asBuiltin(t, "integer"), "5", nil)
+	five, err := value.ValidateLexical(backend(), seededTypes, asBuiltin(t, "integer"), "5", nil, FacetAssertions())
 	if err != nil {
 		t.Fatalf("mapping 5: %v", err)
 	}
@@ -662,7 +662,7 @@ func TestAssertionDecidesDateTimeComparisons(t *testing.T) {
 // with it appended validates, and the value it maps to carries a timezone —
 // which is the range check §3.3.7's timezoneFrag makes, so none is written here.
 func TestImplicitTimezoneIsATimezone(t *testing.T) {
-	v, err := value.ValidateLexical(backend(), seededTypes, asBuiltin(t, "date"), "2000-01-01"+ctaImplicitTimezone, nil)
+	v, err := value.ValidateLexical(backend(), seededTypes, asBuiltin(t, "date"), "2000-01-01"+ctaImplicitTimezone, nil, FacetAssertions())
 	if err != nil {
 		t.Fatalf("validating 2000-01-01%s as xs:date: %v", ctaImplicitTimezone, err)
 	}
