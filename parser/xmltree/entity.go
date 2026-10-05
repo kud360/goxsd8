@@ -210,7 +210,7 @@ func (c *content) include(name, text string, ref int64, open []string) error {
 func (c *content) token(tok xml.Token, raw string, at func(int) int64, depth int, loc xsderr.Loc, open []string) error {
 	switch t := tok.(type) {
 	case xml.StartElement:
-		attrs, err := c.r.expandAttrs(t.Attr, raw, false, loc, open)
+		attrs, err := c.r.expandAttrs(t, raw, false, loc, open)
 		if err != nil {
 			return err
 		}
@@ -290,34 +290,52 @@ func (r *Reader) reference(name string, loc xsderr.Loc) (text string, entity boo
 	return decl.value.text, true, nil
 }
 
-// expandAttrs returns attrs, the attributes of the start tag whose source is
-// raw, with each value normalized per XML 1.0 §3.3.3 (attrValue). The
-// decoder's value is already that for a value whose source holds neither a
-// reference to a general entity nor a literal #x9, #xA or #xD (attrSpace): the
-// decoder resolves character references and predefined entities and applies
-// §2.11, but not §3.3.3's step 3. Every other value is re-read from raw. src
-// reports that raw is document source rather than replacement text; open names
-// the inclusions raw is part of.
-func (r *Reader) expandAttrs(attrs []xml.Attr, raw string, src bool, loc xsderr.Loc, open []string) ([]xml.Attr, error) {
-	if !strings.ContainsAny(raw, "&"+attrSpace) {
-		return attrs, nil
+// expandAttrs returns the attributes of t, the start tag whose source is raw,
+// with each value normalized per XML 1.0 §3.3.3: steps 1–3 (attrValue), then,
+// for an attribute the internal subset defines on t's element type with an
+// AttType other than CDATA (Reader.tokenized), the paragraph after step 3
+// (collapseSpace). An attribute it defines as CDATA, or not at all, is read as
+// CDATA (§3.3.3's last paragraph). The decoder's value is already steps 1–3's
+// for a value whose source holds neither a reference to a general entity nor a
+// literal #x9, #xA or #xD (attrSpace): the decoder resolves character
+// references and predefined entities and applies §2.11, but not step 3. Every
+// other value is re-read from raw. src reports that raw is document source
+// rather than replacement text; open names the inclusions raw is part of.
+func (r *Reader) expandAttrs(t xml.StartElement, raw string, src bool, loc xsderr.Loc, open []string) ([]xml.Attr, error) {
+	reread := strings.ContainsAny(raw, "&"+attrSpace)
+	if !reread && r.tokenized == nil {
+		return t.Attr, nil
 	}
-	vals := attrSources(raw)
-	if len(vals) != len(attrs) {
-		return nil, xsderr.New(xsderr.RuleXMLWellFormed, loc, "start tag re-read found %d attribute values where the decoder read %d", len(vals), len(attrs))
+	var vals []string
+	if reread {
+		vals = attrSources(raw)
+		if len(vals) != len(t.Attr) {
+			return nil, xsderr.New(xsderr.RuleXMLWellFormed, loc, "start tag re-read found %d attribute values where the decoder read %d", len(vals), len(t.Attr))
+		}
 	}
-	out := slices.Clone(attrs)
-	for i, v := range vals {
-		if !refersToEntity(v) && !strings.ContainsAny(v, attrSpace) {
-			continue
+	out := slices.Clone(t.Attr)
+	for i := range out {
+		if reread && (refersToEntity(vals[i]) || strings.ContainsAny(vals[i], attrSpace)) {
+			var b strings.Builder
+			if err := r.attrValue(&b, vals[i], src, loc, open); err != nil {
+				return nil, err
+			}
+			out[i].Value = b.String()
 		}
-		var b strings.Builder
-		if err := r.attrValue(&b, v, src, loc, open); err != nil {
-			return nil, err
+		if r.tokenized[attName{elem: rawName(t.Name), name: rawName(out[i].Name)}] {
+			out[i].Value = collapseSpace(out[i].Value)
 		}
-		out[i].Value = b.String()
 	}
 	return out, nil
+}
+
+// collapseSpace returns v, an attribute's normalized value after XML 1.0
+// §3.3.3's step 3, with leading and trailing #x20 discarded and each run of
+// #x20 replaced by one: the paragraph after step 3, for an attribute whose
+// type is not CDATA. It touches #x20 alone, so a #x9, #xA or #xD a character
+// reference produced stays as it is.
+func collapseSpace(v string) string {
+	return strings.Join(strings.FieldsFunc(v, func(c rune) bool { return c == ' ' }), " ")
 }
 
 // attrSpace is the white space §3.3.3's step 3 maps to #x20 and the decoder
