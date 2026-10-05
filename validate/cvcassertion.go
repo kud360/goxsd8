@@ -83,15 +83,15 @@ const ruleCvcAssertionsValid xsderr.Rule = "cvc-assertions-valid"
 // recorded as an [Unevaluated] under cvc-assertion at e through
 // [walk.decline], never charged and never shown satisfied. The residue is: a
 // {test} xpath declines, whose GAP(xpath) markers name the grammar and type
-// residue (paths, the function library); and every assertion of an e one of
-// whose attributes matching an {attribute use}, carried or ·defaulted·, has no
-// ·actual value·, one of whose element [[children]] a {test} reads has no
-// typed value this package reads ([walk.keepChild]), whose `$value` is
-// undecided ([walk.assertionValues]), or one of whose {test}s counts nodes of
-// a subtree this package cannot report exactly: one holding a ·skipped·
-// element, or an element whose ·governing type definition· it could not
-// determine, so that its ·defaulted attributes· are unknown
-// ([walk.tallyElement]). Fail-open: the withheld value is clause
+// residue (paths, the function library beyond its string and sequence core);
+// and every assertion of an e one of whose attributes matching an {attribute
+// use}, carried or ·defaulted·, has no ·actual value·, one of whose element
+// [[children]] a {test} reads has no typed value this package reads
+// ([walk.keepChild]), whose `$value` is undecided ([walk.assertionValues]), or
+// one of whose {test}s counts nodes of a subtree this package cannot report
+// exactly: one holding a ·skipped· element, or an element whose ·governing
+// type definition· it could not determine, so that its ·defaulted attributes·
+// are unknown ([walk.tallyElement]). Fail-open: the withheld value is clause
 // 6's own verdict, whose whole consumer set inside this package is
 // w.res.violations and its one reader [Result.Violations], which charge on a
 // violation PRESENT, so a decline can only cost a rejection and can

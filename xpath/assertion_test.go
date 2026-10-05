@@ -296,7 +296,7 @@ func TestCompileAssertionTestDeclines(t *testing.T) {
 		{"xs:integer(@x) = 5", "the constructor spelling of the same cast"},
 		{"@f = 1e0", "B.1 rule 1.1's xs:float to xs:double promotion, CompileCTATest's own decline"},
 		{"@x eq 5 eq 5", "ValueComp is non-associative, so a second one is an unparsed tail"},
-		{"string-length(@x) = 1", "a function call outside fn:not, fn:count and the constructors"},
+		{"upper-case(@x) = '1'", "a function call outside fn:not, fn:count, the constructors and the string and sequence core"},
 	} {
 		if _, ok := CompileAssertionTest(asRecord(tc.expr), seededTypes, xsd.EmptyContent{}, uses, asNoElems); ok {
 			t.Errorf("CompileAssertionTest(%q): compiled, want declined (%s)", tc.expr, tc.why)

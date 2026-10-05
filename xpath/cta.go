@@ -20,8 +20,9 @@ import (
 // of which only `$value` is in scope (cvc-assertion clause 2.2), a child-axis
 // step naming one of E's element [[children]] (ctaTypedChild), and a "/" or
 // "//" opening a path, which raises (ctaNoDocumentRoot); and [14] ValueExpr
-// also takes an fn:count call over one counted path (ctaCount); and each
-// comparison operand may be xpath20.md [13] AdditiveExpr over [14]
+// also takes an fn:count call over one counted path (ctaCount) and a call to
+// one of the F&O string and sequence functions, evaluated in ctafunc.go; and
+// each comparison operand may be xpath20.md [13] AdditiveExpr over [14]
 // MultiplicativeExpr, whose operators are evaluated in ctaarith.go (ctaArith).
 // The facet façade (ctaFacetFacade) takes the assertion façade's grammar but
 // fn:count, plus [47] ContextItemExpr `.`, and compiles every read of the
@@ -30,8 +31,9 @@ import (
 // (ctaNoContextItem). It is not a stage of a general XPath 2.0 evaluator: the
 // productions below reach no axis but attribute, one child step and the
 // descendant steps fn:count counts over, no predicate, no variable but `$value`
-// and no function but fn:not and fn:count, so evaluating them directly is exact
-// where a fail-open delegation to a general engine would be a guess.
+// and no function but fn:not, fn:count and the ten ctaParser.libraryCall
+// names, so evaluating them directly is exact where a fail-open delegation to
+// a general engine would be a guess.
 //
 //	[8]  Test                ::= OrExpr
 //	[9]  OrExpr              ::= AndExpr ( 'or' AndExpr )*
@@ -486,9 +488,11 @@ func (ctaTypeError) ctaExpr()        {}
 // (ctaFacade.child) and rooted path (ctaFacade.rooted), and the facet façade's
 // read of an absent context item (ctaNoContextItem) — the cast that [15]
 // ta-CastExpr's tail and [18] ta-ConstructorFunction both build over one of
-// them, the assertion façade's fn:count call (ctaFacade.count), and a binary
-// arithmetic operator over two of them (ctaArith, ctaFacade.computes). Every
-// branch answers readsChild and counted on ctaExpr's terms.
+// them, the assertion façade's fn:count call (ctaFacade.count), a binary
+// arithmetic operator over two of them (ctaArith, ctaFacade.computes), and a
+// call to an F&O string or sequence function over them (ctaMatch,
+// ctaUnaryString, ctaPresence, ctaStringFunction; ctaFacade.callsLibrary).
+// Every branch answers readsChild and counted on ctaExpr's terms.
 type ctaValue interface {
 	ctaValue()
 	readsChild(name xsd.QName) bool
@@ -583,7 +587,8 @@ type ctaValueVar struct {
 // (cvc-assertion clause 2.3.2): the empty sequence, decided at compile time,
 // so the evaluation's [ValueBinding] is never read. It is also the node of
 // arithmetic over such a `$value` (ctaTypes.arithmetic), whose result §3.4
-// makes the empty sequence at compile time all the same.
+// makes the empty sequence at compile time all the same, and of the empty
+// sequence `()` written as a library call's argument (ctaParser.argument).
 type ctaEmptyValue struct{}
 
 // ctaUntypedValue is `$value` over a simple {content type} whose {simple type
@@ -634,6 +639,13 @@ type ctaFacade interface {
 	// arithmetic operators at all ([13] AdditiveExpr, [14]
 	// MultiplicativeExpr), which §3.12.6's grammar has no production for.
 	computes() bool
+	// callsLibrary reports whether the façade admits a call to the F&O
+	// functions ctaParser.libraryCall parses — fn:contains, fn:starts-with,
+	// fn:ends-with, fn:string-length, fn:normalize-space, fn:string, fn:empty,
+	// fn:exists, fn:true and fn:false — at all, which §3.12.6 clause 3 pins out
+	// of [12] ta-BooleanFunction (fn:not alone) and [18] ta-ConstructorFunction
+	// (constructors alone).
+	callsLibrary() bool
 }
 
 // ctaTypeAlternativeFacade is a Type Alternative's façade: every attribute
@@ -689,6 +701,11 @@ func (ctaTypeAlternativeFacade) count(ctaCounted, ctaTypes) (ctaValue, bool) {
 // computes is false, on comparesValues' terms: ta-props-correct clause 2's
 // grammar has no arithmetic operator.
 func (ctaTypeAlternativeFacade) computes() bool { return false }
+
+// callsLibrary is false: §3.12.6 clause 3 makes every function call a call to
+// fn:not or to a constructor, so every other name reaches
+// ctaParser.constructorFunction and declines there.
+func (ctaTypeAlternativeFacade) callsLibrary() bool { return false }
 
 // ctaNameTest is the sealed sum of [36] NameTest's arms as [17] ta-AttrName
 // and a child-axis step reach them, matching one ·expanded name· at a time.
@@ -762,7 +779,9 @@ func (ctaUnresolvedTest) matches(xsd.QName) bool { return false }
 // datatype its XPath literal kind fixes: a StringLiteral is xs:string, an
 // IntegerLiteral or DecimalLiteral is xs:decimal (xs:integer's primitive base,
 // which is the type two such literals are compared in), and a DoubleLiteral is
-// xs:double.
+// xs:double. A call to a zero-argument constant function compiles to one too:
+// fn:true() and fn:false() are the xs:boolean of the lexical "true" and
+// "false" (ctaParser.constantCall).
 type ctaLiteral struct {
 	text string
 	st   *xsd.SimpleType
@@ -890,8 +909,9 @@ type ctaUntypedAtomic struct{}
 
 // ctaTyped is an operand carrying a datatype: a Literal, the result of a cast
 // or a constructor function, a typed attribute, an fn:count call, an arithmetic
-// result, or each item of `$value`. It carries the COMPONENT alone — st.Name()
-// is the name, and storing both would be two encodings of one fact (STYLE D3).
+// result, the result of an F&O string or sequence function, or each item of
+// `$value`. It carries the COMPONENT alone — st.Name() is the name, and storing
+// both would be two encodings of one fact (STYLE D3).
 type ctaTyped struct{ st *xsd.SimpleType }
 
 // ctaEmptySequence is the statically empty operand, ctaEmptyValue: it yields
@@ -921,6 +941,14 @@ func ctaStaticOf(v ctaValue) ctaStatic {
 		return ctaTyped{st: n.st}
 	case ctaArith:
 		return ctaTyped{st: n.st}
+	case ctaMatch:
+		return ctaTyped{st: n.st}
+	case ctaUnaryString:
+		return ctaTyped{st: n.st}
+	case ctaPresence:
+		return ctaTyped{st: n.st}
+	case ctaStringFunction:
+		return ctaTyped{st: n.cast.target}
 	case ctaValueVar:
 		return ctaTyped{st: n.atom}
 	case ctaEmptyValue:
@@ -1202,35 +1230,21 @@ func ctaSingletonOperand(v ctaValue, c *xsd.SimpleType, env ctaEnv) (value.Value
 // involved — a ·nilled· child is a node all the same. Rule 2 holds whatever
 // the sequence's LENGTH, which is what a wildcard NameTest and a repeated
 // child make observable. A rooted path raises err:XPDY0050, and a read of an
-// absent context item err:XPDY0002. `$value` is atomic values and no node: the
+// absent context item err:XPDY0002. ctaStep.nodes is that reading, which
+// fn:empty and fn:exists share. `$value` is atomic values and no node: the
 // statically empty one is rule 1's false, the bound typed one is decided by
 // ctaBoolean, a list of two or more items included, and the untyped one by rule
 // 4 (ctaUntypedBoolean). Every other operand is a singleton atomic value or the
 // empty sequence, which ctaBoolean decides.
 func (e ctaEffectiveBoolean) eval(env ctaEnv) ctaAnswer {
-	switch n := e.operand.(type) {
-	case ctaAttr:
-		matched, ok := ctaMatchedAttributes(n, env)
-		if !ok {
-			return ctaError
-		}
-		return ctaAnswerOf(len(matched) != 0)
-	case ctaTypedAttr:
-		matched, ok := ctaMatchedTyped(n, env)
-		if !ok {
-			return ctaError
-		}
-		return ctaAnswerOf(len(matched) != 0)
-	case ctaTypedChild:
-		_, nodes, ok := ctaMatchedChildren(n, env)
+	if step, isStep := e.operand.(ctaStep); isStep {
+		nodes, ok := step.nodes(env)
 		if !ok {
 			return ctaError
 		}
 		return ctaAnswerOf(nodes != 0)
-	case ctaNoDocumentRoot:
-		return ctaError // err:XPDY0050
-	case ctaNoContextItem:
-		return ctaError // err:XPDY0002
+	}
+	switch n := e.operand.(type) {
 	case ctaLiteral:
 		return ctaBoolean(e.operand, n.st, env)
 	case ctaCast:
@@ -1239,6 +1253,14 @@ func (e ctaEffectiveBoolean) eval(env ctaEnv) ctaAnswer {
 		return ctaBoolean(e.operand, n.st, env)
 	case ctaArith:
 		return ctaBoolean(e.operand, n.st, env)
+	case ctaMatch:
+		return ctaBoolean(e.operand, n.st, env)
+	case ctaUnaryString:
+		return ctaBoolean(e.operand, n.st, env)
+	case ctaPresence:
+		return ctaBoolean(e.operand, n.st, env)
+	case ctaStringFunction:
+		return ctaBoolean(e.operand, n.cast.target, env)
 	case ctaValueVar:
 		return ctaBoolean(e.operand, n.atom, env)
 	case ctaEmptyValue:
@@ -1358,11 +1380,13 @@ type ctaAtoms struct{ vs []value.Value }
 // ctaRaised is a dynamic or type error raised while producing the item —
 // err:FORG0001 from a lexical or facet mismatch, err:XPTY0004 from an empty
 // operand under a cast written without `?`, from a cast over a sequence of two
-// or more items, or from a cast this processor does not support, and an
-// arithmetic operator's err:FOAR0001 and err:FOAR0002 (ctaArithItem). Which of them
-// it was is not carried: key-cta-ta-select clause 2 (§3.12.4) gives them all
-// the same consequence, as cvc-assertion (§3.13.4.1) does for an assertion,
-// and the {test} is where that consequence is applied.
+// or more items, from a cast this processor does not support, or from a
+// function argument xpath20.md §3.1.5's conversion does not match
+// (ctaStringOf), and an arithmetic operator's err:FOAR0001 and err:FOAR0002
+// (ctaArithItem). Which of them it was is not carried: key-cta-ta-select
+// clause 2 (§3.12.4) gives them all the same consequence, as cvc-assertion
+// (§3.13.4.1) does for an assertion, and the {test} is where that consequence
+// is applied.
 type ctaRaised struct{}
 
 func (ctaAtoms) ctaItem()  {}
@@ -1395,6 +1419,9 @@ func ctaValidated(i ctaItem) (value.Value, bool) {
 //     xs:integer and each item of `$value` carry their own type and are
 //     converted to c, which is a no-op wherever the two coincide; the
 //     statically empty `$value` yields nothing to convert.
+//   - an F&O string or sequence function's result is of its own result type
+//     and converted to c on the typed operands' terms, once the function has
+//     been applied to its arguments (ctafunc.go).
 //   - a rooted path raises err:XPDY0050 before it yields anything, and a read
 //     of an absent context item err:XPDY0002.
 //   - an ARITHMETIC result is of its own result type and converted to c on
@@ -1427,6 +1454,14 @@ func ctaItemOf(v ctaValue, c *xsd.SimpleType, env ctaEnv) ctaItem {
 		return ctaCountItem(n, c, env)
 	case ctaArith:
 		return ctaArithItem(n, c, env)
+	case ctaMatch:
+		return ctaMatchItem(n, c, env)
+	case ctaUnaryString:
+		return ctaUnaryStringItem(n, c, env)
+	case ctaPresence:
+		return ctaPresenceItem(n, c, env)
+	case ctaStringFunction:
+		return ctaStringFunctionItem(n, c, env)
 	case ctaValueVar:
 		return ctaValueItem(n, c, env)
 	case ctaEmptyValue:

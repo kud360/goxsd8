@@ -202,13 +202,17 @@ func (t ctaTypes) castTarget(name xsd.QName) (*xsd.SimpleType, bool) {
 }
 
 // castsFrom reports whether this engine casts the operand v at all, which is
-// false for exactly one shape: a TYPED operand read off the instance — an
-// attribute (ctaTypedAttr), a child element (ctaTypedChild), `$value`
-// (ctaValueVar), a count of its nodes (ctaCount, xs:integer) or the result of
-// arithmetic (ctaArith, always numeric) — whose {primitive type definition} is
-// not xs:string. Every other operand casts as [CompileCTATest] states, the
-// statically empty `$value` (ctaEmptyValue) among them: it holds no item to
-// convert.
+// false for exactly one shape: a TYPED operand read off the instance or
+// computed from it — an attribute (ctaTypedAttr), a child element
+// (ctaTypedChild), `$value` (ctaValueVar), a count of its nodes (ctaCount,
+// xs:integer), the result of arithmetic (ctaArith, always numeric) or of an
+// F&O function call (ctaMatch and ctaPresence, xs:boolean; ctaUnaryString,
+// xs:integer or xs:string; ctaStringFunction, xs:string) — whose {primitive
+// type definition} is not xs:string. Every other operand casts as
+// [CompileCTATest] states, the statically empty `$value` (ctaEmptyValue) among
+// them: it holds no item to convert. So does a literal, an fn:true() or
+// fn:false() among them, whose xs:boolean only fn:string casts, to xs:string,
+// where its ·canonical representation· is the string F&O §17.1.2 casts it to.
 //
 // The string family is admitted because xpath-functions.md §17.1.1 makes a
 // cast from xs:string one datatype validation of the value's own string, which
@@ -220,9 +224,10 @@ func (t ctaTypes) castTarget(name xsd.QName) (*xsd.SimpleType, bool) {
 // not over a re-validated canonical lexical — xs:decimal to xs:integer
 // truncates (§17.1.3.4) where the round-trip ctaPromote would perform raises
 // err:FORG0001 for "3.5" — and an assertion a raised cast makes false is a
-// charge (cvc-assertion), so the round-trip would fabricate one. The direction
-// is the withhold [CompileAssertionTest] reports: the assertion is declined,
-// never charged and never satisfied. (#1042)
+// charge (cvc-assertion), so the round-trip would fabricate one. fn:string over
+// such an operand, a node of such a type included, is that cast and declines
+// with it. The direction is the withhold [CompileAssertionTest] reports: the
+// assertion is declined, never charged and never satisfied. (#1042)
 func (t ctaTypes) castsFrom(v ctaValue) bool {
 	var st *xsd.SimpleType
 	switch n := v.(type) {
@@ -234,6 +239,14 @@ func (t ctaTypes) castsFrom(v ctaValue) bool {
 		st = n.st
 	case ctaArith:
 		st = n.st
+	case ctaMatch:
+		st = n.st
+	case ctaUnaryString:
+		st = n.st
+	case ctaPresence:
+		st = n.st
+	case ctaStringFunction:
+		st = n.cast.target
 	case ctaValueVar:
 		st = n.atom
 	default:
@@ -241,6 +254,50 @@ func (t ctaTypes) castsFrom(v ctaValue) bool {
 	}
 	p, resolved := t.primitive(st)
 	return resolved && p.Name() == ctaBuiltin("string")
+}
+
+// floating reports whether v's static type is atomic with a {primitive type
+// definition} of xs:float or xs:double — or one that does not resolve, which
+// ctaParser.stringOf declines the same way — the operands whose cast to
+// xs:string xpath-functions.md §17.1.2 does not render as their ·canonical
+// representation·.
+func (t ctaTypes) floating(v ctaValue) bool {
+	s, typed := ctaStaticOf(v).(ctaTyped)
+	if !typed {
+		return false
+	}
+	p, resolved := t.primitive(s.st)
+	return !resolved || p.Name() == ctaBuiltin("float") || p.Name() == ctaBuiltin("double")
+}
+
+// stringArgument converts v, one argument of an F&O function whose parameter
+// is xs:string?, by xpath20.md §3.1.5's function conversion rules as far as
+// v's static type settles them — atomization, then "each item of type
+// xs:untypedAtomic is cast to the expected atomic type", then B.1's URI
+// promotion, and err:XPTY0004 for an item that matches none of them:
+//
+//   - an xs:untypedAtomic operand is held under its cast to xs:string, the
+//     `?` allowing the empty sequence and the cast raising err:XPTY0004 for two
+//     or more items (ctaCastItem);
+//   - a typed operand whose {primitive type definition} is xs:string or
+//     xs:anyURI (ctaStringLike) is held as it is: subtype substitution and the
+//     URI promotion convert it, and neither changes its string;
+//   - the statically empty operand is held as it is: it holds no item;
+//   - every other typed operand is held mistyped, and ctaStringOf raises
+//     err:XPTY0004 for any item it yields. That is raised dynamically and not
+//     here: an empty operand of any type matches xs:string?, so an absent
+//     xs:integer attribute is the zero-length string.
+func (t ctaTypes) stringArgument(v ctaValue) ctaStringArgument {
+	switch s := ctaStaticOf(v).(type) {
+	case ctaUntypedAtomic:
+		return ctaStringArgument{operand: ctaCast{operand: v, target: t.str, allowsEmpty: true}}
+	case ctaTyped:
+		p, resolved := t.primitive(s.st)
+		return ctaStringArgument{operand: v, mistyped: !resolved || !ctaStringLike(p)}
+	case ctaEmptySequence:
+		return ctaStringArgument{operand: v}
+	}
+	return ctaStringArgument{operand: v, mistyped: true} // ctaStatic has the three arms above; never reached
 }
 
 // typedAtomic reports whether this engine reads a value of type st off the
