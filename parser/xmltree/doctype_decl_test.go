@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -149,6 +150,119 @@ func TestElementAndAttlistDeclAreWellFormed(t *testing.T) {
 	} {
 		t.Run(tc.doc, func(t *testing.T) {
 			wantSubsetFault(t, tc.doc, tc.want)
+		})
+	}
+}
+
+// An entity reference in an <!ATTLIST> default value is checked at the
+// declaration against the entity it names, whether or not the default is ever
+// applied. Each fault row breaks one constraint, its entities declared before
+// the <!ATTLIST> unless the row is about precedence: a name declared nowhere,
+// or only after the <!ATTLIST> (XML 1.0 WFC: Entity Declared, which a
+// standalone="yes" document is bound by after a parameter-entity reference);
+// an unparsed entity, directly, after a parameter-entity reference read and in
+// one's replacement text (WFC: Parsed Entity); an entity reaching itself in
+// one step or two (WFC: No Recursion); an external entity, directly,
+// through another entity and declared only after the <!ATTLIST> (WFC: No
+// External Entity References); and a '<' in replacement text, directly,
+// through another entity and in a name's first, binding declaration (WFC: No <
+// in Attribute Values). Each control reads: a predefined entity, a CharRef,
+// one spelled with a character reference to '&', and an entity whose
+// replacement text is a CharRef to '<'; an undeclared name where Entity
+// Declared does not bind — after an unread or a read parameter-entity
+// reference, or before a read one; an indirect reference to an entity declared
+// after the <!ATTLIST>, which is VC: Entity Declared's; an entity first
+// declared after a declined reference, which the reader does not process
+// (§5.1); a name whose first declaration is clean; an entity reached twice by
+// one walk, and the "billion laughs" entities, which the walk reads once each
+// or not in this test's lifetime; and a clean <!ATTLIST> never applied. Each
+// control reads with an internal subset alone and again beside an external
+// one. So do an undeclared name under an external subset, where Entity
+// Declared does not bind either, and one in a parameter entity's replacement
+// text in a standalone="yes" document, which it does not reach.
+func TestAttlistDefaultEntityReferencesAreWellFormed(t *testing.T) {
+	const decl = "<?xml version=\"1.0\"?>\n"
+	const alone = "<?xml version=\"1.0\" standalone=\"yes\"?>\n"
+	const head = `<!DOCTYPE r [<!NOTATION n SYSTEM 'x'><!ENTITY pic SYSTEM 'u' NDATA n>`
+	const tail = `]><r ent="pic"/>`
+	const ext = `<!ENTITY % ext SYSTEM "x.ent"> %ext; `
+	const read = `<!ENTITY % p ""> %p; `
+	laughs := `<!ENTITY l0 "lol">`
+	for i := 1; i <= 9; i++ {
+		laughs += fmt.Sprintf(`<!ENTITY l%d "%s">`, i, strings.Repeat(fmt.Sprintf("&l%d;", i-1), 10))
+	}
+	const value = `t.xml:2:1: [xml-wf] DOCTYPE internal subset holds an <!ATTLIST> declaration of "r" whose attribute "a" has a default value that references`
+	const inPE = `t.xml:2:1: [xml-wf] replacement text of a parameter entity referenced between DOCTYPE declarations holds an <!ATTLIST> declaration of "r" whose attribute "a" has a default value that references`
+	declared := func(n string) string {
+		return fmt.Sprintf(" entity %s, which no general entity declaration before it declares (XML 1.0 WFC: Entity Declared)", n)
+	}
+	parsed := func(n string) string {
+		return fmt.Sprintf(", directly or indirectly, the unparsed entity %s (XML 1.0 WFC: Parsed Entity)", n)
+	}
+	recursion := func(n string) string {
+		return fmt.Sprintf(", directly or indirectly, entity %s, which references itself (XML 1.0 WFC: No Recursion)", n)
+	}
+	external := func(n string) string {
+		return fmt.Sprintf(", directly or indirectly, the external entity %s (XML 1.0 WFC: No External Entity References)", n)
+	}
+	lt := func(n string) string {
+		return fmt.Sprintf(", directly or indirectly, entity %s, whose replacement text holds '<' (XML 1.0 WFC: No < in Attribute Values)", n)
+	}
+	for _, tc := range []struct {
+		doc  string
+		want string // the whole error
+	}{
+		{decl + head + `<!ATTLIST r a CDATA "&u;">` + tail, value + declared("u")},
+		{decl + head + `<!ATTLIST r a CDATA "&e;"><!ENTITY e "x">` + tail, value + declared("e")},
+		{decl + head + `<!ATTLIST r a CDATA "x&amp;y&#60;&e;"><!ENTITY e "x">` + tail, value + declared("e")},
+		{alone + head + ext + `<!ATTLIST r a CDATA "&u;">` + tail, value + declared("u")},
+		{alone + head + read + `<!ATTLIST r a CDATA "&u;">` + tail, value + declared("u")},
+		{decl + head + `<!ATTLIST r a CDATA "&pic;">` + tail, value + parsed("pic")},
+		{decl + head + read + `<!ATTLIST r a CDATA "&pic;">` + tail, value + parsed("pic")},
+		{decl + head + `<!ENTITY % q "<!ATTLIST r a CDATA '&pic;'>"> %q;` + tail, inPE + parsed("pic")},
+		{decl + head + `<!ENTITY e "&e;"><!ATTLIST r a CDATA "&e;">` + tail, value + recursion("e")},
+		{decl + head + `<!ENTITY e "&f;"><!ENTITY f "&e;"><!ATTLIST r a CDATA "&e;">` + tail, value + recursion("e")},
+		{decl + head + `<!ENTITY x SYSTEM "x.ent"><!ATTLIST r a CDATA "&x;">` + tail, value + external("x")},
+		{decl + head + `<!ENTITY x SYSTEM "x.ent"><!ENTITY y "&x;"><!ATTLIST r a CDATA "&y;">` + tail, value + external("x")},
+		{decl + head + read + `<!ATTLIST r a CDATA "&x;"><!ENTITY x SYSTEM "x.ent">` + tail, value + external("x")},
+		{decl + head + `<!ENTITY lt2 "<"><!ATTLIST r a CDATA "&lt2;">` + tail, value + lt("lt2")},
+		{decl + head + `<!ENTITY lt2 "<"><!ENTITY m "&lt2;"><!ATTLIST r a CDATA "&m;">` + tail, value + lt("lt2")},
+		{decl + head + `<!ENTITY e "a<b"><!ENTITY e "x"><!ATTLIST r a CDATA "&e;">` + tail, value + lt("e")},
+	} {
+		t.Run(tc.doc, func(t *testing.T) {
+			wantSubsetFault(t, tc.doc, tc.want)
+		})
+	}
+	for _, subset := range []string{
+		`<!ATTLIST r a CDATA "&amp;&lt;&gt;&apos;&quot;">`,
+		`<!ATTLIST r a CDATA "&#60;&#x3C;">`,
+		`<!ATTLIST r a CDATA "&#38;u;">`,
+		`<!ENTITY e "&#38;#60;"><!ATTLIST r a CDATA "&e;">`,
+		ext + `<!ATTLIST r a CDATA "&u;">`,
+		read + `<!ATTLIST r a CDATA "&u;">`,
+		`<!ATTLIST r a CDATA "&u;">` + read,
+		`<!ENTITY y "&x;"><!ATTLIST r a CDATA "&y;"><!ENTITY x "v">`,
+		ext + `<!ENTITY lt2 "<"><!ATTLIST r a CDATA "&lt2;">`,
+		`<!ENTITY e "x"><!ENTITY e "a<b"><!ATTLIST r a CDATA "&e;">`,
+		`<!ENTITY e "&f;&f;"><!ENTITY f "v"><!ATTLIST r a CDATA "&e;&e;" b CDATA "&f;">`,
+		`<!ENTITY e "v"><!ATTLIST q a CDATA "&e;">`,
+		laughs + `<!ATTLIST r a CDATA "&l9;">`,
+	} {
+		for _, doc := range []string{
+			`<!DOCTYPE r [` + subset + `]><r/>`,
+			`<!DOCTYPE r SYSTEM "r.dtd" [` + subset + `]><r/>`,
+		} {
+			t.Run(doc, func(t *testing.T) {
+				drained(t, doc)
+			})
+		}
+	}
+	for _, doc := range []string{
+		`<!DOCTYPE r SYSTEM "r.dtd" [<!ATTLIST r a CDATA "&u;">]><r/>`,
+		alone + `<!DOCTYPE r [<!ENTITY % q "<!ATTLIST r a CDATA '&u;'>"> %q;]><r/>`,
+	} {
+		t.Run(doc, func(t *testing.T) {
+			drained(t, doc)
 		})
 	}
 }
