@@ -293,7 +293,7 @@ func TestCompileAssertionTestDeclines(t *testing.T) {
 		{"@q = 'a'", "an xs:QName value has no canonical representation to convert through"},
 		{"@n = 'a'", "an xs:NOTATION value likewise"},
 		{"@x cast as xs:string = '5'", "a cast from a typed non-string attribute"},
-		{"xs:integer(@x) = 5", "the constructor spelling of the same cast"},
+		{"xs:string(@x) = '5'", "the constructor spelling of the same cast"},
 		{"@f = 1e0", "B.1 rule 1.1's xs:float to xs:double promotion, CompileCTATest's own decline"},
 		{"@x eq 5 eq 5", "ValueComp is non-associative, so a second one is an unparsed tail"},
 		{"upper-case(@x) = '1'", "a function call outside fn:not, fn:count, the constructors and the string and sequence core"},
@@ -584,9 +584,10 @@ func TestCompileCTATestStillDeclinesAssertionOnlyForms(t *testing.T) {
 //   - a timezone-MIXED pair is a total order, so `@d < @e or @d >= @e` over
 //     2000-01-01 and 2000-01-01Z is true, and 2000-01-01 at Z equals
 //     2000-01-01Z — including across the day boundary, where 2000-01-01 at Z is
-//     after 2000-01-01+14:00. Every mixed row but `@d lt @e`, false either
-//     way, fails with the date/time arm of ctaHoldsPair removed, which leaves
-//     the pair value.Incomparable and unequal.
+//     after 2000-01-01+14:00. Every mixed row but `@d lt @e` and 1976-02
+//     `eq` 1976-03Z, each false either way, fails with the date/time arm of
+//     ctaHoldsPair removed, which leaves the pair value.Incomparable and
+//     unequal.
 //   - two untimezoned operands, and two timezoned ones, compare as before the
 //     arm: the implicit timezone given to the left operand alone breaks the
 //     untimezoned `@d = @e` row.
@@ -628,12 +629,12 @@ func TestAssertionDecidesDateTimeComparisons(t *testing.T) {
 		{"@gmd = xs:gMonthDay('--01-01Z')", []asTyped{{uq("gmd"), "gMonthDay", "--01-01"}}, true},
 		{"@gd = xs:gDay('---01Z')", []asTyped{{uq("gd"), "gDay", "---01"}}, true},
 		{"@gm ne xs:gMonth('--01Z')", []asTyped{{uq("gm"), "gMonth", "--01"}}, false},
+		{"@gym eq xs:gYearMonth('1976-03Z')", []asTyped{{uq("gym"), "gYearMonth", "1976-02"}}, false},
 		// Two untimezoned, and two timezoned: as before.
 		{"@d = @e", []asTyped{date("d", "2000-01-01"), date("e", "2000-01-01")}, true},
 		{"@d < @e", []asTyped{date("d", "2000-01-01"), date("e", "2000-01-02")}, true},
 		{"@d = @e", []asTyped{date("d", "2000-01-01Z"), date("e", "2000-01-01+14:00")}, false},
 		{"@d > @e", []asTyped{date("d", "2000-01-01Z"), date("e", "2000-01-01+14:00")}, true},
-		{"@gym eq xs:gYearMonth('1976-03Z')", []asTyped{{uq("gym"), "gYearMonth", "1976-02"}}, false},
 		{"@gd = xs:gDay('---02+14:00')", []asTyped{{uq("gd"), "gDay", "---01-10:00"}}, true},
 		{"xs:time('08:00:00+09:00') eq xs:time('17:00:00-06:00')", nil, false},
 		{"xs:time('24:00:00') lt xs:time('23:59:59')", nil, true},

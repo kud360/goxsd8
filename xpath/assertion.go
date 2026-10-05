@@ -383,8 +383,11 @@ type AssertionTest struct{ root ctaExpr }
 //     them behind `./` or `.//`, or a rooted one — so a wildcard, a longer
 //     path, a predicate, a bare `.` and `$value` decline, and so does a `.//`
 //     step outside an fn:count call;
-//   - a cast whose operand is a typed attribute, a typed child, an fn:count
-//     call, an arithmetic result or `$value` outside the xs:string family;
+//   - a cast whose operand is a typed attribute, a typed child or `$value`
+//     outside the xs:string family, to a target that operand's type is neither
+//     nor derived from by restriction (F&O §17.4, §17.1, §17.5) — so
+//     `xs:integer(@d)` over an xs:decimal @d declines and `xs:decimal(@i)`
+//     over an xs:int @i, §17.3's cast, does not;
 //   - an arithmetic operand whose {primitive type definition} is not
 //     xs:decimal, xs:float or xs:double — so the duration and date/time
 //     arithmetic B.2 defines declines, and so does the err:XPTY0004 of any
@@ -400,11 +403,12 @@ type AssertionTest struct{ root ctaExpr }
 //     whose implicit argument is E's string value, read through `.`, which this
 //     engine builds no node for;
 //   - fn:string over a typed attribute, a typed child, an fn:count call, an
-//     arithmetic result, `$value` or a function result outside the xs:string
-//     family, which is the cast the bullet above declines, and fn:string over
-//     any argument whose {primitive type definition} is xs:float or xs:double,
-//     a literal or a cast included, which §17.1.2 renders as an xs:decimal
-//     where its ·canonical representation· is not one.
+//     arithmetic result, `$value`, a function result or a cast of one of them
+//     outside the xs:string family, which is the cast to xs:string the bullet
+//     above declines, and fn:string over any argument whose {primitive type
+//     definition} is xs:float or xs:double, a literal or a cast included,
+//     which §17.1.2 renders as an xs:decimal where its ·canonical
+//     representation· is not one.
 //
 // An xs:string? argument — of every function above but fn:empty, fn:exists and
 // fn:string — of any type outside the xs:string and xs:anyURI families is not a

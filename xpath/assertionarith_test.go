@@ -179,10 +179,11 @@ func TestArithmeticPromotion(t *testing.T) {
 // The arithmetic façades decline what they do not compute: an operand outside
 // the numeric primitives (B.2's duration and date/time rows, and the
 // err:XPTY0004 of every other type), a unary sign, and a cast from an
-// arithmetic result, which is a typed numeric operand (castsFrom). A Type
-// Alternative's {test} declines every arithmetic operator, word and symbol
-// spellings alike: with ctaTypeAlternativeFacade.computes answering true, both
-// CompileCTATest rows compile.
+// arithmetic result, which [16] ta-SimpleValue, the operand of both cast
+// spellings, does not admit. A Type Alternative's {test} declines every
+// arithmetic operator, word and symbol spellings alike: with
+// ctaTypeAlternativeFacade.computes answering true, both CompileCTATest rows
+// compile.
 func TestArithmeticDeclines(t *testing.T) {
 	uses := asUses(t, map[string]string{"s": "string", "dur": "dayTimeDuration", "i": "integer"})
 	for _, expr := range []string{"@s + 1 = 2", "@dur + @dur = @dur", "-@i = 1", "+@i = 1", "xs:integer(@i div 2) = 1"} {

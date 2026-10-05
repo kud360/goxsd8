@@ -258,7 +258,8 @@ func TestAssertionTallyIsFreshAndTotal(t *testing.T) {
 
 // fn:count's argument is one QName step, or a rooted one: every other argument
 // declines, and so does `.//` or `./` outside an fn:count call, and a cast from
-// a count, which is typed xs:integer, outside the xs:string family.
+// a count, which [16] ta-SimpleValue, the operand of both cast spellings, does
+// not admit.
 func TestCompileAssertionTestDeclinesCounts(t *testing.T) {
 	for _, tc := range []struct{ expr, why string }{
 		{"count(*) = 0", "a wildcard NameTest"},

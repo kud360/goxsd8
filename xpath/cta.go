@@ -1259,10 +1259,12 @@ func ctaHoldsPair(op ctaComparator, c *xsd.SimpleType, l, r value.Value, env cta
 // ctaDateTimeFamily reports whether c, a comparison type, is one of the eight
 // primitives F&O §10.4's date and time comparison functions are defined over:
 // xs:dateTime (and so xs:dateTimeStamp, by subtype substitution), xs:time,
-// xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay and xs:gMonth. A
-// comparison type in the family is always the primitive itself, because only
-// the two duration subtypes are ever answered below their primitive
-// (ctaTypes.shared, ctaTypes.untypedAgainst), so the name decides.
+// xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay and xs:gMonth.
+// Every comparison type in the family that reaches a pair is the primitive
+// itself, because ctaTypes.shared and ctaTypes.untypedAgainst answer only the
+// two duration subtypes below their primitive, so the name decides.
+// ctaTypes.againstEmpty can settle xs:dateTimeStamp or a user date subtype —
+// `@dts = ()` — but over the empty sequence, which forms no pair.
 func ctaDateTimeFamily(c *xsd.SimpleType) bool {
 	switch c.Name() {
 	case ctaBuiltin("dateTime"), ctaBuiltin("time"), ctaBuiltin("date"),
@@ -1904,13 +1906,23 @@ func ctaConvert(lexical string, from, to *xsd.SimpleType, env ctaEnv) ctaItem {
 
 // ctaPromote converts one atomic value of type from into type to, which is
 // what §3.5.2 clause 2's cast and B.1's type promotions ask of an operand
-// whose own type is not the type the comparison runs in.
+// whose own type is not the type the comparison runs in, and what F&O §17.2
+// case 4 and §17.3 ask of a cast to from itself or to an ancestor of it.
 //
-// It goes through the value's ·canonical representation·, which is the one
-// lexical the spec guarantees maps back to that same value (Datatypes
-// §2.3.1), so a conversion is one more datatype validation and never a
-// backend-specific value translation this package would have to know the
-// representations for. ctaCanonical renders it. A value it cannot render
+// Where v is already a value of to (ctaRepresents) — to is from, or an
+// ancestor of from whose values come from the mapping v came from — the result
+// is v itself. That is subtype substitution and §17.3's cast alike, "The result
+// will have the same value as the original", and it renders nothing, so it
+// raises nothing where §17.3 says the cast always succeeds: not over the zero
+// of a user restriction of xs:yearMonthDuration, which renders only through
+// xs:duration's mapping, as a lexical xs:yearMonthDuration rejects, and not
+// over a zero of huge ·scale· under a user restriction of xs:precisionDecimal.
+//
+// Every other conversion goes through the value's ·canonical representation·,
+// which is the one lexical the spec guarantees maps back to that same value
+// (Datatypes §2.3.1), so a conversion is one more datatype validation and
+// never a backend-specific value translation this package would have to know
+// the representations for. ctaCanonical renders it. A value it cannot render
 // cannot be converted, which is ctaRaised on either of two terms:
 //
 //   - no canonical mapping on from's chain, which is err:XPTY0004 — the
@@ -1922,11 +1934,12 @@ func ctaConvert(lexical string, from, to *xsd.SimpleType, env ctaEnv) ctaItem {
 //   - a canonical form beyond the backend's capacity (xmlschema11-2 §5.4,
 //     the strict backend's precisionDecimal zero of a huge ·scale·), a
 //     dynamic error raised as an implementation limit — indicated, never
-//     rendered as a padded or substitute lexical. No compiled test converts
-//     out of xs:precisionDecimal: it has no xpath20.md B.2 row, and castsFrom
-//     declines a cast from a typed attribute that is not xs:string.
+//     rendered as a padded or substitute lexical. fn:string over a cast to
+//     xs:precisionDecimal reaches it. A cast from a typed precisionDecimal
+//     operand does not: castsFrom admits one only to its own type or an
+//     ancestor of it, which ctaRepresents answers without rendering.
 func ctaPromote(v value.Value, from, to *xsd.SimpleType, env ctaEnv) ctaItem {
-	if from.Name() == to.Name() {
+	if ctaRepresents(from, to, env) {
 		return ctaSingleton(v)
 	}
 	lexical, rendered := ctaCanonical(v, from, env)
@@ -1934,6 +1947,34 @@ func ctaPromote(v value.Value, from, to *xsd.SimpleType, env ctaEnv) ctaItem {
 		return ctaRaised{}
 	}
 	return ctaValidate(lexical, to, env)
+}
+
+// ctaRepresents reports whether a value of type from is already a value of
+// type to: to is from itself, or an ancestor of from on its {base type
+// definition} chain with no type from from up to but excluding to carrying a
+// [value.Mapping] of its own in env.backend. A value's representation is its
+// nearest mapped ancestor's (value.Backend's nearest-mapped-ancestor rule,
+// which value.ValidateLexical applies), so a mapped type between the two —
+// xs:int under a backend that maps it — means v is in a representation to's
+// values are not, and the conversion renders it. An unwalkable chain reports
+// false, which renders too.
+//
+// TERMINATION: the walk carries no visited set, on ctaTypes.ancestor's terms.
+func ctaRepresents(from, to *xsd.SimpleType, env ctaEnv) bool {
+	for at := from; at != nil; {
+		if at.Name() == to.Name() {
+			return true
+		}
+		if _, mapped := env.backend.Mapping(at.Name()); mapped {
+			return false
+		}
+		base, err := at.Base(env.types)
+		if err != nil {
+			return false
+		}
+		at = base
+	}
+	return false
 }
 
 // ctaCanonical renders v, a value of type from, through the backend's
