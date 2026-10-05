@@ -629,10 +629,8 @@ func (c *contentCheck) fixedActualValue(w *walk, f xsd.ValueConstraint) {
 // stringValid runs String Valid (§3.16.4) over this element's ·initial value· —
 // the string composed, in order, of the [[character code]] of each character
 // information item in E.[[children]] (Glossary, ·initial value·) — against st,
-// and reports the verdict on [walk.stringValid]'s terms: decided false where
-// this package withholds one, and otherwise a nil verdict for a ·valid· value
-// and the rejection — Datatype Valid's, or String Valid clause 3's — for an
-// invalid one.
+// and reports decided and err on [walk.stringValid]'s terms, the rejection
+// where there is one being Datatype Valid's or String Valid clause 3's.
 //
 // Two clauses ask it of the same string, and the CHARGE is each caller's own
 // because each names a different property as the simple type: cvc-type clause
@@ -674,7 +672,7 @@ func (c *contentCheck) fixedActualValue(w *walk, f xsd.ValueConstraint) {
 // decided false with that decline as the error, which each caller records under
 // cvc-assertions-valid ([walk.declineAssertions], cvcassertion.go) in place of
 // its own clause's decline.
-func (c *contentCheck) stringValid(w *walk, st *xsd.SimpleType) (decided bool, verdict error) {
+func (c *contentCheck) stringValid(w *walk, st *xsd.SimpleType) (decided bool, err error) {
 	lexical, ctx := c.assessed()
 	return w.stringValid(st, lexical, ctx, c.e.Loc())
 }
