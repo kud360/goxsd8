@@ -1032,7 +1032,7 @@ func (w *walk) element(e Element, g governance, parent *icCheck, up assertionAnc
 	content := w.contentCheck(e, g, isNilled)
 	asserts := w.compileAssertions(g)
 	w.tallyElement(e, g, up, asserts)
-	w.children(e, content, id, up.below(asserts), w.handedDown(e, g, inherited))
+	w.children(e, content, id, up.below(e.Name(), asserts), w.handedDown(e, g, inherited))
 	if w.res.err != nil {
 		// A walk that stopped on a source fault never settles §3.11.4 or
 		// §3.17.5.2 for this element, on [contentCheck.end]'s grounds: the
