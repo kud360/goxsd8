@@ -345,10 +345,14 @@ func (w *walk) assertionTyped(u xsd.AttributeUse, lexical string, e Element, loc
 // from three facts this walk holds: ct's {content type} is not simple, e is
 // ·nilled· (clause 2.3.1.2), or e is already known to be invalid (clause
 // 2.3.1.1: the partial ·PSVI·'s [validity] "is given the value invalid if and
-// only if the element is known to be invalid"). A ·special· {simple type
-// definition} binds the empty sequence too, and that is not clause 2.3.2: no
-// {test} xpath compiles reads it ([xpath.CompileAssertionTest] declines
-// `$value` over one), and its value is not one this walk can map.
+// only if the element is known to be invalid").
+//
+// Over a ·special· {simple type definition} (isSpecial) the value is
+// [xpath.Untyped] of the ·initial value· [contentCheck.assessed] answers, which
+// is e's [schema normalized value] unchanged — key-nv normalizes under
+// xs:anySimpleType "as in the preserve case" — and whose XDM representation is
+// that value as xs:untypedAtomic (Datatypes dt-xdmrep clause 1). String Valid
+// accepts every lexical against either ·special· type, so it is not re-run.
 //
 // Otherwise the value is e's [schema actual value]: the ·initial value·, or
 // the {value constraint}'s {lexical form} cvc-elt clause 5.1 substitutes for an
@@ -364,10 +368,13 @@ func (w *walk) assertionTyped(u xsd.AttributeUse, lexical string, e Element, loc
 // they give turns a valid document invalid or an invalid one valid.
 func (w *walk) assertionValue(e Element, ct xsd.ComplexType, content *contentCheck, invalid bool) (xpath.ValueBinding, bool) {
 	simple, isSimple := ct.ContentType().(xsd.SimpleContent)
-	if !isSimple || content.nilled || invalid || isSpecial(simple.SimpleType) {
+	if !isSimple || content.nilled || invalid {
 		return xpath.ValueBinding{}, true
 	}
 	lexical := content.assessed()
+	if isSpecial(simple.SimpleType) {
+		return xpath.BindValue(xpath.Untyped(lexical)), true
+	}
 	decided, verdict := w.stringValid(simple.SimpleType, lexical, e, e.Loc())
 	if !decided {
 		return xpath.ValueBinding{}, false

@@ -378,6 +378,19 @@ func TestValueAssertionReadsSimpleContent(t *testing.T) {
 		`the element root is not ·valid· with respect to assertion 1 of 1 in the {assertions} of the ·governing type definition· RootType, whose {test} is "$value eq 5",`)
 }
 
+// `$value` over a ·special· {simple type definition} is the element's [schema
+// normalized value] as xs:untypedAtomic (cvc-assertion clause 2.3.1, Datatypes
+// dt-xdmrep clause 1): `$value eq 'x'` holds for "x", white space preserved,
+// and is charged for " x". The satisfied row fails with walk.assertionValue
+// binding the empty sequence over a ·special· type, which charges it.
+func TestValueAssertionReadsSpecialContentUntyped(t *testing.T) {
+	schema := aSimple(t, "anySimpleType", false, nil, "$value eq 'x'")
+
+	wantSatisfied(t, aAssess(t, schema, cRoot("#x")), "$value eq 'x' over anySimpleType content x")
+	wantAssertionCharge(t, aAssess(t, schema, cRoot("# x")),
+		`the element root is not ·valid· with respect to assertion 1 of 1 in the {assertions} of the ·governing type definition· RootType, whose {test} is "$value eq 'x'",`)
+}
+
 // `$value` over a {content type} that is not simple is the EMPTY SEQUENCE
 // (cvc-assertion clause 2.3.2), so `$value eq 1` is the empty sequence, false
 // under fn:boolean and charged, and its negation is satisfied.

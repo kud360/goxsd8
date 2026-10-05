@@ -118,11 +118,13 @@ type TypedAttributes func(yield func(name xsd.QName, v TypedValue) bool)
 type ValueBinding struct{ v TypedValue }
 
 // BindValue binds `$value` to the typed value v of E's [schema actual value]
-// (cvc-assertion clause 2.3.1), which must be of exactly the {simple type
-// definition} of the [xsd.SimpleContent] the [AssertionTest] was compiled for,
-// on the terms [TypedAttributes] states for an attribute's value. A list
-// {simple type definition}'s value must carry [value.Listed], whose items are
-// the flattened sequence Datatypes dt-xdmrep makes its XDM representation.
+// (cvc-assertion clause 2.3.1), whose arm and type the {simple type definition}
+// of the [xsd.SimpleContent] the [AssertionTest] was compiled for fixes, on the
+// terms [TypedAttributes] states for an attribute's value: [Untyped] of E's
+// [schema normalized value] where it is ·special·, and [Typed] of a value of
+// exactly it otherwise. A list {simple type definition}'s value must carry
+// [value.Listed], whose items are the flattened sequence Datatypes dt-xdmrep
+// makes its XDM representation.
 //
 // BindValue(nil) is the zero ValueBinding, the empty sequence, so the empty
 // sequence has one encoding.
@@ -131,7 +133,8 @@ func BindValue(v TypedValue) ValueBinding { return ValueBinding{v: v} }
 // AssertionTest is a compiled assertion {test}: the expression tree
 // [CompileAssertionTest] admitted for one element's attribute types. It is a
 // distinct type from [CTATest] so a tree typed for an assertion can never be
-// evaluated over lexicals, nor a Type Alternative tree over typed values.
+// evaluated over a Type Alternative's [Attributes], nor a Type Alternative
+// tree over [TypedAttributes].
 type AssertionTest struct{ root ctaExpr }
 
 // CompileAssertionTest compiles an assertion's {test} (§3.13.1, an
@@ -164,9 +167,9 @@ type AssertionTest struct{ root ctaExpr }
 //     ·special· is read as xs:untypedAtomic and is admitted;
 //   - a `$value` over an [xsd.SimpleContent] whose {simple type definition} the
 //     bullet above declines as an attribute's type, unless it is a list whose
-//     {item type definition} that bullet admits, and a `$value` over a
-//     ·special· one — so a union, a list of a union, a ·special· type, and an
-//     xs:QName or xs:NOTATION primitive or item type decline;
+//     {item type definition} that bullet admits — so a union, a list of a
+//     union, and an xs:QName or xs:NOTATION primitive or item type decline. A
+//     ·special· one is read as xs:untypedAtomic and is admitted;
 //   - any variable but `$value`, which is not in the static context at all
 //     (err:XPST0008);
 //   - a cast whose operand is a typed attribute or `$value` outside the

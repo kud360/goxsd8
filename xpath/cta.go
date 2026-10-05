@@ -450,9 +450,9 @@ func (ctaEffectiveBoolean) ctaExpr() {}
 func (ctaTypeError) ctaExpr()        {}
 
 // ctaValue is the sealed sum of the ITEM-valued nodes: the arms of [16]
-// ta-SimpleValue — its AttrName arm in the untyped and the typed form, one per
-// façade (ctaFacade.attribute), its Literal arm, and the assertion façade's
-// `$value` in its two static forms (ctaFacade.variable) — and the cast that [15]
+// ta-SimpleValue — its AttrName arm in the untyped and the typed form
+// (ctaFacade.attribute), its Literal arm, and the assertion façade's
+// `$value` in its three static forms (ctaFacade.variable) — and the cast that [15]
 // ta-CastExpr's tail and [18] ta-ConstructorFunction both build over one of
 // them.
 type ctaValue interface{ ctaValue() }
@@ -499,6 +499,15 @@ type ctaValueVar struct {
 // (cvc-assertion clause 2.3.2): the empty sequence, decided at compile time,
 // so the evaluation's [ValueBinding] is never read.
 type ctaEmptyValue struct{}
+
+// ctaUntypedValue is `$value` over a simple {content type} whose {simple type
+// definition} is ·special· (cvc-assertion clause 2.3.1): its XDM representation
+// is E's [schema normalized value] as one xs:untypedAtomic value (Datatypes
+// dt-xdmrep clause 1), read from the [ValueBinding] as an [Untyped] value, or
+// the empty sequence where the binding is the zero one (clause 2.3.2). It is an
+// arm of its own and not a ctaValueVar with a flag, because it holds no type:
+// its operand's static type is xs:untypedAtomic, as an untyped attribute's is.
+type ctaUntypedValue struct{}
 
 // ctaFacade is the sealed sum of the façades compileCTATest parses for — one
 // value, so the attribute node a façade builds and the comparisons it admits
@@ -654,12 +663,13 @@ type ctaCast struct {
 	allowsEmpty bool
 }
 
-func (ctaAttr) ctaValue()       {}
-func (ctaTypedAttr) ctaValue()  {}
-func (ctaLiteral) ctaValue()    {}
-func (ctaCast) ctaValue()       {}
-func (ctaValueVar) ctaValue()   {}
-func (ctaEmptyValue) ctaValue() {}
+func (ctaAttr) ctaValue()         {}
+func (ctaTypedAttr) ctaValue()    {}
+func (ctaLiteral) ctaValue()      {}
+func (ctaCast) ctaValue()         {}
+func (ctaValueVar) ctaValue()     {}
+func (ctaEmptyValue) ctaValue()   {}
+func (ctaUntypedValue) ctaValue() {}
 
 // ctaStatic is one operand's static type, which is what xpath20.md §3.5.2's
 // casting rules dispatch on. It is a sealed sum of the three states this
@@ -692,8 +702,8 @@ func (ctaUntypedAtomic) ctaStatic() {}
 func (ctaTyped) ctaStatic()         {}
 func (ctaEmptySequence) ctaStatic() {}
 
-// ctaStaticOf reports the static type of one [14] ta-ValueExpr. ctaAttr is the
-// one untyped arm.
+// ctaStaticOf reports the static type of one [14] ta-ValueExpr. ctaAttr and
+// ctaUntypedValue are the untyped arms.
 func ctaStaticOf(v ctaValue) ctaStatic {
 	switch n := v.(type) {
 	case ctaLiteral:
@@ -706,6 +716,8 @@ func ctaStaticOf(v ctaValue) ctaStatic {
 		return ctaTyped{st: n.atom}
 	case ctaEmptyValue:
 		return ctaEmptySequence{}
+	case ctaUntypedValue:
+		return ctaUntypedAtomic{}
 	default:
 		return ctaUntypedAtomic{}
 	}
@@ -957,9 +969,10 @@ func ctaSingletonOperand(v ctaValue, c *xsd.SimpleType, env ctaEnv) (value.Value
 // sequence) when it matches nothing, and no type of its own is involved. Rule
 // 2 holds whatever the sequence's LENGTH, which is what a wildcard NameTest
 // makes observable. `$value` is atomic values and no node: the statically empty
-// one is rule 1's false, and the bound one is decided by ctaBoolean, a list of
-// two or more items included. Every other operand is a singleton atomic value
-// or the empty sequence, which ctaBoolean decides.
+// one is rule 1's false, the bound typed one is decided by ctaBoolean, a list of
+// two or more items included, and the untyped one by rule 4 (ctaUntypedBoolean).
+// Every other operand is a singleton atomic value or the empty sequence, which
+// ctaBoolean decides.
 func (e ctaEffectiveBoolean) eval(env ctaEnv) ctaAnswer {
 	switch n := e.operand.(type) {
 	case ctaAttr:
@@ -982,6 +995,8 @@ func (e ctaEffectiveBoolean) eval(env ctaEnv) ctaAnswer {
 		return ctaBoolean(e.operand, n.atom, env)
 	case ctaEmptyValue:
 		return ctaFalse
+	case ctaUntypedValue:
+		return ctaUntypedBoolean(env)
 	default:
 		return ctaFalse
 	}
@@ -1151,9 +1166,57 @@ func ctaItemOf(v ctaValue, c *xsd.SimpleType, env ctaEnv) ctaItem {
 		return ctaValueItem(n, c, env)
 	case ctaEmptyValue:
 		return ctaAtoms{}
+	case ctaUntypedValue:
+		return ctaUntypedValueItem(c, env)
 	default:
 		return ctaAtoms{}
 	}
+}
+
+// ctaUntypedValueItem casts `$value`'s [Untyped] binding into c, which
+// §3.5.2's casting rules — and §3.5.1 step 4's — do to an xs:untypedAtomic
+// operand, on ctaAttrItem's terms. The zero [ValueBinding] is the empty
+// sequence (cvc-assertion clause 2.3.2).
+//
+// The input is ctaTypedInput by construction (ctaInput); the other arm binds
+// nothing and is unreachable. A [Typed] binding breaks the obligation
+// [BindValue] states and is ctaRaised, unreachable for a caller that keeps it.
+func ctaUntypedValueItem(c *xsd.SimpleType, env ctaEnv) ctaItem {
+	lexical, bound, ok := ctaUntypedBinding(env)
+	if !ok {
+		return ctaRaised{}
+	}
+	if !bound {
+		return ctaAtoms{}
+	}
+	return ctaValidate(lexical, c, env)
+}
+
+// ctaUntypedBoolean is fn:boolean over `$value`'s [Untyped] binding: xpath20.md
+// §2.4.3 rule 4 makes an xs:untypedAtomic value false iff it has zero length,
+// and rule 1 makes the empty sequence — the zero [ValueBinding] — false. A
+// [Typed] binding is ctaError, on ctaUntypedValueItem's terms.
+func ctaUntypedBoolean(env ctaEnv) ctaAnswer {
+	lexical, bound, ok := ctaUntypedBinding(env)
+	if !ok {
+		return ctaError
+	}
+	return ctaAnswerOf(bound && lexical != "")
+}
+
+// ctaUntypedBinding reads `$value`'s binding as an [Untyped] value: its
+// lexical, with bound false for the zero [ValueBinding], and ok false for a
+// binding of the other arm, which breaks the obligation [BindValue] states.
+func ctaUntypedBinding(env ctaEnv) (lexical string, bound, ok bool) {
+	in, typed := env.input.(ctaTypedInput)
+	if !typed || in.value.v == nil {
+		return "", false, true
+	}
+	untyped, isUntyped := in.value.v.(tvUntyped)
+	if !isUntyped {
+		return "", false, false
+	}
+	return untyped.lexical, true, true
 }
 
 // ctaValueItem converts `$value`'s binding into c on ctaTypedAttrItem's terms

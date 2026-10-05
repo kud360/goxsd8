@@ -46,8 +46,9 @@
 //     primitive), a cast from a typed attribute outside the xs:string family, and
 //     a general or value comparison in a date/time type, which has no implicit
 //     timezone to order by (F&O §10.4), and a `$value` whose {simple type
-//     definition} is ·special·, or is classified as such an attribute's type would
-//     be, or is a list of a type that would be. Axes, predicates, quantified
+//     definition} is classified as such an attribute's type would be, or is a
+//     list of a type that would be; a `$value` over ·special· content is
+//     xs:untypedAtomic, as such an attribute is. Axes, predicates, quantified
 //     expressions and the function core are PLANNED (#1042).
 //  3. The full grammar (docs/specs/md/xpath20.md) and function library
 //     (docs/specs/md/xpath-functions.md) — M7 onward, ratcheted.
@@ -114,9 +115,11 @@
 //
 //   - $value binds a typed value, never a bare string (PRINCIPLES 17):
 //     ValueBinding carries E's ·actual value·, and the compiled tree
-//     holds the {simple type definition} it is of, which every
-//     comparison and cast reads. It is an ASSERTION binding:
-//     ta-props-correct adds no variable, so no CTA {test} sees one.
+//     holds the {simple type definition} it is of, which every comparison and cast
+//     reads — or, over a ·special· {simple type definition}, an xs:untypedAtomic
+//     value (Datatypes dt-xdmrep clause 1), which XPath's own casting rules type.
+//     It is an ASSERTION binding: ta-props-correct adds no variable, so no CTA
+//     {test} sees one.
 //   - xpathDefaultNamespace supplies the default ELEMENT/TYPE namespace
 //     for unprefixed element steps (never attribute steps) in
 //     assertions and IDC selector/field paths (PRINCIPLES 15), and for
