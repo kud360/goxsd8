@@ -135,6 +135,12 @@ func (ctaFacetFacade) child(ctaNameTest, ctaTypes) (ctaValue, bool) {
 	return ctaNoContextItem{}, true
 }
 
+// childPath compiles any path of child steps to ctaNoContextItem, on
+// attribute's terms: its first step's context node is the absent context item.
+func (ctaFacetFacade) childPath([]xsd.QName) (ctaValue, bool) {
+	return ctaNoContextItem{}, true
+}
+
 // rooted compiles a path opening with "/" or "//" to ctaNoContextItem: the
 // path begins at `fn:root(self::node())` (xpath20.md §3.2), a read of the
 // context item that raises err:XPDY0002 before the `treat as` whose

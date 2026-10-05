@@ -267,7 +267,8 @@ func ctaSequenceLength(v ctaValue, env ctaEnv) (int, bool) {
 
 // ctaStep is a ctaValue that evaluates to a sequence of NODES rather than of
 // atomic values: an attribute step, untyped (ctaAttr) or typed (ctaTypedAttr),
-// a child-axis step (ctaTypedChild), and the two steps that raise before they
+// a child-axis step (ctaTypedChild), a path of child steps (ctaChildPath), and
+// the two steps that raise before they
 // select a node, a rooted path (ctaNoDocumentRoot) and a read of an absent
 // context item (ctaNoContextItem). Its nodes method is the ONE reading of node
 // existence, which the ·effective boolean value· of a step
@@ -278,8 +279,10 @@ type ctaStep interface {
 	ctaValue
 	// nodes is how many nodes the step selects, a ·nilled· child counting as a
 	// node, reporting false where it raises: a rooted path (err:XPDY0050), a
-	// read of an absent context item (err:XPDY0002), and a matched value
-	// breaking the caller's obligation ([TypedAttributes], [ChildElements]).
+	// read of an absent context item (err:XPDY0002), a matched value breaking
+	// the caller's obligation ([TypedAttributes], [ChildElements]), and a
+	// [Tally] holding no counter for a child path, which [AssertionTest.Evaluate]
+	// refuses before the tree is read.
 	nodes(env ctaEnv) (int, bool)
 }
 
@@ -296,6 +299,17 @@ func (s ctaTypedAttr) nodes(env ctaEnv) (int, bool) {
 func (s ctaTypedChild) nodes(env ctaEnv) (int, bool) {
 	_, nodes, ok := ctaMatchedChildren(s, env)
 	return nodes, ok
+}
+
+// nodes is the counter the evaluation's [Tally] holds for s, which the caller
+// filled with E's subtree. The input is ctaTypedInput by construction
+// (ctaInput); the other arm holds no Tally and raises, unreachably.
+func (s ctaChildPath) nodes(env ctaEnv) (int, bool) {
+	in, typed := env.input.(ctaTypedInput)
+	if !typed {
+		return 0, false
+	}
+	return in.counts.count(s)
 }
 
 func (ctaNoDocumentRoot) nodes(ctaEnv) (int, bool) { return 0, false } // err:XPDY0050

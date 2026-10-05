@@ -165,17 +165,18 @@ func (c *assertionCheck) counts() bool {
 	return false
 }
 
-// tally reports one element of c's element's subtree, named name and depth
-// levels below c's element, to each test's Tally: the element node, and each
-// of attrs, the names of its attribute nodes, at that depth. At depth 0, c's
-// own element, the element node selects nothing ([xpath.Tally.Element]) and
-// its attributes alone count. A test with no Tally takes nothing
-// ([xpath.Tally]'s nil receiver).
-func (c *assertionCheck) tally(depth int, name xsd.QName, attrs []xsd.QName) {
+// tally reports one element of c's element's subtree to each test's Tally:
+// the element node by path, the names of the elements from c's element's
+// child down to it inclusive, and each of attrs, the names of its attribute
+// nodes, at its depth, len(path). The empty path is c's own element, whose
+// element node selects nothing ([xpath.Tally.Element]) and whose attributes
+// alone count. A test with no Tally takes nothing ([xpath.Tally]'s nil
+// receiver).
+func (c *assertionCheck) tally(path []xsd.QName, attrs []xsd.QName) {
 	for _, t := range c.tests {
-		t.tally.Element(depth, name)
+		t.tally.Element(path)
 		for _, a := range attrs {
-			t.tally.Attribute(depth, a)
+			t.tally.Attribute(len(path), a)
 		}
 	}
 }
@@ -211,13 +212,23 @@ func (c *assertionCheck) lacking(l assertionLack) {
 // parent has no {assertions}, which reads its typed value ([walk.keepChild]);
 // counting, the nearest ancestor at any depth one of whose {test}s counts nodes
 // of its subtree, which is told of the element ([walk.tallyElement]); and
-// depth, the element's depth below the ·validation root·, 0 at the root.
+// path, the ·expanded names· of the element's ancestors from the ·validation
+// root· down, the root included, so len(path) is the element's depth below the
+// root, 0 at the root.
 //
-// It holds O(depth) frames, one per counting ancestor, and no node.
+// It holds O(depth) frames, one per counting ancestor, and O(depth) names, and
+// no node.
+//
+// Every element's path shares its parent's backing array: below appends the
+// element's own name in place, so a later sibling's name overwrites an earlier
+// one's at the same index, and a descendant's those below it. That is safe
+// because the walk is recursive — an element's subtree is done before its next
+// sibling's name is written — and because path is read only during
+// [walk.tallyElement]'s calls, which [xpath.Tally.Element] retains nothing of.
 type assertionAncestry struct {
 	parent   *assertionCheck
 	counting *tallyFrame
-	depth    int
+	path     []xsd.QName
 }
 
 // tallyFrame is one counting ancestor: its clause 6 state, its depth below the
@@ -229,14 +240,14 @@ type tallyFrame struct {
 	outer *tallyFrame
 }
 
-// below is the ancestry of each element [[child]] of the element whose
-// ancestry is up and whose own clause 6 state is own: own is their parent, and
-// the counting ancestors are up's, with own's element innermost where some
-// test of own counts.
-func (up assertionAncestry) below(own *assertionCheck) assertionAncestry {
-	next := assertionAncestry{parent: own, counting: up.counting, depth: up.depth + 1}
+// below is the ancestry of each element [[child]] of the element named name
+// whose ancestry is up and whose own clause 6 state is own: own is their
+// parent, name ends their ancestors' path, and the counting ancestors are
+// up's, with own's element innermost where some test of own counts.
+func (up assertionAncestry) below(name xsd.QName, own *assertionCheck) assertionAncestry {
+	next := assertionAncestry{parent: own, counting: up.counting, path: append(up.path, name)}
 	if own.counts() {
-		next.counting = &tallyFrame{check: own, depth: up.depth, outer: up.counting}
+		next.counting = &tallyFrame{check: own, depth: len(up.path), outer: up.counting}
 	}
 	return next
 }
@@ -256,11 +267,13 @@ func (up assertionAncestry) skipped(e Element) {
 }
 
 // tallyElement tells every counting ancestor in up, and e's own clause 6 state
-// own, of e: each ancestor's Tallies count e at its depth below that ancestor,
-// with e's attribute nodes ([walk.attributeNodes]), and own's count e's
-// attribute nodes at depth 0. g is e's governance. Where e's attribute nodes
-// are undecided, each of them takes the lack instead, which declines its
-// assertions: a count missing them could fabricate a charge.
+// own, of e: each ancestor's Tallies count e by its chain of names below that
+// ancestor — the names in up's path below the ancestor's depth, then e's own —
+// with e's attribute nodes ([walk.attributeNodes]) at that chain's length, and
+// own's count e's attribute nodes with the empty chain, depth 0. g is e's
+// governance. Where e's attribute nodes are undecided, each of them takes the
+// lack instead, which declines its assertions: a count missing them could
+// fabricate a charge.
 //
 // It runs on every element [walk.element] enters — invalid, ·nilled·, ·laxly
 // assessed· or undecided alike — once, so each node is reported exactly once,
@@ -271,18 +284,22 @@ func (w *walk) tallyElement(e Element, g governance, up assertionAncestry, own *
 		return
 	}
 	attrs, decided := w.attributeNodes(e, g)
-	tell := func(c *assertionCheck, depth int) {
+	tell := func(c *assertionCheck, path []xsd.QName) {
 		if !decided {
 			c.lacking(lackingCount{name: e.Name(), loc: e.Loc(), why: "its ·governing type definition· was not determined, so its ·defaulted attributes· are unknown"})
 			return
 		}
-		c.tally(depth, e.Name(), attrs)
+		c.tally(path, attrs)
 	}
+	// chain is e's ancestors' names from the root down, then e's own, on
+	// assertionAncestry's shared-array terms: e's own subtree, which would
+	// overwrite the slot, has not been walked yet.
+	chain := append(up.path, e.Name())
 	for f := up.counting; f != nil; f = f.outer {
-		tell(f.check, up.depth-f.depth)
+		tell(f.check, chain[f.depth+1:])
 	}
 	if own.counts() {
-		tell(own, 0)
+		tell(own, chain[len(chain):])
 	}
 }
 
