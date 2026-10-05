@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 	"unicode/utf16"
+	"unicode/utf8"
 
 	"github.com/kud360/goxsd8/parser/xmltree"
 	"github.com/kud360/goxsd8/xsderr"
@@ -660,6 +661,75 @@ func TestIllFormedUTF8InMarkupIsError(t *testing.T) {
 				t.Errorf("HasUnparsedEntity(%q) = true after the fault, want false", "bad")
 			}
 		})
+	}
+}
+
+// TestNonCharInMarkupIsError pins XML 1.0 §2.2 with [2] Char, [15] Comment and
+// [16] PI: a well-formed UTF-8 sequence encoding no Char in a comment,
+// processing instruction or directive — the DOCTYPE's internal subset, an
+// entity value and an ATTLIST default included — is a well-formedness fault
+// located at the sequence's first byte, with a message of its own, not
+// §4.3.3's. The boundaries of Char and the white space it admits read.
+func TestNonCharInMarkupIsError(t *testing.T) {
+	for _, tc := range []struct {
+		name, doc string
+		bad       string // the offending character; "" when the document reads
+	}{
+		{"comment before the document element", "<!-- \x01 --><r/>", "\x01"},
+		{"PI before the document element", "<?pi \x01?><r/>", "\x01"},
+		{"comment in content", "<r><!-- \x01 --></r>", "\x01"},
+		{"PI in content", "<r><?pi \x01?></r>", "\x01"},
+		{"comment in the subset", "<!DOCTYPE r [<!-- \x01 -->]><r/>", "\x01"},
+		{"PI in the subset", "<!DOCTYPE r [<?pi \x01?>]><r/>", "\x01"},
+		{"entity value", "<!DOCTYPE r [<!ENTITY e \"\x01\">]><r/>", "\x01"},
+		{"ATTLIST default", "<!DOCTYPE r [<!ATTLIST r a CDATA \"\x01\">]><r/>", "\x01"},
+		{"U+FFFE in a comment", "<!-- ￾ --><r/>", "￾"},
+		{"U+FFFF in a PI", "<?pi ￿?><r/>", "￿"},
+		{"line ends in a comment", "<!--\t\n\r\n --><r/>", ""},
+		{"line ends in a PI", "<?pi \t\n\r\n?><r/>", ""},
+		{"Char boundaries in a comment", "<!-- ퟿�\U00010000\U0010FFFF --><r/>", ""},
+		{"Char boundaries in a PI", "<?pi ퟿�\U00010000\U0010FFFF?><r/>", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := xmltree.NewReader("t.xml", strings.NewReader(tc.doc))
+			var err error
+			for err == nil {
+				_, err = r.Token()
+			}
+			if tc.bad == "" {
+				if !errors.Is(err, io.EOF) {
+					t.Fatalf("Token: %v, want the document read to io.EOF", err)
+				}
+				return
+			}
+			wantWellFormednessError(t, err)
+			at := strings.Index(tc.doc, tc.bad)
+			if loc, _ := xsderr.LocOf(err); loc != (xsderr.Loc{URI: "t.xml", Line: 1, Col: at + 1}) {
+				t.Errorf("fault at %v, want t.xml:1:%d, the character's first byte", loc, at+1)
+			}
+			c, _ := utf8.DecodeRuneInString(tc.bad)
+			want := fmt.Sprintf("t.xml:1:%d: [xml-wf] character %U in markup is no Char", at+1, c)
+			if !strings.HasPrefix(err.Error(), want) {
+				t.Errorf("error = %q, want it to open %q", err, want)
+			}
+		})
+	}
+}
+
+// TestNonCharInContentIsDecoderFault pins that a non-Char in character data
+// stays the decoder's charge, located where the decoder stops.
+func TestNonCharInContentIsDecoderFault(t *testing.T) {
+	r := xmltree.NewReader("t.xml", strings.NewReader("<r>\x01</r>"))
+	var err error
+	for err == nil {
+		_, err = r.Token()
+	}
+	wantWellFormednessError(t, err)
+	if loc, _ := xsderr.LocOf(err); loc != (xsderr.Loc{URI: "t.xml", Line: 1, Col: 5}) {
+		t.Errorf("fault at %v, want t.xml:1:5", loc)
+	}
+	if !strings.Contains(err.Error(), "illegal character code U+0001") {
+		t.Errorf("error = %q, want the decoder's %q", err, "illegal character code U+0001")
 	}
 }
 

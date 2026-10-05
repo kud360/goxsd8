@@ -9,6 +9,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/kud360/goxsd8/internal/xmlchar"
 	"github.com/kud360/goxsd8/internal/xmldecl"
 	"github.com/kud360/goxsd8/internal/xmlenc"
 	"github.com/kud360/goxsd8/internal/xmltok"
@@ -108,11 +109,12 @@ func NewReader(uri string, r io.Reader) *Reader {
 // Token advances to the next element or character-data node and returns it.
 // It returns io.EOF at the end of a well-formed document. Comments, processing
 // instructions, and the DOCTYPE directive are skipped, once checked for
-// ill-formed UTF-8 (checkUTF8); its entity declarations are read on the way past
-// (see HasUnparsedEntity), and a reference to an internal entity one declares is
-// replaced by the nodes its replacement text parses to (see included). Malformed
-// input, unbound namespace prefixes, and mismatched or unclosed tags are returned
-// as errors carrying an xsderr.Loc — never as a panic (see the fuzz target).
+// ill-formed UTF-8 and for characters outside [2] Char (checkChars); its entity
+// declarations are read on the way past (see HasUnparsedEntity), and a reference
+// to an internal entity one declares is replaced by the nodes its replacement
+// text parses to (see included). Malformed input, unbound namespace prefixes,
+// and mismatched or unclosed tags are returned as errors carrying an xsderr.Loc
+// — never as a panic (see the fuzz target).
 func (r *Reader) Token() (Node, error) {
 	if len(r.pending) > 0 {
 		node := r.pending[0]
@@ -192,7 +194,7 @@ func (r *Reader) classify(tok xml.Token, off int64) (Node, bool, error) {
 		}
 		return &CharData{data: string(t), offset: off, loc: loc}, true, nil
 	case xml.ProcInst:
-		if err := r.checkUTF8(r.source(off), off); err != nil {
+		if err := r.checkChars(r.source(off), off); err != nil {
 			return nil, false, err
 		}
 		if t.Target == "xml" {
@@ -201,35 +203,44 @@ func (r *Reader) classify(tok xml.Token, off int64) (Node, bool, error) {
 		return nil, false, r.checkDeclaration(t, loc)
 	case xml.Directive:
 		raw := r.source(off)
-		if err := r.checkUTF8(raw, off); err != nil {
+		if err := r.checkChars(raw, off); err != nil {
 			return nil, false, err
 		}
 		return nil, false, r.declareEntities(raw, loc)
 	default:
 		// xml.Comment: not part of the element/character-data stream the
 		// parser consumes.
-		return nil, false, r.checkUTF8(r.source(off), off)
+		return nil, false, r.checkChars(r.source(off), off)
 	}
 }
 
-// checkUTF8 checks raw, the source of a comment, processing instruction or
-// directive whose first byte is at offset off, for an ill-formed UTF-8 code
-// unit sequence, which XML 1.0 §4.3.3 makes a fatal error in an entity encoded
-// in UTF-8: a RuleXMLWellFormed fault located at the sequence's first byte.
-// The decoder checks character data, attribute values and names itself and
-// the bodies of these three tokens never. The check is UTF-8 validity, not a
-// byte value: a byte decodes as utf8.RuneError of width 1 exactly where
-// utf8.ValidString fails. A well-formed sequence encoding no Char ([2]) is not
-// this check's.
-func (r *Reader) checkUTF8(raw string, off int64) error {
-	for i, c := range raw {
-		if c != utf8.RuneError {
-			continue
+// checkChars checks raw, the source of a comment, processing instruction or
+// directive whose first byte is at offset off, and returns a RuleXMLWellFormed
+// fault located at the first offending sequence's first byte. The decoder
+// checks character data, attribute values and names itself and the bodies of
+// these three tokens never. It charges two faults, each with its own message:
+//
+//   - An ill-formed UTF-8 code unit sequence, which XML 1.0 §4.3.3 makes a
+//     fatal error in an entity encoded in UTF-8. The test is UTF-8 validity,
+//     not a byte value: a byte decodes as utf8.RuneError of width 1 exactly
+//     where utf8.ValidString fails. It is a test of its own because U+FFFD
+//     is itself a Char: the Char test alone would pass the byte.
+//   - A well-formed sequence encoding no [2] Char. A parsed entity is a
+//     sequence of characters (§2.2), [15] Comment and [16] PI are built from
+//     Char, and the internal subset, its entity value literals included, is
+//     text of the document entity, so the document is not well-formed
+//     (dt-wellformed). No WFC names this fault: WFC: Legal Character covers
+//     character references only.
+func (r *Reader) checkChars(raw string, off int64) error {
+	for i := 0; i < len(raw); {
+		c, n := utf8.DecodeRuneInString(raw[i:])
+		if c == utf8.RuneError && n == 1 {
+			return xsderr.New(xsderr.RuleXMLWellFormed, r.locAt(off+int64(i)), "ill-formed UTF-8 byte sequence in markup (XML 1.0 §4.3.3)")
 		}
-		if _, n := utf8.DecodeRuneInString(raw[i:]); n != 1 {
-			continue
+		if !xmlchar.IsChar(c) {
+			return xsderr.New(xsderr.RuleXMLWellFormed, r.locAt(off+int64(i)), "character U+%04X in markup is no Char (XML 1.0 [2] Char, §2.2)", c)
 		}
-		return xsderr.New(xsderr.RuleXMLWellFormed, r.locAt(off+int64(i)), "ill-formed UTF-8 byte sequence in markup (XML 1.0 §4.3.3)")
+		i += n
 	}
 	return nil
 }

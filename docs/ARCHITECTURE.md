@@ -35,8 +35,9 @@ Value implementations, parsing, validation, and generation live above them.
                                     [4a] NameChar, which regex's \i/\c and
                                     parser/xmltree's DOCTYPE name checks both read.
                                   - internal/xmlchar, XML 1.0 [2] Char, which
-                                    parser/xmltree's character-reference check and
-                                    internal/xmltok's text check both read.
+                                    parser/xmltree's character-reference and
+                                    markup checks and internal/xmltok's text
+                                    check read.
                                   - internal/xmltok, encoding/xml's strict tokenizer
                                     forked to check names against internal/xmlname's
                                     5e tables, which parser/xmltree's reader and
@@ -136,7 +137,7 @@ sets and `parser/xmltree`'s DOCTYPE name checks; a further Name check
 (#1765, #2187) reads the same leaf. Whether that table is generated is
 #989's question, asked of `internal/xmlname`. [2] `Char` lives in
 `internal/xmlchar`, read by `parser/xmltree`'s character-reference check and
-`internal/xmltok`'s text check (#2187).
+markup check and `internal/xmltok`'s text check (#2187, #2265).
 
 `cmd/goxsd8` is a library CONSUMER, not a place to grow capability. A
 capability the CLI needs and the library does not export is a library gap to

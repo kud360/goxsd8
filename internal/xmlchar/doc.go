@@ -1,7 +1,9 @@
 // Package xmlchar holds the XML 1.0 [2] Char production (docs/specs/md/xml.md
 // §2.2) once for every library package that reads it: parser/xmltree's
-// character-reference check in entity replacement text and internal/xmltok's
-// check of character data, CDATA sections and attribute values.
+// character-reference check in entity replacement text and its check of the
+// source of comments, processing instructions and directives, and
+// internal/xmltok's check of character data, CDATA sections and attribute
+// values.
 //
 // # Contract
 //

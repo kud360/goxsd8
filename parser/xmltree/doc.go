@@ -38,6 +38,11 @@
 //     (internal/xmltok), and in a comment, processing instruction or
 //     directive, the DOCTYPE and its internal subset included, by the
 //     reader at the sequence's first byte.
+//   - A well-formed UTF-8 sequence encoding no XML 1.0 [2] Char in a
+//     comment, processing instruction or directive, the DOCTYPE and its
+//     internal subset included, is rejected as RuleXMLWellFormed at the
+//     sequence's first byte (§2.2, [15], [16]); the decoder charges one
+//     in character data and attribute values.
 //   - GAP(xml): UTF-16 without a mark, declared only by encoding=, is
 //     not decoded — it fails well-formedness rather than being read.
 //     Tracked by #361.
