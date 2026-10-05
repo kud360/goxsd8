@@ -652,8 +652,10 @@ func (w *walk) elementKeyMember(c *icCheck) (icKeyMember, bool, bool) {
 // cvc-datatype-valid exactly as a genuine rejection does. Reading one as
 // "absent" would silently shorten a ·key-sequence·, and a short one is what
 // clause 4.2.1 charges a key for. RULED permanent by #774 (STYLE P3b), on
-// cvcattribute.go's terms: an ungoverned type is backend coverage. The caller
-// records the decline ([icTarget.offer]).
+// cvcattribute.go's terms: an ungoverned type is backend coverage. An
+// assertions-facet decline (value.IsAssertionDeclined) declines here too, as
+// [walk.declineAssertions]' residue (#1042). The caller records the decline
+// ([icTarget.offer]).
 //
 // A ·special· st (isSpecial) is decided PRESENT with no v: String Valid holds
 // for every literal against it, so the [schema actual value] is not ·absent·,

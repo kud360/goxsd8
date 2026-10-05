@@ -352,8 +352,9 @@ import (
 //     or clause 5.1's substitute, String Valid against the type — is the
 //     walk's, the empty string of a content-less element included; its one
 //     decline (validate's contentCheck.simpleTypeValue, String Valid withheld)
-//     is RECORDED in Result.Unevaluated, as are the assertions-facet sites of
-//     the type's closure, which validate records and never evaluates.
+//     is RECORDED in Result.Unevaluated, under cvc-assertions-valid where an
+//     assertions facet of the type's closure has a {test} validate's facet
+//     evaluator declines; one it evaluates false is part of the 3.1.3 verdict.
 //   - cvc-elt clause 7 (cvc-id, §3.3.4.5): the walk's, at every depth. It
 //     reads each element's and attribute's item into the [ID/IDREF table]
 //     (validate's walk.idAttributes, walk.idDefaultedAttributes and

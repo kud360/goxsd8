@@ -1,6 +1,7 @@
 package validate
 
 import (
+	"errors"
 	"strconv"
 	"strings"
 	"testing"
@@ -10,15 +11,17 @@ import (
 	"github.com/kud360/goxsd8/xsderr"
 )
 
-// The fixtures below drive the two assertion rules, which charge nothing and
-// record instead: cvc-assertion (§3.13.4.1) for a complex type's {assertions},
-// and cvc-assertions-valid (§4.3.13.3) for a simple type's assertions facet at
-// every variety level (PRINCIPLES 12). Every schema seeds the builtin types,
-// because an assertion-bearing restriction is a restriction OF one.
+// The fixtures below drive the two assertion rules, which charge a {test} the
+// engine evaluates to false and record one it declines: cvc-assertion
+// (§3.13.4.1) for a complex type's {assertions}, and cvc-assertions-valid
+// (§4.3.13.3) for a simple type's assertions facet at every variety level
+// (PRINCIPLES 12). Every schema seeds the builtin types, because an
+// assertion-bearing restriction is a restriction OF one.
 
-// aAssertion is one Assertion whose {test} is expr. The expression is never
-// parsed or evaluated by anything this file drives; it is there so a fixture's
-// assertions are distinguishable when a message names one.
+// aAssertion is one Assertion whose {test} is expr. A facet's expression is
+// evaluated wherever xpath.FacetAssertions admits it, and a complex type's
+// wherever xpath.CompileAssertionTest does; every other one is declined, and
+// names its assertion in the record.
 func aAssertion(expr string) xsd.Assertion {
 	return xsd.NewAssertion(xsd.NewXPathExpression(expr, nil, nil, nil))
 }
@@ -63,7 +66,7 @@ func aList(t *testing.T, name string, item xsd.QName) *xsd.SimpleType {
 }
 
 // aUnion builds a NAMED union simple type over by-name members in declared
-// order — the order [walk.assertionSites] must visit them in.
+// order — the order the dispatch tries them in (dt-active-member).
 func aUnion(t *testing.T, name string, members ...xsd.QName) *xsd.SimpleType {
 	t.Helper()
 	slots := make([]xsd.SimpleTypeOrRef, 0, len(members))
@@ -561,68 +564,155 @@ func TestElementWithoutAssertionsRecordsNothing(t *testing.T) {
 	}
 }
 
-// cvc-attribute clause 3 reaches the assertions facet of the declaration's
-// {type definition} through cvc-datatype-valid clause 3, so the site is
-// recorded at the ATTRIBUTE's location and under the simple-type rule — never
-// under cvc-assertion, which is the complex-type variety and a different rule.
-func TestAttributeSimpleTypeAssertionsAreRecorded(t *testing.T) {
-	uses := []xsd.AttributeUse{typedUse(t, "n", local("AssertedInt"), false, nil, nil)}
-	schema := aSchema(t, aComplexType(t, uses, xsd.EmptyContent{}, nil), aVarietyTypes(t)...)
+// aFacetTypes is aVarietyTypes plus the facets the evaluation tests read: two
+// whose {test} the facet evaluator admits (`$value eq 100` over xs:integer,
+// `$value = 'x'` over xs:string), one reading the absent context item, two it
+// declines (arithmetic, #2269, and a function call), and a union whose first
+// member restricts xs:ENTITY with `$value = 'x'` ahead of xs:string.
+func aFacetTypes(t *testing.T) []*xsd.SimpleType {
+	t.Helper()
+	return append(aVarietyTypes(t),
+		aRestriction(t, "EqHundred", integerType(), "$value eq 100"),
+		aRestriction(t, "IsX", icBuiltin("string"), "$value = 'x'"),
+		aRestriction(t, "Dot", icBuiltin("string"), ". = 'x'"),
+		aRestriction(t, "Even", integerType(), "$value mod 2 = 0"),
+		aRestriction(t, "EndsX", icBuiltin("string"), "ends-with($value, 'x')"),
+		aRestriction(t, "EntityX", icBuiltin("ENTITY"), "$value = 'x'"),
+		aUnion(t, "EntityXOrString", local("EntityX"), icBuiltin("string")),
+	)
+}
 
-	res := aAssess(t, schema, valuedRoot("n", "42"))
+// aAttributeAssessed assesses <root n="lexical"/>, n typed by typ.
+func aAttributeAssessed(t *testing.T, typ, lexical string) *Result {
+	t.Helper()
+	uses := []xsd.AttributeUse{typedUse(t, "n", local(typ), false, nil, nil)}
+	schema := aSchema(t, aComplexType(t, uses, xsd.EmptyContent{}, nil), aFacetTypes(t)...)
+	return aAssess(t, schema, valuedRoot("n", lexical))
+}
 
-	wantRecords(t, res, "cvc-assertions-valid", loc(1, 10), "AssertedInt")
+// wantFacetCharge fails unless res charged exactly one violation under rule,
+// whose wrapped cause is the cvc-assertions-valid verdict cvc-datatype-valid
+// clause 3 folds into Datatype Valid, and recorded nothing as unevaluated.
+func wantFacetCharge(t *testing.T, res *Result, rule xsderr.Rule, why string) {
+	t.Helper()
+	got := res.Violations()
+	if len(got) != 1 || got[0].Rule != rule {
+		t.Errorf("%s: Violations() = %v, want one %s charge", why, got, rule)
+		return
+	}
+	if cause, _ := xsderr.RuleOf(errors.Unwrap(got[0])); cause != "cvc-assertions-valid" {
+		t.Errorf("%s: the charge's cause carries %q, want cvc-assertions-valid", why, cause)
+	}
+	if u := res.Unevaluated(); len(u) != 0 {
+		t.Errorf("%s: Unevaluated() = %v, want none", why, messages(u))
+	}
+}
+
+// cvc-attribute clause 3's String Valid reaches the assertions facet of the
+// declaration's {type definition} through cvc-datatype-valid clause 3, and
+// EVALUATES each {test} the facet evaluator admits (cvc-assertions-valid,
+// §4.3.13.3): `$value eq 100` holds for 100 and `$value = 'x'` for "x", and
+// each is charged under cvc-attribute, its cause the cvc-assertions-valid
+// verdict, for a value it is false of. With xpath.FacetAssertions declining
+// every {test}, each satisfied row records an Unevaluated and each charged row
+// charges nothing, so all four fail.
+func TestAttributeAssertionsFacetIsEvaluated(t *testing.T) {
+	for _, c := range []struct{ typ, lexical string }{{"EqHundred", "100"}, {"IsX", "x"}} {
+		wantSatisfied(t, aAttributeAssessed(t, c.typ, c.lexical), c.typ+" over "+c.lexical)
+	}
+	for _, c := range []struct{ typ, lexical string }{{"EqHundred", "5"}, {"IsX", "y"}} {
+		wantFacetCharge(t, aAttributeAssessed(t, c.typ, c.lexical), "cvc-attribute", c.typ+" over "+c.lexical)
+	}
+}
+
+// cvc-assertions-valid clause 1.2 gives a facet's {test} no context item, so
+// `. = 'x'` raises err:XPDY0002 whatever the value and the facet is not
+// satisfied — charged, never declined (its Note: the expression "will raise a
+// dynamic error, which will cause the assertion to be treated as false"). With
+// the facet façade's ContextItemExpr arm declining, the row charges nothing and
+// fails.
+func TestFacetAssertionReadingTheContextItemIsCharged(t *testing.T) {
+	wantFacetCharge(t, aAttributeAssessed(t, "Dot", "x"), "cvc-attribute", "Dot over x")
 }
 
 // cvc-complex-type clause 1.2 reaches the same facet over an element's
-// ·initial value·, and records it at the CONTAINING element's location — the
-// value is assembled from every character run and belongs to none of them.
-func TestSimpleContentAssertionsAreRecorded(t *testing.T) {
-	types := aVarietyTypes(t)
+// ·initial value·, and charges a value its {test} is false of at the
+// CONTAINING element's location — the value is assembled from every character
+// run and belongs to none of them.
+func TestSimpleContentAssertionsFacetIsEvaluated(t *testing.T) {
+	types := aFacetTypes(t)
 	schema := aSchema(t, aComplexType(t, nil, xsd.SimpleContent{SimpleType: types[0]}, nil), types...)
 
-	res := aAssess(t, schema, cRoot("#42"))
-
-	wantRecords(t, res, "cvc-assertions-valid", loc(1, 1), "AssertedInt")
+	wantSatisfied(t, aAssess(t, schema, cRoot("#42")), "AssertedInt over 42")
+	res := aAssess(t, schema, cRoot("#0"))
+	wantFacetCharge(t, res, "cvc-complex-type", "AssertedInt over 0")
+	if got := res.Violations(); len(got) == 1 && got[0].Loc != loc(1, 1) {
+		t.Errorf("charge Loc = %s, want the element's %s", got[0].Loc, loc(1, 1))
+	}
 }
 
-// PRINCIPLES 12: assertions live at every variety level, and the collection is
-// STATIC — constituents first (cvc-datatype-valid clause 2), then the type's
-// own facet (clause 3). A union therefore records one site per MEMBER TYPE
-// visited, whether or not that member is the ·validating· one, and a list one
-// site for its {item type definition} rather than one per item.
-func TestAssertionSitesRecurseThroughListAndUnion(t *testing.T) {
+// A union's ·validating type· is the FIRST member the value is Datatype Valid
+// against (dt-active-member), assertions facets included: "dup" fails EntityX's
+// `$value = 'x'`, so xs:string validates it, no ·ENTITY value· exists for
+// String Valid clause 3 to find undeclared, and the attribute is ·valid·. "x"
+// satisfies the facet, so EntityX validates it and clause 3 charges the
+// undeclared entity name — the row that shows the first is not vacuous. With
+// the facet unevaluated as it was before #2246, EntityX validates "dup" too and
+// clause 3 charges it; with xpath.FacetAssertions declining, the dispatch
+// stops at EntityX and String Valid declines. Either way the first row fails.
+func TestUnionMemberFailingItsFacetYieldsTheValidatingType(t *testing.T) {
+	wantSatisfied(t, aAttributeAssessed(t, "EntityXOrString", "dup"), "EntityXOrString over dup")
+
+	res := aAttributeAssessed(t, "EntityXOrString", "x")
+	got := res.Violations()
+	if len(got) != 1 || got[0].Rule != "cvc-attribute" {
+		t.Fatalf("Violations() = %v, want the cvc-attribute charge for the undeclared ·ENTITY value·", got)
+	}
+	if cause, _ := xsderr.RuleOf(errors.Unwrap(got[0])); cause != ruleCvcSimpleType {
+		t.Errorf("the charge's cause carries %q, want %s (String Valid clause 3)", cause, ruleCvcSimpleType)
+	}
+}
+
+// An assertions facet whose {test} the facet evaluator declines is recorded
+// through [walk.decline] under cvc-assertions-valid at the item, never charged,
+// at every variety level the cvc-datatype-valid recursion reaches it at
+// (PRINCIPLES 12) and at none it does not: a list item whose facet holds
+// records nothing while the list's own declined facet is recorded; a union
+// records only the member the dispatch REACHED — 42 is decided by AssertedInt,
+// whose facet holds, so AssertedStr's is never asked, where "abc" reaches it —
+// and then its own facet, which is declined whatever its {test} (dt-xdmrep
+// clause 4). The two declined {test}s Even and EndsX are the guard: with
+// [walk.declineAssertions] reporting false they record under cvc-attribute
+// instead, and with the evaluator answering AssertionFails for a decline they
+// are charged.
+func TestDeclinedFacetAssertionsAreRecorded(t *testing.T) {
 	for _, c := range []struct {
 		name    string
 		typ     string
 		lexical string
 		want    []string
 	}{
-		{"atomic", "AssertedInt", "42", []string{"AssertedInt"}},
-		{"list item alone", "PlainList", "1 2", []string{"AssertedInt"}},
-		{"list item then the list's own", "AssertedList", "1 2",
-			[]string{"AssertedInt", "AssertedList"}},
-		{"each union member in declared order", "PlainUnion", "42",
-			[]string{"AssertedInt", "AssertedStr"}},
-		{"union members then the union's own", "AssertedUnion", "42",
-			[]string{"AssertedInt", "AssertedStr", "AssertedUnion"}},
+		{"arithmetic", "Even", "4", []string{"Even"}},
+		{"a function call", "EndsX", "ax", []string{"EndsX"}},
+		{"atomic", "AssertedStr", "abc", []string{"AssertedStr"}},
+		{"a list item evaluated", "PlainList", "1 2", nil},
+		{"the list's own", "AssertedList", "1 2", []string{"AssertedList"}},
+		{"a union decided by its first member", "PlainUnion", "42", nil},
+		{"the union member reached", "PlainUnion", "abc", []string{"AssertedStr"}},
+		{"the union's own", "AssertedUnion", "42", []string{"AssertedUnion"}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			uses := []xsd.AttributeUse{typedUse(t, "n", local(c.typ), false, nil, nil)}
-			schema := aSchema(t, aComplexType(t, uses, xsd.EmptyContent{}, nil), aVarietyTypes(t)...)
-
-			res := aAssess(t, schema, valuedRoot("n", c.lexical))
-
-			wantRecords(t, res, "cvc-assertions-valid", loc(1, 10), c.want...)
+			wantRecords(t, aAttributeAssessed(t, c.typ, c.lexical), "cvc-assertions-valid", loc(1, 10), c.want...)
 		})
 	}
 }
 
-// An ·initial value· String Valid REJECTS still has its assertion sites recorded:
-// the recording precedes the verdict, so a charge does not cost the site the way
-// returning after the verdict would.
-func TestRejectedInitialValueStillRecordsItsSites(t *testing.T) {
-	types := aVarietyTypes(t)
+// An ·initial value· String Valid REJECTS before its assertions stage records
+// nothing for the facet: the stage runs after every other facet has accepted
+// the value (cvc-datatype-valid clause 3), so a lexical outside the lexical
+// space is charged and its assertions are never asked.
+func TestRejectedInitialValueReachesNoAssertion(t *testing.T) {
+	types := aFacetTypes(t)
 	schema := aSchema(t, aComplexType(t, nil, xsd.SimpleContent{SimpleType: types[0]}, nil), types...)
 
 	res := aAssess(t, schema, cRoot("#not an integer"))
@@ -630,25 +720,24 @@ func TestRejectedInitialValueStillRecordsItsSites(t *testing.T) {
 	if len(res.Violations()) != 1 {
 		t.Fatalf("Violations() = %v, want the clause 1.2 charge", res.Violations())
 	}
-	got := res.Unevaluated()
-	if len(got) != 1 || !strings.Contains(got[0].Msg(), "AssertedInt") {
-		t.Fatalf("Unevaluated() = %v, want the AssertedInt site recorded despite the charge", messages(got))
+	if got := res.Unevaluated(); len(got) != 0 {
+		t.Fatalf("Unevaluated() = %v, want none", messages(got))
 	}
 }
 
 // The two rule IDs are never conflated: one element carrying both an
-// {assertions} on its complex type and an assertions facet on its simple
-// {content type} records one site per rule, at the same Loc, discriminated by
-// Rule alone. The facet's comes first: cvc-complex-type clause 1.2 reaches it
-// over the ·initial value· once the [[children]] are exhausted, and clause 6
-// is evaluated after them, over the partial ·PSVI· clause 1.2 is part of
-// (cvc-assertion clause 1.1).
+// {assertions} on its complex type and a declined assertions facet on its
+// simple {content type} records one site per rule, at the same Loc,
+// discriminated by Rule alone. The facet's comes first: cvc-complex-type clause
+// 1.2 reaches it over the ·initial value· once the [[children]] are exhausted,
+// and clause 6 is evaluated after them, over the partial ·PSVI· clause 1.2 is
+// part of (cvc-assertion clause 1.1).
 func TestBothRulesRecordAtOneElement(t *testing.T) {
-	types := aVarietyTypes(t)
-	schema := aSchema(t, aComplexType(t, nil, xsd.SimpleContent{SimpleType: types[0]},
+	types := aFacetTypes(t)
+	schema := aSchema(t, aComplexType(t, nil, xsd.SimpleContent{SimpleType: types[1]},
 		aAssertions("@a = @b")), types...)
 
-	res := aAssess(t, schema, cRoot("#42"))
+	res := aAssess(t, schema, cRoot("#abc"))
 
 	got := res.Unevaluated()
 	if len(got) != 2 {
@@ -663,18 +752,16 @@ func TestBothRulesRecordAtOneElement(t *testing.T) {
 // An attribute matching no {attribute use} is ·attributed to· the {attribute
 // wildcard} instead, and under a strict or a lax wildcard it is assessed
 // against the top-level declaration its name ·resolves· to
-// ([walk.wildcardAttribute]), whose cvc-attribute clause 3 records the type's
-// sites exactly ONCE — wantRecords counts them, so a second recording path
+// ([walk.wildcardAttribute]), whose cvc-attribute clause 3 records a declined
+// facet exactly ONCE — wantRecords counts them, so a second recording path
 // beside [walk.declaredAttribute] fails it (#1891).
 //
 // Under ***skip*** nothing is recorded: the item is ·skipped·, no facet of any
 // type is reached over its lexical (#1043), and there is no unevaluated
-// assertion to report. The recording ran under skip as well while the
-// ·attribution· could only be inferred from the wildcard's presence; #717
-// decides it, so the over-report is gone.
+// assertion to report.
 func TestWildcardAttributeAssertionsAreRecorded(t *testing.T) {
 	d, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, local("n"),
-		xsd.TypeDefinitionRef{Name: local("AssertedInt")}, xsd.NewAttributeGlobalScope(), nil, false)
+		xsd.TypeDefinitionRef{Name: local("AssertedStr")}, xsd.NewAttributeGlobalScope(), nil, false)
 	if err != nil {
 		t.Fatalf("building the top-level n declaration: %v", err)
 	}
@@ -686,31 +773,33 @@ func TestWildcardAttributeAssertionsAreRecorded(t *testing.T) {
 			t.Fatalf("building RootType: %v", err)
 		}
 		schema := cSchemaFrom(t, ct, func(b *xsd.SchemaBuilder) {
-			aTypes(t, b, aVarietyTypes(t)...)
+			aTypes(t, b, aFacetTypes(t)...)
 			b.AddAttribute(d)
 		})
-		return aAssess(t, schema, valuedRoot("n", "42"))
+		return aAssess(t, schema, valuedRoot("n", "abc"))
 	}
 
-	wantRecords(t, assess(xsd.ProcessStrict), "cvc-assertions-valid", loc(1, 10), "AssertedInt")
-	wantRecords(t, assess(xsd.ProcessLax), "cvc-assertions-valid", loc(1, 10), "AssertedInt")
+	wantRecords(t, assess(xsd.ProcessStrict), "cvc-assertions-valid", loc(1, 10), "AssertedStr")
+	wantRecords(t, assess(xsd.ProcessLax), "cvc-assertions-valid", loc(1, 10), "AssertedStr")
 	if got := assess(xsd.ProcessSkip).Unevaluated(); len(got) != 0 {
 		t.Errorf("Unevaluated() = %v, want none: a ·skipped· attribute reaches no assertion site", messages(got))
 	}
 }
 
 // cvc-complex-type clause 4 validates a ·defaulted attribute·'s {lexical form}
-// against the declaration's {type definition}, reaching that type's assertions
-// facet with no attribute information item present — so the site is recorded
-// at the ELEMENT's location.
-func TestDefaultedAttributeAssertionsAreRecorded(t *testing.T) {
+// through xsd.ValueSpace's ValidDefault, which evaluates no assertion: the
+// {lexical form} of a type carrying an assertions facet is undecided, and the
+// clause is declined at the ELEMENT's location — the residue
+// [walk.defaultedAttribute]'s GAP(validate) names — even for a {test} the facet
+// evaluator would have admitted.
+func TestDefaultedAttributeAssertionsFacetDeclines(t *testing.T) {
 	dflt := xsd.NewValueConstraint(xsd.ValueDefault, "42", nil, nil)
 	uses := []xsd.AttributeUse{typedUse(t, "n", local("AssertedInt"), false, nil, &dflt)}
-	schema := aSchema(t, aComplexType(t, uses, xsd.EmptyContent{}, nil), aVarietyTypes(t)...)
+	schema := aSchema(t, aComplexType(t, uses, xsd.EmptyContent{}, nil), aFacetTypes(t)...)
 
 	res := aAssess(t, schema, &testElement{name: local("root"), loc: loc(1, 1)})
 
-	wantRecords(t, res, "cvc-assertions-valid", loc(1, 1), "AssertedInt")
+	wantRecords(t, res, "cvc-complex-type", loc(1, 1), "an assertions facet it does not evaluate")
 }
 
 func TestResultUnevaluatedIsCopied(t *testing.T) {

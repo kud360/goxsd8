@@ -1528,8 +1528,8 @@ func TestInstanceExecutorChargesAbstractComplexType(t *testing.T) {
 // TestInstanceExecutorDeclinesUnevaluatedRoot proves a root the gate admits
 // whose walk RECORDED a check it did not perform declines rather than reading
 // the empty violation list as "valid": an identity constraint whose
-// {selector} icpath does not compile, an assertions facet, whose {test}
-// validate records and never evaluates, and a complex type's {assertions}
+// {selector} icpath does not compile, an assertions facet whose {test} true()
+// — a function call — validate's facet evaluator declines, and a complex type's {assertions}
 // (cvc-complex-type clause 6) whose {test} true() — a function call — is
 // outside what validate's XPath evaluator compiles, so elementAssertions
 // declines it. Each refusal names the rules of the records behind it (#2106):

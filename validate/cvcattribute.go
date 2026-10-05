@@ -115,10 +115,10 @@ func (w *walk) wildcardAttribute(a Attribute, e Element, pc xsd.ProcessContents)
 // for 2.1, [walk.wildcardAttribute] for 2.2).
 //
 // The assertions facets clause 3's String Valid reaches on the declaration's
-// {type definition} are recorded before the lexical is read at all
-// ([walk.simpleAssertions], cvcassertion.go): they are a property of the type
-// and not of the verdict, so a charge, a pass and a decline record the same
-// sites, and each assessed attribute records them exactly once.
+// {type definition} are evaluated inside it, so a failed {test} is part of the
+// verdict clause 3 charges; one the evaluator declines is recorded under
+// cvc-assertions-valid at the attribute ([walk.declineAssertions],
+// cvcassertion.go) in place of the clause 3 decline.
 //
 // The three declines below withhold a verdict rather than guess one, and each is
 // recorded as an [Unevaluated] at the attribute ([walk.declineAttribute]):
@@ -157,9 +157,11 @@ func (w *walk) declaredAttribute(a Attribute, e Element, d xsd.AttributeDeclarat
 			a.Name())
 		return nil, false
 	}
-	w.simpleAssertions(st, "assessing attribute", a.Name(), a.Loc())
 	decided, verdict := w.stringValid(st, a.Value(), e, a.Loc())
 	if !decided {
+		if w.declineAssertions(verdict, "assessing attribute", a.Name(), a.Loc(), "cvc-attribute clause 3") {
+			return nil, false
+		}
 		w.declineAttribute(a, ruleCvcAttribute, "3",
 			"the ·initial value· of the attribute %s was not decided against its declaration's {type definition} %s: String Valid (§3.16.4) was withheld, the value backend reporting a fault of the type rather than a verdict about the lexical or the ·validating type· of an ·ENTITY value· or a NOTATION value being undecidable, so cvc-attribute clause 3 is undecided",
 			a.Name(), st.Name())
@@ -522,9 +524,12 @@ func (w *walk) defaultedConstraint(u xsd.AttributeUse, attrs []Attribute) (xsd.V
 // ValidDefault declines every {lexical form} whose type's closure reaches
 // NOTATION, so none reaches here accepted (#667).
 //
-// The type's assertion sites are recorded at the ELEMENT's location, on
-// [walk.simpleAssertions]'s terms: the attribute is absent, which is what makes
-// it defaulted, so there is no attribute item to carry a Loc.
+// GAP(validate): ValidDefault runs the value pipeline with no assertion
+// evaluator of this package's (the xsd.ValueSpace seam takes none), so a
+// {lexical form} every other facet of the type accepts is UNDECIDED wherever
+// the type's closure carries an assertions facet, and declines here under
+// cvc-complex-type clause 4 rather than being evaluated. Fail-open, on
+// [walk.declineAssertions]' terms. (#1042)
 func (w *walk) defaultedAttribute(e Element, u xsd.AttributeUse, vc xsd.ValueConstraint) {
 	d, resolved := w.schema.ResolvedAttributeDeclaration(u)
 	if !resolved {
@@ -539,7 +544,6 @@ func (w *walk) defaultedAttribute(e Element, u xsd.AttributeUse, vc xsd.ValueCon
 			vc.LexicalForm(), u.DeclarationName(), e.Name())
 		return
 	}
-	w.simpleAssertions(st, "assessing attribute use", u.DeclarationName(), e.Loc())
 	var cause error
 	decided := true
 	if !isSpecial(st) {
@@ -547,7 +551,7 @@ func (w *walk) defaultedAttribute(e Element, u xsd.AttributeUse, vc xsd.ValueCon
 	}
 	if !decided {
 		w.declineDefaulted(e, u,
-			"the {lexical form} %q of the ·effective value constraint· of the ·defaulted attribute· %s of the element %s was not decided against that declaration's {type definition} %s: the value space could not decide Datatype Valid, a fault of the type or of the value backend rather than a verdict about the lexical, so cvc-complex-type clause 4 is undecided",
+			"the {lexical form} %q of the ·effective value constraint· of the ·defaulted attribute· %s of the element %s was not decided against that declaration's {type definition} %s: the value space could not decide Datatype Valid, a fault of the type or of the value backend rather than a verdict about the lexical, or an assertions facet it does not evaluate, so cvc-complex-type clause 4 is undecided",
 			vc.LexicalForm(), u.DeclarationName(), e.Name(), st.Name())
 		return
 	}
@@ -569,8 +573,9 @@ func (w *walk) defaultedAttribute(e Element, u xsd.AttributeUse, vc xsd.ValueCon
 }
 
 // declineDefaulted is [walk.decline] for cvc-complex-type clause 4 over the
-// ·defaulted attribute· u of e, recorded at e's location for the reason
-// [walk.defaultedAttribute]'s assertion sites are.
+// ·defaulted attribute· u of e, recorded at e's location: the attribute is
+// absent, which is what makes it defaulted, so there is no attribute item to
+// carry a Loc.
 func (w *walk) declineDefaulted(e Element, u xsd.AttributeUse, format string, args ...any) {
 	w.decline("assessing attribute use", u.DeclarationName(), e.Loc(), ruleCvcComplexType, "4", format, args...)
 }

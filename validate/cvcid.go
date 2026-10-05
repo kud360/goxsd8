@@ -327,6 +327,8 @@ func (w *walk) idElement(c *icCheck) {
 // reading one as "no id here" would hide a declaration clause 1 charges for the
 // absence of. validatingType's member scan declines on the same class for the
 // same reason. RULED permanent by #774 (STYLE P3b), on cvcattribute.go's terms.
+// The class also holds an assertions-facet decline (value.IsAssertionDeclined),
+// which is not permanent: it is [walk.declineAssertions]' residue (#1042).
 // Each decline is recorded as an [Unevaluated] at the item ([walk.declineID]).
 func (w *walk) idRecord(st *xsd.SimpleType, lexical string, owner Element, node int, loc xsderr.Loc) {
 	candidate, decided := w.idCandidate(st)
@@ -611,7 +613,8 @@ func (w *walk) itemRoleValues(item *xsd.SimpleType, lexical string, owner Elemen
 // but this caller does not need to tell the two apart: a member whose error is
 // not a VERDICT (value.IsDatatypeVerdict) is a fault of the TYPE or of the
 // backend, and reading it as "this member rejected" would hand the value to a
-// LATER member — idRecord's own GAP, on the same terms; a membership no member
+// LATER member — idRecord's own GAP, on the same terms, an assertions-facet
+// decline among them; a membership no member
 // accepts contradicts the String Valid the caller already ran, so it is a
 // disagreement between two readings of one dispatch and not a fact about the
 // document. Both decline identically here.

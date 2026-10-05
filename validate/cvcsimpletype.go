@@ -30,21 +30,25 @@ const ruleCvcDatatypeValid xsderr.Rule = "cvc-datatype-valid"
 // ·actual value· value.ValidateLexical accepted. It reports decided false where
 // this package withholds a verdict, and otherwise a nil verdict for a ·valid·
 // lexical and the rejection for an invalid one, which the caller charges under
-// its own rule with the verdict as the wrapped cause.
+// its own rule with the verdict as the wrapped cause. Where decided is false,
+// verdict is instead the value.ValidateLexical error that withheld it, nil
+// where clause 3 or the NOTATION check did — which [walk.declineAssertions]
+// reads to decline an assertions facet under its own rule.
 //
 // A ·special· st (isSpecial) passes clause 2 without asking ValidateLexical,
 // which no backend answers for one: no clause 1 normalization can move a string
 // out of either type's lexical space, and neither type is NOTATION or has it in
 // its closure. A ValidateLexical error that is not a VERDICT
 // ([value.IsDatatypeVerdict]) withholds one; each caller states that decline's
-// GAP on its own terms.
+// GAP on its own terms. The pipeline evaluates st's assertions facets, and
+// those of every type it recurses into, through [xpath.FacetAssertions].
 func (w *walk) stringValid(st *xsd.SimpleType, lexical string, owner Element, loc xsderr.Loc) (decided bool, verdict error) {
 	if isSpecial(st) {
 		return w.entitiesDeclared(st, lexical, owner, loc)
 	}
 	_, err := value.ValidateLexical(w.backend, w.schema, st, lexical, elementContext{owner: owner}, xpath.FacetAssertions())
 	if err != nil && !value.IsDatatypeVerdict(err) {
-		return false, nil
+		return false, err
 	}
 	if err != nil {
 		return true, err
