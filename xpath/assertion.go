@@ -37,7 +37,9 @@ import (
 // or "//" over one child or attribute step, which raises err:XPDY0050 over
 // that instance (§3.2); and an fn:count call (xpath-functions.md §15.4.1) in
 // [14] ta-ValueExpr's position, over one counted path of E's subtree, whose
-// counts a [Tally] carries.
+// counts a [Tally] carries. It also admits xpath20.md §3.4's binary arithmetic
+// operators over numeric operands (ctaFacade.computes), in each comparison
+// operand's position.
 
 // AttributeTypes answers, for the element information item E whose assertions
 // are being compiled, the {type definition} an attribute of E with the
@@ -316,10 +318,11 @@ type AssertionTest struct{ root ctaExpr }
 //
 // The grammar is [CompileCTATest]'s with the value comparisons, `$value`, an
 // abbreviated child-axis step, a "/" or "//" opening one child or attribute
-// step, and an fn:count call added, and every decline [CompileCTATest] states
-// is this one's too, under the same static context (xpath-valid clause 2.2)
-// augmented with `$value` (cvc-assertion clause 2.2), plus these, each of which
-// is the same withhold:
+// step, an fn:count call, and the binary arithmetic operators `+`, `-`, `*`,
+// `div`, `idiv` and `mod` (xpath20.md §3.4) added, and every decline
+// [CompileCTATest] states is this one's too, under the same static context
+// (xpath-valid clause 2.2) augmented with `$value` (cvc-assertion clause 2.2),
+// plus these, each of which is the same withhold:
 //
 //   - an attribute NameTest that is not a QName: a [37] Wildcard can match an
 //     attribute ·attributed to· an {attribute wildcard}, whose type is not
@@ -351,7 +354,14 @@ type AssertionTest struct{ root ctaExpr }
 //     path, a predicate, a bare `.` and `$value` decline, and so does a `.//`
 //     step outside an fn:count call;
 //   - a cast whose operand is a typed attribute, a typed child, an fn:count
-//     call or `$value` outside the xs:string family.
+//     call, an arithmetic result or `$value` outside the xs:string family;
+//   - an arithmetic operand whose {primitive type definition} is not
+//     xs:decimal, xs:float or xs:double — so the duration and date/time
+//     arithmetic B.2 defines declines, and so does the err:XPTY0004 of any
+//     other type — and an xs:float operand against an xs:double or
+//     xs:untypedAtomic one, which needs B.1 rule 1.1 (#889); a unary `+` or
+//     `-`, and a parenthesized operand, which [11]'s `(` arm reads as a
+//     boolean expression.
 //
 // A counted step consults neither attrs nor elems: fn:count does not atomize
 // its argument (xpath-functions.md §15.4.1, `$arg as item()*`), so the step's
@@ -373,8 +383,9 @@ type AssertionTest struct{ root ctaExpr }
 // required subset to stop at — §3.13 admits full XPath 2.0 — so every decline
 // above is this engine's limit and not the spec's license: paths of more than
 // one step, axes beyond the attribute step, one child step and the one counted
-// step, children whose type is not one simple type, and the F&O function
-// library but fn:count among them. The direction is the withhold: the caller
+// step, children whose type is not one simple type, arithmetic outside the
+// numeric operands and the binary operators, and the F&O function library but
+// fn:count among them. The direction is the withhold: the caller
 // records the assertion as unevaluated and neither charges it nor shows it
 // satisfied (PRINCIPLES 20). (#1042)
 //
@@ -399,7 +410,9 @@ func CompileAssertionTest(expr xsd.XPathExpression, types xsd.TypeResolver, cont
 //
 // So false is ONE answer for two outcomes the caller treats alike — the {test}
 // was false, or it raised (err:FORG0001, err:XPTY0004, err:FORG0006,
-// err:XPDY0050) — and either way E is not ·valid· with respect to the
+// err:XPDY0050, err:FOAR0001 for an xs:decimal or xs:integer division by zero
+// and any `idiv` by zero, err:FOAR0002 for an `idiv` over NaN or an infinite
+// dividend) — and either way E is not ·valid· with respect to the
 // assertion. A processor that raises a type error dynamically "will treat the
 // expression as having evaluated to false" (cvc-xpath, §3.13.4.2). Every
 // decline happened at [CompileAssertionTest].

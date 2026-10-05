@@ -62,8 +62,9 @@ const ctaDecimalDivisionDigits = 18
 // one first, on ctaValueCompare.eval's terms: an operand that raised is the
 // error; an EMPTY one makes the result the empty sequence; one of more than one
 // item is err:XPTY0004. A dynamic error the operator function raises —
-// err:FOAR0001 for a division by zero, err:FOAR0002 for an `idiv` over NaN or
-// an infinite dividend — is ctaRaised.
+// err:FOAR0001 for a division by zero, err:FOAR0002 for an `idiv` over NaN,
+// over an infinite dividend, or whose quotient overflows — is ctaRaised, and
+// so is a result its result type does not validate.
 func ctaArithItem(n ctaArith, c *xsd.SimpleType, env ctaEnv) ctaItem {
 	l, settled, single := ctaArithOperand(n.left, n.operation, env)
 	if !single {

@@ -20,16 +20,18 @@ import (
 // of which only `$value` is in scope (cvc-assertion clause 2.2), a child-axis
 // step naming one of E's element [[children]] (ctaTypedChild), and a "/" or
 // "//" opening a path, which raises (ctaNoDocumentRoot); and [14] ValueExpr
-// also takes an fn:count call over one counted path (ctaCount). The facet
-// façade (ctaFacetFacade) takes the assertion façade's grammar but fn:count,
-// plus [47] ContextItemExpr `.`, and compiles every read of the context item —
-// `.`, an attribute or child step, a rooted path — to the err:XPDY0002 an
-// assertions facet's absent context item raises (ctaNoContextItem). It is not
-// a stage of a general XPath 2.0 evaluator: the productions below reach no
-// axis but attribute, one child step and the descendant steps fn:count counts
-// over, no predicate, no variable but `$value` and no function but fn:not and
-// fn:count, so evaluating them directly is exact where a fail-open delegation
-// to a general engine would be a guess.
+// also takes an fn:count call over one counted path (ctaCount); and each
+// comparison operand may be xpath20.md [13] AdditiveExpr over [14]
+// MultiplicativeExpr, whose operators are evaluated in ctaarith.go (ctaArith).
+// The facet façade (ctaFacetFacade) takes the assertion façade's grammar but
+// fn:count, plus [47] ContextItemExpr `.`, and compiles every read of the
+// context item — `.`, an attribute or child step, a rooted path — to the
+// err:XPDY0002 an assertions facet's absent context item raises
+// (ctaNoContextItem). It is not a stage of a general XPath 2.0 evaluator: the
+// productions below reach no axis but attribute, one child step and the
+// descendant steps fn:count counts over, no predicate, no variable but `$value`
+// and no function but fn:not and fn:count, so evaluating them directly is exact
+// where a fail-open delegation to a general engine would be a guess.
 //
 //	[8]  Test                ::= OrExpr
 //	[9]  OrExpr              ::= AndExpr ( 'or' AndExpr )*
@@ -484,7 +486,8 @@ func (ctaTypeError) ctaExpr()        {}
 // (ctaFacade.child) and rooted path (ctaFacade.rooted), and the facet façade's
 // read of an absent context item (ctaNoContextItem) — the cast that [15]
 // ta-CastExpr's tail and [18] ta-ConstructorFunction both build over one of
-// them, and the assertion façade's fn:count call (ctaFacade.count). Every
+// them, the assertion façade's fn:count call (ctaFacade.count), and a binary
+// arithmetic operator over two of them (ctaArith, ctaFacade.computes). Every
 // branch answers readsChild and counted on ctaExpr's terms.
 type ctaValue interface {
 	ctaValue()
@@ -578,7 +581,9 @@ type ctaValueVar struct {
 
 // ctaEmptyValue is `$value` under any {content type} that is not simple
 // (cvc-assertion clause 2.3.2): the empty sequence, decided at compile time,
-// so the evaluation's [ValueBinding] is never read.
+// so the evaluation's [ValueBinding] is never read. It is also the node of
+// arithmetic over such a `$value` (ctaTypes.arithmetic), whose result §3.4
+// makes the empty sequence at compile time all the same.
 type ctaEmptyValue struct{}
 
 // ctaUntypedValue is `$value` over a simple {content type} whose {simple type
@@ -884,9 +889,9 @@ type ctaStatic interface{ ctaStatic() }
 type ctaUntypedAtomic struct{}
 
 // ctaTyped is an operand carrying a datatype: a Literal, the result of a cast
-// or a constructor function, a typed attribute, an fn:count call, or each item
-// of `$value`. It carries the COMPONENT alone — st.Name() is the name, and
-// storing both would be two encodings of one fact (STYLE D3).
+// or a constructor function, a typed attribute, an fn:count call, an arithmetic
+// result, or each item of `$value`. It carries the COMPONENT alone — st.Name()
+// is the name, and storing both would be two encodings of one fact (STYLE D3).
 type ctaTyped struct{ st *xsd.SimpleType }
 
 // ctaEmptySequence is the statically empty operand, ctaEmptyValue: it yields
@@ -1353,7 +1358,8 @@ type ctaAtoms struct{ vs []value.Value }
 // ctaRaised is a dynamic or type error raised while producing the item —
 // err:FORG0001 from a lexical or facet mismatch, err:XPTY0004 from an empty
 // operand under a cast written without `?`, from a cast over a sequence of two
-// or more items, or from a cast this processor does not support. Which of them
+// or more items, or from a cast this processor does not support, and an
+// arithmetic operator's err:FOAR0001 and err:FOAR0002 (ctaArithItem). Which of them
 // it was is not carried: key-cta-ta-select clause 2 (§3.12.4) gives them all
 // the same consequence, as cvc-assertion (§3.13.4.1) does for an assertion,
 // and the {test} is where that consequence is applied.
@@ -1391,6 +1397,9 @@ func ctaValidated(i ctaItem) (value.Value, bool) {
 //     statically empty `$value` yields nothing to convert.
 //   - a rooted path raises err:XPDY0050 before it yields anything, and a read
 //     of an absent context item err:XPDY0002.
+//   - an ARITHMETIC result is of its own result type and converted to c on
+//     the typed operands' terms, once its operands have been converted into
+//     its operation type and computed (ctaArithItem).
 //   - a CAST evaluates its operand IN THE TARGET TYPE first, because that cast
 //     is the expression the author wrote and its failure is the author's
 //     err:FORG0001, and only then converts the result to c. Evaluating it
