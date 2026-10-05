@@ -126,7 +126,7 @@
 //     other than CDATA is still read as CDATA: §3.3.3's step 4, the
 //     trimming and collapsing of #x20 such a declaration calls for, is
 //     not applied (§5.1 has a non-validating processor normalize with the
-//     declarations it reads). Untracked: no issue owns it yet.
+//     declarations it reads). Tracked by #2281.
 //   - A reference to an internal general entity is replaced by its
 //     replacement text (XML 1.0 §4.4.2, §4.4.5): in content, parsed as
 //     content in the scope in force at the reference, its nodes located at
