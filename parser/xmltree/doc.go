@@ -103,10 +103,13 @@
 //     missing its S, AttType or DefaultDecl ([53]–[60]), or a default value
 //     that is no [10] AttValue, holding a '<', a '&' that opens no Reference
 //     or a character reference naming no Char, or an entity reference that
-//     breaks WFC: Entity Declared (a direct reference to a name no general
-//     entity declaration before the <!ATTLIST> declares, in a document that is
-//     standalone="yes" or has neither an external subset nor a
-//     parameter-entity reference) or, directly or through other entities'
+//     breaks WFC: Entity Declared (in a document that is standalone="yes" or
+//     has neither an external subset nor a parameter-entity reference, a
+//     default value outside every parameter entity referencing directly a
+//     name no general entity declaration before the <!ATTLIST> declares, or
+//     through another entity's replacement text a name no declaration
+//     declares, a declaration in a parameter entity's replacement text
+//     counting for neither) or, directly or through other entities'
 //     replacement text, WFC: Parsed Entity, No Recursion, No External Entity
 //     References or No < in Attribute Values, whether or not the default is
 //     ever applied — a validity constraint on either declaration is no fault;
@@ -125,12 +128,6 @@
 //     only where the reader did not read is not a member, and
 //     Reader.AllDeclarationsProcessed, the [all declarations processed]
 //     property, then reports false.
-//   - GAP(xml): a general entity declared in a parameter entity's
-//     replacement text satisfies WFC: Entity Declared for an <!ATTLIST>
-//     default value, though the constraint counts only a declaration outside
-//     every parameter entity, and a reference in replacement text to a name
-//     declared nowhere is not charged under it. Untracked: no issue owns it
-//     yet.
 //   - Every attribute value, namespace declarations included, is its
 //     normalized value per XML 1.0 §3.3.3, steps 1-3 (Attribute.Value): a
 //     character reference is the character it names, so &#9; stays a tab,
@@ -153,7 +150,9 @@
 //     the reference; in an attribute value, normalized per §3.3.3 together
 //     with the rest of that value. Nested references expand at inclusion
 //     (§4.5). A recursive reference, a '<' in replacement text an attribute
-//     value includes, and replacement text that is not balanced content are
+//     value includes, replacement text that is not balanced content, and, in
+//     a standalone="yes" document, a reference to an entity declared only in
+//     a parameter entity's replacement text (WFC: Entity Declared) are
 //     RuleXMLWellFormed faults. A reference past the reader's bound on
 //     nesting depth or on replacement text included per document is refused,
 //     as is a reference to an entity that is not internal or whose
