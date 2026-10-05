@@ -69,14 +69,27 @@ func asValues(t *testing.T, attrs ...asTyped) TypedAttributes {
 	}
 }
 
-// asCompile compiles expr against uses or fails the test.
+// asCompile compiles expr against uses, for an element with empty content, or
+// fails the test.
 func asCompile(t *testing.T, expr string, uses AttributeTypes) AssertionTest {
 	t.Helper()
-	c, ok := CompileAssertionTest(ctaExprRecord(expr, "", "xs", xsd.XMLSchemaNS, "a", "http://example.com/a"), seededTypes, uses)
+	return asCompileFor(t, expr, xsd.EmptyContent{}, uses)
+}
+
+// asCompileFor compiles expr against uses for an element whose {content type}
+// is content, or fails the test.
+func asCompileFor(t *testing.T, expr string, content xsd.ContentType, uses AttributeTypes) AssertionTest {
+	t.Helper()
+	c, ok := CompileAssertionTest(asRecord(expr), seededTypes, content, uses)
 	if !ok {
 		t.Fatalf("CompileAssertionTest(%q): declined, want compiled", expr)
 	}
 	return c
+}
+
+// asRecord is expr's XPath Expression property record, binding xs and a.
+func asRecord(expr string) xsd.XPathExpression {
+	return ctaExprRecord(expr, "", "xs", xsd.XMLSchemaNS, "a", "http://example.com/a")
 }
 
 // An assertion reads its attributes TYPED, so a comparison runs in the
@@ -105,7 +118,7 @@ func TestAssertionEvaluatesTypedAttributes(t *testing.T) {
 		{"@s cast as xs:integer > 3", []asTyped{{uq("s"), "string", " 5 "}}, true},
 		{"xs:integer(@s) = 5", []asTyped{{uq("s"), "string", "5"}}, true},
 	} {
-		got := asCompile(t, tc.expr, uses).Evaluate(backend(), seededTypes, asValues(t, tc.attrs...))
+		got := asCompile(t, tc.expr, uses).Evaluate(backend(), seededTypes, asValues(t, tc.attrs...), ValueBinding{})
 		if got != tc.want {
 			t.Errorf("Evaluate(%q) over %v = %v, want %v", tc.expr, tc.attrs, got, tc.want)
 		}
@@ -123,13 +136,13 @@ func TestAssertionTypeErrorIsFalse(t *testing.T) {
 	uses := asUses(t, map[string]string{"b": "boolean"})
 	attrs := asValues(t, asTyped{uq("b"), "boolean", "true"})
 
-	if asCompile(t, "@b = 'true'", uses).Evaluate(backend(), seededTypes, attrs) {
+	if asCompile(t, "@b = 'true'", uses).Evaluate(backend(), seededTypes, attrs, ValueBinding{}) {
 		t.Error("Evaluate(@b = 'true') over a typed xs:boolean = true, want false: the comparison raises err:XPTY0004")
 	}
-	if asCompile(t, "not(@b = 'true')", uses).Evaluate(backend(), seededTypes, attrs) {
+	if asCompile(t, "not(@b = 'true')", uses).Evaluate(backend(), seededTypes, attrs, ValueBinding{}) {
 		t.Error("Evaluate(not(@b = 'true')) = true, want false: fn:not propagates the raised error, and the {test} raised")
 	}
-	if !asCompile(t, "@b = @b", uses).Evaluate(backend(), seededTypes, attrs) {
+	if !asCompile(t, "@b = @b", uses).Evaluate(backend(), seededTypes, attrs, ValueBinding{}) {
 		t.Error("Evaluate(@b = @b) = false, want true: two xs:boolean operands are B.2-comparable")
 	}
 }
@@ -163,13 +176,13 @@ func asUnion(t *testing.T) *xsd.SimpleType {
 
 // CompileAssertionTest DECLINES — ok false, never a tree that answers false —
 // every {test} whose operand types it cannot fix, every construct outside the
-// §3.12.6 grammar ($value and the value comparators among them), and every
+// §3.12.6 grammar and its value comparisons ($value among them), and every
 // decline CompileCTATest itself makes.
 func TestCompileAssertionTestDeclines(t *testing.T) {
 	union := asUnion(t)
 	types := asUses(t, map[string]string{
 		"x": "integer", "l": "NMTOKENS", "any": "anySimpleType", "atom": "anyAtomicType",
-		"q": "QName", "n": "NOTATION", "f": "float",
+		"q": "QName", "n": "NOTATION", "f": "float", "d": "date", "e": "date",
 	})
 	uses := func(name xsd.QName) (*xsd.SimpleType, bool) {
 		if name == uq("u") {
@@ -193,12 +206,225 @@ func TestCompileAssertionTestDeclines(t *testing.T) {
 		{"@x cast as xs:string = '5'", "a cast from a typed non-string attribute"},
 		{"xs:integer(@x) = 5", "the constructor spelling of the same cast"},
 		{"@f = 1e0", "B.1 rule 1.1's xs:float to xs:double promotion, CompileCTATest's own decline"},
-		{"$value > 0", "$value is outside the grammar"},
-		{"@x le 5", "a value comparison is outside the grammar"},
-		{"@x eq 5", "likewise eq"},
+		{"@x eq 5 eq 5", "ValueComp is non-associative, so a second one is an unparsed tail"},
+		{"@d lt @e", "a value comparison in the date/time family, on the general comparison's arm"},
 		{"count(@x) = 1", "a function call outside fn:not and the constructors"},
 	} {
-		if _, ok := CompileAssertionTest(ctaExprRecord(tc.expr, "", "xs", xsd.XMLSchemaNS, "a", "http://example.com/a"), seededTypes, uses); ok {
+		if _, ok := CompileAssertionTest(asRecord(tc.expr), seededTypes, xsd.EmptyContent{}, uses); ok {
+			t.Errorf("CompileAssertionTest(%q): compiled, want declined (%s)", tc.expr, tc.why)
+		}
+	}
+}
+
+// The value comparisons (xpath20.md §3.5.1) evaluate over typed attributes:
+// `@min le @max` is §3.13.2's own example, decided in the attributes' xs:int
+// values, so min="10" max="9" fails it where the string reading would hold.
+// An EMPTY operand makes the comparison the empty sequence, whose effective
+// boolean value is false, so fn:not over it is TRUE — the row that tells the
+// empty sequence apart from err:XPTY0004, which fn:not propagates. A pair of
+// operand types B.2 gives the operator no row for is err:XPTY0004, false under
+// fn:not as well.
+func TestAssertionEvaluatesValueComparisons(t *testing.T) {
+	uses := asUses(t, map[string]string{"x": "integer", "min": "int", "max": "int", "s": "string", "b": "boolean", "dur": "duration"})
+	for _, tc := range []struct {
+		expr  string
+		attrs []asTyped
+		want  bool
+	}{
+		{"@min le @max", []asTyped{{uq("min"), "int", "6"}, {uq("max"), "int", "5"}}, false},
+		{"@min le @max", []asTyped{{uq("min"), "int", "5"}, {uq("max"), "int", "6"}}, true},
+		{"@min le @max", []asTyped{{uq("min"), "int", "10"}, {uq("max"), "int", "9"}}, false},
+		{"@min le @max", []asTyped{{uq("min"), "int", "5"}, {uq("max"), "int", "5"}}, true},
+		{"@min lt @max", []asTyped{{uq("min"), "int", "5"}, {uq("max"), "int", "5"}}, false},
+		{"@x eq 5", []asTyped{{uq("x"), "integer", "+05"}}, true},
+		{"@x ne 5", []asTyped{{uq("x"), "integer", "5"}}, false},
+		{"@x gt 4.5", []asTyped{{uq("x"), "integer", "5"}}, true},
+		{"@x ge 5", []asTyped{{uq("x"), "integer", "4"}}, false},
+		{"@s eq 'abc'", []asTyped{{uq("s"), "string", "abc"}}, true},
+		{"@b eq xs:boolean('1')", []asTyped{{uq("b"), "boolean", "true"}}, true},
+		{"@x eq 5", nil, false},
+		{"not(@x eq 5)", nil, true},
+		{"@x eq 5 or @min le @max", []asTyped{{uq("min"), "int", "1"}, {uq("max"), "int", "2"}}, true},
+		{"@x eq 'a'", []asTyped{{uq("x"), "integer", "5"}}, false},
+		{"not(@x eq 'a')", []asTyped{{uq("x"), "integer", "5"}}, false},
+		{"@dur lt @dur", []asTyped{{uq("dur"), "duration", "P1D"}}, false},
+		{"not(@dur lt @dur)", []asTyped{{uq("dur"), "duration", "P1D"}}, false},
+		{"@dur eq @dur", []asTyped{{uq("dur"), "duration", "P1D"}}, true},
+	} {
+		got := asCompile(t, tc.expr, uses).Evaluate(backend(), seededTypes, asValues(t, tc.attrs...), ValueBinding{})
+		if got != tc.want {
+			t.Errorf("Evaluate(%q) over %v = %v, want %v", tc.expr, tc.attrs, got, tc.want)
+		}
+	}
+}
+
+// asList is a list of xs:int, whose `$value` is the sequence of its items.
+func asList(t *testing.T, name string, item xsd.QName) *xsd.SimpleType {
+	t.Helper()
+	st, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: ctaUserNS, Local: name},
+		xsd.ListDerivation{Item: xsd.SimpleTypeRef{Name: item}},
+		xsd.SimpleTypeRef{Name: ctaBuiltin("anySimpleType")},
+		[]xsd.Facet{xsd.NewFacet(xsd.FacetWhiteSpace, []string{"collapse"}, true)}, nil)
+	if err != nil {
+		t.Fatalf("building the %s list: %v", name, err)
+	}
+	return st
+}
+
+// asTypesWith is the seeded builtins plus extra, by name.
+func asTypesWith(extra ...*xsd.SimpleType) ctaTestTypes {
+	types := make(ctaTestTypes, len(seededTypes)+len(extra))
+	for name, td := range seededTypes {
+		types[name] = td
+	}
+	for _, st := range extra {
+		types[st.Name()] = st
+	}
+	return types
+}
+
+// asBind maps lexical against st and binds it to $value, or fails the test.
+func asBind(t *testing.T, st *xsd.SimpleType, lexical string) ValueBinding {
+	t.Helper()
+	v, err := value.ValidateLexical(backend(), seededTypes, st, lexical, nil)
+	if err != nil {
+		t.Fatalf("mapping %q against %s: %v", lexical, st.Name(), err)
+	}
+	return BindValue(v)
+}
+
+// `$value` over a SIMPLE {content type} is E's ·actual value· under its {simple
+// type definition} (cvc-assertion clause 2.3.1), typed — so `$value eq 5`
+// compares xs:int values and "+05" is 5 — and the zero ValueBinding is the
+// empty sequence clause 2.3.2 gives an invalid or ·nilled· E, false under a
+// value comparison and true under fn:not of one.
+func TestAssertionValueOverSimpleContent(t *testing.T) {
+	content := xsd.SimpleContent{SimpleType: asBuiltin(t, "int")}
+	uses := asUses(t, map[string]string{"max": "int"})
+	five := asBind(t, asBuiltin(t, "int"), "+05")
+	for _, tc := range []struct {
+		expr  string
+		bound ValueBinding
+		attrs []asTyped
+		want  bool
+	}{
+		{"$value eq 5", five, nil, true},
+		{"$value eq 6", five, nil, false},
+		{"$value gt 4", five, nil, true},
+		{"$value = 5", five, nil, true},
+		{"$value le @max", five, []asTyped{{uq("max"), "int", "4"}}, false},
+		{"$value le @max", five, []asTyped{{uq("max"), "int", "5"}}, true},
+		{"$value", five, nil, true},
+		{"$value", asBind(t, asBuiltin(t, "int"), "0"), nil, false},
+		{"$value eq 5", ValueBinding{}, nil, false},
+		{"not($value eq 5)", ValueBinding{}, nil, true},
+		{"$value", ValueBinding{}, nil, false},
+	} {
+		got := asCompileFor(t, tc.expr, content, uses).Evaluate(backend(), seededTypes, asValues(t, tc.attrs...), tc.bound)
+		if got != tc.want {
+			t.Errorf("Evaluate(%q) = %v, want %v", tc.expr, got, tc.want)
+		}
+	}
+}
+
+// `$value` under a {content type} that is NOT simple — empty, element-only,
+// mixed — is the empty sequence (cvc-assertion clause 2.3.2), decided at
+// compile time, so `$value eq 1` is the empty sequence and false and its
+// negation true, whatever the evaluation binds: a stray binding is never read.
+func TestAssertionValueOverNonSimpleContent(t *testing.T) {
+	stray := asBind(t, asBuiltin(t, "int"), "1")
+	for _, content := range []xsd.ContentType{
+		xsd.EmptyContent{},
+		xsd.ElementContent{Mixed: false},
+		xsd.ElementContent{Mixed: true},
+	} {
+		for _, tc := range []struct {
+			expr string
+			want bool
+		}{
+			{"$value eq 1", false},
+			{"not($value eq 1)", true},
+			{"$value = 1", false},
+			{"$value", false},
+			{"not($value)", true},
+			{"$value lt xs:hexBinary('00')", false},
+			{"not($value lt xs:hexBinary('00'))", true},
+		} {
+			test := asCompileFor(t, tc.expr, content, asUses(t, nil))
+			for _, bound := range []ValueBinding{{}, stray} {
+				if got := test.Evaluate(backend(), seededTypes, asValues(t), bound); got != tc.want {
+					t.Errorf("Evaluate(%q) under %s content = %v, want %v", tc.expr, content.Variety(), got, tc.want)
+				}
+			}
+		}
+	}
+}
+
+// `$value` over a LIST {simple type definition} is the flattened sequence of
+// its items (Datatypes dt-xdmrep). A value comparison over two or more items
+// raises err:XPTY0004 (xpath20.md §3.5.1 step 3), which cvc-assertion charges
+// as false and fn:not propagates; a general comparison is existential over the
+// items instead; one item compares as itself, and an empty list is the empty
+// sequence. fn:boolean of two or more atomic items raises err:FORG0006.
+func TestAssertionValueOverListContent(t *testing.T) {
+	list := asList(t, "IntList", ctaBuiltin("int"))
+	content := xsd.SimpleContent{SimpleType: list}
+	types := asTypesWith(list)
+	for _, tc := range []struct {
+		expr, lexical string
+		want          bool
+	}{
+		{"$value eq 1", "1 2", false},
+		{"not($value eq 1)", "1 2", false},
+		{"$value = 2", "1 2", true},
+		{"$value = 3", "1 2", false},
+		{"$value eq 3", "3", true},
+		{"$value eq 1", "", false},
+		{"not($value eq 1)", "", true},
+		{"$value", "1 2", false},
+		{"not($value)", "1 2", false},
+		{"$value", "7", true},
+	} {
+		test, ok := CompileAssertionTest(asRecord(tc.expr), types, content, asUses(t, nil))
+		if !ok {
+			t.Fatalf("CompileAssertionTest(%q) over a list: declined, want compiled", tc.expr)
+		}
+		v, err := value.ValidateLexical(backend(), types, list, tc.lexical, nil)
+		if err != nil {
+			t.Fatalf("mapping %q against the list: %v", tc.lexical, err)
+		}
+		if got := test.Evaluate(backend(), types, asValues(t), BindValue(v)); got != tc.want {
+			t.Errorf("Evaluate(%q) over %q = %v, want %v", tc.expr, tc.lexical, got, tc.want)
+		}
+	}
+}
+
+// `$value` DECLINES where its static type is not fixed at compile time, or is
+// one this engine does not read: a nil {content type}, a union, a list of a
+// union, a ·special· type, an xs:QName or xs:NOTATION primitive — and any
+// variable but `$value`, which is not in scope (err:XPST0008), and a cast from
+// a non-string `$value`, on a typed attribute's terms.
+func TestCompileAssertionTestDeclinesValue(t *testing.T) {
+	union := asUnion(t)
+	unionList := asList(t, "UnionList", union.Name())
+	types := asTypesWith(union, unionList)
+	for _, tc := range []struct {
+		expr    string
+		content xsd.ContentType
+		why     string
+	}{
+		{"$value eq 1", nil, "no {content type} to type $value by"},
+		{"$value eq 1", xsd.SimpleContent{SimpleType: union}, "a union's value takes its active member's type"},
+		{"$value = 1", xsd.SimpleContent{SimpleType: unionList}, "a list of a union likewise"},
+		{"$value = 'a'", xsd.SimpleContent{SimpleType: asBuiltin(t, "anySimpleType")}, "a special type's value is untypedAtomic"},
+		{"$value = 'a'", xsd.SimpleContent{SimpleType: asBuiltin(t, "QName")}, "an xs:QName value has no canonical representation"},
+		{"$value = 'a'", xsd.SimpleContent{SimpleType: asBuiltin(t, "NOTATION")}, "an xs:NOTATION value likewise"},
+		{"$other eq 1", xsd.SimpleContent{SimpleType: asBuiltin(t, "int")}, "no variable but $value is in scope"},
+		{"$a:value eq 1", xsd.SimpleContent{SimpleType: asBuiltin(t, "int")}, "$value has no namespace"},
+		{"$value cast as xs:string = '5'", xsd.SimpleContent{SimpleType: asBuiltin(t, "int")}, "a cast from a typed non-string $value"},
+		{"$ eq 1", xsd.SimpleContent{SimpleType: asBuiltin(t, "int")}, "a '$' with no name"},
+	} {
+		if _, ok := CompileAssertionTest(asRecord(tc.expr), types, tc.content, asUses(t, nil)); ok {
 			t.Errorf("CompileAssertionTest(%q): compiled, want declined (%s)", tc.expr, tc.why)
 		}
 	}
@@ -240,7 +466,7 @@ func TestCompileAssertionTestDeclinesDateTimeComparisons(t *testing.T) {
 		"@s cast as xs:date < xs:date('2000-01-01')",
 	} {
 		record := ctaExprRecord(expr, "", "xs", xsd.XMLSchemaNS)
-		if _, ok := CompileAssertionTest(record, seededTypes, uses); ok {
+		if _, ok := CompileAssertionTest(record, seededTypes, xsd.EmptyContent{}, uses); ok {
 			t.Errorf("CompileAssertionTest(%q): compiled, want declined (a date/time comparison type)", expr)
 		}
 		if _, ok := CompileCTATest(record, seededTypes); !ok {

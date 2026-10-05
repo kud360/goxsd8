@@ -137,6 +137,43 @@ func TestListValueIdentityEquality(t *testing.T) {
 	}
 }
 
+// TestListValueItemsInOrder pins the Listed capability: a list value yields its
+// items in dv_list's order, one per token, and an empty list yields none — the
+// sequence xpath's XDM representation of a list value ranges.
+func TestListValueItemsInOrder(t *testing.T) {
+	var got []Value
+	for v := range (listValue{items: []Value{itemStub{2}, itemStub{1}}}).Items() {
+		got = append(got, v)
+	}
+	if len(got) != 2 || got[0] != (itemStub{2}) || got[1] != (itemStub{1}) {
+		t.Errorf("Items() = %v, want [{2} {1}] in list order", got)
+	}
+
+	item := primType(t, "myitem", "collapse")
+	leaf := listType(t, item)
+	b := stubItemBackend{item: item.Name()}
+	for _, tc := range []struct {
+		lexical string
+		items   int
+	}{{"aa bb ccc", 3}, {"", 0}} {
+		v, err := ValidateLexical(b, noSchema{}, leaf, tc.lexical, nil)
+		if err != nil {
+			t.Fatalf("ValidateLexical(%q) = %v, want accept", tc.lexical, err)
+		}
+		listed, ok := v.(Listed)
+		if !ok {
+			t.Fatalf("ValidateLexical(%q) value %T does not implement Listed", tc.lexical, v)
+		}
+		n := 0
+		for range listed.Items() {
+			n++
+		}
+		if n != tc.items {
+			t.Errorf("ValidateLexical(%q).Items() yielded %d items, want %d", tc.lexical, n, tc.items)
+		}
+	}
+}
+
 // TestValidateLexicalListItemErrorPropagates drives a list-variety leaf through
 // the full ValidateLexical pipeline (whiteSpace collapse → listMapping) and
 // confirms an invalid item token's Parse error surfaces unchanged (dv_list

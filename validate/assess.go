@@ -129,15 +129,16 @@ const ruleCvcType xsderr.Rule = "cvc-type"
 // nothing any of these charges reads (#1823).
 //
 // Nothing else is decided: the remaining cvc-elt clauses, cvc-type's own
-// clause 1 (T ·non-absent·), cvc-complex-type clause 5 over [[attributes]]
-// (key-ldt-att) and clause 6 are not evaluated, so a [Result] carrying no
-// violation says that the root is declared, and that every element is governed
-// by no abstract declaration and — where its type was determinable — is
-// governed by no abstract complex type, carries no attribute clause 2 or
-// clause 3.1.1 rejects and no attribute whose value this backend could read
-// and found invalid, lacks no required attribute clause 3 asks for, and has no
-// content reject its ·governing type definition· could settle and no child
-// clause 5 rejects. It says nothing else about the document.
+// clause 1 (T ·non-absent·) and cvc-complex-type clause 5 over [[attributes]]
+// (key-ldt-att) are not evaluated, and clause 6 only for the assertions xpath
+// compiles (cvcassertion.go), so a [Result] carrying no violation says that
+// the root is declared, and that every element is governed by no abstract
+// declaration and — where its type was determinable — is governed by no
+// abstract complex type, carries no attribute clause 2 or clause 3.1.1 rejects
+// and no attribute whose value this backend could read and found invalid,
+// lacks no required attribute clause 3 asks for, has no content reject its
+// ·governing type definition· could settle and no child clause 5 rejects, and
+// fails no assertion it evaluated. It says nothing else about the document.
 //
 // It panics if root is nil, on the same grounds as [ElementChild].
 func (v *Validator) Assess(root Element) *Result {
@@ -941,7 +942,7 @@ func (c elementContext) LookupNamespace(prefix string) (string, bool) {
 }
 
 // element assesses one element information item: the item itself, then its
-// [[attributes]], then its [[children]].
+// [[attributes]], then its [[children]], then its {assertions}.
 //
 // cvc-elt clause 3 is settled first, before anything reads the [[children]],
 // because whether e is ·nilled· decides WHICH rules read them: a ·nilled·
@@ -966,10 +967,16 @@ func (c elementContext) LookupNamespace(prefix string) (string, bool) {
 // throughout. A ·laxly assessed· e has no type either and does NOT end it
 // ([walk.child]).
 //
-// cvc-complex-type clause 6 sits between the two halves:
-// [walk.elementAssertions] evaluates each of e's {assertions} the XPath
-// evaluator compiles, charging cvc-assertion for one that does not hold, and
-// declines the rest (cvcassertion.go).
+// cvc-complex-type clause 6 comes after both halves: [walk.elementAssertions]
+// evaluates each of e's {assertions} the XPath evaluator compiles, charging
+// cvc-assertion for one that does not hold, and declines the rest
+// (cvcassertion.go). It waits for the [[children]] because cvc-assertion
+// clause 1.1 validates e "normally, except that assertions are not checked"
+// before any {test} is evaluated, and clause 2.3 binds `$value` to what that
+// leaves: e's [schema actual value], known only once its character
+// [[children]] are exhausted, and the empty sequence where e is by then known
+// to be invalid — a violation recorded since e was entered, which
+// violationsBefore marks.
 //
 // parent is the enclosing element's identity-constraint state, nil at the
 // ·validation root·. It is what carries the {selector} and {fields} evaluations
@@ -993,13 +1000,13 @@ func (w *walk) element(e Element, g governance, parent *icCheck, inherited []inh
 	if w.log.Enabled(context.Background(), slog.LevelDebug) {
 		w.log.Debug("assessing element", slog.Any("name", e.Name()), slog.Any("loc", e.Loc()))
 	}
+	violationsBefore := len(w.res.violations)
 	w.abstractDeclaration(e, g)
 	w.abstractType(e, g)
 	isNilled := w.nilCheck(e, g)
 	id := w.identityCheck(e, g, parent)
 	w.idAttributes(id)
 	w.attributes(e, g)
-	w.elementAssertions(e, g)
 	content := w.contentCheck(e, g, isNilled)
 	w.children(e, content, id, w.handedDown(e, g, inherited))
 	if w.res.err != nil {
@@ -1007,9 +1014,11 @@ func (w *walk) element(e Element, g governance, parent *icCheck, inherited []inh
 		// §3.17.5.2 for this element, on [contentCheck.end]'s grounds: the
 		// [[children]] the source never finished delivering are ·target nodes·,
 		// field values and ID declarations the rules would otherwise be charged
-		// for the absence of.
+		// for the absence of. Nor cvc-complex-type clause 6, whose partial
+		// ·PSVI· (cvc-assertion clause 1.2) those [[children]] are part of.
 		return
 	}
+	w.elementAssertions(e, g, content, len(w.res.violations) > violationsBefore)
 	id.substitute(content)
 	w.idElement(id)
 	w.identityExit(id)
