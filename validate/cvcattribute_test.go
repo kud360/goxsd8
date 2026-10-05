@@ -1,6 +1,7 @@
 package validate
 
 import (
+	"errors"
 	"slices"
 	"strings"
 	"testing"
@@ -322,6 +323,34 @@ func TestDefaultedAttributeDefaultIsValidated(t *testing.T) {
 	wantSilence(t, assessTyped(t, root,
 		[]xsd.AttributeUse{typedUse(t, "n", integerType(), false, &bad, &good)}),
 		"the use's own {value constraint} is the effective one")
+}
+
+// cvc-complex-type clause 4 maps a QName-valued {lexical form} under the
+// namespace bindings its {value constraint} captured (value.ConstraintContext),
+// never the element's, and DECIDES it: "p:a" with p bound on the constraint is
+// satisfied on an element that binds no p, and with p bound nowhere in the
+// schema it is charged, wrapping the Datatype Valid verdict, though the element
+// binds p. Through ValidDefault, whose gate 1 answers every QName-governed
+// default undecided, both rows record a clause 4 decline instead.
+func TestDefaultedQNameAttributeIsDecidedUnderItsOwnBindings(t *testing.T) {
+	bound := xsd.NewValueConstraint(xsd.ValueDefault, "p:a", []xsd.NamespaceBinding{xsd.NewNamespaceBinding("p", "urn:a")}, nil)
+	unbound := xsd.NewValueConstraint(xsd.ValueDefault, "p:a", nil, nil)
+	bindsP := &testElement{name: xsd.QName{Local: "root"}, loc: loc(1, 1), bindings: map[string]string{"p": "urn:a"}}
+
+	got, undecided := assessRecorded(t, typedSchema(t, []xsd.AttributeUse{typedUse(t, "q", icBuiltin("QName"), false, &bound, nil)}),
+		&testElement{name: xsd.QName{Local: "root"}, loc: loc(1, 1)})
+	wantSilence(t, got, "the constraint's own binding resolves p")
+	wantDeclines(t, undecided)
+
+	got, undecided = assessRecorded(t, typedSchema(t, []xsd.AttributeUse{typedUse(t, "q", icBuiltin("QName"), false, &unbound, nil)}), bindsP)
+	wantDeclines(t, undecided)
+	charge := onlyCharge(t, got, "cvc-complex-type")
+	if !strings.HasPrefix(charge.Msg, "the element root carries no attribute information item named q, and the {lexical form} \"p:a\"") || !strings.Contains(charge.Msg, "clause 4") {
+		t.Errorf("Msg = %q, want clause 4 charged against the defaulted q", charge.Msg)
+	}
+	if cause, _ := xsderr.RuleOf(errors.Unwrap(charge)); cause != "cvc-datatype-valid" {
+		t.Errorf("the charge's cause carries %q, want cvc-datatype-valid", cause)
+	}
 }
 
 // The four conjuncts of ·defaulted attribute· that exclude a use from clause 4,

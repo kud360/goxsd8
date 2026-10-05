@@ -389,16 +389,15 @@ import (
 //     handed the schema, rejects a value naming no declared notation under
 //     cvc-datatype-valid, at every depth; a value outside a NOTATION type's
 //     enumeration is the backend's cvc-enumeration-valid verdict (Datatypes
-//     §4.3.5.4), which Datatype Valid entails. A ·defaulted attribute· of a
-//     NOTATION-derived type is recorded, never decided
-//     (walk.defaultedAttribute). The gate therefore reads no simple type's
-//     closure: finalize's src-resolve pass (xsd's resolveSimpleType) resolves
-//     every {base type definition}, {item type definition} and {member type
-//     definitions} reference of every simple type a Schema holds, so no
-//     closure the walk reads is unreadable, and a String Valid the backend
-//     withholds is recorded by the callers above. Each use's declaration must
-//     resolve to a simple type (recordedAttributeType), so an unresolvable
-//     {attribute declaration} is refused.
+//     §4.3.5.4), which Datatype Valid entails, a ·defaulted attribute·'s
+//     {lexical form} included (walk.defaultedAttribute). The gate therefore
+//     reads no simple type's closure: finalize's src-resolve pass (xsd's
+//     resolveSimpleType) resolves every {base type definition}, {item type
+//     definition} and {member type definitions} reference of every simple type
+//     a Schema holds, so no closure the walk reads is unreadable, and a String
+//     Valid the backend withholds is recorded by the callers above. Each use's
+//     declaration must resolve to a simple type (recordedAttributeType), so an
+//     unresolvable {attribute declaration} is refused.
 //   - cvc-complex-type clause 2: every attribute beyond namespace declarations
 //     and the four xsi: names matches an attribute use (2.1) or is
 //     ·attributed to· the {attribute wildcard} (2.2, cvc-wildcard §3.10.4.1)
