@@ -109,7 +109,7 @@ func asChildTypes(t *testing.T) ElementTypes {
 // xs:string comparison would not. Two children of one name are a sequence: a
 // general comparison is existential over it and a value comparison is
 // err:XPTY0004 (§3.5.1 step 3), false under fn:not too. A ·nilled· child is a
-// node — `e1` holds — with no atom, so `e1 = 'present'` and `e1 = ''` are
+// node — `e1` holds — with no atom, so `e1 = 'present'` and `e1 = ”` are
 // false and the first one's fn:not true. Every row declines at
 // CompileAssertionTest, and so fails, with ctaAssertionFacade.child declining.
 func TestAssertionReadsChildElements(t *testing.T) {

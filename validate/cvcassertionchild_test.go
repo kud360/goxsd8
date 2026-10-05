@@ -95,7 +95,7 @@ func acDeclined(t *testing.T, res *Result, want string) {
 // is charged where n is absent, the empty node sequence being false (xpath20.md
 // §2.4.3); `n > 9` compares xs:int values, so 10 holds where the string "10"
 // would not. A ·nilled· <e1> is a node with no value (xpath-datamodel §6.2.4):
-// `e1` holds and `e1 = ''` is charged, where an empty <e1> satisfies it. An
+// `e1` holds and `e1 = ”` is charged, where an empty <e1> satisfies it. An
 // xsi:type restricting xs:string to xs:token is read through the child's own
 // whiteSpace, so "  present " is "present". Every row is declined instead, and
 // fails, with xpath's ctaAssertionFacade.child declining every child step.
@@ -145,13 +145,17 @@ func TestAssertionRootedPathIsCharged(t *testing.T) {
 
 // A child a {test} reads but whose typed value this package does not read
 // DECLINES every assertion of <root> (walk.childValue), and is never charged:
-// an <n> String Valid rejects is invalid in the partial ·PSVI·; a second <e1>
-// is ·skipped· by the wildcard; an <e1> whose xsi:type EXTENDS xs:string may
-// carry a value of another type. A child no {test} reads declines nothing,
-// which is the retention gate (assertionCheck.reads): `@x = 1` and
-// `e1 = 'present'` are each evaluated beside an invalid <n>, which only its own
-// charge reports. With reads answering true for every name, both of those rows
-// decline instead.
+// an <n> String Valid rejects is invalid in the partial ·PSVI·, and so is an
+// <n> whose value maps but which carries an attribute its simple type admits
+// none of (cvc-type clause 3.1.1) — the row that is satisfied instead with
+// childValue's recorded check removed; a second <e1> is ·skipped· by the
+// wildcard; an <e1> whose xsi:type EXTENDS xs:string may carry a value of
+// another type. Each of the last two rows is satisfied instead with its own
+// arm removed (assertionCheck.skipped, the restriction check). A child no
+// {test} reads declines nothing, which is the retention gate
+// (assertionCheck.reads): `@x = 1` and `e1 = 'present'` are each evaluated
+// beside an invalid <n>, which only its own charge reports. With reads
+// answering true for every name, both of those rows decline instead.
 func TestAssertionOverAnUnreadableChildIsDeclined(t *testing.T) {
 	x := &testAttribute{name: local("x"), value: "1", loc: loc(1, 10)}
 	for _, tc := range []struct {
@@ -160,6 +164,8 @@ func TestAssertionOverAnUnreadableChildIsDeclined(t *testing.T) {
 		want      string
 	}{
 		{"an invalid child", "n > 0", []Child{acKid("n", 2, "abc")}, "the child element n of the element root"},
+		{"a child invalid for an attribute", "n > 0", []Child{acKid("n", 2, "5", &testAttribute{name: local("stray"), value: "1", loc: loc(2, 6)})},
+			"a violation or an unevaluated check was recorded for it"},
 		{"a skipped child", "e1 = 'present'", []Child{acKid("e1", 2, "present"), acKid("e1", 3, "present")}, "it is ·skipped·"},
 		{"an xsi:type extension", "e1 = 'present'", []Child{acKid("e1", 2, "present", xsiTypeAttr("StrExt"))}, "nor derived from it by restriction"},
 	} {
