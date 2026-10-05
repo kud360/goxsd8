@@ -4030,12 +4030,15 @@ func childElements(el *Element, space, local string) []*Element {
 // contains one, so both reject; otherwise R == T. Every literal compared through
 // this helper is whitespace-free — none/interleave/suffix, unbounded,
 // skip/strict/lax, true/false/1/0, prohibited/optional/required,
-// qualified/unqualified, the decimal digit strings, NCNames, xs:QNames,
-// xs:decimal literals and the empty string — so the equivalence holds at every
-// call site but one. [producer.bindQName], whose GAP(parser) marker leaves the
-// full NCName test unapplied, rejects neither a T with interior whitespace nor
-// its R lexically — but neither names a declared component, since every
-// declared name is an NCName.
+// qualified/unqualified, #all, ##any/##other, the decimal digit strings,
+// NCNames, xs:QNames, xs:decimal literals and the empty string — so the
+// equivalence holds at every call site but one. [producer.bindQName], whose
+// GAP(parser) marker leaves the full NCName test unapplied, rejects neither a T
+// with interior whitespace nor its R lexically — but neither names a declared
+// component, since every declared name is an NCName.
+// [producer.namespaceVarietyAndSet] also splits its trimmed value into tokens,
+// and strings.Fields splits a value identically with or without its ends
+// trimmed.
 func collapseTrim(lexical string) string {
 	return strings.Trim(lexical, xmlSpace)
 }
