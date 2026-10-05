@@ -148,16 +148,18 @@ func TestSimpleBaseWrongKindRejected(t *testing.T) {
 	}
 }
 
-// TestSimpleTypeOrRefRejectsIllegalEncodings pins the two constructor
-// rejections SimpleTypeOrRef's doc declares: a reference that names nothing, and
-// an owned arm holding nothing. Both are representation invariants, so both are
-// charged xsderr.RuleComponentInvariant rather than a spec rule.
+// TestSimpleTypeOrRefRejectsIllegalEncodings pins the {base type definition}
+// row of SimpleTypeOrRef's arm × slot table: a nil slot, a reference that names
+// nothing, and an owned arm holding nothing are each refused at construction.
+// All three are representation invariants, so all three are charged
+// xsderr.RuleComponentInvariant rather than a spec rule.
 func TestSimpleTypeOrRefRejectsIllegalEncodings(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		base SimpleTypeOrRef
 		want string
 	}{
+		{"a nil base", nil, "{base type definition} is absent"},
 		{"a ref naming nothing", SimpleTypeRef{}, "absent (zero) QName"},
 		{"an owned arm holding nothing", OwnedSimpleType{}, "no definition"},
 	} {
@@ -245,7 +247,7 @@ func TestDeferredBaseReadersResolveThroughSchema(t *testing.T) {
 }
 
 // TestItemAndMemberSlotsRejectAbsence pins the arm × slot legality table's
-// nil-illegal row: the {item type definition} and each {member type
+// item and member rows: the {item type definition} and each {member type
 // definitions} entry admit no encoding of absence, so all three — a nil slot, a
 // ref naming nothing, an owned arm holding nothing — are refused at
 // CONSTRUCTION. That rejection is what lets checkListGraph and checkUnionGraph

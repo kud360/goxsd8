@@ -605,15 +605,14 @@ type SimpleType struct {
 }
 
 // NewSimpleType builds a Simple Type Definition. base is the {base type
-// definition} slot (SimpleTypeOrRef, simpletyperef.go): nil means this type IS
-// xs:anySimpleType (the one simple type whose base is xs:anyType, a Complex Type
-// Definition outside this package's scope); every other simple type carries
-// either a SimpleTypeRef naming its base or an OwnedSimpleType holding it.
+// definition} slot (SimpleTypeOrRef, simpletyperef.go), and it is present: a
+// SimpleTypeRef naming the base or an OwnedSimpleType holding it. Every Simple
+// Type Definition but xs:anySimpleType has a simple base (Datatypes §4.1.6), and
+// that one component is not built here — it is the anchor AnySimpleType returns.
 // derivation is the declared §3.16.2.1 alternative the component was mapped
 // from, and it is what {variety}, {primitive type definition}, {item type
 // definition} and {member type definitions} are DERIVED from — none of the four
-// is passed or stored (STYLE D3). It may be nil to model xs:anySimpleType, which
-// was mapped from no alternative at all and whose {variety} is ·absent·.
+// is passed or stored (STYLE D3). It is present too.
 //
 // The two ·special· types are constrained bases. xs:anySimpleType is the base a
 // ·constructed· list or union names (cos-st-restricts 2.2.1/3.2.1), and those
@@ -635,11 +634,10 @@ type SimpleType struct {
 //   - two ownFacets of the same FacetKind (clause 4: "not more than one member
 //     of {facets} of the same kind").
 //
-// and, charging xsderr.RuleComponentInvariant, every illegal encoding of the
-// three type-valued slots themselves — a SimpleTypeRef naming nothing and an
-// OwnedSimpleType holding nothing anywhere (checkSimpleTypeOrRef), plus an
-// ABSENT item or member, which only the base slot may be
-// (checkSimpleTypeDerivationSlots over SimpleTypeOrRef's arm × slot table).
+// and, charging xsderr.RuleComponentInvariant, a nil derivation and every
+// illegal encoding of the three type-valued slots themselves — a nil, a
+// SimpleTypeRef naming nothing and an OwnedSimpleType holding nothing, in every
+// slot (checkSimpleTypeOrRefPresent over SimpleTypeOrRef's arm × slot table).
 //
 // Everything the CROSS-REFERENCE constraints decide — every cos-st-restricts
 // sub-clause and st-props-correct clauses 1, 2, 3 and 5 — is charged at
@@ -662,7 +660,7 @@ type SimpleType struct {
 // seeded built-in datatype is — passes the zero xsderr.Loc{}, which reads as
 // "unknown".
 func NewSimpleType(loc xsderr.Loc, name QName, derivation SimpleTypeDerivation, base SimpleTypeOrRef, ownFacets []Facet, final []DerivationMethod) (*SimpleType, error) {
-	if err := checkSimpleTypeOrRef(loc, base); err != nil {
+	if err := checkSimpleTypeOrRefPresent(loc, base, "{base type definition}"); err != nil {
 		return nil, err
 	}
 	if err := checkSimpleTypeDerivationSlots(loc, derivation); err != nil {
@@ -695,10 +693,12 @@ func copyDerivation(derivation SimpleTypeDerivation) SimpleTypeDerivation {
 	return UnionDerivation{Members: append([]SimpleTypeOrRef(nil), u.Members...)}
 }
 
-// checkSimpleTypeDerivationSlots charges checkSimpleTypeOrRefPresent over the
-// type-valued slots the declared derivation carries: ListDerivation.Item and
-// every UnionDerivation.Members entry, the two slots SimpleTypeOrRef's arm ×
-// slot table makes nil-illegal. The other three arms carry no slot at all.
+// checkSimpleTypeDerivationSlots rejects a nil derivation, charged to
+// xsderr.RuleComponentInvariant — only xs:anySimpleType declares no §3.16.2.1
+// alternative, and NewSimpleType does not build it — and charges
+// checkSimpleTypeOrRefPresent over the type-valued slots the declared derivation
+// carries: ListDerivation.Item and every UnionDerivation.Members entry. The other
+// three arms carry no slot at all.
 //
 // An EMPTY membership is accepted: §3.16.1 admits it and only the <union>
 // element's own representation constraint (src-simple-type clause 4) forbids the
@@ -707,6 +707,9 @@ func copyDerivation(derivation SimpleTypeDerivation) SimpleTypeDerivation {
 // assemble.
 func checkSimpleTypeDerivationSlots(loc xsderr.Loc, derivation SimpleTypeDerivation) error {
 	switch d := derivation.(type) {
+	case nil:
+		return xsderr.New(xsderr.RuleComponentInvariant, loc,
+			"simple type derivation is absent, but every simple type other than xs:anySimpleType declares a restriction, list or union alternative")
 	case ListDerivation:
 		return checkSimpleTypeOrRefPresent(loc, d.Item, "{item type definition}")
 	case UnionDerivation:
@@ -834,7 +837,7 @@ func (t *SimpleType) Variety(r TypeResolver) (Variety, error) {
 		return Union{}, nil
 	case RestrictionDerivation:
 		base, err := t.Base(r)
-		if err != nil || base == nil {
+		if err != nil {
 			return nil, err
 		}
 		return base.Variety(r)
@@ -858,7 +861,7 @@ func (t *SimpleType) Primitive(r TypeResolver) (*SimpleType, error) {
 		return t, nil
 	case RestrictionDerivation:
 		base, err := t.Base(r)
-		if err != nil || base == nil {
+		if err != nil {
 			return nil, err
 		}
 		return base.Primitive(r)
@@ -888,7 +891,7 @@ func (t *SimpleType) Item(r TypeResolver) (*SimpleType, error) {
 		return simpleTypeOfRef(r, d.Item, t.loc, simpleTypeLabel(t)+" {item type definition}")
 	case RestrictionDerivation:
 		base, err := t.Base(r)
-		if err != nil || base == nil {
+		if err != nil {
 			return nil, err
 		}
 		return base.Item(r)
@@ -922,7 +925,7 @@ func (t *SimpleType) Members(r TypeResolver) ([]*SimpleType, error) {
 		return out, nil
 	case RestrictionDerivation:
 		base, err := t.Base(r)
-		if err != nil || base == nil {
+		if err != nil {
 			return nil, err
 		}
 		return base.Members(r)
@@ -931,9 +934,11 @@ func (t *SimpleType) Members(r TypeResolver) ([]*SimpleType, error) {
 }
 
 // Base resolves and returns the {base type definition} property. It is nil, with
-// a nil error, if and only if IsAnySimpleType reports true — that is, when this
-// type IS xs:anySimpleType, whose real base (xs:anyType) is a Complex Type
-// Definition outside this package's scope.
+// a nil error, if and only if t is the xs:anySimpleType anchor (AnySimpleType),
+// whose real base (xs:anyType) is a Complex Type Definition outside this
+// package's scope. Any other SimpleType whose slot is absent — only the zero
+// value, since NewSimpleType rejects a nil base — is an xsderr.RuleComponentInvariant
+// error (simpleTypeOfRef).
 //
 // The stored slot is a SimpleTypeOrRef (simpletyperef.go), so for a by-name base
 // this is the src-resolve clause 1.1 lookup against r. It is the ONE reader of
@@ -946,24 +951,26 @@ func (t *SimpleType) Members(r TypeResolver) ([]*SimpleType, error) {
 // definition} or {facets} off a truncated chain and accept what the full chain
 // forbids.
 func (t *SimpleType) Base(r TypeResolver) (*SimpleType, error) {
+	if t == anySimpleType {
+		return nil, nil
+	}
 	return simpleTypeOfRef(r, t.base, t.loc, simpleTypeLabel(t)+" {base type definition}")
 }
 
-// IsAnySimpleType reports whether this type is xs:anySimpleType, the root of the
-// simple-type hierarchy (§3.16.1). It is exactly the condition "the {base type
-// definition} slot is absent", exposed as a predicate so callers do not infer
-// this identity from nil-ness. It needs no resolver and cannot fail: absence is
-// a property of the SLOT, decided without following anything (SimpleTypeOrRef).
+// IsAnySimpleType reports whether t is xs:anySimpleType, the root of the
+// simple-type hierarchy (§3.16.1), by identity against the anchor
+// [AnySimpleType] — Datatypes §4.1.6 defines exactly one such component, so no
+// caller-built type, however it is shaped, is xs:anySimpleType. It reports false
+// for nil.
 func (t *SimpleType) IsAnySimpleType() bool {
-	return t.base == nil
+	return t == anySimpleType
 }
 
 // IsSpecial reports whether t is one of the two ·special· datatypes,
 // xs:anySimpleType and xs:anyAtomicType (Datatypes §2.4.2, dt-special), by
 // identity against the anchors [AnySimpleType] and [AnyAtomicType], not by
 // shape: a union or a caller-built type that merely looks like one is not
-// ·special·. It does not agree with IsAnySimpleType, which tests the {base type
-// definition} slot: a type whose base is merely absent is not ·special·.
+// ·special·.
 //
 // A ·literal· is datatype-valid against a ·special· type unconditionally — the
 // first disjunct of the Note under Datatype Valid (Datatypes §4.1.4,
@@ -971,7 +978,7 @@ func (t *SimpleType) IsAnySimpleType() bool {
 // §3.2.1.2, §3.2.2.2): one literal may map to values of several primitives. It
 // reports false for nil.
 func (t *SimpleType) IsSpecial() bool {
-	return t == anySimpleType || t == anyAtomicType
+	return t.IsAnySimpleType() || t == anyAtomicType
 }
 
 // IsPrimitive reports whether this type is a primitive datatype (Datatypes

@@ -68,9 +68,9 @@ func eGlobalWithTable(t *testing.T, name, typeName QName, tt *TypeTable) Element
 // eAbsentType below.
 func eAnonymous(t *testing.T, name QName, scope Scope) ElementDeclaration {
 	t.Helper()
-	st, err := newCheckedSimpleType(xsderr.Loc{}, QName{}, nil, nil, nil, nil)
+	st, err := newCheckedPrimitiveType(xsderr.Loc{}, QName{}, nil, nil)
 	if err != nil {
-		t.Fatalf("NewSimpleType: %v", err)
+		t.Fatalf("newCheckedPrimitiveType: %v", err)
 	}
 	e, err := NewElementDeclaration(xsderr.Loc{}, name, InlineTypeDefinition{Definition: st}, nil, scope, nil, false, nil,
 		nil, nil, false, nil)
