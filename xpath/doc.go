@@ -42,28 +42,34 @@
 //     untyped one. Its grammar is tier 1's plus xpath20.md's value comparisons
 //     (§3.5.1, eq/ne/lt/le/gt/ge), `$value` (cvc-assertion clause 2.3;
 //     ValueBinding), an abbreviated child-axis step with a QName NameTest
-//     (§3.2.1.1), whose unprefixed name takes the {default namespace}, and a
-//     "/" or "//" opening one, which raises err:XPDY0050 because the instance's
-//     root is E and not a document node (§3.2) — all of which a Type
-//     Alternative's {test} still declines. AssertionTest.ReadsChild reports
-//     which children a compiled {test} reads, so its caller keeps no other.
+//     (§3.2.1.1), whose unprefixed name takes the {default namespace}, a
+//     "/" or "//" opening one or an attribute step, which raises err:XPDY0050
+//     because the instance's root is E and not a document node (§3.2), and an
+//     fn:count call (xpath-functions.md §15.4.1) over `N`, `@N`, either behind
+//     `./` or `.//`, or a rooted step — all of which a Type Alternative's
+//     {test} still declines. AssertionTest.ReadsChild reports which children a
+//     compiled {test} reads for their values, so its caller keeps no other;
+//     fn:count reads no value, and AssertionTest.Tally makes the Tally its
+//     caller reports E's subtree to (Tally.Element, Tally.Attribute) and
+//     Evaluate reads the counts off, so no counted node is kept.
 //     It declines what tier 1 declines, plus a wildcard NameTest, an attribute
 //     with no fixed atomic type that is not ·special· (a list, a union, an
 //     xs:QName or xs:NOTATION primitive), a child whose ·locally declared type·
 //     is ·absent·, ·special·, or neither a simple type an attribute's would be
-//     admitted as nor simple content over one, a path of more than one step, a
-//     cast from a typed attribute or child outside the xs:string family, and a
-//     `$value` whose {simple type definition} is classified as such an
-//     attribute's type would be, or is a list of a type that would be; a
-//     `$value` over ·special· content is xs:untypedAtomic, as such an attribute
-//     is. FacetAssertions is the value.AssertionEvaluator for an assertions
-//     facet's {test} (Datatypes §4.3.13.3, cvc-assertions-valid), over the same
-//     grammar plus [47] ContextItemExpr: `$value` is bound to the value under the
-//     facet's type, and there is no context item, so `.`, an attribute or child
-//     step and a rooted path each raise err:XPDY0002 and fail the facet; a
-//     union's own assertions facet declines. `.` declines everywhere else.
-//     Longer paths, the other axes, predicates, quantified expressions and
-//     the function core are PLANNED (#1042).
+//     admitted as nor simple content over one, a path of more than one step, an
+//     fn:count argument of any other shape, a cast from a typed attribute,
+//     child or count outside the xs:string family, and a `$value` whose {simple
+//     type definition} is classified as such an attribute's type would be, or is
+//     a list of a type that would be; a `$value` over ·special· content is
+//     xs:untypedAtomic, as such an attribute is. FacetAssertions is the
+//     value.AssertionEvaluator for an assertions facet's {test} (Datatypes
+//     §4.3.13.3, cvc-assertions-valid), over the same grammar plus [47]
+//     ContextItemExpr: `$value` is bound to the value under the facet's type, and
+//     there is no context item, so `.`, an attribute or child step and a rooted
+//     path each raise err:XPDY0002 and fail the facet; a union's own assertions
+//     facet and an fn:count call decline. `.` declines everywhere else. Longer
+//     paths, the other axes, predicates, quantified expressions and the function
+//     core beyond fn:count are PLANNED (#1042).
 //  3. The full grammar (docs/specs/md/xpath20.md) and function library
 //     (docs/specs/md/xpath-functions.md) — M7 onward, ratcheted.
 //     PLANNED.

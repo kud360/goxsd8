@@ -386,12 +386,12 @@ func CompileAssertionTest(expr xsd.XPathExpression, types xsd.TypeResolver, cont
 // Evaluate reports whether the compiled {test} evaluates to true for the
 // element whose attributes attrs yields, whose element [[children]] children
 // yields, whose subtree counts has counted and whose `$value` is v, WITHOUT
-// raising a dynamic or type error —
-// the whole of what cvc-assertion (§3.13.4.1) asks: "An element information
-// item E is locally ·valid· with respect to an assertion if and only if the
-// {test} evaluates to true (see below) without raising any dynamic error or
-// type error." Clause 3 converts the result "as if by a call to the XPath
-// fn:boolean function", which a boolean-rooted tree already is.
+// raising a dynamic or type error — the whole of what cvc-assertion
+// (§3.13.4.1) asks: "An element information item E is locally ·valid· with
+// respect to an assertion if and only if the {test} evaluates to true (see
+// below) without raising any dynamic error or type error." Clause 3 converts
+// the result "as if by a call to the XPath fn:boolean function", which a
+// boolean-rooted tree already is.
 //
 // So false is ONE answer for two outcomes the caller treats alike — the {test}
 // was false, or it raised (err:FORG0001, err:XPTY0004, err:FORG0006,

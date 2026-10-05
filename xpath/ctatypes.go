@@ -205,9 +205,9 @@ func (t ctaTypes) castTarget(name xsd.QName) (*xsd.SimpleType, bool) {
 // false for exactly one shape: a TYPED operand read off the instance — an
 // attribute (ctaTypedAttr), a child element (ctaTypedChild), `$value`
 // (ctaValueVar) or a count of its nodes (ctaCount, xs:integer) — whose
-// {primitive type definition} is not xs:string. Every
-// other operand casts as [CompileCTATest] states, the statically empty
-// `$value` (ctaEmptyValue) among them: it holds no item to convert.
+// {primitive type definition} is not xs:string. Every other operand casts as
+// [CompileCTATest] states, the statically empty `$value` (ctaEmptyValue)
+// among them: it holds no item to convert.
 //
 // The string family is admitted because xpath-functions.md §17.1.1 makes a
 // cast from xs:string one datatype validation of the value's own string, which

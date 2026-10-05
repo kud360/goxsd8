@@ -24,11 +24,12 @@ import (
 // Alternative's {test} reaches none of them. Every method below is named for
 // the production it parses, and the whole grammar is both reached and
 // evaluated: no method here is a stub, and the production-level declines are
-// those six façade methods'. xpath/doc.go owns the enumeration of what declines; every other
-// decline reaching this file is ctaTypes answering ctaTypeDeclined for a
-// comparison type, a cast target or a cast operand it will not serve, or the
-// façade declining a NameTest, a variable's type or a settled comparison type,
-// which the production that asked propagates unchanged.
+// those six façade methods'. xpath/doc.go owns the enumeration of what
+// declines; every other decline reaching this file is ctaTypes answering
+// ctaTypeDeclined for a comparison type, a cast target or a cast operand it
+// will not serve, or the façade declining a NameTest, a variable's type or a
+// settled comparison type, which the production that asked propagates
+// unchanged.
 
 // ctaFunctionNS is the default function namespace of a {test}'s static context
 // (xpath-valid clause 2.2.4, §3.13.6.2), which an unprefixed [12]
@@ -243,14 +244,17 @@ const (
 	// assertion façade's `$value` reaches (ctaFacade.variable).
 	ctaDollarTok
 	// ctaSlashTok is '/' and ctaSlashSlashTok is '//'. Each is read only where
-	// it opens a [25] PathExpr (ctaParser.rootedPath); anywhere else it is a
-	// token no production takes, so `a/b` and `a//b` are not expressions here.
+	// it opens a [25] PathExpr (ctaParser.rootedPath) or follows the `.`
+	// opening an fn:count argument (ctaParser.countArgument); anywhere else it
+	// is a token no production takes, so `a/b` and `a//b` are not expressions
+	// here.
 	ctaSlashTok
 	ctaSlashSlashTok
 	// ctaDotTok is a '.' that opens no NumericLiteral: the [47]
 	// ContextItemExpr, which only the facet façade admits
-	// (ctaFacade.contextItem). '..', the abbreviated parent step, is not
-	// tokenized at all.
+	// (ctaFacade.contextItem), or the context item an fn:count argument's
+	// `./` or `.//` opens with (ctaParser.countArgument). '..', the
+	// abbreviated parent step, is not tokenized at all.
 	ctaDotTok
 )
 
@@ -822,25 +826,26 @@ func (p *ctaParser) countCall() (ctaValue, bool) {
 // wildcard, a predicate and a bare `.` leave a token no production takes, or
 // none at all, and decline.
 func (p *ctaParser) countArgument() (ctaCounted, bool) {
-	switch p.peek(0).kind {
-	case ctaSlashTok, ctaSlashSlashTok:
+	if p.at(ctaSlashTok) || p.at(ctaSlashSlashTok) {
 		rooted, ok := p.rootedPath()
 		if !ok {
 			return nil, false
 		}
 		counted, isCounted := rooted.(ctaCounted)
 		return counted, isCounted
-	case ctaDotTok:
-		p.advance()
-		if p.at(ctaSlashSlashTok) {
-			p.advance()
-			return p.countStep(ctaCountDescendants, ctaCountSubtreeAttributes)
-		}
-		if !p.at(ctaSlashTok) {
-			return nil, false
-		}
-		p.advance()
 	}
+	if !p.at(ctaDotTok) {
+		return p.countStep(ctaCountChildren, ctaCountOwnAttributes)
+	}
+	p.advance()
+	if p.at(ctaSlashSlashTok) {
+		p.advance()
+		return p.countStep(ctaCountDescendants, ctaCountSubtreeAttributes)
+	}
+	if !p.at(ctaSlashTok) {
+		return nil, false
+	}
+	p.advance()
 	return p.countStep(ctaCountChildren, ctaCountOwnAttributes)
 }
 

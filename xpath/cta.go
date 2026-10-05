@@ -351,9 +351,10 @@ func (t CTATest) Evaluate(b value.Backend, types xsd.TypeResolver, attrs Attribu
 // ctaEnv is the dynamic context of one [CTATest.Evaluate] or
 // [AssertionTest.Evaluate] call. cvc-xpath (§3.13.4.2) fixes the rest of it —
 // context item E, context position and size 1, no variable values but the
-// `$value` cvc-assertion clause 2.3 adds — and of that only `$value` and the
-// context item's own attributes and element [[children]] are reachable in this
-// grammar, so the attributes, the children, `$value`'s binding, the value
+// `$value` cvc-assertion clause 2.3 adds — and of that only `$value`, the
+// context item's own attributes and element [[children]], and the counts of
+// the nodes of its subtree fn:count selects are reachable in this grammar, so
+// the attributes, the children, the counts, `$value`'s binding, the value
 // spaces and the type knowledge the casts need are the whole of what
 // evaluation reads. A facet {test} [FacetAssertions] evaluates has no context
 // item at all (cvc-assertions-valid clause 1.2), so it reads nothing of its
@@ -876,9 +877,8 @@ type ctaUntypedAtomic struct{}
 
 // ctaTyped is an operand carrying a datatype: a Literal, the result of a cast
 // or a constructor function, a typed attribute, an fn:count call, or each item
-// of `$value`. It
-// carries the COMPONENT alone — st.Name() is the name, and storing both would
-// be two encodings of one fact (STYLE D3).
+// of `$value`. It carries the COMPONENT alone — st.Name() is the name, and
+// storing both would be two encodings of one fact (STYLE D3).
 type ctaTyped struct{ st *xsd.SimpleType }
 
 // ctaEmptySequence is the statically empty operand, ctaEmptyValue: it yields
