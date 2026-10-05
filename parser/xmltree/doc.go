@@ -71,33 +71,33 @@
 //     rejected as RuleXMLWellFormed at the run's start, the character
 //     after the preceding markup.
 //   - The DOCTYPE's internal subset is read for its general entity
-//     declarations, the first declaration of a name binding (XML 1.0 §4.2).
-//     Its unparsed entities (<!ENTITY name SYSTEM|PUBLIC ... NDATA
-//     notation>) are the document's [unparsed entities] property, answered
-//     by Reader.HasUnparsedEntity and final once the document element's
-//     start tag is read; the subset itself surfaces as no Node, a prolog
-//     fact not being part of the element/character-data stream. Internal
-//     parameter entities are expanded, bounded in depth and size. Rejected
-//     as RuleXMLWellFormed at the directive, in the subset or in an
-//     expanded parameter entity's replacement text: text between
-//     declarations that is neither S nor a PEReference — a '%' run that is
-//     no PEReference, or a '<!' opening no markup declaration, among it
-//     ([28b] intSubset, [28a] DeclSep, [69] PEReference, WFC: PE Between
-//     Declarations); a comment holding "--" ([15]); a processing
-//     instruction whose target is no Name or is "xml" in any case ([16],
-//     [17]); a notation declaration that is no [82] NotationDecl; a '<'
-//     outside a markup declaration's literals ([45], [52], [70], [82]); a
-//     parameter-entity reference inside a markup declaration, an entity
-//     value literal included (WFC: PEs in Internal Subset), and any other
-//     '%' in an entity value literal ([9]); an <!ENTITY> that is no [70]
-//     EntityDecl — no S after its keyword, a declared name, general or
-//     parameter, that is no Name ([71], [72], [5]), a missing definition,
-//     one that is neither one EntityValue nor an ExternalID ([73], [74],
-//     [75], [11], [12], [13]), an NDataDecl in a parameter entity's PEDef
-//     ([74]) or anything but one after a general entity's ExternalID
-//     ([76]), and an entity value literal whose '&' opens no Reference
-//     ([66]–[68]) or whose character reference names no Char (WFC: Legal
-//     Character), referenced or not; an <!ELEMENT> that is no [45]
+//     declarations, the first declaration of a name binding (XML 1.0 §4.2),
+//     and for its attribute-list declarations' attribute types (see the
+//     attribute-value bullets below). Its unparsed entities (<!ENTITY name
+//     SYSTEM|PUBLIC ... NDATA notation>) are the document's [unparsed
+//     entities] property, answered by Reader.HasUnparsedEntity and final once
+//     the document element's start tag is read; the subset itself surfaces as
+//     no Node, a prolog fact not being part of the element/character-data
+//     stream. Internal parameter entities are expanded, bounded in depth and
+//     size. Rejected as RuleXMLWellFormed at the directive, in the subset or
+//     in an expanded parameter entity's replacement text: text between
+//     declarations that is neither S nor a PEReference — a '%' run that is no
+//     PEReference, or a '<!' opening no markup declaration, among it ([28b]
+//     intSubset, [28a] DeclSep, [69] PEReference, WFC: PE Between
+//     Declarations); a comment holding "--" ([15]); a processing instruction
+//     whose target is no Name or is "xml" in any case ([16], [17]); a notation
+//     declaration that is no [82] NotationDecl; a '<' outside a markup
+//     declaration's literals ([45], [52], [70], [82]); a parameter-entity
+//     reference inside a markup declaration, an entity value literal included
+//     (WFC: PEs in Internal Subset), and any other '%' in an entity value
+//     literal ([9]); an <!ENTITY> that is no [70] EntityDecl — no S after its
+//     keyword, a declared name, general or parameter, that is no Name ([71],
+//     [72], [5]), a missing definition, one that is neither one EntityValue
+//     nor an ExternalID ([73], [74], [75], [11], [12], [13]), an NDataDecl in
+//     a parameter entity's PEDef ([74]) or anything but one after a general
+//     entity's ExternalID ([76]), and an entity value literal whose '&' opens
+//     no Reference ([66]–[68]) or whose character reference names no Char
+//     (WFC: Legal Character), referenced or not; an <!ELEMENT> that is no [45]
 //     elementdecl, its contentspec no 'EMPTY', 'ANY', Mixed or children
 //     ([46]–[51]); an <!ATTLIST> that is no [52] AttlistDecl, an AttDef
 //     missing its S, AttType or DefaultDecl ([53]–[60]), or a default value
@@ -120,10 +120,11 @@
 //     read, by design (#1668), nor is an external parameter entity; after a
 //     parameter-entity reference that is not read, unless standalone="yes",
 //     the rest of the internal subset is checked for well-formedness alone,
-//     binding no parameter entity, declaring no general entity and expanding
-//     no reference (XML 1.0 §5.1). An entity declared only where the reader
-//     did not read is not a member, and Reader.AllDeclarationsProcessed, the
-//     [all declarations processed] property, then reports false.
+//     binding no parameter entity, declaring no general entity, defining no
+//     attribute and expanding no reference (XML 1.0 §5.1). An entity declared
+//     only where the reader did not read is not a member, and
+//     Reader.AllDeclarationsProcessed, the [all declarations processed]
+//     property, then reports false.
 //   - GAP(xml): a general entity declared in a parameter entity's
 //     replacement text satisfies WFC: Entity Declared for an <!ATTLIST>
 //     default value, though the constraint counts only a declaration outside
@@ -131,15 +132,21 @@
 //     declared nowhere is not charged under it. Untracked: no issue owns it
 //     yet.
 //   - Every attribute value, namespace declarations included, is its
-//     normalized value per XML 1.0 §3.3.3, steps 1-3, for an attribute
-//     read as CDATA (Attribute.Value): a character reference is the
-//     character it names, so &#9; stays a tab, while each literal #x9,
-//     #xA or #xD is #x20, a line end (§2.11) one #x20.
-//   - GAP(xml): an attribute the internal subset declares with a type
-//     other than CDATA is still read as CDATA: §3.3.3's step 4, the
-//     trimming and collapsing of #x20 such a declaration calls for, is
-//     not applied (§5.1 has a non-validating processor normalize with the
-//     declarations it reads). Untracked: no issue owns it yet.
+//     normalized value per XML 1.0 §3.3.3, steps 1-3 (Attribute.Value): a
+//     character reference is the character it names, so &#9; stays a tab,
+//     while each literal #x9, #xA or #xD is #x20, a line end (§2.11) one
+//     #x20.
+//   - An attribute the internal subset's <!ATTLIST> declarations define
+//     with an AttType other than CDATA — tokenized, NOTATION or an
+//     enumeration ([54]–[59]) — then has leading and trailing #x20
+//     discarded and each run of #x20 replaced by one (§3.3.3's paragraph
+//     after step 3), so a namespace declaration binds the collapsed
+//     value; one defined as CDATA, or not at all, is read as CDATA. A
+//     definition applies to the element type and attribute names as the
+//     declaration and the tag spell them, prefix included, and the first
+//     definition of an attribute of an element type binds (§3.3). One
+//     after a parameter-entity reference that is not read, outside a
+//     standalone="yes" document, is not processed (§5.1).
 //   - A reference to an internal general entity is replaced by its
 //     replacement text (XML 1.0 §4.4.2, §4.4.5): in content, parsed as
 //     content in the scope in force at the reference, its nodes located at
