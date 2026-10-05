@@ -144,11 +144,10 @@ func (vs valueSpace) compare(r xsd.TypeResolver, ta *xsd.SimpleType, a xsd.Value
 //     GAP(value): this package holds no XPath engine, so the pipeline runs
 //     with assertionsUndecided and every {lexical form} the other facets of t
 //     accept is undecided wherever t's closure carries an assertions facet.
-//     The readers of the withheld verdict are xsd's Schema.checkSimpleDefault
-//     (a-props-correct and au-props-correct clause 2) and validate's
-//     walk.defaultedAttribute (cvc-complex-type clause 4), each of which
-//     charges only a decided cause and declines or accepts an undecided one,
-//     so the direction is fail-open. (#1042)
+//     The reader of the withheld verdict is xsd's Schema.checkSimpleDefault
+//     (a-props-correct and au-props-correct clause 2), which charges only a
+//     decided cause and accepts an undecided one, so the direction is
+//     fail-open. (#1042)
 //
 // One residue is recorded rather than papered over. GAP(value): union member
 // facet compilation. dispatchUnion folds every member's rejection into one

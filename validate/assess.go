@@ -903,26 +903,24 @@ func (w *walk) localGovernance(e Element, ldt xsd.TypeDefinition) governance {
 // written here.
 //
 // values is [value.NewValueSpace] over that same backend, built once per
-// assessment for the two charges that ask a value-constraint question of the
-// SCHEMA rather than of the instance: cvc-complex-type clause 4
-// ([walk.defaultedAttribute]) and cvc-elt clause 5.1.1
-// ([contentCheck.defaultValid], which reads this seam on the first one's
-// terms). It is not derived state to be re-derived per call: the constructor is
-// total on a non-nil backend and the result is immutable, so building it per
-// ·defaulted attribute· would allocate once per use per element to reach the
-// same object. nodes counts the element information items the walk has entered,
-// and the count doubles as each one's IDENTITY: §3.11.5's conflict resolution
-// turns on "the same key-sequence but distinct nodes" and §3.17.5.2's [binding]
-// is a SET of elements, and an [Element] is an interface whose == compares
-// whatever an adapter's dynamic type compares. ids is the [ID/IDREF table] those
-// ordinals bind into, assembled across the whole walk and read once, at the
-// ·validation root· (cvcid.go). entities is the root narrowed to
-// [UnparsedEntities] once, at the top of the call, and nil where the source does
-// not support [unparsedEntities] — the nil is that fact's only encoding, and
-// String Valid clause 3 reads it (cvcsimpletype.go). declsUnread is the root's
-// [DeclarationsProcessed] answer, read once at the same point and inverted: true
-// only where the source implements the capability and reports false, which is
-// all clause 3's diagnostic needs.
+// assessment for the charge that asks a value-constraint question of the SCHEMA
+// rather than of the instance: cvc-elt clause 5.1.1
+// ([contentCheck.defaultValid]). It is not derived state to be re-derived per
+// call: the constructor is total on a non-nil backend and the result is
+// immutable, so building it per ·defaulted attribute· would allocate once per
+// use per element to reach the same object. nodes counts the element information
+// items the walk has entered, and the count doubles as each one's IDENTITY:
+// §3.11.5's conflict resolution turns on "the same key-sequence but distinct
+// nodes" and §3.17.5.2's [binding] is a SET of elements, and an [Element] is an
+// interface whose == compares whatever an adapter's dynamic type compares. ids
+// is the [ID/IDREF table] those ordinals bind into, assembled across the whole
+// walk and read once, at the ·validation root· (cvcid.go). entities is the root
+// narrowed to [UnparsedEntities] once, at the top of the call, and nil where the
+// source does not support [unparsedEntities] — the nil is that fact's only
+// encoding, and String Valid clause 3 reads it (cvcsimpletype.go). declsUnread
+// is the root's [DeclarationsProcessed] answer, read once at the same point and
+// inverted: true only where the source implements the capability and reports
+// false, which is all clause 3's diagnostic needs.
 type walk struct {
 	log         *slog.Logger
 	schema      *xsd.Schema

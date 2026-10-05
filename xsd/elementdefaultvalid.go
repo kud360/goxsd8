@@ -118,8 +118,7 @@ func (s *Schema) checkElementDefaultValid(e ElementDeclaration) error {
 // [SchemaBuilder.Finalize] carries undecidedValueSpace{}, which answers every
 // question undecided, so reading s.valueSpace would leave cvc-elt clause 5.1.1
 // permanently undecidable for such a schema, while the walk charging that clause
-// holds the space its own backend defines. It is the same seam validate's
-// cvc-complex-type clause 4 charge reads for the same reason. A nil vs panics on
+// holds the space its own backend defines. A nil vs panics on
 // [SchemaBuilder.FinalizeWith]'s grounds, this being the one door that can carry
 // one in.
 //

@@ -140,15 +140,15 @@
 // rule is cvc-datatype-valid or one of the facet rules under it, and no
 // intermediate cvc-simple-type node sits between. Where clause 3 fails — an
 // ·ENTITY value· that is not a ·declared entity name· — the verdict is
-// cvc-simple-type's own, since that clause delegates to nothing. The first
-// three read clause 2's verdict off value.ValidateLexical directly; clause 4
-// reads it through xsd.ValueSpace's ValidDefault, which returns the same error.
-// Among those verdicts is a NOTATION value whose QName names no notation
-// declaration of the schema, outside NOTATION's ·value space· (Datatypes
-// §3.3.19): value.ValidateLexical decides it against the schema it is handed,
-// under cvc-datatype-valid. Clause 4 never reaches it, ValidDefault declining
-// every NOTATION {lexical form}. Error() still renders each wrapped verdict
-// into the message as well, for a reader who holds only the string.
+// cvc-simple-type's own, since that clause delegates to nothing. All four read
+// clause 2's verdict off value.ValidateLexical directly, clause 4 mapping the
+// {lexical form} under the bindings its {value constraint} captured
+// (value.ConstraintContext). Among those verdicts is a NOTATION value whose
+// QName names no notation declaration of the schema, outside NOTATION's ·value
+// space· (Datatypes §3.3.19): value.ValidateLexical decides it against the
+// schema it is handed, under cvc-datatype-valid. Error() still renders each
+// wrapped verdict into the message as well, for a reader who holds only the
+// string.
 //
 // Whether a cause is there is read off Unwrap and never off the rule ID:
 // clauses 1.2 and 4 both charge under cvc-complex-type and both wrap the

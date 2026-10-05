@@ -271,10 +271,10 @@ func (c *contentCheck) assessed() (lexical string, ctx value.Context) {
 // as the cause of.
 //
 // The value space handed to it is the WALK's ([walk.values]) and not the one the
-// schema was finalized with, on [walk.defaultedAttribute]'s terms and for the
-// same reason: a schema assembled through [xsd.SchemaBuilder.Finalize] carries
-// undecidedValueSpace, which answers every question undecided, so reading its
-// would leave this charge permanently undecidable for such a schema.
+// schema was finalized with: a schema assembled through
+// [xsd.SchemaBuilder.Finalize] carries undecidedValueSpace, which answers every
+// question undecided, so reading its would leave this charge permanently
+// undecidable for such a schema.
 func (c *contentCheck) defaultValid(w *walk) {
 	if c.charged || !c.g.instance || c.g.typ == nil {
 		return

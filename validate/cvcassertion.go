@@ -35,12 +35,10 @@ import (
 // for an attribute matched by an {attribute use} and for one ·attributed to· a
 // strict or lax {attribute wildcard} alike), and cvc-type clause 3.1.3 /
 // cvc-complex-type clause 1.2 over an element's ·initial value·
-// ([contentCheck.stringValid]). cvc-complex-type clause 4 over a ·defaulted
-// attribute·'s {lexical form} ([walk.defaultedAttribute]) reaches the pipeline
-// through xsd.ValueSpace's ValidDefault instead, which evaluates no assertion
-// and states its own GAP. cvcid.go and cvcidentityconstraint.go re-run the
-// datatype pipeline over lexicals those sites already decided, and record only
-// declines of their own.
+// ([contentCheck.stringValid]), and cvc-complex-type clause 4 over a
+// ·defaulted attribute·'s {lexical form} ([walk.defaultedAttribute]). cvcid.go
+// and cvcidentityconstraint.go re-run the datatype pipeline over lexicals those
+// sites already decided, and record only declines of their own.
 
 // ruleCvcAssertion is Assertion Satisfied (Structures §3.13.4.1,
 // cvc-assertion), whose single caller is cvc-complex-type clause 6. The clause
