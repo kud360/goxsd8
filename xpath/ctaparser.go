@@ -13,14 +13,18 @@ import (
 
 // This file is the lexer and the recursive-descent parser for the §3.12.6
 // required subset, one of each (STYLE T4, xpath/doc.go's "There is never a
-// second, lenient parser"). Every method below is named for the production it
-// parses, and the whole grammar is both reached and evaluated: no method here
-// is a stub, because no compile-time decline is production-level. xpath/doc.go
-// owns the enumeration of what declines; every decline reaching this file is
-// ctaTypes answering ctaTypeDeclined for a comparison type, a cast target or a
-// cast operand it will not serve, or the façade (ctaFacade) declining a
-// NameTest or a settled comparison type, which the production that asked
-// propagates unchanged.
+// second, lenient parser"), plus the two productions beyond it an assertion's
+// {test} reaches: xpath20.md [23] ValueComp and [44] VarRef, each behind the
+// façade (ctaFacade.comparesValues, ctaFacade.variable), so a Type
+// Alternative's {test} cannot reach either. Every method below is named for
+// the production it parses, and the whole grammar is both reached and
+// evaluated: no method here is a stub, and the production-level declines are
+// those two façade methods'. xpath/doc.go owns the enumeration of what
+// declines; every other decline reaching this file is ctaTypes answering
+// ctaTypeDeclined for a comparison type, a cast target or a cast operand it
+// will not serve, or the façade declining a NameTest, a variable's type or a
+// settled comparison type, which the production that asked propagates
+// unchanged.
 
 // ctaFunctionNS is the default function namespace of a {test}'s static context
 // (xpath-valid clause 2.2.4, §3.13.6.2), which an unprefixed [12]
@@ -212,6 +216,9 @@ const (
 	// ctaCompTok is one operator of [13] ta-Comparator, whose text is its
 	// spelling.
 	ctaCompTok
+	// ctaDollarTok is the '$' opening xpath20.md [44] VarRef, which only the
+	// assertion façade's `$value` reaches (ctaFacade.variable).
+	ctaDollarTok
 )
 
 // ctaToken is one token, identified by kind. text carries the source spelling
@@ -253,6 +260,9 @@ func ctaTokenize(s string) ([]ctaToken, bool) {
 			i++
 		case r == '?':
 			toks = append(toks, ctaToken{kind: ctaQuestionTok})
+			i++
+		case r == '$':
+			toks = append(toks, ctaToken{kind: ctaDollarTok})
 			i++
 		case r == ':':
 			if !strings.HasPrefix(s[i:], "::") {
@@ -599,6 +609,9 @@ func (p *ctaParser) booleanExpr() (ctaExpr, bool) {
 	if !ok {
 		return nil, false
 	}
+	if op, isValue := p.valueComparator(); isValue {
+		return p.valueComparison(op, left)
+	}
 	op, compared := p.comparator()
 	if !compared {
 		return ctaEffectiveBoolean{operand: left}, true
@@ -659,6 +672,79 @@ func (p *ctaParser) comparator() (ctaComparator, bool) {
 		return ctaGreaterEqual, true
 	}
 	return ctaEqual, false
+}
+
+// valueComparator reads one xpath20.md [23] ValueComp, reporting false where
+// the cursor is on anything else. Each spelling is the operator whose B.2 rows
+// it reads — `eq` the row `A eq B`, and so on for the other five — which are
+// the rows the [13] ta-Comparator spellings reach through §3.5.2's definition
+// of a general comparison, so one operator type serves both.
+//
+// The six spellings are NCNames, and XPath has no reserved words, so what makes
+// one an operator is its position: right after a [14] ta-ValueExpr no other
+// production opens with a name but 'cast', 'and' and 'or', none of which is
+// spelled like one.
+func (p *ctaParser) valueComparator() (ctaComparator, bool) {
+	if !p.at(ctaNameTok) {
+		return ctaEqual, false
+	}
+	var op ctaComparator
+	switch p.peek(0).text {
+	case "eq":
+		op = ctaEqual
+	case "ne":
+		op = ctaNotEqual
+	case "lt":
+		op = ctaLess
+	case "le":
+		op = ctaLessEqual
+	case "gt":
+		op = ctaGreater
+	case "ge":
+		op = ctaGreaterEqual
+	default:
+		return ctaEqual, false
+	}
+	p.advance()
+	return op, true
+}
+
+// valueComparison parses the right operand of a value comparison whose left
+// operand and operator are already read, and builds its node: xpath20.md [10]
+// ComparisonExpr with its ValueComp arm, which §3.12.6's grammar does not
+// have. The façade decides whether it is admitted at all
+// (ctaFacade.comparesValues), so a Type Alternative's {test} declines it as
+// outside its required subset.
+//
+// [10] admits ONE comparison per ComparisonExpr, so `@a eq @b eq @c` is not an
+// expression; here the trailing `eq` is a token no production takes, and the
+// parse ends unsupported as any other unparsed tail does.
+//
+// The type both operands are compared in is settled here, on §3.5.1's terms
+// (ctaTypes.valueComparison), and a type it cannot be compared in is the
+// err:XPTY0004 node a general comparison builds too. The façade then admits or
+// declines the settled type exactly as it does a general comparison's, so a
+// value comparison in the date/time family declines on the same arm
+// (ctaFacade.admitsComparison).
+func (p *ctaParser) valueComparison(op ctaComparator, left ctaValue) (ctaExpr, bool) {
+	if !p.facade.comparesValues() {
+		return nil, false
+	}
+	right, ok := p.valueExpr()
+	if !ok {
+		return nil, false
+	}
+	comparison, typing := p.types.valueComparison(op, left, right)
+	if typing == ctaTypeDeclined {
+		return nil, false
+	}
+	if typing == ctaTypeErrored {
+		return ctaTypeError{}, true
+	}
+	if !p.facade.admitsComparison(p.types, comparison) {
+		return nil, false
+	}
+	return ctaValueCompare{op: op, comparison: comparison, left: left, right: right}, true
 }
 
 // valueExpr parses [14] ta-ValueExpr, dispatching on whether a function call
@@ -742,11 +828,14 @@ func (p *ctaParser) constructorFunction() (ctaValue, bool) {
 	return ctaCast{operand: arg, target: target, allowsEmpty: true}, true
 }
 
-// simpleValue parses [16] ta-SimpleValue's two arms.
+// simpleValue parses [16] ta-SimpleValue's two arms, and the [44] VarRef arm
+// the assertion façade adds (varRef).
 func (p *ctaParser) simpleValue() (ctaValue, bool) {
 	switch p.peek(0).kind {
 	case ctaAtTok, ctaNameTok:
 		return p.attrName()
+	case ctaDollarTok:
+		return p.varRef()
 	case ctaStringTok:
 		text := p.peek(0).text
 		p.advance()
@@ -758,6 +847,22 @@ func (p *ctaParser) simpleValue() (ctaValue, bool) {
 	default:
 		return nil, false
 	}
+}
+
+// varRef parses xpath20.md [44] VarRef, `'$' VarName`, whose [45] VarName is a
+// QName. An unprefixed one is in NO namespace, which is where cvc-assertion
+// clause 2.3 puts `$value` ("no namespace URI and ... "value" as the local
+// name"); a prefixed one resolves against the {namespace bindings} on
+// attributeName's terms. The node is p.facade's, which declines every name but
+// the one variable its static context holds.
+func (p *ctaParser) varRef() (ctaValue, bool) {
+	p.advance() // '$'
+	if !p.at(ctaNameTok) {
+		return nil, false
+	}
+	text := p.peek(0).text
+	p.advance()
+	return p.facade.variable(p.attributeName(text), p.types)
 }
 
 // attrName parses [17] ta-AttrName in BOTH spellings ta-props-correct clause 2

@@ -268,6 +268,141 @@ func TestAssertionComparesTypedValues(t *testing.T) {
 	}
 }
 
+// A VALUE comparison is evaluated as §3.13.2's own example writes it:
+// `@min le @max` over two xs:int attributes is charged for min="6" max="5" —
+// the d4_3_15ii01 shape — and holds for min="5" max="6".
+func TestValueComparisonAssertionIsEvaluated(t *testing.T) {
+	schema := aTyped(t, []string{"min", "int", "max", "int"}, "@min le @max")
+
+	wantAssertionCharge(t, aAssess(t, schema, aRoot("min", "6", "max", "5")),
+		`the element root is not ·valid· with respect to assertion 1 of 1 in the {assertions} of the ·governing type definition· RootType, whose {test} is "@min le @max",`)
+	if res := aAssess(t, schema, aRoot("min", "5", "max", "6")); len(res.Violations()) != 0 || len(res.Unevaluated()) != 0 {
+		t.Errorf("5 le 6: Violations() = %v, Unevaluated() = %v, want both empty", res.Violations(), messages(res.Unevaluated()))
+	}
+}
+
+// aSimple builds RootType over a simple {content type} of the builtin typ, with
+// the attribute uses and assertions given, and declares <root> over it,
+// {nillable} as given.
+func aSimple(t *testing.T, typ string, nillable bool, uses []xsd.AttributeUse, exprs ...string) *xsd.Schema {
+	t.Helper()
+	td, declared := builtinType(t, typ)
+	if !declared {
+		t.Fatalf("no builtin xs:%s", typ)
+	}
+	ct := aComplexType(t, uses, xsd.SimpleContent{SimpleType: td}, aAssertions(exprs...))
+	e, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "root"},
+		xsd.TypeDefinitionRef{Name: ct.Name()}, nil, xsd.NewGlobalScope(), nil, nillable, nil, nil, nil, false, nil)
+	if err != nil {
+		t.Fatalf("building the root element declaration: %v", err)
+	}
+	b := xsd.NewSchemaBuilder()
+	aTypes(t, b)
+	b.AddType(ct)
+	b.AddElement(e)
+	schema, err := b.Finalize()
+	if err != nil {
+		t.Fatalf("finalizing the schema: %v", err)
+	}
+	return schema
+}
+
+// builtinType is the seeded builtin simple type named local.
+func builtinType(t *testing.T, local string) (*xsd.SimpleType, bool) {
+	t.Helper()
+	seeded, err := builtin.Seed(testBackend())
+	if err != nil {
+		t.Fatalf("seeding the builtin types: %v", err)
+	}
+	for _, st := range seeded {
+		if st.Name() == icBuiltin(local) {
+			return st, true
+		}
+	}
+	return nil, false
+}
+
+// wantSatisfied fails unless res charged and recorded nothing.
+func wantSatisfied(t *testing.T, res *Result, why string) {
+	t.Helper()
+	if len(res.Violations()) != 0 || len(res.Unevaluated()) != 0 {
+		t.Errorf("%s: Violations() = %v, Unevaluated() = %v, want both empty", why, res.Violations(), messages(res.Unevaluated()))
+	}
+}
+
+// `$value` over a SIMPLE {content type} is the element's ·actual value·
+// (cvc-assertion clause 2.3.1), typed by the {simple type definition}: `$value
+// eq 5` holds for "+05", is charged for "6", and the value the ·initial value·
+// maps to is what is compared, white space collapsed.
+func TestValueAssertionReadsSimpleContent(t *testing.T) {
+	schema := aSimple(t, "int", false, nil, "$value eq 5")
+
+	wantSatisfied(t, aAssess(t, schema, cRoot("# +05 ")), "$value eq 5 over +05")
+	wantAssertionCharge(t, aAssess(t, schema, cRoot("#6")),
+		`the element root is not ·valid· with respect to assertion 1 of 1 in the {assertions} of the ·governing type definition· RootType, whose {test} is "$value eq 5",`)
+}
+
+// `$value` over a {content type} that is not simple is the EMPTY SEQUENCE
+// (cvc-assertion clause 2.3.2), so `$value eq 1` is the empty sequence, false
+// under fn:boolean and charged, and its negation is satisfied.
+func TestValueAssertionOverElementOnlyContentIsEmpty(t *testing.T) {
+	content := cSequence(t, false, cParticle(t, "a", 0, 1))
+	charged := aSchema(t, aComplexType(t, nil, content, aAssertions("$value eq 1")))
+	wantAssertionCharge(t, aAssess(t, charged, cRoot()), "the element root is not ·valid· with respect to assertion 1 of 1")
+
+	negated := aSchema(t, aComplexType(t, nil, content, aAssertions("not($value eq 1)")))
+	wantSatisfied(t, aAssess(t, negated, cRoot()), "not($value eq 1) over element-only content")
+}
+
+// An element ALREADY KNOWN TO BE INVALID when its assertions are evaluated —
+// here for a missing required attribute, cvc-complex-type clause 3 — binds
+// `$value` to the empty sequence (cvc-assertion clauses 2.3.1.1 and 2.3.2),
+// not to its ·actual value·: `not($value eq 5)` over "5" is satisfied, where
+// the value would make it false.
+func TestValueAssertionOverAnInvalidElementIsEmpty(t *testing.T) {
+	uses := []xsd.AttributeUse{typedUse(t, "r", icBuiltin("string"), true, nil, nil)}
+	schema := aSimple(t, "int", false, uses, "not($value eq 5)")
+
+	res := aAssess(t, schema, cRoot("#5"))
+	if got := res.Violations(); len(got) != 1 || got[0].Rule != "cvc-complex-type" {
+		t.Fatalf("Violations() = %v, want the cvc-complex-type clause 3 charge alone: the assertion holds over the empty sequence", got)
+	}
+	if got := res.Unevaluated(); len(got) != 0 {
+		t.Errorf("Unevaluated() = %v, want none", messages(got))
+	}
+	wantSatisfied(t, aAssess(t, aSimple(t, "int", false, nil, "$value eq 5"), cRoot("#5")), "$value eq 5 over a valid 5")
+}
+
+// A ·nilled· element binds `$value` to the empty sequence (cvc-assertion clause
+// 2.3.1.2), whatever its type's {content type}. Over xs:string the case is
+// discriminating: the empty ·initial value· a ·nilled· element carries is a
+// valid xs:string, so reading it would make `$value` equal the empty string.
+func TestValueAssertionOverANilledElementIsEmpty(t *testing.T) {
+	root := cRoot()
+	root.attrs = []Attribute{&testAttribute{
+		name: xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: "nil"}, value: "true", loc: loc(1, 10)}}
+
+	wantSatisfied(t, aAssess(t, aSimple(t, "string", true, nil, "not($value eq '')"), root), "not($value eq '') over a ·nilled· element")
+	wantAssertionCharge(t, aAssess(t, aSimple(t, "string", true, nil, "$value eq ''"), root), "the element root is not ·valid· with respect to assertion 1 of 1")
+}
+
+// Where String Valid over the ·initial value· is WITHHELD, `$value` is
+// undecided, and every assertion of the element is declined — never charged,
+// never satisfied — beside clause 1.2's own record.
+func TestValueAssertionOverAnUndecidedValueIsDeclined(t *testing.T) {
+	td, _ := builtinType(t, "decimal")
+	schema := aSchema(t, aComplexType(t, nil, xsd.SimpleContent{SimpleType: td}, aAssertions("$value gt 1")))
+
+	got, undecided := assessRecordedWith(t, gapBackend(icBuiltin("decimal")), schema, cRoot("#1.5"))
+	if len(got) != 0 {
+		t.Fatalf("Violations() = %v, want none: an undecided $value charges nothing", got)
+	}
+	if len(undecided) != 2 || undecided[1].Rule() != "cvc-assertion" ||
+		!strings.Contains(undecided[1].Msg(), "the element root has simple content whose [schema actual value], which cvc-assertion clause 2.3.1 binds to $value, is undecided") {
+		t.Fatalf("Unevaluated() = %v, want clause 1.2's record then the assertion declined for its undecided $value", messages(undecided))
+	}
+}
+
 // An admitted {test} that RAISES is charged, never declined: `@b = 'true'`
 // over an xs:boolean @b compares xs:boolean with xs:string, err:XPTY0004, and
 // cvc-assertion is satisfied only by a {test} that is true "without raising
@@ -282,7 +417,7 @@ func TestAssertionRaisingATypeErrorIsCharged(t *testing.T) {
 // recorded under cvc-assertion at the element, never charged, never satisfied
 // — whatever the attribute values would have made of it.
 func TestOutOfFamilyAssertionIsDeclined(t *testing.T) {
-	for _, expr := range []string{"$value > 0", "@x le 5", "count(@*) = 1", "@* = 5", "@y = 5"} {
+	for _, expr := range []string{"$other > 0", "@x eq 5 eq 5", "count(@*) = 1", "@* = 5", "@y = 5"} {
 		schema := aTyped(t, []string{"x", "integer"}, expr)
 		res := aAssess(t, schema, aRoot("x", "500"))
 		wantRecords(t, res, "cvc-assertion", loc(1, 1), "whose {test} is "+strconv.Quote(expr)+", was not evaluated: this engine's XPath evaluator declined it")
@@ -410,7 +545,10 @@ func TestRejectedInitialValueStillRecordsItsSites(t *testing.T) {
 // The two rule IDs are never conflated: one element carrying both an
 // {assertions} on its complex type and an assertions facet on its simple
 // {content type} records one site per rule, at the same Loc, discriminated by
-// Rule alone.
+// Rule alone. The facet's comes first: cvc-complex-type clause 1.2 reaches it
+// over the ·initial value· once the [[children]] are exhausted, and clause 6
+// is evaluated after them, over the partial ·PSVI· clause 1.2 is part of
+// (cvc-assertion clause 1.1).
 func TestBothRulesRecordAtOneElement(t *testing.T) {
 	types := aVarietyTypes(t)
 	schema := aSchema(t, aComplexType(t, nil, xsd.SimpleContent{SimpleType: types[0]},
@@ -422,8 +560,8 @@ func TestBothRulesRecordAtOneElement(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("Unevaluated() = %v, want one site per rule", messages(got))
 	}
-	if got[0].Rule() != "cvc-assertion" || got[1].Rule() != "cvc-assertions-valid" {
-		t.Errorf("rules = %q, %q, want cvc-assertion then cvc-assertions-valid",
+	if got[0].Rule() != "cvc-assertions-valid" || got[1].Rule() != "cvc-assertion" {
+		t.Errorf("rules = %q, %q, want cvc-assertions-valid then cvc-assertion",
 			got[0].Rule(), got[1].Rule())
 	}
 }
