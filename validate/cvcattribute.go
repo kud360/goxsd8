@@ -2,6 +2,7 @@ package validate
 
 import (
 	"github.com/kud360/goxsd8/value"
+	"github.com/kud360/goxsd8/xpath"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
 )
@@ -322,7 +323,7 @@ func (w *walk) instanceTypeLexical(a Attribute, e Element) bool {
 			e.Name())
 		return true
 	}
-	_, err := value.ValidateLexical(w.backend, w.schema, st, a.Value(), elementContext{owner: e})
+	_, err := value.ValidateLexical(w.backend, w.schema, st, a.Value(), elementContext{owner: e}, xpath.FacetAssertions())
 	if err == nil {
 		w.logAttribute(a, ruleCvcAttribute, "3", "satisfied")
 		return true

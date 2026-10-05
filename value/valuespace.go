@@ -139,7 +139,13 @@ func (vs valueSpace) compare(r xsd.TypeResolver, ta *xsd.SimpleType, a xsd.Value
 //     rule with nothing to say about it, for a default no lexical could have
 //     satisfied. That predicate names the whole class and why each member
 //     belongs to it; this method does not re-derive the list, which is what the
-//     three separate pre-check gates it replaced amounted to.
+//     three separate pre-check gates it replaced amounted to. The same gate
+//     catches an assertions-facet decline ([IsAssertionDeclined]):
+//     GAP(value): this package holds no XPath engine, so the pipeline runs
+//     with assertionsUndecided and every {lexical form} the other facets of t
+//     accept is undecided wherever t's closure carries an assertions facet.
+//     Undecided accepts, so the withheld half is a schema rejection and the
+//     direction is fail-open. (#1042)
 //
 // One residue is recorded rather than papered over. GAP(value): union member
 // facet compilation. dispatchUnion folds every member's rejection into one
@@ -168,7 +174,7 @@ func (vs valueSpace) ValidDefault(r xsd.TypeResolver, t *xsd.SimpleType, vc xsd.
 		//nolint:nilerr // the first result is the VERDICT's cause, not this call's error: a needsContext fault is a fault of the type, which gate 1 answers undecided and so causeless.
 		return nil, false
 	}
-	_, err = ValidateLexical(vs.b, r, t, vc.LexicalForm(), nil)
+	_, err = ValidateLexical(vs.b, r, t, vc.LexicalForm(), nil, assertionsUndecided{})
 	if err == nil {
 		return nil, true
 	}
@@ -239,7 +245,11 @@ func (vs valueSpace) ValidDefault(r xsd.TypeResolver, t *xsd.SimpleType, vc xsd.
 // wrongly in both directions.
 //
 // For a t that is not ·special·, a side that fails to validate is undecided,
-// never a mismatch. For the instance side that is not a lost verdict: a
+// never a mismatch. GAP(value): that includes every side an assertions facet in
+// t's closure reaches, which this function runs with assertionsUndecided — it is
+// handed no [AssertionEvaluator] — and so declines (IsAssertionDeclined). The
+// withheld answer is a NOT-same its callers would charge, so the direction is
+// fail-open. (#1042) For the instance side that is not a lost verdict: a
 // literal outside t's lexical space already fails cvc-attribute clause 3,
 // which the caller charges in its own right, and reporting "not the same
 // value" for what is really "not a value at all" would charge clause 4 as well
@@ -249,11 +259,11 @@ func ConstraintMatches(b Backend, r xsd.TypeResolver, t *xsd.SimpleType, lexical
 	if isSpecial(t) {
 		return specialMatches(b, t, t, lexical, ctx, vc.LexicalForm(), constraintContext(vc), equalOrIdentical)
 	}
-	av, err := ValidateLexical(b, r, t, lexical, ctx)
+	av, err := ValidateLexical(b, r, t, lexical, ctx, assertionsUndecided{})
 	if err != nil {
 		return false, false
 	}
-	cv, err := ValidateLexical(b, r, t, vc.LexicalForm(), constraintContext(vc))
+	cv, err := ValidateLexical(b, r, t, vc.LexicalForm(), constraintContext(vc), assertionsUndecided{})
 	if err != nil {
 		return false, false
 	}

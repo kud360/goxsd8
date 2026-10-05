@@ -4,6 +4,7 @@ import (
 	"slices"
 
 	"github.com/kud360/goxsd8/value"
+	"github.com/kud360/goxsd8/xpath"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
 )
@@ -41,7 +42,7 @@ func (w *walk) stringValid(st *xsd.SimpleType, lexical string, owner Element, lo
 	if isSpecial(st) {
 		return w.entitiesDeclared(st, lexical, owner, loc)
 	}
-	_, err := value.ValidateLexical(w.backend, w.schema, st, lexical, elementContext{owner: owner})
+	_, err := value.ValidateLexical(w.backend, w.schema, st, lexical, elementContext{owner: owner}, xpath.FacetAssertions())
 	if err != nil && !value.IsDatatypeVerdict(err) {
 		return false, nil
 	}

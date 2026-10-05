@@ -1656,7 +1656,7 @@ func ctaCanonical(v value.Value, from *xsd.SimpleType, env ctaEnv) (string, bool
 // processor cannot cast between at all, err:XPTY0004. key-cta-ta-select
 // clause 2 makes the {test} false for both.
 func ctaValidate(lexical string, st *xsd.SimpleType, env ctaEnv) ctaItem {
-	v, err := value.ValidateLexical(env.backend, env.types, st, lexical, nil)
+	v, err := value.ValidateLexical(env.backend, env.types, st, lexical, nil, FacetAssertions())
 	if err == nil {
 		return ctaSingleton(v)
 	}

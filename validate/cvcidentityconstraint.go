@@ -5,6 +5,7 @@ import (
 
 	"github.com/kud360/goxsd8/icpath"
 	"github.com/kud360/goxsd8/value"
+	"github.com/kud360/goxsd8/xpath"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
 )
@@ -670,7 +671,7 @@ func (w *walk) keyMember(st *xsd.SimpleType, lexical string, owner Element, elem
 	if isSpecial(st) {
 		return icKeyMember{st: st, lexical: lexical, owner: owner, element: element, nillable: nillable}, true, true
 	}
-	v, err := value.ValidateLexical(w.backend, w.schema, st, lexical, elementContext{owner: owner})
+	v, err := value.ValidateLexical(w.backend, w.schema, st, lexical, elementContext{owner: owner}, xpath.FacetAssertions())
 	if err != nil {
 		return icKeyMember{}, false, value.IsDatatypeVerdict(err)
 	}
@@ -1261,7 +1262,7 @@ func (w *walk) primitiveItem(st *xsd.SimpleType, lexical string, ctx value.Conte
 	if err != nil || primitive == nil {
 		return icPrimitiveItem{}, false
 	}
-	v, err := value.ValidateLexical(w.backend, w.schema, primitive, lexical, ctx)
+	v, err := value.ValidateLexical(w.backend, w.schema, primitive, lexical, ctx, xpath.FacetAssertions())
 	if err != nil {
 		return icPrimitiveItem{}, false
 	}
