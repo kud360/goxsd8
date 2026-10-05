@@ -173,7 +173,9 @@ func TestElementAndAttlistDeclAreWellFormed(t *testing.T) {
 // reference to an entity declared after the <!ATTLIST>, which is VC: Entity
 // Declared's; an entity first declared after a declined reference, which the
 // reader does not process (§5.1); a name whose first declaration is clean; an
-// entity reached twice by one walk; and a clean <!ATTLIST> never applied.
+// entity reached twice by one walk; and a clean <!ATTLIST> never applied. Each
+// control reads with an internal subset alone and again beside an external
+// one.
 func TestAttlistDefaultEntityReferencesAreWellFormed(t *testing.T) {
 	const decl = "<?xml version=\"1.0\"?>\n"
 	const alone = "<?xml version=\"1.0\" standalone=\"yes\"?>\n"
