@@ -194,6 +194,34 @@ func TestAssertionOverAnUnreadableChildIsDeclined(t *testing.T) {
 	}
 }
 
+// validate.valueTypeOf and xpath's ctaChildValueType each classify a
+// ·locally declared type· for the value of a child a {test} reads, and the
+// [xpath.ChildElements] contract makes them agree. This pins the agreement
+// across the package boundary through the seam alone: <c>'s ·locally declared
+// type· CInt is complex with simple content over xs:int, so `c > 9` is
+// satisfied over 10 and charged over 5. Either side dropping the
+// simple-content arm declines both rows instead — validate's valueTypeOf
+// returning nil for it, or xpath's ctaChildValueType answering false; the
+// simple-type arm is TestAssertionReadsChildElementValues' rows.
+func TestAssertionChildValueTypeAgreesAcrossPackages(t *testing.T) {
+	schema := parsedSchema(t, map[string]string{"main.xsd": `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="CInt">
+    <xs:simpleContent>
+      <xs:extension base="xs:int"><xs:attribute name="a" type="xs:int"/></xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:complexType name="RootType">
+    <xs:sequence><xs:element name="c" type="CInt"/></xs:sequence>
+    <xs:assert test="c &gt; 9"/>
+  </xs:complexType>
+  <xs:element name="root" type="RootType"/>
+</xs:schema>`})
+	a := &testAttribute{name: local("a"), value: "1", loc: loc(2, 6)}
+	wantSatisfied(t, aAssess(t, schema, acRoot(acKid("c", 2, "10", a))), "c > 9")
+	wantAssertionCharge(t, aAssess(t, schema, acRoot(acKid("c", 2, "5", a))),
+		`the element root is not ·valid· with respect to assertion 1 of 1 in the {assertions} of the ·governing type definition· RootType, whose {test} is "c > 9",`)
+}
+
 // A child whose ·governing type definition· is not ·validly substitutable· for
 // its ·locally declared type· DECLINES <root>'s assertions on walk.childValue's
 // own repeat of cvc-complex-type clause 5, which walk.child charges before the
