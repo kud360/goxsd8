@@ -52,6 +52,13 @@ type Reader struct {
 	// names the internal entities among them to the decoder, which otherwise
 	// refuses a reference to any of them (see included).
 	entities map[string]entityDecl
+	// tokenized maps each (element type, attribute) name pair an <!ATTLIST>
+	// of the internal subset defines, as the declaration spells them, to
+	// whether the pair's FIRST definition, which binds (XML 1.0 §3.3), gives
+	// an AttType other than CDATA: an attribute it maps to true has its
+	// normalized value trimmed and collapsed (see expandAttrs). It is a lookup
+	// index only, never iterated.
+	tokenized map[attName]bool
 	// spent counts the bytes of replacement text included so far, against
 	// maxGEExpansion.
 	spent int
@@ -66,6 +73,13 @@ type Reader struct {
 	// standalone records the XML declaration's standalone="yes" (XML 1.0
 	// §2.9), which the DOCTYPE after it is read under.
 	standalone bool
+}
+
+// attName is an attribute name and the element type name it is defined on,
+// each as raw source spells it, prefix included: the key an <!ATTLIST>
+// definition and a start tag's attribute meet on, before any prefix resolves.
+type attName struct {
+	elem, name string
 }
 
 // frame is one open element: its resolved name (to match the end tag), the
@@ -165,7 +179,7 @@ func (r *Reader) classify(tok xml.Token, off int64) (Node, bool, error) {
 	loc := r.locAt(off)
 	switch t := tok.(type) {
 	case xml.StartElement:
-		attrs, err := r.expandAttrs(t.Attr, r.source(off), true, loc, nil)
+		attrs, err := r.expandAttrs(t, r.source(off), true, loc, nil)
 		if err != nil {
 			return nil, false, err
 		}
@@ -245,9 +259,11 @@ func (r *Reader) checkChars(raw string, off int64) error {
 	return nil
 }
 
-// declareEntities records the general entity declarations of a DOCTYPE
-// directive at the document level, keeping the first declaration of each name,
-// and whether any declaration went unread. raw is the directive's source, "<!"
+// declareEntities records the general entity declarations and the <!ATTLIST>
+// attribute definitions of a DOCTYPE directive at the document level, keeping
+// the first declaration of each entity name and the first definition of each
+// attribute of an element type (XML 1.0 §4.2, §3.3), and whether any
+// declaration went unread. raw is the directive's source, "<!"
 // through '>': the subset is read from it rather than from the decoder's
 // Directive token, which replaces each comment with one space, so that a
 // comment's own grammar can be checked (XML 1.0 [15] Comment). A directive
@@ -260,12 +276,22 @@ func (r *Reader) declareEntities(raw string, loc xsderr.Loc) error {
 	}
 	body, _ := strings.CutPrefix(raw, "<!")
 	body, _ = strings.CutSuffix(body, ">")
-	decls, unread, err := doctypeEntities(body, r.standalone, loc)
+	decls, atts, unread, err := doctypeEntities(body, r.standalone, loc)
 	if err != nil {
 		return err
 	}
 	if unread {
 		r.declsUnread = true
+	}
+	for _, att := range atts {
+		key := attName{elem: att.elem, name: att.name}
+		if _, bound := r.tokenized[key]; bound {
+			continue
+		}
+		if r.tokenized == nil {
+			r.tokenized = make(map[attName]bool)
+		}
+		r.tokenized[key] = att.tokenized
 	}
 	for _, decl := range decls {
 		if _, bound := r.entities[decl.name]; bound {
