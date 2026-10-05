@@ -35,17 +35,18 @@ const (
 	maxPEExpansion = 1 << 20
 )
 
-// doctypeEntities reads the general entity declarations of one directive's
-// DOCTYPE, in document order, and reports whether some declaration went
-// unread: the inverse of the document's [all declarations processed] (XML
-// Infoset §2.1). directive is the directive's source between its "<!" and its
-// closing '>', comments included (see Reader.declareEntities). standalone is
-// the XML declaration's standalone="yes" (XML 1.0 §2.9 SDDecl). A directive
-// that is no doctypedecl — one whose keyword is not "DOCTYPE", in that case,
-// or is run on into the text after it with no S between, `<!DOCTYPEr>` — and
-// a DOCTYPE whose document type name is missing or is not a Name (XML 1.0
-// [22] prolog, [27] Misc, [28] doctypedecl, [5] Name) are not well-formed: a
-// RuleXMLWellFormed fault at loc, the directive's start.
+// doctypeEntities reads the general entity declarations and the <!ATTLIST>
+// attribute definitions of one directive's DOCTYPE, each in document order,
+// and reports whether some declaration went unread: the inverse of the
+// document's [all declarations processed] (XML Infoset §2.1). directive is
+// the directive's source between its "<!" and its closing '>', comments
+// included (see Reader.declareEntities). standalone is the XML declaration's
+// standalone="yes" (XML 1.0 §2.9 SDDecl). A directive that is no doctypedecl
+// — one whose keyword is not "DOCTYPE", in that case, or is run on into the
+// text after it with no S between, `<!DOCTYPEr>` — and a DOCTYPE whose
+// document type name is missing or is not a Name (XML 1.0 [22] prolog, [27]
+// Misc, [28] doctypedecl, [5] Name) are not well-formed: a RuleXMLWellFormed
+// fault at loc, the directive's start.
 //
 // The external DTD subset is never read, by design (XML 1.0 §5.1 and §5.2
 // oblige a non-validating processor to read the document entity alone;
@@ -59,12 +60,12 @@ const (
 // recursive reference (WFC No Recursion) always reaches — reports unread.
 // Unless standalone, the rest of the internal subset is then only checked for
 // well-formedness, which §5.1 requires of the entire internal subset: it binds
-// no parameter entity, records no general entity and expands no
-// parameter-entity reference, since §5.1 forbids processing an entity
-// declaration that follows a reference to a parameter entity that is not read,
-// except when standalone="yes". A conditional section in replacement text,
-// which this scan does not read, is declined the same way and ends the text it
-// appears in.
+// no parameter entity, records no general entity or attribute definition and
+// expands no parameter-entity reference, since §5.1 forbids processing an
+// entity or attribute-list declaration that follows a reference to a parameter
+// entity that is not read, except when standalone="yes". A conditional section
+// in replacement text, which this scan does not read, is declined the same way
+// and ends the text it appears in.
 //
 // Every fault below is a RuleXMLWellFormed fault at loc, which ends the read
 // and declares nothing. Between declarations, in the internal subset and in an
@@ -105,10 +106,10 @@ const (
 // checked against the entity it names, a fault too: WFC: Entity Declared,
 // Parsed Entity, No Recursion, No External Entity References and No < in
 // Attribute Values (see defaultsFault).
-func doctypeEntities(directive string, standalone bool, loc xsderr.Loc) (decls []entityDecl, unread bool, err error) {
+func doctypeEntities(directive string, standalone bool, loc xsderr.Loc) (decls []entityDecl, atts []attDecl, unread bool, err error) {
 	rest, ok := strings.CutPrefix(directive, "DOCTYPE")
 	if _, spaced := cutSpace(rest); !ok || !spaced && rest != "" {
-		return nil, false, xsderr.New(xsderr.RuleXMLWellFormed, loc, "directive %q is no doctypedecl, '<!DOCTYPE' S Name, and no other directive may stand outside the document element (XML 1.0 [22] prolog, [27] Misc, [28] doctypedecl)", "<!"+excerpt(directive))
+		return nil, nil, false, xsderr.New(xsderr.RuleXMLWellFormed, loc, "directive %q is no doctypedecl, '<!DOCTYPE' S Name, and no other directive may stand outside the document element (XML 1.0 [22] prolog, [27] Misc, [28] doctypedecl)", "<!"+excerpt(directive))
 	}
 	header := rest
 	open := outsideQuotes(rest, "[<")
@@ -116,22 +117,22 @@ func doctypeEntities(directive string, standalone bool, loc xsderr.Loc) (decls [
 		header = rest[:open]
 	}
 	if name := doctypeName(header); !isName(name) {
-		return nil, false, xsderr.New(xsderr.RuleXMLWellFormed, loc, "DOCTYPE document type name %q is not a Name (XML 1.0 [28] doctypedecl, [5] Name)", name)
+		return nil, nil, false, xsderr.New(xsderr.RuleXMLWellFormed, loc, "DOCTYPE document type name %q is not a Name (XML 1.0 [28] doctypedecl, [5] Name)", name)
 	}
 	if open >= 0 && rest[open] == '<' {
-		return nil, false, xsderr.New(xsderr.RuleXMLWellFormed, loc, "DOCTYPE holds %q before its internal subset, where only S, its name and an ExternalID may stand (XML 1.0 [28] doctypedecl)", excerpt(rest[open:]))
+		return nil, nil, false, xsderr.New(xsderr.RuleXMLWellFormed, loc, "DOCTYPE holds %q before its internal subset, where only S, its name and an ExternalID may stand (XML 1.0 [28] doctypedecl)", excerpt(rest[open:]))
 	}
 	sc := subsetScan{standalone: standalone, loc: loc, unread: hasExternalID(header)}
 	if open < 0 {
-		return nil, sc.unread, nil
+		return nil, nil, sc.unread, nil
 	}
 	if err := sc.scan(rest[open+1:]); err != nil {
-		return nil, false, err
+		return nil, nil, false, err
 	}
 	if err := sc.defaultsFault(); err != nil {
-		return nil, false, err
+		return nil, nil, false, err
 	}
-	return sc.decls, sc.unread, nil
+	return sc.decls, sc.atts, sc.unread, nil
 }
 
 // doctypeName is a DOCTYPE header's first token, the document type name, or
@@ -160,12 +161,14 @@ func hasExternalID(header string) bool {
 // declaration of a name (XML 1.0 §4.2); it is a lookup index only, never
 // iterated. depth counts the expansions in progress, and spent the bytes of
 // replacement text scanned so far. decls collects the general entity
+// declarations read, atts the attribute definitions of the <!ATTLIST>
 // declarations read, and unread records that some declaration was not.
 // checkOnly records that a declined reference has ended processing, outside a
 // standalone document (XML 1.0 §5.1): the scan reads on only to check
-// well-formedness. defaults collects the <!ATTLIST> default values read, in
-// document order, for defaultsFault. loc is the directive's start, where every
-// fault the scan finds is located.
+// well-formedness, recording no declaration in decls or atts. defaults
+// collects the <!ATTLIST> default values read, in document order, for
+// defaultsFault. loc is the directive's start, where every fault the scan
+// finds is located.
 type subsetScan struct {
 	standalone bool
 	loc        xsderr.Loc
@@ -175,7 +178,18 @@ type subsetScan struct {
 	decls      []entityDecl
 	unread     bool
 	checkOnly  bool
+	atts       []attDecl
 	defaults   []attDefault
+}
+
+// attDecl is one attribute definition an <!ATTLIST> declaration gives, read by
+// attDef: the element type and attribute names as the declaration spells them,
+// prefix included, and whether its AttType is other than [55] CDATA — a [56]
+// TokenizedType or a [57] EnumeratedType, which XML 1.0 §3.3.3 has the
+// normalized value of trimmed and collapsed (see collapseSpace).
+type attDecl struct {
+	elem, name string
+	tokenized  bool
 }
 
 // attDefault is one default value an <!ATTLIST> declaration gives, read by
@@ -552,7 +566,8 @@ func (sc *subsetScan) readAttlistDecl(body string) error {
 // ([54]) is 'CDATA' ([55] StringType), a [56] TokenizedType keyword, or an
 // EnumeratedType ([57]): 'NOTATION' S and a parenthesized list of Names ([58]
 // NotationType) or a parenthesized list of Nmtokens ([59] Enumeration, [7]
-// Nmtoken), see enumeration. Keywords are in upper case.
+// Nmtoken), see enumeration. Keywords are in upper case. Unless checkOnly, it
+// records the definition on atts (XML 1.0 §5.1).
 func (sc *subsetScan) attDef(elem, def string) (rest string, err error) {
 	name, rest := tokenRun(def)
 	if !isName(name) {
@@ -581,7 +596,13 @@ func (sc *subsetScan) attDef(elem, def string) (rest string, err error) {
 	if !ok {
 		return "", xsderr.New(xsderr.RuleXMLWellFormed, sc.loc, "%s holds an <!ATTLIST> declaration of %q whose attribute %q has %q where S and an AttType must stand (XML 1.0 [53] AttDef, [54] AttType, [55] StringType, [56] TokenizedType, [57] EnumeratedType)", sc.where(), elem, name, excerpt(typ))
 	}
-	return sc.defaultDecl(elem, name, rest)
+	if rest, err = sc.defaultDecl(elem, name, rest); err != nil {
+		return "", err
+	}
+	if !sc.checkOnly {
+		sc.atts = append(sc.atts, attDecl{elem: elem, name: name, tokenized: kw != "CDATA"})
+	}
+	return rest, nil
 }
 
 // isTypeKeyword reports whether kw is an AttType keyword that stands alone: a
