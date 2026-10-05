@@ -58,7 +58,7 @@ func asValues(t *testing.T, attrs ...asTyped) TypedAttributes {
 	vs := make([]TypedValue, 0, len(attrs))
 	for _, a := range attrs {
 		st := asBuiltin(t, a.typ)
-		if ctaSpecial(st) {
+		if st.IsSpecial() {
 			vs = append(vs, Untyped(a.lexical))
 			continue
 		}

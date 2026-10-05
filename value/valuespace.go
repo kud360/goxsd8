@@ -96,7 +96,7 @@ type relation func(a, b Value) (same, decided bool)
 //
 // Every other pair is mapped into one value space by values and compared there.
 func (vs valueSpace) compare(r xsd.TypeResolver, ta *xsd.SimpleType, a xsd.ValueConstraint, tb *xsd.SimpleType, b xsd.ValueConstraint, rel relation) (same, decided bool) {
-	if isSpecial(ta) && isSpecial(tb) {
+	if ta.IsSpecial() && tb.IsSpecial() {
 		return specialMatches(vs.b, ta, tb, a.LexicalForm(), constraintContext(a), b.LexicalForm(), constraintContext(b), rel)
 	}
 	av, bv, ok := vs.values(r, ta, a, tb, b)
@@ -251,7 +251,7 @@ func (vs valueSpace) ValidDefault(r xsd.TypeResolver, t *xsd.SimpleType, vc xsd.
 // default, so no finalize judges such a value, and it is undecided here, never
 // NOT-same, until #667 routes those defaults through ValidDefault.
 func ConstraintMatches(b Backend, r xsd.TypeResolver, t *xsd.SimpleType, lexical string, ctx Context, vc xsd.ValueConstraint) (same, decided bool) {
-	if isSpecial(t) {
+	if t.IsSpecial() {
 		return specialMatches(b, t, t, lexical, ctx, vc.LexicalForm(), constraintContext(vc), equalOrIdentical)
 	}
 	av, err := ValidateLexical(b, r, t, lexical, ctx)
@@ -382,15 +382,6 @@ func listTokens(lit string) ([]string, bool) {
 		}
 	}
 	return tokens, true
-}
-
-// isSpecial reports whether t is one of the two ·special· datatypes,
-// xs:anySimpleType and xs:anyAtomicType (Datatypes §2.4, dt-special), by the
-// pointer identity [xsd.AnySimpleType] and [xsd.AnyAtomicType] make
-// load-bearing. A union or a caller-built type that merely looks like one is
-// not ·special·.
-func isSpecial(t *xsd.SimpleType) bool {
-	return t == xsd.AnySimpleType() || t == xsd.AnyAtomicType()
 }
 
 // values maps both {lexical form}s to ·actual values· IN ONE VALUE SPACE, or

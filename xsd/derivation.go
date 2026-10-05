@@ -417,7 +417,7 @@ func checkListGraph(r TypeResolver, t, base *SimpleType) error {
 	if err != nil {
 		return err
 	}
-	if isSpecialType(item) {
+	if item.IsSpecial() {
 		return xsderr.New(ruleCosSTRestricts, t.loc,
 			"list {item type definition} %s is a special type definition (cos-st-restricts clause 2.1)", item.name)
 	}
@@ -553,7 +553,7 @@ func checkUnionGraph(r TypeResolver, t, base *SimpleType) error {
 		return err
 	}
 	for _, m := range members {
-		if isSpecialType(m) {
+		if m.IsSpecial() {
 			return xsderr.New(ruleCosSTRestricts, t.loc,
 				"union {member type definitions} contains special type definition %s (cos-st-restricts clause 3.1)", m.name)
 		}
@@ -736,13 +736,6 @@ func stRestrictionUnblocked(r TypeResolver, d *SimpleType, blocked []DerivationM
 // here.
 func restrictionBlocked(blocked []DerivationMethod) bool {
 	return containsDerivationMethod(blocked, DerivationRestriction)
-}
-
-// isSpecialType reports whether t is one of the two special datatypes,
-// xs:anySimpleType or xs:anyAtomicType (Datatypes §2.4.2, id="dt-special"),
-// tested by identity against the package singletons.
-func isSpecialType(t *SimpleType) bool {
-	return t == anySimpleType || t == anyAtomicType
 }
 
 // finalContains reports whether the {final} set contains derivation method d.

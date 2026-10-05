@@ -23,14 +23,22 @@ const ruleCvcSimpleType xsderr.Rule = "cvc-simple-type"
 // invalid one, which the caller charges under its own rule with the verdict as
 // the wrapped cause.
 //
-// A ·special· st (isSpecial) passes clause 2 without asking ValidateLexical,
-// which no backend answers for one: no clause 1 normalization can move a string
-// out of either type's lexical space, and neither type is NOTATION or has it in
-// its closure. A ValidateLexical error that is not a VERDICT
-// ([value.IsDatatypeVerdict]) withholds one; each caller states that decline's
-// GAP on its own terms.
+// A ·special· st ([xsd.SimpleType.IsSpecial]) passes clause 2 without asking
+// ValidateLexical, which no backend answers for one: no clause 1 normalization
+// can move a string out of either type's lexical space, and neither type is
+// NOTATION or has it in its closure. A value this package reads against one is
+// therefore decided, never declined, whatever the backend maps: both lexical
+// spaces are every Char sequence and both {facets} are empty (#1788). Its value
+// space is another matter, so a ·key-sequence· member of a special type is
+// compared by its lexical, decided only where two such lexicals are
+// byte-identical ([sameSpecialMember]). A fixed-value comparison
+// ([walk.fixedAgreement], [contentCheck.fixedActualValue]) is decided by
+// [value.ConstraintMatches] over the mapping's union of primitive and list
+// mappings, and declines only where a member of it cannot answer. A
+// ValidateLexical error that is not a VERDICT ([value.IsDatatypeVerdict])
+// withholds one; each caller states that decline's GAP on its own terms.
 func (w *walk) stringValid(st *xsd.SimpleType, lexical string, owner Element, loc xsderr.Loc) (decided bool, verdict error) {
-	if isSpecial(st) {
+	if st.IsSpecial() {
 		return w.entitiesDeclared(st, lexical, owner, loc)
 	}
 	_, err := value.ValidateLexical(w.backend, w.schema, st, lexical, elementContext{owner: owner})
@@ -41,25 +49,6 @@ func (w *walk) stringValid(st *xsd.SimpleType, lexical string, owner Element, lo
 		return true, err
 	}
 	return w.entitiesDeclared(st, lexical, owner, loc)
-}
-
-// isSpecial reports whether st is one of the two ·special· datatypes,
-// xs:anySimpleType and xs:anyAtomicType (Datatypes §2.4, dt-special), by the
-// pointer identity [xsd.AnySimpleType] and [xsd.AnyAtomicType] make
-// load-bearing. Datatype Valid (Datatypes §4.1.4, cvc-datatype-valid) holds
-// UNCONDITIONALLY for every literal against either — its own first disjunct is
-// "T corresponds to a ·special· datatype" — so a value this package reads
-// against one is decided, never declined, whatever the backend maps: both
-// lexical spaces are every Char sequence and both {facets} are empty (#1788).
-// Their value spaces are another matter, the lexical mapping "not a function"
-// (Datatypes §3.2.1.2, §3.2.2.2), so a ·key-sequence· member of a special type
-// is compared by its lexical, decided only where two such lexicals are
-// byte-identical ([sameSpecialMember]). A fixed-value comparison
-// ([walk.fixedAgreement], [contentCheck.fixedActualValue]) is decided by
-// [value.ConstraintMatches] over the mapping's union of primitive and list
-// mappings, and declines only where a member of it cannot answer.
-func isSpecial(st *xsd.SimpleType) bool {
-	return st == xsd.AnySimpleType() || st == xsd.AnyAtomicType()
 }
 
 // entitiesDeclared settles String Valid clause 3 — "Let V be the ·actual value·
