@@ -273,7 +273,7 @@ func TestCompileAssertionTestDeclines(t *testing.T) {
 	union := asUnion(t)
 	types := asUses(t, map[string]string{
 		"x": "integer", "l": "NMTOKENS",
-		"q": "QName", "n": "NOTATION", "f": "float", "d": "date", "e": "date",
+		"q": "QName", "n": "NOTATION", "f": "float",
 	})
 	uses := func(name xsd.QName) (*xsd.SimpleType, bool) {
 		if name == uq("u") {
@@ -296,7 +296,6 @@ func TestCompileAssertionTestDeclines(t *testing.T) {
 		{"xs:integer(@x) = 5", "the constructor spelling of the same cast"},
 		{"@f = 1e0", "B.1 rule 1.1's xs:float to xs:double promotion, CompileCTATest's own decline"},
 		{"@x eq 5 eq 5", "ValueComp is non-associative, so a second one is an unparsed tail"},
-		{"@d lt @e", "a value comparison in the date/time family, on the general comparison's arm"},
 		{"count(@x) = 1", "a function call outside fn:not and the constructors"},
 	} {
 		if _, ok := CompileAssertionTest(asRecord(tc.expr), seededTypes, xsd.EmptyContent{}, uses, asNoElems); ok {
@@ -578,37 +577,97 @@ func TestCompileCTATestStillDeclinesAssertionOnlyForms(t *testing.T) {
 	}
 }
 
-// A general comparison whose comparison type is in the date/time family
-// DECLINES at CompileAssertionTest and still compiles under CompileCTATest:
-// without an implicit timezone (F&O §10.4, cvc-xpath clause 7) the engine
-// decides `@d < @e or @d >= @e` over @d=2000-01-01 and @e=2000-01-01Z false,
-// a tautology an assertion would be charged on. Each type below reaches the
-// decline through its {primitive type definition}, xs:dateTimeStamp through
-// xs:dateTime's.
-func TestCompileAssertionTestDeclinesDateTimeComparisons(t *testing.T) {
+// A general or value comparison whose comparison type is in the date/time
+// family DECIDES at CompileAssertionTest, under the implicit timezone F&O §10.4
+// assumes on an operand without one (ctaImplicitTimezone, Z):
+//
+//   - a timezone-MIXED pair is a total order, so `@d < @e or @d >= @e` over
+//     2000-01-01 and 2000-01-01Z is true, and 2000-01-01 at Z equals
+//     2000-01-01Z — including across the day boundary, where 2000-01-01 at Z is
+//     after 2000-01-01+14:00. Every mixed row but `@d lt @e`, false either
+//     way, fails with the date/time arm of ctaHoldsPair removed, which leaves
+//     the pair value.Incomparable and unequal.
+//   - two untimezoned operands, and two timezoned ones, compare as before the
+//     arm: the implicit timezone given to the left operand alone breaks the
+//     untimezoned `@d = @e` row.
+//   - the g* types have eq and ne alone (xpath20.md B.2), so an ordering over
+//     one is err:XPTY0004 — false, and false under fn:not — whatever the
+//     timezones; their equality compares starting instants.
+//   - an xs:untypedAtomic operand is cast to xs:date against a date under a
+//     general comparison (§3.5.2 clause 2.4) and decided at Z, and to xs:string
+//     under a value comparison (§3.5.1 step 4), which is err:XPTY0004.
+//
+// xs:dateTimeStamp reaches the arm through its xs:dateTime primitive, and the
+// 24:00:00 rows pin that the canonical round-trip needs no case of its own.
+func TestAssertionDecidesDateTimeComparisons(t *testing.T) {
 	uses := asUses(t, map[string]string{
 		"d": "date", "e": "date", "dt": "dateTime", "dts": "dateTimeStamp", "tm": "time",
-		"gym": "gYearMonth", "gy": "gYear", "gmd": "gMonthDay", "gd": "gDay", "gm": "gMonth", "s": "string",
+		"gym": "gYearMonth", "gy": "gYear", "gmd": "gMonthDay", "gd": "gDay", "gm": "gMonth",
+		"x": "anySimpleType",
 	})
-	for _, expr := range []string{
-		"@d < @e or @d >= @e",
-		"@d = @e",
-		"@dt < xs:dateTime('2000-01-01T00:00:00')",
-		"@dts != xs:dateTime('2000-01-01T00:00:00')",
-		"@tm <= xs:time('00:00:00')",
-		"@gym = xs:gYearMonth('2000-01')",
-		"@gy = xs:gYear('2000')",
-		"@gmd = xs:gMonthDay('--01-01')",
-		"@gd = xs:gDay('---01')",
-		"@gm = xs:gMonth('--01')",
-		"@s cast as xs:date < xs:date('2000-01-01')",
+	date := func(name, lexical string) asTyped { return asTyped{uq(name), "date", lexical} }
+	for _, tc := range []struct {
+		expr  string
+		attrs []asTyped
+		want  bool
+	}{
+		// Mixed: decided at Z.
+		{"@d < @e or @d >= @e", []asTyped{date("d", "2000-01-01"), date("e", "2000-01-01Z")}, true},
+		{"@d = @e", []asTyped{date("d", "2000-01-01"), date("e", "2000-01-01Z")}, true},
+		{"@d != @e", []asTyped{date("d", "2000-01-01"), date("e", "2000-01-01Z")}, false},
+		{"@d eq @e", []asTyped{date("d", "2000-01-01"), date("e", "2000-01-01Z")}, true},
+		{"@d le @e", []asTyped{date("d", "2000-01-01"), date("e", "2000-01-01Z")}, true},
+		{"@d lt @e", []asTyped{date("d", "2000-01-01"), date("e", "2000-01-01Z")}, false},
+		{"@d > @e", []asTyped{date("d", "2000-01-01"), date("e", "2000-01-01+14:00")}, true},
+		{"@e < @d", []asTyped{date("d", "2000-01-01"), date("e", "2000-01-01+14:00")}, true},
+		{"@dt = xs:dateTime('2000-01-01T00:00:00Z')", []asTyped{{uq("dt"), "dateTime", "2000-01-01T00:00:00"}}, true},
+		{"@dts = xs:dateTime('2000-01-01T00:00:00')", []asTyped{{uq("dts"), "dateTimeStamp", "2000-01-01T00:00:00Z"}}, true},
+		{"@tm ge xs:time('12:00:00Z')", []asTyped{{uq("tm"), "time", "12:00:00"}}, true},
+		{"@gym eq xs:gYearMonth('1976-02Z')", []asTyped{{uq("gym"), "gYearMonth", "1976-02"}}, true},
+		{"@gy = xs:gYear('2000Z')", []asTyped{{uq("gy"), "gYear", "2000"}}, true},
+		{"@gmd = xs:gMonthDay('--01-01Z')", []asTyped{{uq("gmd"), "gMonthDay", "--01-01"}}, true},
+		{"@gd = xs:gDay('---01Z')", []asTyped{{uq("gd"), "gDay", "---01"}}, true},
+		{"@gm ne xs:gMonth('--01Z')", []asTyped{{uq("gm"), "gMonth", "--01"}}, false},
+		// Two untimezoned, and two timezoned: as before.
+		{"@d = @e", []asTyped{date("d", "2000-01-01"), date("e", "2000-01-01")}, true},
+		{"@d < @e", []asTyped{date("d", "2000-01-01"), date("e", "2000-01-02")}, true},
+		{"@d = @e", []asTyped{date("d", "2000-01-01Z"), date("e", "2000-01-01+14:00")}, false},
+		{"@d > @e", []asTyped{date("d", "2000-01-01Z"), date("e", "2000-01-01+14:00")}, true},
+		{"@gym eq xs:gYearMonth('1976-03Z')", []asTyped{{uq("gym"), "gYearMonth", "1976-02"}}, false},
+		{"@gd = xs:gDay('---02+14:00')", []asTyped{{uq("gd"), "gDay", "---01-10:00"}}, true},
+		{"xs:time('08:00:00+09:00') eq xs:time('17:00:00-06:00')", nil, false},
+		{"xs:time('24:00:00') lt xs:time('23:59:59')", nil, true},
+		{"xs:time('24:00:00+01:00') eq xs:time('00:00:00+01:00')", nil, true},
+		{"xs:dateTime('1999-12-31T24:00:00') eq xs:dateTime('2000-01-01T00:00:00')", nil, true},
+		// g* orderings: err:XPTY0004 whatever the timezones.
+		{"@gd < xs:gDay('---02')", []asTyped{{uq("gd"), "gDay", "---01"}}, false},
+		{"not(@gd < xs:gDay('---02'))", []asTyped{{uq("gd"), "gDay", "---01"}}, false},
+		{"not(@gym lt xs:gYearMonth('1976-03Z'))", []asTyped{{uq("gym"), "gYearMonth", "1976-02"}}, false},
+		// xs:untypedAtomic: cast to xs:date by §3.5.2, to xs:string by §3.5.1.
+		{"@x < xs:date('2000-01-01Z') or @x >= xs:date('2000-01-01Z')", []asTyped{{uq("x"), "anySimpleType", "2000-01-01"}}, true},
+		{"@x = xs:date('2000-01-01Z')", []asTyped{{uq("x"), "anySimpleType", "2000-01-01"}}, true},
+		{"@x eq xs:date('2000-01-01Z')", []asTyped{{uq("x"), "anySimpleType", "2000-01-01"}}, false},
+		{"not(@x eq xs:date('2000-01-01Z'))", []asTyped{{uq("x"), "anySimpleType", "2000-01-01"}}, false},
 	} {
-		record := ctaExprRecord(expr, "", "xs", xsd.XMLSchemaNS)
-		if _, ok := CompileAssertionTest(record, seededTypes, xsd.EmptyContent{}, uses, asNoElems); ok {
-			t.Errorf("CompileAssertionTest(%q): compiled, want declined (a date/time comparison type)", expr)
-		}
-		if _, ok := CompileCTATest(record, seededTypes); !ok {
-			t.Errorf("CompileCTATest(%q): declined, want compiled (the Type Alternative façade admits every comparison type)", expr)
-		}
+		t.Run(tc.expr, func(t *testing.T) {
+			got := asCompile(t, tc.expr, uses).Evaluate(backend(), seededTypes, asValues(t, tc.attrs...), asNoChildren, ValueBinding{})
+			if got != tc.want {
+				t.Errorf("Evaluate(%q) over %v = %v, want %v", tc.expr, tc.attrs, got, tc.want)
+			}
+		})
+	}
+}
+
+// ctaImplicitTimezone is a legal timezoneFrag: an untimezoned xs:date lexical
+// with it appended validates, and the value it maps to carries a timezone —
+// which is the range check §3.3.7's timezoneFrag makes, so none is written here.
+func TestImplicitTimezoneIsATimezone(t *testing.T) {
+	v, err := value.ValidateLexical(backend(), seededTypes, asBuiltin(t, "date"), "2000-01-01"+ctaImplicitTimezone, nil)
+	if err != nil {
+		t.Fatalf("validating 2000-01-01%s as xs:date: %v", ctaImplicitTimezone, err)
+	}
+	tz, aware := v.(value.TimezoneAware)
+	if !aware || !tz.HasTimezone() {
+		t.Errorf("2000-01-01%s as xs:date carries no timezone", ctaImplicitTimezone)
 	}
 }

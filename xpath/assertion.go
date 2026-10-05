@@ -237,10 +237,7 @@ type AssertionTest struct{ root ctaExpr }
 //     so does every mixed, element-only and empty {content type};
 //   - a path of more than one step, and a "/" with no step after it;
 //   - a cast whose operand is a typed attribute, a typed child or `$value`
-//     outside the xs:string family;
-//   - a general or value comparison whose comparison type's {primitive type
-//     definition} is a date/time one, which without an implicit timezone this
-//     engine cannot order (ctaAssertionFacade.admitsComparison).
+//     outside the xs:string family.
 //
 // An XPath STATIC error is declined too and never reported: the
 // static-error question about an assertion is the schema assembler's, and
@@ -489,39 +486,4 @@ func ctaChildValueType(td xsd.TypeDefinition) (*xsd.SimpleType, bool) {
 // node is above it, so the path raises err:XPDY0050 (xpath20.md §3.2).
 func (ctaAssertionFacade) rooted() (ctaValue, bool) {
 	return ctaNoDocumentRoot{}, true
-}
-
-// admitsComparison declines a comparison type whose {primitive type
-// definition} is in the date/time family — xs:dateTime (and so
-// xs:dateTimeStamp), xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay,
-// xs:gDay, xs:gMonth — or cannot be resolved, and admits every other.
-//
-// GAP(xpath): F&O §10.4 (xpath-functions.md, "Comparison Operators on
-// Duration, Date and Time Values") makes those comparisons a TOTAL order: "If
-// either operand to a comparison function on date or time values does not have
-// an (explicit) timezone then, for the purpose of the operation, an implicit
-// timezone, provided by the dynamic context ..., is assumed to be present as
-// part of the value." cvc-xpath clause 7 (§3.13.4.2) makes that implicit
-// timezone implementation-defined but constant per ·assessment· episode. This
-// engine has no implicit timezone, so ctaHoldsPair finds a timezoned operand
-// and an untimezoned one value.Incomparable and unequal — false for every
-// operator but != and ne, which it decides true — for a general and a value
-// comparison alike, and an assertion would be charged (or satisfied) on that:
-// `@d < @e or @d >= @e` over two xs:date attributes 2000-01-01 and 2000-01-01Z
-// is a tautology this engine would answer false. The direction is the
-// withhold: the {test} declines at [CompileAssertionTest], and the assertion
-// is neither charged nor shown satisfied (PRINCIPLES 20). A Type Alternative's
-// façade still evaluates them. (#1042)
-func (ctaAssertionFacade) admitsComparison(types ctaTypes, c *xsd.SimpleType) bool {
-	p, resolved := types.primitive(c)
-	if !resolved {
-		return false
-	}
-	switch p.Name() {
-	case ctaBuiltin("dateTime"), ctaBuiltin("time"), ctaBuiltin("date"),
-		ctaBuiltin("gYearMonth"), ctaBuiltin("gYear"), ctaBuiltin("gMonthDay"),
-		ctaBuiltin("gDay"), ctaBuiltin("gMonth"):
-		return false
-	}
-	return true
 }
