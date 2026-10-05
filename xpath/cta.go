@@ -1,6 +1,7 @@
 package xpath
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/kud360/goxsd8/value"
@@ -18,15 +19,17 @@ import (
 // (ctaValueCompare), and [16] SimpleValue also takes [44] VarRef ('$' VarName),
 // of which only `$value` is in scope (cvc-assertion clause 2.2), a child-axis
 // step naming one of E's element [[children]] (ctaTypedChild), and a "/" or
-// "//" opening a path, which raises (ctaNoDocumentRoot). The facet façade
-// (ctaFacetFacade) takes the assertion façade's grammar plus [47]
-// ContextItemExpr `.`, and compiles every read of the context item — `.`, an
-// attribute or child step, a rooted path — to the err:XPDY0002 an assertions
-// facet's absent context item raises (ctaNoContextItem). It is not a stage of
-// a general XPath 2.0 evaluator: the productions below reach no axis but
-// attribute and one child step, no predicate, no variable but `$value` and no
-// function but fn:not, so evaluating them directly is exact where a fail-open
-// delegation to a general engine would be a guess.
+// "//" opening a path, which raises (ctaNoDocumentRoot); and [14] ValueExpr
+// also takes an fn:count call over one counted path (ctaCount). The facet
+// façade (ctaFacetFacade) takes the assertion façade's grammar but fn:count,
+// plus [47] ContextItemExpr `.`, and compiles every read of the context item —
+// `.`, an attribute or child step, a rooted path — to the err:XPDY0002 an
+// assertions facet's absent context item raises (ctaNoContextItem). It is not
+// a stage of a general XPath 2.0 evaluator: the productions below reach no
+// axis but attribute, one child step and the descendant steps fn:count counts
+// over, no predicate, no variable but `$value` and no function but fn:not and
+// fn:count, so evaluating them directly is exact where a fail-open delegation
+// to a general engine would be a guess.
 //
 //	[8]  Test                ::= OrExpr
 //	[9]  OrExpr              ::= AndExpr ( 'or' AndExpr )*
@@ -348,9 +351,10 @@ func (t CTATest) Evaluate(b value.Backend, types xsd.TypeResolver, attrs Attribu
 // ctaEnv is the dynamic context of one [CTATest.Evaluate] or
 // [AssertionTest.Evaluate] call. cvc-xpath (§3.13.4.2) fixes the rest of it —
 // context item E, context position and size 1, no variable values but the
-// `$value` cvc-assertion clause 2.3 adds — and of that only `$value` and the
-// context item's own attributes and element [[children]] are reachable in this
-// grammar, so the attributes, the children, `$value`'s binding, the value
+// `$value` cvc-assertion clause 2.3 adds — and of that only `$value`, the
+// context item's own attributes and element [[children]], and the counts of
+// the nodes of its subtree fn:count selects are reachable in this grammar, so
+// the attributes, the children, the counts, `$value`'s binding, the value
 // spaces and the type knowledge the casts need are the whole of what
 // evaluation reads. A facet {test} [FacetAssertions] evaluates has no context
 // item at all (cvc-assertions-valid clause 1.2), so it reads nothing of its
@@ -381,12 +385,15 @@ type ctaInput interface{ ctaInput() }
 type ctaLexicalInput struct{ attrs Attributes }
 
 // ctaTypedInput is an assertion's input: its typed attributes, its element
-// [[children]], and the value cvc-assertion clause 2.3 binds to `$value`. The
-// children and the binding live here and on no other arm, so a Type
-// Alternative's evaluation cannot carry either.
+// [[children]], the counts of the nodes its fn:count calls select, and the
+// value cvc-assertion clause 2.3 binds to `$value`. The children, the counts
+// and the binding live here and on no other arm, so a Type Alternative's
+// evaluation cannot carry any of them. counts is nil where the tree counts
+// nothing, which a facet evaluation's never does.
 type ctaTypedInput struct {
 	attrs    TypedAttributes
 	children ChildElements
+	counts   *Tally
 	value    ValueBinding
 }
 
@@ -397,11 +404,14 @@ func (ctaTypedInput) ctaInput()   {}
 // The grammar closes the set (STYLE T2's schema-closed-set exception), so
 // consumers type-switch over the branches and no further branch is
 // representable outside this package. Every branch answers readsChild
-// ([AssertionTest.ReadsChild]) as a method, so a branch added without it does
-// not compile.
+// ([AssertionTest.ReadsChild]) and counted ([AssertionTest.Tally]) as methods,
+// so a branch added without them does not compile.
 type ctaExpr interface {
 	ctaExpr()
 	readsChild(name xsd.QName) bool
+	// counted appends to into each path an fn:count call in the node counts, at
+	// any depth, in written order, and returns the extended slice.
+	counted(into []ctaCountPath) []ctaCountPath
 }
 
 // ctaOr is [9] ta-OrExpr: existential over its operands, in written order.
@@ -472,12 +482,14 @@ func (ctaTypeError) ctaExpr()        {}
 // (ctaFacade.attribute), its Literal arm, and the assertion façade's `$value`
 // in its three static forms (ctaFacade.variable), child-axis step
 // (ctaFacade.child) and rooted path (ctaFacade.rooted), and the facet façade's
-// read of an absent context item (ctaNoContextItem) — and the cast that
-// [15] ta-CastExpr's tail and [18] ta-ConstructorFunction both build over one
-// of them. Every branch answers readsChild on ctaExpr's terms.
+// read of an absent context item (ctaNoContextItem) — the cast that [15]
+// ta-CastExpr's tail and [18] ta-ConstructorFunction both build over one of
+// them, and the assertion façade's fn:count call (ctaFacade.count). Every
+// branch answers readsChild and counted on ctaExpr's terms.
 type ctaValue interface {
 	ctaValue()
 	readsChild(name xsd.QName) bool
+	counted(into []ctaCountPath) []ctaCountPath
 }
 
 // ctaAttr is [17] ta-AttrName over an UNTYPED attribute: the attribute step
@@ -609,6 +621,10 @@ type ctaFacade interface {
 	// contextItem compiles the [47] ContextItemExpr `.` into its node,
 	// reporting false where the façade declines it, on attribute's terms.
 	contextItem() (ctaValue, bool)
+	// count compiles an fn:count call whose argument compiled to arg into its
+	// node, reporting false where the façade declines it, on attribute's
+	// terms.
+	count(arg ctaCounted, types ctaTypes) (ctaValue, bool)
 }
 
 // ctaTypeAlternativeFacade is a Type Alternative's façade: every attribute
@@ -651,6 +667,13 @@ func (ctaTypeAlternativeFacade) rooted() (ctaValue, bool) {
 // contextItem declines `.`, on child's terms: ta-props-correct clause 2's
 // grammar has no ContextItemExpr.
 func (ctaTypeAlternativeFacade) contextItem() (ctaValue, bool) {
+	return nil, false
+}
+
+// count declines every fn:count call, on child's terms: §3.12.6 clause 3 makes
+// every [18] ta-ConstructorFunction a constructor for a built-in datatype, and
+// no other function but fn:not is in the grammar.
+func (ctaTypeAlternativeFacade) count(ctaCounted, ctaTypes) (ctaValue, bool) {
 	return nil, false
 }
 
@@ -755,6 +778,75 @@ type ctaCast struct {
 	allowsEmpty bool
 }
 
+// ctaCount is an fn:count call (xpath-functions.md §15.4.1, `fn:count($arg as
+// item()*) as xs:integer`), which only the assertion façade admits
+// (ctaFacade.count): the number of nodes its argument selects, as one value of
+// st, xs:integer. The argument is not atomized — the signature's item()* asks
+// for none — so a counted step is never typed and reads no value: what it
+// selects is read off the [Tally] the evaluation carries, which the caller fills
+// with E's subtree, and never off [ChildElements] or [TypedAttributes].
+type ctaCount struct {
+	arg ctaCounted
+	st  *xsd.SimpleType
+}
+
+// ctaCounted is the sealed sum of what an fn:count argument compiles to: a
+// relative path a [Tally] counts (ctaCountPath), or a rooted path, which raises
+// err:XPDY0050 before it selects a node and so before fn:count sees a sequence
+// (ctaNoDocumentRoot, xpath20.md §3.2). The grammar closes the set (STYLE T2's
+// schema-closed-set exception).
+type ctaCounted interface{ ctaCounted() }
+
+// ctaCountPath is one relative path fn:count counts over: the nodes on axis
+// named name. It is comparable, and a [Tally] keeps one counter per distinct
+// path.
+type ctaCountPath struct {
+	axis ctaCountAxis
+	name xsd.QName
+}
+
+// ctaCountAxis is which nodes of E's subtree a ctaCountPath selects, by kind
+// and by depth below E (xpath20.md §3.2.4's abbreviations, E the context node).
+type ctaCountAxis byte
+
+const (
+	// ctaCountChildren is `N` or `./N`: the element children of E.
+	ctaCountChildren ctaCountAxis = iota
+	// ctaCountDescendants is `.//N`, `./descendant-or-self::node()/child::N`:
+	// every element below E at any depth, and never E itself.
+	ctaCountDescendants
+	// ctaCountOwnAttributes is `@N` or `./@N`: the attributes of E.
+	ctaCountOwnAttributes
+	// ctaCountSubtreeAttributes is `.//@N`,
+	// `./descendant-or-self::node()/attribute::N`: the attributes of E itself
+	// and of every element below it.
+	ctaCountSubtreeAttributes
+)
+
+func (ctaCountPath) ctaCounted()      {}
+func (ctaNoDocumentRoot) ctaCounted() {}
+
+// selects reports whether p selects a node named name, an attribute node where
+// attribute is true and an element node otherwise, depth levels below E: an
+// element's own depth, or the depth of the element an attribute belongs to, 0
+// being E.
+func (p ctaCountPath) selects(attribute bool, depth int, name xsd.QName) bool {
+	if name != p.name {
+		return false
+	}
+	switch p.axis {
+	case ctaCountChildren:
+		return !attribute && depth == 1
+	case ctaCountDescendants:
+		return !attribute && depth >= 1
+	case ctaCountOwnAttributes:
+		return attribute && depth == 0
+	case ctaCountSubtreeAttributes:
+		return attribute && depth >= 0
+	}
+	return false
+}
+
 func (ctaAttr) ctaValue()           {}
 func (ctaTypedAttr) ctaValue()      {}
 func (ctaTypedChild) ctaValue()     {}
@@ -762,6 +854,7 @@ func (ctaNoDocumentRoot) ctaValue() {}
 func (ctaNoContextItem) ctaValue()  {}
 func (ctaLiteral) ctaValue()        {}
 func (ctaCast) ctaValue()           {}
+func (ctaCount) ctaValue()          {}
 func (ctaValueVar) ctaValue()       {}
 func (ctaEmptyValue) ctaValue()     {}
 func (ctaUntypedValue) ctaValue()   {}
@@ -783,9 +876,9 @@ type ctaStatic interface{ ctaStatic() }
 type ctaUntypedAtomic struct{}
 
 // ctaTyped is an operand carrying a datatype: a Literal, the result of a cast
-// or a constructor function, a typed attribute, or each item of `$value`. It
-// carries the COMPONENT alone — st.Name() is the name, and storing both would
-// be two encodings of one fact (STYLE D3).
+// or a constructor function, a typed attribute, an fn:count call, or each item
+// of `$value`. It carries the COMPONENT alone — st.Name() is the name, and
+// storing both would be two encodings of one fact (STYLE D3).
 type ctaTyped struct{ st *xsd.SimpleType }
 
 // ctaEmptySequence is the statically empty operand, ctaEmptyValue: it yields
@@ -810,6 +903,8 @@ func ctaStaticOf(v ctaValue) ctaStatic {
 	case ctaTypedAttr:
 		return ctaTyped{st: n.st}
 	case ctaTypedChild:
+		return ctaTyped{st: n.st}
+	case ctaCount:
 		return ctaTyped{st: n.st}
 	case ctaValueVar:
 		return ctaTyped{st: n.atom}
@@ -1125,6 +1220,8 @@ func (e ctaEffectiveBoolean) eval(env ctaEnv) ctaAnswer {
 		return ctaBoolean(e.operand, n.st, env)
 	case ctaCast:
 		return ctaBoolean(e.operand, n.target, env)
+	case ctaCount:
+		return ctaBoolean(e.operand, n.st, env)
 	case ctaValueVar:
 		return ctaBoolean(e.operand, n.atom, env)
 	case ctaEmptyValue:
@@ -1276,10 +1373,10 @@ func ctaValidated(i ctaItem) (value.Value, bool) {
 //   - an UNTYPED attribute is xs:untypedAtomic, which §3.5.2's casting rules
 //     cast STRAIGHT to c (clause 1's xs:string, or clause 2's type chosen from
 //     the other operand). No intermediate type exists to cast through.
-//   - a TYPED attribute, each typed child, a LITERAL and each item of `$value`
-//     carry their own type and are converted to c, which is a no-op wherever
-//     the two coincide; the statically empty `$value` yields nothing to
-//     convert.
+//   - a TYPED attribute, each typed child, a LITERAL, an fn:count call's
+//     xs:integer and each item of `$value` carry their own type and are
+//     converted to c, which is a no-op wherever the two coincide; the
+//     statically empty `$value` yields nothing to convert.
 //   - a rooted path raises err:XPDY0050 before it yields anything, and a read
 //     of an absent context item err:XPDY0002.
 //   - a CAST evaluates its operand IN THE TARGET TYPE first, because that cast
@@ -1305,6 +1402,8 @@ func ctaItemOf(v ctaValue, c *xsd.SimpleType, env ctaEnv) ctaItem {
 		return ctaConvert(n.text, n.st, c, env)
 	case ctaCast:
 		return ctaCastItem(n, c, env)
+	case ctaCount:
+		return ctaCountItem(n, c, env)
 	case ctaValueVar:
 		return ctaValueItem(n, c, env)
 	case ctaEmptyValue:
@@ -1543,6 +1642,37 @@ func ctaTypedChildItem(n ctaTypedChild, c *xsd.SimpleType, env ctaEnv) ctaItem {
 		vs = append(vs, converted)
 	}
 	return ctaAtoms{vs: vs}
+}
+
+// ctaCountItem is the xs:integer fn:count returns for n, converted into c on
+// ctaTypedAttrItem's terms: the counter the evaluation's [Tally] holds for n's
+// path, through the lexical of that integer, which is a datatype validation as
+// every value this package builds is.
+//
+// A rooted argument raises err:XPDY0050 before fn:count is applied
+// (ctaNoDocumentRoot). A Tally with no counter for the path is a caller breach
+// [AssertionTest.Evaluate] answers false before the tree is read, so the
+// ctaRaised it is here is unreachable through that entry point. The input is
+// ctaTypedInput by construction (ctaInput); the other arm counts nothing and is
+// unreachable too.
+func ctaCountItem(n ctaCount, c *xsd.SimpleType, env ctaEnv) ctaItem {
+	path, relative := n.arg.(ctaCountPath)
+	if !relative {
+		return ctaRaised{} // err:XPDY0050
+	}
+	in, typed := env.input.(ctaTypedInput)
+	if !typed {
+		return ctaRaised{}
+	}
+	count, held := in.counts.count(path)
+	if !held {
+		return ctaRaised{}
+	}
+	v, validated := ctaValidated(ctaValidate(strconv.Itoa(count), n.st, env))
+	if !validated {
+		return ctaRaised{}
+	}
+	return ctaPromote(v, n.st, c, env)
 }
 
 // ctaAttrItem casts the matched attributes into c, which §3.5.2's casting rules
