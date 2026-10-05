@@ -72,8 +72,18 @@ var errAssertionDeclined = errors.New("value: an assertions-facet {test} was not
 // (STYLE T4): `grep assertionDeclined(` enumerates every decline.
 func assertionDeclined(st *xsd.SimpleType, i, n int, test xsd.XPathExpression) error {
 	return xsderr.Wrap(ruleCvcAssertionsValid, xsderr.Loc{}, fmt.Errorf(
-		"%w: assertion %d of %d in the {value} of the assertions facet of the simple type %s, whose {test} is %q: whether the value is facet-valid with respect to it (cvc-assertions-valid, Datatypes §4.3.13.3) is undecided",
-		errAssertionDeclined, i+1, n, st.Name(), test.Expression()))
+		"%w: assertion %d of %d in the {value} of the assertions facet of %s, whose {test} is %q: whether the value is facet-valid with respect to it (cvc-assertions-valid, Datatypes §4.3.13.3) is undecided",
+		errAssertionDeclined, i+1, n, simpleTypeLabel(st), test.Expression()))
+}
+
+// simpleTypeLabel names st for an assertions-stage message: "the simple type"
+// and its ·expanded name·, or "an anonymous simple type" for the zero QName an
+// inline definition carries, which would otherwise render as nothing.
+func simpleTypeLabel(st *xsd.SimpleType) string {
+	if st.Name() == (xsd.QName{}) {
+		return "an anonymous simple type"
+	}
+	return fmt.Sprintf("the simple type %s", st.Name())
 }
 
 // IsAssertionDeclined reports whether err — an error [ValidateLexical] or
@@ -124,8 +134,8 @@ func checkAssertions(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, v Value,
 			outcome := a.Evaluate(b, r, st, as.Test(), v)
 			if outcome == AssertionFails {
 				return xsderr.New(ruleCvcAssertionsValid, xsderr.Loc{},
-					"the value is not facet-valid with respect to assertion %d of %d in the {value} of the assertions facet of the simple type %s, whose {test} %q did not evaluate to true without raising a dynamic or type error (cvc-assertions-valid, Datatypes §4.3.13.3)",
-					i+1, len(assertions), st.Name(), as.Test().Expression())
+					"the value is not facet-valid with respect to assertion %d of %d in the {value} of the assertions facet of %s, whose {test} %q did not evaluate to true without raising a dynamic or type error (cvc-assertions-valid, Datatypes §4.3.13.3)",
+					i+1, len(assertions), simpleTypeLabel(st), as.Test().Expression())
 			}
 			if outcome == AssertionDeclined && declined == nil {
 				declined = assertionDeclined(st, i, len(assertions), as.Test())
