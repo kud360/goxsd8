@@ -95,8 +95,8 @@ type SimpleTypeRef struct{ Name QName }
 //
 // Definition is always present: no slot encodes absent at all, so an
 // OwnedSimpleType wrapping nil encodes nothing. NewSimpleType rejects one in
-// every slot. The field is
-// read-only by convention; do not mutate it after construction.
+// every slot. The field is read-only by convention; do not mutate it after
+// construction.
 //
 // It carries a *SimpleType and not a TypeDefinition, which makes original item
 // 7's runtime rejection — a ComplexType written into the simple-type base slot —
