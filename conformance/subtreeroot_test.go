@@ -153,7 +153,7 @@ func TestInstanceExecutorDecidesAssessedSubtreeRoot(t *testing.T) {
 		// The NOTATION rows, one per value-type site the gate reads and one
 		// through the lax {attribute wildcard}, name a declared notation the
 		// enumeration admits: String Valid is the walk's (#1904), NOTATION's
-		// ·value space· decided by walk.notationsDeclared (Datatypes §3.3.19).
+		// ·value space· decided by value.ValidateLexical (Datatypes §3.3.19).
 		// TestInstanceExecutorChargesNotation holds the undeclared values.
 		{"a NOTATION enumeration as the root's value type", notationN + `<xs:element name="known" type="N"/>`, `<known>n</known>`},
 		{

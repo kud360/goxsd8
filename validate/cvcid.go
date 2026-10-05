@@ -40,11 +40,9 @@ const ruleCvcID xsderr.Rule = "cvc-id"
 
 // valueRole is what the ·validating type· of a value makes it (§3.16.4,
 // key-TYPE-value): an ·ID value· its element declares, an ·IDREF value·
-// referring to one, an ·ENTITY value· String Valid clause 3 reads, a NOTATION
-// value whose QName must name a declared notation (Datatypes §3.3.19,
-// [walk.notationsDeclared]), or none of these. The [ID/IDREF table], clause 3
-// and the notation check read one classification between them, so there is one
-// resolver of ·validating type·s and not three (STYLE T4).
+// referring to one, an ·ENTITY value· String Valid clause 3 reads, or none of
+// these. The [ID/IDREF table] and clause 3 read one classification between
+// them, so there is one resolver of ·validating type·s and not two (STYLE T4).
 type valueRole int
 
 const (
@@ -52,7 +50,6 @@ const (
 	roleIDDeclare
 	roleIDReference
 	roleEntity
-	roleNotation
 )
 
 // isID reports whether r is one of the two roles §3.17.5.2 builds the [ID/IDREF
@@ -62,15 +59,11 @@ func (r valueRole) isID() bool { return r == roleIDDeclare || r == roleIDReferen
 // isEntity reports whether r is an ·ENTITY value·'s.
 func (r valueRole) isEntity() bool { return r == roleEntity }
 
-// isNotation reports whether r is a NOTATION value's.
-func (r valueRole) isNotation() bool { return r == roleNotation }
-
-// roleValue is one ·ID value·, ·IDREF value·, ·ENTITY value· or NOTATION value
-// of an item's ·actual value·, carrying the role its OWN ·validating type·
-// gives it. The role travels per value and not per item because a list whose
-// {item type definition} is a union decides it per item (§3.16.4 key-vtype
-// clause 2), so one attribute's value can hold an ·ID value· and a string that
-// is neither.
+// roleValue is one ·ID value·, ·IDREF value· or ·ENTITY value· of an item's
+// ·actual value·, carrying the role its OWN ·validating type· gives it. The
+// role travels per value and not per item because a list whose {item type
+// definition} is a union decides it per item (§3.16.4 key-vtype clause 2), so
+// one attribute's value can hold an ·ID value· and a string that is neither.
 type roleValue struct {
 	value string
 	role  valueRole
@@ -359,10 +352,9 @@ func (w *walk) idRecord(st *xsd.SimpleType, lexical string, owner Element, node 
 			w.ids.declare(v.value, node, loc)
 		case roleIDReference:
 			w.ids.reference(v.value, loc)
-		case roleEntity, roleNotation, roleNone:
-			// An ·ENTITY value· is String Valid clause 3's and a NOTATION value
-			// [walk.notationsDeclared]'s, and neither is a member of the [ID/IDREF
-			// table]; roleValues yields no roleNone at all.
+		case roleEntity, roleNone:
+			// An ·ENTITY value· is String Valid clause 3's and no member of the
+			// [ID/IDREF table]; roleValues yields no roleNone at all.
 		}
 	}
 }
@@ -378,18 +370,16 @@ func (w *walk) declineID(owner Element, loc xsderr.Loc, format string, args ...a
 
 // valueTokens splits one item's ·actual value· into the strings a ·validating
 // type· is read against: every item of a list value, or the single value of an
-// atomic one. WHICH of them are ·ID values·, ·IDREF values·, ·ENTITY values· or
-// NOTATION values is roleValues's to say.
+// atomic one. WHICH of them are ·ID values·, ·IDREF values· or ·ENTITY values·
+// is roleValues's to say.
 //
 // The values are read off the COLLAPSED lexical rather than out of the parsed
-// value, which is exact for the six types namedRole names and for every type
+// value, which is exact for the five types namedRole names and for every type
 // derived from them: ID, IDREF, ENTITY and the item types of IDREFS and
 // ENTITIES all derive from xs:NCName, whose ·value space· is its ·lexical
 // space· (Datatypes §3.4.7) under the collapse whiteSpace its ancestor xs:token
-// fixes. A NOTATION token is its QName lexical under NOTATION's fixed collapse
-// (§3.3.19), which [walk.notationsDeclared] resolves to the QName itself. Every
-// caller has already run String Valid clauses 1 and 2 over the lexical, so a
-// value reaching here is one that mapping accepted.
+// fixes. Every caller has already run String Valid clauses 1 and 2 over the
+// lexical, so a value reaching here is one that mapping accepted.
 func valueTokens(lexical string, list bool) []string {
 	fields := strings.Fields(lexical)
 	if list || len(fields) < 2 {
@@ -417,9 +407,8 @@ func (w *walk) idCandidate(st *xsd.SimpleType) (candidate, decided bool) {
 
 // candidate is idCandidate's walk over any family of roles: whether st is, or
 // is ·derived· or ·constructed· directly or indirectly from, a type namedRole
-// gives a role in family. String Valid clause 3 asks it of ENTITY and ENTITIES,
-// and [walk.notationsDeclared] of NOTATION (cvcsimpletype.go), on the same
-// terms.
+// gives a role in family. String Valid clause 3 asks it of ENTITY and ENTITIES
+// (cvcsimpletype.go), on the same terms.
 //
 // It recurses into a list's {item type definition} and into each union's
 // {member type definitions} with no visited set (STYLE D4). [New] takes only a
@@ -470,8 +459,8 @@ func (w *walk) candidate(st *xsd.SimpleType, family func(valueRole) bool) (candi
 
 // namedRole reads the ·derived· half of key-TYPE-value off st's {base type
 // definition} chain: ID, IDREF and IDREFS by name for §3.17.5.2 clause 3,
-// ENTITY and ENTITIES by name for String Valid clause 3, NOTATION by name for
-// [walk.notationsDeclared], and every type reaching one of them by restriction.
+// ENTITY and ENTITIES by name for String Valid clause 3, and every type
+// reaching one of them by restriction.
 //
 // list distinguishes the two readings of the ·actual value·: IDREFS holds one
 // ·IDREF value· per list item and ENTITIES one ·ENTITY value·, an atomic type
@@ -496,8 +485,6 @@ func (w *walk) namedRole(st *xsd.SimpleType) (role valueRole, list, decided bool
 			return roleEntity, false, true
 		case entitiesName:
 			return roleEntity, true, true
-		case notationName:
-			return roleNotation, false, true
 		}
 		if t.IsAnySimpleType() {
 			break
@@ -511,15 +498,14 @@ func (w *walk) namedRole(st *xsd.SimpleType) (role valueRole, list, decided bool
 	return roleNone, false, true
 }
 
-// roleValues is every ·ID value·, ·IDREF value·, ·ENTITY value· and NOTATION
-// value in one item's ·actual value·, each classified by its own ·validating
-// type· (§3.16.4, key-vtype) and not by the ·governing type definition· a
-// candidacy test admitted the item on. §3.17.5.2's ·ID value· is "one whose
-// ·validating type· is or is ·derived· from ID" (key-TYPE-value), so a union of
-// ID and string contributes nothing for a value the string member validated,
-// and an ·ENTITY value· and a NOTATION value are read on the same terms. The
-// [ID/IDREF table] takes the ID roles off the result (idRecord), String Valid
-// clause 3 the ENTITY one and [walk.notationsDeclared] the NOTATION one
+// roleValues is every ·ID value·, ·IDREF value· and ·ENTITY value· in one
+// item's ·actual value·, each classified by its own ·validating type· (§3.16.4,
+// key-vtype) and not by the ·governing type definition· a candidacy test
+// admitted the item on. §3.17.5.2's ·ID value· is "one whose ·validating type·
+// is or is ·derived· from ID" (key-TYPE-value), so a union of ID and string
+// contributes nothing for a value the string member validated, and an ·ENTITY
+// value· is read on the same terms. The [ID/IDREF table] takes the ID roles off
+// the result (idRecord) and String Valid clause 3 the ENTITY one
 // (cvcsimpletype.go).
 //
 // The two arms are key-vtype's two clauses. Clause 1 fixes the type of the whole
@@ -622,16 +608,14 @@ func (w *walk) validatingType(st *xsd.SimpleType, lexical string, owner Element)
 	return t, true
 }
 
-// The three built-in types §3.17.5.2 clause 3 names by hand, the two whose
-// values String Valid clause 3 reads (key-TYPE-value), and the one whose values
-// must name a declared notation (Datatypes §3.3.19).
+// The three built-in types §3.17.5.2 clause 3 names by hand, and the two whose
+// values String Valid clause 3 reads (key-TYPE-value).
 var (
 	idName       = xsd.QName{Space: xsd.XMLSchemaNS, Local: "ID"}
 	idrefName    = xsd.QName{Space: xsd.XMLSchemaNS, Local: "IDREF"}
 	idrefsName   = xsd.QName{Space: xsd.XMLSchemaNS, Local: "IDREFS"}
 	entityName   = xsd.QName{Space: xsd.XMLSchemaNS, Local: "ENTITY"}
 	entitiesName = xsd.QName{Space: xsd.XMLSchemaNS, Local: "ENTITIES"}
-	notationName = xsd.QName{Space: xsd.XMLSchemaNS, Local: "NOTATION"}
 )
 
 // attributeType is the ·governing type definition· of one attribute

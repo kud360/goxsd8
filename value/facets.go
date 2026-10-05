@@ -247,6 +247,17 @@ func IsDatatypeVerdict(err error) bool {
 // context, threaded to the governing mapping's Parse for the candidate value; a
 // context-free cohort (decimal/boolean/string) passes nil here.
 //
+// Where r answers notationDeclarer, as *xsd.Schema does, a literal whose
+// {primitive type definition} is NOTATION is also held to NOTATION's ·lexical
+// space·, "the set of all names of notations declared in the current schema"
+// (Datatypes §3.3.19): one whose prefix ctx does not bind, or whose QName names
+// none of r's notations, is rejected under cvc-datatype-valid, after its value
+// facets have accepted it (declaredNotation). That holds wherever NOTATION
+// decides the literal — st itself, a type derived from it, a list item or a
+// union member, whose rejection lets the dispatch fall through to a later
+// member (§4.1.4 cl.2.3). Against any other r, NOTATION is held to b's mapping
+// and st's facets alone, and no literal is rejected as undeclared.
+//
 // PRECONDITION (caller-guarded, not PRE-checked here — but a violation is
 // reported, see below): every facet on st is applicable to st per
 // cos-applicable-facets (§4.1.5), and b maps st's governing type. The
@@ -366,6 +377,10 @@ func ValidateLexical(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexic
 // A non-nil err here is not necessarily a rejection of rawLexical —
 // [IsDatatypeVerdict] says which, on the same terms ValidateLexical's own
 // callers already apply. On any non-nil err the *xsd.SimpleType result is nil.
+//
+// NOTATION is held to the notations r declares on ValidateLexical's terms, so
+// an undeclared NOTATION literal is rejected here too, and a union member
+// rejecting one is not the ·active basic member·.
 func ValidatingType(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexical string, ctx Context) (*xsd.SimpleType, Value, error) {
 	variety, err := st.Variety(r)
 	if err != nil {
@@ -464,6 +479,9 @@ func validateLexical(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexic
 		if err := vf.CheckValue(v); err != nil {
 			return nil, 0, err
 		}
+	}
+	if err := declaredNotation(r, st, variety, lexical, ctx); err != nil {
+		return nil, 0, err
 	}
 	return v, ws, nil
 }
