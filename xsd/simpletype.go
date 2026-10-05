@@ -931,9 +931,11 @@ func (t *SimpleType) Members(r TypeResolver) ([]*SimpleType, error) {
 }
 
 // Base resolves and returns the {base type definition} property. It is nil, with
-// a nil error, if and only if IsAnySimpleType reports true — that is, when this
-// type IS xs:anySimpleType, whose real base (xs:anyType) is a Complex Type
-// Definition outside this package's scope.
+// a nil error, if and only if t is the xs:anySimpleType anchor (AnySimpleType),
+// whose real base (xs:anyType) is a Complex Type Definition outside this
+// package's scope. Any other SimpleType whose slot is absent — only the zero
+// value, since NewSimpleType rejects a nil base — is an xsderr.RuleComponentInvariant
+// error (simpleTypeOfRef).
 //
 // The stored slot is a SimpleTypeOrRef (simpletyperef.go), so for a by-name base
 // this is the src-resolve clause 1.1 lookup against r. It is the ONE reader of
@@ -946,24 +948,26 @@ func (t *SimpleType) Members(r TypeResolver) ([]*SimpleType, error) {
 // definition} or {facets} off a truncated chain and accept what the full chain
 // forbids.
 func (t *SimpleType) Base(r TypeResolver) (*SimpleType, error) {
+	if t == anySimpleType {
+		return nil, nil
+	}
 	return simpleTypeOfRef(r, t.base, t.loc, simpleTypeLabel(t)+" {base type definition}")
 }
 
-// IsAnySimpleType reports whether this type is xs:anySimpleType, the root of the
-// simple-type hierarchy (§3.16.1). It is exactly the condition "the {base type
-// definition} slot is absent", exposed as a predicate so callers do not infer
-// this identity from nil-ness. It needs no resolver and cannot fail: absence is
-// a property of the SLOT, decided without following anything (SimpleTypeOrRef).
+// IsAnySimpleType reports whether t is xs:anySimpleType, the root of the
+// simple-type hierarchy (§3.16.1), by identity against the anchor
+// [AnySimpleType] — Datatypes §4.1.6 defines exactly one such component, so no
+// caller-built type, however it is shaped, is xs:anySimpleType. It reports false
+// for nil.
 func (t *SimpleType) IsAnySimpleType() bool {
-	return t.base == nil
+	return t == anySimpleType
 }
 
 // IsSpecial reports whether t is one of the two ·special· datatypes,
 // xs:anySimpleType and xs:anyAtomicType (Datatypes §2.4.2, dt-special), by
 // identity against the anchors [AnySimpleType] and [AnyAtomicType], not by
 // shape: a union or a caller-built type that merely looks like one is not
-// ·special·. It does not agree with IsAnySimpleType, which tests the {base type
-// definition} slot: a type whose base is merely absent is not ·special·.
+// ·special·.
 //
 // A ·literal· is datatype-valid against a ·special· type unconditionally — the
 // first disjunct of the Note under Datatype Valid (Datatypes §4.1.4,
@@ -971,7 +975,7 @@ func (t *SimpleType) IsAnySimpleType() bool {
 // §3.2.1.2, §3.2.2.2): one literal may map to values of several primitives. It
 // reports false for nil.
 func (t *SimpleType) IsSpecial() bool {
-	return t == anySimpleType || t == anyAtomicType
+	return t.IsAnySimpleType() || t == anyAtomicType
 }
 
 // IsPrimitive reports whether this type is a primitive datatype (Datatypes

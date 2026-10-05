@@ -8,17 +8,6 @@ import (
 	"github.com/kud360/goxsd8/xsderr"
 )
 
-// mustSimpleType builds a minimal valid *SimpleType (xs:anySimpleType shape:
-// nil variety, nil base) for use as a SimpleContent {simple type definition}.
-func mustSimpleType(t *testing.T) *xsd.SimpleType {
-	t.Helper()
-	st, err := newCheckedSimpleType(xsderr.Loc{}, xsd.QName{Local: "st"}, nil, nil, nil, nil)
-	if err != nil {
-		t.Fatalf("NewSimpleType unexpected error: %v", err)
-	}
-	return st
-}
-
 // mustParticleWithTerm builds a valid Particle carrying a present {term}.
 func mustParticleWithTerm(t *testing.T) xsd.Particle {
 	t.Helper()
@@ -58,7 +47,7 @@ func TestNewComplexTypeEmptyContent(t *testing.T) {
 }
 
 func TestNewComplexTypeSimpleContent(t *testing.T) {
-	st := mustSimpleType(t)
+	st := simpleTypeNamed(t, xsd.QName{Local: "st"})
 	c, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Local: "ct"}, xsd.QName{Local: "base"}, nil,
 		xsd.DerivationExtension, false, nil, nil, nil, xsd.SimpleContent{SimpleType: st}, nil, nil)
 	if err != nil {

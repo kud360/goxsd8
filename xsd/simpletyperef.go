@@ -167,11 +167,11 @@ func checkSimpleTypeOrRefPresent(loc xsderr.Loc, ref SimpleTypeOrRef, slot strin
 //
 // The arms:
 //
-//   - nil is an ·absent· base (the type IS xs:anySimpleType): (nil, nil), which
-//     every caller reads as the end of the chain, never as a failure. It reaches
-//     here from the base slot alone — NewSimpleType rejects a nil item or member
-//     — so the answer needs no per-caller multiplexing (SimpleTypeOrRef's arm ×
-//     slot table).
+//   - nil is an ERROR charged to xsderr.RuleComponentInvariant, in every slot:
+//     NewSimpleType rejects a nil in all three (SimpleTypeOrRef's arm × slot
+//     table), so a nil here means the owning SimpleType was built by no
+//     constructor — the zero value. xs:anySimpleType's own absent slot never
+//     reaches here: Base answers for the anchor by identity before calling this.
 //   - OwnedSimpleType IS the component; it is in no by-name symbol table, so a
 //     lookup would miss it.
 //   - SimpleTypeRef is the r.Type lookup. BOTH a miss and a wrong-kind hit (the
@@ -195,7 +195,8 @@ func checkSimpleTypeOrRefPresent(loc xsderr.Loc, ref SimpleTypeOrRef, slot strin
 func simpleTypeOfRef(r TypeResolver, ref SimpleTypeOrRef, loc xsderr.Loc, ctx string) (*SimpleType, error) {
 	switch b := ref.(type) {
 	case nil:
-		return nil, nil
+		return nil, xsderr.New(xsderr.RuleComponentInvariant, loc,
+			"%s is absent, but every simple type other than xs:anySimpleType holds one: this SimpleType was built by no constructor", ctx)
 	case OwnedSimpleType:
 		return b.Definition, nil
 	case SimpleTypeRef:

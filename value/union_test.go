@@ -488,12 +488,13 @@ func TestActiveBasicMemberDeclinesOnMembershipExhaustion(t *testing.T) {
 // whiteSpace mode and the union's own pattern stage must test the RAW literal rather
 // than normalize with the zero mode.
 //
-// The state is reachable, not hypothetical: cos-st-restricts clause 3.1 rejects the two
-// ·special· ANCHOR nodes as members by IDENTITY, so a caller-built type in the same
-// SHAPE as an anchor — no declared derivation, no {base type definition} — passes that
-// check and can be a member. Its {variety} is ·absent·, which is §4.1.5's first
-// no-applicable-facets case. Without the guard, normalizeWhiteSpace panics on the zero
-// mode — the very panic class this cohort exists to remove.
+// The state is reachable, not hypothetical: a ·restriction· of xs:anySimpleType
+// inherits its ·absent· {variety}, which is §4.1.5's first no-applicable-facets case.
+// NewSimpleType builds one — the {variety} is st-props-correct clause 1's, charged by
+// that member's own CheckDerivation, which a union's CheckDerivation does not re-run
+// over its members — and cos-st-restricts clause 3.1 rejects only the two ·special·
+// ANCHOR nodes as members, by IDENTITY. Without the guard, normalizeWhiteSpace panics
+// on the zero mode — the very panic class this cohort exists to remove.
 //
 // The member used to be an atomic type carrying an explicitly absent {primitive type
 // definition} over a primitive base — §4.1.5's SECOND case. That shape is no longer
@@ -503,10 +504,10 @@ func TestActiveBasicMemberDeclinesOnMembershipExhaustion(t *testing.T) {
 // under test is unchanged; the reachable witness for it moved from §4.1.5's second case
 // to its first.
 func TestValidateLexicalUnionMemberWithNoApplicableFacets(t *testing.T) {
-	member, err := newCheckedSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "absentVariety"},
-		nil, nil, nil, nil)
+	member, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "absentVariety"},
+		xsd.RestrictionDerivation{}, xsd.OwnedSimpleType{Definition: xsd.AnySimpleType()}, nil, nil)
 	if err != nil {
-		t.Fatalf("NewSimpleType(absent {variety}, absent {base type definition}): %v", err)
+		t.Fatalf("NewSimpleType(restriction of xs:anySimpleType): %v", err)
 	}
 	u := unionType2(t, "facetlessMember", member)
 

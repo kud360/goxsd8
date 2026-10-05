@@ -616,8 +616,13 @@ func (s *Schema) resolveKeyref(ic IdentityConstraint) error {
 // A rejection is positioned at the referring type's own Loc, which simpleTypeOfRef
 // takes from t — the referrer-Loc convention, with the simple type as its own
 // nearest position-bearing component.
+//
+// The xs:anySimpleType anchor holds no slot to resolve — its base is xs:anyType,
+// outside this package, and it has no derivation — so it returns nil by identity,
+// the test Base makes before reading the slot; any other absent base is
+// simpleTypeOfRef's xsderr.RuleComponentInvariant error.
 func (s *Schema) resolveSimpleType(t *SimpleType) error {
-	if t == nil {
+	if t == nil || t.IsAnySimpleType() {
 		return nil
 	}
 	if err := s.resolveSimpleTypeSlot(t, t.base, "{base type definition}"); err != nil {

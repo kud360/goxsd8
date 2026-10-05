@@ -363,36 +363,34 @@ func TestAnchorsNilContract(t *testing.T) {
 	}
 }
 
-// TestIsSpecialIsIdentity pins IsSpecial to identity against the two anchors
-// (Datatypes §2.4.2, dt-special): a caller-built type with an absent base and
-// an absent {variety} has the anchor's shape, and IsAnySimpleType says true
-// for it, yet it is not ·special·.
+// TestIsSpecialIsIdentity pins IsAnySimpleType and IsSpecial to identity
+// against the anchors (Datatypes §4.1.6, §2.4.2 dt-special). The lookalike is
+// the zero value &SimpleType{}: it has xs:anySimpleType's shape — an absent base
+// and an absent {variety} — and is neither xs:anySimpleType nor ·special·, so
+// the two predicates agree on it as on every row.
 func TestIsSpecialIsIdentity(t *testing.T) {
-	lookalike, err := NewSimpleType(xsderr.Loc{}, QName{Space: XMLSchemaNS, Local: "anySimpleType"}, nil, nil, nil, nil)
-	if err != nil {
-		t.Fatalf("NewSimpleType: %v", err)
-	}
-	if !lookalike.IsAnySimpleType() {
-		t.Fatal("lookalike.IsAnySimpleType() = false, want true (the shape this test contrasts)")
-	}
 	prim, err := NewPrimitiveType(xsderr.Loc{}, QName{Space: XMLSchemaNS, Local: "string"}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewPrimitiveType: %v", err)
 	}
 	cases := []struct {
-		name string
-		t    *SimpleType
-		want bool
+		name          string
+		t             *SimpleType
+		wantAnySimple bool
+		wantSpecial   bool
 	}{
-		{"anySimpleType", AnySimpleType(), true},
-		{"anyAtomicType", AnyAtomicType(), true},
-		{"lookalike", lookalike, false},
-		{"primitive", prim, false},
-		{"nil", nil, false},
+		{"anySimpleType", AnySimpleType(), true, true},
+		{"anyAtomicType", AnyAtomicType(), false, true},
+		{"zero-value lookalike", &SimpleType{}, false, false},
+		{"primitive", prim, false, false},
+		{"nil", nil, false, false},
 	}
 	for _, c := range cases {
-		if got := c.t.IsSpecial(); got != c.want {
-			t.Errorf("%s.IsSpecial() = %v, want %v", c.name, got, c.want)
+		if got := c.t.IsAnySimpleType(); got != c.wantAnySimple {
+			t.Errorf("%s.IsAnySimpleType() = %v, want %v", c.name, got, c.wantAnySimple)
+		}
+		if got := c.t.IsSpecial(); got != c.wantSpecial {
+			t.Errorf("%s.IsSpecial() = %v, want %v", c.name, got, c.wantSpecial)
 		}
 	}
 }
@@ -542,23 +540,19 @@ func TestDerivedPropertiesFollowTheBaseChain(t *testing.T) {
 }
 
 // TestDerivedReadersAreTotal pins that the four derived readers never panic on
-// the partially-built shapes the constructors themselves produce and
-// CheckDerivation (derivation.go) later reads them off: a type with a nil
-// derivation AND a nil base (the anonymous placeholder several callers build),
-// and a restriction whose base's own base is nil. Each returns the ·absent·
-// value instead.
+// a type with a nil derivation AND a nil base, nor on a restriction whose base
+// is one. NewSimpleType rejects both nils, so the only such type a caller can
+// hold is the zero value &SimpleType{}, and that is the witness here. Each
+// reader returns the ·absent· value instead.
 func TestDerivedReadersAreTotal(t *testing.T) {
-	anon, err := newCheckedSimpleType(xsderr.Loc{}, QName{}, nil, nil, nil, nil)
-	if err != nil {
-		t.Fatalf("newCheckedSimpleType(nil derivation, nil base): %v", err)
-	}
-	// A restriction whose base chain runs out: anon's own base is nil.
-	overAnon := &SimpleType{name: QName{Local: "overAnon"}, derivation: RestrictionDerivation{}, base: OwnedSimpleType{Definition: anon}}
+	zero := &SimpleType{}
+	// A restriction whose base chain runs out: zero's own base is nil.
+	overZero := &SimpleType{name: QName{Local: "overZero"}, derivation: RestrictionDerivation{}, base: OwnedSimpleType{Definition: zero}}
 
 	for _, c := range []struct {
 		name string
 		st   *SimpleType
-	}{{"nil derivation and nil base", anon}, {"restriction over a nil-based base", overAnon}} {
+	}{{"zero value", zero}, {"restriction over the zero value", overZero}} {
 		if got := mustVariety(c.st); got != nil {
 			t.Errorf("%s: Variety() = %#v, want nil", c.name, got)
 		}
