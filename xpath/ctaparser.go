@@ -655,9 +655,6 @@ func (p *ctaParser) booleanExpr() (ctaExpr, bool) {
 	if typing == ctaTypeErrored {
 		return ctaTypeError{}, true
 	}
-	if !p.facade.admitsComparison(p.types, comparison) {
-		return nil, false
-	}
 	return ctaCompare{op: op, comparison: comparison, left: left, right: right}, true
 }
 
@@ -750,10 +747,8 @@ func (p *ctaParser) valueComparator() (ctaComparator, bool) {
 //
 // The type both operands are compared in is settled here, on §3.5.1's terms
 // (ctaTypes.valueComparison), and a type it cannot be compared in is the
-// err:XPTY0004 node a general comparison builds too. The façade then admits or
-// declines the settled type exactly as it does a general comparison's, so a
-// value comparison in the date/time family declines on the same arm
-// (ctaFacade.admitsComparison).
+// err:XPTY0004 node a general comparison builds too, and a settled type is
+// evaluated exactly as a general comparison's is (ctaHoldsPair).
 func (p *ctaParser) valueComparison(op ctaComparator, left ctaValue) (ctaExpr, bool) {
 	if !p.facade.comparesValues() {
 		return nil, false
@@ -768,9 +763,6 @@ func (p *ctaParser) valueComparison(op ctaComparator, left ctaValue) (ctaExpr, b
 	}
 	if typing == ctaTypeErrored {
 		return ctaTypeError{}, true
-	}
-	if !p.facade.admitsComparison(p.types, comparison) {
-		return nil, false
 	}
 	return ctaValueCompare{op: op, comparison: comparison, left: left, right: right}, true
 }

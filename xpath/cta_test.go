@@ -1373,6 +1373,40 @@ func TestEvaluateBooleanComparisons(t *testing.T) {
 	}
 }
 
+// TestEvaluateDateTimeAtImplicitTimezone pins F&O §10.4 on the Type Alternative
+// façade: an untyped @d cast to xs:date against a date (§3.5.2 clause 2.4) and
+// compared with a timezoned one is decided under the implicit timezone,
+// ctaImplicitTimezone (Z). The tautology is true whatever the constant is, and
+// the `=` rows are true because it is Z; every mixed row fails with the
+// date/time arm of ctaHoldsPair removed, which answers the tautology false.
+// Two untimezoned operands, and two timezoned ones, compare as before the arm,
+// and a g* ordering stays err:XPTY0004 (B.2), which fn:not does not invert.
+func TestEvaluateDateTimeAtImplicitTimezone(t *testing.T) {
+	attrs := ctaAttrs(at("d", "2000-01-01"), at("z", "2000-01-01Z"), at("g", "---01"))
+	for _, tc := range []struct {
+		expr string
+		want bool
+	}{
+		{"@d < xs:date('2000-01-01Z') or @d >= xs:date('2000-01-01Z')", true},
+		{"@d = xs:date('2000-01-01Z')", true},
+		{"@d != xs:date('2000-01-01Z')", false},
+		{"@d <= xs:date('2000-01-01Z')", true},
+		{"@d > xs:date('2000-01-01+14:00')", true},
+		{"@g cast as xs:gDay = xs:gDay('---01Z')", true},
+		{"@d = xs:date('2000-01-01')", true},
+		{"@d < xs:date('2000-01-02')", true},
+		{"@z = xs:date('2000-01-01+14:00')", false},
+		{"@z > xs:date('2000-01-01+14:00')", true},
+		{"@g cast as xs:gDay < xs:gDay('---02')", false},
+		{"not(@g cast as xs:gDay < xs:gDay('---02'))", false},
+	} {
+		got := compile(t, tc.expr, "xs", xsd.XMLSchemaNS).Evaluate(backend(), seededTypes, attrs)
+		if got != tc.want {
+			t.Errorf("Evaluate(%q) = %v, want %v", tc.expr, got, tc.want)
+		}
+	}
+}
+
 // TestEvaluateDurationSubtypeOrdering guards the regression the B.2 lookup
 // invites: B.2 writes the four ordering rows under xs:yearMonthDuration and
 // xs:dayTimeDuration and none under their xs:duration primitive, so reducing

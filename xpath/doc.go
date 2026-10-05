@@ -53,8 +53,7 @@
 //     is ·absent·, ·special·, or neither a simple type an attribute's would be
 //     admitted as nor simple content over one, a path of more than one step, a
 //     cast from a typed attribute or child outside the xs:string family, and a
-//     general or value comparison in a date/time type, which has no implicit
-//     timezone to order by (F&O §10.4), and a `$value` whose {simple type
+//     `$value` whose {simple type
 //     definition} is classified as such an attribute's type would be, or is a
 //     list of a type that would be; a `$value` over ·special· content is
 //     xs:untypedAtomic, as such an attribute is. Longer paths, the other axes,
@@ -144,4 +143,11 @@
 // Which operators an operand type admits at ALL is xpath20.md B.2's
 // answer rather than a capability's, generated from the spec into the
 // package (tools/opmapgen) and enforced at compile time.
+//
+// # Dynamic context
+//
+// The implicit timezone is Z, the zero offset PT0S, for every evaluation of
+// either façade (cvc-xpath clause 7 leaves it ·implementation-defined·);
+// ctaImplicitTimezone holds it, and F&O §10.4 assumes it on whichever operand
+// of a date/time comparison has no timezone of its own.
 package xpath
