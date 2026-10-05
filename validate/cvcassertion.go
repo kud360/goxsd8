@@ -197,8 +197,10 @@ func (c *assertionCheck) reads(name xsd.QName) bool {
 	return false
 }
 
-// lacking records l as c's lack where c has none yet, so the first lacking
-// child in document order is the one a decline names.
+// lacking records l as c's lack where c has none yet, so the first lack the
+// walk meets is the one a decline names: a counted node's on entering it
+// ([walk.tallyElement]), a read child's once its assessment is over
+// ([walk.keepChild]), both in document order.
 func (c *assertionCheck) lacking(l assertionLack) {
 	if c.lack == nil {
 		c.lack = l
