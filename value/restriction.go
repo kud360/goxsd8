@@ -139,7 +139,7 @@ func CheckFacetRestriction(b Backend, r xsd.TypeResolver, t *xsd.SimpleType) err
 		// carries no facets of its own (§3.16.1).
 		return nil
 	}
-	m, ok, err := governingMapping(b, r, base)
+	m, ok, err := governingMapping(b, r, base, assertionsUndecided{})
 	if err != nil {
 		return err
 	}
@@ -546,6 +546,17 @@ func minInclusiveRestrictionViolates(base xsd.FacetKind, ord Ordering) bool {
 // and re-charging it here as enumeration-valid-restriction against the DERIVED type
 // would name a constraint with nothing to say about it and reject a schema whose
 // enumeration may be perfectly valid.
+//
+// An assertions-facet DECLINE in the base is SKIPPED on the same terms
+// (IsAssertionDeclined): this check holds no XPath engine (assertionsUndecided),
+// so a member every other facet of the base accepts reaches the base's
+// assertions undecided, and charging that would reject every enumeration on a
+// base carrying an assertions facet. GAP(value): a member the base's
+// assertions would reject is therefore never charged under §4.3.5.5. The
+// withheld value is this function's error, whose one reader is
+// builtin's checkSimpleTypeRestriction, the xsd.SimpleTypeRestrictionChecker
+// xsd's finalize charges on an error PRESENT, so the decline can only cost a
+// schema rejection and the direction is fail-open. (#1042)
 func (rc restrictionCheck) checkEnumerationRestriction(b Backend, r xsd.TypeResolver) error {
 	memberBackend := b
 	if s, ok := r.(notationDeclarer); ok {
@@ -559,8 +570,8 @@ func (rc restrictionCheck) checkEnumerationRestriction(b Backend, r xsd.TypeReso
 		// ok=true; the second result is discarded deliberately.
 		members, _ := own.EnumerationMembers()
 		for _, em := range members {
-			_, err := ValidateLexical(memberBackend, r, rc.base, em.Lexical(), newMemberContext(em))
-			if IsFacetPrecondition(err) {
+			_, err := ValidateLexical(memberBackend, r, rc.base, em.Lexical(), newMemberContext(em), assertionsUndecided{})
+			if IsFacetPrecondition(err) || IsAssertionDeclined(err) {
 				continue
 			}
 			if err != nil {

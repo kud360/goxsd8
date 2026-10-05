@@ -224,7 +224,7 @@ func TestNewBoundFacetUnorderedLimitIsError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewPrimitiveType: %v", err)
 	}
-	_, verr := ValidateLexical(plainBackend{qn: true}, noSchema{}, st, "1", nil)
+	_, verr := ValidateLexical(plainBackend{qn: true}, noSchema{}, st, "1", nil, assertionsUndecided{})
 	if verr == nil {
 		t.Fatal("ValidateLexical(maxInclusive facet over an unordered value space) = nil error, want a precondition fault")
 	}

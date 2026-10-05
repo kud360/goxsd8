@@ -152,8 +152,11 @@ import (
 //     XPath evaluator compiles and that {test} is false or raises a dynamic or
 //     type error, which the rule treats alike (#2232). cvc-complex-type clause
 //     6 reads it, so case 3's chain applies unchanged. An assertion whose
-//     {test} the evaluator declines is recorded, never charged, and a facet
-//     assertion's cvc-assertions-valid is never charged at all.
+//     {test} the evaluator declines is recorded, never charged. A simple
+//     type's assertions facet is evaluated as well, and a false {test} is
+//     charged — but folded into Datatype Valid (cvc-datatype-valid clause 3)
+//     and so under cvc-complex-type, cvc-attribute or cvc-type, cases 3, 4
+//     and 9, never as a top-level cvc-assertions-valid (#2246).
 //
 // All ten are unconditional: no verdict here can be overturned by anything in
 // the rest of the document, which is what makes them decidable while the engine
@@ -352,8 +355,9 @@ import (
 //     or clause 5.1's substitute, String Valid against the type — is the
 //     walk's, the empty string of a content-less element included; its one
 //     decline (validate's contentCheck.simpleTypeValue, String Valid withheld)
-//     is RECORDED in Result.Unevaluated, as are the assertions-facet sites of
-//     the type's closure, which validate records and never evaluates.
+//     is RECORDED in Result.Unevaluated, under cvc-assertions-valid where an
+//     assertions facet of the type's closure has a {test} validate's facet
+//     evaluator declines; one it evaluates false is part of the 3.1.3 verdict.
 //   - cvc-elt clause 7 (cvc-id, §3.3.4.5): the walk's, at every depth. It
 //     reads each element's and attribute's item into the [ID/IDREF table]
 //     (validate's walk.idAttributes, walk.idDefaultedAttributes and
@@ -569,7 +573,7 @@ import (
 // records how far the walk got and not what the document holds: the walk keeps
 // going after a charge such as an abstract declaration's, so a Result can carry
 // BOTH a decidable violation and a truncated walk. And a violation set that
-// holds any rule outside the ten enumerated declines rather than being read as
+// holds any rule outside decidableRules declines rather than being read as
 // a verdict a later slice's wider Assess might charge under an approximation;
 // the COUNT is not a condition, since one root can honestly carry several
 // charges (see decidedNotValid). An EMPTY violation set declines unless the
@@ -611,7 +615,7 @@ const (
 	refuseInstanceUnresolved refusal = "instance-unresolved"   // assessInstance: the instance will not resolve
 	refuseInstanceUnread     refusal = "instance-unread"       // assessInstance: xmlsrc.Validate failed
 	refuseWalkStopped        refusal = "walk-stopped"          // assessInstance: validate.Result.Err
-	refuseUndecidedRule      refusal = "undecided-rule"        // decidedNotValid: a charge outside the ten
+	refuseUndecidedRule      refusal = "undecided-rule"        // decidedNotValid: a charge outside decidableRules
 	refuseUnevaluated        refusal = "unevaluated"           // validate.Result.Unevaluated is not empty; see unevaluatedRefusal
 
 	// assessedSubtreeRoot's pre-gate refusals (subtreeroot.go).
@@ -763,12 +767,13 @@ func assessInstance(v *validate.Validator, doc string) (*validate.Result, refusa
 	return result, ""
 }
 
-// These are the ten rules validate.Validator.Assess charges, and the whole of
-// what this lane may read as a verdict. All ten are catalog IDs in their BARE
-// form: the charged clause lives in the message text, not in a dotted rule ID,
-// so matching the rule alone is the only stable match — and it is the right
-// one, since a root failing ANY clause of any of the ten is not locally valid
-// and so not valid (§3.3.5.1 e-validity clause 1.1.1.1).
+// These are the ten rules validate.Validator.Assess charges, and with
+// cvc-assertions-valid (decidableRules) the whole of what this lane may read as
+// a verdict. All of them are catalog IDs in their BARE form: the charged clause
+// lives in the message text, not in a dotted rule ID, so matching the rule
+// alone is the only stable match — and it is the right one, since a root
+// failing ANY clause of any of the ten is not locally valid and so not valid
+// (§3.3.5.1 e-validity clause 1.1.1.1).
 const (
 	ruleCvcAssessElt      xsderr.Rule = "cvc-assess-elt"
 	ruleCvcElt            xsderr.Rule = "cvc-elt"
@@ -782,14 +787,27 @@ const (
 	ruleCvcID                 xsderr.Rule = "cvc-id"
 
 	ruleCvcAssertion xsderr.Rule = "cvc-assertion"
+
+	// ruleCvcAssertionsValid is Assertions Valid (Datatypes §4.3.13.3), which
+	// Assess never charges at top level: see decidableRules.
+	ruleCvcAssertionsValid xsderr.Rule = "cvc-assertions-valid"
 )
 
 // decidableRules collects them for the membership test below, so growing the
 // set is one edit and the test reads the same however long it gets — a chain of
 // != comparisons silently admits a rule someone forgot to add to it.
+//
+// cvc-assertions-valid is admitted beside the ten and is NOT load-bearing: a
+// false assertions-facet {test} makes the value not Datatype Valid
+// (cvc-datatype-valid clause 3), which validate charges under the rule of the
+// item it decides — cvc-attribute, cvc-type or cvc-complex-type, each already
+// here — with the facet's verdict as the wrapped cause, and decidedNotValid
+// reads the top-level rule alone. No violation carries it at top level today;
+// were one to, it would be unconditional, as each of the ten is.
 var decidableRules = []xsderr.Rule{
 	ruleCvcAssessElt, ruleCvcElt, ruleCvcType, ruleCvcComplexType, ruleCvcComplexContent,
 	ruleCvcAttribute, ruleCvcAu, ruleCvcIdentityConstraint, ruleCvcID, ruleCvcAssertion,
+	ruleCvcAssertionsValid,
 }
 
 // decidedNotValid reports whether the violations one assessment charged

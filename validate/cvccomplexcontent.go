@@ -660,17 +660,12 @@ func (c *contentCheck) fixedActualValue(w *walk, f xsd.ValueConstraint) {
 // [walk.notationsDeclared] states. Either decline is recorded by the caller as an
 // [Unevaluated] under the rule it withholds ([contentCheck.decline]).
 //
-// st's assertion sites are recorded BEFORE the decline ([walk.simpleAssertions],
-// cvcassertion.go), because it leaves the element's ·initial value· to be read
-// by cvcid.go and cvcidentityconstraint.go against the same type: a value this
-// backend cannot read declines here and still reaches the datatype pipeline
-// there, so recording after the decline would lose the site. A ·nilled· element
-// records nothing — its ·initial value· is ·absent· (§3.3.5.4), which is the
-// same condition [contentCheck.simpleTypeValue] gates clause 3.1.3 on.
+// st's assertions facets are evaluated inside String Valid, so a failed {test}
+// is part of the verdict both clauses charge; one the evaluator declines leaves
+// decided false with that decline as the error, which each caller records under
+// cvc-assertions-valid ([walk.declineAssertions], cvcassertion.go) in place of
+// its own clause's decline.
 func (c *contentCheck) stringValid(w *walk, st *xsd.SimpleType) (decided bool, verdict error) {
-	if !c.nilled {
-		w.simpleAssertions(st, "assessing element", c.e.Name(), c.e.Loc())
-	}
 	return w.stringValid(st, c.assessed(), c.e, c.e.Loc())
 }
 
@@ -694,6 +689,9 @@ func (c *contentCheck) simpleTypeValue(w *walk) {
 	}
 	decided, verdict := c.stringValid(w, st)
 	if !decided {
+		if w.declineAssertions(verdict, "assessing content", c.e.Name(), c.e.Loc(), "cvc-type clause 3.1.3") {
+			return
+		}
 		c.decline(w, c.e.Name(), c.e.Loc(), ruleCvcType, "3.1.3",
 			"the ·initial value· of the element %s was not decided against its ·governing type definition· %s: String Valid (§3.16.4) was withheld, the value backend reporting a fault of the type rather than a verdict about the lexical or the ·validating type· of an ·ENTITY value· or a NOTATION value being undecidable, so cvc-type clause 3.1.3 is undecided",
 			c.e.Name(), typeName(st))
@@ -715,6 +713,9 @@ func (c *contentCheck) simpleTypeValue(w *walk) {
 func (c *contentCheck) initialValue(w *walk, st *xsd.SimpleType) {
 	decided, verdict := c.stringValid(w, st)
 	if !decided {
+		if w.declineAssertions(verdict, "assessing content", c.e.Name(), c.e.Loc(), "cvc-complex-type clause 1.2") {
+			return
+		}
 		c.decline(w, c.e.Name(), c.e.Loc(), ruleCvcComplexType, "1.2",
 			"the ·initial value· of the element %s was not decided against the {simple type definition} %s of its ·governing type definition·'s {content type}: String Valid (§3.16.4) was withheld, the value backend reporting a fault of the type rather than a verdict about the lexical or the ·validating type· of an ·ENTITY value· or a NOTATION value being undecidable, so cvc-complex-type clause 1.2 is undecided",
 			c.e.Name(), st.Name())

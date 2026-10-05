@@ -1528,15 +1528,15 @@ func TestInstanceExecutorChargesAbstractComplexType(t *testing.T) {
 // TestInstanceExecutorDeclinesUnevaluatedRoot proves a root the gate admits
 // whose walk RECORDED a check it did not perform declines rather than reading
 // the empty violation list as "valid": an identity constraint whose
-// {selector} icpath does not compile, an assertions facet, whose {test}
-// validate records and never evaluates, and a complex type's {assertions}
-// (cvc-complex-type clause 6) whose {test} true() — a function call — is
-// outside what validate's XPath evaluator compiles, so elementAssertions
-// declines it. Each refusal names the rules of the records behind it (#2106):
-// the first three cases differ only in the Unevaluated rule they record, and
-// the last records cvc-assertions-valid, cvc-assertion, cvc-assertions-valid
-// in document order, so its token names each rule once, in first-occurrence
-// order rather than sorted.
+// {selector} icpath does not compile, an assertions facet whose {test} true()
+// — a function call — validate's facet evaluator declines, and a complex
+// type's {assertions} (cvc-complex-type clause 6) whose {test} true() — a
+// function call — is outside what validate's XPath evaluator compiles, so
+// elementAssertions declines it. Each refusal names the rules of the records
+// behind it (#2106): the first three cases differ only in the Unevaluated
+// rule they record, and the last records cvc-assertions-valid, cvc-assertion,
+// cvc-assertions-valid in document order, so its token names each rule once,
+// in first-occurrence order rather than sorted.
 func TestInstanceExecutorDeclinesUnevaluatedRoot(t *testing.T) {
 	const assertedString = `<xs:simpleType name="A"><xs:restriction base="xs:string">` +
 		`<xs:assertion test="true()"/></xs:restriction></xs:simpleType>`
