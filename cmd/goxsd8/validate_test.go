@@ -98,9 +98,67 @@ func TestValidateRendersDelegatedVerdictWithoutPlaceholder(t *testing.T) {
 	if code := run([]string{"validate", "-schema", orderSchema, invalidInstance}, &stdout, &stderr); code != exitInvalid {
 		t.Fatalf("code = %d, want %d (stderr %q)", code, exitInvalid, stderr.String())
 	}
-	const want = invalidInstance + `:5:3: [cvc-attribute] the ·initial value· of the attribute sku is not ·valid· with respect to its declaration's {type definition} {http://example.com/order}Sku, which cvc-attribute clause 3 requires as per String Valid (§3.16.4): [cvc-pattern-valid] value "nope" matches no member of the pattern facet (cvc-pattern-valid, §4.3.4.4)`
+	const want = invalidInstance + `:5:3: [cvc-attribute] the ·initial value· of the attribute sku is not ·valid· with respect to its declaration's {type definition} {http://example.com/order}Sku, which cvc-attribute clause 3 requires as per String Valid (§3.16.4): [cvc-pattern-valid] value "nope" matches no member of the pattern facet of the simple type {http://example.com/order}Sku, whose {value} holds "[A-Z]{3}-[0-9]{4}" (cvc-pattern-valid, §4.3.4.4)`
 	if line, _, _ := strings.Cut(stdout.String(), "\n"); line != want {
 		t.Errorf("first line =\n%s\nwant\n%s", line, want)
+	}
+}
+
+// runIntPattern validates <n>x3</n> against an element of type xs:int, a
+// lexical outside xs:integer's built-in pattern, which xs:int inherits
+// (Datatypes integer.pattern), and returns the instance path and the run's
+// outcome.
+func runIntPattern(t *testing.T) (instance string, code int, stdout, stderr string) {
+	t.Helper()
+	dir := t.TempDir()
+	schema := filepath.Join(dir, "s.xsd")
+	instance = filepath.Join(dir, "i.xml")
+	if err := os.WriteFile(schema, []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="n" type="xs:int"/></xs:schema>`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(instance, []byte(`<n>x3</n>`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var out, errOut bytes.Buffer
+	code = run([]string{"validate", "-schema", schema, instance}, &out, &errOut)
+	return instance, code, out.String(), errOut.String()
+}
+
+// TestValidateNamesTheBuiltinPatternAndItsDeclaringType pins that a built-in
+// type's pattern rejection names the pattern it failed and the type that
+// declares it — xs:integer's [\-+]?[0-9]+ — rather than reading as a pattern
+// the schema author wrote (#2310).
+func TestValidateNamesTheBuiltinPatternAndItsDeclaringType(t *testing.T) {
+	_, code, stdout, stderr := runIntPattern(t)
+	if code != exitInvalid {
+		t.Fatalf("code = %d, want %d (stdout %q, stderr %q)", code, exitInvalid, stdout, stderr)
+	}
+	const want = `[cvc-pattern-valid] value "x3" matches no member of the pattern facet of the simple type {http://www.w3.org/2001/XMLSchema}integer, whose {value} holds "[\-+]?[0-9]+" (cvc-pattern-valid, §4.3.4.4)`
+	if !strings.Contains(stdout, want) {
+		t.Errorf("stdout =\n%s\nwant it to carry\n%s", stdout, want)
+	}
+}
+
+// TestValidateIntPatternRuleAndExitCode characterizes the rule a lexical
+// outside xs:int's inherited pattern is charged under: exit 1, cvc-type
+// clause 3.1.3 wrapping cvc-pattern-valid. The lexical also fails xs:int's
+// lexical mapping (cvc-datatype-valid clause 2.1) and the spec orders neither
+// clause first, so this pins the repository's choice — the pattern stage
+// runs before the mapping — against a re-charge under another rule (#2310).
+func TestValidateIntPatternRuleAndExitCode(t *testing.T) {
+	instance, code, stdout, stderr := runIntPattern(t)
+	if code != exitInvalid {
+		t.Fatalf("code = %d, want %d (stdout %q, stderr %q)", code, exitInvalid, stdout, stderr)
+	}
+	if stderr != "" {
+		t.Errorf("stderr = %q, want empty", stderr)
+	}
+	line, _, _ := strings.Cut(stdout, "\n")
+	if prefix := instance + ":1:1: [cvc-type] "; !strings.HasPrefix(line, prefix) {
+		t.Errorf("first line = %q, want it to open %q", line, prefix)
+	}
+	if !strings.Contains(line, `: [cvc-pattern-valid] value "x3" `) {
+		t.Errorf("first line = %q, want the cvc-type charge to wrap a cvc-pattern-valid verdict on \"x3\"", line)
 	}
 }
 
