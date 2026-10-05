@@ -598,7 +598,7 @@ func TestElementWithoutAssertionsRecordsNothing(t *testing.T) {
 // aFacetTypes is aVarietyTypes plus the facets the evaluation tests read: two
 // whose {test} the facet evaluator admits (`$value eq 100` over xs:integer,
 // `$value = 'x'` over xs:string), one reading the absent context item, two it
-// declines (arithmetic, #2269, and a function call), and a union whose first
+// declines (a range expression and a function call), and a union whose first
 // member restricts xs:ENTITY with `$value = 'x'` ahead of xs:string.
 func aFacetTypes(t *testing.T) []*xsd.SimpleType {
 	t.Helper()
@@ -606,7 +606,7 @@ func aFacetTypes(t *testing.T) []*xsd.SimpleType {
 		aRestriction(t, "EqHundred", integerType(), "$value eq 100"),
 		aRestriction(t, "IsX", icBuiltin("string"), "$value = 'x'"),
 		aRestriction(t, "Dot", icBuiltin("string"), ". = 'x'"),
-		aRestriction(t, "Even", integerType(), "$value mod 2 = 0"),
+		aRestriction(t, "InRange", integerType(), "$value = 1 to 10"),
 		aRestriction(t, "EndsX", icBuiltin("string"), "ends-with($value, 'x')"),
 		aRestriction(t, "EntityX", icBuiltin("ENTITY"), "$value = 'x'"),
 		aUnion(t, "EntityXOrString", local("EntityX"), icBuiltin("string")),
@@ -712,7 +712,7 @@ func TestUnionMemberFailingItsFacetYieldsTheValidatingType(t *testing.T) {
 // records only the member the dispatch REACHED — 42 is decided by AssertedInt,
 // whose facet holds, so AssertedStr's is never asked, where "abc" reaches it —
 // and then its own facet, which is declined whatever its {test} (dt-xdmrep
-// clause 4). The two declined {test}s Even and EndsX are the guard: with
+// clause 4). The two declined {test}s InRange and EndsX are the guard: with
 // [walk.declineAssertions] reporting false they record under cvc-attribute
 // instead, and with the evaluator answering AssertionFails for a decline they
 // are charged.
@@ -723,7 +723,7 @@ func TestDeclinedFacetAssertionsAreRecorded(t *testing.T) {
 		lexical string
 		want    []string
 	}{
-		{"arithmetic", "Even", "4", []string{"Even"}},
+		{"a range expression", "InRange", "4", []string{"InRange"}},
 		{"a function call", "EndsX", "ax", []string{"EndsX"}},
 		{"atomic", "AssertedStr", "abc", []string{"AssertedStr"}},
 		{"a list item evaluated", "PlainList", "1 2", nil},
@@ -822,7 +822,7 @@ func TestWildcardAttributeAssertionsAreRecorded(t *testing.T) {
 // definition} (walk.stringValid, xpath.FacetAssertions): `$value > 0` holds for
 // a default of "42" and is charged under clause 4, its cause the
 // cvc-assertions-valid verdict, for "0"; a {test} the facet evaluator declines
-// (`$value mod 2 = 0`, #2269) is recorded under cvc-assertions-valid at the
+// (`$value = 1 to 10`) is recorded under cvc-assertions-valid at the
 // ELEMENT's location, the attribute being absent. With the default decided
 // through xsd.ValueSpace's ValidDefault, which evaluates no assertion, all
 // three rows record a cvc-complex-type clause 4 decline instead.
@@ -836,7 +836,7 @@ func TestDefaultedAttributeAssertionsFacetIsEvaluated(t *testing.T) {
 
 	wantSatisfied(t, assess("AssertedInt", "42"), "AssertedInt over a default of 42")
 	wantFacetCharge(t, assess("AssertedInt", "0"), "cvc-complex-type", "AssertedInt over a default of 0")
-	wantRecords(t, assess("Even", "42"), "cvc-assertions-valid", loc(1, 1), "Even")
+	wantRecords(t, assess("InRange", "42"), "cvc-assertions-valid", loc(1, 1), "InRange")
 }
 
 func TestResultUnevaluatedIsCopied(t *testing.T) {
