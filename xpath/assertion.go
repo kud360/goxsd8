@@ -410,9 +410,10 @@ func CompileAssertionTest(expr xsd.XPathExpression, types xsd.TypeResolver, cont
 //
 // So false is ONE answer for two outcomes the caller treats alike — the {test}
 // was false, or it raised (err:FORG0001, err:XPTY0004, err:FORG0006,
-// err:XPDY0050, err:FOAR0001 for an xs:decimal or xs:integer division by zero
-// and any `idiv` by zero, err:FOAR0002 for an `idiv` over NaN or an infinite
-// dividend) — and either way E is not ·valid· with respect to the
+// err:XPDY0050, err:FOAR0001 for a `div`, `idiv` or `mod` by zero over
+// xs:decimal or xs:integer operands and for any `idiv` by zero, err:FOAR0002
+// for an `idiv` over a NaN operand or an infinite dividend or whose quotient
+// overflows to an infinity) — and either way E is not ·valid· with respect to the
 // assertion. A processor that raises a type error dynamically "will treat the
 // expression as having evaluated to false" (cvc-xpath, §3.13.4.2). Every
 // decline happened at [CompileAssertionTest].

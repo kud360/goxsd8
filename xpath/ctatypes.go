@@ -348,11 +348,17 @@ func (t ctaTypes) arithmetic(op ctaArithOp, l, r ctaValue) (ctaValue, bool) {
 	if typing != ctaTypeSettled {
 		return nil, false
 	}
-	result, settled := t.arithmeticResult(op, operation, l, r)
+	// ctaWider answers one of two numeric primitives, so this arm never runs;
+	// it declines rather than computing in a kind operation is not.
+	kind, numeric := ctaNumericKindOf(operation)
+	if !numeric {
+		return nil, false
+	}
+	result, settled := t.arithmeticResult(op, kind, operation, l, r)
 	if !settled {
 		return nil, false
 	}
-	return ctaArith{op: op, operation: operation, st: result, left: l, right: r}, true
+	return ctaArith{op: op, kind: kind, operation: operation, st: result, left: l, right: r}, true
 }
 
 // arithmeticOperand is the numeric primitive one arithmetic operand is
@@ -372,9 +378,9 @@ func (t ctaTypes) arithmeticOperand(v ctaValue) (*xsd.SimpleType, bool) {
 }
 
 // arithmeticResult is the type xpath20.md B.2 gives op over two operands
-// computed in operation: xs:integer for `idiv` whatever the operands
-// (op:numeric-integer-divide); operation itself where that is xs:float or
-// xs:double; and, in xs:decimal, xs:integer where both operands are derived
+// computed in operation, the numeric primitive of the given kind: xs:integer
+// for `idiv` whatever the operands (op:numeric-integer-divide); operation
+// itself where that is xs:float or xs:double; and, in xs:decimal, xs:integer where both operands are derived
 // from xs:integer and the operator is not `div` — whose two-xs:integer row is
 // xs:decimal (xpath-functions.md §6.2.4) — and xs:decimal otherwise. It
 // reports false where xs:integer does not resolve or a {base type definition}
@@ -385,8 +391,8 @@ func (t ctaTypes) arithmeticOperand(v ctaValue) (*xsd.SimpleType, bool) {
 // where B.2 says xs:integer. The two are one value, and nothing this grammar
 // applies to the result tells them apart: a comparison and fn:boolean run in
 // the primitive, and a cast from the result is declined (castsFrom).
-func (t ctaTypes) arithmeticResult(op ctaArithOp, operation *xsd.SimpleType, l, r ctaValue) (*xsd.SimpleType, bool) {
-	if op != ctaIntegerDivide && (operation.Name() != ctaBuiltin("decimal") || op == ctaDivide) {
+func (t ctaTypes) arithmeticResult(op ctaArithOp, kind ctaNumericKind, operation *xsd.SimpleType, l, r ctaValue) (*xsd.SimpleType, bool) {
+	if op != ctaIntegerDivide && (kind != ctaDecimalKind || op == ctaDivide) {
 		return operation, true
 	}
 	integer, resolved := t.simple(ctaBuiltin("integer"))
@@ -797,13 +803,34 @@ func ctaWider(a, b *xsd.SimpleType) (*xsd.SimpleType, ctaTyping) {
 // ctaRank orders the three numeric primitives by which promotes to which, and
 // reports -1 for a primitive that is not numeric at all.
 func ctaRank(p *xsd.SimpleType) int {
+	kind, numeric := ctaNumericKindOf(p)
+	if !numeric {
+		return -1
+	}
+	return int(kind)
+}
+
+// ctaNumericKind is one of the three numeric primitives xpath20.md B.1's
+// numeric promotions are written over, in the order they promote:
+// xs:decimal to either of the others, and xs:float to xs:double.
+type ctaNumericKind byte
+
+const (
+	ctaDecimalKind ctaNumericKind = iota
+	ctaFloatKind
+	ctaDoubleKind
+)
+
+// ctaNumericKindOf is the numeric primitive p is, or false where p is none of
+// the three.
+func ctaNumericKindOf(p *xsd.SimpleType) (ctaNumericKind, bool) {
 	switch p.Name() {
 	case ctaBuiltin("decimal"):
-		return 0
+		return ctaDecimalKind, true
 	case ctaBuiltin("float"):
-		return 1
+		return ctaFloatKind, true
 	case ctaBuiltin("double"):
-		return 2
+		return ctaDoubleKind, true
 	}
-	return -1
+	return 0, false
 }

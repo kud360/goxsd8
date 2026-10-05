@@ -60,8 +60,8 @@ func TestArithmeticModOverValue(t *testing.T) {
 // double zero, which is NaN; `idiv` by any zero raises, an xs:double one
 // included. An xs:untypedAtomic dividend is cast to xs:double (§3.4), so `@u div
 // 0` is INF; `@i div 0.0` is xs:decimal division and raises, and `@i div 0e0`
-// is xs:double division and does not. With decimalDivision's zero check removed
-// the xs:decimal `div` rows panic in big.Rat.Quo; with ctaArithItem answering
+// is xs:double division and does not. With any one of decimal's three zero
+// checks removed, that operator's xs:decimal rows panic in big.Rat.Quo; with ctaArithItem answering
 // an operator that raises with the empty sequence instead of ctaRaised, each
 // fn:not row of a raising operator holds and fails.
 func TestArithmeticDivisionByZero(t *testing.T) {

@@ -36,11 +36,13 @@ const (
 // ctaArith is one binary arithmetic operator over two operands (xpath20.md
 // §3.4), whose types were settled at compile time by ctaTypes.arithmetic:
 // operation is the numeric primitive both atomized operands are converted into
-// (B.1), and st the type of the result (B.2), which is why the operand's
-// static type is st. The two differ for `idiv` (always xs:integer), for an
-// xs:integer result computed in xs:decimal, and agree otherwise.
+// (B.1), kind which of the three it is, and st the type of the result (B.2),
+// which is why the operand's static type is st. operation and st differ for
+// `idiv` (always xs:integer), for an xs:integer result computed in xs:decimal,
+// and agree otherwise.
 type ctaArith struct {
 	op          ctaArithOp
+	kind        ctaNumericKind
 	operation   *xsd.SimpleType
 	st          *xsd.SimpleType
 	left, right ctaValue
@@ -61,10 +63,9 @@ const ctaDecimalDivisionDigits = 18
 // terms. xpath20.md §3.4's steps are applied to each operand in order, the left
 // one first, on ctaValueCompare.eval's terms: an operand that raised is the
 // error; an EMPTY one makes the result the empty sequence; one of more than one
-// item is err:XPTY0004. A dynamic error the operator function raises —
-// err:FOAR0001 for a division by zero, err:FOAR0002 for an `idiv` over NaN,
-// over an infinite dividend, or whose quotient overflows — is ctaRaised, and
-// so is a result its result type does not validate.
+// item is err:XPTY0004. A dynamic error the operator function raises — the
+// err:FOAR0001 and err:FOAR0002 cases [AssertionTest.Evaluate] lists — is
+// ctaRaised, and so is a result its result type does not validate.
 func ctaArithItem(n ctaArith, c *xsd.SimpleType, env ctaEnv) ctaItem {
 	l, settled, single := ctaArithOperand(n.left, n.operation, env)
 	if !single {
@@ -107,24 +108,22 @@ func ctaArithOperand(v ctaValue, operation *xsd.SimpleType, env ctaEnv) (string,
 
 // compute applies n's operator to two canonical lexicals of n.operation,
 // reporting the lexical of the result in n.st, or false where the operator
-// function raises. The default arm is unreachable: ctaTypes.arithmetic admits
-// the three numeric primitives alone.
+// function raises.
 func (n ctaArith) compute(l, r string) (string, bool) {
-	switch n.operation.Name() {
-	case ctaBuiltin("decimal"):
+	if n.kind == ctaDecimalKind {
 		return n.op.decimal(l, r)
-	case ctaBuiltin("float"):
-		return n.op.floating(l, r, 32)
-	case ctaBuiltin("double"):
-		return n.op.floating(l, r, 64)
 	}
-	return "", false
+	return n.op.floating(l, r, n.kind)
 }
 
 // decimal applies op to two xs:decimal lexicals (F&O §6.2), exactly, but for
 // a non-terminating quotient (ctaDecimalDivisionDigits). A zero divisor of
 // `div`, `idiv` or `mod` raises err:FOAR0001 (§6.2.4, §6.2.5, §6.2.6), which is
 // false here. No xs:decimal operation overflows: the values are unbounded.
+//
+// l and r are ·canonical representations· the backend rendered, so a lexical
+// big.Rat does not parse is a backend fault rather than an operand error; it
+// is false, as an operand that does not render is (ctaArithOperand).
 func (op ctaArithOp) decimal(l, r string) (string, bool) {
 	a, parsed := new(big.Rat).SetString(l)
 	if !parsed {
@@ -141,28 +140,26 @@ func (op ctaArithOp) decimal(l, r string) (string, bool) {
 		return ctaDecimalLexical(new(big.Rat).Sub(a, b)), true
 	case ctaMultiply:
 		return ctaDecimalLexical(new(big.Rat).Mul(a, b)), true
-	default:
-		return op.decimalDivision(a, b)
-	}
-}
-
-// decimalDivision is decimal's arm for the three division operators, `div`,
-// `idiv` and `mod`, each of which raises err:FOAR0001 for a zero divisor.
-func (op ctaArithOp) decimalDivision(a, b *big.Rat) (string, bool) {
-	if b.Sign() == 0 {
-		return "", false // err:FOAR0001
-	}
-	switch op {
+	case ctaDivide:
+		if b.Sign() == 0 {
+			return "", false // err:FOAR0001
+		}
+		return ctaDecimalLexical(new(big.Rat).Quo(a, b)), true
 	case ctaIntegerDivide:
+		if b.Sign() == 0 {
+			return "", false // err:FOAR0001
+		}
 		return ctaTruncatedQuotient(a, b).String(), true
 	case ctaModulus:
+		if b.Sign() == 0 {
+			return "", false // err:FOAR0001
+		}
 		// §6.2.6: (a idiv b)*b + (a mod b) = a, so the sign follows the
 		// dividend.
 		t := new(big.Rat).SetInt(ctaTruncatedQuotient(a, b))
 		return ctaDecimalLexical(new(big.Rat).Sub(a, t.Mul(t, b))), true
-	default:
-		return ctaDecimalLexical(new(big.Rat).Quo(a, b)), true
 	}
+	return "", false // op is one of the six constants; never reached
 }
 
 // ctaTruncatedQuotient is a / b truncated toward zero, which is the xs:integer
@@ -206,56 +203,70 @@ func ctaStripFactor(n *big.Int, f int64) int {
 	}
 }
 
-// floating applies op to two lexicals of the IEEE 754 type of bits bits —
-// xs:float at 32, xs:double at 64 — whose special values F&O §6.2 fixes:
-// `div` by zero is an infinity or NaN and raises nothing (§6.2.4), `mod` is
-// NaN for an infinite dividend or a zero divisor and the dividend for an
-// infinite divisor (§6.2.6), all of which Go's IEEE arithmetic and [math.Mod]
-// answer as written. Each result is rounded to the type: computing an xs:float
-// operation in float64 and rounding once is exact, float64 carrying more than
-// twice float32's precision. `idiv` is integerDivide.
-func (op ctaArithOp) floating(l, r string, bits int) (string, bool) {
-	a, err := strconv.ParseFloat(l, bits)
+// floating applies op to two lexicals of the IEEE 754 type kind is — xs:float
+// or xs:double, never xs:decimal (ctaArith.compute) — whose special values F&O
+// §6.2 fixes: `div` by zero is an infinity or NaN and raises nothing (§6.2.4),
+// `mod` is NaN for an infinite dividend or a zero divisor and the dividend for
+// an infinite divisor (§6.2.6), all of which Go's IEEE arithmetic and
+// [math.Mod] answer as written. Each result is rounded to the type: computing
+// an xs:float operation in float64 and rounding once is exact, float64
+// carrying more than twice float32's precision. `idiv` is
+// ctaFloatIntegerDivide.
+//
+// l and r are ·canonical representations· the backend rendered, so a lexical
+// strconv does not parse is a backend fault rather than an operand error; it
+// is false, as an operand that does not render is (ctaArithOperand).
+func (op ctaArithOp) floating(l, r string, kind ctaNumericKind) (string, bool) {
+	a, err := strconv.ParseFloat(l, kind.bits())
 	if err != nil {
 		return "", false
 	}
-	b, err := strconv.ParseFloat(r, bits)
+	b, err := strconv.ParseFloat(r, kind.bits())
 	if err != nil {
 		return "", false
 	}
-	var x float64
 	switch op {
 	case ctaAdd:
-		x = a + b
+		return ctaFloatLexical(a+b, kind), true
 	case ctaSubtract:
-		x = a - b
+		return ctaFloatLexical(a-b, kind), true
 	case ctaMultiply:
-		x = a * b
+		return ctaFloatLexical(a*b, kind), true
 	case ctaDivide:
-		x = a / b
-	case ctaModulus:
-		x = math.Mod(a, b)
+		return ctaFloatLexical(a/b, kind), true
 	case ctaIntegerDivide:
-		return ctaFloatIntegerDivide(a, b, bits)
+		return ctaFloatIntegerDivide(a, b, kind)
+	case ctaModulus:
+		return ctaFloatLexical(math.Mod(a, b), kind), true
 	}
-	return ctaFloatLexical(ctaRounded(x, bits), bits), true
+	return "", false // op is one of the six constants; never reached
+}
+
+// bits is the width of the IEEE 754 type kind is, the bitSize strconv takes:
+// 32 for xs:float and 64 for xs:double. kind is never ctaDecimalKind
+// (ctaArith.compute).
+func (kind ctaNumericKind) bits() int {
+	if kind == ctaFloatKind {
+		return 32
+	}
+	return 64
 }
 
 // ctaFloatIntegerDivide is op:numeric-integer-divide over two IEEE 754 values
-// (F&O §6.2.5): a zero divisor raises err:FOAR0001, a NaN operand or an
+// of kind (F&O §6.2.5): a zero divisor raises err:FOAR0001, a NaN operand or an
 // infinite dividend err:FOAR0002, an infinite divisor of a finite dividend is
 // 0, and otherwise the quotient is `($a div $b) cast as xs:integer` — the `div`
 // in the operands' own type, then truncated. A quotient that overflows to an
 // infinity is err:FOAR0002 too, "subject to limits of precision and
 // overflow/underflow conditions". Every error is false here.
-func ctaFloatIntegerDivide(a, b float64, bits int) (string, bool) {
+func ctaFloatIntegerDivide(a, b float64, kind ctaNumericKind) (string, bool) {
 	if b == 0 {
 		return "", false // err:FOAR0001
 	}
 	if math.IsNaN(a) || math.IsNaN(b) || math.IsInf(a, 0) {
 		return "", false // err:FOAR0002
 	}
-	q := ctaRounded(a/b, bits)
+	q := ctaRounded(a/b, kind)
 	if math.IsInf(q, 0) {
 		return "", false // err:FOAR0002
 	}
@@ -264,19 +275,20 @@ func ctaFloatIntegerDivide(a, b float64, bits int) (string, bool) {
 	return truncated.String(), true
 }
 
-// ctaRounded is x rounded to the IEEE 754 type of bits bits.
-func ctaRounded(x float64, bits int) float64 {
-	if bits == 32 {
+// ctaRounded is x rounded to the IEEE 754 type kind is.
+func ctaRounded(x float64, kind ctaNumericKind) float64 {
+	if kind == ctaFloatKind {
 		return float64(float32(x))
 	}
 	return x
 }
 
-// ctaFloatLexical renders x, a value of the IEEE 754 type of bits bits, as a
+// ctaFloatLexical rounds x to the IEEE 754 type kind is and renders it as a
 // lexical of that type (Datatypes §3.3.4, §3.3.5): the special values spelled
 // INF, -INF and NaN, and every other value in scientific notation with the
 // fewest digits that map back to it.
-func ctaFloatLexical(x float64, bits int) string {
+func ctaFloatLexical(x float64, kind ctaNumericKind) string {
+	x = ctaRounded(x, kind)
 	switch {
 	case math.IsNaN(x):
 		return "NaN"
@@ -285,5 +297,5 @@ func ctaFloatLexical(x float64, bits int) string {
 	case math.IsInf(x, -1):
 		return "-INF"
 	}
-	return strconv.FormatFloat(x, 'E', -1, bits)
+	return strconv.FormatFloat(x, 'E', -1, kind.bits())
 }
