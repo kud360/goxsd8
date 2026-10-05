@@ -372,22 +372,27 @@ type fixedConstraint struct {
 // st whose two literals some member of its mapping union cannot compare (an
 // unmapped primitive, or values with no sameness relation), and a {lexical form}
 // outside its own type's lexical space (a schema fault cos-valid-simple-default
-// charges at assembly, not the instance's; a NOTATION one naming no declared
-// notation is left undecided there too, by ValidDefault's gate 1). Charging on
-// undecided would reject a document for a gap in the processor. The ·special·
-// residue is RULED permanent by #2040 (STYLE P3b): a member that cannot answer
-// may be the one that equates the two literals, so no verdict exists to give;
-// #2029 ruled the wider residue this one narrows (provenance). The rest is RULED
-// permanent by #774 (STYLE P3b): cos-valid-simple-default (§3.2.6.2) is a Schema
-// Component Constraint, and a schema assembled through
-// [xsd.SchemaBuilder.Finalize] rather than FinalizeWith carries an undecided
-// value space, so that check may never have run; the instance walk has no sound
-// verdict to give in its place.
+// charges at assembly, not the instance's). Charging on undecided would reject a
+// document for a gap in the processor. The ·special· residue is RULED permanent
+// by #2040 (STYLE P3b): a member that cannot answer may be the one that equates
+// the two literals, so no verdict exists to give; #2029 ruled the wider residue
+// this one narrows (provenance). The rest is RULED permanent by #774 (STYLE
+// P3b): cos-valid-simple-default (§3.2.6.2) is a Schema Component Constraint,
+// and a schema assembled through [xsd.SchemaBuilder.Finalize] rather than
+// FinalizeWith carries an undecided value space, so that check may never have
+// run; the instance walk has no sound verdict to give in its place.
+//
+// GAP(value): a NOTATION {lexical form} naming no declared notation, tracked by
+// #667. [value.ConstraintMatches] answers it undecided, not NOT-same, because no
+// assembly ever judges it: [xsd.ValueSpace]'s ValidDefault refuses every
+// NOTATION-governed default at its gate 1 (needsContext), even under
+// FinalizeWith, so cos-valid-simple-default never charges it. The comparison
+// declines here until #667 routes those defaults through ValidDefault.
 func (w *walk) fixedAgreement(a Attribute, e Element, st *xsd.SimpleType, f fixedConstraint) {
 	same, decided := value.ConstraintMatches(w.backend, w.schema, st, a.Value(), elementContext{owner: e}, f.vc)
 	if !decided {
 		w.declineAttribute(a, f.rule, f.clause,
-			"the ·actual value· of the attribute %s was not compared with the {value} of the fixed {value constraint} %q on its %s: value.ConstraintMatches could not decide the comparison, a fault of the type or of the value backend, or two literals of a ·special· type that some member of its lexical mapping cannot compare, rather than a verdict about the value, so %s is undecided",
+			"the ·actual value· of the attribute %s was not compared with the {value} of the fixed {value constraint} %q on its %s: value.ConstraintMatches could not decide the comparison, a fault of the type or of the value backend, two literals of a ·special· type that some member of its lexical mapping cannot compare, or a NOTATION {value} naming no declared notation, which no assembly judges yet (#667), rather than a verdict about the value, so %s is undecided",
 			a.Name(), f.vc.LexicalForm(), f.owner, citation(f.rule, f.clause))
 		return
 	}

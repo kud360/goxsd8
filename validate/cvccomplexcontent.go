@@ -595,6 +595,11 @@ func (c *contentCheck) fixedLexical(w *walk, f xsd.ValueConstraint) {
 // or a schema fault cos-valid-default charges at assembly, not the instance's.
 // It is recorded as an [Unevaluated] instead ([contentCheck.decline]), the
 // clause having been reached and not performed.
+//
+// GAP(value): a NOTATION {lexical form} naming no declared notation, tracked by
+// #667, declines here on [walk.fixedAgreement]'s terms: ValidDefault's gate 1
+// refuses every NOTATION-governed default, so no assembly judges it and
+// [value.ConstraintMatches] answers it undecided.
 func (c *contentCheck) fixedActualValue(w *walk, f xsd.ValueConstraint) {
 	st := c.g.valueType()
 	if st == nil {
@@ -603,7 +608,7 @@ func (c *contentCheck) fixedActualValue(w *walk, f xsd.ValueConstraint) {
 	same, decided := value.ConstraintMatches(w.backend, w.schema, st, c.initial.String(), elementContext{owner: c.e}, f)
 	if !decided {
 		c.decline(w, c.e.Name(), c.e.Loc(), ruleCvcElt, "5.2.2.2.2",
-			"the ·actual value· of the element %s was not compared with the {value} of the fixed {value constraint} %q of its ·governing element declaration·: value.ConstraintMatches could not decide the comparison, a fault of the type or of the value backend, or two literals of a ·special· type that some member of its lexical mapping cannot compare, rather than a verdict about the value, so cvc-elt clause 5.2.2.2.2 is undecided",
+			"the ·actual value· of the element %s was not compared with the {value} of the fixed {value constraint} %q of its ·governing element declaration·: value.ConstraintMatches could not decide the comparison, a fault of the type or of the value backend, two literals of a ·special· type that some member of its lexical mapping cannot compare, or a NOTATION {value} naming no declared notation, which no assembly judges yet (#667), rather than a verdict about the value, so cvc-elt clause 5.2.2.2.2 is undecided",
 			c.e.Name(), f.LexicalForm())
 		return
 	}

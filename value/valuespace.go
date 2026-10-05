@@ -244,10 +244,12 @@ func (vs valueSpace) ValidDefault(r xsd.TypeResolver, t *xsd.SimpleType, vc xsd.
 // which the caller charges in its own right, and reporting "not the same
 // value" for what is really "not a value at all" would charge clause 4 as well
 // for one defect. For vc's side it is the schema's own cos-valid-simple-default
-// obligation (§3.2.6.2), already charged at finalize — except where t is
-// governed by NOTATION, which ValidDefault's gate 1 declines: a fixed value
-// naming no declared notation is then unjudged at finalize and undecided here,
-// never NOT-same.
+// obligation (§3.2.6.2), already charged at finalize.
+//
+// GAP(value): a NOTATION vc.{lexical form} naming no declared notation, tracked
+// by #667. ValidDefault's gate 1 (needsContext) refuses every NOTATION-governed
+// default, so no finalize judges such a value, and it is undecided here, never
+// NOT-same, until #667 routes those defaults through ValidDefault.
 func ConstraintMatches(b Backend, r xsd.TypeResolver, t *xsd.SimpleType, lexical string, ctx Context, vc xsd.ValueConstraint) (same, decided bool) {
 	if isSpecial(t) {
 		return specialMatches(b, t, t, lexical, ctx, vc.LexicalForm(), constraintContext(vc), equalOrIdentical)
