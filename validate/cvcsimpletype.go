@@ -28,13 +28,7 @@ const ruleCvcSimpleType xsderr.Rule = "cvc-simple-type"
 // can move a string out of either type's lexical space, and neither type is
 // NOTATION or has it in its closure. A value this package reads against one is
 // therefore decided, never declined, whatever the backend maps: both lexical
-// spaces are every Char sequence and both {facets} are empty (#1788). Its value
-// space is another matter, so a ·key-sequence· member of a special type is
-// compared by its lexical, decided only where two such lexicals are
-// byte-identical ([sameSpecialMember]). A fixed-value comparison
-// ([walk.fixedAgreement], [contentCheck.fixedActualValue]) is decided by
-// [value.ConstraintMatches] over the mapping's union of primitive and list
-// mappings, and declines only where a member of it cannot answer. A
+// spaces are every Char sequence and both {facets} are empty (#1788). A
 // ValidateLexical error that is not a VERDICT ([value.IsDatatypeVerdict])
 // withholds one; each caller states that decline's GAP on its own terms.
 func (w *walk) stringValid(st *xsd.SimpleType, lexical string, owner Element, loc xsderr.Loc) (decided bool, verdict error) {

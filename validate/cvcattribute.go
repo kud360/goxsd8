@@ -514,10 +514,10 @@ func (w *walk) defaultedConstraint(u xsd.AttributeUse, attrs []Attribute) (xsd.V
 // charge nothing, and are recorded as an [Unevaluated] at the element
 // ([walk.declineDefaulted]), as are a {type definition} that is absent or
 // complex and an undecidable ·validating type· for clause 3. A ·special· type
-// ([xsd.SimpleType.IsSpecial]) is not asked at all, since ValidDefault answers
-// it undecided. A decided rejection hands back the Datatype Valid verdict
-// itself, which the charge carries as its wrapped cause (validate.go's
-// causedBy).
+// is not asked at all: Datatype Valid holds for every literal against one
+// ([xsd.SimpleType.IsSpecial]), so its {lexical form} passes to clause 3. A
+// decided rejection hands back the Datatype Valid verdict itself, which the
+// charge carries as its wrapped cause (validate.go's causedBy).
 //
 // ValidDefault answers String Valid clauses 1 and 2 only, being a question the
 // schema alone settles, so clause 3 is asked here of a {lexical form} it

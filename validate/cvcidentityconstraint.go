@@ -656,8 +656,8 @@ func (w *walk) elementKeyMember(c *icCheck) (icKeyMember, bool, bool) {
 //
 // A ·special· st ([xsd.SimpleType.IsSpecial]) is decided PRESENT with no v: its
 // [schema actual value] is not ·absent·, yet its lexical names no one ·actual
-// value· either, and the oracle ruled which one it contributes undecidable from
-// the spec text. The member carries its lexical, which is already its
+// value·: the oracle ruled which one it contributes undecidable from the spec
+// text. The member carries its lexical, which is already its
 // normalized value — neither type has a whiteSpace facet (§4.3.6) — and
 // [sameSpecialMember] decides a pair on it only where both lexicals are
 // byte-identical, declining every other pair it is in, RULED permanent by #2124
