@@ -14,10 +14,43 @@ import (
 
 // acNode is one node the caller reports to a Tally: an element node, or an
 // attribute node where attribute is true, named name and depth levels below E.
+// An element node is reported by its chain below E: path where it is non-nil,
+// and otherwise depth-1 ancestors named acFiller above name, the empty chain —
+// E itself — at a depth below 1.
 type acNode struct {
 	attribute bool
 	depth     int
 	name      xsd.QName
+	path      []xsd.QName
+}
+
+// acFiller names the ancestors acTally invents for an element reported by
+// depth, a name no counted path below writes.
+var acFiller = uq("anc")
+
+// chain is the element chain n is reported by.
+func (n acNode) chain() []xsd.QName {
+	if n.path != nil {
+		return n.path
+	}
+	var path []xsd.QName
+	for range n.depth - 1 {
+		path = append(path, acFiller)
+	}
+	if n.depth >= 1 {
+		path = append(path, n.name)
+	}
+	return path
+}
+
+// acPath is an element node reported by the chain of locals below E, each in no
+// namespace.
+func acPath(locals ...string) acNode {
+	path := []xsd.QName{}
+	for _, l := range locals {
+		path = append(path, uq(l))
+	}
+	return acNode{path: path}
 }
 
 // acEl is an element node named local in no namespace, depth levels below E.
@@ -37,7 +70,7 @@ func acTally(test AssertionTest, nodes ...acNode) *Tally {
 			c.Attribute(n.depth, n.name)
 			continue
 		}
-		c.Element(n.depth, n.name)
+		c.Element(n.chain())
 	}
 	return c
 }
@@ -205,8 +238,9 @@ func TestAssertionEvaluateRefusesAMismatchedTally(t *testing.T) {
 
 // AssertionTest.Tally is nil for a test that counts nothing and fresh on every
 // call otherwise, so filling one Tally leaves the next untouched and the
-// compiled test immutable. Tally's methods are total: a depth out of range
-// selects nothing, and a nil Tally takes any report.
+// compiled test immutable. Tally's methods are total: an empty element chain
+// and an attribute depth below 0 select nothing, and a nil Tally takes any
+// report.
 func TestAssertionTallyIsFreshAndTotal(t *testing.T) {
 	if c := acCompile(t, asRecord("@length eq 1")).Tally(); c != nil {
 		t.Errorf("Tally() of a test with no fn:count = %v, want nil", c)
@@ -218,7 +252,7 @@ func TestAssertionTallyIsFreshAndTotal(t *testing.T) {
 		t.Error("Evaluate over a fresh Tally given only out-of-range depths = false, want true")
 	}
 	var none *Tally
-	none.Element(1, uq("e1"))
+	none.Element([]xsd.QName{uq("e1")})
 	none.Attribute(0, uq("a"))
 }
 

@@ -403,7 +403,8 @@ func TestCompileAssertionTestDeclinesFunctions(t *testing.T) {
 		"string($value) = '5'",
 		"string(1.5e0) = '1.5'",
 		"string(xs:float('1.5')) = '1.5'",
-		"exists(a/b)",
+		"exists(a/@b)",
+		"exists(a/b, a/b)",
 		"contains(@s, ('x'))",
 	} {
 		if _, ok := afCompile(t, expr, xsd.SimpleContent{SimpleType: asBuiltin(t, "int")}); ok {

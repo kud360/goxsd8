@@ -397,13 +397,15 @@
 // xpath compiles when the element is entered — the §3.12.6 grammar plus the
 // value comparisons, `$value`, a one-step child-axis path, a "/"-rooted one,
 // arithmetic, the F&O string and sequence functions xpath.CompileAssertionTest
-// lists, and fn:count over a one-step child, descendant or attribute path,
+// lists, fn:count over a one-step child, descendant or attribute path, and
+// fn:exists, fn:empty or the ·effective boolean value· of a child path `a/b`,
 // over the element's attributes, carried or ·defaulted·, read TYPED by their
 // {attribute uses}' types (as xs:untypedAtomic where that type is ·special·),
 // the element [[children]] a {test} names, read TYPED by their ·locally
 // declared types· once each child's own assessment is over, the counts of the
 // nodes of its subtree, reported to each counting {test}'s xpath.Tally as the
-// walk passes them, and its simple content's ·actual value· — is evaluated
+// walk passes them, each element by its chain of names below the counting
+// element, and its simple content's ·actual value· — is evaluated
 // over those values and charged where it is false or raises a dynamic or type
 // error. A member xpath declines, and every member of an element one of whose
 // use-matched or ·defaulted· attributes has no ·actual value·, one of whose
