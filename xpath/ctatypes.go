@@ -294,8 +294,10 @@ func (t ctaTypes) stringArgument(v ctaValue) ctaStringArgument {
 	case ctaTyped:
 		p, resolved := t.primitive(s.st)
 		return ctaStringArgument{operand: v, mistyped: !resolved || !ctaStringLike(p)}
+	case ctaEmptySequence:
+		return ctaStringArgument{operand: v}
 	}
-	return ctaStringArgument{operand: v}
+	return ctaStringArgument{operand: v, mistyped: true} // ctaStatic has the three arms above; never reached
 }
 
 // typedAtomic reports whether this engine reads a value of type st off the

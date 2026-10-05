@@ -161,8 +161,10 @@ func ctaStringOf(a ctaStringArgument, env ctaEnv) (string, bool) {
 			return "", false
 		}
 		return str.Canonical(), true
+	case ctaUntypedAtomic:
+		return "", false
 	}
-	return "", false
+	return "", false // ctaStatic has the three arms above; never reached
 }
 
 // ctaMatchItem evaluates n, its left argument first, and converts the

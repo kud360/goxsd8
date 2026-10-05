@@ -323,6 +323,27 @@ func TestStringFunctionArmsInEverySwitch(t *testing.T) {
 	}
 }
 
+// stringArgument and ctaStringOf each name every ctaStatic arm: the statically
+// empty operand is held as it is and not mistyped, an xs:untypedAtomic one is
+// held under its cast to xs:string, and ctaStringOf raises for an operand whose
+// static type is xs:untypedAtomic, which stringArgument never stores. Without
+// stringArgument's ctaEmptySequence case the empty row is mistyped, and with
+// ctaStringOf's ctaUntypedAtomic case answering a string the raised row fails.
+func TestStringArgumentNamesEveryStaticArm(t *testing.T) {
+	known := compileTypes(t)
+	if got := known.stringArgument(ctaEmptyValue{}); got != (ctaStringArgument{operand: ctaEmptyValue{}}) {
+		t.Errorf("stringArgument(()) = %+v, want the operand held, not mistyped", got)
+	}
+	untyped := known.stringArgument(ctaUntypedValue{})
+	if _, cast := untyped.operand.(ctaCast); !cast || untyped.mistyped {
+		t.Errorf("stringArgument($value untyped) = %+v, want its cast to xs:string, not mistyped", untyped)
+	}
+	env := ctaEnv{backend: backend(), types: seededTypes}
+	if s, ok := ctaStringOf(ctaStringArgument{operand: ctaUntypedValue{}}, env); ok {
+		t.Errorf("ctaStringOf(xs:untypedAtomic operand) = %q, want raised", s)
+	}
+}
+
 // A new node reads what its arguments read: a typed child under each is
 // reported by ReadsChild — fn:exists reads which children exist off
 // ChildElements — and an fn:count call under one is counted by the Tally, so
