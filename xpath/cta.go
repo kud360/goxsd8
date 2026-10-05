@@ -1230,14 +1230,15 @@ func ctaSingletonOperand(v ctaValue, c *xsd.SimpleType, env ctaEnv) (value.Value
 // involved — a ·nilled· child is a node all the same. Rule 2 holds whatever
 // the sequence's LENGTH, which is what a wildcard NameTest and a repeated
 // child make observable. A rooted path raises err:XPDY0050, and a read of an
-// absent context item err:XPDY0002. ctaNodeCount is that reading, which
+// absent context item err:XPDY0002. ctaStep.nodes is that reading, which
 // fn:empty and fn:exists share. `$value` is atomic values and no node: the
 // statically empty one is rule 1's false, the bound typed one is decided by
 // ctaBoolean, a list of two or more items included, and the untyped one by rule
 // 4 (ctaUntypedBoolean). Every other operand is a singleton atomic value or the
 // empty sequence, which ctaBoolean decides.
 func (e ctaEffectiveBoolean) eval(env ctaEnv) ctaAnswer {
-	if nodes, isNodes, ok := ctaNodeCount(e.operand, env); isNodes {
+	if step, isStep := e.operand.(ctaStep); isStep {
+		nodes, ok := step.nodes(env)
 		if !ok {
 			return ctaError
 		}

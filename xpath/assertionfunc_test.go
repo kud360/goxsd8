@@ -323,6 +323,27 @@ func TestStringFunctionArmsInEverySwitch(t *testing.T) {
 	}
 }
 
+// stringArgument and ctaStringOf each name every ctaStatic arm: the statically
+// empty operand is held as it is and not mistyped, an xs:untypedAtomic one is
+// held under its cast to xs:string, and ctaStringOf raises for an operand whose
+// static type is xs:untypedAtomic, which stringArgument never stores. Without
+// stringArgument's ctaEmptySequence case the empty row is mistyped, and with
+// ctaStringOf's ctaUntypedAtomic case answering a string the raised row fails.
+func TestStringArgumentNamesEveryStaticArm(t *testing.T) {
+	known := compileTypes(t)
+	if got := known.stringArgument(ctaEmptyValue{}); got != (ctaStringArgument{operand: ctaEmptyValue{}}) {
+		t.Errorf("stringArgument(()) = %+v, want the operand held, not mistyped", got)
+	}
+	untyped := known.stringArgument(ctaUntypedValue{})
+	if _, cast := untyped.operand.(ctaCast); !cast || untyped.mistyped {
+		t.Errorf("stringArgument($value untyped) = %+v, want its cast to xs:string, not mistyped", untyped)
+	}
+	env := ctaEnv{backend: backend(), types: seededTypes}
+	if s, ok := ctaStringOf(ctaStringArgument{operand: ctaUntypedValue{}}, env); ok {
+		t.Errorf("ctaStringOf(xs:untypedAtomic operand) = %q, want raised", s)
+	}
+}
+
 // A new node reads what its arguments read: a typed child under each is
 // reported by ReadsChild — fn:exists reads which children exist off
 // ChildElements — and an fn:count call under one is counted by the Tally, so
@@ -354,9 +375,12 @@ func TestStringFunctionsReadTheirArguments(t *testing.T) {
 // form), every other arity, the zero-argument string forms — whose implicit
 // argument is E's string value, which `.` on the assertion façade does not
 // supply — and fn:string over a typed node or value outside the xs:string
-// family (castsFrom). With matchCall admitting three arguments the collation
-// row compiles, and with ctaAssertionFacade.contextItem admitting `.` the
-// zero-argument rows do.
+// family (castsFrom), or over an xs:float or xs:double, whose cast to xs:string
+// §17.1.2 does not render canonically (ctaTypes.floating) — an xs:decimal
+// still compiles. With matchCall admitting three arguments the collation row
+// compiles, with ctaAssertionFacade.contextItem admitting `.` the
+// zero-argument rows do, and with stringOf not asking floating the two
+// floating rows do.
 func TestCompileAssertionTestDeclinesFunctions(t *testing.T) {
 	str := asBuiltin(t, "string")
 	for _, expr := range []string{
@@ -377,6 +401,8 @@ func TestCompileAssertionTestDeclinesFunctions(t *testing.T) {
 		"string(n) = '5'",
 		"string(c) = '5'",
 		"string($value) = '5'",
+		"string(1.5e0) = '1.5'",
+		"string(xs:float('1.5')) = '1.5'",
 		"exists(a/b)",
 		"contains(@s, ('x'))",
 	} {
@@ -386,6 +412,9 @@ func TestCompileAssertionTestDeclinesFunctions(t *testing.T) {
 	}
 	if _, ok := afCompile(t, "string($value) = 'x'", xsd.SimpleContent{SimpleType: str}); !ok {
 		t.Error("CompileAssertionTest(string($value) = 'x') over xs:string content: declined, want compiled")
+	}
+	if _, ok := afCompile(t, "string(1.5) = '1.5'", xsd.SimpleContent{SimpleType: str}); !ok {
+		t.Error("CompileAssertionTest(string(1.5) = '1.5'): declined, want compiled")
 	}
 }
 

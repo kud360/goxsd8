@@ -161,8 +161,10 @@ func ctaStringOf(a ctaStringArgument, env ctaEnv) (string, bool) {
 			return "", false
 		}
 		return str.Canonical(), true
+	case ctaUntypedAtomic:
+		return "", false
 	}
-	return "", false
+	return "", false // ctaStatic has the three arms above; never reached
 }
 
 // ctaMatchItem evaluates n, its left argument first, and converts the
@@ -239,14 +241,14 @@ func ctaStringFunctionItem(n ctaStringFunction, c *xsd.SimpleType, env ctaEnv) c
 // ctaSequenceLength is how many items v evaluates to, without atomizing it —
 // the question fn:empty and fn:exists ask of their `item()*` argument —
 // reporting false where it raises. A step is the number of nodes it selects,
-// which ctaNodeCount answers for both this and the ·effective boolean value·;
+// which ctaStep.nodes answers for both this and the ·effective boolean value·;
 // `$value` over ·special· content is one xs:untypedAtomic value or, unbound,
 // none (ctaUntypedBinding); the statically empty sequence is none; and every
 // other operand is the length of its items in its own static type, which
 // converts none of them.
 func ctaSequenceLength(v ctaValue, env ctaEnv) (int, bool) {
-	if nodes, isNodes, ok := ctaNodeCount(v, env); isNodes {
-		return nodes, ok
+	if step, isStep := v.(ctaStep); isStep {
+		return step.nodes(env)
 	}
 	if _, untyped := v.(ctaUntypedValue); untyped {
 		_, bound, ok := ctaUntypedBinding(env)
@@ -263,32 +265,38 @@ func ctaSequenceLength(v ctaValue, env ctaEnv) (int, bool) {
 	return len(atoms.vs), ok
 }
 
-// ctaNodeCount is how many nodes v selects where v is a step — an attribute
-// step, untyped (ctaAttr) or typed (ctaTypedAttr), or a child-axis step
-// (ctaTypedChild), a ·nilled· child counting as a node — with isNodes true, ok
-// false where the step raises: a rooted path (err:XPDY0050), a read of an
-// absent context item (err:XPDY0002), and a matched value breaking the
-// caller's obligation ([TypedAttributes], [ChildElements]). It is the ONE
-// reading of node existence, which the ·effective boolean value· of a step
+// ctaStep is a ctaValue that evaluates to a sequence of NODES rather than of
+// atomic values: an attribute step, untyped (ctaAttr) or typed (ctaTypedAttr),
+// a child-axis step (ctaTypedChild), and the two steps that raise before they
+// select a node, a rooted path (ctaNoDocumentRoot) and a read of an absent
+// context item (ctaNoContextItem). Its nodes method is the ONE reading of node
+// existence, which the ·effective boolean value· of a step
 // (ctaEffectiveBoolean.eval) and fn:empty and fn:exists (ctaSequenceLength)
-// both take. isNodes is false for every other operand, whose items are atomic
-// values the caller reads its own way.
-func ctaNodeCount(v ctaValue, env ctaEnv) (n int, isNodes, ok bool) {
-	switch s := v.(type) {
-	case ctaAttr:
-		matched, ok := ctaMatchedAttributes(s, env)
-		return len(matched), true, ok
-	case ctaTypedAttr:
-		matched, ok := ctaMatchedTyped(s, env)
-		return len(matched), true, ok
-	case ctaTypedChild:
-		_, nodes, ok := ctaMatchedChildren(s, env)
-		return nodes, true, ok
-	case ctaNoDocumentRoot:
-		return 0, true, false // err:XPDY0050
-	case ctaNoContextItem:
-		return 0, true, false // err:XPDY0002
-	default:
-		return 0, false, true
-	}
+// both take; every other operand's items are atomic values the caller reads
+// its own way.
+type ctaStep interface {
+	ctaValue
+	// nodes is how many nodes the step selects, a ·nilled· child counting as a
+	// node, reporting false where it raises: a rooted path (err:XPDY0050), a
+	// read of an absent context item (err:XPDY0002), and a matched value
+	// breaking the caller's obligation ([TypedAttributes], [ChildElements]).
+	nodes(env ctaEnv) (int, bool)
 }
+
+func (s ctaAttr) nodes(env ctaEnv) (int, bool) {
+	matched, ok := ctaMatchedAttributes(s, env)
+	return len(matched), ok
+}
+
+func (s ctaTypedAttr) nodes(env ctaEnv) (int, bool) {
+	matched, ok := ctaMatchedTyped(s, env)
+	return len(matched), ok
+}
+
+func (s ctaTypedChild) nodes(env ctaEnv) (int, bool) {
+	_, nodes, ok := ctaMatchedChildren(s, env)
+	return nodes, ok
+}
+
+func (ctaNoDocumentRoot) nodes(ctaEnv) (int, bool) { return 0, false } // err:XPDY0050
+func (ctaNoContextItem) nodes(ctaEnv) (int, bool)  { return 0, false } // err:XPDY0002

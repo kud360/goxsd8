@@ -380,7 +380,10 @@ type AssertionTest struct{ root ctaExpr }
 //     engine builds no node for;
 //   - fn:string over a typed attribute, a typed child, an fn:count call, an
 //     arithmetic result, `$value` or a function result outside the xs:string
-//     family, which is the cast the bullet above declines.
+//     family, which is the cast the bullet above declines, and fn:string over
+//     any argument whose {primitive type definition} is xs:float or xs:double,
+//     a literal or a cast included, which §17.1.2 renders as an xs:decimal
+//     where its ·canonical representation· is not one.
 //
 // An xs:string? argument — of every function above but fn:empty, fn:exists and
 // fn:string — of any type outside the xs:string and xs:anyURI families is not a
