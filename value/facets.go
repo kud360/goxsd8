@@ -267,11 +267,12 @@ func IsDatatypeVerdict(err error) bool {
 // space·, "the set of all names of notations declared in the current schema"
 // (Datatypes §3.3.19): one whose prefix ctx does not bind, or whose QName names
 // none of r's notations, is rejected under cvc-datatype-valid, after its value
-// facets have accepted it (declaredNotation). That holds wherever NOTATION
-// decides the literal — st itself, a type derived from it, a list item or a
-// union member, whose rejection lets the dispatch fall through to a later
-// member (§4.1.4 cl.2.3). Against any other r, NOTATION is held to b's mapping
-// and st's facets alone, and no literal is rejected as undeclared.
+// facets have accepted it and before its assertions stage, which it never
+// reaches (declaredNotation). That holds wherever NOTATION decides the literal
+// — st itself, a type derived from it, a list item or a union member, whose
+// rejection lets the dispatch fall through to a later member (§4.1.4 cl.2.3).
+// Against any other r, NOTATION is held to b's mapping and st's facets alone,
+// and no literal is rejected as undeclared.
 //
 // PRECONDITION (caller-guarded, not PRE-checked here — but a violation is
 // reported, see below): every facet on st is applicable to st per

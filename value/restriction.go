@@ -608,6 +608,8 @@ var _ notationDeclarer = (*xsd.Schema)(nil)
 // member such an enumeration admits names a declared notation, finalize having
 // charged one that does not. A list or union type's own enumeration runs after
 // its items or members, so an undeclared item or member is this verdict first.
+// It runs before the assertions stage, so an undeclared literal is this
+// verdict, never an assertion's verdict or decline.
 //
 // r.Notations is the whole assembled set, so a notation from an included,
 // imported or overriding document counts wherever it sits in document order

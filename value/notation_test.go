@@ -142,3 +142,24 @@ func TestConstraintMatchesAnUndeclaredNotationFixedValueIsUndecided(t *testing.T
 		t.Errorf("ConstraintMatches(bez, fixed bez) against no notationDeclarer = (%t, %t), want (true, true)", same, decided)
 	}
 }
+
+// The declared-set decision runs before the assertions stage, so an
+// undeclared NOTATION value is the cvc-datatype-valid verdict and never
+// reaches an assertion: under an evaluator that fails every {test} the
+// verdict is still NOTATION's, and no call is made. A declared foo reaches the
+// assertion and is its verdict.
+func TestValidateLexicalDecidesNotationBeforeAssertions(t *testing.T) {
+	b := lexicalBackend{}
+	schema := declaringFoo(t)
+	st := asserting(t, "assertedNota", primType(t, "NOTATION", "collapse"), "fail")
+	var calls []assertionCall
+	_, err := ValidateLexical(b, schema, st, "bez", notationScope{}, scripted(&calls))
+	wantUndeclaredBez(t, "asserted NOTATION", err)
+	if len(calls) != 0 {
+		t.Errorf("assertion calls for the undeclared bez = %d, want 0", len(calls))
+	}
+	_, err = ValidateLexical(b, schema, st, "foo", notationScope{}, scripted(&calls))
+	if rule, _ := xsderr.RuleOf(err); rule != ruleCvcAssertionsValid || len(calls) != 1 {
+		t.Errorf("ValidateLexical(foo) = %v after %d calls, want a cvc-assertions-valid verdict after 1", err, len(calls))
+	}
+}
