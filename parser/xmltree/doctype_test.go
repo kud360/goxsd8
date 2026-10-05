@@ -393,8 +393,9 @@ func TestSubsetStrayTextIsNotWellFormed(t *testing.T) {
 
 // wantSubsetFault reads doc to its first error, which must be the
 // well-formedness fault want, whole, and must leave pic undeclared: a faulty
-// subset declares nothing.
-func wantSubsetFault(t *testing.T, doc, want string) {
+// subset declares nothing. It returns the error, whose cause it does not
+// check.
+func wantSubsetFault(t *testing.T, doc, want string) error {
 	t.Helper()
 	r := xmltree.NewReader("t.xml", strings.NewReader(doc))
 	var err error
@@ -411,6 +412,7 @@ func wantSubsetFault(t *testing.T, doc, want string) {
 	if r.HasUnparsedEntity("pic") {
 		t.Errorf("HasUnparsedEntity(%q) = true, want false: the subset is not well-formed", "pic")
 	}
+	return err
 }
 
 // The markup the internal subset holds must match its own production, at depth
