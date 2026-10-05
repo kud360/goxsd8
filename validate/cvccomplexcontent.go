@@ -670,7 +670,7 @@ func (c *contentCheck) fixedActualValue(w *walk, f xsd.ValueConstraint) {
 // cvc-assertions-valid ([walk.declineAssertions], cvcassertion.go) in place of
 // its own clause's decline.
 func (c *contentCheck) stringValid(w *walk, st *xsd.SimpleType) (decided bool, verdict error) {
-	return w.stringValid(st, c.assessed(), c.e, c.e.Loc())
+	return w.stringValid(st, c.assessed(), elementContext{owner: c.e}, c.e.Loc())
 }
 
 // simpleTypeValue settles cvc-type clause 3.1.3: where E is not ·nilled·, its

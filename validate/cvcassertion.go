@@ -493,7 +493,7 @@ func (w *walk) assertionValues(e Element, attrs []Attribute, asserts *assertionC
 		if !matched {
 			continue
 		}
-		v, read := w.assertionTyped(u, a.Value(), e, a.Loc())
+		v, read := w.assertionTyped(u, a.Value(), elementContext{owner: e}, a.Loc())
 		if !read {
 			return assertionInput{}, lackingAttribute{a: a}
 		}
@@ -504,7 +504,7 @@ func (w *walk) assertionValues(e Element, attrs []Attribute, asserts *assertionC
 		if !defaulted {
 			continue
 		}
-		v, read := w.assertionTyped(u, vc.LexicalForm(), e, e.Loc())
+		v, read := w.assertionTyped(u, vc.LexicalForm(), elementContext{owner: e}, e.Loc())
 		if !read {
 			return assertionInput{}, lackingDefault{u: u}
 		}
@@ -522,10 +522,11 @@ func (w *walk) assertionValues(e Element, attrs []Attribute, asserts *assertionC
 }
 
 // assertionTyped is the typed value of an attribute of the use u whose
-// [schema normalized value] is lexical, read at loc on e, reporting false
-// where it has no ·actual value·: u's declaration or {type definition} does not
-// resolve ([walk.assertionType]), String Valid ([walk.stringValid]) over
-// lexical is rejected or withheld, or the mapping errors.
+// [schema normalized value] is lexical, read at loc and mapped under ctx,
+// reporting false where it has no ·actual value·: u's declaration or {type
+// definition} does not resolve ([walk.assertionType]), String Valid
+// ([walk.stringValid]) over lexical is rejected or withheld, or the mapping
+// errors.
 //
 // The value is [xpath.Untyped] of lexical where the type is ·special·
 // ([xsd.SimpleType.IsSpecial]): xpath-datamodel §3.3.1.2 makes it the [schema
@@ -535,19 +536,19 @@ func (w *walk) assertionValues(e Element, attrs []Attribute, asserts *assertionC
 // whiteSpace facet either; a defaulted one's {lexical form} is it by
 // key-dflt-att. The value is [xpath.Typed] of the ·actual value· mapped under
 // the type otherwise.
-func (w *walk) assertionTyped(u xsd.AttributeUse, lexical string, e Element, loc xsderr.Loc) (xpath.TypedValue, bool) {
+func (w *walk) assertionTyped(u xsd.AttributeUse, lexical string, ctx value.Context, loc xsderr.Loc) (xpath.TypedValue, bool) {
 	st, resolved := w.assertionType(u)
 	if !resolved {
 		return nil, false
 	}
-	decided, verdict := w.stringValid(st, lexical, e, loc)
+	decided, verdict := w.stringValid(st, lexical, ctx, loc)
 	if !decided || verdict != nil {
 		return nil, false
 	}
 	if st.IsSpecial() {
 		return xpath.Untyped(lexical), true
 	}
-	v, err := value.ValidateLexical(w.backend, w.schema, st, lexical, elementContext{owner: e}, xpath.FacetAssertions())
+	v, err := value.ValidateLexical(w.backend, w.schema, st, lexical, ctx, xpath.FacetAssertions())
 	if err != nil {
 		return nil, false
 	}
@@ -591,7 +592,7 @@ func (w *walk) assertionValue(e Element, ct xsd.ComplexType, content *contentChe
 	if simple.SimpleType.IsSpecial() {
 		return xpath.BindValue(xpath.Untyped(lexical)), true
 	}
-	decided, verdict := w.stringValid(simple.SimpleType, lexical, e, e.Loc())
+	decided, verdict := w.stringValid(simple.SimpleType, lexical, elementContext{owner: e}, e.Loc())
 	if !decided {
 		return xpath.ValueBinding{}, false
 	}

@@ -156,7 +156,7 @@ func (w *walk) declaredAttribute(a Attribute, e Element, d xsd.AttributeDeclarat
 			a.Name())
 		return nil, false
 	}
-	decided, verdict := w.stringValid(st, a.Value(), e, a.Loc())
+	decided, verdict := w.stringValid(st, a.Value(), elementContext{owner: e}, a.Loc())
 	if !decided {
 		if w.declineAssertions(verdict, "assessing attribute", a.Name(), a.Loc(), "cvc-attribute clause 3") {
 			return nil, false
@@ -562,7 +562,7 @@ func (w *walk) defaultedAttribute(e Element, u xsd.AttributeUse, vc xsd.ValueCon
 		return
 	}
 	if cause == nil {
-		decided, cause = w.entitiesDeclared(st, vc.LexicalForm(), e, e.Loc())
+		decided, cause = w.entitiesDeclared(st, vc.LexicalForm(), elementContext{owner: e}, e.Loc())
 	}
 	if !decided {
 		w.declineDefaulted(e, u,
