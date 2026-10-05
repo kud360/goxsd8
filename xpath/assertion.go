@@ -101,8 +101,9 @@ func Child(name xsd.QName, v TypedValue) ChildElement { return ChildElement{name
 // engine compiles reaches below one.
 type ChildElements func(yield func(ChildElement) bool)
 
-// TypedValue is the typed value of one attribute node, or of `$value`, in the
-// data model instance cvc-assertion clause 1 builds, as xpath-datamodel
+// TypedValue is the typed value of one attribute node, of one element node of
+// simple type or simple content (xpath-datamodel §6.2.4), or of `$value`, in
+// the data model instance cvc-assertion clause 1 builds, as xpath-datamodel
 // §3.3.1.2 (Typed Value Determination) computes it: an ·actual value· of a type
 // fixed at compile time ([Typed]), or a [schema normalized value] "as an
 // instance of xs:untypedAtomic" ([Untyped]), which is the typed value under
