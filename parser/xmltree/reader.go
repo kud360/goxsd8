@@ -163,13 +163,11 @@ func (r *Reader) classify(tok xml.Token, off int64) (Node, bool, error) {
 	loc := r.locAt(off)
 	switch t := tok.(type) {
 	case xml.StartElement:
-		if r.dec.Entity != nil {
-			attrs, err := r.expandAttrs(t.Attr, r.source(off), true, loc, nil)
-			if err != nil {
-				return nil, false, err
-			}
-			t.Attr = attrs
+		attrs, err := r.expandAttrs(t.Attr, r.source(off), true, loc, nil)
+		if err != nil {
+			return nil, false, err
 		}
+		t.Attr = attrs
 		node, err := r.startElement(t, loc)
 		if err != nil {
 			return nil, false, err

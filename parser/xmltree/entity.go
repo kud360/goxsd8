@@ -291,12 +291,15 @@ func (r *Reader) reference(name string, loc xsderr.Loc) (text string, entity boo
 }
 
 // expandAttrs returns attrs, the attributes of the start tag whose source is
-// raw, with the value of each that references a general entity re-read from
-// raw and normalized (attrValue). src reports that raw is document source
-// rather than replacement text; open names the inclusions raw is part of. An
-// attribute referencing no general entity keeps the decoder's value.
+// raw, with each value normalized per XML 1.0 §3.3.3 (attrValue). The
+// decoder's value is already that for a value whose source holds neither a
+// reference to a general entity nor a literal #x9, #xA or #xD (attrSpace): the
+// decoder resolves character references and predefined entities and applies
+// §2.11, but not §3.3.3's step 3. Every other value is re-read from raw. src
+// reports that raw is document source rather than replacement text; open names
+// the inclusions raw is part of.
 func (r *Reader) expandAttrs(attrs []xml.Attr, raw string, src bool, loc xsderr.Loc, open []string) ([]xml.Attr, error) {
-	if !strings.Contains(raw, "&") {
+	if !strings.ContainsAny(raw, "&"+attrSpace) {
 		return attrs, nil
 	}
 	vals := attrSources(raw)
@@ -305,7 +308,7 @@ func (r *Reader) expandAttrs(attrs []xml.Attr, raw string, src bool, loc xsderr.
 	}
 	out := slices.Clone(attrs)
 	for i, v := range vals {
-		if !refersToEntity(v) {
+		if !refersToEntity(v) && !strings.ContainsAny(v, attrSpace) {
 			continue
 		}
 		var b strings.Builder
@@ -316,6 +319,10 @@ func (r *Reader) expandAttrs(attrs []xml.Attr, raw string, src bool, loc xsderr.
 	}
 	return out, nil
 }
+
+// attrSpace is the white space §3.3.3's step 3 maps to #x20 and the decoder
+// leaves in an attribute value as it is: declSpace less #x20 itself.
+const attrSpace = "\t\n\r"
 
 // attrSources returns the source of each attribute value in raw, a start
 // tag's source, in document order: the text between the value's quotes. The

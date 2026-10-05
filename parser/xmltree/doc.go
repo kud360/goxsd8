@@ -117,6 +117,16 @@
 //     checked for its syntax alone: WFC: Entity Declared, Parsed Entity, No
 //     Recursion, No External Entity References and No < in Attribute Values
 //     are not checked against the entity it names. Tracked by #2257.
+//   - Every attribute value, namespace declarations included, is its
+//     normalized value per XML 1.0 §3.3.3, steps 1-3, for an attribute
+//     read as CDATA (Attribute.Value): a character reference is the
+//     character it names, so &#9; stays a tab, while each literal #x9,
+//     #xA or #xD is #x20, a line end (§2.11) one #x20.
+//   - GAP(xml): an attribute the internal subset declares with a type
+//     other than CDATA is still read as CDATA: §3.3.3's step 4, the
+//     trimming and collapsing of #x20 such a declaration calls for, is
+//     not applied (§5.1 has a non-validating processor normalize with the
+//     declarations it reads). Untracked: no issue owns it yet.
 //   - A reference to an internal general entity is replaced by its
 //     replacement text (XML 1.0 §4.4.2, §4.4.5): in content, parsed as
 //     content in the scope in force at the reference, its nodes located at
