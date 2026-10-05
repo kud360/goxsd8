@@ -584,12 +584,12 @@ func TestCompileCTATestStillDeclinesAssertionOnlyForms(t *testing.T) {
 //   - a timezone-MIXED pair is a total order, so `@d < @e or @d >= @e` over
 //     2000-01-01 and 2000-01-01Z is true, and 2000-01-01 at Z equals
 //     2000-01-01Z — including across the day boundary, where 2000-01-01 at Z is
-//     after 2000-01-01+14:00. Each such row fails with the date/time arm of
-//     ctaHoldsPair removed, which leaves the pair value.Incomparable and
-//     unequal.
+//     after 2000-01-01+14:00. Every mixed row but `@d lt @e`, false either
+//     way, fails with the date/time arm of ctaHoldsPair removed, which leaves
+//     the pair value.Incomparable and unequal.
 //   - two untimezoned operands, and two timezoned ones, compare as before the
-//     arm: a normalisation applied to one operand of an untimezoned pair, or to
-//     a timezoned operand, breaks those rows.
+//     arm: the implicit timezone given to the left operand alone breaks the
+//     untimezoned `@d = @e` row.
 //   - the g* types have eq and ne alone (xpath20.md B.2), so an ordering over
 //     one is err:XPTY0004 — false, and false under fn:not — whatever the
 //     timezones; their equality compares starting instants.

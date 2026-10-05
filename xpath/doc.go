@@ -53,12 +53,11 @@
 //     is ·absent·, ·special·, or neither a simple type an attribute's would be
 //     admitted as nor simple content over one, a path of more than one step, a
 //     cast from a typed attribute or child outside the xs:string family, and a
-//     `$value` whose {simple type
-//     definition} is classified as such an attribute's type would be, or is a
-//     list of a type that would be; a `$value` over ·special· content is
-//     xs:untypedAtomic, as such an attribute is. Longer paths, the other axes,
-//     predicates, quantified expressions and the function core are PLANNED
-//     (#1042).
+//     `$value` whose {simple type definition} is classified as such an
+//     attribute's type would be, or is a list of a type that would be; a
+//     `$value` over ·special· content is xs:untypedAtomic, as such an attribute
+//     is. Longer paths, the other axes, predicates, quantified expressions and
+//     the function core are PLANNED (#1042).
 //  3. The full grammar (docs/specs/md/xpath20.md) and function library
 //     (docs/specs/md/xpath-functions.md) — M7 onward, ratcheted.
 //     PLANNED.
