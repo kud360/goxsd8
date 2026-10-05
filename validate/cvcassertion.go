@@ -88,8 +88,12 @@ const ruleCvcAssertionsValid xsderr.Rule = "cvc-assertions-valid"
 // residue (paths, the function library); and every assertion of an e one of
 // whose attributes matching an {attribute use}, carried or ·defaulted·, has no
 // ·actual value·, one of whose element [[children]] a {test} reads has no
-// typed value this package reads ([walk.keepChild]), or whose `$value` is
-// undecided ([walk.assertionValues]). Fail-open: the withheld value is clause
+// typed value this package reads ([walk.keepChild]), whose `$value` is
+// undecided ([walk.assertionValues]), or one of whose {test}s counts nodes of
+// a subtree this package cannot report exactly: one holding a ·skipped·
+// element, or an element whose ·governing type definition· it could not
+// determine, so that its ·defaulted attributes· are unknown
+// ([walk.tallyElement]). Fail-open: the withheld value is clause
 // 6's own verdict, whose whole consumer set inside this package is
 // w.res.violations and its one reader [Result.Violations], which charge on a
 // violation PRESENT, so a decline can only cost a rejection and can
@@ -116,7 +120,7 @@ func (w *walk) elementAssertions(e Element, asserts *assertionCheck, content *co
 				site, e.Name())
 			continue
 		}
-		if test.Evaluate(w.backend, w.schema, in.yield, asserts.yieldChildren, in.value) {
+		if test.Evaluate(w.backend, w.schema, in.yield, asserts.yieldChildren, c.tally, in.value) {
 			w.logDecision("assessing element", e.Name(), e.Loc(), ruleCvcAssertion, "", "satisfied")
 			continue
 		}
@@ -137,12 +141,45 @@ func (w *walk) elementAssertions(e Element, asserts *assertionCheck, content *co
 // exhausted ([walk.keepChild]), what the compiled tests read of them: children
 // holds one [xpath.ChildElement] per element [[child]] some test reads, in
 // arrival order, which is document order (STYLE D1); and lack is the first such
-// child that has no typed value this package reads, nil while there is none.
+// child that has no typed value this package reads, nil while there is none —
+// or the first node of the element's subtree a test's [xpath.Tally] cannot be
+// told of exactly ([walk.tallyElement]). Each test's Tally collects the counts
+// from the whole subtree as it is walked, and no node of it is kept.
 type assertionCheck struct {
 	ct       xsd.ComplexType
 	tests    []assertionTest
 	children []xpath.ChildElement
 	lack     assertionLack
+}
+
+// counts reports whether some compiled test of c counts nodes of the element's
+// subtree, holding an [xpath.Tally]. A nil c — an element with no {assertions}
+// — counts none.
+func (c *assertionCheck) counts() bool {
+	if c == nil {
+		return false
+	}
+	for _, t := range c.tests {
+		if t.tally != nil {
+			return true
+		}
+	}
+	return false
+}
+
+// tally reports one element of c's element's subtree, named name and depth
+// levels below c's element, to each test's Tally: the element node, and each
+// of attrs, the names of its attribute nodes, at that depth. At depth 0, c's
+// own element, the element node selects nothing ([xpath.Tally.Element]) and
+// its attributes alone count. A test with no Tally takes nothing
+// ([xpath.Tally]'s nil receiver).
+func (c *assertionCheck) tally(depth int, name xsd.QName, attrs []xsd.QName) {
+	for _, t := range c.tests {
+		t.tally.Element(depth, name)
+		for _, a := range attrs {
+			t.tally.Attribute(depth, a)
+		}
+	}
 }
 
 // reads reports whether some compiled test of c reads a child element named
@@ -168,15 +205,113 @@ func (c *assertionCheck) lacking(l assertionLack) {
 	}
 }
 
-// skipped records e, an element [[child]] ·skipped· by key-sva clause 3.2, as
-// c's lack where some test of c reads e's name: a ·skipped· element is not
-// ·assessed·, so the partial ·PSVI· gives it no type to read its value under.
-// A nil c reads nothing.
-func (c *assertionCheck) skipped(e Element) {
-	if !c.reads(e.Name()) {
+// assertionAncestry is what the {assertions} of an element's ancestors read of
+// it, handed down the walk beside its identity-constraint state: parent, the
+// clause 6 state of its parent, nil at the ·validation root· and wherever the
+// parent has no {assertions}, which reads its typed value ([walk.keepChild]);
+// counting, the nearest ancestor at any depth one of whose {test}s counts nodes
+// of its subtree, which is told of the element ([walk.tallyElement]); and
+// depth, the element's depth below the ·validation root·, 0 at the root.
+//
+// It holds O(depth) frames, one per counting ancestor, and no node.
+type assertionAncestry struct {
+	parent   *assertionCheck
+	counting *tallyFrame
+	depth    int
+}
+
+// tallyFrame is one counting ancestor: its clause 6 state, its depth below the
+// ·validation root·, and the next counting ancestor above it, nil where there
+// is none.
+type tallyFrame struct {
+	check *assertionCheck
+	depth int
+	outer *tallyFrame
+}
+
+// below is the ancestry of each element [[child]] of the element whose
+// ancestry is up and whose own clause 6 state is own: own is their parent, and
+// the counting ancestors are up's, with own's element innermost where some
+// test of own counts.
+func (up assertionAncestry) below(own *assertionCheck) assertionAncestry {
+	next := assertionAncestry{parent: own, counting: up.counting, depth: up.depth + 1}
+	if own.counts() {
+		next.counting = &tallyFrame{check: own, depth: up.depth, outer: up.counting}
+	}
+	return next
+}
+
+// skipped records e, an element [[child]] ·skipped· by key-sva clause 3.2 and
+// whose ancestry is up, as a lack: of its parent where some test of the parent
+// reads e's name — a ·skipped· element is not ·assessed·, so the partial ·PSVI·
+// gives it no type to read its value under — and of every counting ancestor,
+// none of whose Tallies can be told of the subtree the walk does not enter.
+func (up assertionAncestry) skipped(e Element) {
+	if up.parent.reads(e.Name()) {
+		up.parent.lacking(lackingChild{name: e.Name(), loc: e.Loc(), why: "it is ·skipped·, so it is not ·assessed·"})
+	}
+	for f := up.counting; f != nil; f = f.outer {
+		f.check.lacking(lackingCount{name: e.Name(), loc: e.Loc(), why: "it is ·skipped·, so its subtree is not walked"})
+	}
+}
+
+// tallyElement tells every counting ancestor in up, and e's own clause 6 state
+// own, of e: each ancestor's Tallies count e at its depth below that ancestor,
+// with e's attribute nodes ([walk.attributeNodes]), and own's count e's
+// attribute nodes at depth 0. g is e's governance. Where e's attribute nodes
+// are undecided, each of them takes the lack instead, which declines its
+// assertions: a count missing them could fabricate a charge.
+//
+// It runs on every element [walk.element] enters — invalid, ·nilled·, ·laxly
+// assessed· or undecided alike — once, so each node is reported exactly once,
+// as [xpath.Tally] obliges. A ·skipped· element is not entered, and
+// [assertionAncestry.skipped] takes its place.
+func (w *walk) tallyElement(e Element, g governance, up assertionAncestry, own *assertionCheck) {
+	if up.counting == nil && !own.counts() {
 		return
 	}
-	c.lacking(lackingChild{name: e.Name(), loc: e.Loc(), why: "it is ·skipped·, so it is not ·assessed·"})
+	attrs, decided := w.attributeNodes(e, g)
+	tell := func(c *assertionCheck, depth int) {
+		if !decided {
+			c.lacking(lackingCount{name: e.Name(), loc: e.Loc(), why: "its ·governing type definition· was not determined, so its ·defaulted attributes· are unknown"})
+			return
+		}
+		c.tally(depth, e.Name(), attrs)
+	}
+	for f := up.counting; f != nil; f = f.outer {
+		tell(f.check, up.depth-f.depth)
+	}
+	if own.counts() {
+		tell(own, 0)
+	}
+}
+
+// attributeNodes is the names of e's attribute nodes in the data model instance
+// cvc-assertion clause 1 builds: each attribute e carries — xsi ones included,
+// namespace declarations being none ([Element.Attributes]) — then each of its
+// ·defaulted attributes· (key-dflt-att, [walk.defaultedConstraint]) under g's
+// complex ·governing type definition·. decided is false where this package
+// could not determine that type ([governance.typeUndetermined]), so which
+// uses default is unknown. An element whose type is simple, or which is ·laxly
+// assessed· and so ·governed by· no type, has no ·defaulted attribute·.
+func (w *walk) attributeNodes(e Element, g governance) (names []xsd.QName, decided bool) {
+	if g.typeUndetermined() {
+		return nil, false
+	}
+	attrs := e.Attributes()
+	for _, a := range attrs {
+		names = append(names, a.Name())
+	}
+	ct := g.complexType()
+	if ct == nil {
+		return names, true
+	}
+	for _, u := range ct.AttributeUses() {
+		if _, defaulted := w.defaultedConstraint(u, attrs); defaulted {
+			names = append(names, u.DeclarationName())
+		}
+	}
+	return names, true
 }
 
 // yieldChildren is the kept children as an [xpath.ChildElements].
@@ -188,11 +323,14 @@ func (c *assertionCheck) yieldChildren(yield func(xpath.ChildElement) bool) {
 	}
 }
 
-// assertionTest is one member of ct.{assertions} and its {test} as
-// [xpath.CompileAssertionTest] compiled it, nil where that declined.
+// assertionTest is one member of ct.{assertions}, its {test} as
+// [xpath.CompileAssertionTest] compiled it, nil where that declined, and the
+// [xpath.Tally] that test's evaluation reads ([xpath.AssertionTest.Tally]),
+// nil where it counts nothing.
 type assertionTest struct {
-	a    xsd.Assertion
-	test *xpath.AssertionTest
+	a     xsd.Assertion
+	test  *xpath.AssertionTest
+	tally *xpath.Tally
 }
 
 // compileAssertions compiles every assertion of g's complex ·governing type
@@ -202,7 +340,8 @@ type assertionTest struct {
 // ·locally declared types· within T ([walk.assertionElementTypes]) — so
 // nothing the [[children]] carry can change a compiled tree, and compiling
 // before they arrive is what lets the walk know which of them a {test} reads
-// ([assertionCheck.reads]).
+// ([assertionCheck.reads]) and which {test}s count nodes of e's subtree, each
+// of which gets its Tally here, fresh for e ([assertionCheck.counts]).
 //
 // {assertions} is read whole and its base chain is never walked: cos-ct-extends
 // clause 1.7 and derivation-ok-restriction clause 5 both make B.{assertions} a
@@ -224,6 +363,7 @@ func (w *walk) compileAssertions(g governance) *assertionCheck {
 		c := assertionTest{a: a}
 		if test, compiled := xpath.CompileAssertionTest(a.Test(), w.schema, ct.ContentType(), w.assertionTypes(*ct), w.assertionElementTypes(*ct)); compiled {
 			c.test = &test
+			c.tally = test.Tally()
 		}
 		check.tests = append(check.tests, c)
 	}
@@ -292,10 +432,12 @@ func (w *walk) assertionElementTypes(ct xsd.ComplexType) xpath.ElementTypes {
 // recorded since e was entered — in e itself or anywhere below it.
 //
 // A child no {test} reads is kept nowhere, and a child that is read is kept as
-// ONE value, never a subtree: no step xpath compiles reaches below a child, so
-// the walk holds at most one value per element [[child]] of an element whose
-// {assertions} read it, for the data model instance cvc-assertion clause 1
-// builds from the parent.
+// ONE value, never a subtree: no value step xpath compiles reaches below a
+// child, so the walk holds at most one value per element [[child]] of an
+// element whose {assertions} read it, for the data model instance
+// cvc-assertion clause 1 builds from the parent. A {test} that only counts a
+// child reads its [xpath.Tally] instead ([walk.tallyElement]), and the child
+// never comes through here for it.
 func (w *walk) keepChild(parent *assertionCheck, e Element, g governance, content *contentCheck, recorded bool) {
 	if !parent.reads(e.Name()) {
 		return
@@ -444,6 +586,20 @@ func (l lackingDefault) declined(e xsd.QName) string {
 	return fmt.Sprintf("the ·defaulted attribute· %s of the element %s has no ·actual value· for the data model instance cvc-assertion clause 1 builds", l.u.DeclarationName(), e)
 }
 
+// lackingCount is an element, named name at loc, of the subtree of an element
+// one of whose {test}s counts its nodes, which the counting [xpath.Tally]
+// cannot be told of exactly, for the reason why ([walk.tallyElement],
+// [assertionAncestry.skipped]).
+type lackingCount struct {
+	name xsd.QName
+	loc  xsderr.Loc
+	why  string
+}
+
+func (l lackingCount) declined(e xsd.QName) string {
+	return fmt.Sprintf("the element %s at %s, in the subtree of the element %s whose nodes a {test} counts, cannot be counted exactly for the data model instance cvc-assertion clause 1 builds: %s", l.name, l.loc, e, l.why)
+}
+
 func (l lackingChild) declined(e xsd.QName) string {
 	return fmt.Sprintf("the child element %s of the element %s at %s, which a {test} reads, has no typed value for the data model instance cvc-assertion clause 1 builds: %s", l.name, e, l.loc, l.why)
 }
@@ -475,7 +631,8 @@ func (lackingValue) declined(e xsd.QName) string {
 // keeps no ·actual values·. Omitting such an attribute instead would make `@a`
 // the empty sequence and could fabricate a charge. After the attributes it
 // reports asserts' own lack: an element [[child]] a {test} reads that has no
-// typed value ([walk.keepChild]).
+// typed value ([walk.keepChild]), or a node of e's subtree a {test} counts that
+// its Tally could not be told of ([walk.tallyElement]).
 //
 // An attribute matching no use is not read: no {test}
 // [xpath.CompileAssertionTest] admits can name it ([walk.assertionTypes]), so
@@ -483,8 +640,8 @@ func (lackingValue) declined(e xsd.QName) string {
 //
 // A lack declines every assertion of e, including one whose {test} never reads
 // what is lacking: whether a {test} reads `$value` is not something the
-// compiled test reports, and a child's lack is kept per element and not per
-// {test}.
+// compiled test reports, and a child's lack, like a count's, is kept per
+// element and not per {test}.
 func (w *walk) assertionValues(e Element, attrs []Attribute, asserts *assertionCheck, content *contentCheck, invalid bool) (assertionInput, assertionLack) {
 	ct := asserts.ct
 	var in assertionInput

@@ -16,14 +16,15 @@ import (
 // second, lenient parser"), plus the productions beyond it an assertion's
 // {test} reaches: xpath20.md [23] ValueComp, [44] VarRef, an abbreviated
 // child-axis step whose NodeTest is a QName ([31] AbbrevForwardStep, §3.2.1.1),
-// a "/" or "//" opening [25] PathExpr over one such step, and [47]
+// a "/" or "//" opening [25] PathExpr over one such step or one attribute step,
+// an fn:count call ([48] FunctionCall) over one counted path, and [47]
 // ContextItemExpr `.`, which only the facet façade admits — each behind the
 // façade (ctaFacade.comparesValues, ctaFacade.variable, ctaFacade.child,
-// ctaFacade.rooted, ctaFacade.contextItem), so a Type Alternative's {test}
-// reaches none of them. Every method below is named for the production it
-// parses, and the whole grammar is both reached and evaluated: no method here
-// is a stub, and the production-level declines are those five façade
-// methods'. xpath/doc.go owns the enumeration of what declines; every other
+// ctaFacade.rooted, ctaFacade.count, ctaFacade.contextItem), so a Type
+// Alternative's {test} reaches none of them. Every method below is named for
+// the production it parses, and the whole grammar is both reached and
+// evaluated: no method here is a stub, and the production-level declines are
+// those six façade methods'. xpath/doc.go owns the enumeration of what declines; every other
 // decline reaching this file is ctaTypes answering ctaTypeDeclined for a
 // comparison type, a cast target or a cast operand it will not serve, or the
 // façade declining a NameTest, a variable's type or a settled comparison type,
@@ -39,6 +40,10 @@ const ctaFunctionNS = "http://www.w3.org/2005/xpath-functions"
 // §3.12.6 clause 3, "Any strings matching the BooleanFunction production are
 // function calls to fn:not".
 var ctaNotFunction = xsd.QName{Space: ctaFunctionNS, Local: "not"}
+
+// ctaCountFunction is fn:count (xpath-functions.md §15.4.1), the one function
+// a [14] ta-ValueExpr calls that is not a constructor (ctaParser.countCall).
+var ctaCountFunction = xsd.QName{Space: ctaFunctionNS, Local: "count"}
 
 // ctaNames holds the {namespace bindings} and the {default namespace} of one
 // XPath Expression property record, the bindings indexed by prefix. The map is
@@ -779,12 +784,86 @@ func (p *ctaParser) valueComparison(op ctaComparator, left ctaValue) (ctaExpr, b
 }
 
 // valueExpr parses [14] ta-ValueExpr, dispatching on whether a function call
-// opens it.
+// opens it, and on whether that function is fn:count, the one the assertion
+// façade calls (countCall), or a constructor.
 func (p *ctaParser) valueExpr() (ctaValue, bool) {
 	if p.at(ctaNameTok) && p.peek(1).kind == ctaLParen {
+		if p.functionName(p.peek(0).text) == ctaCountFunction {
+			return p.countCall()
+		}
 		return p.constructorFunction()
 	}
 	return p.castExpr()
+}
+
+// countCall parses an fn:count call, xpath20.md [48] FunctionCall with one
+// argument, whose name the caller has already resolved to fn:count. The node
+// is p.facade's, which may decline it, and so is the node of a rooted
+// argument; an argument outside countArgument's shapes declines.
+func (p *ctaParser) countCall() (ctaValue, bool) {
+	p.advance() // the function name
+	p.advance() // '('
+	arg, ok := p.countArgument()
+	if !ok {
+		return nil, false
+	}
+	if !p.at(ctaRParen) {
+		return nil, false
+	}
+	p.advance()
+	return p.facade.count(arg, p.types)
+}
+
+// countArgument parses fn:count's argument as far as a [Tally] counts it: a
+// rooted path (rootedPath), whose node p.facade builds and which is an
+// argument only where it is ctaCounted — ctaNoDocumentRoot, which raises before
+// it selects a node — or a relative path of one step with a QName NameTest,
+// `N`, `@N`, or either behind `./` or `.//` (countStep). A longer path, a
+// wildcard, a predicate and a bare `.` leave a token no production takes, or
+// none at all, and decline.
+func (p *ctaParser) countArgument() (ctaCounted, bool) {
+	switch p.peek(0).kind {
+	case ctaSlashTok, ctaSlashSlashTok:
+		rooted, ok := p.rootedPath()
+		if !ok {
+			return nil, false
+		}
+		counted, isCounted := rooted.(ctaCounted)
+		return counted, isCounted
+	case ctaDotTok:
+		p.advance()
+		if p.at(ctaSlashSlashTok) {
+			p.advance()
+			return p.countStep(ctaCountDescendants, ctaCountSubtreeAttributes)
+		}
+		if !p.at(ctaSlashTok) {
+			return nil, false
+		}
+		p.advance()
+	}
+	return p.countStep(ctaCountChildren, ctaCountOwnAttributes)
+}
+
+// countStep parses the one step of a counted relative path: `'@' QName`,
+// resolved on attributeName's terms and counted on the axis attributes, or a
+// QName, resolved on elementName's terms and counted on the axis elements. The
+// step is never typed: fn:count does not atomize it (ctaCount).
+func (p *ctaParser) countStep(elements, attributes ctaCountAxis) (ctaCounted, bool) {
+	if p.at(ctaAtTok) {
+		p.advance()
+		if !p.at(ctaNameTok) {
+			return nil, false
+		}
+		name := p.attributeName(p.peek(0).text)
+		p.advance()
+		return ctaCountPath{axis: attributes, name: name}, true
+	}
+	if !p.at(ctaNameTok) {
+		return nil, false
+	}
+	name := p.elementName(p.peek(0).text)
+	p.advance()
+	return ctaCountPath{axis: elements, name: name}, true
 }
 
 // castExpr parses [15] ta-CastExpr: a SimpleValue and an optional cast tail.
@@ -830,7 +909,8 @@ func (p *ctaParser) castExpr() (ctaValue, bool) {
 // §3.12.6 clause 3 makes every QName '(' SimpleValue ')' whose name is not
 // fn:not a constructor call for a built-in datatype, so this one production
 // covers both the constructor spelling of a cast and the "unknown boolean
-// function" reading — there is no third case to distinguish. The name is a
+// function" reading — there is no third case to distinguish. The one call
+// beyond §3.12.6 is fn:count, which valueExpr hands to countCall instead. The name is a
 // FUNCTION name, resolved as one, and it names the datatype at the same time:
 // an unprefixed int(...) is fn:int, which declares no constructor, and never
 // xs:int.
@@ -923,21 +1003,37 @@ func (p *ctaParser) childStep() (ctaValue, bool) {
 }
 
 // rootedPath parses xpath20.md [25] PathExpr's two rooted arms, "/"
-// RelativePathExpr and "//" RelativePathExpr, as far as ONE child-axis step
-// with a QName NameTest; a longer path, and a bare "/", leave a token no
-// production takes. The step is resolved — an unbound prefix in it is
-// err:XPST0081 like any other — and never typed: the node is p.facade's, and
-// each façade that admits it builds a node that raises before any step is
-// taken (ctaNoDocumentRoot, ctaNoContextItem), so what the step would select is
-// never asked.
+// RelativePathExpr and "//" RelativePathExpr, as far as ONE step with a QName
+// NameTest: a child-axis one, or an abbreviated attribute one, `'@' QName`; a
+// longer path, a wildcard, and a bare "/" leave a token no production takes.
+// The step is resolved — an unbound prefix in it is err:XPST0081 like any other,
+// on elementName's or attributeName's terms — and never typed: the node is
+// p.facade's, and each façade that admits it builds a node that raises before
+// any step is taken (ctaNoDocumentRoot, ctaNoContextItem), so what the step
+// would select is never asked.
 func (p *ctaParser) rootedPath() (ctaValue, bool) {
 	p.advance() // '/' or '//'
+	attribute := p.at(ctaAtTok)
+	if attribute {
+		p.advance()
+	}
 	if !p.at(ctaNameTok) {
 		return nil, false
 	}
-	p.elementName(p.peek(0).text)
+	p.rootedStepName(attribute, p.peek(0).text)
 	p.advance()
 	return p.facade.rooted()
+}
+
+// rootedStepName resolves the NameTest text of rootedPath's one step, on
+// attributeName's terms where attribute is true and elementName's otherwise.
+// The name is discarded: resolving it is what records an unbound prefix.
+func (p *ctaParser) rootedStepName(attribute bool, text string) {
+	if attribute {
+		p.attributeName(text)
+		return
+	}
+	p.elementName(text)
 }
 
 // attrName parses [17] ta-AttrName in BOTH spellings ta-props-correct clause 2
