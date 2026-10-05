@@ -66,10 +66,10 @@ Assert/assert-simple007/instance/assert-simple007.n1.xml fail
 Assert/assert-simple008/instance/assert-simple007.n1.xml fail
 Assert/assert-simple009/instance/assert-simple007.n1.xml fail
 Assert/assert-simple010/instance/assert-simple007.n1.xml fail
-Assert/assert001/instance/assert001.n1.xml fail
-Assert/assert001/instance/assert001.v1.xml fail
-Assert/assert002/instance/assert002.n1.xml fail
-Assert/assert002/instance/assert002.v1.xml fail
+Assert/assert001/instance/assert001.n1.xml pass
+Assert/assert001/instance/assert001.v1.xml pass
+Assert/assert002/instance/assert002.n1.xml pass
+Assert/assert002/instance/assert002.v1.xml pass
 Assert/assert003/instance/assert003.n1.xml fail
 Assert/assert003/instance/assert003.n2.xml fail
 Assert/assert003/instance/assert003.v1.xml fail
@@ -25446,7 +25446,7 @@ UnitsLength/d3_3_16ii02/instance/d3_3_16ii02i pass
 UnitsLength/d3_3_16v01/instance/d3_3_16v01i pass
 UnitsLength/d3_3_17ii01/instance/d3_3_17ii01i pass
 UnitsLength/d3_3_17v01/instance/d3_3_17v01i pass
-VC/vc001/instance/vc001.n1.xml fail
+VC/vc001/instance/vc001.n1.xml pass
 VC/vc001/instance/vc001.v1.xml fail
 VC/vc002/instance/vc002.n1.xml pass
 VC/vc002/instance/vc002.v1.xml fail
@@ -25456,9 +25456,9 @@ VC/vc005/instance/vc005.v1.xml fail
 VC/vc006/instance/vc006.n1.xml fail
 VC/vc007/instance/vc007.n1.xml fail
 VC/vc007/instance/vc007.v1.xml fail
-VC/vc008/instance/vc008.n1.xml fail
+VC/vc008/instance/vc008.n1.xml pass
 VC/vc008/instance/vc008.v1.xml fail
-VC/vc009/instance/vc009.n1.xml fail
+VC/vc009/instance/vc009.n1.xml pass
 VC/vc009/instance/vc009.v1.xml fail
 VC/vc010/instance/vc010.v1.xml fail
 VC/vc011/instance/vc011.n1.xml pass
@@ -25470,7 +25470,7 @@ VC/vc020/instance/vc020.v1.xml fail
 VC/vc021/instance/vc021.n1.xml pass
 VC/vc022/instance/vc022.n1.xml pass
 VC/vc023/instance/vc023.v1.xml fail
-VC/vc024-11/instance/vc024.n1.xml fail
+VC/vc024-11/instance/vc024.n1.xml pass
 VC/vc024-11/instance/vc024.v1.xml fail
 VC/vc_001/instance/vc_001_2 fail
 VC/vc_001/instance/vc_001_3 fail

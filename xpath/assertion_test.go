@@ -11,9 +11,10 @@ import (
 // The fixtures below drive the assertion façade: the §3.12.6 grammar over an
 // element whose attributes are TYPED (cvc-assertion clause 1, §3.13.4.1).
 
-// asTyped is one typed attribute of the element an assertion is evaluated
-// against: its ·expanded name·, the builtin type its use declares, and the
-// lexical its ·actual value· is mapped from.
+// asTyped is one attribute of the element an assertion is evaluated against:
+// its ·expanded name·, the builtin type its use declares, and the lexical its
+// typed value is read from — mapped to an ·actual value·, or taken as
+// xs:untypedAtomic where the type is ·special·.
 type asTyped struct {
 	name    xsd.QName
 	typ     string
@@ -48,19 +49,26 @@ func asUses(t *testing.T, uses map[string]string) AttributeTypes {
 	}
 }
 
-// asValues is the [TypedAttributes] over attrs in the order WRITTEN, each
-// value mapped by the backend from its lexical against its builtin type.
+// asValues is the [TypedAttributes] over attrs in the order WRITTEN, on the
+// terms [TypedAttributes] states: [Untyped] of the lexical where the builtin
+// type is ·special·, and [Typed] of the value the backend maps from the lexical
+// against it otherwise.
 func asValues(t *testing.T, attrs ...asTyped) TypedAttributes {
 	t.Helper()
-	vs := make([]value.Value, 0, len(attrs))
+	vs := make([]TypedValue, 0, len(attrs))
 	for _, a := range attrs {
-		v, err := value.ValidateLexical(backend(), seededTypes, asBuiltin(t, a.typ), a.lexical, nil)
+		st := asBuiltin(t, a.typ)
+		if ctaSpecial(st) {
+			vs = append(vs, Untyped(a.lexical))
+			continue
+		}
+		v, err := value.ValidateLexical(backend(), seededTypes, st, a.lexical, nil)
 		if err != nil {
 			t.Fatalf("mapping %q as xs:%s: %v", a.lexical, a.typ, err)
 		}
-		vs = append(vs, v)
+		vs = append(vs, Typed(v))
 	}
-	return func(yield func(xsd.QName, value.Value) bool) {
+	return func(yield func(xsd.QName, TypedValue) bool) {
 		for i, a := range attrs {
 			if !yield(a.name, vs[i]) {
 				return
@@ -174,6 +182,82 @@ func asUnion(t *testing.T) *xsd.SimpleType {
 	return st
 }
 
+// An attribute whose type is ·special· is read as xs:untypedAtomic — its
+// [schema normalized value], xpath-datamodel §3.3.1.2 and Datatypes dt-xdmrep
+// clause 1 — and compared as §3.5.2 compares an untyped operand: against an
+// integer literal it is cast to xs:double (clause 2.1), so x="1e0" equals 1,
+// which an xs:decimal cast would raise on; against another untypedAtomic both
+// are cast to xs:string (clause 1), so "10" > "9" is false; and a lexical that
+// does not cast raises err:FORG0001, which cvc-assertion charges as false and
+// fn:not propagates. A value comparison casts it to xs:string whatever the
+// other operand (§3.5.1 step 4). Each row fails with the ·special· arm of
+// ctaAssertionFacade.attribute removed, which declines the {test} instead.
+func TestAssertionReadsSpecialAttributesUntyped(t *testing.T) {
+	uses := asUses(t, map[string]string{"x": "anySimpleType", "y": "anySimpleType", "atom": "anyAtomicType", "i": "integer"})
+	for _, tc := range []struct {
+		expr  string
+		attrs []asTyped
+		want  bool
+	}{
+		{"@x > 300", []asTyped{{uq("x"), "anySimpleType", "304"}}, true},
+		{"@x > 300", []asTyped{{uq("x"), "anySimpleType", "204"}}, false},
+		{"@x > 300", nil, false},
+		{"@x = 1", []asTyped{{uq("x"), "anySimpleType", "1e0"}}, true},
+		{"@x = 1", []asTyped{{uq("x"), "anySimpleType", " 1 "}}, true},
+		{"@x > 300", []asTyped{{uq("x"), "anySimpleType", "abc"}}, false},
+		{"not(@x > 300)", []asTyped{{uq("x"), "anySimpleType", "abc"}}, false},
+		{"not(@x > 300)", []asTyped{{uq("x"), "anySimpleType", "204"}}, true},
+		{"@x > @y", []asTyped{{uq("x"), "anySimpleType", "10"}, {uq("y"), "anySimpleType", "9"}}, false},
+		{"@x > @y", []asTyped{{uq("x"), "anySimpleType", "9"}, {uq("y"), "anySimpleType", "10"}}, true},
+		{"@x = @i", []asTyped{{uq("x"), "anySimpleType", "5.0"}, {uq("i"), "integer", "5"}}, true},
+		{"@x eq '304'", []asTyped{{uq("x"), "anySimpleType", "304"}}, true},
+		{"@x eq 304", []asTyped{{uq("x"), "anySimpleType", "304"}}, false},
+		{"not(@x eq 304)", []asTyped{{uq("x"), "anySimpleType", "304"}}, false},
+		{"@x cast as xs:integer gt 3", []asTyped{{uq("x"), "anySimpleType", " 5 "}}, true},
+		{"@x", []asTyped{{uq("x"), "anySimpleType", ""}}, true},
+		{"@x", nil, false},
+		{"@atom = 'a'", []asTyped{{uq("atom"), "anyAtomicType", "a"}}, true},
+	} {
+		t.Run(tc.expr, func(t *testing.T) {
+			got := asCompile(t, tc.expr, uses).Evaluate(backend(), seededTypes, asValues(t, tc.attrs...), ValueBinding{})
+			if got != tc.want {
+				t.Errorf("Evaluate(%q) over %v = %v, want %v", tc.expr, tc.attrs, got, tc.want)
+			}
+		})
+	}
+}
+
+// A value of the wrong arm breaks the obligation [TypedAttributes] states, and
+// the node reading it raises rather than answering: a [Typed] value under a
+// ·special· name, and an [Untyped] one under a typed name, make the {test}
+// false and its fn:not false too.
+func TestAssertionRaisesOnWrongArm(t *testing.T) {
+	uses := asUses(t, map[string]string{"x": "anySimpleType", "i": "integer"})
+	v, err := value.ValidateLexical(backend(), seededTypes, asBuiltin(t, "integer"), "5", nil)
+	if err != nil {
+		t.Fatalf("mapping 5: %v", err)
+	}
+	for _, tc := range []struct {
+		expr string
+		name xsd.QName
+		v    TypedValue
+	}{
+		{"@x = 5", uq("x"), Typed(v)},
+		{"not(@x = 5)", uq("x"), Typed(v)},
+		{"@x", uq("x"), Typed(v)},
+		{"@i = 5", uq("i"), Untyped("5")},
+		{"not(@i = 5)", uq("i"), Untyped("5")},
+		{"@i", uq("i"), Untyped("5")},
+	} {
+		attrs := func(yield func(xsd.QName, TypedValue) bool) { yield(tc.name, tc.v) }
+		t.Run(tc.expr, func(t *testing.T) {
+			if asCompile(t, tc.expr, uses).Evaluate(backend(), seededTypes, attrs, ValueBinding{}) {
+				t.Errorf("Evaluate(%q) over the wrong arm = true, want false: the read raises", tc.expr)
+			}
+		})
+	}
+}
+
 // CompileAssertionTest DECLINES — ok false, never a tree that answers false —
 // every {test} whose operand types it cannot fix, every construct outside the
 // §3.12.6 grammar and its value comparisons ($value among them), and every
@@ -181,7 +265,7 @@ func asUnion(t *testing.T) *xsd.SimpleType {
 func TestCompileAssertionTestDeclines(t *testing.T) {
 	union := asUnion(t)
 	types := asUses(t, map[string]string{
-		"x": "integer", "l": "NMTOKENS", "any": "anySimpleType", "atom": "anyAtomicType",
+		"x": "integer", "l": "NMTOKENS",
 		"q": "QName", "n": "NOTATION", "f": "float", "d": "date", "e": "date",
 	})
 	uses := func(name xsd.QName) (*xsd.SimpleType, bool) {
@@ -199,8 +283,6 @@ func TestCompileAssertionTestDeclines(t *testing.T) {
 		{"@p:x = 1", "an unbound prefix"},
 		{"@l = 'a'", "a list type atomizes to a sequence"},
 		{"@u = 1", "a union's value takes its validating member's type"},
-		{"@any = 'a'", "xs:anySimpleType has no primitive"},
-		{"@atom = 'a'", "xs:anyAtomicType has no primitive"},
 		{"@q = 'a'", "an xs:QName value has no canonical representation to convert through"},
 		{"@n = 'a'", "an xs:NOTATION value likewise"},
 		{"@x cast as xs:string = '5'", "a cast from a typed non-string attribute"},
@@ -290,7 +372,7 @@ func asBind(t *testing.T, st *xsd.SimpleType, lexical string) ValueBinding {
 	if err != nil {
 		t.Fatalf("mapping %q against %s: %v", lexical, st.Name(), err)
 	}
-	return BindValue(v)
+	return BindValue(Typed(v))
 }
 
 // `$value` over a SIMPLE {content type} is E's ·actual value· under its {simple
@@ -393,17 +475,66 @@ func TestAssertionValueOverListContent(t *testing.T) {
 		if err != nil {
 			t.Fatalf("mapping %q against the list: %v", tc.lexical, err)
 		}
-		if got := test.Evaluate(backend(), types, asValues(t), BindValue(v)); got != tc.want {
+		if got := test.Evaluate(backend(), types, asValues(t), BindValue(Typed(v))); got != tc.want {
 			t.Errorf("Evaluate(%q) over %q = %v, want %v", tc.expr, tc.lexical, got, tc.want)
+		}
+	}
+}
+
+// `$value` over a ·special· {simple type definition} is E's [schema normalized
+// value] as one xs:untypedAtomic value (Datatypes dt-xdmrep clause 1), cast as
+// an untyped attribute is: to xs:string under a value comparison (xpath20.md
+// §3.5.1 step 4), to xs:double against a numeric under a general comparison
+// (§3.5.2 clause 2.1), raising err:FORG0001 where it does not cast; its
+// effective boolean value is false only for the zero-length string (§2.4.3 rule
+// 4). The zero ValueBinding is the empty sequence, and a [Typed] binding breaks
+// [BindValue]'s obligation and raises. Each row fails with ctaTypes.valueVariable
+// declining a ·special· type.
+func TestAssertionValueOverSpecialContent(t *testing.T) {
+	five, err := value.ValidateLexical(backend(), seededTypes, asBuiltin(t, "integer"), "5", nil)
+	if err != nil {
+		t.Fatalf("mapping 5: %v", err)
+	}
+	for _, special := range []string{"anySimpleType", "anyAtomicType"} {
+		content := xsd.SimpleContent{SimpleType: asBuiltin(t, special)}
+		for _, tc := range []struct {
+			expr  string
+			bound ValueBinding
+			want  bool
+		}{
+			{"$value eq 'x'", BindValue(Untyped("x")), true},
+			{"$value eq 'x'", BindValue(Untyped(" x")), false},
+			{"$value = 5", BindValue(Untyped("5.0")), true},
+			{"$value eq 5", BindValue(Untyped("5")), false},
+			{"not($value eq 5)", BindValue(Untyped("5")), false},
+			{"$value = 5", BindValue(Untyped("five")), false},
+			{"not($value = 5)", BindValue(Untyped("five")), false},
+			{"$value cast as xs:integer eq 5", BindValue(Untyped(" 5 ")), true},
+			{"$value", BindValue(Untyped("0")), true},
+			{"$value", BindValue(Untyped("")), false},
+			{"not($value)", BindValue(Untyped("")), true},
+			{"$value eq 'x'", ValueBinding{}, false},
+			{"not($value eq 'x')", ValueBinding{}, true},
+			{"$value", ValueBinding{}, false},
+			{"$value eq 'x'", BindValue(Typed(five)), false},
+			{"not($value eq 'x')", BindValue(Typed(five)), false},
+			{"not($value)", BindValue(Typed(five)), false},
+		} {
+			t.Run(special+" "+tc.expr, func(t *testing.T) {
+				got := asCompileFor(t, tc.expr, content, asUses(t, nil)).Evaluate(backend(), seededTypes, asValues(t), tc.bound)
+				if got != tc.want {
+					t.Errorf("Evaluate(%q) over %s content = %v, want %v", tc.expr, special, got, tc.want)
+				}
+			})
 		}
 	}
 }
 
 // `$value` DECLINES where its static type is not fixed at compile time, or is
 // one this engine does not read: a nil {content type}, a union, a list of a
-// union, a ·special· type, an xs:QName or xs:NOTATION primitive — and any
-// variable but `$value`, which is not in scope (err:XPST0008), and a cast from
-// a non-string `$value`, on a typed attribute's terms.
+// union, an xs:QName or xs:NOTATION primitive — and any variable but `$value`,
+// which is not in scope (err:XPST0008), and a cast from a non-string `$value`,
+// on a typed attribute's terms.
 func TestCompileAssertionTestDeclinesValue(t *testing.T) {
 	union := asUnion(t)
 	unionList := asList(t, "UnionList", union.Name())
@@ -416,7 +547,6 @@ func TestCompileAssertionTestDeclinesValue(t *testing.T) {
 		{"$value eq 1", nil, "no {content type} to type $value by"},
 		{"$value eq 1", xsd.SimpleContent{SimpleType: union}, "a union's value takes its active member's type"},
 		{"$value = 1", xsd.SimpleContent{SimpleType: unionList}, "a list of a union likewise"},
-		{"$value = 'a'", xsd.SimpleContent{SimpleType: asBuiltin(t, "anySimpleType")}, "a special type's value is untypedAtomic"},
 		{"$value = 'a'", xsd.SimpleContent{SimpleType: asBuiltin(t, "QName")}, "an xs:QName value has no canonical representation"},
 		{"$value = 'a'", xsd.SimpleContent{SimpleType: asBuiltin(t, "NOTATION")}, "an xs:NOTATION value likewise"},
 		{"$other eq 1", xsd.SimpleContent{SimpleType: asBuiltin(t, "int")}, "no variable but $value is in scope"},

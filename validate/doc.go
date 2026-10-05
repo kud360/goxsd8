@@ -388,13 +388,14 @@
 // element whose ·governing type definition· is a complex type with
 // {assertions}, once its [[children]] are exhausted: each member whose {test}
 // xpath compiles — the §3.12.6 grammar plus the value comparisons and `$value`,
-// over the element's attributes read TYPED by their {attribute uses}' types and
-// its simple content's ·actual value· — is evaluated over those values and
+// over the element's attributes, carried or ·defaulted·, read TYPED by their
+// {attribute uses}' types (as xs:untypedAtomic where that type is ·special·)
+// and its simple content's ·actual value· — is evaluated over those values and
 // charged where it is false or raises a dynamic or type error. A member xpath
-// declines, every member of an element one of whose use-matched attributes has
-// no ·actual value· or whose simple content's ·actual value· is undecided, and
-// one naming a ·defaulted attribute· the element does not carry are recorded
-// as [Unevaluated] under cvc-assertion instead (cvcassertion.go).
+// declines, and every member of an element one of whose use-matched or
+// ·defaulted· attributes has no ·actual value· or whose simple content's
+// ·actual value· is undecided, are recorded as [Unevaluated] under
+// cvc-assertion instead (cvcassertion.go).
 //
 // The rest of the cvc- decisions land on the walk [Validator.Assess]
 // already makes. Non-fatal warnings get an accessor of their own the day

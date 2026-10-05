@@ -268,6 +268,42 @@ func TestAssertionComparesTypedValues(t *testing.T) {
 	}
 }
 
+// An attribute whose type is ·special· is read as xs:untypedAtomic, its
+// [schema normalized value] (xpath-datamodel §3.3.1.2): `@x > 300` casts it to
+// xs:double (xpath20.md §3.5.2 clause 2.1), so x="304" is satisfied and
+// x="204" charged — the vc001 shape — and x="abc" does not cast, which raises
+// err:FORG0001 and is charged under cvc-assertion as well. Two such attributes
+// compare as xs:string (clause 1), so "10" > "9" is charged.
+//
+// With the ·special· arm of xpath's assertion façade removed every row is
+// declined instead, and fails; with walk.assertionValues yielding no value for
+// a ·special· attribute, the two satisfied rows are charged, and fail.
+func TestAssertionReadsSpecialAttributeUntyped(t *testing.T) {
+	single := aTyped(t, []string{"x", "anySimpleType"}, "@x > 300")
+	pair := aTyped(t, []string{"x", "anySimpleType", "y", "anySimpleType"}, "@x > @y")
+	for _, tc := range []struct {
+		name    string
+		schema  *xsd.Schema
+		root    *testElement
+		charged bool
+	}{
+		{"304 > 300", single, aRoot("x", "304"), false},
+		{"204 > 300", single, aRoot("x", "204"), true},
+		{"abc > 300 raises FORG0001", single, aRoot("x", "abc"), true},
+		{"10 > 9 as strings", pair, aRoot("x", "10", "y", "9"), true},
+		{"9 > 10 as strings", pair, aRoot("x", "9", "y", "10"), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			res := aAssess(t, tc.schema, tc.root)
+			if !tc.charged {
+				wantSatisfied(t, res, tc.name)
+				return
+			}
+			wantAssertionCharge(t, res, "the element root is not ·valid· with respect to assertion 1 of 1 in the {assertions} of the ·governing type definition· RootType, whose {test} is ")
+		})
+	}
+}
+
 // A VALUE comparison is evaluated as §3.13.2's own example writes it:
 // `@min le @max` over two xs:int attributes is charged for min="6" max="5" —
 // the d4_3_15ii01 shape — and holds for min="5" max="6".
@@ -340,6 +376,19 @@ func TestValueAssertionReadsSimpleContent(t *testing.T) {
 	wantSatisfied(t, aAssess(t, schema, cRoot("# +05 ")), "$value eq 5 over +05")
 	wantAssertionCharge(t, aAssess(t, schema, cRoot("#6")),
 		`the element root is not ·valid· with respect to assertion 1 of 1 in the {assertions} of the ·governing type definition· RootType, whose {test} is "$value eq 5",`)
+}
+
+// `$value` over a ·special· {simple type definition} is the element's [schema
+// normalized value] as xs:untypedAtomic (cvc-assertion clause 2.3.1, Datatypes
+// dt-xdmrep clause 1): `$value eq 'x'` holds for "x", white space preserved,
+// and is charged for " x". The satisfied row fails with walk.assertionValue
+// binding the empty sequence over a ·special· type, which charges it.
+func TestValueAssertionReadsSpecialContentUntyped(t *testing.T) {
+	schema := aSimple(t, "anySimpleType", false, nil, "$value eq 'x'")
+
+	wantSatisfied(t, aAssess(t, schema, cRoot("#x")), "$value eq 'x' over anySimpleType content x")
+	wantAssertionCharge(t, aAssess(t, schema, cRoot("# x")),
+		`the element root is not ·valid· with respect to assertion 1 of 1 in the {assertions} of the ·governing type definition· RootType, whose {test} is "$value eq 'x'",`)
 }
 
 // `$value` over a {content type} that is not simple is the EMPTY SEQUENCE
@@ -443,16 +492,61 @@ func TestAssertionOverAnAttributeWithoutActualValueIsDeclined(t *testing.T) {
 	}
 }
 
-// A {test} naming a ·defaulted attribute· the element does not carry is
-// declined, whether the partial PSVI holds it being unruled; carried, the same
-// attribute is read like any other.
-func TestAssertionNamingAnUncarriedDefaultedAttributeIsDeclined(t *testing.T) {
-	dflt := xsd.NewValueConstraint(xsd.ValueDefault, "500", nil, nil)
-	uses := []xsd.AttributeUse{typedUse(t, "x", integerType(), false, nil, &dflt)}
-	schema := aSchema(t, aComplexType(t, uses, xsd.EmptyContent{}, aAssertions("@x > 300")))
+// aDefaulted builds RootType with one optional use of x, of the builtin typ,
+// whose {value constraint} defaults it to lexical, and the assertions given.
+func aDefaulted(t *testing.T, typ, lexical string, exprs ...string) *xsd.Schema {
+	t.Helper()
+	dflt := xsd.NewValueConstraint(xsd.ValueDefault, lexical, nil, nil)
+	uses := []xsd.AttributeUse{typedUse(t, "x", icBuiltin(typ), false, nil, &dflt)}
+	return aSchema(t, aComplexType(t, uses, xsd.EmptyContent{}, aAssertions(exprs...)))
+}
 
-	wantRecords(t, aAssess(t, schema, aRoot()), "cvc-assertion", loc(1, 1), "XPath evaluator declined it")
-	wantAssertionCharge(t, aAssess(t, schema, aRoot("x", "200")), "the element root is not ·valid·")
+// A ·defaulted attribute· the element does not carry is PRESENT in the partial
+// ·PSVI· cvc-assertion clause 1.2 builds from (key-dflt-att), read as its
+// ·effective value constraint· supplies it: `@x > 300` over a default of "500"
+// is satisfied and over "200" charged, a ·special· type's default is read as
+// xs:untypedAtomic, and a carried x overrides the default. The two satisfied
+// rows over an uncarried x fail with walk.assertionValues yielding no
+// defaulted attribute, which reads @x as the empty sequence.
+func TestAssertionReadsADefaultedAttribute(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		schema  *xsd.Schema
+		root    *testElement
+		charged bool
+	}{
+		{"default 500 > 300", aDefaulted(t, "integer", "500", "@x > 300"), aRoot(), false},
+		{"default 200 > 300", aDefaulted(t, "integer", "200", "@x > 300"), aRoot(), true},
+		{"untyped default 304 > 300", aDefaulted(t, "anySimpleType", "304", "@x > 300"), aRoot(), false},
+		{"carried 200 over default 500", aDefaulted(t, "integer", "500", "@x > 300"), aRoot("x", "200"), true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			res := aAssess(t, tc.schema, tc.root)
+			if !tc.charged {
+				wantSatisfied(t, res, tc.name)
+				return
+			}
+			wantAssertionCharge(t, res, "the element root is not ·valid· with respect to assertion 1 of 1 in the {assertions} of the ·governing type definition· RootType, whose {test} is ")
+		})
+	}
+}
+
+// A ·defaulted attribute· whose {lexical form} the value space cannot decide
+// has no ·actual value·, so every assertion of the element is DECLINED,
+// carrying the use's name — never read as the empty sequence, which would
+// charge `not(@x)` false here — beside cvc-complex-type clause 4's own record.
+func TestAssertionOverAnUndecidedDefaultedAttributeIsDeclined(t *testing.T) {
+	schema := aDefaulted(t, "decimal", "500", "not(@x)")
+
+	got, undecided := assessRecordedWith(t, gapBackend(icBuiltin("decimal")), schema, aRoot())
+	if len(got) != 0 {
+		t.Fatalf("Violations() = %v, want none: an undecided default charges nothing", got)
+	}
+	last := len(undecided) - 1
+	if last < 0 || undecided[last].Rule() != "cvc-assertion" ||
+		!strings.HasPrefix(undecided[last].Msg(), "assertion 1 of 1 in the {assertions} of the ·governing type definition· RootType, whose {test} is \"not(@x)\", was not evaluated: the ·defaulted attribute· x of the element root has no ·actual value·") {
+		t.Fatalf("Unevaluated() = %v, want the assertion declined last for the defaulted x's missing ·actual value·", messages(undecided))
+	}
 }
 
 // A complex type with no {assertions} records nothing: the visit is per
