@@ -187,6 +187,7 @@
 //
 //	func NewValueSpace(b Backend) xsd.ValueSpace
 //	func ConstraintMatches(b Backend, r xsd.TypeResolver, t *xsd.SimpleType, lexical string, ctx Context, vc xsd.ValueConstraint) (same, decided bool)
+//	func ConstraintContext(vc xsd.ValueConstraint) Context
 //
 // [ConstraintMatches] is the INSTANCE-time half, and is not part of the
 // xsd.ValueSpace interface: an instance literal is not a Value Constraint, and the
@@ -198,6 +199,13 @@
 // on the same fail-open terms as everything below; a ·special· type
 // (xs:anySimpleType, xs:anyAtomicType) skips the pipeline and is decided over its
 // mapping union, as [ConstraintMatches] states.
+//
+// [ConstraintContext] is that schema document's context for one Value
+// Constraint, the one every comparison here maps a {lexical form} under. It is
+// exported for the validator, which maps a default's {lexical form} itself
+// wherever the instance takes one on — a ·defaulted attribute· (cvc-complex-type
+// §3.4.4.2 clause 4) or an element default (cvc-elt §3.3.4.3 clause 5.1.2) — and
+// must never map it under the instance's bindings.
 //
 // [NewValueSpace] is what lets package xsd — a pure leaf that cannot import this
 // one — decide the Structures constraints that reach into a value space. Two

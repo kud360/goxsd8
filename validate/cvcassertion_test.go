@@ -552,6 +552,44 @@ func TestAssertionOverAnUndecidedDefaultedAttributeIsDeclined(t *testing.T) {
 	}
 }
 
+// A ·defaulted attribute·'s ·actual value· is mapped under the namespace
+// bindings its {value constraint} captured (value.ConstraintContext), never
+// the element's: an xs:QName x defaulting to "p:a", p bound to urn:a on the
+// constraint alone, reaches `not(@y)` as a value whether the element binds no p
+// or binds it elsewhere, and the assertion is evaluated. With the default
+// mapped under elementContext the first row declines the assertion for x's
+// missing ·actual value·; the second guards against declining every
+// QName-governed default outright, which would decline it as well.
+func TestAssertionReadsADefaultUnderItsOwnBindings(t *testing.T) {
+	dflt := xsd.NewValueConstraint(xsd.ValueDefault, "p:a", []xsd.NamespaceBinding{xsd.NewNamespaceBinding("p", "urn:a")}, nil)
+	uses := []xsd.AttributeUse{
+		typedUse(t, "x", icBuiltin("QName"), false, &dflt, nil),
+		typedUse(t, "y", icBuiltin("integer"), false, nil, nil),
+	}
+	schema := aSchema(t, aComplexType(t, uses, xsd.EmptyContent{}, aAssertions("not(@y)")))
+	elsewhere := aRoot()
+	elsewhere.bindings = map[string]string{"p": "urn:other"}
+	for _, tc := range []struct {
+		name string
+		root *testElement
+	}{
+		{"p unbound in the instance", aRoot()},
+		{"p bound elsewhere in the instance", elsewhere},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			res := aAssess(t, schema, tc.root)
+			if got := res.Violations(); len(got) != 0 {
+				t.Fatalf("Violations() = %v, want none: not(@y) holds", got)
+			}
+			for _, u := range res.Unevaluated() {
+				if u.Rule() == "cvc-assertion" {
+					t.Fatalf("Unevaluated() = %v, want the assertion evaluated over x's ·actual value·", messages(res.Unevaluated()))
+				}
+			}
+		})
+	}
+}
+
 // A complex type with no {assertions} records nothing: the visit is per
 // assertion, not per element.
 func TestElementWithoutAssertionsRecordsNothing(t *testing.T) {

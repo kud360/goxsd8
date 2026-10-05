@@ -97,7 +97,7 @@ type relation func(a, b Value) (same, decided bool)
 // Every other pair is mapped into one value space by values and compared there.
 func (vs valueSpace) compare(r xsd.TypeResolver, ta *xsd.SimpleType, a xsd.ValueConstraint, tb *xsd.SimpleType, b xsd.ValueConstraint, rel relation) (same, decided bool) {
 	if ta.IsSpecial() && tb.IsSpecial() {
-		return specialMatches(vs.b, ta, tb, a.LexicalForm(), constraintContext(a), b.LexicalForm(), constraintContext(b), rel)
+		return specialMatches(vs.b, ta, tb, a.LexicalForm(), ConstraintContext(a), b.LexicalForm(), ConstraintContext(b), rel)
 	}
 	av, bv, ok := vs.values(r, ta, a, tb, b)
 	if !ok {
@@ -244,7 +244,7 @@ func (vs valueSpace) ValidDefault(r xsd.TypeResolver, t *xsd.SimpleType, vc xsd.
 // point: ctx is the instance's, resolving a QName lexical against the namespace
 // bindings in scope where the attribute was written, while vc carries the bindings
 // in scope where its own {lexical form} was written in the schema document
-// (§3.3.18, constraintContext). One shared context would decide a QName agreement
+// (§3.3.18, [ConstraintContext]). One shared context would decide a QName agreement
 // wrongly in both directions.
 //
 // For a t that is not ·special·, a side that fails to validate is undecided,
@@ -267,13 +267,13 @@ func (vs valueSpace) ValidDefault(r xsd.TypeResolver, t *xsd.SimpleType, vc xsd.
 // NOT-same, until #667 routes those defaults through ValidDefault.
 func ConstraintMatches(b Backend, r xsd.TypeResolver, t *xsd.SimpleType, lexical string, ctx Context, vc xsd.ValueConstraint) (same, decided bool) {
 	if t.IsSpecial() {
-		return specialMatches(b, t, t, lexical, ctx, vc.LexicalForm(), constraintContext(vc), equalOrIdentical)
+		return specialMatches(b, t, t, lexical, ctx, vc.LexicalForm(), ConstraintContext(vc), equalOrIdentical)
 	}
 	av, err := ValidateLexical(b, r, t, lexical, ctx, assertionsUndecided{})
 	if err != nil {
 		return false, false
 	}
-	cv, err := ValidateLexical(b, r, t, vc.LexicalForm(), constraintContext(vc), assertionsUndecided{})
+	cv, err := ValidateLexical(b, r, t, vc.LexicalForm(), ConstraintContext(vc), assertionsUndecided{})
 	if err != nil {
 		return false, false
 	}
@@ -449,22 +449,28 @@ func (vs valueSpace) values(r xsd.TypeResolver, ta *xsd.SimpleType, a xsd.ValueC
 	if aws == 0 || bws == 0 {
 		return nil, nil, false
 	}
-	av, err := m.Parse(normalizeWhiteSpace(a.LexicalForm(), aws), constraintContext(a))
+	av, err := m.Parse(normalizeWhiteSpace(a.LexicalForm(), aws), ConstraintContext(a))
 	if err != nil {
 		return nil, nil, false
 	}
-	bv, err := m.Parse(normalizeWhiteSpace(b.LexicalForm(), bws), constraintContext(b))
+	bv, err := m.Parse(normalizeWhiteSpace(b.LexicalForm(), bws), ConstraintContext(b))
 	if err != nil {
 		return nil, nil, false
 	}
 	return av, bv, true
 }
 
-// constraintContext is the [Context] a value constraint's {lexical form} is
-// parsed under: the namespace bindings captured at the schema-document element
-// that wrote it (§3.3.18, fixed there by cos-valid-simple-default clause 2), on
-// the ONE nsContext this package resolves prefixes with (facets.go).
-func constraintContext(vc xsd.ValueConstraint) nsContext {
+// ConstraintContext is the [Context] vc.{lexical form} is mapped under: the
+// namespace bindings in scope at the schema-document element that wrote it
+// (§3.3.18, fixed there by cos-valid-simple-default clause 2), never the
+// instance's. Pass it as [ValidateLexical]'s or [ValidatingType]'s ctx wherever
+// the literal is a value constraint's {lexical form} supplied at assessment
+// time — a ·defaulted attribute· (key-dflt-att) or an element default (cvc-elt
+// clause 5.1.2). Prefixes resolve on the ONE nsContext this package resolves
+// them with (facets.go): "xml" always bound, the empty prefix to vc's {default
+// namespace} or to no namespace. A vc that captured no bindings still yields a
+// total, non-nil context.
+func ConstraintContext(vc xsd.ValueConstraint) Context {
 	ns, ok := vc.DefaultNamespace()
 	return newNSContext(vc.NamespaceBindings(), ns, ok)
 }

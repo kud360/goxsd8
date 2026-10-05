@@ -502,7 +502,7 @@ func (c *icCheck) fieldDefaultedAttributes(w *walk, t *icTarget, i int, sel icpa
 			t.decline(w, i, u.DeclarationName(), c.e.Loc(), "it is a ·defaulted attribute· whose declaration's {type definition} is absent or not a simple type definition")
 			continue
 		}
-		m, present, decided := w.keyMember(st, vc.LexicalForm(), elementContext{owner: c.e}, false, false)
+		m, present, decided := w.keyMember(st, vc.LexicalForm(), value.ConstraintContext(vc), false, false)
 		t.offer(w, i, u.DeclarationName(), c.e.Loc(), m, present, decided)
 	}
 }
@@ -532,18 +532,20 @@ func (c *icCheck) substitute(content *contentCheck) {
 
 // assessed is the ·initial value· cvc-elt clause 5 leaves this element assessed
 // on, which is what §3.11.4 clause 3 and §3.17.5.2 both read a [schema actual
-// value] off: D.{value constraint}.{lexical form} on clause 5.1's arm, and the
-// gathered ·initial value· on clause 5.2's.
+// value] off, paired with the namespace context it is mapped under, on
+// [contentCheck.assessed]'s terms: D.{value constraint}.{lexical form} under
+// [value.ConstraintContext] on clause 5.1's arm, and the gathered ·initial
+// value· under E's own bindings (elementContext) on clause 5.2's.
 //
 // §3.11.4's own Note is why the substituted one reaches here and not just
 // cvc-type: "the use of [schema actual value] in the definition of ·key sequence·
 // above means that default or fixed value constraints may play a part in
 // ·key-sequences·", and §3.17.5.2's Note says the same of the ·eligible item set·.
-func (c *icCheck) assessed() string {
+func (c *icCheck) assessed() (lexical string, ctx value.Context) {
 	if c.hasDefault {
-		return c.defaulted.LexicalForm()
+		return c.defaulted.LexicalForm(), value.ConstraintContext(c.defaulted)
 	}
-	return c.initial.String()
+	return c.initial.String(), elementContext{owner: c.e}
 }
 
 // identityExit settles everything about one element that only its exhausted
@@ -630,13 +632,17 @@ func (w *walk) elementKeyMember(c *icCheck) (icKeyMember, bool, bool) {
 		return icKeyMember{}, false, true
 	}
 	nillable := c.g.hasDecl && c.g.decl.Nillable()
-	return w.keyMember(st, c.assessed(), elementContext{owner: c.e}, true, nillable)
+	lexical, ctx := c.assessed()
+	return w.keyMember(st, lexical, ctx, true, nillable)
 }
 
 // keyMember maps one field node's lexical to the ·actual value· that is its
 // [schema actual value], through the same String Valid (§3.16.4) pipeline the
 // attribute charges run (value.ValidateLexical, under ctx: the namespace
-// bindings in scope at the node that owns the lexical, elementContext).
+// bindings in scope at the node that owns the lexical, elementContext, for a
+// lexical the instance carries, and [value.ConstraintContext] for a {value
+// constraint}'s {lexical form} — a ·defaulted attribute·'s or an element
+// default's).
 //
 // The three answers are the three the rule distinguishes. present=true is a
 // non-absent [schema actual value]. present=false with decided=true is an

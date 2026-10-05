@@ -339,7 +339,8 @@ func (w *walk) keepChild(parent *assertionCheck, e Element, g governance, conten
 // is e's ·initial value· ([contentCheck.assessed], the {value constraint}'s
 // {lexical form} where cvc-elt clause 5.1 substituted it), normalized under e's
 // own type's whiteSpace (normalizedLexical) — an extension keeps it and a
-// restriction never weakens it — and mapped under the answered type.
+// restriction never weakens it — and mapped under the answered type, in the
+// namespace context assessed pairs it with.
 func (w *walk) childValue(ct xsd.ComplexType, e Element, g governance, content *contentCheck, recorded bool) (xpath.ChildElement, assertionLack) {
 	lacking := func(why string) (xpath.ChildElement, assertionLack) {
 		return xpath.ChildElement{}, lackingChild{name: e.Name(), loc: e.Loc(), why: why}
@@ -368,11 +369,12 @@ func (w *walk) childValue(ct xsd.ComplexType, e Element, g governance, content *
 	if own == nil {
 		return lacking("its ·governing type definition· has no simple type its value is read under")
 	}
-	normalized, ok := normalizedLexical(w.schema, own, content.assessed())
+	lexical, ctx := content.assessed()
+	normalized, ok := normalizedLexical(w.schema, own, lexical)
 	if !ok {
 		return lacking("its ·initial value· has no [schema normalized value] under its own type")
 	}
-	v, err := value.ValidateLexical(w.backend, w.schema, answered, normalized, elementContext{owner: e}, xpath.FacetAssertions())
+	v, err := value.ValidateLexical(w.backend, w.schema, answered, normalized, ctx, xpath.FacetAssertions())
 	if err != nil {
 		return lacking(fmt.Sprintf("its [schema normalized value] has no ·actual value· under %s", typeName(answered)))
 	}
@@ -461,10 +463,12 @@ func (lackingValue) declined(e xsd.QName) string {
 //
 // A ·defaulted attribute· is read as its use's ·effective value constraint·
 // supplies it: its {lexical form} is the [schema normalized value], and the
-// ·actual value· is mapped from it. The partial ·PSVI· cvc-assertion clause 1.2
-// builds from holds it — clause 1.1 sets aside only cvc-complex-type clause 6,
-// not the attribute defaulting key-dflt-att's PSVI contribution makes — so
-// reading it as the empty sequence instead could fabricate a charge.
+// ·actual value· is mapped from it under [value.ConstraintContext], the bindings
+// in scope where the schema document wrote it (Datatypes §3.3.18), never e's.
+// The partial ·PSVI· cvc-assertion clause 1.2 builds from holds it — clause 1.1
+// sets aside only cvc-complex-type clause 6, not the attribute defaulting
+// key-dflt-att's PSVI contribution makes — so reading it as the empty sequence
+// instead could fabricate a charge.
 //
 // It reports the lack, carrying the first attribute lacking one, where any
 // such attribute has no ·actual value·: its declaration or {type definition}
@@ -504,7 +508,7 @@ func (w *walk) assertionValues(e Element, attrs []Attribute, asserts *assertionC
 		if !defaulted {
 			continue
 		}
-		v, read := w.assertionTyped(u, vc.LexicalForm(), elementContext{owner: e}, e.Loc())
+		v, read := w.assertionTyped(u, vc.LexicalForm(), value.ConstraintContext(vc), e.Loc())
 		if !read {
 			return assertionInput{}, lackingDefault{u: u}
 		}
@@ -573,11 +577,12 @@ func (w *walk) assertionTyped(u xsd.AttributeUse, lexical string, ctx value.Cont
 //
 // Otherwise the value is e's [schema actual value]: the ·initial value·, or
 // the {value constraint}'s {lexical form} cvc-elt clause 5.1 substitutes for an
-// empty e ([contentCheck.assessed]), mapped under the {simple type definition}
-// by String Valid ([walk.stringValid]) re-run as [walk.assertionValues] re-runs
-// it for an attribute. It is undecided where String Valid is withheld. A
-// rejection would be clause 2.3.2 again, but cvc-complex-type clause 1.2 has
-// charged it by now, so invalid is already true.
+// empty e ([contentCheck.assessed]), mapped under the {simple type definition},
+// in the namespace context assessed pairs it with, by String Valid
+// ([walk.stringValid]) re-run as [walk.assertionValues] re-runs it for an
+// attribute. It is undecided where String Valid is withheld. A rejection would
+// be clause 2.3.2 again, but cvc-complex-type clause 1.2 has charged it by now,
+// so invalid is already true.
 //
 // A DECLINED check of e's own elsewhere leaves e's [validity] undecided
 // between invalid and notKnown, and the actual value is bound all the same:
@@ -588,18 +593,18 @@ func (w *walk) assertionValue(e Element, ct xsd.ComplexType, content *contentChe
 	if !isSimple || content.nilled || invalid {
 		return xpath.ValueBinding{}, true
 	}
-	lexical := content.assessed()
+	lexical, ctx := content.assessed()
 	if simple.SimpleType.IsSpecial() {
 		return xpath.BindValue(xpath.Untyped(lexical)), true
 	}
-	decided, verdict := w.stringValid(simple.SimpleType, lexical, elementContext{owner: e}, e.Loc())
+	decided, verdict := w.stringValid(simple.SimpleType, lexical, ctx, e.Loc())
 	if !decided {
 		return xpath.ValueBinding{}, false
 	}
 	if verdict != nil {
 		return xpath.ValueBinding{}, true
 	}
-	v, err := value.ValidateLexical(w.backend, w.schema, simple.SimpleType, lexical, elementContext{owner: e}, xpath.FacetAssertions())
+	v, err := value.ValidateLexical(w.backend, w.schema, simple.SimpleType, lexical, ctx, xpath.FacetAssertions())
 	if err != nil {
 		return xpath.ValueBinding{}, false
 	}

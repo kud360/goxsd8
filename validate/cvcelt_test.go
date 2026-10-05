@@ -469,3 +469,72 @@ func TestClause511IsNotReachedWithoutAValueConstraint(t *testing.T) {
 	wantSilence(t, cAssess(t, eOverrideSchema(t, nil), eRoot(map[string]string{"type": "Tight"})),
 		"with no {value constraint} there is no default for cos-valid-default to judge")
 }
+
+// qnameDefault is a {value constraint} defaulting to "p:a", carrying the given
+// namespace bindings as the ones in scope where a schema document wrote it.
+func qnameDefault(bindings ...xsd.NamespaceBinding) xsd.ValueConstraint {
+	return xsd.NewValueConstraint(xsd.ValueDefault, "p:a", bindings, nil)
+}
+
+// qnameContentSchema declares "root" over RootType, whose {content type} is
+// simple with xs:QName as its {simple type definition}, carrying vc.
+func qnameContentSchema(t *testing.T, vc *xsd.ValueConstraint) *xsd.Schema {
+	t.Helper()
+	qname, found := builtinType(t, "QName")
+	if !found {
+		t.Fatal("no builtin xs:QName")
+	}
+	b := xsd.NewSchemaBuilder()
+	aTypes(t, b)
+	b.AddType(aComplexType(t, nil, xsd.SimpleContent{SimpleType: qname}, nil))
+	d, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "root"},
+		xsd.TypeDefinitionRef{Name: xsd.QName{Local: "RootType"}}, nil, xsd.NewGlobalScope(),
+		vc, false, nil, nil, nil, false, nil)
+	if err != nil {
+		t.Fatalf("building the root element declaration: %v", err)
+	}
+	b.AddElement(d)
+	schema, err := b.Finalize()
+	if err != nil {
+		t.Fatalf("finalizing the QName-content schema: %v", err)
+	}
+	return schema
+}
+
+// Clause 5.1.2's substituted {lexical form} is mapped under the namespace
+// bindings in scope where the schema document wrote it (cos-valid-simple-default
+// clause 2, Datatypes §3.3.18), never under the element's: an empty <root>
+// whose xs:QName default "p:a" binds p only on its {value constraint} is
+// decided satisfied under cvc-type clause 3.1.3 (a simple type) and
+// cvc-complex-type clause 1.2 (simple content), and one whose {value
+// constraint} binds no p is charged though the element binds it. Each row fails
+// with contentCheck.assessed pairing the default with elementContext.
+func TestElementDefaultIsMappedUnderItsOwnBindings(t *testing.T) {
+	bound := qnameDefault(xsd.NewNamespaceBinding("p", "urn:a"))
+	unbound := qnameDefault()
+	instanceBound := cRoot()
+	instanceBound.bindings = map[string]string{"p": "urn:a"}
+	for _, tc := range []struct {
+		name   string
+		schema *xsd.Schema
+		root   *testElement
+		rule   xsderr.Rule
+		clause string
+		want   string
+	}{
+		{"simple type, p bound in the schema", simpleTypedSchema(t, icBuiltin("QName"), &bound, false), cRoot(), "cvc-type", "3.1.3", "satisfied"},
+		{"simple content, p bound in the schema", qnameContentSchema(t, &bound), cRoot(), "cvc-complex-type", "1.2", "satisfied"},
+		{"simple type, p bound in the instance", simpleTypedSchema(t, icBuiltin("QName"), &unbound, false), instanceBound, "cvc-type", "3.1.3", "charged"},
+		{"simple content, p bound in the instance", qnameContentSchema(t, &unbound), instanceBound, "cvc-complex-type", "1.2", "charged"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, visits := eSubstituted(t, tc.schema, tc.root)
+			eWantOutcome(t, visits, tc.rule, tc.clause, tc.want)
+			if tc.want == "satisfied" {
+				wantSilence(t, got, "the default's own bindings resolve p")
+				return
+			}
+			wantContentCharge(t, got, tc.rule, tc.clause, loc(1, 1))
+		})
+	}
+}

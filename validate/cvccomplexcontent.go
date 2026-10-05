@@ -231,14 +231,19 @@ func (c *contentCheck) defaulted() (xsd.ValueConstraint, bool) {
 }
 
 // assessed is the ·initial value· cvc-elt clause 5 leaves this element assessed
-// on: D.{value constraint}.{lexical form} on clause 5.1's arm, and the ·initial
-// value· E actually carries on clause 5.2's. It is [icCheck.assessed]'s twin, one
-// per state the [[children]] are read into.
-func (c *contentCheck) assessed() string {
+// on, paired with the namespace context it is mapped under: D.{value
+// constraint}.{lexical form} under [value.ConstraintContext] on clause 5.1's
+// arm, the bindings in scope where the schema document wrote it
+// (cos-valid-simple-default clause 2, Datatypes §3.3.18), and the ·initial
+// value· E actually carries under E's own bindings (elementContext) on clause
+// 5.2's. The two travel together so no reader can map a default under the
+// instance's bindings. It is [icCheck.assessed]'s twin, one per state the
+// [[children]] are read into.
+func (c *contentCheck) assessed() (lexical string, ctx value.Context) {
 	if vc, defaulted := c.defaulted(); defaulted {
-		return vc.LexicalForm()
+		return vc.LexicalForm(), value.ConstraintContext(vc)
 	}
-	return c.initial.String()
+	return c.initial.String(), elementContext{owner: c.e}
 }
 
 // defaultValid settles cvc-elt clause 5.1.1: where clause 5.1's arm is live and
@@ -670,7 +675,8 @@ func (c *contentCheck) fixedActualValue(w *walk, f xsd.ValueConstraint) {
 // cvc-assertions-valid ([walk.declineAssertions], cvcassertion.go) in place of
 // its own clause's decline.
 func (c *contentCheck) stringValid(w *walk, st *xsd.SimpleType) (decided bool, verdict error) {
-	return w.stringValid(st, c.assessed(), elementContext{owner: c.e}, c.e.Loc())
+	lexical, ctx := c.assessed()
+	return w.stringValid(st, lexical, ctx, c.e.Loc())
 }
 
 // simpleTypeValue settles cvc-type clause 3.1.3: where E is not ·nilled·, its

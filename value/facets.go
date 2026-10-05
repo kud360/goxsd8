@@ -898,7 +898,7 @@ const xmlNamespaceURI = "http://www.w3.org/XML/1998/namespace"
 // captured set of namespace bindings so a prefixed literal resolves against the
 // bindings in scope WHERE IT WAS WRITTEN — an enumeration facet member's
 // <enumeration> element (newMemberContext), a value constraint's
-// <element>/<attribute> element (constraintContext, valuespace.go). Its
+// <element>/<attribute> element ([ConstraintContext], valuespace.go). Its
 // reserved-prefix rules match conformance.nsContext exactly (value cannot import
 // the test-only conformance package, so this is a small second implementation of
 // the same logic): "xml" is always bound, "xmlns" is never bindable, and the

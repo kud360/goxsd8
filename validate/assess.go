@@ -940,7 +940,9 @@ type walk struct {
 // QName- or NOTATION-valued lexical resolves its prefix (Datatypes §3.3.18,
 // §3.3.19, PRINCIPLES 19). The owner is the attribute's element for an
 // attribute's lexical (cvc-attribute clause 3) and the element itself for its
-// ·initial value· (cvc-complex-type clause 1.2).
+// ·initial value· (cvc-complex-type clause 1.2). A {value constraint}'s {lexical
+// form} — a ·defaulted attribute·'s or an element default's — is never mapped
+// under it: [value.ConstraintContext] is that literal's context.
 //
 // It exists so no site passes a nil Context. A nil one makes a backend reject
 // every prefixed QName lexical for want of bindings, which is a false reject of

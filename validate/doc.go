@@ -197,9 +197,12 @@
 // empty one: the item assessed is the one carrying D.{value constraint}.{lexical
 // form} as its ·normalized value·, which 5.1.2 sends to the same cvc-type
 // dispatch and which the [ID/IDREF table] and a ·key-sequence· read in place of
-// the empty ·initial value·; and 5.1.1 charges Element Default Valid (Immediate)
-// (§3.3.6.2) over that constraint where the ·governing type definition· is an
-// ·instance-specified· one, which is the xsi:type case alone.
+// the empty ·initial value·, each mapping that {lexical form} under the
+// namespace bindings in scope where the schema document wrote it
+// (value.ConstraintContext, Datatypes §3.3.18) and never under the element's;
+// and 5.1.1 charges Element Default Valid (Immediate) (§3.3.6.2) over that
+// constraint where the ·governing type definition· is an ·instance-specified·
+// one, which is the xsi:type case alone.
 //
 // The third is cvc-type (§3.3.4.4) clause 3.1, the arm taken where the
 // ·governing type definition· is a Simple Type Definition rather than a complex

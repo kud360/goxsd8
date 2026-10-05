@@ -236,7 +236,7 @@ func (w *walk) idDefaultedAttributes(c *icCheck, attrs []Attribute, ct xsd.Compl
 				u.DeclarationName(), c.e.Name())
 			continue
 		}
-		w.idRecord(st, vc.LexicalForm(), c.e, elementContext{owner: c.e}, c.node, c.e.Loc())
+		w.idRecord(st, vc.LexicalForm(), c.e, value.ConstraintContext(vc), c.node, c.e.Loc())
 	}
 }
 
@@ -295,7 +295,8 @@ func (w *walk) idElement(c *icCheck) {
 	if c.parent != nil {
 		node = c.parent.node
 	}
-	w.idRecord(st, c.assessed(), c.e, elementContext{owner: c.e}, node, c.e.Loc())
+	lexical, ctx := c.assessed()
+	w.idRecord(st, lexical, c.e, ctx, node, c.e.Loc())
 }
 
 // idRecord adds whatever one item contributes to the table. node is the element
