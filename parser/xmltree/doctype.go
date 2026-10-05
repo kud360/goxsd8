@@ -822,13 +822,13 @@ func (g *entityGraph) fault(about, name string) error {
 			continue
 		}
 		switch g.state[ref] {
-		case walked:
-			continue
+		case unwalked:
+			if path, err = g.enter(path, about, ref); err != nil {
+				return err
+			}
 		case walking:
 			return xsderr.New(xsderr.RuleXMLWellFormed, g.loc, "%s that references, directly or indirectly, entity %s, which references itself (XML 1.0 WFC: No Recursion)", about, ref)
-		}
-		if path, err = g.enter(path, about, ref); err != nil {
-			return err
+		case walked:
 		}
 	}
 	return nil
