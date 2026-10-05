@@ -99,6 +99,12 @@ func (ctaFacetFacade) attribute(ctaNameTest, ctaTypes) (ctaValue, bool) {
 // ctaAssertionFacade.comparesValues' terms.
 func (ctaFacetFacade) comparesValues() bool { return true }
 
+// computes is true, on ctaAssertionFacade.computes' terms. An operand that
+// reads the absent context item is ctaNoContextItem, whose err:XPDY0002 the
+// arithmetic over it raises, so `. + 1` fails the facet rather than declining
+// (cvc-assertions-valid clause 1.2's Note).
+func (ctaFacetFacade) computes() bool { return true }
+
 // variable compiles `$value` (clause 1.1: "no namespace URI and ... 'value' as
 // the local name") against st as ctaTypes.valueVariable classifies it, the XDM
 // representation of a value of st (dt-xdmrep), and declines every other name,

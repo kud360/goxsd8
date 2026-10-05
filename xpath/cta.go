@@ -625,6 +625,10 @@ type ctaFacade interface {
 	// node, reporting false where the façade declines it, on attribute's
 	// terms.
 	count(arg ctaCounted, types ctaTypes) (ctaValue, bool)
+	// computes reports whether the façade admits xpath20.md §3.4's binary
+	// arithmetic operators at all ([13] AdditiveExpr, [14]
+	// MultiplicativeExpr), which §3.12.6's grammar has no production for.
+	computes() bool
 }
 
 // ctaTypeAlternativeFacade is a Type Alternative's façade: every attribute
@@ -676,6 +680,10 @@ func (ctaTypeAlternativeFacade) contextItem() (ctaValue, bool) {
 func (ctaTypeAlternativeFacade) count(ctaCounted, ctaTypes) (ctaValue, bool) {
 	return nil, false
 }
+
+// computes is false, on comparesValues' terms: ta-props-correct clause 2's
+// grammar has no arithmetic operator.
+func (ctaTypeAlternativeFacade) computes() bool { return false }
 
 // ctaNameTest is the sealed sum of [36] NameTest's arms as [17] ta-AttrName
 // and a child-axis step reach them, matching one ·expanded name· at a time.
@@ -905,6 +913,8 @@ func ctaStaticOf(v ctaValue) ctaStatic {
 	case ctaTypedChild:
 		return ctaTyped{st: n.st}
 	case ctaCount:
+		return ctaTyped{st: n.st}
+	case ctaArith:
 		return ctaTyped{st: n.st}
 	case ctaValueVar:
 		return ctaTyped{st: n.atom}
@@ -1222,6 +1232,8 @@ func (e ctaEffectiveBoolean) eval(env ctaEnv) ctaAnswer {
 		return ctaBoolean(e.operand, n.target, env)
 	case ctaCount:
 		return ctaBoolean(e.operand, n.st, env)
+	case ctaArith:
+		return ctaBoolean(e.operand, n.st, env)
 	case ctaValueVar:
 		return ctaBoolean(e.operand, n.atom, env)
 	case ctaEmptyValue:
@@ -1404,6 +1416,8 @@ func ctaItemOf(v ctaValue, c *xsd.SimpleType, env ctaEnv) ctaItem {
 		return ctaCastItem(n, c, env)
 	case ctaCount:
 		return ctaCountItem(n, c, env)
+	case ctaArith:
+		return ctaArithItem(n, c, env)
 	case ctaValueVar:
 		return ctaValueItem(n, c, env)
 	case ctaEmptyValue:

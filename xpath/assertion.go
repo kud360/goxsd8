@@ -533,6 +533,12 @@ func (n ctaTypedChild) readsChild(name xsd.QName) bool { return n.name == name }
 // name.
 func (n ctaCast) readsChild(name xsd.QName) bool { return n.operand.readsChild(name) }
 
+// readsChild reports whether either operand of the arithmetic holds a
+// ctaTypedChild naming name.
+func (n ctaArith) readsChild(name xsd.QName) bool {
+	return n.left.readsChild(name) || n.right.readsChild(name)
+}
+
 // readsChild is false for each of these: none is a child-axis step or holds an
 // operand.
 func (ctaAttr) readsChild(xsd.QName) bool           { return false }
@@ -574,6 +580,12 @@ func (n ctaEffectiveBoolean) counted(into []ctaCountPath) []ctaCountPath {
 
 // counted appends each path the cast's operand counts over.
 func (n ctaCast) counted(into []ctaCountPath) []ctaCountPath { return n.operand.counted(into) }
+
+// counted appends each path either operand of the arithmetic counts over, the
+// left one first.
+func (n ctaArith) counted(into []ctaCountPath) []ctaCountPath {
+	return n.right.counted(n.left.counted(into))
+}
 
 // counted appends the call's path where it is relative; a rooted argument
 // raises before it selects a node and counts nothing.
@@ -622,6 +634,10 @@ func (ctaAssertionFacade) ctaFacade() {}
 // [23] ValueComp is in its grammar, and the §3.13.2 example `@min le @max`
 // writes one.
 func (ctaAssertionFacade) comparesValues() bool { return true }
+
+// computes is true, on comparesValues' terms: §3.4's arithmetic is in full
+// XPath 2.0.
+func (ctaAssertionFacade) computes() bool { return true }
 
 // ctaValueName is the ·expanded name· of the one variable an assertion's
 // static context holds (cvc-assertion clause 2.3): "no namespace URI and ...
