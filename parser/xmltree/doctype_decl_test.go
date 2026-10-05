@@ -175,7 +175,9 @@ func TestElementAndAttlistDeclAreWellFormed(t *testing.T) {
 // reader does not process (§5.1); a name whose first declaration is clean; an
 // entity reached twice by one walk; and a clean <!ATTLIST> never applied. Each
 // control reads with an internal subset alone and again beside an external
-// one.
+// one. So does an undeclared name in a parameter entity's replacement text in
+// a standalone="yes" document: Entity Declared does not reach a reference
+// there.
 func TestAttlistDefaultEntityReferencesAreWellFormed(t *testing.T) {
 	const decl = "<?xml version=\"1.0\"?>\n"
 	const alone = "<?xml version=\"1.0\" standalone=\"yes\"?>\n"
@@ -248,6 +250,10 @@ func TestAttlistDefaultEntityReferencesAreWellFormed(t *testing.T) {
 			})
 		}
 	}
+	inText := alone + `<!DOCTYPE r [<!ENTITY % q "<!ATTLIST r a CDATA '&u;'>"> %q;]><r/>`
+	t.Run(inText, func(t *testing.T) {
+		drained(t, inText)
+	})
 }
 
 // <!ELEMENT> and <!ATTLIST> declarations that match their productions read,
