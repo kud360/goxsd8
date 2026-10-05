@@ -537,11 +537,13 @@ func (t ctaTypes) comparison(op ctaComparator, l, r ctaValue) (*xsd.SimpleType, 
 // their least common type by a combination of type promotion and subtype
 // substitution", which is shared — and B.2's rows decide the rest.
 //
-// Only the assertion façade reaches here (ctaFacade.comparesValues), and the
-// xs:untypedAtomic operands it builds are an attribute whose type is ·special·
-// (ctaAssertionFacade.attribute), `$value` over ·special· content
-// (ctaUntypedValue), and the rooted path, which raises before it is compared
-// (ctaNoDocumentRoot).
+// Only the two façades whose ctaFacade.comparesValues is true reach here, the
+// assertion façade (ctaAssertionFacade) and the facet façade (ctaFacetFacade).
+// The untyped operands they build are an attribute whose type is ·special·
+// (ctaAssertionFacade.attribute), `$value` over a ·special· type
+// (ctaUntypedValue), and two that raise before they are compared: the rooted
+// path (ctaNoDocumentRoot, err:XPDY0050) and a read of the absent context item
+// (ctaNoContextItem, err:XPDY0002, xpath20.md §3.1.4).
 func (t ctaTypes) valueComparison(op ctaComparator, l, r ctaValue) (*xsd.SimpleType, ctaTyping) {
 	if st, empty := t.againstEmpty(l, r); empty {
 		return st, ctaTypeSettled

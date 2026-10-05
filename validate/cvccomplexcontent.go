@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/kud360/goxsd8/value"
+	"github.com/kud360/goxsd8/xpath"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
 )
@@ -591,15 +592,19 @@ func (c *contentCheck) fixedLexical(w *walk, f xsd.ValueConstraint) {
 // {content type} — the ·actual value· of E is equal or identical to
 // D.{value constraint}.{value}.
 //
-// A governing type that is neither leaves clause 5.2.2.2 with no applicable case
-// and charges nothing. A ·special· governing type is decided over its mapping
-// union ([value.ConstraintMatches]). An undecided comparison charges nothing, on
-// [walk.fixedAgreement]'s terms and for the same reasons: an ungoverned type, a
-// ·special· one whose literals some member of that union cannot compare, or a
-// {lexical form} outside its own type's lexical space is a gap in this processor
-// or a schema fault cos-valid-default charges at assembly, not the instance's.
-// It is recorded as an [Unevaluated] instead ([contentCheck.decline]), the
-// clause having been reached and not performed.
+// A governing type that is neither leaves clause 5.2.2.2 with no applicable
+// case and charges nothing. A ·special· governing type is decided over its
+// mapping union ([value.ConstraintMatches]), and an assertions facet in an
+// ordinary one's closure through [xpath.FacetAssertions]. An undecided
+// comparison charges nothing, on [walk.fixedAgreement]'s terms and for the
+// same reasons: an ungoverned type, a ·special· one whose literals some member
+// of that union cannot compare, and a {lexical form} outside its own type's
+// lexical space or failing one of its {test}s are a gap in this processor or a
+// schema fault, not the instance's. It is recorded as an [Unevaluated] instead
+// ([contentCheck.decline]), the clause having been reached and not performed.
+//
+// GAP(xpath): a {test} the evaluator declines on either side is undecided too,
+// and declines here on [walk.fixedAgreement]'s terms. (#1042)
 //
 // GAP(value): a NOTATION {lexical form} naming no declared notation, tracked by
 // #667, declines here on [walk.fixedAgreement]'s terms: ValidDefault's gate 1
@@ -610,10 +615,10 @@ func (c *contentCheck) fixedActualValue(w *walk, f xsd.ValueConstraint) {
 	if st == nil {
 		return
 	}
-	same, decided := value.ConstraintMatches(w.backend, w.schema, st, c.initial.String(), elementContext{owner: c.e}, f)
+	same, decided := value.ConstraintMatches(w.backend, w.schema, st, c.initial.String(), elementContext{owner: c.e}, f, xpath.FacetAssertions())
 	if !decided {
 		c.decline(w, c.e.Name(), c.e.Loc(), ruleCvcElt, "5.2.2.2.2",
-			"the ·actual value· of the element %s was not compared with the {value} of the fixed {value constraint} %q of its ·governing element declaration·: value.ConstraintMatches could not decide the comparison, a fault of the type or of the value backend, two literals of a ·special· type that some member of its lexical mapping cannot compare, or a NOTATION {value} naming no declared notation, which no assembly judges yet (#667), rather than a verdict about the value, so cvc-elt clause 5.2.2.2.2 is undecided",
+			"the ·actual value· of the element %s was not compared with the {value} of the fixed {value constraint} %q of its ·governing element declaration·: value.ConstraintMatches could not decide the comparison, a fault of the type or of the value backend, two literals of a ·special· type that some member of its lexical mapping cannot compare, an assertions-facet {test} not evaluated on either side or failed by the {value}, or a NOTATION {value} naming no declared notation, which no assembly judges yet (#667), rather than a verdict about the value, so cvc-elt clause 5.2.2.2.2 is undecided",
 			c.e.Name(), f.LexicalForm())
 		return
 	}
@@ -629,10 +634,8 @@ func (c *contentCheck) fixedActualValue(w *walk, f xsd.ValueConstraint) {
 // stringValid runs String Valid (§3.16.4) over this element's ·initial value· —
 // the string composed, in order, of the [[character code]] of each character
 // information item in E.[[children]] (Glossary, ·initial value·) — against st,
-// and reports the verdict on [walk.stringValid]'s terms: decided false where
-// this package withholds one, and otherwise a nil verdict for a ·valid· value
-// and the rejection — Datatype Valid's, or String Valid clause 3's — for an
-// invalid one.
+// and reports decided and err on [walk.stringValid]'s terms, the rejection
+// where there is one being Datatype Valid's or String Valid clause 3's.
 //
 // Two clauses ask it of the same string, and the CHARGE is each caller's own
 // because each names a different property as the simple type: cvc-type clause
@@ -674,7 +677,7 @@ func (c *contentCheck) fixedActualValue(w *walk, f xsd.ValueConstraint) {
 // decided false with that decline as the error, which each caller records under
 // cvc-assertions-valid ([walk.declineAssertions], cvcassertion.go) in place of
 // its own clause's decline.
-func (c *contentCheck) stringValid(w *walk, st *xsd.SimpleType) (decided bool, verdict error) {
+func (c *contentCheck) stringValid(w *walk, st *xsd.SimpleType) (decided bool, err error) {
 	lexical, ctx := c.assessed()
 	return w.stringValid(st, lexical, ctx, c.e.Loc())
 }

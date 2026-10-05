@@ -134,11 +134,11 @@ func TestConstraintMatchesAnUndeclaredNotationFixedValueIsUndecided(t *testing.T
 	notation := primType(t, "NOTATION", "collapse")
 	fixed := xsd.NewValueConstraint(xsd.ValueFixed, "bez", nil, nil)
 	for _, lexical := range []string{"foo", "bez"} {
-		if same, decided := ConstraintMatches(b, schema, notation, lexical, notationScope{}, fixed); decided {
+		if same, decided := ConstraintMatches(b, schema, notation, lexical, notationScope{}, fixed, assertionsUndecided{}); decided {
 			t.Errorf("ConstraintMatches(%s, fixed bez) = (%t, decided), want undecided", lexical, same)
 		}
 	}
-	if same, decided := ConstraintMatches(b, noSchema{}, notation, "bez", notationScope{}, fixed); !same || !decided {
+	if same, decided := ConstraintMatches(b, noSchema{}, notation, "bez", notationScope{}, fixed, assertionsUndecided{}); !same || !decided {
 		t.Errorf("ConstraintMatches(bez, fixed bez) against no notationDeclarer = (%t, %t), want (true, true)", same, decided)
 	}
 }

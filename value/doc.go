@@ -78,9 +78,9 @@
 // a failed one is an ordinary verdict under cvc-assertions-valid, and a declined
 // one is the third non-verdict, which [IsAssertionDeclined] reports and
 // [IsDatatypeVerdict] excludes. GAP(value): this package's own callers of the
-// pipeline that are handed no evaluator — [CheckFacetRestriction], the
-// [xsd.ValueSpace] [NewValueSpace] returns, [ConstraintMatches] — decline every
-// {test}, each fail-open on the terms its own marker states. (#1042)
+// pipeline that are handed no evaluator — [CheckFacetRestriction] and the
+// [xsd.ValueSpace] [NewValueSpace] returns — decline every {test}, each
+// fail-open on the terms its own marker states. (#1042)
 //
 // One member of that class has a predicate of its own, because two sites need to
 // know WHICH fault: a type may reach [ValidateLexical] carrying a facet that is not
@@ -186,7 +186,7 @@
 // # Value-constraint validity and comparison (the xsd.ValueSpace seam)
 //
 //	func NewValueSpace(b Backend) xsd.ValueSpace
-//	func ConstraintMatches(b Backend, r xsd.TypeResolver, t *xsd.SimpleType, lexical string, ctx Context, vc xsd.ValueConstraint) (same, decided bool)
+//	func ConstraintMatches(b Backend, r xsd.TypeResolver, t *xsd.SimpleType, lexical string, ctx Context, vc xsd.ValueConstraint, a AssertionEvaluator) (same, decided bool)
 //	func ConstraintContext(vc xsd.ValueConstraint) Context
 //
 // [ConstraintMatches] is the INSTANCE-time half, and is not part of the
@@ -194,7 +194,8 @@
 // rule reading the answer (cvc-attribute §3.2.4.1 clause 4, cvc-au §3.5.4) belongs
 // to the validator, not to schema assembly. It maps both an instance literal and a
 // fixed constraint's {lexical form} through one type's pipeline — each under its
-// own namespace context, the instance's and the schema document's — and compares
+// own namespace context, the instance's and the schema document's, and each
+// through the caller's [AssertionEvaluator] at the assertions stage — and compares
 // the ·actual values· under the same equal-or-identical union, answering undecided
 // on the same fail-open terms as everything below; a ·special· type
 // (xs:anySimpleType, xs:anyAtomicType) skips the pipeline and is decided over its
