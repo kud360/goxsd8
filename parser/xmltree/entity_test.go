@@ -211,3 +211,54 @@ func TestEntityReferenceRefusedUnread(t *testing.T) {
 		}
 	})
 }
+
+// TestEntityDeclaredOnlyInParameterEntity charges, in a standalone="yes"
+// document, a reference in content, in an attribute value and in replacement
+// text to a general entity declared only in a parameter entity's replacement
+// text (XML 1.0 WFC Entity Declared, which counts only a declaration outside
+// every parameter entity), as a fault the reader charges itself. Each control
+// is a fault row's document less one difference: no standalone="yes", where
+// the parameter-entity reference read lifts the constraint, or a second
+// declaration of the name outside every parameter entity, after the first or
+// before it.
+func TestEntityDeclaredOnlyInParameterEntity(t *testing.T) {
+	const alone = `<?xml version="1.0" standalone="yes"?>`
+	const pe = `<!ENTITY % p "<!ENTITY e 'x'>">%p;`
+	const msg = `[xml-wf] reference to entity &e; in a standalone="yes" document, where no general entity declaration outside every parameter entity declares it (XML 1.0 WFC Entity Declared)`
+	for _, tc := range []struct {
+		subset, root, want string
+	}{
+		{pe, `<r>&e;</r>`, `d.xml:1:91: ` + msg},
+		{pe, `<r a="&e;"/>`, `d.xml:1:88: ` + msg},
+		{pe + `<!ENTITY f "[&e;]">`, `<r>&f;</r>`, `d.xml:1:110: ` + msg},
+	} {
+		t.Run(tc.subset+tc.root, func(t *testing.T) {
+			_, err := collect(t, "d.xml", alone+`<!DOCTYPE r [`+tc.subset+`]>`+tc.root)
+			wantWellFormednessError(t, err)
+			var e *xsderr.Error
+			if !errors.As(err, &e) || e.Err != nil {
+				t.Errorf("error %v: want a charge wrapping no cause", err)
+			}
+			if fmt.Sprint(err) != tc.want {
+				t.Errorf("error = %q, want %q", err, tc.want)
+			}
+		})
+	}
+	for _, tc := range []struct {
+		decl, subset, root, want string
+	}{
+		{`<?xml version="1.0"?>`, pe, `<r a="&e;">&e;</r>`, `<r a="x">"x"</r>`},
+		{alone, pe + `<!ENTITY e "y">`, `<r a="&e;">&e;</r>`, `<r a="x">"x"</r>`},
+		{alone, `<!ENTITY e "y">` + pe, `<r a="&e;">&e;</r>`, `<r a="y">"y"</r>`},
+	} {
+		t.Run(tc.decl+tc.subset+tc.root, func(t *testing.T) {
+			nodes, err := collect(t, "d.xml", tc.decl+`<!DOCTYPE r [`+tc.subset+`]>`+tc.root)
+			if err != nil {
+				t.Fatalf("Token: %v", err)
+			}
+			if got := render(nodes); got != tc.want {
+				t.Errorf("read %s\n want %s", got, tc.want)
+			}
+		})
+	}
+}

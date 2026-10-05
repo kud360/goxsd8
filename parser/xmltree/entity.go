@@ -271,7 +271,11 @@ var errExpansionBound = errors.New("general-entity expansion bound reached")
 // name that resolves to neither — an undeclared entity, an external or
 // unparsed one, one declared where the reader did not read — is refused, as
 // the decoder refuses it; a malformed character reference is not well-formed
-// (WFC Legal Character).
+// (WFC Legal Character), and so, in a standalone="yes" document, is a
+// reference to an entity declared only in a parameter entity's replacement
+// text, which WFC Entity Declared does not count (XML 1.0 wf-entdeclared).
+// Outside a standalone document an internal subset that declares one has
+// referenced a parameter entity, which lifts that constraint.
 func (r *Reader) reference(name string, loc xsderr.Loc) (text string, entity bool, err error) {
 	if digits, ok := strings.CutPrefix(name, "#"); ok {
 		c, legal := charRef(digits)
@@ -286,6 +290,9 @@ func (r *Reader) reference(name string, loc xsderr.Loc) (text string, entity boo
 	decl := r.entities[name]
 	if !decl.value.readable {
 		return "", false, xsderr.Wrap(xsderr.RuleXMLWellFormed, loc, fmt.Errorf("reference to entity &%s;, which is not an internal entity the reader read the declaration of", name))
+	}
+	if r.standalone && decl.inPE {
+		return "", false, xsderr.New(xsderr.RuleXMLWellFormed, loc, "reference to entity &%s; in a standalone=\"yes\" document, where no general entity declaration outside every parameter entity declares it (XML 1.0 WFC Entity Declared)", name)
 	}
 	return decl.value.text, true, nil
 }
