@@ -552,6 +552,37 @@ func TestAssertionOverAnUndecidedDefaultedAttributeIsDeclined(t *testing.T) {
 	}
 }
 
+// A ·defaulted attribute·'s ·actual value· is mapped under the namespace
+// bindings its {value constraint} captured (value.ConstraintContext), never
+// the element's: an xs:QName x defaulting to "p:a", p bound to urn:a on the
+// constraint alone, reaches `not(@y)` as a value whether the element binds no p
+// or binds it elsewhere, and the assertion is evaluated and satisfied, with
+// cvc-complex-type clause 4 decided beside it. With the default mapped under
+// elementContext the first row declines the assertion for x's missing ·actual
+// value·; the second guards against declining every QName-governed default
+// outright, which would decline it as well.
+func TestAssertionReadsADefaultUnderItsOwnBindings(t *testing.T) {
+	dflt := xsd.NewValueConstraint(xsd.ValueDefault, "p:a", []xsd.NamespaceBinding{xsd.NewNamespaceBinding("p", "urn:a")}, nil)
+	uses := []xsd.AttributeUse{
+		typedUse(t, "x", icBuiltin("QName"), false, &dflt, nil),
+		typedUse(t, "y", icBuiltin("integer"), false, nil, nil),
+	}
+	schema := aSchema(t, aComplexType(t, uses, xsd.EmptyContent{}, aAssertions("not(@y)")))
+	elsewhere := aRoot()
+	elsewhere.bindings = map[string]string{"p": "urn:other"}
+	for _, tc := range []struct {
+		name string
+		root *testElement
+	}{
+		{"p unbound in the instance", aRoot()},
+		{"p bound elsewhere in the instance", elsewhere},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			wantSatisfied(t, aAssess(t, schema, tc.root), "not(@y) evaluated over x's ·actual value·")
+		})
+	}
+}
+
 // A complex type with no {assertions} records nothing: the visit is per
 // assertion, not per element.
 func TestElementWithoutAssertionsRecordsNothing(t *testing.T) {
@@ -786,20 +817,26 @@ func TestWildcardAttributeAssertionsAreRecorded(t *testing.T) {
 	}
 }
 
-// cvc-complex-type clause 4 validates a ·defaulted attribute·'s {lexical form}
-// through xsd.ValueSpace's ValidDefault, which evaluates no assertion: the
-// {lexical form} of a type carrying an assertions facet is undecided, and the
-// clause is declined at the ELEMENT's location — the residue
-// [walk.defaultedAttribute]'s GAP(validate) names — even for a {test} the facet
-// evaluator would have admitted.
-func TestDefaultedAttributeAssertionsFacetDeclines(t *testing.T) {
-	dflt := xsd.NewValueConstraint(xsd.ValueDefault, "42", nil, nil)
-	uses := []xsd.AttributeUse{typedUse(t, "n", local("AssertedInt"), false, nil, &dflt)}
-	schema := aSchema(t, aComplexType(t, uses, xsd.EmptyContent{}, nil), aFacetTypes(t)...)
+// cvc-complex-type clause 4's String Valid over a ·defaulted attribute·'s
+// {lexical form} EVALUATES the assertions facets of the declaration's {type
+// definition} (walk.stringValid, xpath.FacetAssertions): `$value > 0` holds for
+// a default of "42" and is charged under clause 4, its cause the
+// cvc-assertions-valid verdict, for "0"; a {test} the facet evaluator declines
+// (`$value mod 2 = 0`, #2269) is recorded under cvc-assertions-valid at the
+// ELEMENT's location, the attribute being absent. With the default decided
+// through xsd.ValueSpace's ValidDefault, which evaluates no assertion, all
+// three rows record a cvc-complex-type clause 4 decline instead.
+func TestDefaultedAttributeAssertionsFacetIsEvaluated(t *testing.T) {
+	assess := func(typ, lexical string) *Result {
+		dflt := xsd.NewValueConstraint(xsd.ValueDefault, lexical, nil, nil)
+		uses := []xsd.AttributeUse{typedUse(t, "n", local(typ), false, nil, &dflt)}
+		schema := aSchema(t, aComplexType(t, uses, xsd.EmptyContent{}, nil), aFacetTypes(t)...)
+		return aAssess(t, schema, &testElement{name: local("root"), loc: loc(1, 1)})
+	}
 
-	res := aAssess(t, schema, &testElement{name: local("root"), loc: loc(1, 1)})
-
-	wantRecords(t, res, "cvc-complex-type", loc(1, 1), "an assertions facet it does not evaluate")
+	wantSatisfied(t, assess("AssertedInt", "42"), "AssertedInt over a default of 42")
+	wantFacetCharge(t, assess("AssertedInt", "0"), "cvc-complex-type", "AssertedInt over a default of 0")
+	wantRecords(t, assess("Even", "42"), "cvc-assertions-valid", loc(1, 1), "Even")
 }
 
 func TestResultUnevaluatedIsCopied(t *testing.T) {
