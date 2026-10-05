@@ -99,8 +99,8 @@ Assert/assert008a/instance/assert008a.n3.xml fail
 Assert/assert008a/instance/assert008a.v1.xml fail
 Assert/assert009/instance/assert009.n1.xml fail
 Assert/assert009/instance/assert009.v1.xml fail
-Assert/assert010/instance/assert010.n1.xml fail
-Assert/assert010/instance/assert010.v1.xml fail
+Assert/assert010/instance/assert010.n1.xml pass
+Assert/assert010/instance/assert010.v1.xml pass
 Assert/assert011/instance/assert011.n1.xml fail
 Assert/assert011/instance/assert011.v1.xml fail
 Assert/assert012/instance/assert012.n1.xml pass
@@ -25036,9 +25036,9 @@ Override/over008/instance/over008.v01.xml pass
 Override/over009/instance/over009.n01.xml pass
 Override/over009/instance/over009.n02.xml pass
 Override/over009/instance/over009.v01.xml pass
-Override/over010/instance/over010.n01.xml fail
+Override/over010/instance/over010.n01.xml pass
 Override/over010/instance/over010.n02.xml pass
-Override/over010/instance/over010.v01.xml fail
+Override/over010/instance/over010.v01.xml pass
 Override/over012/instance/over012.n01.xml pass
 Override/over012/instance/over012.n02.xml pass
 Override/over012/instance/over012.v01.xml pass
