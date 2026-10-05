@@ -66,22 +66,23 @@
 //     attribute's would be admitted as nor simple content over one, a path of
 //     more than one step, an fn:count argument of any other shape, a cast — and
 //     so fn:string — from a typed attribute, child, `$value`, count, arithmetic
-//     or function result outside the xs:string family, a collation argument, a
-//     function call of the wrong arity, the zero-argument string functions,
-//     whose implicit argument reads `.`, an arithmetic operand that is not
-//     numeric, an xs:float one against xs:double (#889), a unary sign, and a
-//     `$value` whose {simple type definition} is classified as such an
-//     attribute's type would be, or is a list of a type that would be; a `$value`
-//     over ·special· content is xs:untypedAtomic, as such an attribute is.
-//     FacetAssertions is the value.AssertionEvaluator for an assertions facet's
-//     {test} (Datatypes §4.3.13.3, cvc-assertions-valid), over the same grammar
-//     plus [47] ContextItemExpr: `$value` is bound to the value under the facet's
-//     type, and there is no context item, so `.`, an attribute or child step, a
-//     rooted path and a zero-argument string function each raise err:XPDY0002 and
-//     fail the facet; a union's own assertions facet and an fn:count call
-//     decline. `.` declines everywhere else. Longer paths, the other axes,
-//     predicates, quantified expressions, the collation arguments and every other
-//     F&O function are PLANNED (#1042).
+//     or function result outside the xs:string family, fn:string over an
+//     xs:float or xs:double argument, a collation argument, a function call of
+//     the wrong arity, the zero-argument string functions, whose implicit
+//     argument reads `.`, an arithmetic operand that is not numeric, an xs:float
+//     one against xs:double (#889), a unary sign, and a `$value` whose {simple
+//     type definition} is classified as such an attribute's type would be, or is
+//     a list of a type that would be; a `$value` over ·special· content is
+//     xs:untypedAtomic, as such an attribute is. FacetAssertions is the
+//     value.AssertionEvaluator for an assertions facet's {test} (Datatypes
+//     §4.3.13.3, cvc-assertions-valid), over the same grammar plus [47]
+//     ContextItemExpr: `$value` is bound to the value under the facet's type, and
+//     there is no context item, so `.`, an attribute or child step, a rooted path
+//     and a zero-argument string function each raise err:XPDY0002 and fail the
+//     facet; a union's own assertions facet and an fn:count call decline. `.`
+//     declines everywhere else. Longer paths, the other axes, predicates,
+//     quantified expressions, the collation arguments and every other F&O
+//     function are PLANNED (#1042).
 //  3. The full grammar (docs/specs/md/xpath20.md) and function library
 //     (docs/specs/md/xpath-functions.md) — M7 onward, ratcheted.
 //     PLANNED.

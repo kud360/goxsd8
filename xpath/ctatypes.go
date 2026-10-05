@@ -256,6 +256,20 @@ func (t ctaTypes) castsFrom(v ctaValue) bool {
 	return resolved && p.Name() == ctaBuiltin("string")
 }
 
+// floating reports whether v's static type is atomic with a {primitive type
+// definition} of xs:float or xs:double — or one that does not resolve, which
+// ctaParser.stringOf declines the same way — the operands whose cast to
+// xs:string xpath-functions.md §17.1.2 does not render as their ·canonical
+// representation·.
+func (t ctaTypes) floating(v ctaValue) bool {
+	s, typed := ctaStaticOf(v).(ctaTyped)
+	if !typed {
+		return false
+	}
+	p, resolved := t.primitive(s.st)
+	return !resolved || p.Name() == ctaBuiltin("float") || p.Name() == ctaBuiltin("double")
+}
+
 // stringArgument converts v, one argument of an F&O function whose parameter
 // is xs:string?, by xpath20.md §3.1.5's function conversion rules as far as
 // v's static type settles them — atomization, then "each item of type

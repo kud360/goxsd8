@@ -354,9 +354,12 @@ func TestStringFunctionsReadTheirArguments(t *testing.T) {
 // form), every other arity, the zero-argument string forms — whose implicit
 // argument is E's string value, which `.` on the assertion façade does not
 // supply — and fn:string over a typed node or value outside the xs:string
-// family (castsFrom). With matchCall admitting three arguments the collation
-// row compiles, and with ctaAssertionFacade.contextItem admitting `.` the
-// zero-argument rows do.
+// family (castsFrom), or over an xs:float or xs:double, whose cast to xs:string
+// §17.1.2 does not render canonically (ctaTypes.floating) — an xs:decimal
+// still compiles. With matchCall admitting three arguments the collation row
+// compiles, with ctaAssertionFacade.contextItem admitting `.` the
+// zero-argument rows do, and with stringOf not asking floating the two
+// floating rows do.
 func TestCompileAssertionTestDeclinesFunctions(t *testing.T) {
 	str := asBuiltin(t, "string")
 	for _, expr := range []string{
@@ -377,6 +380,8 @@ func TestCompileAssertionTestDeclinesFunctions(t *testing.T) {
 		"string(n) = '5'",
 		"string(c) = '5'",
 		"string($value) = '5'",
+		"string(1.5e0) = '1.5'",
+		"string(xs:float('1.5')) = '1.5'",
 		"exists(a/b)",
 		"contains(@s, ('x'))",
 	} {
@@ -386,6 +391,9 @@ func TestCompileAssertionTestDeclinesFunctions(t *testing.T) {
 	}
 	if _, ok := afCompile(t, "string($value) = 'x'", xsd.SimpleContent{SimpleType: str}); !ok {
 		t.Error("CompileAssertionTest(string($value) = 'x') over xs:string content: declined, want compiled")
+	}
+	if _, ok := afCompile(t, "string(1.5) = '1.5'", xsd.SimpleContent{SimpleType: str}); !ok {
+		t.Error("CompileAssertionTest(string(1.5) = '1.5'): declined, want compiled")
 	}
 }
 
