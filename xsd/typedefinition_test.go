@@ -11,11 +11,7 @@ import (
 // xsd.InlineTypeDefinition legally wraps.
 func anonSimpleType(t *testing.T) *xsd.SimpleType {
 	t.Helper()
-	st, err := newCheckedSimpleType(xsderr.Loc{}, xsd.QName{}, nil, nil, nil, nil)
-	if err != nil {
-		t.Fatalf("NewSimpleType: %v", err)
-	}
-	return st
+	return simpleTypeNamed(t, xsd.QName{})
 }
 
 // namedSimpleType builds a NAMED simple type, which InlineTypeDefinition must
@@ -23,11 +19,7 @@ func anonSimpleType(t *testing.T) *xsd.SimpleType {
 // TypeDefinitionRef arm.
 func namedSimpleType(t *testing.T) *xsd.SimpleType {
 	t.Helper()
-	st, err := newCheckedSimpleType(xsderr.Loc{}, xsd.QName{Local: "T"}, nil, nil, nil, nil)
-	if err != nil {
-		t.Fatalf("NewSimpleType: %v", err)
-	}
-	return st
+	return simpleTypeNamed(t, xsd.QName{Local: "T"})
 }
 
 // TestTypeDefinitionOrRefInvariants pins the three encodings of a {type
