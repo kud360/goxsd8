@@ -46,21 +46,25 @@
 //     "/" or "//" opening one or an attribute step, which raises err:XPDY0050
 //     because the instance's root is E and not a document node (§3.2), and an
 //     fn:count call (xpath-functions.md §15.4.1) over `N`, `@N`, either behind
-//     `./` or `.//`, or a rooted step — all of which a Type Alternative's
-//     {test} still declines. AssertionTest.ReadsChild reports which children a
-//     compiled {test} reads for their values, so its caller keeps no other;
-//     fn:count reads no value, and AssertionTest.Tally makes the Tally its
-//     caller reports E's subtree to (Tally.Element, Tally.Attribute) and
-//     Evaluate reads the counts off, so no counted node is kept.
-//     It declines what tier 1 declines, plus a wildcard NameTest, an attribute
-//     with no fixed atomic type that is not ·special· (a list, a union, an
-//     xs:QName or xs:NOTATION primitive), a child whose ·locally declared type·
-//     is ·absent·, ·special·, or neither a simple type an attribute's would be
-//     admitted as nor simple content over one, a path of more than one step, an
-//     fn:count argument of any other shape, a cast from a typed attribute,
-//     child or count outside the xs:string family, and a `$value` whose {simple
-//     type definition} is classified as such an attribute's type would be, or is
-//     a list of a type that would be; a `$value` over ·special· content is
+//     `./` or `.//`, or a rooted step, and xpath20.md §3.4's binary arithmetic
+//     (`+`, `-`, `*`, `div`, `idiv`, `mod`) over numeric operands, whose
+//     dynamic errors err:FOAR0001 and err:FOAR0002 are charged like any other
+//     — all of which a Type Alternative's {test} still declines.
+//     AssertionTest.ReadsChild reports which children a compiled {test} reads for
+//     their values, so its caller keeps no other; fn:count reads no value, and
+//     AssertionTest.Tally makes the Tally its caller reports E's subtree to
+//     (Tally.Element, Tally.Attribute) and Evaluate reads the counts off, so no
+//     counted node is kept. It declines what tier 1 declines, plus a wildcard
+//     NameTest, an attribute with no fixed atomic type that is not ·special· (a
+//     list, a union, an xs:QName or xs:NOTATION primitive), a child whose
+//     ·locally declared type· is ·absent·, ·special·, or neither a simple type an
+//     attribute's would be admitted as nor simple content over one, a path of
+//     more than one step, an fn:count argument of any other shape, a cast from a
+//     typed attribute, child, count or arithmetic result outside the xs:string
+//     family, an arithmetic operand that is not numeric, an xs:float one against
+//     xs:double (#889), a unary sign, and a `$value` whose {simple type
+//     definition} is classified as such an attribute's type would be, or is a
+//     list of a type that would be; a `$value` over ·special· content is
 //     xs:untypedAtomic, as such an attribute is. FacetAssertions is the
 //     value.AssertionEvaluator for an assertions facet's {test} (Datatypes
 //     §4.3.13.3, cvc-assertions-valid), over the same grammar plus [47]
@@ -151,9 +155,16 @@
 //
 // Numbers follow the XDM model the subset needs; comparisons over typed
 // atoms delegate to value capabilities so backend values participate.
-// Which operators an operand type admits at ALL is xpath20.md B.2's
-// answer rather than a capability's, generated from the spec into the
-// package (tools/opmapgen) and enforced at compile time.
+// Arithmetic has no value capability to delegate to, so it reads each
+// operand's ·canonical representation·, computes, and validates the result's
+// lexical against the result type — a datatype validation, as every value
+// this engine builds is. Which operand types a comparison operator admits at
+// ALL is xpath20.md B.2's answer rather than a capability's, generated from
+// the spec into the package (tools/opmapgen) and enforced at compile time.
+// Arithmetic's operand admission and result types are B.2's six numeric
+// rows, transcribed in ctaTypes.arithmetic and arithmeticResult rather than
+// generated: those rows' result cell is the prose rule "numeric" with two
+// exceptions, which a generator would have to hard-code as well.
 //
 // # Dynamic context
 //
@@ -161,4 +172,9 @@
 // either façade (cvc-xpath clause 7 leaves it ·implementation-defined·);
 // ctaImplicitTimezone holds it, and F&O §10.4 assumes it on whichever operand
 // of a date/time comparison has no timezone of its own.
+//
+// An xs:decimal quotient that does not terminate is rounded to
+// ctaDecimalDivisionDigits fractional digits, the precision F&O §6.2 leaves
+// ·implementation-defined·; every other xs:decimal and xs:integer result is
+// exact.
 package xpath

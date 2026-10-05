@@ -15,8 +15,8 @@ import (
 // attribute or child-axis step, a "/" or "//" opening a path — raises
 // err:XPDY0002 (ctaNoContextItem), and `$value`, bound to the XDM
 // representation of the value under the facet's type (clause 1.4, dt-xdmrep),
-// is the whole of what a {test} can read. An fn:count call declines
-// (ctaFacetFacade.count).
+// is the whole of what a {test} can read, arithmetic over it included
+// (ctaFacetFacade.computes). An fn:count call declines (ctaFacetFacade.count).
 
 // FacetAssertions is the [value.AssertionEvaluator] for an assertions facet's
 // {test}s: it compiles the {test} under the facet's static context and
@@ -31,7 +31,9 @@ import (
 //   - [value.AssertionHolds], where it evaluates to true;
 //   - [value.AssertionFails], where it evaluates to false or raises a dynamic or
 //     type error, which cvc-assertions-valid treats alike — err:XPDY0002 for a
-//     read of the absent context item among them;
+//     read of the absent context item among them, arithmetic over one
+//     included, and the err:FOAR0001 and err:FOAR0002 of arithmetic
+//     ([AssertionTest.Evaluate] lists them);
 //   - [value.AssertionDeclined], where this engine does not evaluate it: a
 //     {test} [CompileAssertionTest] would decline over a simple {content type}
 //     of the same type, on that function's terms — the grammar is the same and
@@ -98,6 +100,12 @@ func (ctaFacetFacade) attribute(ctaNameTest, ctaTypes) (ctaValue, bool) {
 // comparesValues is true: the {test} is full XPath 2.0, on
 // ctaAssertionFacade.comparesValues' terms.
 func (ctaFacetFacade) comparesValues() bool { return true }
+
+// computes is true, on ctaAssertionFacade.computes' terms. An operand that
+// reads the absent context item is ctaNoContextItem, whose err:XPDY0002 the
+// arithmetic over it raises, so `. + 1` fails the facet rather than declining
+// (cvc-assertions-valid clause 1.2's Note).
+func (ctaFacetFacade) computes() bool { return true }
 
 // variable compiles `$value` (clause 1.1: "no namespace URI and ... 'value' as
 // the local name") against st as ctaTypes.valueVariable classifies it, the XDM

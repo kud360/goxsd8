@@ -17,19 +17,20 @@ import (
 // {test} reaches: xpath20.md [23] ValueComp, [44] VarRef, an abbreviated
 // child-axis step whose NodeTest is a QName ([31] AbbrevForwardStep, §3.2.1.1),
 // a "/" or "//" opening [25] PathExpr over one such step or one attribute step,
-// an fn:count call ([48] FunctionCall) over one counted path, and [47]
+// an fn:count call ([48] FunctionCall) over one counted path, the binary
+// operators of [13] AdditiveExpr and [14] MultiplicativeExpr, and [47]
 // ContextItemExpr `.`, which only the facet façade admits — each behind the
 // façade (ctaFacade.comparesValues, ctaFacade.variable, ctaFacade.child,
-// ctaFacade.rooted, ctaFacade.count, ctaFacade.contextItem), so a Type
-// Alternative's {test} reaches none of them. Every method below is named for
-// the production it parses, and the whole grammar is both reached and
-// evaluated: no method here is a stub, and the production-level declines are
-// those six façade methods'. xpath/doc.go owns the enumeration of what
-// declines; every other decline reaching this file is ctaTypes answering
-// ctaTypeDeclined for a comparison type, a cast target or a cast operand it
-// will not serve, or the façade declining a NameTest, a variable's type or a
-// settled comparison type, which the production that asked propagates
-// unchanged.
+// ctaFacade.rooted, ctaFacade.count, ctaFacade.computes,
+// ctaFacade.contextItem), so a Type Alternative's {test} reaches none of them.
+// Every method below is named for the production it parses, and the whole
+// grammar is both reached and evaluated: no method here is a stub, and the
+// production-level declines are those seven façade methods'. xpath/doc.go owns
+// the enumeration of what declines; every other decline reaching this file is
+// ctaTypes answering ctaTypeDeclined for a comparison type, a cast target or a
+// cast operand it will not serve, ctaTypes.arithmetic declining an operand
+// pair, or the façade declining a NameTest, a variable's type or a settled
+// comparison type, which the production that asked propagates unchanged.
 
 // ctaFunctionNS is the default function namespace of a {test}'s static context
 // (xpath-valid clause 2.2.4, §3.13.6.2), which an unprefixed [12]
@@ -218,9 +219,10 @@ const (
 	// ctaWildcardTok is one [37] Wildcard — `*`, `NCName ':' '*'` or
 	// `'*' ':' NCName` — whose text is as written. It is its own kind and not a
 	// ctaNameTok carrying a `*`, because ctaNameTok also carries the keywords and
-	// the axis name and a wildcard reaches none of those positions: attrName
-	// accepts this kind and no other production does, so `1 * 2` stays a decline
-	// and no multiplicative production is implied.
+	// the axis name and a wildcard reaches none of those positions. Two
+	// productions read it: attrName as a NameTest, and multiplicativeOperator
+	// as the `*` operator where a bare `*` follows a complete operand, which is
+	// a position no NameTest can take.
 	ctaWildcardTok
 	// ctaStringTok is a StringLiteral, whose text is its VALUE — quotes
 	// stripped, doubled quotes folded to one.
@@ -256,6 +258,12 @@ const (
 	// `./` or `.//` opens with (ctaParser.countArgument). '..', the
 	// abbreviated parent step, is not tokenized at all.
 	ctaDotTok
+	// ctaPlusTok is '+' and ctaMinusTok is '-', the two operators of xpath20.md
+	// [13] AdditiveExpr (ctaParser.additiveOperator). Neither can open a name or
+	// a number, so no other token is read across one; a '-' INSIDE a name is an
+	// NCName character and never this token, so `a-1` is one name.
+	ctaPlusTok
+	ctaMinusTok
 )
 
 // ctaToken is one token, identified by kind. text carries the source spelling
@@ -300,6 +308,12 @@ func ctaTokenize(s string) ([]ctaToken, bool) {
 			i++
 		case r == '$':
 			toks = append(toks, ctaToken{kind: ctaDollarTok})
+			i++
+		case r == '+':
+			toks = append(toks, ctaToken{kind: ctaPlusTok})
+			i++
+		case r == '-':
+			toks = append(toks, ctaToken{kind: ctaMinusTok})
 			i++
 		case strings.HasPrefix(s[i:], "//"):
 			toks = append(toks, ctaToken{kind: ctaSlashSlashTok})
@@ -417,8 +431,8 @@ func ctaScanString(s string, i int) (string, int, bool) {
 //
 // No sign is admitted, and that is the grammar's doing rather than an
 // omission: [16] ta-SimpleValue reaches a Literal directly, with no unary
-// operator production between them, so "-1" is two tokens the subset has no
-// rule for.
+// operator production between them, so "-1" is a ctaMinusTok and a number,
+// and no production takes a ctaMinusTok where an operand opens.
 func ctaScanNumber(s string, i int) int {
 	j := ctaScanDigits(s, i)
 	if j < len(s) && s[j] == '.' {
@@ -653,7 +667,7 @@ func (p *ctaParser) booleanExpr() (ctaExpr, bool) {
 	if p.at(ctaNameTok) && p.peek(1).kind == ctaLParen && p.functionName(p.peek(0).text) == ctaNotFunction {
 		return p.booleanFunction()
 	}
-	left, ok := p.valueExpr()
+	left, ok := p.additiveExpr()
 	if !ok {
 		return nil, false
 	}
@@ -664,7 +678,7 @@ func (p *ctaParser) booleanExpr() (ctaExpr, bool) {
 	if !compared {
 		return ctaEffectiveBoolean{operand: left}, true
 	}
-	right, ok := p.valueExpr()
+	right, ok := p.additiveExpr()
 	if !ok {
 		return nil, false
 	}
@@ -773,7 +787,7 @@ func (p *ctaParser) valueComparison(op ctaComparator, left ctaValue) (ctaExpr, b
 	if !p.facade.comparesValues() {
 		return nil, false
 	}
-	right, ok := p.valueExpr()
+	right, ok := p.additiveExpr()
 	if !ok {
 		return nil, false
 	}
@@ -785,6 +799,106 @@ func (p *ctaParser) valueComparison(op ctaComparator, left ctaValue) (ctaExpr, b
 		return ctaTypeError{}, true
 	}
 	return ctaValueCompare{op: op, comparison: comparison, left: left, right: right}, true
+}
+
+// additiveExpr parses xpath20.md [13] AdditiveExpr, `MultiplicativeExpr ( ("+"
+// | "-") MultiplicativeExpr )*`, left-associatively, in each position [11]
+// ta-BooleanExpr and a value comparison read an operand in. A single operand
+// yields that operand rather than an arithmetic node, so a {test} with no
+// operator compiles to the tree it always did.
+func (p *ctaParser) additiveExpr() (ctaValue, bool) {
+	left, ok := p.multiplicativeExpr()
+	if !ok {
+		return nil, false
+	}
+	for {
+		op, isOp := p.additiveOperator()
+		if !isOp {
+			return left, true
+		}
+		right, ok := p.multiplicativeExpr()
+		if !ok {
+			return nil, false
+		}
+		if left, ok = p.arithmetic(op, left, right); !ok {
+			return nil, false
+		}
+	}
+}
+
+// additiveOperator reads one [13] AdditiveExpr operator, reporting false where
+// the cursor is on anything else.
+func (p *ctaParser) additiveOperator() (ctaArithOp, bool) {
+	switch p.peek(0).kind {
+	case ctaPlusTok:
+		p.advance()
+		return ctaAdd, true
+	case ctaMinusTok:
+		p.advance()
+		return ctaSubtract, true
+	default:
+		return ctaAdd, false
+	}
+}
+
+// multiplicativeExpr parses xpath20.md [14] MultiplicativeExpr, `UnionExpr (
+// ("*" | "div" | "idiv" | "mod") UnionExpr )*`, on additiveExpr's terms. Each
+// operand is a [14] ta-ValueExpr: the productions between UnionExpr and
+// ValueExpr are reached only through their one-operand arms, so a union, a
+// `treat`, an `instance of` and a unary sign leave a token no production takes
+// and decline.
+func (p *ctaParser) multiplicativeExpr() (ctaValue, bool) {
+	left, ok := p.valueExpr()
+	if !ok {
+		return nil, false
+	}
+	for {
+		op, isOp := p.multiplicativeOperator()
+		if !isOp {
+			return left, true
+		}
+		right, ok := p.valueExpr()
+		if !ok {
+			return nil, false
+		}
+		if left, ok = p.arithmetic(op, left, right); !ok {
+			return nil, false
+		}
+	}
+}
+
+// multiplicativeOperator reads one [14] MultiplicativeExpr operator, reporting
+// false where the cursor is on anything else. `*` is a bare ctaWildcardTok,
+// which right after a complete operand no NameTest can be; `div`, `idiv` and
+// `mod` are NCNames, operators by position on valueComparator's terms.
+func (p *ctaParser) multiplicativeOperator() (ctaArithOp, bool) {
+	tok := p.peek(0)
+	var op ctaArithOp
+	switch {
+	case tok.kind == ctaWildcardTok && tok.text == "*":
+		op = ctaMultiply
+	case tok.kind == ctaNameTok && tok.text == "div":
+		op = ctaDivide
+	case tok.kind == ctaNameTok && tok.text == "idiv":
+		op = ctaIntegerDivide
+	case tok.kind == ctaNameTok && tok.text == "mod":
+		op = ctaModulus
+	default:
+		return ctaAdd, false
+	}
+	p.advance()
+	return op, true
+}
+
+// arithmetic builds the node of one binary arithmetic operator over two
+// operands already parsed (xpath20.md §3.4), declining where the façade
+// computes nothing (ctaFacade.computes) or ctaTypes.arithmetic will not type
+// the pair.
+func (p *ctaParser) arithmetic(op ctaArithOp, left, right ctaValue) (ctaValue, bool) {
+	if !p.facade.computes() {
+		return nil, false
+	}
+	return p.types.arithmetic(op, left, right)
 }
 
 // valueExpr parses [14] ta-ValueExpr, dispatching on whether a function call
