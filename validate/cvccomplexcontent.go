@@ -656,8 +656,7 @@ func (c *contentCheck) fixedActualValue(w *walk, f xsd.ValueConstraint) {
 // RULED permanent by #774 (STYLE P3b), on declaredAttribute's terms; a ·special·
 // type is decided and never reaches it (isSpecial). An undecidable ·validating
 // type· withholds String Valid clause 3's verdict on the terms
-// [walk.entitiesDeclared] states, and the NOTATION check's on the terms
-// [walk.notationsDeclared] states. Either decline is recorded by the caller as an
+// [walk.entitiesDeclared] states. Either decline is recorded by the caller as an
 // [Unevaluated] under the rule it withholds ([contentCheck.decline]).
 //
 // st's assertion sites are recorded BEFORE the decline ([walk.simpleAssertions],
@@ -695,7 +694,7 @@ func (c *contentCheck) simpleTypeValue(w *walk) {
 	decided, verdict := c.stringValid(w, st)
 	if !decided {
 		c.decline(w, c.e.Name(), c.e.Loc(), ruleCvcType, "3.1.3",
-			"the ·initial value· of the element %s was not decided against its ·governing type definition· %s: String Valid (§3.16.4) was withheld, the value backend reporting a fault of the type rather than a verdict about the lexical or the ·validating type· of an ·ENTITY value· or a NOTATION value being undecidable, so cvc-type clause 3.1.3 is undecided",
+			"the ·initial value· of the element %s was not decided against its ·governing type definition· %s: String Valid (§3.16.4) was withheld, the value backend reporting a fault of the type rather than a verdict about the lexical or the ·validating type· of an ·ENTITY value· being undecidable, so cvc-type clause 3.1.3 is undecided",
 			c.e.Name(), typeName(st))
 		return
 	}
@@ -716,7 +715,7 @@ func (c *contentCheck) initialValue(w *walk, st *xsd.SimpleType) {
 	decided, verdict := c.stringValid(w, st)
 	if !decided {
 		c.decline(w, c.e.Name(), c.e.Loc(), ruleCvcComplexType, "1.2",
-			"the ·initial value· of the element %s was not decided against the {simple type definition} %s of its ·governing type definition·'s {content type}: String Valid (§3.16.4) was withheld, the value backend reporting a fault of the type rather than a verdict about the lexical or the ·validating type· of an ·ENTITY value· or a NOTATION value being undecidable, so cvc-complex-type clause 1.2 is undecided",
+			"the ·initial value· of the element %s was not decided against the {simple type definition} %s of its ·governing type definition·'s {content type}: String Valid (§3.16.4) was withheld, the value backend reporting a fault of the type rather than a verdict about the lexical or the ·validating type· of an ·ENTITY value· being undecidable, so cvc-complex-type clause 1.2 is undecided",
 			c.e.Name(), st.Name())
 		return
 	}

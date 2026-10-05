@@ -381,12 +381,12 @@ import (
 //     where undecided (walk.declineAttribute, walk.declineDefaulted,
 //     contentCheck.decline). So is String Valid clause 2's NOTATION half,
 //     NOTATION's ·value space· being "the set of QNames of notations declared
-//     in the current schema" (Datatypes §3.3.19): walk.notationsDeclared
-//     charges cvc-datatype-valid for a value naming no declared notation, at
-//     every depth, and its callers record it where undecided; a value outside
-//     a NOTATION type's enumeration is the backend's cvc-enumeration-valid
-//     verdict (Datatypes §4.3.5.4), which Datatype Valid entails. A ·defaulted
-//     attribute· of a NOTATION-derived type is recorded, never decided
+//     in the current schema" (Datatypes §3.3.19): value.ValidateLexical,
+//     handed the schema, rejects a value naming no declared notation under
+//     cvc-datatype-valid, at every depth; a value outside a NOTATION type's
+//     enumeration is the backend's cvc-enumeration-valid verdict (Datatypes
+//     §4.3.5.4), which Datatype Valid entails. A ·defaulted attribute· of a
+//     NOTATION-derived type is recorded, never decided
 //     (walk.defaultedAttribute). The gate therefore reads no simple type's
 //     closure: finalize's src-resolve pass (xsd's resolveSimpleType) resolves
 //     every {base type definition}, {item type definition} and {member type

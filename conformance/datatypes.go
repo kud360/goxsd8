@@ -113,9 +113,10 @@ import (
 // rejection (cvc-datatype-valid §4.1.4), never a value fabricated with a guessed
 // namespace (PRINCIPLES 19). This is a complete lexical check: QName/NOTATION have
 // no spec-defined canonical form, and NOTATION's declared-notation requirement
-// (§3.3.19) is checked above this leaf mapping, by validate's walk.notationsDeclared
-// against the current schema, out of scope here. The value's whiteSpace is fixed to
-// collapse for both, applied by the shared normalizeWhiteSpace before Parse.
+// (§3.3.19) is checked above this leaf mapping, by value.ValidateLexical against a
+// resolver holding the current schema's notations, out of scope here. The value's
+// whiteSpace is fixed to collapse for both, applied by the shared
+// normalizeWhiteSpace before Parse.
 //
 // ## The <item>-attribute sub-shape (issue #146)
 //
@@ -1247,7 +1248,7 @@ func execFacetsCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c 
 // component declarations are NOT load-bearing for any instance verdict here: every
 // fixture declares each of jpeg/mpeg/g, so a value the enumeration admits names a
 // declared notation, and the instance-side check that reads the declarations
-// (§3.3.19, validate's walk.notationsDeclared) has nothing to reject. They are
+// (§3.3.19, value.ValidateLexical against the schema) has nothing to reject. They are
 // deliberately not parsed. A case whose schema does not decode to the two-step shape,
 // whose base step does not restrict NOTATION, or that pairs an inapplicable facet
 // with NOTATION is declined (Fail, a recorded gap).
