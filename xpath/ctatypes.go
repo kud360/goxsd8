@@ -203,10 +203,10 @@ func (t ctaTypes) castTarget(name xsd.QName) (*xsd.SimpleType, bool) {
 
 // castsFrom reports whether this engine casts the operand v at all, which is
 // false for exactly one shape: a TYPED operand read off the instance — an
-// attribute (ctaTypedAttr) or `$value` (ctaValueVar) — whose {primitive type
-// definition} is not xs:string. Every other operand casts as [CompileCTATest]
-// states, the statically empty `$value` (ctaEmptyValue) among them: it holds
-// no item to convert.
+// attribute (ctaTypedAttr), a child element (ctaTypedChild) or `$value`
+// (ctaValueVar) — whose {primitive type definition} is not xs:string. Every
+// other operand casts as [CompileCTATest] states, the statically empty
+// `$value` (ctaEmptyValue) among them: it holds no item to convert.
 //
 // The string family is admitted because xpath-functions.md §17.1.1 makes a
 // cast from xs:string one datatype validation of the value's own string, which
@@ -225,6 +225,8 @@ func (t ctaTypes) castsFrom(v ctaValue) bool {
 	var st *xsd.SimpleType
 	switch n := v.(type) {
 	case ctaTypedAttr:
+		st = n.st
+	case ctaTypedChild:
 		st = n.st
 	case ctaValueVar:
 		st = n.atom
@@ -246,10 +248,11 @@ func ctaSpecial(st *xsd.SimpleType) bool {
 
 // typedAtomic reports whether this engine reads a value of type st off the
 // instance as a typed operand — an attribute whose type [AttributeTypes]
-// answered, or one item of `$value` (valueVariable) — classified the way
-// castTarget classifies a cast target: by its {primitive type definition},
-// which is ·absent· for EXACTLY the types whose atomized value is not one
-// atomic value of a type known at compile time:
+// answered, a child element whose type [ElementTypes] answered, or one item of
+// `$value` (valueVariable) — classified the way castTarget classifies a cast
+// target: by its {primitive type definition}, which is ·absent· for EXACTLY
+// the types whose atomized value is not one atomic value of a type known at
+// compile time:
 //
 //   - a list or union {variety}: a list atomizes to a sequence, and a union's
 //     value takes the type of its ·validating· member, which only the instance
@@ -372,8 +375,9 @@ func (t ctaTypes) comparison(op ctaComparator, l, r ctaValue) (*xsd.SimpleType, 
 //
 // Only the assertion façade reaches here (ctaFacade.comparesValues), and the
 // xs:untypedAtomic operands it builds are an attribute whose type is ·special·
-// (ctaAssertionFacade.attribute) and `$value` over ·special· content
-// (ctaUntypedValue).
+// (ctaAssertionFacade.attribute), `$value` over ·special· content
+// (ctaUntypedValue), and the rooted path, which raises before it is compared
+// (ctaNoDocumentRoot).
 func (t ctaTypes) valueComparison(op ctaComparator, l, r ctaValue) (*xsd.SimpleType, ctaTyping) {
 	if st, empty := t.againstEmpty(l, r); empty {
 		return st, ctaTypeSettled
@@ -430,9 +434,10 @@ func ctaIsEmpty(v ctaValue) bool {
 // converted settles the type alone, leaving B.2's operator rows to comparison.
 //
 // Two rules cover the three operand shapes this grammar builds, because an
-// operand is either xs:untypedAtomic (an uncast untyped attribute, or `$value`
-// over ·special· content) or typed (a Literal, a cast, a constructor function,
-// a typed attribute, a typed `$value`):
+// operand is either xs:untypedAtomic (an uncast untyped attribute, `$value`
+// over ·special· content, or the rooted path, which raises before it is
+// compared) or typed (a Literal, a cast, a constructor function, a typed
+// attribute, a typed child element, a typed `$value`):
 //
 //   - BOTH xs:untypedAtomic: clause 1, "the values are cast to the type
 //     xs:string".

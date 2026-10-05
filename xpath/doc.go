@@ -31,25 +31,35 @@
 //     grammar over the same traversal, which is a different question
 //     with a different owner — see below.
 //  2. Assertion essentials: axes, predicates, quantified expressions,
-//     typed comparisons, the F&O function core — M6. FIRST SLICE
+//     typed comparisons, the F&O function core — M6. FIRST SLICES
 //     SHIPPED: CompileAssertionTest compiles an assertion {test} written
 //     in tier 1's grammar over the element's TYPED attributes (AttributeTypes;
-//     cvc-assertion clause 1, §3.13.4.1), and AssertionTest.Evaluate decides it
-//     over their typed values (TypedAttributes, TypedValue) — an ·actual value·,
-//     or xs:untypedAtomic for an attribute whose type is ·special·
-//     (xpath-datamodel §3.3.1.2), which is cast as tier 1 casts an untyped one.
-//     Its grammar is tier 1's plus xpath20.md's value comparisons (§3.5.1,
-//     eq/ne/lt/le/gt/ge) and `$value` (cvc-assertion clause 2.3; ValueBinding),
-//     which a Type Alternative's {test} still declines. It declines what tier 1
-//     declines, plus a wildcard NameTest, an attribute with no fixed atomic type
-//     that is not ·special· (a list, a union, an xs:QName or xs:NOTATION
-//     primitive), a cast from a typed attribute outside the xs:string family, and
-//     a general or value comparison in a date/time type, which has no implicit
+//     cvc-assertion clause 1, §3.13.4.1) and TYPED element children
+//     (ElementTypes), and AssertionTest.Evaluate decides it over their typed
+//     values (TypedAttributes, ChildElements, ChildElement, Child, TypedValue) —
+//     an ·actual value·, or xs:untypedAtomic for an attribute whose type is
+//     ·special· (xpath-datamodel §3.3.1.2), which is cast as tier 1 casts an
+//     untyped one. Its grammar is tier 1's plus xpath20.md's value comparisons
+//     (§3.5.1, eq/ne/lt/le/gt/ge), `$value` (cvc-assertion clause 2.3;
+//     ValueBinding), an abbreviated child-axis step with a QName NameTest
+//     (§3.2.1.1), whose unprefixed name takes the {default namespace}, and a
+//     "/" or "//" opening one, which raises err:XPDY0050 because the instance's
+//     root is E and not a document node (§3.2) — all of which a Type
+//     Alternative's {test} still declines. AssertionTest.ReadsChild reports
+//     which children a compiled {test} reads, so its caller keeps no other.
+//     It declines what tier 1 declines, plus a wildcard NameTest, an attribute
+//     with no fixed atomic type that is not ·special· (a list, a union, an
+//     xs:QName or xs:NOTATION primitive), a child whose ·locally declared type·
+//     is ·absent·, ·special·, or neither a simple type an attribute's would be
+//     admitted as nor simple content over one, a path of more than one step, a
+//     cast from a typed attribute or child outside the xs:string family, and a
+//     general or value comparison in a date/time type, which has no implicit
 //     timezone to order by (F&O §10.4), and a `$value` whose {simple type
 //     definition} is classified as such an attribute's type would be, or is a
 //     list of a type that would be; a `$value` over ·special· content is
-//     xs:untypedAtomic, as such an attribute is. Axes, predicates, quantified
-//     expressions and the function core are PLANNED (#1042).
+//     xs:untypedAtomic, as such an attribute is. Longer paths, the other axes,
+//     predicates, quantified expressions and the function core are PLANNED
+//     (#1042).
 //  3. The full grammar (docs/specs/md/xpath20.md) and function library
 //     (docs/specs/md/xpath-functions.md) — M7 onward, ratcheted.
 //     PLANNED.
@@ -124,7 +134,7 @@
 //     for unprefixed element steps (never attribute steps) in
 //     assertions and IDC selector/field paths (PRINCIPLES 15), and for
 //     an unprefixed cast TARGET (xpath20.md §3.10.2). The CTA subset
-//     reaches no element step, so a cast target is the only thing it
+//     declines every element step, so a cast target is the only thing it
 //     consults the default namespace for.
 //   - fn:matches / fn:replace / fn:tokenize bind to regex flavor FO,
 //     never the pattern-facet flavor.
