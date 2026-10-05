@@ -614,10 +614,10 @@ func (w *walk) itemRoleValues(item *xsd.SimpleType, lexical string, owner Elemen
 // not a VERDICT (value.IsDatatypeVerdict) is a fault of the TYPE or of the
 // backend, and reading it as "this member rejected" would hand the value to a
 // LATER member — idRecord's own GAP, on the same terms, an assertions-facet
-// decline among them; a membership no member
-// accepts contradicts the String Valid the caller already ran, so it is a
-// disagreement between two readings of one dispatch and not a fact about the
-// document. Both decline identically here.
+// decline among them; a membership no member accepts contradicts the String
+// Valid the caller already ran, so it is a disagreement between two readings
+// of one dispatch and not a fact about the document. Both decline identically
+// here.
 func (w *walk) validatingType(st *xsd.SimpleType, lexical string, owner Element) (*xsd.SimpleType, bool) {
 	t, _, err := value.ValidatingType(w.backend, w.schema, st, lexical, elementContext{owner: owner}, xpath.FacetAssertions())
 	if err != nil {

@@ -346,15 +346,15 @@ func (t CTATest) Evaluate(b value.Backend, types xsd.TypeResolver, attrs Attribu
 }
 
 // ctaEnv is the dynamic context of one [CTATest.Evaluate] or
-// [AssertionTest.Evaluate] call, or of one facet {test} [FacetAssertions]
-// evaluates, which has no context item at all (cvc-assertions-valid clause 1.2)
-// and so reads nothing of its input but `$value`. cvc-xpath (§3.13.4.2) fixes
-// the rest of it — context item E, context position and size 1, no variable
-// values but the `$value` cvc-assertion clause 2.3 adds — and of that only `$value` and the
+// [AssertionTest.Evaluate] call. cvc-xpath (§3.13.4.2) fixes the rest of it —
+// context item E, context position and size 1, no variable values but the
+// `$value` cvc-assertion clause 2.3 adds — and of that only `$value` and the
 // context item's own attributes and element [[children]] are reachable in this
 // grammar, so the attributes, the children, `$value`'s binding, the value
 // spaces and the type knowledge the casts need are the whole of what
-// evaluation reads.
+// evaluation reads. A facet {test} [FacetAssertions] evaluates has no context
+// item at all (cvc-assertions-valid clause 1.2), so it reads nothing of its
+// input but `$value`.
 type ctaEnv struct {
 	backend value.Backend
 	types   xsd.TypeResolver
@@ -1092,11 +1092,11 @@ func ctaSingletonOperand(v ctaValue, c *xsd.SimpleType, env ctaEnv) (value.Value
 // involved — a ·nilled· child is a node all the same. Rule 2 holds whatever
 // the sequence's LENGTH, which is what a wildcard NameTest and a repeated
 // child make observable. A rooted path raises err:XPDY0050, and a read of an
-// absent context item err:XPDY0002. `$value` is atomic
-// values and no node: the statically empty one is rule 1's false, the bound
-// typed one is decided by ctaBoolean, a list of two or more items included, and
-// the untyped one by rule 4 (ctaUntypedBoolean). Every other operand is a
-// singleton atomic value or the empty sequence, which ctaBoolean decides.
+// absent context item err:XPDY0002. `$value` is atomic values and no node: the
+// statically empty one is rule 1's false, the bound typed one is decided by
+// ctaBoolean, a list of two or more items included, and the untyped one by rule
+// 4 (ctaUntypedBoolean). Every other operand is a singleton atomic value or the
+// empty sequence, which ctaBoolean decides.
 func (e ctaEffectiveBoolean) eval(env ctaEnv) ctaAnswer {
 	switch n := e.operand.(type) {
 	case ctaAttr:

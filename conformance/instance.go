@@ -769,11 +769,11 @@ func assessInstance(v *validate.Validator, doc string) (*validate.Result, refusa
 
 // These are the ten rules validate.Validator.Assess charges, and with
 // cvc-assertions-valid (decidableRules) the whole of what this lane may read as
-// a verdict. All of them are catalog IDs in their BARE
-// form: the charged clause lives in the message text, not in a dotted rule ID,
-// so matching the rule alone is the only stable match — and it is the right
-// one, since a root failing ANY clause of any of the ten is not locally valid
-// and so not valid (§3.3.5.1 e-validity clause 1.1.1.1).
+// a verdict. All of them are catalog IDs in their BARE form: the charged clause
+// lives in the message text, not in a dotted rule ID, so matching the rule
+// alone is the only stable match — and it is the right one, since a root
+// failing ANY clause of any of the ten is not locally valid and so not valid
+// (§3.3.5.1 e-validity clause 1.1.1.1).
 const (
 	ruleCvcAssessElt      xsderr.Rule = "cvc-assess-elt"
 	ruleCvcElt            xsderr.Rule = "cvc-elt"

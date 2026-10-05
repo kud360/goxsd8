@@ -253,8 +253,8 @@ func (vs valueSpace) ValidDefault(r xsd.TypeResolver, t *xsd.SimpleType, vc xsd.
 // literal outside t's lexical space already fails cvc-attribute clause 3,
 // which the caller charges in its own right, and reporting "not the same
 // value" for what is really "not a value at all" would charge clause 4 as well
-// for one defect. For vc's side it is the schema's own
-// cos-valid-simple-default obligation (§3.2.6.2), already charged at finalize.
+// for one defect. For vc's side it is the schema's own cos-valid-simple-default
+// obligation (§3.2.6.2), already charged at finalize.
 func ConstraintMatches(b Backend, r xsd.TypeResolver, t *xsd.SimpleType, lexical string, ctx Context, vc xsd.ValueConstraint) (same, decided bool) {
 	if isSpecial(t) {
 		return specialMatches(b, t, t, lexical, ctx, vc.LexicalForm(), constraintContext(vc), equalOrIdentical)
