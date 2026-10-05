@@ -25857,7 +25857,7 @@ anyAttribute/s3_10_6ii04/instance/s3_10_6v04i pass
 anyAttribute/s3_10_6v01/instance/s3_10_6v01i pass
 anyAttribute/s3_10_6v02/instance/s3_10_6v02i pass
 anyAttribute/s3_10_6v03/instance/s3_10_6v03i pass
-assertion/d4_3_15ii01/instance/d4_3_15ii01i fail
+assertion/d4_3_15ii01/instance/d4_3_15ii01i pass
 assertion/d4_3_15ii02/instance/d4_3_15ii02i fail
 assertion/d4_3_15ii03/instance/d4_3_15ii03i fail
 assertion/d4_3_15ii04/instance/d4_3_15ii04i fail

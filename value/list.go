@@ -1,6 +1,8 @@
 package value
 
 import (
+	"iter"
+	"slices"
 	"strings"
 
 	"github.com/kud360/goxsd8/xsd"
@@ -28,11 +30,13 @@ import (
 // cvc-enumeration-valid's "equal or identical" over a list value space
 // (§4.3.5.4 + §2.2.1/§2.2.2). enumMatch (facets.go) and lengthFacet.CheckValue
 // discover them via these interfaces, never a concrete type, so the assertions
-// have real call sites.
+// have real call sites. Listed hands the items themselves to xpath, whose XDM
+// representation of a list value (Datatypes dt-xdmrep) is their sequence.
 var (
 	_ Lengthed  = listValue{}
 	_ Identical = listValue{}
 	_ Eq        = listValue{}
+	_ Listed    = listValue{}
 )
 
 // listMapping builds the lexical mapping for a list-variety type from its item
@@ -157,7 +161,8 @@ func listGoverned(b Backend, r xsd.TypeResolver, item *xsd.SimpleType) (bool, er
 // listValue is a list-variety value: the ordered sequence of item values
 // produced by listMapping.Parse (§4.1.4 cl.2.2). Its capabilities realize the
 // list-applicable facets — length in items (§4.3.1.3) and enumeration by
-// value-space "equal or identical" (§4.3.5.4) — over that sequence.
+// value-space "equal or identical" (§4.3.5.4) — over that sequence, and
+// [Listed] exposes the sequence itself.
 type listValue struct {
 	items []Value
 }
@@ -168,6 +173,11 @@ type listValue struct {
 // of list items"). lengthFacet.CheckValue reads it through the Lengthed
 // capability, so the list case needs no length-facet code of its own.
 func (l listValue) Len() int { return len(l.items) }
+
+// Items yields the list items in order, which is the [Listed] capability: the
+// sequence dv_list (§4.1.4 cl.2.2) identified, each item the value its token
+// mapped to against the {item type definition}.
+func (l listValue) Items() iter.Seq[Value] { return slices.Values(l.items) }
 
 // Identical reports the §2.2.1 identity relation over list values: two lists are
 // identical iff they have equal length and every item is pairwise Identical to

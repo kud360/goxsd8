@@ -510,7 +510,7 @@ otherwise stdlib.
 
 **Status: the CTA required subset ships, and over the same grammar the
 first slice of assertion evaluation; the rest is the destination.**
-`go doc` renders eight identifiers. Four — `CompileCTATest`, `CTATest`,
+`go doc` renders ten identifiers. Four — `CompileCTATest`, `CTATest`,
 `Attributes` and `CTATestStaticError` — compile, evaluate and
 statically check §3.12.6's `ta-Test` grammar for a Type Alternative's
 `{test}`. They have two consumers in two phases: `parser` calls
@@ -518,11 +518,12 @@ statically check §3.12.6's `ta-Test` grammar for a Type Alternative's
 clause 2 over `xpath-valid` clause 2 for a `{test}` with an XPath static
 error — wrapping the `*xsderr.Error` this package returns, which carries
 the XPath code (`err:XPST0081`) as its own rule — and `validate` compiles
-and evaluates the same `{test}` at ·assessment· time. Four more —
-`CompileAssertionTest`, `AssertionTest`, `AttributeTypes` and
-`TypedAttributes` — compile and evaluate an assertion `{test}` written in
-that grammar over the element's TYPED attributes, for `validate`'s
-`cvc-assertion` charge. Read the tiers below as "does" for tier 1 and for
+and evaluates the same `{test}` at ·assessment· time. Six more —
+`CompileAssertionTest`, `AssertionTest`, `AttributeTypes`,
+`TypedAttributes`, `ValueBinding` and `BindValue` — compile and evaluate
+an assertion `{test}` written in that grammar plus the value comparisons
+and `$value`, over the element's TYPED attributes and its simple
+content's ·actual value·, for `validate`'s `cvc-assertion` charge. Read the tiers below as "does" for tier 1 and for
 tier 2's first slice, and "will" for the rest.
 
 Full XPath 2.0 is the destination; the engine grows outward from the
@@ -533,7 +534,8 @@ XSD-required subset:
    enumerates,
 2. assertion essentials — axes, predicates, quantified expressions, typed
    comparisons, the F&O function core; its first slice, tier 1's grammar
-   over typed attributes, ships, and `xpath/doc.go` enumerates what it
+   plus the value comparisons and `$value` over typed attributes and
+   simple content, ships, and `xpath/doc.go` enumerates what it
    declines,
 3. the full grammar and function library, tracked by its own conformance
    lane.

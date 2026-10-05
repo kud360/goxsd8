@@ -10,8 +10,9 @@
 // never a type switch over concrete types: [Eq] and [Ordered] for comparison
 // (XSD value spaces are partially ordered — see [Ordering]), [Identical] for
 // the identity relation enumeration matching needs, [Lengthed], [DigitCounted],
-// [Scaled], [TimezoneAware] for the facets that measure a value, and
-// [Canonical] for value → canonical lexical.
+// [Scaled], [TimezoneAware] for the facets that measure a value,
+// [Canonical] for value → canonical lexical, and [Listed] for the items of
+// a list-variety value, which this package's own list mapping produces.
 //
 // # Backends
 //

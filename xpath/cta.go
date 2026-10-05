@@ -11,11 +11,16 @@ import (
 // This file evaluates the RESTRICTED expression subset a Type Alternative's
 // {test} is written in — the "Test XPath expressions" grammar ta-props-correct
 // clause 2.1 (§3.12.6) fixes, productions [8] ta-Test through [18]
-// ta-ConstructorFunction — and nothing wider. It is not a stage of a general
-// XPath 2.0 evaluator: the productions below reach no axis but attribute, no
-// predicate, no variable and no function but fn:not, so evaluating them
-// directly is exact where a fail-open delegation to a general engine would be
-// a guess.
+// ta-ConstructorFunction — and nothing wider, but for the two productions the
+// assertion façade adds and the Type Alternative one declines: [11]'s
+// Comparator position also takes xpath20.md [23] ValueComp ('eq' | 'ne' | 'lt'
+// | 'le' | 'gt' | 'ge'), evaluated as §3.5.1's value comparison
+// (ctaValueCompare), and [16] SimpleValue also takes [44] VarRef ('$' VarName),
+// of which only `$value` is in scope (cvc-assertion clause 2.2). It is not a
+// stage of a general XPath 2.0 evaluator: the productions below reach no axis
+// but attribute, no predicate, no variable but `$value` and no function but
+// fn:not, so evaluating them directly is exact where a fail-open delegation to
+// a general engine would be a guess.
 //
 //	[8]  Test                ::= OrExpr
 //	[9]  OrExpr              ::= AndExpr ( 'or' AndExpr )*
@@ -334,10 +339,11 @@ func (t CTATest) Evaluate(b value.Backend, types xsd.TypeResolver, attrs Attribu
 
 // ctaEnv is the dynamic context of one [CTATest.Evaluate] or
 // [AssertionTest.Evaluate] call. cvc-xpath (§3.13.4.2) fixes the rest of it —
-// context item E, context position and size 1, no variable values — and none of
-// that is representable in this grammar, which reaches no context item and has
-// no VarRef production, so the attributes, the value spaces and the type
-// knowledge the casts need are the whole of what evaluation reads.
+// context item E, context position and size 1, no variable values but the
+// `$value` cvc-assertion clause 2.3 adds — and none of that but `$value` is
+// representable in this grammar, which reaches no context item, so the
+// attributes, `$value`'s binding, the value spaces and the type knowledge the
+// casts need are the whole of what evaluation reads.
 type ctaEnv struct {
 	backend value.Backend
 	types   xsd.TypeResolver
@@ -359,8 +365,13 @@ type ctaInput interface{ ctaInput() }
 // ctaLexicalInput is a Type Alternative's attribute input.
 type ctaLexicalInput struct{ attrs Attributes }
 
-// ctaTypedInput is an assertion's attribute input.
-type ctaTypedInput struct{ attrs TypedAttributes }
+// ctaTypedInput is an assertion's input: its typed attributes, and the value
+// cvc-assertion clause 2.3 binds to `$value`. The binding lives here and on no
+// other arm, so a Type Alternative's evaluation cannot carry one.
+type ctaTypedInput struct {
+	attrs TypedAttributes
+	value ValueBinding
+}
 
 func (ctaLexicalInput) ctaInput() {}
 func (ctaTypedInput) ctaInput()   {}
@@ -395,6 +406,24 @@ type ctaCompare struct {
 	right      ctaValue
 }
 
+// ctaValueCompare is a value comparison (xpath20.md §3.5.1), [10]
+// ComparisonExpr's ValueComp arm, which only the assertion façade admits
+// (ctaFacade.comparesValues). Its comparison type — the one type §3.5.1 converts
+// both atomized operands into — was settled at compile time by
+// ctaTypes.valueComparison, so the node is B.2-legal by construction as a
+// ctaCompare is.
+//
+// It is a node of its own and not a ctaCompare with a flag, because the two
+// quantify differently over the same operand sequences: a general comparison is
+// existential over them, and a value comparison admits at most one item per
+// operand and answers the EMPTY SEQUENCE for an empty one (ctaValueCompare.eval).
+type ctaValueCompare struct {
+	op         ctaComparator
+	comparison *xsd.SimpleType
+	left       ctaValue
+	right      ctaValue
+}
+
 // ctaEffectiveBoolean is [11] ta-BooleanExpr's third arm with its Comparator
 // ABSENT — a bare ValueExpr standing in a boolean position, whose value is its
 // ·effective boolean value· (xpath20.md §2.4.3, fn:boolean).
@@ -412,13 +441,16 @@ func (ctaOr) ctaExpr()               {}
 func (ctaAnd) ctaExpr()              {}
 func (ctaNot) ctaExpr()              {}
 func (ctaCompare) ctaExpr()          {}
+func (ctaValueCompare) ctaExpr()     {}
 func (ctaEffectiveBoolean) ctaExpr() {}
 func (ctaTypeError) ctaExpr()        {}
 
-// ctaValue is the sealed sum of the ITEM-valued nodes: the two arms of [16]
+// ctaValue is the sealed sum of the ITEM-valued nodes: the arms of [16]
 // ta-SimpleValue — its AttrName arm in the untyped and the typed form, one per
-// façade (ctaFacade.attribute) — and the cast that [15] ta-CastExpr's tail and [18]
-// ta-ConstructorFunction both build over one of them.
+// façade (ctaFacade.attribute), its Literal arm, and the assertion façade's
+// `$value` in its two static forms (ctaFacade.variable) — and the cast that [15]
+// ta-CastExpr's tail and [18] ta-ConstructorFunction both build over one of
+// them.
 type ctaValue interface{ ctaValue() }
 
 // ctaAttr is [17] ta-AttrName over an UNTYPED instance: the attribute step
@@ -445,6 +477,23 @@ type ctaTypedAttr struct {
 	st   *xsd.SimpleType
 }
 
+// ctaValueVar is `$value` over a simple {content type} (cvc-assertion clause
+// 2.3.1): the XDM representation of E's [schema actual value], read from the
+// [ValueBinding] the evaluation carries. atom is the type of each item — the
+// {simple type definition} itself, or its {item type definition} where listed
+// is true and the value is a list, whose items Datatypes dt-xdmrep flattens
+// into the sequence. Both were settled at compile time (ctaTypes.valueVariable),
+// which is why the operand's static type is atom.
+type ctaValueVar struct {
+	atom   *xsd.SimpleType
+	listed bool
+}
+
+// ctaEmptyValue is `$value` under any {content type} that is not simple
+// (cvc-assertion clause 2.3.2): the empty sequence, decided at compile time,
+// so the evaluation's [ValueBinding] is never read.
+type ctaEmptyValue struct{}
+
 // ctaFacade is the sealed sum of the façades compileCTATest parses for — one
 // value, so the attribute node a façade builds and the comparisons it admits
 // can never come from two different façades (STYLE T1). The grammar's two
@@ -457,10 +506,19 @@ type ctaFacade interface {
 	// types are the compile's own, for a façade that classifies the type it
 	// reads.
 	attribute(test ctaNameTest, types ctaTypes) (ctaValue, bool)
-	// admitsComparison reports whether the façade evaluates a general
-	// comparison whose operands ctaTypes.comparison settled into c, reporting
-	// false where it declines the whole expression on the same withhold terms.
+	// admitsComparison reports whether the façade evaluates a comparison —
+	// general or value — whose operands ctaTypes.comparison or
+	// ctaTypes.valueComparison settled into c, reporting false where it declines
+	// the whole expression on the same withhold terms.
 	admitsComparison(types ctaTypes, c *xsd.SimpleType) bool
+	// comparesValues reports whether the façade admits xpath20.md [23]
+	// ValueComp at all, which §3.12.6's grammar has no production for.
+	comparesValues() bool
+	// variable compiles one [44] VarRef naming name into its node, reporting
+	// false where the façade declines it — every name not in its static
+	// context, which is a static error (err:XPST0008) withheld on the same
+	// terms as attribute's decline.
+	variable(name xsd.QName, types ctaTypes) (ctaValue, bool)
 }
 
 // ctaTypeAlternativeFacade is a Type Alternative's façade: every NameTest is
@@ -476,6 +534,20 @@ func (ctaTypeAlternativeFacade) attribute(test ctaNameTest, _ ctaTypes) (ctaValu
 
 func (ctaTypeAlternativeFacade) admitsComparison(ctaTypes, *xsd.SimpleType) bool {
 	return true
+}
+
+// comparesValues is false: [13] ta-Comparator spells the general comparators
+// alone, and a value comparison is outside the required subset §3.12.6's Note
+// licenses a processor to decline.
+func (ctaTypeAlternativeFacade) comparesValues() bool { return false }
+
+// variable declines every name: ta-props-correct clause 2's grammar has no
+// VarRef, and xpath-valid clause 2.2.6 leaves a Type Alternative's in-scope
+// variables empty, so `$value` there is err:XPST0008 — a static error this
+// engine declines rather than charges, on the "unsupported dominates static"
+// terms [CTATestStaticError] states.
+func (ctaTypeAlternativeFacade) variable(xsd.QName, ctaTypes) (ctaValue, bool) {
+	return nil, false
 }
 
 // ctaNameTest is the sealed sum of [36] NameTest's arms as [17] ta-AttrName
@@ -576,16 +648,19 @@ type ctaCast struct {
 	allowsEmpty bool
 }
 
-func (ctaAttr) ctaValue()      {}
-func (ctaTypedAttr) ctaValue() {}
-func (ctaLiteral) ctaValue()   {}
-func (ctaCast) ctaValue()      {}
+func (ctaAttr) ctaValue()       {}
+func (ctaTypedAttr) ctaValue()  {}
+func (ctaLiteral) ctaValue()    {}
+func (ctaCast) ctaValue()       {}
+func (ctaValueVar) ctaValue()   {}
+func (ctaEmptyValue) ctaValue() {}
 
 // ctaStatic is one operand's static type, which is what xpath20.md §3.5.2's
-// casting rules dispatch on. It is a sealed sum of the two states this grammar
-// can produce and not a datatype: an uncast UNTYPED attribute has no type
-// ANNOTATION at all, because key-cta-ta-select clause 1 labels every node of
-// the constructed instance untyped.
+// casting rules dispatch on. It is a sealed sum of the three states this
+// grammar can produce and not a datatype: an uncast UNTYPED attribute has no
+// type ANNOTATION at all, because key-cta-ta-select clause 1 labels every node
+// of the constructed instance untyped, and the statically empty `$value` has
+// no item to carry one.
 type ctaStatic interface{ ctaStatic() }
 
 // ctaUntypedAtomic is an uncast attribute operand, which atomizes to a single
@@ -595,13 +670,19 @@ type ctaStatic interface{ ctaStatic() }
 type ctaUntypedAtomic struct{}
 
 // ctaTyped is an operand carrying a datatype: a Literal, the result of a cast
-// or a constructor function, or a typed attribute. It carries the COMPONENT
-// alone — st.Name() is the name, and storing both would be two encodings of one
-// fact (STYLE D3).
+// or a constructor function, a typed attribute, or each item of `$value`. It
+// carries the COMPONENT alone — st.Name() is the name, and storing both would
+// be two encodings of one fact (STYLE D3).
 type ctaTyped struct{ st *xsd.SimpleType }
+
+// ctaEmptySequence is the statically empty operand, ctaEmptyValue: it yields
+// no item, so no operator is applied to it and no type is involved
+// (ctaTypes.againstEmpty).
+type ctaEmptySequence struct{}
 
 func (ctaUntypedAtomic) ctaStatic() {}
 func (ctaTyped) ctaStatic()         {}
+func (ctaEmptySequence) ctaStatic() {}
 
 // ctaStaticOf reports the static type of one [14] ta-ValueExpr. ctaAttr is the
 // one untyped arm.
@@ -613,14 +694,20 @@ func ctaStaticOf(v ctaValue) ctaStatic {
 		return ctaTyped{st: n.target}
 	case ctaTypedAttr:
 		return ctaTyped{st: n.st}
+	case ctaValueVar:
+		return ctaTyped{st: n.atom}
+	case ctaEmptyValue:
+		return ctaEmptySequence{}
 	default:
 		return ctaUntypedAtomic{}
 	}
 }
 
-// ctaComparator is one operator of [13] ta-Comparator. All six are GENERAL
-// comparisons (xpath20.md §3.5.2), never the eq/ne/lt/le/gt/ge value
-// comparisons, which this grammar has no production for.
+// ctaComparator is one of the six comparison operators: a [13] ta-Comparator
+// spelling in a general comparison (xpath20.md §3.5.2, ctaCompare), or a [23]
+// ValueComp spelling in a value comparison (§3.5.1, ctaValueCompare). Each is
+// named for the B.2 rows both spellings of it read — `=` and `eq` the
+// `A eq B` row — and the node it sits on is what says how it quantifies.
 type ctaComparator byte
 
 const (
@@ -688,6 +775,8 @@ func ctaEval(x ctaExpr, env ctaEnv) ctaAnswer {
 	case ctaNot:
 		return ctaEval(n.operand, env).negated()
 	case ctaCompare:
+		return n.eval(env)
+	case ctaValueCompare:
 		return n.eval(env)
 	case ctaEffectiveBoolean:
 		return n.eval(env)
@@ -777,7 +866,7 @@ func (c ctaCompare) eval(env ctaEnv) ctaAnswer {
 	}
 	for _, lv := range l.vs {
 		for _, rv := range r.vs {
-			if got := c.holdsPair(lv, rv, env); got != ctaFalse {
+			if got := ctaHoldsPair(c.op, c.comparison, lv, rv, env); got != ctaFalse {
 				return got
 			}
 		}
@@ -785,17 +874,70 @@ func (c ctaCompare) eval(env ctaEnv) ctaAnswer {
 	return ctaFalse
 }
 
-// holdsPair decides one PAIR of the existential above, which is §3.5.2 clause
-// 3's value comparison — both values having reached c.comparison already, where
-// clause 2's casts happened.
-func (c ctaCompare) holdsPair(l, r value.Value, env ctaEnv) ctaAnswer {
-	if ctaStringLike(c.comparison) {
-		return c.op.holdsCollated(l, r)
+// ctaHoldsPair decides op between two values both already converted into the
+// comparison type c. It is the one decision both comparison nodes reach: one
+// PAIR of a general comparison's existential is §3.5.2 clause 3's value
+// comparison, and a value comparison (§3.5.1) is that same application of the
+// operator to its two singletons.
+func ctaHoldsPair(op ctaComparator, c *xsd.SimpleType, l, r value.Value, env ctaEnv) ctaAnswer {
+	if ctaStringLike(c) {
+		return op.holdsCollated(l, r)
 	}
-	if c.comparison.Name() == ctaBuiltin("boolean") {
-		return c.op.holdsBoolean(l, r, c.comparison, env)
+	if c.Name() == ctaBuiltin("boolean") {
+		return op.holdsBoolean(l, r, c, env)
 	}
-	return c.op.holdsBetween(l, r)
+	return op.holdsBetween(l, r)
+}
+
+// eval decides one value comparison (xpath20.md §3.5.1), whose steps are
+// applied to each operand in order, the left one first — the order is
+// implementation-dependent, and fixing it fixes which answer a pair of faulty
+// operands gets (STYLE D1):
+//
+//   - an operand that raised is the error;
+//   - step 2, an EMPTY atomized operand: "the result of the value comparison is
+//     an empty sequence";
+//   - step 3, an operand of more than one item: err:XPTY0004.
+//
+// Step 4's xs:untypedAtomic cast and the conversion to the least common type
+// both happened in converting each operand into c.comparison
+// (ctaTypes.valueComparison), so what remains is the operator, on the one pair.
+//
+// The empty sequence is answered as ctaFalse, and that is exact rather than an
+// approximation: every consumer of an [11] ta-BooleanExpr takes its ·effective
+// boolean value· — §3.6's and/or and fn:not over their operands, and clause 3
+// of cvc-assertion over the {test} — and the effective boolean value of the
+// empty sequence is false (§2.4.3 rule 1). So `not(@x eq 1)` over an E without
+// @x is true, where an err:XPTY0004 under the same fn:not would stay an error.
+func (c ctaValueCompare) eval(env ctaEnv) ctaAnswer {
+	l, settled, single := ctaSingletonOperand(c.left, c.comparison, env)
+	if !single {
+		return settled
+	}
+	r, settled, single := ctaSingletonOperand(c.right, c.comparison, env)
+	if !single {
+		return settled
+	}
+	return ctaHoldsPair(c.op, c.comparison, l, r, env)
+}
+
+// ctaSingletonOperand evaluates one value-comparison operand into c, reporting
+// its one atomic value, or false with the answer the whole comparison takes
+// without applying its operator: ctaError for a raised operand or one of two
+// or more items (§3.5.1 step 3, err:XPTY0004), and ctaFalse — the empty
+// sequence, read as ctaValueCompare.eval states — for an empty one (step 2).
+func ctaSingletonOperand(v ctaValue, c *xsd.SimpleType, env ctaEnv) (value.Value, ctaAnswer, bool) {
+	atoms, converted := ctaItemOf(v, c, env).(ctaAtoms)
+	if !converted {
+		return nil, ctaError, false
+	}
+	if len(atoms.vs) == 0 {
+		return nil, ctaFalse, false
+	}
+	if len(atoms.vs) > 1 {
+		return nil, ctaError, false // err:XPTY0004
+	}
+	return atoms.vs[0], ctaFalse, true
 }
 
 // eval decides the ·effective boolean value· of a bare ValueExpr (xpath20.md
@@ -806,8 +948,10 @@ func (c ctaCompare) holdsPair(l, r value.Value, env ctaEnv) ctaAnswer {
 // item is a node") whenever its NameTest matches at all and rule 1 (the empty
 // sequence) when it matches nothing, and no type of its own is involved. Rule
 // 2 holds whatever the sequence's LENGTH, which is what a wildcard NameTest
-// makes observable. Every other operand is a singleton atomic value or the
-// empty sequence, which ctaBoolean decides.
+// makes observable. `$value` is atomic values and no node: the statically empty
+// one is rule 1's false, and the bound one is decided by ctaBoolean, a list of
+// two or more items included. Every other operand is a singleton atomic value
+// or the empty sequence, which ctaBoolean decides.
 func (e ctaEffectiveBoolean) eval(env ctaEnv) ctaAnswer {
 	switch n := e.operand.(type) {
 	case ctaAttr:
@@ -818,6 +962,10 @@ func (e ctaEffectiveBoolean) eval(env ctaEnv) ctaAnswer {
 		return ctaBoolean(e.operand, n.st, env)
 	case ctaCast:
 		return ctaBoolean(e.operand, n.target, env)
+	case ctaValueVar:
+		return ctaBoolean(e.operand, n.atom, env)
+	case ctaEmptyValue:
+		return ctaFalse
 	default:
 		return ctaFalse
 	}
@@ -841,8 +989,9 @@ func (e ctaEffectiveBoolean) eval(env ctaEnv) ctaAnswer {
 //
 // A sequence of TWO OR MORE items is rule 6 as well — fn:boolean is defined
 // over "a sequence whose first item is not a node" of length one, and raises
-// err:FORG0006 otherwise — and only a cast can put a wildcard-matched sequence
-// here, which raises err:XPTY0004 for that length before this is reached.
+// err:FORG0006 otherwise. A `$value` over a list {simple type definition}
+// reaches it with its items; a cast can put a wildcard-matched sequence here
+// too, but raises err:XPTY0004 for that length before this is reached.
 func ctaBoolean(v ctaValue, st *xsd.SimpleType, env ctaEnv) ctaAnswer {
 	p, err := st.Primitive(env.types)
 	if err != nil || p == nil {
@@ -957,13 +1106,14 @@ func ctaValidated(i ctaItem) (value.Value, bool) {
 // converted into type c — the type the enclosing operator compares or reads it
 // in.
 //
-// The four arms are the four ways an item acquires a type:
+// The arms are the ways an item acquires a type:
 //
 //   - an UNTYPED attribute is xs:untypedAtomic, which §3.5.2's casting rules
 //     cast STRAIGHT to c (clause 1's xs:string, or clause 2's type chosen from
 //     the other operand). No intermediate type exists to cast through.
-//   - a TYPED attribute and a LITERAL carry their own type and are converted to
-//     c, which is a no-op wherever the two coincide.
+//   - a TYPED attribute, a LITERAL and each item of `$value` carry their own
+//     type and are converted to c, which is a no-op wherever the two coincide;
+//     the statically empty `$value` yields nothing to convert.
 //   - a CAST evaluates its operand IN THE TARGET TYPE first, because that cast
 //     is the expression the author wrote and its failure is the author's
 //     err:FORG0001, and only then converts the result to c. Evaluating it
@@ -981,9 +1131,47 @@ func ctaItemOf(v ctaValue, c *xsd.SimpleType, env ctaEnv) ctaItem {
 		return ctaConvert(n.text, n.st, c, env)
 	case ctaCast:
 		return ctaCastItem(n, c, env)
+	case ctaValueVar:
+		return ctaValueItem(n, c, env)
+	case ctaEmptyValue:
+		return ctaAtoms{}
 	default:
 		return ctaAtoms{}
 	}
+}
+
+// ctaValueItem converts `$value`'s binding into c on ctaTypedAttrItem's terms
+// (ctaPromote). The zero [ValueBinding] is the empty sequence (cvc-assertion
+// clause 2.3.2). A listed n ranges the bound value's [value.Listed] items in
+// order, each of type n.atom — the flattened sequence Datatypes dt-xdmrep makes
+// a list value's XDM representation, so an empty list is the empty sequence and
+// a list of two or more items is a sequence of that length.
+//
+// The input is ctaTypedInput by construction (ctaInput); the other arm binds
+// nothing and is unreachable. A listed binding whose value does not carry
+// [value.Listed] breaks the obligation [BindValue] states and is ctaRaised,
+// unreachable for a caller that keeps it.
+func ctaValueItem(n ctaValueVar, c *xsd.SimpleType, env ctaEnv) ctaItem {
+	in, typed := env.input.(ctaTypedInput)
+	if !typed || in.value.v == nil {
+		return ctaAtoms{}
+	}
+	if !n.listed {
+		return ctaPromote(in.value.v, n.atom, c, env)
+	}
+	list, isList := in.value.v.(value.Listed)
+	if !isList {
+		return ctaRaised{}
+	}
+	var vs []value.Value
+	for item := range list.Items() {
+		converted, ok := ctaValidated(ctaPromote(item, n.atom, c, env))
+		if !ok {
+			return ctaRaised{}
+		}
+		vs = append(vs, converted)
+	}
+	return ctaAtoms{vs: vs}
 }
 
 // ctaMatchedAttributes is the [[normalized value]]s of the attributes n's
