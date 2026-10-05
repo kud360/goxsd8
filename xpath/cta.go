@@ -469,11 +469,11 @@ type ctaValue interface{ ctaValue() }
 type ctaAttr struct{ test ctaNameTest }
 
 // ctaTypedAttr is [17] ta-AttrName over a TYPED instance, which is an
-// assertion's (ctaAssertionFacade): the attribute E carries under the ·expanded
-// name· name, at most one, whose typed value is of type st — the {type
-// definition} [AttributeTypes] answered for that name at compile time, which is
-// why the node carries it and the operand's static type is st rather than
-// xs:untypedAtomic.
+// assertion's (ctaAssertionFacade): the attribute E has under the ·expanded
+// name· name — carried, or ·defaulted· ([TypedAttributes]) — at most one, whose
+// typed value is of type st — the {type definition} [AttributeTypes] answered
+// for that name at compile time, which is why the node carries it and the
+// operand's static type is st rather than xs:untypedAtomic.
 //
 // Only a QName NameTest builds one: a [37] Wildcard arm can match an attribute
 // ·attributed to· an {attribute wildcard}, whose type is not fixed at compile

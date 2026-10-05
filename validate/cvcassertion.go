@@ -98,16 +98,13 @@ const ruleCvcAssertionsValid xsderr.Rule = "cvc-assertions-valid"
 // recorded as an [Unevaluated] under cvc-assertion at e through
 // [walk.decline], never charged and never shown satisfied. The residue is: a
 // {test} xpath declines, whose GAP(xpath) markers name the grammar and type
-// residue (paths, the function library); every assertion of an e one of whose
-// attributes matching an {attribute use} has no ·actual value·, or whose
-// `$value` is undecided ([walk.assertionValues]); and a {test} naming a
-// ·defaulted attribute· e does not carry, whether the partial ·PSVI·
-// cvc-assertion clause 1.2 builds from holds one being unruled
-// ([walk.assertionTypes]). Fail-open: the withheld value is clause 6's own
-// verdict, whose whole consumer set inside this package is w.res.violations
-// and its one reader [Result.Violations], which charge on a violation
-// PRESENT, so a decline can only cost a rejection and can manufacture none.
-// (#1042)
+// residue (paths, the function library); and every assertion of an e one of
+// whose attributes matching an {attribute use}, carried or ·defaulted·, has no
+// ·actual value·, or whose `$value` is undecided ([walk.assertionValues]).
+// Fail-open: the withheld value is clause 6's own verdict, whose whole
+// consumer set inside this package is w.res.violations and its one reader
+// [Result.Violations], which charge on a violation PRESENT, so a decline can
+// only cost a rejection and can manufacture none. (#1042)
 func (w *walk) elementAssertions(e Element, g governance, content *contentCheck, invalid bool) {
 	ct := g.complexType()
 	if ct == nil {
@@ -128,7 +125,7 @@ func (w *walk) elementAssertions(e Element, g governance, content *contentCheck,
 				site, lack.declined(e.Name()))
 			continue
 		}
-		test, compiled := xpath.CompileAssertionTest(a.Test(), w.schema, ct.ContentType(), w.assertionTypes(attrs, *ct))
+		test, compiled := xpath.CompileAssertionTest(a.Test(), w.schema, ct.ContentType(), w.assertionTypes(*ct))
 		if !compiled {
 			w.decline("assessing element", e.Name(), e.Loc(), ruleCvcAssertion, "",
 				"%s was not evaluated: this engine's XPath evaluator declined it, so whether the element %s is ·valid· with respect to it, as cvc-complex-type clause 6 requires (Assertion Satisfied, §3.13.4.1), is undecided",
@@ -166,25 +163,21 @@ func (w *walk) assertionType(u xsd.AttributeUse) (st *xsd.SimpleType, resolved b
 }
 
 // assertionTypes is the [xpath.AttributeTypes] of an element whose
-// [[attributes]] are attrs and whose ·governing type definition· is ct: the
-// type of the {attribute use} of ct matching the name (cvc-complex-type clause
-// 2.1's match, attributeUseNamed), on [walk.assertionType]'s terms. A name no
-// use matches has no type fixed at compile time — only an {attribute wildcard}
-// can admit it — and answers false.
+// ·governing type definition· is ct: the type of the {attribute use} of ct
+// matching the name (cvc-complex-type clause 2.1's match, attributeUseNamed),
+// on [walk.assertionType]'s terms. A name no use matches has no type fixed at
+// compile time — only an {attribute wildcard} can admit it — and answers false,
+// as does a use whose declaration or type does not resolve.
 //
-// So does the name of a ·defaulted attribute· of the element
-// ([walk.defaultedConstraint], key-dflt-att), under the GAP elementAssertions
-// states: whether the instance holds it is unruled, so a {test} naming it is
-// declined rather than read as the empty sequence. A use the element does not
-// carry and that supplies no default answers its type: the attribute is
-// absent, and the empty sequence is what the {test} reads.
-func (w *walk) assertionTypes(attrs []Attribute, ct xsd.ComplexType) xpath.AttributeTypes {
+// The answer does not depend on whether the element carries the attribute: a
+// carried one and a ·defaulted attribute· (key-dflt-att) are both in the
+// partial ·PSVI· cvc-assertion clause 1.2 builds from, and both are yielded
+// ([walk.assertionValues]); a use neither carried nor defaulted is absent, and
+// the empty sequence is what the {test} reads.
+func (w *walk) assertionTypes(ct xsd.ComplexType) xpath.AttributeTypes {
 	return func(name xsd.QName) (*xsd.SimpleType, bool) {
 		u, matched := attributeUseNamed(ct.AttributeUses(), name)
 		if !matched {
-			return nil, false
-		}
-		if _, defaulted := w.defaultedConstraint(u, attrs); defaulted {
 			return nil, false
 		}
 		return w.assertionType(u)
@@ -229,6 +222,12 @@ type assertionLack interface {
 // use}, that has no ·actual value· ([walk.assertionValues]).
 type lackingAttribute struct{ a Attribute }
 
+// lackingDefault is a ·defaulted attribute·, which has no attribute of the
+// instance to carry, whose use's ·effective value constraint· has no ·actual
+// value· ([walk.assertionValues]). The use is the whole of it: the name is its
+// declaration's, and the {lexical form} its ·effective value constraint·'s.
+type lackingDefault struct{ u xsd.AttributeUse }
+
 // lackingValue is a simple {content type} whose `$value` is undecided
 // ([walk.assertionValue]).
 type lackingValue struct{}
@@ -237,28 +236,36 @@ func (l lackingAttribute) declined(e xsd.QName) string {
 	return fmt.Sprintf("the attribute %s of the element %s has no ·actual value· for the data model instance cvc-assertion clause 1 builds", l.a.Name(), e)
 }
 
+func (l lackingDefault) declined(e xsd.QName) string {
+	return fmt.Sprintf("the ·defaulted attribute· %s of the element %s has no ·actual value· for the data model instance cvc-assertion clause 1 builds", l.u.DeclarationName(), e)
+}
+
 func (lackingValue) declined(e xsd.QName) string {
 	return fmt.Sprintf("the element %s has simple content whose [schema actual value], which cvc-assertion clause 2.3.1 binds to $value, is undecided: String Valid over its ·initial value· was withheld", e)
 }
 
-// assertionValues is the input of e's assertions: the typed value of each
-// attribute of attrs that matches an {attribute use} of ct, in document order,
-// under the type [walk.assertionType] resolves for that use, and `$value`'s
-// binding ([walk.assertionValue]). It reports the lack, carrying the first
-// attribute lacking one, where any such attribute has no ·actual value·: its
-// declaration or {type definition} does not resolve, or cvc-attribute clause 3
-// charged or declined its lexical — String Valid ([walk.stringValid]), the
-// same check re-run here because the walk keeps no ·actual values·. Omitting
-// such an attribute instead would make `@a` the empty sequence and could
-// fabricate a charge.
+// assertionValues is the input of e's assertions: the typed value
+// ([walk.assertionTyped]) of each attribute of attrs that matches an {attribute
+// use} of ct, in document order, then of each ·defaulted attribute· of e
+// ([walk.defaultedConstraint], key-dflt-att) in the order of ct.{attribute
+// uses}, each under the type [walk.assertionType] resolves for its use, and
+// `$value`'s binding ([walk.assertionValue]).
 //
-// The typed value is [xpath.Untyped] of the attribute's [[normalized value]]
-// where the type is ·special· (isSpecial): xpath-datamodel §3.3.1.2 makes it
-// the [schema normalized value] as xs:untypedAtomic, and that is the
-// [[normalized value]] unchanged, because key-nv normalizes under
-// xs:anySimpleType "as in the preserve case" and xs:anyAtomicType carries no
-// whiteSpace facet either. It is [xpath.Typed] of the ·actual value· mapped
-// under the type otherwise.
+// A ·defaulted attribute· is read as its use's ·effective value constraint·
+// supplies it: its {lexical form} is the [schema normalized value], and the
+// ·actual value· is mapped from it. The partial ·PSVI· cvc-assertion clause 1.2
+// builds from holds it — clause 1.1 sets aside only cvc-complex-type clause 6,
+// not the attribute defaulting key-dflt-att's PSVI contribution makes — so
+// reading it as the empty sequence instead could fabricate a charge.
+//
+// It reports the lack, carrying the first attribute lacking one, where any
+// such attribute has no ·actual value·: its declaration or {type definition}
+// does not resolve, or String Valid ([walk.stringValid]) over its lexical is
+// rejected or withheld — charged or declined by cvc-attribute clause 3 for a
+// carried attribute and by cvc-complex-type clause 4 for a defaulted one
+// ([walk.defaultedAttribute]), the same check re-run here because the walk
+// keeps no ·actual values·. Omitting such an attribute instead would make `@a`
+// the empty sequence and could fabricate a charge.
 //
 // An attribute matching no use is not read: no {test}
 // [xpath.CompileAssertionTest] admits can name it ([walk.assertionTypes]), so
@@ -274,23 +281,22 @@ func (w *walk) assertionValues(e Element, attrs []Attribute, ct xsd.ComplexType,
 		if !matched {
 			continue
 		}
-		st, resolved := w.assertionType(u)
-		if !resolved {
+		v, read := w.assertionTyped(u, a.Value(), e, a.Loc())
+		if !read {
 			return assertionInput{}, lackingAttribute{a: a}
 		}
-		decided, verdict := w.stringValid(st, a.Value(), e, a.Loc())
-		if !decided || verdict != nil {
-			return assertionInput{}, lackingAttribute{a: a}
-		}
-		if isSpecial(st) {
-			in.attrs = append(in.attrs, assertionValue{name: a.Name(), v: xpath.Untyped(a.Value())})
+		in.attrs = append(in.attrs, assertionValue{name: a.Name(), v: v})
+	}
+	for _, u := range ct.AttributeUses() {
+		vc, defaulted := w.defaultedConstraint(u, attrs)
+		if !defaulted {
 			continue
 		}
-		v, err := value.ValidateLexical(w.backend, w.schema, st, a.Value(), elementContext{owner: e})
-		if err != nil {
-			return assertionInput{}, lackingAttribute{a: a}
+		v, read := w.assertionTyped(u, vc.LexicalForm(), e, e.Loc())
+		if !read {
+			return assertionInput{}, lackingDefault{u: u}
 		}
-		in.attrs = append(in.attrs, assertionValue{name: a.Name(), v: xpath.Typed(v)})
+		in.attrs = append(in.attrs, assertionValue{name: u.DeclarationName(), v: v})
 	}
 	bound, decided := w.assertionValue(e, ct, content, invalid)
 	if !decided {
@@ -298,6 +304,38 @@ func (w *walk) assertionValues(e Element, attrs []Attribute, ct xsd.ComplexType,
 	}
 	in.value = bound
 	return in, nil
+}
+
+// assertionTyped is the typed value of an attribute of the use u whose
+// [schema normalized value] is lexical, read at loc on e, reporting false
+// where it has no ·actual value·: u's declaration or {type definition} does not
+// resolve ([walk.assertionType]), String Valid ([walk.stringValid]) over
+// lexical is rejected or withheld, or the mapping errors.
+//
+// The value is [xpath.Untyped] of lexical where the type is ·special·
+// (isSpecial): xpath-datamodel §3.3.1.2 makes it the [schema normalized value]
+// as xs:untypedAtomic. A carried attribute's [[normalized value]] is that
+// value unchanged, because key-nv normalizes under xs:anySimpleType "as in the
+// preserve case" and xs:anyAtomicType carries no whiteSpace facet either; a
+// defaulted one's {lexical form} is it by key-dflt-att. The value is
+// [xpath.Typed] of the ·actual value· mapped under the type otherwise.
+func (w *walk) assertionTyped(u xsd.AttributeUse, lexical string, e Element, loc xsderr.Loc) (xpath.TypedValue, bool) {
+	st, resolved := w.assertionType(u)
+	if !resolved {
+		return nil, false
+	}
+	decided, verdict := w.stringValid(st, lexical, e, loc)
+	if !decided || verdict != nil {
+		return nil, false
+	}
+	if isSpecial(st) {
+		return xpath.Untyped(lexical), true
+	}
+	v, err := value.ValidateLexical(w.backend, w.schema, st, lexical, elementContext{owner: e})
+	if err != nil {
+		return nil, false
+	}
+	return xpath.Typed(v), true
 }
 
 // assertionValue is the value cvc-assertion clause 2.3 binds to `$value` for e,

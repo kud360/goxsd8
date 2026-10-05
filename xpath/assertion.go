@@ -37,13 +37,15 @@ import (
 // ·expanded name· name is typed by: the type of the {attribute declaration} of
 // the {attribute use} of E's ·governing type definition· matching that name. ok
 // false means no type is fixed for the name at compile time — no such use, a
-// name only an {attribute wildcard} can admit, or a use the caller declines to
-// type — and [CompileAssertionTest] declines a {test} naming it.
+// name only an {attribute wildcard} can admit, or a use whose declaration or
+// type does not resolve — and [CompileAssertionTest] declines a {test} naming
+// it.
 //
 // It is STATIC in the sense the compile needs: the answer does not depend on
-// whether E carries the attribute. Its one consumer is validate's
-// cvc-assertion site (validate/cvcassertion.go), which builds it and
-// [TypedAttributes] from one lookup so the two cannot disagree.
+// whether E carries the attribute, or a ·defaulted attribute· (key-dflt-att)
+// stands in for it, both of which [TypedAttributes] yields. Its one consumer
+// is validate's cvc-assertion site (validate/cvcassertion.go), which builds
+// it and [TypedAttributes] from one lookup so the two cannot disagree.
 type AttributeTypes func(name xsd.QName) (*xsd.SimpleType, bool)
 
 // TypedValue is the typed value of one attribute node, or of `$value`, in the
@@ -80,10 +82,12 @@ func Typed(v value.Value) TypedValue {
 // typed value of a node whose type is xs:anySimpleType or xs:anyAtomicType.
 func Untyped(lexical string) TypedValue { return tvUntyped{lexical: lexical} }
 
-// TypedAttributes yields the attributes E carries that matched an {attribute
-// use} of its ·governing type definition·, each as its ·expanded name· and its
-// typed value, in DOCUMENT ORDER (STYLE D1). It must be non-nil, and a yield
-// reporting false ends the walk.
+// TypedAttributes yields E's attributes that matched an {attribute use} of its
+// ·governing type definition·, each as its ·expanded name· and its typed
+// value: those E carries, in DOCUMENT ORDER (STYLE D1), then its ·defaulted
+// attributes· (key-dflt-att), which the partial ·PSVI· cvc-assertion clause
+// 1.2 builds from holds too, in an order the caller fixes. It must be non-nil,
+// and a yield reporting false ends the walk.
 //
 // Each value's arm is fixed by the type [AttributeTypes] answered for its name
 // when the [AssertionTest] being evaluated was compiled: [Untyped] of the
