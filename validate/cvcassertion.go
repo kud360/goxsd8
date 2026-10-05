@@ -68,25 +68,17 @@ const ruleCvcAssertionsValid xsderr.Rule = "cvc-assertions-valid"
 // property at all — a simple one's assertions are facets, and reach
 // ruleCvcAssertionsValid instead.
 //
-// {assertions} is read whole and its base chain is never walked: cos-ct-extends
-// clause 1.7 and derivation-ok-restriction clause 5 both make B.{assertions} a
-// prefix of T.{assertions}, so unioning the chain here would report every
-// inherited assertion once per derivation step. Every one of them, inherited
-// or not, is compiled against T's OWN {attribute uses} ([walk.assertionTypes]),
-// because the instance it reads is e's as T types it: a restriction that
-// narrows an attribute's type narrows it for the base's assertions too. Each is
-// compiled per element and cached nowhere.
-//
-// Every one is compiled against T's {content type} too, which fixes `$value`'s
-// static type (cvc-assertion clause 2.3.1.3), and evaluated with the binding
-// [walk.assertionValue] gives it: invalid says whether e is known to be invalid
-// in the partial ·PSVI· by now (clause 2.3.1.1) — the caller's count of the
-// violations recorded since e was entered — and content is e's own content
+// asserts is e's clause 6 state, opened when e was entered
+// ([walk.compileAssertions], which compiles every {test}) and nil where T has
+// no {assertions}. Each compiled test is evaluated with the binding
+// [walk.assertionValue] gives `$value`: invalid says whether e is known to be
+// invalid in the partial ·PSVI· by now (clause 2.3.1.1) — the caller's count of
+// the violations recorded since e was entered — and content is e's own content
 // check, exhausted, which holds the ·initial value· and the ·nilled· answer.
 //
 // Each assertion takes exactly one of three outcomes: DECLINED, where
-// [xpath.CompileAssertionTest] reports false or e's attributes or `$value`
-// cannot be read; CHARGED under cvc-assertion, where
+// [xpath.CompileAssertionTest] reported false or e's attributes, the children
+// a {test} reads, or `$value` cannot be read; CHARGED under cvc-assertion, where
 // [xpath.AssertionTest.Evaluate] reports false — the {test} was false or raised
 // a dynamic or type error, which cvc-assertion's opening sentence treats alike
 // ("evaluates to true ... without raising any dynamic error or type error");
@@ -100,39 +92,36 @@ const ruleCvcAssertionsValid xsderr.Rule = "cvc-assertions-valid"
 // {test} xpath declines, whose GAP(xpath) markers name the grammar and type
 // residue (paths, the function library); and every assertion of an e one of
 // whose attributes matching an {attribute use}, carried or ·defaulted·, has no
-// ·actual value·, or whose `$value` is undecided ([walk.assertionValues]).
-// Fail-open: the withheld value is clause 6's own verdict, whose whole
-// consumer set inside this package is w.res.violations and its one reader
-// [Result.Violations], which charge on a violation PRESENT, so a decline can
-// only cost a rejection and can manufacture none. (#1042)
-func (w *walk) elementAssertions(e Element, g governance, content *contentCheck, invalid bool) {
-	ct := g.complexType()
-	if ct == nil {
-		return
-	}
-	assertions := ct.Assertions()
-	if len(assertions) == 0 {
+// ·actual value·, one of whose element [[children]] a {test} reads has no
+// typed value this package reads ([walk.keepChild]), or whose `$value` is
+// undecided ([walk.assertionValues]). Fail-open: the withheld value is clause
+// 6's own verdict, whose whole consumer set inside this package is
+// w.res.violations and its one reader [Result.Violations], which charge on a
+// violation PRESENT, so a decline can only cost a rejection and can
+// manufacture none. (#1042)
+func (w *walk) elementAssertions(e Element, asserts *assertionCheck, content *contentCheck, invalid bool) {
+	if asserts == nil {
 		return
 	}
 	attrs := e.Attributes()
-	in, lack := w.assertionValues(e, attrs, *ct, content, invalid)
-	for i, a := range assertions {
+	in, lack := w.assertionValues(e, attrs, asserts, content, invalid)
+	for i, c := range asserts.tests {
 		site := fmt.Sprintf("assertion %d of %d in the {assertions} of the ·governing type definition· %s, whose {test} is %q,",
-			i+1, len(assertions), typeName(*ct), a.Test().Expression())
+			i+1, len(asserts.tests), typeName(asserts.ct), c.a.Test().Expression())
 		if lack != nil {
 			w.decline("assessing element", e.Name(), e.Loc(), ruleCvcAssertion, "",
 				"%s was not evaluated: %s, so whether the element is ·valid· with respect to it, as cvc-complex-type clause 6 requires, is undecided",
 				site, lack.declined(e.Name()))
 			continue
 		}
-		test, compiled := xpath.CompileAssertionTest(a.Test(), w.schema, ct.ContentType(), w.assertionTypes(*ct))
-		if !compiled {
+		test := c.test
+		if test == nil {
 			w.decline("assessing element", e.Name(), e.Loc(), ruleCvcAssertion, "",
 				"%s was not evaluated: this engine's XPath evaluator declined it, so whether the element %s is ·valid· with respect to it, as cvc-complex-type clause 6 requires (Assertion Satisfied, §3.13.4.1), is undecided",
 				site, e.Name())
 			continue
 		}
-		if test.Evaluate(w.backend, w.schema, in.yield, in.value) {
+		if test.Evaluate(w.backend, w.schema, in.yield, asserts.yieldChildren, in.value) {
 			w.logDecision("assessing element", e.Name(), e.Loc(), ruleCvcAssertion, "", "satisfied")
 			continue
 		}
@@ -141,6 +130,109 @@ func (w *walk) elementAssertions(e Element, g governance, content *contentCheck,
 			e.Name(), site))
 		w.logDecision("assessing element", e.Name(), e.Loc(), ruleCvcAssertion, "", "charged")
 	}
+}
+
+// assertionCheck is one element's cvc-complex-type clause 6 state, opened when
+// the element is entered ([walk.compileAssertions]) and settled once its
+// [[children]] are exhausted ([walk.elementAssertions]): the ·governing type
+// definition· ct whose {assertions} are evaluated, and each of them with its
+// compiled {test}, in {assertions} order.
+//
+// Between the two it collects, from the element's own [[children]] as each is
+// exhausted ([walk.keepChild]), what the compiled tests read of them: children
+// holds one [xpath.ChildElement] per element [[child]] some test reads, in
+// arrival order, which is document order (STYLE D1); and lack is the first such
+// child that has no typed value this package reads, nil while there is none.
+type assertionCheck struct {
+	ct       xsd.ComplexType
+	tests    []assertionTest
+	children []xpath.ChildElement
+	lack     assertionLack
+}
+
+// reads reports whether some compiled test of c reads a child element named
+// name ([xpath.AssertionTest.ReadsChild]). A nil c — an element with no
+// {assertions} — reads none.
+func (c *assertionCheck) reads(name xsd.QName) bool {
+	if c == nil {
+		return false
+	}
+	for _, t := range c.tests {
+		if t.test != nil && t.test.ReadsChild(name) {
+			return true
+		}
+	}
+	return false
+}
+
+// lacking records l as c's lack where c has none yet, so the first lacking
+// child in document order is the one a decline names.
+func (c *assertionCheck) lacking(l assertionLack) {
+	if c.lack == nil {
+		c.lack = l
+	}
+}
+
+// skipped records e, an element [[child]] ·skipped· by key-sva clause 3.2, as
+// c's lack where some test of c reads e's name: a ·skipped· element is not
+// ·assessed·, so the partial ·PSVI· gives it no type to read its value under.
+// A nil c reads nothing.
+func (c *assertionCheck) skipped(e Element) {
+	if !c.reads(e.Name()) {
+		return
+	}
+	c.lacking(lackingChild{name: e.Name(), loc: e.Loc(), why: "it is ·skipped·, so it is not ·assessed·"})
+}
+
+// yieldChildren is the kept children as an [xpath.ChildElements].
+func (c *assertionCheck) yieldChildren(yield func(xpath.ChildElement) bool) {
+	for _, child := range c.children {
+		if !yield(child) {
+			return
+		}
+	}
+}
+
+// assertionTest is one member of ct.{assertions} and its {test} as
+// [xpath.CompileAssertionTest] compiled it, nil where that declined.
+type assertionTest struct {
+	a    xsd.Assertion
+	test *xpath.AssertionTest
+}
+
+// compileAssertions compiles every assertion of g's complex ·governing type
+// definition· when e is entered, and is nil where there is none to compile: g
+// is not complex, or its {assertions} is empty. Every input a compile reads is
+// STATIC — the {test}, T's {content type}, T's {attribute uses} and the
+// ·locally declared types· within T ([walk.assertionElementTypes]) — so
+// nothing the [[children]] carry can change a compiled tree, and compiling
+// before they arrive is what lets the walk know which of them a {test} reads
+// ([assertionCheck.reads]).
+//
+// {assertions} is read whole and its base chain is never walked: cos-ct-extends
+// clause 1.7 and derivation-ok-restriction clause 5 both make B.{assertions} a
+// prefix of T.{assertions}, so unioning the chain here would report every
+// inherited assertion once per derivation step. Every one of them, inherited
+// or not, is compiled against T's OWN {attribute uses} ([walk.assertionTypes]),
+// because the instance it reads is e's as T types it: a restriction that
+// narrows an attribute's type narrows it for the base's assertions too, and
+// against T's {content type}, which fixes `$value`'s static type
+// (cvc-assertion clause 2.3.1.3). Each is compiled per element and cached
+// nowhere.
+func (w *walk) compileAssertions(g governance) *assertionCheck {
+	ct := g.complexType()
+	if ct == nil || len(ct.Assertions()) == 0 {
+		return nil
+	}
+	check := &assertionCheck{ct: *ct}
+	for _, a := range ct.Assertions() {
+		c := assertionTest{a: a}
+		if test, compiled := xpath.CompileAssertionTest(a.Test(), w.schema, ct.ContentType(), w.assertionTypes(*ct), w.assertionElementTypes(*ct)); compiled {
+			c.test = &test
+		}
+		check.tests = append(check.tests, c)
+	}
+	return check
 }
 
 // assertionType is the {type definition} of the {attribute declaration} of
@@ -182,6 +274,104 @@ func (w *walk) assertionTypes(ct xsd.ComplexType) xpath.AttributeTypes {
 		}
 		return w.assertionType(u)
 	}
+}
+
+// assertionElementTypes is the [xpath.ElementTypes] of an element whose
+// ·governing type definition· is ct: the ·locally declared type· within ct of
+// a child element with the name ([xsd.Schema.LocallyDeclaredElementType],
+// key-ldt-elem), false where it is ·absent·. [walk.keepChild] reads the same
+// lookup, so the type a {test} is compiled against and the one a child's value
+// is mapped under cannot disagree, which [xpath.ChildElements] makes the
+// caller's obligation.
+func (w *walk) assertionElementTypes(ct xsd.ComplexType) xpath.ElementTypes {
+	return func(name xsd.QName) (xsd.TypeDefinition, bool) {
+		return w.schema.LocallyDeclaredElementType(ct, name)
+	}
+}
+
+// keepChild hands e, an element [[child]] of the element whose clause 6 state
+// is parent, to that state once e's own assessment is over, where some {test}
+// of the parent reads e's name: one [xpath.ChildElement] carrying e's typed
+// value ([walk.childValue]), or the lack that declines the parent's
+// assertions. recorded reports whether any violation or [Unevaluated] was
+// recorded since e was entered — in e itself or anywhere below it.
+//
+// A child no {test} reads is kept nowhere, and a child that is read is kept as
+// ONE value, never a subtree: no step xpath compiles reaches below a child, so
+// the walk holds at most one value per element [[child]] of an element whose
+// {assertions} read it, for the data model instance cvc-assertion clause 1
+// builds from the parent.
+func (w *walk) keepChild(parent *assertionCheck, e Element, g governance, content *contentCheck, recorded bool) {
+	if !parent.reads(e.Name()) {
+		return
+	}
+	child, lack := w.childValue(parent.ct, e, g, content, recorded)
+	if lack != nil {
+		parent.lacking(lack)
+		return
+	}
+	parent.children = append(parent.children, child)
+}
+
+// childValue is e's typed value (xpath-datamodel §6.2.4) as a {test} of its
+// parent, whose ·governing type definition· is ct, reads it: under the simple
+// type the ·locally declared type· of e within ct has its value in
+// ([walk.assertionElementTypes], valueTypeOf), which is the type the {test}
+// was compiled against. It reports a lackingChild instead where e's own
+// assessment leaves that value unread:
+//
+//   - recorded: a violation makes e invalid in the partial ·PSVI·, and an
+//     [Unevaluated] — String Valid over its ·initial value· withheld among
+//     them — leaves its validity undecided;
+//   - e has no ·governing type definition· — ·laxly assessed·, or one this
+//     package could not determine — or one that is not the ·locally declared
+//     type· or derived from it by restriction alone ([xsd.Schema.ValidlySubstitutable]
+//     with extension blocked), so its value may not be one of that type's;
+//   - the [schema normalized value] under e's own type does not map under the
+//     answered type.
+//
+// A ·nilled· e is [xpath.Child] of nil, the empty sequence. Otherwise the value
+// is e's ·initial value· ([contentCheck.assessed], the {value constraint}'s
+// {lexical form} where cvc-elt clause 5.1 substituted it), normalized under e's
+// own type's whiteSpace (normalizedLexical) — a restriction never weakens it —
+// and mapped under the answered type.
+func (w *walk) childValue(ct xsd.ComplexType, e Element, g governance, content *contentCheck, recorded bool) (xpath.ChildElement, assertionLack) {
+	lacking := func(why string) (xpath.ChildElement, assertionLack) {
+		return xpath.ChildElement{}, lackingChild{name: e.Name(), loc: e.Loc(), why: why}
+	}
+	if recorded {
+		return lacking("a violation or an unevaluated check was recorded for it or below it, so it is not known to be ·valid·")
+	}
+	ldt, local := w.schema.LocallyDeclaredElementType(ct, e.Name())
+	answered := valueTypeOf(ldt)
+	if !local || answered == nil {
+		return lacking("its ·locally declared type· has no simple type its value is read under")
+	}
+	if g.typ == nil {
+		return lacking("it has no ·governing type definition·")
+	}
+	if !sameType(g.typ, ldt) {
+		restricted, err := w.schema.ValidlySubstitutable(g.typ, ldt, []xsd.DerivationMethod{xsd.DerivationExtension})
+		if err != nil || !restricted {
+			return lacking(fmt.Sprintf("its ·governing type definition· %s is neither its ·locally declared type· %s nor derived from it by restriction", typeName(g.typ), typeName(ldt)))
+		}
+	}
+	if content.nilled {
+		return xpath.Child(e.Name(), nil), nil
+	}
+	own := g.valueType()
+	if own == nil {
+		return lacking("its ·governing type definition· has no simple type its value is read under")
+	}
+	normalized, ok := normalizedLexical(w.schema, own, content.assessed())
+	if !ok {
+		return lacking("its ·initial value· has no [schema normalized value] under its own type")
+	}
+	v, err := value.ValidateLexical(w.backend, w.schema, answered, normalized, elementContext{owner: e})
+	if err != nil {
+		return lacking(fmt.Sprintf("its [schema normalized value] has no ·actual value· under %s", typeName(answered)))
+	}
+	return xpath.Child(e.Name(), xpath.Typed(v)), nil
 }
 
 // assertionValue is one attribute's typed value as an assertion {test} reads
@@ -232,12 +422,25 @@ type lackingDefault struct{ u xsd.AttributeUse }
 // ([walk.assertionValue]).
 type lackingValue struct{}
 
+// lackingChild is an element [[child]], named name at loc, that a {test} reads
+// and that has no typed value this package reads, for the reason why
+// ([walk.childValue]).
+type lackingChild struct {
+	name xsd.QName
+	loc  xsderr.Loc
+	why  string
+}
+
 func (l lackingAttribute) declined(e xsd.QName) string {
 	return fmt.Sprintf("the attribute %s of the element %s has no ·actual value· for the data model instance cvc-assertion clause 1 builds", l.a.Name(), e)
 }
 
 func (l lackingDefault) declined(e xsd.QName) string {
 	return fmt.Sprintf("the ·defaulted attribute· %s of the element %s has no ·actual value· for the data model instance cvc-assertion clause 1 builds", l.u.DeclarationName(), e)
+}
+
+func (l lackingChild) declined(e xsd.QName) string {
+	return fmt.Sprintf("the child element %s of the element %s at %s, which a {test} reads, has no typed value for the data model instance cvc-assertion clause 1 builds: %s", l.name, e, l.loc, l.why)
 }
 
 func (lackingValue) declined(e xsd.QName) string {
@@ -265,7 +468,9 @@ func (lackingValue) declined(e xsd.QName) string {
 // carried attribute and by cvc-complex-type clause 4 for a defaulted one
 // ([walk.defaultedAttribute]), the same check re-run here because the walk
 // keeps no ·actual values·. Omitting such an attribute instead would make `@a`
-// the empty sequence and could fabricate a charge.
+// the empty sequence and could fabricate a charge. After the attributes it
+// reports asserts' own lack: an element [[child]] a {test} reads that has no
+// typed value ([walk.keepChild]).
 //
 // An attribute matching no use is not read: no {test}
 // [xpath.CompileAssertionTest] admits can name it ([walk.assertionTypes]), so
@@ -273,8 +478,10 @@ func (lackingValue) declined(e xsd.QName) string {
 //
 // A lack declines every assertion of e, including one whose {test} never reads
 // what is lacking: whether a {test} reads `$value` is not something the
-// compiled test reports.
-func (w *walk) assertionValues(e Element, attrs []Attribute, ct xsd.ComplexType, content *contentCheck, invalid bool) (assertionInput, assertionLack) {
+// compiled test reports, and a child's lack is kept per element and not per
+// {test}.
+func (w *walk) assertionValues(e Element, attrs []Attribute, asserts *assertionCheck, content *contentCheck, invalid bool) (assertionInput, assertionLack) {
+	ct := asserts.ct
 	var in assertionInput
 	for _, a := range attrs {
 		u, matched := attributeUseNamed(ct.AttributeUses(), a.Name())
@@ -297,6 +504,9 @@ func (w *walk) assertionValues(e Element, attrs []Attribute, ct xsd.ComplexType,
 			return assertionInput{}, lackingDefault{u: u}
 		}
 		in.attrs = append(in.attrs, assertionValue{name: u.DeclarationName(), v: v})
+	}
+	if asserts.lack != nil {
+		return assertionInput{}, asserts.lack
 	}
 	bound, decided := w.assertionValue(e, ct, content, invalid)
 	if !decided {

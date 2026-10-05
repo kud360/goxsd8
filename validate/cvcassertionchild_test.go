@@ -1,0 +1,191 @@
+package validate
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/kud360/goxsd8/xsd"
+	"github.com/kud360/goxsd8/xsderr"
+)
+
+// The fixtures below drive an assertion {test} that reads <root>'s element
+// [[children]] (cvc-assertion clause 1.2): RootType carries the assertions
+// given, an attribute x of xs:int, and the content
+//
+//	sequence( e1?, n*, any(skip)* )
+//
+// with e1 a {nillable} xs:string and n an xs:int, so a second <e1> is
+// ·attributed to· the skip wildcard and ·skipped·. StrExt is a complex type
+// whose simple content EXTENDS xs:string, which an xsi:type can put on <e1>.
+
+// acSchema builds RootType over the assertions exprs, and declares <root>.
+func acSchema(t *testing.T, exprs ...string) *xsd.Schema {
+	t.Helper()
+	unbounded, err := xsd.NewUnboundedOccurs(xsderr.Loc{}, 0)
+	if err != nil {
+		t.Fatalf("NewUnboundedOccurs: %v", err)
+	}
+	skip, err := xsd.NewParticle(xsderr.Loc{}, unbounded, xsd.ResolvedTerm{Term: *anyWildcard(t, xsd.ProcessSkip)})
+	if err != nil {
+		t.Fatalf("NewParticle: %v", err)
+	}
+	content := icContent(t,
+		icOptional(t, icLocal(t, "RootType", local("e1"), icBuiltin("string"), true, nil)),
+		icRepeated(t, icLocal(t, "RootType", local("n"), icBuiltin("int"), false, nil)),
+		skip)
+	ct, err := xsd.NewComplexType(xsderr.Loc{}, local("RootType"), xsd.QName{}, nil,
+		xsd.DerivationRestriction, false, attrContent([]xsd.AttributeUse{icUse(t, local("x"), "int")}),
+		nil, nil, content, nil, aAssertions(exprs...))
+	if err != nil {
+		t.Fatalf("building RootType: %v", err)
+	}
+	str := icSeeded(t)["string"]
+	ext, err := xsd.NewComplexType(xsderr.Loc{}, local("StrExt"), icBuiltin("string"), nil,
+		xsd.DerivationExtension, false, nil, nil, nil, xsd.SimpleContent{SimpleType: str}, nil, nil)
+	if err != nil {
+		t.Fatalf("building StrExt: %v", err)
+	}
+	return cSchemaFrom(t, ct, func(b *xsd.SchemaBuilder) {
+		aTypes(t, b)
+		b.AddType(ext)
+	})
+}
+
+// acKid is a child element named name at line, holding text and carrying
+// attrs, with the xs prefix bound for an xsi:type.
+func acKid(name string, line int, text string, attrs ...Attribute) Child {
+	e := &testElement{name: local(name), attrs: attrs, loc: loc(line, 3),
+		bindings: map[string]string{"xs": xsd.XMLSchemaNS}}
+	if text != "" {
+		e.kids = []Child{TextChild(&testText{data: text, loc: loc(line, 8)})}
+	}
+	return ElementChild(e)
+}
+
+// acRoot is <root> at 1:1 over kids.
+func acRoot(kids ...Child) *testElement {
+	return &testElement{name: local("root"), kids: kids, loc: loc(1, 1)}
+}
+
+// acDeclined fails unless res recorded exactly one Unevaluated, under
+// cvc-assertion at <root>, whose message names want — whatever else res
+// charged.
+func acDeclined(t *testing.T, res *Result, want string) {
+	t.Helper()
+	got := res.Unevaluated()
+	if len(got) != 1 {
+		t.Fatalf("Unevaluated() = %v, want one cvc-assertion decline", messages(got))
+	}
+	if got[0].Rule() != ruleCvcAssertion || got[0].Loc() != loc(1, 1) {
+		t.Errorf("Unevaluated()[0] = %s at %s, want cvc-assertion at %s", got[0].Rule(), got[0].Loc(), loc(1, 1))
+	}
+	if !strings.Contains(got[0].Msg(), want) {
+		t.Errorf("Unevaluated()[0].Msg() = %q, want it to name %q", got[0].Msg(), want)
+	}
+	for _, v := range res.Violations() {
+		if v.Rule == ruleCvcAssertion {
+			t.Errorf("Violations() holds %v: a declined assertion is never charged", v)
+		}
+	}
+}
+
+// An assertion reads <root>'s element [[children]] TYPED, over the instance
+// cvc-assertion clause 1 builds once they are validated: `e1 = 'present'` is
+// satisfied over <e1>present</e1> and charged over <e1>absent</e1>; `e1 and n`
+// is charged where n is absent, the empty node sequence being false (xpath20.md
+// §2.4.3); `n > 9` compares xs:int values, so 10 holds where the string "10"
+// would not. A ·nilled· <e1> is a node with no value (xpath-datamodel §6.2.4):
+// `e1` holds and `e1 = ”` is charged, where an empty <e1> satisfies it. An
+// xsi:type restricting xs:string to xs:token is read through the child's own
+// whiteSpace, so "  present " is "present". Every row is declined instead, and
+// fails, with xpath's ctaAssertionFacade.child declining every child step.
+func TestAssertionReadsChildElementValues(t *testing.T) {
+	nilled := &testAttribute{name: xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: "nil"}, value: "true", loc: loc(2, 6)}
+	token := xsiTypeAttr("xs:token")
+	for _, tc := range []struct {
+		expr    string
+		kids    []Child
+		charged bool
+	}{
+		{"e1 = 'present'", []Child{acKid("e1", 2, "present")}, false},
+		{"e1 = 'present'", []Child{acKid("e1", 2, "absent")}, true},
+		{"e1 = 'present'", nil, true},
+		{"e1 and n", []Child{acKid("e1", 2, "x"), acKid("n", 3, "1")}, false},
+		{"e1 and n", []Child{acKid("e1", 2, "x")}, true},
+		{"n > 9", []Child{acKid("n", 2, "10")}, false},
+		{"n = 2", []Child{acKid("n", 2, "1"), acKid("n", 3, "2")}, false},
+		{"e1", []Child{acKid("e1", 2, "", nilled)}, false},
+		{"e1 = 'present'", []Child{acKid("e1", 2, "", nilled)}, true},
+		{"e1 = ''", []Child{acKid("e1", 2, "", nilled)}, true},
+		{"e1 = ''", []Child{acKid("e1", 2, "")}, false},
+		{"e1 = 'present'", []Child{acKid("e1", 2, "  present ", token)}, false},
+	} {
+		t.Run(tc.expr, func(t *testing.T) {
+			res := aAssess(t, acSchema(t, tc.expr), acRoot(tc.kids...))
+			if !tc.charged {
+				wantSatisfied(t, res, tc.expr)
+				return
+			}
+			wantAssertionCharge(t, res, "the element root is not ·valid· with respect to assertion 1 of 1 in the {assertions} of the ·governing type definition· RootType, whose {test} is ")
+		})
+	}
+}
+
+// A "/"-rooted {test} raises err:XPDY0050: <root> is the root of the instance
+// cvc-assertion clause 1.3 builds, with no document node above it (xpath20.md
+// §3.2), so `/root = 'present'` is charged whatever <root>'s child holds. It
+// is declined instead, and fails, with xpath's assertion façade declining a
+// rooted path.
+func TestAssertionRootedPathIsCharged(t *testing.T) {
+	for _, e1 := range []string{"present", "absent"} {
+		res := aAssess(t, acSchema(t, "/root = 'present'"), acRoot(acKid("e1", 2, e1)))
+		wantAssertionCharge(t, res, `the element root is not ·valid· with respect to assertion 1 of 1 in the {assertions} of the ·governing type definition· RootType, whose {test} is "/root = 'present'",`)
+	}
+}
+
+// A child a {test} reads but whose typed value this package does not read
+// DECLINES every assertion of <root> (walk.childValue), and is never charged:
+// an <n> String Valid rejects is invalid in the partial ·PSVI·, and so is an
+// <n> whose value maps but which carries an attribute its simple type admits
+// none of (cvc-type clause 3.1.1) — the row that is satisfied instead with
+// childValue's recorded check removed; a second <e1> is ·skipped· by the
+// wildcard; an <e1> whose xsi:type EXTENDS xs:string may carry a value of
+// another type. Each of the last two rows is satisfied instead with its own
+// arm removed (assertionCheck.skipped, the restriction check). A child no
+// {test} reads declines nothing, which is the retention gate
+// (assertionCheck.reads): `@x = 1` and `e1 = 'present'` are each evaluated
+// beside an invalid <n>, which only its own charge reports. With reads
+// answering true for every name, both of those rows decline instead.
+func TestAssertionOverAnUnreadableChildIsDeclined(t *testing.T) {
+	x := &testAttribute{name: local("x"), value: "1", loc: loc(1, 10)}
+	for _, tc := range []struct {
+		why, expr string
+		kids      []Child
+		want      string
+	}{
+		{"an invalid child", "n > 0", []Child{acKid("n", 2, "abc")}, "the child element n of the element root"},
+		{"a child invalid for an attribute", "n > 0", []Child{acKid("n", 2, "5", &testAttribute{name: local("stray"), value: "1", loc: loc(2, 6)})},
+			"a violation or an unevaluated check was recorded for it"},
+		{"a skipped child", "e1 = 'present'", []Child{acKid("e1", 2, "present"), acKid("e1", 3, "present")}, "it is ·skipped·"},
+		{"an xsi:type extension", "e1 = 'present'", []Child{acKid("e1", 2, "present", xsiTypeAttr("StrExt"))}, "nor derived from it by restriction"},
+	} {
+		t.Run(tc.why, func(t *testing.T) {
+			acDeclined(t, aAssess(t, acSchema(t, tc.expr), acRoot(tc.kids...)), tc.want)
+		})
+	}
+	for _, expr := range []string{"@x = 1", "e1 = 'present'"} {
+		t.Run("unread invalid child beside "+expr, func(t *testing.T) {
+			root := acRoot(acKid("e1", 2, "present"), acKid("n", 3, "abc"))
+			root.attrs = []Attribute{x}
+			res := aAssess(t, acSchema(t, expr), root)
+			if got := res.Unevaluated(); len(got) != 0 {
+				t.Errorf("Unevaluated() = %v, want none: no {test} reads <n>", messages(got))
+			}
+			for _, v := range res.Violations() {
+				if v.Rule == ruleCvcAssertion {
+					t.Errorf("Violations() holds %v, want the assertion satisfied", v)
+				}
+			}
+		})
+	}
+}
