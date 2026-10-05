@@ -1753,9 +1753,10 @@ const ctaImplicitTimezone = "Z"
 // values are then decided by holdsBetween, which is total over them.
 //
 // The value space's own partial order is left as it is, because the facets
-// read it: a mixed pair is [value.Incomparable] there and unequal, which is
-// right for minInclusive and wrong for XPath, so the substitution happens here
-// and per operand, and never by reading the pair's Incomparable.
+// read it: a mixed pair is never equal there and is [value.Incomparable]
+// within fourteen hours, which is right for minInclusive and wrong for XPath,
+// so the substitution happens here and per operand, and never by reading the
+// pair's Incomparable.
 //
 // Which operators reach here is B.2's answer, settled at compile time: the g*
 // types have eq and ne alone, so an ordering over them is the err:XPTY0004
