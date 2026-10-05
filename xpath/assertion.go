@@ -272,8 +272,12 @@ func (c *Tally) count(path ctaCountPath) (int, bool) {
 
 // fits reports whether c holds exactly one counter for each of paths, in that
 // order — which a Tally [AssertionTest.Tally] made from the test paths was
-// read off holds — and none where paths is empty, a nil c included.
+// read off holds — and is nil where paths is empty, since a test that counts
+// nothing has no Tally and any non-nil c given to it is a breach.
 func (c *Tally) fits(paths []ctaCountPath) bool {
+	if len(paths) == 0 {
+		return c == nil
+	}
 	var held []ctaCounter
 	if c != nil {
 		held = c.counters

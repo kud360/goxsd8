@@ -915,10 +915,10 @@ func (p *ctaParser) castExpr() (ctaValue, bool) {
 // fn:not a constructor call for a built-in datatype, so this one production
 // covers both the constructor spelling of a cast and the "unknown boolean
 // function" reading — there is no third case to distinguish. The one call
-// beyond §3.12.6 is fn:count, which valueExpr hands to countCall instead. The name is a
-// FUNCTION name, resolved as one, and it names the datatype at the same time:
-// an unprefixed int(...) is fn:int, which declares no constructor, and never
-// xs:int.
+// beyond §3.12.6 is fn:count, which valueExpr hands to countCall instead. The
+// name is a FUNCTION name, resolved as one, and it names the datatype at the
+// same time: an unprefixed int(...) is fn:int, which declares no constructor,
+// and never xs:int.
 //
 // The node is castExpr's, with allowsEmpty TRUE unconditionally: xpath20.md
 // §3.10.4 defines T($arg) as (($arg) cast as T?), and the `?` is part of that

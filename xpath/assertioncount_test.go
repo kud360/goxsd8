@@ -174,9 +174,10 @@ func TestAssertionRootedCountRaises(t *testing.T) {
 // holds: `count(e1) eq 0` is satisfied with its own empty Tally and false with
 // none, with one counting another path, and with one counting a further path;
 // `'a' = 'a'`, which counts nothing, is satisfied with no Tally and false with
-// one. The last two false rows are satisfied instead with Tally.fits' check
-// removed from Evaluate; the other two stay false without it, the count node
-// finding no counter for its path (ctaCountItem).
+// one, a zero-value Tally included. The last three false rows are satisfied
+// instead with Tally.fits' check removed from Evaluate, and the zero-value row
+// with only fits' empty-paths guard removed; the other two stay false without
+// the check, the count node finding no counter for its path (ctaCountItem).
 func TestAssertionEvaluateRefusesAMismatchedTally(t *testing.T) {
 	counting := acCompile(t, asRecord("count(e1) eq 0"))
 	other := acCompile(t, asRecord("count(e2) eq 0"))
@@ -194,6 +195,7 @@ func TestAssertionEvaluateRefusesAMismatchedTally(t *testing.T) {
 		{"a Tally counting a further path", counting, wider.Tally(), false},
 		{"no Tally where it counts nothing", plain, nil, true},
 		{"a Tally where it counts nothing", plain, counting.Tally(), false},
+		{"a zero-value Tally where it counts nothing", plain, &Tally{}, false},
 	} {
 		if got := tc.test.Evaluate(backend(), seededTypes, asValues(t), asNoChildren, tc.counts, ValueBinding{}); got != tc.holds {
 			t.Errorf("%s: Evaluate = %v, want %v", tc.why, got, tc.holds)
