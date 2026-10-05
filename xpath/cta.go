@@ -938,6 +938,8 @@ func (p ctaCountPath) selectsElement(path []xsd.QName) bool {
 		return len(path) == 1
 	case ctaCountDescendants:
 		return true
+	case ctaCountOwnAttributes, ctaCountSubtreeAttributes:
+		return false
 	}
 	return false
 }
@@ -954,6 +956,8 @@ func (p ctaCountPath) selectsAttribute(depth int, name xsd.QName) bool {
 		return depth == 0
 	case ctaCountSubtreeAttributes:
 		return depth >= 0
+	case ctaCountChildren, ctaCountDescendants:
+		return false
 	}
 	return false
 }

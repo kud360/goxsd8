@@ -1415,13 +1415,10 @@ func (p *ctaParser) childPathLength(at int) int {
 // OrExpr or of fn:not, or the 'and' or 'or' of the expression enclosing it.
 func (p *ctaParser) closesBoolean(at int) bool {
 	tok := p.peek(at)
-	switch tok.kind {
-	case ctaEOF, ctaRParen:
+	if tok.kind == ctaEOF || tok.kind == ctaRParen {
 		return true
-	case ctaNameTok:
-		return tok.text == "and" || tok.text == "or"
 	}
-	return false
+	return tok.kind == ctaNameTok && (tok.text == "and" || tok.text == "or")
 }
 
 // childPath parses the n tokens childPathLength measured at the cursor as
