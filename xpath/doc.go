@@ -56,7 +56,13 @@
 //     `$value` whose {simple type definition} is classified as such an
 //     attribute's type would be, or is a list of a type that would be; a
 //     `$value` over ·special· content is xs:untypedAtomic, as such an attribute
-//     is. Longer paths, the other axes, predicates, quantified expressions and
+//     is. FacetAssertions is the value.AssertionEvaluator for an assertions
+//     facet's {test} (Datatypes §4.3.13.3, cvc-assertions-valid), over the same
+//     grammar plus [47] ContextItemExpr: `$value` is bound to the value under the
+//     facet's type, and there is no context item, so `.`, an attribute or child
+//     step and a rooted path each raise err:XPDY0002 and fail the facet; a
+//     union's own assertions facet declines. `.` declines everywhere else.
+//     Longer paths, the other axes, predicates, quantified expressions and
 //     the function core are PLANNED (#1042).
 //  3. The full grammar (docs/specs/md/xpath20.md) and function library
 //     (docs/specs/md/xpath-functions.md) — M7 onward, ratcheted.

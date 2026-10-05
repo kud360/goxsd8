@@ -215,7 +215,7 @@ func TestEffectiveWhiteSpaceNoFacetsApplicable(t *testing.T) {
 // a naive caller would read as a false reject.
 func TestValidateLexicalSpecialDatatypesDoNotFault(t *testing.T) {
 	for _, st := range []*xsd.SimpleType{xsd.AnySimpleType(), xsd.AnyAtomicType()} {
-		_, err := ValidateLexical(emptyBackend{}, noSchema{}, st, "  raw  literal  ", nil)
+		_, err := ValidateLexical(emptyBackend{}, noSchema{}, st, "  raw  literal  ", nil, assertionsUndecided{})
 		if err == nil {
 			t.Errorf("ValidateLexical(%s) = nil error, want the ungoverned cvc-datatype-valid error", st.Name())
 			continue
@@ -260,7 +260,7 @@ func TestValidateLexicalUnionWhiteSpaceStageNoPanic(t *testing.T) {
 	union := unionType(t)
 	// emptyBackend maps nothing, so no member of the union is governed and
 	// ValidateLexical returns its normal cvc-datatype-valid error.
-	v, err := ValidateLexical(emptyBackend{}, noSchema{}, union, "  raw  literal  ", nil)
+	v, err := ValidateLexical(emptyBackend{}, noSchema{}, union, "  raw  literal  ", nil, assertionsUndecided{})
 	if err == nil {
 		t.Fatalf("ValidateLexical(union) = (%v, nil), want a real error (no governing mapping)", v)
 	}

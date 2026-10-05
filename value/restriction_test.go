@@ -452,7 +452,7 @@ func TestFacetValueNormalizedAtConstruction(t *testing.T) {
 		t.Fatalf("NewSimpleType: %v", err)
 	}
 
-	v, err := ValidateLexical(b, noSchema{}, st, " 7 ", nil)
+	v, err := ValidateLexical(b, noSchema{}, st, " 7 ", nil, assertionsUndecided{})
 	if err != nil {
 		t.Fatalf("ValidateLexical(\" 7 \") = %v, want the enumeration member 7 to match", err)
 	}
@@ -462,7 +462,7 @@ func TestFacetValueNormalizedAtConstruction(t *testing.T) {
 
 	// The bound really is 9, not an unparsed string: 8 is enumerated and under
 	// the bound, so only the enumeration can reject it, and it does not.
-	if _, err := ValidateLexical(b, noSchema{}, st, "8", nil); err != nil {
+	if _, err := ValidateLexical(b, noSchema{}, st, "8", nil, assertionsUndecided{}); err != nil {
 		t.Errorf("ValidateLexical(\"8\") = %v, want valid under maxInclusive \" 9 \"", err)
 	}
 
@@ -486,7 +486,7 @@ func TestFacetValueNotNormalizedUnderPreserve(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSimpleType: %v", err)
 	}
-	if _, err := ValidateLexical(b, noSchema{}, st, "7", nil); err == nil {
+	if _, err := ValidateLexical(b, noSchema{}, st, "7", nil, assertionsUndecided{}); err == nil {
 		t.Error("ValidateLexical under a preserve base with maxInclusive \" 9 \" = nil error, want the padded facet {value} to be rejected")
 	}
 }

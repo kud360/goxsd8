@@ -1260,7 +1260,7 @@ func (w *walk) attribute(a Attribute, e Element, g governance) {
 // An admitted item is ·attributed to· the wildcard and goes on to
 // [walk.wildcardAttribute]: under a ***strict*** or ***lax*** wildcard it is
 // assessed against the top-level declaration its ·expanded name· ·resolves· to,
-// cvc-attribute clauses 3 and 4 with their assertion sites, and under
+// cvc-attribute clauses 3 and 4 with the assertions facets clause 3 reaches, and under
 // ***skip*** it is not assessed. A NON-admitted item is ·attributed to· nothing
 // (§3.4.4.4), so no wildcard sends it to any declaration, and its own charge is
 // the whole of what this element owes for it.

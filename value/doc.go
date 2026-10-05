@@ -71,6 +71,17 @@
 // typeless attribute (xs:anySimpleType, Structures §3.2.2.2) would otherwise be
 // rejected by every processor that trusted the ID.
 //
+// The last stage is the one this package cannot run itself: an assertions
+// facet's {test}s are XPath 2.0 (cvc-assertions-valid, §4.3.13.3), and package
+// xpath imports this one. [ValidateLexical] and [ValidatingType] therefore take
+// an [AssertionEvaluator], which answers each {test} with an [AssertionOutcome]:
+// a failed one is an ordinary verdict under cvc-assertions-valid, and a declined
+// one is the third non-verdict, which [IsAssertionDeclined] reports and
+// [IsDatatypeVerdict] excludes. GAP(value): this package's own callers of the
+// pipeline that are handed no evaluator — [CheckFacetRestriction], the
+// [xsd.ValueSpace] [NewValueSpace] returns, [ConstraintMatches] — decline every
+// {test}, each fail-open on the terms its own marker states. (#1042)
+//
 // One member of that class has a predicate of its own, because two sites need to
 // know WHICH fault: a type may reach [ValidateLexical] carrying a facet that is not
 // applicable to it at all (cos-applicable-facets §4.1.5) — a bound facet on an
@@ -95,10 +106,12 @@
 // type·): st itself, or the ·active basic member· a union dispatched to. Its
 // own member-identification scan applies a WIDER fault test than the dispatch
 // above does — it declines on any member error that is not [IsDatatypeVerdict],
-// where the dispatch folds anything short of [IsFacetPrecondition] into
-// "rejected" and keeps scanning (dv_union's own #462 gap) — so the two can
-// disagree on which members fault; ValidatingType's doc comment is the
-// authority on why.
+// where the dispatch folds anything short of [IsFacetPrecondition] or
+// [IsAssertionDeclined] into "rejected" and keeps scanning (dv_union's own #462
+// gap) — so the two can disagree on which members fault; ValidatingType's doc
+// comment is the authority on why. Both run each member's assertions facets, so
+// a member one of whose {test}s fails is passed over for a later one
+// (dt-active-member).
 //
 // A facet's OWN {value} goes through the same whiteSpace normalization before it
 // is parsed, once at construction: a facet's {value} property is "a value from

@@ -87,10 +87,14 @@
 //     over the element's typed attributes and children, and charged under
 //     cvc-assertion (§3.13.4.1) where it is false or raises; one xpath does
 //     not compile is recorded as an [Unevaluated] under cvc-assertion. List
-//     item and list, union member and union, atomic: each assertions-facet
-//     site is recorded as an [Unevaluated] under cvc-assertions-valid
-//     (§4.3.13.3) and evaluated at none. No unevaluated site is ever
-//     reported as satisfied (PRINCIPLES 12, cvcassertion.go).
+//     item and list, union member and union, atomic: a simple type's
+//     assertions facet is EVALUATED inside String Valid by
+//     xpath.FacetAssertions wherever the cvc-datatype-valid recursion reaches
+//     it, a failed {test} being part of the Datatype Valid verdict the caller
+//     charges and choosing a union's ·validating type· (dt-active-member); one
+//     it declines is recorded as an [Unevaluated] under cvc-assertions-valid
+//     (§4.3.13.3). No unevaluated site is ever reported as satisfied
+//     (PRINCIPLES 12, cvcassertion.go).
 //   - A *Validator is safe for concurrent use by multiple goroutines: [New]
 //     builds it once from an already-finalized [xsd.Schema] and a
 //     [value.Backend], and every [Validator.Assess] call builds and drops

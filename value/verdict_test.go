@@ -42,7 +42,7 @@ func TestIsDatatypeVerdictSeparatesTypeFaultsFromRejections(t *testing.T) {
 		{"no whiteSpace mode in force", b, noWS, "1", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := ValidateLexical(tc.backend, noSchema{}, tc.t, tc.lexical, nil)
+			_, err := ValidateLexical(tc.backend, noSchema{}, tc.t, tc.lexical, nil, assertionsUndecided{})
 			if err == nil {
 				t.Fatal("ValidateLexical = nil, want an error to classify")
 			}
@@ -55,7 +55,7 @@ func TestIsDatatypeVerdictSeparatesTypeFaultsFromRejections(t *testing.T) {
 	if IsDatatypeVerdict(nil) {
 		t.Error("IsDatatypeVerdict(nil) = true, want false: no error is no verdict")
 	}
-	if _, err := ValidateLexical(b, noSchema{}, prim, "1", nil); err != nil {
+	if _, err := ValidateLexical(b, noSchema{}, prim, "1", nil, assertionsUndecided{}); err != nil {
 		t.Fatalf("ValidateLexical(accepted) = %v, want nil", err)
 	}
 }
@@ -67,7 +67,7 @@ func TestIsDatatypeVerdictSeparatesTypeFaultsFromRejections(t *testing.T) {
 // errFacetPrecondition — one chain, not two encodings.
 func TestTypeFaultKeepsTheRuleAndSubsumesPreconditions(t *testing.T) {
 	prim := vsPrim(t, "int")
-	_, err := ValidateLexical(emptyBackend{}, noSchema{}, prim, "1", nil)
+	_, err := ValidateLexical(emptyBackend{}, noSchema{}, prim, "1", nil, assertionsUndecided{})
 	if err == nil {
 		t.Fatal("ValidateLexical(ungoverned) = nil, want the backend-gap error")
 	}
@@ -82,7 +82,7 @@ func TestTypeFaultKeepsTheRuleAndSubsumesPreconditions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("building the whiteSpace-less type: %v", err)
 	}
-	_, err = ValidateLexical(intBackend{mapped: noWS.Name()}, noSchema{}, noWS, "1", nil)
+	_, err = ValidateLexical(intBackend{mapped: noWS.Name()}, noSchema{}, noWS, "1", nil, assertionsUndecided{})
 	if !IsFacetPrecondition(err) {
 		t.Fatalf("IsFacetPrecondition(%v) = false, want true", err)
 	}

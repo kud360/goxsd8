@@ -73,7 +73,7 @@ func asChildren(t *testing.T, children ...asChild) ChildElements {
 			out = append(out, Child(c.name, nil))
 			continue
 		}
-		v, err := value.ValidateLexical(backend(), seededTypes, asBuiltin(t, c.typ), c.lexical, nil)
+		v, err := value.ValidateLexical(backend(), seededTypes, asBuiltin(t, c.typ), c.lexical, nil, FacetAssertions())
 		if err != nil {
 			t.Fatalf("mapping %q as xs:%s: %v", c.lexical, c.typ, err)
 		}
@@ -206,7 +206,7 @@ func TestAssertionChildStepReadsTheDefaultNamespace(t *testing.T) {
 	str := asBuiltin(t, "string")
 	tns, local := xsd.QName{Space: "urn:t", Local: "e1"}, uq("e1")
 	elems := asElems(map[xsd.QName]xsd.TypeDefinition{tns: str, local: str})
-	present, err := value.ValidateLexical(backend(), seededTypes, str, "present", nil)
+	present, err := value.ValidateLexical(backend(), seededTypes, str, "present", nil, FacetAssertions())
 	if err != nil {
 		t.Fatalf("mapping present: %v", err)
 	}
