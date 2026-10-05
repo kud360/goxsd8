@@ -324,17 +324,27 @@ func (w *walk) keepChild(parent *assertionCheck, e Element, g governance, conten
 //     [Unevaluated] — String Valid over its ·initial value· withheld among
 //     them — leaves its validity undecided;
 //   - e has no ·governing type definition· — ·laxly assessed·, or one this
-//     package could not determine — or one that is not the ·locally declared
-//     type· or derived from it by restriction alone ([xsd.Schema.ValidlySubstitutable]
-//     with extension blocked), so its value may not be one of that type's;
+//     package could not determine — or one that is neither the same as nor
+//     ·validly substitutable· ·without limitation· for the ·locally declared
+//     type· ([xsd.Schema.ValidlySubstitutable] with no blocking keyword). That
+//     is cvc-complex-type clause 5's own test, repeated here because
+//     [walk.locallyDeclaredType] decides that clause in [walk.child], before
+//     e's frame opens, so its charge is not among those recorded covers. Once
+//     it holds, the simple type g.valueType() answers is the answered type
+//     or validly derived from it (cos-st-derived-ok), whose lexical mapping is
+//     a subset of the answered type's: an extension keeps its base's {simple
+//     type definition} (cos-ct-extends clauses 1.4.1 and 2.1), and a
+//     restriction's is validly derived from its base's (derivation-ok-restriction
+//     clause 2.2.2.1; its clause 2.2.2.2 needs a mixed base, which answers no
+//     simple type);
 //   - the [schema normalized value] under e's own type does not map under the
 //     answered type.
 //
 // A ·nilled· e is [xpath.Child] of nil, the empty sequence. Otherwise the value
 // is e's ·initial value· ([contentCheck.assessed], the {value constraint}'s
 // {lexical form} where cvc-elt clause 5.1 substituted it), normalized under e's
-// own type's whiteSpace (normalizedLexical) — a restriction never weakens it —
-// and mapped under the answered type.
+// own type's whiteSpace (normalizedLexical) — an extension keeps it and a
+// restriction never weakens it — and mapped under the answered type.
 func (w *walk) childValue(ct xsd.ComplexType, e Element, g governance, content *contentCheck, recorded bool) (xpath.ChildElement, assertionLack) {
 	lacking := func(why string) (xpath.ChildElement, assertionLack) {
 		return xpath.ChildElement{}, lackingChild{name: e.Name(), loc: e.Loc(), why: why}
@@ -351,9 +361,9 @@ func (w *walk) childValue(ct xsd.ComplexType, e Element, g governance, content *
 		return lacking("it has no ·governing type definition·")
 	}
 	if !sameType(g.typ, ldt) {
-		restricted, err := w.schema.ValidlySubstitutable(g.typ, ldt, []xsd.DerivationMethod{xsd.DerivationExtension})
-		if err != nil || !restricted {
-			return lacking(fmt.Sprintf("its ·governing type definition· %s is neither its ·locally declared type· %s nor derived from it by restriction", typeName(g.typ), typeName(ldt)))
+		substitutable, err := w.schema.ValidlySubstitutable(g.typ, ldt, nil)
+		if err != nil || !substitutable {
+			return lacking(fmt.Sprintf("its ·governing type definition· %s is neither its ·locally declared type· %s nor ·validly substitutable· for it", typeName(g.typ), typeName(ldt)))
 		}
 	}
 	if content.nilled {

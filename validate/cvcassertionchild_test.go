@@ -16,7 +16,9 @@ import (
 //
 // with e1 a {nillable} xs:string and n an xs:int, so a second <e1> is
 // ·attributed to· the skip wildcard and ·skipped·. StrExt is a complex type
-// whose simple content EXTENDS xs:string, which an xsi:type can put on <e1>.
+// whose simple content EXTENDS xs:string, which an xsi:type can put on <e1>:
+// it keeps xs:string as its {simple type definition} (cos-ct-extends clause
+// 2.1), so <e1>'s value is read as one.
 
 // acSchema builds RootType over the assertions exprs, and declares <root>.
 func acSchema(t *testing.T, exprs ...string) *xsd.Schema {
@@ -97,8 +99,11 @@ func acDeclined(t *testing.T, res *Result, want string) {
 // would not. A ·nilled· <e1> is a node with no value (xpath-datamodel §6.2.4):
 // `e1` holds and `e1 = ”` is charged, where an empty <e1> satisfies it. An
 // xsi:type restricting xs:string to xs:token is read through the child's own
-// whiteSpace, so "  present " is "present". Every row is declined instead, and
-// fails, with xpath's ctaAssertionFacade.child declining every child step.
+// whiteSpace, so "  present " is "present", and one naming StrExt, which is
+// ·validly substitutable· for xs:string by extension, is read as xs:string
+// too: both StrExt rows decline instead with walk.childValue blocking
+// extension. Every row is declined instead, and fails, with xpath's
+// ctaAssertionFacade.child declining every child step.
 func TestAssertionReadsChildElementValues(t *testing.T) {
 	nilled := &testAttribute{name: xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: "nil"}, value: "true", loc: loc(2, 6)}
 	token := xsiTypeAttr("xs:token")
@@ -119,6 +124,8 @@ func TestAssertionReadsChildElementValues(t *testing.T) {
 		{"e1 = ''", []Child{acKid("e1", 2, "", nilled)}, true},
 		{"e1 = ''", []Child{acKid("e1", 2, "")}, false},
 		{"e1 = 'present'", []Child{acKid("e1", 2, "  present ", token)}, false},
+		{"e1 = 'present'", []Child{acKid("e1", 2, "present", xsiTypeAttr("StrExt"))}, false},
+		{"e1 = 'present'", []Child{acKid("e1", 2, "absent", xsiTypeAttr("StrExt"))}, true},
 	} {
 		t.Run(tc.expr, func(t *testing.T) {
 			res := aAssess(t, acSchema(t, tc.expr), acRoot(tc.kids...))
@@ -149,10 +156,8 @@ func TestAssertionRootedPathIsCharged(t *testing.T) {
 // <n> whose value maps but which carries an attribute its simple type admits
 // none of (cvc-type clause 3.1.1) — the row that is satisfied instead with
 // childValue's recorded check removed; a second <e1> is ·skipped· by the
-// wildcard; an <e1> whose xsi:type EXTENDS xs:string may carry a value of
-// another type. Each of the last two rows is satisfied instead with its own
-// arm removed (assertionCheck.skipped, the restriction check). A child no
-// {test} reads declines nothing, which is the retention gate
+// wildcard, which is satisfied instead with assertionCheck.skipped removed. A
+// child no {test} reads declines nothing, which is the retention gate
 // (assertionCheck.reads): `@x = 1` and `e1 = 'present'` are each evaluated
 // beside an invalid <n>, which only its own charge reports. With reads
 // answering true for every name, both of those rows decline instead.
@@ -167,7 +172,6 @@ func TestAssertionOverAnUnreadableChildIsDeclined(t *testing.T) {
 		{"a child invalid for an attribute", "n > 0", []Child{acKid("n", 2, "5", &testAttribute{name: local("stray"), value: "1", loc: loc(2, 6)})},
 			"a violation or an unevaluated check was recorded for it"},
 		{"a skipped child", "e1 = 'present'", []Child{acKid("e1", 2, "present"), acKid("e1", 3, "present")}, "it is ·skipped·"},
-		{"an xsi:type extension", "e1 = 'present'", []Child{acKid("e1", 2, "present", xsiTypeAttr("StrExt"))}, "nor derived from it by restriction"},
 	} {
 		t.Run(tc.why, func(t *testing.T) {
 			acDeclined(t, aAssess(t, acSchema(t, tc.expr), acRoot(tc.kids...)), tc.want)
@@ -188,4 +192,28 @@ func TestAssertionOverAnUnreadableChildIsDeclined(t *testing.T) {
 			}
 		})
 	}
+}
+
+// A child whose ·governing type definition· is not ·validly substitutable· for
+// its ·locally declared type· DECLINES <root>'s assertions on walk.childValue's
+// own repeat of cvc-complex-type clause 5, which walk.child charges before the
+// child's frame opens, outside the record childValue reads. wild062's shape:
+// the second <e1> is ·attributed to· the lax wildcard, resolves to no top-level
+// declaration, and is governed by its xsi:type xs:time alone, which is not
+// ·validly substitutable· for the local e1's xs:string. Its "12:20:02" maps
+// under xs:string too, so with childValue's ValidlySubstitutable check removed
+// `e1 = '12:20:02'` is satisfied instead.
+func TestAssertionOverANonSubstitutableChildIsDeclined(t *testing.T) {
+	schema := parsedSchema(t, map[string]string{"main.xsd": `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="RootType">
+    <xs:sequence>
+      <xs:element name="e1" type="xs:string"/>
+      <xs:any namespace="##local" processContents="lax"/>
+    </xs:sequence>
+    <xs:assert test="e1 = '12:20:02'"/>
+  </xs:complexType>
+  <xs:element name="root" type="RootType"/>
+</xs:schema>`})
+	res := aAssess(t, schema, acRoot(acKid("e1", 2, "x"), acKid("e1", 3, "12:20:02", xsiTypeAttr("xs:time"))))
+	acDeclined(t, res, "its ·governing type definition· {"+xsd.XMLSchemaNS+"}time is neither its ·locally declared type· {"+xsd.XMLSchemaNS+"}string nor ·validly substitutable· for it")
 }

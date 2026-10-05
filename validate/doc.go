@@ -397,9 +397,9 @@
 // where it is false or raises a dynamic or type error. A member xpath
 // declines, and every member of an element one of whose use-matched or
 // ·defaulted· attributes has no ·actual value·, one of whose read children is
-// not known ·valid· or not of a restriction of its ·locally declared type·, or
-// whose simple content's ·actual value· is undecided, are recorded as
-// [Unevaluated] under cvc-assertion instead (cvcassertion.go).
+// not known ·valid· or not ·validly substitutable· for its ·locally declared
+// type·, or whose simple content's ·actual value· is undecided, are recorded
+// as [Unevaluated] under cvc-assertion instead (cvcassertion.go).
 //
 // The rest of the cvc- decisions land on the walk [Validator.Assess]
 // already makes. Non-fatal warnings get an accessor of their own the day
