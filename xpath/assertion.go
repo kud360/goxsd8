@@ -43,22 +43,58 @@ import (
 // [TypedAttributes] from one lookup so the two cannot disagree.
 type AttributeTypes func(name xsd.QName) (*xsd.SimpleType, bool)
 
+// TypedValue is the typed value of one attribute node, or of `$value`, in the
+// data model instance cvc-assertion clause 1 builds, as xpath-datamodel
+// §3.3.1.2 (Typed Value Determination) computes it: an ·actual value· of a type
+// fixed at compile time ([Typed]), or a [schema normalized value] "as an
+// instance of xs:untypedAtomic" ([Untyped]), which is the typed value under
+// xs:anySimpleType and xs:anyAtomicType there and in Datatypes dt-xdmrep
+// clause 1. It is a sealed sum of exactly those two arms, so no value carries
+// both a lexical and a typed value (STYLE T1).
+type TypedValue interface{ typedValue() }
+
+// tvTyped is [Typed]'s arm: an ·actual value· of the type the tree holds.
+type tvTyped struct{ v value.Value }
+
+// tvUntyped is [Untyped]'s arm: a [schema normalized value], xs:untypedAtomic.
+type tvUntyped struct{ lexical string }
+
+func (tvTyped) typedValue()   {}
+func (tvUntyped) typedValue() {}
+
+// Typed is the typed value v, an ·actual value· mapped under a type whose
+// typed value is not xs:untypedAtomic. Typed(nil) is nil, so a nil value has
+// one encoding.
+func Typed(v value.Value) TypedValue {
+	if v == nil {
+		return nil
+	}
+	return tvTyped{v: v}
+}
+
+// Untyped is lexical as an instance of xs:untypedAtomic, which lexical must be
+// the [schema normalized value] of: xpath-datamodel §3.3.1.2 makes that the
+// typed value of a node whose type is xs:anySimpleType or xs:anyAtomicType.
+func Untyped(lexical string) TypedValue { return tvUntyped{lexical: lexical} }
+
 // TypedAttributes yields the attributes E carries that matched an {attribute
 // use} of its ·governing type definition·, each as its ·expanded name· and its
-// ·actual value·, in DOCUMENT ORDER (STYLE D1). It must be non-nil, and a
-// yield reporting false ends the walk.
+// typed value, in DOCUMENT ORDER (STYLE D1). It must be non-nil, and a yield
+// reporting false ends the walk.
 //
-// Each value must be of EXACTLY the type [AttributeTypes] answered for its
-// name when the [AssertionTest] being evaluated was compiled: the tree holds
-// that type and converts the value from it. That agreement is the caller's
-// obligation, and it is the same one [BindValue] places on `$value`'s value
-// against the {simple type definition} of the content type the test was
-// compiled for.
+// Each value must be [Typed] of a value of EXACTLY the type [AttributeTypes]
+// answered for its name when the [AssertionTest] being evaluated was compiled:
+// the tree holds that type and converts the value from it. That agreement is
+// the caller's obligation, and it is the same one [BindValue] places on
+// `$value`'s value against the {simple type definition} of the content type the
+// test was compiled for. A value breaking it — nil, or the other arm — is a
+// dynamic error wherever the tree reads it, which [AssertionTest.Evaluate]
+// answers false.
 //
 // Unlike [Attributes], it carries no [inherited attributes]: the XDM instance
 // cvc-assertion clause 1.3 builds contains E's own [[attributes]] and nothing
 // from outside E.
-type TypedAttributes func(yield func(name xsd.QName, v value.Value) bool)
+type TypedAttributes func(yield func(name xsd.QName, v TypedValue) bool)
 
 // ValueBinding is the value cvc-assertion clause 2.3 binds to `$value` for one
 // evaluation. The zero ValueBinding is the empty sequence — clause 2.3.2's
@@ -70,18 +106,18 @@ type TypedAttributes func(yield func(name xsd.QName, v value.Value) bool)
 // always decides, so a caller that cannot tell which of clause 2.3's cases E is
 // in declines the assertion itself, as it does an attribute with no ·actual
 // value·.
-type ValueBinding struct{ v value.Value }
+type ValueBinding struct{ v TypedValue }
 
-// BindValue binds `$value` to E's [schema actual value] v (cvc-assertion clause
-// 2.3.1), which must be of exactly the {simple type definition} of the
-// [xsd.SimpleContent] the [AssertionTest] was compiled for, on the terms
-// [TypedAttributes] states for an attribute's value. A list {simple type
-// definition}'s value must carry [value.Listed], whose items are the
-// flattened sequence Datatypes dt-xdmrep makes its XDM representation.
+// BindValue binds `$value` to the typed value v of E's [schema actual value]
+// (cvc-assertion clause 2.3.1), which must be of exactly the {simple type
+// definition} of the [xsd.SimpleContent] the [AssertionTest] was compiled for,
+// on the terms [TypedAttributes] states for an attribute's value. A list
+// {simple type definition}'s value must carry [value.Listed], whose items are
+// the flattened sequence Datatypes dt-xdmrep makes its XDM representation.
 //
 // BindValue(nil) is the zero ValueBinding, the empty sequence, so the empty
 // sequence has one encoding.
-func BindValue(v value.Value) ValueBinding { return ValueBinding{v: v} }
+func BindValue(v TypedValue) ValueBinding { return ValueBinding{v: v} }
 
 // AssertionTest is a compiled assertion {test}: the expression tree
 // [CompileAssertionTest] admitted for one element's attribute types. It is a

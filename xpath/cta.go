@@ -957,7 +957,11 @@ func (e ctaEffectiveBoolean) eval(env ctaEnv) ctaAnswer {
 	case ctaAttr:
 		return ctaAnswerOf(len(ctaMatchedAttributes(n, env)) != 0)
 	case ctaTypedAttr:
-		return ctaAnswerOf(len(ctaMatchedTyped(n, env)) != 0)
+		matched, ok := ctaMatchedTyped(n, env)
+		if !ok {
+			return ctaError
+		}
+		return ctaAnswerOf(len(matched) != 0)
 	case ctaLiteral:
 		return ctaBoolean(e.operand, n.st, env)
 	case ctaCast:
@@ -1148,18 +1152,22 @@ func ctaItemOf(v ctaValue, c *xsd.SimpleType, env ctaEnv) ctaItem {
 // a list of two or more items is a sequence of that length.
 //
 // The input is ctaTypedInput by construction (ctaInput); the other arm binds
-// nothing and is unreachable. A listed binding whose value does not carry
-// [value.Listed] breaks the obligation [BindValue] states and is ctaRaised,
-// unreachable for a caller that keeps it.
+// nothing and is unreachable. A binding that is not [Typed], and a listed one
+// whose value does not carry [value.Listed], break the obligation [BindValue]
+// states and are ctaRaised, unreachable for a caller that keeps it.
 func ctaValueItem(n ctaValueVar, c *xsd.SimpleType, env ctaEnv) ctaItem {
 	in, typed := env.input.(ctaTypedInput)
 	if !typed || in.value.v == nil {
 		return ctaAtoms{}
 	}
-	if !n.listed {
-		return ctaPromote(in.value.v, n.atom, c, env)
+	bound, isTyped := in.value.v.(tvTyped)
+	if !isTyped {
+		return ctaRaised{}
 	}
-	list, isList := in.value.v.(value.Listed)
+	if !n.listed {
+		return ctaPromote(bound.v, n.atom, c, env)
+	}
+	list, isList := bound.v.(value.Listed)
 	if !isList {
 		return ctaRaised{}
 	}
@@ -1202,30 +1210,41 @@ func ctaMatchedAttributes(n ctaAttr, env ctaEnv) []string {
 
 // ctaMatchedTyped is ctaMatchedAttributes for a typed attribute: the typed
 // values [TypedAttributes] yields under n's ·expanded name·, at most one, each
-// of type n.st by the caller's obligation that type states.
+// of type n.st by the caller's obligation that type states. ok is false where
+// a matched value is not [Typed], which breaks that obligation and which every
+// reader raises on.
 //
 // The input is ctaTypedInput by construction (ctaInput); the other arm matches
 // nothing and is unreachable.
-func ctaMatchedTyped(n ctaTypedAttr, env ctaEnv) []value.Value {
+func ctaMatchedTyped(n ctaTypedAttr, env ctaEnv) (matched []value.Value, ok bool) {
 	in, typed := env.input.(ctaTypedInput)
 	if !typed {
-		return nil
+		return nil, true
 	}
-	var matched []value.Value
-	in.attrs(func(name xsd.QName, v value.Value) bool {
-		if name == n.name {
-			matched = append(matched, v)
+	ok = true
+	in.attrs(func(name xsd.QName, v TypedValue) bool {
+		if name != n.name {
+			return true
 		}
+		tv, isTyped := v.(tvTyped)
+		if !isTyped {
+			ok = false
+			return false
+		}
+		matched = append(matched, tv.v)
 		return true
 	})
-	return matched
+	return matched, ok
 }
 
 // ctaTypedAttrItem converts the matched typed value into c on ctaPromote's
 // terms, which is B.1's promotion or §3.5.2's conversion into the comparison
 // type — never a re-validation of the attribute's lexical, which has none here.
 func ctaTypedAttrItem(n ctaTypedAttr, c *xsd.SimpleType, env ctaEnv) ctaItem {
-	matched := ctaMatchedTyped(n, env)
+	matched, ok := ctaMatchedTyped(n, env)
+	if !ok {
+		return ctaRaised{}
+	}
 	vs := make([]value.Value, 0, len(matched))
 	for _, v := range matched {
 		converted, ok := ctaValidated(ctaPromote(v, n.st, c, env))

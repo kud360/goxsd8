@@ -60,9 +60,9 @@ func asValues(t *testing.T, attrs ...asTyped) TypedAttributes {
 		}
 		vs = append(vs, v)
 	}
-	return func(yield func(xsd.QName, value.Value) bool) {
+	return func(yield func(xsd.QName, TypedValue) bool) {
 		for i, a := range attrs {
-			if !yield(a.name, vs[i]) {
+			if !yield(a.name, Typed(vs[i])) {
 				return
 			}
 		}
@@ -290,7 +290,7 @@ func asBind(t *testing.T, st *xsd.SimpleType, lexical string) ValueBinding {
 	if err != nil {
 		t.Fatalf("mapping %q against %s: %v", lexical, st.Name(), err)
 	}
-	return BindValue(v)
+	return BindValue(Typed(v))
 }
 
 // `$value` over a SIMPLE {content type} is E's ·actual value· under its {simple
@@ -393,7 +393,7 @@ func TestAssertionValueOverListContent(t *testing.T) {
 		if err != nil {
 			t.Fatalf("mapping %q against the list: %v", tc.lexical, err)
 		}
-		if got := test.Evaluate(backend(), types, asValues(t), BindValue(v)); got != tc.want {
+		if got := test.Evaluate(backend(), types, asValues(t), BindValue(Typed(v))); got != tc.want {
 			t.Errorf("Evaluate(%q) over %q = %v, want %v", tc.expr, tc.lexical, got, tc.want)
 		}
 	}

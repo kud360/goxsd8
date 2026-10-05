@@ -203,7 +203,7 @@ func (w *walk) assertionTypes(attrs []Attribute, ct xsd.ComplexType) xpath.Attri
 // reads it.
 type assertionValue struct {
 	name xsd.QName
-	v    value.Value
+	v    xpath.TypedValue
 }
 
 // assertionInput is what one element's assertions read: its typed attributes,
@@ -214,7 +214,7 @@ type assertionInput struct {
 }
 
 // yield is the attributes as an [xpath.TypedAttributes].
-func (in assertionInput) yield(yield func(xsd.QName, value.Value) bool) {
+func (in assertionInput) yield(yield func(xsd.QName, xpath.TypedValue) bool) {
 	for _, a := range in.attrs {
 		if !yield(a.name, a.v) {
 			return
@@ -291,7 +291,7 @@ func (w *walk) assertionValues(e Element, attrs []Attribute, ct xsd.ComplexType,
 		if err != nil {
 			return assertionInput{}, lackingAttribute{name: a.Name()}
 		}
-		in.attrs = append(in.attrs, assertionValue{name: a.Name(), v: v})
+		in.attrs = append(in.attrs, assertionValue{name: a.Name(), v: xpath.Typed(v)})
 	}
 	bound, decided := w.assertionValue(e, ct, content, invalid)
 	if !decided {
@@ -342,7 +342,7 @@ func (w *walk) assertionValue(e Element, ct xsd.ComplexType, content *contentChe
 	if err != nil {
 		return xpath.ValueBinding{}, false
 	}
-	return xpath.BindValue(v), true
+	return xpath.BindValue(xpath.Typed(v)), true
 }
 
 // simpleAssertions records every assertions-facet site st carries through
