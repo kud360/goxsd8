@@ -8,7 +8,7 @@ import (
 // This file is the ASSERTION façade over the §3.12.6 grammar compileCTATest
 // parses (STYLE T4): an {assertions} member's {test} (§3.13.1) written in that
 // grammar is compiled and evaluated against the element it guards, which
-// cvc-assertion (§3.13.4.1) asks of it. It is the first slices of tier 2
+// cvc-assertion (§3.13.4.1) asks of it. It holds the first slices of tier 2
 // (doc.go) and nothing wider: the grammar is the Type Alternative one, widened
 // only where the façade admits a production (ctaFacade) — an assertion's
 // instance is TYPED.

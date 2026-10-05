@@ -21,7 +21,7 @@ import (
 // ctaFacade.rooted), so a Type Alternative's {test} reaches none of them. Every
 // method below is named for the production it parses, and the whole grammar is
 // both reached and evaluated: no method here is a stub, and the
-// production-level declines are those two façade methods'. xpath/doc.go owns
+// production-level declines are those four façade methods'. xpath/doc.go owns
 // the enumeration of what declines; every other decline reaching this file is
 // ctaTypes answering ctaTypeDeclined for a comparison type, a cast target or a
 // cast operand it will not serve, or the façade declining a NameTest, a
