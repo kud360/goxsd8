@@ -389,11 +389,16 @@ type fixedConstraint struct {
 // FinalizeWith carries an undecided value space, so that check may never have
 // run; the instance walk has no sound verdict to give in its place.
 //
-// GAP(xpath): a {test} the evaluator declines on either side is undecided too,
-// and so is a {lexical form} that fails one of st's {test}s, which no assembly
-// charges because the [xsd.ValueSpace]'s ValidDefault declines every {test};
-// both charge nothing and are recorded as above, on the terms
+// GAP(xpath): a {test} the evaluator declines on either side is undecided too;
+// it charges nothing and is recorded as above, on the terms
 // [value.ConstraintMatches] states. (#1042)
+//
+// A {lexical form} that fails one of st's {test}s charges nothing and is
+// recorded as above as well: the ValidDefault of the [xsd.ValueSpace]
+// [value.NewValueSpace] returns runs the pipeline with no evaluator of its own
+// and declines every {test} (its gate 2's GAP(value)), so such a {lexical form}
+// is charged by no assembly, and is undecided here rather than NOT-same all the
+// same.
 //
 // GAP(value): a NOTATION {lexical form} naming no declared notation, tracked by
 // #667. [value.ConstraintMatches] answers it undecided, not NOT-same, because no

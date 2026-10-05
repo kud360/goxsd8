@@ -598,11 +598,13 @@ func (c *contentCheck) fixedLexical(w *walk, f xsd.ValueConstraint) {
 // ordinary one's closure through [xpath.FacetAssertions]. An undecided
 // comparison charges nothing, on [walk.fixedAgreement]'s terms and for the
 // same reasons: an ungoverned type, a ·special· one whose literals some member
-// of that union cannot compare, a {lexical form} outside its own type's lexical
-// space or failing one of its {test}s, and a {test} the evaluator declines on
-// either side are a gap in this processor or a schema fault, not the
-// instance's. It is recorded as an [Unevaluated] instead
+// of that union cannot compare, and a {lexical form} outside its own type's
+// lexical space or failing one of its {test}s are a gap in this processor or a
+// schema fault, not the instance's. It is recorded as an [Unevaluated] instead
 // ([contentCheck.decline]), the clause having been reached and not performed.
+//
+// GAP(xpath): a {test} the evaluator declines on either side is undecided too,
+// and declines here on [walk.fixedAgreement]'s terms. (#1042)
 //
 // GAP(value): a NOTATION {lexical form} naming no declared notation, tracked by
 // #667, declines here on [walk.fixedAgreement]'s terms: ValidDefault's gate 1
