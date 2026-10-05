@@ -111,12 +111,13 @@
 //     declares, a declaration in a parameter entity's replacement text
 //     counting for neither) or, directly or through other entities'
 //     replacement text, WFC: Parsed Entity, No Recursion, No External Entity
-//     References or No < in Attribute Values, whether or not the default is
-//     ever applied — a validity constraint on either declaration is no fault;
-//     replacement text ending inside a comment, processing instruction or
-//     markup declaration; and a '<' in the DOCTYPE header, a subset no ']'
-//     closes, or text other than S between that ']' and '>' ([28]
-//     doctypedecl). A processing instruction between the subset's declarations
+//     References or No < in Attribute Values, or a '&' in such replacement
+//     text that begins no Reference (§4.4.5, [67]), whether or not the
+//     default is ever applied — a validity constraint on either declaration is
+//     no fault; replacement text ending inside a comment, processing
+//     instruction or markup declaration; and a '<' in the DOCTYPE header, a
+//     subset no ']' closes, or text other than S between that ']' and '>'
+//     ([28] doctypedecl). A processing instruction between the subset's declarations
 //     runs to the "?>" that alone closes it ([16] PI), whatever '>', '<' or
 //     quote it holds (internal/xmltok), and one no "?>" closes fails as the
 //     decoder's syntax error at the end of input. The external subset is never
@@ -150,9 +151,11 @@
 //     the reference; in an attribute value, normalized per §3.3.3 together
 //     with the rest of that value. Nested references expand at inclusion
 //     (§4.5). A recursive reference, a '<' in replacement text an attribute
-//     value includes, replacement text that is not balanced content, and, in
-//     a standalone="yes" document, a reference to an entity declared only in
-//     a parameter entity's replacement text (WFC: Entity Declared) are
+//     value includes, a '&' in included replacement text that begins no
+//     Reference (a literal's `&#38;` puts one there; §4.4.2, [67]),
+//     replacement text that is not balanced content, and, in a
+//     standalone="yes" document, a reference to an entity declared only in a
+//     parameter entity's replacement text (WFC: Entity Declared) are
 //     RuleXMLWellFormed faults. A reference past the reader's bound on
 //     nesting depth or on replacement text included per document is refused,
 //     as is a reference to an entity that is not internal or whose

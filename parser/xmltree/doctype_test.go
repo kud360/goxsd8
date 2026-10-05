@@ -393,7 +393,8 @@ func TestSubsetStrayTextIsNotWellFormed(t *testing.T) {
 
 // wantSubsetFault reads doc to its first error, which must be the
 // well-formedness fault want, whole, and must leave pic undeclared: a faulty
-// subset declares nothing.
+// subset declares nothing. The fault must wrap no cause: the subset's checks
+// are definite faults (doc.go's Contract).
 func wantSubsetFault(t *testing.T, doc, want string) {
 	t.Helper()
 	r := xmltree.NewReader("t.xml", strings.NewReader(doc))
@@ -407,6 +408,9 @@ func wantSubsetFault(t *testing.T, doc, want string) {
 	wantWellFormednessError(t, err)
 	if err.Error() != want {
 		t.Errorf("error = %q, want %q", err, want)
+	}
+	if errors.Unwrap(err) != nil {
+		t.Errorf("error %v wraps the cause %v, want a definite fault wrapping none", err, errors.Unwrap(err))
 	}
 	if r.HasUnparsedEntity("pic") {
 		t.Errorf("HasUnparsedEntity(%q) = true, want false: the subset is not well-formed", "pic")

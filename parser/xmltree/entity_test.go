@@ -262,3 +262,70 @@ func TestEntityDeclaredOnlyInParameterEntity(t *testing.T) {
 		})
 	}
 }
+
+// TestEntityAmpersandBeginsNoReference charges a '&' in included replacement
+// text that begins no Reference (XML 1.0 §4.4.2, §4.4.5, [67] Reference) as a
+// fault the reader charges itself, wrapping no cause, at the outermost
+// reference and naming the entity whose replacement text holds it: a literal
+// spelling it `&#38;` or `&#x26;`, in an attribute value and in content; a
+// ';' after it that closes no Name; one an included entity's replacement text
+// holds; and one in an attribute value of a start tag replacement text holds.
+// Each control reads: a '&' its literal spelled `&#38;` that begins a CharRef,
+// to '<' or to '&', or an EntityRef to a declared entity, and one inside a
+// comment or a CDATA section. An EntityRef so spelled to an undeclared entity
+// is the reader's refusal, wrapping a cause, as TestEntityReferenceRefusedUnread
+// refuses one.
+func TestEntityAmpersandBeginsNoReference(t *testing.T) {
+	const msg = "[xml-wf] the replacement text of entity %s holds a '&' that begins no Reference, '&' Name ';' or a character reference (XML 1.0 §4.4.2, [67] Reference, [68] EntityRef, [66] CharRef)"
+	for _, tc := range []struct {
+		subset, root, want string
+	}{
+		{`<!ENTITY e "a&#38;b">`, `<r a="&e;"/>`, "d.xml:1:37: " + fmt.Sprintf(msg, "e")},
+		{`<!ENTITY e "a&#38;b">`, `<r>&e;</r>`, "d.xml:1:40: " + fmt.Sprintf(msg, "e")},
+		{`<!ENTITY e "a&#x26;b">`, `<r a="&e;"/>`, "d.xml:1:38: " + fmt.Sprintf(msg, "e")},
+		{`<!ENTITY e "a&#x26;b">`, `<r>&e;</r>`, "d.xml:1:41: " + fmt.Sprintf(msg, "e")},
+		{`<!ENTITY e "a&#38;b c;">`, `<r a="&e;"/>`, "d.xml:1:40: " + fmt.Sprintf(msg, "e")},
+		{`<!ENTITY e "a&#38;b c;">`, `<r>&e;</r>`, "d.xml:1:43: " + fmt.Sprintf(msg, "e")},
+		{`<!ENTITY f "a&#38;b"><!ENTITY e "x&f;">`, `<r a="&e;"/>`, "d.xml:1:55: " + fmt.Sprintf(msg, "f")},
+		{`<!ENTITY f "a&#38;b"><!ENTITY e "x&f;">`, `<r>&e;</r>`, "d.xml:1:58: " + fmt.Sprintf(msg, "f")},
+		{`<!ENTITY e "<b v='a&#38;b'/>">`, `<r>&e;</r>`, "d.xml:1:49: " + fmt.Sprintf(msg, "e")},
+	} {
+		t.Run(tc.subset+tc.root, func(t *testing.T) {
+			_, err := collect(t, "d.xml", `<!DOCTYPE r [`+tc.subset+`]>`+tc.root)
+			wantWellFormednessError(t, err)
+			if errors.Unwrap(err) != nil {
+				t.Errorf("error %v wraps the cause %v, want a charge wrapping none", err, errors.Unwrap(err))
+			}
+			if fmt.Sprint(err) != tc.want {
+				t.Errorf("error = %q, want %q", err, tc.want)
+			}
+		})
+	}
+	for _, tc := range []struct {
+		subset, root, want string
+	}{
+		{`<!ENTITY e "a&#38;#60;b">`, `<r a="&e;">&e;</r>`, `<r a="a<b">"a<b"</r>`},
+		{`<!ENTITY e "a&#38;#38;b">`, `<r a="&e;">&e;</r>`, `<r a="a&b">"a&b"</r>`},
+		{`<!ENTITY b "v"><!ENTITY e "a&#38;b;">`, `<r a="&e;">&e;</r>`, `<r a="av">"av"</r>`},
+		{`<!ENTITY e "<!-- &#38; --><![CDATA[&#38;]]>x">`, `<r>&e;</r>`, `<r>"&x"</r>`},
+	} {
+		t.Run(tc.subset+tc.root, func(t *testing.T) {
+			nodes, err := collect(t, "d.xml", `<!DOCTYPE r [`+tc.subset+`]>`+tc.root)
+			if err != nil {
+				t.Fatalf("Token: %v", err)
+			}
+			if got := render(nodes); got != tc.want {
+				t.Errorf("read %s\n want %s", got, tc.want)
+			}
+		})
+	}
+	for _, root := range []string{`<r a="&e;"/>`, `<r>&e;</r>`} {
+		t.Run(root, func(t *testing.T) {
+			_, err := collect(t, "d.xml", `<!DOCTYPE r [<!ENTITY e "a&#38;b;">]>`+root)
+			wantWellFormednessError(t, err)
+			if errors.Unwrap(err) == nil || !strings.Contains(fmt.Sprint(err), "&b;") {
+				t.Errorf("error %v: want the refusal of &b;, wrapping its cause", err)
+			}
+		})
+	}
+}
