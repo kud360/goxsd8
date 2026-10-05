@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/kud360/goxsd8/builtin"
@@ -1763,4 +1764,93 @@ func TestDatatypesD34Cohort(t *testing.T) {
 	if got := mustPrimitive(derived).Name().Local; got != "precisionDecimal" {
 		t.Errorf("decMaxExclusive_MinInclusive.Primitive() = %q, want precisionDecimal", got)
 	}
+}
+
+// declineEvery is the value.AssertionEvaluator that declines every {test}, so
+// any type carrying an assertions facet comes back from value.ValidateLexical
+// with a value.IsAssertionDeclined error.
+type declineEvery struct{}
+
+func (declineEvery) Evaluate(value.Backend, xsd.TypeResolver, *xsd.SimpleType, xsd.XPathExpression, value.Value) value.AssertionOutcome {
+	return value.AssertionDeclined
+}
+
+// TestMustNotBePreconditionOrDeclinePanicsOnADecline pins the guard's assertions
+// half: an assertions-facet decline is a non-verdict no type this lane
+// synthesizes can produce, so handing it one fails the run rather than letting an
+// .nK case score it as an agreement. A verdict, nil and a type fault (a pattern
+// naming an unrecognized category, which regex.Translate cannot express and
+// value.IsDatatypeVerdict also excludes) pass through: the guard refuses exactly
+// its two classes.
+func TestMustNotBePreconditionOrDeclinePanicsOnADecline(t *testing.T) {
+	backend := strict.New()
+	types, err := builtin.Seed(backend)
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	var decimal *xsd.SimpleType
+	for _, ty := range types {
+		if ty.Name() == (xsd.QName{Space: xsd.XMLSchemaNS, Local: "decimal"}) {
+			decimal = ty
+			break
+		}
+	}
+	if decimal == nil {
+		t.Fatal("xs:decimal not seeded")
+	}
+	restrict := func(local string, f xsd.Facet) *xsd.SimpleType {
+		t.Helper()
+		st, err := synthSimpleType(xsd.QName{Local: local}, xsd.RestrictionDerivation{}, decimal, []xsd.Facet{f})
+		if err != nil {
+			t.Fatalf("synthSimpleType(%s): %v", local, err)
+		}
+		return st
+	}
+	asserting := restrict("asserting", xsd.NewAssertionsFacet([]xsd.Assertion{
+		xsd.NewAssertion(xsd.NewXPathExpression("$value ge 0", nil, nil, nil)),
+	}))
+	unexpressible := restrict("unexpressible", xsd.NewFacet(xsd.FacetPattern, []string{`\p{Zz}`}, false))
+	c := caseSpec{id: "probe/mustNotBePreconditionOrDecline"}
+	for _, tc := range []struct {
+		name      string
+		st        *xsd.SimpleType
+		lexical   string
+		typeFault bool
+		wantPanic string
+	}{
+		{name: "an assertions decline", st: asserting, lexical: "7",
+			wantPanic: "conformance: case probe/mustNotBePreconditionOrDecline: value.ValidateLexical reported an assertions-facet decline on \"7\""},
+		{name: "a verdict", st: asserting, lexical: "seven"},
+		{name: "nil", st: decimal, lexical: "7"},
+		{name: "a type fault", st: unexpressible, lexical: "7", typeFault: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, verr := value.ValidateLexical(backend, noSchema{}, tc.st, tc.lexical, nil, declineEvery{})
+			if tc.wantPanic != "" && !value.IsAssertionDeclined(verr) {
+				t.Fatalf("premise: ValidateLexical(%s, %q) = %v, want an assertions decline", tc.st.Name().Local, tc.lexical, verr)
+			}
+			if tc.typeFault && (verr == nil || value.IsDatatypeVerdict(verr) || value.IsFacetPrecondition(verr) || value.IsAssertionDeclined(verr)) {
+				t.Fatalf("premise: ValidateLexical(%s, %q) = %v, want a type fault", tc.st.Name().Local, tc.lexical, verr)
+			}
+			got := panicOf(func() { mustNotBePreconditionOrDecline(verr, c, tc.lexical) })
+			if tc.wantPanic == "" && got != "" {
+				t.Fatalf("mustNotBePreconditionOrDecline(%v) panicked: %s", verr, got)
+			}
+			if !strings.HasPrefix(got, tc.wantPanic) {
+				t.Errorf("mustNotBePreconditionOrDecline(%v) panic = %q, want prefix %q", verr, got, tc.wantPanic)
+			}
+		})
+	}
+}
+
+// panicOf runs f and returns what it panicked with, rendered, or "" if it
+// returned normally.
+func panicOf(f func()) (msg string) {
+	defer func() {
+		if r := recover(); r != nil {
+			msg = fmt.Sprint(r)
+		}
+	}()
+	f()
+	return ""
 }

@@ -93,8 +93,11 @@
 //     it, a failed {test} being part of the Datatype Valid verdict the caller
 //     charges and choosing a union's ·validating type· (dt-active-member); one
 //     it declines is recorded as an [Unevaluated] under cvc-assertions-valid
-//     (§4.3.13.3). No unevaluated site is ever reported as satisfied
-//     (PRINCIPLES 12, cvcassertion.go).
+//     (§4.3.13.3). The same evaluator maps both sides of a fixed-value
+//     comparison (cvc-attribute clause 4, cvc-au, cvc-elt clause 5.2.2.2.2,
+//     value.ConstraintMatches), where a {test} it declines or fails leaves
+//     that clause's own [Unevaluated]. No unevaluated site is ever reported as
+//     satisfied (PRINCIPLES 12, cvcassertion.go).
 //   - A *Validator is safe for concurrent use by multiple goroutines: [New]
 //     builds it once from an already-finalized [xsd.Schema] and a
 //     [value.Backend], and every [Validator.Assess] call builds and drops

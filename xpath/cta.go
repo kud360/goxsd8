@@ -447,9 +447,9 @@ type ctaCompare struct {
 }
 
 // ctaValueCompare is a value comparison (xpath20.md §3.5.1), [10]
-// ComparisonExpr's ValueComp arm, which only the assertion façade admits
-// (ctaFacade.comparesValues). Its comparison type — the one type §3.5.1 converts
-// both atomized operands into — was settled at compile time by
+// ComparisonExpr's ValueComp arm, which only the assertion and facet façades
+// admit (ctaFacade.comparesValues). Its comparison type — the one type §3.5.1
+// converts both atomized operands into — was settled at compile time by
 // ctaTypes.valueComparison, so the node is B.2-legal by construction as a
 // ctaCompare is.
 //

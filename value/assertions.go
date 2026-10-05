@@ -50,9 +50,9 @@ const (
 //
 // Its one consumer is the pipeline's assertions stage, which runs after every
 // other value facet has accepted v; validate injects package xpath's
-// implementation (xpath.FacetAssertions) at every [ValidateLexical] and
-// [ValidatingType] call. An implementation answers [AssertionDeclined] for a
-// {test} it cannot evaluate, never a guess.
+// implementation (xpath.FacetAssertions) at every [ValidateLexical],
+// [ValidatingType] and [ConstraintMatches] call. An implementation answers
+// [AssertionDeclined] for a {test} it cannot evaluate, never a guess.
 type AssertionEvaluator interface {
 	Evaluate(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, test xsd.XPathExpression, v Value) AssertionOutcome
 }
@@ -101,13 +101,13 @@ func IsAssertionDeclined(err error) bool {
 }
 
 // assertionsUndecided is the [AssertionEvaluator] this package's own
-// schema-time and value-space callers pass — [CheckFacetRestriction], the
-// [xsd.ValueSpace] [NewValueSpace] returns, and [ConstraintMatches] — none of
-// which is handed an evaluator by its caller. It declines every {test}: this
-// package has no XPath engine of its own, and answering [AssertionHolds] would
-// accept a value an assertion rejects. GAP(value): each of the three therefore
-// leaves undecided what an assertions facet in a type's closure would decide;
-// each states its own consumers and direction at its marker. (#1042)
+// schema-time callers pass — [CheckFacetRestriction] and the [xsd.ValueSpace]
+// [NewValueSpace] returns — neither of which is handed an evaluator by its
+// caller. It declines every {test}: this package has no XPath engine of its
+// own, and answering [AssertionHolds] would accept a value an assertion
+// rejects. GAP(value): each of the two therefore leaves undecided what an
+// assertions facet in a type's closure would decide; each states its own
+// consumers and direction at its marker. (#1042)
 type assertionsUndecided struct{}
 
 // Evaluate declines every {test}.

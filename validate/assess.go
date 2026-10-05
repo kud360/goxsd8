@@ -907,8 +907,8 @@ func (w *walk) localGovernance(e Element, ldt xsd.TypeDefinition) governance {
 // rather than of the instance: cvc-elt clause 5.1.1
 // ([contentCheck.defaultValid]). It is not derived state to be re-derived per
 // call: the constructor is total on a non-nil backend and the result is
-// immutable, so building it per ·defaulted attribute· would allocate once per
-// use per element to reach the same object. nodes counts the element information
+// immutable, so building it on that arm would allocate once per element
+// reaching it to reach the same object. nodes counts the element information
 // items the walk has entered, and the count doubles as each one's IDENTITY:
 // §3.11.5's conflict resolution turns on "the same key-sequence but distinct
 // nodes" and §3.17.5.2's [binding] is a SET of elements, and an [Element] is an

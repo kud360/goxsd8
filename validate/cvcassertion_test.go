@@ -871,3 +871,109 @@ func TestUnevaluatedIsNotAnError(t *testing.T) {
 		t.Fatal("*Unevaluated satisfies error; it must carry no Error method on either receiver")
 	}
 }
+
+// aFixedTypes is the pair the fixed-value comparisons read: NonNegative
+// restricts xs:integer with `$value ge 0`, which the facet evaluator admits,
+// and InRange with `$value = 1 to 10`, which it declines.
+func aFixedTypes(t *testing.T) []*xsd.SimpleType {
+	t.Helper()
+	return []*xsd.SimpleType{
+		aRestriction(t, "NonNegative", integerType(), "$value ge 0"),
+		aRestriction(t, "InRange", integerType(), "$value = 1 to 10"),
+	}
+}
+
+// aFixedAttributeAssessed assesses <root n="lexical"/>, n declared of type typ
+// with the fixed {value constraint} fixed.
+func aFixedAttributeAssessed(t *testing.T, typ, fixed, lexical string) *Result {
+	t.Helper()
+	vc := xsd.NewValueConstraint(xsd.ValueFixed, fixed, nil, nil)
+	uses := []xsd.AttributeUse{typedUse(t, "n", local(typ), false, &vc, nil)}
+	schema := aSchema(t, aComplexType(t, uses, xsd.EmptyContent{}, nil), aFixedTypes(t)...)
+	return aAssess(t, schema, valuedRoot("n", lexical))
+}
+
+// aFixedElementAssessed assesses <root>lexical</root>, root declared of type
+// typ with the fixed {value constraint} fixed.
+func aFixedElementAssessed(t *testing.T, typ, fixed, lexical string) *Result {
+	t.Helper()
+	b := xsd.NewSchemaBuilder()
+	aTypes(t, b, aFixedTypes(t)...)
+	vc := xsd.NewValueConstraint(xsd.ValueFixed, fixed, nil, nil)
+	d, err := xsd.NewElementDeclaration(xsderr.Loc{}, local("root"),
+		xsd.TypeDefinitionRef{Name: local(typ)}, nil, xsd.NewGlobalScope(),
+		&vc, false, nil, nil, nil, false, nil)
+	if err != nil {
+		t.Fatalf("building the root element declaration: %v", err)
+	}
+	b.AddElement(d)
+	schema, err := b.Finalize()
+	if err != nil {
+		t.Fatalf("finalizing the fixed-element schema: %v", err)
+	}
+	return aAssess(t, schema, cRoot("#"+lexical))
+}
+
+// wantFixedCharge fails unless res charged exactly one violation under rule,
+// its message opening with prefix and naming clause, and recorded nothing as
+// unevaluated.
+func wantFixedCharge(t *testing.T, res *Result, rule xsderr.Rule, prefix, clause, why string) {
+	t.Helper()
+	got := res.Violations()
+	if len(got) != 1 || got[0].Rule != rule {
+		t.Fatalf("%s: Violations() = %v, want one %s charge", why, got, rule)
+	}
+	if !strings.HasPrefix(got[0].Msg, prefix) || !strings.Contains(got[0].Msg, clause) {
+		t.Errorf("%s: Msg = %q, want it to open %q and name %s", why, got[0].Msg, prefix, clause)
+	}
+	if u := res.Unevaluated(); len(u) != 0 {
+		t.Errorf("%s: Unevaluated() = %v, want none", why, messages(u))
+	}
+}
+
+// cvc-attribute clause 4 compares the attribute's ·actual value· with the fixed
+// {value} through the type's whole pipeline, assertions facet included
+// (cvc-datatype-valid clause 3, value.ConstraintMatches): "+7" and a fixed "7"
+// are one xs:integer, so nothing is charged or recorded, and "5" — valid under
+// `$value ge 0`, so cvc-attribute clause 3 is satisfied — is a different value,
+// charged under clause 4 alone. With value.ConstraintMatches handed an
+// evaluator that declines every {test}, both comparisons are undecided, each
+// row records a clause 4 Unevaluated and charges nothing, and both fail.
+func TestFixedAttributeComparesThroughItsAssertionsFacet(t *testing.T) {
+	wantSatisfied(t, aFixedAttributeAssessed(t, "NonNegative", "7", "+7"), "+7 against a fixed 7")
+	wantFixedCharge(t, aFixedAttributeAssessed(t, "NonNegative", "7", "5"), "cvc-attribute",
+		`the ·actual value· of the attribute n is neither equal nor identical to the {value} of the fixed {value constraint} "7" on its attribute declaration`,
+		"cvc-attribute clause 4", "5 against a fixed 7")
+}
+
+// cvc-elt clause 5.2.2.2.2 makes the same comparison for an element whose
+// ·governing type definition· is simple: "+7" agrees with a fixed "7", and "5"
+// is charged under clause 5.2.2.2.2 alone, cvc-type clause 3.1.3 being
+// satisfied by `$value ge 0`. With value.ConstraintMatches handed an evaluator
+// that declines every {test}, the "5" row records a 5.2.2.2.2 Unevaluated and
+// charges nothing, and fails.
+func TestFixedElementComparesThroughItsAssertionsFacet(t *testing.T) {
+	wantSatisfied(t, aFixedElementAssessed(t, "NonNegative", "7", "+7"), "+7 against a fixed 7")
+	wantFixedCharge(t, aFixedElementAssessed(t, "NonNegative", "7", "5"), "cvc-elt",
+		`the ·actual value· of the element root is neither equal nor identical to the {value} of the fixed {value constraint} "7"`,
+		"cvc-elt clause 5.2.2.2.2", "5 against a fixed 7")
+}
+
+// The guard: a {test} the facet evaluator declines leaves the fixed-value
+// comparison undecided, and nothing is charged. "4" against a fixed "7" is a
+// NOT-same pair, so a decided comparison would charge cvc-elt clause
+// 5.2.2.2.2; instead clause 3.1.3 records the declined InRange facet under
+// cvc-assertions-valid and the comparison records its own clause 5.2.2.2.2
+// decline. With FacetAssertions answering AssertionHolds where it declines,
+// the row is charged and fails.
+func TestFixedElementWithADeclinedAssertionIsUndecided(t *testing.T) {
+	res := aFixedElementAssessed(t, "InRange", "7", "4")
+	if got := res.Violations(); len(got) != 0 {
+		t.Fatalf("Violations() = %v, want none: a declined {test} decides nothing", got)
+	}
+	got := res.Unevaluated()
+	if len(got) != 2 || got[0].Rule() != "cvc-assertions-valid" || got[1].Rule() != "cvc-elt" ||
+		!strings.Contains(got[1].Msg(), "cvc-elt clause 5.2.2.2.2 is undecided") {
+		t.Errorf("Unevaluated() = %v, want the InRange facet's cvc-assertions-valid record then the cvc-elt clause 5.2.2.2.2 decline", messages(got))
+	}
+}

@@ -889,7 +889,7 @@ func newEnumFacet(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, ef xsd.Effe
 
 // xmlNamespaceURI is the single reserved, implicitly-bound XML namespace prefix
 // (Namespaces in XML §3): "xml" is bound by definition with no declaration.
-// "xmlns" is deliberately NOT a resolvable prefix — it names
+// "xmlns" deliberately gets no implicit binding — it names
 // namespace-declaration attributes, not a binding (WG ruling, bugzilla 4053).
 const xmlNamespaceURI = "http://www.w3.org/XML/1998/namespace"
 
@@ -901,9 +901,11 @@ const xmlNamespaceURI = "http://www.w3.org/XML/1998/namespace"
 // <element>/<attribute> element ([ConstraintContext], valuespace.go). Its
 // reserved-prefix rules match conformance.nsContext exactly (value cannot import
 // the test-only conformance package, so this is a small second implementation of
-// the same logic): "xml" is always bound, "xmlns" is never bindable, and the
-// empty prefix resolves to the {default namespace} if one is in scope
-// (element-name semantics) else to no namespace.
+// the same logic): "xml" is always bound, "xmlns" gets no case of its own —
+// bound only where the captured bindings carry it, which no schema document
+// can declare (Namespaces in XML §3) — and the empty prefix resolves to the
+// {default namespace} if one is in scope (element-name semantics) else to no
+// namespace.
 //
 // It is a value type, so every caller has a usable context and there is no
 // nil-Context path to reason about. The map is an internal lookup, never ranged
@@ -937,14 +939,14 @@ func newMemberContext(m xsd.EnumerationMember) nsContext {
 }
 
 // LookupNamespace resolves prefix per §3.3.18. The reserved prefix "xml" is
-// always bound (Namespaces in XML §3); "xmlns" is never bound (it falls through
-// to the unbound branch). The empty prefix (an unprefixed literal) binds to the
-// {default namespace} if in scope, else to no namespace (ok=true, "") —
-// element-name semantics, so an unprefixed literal is never rejected as unbound.
-// A declared non-empty prefix resolves to its binding; any other non-empty prefix
-// is genuinely unbound (ok=false), which the mapping's Parse turns into a
-// rejection — remapped to src-enumeration-value (§4.3.5.3) for a facet member,
-// and read as undecided for a value constraint (valuespace.go).
+// always bound (Namespaces in XML §3); "xmlns" has no case of its own, so it is
+// bound only where the captured bindings carry it. The empty prefix (an
+// unprefixed literal) binds to the {default namespace} if in scope, else to no
+// namespace (ok=true, "") — element-name semantics, so an unprefixed literal is
+// never rejected as unbound. A declared non-empty prefix resolves to its binding;
+// any other non-empty prefix is genuinely unbound (ok=false), which the mapping's
+// Parse turns into a rejection — remapped to src-enumeration-value (§4.3.5.3) for
+// a facet member, and read as undecided for a value constraint (valuespace.go).
 func (c nsContext) LookupNamespace(prefix string) (namespace string, ok bool) {
 	if prefix == "xml" {
 		return xmlNamespaceURI, true
