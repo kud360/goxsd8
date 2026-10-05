@@ -58,12 +58,12 @@ func TestFacetAssertionsDecideTheValue(t *testing.T) {
 }
 
 // FacetAssertions declines a {test} outside the grammar CompileAssertionTest
-// admits — arithmetic over a non-numeric `$value`, a function call, a
-// variable other than `$value`, the abbreviated parent step — and every
-// {test} of a union's own assertions facet, whose `$value` is typed by an
-// ·active basic member· the evaluator is not handed (dt-xdmrep clause 4),
-// even one that reads nothing: the `'a' = 'a'` row holds with Evaluate's
-// union check removed.
+// admits — arithmetic over a non-numeric `$value`, a call to a function
+// outside the string and sequence core, a variable other than `$value`, the
+// abbreviated parent step — and every {test} of a union's own assertions
+// facet, whose `$value` is typed by an ·active basic member· the evaluator
+// is not handed (dt-xdmrep clause 4), even one that reads nothing: the `'a'
+// = 'a'` row holds with Evaluate's union check removed.
 func TestFacetAssertionsDecline(t *testing.T) {
 	str := asBuiltin(t, "string")
 	union := asUnion(t)
@@ -73,7 +73,7 @@ func TestFacetAssertionsDecline(t *testing.T) {
 		st   *xsd.SimpleType
 	}{
 		{"$value mod 2 = 0", str},
-		{"ends-with($value, 'x')", str},
+		{"upper-case($value) = 'X'", str},
 		{"$other = 'x'", str},
 		{".. = 'x'", str},
 		{"$value = 'x'", union},

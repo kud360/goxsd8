@@ -17,20 +17,23 @@ import (
 // {test} reaches: xpath20.md [23] ValueComp, [44] VarRef, an abbreviated
 // child-axis step whose NodeTest is a QName ([31] AbbrevForwardStep, §3.2.1.1),
 // a "/" or "//" opening [25] PathExpr over one such step or one attribute step,
-// an fn:count call ([48] FunctionCall) over one counted path, the binary
-// operators of [13] AdditiveExpr and [14] MultiplicativeExpr, and [47]
-// ContextItemExpr `.`, which only the facet façade admits — each behind the
-// façade (ctaFacade.comparesValues, ctaFacade.variable, ctaFacade.child,
-// ctaFacade.rooted, ctaFacade.count, ctaFacade.computes,
-// ctaFacade.contextItem), so a Type Alternative's {test} reaches none of them.
-// Every method below is named for the production it parses, and the whole
-// grammar is both reached and evaluated: no method here is a stub, and the
-// production-level declines are those seven façade methods'. xpath/doc.go owns
-// the enumeration of what declines; every other decline reaching this file is
-// ctaTypes answering ctaTypeDeclined for a comparison type, a cast target or a
-// cast operand it will not serve, ctaTypes.arithmetic declining an operand
-// pair, or the façade declining a NameTest, a variable's type or a settled
-// comparison type, which the production that asked propagates unchanged.
+// an fn:count call ([48] FunctionCall) over one counted path, a call to one of
+// the F&O string and sequence functions (libraryCall) whose arguments are
+// additive expressions or `()`, the binary operators of [13] AdditiveExpr and
+// [14] MultiplicativeExpr, and [47] ContextItemExpr `.`, which only the facet
+// façade admits — each behind the façade (ctaFacade.comparesValues,
+// ctaFacade.variable, ctaFacade.child, ctaFacade.rooted, ctaFacade.count,
+// ctaFacade.callsLibrary, ctaFacade.computes, ctaFacade.contextItem), so a
+// Type Alternative's {test} reaches none of them. Every method below is named
+// for the production it parses, and the whole grammar is both reached and
+// evaluated: no method here is a stub, and the production-level declines are
+// those eight façade methods'. xpath/doc.go owns the enumeration of what
+// declines; every other decline reaching this file is ctaTypes answering
+// ctaTypeDeclined for a comparison type, a cast target or a cast operand it
+// will not serve, ctaTypes.arithmetic declining an operand pair, a library
+// call of an arity its function does not have, or the façade declining a
+// NameTest, a variable's type or a settled comparison type, which the
+// production that asked propagates unchanged.
 
 // ctaFunctionNS is the default function namespace of a {test}'s static context
 // (xpath-valid clause 2.2.4, §3.13.6.2), which an unprefixed [12]
@@ -43,8 +46,9 @@ const ctaFunctionNS = "http://www.w3.org/2005/xpath-functions"
 // function calls to fn:not".
 var ctaNotFunction = xsd.QName{Space: ctaFunctionNS, Local: "not"}
 
-// ctaCountFunction is fn:count (xpath-functions.md §15.4.1), the one function
-// a [14] ta-ValueExpr calls that is not a constructor (ctaParser.countCall).
+// ctaCountFunction is fn:count (xpath-functions.md §15.4.1), which a [14]
+// ta-ValueExpr calls on the assertion façade alone (ctaParser.countCall); the
+// other functions it calls but the constructors are ctaParser.libraryCall's.
 var ctaCountFunction = xsd.QName{Space: ctaFunctionNS, Local: "count"}
 
 // ctaNames holds the {namespace bindings} and the {default namespace} of one
@@ -264,6 +268,10 @@ const (
 	// NCName character and never this token, so `a-1` is one name.
 	ctaPlusTok
 	ctaMinusTok
+	// ctaCommaTok is ',', which separates the arguments of a call to one of the
+	// F&O functions the façade admits (ctaParser.arguments) and is read nowhere
+	// else, so a comma in any other position is a token no production takes.
+	ctaCommaTok
 )
 
 // ctaToken is one token, identified by kind. text carries the source spelling
@@ -314,6 +322,9 @@ func ctaTokenize(s string) ([]ctaToken, bool) {
 			i++
 		case r == '-':
 			toks = append(toks, ctaToken{kind: ctaMinusTok})
+			i++
+		case r == ',':
+			toks = append(toks, ctaToken{kind: ctaCommaTok})
 			i++
 		case strings.HasPrefix(s[i:], "//"):
 			toks = append(toks, ctaToken{kind: ctaSlashSlashTok})
@@ -902,16 +913,219 @@ func (p *ctaParser) arithmetic(op ctaArithOp, left, right ctaValue) (ctaValue, b
 }
 
 // valueExpr parses [14] ta-ValueExpr, dispatching on whether a function call
-// opens it, and on whether that function is fn:count, the one the assertion
-// façade calls (countCall), or a constructor.
+// opens it, and on which function it calls: fn:count, which the assertion
+// façade calls (countCall), one of the F&O functions a façade that calls the
+// library admits (ctaFacade.callsLibrary, libraryCall), or a constructor.
+//
+// The gate is asked before the name is: where the façade calls no library
+// function, every name but fn:count is a constructor call, so a Type
+// Alternative's {test} reaches castTarget with it and declines, and its grammar
+// stays at fn:not (§3.12.6 clause 3).
 func (p *ctaParser) valueExpr() (ctaValue, bool) {
-	if p.at(ctaNameTok) && p.peek(1).kind == ctaLParen {
-		if p.functionName(p.peek(0).text) == ctaCountFunction {
-			return p.countCall()
-		}
-		return p.constructorFunction()
+	if !p.at(ctaNameTok) || p.peek(1).kind != ctaLParen {
+		return p.castExpr()
 	}
-	return p.castExpr()
+	name := p.functionName(p.peek(0).text)
+	if name == ctaCountFunction {
+		return p.countCall()
+	}
+	if p.facade.callsLibrary() && name.Space == ctaFunctionNS {
+		return p.libraryCall(name.Local)
+	}
+	return p.constructorFunction()
+}
+
+// libraryCall parses a call, xpath20.md [48] FunctionCall, to the function
+// named local in the default function namespace, where it is one of the F&O
+// functions the assertion and facet façades admit (ctafunc.go), and is a
+// constructorFunction for every other local, where castTarget declines it.
+// The name is matched here and nowhere else, and no node stores it.
+func (p *ctaParser) libraryCall(local string) (ctaValue, bool) {
+	switch local {
+	case "contains":
+		return p.matchCall(ctaContains)
+	case "starts-with":
+		return p.matchCall(ctaStartsWith)
+	case "ends-with":
+		return p.matchCall(ctaEndsWith)
+	case "string-length":
+		return p.unaryStringCall(ctaStringLength)
+	case "normalize-space":
+		return p.unaryStringCall(ctaNormalizeSpace)
+	case "string":
+		return p.stringCall()
+	case "empty":
+		return p.presenceCall(ctaEmptyTest)
+	case "exists":
+		return p.presenceCall(ctaExistsTest)
+	case "true", "false":
+		return p.constantCall(local)
+	}
+	return p.constructorFunction()
+}
+
+// arguments parses the parenthesized argument list of a call whose name the
+// cursor is on, xpath20.md [48] FunctionCall's `"(" (ExprSingle ("," ExprSingle)*)?
+// ")"`, each argument as argument parses it. The arity is the caller's to
+// check, before it builds a node.
+func (p *ctaParser) arguments() ([]ctaValue, bool) {
+	p.advance() // the function name
+	p.advance() // '('
+	if p.at(ctaRParen) {
+		p.advance()
+		return nil, true
+	}
+	var args []ctaValue
+	for {
+		arg, ok := p.argument()
+		if !ok {
+			return nil, false
+		}
+		args = append(args, arg)
+		if p.at(ctaRParen) {
+			p.advance()
+			return args, true
+		}
+		if !p.at(ctaCommaTok) {
+			return nil, false
+		}
+		p.advance()
+	}
+}
+
+// argument parses one argument of a library call: an additiveExpr operand, or
+// the empty sequence `()` (xpath20.md [46] ParenthesizedExpr with no Expr),
+// which is admitted in argument position only and compiles to the statically
+// empty ctaEmptyValue. Every other parenthesized expression declines here, as
+// it does in an arithmetic operand's position.
+func (p *ctaParser) argument() (ctaValue, bool) {
+	if p.at(ctaLParen) && p.peek(1).kind == ctaRParen {
+		p.advance()
+		p.advance()
+		return ctaEmptyValue{}, true
+	}
+	return p.additiveExpr()
+}
+
+// matchCall parses a call to fn:contains, fn:starts-with or fn:ends-with (op)
+// with its two xs:string? arguments (xpath-functions.md §7.5.1–7.5.3), whose
+// result is xs:boolean. Every other arity declines (err:XPST0017, withheld on
+// [CompileAssertionTest]'s terms), and so does a boolean that does not
+// resolve.
+//
+// GAP(xpath): the three-argument form, whose third argument names a collation
+// (§7.3.1), declines rather than being evaluated — and is never evaluated as
+// the two-argument form, which compares under the default collation alone. The
+// direction is the withhold [CompileAssertionTest] reports. (#1042)
+func (p *ctaParser) matchCall(op ctaMatchOp) (ctaValue, bool) {
+	args, ok := p.arguments()
+	if !ok || len(args) != 2 {
+		return nil, false
+	}
+	boolean, resolved := p.types.simple(ctaBuiltin("boolean"))
+	if !resolved {
+		return nil, false
+	}
+	return ctaMatch{op: op, left: p.types.stringArgument(args[0]), right: p.types.stringArgument(args[1]), st: boolean}, true
+}
+
+// unaryStringCall parses a call to fn:string-length or fn:normalize-space (op)
+// with its one xs:string? argument, or with none, which F&O makes the string
+// value of the context item: `f(fn:string(.))` (xpath-functions.md §7.4.4,
+// §7.4.5), whose `.` is argumentOrDot's and whose fn:string is stringOf's. Two
+// or more arguments decline, and so does a result type that does not resolve.
+func (p *ctaParser) unaryStringCall(op ctaUnaryStringOp) (ctaValue, bool) {
+	args, ok := p.arguments()
+	if !ok || len(args) > 1 {
+		return nil, false
+	}
+	arg, ok := p.argumentOrDot(args)
+	if !ok {
+		return nil, false
+	}
+	if len(args) == 0 {
+		if arg, ok = p.stringOf(arg); !ok {
+			return nil, false
+		}
+	}
+	st, resolved := p.types.simple(op.resultType())
+	if !resolved {
+		return nil, false
+	}
+	return ctaUnaryString{op: op, arg: p.types.stringArgument(arg), st: st}, true
+}
+
+// argumentOrDot is the one argument args holds, or, where it holds none, the
+// context item `.`, which is p.facade's (ctaFacade.contextItem): the assertion
+// façade declines it, and the facet façade's raises err:XPDY0002.
+func (p *ctaParser) argumentOrDot(args []ctaValue) (ctaValue, bool) {
+	if len(args) == 1 {
+		return args[0], true
+	}
+	return p.facade.contextItem()
+}
+
+// stringCall parses a call to fn:string with its one `item()?` argument, or
+// with none, which is the context item `.` (xpath-functions.md §2.3). Two or
+// more arguments decline.
+func (p *ctaParser) stringCall() (ctaValue, bool) {
+	args, ok := p.arguments()
+	if !ok || len(args) > 1 {
+		return nil, false
+	}
+	arg, ok := p.argumentOrDot(args)
+	if !ok {
+		return nil, false
+	}
+	return p.stringOf(arg)
+}
+
+// stringOf builds fn:string over arg: "the same string as is returned by the
+// expression "$arg cast as xs:string"" for an atomic value (xpath-functions.md
+// §2.3), which is a ctaCast to xs:string admitted on castsFrom's terms and
+// allowing the empty sequence, which ctaStringFunction maps to the zero-length
+// string. A node's string-value is the same string wherever castsFrom admits
+// the node: the string-value of an attribute or of an element of simple type is
+// its [schema normalized value] (xpath-datamodel :1562, :1307), which for the
+// xs:string family is its typed value; every other typed node declines under
+// castsFrom's GAP(xpath).
+func (p *ctaParser) stringOf(arg ctaValue) (ctaValue, bool) {
+	if !p.types.castsFrom(arg) {
+		return nil, false
+	}
+	return ctaStringFunction{cast: ctaCast{operand: arg, target: p.types.str, allowsEmpty: true}}, true
+}
+
+// presenceCall parses a call to fn:empty or fn:exists (op) with its one
+// `item()*` argument (xpath-functions.md §15.1.4, §15.1.5), which is not
+// atomized, and whose result is xs:boolean. Every other arity declines, and so
+// does a boolean that does not resolve.
+func (p *ctaParser) presenceCall(op ctaPresenceOp) (ctaValue, bool) {
+	args, ok := p.arguments()
+	if !ok || len(args) != 1 {
+		return nil, false
+	}
+	boolean, resolved := p.types.simple(ctaBuiltin("boolean"))
+	if !resolved {
+		return nil, false
+	}
+	return ctaPresence{op: op, operand: args[0], st: boolean}, true
+}
+
+// constantCall parses a call to fn:true or fn:false, named local, with no
+// argument (xpath-functions.md §9.1.1, §9.1.2), into the ctaLiteral of the
+// xs:boolean it returns, whose lexical local is. An argument declines, and so
+// does a boolean that does not resolve.
+func (p *ctaParser) constantCall(local string) (ctaValue, bool) {
+	args, ok := p.arguments()
+	if !ok || len(args) != 0 {
+		return nil, false
+	}
+	boolean, resolved := p.types.simple(ctaBuiltin("boolean"))
+	if !resolved {
+		return nil, false
+	}
+	return ctaLiteral{text: local, st: boolean}, true
 }
 
 // countCall parses an fn:count call, xpath20.md [48] FunctionCall with one
@@ -1028,11 +1242,12 @@ func (p *ctaParser) castExpr() (ctaValue, bool) {
 // §3.12.6 clause 3 makes every QName '(' SimpleValue ')' whose name is not
 // fn:not a constructor call for a built-in datatype, so this one production
 // covers both the constructor spelling of a cast and the "unknown boolean
-// function" reading — there is no third case to distinguish. The one call
-// beyond §3.12.6 is fn:count, which valueExpr hands to countCall instead. The
-// name is a FUNCTION name, resolved as one, and it names the datatype at the
-// same time: an unprefixed int(...) is fn:int, which declares no constructor,
-// and never xs:int.
+// function" reading — there is no third case to distinguish. The calls beyond
+// §3.12.6 are fn:count and, on a façade that calls the library, the F&O
+// functions libraryCall names, which valueExpr hands to countCall and
+// libraryCall instead. The name is a FUNCTION name, resolved as one, and it
+// names the datatype at the same time: an unprefixed int(...) is fn:int,
+// which declares no constructor, and never xs:int.
 //
 // The node is castExpr's, with allowsEmpty TRUE unconditionally: xpath20.md
 // §3.10.4 defines T($arg) as (($arg) cast as T?), and the `?` is part of that

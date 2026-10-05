@@ -25,7 +25,7 @@ import (
 // assertion reads untyped too: its typed value is xs:untypedAtomic
 // (xpath-datamodel §3.3.1.2), so both façades build the same node for it.
 //
-// The assertion façade widens the grammar by FIVE productions the Type
+// The assertion façade widens the grammar by SIX productions the Type
 // Alternative façade declines: the eq/ne/lt/le/gt/ge value comparisons
 // (xpath20.md §3.5.1, [23] ValueComp), in [11] ta-BooleanExpr's comparator
 // position; three more arms of [16] ta-SimpleValue — the variable reference
@@ -35,11 +35,14 @@ import (
 // (§3.2.1.1), which reads E's element [[children]], whose typed values
 // cvc-assertion clause 1.2's partial ·PSVI· holds; and a path opening with "/"
 // or "//" over one child or attribute step, which raises err:XPDY0050 over
-// that instance (§3.2); and an fn:count call (xpath-functions.md §15.4.1) in
-// [14] ta-ValueExpr's position, over one counted path of E's subtree, whose
-// counts a [Tally] carries. It also admits xpath20.md §3.4's binary arithmetic
-// operators over numeric operands (ctaFacade.computes), in each comparison
-// operand's position.
+// that instance (§3.2); an fn:count call (xpath-functions.md §15.4.1) in [14]
+// ta-ValueExpr's position, over one counted path of E's subtree, whose counts
+// a [Tally] carries; and, in the same position, a call to one of the F&O
+// string and sequence functions [CompileAssertionTest] lists
+// (ctaFacade.callsLibrary, ctafunc.go), whose argument may also be the empty
+// sequence `()`. It also admits xpath20.md §3.4's binary arithmetic operators
+// over numeric operands (ctaFacade.computes), in each comparison operand's
+// position.
 
 // AttributeTypes answers, for the element information item E whose assertions
 // are being compiled, the {type definition} an attribute of E with the
@@ -318,11 +321,17 @@ type AssertionTest struct{ root ctaExpr }
 //
 // The grammar is [CompileCTATest]'s with the value comparisons, `$value`, an
 // abbreviated child-axis step, a "/" or "//" opening one child or attribute
-// step, an fn:count call, and the binary arithmetic operators `+`, `-`, `*`,
-// `div`, `idiv` and `mod` (xpath20.md §3.4) added, and every decline
-// [CompileCTATest] states is this one's too, under the same static context
-// (xpath-valid clause 2.2) augmented with `$value` (cvc-assertion clause 2.2),
-// plus these, each of which is the same withhold:
+// step, an fn:count call, the binary arithmetic operators `+`, `-`, `*`,
+// `div`, `idiv` and `mod` (xpath20.md §3.4), and a call to one of the F&O
+// string and sequence functions — fn:contains, fn:starts-with and
+// fn:ends-with with two arguments, fn:string-length, fn:normalize-space and
+// fn:string with one, fn:empty and fn:exists with one, and fn:true and fn:false
+// with none (xpath-functions.md §7.5.1–7.5.3, §7.4.4, §7.4.5, §2.3, §15.1.4,
+// §15.1.5, §9.1.1, §9.1.2), any argument of which may be the empty sequence
+// `()` — added, and every decline [CompileCTATest] states is this one's too,
+// under the same static context (xpath-valid clause 2.2) augmented with
+// `$value` (cvc-assertion clause 2.2), plus these, each of which is the same
+// withhold:
 //
 //   - an attribute NameTest that is not a QName: a [37] Wildcard can match an
 //     attribute ·attributed to· an {attribute wildcard}, whose type is not
@@ -361,7 +370,23 @@ type AssertionTest struct{ root ctaExpr }
 //     other type — and an xs:float operand against an xs:double or
 //     xs:untypedAtomic one, which needs B.1 rule 1.1 (#889); a unary `+` or
 //     `-`, and a parenthesized operand, which [11]'s `(` arm reads as a
-//     boolean expression.
+//     boolean expression;
+//   - a call to fn:contains, fn:starts-with or fn:ends-with with a third,
+//     collation argument (§7.3.1), which is never read as the two-argument
+//     form, and a call to any of the functions above with an arity it does not
+//     have (err:XPST0017);
+//   - fn:string-length, fn:normalize-space and fn:string with no argument,
+//     whose implicit argument is E's string value, read through `.`, which this
+//     engine builds no node for;
+//   - fn:string over a typed attribute, a typed child, an fn:count call, an
+//     arithmetic result, `$value` or a function result outside the xs:string
+//     family, which is the cast the bullet above declines.
+//
+// An xs:string? argument — of every function above but fn:empty, fn:exists and
+// fn:string — of any type outside the xs:string and xs:anyURI families is not a
+// decline: xpath20.md §3.1.5's function conversion raises err:XPTY0004 for each
+// item it yields, an absent attribute's empty sequence being the zero-length
+// string, and so does a `$value` of two or more items.
 //
 // A counted step consults neither attrs nor elems: fn:count does not atomize
 // its argument (xpath-functions.md §15.4.1, `$arg as item()*`), so the step's
@@ -384,10 +409,10 @@ type AssertionTest struct{ root ctaExpr }
 // above is this engine's limit and not the spec's license: paths of more than
 // one step, axes beyond the attribute step, one child step and the one counted
 // step, children whose type is not one simple type, arithmetic outside the
-// numeric operands and the binary operators, and the F&O function library but
-// fn:count among them. The direction is the withhold: the caller
-// records the assertion as unevaluated and neither charges it nor shows it
-// satisfied (PRINCIPLES 20). (#1042)
+// numeric operands and the binary operators, the collation argument, and every
+// F&O function but fn:count and those listed above among them. The direction
+// is the withhold: the caller records the assertion as unevaluated and neither
+// charges it nor shows it satisfied (PRINCIPLES 20). (#1042)
 //
 // types is read as [CompileCTATest] reads it and stored nowhere.
 func CompileAssertionTest(expr xsd.XPathExpression, types xsd.TypeResolver, content xsd.ContentType, attrs AttributeTypes, elems ElementTypes) (AssertionTest, bool) {
@@ -409,7 +434,8 @@ func CompileAssertionTest(expr xsd.XPathExpression, types xsd.TypeResolver, cont
 // boolean-rooted tree already is.
 //
 // So false is ONE answer for two outcomes the caller treats alike — the {test}
-// was false, or it raised (err:FORG0001, err:XPTY0004, err:FORG0006,
+// was false, or it raised (err:FORG0001, err:XPTY0004, which a function
+// argument's conversion or cardinality raises too, err:FORG0006,
 // err:XPDY0050, err:FOAR0001 for a `div`, `idiv` or `mod` by zero over
 // xs:decimal or xs:integer operands and for any `idiv` by zero, err:FOAR0002
 // for an `idiv` over a NaN operand or an infinite dividend or whose quotient
@@ -553,6 +579,23 @@ func (n ctaArith) readsChild(name xsd.QName) bool {
 	return n.left.readsChild(name) || n.right.readsChild(name)
 }
 
+// readsChild reports whether either argument holds a ctaTypedChild naming
+// name.
+func (n ctaMatch) readsChild(name xsd.QName) bool {
+	return n.left.operand.readsChild(name) || n.right.operand.readsChild(name)
+}
+
+// readsChild reports whether the argument holds a ctaTypedChild naming name.
+func (n ctaUnaryString) readsChild(name xsd.QName) bool { return n.arg.operand.readsChild(name) }
+
+// readsChild reports whether the operand holds a ctaTypedChild naming name:
+// fn:exists over a child step reads which children exist off [ChildElements].
+func (n ctaPresence) readsChild(name xsd.QName) bool { return n.operand.readsChild(name) }
+
+// readsChild reports whether the cast fn:string is holds a ctaTypedChild naming
+// name.
+func (n ctaStringFunction) readsChild(name xsd.QName) bool { return n.cast.readsChild(name) }
+
 // readsChild is false for each of these: none is a child-axis step or holds an
 // operand.
 func (ctaAttr) readsChild(xsd.QName) bool           { return false }
@@ -599,6 +642,24 @@ func (n ctaCast) counted(into []ctaCountPath) []ctaCountPath { return n.operand.
 // left one first.
 func (n ctaArith) counted(into []ctaCountPath) []ctaCountPath {
 	return n.right.counted(n.left.counted(into))
+}
+
+// counted appends each path either argument counts over, the left one first.
+func (n ctaMatch) counted(into []ctaCountPath) []ctaCountPath {
+	return n.right.operand.counted(n.left.operand.counted(into))
+}
+
+// counted appends each path the argument counts over.
+func (n ctaUnaryString) counted(into []ctaCountPath) []ctaCountPath {
+	return n.arg.operand.counted(into)
+}
+
+// counted appends each path the operand counts over.
+func (n ctaPresence) counted(into []ctaCountPath) []ctaCountPath { return n.operand.counted(into) }
+
+// counted appends each path the cast fn:string is counts over.
+func (n ctaStringFunction) counted(into []ctaCountPath) []ctaCountPath {
+	return n.cast.counted(into)
 }
 
 // counted appends the call's path where it is relative; a rooted argument
@@ -652,6 +713,10 @@ func (ctaAssertionFacade) comparesValues() bool { return true }
 // computes is true, on comparesValues' terms: §3.4's arithmetic is in full
 // XPath 2.0.
 func (ctaAssertionFacade) computes() bool { return true }
+
+// callsLibrary is true, on comparesValues' terms: the F&O function library is
+// in full XPath 2.0.
+func (ctaAssertionFacade) callsLibrary() bool { return true }
 
 // ctaValueName is the ·expanded name· of the one variable an assertion's
 // static context holds (cvc-assertion clause 2.3): "no namespace URI and ...

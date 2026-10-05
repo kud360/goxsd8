@@ -150,8 +150,8 @@ func (c *content) chars(s string, at func(int) int64, src bool, open []string) e
 		}
 		loc := c.r.locAt(at(i))
 		end := strings.IndexByte(s[i:], ';')
-		if end < 0 {
-			return unterminated(loc)
+		if end < 0 || !isReference(s[i+1:i+end]) {
+			return noReference(loc, open)
 		}
 		name := s[i+1 : i+end]
 		text, entity, err := c.r.reference(name, loc)
@@ -174,7 +174,10 @@ func (c *content) chars(s string, at func(int) int64, src bool, open []string) e
 // include parses text, the replacement text of the entity name referenced at
 // offset ref, as content (XML 1.0 §4.4.2, §4.3.2 well-formed parsed entity):
 // an element it opens must close in it, and it closes none it did not open.
-// Every node it produces is located at the reference.
+// Every node it produces is located at the reference. A syntax error the
+// decoder finds in a token holding a '&' that begins no Reference is that
+// fault, charged wrapping no cause (noReference, strayInToken); any other is
+// wrapped as the cause.
 func (c *content) include(name, text string, ref int64, open []string) error {
 	loc := c.r.locAt(ref)
 	open, err := c.r.charge(name, text, loc, open)
@@ -192,6 +195,9 @@ func (c *content) include(name, text string, ref int64, open []string) error {
 			break
 		}
 		if err != nil {
+			if strayInToken(text[from:]) {
+				return noReference(loc, open)
+			}
 			return xsderr.Wrap(xsderr.RuleXMLWellFormed, loc, fmt.Errorf("in the replacement text of entity %s: %w", name, err))
 		}
 		raw := text[from:dec.InputOffset()]
@@ -203,6 +209,24 @@ func (c *content) include(name, text string, ref int64, open []string) error {
 		return xsderr.New(xsderr.RuleXMLWellFormed, loc, "element %s opened in the replacement text of entity %s does not close in it (XML 1.0 §4.3.2, [43] content)", qname(c.r.stack[len(c.r.stack)-1].name), name)
 	}
 	return nil
+}
+
+// strayInToken reports whether src, replacement text from the first byte of
+// the token the decoder failed to read, holds a '&' that begins no Reference
+// (strayAmp) in that token: in character data, which runs to the next '<', or
+// in an attribute value of a start tag, which runs to the '>' outside its
+// literals that closes it. A comment, CDATA section, processing instruction,
+// end tag or unclosed start tag holds none it checks.
+func strayInToken(src string) bool {
+	if !strings.HasPrefix(src, "<") {
+		data, _, _ := strings.Cut(src, "<")
+		return strayAmp(data)
+	}
+	end := outsideQuotes(src, ">")
+	if end < 0 || strings.HasPrefix(src, "<!") || strings.HasPrefix(src, "<?") || strings.HasPrefix(src, "</") {
+		return false
+	}
+	return slices.ContainsFunc(attrSources(src[:end]), strayAmp)
 }
 
 // token reads one token of replacement text, whose source is raw, into c.
@@ -255,10 +279,19 @@ func (r *Reader) charge(name, text string, loc xsderr.Loc, open []string) ([]str
 	return append(slices.Clip(open), name), nil
 }
 
-// unterminated charges a '&' that no ';' closes, which begins no Reference
-// (XML 1.0 [67]) and may not stand as data ([10] AttValue, [14] CharData).
-func unterminated(loc xsderr.Loc) error {
-	return xsderr.New(xsderr.RuleXMLWellFormed, loc, "'&' begins no reference: no ';' closes it (XML 1.0 [67] Reference)")
+// noReference charges a '&' that begins no Reference (XML 1.0 [67]): no ';'
+// closes it, or what stands before the ';' is neither an EntityRef's Name
+// ([68]) nor a CharRef's digits ([66]) (see isReference). It may stand as data
+// in neither an attribute value ([10] AttValue) nor content ([14] CharData),
+// and replacement text is reparsed where it is included (§4.4.2, §4.4.5), so a
+// '&' a literal spelled `&#38;` or `&#x26;` is this fault wherever the entity
+// is referenced, unless a Reference follows it (§4.5, Appendix D). open names
+// the inclusions the '&' is part of, outermost first.
+func noReference(loc xsderr.Loc, open []string) error {
+	if len(open) == 0 {
+		return xsderr.New(xsderr.RuleXMLWellFormed, loc, "'&' begins no Reference, '&' Name ';' or a character reference (XML 1.0 [67] Reference, [68] EntityRef, [66] CharRef)")
+	}
+	return xsderr.New(xsderr.RuleXMLWellFormed, loc, "the replacement text of entity %s holds a '&' that begins no Reference, '&' Name ';' or a character reference (XML 1.0 §4.4.2, [67] Reference, [68] EntityRef, [66] CharRef)", open[len(open)-1])
 }
 
 // errExpansionBound is the cause of a reference refused at maxGEDepth or
@@ -381,8 +414,8 @@ func (r *Reader) attrValue(b *strings.Builder, s string, src bool, loc xsderr.Lo
 		switch c := s[i]; {
 		case c == '&':
 			end := strings.IndexByte(s[i:], ';')
-			if end < 0 {
-				return unterminated(loc)
+			if end < 0 || !isReference(s[i+1:i+end]) {
+				return noReference(loc, open)
 			}
 			name := s[i+1 : i+end]
 			i += end

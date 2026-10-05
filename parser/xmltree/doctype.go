@@ -107,7 +107,8 @@ const (
 // subset reads without one of them, an entity reference in a default value is
 // checked against the entity it names, a fault too: WFC: Entity Declared,
 // Parsed Entity, No Recursion, No External Entity References and No < in
-// Attribute Values (see defaultsFault).
+// Attribute Values, and a '&' in replacement text that begins no Reference
+// (see defaultsFault).
 func doctypeEntities(directive string, standalone bool, loc xsderr.Loc) (decls []entityDecl, atts []attDecl, unread bool, err error) {
 	rest, ok := strings.CutPrefix(directive, "DOCTYPE")
 	if _, spaced := cutSpace(rest); !ok || !spaced && rest != "" {
@@ -733,12 +734,12 @@ func (sc *subsetScan) attValueFault(what, lit string) error {
 // Values), and it must not reach itself (WFC: No Recursion; see entityGraph).
 // A CharRef ([66]) names no entity: `&#60;` breaks none of these, and neither
 // does an entity whose replacement text is `&#60;`. A '&' that replacement
-// text holds where its literal spelled `&#38;` opens no EntityRef unless a
-// Name and ';' follow it, and is otherwise passed over (see nextEntityRef). An
-// entity declaration after a declined reference, outside a standalone
-// document, is not recorded (§5.1), so a name first declared there is none
-// this check knows: Entity Declared does not bind there, and the others are
-// not checked.
+// text holds where its literal spelled `&#38;` must begin a Reference there
+// too (§4.4.5, [67]; see strayAmp): `&#38;#60;` is clean and `&#38;b` a fault,
+// while `&#38;b;` references b. An entity declaration after a declined
+// reference, outside a standalone document, is not recorded (§5.1), so a name
+// first declared there is none this check knows: Entity Declared does not bind
+// there, and the others are not checked.
 func (sc *subsetScan) defaultsFault() error {
 	if len(sc.defaults) == 0 {
 		return nil
@@ -888,8 +889,10 @@ func (g *entityGraph) fault(about, name string) error {
 // enter returns path with the declared general entity name pushed on it, or
 // the fault of an entity the default value about describes may not reference,
 // directly or indirectly: an unparsed one (XML 1.0 WFC: Parsed Entity), an
-// external one (WFC: No External Entity References), or one whose replacement
-// text holds '<' (WFC: No < in Attribute Values).
+// external one (WFC: No External Entity References), one whose replacement
+// text holds '<' (WFC: No < in Attribute Values), or one whose replacement
+// text holds a '&' that begins no Reference (strayAmp), which is no [10]
+// AttValue where the text is included (§4.4.5, [67] Reference).
 func (g *entityGraph) enter(path []walkFrame, about, name string) ([]walkFrame, error) {
 	d := g.decls[g.first[name]]
 	switch {
@@ -899,6 +902,8 @@ func (g *entityGraph) enter(path []walkFrame, about, name string) ([]walkFrame, 
 		return nil, xsderr.New(xsderr.RuleXMLWellFormed, g.loc, "%s that references, directly or indirectly, the external entity %s (XML 1.0 WFC: No External Entity References)", about, name)
 	case strings.ContainsRune(d.value.text, '<'):
 		return nil, xsderr.New(xsderr.RuleXMLWellFormed, g.loc, "%s that references, directly or indirectly, entity %s, whose replacement text holds '<' (XML 1.0 WFC: No < in Attribute Values)", about, name)
+	case strayAmp(d.value.text):
+		return nil, xsderr.New(xsderr.RuleXMLWellFormed, g.loc, "%s that references, directly or indirectly, entity %s, whose replacement text holds a '&' that begins no Reference, '&' Name ';' or a character reference (XML 1.0 §4.4.5, [10] AttValue, [67] Reference)", about, name)
 	}
 	g.state[name] = walking
 	return append(path, walkFrame{name: name, rest: d.value.text}), nil
@@ -907,8 +912,9 @@ func (g *entityGraph) enter(path []walkFrame, about, name string) ([]walkFrame, 
 // nextEntityRef returns the Name of the first EntityRef, '&' Name ';' (XML 1.0
 // [68]), in s — a default value's text, or replacement text it includes — and
 // what follows it, or reports false when s holds none. A CharRef ([66]) is no
-// EntityRef, and a '&' that opens no Reference, which replacement text holds
-// where its literal spelled a character reference to '&', is passed over.
+// EntityRef and is passed over; every other '&' in s begins an EntityRef,
+// attValueFault having charged one in a default value that does not, and enter
+// one in replacement text.
 func nextEntityRef(s string) (name, after string, ok bool) {
 	for {
 		amp := strings.IndexByte(s, '&')
@@ -1104,6 +1110,27 @@ func isReference(ref string) bool {
 		digits, set = hex, "0123456789abcdefABCDEF"
 	}
 	return digits != "" && strings.Trim(digits, set) == ""
+}
+
+// strayAmp reports whether s, replacement text or a run of it, holds a '&'
+// that begins no Reference ([67]): no ';' follows it, or what stands between
+// them is no Reference (isReference). A literal's `&#38;` or `&#x26;` puts a
+// bare '&' in replacement text (XML 1.0 §4.5), and the text is reparsed where
+// it is included (§4.4.2, §4.4.5), so such a '&' is a fault there unless a
+// Reference follows it: `&#38;#60;` is clean, `&#38;b` is not.
+func strayAmp(s string) bool {
+	for {
+		amp := strings.IndexByte(s, '&')
+		if amp < 0 {
+			return false
+		}
+		s = s[amp+1:]
+		end := strings.IndexByte(s, ';')
+		if end < 0 || !isReference(s[:end]) {
+			return true
+		}
+		s = s[end+1:]
+	}
 }
 
 // externalID reads the ExternalID def, an entity definition's tokens, opens
