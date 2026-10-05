@@ -1116,7 +1116,7 @@ func (p *ctaParser) stringCall() (ctaValue, bool) {
 // charged and never satisfied — the withhold [CompileAssertionTest] reports.
 // (#1042)
 func (p *ctaParser) stringOf(arg ctaValue) (ctaValue, bool) {
-	if !p.types.castsFrom(arg) || p.types.floating(arg) {
+	if !p.types.castsFrom(arg, p.types.str) || p.types.floating(arg) {
 		return nil, false
 	}
 	return ctaStringFunction{cast: ctaCast{operand: arg, target: p.types.str, allowsEmpty: true}}, true
@@ -1277,7 +1277,7 @@ func (p *ctaParser) castExpr() (ctaValue, bool) {
 		allowsEmpty = true
 	}
 	target, admitted := p.types.castTarget(p.typeName(text))
-	if !admitted || !p.types.castsFrom(v) {
+	if !admitted || !p.types.castsFrom(v, target) {
 		return nil, false
 	}
 	return ctaCast{operand: v, target: target, allowsEmpty: allowsEmpty}, true
@@ -1313,7 +1313,7 @@ func (p *ctaParser) constructorFunction() (ctaValue, bool) {
 	}
 	p.advance()
 	target, admitted := p.types.castTarget(name)
-	if !admitted || !p.types.castsFrom(arg) {
+	if !admitted || !p.types.castsFrom(arg, target) {
 		return nil, false
 	}
 	return ctaCast{operand: arg, target: target, allowsEmpty: true}, true

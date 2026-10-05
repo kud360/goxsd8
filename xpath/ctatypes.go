@@ -201,57 +201,107 @@ func (t ctaTypes) castTarget(name xsd.QName) (*xsd.SimpleType, bool) {
 	return st, true
 }
 
-// castsFrom reports whether this engine casts the operand v at all, which is
-// false for exactly one shape: a TYPED operand read off the instance or
-// computed from it — an attribute (ctaTypedAttr), a child element
-// (ctaTypedChild), `$value` (ctaValueVar), a count of its nodes (ctaCount,
-// xs:integer), the result of arithmetic (ctaArith, always numeric) or of an
-// F&O function call (ctaMatch and ctaPresence, xs:boolean; ctaUnaryString,
-// xs:integer or xs:string; ctaStringFunction, xs:string) — whose {primitive
-// type definition} is not xs:string. Every other operand casts as
-// [CompileCTATest] states, the statically empty `$value` (ctaEmptyValue) among
-// them: it holds no item to convert. So does a literal, an fn:true() or
-// fn:false() among them, whose xs:boolean only fn:string casts, to xs:string,
-// where its ·canonical representation· is the string F&O §17.1.2 casts it to.
+// castsFrom reports whether this engine casts the operand v to target, a type
+// castTarget admitted, at all. It is false for exactly one shape: a TYPED
+// operand read off the instance or computed from it — an attribute
+// (ctaTypedAttr), a child element (ctaTypedChild), `$value` (ctaValueVar, each
+// item of a listed one), a count of its nodes (ctaCount, xs:integer), the
+// result of arithmetic (ctaArith, its B.2 result type, arithmeticResult) or of
+// an F&O function call (ctaMatch and ctaPresence, xs:boolean; ctaUnaryString,
+// xs:integer or xs:string; ctaStringFunction, xs:string), or a cast of one of
+// them that is not in the string family (castSource, its target) — whose
+// {primitive type definition} is not xs:string and whose type is neither target
+// nor derived from it. Every other operand casts as [CompileCTATest] states, the
+// statically empty `$value` (ctaEmptyValue) among them: it holds no item to
+// convert. So does a literal, an fn:true() or fn:false() among them, whose
+// xs:boolean only fn:string casts, to xs:string, where its ·canonical
+// representation· is the string F&O §17.1.2 casts it to.
 //
-// The string family is admitted because xpath-functions.md §17.1.1 makes a
-// cast from xs:string one datatype validation of the value's own string, which
-// ctaPromote performs exactly: the ·canonical representation· of an xs:string
-// value is that string (f-stringCanmap).
+// Two typed operands are admitted:
 //
-// GAP(xpath): a cast from any OTHER typed operand is declined, because
-// xpath-functions.md §17 defines most casts between primitives over the VALUE,
-// not over a re-validated canonical lexical — xs:decimal to xs:integer
-// truncates (§17.1.3.4) where the round-trip ctaPromote would perform raises
-// err:FORG0001 for "3.5" — and an assertion a raised cast makes false is a
-// charge (cvc-assertion), so the round-trip would fabricate one. fn:string over
-// such an operand, a node of such a type included, is that cast and declines
-// with it. The direction is the withhold [CompileAssertionTest] reports: the
-// assertion is declined, never charged and never satisfied. (#1042)
-func (t ctaTypes) castsFrom(v ctaValue) bool {
-	var st *xsd.SimpleType
-	switch n := v.(type) {
-	case ctaTypedAttr:
-		st = n.st
-	case ctaTypedChild:
-		st = n.st
-	case ctaCount:
-		st = n.st
-	case ctaArith:
-		st = n.st
-	case ctaMatch:
-		st = n.st
-	case ctaUnaryString:
-		st = n.st
-	case ctaPresence:
-		st = n.st
-	case ctaStringFunction:
-		st = n.cast.target
-	case ctaValueVar:
-		st = n.atom
-	default:
+//   - the string family, to any target, because xpath-functions.md §17.1.1
+//     makes a cast from xs:string one datatype validation of the value's own
+//     string, which ctaPromote performs exactly: the ·canonical
+//     representation· of an xs:string value is that string (f-stringCanmap);
+//   - an operand whose type is target itself or derived from it by
+//     restriction, at any depth: F&O §17.2 case 4, "When SV is an instance of
+//     the TT, the cast always succeeds (Identity cast)", and §17.3, "it is
+//     always possible to cast a value of any atomic type to an atomic type from
+//     which it is derived, directly or indirectly, by restriction ... The
+//     result will have the same value as the original". ctaPromote hands the
+//     value on unrendered wherever it already is one of target's
+//     (ctaRepresents). Every typed operand above is atomic and its
+//     base chain is restriction alone (typedAtomic, valueVariable), and
+//     castTarget has already excluded xs:NOTATION, xs:anyAtomicType and every
+//     non-atomic target, the exclusions §17.3 and §3.10.2 make. The relation is
+//     the operand's type below the target and never the reverse, nor a shared
+//     primitive: `xs:integer(@d)` over an xs:decimal @d is §17.4's, not §17.3's.
+//
+// Both cast spellings take a [16] ta-SimpleValue operand, so a count, an
+// arithmetic or function result and a cast reach castsFrom only as fn:string's
+// argument (ctaParser.stringOf), whose target is xs:string: of those, the
+// second rule admits exactly what the first does.
+//
+// GAP(xpath): a cast from any OTHER typed operand is declined — §17.4's cast
+// within a branch of the hierarchy that is not to an ancestor, and §17.1's and
+// §17.5's casts across primitives — because xpath-functions.md §17 defines
+// those over the VALUE, not over a re-validated canonical lexical: xs:decimal
+// to xs:integer truncates (§17.1.3.4) where the round-trip ctaPromote would
+// perform raises err:FORG0001 for "3.5", and an assertion a raised cast makes
+// false is a charge (cvc-assertion), so the round-trip would fabricate one.
+// fn:string over such an operand, a node of such a type included, is that cast
+// to xs:string and declines with it. The direction is the withhold
+// [CompileAssertionTest] reports: the assertion is declined, never charged and
+// never satisfied. (#1042)
+func (t ctaTypes) castsFrom(v ctaValue, target *xsd.SimpleType) bool {
+	st, judged := t.castSource(v)
+	if !judged || t.stringSource(st) {
 		return true
 	}
+	at, err := t.ancestor(st, target.Name())
+	return err == nil && at != nil
+}
+
+// castSource is the type castsFrom judges a cast from v by — the static type
+// of a typed operand castsFrom names — or false where v casts whatever the
+// target. A cast is such an operand itself where its own operand is one that
+// is not in the string family: its value is then that operand's, under a new
+// annotation, and casting it on is a cast from a typed instance value as much
+// as the first one, so `xs:integer(xs:decimal(@d))` over an xs:decimal @d is
+// §17.4's truncation and declines with `xs:integer(@d)`.
+func (t ctaTypes) castSource(v ctaValue) (*xsd.SimpleType, bool) {
+	switch n := v.(type) {
+	case ctaTypedAttr:
+		return n.st, true
+	case ctaTypedChild:
+		return n.st, true
+	case ctaCount:
+		return n.st, true
+	case ctaArith:
+		return n.st, true
+	case ctaMatch:
+		return n.st, true
+	case ctaUnaryString:
+		return n.st, true
+	case ctaPresence:
+		return n.st, true
+	case ctaStringFunction:
+		return n.cast.target, true
+	case ctaValueVar:
+		return n.atom, true
+	case ctaCast:
+		inner, judged := t.castSource(n.operand)
+		if !judged || t.stringSource(inner) {
+			return nil, false
+		}
+		return n.target, true
+	}
+	return nil, false
+}
+
+// stringSource reports whether st's {primitive type definition} is xs:string,
+// the family castsFrom admits a cast from to any target.
+func (t ctaTypes) stringSource(st *xsd.SimpleType) bool {
 	p, resolved := t.primitive(st)
 	return resolved && p.Name() == ctaBuiltin("string")
 }
@@ -447,7 +497,8 @@ func (t ctaTypes) arithmeticOperand(v ctaValue) (*xsd.SimpleType, bool) {
 // (ctaTypes.literal), so `$value mod 2` over an xs:int `$value` is xs:decimal
 // where B.2 says xs:integer. The two are one value, and nothing this grammar
 // applies to the result tells them apart: a comparison and fn:boolean run in
-// the primitive, and a cast from the result is declined (castsFrom).
+// the primitive, and a cast from the result is written only as fn:string,
+// which declines it as a cast from outside the string family (castsFrom).
 func (t ctaTypes) arithmeticResult(op ctaArithOp, kind ctaNumericKind, operation *xsd.SimpleType, l, r ctaValue) (*xsd.SimpleType, bool) {
 	if op != ctaIntegerDivide && (kind != ctaDecimalKind || op == ctaDivide) {
 		return operation, true

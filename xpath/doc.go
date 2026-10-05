@@ -62,9 +62,11 @@
 //     whose ·locally declared type· is ·absent·, ·special·, or neither a simple type an
 //     attribute's would be admitted as nor simple content over one, a path of more than one step
 //     in any other position or with any other step — so `a/b = 1`, `count(a/b)`, `a/@b`, `a//b`
-//     and `a/*` decline — an fn:count argument of any other shape, a cast — and so fn:string —
-//     from a typed attribute, child, `$value`, count, arithmetic or function result outside the
-//     xs:string family, fn:string over an xs:float or xs:double argument, a collation argument, a
+//     and `a/*` decline — an fn:count argument of any other shape, a cast from a typed attribute,
+//     child or `$value` outside the xs:string family to a type it is not derived from (F&O §17.2
+//     case 4's identity cast and §17.3's cast up the hierarchy are admitted), fn:string over any
+//     of those or over a typed count, arithmetic or function result, or a cast of one, outside
+//     that family, fn:string over an xs:float or xs:double argument, a collation argument, a
 //     function call of the wrong arity, the zero-argument string functions, whose implicit
 //     argument reads `.`, an arithmetic operand that is not numeric, an xs:float one against
 //     xs:double (#889), a unary sign, and a `$value` whose {simple type definition} is classified
