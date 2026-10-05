@@ -77,6 +77,13 @@ func asValues(t *testing.T, attrs ...asTyped) TypedAttributes {
 	}
 }
 
+// asNoElems is the [ElementTypes] of an element whose governing type declares
+// no child element, so every child-axis step declines.
+func asNoElems(xsd.QName) (xsd.TypeDefinition, bool) { return nil, false }
+
+// asNoChildren is the [ChildElements] of an element with no element child.
+func asNoChildren(func(ChildElement) bool) {}
+
 // asCompile compiles expr against uses, for an element with empty content, or
 // fails the test.
 func asCompile(t *testing.T, expr string, uses AttributeTypes) AssertionTest {
@@ -88,7 +95,7 @@ func asCompile(t *testing.T, expr string, uses AttributeTypes) AssertionTest {
 // is content, or fails the test.
 func asCompileFor(t *testing.T, expr string, content xsd.ContentType, uses AttributeTypes) AssertionTest {
 	t.Helper()
-	c, ok := CompileAssertionTest(asRecord(expr), seededTypes, content, uses)
+	c, ok := CompileAssertionTest(asRecord(expr), seededTypes, content, uses, asNoElems)
 	if !ok {
 		t.Fatalf("CompileAssertionTest(%q): declined, want compiled", expr)
 	}
@@ -126,7 +133,7 @@ func TestAssertionEvaluatesTypedAttributes(t *testing.T) {
 		{"@s cast as xs:integer > 3", []asTyped{{uq("s"), "string", " 5 "}}, true},
 		{"xs:integer(@s) = 5", []asTyped{{uq("s"), "string", "5"}}, true},
 	} {
-		got := asCompile(t, tc.expr, uses).Evaluate(backend(), seededTypes, asValues(t, tc.attrs...), ValueBinding{})
+		got := asCompile(t, tc.expr, uses).Evaluate(backend(), seededTypes, asValues(t, tc.attrs...), asNoChildren, ValueBinding{})
 		if got != tc.want {
 			t.Errorf("Evaluate(%q) over %v = %v, want %v", tc.expr, tc.attrs, got, tc.want)
 		}
@@ -144,13 +151,13 @@ func TestAssertionTypeErrorIsFalse(t *testing.T) {
 	uses := asUses(t, map[string]string{"b": "boolean"})
 	attrs := asValues(t, asTyped{uq("b"), "boolean", "true"})
 
-	if asCompile(t, "@b = 'true'", uses).Evaluate(backend(), seededTypes, attrs, ValueBinding{}) {
+	if asCompile(t, "@b = 'true'", uses).Evaluate(backend(), seededTypes, attrs, asNoChildren, ValueBinding{}) {
 		t.Error("Evaluate(@b = 'true') over a typed xs:boolean = true, want false: the comparison raises err:XPTY0004")
 	}
-	if asCompile(t, "not(@b = 'true')", uses).Evaluate(backend(), seededTypes, attrs, ValueBinding{}) {
+	if asCompile(t, "not(@b = 'true')", uses).Evaluate(backend(), seededTypes, attrs, asNoChildren, ValueBinding{}) {
 		t.Error("Evaluate(not(@b = 'true')) = true, want false: fn:not propagates the raised error, and the {test} raised")
 	}
-	if !asCompile(t, "@b = @b", uses).Evaluate(backend(), seededTypes, attrs, ValueBinding{}) {
+	if !asCompile(t, "@b = @b", uses).Evaluate(backend(), seededTypes, attrs, asNoChildren, ValueBinding{}) {
 		t.Error("Evaluate(@b = @b) = false, want true: two xs:boolean operands are B.2-comparable")
 	}
 }
@@ -219,7 +226,7 @@ func TestAssertionReadsSpecialAttributesUntyped(t *testing.T) {
 		{"@atom = 'a'", []asTyped{{uq("atom"), "anyAtomicType", "a"}}, true},
 	} {
 		t.Run(tc.expr, func(t *testing.T) {
-			got := asCompile(t, tc.expr, uses).Evaluate(backend(), seededTypes, asValues(t, tc.attrs...), ValueBinding{})
+			got := asCompile(t, tc.expr, uses).Evaluate(backend(), seededTypes, asValues(t, tc.attrs...), asNoChildren, ValueBinding{})
 			if got != tc.want {
 				t.Errorf("Evaluate(%q) over %v = %v, want %v", tc.expr, tc.attrs, got, tc.want)
 			}
@@ -251,7 +258,7 @@ func TestAssertionRaisesOnWrongArm(t *testing.T) {
 	} {
 		attrs := func(yield func(xsd.QName, TypedValue) bool) { yield(tc.name, tc.v) }
 		t.Run(tc.expr, func(t *testing.T) {
-			if asCompile(t, tc.expr, uses).Evaluate(backend(), seededTypes, attrs, ValueBinding{}) {
+			if asCompile(t, tc.expr, uses).Evaluate(backend(), seededTypes, attrs, asNoChildren, ValueBinding{}) {
 				t.Errorf("Evaluate(%q) over the wrong arm = true, want false: the read raises", tc.expr)
 			}
 		})
@@ -292,7 +299,7 @@ func TestCompileAssertionTestDeclines(t *testing.T) {
 		{"@d lt @e", "a value comparison in the date/time family, on the general comparison's arm"},
 		{"count(@x) = 1", "a function call outside fn:not and the constructors"},
 	} {
-		if _, ok := CompileAssertionTest(asRecord(tc.expr), seededTypes, xsd.EmptyContent{}, uses); ok {
+		if _, ok := CompileAssertionTest(asRecord(tc.expr), seededTypes, xsd.EmptyContent{}, uses, asNoElems); ok {
 			t.Errorf("CompileAssertionTest(%q): compiled, want declined (%s)", tc.expr, tc.why)
 		}
 	}
@@ -333,7 +340,7 @@ func TestAssertionEvaluatesValueComparisons(t *testing.T) {
 		{"not(@dur lt @dur)", []asTyped{{uq("dur"), "duration", "P1D"}}, false},
 		{"@dur eq @dur", []asTyped{{uq("dur"), "duration", "P1D"}}, true},
 	} {
-		got := asCompile(t, tc.expr, uses).Evaluate(backend(), seededTypes, asValues(t, tc.attrs...), ValueBinding{})
+		got := asCompile(t, tc.expr, uses).Evaluate(backend(), seededTypes, asValues(t, tc.attrs...), asNoChildren, ValueBinding{})
 		if got != tc.want {
 			t.Errorf("Evaluate(%q) over %v = %v, want %v", tc.expr, tc.attrs, got, tc.want)
 		}
@@ -402,7 +409,7 @@ func TestAssertionValueOverSimpleContent(t *testing.T) {
 		{"not($value eq 5)", ValueBinding{}, nil, true},
 		{"$value", ValueBinding{}, nil, false},
 	} {
-		got := asCompileFor(t, tc.expr, content, uses).Evaluate(backend(), seededTypes, asValues(t, tc.attrs...), tc.bound)
+		got := asCompileFor(t, tc.expr, content, uses).Evaluate(backend(), seededTypes, asValues(t, tc.attrs...), asNoChildren, tc.bound)
 		if got != tc.want {
 			t.Errorf("Evaluate(%q) = %v, want %v", tc.expr, got, tc.want)
 		}
@@ -434,7 +441,7 @@ func TestAssertionValueOverNonSimpleContent(t *testing.T) {
 		} {
 			test := asCompileFor(t, tc.expr, content, asUses(t, nil))
 			for _, bound := range []ValueBinding{{}, stray} {
-				if got := test.Evaluate(backend(), seededTypes, asValues(t), bound); got != tc.want {
+				if got := test.Evaluate(backend(), seededTypes, asValues(t), asNoChildren, bound); got != tc.want {
 					t.Errorf("Evaluate(%q) under %s content = %v, want %v", tc.expr, content.Variety(), got, tc.want)
 				}
 			}
@@ -467,7 +474,7 @@ func TestAssertionValueOverListContent(t *testing.T) {
 		{"not($value)", "1 2", false},
 		{"$value", "7", true},
 	} {
-		test, ok := CompileAssertionTest(asRecord(tc.expr), types, content, asUses(t, nil))
+		test, ok := CompileAssertionTest(asRecord(tc.expr), types, content, asUses(t, nil), asNoElems)
 		if !ok {
 			t.Fatalf("CompileAssertionTest(%q) over a list: declined, want compiled", tc.expr)
 		}
@@ -475,7 +482,7 @@ func TestAssertionValueOverListContent(t *testing.T) {
 		if err != nil {
 			t.Fatalf("mapping %q against the list: %v", tc.lexical, err)
 		}
-		if got := test.Evaluate(backend(), types, asValues(t), BindValue(Typed(v))); got != tc.want {
+		if got := test.Evaluate(backend(), types, asValues(t), asNoChildren, BindValue(Typed(v))); got != tc.want {
 			t.Errorf("Evaluate(%q) over %q = %v, want %v", tc.expr, tc.lexical, got, tc.want)
 		}
 	}
@@ -521,7 +528,7 @@ func TestAssertionValueOverSpecialContent(t *testing.T) {
 			{"not($value)", BindValue(Typed(five)), false},
 		} {
 			t.Run(special+" "+tc.expr, func(t *testing.T) {
-				got := asCompileFor(t, tc.expr, content, asUses(t, nil)).Evaluate(backend(), seededTypes, asValues(t), tc.bound)
+				got := asCompileFor(t, tc.expr, content, asUses(t, nil)).Evaluate(backend(), seededTypes, asValues(t), asNoChildren, tc.bound)
 				if got != tc.want {
 					t.Errorf("Evaluate(%q) over %s content = %v, want %v", tc.expr, special, got, tc.want)
 				}
@@ -554,16 +561,17 @@ func TestCompileAssertionTestDeclinesValue(t *testing.T) {
 		{"$value cast as xs:string = '5'", xsd.SimpleContent{SimpleType: asBuiltin(t, "int")}, "a cast from a typed non-string $value"},
 		{"$ eq 1", xsd.SimpleContent{SimpleType: asBuiltin(t, "int")}, "a '$' with no name"},
 	} {
-		if _, ok := CompileAssertionTest(asRecord(tc.expr), types, tc.content, asUses(t, nil)); ok {
+		if _, ok := CompileAssertionTest(asRecord(tc.expr), types, tc.content, asUses(t, nil), asNoElems); ok {
 			t.Errorf("CompileAssertionTest(%q): compiled, want declined (%s)", tc.expr, tc.why)
 		}
 	}
 }
 
-// A Type Alternative's {test} still declines $value and the value comparators:
-// the assertion façade widened nothing in the grammar CompileCTATest admits.
+// A Type Alternative's {test} still declines $value, the value comparators, a
+// child-axis step and a rooted path: the assertion façade widened nothing in
+// the grammar CompileCTATest admits.
 func TestCompileCTATestStillDeclinesAssertionOnlyForms(t *testing.T) {
-	for _, expr := range []string{"$value > 0", "@min le @max", "@x eq 5"} {
+	for _, expr := range []string{"$value > 0", "@min le @max", "@x eq 5", "e1 = 'present'", "/r = 'present'", "//r"} {
 		if _, ok := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); ok {
 			t.Errorf("CompileCTATest(%q): compiled, want declined", expr)
 		}
@@ -596,7 +604,7 @@ func TestCompileAssertionTestDeclinesDateTimeComparisons(t *testing.T) {
 		"@s cast as xs:date < xs:date('2000-01-01')",
 	} {
 		record := ctaExprRecord(expr, "", "xs", xsd.XMLSchemaNS)
-		if _, ok := CompileAssertionTest(record, seededTypes, xsd.EmptyContent{}, uses); ok {
+		if _, ok := CompileAssertionTest(record, seededTypes, xsd.EmptyContent{}, uses, asNoElems); ok {
 			t.Errorf("CompileAssertionTest(%q): compiled, want declined (a date/time comparison type)", expr)
 		}
 		if _, ok := CompileCTATest(record, seededTypes); !ok {

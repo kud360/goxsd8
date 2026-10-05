@@ -16,11 +16,13 @@ import (
 // Comparator position also takes xpath20.md [23] ValueComp ('eq' | 'ne' | 'lt'
 // | 'le' | 'gt' | 'ge'), evaluated as §3.5.1's value comparison
 // (ctaValueCompare), and [16] SimpleValue also takes [44] VarRef ('$' VarName),
-// of which only `$value` is in scope (cvc-assertion clause 2.2). It is not a
-// stage of a general XPath 2.0 evaluator: the productions below reach no axis
-// but attribute, no predicate, no variable but `$value` and no function but
-// fn:not, so evaluating them directly is exact where a fail-open delegation to
-// a general engine would be a guess.
+// of which only `$value` is in scope (cvc-assertion clause 2.2), a child-axis
+// step naming one of E's element [[children]] (ctaTypedChild), and a "/" or
+// "//" opening a path, which raises (ctaNoDocumentRoot). It is not a stage of
+// a general XPath 2.0 evaluator: the productions below reach no axis but
+// attribute and one child step, no predicate, no variable but `$value` and no
+// function but fn:not, so evaluating them directly is exact where a fail-open
+// delegation to a general engine would be a guess.
 //
 //	[8]  Test                ::= OrExpr
 //	[9]  OrExpr              ::= AndExpr ( 'or' AndExpr )*
@@ -161,13 +163,15 @@ type CTATest struct{ root ctaExpr }
 // namespace is read only where [xsd.XPathExpression.DefaultNamespace] reports
 // it present, because that accessor's own doc makes the first result "not
 // meaningful" otherwise; an ABSENT one leaves ctaNames.defaultNamespace the
-// empty string, which is the no-namespace answer §3.10.2 wants. It is
-// consulted for an unprefixed cast TARGET and for nothing else (xpath20.md
-// §3.10.2: "If the target type has no namespace prefix, it is considered to be
-// in the default element/type namespace"): [17] ta-AttrName makes every
-// NameTest in this grammar an attribute-axis one, whose principal node kind is
-// never element, so an unprefixed NameTest is always in no namespace
-// (xpath20.md §3.2.1.2, PRINCIPLES 15).
+// empty string, which is the no-namespace answer §3.10.2 wants. A Type
+// Alternative's {test} consults it for an unprefixed cast TARGET and for
+// nothing else (xpath20.md §3.10.2: "If the target type has no namespace
+// prefix, it is considered to be in the default element/type namespace"): [17]
+// ta-AttrName makes every NameTest its grammar reaches an attribute-axis one,
+// whose principal node kind is never element, so an unprefixed NameTest is
+// always in no namespace (xpath20.md §3.2.1.2, PRINCIPLES 15), and a child-axis
+// step, whose NameTest would read it, is the assertion façade's and declined
+// here (ctaFacade.child).
 func CompileCTATest(expr xsd.XPathExpression, types xsd.TypeResolver) (CTATest, bool) {
 	root, defect := compileCTATest(expr, types, ctaTypeAlternativeFacade{})
 	if defect.kind != ctaNoDefect {
@@ -340,10 +344,11 @@ func (t CTATest) Evaluate(b value.Backend, types xsd.TypeResolver, attrs Attribu
 // ctaEnv is the dynamic context of one [CTATest.Evaluate] or
 // [AssertionTest.Evaluate] call. cvc-xpath (§3.13.4.2) fixes the rest of it —
 // context item E, context position and size 1, no variable values but the
-// `$value` cvc-assertion clause 2.3 adds — and none of that but `$value` is
-// representable in this grammar, which reaches no context item, so the
-// attributes, `$value`'s binding, the value spaces and the type knowledge the
-// casts need are the whole of what evaluation reads.
+// `$value` cvc-assertion clause 2.3 adds — and of that only `$value` and the
+// context item's own attributes and element [[children]] are reachable in this
+// grammar, so the attributes, the children, `$value`'s binding, the value
+// spaces and the type knowledge the casts need are the whole of what
+// evaluation reads.
 type ctaEnv struct {
 	backend value.Backend
 	types   xsd.TypeResolver
@@ -369,12 +374,14 @@ type ctaInput interface{ ctaInput() }
 // ctaLexicalInput is a Type Alternative's attribute input.
 type ctaLexicalInput struct{ attrs Attributes }
 
-// ctaTypedInput is an assertion's input: its typed attributes, and the value
-// cvc-assertion clause 2.3 binds to `$value`. The binding lives here and on no
-// other arm, so a Type Alternative's evaluation cannot carry one.
+// ctaTypedInput is an assertion's input: its typed attributes, its element
+// [[children]], and the value cvc-assertion clause 2.3 binds to `$value`. The
+// children and the binding live here and on no other arm, so a Type
+// Alternative's evaluation cannot carry either.
 type ctaTypedInput struct {
-	attrs TypedAttributes
-	value ValueBinding
+	attrs    TypedAttributes
+	children ChildElements
+	value    ValueBinding
 }
 
 func (ctaLexicalInput) ctaInput() {}
@@ -383,8 +390,13 @@ func (ctaTypedInput) ctaInput()   {}
 // ctaExpr is the sealed sum of the BOOLEAN-valued nodes of the compiled tree.
 // The grammar closes the set (STYLE T2's schema-closed-set exception), so
 // consumers type-switch over the branches and no further branch is
-// representable outside this package.
-type ctaExpr interface{ ctaExpr() }
+// representable outside this package. Every branch answers readsChild
+// ([AssertionTest.ReadsChild]) as a method, so a branch added without it does
+// not compile.
+type ctaExpr interface {
+	ctaExpr()
+	readsChild(name xsd.QName) bool
+}
 
 // ctaOr is [9] ta-OrExpr: existential over its operands, in written order.
 // A one-operand OrExpr is never built — the parser returns the operand itself
@@ -451,11 +463,15 @@ func (ctaTypeError) ctaExpr()        {}
 
 // ctaValue is the sealed sum of the ITEM-valued nodes: the arms of [16]
 // ta-SimpleValue — its AttrName arm in the untyped and the typed form
-// (ctaFacade.attribute), its Literal arm, and the assertion façade's
-// `$value` in its three static forms (ctaFacade.variable) — and the cast that [15]
-// ta-CastExpr's tail and [18] ta-ConstructorFunction both build over one of
-// them.
-type ctaValue interface{ ctaValue() }
+// (ctaFacade.attribute), its Literal arm, and the assertion façade's `$value`
+// in its three static forms (ctaFacade.variable), child-axis step
+// (ctaFacade.child) and rooted path (ctaFacade.rooted) — and the cast that
+// [15] ta-CastExpr's tail and [18] ta-ConstructorFunction both build over one
+// of them. Every branch answers readsChild on ctaExpr's terms.
+type ctaValue interface {
+	ctaValue()
+	readsChild(name xsd.QName) bool
+}
 
 // ctaAttr is [17] ta-AttrName over an UNTYPED attribute: the attribute step
 // whose NameTest selects a SEQUENCE of E's attributes, in document order, out
@@ -482,6 +498,39 @@ type ctaTypedAttr struct {
 	name xsd.QName
 	st   *xsd.SimpleType
 }
+
+// ctaTypedChild is an abbreviated child-axis step over a TYPED instance, which
+// is an assertion's (ctaAssertionFacade.child): the sequence of E's element
+// [[children]] under the ·expanded name· name, in document order
+// ([ChildElements]), the typed value of each of which is of type st — the
+// simple type ctaAssertionFacade.child read off the ·locally declared type·
+// [ElementTypes] answered for that name at compile time, which is why the node
+// carries it and the operand's static type is st (xpath-datamodel §6.2.4,
+// §3.3.1.2).
+//
+// A ·nilled· child is a node of the sequence whose typed value is the empty
+// sequence (xpath-datamodel §6.2.4): it counts for the step's ·effective
+// boolean value·, which is node existence, and contributes no atom when the
+// sequence is atomized.
+//
+// It is a node of its own and not a ctaTypedAttr with a flag: the two read
+// different inputs, and an element step matches any number of nodes where an
+// exact attribute step matches at most one.
+type ctaTypedChild struct {
+	name xsd.QName
+	st   *xsd.SimpleType
+}
+
+// ctaNoDocumentRoot is a path opening with "/" or "//", which begins at the
+// root of the tree containing the context node through `(fn:root(self::node())
+// treat as document-node())` (xpath20.md §3.2) — and the root of the data
+// model instance cvc-assertion clause 1.3 builds is E, an element node, with
+// no document node above it: "if the root node above the context node is not a
+// document node, a dynamic error is raised [err:XPDY0050]". So it raises
+// whatever E is named and whatever step follows. It is a node of its own: no
+// other arm raises err:XPDY0050, and ctaTypeError is a comparison's
+// err:XPTY0004.
+type ctaNoDocumentRoot struct{}
 
 // ctaValueVar is `$value` over a simple {content type} (cvc-assertion clause
 // 2.3.1): the XDM representation of E's [schema actual value], read from the
@@ -534,11 +583,19 @@ type ctaFacade interface {
 	// context, which is a static error (err:XPST0008) withheld on the same
 	// terms as attribute's decline.
 	variable(name xsd.QName, types ctaTypes) (ctaValue, bool)
+	// child compiles one abbreviated child-axis step whose NameTest resolved
+	// to test into its node, reporting false where the façade declines it, on
+	// attribute's terms.
+	child(test ctaNameTest, types ctaTypes) (ctaValue, bool)
+	// rooted compiles a path opening with "/" or "//" into its node, reporting
+	// false where the façade declines it, on attribute's terms.
+	rooted() (ctaValue, bool)
 }
 
-// ctaTypeAlternativeFacade is a Type Alternative's façade: every NameTest is
-// admitted and reads E's attributes untyped, and every settled comparison type
-// is evaluated.
+// ctaTypeAlternativeFacade is a Type Alternative's façade: every attribute
+// NameTest is admitted and reads E's attributes untyped, every settled
+// comparison type is evaluated, and no production beyond §3.12.6's grammar is
+// admitted.
 type ctaTypeAlternativeFacade struct{}
 
 func (ctaTypeAlternativeFacade) ctaFacade() {}
@@ -565,22 +622,37 @@ func (ctaTypeAlternativeFacade) variable(xsd.QName, ctaTypes) (ctaValue, bool) {
 	return nil, false
 }
 
+// child declines every child-axis step: [17] ta-AttrName is the only step
+// ta-props-correct clause 2's grammar has, and a {test} outside that grammar
+// is what §3.12.6's Note licenses a processor to decline.
+func (ctaTypeAlternativeFacade) child(ctaNameTest, ctaTypes) (ctaValue, bool) {
+	return nil, false
+}
+
+// rooted declines every rooted path, on child's terms.
+func (ctaTypeAlternativeFacade) rooted() (ctaValue, bool) {
+	return nil, false
+}
+
 // ctaNameTest is the sealed sum of [36] NameTest's arms as [17] ta-AttrName
-// reaches them, matching one ·expanded name· at a time on the ATTRIBUTE axis,
-// whose principal node kind is attribute and never element (xpath20.md
-// §3.2.1.2). The grammar closes the set (STYLE T2's schema-closed-set
-// exception), so no further arm is representable outside this package.
+// and a child-axis step reach them, matching one ·expanded name· at a time.
+// The axis is the parser's: the name an unprefixed QName resolves to depends
+// on the axis's principal node kind (xpath20.md §3.2.1.2), and is resolved
+// before a test is built. The grammar closes the set (STYLE T2's
+// schema-closed-set exception), so no further arm is representable outside
+// this package.
 type ctaNameTest interface {
 	ctaNameTest()
-	// matches reports whether an attribute with this ·expanded name· is
-	// selected by the test.
+	// matches reports whether a node with this ·expanded name· is selected by
+	// the test.
 	matches(name xsd.QName) bool
 }
 
 // ctaExactName is [36]'s QName arm, resolved: a prefixed NameTest against the
-// {namespace bindings}, an unprefixed one to NO namespace, because the
-// {default namespace} is the default ELEMENT/type namespace and this axis's
-// principal node kind is never element (PRINCIPLES 15).
+// {namespace bindings}; an unprefixed one to NO namespace on the attribute
+// axis, whose principal node kind is never element (ctaParser.attributeName),
+// and to the {default namespace} on the child axis, whose principal node kind
+// is element (ctaParser.elementName) (PRINCIPLES 15).
 //
 // A NameTest whose prefix has no binding holds ctaUnresolvedName instead, and
 // no such node is ever evaluated: it comes with a ctaStaticError defect, on
@@ -663,13 +735,15 @@ type ctaCast struct {
 	allowsEmpty bool
 }
 
-func (ctaAttr) ctaValue()         {}
-func (ctaTypedAttr) ctaValue()    {}
-func (ctaLiteral) ctaValue()      {}
-func (ctaCast) ctaValue()         {}
-func (ctaValueVar) ctaValue()     {}
-func (ctaEmptyValue) ctaValue()   {}
-func (ctaUntypedValue) ctaValue() {}
+func (ctaAttr) ctaValue()           {}
+func (ctaTypedAttr) ctaValue()      {}
+func (ctaTypedChild) ctaValue()     {}
+func (ctaNoDocumentRoot) ctaValue() {}
+func (ctaLiteral) ctaValue()        {}
+func (ctaCast) ctaValue()           {}
+func (ctaValueVar) ctaValue()       {}
+func (ctaEmptyValue) ctaValue()     {}
+func (ctaUntypedValue) ctaValue()   {}
 
 // ctaStatic is one operand's static type, which is what xpath20.md §3.5.2's
 // casting rules dispatch on. It is a sealed sum of the three states this
@@ -703,7 +777,9 @@ func (ctaTyped) ctaStatic()         {}
 func (ctaEmptySequence) ctaStatic() {}
 
 // ctaStaticOf reports the static type of one [14] ta-ValueExpr. ctaAttr and
-// ctaUntypedValue are the untyped arms.
+// ctaUntypedValue are the untyped arms, and so is ctaNoDocumentRoot: it raises
+// before any item exists, so its static type decides only whether a
+// comparison over it compiles, never an answer.
 func ctaStaticOf(v ctaValue) ctaStatic {
 	switch n := v.(type) {
 	case ctaLiteral:
@@ -711,6 +787,8 @@ func ctaStaticOf(v ctaValue) ctaStatic {
 	case ctaCast:
 		return ctaTyped{st: n.target}
 	case ctaTypedAttr:
+		return ctaTyped{st: n.st}
+	case ctaTypedChild:
 		return ctaTyped{st: n.st}
 	case ctaValueVar:
 		return ctaTyped{st: n.atom}
@@ -963,16 +1041,17 @@ func ctaSingletonOperand(v ctaValue, c *xsd.SimpleType, env ctaEnv) (value.Value
 // eval decides the ·effective boolean value· of a bare ValueExpr (xpath20.md
 // §2.4.3, the fn:boolean rules quoted there).
 //
-// An AttrName, untyped or typed, evaluates to a sequence of attribute NODES
-// rather than to atomic values, so it takes rule 2 ("a sequence whose first
-// item is a node") whenever its NameTest matches at all and rule 1 (the empty
-// sequence) when it matches nothing, and no type of its own is involved. Rule
-// 2 holds whatever the sequence's LENGTH, which is what a wildcard NameTest
-// makes observable. `$value` is atomic values and no node: the statically empty
-// one is rule 1's false, the bound typed one is decided by ctaBoolean, a list of
-// two or more items included, and the untyped one by rule 4 (ctaUntypedBoolean).
-// Every other operand is a singleton atomic value or the empty sequence, which
-// ctaBoolean decides.
+// An AttrName, untyped or typed, and a child-axis step evaluate to a sequence
+// of NODES rather than to atomic values, so each takes rule 2 ("a sequence
+// whose first item is a node") whenever its NameTest matches at all and rule 1
+// (the empty sequence) when it matches nothing, and no type of its own is
+// involved — a ·nilled· child is a node all the same. Rule 2 holds whatever
+// the sequence's LENGTH, which is what a wildcard NameTest and a repeated
+// child make observable. A rooted path raises err:XPDY0050. `$value` is atomic
+// values and no node: the statically empty one is rule 1's false, the bound
+// typed one is decided by ctaBoolean, a list of two or more items included, and
+// the untyped one by rule 4 (ctaUntypedBoolean). Every other operand is a
+// singleton atomic value or the empty sequence, which ctaBoolean decides.
 func (e ctaEffectiveBoolean) eval(env ctaEnv) ctaAnswer {
 	switch n := e.operand.(type) {
 	case ctaAttr:
@@ -987,6 +1066,14 @@ func (e ctaEffectiveBoolean) eval(env ctaEnv) ctaAnswer {
 			return ctaError
 		}
 		return ctaAnswerOf(len(matched) != 0)
+	case ctaTypedChild:
+		_, nodes, ok := ctaMatchedChildren(n, env)
+		if !ok {
+			return ctaError
+		}
+		return ctaAnswerOf(nodes != 0)
+	case ctaNoDocumentRoot:
+		return ctaError // err:XPDY0050
 	case ctaLiteral:
 		return ctaBoolean(e.operand, n.st, env)
 	case ctaCast:
@@ -1142,9 +1229,11 @@ func ctaValidated(i ctaItem) (value.Value, bool) {
 //   - an UNTYPED attribute is xs:untypedAtomic, which §3.5.2's casting rules
 //     cast STRAIGHT to c (clause 1's xs:string, or clause 2's type chosen from
 //     the other operand). No intermediate type exists to cast through.
-//   - a TYPED attribute, a LITERAL and each item of `$value` carry their own
-//     type and are converted to c, which is a no-op wherever the two coincide;
-//     the statically empty `$value` yields nothing to convert.
+//   - a TYPED attribute, each typed child, a LITERAL and each item of `$value`
+//     carry their own type and are converted to c, which is a no-op wherever
+//     the two coincide; the statically empty `$value` yields nothing to
+//     convert.
+//   - a rooted path raises err:XPDY0050 before it yields anything.
 //   - a CAST evaluates its operand IN THE TARGET TYPE first, because that cast
 //     is the expression the author wrote and its failure is the author's
 //     err:FORG0001, and only then converts the result to c. Evaluating it
@@ -1158,6 +1247,10 @@ func ctaItemOf(v ctaValue, c *xsd.SimpleType, env ctaEnv) ctaItem {
 		return ctaAttrItem(n, c, env)
 	case ctaTypedAttr:
 		return ctaTypedAttrItem(n, c, env)
+	case ctaTypedChild:
+		return ctaTypedChildItem(n, c, env)
+	case ctaNoDocumentRoot:
+		return ctaRaised{} // err:XPDY0050
 	case ctaLiteral:
 		return ctaConvert(n.text, n.st, c, env)
 	case ctaCast:
@@ -1335,6 +1428,59 @@ func ctaMatchedTyped(n ctaTypedAttr, env ctaEnv) (matched []value.Value, ok bool
 // type — never a re-validation of the attribute's lexical, which has none here.
 func ctaTypedAttrItem(n ctaTypedAttr, c *xsd.SimpleType, env ctaEnv) ctaItem {
 	matched, ok := ctaMatchedTyped(n, env)
+	if !ok {
+		return ctaRaised{}
+	}
+	vs := make([]value.Value, 0, len(matched))
+	for _, v := range matched {
+		converted, ok := ctaValidated(ctaPromote(v, n.st, c, env))
+		if !ok {
+			return ctaRaised{}
+		}
+		vs = append(vs, converted)
+	}
+	return ctaAtoms{vs: vs}
+}
+
+// ctaMatchedChildren is the typed values of E's element [[children]] n's
+// NameTest selects, in the DOCUMENT ORDER [ChildElements] yields them in, each
+// of type n.st by the caller's obligation that type states; and nodes, how
+// many children it selects — a ·nilled· one included, which is a node with no
+// value. ok is false where a selected child's value is neither [Typed] nor
+// nil, which breaks that obligation and which every reader raises on.
+//
+// The input is ctaTypedInput by construction (ctaInput); the other arm carries
+// no children and is unreachable.
+func ctaMatchedChildren(n ctaTypedChild, env ctaEnv) (vs []value.Value, nodes int, ok bool) {
+	in, typed := env.input.(ctaTypedInput)
+	if !typed {
+		return nil, 0, true
+	}
+	ok = true
+	in.children(func(c ChildElement) bool {
+		if c.name != n.name {
+			return true
+		}
+		nodes++
+		if c.v == nil {
+			return true
+		}
+		tv, isTyped := c.v.(tvTyped)
+		if !isTyped {
+			ok = false
+			return false
+		}
+		vs = append(vs, tv.v)
+		return true
+	})
+	return vs, nodes, ok
+}
+
+// ctaTypedChildItem atomizes the selected children (xpath20.md §2.4.2) and
+// converts the atoms into c on ctaTypedAttrItem's terms: each child's typed
+// value, in document order, a ·nilled· child contributing none.
+func ctaTypedChildItem(n ctaTypedChild, c *xsd.SimpleType, env ctaEnv) ctaItem {
+	matched, _, ok := ctaMatchedChildren(n, env)
 	if !ok {
 		return ctaRaised{}
 	}
