@@ -937,9 +937,10 @@ func (s *Schema) checkSimpleTypeDerivations() error {
 // itemType= names the very list declaring it, a shape CheckDerivation rejects
 // under cos-st-restricts clause 2.1 without descending at all.
 //
-// A nil t is an owned arm that was absent, not a fault: only the base slot may be
-// absent, and st-props-correct clause 1 owns that verdict inside CheckDerivation,
-// so re-charging it here would name a rule this pass does not own (STYLE E2).
+// A nil t is a by-name arm, walked in its own right, or the xs:anySimpleType
+// anchor's absent base, not a fault: an absent base on any other type is Base's
+// xsderr.RuleComponentInvariant error, which CheckDerivation surfaces, so
+// re-charging it here would name a verdict this pass does not own (STYLE E2).
 func (s *Schema) checkSimpleTypeGraph(t *SimpleType) error {
 	if t == nil {
 		return nil

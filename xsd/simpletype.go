@@ -837,7 +837,7 @@ func (t *SimpleType) Variety(r TypeResolver) (Variety, error) {
 		return Union{}, nil
 	case RestrictionDerivation:
 		base, err := t.Base(r)
-		if err != nil || base == nil {
+		if err != nil {
 			return nil, err
 		}
 		return base.Variety(r)
@@ -861,7 +861,7 @@ func (t *SimpleType) Primitive(r TypeResolver) (*SimpleType, error) {
 		return t, nil
 	case RestrictionDerivation:
 		base, err := t.Base(r)
-		if err != nil || base == nil {
+		if err != nil {
 			return nil, err
 		}
 		return base.Primitive(r)
@@ -891,7 +891,7 @@ func (t *SimpleType) Item(r TypeResolver) (*SimpleType, error) {
 		return simpleTypeOfRef(r, d.Item, t.loc, simpleTypeLabel(t)+" {item type definition}")
 	case RestrictionDerivation:
 		base, err := t.Base(r)
-		if err != nil || base == nil {
+		if err != nil {
 			return nil, err
 		}
 		return base.Item(r)
@@ -925,7 +925,7 @@ func (t *SimpleType) Members(r TypeResolver) ([]*SimpleType, error) {
 		return out, nil
 	case RestrictionDerivation:
 		base, err := t.Base(r)
-		if err != nil || base == nil {
+		if err != nil {
 			return nil, err
 		}
 		return base.Members(r)
