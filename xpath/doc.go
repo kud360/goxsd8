@@ -30,59 +30,54 @@
 //     CTATestStaticError reports the XPath STATIC errors of the same
 //     grammar over the same traversal, which is a different question
 //     with a different owner — see below.
-//  2. Assertion essentials: axes, predicates, quantified expressions,
-//     typed comparisons, the F&O function core — M6. FIRST SLICES
-//     SHIPPED: CompileAssertionTest compiles an assertion {test} written
-//     in tier 1's grammar over the element's TYPED attributes (AttributeTypes;
-//     cvc-assertion clause 1, §3.13.4.1) and TYPED element children
-//     (ElementTypes), and AssertionTest.Evaluate decides it over their typed
-//     values (TypedAttributes, ChildElements, ChildElement, Child, TypedValue) —
-//     an ·actual value·, or xs:untypedAtomic for an attribute whose type is
-//     ·special· (xpath-datamodel §3.3.1.2), which is cast as tier 1 casts an
-//     untyped one. Its grammar is tier 1's plus xpath20.md's value comparisons
-//     (§3.5.1, eq/ne/lt/le/gt/ge), `$value` (cvc-assertion clause 2.3;
-//     ValueBinding), an abbreviated child-axis step with a QName NameTest
-//     (§3.2.1.1), whose unprefixed name takes the {default namespace}, a
-//     "/" or "//" opening one or an attribute step, which raises err:XPDY0050
-//     because the instance's root is E and not a document node (§3.2), an
-//     fn:count call (xpath-functions.md §15.4.1) over `N`, `@N`, either behind
-//     `./` or `.//`, or a rooted step, xpath20.md §3.4's binary arithmetic
-//     (`+`, `-`, `*`, `div`, `idiv`, `mod`) over numeric operands, whose
-//     dynamic errors err:FOAR0001 and err:FOAR0002 are charged like any other,
-//     and F&O's string and sequence core — fn:contains, fn:starts-with and
-//     fn:ends-with under the codepoint collation, fn:string-length,
-//     fn:normalize-space, fn:string, fn:empty, fn:exists, fn:true and fn:false,
-//     `()` admitted as an argument, whose xs:string? arguments raise
-//     err:XPTY0004 for an item of another type or for two or more items —
-//     all of which a Type Alternative's {test} still declines.
-//     AssertionTest.ReadsChild reports which children a compiled {test} reads for
-//     their values, so its caller keeps no other; fn:count reads no value, and
-//     AssertionTest.Tally makes the Tally its caller reports E's subtree to
-//     (Tally.Element, Tally.Attribute) and Evaluate reads the counts off, so no
-//     counted node is kept. It declines what tier 1 declines, plus a wildcard
-//     NameTest, an attribute with no fixed atomic type that is not ·special· (a
-//     list, a union, an xs:QName or xs:NOTATION primitive), a child whose
-//     ·locally declared type· is ·absent·, ·special·, or neither a simple type an
-//     attribute's would be admitted as nor simple content over one, a path of
-//     more than one step, an fn:count argument of any other shape, a cast — and
-//     so fn:string — from a typed attribute, child, `$value`, count, arithmetic
-//     or function result outside the xs:string family, fn:string over an
-//     xs:float or xs:double argument, a collation argument, a function call of
-//     the wrong arity, the zero-argument string functions, whose implicit
-//     argument reads `.`, an arithmetic operand that is not numeric, an xs:float
-//     one against xs:double (#889), a unary sign, and a `$value` whose {simple
-//     type definition} is classified as such an attribute's type would be, or is
-//     a list of a type that would be; a `$value` over ·special· content is
-//     xs:untypedAtomic, as such an attribute is. FacetAssertions is the
-//     value.AssertionEvaluator for an assertions facet's {test} (Datatypes
-//     §4.3.13.3, cvc-assertions-valid), over the same grammar plus [47]
-//     ContextItemExpr: `$value` is bound to the value under the facet's type, and
-//     there is no context item, so `.`, an attribute or child step, a rooted path
-//     and a zero-argument string function each raise err:XPDY0002 and fail the
-//     facet; a union's own assertions facet and an fn:count call decline. `.`
-//     declines everywhere else. Longer paths, the other axes, predicates,
-//     quantified expressions, the collation arguments and every other F&O
-//     function are PLANNED (#1042).
+//  2. Assertion essentials: axes, predicates, quantified expressions, typed comparisons, the F&O
+//     function core — M6. FIRST SLICES SHIPPED: CompileAssertionTest compiles an assertion {test}
+//     written in tier 1's grammar over the element's TYPED attributes (AttributeTypes;
+//     cvc-assertion clause 1, §3.13.4.1) and TYPED element children (ElementTypes), and
+//     AssertionTest.Evaluate decides it over their typed values (TypedAttributes, ChildElements,
+//     ChildElement, Child, TypedValue) — an ·actual value·, or xs:untypedAtomic for an attribute
+//     whose type is ·special· (xpath-datamodel §3.3.1.2), which is cast as tier 1 casts an untyped
+//     one. Its grammar is tier 1's plus xpath20.md's value comparisons (§3.5.1,
+//     eq/ne/lt/le/gt/ge), `$value` (cvc-assertion clause 2.3; ValueBinding), an abbreviated
+//     child-axis step with a QName NameTest (§3.2.1.1), whose unprefixed name takes the {default
+//     namespace}, a "/" or "//" opening one or an attribute step, which raises err:XPDY0050
+//     because the instance's root is E and not a document node (§3.2), a relative path of two or
+//     more such child steps, `a/b` (§3.2), as the whole operand of fn:exists, fn:empty or an
+//     ·effective boolean value·, whose steps are never typed and which selects any node, ·nilled·
+//     or not, at the end of that chain of names, an fn:count call (xpath-functions.md §15.4.1)
+//     over `N`, `@N`, either behind `./` or `.//`, or a rooted step, xpath20.md §3.4's binary
+//     arithmetic (`+`, `-`, `*`, `div`, `idiv`, `mod`) over numeric operands, whose dynamic errors
+//     err:FOAR0001 and err:FOAR0002 are charged like any other, and F&O's string and sequence core
+//     — fn:contains, fn:starts-with and fn:ends-with under the codepoint collation,
+//     fn:string-length, fn:normalize-space, fn:string, fn:empty, fn:exists, fn:true and fn:false,
+//     `()` admitted as an argument, whose xs:string? arguments raise err:XPTY0004 for an item of
+//     another type or for two or more items — all of which a Type Alternative's {test} still
+//     declines. AssertionTest.ReadsChild reports which children a compiled {test} reads for their
+//     values, so its caller keeps no other; neither fn:count nor a child path reads a value, and
+//     AssertionTest.Tally makes the Tally its caller reports E's subtree to — each element by its
+//     chain of names below E (Tally.Element), each attribute by its element's depth
+//     (Tally.Attribute) — and Evaluate reads the counts off, so no counted node is kept. It
+//     declines what tier 1 declines, plus a wildcard NameTest, an attribute with no fixed atomic
+//     type that is not ·special· (a list, a union, an xs:QName or xs:NOTATION primitive), a child
+//     whose ·locally declared type· is ·absent·, ·special·, or neither a simple type an
+//     attribute's would be admitted as nor simple content over one, a path of more than one step
+//     in any other position or with any other step — so `a/b = 1`, `count(a/b)`, `a/@b`, `a//b`
+//     and `a/*` decline — an fn:count argument of any other shape, a cast — and so fn:string —
+//     from a typed attribute, child, `$value`, count, arithmetic or function result outside the
+//     xs:string family, fn:string over an xs:float or xs:double argument, a collation argument, a
+//     function call of the wrong arity, the zero-argument string functions, whose implicit
+//     argument reads `.`, an arithmetic operand that is not numeric, an xs:float one against
+//     xs:double (#889), a unary sign, and a `$value` whose {simple type definition} is classified
+//     as such an attribute's type would be, or is a list of a type that would be; a `$value` over
+//     ·special· content is xs:untypedAtomic, as such an attribute is. FacetAssertions is the
+//     value.AssertionEvaluator for an assertions facet's {test} (Datatypes §4.3.13.3,
+//     cvc-assertions-valid), over the same grammar plus [47] ContextItemExpr: `$value` is bound to
+//     the value under the facet's type, and there is no context item, so `.`, an attribute or
+//     child step, a child path, a rooted path and a zero-argument string function each raise
+//     err:XPDY0002 and fail the facet; a union's own assertions facet and an fn:count call
+//     decline. `.` declines everywhere else. Longer paths in other positions, the other axes,
+//     predicates, quantified expressions, the collation arguments and every other F&O function are
+//     PLANNED (#1042).
 //  3. The full grammar (docs/specs/md/xpath20.md) and function library
 //     (docs/specs/md/xpath-functions.md) — M7 onward, ratcheted.
 //     PLANNED.

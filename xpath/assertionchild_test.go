@@ -235,7 +235,10 @@ func TestAssertionChildStepReadsTheDefaultNamespace(t *testing.T) {
 
 // A child-axis step DECLINES where the child's type is not fixed at compile
 // time or is not one simple type this engine reads (ctaAssertionFacade.child),
-// and every path but one step, rooted or not, declines in the grammar.
+// and every path but one step, rooted or not, declines in the grammar in a
+// comparison's position — the one position a child path of two or more steps
+// is admitted in is the whole operand of fn:exists, fn:empty or an ·effective
+// boolean value· (assertionpath_test.go).
 func TestCompileAssertionTestDeclinesChildSteps(t *testing.T) {
 	union := asUnion(t)
 	types := asTypesWith(union)

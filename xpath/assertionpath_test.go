@@ -286,10 +286,11 @@ func TestAssertionRootedChildPath(t *testing.T) {
 
 // A child path is the assertion façade's alone: a Type Alternative's {test}
 // declines it on ctaTypeAlternativeFacade.childPath, and an assertions facet's
-// reads the absent context item and never Holds (ctaFacetFacade.childPath,
-// err:XPDY0002). The facet rows decline instead with the facet's childPath
-// declining, which a Declined outcome would also satisfy; the Type Alternative
-// rows compile with its childPath admitting the path.
+// reads the absent context item and Fails, never Holds
+// (ctaFacetFacade.childPath, err:XPDY0002), fn:not over it included, the error
+// propagating. The facet rows decline instead with the facet's childPath
+// declining; the Type Alternative rows compile with its childPath admitting
+// the path.
 func TestChildPathOutsideTheAssertionFacade(t *testing.T) {
 	for _, expr := range []string{"a/b", "not(a/b)", "a/b and @x"} {
 		if _, ok := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); ok {
@@ -298,8 +299,8 @@ func TestChildPathOutsideTheAssertionFacade(t *testing.T) {
 	}
 	str := asBuiltin(t, "string")
 	for _, test := range []string{"a/b", "not(a/b)", "exists(a/b)", "empty(a/b)", "not(empty(a/b))"} {
-		if got := FacetAssertions().Evaluate(backend(), seededTypes, str, ctaExprRecord(test, ""), fcValue(t, str, "x")); got == value.AssertionHolds {
-			t.Errorf("FacetAssertions().Evaluate(%q) = Holds, want Declined or Fails", test)
+		if got := FacetAssertions().Evaluate(backend(), seededTypes, str, ctaExprRecord(test, ""), fcValue(t, str, "x")); got != value.AssertionFails {
+			t.Errorf("FacetAssertions().Evaluate(%q) = %d, want Fails (%d): never Holds", test, got, value.AssertionFails)
 		}
 	}
 }

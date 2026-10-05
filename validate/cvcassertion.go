@@ -453,8 +453,9 @@ func (w *walk) assertionElementTypes(ct xsd.ComplexType) xpath.ElementTypes {
 // child, so the walk holds at most one value per element [[child]] of an
 // element whose {assertions} read it, for the data model instance
 // cvc-assertion clause 1 builds from the parent. A {test} that only counts a
-// child reads its [xpath.Tally] instead ([walk.tallyElement]), and the child
-// never comes through here for it.
+// child, or only asks the existence of a child path through it, reads its
+// [xpath.Tally] instead ([walk.tallyElement]), and the child never comes
+// through here for it.
 func (w *walk) keepChild(parent *assertionCheck, e Element, g governance, content *contentCheck, recorded bool) {
 	if !parent.reads(e.Name()) {
 		return

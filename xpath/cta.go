@@ -34,10 +34,10 @@ import (
 // (ctaNoContextItem). It is not a stage of a general XPath 2.0 evaluator: the
 // productions below reach no axis but attribute, one child step, the
 // child-step paths whose existence is asked and the descendant steps fn:count
-// counts over, no predicate, no variable but `$value`
-// and no function but fn:not, fn:count and the ten ctaParser.libraryCall
-// names, so evaluating them directly is exact where a fail-open delegation to
-// a general engine would be a guess.
+// counts over, no predicate, no variable but `$value` and no function but
+// fn:not, fn:count and the ten ctaParser.libraryCall names, so evaluating them
+// directly is exact where a fail-open delegation to a general engine would be a
+// guess.
 //
 //	[8]  Test                ::= OrExpr
 //	[9]  OrExpr              ::= AndExpr ( 'or' AndExpr )*
@@ -489,14 +489,15 @@ func (ctaTypeError) ctaExpr()        {}
 // ta-SimpleValue — its AttrName arm in the untyped and the typed form
 // (ctaFacade.attribute), its Literal arm, and the assertion façade's `$value`
 // in its three static forms (ctaFacade.variable), child-axis step
-// (ctaFacade.child) and rooted path (ctaFacade.rooted), and the facet façade's
-// read of an absent context item (ctaNoContextItem) — the cast that [15]
-// ta-CastExpr's tail and [18] ta-ConstructorFunction both build over one of
-// them, the assertion façade's fn:count call (ctaFacade.count), a binary
-// arithmetic operator over two of them (ctaArith, ctaFacade.computes), and a
-// call to an F&O string or sequence function over them (ctaMatch,
-// ctaUnaryString, ctaPresence, ctaStringFunction; ctaFacade.callsLibrary).
-// Every branch answers readsChild and counted on ctaExpr's terms.
+// (ctaFacade.child), child path (ctaFacade.childPath) and rooted path
+// (ctaFacade.rooted), and the facet façade's read of an absent context item
+// (ctaNoContextItem) — the cast that [15] ta-CastExpr's tail and [18]
+// ta-ConstructorFunction both build over one of them, the assertion façade's
+// fn:count call (ctaFacade.count), a binary arithmetic operator over two of
+// them (ctaArith, ctaFacade.computes), and a call to an F&O string or
+// sequence function over them (ctaMatch, ctaUnaryString, ctaPresence,
+// ctaStringFunction; ctaFacade.callsLibrary). Every branch answers readsChild
+// and counted on ctaExpr's terms.
 type ctaValue interface {
 	ctaValue()
 	readsChild(name xsd.QName) bool
@@ -845,8 +846,8 @@ type ctaCount struct {
 type ctaCounted interface{ ctaCounted() }
 
 // ctaCountPath is one relative path fn:count counts over: the nodes on axis
-// named name. It is comparable, and a [Tally] keeps one counter per distinct
-// path.
+// named name. It is one arm of the keys a [Tally] keeps one counter per
+// distinct one of (ctaTallied).
 type ctaCountPath struct {
 	axis ctaCountAxis
 	name xsd.QName
@@ -1023,7 +1024,9 @@ func (ctaEmptySequence) ctaStatic() {}
 // ctaStaticOf reports the static type of one [14] ta-ValueExpr. ctaAttr and
 // ctaUntypedValue are the untyped arms, and so are ctaNoDocumentRoot and
 // ctaNoContextItem: each raises before any item exists, so its static type
-// decides only whether a comparison over it compiles, never an answer.
+// decides only whether a comparison over it compiles, never an answer. A
+// ctaChildPath never reaches here: ctaParser.childPath builds it only where no
+// static type is asked.
 func ctaStaticOf(v ctaValue) ctaStatic {
 	switch n := v.(type) {
 	case ctaLiteral:
@@ -1320,14 +1323,14 @@ func ctaSingletonOperand(v ctaValue, c *xsd.SimpleType, env ctaEnv) (value.Value
 // eval decides the ·effective boolean value· of a bare ValueExpr (xpath20.md
 // §2.4.3, the fn:boolean rules quoted there).
 //
-// An AttrName, untyped or typed, and a child-axis step evaluate to a sequence
-// of NODES rather than to atomic values, so each takes rule 2 ("a sequence
-// whose first item is a node") whenever its NameTest matches at all and rule 1
-// (the empty sequence) when it matches nothing, and no type of its own is
-// involved — a ·nilled· child is a node all the same. Rule 2 holds whatever
-// the sequence's LENGTH, which is what a wildcard NameTest and a repeated
-// child make observable. A rooted path raises err:XPDY0050, and a read of an
-// absent context item err:XPDY0002. ctaStep.nodes is that reading, which
+// An AttrName, untyped or typed, a child-axis step and a child path evaluate
+// to a sequence of NODES rather than to atomic values, so each takes rule 2
+// ("a sequence whose first item is a node") whenever its NameTest matches at
+// all and rule 1 (the empty sequence) when it matches nothing, and no type of
+// its own is involved — a ·nilled· child is a node all the same. Rule 2 holds
+// whatever the sequence's LENGTH, which is what a wildcard NameTest and a
+// repeated child make observable. A rooted path raises err:XPDY0050, and a read
+// of an absent context item err:XPDY0002. ctaStep.nodes is that reading, which
 // fn:empty and fn:exists share. `$value` is atomic values and no node: the
 // statically empty one is rule 1's false, the bound typed one is decided by
 // ctaBoolean, a list of two or more items included, and the untyped one by rule

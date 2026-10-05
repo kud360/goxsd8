@@ -26,17 +26,16 @@ import (
 // façade admits — each behind the façade (ctaFacade.comparesValues,
 // ctaFacade.variable, ctaFacade.child, ctaFacade.childPath, ctaFacade.rooted,
 // ctaFacade.count, ctaFacade.callsLibrary, ctaFacade.computes,
-// ctaFacade.contextItem), so a
-// Type Alternative's {test} reaches none of them. Every method below is named
-// for the production it parses, and the whole grammar is both reached and
-// evaluated: no method here is a stub, and the production-level declines are
-// those nine façade methods'. xpath/doc.go owns the enumeration of what
-// declines; every other decline reaching this file is ctaTypes answering
-// ctaTypeDeclined for a comparison type, a cast target or a cast operand it
-// will not serve, ctaTypes.arithmetic declining an operand pair, a library
-// call of an arity its function does not have, or the façade declining a
-// NameTest, a variable's type or a settled comparison type, which the
-// production that asked propagates unchanged.
+// ctaFacade.contextItem), so a Type Alternative's {test} reaches none of them.
+// Every method below is named for the production it parses, and the whole
+// grammar is both reached and evaluated: no method here is a stub, and the
+// production-level declines are those nine façade methods'. xpath/doc.go owns
+// the enumeration of what declines; every other decline reaching this file is
+// ctaTypes answering ctaTypeDeclined for a comparison type, a cast target or a
+// cast operand it will not serve, ctaTypes.arithmetic declining an operand
+// pair, a library call of an arity its function does not have, or the façade
+// declining a NameTest, a variable's type or a settled comparison type, which
+// the production that asked propagates unchanged.
 
 // ctaFunctionNS is the default function namespace of a {test}'s static context
 // (xpath-valid clause 2.2.4, §3.13.6.2), which an unprefixed [12]
