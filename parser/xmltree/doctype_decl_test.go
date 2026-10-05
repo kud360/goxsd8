@@ -169,26 +169,33 @@ func TestElementAndAttlistDeclAreWellFormed(t *testing.T) {
 // Recursion); an external entity, directly, through another entity and
 // declared only after the <!ATTLIST> (WFC: No External Entity References); and
 // a '<' in replacement text, directly, through another entity and in a name's
-// first, binding declaration (WFC: No < in Attribute Values). Each control
-// reads: a predefined entity, a CharRef, one spelled with a character
-// reference to '&', and an entity whose replacement text is a CharRef to '<';
-// an undeclared name where Entity Declared does not bind — after an unread or
-// a read parameter-entity reference, or before a read one, and in replacement
-// text after a read one; an indirect reference to an entity declared after the
-// <!ATTLIST>, which is VC: Entity Declared's; an entity first declared after a
-// declined reference, which the reader does not process (§5.1); a name whose
-// first declaration is clean; an entity reached twice by one walk, and the
-// "billion laughs" entities, which the walk reads once each or not in this
-// test's lifetime; and a clean <!ATTLIST> never applied. Each control reads
-// with an internal subset alone and again beside an external one. So do an
-// undeclared name under an external subset, where Entity Declared does not
-// bind either, and one in a parameter entity's replacement text in a
-// standalone="yes" document, which it does not reach; the standalone="yes" row
-// whose entity is declared only in a parameter entity, without
-// standalone="yes", where the reference read lifts the constraint; an entity
-// whose replacement text references a name declared nowhere, which no default
-// value references; and an entity whose literal spells a '&' as `&#38;`, which
-// opens no reference in its replacement text (§4.4.2).
+// first, binding declaration (WFC: No < in Attribute Values); and a '&' in
+// replacement text that begins no Reference, where the literal spelled it
+// `&#38;` or `&#x26;`, directly, before a ';' that closes no Name, through
+// another entity and where Entity Declared does not bind (§4.4.5, [10]
+// AttValue, [67] Reference), and one that begins an EntityRef to a name
+// declared nowhere (WFC: Entity Declared). Every fault wraps no cause. Each
+// control reads: a predefined entity, a CharRef, one spelled with a character
+// reference to '&', an entity whose replacement text is a CharRef to '<' or to
+// '&', and one whose replacement text references a declared entity through a
+// '&' its literal spelled `&#38;`; an undeclared name where Entity Declared
+// does not bind — after an unread or a read parameter-entity reference, or
+// before a read one, and in replacement text after a read one; an indirect
+// reference to an entity declared after the <!ATTLIST>, which is VC: Entity
+// Declared's; an entity first declared after a declined reference, which the
+// reader does not process (§5.1); a name whose first declaration is clean; an
+// entity reached twice by one walk, and the "billion laughs" entities, which
+// the walk reads once each or not in this test's lifetime; and a clean
+// <!ATTLIST> never applied. Each control reads with an internal subset alone
+// and again beside an external one. So do an undeclared name under an external
+// subset, where Entity Declared does not bind either, and one in a parameter
+// entity's replacement text in a standalone="yes" document, which it does not
+// reach; the standalone="yes" row whose entity is declared only in a parameter
+// entity, without standalone="yes", where the reference read lifts the
+// constraint; an entity whose replacement text references a name declared
+// nowhere, which no default value references; and an entity whose replacement
+// text holds a '&' that begins no Reference, which no default value references
+// either.
 func TestAttlistDefaultEntityReferencesAreWellFormed(t *testing.T) {
 	const decl = "<?xml version=\"1.0\"?>\n"
 	const alone = "<?xml version=\"1.0\" standalone=\"yes\"?>\n"
@@ -221,6 +228,9 @@ func TestAttlistDefaultEntityReferencesAreWellFormed(t *testing.T) {
 	lt := func(n string) string {
 		return fmt.Sprintf(", directly or indirectly, entity %s, whose replacement text holds '<' (XML 1.0 WFC: No < in Attribute Values)", n)
 	}
+	stray := func(n string) string {
+		return fmt.Sprintf(", directly or indirectly, entity %s, whose replacement text holds a '&' that begins no Reference, '&' Name ';' or a character reference (XML 1.0 §4.4.5, [10] AttValue, [67] Reference)", n)
+	}
 	for _, tc := range []struct {
 		doc  string
 		want string // the whole error
@@ -244,6 +254,11 @@ func TestAttlistDefaultEntityReferencesAreWellFormed(t *testing.T) {
 		{decl + head + `<!ENTITY lt2 "<"><!ATTLIST r a CDATA "&lt2;">` + tail, value + lt("lt2")},
 		{decl + head + `<!ENTITY lt2 "<"><!ENTITY m "&lt2;"><!ATTLIST r a CDATA "&m;">` + tail, value + lt("lt2")},
 		{decl + head + `<!ENTITY e "a<b"><!ENTITY e "x"><!ATTLIST r a CDATA "&e;">` + tail, value + lt("e")},
+		{decl + head + `<!ENTITY f "a&#38;b"><!ATTLIST r a CDATA "&f;">` + tail, value + stray("f")},
+		{decl + head + `<!ENTITY f "a&#x26;b"><!ATTLIST r a CDATA "&f;">` + tail, value + stray("f")},
+		{decl + head + `<!ENTITY f "a&#38;b c;"><!ENTITY g "&f;"><!ATTLIST r a CDATA "&g;">` + tail, value + stray("f")},
+		{decl + head + read + `<!ENTITY f "&#38;"><!ATTLIST r a CDATA "&f;">` + tail, value + stray("f")},
+		{decl + head + `<!ENTITY f "a&#38;b;"><!ATTLIST r a CDATA "&f;">` + tail, value + undeclared("f", "b")},
 	} {
 		t.Run(tc.doc, func(t *testing.T) {
 			wantSubsetFault(t, tc.doc, tc.want)
@@ -254,6 +269,8 @@ func TestAttlistDefaultEntityReferencesAreWellFormed(t *testing.T) {
 		`<!ATTLIST r a CDATA "&#60;&#x3C;">`,
 		`<!ATTLIST r a CDATA "&#38;u;">`,
 		`<!ENTITY e "&#38;#60;"><!ATTLIST r a CDATA "&e;">`,
+		`<!ENTITY e "a&#38;#38;b"><!ATTLIST r a CDATA "&e;">`,
+		`<!ENTITY b "v"><!ENTITY e "a&#38;b;"><!ATTLIST r a CDATA "&e;">`,
 		ext + `<!ATTLIST r a CDATA "&u;">`,
 		read + `<!ATTLIST r a CDATA "&u;">`,
 		`<!ATTLIST r a CDATA "&u;">` + read,
@@ -279,7 +296,7 @@ func TestAttlistDefaultEntityReferencesAreWellFormed(t *testing.T) {
 		alone + `<!DOCTYPE r [<!ENTITY % q "<!ATTLIST r a CDATA '&u;'>"> %q;]><r/>`,
 		decl + head + peDeclared + tail,
 		decl + head + `<!ENTITY f "&u;"><!ATTLIST r a CDATA "x">` + tail,
-		decl + head + `<!ENTITY f "a&#38;b"><!ATTLIST r a CDATA "&f;">` + tail,
+		decl + head + `<!ENTITY f "a&#38;b"><!ATTLIST r a CDATA "x">` + tail,
 	} {
 		t.Run(doc, func(t *testing.T) {
 			drained(t, doc)
