@@ -13,18 +13,20 @@ import (
 
 // This file is the lexer and the recursive-descent parser for the §3.12.6
 // required subset, one of each (STYLE T4, xpath/doc.go's "There is never a
-// second, lenient parser"), plus the two productions beyond it an assertion's
-// {test} reaches: xpath20.md [23] ValueComp and [44] VarRef, each behind the
-// façade (ctaFacade.comparesValues, ctaFacade.variable), so a Type
-// Alternative's {test} cannot reach either. Every method below is named for
-// the production it parses, and the whole grammar is both reached and
-// evaluated: no method here is a stub, and the production-level declines are
-// those two façade methods'. xpath/doc.go owns the enumeration of what
-// declines; every other decline reaching this file is ctaTypes answering
-// ctaTypeDeclined for a comparison type, a cast target or a cast operand it
-// will not serve, or the façade declining a NameTest, a variable's type or a
-// settled comparison type, which the production that asked propagates
-// unchanged.
+// second, lenient parser"), plus the productions beyond it an assertion's
+// {test} reaches: xpath20.md [23] ValueComp, [44] VarRef, an abbreviated
+// child-axis step whose NodeTest is a QName ([31] AbbrevForwardStep, §3.2.1.1),
+// and a "/" or "//" opening [25] PathExpr over one such step — each behind the
+// façade (ctaFacade.comparesValues, ctaFacade.variable, ctaFacade.child,
+// ctaFacade.rooted), so a Type Alternative's {test} reaches none of them. Every
+// method below is named for the production it parses, and the whole grammar is
+// both reached and evaluated: no method here is a stub, and the
+// production-level declines are those two façade methods'. xpath/doc.go owns
+// the enumeration of what declines; every other decline reaching this file is
+// ctaTypes answering ctaTypeDeclined for a comparison type, a cast target or a
+// cast operand it will not serve, or the façade declining a NameTest, a
+// variable's type or a settled comparison type, which the production that asked
+// propagates unchanged.
 
 // ctaFunctionNS is the default function namespace of a {test}'s static context
 // (xpath-valid clause 2.2.4, §3.13.6.2), which an unprefixed [12]
@@ -44,12 +46,13 @@ var ctaNotFunction = xsd.QName{Space: ctaFunctionNS, Local: "not"}
 // the parse walk reached, never one this map yielded.
 //
 // The record's {default namespace} is the default ELEMENT/TYPE namespace, so
-// it answers for exactly one production here: [15] ta-CastExpr's target QName,
+// it answers for exactly two productions here: [15] ta-CastExpr's target QName,
 // which xpath20.md §3.10.2 puts in it ("if the target type has no namespace
-// prefix, it is considered to be in the default element/type namespace"). An
-// absent {default namespace} is the empty string, which is the no-namespace
-// answer that case wants anyway. An unprefixed attribute NameTest and an
-// unprefixed function name take their own answers, and neither is this one.
+// prefix, it is considered to be in the default element/type namespace"), and
+// the NameTest of a child-axis step (elementName). An absent {default
+// namespace} is the empty string, which is the no-namespace answer both cases
+// want then. An unprefixed attribute NameTest and an unprefixed function name
+// take their own answers, and neither is this one.
 type ctaNames struct {
 	prefixes         map[string]string
 	defaultNamespace string
@@ -100,6 +103,20 @@ func (p *ctaParser) wildcardTest(text string) ctaNameTest {
 		return ctaUnresolvedTest{}
 	}
 	return ctaAnyLocal{space: space}
+}
+
+// elementName resolves the QName NameTest of a child-axis step to an ·expanded
+// name·. An unprefixed one takes the {default namespace}: the child axis's
+// principal node kind is element, so xpath20.md §3.2.1.2 puts an unprefixed
+// name test in "the default element/type namespace in the expression context",
+// which xpath-valid clause 2.2.3 fixes as the {default namespace} — an
+// assertion's xpathDefaultNamespace, already resolved (PRINCIPLES 15).
+func (p *ctaParser) elementName(text string) xsd.QName {
+	prefix, local, prefixed := strings.Cut(text, ":")
+	if !prefixed {
+		return xsd.QName{Space: p.names.defaultNamespace, Local: text}
+	}
+	return p.prefixedName(prefix, local)
 }
 
 // typeName resolves the QName naming a datatype on attributeName's terms,
@@ -219,6 +236,11 @@ const (
 	// ctaDollarTok is the '$' opening xpath20.md [44] VarRef, which only the
 	// assertion façade's `$value` reaches (ctaFacade.variable).
 	ctaDollarTok
+	// ctaSlashTok is '/' and ctaSlashSlashTok is '//'. Each is read only where
+	// it opens a [25] PathExpr (ctaParser.rootedPath); anywhere else it is a
+	// token no production takes, so `a/b` and `a//b` are not expressions here.
+	ctaSlashTok
+	ctaSlashSlashTok
 )
 
 // ctaToken is one token, identified by kind. text carries the source spelling
@@ -263,6 +285,12 @@ func ctaTokenize(s string) ([]ctaToken, bool) {
 			i++
 		case r == '$':
 			toks = append(toks, ctaToken{kind: ctaDollarTok})
+			i++
+		case strings.HasPrefix(s[i:], "//"):
+			toks = append(toks, ctaToken{kind: ctaSlashSlashTok})
+			i += 2
+		case r == '/':
+			toks = append(toks, ctaToken{kind: ctaSlashTok})
 			i++
 		case r == ':':
 			if !strings.HasPrefix(s[i:], "::") {
@@ -828,12 +856,22 @@ func (p *ctaParser) constructorFunction() (ctaValue, bool) {
 	return ctaCast{operand: arg, target: target, allowsEmpty: true}, true
 }
 
-// simpleValue parses [16] ta-SimpleValue's two arms, and the [44] VarRef arm
-// the assertion façade adds (varRef).
+// simpleValue parses [16] ta-SimpleValue's two arms, and the arms the
+// assertion façade adds: [44] VarRef (varRef), a child-axis step (childStep),
+// and a rooted path (rootedPath). A name opens the unabbreviated attribute axis
+// only where `::` follows the name `attribute`, and a child-axis step
+// otherwise.
 func (p *ctaParser) simpleValue() (ctaValue, bool) {
 	switch p.peek(0).kind {
-	case ctaAtTok, ctaNameTok:
+	case ctaAtTok:
 		return p.attrName()
+	case ctaNameTok:
+		if p.atName("attribute") && p.peek(1).kind == ctaAxisTok {
+			return p.attrName()
+		}
+		return p.childStep()
+	case ctaSlashTok, ctaSlashSlashTok:
+		return p.rootedPath()
 	case ctaDollarTok:
 		return p.varRef()
 	case ctaStringTok:
@@ -863,6 +901,36 @@ func (p *ctaParser) varRef() (ctaValue, bool) {
 	text := p.peek(0).text
 	p.advance()
 	return p.facade.variable(p.attributeName(text), p.types)
+}
+
+// childStep parses one abbreviated child-axis step, xpath20.md [31]
+// AbbrevForwardStep without its '@' — "If the axis name is omitted from an
+// axis step, the default axis is child" (§3.2.4) — whose NodeTest is a QName
+// NameTest, resolved on elementName's terms. The node is p.facade's, which
+// may decline it. A [37] Wildcard NameTest is a ctaWildcardTok and never
+// reaches here, and `child::` spelled out is a name followed by a `::` no
+// production takes: both decline.
+func (p *ctaParser) childStep() (ctaValue, bool) {
+	text := p.peek(0).text
+	p.advance()
+	return p.facade.child(ctaExactName{name: p.elementName(text)}, p.types)
+}
+
+// rootedPath parses xpath20.md [25] PathExpr's two rooted arms, "/"
+// RelativePathExpr and "//" RelativePathExpr, as far as ONE child-axis step
+// with a QName NameTest; a longer path, and a bare "/", leave a token no
+// production takes. The step is resolved — an unbound prefix in it is
+// err:XPST0081 like any other — and never typed: the node is p.facade's, and
+// the one façade that admits it builds a node that raises before any step is
+// taken (ctaNoDocumentRoot), so what the step would select is never asked.
+func (p *ctaParser) rootedPath() (ctaValue, bool) {
+	p.advance() // '/' or '//'
+	if !p.at(ctaNameTok) {
+		return nil, false
+	}
+	p.elementName(p.peek(0).text)
+	p.advance()
+	return p.facade.rooted()
 }
 
 // attrName parses [17] ta-AttrName in BOTH spellings ta-props-correct clause 2

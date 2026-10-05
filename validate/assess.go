@@ -164,7 +164,7 @@ func (v *Validator) Assess(root Element) *Result {
 		}
 		g = typed
 	}
-	w.element(root, g, nil, nil)
+	w.element(root, g, nil, nil, nil)
 	w.ids.charge(&w, root)
 	return &w.res
 }
@@ -278,7 +278,17 @@ func (g governance) simpleType() *xsd.SimpleType {
 // definition with {variety} simple" — and nil for every other, which carries no
 // [schema actual value] to be a ·key-sequence· member or an ·ID value·.
 func (g governance) valueType() *xsd.SimpleType {
-	switch t := g.typ.(type) {
+	return valueTypeOf(g.typ)
+}
+
+// valueTypeOf is the simple type an element of type td has its value in: td
+// itself where it is simple, the {simple type definition} of its {content
+// type} where it is complex with {variety} simple, and nil for every other
+// type, nil included. It is [governance.valueType]'s answer for a type that
+// governs nothing yet, which is what a ·locally declared type· is
+// ([walk.childValue]).
+func valueTypeOf(td xsd.TypeDefinition) *xsd.SimpleType {
+	switch t := td.(type) {
 	case *xsd.SimpleType:
 		return t
 	case xsd.ComplexType:
@@ -998,11 +1008,19 @@ func (c elementContext) LookupNamespace(prefix string) (string, bool) {
 // [[children]] is computed here, after g, because key-p-inherited clause 3
 // reads the ·attribution· of e's attributes to e's ·governing type definition·
 // ([walk.handedDown]).
-func (w *walk) element(e Element, g governance, parent *icCheck, inherited []inheritedAttribute) {
+//
+// asserting is the enclosing element's clause 6 state, nil at the ·validation
+// root· and wherever the enclosing element has no {assertions}, and it travels
+// down beside parent as e's own state travels to e's [[children]]. e hands it
+// its typed value last, once everything that can find e invalid has run
+// ([walk.keepChild]): cvc-assertion clause 1.1 validates the parent's
+// [[children]] "in the usual way" before any {test} of the parent reads them.
+func (w *walk) element(e Element, g governance, parent *icCheck, asserting *assertionCheck, inherited []inheritedAttribute) {
 	if w.log.Enabled(context.Background(), slog.LevelDebug) {
 		w.log.Debug("assessing element", slog.Any("name", e.Name()), slog.Any("loc", e.Loc()))
 	}
 	violationsBefore := len(w.res.violations)
+	unevaluatedBefore := len(w.res.unevaluated)
 	w.abstractDeclaration(e, g)
 	w.abstractType(e, g)
 	isNilled := w.nilCheck(e, g)
@@ -1011,7 +1029,7 @@ func (w *walk) element(e Element, g governance, parent *icCheck, inherited []inh
 	w.attributes(e, g)
 	content := w.contentCheck(e, g, isNilled)
 	asserts := w.compileAssertions(g)
-	w.children(e, content, id, w.handedDown(e, g, inherited))
+	w.children(e, content, id, asserts, w.handedDown(e, g, inherited))
 	if w.res.err != nil {
 		// A walk that stopped on a source fault never settles §3.11.4 or
 		// §3.17.5.2 for this element, on [contentCheck.end]'s grounds: the
@@ -1025,6 +1043,8 @@ func (w *walk) element(e Element, g governance, parent *icCheck, inherited []inh
 	id.substitute(content)
 	w.idElement(id)
 	w.identityExit(id)
+	w.keepChild(asserting, e, g, content,
+		len(w.res.violations) > violationsBefore || len(w.res.unevaluated) > unevaluatedBefore)
 }
 
 // abstractDeclaration settles cvc-elt (§3.3.4.3) clause 2 for e: its
@@ -1438,15 +1458,16 @@ func (w *walk) text(t Text) {
 // would have satisfied.
 //
 // inherited is the [inherited attributes] each element [[child]] gets, the
-// same for all of them ([walk.handedDown]).
-func (w *walk) children(e Element, content *contentCheck, id *icCheck, inherited []inheritedAttribute) {
+// same for all of them ([walk.handedDown]), and asserts is e's clause 6 state,
+// which each of them hands its typed value to ([walk.keepChild]).
+func (w *walk) children(e Element, content *contentCheck, id *icCheck, asserts *assertionCheck, inherited []inheritedAttribute) {
 	kids := e.Children()
 	for {
 		c, ok := kids.Next()
 		if !ok {
 			break
 		}
-		w.child(c, content, id, inherited)
+		w.child(c, content, id, asserts, inherited)
 		if w.res.err != nil {
 			return
 		}
@@ -1480,7 +1501,7 @@ func (w *walk) children(e Element, content *contentCheck, id *icCheck, inherited
 // [walk.childGoverning]: it takes [governance]'s undecided shape here, and
 // clause 5 ([walk.locallyDeclaredType]), which an undecided child's absent
 // ·governing type definition· makes vacuous, is not consulted for it.
-func (w *walk) child(c Child, content *contentCheck, id *icCheck, inherited []inheritedAttribute) {
+func (w *walk) child(c Child, content *contentCheck, id *icCheck, asserts *assertionCheck, inherited []inheritedAttribute) {
 	if e, ok := c.Element(); ok {
 		a, undecided := content.element(w, e)
 		if a == nil && content.g.laxlyAssessed() {
@@ -1492,7 +1513,7 @@ func (w *walk) child(c Child, content *contentCheck, id *icCheck, inherited []in
 			// assessed· where one resolves, ·laxly assessed· again where none
 			// does, and never invalid for the want of one — the wildcard is lax,
 			// so e-validity clause 1.1.3 is not live (#1823).
-			w.element(e, w.resolvedGovernance(e, inherited), id, inherited)
+			w.element(e, w.resolvedGovernance(e, inherited), id, asserts, inherited)
 			return
 		}
 		if undecided {
@@ -1544,17 +1565,18 @@ func (w *walk) child(c Child, content *contentCheck, id *icCheck, inherited []in
 			// [walk.localGovernance] record or sits below one, so a record here
 			// would restate one decline per child.
 			w.ids.declined = true
-			w.element(e, governance{undecided: true}, id, inherited)
+			w.element(e, governance{undecided: true}, id, asserts, inherited)
 			return
 		}
 		g, assess := w.childGoverning(e, a, content.g.complexType(), inherited)
 		if !assess {
+			asserts.skipped(e)
 			w.logSkipped(e)
 			return
 		}
 		w.unresolvedStrictWildcardChild(content, e, a, g)
 		w.locallyDeclaredType(content, e, g)
-		w.element(e, g, id, inherited)
+		w.element(e, g, id, asserts, inherited)
 		return
 	}
 	t, ok := c.Text()

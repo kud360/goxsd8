@@ -8,9 +8,10 @@ import (
 // This file is the ASSERTION façade over the §3.12.6 grammar compileCTATest
 // parses (STYLE T4): an {assertions} member's {test} (§3.13.1) written in that
 // grammar is compiled and evaluated against the element it guards, which
-// cvc-assertion (§3.13.4.1) asks of it. It is the first slice of tier 2
-// (doc.go) and nothing wider: the grammar is the Type Alternative one, and only
-// the façade differs (ctaFacade) — an assertion's instance is TYPED.
+// cvc-assertion (§3.13.4.1) asks of it. It is the first slices of tier 2
+// (doc.go) and nothing wider: the grammar is the Type Alternative one, widened
+// only where the façade admits a production (ctaFacade) — an assertion's
+// instance is TYPED.
 //
 // cvc-assertion clause 1 builds the XDM instance from the partial ·PSVI· of E,
 // so each attribute carries the type its ·governing attribute declaration·
@@ -24,13 +25,16 @@ import (
 // assertion reads untyped too: its typed value is xs:untypedAtomic
 // (xpath-datamodel §3.3.1.2), so both façades build the same node for it.
 //
-// The assertion façade widens the grammar by TWO productions the Type
+// The assertion façade widens the grammar by FOUR productions the Type
 // Alternative façade declines: the eq/ne/lt/le/gt/ge value comparisons
 // (xpath20.md §3.5.1, [23] ValueComp), in [11] ta-BooleanExpr's comparator
-// position, and the variable reference `$value` (xpath20.md [44] VarRef), as
-// one more arm of [16] ta-SimpleValue — cvc-assertion clause 2.2 augments an
-// assertion's static context with that one variable, and ta-props-correct
-// clause 2's grammar names none.
+// position, and three more arms of [16] ta-SimpleValue — the variable
+// reference `$value` (xpath20.md [44] VarRef), which cvc-assertion clause 2.2
+// adds to an assertion's static context where ta-props-correct clause 2's
+// grammar names no variable; an abbreviated child-axis step with a QName
+// NameTest (§3.2.1.1), which reads E's element [[children]], whose typed
+// values cvc-assertion clause 1.2's partial ·PSVI· holds; and a path opening
+// with "/" or "//", which raises err:XPDY0050 over that instance (§3.2).
 
 // AttributeTypes answers, for the element information item E whose assertions
 // are being compiled, the {type definition} an attribute of E with the
@@ -47,6 +51,55 @@ import (
 // is validate's cvc-assertion site (validate/cvcassertion.go), which builds
 // it and [TypedAttributes] from one lookup so the two cannot disagree.
 type AttributeTypes func(name xsd.QName) (*xsd.SimpleType, bool)
+
+// ElementTypes answers, for the element information item E whose assertions are
+// being compiled, the {type definition} a child element of E with the ·expanded
+// name· name is read under: its ·locally declared type· within E's ·governing
+// type definition· (key-ldt-elem), the type cvc-complex-type clause 5 requires
+// that child's own ·governing type definition· to be the same as or ·validly
+// substitutable· for. ok false means no type is fixed for the name at compile
+// time — the type is ·absent· — and [CompileAssertionTest] declines a {test}
+// naming it.
+//
+// It is STATIC, on [AttributeTypes]' terms: the answer does not depend on
+// which children E carries, or on the type an xsi:type gives one, which is why
+// the type the compile reads and the one a child is governed by can differ and
+// [ChildElements] states which values agree with it. Its one consumer is
+// validate's cvc-assertion site (validate/cvcassertion.go).
+type ElementTypes func(name xsd.QName) (xsd.TypeDefinition, bool)
+
+// ChildElement is one element [[child]] of E as an assertion {test} reads it:
+// its ·expanded name· and its typed value (xpath-datamodel §6.2.4). It is
+// opaque, so its one constructor is [Child].
+type ChildElement struct {
+	name xsd.QName
+	v    TypedValue
+}
+
+// Child is the child element named name whose typed value is v, on the terms
+// [ChildElements] states. Child(name, nil) is a ·nilled· child, whose typed
+// value is the empty sequence (xpath-datamodel §6.2.4): a node all the same,
+// which a {test} naming it finds.
+func Child(name xsd.QName, v TypedValue) ChildElement { return ChildElement{name: name, v: v} }
+
+// ChildElements yields E's element [[children]] a compiled {test} reads, in
+// DOCUMENT ORDER (STYLE D1), each as a [ChildElement]. It must be non-nil, and
+// a yield reporting false ends the walk. A child no compiled step names need
+// not be yielded: [AssertionTest.ReadsChild] reports which names one reads.
+//
+// Each value is [Typed] of a value of EXACTLY the simple type the compile read
+// off the type [ElementTypes] answered for its name — that type itself, or the
+// {simple type definition} of its simple {content type} — or nil for a
+// ·nilled· child. That agreement is the caller's obligation, on the terms
+// [TypedAttributes] states for an attribute's value: validate produces the
+// value from the child's [schema normalized value] under the child's OWN
+// ·governing type definition·, then maps it under that simple type. A value
+// breaking it — the [Untyped] arm — is a dynamic error wherever the tree reads
+// it, which [AssertionTest.Evaluate] answers false.
+//
+// It carries the children alone and none of their descendants: no step this
+// engine compiles reaches below one.
+type ChildElements func(yield func(ChildElement) bool)
 
 // TypedValue is the typed value of one attribute node, or of `$value`, in the
 // data model instance cvc-assertion clause 1 builds, as xpath-datamodel
@@ -131,18 +184,19 @@ type ValueBinding struct{ v TypedValue }
 func BindValue(v TypedValue) ValueBinding { return ValueBinding{v: v} }
 
 // AssertionTest is a compiled assertion {test}: the expression tree
-// [CompileAssertionTest] admitted for one element's attribute types. It is a
-// distinct type from [CTATest] so a tree typed for an assertion can never be
-// evaluated over a Type Alternative's [Attributes], nor a Type Alternative
-// tree over [TypedAttributes].
+// [CompileAssertionTest] admitted for one element's attribute and child
+// element types. It is a distinct type from [CTATest] so a tree typed for an
+// assertion can never be evaluated over a Type Alternative's [Attributes],
+// nor a Type Alternative tree over [TypedAttributes].
 type AssertionTest struct{ root ctaExpr }
 
 // CompileAssertionTest compiles an assertion's {test} (§3.13.1, an
 // [xsd.XPathExpression] property record) for the element whose ·governing
-// type definition· has the {content type} content and whose attribute types
-// attrs answers, reporting ok false for a {test} this engine cannot evaluate.
-// Its consumer is validate's cvc-assertion site (validate/cvcassertion.go),
-// which declines the assertion on ok false.
+// type definition· has the {content type} content, whose attribute types
+// attrs answers and whose child element types elems answers, reporting ok
+// false for a {test} this engine cannot evaluate. Its consumer is
+// validate's cvc-assertion site (validate/cvcassertion.go), which declines
+// the assertion on ok false.
 //
 // content fixes `$value`'s static type, which is what cvc-assertion clause
 // 2.3.1.3 reads: under an [xsd.SimpleContent] it is the {simple type
@@ -150,10 +204,11 @@ type AssertionTest struct{ root ctaExpr }
 // {content type} it is the empty sequence (clause 2.3.2), whatever the binding.
 // A nil content declines every {test} naming `$value`.
 //
-// The grammar is [CompileCTATest]'s with the value comparisons and `$value`
-// added, and every decline [CompileCTATest] states is this one's too, under the
-// same static context (xpath-valid clause 2.2) augmented with `$value`
-// (cvc-assertion clause 2.2), plus these, each of which is the same withhold:
+// The grammar is [CompileCTATest]'s with the value comparisons, `$value`, an
+// abbreviated child-axis step and a "/" or "//" opening one added, and every
+// decline [CompileCTATest] states is this one's too, under the same static
+// context (xpath-valid clause 2.2) augmented with `$value` (cvc-assertion
+// clause 2.2), plus these, each of which is the same withhold:
 //
 //   - an attribute NameTest that is not a QName: a [37] Wildcard can match an
 //     attribute ·attributed to· an {attribute wildcard}, whose type is not
@@ -172,8 +227,16 @@ type AssertionTest struct{ root ctaExpr }
 //     ·special· one is read as xs:untypedAtomic and is admitted;
 //   - any variable but `$value`, which is not in the static context at all
 //     (err:XPST0008);
-//   - a cast whose operand is a typed attribute or `$value` outside the
-//     xs:string family;
+//   - a child-axis step whose NameTest is not a QName, or spells its axis out,
+//     or names a child for which elems reports false;
+//   - a child whose type elems answers is not a simple type the bullets above
+//     admit as an attribute's, nor a complex type whose simple {content type}
+//     is one: a ·special· type declines, because an xsi:type can give the
+//     child a typed value where the compile read an xs:untypedAtomic one, and
+//     so does every mixed, element-only and empty {content type};
+//   - a path of more than one step, and a "/" with no step after it;
+//   - a cast whose operand is a typed attribute, a typed child or `$value`
+//     outside the xs:string family;
 //   - a general or value comparison whose comparison type's {primitive type
 //     definition} is a date/time one, which without an implicit timezone this
 //     engine cannot order (ctaAssertionFacade.admitsComparison).
@@ -182,16 +245,22 @@ type AssertionTest struct{ root ctaExpr }
 // static-error question about an assertion is the schema assembler's, and
 // [CTATestStaticError] answers it for a Type Alternative only.
 //
+// A leading "/" or "//" followed by one step is not a decline: E is the root
+// of the data model instance, with no document node above it (cvc-assertion
+// clause 1.3), so the path raises err:XPDY0050 (xpath20.md §3.2) and the
+// {test} is false whatever E is named.
+//
 // GAP(xpath): unlike a Type Alternative's, an assertion's {test} has no
 // required subset to stop at — §3.13 admits full XPath 2.0 — so every decline
-// above is this engine's limit and not the spec's license: paths and axes
-// beyond the attribute step, and the F&O function library among them. The
+// above is this engine's limit and not the spec's license: paths of more than
+// one step, axes beyond the attribute step and one child step, children whose
+// type is not one simple type, and the F&O function library among them. The
 // direction is the withhold: the caller records the assertion as unevaluated
 // and neither charges it nor shows it satisfied (PRINCIPLES 20). (#1042)
 //
 // types is read as [CompileCTATest] reads it and stored nowhere.
-func CompileAssertionTest(expr xsd.XPathExpression, types xsd.TypeResolver, content xsd.ContentType, attrs AttributeTypes) (AssertionTest, bool) {
-	root, defect := compileCTATest(expr, types, ctaAssertionFacade{content: content, attrs: attrs})
+func CompileAssertionTest(expr xsd.XPathExpression, types xsd.TypeResolver, content xsd.ContentType, attrs AttributeTypes, elems ElementTypes) (AssertionTest, bool) {
+	root, defect := compileCTATest(expr, types, ctaAssertionFacade{content: content, attrs: attrs, elems: elems})
 	if defect.kind != ctaNoDefect {
 		return AssertionTest{}, false
 	}
@@ -199,35 +268,89 @@ func CompileAssertionTest(expr xsd.XPathExpression, types xsd.TypeResolver, cont
 }
 
 // Evaluate reports whether the compiled {test} evaluates to true for the
-// element whose attributes attrs yields and whose `$value` is v, WITHOUT
-// raising a dynamic or type error — the whole of what cvc-assertion
-// (§3.13.4.1) asks: "An element information item E is locally ·valid· with
-// respect to an assertion if and only if the {test} evaluates to true (see
-// below) without raising any dynamic error or type error." Clause 3 converts
-// the result "as if by a call to the XPath fn:boolean function", which a
-// boolean-rooted tree already is.
+// element whose attributes attrs yields, whose element [[children]] children
+// yields and whose `$value` is v, WITHOUT raising a dynamic or type error —
+// the whole of what cvc-assertion (§3.13.4.1) asks: "An element information
+// item E is locally ·valid· with respect to an assertion if and only if the
+// {test} evaluates to true (see below) without raising any dynamic error or
+// type error." Clause 3 converts the result "as if by a call to the XPath
+// fn:boolean function", which a boolean-rooted tree already is.
 //
 // So false is ONE answer for two outcomes the caller treats alike — the {test}
-// was false, or it raised (err:FORG0001, err:XPTY0004, err:FORG0006) — and
-// either way E is not ·valid· with respect to the assertion. A processor that
-// raises a type error dynamically "will treat the expression as having
-// evaluated to false" (cvc-xpath, §3.13.4.2). Every decline happened at
-// [CompileAssertionTest].
+// was false, or it raised (err:FORG0001, err:XPTY0004, err:FORG0006,
+// err:XPDY0050) — and either way E is not ·valid· with respect to the
+// assertion. A processor that raises a type error dynamically "will treat the
+// expression as having evaluated to false" (cvc-xpath, §3.13.4.2). Every
+// decline happened at [CompileAssertionTest].
 //
 // The dynamic context is cvc-xpath's — context item E, position and size 1 —
 // with the one variable cvc-assertion clause 2.3 adds to it, `$value`, bound
 // to v. A tree compiled for a {content type} that is not simple never reads v.
 // b and types are read as [CTATest.Evaluate] reads them.
-func (t AssertionTest) Evaluate(b value.Backend, types xsd.TypeResolver, attrs TypedAttributes, v ValueBinding) bool {
-	return ctaEval(t.root, ctaEnv{backend: b, types: types, input: ctaTypedInput{attrs: attrs, value: v}}) == ctaTrue
+func (t AssertionTest) Evaluate(b value.Backend, types xsd.TypeResolver, attrs TypedAttributes, children ChildElements, v ValueBinding) bool {
+	return ctaEval(t.root, ctaEnv{backend: b, types: types, input: ctaTypedInput{attrs: attrs, children: children, value: v}}) == ctaTrue
+}
+
+// ReadsChild reports whether the compiled {test} holds a child-axis step that
+// selects a child element named name, which is what [AssertionTest.Evaluate]'s
+// [ChildElements] must yield. Its consumer is validate's walk, which keeps a
+// child's value only where some {test} of its parent reads it. The answer is
+// read off the tree itself.
+func (t AssertionTest) ReadsChild(name xsd.QName) bool {
+	return ctaExprReadsChild(t.root, name)
+}
+
+// ctaExprReadsChild reports whether x holds a ctaTypedChild naming name, at
+// any depth. ctaTypeError holds no operand, and the nil root of a zero
+// AssertionTest holds nothing.
+func ctaExprReadsChild(x ctaExpr, name xsd.QName) bool {
+	switch n := x.(type) {
+	case ctaOr:
+		return ctaAnyReadsChild(n.operands, name)
+	case ctaAnd:
+		return ctaAnyReadsChild(n.operands, name)
+	case ctaNot:
+		return ctaExprReadsChild(n.operand, name)
+	case ctaCompare:
+		return ctaValueReadsChild(n.left, name) || ctaValueReadsChild(n.right, name)
+	case ctaValueCompare:
+		return ctaValueReadsChild(n.left, name) || ctaValueReadsChild(n.right, name)
+	case ctaEffectiveBoolean:
+		return ctaValueReadsChild(n.operand, name)
+	}
+	return false
+}
+
+// ctaAnyReadsChild is ctaExprReadsChild over each of operands.
+func ctaAnyReadsChild(operands []ctaExpr, name xsd.QName) bool {
+	for _, o := range operands {
+		if ctaExprReadsChild(o, name) {
+			return true
+		}
+	}
+	return false
+}
+
+// ctaValueReadsChild reports whether v is, or casts, a ctaTypedChild naming
+// name. No other value node holds an operand.
+func ctaValueReadsChild(v ctaValue, name xsd.QName) bool {
+	switch n := v.(type) {
+	case ctaTypedChild:
+		return n.name == name
+	case ctaCast:
+		return ctaValueReadsChild(n.operand, name)
+	}
+	return false
 }
 
 // ctaAssertionFacade is the assertion façade compileCTATest parses for: its
-// attribute nodes are typed by attrs, its `$value` by content, and it declines
-// the comparison types it cannot yet decide.
+// attribute nodes are typed by attrs, its child element nodes by elems, its
+// `$value` by content, and it declines the comparison types it cannot yet
+// decide.
 type ctaAssertionFacade struct {
 	content xsd.ContentType
 	attrs   AttributeTypes
+	elems   ElementTypes
 }
 
 func (ctaAssertionFacade) ctaFacade() {}
@@ -292,6 +415,62 @@ func (f ctaAssertionFacade) attribute(test ctaNameTest, types ctaTypes) (ctaValu
 		return nil, false
 	}
 	return ctaTypedAttr{name: exact.name, st: st}, true
+}
+
+// child compiles a QName NameTest on the child axis whose name elems types to
+// a ctaTypedChild, over the simple type a child of that type has its typed
+// value in (ctaChildValueType): xpath-datamodel §6.2.4 makes the typed value
+// of an element whose type is a simple type, or a complex type with simple
+// content, the one §3.3.1.2 computes for that simple type. The simple type
+// must be one ctaTypes.typedAtomic reads as one atomic value; every other
+// NameTest declines, and so does every other type:
+//
+//   - a ·special· simple type, or simple content over one: the compiled type is
+//     static, and an xsi:type can make the child's own type a typed one, so
+//     reading it as xs:untypedAtomic could charge a valid child;
+//   - a complex type whose {content type} is mixed (its typed value is its
+//     string value as xs:untypedAtomic), element-only (atomizing it is a type
+//     error), or empty (its typed value is the empty sequence) — each read the
+//     way xpath-datamodel §6.2.4 says, but by its own node this engine does not
+//     build.
+func (f ctaAssertionFacade) child(test ctaNameTest, types ctaTypes) (ctaValue, bool) {
+	exact, isExact := test.(ctaExactName)
+	if !isExact {
+		return nil, false
+	}
+	td, typed := f.elems(exact.name)
+	if !typed {
+		return nil, false
+	}
+	st, simple := ctaChildValueType(td)
+	if !simple || ctaSpecial(st) || !types.typedAtomic(st) {
+		return nil, false
+	}
+	return ctaTypedChild{name: exact.name, st: st}, true
+}
+
+// ctaChildValueType is the simple type the typed value of an element of type
+// td is computed in (xpath-datamodel §6.2.4): td itself where it is simple,
+// its {simple type definition} where it is complex with a simple {content
+// type}, and false otherwise. The default arm is unreachable:
+// [xsd.TypeDefinition] is a sealed sum of the two variants named (STYLE T2's
+// schema-closed-set exception).
+func ctaChildValueType(td xsd.TypeDefinition) (*xsd.SimpleType, bool) {
+	switch t := td.(type) {
+	case *xsd.SimpleType:
+		return t, true
+	case xsd.ComplexType:
+		sc, simple := t.ContentType().(xsd.SimpleContent)
+		return sc.SimpleType, simple
+	}
+	return nil, false
+}
+
+// rooted compiles a path opening with "/" or "//" to ctaNoDocumentRoot: E is
+// the root of the instance cvc-assertion clause 1.3 builds, and no document
+// node is above it, so the path raises err:XPDY0050 (xpath20.md §3.2).
+func (ctaAssertionFacade) rooted() (ctaValue, bool) {
+	return ctaNoDocumentRoot{}, true
 }
 
 // admitsComparison declines a comparison type whose {primitive type
