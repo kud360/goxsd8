@@ -20,9 +20,9 @@ import (
 // (cvcsimpletype.go): whiteSpace normalization (cl.1) and Datatype Valid (cl.2,
 // Datatypes §4.1.4) through value.ValidateLexical, in that order, then clause
 // 3's "every ·ENTITY value· in V is a ·declared entity name·" against the
-// document's [unparsedEntities] ([UnparsedEntities]), and last the clause 2
-// condition no backend decides, that a NOTATION value names a notation
-// declared in the schema ([walk.notationsDeclared]).
+// document's [unparsedEntities] ([UnparsedEntities]). Clause 2 includes that a
+// NOTATION value names a notation declared in the schema (Datatypes §3.3.19),
+// which value.ValidateLexical decides against [xsd.Schema.Notations].
 //
 // GAP(validate): the [unparsedEntities] validate/xmlsrc presents is read from
 // the DOCTYPE's internal subset, its internal parameter entities expanded under
@@ -145,9 +145,8 @@ func (w *walk) wildcardAttribute(a Attribute, e Element, pc xsd.ProcessContents)
 //     ·special· datatypes never reach it: [walk.stringValid] decides them
 //     (isSpecial), so the typeless <attribute> §3.2.2.2's third tier types as
 //     xs:anySimpleType is satisfied, not declined.
-//   - an ·ENTITY value· or NOTATION value candidate whose ·validating type·
-//     this package cannot decide, on [walk.entitiesDeclared]'s and
-//     [walk.notationsDeclared]'s terms.
+//   - an ·ENTITY value· candidate whose ·validating type· this package cannot
+//     decide, on [walk.entitiesDeclared]'s terms.
 func (w *walk) declaredAttribute(a Attribute, e Element, d xsd.AttributeDeclaration) (*xsd.SimpleType, bool) {
 	st, simple := w.schema.ResolvedSimpleType(d.TypeDefinition())
 	if !simple {
@@ -160,7 +159,7 @@ func (w *walk) declaredAttribute(a Attribute, e Element, d xsd.AttributeDeclarat
 	decided, verdict := w.stringValid(st, a.Value(), e, a.Loc())
 	if !decided {
 		w.declineAttribute(a, ruleCvcAttribute, "3",
-			"the ·initial value· of the attribute %s was not decided against its declaration's {type definition} %s: String Valid (§3.16.4) was withheld, the value backend reporting a fault of the type rather than a verdict about the lexical or the ·validating type· of an ·ENTITY value· or a NOTATION value being undecidable, so cvc-attribute clause 3 is undecided",
+			"the ·initial value· of the attribute %s was not decided against its declaration's {type definition} %s: String Valid (§3.16.4) was withheld, the value backend reporting a fault of the type rather than a verdict about the lexical or the ·validating type· of an ·ENTITY value· being undecidable, so cvc-attribute clause 3 is undecided",
 			a.Name(), st.Name())
 		return nil, false
 	}
@@ -373,15 +372,17 @@ type fixedConstraint struct {
 // st whose two literals some member of its mapping union cannot compare (an
 // unmapped primitive, or values with no sameness relation), and a {lexical form}
 // outside its own type's lexical space (a schema fault cos-valid-simple-default
-// charges at assembly, not the instance's). Charging on undecided would reject a
-// document for a gap in the processor. The ·special· residue is RULED permanent
-// by #2040 (STYLE P3b): a member that cannot answer may be the one that
-// equates the two literals, so no verdict exists to give; #2029 ruled the wider
-// residue this one narrows (provenance). The rest is RULED permanent by #774
-// (STYLE P3b): cos-valid-simple-default (§3.2.6.2) is a Schema Component
-// Constraint, and a schema assembled through [xsd.SchemaBuilder.Finalize] rather
-// than FinalizeWith carries an undecided value space, so that check may never
-// have run; the instance walk has no sound verdict to give in its place.
+// charges at assembly, not the instance's; a NOTATION one naming no declared
+// notation is left undecided there too, by ValidDefault's gate 1). Charging on
+// undecided would reject a document for a gap in the processor. The ·special·
+// residue is RULED permanent by #2040 (STYLE P3b): a member that cannot answer
+// may be the one that equates the two literals, so no verdict exists to give;
+// #2029 ruled the wider residue this one narrows (provenance). The rest is RULED
+// permanent by #774 (STYLE P3b): cos-valid-simple-default (§3.2.6.2) is a Schema
+// Component Constraint, and a schema assembled through
+// [xsd.SchemaBuilder.Finalize] rather than FinalizeWith carries an undecided
+// value space, so that check may never have run; the instance walk has no sound
+// verdict to give in its place.
 func (w *walk) fixedAgreement(a Attribute, e Element, st *xsd.SimpleType, f fixedConstraint) {
 	same, decided := value.ConstraintMatches(w.backend, w.schema, st, a.Value(), elementContext{owner: e}, f.vc)
 	if !decided {
@@ -517,9 +518,9 @@ func (w *walk) defaultedConstraint(u xsd.AttributeUse, attrs []Attribute) (xsd.V
 // schema alone settles, so clause 3 is asked here of a {lexical form} it
 // accepts: whether each ·ENTITY value· in it is a ·declared entity name· is the
 // DOCUMENT's to say ([walk.entitiesDeclared]), and a rejection there is the
-// wrapped cause on the same terms. [walk.notationsDeclared] is not asked:
-// ValidDefault declines every {lexical form} whose type's closure reaches
-// NOTATION, so none reaches here accepted (#667).
+// wrapped cause on the same terms. NOTATION's declared-notation condition is
+// never asked of one: ValidDefault declines every {lexical form} whose type's
+// closure reaches NOTATION, so none reaches here accepted (#667).
 //
 // The type's assertion sites are recorded at the ELEMENT's location, on
 // [walk.simpleAssertions]'s terms: the attribute is absent, which is what makes

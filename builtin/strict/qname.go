@@ -63,9 +63,9 @@ func parseQName(lexical string, ctx value.Context) (value.Value, error) {
 // grammar+resolution as QName (§3.3.19: "the lexical mapping rules for NOTATION
 // are as given for QName"). It accepts a QName whether or not it names a
 // notation declared in the current schema, which NOTATION's lexical and value
-// spaces require (§3.3.19): a leaf mapping holds no schema, so the instance
-// check is validate's walk.notationsDeclared, and an enumeration member's is
-// value's declaredNotationBackend, each over a lexical this mapping accepted.
+// spaces require (§3.3.19): a leaf mapping holds no schema, so that check is
+// value.ValidateLexical's, over a lexical this mapping accepted, wherever its
+// resolver holds the schema.
 func parseNOTATION(lexical string, ctx value.Context) (value.Value, error) {
 	space, local, err := resolveQNameLexical(lexical, ctx, "NOTATION")
 	if err != nil {
