@@ -475,8 +475,8 @@ func (w *walk) defaultedAttributes(e Element, attrs []Attribute, governing xsd.C
 // own order), and if so the ·effective value constraint· whose {lexical form}
 // is the [[normalized value]] Attribute Default Value (§3.4.5.1) supplies. It is
 // the one encoding of that definition, read by defaultedAttributes,
-// [walk.handedDown], [walk.idDefaultedAttributes] and
-// [icCheck.fieldDefaultedAttributes].
+// [walk.handedDown], [walk.idDefaultedAttributes],
+// [icCheck.fieldDefaultedAttributes] and [walk.assertionValues].
 func (w *walk) defaultedConstraint(u xsd.AttributeUse, attrs []Attribute) (xsd.ValueConstraint, bool) {
 	if u.Required() { // clause 2
 		return xsd.ValueConstraint{}, false

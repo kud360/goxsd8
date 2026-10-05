@@ -235,6 +235,15 @@ func (t ctaTypes) castsFrom(v ctaValue) bool {
 	return resolved && p.Name() == ctaBuiltin("string")
 }
 
+// ctaSpecial reports whether st is one of the two ·special· simple types,
+// xs:anySimpleType or xs:anyAtomicType, under which xpath-datamodel §3.3.1.2
+// and Datatypes dt-xdmrep clause 1 make a typed value xs:untypedAtomic. It is
+// an identity test on the anchors [xsd.AnySimpleType] and [xsd.AnyAtomicType],
+// the test validate's isSpecial makes too (#2041).
+func ctaSpecial(st *xsd.SimpleType) bool {
+	return st == xsd.AnySimpleType() || st == xsd.AnyAtomicType()
+}
+
 // typedAtomic reports whether this engine reads a value of type st off the
 // instance as a typed operand — an attribute whose type [AttributeTypes]
 // answered, or one item of `$value` (valueVariable) — classified the way
@@ -246,7 +255,9 @@ func (t ctaTypes) castsFrom(v ctaValue) bool {
 //     value takes the type of its ·validating· member, which only the instance
 //     decides;
 //   - xs:anySimpleType and xs:anyAtomicType, whose lexical mapping is not a
-//     function (Datatypes §3.2.1.2, §3.2.2.2).
+//     function (Datatypes §3.2.1.2, §3.2.2.2), and whose typed value is
+//     xs:untypedAtomic instead (ctaSpecial) — which a caller that reads one
+//     untyped asks about before this, and never reaches here with.
 //
 // An xs:QName or xs:NOTATION primitive is declined as well: neither has a
 // ·canonical representation· (value.Mapping), so ctaPromote cannot convert one
@@ -275,14 +286,18 @@ func (t ctaTypes) typedAtomic(st *xsd.SimpleType) bool {
 //   - a list whose {item type definition} typedAtomic admits is the sequence
 //     of its items, each of that item type — "a sequence of one or more atomic
 //     values" (cvc-assertion clause 2.3.1's Note), or none for an empty list;
+//   - a ·special· st (ctaSpecial) is one xs:untypedAtomic value, E's [schema
+//     normalized value] (dt-xdmrep clause 1), which is ctaUntypedValue;
 //   - anything else declines: a union, whose value takes the type of its
 //     ·active basic member·, which only the instance decides; a list of such a
 //     union; and every other st typedAtomic declines.
 //
 // GAP(xpath): each of those declines the whole assertion on [CompileAssertionTest]'s
-// withhold. A ·special· st's `$value` is an xs:untypedAtomic value, which the
-// assertion façade has no input for. (#1042)
+// withhold. (#1042)
 func (t ctaTypes) valueVariable(st *xsd.SimpleType) (ctaValue, bool) {
+	if ctaSpecial(st) {
+		return ctaUntypedValue{}, true
+	}
 	if t.typedAtomic(st) {
 		return ctaValueVar{atom: st}, true
 	}
@@ -355,9 +370,10 @@ func (t ctaTypes) comparison(op ctaComparator, l, r ctaValue) (*xsd.SimpleType, 
 // their least common type by a combination of type promotion and subtype
 // substitution", which is shared — and B.2's rows decide the rest.
 //
-// No operand the assertion façade builds is xs:untypedAtomic today: only a
-// Type Alternative's attribute is, and that façade declines every value
-// comparison (ctaFacade.comparesValues).
+// Only the assertion façade reaches here (ctaFacade.comparesValues), and the
+// xs:untypedAtomic operands it builds are an attribute whose type is ·special·
+// (ctaAssertionFacade.attribute) and `$value` over ·special· content
+// (ctaUntypedValue).
 func (t ctaTypes) valueComparison(op ctaComparator, l, r ctaValue) (*xsd.SimpleType, ctaTyping) {
 	if st, empty := t.againstEmpty(l, r); empty {
 		return st, ctaTypeSettled
@@ -414,8 +430,9 @@ func ctaIsEmpty(v ctaValue) bool {
 // converted settles the type alone, leaving B.2's operator rows to comparison.
 //
 // Two rules cover the three operand shapes this grammar builds, because an
-// operand is either xs:untypedAtomic (an uncast untyped attribute) or typed (a
-// Literal, a cast, a constructor function, a typed attribute):
+// operand is either xs:untypedAtomic (an uncast untyped attribute, or `$value`
+// over ·special· content) or typed (a Literal, a cast, a constructor function,
+// a typed attribute, a typed `$value`):
 //
 //   - BOTH xs:untypedAtomic: clause 1, "the values are cast to the type
 //     xs:string".

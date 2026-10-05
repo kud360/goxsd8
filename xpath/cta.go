@@ -358,8 +358,12 @@ type ctaEnv struct {
 //
 // Each façade pairs its own tree with its own input: [CTATest.Evaluate] builds
 // ctaLexicalInput over a tree of ctaAttr nodes, and [AssertionTest.Evaluate]
-// builds ctaTypedInput over a tree of ctaTypedAttr nodes, so a node never meets
-// the other input.
+// builds ctaTypedInput over a tree of ctaTypedAttr nodes and of ctaAttr nodes
+// for the attributes whose type is ·special·, so a ctaTypedAttr never meets a
+// lexical input. A ctaAttr reads either: every lexical a ctaLexicalInput
+// yields, or each [Untyped] value a ctaTypedInput yields, whose other arm is a
+// breach of [TypedAttributes]' obligation that the node raises on
+// (ctaMatchedAttributes).
 type ctaInput interface{ ctaInput() }
 
 // ctaLexicalInput is a Type Alternative's attribute input.
@@ -446,16 +450,18 @@ func (ctaEffectiveBoolean) ctaExpr() {}
 func (ctaTypeError) ctaExpr()        {}
 
 // ctaValue is the sealed sum of the ITEM-valued nodes: the arms of [16]
-// ta-SimpleValue — its AttrName arm in the untyped and the typed form, one per
-// façade (ctaFacade.attribute), its Literal arm, and the assertion façade's
-// `$value` in its two static forms (ctaFacade.variable) — and the cast that [15]
+// ta-SimpleValue — its AttrName arm in the untyped and the typed form
+// (ctaFacade.attribute), its Literal arm, and the assertion façade's
+// `$value` in its three static forms (ctaFacade.variable) — and the cast that [15]
 // ta-CastExpr's tail and [18] ta-ConstructorFunction both build over one of
 // them.
 type ctaValue interface{ ctaValue() }
 
-// ctaAttr is [17] ta-AttrName over an UNTYPED instance: the attribute step
+// ctaAttr is [17] ta-AttrName over an UNTYPED attribute: the attribute step
 // whose NameTest selects a SEQUENCE of E's attributes, in document order, out
-// of what [Attributes] yields.
+// of what [Attributes] yields — or, in an assertion, the one attribute an exact
+// NameTest names whose type is ·special·, whose typed value is xs:untypedAtomic
+// (ctaAssertionFacade.attribute), out of what [TypedAttributes] yields.
 //
 // The NameTest is settled at compile time, so evaluation carries no axis and no
 // prefix of its own — every name it could resolve is already an ·expanded name·
@@ -463,11 +469,11 @@ type ctaValue interface{ ctaValue() }
 type ctaAttr struct{ test ctaNameTest }
 
 // ctaTypedAttr is [17] ta-AttrName over a TYPED instance, which is an
-// assertion's (ctaAssertionFacade): the attribute E carries under the ·expanded
-// name· name, at most one, whose typed value is of type st — the {type
-// definition} [AttributeTypes] answered for that name at compile time, which is
-// why the node carries it and the operand's static type is st rather than
-// xs:untypedAtomic.
+// assertion's (ctaAssertionFacade): the attribute E has under the ·expanded
+// name· name — carried, or ·defaulted· ([TypedAttributes]) — at most one, whose
+// typed value is of type st — the {type definition} [AttributeTypes] answered
+// for that name at compile time, which is why the node carries it and the
+// operand's static type is st rather than xs:untypedAtomic.
 //
 // Only a QName NameTest builds one: a [37] Wildcard arm can match an attribute
 // ·attributed to· an {attribute wildcard}, whose type is not fixed at compile
@@ -493,6 +499,15 @@ type ctaValueVar struct {
 // (cvc-assertion clause 2.3.2): the empty sequence, decided at compile time,
 // so the evaluation's [ValueBinding] is never read.
 type ctaEmptyValue struct{}
+
+// ctaUntypedValue is `$value` over a simple {content type} whose {simple type
+// definition} is ·special· (cvc-assertion clause 2.3.1): its XDM representation
+// is E's [schema normalized value] as one xs:untypedAtomic value (Datatypes
+// dt-xdmrep clause 1), read from the [ValueBinding] as an [Untyped] value, or
+// the empty sequence where the binding is the zero one (clause 2.3.2). It is an
+// arm of its own and not a ctaValueVar with a flag, because it holds no type:
+// its operand's static type is xs:untypedAtomic, as an untyped attribute's is.
+type ctaUntypedValue struct{}
 
 // ctaFacade is the sealed sum of the façades compileCTATest parses for — one
 // value, so the attribute node a façade builds and the comparisons it admits
@@ -648,25 +663,28 @@ type ctaCast struct {
 	allowsEmpty bool
 }
 
-func (ctaAttr) ctaValue()       {}
-func (ctaTypedAttr) ctaValue()  {}
-func (ctaLiteral) ctaValue()    {}
-func (ctaCast) ctaValue()       {}
-func (ctaValueVar) ctaValue()   {}
-func (ctaEmptyValue) ctaValue() {}
+func (ctaAttr) ctaValue()         {}
+func (ctaTypedAttr) ctaValue()    {}
+func (ctaLiteral) ctaValue()      {}
+func (ctaCast) ctaValue()         {}
+func (ctaValueVar) ctaValue()     {}
+func (ctaEmptyValue) ctaValue()   {}
+func (ctaUntypedValue) ctaValue() {}
 
 // ctaStatic is one operand's static type, which is what xpath20.md §3.5.2's
 // casting rules dispatch on. It is a sealed sum of the three states this
 // grammar can produce and not a datatype: an uncast UNTYPED attribute has no
 // type ANNOTATION at all, because key-cta-ta-select clause 1 labels every node
-// of the constructed instance untyped, and the statically empty `$value` has
-// no item to carry one.
+// of the constructed instance untyped — and an assertion's attribute whose type
+// is ·special· has a typed value of xs:untypedAtomic all the same
+// (xpath-datamodel §3.3.1.2) — and the statically empty `$value` has no item to
+// carry one.
 type ctaStatic interface{ ctaStatic() }
 
 // ctaUntypedAtomic is an uncast attribute operand, which atomizes to a single
 // xs:untypedAtomic value (§3.13.4.1's note on the same "labeled as untyped"
 // condition: "its atomized value will be a single atomic value of type
-// untypedAtomic").
+// untypedAtomic"; xpath-datamodel §3.3.1.2 for a ·special· type).
 type ctaUntypedAtomic struct{}
 
 // ctaTyped is an operand carrying a datatype: a Literal, the result of a cast
@@ -684,8 +702,8 @@ func (ctaUntypedAtomic) ctaStatic() {}
 func (ctaTyped) ctaStatic()         {}
 func (ctaEmptySequence) ctaStatic() {}
 
-// ctaStaticOf reports the static type of one [14] ta-ValueExpr. ctaAttr is the
-// one untyped arm.
+// ctaStaticOf reports the static type of one [14] ta-ValueExpr. ctaAttr and
+// ctaUntypedValue are the untyped arms.
 func ctaStaticOf(v ctaValue) ctaStatic {
 	switch n := v.(type) {
 	case ctaLiteral:
@@ -698,6 +716,8 @@ func ctaStaticOf(v ctaValue) ctaStatic {
 		return ctaTyped{st: n.atom}
 	case ctaEmptyValue:
 		return ctaEmptySequence{}
+	case ctaUntypedValue:
+		return ctaUntypedAtomic{}
 	default:
 		return ctaUntypedAtomic{}
 	}
@@ -949,15 +969,24 @@ func ctaSingletonOperand(v ctaValue, c *xsd.SimpleType, env ctaEnv) (value.Value
 // sequence) when it matches nothing, and no type of its own is involved. Rule
 // 2 holds whatever the sequence's LENGTH, which is what a wildcard NameTest
 // makes observable. `$value` is atomic values and no node: the statically empty
-// one is rule 1's false, and the bound one is decided by ctaBoolean, a list of
-// two or more items included. Every other operand is a singleton atomic value
-// or the empty sequence, which ctaBoolean decides.
+// one is rule 1's false, the bound typed one is decided by ctaBoolean, a list of
+// two or more items included, and the untyped one by rule 4 (ctaUntypedBoolean).
+// Every other operand is a singleton atomic value or the empty sequence, which
+// ctaBoolean decides.
 func (e ctaEffectiveBoolean) eval(env ctaEnv) ctaAnswer {
 	switch n := e.operand.(type) {
 	case ctaAttr:
-		return ctaAnswerOf(len(ctaMatchedAttributes(n, env)) != 0)
+		matched, ok := ctaMatchedAttributes(n, env)
+		if !ok {
+			return ctaError
+		}
+		return ctaAnswerOf(len(matched) != 0)
 	case ctaTypedAttr:
-		return ctaAnswerOf(len(ctaMatchedTyped(n, env)) != 0)
+		matched, ok := ctaMatchedTyped(n, env)
+		if !ok {
+			return ctaError
+		}
+		return ctaAnswerOf(len(matched) != 0)
 	case ctaLiteral:
 		return ctaBoolean(e.operand, n.st, env)
 	case ctaCast:
@@ -966,6 +995,8 @@ func (e ctaEffectiveBoolean) eval(env ctaEnv) ctaAnswer {
 		return ctaBoolean(e.operand, n.atom, env)
 	case ctaEmptyValue:
 		return ctaFalse
+	case ctaUntypedValue:
+		return ctaUntypedBoolean(env)
 	default:
 		return ctaFalse
 	}
@@ -1135,9 +1166,57 @@ func ctaItemOf(v ctaValue, c *xsd.SimpleType, env ctaEnv) ctaItem {
 		return ctaValueItem(n, c, env)
 	case ctaEmptyValue:
 		return ctaAtoms{}
+	case ctaUntypedValue:
+		return ctaUntypedValueItem(c, env)
 	default:
 		return ctaAtoms{}
 	}
+}
+
+// ctaUntypedValueItem casts `$value`'s [Untyped] binding into c, which
+// §3.5.2's casting rules — and §3.5.1 step 4's — do to an xs:untypedAtomic
+// operand, on ctaAttrItem's terms. The zero [ValueBinding] is the empty
+// sequence (cvc-assertion clause 2.3.2).
+//
+// The input is ctaTypedInput by construction (ctaInput); the other arm binds
+// nothing and is unreachable. A [Typed] binding breaks the obligation
+// [BindValue] states and is ctaRaised, unreachable for a caller that keeps it.
+func ctaUntypedValueItem(c *xsd.SimpleType, env ctaEnv) ctaItem {
+	lexical, bound, ok := ctaUntypedBinding(env)
+	if !ok {
+		return ctaRaised{}
+	}
+	if !bound {
+		return ctaAtoms{}
+	}
+	return ctaValidate(lexical, c, env)
+}
+
+// ctaUntypedBoolean is fn:boolean over `$value`'s [Untyped] binding: xpath20.md
+// §2.4.3 rule 4 makes an xs:untypedAtomic value false iff it has zero length,
+// and rule 1 makes the empty sequence — the zero [ValueBinding] — false. A
+// [Typed] binding is ctaError, on ctaUntypedValueItem's terms.
+func ctaUntypedBoolean(env ctaEnv) ctaAnswer {
+	lexical, bound, ok := ctaUntypedBinding(env)
+	if !ok {
+		return ctaError
+	}
+	return ctaAnswerOf(bound && lexical != "")
+}
+
+// ctaUntypedBinding reads `$value`'s binding as an [Untyped] value: its
+// lexical, with bound false for the zero [ValueBinding], and ok false for a
+// binding of the other arm, which breaks the obligation [BindValue] states.
+func ctaUntypedBinding(env ctaEnv) (lexical string, bound, ok bool) {
+	in, typed := env.input.(ctaTypedInput)
+	if !typed || in.value.v == nil {
+		return "", false, true
+	}
+	untyped, isUntyped := in.value.v.(tvUntyped)
+	if !isUntyped {
+		return "", false, false
+	}
+	return untyped.lexical, true, true
 }
 
 // ctaValueItem converts `$value`'s binding into c on ctaTypedAttrItem's terms
@@ -1148,18 +1227,22 @@ func ctaItemOf(v ctaValue, c *xsd.SimpleType, env ctaEnv) ctaItem {
 // a list of two or more items is a sequence of that length.
 //
 // The input is ctaTypedInput by construction (ctaInput); the other arm binds
-// nothing and is unreachable. A listed binding whose value does not carry
-// [value.Listed] breaks the obligation [BindValue] states and is ctaRaised,
-// unreachable for a caller that keeps it.
+// nothing and is unreachable. A binding that is not [Typed], and a listed one
+// whose value does not carry [value.Listed], break the obligation [BindValue]
+// states and are ctaRaised, unreachable for a caller that keeps it.
 func ctaValueItem(n ctaValueVar, c *xsd.SimpleType, env ctaEnv) ctaItem {
 	in, typed := env.input.(ctaTypedInput)
 	if !typed || in.value.v == nil {
 		return ctaAtoms{}
 	}
-	if !n.listed {
-		return ctaPromote(in.value.v, n.atom, c, env)
+	bound, isTyped := in.value.v.(tvTyped)
+	if !isTyped {
+		return ctaRaised{}
 	}
-	list, isList := in.value.v.(value.Listed)
+	if !n.listed {
+		return ctaPromote(bound.v, n.atom, c, env)
+	}
+	list, isList := bound.v.(value.Listed)
 	if !isList {
 		return ctaRaised{}
 	}
@@ -1183,49 +1266,78 @@ func ctaValueItem(n ctaValueVar, c *xsd.SimpleType, env ctaEnv) ctaItem {
 // because no element carries two of one ·expanded name·, and a [37] Wildcard
 // arm has no such bound.
 //
-// The input is ctaLexicalInput by construction (ctaInput); the other arm
-// matches nothing and is unreachable.
-func ctaMatchedAttributes(n ctaAttr, env ctaEnv) []string {
-	in, lexical := env.input.(ctaLexicalInput)
-	if !lexical {
-		return nil
+// Over a ctaTypedInput — an assertion's attribute whose type is ·special· — the
+// matched values are the [Untyped] arms' [schema normalized value]s, and ok is
+// false where a matched value is not [Untyped], which breaks the obligation
+// [TypedAttributes] states and which every reader raises on (ctaInput). The
+// default arm is unreachable: ctaInput is sealed over the two arms named.
+func ctaMatchedAttributes(n ctaAttr, env ctaEnv) (matched []string, ok bool) {
+	switch in := env.input.(type) {
+	case ctaLexicalInput:
+		in.attrs(func(name xsd.QName, lexical string) bool {
+			if n.test.matches(name) {
+				matched = append(matched, lexical)
+			}
+			return true
+		})
+		return matched, true
+	case ctaTypedInput:
+		ok = true
+		in.attrs(func(name xsd.QName, v TypedValue) bool {
+			if !n.test.matches(name) {
+				return true
+			}
+			untyped, isUntyped := v.(tvUntyped)
+			if !isUntyped {
+				ok = false
+				return false
+			}
+			matched = append(matched, untyped.lexical)
+			return true
+		})
+		return matched, ok
+	default:
+		return nil, true
 	}
-	var matched []string
-	in.attrs(func(name xsd.QName, lexical string) bool {
-		if n.test.matches(name) {
-			matched = append(matched, lexical)
-		}
-		return true
-	})
-	return matched
 }
 
 // ctaMatchedTyped is ctaMatchedAttributes for a typed attribute: the typed
 // values [TypedAttributes] yields under n's ·expanded name·, at most one, each
-// of type n.st by the caller's obligation that type states.
+// of type n.st by the caller's obligation that type states. ok is false where
+// a matched value is not [Typed], which breaks that obligation and which every
+// reader raises on.
 //
 // The input is ctaTypedInput by construction (ctaInput); the other arm matches
 // nothing and is unreachable.
-func ctaMatchedTyped(n ctaTypedAttr, env ctaEnv) []value.Value {
+func ctaMatchedTyped(n ctaTypedAttr, env ctaEnv) (matched []value.Value, ok bool) {
 	in, typed := env.input.(ctaTypedInput)
 	if !typed {
-		return nil
+		return nil, true
 	}
-	var matched []value.Value
-	in.attrs(func(name xsd.QName, v value.Value) bool {
-		if name == n.name {
-			matched = append(matched, v)
+	ok = true
+	in.attrs(func(name xsd.QName, v TypedValue) bool {
+		if name != n.name {
+			return true
 		}
+		tv, isTyped := v.(tvTyped)
+		if !isTyped {
+			ok = false
+			return false
+		}
+		matched = append(matched, tv.v)
 		return true
 	})
-	return matched
+	return matched, ok
 }
 
 // ctaTypedAttrItem converts the matched typed value into c on ctaPromote's
 // terms, which is B.1's promotion or §3.5.2's conversion into the comparison
 // type — never a re-validation of the attribute's lexical, which has none here.
 func ctaTypedAttrItem(n ctaTypedAttr, c *xsd.SimpleType, env ctaEnv) ctaItem {
-	matched := ctaMatchedTyped(n, env)
+	matched, ok := ctaMatchedTyped(n, env)
+	if !ok {
+		return ctaRaised{}
+	}
 	vs := make([]value.Value, 0, len(matched))
 	for _, v := range matched {
 		converted, ok := ctaValidated(ctaPromote(v, n.st, c, env))
@@ -1246,7 +1358,10 @@ func ctaTypedAttrItem(n ctaTypedAttr, c *xsd.SimpleType, env ctaEnv) ctaItem {
 // dropping out of it. So `@* = 3` over an element carrying n="3" and s="abc"
 // raises and is false, where a per-pair conversion would answer true.
 func ctaAttrItem(n ctaAttr, c *xsd.SimpleType, env ctaEnv) ctaItem {
-	matched := ctaMatchedAttributes(n, env)
+	matched, ok := ctaMatchedAttributes(n, env)
+	if !ok {
+		return ctaRaised{}
+	}
 	vs := make([]value.Value, 0, len(matched))
 	for _, lexical := range matched {
 		v, validated := ctaValidated(ctaValidate(lexical, c, env))
