@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -169,15 +170,16 @@ func TestElementAndAttlistDeclAreWellFormed(t *testing.T) {
 // one spelled with a character reference to '&', and an entity whose
 // replacement text is a CharRef to '<'; an undeclared name where Entity
 // Declared does not bind — after an unread or a read parameter-entity
-// reference, before a read one, or under an external subset; an indirect
-// reference to an entity declared after the <!ATTLIST>, which is VC: Entity
-// Declared's; an entity first declared after a declined reference, which the
-// reader does not process (§5.1); a name whose first declaration is clean; an
-// entity reached twice by one walk; and a clean <!ATTLIST> never applied. Each
+// reference, or before a read one; an indirect reference to an entity declared
+// after the <!ATTLIST>, which is VC: Entity Declared's; an entity first
+// declared after a declined reference, which the reader does not process
+// (§5.1); a name whose first declaration is clean; an entity reached twice by
+// one walk, and the "billion laughs" entities, which the walk reads once each
+// or not in this test's lifetime; and a clean <!ATTLIST> never applied. Each
 // control reads with an internal subset alone and again beside an external
-// one. So does an undeclared name in a parameter entity's replacement text in
-// a standalone="yes" document: Entity Declared does not reach a reference
-// there.
+// one. So do an undeclared name under an external subset, where Entity
+// Declared does not bind either, and one in a parameter entity's replacement
+// text in a standalone="yes" document, which it does not reach.
 func TestAttlistDefaultEntityReferencesAreWellFormed(t *testing.T) {
 	const decl = "<?xml version=\"1.0\"?>\n"
 	const alone = "<?xml version=\"1.0\" standalone=\"yes\"?>\n"
@@ -185,6 +187,10 @@ func TestAttlistDefaultEntityReferencesAreWellFormed(t *testing.T) {
 	const tail = `]><r ent="pic"/>`
 	const ext = `<!ENTITY % ext SYSTEM "x.ent"> %ext; `
 	const read = `<!ENTITY % p ""> %p; `
+	laughs := `<!ENTITY l0 "lol">`
+	for i := 1; i <= 9; i++ {
+		laughs += fmt.Sprintf(`<!ENTITY l%d "%s">`, i, strings.Repeat(fmt.Sprintf("&l%d;", i-1), 10))
+	}
 	const value = `t.xml:2:1: [xml-wf] DOCTYPE internal subset holds an <!ATTLIST> declaration of "r" whose attribute "a" has a default value that references`
 	const inPE = `t.xml:2:1: [xml-wf] replacement text of a parameter entity referenced between DOCTYPE declarations holds an <!ATTLIST> declaration of "r" whose attribute "a" has a default value that references`
 	declared := func(n string) string {
@@ -240,6 +246,7 @@ func TestAttlistDefaultEntityReferencesAreWellFormed(t *testing.T) {
 		`<!ENTITY e "x"><!ENTITY e "a<b"><!ATTLIST r a CDATA "&e;">`,
 		`<!ENTITY e "&f;&f;"><!ENTITY f "v"><!ATTLIST r a CDATA "&e;&e;" b CDATA "&f;">`,
 		`<!ENTITY e "v"><!ATTLIST q a CDATA "&e;">`,
+		laughs + `<!ATTLIST r a CDATA "&l9;">`,
 	} {
 		for _, doc := range []string{
 			`<!DOCTYPE r [` + subset + `]><r/>`,
@@ -250,10 +257,14 @@ func TestAttlistDefaultEntityReferencesAreWellFormed(t *testing.T) {
 			})
 		}
 	}
-	inText := alone + `<!DOCTYPE r [<!ENTITY % q "<!ATTLIST r a CDATA '&u;'>"> %q;]><r/>`
-	t.Run(inText, func(t *testing.T) {
-		drained(t, inText)
-	})
+	for _, doc := range []string{
+		`<!DOCTYPE r SYSTEM "r.dtd" [<!ATTLIST r a CDATA "&u;">]><r/>`,
+		alone + `<!DOCTYPE r [<!ENTITY % q "<!ATTLIST r a CDATA '&u;'>"> %q;]><r/>`,
+	} {
+		t.Run(doc, func(t *testing.T) {
+			drained(t, doc)
+		})
+	}
 }
 
 // <!ELEMENT> and <!ATTLIST> declarations that match their productions read,
