@@ -18,8 +18,11 @@ import (
 // two xs:int attributes "the typed values of the attributes are available for
 // comparison; it is not necessary to cast". A Type Alternative's instance is
 // untyped instead (key-cta-ta-select clause 1's Note), which is why the two
-// façades build different nodes for one [17] ta-AttrName and take different
-// attribute inputs, and why neither tree can be fed the other's input.
+// façades build different nodes for one [17] ta-AttrName over a typed
+// attribute and take different attribute inputs, and why neither tree can be
+// fed the other's input. An attribute whose type is ·special· is the one an
+// assertion reads untyped too: its typed value is xs:untypedAtomic
+// (xpath-datamodel §3.3.1.2), so both façades build the same node for it.
 //
 // The assertion façade widens the grammar by TWO productions the Type
 // Alternative façade declines: the eq/ne/lt/le/gt/ge value comparisons
@@ -82,14 +85,16 @@ func Untyped(lexical string) TypedValue { return tvUntyped{lexical: lexical} }
 // typed value, in DOCUMENT ORDER (STYLE D1). It must be non-nil, and a yield
 // reporting false ends the walk.
 //
-// Each value must be [Typed] of a value of EXACTLY the type [AttributeTypes]
-// answered for its name when the [AssertionTest] being evaluated was compiled:
-// the tree holds that type and converts the value from it. That agreement is
-// the caller's obligation, and it is the same one [BindValue] places on
-// `$value`'s value against the {simple type definition} of the content type the
-// test was compiled for. A value breaking it — nil, or the other arm — is a
-// dynamic error wherever the tree reads it, which [AssertionTest.Evaluate]
-// answers false.
+// Each value's arm is fixed by the type [AttributeTypes] answered for its name
+// when the [AssertionTest] being evaluated was compiled: [Untyped] of the
+// attribute's [schema normalized value] exactly when that type is ·special· —
+// xs:anySimpleType or xs:anyAtomicType — and [Typed] of a value of EXACTLY that
+// type otherwise, which the tree holds and converts the value from. That
+// agreement is the caller's obligation, and it is the same one [BindValue]
+// places on `$value`'s value against the {simple type definition} of the
+// content type the test was compiled for. A value breaking it — nil, or the
+// other arm — is a dynamic error wherever the tree reads it, which
+// [AssertionTest.Evaluate] answers false.
 //
 // Unlike [Attributes], it carries no [inherited attributes]: the XDM instance
 // cvc-assertion clause 1.3 builds contains E's own [[attributes]] and nothing
@@ -147,16 +152,17 @@ type AssertionTest struct{ root ctaExpr }
 //     attribute ·attributed to· an {attribute wildcard}, whose type is not
 //     fixed at compile time;
 //   - a QName for which attrs reports false;
-//   - an attribute whose type does not atomize to one atomic value of a type
-//     known at compile time — a list or union {variety}, xs:anySimpleType,
-//     xs:anyAtomicType — or whose {primitive type definition} is xs:QName or
-//     xs:NOTATION, which carry no ·canonical representation· to convert
-//     through. The variety is classified here, not trusted to attrs;
+//   - an attribute whose type is not ·special· and does not atomize to one
+//     atomic value of a type known at compile time — a list or union {variety}
+//     — or whose {primitive type definition} is xs:QName or xs:NOTATION, which
+//     carry no ·canonical representation· to convert through. The variety is
+//     classified here, not trusted to attrs. An attribute whose type is
+//     ·special· is read as xs:untypedAtomic and is admitted;
 //   - a `$value` over an [xsd.SimpleContent] whose {simple type definition} the
 //     bullet above declines as an attribute's type, unless it is a list whose
-//     {item type definition} that bullet admits — so a union, a list of a
-//     union, a ·special· type, and an xs:QName or xs:NOTATION primitive or item
-//     type decline;
+//     {item type definition} that bullet admits, and a `$value` over a
+//     ·special· one — so a union, a list of a union, a ·special· type, and an
+//     xs:QName or xs:NOTATION primitive or item type decline;
 //   - any variable but `$value`, which is not in the static context at all
 //     (err:XPST0008);
 //   - a cast whose operand is a typed attribute or `$value` outside the
@@ -250,9 +256,14 @@ func (f ctaAssertionFacade) variable(name xsd.QName, types ctaTypes) (ctaValue, 
 	return types.valueVariable(simple.SimpleType)
 }
 
-// attribute compiles a QName NameTest whose name attrs types with a type this
-// engine reads as one atomic value (ctaTypes.typedAtomic) to a
-// ctaTypedAttr, and declines every other NameTest.
+// attribute compiles a QName NameTest whose name attrs types with a ·special·
+// type (ctaSpecial) to a ctaAttr, the untyped attribute node a Type
+// Alternative builds — the typed value of such an attribute is its [schema
+// normalized value] as xs:untypedAtomic (xpath-datamodel §3.3.1.2, Datatypes
+// dt-xdmrep clause 1), which §3.5.2 casts as it casts an untyped one. A name
+// attrs types with a type this engine reads as one atomic value
+// (ctaTypes.typedAtomic) compiles to a ctaTypedAttr, and every other NameTest
+// declines.
 //
 // An unbound prefix's ctaUnresolvedName reaches attrs like any other name; no
 // attribute use can carry it, so the façade declines it and the parse ends
@@ -264,7 +275,13 @@ func (f ctaAssertionFacade) attribute(test ctaNameTest, types ctaTypes) (ctaValu
 		return nil, false
 	}
 	st, typed := f.attrs(exact.name)
-	if !typed || !types.typedAtomic(st) {
+	if !typed {
+		return nil, false
+	}
+	if ctaSpecial(st) {
+		return ctaAttr{test: exact}, true
+	}
+	if !types.typedAtomic(st) {
 		return nil, false
 	}
 	return ctaTypedAttr{name: exact.name, st: st}, true

@@ -268,6 +268,42 @@ func TestAssertionComparesTypedValues(t *testing.T) {
 	}
 }
 
+// An attribute whose type is ·special· is read as xs:untypedAtomic, its
+// [schema normalized value] (xpath-datamodel §3.3.1.2): `@x > 300` casts it to
+// xs:double (xpath20.md §3.5.2 clause 2.1), so x="304" is satisfied and
+// x="204" charged — the vc001 shape — and x="abc" does not cast, which raises
+// err:FORG0001 and is charged under cvc-assertion as well. Two such attributes
+// compare as xs:string (clause 1), so "10" > "9" is charged.
+//
+// With the ·special· arm of xpath's assertion façade removed every row is
+// declined instead, and fails; with walk.assertionValues yielding no value for
+// a ·special· attribute, the two satisfied rows are charged, and fail.
+func TestAssertionReadsSpecialAttributeUntyped(t *testing.T) {
+	single := aTyped(t, []string{"x", "anySimpleType"}, "@x > 300")
+	pair := aTyped(t, []string{"x", "anySimpleType", "y", "anySimpleType"}, "@x > @y")
+	for _, tc := range []struct {
+		name    string
+		schema  *xsd.Schema
+		root    *testElement
+		charged bool
+	}{
+		{"304 > 300", single, aRoot("x", "304"), false},
+		{"204 > 300", single, aRoot("x", "204"), true},
+		{"abc > 300 raises FORG0001", single, aRoot("x", "abc"), true},
+		{"10 > 9 as strings", pair, aRoot("x", "10", "y", "9"), true},
+		{"9 > 10 as strings", pair, aRoot("x", "9", "y", "10"), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			res := aAssess(t, tc.schema, tc.root)
+			if !tc.charged {
+				wantSatisfied(t, res, tc.name)
+				return
+			}
+			wantAssertionCharge(t, res, "the element root is not ·valid· with respect to assertion 1 of 1 in the {assertions} of the ·governing type definition· RootType, whose {test} is ")
+		})
+	}
+}
+
 // A VALUE comparison is evaluated as §3.13.2's own example writes it:
 // `@min le @max` over two xs:int attributes is charged for min="6" max="5" —
 // the d4_3_15ii01 shape — and holds for min="5" max="6".

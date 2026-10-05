@@ -358,8 +358,12 @@ type ctaEnv struct {
 //
 // Each façade pairs its own tree with its own input: [CTATest.Evaluate] builds
 // ctaLexicalInput over a tree of ctaAttr nodes, and [AssertionTest.Evaluate]
-// builds ctaTypedInput over a tree of ctaTypedAttr nodes, so a node never meets
-// the other input.
+// builds ctaTypedInput over a tree of ctaTypedAttr nodes and of ctaAttr nodes
+// for the attributes whose type is ·special·, so a ctaTypedAttr never meets a
+// lexical input. A ctaAttr reads either: every lexical a ctaLexicalInput
+// yields, or each [Untyped] value a ctaTypedInput yields, whose other arm is a
+// breach of [TypedAttributes]' obligation that the node raises on
+// (ctaMatchedAttributes).
 type ctaInput interface{ ctaInput() }
 
 // ctaLexicalInput is a Type Alternative's attribute input.
@@ -453,9 +457,11 @@ func (ctaTypeError) ctaExpr()        {}
 // them.
 type ctaValue interface{ ctaValue() }
 
-// ctaAttr is [17] ta-AttrName over an UNTYPED instance: the attribute step
+// ctaAttr is [17] ta-AttrName over an UNTYPED attribute: the attribute step
 // whose NameTest selects a SEQUENCE of E's attributes, in document order, out
-// of what [Attributes] yields.
+// of what [Attributes] yields — or, in an assertion, the one attribute an exact
+// NameTest names whose type is ·special·, whose typed value is xs:untypedAtomic
+// (ctaAssertionFacade.attribute), out of what [TypedAttributes] yields.
 //
 // The NameTest is settled at compile time, so evaluation carries no axis and no
 // prefix of its own — every name it could resolve is already an ·expanded name·
@@ -659,14 +665,16 @@ func (ctaEmptyValue) ctaValue() {}
 // casting rules dispatch on. It is a sealed sum of the three states this
 // grammar can produce and not a datatype: an uncast UNTYPED attribute has no
 // type ANNOTATION at all, because key-cta-ta-select clause 1 labels every node
-// of the constructed instance untyped, and the statically empty `$value` has
-// no item to carry one.
+// of the constructed instance untyped — and an assertion's attribute whose type
+// is ·special· has a typed value of xs:untypedAtomic all the same
+// (xpath-datamodel §3.3.1.2) — and the statically empty `$value` has no item to
+// carry one.
 type ctaStatic interface{ ctaStatic() }
 
 // ctaUntypedAtomic is an uncast attribute operand, which atomizes to a single
 // xs:untypedAtomic value (§3.13.4.1's note on the same "labeled as untyped"
 // condition: "its atomized value will be a single atomic value of type
-// untypedAtomic").
+// untypedAtomic"; xpath-datamodel §3.3.1.2 for a ·special· type).
 type ctaUntypedAtomic struct{}
 
 // ctaTyped is an operand carrying a datatype: a Literal, the result of a cast
@@ -955,7 +963,11 @@ func ctaSingletonOperand(v ctaValue, c *xsd.SimpleType, env ctaEnv) (value.Value
 func (e ctaEffectiveBoolean) eval(env ctaEnv) ctaAnswer {
 	switch n := e.operand.(type) {
 	case ctaAttr:
-		return ctaAnswerOf(len(ctaMatchedAttributes(n, env)) != 0)
+		matched, ok := ctaMatchedAttributes(n, env)
+		if !ok {
+			return ctaError
+		}
+		return ctaAnswerOf(len(matched) != 0)
 	case ctaTypedAttr:
 		matched, ok := ctaMatchedTyped(n, env)
 		if !ok {
@@ -1191,21 +1203,39 @@ func ctaValueItem(n ctaValueVar, c *xsd.SimpleType, env ctaEnv) ctaItem {
 // because no element carries two of one ·expanded name·, and a [37] Wildcard
 // arm has no such bound.
 //
-// The input is ctaLexicalInput by construction (ctaInput); the other arm
-// matches nothing and is unreachable.
-func ctaMatchedAttributes(n ctaAttr, env ctaEnv) []string {
-	in, lexical := env.input.(ctaLexicalInput)
-	if !lexical {
-		return nil
+// Over a ctaTypedInput — an assertion's attribute whose type is ·special· — the
+// matched values are the [Untyped] arms' [schema normalized value]s, and ok is
+// false where a matched value is not [Untyped], which breaks the obligation
+// [TypedAttributes] states and which every reader raises on (ctaInput). The
+// default arm is unreachable: ctaInput is sealed over the two arms named.
+func ctaMatchedAttributes(n ctaAttr, env ctaEnv) (matched []string, ok bool) {
+	switch in := env.input.(type) {
+	case ctaLexicalInput:
+		in.attrs(func(name xsd.QName, lexical string) bool {
+			if n.test.matches(name) {
+				matched = append(matched, lexical)
+			}
+			return true
+		})
+		return matched, true
+	case ctaTypedInput:
+		ok = true
+		in.attrs(func(name xsd.QName, v TypedValue) bool {
+			if !n.test.matches(name) {
+				return true
+			}
+			untyped, isUntyped := v.(tvUntyped)
+			if !isUntyped {
+				ok = false
+				return false
+			}
+			matched = append(matched, untyped.lexical)
+			return true
+		})
+		return matched, ok
+	default:
+		return nil, true
 	}
-	var matched []string
-	in.attrs(func(name xsd.QName, lexical string) bool {
-		if n.test.matches(name) {
-			matched = append(matched, lexical)
-		}
-		return true
-	})
-	return matched
 }
 
 // ctaMatchedTyped is ctaMatchedAttributes for a typed attribute: the typed
@@ -1265,7 +1295,10 @@ func ctaTypedAttrItem(n ctaTypedAttr, c *xsd.SimpleType, env ctaEnv) ctaItem {
 // dropping out of it. So `@* = 3` over an element carrying n="3" and s="abc"
 // raises and is false, where a per-pair conversion would answer true.
 func ctaAttrItem(n ctaAttr, c *xsd.SimpleType, env ctaEnv) ctaItem {
-	matched := ctaMatchedAttributes(n, env)
+	matched, ok := ctaMatchedAttributes(n, env)
+	if !ok {
+		return ctaRaised{}
+	}
 	vs := make([]value.Value, 0, len(matched))
 	for _, lexical := range matched {
 		v, validated := ctaValidated(ctaValidate(lexical, c, env))

@@ -149,27 +149,20 @@ func (w *walk) elementAssertions(e Element, g governance, content *contentCheck,
 // assertionType is the {type definition} of the {attribute declaration} of
 // the use u, which an assertion {test} reads that use's attribute as. resolved
 // is false where the declaration or the type does not resolve to a simple
-// type; typed is false there and for a ·special· type (isSpecial) too, whose
-// lexical mapping is not a function and which xpath declines besides. It is
-// the ONE lookup [walk.assertionTypes] and [walk.assertionValues] share, so
-// the type a {test} is compiled against and the type its values are mapped
-// under cannot disagree, which [xpath.TypedAttributes] makes the caller's
-// obligation.
-//
-// The two results are apart because the two readers treat them apart: an
-// unresolved type leaves an attribute of that use with no ·actual value·,
-// while a ·special· one leaves it with an ·actual value· no {test} this engine
-// compiles can read.
-func (w *walk) assertionType(u xsd.AttributeUse) (st *xsd.SimpleType, resolved, typed bool) {
+// type. It is the ONE lookup [walk.assertionTypes] and [walk.assertionValues]
+// share, so the type a {test} is compiled against and the arm and type its
+// values are yielded under cannot disagree, which [xpath.TypedAttributes] makes
+// the caller's obligation.
+func (w *walk) assertionType(u xsd.AttributeUse) (st *xsd.SimpleType, resolved bool) {
 	d, resolved := w.schema.ResolvedAttributeDeclaration(u)
 	if !resolved {
-		return nil, false, false
+		return nil, false
 	}
 	st, simple := w.schema.ResolvedSimpleType(d.TypeDefinition())
 	if !simple {
-		return nil, false, false
+		return nil, false
 	}
-	return st, true, !isSpecial(st)
+	return st, true
 }
 
 // assertionTypes is the [xpath.AttributeTypes] of an element whose
@@ -194,13 +187,12 @@ func (w *walk) assertionTypes(attrs []Attribute, ct xsd.ComplexType) xpath.Attri
 		if _, defaulted := w.defaultedConstraint(u, attrs); defaulted {
 			return nil, false
 		}
-		st, _, typed := w.assertionType(u)
-		return st, typed
+		return w.assertionType(u)
 	}
 }
 
-// assertionValue is one attribute's ·actual value· as an assertion {test}
-// reads it.
+// assertionValue is one attribute's typed value as an assertion {test} reads
+// it.
 type assertionValue struct {
 	name xsd.QName
 	v    xpath.TypedValue
@@ -233,38 +225,44 @@ type assertionLack interface {
 	declined(e xsd.QName) string
 }
 
-// lackingAttribute is an attribute matching an {attribute use} that has no
-// ·actual value· ([walk.assertionValues]).
-type lackingAttribute struct{ name xsd.QName }
+// lackingAttribute is an attribute of the instance, matching an {attribute
+// use}, that has no ·actual value· ([walk.assertionValues]).
+type lackingAttribute struct{ a Attribute }
 
 // lackingValue is a simple {content type} whose `$value` is undecided
 // ([walk.assertionValue]).
 type lackingValue struct{}
 
 func (l lackingAttribute) declined(e xsd.QName) string {
-	return fmt.Sprintf("the attribute %s of the element %s has no ·actual value· for the data model instance cvc-assertion clause 1 builds", l.name, e)
+	return fmt.Sprintf("the attribute %s of the element %s has no ·actual value· for the data model instance cvc-assertion clause 1 builds", l.a.Name(), e)
 }
 
 func (lackingValue) declined(e xsd.QName) string {
 	return fmt.Sprintf("the element %s has simple content whose [schema actual value], which cvc-assertion clause 2.3.1 binds to $value, is undecided: String Valid over its ·initial value· was withheld", e)
 }
 
-// assertionValues is the input of e's assertions: the ·actual value· of each
+// assertionValues is the input of e's assertions: the typed value of each
 // attribute of attrs that matches an {attribute use} of ct, in document order,
-// mapped under the type [walk.assertionType] resolves for that use, and
-// `$value`'s binding ([walk.assertionValue]). It reports the lack, naming the
-// first attribute lacking one, where any such attribute has no ·actual value·:
-// its declaration or {type definition} does not resolve, or cvc-attribute
-// clause 3 charged or declined its lexical — String Valid ([walk.stringValid]),
-// the same check re-run here because the walk keeps no ·actual values·.
-// Omitting such an attribute instead would make `@a` the empty sequence and
-// could fabricate a charge.
+// under the type [walk.assertionType] resolves for that use, and `$value`'s
+// binding ([walk.assertionValue]). It reports the lack, carrying the first
+// attribute lacking one, where any such attribute has no ·actual value·: its
+// declaration or {type definition} does not resolve, or cvc-attribute clause 3
+// charged or declined its lexical — String Valid ([walk.stringValid]), the
+// same check re-run here because the walk keeps no ·actual values·. Omitting
+// such an attribute instead would make `@a` the empty sequence and could
+// fabricate a charge.
+//
+// The typed value is [xpath.Untyped] of the attribute's [[normalized value]]
+// where the type is ·special· (isSpecial): xpath-datamodel §3.3.1.2 makes it
+// the [schema normalized value] as xs:untypedAtomic, and that is the
+// [[normalized value]] unchanged, because key-nv normalizes under
+// xs:anySimpleType "as in the preserve case" and xs:anyAtomicType carries no
+// whiteSpace facet either. It is [xpath.Typed] of the ·actual value· mapped
+// under the type otherwise.
 //
 // An attribute matching no use is not read: no {test}
 // [xpath.CompileAssertionTest] admits can name it ([walk.assertionTypes]), so
-// its own ·actual value· decides nothing here. One whose use
-// [walk.assertionType] does not type is checked and not read, on the same
-// grounds.
+// its own ·actual value· decides nothing here.
 //
 // A lack declines every assertion of e, including one whose {test} never reads
 // what is lacking: whether a {test} reads `$value` is not something the
@@ -276,20 +274,21 @@ func (w *walk) assertionValues(e Element, attrs []Attribute, ct xsd.ComplexType,
 		if !matched {
 			continue
 		}
-		st, resolved, typed := w.assertionType(u)
+		st, resolved := w.assertionType(u)
 		if !resolved {
-			return assertionInput{}, lackingAttribute{name: a.Name()}
+			return assertionInput{}, lackingAttribute{a: a}
 		}
 		decided, verdict := w.stringValid(st, a.Value(), e, a.Loc())
 		if !decided || verdict != nil {
-			return assertionInput{}, lackingAttribute{name: a.Name()}
+			return assertionInput{}, lackingAttribute{a: a}
 		}
-		if !typed {
+		if isSpecial(st) {
+			in.attrs = append(in.attrs, assertionValue{name: a.Name(), v: xpath.Untyped(a.Value())})
 			continue
 		}
 		v, err := value.ValidateLexical(w.backend, w.schema, st, a.Value(), elementContext{owner: e})
 		if err != nil {
-			return assertionInput{}, lackingAttribute{name: a.Name()}
+			return assertionInput{}, lackingAttribute{a: a}
 		}
 		in.attrs = append(in.attrs, assertionValue{name: a.Name(), v: xpath.Typed(v)})
 	}

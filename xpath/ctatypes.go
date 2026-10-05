@@ -235,6 +235,15 @@ func (t ctaTypes) castsFrom(v ctaValue) bool {
 	return resolved && p.Name() == ctaBuiltin("string")
 }
 
+// ctaSpecial reports whether st is one of the two ·special· simple types,
+// xs:anySimpleType or xs:anyAtomicType, under which xpath-datamodel §3.3.1.2
+// and Datatypes dt-xdmrep clause 1 make a typed value xs:untypedAtomic. It is
+// an identity test on the anchors [xsd.AnySimpleType] and [xsd.AnyAtomicType],
+// the test validate's isSpecial makes too (#2041).
+func ctaSpecial(st *xsd.SimpleType) bool {
+	return st == xsd.AnySimpleType() || st == xsd.AnyAtomicType()
+}
+
 // typedAtomic reports whether this engine reads a value of type st off the
 // instance as a typed operand — an attribute whose type [AttributeTypes]
 // answered, or one item of `$value` (valueVariable) — classified the way
@@ -246,7 +255,9 @@ func (t ctaTypes) castsFrom(v ctaValue) bool {
 //     value takes the type of its ·validating· member, which only the instance
 //     decides;
 //   - xs:anySimpleType and xs:anyAtomicType, whose lexical mapping is not a
-//     function (Datatypes §3.2.1.2, §3.2.2.2).
+//     function (Datatypes §3.2.1.2, §3.2.2.2), and whose typed value is
+//     xs:untypedAtomic instead (ctaSpecial) — which a caller that reads one
+//     untyped asks about before this, and never reaches here with.
 //
 // An xs:QName or xs:NOTATION primitive is declined as well: neither has a
 // ·canonical representation· (value.Mapping), so ctaPromote cannot convert one
@@ -355,9 +366,9 @@ func (t ctaTypes) comparison(op ctaComparator, l, r ctaValue) (*xsd.SimpleType, 
 // their least common type by a combination of type promotion and subtype
 // substitution", which is shared — and B.2's rows decide the rest.
 //
-// No operand the assertion façade builds is xs:untypedAtomic today: only a
-// Type Alternative's attribute is, and that façade declines every value
-// comparison (ctaFacade.comparesValues).
+// Only the assertion façade reaches here (ctaFacade.comparesValues), and the
+// one xs:untypedAtomic operand it builds is an attribute whose type is
+// ·special· (ctaAssertionFacade.attribute).
 func (t ctaTypes) valueComparison(op ctaComparator, l, r ctaValue) (*xsd.SimpleType, ctaTyping) {
 	if st, empty := t.againstEmpty(l, r); empty {
 		return st, ctaTypeSettled
