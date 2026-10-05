@@ -95,7 +95,9 @@ func IsAssertionDeclined(err error) bool {
 // [xsd.ValueSpace] [NewValueSpace] returns, and [ConstraintMatches] — none of
 // which is handed an evaluator by its caller. It declines every {test}: this
 // package has no XPath engine of its own, and answering [AssertionHolds] would
-// accept a value an assertion rejects.
+// accept a value an assertion rejects. GAP(value): each of the three therefore
+// leaves undecided what an assertions facet in a type's closure would decide;
+// each states its own consumers and direction at its marker. (#1042)
 type assertionsUndecided struct{}
 
 // Evaluate declines every {test}.

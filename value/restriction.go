@@ -552,8 +552,11 @@ func minInclusiveRestrictionViolates(base xsd.FacetKind, ord Ordering) bool {
 // so a member every other facet of the base accepts reaches the base's
 // assertions undecided, and charging that would reject every enumeration on a
 // base carrying an assertions facet. GAP(value): a member the base's
-// assertions would reject is therefore never charged under §4.3.5.5 — the
-// withheld half is a schema rejection, so the direction is fail-open. (#1042)
+// assertions would reject is therefore never charged under §4.3.5.5. The
+// withheld value is this function's error, whose one reader is
+// builtin's checkSimpleTypeRestriction, the xsd.SimpleTypeRestrictionChecker
+// xsd's finalize charges on an error PRESENT, so the decline can only cost a
+// schema rejection and the direction is fail-open. (#1042)
 func (rc restrictionCheck) checkEnumerationRestriction(b Backend, r xsd.TypeResolver) error {
 	memberBackend := b
 	if s, ok := r.(notationDeclarer); ok {

@@ -144,8 +144,11 @@ func (vs valueSpace) compare(r xsd.TypeResolver, ta *xsd.SimpleType, a xsd.Value
 //     GAP(value): this package holds no XPath engine, so the pipeline runs
 //     with assertionsUndecided and every {lexical form} the other facets of t
 //     accept is undecided wherever t's closure carries an assertions facet.
-//     Undecided accepts, so the withheld half is a schema rejection and the
-//     direction is fail-open. (#1042)
+//     The readers of the withheld verdict are xsd's Schema.checkSimpleDefault
+//     (a-props-correct and au-props-correct clause 2) and validate's
+//     walk.defaultedAttribute (cvc-complex-type clause 4), each of which
+//     charges only a decided cause and declines or accepts an undecided one,
+//     so the direction is fail-open. (#1042)
 //
 // One residue is recorded rather than papered over. GAP(value): union member
 // facet compilation. dispatchUnion folds every member's rejection into one
@@ -247,8 +250,10 @@ func (vs valueSpace) ValidDefault(r xsd.TypeResolver, t *xsd.SimpleType, vc xsd.
 // For a t that is not ·special·, a side that fails to validate is undecided,
 // never a mismatch. GAP(value): that includes every side an assertions facet in
 // t's closure reaches, which this function runs with assertionsUndecided — it is
-// handed no [AssertionEvaluator] — and so declines (IsAssertionDeclined). The
-// withheld answer is a NOT-same its callers would charge, so the direction is
+// handed no [AssertionEvaluator] — and so declines (IsAssertionDeclined). Its
+// readers, validate's walk.fixedAgreement (cvc-attribute clause 4, cvc-au) and
+// contentCheck.fixedActualValue (cvc-elt clause 5.2.2.2.2), charge only a
+// decided NOT-same and decline an undecided answer, so the direction is
 // fail-open. (#1042) For the instance side that is not a lost verdict: a
 // literal outside t's lexical space already fails cvc-attribute clause 3,
 // which the caller charges in its own right, and reporting "not the same

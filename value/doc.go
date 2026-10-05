@@ -77,9 +77,10 @@
 // an [AssertionEvaluator], which answers each {test} with an [AssertionOutcome]:
 // a failed one is an ordinary verdict under cvc-assertions-valid, and a declined
 // one is the third non-verdict, which [IsAssertionDeclined] reports and
-// [IsDatatypeVerdict] excludes. This package's own callers of the pipeline that
-// are handed no evaluator — [CheckFacetRestriction], the [xsd.ValueSpace]
-// [NewValueSpace] returns, [ConstraintMatches] — decline every {test}.
+// [IsDatatypeVerdict] excludes. GAP(value): this package's own callers of the
+// pipeline that are handed no evaluator — [CheckFacetRestriction], the
+// [xsd.ValueSpace] [NewValueSpace] returns, [ConstraintMatches] — decline every
+// {test}, each fail-open on the terms its own marker states. (#1042)
 //
 // One member of that class has a predicate of its own, because two sites need to
 // know WHICH fault: a type may reach [ValidateLexical] carrying a facet that is not
