@@ -22,25 +22,24 @@ import "github.com/kud360/goxsd8/xsderr"
 // type outright), and adding a fourth arm to it would re-open the arm-by-slot
 // legality table for all four slots that sum already serves.
 //
-// THE ARM × SLOT LEGALITY TABLE. Both arms are legal in all three slots; nil is
-// legal in exactly one, and every other absent-encoding is illegal everywhere:
+// THE ARM × SLOT LEGALITY TABLE. Both arms are legal in all three slots, and
+// every absent-encoding is illegal everywhere:
 //
-//	slot                       nil    SimpleTypeRef{Name}   OwnedSimpleType{Definition}
-//	{base type definition}     legal  legal, Name present   legal, Definition present
-//	{item type definition}     ILLEGAL  "        "          "        "
-//	{member type definitions}[i]  ILLEGAL  "     "          "        "
+//	slot                          nil      SimpleTypeRef{Name}   OwnedSimpleType{Definition}
+//	{base type definition}        ILLEGAL  legal, Name present   legal, Definition present
+//	{item type definition}        ILLEGAL  "        "            "        "
+//	{member type definitions}[i]  ILLEGAL  "        "            "        "
 //
-// nil in the base slot is the single encoding of an ·absent· {base type
-// definition}: the type IS xs:anySimpleType, whose real base xs:anyType is a
-// Complex Type Definition outside this package's scope, and IsAnySimpleType is
-// exactly that predicate. A list always HAS an item and a membership never holds
-// an absent member (§3.16.1), so nil there encodes nothing — as do the two
+// Every Simple Type Definition but xs:anySimpleType has a simple base
+// (Datatypes §4.1.6), a list always HAS an item and a membership never holds an
+// absent member (§3.16.1), so nil encodes nothing in any slot — nor do the two
 // forgeable near-misses, a zero-named SimpleTypeRef and an OwnedSimpleType
-// wrapping nil. NewSimpleType rejects all three in the item and member slots
-// (checkSimpleTypeOrRefPresent) and the latter two in the base slot
-// (checkSimpleTypeOrRef), so absence is decided ONCE, at construction, and
-// simpleTypeOfRef never multiplexes it per caller: a nil it sees came from the
-// base slot and means xs:anySimpleType.
+// wrapping nil. xs:anySimpleType, whose real base xs:anyType is a Complex Type
+// Definition outside this package's scope, is the anchor AnySimpleType returns,
+// built by no constructor; Base and IsAnySimpleType recognize it by identity.
+// NewSimpleType rejects all three encodings in all three slots
+// (checkSimpleTypeOrRefPresent), so absence is decided ONCE, at construction,
+// and a nil simpleTypeOfRef sees means a SimpleType no constructor built.
 //
 // That construction-time discharge is what keeps this sum's contract narrower
 // than its sibling TypeDefinitionOrRef's, whose doc must instead make "the
@@ -94,10 +93,9 @@ type SimpleTypeRef struct{ Name QName }
 // the drift; it is pinned by tests asserting a produced named base= and a
 // produced named itemType= each store SimpleTypeRef.
 //
-// Definition is always present: in the base slot nil-the-interface is the only
-// encoding of absent, and in the item and member slots nothing encodes absent at
-// all, so an OwnedSimpleType wrapping nil is a second encoding of absent or of
-// nothing (STYLE D3). NewSimpleType rejects one in every slot. The field is
+// Definition is always present: no slot encodes absent at all, so an
+// OwnedSimpleType wrapping nil encodes nothing. NewSimpleType rejects one in
+// every slot. The field is
 // read-only by convention; do not mutate it after construction.
 //
 // It carries a *SimpleType and not a TypeDefinition, which makes original item
@@ -113,17 +111,6 @@ func (SimpleTypeRef) simpleTypeOrRef() {}
 // SimpleTypeOrRef doc.
 func (OwnedSimpleType) simpleTypeOrRef() {}
 
-// checkSimpleTypeOrRef rejects the encodings the {base type definition} slot —
-// the ONE slot of the three where nil is legal (SimpleTypeOrRef's arm × slot
-// table) — may not hold. A nil ref is that slot's absent encoding and passes;
-// anything else must be present, which is checkSimpleTypeOrRefPresent's verdict.
-func checkSimpleTypeOrRef(loc xsderr.Loc, ref SimpleTypeOrRef) error {
-	if ref == nil {
-		return nil
-	}
-	return checkSimpleTypeOrRefPresent(loc, ref, "{base type definition}")
-}
-
 // checkSimpleTypeOrRefPresent rejects every encoding of ABSENCE in a slot that
 // must hold a type: a nil ref, a SimpleTypeRef naming nothing, and an
 // OwnedSimpleType holding nothing. It is charged to
@@ -131,10 +118,10 @@ func checkSimpleTypeOrRef(loc xsderr.Loc, ref SimpleTypeOrRef) error {
 // package owns, not spec clauses a schema author can violate — the same footing
 // checkTypeDefinitionOrRef rejects a zero-named TypeDefinitionRef on.
 //
-// slot names the property for the message ("{item type definition}",
-// "{member type definitions}[2]"), and is what lets the item and member slots
-// discharge their absence at CONSTRUCTION rather than leaving simpleTypeOfRef to
-// answer "absent" differently per caller at read time.
+// slot names the property for the message ("{base type definition}",
+// "{member type definitions}[2]"), and is what lets all three slots discharge
+// their absence at CONSTRUCTION rather than leaving simpleTypeOfRef to answer
+// "absent" differently per caller at read time.
 func checkSimpleTypeOrRefPresent(loc xsderr.Loc, ref SimpleTypeOrRef, slot string) error {
 	switch r := ref.(type) {
 	case nil:

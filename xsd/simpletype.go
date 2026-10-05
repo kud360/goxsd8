@@ -605,15 +605,14 @@ type SimpleType struct {
 }
 
 // NewSimpleType builds a Simple Type Definition. base is the {base type
-// definition} slot (SimpleTypeOrRef, simpletyperef.go): nil means this type IS
-// xs:anySimpleType (the one simple type whose base is xs:anyType, a Complex Type
-// Definition outside this package's scope); every other simple type carries
-// either a SimpleTypeRef naming its base or an OwnedSimpleType holding it.
+// definition} slot (SimpleTypeOrRef, simpletyperef.go), and it is present: a
+// SimpleTypeRef naming the base or an OwnedSimpleType holding it. Every Simple
+// Type Definition but xs:anySimpleType has a simple base (Datatypes §4.1.6), and
+// that one component is not built here — it is the anchor AnySimpleType returns.
 // derivation is the declared §3.16.2.1 alternative the component was mapped
 // from, and it is what {variety}, {primitive type definition}, {item type
 // definition} and {member type definitions} are DERIVED from — none of the four
-// is passed or stored (STYLE D3). It may be nil to model xs:anySimpleType, which
-// was mapped from no alternative at all and whose {variety} is ·absent·.
+// is passed or stored (STYLE D3). It is present too.
 //
 // The two ·special· types are constrained bases. xs:anySimpleType is the base a
 // ·constructed· list or union names (cos-st-restricts 2.2.1/3.2.1), and those
@@ -635,11 +634,10 @@ type SimpleType struct {
 //   - two ownFacets of the same FacetKind (clause 4: "not more than one member
 //     of {facets} of the same kind").
 //
-// and, charging xsderr.RuleComponentInvariant, every illegal encoding of the
-// three type-valued slots themselves — a SimpleTypeRef naming nothing and an
-// OwnedSimpleType holding nothing anywhere (checkSimpleTypeOrRef), plus an
-// ABSENT item or member, which only the base slot may be
-// (checkSimpleTypeDerivationSlots over SimpleTypeOrRef's arm × slot table).
+// and, charging xsderr.RuleComponentInvariant, a nil derivation and every
+// illegal encoding of the three type-valued slots themselves — a nil, a
+// SimpleTypeRef naming nothing and an OwnedSimpleType holding nothing, in every
+// slot (checkSimpleTypeOrRefPresent over SimpleTypeOrRef's arm × slot table).
 //
 // Everything the CROSS-REFERENCE constraints decide — every cos-st-restricts
 // sub-clause and st-props-correct clauses 1, 2, 3 and 5 — is charged at
@@ -662,7 +660,7 @@ type SimpleType struct {
 // seeded built-in datatype is — passes the zero xsderr.Loc{}, which reads as
 // "unknown".
 func NewSimpleType(loc xsderr.Loc, name QName, derivation SimpleTypeDerivation, base SimpleTypeOrRef, ownFacets []Facet, final []DerivationMethod) (*SimpleType, error) {
-	if err := checkSimpleTypeOrRef(loc, base); err != nil {
+	if err := checkSimpleTypeOrRefPresent(loc, base, "{base type definition}"); err != nil {
 		return nil, err
 	}
 	if err := checkSimpleTypeDerivationSlots(loc, derivation); err != nil {
@@ -695,10 +693,12 @@ func copyDerivation(derivation SimpleTypeDerivation) SimpleTypeDerivation {
 	return UnionDerivation{Members: append([]SimpleTypeOrRef(nil), u.Members...)}
 }
 
-// checkSimpleTypeDerivationSlots charges checkSimpleTypeOrRefPresent over the
-// type-valued slots the declared derivation carries: ListDerivation.Item and
-// every UnionDerivation.Members entry, the two slots SimpleTypeOrRef's arm ×
-// slot table makes nil-illegal. The other three arms carry no slot at all.
+// checkSimpleTypeDerivationSlots rejects a nil derivation, charged to
+// xsderr.RuleComponentInvariant — only xs:anySimpleType declares no §3.16.2.1
+// alternative, and NewSimpleType does not build it — and charges
+// checkSimpleTypeOrRefPresent over the type-valued slots the declared derivation
+// carries: ListDerivation.Item and every UnionDerivation.Members entry. The other
+// three arms carry no slot at all.
 //
 // An EMPTY membership is accepted: §3.16.1 admits it and only the <union>
 // element's own representation constraint (src-simple-type clause 4) forbids the
@@ -707,6 +707,9 @@ func copyDerivation(derivation SimpleTypeDerivation) SimpleTypeDerivation {
 // assemble.
 func checkSimpleTypeDerivationSlots(loc xsderr.Loc, derivation SimpleTypeDerivation) error {
 	switch d := derivation.(type) {
+	case nil:
+		return xsderr.New(xsderr.RuleComponentInvariant, loc,
+			"simple type derivation is absent, but every simple type other than xs:anySimpleType declares a restriction, list or union alternative")
 	case ListDerivation:
 		return checkSimpleTypeOrRefPresent(loc, d.Item, "{item type definition}")
 	case UnionDerivation:

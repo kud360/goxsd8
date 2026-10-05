@@ -82,9 +82,10 @@ func validateUnion(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexical
 	// means the ·active basic member· is itself a type §4.1.5 makes facet-less: a
 	// member whose {variety} is ·absent·, §4.1.5's FIRST no-applicable-facets case
 	// (noFacetsApplicable's `case nil`). cos-st-restricts clause 3.1 admits such a
-	// member because it rejects only the two ·special· ANCHOR nodes by identity, not
-	// every caller-built type in their shape — one with no declared derivation and no
-	// {base type definition} derives no {variety} at all. Nothing normalizes there, so
+	// member because it rejects only the two ·special· ANCHOR nodes by identity: a
+	// ·restriction· of xs:anySimpleType inherits its ·absent· {variety}, and
+	// st-props-correct clause 1 is charged by that member's own CheckDerivation,
+	// which a union's does not re-run over its members. Nothing normalizes there, so
 	// the raw literal is what clause 1 tests — the same `if ws != 0` guard
 	// validateLexical and facetValue apply.
 	lexical := rawLexical

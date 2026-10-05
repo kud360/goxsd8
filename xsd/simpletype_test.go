@@ -2,6 +2,7 @@ package xsd
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/kud360/goxsd8/xsderr"
@@ -311,6 +312,23 @@ func TestNewSimpleTypeAcceptsLegalFinal(t *testing.T) {
 	got[0] = DerivationUnion // mutating the copy must not affect st
 	if st.Final()[0] != DerivationRestriction {
 		t.Error("Final() returned an aliased slice")
+	}
+}
+
+// TestNewSimpleTypeRejectsNilDerivation pins that NewSimpleType refuses an
+// absent derivation, charged xsderr.RuleComponentInvariant: only
+// xs:anySimpleType declares no §3.16.2.1 alternative, and it is the anchor
+// AnySimpleType returns, not a component this constructor builds.
+func TestNewSimpleTypeRejectsNilDerivation(t *testing.T) {
+	_, err := NewSimpleType(xsderr.Loc{}, QName{Local: "D"}, nil, ownedBase(anySimpleType), nil, nil)
+	if err == nil {
+		t.Fatal("NewSimpleType(nil derivation) = nil error, want a component-invariant rejection")
+	}
+	if r, _ := xsderr.RuleOf(err); r != xsderr.RuleComponentInvariant {
+		t.Fatalf("rule = %q, want %q (%v)", r, xsderr.RuleComponentInvariant, err)
+	}
+	if !strings.Contains(err.Error(), "derivation is absent") {
+		t.Fatalf("message does not name the absent derivation: %v", err)
 	}
 }
 
