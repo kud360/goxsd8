@@ -48,9 +48,13 @@ type Reader struct {
 	// declares to that name's FIRST declaration, which binds (XML 1.0 §4.2):
 	// a later NDATA declaration of a name already declared parsed declares no
 	// unparsed entity, and a later literal gives an internal entity no second
-	// replacement text. It is a lookup index only, never iterated. dec.Entity
-	// names the internal entities among them to the decoder, which otherwise
-	// refuses a reference to any of them (see included).
+	// replacement text. That declaration's inPE alone is not the first's: it
+	// is cleared by any declaration of the name outside every parameter
+	// entity, since WFC Entity Declared counts every such declaration, not
+	// only the binding one (see Reader.reference). It is a lookup index only,
+	// never iterated. dec.Entity names the internal entities among them to
+	// the decoder, which otherwise refuses a reference to any of them (see
+	// included).
 	entities map[string]entityDecl
 	// tokenized maps each (element type, attribute) name pair an <!ATTLIST>
 	// of the internal subset defines, as the declaration spells them, to
@@ -261,8 +265,9 @@ func (r *Reader) checkChars(raw string, off int64) error {
 
 // declareEntities records the general entity declarations and the <!ATTLIST>
 // attribute definitions of a DOCTYPE directive at the document level, keeping
-// the first declaration of each entity name and the first definition of each
-// attribute of an element type (XML 1.0 §4.2, §3.3), and whether any
+// the first declaration of each entity name, less its inPE once a declaration
+// of the name outside every parameter entity is read, and the first definition
+// of each attribute of an element type (XML 1.0 §4.2, §3.3), and whether any
 // declaration went unread. raw is the directive's source, "<!"
 // through '>': the subset is read from it rather than from the decoder's
 // Directive token, which replaces each comment with one space, so that a
@@ -294,7 +299,11 @@ func (r *Reader) declareEntities(raw string, loc xsderr.Loc) error {
 		r.tokenized[key] = att.tokenized
 	}
 	for _, decl := range decls {
-		if _, bound := r.entities[decl.name]; bound {
+		if bound, ok := r.entities[decl.name]; ok {
+			if bound.inPE && !decl.inPE {
+				bound.inPE = false
+				r.entities[decl.name] = bound
+			}
 			continue
 		}
 		if r.entities == nil {

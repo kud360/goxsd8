@@ -16,10 +16,12 @@ import (
 // value· must name (Structures §3.16.4 key-vde) — and, for an internal entity,
 // its replacement text, which a reference to it includes (XML 1.0 §4.4.2,
 // §4.4.5, §4.4.8). value is unreadable for an external entity, unparsed or
-// not.
+// not. inPE reports that the declaration stands in a parameter entity's
+// replacement text, where XML 1.0 WFC: Entity Declared does not count it.
 type entityDecl struct {
 	name     string
 	unparsed bool
+	inPE     bool
 	value    entityValue
 }
 
@@ -706,46 +708,64 @@ func (sc *subsetScan) attValueFault(what, lit string) error {
 // checked once the whole subset is read, so a fault the scan finds anywhere in
 // the subset is reported in place of one of these.
 //
-// Each EntityRef ([68]) the default value holds directly, a predefined name
-// (amp, lt, gt, apos, quot; XML 1.0 §4.6) excepted, must name a general entity
-// declared before the <!ATTLIST> (WFC: Entity Declared), where that constraint
-// binds: in a default value outside a parameter entity's replacement text, of
-// a document that is standalone="yes" or whose DOCTYPE names no external subset
-// and whose internal subset references no parameter entity, before the
-// <!ATTLIST> or after it. An indirect reference to an entity declared after it
-// is VC: Entity Declared's alone. The entity a reference names, by its first
-// declaration, which binds (§4.2), and every entity its replacement text
-// references in turn, at any depth, must be parsed (WFC: Parsed Entity) and
-// internal (WFC: No External Entity References), its replacement text must hold
-// no '<' (WFC: No < in Attribute Values), and it must not reach itself (WFC: No
-// Recursion; see entityGraph). A CharRef ([66]) names no entity: `&#60;` breaks
-// none of these, and neither does an entity whose replacement text is `&#60;`.
-// An entity declaration after a declined reference, outside a standalone
+// WFC: Entity Declared binds a default value outside a parameter entity's
+// replacement text, of a document that is standalone="yes" or whose DOCTYPE
+// names no external subset and whose internal subset references no parameter
+// entity. There each EntityRef ([68]) the default value holds directly must
+// name a general entity declared before the <!ATTLIST>, and each one the
+// replacement text of an entity it reaches holds — recognized where that text
+// is included in the default value (XML 1.0 §4.4.2, §4.4.5), so not within a
+// parameter entity — must name one declared before the <!ATTLIST> or after it,
+// an indirect reference to an entity declared after it being VC: Entity
+// Declared's alone. Either way the constraint counts only a declaration
+// outside every parameter entity's replacement text (entityDecl.inPE), and
+// never asks a predefined name (amp, lt, gt, apos, quot; §4.6) to be declared.
+// So under standalone="yes" an entity declared only in a parameter entity is
+// declared for none of these references, and an entity whose replacement text
+// references a name declared nowhere breaks the constraint once a default value
+// references it, though its declaration alone does not. Where the constraint
+// does not bind, a reference to a name declared nowhere is passed over.
+//
+// The entity a reference names, by its first declaration, which binds (§4.2),
+// and every entity its replacement text references in turn, at any depth, must
+// be parsed (WFC: Parsed Entity) and internal (WFC: No External Entity
+// References), its replacement text must hold no '<' (WFC: No < in Attribute
+// Values), and it must not reach itself (WFC: No Recursion; see entityGraph).
+// A CharRef ([66]) names no entity: `&#60;` breaks none of these, and neither
+// does an entity whose replacement text is `&#60;`. A '&' that replacement
+// text holds where its literal spelled `&#38;` opens no EntityRef unless a
+// Name and ';' follow it, and is otherwise passed over (see nextEntityRef). An
+// entity declaration after a declined reference, outside a standalone
 // document, is not recorded (§5.1), so a name first declared there is none
 // this check knows: Entity Declared does not bind there, and the others are
 // not checked.
-//
-// GAP(xml): a general entity declared in a parameter entity's replacement text
-// satisfies WFC: Entity Declared here, though the constraint counts only a
-// declaration that does not occur within a parameter entity, and a reference in
-// replacement text to a name declared nowhere is not charged under it.
-// Untracked: no issue owns it yet.
 func (sc *subsetScan) defaultsFault() error {
 	if len(sc.defaults) == 0 {
 		return nil
 	}
-	g := entityGraph{loc: sc.loc, decls: sc.decls, first: make(map[string]int), state: make(map[string]walkState)}
+	first, outside := make(map[string]int), make(map[string]int)
 	for i, d := range sc.decls {
-		if _, bound := g.first[d.name]; !bound {
-			g.first[d.name] = i
+		if _, bound := first[d.name]; !bound {
+			first[d.name] = i
+		}
+		if _, bound := outside[d.name]; !bound && !d.inPE {
+			outside[d.name] = i
 		}
 	}
 	// Every parameter-entity reference between declarations was declined,
 	// setting unread, expanded, charging spent, or read once checkOnly, after
 	// a decline; an external subset sets unread from the header.
 	binds := sc.standalone || !sc.unread && sc.spent == 0
+	graphs := [2]entityGraph{
+		{loc: sc.loc, decls: sc.decls, first: first, outside: outside, state: make(map[string]walkState)},
+		{loc: sc.loc, decls: sc.decls, first: first, outside: outside, declared: true, state: make(map[string]walkState)},
+	}
 	for _, d := range sc.defaults {
-		if err := g.defaultFault(d, binds && !d.inPE); err != nil {
+		g := &graphs[0]
+		if binds && !d.inPE {
+			g = &graphs[1]
+		}
+		if err := g.defaultFault(d); err != nil {
 			return err
 		}
 	}
@@ -754,15 +774,21 @@ func (sc *subsetScan) defaultsFault() error {
 
 // entityGraph walks the general entities a subset's default values reference,
 // directly or through one another's replacement text, for defaultsFault. decls
-// are the subset's general entity declarations, in document order, and first
-// the index of each name's first declaration among them; state records how
-// far the walk from each entity has got. Both maps are lookup indexes only,
+// are the subset's general entity declarations, in document order, first the
+// index of each name's first declaration among them, and outside the index of
+// each name's first declaration outside every parameter entity's replacement
+// text. declared reports that WFC: Entity Declared binds the default values
+// this graph walks from; state records how far the walk from each entity has
+// got, which a walk where the constraint binds may not take from one where it
+// does not, so each graph keeps its own. The maps are lookup indexes only,
 // never iterated. loc is the directive's start, where every fault is located.
 type entityGraph struct {
-	loc   xsderr.Loc
-	decls []entityDecl
-	first map[string]int
-	state map[string]walkState
+	loc      xsderr.Loc
+	decls    []entityDecl
+	first    map[string]int
+	outside  map[string]int
+	declared bool
+	state    map[string]walkState
 }
 
 // walkState is how far an entityGraph's walk from one entity has got.
@@ -780,8 +806,7 @@ const (
 
 // defaultFault returns the fault of the first entity reference d's default
 // value holds directly that breaks a constraint defaultsFault names, or nil.
-// declared reports that WFC: Entity Declared binds d.
-func (g *entityGraph) defaultFault(d attDefault, declared bool) error {
+func (g *entityGraph) defaultFault(d attDefault) error {
 	lit := d.lit
 	for {
 		name, after, ok := nextEntityRef(lit)
@@ -792,11 +817,11 @@ func (g *entityGraph) defaultFault(d attDefault, declared bool) error {
 		if _, builtin := predefined[name]; builtin {
 			continue
 		}
-		i, known := g.first[name]
-		if declared && (!known || i >= d.declared) {
-			return xsderr.New(xsderr.RuleXMLWellFormed, g.loc, "%s that references entity %s, which no general entity declaration before it declares (XML 1.0 WFC: Entity Declared)", d.about, name)
+		i, counted := g.outside[name]
+		if g.declared && (!counted || i >= d.declared) {
+			return xsderr.New(xsderr.RuleXMLWellFormed, g.loc, "%s that references entity %s, which no general entity declaration before it, outside every parameter entity, declares (XML 1.0 WFC: Entity Declared)", d.about, name)
 		}
-		if !known {
+		if _, known := g.first[name]; !known {
 			continue
 		}
 		if err := g.fault(d.about, name); err != nil {
@@ -815,10 +840,12 @@ type walkFrame struct {
 // fault walks from name, a declared general entity the default value about
 // describes references, depth first through the replacement text of every
 // entity it reaches, and returns the fault of the first it finds: an entity
-// enter refuses, or a reference to one already on the path (XML 1.0 WFC: No
-// Recursion). The path is a slice, not the call stack, so entities nested as
-// deeply as the subset can declare them cost no recursion and no bound. A
-// predefined name and one declared nowhere are passed over.
+// enter refuses, a reference to one already on the path (XML 1.0 WFC: No
+// Recursion), or, where declared, a reference to a name no declaration outside
+// every parameter entity declares (WFC: Entity Declared). The path is a slice,
+// not the call stack, so entities nested as deeply as the subset can declare
+// them cost no recursion and no bound. A predefined name is passed over, and
+// so, unless declared, is one declared nowhere.
 func (g *entityGraph) fault(about, name string) error {
 	if g.state[name] == walked {
 		return nil
@@ -838,6 +865,9 @@ func (g *entityGraph) fault(about, name string) error {
 		top.rest = after
 		if _, builtin := predefined[ref]; builtin {
 			continue
+		}
+		if _, counted := g.outside[ref]; g.declared && !counted {
+			return xsderr.New(xsderr.RuleXMLWellFormed, g.loc, "%s that references, directly or indirectly, entity %s, whose replacement text references entity %s, which no general entity declaration outside every parameter entity declares (XML 1.0 WFC: Entity Declared)", about, top.name, ref)
 		}
 		if _, known := g.first[ref]; !known {
 			continue
@@ -962,7 +992,7 @@ func (sc *subsetScan) readEntityDecl(body string) (entityDecl, bool, error) {
 		}
 		return entityDecl{}, false, xsderr.New(xsderr.RuleXMLWellFormed, sc.loc, "%s holds an <!ENTITY> declaration whose name %q is not a Name (XML 1.0 %s, [5] Name)", sc.where(), name, decl)
 	}
-	d := entityDecl{name: toks[0]}
+	d := entityDecl{name: toks[0], inPE: sc.depth > 0}
 	def := toks[1:]
 	if len(def) == 0 {
 		return entityDecl{}, false, xsderr.New(xsderr.RuleXMLWellFormed, sc.loc, "%s holds an <!ENTITY> declaration of %q with no definition (XML 1.0 %s, %s)", sc.where(), d.name, decl, defn)
