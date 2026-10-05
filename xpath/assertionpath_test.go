@@ -134,12 +134,12 @@ func TestAssertionChildPathReadsNoChild(t *testing.T) {
 // A path written twice keeps one counter (ctaTallied.same), which the test's
 // own Tally fits; a Tally made for another path, or for the one-step `a`, does
 // not fit, and Evaluate answers false for it whatever the tree holds. With
-// ctaChildPath.same answering false the first row's Tally holds two counters and
-// still fits, and its count reads the first; with it answering true for any
-// ctaChildPath the a/c row fits and holds.
+// ctaChildPath.same answering false the path written twice takes two counters
+// and its own Tally fits nothing; with it answering true for any ctaChildPath
+// the a/c, b/a and a/b/c rows fit and hold.
 func TestAssertionChildPathKeepsOneCounter(t *testing.T) {
 	twice := apCompile(t, asRecord("exists(a/b) and not(empty(a/b))"))
-	if c := twice.Tally(); len(c.counters) != 1 {
+	if c := twice.Tally(); c == nil || len(c.counters) != 1 {
 		t.Errorf("(exists(a/b) and not(empty(a/b))).Tally() holds %d counters, want 1", len(c.counters))
 	}
 	if !twice.Evaluate(backend(), seededTypes, asValues(t), asNoChildren, acTally(twice, acPath("a", "b")), ValueBinding{}) {
@@ -256,6 +256,8 @@ func TestCompileAssertionTestDeclinesChildPaths(t *testing.T) {
 		{"exists(a/text())", "a kind test"},
 		{"exists(a/)", "a slash with no step after it"},
 		{"exists(./a/b)", "a context-item path"},
+		{"exists(a/b", "an unclosed call"},
+		{"exists(a/b c)", "a stray token before the call's ')'"},
 		{"exists(a/p:b)", "an unbound prefix"},
 	} {
 		if _, ok := CompileAssertionTest(asRecord(tc.expr), seededTypes, asElementContent(t, false), uses, elems); ok {
