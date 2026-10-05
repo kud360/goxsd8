@@ -298,51 +298,68 @@ func (t AssertionTest) Evaluate(b value.Backend, types xsd.TypeResolver, attrs T
 // child's value only where some {test} of its parent reads it. The answer is
 // read off the tree itself.
 func (t AssertionTest) ReadsChild(name xsd.QName) bool {
-	return ctaExprReadsChild(t.root, name)
-}
-
-// ctaExprReadsChild reports whether x holds a ctaTypedChild naming name, at
-// any depth. ctaTypeError holds no operand, and the nil root of a zero
-// AssertionTest holds nothing.
-func ctaExprReadsChild(x ctaExpr, name xsd.QName) bool {
-	switch n := x.(type) {
-	case ctaOr:
-		return ctaAnyReadsChild(n.operands, name)
-	case ctaAnd:
-		return ctaAnyReadsChild(n.operands, name)
-	case ctaNot:
-		return ctaExprReadsChild(n.operand, name)
-	case ctaCompare:
-		return ctaValueReadsChild(n.left, name) || ctaValueReadsChild(n.right, name)
-	case ctaValueCompare:
-		return ctaValueReadsChild(n.left, name) || ctaValueReadsChild(n.right, name)
-	case ctaEffectiveBoolean:
-		return ctaValueReadsChild(n.operand, name)
+	if t.root == nil {
+		// The zero AssertionTest, which no successful CompileAssertionTest
+		// produces, holds nothing.
+		return false
 	}
-	return false
+	return t.root.readsChild(name)
 }
 
-// ctaAnyReadsChild is ctaExprReadsChild over each of operands.
+// readsChild reports whether any of operands holds a ctaTypedChild naming
+// name, at any depth.
+func (n ctaOr) readsChild(name xsd.QName) bool { return ctaAnyReadsChild(n.operands, name) }
+
+// readsChild is ctaOr.readsChild's.
+func (n ctaAnd) readsChild(name xsd.QName) bool { return ctaAnyReadsChild(n.operands, name) }
+
+// readsChild reports whether the operand holds a ctaTypedChild naming name.
+func (n ctaNot) readsChild(name xsd.QName) bool { return n.operand.readsChild(name) }
+
+// readsChild reports whether either operand is, or casts, a ctaTypedChild
+// naming name.
+func (n ctaCompare) readsChild(name xsd.QName) bool {
+	return n.left.readsChild(name) || n.right.readsChild(name)
+}
+
+// readsChild is ctaCompare.readsChild's.
+func (n ctaValueCompare) readsChild(name xsd.QName) bool {
+	return n.left.readsChild(name) || n.right.readsChild(name)
+}
+
+// readsChild reports whether the operand is, or casts, a ctaTypedChild naming
+// name.
+func (n ctaEffectiveBoolean) readsChild(name xsd.QName) bool { return n.operand.readsChild(name) }
+
+// readsChild is false: the node holds no operand.
+func (ctaTypeError) readsChild(xsd.QName) bool { return false }
+
+// ctaAnyReadsChild is readsChild over each of operands.
 func ctaAnyReadsChild(operands []ctaExpr, name xsd.QName) bool {
 	for _, o := range operands {
-		if ctaExprReadsChild(o, name) {
+		if o.readsChild(name) {
 			return true
 		}
 	}
 	return false
 }
 
-// ctaValueReadsChild reports whether v is, or casts, a ctaTypedChild naming
-// name. No other value node holds an operand.
-func ctaValueReadsChild(v ctaValue, name xsd.QName) bool {
-	switch n := v.(type) {
-	case ctaTypedChild:
-		return n.name == name
-	case ctaCast:
-		return ctaValueReadsChild(n.operand, name)
-	}
-	return false
-}
+// readsChild reports whether the step selects children named name.
+func (n ctaTypedChild) readsChild(name xsd.QName) bool { return n.name == name }
+
+// readsChild reports whether the cast's operand is a ctaTypedChild naming
+// name.
+func (n ctaCast) readsChild(name xsd.QName) bool { return n.operand.readsChild(name) }
+
+// readsChild is false for each of these: none is a child-axis step or holds an
+// operand.
+func (ctaAttr) readsChild(xsd.QName) bool           { return false }
+func (ctaTypedAttr) readsChild(xsd.QName) bool      { return false }
+func (ctaNoDocumentRoot) readsChild(xsd.QName) bool { return false }
+func (ctaLiteral) readsChild(xsd.QName) bool        { return false }
+func (ctaValueVar) readsChild(xsd.QName) bool       { return false }
+func (ctaEmptyValue) readsChild(xsd.QName) bool     { return false }
+func (ctaUntypedValue) readsChild(xsd.QName) bool   { return false }
 
 // ctaAssertionFacade is the assertion façade compileCTATest parses for: its
 // attribute nodes are typed by attrs, its child element nodes by elems, its

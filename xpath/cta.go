@@ -390,8 +390,13 @@ func (ctaTypedInput) ctaInput()   {}
 // ctaExpr is the sealed sum of the BOOLEAN-valued nodes of the compiled tree.
 // The grammar closes the set (STYLE T2's schema-closed-set exception), so
 // consumers type-switch over the branches and no further branch is
-// representable outside this package.
-type ctaExpr interface{ ctaExpr() }
+// representable outside this package. Every branch answers readsChild
+// ([AssertionTest.ReadsChild]) as a method, so a branch added without it does
+// not compile.
+type ctaExpr interface {
+	ctaExpr()
+	readsChild(name xsd.QName) bool
+}
 
 // ctaOr is [9] ta-OrExpr: existential over its operands, in written order.
 // A one-operand OrExpr is never built — the parser returns the operand itself
@@ -462,8 +467,11 @@ func (ctaTypeError) ctaExpr()        {}
 // in its three static forms (ctaFacade.variable), child-axis step
 // (ctaFacade.child) and rooted path (ctaFacade.rooted) — and the cast that
 // [15] ta-CastExpr's tail and [18] ta-ConstructorFunction both build over one
-// of them.
-type ctaValue interface{ ctaValue() }
+// of them. Every branch answers readsChild on ctaExpr's terms.
+type ctaValue interface {
+	ctaValue()
+	readsChild(name xsd.QName) bool
+}
 
 // ctaAttr is [17] ta-AttrName over an UNTYPED attribute: the attribute step
 // whose NameTest selects a SEQUENCE of E's attributes, in document order, out
