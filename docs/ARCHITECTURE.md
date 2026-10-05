@@ -511,7 +511,7 @@ otherwise stdlib.
 
 **Status: the CTA required subset ships, and over the same grammar the
 first slices of assertion evaluation; the rest is the destination.**
-`go doc` renders seventeen identifiers. Four — `CompileCTATest`, `CTATest`,
+`go doc` renders eighteen identifiers. Four — `CompileCTATest`, `CTATest`,
 `Attributes` and `CTATestStaticError` — compile, evaluate and
 statically check §3.12.6's `ta-Test` grammar for a Type Alternative's
 `{test}`. They have two consumers in two phases: `parser` calls
@@ -528,7 +528,11 @@ grammar plus the value comparisons, `$value`, a one-step child-axis path
 and a `/`-rooted one, over the typed values of the element's attributes,
 of its element children and of its simple content, for `validate`'s
 `cvc-assertion` charge; the method `AssertionTest.ReadsChild` tells
-`validate` which children to keep. Read the tiers below as "does" for
+`validate` which children to keep. The eighteenth, `FacetAssertions`, is
+the `value.AssertionEvaluator` `validate` injects into
+`value.ValidateLexical`/`ValidatingType`: it compiles and evaluates an
+assertions facet's `{test}` over the same grammar plus `.`, with no context
+item (`cvc-assertions-valid`). Read the tiers below as "does" for
 tier 1 and for tier 2's first slices, and "will" for the rest.
 
 Full XPath 2.0 is the destination; the engine grows outward from the

@@ -16,7 +16,10 @@ import (
 // over an atomic type's effective facets. The fixed stage sequence (doc.go "The
 // facet pipeline", ARCHITECTURE.md) is:
 //
-//	whiteSpace → pattern (lexical) → lexical mapping (Parse) → value facets
+//	whiteSpace → pattern (lexical) → lexical mapping (Parse) → value facets → assertions
+//
+// The assertions stage is assertions.go's, run through the caller's
+// [AssertionEvaluator].
 //
 // Pattern operates on the whiteSpace-normalized LEXICAL literal
 // (cvc-pattern-valid, §4.3.4.4); enumeration/bounds/digits/length operate on
@@ -198,9 +201,11 @@ func IsFacetPrecondition(err error) bool {
 
 // IsDatatypeVerdict reports whether err — an error [ValidateLexical] returned —
 // is a VERDICT about the literal it was handed: the literal is not Datatype Valid
-// (Datatypes §4.1.4) with respect to that type. It is false for a nil error and
-// false for every error that is instead a fault of the *[xsd.SimpleType] or of the
-// [Backend]:
+// (Datatypes §4.1.4) with respect to that type. It is false for a nil error,
+// false for an assertions-facet decline ([IsAssertionDeclined]: the
+// [AssertionEvaluator] did not decide a {test}, so the verdict is undecided),
+// and false for every error that is instead a fault of the *[xsd.SimpleType] or
+// of the [Backend]:
 //
 //   - no [Backend] mapping governs the type, its list's item type, or one of its
 //     union's members. This is how xs:anySimpleType and xs:anyAtomicType arrive:
@@ -230,22 +235,32 @@ func IsFacetPrecondition(err error) bool {
 // verdict — the false reject this predicate exists to prevent. The exclusion is
 // not a safety net, it is what makes the predicate total over the open set of
 // backend Parse errors, which cannot be enumerated. What bounds the risk is that
-// marking has exactly two sites, typeFault and facetPrecondition; a new
-// non-verdict error must pass through one of them, and `grep typeFault(` plus
-// `grep facetPrecondition(` enumerates the whole class.
+// marking has exactly three sites, typeFault, facetPrecondition and
+// assertionDeclined; a new non-verdict error must pass through one of them, and
+// `grep typeFault(`, `grep facetPrecondition(` and `grep assertionDeclined(`
+// enumerate the whole class.
 func IsDatatypeVerdict(err error) bool {
-	return err != nil && !errors.Is(err, errTypeFault)
+	return err != nil && !errors.Is(err, errTypeFault) && !IsAssertionDeclined(err)
 }
 
 // ValidateLexical validates the lexical string rawLexical against st's effective
 // facets through the full facet pipeline (whiteSpace → pattern → lexical mapping
-// → value facets), returning the parsed value on success or the first error a
-// stage produces (stop-on-first-failure; this does not collect all facet
-// violations). A rejection carries the stage's *xsderr.Error, reachable through
-// [xsderr.RuleOf] whether or not the error is wrapped; call [IsDatatypeVerdict]
-// before reading any of them as a verdict. ctx is the VALIDATED INSTANCE's
-// context, threaded to the governing mapping's Parse for the candidate value; a
-// context-free cohort (decimal/boolean/string) passes nil here.
+// → value facets → assertions), returning the parsed value on success or the
+// first error a stage produces (stop-on-first-failure; this does not collect all
+// facet violations). A rejection carries the stage's *xsderr.Error, reachable
+// through [xsderr.RuleOf] whether or not the error is wrapped; call
+// [IsDatatypeVerdict] before reading any of them as a verdict. ctx is the
+// VALIDATED INSTANCE's context, threaded to the governing mapping's Parse for the
+// candidate value; a context-free cohort (decimal/boolean/string) passes nil
+// here.
+//
+// a decides each {test} of an assertions facet the pipeline reaches
+// (cvc-assertions-valid, Datatypes §4.3.13.3) — st's own, and those of every
+// type the pipeline recurses into: a list's {item type definition} per item, a
+// union's members — and MUST be non-nil. Its stage runs last, after every other
+// value facet has accepted the value (cvc-datatype-valid clause 3): a {test} it
+// fails is a cvc-assertions-valid rejection, and one it declines returns an
+// error [IsAssertionDeclined] reports true for, which is not a verdict.
 //
 // Where r answers notationDeclarer, as *xsd.Schema does, a literal whose
 // {primitive type definition} is NOTATION is also held to NOTATION's ·lexical
@@ -344,8 +359,8 @@ func IsDatatypeVerdict(err error) bool {
 // xsd.Schema passes it; one validating against a Schema-less graph passes a stub
 // that resolves nothing, which is correct because such a graph carries no
 // by-name base to resolve.
-func ValidateLexical(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexical string, ctx Context) (Value, error) {
-	v, _, err := validateLexical(b, r, st, rawLexical, ctx)
+func ValidateLexical(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexical string, ctx Context, a AssertionEvaluator) (Value, error) {
+	v, _, err := validateLexical(b, r, st, rawLexical, ctx, a)
 	return v, err
 }
 
@@ -374,6 +389,12 @@ func ValidateLexical(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexic
 // ValidateLexical's own verdict on such an input: a real, narrow, and
 // deliberate divergence, not a bug.
 //
+// Both scans run each member's assertions facets through a, which MUST be
+// non-nil, as ValidateLexical does: a member one of whose {test}s fails is not
+// Datatype Valid, so a later member is the ·validating type·
+// (dt-active-member), and a member one of whose {test}s a declines stops both
+// scans, so no later member is chosen on a verdict nobody decided.
+//
 // A non-nil err here is not necessarily a rejection of rawLexical —
 // [IsDatatypeVerdict] says which, on the same terms ValidateLexical's own
 // callers already apply. On any non-nil err the *xsd.SimpleType result is nil.
@@ -381,23 +402,23 @@ func ValidateLexical(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexic
 // NOTATION is held to the notations r declares on ValidateLexical's terms, so
 // an undeclared NOTATION literal is rejected here too, and a union member
 // rejecting one is not the ·active basic member·.
-func ValidatingType(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexical string, ctx Context) (*xsd.SimpleType, Value, error) {
+func ValidatingType(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexical string, ctx Context, a AssertionEvaluator) (*xsd.SimpleType, Value, error) {
 	variety, err := st.Variety(r)
 	if err != nil {
 		return nil, nil, typeFault(err)
 	}
 	if _, ok := variety.(xsd.Union); !ok {
-		v, _, err := validateLexical(b, r, st, rawLexical, ctx)
+		v, _, err := validateLexical(b, r, st, rawLexical, ctx, a)
 		if err != nil {
 			return nil, nil, err
 		}
 		return st, v, nil
 	}
-	v, _, err := validateUnion(b, r, st, rawLexical, ctx)
+	v, _, err := validateUnion(b, r, st, rawLexical, ctx, a)
 	if err != nil {
 		return nil, nil, err
 	}
-	t, err := activeBasicMember(b, r, st, rawLexical, ctx)
+	t, err := activeBasicMember(b, r, st, rawLexical, ctx, a)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -416,7 +437,7 @@ func ValidatingType(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexica
 // and only the callee knows which member that was. No caller outside this package
 // needs it, so the exported wrapper drops it rather than widening the API
 // (STYLE T5).
-func validateLexical(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexical string, ctx Context) (Value, whiteSpace, error) {
+func validateLexical(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexical string, ctx Context, a AssertionEvaluator) (Value, whiteSpace, error) {
 	// {variety} dispatch, cvc-datatype-valid clause 2 (§4.1.4): a union takes
 	// clause 2.3's member dispatch (union.go), which composes st's own facets
 	// around the dispatched member's verdict rather than around st's own mapping.
@@ -426,10 +447,10 @@ func validateLexical(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexic
 		return nil, 0, typeFault(err)
 	}
 	if _, ok := variety.(xsd.Union); ok {
-		return validateUnion(b, r, st, rawLexical, ctx)
+		return validateUnion(b, r, st, rawLexical, ctx, a)
 	}
 
-	lexFacets, valFacets, err := compile(b, r, st)
+	lexFacets, valFacets, assertFacets, err := compile(b, r, st, a)
 	if err != nil {
 		return nil, 0, typeFault(err)
 	}
@@ -461,7 +482,7 @@ func validateLexical(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexic
 	// lexical mapping: the candidate value is produced by st's OWN governing
 	// mapping (its own, or its nearest mapped ancestor's — the widest-space rule
 	// governs facet {value}s, not the application-facing candidate).
-	m, ok, err := governingMapping(b, r, st)
+	m, ok, err := governingMapping(b, r, st, a)
 	if err != nil {
 		return nil, 0, typeFault(err)
 	}
@@ -481,6 +502,12 @@ func validateLexical(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexic
 		}
 	}
 	if err := declaredNotation(r, st, variety, lexical, ctx); err != nil {
+		return nil, 0, err
+	}
+
+	// assertions stage (cvc-assertions-valid, §4.3.13.3), last: every other
+	// value facet has accepted v (cvc-datatype-valid clause 3).
+	if err := checkAssertions(b, r, st, v, assertFacets, a); err != nil {
 		return nil, 0, err
 	}
 	return v, ws, nil
@@ -512,14 +539,18 @@ func validateLexical(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexic
 //
 // The whiteSpace facet is consumed by the normalize stage, not as a checker;
 // explicitTimezone is a value facet handled here (cvc-explicitTimezone-valid,
-// §4.3.14.3). assertions remain out of this runner's scope — they are a separate
-// later stage, not an atomic value facet — and are skipped.
-func compile(b Backend, r xsd.TypeResolver, st *xsd.SimpleType) ([]LexicalFacet, []ValueFacet, error) {
+// §4.3.14.3). An assertions facet is not compiled — its {test}s are XPath, which
+// the [AssertionEvaluator] decides — but returned, in effective-facet order, for
+// the assertions stage (checkAssertions) that runs after every value facet. a is
+// threaded to the enumeration and bound facets, whose {value}s a list or union
+// declaring type parses through the full pipeline (declaringFacetSpace).
+func compile(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, a AssertionEvaluator) ([]LexicalFacet, []ValueFacet, []xsd.Facet, error) {
 	var lexFacets []LexicalFacet
 	var valFacets []ValueFacet
+	var assertFacets []xsd.Facet
 	eff, err := st.EffectiveFacets(r)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	for _, ef := range eff {
 		switch ef.Facet().Kind() {
@@ -528,48 +559,49 @@ func compile(b Backend, r xsd.TypeResolver, st *xsd.SimpleType) ([]LexicalFacet,
 		case xsd.FacetPattern:
 			pf, err := newPatternFacet(ef.Facet())
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, nil, err
 			}
 			lexFacets = append(lexFacets, pf)
 		case xsd.FacetEnumeration:
-			enf, err := newEnumFacet(b, r, st, ef)
+			enf, err := newEnumFacet(b, r, st, ef, a)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, nil, err
 			}
 			valFacets = append(valFacets, enf)
 		case xsd.FacetMaxInclusive, xsd.FacetMaxExclusive, xsd.FacetMinInclusive, xsd.FacetMinExclusive:
-			bf, err := newBoundFacet(b, r, st, ef)
+			bf, err := newBoundFacet(b, r, st, ef, a)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, nil, err
 			}
 			valFacets = append(valFacets, bf)
 		case xsd.FacetTotalDigits, xsd.FacetFractionDigits:
 			df, err := newDigitsFacet(ef.Facet())
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, nil, err
 			}
 			valFacets = append(valFacets, df)
 		case xsd.FacetLength, xsd.FacetMinLength, xsd.FacetMaxLength:
 			lf, err := newLengthFacet(r, st, ef.Facet())
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, nil, err
 			}
 			valFacets = append(valFacets, lf)
 		case xsd.FacetExplicitTimezone:
 			tf, err := newExplicitTimezoneFacet(ef.Facet())
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, nil, err
 			}
 			valFacets = append(valFacets, tf)
 		case xsd.FacetMaxScale, xsd.FacetMinScale:
 			sf, err := newScaleFacet(ef.Facet())
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, nil, err
 			}
 			valFacets = append(valFacets, sf)
 		case xsd.FacetAssertions:
-			// Out of this runner's scope: assertions are a separate later stage,
-			// not an atomic value facet.
+			// Collected for the assertions stage, not compiled: its {test}s are
+			// the AssertionEvaluator's.
+			assertFacets = append(assertFacets, ef.Facet())
 		default:
 			// A FacetKind with no case above is a package-internal completeness
 			// bug, not instance data and not even caller data: the enum was
@@ -590,7 +622,7 @@ func compile(b Backend, r xsd.TypeResolver, st *xsd.SimpleType) ([]LexicalFacet,
 			panic(fmt.Sprintf("value: compile: unhandled FacetKind %s", ef.Facet().Kind()))
 		}
 	}
-	return lexFacets, valFacets, nil
+	return lexFacets, valFacets, assertFacets, nil
 }
 
 // governingMapping resolves the Mapping that governs node's value space. For a
@@ -614,7 +646,11 @@ func compile(b Backend, r xsd.TypeResolver, st *xsd.SimpleType) ([]LexicalFacet,
 // type leaves the whole list ungoverned, unionGoverned (union.go) why one unmapped
 // member spoils the whole dispatch — both yielding the same (Mapping{}, false)
 // "ungoverned" outcome the atomic case returns.
-func governingMapping(b Backend, r xsd.TypeResolver, node *xsd.SimpleType) (Mapping, bool, error) {
+//
+// a is the [AssertionEvaluator] a list's or a union's synthesized Parse hands
+// each item or member it decides through the full pipeline; the atomic case
+// never reads it.
+func governingMapping(b Backend, r xsd.TypeResolver, node *xsd.SimpleType, a AssertionEvaluator) (Mapping, bool, error) {
 	variety, err := node.Variety(r)
 	if err != nil {
 		return Mapping{}, false, err
@@ -624,22 +660,22 @@ func governingMapping(b Backend, r xsd.TypeResolver, node *xsd.SimpleType) (Mapp
 		if err != nil {
 			return Mapping{}, false, err
 		}
-		governed, err := listGoverned(b, r, item)
+		governed, err := listGoverned(b, r, item, a)
 		if err != nil || !governed {
 			return Mapping{}, false, err
 		}
-		return listMapping(b, r, item), true, nil
+		return listMapping(b, r, item, a), true, nil
 	}
 	if _, ok := variety.(xsd.Union); ok {
 		members, err := node.Members(r)
 		if err != nil {
 			return Mapping{}, false, err
 		}
-		governed, err := unionGoverned(b, r, members)
+		governed, err := unionGoverned(b, r, members, a)
 		if err != nil || !governed {
 			return Mapping{}, false, err
 		}
-		return unionMapping(b, r, members), true, nil
+		return unionMapping(b, r, members, a), true, nil
 	}
 	s, ok, err := governingNode(b, r, node)
 	if err != nil || !ok {
@@ -705,7 +741,9 @@ func governingNode(b Backend, r xsd.TypeResolver, node *xsd.SimpleType) (*xsd.Si
 // normalization stage consumes without consulting Declaring(). A caller that
 // nonetheless passed the zero QName would match the nearest anonymous node from
 // leaf upward, which is the same nearest-declaration rule a named match gets.
-func declaringFacetSpace(b Backend, r xsd.TypeResolver, leaf *xsd.SimpleType, declaring xsd.QName) (m Mapping, ws whiteSpace, ok bool, err error) {
+//
+// a is governingMapping's, read only for a list or union declaring type.
+func declaringFacetSpace(b Backend, r xsd.TypeResolver, leaf *xsd.SimpleType, declaring xsd.QName, a AssertionEvaluator) (m Mapping, ws whiteSpace, ok bool, err error) {
 	for s := leaf; s != nil; {
 		base, err := s.Base(r)
 		if err != nil {
@@ -715,7 +753,7 @@ func declaringFacetSpace(b Backend, r xsd.TypeResolver, leaf *xsd.SimpleType, de
 			s = base
 			continue
 		}
-		m, ok, err := governingMapping(b, r, s)
+		m, ok, err := governingMapping(b, r, s, a)
 		if err != nil {
 			return Mapping{}, 0, false, err
 		}
@@ -825,8 +863,8 @@ type enumFacet struct {
 // §4.3.5.3), so the bare cvc-datatype-valid Parse returns is remapped to that
 // construction-time rule — the sibling of src-pattern-value newPatternFacet
 // already uses.
-func newEnumFacet(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, ef xsd.EffectiveFacet) (enumFacet, error) {
-	m, ws, ok, err := declaringFacetSpace(b, r, st, ef.Declaring())
+func newEnumFacet(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, ef xsd.EffectiveFacet, a AssertionEvaluator) (enumFacet, error) {
+	m, ws, ok, err := declaringFacetSpace(b, r, st, ef.Declaring(), a)
 	if err != nil {
 		return enumFacet{}, err
 	}
@@ -963,10 +1001,10 @@ type boundFacet struct {
 // newBoundFacet parses the single bound {value} via the declaring type's
 // mapping (widest-space rule), whiteSpace-normalized through its base's mode
 // first (declaringFacetSpace/facetValue), and requires the result to be Ordered.
-func newBoundFacet(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, ef xsd.EffectiveFacet) (boundFacet, error) {
+func newBoundFacet(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, ef xsd.EffectiveFacet, a AssertionEvaluator) (boundFacet, error) {
 	kind := ef.Facet().Kind()
 	rule := boundRule(kind)
-	m, ws, ok, err := declaringFacetSpace(b, r, st, ef.Declaring())
+	m, ws, ok, err := declaringFacetSpace(b, r, st, ef.Declaring(), a)
 	if err != nil {
 		return boundFacet{}, err
 	}
