@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/big"
 	"regexp"
+	"strings"
 
 	"github.com/kud360/goxsd8/regex"
 	"github.com/kud360/goxsd8/xsd"
@@ -558,7 +559,7 @@ func compile(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, a AssertionEvalu
 		case xsd.FacetWhiteSpace:
 			// Consumed by the whiteSpace normalize stage, not a checker.
 		case xsd.FacetPattern:
-			pf, err := newPatternFacet(ef.Facet())
+			pf, err := newPatternFacet(ef)
 			if err != nil {
 				return nil, nil, nil, err
 			}
@@ -804,16 +805,19 @@ func facetValue(m Mapping, ws whiteSpace, raw string, ctx Context) (Value, error
 // patternFacet per such EffectiveFacet, and ValidateLexical requires EVERY one
 // to pass (AND-across-steps); within a single patternFacet a literal is
 // pattern-valid if it matches ANY member (the same-step OR-set). The RE2
-// regexes are compiled once at construction.
+// regexes are compiled once at construction; ef is kept so a rejection names
+// the step that failed — its literals and the type that declares them.
 type patternFacet struct {
+	ef  xsd.EffectiveFacet
 	res []*regexp.Regexp
 }
 
-// newPatternFacet translates each XSD-flavor pattern value to RE2 and compiles
-// it (regex.FlavorXSD is implicitly whole-string anchored; ^ and $ are literal
-// characters, not anchors). A bad pattern surfaces here, not mid-validation.
-func newPatternFacet(f xsd.Facet) (patternFacet, error) {
-	values := f.Values()
+// newPatternFacet translates each XSD-flavor pattern value of ef to RE2 and
+// compiles it (regex.FlavorXSD is implicitly whole-string anchored; ^ and $ are
+// literal characters, not anchors). A bad pattern surfaces here, not
+// mid-validation.
+func newPatternFacet(ef xsd.EffectiveFacet) (patternFacet, error) {
+	values := ef.Facet().Values()
 	res := make([]*regexp.Regexp, 0, len(values))
 	for _, p := range values {
 		goRE, err := regex.Translate(p, regex.FlavorXSD, "")
@@ -826,19 +830,29 @@ func newPatternFacet(f xsd.Facet) (patternFacet, error) {
 		}
 		res = append(res, re)
 	}
-	return patternFacet{res: res}, nil
+	return patternFacet{ef: ef, res: res}, nil
 }
 
 // CheckLexical accepts the normalized literal iff it matches at least one
-// pattern in the OR-set (cvc-pattern-valid, §4.3.4.4).
+// pattern in the OR-set (cvc-pattern-valid, §4.3.4.4). A rejection names the
+// whole OR-set of the failed step — every member, as written and unescaped,
+// never a single `|` branch — and the type on the base chain that declares it,
+// which is derived provenance, not a spec property (simpleTypeLabel renders the
+// zero QName of an anonymous one).
 func (p patternFacet) CheckLexical(normalized string) error {
 	for _, re := range p.res {
 		if re.MatchString(normalized) {
 			return nil
 		}
 	}
+	values := p.ef.Facet().Values()
+	quoted := make([]string, len(values))
+	for i, v := range values {
+		quoted[i] = `"` + v + `"`
+	}
 	return xsderr.New(ruleCvcPatternValid, xsderr.Loc{},
-		"value %q matches no member of the pattern facet (cvc-pattern-valid, §4.3.4.4)", normalized)
+		"value %q matches no member of the pattern facet of %s, whose {value} holds %s (cvc-pattern-valid, §4.3.4.4)",
+		normalized, simpleTypeLabel(p.ef.Declaring()), strings.Join(quoted, ", "))
 }
 
 // enumFacet is the enumeration value-facet stage (cvc-enumeration-valid,
