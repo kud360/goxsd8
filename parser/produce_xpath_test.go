@@ -612,6 +612,30 @@ func TestProduceXPathDefaultNamespaceTargetAbsent(t *testing.T) {
 	}
 }
 
+// TestProduceXPathDefaultNamespaceChameleonTarget pins ##targetNamespace to the
+// EFFECTIVE target namespace: a chameleon-<include>d document carries no
+// targetNamespace of its own, but §F.1 adds the includer's, so its assertions'
+// {default namespace} is the includer's namespace and not ·absent· (#2340).
+func TestProduceXPathDefaultNamespaceChameleonTarget(t *testing.T) {
+	s, err := parseMap(t, "main.xsd", map[string]string{
+		"main.xsd": wrap("urn:x", `<xs:include schemaLocation="lib.xsd"/>`),
+		"lib.xsd": `<xs:schema xmlns:xs="` + xsdNS + `" xpathDefaultNamespace="##targetNamespace">` +
+			`<xs:complexType name="T"><xs:sequence/><xs:assert test="empty(a)"/></xs:complexType>` +
+			`</xs:schema>`,
+	})
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	asserts := topComplexTypeIn(t, s, xq("T")).Assertions()
+	if len(asserts) != 1 {
+		t.Fatalf("{assertions} = %d members, want 1", len(asserts))
+	}
+	got, ok := asserts[0].Test().DefaultNamespace()
+	if !ok || got != "urn:x" {
+		t.Errorf("{default namespace} = %q (present %v), want present %q", got, ok, "urn:x")
+	}
+}
+
 // complexTypeOf produces doc and returns its top-level complex type named local.
 func complexTypeOf(t *testing.T, doc, local string) xsd.ComplexType {
 	t.Helper()
