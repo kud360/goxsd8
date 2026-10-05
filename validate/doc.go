@@ -140,15 +140,15 @@
 // rule is cvc-datatype-valid or one of the facet rules under it, and no
 // intermediate cvc-simple-type node sits between. Where clause 3 fails — an
 // ·ENTITY value· that is not a ·declared entity name· — the verdict is
-// cvc-simple-type's own, since that clause delegates to nothing. The first
-// three read clause 2's verdict off value.ValidateLexical directly; clause 4
-// reads it through xsd.ValueSpace's ValidDefault, which returns the same error.
-// Among those verdicts is a NOTATION value whose QName names no notation
-// declaration of the schema, outside NOTATION's ·value space· (Datatypes
-// §3.3.19): value.ValidateLexical decides it against the schema it is handed,
-// under cvc-datatype-valid. Clause 4 never reaches it, ValidDefault declining
-// every NOTATION {lexical form}. Error() still renders each wrapped verdict
-// into the message as well, for a reader who holds only the string.
+// cvc-simple-type's own, since that clause delegates to nothing. All four read
+// clause 2's verdict off value.ValidateLexical directly, clause 4 mapping the
+// {lexical form} under the bindings its {value constraint} captured
+// (value.ConstraintContext). Among those verdicts is a NOTATION value whose
+// QName names no notation declaration of the schema, outside NOTATION's ·value
+// space· (Datatypes §3.3.19): value.ValidateLexical decides it against the
+// schema it is handed, under cvc-datatype-valid. Error() still renders each
+// wrapped verdict into the message as well, for a reader who holds only the
+// string.
 //
 // Whether a cause is there is read off Unwrap and never off the rule ID:
 // clauses 1.2 and 4 both charge under cvc-complex-type and both wrap the
@@ -197,9 +197,12 @@
 // empty one: the item assessed is the one carrying D.{value constraint}.{lexical
 // form} as its ·normalized value·, which 5.1.2 sends to the same cvc-type
 // dispatch and which the [ID/IDREF table] and a ·key-sequence· read in place of
-// the empty ·initial value·; and 5.1.1 charges Element Default Valid (Immediate)
-// (§3.3.6.2) over that constraint where the ·governing type definition· is an
-// ·instance-specified· one, which is the xsi:type case alone.
+// the empty ·initial value·, each mapping that {lexical form} under the
+// namespace bindings in scope where the schema document wrote it
+// (value.ConstraintContext, Datatypes §3.3.18) and never under the element's;
+// and 5.1.1 charges Element Default Valid (Immediate) (§3.3.6.2) over that
+// constraint where the ·governing type definition· is an ·instance-specified·
+// one, which is the xsi:type case alone.
 //
 // The third is cvc-type (§3.3.4.4) clause 3.1, the arm taken where the
 // ·governing type definition· is a Simple Type Definition rather than a complex

@@ -426,6 +426,37 @@ func TestFieldSelectsADefaultedAttribute(t *testing.T) {
 	})
 }
 
+// A default's [schema actual value] in a ·key-sequence· is its {value
+// constraint}'s {lexical form} mapped under the bindings that constraint
+// captured (value.ConstraintContext), never the instance's: two <ditem>s whose
+// xs:QName defaults "p:a" bind p only in the schema share one ·key-sequence·,
+// so a key charges clause 4.2.2 against the later — for the ·defaulted
+// attribute· @dq (icCheck.fieldDefaultedAttributes) and for the empty element
+// <dqe> (icCheck.assessed) alike. Mapped under elementContext, p is unbound,
+// each member is ·absent·, and the key charges clause 4.2.1 at both targets
+// instead.
+func TestKeySequenceReadsADefaultUnderItsOwnBindings(t *testing.T) {
+	withDQE := func(line int) *testElement {
+		return icElem(xsd.QName{Local: "ditem"}, line, nil, ElementChild(icElem(xsd.QName{Local: "dqe"}, line, nil)))
+	}
+	for _, tc := range []struct {
+		field string
+		root  *testElement
+	}{
+		{"@dq", icRoot(icDItem(2), icDItem(3))},
+		{"dqe", icRoot(withDQE(2), withDQE(3))},
+	} {
+		t.Run(tc.field, func(t *testing.T) {
+			key := icDef(t, "K", xsd.IdentityConstraintKey, "ditem", nil, "", tc.field)
+			got := icAssess(t, icDefaultedAttrSchema(t, []xsd.IdentityConstraint{key}), tc.root)
+			icWantCharges(t, got, icCharge(ruleCvcIdentityConstraint, 3))
+			if !strings.Contains(got[0].Error(), "clause 4.2.2 ") {
+				t.Errorf("Violations() = %v, want the one charge under clause 4.2.2", got)
+			}
+		})
+	}
+}
+
 // The rule ID is the BARE catalog name, with the clause in the message text.
 func TestIdentityConstraintRuleIsTheBareCatalogName(t *testing.T) {
 	if !xsderr.IsValidRule(ruleCvcIdentityConstraint) {

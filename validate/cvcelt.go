@@ -162,10 +162,11 @@ func (w *walk) nilCheck(e Element, g governance) bool {
 // hands it the raw default=/fixed= attribute value — so the composition
 // normalizes it exactly once, under the type doing the validating. That is the
 // same composition [xsd.ValueSpace.ValidDefault] applies wherever a {value
-// constraint}'s lexical is read: a-props-correct clause 2, au-props-correct
-// clause 2, e-props-correct clause 2 and cvc-complex-type clause 4
-// ([walk.defaultedAttribute]) all predate this rule and all compose it the same
-// way, so clause 5.1.1 and clause 5.1.2 cannot disagree about the lexical either.
+// constraint}'s lexical is read — a-props-correct clause 2, au-props-correct
+// clause 2 and e-props-correct clause 2 — and that cvc-complex-type clause 4
+// ([walk.defaultedAttribute]) applies through [walk.stringValid]: all predate
+// this rule and all compose it the same way, so clause 5.1.1 and clause 5.1.2
+// cannot disagree about the lexical either.
 //
 // GAP(validate): where the {lexical form} is not already a fixed point of that
 // facet, normalizing once is a READING of clause 5.1.2 and not a transcription
