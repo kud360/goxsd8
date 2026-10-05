@@ -124,7 +124,8 @@ func (a attribute) Name() xsd.QName { return qname(a.a.Name()) }
 
 // Value reports A.[[normalized value]] as the source produced it. XML 1.0
 // §3.3.3 normalization is an infoset precondition (Appendix D), already
-// applied upstream, and this layer applies nothing further.
+// applied by parser/xmltree (Attribute.Value), and this layer applies nothing
+// further.
 func (a attribute) Value() string { return a.a.Value() }
 
 func (a attribute) Loc() xsderr.Loc { return a.a.Loc() }
