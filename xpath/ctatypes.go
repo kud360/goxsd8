@@ -204,10 +204,11 @@ func (t ctaTypes) castTarget(name xsd.QName) (*xsd.SimpleType, bool) {
 // castsFrom reports whether this engine casts the operand v at all, which is
 // false for exactly one shape: a TYPED operand read off the instance — an
 // attribute (ctaTypedAttr), a child element (ctaTypedChild), `$value`
-// (ctaValueVar) or a count of its nodes (ctaCount, xs:integer) — whose
-// {primitive type definition} is not xs:string. Every other operand casts as
-// [CompileCTATest] states, the statically empty `$value` (ctaEmptyValue)
-// among them: it holds no item to convert.
+// (ctaValueVar), a count of its nodes (ctaCount, xs:integer) or the result of
+// arithmetic (ctaArith, always numeric) — whose {primitive type definition} is
+// not xs:string. Every other operand casts as [CompileCTATest] states, the
+// statically empty `$value` (ctaEmptyValue) among them: it holds no item to
+// convert.
 //
 // The string family is admitted because xpath-functions.md §17.1.1 makes a
 // cast from xs:string one datatype validation of the value's own string, which
@@ -230,6 +231,8 @@ func (t ctaTypes) castsFrom(v ctaValue) bool {
 	case ctaTypedChild:
 		st = n.st
 	case ctaCount:
+		st = n.st
+	case ctaArith:
 		st = n.st
 	case ctaValueVar:
 		st = n.atom
@@ -303,6 +306,110 @@ func (t ctaTypes) valueVariable(st *xsd.SimpleType) (ctaValue, bool) {
 		return nil, false
 	}
 	return ctaValueVar{atom: item, listed: true}, true
+}
+
+// arithmetic builds the node of the binary arithmetic operator op over l and r
+// (xpath20.md §3.4), settling at compile time the type both operands are
+// converted into and the type of the result, or reports false where this
+// engine declines the pair.
+//
+//   - A statically empty operand makes the whole expression the empty sequence
+//     (§3.4: "If either operand is an empty sequence, the result of the
+//     operation is an empty sequence"), which is ctaEmptyValue; the other
+//     operand "need not be evaluated" (§3.4), so it is not kept.
+//   - An xs:untypedAtomic operand is cast to xs:double (§3.4, "If the atomized
+//     operand is of type xs:untypedAtomic, it is cast to xs:double").
+//   - The operation type is then B.1's promotion of the two numeric primitives
+//     to the wider one, which is ctaWider and keeps its xs:float/xs:double
+//     withhold: an xs:untypedAtomic operand against an xs:float one reaches it
+//     as xs:double against xs:float.
+//   - The result type is B.2's (arithmeticResult).
+//
+// GAP(xpath): an operand whose {primitive type definition} is not numeric
+// declines. B.2 gives `+`, `-`, `*` and `div` rows over the duration and
+// date/time types, which this engine computes nothing in, and every other
+// operand type is err:XPTY0004, which declining withholds rather than charges.
+// The direction is the withhold [CompileAssertionTest] and [FacetAssertions]
+// report: the assertion or the facet is declined, never charged and never
+// satisfied. (#1042)
+func (t ctaTypes) arithmetic(op ctaArithOp, l, r ctaValue) (ctaValue, bool) {
+	if ctaIsEmpty(l) || ctaIsEmpty(r) {
+		return ctaEmptyValue{}, true
+	}
+	lp, numeric := t.arithmeticOperand(l)
+	if !numeric {
+		return nil, false
+	}
+	rp, numeric := t.arithmeticOperand(r)
+	if !numeric {
+		return nil, false
+	}
+	operation, typing := ctaWider(lp, rp)
+	if typing != ctaTypeSettled {
+		return nil, false
+	}
+	result, settled := t.arithmeticResult(op, operation, l, r)
+	if !settled {
+		return nil, false
+	}
+	return ctaArith{op: op, operation: operation, st: result, left: l, right: r}, true
+}
+
+// arithmeticOperand is the numeric primitive one arithmetic operand is
+// computed from: xs:double for an xs:untypedAtomic operand (§3.4), and its own
+// {primitive type definition} for a typed one, reporting false where that is
+// not numeric or does not resolve.
+func (t ctaTypes) arithmeticOperand(v ctaValue) (*xsd.SimpleType, bool) {
+	typed, isTyped := ctaStaticOf(v).(ctaTyped)
+	if !isTyped {
+		return t.double, true
+	}
+	p, resolved := t.primitive(typed.st)
+	if !resolved || !ctaNumeric(p) {
+		return nil, false
+	}
+	return p, true
+}
+
+// arithmeticResult is the type xpath20.md B.2 gives op over two operands
+// computed in operation: xs:integer for `idiv` whatever the operands
+// (op:numeric-integer-divide); operation itself where that is xs:float or
+// xs:double; and, in xs:decimal, xs:integer where both operands are derived
+// from xs:integer and the operator is not `div` — whose two-xs:integer row is
+// xs:decimal (xpath-functions.md §6.2.4) — and xs:decimal otherwise. It
+// reports false where xs:integer does not resolve or a {base type definition}
+// chain cannot be walked.
+//
+// An IntegerLiteral is typed xs:decimal here as everywhere in this grammar
+// (ctaTypes.literal), so `$value mod 2` over an xs:int `$value` is xs:decimal
+// where B.2 says xs:integer. The two are one value, and nothing this grammar
+// applies to the result tells them apart: a comparison and fn:boolean run in
+// the primitive, and a cast from the result is declined (castsFrom).
+func (t ctaTypes) arithmeticResult(op ctaArithOp, operation *xsd.SimpleType, l, r ctaValue) (*xsd.SimpleType, bool) {
+	if op != ctaIntegerDivide && (operation.Name() != ctaBuiltin("decimal") || op == ctaDivide) {
+		return operation, true
+	}
+	integer, resolved := t.simple(ctaBuiltin("integer"))
+	if !resolved {
+		return nil, false
+	}
+	if op == ctaIntegerDivide {
+		return integer, true
+	}
+	for _, v := range []ctaValue{l, r} {
+		typed, isTyped := ctaStaticOf(v).(ctaTyped)
+		if !isTyped {
+			return operation, true
+		}
+		at, err := t.ancestor(typed.st, integer.Name())
+		if err != nil {
+			return nil, false
+		}
+		if at == nil {
+			return operation, true
+		}
+	}
+	return integer, true
 }
 
 // ctaTyping is which of the three outcomes settling a comparison's type
@@ -657,8 +764,13 @@ func ctaStringLike(p *xsd.SimpleType) bool {
 // numeric primitives: xs:float promotes to xs:double, and xs:decimal to either
 // of them, so the wider of the pair is the one both reach.
 //
+// It answers both a comparison (shared) and an arithmetic operator
+// (ctaTypes.arithmetic), whose operation type is this same promotion; the
+// latter also asks it of two operands sharing one primitive, which is then
+// the answer.
+//
 // GAP(xpath): the xs:float against xs:double pair is DECLINED rather than
-// compared, because reaching it needs B.1 rule 1.1 and this engine cannot
+// compared or computed, because reaching it needs B.1 rule 1.1 and this engine cannot
 // perform rule 1.1. That rule promotes the xs:float operand to "the xs:double
 // value that is the same as the original value" — the same point of the real
 // line, not a re-parse of any lexical — and value exposes no such widening:
