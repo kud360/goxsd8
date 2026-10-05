@@ -89,7 +89,7 @@ func aVarietyTypes(t *testing.T) []*xsd.SimpleType {
 	t.Helper()
 	return []*xsd.SimpleType{
 		aRestriction(t, "AssertedInt", integerType(), "$value > 0"),
-		aRestriction(t, "AssertedStr", icBuiltin("string"), "string-length($value) > 0"),
+		aRestriction(t, "AssertedStr", icBuiltin("string"), "upper-case($value) != ''"),
 		aList(t, "PlainList", local("AssertedInt")),
 		aRestriction(t, "AssertedList", local("PlainList"), "count($value) > 1"),
 		aUnion(t, "PlainUnion", local("AssertedInt"), local("AssertedStr")),
@@ -598,7 +598,8 @@ func TestElementWithoutAssertionsRecordsNothing(t *testing.T) {
 // aFacetTypes is aVarietyTypes plus the facets the evaluation tests read: two
 // whose {test} the facet evaluator admits (`$value eq 100` over xs:integer,
 // `$value = 'x'` over xs:string), one reading the absent context item, two it
-// declines (a range expression and a function call), and a union whose first
+// declines (a range expression and an fn:upper-case call, a function outside the
+// string and sequence core xpath.CompileAssertionTest calls), and a union whose first
 // member restricts xs:ENTITY with `$value = 'x'` ahead of xs:string.
 func aFacetTypes(t *testing.T) []*xsd.SimpleType {
 	t.Helper()
@@ -607,7 +608,7 @@ func aFacetTypes(t *testing.T) []*xsd.SimpleType {
 		aRestriction(t, "IsX", icBuiltin("string"), "$value = 'x'"),
 		aRestriction(t, "Dot", icBuiltin("string"), ". = 'x'"),
 		aRestriction(t, "InRange", integerType(), "$value = 1 to 10"),
-		aRestriction(t, "EndsX", icBuiltin("string"), "ends-with($value, 'x')"),
+		aRestriction(t, "UpperX", icBuiltin("string"), "upper-case($value) = 'AX'"),
 		aRestriction(t, "EntityX", icBuiltin("ENTITY"), "$value = 'x'"),
 		aUnion(t, "EntityXOrString", local("EntityX"), icBuiltin("string")),
 	)
@@ -712,7 +713,7 @@ func TestUnionMemberFailingItsFacetYieldsTheValidatingType(t *testing.T) {
 // records only the member the dispatch REACHED — 42 is decided by AssertedInt,
 // whose facet holds, so AssertedStr's is never asked, where "abc" reaches it —
 // and then its own facet, which is declined whatever its {test} (dt-xdmrep
-// clause 4). The two declined {test}s InRange and EndsX are the guard: with
+// clause 4). The two declined {test}s InRange and UpperX are the guard: with
 // [walk.declineAssertions] reporting false they record under cvc-attribute
 // instead, and with the evaluator answering AssertionFails for a decline they
 // are charged.
@@ -724,7 +725,7 @@ func TestDeclinedFacetAssertionsAreRecorded(t *testing.T) {
 		want    []string
 	}{
 		{"a range expression", "InRange", "4", []string{"InRange"}},
-		{"a function call", "EndsX", "ax", []string{"EndsX"}},
+		{"a function call", "UpperX", "ax", []string{"UpperX"}},
 		{"atomic", "AssertedStr", "abc", []string{"AssertedStr"}},
 		{"a list item evaluated", "PlainList", "1 2", nil},
 		{"the list's own", "AssertedList", "1 2", []string{"AssertedList"}},
