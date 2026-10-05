@@ -366,6 +366,10 @@ type fixedConstraint struct {
 // under the schema document's, so "1" and "01" agree as one xs:integer and
 // "a:x" and "b:x" agree exactly when both prefixes name one namespace.
 //
+// Each side's assertions facets are evaluated through [xpath.FacetAssertions]
+// (cvc-assertions-valid via cvc-datatype-valid clause 3), so an assertions
+// facet in st's closure decides the comparison rather than declining it.
+//
 // A ·special· st, whose lexical mapping is not a function (Datatypes §3.2.1.2),
 // is decided over that mapping's union of primitive and list mappings, as
 // [value.ConstraintMatches] states.
@@ -385,6 +389,12 @@ type fixedConstraint struct {
 // FinalizeWith carries an undecided value space, so that check may never have
 // run; the instance walk has no sound verdict to give in its place.
 //
+// GAP(xpath): a {test} the evaluator declines on either side is undecided too,
+// and so is a {lexical form} that fails one of st's {test}s, which no assembly
+// charges because the [xsd.ValueSpace]'s ValidDefault declines every {test};
+// both charge nothing and are recorded as above, on the terms
+// [value.ConstraintMatches] states. (#1042)
+//
 // GAP(value): a NOTATION {lexical form} naming no declared notation, tracked by
 // #667. [value.ConstraintMatches] answers it undecided, not NOT-same, because no
 // assembly ever judges it: [xsd.ValueSpace]'s ValidDefault refuses every
@@ -392,10 +402,10 @@ type fixedConstraint struct {
 // FinalizeWith, so cos-valid-simple-default never charges it. The comparison
 // declines here until #667 routes those defaults through ValidDefault.
 func (w *walk) fixedAgreement(a Attribute, e Element, st *xsd.SimpleType, f fixedConstraint) {
-	same, decided := value.ConstraintMatches(w.backend, w.schema, st, a.Value(), elementContext{owner: e}, f.vc)
+	same, decided := value.ConstraintMatches(w.backend, w.schema, st, a.Value(), elementContext{owner: e}, f.vc, xpath.FacetAssertions())
 	if !decided {
 		w.declineAttribute(a, f.rule, f.clause,
-			"the ·actual value· of the attribute %s was not compared with the {value} of the fixed {value constraint} %q on its %s: value.ConstraintMatches could not decide the comparison, a fault of the type or of the value backend, two literals of a ·special· type that some member of its lexical mapping cannot compare, or a NOTATION {value} naming no declared notation, which no assembly judges yet (#667), rather than a verdict about the value, so %s is undecided",
+			"the ·actual value· of the attribute %s was not compared with the {value} of the fixed {value constraint} %q on its %s: value.ConstraintMatches could not decide the comparison, a fault of the type or of the value backend, two literals of a ·special· type that some member of its lexical mapping cannot compare, an assertions-facet {test} not evaluated on either side or failed by the {value}, or a NOTATION {value} naming no declared notation, which no assembly judges yet (#667), rather than a verdict about the value, so %s is undecided",
 			a.Name(), f.vc.LexicalForm(), f.owner, citation(f.rule, f.clause))
 		return
 	}

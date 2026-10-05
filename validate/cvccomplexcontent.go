@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/kud360/goxsd8/value"
+	"github.com/kud360/goxsd8/xpath"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
 )
@@ -591,15 +592,17 @@ func (c *contentCheck) fixedLexical(w *walk, f xsd.ValueConstraint) {
 // {content type} — the ·actual value· of E is equal or identical to
 // D.{value constraint}.{value}.
 //
-// A governing type that is neither leaves clause 5.2.2.2 with no applicable case
-// and charges nothing. A ·special· governing type is decided over its mapping
-// union ([value.ConstraintMatches]). An undecided comparison charges nothing, on
-// [walk.fixedAgreement]'s terms and for the same reasons: an ungoverned type, a
-// ·special· one whose literals some member of that union cannot compare, or a
-// {lexical form} outside its own type's lexical space is a gap in this processor
-// or a schema fault cos-valid-default charges at assembly, not the instance's.
-// It is recorded as an [Unevaluated] instead ([contentCheck.decline]), the
-// clause having been reached and not performed.
+// A governing type that is neither leaves clause 5.2.2.2 with no applicable
+// case and charges nothing. A ·special· governing type is decided over its
+// mapping union ([value.ConstraintMatches]), and an assertions facet in an
+// ordinary one's closure through [xpath.FacetAssertions]. An undecided
+// comparison charges nothing, on [walk.fixedAgreement]'s terms and for the
+// same reasons: an ungoverned type, a ·special· one whose literals some member
+// of that union cannot compare, a {lexical form} outside its own type's lexical
+// space or failing one of its {test}s, and a {test} the evaluator declines on
+// either side are a gap in this processor or a schema fault, not the
+// instance's. It is recorded as an [Unevaluated] instead
+// ([contentCheck.decline]), the clause having been reached and not performed.
 //
 // GAP(value): a NOTATION {lexical form} naming no declared notation, tracked by
 // #667, declines here on [walk.fixedAgreement]'s terms: ValidDefault's gate 1
@@ -610,10 +613,10 @@ func (c *contentCheck) fixedActualValue(w *walk, f xsd.ValueConstraint) {
 	if st == nil {
 		return
 	}
-	same, decided := value.ConstraintMatches(w.backend, w.schema, st, c.initial.String(), elementContext{owner: c.e}, f)
+	same, decided := value.ConstraintMatches(w.backend, w.schema, st, c.initial.String(), elementContext{owner: c.e}, f, xpath.FacetAssertions())
 	if !decided {
 		c.decline(w, c.e.Name(), c.e.Loc(), ruleCvcElt, "5.2.2.2.2",
-			"the ·actual value· of the element %s was not compared with the {value} of the fixed {value constraint} %q of its ·governing element declaration·: value.ConstraintMatches could not decide the comparison, a fault of the type or of the value backend, two literals of a ·special· type that some member of its lexical mapping cannot compare, or a NOTATION {value} naming no declared notation, which no assembly judges yet (#667), rather than a verdict about the value, so cvc-elt clause 5.2.2.2.2 is undecided",
+			"the ·actual value· of the element %s was not compared with the {value} of the fixed {value constraint} %q of its ·governing element declaration·: value.ConstraintMatches could not decide the comparison, a fault of the type or of the value backend, two literals of a ·special· type that some member of its lexical mapping cannot compare, an assertions-facet {test} not evaluated on either side or failed by the {value}, or a NOTATION {value} naming no declared notation, which no assembly judges yet (#667), rather than a verdict about the value, so cvc-elt clause 5.2.2.2.2 is undecided",
 			c.e.Name(), f.LexicalForm())
 		return
 	}

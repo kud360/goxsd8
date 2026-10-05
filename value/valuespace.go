@@ -246,33 +246,47 @@ func (vs valueSpace) ValidDefault(r xsd.TypeResolver, t *xsd.SimpleType, vc xsd.
 // (§3.3.18, [ConstraintContext]). One shared context would decide a QName agreement
 // wrongly in both directions.
 //
+// a decides each {test} of an assertions facet the pipeline reaches on either
+// side (cvc-assertions-valid via cvc-datatype-valid clause 3, Datatypes
+// §4.1.4), on [ValidateLexical]'s terms, and MUST be non-nil — even for a
+// ·special· t, which never reads it.
+//
 // For a t that is not ·special·, a side that fails to validate is undecided,
-// never a mismatch. GAP(value): that includes every side an assertions facet in
-// t's closure reaches, which this function runs with assertionsUndecided — it is
-// handed no [AssertionEvaluator] — and so declines (IsAssertionDeclined). Its
-// readers, validate's walk.fixedAgreement (cvc-attribute clause 4, cvc-au) and
+// never a mismatch: a {test} a FAILS on either side is such a failure like any
+// other. For the instance side that is not a lost verdict: a literal that is
+// not Datatype Valid against t — outside its lexical space, or failing one of
+// its facets, assertions included — already fails cvc-attribute clause 3 or
+// cvc-elt clause 5.2.1, which the caller charges in its own right, and
+// reporting "not the same value" for what is really "not a value of t at all"
+// would charge the agreement clause as well for one defect. For vc's side it is
+// the schema's own cos-valid-simple-default obligation (§3.2.6.2), charged at
+// finalize — except an assertions facet's: the ValidDefault of the
+// [xsd.ValueSpace] [NewValueSpace] returns runs the pipeline with no evaluator
+// of its own and declines every {test} (its gate 2's GAP(value)), so a
+// vc.{lexical form} failing a {test} is charged by no assembly, and is
+// undecided here rather than NOT-same all the same.
+//
+// GAP(xpath): a {test} a DECLINES ([IsAssertionDeclined]) is undecided too;
+// which {test}s the evaluator validate passes declines is stated at
+// xpath.FacetAssertions' own marker. This function's readers, validate's
+// walk.fixedAgreement (cvc-attribute clause 4, cvc-au) and
 // contentCheck.fixedActualValue (cvc-elt clause 5.2.2.2.2), charge only a
 // decided NOT-same and decline an undecided answer, so the direction is
-// fail-open. (#1042) For the instance side that is not a lost verdict: a
-// literal outside t's lexical space already fails cvc-attribute clause 3,
-// which the caller charges in its own right, and reporting "not the same
-// value" for what is really "not a value at all" would charge clause 4 as well
-// for one defect. For vc's side it is the schema's own cos-valid-simple-default
-// obligation (§3.2.6.2), already charged at finalize.
+// fail-open. (#1042)
 //
 // GAP(value): a NOTATION vc.{lexical form} naming no declared notation, tracked
 // by #667. ValidDefault's gate 1 (needsContext) refuses every NOTATION-governed
 // default, so no finalize judges such a value, and it is undecided here, never
 // NOT-same, until #667 routes those defaults through ValidDefault.
-func ConstraintMatches(b Backend, r xsd.TypeResolver, t *xsd.SimpleType, lexical string, ctx Context, vc xsd.ValueConstraint) (same, decided bool) {
+func ConstraintMatches(b Backend, r xsd.TypeResolver, t *xsd.SimpleType, lexical string, ctx Context, vc xsd.ValueConstraint, a AssertionEvaluator) (same, decided bool) {
 	if t.IsSpecial() {
 		return specialMatches(b, t, t, lexical, ctx, vc.LexicalForm(), ConstraintContext(vc), equalOrIdentical)
 	}
-	av, err := ValidateLexical(b, r, t, lexical, ctx, assertionsUndecided{})
+	av, err := ValidateLexical(b, r, t, lexical, ctx, a)
 	if err != nil {
 		return false, false
 	}
-	cv, err := ValidateLexical(b, r, t, vc.LexicalForm(), ConstraintContext(vc), assertionsUndecided{})
+	cv, err := ValidateLexical(b, r, t, vc.LexicalForm(), ConstraintContext(vc), a)
 	if err != nil {
 		return false, false
 	}

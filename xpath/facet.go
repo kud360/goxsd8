@@ -22,9 +22,9 @@ import (
 // {test}s: it compiles the {test} under the facet's static context and
 // evaluates it with no context item, `$value` bound to v ([value.AssertionEvaluator]
 // states the contract). Its consumer is validate, which passes it at every
-// value.ValidateLexical and value.ValidatingType call, so a value's Datatype
-// Valid verdict — and a union's ·validating type· with it — includes its
-// assertions facets.
+// value.ValidateLexical, value.ValidatingType and value.ConstraintMatches call,
+// so a value's Datatype Valid verdict — and a union's ·validating type· and a
+// fixed-value comparison with it — includes its assertions facets.
 //
 // Each {test} answers one of three outcomes:
 //
