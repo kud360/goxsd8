@@ -97,26 +97,34 @@
 //     ([46]–[51]); an <!ATTLIST> that is no [52] AttlistDecl, an AttDef
 //     missing its S, AttType or DefaultDecl ([53]–[60]), or a default value
 //     that is no [10] AttValue, holding a '<', a '&' that opens no Reference
-//     or a character reference naming no Char — a validity constraint on
-//     either declaration is no fault; replacement text ending inside a
-//     comment, processing instruction or markup declaration; and a '<' in
-//     the DOCTYPE header, a subset no ']' closes, or text other than S
-//     between that ']' and '>' ([28] doctypedecl). A processing instruction
-//     between the subset's declarations runs to the "?>" that alone closes
-//     it ([16] PI), whatever '>', '<' or quote it holds (internal/xmltok),
-//     and one no "?>" closes fails as the decoder's syntax error at the end
-//     of input. The external subset is never read, by design (#1668), nor
-//     is an external parameter entity; after a parameter-entity reference
-//     that is not read, unless standalone="yes", the rest of the internal
-//     subset is checked for well-formedness alone, binding no parameter
-//     entity, declaring no general entity and expanding no reference (XML
-//     1.0 §5.1). An entity declared only where the reader did not read is
-//     not a member, and Reader.AllDeclarationsProcessed, the [all
-//     declarations processed] property, then reports false.
-//   - GAP(xml): an entity reference in an <!ATTLIST> default value is
-//     checked for its syntax alone: WFC: Entity Declared, Parsed Entity, No
-//     Recursion, No External Entity References and No < in Attribute Values
-//     are not checked against the entity it names. Tracked by #2257.
+//     or a character reference naming no Char, or an entity reference that
+//     breaks WFC: Entity Declared (a direct reference to a name no general
+//     entity declaration before the <!ATTLIST> declares, in a document that is
+//     standalone="yes" or has neither an external subset nor a
+//     parameter-entity reference) or, directly or through other entities'
+//     replacement text, WFC: Parsed Entity, No Recursion, No External Entity
+//     References or No < in Attribute Values, whether or not the default is
+//     ever applied — a validity constraint on either declaration is no fault;
+//     replacement text ending inside a comment, processing instruction or
+//     markup declaration; and a '<' in the DOCTYPE header, a subset no ']'
+//     closes, or text other than S between that ']' and '>' ([28]
+//     doctypedecl). A processing instruction between the subset's declarations
+//     runs to the "?>" that alone closes it ([16] PI), whatever '>', '<' or
+//     quote it holds (internal/xmltok), and one no "?>" closes fails as the
+//     decoder's syntax error at the end of input. The external subset is never
+//     read, by design (#1668), nor is an external parameter entity; after a
+//     parameter-entity reference that is not read, unless standalone="yes",
+//     the rest of the internal subset is checked for well-formedness alone,
+//     binding no parameter entity, declaring no general entity and expanding
+//     no reference (XML 1.0 §5.1). An entity declared only where the reader
+//     did not read is not a member, and Reader.AllDeclarationsProcessed, the
+//     [all declarations processed] property, then reports false.
+//   - GAP(xml): a general entity declared in a parameter entity's
+//     replacement text satisfies WFC: Entity Declared for an <!ATTLIST>
+//     default value, though the constraint counts only a declaration outside
+//     every parameter entity, and a reference in replacement text to a name
+//     declared nowhere is not charged under it. Untracked: no issue owns it
+//     yet.
 //   - Every attribute value, namespace declarations included, is its
 //     normalized value per XML 1.0 §3.3.3, steps 1-3, for an attribute
 //     read as CDATA (Attribute.Value): a character reference is the

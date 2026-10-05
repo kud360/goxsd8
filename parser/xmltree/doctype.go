@@ -100,12 +100,11 @@ const (
 // a name that is no Name, an AttType that is no [54]–[59] AttType, a missing
 // [60] DefaultDecl, and a default value that is no [10] AttValue, a '<' in it
 // among them. A validity constraint on either declaration is no fault. These
-// checks run on after a declined reference, as §5.1 requires.
-//
-// GAP(xml): an entity reference in an attribute default is checked for its
-// syntax alone, not for WFC: Entity Declared, Parsed Entity, No Recursion, No
-// External Entity References or No < in Attribute Values (see attValueFault).
-// Tracked by #2257.
+// checks run on after a declined reference, as §5.1 requires. Once the whole
+// subset reads without one of them, an entity reference in a default value is
+// checked against the entity it names, a fault too: WFC: Entity Declared,
+// Parsed Entity, No Recursion, No External Entity References and No < in
+// Attribute Values (see defaultsFault).
 func doctypeEntities(directive string, standalone bool, loc xsderr.Loc) (decls []entityDecl, unread bool, err error) {
 	rest, ok := strings.CutPrefix(directive, "DOCTYPE")
 	if _, spaced := cutSpace(rest); !ok || !spaced && rest != "" {
@@ -127,6 +126,9 @@ func doctypeEntities(directive string, standalone bool, loc xsderr.Loc) (decls [
 		return nil, sc.unread, nil
 	}
 	if err := sc.scan(rest[open+1:]); err != nil {
+		return nil, false, err
+	}
+	if err := sc.defaultsFault(); err != nil {
 		return nil, false, err
 	}
 	return sc.decls, sc.unread, nil
@@ -161,8 +163,9 @@ func hasExternalID(header string) bool {
 // declarations read, and unread records that some declaration was not.
 // checkOnly records that a declined reference has ended processing, outside a
 // standalone document (XML 1.0 §5.1): the scan reads on only to check
-// well-formedness. loc is the directive's start, where every fault the scan
-// finds is located.
+// well-formedness. defaults collects the <!ATTLIST> default values read, in
+// document order, for defaultsFault. loc is the directive's start, where every
+// fault the scan finds is located.
 type subsetScan struct {
 	standalone bool
 	loc        xsderr.Loc
@@ -172,6 +175,19 @@ type subsetScan struct {
 	decls      []entityDecl
 	unread     bool
 	checkOnly  bool
+	defaults   []attDefault
+}
+
+// attDefault is one default value an <!ATTLIST> declaration gives, read by
+// defaultDecl: about describes it for a fault message, lit is its text between
+// the quotes, declared counts the general entity declarations recorded before
+// it, and inPE reports that it stands in a parameter entity's replacement
+// text.
+type attDefault struct {
+	about    string
+	lit      string
+	declared int
+	inPE     bool
 }
 
 // entityValue is one entity's replacement text, and whether it has one the
@@ -605,8 +621,9 @@ func enumeration(s string, valid func(string) bool) (rest string, ok bool) {
 // defaultDecl reads the S and DefaultDecl that s, the text after attribute
 // name's AttType in the <!ATTLIST> declaration of elem, opens with: XML 1.0
 // [53] AttDef, [60] DefaultDecl, '#REQUIRED', '#IMPLIED', or an AttValue
-// literal with '#FIXED' S before it or not, its text attValueFault's. It
-// returns what follows the DefaultDecl.
+// literal with '#FIXED' S before it or not, its text attValueFault's and,
+// once the subset is read, defaultsFault's. It returns what follows the
+// DefaultDecl.
 func (sc *subsetScan) defaultDecl(elem, name, s string) (rest string, err error) {
 	at, ok := cutSpace(s)
 	kw, lit := tokenRun(at)
@@ -630,27 +647,21 @@ func (sc *subsetScan) defaultDecl(elem, name, s string) (rest string, err error)
 	if end < 0 {
 		return "", xsderr.New(xsderr.RuleXMLWellFormed, sc.loc, "%s holds an <!ATTLIST> declaration of %q whose attribute %q has %q where S and a DefaultDecl, '#REQUIRED', '#IMPLIED' or an AttValue with ('#FIXED' S)? before it, must stand (XML 1.0 [53] AttDef, [60] DefaultDecl)", sc.where(), elem, name, excerpt(at))
 	}
-	if err := sc.attValueFault(elem, name, lit[1:1+end]); err != nil {
+	what := "an <!ATTLIST> declaration of " + strconv.Quote(elem) + " whose attribute " + strconv.Quote(name) + " has a default value"
+	if err := sc.attValueFault(what, lit[1:1+end]); err != nil {
 		return "", err
 	}
+	sc.defaults = append(sc.defaults, attDefault{about: sc.where() + " holds " + what, lit: lit[1 : 1+end], declared: len(sc.decls), inPE: sc.depth > 0})
 	return lit[end+2:], nil
 }
 
-// attValueFault returns the fault of lit, the text between the quotes of
-// attribute name's default value in the <!ATTLIST> declaration of elem, when
-// it is no XML 1.0 [10] AttValue: it holds no '<', and every '&' in it opens a
-// Reference, an EntityRef or a CharRef naming a Char (see reference). A '>'
-// and a '%' are data in it: an AttValue recognizes no parameter-entity
-// reference.
-//
-// GAP(xml): an entity reference in a default value is checked for its syntax
-// alone, whatever the entity it names: WFC: Entity Declared (the declaration
-// must precede the reference), Parsed Entity and No Recursion, which [68]
-// EntityRef imposes, and No External Entity References and No < in Attribute
-// Values, which [60] DefaultDecl imposes on that entity's replacement text,
-// are not checked. Tracked by #2257.
-func (sc *subsetScan) attValueFault(elem, name, lit string) error {
-	what := "an <!ATTLIST> declaration of " + strconv.Quote(elem) + " whose attribute " + strconv.Quote(name) + " has a default value"
+// attValueFault returns the fault of lit, the text between the quotes of the
+// default value what describes, when it is no XML 1.0 [10] AttValue: it holds
+// no '<', and every '&' in it opens a Reference, an EntityRef or a CharRef
+// naming a Char (see reference). A '>' and a '%' are data in it: an AttValue
+// recognizes no parameter-entity reference. The entity an EntityRef names is
+// defaultsFault's to check, once every declaration is read.
+func (sc *subsetScan) attValueFault(what, lit string) error {
 	for {
 		i := strings.IndexAny(lit, "<&")
 		if i < 0 {
@@ -664,6 +675,199 @@ func (sc *subsetScan) attValueFault(elem, name, lit string) error {
 			return err
 		}
 		lit = after
+	}
+}
+
+// defaultsFault returns the fault of the first entity reference, in document
+// order, by which a default value of the subset's <!ATTLIST> declarations
+// breaks a well-formedness constraint on the entity it names, or nil. These
+// bind the declaration, whether or not its default is ever applied, and are
+// checked once the whole subset is read, so a fault the scan finds anywhere in
+// the subset is reported in place of one of these.
+//
+// Each EntityRef ([68]) the default value holds directly, a predefined name
+// (amp, lt, gt, apos, quot; XML 1.0 §4.6) excepted, must name a general entity
+// declared before the <!ATTLIST> (WFC: Entity Declared), where that constraint
+// binds: in a default value outside a parameter entity's replacement text, of
+// a document that is standalone="yes" or whose DOCTYPE names no external subset
+// and whose internal subset references no parameter entity, before the
+// <!ATTLIST> or after it. An indirect reference to an entity declared after it
+// is VC: Entity Declared's alone. The entity a reference names, by its first
+// declaration, which binds (§4.2), and every entity its replacement text
+// references in turn, at any depth, must be parsed (WFC: Parsed Entity) and
+// internal (WFC: No External Entity References), its replacement text must hold
+// no '<' (WFC: No < in Attribute Values), and it must not reach itself (WFC: No
+// Recursion; see entityGraph). A CharRef ([66]) names no entity: `&#60;` breaks
+// none of these, and neither does an entity whose replacement text is `&#60;`.
+// An entity declaration after a declined reference, outside a standalone
+// document, is not recorded (§5.1), so a name first declared there is none
+// this check knows: Entity Declared does not bind there, and the others are
+// not checked.
+//
+// GAP(xml): a general entity declared in a parameter entity's replacement text
+// satisfies WFC: Entity Declared here, though the constraint counts only a
+// declaration that does not occur within a parameter entity, and a reference in
+// replacement text to a name declared nowhere is not charged under it.
+// Untracked: no issue owns it yet.
+func (sc *subsetScan) defaultsFault() error {
+	if len(sc.defaults) == 0 {
+		return nil
+	}
+	g := entityGraph{loc: sc.loc, decls: sc.decls, first: make(map[string]int), state: make(map[string]walkState)}
+	for i, d := range sc.decls {
+		if _, bound := g.first[d.name]; !bound {
+			g.first[d.name] = i
+		}
+	}
+	// Every parameter-entity reference between declarations was declined,
+	// setting unread, expanded, charging spent, or read once checkOnly, after
+	// a decline; an external subset sets unread from the header.
+	binds := sc.standalone || !sc.unread && sc.spent == 0
+	for _, d := range sc.defaults {
+		if err := g.defaultFault(d, binds && !d.inPE); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// entityGraph walks the general entities a subset's default values reference,
+// directly or through one another's replacement text, for defaultsFault. decls
+// are the subset's general entity declarations, in document order, and first
+// the index of each name's first declaration among them; state records how
+// far the walk from each entity has got. Both maps are lookup indexes only,
+// never iterated. loc is the directive's start, where every fault is located.
+type entityGraph struct {
+	loc   xsderr.Loc
+	decls []entityDecl
+	first map[string]int
+	state map[string]walkState
+}
+
+// walkState is how far an entityGraph's walk from one entity has got.
+type walkState uint8
+
+const (
+	// unwalked: the walk has not reached the entity.
+	unwalked walkState = iota
+	// walking: the entity is on the path from the default value being walked.
+	walking
+	// walked: the entity and every entity it reaches break none of the
+	// constraints, so a later reference to it needs no walk.
+	walked
+)
+
+// defaultFault returns the fault of the first entity reference d's default
+// value holds directly that breaks a constraint defaultsFault names, or nil.
+// declared reports that WFC: Entity Declared binds d.
+func (g *entityGraph) defaultFault(d attDefault, declared bool) error {
+	lit := d.lit
+	for {
+		name, after, ok := nextEntityRef(lit)
+		if !ok {
+			return nil
+		}
+		lit = after
+		if _, builtin := predefined[name]; builtin {
+			continue
+		}
+		i, known := g.first[name]
+		if declared && (!known || i >= d.declared) {
+			return xsderr.New(xsderr.RuleXMLWellFormed, g.loc, "%s that references entity %s, which no general entity declaration before it declares (XML 1.0 WFC: Entity Declared)", d.about, name)
+		}
+		if !known {
+			continue
+		}
+		if err := g.fault(d.about, name); err != nil {
+			return err
+		}
+	}
+}
+
+// walkFrame is one entity on the path of an entityGraph's walk: its name and
+// the part of its replacement text the walk has yet to read.
+type walkFrame struct {
+	name string
+	rest string
+}
+
+// fault walks from name, a declared general entity the default value about
+// describes references, depth first through the replacement text of every
+// entity it reaches, and returns the fault of the first it finds: an entity
+// enter refuses, or a reference to one already on the path (XML 1.0 WFC: No
+// Recursion). The path is a slice, not the call stack, so entities nested as
+// deeply as the subset can declare them cost no recursion and no bound. A
+// predefined name and one declared nowhere are passed over.
+func (g *entityGraph) fault(about, name string) error {
+	if g.state[name] == walked {
+		return nil
+	}
+	path, err := g.enter(nil, about, name)
+	if err != nil {
+		return err
+	}
+	for len(path) > 0 {
+		top := &path[len(path)-1]
+		ref, after, ok := nextEntityRef(top.rest)
+		if !ok {
+			g.state[top.name] = walked
+			path = path[:len(path)-1]
+			continue
+		}
+		top.rest = after
+		if _, builtin := predefined[ref]; builtin {
+			continue
+		}
+		if _, known := g.first[ref]; !known {
+			continue
+		}
+		switch g.state[ref] {
+		case unwalked:
+			if path, err = g.enter(path, about, ref); err != nil {
+				return err
+			}
+		case walking:
+			return xsderr.New(xsderr.RuleXMLWellFormed, g.loc, "%s that references, directly or indirectly, entity %s, which references itself (XML 1.0 WFC: No Recursion)", about, ref)
+		case walked:
+		}
+	}
+	return nil
+}
+
+// enter returns path with the declared general entity name pushed on it, or
+// the fault of an entity the default value about describes may not reference,
+// directly or indirectly: an unparsed one (XML 1.0 WFC: Parsed Entity), an
+// external one (WFC: No External Entity References), or one whose replacement
+// text holds '<' (WFC: No < in Attribute Values).
+func (g *entityGraph) enter(path []walkFrame, about, name string) ([]walkFrame, error) {
+	d := g.decls[g.first[name]]
+	switch {
+	case d.unparsed:
+		return nil, xsderr.New(xsderr.RuleXMLWellFormed, g.loc, "%s that references, directly or indirectly, the unparsed entity %s (XML 1.0 WFC: Parsed Entity)", about, name)
+	case !d.value.readable:
+		return nil, xsderr.New(xsderr.RuleXMLWellFormed, g.loc, "%s that references, directly or indirectly, the external entity %s (XML 1.0 WFC: No External Entity References)", about, name)
+	case strings.ContainsRune(d.value.text, '<'):
+		return nil, xsderr.New(xsderr.RuleXMLWellFormed, g.loc, "%s that references, directly or indirectly, entity %s, whose replacement text holds '<' (XML 1.0 WFC: No < in Attribute Values)", about, name)
+	}
+	g.state[name] = walking
+	return append(path, walkFrame{name: name, rest: d.value.text}), nil
+}
+
+// nextEntityRef returns the Name of the first EntityRef, '&' Name ';' (XML 1.0
+// [68]), in s — a default value's text, or replacement text it includes — and
+// what follows it, or reports false when s holds none. A CharRef ([66]) is no
+// EntityRef, and a '&' that opens no Reference, which replacement text holds
+// where its literal spelled a character reference to '&', is passed over.
+func nextEntityRef(s string) (name, after string, ok bool) {
+	for {
+		amp := strings.IndexByte(s, '&')
+		if amp < 0 {
+			return "", "", false
+		}
+		s = s[amp+1:]
+		if end := strings.IndexByte(s, ';'); end >= 0 && isName(s[:end]) {
+			return s[:end], s[end+1:], true
+		}
 	}
 }
 
