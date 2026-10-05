@@ -15,7 +15,8 @@ import (
 // attribute or child-axis step, a "/" or "//" opening a path — raises
 // err:XPDY0002 (ctaNoContextItem), and `$value`, bound to the XDM
 // representation of the value under the facet's type (clause 1.4, dt-xdmrep),
-// is the whole of what a {test} can read.
+// is the whole of what a {test} can read. An fn:count call declines
+// (ctaFacetFacade.count).
 
 // FacetAssertions is the [value.AssertionEvaluator] for an assertions facet's
 // {test}s: it compiles the {test} under the facet's static context and
@@ -34,16 +35,17 @@ import (
 //   - [value.AssertionDeclined], where this engine does not evaluate it: a
 //     {test} [CompileAssertionTest] would decline over a simple {content type}
 //     of the same type, on that function's terms — the grammar is the same and
-//     so is every decline it states — and every {test} of a union's own
-//     assertions facet.
+//     so is every decline it states — a {test} calling fn:count, and every
+//     {test} of a union's own assertions facet.
 //
 // GAP(xpath): a union's own assertions facet is declined whatever its {test}:
 // `$value` is the XDM representation of the value under the union's ·active
 // basic member· (dt-xdmrep clause 4), which only the dispatch knows, and this
-// evaluator is handed the union. Every other decline is [CompileAssertionTest]'s,
-// under its GAP(xpath). The direction is the withhold: the caller declines
-// the value's Datatype Valid verdict, never charging it and never showing it
-// satisfied. (#1042)
+// evaluator is handed the union. So is an fn:count call, whose argument would
+// raise err:XPDY0002 over the absent context item (ctaFacetFacade.count).
+// Every other decline is [CompileAssertionTest]'s, under its GAP(xpath). The
+// direction is the withhold: the caller declines the value's Datatype Valid
+// verdict, never charging it and never showing it satisfied. (#1042)
 //
 // Nothing is cached: each call compiles its {test} afresh (STYLE D3), and b and
 // r are read as [AssertionTest.Evaluate] reads them and stored nowhere.
@@ -126,4 +128,12 @@ func (ctaFacetFacade) rooted() (ctaValue, bool) {
 // contextItem compiles `.` to ctaNoContextItem (xpath20.md §3.1.4).
 func (ctaFacetFacade) contextItem() (ctaValue, bool) {
 	return ctaNoContextItem{}, true
+}
+
+// count declines every fn:count call. Its argument reads the absent context
+// item and would raise err:XPDY0002, but the call is admitted by the assertion
+// façade alone, whose counts a [Tally] the facet evaluation has none of
+// supplies; the decline is [FacetAssertions]' withhold, under its GAP(xpath).
+func (ctaFacetFacade) count(ctaCounted, ctaTypes) (ctaValue, bool) {
+	return nil, false
 }
