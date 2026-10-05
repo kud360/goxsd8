@@ -16,12 +16,14 @@ import (
 // second, lenient parser"), plus the productions beyond it an assertion's
 // {test} reaches: xpath20.md [23] ValueComp, [44] VarRef, an abbreviated
 // child-axis step whose NodeTest is a QName ([31] AbbrevForwardStep, §3.2.1.1),
-// and a "/" or "//" opening [25] PathExpr over one such step — each behind the
+// a "/" or "//" opening [25] PathExpr over one such step, and [47]
+// ContextItemExpr `.`, which only the facet façade admits — each behind the
 // façade (ctaFacade.comparesValues, ctaFacade.variable, ctaFacade.child,
-// ctaFacade.rooted), so a Type Alternative's {test} reaches none of them. Every
-// method below is named for the production it parses, and the whole grammar is
-// both reached and evaluated: no method here is a stub, and the
-// production-level declines are those four façade methods'. xpath/doc.go owns
+// ctaFacade.rooted, ctaFacade.contextItem), so a Type Alternative's {test}
+// reaches none of them. Every method below is named for the production it
+// parses, and the whole grammar is both reached and evaluated: no method here
+// is a stub, and the production-level declines are those five façade
+// methods'. xpath/doc.go owns
 // the enumeration of what declines; every other decline reaching this file is
 // ctaTypes answering ctaTypeDeclined for a comparison type, a cast target or a
 // cast operand it will not serve, or the façade declining a NameTest, a
@@ -241,6 +243,11 @@ const (
 	// token no production takes, so `a/b` and `a//b` are not expressions here.
 	ctaSlashTok
 	ctaSlashSlashTok
+	// ctaDotTok is a '.' that opens no NumericLiteral: the [47]
+	// ContextItemExpr, which only the facet façade admits
+	// (ctaFacade.contextItem). '..', the abbreviated parent step, is not
+	// tokenized at all.
+	ctaDotTok
 )
 
 // ctaToken is one token, identified by kind. text carries the source spelling
@@ -314,11 +321,16 @@ func ctaTokenize(s string) ([]ctaToken, bool) {
 			i = j
 		case r >= '0' && r <= '9', r == '.':
 			j := ctaScanNumber(s, i)
-			if j == i {
+			if j > i {
+				toks = append(toks, ctaToken{kind: ctaNumberTok, text: s[i:j]})
+				i = j
+				continue
+			}
+			if r != '.' || strings.HasPrefix(s[i:], "..") {
 				return nil, false
 			}
-			toks = append(toks, ctaToken{kind: ctaNumberTok, text: s[i:j]})
-			i = j
+			toks = append(toks, ctaToken{kind: ctaDotTok})
+			i++
 		default:
 			kind, j := ctaScanNameTest(s, i)
 			if j == i {
@@ -848,11 +860,11 @@ func (p *ctaParser) constructorFunction() (ctaValue, bool) {
 	return ctaCast{operand: arg, target: target, allowsEmpty: true}, true
 }
 
-// simpleValue parses [16] ta-SimpleValue's two arms, and the arms the
-// assertion façade adds: [44] VarRef (varRef), a child-axis step (childStep),
-// and a rooted path (rootedPath). A name opens the unabbreviated attribute axis
-// only where `::` follows the name `attribute`, and a child-axis step
-// otherwise.
+// simpleValue parses [16] ta-SimpleValue's two arms, the arms the assertion
+// façade adds — [44] VarRef (varRef), a child-axis step (childStep), and a
+// rooted path (rootedPath) — and [47] ContextItemExpr, which the facet façade
+// adds. A name opens the unabbreviated attribute axis only where `::` follows
+// the name `attribute`, and a child-axis step otherwise.
 func (p *ctaParser) simpleValue() (ctaValue, bool) {
 	switch p.peek(0).kind {
 	case ctaAtTok:
@@ -866,6 +878,9 @@ func (p *ctaParser) simpleValue() (ctaValue, bool) {
 		return p.rootedPath()
 	case ctaDollarTok:
 		return p.varRef()
+	case ctaDotTok:
+		p.advance()
+		return p.facade.contextItem()
 	case ctaStringTok:
 		text := p.peek(0).text
 		p.advance()
@@ -913,8 +928,9 @@ func (p *ctaParser) childStep() (ctaValue, bool) {
 // with a QName NameTest; a longer path, and a bare "/", leave a token no
 // production takes. The step is resolved — an unbound prefix in it is
 // err:XPST0081 like any other — and never typed: the node is p.facade's, and
-// the one façade that admits it builds a node that raises before any step is
-// taken (ctaNoDocumentRoot), so what the step would select is never asked.
+// each façade that admits it builds a node that raises before any step is
+// taken (ctaNoDocumentRoot, ctaNoContextItem), so what the step would select is
+// never asked.
 func (p *ctaParser) rootedPath() (ctaValue, bool) {
 	p.advance() // '/' or '//'
 	if !p.at(ctaNameTok) {

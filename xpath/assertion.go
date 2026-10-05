@@ -353,6 +353,7 @@ func (n ctaCast) readsChild(name xsd.QName) bool { return n.operand.readsChild(n
 func (ctaAttr) readsChild(xsd.QName) bool           { return false }
 func (ctaTypedAttr) readsChild(xsd.QName) bool      { return false }
 func (ctaNoDocumentRoot) readsChild(xsd.QName) bool { return false }
+func (ctaNoContextItem) readsChild(xsd.QName) bool  { return false }
 func (ctaLiteral) readsChild(xsd.QName) bool        { return false }
 func (ctaValueVar) readsChild(xsd.QName) bool       { return false }
 func (ctaEmptyValue) readsChild(xsd.QName) bool     { return false }
@@ -486,4 +487,12 @@ func ctaChildValueType(td xsd.TypeDefinition) (*xsd.SimpleType, bool) {
 // node is above it, so the path raises err:XPDY0050 (xpath20.md §3.2).
 func (ctaAssertionFacade) rooted() (ctaValue, bool) {
 	return ctaNoDocumentRoot{}, true
+}
+
+// contextItem declines `.`. The context item is E (cvc-xpath), an element node
+// whose typed value this engine builds no node for, so the [47]
+// ContextItemExpr is outside what [CompileAssertionTest] admits, on child's
+// terms.
+func (ctaAssertionFacade) contextItem() (ctaValue, bool) {
+	return nil, false
 }

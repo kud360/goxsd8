@@ -18,7 +18,11 @@ import (
 // (ctaValueCompare), and [16] SimpleValue also takes [44] VarRef ('$' VarName),
 // of which only `$value` is in scope (cvc-assertion clause 2.2), a child-axis
 // step naming one of E's element [[children]] (ctaTypedChild), and a "/" or
-// "//" opening a path, which raises (ctaNoDocumentRoot). It is not a stage of
+// "//" opening a path, which raises (ctaNoDocumentRoot). The facet façade
+// (ctaFacetFacade) takes the assertion façade's grammar plus [47]
+// ContextItemExpr `.`, and compiles every read of the context item — `.`, an
+// attribute or child step, a rooted path — to the err:XPDY0002 an assertions
+// facet's absent context item raises (ctaNoContextItem). It is not a stage of
 // a general XPath 2.0 evaluator: the productions below reach no axis but
 // attribute and one child step, no predicate, no variable but `$value` and no
 // function but fn:not, so evaluating them directly is exact where a fail-open
@@ -342,9 +346,11 @@ func (t CTATest) Evaluate(b value.Backend, types xsd.TypeResolver, attrs Attribu
 }
 
 // ctaEnv is the dynamic context of one [CTATest.Evaluate] or
-// [AssertionTest.Evaluate] call. cvc-xpath (§3.13.4.2) fixes the rest of it —
-// context item E, context position and size 1, no variable values but the
-// `$value` cvc-assertion clause 2.3 adds — and of that only `$value` and the
+// [AssertionTest.Evaluate] call, or of one facet {test} [FacetAssertions]
+// evaluates, which has no context item at all (cvc-assertions-valid clause 1.2)
+// and so reads nothing of its input but `$value`. cvc-xpath (§3.13.4.2) fixes
+// the rest of it — context item E, context position and size 1, no variable
+// values but the `$value` cvc-assertion clause 2.3 adds — and of that only `$value` and the
 // context item's own attributes and element [[children]] are reachable in this
 // grammar, so the attributes, the children, `$value`'s binding, the value
 // spaces and the type knowledge the casts need are the whole of what
@@ -465,7 +471,8 @@ func (ctaTypeError) ctaExpr()        {}
 // ta-SimpleValue — its AttrName arm in the untyped and the typed form
 // (ctaFacade.attribute), its Literal arm, and the assertion façade's `$value`
 // in its three static forms (ctaFacade.variable), child-axis step
-// (ctaFacade.child) and rooted path (ctaFacade.rooted) — and the cast that
+// (ctaFacade.child) and rooted path (ctaFacade.rooted), and the facet façade's
+// read of an absent context item (ctaNoContextItem) — and the cast that
 // [15] ta-CastExpr's tail and [18] ta-ConstructorFunction both build over one
 // of them. Every branch answers readsChild on ctaExpr's terms.
 type ctaValue interface {
@@ -532,6 +539,19 @@ type ctaTypedChild struct {
 // err:XPTY0004.
 type ctaNoDocumentRoot struct{}
 
+// ctaNoContextItem is an expression that reads the context item where there is
+// none, which only an assertions facet's {test} is evaluated under
+// (cvc-assertions-valid clause 1.2: "There is no context item"; its Note: "the
+// expression '.', or any implicit or explicit reference to the context item,
+// will raise a dynamic error"): the [47] ContextItemExpr `.`, an attribute or
+// child-axis step, and a path opening with "/" or "//". Each raises
+// err:XPDY0002 (xpath20.md §2.1.2, §3.1.4: "If the context item is undefined,
+// a context item expression raises a dynamic error") whatever it names, and only
+// the facet façade builds it (ctaFacetFacade). It is a node of its own and not
+// ctaNoDocumentRoot: that one's err:XPDY0050 needs a context node whose root is
+// not a document node, which no context item at all cannot supply.
+type ctaNoContextItem struct{}
+
 // ctaValueVar is `$value` over a simple {content type} (cvc-assertion clause
 // 2.3.1): the XDM representation of E's [schema actual value], read from the
 // [ValueBinding] the evaluation carries. atom is the type of each item — the
@@ -560,8 +580,9 @@ type ctaUntypedValue struct{}
 
 // ctaFacade is the sealed sum of the façades compileCTATest parses for — one
 // value, so the attribute node a façade builds and the comparisons it admits
-// can never come from two different façades (STYLE T1). The grammar's two
-// consumers close the set (STYLE T2's schema-closed-set exception).
+// can never come from two different façades (STYLE T1). The grammar's three
+// consumers — a Type Alternative, an assertion and an assertions facet — close
+// the set (STYLE T2's schema-closed-set exception).
 type ctaFacade interface {
 	ctaFacade()
 	// attribute compiles one [17] ta-AttrName whose NameTest resolved to test
@@ -585,6 +606,9 @@ type ctaFacade interface {
 	// rooted compiles a path opening with "/" or "//" into its node, reporting
 	// false where the façade declines it, on attribute's terms.
 	rooted() (ctaValue, bool)
+	// contextItem compiles the [47] ContextItemExpr `.` into its node,
+	// reporting false where the façade declines it, on attribute's terms.
+	contextItem() (ctaValue, bool)
 }
 
 // ctaTypeAlternativeFacade is a Type Alternative's façade: every attribute
@@ -621,6 +645,12 @@ func (ctaTypeAlternativeFacade) child(ctaNameTest, ctaTypes) (ctaValue, bool) {
 
 // rooted declines every rooted path, on child's terms.
 func (ctaTypeAlternativeFacade) rooted() (ctaValue, bool) {
+	return nil, false
+}
+
+// contextItem declines `.`, on child's terms: ta-props-correct clause 2's
+// grammar has no ContextItemExpr.
+func (ctaTypeAlternativeFacade) contextItem() (ctaValue, bool) {
 	return nil, false
 }
 
@@ -729,6 +759,7 @@ func (ctaAttr) ctaValue()           {}
 func (ctaTypedAttr) ctaValue()      {}
 func (ctaTypedChild) ctaValue()     {}
 func (ctaNoDocumentRoot) ctaValue() {}
+func (ctaNoContextItem) ctaValue()  {}
 func (ctaLiteral) ctaValue()        {}
 func (ctaCast) ctaValue()           {}
 func (ctaValueVar) ctaValue()       {}
@@ -767,9 +798,9 @@ func (ctaTyped) ctaStatic()         {}
 func (ctaEmptySequence) ctaStatic() {}
 
 // ctaStaticOf reports the static type of one [14] ta-ValueExpr. ctaAttr and
-// ctaUntypedValue are the untyped arms, and so is ctaNoDocumentRoot: it raises
-// before any item exists, so its static type decides only whether a
-// comparison over it compiles, never an answer.
+// ctaUntypedValue are the untyped arms, and so are ctaNoDocumentRoot and
+// ctaNoContextItem: each raises before any item exists, so its static type
+// decides only whether a comparison over it compiles, never an answer.
 func ctaStaticOf(v ctaValue) ctaStatic {
 	switch n := v.(type) {
 	case ctaLiteral:
@@ -1060,7 +1091,8 @@ func ctaSingletonOperand(v ctaValue, c *xsd.SimpleType, env ctaEnv) (value.Value
 // (the empty sequence) when it matches nothing, and no type of its own is
 // involved — a ·nilled· child is a node all the same. Rule 2 holds whatever
 // the sequence's LENGTH, which is what a wildcard NameTest and a repeated
-// child make observable. A rooted path raises err:XPDY0050. `$value` is atomic
+// child make observable. A rooted path raises err:XPDY0050, and a read of an
+// absent context item err:XPDY0002. `$value` is atomic
 // values and no node: the statically empty one is rule 1's false, the bound
 // typed one is decided by ctaBoolean, a list of two or more items included, and
 // the untyped one by rule 4 (ctaUntypedBoolean). Every other operand is a
@@ -1087,6 +1119,8 @@ func (e ctaEffectiveBoolean) eval(env ctaEnv) ctaAnswer {
 		return ctaAnswerOf(nodes != 0)
 	case ctaNoDocumentRoot:
 		return ctaError // err:XPDY0050
+	case ctaNoContextItem:
+		return ctaError // err:XPDY0002
 	case ctaLiteral:
 		return ctaBoolean(e.operand, n.st, env)
 	case ctaCast:
@@ -1246,7 +1280,8 @@ func ctaValidated(i ctaItem) (value.Value, bool) {
 //     carry their own type and are converted to c, which is a no-op wherever
 //     the two coincide; the statically empty `$value` yields nothing to
 //     convert.
-//   - a rooted path raises err:XPDY0050 before it yields anything.
+//   - a rooted path raises err:XPDY0050 before it yields anything, and a read
+//     of an absent context item err:XPDY0002.
 //   - a CAST evaluates its operand IN THE TARGET TYPE first, because that cast
 //     is the expression the author wrote and its failure is the author's
 //     err:FORG0001, and only then converts the result to c. Evaluating it
@@ -1264,6 +1299,8 @@ func ctaItemOf(v ctaValue, c *xsd.SimpleType, env ctaEnv) ctaItem {
 		return ctaTypedChildItem(n, c, env)
 	case ctaNoDocumentRoot:
 		return ctaRaised{} // err:XPDY0050
+	case ctaNoContextItem:
+		return ctaRaised{} // err:XPDY0002
 	case ctaLiteral:
 		return ctaConvert(n.text, n.st, c, env)
 	case ctaCast:
