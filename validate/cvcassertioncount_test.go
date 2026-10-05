@@ -1,0 +1,217 @@
+package validate
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/kud360/goxsd8/xsd"
+)
+
+// The fixtures below drive an assertion {test} that counts nodes of <e1>'s
+// subtree with fn:count, which the walk reports to the test's xpath.Tally as
+// it passes (walk.tallyElement). The validation root is an <e1> of RootType,
+// whose content is
+//
+//	sequence( e1*, u?, any(urn:lax, lax)*, any(urn:skip, skip)* )
+//
+// each local <e1> of E1Type, which nests further e1s, carries an optional a and
+// a d that defaults to "x"; <u> takes its type from an alternative whose
+// {test} xpath declines, so its ·governing type definition· is undetermined.
+const ccSchemaText = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:l="urn:lax">
+  <xs:complexType name="E1Type">
+    <xs:sequence>
+      <xs:element name="e1" type="E1Type" minOccurs="0" maxOccurs="unbounded" nillable="true"/>
+    </xs:sequence>
+    <xs:attribute name="a" type="xs:string"/>
+    <xs:attribute name="d" type="xs:string" default="x"/>
+  </xs:complexType>
+  <xs:complexType name="RootType">
+    <xs:sequence>
+      <xs:element name="e1" type="E1Type" minOccurs="0" maxOccurs="unbounded" nillable="true"/>
+      <xs:element name="u" minOccurs="0">
+        <xs:alternative test="string-length(@k) gt 0" type="xs:string"/>
+      </xs:element>
+      <xs:any namespace="urn:lax" processContents="lax" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:any namespace="urn:skip" processContents="skip" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+    <xs:attribute name="a" type="xs:string"/>
+    <xs:assert test="TEST"/>
+  </xs:complexType>
+  <xs:element name="e1" type="RootType"/>
+</xs:schema>`
+
+// ccSchema is ccSchemaText with test as RootType's one assertion.
+func ccSchema(t *testing.T, test string) *xsd.Schema {
+	t.Helper()
+	escaped := strings.NewReplacer("&", "&amp;", "<", "&lt;", `"`, "&quot;").Replace(test)
+	return parsedSchema(t, map[string]string{"main.xsd": strings.Replace(ccSchemaText, "TEST", escaped, 1)})
+}
+
+// ccNode is an element named name at line, carrying attrs, over kids.
+func ccNode(name xsd.QName, line int, attrs []Attribute, kids ...Child) Child {
+	return ElementChild(&testElement{name: name, attrs: attrs, kids: kids, loc: loc(line, 3)})
+}
+
+// ccAttr is an attribute named name with value, on the element at line.
+func ccAttr(name xsd.QName, value string, line int) Attribute {
+	return &testAttribute{name: name, value: value, loc: loc(line, 6)}
+}
+
+// ccRoot is the validation root <e1> at 1:1, carrying attrs, over kids.
+func ccRoot(attrs []Attribute, kids ...Child) *testElement {
+	return &testElement{name: local("e1"), attrs: attrs, kids: kids, loc: loc(1, 1)}
+}
+
+// ccNotCharged fails if res charged cvc-assertion or recorded any Unevaluated:
+// the assertion was evaluated and holds, whatever else res charged.
+func ccNotCharged(t *testing.T, res *Result, why string) {
+	t.Helper()
+	if got := res.Unevaluated(); len(got) != 0 {
+		t.Errorf("%s: Unevaluated() = %v, want none", why, messages(got))
+	}
+	for _, v := range res.Violations() {
+		if v.Rule == ruleCvcAssertion {
+			t.Errorf("%s: Violations() holds %v, want the assertion satisfied", why, v)
+		}
+	}
+}
+
+// ccDeclinedAmong fails unless res recorded, among its Unevaluated, a
+// cvc-assertion decline at the root naming want, and charged no cvc-assertion.
+func ccDeclinedAmong(t *testing.T, res *Result, want string) {
+	t.Helper()
+	found := false
+	for _, u := range res.Unevaluated() {
+		found = found || u.Rule() == ruleCvcAssertion && u.Loc() == loc(1, 1) && strings.Contains(u.Msg(), want)
+	}
+	if !found {
+		t.Errorf("Unevaluated() = %v, want a cvc-assertion decline at %s naming %q", messages(res.Unevaluated()), loc(1, 1), want)
+	}
+	for _, v := range res.Violations() {
+		if v.Rule == ruleCvcAssertion {
+			t.Errorf("Violations() holds %v: a declined assertion is never charged", v)
+		}
+	}
+}
+
+// fn:count counts the nodes of <e1>'s subtree the walk reports, in the data
+// model instance cvc-assertion clause 1 builds. `count(e1) eq 1` counts the
+// child and not the grandchild; `count(.//e1) eq 2` counts both and not the
+// root <e1> itself, and is charged over a third. `count(.//@a) eq 2` counts the
+// root's own @a with a grandchild's, and is charged without the root's. Each
+// E1Type element's d is ·defaulted· (key-dflt-att) and counted as carried, so
+// `count(.//@d) eq 2` holds over two of them, one carrying d or neither; the
+// two rows are charged instead with walk.attributeNodes adding no ·defaulted
+// attribute·. An xsi:nil attribute is a node of the instance and its ·nilled·
+// element is walked. Every row is declined instead, and fails, with xpath's
+// fn:count declining.
+func TestAssertionCountsTheWalkedSubtree(t *testing.T) {
+	e1, a, d := local("e1"), local("a"), local("d")
+	nilled := ccAttr(xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: "nil"}, "true", 2)
+	for _, tc := range []struct {
+		why, test string
+		root      *testElement
+		charged   bool
+	}{
+		{"a child, not a grandchild", "count(e1) eq 1",
+			ccRoot(nil, ccNode(e1, 2, nil, ccNode(e1, 3, nil))), false},
+		{"a child and a grandchild, not the root", "count(.//e1) eq 2",
+			ccRoot(nil, ccNode(e1, 2, nil, ccNode(e1, 3, nil))), false},
+		{"three descendants", "count(.//e1) eq 2",
+			ccRoot(nil, ccNode(e1, 2, nil, ccNode(e1, 3, nil)), ccNode(e1, 4, nil)), true},
+		{"the root's own @a and a grandchild's", "count(.//@a) eq 2",
+			ccRoot([]Attribute{ccAttr(a, "r", 1)}, ccNode(e1, 2, nil, ccNode(e1, 3, []Attribute{ccAttr(a, "g", 3)}))), false},
+		{"a grandchild's @a alone", "count(.//@a) eq 2",
+			ccRoot(nil, ccNode(e1, 2, nil, ccNode(e1, 3, []Attribute{ccAttr(a, "g", 3)}))), true},
+		{"the root's own @a, not a child's", "count(@a) eq 1",
+			ccRoot([]Attribute{ccAttr(a, "r", 1)}, ccNode(e1, 2, []Attribute{ccAttr(a, "c", 2)})), false},
+		{"two ·defaulted· d", "count(.//@d) eq 2",
+			ccRoot(nil, ccNode(e1, 2, nil, ccNode(e1, 3, nil))), false},
+		{"one carried d, one ·defaulted·", "count(.//@d) eq 2",
+			ccRoot(nil, ccNode(e1, 2, []Attribute{ccAttr(d, "y", 2)}, ccNode(e1, 3, nil))), false},
+		{"an xsi:nil on a ·nilled· child", "count(.//@xsi:nil) eq 1 and count(e1) eq 1",
+			ccRoot(nil, ccNode(e1, 2, []Attribute{nilled})), false},
+	} {
+		t.Run(tc.why, func(t *testing.T) {
+			res := aAssess(t, ccSchema(t, tc.test), tc.root)
+			if !tc.charged {
+				wantSatisfied(t, res, tc.test)
+				return
+			}
+			wantAssertionCharge(t, res, "the element e1 is not ·valid· with respect to assertion 1 of 1 in the {assertions} of the ·governing type definition· RootType, whose {test} is ")
+		})
+	}
+}
+
+// Every element the walk enters is counted whatever its assessment: an <e1>
+// invalid for an undeclared attribute, which its own charge reports, and a
+// ·laxly assessed· {urn:lax}x and the lax x below it, whose @a counts too —
+// no ·governing type definition· means no ·defaulted attribute· to miss. The
+// lax row is declined instead, and fails, with walk.attributeNodes treating a
+// ·laxly assessed· element as undetermined.
+func TestAssertionCountsInvalidAndLaxElements(t *testing.T) {
+	e1, x := local("e1"), xsd.QName{Space: "urn:lax", Local: "x"}
+	stray := ccAttr(local("stray"), "1", 2)
+	res := aAssess(t, ccSchema(t, "count(e1) eq 2"), ccRoot(nil, ccNode(e1, 2, []Attribute{stray}), ccNode(e1, 3, nil)))
+	ccNotCharged(t, res, "an invalid child")
+	if len(res.Violations()) == 0 {
+		t.Error("Violations() is empty, want the stray attribute charged")
+	}
+	res = aAssess(t, ccSchema(t, "count(.//l:x) eq 2 and count(.//@a) eq 1"),
+		ccRoot(nil, ccNode(x, 2, []Attribute{ccAttr(local("a"), "v", 2)}, ccNode(x, 3, nil))))
+	wantSatisfied(t, res, "lax elements")
+}
+
+// A subtree the walk cannot report exactly DECLINES the counting element's
+// assertions (lackingCount), and is never charged: a ·skipped· {urn:skip}y,
+// whose subtree is not walked, and a <u> whose ·governing type definition· is
+// undetermined, whose ·defaulted attributes· are unknown. An assertion that
+// counts nothing reads no Tally and is evaluated beside the ·skipped· child.
+// The skipped row is satisfied instead with assertionAncestry.skipped's
+// counting loop removed, and the undetermined one with walk.tallyElement's
+// decided check removed.
+func TestAssertionOverAnUncountableSubtreeIsDeclined(t *testing.T) {
+	y, u := xsd.QName{Space: "urn:skip", Local: "y"}, local("u")
+	acDeclined(t, aAssess(t, ccSchema(t, "count(e1) eq 0"), ccRoot(nil, ccNode(y, 2, nil))),
+		"the element {urn:skip}y at instance.xml:2:3, in the subtree of the element e1 whose nodes a {test} counts, cannot be counted exactly for the data model instance cvc-assertion clause 1 builds: it is ·skipped·, so its subtree is not walked")
+	ccDeclinedAmong(t, aAssess(t, ccSchema(t, "count(e1) eq 0"), ccRoot(nil, ccNode(u, 2, []Attribute{ccAttr(local("k"), "1", 2)}))),
+		"the element u at instance.xml:2:3, in the subtree of the element e1 whose nodes a {test} counts, cannot be counted exactly for the data model instance cvc-assertion clause 1 builds: its ·governing type definition· was not determined")
+	wantSatisfied(t, aAssess(t, ccSchema(t, "@a = 'v'"), ccRoot([]Attribute{ccAttr(local("a"), "v", 1)}, ccNode(y, 2, nil))),
+		"a non-counting assertion beside a ·skipped· child")
+}
+
+// An element below another counting one is counted by both, each at its own
+// depth: <root> counts three b below it and one child b, <inner> two below it
+// and one child b. A fourth b is charged at <root> alone. Every row is charged
+// instead with walk.tallyElement passing the depth below the ·validation root·
+// rather than below each counting ancestor.
+func TestNestedCountsTakeTheirOwnDepth(t *testing.T) {
+	schema := parsedSchema(t, map[string]string{"main.xsd": `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="CType">
+    <xs:sequence><xs:element name="b" minOccurs="0" maxOccurs="unbounded"/></xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="IType">
+    <xs:sequence>
+      <xs:element name="b" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="c" type="CType" minOccurs="0"/>
+    </xs:sequence>
+    <xs:assert test="count(.//b) eq 2 and count(b) eq 1"/>
+  </xs:complexType>
+  <xs:complexType name="RType">
+    <xs:sequence>
+      <xs:element name="inner" type="IType"/>
+      <xs:element name="b" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+    <xs:assert test="count(.//b) eq 3 and count(b) eq 1"/>
+  </xs:complexType>
+  <xs:element name="root" type="RType"/>
+</xs:schema>`})
+	b, c, inner := local("b"), local("c"), local("inner")
+	tree := func(extra ...Child) *testElement {
+		kids := append([]Child{ccNode(inner, 2, nil, ccNode(b, 3, nil), ccNode(c, 4, nil, ccNode(b, 5, nil))), ccNode(b, 6, nil)}, extra...)
+		return &testElement{name: local("root"), kids: kids, loc: loc(1, 1)}
+	}
+	wantSatisfied(t, aAssess(t, schema, tree()), "three b below root, two below inner")
+	wantAssertionCharge(t, aAssess(t, schema, tree(ccNode(b, 7, nil))),
+		`the element root is not ·valid· with respect to assertion 1 of 1 in the {assertions} of the ·governing type definition· RType, whose {test} is "count(.//b) eq 3 and count(b) eq 1",`)
+}

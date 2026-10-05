@@ -151,7 +151,7 @@ func TestAssertionReadsChildElements(t *testing.T) {
 			if !ok {
 				t.Fatalf("CompileAssertionTest(%q): declined, want compiled", tc.expr)
 			}
-			if got := test.Evaluate(backend(), seededTypes, asValues(t), asChildren(t, tc.children...), ValueBinding{}); got != tc.want {
+			if got := test.Evaluate(backend(), seededTypes, asValues(t), asChildren(t, tc.children...), nil, ValueBinding{}); got != tc.want {
 				t.Errorf("Evaluate(%q) over %v = %v, want %v", tc.expr, tc.children, got, tc.want)
 			}
 		})
@@ -168,7 +168,7 @@ func TestAssertionRaisesOnAnUntypedChild(t *testing.T) {
 		if !ok {
 			t.Fatalf("CompileAssertionTest(%q): declined, want compiled", expr)
 		}
-		if test.Evaluate(backend(), seededTypes, asValues(t), children, ValueBinding{}) {
+		if test.Evaluate(backend(), seededTypes, asValues(t), children, nil, ValueBinding{}) {
 			t.Errorf("Evaluate(%q) over an Untyped child = true, want false: the read raises", expr)
 		}
 	}
@@ -189,7 +189,7 @@ func TestAssertionRootedPathRaises(t *testing.T) {
 			t.Fatalf("CompileAssertionTest(%q): declined, want compiled", expr)
 		}
 		for _, e1 := range []string{"present", "absent"} {
-			if test.Evaluate(backend(), seededTypes, asValues(t), asChildren(t, asChild{uq("e1"), "string", e1, false}), ValueBinding{}) {
+			if test.Evaluate(backend(), seededTypes, asValues(t), asChildren(t, asChild{uq("e1"), "string", e1, false}), nil, ValueBinding{}) {
 				t.Errorf("Evaluate(%q) over <e1>%s</e1> = true, want false: the leading slash raises err:XPDY0050", expr, e1)
 			}
 		}
@@ -227,7 +227,7 @@ func TestAssertionChildStepReadsTheDefaultNamespace(t *testing.T) {
 			t.Fatalf("%s: CompileAssertionTest(%q) declined, want compiled", tc.why, tc.record.Expression())
 		}
 		children := func(yield func(ChildElement) bool) { yield(Child(tc.childName, Typed(present))) }
-		if got := test.Evaluate(backend(), seededTypes, asValues(t), children, ValueBinding{}); got != tc.want {
+		if got := test.Evaluate(backend(), seededTypes, asValues(t), children, nil, ValueBinding{}); got != tc.want {
 			t.Errorf("%s: Evaluate = %v, want %v", tc.why, got, tc.want)
 		}
 	}
@@ -274,7 +274,6 @@ func TestCompileAssertionTestDeclinesChildSteps(t *testing.T) {
 		{"/e1/e1 = 'a'", "a rooted path of two steps"},
 		{"/ = 'a'", "a bare slash"},
 		{"// = 'a'", "a bare double slash"},
-		{"/@a = 'a'", "a rooted attribute step"},
 		{"/p:r = 'a'", "an unbound prefix in a rooted step"},
 	} {
 		if _, ok := CompileAssertionTest(asRecord(tc.expr), types, xsd.ElementContent{}, asUses(t, nil), elems); ok {
