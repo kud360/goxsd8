@@ -158,9 +158,13 @@
 // Arithmetic has no value capability to delegate to, so it reads each
 // operand's ·canonical representation·, computes, and validates the result's
 // lexical against the result type — a datatype validation, as every value
-// this engine builds is. Which operators an operand type admits at ALL is
-// xpath20.md B.2's answer rather than a capability's, generated from the
-// spec into the package (tools/opmapgen) and enforced at compile time.
+// this engine builds is. Which operand types a comparison operator admits at
+// ALL is xpath20.md B.2's answer rather than a capability's, generated from
+// the spec into the package (tools/opmapgen) and enforced at compile time.
+// Arithmetic's operand admission and result types are B.2's six numeric
+// rows, transcribed in ctaTypes.arithmetic and arithmeticResult rather than
+// generated: those rows' result cell is the prose rule "numeric" with two
+// exceptions, which a generator would have to hard-code as well.
 //
 // # Dynamic context
 //

@@ -14,9 +14,14 @@
 // Rows for the operators outside the six comparisons — the arithmetic, node
 // and sequence operators — are read and skipped: they have differently shaped
 // rows, their own XPTY0004 clause (§3.4), and no production in §3.12.6's
-// required subset. Anything else the table holds is an error rather than a
-// skip, so a spec re-render that changes the table's shape stops the build
-// instead of silently emitting a short table.
+// required subset. The six numeric×numeric arithmetic rows the assertion
+// façades evaluate live in xpath's ctaTypes.arithmetic and arithmeticResult,
+// transcribed rather than generated because their result cell is a prose rule
+// rather than per-type data; the duration and date/time arithmetic rows are
+// this generator's to emit when the engine admits them (#1042). Anything else
+// the table holds is an error rather than a skip, so a spec re-render that
+// changes the table's shape stops the build instead of silently emitting a
+// short table.
 package main
 
 import (

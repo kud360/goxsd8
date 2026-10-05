@@ -380,11 +380,11 @@ func (t ctaTypes) arithmeticOperand(v ctaValue) (*xsd.SimpleType, bool) {
 // arithmeticResult is the type xpath20.md B.2 gives op over two operands
 // computed in operation, the numeric primitive of the given kind: xs:integer
 // for `idiv` whatever the operands (op:numeric-integer-divide); operation
-// itself where that is xs:float or xs:double; and, in xs:decimal, xs:integer where both operands are derived
-// from xs:integer and the operator is not `div` — whose two-xs:integer row is
-// xs:decimal (xpath-functions.md §6.2.4) — and xs:decimal otherwise. It
-// reports false where xs:integer does not resolve or a {base type definition}
-// chain cannot be walked.
+// itself where that is xs:float or xs:double; and, in xs:decimal, xs:integer
+// where both operands are derived from xs:integer and the operator is not
+// `div` — whose two-xs:integer row is xs:decimal (xpath-functions.md §6.2.4)
+// — and xs:decimal otherwise. It reports false where xs:integer does not
+// resolve or a {base type definition} chain cannot be walked.
 //
 // An IntegerLiteral is typed xs:decimal here as everywhere in this grammar
 // (ctaTypes.literal), so `$value mod 2` over an xs:int `$value` is xs:decimal
