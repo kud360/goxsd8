@@ -657,20 +657,19 @@ func (w *walk) elementKeyMember(c *icCheck) (icKeyMember, bool, bool) {
 // [walk.declineAssertions]' residue (#1042). The caller records the decline
 // ([icTarget.offer]).
 //
-// A ·special· st (isSpecial) is decided PRESENT with no v: String Valid holds
-// for every literal against it, so the [schema actual value] is not ·absent·,
-// but its lexical mapping is "not a function" (Datatypes §3.2.1.2, §3.2.2.2),
-// so the lexical names no one ·actual value· either: the oracle ruled which one
-// it contributes undecidable from the spec text. The member carries its
-// lexical, which is already its normalized value — neither type has a
-// whiteSpace facet (§4.3.6) — and [sameSpecialMember] decides a pair on it only
-// where both lexicals are byte-identical, declining every other pair it is in,
-// RULED permanent by #2124 (STYLE P3b).
+// A ·special· st ([xsd.SimpleType.IsSpecial]) is decided PRESENT with no v: its
+// [schema actual value] is not ·absent·, yet its lexical names no one ·actual
+// value·: the oracle ruled which one it contributes undecidable from the spec
+// text. The member carries its lexical, which is already its
+// normalized value — neither type has a whiteSpace facet (§4.3.6) — and
+// [sameSpecialMember] decides a pair on it only where both lexicals are
+// byte-identical, declining every other pair it is in, RULED permanent by #2124
+// (STYLE P3b).
 func (w *walk) keyMember(st *xsd.SimpleType, lexical string, owner Element, element, nillable bool) (icKeyMember, bool, bool) {
 	if st == nil {
 		return icKeyMember{}, false, false
 	}
-	if isSpecial(st) {
+	if st.IsSpecial() {
 		return icKeyMember{st: st, lexical: lexical, owner: owner, element: element, nillable: nillable}, true, true
 	}
 	v, err := value.ValidateLexical(w.backend, w.schema, st, lexical, elementContext{owner: owner}, xpath.FacetAssertions())
@@ -1040,7 +1039,7 @@ func (w *walk) sameKeySequence(a, b icKeySequence) (same, decided bool) {
 // A pair with a ·special· member is decided by [sameSpecialMember] alone and
 // never reaches either path.
 func (w *walk) sameKeyMember(a, b icKeyMember) (same, decided bool) {
-	if isSpecial(a.st) || isSpecial(b.st) {
+	if a.st.IsSpecial() || b.st.IsSpecial() {
 		return sameSpecialMember(a, b)
 	}
 	if a.st == b.st && w.oneValueSpace(a.st) {
@@ -1069,7 +1068,7 @@ func (w *walk) sameKeyMember(a, b icKeyMember) (same, decided bool) {
 // a narrowed primitive [value.Override] (#2045), and needs each member's own
 // namespace context besides.
 func sameSpecialMember(a, b icKeyMember) (same, decided bool) {
-	if isSpecial(a.st) && isSpecial(b.st) && a.lexical == b.lexical {
+	if a.st.IsSpecial() && b.st.IsSpecial() && a.lexical == b.lexical {
 		return true, true
 	}
 	return false, false

@@ -403,7 +403,7 @@ func (f ctaAssertionFacade) variable(name xsd.QName, types ctaTypes) (ctaValue, 
 }
 
 // attribute compiles a QName NameTest whose name attrs types with a ·special·
-// type (ctaSpecial) to a ctaAttr, the untyped attribute node a Type
+// type ([xsd.SimpleType.IsSpecial]) to a ctaAttr, the untyped attribute node a Type
 // Alternative builds — the typed value of such an attribute is its [schema
 // normalized value] as xs:untypedAtomic (xpath-datamodel §3.3.1.2, Datatypes
 // dt-xdmrep clause 1), which §3.5.2 casts as it casts an untyped one. A name
@@ -424,7 +424,7 @@ func (f ctaAssertionFacade) attribute(test ctaNameTest, types ctaTypes) (ctaValu
 	if !typed {
 		return nil, false
 	}
-	if ctaSpecial(st) {
+	if st.IsSpecial() {
 		return ctaAttr{test: exact}, true
 	}
 	if !types.typedAtomic(st) {
@@ -459,7 +459,7 @@ func (f ctaAssertionFacade) child(test ctaNameTest, types ctaTypes) (ctaValue, b
 		return nil, false
 	}
 	st, simple := ctaChildValueType(td)
-	if !simple || ctaSpecial(st) || !types.typedAtomic(st) {
+	if !simple || st.IsSpecial() || !types.typedAtomic(st) {
 		return nil, false
 	}
 	return ctaTypedChild{name: exact.name, st: st}, true

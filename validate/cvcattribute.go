@@ -144,8 +144,8 @@ func (w *walk) wildcardAttribute(a Attribute, e Element, pc xsd.ProcessContents)
 //     the decline is inherent to [value.IsDatatypeVerdict]'s split, and a type
 //     no backend maps is backend coverage to close, not this package's. The two
 //     ·special· datatypes never reach it: [walk.stringValid] decides them
-//     (isSpecial), so the typeless <attribute> §3.2.2.2's third tier types as
-//     xs:anySimpleType is satisfied, not declined.
+//     ([xsd.SimpleType.IsSpecial]), so the typeless <attribute> §3.2.2.2's third
+//     tier types as xs:anySimpleType is satisfied, not declined.
 //   - an ·ENTITY value· candidate whose ·validating type· this package cannot
 //     decide, on [walk.entitiesDeclared]'s terms.
 func (w *walk) declaredAttribute(a Attribute, e Element, d xsd.AttributeDeclaration) (*xsd.SimpleType, bool) {
@@ -518,9 +518,9 @@ func (w *walk) defaultedConstraint(u xsd.AttributeUse, attrs []Attribute) (xsd.V
 // ([walk.declineDefaulted]), as are a {type definition} that is absent or
 // complex and an undecidable ·validating type· for clause 3. A ·special· type
 // is not asked at all: Datatype Valid holds for every literal against one
-// (isSpecial), which ValidDefault answers undecided. A decided rejection hands
-// back the Datatype Valid verdict itself, which the charge carries as its
-// wrapped cause (validate.go's causedBy).
+// ([xsd.SimpleType.IsSpecial]), so its {lexical form} passes to clause 3. A
+// decided rejection hands back the Datatype Valid verdict itself, which the
+// charge carries as its wrapped cause (validate.go's causedBy).
 //
 // ValidDefault answers String Valid clauses 1 and 2 only, being a question the
 // schema alone settles, so clause 3 is asked here of a {lexical form} it
@@ -552,7 +552,7 @@ func (w *walk) defaultedAttribute(e Element, u xsd.AttributeUse, vc xsd.ValueCon
 	}
 	var cause error
 	decided := true
-	if !isSpecial(st) {
+	if !st.IsSpecial() {
 		cause, decided = w.values.ValidDefault(w.schema, st, vc)
 	}
 	if !decided {

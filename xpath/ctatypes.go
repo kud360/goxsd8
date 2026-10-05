@@ -237,15 +237,6 @@ func (t ctaTypes) castsFrom(v ctaValue) bool {
 	return resolved && p.Name() == ctaBuiltin("string")
 }
 
-// ctaSpecial reports whether st is one of the two ·special· simple types,
-// xs:anySimpleType or xs:anyAtomicType, under which xpath-datamodel §3.3.1.2
-// and Datatypes dt-xdmrep clause 1 make a typed value xs:untypedAtomic. It is
-// an identity test on the anchors [xsd.AnySimpleType] and [xsd.AnyAtomicType],
-// the test validate's isSpecial makes too (#2041).
-func ctaSpecial(st *xsd.SimpleType) bool {
-	return st == xsd.AnySimpleType() || st == xsd.AnyAtomicType()
-}
-
 // typedAtomic reports whether this engine reads a value of type st off the
 // instance as a typed operand — an attribute whose type [AttributeTypes]
 // answered, a child element whose type [ElementTypes] answered, or one item of
@@ -257,10 +248,9 @@ func ctaSpecial(st *xsd.SimpleType) bool {
 //   - a list or union {variety}: a list atomizes to a sequence, and a union's
 //     value takes the type of its ·validating· member, which only the instance
 //     decides;
-//   - xs:anySimpleType and xs:anyAtomicType, whose lexical mapping is not a
-//     function (Datatypes §3.2.1.2, §3.2.2.2), and whose typed value is
-//     xs:untypedAtomic instead (ctaSpecial) — which a caller that reads one
-//     untyped asks about before this, and never reaches here with.
+//   - the two ·special· types ([xsd.SimpleType.IsSpecial]), whose typed value
+//     is xs:untypedAtomic instead — which a caller that reads one untyped asks
+//     about before this, and never reaches here with.
 //
 // An xs:QName or xs:NOTATION primitive is declined as well: neither has a
 // ·canonical representation· (value.Mapping), so ctaPromote cannot convert one
@@ -289,8 +279,9 @@ func (t ctaTypes) typedAtomic(st *xsd.SimpleType) bool {
 //   - a list whose {item type definition} typedAtomic admits is the sequence
 //     of its items, each of that item type — "a sequence of one or more atomic
 //     values" (cvc-assertion clause 2.3.1's Note), or none for an empty list;
-//   - a ·special· st (ctaSpecial) is one xs:untypedAtomic value, E's [schema
-//     normalized value] (dt-xdmrep clause 1), which is ctaUntypedValue;
+//   - a ·special· st ([xsd.SimpleType.IsSpecial]) is one xs:untypedAtomic
+//     value, E's [schema normalized value] (xpath-datamodel §3.3.1.2, Datatypes
+//     dt-xdmrep clause 1), which is ctaUntypedValue;
 //   - anything else declines: a union, whose value takes the type of its
 //     ·active basic member·, which only the instance decides; a list of such a
 //     union; and every other st typedAtomic declines.
@@ -298,7 +289,7 @@ func (t ctaTypes) typedAtomic(st *xsd.SimpleType) bool {
 // GAP(xpath): each of those declines the whole assertion on [CompileAssertionTest]'s
 // withhold. (#1042)
 func (t ctaTypes) valueVariable(st *xsd.SimpleType) (ctaValue, bool) {
-	if ctaSpecial(st) {
+	if st.IsSpecial() {
 		return ctaUntypedValue{}, true
 	}
 	if t.typedAtomic(st) {

@@ -291,8 +291,7 @@
 // rather than a verdict about the lexical (value.IsDatatypeVerdict), which is
 // what keeps a value of a type this backend does not map from being rejected by
 // every document that carries one. The two ·special· datatypes are decided
-// instead, Datatype Valid holding for every literal against xs:anySimpleType and
-// xs:anyAtomicType (Datatypes §4.1.4), so a typeless attribute (§3.2.2.2) is
+// instead ([xsd.SimpleType.IsSpecial]), so a typeless attribute (§3.2.2.2) is
 // satisfied. Which declines are recorded as [Unevaluated], and which are not, is
 // [Unevaluated]'s own doc to say. An {attribute wildcard} carries an obligation
 // that is this layer's ALONE: where the wildcard's {process contents} is strict

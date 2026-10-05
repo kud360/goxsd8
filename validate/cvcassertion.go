@@ -528,12 +528,13 @@ func (w *walk) assertionValues(e Element, attrs []Attribute, asserts *assertionC
 // lexical is rejected or withheld, or the mapping errors.
 //
 // The value is [xpath.Untyped] of lexical where the type is ·special·
-// (isSpecial): xpath-datamodel §3.3.1.2 makes it the [schema normalized value]
-// as xs:untypedAtomic. A carried attribute's [[normalized value]] is that
-// value unchanged, because key-nv normalizes under xs:anySimpleType "as in the
-// preserve case" and xs:anyAtomicType carries no whiteSpace facet either; a
-// defaulted one's {lexical form} is it by key-dflt-att. The value is
-// [xpath.Typed] of the ·actual value· mapped under the type otherwise.
+// ([xsd.SimpleType.IsSpecial]): xpath-datamodel §3.3.1.2 makes it the [schema
+// normalized value] as xs:untypedAtomic. A carried attribute's [[normalized
+// value]] is that value unchanged, because key-nv normalizes under
+// xs:anySimpleType "as in the preserve case" and xs:anyAtomicType carries no
+// whiteSpace facet either; a defaulted one's {lexical form} is it by
+// key-dflt-att. The value is [xpath.Typed] of the ·actual value· mapped under
+// the type otherwise.
 func (w *walk) assertionTyped(u xsd.AttributeUse, lexical string, e Element, loc xsderr.Loc) (xpath.TypedValue, bool) {
 	st, resolved := w.assertionType(u)
 	if !resolved {
@@ -543,7 +544,7 @@ func (w *walk) assertionTyped(u xsd.AttributeUse, lexical string, e Element, loc
 	if !decided || verdict != nil {
 		return nil, false
 	}
-	if isSpecial(st) {
+	if st.IsSpecial() {
 		return xpath.Untyped(lexical), true
 	}
 	v, err := value.ValidateLexical(w.backend, w.schema, st, lexical, elementContext{owner: e}, xpath.FacetAssertions())
@@ -562,7 +563,7 @@ func (w *walk) assertionTyped(u xsd.AttributeUse, lexical string, e Element, loc
 // 2.3.1.1: the partial ·PSVI·'s [validity] "is given the value invalid if and
 // only if the element is known to be invalid").
 //
-// Over a ·special· {simple type definition} (isSpecial) the value is
+// Over a ·special· {simple type definition} ([xsd.SimpleType.IsSpecial]) the value is
 // [xpath.Untyped] of the ·initial value· [contentCheck.assessed] answers, which
 // is e's [schema normalized value] unchanged — key-nv normalizes under
 // xs:anySimpleType "as in the preserve case" — and whose XDM representation is
@@ -587,7 +588,7 @@ func (w *walk) assertionValue(e Element, ct xsd.ComplexType, content *contentChe
 		return xpath.ValueBinding{}, true
 	}
 	lexical := content.assessed()
-	if isSpecial(simple.SimpleType) {
+	if simple.SimpleType.IsSpecial() {
 		return xpath.BindValue(xpath.Untyped(lexical)), true
 	}
 	decided, verdict := w.stringValid(simple.SimpleType, lexical, e, e.Loc())

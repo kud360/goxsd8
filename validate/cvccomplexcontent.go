@@ -659,10 +659,10 @@ func (c *contentCheck) fixedActualValue(w *walk, f xsd.ValueConstraint) {
 // under cvc-datatype-valid exactly as a genuine rejection does, and charging it
 // would reject every element whose character content this backend cannot read.
 // RULED permanent by #774 (STYLE P3b), on declaredAttribute's terms; a ·special·
-// type is decided and never reaches it (isSpecial). An undecidable ·validating
-// type· withholds String Valid clause 3's verdict on the terms
-// [walk.entitiesDeclared] states. Either decline is recorded by the caller as an
-// [Unevaluated] under the rule it withholds ([contentCheck.decline]).
+// type is decided and never reaches it ([xsd.SimpleType.IsSpecial]). An
+// undecidable ·validating type· withholds String Valid clause 3's verdict on the
+// terms [walk.entitiesDeclared] states. Either decline is recorded by the caller
+// as an [Unevaluated] under the rule it withholds ([contentCheck.decline]).
 //
 // st's assertions facets are evaluated inside String Valid, so a failed {test}
 // is part of the verdict both clauses charge; one the evaluator declines leaves

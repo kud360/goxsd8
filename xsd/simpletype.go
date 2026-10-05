@@ -958,6 +958,22 @@ func (t *SimpleType) IsAnySimpleType() bool {
 	return t.base == nil
 }
 
+// IsSpecial reports whether t is one of the two ·special· datatypes,
+// xs:anySimpleType and xs:anyAtomicType (Datatypes §2.4.2, dt-special), by
+// identity against the anchors [AnySimpleType] and [AnyAtomicType], not by
+// shape: a union or a caller-built type that merely looks like one is not
+// ·special·. It does not agree with IsAnySimpleType, which tests the {base type
+// definition} slot: a type whose base is merely absent is not ·special·.
+//
+// A ·literal· is datatype-valid against a ·special· type unconditionally — the
+// first disjunct of the Note under Datatype Valid (Datatypes §4.1.4,
+// cvc-datatype-valid) — while its lexical mapping is not a function (Datatypes
+// §3.2.1.2, §3.2.2.2): one literal may map to values of several primitives. It
+// reports false for nil.
+func (t *SimpleType) IsSpecial() bool {
+	return t == anySimpleType || t == anyAtomicType
+}
+
 // IsPrimitive reports whether this type is a primitive datatype (Datatypes
 // §2.4.2). The two special types xs:anySimpleType and xs:anyAtomicType are
 // themselves not primitive, and this returns false for them.
@@ -1213,7 +1229,7 @@ func AnySimpleType() *SimpleType { return anySimpleType }
 // primitive datatype, an immutable package singleton. A producer roots every
 // primitive on THIS node (NewPrimitiveType does so) so the pointer-identity
 // tests that key on the anchor — checkAtomicGraph's #480 rejection,
-// isSpecialType — hold across the whole graph. The anchor reports Atomic
+// IsSpecial — hold across the whole graph. The anchor reports Atomic
 // {variety} while its own {primitive type definition} is ·absent· and
 // IsPrimitive is false. The returned node is read-only; do not mutate it.
 func AnyAtomicType() *SimpleType { return anyAtomicType }

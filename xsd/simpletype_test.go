@@ -363,6 +363,40 @@ func TestAnchorsNilContract(t *testing.T) {
 	}
 }
 
+// TestIsSpecialIsIdentity pins IsSpecial to identity against the two anchors
+// (Datatypes §2.4.2, dt-special): a caller-built type with an absent base and
+// an absent {variety} has the anchor's shape, and IsAnySimpleType says true
+// for it, yet it is not ·special·.
+func TestIsSpecialIsIdentity(t *testing.T) {
+	lookalike, err := NewSimpleType(xsderr.Loc{}, QName{Space: XMLSchemaNS, Local: "anySimpleType"}, nil, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("NewSimpleType: %v", err)
+	}
+	if !lookalike.IsAnySimpleType() {
+		t.Fatal("lookalike.IsAnySimpleType() = false, want true (the shape this test contrasts)")
+	}
+	prim, err := NewPrimitiveType(xsderr.Loc{}, QName{Space: XMLSchemaNS, Local: "string"}, nil, nil)
+	if err != nil {
+		t.Fatalf("NewPrimitiveType: %v", err)
+	}
+	cases := []struct {
+		name string
+		t    *SimpleType
+		want bool
+	}{
+		{"anySimpleType", AnySimpleType(), true},
+		{"anyAtomicType", AnyAtomicType(), true},
+		{"lookalike", lookalike, false},
+		{"primitive", prim, false},
+		{"nil", nil, false},
+	}
+	for _, c := range cases {
+		if got := c.t.IsSpecial(); got != c.want {
+			t.Errorf("%s.IsSpecial() = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
 // TestAnyAtomicTypeResolvedTriple pins xs:anyAtomicType's own encoding: it is
 // the ONE component that is atomic by fiat (Datatypes §4.1.6) while its
 // {primitive type definition} is ·absent· and it is not itself a primitive
