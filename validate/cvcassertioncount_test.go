@@ -395,3 +395,64 @@ func TestNestedCountsTakeTheirOwnDepth(t *testing.T) {
 	wantAssertionCharge(t, aAssess(t, schema, tree(ccNode(b, 7, nil))),
 		`the element root is not ·valid· with respect to assertion 1 of 1 in the {assertions} of the ·governing type definition· RType, whose {test} is "count(.//b) eq 3 and count(b) eq 1",`)
 }
+
+// A child step filtered by attribute existence counts the children whose
+// attribute nodes, carried or ·defaulted·, include each name (xpath20.md
+// §3.2.2): every E1Type <e1> has a ·defaulted· d, so `count(e1[@d]) eq 2`
+// holds over two <e1> carrying none, and `count(e1[@a and @d]) eq 1` over one
+// carrying an EMPTY a — the predicate asks for the node, never its value — and
+// one carrying none; a grandchild <e1> carrying a is no child. A ·skipped· y
+// is counted by the attributes it carries and no ·defaulted· one: `s:y[@a and
+// @b]` counts a y carrying both and not one carrying a alone, and `s:y[@d]`
+// none, its declared default never taken. A union counts each node once. The
+// first three rows are charged instead with walk.attributeNodes adding no
+// ·defaulted attribute·; the "a and b" row with assertionAncestry.tallySkipped
+// reporting no attribute names; the union row with the Tally summing a union's
+// operands.
+func TestAssertionCountsChildrenFilteredByAttributes(t *testing.T) {
+	e1, y, a, b, d := local("e1"), xsd.QName{Space: "urn:skip", Local: "y"}, local("a"), local("b"), local("d")
+	for _, tc := range []struct {
+		why, test string
+		root      *testElement
+		charged   bool
+	}{
+		{"two ·defaulted· d", "count(e1[@d]) eq 2",
+			ccRoot(nil, ccNode(e1, 2, nil), ccNode(e1, 3, nil)), false},
+		{"an empty a and a ·defaulted· d", "count(e1[@a and @d]) eq 1",
+			ccRoot(nil, ccNode(e1, 2, []Attribute{ccAttr(a, "", 2)}), ccNode(e1, 3, nil)), false},
+		{"a carried d too", "count(e1[@a and @d]) eq 2",
+			ccRoot(nil, ccNode(e1, 2, []Attribute{ccAttr(a, "", 2)}), ccNode(e1, 3, []Attribute{ccAttr(a, "1", 3), ccAttr(d, "y", 3)})), false},
+		{"a grandchild is no child", "count(e1[@a]) eq 1",
+			ccRoot(nil, ccNode(e1, 2, []Attribute{ccAttr(a, "1", 2)}, ccNode(e1, 3, []Attribute{ccAttr(a, "2", 3)}))), false},
+		{"a ·skipped· y carrying a and b", "count(s:y[@a and @b]) eq 1",
+			ccRoot(nil, ccNode(y, 2, []Attribute{ccAttr(a, "1", 2), ccAttr(b, "1", 2)}, ccNode(y, 3, []Attribute{ccAttr(a, "1", 3)}))), false},
+		{"a ·skipped· y carrying a alone", "count(s:y[@a and @b]) eq 1",
+			ccRoot(nil, ccNode(y, 2, []Attribute{ccAttr(a, "1", 2)}, ccNode(y, 3, []Attribute{ccAttr(b, "1", 3)}))), true},
+		{"a ·skipped· y has no ·defaulted· d", "count(s:y[@d]) eq 0",
+			ccRoot(nil, ccNode(y, 2, nil)), false},
+		{"a union counts each node once", "count(@a | e1 | e1[@a]) eq 3",
+			ccRoot([]Attribute{ccAttr(a, "r", 1)}, ccNode(e1, 2, []Attribute{ccAttr(a, "1", 2)}), ccNode(e1, 3, nil)), false},
+	} {
+		t.Run(tc.why, func(t *testing.T) {
+			res := aAssess(t, ccSchema(t, tc.test), tc.root)
+			if !tc.charged {
+				wantSatisfied(t, res, tc.test)
+				return
+			}
+			wantAssertionCharge(t, res, "the element e1 is not ·valid· with respect to assertion 1 of 1 in the {assertions} of the ·governing type definition· RootType, whose {test} is ")
+		})
+	}
+}
+
+// An element whose ·governing type definition· is undetermined has ·defaulted
+// attributes· the walk cannot know, so a filtered child step naming it, which
+// reads the attribute names of E's children, DECLINES — `count(u[@k])` — where
+// the bare step still counts it: `count(u) eq 1` is decided. The decline row
+// is decided instead, and charged, with ctaFilteredChildren.selectsAttributesAt
+// false at depth 1.
+func TestAssertionFilteredCountOverAnUndeterminedChild(t *testing.T) {
+	u, k := local("u"), ccAttr(local("k"), "1", 2)
+	ccDeclinedAmong(t, aAssess(t, ccSchema(t, "count(u[@k]) eq 1"), ccRoot(nil, ccNode(u, 2, []Attribute{k}))),
+		"the element u at instance.xml:2:3, in the subtree of the element e1 whose nodes a {test} counts, cannot be counted exactly for the data model instance cvc-assertion clause 1 builds: its ·governing type definition· was not determined")
+	ccDecided(t, aAssess(t, ccSchema(t, "count(u) eq 1"), ccRoot(nil, ccNode(u, 2, []Attribute{k}))), false, "count(u) eq 1")
+}

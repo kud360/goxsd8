@@ -382,6 +382,8 @@ func (t ctaTypes) castSource(v ctaValue) (*xsd.SimpleType, bool) {
 		return n.st, true
 	case ctaTypedChild:
 		return n.st, true
+	case ctaCandidate:
+		return n.st, true
 	case ctaCount:
 		return n.st, true
 	case ctaArith:
