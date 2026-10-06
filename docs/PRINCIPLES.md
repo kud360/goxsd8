@@ -103,8 +103,13 @@ codified as rules in docs/STYLE.md.
     must not leak back into the overriding document under mutual/circular
     overrides.
 
-17. **XPath variables are typed atoms.** `$value` binds `{Lexical, Kind}`,
-    not a bare string; comparisons and casts depend on the kind.
+17. **XPath variables are typed atoms.** `$value` binds an
+    `xpath.ValueBinding` over an `xpath.TypedValue`: `Typed`, a
+    `value.Value` of the {simple type definition} the compiled tree holds,
+    or, for a ·special· type, `Untyped`, an xs:untypedAtomic. A list
+    type's value binds as its flattened items, each one typed; the zero
+    binding is the empty sequence. Never bind a bare string with a kind
+    tag: comparisons and casts read the type from the tree.
 
 18. **precisionDecimal values keep their scale.** The value is a
     (coefficient, scale, sign) identity — `3`, `3.0`, `3.00` are distinct
