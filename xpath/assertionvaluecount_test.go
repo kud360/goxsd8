@@ -20,14 +20,15 @@ type vcCase struct {
 }
 
 // vcAssertion compiles tc.expr for an E whose simple {content type} is tc.st,
-// failing the test where it declines — a decline would read as false and pass
+// failing the case where it declines — a decline would read as false and pass
 // every false row vacuously — and evaluates it with `$value` bound to
-// tc.lexical. The test counts no path, so it has no Tally to hand over.
+// tc.lexical. A declined case is reported here alone, and answers tc.want. The test counts no path, so it has no Tally to hand over.
 func vcAssertion(t *testing.T, types xsd.TypeResolver, tc vcCase) bool {
 	t.Helper()
 	test, ok := CompileAssertionTest(asRecord(tc.expr), types, xsd.SimpleContent{SimpleType: tc.st}, asUses(t, nil), asNoElems)
 	if !ok {
-		t.Fatalf("CompileAssertionTest(%q) over %s: declined, want compiled", tc.expr, tc.st.Name().Local)
+		t.Errorf("CompileAssertionTest(%q) over %s: declined, want compiled", tc.expr, tc.st.Name().Local)
+		return tc.want
 	}
 	if test.Tally() != nil {
 		t.Errorf("(%q).Tally() = non-nil, want nil: `$value` is counted off its items", tc.expr)
@@ -40,7 +41,7 @@ func vcAssertion(t *testing.T, types xsd.TypeResolver, tc vcCase) bool {
 }
 
 // vcFacet decides tc.expr as an assertions facet's {test} over tc.lexical
-// under tc.st, failing the test where it declines, on vcAssertion's terms.
+// under tc.st, failing the case where it declines, on vcAssertion's terms.
 func vcFacet(t *testing.T, types xsd.TypeResolver, tc vcCase) bool {
 	t.Helper()
 	v, err := value.ValidateLexical(backend(), types, tc.st, tc.lexical, nil, FacetAssertions())
@@ -49,7 +50,8 @@ func vcFacet(t *testing.T, types xsd.TypeResolver, tc vcCase) bool {
 	}
 	got := FacetAssertions().Evaluate(backend(), types, tc.st, asRecord(tc.expr), v)
 	if got == value.AssertionDeclined {
-		t.Fatalf("FacetAssertions().Evaluate(%q) over %s: declined, want decided", tc.expr, tc.st.Name().Local)
+		t.Errorf("FacetAssertions().Evaluate(%q) over %s: declined, want decided", tc.expr, tc.st.Name().Local)
+		return tc.want
 	}
 	return got == value.AssertionHolds
 }
