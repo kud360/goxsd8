@@ -180,13 +180,17 @@ res, err := xmlsrc.Validate(v, f, xmlsrc.WithURI("order.xml"))
 if err != nil {
 	log.Fatal(err)
 }
-// The verdict is res.Violations(); a non-nil res.Err() means the assessment
-// is INCOMPLETE, so an empty Violations() then proves nothing.
+// An empty Violations() proves nothing unless res.Err() is nil AND
+// res.Unevaluated() is empty: a non-nil Err() means the assessment is
+// INCOMPLETE, and each Unevaluated entry is a rule it left undecided.
 if err := res.Err(); err != nil {
 	log.Fatal(err)
 }
 for _, e := range res.Violations() { // []*xsderr.Error, in document order
 	fmt.Println(e)
+}
+for _, u := range res.Unevaluated() { // no String method: this is the CLI's form
+	fmt.Println(fmt.Sprintf("%s: [%s] %s", u.Loc(), u.Rule(), u.Msg()))
 }
 ```
 
