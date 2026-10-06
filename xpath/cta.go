@@ -28,21 +28,22 @@ import (
 // in it filtered by one [40] Predicate testing attribute existence
 // (ctaFilteredChildren) or comparing the child's value (ctaMatchingChildren,
 // whose `.` is ctaCandidate), and two or more such paths joined by [21]
-// UnionExpr (ctaUnion) — and a call to one of the F&O string and sequence
-// functions, evaluated in ctafunc.go; and each comparison operand may be
-// xpath20.md [13] AdditiveExpr over [14] MultiplicativeExpr, whose operators
-// are evaluated in ctaarith.go (ctaArith). The facet façade (ctaFacetFacade)
-// takes the assertion façade's grammar but fn:count, plus [47] ContextItemExpr
-// `.`, and compiles every read of the context item — `.`, an attribute or child
-// step, a rooted path — to the err:XPDY0002 an assertions facet's absent
-// context item raises (ctaNoContextItem). It is not a stage of a general XPath
-// 2.0 evaluator: the productions below reach no axis but attribute, one child
-// step, the child-step paths and the one descendant step whose existence is
-// asked and the descendant steps fn:count counts over, no predicate or union
-// but those in an fn:count argument, no variable but `$value` and no function
-// but fn:not, fn:count and the ten ctaParser.libraryCall names, so evaluating
-// them directly is exact where a fail-open delegation to a general engine would
-// be a guess.
+// UnionExpr (ctaUnion) — or over an operand that is no path, such as
+// `$value`, whose items it counts (ctaCountedItems), and a call to one of the
+// F&O string and sequence functions, evaluated in ctafunc.go; and each
+// comparison operand may be xpath20.md [13] AdditiveExpr over [14]
+// MultiplicativeExpr, whose operators are evaluated in ctaarith.go (ctaArith).
+// The facet façade (ctaFacetFacade) takes the assertion façade's grammar but
+// fn:count over a path, plus [47] ContextItemExpr `.`, and compiles every read
+// of the context item — `.`, an attribute or child step, a rooted path — to the
+// err:XPDY0002 an assertions facet's absent context item raises
+// (ctaNoContextItem). It is not a stage of a general XPath 2.0 evaluator: the
+// productions below reach no axis but attribute, one child step, the child-step
+// paths and the one descendant step whose existence is asked and the descendant
+// steps fn:count counts over, no predicate or union but those in an fn:count
+// argument, no variable but `$value` and no function but fn:not, fn:count and
+// the eleven ctaParser.libraryCall names, so evaluating them directly is exact
+// where a fail-open delegation to a general engine would be a guess.
 //
 //	[8]  Test                ::= OrExpr
 //	[9]  OrExpr              ::= AndExpr ( 'or' AndExpr )*
@@ -2181,9 +2182,10 @@ func ctaPromoted(vs []value.Value, from, c *xsd.SimpleType, env ctaEnv) ctaItem 
 }
 
 // ctaCountItem is the xs:integer fn:count returns for n, converted into c on
-// ctaTypedAttrItem's terms: how many nodes n's argument selects
+// ctaTypedAttrItem's terms: how many items n's argument evaluates to
 // (ctaCounted.nodes) — the counter the evaluation's [Tally] holds for its
-// path, or the children its value predicate is true for — through the lexical
+// path, the children its value predicate is true for, or the items of an
+// operand that is no path (ctaCountedItems) — through the lexical
 // of that integer, which is a datatype validation as every value this package
 // builds is. An argument whose predicate raised over a candidate raises.
 //

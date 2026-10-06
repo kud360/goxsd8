@@ -21,7 +21,8 @@ import (
 // `./N` or `.//N`, standing as the whole operand of fn:exists, fn:empty or an
 // ·effective boolean value· (childPath, selectedElements), an fn:count call
 // ([48] FunctionCall) over one counted path, a [40] Predicate on a child step
-// in it (predicate) or a [21] UnionExpr of such paths (countArgument), a call
+// in it (predicate) or a [21] UnionExpr of such paths (countArgument), or over
+// an operand a library call takes as its argument (countedArgument), a call
 // to one of the F&O string and sequence functions (libraryCall) whose arguments
 // are additive expressions or `()`, the binary operators of [13] AdditiveExpr
 // and [14] MultiplicativeExpr, and [47] ContextItemExpr `.`, which the facet
@@ -54,8 +55,9 @@ const ctaFunctionNS = "http://www.w3.org/2005/xpath-functions"
 var ctaNotFunction = xsd.QName{Space: ctaFunctionNS, Local: "not"}
 
 // ctaCountFunction is fn:count (xpath-functions.md §15.4.1), which a [14]
-// ta-ValueExpr calls on the assertion façade alone (ctaParser.countCall); the
-// other functions it calls but the constructors are ctaParser.libraryCall's.
+// ta-ValueExpr calls on the assertion and facet façades (ctaParser.countCall,
+// ctaFacade.count); the other functions it calls but the constructors are
+// ctaParser.libraryCall's.
 var ctaCountFunction = xsd.QName{Space: ctaFunctionNS, Local: "count"}
 
 // ctaNames holds the {namespace bindings} and the {default namespace} of one
@@ -254,7 +256,8 @@ const (
 	// spelling.
 	ctaCompTok
 	// ctaDollarTok is the '$' opening xpath20.md [44] VarRef, which only the
-	// assertion façade's `$value` reaches (ctaFacade.variable).
+	// assertion and facet façades' `$value` reaches (ctaFacade.variable), and
+	// which opens an fn:count argument that is no path (ctaParser.countsItems).
 	ctaDollarTok
 	// ctaSlashTok is '/' and ctaSlashSlashTok is '//'. Each is read only where
 	// it opens a [25] PathExpr (ctaParser.rootedPath) or follows the `.`
@@ -963,7 +966,7 @@ func (p *ctaParser) arithmetic(op ctaArithOp, left, right ctaValue) (ctaValue, b
 
 // valueExpr parses [14] ta-ValueExpr, dispatching on whether a function call
 // opens it, and on which function it calls: fn:count, which the assertion
-// façade calls (countCall), one of the F&O functions a façade that calls the
+// and facet façades call (countCall), one of the F&O functions a façade that calls the
 // library admits (ctaFacade.callsLibrary, libraryCall), or a constructor.
 //
 // The gate is asked before the name is: where the façade calls no library

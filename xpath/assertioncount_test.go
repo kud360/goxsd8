@@ -337,9 +337,9 @@ func TestCompileAssertionTestDeclinesCounts(t *testing.T) {
 	}
 }
 
-// fn:count is the assertion façade's alone: a Type Alternative's {test}
-// declines it under §3.12.6 clause 3, and an assertions facet's declines it
-// (ctaFacetFacade.count) rather than failing. A rooted attribute step reads the
+// fn:count over a path is the assertion façade's alone: a Type Alternative's
+// {test} declines it under §3.12.6 clause 3, and an assertions facet's declines
+// it (ctaFacetFacade.count) rather than failing. A rooted attribute step reads the
 // facet's absent context item and fails it (err:XPDY0002), and a Type
 // Alternative declines it as it declines every rooted path. The relative count
 // rows compile, and fail, with either façade's count admitting the call; the
