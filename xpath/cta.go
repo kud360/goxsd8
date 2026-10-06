@@ -159,7 +159,13 @@ type CTATest struct{ root ctaExpr }
 //     tracks the CONSEQUENCE, and both consequences are the one withhold
 //     validate/cta.go's conditionallySelected argues: the element's
 //     ·governing type definition· is not determined, and no type is assessed
-//     against in its place.
+//     against in its place;
+//   - a cast of a DoubleLiteral to any target but xs:double, such as
+//     `xs:string(1.5e0)`, the one cast this façade declines for its OPERAND
+//     (ctaTypes.castsFrom): F&O §17.1.2 and §17.1.3 define it over the value,
+//     not over the canonical lexical this engine would re-validate, and it is
+//     valid XPath with a defined result, so declining is a withhold and never
+//     a static error.
 //
 // It never returns an error: a decline is not a verdict about the schema. The
 // verdict the STATIC errors two of those bullets name does carry is
