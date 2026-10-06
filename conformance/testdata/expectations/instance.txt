@@ -86,15 +86,15 @@ Assert/assert006/instance/assert006.n1.xml fail
 Assert/assert006/instance/assert006.n2.xml fail
 Assert/assert006/instance/assert006.v1.xml fail
 Assert/assert007/instance/assert007.n1.xml fail
-Assert/assert007/instance/assert007.n2.xml fail
+Assert/assert007/instance/assert007.n2.xml pass
 Assert/assert007/instance/assert007.n3.xml fail
 Assert/assert007/instance/assert007.v1.xml fail
 Assert/assert008/instance/assert008.n1.xml fail
-Assert/assert008/instance/assert008.n2.xml fail
+Assert/assert008/instance/assert008.n2.xml pass
 Assert/assert008/instance/assert008.n3.xml fail
 Assert/assert008/instance/assert008.v1.xml fail
 Assert/assert008a/instance/assert008a.n1.xml fail
-Assert/assert008a/instance/assert008a.n2.xml fail
+Assert/assert008a/instance/assert008a.n2.xml pass
 Assert/assert008a/instance/assert008a.n3.xml fail
 Assert/assert008a/instance/assert008a.v1.xml fail
 Assert/assert009/instance/assert009.n1.xml pass
@@ -122,7 +122,7 @@ Assert/assert024/instance/assert024.v1.xml fail
 Assert/assert_001/instance/assert_001_2 pass
 Assert/assert_002/instance/assert_002_2 pass
 Assert/assert_002/instance/assert_002_3 pass
-Assert/assert_003/instance/assert_003_2 fail
+Assert/assert_003/instance/assert_003_2 pass
 Assert/assert_004/instance/assert_004_2 pass
 Assert/assert_005/instance/assert_005_2 pass
 Assert/assert_006/instance/assert_006_2 fail
@@ -25859,7 +25859,7 @@ anyAttribute/s3_10_6v02/instance/s3_10_6v02i pass
 anyAttribute/s3_10_6v03/instance/s3_10_6v03i pass
 assertion/d4_3_15ii01/instance/d4_3_15ii01i pass
 assertion/d4_3_15ii02/instance/d4_3_15ii02i pass
-assertion/d4_3_15ii03/instance/d4_3_15ii03i fail
+assertion/d4_3_15ii03/instance/d4_3_15ii03i pass
 assertion/d4_3_15ii04/instance/d4_3_15ii04i pass
 assertion/d4_3_15ii06/instance/d4_3_15ii06i pass
 assertion/d4_3_15ii08/instance/d4_3_15ii08i pass
@@ -25885,7 +25885,7 @@ assertion/d4_3_15ii31/instance/d4_3_15ii31i pass
 assertion/d4_3_15ii32/instance/d4_3_15ii32i pass
 assertion/d4_3_15v01/instance/d4_3_15v01i pass
 assertion/d4_3_15v02/instance/d4_3_15v02i pass
-assertion/d4_3_15v03/instance/d4_3_15v03i fail
+assertion/d4_3_15v03/instance/d4_3_15v03i pass
 assertion/d4_3_15v04/instance/d4_3_15v04i pass
 assertion/d4_3_15v05/instance/d4_3_15v05i pass
 assertion/d4_3_15v06/instance/d4_3_15v06i fail
