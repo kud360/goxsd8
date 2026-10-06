@@ -349,7 +349,7 @@ func TestStringArgumentNamesEveryStaticArm(t *testing.T) {
 // `exists(count(inner))` holds. With an arm's readsChild or counted answering
 // nothing for its arguments, that arm's row fails.
 func TestStringFunctionsReadTheirArguments(t *testing.T) {
-	for _, expr := range []string{"contains('x', e1)", "string-length(e1) = 0", "exists(e1 cast as xs:string)", "string(e1) = ''"} {
+	for _, expr := range []string{"contains('x', e1)", "string-length(e1) = 0", "exists(e1 cast as xs:string)", "string(e1) = ''", "distinct-values(e1) = ''"} {
 		test, ok := afCompile(t, expr, xsd.EmptyContent{})
 		if !ok {
 			t.Fatalf("CompileAssertionTest(%q): declined, want compiled", expr)
@@ -358,7 +358,7 @@ func TestStringFunctionsReadTheirArguments(t *testing.T) {
 			t.Errorf("(%s).ReadsChild(e1) = false, want true", expr)
 		}
 	}
-	for _, expr := range []string{"exists(count(inner))", "contains('1', count(inner))", "string-length(count(inner)) = 1", "string(normalize-space(count(inner))) = ''"} {
+	for _, expr := range []string{"exists(count(inner))", "contains('1', count(inner))", "string-length(count(inner)) = 1", "string(normalize-space(count(inner))) = ''", "distinct-values(count(inner)) = 1"} {
 		if acCompile(t, asRecord(expr)).Tally() == nil {
 			t.Errorf("(%s).Tally() = nil, want a counter for inner", expr)
 		}
@@ -369,7 +369,7 @@ func TestStringFunctionsReadTheirArguments(t *testing.T) {
 	}
 }
 
-// What stays declined: a function outside the ten, the three-argument
+// What stays declined: a function outside the eleven, the three-argument
 // collation form of fn:contains and its kin (never read as the two-argument
 // form), every other arity, the zero-argument string forms — whose implicit
 // argument is E's string value, which `.` on the assertion façade does not
@@ -426,7 +426,7 @@ func TestCompileAssertionTestDeclinesFunctions(t *testing.T) {
 	}
 }
 
-// A Type Alternative's {test} declines every one of the ten functions — the
+// A Type Alternative's {test} declines every one of the eleven functions — the
 // CTA grammar admits fn:not alone (§3.12.6 clause 3) — which CompileCTATest
 // itself shows, CTATestStaticError answering nil for a decline and a pass
 // alike; `not(@a = 'x')` still compiles. With ctaTypeAlternativeFacade
@@ -435,7 +435,7 @@ func TestCompileCTATestDeclinesLibraryFunctions(t *testing.T) {
 	for _, expr := range []string{
 		"contains(@a, 'x')", "starts-with(@a, 'x')", "ends-with(@a, 'x')",
 		"string-length(@a) > 0", "normalize-space(@a) = 'x'", "string(@a) = 'x'",
-		"empty(@a)", "exists(@a)", "true()", "false()", "not(true())",
+		"empty(@a)", "exists(@a)", "distinct-values(@a) = 'x'", "true()", "false()", "not(true())",
 	} {
 		if _, ok := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); ok {
 			t.Errorf("CompileCTATest(%q): compiled, want declined", expr)

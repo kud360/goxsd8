@@ -42,7 +42,8 @@ import (
 // whatever the selected elements' types (ctaFacade.childPath,
 // ctaFacade.elements); an fn:count call (xpath-functions.md §15.4.1) in [14]
 // ta-ValueExpr's position, over one counted path of E's subtree, whose counts
-// a [Tally] carries; inside that call's argument, xpath20.md [40] Predicate,
+// a [Tally] carries, or over an operand that is no path, such as `$value`,
+// whose items it counts; inside that call's argument, xpath20.md [40] Predicate,
 // one on a child step, testing the existence of the child's attributes, which
 // the Tally reads too, or comparing the child's own value, read off
 // [ChildElements] (§3.2.2); and [21] UnionExpr over such operands (§3.3.3),
@@ -380,14 +381,16 @@ type AssertionTest struct{ root ctaExpr }
 // whole operand of fn:exists, fn:empty or an ·effective boolean value·
 // (xpath20.md §3.2, §3.2.4, §2.4.3), an fn:count call, whose argument may
 // filter a child step by one predicate or join operands with `|` or `union`
-// (§3.2.2, §3.3.3; the bullets below bound both), the binary arithmetic
-// operators `+`, `-`, `*`, `div`, `idiv` and `mod` (xpath20.md §3.4), and a
-// call to one of the F&O string and sequence functions — fn:contains,
-// fn:starts-with and fn:ends-with with two arguments, fn:string-length,
-// fn:normalize-space and fn:string with one, fn:empty and fn:exists with one,
-// and fn:true and fn:false with none (xpath-functions.md §7.5.1–7.5.3, §7.4.4,
-// §7.4.5, §2.3, §15.1.4, §15.1.5, §9.1.1, §9.1.2), any argument of which may be
-// the empty sequence `()` — added, and every decline [CompileCTATest] states is
+// (§3.2.2, §3.3.3; the bullets below bound both), or be an operand that is no
+// path — `$value`, `()`, a literal or a function call, read as any argument of
+// the functions below is — the binary arithmetic operators `+`, `-`, `*`,
+// `div`, `idiv` and `mod` (xpath20.md §3.4), and a call to one of the F&O
+// string and sequence functions — fn:contains, fn:starts-with and fn:ends-with
+// with two arguments, fn:string-length, fn:normalize-space and fn:string with
+// one, fn:empty, fn:exists and fn:distinct-values with one, and fn:true and
+// fn:false with none (xpath-functions.md §7.5.1–7.5.3, §7.4.4, §7.4.5, §2.3,
+// §15.1.4, §15.1.5, §15.1.6, §9.1.1, §9.1.2), any argument of which may be the
+// empty sequence `()` — added, and every decline [CompileCTATest] states is
 // this one's too, under the same static context (xpath-valid clause 2.2)
 // augmented with `$value` (cvc-assertion clause 2.2), plus these, each of which
 // is the same withhold:
@@ -428,8 +431,10 @@ type AssertionTest struct{ root ctaExpr }
 //   - an fn:count argument that is not one QName step — `N`, `@N`, either of
 //     them behind `./` or `.//`, or a rooted one — nor such a child step `N`
 //     or `./N` filtered by one predicate the next two bullets admit, nor a `|`
-//     or `union` of relative such operands — so a wildcard, a longer path, a
-//     bare `.`, `$value`, a predicate on any other step, a second predicate,
+//     or `union` of relative such operands, nor an operand that opens as no
+//     path does — `$`, `(`, a literal, or a name followed by `(` — and that a
+//     function argument admits — so a wildcard, a longer path, a bare `.`, a
+//     union with `$value`, a predicate on any other step, a second predicate,
 //     and a union operand that is rooted or filtered by its value decline, and
 //     so does a step behind `./` or `.//` anywhere but in an fn:count call or
 //     as the whole operand of fn:exists, fn:empty or an ·effective boolean
@@ -469,9 +474,9 @@ type AssertionTest struct{ root ctaExpr }
 //     `-`, and a parenthesized operand, which [11]'s `(` arm reads as a
 //     boolean expression;
 //   - a call to fn:contains, fn:starts-with or fn:ends-with with a third,
-//     collation argument (§7.3.1), which is never read as the two-argument
-//     form, and a call to any of the functions above with an arity it does not
-//     have (err:XPST0017);
+//     collation argument, or to fn:distinct-values with a second (§7.3.1),
+//     which is never read as the form without it, and a call to any of the
+//     functions above with an arity it does not have (err:XPST0017);
 //   - fn:string-length, fn:normalize-space and fn:string with no argument,
 //     whose implicit argument is E's string value, read through `.`, which this
 //     engine builds no node for;
@@ -482,11 +487,12 @@ type AssertionTest struct{ root ctaExpr }
 //     definition} is xs:float or xs:double, a literal or a cast included,
 //     which is the cast to xs:string that bullet's floating clause declines.
 //
-// An xs:string? argument — of every function above but fn:empty, fn:exists and
-// fn:string — of any type outside the xs:string and xs:anyURI families is not a
-// decline: xpath20.md §3.1.5's function conversion raises err:XPTY0004 for each
-// item it yields, an absent attribute's empty sequence being the zero-length
-// string, and so does a `$value` of two or more items.
+// An xs:string? argument — of every function above but fn:empty, fn:exists,
+// fn:distinct-values and fn:string — of any type outside the xs:string and
+// xs:anyURI families is not a decline: xpath20.md §3.1.5's function conversion
+// raises err:XPTY0004 for each item it yields, an absent attribute's empty
+// sequence being the zero-length string, and so does a `$value` of two or more
+// items.
 //
 // A counted step consults neither attrs nor elems: fn:count does not atomize
 // its argument (xpath-functions.md §15.4.1, `$arg as item()*`), so the step's
@@ -503,7 +509,19 @@ type AssertionTest struct{ root ctaExpr }
 // evaluation carries ([AssertionTest.Tally]). A predicate reading `.` is the
 // one counted argument elems types: it atomizes each candidate child, typed as
 // a child step naming it is, and counts over [ChildElements]; a dynamic or
-// type error over any candidate raises for the whole count.
+// type error over any candidate raises for the whole count. An argument that is
+// no path is counted off its own items, never the [Tally], on fn:exists'
+// terms: `count($value)` is the number of items of `$value` — one for an
+// atomic or ·special· value, each item of a list (Datatypes dt-xdmrep clause
+// 3), and none for an empty list or the empty sequence clause 2.3.2 binds.
+//
+// fn:distinct-values atomizes its argument and drops each item eq to an
+// earlier one (xpath-functions.md §15.1.6), compared in the items' {primitive
+// type definition}: under the codepoint collation, so "a" and "A" are two; at
+// the implicit timezone, Z, for a date or time without one; with 0 and -0 one
+// value and NaN one item although `NaN eq NaN` is false; an xs:untypedAtomic
+// item as xs:string; and two items eq does not relate as two, never an error.
+// Which of two equal items survives is the first.
 //
 // An XPath STATIC error is declined too and never reported: the
 // static-error question about an assertion is the schema assembler's, and
@@ -587,8 +605,9 @@ func (t AssertionTest) Evaluate(b value.Backend, types xsd.TypeResolver, attrs T
 // whose existence t asks (fn:exists, fn:empty, an ·effective boolean value·),
 // one counter serving a path both counted and asked, or nil where t counts
 // over none — a {test} with neither, or one whose every fn:count argument is
-// rooted and raises or is a child step filtered by its value, which
-// [ChildElements] answers. t itself is not changed, so one compiled test
+// rooted and raises, is a child step filtered by its value, which
+// [ChildElements] answers, or is no path and counts none, as `count($value)`
+// counts the items of `$value`. t itself is not changed, so one compiled test
 // serves any number of evaluations, each with its own Tally.
 //
 // Its consumer is validate's walk (validate/cvcassertion.go), which reads the
@@ -641,8 +660,9 @@ func ctaHoldsPath(paths []ctaTallied, path ctaTallied) bool {
 // child step an fn:count argument filters by a predicate over its value,
 // `count(N[. = 'x'])`, which is counted over the children yielded. Its
 // consumer is validate's walk, which keeps a child's value only where some
-// {test} of its parent reads it. Any other fn:count argument reads no value
-// and is no read here, nor is an element step or a child path of two or more
+// {test} of its parent reads it. Any other fn:count path reads no value and is
+// no read here — an argument that is no path reads what its operand reads,
+// `count($value)` nothing — nor is an element step or a child path of two or more
 // steps whose existence alone is asked, whatever the type of the child it
 // names: what each counts is [AssertionTest.Tally]'s. The answer is read off
 // the tree itself.
@@ -723,6 +743,9 @@ func (n ctaPresence) readsChild(name xsd.QName) bool { return n.operand.readsChi
 // name.
 func (n ctaStringFunction) readsChild(name xsd.QName) bool { return n.cast.readsChild(name) }
 
+// readsChild reports whether the argument holds a ctaTypedChild naming name.
+func (n ctaDistinctValues) readsChild(name xsd.QName) bool { return n.operand.readsChild(name) }
+
 // readsChild is false for each of these: none is a child-axis step or holds an
 // operand.
 func (ctaAttr) readsChild(xsd.QName) bool           { return false }
@@ -743,6 +766,10 @@ func (n ctaCount) readsChild(name xsd.QName) bool { return n.arg.readsChild(name
 func (ctaCountPath) readsChild(xsd.QName) bool        { return false }
 func (ctaFilteredChildren) readsChild(xsd.QName) bool { return false }
 func (ctaUnion) readsChild(xsd.QName) bool            { return false }
+
+// readsChild reports whether the counted operand holds a ctaTypedChild naming
+// name: `count($value)` reads none.
+func (c ctaCountedItems) readsChild(name xsd.QName) bool { return c.operand.readsChild(name) }
 
 // readsChild reports whether m filters children named name, whose values its
 // predicate reads: they are counted over [ChildElements], never the [Tally].
@@ -810,6 +837,11 @@ func (n ctaStringFunction) counted(into []ctaTallied) []ctaTallied {
 	return n.cast.counted(into)
 }
 
+// counted appends each path the argument counts over.
+func (n ctaDistinctValues) counted(into []ctaTallied) []ctaTallied {
+	return n.operand.counted(into)
+}
+
 // counted appends the path the call's argument counts over, if any.
 func (n ctaCount) counted(into []ctaTallied) []ctaTallied { return n.arg.counted(into) }
 
@@ -817,6 +849,11 @@ func (n ctaCount) counted(into []ctaTallied) []ctaTallied { return n.arg.counted
 func (p ctaCountPath) counted(into []ctaTallied) []ctaTallied        { return append(into, p) }
 func (f ctaFilteredChildren) counted(into []ctaTallied) []ctaTallied { return append(into, f) }
 func (u ctaUnion) counted(into []ctaTallied) []ctaTallied            { return append(into, u) }
+
+// counted appends each path the counted operand counts over, and never c
+// itself: its items are read off the operand, so `count($value)` keys nothing
+// in the [Tally].
+func (c ctaCountedItems) counted(into []ctaTallied) []ctaTallied { return c.operand.counted(into) }
 
 // counted appends nothing: m is counted over [ChildElements], never keyed in
 // the [Tally], and its predicate counts nothing (ctaPredicateFacade.count).
@@ -1026,11 +1063,17 @@ func (ctaAssertionFacade) rooted() (ctaValue, bool) {
 	return ctaNoDocumentRoot{}, true
 }
 
-// count compiles an fn:count call over arg to a ctaCount of xs:integer, the
-// type xpath-functions.md §15.4.1 gives its result, and declines it where types
-// resolves no xs:integer. arg is never typed against attrs or elems: fn:count
-// does not atomize it ([CompileAssertionTest]).
+// count compiles an fn:count call over arg to its ctaCount (ctaCountOf). arg is
+// never typed against attrs or elems: fn:count does not atomize it
+// ([CompileAssertionTest]).
 func (ctaAssertionFacade) count(arg ctaCounted, types ctaTypes) (ctaValue, bool) {
+	return ctaCountOf(arg, types)
+}
+
+// ctaCountOf is the ctaCount of xs:integer over arg, the type
+// xpath-functions.md §15.4.1 gives fn:count's result, false where types
+// resolves no xs:integer.
+func ctaCountOf(arg ctaCounted, types ctaTypes) (ctaValue, bool) {
 	integer, resolved := types.simple(ctaBuiltin("integer"))
 	if !resolved {
 		return nil, false

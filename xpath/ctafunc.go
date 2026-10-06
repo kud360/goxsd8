@@ -14,9 +14,12 @@ import (
 // Alternative's {test} declines: fn:contains, fn:starts-with and fn:ends-with
 // (xpath-functions.md §7.5.1–7.5.3, ctaMatch), fn:string-length and
 // fn:normalize-space (§7.4.4, §7.4.5, ctaUnaryString), fn:empty and fn:exists
-// (§15.1.4, §15.1.5, ctaPresence), and fn:string (§2.3, ctaStringFunction).
-// fn:true and fn:false (§9.1.1, §9.1.2) are constants, which compile to the
-// ctaLiteral of their xs:boolean (ctaParser.constantCall).
+// (§15.1.4, §15.1.5, ctaPresence), fn:distinct-values (§15.1.6,
+// ctaDistinctValues), and fn:string (§2.3, ctaStringFunction) — and fn:count
+// over an argument that is no path (§15.4.1, ctaCountedItems), whose items are
+// counted as fn:empty and fn:exists count them. fn:true and fn:false (§9.1.1,
+// §9.1.2) are constants, which compile to the ctaLiteral of their xs:boolean
+// (ctaParser.constantCall).
 //
 // An argument whose parameter is xs:string? is converted by xpath20.md
 // §3.1.5's function conversion rules, as far as the static type settles them,
@@ -98,10 +101,29 @@ type ctaPresence struct {
 // sequence mapped to the zero-length string. Its static type is cast.target.
 type ctaStringFunction struct{ cast ctaCast }
 
+// ctaDistinctValues is a call to fn:distinct-values with its one
+// `xs:anyAtomicType*` argument (xpath-functions.md §15.1.6): the atomized
+// operand with every item eq to an earlier one dropped (ctaDistinctValues.eval).
+// Its static type is the operand's — an item survives under its own type, and
+// an xs:untypedAtomic one stays xs:untypedAtomic (ctaDistinctValues.itemType).
+// A statically empty argument is never one: ctaParser.distinctValuesCall
+// compiles it to ctaEmptyValue.
+type ctaDistinctValues struct{ operand ctaValue }
+
+// ctaCountedItems is an fn:count argument that is no path (ctaCounted): a
+// `$value`, `()`, a function call or any other operand a library call takes
+// as its argument (ctaParser.argument), whose items fn:count counts without
+// atomizing them (xpath-functions.md §15.4.1, `item()*`) — ctaSequenceLength,
+// fn:empty's and fn:exists' reading. It is no counter key (ctaTallied) and no
+// union operand: what it counts is read off the operand, never off the
+// [Tally], so it keys only what its operand counts.
+type ctaCountedItems struct{ operand ctaValue }
+
 func (ctaMatch) ctaValue()          {}
 func (ctaUnaryString) ctaValue()    {}
 func (ctaPresence) ctaValue()       {}
 func (ctaStringFunction) ctaValue() {}
+func (ctaDistinctValues) ctaValue() {}
 
 // resultType is the ·expanded name· of the type op returns.
 func (op ctaUnaryStringOp) resultType() xsd.QName {
@@ -238,17 +260,128 @@ func ctaStringFunctionItem(n ctaStringFunction, c *xsd.SimpleType, env ctaEnv) c
 	return ctaPromote(cast.vs[0], n.cast.target, c, env)
 }
 
+// itemType is the type n's items are read in to be compared: the operand's own
+// static type where it is typed, and xs:string where it is xs:untypedAtomic,
+// which xpath-functions.md §15.1.6 compares "as if it were of type xs:string".
+// It reports false where env.types resolves no xs:string, which is
+// unreachable for the builtins every resolver holds.
+func (n ctaDistinctValues) itemType(env ctaEnv) (*xsd.SimpleType, bool) {
+	if typed, isTyped := ctaStaticOf(n.operand).(ctaTyped); isTyped {
+		return typed.st, true
+	}
+	td, declared := env.types.Type(ctaBuiltin("string"))
+	st, simple := td.(*xsd.SimpleType)
+	return st, declared && simple
+}
+
+// ctaDistinctValuesItem evaluates n (ctaDistinctValues.eval) and converts
+// each surviving item, read in its itemType, into c on ctaPromoted's terms:
+// the identity where c is that type, and for an xs:untypedAtomic operand the
+// cast of its xs:string to c, which is the cast of the xs:untypedAtomic item
+// itself.
+func ctaDistinctValuesItem(n ctaDistinctValues, c *xsd.SimpleType, env ctaEnv) ctaItem {
+	st, resolved := n.itemType(env)
+	if !resolved {
+		return ctaRaised{}
+	}
+	vs, ok := n.eval(env)
+	if !ok {
+		return ctaRaised{}
+	}
+	return ctaPromoted(vs, st, c, env)
+}
+
+// ctaDistinctBoolean is the ·effective boolean value· of n: fn:boolean over
+// the items it keeps, read in its itemType (ctaBoolean) — so an
+// xs:untypedAtomic item takes xs:string's rule 4, which is its own.
+func ctaDistinctBoolean(n ctaDistinctValues, env ctaEnv) ctaAnswer {
+	st, resolved := n.itemType(env)
+	if !resolved {
+		return ctaError
+	}
+	return ctaBoolean(n, st, env)
+}
+
+// eval is fn:distinct-values over n's operand (xpath-functions.md §15.1.6):
+// its items read in its itemType, in order, each kept unless it is the same as
+// one kept before it, reporting false where the operand raises. Which of two
+// equal items survives, and in what order, is ·implementation dependent·;
+// this keeps the first, in the operand's order (STYLE D1).
+//
+// Two items are the same where eq holds between them in that type's {primitive
+// type definition} (ctaHoldsPair) — so 0 and -0 are one, a date or time without a
+// timezone is compared under the implicit timezone, and xs:string items under
+// the codepoint collation, which is the default collation xpath-valid clause
+// 2.2.10 fixes — and where both are NaN, each unequal to itself ([value.Eq]),
+// which §15.1.6 makes one item although `NaN eq NaN` is false. A pair eq does
+// not decide, as for a value with no equality, is two items: §15.1.6 makes
+// values eq is not defined for distinct, never an error.
+func (n ctaDistinctValues) eval(env ctaEnv) ([]value.Value, bool) {
+	st, resolved := n.itemType(env)
+	if !resolved {
+		return nil, false
+	}
+	p, err := st.Primitive(env.types)
+	if err != nil || p == nil {
+		return nil, false
+	}
+	atoms, converted := ctaItemOf(n.operand, st, env).(ctaAtoms)
+	if !converted {
+		return nil, false
+	}
+	var kept, keys []value.Value
+	for _, v := range atoms.vs {
+		key, ok := ctaValidated(ctaPromote(v, st, p, env))
+		if !ok {
+			return nil, false
+		}
+		if ctaHoldsAny(keys, key, p, env) {
+			continue
+		}
+		kept = append(kept, v)
+		keys = append(keys, key)
+	}
+	return kept, true
+}
+
+// ctaHoldsAny reports whether key, a value of the primitive p, is the same as
+// any of keys on ctaDistinctValues.eval's terms.
+func ctaHoldsAny(keys []value.Value, key value.Value, p *xsd.SimpleType, env ctaEnv) bool {
+	for _, k := range keys {
+		if ctaHoldsPair(ctaEqual, p, k, key, env) == ctaTrue || (ctaNaN(k) && ctaNaN(key)) {
+			return true
+		}
+	}
+	return false
+}
+
+// ctaNaN reports whether v is unequal to itself, which [value.Eq] states of
+// NaN alone, on ctaBooleanOf's terms.
+func ctaNaN(v value.Value) bool {
+	eq, comparable := v.(value.Eq)
+	return comparable && !eq.Eq(v)
+}
+
+// nodes is how many items c's operand evaluates to (ctaSequenceLength), which
+// is what fn:count returns for it.
+func (c ctaCountedItems) nodes(env ctaEnv) (int, bool) { return ctaSequenceLength(c.operand, env) }
+
 // ctaSequenceLength is how many items v evaluates to, without atomizing it —
-// the question fn:empty and fn:exists ask of their `item()*` argument —
-// reporting false where it raises. A step is the number of nodes it selects,
-// which ctaStep.nodes answers for both this and the ·effective boolean value·;
-// `$value` over ·special· content is one xs:untypedAtomic value or, unbound,
-// none (ctaUntypedBinding); the statically empty sequence is none; and every
-// other operand is the length of its items in its own static type, which
-// converts none of them.
+// the question fn:count, fn:empty and fn:exists ask of their `item()*`
+// argument — reporting false where it raises. A step is the number of nodes it
+// selects, which ctaStep.nodes answers for both this and the ·effective
+// boolean value·; `$value` over ·special· content is one xs:untypedAtomic value
+// or, unbound, none (ctaUntypedBinding); an fn:distinct-values call is the
+// items it keeps, whatever its static type (ctaDistinctValues.eval); the
+// statically empty sequence is none; and every other operand is the length of
+// its items in its own static type, which converts none of them.
 func ctaSequenceLength(v ctaValue, env ctaEnv) (int, bool) {
 	if step, isStep := v.(ctaStep); isStep {
 		return step.nodes(env)
+	}
+	if distinct, isDistinct := v.(ctaDistinctValues); isDistinct {
+		vs, ok := distinct.eval(env)
+		return len(vs), ok
 	}
 	if _, untyped := v.(ctaUntypedValue); untyped {
 		_, bound, ok := ctaUntypedBinding(env)
