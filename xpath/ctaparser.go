@@ -20,11 +20,13 @@ import (
 // a [26] RelativePathExpr of two or more such steps, or one element step `N`,
 // `./N` or `.//N`, standing as the whole operand of fn:exists, fn:empty or an
 // ·effective boolean value· (childPath, selectedElements), an fn:count call
-// ([48] FunctionCall) over one counted path, a call to one of the F&O string
-// and sequence functions (libraryCall) whose arguments are additive expressions
-// or `()`, the binary operators of [13] AdditiveExpr and [14]
-// MultiplicativeExpr, and [47] ContextItemExpr `.`, which only the facet façade
-// admits — each behind the façade (ctaFacade.comparesValues,
+// ([48] FunctionCall) over one counted path, a [40] Predicate on a child step
+// in it (predicate) or a [21] UnionExpr of such paths (countArgument), a call
+// to one of the F&O string and sequence functions (libraryCall) whose arguments
+// are additive expressions or `()`, the binary operators of [13] AdditiveExpr
+// and [14] MultiplicativeExpr, and [47] ContextItemExpr `.`, which only the
+// facet façade admits, and which a value predicate reads as its candidate
+// (valuePredicate) — each behind the façade (ctaFacade.comparesValues,
 // ctaFacade.variable, ctaFacade.child, ctaFacade.childPath, ctaFacade.elements,
 // ctaFacade.rooted, ctaFacade.count, ctaFacade.callsLibrary,
 // ctaFacade.computes, ctaFacade.contextItem), so a Type Alternative's {test}
@@ -35,8 +37,10 @@ import (
 // reaching this file is ctaTypes answering ctaTypeDeclined for a comparison
 // type, a cast target or a cast operand it will not serve, ctaTypes.arithmetic
 // declining an operand pair, a library call of an arity its function does not
-// have, or the façade declining a NameTest, a variable's type or a settled
-// comparison type, which the production that asked propagates unchanged.
+// have, a predicate or a union operand outside the shapes predicate,
+// valuePredicate and ctaUnionOf admit, or the façade declining a NameTest, a
+// variable's type or a settled comparison type, which the production that asked
+// propagates unchanged.
 
 // ctaFunctionNS is the default function namespace of a {test}'s static context
 // (xpath-valid clause 2.2.4, §3.13.6.2), which an unprefixed [12]

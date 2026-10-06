@@ -268,13 +268,14 @@ func ctaSequenceLength(v ctaValue, env ctaEnv) (int, bool) {
 // ctaStep is a ctaValue that evaluates to a sequence of NODES rather than of
 // atomic values: an attribute step, untyped (ctaAttr) or typed (ctaTypedAttr),
 // a child-axis step (ctaTypedChild), an element step whose existence is asked
-// (ctaSelectedElements), a path of child steps (ctaChildPath), and
-// the two steps that raise before they select a node, a rooted path
-// (ctaNoDocumentRoot) and a read of an absent context item (ctaNoContextItem).
-// Its nodes method is the ONE reading of node existence, which the ·effective
-// boolean value· of a step (ctaEffectiveBoolean.eval) and fn:empty and
-// fn:exists (ctaSequenceLength) both take; every other operand's items are
-// atomic values the caller reads its own way.
+// (ctaSelectedElements), a path of child steps (ctaChildPath), the candidate
+// `.` inside a value predicate (ctaCandidate), and the two steps that raise
+// before they select a node, a rooted path (ctaNoDocumentRoot) and a read of
+// an absent context item (ctaNoContextItem). Its nodes method is the ONE
+// reading of node existence, which the ·effective boolean value· of a step
+// (ctaEffectiveBoolean.eval) and fn:empty and fn:exists (ctaSequenceLength)
+// both take; every other operand's items are atomic values the caller reads
+// its own way.
 type ctaStep interface {
 	ctaValue
 	// nodes is how many nodes the step selects, a ·nilled· child counting as a

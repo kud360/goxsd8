@@ -24,21 +24,25 @@ import (
 // fn:exists, fn:empty or an ·effective boolean value· also takes a relative
 // path of two or more such steps (ctaChildPath) and one element step `N`,
 // `./N` or `.//N` whatever N's type (ctaSelectedElements); and [14] ValueExpr
-// also takes an fn:count call over one counted path (ctaCount) and a call to
-// one of the F&O string and sequence functions, evaluated in ctafunc.go; and
-// each comparison operand may be xpath20.md [13] AdditiveExpr over [14]
-// MultiplicativeExpr, whose operators are evaluated in ctaarith.go (ctaArith).
-// The facet façade (ctaFacetFacade) takes the assertion façade's grammar but
-// fn:count, plus [47] ContextItemExpr `.`, and compiles every read of the
-// context item — `.`, an attribute or child step, a rooted path — to the
-// err:XPDY0002 an assertions facet's absent context item raises
-// (ctaNoContextItem). It is not a stage of a general XPath 2.0 evaluator: the
-// productions below reach no axis but attribute, one child step, the
-// child-step paths and the one descendant step whose existence is asked and
-// the descendant steps fn:count counts over, no predicate, no variable but
-// `$value` and no function but fn:not, fn:count and the ten
-// ctaParser.libraryCall names, so evaluating them directly is exact where a
-// fail-open delegation to a general engine would be a guess.
+// also takes an fn:count call over one counted path (ctaCount) — a child step
+// in it filtered by one [40] Predicate testing attribute existence
+// (ctaFilteredChildren) or comparing the child's value (ctaMatchingChildren,
+// whose `.` is ctaCandidate), and two or more such paths joined by [21]
+// UnionExpr (ctaUnion) — and a call to one of the F&O string and sequence
+// functions, evaluated in ctafunc.go; and each comparison operand may be
+// xpath20.md [13] AdditiveExpr over [14] MultiplicativeExpr, whose operators
+// are evaluated in ctaarith.go (ctaArith). The facet façade (ctaFacetFacade)
+// takes the assertion façade's grammar but fn:count, plus [47] ContextItemExpr
+// `.`, and compiles every read of the context item — `.`, an attribute or child
+// step, a rooted path — to the err:XPDY0002 an assertions facet's absent
+// context item raises (ctaNoContextItem). It is not a stage of a general XPath
+// 2.0 evaluator: the productions below reach no axis but attribute, one child
+// step, the child-step paths and the one descendant step whose existence is
+// asked and the descendant steps fn:count counts over, no predicate or union
+// but those in an fn:count argument, no variable but `$value` and no function
+// but fn:not, fn:count and the ten ctaParser.libraryCall names, so evaluating
+// them directly is exact where a fail-open delegation to a general engine would
+// be a guess.
 //
 //	[8]  Test                ::= OrExpr
 //	[9]  OrExpr              ::= AndExpr ( 'or' AndExpr )*
@@ -642,8 +646,10 @@ type ctaUntypedValue struct{}
 // ctaFacade is the sealed sum of the façades compileCTATest parses for — one
 // value, so the attribute node a façade builds and the comparisons it admits
 // can never come from two different façades (STYLE T1). The grammar's three
-// consumers — a Type Alternative, an assertion and an assertions facet — close
-// the set (STYLE T2's schema-closed-set exception).
+// consumers — a Type Alternative, an assertion and an assertions facet — and
+// the scope a value predicate's expression parses in inside an assertion's
+// fn:count argument (ctaPredicateFacade) close the set (STYLE T2's
+// schema-closed-set exception).
 type ctaFacade interface {
 	ctaFacade()
 	// attribute compiles one [17] ta-AttrName whose NameTest resolved to test
@@ -878,7 +884,10 @@ type ctaCast struct {
 // st, xs:integer. The argument is not atomized — the signature's item()* asks
 // for none — so a counted step is never typed and reads no value: what it
 // selects is read off the [Tally] the evaluation carries, which the caller fills
-// with E's subtree, and never off [ChildElements] or [TypedAttributes].
+// with E's subtree, and never off [TypedAttributes]. The one argument that
+// reads a value is a child step filtered by a predicate over it
+// (ctaMatchingChildren), which atomizes each candidate inside the predicate
+// and is counted over [ChildElements] instead.
 type ctaCount struct {
 	arg ctaCounted
 	st  *xsd.SimpleType
@@ -2149,9 +2158,11 @@ func ctaPromoted(vs []value.Value, from, c *xsd.SimpleType, env ctaEnv) ctaItem 
 }
 
 // ctaCountItem is the xs:integer fn:count returns for n, converted into c on
-// ctaTypedAttrItem's terms: the counter the evaluation's [Tally] holds for n's
-// path, through the lexical of that integer, which is a datatype validation as
-// every value this package builds is.
+// ctaTypedAttrItem's terms: how many nodes n's argument selects
+// (ctaCounted.nodes) — the counter the evaluation's [Tally] holds for its
+// path, or the children its value predicate is true for — through the lexical
+// of that integer, which is a datatype validation as every value this package
+// builds is. An argument whose predicate raised over a candidate raises.
 //
 // A rooted argument raises err:XPDY0050 before fn:count is applied
 // (ctaNoDocumentRoot). A Tally with no counter for the path is a caller breach
