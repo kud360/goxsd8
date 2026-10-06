@@ -105,10 +105,16 @@ type ctaStringFunction struct{ cast ctaCast }
 // `xs:anyAtomicType*` argument (xpath-functions.md §15.1.6): the atomized
 // operand with every item eq to an earlier one dropped (ctaDistinctValues.eval).
 // Its static type is the operand's — an item survives under its own type, and
-// an xs:untypedAtomic one stays xs:untypedAtomic (ctaDistinctValues.itemType).
-// A statically empty argument is never one: ctaParser.distinctValuesCall
+// an xs:untypedAtomic one stays xs:untypedAtomic (ctaStaticOf). st is the type
+// its items are read in to be compared, which ctaParser.distinctValuesCall
+// resolves: the operand's own static type where it is typed, and xs:string
+// where it is xs:untypedAtomic, which §15.1.6 compares "as if it were of type
+// xs:string". A statically empty argument is never one: distinctValuesCall
 // compiles it to ctaEmptyValue.
-type ctaDistinctValues struct{ operand ctaValue }
+type ctaDistinctValues struct {
+	operand ctaValue
+	st      *xsd.SimpleType
+}
 
 // ctaCountedItems is an fn:count argument that is no path (ctaCounted): a
 // `$value`, `()`, a function call or any other operand a library call takes
@@ -260,50 +266,20 @@ func ctaStringFunctionItem(n ctaStringFunction, c *xsd.SimpleType, env ctaEnv) c
 	return ctaPromote(cast.vs[0], n.cast.target, c, env)
 }
 
-// itemType is the type n's items are read in to be compared: the operand's own
-// static type where it is typed, and xs:string where it is xs:untypedAtomic,
-// which xpath-functions.md §15.1.6 compares "as if it were of type xs:string".
-// It reports false where env.types resolves no xs:string, which is
-// unreachable for the builtins every resolver holds.
-func (n ctaDistinctValues) itemType(env ctaEnv) (*xsd.SimpleType, bool) {
-	if typed, isTyped := ctaStaticOf(n.operand).(ctaTyped); isTyped {
-		return typed.st, true
-	}
-	td, declared := env.types.Type(ctaBuiltin("string"))
-	st, simple := td.(*xsd.SimpleType)
-	return st, declared && simple
-}
-
 // ctaDistinctValuesItem evaluates n (ctaDistinctValues.eval) and converts
-// each surviving item, read in its itemType, into c on ctaPromoted's terms:
-// the identity where c is that type, and for an xs:untypedAtomic operand the
-// cast of its xs:string to c, which is the cast of the xs:untypedAtomic item
-// itself.
+// each surviving item, read in n.st, into c on ctaPromoted's terms: the
+// identity where c is that type, and for an xs:untypedAtomic operand the cast
+// of its xs:string to c, which is the cast of the xs:untypedAtomic item itself.
 func ctaDistinctValuesItem(n ctaDistinctValues, c *xsd.SimpleType, env ctaEnv) ctaItem {
-	st, resolved := n.itemType(env)
-	if !resolved {
-		return ctaRaised{}
-	}
 	vs, ok := n.eval(env)
 	if !ok {
 		return ctaRaised{}
 	}
-	return ctaPromoted(vs, st, c, env)
-}
-
-// ctaDistinctBoolean is the ·effective boolean value· of n: fn:boolean over
-// the items it keeps, read in its itemType (ctaBoolean) — so an
-// xs:untypedAtomic item takes xs:string's rule 4, which is its own.
-func ctaDistinctBoolean(n ctaDistinctValues, env ctaEnv) ctaAnswer {
-	st, resolved := n.itemType(env)
-	if !resolved {
-		return ctaError
-	}
-	return ctaBoolean(n, st, env)
+	return ctaPromoted(vs, n.st, c, env)
 }
 
 // eval is fn:distinct-values over n's operand (xpath-functions.md §15.1.6):
-// its items read in its itemType, in order, each kept unless it is the same as
+// its items read in n.st, in order, each kept unless it is the same as
 // one kept before it, reporting false where the operand raises. Which of two
 // equal items survives, and in what order, is ·implementation dependent·;
 // this keeps the first, in the operand's order (STYLE D1).
@@ -317,21 +293,17 @@ func ctaDistinctBoolean(n ctaDistinctValues, env ctaEnv) ctaAnswer {
 // not decide, as for a value with no equality, is two items: §15.1.6 makes
 // values eq is not defined for distinct, never an error.
 func (n ctaDistinctValues) eval(env ctaEnv) ([]value.Value, bool) {
-	st, resolved := n.itemType(env)
-	if !resolved {
-		return nil, false
-	}
-	p, err := st.Primitive(env.types)
+	p, err := n.st.Primitive(env.types)
 	if err != nil || p == nil {
 		return nil, false
 	}
-	atoms, converted := ctaItemOf(n.operand, st, env).(ctaAtoms)
+	atoms, converted := ctaItemOf(n.operand, n.st, env).(ctaAtoms)
 	if !converted {
 		return nil, false
 	}
 	var kept, keys []value.Value
 	for _, v := range atoms.vs {
-		key, ok := ctaValidated(ctaPromote(v, st, p, env))
+		key, ok := ctaValidated(ctaPromote(v, n.st, p, env))
 		if !ok {
 			return nil, false
 		}

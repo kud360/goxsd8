@@ -690,9 +690,10 @@ type ctaFacade interface {
 	// contextItem compiles the [47] ContextItemExpr `.` into its node,
 	// reporting false where the façade declines it, on attribute's terms.
 	contextItem() (ctaValue, bool)
-	// count compiles an fn:count call whose argument compiled to arg into its
+	// count compiles an fn:count call over a path, compiled to arg, into its
 	// node, reporting false where the façade declines it, on attribute's
-	// terms.
+	// terms. An argument that is no path never reaches it: ctaParser.countCall
+	// compiles that call itself (ctaCountedItems).
 	count(arg ctaCounted, types ctaTypes) (ctaValue, bool)
 	// computes reports whether the façade admits xpath20.md §3.4's binary
 	// arithmetic operators at all ([13] AdditiveExpr, [14]
@@ -883,7 +884,7 @@ type ctaCast struct {
 
 // ctaCount is an fn:count call (xpath-functions.md §15.4.1, `fn:count($arg as
 // item()*) as xs:integer`), which the assertion façade admits over every
-// argument and the facet façade over one that is no path (ctaFacade.count):
+// argument and the facet façade over one that is no path (ctaParser.countCall):
 // the number of items its argument evaluates to, as one value of st,
 // xs:integer. The argument is not atomized — the signature's item()* asks for
 // none — so a counted step is never typed and reads no value: what it selects
@@ -907,8 +908,8 @@ type ctaCount struct {
 // sequence (ctaNoDocumentRoot, xpath20.md §3.2), or an operand that is no
 // path, whose own items are counted (ctaCountedItems). The grammar closes the set
 // (STYLE T2's schema-closed-set exception). Every arm answers readsChild and
-// counted on ctaExpr's terms, and nodes, how many nodes it selects, reporting
-// false where it raises.
+// counted on ctaExpr's terms, and nodes, how many items it evaluates to — the
+// nodes a path selects — reporting false where it raises.
 type ctaCounted interface {
 	ctaCounted()
 	readsChild(name xsd.QName) bool
@@ -1715,7 +1716,7 @@ func (e ctaEffectiveBoolean) eval(env ctaEnv) ctaAnswer {
 	case ctaStringFunction:
 		return ctaBoolean(e.operand, n.cast.target, env)
 	case ctaDistinctValues:
-		return ctaDistinctBoolean(n, env)
+		return ctaBoolean(e.operand, n.st, env)
 	case ctaValueVar:
 		return ctaBoolean(e.operand, n.atom, env)
 	case ctaEmptyValue:

@@ -222,7 +222,8 @@ func TestCountOfAnOperandKeysWhatItCounts(t *testing.T) {
 }
 
 // The forms outside this slice still decline: fn:distinct-values with a
-// collation argument (§7.3.1) or none, `count(.)`, and each of the new forms
+// collation argument (§7.3.1) or none, `count(.)`, fn:string over an xs:double
+// fn:distinct-values call, and each of the new forms
 // under a Type Alternative's {test}, whose grammar holds no fn:count
 // (§3.12.6 clause 3) — and on the facet, the paths fn:count counts off a
 // Tally (TestCountDeclinesOutsideTheAssertionFacade).
@@ -240,6 +241,22 @@ func TestCountAndDistinctValuesDecline(t *testing.T) {
 		v := fcValue(t, list, "1 2")
 		if got := FacetAssertions().Evaluate(backend(), types, list, asRecord(expr), v); got != value.AssertionDeclined {
 			t.Errorf("FacetAssertions().Evaluate(%q) = %d, want declined", expr, got)
+		}
+	}
+	// fn:string over an xs:double fn:distinct-values call is the cast to
+	// xs:string of a floating value, which declines (castSource,
+	// floatingSource): fn:string(1.0e0) is "1", which this engine does not
+	// build. Both rows compile and answer — the first false, the second true,
+	// each wrong — with castSource's ctaDistinctValues arm removed.
+	doubles := asList(t, "DoubleList", ctaBuiltin("double"))
+	dtypes := asTypesWith(doubles)
+	for _, expr := range []string{"string(distinct-values($value)) = '1'", "string(distinct-values($value)) = '1.0E0'"} {
+		if _, ok := CompileAssertionTest(asRecord(expr), dtypes, xsd.SimpleContent{SimpleType: doubles}, asUses(t, nil), asNoElems); ok {
+			t.Errorf("CompileAssertionTest(%q) over a double list: compiled, want declined", expr)
+		}
+		v := fcValue(t, doubles, "1")
+		if got := FacetAssertions().Evaluate(backend(), dtypes, doubles, asRecord(expr), v); got != value.AssertionDeclined {
+			t.Errorf("FacetAssertions().Evaluate(%q) over a double list = %d, want declined", expr, got)
 		}
 	}
 	for _, expr := range []string{"count(()) = 0", "count('a') = 1", "count(distinct-values(@a)) = 1"} {

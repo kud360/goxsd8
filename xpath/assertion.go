@@ -1063,8 +1063,8 @@ func (ctaAssertionFacade) rooted() (ctaValue, bool) {
 	return ctaNoDocumentRoot{}, true
 }
 
-// count compiles an fn:count call over arg to its ctaCount (ctaCountOf). arg is
-// never typed against attrs or elems: fn:count does not atomize it
+// count compiles an fn:count call over the path arg to its ctaCount
+// (ctaCountOf). arg is never typed against attrs or elems: fn:count does not atomize it
 // ([CompileAssertionTest]).
 func (ctaAssertionFacade) count(arg ctaCounted, types ctaTypes) (ctaValue, bool) {
 	return ctaCountOf(arg, types)

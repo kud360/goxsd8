@@ -22,7 +22,7 @@ import (
 // ·effective boolean value· (childPath, selectedElements), an fn:count call
 // ([48] FunctionCall) over one counted path, a [40] Predicate on a child step
 // in it (predicate) or a [21] UnionExpr of such paths (countArgument), or over
-// an operand a library call takes as its argument (countedArgument), a call
+// an operand a library call takes as its argument (countCall), a call
 // to one of the F&O string and sequence functions (libraryCall) whose arguments
 // are additive expressions or `()`, the binary operators of [13] AdditiveExpr
 // and [14] MultiplicativeExpr, and [47] ContextItemExpr `.`, which the facet
@@ -55,8 +55,8 @@ const ctaFunctionNS = "http://www.w3.org/2005/xpath-functions"
 var ctaNotFunction = xsd.QName{Space: ctaFunctionNS, Local: "not"}
 
 // ctaCountFunction is fn:count (xpath-functions.md §15.4.1), which a [14]
-// ta-ValueExpr calls on the assertion and facet façades (ctaParser.countCall,
-// ctaFacade.count); the other functions it calls but the constructors are
+// ta-ValueExpr calls on the assertion and facet façades (ctaParser.countCall);
+// the other functions it calls but the constructors are
 // ctaParser.libraryCall's.
 var ctaCountFunction = xsd.QName{Space: ctaFunctionNS, Local: "count"}
 
@@ -1198,8 +1198,10 @@ func (p *ctaParser) presenceArgument() (ctaValue, bool) {
 // `xs:anyAtomicType*` argument (xpath-functions.md §15.1.6), which is atomized
 // (ctaDistinctValues), and whose result is that argument's distinct items. A
 // statically empty argument compiles to ctaEmptyValue, which is the empty
-// sequence the call returns over it; an xs:untypedAtomic one is compared in
-// xs:string. No argument declines (err:XPST0017).
+// sequence the call returns over it. The node's st is the type its items are
+// compared in: the argument's own static type, or xs:string for an
+// xs:untypedAtomic one, which declines where p.types resolves no xs:string.
+// No argument declines (err:XPST0017).
 //
 // GAP(xpath): the two-argument form, whose second argument names a collation
 // (§7.3.1), declines rather than being evaluated — and is never evaluated as
@@ -1213,7 +1215,14 @@ func (p *ctaParser) distinctValuesCall() (ctaValue, bool) {
 	if ctaIsEmpty(args[0]) {
 		return ctaEmptyValue{}, true
 	}
-	return ctaDistinctValues{operand: args[0]}, true
+	if typed, isTyped := ctaStaticOf(args[0]).(ctaTyped); isTyped {
+		return ctaDistinctValues{operand: args[0], st: typed.st}, true
+	}
+	str, resolved := p.types.simple(ctaBuiltin("string"))
+	if !resolved {
+		return nil, false
+	}
+	return ctaDistinctValues{operand: args[0], st: str}, true
 }
 
 // constantCall parses a call to fn:true or fn:false, named local, with no
@@ -1237,35 +1246,27 @@ func (p *ctaParser) constantCall(local string) (ctaValue, bool) {
 // façade calls the library (ctaFacade.callsLibrary) and the argument opens as
 // no path can (countsItems), the argument is one a library call takes
 // (argument) — `$value`, `()`, a function call, a literal — whose items are
-// counted (ctaCountedItems); every other argument is a path countArgument
-// parses. The node is p.facade's, which may decline it, and so is the node of
-// a rooted argument; an argument outside those shapes declines.
+// counted, and the node is their ctaCount (ctaCountedItems, ctaCountOf) on
+// every such façade. Every other argument is a path countArgument parses,
+// whose node is p.facade's (ctaFacade.count), which may decline it, as is the
+// node of a rooted argument; an argument outside those shapes declines.
 func (p *ctaParser) countCall() (ctaValue, bool) {
 	p.advance() // the function name
 	p.advance() // '('
-	arg, ok := p.countedArgument()
-	if !ok {
-		return nil, false
+	if p.facade.callsLibrary() && p.countsItems() {
+		operand, ok := p.argument()
+		if !ok || !p.at(ctaRParen) {
+			return nil, false
+		}
+		p.advance()
+		return ctaCountOf(ctaCountedItems{operand: operand}, p.types)
 	}
-	if !p.at(ctaRParen) {
+	arg, ok := p.countArgument()
+	if !ok || !p.at(ctaRParen) {
 		return nil, false
 	}
 	p.advance()
 	return p.facade.count(arg, p.types)
-}
-
-// countedArgument parses fn:count's one argument on countCall's terms: the
-// operand argument parses where the façade calls the library and the cursor
-// opens no path (countsItems), and the path countArgument parses otherwise.
-func (p *ctaParser) countedArgument() (ctaCounted, bool) {
-	if !p.facade.callsLibrary() || !p.countsItems() {
-		return p.countArgument()
-	}
-	operand, ok := p.argument()
-	if !ok {
-		return nil, false
-	}
-	return ctaCountedItems{operand: operand}, true
 }
 
 // countsItems reports whether the cursor opens an fn:count argument no path
