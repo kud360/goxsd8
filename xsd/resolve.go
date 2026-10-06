@@ -732,7 +732,7 @@ func (s *Schema) resolveAttributeDecl(a AttributeDeclaration) error {
 		return nil
 	}
 	return xsderr.New(ruleSrcResolve, a.Loc(),
-		"%s references simple type %s, but that expanded name is a complex type definition, and §3.2.2.1/§3.2.2.2 take an attribute's {type definition} to be the simple type definition its type= resolves to (src-resolve)", ctx, r.Name)
+		"%s references simple type %s, but that expanded name is a complex type definition, and src-resolve requires an attribute's type= to resolve to a simple type definition", ctx, r.Name)
 }
 
 // resolveElementDecl resolves the two reference-bearing slots of an element
