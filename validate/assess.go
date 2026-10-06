@@ -1385,7 +1385,7 @@ func (w *walk) declineAttribute(a Attribute, rule xsderr.Rule, clause, format st
 // [walk.element] is never reached for it, so its "assessing element" line —
 // which every other element gets, whatever was or was not decided about it
 // (STYLE L1) — has nowhere else to come from, and it carries the outcome that
-// says the subtree below is unvisited rather than merely undecided.
+// says the subtree below is unassessed rather than merely undecided.
 func (w *walk) logSkipped(e Element) {
 	if !w.log.Enabled(context.Background(), slog.LevelDebug) {
 		return
@@ -1495,11 +1495,15 @@ func (w *walk) children(e Element, content *contentCheck, id *icCheck, below ass
 //
 // A ·skipped· child stops here and not one level down, which is what makes it
 // the whole SUBTREE that is not ·assessed· (key-sva clause 3.2, cvc-assess-elt
-// clause 2): [walk.element] is the only path to a child's own [[children]], so
-// declining to call it leaves every element below the skipped one unvisited,
-// whatever its own attribution would have been. It is also what keeps
-// inherited, the child's [inherited attributes], from reaching a child
-// e-inherited_attributes gives none: one attributed to a skip Wildcard.
+// clause 2): [walk.element] is the only path that assesses a child's own
+// [[children]], so declining to call it leaves every element below the skipped
+// one unassessed, whatever its own attribution would have been. It is also
+// what keeps inherited, the child's [inherited attributes], from reaching a
+// child e-inherited_attributes gives none: one attributed to a skip Wildcard.
+// The one read of a ·skipped· subtree is [assertionAncestry.skipped]'s, and
+// only where an ancestor's {test} counts nodes of it: the names of its elements
+// and their attributes, for the Tally, and nothing assessed. A fault in the
+// source met there stops the walk as one met here would.
 //
 // A child [contentCheck.element] reports undecided never reaches
 // [walk.childGoverning]: it takes [governance]'s undecided shape here, and
@@ -1577,8 +1581,10 @@ func (w *walk) child(c Child, content *contentCheck, id *icCheck, up assertionAn
 		}
 		g, assess := w.childGoverning(e, a, content.g.complexType(), inherited)
 		if !assess {
-			up.skipped(e)
 			w.logSkipped(e)
+			if err := up.skipped(e); err != nil {
+				w.res.err = err
+			}
 			return
 		}
 		w.unresolvedStrictWildcardChild(content, e, a, g)

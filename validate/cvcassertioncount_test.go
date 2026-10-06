@@ -1,6 +1,7 @@
 package validate
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -17,7 +18,10 @@ import (
 // each local <e1> of E1Type, which nests further e1s, carries an optional a and
 // a d that defaults to "x"; <u> takes its type from an alternative whose
 // {test} xpath declines, so its ·governing type definition· is undetermined.
-const ccSchemaText = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:l="urn:lax">
+// skip.xsd declares a global {urn:skip}y whose d defaults to "x" too, which
+// the skip wildcard's ·skipped· y never takes.
+const ccSchemaText = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:l="urn:lax" xmlns:s="urn:skip">
+  <xs:import namespace="urn:skip" schemaLocation="skip.xsd"/>
   <xs:complexType name="E1Type">
     <xs:sequence>
       <xs:element name="e1" type="E1Type" minOccurs="0" maxOccurs="unbounded" nillable="true"/>
@@ -40,11 +44,21 @@ const ccSchemaText = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xml
   <xs:element name="e1" type="RootType"/>
 </xs:schema>`
 
+// ccSkipText is skip.xsd: the global {urn:skip}y, with a defaulted d.
+const ccSkipText = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:skip">
+  <xs:element name="y">
+    <xs:complexType>
+      <xs:sequence><xs:any processContents="lax" minOccurs="0" maxOccurs="unbounded"/></xs:sequence>
+      <xs:attribute name="d" type="xs:string" default="x"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+
 // ccSchema is ccSchemaText with test as RootType's one assertion.
 func ccSchema(t *testing.T, test string) *xsd.Schema {
 	t.Helper()
 	escaped := strings.NewReplacer("&", "&amp;", "<", "&lt;", `"`, "&quot;").Replace(test)
-	return parsedSchema(t, map[string]string{"main.xsd": strings.Replace(ccSchemaText, "TEST", escaped, 1)})
+	return parsedSchema(t, map[string]string{"main.xsd": strings.Replace(ccSchemaText, "TEST", escaped, 1), "skip.xsd": ccSkipText})
 }
 
 // ccNode is an element named name at line, carrying attrs, over kids.
@@ -162,17 +176,91 @@ func TestAssertionCountsInvalidAndLaxElements(t *testing.T) {
 	wantSatisfied(t, res, "lax elements")
 }
 
-// A subtree the walk cannot report exactly DECLINES the counting element's
-// assertions (lackingCount), and is never charged: a ·skipped· {urn:skip}y,
-// whose subtree is not walked. An assertion that counts nothing reads no Tally
-// and is evaluated beside the ·skipped· child. The skipped row is satisfied
-// instead with assertionAncestry.skipped's counting loop removed.
-func TestAssertionOverAnUncountableSubtreeIsDeclined(t *testing.T) {
-	y := xsd.QName{Space: "urn:skip", Local: "y"}
-	acDeclined(t, aAssess(t, ccSchema(t, "count(e1) eq 0"), ccRoot(nil, ccNode(y, 2, nil))),
-		"the element {urn:skip}y at instance.xml:2:3, in the subtree of the element e1 whose nodes a {test} counts, cannot be counted exactly for the data model instance cvc-assertion clause 1 builds: it is ·skipped·, so its subtree is not walked")
-	wantSatisfied(t, aAssess(t, ccSchema(t, "@a = 'v'"), ccRoot([]Attribute{ccAttr(local("a"), "v", 1)}, ccNode(y, 2, nil))),
+// A ·skipped· subtree is counted by name (assertionAncestry.tallySkipped): a
+// {urn:skip}y the skip wildcard ·skipped· and every element below it, each at
+// its own depth, so `count(e1)` does not count the e1 inside y, with the
+// attributes each carries — xsi:type among them, never assessed, so its bogus
+// QName charges nothing — and no ·defaulted attribute·, so y's declared d,
+// which ·skipped· y is not governed by, counts only where carried. Every
+// table row is declined instead, and fails, with assertionAncestry.skipped
+// recording a lackingCount for each counting ancestor; the charged rows are
+// satisfied instead with tallySkipped reporting nothing below y.
+func TestAssertionCountsAcrossASkippedElement(t *testing.T) {
+	e1, y, a, d := local("e1"), xsd.QName{Space: "urn:skip", Local: "y"}, local("a"), local("d")
+	xsiType := ccAttr(xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: "type"}, "no:such", 4)
+	for _, tc := range []struct {
+		why, test string
+		root      *testElement
+		charged   bool
+	}{
+		{"an e1 inside y and one outside", "count(.//e1) eq 2",
+			ccRoot(nil, ccNode(e1, 2, nil), ccNode(y, 3, nil, ccNode(e1, 4, nil))), false},
+		{"three e1, two outside y", "count(.//e1) eq 2",
+			ccRoot(nil, ccNode(e1, 2, nil), ccNode(e1, 3, nil), ccNode(y, 4, nil, ccNode(e1, 5, nil))), true},
+		{"y itself and a y inside it", "count(.//s:y) eq 2",
+			ccRoot(nil, ccNode(y, 2, nil, ccNode(y, 3, nil))), false},
+		{"the e1 inside y is no child", "count(e1) eq 1",
+			ccRoot(nil, ccNode(e1, 2, nil), ccNode(y, 3, nil, ccNode(e1, 4, nil))), false},
+		{"y's own @a and its child's", "count(.//@a) eq 2",
+			ccRoot(nil, ccNode(y, 2, []Attribute{ccAttr(a, "1", 2)}, ccNode(e1, 3, []Attribute{ccAttr(a, "2", 3)}))), false},
+		{"y's own @a and its child's, one too many", "count(.//@a) eq 1",
+			ccRoot(nil, ccNode(y, 2, []Attribute{ccAttr(a, "1", 2)}, ccNode(e1, 3, []Attribute{ccAttr(a, "2", 3)}))), true},
+		{"an xsi:type inside y", "count(.//@xsi:type) eq 1",
+			ccRoot(nil, ccNode(y, 2, nil, ccNode(y, 3, nil, ccNode(e1, 4, []Attribute{xsiType})))), false},
+		{"a carried d and no ·defaulted· one", "count(.//@d) eq 1",
+			ccRoot(nil, ccNode(y, 2, []Attribute{ccAttr(d, "c", 2)}, ccNode(y, 3, nil))), false},
+	} {
+		t.Run(tc.why, func(t *testing.T) {
+			res := aAssess(t, ccSchema(t, tc.test), tc.root)
+			if !tc.charged {
+				wantSatisfied(t, res, tc.test)
+				return
+			}
+			wantAssertionCharge(t, res, "the element e1 is not ·valid· with respect to assertion 1 of 1 in the {assertions} of the ·governing type definition· RootType, whose {test} is ")
+		})
+	}
+	wantSatisfied(t, aAssess(t, ccSchema(t, "@a = 'v'"), ccRoot([]Attribute{ccAttr(a, "v", 1)}, ccNode(y, 2, nil))),
 		"a non-counting assertion beside a ·skipped· child")
+}
+
+// A ·skipped· child whose value a {test} reads still DECLINES its parent's
+// assertions through lackingChild, whatever else the same {test} counts
+// (guard): the ·skipped· <e1> is read by name for `count(.//x)`, and its value
+// is not read.
+func TestAssertionReadingASkippedCountedChildIsDeclined(t *testing.T) {
+	acDeclined(t, aAssess(t, acSchema(t, "e1 = 'present' and count(.//x) ge 0"), acRoot(acKid("e1", 2, "present"), acKid("e1", 3, "present"))),
+		"the child element e1 of the element root at instance.xml:3:3, which a {test} reads, has no typed value for the data model instance cvc-assertion clause 1 builds: it is ·skipped·")
+}
+
+// A fault in the source inside a ·skipped· subtree stops the walk where an
+// ancestor counts across it, since the subtree is read for the Tally: Err()
+// wraps the fault with the element whose [[children]] were being read, two
+// levels below the skip, and nothing is decided at the root. It is Err() nil
+// instead, with tallySkipped dropping its cursor's Err or a child call's
+// error. Where no ancestor counts the subtree is never opened, and a fault a
+// cursor over it would report goes unread (guard).
+func TestSourceFaultInASkippedCountedSubtreeStopsTheWalk(t *testing.T) {
+	y := xsd.QName{Space: "urn:skip", Local: "y"}
+	fault := errors.New("truncated")
+	tree := func() *testElement {
+		inner := &testElement{name: local("z"), kidsErr: fault, loc: loc(4, 3)}
+		return ccRoot([]Attribute{ccAttr(local("a"), "v", 1)}, ccNode(y, 2, nil, ccNode(y, 3, nil, ElementChild(inner))))
+	}
+	v, err := New(ccSchema(t, "count(.//s:y) eq 2"), testBackend())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	res := v.Assess(tree())
+	if !errors.Is(res.Err(), fault) {
+		t.Fatalf("Err() = %v, want it to wrap %v", res.Err(), fault)
+	}
+	if want := "reading the children of z at instance.xml:4:3: "; !strings.HasPrefix(res.Err().Error(), want) {
+		t.Errorf("Err() = %q, want it to open %q", res.Err(), want)
+	}
+	if len(res.Violations()) != 0 || len(res.Unevaluated()) != 0 {
+		t.Errorf("Violations() = %v, Unevaluated() = %v, want both empty: the walk stopped", res.Violations(), messages(res.Unevaluated()))
+	}
+	wantSatisfied(t, aAssess(t, ccSchema(t, "@a = 'v'"), tree()), "a non-counting assertion over a faulting ·skipped· subtree")
 }
 
 // ccDecided fails unless res recorded no cvc-assertion decline, and charged

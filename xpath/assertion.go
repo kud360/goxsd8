@@ -231,8 +231,8 @@ func BindValue(v TypedValue) ValueBinding { return ValueBinding{v: v} }
 // Under-reporting would make a count too small and could fabricate a charge.
 //
 // Its consumer is validate's cvc-assertion site (validate/cvcassertion.go),
-// which reports each element it walks to the Tally of every enclosing element's
-// {assertions} that has one.
+// which reports each element it walks, and each element of a ·skipped· subtree
+// by name, to the Tally of every enclosing element's {assertions} that has one.
 type Tally struct{ counters []ctaCounter }
 
 // ctaCounter is one counter of a [Tally]: the path it counts and how many of

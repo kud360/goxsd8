@@ -88,15 +88,14 @@ const ruleCvcAssertionsValid xsderr.Rule = "cvc-assertions-valid"
 // use}, carried or ·defaulted·, has no ·actual value·, one of whose element
 // [[children]] a {test} reads has no typed value this package reads
 // ([walk.keepChild]), whose `$value` is undecided ([walk.assertionValues]), or
-// one of whose {test}s counts nodes of a subtree this package cannot report
-// exactly: one holding a ·skipped· element, or an element whose ·governing
-// type definition· it could not determine, so that its ·defaulted attributes·
-// are unknown, where a {test} counts attribute nodes at that element's depth
-// ([walk.tallyElement]). Fail-open: the withheld value is clause
-// 6's own verdict, whose whole consumer set inside this package is
-// w.res.violations and its one reader [Result.Violations], which charge on a
-// violation PRESENT, so a decline can only cost a rejection and can
-// manufacture none. (#1042)
+// one of whose {test}s counts the attribute nodes of an element of its subtree
+// whose ·governing type definition· this package could not determine, so that
+// its ·defaulted attributes· are unknown ([walk.tallyElement]); a ·skipped·
+// subtree is counted, by name ([assertionAncestry.tallySkipped]). Fail-open:
+// the withheld value is clause 6's own verdict, whose whole consumer set
+// inside this package is w.res.violations and its one reader
+// [Result.Violations], which charge on a violation PRESENT, so a decline can
+// only cost a rejection and can manufacture none. (#1042)
 func (w *walk) elementAssertions(e Element, asserts *assertionCheck, content *contentCheck, invalid bool) {
 	if asserts == nil {
 		return
@@ -141,9 +140,13 @@ func (w *walk) elementAssertions(e Element, asserts *assertionCheck, content *co
 // holds one [xpath.ChildElement] per element [[child]] some test reads, in
 // arrival order, which is document order (STYLE D1); and lack is the first such
 // child that has no typed value this package reads, nil while there is none —
-// or the first node of the element's subtree a test's [xpath.Tally] cannot be
-// told of exactly ([walk.tallyElement]). Each test's Tally collects the counts
-// from the whole subtree as it is walked, and no node of it is kept.
+// or the first element of the element's subtree a test's [xpath.Tally] cannot
+// be told of exactly: one whose ·governing type definition· was not
+// determined, at whose depth some test counts attribute nodes
+// ([assertionCheck.countsAttributesAt], [walk.tallyElement]). The lack is the
+// whole check's, never one test's. Each test's Tally collects the counts from
+// the whole subtree as it is walked — a ·skipped· part of it by name
+// ([assertionAncestry.tallySkipped]) — and no node of it is kept.
 type assertionCheck struct {
 	ct       xsd.ComplexType
 	tests    []assertionTest
@@ -265,18 +268,74 @@ func (up assertionAncestry) below(name xsd.QName, own *assertionCheck) assertion
 	return next
 }
 
-// skipped records e, an element [[child]] ·skipped· by key-sva clause 3.2 and
-// whose ancestry is up, as a lack: of its parent where some test of the parent
-// reads e's name — a ·skipped· element is not ·assessed·, so the partial ·PSVI·
-// gives it no type to read its value under — and of every counting ancestor,
-// none of whose Tallies can be told of the subtree the walk does not enter.
-func (up assertionAncestry) skipped(e Element) {
+// skipped hands e, an element [[child]] ·skipped· by key-sva clause 3.2 and
+// whose ancestry is up, to the {assertions} of its ancestors: as a lack of its
+// parent where some test of the parent reads e's name — a ·skipped· element is
+// not ·assessed·, so the partial ·PSVI· gives it no type to read its value
+// under — and, where some ancestor counts, as e's subtree told to every
+// counting ancestor's Tallies ([assertionAncestry.tallySkipped]). It reports
+// the fault in the source that stopped that subtree, and nil where none did;
+// where no ancestor counts, nothing below e is read and it reports nil.
+func (up assertionAncestry) skipped(e Element) error {
 	if up.parent.reads(e.Name()) {
 		up.parent.lacking(lackingChild{name: e.Name(), loc: e.Loc(), why: "it is ·skipped·, so it is not ·assessed·"})
 	}
-	for f := up.counting; f != nil; f = f.outer {
-		f.check.lacking(lackingCount{name: e.Name(), loc: e.Loc(), why: "it is ·skipped·, so its subtree is not walked"})
+	if up.counting == nil {
+		return nil
 	}
+	return up.tallySkipped(e)
+}
+
+// tallySkipped tells every counting ancestor in up of e, an element of a
+// ·skipped· subtree whose ancestry is up, and then of each element below e, in
+// document order: each ancestor's Tallies count an element by its chain of
+// names below that ancestor, on [walk.tallyElement]'s terms, with the names of
+// the attributes the element carries at that chain's length. A ·skipped·
+// element and everything below it is governed by no type (key-skipped,
+// key-governing-type-elem item 5), so it has no ·defaulted attribute·
+// (key-dflt-att), and its attribute nodes are exactly the [[attributes]] it
+// carries, xsi ones included ([Element.Attributes]); whether a {test} counts
+// attribute nodes at its depth decides nothing here.
+//
+// It reads names and nothing else: no element below the skip is ·assessed·
+// (cvc-assess-elt clause 2), so nothing is fed to an identity constraint or the
+// ID table, no [inherited attributes] are handed down, no value is kept for a
+// {test} ([walk.keepChild]), and nothing is logged. It opens e's [[children]]
+// ([Element.Children]) while the source still stands at e — the caller's
+// cursor has not advanced past it — and drains that cursor before it returns,
+// as [Children] requires; a text child counts nothing and is passed over. It
+// reports the fault in the source that stopped a cursor, wrapped once with the
+// element whose [[children]] it was reading, and nil otherwise.
+func (up assertionAncestry) tallySkipped(e Element) error {
+	// chain is on [walk.tallyElement]'s shared-array terms: each child's call
+	// writes the slot after it, and returns before the next child's does.
+	chain := append(up.path, e.Name())
+	var attrs []xsd.QName
+	for _, a := range e.Attributes() {
+		attrs = append(attrs, a.Name())
+	}
+	for f := up.counting; f != nil; f = f.outer {
+		f.check.tally(chain[f.depth+1:], attrs)
+	}
+	below := assertionAncestry{counting: up.counting, path: chain}
+	kids := e.Children()
+	for {
+		c, ok := kids.Next()
+		if !ok {
+			break
+		}
+		child, isElement := c.Element()
+		if !isElement {
+			continue
+		}
+		if err := below.tallySkipped(child); err != nil {
+			return err
+		}
+	}
+	if err := kids.Err(); err != nil {
+		return fmt.Errorf("reading the children of %s at %s: %w", e.Name(), e.Loc(), err)
+	}
+	return nil
 }
 
 // tallyElement tells every counting ancestor in up, and e's own clause 6 state
@@ -295,7 +354,7 @@ func (up assertionAncestry) skipped(e Element) {
 // It runs on every element [walk.element] enters — invalid, ·nilled·, ·laxly
 // assessed· or undecided alike — once, so each node is reported exactly once,
 // as [xpath.Tally] obliges. A ·skipped· element is not entered, and
-// [assertionAncestry.skipped] takes its place.
+// [assertionAncestry.tallySkipped] reports it and its subtree in its place.
 func (w *walk) tallyElement(e Element, g governance, up assertionAncestry, own *assertionCheck) {
 	if up.counting == nil && !own.counts() {
 		return
@@ -629,8 +688,9 @@ func (l lackingDefault) declined(e xsd.QName) string {
 
 // lackingCount is an element, named name at loc, of the subtree of an element
 // one of whose {test}s counts its nodes, which the counting [xpath.Tally]
-// cannot be told of exactly, for the reason why ([walk.tallyElement],
-// [assertionAncestry.skipped]).
+// cannot be told of exactly, for the reason why: its ·governing type
+// definition· was not determined, and a {test} counts its attribute nodes
+// ([walk.tallyElement]).
 type lackingCount struct {
 	name xsd.QName
 	loc  xsderr.Loc

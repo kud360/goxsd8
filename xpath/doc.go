@@ -56,7 +56,8 @@
 //     values, so its caller keeps no other; neither fn:count nor a child path reads a value, and
 //     AssertionTest.Tally makes the Tally its caller reports E's subtree to — each element by its
 //     chain of names below E (Tally.Element), each attribute by its element's depth
-//     (Tally.Attribute) — and Evaluate reads the counts off, so no counted node is kept. It
+//     (Tally.Attribute), Tally.CountsAttributesAt telling it at which depths an attribute
+//     counts — and Evaluate reads the counts off, so no counted node is kept. It
 //     declines what tier 1 declines, plus a wildcard NameTest, an attribute with no fixed atomic
 //     type that is not ·special· (a list, a union, an xs:QName or xs:NOTATION primitive), a child
 //     whose ·locally declared type· is ·absent·, ·special·, or neither a simple type an
