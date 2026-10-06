@@ -540,8 +540,8 @@ XSD-required subset:
 2. assertion essentials — axes, predicates, quantified expressions, typed
    comparisons, the F&O function core; its first slices ship, and
    `xpath/doc.go`'s tier 2 enumerates the grammar they admit — `fn:count`
-   among it, over `N` or `@N` behind `./` or `.//`, or over a rooted step —
-   and what they decline,
+   among it, over `N` or `@N`, bare or behind `./` or `.//`, or over a
+   rooted step — and what they decline,
 3. the full grammar and function library, tracked by its own conformance
    lane.
 
