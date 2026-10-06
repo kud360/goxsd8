@@ -428,25 +428,26 @@ func ValidatingType(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexica
 }
 
 // validateLexical is ValidateLexical's internal form: the same verdict, plus the
-// whiteSpace mode of the ·basic member· that actually decided the literal — st's
-// own for the atomic and list varieties, the ·active basic member·'s for a union,
-// which validateUnion reaches by recursing here per member (§4.1.4 cl.2.3).
+// ·basic member· that actually decided the literal — st itself for the atomic and
+// list varieties, the ·active basic member· for a union, which validateUnion
+// reaches by recursing here per member (§4.1.4 cl.2.3, dt-active-basic-member).
 //
-// That third result exists for exactly one consumer, validateUnion: a union's own
-// pattern facet must be matched against the literal as normalized by the member
-// that validated it ("in the case of unions the ·pre-lexical· facets to use are
-// those associated with B in clause 2.3", the dv_vfacets note; PRINCIPLES 11),
-// and only the callee knows which member that was. No caller outside this package
-// needs it, so the exported wrapper drops it rather than widening the API
-// (STYLE T5).
-func validateLexical(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexical string, ctx Context, a AssertionEvaluator) (Value, whiteSpace, error) {
+// That third result exists for exactly one consumer, validateUnion, which needs
+// the member twice: a union's own pattern facet must be matched against the
+// literal as normalized by that member's whiteSpace ("in the case of unions the
+// ·pre-lexical· facets to use are those associated with B in clause 2.3", the
+// dv_vfacets note; PRINCIPLES 11), and the union's own assertions bind `$value`
+// under that member (dt-xdmrep clause 4) — and only the callee knows which member
+// that was. No caller outside this package needs it, so the exported wrapper
+// drops it rather than widening the API (STYLE T5).
+func validateLexical(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexical string, ctx Context, a AssertionEvaluator) (Value, *xsd.SimpleType, error) {
 	// {variety} dispatch, cvc-datatype-valid clause 2 (§4.1.4): a union takes
 	// clause 2.3's member dispatch (union.go), which composes st's own facets
 	// around the dispatched member's verdict rather than around st's own mapping.
 	// Atomic (cl.2.1) and list (cl.2.2) share the path below.
 	variety, err := st.Variety(r)
 	if err != nil {
-		return nil, 0, typeFault(err)
+		return nil, nil, typeFault(err)
 	}
 	if _, ok := variety.(xsd.Union); ok {
 		return validateUnion(b, r, st, rawLexical, ctx, a)
@@ -454,7 +455,7 @@ func validateLexical(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexic
 
 	lexFacets, valFacets, assertFacets, err := compile(b, r, st, a)
 	if err != nil {
-		return nil, 0, typeFault(err)
+		return nil, nil, typeFault(err)
 	}
 
 	// whiteSpace stage (§4.3.6): normalize using st's effective whiteSpace facet,
@@ -466,7 +467,7 @@ func validateLexical(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexic
 	// facetValue applies to a facet's own {value}.
 	ws, err := effectiveWhiteSpace(r, st)
 	if err != nil {
-		return nil, 0, typeFault(err)
+		return nil, nil, typeFault(err)
 	}
 	lexical := rawLexical
 	if ws != 0 {
@@ -477,7 +478,7 @@ func validateLexical(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexic
 	// whiteSpace-normalized lexical, before the value even exists.
 	for _, lf := range lexFacets {
 		if err := lf.CheckLexical(lexical); err != nil {
-			return nil, 0, err
+			return nil, nil, err
 		}
 	}
 
@@ -486,33 +487,33 @@ func validateLexical(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexic
 	// governs facet {value}s, not the application-facing candidate).
 	m, ok, err := governingMapping(b, r, st, a)
 	if err != nil {
-		return nil, 0, typeFault(err)
+		return nil, nil, typeFault(err)
 	}
 	if !ok {
-		return nil, 0, typeFault(xsderr.New(ruleCvcDatatypeValid, xsderr.Loc{},
+		return nil, nil, typeFault(xsderr.New(ruleCvcDatatypeValid, xsderr.Loc{},
 			"value: no backend mapping governs type %s", st.Name()))
 	}
 	v, err := m.Parse(lexical, ctx)
 	if err != nil {
-		return nil, 0, err
+		return nil, nil, err
 	}
 
 	// value-facet stage: enumeration/bounds/digits/length on the parsed value.
 	for _, vf := range valFacets {
 		if err := vf.CheckValue(v); err != nil {
-			return nil, 0, err
+			return nil, nil, err
 		}
 	}
 	if err := declaredNotation(r, st, variety, lexical, ctx); err != nil {
-		return nil, 0, err
+		return nil, nil, err
 	}
 
 	// assertions stage (cvc-assertions-valid, §4.3.13.3), last: every other
 	// value facet has accepted v (cvc-datatype-valid clause 3).
-	if err := checkAssertions(b, r, st, v, assertFacets, a); err != nil {
-		return nil, 0, err
+	if err := checkAssertions(b, r, st, st, v, assertFacets, a); err != nil {
+		return nil, nil, err
 	}
-	return v, ws, nil
+	return v, st, nil
 }
 
 // compile builds the pattern (lexical) and value facet checkers for st from its

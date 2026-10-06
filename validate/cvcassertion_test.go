@@ -93,7 +93,7 @@ func aVarietyTypes(t *testing.T) []*xsd.SimpleType {
 		aList(t, "PlainList", local("AssertedInt")),
 		aRestriction(t, "AssertedList", local("PlainList"), "count($value) > 1"),
 		aUnion(t, "PlainUnion", local("AssertedInt"), local("AssertedStr")),
-		aRestriction(t, "AssertedUnion", local("PlainUnion"), "$value != 'x'"),
+		aRestriction(t, "AssertedUnion", local("PlainUnion"), "upper-case($value) != ''"),
 	}
 }
 
@@ -712,11 +712,12 @@ func TestUnionMemberFailingItsFacetYieldsTheValidatingType(t *testing.T) {
 // records nothing while the list's own declined facet is recorded; a union
 // records only the member the dispatch REACHED — 42 is decided by AssertedInt,
 // whose facet holds, so AssertedStr's is never asked, where "abc" reaches it —
-// and then its own facet, which is declined whatever its {test} (dt-xdmrep
-// clause 4). The two declined {test}s InRange and UpperX are the guard: with
-// [walk.declineAssertions] reporting false they record under cvc-attribute
-// instead, and with the evaluator answering AssertionFails for a decline they
-// are charged.
+// and then its own facet, compiled with `$value` typed by that ·active basic
+// member· (dt-xdmrep clause 4), whose fn:upper-case call declines there as it
+// would over AssertedInt itself. The two declined {test}s InRange and UpperX
+// are the guard: with [walk.declineAssertions] reporting false they record
+// under cvc-attribute instead, and with the evaluator answering AssertionFails
+// for a decline they are charged.
 func TestDeclinedFacetAssertionsAreRecorded(t *testing.T) {
 	for _, c := range []struct {
 		name    string
