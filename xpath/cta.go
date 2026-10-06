@@ -918,6 +918,10 @@ type ctaTallied interface {
 	// selectsAttribute reports whether the key selects an attribute node named
 	// name of the element depth levels below E, 0 being E.
 	selectsAttribute(depth int, name xsd.QName) bool
+	// selectsAttributesAt reports whether the key selects an attribute node of
+	// any name of the element depth levels below E, 0 being E
+	// ([Tally.CountsAttributesAt]).
+	selectsAttributesAt(depth int) bool
 	// same reports whether the key and other select the same nodes, which is
 	// what makes one counter serve both.
 	same(other ctaTallied) bool
@@ -962,6 +966,21 @@ func (p ctaCountPath) selectsAttribute(depth int, name xsd.QName) bool {
 	return false
 }
 
+// selectsAttributesAt reports whether p selects attributes of the element
+// depth levels below E: `@N` E's own, at depth 0, and `.//@N` E's or any
+// element's below it, at every depth from 0. An element axis selects none.
+func (p ctaCountPath) selectsAttributesAt(depth int) bool {
+	switch p.axis {
+	case ctaCountOwnAttributes:
+		return depth == 0
+	case ctaCountSubtreeAttributes:
+		return depth >= 0
+	case ctaCountChildren, ctaCountDescendants:
+		return false
+	}
+	return false
+}
+
 // same reports whether other is a ctaCountPath equal to p.
 func (p ctaCountPath) same(other ctaTallied) bool {
 	o, isCount := other.(ctaCountPath)
@@ -973,6 +992,9 @@ func (p ctaChildPath) selectsElement(path []xsd.QName) bool { return slices.Equa
 
 // selectsAttribute is false: every step of p is on the child axis.
 func (ctaChildPath) selectsAttribute(int, xsd.QName) bool { return false }
+
+// selectsAttributesAt is false: every step of p is on the child axis.
+func (ctaChildPath) selectsAttributesAt(int) bool { return false }
 
 // same reports whether other is a ctaChildPath with p's steps.
 func (p ctaChildPath) same(other ctaTallied) bool {

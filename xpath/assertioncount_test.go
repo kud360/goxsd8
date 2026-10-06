@@ -256,6 +256,32 @@ func TestAssertionTallyIsFreshAndTotal(t *testing.T) {
 	none.Attribute(0, uq("a"))
 }
 
+// CountsAttributesAt answers per counted path: `@a` selects attributes of E
+// alone, `.//@a` those of E and of every element below it, and `e1`, `.//e1`
+// and the child path `e1/e1` select none at any depth. A test that counts
+// nothing has a nil Tally, which answers false, and so does every Tally at a
+// depth below 0.
+func TestTallyCountsAttributesAt(t *testing.T) {
+	for _, tc := range []struct {
+		expr string
+		want map[int]bool
+	}{
+		{"count(@a) eq 0", map[int]bool{-1: false, 0: true, 1: false, 2: false}},
+		{"count(.//@a) eq 0", map[int]bool{-1: false, 0: true, 1: true, 2: true}},
+		{"count(e1) eq 0", map[int]bool{-1: false, 0: false, 1: false, 2: false}},
+		{"count(.//e1) eq 0", map[int]bool{-1: false, 0: false, 1: false, 2: false}},
+		{"exists(e1/e1)", map[int]bool{-1: false, 0: false, 1: false, 2: false}},
+		{"@length eq 1", map[int]bool{-1: false, 0: false, 1: false, 2: false}},
+	} {
+		c := acCompile(t, asRecord(tc.expr)).Tally()
+		for depth := -1; depth <= 2; depth++ {
+			if got := c.CountsAttributesAt(depth); got != tc.want[depth] {
+				t.Errorf("Tally of %q: CountsAttributesAt(%d) = %v, want %v", tc.expr, depth, got, tc.want[depth])
+			}
+		}
+	}
+}
+
 // fn:count's argument is one QName step, or a rooted one: every other argument
 // declines, and so does `.//` or `./` outside an fn:count call, and a cast from
 // a count, which [16] ta-SimpleValue, the operand of both cast spellings, does

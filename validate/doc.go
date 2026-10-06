@@ -405,13 +405,14 @@
 // declared types· once each child's own assessment is over, the counts of the
 // nodes of its subtree, reported to each counting {test}'s xpath.Tally as the
 // walk passes them, each element by its chain of names below the counting
-// element, and its simple content's ·actual value· — is evaluated
-// over those values and charged where it is false or raises a dynamic or type
-// error. A member xpath declines, and every member of an element one of whose
-// use-matched or ·defaulted· attributes has no ·actual value·, one of whose
-// read children is not known ·valid· or not ·validly substitutable· for its
-// ·locally declared type·, whose counted subtree holds a ·skipped· element or
-// one whose ·governing type definition· was not determined, or whose simple
+// element, a ·skipped· subtree's by name alone, and its simple content's
+// ·actual value· — is evaluated over those values and charged where it is
+// false or raises a dynamic or type error. A member xpath declines, and every
+// member of an element one of whose use-matched or ·defaulted· attributes has
+// no ·actual value·, one of whose read children is not known ·valid· or not
+// ·validly substitutable· for its ·locally declared type·, whose counted
+// subtree holds an element whose ·governing type definition· was not
+// determined and whose attribute nodes a {test} counts, or whose simple
 // content's ·actual value· is undecided, are recorded as [Unevaluated] under
 // cvc-assertion instead (cvcassertion.go).
 //
