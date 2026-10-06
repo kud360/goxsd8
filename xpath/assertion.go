@@ -212,7 +212,7 @@ func BindValue(v TypedValue) ValueBinding { return ValueBinding{v: v} }
 //
 //   - each element below E, by the chain of ·expanded names· from E's child
 //     down to it, whatever its validity, whether it is ·nilled·, and whether it
-//     was ·strictly· or ·laxly assessed· ([Tally.Element]);
+//     was ·strictly· or ·laxly assessed· or ·skipped· ([Tally.Element]);
 //   - each attribute of E and of each element below it, at the depth of the
 //     element it belongs to ([Tally.Attribute]): those the element carries,
 //     xsi:type and the other xsi attributes among them, and its ·defaulted
@@ -220,16 +220,19 @@ func BindValue(v TypedValue) ValueBinding { return ValueBinding{v: v} }
 //     from holds too; never a namespace declaration, which is not an attribute
 //     node.
 //
-// It has no undecided state: a caller that cannot report a subtree exactly —
-// one holding a ·skipped· element, whose own subtree is not walked, or an
-// element whose ·defaulted attributes· are undecidable for want of a
-// ·governing type definition· — declines the assertion itself, on the terms
-// [ValueBinding] states for an undecided `$value`. Under-reporting would make a
-// count too small and could fabricate a charge.
+// A ·skipped· element and everything below it is governed by no type
+// (key-skipped, key-governing-type-elem item 5), so it has no ·defaulted
+// attribute·: its attribute nodes are exactly those it carries, xsi ones
+// included. An element whose ·governing type definition· the caller could not
+// determine has ·defaulted attributes· it cannot know, and may go unreported
+// as attributes only at a depth where [Tally.CountsAttributesAt] is false; a
+// caller that cannot report a subtree exactly otherwise declines the assertion
+// itself, on the terms [ValueBinding] states for an undecided `$value`.
+// Under-reporting would make a count too small and could fabricate a charge.
 //
 // Its consumer is validate's cvc-assertion site (validate/cvcassertion.go),
-// which reports each element it walks to the Tally of every enclosing element's
-// {assertions} that has one.
+// which reports each element it walks, and each element of a ·skipped· subtree
+// by name, to the Tally of every enclosing element's {assertions} that has one.
 type Tally struct{ counters []ctaCounter }
 
 // ctaCounter is one counter of a [Tally]: the path it counts and how many of
@@ -274,6 +277,27 @@ func (c *Tally) Attribute(depth int, name xsd.QName) {
 			c.counters[i].n++
 		}
 	}
+}
+
+// CountsAttributesAt reports whether some path c counts selects an attribute
+// node of the element depth levels below E, 0 being E: `@N` at depth 0 only,
+// and `.//@N` at every depth from 0. It is false for a nil Tally and for a
+// depth below 0, which no [Tally.Attribute] report counts at either.
+//
+// Its consumer is validate's walk (validate/cvcassertion.go), which asks it of
+// an element whose ·defaulted attributes· it cannot know: where it is false,
+// no report of that element's attributes could change any count, and the
+// element node is reported alone.
+func (c *Tally) CountsAttributesAt(depth int) bool {
+	if c == nil {
+		return false
+	}
+	for _, counter := range c.counters {
+		if counter.path.selectsAttributesAt(depth) {
+			return true
+		}
+	}
+	return false
 }
 
 // count is the counter c holds for path, false where it holds none.
