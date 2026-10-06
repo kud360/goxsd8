@@ -155,12 +155,12 @@
 //     Reference (a literal's `&#38;` puts one there; §4.4.2, [67]),
 //     replacement text that is not balanced content, and, in a
 //     standalone="yes" document, a reference to an entity declared only in a
-//     parameter entity's replacement text (WFC: Entity Declared) are
-//     RuleXMLWellFormed faults. A reference past the reader's bound on
-//     nesting depth or on replacement text included per document is refused,
-//     as is a reference to an entity that is not internal or whose
-//     declaration the reader did not read, wrapping a cause: the reader does
-//     not decide whether the document is well-formed.
+//     parameter entity's replacement text, internal, external or unparsed
+//     (WFC: Entity Declared), are RuleXMLWellFormed faults. A reference past
+//     the reader's bound on nesting depth or on replacement text included per
+//     document is refused, as is any other reference to an entity that is not
+//     internal or whose declaration the reader did not read, wrapping a cause:
+//     the reader does not decide whether the document is well-formed.
 //   - Every error the reader returns but io.EOF is a RuleXMLWellFormed
 //     *xsderr.Error, and whether it wraps a cause says what it decides. One wrapping no
 //     cause is a charge the reader makes itself and a definite fault whatever
