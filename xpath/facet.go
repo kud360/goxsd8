@@ -15,7 +15,8 @@ import (
 // attribute or child-axis step, a "/" or "//" opening a path, and the implicit
 // argument of fn:string, fn:string-length and fn:normalize-space called with
 // none — raises err:XPDY0002 (ctaNoContextItem), and `$value`, bound to the XDM
-// representation of the value under the facet's type (clause 1.4, dt-xdmrep),
+// representation of the value under the facet's type, or under its ·active
+// basic member· where that type is a union (clause 1.4, dt-xdmrep clause 4),
 // is the whole of what a {test} can read, arithmetic and the F&O string and
 // sequence functions over it included (ctaFacetFacade.computes,
 // ctaFacetFacade.callsLibrary). An fn:count call declines
@@ -41,17 +42,19 @@ import (
 //   - [value.AssertionDeclined], where this engine does not evaluate it: a
 //     {test} [CompileAssertionTest] would decline over a simple {content type}
 //     of the same type, on that function's terms — the grammar is the same and
-//     so is every decline it states — a {test} calling fn:count, and every
-//     {test} of a union's own assertions facet.
+//     so is every decline it states — and a {test} calling fn:count.
 //
-// GAP(xpath): a union's own assertions facet is declined whatever its {test}:
-// `$value` is the XDM representation of the value under the union's ·active
-// basic member· (dt-xdmrep clause 4), which only the dispatch knows, and this
-// evaluator is handed the union. So is an fn:count call, whose argument would
-// raise err:XPDY0002 over the absent context item (ctaFacetFacade.count).
-// Every other decline is [CompileAssertionTest]'s, under its GAP(xpath). The
-// direction is the withhold: the caller declines the value's Datatype Valid
-// verdict, never charging it and never showing it satisfied. (#1042)
+// A union's own assertions facet is evaluated like any other: the pipeline
+// hands this evaluator the union's ·active basic member· as st, the type under
+// which `$value` is the value's XDM representation (dt-xdmrep clause 4,
+// cvc-assertions-valid clause 1.4), so a {test} is compiled against that
+// member and declines only where it would over the member itself.
+//
+// GAP(xpath): an fn:count call is declined, whose argument would raise
+// err:XPDY0002 over the absent context item (ctaFacetFacade.count). Every other
+// decline is [CompileAssertionTest]'s, under its GAP(xpath). The direction is
+// the withhold: the caller declines the value's Datatype Valid verdict, never
+// charging it and never showing it satisfied. (#1042)
 //
 // Nothing is cached: each call compiles its {test} afresh (STYLE D3), and b and
 // r are read as [AssertionTest.Evaluate] reads them and stored nowhere.
@@ -63,13 +66,6 @@ type facetAssertions struct{}
 
 // Evaluate decides test against v, a value of st, on [FacetAssertions]' terms.
 func (facetAssertions) Evaluate(b value.Backend, r xsd.TypeResolver, st *xsd.SimpleType, test xsd.XPathExpression, v value.Value) value.AssertionOutcome {
-	variety, err := st.Variety(r)
-	if err != nil {
-		return value.AssertionDeclined
-	}
-	if _, isUnion := variety.(xsd.Union); isUnion {
-		return value.AssertionDeclined
-	}
 	root, defect := compileCTATest(test, r, ctaFacetFacade{st: st})
 	if defect.kind != ctaNoDefect {
 		return value.AssertionDeclined
@@ -89,8 +85,10 @@ func noTypedAttributes(func(xsd.QName, TypedValue) bool) {}
 func noChildElements(func(ChildElement) bool) {}
 
 // ctaFacetFacade is the facet façade compileCTATest parses for: `$value` is
-// typed by st, the simple type the assertions facet is effective on, and every
-// read of the context item compiles to ctaNoContextItem.
+// typed by st, the type [value.AssertionEvaluator] hands over — the simple type
+// the assertions facet is effective on, or the ·active basic member· where that
+// type is a union (dt-xdmrep clause 4) — and every read of the context item
+// compiles to ctaNoContextItem.
 type ctaFacetFacade struct{ st *xsd.SimpleType }
 
 func (ctaFacetFacade) ctaFacade() {}

@@ -714,10 +714,10 @@ func TestUnionMemberFailingItsFacetYieldsTheValidatingType(t *testing.T) {
 // whose facet holds, so AssertedStr's is never asked, where "abc" reaches it —
 // and then its own facet, compiled with `$value` typed by that ·active basic
 // member· (dt-xdmrep clause 4), whose fn:upper-case call declines there as it
-// would over AssertedInt itself. The two declined {test}s InRange and UpperX are the guard: with
-// [walk.declineAssertions] reporting false they record under cvc-attribute
-// instead, and with the evaluator answering AssertionFails for a decline they
-// are charged.
+// would over AssertedInt itself. The two declined {test}s InRange and UpperX
+// are the guard: with [walk.declineAssertions] reporting false they record
+// under cvc-attribute instead, and with the evaluator answering AssertionFails
+// for a decline they are charged.
 func TestDeclinedFacetAssertionsAreRecorded(t *testing.T) {
 	for _, c := range []struct {
 		name    string
