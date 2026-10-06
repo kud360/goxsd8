@@ -94,14 +94,13 @@ func TestHasUnparsedEntityKeepsTheFirstDeclaration(t *testing.T) {
 
 // A document with no DOCTYPE, or one with no internal subset, declares no
 // unparsed entity — a '[' inside the external identifier's literal opens no
-// subset — and neither does a directive inside an element, which is no
-// doctypedecl.
+// subset. A DOCTYPE out of place is a fault that declares none, a row of
+// TestMisplacedDeclarationIsAFault.
 func TestHasUnparsedEntityWithoutAnInternalSubset(t *testing.T) {
 	for _, doc := range []string{
 		`<r/>`,
 		`<!DOCTYPE r SYSTEM "r.dtd"><r/>`,
 		`<!DOCTYPE r SYSTEM "[<!ENTITY pic SYSTEM 'p' NDATA gif>]"><r/>`,
-		`<r><!DOCTYPE r [<!ENTITY pic SYSTEM "p" NDATA gif>]></r>`,
 	} {
 		if drained(t, doc).HasUnparsedEntity("pic") {
 			t.Errorf("%s: HasUnparsedEntity(%q) = true, want false", doc, "pic")
