@@ -15,10 +15,14 @@ import (
 // (clauses 2–3). A dangling reference (no such component) and a wrong-kind
 // reference (the name exists only in another kind's table) are the SAME failure
 // — the kind-specific lookup simply misses — so both are charged this rule,
-// differing only in message. Clause 4 (namespace reachability from the referring
-// document) is a distinct precondition that needs the schema-document import
-// graph, which the compiled component model does not carry; it is out of #173's
-// scope and left to the producer (#176).
+// differing only in message. A slot whose specified kind is SIMPLE type
+// definition fails the rule too when its name resolves to a complex type, but
+// cites no clause: clause 1.1 only selects {type definitions}, which the
+// complex type satisfies, and what fails is the rule's "specified kind"
+// (simpleTypeOfRef, resolveAttributeDecl). Clause 4 (namespace reachability from
+// the referring document) is a distinct precondition that needs the
+// schema-document import graph, which the compiled component model does not
+// carry; it is out of #173's scope and left to the producer (#176).
 const ruleSrcResolve xsderr.Rule = "src-resolve"
 
 // anyTypeName is the expanded name of xs:anyType, the one Complex Type

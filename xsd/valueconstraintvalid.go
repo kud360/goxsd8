@@ -275,9 +275,10 @@ func (s *Schema) checkAttributeDeclarationDefaults() error {
 // (doc.go), so a reader is sent to the <xs:attribute> that wrote the default.
 //
 // Both gates accept rather than reject: no {value constraint} means the clause is
-// not reached at all (never reached-and-satisfied), and a {type definition} that
-// is absent, unresolvable, or complex is ResolvedSimpleType's documented "not decidable
-// by this clause".
+// not reached at all (never reached-and-satisfied), and an absent {type
+// definition} is ResolvedSimpleType's documented "not decidable by this clause".
+// An unresolvable or complex one never reaches here: Phase A charges both
+// src-resolve (resolveAttributeDecl).
 func (s *Schema) checkAttributeDeclarationValueConstraint(d AttributeDeclaration) error {
 	dvc, present := d.ValueConstraint()
 	if !present {

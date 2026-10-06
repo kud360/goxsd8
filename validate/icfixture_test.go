@@ -586,9 +586,8 @@ func icTabledE(line int, wid string) *testElement {
 // to select. @dw is one no fixture's field selects, so offering it would fill
 // a slot twice. @dc's declaration has an ABSENT {type definition} (aUse), so
 // a field selecting it has no simple type to read a value through. @dq and
-// <dqe> are
-// xs:QName defaults of "p:a" whose {value constraint} alone binds p (to
-// urn:a), which no instance here declares.
+// <dqe> are xs:QName defaults of "p:a" whose {value constraint} alone binds p
+// (to urn:a), which no instance here declares.
 //
 //	root   RootType   sequence( ditem*, dref* )
 //	ditem  DItemType  sequence( dqe? ), @dv xs:integer default "1",
