@@ -333,7 +333,7 @@ func TestBuiltBinaryMatrix(t *testing.T) {
 	// parse's and validate's own outcomes, through the shipped executable
 	// rather than through run: the exit code, the stream each answer lands on,
 	// and the summary's bytes are what a script sees (#251's shape, #472's
-	// subject). The two stdin rows are the only place standard input is
+	// subject). The four stdin rows are the only place standard input is
 	// reachable at all — run takes its writers as arguments and its reader from
 	// the process — and they pin the hint scan's replay as well as the
 	// spelling: the scan consumes the document's prefix, so a broken replay
@@ -366,6 +366,12 @@ func TestBuiltBinaryMatrix(t *testing.T) {
 		{args: []string{"validate", "-format", "xml", "-schema", orderSchema, "-"},
 			stdin: readFixture(t, validInstance), code: 0},
 		{args: []string{"validate", "-format", "xml", "-schema", orderSchema, "-"},
+			stdin: readFixture(t, invalidInstance), code: 1, stdoutMatch: "-:5:3: [cvc-attribute]"},
+		// - without -format is read as xml while json and ber are reserved
+		// (#2403); without the default both rows exit 2 asking for -format.
+		{args: []string{"validate", "-schema", orderSchema, "-"},
+			stdin: readFixture(t, validInstance), code: 0},
+		{args: []string{"validate", "-schema", orderSchema, "-"},
 			stdin: readFixture(t, invalidInstance), code: 1, stdoutMatch: "-:5:3: [cvc-attribute]"},
 	} {
 		stdout, stderr, code := runBinaryStdin(t, bin, c.args, c.stdin)

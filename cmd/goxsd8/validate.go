@@ -224,6 +224,9 @@ type validation struct {
 
 // one assesses a single instance argument and reports its exit code.
 func (vn *validation) one(instance string, stdout, stderr io.Writer) int {
+	if err := refuseDirectory(instance); err != nil {
+		return usageError(stderr, fmt.Sprintf("goxsd8: validate: %v", err))
+	}
 	format, err := formatOf(instance, vn.forced)
 	if err != nil {
 		return usageError(stderr, fmt.Sprintf("goxsd8: validate: %v", err))
@@ -407,6 +410,27 @@ func reportLines(stdout, stderr io.Writer, instance string, lines []string, code
 	return code
 }
 
+// refuseDirectory charges an instance argument naming a directory as
+// unreadable, in rootLocation's words. It answers before formatOf, so a
+// directory is diagnosed as a directory whatever its name's extension and
+// whatever -format forced, rather than as an extension problem or as malformed
+// XML.
+//
+// The stat follows symbolic links, so a link to a directory is refused too; a
+// FIFO or a device is not a directory and passes on to be read. stdinArg is
+// never stat'ed: it names standard input, not a file. A stat that fails decides
+// nothing here: openInstance reports that argument's fault in the operating
+// system's own words, after formatOf has had its say on the extension.
+func refuseDirectory(instance string) error {
+	if instance == stdinArg {
+		return nil
+	}
+	if info, err := os.Stat(instance); err == nil && info.IsDir() {
+		return fmt.Errorf("open %s: is a directory", instance)
+	}
+	return nil
+}
+
 // openInstance opens one instance argument for reading and returns the reader
 // together with the close its caller owes. stdinArg names standard input,
 // which this process does not own and therefore does not close.
@@ -440,15 +464,19 @@ func forcedFormat(token string) (sourceFormat, error) {
 // formatOf reports the source format of one instance argument: the -format
 // value where the flag was given, and otherwise the format its extension names.
 //
-// An argument whose extension names none of them — including stdinArg, which
-// has no extension at all — is a usage error rather than a guess, so that no
-// document is ever read in a format nothing in the invocation asked for.
+// stdinArg has no extension, and without -format it is read as formatXML: xml
+// is the only format assessed today, json and ber being reserved, so no other
+// reading of standard input could be meant. That default lasts only while xml
+// stands alone — once a second format is assessed, stdinArg needs -format
+// again, as the contract states (#2403). Any other argument whose extension
+// names no source format is a usage error rather than a guess, so that no file
+// is ever read in a format nothing in the invocation asked for.
 func formatOf(instance string, forced sourceFormat) (sourceFormat, error) {
 	if forced != "" {
 		return forced, nil
 	}
 	if instance == stdinArg {
-		return "", fmt.Errorf("%s names standard input, which carries no extension to name a source format; pass -format %s", stdinArg, formatVocabulary())
+		return formatXML, nil
 	}
 	ext := filepath.Ext(instance)
 	for _, f := range sourceFormats {

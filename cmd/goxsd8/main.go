@@ -95,7 +95,11 @@ Usage (contract; subcommands land with their milestones):
       spelling); an unrecognized token, and an instance whose
       extension names none of the three, are usage errors listing the
       values. Only xml is assessed today: json and ber are reserved,
-      and an instance in either exits 2 saying so.
+      and an instance in either exits 2 saying so. - has no
+      extension and is read as xml without -format, as in
+      goxsd8 validate -schema s.xsd - < i.xml; once a second format
+      is assessed, - will need -format. An instance argument naming
+      a directory exits 2 saying it is a directory.
       xsi:schemaLocation hints on the document element of an XML
       instance augment the schema set for that instance (resolved
       relative to the instance; disable with -no-hints). A hint the

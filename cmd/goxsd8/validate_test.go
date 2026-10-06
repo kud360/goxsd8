@@ -889,6 +889,18 @@ func TestValidateSchemaFlagIsRepeatable(t *testing.T) {
 // them collapse into one line.
 func TestValidateUsageErrors(t *testing.T) {
 	dir := t.TempDir()
+	xmlDir := filepath.Join(dir, "d.xml")
+	forcedDir := filepath.Join(dir, "forced")
+	plainDir := filepath.Join(dir, "plain")
+	linkDir := filepath.Join(dir, "link.xml")
+	for _, d := range []string{xmlDir, forcedDir, plainDir} {
+		if err := os.Mkdir(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Symlink(xmlDir, linkDir); err != nil {
+		t.Fatal(err)
+	}
 	cases := []struct {
 		name string
 		args []string
@@ -906,7 +918,19 @@ func TestValidateUsageErrors(t *testing.T) {
 		{"schema is a directory", []string{"validate", "-schema", dir, validInstance}, "is a directory"},
 		{"schema from stdin", []string{"validate", "-schema", "-", validInstance}, "standard input is not a schema location"},
 		{"missing instance", []string{"validate", "-schema", orderSchema, "testdata/nosuch.xml"}, "no such file or directory"},
-		{"stdin needs -format", []string{"validate", "-schema", orderSchema, "-"}, "carries no extension to name a source format"},
+		// - defaults to xml only while json and ber are reserved: a forced
+		// reserved token still answers before standard input is read (#2403).
+		{"stdin forced json is reserved", []string{"validate", "-format", "json", "-schema", orderSchema, "-"}, "-: -format json is reserved by the contract"},
+		// A directory instance is charged as a directory before formatOf reads
+		// its extension, whatever its name and whatever -format forced (#2403):
+		// "." and the extension-less directory answered with the extension
+		// message without the check, and the .xml-named and forced ones with an
+		// exit-1 [xml-wf] read failure.
+		{"instance is .", []string{"validate", "-schema", orderSchema, "."}, "goxsd8: validate: open .: is a directory"},
+		{"instance is a directory", []string{"validate", "-schema", orderSchema, plainDir}, "goxsd8: validate: open " + plainDir + ": is a directory"},
+		{"instance is a directory named .xml", []string{"validate", "-schema", orderSchema, xmlDir}, "goxsd8: validate: open " + xmlDir + ": is a directory"},
+		{"instance is a directory under -format", []string{"validate", "-format", "xml", "-schema", orderSchema, forcedDir}, "goxsd8: validate: open " + forcedDir + ": is a directory"},
+		{"instance is a link to a directory", []string{"validate", "-schema", orderSchema, linkDir}, "goxsd8: validate: open " + linkDir + ": is a directory"},
 		// -help=true is not one of the three help spellings, at any position
 		// (doc.go's argument vocabulary); after a subcommand it is a flag whose
 		// value that subcommand does not accept.
@@ -988,7 +1012,6 @@ func TestValidateAdversarialArguments(t *testing.T) {
 		{"validate", "-out"},
 		{"validate", "-no-hints"},
 		{"validate", "-schema", orderSchema, ""},
-		{"validate", "-schema", orderSchema, "-"},
 		{"validate", "-schema", orderSchema, "\x00\x01.xml"},
 		{"validate", "-schema", strings.Repeat("a/", 200) + "x.xsd", validInstance},
 		{"validate", "-schema", orderSchema, strings.Repeat("a/", 200) + "x.xml"},
