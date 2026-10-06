@@ -1007,6 +1007,8 @@ func (p *ctaParser) libraryCall(local string) (ctaValue, bool) {
 		return p.presenceCall(ctaEmptyTest)
 	case "exists":
 		return p.presenceCall(ctaExistsTest)
+	case "distinct-values":
+		return p.distinctValuesCall()
 	case "true", "false":
 		return p.constantCall(local)
 	}
@@ -1189,6 +1191,33 @@ func (p *ctaParser) presenceArgument() (ctaValue, bool) {
 	return args[0], true
 }
 
+// distinctValuesCall parses a call to fn:distinct-values with its one
+// `xs:anyAtomicType*` argument (xpath-functions.md §15.1.6), which is atomized
+// (ctaDistinctValues), and whose result is that argument's distinct items. A
+// statically empty argument compiles to ctaEmptyValue, which is the empty
+// sequence the call returns over it; an xs:untypedAtomic one is compared in
+// xs:string. No argument declines (err:XPST0017).
+//
+// GAP(xpath): the two-argument form, whose second argument names a collation
+// (§7.3.1), declines rather than being evaluated — and is never evaluated as
+// the one-argument form, which compares under the default collation alone. The
+// direction is the withhold [CompileAssertionTest] reports. (#1042)
+func (p *ctaParser) distinctValuesCall() (ctaValue, bool) {
+	args, ok := p.arguments()
+	if !ok || len(args) != 1 {
+		return nil, false
+	}
+	switch s := ctaStaticOf(args[0]).(type) {
+	case ctaTyped:
+		return ctaDistinctValues{operand: args[0], st: s.st}, true
+	case ctaUntypedAtomic:
+		return ctaDistinctValues{operand: args[0], st: p.types.str}, true
+	case ctaEmptySequence:
+		return ctaEmptyValue{}, true
+	}
+	return nil, false // ctaStatic has the three arms above; never reached
+}
+
 // constantCall parses a call to fn:true or fn:false, named local, with no
 // argument (xpath-functions.md §9.1.1, §9.1.2), into the ctaLiteral of the
 // xs:boolean it returns, whose lexical local is. An argument declines, and so
@@ -1206,13 +1235,17 @@ func (p *ctaParser) constantCall(local string) (ctaValue, bool) {
 }
 
 // countCall parses an fn:count call, xpath20.md [48] FunctionCall with one
-// argument, whose name the caller has already resolved to fn:count. The node
-// is p.facade's, which may decline it, and so is the node of a rooted
-// argument; an argument outside countArgument's shapes declines.
+// argument, whose name the caller has already resolved to fn:count. Where the
+// façade calls the library (ctaFacade.callsLibrary) and the argument opens as
+// no path can (countsItems), the argument is one a library call takes
+// (argument) — `$value`, `()`, a function call, a literal — whose items are
+// counted (ctaCountedItems); every other argument is a path countArgument
+// parses. The node is p.facade's, which may decline it, and so is the node of
+// a rooted argument; an argument outside those shapes declines.
 func (p *ctaParser) countCall() (ctaValue, bool) {
 	p.advance() // the function name
 	p.advance() // '('
-	arg, ok := p.countArgument()
+	arg, ok := p.countedArgument()
 	if !ok {
 		return nil, false
 	}
@@ -1221,6 +1254,34 @@ func (p *ctaParser) countCall() (ctaValue, bool) {
 	}
 	p.advance()
 	return p.facade.count(arg, p.types)
+}
+
+// countedArgument parses fn:count's one argument on countCall's terms: the
+// operand argument parses where the façade calls the library and the cursor
+// opens no path (countsItems), and the path countArgument parses otherwise.
+func (p *ctaParser) countedArgument() (ctaCounted, bool) {
+	if !p.facade.callsLibrary() || !p.countsItems() {
+		return p.countArgument()
+	}
+	operand, ok := p.argument()
+	if !ok {
+		return nil, false
+	}
+	return ctaCountedItems{operand: operand}, true
+}
+
+// countsItems reports whether the cursor opens an fn:count argument no path
+// opens with: a VarRef's '$', a '(' — `()` among them — a literal, or a
+// function call, a name followed by '('. A path opens with "/", "//", ".",
+// '@', a wildcard, an axis or a name standing alone. Nothing is consumed.
+func (p *ctaParser) countsItems() bool {
+	switch p.peek(0).kind {
+	case ctaDollarTok, ctaLParen, ctaStringTok, ctaNumberTok:
+		return true
+	case ctaNameTok:
+		return p.peek(1).kind == ctaLParen
+	}
+	return false
 }
 
 // countArgument parses fn:count's argument: one operand (countOperand), or

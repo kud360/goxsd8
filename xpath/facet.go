@@ -159,10 +159,16 @@ func (ctaFacetFacade) contextItem() (ctaValue, bool) {
 	return ctaNoContextItem{}, true
 }
 
-// count declines every fn:count call. Its argument reads the absent context
-// item and would raise err:XPDY0002, but the call is admitted by the assertion
-// façade alone, whose counts a [Tally] the facet evaluation has none of
-// supplies; the decline is [FacetAssertions]' withhold, under its GAP(xpath).
-func (ctaFacetFacade) count(ctaCounted, ctaTypes) (ctaValue, bool) {
-	return nil, false
+// count compiles an fn:count call whose argument is no path
+// (ctaCountedItems), `count($value)` among them, to its ctaCount (ctaCountOf),
+// and declines one over a path, which reads the absent context item and
+// would raise err:XPDY0002 but is counted off a [Tally] the facet evaluation
+// has none of; that decline is [FacetAssertions]' withhold, under its
+// GAP(xpath).
+func (ctaFacetFacade) count(arg ctaCounted, types ctaTypes) (ctaValue, bool) {
+	items, isItems := arg.(ctaCountedItems)
+	if !isItems {
+		return nil, false
+	}
+	return ctaCountOf(items, types)
 }

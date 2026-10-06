@@ -723,6 +723,9 @@ func (n ctaPresence) readsChild(name xsd.QName) bool { return n.operand.readsChi
 // name.
 func (n ctaStringFunction) readsChild(name xsd.QName) bool { return n.cast.readsChild(name) }
 
+// readsChild reports whether the argument holds a ctaTypedChild naming name.
+func (n ctaDistinctValues) readsChild(name xsd.QName) bool { return n.operand.readsChild(name) }
+
 // readsChild is false for each of these: none is a child-axis step or holds an
 // operand.
 func (ctaAttr) readsChild(xsd.QName) bool           { return false }
@@ -743,6 +746,10 @@ func (n ctaCount) readsChild(name xsd.QName) bool { return n.arg.readsChild(name
 func (ctaCountPath) readsChild(xsd.QName) bool        { return false }
 func (ctaFilteredChildren) readsChild(xsd.QName) bool { return false }
 func (ctaUnion) readsChild(xsd.QName) bool            { return false }
+
+// readsChild reports whether the counted operand holds a ctaTypedChild naming
+// name: `count($value)` reads none.
+func (c ctaCountedItems) readsChild(name xsd.QName) bool { return c.operand.readsChild(name) }
 
 // readsChild reports whether m filters children named name, whose values its
 // predicate reads: they are counted over [ChildElements], never the [Tally].
@@ -810,6 +817,11 @@ func (n ctaStringFunction) counted(into []ctaTallied) []ctaTallied {
 	return n.cast.counted(into)
 }
 
+// counted appends each path the argument counts over.
+func (n ctaDistinctValues) counted(into []ctaTallied) []ctaTallied {
+	return n.operand.counted(into)
+}
+
 // counted appends the path the call's argument counts over, if any.
 func (n ctaCount) counted(into []ctaTallied) []ctaTallied { return n.arg.counted(into) }
 
@@ -817,6 +829,11 @@ func (n ctaCount) counted(into []ctaTallied) []ctaTallied { return n.arg.counted
 func (p ctaCountPath) counted(into []ctaTallied) []ctaTallied        { return append(into, p) }
 func (f ctaFilteredChildren) counted(into []ctaTallied) []ctaTallied { return append(into, f) }
 func (u ctaUnion) counted(into []ctaTallied) []ctaTallied            { return append(into, u) }
+
+// counted appends each path the counted operand counts over, and never c
+// itself: its items are read off the operand, so `count($value)` keys nothing
+// in the [Tally].
+func (c ctaCountedItems) counted(into []ctaTallied) []ctaTallied { return c.operand.counted(into) }
 
 // counted appends nothing: m is counted over [ChildElements], never keyed in
 // the [Tally], and its predicate counts nothing (ctaPredicateFacade.count).
@@ -1026,11 +1043,17 @@ func (ctaAssertionFacade) rooted() (ctaValue, bool) {
 	return ctaNoDocumentRoot{}, true
 }
 
-// count compiles an fn:count call over arg to a ctaCount of xs:integer, the
-// type xpath-functions.md §15.4.1 gives its result, and declines it where types
-// resolves no xs:integer. arg is never typed against attrs or elems: fn:count
-// does not atomize it ([CompileAssertionTest]).
+// count compiles an fn:count call over arg to its ctaCount (ctaCountOf). arg is
+// never typed against attrs or elems: fn:count does not atomize it
+// ([CompileAssertionTest]).
 func (ctaAssertionFacade) count(arg ctaCounted, types ctaTypes) (ctaValue, bool) {
+	return ctaCountOf(arg, types)
+}
+
+// ctaCountOf is the ctaCount of xs:integer over arg, the type
+// xpath-functions.md §15.4.1 gives fn:count's result, false where types
+// resolves no xs:integer.
+func ctaCountOf(arg ctaCounted, types ctaTypes) (ctaValue, bool) {
 	integer, resolved := types.simple(ctaBuiltin("integer"))
 	if !resolved {
 		return nil, false
