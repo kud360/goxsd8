@@ -160,7 +160,16 @@ type CTATest struct{ root ctaExpr }
 //     tracks the CONSEQUENCE, and both consequences are the one withhold
 //     validate/cta.go's conditionallySelected argues: the element's
 //     ·governing type definition· is not determined, and no type is assessed
-//     against in its place.
+//     against in its place;
+//   - a cast of a DoubleLiteral to any target but xs:double, such as
+//     `xs:string(1.5e0)`, the one cast this façade declines for its OPERAND
+//     (ctaTypes.castsFrom). To a target F&O §17.1's casting table marks Y or
+//     M from xs:double, §17.1.2, §17.1.3 and §17.1.6 define the cast over the
+//     value, not over the canonical lexical this engine would re-validate,
+//     and it is valid XPath with a defined result; to a target it marks N,
+//     such as `xs:date(1.5e0)`, §17.1 raises err:XPTY0004, a type error, which
+//     this façade declines too rather than raising — a withhold, as the
+//     defined result's decline is.
 //
 // It never returns an error: a decline is not a verdict about the schema. The
 // verdict the STATIC errors two of those bullets name does carry is
