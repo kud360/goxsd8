@@ -1432,8 +1432,8 @@ func isLiteral(t string) bool {
 }
 
 // declSpace is XML 1.0's S production: the white space that separates the
-// tokens of a markup declaration, and the only character data that may follow
-// the document element (see trailerFault).
+// tokens of a markup declaration, and the only character data that may precede
+// or follow the document element (see outsideRootFault).
 const declSpace = " \t\r\n"
 
 // declTokens splits a markup declaration body on white space, keeping each

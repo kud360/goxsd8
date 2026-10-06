@@ -1692,7 +1692,8 @@ type fixture struct{ name, content string }
 // (cvc-elt clause 4) — at the gate itself, since it is a precondition in its
 // own right and not a restatement of those charges. No executor row can see
 // them, so the gate is called directly, with the declared root, with content
-// and without, as the controls. A decoder error is refused too. An abstract
+// and without, as the controls. A decoder error is refused too, and so is
+// character data before the root that is not white space (rootStart). An abstract
 // declaration (cvc-elt clause 2) is admitted: the walk charges it at every
 // element, so the gate refuses it nowhere (#2127).
 //
@@ -1728,6 +1729,9 @@ func TestAssessedSubtreeRootRootConditions(t *testing.T) {
 		{"an xsi:type that does not ·override· the declared type", `<known ` + xsiXS + ` xsi:type="xs:int">1</known>`, refuseXsiTypeNotOverride},
 		{"a malformed document", `<known>`, refuseDecode},
 		{"a directive after the root", `<known>x</known><!DOCTYPE known>`, refuseEpilogDirective},
+		{"text before the root", "<!-- c -->\njunk<known>x</known>", refuseProlog},
+		{"a second byte-order mark before the root", "\xEF\xBB\xBF\xEF\xBB\xBF<known>x</known>", refuseProlog},
+		{"white space, a comment and a PI before the root", "\r\n<!-- c --> <?pi?>\n<known>x</known>", ""},
 	} {
 		c := instanceCase(t, schemaBody, tc.instance, true)
 		schema, report, decidable, err := assembleCase(strict.New(), c.schemaDoc, nil)

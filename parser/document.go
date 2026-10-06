@@ -90,8 +90,10 @@ func ReadDocument(uri string, r io.Reader) (*Document, error) {
 			// the stack it mirrors is never empty here.
 			stack = stack[:len(stack)-1]
 		case *xmltree.CharData:
-			// Character data outside any element (document-level whitespace) has
-			// no element to attach to; only element content becomes Text nodes.
+			// Character data outside any element has no element to attach to;
+			// only element content becomes Text nodes. The reader has already
+			// refused any such run that is not S (XML 1.0 [1] document, [27]
+			// Misc), so nothing a document holds is lost here.
 			if len(stack) == 0 {
 				continue
 			}
