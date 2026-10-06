@@ -382,10 +382,16 @@ func (t CTATest) Evaluate(b value.Backend, types xsd.TypeResolver, attrs Attribu
 // evaluation reads. A facet {test} [FacetAssertions] evaluates has no context
 // item at all (cvc-assertions-valid clause 1.2), so it reads nothing of its
 // input but `$value`.
+//
+// candidate is the typed value of the context item inside a predicate — the
+// child ctaMatchingChildren.nodes evaluates its predicate for, one value or
+// none for a ·nilled· child — which only a ctaCandidate reads, and which only
+// a predicate's tree holds.
 type ctaEnv struct {
-	backend value.Backend
-	types   xsd.TypeResolver
-	input   ctaInput
+	backend   value.Backend
+	types     xsd.TypeResolver
+	input     ctaInput
+	candidate []value.Value
 }
 
 // ctaInput is the sealed sum of the two attribute inputs an evaluation reads,
@@ -568,6 +574,17 @@ type ctaTypedChild struct {
 	name xsd.QName
 	st   *xsd.SimpleType
 }
+
+// ctaCandidate is the [47] ContextItemExpr `.` inside a predicate that filters
+// a child step (ctaMatchingChildren): the child the predicate is evaluated for
+// (xpath20.md §3.2.2: "the context item is the item currently being tested
+// against the predicate"), one node whose typed value is of type st — the type
+// ctaAssertionFacade.child reads off the ·locally declared type· of the step's
+// children, so a child of a type that declines there declines here — or the
+// empty sequence for a ·nilled· child (xpath-datamodel §6.2.4). The value is
+// the evaluation's ctaEnv.candidate. The parser builds it in predicate scope
+// alone (ctaParser.valuePredicate): `.` anywhere else is the façade's.
+type ctaCandidate struct{ st *xsd.SimpleType }
 
 // ctaNoDocumentRoot is a path opening with "/" or "//", which begins at the
 // root of the tree containing the context node through `(fn:root(self::node())
@@ -870,11 +887,13 @@ type ctaCount struct {
 // ctaCounted is the sealed sum of what an fn:count argument compiles to: a
 // relative path a [Tally] counts — one step (ctaCountPath), a child step
 // filtered by attribute existence (ctaFilteredChildren), or a union of those
-// (ctaUnion) — or a rooted path, which raises err:XPDY0050 before it selects
-// a node and so before fn:count sees a sequence (ctaNoDocumentRoot, xpath20.md
-// §3.2). The grammar closes the set (STYLE T2's schema-closed-set exception).
-// Every arm answers readsChild and counted on ctaExpr's terms, and nodes, how
-// many nodes it selects, reporting false where it raises.
+// (ctaUnion) — a child step filtered by its value, which the evaluation
+// counts over [ChildElements] (ctaMatchingChildren), or a rooted path, which
+// raises err:XPDY0050 before it selects a node and so before fn:count sees a
+// sequence (ctaNoDocumentRoot, xpath20.md §3.2). The grammar closes the set
+// (STYLE T2's schema-closed-set exception). Every arm answers readsChild and
+// counted on ctaExpr's terms, and nodes, how many nodes it selects, reporting
+// false where it raises.
 type ctaCounted interface {
 	ctaCounted()
 	readsChild(name xsd.QName) bool
@@ -911,7 +930,59 @@ const (
 func (ctaCountPath) ctaCounted()        {}
 func (ctaFilteredChildren) ctaCounted() {}
 func (ctaUnion) ctaCounted()            {}
+func (ctaMatchingChildren) ctaCounted() {}
 func (ctaNoDocumentRoot) ctaCounted()   {}
+
+// ctaMatchingChildren is a child step with a QName NameTest filtered by a
+// predicate that reads the child's VALUE, `N[. = 'x']` (xpath20.md §3.2.2),
+// which only an fn:count argument takes (ctaParser.valuePredicate): the
+// element children of E named name for which pred is true, each child in turn
+// the context item pred reads as `.` (ctaCandidate). pred is a comparison, or
+// and, or and fn:not over comparisons, never a bare value: a numeric one would
+// select by position, which needs an order this engine does not keep, so the
+// parser builds no other (ctaComparisonRooted).
+//
+// It is no counter key: what it selects depends on each child's typed value,
+// which the [Tally] never sees, so it is counted over [ChildElements] at
+// evaluation (ctaMatchingChildren.nodes) and reports name as a child it reads
+// ([AssertionTest.ReadsChild]). A predicate that raises over any child makes
+// the whole count raise, never a child left uncounted.
+type ctaMatchingChildren struct {
+	name xsd.QName
+	pred ctaExpr
+}
+
+// ctaComparisonRooted reports whether x is a comparison, or ctaAnd, ctaOr or
+// ctaNot over such — the roots ctaParser.valuePredicate admits. A comparison
+// whose operand types B.2 rejects is ctaTypeError, still a comparison, which
+// raises over each child. A bare value is ctaEffectiveBoolean, whose value may
+// be numeric and so positional (§3.2.2), and is refused whatever its static
+// type.
+func ctaComparisonRooted(x ctaExpr) bool {
+	switch n := x.(type) {
+	case ctaCompare, ctaValueCompare, ctaTypeError:
+		return true
+	case ctaAnd:
+		return ctaAllComparisonRooted(n.operands)
+	case ctaOr:
+		return ctaAllComparisonRooted(n.operands)
+	case ctaNot:
+		return ctaComparisonRooted(n.operand)
+	case ctaEffectiveBoolean:
+		return false
+	}
+	return false
+}
+
+// ctaAllComparisonRooted is ctaComparisonRooted over each of operands.
+func ctaAllComparisonRooted(operands []ctaExpr) bool {
+	for _, o := range operands {
+		if !ctaComparisonRooted(o) {
+			return false
+		}
+	}
+	return true
+}
 
 // ctaFilteredChildren is a child step with a QName NameTest filtered by a
 // predicate that is a conjunction of attribute-existence tests, `N[@A]`,
@@ -979,7 +1050,7 @@ func ctaUnionOf(operands []ctaCounted) (ctaCounted, bool) {
 			for _, inner := range k.operands {
 				add(inner)
 			}
-		case ctaNoDocumentRoot:
+		case ctaMatchingChildren, ctaNoDocumentRoot:
 			return nil, false
 		}
 	}
@@ -1238,6 +1309,7 @@ func (u ctaUnion) same(other ctaTallied) bool {
 func (ctaAttr) ctaValue()             {}
 func (ctaTypedAttr) ctaValue()        {}
 func (ctaTypedChild) ctaValue()       {}
+func (ctaCandidate) ctaValue()        {}
 func (ctaChildPath) ctaValue()        {}
 func (ctaSelectedElements) ctaValue() {}
 func (ctaNoDocumentRoot) ctaValue()   {}
@@ -1297,6 +1369,8 @@ func ctaStaticOf(v ctaValue) ctaStatic {
 	case ctaTypedAttr:
 		return ctaTyped{st: n.st}
 	case ctaTypedChild:
+		return ctaTyped{st: n.st}
+	case ctaCandidate:
 		return ctaTyped{st: n.st}
 	case ctaCount:
 		return ctaTyped{st: n.st}
@@ -1806,6 +1880,8 @@ func ctaItemOf(v ctaValue, c *xsd.SimpleType, env ctaEnv) ctaItem {
 		return ctaTypedAttrItem(n, c, env)
 	case ctaTypedChild:
 		return ctaTypedChildItem(n, c, env)
+	case ctaCandidate:
+		return ctaPromoted(env.candidate, n.st, c, env)
 	case ctaChildPath:
 		// Never reached: ctaParser.childPath builds the node only where its
 		// nodes are counted and no item is read (ctaStep.nodes).
@@ -2010,15 +2086,7 @@ func ctaTypedAttrItem(n ctaTypedAttr, c *xsd.SimpleType, env ctaEnv) ctaItem {
 	if !ok {
 		return ctaRaised{}
 	}
-	vs := make([]value.Value, 0, len(matched))
-	for _, v := range matched {
-		converted, ok := ctaValidated(ctaPromote(v, n.st, c, env))
-		if !ok {
-			return ctaRaised{}
-		}
-		vs = append(vs, converted)
-	}
-	return ctaAtoms{vs: vs}
+	return ctaPromoted(matched, n.st, c, env)
 }
 
 // ctaMatchedChildren is the typed values of E's element [[children]] n's
@@ -2063,15 +2131,21 @@ func ctaTypedChildItem(n ctaTypedChild, c *xsd.SimpleType, env ctaEnv) ctaItem {
 	if !ok {
 		return ctaRaised{}
 	}
-	vs := make([]value.Value, 0, len(matched))
-	for _, v := range matched {
-		converted, ok := ctaValidated(ctaPromote(v, n.st, c, env))
+	return ctaPromoted(matched, n.st, c, env)
+}
+
+// ctaPromoted converts each of vs, values of type from, into c on ctaPromote's
+// terms, in order, raising for the whole sequence where one does not convert.
+func ctaPromoted(vs []value.Value, from, c *xsd.SimpleType, env ctaEnv) ctaItem {
+	converted := make([]value.Value, 0, len(vs))
+	for _, v := range vs {
+		cv, ok := ctaValidated(ctaPromote(v, from, c, env))
 		if !ok {
 			return ctaRaised{}
 		}
-		vs = append(vs, converted)
+		converted = append(converted, cv)
 	}
-	return ctaAtoms{vs: vs}
+	return ctaAtoms{vs: converted}
 }
 
 // ctaCountItem is the xs:integer fn:count returns for n, converted into c on

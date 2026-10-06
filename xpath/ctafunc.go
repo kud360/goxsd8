@@ -318,6 +318,49 @@ func (f ctaFilteredChildren) nodes(env ctaEnv) (int, bool) { return ctaTalliedNo
 // nodes is ctaCountPath.nodes'.
 func (u ctaUnion) nodes(env ctaEnv) (int, bool) { return ctaTalliedNodes(u, env) }
 
+// nodes is how many of E's children named m.name its predicate is true for,
+// each child in document order the context item (ctaEnv.candidate): its typed
+// value, or none for a ·nilled· one. A predicate that raises over any child
+// raises for the whole count, and so does a yielded value breaking the
+// obligation [ChildElements] states. The input is ctaTypedInput by
+// construction (ctaInput); the other arm carries no children and raises,
+// unreachably.
+func (m ctaMatchingChildren) nodes(env ctaEnv) (int, bool) {
+	in, typed := env.input.(ctaTypedInput)
+	if !typed {
+		return 0, false
+	}
+	n, ok := 0, true
+	in.children(func(c ChildElement) bool {
+		if c.name != m.name {
+			return true
+		}
+		inner := env
+		inner.candidate = nil
+		if c.v != nil {
+			tv, isTyped := c.v.(tvTyped)
+			if !isTyped {
+				ok = false
+				return false
+			}
+			inner.candidate = []value.Value{tv.v}
+		}
+		switch ctaEval(m.pred, inner) {
+		case ctaTrue:
+			n++
+		case ctaError:
+			ok = false
+			return false
+		case ctaFalse:
+		}
+		return true
+	})
+	return n, ok
+}
+
+// nodes is 1: the candidate is one node, ·nilled· or not.
+func (ctaCandidate) nodes(ctaEnv) (int, bool) { return 1, true }
+
 // ctaTalliedNodes is the counter the evaluation's [Tally] holds for key, which
 // the caller filled with E's subtree. The input is ctaTypedInput by
 // construction (ctaInput); the other arm holds no Tally and raises,

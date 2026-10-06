@@ -706,6 +706,14 @@ func (ctaCountPath) readsChild(xsd.QName) bool        { return false }
 func (ctaFilteredChildren) readsChild(xsd.QName) bool { return false }
 func (ctaUnion) readsChild(xsd.QName) bool            { return false }
 
+// readsChild reports whether m filters children named name, whose values its
+// predicate reads: they are counted over [ChildElements], never the [Tally].
+func (m ctaMatchingChildren) readsChild(name xsd.QName) bool { return m.name == name }
+
+// readsChild is false: the candidate's value is the enclosing
+// ctaMatchingChildren's read, which reports its name.
+func (ctaCandidate) readsChild(xsd.QName) bool { return false }
+
 // readsChild is false, on ctaCount's terms: a child path reads no node's value,
 // and how many nodes it selects is the [Tally]'s.
 func (ctaChildPath) readsChild(xsd.QName) bool { return false }
@@ -771,6 +779,13 @@ func (n ctaCount) counted(into []ctaTallied) []ctaTallied { return n.arg.counted
 func (p ctaCountPath) counted(into []ctaTallied) []ctaTallied        { return append(into, p) }
 func (f ctaFilteredChildren) counted(into []ctaTallied) []ctaTallied { return append(into, f) }
 func (u ctaUnion) counted(into []ctaTallied) []ctaTallied            { return append(into, u) }
+
+// counted appends nothing: m is counted over [ChildElements], never keyed in
+// the [Tally], and its predicate counts nothing (ctaPredicateFacade.count).
+func (ctaMatchingChildren) counted(into []ctaTallied) []ctaTallied { return into }
+
+// counted appends nothing: the candidate is no fn:count call.
+func (ctaCandidate) counted(into []ctaTallied) []ctaTallied { return into }
 
 // counted appends the path itself: the [Tally] counts the nodes it selects.
 func (n ctaChildPath) counted(into []ctaTallied) []ctaTallied { return append(into, n) }

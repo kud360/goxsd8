@@ -547,3 +547,189 @@ func TestCompileAssertionTestDeclinesPredicatesAndUnions(t *testing.T) {
 		}
 	}
 }
+
+// vpElems is E's child element types for the value-predicate rows: white is
+// whiteType, e1 an xs:string, n an xs:int.
+func vpElems(t *testing.T, whiteType xsd.TypeDefinition) ElementTypes {
+	t.Helper()
+	return asElems(map[xsd.QName]xsd.TypeDefinition{
+		uq("white"): whiteType, uq("e1"): asBuiltin(t, "string"), uq("n"): asBuiltin(t, "int"),
+	})
+}
+
+// vpCompile compiles expr under vpElems(whiteType), for an E with element-only
+// content and an xs:int attribute a, reporting whether it compiled.
+func vpCompile(t *testing.T, expr string, whiteType xsd.TypeDefinition) (AssertionTest, bool) {
+	t.Helper()
+	return CompileAssertionTest(asRecord(expr), seededTypes, xsd.ElementContent{}, asUses(t, map[string]string{"a": "int"}), vpElems(t, whiteType))
+}
+
+// vpWhite is a child named white of type typ holding lexical.
+func vpWhite(typ, lexical string) asChild { return asChild{uq("white"), typ, lexical, false} }
+
+// A predicate that reads the candidate's VALUE filters a counted child step
+// (xpath20.md §3.2.2): `.` inside it is each white child in turn, typed as a
+// child step naming white is, so `count(white[. = 'oo']) lt 2` is false over
+// two whites holding "oo" and true where one holds anything else. The count
+// reads ChildElements, not the Tally: ReadsChild(white) is true and the test
+// has no Tally. A child of another name is not a candidate. A ·nilled· white
+// is a node with no value (xpath-datamodel §6.2.4), so `. = 'oo'` is false
+// for it and its fn:not true, no error raised. and, or, fn:not, a value
+// comparison, arithmetic and a cast are admitted over the candidate. Every
+// row declines, and fails, with ctaParser.predicate declining a predicate that
+// is not an attribute-existence conjunction; the "two oo" and "one of two"
+// rows answer each other's value with ctaMatchingChildren.nodes counting
+// every candidate rather than those its predicate is true for.
+func TestAssertionCountsChildrenFilteredByValue(t *testing.T) {
+	str := asBuiltin(t, "string")
+	nilled := asChild{name: uq("white"), nilled: true}
+	for _, tc := range []struct {
+		why      string
+		expr     string
+		children []asChild
+		holds    bool
+	}{
+		{"two oo", "count(white[. = 'oo']) lt 2", []asChild{vpWhite("string", "oo"), vpWhite("string", "oo")}, false},
+		{"one of two", "count(white[. = 'oo']) lt 2", []asChild{vpWhite("string", "oo"), vpWhite("string", "o")}, true},
+		{"none", "count(white[. = 'oo']) lt 2", nil, true},
+		{"another name is no candidate", "count(white[. = 'oo']) = 1",
+			[]asChild{{uq("e1"), "string", "oo", false}, vpWhite("string", "oo")}, true},
+		{"./white is white", "count(./white[. = 'oo']) = 2", []asChild{vpWhite("string", "oo"), vpWhite("string", "oo")}, true},
+		{"a nilled white is not counted", "count(white[. = 'oo']) = 1", []asChild{nilled, vpWhite("string", "oo")}, true},
+		{"a nilled white under fn:not", "count(white[not(. = 'oo')]) = 1", []asChild{nilled, vpWhite("string", "oo")}, true},
+		{"or", "count(white[. = 'oo' or . = 'x']) = 2", []asChild{vpWhite("string", "x"), vpWhite("string", "oo"), vpWhite("string", "y")}, true},
+		{"and", "count(white[. != 'oo' and . != 'x']) = 1", []asChild{vpWhite("string", "x"), vpWhite("string", "oo"), vpWhite("string", "y")}, true},
+		{"a value comparison", "count(white[. eq 'oo']) = 1", []asChild{vpWhite("string", "x"), vpWhite("string", "oo")}, true},
+		{"a cast", "count(white[xs:string(.) = 'oo']) = 1", []asChild{vpWhite("string", "oo")}, true},
+		{"arithmetic over an xs:int", "count(n[. + 1 = 3]) = 1", []asChild{{uq("n"), "int", "2", false}, {uq("n"), "int", "3", false}}, true},
+		{"beside a counted step", "count(white[. = 'oo']) = 1 and count(white) = 2", []asChild{vpWhite("string", "oo"), vpWhite("string", "x")}, true},
+	} {
+		t.Run(tc.why, func(t *testing.T) {
+			test, ok := vpCompile(t, tc.expr, str)
+			if !ok {
+				t.Fatalf("CompileAssertionTest(%q): declined, want compiled", tc.expr)
+			}
+			counts := test.Tally()
+			for _, c := range tc.children {
+				counts.Element([]xsd.QName{c.name}, nil)
+			}
+			if got := test.Evaluate(backend(), seededTypes, asValues(t), asChildren(t, tc.children...), counts, ValueBinding{}); got != tc.holds {
+				t.Errorf("Evaluate(%q) over %v = %v, want %v", tc.expr, tc.children, got, tc.holds)
+			}
+		})
+	}
+	test, ok := vpCompile(t, "count(white[. = 'oo']) lt 2", str)
+	if !ok {
+		t.Fatal("CompileAssertionTest(count(white[. = 'oo']) lt 2): declined, want compiled")
+	}
+	if !test.ReadsChild(uq("white")) || test.ReadsChild(uq("e1")) || test.Tally() != nil {
+		t.Errorf("ReadsChild(white) = %v, ReadsChild(e1) = %v, Tally() = %v, want true, false and nil",
+			test.ReadsChild(uq("white")), test.ReadsChild(uq("e1")), test.Tally())
+	}
+}
+
+// A predicate that raises over any candidate makes the whole count raise, and
+// the assertion false — never a candidate left uncounted (cvc-assertion,
+// §3.13.4.1). Over an xs:int white, `. = 'oo'` is err:XPTY0004 (B.2 has no
+// xs:int and xs:string row): one white makes `count(white[. = 'oo']) lt 2`
+// false, none leaves it true, since no candidate is evaluated. `. div 0` over
+// an xs:int is err:FOAR0001, so `count(n[. div 0 = 1]) = 0` is false over one
+// n, where an error read as no match would hold, and so is its fn:not. The
+// first and third rows hold instead with ctaMatchingChildren.nodes passing
+// over a candidate whose predicate raised.
+func TestAssertionValuePredicateErrorRaisesTheCount(t *testing.T) {
+	i := asBuiltin(t, "int")
+	for _, tc := range []struct {
+		why      string
+		expr     string
+		children []asChild
+		holds    bool
+	}{
+		{"an xs:int white against 'oo'", "count(white[. = 'oo']) lt 2", []asChild{vpWhite("int", "3")}, false},
+		{"no white", "count(white[. = 'oo']) lt 2", nil, true},
+		{"a division by zero", "count(n[. div 0 = 1]) = 0", []asChild{{uq("n"), "int", "2", false}}, false},
+		{"a division by zero under fn:not", "not(count(n[. div 0 = 1]) = 0)", []asChild{{uq("n"), "int", "2", false}}, false},
+		{"a ·nilled· n raises nothing", "count(n[. div 0 = 1]) = 0", []asChild{{name: uq("n"), nilled: true}}, true},
+	} {
+		t.Run(tc.why, func(t *testing.T) {
+			test, ok := vpCompile(t, tc.expr, i)
+			if !ok {
+				t.Fatalf("CompileAssertionTest(%q): declined, want compiled", tc.expr)
+			}
+			if got := test.Evaluate(backend(), seededTypes, asValues(t), asChildren(t, tc.children...), nil, ValueBinding{}); got != tc.holds {
+				t.Errorf("Evaluate(%q) over %v = %v, want %v", tc.expr, tc.children, got, tc.holds)
+			}
+		})
+	}
+}
+
+// A value predicate types `.` as a child step naming the candidate does, so a
+// white with no single simple typed value declines — element-only, mixed,
+// empty, ·special·, list or union — and so does every other value predicate
+// outside the admitted shape: one not directly on a child step, outside
+// fn:count, in a union, mixing `.` with an attribute, reading another node,
+// `$value` or an fn:count, calling a library function, or whose root is not a
+// comparison, which may be numeric and so positional (guard).
+func TestCompileAssertionTestDeclinesValuePredicates(t *testing.T) {
+	str := asBuiltin(t, "string")
+	for _, tc := range []struct {
+		why   string
+		white xsd.TypeDefinition
+	}{
+		{"element-only", asComplex(t, "ElementOnly", asElementContent(t, false))},
+		{"mixed", asComplex(t, "Mixed", asElementContent(t, true))},
+		{"empty", asComplex(t, "Empty", xsd.EmptyContent{})},
+		{"·special·", asBuiltin(t, "anySimpleType")},
+		{"a list", asList(t, "Ints", ctaBuiltin("int"))},
+		{"a union", asUnion(t)},
+	} {
+		if _, ok := vpCompile(t, "count(white[. = 'oo']) lt 2", tc.white); ok {
+			t.Errorf("CompileAssertionTest over a %s white: compiled, want declined", tc.why)
+		}
+	}
+	for _, tc := range []struct{ expr, why string }{
+		{"count(.//white[. = 'oo']) = 1", "a descendant step"},
+		{"count(a/white[. = 'oo']) = 1", "a path of two steps"},
+		{"exists(white[. = 'oo'])", "fn:exists"},
+		{"white[. = 'oo']", "an effective boolean value"},
+		{"white[. = 'oo'] = 'oo'", "a comparison operand"},
+		{"count(white[. = 'x'] | e1)", "a union operand"},
+		{"count(e1 | white[. = 'x'])", "a second union operand"},
+		{"count(white[. = 'x' and @a])", "`.` with an attribute"},
+		{"count(white[. = e1])", "a child step"},
+		{"count(white[. = $value])", "$value"},
+		{"count(white[count(e1) = 1])", "an fn:count"},
+		{"count(white[. = count(white[. = 'x'])])", "a nested predicate"},
+		{"count(white[string-length(.) = 2])", "a library function"},
+		{"count(white[.])", "a bare `.`"},
+		{"count(white[string-length(.)])", "a bare library call"},
+		{"count(white[1])", "a numeric literal"},
+		{"count(n[. + 0])", "bare arithmetic"},
+		{"count(white[. = 'x' and .])", "a bare `.` under and"},
+		{"count(white[not(.)])", "a bare `.` under fn:not"},
+		{"count(white[./x])", "a step below the candidate"},
+		{"count(white[position() = 1])", "position()"},
+		{"count(white[last()])", "last()"},
+		{"count(zz[. = 'x'])", "a child with no type"},
+		{".", "`.` at the top level"},
+	} {
+		if _, ok := vpCompile(t, tc.expr, str); ok {
+			t.Errorf("CompileAssertionTest(%q): compiled, want declined (%s)", tc.expr, tc.why)
+		}
+	}
+}
+
+// A predicate is the assertion façade's alone: a Type Alternative's {test}
+// declines every one, as it declines fn:count, and an assertions facet's
+// declines a counted one, reaching no predicate it could evaluate.
+func TestPredicatesDeclineOutsideTheAssertionFacade(t *testing.T) {
+	str := asBuiltin(t, "string")
+	for _, expr := range []string{"count(c[@a]) = 0", "count(white[. = 'x']) = 0", "count(@a | @b) = 0"} {
+		if _, ok := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); ok {
+			t.Errorf("CompileCTATest(%q): compiled, want declined", expr)
+		}
+		if got := FacetAssertions().Evaluate(backend(), seededTypes, str, ctaExprRecord(expr, ""), fcValue(t, str, "x")); got != value.AssertionDeclined {
+			t.Errorf("FacetAssertions().Evaluate(%q) = %d, want %d", expr, got, value.AssertionDeclined)
+		}
+	}
+}

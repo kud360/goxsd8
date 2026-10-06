@@ -245,3 +245,36 @@ func TestAssertionOverANonSubstitutableChildIsDeclined(t *testing.T) {
 	res := aAssess(t, schema, acRoot(acKid("e1", 2, "x"), acKid("e1", 3, "12:20:02", xsiTypeAttr("xs:time"))))
 	acDeclined(t, res, "its ·governing type definition· {"+xsd.XMLSchemaNS+"}time is neither its ·locally declared type· {"+xsd.XMLSchemaNS+"}string nor ·validly substitutable· for it")
 }
+
+// fn:count over a child step whose predicate reads the child's value counts
+// the children the predicate is true for, each read typed as a child step
+// naming it reads it (walk.keepChild): `count(n[. = 3]) eq 1` holds over 3
+// and 4 and is charged over 3 and 3, which compares xs:int values; a ·nilled·
+// <e1> has no value, so `count(e1[. = 'x']) eq 0` holds over it. A ·skipped·
+// second <e1> under a value predicate declines through lackingChild, as a
+// value step's does. Every row is declined instead, and fails, with
+// ctaMatchingChildren.readsChild false, which keeps no child's value.
+func TestAssertionCountsChildrenFilteredByValue(t *testing.T) {
+	nilled := &testAttribute{name: xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: "nil"}, value: "true", loc: loc(2, 6)}
+	for _, tc := range []struct {
+		expr    string
+		kids    []Child
+		charged bool
+	}{
+		{"count(n[. = 3]) eq 1", []Child{acKid("n", 2, "3"), acKid("n", 3, "4")}, false},
+		{"count(n[. = 3]) eq 1", []Child{acKid("n", 2, "3"), acKid("n", 3, "03")}, true},
+		{"count(e1[. = 'x']) eq 0", []Child{acKid("e1", 2, "", nilled)}, false},
+		{"count(e1[. = 'x']) eq 1", []Child{acKid("e1", 2, "x"), acKid("n", 3, "1")}, false},
+	} {
+		t.Run(tc.expr, func(t *testing.T) {
+			res := aAssess(t, acSchema(t, tc.expr), acRoot(tc.kids...))
+			if !tc.charged {
+				wantSatisfied(t, res, tc.expr)
+				return
+			}
+			wantAssertionCharge(t, res, "the element root is not ·valid· with respect to assertion 1 of 1 in the {assertions} of the ·governing type definition· RootType, whose {test} is ")
+		})
+	}
+	acDeclined(t, aAssess(t, acSchema(t, "count(e1[. = 'x']) le 2"), acRoot(acKid("e1", 2, "x"), acKid("e1", 3, "x"))),
+		"the child element e1 of the element root at instance.xml:3:3, which a {test} reads, has no typed value for the data model instance cvc-assertion clause 1 builds: it is ·skipped·")
+}
