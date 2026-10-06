@@ -1138,7 +1138,7 @@ MS-Attribute2006-07-15/attC008/schema/attC008 pass
 MS-Attribute2006-07-15/attC009/schema/attC009 pass
 MS-Attribute2006-07-15/attC010/schema/attC010 pass
 MS-Attribute2006-07-15/attD001/schema/attD001 pass
-MS-Attribute2006-07-15/attD002/schema/attD002 fail
+MS-Attribute2006-07-15/attD002/schema/attD002 pass
 MS-Attribute2006-07-15/attD003/schema/attD003 pass
 MS-Attribute2006-07-15/attD004/schema/attD004 pass
 MS-Attribute2006-07-15/attD005/schema/attD005 pass

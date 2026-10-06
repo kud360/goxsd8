@@ -677,12 +677,12 @@ func (s *Schema) checkAttributeUseSubsumes(n QName, r attributeRestriction, gene
 // clause 5.1 names cos-st-derived-ok with no set — so derivedOKSimple
 // (derivation.go) is called with a nil blocked.
 //
-// An unresolvable or non-simple {type definition} on either side is SKIPPED
-// rather than rejected: a dangling type name was already charged src-resolve by
-// Phase A, and a name resolving to a complex type is not a fact this clause is
-// competent to charge. Skipping is fail-open, never a false reject. Both sides
-// are resolved through attributeUseType, the one encoding of "the simple type
-// governing this use" clause 5.2.2 also reads (STYLE T4).
+// An absent {type definition} on either side is SKIPPED rather than rejected:
+// it names no type to derive from. Skipping is fail-open, never a false reject.
+// A dangling type= and one naming a complex type never reach here: Phase A
+// charges both src-resolve (resolveTypeDefinitionSlot, resolveAttributeDecl).
+// Both sides are resolved through attributeUseType, the one encoding of "the
+// simple type governing this use" clause 5.2.2 also reads (STYLE T4).
 //
 // An unresolvable {base type definition} INSIDE either chain is a different
 // thing and is returned as the src-resolve error rather than skipped: this frame
@@ -735,10 +735,9 @@ func (s *Schema) checkAttributeTypeDerivedOK(n QName, r attributeRestriction, ge
 // permanent and belong to #2087: two types resolving to DIFFERENT governing
 // mappings, a list or union type, and a ·special· type against an ordinary
 // one — all of which clause 5.1 permits, since S's type need only be DERIVED
-// from G's; and a by-name type= resolving to a COMPLEX type, which §3.2.2.2's
-// "the simple type definition ·resolved· to" makes a src-resolve failure this
-// package does not charge (an inline complex type is rejected at construction,
-// a-props-correct clause 1).
+// from G's. A complex {type definition} is not among them: Phase A charges a
+// by-name one src-resolve (resolveAttributeDecl), and NewAttributeDeclaration
+// an inline one a-props-correct clause 1.
 func (s *Schema) checkAttributeValueConstraintSubsumes(n QName, r attributeRestriction, general, specific AttributeUse) error {
 	gvc, present := s.EffectiveValueConstraint(general)
 	if !present || gvc.Kind() != ValueFixed {
@@ -778,9 +777,10 @@ func (s *Schema) attributeValueConstraintsAgree(general, specific AttributeUse, 
 // attributeUseType is the Simple Type Definition governing an attribute use's
 // values: its {attribute declaration}.{type definition}, resolved through the
 // same two helpers every other consumer here uses (STYLE T4). ok is false for a
-// dangling Ref and for a {type definition} that is absent, unresolvable, or
-// complex — the cases the value-constraint clauses treat as "not decidable",
-// never as a violation.
+// dangling Ref and for an absent {type definition} — the cases the
+// value-constraint clauses treat as "not decidable", never as a violation. An
+// unresolvable or complex {type definition} is false too, but no finalized
+// schema holds one: Phase A charges both src-resolve (resolveAttributeDecl).
 func (s *Schema) attributeUseType(u AttributeUse) (*SimpleType, bool) {
 	d, ok := s.ResolvedAttributeDeclaration(u)
 	if !ok {

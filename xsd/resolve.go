@@ -15,10 +15,14 @@ import (
 // (clauses 2–3). A dangling reference (no such component) and a wrong-kind
 // reference (the name exists only in another kind's table) are the SAME failure
 // — the kind-specific lookup simply misses — so both are charged this rule,
-// differing only in message. Clause 4 (namespace reachability from the referring
-// document) is a distinct precondition that needs the schema-document import
-// graph, which the compiled component model does not carry; it is out of #173's
-// scope and left to the producer (#176).
+// differing only in message. A slot whose specified kind is SIMPLE type
+// definition fails the rule too when its name resolves to a complex type, but
+// cites no clause: clause 1.1 only selects {type definitions}, which the
+// complex type satisfies, and what fails is the rule's "specified kind"
+// (simpleTypeOfRef, resolveAttributeDecl). Clause 4 (namespace reachability from
+// the referring document) is a distinct precondition that needs the
+// schema-document import graph, which the compiled component model does not
+// carry; it is out of #173's scope and left to the producer (#176).
 const ruleSrcResolve xsderr.Rule = "src-resolve"
 
 // anyTypeName is the expanded name of xs:anyType, the one Complex Type
@@ -390,12 +394,13 @@ func (s *Schema) resolveReferences() error {
 // a site here.
 func (s *Schema) referenceWalk() componentWalk {
 	return componentWalk{
-		typeDefinitionSlot: s.resolveTypeDefinitionSlot,
-		attributeUse:       s.resolveAttributeUse,
-		attributeGroupRef:  s.resolveAttributeGroupRef,
-		elementDeclaration: s.resolveElementDecl,
-		simpleType:         s.resolveSimpleType,
-		termRef:            s.resolveTermRef,
+		typeDefinitionSlot:   s.resolveTypeDefinitionSlot,
+		attributeUse:         s.resolveAttributeUse,
+		attributeGroupRef:    s.resolveAttributeGroupRef,
+		elementDeclaration:   s.resolveElementDecl,
+		attributeDeclaration: s.resolveAttributeDecl,
+		simpleType:           s.resolveSimpleType,
+		termRef:              s.resolveTermRef,
 	}
 }
 
@@ -697,6 +702,37 @@ func (s *Schema) resolveAttributeUse(u AttributeUse, loc xsderr.Loc, _ string) e
 	default:
 		panic("xsd: resolveAttributeUse: non-exhaustive AttributeDeclarationOrRef switch")
 	}
+}
+
+// resolveAttributeDecl charges the specified KIND of an attribute declaration's
+// by-name {type definition}: §3.2.2.1 dcl.att.global and §3.2.2.2 dcl.att.local
+// (which also maps a local <attribute> inside an <attributeGroup>) take it to be
+// "the simple type definition ·resolved· to by the ·actual value· of the type
+// [attribute]", so a type= naming a Complex Type Definition — xs:anyType
+// included — does not resolve to a component of the specified kind and fails
+// src-resolve (§3.17.6.2). resolveTypeDefinitionSlot cannot charge it: it answers
+// for every {type definition} slot, and the element, base, type alternative and
+// type table slots legitimately take either kind.
+//
+// It resolves through resolveTypeName rather than leaning on the slot charge
+// that runs just before it, so a dangling name is rejected here too, under the
+// same message. The inline arm needs no check (NewAttributeDeclaration rejects a
+// complex one under a-props-correct clause 1), and an absent slot names nothing.
+func (s *Schema) resolveAttributeDecl(a AttributeDeclaration) error {
+	r, ok := a.TypeDefinition().(TypeDefinitionRef)
+	if !ok {
+		return nil
+	}
+	ctx := "attribute declaration " + a.Name().String() + " {type definition}"
+	t, err := resolveTypeName(s, r.Name, a.Loc(), ctx)
+	if err != nil {
+		return err
+	}
+	if _, isComplex := t.(ComplexType); !isComplex {
+		return nil
+	}
+	return xsderr.New(ruleSrcResolve, a.Loc(),
+		"%s references simple type %s, but that expanded name is a complex type definition, and src-resolve requires an attribute's type= to resolve to a simple type definition", ctx, r.Name)
 }
 
 // resolveElementDecl resolves the two reference-bearing slots of an element
