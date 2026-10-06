@@ -848,10 +848,10 @@ type walkFrame struct {
 // Recursion), or, where declared, a reference to a name no declaration outside
 // every parameter entity declares, in the replacement text of an entity whose
 // binding declaration stands outside every parameter entity too (WFC: Entity
-// Declared; see defaultsFault). The path is a slice,
-// not the call stack, so entities nested as deeply as the subset can declare
-// them cost no recursion and no bound. A predefined name is passed over, and
-// so, unless declared, is one declared nowhere.
+// Declared; see defaultsFault). The path is a slice, not the call stack, so
+// entities nested as deeply as the subset can declare them cost no recursion
+// and no bound. A predefined name is passed over, and so, unless declared, is
+// one declared nowhere.
 func (g *entityGraph) fault(about, name string) error {
 	if g.state[name] == walked {
 		return nil

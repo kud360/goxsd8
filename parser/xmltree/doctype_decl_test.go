@@ -198,10 +198,9 @@ func TestElementAndAttlistDeclAreWellFormed(t *testing.T) {
 // every parameter entity but bound (§4.2) by its first declaration, in one,
 // whose replacement text references x, declared only in that parameter
 // entity, a reference that occurs within a parameter entity (#2365); an entity
-// whose replacement text references a name declared
-// nowhere, which no default value references; and an entity whose replacement
-// text holds a '&' that begins no Reference, which no default value references
-// either.
+// whose replacement text references a name declared nowhere, which no default
+// value references; and an entity whose replacement text holds a '&' that
+// begins no Reference, which no default value references either.
 func TestAttlistDefaultEntityReferencesAreWellFormed(t *testing.T) {
 	const decl = "<?xml version=\"1.0\"?>\n"
 	const alone = "<?xml version=\"1.0\" standalone=\"yes\"?>\n"
