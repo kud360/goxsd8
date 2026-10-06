@@ -301,25 +301,33 @@ func (s ctaTypedChild) nodes(env ctaEnv) (int, bool) {
 	return nodes, ok
 }
 
-// nodes is the counter the evaluation's [Tally] holds for s, which the caller
-// filled with E's subtree. The input is ctaTypedInput by construction
-// (ctaInput); the other arm holds no Tally and raises, unreachably.
-func (s ctaChildPath) nodes(env ctaEnv) (int, bool) {
-	in, typed := env.input.(ctaTypedInput)
-	if !typed {
-		return 0, false
-	}
-	return in.counts.count(s)
-}
+// nodes is the counter the evaluation's [Tally] holds for s (ctaTalliedNodes).
+func (s ctaChildPath) nodes(env ctaEnv) (int, bool) { return ctaTalliedNodes(s, env) }
 
-// nodes is the counter the evaluation's [Tally] holds for s's path, on
-// ctaChildPath's terms.
-func (s ctaSelectedElements) nodes(env ctaEnv) (int, bool) {
+// nodes is the counter the evaluation's [Tally] holds for s's path
+// (ctaTalliedNodes).
+func (s ctaSelectedElements) nodes(env ctaEnv) (int, bool) { return ctaTalliedNodes(s.path, env) }
+
+// nodes is the counter the evaluation's [Tally] holds for p (ctaTalliedNodes),
+// which is how many nodes fn:count over p counts.
+func (p ctaCountPath) nodes(env ctaEnv) (int, bool) { return ctaTalliedNodes(p, env) }
+
+// nodes is ctaCountPath.nodes'.
+func (f ctaFilteredChildren) nodes(env ctaEnv) (int, bool) { return ctaTalliedNodes(f, env) }
+
+// nodes is ctaCountPath.nodes'.
+func (u ctaUnion) nodes(env ctaEnv) (int, bool) { return ctaTalliedNodes(u, env) }
+
+// ctaTalliedNodes is the counter the evaluation's [Tally] holds for key, which
+// the caller filled with E's subtree. The input is ctaTypedInput by
+// construction (ctaInput); the other arm holds no Tally and raises,
+// unreachably.
+func ctaTalliedNodes(key ctaTallied, env ctaEnv) (int, bool) {
 	in, typed := env.input.(ctaTypedInput)
 	if !typed {
 		return 0, false
 	}
-	return in.counts.count(s.path)
+	return in.counts.count(key)
 }
 
 func (ctaNoDocumentRoot) nodes(ctaEnv) (int, bool) { return 0, false } // err:XPDY0050

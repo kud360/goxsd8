@@ -199,7 +199,7 @@ func TestTalliedSelects(t *testing.T) {
 		{".//b misses [b a]", desc, []xsd.QName{b, a}, false},
 		{".//b misses []", desc, []xsd.QName{}, false},
 	} {
-		if got := tc.key.selectsElement(tc.path); got != tc.want {
+		if got := tc.key.selectsElement(tc.path, nil); got != tc.want {
 			t.Errorf("%s: selectsElement = %v, want %v", tc.why, got, tc.want)
 		}
 	}

@@ -255,7 +255,7 @@ const (
 	// ctaSlashTok is '/' and ctaSlashSlashTok is '//'. Each is read only where
 	// it opens a [25] PathExpr (ctaParser.rootedPath) or follows the `.`
 	// opening an fn:count argument or an element step whose existence is
-	// asked (ctaParser.countArgument), and a '/' also between the steps of a
+	// asked (ctaParser.countPath), and a '/' also between the steps of a
 	// child path (ctaParser.childPath); anywhere else it is a token no
 	// production takes, so `a//b`, and `a/b` outside a child path's three
 	// positions, are not expressions here.
@@ -264,7 +264,7 @@ const (
 	// ctaDotTok is a '.' that opens no NumericLiteral: the [47]
 	// ContextItemExpr, which only the facet façade admits
 	// (ctaFacade.contextItem), or the context item an fn:count argument's or
-	// an element step's `./` or `.//` opens with (ctaParser.countArgument).
+	// an element step's `./` or `.//` opens with (ctaParser.countPath).
 	// '..', the abbreviated parent step, is not tokenized at all.
 	ctaDotTok
 	// ctaPlusTok is '+' and ctaMinusTok is '-', the two operators of xpath20.md
@@ -277,6 +277,14 @@ const (
 	// F&O functions the façade admits (ctaParser.arguments) and is read nowhere
 	// else, so a comma in any other position is a token no production takes.
 	ctaCommaTok
+	// ctaLBracketTok is '[' and ctaRBracketTok is ']', which open and close
+	// xpath20.md [40] Predicate, read only after a child step of an fn:count
+	// argument (ctaParser.predicate).
+	ctaLBracketTok
+	ctaRBracketTok
+	// ctaBarTok is '|', xpath20.md [21] UnionExpr's operator, read only between
+	// the operands of an fn:count argument (ctaParser.countArgument).
+	ctaBarTok
 )
 
 // ctaToken is one token, identified by kind. text carries the source spelling
@@ -330,6 +338,15 @@ func ctaTokenize(s string) ([]ctaToken, bool) {
 			i++
 		case r == ',':
 			toks = append(toks, ctaToken{kind: ctaCommaTok})
+			i++
+		case r == '[':
+			toks = append(toks, ctaToken{kind: ctaLBracketTok})
+			i++
+		case r == ']':
+			toks = append(toks, ctaToken{kind: ctaRBracketTok})
+			i++
+		case r == '|':
+			toks = append(toks, ctaToken{kind: ctaBarTok})
 			i++
 		case strings.HasPrefix(s[i:], "//"):
 			toks = append(toks, ctaToken{kind: ctaSlashSlashTok})
@@ -1202,14 +1219,104 @@ func (p *ctaParser) countCall() (ctaValue, bool) {
 	return p.facade.count(arg, p.types)
 }
 
-// countArgument parses fn:count's argument as far as a [Tally] counts it: a
-// rooted path (rootedPath), whose node p.facade builds and which is an
-// argument only where it is ctaCounted — ctaNoDocumentRoot, which raises before
-// it selects a node — or a relative path of one step with a QName NameTest,
-// `N`, `@N`, or either behind `./` or `.//` (countStep). A longer path, a
-// wildcard, a predicate and a bare `.` leave a token no production takes, or
-// none at all, and decline. selectedElements parses its element steps too.
+// countArgument parses fn:count's argument: one operand (countOperand), or
+// xpath20.md [21] UnionExpr over two or more, joined by `|` or `union`
+// (§3.3.3), whose node ctaUnionOf builds and which declines a rooted operand
+// and one filtered by a predicate that reads the child's value.
 func (p *ctaParser) countArgument() (ctaCounted, bool) {
+	first, ok := p.countOperand()
+	if !ok {
+		return nil, false
+	}
+	if !p.atUnion() {
+		return first, true
+	}
+	operands := []ctaCounted{first}
+	for p.atUnion() {
+		p.advance()
+		next, ok := p.countOperand()
+		if !ok {
+			return nil, false
+		}
+		operands = append(operands, next)
+	}
+	return ctaUnionOf(operands)
+}
+
+// atUnion reports whether the cursor sits on a [21] UnionExpr operator, `|` or
+// `union`, which right after a complete operand no other production opens
+// with.
+func (p *ctaParser) atUnion() bool { return p.at(ctaBarTok) || p.atName("union") }
+
+// countOperand parses one operand of fn:count's argument: a path countPath
+// parses, and, where a '[' follows a child step `N` or `./N`, the one
+// predicate filtering it (predicate). A predicate after any other step — `.//N`,
+// `@N`, a rooted step — and a second predicate leave a token no production
+// takes, and decline.
+func (p *ctaParser) countOperand() (ctaCounted, bool) {
+	arg, ok := p.countPath()
+	if !ok || !p.at(ctaLBracketTok) {
+		return arg, ok
+	}
+	step, isPath := arg.(ctaCountPath)
+	if !isPath || step.axis != ctaCountChildren {
+		return nil, false
+	}
+	return p.predicate(step.name)
+}
+
+// predicate parses xpath20.md [40] Predicate, `"[" Expr "]"`, filtering the
+// child step that selects E's children named name, as far as an fn:count
+// argument admits it: a conjunction of attribute-existence tests with QName
+// NameTests, `@A` or `@A1 and @A2 …`, resolved on attributeName's terms, which
+// is ctaFilteredChildren.
+//
+// GAP(xpath): every other predicate declines — a disjunction, an fn:not, a
+// wildcard, an attribute atomized (`c[@a = 1]`), a numeric one (`c[1]`), and
+// any predicate outside an fn:count argument. The direction is the withhold
+// [CompileAssertionTest] reports. (#1042)
+func (p *ctaParser) predicate(name xsd.QName) (ctaCounted, bool) {
+	p.advance() // '['
+	n := p.existenceLength()
+	if n == 0 || p.peek(n).kind != ctaRBracketTok {
+		return nil, false
+	}
+	var required []xsd.QName
+	for end := p.pos + n; p.pos < end; p.advance() {
+		if p.at(ctaAtTok) {
+			p.advance()
+			required = append(required, p.attributeName(p.peek(0).text))
+		}
+	}
+	p.advance() // ']'
+	return ctaFilteredChildrenOf(name, required)
+}
+
+// existenceLength is how many tokens at the cursor spell a conjunction of
+// attribute-existence tests, `'@' QName ('and' '@' QName)*`, and 0 where they
+// spell none. Nothing is consumed.
+func (p *ctaParser) existenceLength() int {
+	n := 0
+	for {
+		if p.peek(n).kind != ctaAtTok || p.peek(n+1).kind != ctaNameTok {
+			return 0
+		}
+		n += 2
+		if tok := p.peek(n); tok.kind != ctaNameTok || tok.text != "and" {
+			return n
+		}
+		n++
+	}
+}
+
+// countPath parses one counted path: a rooted path (rootedPath), whose node
+// p.facade builds and which is an argument only where it is ctaCounted —
+// ctaNoDocumentRoot, which raises before it selects a node — or a relative
+// path of one step with a QName NameTest, `N`, `@N`, or either behind `./` or
+// `.//` (countStep). A longer path, a wildcard and a bare `.` leave a token no
+// production takes, or none at all, and decline. selectedElements parses its
+// element steps too.
+func (p *ctaParser) countPath() (ctaCounted, bool) {
 	if p.at(ctaSlashTok) || p.at(ctaSlashSlashTok) {
 		rooted, ok := p.rootedPath()
 		if !ok {
@@ -1459,7 +1566,7 @@ func (p *ctaParser) childPath(n int) (ctaValue, bool) {
 }
 
 // selectedStepLength is how many tokens, from offset at ahead of the cursor,
-// spell one of countArgument's element steps — a QName, `N`, alone or behind
+// spell one of countPath's element steps — a QName, `N`, alone or behind
 // `./` or `.//` — and 0 where they spell none. Nothing is consumed, and nothing
 // after the name is read: a name followed by '(' or '::' is a function call or
 // an axis spelled out, which the caller's check that the token after the step
@@ -1479,7 +1586,7 @@ func (p *ctaParser) selectedStepLength(at int) int {
 }
 
 // selectedElements parses the step selectedStepLength measured at the cursor
-// on countArgument's grammar — `N` and `./N` the element children of E named
+// on countPath's grammar — `N` and `./N` the element children of E named
 // N, `.//N` every element below E so named (xpath20.md §3.2.4) — into the node
 // p.facade builds for it (ctaFacade.elements), which may decline it. It is the
 // ONE place a ctaSelectedElements is built, reached from childPath's two
@@ -1489,7 +1596,7 @@ func (p *ctaParser) selectedStepLength(at int) int {
 // else a step is childStep's, whose value is read, and `./N` and `.//N`
 // decline.
 func (p *ctaParser) selectedElements() (ctaValue, bool) {
-	arg, ok := p.countArgument()
+	arg, ok := p.countPath()
 	if !ok {
 		return nil, false
 	}

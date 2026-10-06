@@ -274,7 +274,7 @@ func (c *Tally) Element(path []xsd.QName, attrs []xsd.QName) {
 // counted once.
 func ctaSelected(key ctaTallied, path, attrs []xsd.QName) int {
 	n := 0
-	if key.selectsElement(path) {
+	if key.selectsElement(path, attrs) {
 		n++
 	}
 	for _, a := range attrs {
@@ -696,9 +696,15 @@ func (ctaValueVar) readsChild(xsd.QName) bool       { return false }
 func (ctaEmptyValue) readsChild(xsd.QName) bool     { return false }
 func (ctaUntypedValue) readsChild(xsd.QName) bool   { return false }
 
-// readsChild is false: an fn:count call reads no child's value, and what it
-// counts is the [Tally]'s.
-func (ctaCount) readsChild(xsd.QName) bool { return false }
+// readsChild reports whether the call's argument reads the value of a child
+// named name.
+func (n ctaCount) readsChild(name xsd.QName) bool { return n.arg.readsChild(name) }
+
+// readsChild is false for each of these: a counted path reads no child's
+// value, and what it counts is the [Tally]'s.
+func (ctaCountPath) readsChild(xsd.QName) bool        { return false }
+func (ctaFilteredChildren) readsChild(xsd.QName) bool { return false }
+func (ctaUnion) readsChild(xsd.QName) bool            { return false }
 
 // readsChild is false, on ctaCount's terms: a child path reads no node's value,
 // and how many nodes it selects is the [Tally]'s.
@@ -758,15 +764,13 @@ func (n ctaStringFunction) counted(into []ctaTallied) []ctaTallied {
 	return n.cast.counted(into)
 }
 
-// counted appends the call's path where it is relative; a rooted argument
-// raises before it selects a node and counts nothing.
-func (n ctaCount) counted(into []ctaTallied) []ctaTallied {
-	path, relative := n.arg.(ctaCountPath)
-	if !relative {
-		return into
-	}
-	return append(into, path)
-}
+// counted appends the path the call's argument counts over, if any.
+func (n ctaCount) counted(into []ctaTallied) []ctaTallied { return n.arg.counted(into) }
+
+// counted appends the key itself: the [Tally] counts the nodes it selects.
+func (p ctaCountPath) counted(into []ctaTallied) []ctaTallied        { return append(into, p) }
+func (f ctaFilteredChildren) counted(into []ctaTallied) []ctaTallied { return append(into, f) }
+func (u ctaUnion) counted(into []ctaTallied) []ctaTallied            { return append(into, u) }
 
 // counted appends the path itself: the [Tally] counts the nodes it selects.
 func (n ctaChildPath) counted(into []ctaTallied) []ctaTallied { return append(into, n) }

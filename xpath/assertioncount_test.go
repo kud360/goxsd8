@@ -269,9 +269,12 @@ func TestAssertionTallyIsFreshAndTotal(t *testing.T) {
 
 // CountsAttributesAt answers per counted path: `@a` selects attributes of E
 // alone, `.//@a` those of E and of every element below it, and `e1`, `.//e1`
-// and the child path `e1/e1` select none at any depth. A test that counts
-// nothing has a nil Tally, which answers false, and so does every Tally at a
-// depth below 0.
+// and the child path `e1/e1` select none at any depth. `c[@a]` reads the
+// attribute names of E's children, at depth 1 alone, and a union reads them
+// wherever an operand does. A test that counts nothing has a nil Tally, which
+// answers false, and so does every Tally at a depth below 0. The `c[@a]` rows
+// fail at depth 1 with ctaFilteredChildren.selectsAttributesAt false, and the
+// union rows with ctaUnion.selectsAttributesAt asking its first operand alone.
 func TestTallyCountsAttributesAt(t *testing.T) {
 	for _, tc := range []struct {
 		expr string
@@ -282,6 +285,10 @@ func TestTallyCountsAttributesAt(t *testing.T) {
 		{"count(e1) eq 0", map[int]bool{-1: false, 0: false, 1: false, 2: false}},
 		{"count(.//e1) eq 0", map[int]bool{-1: false, 0: false, 1: false, 2: false}},
 		{"exists(e1/e1)", map[int]bool{-1: false, 0: false, 1: false, 2: false}},
+		{"count(c[@a]) eq 0", map[int]bool{-1: false, 0: false, 1: true, 2: false}},
+		{"count(c | e1) eq 0", map[int]bool{-1: false, 0: false, 1: false, 2: false}},
+		{"count(c | @a) eq 0", map[int]bool{-1: false, 0: true, 1: false, 2: false}},
+		{"count(c[@a] | e1) eq 0", map[int]bool{-1: false, 0: false, 1: true, 2: false}},
 		{"@length eq 1", map[int]bool{-1: false, 0: false, 1: false, 2: false}},
 	} {
 		c := acCompile(t, asRecord(tc.expr)).Tally()
@@ -357,6 +364,186 @@ func TestCountDeclinesOutsideTheAssertionFacade(t *testing.T) {
 	} {
 		if got := FacetAssertions().Evaluate(backend(), seededTypes, str, ctaExprRecord(tc.test, ""), fcValue(t, str, "x")); got != tc.want {
 			t.Errorf("FacetAssertions().Evaluate(%q) = %d, want %d", tc.test, got, tc.want)
+		}
+	}
+}
+
+// acElAt is an element node named local in no namespace, depth levels below E,
+// whose attribute nodes are named attrs, each in no namespace.
+func acElAt(depth int, local string, attrs ...string) acNode {
+	n := acEl(depth, local)
+	for _, a := range attrs {
+		n.attrs = append(n.attrs, uq(a))
+	}
+	return n
+}
+
+// acE is E itself, reported by the empty chain, whose attribute nodes are
+// named attrs, each in no namespace.
+func acE(attrs ...string) acNode {
+	n := acPath()
+	for _, a := range attrs {
+		n.attrs = append(n.attrs, uq(a))
+	}
+	return n
+}
+
+// acDecides fails unless expr compiles under acCompile and evaluates to want
+// over a Tally given nodes.
+func acDecides(t *testing.T, expr string, want bool, nodes ...acNode) {
+	t.Helper()
+	test := acCompile(t, asRecord(expr))
+	if got := test.Evaluate(backend(), seededTypes, asValues(t), asNoChildren, acTally(test, nodes...), ValueBinding{}); got != want {
+		t.Errorf("Evaluate(%q) over %v = %v, want %v", expr, nodes, got, want)
+	}
+}
+
+// acCounters fails unless expr compiles under acCompile to a test whose Tally
+// holds want counters.
+func acCounters(t *testing.T, expr string, want int) {
+	t.Helper()
+	if c := acCompile(t, asRecord(expr)).Tally(); c == nil || len(c.counters) != want {
+		t.Errorf("(%s).Tally() = %v, want %d counters", expr, c, want)
+	}
+}
+
+// A predicate that is a conjunction of attribute-existence tests filters a
+// counted child step (xpath20.md §3.2.2): `c[@a and @b]` selects the children
+// named c whose attribute nodes include both, which the Tally reads off the
+// names each Tally.Element report carries. A c carrying @a alone is not
+// selected; neither is a grandchild c, E itself, or an element a carrying an
+// attribute c. A further attribute is no matter, nor is the order the
+// conjunction names them in, and a name written twice is required once.
+// `c[@n]` is node-valued, so it is the existence test and not a positional
+// one. Every row declines, and fails, with ctaParser.predicate declining every
+// predicate; the "only @a" and "required whole" rows are satisfied instead
+// with ctaFilteredChildren.selectsElement asking for any one required name
+// rather than all.
+func TestAssertionCountsChildrenFilteredByAttributes(t *testing.T) {
+	for _, tc := range []struct {
+		why   string
+		expr  string
+		nodes []acNode
+		holds bool
+	}{
+		{"both attributes", "count(c[@a and @b]) = 1", []acNode{acElAt(1, "c", "a", "b")}, true},
+		{"only @a", "count(c[@a and @b]) = 1", []acNode{acElAt(1, "c", "a")}, false},
+		{"the conjunction is required whole", "count(c[@a and @b]) = 0", []acNode{acElAt(1, "c", "b"), acElAt(1, "c", "a")}, true},
+		{"a further attribute", "count(c[@a and @b]) = 1", []acNode{acElAt(1, "c", "x", "b", "a")}, true},
+		{"one of two children", "count(c[@a and @b]) = 1", []acNode{acElAt(1, "c", "a", "b"), acElAt(1, "c", "b")}, true},
+		{"two children", "count(c[@a and @b]) = 2", []acNode{acElAt(1, "c", "a", "b"), acElAt(1, "c", "b", "a")}, true},
+		{"a grandchild is no child", "count(c[@a and @b]) = 0", []acNode{acElAt(2, "c", "a", "b")}, true},
+		{"E itself is no child", "count(c[@a and @b]) = 0", []acNode{acE("a", "b")}, true},
+		{"an element a carrying an attribute c", "count(c[@a]) = 0", []acNode{acElAt(1, "a", "c")}, true},
+		{"the order of the conjunction", "count(c[@b and @a]) = 1", []acNode{acElAt(1, "c", "a", "b")}, true},
+		{"a name written twice", "count(c[@a and @a]) = 1", []acNode{acElAt(1, "c", "a")}, true},
+		{"./c filters as c does", "count(./c[@a]) = 1", []acNode{acElAt(1, "c", "a"), acElAt(1, "c")}, true},
+		{"c[@n] is an existence test", "count(c[@n]) = 1", []acNode{acElAt(1, "c", "n"), acElAt(1, "c")}, true},
+	} {
+		t.Run(tc.why, func(t *testing.T) { acDecides(t, tc.expr, tc.holds, tc.nodes...) })
+	}
+}
+
+// One counter serves a filtered step however its conjunction is ordered or
+// repeated, and a filtered step and the bare one keep two. The first two rows
+// hold two counters with ctaFilteredChildren.same reading its names in order
+// or ctaFilteredChildrenOf keeping a repeated one.
+func TestAssertionFilteredStepsShareCounters(t *testing.T) {
+	acCounters(t, "count(c[@a and @b]) = 1 and count(c[@b and @a]) = 1", 1)
+	acCounters(t, "count(c[@a]) = 1 and count(c[@a and @a]) = 1", 1)
+	acCounters(t, "count(c[@a]) = 1 and count(c) = 1", 2)
+	acCounters(t, "count(c[@a]) = 1 and count(c[@b]) = 1", 2)
+	acCounters(t, "count(c[@a]) = 1 and count(d[@a]) = 1", 2)
+}
+
+// A union in fn:count's argument (xpath20.md §3.3.3) counts each node ONCE,
+// whichever operands select it: `count(@a | @b) = 1` holds with one of the two
+// and not with both; `count(e | .//e)` over an e child and an e grandchild is
+// 2, where summing per-operand counts would be 3; `count(e[@a] | e[@b])` over
+// one e carrying both is 1. `union` is `|`. The real fixtures' shapes compile
+// and decide too. Every row declines, and fails, with ctaParser.countArgument
+// reading one operand; the two overlap rows are false instead with ctaSelected
+// summing ctaUnion's operands rather than asking whether any selects a node.
+func TestAssertionCountsAUnionOnce(t *testing.T) {
+	for _, tc := range []struct {
+		why   string
+		expr  string
+		nodes []acNode
+		holds bool
+	}{
+		{"one of two attributes", "count(@a | @b) = 1", []acNode{acE("a")}, true},
+		{"the other of two attributes", "count(@a | @b) = 1", []acNode{acE("b", "x")}, true},
+		{"both attributes", "count(@a | @b) = 1", []acNode{acE("a", "b")}, false},
+		{"neither attribute", "count(@a | @b) = 0", []acNode{acE("x"), acElAt(1, "a", "a")}, true},
+		{"a child and a grandchild selected by two operands", "count(e | .//e) = 2", []acNode{acEl(1, "e"), acPath("e", "e")}, true},
+		{"one child selected by two filtered operands", "count(e[@a] | e[@b]) = 1", []acNode{acElAt(1, "e", "a", "b")}, true},
+		{"two children each selected by one filtered operand", "count(e[@a] | e[@b]) = 2", []acNode{acElAt(1, "e", "a"), acElAt(1, "e", "b"), acElAt(1, "e")}, true},
+		{"an element and an attribute", "count(e | @a) = 2", []acNode{acE("a"), acEl(1, "e")}, true},
+		{"union is |", "count(@a union @b) = 2", []acNode{acE("a", "b")}, true},
+		{"three operands", "count(@a | @b | e) = 3", []acNode{acE("a", "b"), acEl(1, "e")}, true},
+		{"d4_3_15 timer, one", "count(@time | @iterations) = 1", []acNode{acE("time")}, true},
+		{"d4_3_15 timer, two", "count(@time | @iterations) = 1", []acNode{acE("time", "iterations")}, false},
+		{"d4_3_15 parent, a grandchild child element", "count(child[@name and @dob] | grandchild[@name and @dob]) = 1",
+			[]acNode{acElAt(1, "grandchild", "name", "dob")}, true},
+		{"d4_3_15 parent, both", "count(child[@name and @dob] | grandchild[@name and @dob]) = 1",
+			[]acNode{acElAt(1, "child", "name", "dob"), acElAt(1, "grandchild", "dob", "name")}, false},
+		{"d4_3_15 parent, one without dob", "count(child[@name and @dob] | grandchild[@name and @dob]) = 1",
+			[]acNode{acElAt(1, "child", "name", "dob"), acElAt(1, "grandchild", "name")}, true},
+	} {
+		t.Run(tc.why, func(t *testing.T) { acDecides(t, tc.expr, tc.holds, tc.nodes...) })
+	}
+}
+
+// A union keeps one counter per distinct operand SET: `e | e` is `e` itself and
+// shares its counter, `@a | @b` and `@b | @a` are one, `e | @a | e` is `@a |
+// e`; no operand is read for what it selects, so `e | .//e` and `.//e` keep
+// two. The first four rows hold a counter more with ctaUnionOf keeping a
+// repeated operand or not collapsing to a single one, or with ctaUnion.same
+// reading its operands in order.
+func TestAssertionUnionCounters(t *testing.T) {
+	acCounters(t, "count(e | e) = 1 and count(e) = 1", 1)
+	acCounters(t, "count(@a | @b) = 1 and count(@b | @a) = 1", 1)
+	acCounters(t, "count(e | @a | e) = 1 and count(@a | e) = 1", 1)
+	acCounters(t, "count(e[@a] | e[@b]) = 1 and count(e[@b] | e[@a]) = 1", 1)
+	acCounters(t, "count(e | .//e) = 1 and count(.//e) = 1", 2)
+}
+
+// A predicate fn:count admits is an attribute-existence conjunction on a child
+// step: every other one declines, and so does a union operand that is rooted
+// or a path of two steps, and a predicate or a union outside fn:count. A
+// numeric predicate is positional, which an order-free Tally cannot decide,
+// and position() and last() are not in the library (guard).
+func TestCompileAssertionTestDeclinesPredicatesAndUnions(t *testing.T) {
+	for _, tc := range []struct{ expr, why string }{
+		{"count(c[@a or @b]) = 1", "a disjunction"},
+		{"count(c[not(@a)]) = 1", "an fn:not"},
+		{"count(c[@a = 1]) = 1", "an attribute atomized"},
+		{"count(c[@a + 0]) = 1", "an attribute in arithmetic"},
+		{"count(c[@*]) = 1", "an attribute wildcard"},
+		{"count(c[@p:a]) = 1", "an unbound prefix"},
+		{"count(c[1]) = 1", "a numeric predicate"},
+		{"count(c[1 + 0]) = 1", "a numeric arithmetic predicate"},
+		{"count(c[position() = 1]) = 1", "position()"},
+		{"count(c[last()]) = 1", "last()"},
+		{"count(c[@a][@b]) = 1", "two predicates"},
+		{"count(c[]) = 1", "an empty predicate"},
+		{"count(c[@a) = 1", "an unclosed predicate"},
+		{"count(.//c[@a]) = 1", "a predicate on a descendant step"},
+		{"count(@a[@b]) = 1", "a predicate on an attribute step"},
+		{"count(a/c[@a]) = 1", "a predicate after a path"},
+		{"count(/c[@a]) = 1", "a predicate on a rooted step"},
+		{"count(/e | e) = 1", "a rooted union operand"},
+		{"count(e | //e) = 1", "a rooted second union operand"},
+		{"count(a/b | e) = 1", "a child path union operand"},
+		{"count(e |) = 1", "a union with no right operand"},
+		{"count(| e) = 1", "a union with no left operand"},
+		{"exists(c[@a])", "a predicate in fn:exists"},
+		{"c[@a]", "a predicate as an effective boolean value"},
+		{"exists(@a | @b)", "a union in fn:exists"},
+		{"@a | @b", "a union as an effective boolean value"},
+	} {
+		if _, ok := CompileAssertionTest(asRecord(tc.expr), seededTypes, xsd.ElementContent{}, asUses(t, map[string]string{"a": "int", "b": "int"}), asChildTypes(t)); ok {
+			t.Errorf("CompileAssertionTest(%q): compiled, want declined (%s)", tc.expr, tc.why)
 		}
 	}
 }

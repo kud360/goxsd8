@@ -868,11 +868,19 @@ type ctaCount struct {
 }
 
 // ctaCounted is the sealed sum of what an fn:count argument compiles to: a
-// relative path a [Tally] counts (ctaCountPath), or a rooted path, which raises
-// err:XPDY0050 before it selects a node and so before fn:count sees a sequence
-// (ctaNoDocumentRoot, xpath20.md §3.2). The grammar closes the set (STYLE T2's
-// schema-closed-set exception).
-type ctaCounted interface{ ctaCounted() }
+// relative path a [Tally] counts — one step (ctaCountPath), a child step
+// filtered by attribute existence (ctaFilteredChildren), or a union of those
+// (ctaUnion) — or a rooted path, which raises err:XPDY0050 before it selects
+// a node and so before fn:count sees a sequence (ctaNoDocumentRoot, xpath20.md
+// §3.2). The grammar closes the set (STYLE T2's schema-closed-set exception).
+// Every arm answers readsChild and counted on ctaExpr's terms, and nodes, how
+// many nodes it selects, reporting false where it raises.
+type ctaCounted interface {
+	ctaCounted()
+	readsChild(name xsd.QName) bool
+	counted(into []ctaTallied) []ctaTallied
+	nodes(env ctaEnv) (int, bool)
+}
 
 // ctaCountPath is one relative path fn:count counts over: the nodes on axis
 // named name. It is one arm of the keys a [Tally] keeps one counter per
@@ -900,8 +908,90 @@ const (
 	ctaCountSubtreeAttributes
 )
 
-func (ctaCountPath) ctaCounted()      {}
-func (ctaNoDocumentRoot) ctaCounted() {}
+func (ctaCountPath) ctaCounted()        {}
+func (ctaFilteredChildren) ctaCounted() {}
+func (ctaUnion) ctaCounted()            {}
+func (ctaNoDocumentRoot) ctaCounted()   {}
+
+// ctaFilteredChildren is a child step with a QName NameTest filtered by a
+// predicate that is a conjunction of attribute-existence tests, `N[@A]`,
+// `N[@A1 and @A2 …]` (xpath20.md §3.2.2), which only an fn:count argument
+// takes (ctaParser.predicate): the element children of E named name whose
+// attribute nodes include every name in required. A predicate whose value is
+// not numeric is decided by its ·effective boolean value· (§3.2.2), and an
+// attribute step's is whether it selects a node (§2.4.3 rule 2), so no
+// attribute's value — an empty one included — decides anything and none is
+// typed. It is a counter key (ctaTallied) of its own, whose [Tally] reads the
+// attribute names each [Tally.Element] report carries.
+//
+// Its one constructor is ctaFilteredChildrenOf, which holds required as a
+// non-empty set: duplicates dropped, the rest in written order.
+type ctaFilteredChildren struct {
+	name     xsd.QName
+	required []xsd.QName
+}
+
+// ctaFilteredChildrenOf is the ctaFilteredChildren over the children named
+// name carrying every attribute in required, false where required is empty.
+func ctaFilteredChildrenOf(name xsd.QName, required []xsd.QName) (ctaFilteredChildren, bool) {
+	var distinct []xsd.QName
+	for _, r := range required {
+		if !slices.Contains(distinct, r) {
+			distinct = append(distinct, r)
+		}
+	}
+	if len(distinct) == 0 {
+		return ctaFilteredChildren{}, false
+	}
+	return ctaFilteredChildren{name: name, required: distinct}, true
+}
+
+// ctaUnion is a union of two or more counted operands, `A | B` or `A union B`
+// (xpath20.md §3.3.3), which only an fn:count argument takes: every node any
+// operand selects, each ONCE — the operator eliminates duplicates by node
+// identity — so `count(e | .//e)` is the number of e below E and `count(@a |
+// @b)` is 0, 1 or 2. Each operand is a ctaCountPath or a ctaFilteredChildren.
+// It is a counter key (ctaTallied) of its own, whose [Tally] counts a reported
+// node once where any operand selects it, and never sums per-operand counts.
+//
+// Its one constructor is ctaUnionOf, which flattens a nested union, drops an
+// operand the same as one before it, and collapses to the one operand left,
+// so `count(e | e)` is `count(e)` and shares its counter.
+type ctaUnion struct{ operands []ctaTallied }
+
+// ctaUnionOf is the union of operands, false where one is not an operand a
+// [Tally] counts in a union: a rooted path, which raises, and a child step
+// filtered by a predicate that reads the child's value.
+func ctaUnionOf(operands []ctaCounted) (ctaCounted, bool) {
+	var distinct []ctaTallied
+	add := func(k ctaTallied) {
+		if !ctaHoldsPath(distinct, k) {
+			distinct = append(distinct, k)
+		}
+	}
+	for _, o := range operands {
+		switch k := o.(type) {
+		case ctaCountPath:
+			add(k)
+		case ctaFilteredChildren:
+			add(k)
+		case ctaUnion:
+			for _, inner := range k.operands {
+				add(inner)
+			}
+		case ctaNoDocumentRoot:
+			return nil, false
+		}
+	}
+	if len(distinct) == 0 {
+		return nil, false
+	}
+	if len(distinct) == 1 {
+		single, counted := distinct[0].(ctaCounted)
+		return single, counted
+	}
+	return ctaUnion{operands: distinct}, true
+}
 
 // ctaChildPath is a relative path of two or more abbreviated child-axis steps,
 // each with a QName NameTest, `N1/N2/…` (xpath20.md [26] RelativePathExpr,
@@ -963,15 +1053,17 @@ func ctaSelectedElementsOf(p ctaCountPath) (ctaSelectedElements, bool) {
 }
 
 // ctaTallied is the sealed sum of the keys a [Tally] keeps a counter under: an
-// fn:count path (ctaCountPath) and a child path (ctaChildPath). The grammar
-// closes the set (STYLE T2's schema-closed-set exception). Two keys are
-// compared by same and never with ==, which a slice-holding arm cannot take.
+// fn:count path (ctaCountPath), a filtered child step (ctaFilteredChildren), a
+// union (ctaUnion), and a child path (ctaChildPath). The grammar closes the set
+// (STYLE T2's schema-closed-set exception). Two keys are compared by same and
+// never with ==, which a slice-holding arm cannot take.
 type ctaTallied interface {
 	ctaTallied()
 	// selectsElement reports whether the key selects the element node whose
-	// chain below E is path, from E's child down to the node inclusive
-	// ([Tally.Element]). An empty path is E itself, which no key selects.
-	selectsElement(path []xsd.QName) bool
+	// chain below E is path, from E's child down to the node inclusive, and
+	// whose attribute nodes are named attrs ([Tally.Element]). An empty path
+	// is E itself, which no key selects.
+	selectsElement(path, attrs []xsd.QName) bool
 	// selectsAttribute reports whether the key selects an attribute node named
 	// name of the element depth levels below E, 0 being E.
 	selectsAttribute(depth int, name xsd.QName) bool
@@ -984,13 +1076,15 @@ type ctaTallied interface {
 	same(other ctaTallied) bool
 }
 
-func (ctaCountPath) ctaTallied() {}
-func (ctaChildPath) ctaTallied() {}
+func (ctaCountPath) ctaTallied()        {}
+func (ctaFilteredChildren) ctaTallied() {}
+func (ctaUnion) ctaTallied()            {}
+func (ctaChildPath) ctaTallied()        {}
 
 // selectsElement reports whether p selects the element whose chain below E is
 // path: one named p.name, at depth 1 for `N` and at any depth from 1 for
-// `.//N`. An attribute axis selects no element.
-func (p ctaCountPath) selectsElement(path []xsd.QName) bool {
+// `.//N`, whatever its attributes. An attribute axis selects no element.
+func (p ctaCountPath) selectsElement(path, _ []xsd.QName) bool {
 	if len(path) == 0 || path[len(path)-1] != p.name {
 		return false
 	}
@@ -1044,8 +1138,9 @@ func (p ctaCountPath) same(other ctaTallied) bool {
 	return isCount && o == p
 }
 
-// selectsElement reports whether path is exactly p's steps.
-func (p ctaChildPath) selectsElement(path []xsd.QName) bool { return slices.Equal(path, p.steps) }
+// selectsElement reports whether path is exactly p's steps, whatever the
+// element's attributes.
+func (p ctaChildPath) selectsElement(path, _ []xsd.QName) bool { return slices.Equal(path, p.steps) }
 
 // selectsAttribute is false: every step of p is on the child axis.
 func (ctaChildPath) selectsAttribute(int, xsd.QName) bool { return false }
@@ -1057,6 +1152,87 @@ func (ctaChildPath) selectsAttributesAt(int) bool { return false }
 func (p ctaChildPath) same(other ctaTallied) bool {
 	o, isChild := other.(ctaChildPath)
 	return isChild && slices.Equal(o.steps, p.steps)
+}
+
+// selectsElement reports whether the element whose chain below E is path is a
+// child of E named f.name whose attribute nodes, attrs, include every name f
+// requires.
+func (f ctaFilteredChildren) selectsElement(path, attrs []xsd.QName) bool {
+	return len(path) == 1 && path[0] == f.name && ctaContainsAll(attrs, f.required)
+}
+
+// selectsAttribute is false: f selects element children.
+func (ctaFilteredChildren) selectsAttribute(int, xsd.QName) bool { return false }
+
+// selectsAttributesAt is true at depth 1, E's children, whose attribute names
+// decide whether f selects them, and false at every other depth.
+func (ctaFilteredChildren) selectsAttributesAt(depth int) bool { return depth == 1 }
+
+// same reports whether other is a ctaFilteredChildren over f's name requiring
+// the same set of attributes, in any order: each holds its set without
+// duplicates (ctaFilteredChildrenOf), so equal lengths and containment one way
+// are set equality.
+func (f ctaFilteredChildren) same(other ctaTallied) bool {
+	o, isFiltered := other.(ctaFilteredChildren)
+	return isFiltered && o.name == f.name && len(o.required) == len(f.required) && ctaContainsAll(o.required, f.required)
+}
+
+// ctaContainsAll reports whether set holds every one of names.
+func ctaContainsAll(set, names []xsd.QName) bool {
+	for _, n := range names {
+		if !slices.Contains(set, n) {
+			return false
+		}
+	}
+	return true
+}
+
+// selectsElement reports whether any operand of u selects the element.
+func (u ctaUnion) selectsElement(path, attrs []xsd.QName) bool {
+	for _, o := range u.operands {
+		if o.selectsElement(path, attrs) {
+			return true
+		}
+	}
+	return false
+}
+
+// selectsAttribute reports whether any operand of u selects the attribute.
+func (u ctaUnion) selectsAttribute(depth int, name xsd.QName) bool {
+	for _, o := range u.operands {
+		if o.selectsAttribute(depth, name) {
+			return true
+		}
+	}
+	return false
+}
+
+// selectsAttributesAt reports whether any operand of u reads the attribute
+// names reported at depth.
+func (u ctaUnion) selectsAttributesAt(depth int) bool {
+	for _, o := range u.operands {
+		if o.selectsAttributesAt(depth) {
+			return true
+		}
+	}
+	return false
+}
+
+// same reports whether other is a ctaUnion over the same operands, in any
+// order: each holds its operands without duplicates (ctaUnionOf), so equal
+// lengths and containment one way are set equality. No key is read for the
+// nodes it selects, so `e | .//e` and `.//e` are two keys.
+func (u ctaUnion) same(other ctaTallied) bool {
+	o, isUnion := other.(ctaUnion)
+	if !isUnion || len(o.operands) != len(u.operands) {
+		return false
+	}
+	for _, k := range u.operands {
+		if !ctaHoldsPath(o.operands, k) {
+			return false
+		}
+	}
+	return true
 }
 
 func (ctaAttr) ctaValue()             {}
@@ -1910,16 +2086,8 @@ func ctaTypedChildItem(n ctaTypedChild, c *xsd.SimpleType, env ctaEnv) ctaItem {
 // ctaTypedInput by construction (ctaInput); the other arm counts nothing and is
 // unreachable too.
 func ctaCountItem(n ctaCount, c *xsd.SimpleType, env ctaEnv) ctaItem {
-	path, relative := n.arg.(ctaCountPath)
-	if !relative {
-		return ctaRaised{} // err:XPDY0050
-	}
-	in, typed := env.input.(ctaTypedInput)
-	if !typed {
-		return ctaRaised{}
-	}
-	count, held := in.counts.count(path)
-	if !held {
+	count, ok := n.arg.nodes(env)
+	if !ok {
 		return ctaRaised{}
 	}
 	v, validated := ctaValidated(ctaValidate(strconv.Itoa(count), n.st, env))
