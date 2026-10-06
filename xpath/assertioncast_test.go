@@ -245,3 +245,74 @@ func TestCompileAssertionTestDeclinesCastsDownOrAcross(t *testing.T) {
 		t.Error("Evaluate(string(xs:date(@s)) eq '2000-01-01') over s=' 2000-01-01 ' = false, want true")
 	}
 }
+
+// cfFacade evaluates one {test} on one of the three façades, over an E or a
+// value it does not read, reporting whether the façade decided it and, where
+// it did, the answer: true for FacetAssertions' Holds.
+type cfFacade struct {
+	name string
+	eval func(t *testing.T, expr string) (got, decided bool)
+}
+
+// cfFacades is CompileAssertionTest, CompileCTATest and FacetAssertions.
+func cfFacades() []cfFacade {
+	return []cfFacade{
+		{"CompileAssertionTest", func(t *testing.T, expr string) (bool, bool) {
+			test, ok := afCompile(t, expr, xsd.EmptyContent{})
+			if !ok {
+				return false, false
+			}
+			return test.Evaluate(backend(), seededTypes, asValues(t), asNoChildren, nil, ValueBinding{}), true
+		}},
+		{"CompileCTATest", func(t *testing.T, expr string) (bool, bool) {
+			test, ok := CompileCTATest(asRecord(expr), seededTypes)
+			if !ok {
+				return false, false
+			}
+			return test.Evaluate(backend(), seededTypes, ctaAttrs()), true
+		}},
+		{"FacetAssertions", func(t *testing.T, expr string) (bool, bool) {
+			str := asBuiltin(t, "string")
+			switch FacetAssertions().Evaluate(backend(), seededTypes, str, asRecord(expr), fcValue(t, str, "x")) {
+			case value.AssertionHolds:
+				return true, true
+			case value.AssertionFails:
+				return false, true
+			}
+			return false, false
+		}},
+	}
+}
+
+// A cast from an xs:float or xs:double operand to a target that is neither
+// its own type nor an ancestor of it is never decided through ctaPromote's
+// re-validation of the canonical "1.5E0" (castsFrom, floatingSource): F&O
+// §17.1.2 renders 1.5e0 as the xs:string "1.5" and §17.1.3 casts it to the
+// xs:decimal 1.5, so a façade that decides a row answers want, and one that
+// declines it withholds. The identity cast `xs:double(1.5e0)` (§17.2 case 4)
+// and a DecimalLiteral's cast to xs:string compile and hold on every façade.
+// With castSource's literal exit answering (nil, false) in place of
+// floatingSource, every row but the two guards compiles and answers the
+// opposite of want.
+func TestCastFromAFloatingOperand(t *testing.T) {
+	for _, f := range cfFacades() {
+		for _, tc := range []struct {
+			expr string
+			want bool
+		}{
+			{"xs:string(1.5e0) = '1.5'", true},
+			{"xs:decimal(1.5e0) = 1.5", true},
+			{"xs:string(1.5e0) = '1.5E0'", false},
+			{"1.5e0 cast as xs:string = '1.5'", true},
+		} {
+			if got, decided := f.eval(t, tc.expr); decided && got != tc.want {
+				t.Errorf("%s(%q) = %v, want %v or declined", f.name, tc.expr, got, tc.want)
+			}
+		}
+		for _, expr := range []string{"xs:string(1.5) = '1.5'", "xs:double(1.5e0) = 1.5e0"} {
+			if got, decided := f.eval(t, expr); !decided || !got {
+				t.Errorf("%s(%q): decided %v, got %v, want decided and true", f.name, expr, decided, got)
+			}
+		}
+	}
+}
