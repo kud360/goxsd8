@@ -91,7 +91,8 @@ const ruleCvcAssertionsValid xsderr.Rule = "cvc-assertions-valid"
 // one of whose {test}s counts nodes of a subtree this package cannot report
 // exactly: one holding a ·skipped· element, or an element whose ·governing
 // type definition· it could not determine, so that its ·defaulted attributes·
-// are unknown ([walk.tallyElement]). Fail-open: the withheld value is clause
+// are unknown, where a {test} counts attribute nodes at that element's depth
+// ([walk.tallyElement]). Fail-open: the withheld value is clause
 // 6's own verdict, whose whole consumer set inside this package is
 // w.res.violations and its one reader [Result.Violations], which charge on a
 // violation PRESENT, so a decline can only cost a rejection and can
@@ -159,6 +160,18 @@ func (c *assertionCheck) counts() bool {
 	}
 	for _, t := range c.tests {
 		if t.tally != nil {
+			return true
+		}
+	}
+	return false
+}
+
+// countsAttributesAt reports whether some compiled test of c counts attribute
+// nodes of the element depth levels below c's element, 0 being c's element
+// itself ([xpath.Tally.CountsAttributesAt]). A test with no Tally counts none.
+func (c *assertionCheck) countsAttributesAt(depth int) bool {
+	for _, t := range c.tests {
+		if t.tally.CountsAttributesAt(depth) {
 			return true
 		}
 	}
@@ -271,9 +284,13 @@ func (up assertionAncestry) skipped(e Element) {
 // ancestor — the names in up's path below the ancestor's depth, then e's own —
 // with e's attribute nodes ([walk.attributeNodes]) at that chain's length, and
 // own's count e's attribute nodes with the empty chain, depth 0. g is e's
-// governance. Where e's attribute nodes are undecided, each of them takes the
-// lack instead, which declines its assertions: a count missing them could
-// fabricate a charge.
+// governance. Where e's attribute nodes are undecided — its ·governing type
+// definition· was not determined, so its ·defaulted attributes· are unknown —
+// an ancestor some test of which counts attribute nodes at e's depth below it
+// ([assertionCheck.countsAttributesAt]) takes the lack instead, which declines
+// its assertions, since a count missing them could fabricate a charge; every
+// other ancestor counts e's element node alone, which no attribute node it
+// could miss changes.
 //
 // It runs on every element [walk.element] enters — invalid, ·nilled·, ·laxly
 // assessed· or undecided alike — once, so each node is reported exactly once,
@@ -285,11 +302,15 @@ func (w *walk) tallyElement(e Element, g governance, up assertionAncestry, own *
 	}
 	attrs, decided := w.attributeNodes(e, g)
 	tell := func(c *assertionCheck, path []xsd.QName) {
-		if !decided {
-			c.lacking(lackingCount{name: e.Name(), loc: e.Loc(), why: "its ·governing type definition· was not determined, so its ·defaulted attributes· are unknown"})
+		if decided {
+			c.tally(path, attrs)
 			return
 		}
-		c.tally(path, attrs)
+		if c.countsAttributesAt(len(path)) {
+			c.lacking(lackingCount{name: e.Name(), loc: e.Loc(), why: "its ·governing type definition· was not determined, so its ·defaulted attributes·, whose names a {test} counts, are unknown"})
+			return
+		}
+		c.tally(path, nil)
 	}
 	// chain is e's ancestors' names from the root down, then e's own, on
 	// assertionAncestry's shared-array terms: e's own subtree, which would

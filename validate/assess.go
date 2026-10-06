@@ -1562,9 +1562,9 @@ func (w *walk) child(c Child, content *contentCheck, id *icCheck, up assertionAn
 			// [walk.idElement] nothing to decide, [icCheck.fill] declines any field slot
 			// the child would fill, and [walk.locallyDeclaredType] is not consulted
 			// (above). [walk.tallyElement] declines the {assertions} of every
-			// ancestor one of whose {test}s counts nodes of its subtree, whose
-			// Tallies cannot be told of the child's ·defaulted attributes·,
-			// fail-open.
+			// ancestor one of whose {test}s counts attribute nodes at the child's
+			// depth, whose Tallies cannot be told of its ·defaulted attributes·,
+			// fail-open; an ancestor counting none there counts its element node.
 			//
 			// It records no [Unevaluated] of its own. A clause 1.4 the matcher
 			// declined is content.element's cvc-complex-content record, and a

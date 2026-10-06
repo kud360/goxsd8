@@ -411,9 +411,10 @@
 // use-matched or ·defaulted· attributes has no ·actual value·, one of whose
 // read children is not known ·valid· or not ·validly substitutable· for its
 // ·locally declared type·, whose counted subtree holds a ·skipped· element or
-// one whose ·governing type definition· was not determined, or whose simple
-// content's ·actual value· is undecided, are recorded as [Unevaluated] under
-// cvc-assertion instead (cvcassertion.go).
+// one whose ·governing type definition· was not determined and whose attribute
+// nodes a {test} counts, or whose simple content's ·actual value· is
+// undecided, are recorded as [Unevaluated] under cvc-assertion instead
+// (cvcassertion.go).
 //
 // The rest of the cvc- decisions land on the walk [Validator.Assess]
 // already makes. Non-fatal warnings get an accessor of their own the day

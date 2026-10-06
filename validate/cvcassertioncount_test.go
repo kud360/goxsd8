@@ -164,20 +164,69 @@ func TestAssertionCountsInvalidAndLaxElements(t *testing.T) {
 
 // A subtree the walk cannot report exactly DECLINES the counting element's
 // assertions (lackingCount), and is never charged: a ·skipped· {urn:skip}y,
-// whose subtree is not walked, and a <u> whose ·governing type definition· is
-// undetermined, whose ·defaulted attributes· are unknown. An assertion that
-// counts nothing reads no Tally and is evaluated beside the ·skipped· child.
-// The skipped row is satisfied instead with assertionAncestry.skipped's
-// counting loop removed, and the undetermined one with walk.tallyElement's
-// decided check removed.
+// whose subtree is not walked. An assertion that counts nothing reads no Tally
+// and is evaluated beside the ·skipped· child. The skipped row is satisfied
+// instead with assertionAncestry.skipped's counting loop removed.
 func TestAssertionOverAnUncountableSubtreeIsDeclined(t *testing.T) {
-	y, u := xsd.QName{Space: "urn:skip", Local: "y"}, local("u")
+	y := xsd.QName{Space: "urn:skip", Local: "y"}
 	acDeclined(t, aAssess(t, ccSchema(t, "count(e1) eq 0"), ccRoot(nil, ccNode(y, 2, nil))),
 		"the element {urn:skip}y at instance.xml:2:3, in the subtree of the element e1 whose nodes a {test} counts, cannot be counted exactly for the data model instance cvc-assertion clause 1 builds: it is ·skipped·, so its subtree is not walked")
-	ccDeclinedAmong(t, aAssess(t, ccSchema(t, "count(e1) eq 0"), ccRoot(nil, ccNode(u, 2, []Attribute{ccAttr(local("k"), "1", 2)}))),
-		"the element u at instance.xml:2:3, in the subtree of the element e1 whose nodes a {test} counts, cannot be counted exactly for the data model instance cvc-assertion clause 1 builds: its ·governing type definition· was not determined")
 	wantSatisfied(t, aAssess(t, ccSchema(t, "@a = 'v'"), ccRoot([]Attribute{ccAttr(local("a"), "v", 1)}, ccNode(y, 2, nil))),
 		"a non-counting assertion beside a ·skipped· child")
+}
+
+// ccDecided fails unless res recorded no cvc-assertion decline, and charged
+// cvc-assertion at the root exactly where charged: the assertion was
+// evaluated, whatever else res declined.
+func ccDecided(t *testing.T, res *Result, charged bool, why string) {
+	t.Helper()
+	for _, u := range res.Unevaluated() {
+		if u.Rule() == ruleCvcAssertion {
+			t.Errorf("%s: Unevaluated() holds %q, want the assertion evaluated", why, u.Msg())
+		}
+	}
+	got := false
+	for _, v := range res.Violations() {
+		got = got || v.Rule == ruleCvcAssertion && v.Loc == loc(1, 1)
+	}
+	if got != charged {
+		t.Errorf("%s: charged = %v, want %v (Violations() = %v)", why, got, charged, res.Violations())
+	}
+}
+
+// An element whose ·governing type definition· is undetermined — <u>, whose
+// alternative's {test} xpath declines, and the <e1> below it, walked against
+// nothing — has ·defaulted attributes· the walk cannot know, but its element
+// node is counted wherever no {test} counts attribute nodes at its depth: the
+// element counts are decided, and so is `count(@a)`, which selects the root's
+// attributes alone. Every decided row is declined instead, and fails, with
+// walk.tallyElement declining an undetermined element whatever the Tally
+// counts; with its element node unreported, the charged row is satisfied
+// instead and the first two are charged. `count(.//@a)` selects <u>'s
+// attributes, so it is declined still (guard).
+func TestAssertionCountsAcrossAnUndeterminedElement(t *testing.T) {
+	e1, u, a := local("e1"), local("u"), local("a")
+	k := ccAttr(local("k"), "1", 2)
+	for _, tc := range []struct {
+		why, test string
+		root      *testElement
+		charged   bool
+	}{
+		{"u among the descendants", "count(.//u) eq 1 and count(.//e1) eq 1",
+			ccRoot(nil, ccNode(e1, 2, nil), ccNode(u, 3, []Attribute{k})), false},
+		{"an e1 below u", "count(.//e1) eq 2",
+			ccRoot(nil, ccNode(e1, 2, nil), ccNode(u, 3, []Attribute{k}, ccNode(e1, 4, nil))), false},
+		{"an e1 below u, counted", "count(.//e1) eq 1",
+			ccRoot(nil, ccNode(e1, 2, nil), ccNode(u, 3, []Attribute{k}, ccNode(e1, 4, nil))), true},
+		{"the root's own @a beside u", "count(@a) eq 1",
+			ccRoot([]Attribute{ccAttr(a, "r", 1)}, ccNode(u, 2, []Attribute{k, ccAttr(a, "u", 2)})), false},
+	} {
+		t.Run(tc.why, func(t *testing.T) {
+			ccDecided(t, aAssess(t, ccSchema(t, tc.test), tc.root), tc.charged, tc.test)
+		})
+	}
+	ccDeclinedAmong(t, aAssess(t, ccSchema(t, "count(.//@a) eq 0"), ccRoot(nil, ccNode(u, 2, []Attribute{k}))),
+		"the element u at instance.xml:2:3, in the subtree of the element e1 whose nodes a {test} counts, cannot be counted exactly for the data model instance cvc-assertion clause 1 builds: its ·governing type definition· was not determined")
 }
 
 // An element below another counting one is counted by both, each at its own
