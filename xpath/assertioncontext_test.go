@@ -32,9 +32,10 @@ func cxEval(t *testing.T, expr string, types xsd.TypeResolver, st *xsd.SimpleTyp
 // `$value eq 4` holds. Arithmetic casts it to xs:double (§3.4), so
 // `. mod 2 = 0` holds on 4 and fails on 5. The zero-argument string functions
 // read the same string (xpath-functions.md §2.3, §7.4.4, §7.4.5). Every row
-// declines with ctaAssertionFacade.contextItem declining; the `eq` rows hold,
-// and the `string-length` and '0030' rows fail, with contextItem answering
-// `$value`'s ctaValueVar.
+// reading `.` declines with ctaAssertionFacade.contextItem declining. With
+// contextItem answering `$value`'s ctaValueVar, `. eq 4` holds, `. eq '4'`,
+// `string-length(.) = 4` and `. = '0030'` fail, and `string-length() = 4`
+// declines.
 func TestAssertionContextItemIsTheStringValue(t *testing.T) {
 	integer := asBuiltin(t, "integer")
 	for _, tc := range []struct {
@@ -75,7 +76,9 @@ func TestAssertionContextItemIsTheStringValue(t *testing.T) {
 // over no item, fails. Over a list `.` is one item, the whole string "1 2",
 // where `$value` is two; over a union, whose `$value` declines, `.` compiles
 // and reads the string. With ctaContextAtomItem reading `$value`'s binding
-// instead, the invalid and ·nilled· rows fail.
+// instead, `. = 5` and `not(. = 5)` over the invalid E, `.` against the
+// zero-length string over the ·nilled· one, the list's `. = '1 2'` and
+// string-length rows and the union row fail.
 func TestAssertionContextItemOverEveryBinding(t *testing.T) {
 	integer := asBuiltin(t, "integer")
 	for _, tc := range []struct {
@@ -137,10 +140,18 @@ func TestAssertionContextItemDeclines(t *testing.T) {
 			t.Errorf("CompileAssertionTest(%q) over simple content: compiled, want declined", expr)
 		}
 	}
-	for _, content := range []xsd.ContentType{nil, xsd.EmptyContent{}, asElementContent(t, false), asElementContent(t, true)} {
+	for _, tc := range []struct {
+		content xsd.ContentType
+		why     string
+	}{
+		{nil, "no"},
+		{xsd.EmptyContent{}, "empty"},
+		{asElementContent(t, false), "element-only"},
+		{asElementContent(t, true), "mixed"},
+	} {
 		for _, expr := range []string{". = 'x'", "string-length() = 0", "string(.) = ''"} {
-			if _, ok := CompileAssertionTest(asRecord(expr), seededTypes, content, asUses(t, nil), asNoElems); ok {
-				t.Errorf("CompileAssertionTest(%q) over %v content: compiled, want declined", expr, content)
+			if _, ok := CompileAssertionTest(asRecord(expr), seededTypes, tc.content, asUses(t, nil), asNoElems); ok {
+				t.Errorf("CompileAssertionTest(%q) over %s content: compiled, want declined", expr, tc.why)
 			}
 		}
 	}
@@ -156,9 +167,12 @@ func TestAssertionContextItemDeclines(t *testing.T) {
 // either operand. The comparison is existential over its items (§3.5.2), so
 // `. = (1 to 10, 20, 30)` holds on 20 and fails on 80, and `!=` holds where
 // any item differs. `1 to 0` and `3 to 1` are the empty sequence, which forms
-// no pair, so the comparison is false and its negation true — not the
-// err:XPTY0004 fn:not would propagate. Each row declines with
-// ctaFacade.constructsSequences false on the assertion façade.
+// no pair, so the comparison is false and its negation true — against an
+// xs:string operand too, `not(string(.) = (1 to 0))`, where a non-empty
+// xs:integer sequence would be err:XPTY0004, which fn:not propagates. Each row
+// declines with ctaFacade.constructsSequences false on the assertion façade,
+// and the xs:string row fails with ctaParser.integerSequence building an
+// itemless ctaIntegerRanges in place of ctaEmptyValue.
 func TestAssertionIntegerSequences(t *testing.T) {
 	integer := asBuiltin(t, "integer")
 	for _, tc := range []struct {
@@ -177,6 +191,8 @@ func TestAssertionIntegerSequences(t *testing.T) {
 		{". = (1 to 0)", "0", false},
 		{"not(. = (1 to 0))", "0", true},
 		{"not($value = (3 to 1))", "2", true},
+		{"not(string(.) = (1 to 0))", "2", true},
+		{"not(string(.) = (1 to 3))", "2", false},
 		{". != (1 to 3)", "2", true},
 		{". != (2)", "2", false},
 		{". > (1 to 3)", "2", true},
@@ -195,9 +211,10 @@ func TestAssertionIntegerSequences(t *testing.T) {
 // kind, an IntegerLiteral beyond int64, and a sequence longer than
 // ctaMaxSequenceLength. A Type Alternative's {test} declines every sequence,
 // and an assertions facet's evaluates one, `$value = (1 to 10, 20)` holding on
-// 20 and failing on 15. The `1 to 5000` row compiles with the length bound
-// removed, and the facet rows decline with ctaFacetFacade.constructsSequences
-// false.
+// 20 and failing on 15. The two rows longer than ctaMaxSequenceLength compile
+// with the length bound removed, the Type Alternative rows with
+// ctaTypeAlternativeFacade.constructsSequences true, and the facet rows
+// decline with ctaFacetFacade.constructsSequences false.
 func TestIntegerSequencesDecline(t *testing.T) {
 	simple := xsd.SimpleContent{SimpleType: asBuiltin(t, "integer")}
 	for _, expr := range []string{
