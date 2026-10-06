@@ -314,7 +314,7 @@ func (r *Reader) declareEntities(raw string, loc xsderr.Loc) error {
 			r.entities = make(map[string]entityDecl)
 		}
 		r.entities[decl.name] = decl
-		if !decl.value.readable && !(r.standalone && decl.inPE) {
+		if named := decl.value.readable || r.standalone && decl.inPE; !named {
 			continue
 		}
 		if r.dec.Entity == nil {
