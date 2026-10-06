@@ -97,8 +97,8 @@ Assert/assert008a/instance/assert008a.n1.xml fail
 Assert/assert008a/instance/assert008a.n2.xml fail
 Assert/assert008a/instance/assert008a.n3.xml fail
 Assert/assert008a/instance/assert008a.v1.xml fail
-Assert/assert009/instance/assert009.n1.xml fail
-Assert/assert009/instance/assert009.v1.xml fail
+Assert/assert009/instance/assert009.n1.xml pass
+Assert/assert009/instance/assert009.v1.xml pass
 Assert/assert010/instance/assert010.n1.xml pass
 Assert/assert010/instance/assert010.v1.xml pass
 Assert/assert011/instance/assert011.n1.xml fail
@@ -137,7 +137,7 @@ Assert/assert_014/instance/assert_014_2 pass
 Assert/assert_015/instance/assert_015_2 fail
 Assert/assert_016/instance/assert_016_2 pass
 Assert/assert_017/instance/assert_017_2 pass
-Assert/assert_018/instance/assert_018_2 fail
+Assert/assert_018/instance/assert_018_2 pass
 Assert/assert_018/instance/assert_018_3 pass
 Assert/assert_019/instance/assert_019_2 fail
 Assert/assert_020/instance/assert_020_2 pass
