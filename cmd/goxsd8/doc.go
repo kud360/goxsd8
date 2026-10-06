@@ -70,7 +70,11 @@
 //	    spelling); an unrecognized token, and an instance whose
 //	    extension names none of the three, are usage errors listing the
 //	    values. Only xml is assessed today: json and ber are reserved,
-//	    and an instance in either exits 2 saying so.
+//	    and an instance in either exits 2 saying so. - has no
+//	    extension and is read as xml without -format, as in
+//	    goxsd8 validate -schema s.xsd - < i.xml; once a second format
+//	    is assessed, - will need -format. An instance argument naming
+//	    a directory exits 2 saying it is a directory.
 //	    xsi:schemaLocation hints on the document element of an XML
 //	    instance augment the schema set for that instance (resolved
 //	    relative to the instance; disable with -no-hints). A hint the
@@ -214,13 +218,16 @@
 // invalid with undecided exits 1: a gate acts on the verdict it has.
 //
 // validate assesses its instances in argument order. An instance argument
-// spelled - is standard input, which has no extension to name a source format,
-// so it needs -format. -schema - is not supported: a schema document's
-// location is the base URI its own relative <xs:include>, <xs:import> and
-// <xs:override> references resolve against, and standard input has none. That
-// spelling is refused, exit 2, rather than opened, so a file which happens to
-// be named - is never compiled as the schema set behind it; ./- is what names
-// that file.
+// spelled - is standard input, which has no extension to name a source format;
+// without -format it is read as xml, the one format assessed while json and ber
+// are reserved, and once a second format is assessed it will need -format
+// again. An instance argument naming a directory, by any name and under any
+// -format, is charged exit 2 as a directory before its extension is read.
+// -schema - is not supported: a schema document's location is the base URI its
+// own relative <xs:include>, <xs:import> and <xs:override> references resolve
+// against, and standard input has none. That spelling is refused, exit 2,
+// rather than opened, so a file which happens to be named - is never compiled
+// as the schema set behind it; ./- is what names that file.
 //
 // validate follows an xsi:schemaLocation or xsi:noNamespaceSchemaLocation hint
 // carried by the DOCUMENT ELEMENT of an XML instance, and no other element's.
