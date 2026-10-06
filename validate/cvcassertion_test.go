@@ -91,7 +91,7 @@ func aVarietyTypes(t *testing.T) []*xsd.SimpleType {
 		aRestriction(t, "AssertedInt", integerType(), "$value > 0"),
 		aRestriction(t, "AssertedStr", icBuiltin("string"), "upper-case($value) != ''"),
 		aList(t, "PlainList", local("AssertedInt")),
-		aRestriction(t, "AssertedList", local("PlainList"), "count($value) > 1"),
+		aRestriction(t, "AssertedList", local("PlainList"), "sum($value) > 1"),
 		aUnion(t, "PlainUnion", local("AssertedInt"), local("AssertedStr")),
 		aRestriction(t, "AssertedUnion", local("PlainUnion"), "upper-case($value) != ''"),
 	}

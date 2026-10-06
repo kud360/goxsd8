@@ -1273,13 +1273,10 @@ func (p *ctaParser) countedArgument() (ctaCounted, bool) {
 // function call, a name followed by '('. A path opens with "/", "//", ".",
 // '@', a wildcard, an axis or a name standing alone. Nothing is consumed.
 func (p *ctaParser) countsItems() bool {
-	switch p.peek(0).kind {
-	case ctaDollarTok, ctaLParen, ctaStringTok, ctaNumberTok:
-		return true
-	case ctaNameTok:
+	if p.at(ctaNameTok) {
 		return p.peek(1).kind == ctaLParen
 	}
-	return false
+	return p.at(ctaDollarTok) || p.at(ctaLParen) || p.at(ctaStringTok) || p.at(ctaNumberTok)
 }
 
 // countArgument parses fn:count's argument: one operand (countOperand), or
