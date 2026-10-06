@@ -17,25 +17,26 @@ import (
 // {test} reaches: xpath20.md [23] ValueComp, [44] VarRef, an abbreviated
 // child-axis step whose NodeTest is a QName ([31] AbbrevForwardStep, §3.2.1.1),
 // a "/" or "//" opening [25] PathExpr over one such step or one attribute step,
-// a [26] RelativePathExpr of two or more such steps standing as the whole
-// operand of fn:exists, fn:empty or an ·effective boolean value· (childPath),
-// an fn:count call ([48] FunctionCall) over one counted path, a call to one of
-// the F&O string and sequence functions (libraryCall) whose arguments are
-// additive expressions or `()`, the binary operators of [13] AdditiveExpr and
-// [14] MultiplicativeExpr, and [47] ContextItemExpr `.`, which only the facet
-// façade admits — each behind the façade (ctaFacade.comparesValues,
-// ctaFacade.variable, ctaFacade.child, ctaFacade.childPath, ctaFacade.rooted,
-// ctaFacade.count, ctaFacade.callsLibrary, ctaFacade.computes,
-// ctaFacade.contextItem), so a Type Alternative's {test} reaches none of them.
-// Every method below is named for the production it parses, and the whole
-// grammar is both reached and evaluated: no method here is a stub, and the
-// production-level declines are those nine façade methods'. xpath/doc.go owns
-// the enumeration of what declines; every other decline reaching this file is
-// ctaTypes answering ctaTypeDeclined for a comparison type, a cast target or a
-// cast operand it will not serve, ctaTypes.arithmetic declining an operand
-// pair, a library call of an arity its function does not have, or the façade
-// declining a NameTest, a variable's type or a settled comparison type, which
-// the production that asked propagates unchanged.
+// a [26] RelativePathExpr of two or more such steps, or one element step `N`,
+// `./N` or `.//N`, standing as the whole operand of fn:exists, fn:empty or an
+// ·effective boolean value· (childPath, selectedElements), an fn:count call
+// ([48] FunctionCall) over one counted path, a call to one of the F&O string
+// and sequence functions (libraryCall) whose arguments are additive expressions
+// or `()`, the binary operators of [13] AdditiveExpr and [14]
+// MultiplicativeExpr, and [47] ContextItemExpr `.`, which only the facet façade
+// admits — each behind the façade (ctaFacade.comparesValues,
+// ctaFacade.variable, ctaFacade.child, ctaFacade.childPath, ctaFacade.elements,
+// ctaFacade.rooted, ctaFacade.count, ctaFacade.callsLibrary,
+// ctaFacade.computes, ctaFacade.contextItem), so a Type Alternative's {test}
+// reaches none of them. Every method below is named for the production it
+// parses, and the whole grammar is both reached and evaluated: no method here
+// is a stub, and the production-level declines are those ten façade methods'.
+// xpath/doc.go owns the enumeration of what declines; every other decline
+// reaching this file is ctaTypes answering ctaTypeDeclined for a comparison
+// type, a cast target or a cast operand it will not serve, ctaTypes.arithmetic
+// declining an operand pair, a library call of an arity its function does not
+// have, or the façade declining a NameTest, a variable's type or a settled
+// comparison type, which the production that asked propagates unchanged.
 
 // ctaFunctionNS is the default function namespace of a {test}'s static context
 // (xpath-valid clause 2.2.4, §3.13.6.2), which an unprefixed [12]
@@ -253,17 +254,18 @@ const (
 	ctaDollarTok
 	// ctaSlashTok is '/' and ctaSlashSlashTok is '//'. Each is read only where
 	// it opens a [25] PathExpr (ctaParser.rootedPath) or follows the `.`
-	// opening an fn:count argument (ctaParser.countArgument), and a '/' also
-	// between the steps of a child path (ctaParser.childPath); anywhere else it
-	// is a token no production takes, so `a//b`, and `a/b` outside a child
-	// path's three positions, are not expressions here.
+	// opening an fn:count argument or an element step whose existence is
+	// asked (ctaParser.countArgument), and a '/' also between the steps of a
+	// child path (ctaParser.childPath); anywhere else it is a token no
+	// production takes, so `a//b`, and `a/b` outside a child path's three
+	// positions, are not expressions here.
 	ctaSlashTok
 	ctaSlashSlashTok
 	// ctaDotTok is a '.' that opens no NumericLiteral: the [47]
 	// ContextItemExpr, which only the facet façade admits
-	// (ctaFacade.contextItem), or the context item an fn:count argument's
-	// `./` or `.//` opens with (ctaParser.countArgument). '..', the
-	// abbreviated parent step, is not tokenized at all.
+	// (ctaFacade.contextItem), or the context item an fn:count argument's or
+	// an element step's `./` or `.//` opens with (ctaParser.countArgument).
+	// '..', the abbreviated parent step, is not tokenized at all.
 	ctaDotTok
 	// ctaPlusTok is '+' and ctaMinusTok is '-', the two operators of xpath20.md
 	// [13] AdditiveExpr (ctaParser.additiveOperator). Neither can open a name or
@@ -667,11 +669,13 @@ func (p *ctaParser) andExpr() (ctaExpr, bool) {
 // which an unknown name is its own error.
 //
 // The third arm with its Comparator absent also takes a child path
-// (childPath), whose ·effective boolean value· is whether it selects a node,
-// where the path is the WHOLE ValueExpr: the token after it ends the
-// BooleanExpr (closesBoolean). Followed by anything else — a comparator, an
-// operator, a cast — it is left to additiveExpr, whose one child step leaves
-// the '/' a token no production takes, and declines.
+// (childPath) or one element step (selectedElements), whose ·effective boolean
+// value· is whether it selects a node, where the path is the WHOLE ValueExpr:
+// the token after it ends the BooleanExpr (closesBoolean). Followed by anything
+// else — a comparator, an operator, a cast — it is left to additiveExpr, whose
+// one child step leaves a '/' after it a token no production takes, and
+// declines, and so does a `.` before a '/' or '//'; one step is childStep's,
+// whose value is read.
 func (p *ctaParser) booleanExpr() (ctaExpr, bool) {
 	if p.at(ctaLParen) {
 		p.advance()
@@ -694,6 +698,13 @@ func (p *ctaParser) booleanExpr() (ctaExpr, bool) {
 			return nil, false
 		}
 		return ctaEffectiveBoolean{operand: path}, true
+	}
+	if n := p.selectedStepLength(0); n > 0 && p.closesBoolean(n) {
+		step, ok := p.selectedElements()
+		if !ok {
+			return nil, false
+		}
+		return ctaEffectiveBoolean{operand: step}, true
 	}
 	left, ok := p.additiveExpr()
 	if !ok {
@@ -1131,10 +1142,10 @@ func (p *ctaParser) presenceCall(op ctaPresenceOp) (ctaValue, bool) {
 }
 
 // presenceArgument parses the parenthesized argument list of the fn:empty or
-// fn:exists call whose name the cursor is on: a child path (childPath) where
-// the path is the whole list, closed by the call's ')', and otherwise the list
-// arguments parses, of which exactly one argument is admitted — every other
-// arity declines (err:XPST0017).
+// fn:exists call whose name the cursor is on: a child path (childPath) or one
+// element step (selectedElements) where it is the whole list, closed by the
+// call's ')', and otherwise the list arguments parses, of which exactly one
+// argument is admitted — every other arity declines (err:XPST0017).
 func (p *ctaParser) presenceArgument() (ctaValue, bool) {
 	if n := p.childPathLength(2); n > 0 && p.peek(2+n).kind == ctaRParen {
 		p.advance() // the function name
@@ -1142,6 +1153,13 @@ func (p *ctaParser) presenceArgument() (ctaValue, bool) {
 		path, ok := p.childPath(n)
 		p.advance() // ')'
 		return path, ok
+	}
+	if n := p.selectedStepLength(2); n > 0 && p.peek(2+n).kind == ctaRParen {
+		p.advance() // the function name
+		p.advance() // '('
+		step, ok := p.selectedElements()
+		p.advance() // ')'
+		return step, ok
 	}
 	args, ok := p.arguments()
 	if !ok || len(args) != 1 {
@@ -1190,7 +1208,7 @@ func (p *ctaParser) countCall() (ctaValue, bool) {
 // it selects a node — or a relative path of one step with a QName NameTest,
 // `N`, `@N`, or either behind `./` or `.//` (countStep). A longer path, a
 // wildcard, a predicate and a bare `.` leave a token no production takes, or
-// none at all, and decline.
+// none at all, and decline. selectedElements parses its element steps too.
 func (p *ctaParser) countArgument() (ctaCounted, bool) {
 	if p.at(ctaSlashTok) || p.at(ctaSlashSlashTok) {
 		rooted, ok := p.rootedPath()
@@ -1423,7 +1441,8 @@ func (p *ctaParser) closesBoolean(at int) bool {
 // is the whole operand — the three positions that ask only whether the path
 // selects a node, and never atomize it. simpleValue and additiveExpr never
 // reach it, so no comparison, operator, cast or other call takes one, and
-// childStep stays one step. The node is p.facade's, which may decline it.
+// childStep stays one step; one step in the same positions is
+// selectedElements'. The node is p.facade's, which may decline it.
 //
 // GAP(xpath): a path in any other position, or with a wildcard, a predicate,
 // an axis spelled out, a '//' between steps or an attribute step, declines;
@@ -1437,6 +1456,48 @@ func (p *ctaParser) childPath(n int) (ctaValue, bool) {
 		steps = append(steps, p.elementName(p.peek(0).text))
 	}
 	return p.facade.childPath(steps)
+}
+
+// selectedStepLength is how many tokens, from offset at ahead of the cursor,
+// spell one of countArgument's element steps — a QName, `N`, alone or behind
+// `./` or `.//` — and 0 where they spell none. Nothing is consumed, and nothing
+// after the name is read: a name followed by '(' or '::' is a function call or
+// an axis spelled out, which the caller's check that the token after the step
+// closes the operand turns away.
+func (p *ctaParser) selectedStepLength(at int) int {
+	n := 0
+	if p.peek(at).kind == ctaDotTok {
+		if next := p.peek(at + 1).kind; next != ctaSlashTok && next != ctaSlashSlashTok {
+			return 0
+		}
+		n = 2
+	}
+	if p.peek(at+n).kind != ctaNameTok {
+		return 0
+	}
+	return n + 1
+}
+
+// selectedElements parses the step selectedStepLength measured at the cursor
+// on countArgument's grammar — `N` and `./N` the element children of E named
+// N, `.//N` every element below E so named (xpath20.md §3.2.4) — into the node
+// p.facade builds for it (ctaFacade.elements), which may decline it. It is the
+// ONE place a ctaSelectedElements is built, reached from childPath's two
+// positions alone and on its terms: the ·effective boolean value· arm of
+// booleanExpr and fn:exists or fn:empty's argument (presenceArgument), where
+// the step is the whole operand, whatever type the step's name has. Everywhere
+// else a step is childStep's, whose value is read, and `./N` and `.//N`
+// decline.
+func (p *ctaParser) selectedElements() (ctaValue, bool) {
+	arg, ok := p.countArgument()
+	if !ok {
+		return nil, false
+	}
+	path, relative := arg.(ctaCountPath)
+	if !relative {
+		return nil, false
+	}
+	return p.facade.elements(path)
 }
 
 // rootedPath parses xpath20.md [25] PathExpr's two rooted arms, "/"

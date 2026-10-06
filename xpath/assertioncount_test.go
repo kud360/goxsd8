@@ -283,7 +283,7 @@ func TestTallyCountsAttributesAt(t *testing.T) {
 }
 
 // fn:count's argument is one QName step, or a rooted one: every other argument
-// declines, and so does `.//` or `./` outside an fn:count call, and a cast from
+// declines, and so does `.//` or `./` in a comparison operand, and a cast from
 // a count, which [16] ta-SimpleValue, the operand of both cast spellings, does
 // not admit.
 func TestCompileAssertionTestDeclinesCounts(t *testing.T) {
@@ -308,8 +308,8 @@ func TestCompileAssertionTestDeclinesCounts(t *testing.T) {
 		{"count(.//) = 0", "a double slash with no step after it"},
 		{"count(/) = 0", "a bare slash"},
 		{"count(@p:a) = 0", "an unbound prefix"},
-		{".//e1 = 'a'", "a descendant step outside fn:count"},
-		{"./@length = 1", "a context-item path outside fn:count"},
+		{".//e1 = 'a'", "a descendant step in a comparison"},
+		{"./@length = 1", "a context-item path in a comparison"},
 		{"count(e1) cast as xs:string = '1'", "a cast from an xs:integer count"},
 		{"count(count(e1)) = 1", "a count of a count"},
 	} {

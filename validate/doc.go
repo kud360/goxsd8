@@ -398,8 +398,9 @@
 // value comparisons, `$value`, a one-step child-axis path, a "/"-rooted one,
 // arithmetic, the F&O string and sequence functions xpath.CompileAssertionTest
 // lists, fn:count over a one-step child, descendant or attribute path, and
-// fn:exists, fn:empty or the ·effective boolean value· of a child path `a/b`,
-// over the element's attributes, carried or ·defaulted·, read TYPED by their
+// fn:exists, fn:empty or the ·effective boolean value· of a child path `a/b`
+// or of one child or descendant step, `a` or `.//a`, whatever a's type, over
+// the element's attributes, carried or ·defaulted·, read TYPED by their
 // {attribute uses}' types (as xs:untypedAtomic where that type is ·special·),
 // the element [[children]] a {test} names, read TYPED by their ·locally
 // declared types· once each child's own assessment is over, the counts of the

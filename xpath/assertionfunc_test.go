@@ -114,12 +114,12 @@ func TestAssertionStringFunctions(t *testing.T) {
 
 // fn:empty and fn:exists test their `item()*` argument for the empty sequence
 // without atomizing it (§15.1.4, §15.1.5): an attribute present or absent, a
-// child present, absent or ·nilled· (a node with no value), `$value` over
-// non-simple content — which assert019 reads — and over simple content bound
-// and unbound. A rooted path raises err:XPDY0050 under either, which fn:not
-// propagates. fn:true() and fn:false() compile, and are constants whatever E
-// carries. Every row is declined at CompileAssertionTest, and fails, with
-// ctaFacade.callsLibrary false on the assertion façade.
+// cast of a child present or absent, `$value` over non-simple content — which
+// assert019 reads — and over simple content bound and unbound. A rooted path
+// raises err:XPDY0050 under either, which fn:not propagates. fn:true() and
+// fn:false() compile, and are constants whatever E carries. Every row is
+// declined at CompileAssertionTest, and fails, with ctaFacade.callsLibrary
+// false on the assertion façade.
 func TestAssertionPresenceFunctions(t *testing.T) {
 	s := []asTyped{{uq("s"), "string", "x"}}
 	for _, tc := range []struct {
@@ -132,10 +132,9 @@ func TestAssertionPresenceFunctions(t *testing.T) {
 		{"exists(@s)", nil, nil, false},
 		{"empty(@s)", s, nil, false},
 		{"empty(@s)", nil, nil, true},
-		{"exists(e1)", nil, []asChild{{uq("e1"), "string", "", false}}, true},
-		{"exists(e1)", nil, nil, false},
-		{"exists(e1)", nil, []asChild{{name: uq("e1"), nilled: true}}, true},
-		{"empty(e1)", nil, []asChild{{name: uq("e1"), nilled: true}}, false},
+		{"exists(e1 cast as xs:string)", nil, []asChild{{uq("e1"), "string", "", false}}, true},
+		{"exists(e1 cast as xs:string)", nil, nil, false},
+		{"empty(xs:string(e1))", nil, []asChild{{uq("e1"), "string", "", false}}, false},
 		{"exists(/r)", nil, nil, false},
 		{"not(exists(/r))", nil, nil, false},
 		{"not(empty(//@s))", s, nil, false},
@@ -345,12 +344,12 @@ func TestStringArgumentNamesEveryStaticArm(t *testing.T) {
 }
 
 // A new node reads what its arguments read: a typed child under each is
-// reported by ReadsChild — fn:exists reads which children exist off
+// reported by ReadsChild — fn:exists over a cast of one reads its value off
 // ChildElements — and an fn:count call under one is counted by the Tally, so
 // `exists(count(inner))` holds. With an arm's readsChild or counted answering
 // nothing for its arguments, that arm's row fails.
 func TestStringFunctionsReadTheirArguments(t *testing.T) {
-	for _, expr := range []string{"contains('x', e1)", "string-length(e1) = 0", "exists(e1)", "string(e1) = ''"} {
+	for _, expr := range []string{"contains('x', e1)", "string-length(e1) = 0", "exists(e1 cast as xs:string)", "string(e1) = ''"} {
 		test, ok := afCompile(t, expr, xsd.EmptyContent{})
 		if !ok {
 			t.Fatalf("CompileAssertionTest(%q): declined, want compiled", expr)
