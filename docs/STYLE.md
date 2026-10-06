@@ -80,6 +80,22 @@ instance location. `xsderr.Loc` is threaded, not reconstructed.
 `Error()`'s rendered `[rule]` prefix and a grep for the full rule-and-clause
 finds the site (#759).
 
+**E5. A message leads with its fact, then cites.** Open every `Msg` with the
+offending item, its value and what it should have been, and close it with
+E4's citation as a clause of the same sentence: `"…, which cvc-type clause
+3.1.3 requires"`, `"…, but cvc-pattern-valid requires one to match"`. A spec
+term of art goes after the fact or nowhere. Cite by rule ID and clause alone:
+no `§` number, and never a trailing parenthetical `(rule, §N)`, which does not
+conform to E4. The order binds each message, not the rendered line, so a
+delegating message names the item and value in its own fact, and its wrapped
+cause follows after `": "` (validate's `causedBy`) as a message of its own,
+keeping its own `[rule]` prefix and its own citation. `Error()`'s `[rule]`
+prefix and the inline rule ID both stay (#2311). Target shape:
+
+```
+<loc>: [cvc-type] element n's value "x3" is not a valid <int>, which cvc-type clause 3.1.3 requires: [cvc-pattern-valid] "x3" matches no member of the pattern facet of <integer>, whose {value} holds <pattern>, but cvc-pattern-valid requires one to match
+```
+
 ## Data & determinism
 
 **D1. Deterministic output, always.** Identical inputs produce byte-identical
