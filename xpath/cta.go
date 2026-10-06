@@ -1035,14 +1035,15 @@ func ctaFilteredChildrenOf(name xsd.QName, required []xsd.QName) (ctaFilteredChi
 // It is a counter key (ctaTallied) of its own, whose [Tally] counts a reported
 // node once where any operand selects it, and never sums per-operand counts.
 //
-// Its one constructor is ctaUnionOf, which flattens a nested union, drops an
-// operand the same as one before it, and collapses to the one operand left,
-// so `count(e | e)` is `count(e)` and shares its counter.
+// Its one constructor is ctaUnionOf, which drops an operand the same as one
+// before it and collapses to the one operand left, so `count(e | e)` is
+// `count(e)` and shares its counter.
 type ctaUnion struct{ operands []ctaTallied }
 
 // ctaUnionOf is the union of operands, false where one is not an operand a
 // [Tally] counts in a union: a rooted path, which raises, and a child step
-// filtered by a predicate that reads the child's value.
+// filtered by a predicate that reads the child's value. operands is never
+// empty: countArgument passes two or more.
 func ctaUnionOf(operands []ctaCounted) (ctaCounted, bool) {
 	var distinct []ctaTallied
 	add := func(k ctaTallied) {
@@ -1056,16 +1057,9 @@ func ctaUnionOf(operands []ctaCounted) (ctaCounted, bool) {
 			add(k)
 		case ctaFilteredChildren:
 			add(k)
-		case ctaUnion:
-			for _, inner := range k.operands {
-				add(inner)
-			}
-		case ctaMatchingChildren, ctaNoDocumentRoot:
+		default:
 			return nil, false
 		}
-	}
-	if len(distinct) == 0 {
-		return nil, false
 	}
 	if len(distinct) == 1 {
 		single, counted := distinct[0].(ctaCounted)
