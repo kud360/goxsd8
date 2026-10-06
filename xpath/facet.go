@@ -19,7 +19,8 @@ import (
 // basic member· where that type is a union (clause 1.4, dt-xdmrep clause 4),
 // is the whole of what a {test} can read, arithmetic and the F&O string and
 // sequence functions over it included (ctaFacetFacade.computes,
-// ctaFacetFacade.callsLibrary). An fn:count call declines
+// ctaFacetFacade.callsLibrary), and fn:count over it or over any other operand
+// that is no path. An fn:count call over a path declines
 // (ctaFacetFacade.count).
 
 // FacetAssertions is the [value.AssertionEvaluator] for an assertions facet's
@@ -42,7 +43,8 @@ import (
 //   - [value.AssertionDeclined], where this engine does not evaluate it: a
 //     {test} [CompileAssertionTest] would decline over a simple {content type}
 //     of the same type, on that function's terms — the grammar is the same and
-//     so is every decline it states — and a {test} calling fn:count.
+//     so is every decline it states — and a {test} calling fn:count over a
+//     path, `count(@a)`, which `count($value)` is not.
 //
 // A union's own assertions facet is evaluated like any other: the pipeline
 // hands this evaluator the union's ·active basic member· as st, the type under
@@ -50,8 +52,8 @@ import (
 // cvc-assertions-valid clause 1.4), so a {test} is compiled against that
 // member and declines only where it would over the member itself.
 //
-// GAP(xpath): an fn:count call is declined, whose argument would raise
-// err:XPDY0002 over the absent context item (ctaFacetFacade.count). Every other
+// GAP(xpath): an fn:count call over a path is declined, whose argument would
+// raise err:XPDY0002 over the absent context item (ctaFacetFacade.count). Every other
 // decline is [CompileAssertionTest]'s, under its GAP(xpath). The direction is
 // the withhold: the caller declines the value's Datatype Valid verdict, never
 // charging it and never showing it satisfied. (#1042)
@@ -159,10 +161,11 @@ func (ctaFacetFacade) contextItem() (ctaValue, bool) {
 	return ctaNoContextItem{}, true
 }
 
-// count declines every fn:count call. Its argument reads the absent context
-// item and would raise err:XPDY0002, but the call is admitted by the assertion
-// façade alone, whose counts a [Tally] the facet evaluation has none of
-// supplies; the decline is [FacetAssertions]' withhold, under its GAP(xpath).
+// count declines every fn:count call over a path, which reads the absent
+// context item and would raise err:XPDY0002 but is counted off a [Tally] the
+// facet evaluation has none of; that decline is [FacetAssertions]' withhold,
+// under its GAP(xpath). An fn:count call over an operand that is no path,
+// `count($value)`, never reaches it (ctaParser.countCall).
 func (ctaFacetFacade) count(ctaCounted, ctaTypes) (ctaValue, bool) {
 	return nil, false
 }

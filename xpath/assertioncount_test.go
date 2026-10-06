@@ -301,9 +301,9 @@ func TestTallyCountsAttributesAt(t *testing.T) {
 	}
 }
 
-// fn:count's argument is one QName step, a rooted one, a child step filtered
-// by one predicate, or a union (the predicate and union rows below): every
-// other argument declines, a positional predicate among them, and so does
+// fn:count's path argument is one QName step, a rooted one, a child step
+// filtered by one predicate, or a union (the predicate and union rows below):
+// every other path declines, a positional predicate among them, and so does
 // `.//` or `./` in a comparison operand, and a cast from a count, which [16]
 // ta-SimpleValue, the operand of both cast spellings, does not admit.
 func TestCompileAssertionTestDeclinesCounts(t *testing.T) {
@@ -318,7 +318,6 @@ func TestCompileAssertionTestDeclinesCounts(t *testing.T) {
 		{"count(//e1/e1) = 0", "a rooted path of two steps"},
 		{"count(.) = 1", "the context item alone"},
 		{"count(..) = 1", "the parent step"},
-		{"count($value) = 1", "a variable"},
 		{"count(e1[1]) = 1", "a positional predicate"},
 		{"count(child::e1) = 1", "the unabbreviated child axis"},
 		{"count(attribute::a) = 1", "the unabbreviated attribute axis"},
@@ -331,7 +330,6 @@ func TestCompileAssertionTestDeclinesCounts(t *testing.T) {
 		{".//e1 = 'a'", "a descendant step in a comparison"},
 		{"./@length = 1", "a context-item path in a comparison"},
 		{"count(e1) cast as xs:string = '1'", "a cast from an xs:integer count"},
-		{"count(count(e1)) = 1", "a count of a count"},
 	} {
 		if _, ok := CompileAssertionTest(asRecord(tc.expr), seededTypes, xsd.ElementContent{}, asUses(t, map[string]string{"length": "int"}), asChildTypes(t)); ok {
 			t.Errorf("CompileAssertionTest(%q): compiled, want declined (%s)", tc.expr, tc.why)
@@ -339,9 +337,9 @@ func TestCompileAssertionTestDeclinesCounts(t *testing.T) {
 	}
 }
 
-// fn:count is the assertion façade's alone: a Type Alternative's {test}
-// declines it under §3.12.6 clause 3, and an assertions facet's declines it
-// (ctaFacetFacade.count) rather than failing. A rooted attribute step reads the
+// fn:count over a path is the assertion façade's alone: a Type Alternative's
+// {test} declines it under §3.12.6 clause 3, and an assertions facet's declines
+// it (ctaFacetFacade.count) rather than failing. A rooted attribute step reads the
 // facet's absent context item and fails it (err:XPDY0002), and a Type
 // Alternative declines it as it declines every rooted path. The relative count
 // rows compile, and fail, with either façade's count admitting the call; the
