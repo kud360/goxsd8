@@ -180,7 +180,7 @@ func dispatchUnion(b Backend, r xsd.TypeResolver, members []*xsd.SimpleType, raw
 		rejections = append(rejections, fmt.Sprintf("member %d (%s): %v", i, m.Name(), err))
 	}
 	return nil, nil, xsderr.New(ruleCvcDatatypeValid, xsderr.Loc{},
-		"value %q is Datatype Valid with respect to no member of the union's %d {member type definitions} (cvc-datatype-valid clause 2.3, §4.1.4): %s",
+		"value %q is Datatype Valid with respect to no member of the union's %d {member type definitions}, but cvc-datatype-valid clause 2.3 requires it to be valid with respect to at least one: %s",
 		rawLexical, len(members), strings.Join(rejections, "; "))
 }
 
@@ -231,7 +231,7 @@ func activeBasicMember(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLex
 		return m, nil
 	}
 	return nil, typeFault(xsderr.New(ruleCvcDatatypeValid, xsderr.Loc{},
-		"value %q identifies no active member among the union's %d {member type definitions}, though validateUnion already accepted it (dt-active-member, Datatypes §4.1.4 Terminology)",
+		"value %q identifies no active member among the union's %d {member type definitions}, though validateUnion already accepted it",
 		rawLexical, len(members)))
 }
 

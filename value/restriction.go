@@ -243,7 +243,7 @@ func (rc restrictionCheck) checkBoundConsistency() error {
 				continue
 			}
 			return xsderr.New(rule, rc.owner.Loc(),
-				"simple type restriction's own %s {value} %q and %s {value} %q leave an empty value space (%s)",
+				"simple type restriction's own %s {value} %q and %s {value} %q leave an empty value space, which %s forbids",
 				low.Kind(), boundLexical(low), up.Kind(), boundLexical(up), rule)
 		}
 	}
@@ -357,7 +357,7 @@ func (rc restrictionCheck) checkBoundAgainstBase(r xsd.TypeResolver, own xsd.Fac
 			continue
 		}
 		return xsderr.New(rule, rc.owner.Loc(),
-			"simple type restriction's own %s {value} %q is not a valid restriction of the {base type definition}'s %s {value} %q (%s)",
+			"simple type restriction's own %s {value} %q is not a valid restriction of the {base type definition}'s %s {value} %q, which %s requires",
 			own.Kind(), boundLexical(own), baseF.Kind(), boundLexical(baseF), rule)
 	}
 	return nil
@@ -632,14 +632,14 @@ func declaredNotation(r xsd.TypeResolver, st *xsd.SimpleType, variety xsd.Variet
 	name, ok := resolveNotationLexical(lexical, ctx)
 	if !ok {
 		return xsderr.New(ruleCvcDatatypeValid, xsderr.Loc{},
-			"the NOTATION value %q has a prefix no in-scope namespace binding declares, so it resolves to no QName and is outside the ·value space· of NOTATION (Datatypes §3.3.18, §3.3.19)",
+			"the NOTATION value %q has a prefix no in-scope namespace binding declares, so it resolves to no QName and is outside the ·value space· of NOTATION, which cvc-datatype-valid clause 2.1 requires it to be in",
 			lexical)
 	}
 	if slices.ContainsFunc(s.Notations(), func(n xsd.Notation) bool { return n.Name() == name }) {
 		return nil
 	}
 	return xsderr.New(ruleCvcDatatypeValid, xsderr.Loc{},
-		"the NOTATION value %q resolves to the QName %s, which names no notation declaration of the schema, so it is outside the ·value space· of NOTATION, \"the set of QNames of notations declared in the current schema\" (Datatypes §3.3.19)",
+		"the NOTATION value %q resolves to the QName %s, which names no notation declaration of the schema, so it is outside the ·value space· of NOTATION, \"the set of QNames of notations declared in the current schema\", which cvc-datatype-valid clause 2.1 requires it to be in",
 		lexical, name)
 }
 
@@ -751,7 +751,7 @@ func CheckPatternSyntax(t *xsd.SimpleType) error {
 				continue
 			}
 			return xsderr.New(ruleSrcPatternValue, t.Loc(),
-				"pattern facet value %q is not a regular expression: %s (src-pattern-value, §4.3.4.3 via Datatypes Appendix G)",
+				"pattern facet value %q is not a regular expression as Datatypes Appendix G defines one, which src-pattern-value requires: %s",
 				p, patternDetail(err))
 		}
 	}

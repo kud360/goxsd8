@@ -77,7 +77,7 @@ var errAssertionDeclined = errors.New("value: an assertions-facet {test} was not
 // (STYLE T4): `grep assertionDeclined(` enumerates every decline.
 func assertionDeclined(st *xsd.SimpleType, i, n int, test xsd.XPathExpression) error {
 	return xsderr.Wrap(ruleCvcAssertionsValid, xsderr.Loc{}, fmt.Errorf(
-		"%w: assertion %d of %d in the {value} of the assertions facet of %s, whose {test} is %q: whether the value is facet-valid with respect to it (cvc-assertions-valid, Datatypes §4.3.13.3) is undecided",
+		"%w: assertion %d of %d in the {value} of the assertions facet of %s, whose {test} is %q: it is undecided whether the value is facet-valid with respect to it, which cvc-assertions-valid requires",
 		errAssertionDeclined, i+1, n, simpleTypeLabel(st.Name()), test.Expression()))
 }
 
@@ -143,7 +143,7 @@ func checkAssertions(b Backend, r xsd.TypeResolver, st, basic *xsd.SimpleType, v
 			outcome := a.Evaluate(b, r, basic, as.Test(), v)
 			if outcome == AssertionFails {
 				return xsderr.New(ruleCvcAssertionsValid, xsderr.Loc{},
-					"the value is not facet-valid with respect to assertion %d of %d in the {value} of the assertions facet of %s, whose {test} %q did not evaluate to true without raising a dynamic or type error (cvc-assertions-valid, Datatypes §4.3.13.3)",
+					"the value is not facet-valid with respect to assertion %d of %d in the {value} of the assertions facet of %s, whose {test} %q did not evaluate to true without raising a dynamic or type error, but cvc-assertions-valid requires every {test} to",
 					i+1, len(assertions), simpleTypeLabel(st.Name()), as.Test().Expression())
 			}
 			if outcome == AssertionDeclined && declined == nil {
