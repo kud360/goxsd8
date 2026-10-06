@@ -21,7 +21,8 @@ import (
 // `./N` or `.//N`, standing as the whole operand of fn:exists, fn:empty or an
 // ·effective boolean value· (childPath, selectedElements), an fn:count call
 // ([48] FunctionCall) over one counted path, a [40] Predicate on a child step
-// in it (predicate) or a [21] UnionExpr of such paths (countArgument), a call
+// in it (predicate) or a [21] UnionExpr of such paths (countArgument), or over
+// an operand a library call takes as its argument (countCall), a call
 // to one of the F&O string and sequence functions (libraryCall) whose arguments
 // are additive expressions or `()`, the binary operators of [13] AdditiveExpr
 // and [14] MultiplicativeExpr, and [47] ContextItemExpr `.`, which the facet
@@ -54,8 +55,9 @@ const ctaFunctionNS = "http://www.w3.org/2005/xpath-functions"
 var ctaNotFunction = xsd.QName{Space: ctaFunctionNS, Local: "not"}
 
 // ctaCountFunction is fn:count (xpath-functions.md §15.4.1), which a [14]
-// ta-ValueExpr calls on the assertion façade alone (ctaParser.countCall); the
-// other functions it calls but the constructors are ctaParser.libraryCall's.
+// ta-ValueExpr calls on the assertion and facet façades (ctaParser.countCall);
+// the other functions it calls but the constructors are
+// ctaParser.libraryCall's.
 var ctaCountFunction = xsd.QName{Space: ctaFunctionNS, Local: "count"}
 
 // ctaNames holds the {namespace bindings} and the {default namespace} of one
@@ -254,7 +256,8 @@ const (
 	// spelling.
 	ctaCompTok
 	// ctaDollarTok is the '$' opening xpath20.md [44] VarRef, which only the
-	// assertion façade's `$value` reaches (ctaFacade.variable).
+	// assertion and facet façades' `$value` reaches (ctaFacade.variable), and
+	// which opens an fn:count argument that is no path (ctaParser.countsItems).
 	ctaDollarTok
 	// ctaSlashTok is '/' and ctaSlashSlashTok is '//'. Each is read only where
 	// it opens a [25] PathExpr (ctaParser.rootedPath) or follows the `.`
@@ -963,7 +966,7 @@ func (p *ctaParser) arithmetic(op ctaArithOp, left, right ctaValue) (ctaValue, b
 
 // valueExpr parses [14] ta-ValueExpr, dispatching on whether a function call
 // opens it, and on which function it calls: fn:count, which the assertion
-// façade calls (countCall), one of the F&O functions a façade that calls the
+// and facet façades call (countCall), one of the F&O functions a façade that calls the
 // library admits (ctaFacade.callsLibrary, libraryCall), or a constructor.
 //
 // The gate is asked before the name is: where the façade calls no library
@@ -1007,6 +1010,8 @@ func (p *ctaParser) libraryCall(local string) (ctaValue, bool) {
 		return p.presenceCall(ctaEmptyTest)
 	case "exists":
 		return p.presenceCall(ctaExistsTest)
+	case "distinct-values":
+		return p.distinctValuesCall()
 	case "true", "false":
 		return p.constantCall(local)
 	}
@@ -1189,6 +1194,37 @@ func (p *ctaParser) presenceArgument() (ctaValue, bool) {
 	return args[0], true
 }
 
+// distinctValuesCall parses a call to fn:distinct-values with its one
+// `xs:anyAtomicType*` argument (xpath-functions.md §15.1.6), which is atomized
+// (ctaDistinctValues), and whose result is that argument's distinct items. A
+// statically empty argument compiles to ctaEmptyValue, which is the empty
+// sequence the call returns over it. The node's st is the type its items are
+// compared in: the argument's own static type, or xs:string for an
+// xs:untypedAtomic one, which declines where p.types resolves no xs:string.
+// No argument declines (err:XPST0017).
+//
+// GAP(xpath): the two-argument form, whose second argument names a collation
+// (§7.3.1), declines rather than being evaluated — and is never evaluated as
+// the one-argument form, which compares under the default collation alone. The
+// direction is the withhold [CompileAssertionTest] reports. (#1042)
+func (p *ctaParser) distinctValuesCall() (ctaValue, bool) {
+	args, ok := p.arguments()
+	if !ok || len(args) != 1 {
+		return nil, false
+	}
+	if ctaIsEmpty(args[0]) {
+		return ctaEmptyValue{}, true
+	}
+	if typed, isTyped := ctaStaticOf(args[0]).(ctaTyped); isTyped {
+		return ctaDistinctValues{operand: args[0], st: typed.st}, true
+	}
+	str, resolved := p.types.simple(ctaBuiltin("string"))
+	if !resolved {
+		return nil, false
+	}
+	return ctaDistinctValues{operand: args[0], st: str}, true
+}
+
 // constantCall parses a call to fn:true or fn:false, named local, with no
 // argument (xpath-functions.md §9.1.1, §9.1.2), into the ctaLiteral of the
 // xs:boolean it returns, whose lexical local is. An argument declines, and so
@@ -1206,21 +1242,42 @@ func (p *ctaParser) constantCall(local string) (ctaValue, bool) {
 }
 
 // countCall parses an fn:count call, xpath20.md [48] FunctionCall with one
-// argument, whose name the caller has already resolved to fn:count. The node
-// is p.facade's, which may decline it, and so is the node of a rooted
-// argument; an argument outside countArgument's shapes declines.
+// argument, whose name the caller has already resolved to fn:count. Where the
+// façade calls the library (ctaFacade.callsLibrary) and the argument opens as
+// no path can (countsItems), the argument is one a library call takes
+// (argument) — `$value`, `()`, a function call, a literal — whose items are
+// counted, and the node is their ctaCount (ctaCountedItems, ctaCountOf) on
+// every such façade. Every other argument is a path countArgument parses,
+// whose node is p.facade's (ctaFacade.count), which may decline it, as is the
+// node of a rooted argument; an argument outside those shapes declines.
 func (p *ctaParser) countCall() (ctaValue, bool) {
 	p.advance() // the function name
 	p.advance() // '('
-	arg, ok := p.countArgument()
-	if !ok {
-		return nil, false
+	if p.facade.callsLibrary() && p.countsItems() {
+		operand, ok := p.argument()
+		if !ok || !p.at(ctaRParen) {
+			return nil, false
+		}
+		p.advance()
+		return ctaCountOf(ctaCountedItems{operand: operand}, p.types)
 	}
-	if !p.at(ctaRParen) {
+	arg, ok := p.countArgument()
+	if !ok || !p.at(ctaRParen) {
 		return nil, false
 	}
 	p.advance()
 	return p.facade.count(arg, p.types)
+}
+
+// countsItems reports whether the cursor opens an fn:count argument no path
+// opens with: a VarRef's '$', a '(' — `()` among them — a literal, or a
+// function call, a name followed by '('. A path opens with "/", "//", ".",
+// '@', a wildcard, an axis or a name standing alone. Nothing is consumed.
+func (p *ctaParser) countsItems() bool {
+	if p.at(ctaNameTok) {
+		return p.peek(1).kind == ctaLParen
+	}
+	return p.at(ctaDollarTok) || p.at(ctaLParen) || p.at(ctaStringTok) || p.at(ctaNumberTok)
 }
 
 // countArgument parses fn:count's argument: one operand (countOperand), or
