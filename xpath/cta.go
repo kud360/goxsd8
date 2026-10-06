@@ -1715,7 +1715,7 @@ func (e ctaEffectiveBoolean) eval(env ctaEnv) ctaAnswer {
 	case ctaStringFunction:
 		return ctaBoolean(e.operand, n.cast.target, env)
 	case ctaDistinctValues:
-		return ctaBoolean(e.operand, n.st, env)
+		return ctaDistinctBoolean(n, env)
 	case ctaValueVar:
 		return ctaBoolean(e.operand, n.atom, env)
 	case ctaEmptyValue:

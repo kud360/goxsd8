@@ -242,7 +242,7 @@ func TestCountAndDistinctValuesDecline(t *testing.T) {
 			t.Errorf("FacetAssertions().Evaluate(%q) = %d, want declined", expr, got)
 		}
 	}
-	for _, expr := range []string{"count(()) = 0", "count('a') = 1", "distinct-values(@a) = 'x'", "count(distinct-values(@a)) = 1"} {
+	for _, expr := range []string{"count(()) = 0", "count('a') = 1", "count(distinct-values(@a)) = 1"} {
 		if _, ok := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); ok {
 			t.Errorf("CompileCTATest(%q): compiled, want declined", expr)
 		}

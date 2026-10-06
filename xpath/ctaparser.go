@@ -1210,15 +1210,10 @@ func (p *ctaParser) distinctValuesCall() (ctaValue, bool) {
 	if !ok || len(args) != 1 {
 		return nil, false
 	}
-	switch s := ctaStaticOf(args[0]).(type) {
-	case ctaTyped:
-		return ctaDistinctValues{operand: args[0], st: s.st}, true
-	case ctaUntypedAtomic:
-		return ctaDistinctValues{operand: args[0], st: p.types.str}, true
-	case ctaEmptySequence:
+	if ctaIsEmpty(args[0]) {
 		return ctaEmptyValue{}, true
 	}
-	return nil, false // ctaStatic has the three arms above; never reached
+	return ctaDistinctValues{operand: args[0]}, true
 }
 
 // constantCall parses a call to fn:true or fn:false, named local, with no
