@@ -562,9 +562,10 @@ never the pattern-facet flavor.
 ## Identity-constraint paths (`icpath`)
 
 **Status: ships whole — the grammar, the two SCCs over it and the streaming
-matcher.** `go doc` renders thirteen identifiers: `CompileSelector` /
-`CompileField` and the opaque `Expr`, `Live` and `Selection` the matcher runs
-on, plus `SelectorViolation` / `FieldViolation`. It owns §3.11.6.2 and
+matcher.** `go doc ./icpath` renders the exported inventory; read it there.
+Its top-level exports are `CompileSelector` / `CompileField` and the opaque
+`Expr`, `Live` and `Selection` the matcher runs on, plus `SelectorViolation` /
+`FieldViolation`. It owns §3.11.6.2 and
 §3.11.6.3 — the ·selector subset· and the ·field subset·, a path grammar over
 the child and attribute axes — and imports `xsd`, `xsderr` and `regex` (the
 NCName class its lexer scans with).
