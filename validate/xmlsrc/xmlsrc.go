@@ -39,17 +39,19 @@ func WithURI(uri string) Option {
 // Validate assesses the XML instance in r against v's schema and reports
 // what the assessment found.
 //
-// The two error channels split on whether an assessment stands: it returns
-// (nil, err) when none does — v or r is nil, the document is malformed
-// before its document element, or the walk finished and the rest of the
-// stream, which Validate then reads to its end, is malformed: a subtree the
-// walk did not descend into, or what follows the document element, where
-// only Misc may stand (XML 1.0 [1] document, [27] Misc), so that character
-// data that is not literal white space and a second top-level element there are
-// reported. A document that is not well-formed has no infoset to assess. It
-// returns (result, nil) in every other case, with a source fault that stopped
-// the walk mid-document living in [validate.Result.Err] alone and never also
-// returned here.
+// It returns (nil, err) when no assessment stands: v or r is nil, or the
+// source is faulty outside [validate.Validator.Assess] — before the document
+// element starts, or in the read to the stream's end that Validate makes once
+// the walk returns, which covers a subtree the walk did not descend into and
+// what follows the document element, where only Misc may stand (XML 1.0 [1]
+// document, [27] Misc). It returns (result, nil) in every other case, and a
+// source fault that stopped Assess lives in [validate.Result.Err] alone,
+// never also returned here.
+//
+// A fault inside the document element can land in either channel: in
+// [validate.Result.Err] when the walk met it, in err when it lies in what the
+// walk left unread when it returned. Read both as "not well-formed; no
+// verdict".
 //
 // A nil argument yields a plain error rather than an [xsderr.Error], on
 // [validate.New]'s reasoning about its own nil schema: it is a caller's
@@ -72,10 +74,9 @@ func Validate(v *validate.Validator, r io.Reader, opts ...Option) (*validate.Res
 	// A walk that stopped on a fault has it in res.Err already, and the
 	// stream it stopped in is not read on.
 	if w.err == nil {
-		err = w.drain()
-	}
-	if err != nil {
-		return nil, err
+		if err := w.drain(); err != nil {
+			return nil, err
+		}
 	}
 	return res, nil
 }

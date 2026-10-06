@@ -36,9 +36,6 @@
 // could only be there is rejected with a message saying the DTD was not fully
 // read, rather than that the name is undeclared.
 //
-// Validate reads the stream to its end once the walk returns, so a fault
-// outside the document element reaches the caller as the reader's own
-// *xsderr.Error: before the document element, character data that is not
-// literal white space; after it, that and a second top-level element (XML 1.0
-// [1] document, [27] Misc).
+// Validate's doc comment owns which of its two error channels a source fault
+// reaches.
 package xmlsrc
