@@ -65,11 +65,15 @@
 //     is rejected as RuleXMLWellFormed in any other document, which is XML
 //     1.0 (nsc-NoPrefixUndecl). The default declaration xmlns="" is legal
 //     in both.
-//   - After the document element only comments, processing instructions
-//     and white space may appear (XML 1.0 [1] document, [27] Misc):
-//     a character-data run there holding anything but white space is
-//     rejected as RuleXMLWellFormed at the run's start, the character
-//     after the preceding markup.
+//   - Outside the document element only Misc — comments, processing
+//     instructions and white space — may appear, and before it an XML
+//     declaration and a DOCTYPE too (XML 1.0 [1] document, [22] prolog,
+//     [27] Misc). Rejected as RuleXMLWellFormed: a character-data run
+//     before the document element, or after it, whose source is
+//     anything but S, a character reference or CDATA section decoding to
+//     white space and a U+FEFF after the encoding signature among it, at
+//     the run's start, the character after the preceding markup; and a
+//     second top-level element, at its start tag.
 //   - The DOCTYPE's internal subset is read for its general entity
 //     declarations, the first declaration of a name binding (XML 1.0 §4.2),
 //     and for its attribute-list declarations' attribute types (see the

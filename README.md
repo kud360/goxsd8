@@ -172,9 +172,10 @@ if err != nil {
 }
 defer f.Close()
 
-// err means the assessment never RAN: a nil argument, or a document with no
-// well-formed document element to start it. A source fault that stopped the
-// walk mid-document lives in res.Err() alone and is never also returned here.
+// err means no assessment stands: a nil argument, or a document that is not
+// well-formed where the walk did not read it — before the document element,
+// after it, or in a subtree the walk did not enter. A fault that stopped the
+// walk lives in res.Err() alone and is never also returned here.
 res, err := xmlsrc.Validate(v, f, xmlsrc.WithURI("order.xml"))
 if err != nil {
 	log.Fatal(err)

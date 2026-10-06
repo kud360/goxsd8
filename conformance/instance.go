@@ -598,6 +598,7 @@ const (
 	refuseHintAssembly    refusal = "hint-assembly"        // assembleHints: assemblyDeclined refused the outcome
 	refuseHintUndeclared  refusal = "hint-undeclared-root" // assembleHints: no top-level declaration for the root
 	refuseDoctype         refusal = "doctype"              // rootStart: a directive defaultsNoAttribute refuses
+	refuseProlog          refusal = "prolog-text"          // rootStart: character data before the root that is not white space
 	refuseDecode          refusal = "decode"               // an internal/xmltok decoder error, at any re-read site
 
 	// builtinsSchema (instancehints.go): no group schema, and the instance
@@ -741,7 +742,8 @@ func unevaluatedRefusal(records []validate.Unevaluated) refusal {
 // or declines, naming the refusal. It declines on three conditions, none of
 // which is a verdict about the document: a document that will not resolve or
 // that the reader rejects for any reason, a caller fault or a document
-// malformed before its document element (xmlsrc.Validate's own error channel),
+// malformed before its document element or in what the walk left unread, what
+// follows the document element included (xmlsrc.Validate's own error channel),
 // and a walk that STOPPED on a source fault mid-document (validate.Result.Err),
 // whose empty violation list records how far the walk got rather than what the
 // document holds.
