@@ -216,21 +216,29 @@ func TestEntityReferenceRefusedUnread(t *testing.T) {
 // document, a reference in content, in an attribute value and in replacement
 // text to a general entity declared only in a parameter entity's replacement
 // text (XML 1.0 WFC Entity Declared, which counts only a declaration outside
-// every parameter entity), as a fault the reader charges itself. Each control
-// is a fault row's document less one difference: no standalone="yes", where
-// the parameter-entity reference read lifts the constraint, or a second
-// declaration of the name outside every parameter entity, after the first or
-// before it.
+// every parameter entity), as a fault the reader charges itself, whether the
+// entity is internal, external or unparsed: the clause keys on where the
+// declaration stands, so the decoder's refusal of an entity that is not
+// internal does not answer first. Each control is a fault row's document less
+// one difference: no standalone="yes", where the parameter-entity reference
+// read lifts the constraint, or a second declaration of the name outside every
+// parameter entity, after the first or before it. Each refused row is such a
+// control for an external entity, which the reader does not read: refused,
+// wrapping a cause, and charging no Entity Declared.
 func TestEntityDeclaredOnlyInParameterEntity(t *testing.T) {
 	const alone = `<?xml version="1.0" standalone="yes"?>`
 	const pe = `<!ENTITY % p "<!ENTITY e 'x'>">%p;`
-	const msg = `[xml-wf] reference to entity &e; in a standalone="yes" document, where no general entity declaration outside every parameter entity declares it (XML 1.0 WFC Entity Declared)`
+	const xpe = `<!ENTITY % p "<!ENTITY x SYSTEM 'x.ent'>">%p;`
+	const msg = `[xml-wf] reference to entity &%s; in a standalone="yes" document, where no general entity declaration outside every parameter entity declares it (XML 1.0 WFC Entity Declared)`
 	for _, tc := range []struct {
 		subset, root, want string
 	}{
-		{pe, `<r>&e;</r>`, `d.xml:1:91: ` + msg},
-		{pe, `<r a="&e;"/>`, `d.xml:1:88: ` + msg},
-		{pe + `<!ENTITY f "[&e;]">`, `<r>&f;</r>`, `d.xml:1:110: ` + msg},
+		{pe, `<r>&e;</r>`, `d.xml:1:91: ` + fmt.Sprintf(msg, "e")},
+		{pe, `<r a="&e;"/>`, `d.xml:1:88: ` + fmt.Sprintf(msg, "e")},
+		{pe + `<!ENTITY f "[&e;]">`, `<r>&f;</r>`, `d.xml:1:110: ` + fmt.Sprintf(msg, "e")},
+		{xpe, `<r>&x;</r>`, `d.xml:1:102: ` + fmt.Sprintf(msg, "x")},
+		{xpe, `<r a="&x;"/>`, `d.xml:1:99: ` + fmt.Sprintf(msg, "x")},
+		{`<!NOTATION n SYSTEM 'n'><!ENTITY % p "<!ENTITY x SYSTEM 'x.ent' NDATA n>">%p;`, `<r>&x;</r>`, `d.xml:1:134: ` + fmt.Sprintf(msg, "x")},
 	} {
 		t.Run(tc.subset+tc.root, func(t *testing.T) {
 			_, err := collect(t, "d.xml", alone+`<!DOCTYPE r [`+tc.subset+`]>`+tc.root)
@@ -261,6 +269,25 @@ func TestEntityDeclaredOnlyInParameterEntity(t *testing.T) {
 			}
 		})
 	}
+	for _, tc := range []struct {
+		decl, subset string
+	}{
+		{alone, `<!ENTITY x SYSTEM 'x.ent'>`},
+		{`<?xml version="1.0"?>`, xpe},
+		{alone, xpe + `<!ENTITY x SYSTEM 'y.ent'>`},
+	} {
+		t.Run(tc.decl+tc.subset, func(t *testing.T) {
+			_, err := collect(t, "d.xml", tc.decl+`<!DOCTYPE r [`+tc.subset+`]><r>&x;</r>`)
+			wantWellFormednessError(t, err)
+			var e *xsderr.Error
+			if !errors.As(err, &e) || e.Err == nil {
+				t.Errorf("error %v: want a refusal wrapping its cause", err)
+			}
+			if strings.Contains(fmt.Sprint(err), "Entity Declared") {
+				t.Errorf("error %v names WFC Entity Declared, which the document does not break", err)
+			}
+		})
+	}
 }
 
 // TestEntityAmpersandBeginsNoReference charges a '&' in included replacement
@@ -274,7 +301,9 @@ func TestEntityDeclaredOnlyInParameterEntity(t *testing.T) {
 // to '<' or to '&', or an EntityRef to a declared entity, and one inside a
 // comment or a CDATA section. An EntityRef so spelled to an undeclared entity
 // is the reader's refusal, wrapping a cause, as TestEntityReferenceRefusedUnread
-// refuses one.
+// refuses one. A '&' in a comment, a processing instruction or an end tag the
+// decoder fails to read is no such charge: the decoder's own syntax error is
+// wrapped as the cause.
 func TestEntityAmpersandBeginsNoReference(t *testing.T) {
 	const msg = "[xml-wf] the replacement text of entity %s holds a '&' that begins no Reference, '&' Name ';' or a character reference (XML 1.0 §4.4.2, [67] Reference, [68] EntityRef, [66] CharRef)"
 	for _, tc := range []struct {
@@ -325,6 +354,24 @@ func TestEntityAmpersandBeginsNoReference(t *testing.T) {
 			wantWellFormednessError(t, err)
 			if errors.Unwrap(err) == nil || !strings.Contains(fmt.Sprint(err), "&b;") {
 				t.Errorf("error %v: want the refusal of &b;, wrapping its cause", err)
+			}
+		})
+	}
+	for _, tc := range []struct {
+		subset, cause string
+	}{
+		{`<!ENTITY e "<!-- -- 'a&#38;b' -->">`, `invalid sequence "--" not allowed in comments`},
+		{`<!ENTITY e "<?xml version='a&#38;b'?>">`, `unsupported version "a&b"`},
+		{`<!ENTITY e "<b></b x='a&#38;b'>">`, `invalid characters between </b and >`},
+	} {
+		t.Run(tc.subset+"<r>&e;</r>", func(t *testing.T) {
+			_, err := collect(t, "d.xml", `<!DOCTYPE r [`+tc.subset+`]><r>&e;</r>`)
+			wantWellFormednessError(t, err)
+			if strings.Contains(fmt.Sprint(err), "begins no Reference") {
+				t.Errorf("error %v charges a '&' that begins no Reference in a comment, processing instruction or end tag", err)
+			}
+			if cause := errors.Unwrap(err); cause == nil || !strings.Contains(cause.Error(), tc.cause) {
+				t.Errorf("error %v: want it to wrap the decoder's cause %q", err, tc.cause)
 			}
 		})
 	}
