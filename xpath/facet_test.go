@@ -5,6 +5,7 @@ import (
 
 	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
+	"github.com/kud360/goxsd8/xsderr"
 )
 
 // fcValue maps lexical against st, or fails the test.
@@ -60,28 +61,108 @@ func TestFacetAssertionsDecideTheValue(t *testing.T) {
 // FacetAssertions declines a {test} outside the grammar CompileAssertionTest
 // admits — arithmetic over a non-numeric `$value`, a call to a function
 // outside the string and sequence core, a variable other than `$value`, the
-// abbreviated parent step — and every {test} of a union's own assertions
-// facet, whose `$value` is typed by an ·active basic member· the evaluator
-// is not handed (dt-xdmrep clause 4), even one that reads nothing: the `'a'
-// = 'a'` row holds with Evaluate's union check removed.
+// abbreviated parent step.
 func TestFacetAssertionsDecline(t *testing.T) {
 	str := asBuiltin(t, "string")
-	union := asUnion(t)
-	types := asTypesWith(union)
-	for _, tc := range []struct {
-		test string
-		st   *xsd.SimpleType
-	}{
-		{"$value mod 2 = 0", str},
-		{"upper-case($value) = 'X'", str},
-		{"$other = 'x'", str},
-		{".. = 'x'", str},
-		{"$value = 'x'", union},
-		{"'a' = 'a'", union},
-	} {
+	for _, test := range []string{"$value mod 2 = 0", "upper-case($value) = 'X'", "$other = 'x'", ".. = 'x'"} {
 		v := fcValue(t, str, "x")
-		if got := FacetAssertions().Evaluate(backend(), types, tc.st, ctaExprRecord(tc.test, ""), v); got != value.AssertionDeclined {
-			t.Errorf("Evaluate(%q over %s) = %d, want declined", tc.test, tc.st.Name(), got)
+		if got := FacetAssertions().Evaluate(backend(), seededTypes, str, ctaExprRecord(test, ""), v); got != value.AssertionDeclined {
+			t.Errorf("Evaluate(%q over %s) = %d, want declined", test, str.Name(), got)
+		}
+	}
+}
+
+// fcUnion builds a NAMED union simple type over by-name members in declared
+// order, with no facets of its own.
+func fcUnion(t *testing.T, local string, members ...xsd.QName) *xsd.SimpleType {
+	t.Helper()
+	slots := make([]xsd.SimpleTypeOrRef, 0, len(members))
+	for _, m := range members {
+		slots = append(slots, xsd.SimpleTypeRef{Name: m})
+	}
+	st, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: ctaUserNS, Local: local},
+		xsd.UnionDerivation{Members: slots}, xsd.SimpleTypeRef{Name: ctaBuiltin("anySimpleType")}, nil, nil)
+	if err != nil {
+		t.Fatalf("building the %s union: %v", local, err)
+	}
+	return st
+}
+
+// fcAssertedUnion restricts the union base, whose {member type definitions}
+// are members, with an assertions facet of its own carrying test.
+func fcAssertedUnion(t *testing.T, base *xsd.SimpleType, test string, members ...xsd.QName) *xsd.SimpleType {
+	t.Helper()
+	slots := make([]xsd.SimpleTypeOrRef, 0, len(members))
+	for _, m := range members {
+		slots = append(slots, xsd.SimpleTypeRef{Name: m})
+	}
+	facets := []xsd.Facet{xsd.NewAssertionsFacet([]xsd.Assertion{xsd.NewAssertion(asRecord(test))})}
+	st, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: ctaUserNS, Local: "Asserted" + base.Name().Local},
+		xsd.UnionDerivation{Members: slots}, xsd.SimpleTypeRef{Name: base.Name()}, facets, nil)
+	if err != nil {
+		t.Fatalf("building the restriction of %s: %v", base.Name(), err)
+	}
+	return st
+}
+
+// fcOutcome is what value.ValidateLexical's err says the assertions stage
+// decided: accepted is AssertionHolds, a cvc-assertions-valid verdict is
+// AssertionFails and an assertions decline is AssertionDeclined.
+func fcOutcome(t *testing.T, err error) value.AssertionOutcome {
+	t.Helper()
+	if err == nil {
+		return value.AssertionHolds
+	}
+	if value.IsAssertionDeclined(err) {
+		return value.AssertionDeclined
+	}
+	if rule, _ := xsderr.RuleOf(err); rule == "cvc-assertions-valid" && value.IsDatatypeVerdict(err) {
+		return value.AssertionFails
+	}
+	t.Fatalf("ValidateLexical: %v, want an assertions-stage outcome", err)
+	return value.AssertionDeclined
+}
+
+// A union's own assertions facet binds `$value` under the ·active basic
+// member· the dispatch chose (dt-xdmrep clause 4, cvc-assertions-valid clause
+// 1.4): over union(xs:date, xs:integer), `$value = 5` holds for 5 and fails
+// for 6, `$value = xs:date('2008-01-01')` holds for that date and fails for
+// another, and each fails across members, where comparing an xs:date with an
+// xs:integer is a type error (err:XPTY0004), which cvc-assertions-valid
+// charges as false. A union of that union with xs:string descends to the same
+// basic member (dt-active-basic-member) and binds it, and a string literal
+// binds xs:string. Every row but the guard's declines with validateUnion
+// handing checkAssertions the union in place of the member, which
+// ctaTypes.valueVariable declines. The guard: a {test} the façade declines
+// over a non-union (fn:upper-case) still declines over a union.
+func TestFacetAssertionsOverAUnionBindTheActiveBasicMember(t *testing.T) {
+	date, integer, str := ctaBuiltin("date"), ctaBuiltin("integer"), ctaBuiltin("string")
+	dateOrInt := fcUnion(t, "DateOrInt", date, integer)
+	nested := fcUnion(t, "DateOrIntOrString", dateOrInt.Name(), str)
+	for _, tc := range []struct {
+		base    *xsd.SimpleType
+		members []xsd.QName
+		test    string
+		lexical string
+		want    value.AssertionOutcome
+	}{
+		{dateOrInt, []xsd.QName{date, integer}, "$value = 5", "5", value.AssertionHolds},
+		{dateOrInt, []xsd.QName{date, integer}, "$value = 5", "6", value.AssertionFails},
+		{dateOrInt, []xsd.QName{date, integer}, "$value = 5", "2008-01-01", value.AssertionFails},
+		{dateOrInt, []xsd.QName{date, integer}, "$value = xs:date('2008-01-01')", "2008-01-01", value.AssertionHolds},
+		{dateOrInt, []xsd.QName{date, integer}, "$value = xs:date('2008-01-01')", "2008-01-02", value.AssertionFails},
+		{dateOrInt, []xsd.QName{date, integer}, "$value = xs:date('2008-01-01')", "5", value.AssertionFails},
+		{nested, []xsd.QName{dateOrInt.Name(), str}, "$value = 5", "5", value.AssertionHolds},
+		{nested, []xsd.QName{dateOrInt.Name(), str}, "$value = 5", "6", value.AssertionFails},
+		{nested, []xsd.QName{dateOrInt.Name(), str}, "$value = xs:date('2008-01-01')", "2008-01-01", value.AssertionHolds},
+		{nested, []xsd.QName{dateOrInt.Name(), str}, "$value = 'abc'", "abc", value.AssertionHolds},
+		{nested, []xsd.QName{dateOrInt.Name(), str}, "$value = 'abc'", "5", value.AssertionFails},
+		{dateOrInt, []xsd.QName{date, integer}, "upper-case($value) = 'X'", "5", value.AssertionDeclined},
+	} {
+		st := fcAssertedUnion(t, tc.base, tc.test, tc.members...)
+		_, err := value.ValidateLexical(backend(), asTypesWith(dateOrInt, nested), st, tc.lexical, nil, FacetAssertions())
+		if got := fcOutcome(t, err); got != tc.want {
+			t.Errorf("%s over %q against a restriction of %s = %d, want %d (err %v)", tc.test, tc.lexical, tc.base.Name().Local, got, tc.want, err)
 		}
 	}
 }

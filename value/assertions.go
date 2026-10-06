@@ -44,9 +44,14 @@ const (
 // AssertionEvaluator decides one {test} of an assertions facet against a value,
 // on the terms of Assertions Valid (Datatypes §4.3.13.3, cvc-assertions-valid):
 // no context item (clause 1.2), and `$value` bound to the XDM representation of
-// v under st (clauses 1.4 and 1.5, dt-xdmrep), st being the type the facet is
-// effective on. b and r are the ones [ValidateLexical] was handed, passed per
-// call and stored nowhere, so one evaluator serves every schema.
+// v under st (clauses 1.4 and 1.5, dt-xdmrep). st is the type under which
+// `$value` is v's XDM representation (dt-xdmrep): the type the facet is
+// effective on, or — where that type is a union — the ·active basic member·
+// that identified v (dt-xdmrep clause 4), never a union. An implementation is
+// never called for a value with no active basic member (cvc-assertions-valid
+// clause 1.5): the union dispatch rejects such a literal before the assertions
+// stage. b and r are the ones [ValidateLexical] was handed, passed per call and
+// stored nowhere, so one evaluator serves every schema.
 //
 // Its one consumer is the pipeline's assertions stage, which runs after every
 // other value facet has accepted v; validate injects package xpath's
@@ -119,7 +124,10 @@ func (assertionsUndecided) Evaluate(Backend, xsd.TypeResolver, *xsd.SimpleType, 
 // checkAssertions is the assertions stage over v, already accepted by every
 // other stage against st: each {test} in the {value} of each assertions facet
 // in facets — st's effective ones, which compile collected in effective-facet
-// order — is handed to a, in that order.
+// order — is handed to a, in that order, with basic as the type under which
+// `$value` is v's XDM representation (dt-xdmrep): st itself, or where st is a
+// union the ·active basic member· that identified v (dt-xdmrep clause 4). st
+// names the facet in every message.
 //
 // The first [AssertionFails] is the verdict, a cvc-assertions-valid rejection,
 // and it stops the scan. A decline does NOT stop it: every assertion is a
@@ -127,12 +135,12 @@ func (assertionsUndecided) Evaluate(Backend, xsd.TypeResolver, *xsd.SimpleType, 
 // invalid whatever an earlier declined {test} would have said. Only where no
 // {test} fails is the first decline returned, as assertionDeclined's
 // non-verdict.
-func checkAssertions(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, v Value, facets []xsd.Facet, a AssertionEvaluator) error {
+func checkAssertions(b Backend, r xsd.TypeResolver, st, basic *xsd.SimpleType, v Value, facets []xsd.Facet, a AssertionEvaluator) error {
 	var declined error
 	for _, f := range facets {
 		assertions, _ := f.Assertions()
 		for i, as := range assertions {
-			outcome := a.Evaluate(b, r, st, as.Test(), v)
+			outcome := a.Evaluate(b, r, basic, as.Test(), v)
 			if outcome == AssertionFails {
 				return xsderr.New(ruleCvcAssertionsValid, xsderr.Loc{},
 					"the value is not facet-valid with respect to assertion %d of %d in the {value} of the assertions facet of %s, whose {test} %q did not evaluate to true without raising a dynamic or type error (cvc-assertions-valid, Datatypes §4.3.13.3)",

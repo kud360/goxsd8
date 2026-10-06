@@ -885,15 +885,16 @@ func (w *walk) assertionValue(e Element, ct xsd.ComplexType, content *contentChe
 // facets, assertions included, accept the value (dt-active-member).
 //
 // GAP(validate): a {test} [xpath.FacetAssertions] declines — one outside the
-// grammar [xpath.CompileAssertionTest] admits, and every {test} of a union's
-// own assertions facet — leaves the value's Datatype Valid verdict undecided,
-// and is DECLINED here. The cvcid.go and cvcidentityconstraint.go re-runs reach
-// the same non-verdict and decline on it, and the union dispatch stops at a
-// member that declined rather than handing the value to a later one, so no
-// ·validating type· is chosen past a {test} nobody decided. Fail-open: the
-// withheld verdict's whole consumer set is w.res.violations and its one reader
-// [Result.Violations], which charge on a violation PRESENT, so a decline can
-// only cost a rejection and can manufacture none. (#1042)
+// grammar [xpath.CompileAssertionTest] admits, over the facet's type or, for a
+// union's own assertions facet, over its ·active basic member· — leaves the
+// value's Datatype Valid verdict undecided, and is DECLINED here. The cvcid.go
+// and cvcidentityconstraint.go re-runs reach the same non-verdict and decline
+// on it, and the union dispatch stops at a member that declined rather than
+// handing the value to a later one, so no ·validating type· is chosen past a
+// {test} nobody decided. Fail-open: the withheld verdict's whole consumer set
+// is w.res.violations and its one reader [Result.Violations], which charge on a
+// violation PRESENT, so a decline can only cost a rejection and can manufacture
+// none. (#1042)
 func (w *walk) declineAssertions(err error, event string, name xsd.QName, loc xsderr.Loc, withheld string) bool {
 	if !value.IsAssertionDeclined(err) {
 		return false

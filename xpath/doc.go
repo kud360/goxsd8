@@ -75,12 +75,12 @@
 //     ·special· content is xs:untypedAtomic, as such an attribute is. FacetAssertions is the
 //     value.AssertionEvaluator for an assertions facet's {test} (Datatypes §4.3.13.3,
 //     cvc-assertions-valid), over the same grammar plus [47] ContextItemExpr: `$value` is bound to
-//     the value under the facet's type, and there is no context item, so `.`, an attribute or
-//     child step, a child path, a rooted path and a zero-argument string function each raise
-//     err:XPDY0002 and fail the facet; a union's own assertions facet and an fn:count call
-//     decline. `.` declines everywhere else. Longer paths in other positions, the other axes,
-//     predicates, quantified expressions, the collation arguments and every other F&O function are
-//     PLANNED (#1042).
+//     the value under the facet's type, or under its ·active basic member· where that type is a
+//     union (dt-xdmrep clause 4), and there is no context item, so `.`, an attribute or child
+//     step, a child path, a rooted path and a zero-argument string function each raise
+//     err:XPDY0002 and fail the facet; an fn:count call declines. `.` declines everywhere else.
+//     Longer paths in other positions, the other axes, predicates, quantified expressions, the
+//     collation arguments and every other F&O function are PLANNED (#1042).
 //  3. The full grammar (docs/specs/md/xpath20.md) and function library
 //     (docs/specs/md/xpath-functions.md) — M7 onward, ratcheted.
 //     PLANNED.
