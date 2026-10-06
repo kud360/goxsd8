@@ -834,12 +834,22 @@ func newPatternFacet(ef xsd.EffectiveFacet) (patternFacet, error) {
 	return patternFacet{ef: ef, res: res}, nil
 }
 
+// patternMemberEscaper renders one pattern {value} member for a
+// cvc-pattern-valid message, between the double quotes CheckLexical adds:
+// `&`, `"`, LF and CR become the XML character references `&amp;`, `&quot;`,
+// `&#10;` and `&#13;`, so a quote inside a member never reads as the end of
+// one, the `", "` joining members never appears inside one, and a line break
+// never splits the message (#2350). Every other character stays as written —
+// a backslash in particular is never doubled, so `[\-+]?[0-9]+` prints as the
+// Datatypes spec spells it.
+var patternMemberEscaper = strings.NewReplacer(`&`, "&amp;", `"`, "&quot;", "\n", "&#10;", "\r", "&#13;")
+
 // CheckLexical accepts the normalized literal iff it matches at least one
 // pattern in the OR-set (cvc-pattern-valid, §4.3.4.4). A rejection names the
-// whole OR-set of the failed step — every member, as written and unescaped,
-// never a single `|` branch — and the type on the base chain that declares it,
-// which is derived provenance, not a spec property (simpleTypeLabel renders the
-// zero QName of an anonymous one).
+// whole OR-set of the failed step — every member, never a single `|` branch,
+// rendered by patternMemberEscaper — and the type on the base chain that
+// declares it, which is derived provenance, not a spec property
+// (simpleTypeLabel renders the zero QName of an anonymous one).
 func (p patternFacet) CheckLexical(normalized string) error {
 	for _, re := range p.res {
 		if re.MatchString(normalized) {
@@ -849,7 +859,7 @@ func (p patternFacet) CheckLexical(normalized string) error {
 	values := p.ef.Facet().Values()
 	quoted := make([]string, len(values))
 	for i, v := range values {
-		quoted[i] = `"` + v + `"`
+		quoted[i] = `"` + patternMemberEscaper.Replace(v) + `"`
 	}
 	return xsderr.New(ruleCvcPatternValid, xsderr.Loc{},
 		"value %q matches no member of the pattern facet of %s, whose {value} holds %s (cvc-pattern-valid, §4.3.4.4)",

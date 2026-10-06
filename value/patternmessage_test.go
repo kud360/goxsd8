@@ -20,11 +20,13 @@ func (ownedChain) Type(xsd.QName) (xsd.TypeDefinition, bool) { return nil, false
 
 // TestPatternRejectionNamesFailedStep pins what a cvc-pattern-valid rejection
 // (§4.3.4.4) says: the whole OR-set of the derivation step the literal failed,
-// each member as written, and the type on the base chain that declares it — so
+// each member as written save the XML references patternMemberEscaper puts for
+// `&`, `"`, LF and CR, and the type on the base chain that declares it — so
 // xs:int's "x3" is charged to xs:integer's built-in pattern (Datatypes
 // integer.pattern), not to a pattern the schema author never wrote (#2310).
 // With CheckLexical's message reverted to the one naming neither, every row
-// fails.
+// fails; with its members unescaped again, the quote, line-break and ampersand
+// rows fail (#2350), and the backslash rows fail under a %q rendering.
 func TestPatternRejectionNamesFailedStep(t *testing.T) {
 	b := strict.New()
 	seeded, err := builtin.Seed(b)
@@ -50,6 +52,10 @@ func TestPatternRejectionNamesFailedStep(t *testing.T) {
 	code := restrict(xsd.QName{Space: "urn:t", Local: "Code"}, builtins["string"], "[A-Z]{3}")
 	narrower := restrict(xsd.QName{Space: "urn:t", Local: "Narrower"}, code, "AB.")
 	anon := restrict(xsd.QName{}, builtins["string"], "[0-9]+", "[a-z]+")
+	pair := restrict(xsd.QName{Space: "urn:t", Local: "Pair"}, builtins["string"], "a", "b")
+	quote := restrict(xsd.QName{Space: "urn:t", Local: "Q"}, builtins["string"], `a", "b`)
+	lines := restrict(xsd.QName{Space: "urn:t", Local: "N"}, builtins["string"], "a\nb", "c\rd")
+	amp := restrict(xsd.QName{Space: "urn:t", Local: "Amp"}, builtins["string"], "a&#10;b")
 	ints, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:t", Local: "Ints"},
 		xsd.ListDerivation{Item: xsd.OwnedSimpleType{Definition: builtins["int"]}},
 		xsd.OwnedSimpleType{Definition: xsd.AnySimpleType()},
@@ -82,6 +88,16 @@ func TestPatternRejectionNamesFailedStep(t *testing.T) {
 			`value "XYZ" matches no member of the pattern facet of the simple type {urn:t}Narrower, whose {value} holds "AB." (cvc-pattern-valid, §4.3.4.4)`},
 		{"an anonymous type's whole OR-set", anon, "A1", "cvc-pattern-valid",
 			`value "A1" matches no member of the pattern facet of an anonymous simple type, whose {value} holds "[0-9]+", "[a-z]+" (cvc-pattern-valid, §4.3.4.4)`},
+		// Q's one member holds `", "`; it must not read as Pair's two members.
+		{"two members a and b", pair, "z", "cvc-pattern-valid",
+			`value "z" matches no member of the pattern facet of the simple type {urn:t}Pair, whose {value} holds "a", "b" (cvc-pattern-valid, §4.3.4.4)`},
+		{"one member holding a quote", quote, "z", "cvc-pattern-valid",
+			`value "z" matches no member of the pattern facet of the simple type {urn:t}Q, whose {value} holds "a&quot;, &quot;b" (cvc-pattern-valid, §4.3.4.4)`},
+		{"members holding LF and CR stay on one line", lines, "z", "cvc-pattern-valid",
+			`value "z" matches no member of the pattern facet of the simple type {urn:t}N, whose {value} holds "a&#10;b", "c&#13;d" (cvc-pattern-valid, §4.3.4.4)`},
+		// A member spelling a reference itself must not read as the LF one.
+		{"a member holding an ampersand", amp, "z", "cvc-pattern-valid",
+			`value "z" matches no member of the pattern facet of the simple type {urn:t}Amp, whose {value} holds "a&amp;#10;b" (cvc-pattern-valid, §4.3.4.4)`},
 		{"a list item fails its item type's ancestor's pattern", ints, "1 x3", "cvc-pattern-valid",
 			`value "x3" matches no member of the pattern facet of the simple type {http://www.w3.org/2001/XMLSchema}integer, whose {value} holds "[\-+]?[0-9]+" (cvc-pattern-valid, §4.3.4.4)`},
 		// No member accepts, so the union charges cvc-datatype-valid and folds
