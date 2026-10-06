@@ -511,29 +511,25 @@ otherwise stdlib.
 
 **Status: the CTA required subset ships, and over the same grammar the
 first slices of assertion evaluation; the rest is the destination.**
-`go doc` renders eighteen identifiers. Four — `CompileCTATest`, `CTATest`,
-`Attributes` and `CTATestStaticError` — compile, evaluate and
-statically check §3.12.6's `ta-Test` grammar for a Type Alternative's
-`{test}`. They have two consumers in two phases: `parser` calls
+`xpath/doc.go` owns the exported inventory and the grammar each tier admits;
+read it there. Two consumers take the exports in two phases. `parser` calls
 `CTATestStaticError` at schema construction, charging `ta-props-correct`
-clause 2 over `xpath-valid` clause 2 for a `{test}` with an XPath static
-error — wrapping the `*xsderr.Error` this package returns, which carries
-the XPath code (`err:XPST0081`) as its own rule — and `validate` compiles
-and evaluates the same `{test}` at ·assessment· time. Thirteen more —
-`CompileAssertionTest`, `AssertionTest`, `AttributeTypes`,
-`ElementTypes`, `TypedAttributes`, `ChildElements`, `ChildElement`,
-`Child`, `TypedValue`, `Typed`, `Untyped`, `ValueBinding` and
-`BindValue` — compile and evaluate an assertion `{test}` written in that
-grammar plus the value comparisons, `$value`, a one-step child-axis path
-and a `/`-rooted one, over the typed values of the element's attributes,
-of its element children and of its simple content, for `validate`'s
-`cvc-assertion` charge; the method `AssertionTest.ReadsChild` tells
-`validate` which children to keep. The eighteenth, `FacetAssertions`, is
-the `value.AssertionEvaluator` `validate` injects into
-`value.ValidateLexical`/`ValidatingType`: it compiles and evaluates an
-assertions facet's `{test}` over the same grammar plus `.`, with no context
-item (`cvc-assertions-valid`). Read the tiers below as "does" for
-tier 1 and for tier 2's first slices, and "will" for the rest.
+clause 2 over `xpath-valid` clause 2 for a Type Alternative `{test}` with an
+XPath static error — wrapping the `*xsderr.Error` this package returns,
+which carries the XPath code (`err:XPST0081`) as its own rule. `validate`
+takes the rest at ·assessment· time: it compiles and evaluates the same
+`{test}` against §3.12.6's `ta-Test` grammar; it compiles and evaluates an
+assertion `{test}` over the typed values of the element's attributes, of its
+element children and of its simple content for `cvc-assertion`, keeping only
+the children the compiled test reads; for a test that counts nodes it walks
+the element's subtree in `validate/cvcassertion.go`, reporting each element
+and attribute to the test's `Tally` and asking `CountsAttributesAt` at which
+depths an element whose ·governing type definition· was not determined
+leaves the count lacking; and it injects `FacetAssertions`, the
+`value.AssertionEvaluator` for an assertions facet's `{test}`
+(`cvc-assertions-valid`), into `value.ValidateLexical`/`ValidatingType`.
+Read the tiers below as "does" for tier 1 and for tier 2's first slices,
+and "will" for the rest.
 
 Full XPath 2.0 is the destination; the engine grows outward from the
 XSD-required subset:
@@ -542,10 +538,10 @@ XSD-required subset:
    shipped, less the shapes that compile-time-decline, which `xpath/doc.go`
    enumerates,
 2. assertion essentials — axes, predicates, quantified expressions, typed
-   comparisons, the F&O function core; its first slices, tier 1's grammar
-   plus the value comparisons, `$value` and one child-axis step over typed
-   attributes, element children and simple content, ship, and
-   `xpath/doc.go` enumerates what they decline,
+   comparisons, the F&O function core; its first slices ship, and
+   `xpath/doc.go`'s tier 2 enumerates the grammar they admit — `fn:count`
+   among it, over `N` or `@N` behind `./` or `.//`, or over a rooted step —
+   and what they decline,
 3. the full grammar and function library, tracked by its own conformance
    lane.
 
