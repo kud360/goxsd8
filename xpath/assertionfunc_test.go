@@ -380,11 +380,11 @@ func TestStringFunctionsReadTheirArguments(t *testing.T) {
 // implicit argument is E's string value `.` reads
 // (TestAssertionContextItemIsTheStringValue evaluates them). With matchCall
 // admitting three arguments the collation row compiles, with
-// literalCastsTo's last return answering true the
-// `string(1.5e0)` row does, and with castSource's ctaCast exit answering
-// (nil, false) in place of floatingSource the two rows over a cast to
-// xs:float or xs:double do; with literalCastsTo's xs:decimal or xs:boolean
-// arm answering false, `string(1.5)` or `string(true())` declines.
+// literalCastsTo's last return answering true the `string(1.5e0)` row does,
+// and with castSource's ctaCast exit answering (nil, false) in place of
+// floatingSource the two rows over a cast to xs:float or xs:double do; with
+// literalCastsTo's xs:decimal or xs:boolean arm answering false, `string(1.5)`
+// or `string(true())` declines.
 func TestCompileAssertionTestDeclinesFunctions(t *testing.T) {
 	str := asBuiltin(t, "string")
 	for _, expr := range []string{

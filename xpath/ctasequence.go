@@ -12,8 +12,8 @@ import (
 // operand of a general comparison, and nowhere else: [11] RangeExpr,
 // `IntegerLiteral 'to' IntegerLiteral`, written bare or parenthesized, and the
 // comma operator of [2] Expr inside a [46] ParenthesizedExpr, `(a, b, …)`,
-// whose members are IntegerLiterals and such ranges — so
-// `. = (1 to 10, 20, 30)` and `$value = 1 to 10` compile.
+// whose members are IntegerLiterals and such ranges — so `. = (1 to 10, 20,
+// 30)` and `$value = 1 to 10` compile.
 //
 // The sequence is materialized when the comparison reads it (ctaAtoms), so its
 // length is fixed at compile time from the literals alone, and bounded by

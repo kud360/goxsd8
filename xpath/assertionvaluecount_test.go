@@ -146,13 +146,13 @@ func TestDistinctValuesResult(t *testing.T) {
 }
 
 // `$value` over a ·special· {simple type definition} is one xs:untypedAtomic
-// value, or none for the zero binding (cvc-assertion clause 2.3.2), and over
-// any {content type} that is not simple the empty sequence: fn:count counts 1,
-// 0 and 0, and fn:distinct-values keeps the one item, compared as xs:string
-// (§15.1.6). The `count(distinct-values($value)) eq 1` row fails with
-// ctaSequenceLength's ctaDistinctValues arm removed, which counts an untyped
-// operand as statically empty, and the ·effective boolean value· row over "x"
-// with ctaEffectiveBoolean.eval's.
+// value, or none for the zero binding's nil `$value` (cvc-assertion clause
+// 2.3.2), and over any {content type} that is not simple the empty sequence:
+// fn:count counts 1, 0 and 0, and fn:distinct-values keeps the one item,
+// compared as xs:string (§15.1.6). The `count(distinct-values($value)) eq 1`
+// row fails with ctaSequenceLength's ctaDistinctValues arm removed, which
+// counts an untyped operand as statically empty, and the ·effective boolean
+// value· row over "x" with ctaEffectiveBoolean.eval's.
 func TestCountValueOverSpecialAndNonSimpleContent(t *testing.T) {
 	anySimple := xsd.SimpleContent{SimpleType: asBuiltin(t, "anySimpleType")}
 	for _, tc := range []struct {

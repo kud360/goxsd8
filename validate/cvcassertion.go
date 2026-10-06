@@ -61,13 +61,13 @@ const ruleCvcAssertionsValid xsderr.Rule = "cvc-assertions-valid"
 // property at all — a simple one's assertions are facets, and reach
 // ruleCvcAssertionsValid instead.
 //
-// asserts is e's clause 6 state, opened when e was entered
-// ([walk.compileAssertions], which compiles every {test}) and nil where T has
-// no {assertions}. Each compiled test is evaluated with the binding
-// [walk.assertionValue] gives `$value`: invalid says whether e is known to be
-// invalid in the partial ·PSVI· by now (clause 2.3.1.1) — the caller's count of
-// the violations recorded since e was entered — and content is e's own content
-// check, exhausted, which holds the ·initial value· and the ·nilled· answer.
+// asserts is e's clause 6 state, opened when e was entered ([walk.compileAssertions],
+// which compiles every {test}) and nil where T has no {assertions}. Each compiled
+// test is evaluated with the binding [walk.assertionValue] gives `.` and `$value`:
+// invalid says whether e is known to be invalid in the partial ·PSVI· by now (clause
+// 2.3.1.1) — the caller's count of the violations recorded since e was entered — and
+// content is e's own content check, exhausted, which holds the ·initial value· and
+// the ·nilled· answer.
 //
 // Each assertion takes exactly one of three outcomes: DECLINED, where
 // [xpath.CompileAssertionTest] reported false or e's attributes, the children
@@ -447,8 +447,8 @@ type assertionTest struct {
 // because the instance it reads is e's as T types it: a restriction that
 // narrows an attribute's type narrows it for the base's assertions too, and
 // against T's {content type}, which fixes `$value`'s static type
-// (cvc-assertion clause 2.3.1.3). Each is compiled per element and cached
-// nowhere.
+// (cvc-assertion clause 2.3.1.3) and whether `.` is read. Each is compiled per
+// element and cached nowhere.
 func (w *walk) compileAssertions(g governance) *assertionCheck {
 	ct := g.complexType()
 	if ct == nil || len(ct.Assertions()) == 0 {
@@ -630,7 +630,8 @@ type assertionValue struct {
 }
 
 // assertionInput is what one element's assertions read: its typed attributes,
-// in document order, and the binding cvc-assertion clause 2.3 gives `$value`.
+// in document order, and its string value and the binding cvc-assertion clause
+// 2.3 gives `$value` ([xpath.ValueBinding]).
 type assertionInput struct {
 	attrs []assertionValue
 	value xpath.ValueBinding
@@ -715,7 +716,7 @@ func (lackingValue) declined(e xsd.QName) string {
 // use} of ct, in document order, then of each ·defaulted attribute· of e
 // ([walk.defaultedConstraint], key-dflt-att) in the order of ct.{attribute
 // uses}, each under the type [walk.assertionType] resolves for its use, and
-// `$value`'s binding ([walk.assertionValue]).
+// the binding of `.` and `$value` ([walk.assertionValue]).
 //
 // A ·defaulted attribute· is read as its use's ·effective value constraint·
 // supplies it: its {lexical form} is the [schema normalized value], and the

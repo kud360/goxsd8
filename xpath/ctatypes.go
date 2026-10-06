@@ -707,9 +707,10 @@ func (t ctaTypes) comparison(op ctaComparator, l, r ctaValue) (*xsd.SimpleType, 
 // assertion façade (ctaAssertionFacade) and the facet façade (ctaFacetFacade).
 // The untyped operands they build are an attribute whose type is ·special·
 // (ctaAssertionFacade.attribute), `$value` over a ·special· type
-// (ctaUntypedValue), and two that raise before they are compared: the rooted
-// path (ctaNoDocumentRoot, err:XPDY0050) and a read of the absent context item
-// (ctaNoContextItem, err:XPDY0002, xpath20.md §3.1.4).
+// (ctaUntypedValue), `.` over simple content (ctaContextAtom), and two that
+// raise before they are compared: the rooted path (ctaNoDocumentRoot,
+// err:XPDY0050) and a read of the absent context item (ctaNoContextItem,
+// err:XPDY0002, xpath20.md §3.1.4).
 func (t ctaTypes) valueComparison(op ctaComparator, l, r ctaValue) (*xsd.SimpleType, ctaTyping) {
 	if st, empty := t.againstEmpty(l, r); empty {
 		return st, ctaTypeSettled
@@ -767,9 +768,10 @@ func ctaIsEmpty(v ctaValue) bool {
 //
 // Two rules cover the three operand shapes this grammar builds, because an
 // operand is either xs:untypedAtomic (an uncast untyped attribute, `$value`
-// over ·special· content, or the rooted path, which raises before it is
-// compared) or typed (a Literal, a cast, a constructor function, a typed
-// attribute, a typed child element, a typed `$value`):
+// over ·special· content, `.` over simple content, or the rooted path, which
+// raises before it is compared) or typed (a Literal, a cast, a constructor
+// function, a typed attribute, a typed child element, a typed `$value`, an
+// integer sequence):
 //
 //   - BOTH xs:untypedAtomic: clause 1, "the values are cast to the type
 //     xs:string".

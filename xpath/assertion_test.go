@@ -383,9 +383,9 @@ func asBind(t *testing.T, st *xsd.SimpleType, lexical string) ValueBinding {
 
 // `$value` over a SIMPLE {content type} is E's ·actual value· under its {simple
 // type definition} (cvc-assertion clause 2.3.1), typed — so `$value eq 5`
-// compares xs:int values and "+05" is 5 — and the zero ValueBinding is the
-// empty sequence clause 2.3.2 gives an invalid or ·nilled· E, false under a
-// value comparison and true under fn:not of one.
+// compares xs:int values and "+05" is 5 — and `$value` in the zero
+// ValueBinding is the empty sequence clause 2.3.2 gives an invalid or ·nilled·
+// E, false under a value comparison and true under fn:not of one.
 func TestAssertionValueOverSimpleContent(t *testing.T) {
 	content := xsd.SimpleContent{SimpleType: asBuiltin(t, "int")}
 	uses := asUses(t, map[string]string{"max": "int"})
@@ -491,11 +491,10 @@ func TestAssertionValueOverListContent(t *testing.T) {
 // value] as one xs:untypedAtomic value (Datatypes dt-xdmrep clause 1), cast as
 // an untyped attribute is: to xs:string under a value comparison (xpath20.md
 // §3.5.1 step 4), to xs:double against a numeric under a general comparison
-// (§3.5.2 clause 2.1), raising err:FORG0001 where it does not cast; its
-// effective boolean value is false only for the zero-length string (§2.4.3 rule
-// 4). The zero ValueBinding is the empty sequence, and a [Typed] binding breaks
-// [BindValue]'s obligation and raises. Each row fails with ctaTypes.valueVariable
-// declining a ·special· type.
+// (§3.5.2 clause 2.1), raising err:FORG0001 where it does not cast; its effective boolean
+// value is false only for the zero-length string (§2.4.3 rule 4). `$value` in the zero
+// ValueBinding is the empty sequence, and a [Typed] binding breaks [BindValue]'s obligation
+// and raises. Each row fails with ctaTypes.valueVariable declining a ·special· type.
 func TestAssertionValueOverSpecialContent(t *testing.T) {
 	five, err := value.ValidateLexical(backend(), seededTypes, asBuiltin(t, "integer"), "5", nil, FacetAssertions())
 	if err != nil {

@@ -426,17 +426,16 @@ func TestValueAssertionOverAnInvalidElementIsEmpty(t *testing.T) {
 }
 
 // `.` over simple content is the element's string value, its ·initial value·
-// unnormalized and as xs:untypedAtomic, and never `$value`
-// ([xpath.BindValue]): over xs:integer content "0030" `string-length(.) = 4`
-// holds where `$value` is 30, and over "30" it is charged. An element already
-// known to be invalid — a missing required attribute, cvc-complex-type clause
-// 3 — still has its string value, while `$value` is the empty sequence
-// (cvc-assertion clause 2.3.2), so `. = 5 and empty($value)` holds over "5". An
-// empty element its declaration defaults reads the default's {lexical form},
-// the text node the data model builds for it (xpath-datamodel Appendix J.2).
-// The invalid row is charged with walk.assertionValue binding "" for an
-// invalid element, and the defaulted row with it binding the ·initial value·
-// in place of [contentCheck.assessed]'s.
+// unnormalized and as xs:untypedAtomic, and never `$value` ([xpath.BindValue]):
+// over xs:integer content "0030" `string-length(.) = 4` holds where `$value` is
+// 30, and over "30" it is charged. An element already known to be invalid — a
+// missing required attribute, cvc-complex-type clause 3 — still has its string
+// value, while `$value` is the empty sequence (cvc-assertion clause 2.3.2), so
+// `. = 5 and empty($value)` holds over "5". An empty element its declaration
+// defaults reads the default's {lexical form}, the text node the data model
+// builds for it (xpath-datamodel Appendix J.2). The invalid row is charged with
+// walk.assertionValue binding "" for an invalid element, and the defaulted row
+// with it binding the ·initial value· in place of [contentCheck.assessed]'s.
 func TestContextItemAssertionReadsTheStringValue(t *testing.T) {
 	schema := aSimple(t, "integer", false, nil, "string-length(.) = 4 and $value = 30")
 	wantSatisfied(t, aAssess(t, schema, cRoot("#0030")), "string-length(.) = 4 over 0030")

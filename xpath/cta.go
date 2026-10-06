@@ -32,18 +32,22 @@ import (
 // `$value`, whose items it counts (ctaCountedItems), and a call to one of the
 // F&O string and sequence functions, evaluated in ctafunc.go; and each
 // comparison operand may be xpath20.md [13] AdditiveExpr over [14]
-// MultiplicativeExpr, whose operators are evaluated in ctaarith.go (ctaArith).
+// MultiplicativeExpr, whose operators are evaluated in ctaarith.go (ctaArith);
+// [47] ContextItemExpr `.` over simple content, atomized to E's string value
+// (ctaContextAtom); and a general comparison's operand may be an integer
+// sequence, xpath20.md [11] RangeExpr or §3.3.1's comma sequence over
+// IntegerLiterals, evaluated in ctasequence.go (ctaIntegerRanges).
 // The facet façade (ctaFacetFacade) takes the assertion façade's grammar but
-// fn:count over a path, plus [47] ContextItemExpr `.`, and compiles every read
-// of the context item — `.`, an attribute or child step, a rooted path — to the
-// err:XPDY0002 an assertions facet's absent context item raises
-// (ctaNoContextItem). It is not a stage of a general XPath 2.0 evaluator: the
-// productions below reach no axis but attribute, one child step, the child-step
-// paths and the one descendant step whose existence is asked and the descendant
-// steps fn:count counts over, no predicate or union but those in an fn:count
-// argument, no variable but `$value` and no function but fn:not, fn:count and
-// the eleven ctaParser.libraryCall names, so evaluating them directly is exact
-// where a fail-open delegation to a general engine would be a guess.
+// fn:count over a path, and compiles every read of the context item — `.`, an
+// attribute or child step, a rooted path — to the err:XPDY0002 an assertions
+// facet's absent context item raises (ctaNoContextItem). It is not a stage of
+// a general XPath 2.0 evaluator: the productions below reach no axis but
+// attribute, one child step, the child-step paths and the one descendant step
+// whose existence is asked and the descendant steps fn:count counts over, no
+// predicate or union but those in an fn:count argument, no variable but
+// `$value` and no function but fn:not, fn:count and the eleven
+// ctaParser.libraryCall names, so evaluating them directly is exact where a
+// fail-open delegation to a general engine would be a guess.
 //
 //	[8]  Test                ::= OrExpr
 //	[9]  OrExpr              ::= AndExpr ( 'or' AndExpr )*
@@ -380,13 +384,13 @@ func (t CTATest) Evaluate(b value.Backend, types xsd.TypeResolver, attrs Attribu
 // [AssertionTest.Evaluate] call. cvc-xpath (§3.13.4.2) fixes the rest of it —
 // context item E, context position and size 1, no variable values but the
 // `$value` cvc-assertion clause 2.3 adds — and of that only `$value`, the
-// context item's own attributes and element [[children]], and the counts of
-// the nodes of its subtree fn:count selects are reachable in this grammar, so
-// the attributes, the children, the counts, `$value`'s binding, the value
-// spaces and the type knowledge the casts need are the whole of what
-// evaluation reads. A facet {test} [FacetAssertions] evaluates has no context
-// item at all (cvc-assertions-valid clause 1.2), so it reads nothing of its
-// input but `$value`.
+// context item's string value, its own attributes and element [[children]],
+// and the counts of the nodes of its subtree fn:count selects are reachable in
+// this grammar, so the attributes, the children, the counts, the
+// [ValueBinding], the value spaces and the type knowledge the casts need are
+// the whole of what evaluation reads. A facet {test} [FacetAssertions]
+// evaluates has no context item at all (cvc-assertions-valid clause 1.2), so
+// it reads nothing of its input but `$value`.
 //
 // candidate is the typed value of the context item inside a predicate — the
 // child ctaMatchingChildren.nodes evaluates its predicate for, one value or
@@ -419,11 +423,12 @@ type ctaInput interface{ ctaInput() }
 type ctaLexicalInput struct{ attrs Attributes }
 
 // ctaTypedInput is an assertion's input: its typed attributes, its element
-// [[children]], the counts of the nodes its fn:count calls select, and the
-// value cvc-assertion clause 2.3 binds to `$value`. The children, the counts
-// and the binding live here and on no other arm, so a Type Alternative's
-// evaluation cannot carry any of them. counts is nil where the tree counts
-// nothing, which a facet evaluation's never does.
+// [[children]], the counts of the nodes its fn:count calls select, and E's
+// string value and the value cvc-assertion clause 2.3 binds to `$value`
+// ([ValueBinding]). The children, the counts and the binding live here and on
+// no other arm, so a Type Alternative's evaluation cannot carry any of them.
+// counts is nil where the tree counts nothing, which a facet evaluation's
+// never does.
 type ctaTypedInput struct {
 	attrs    TypedAttributes
 	children ChildElements
@@ -523,8 +528,10 @@ func (ctaTypeError) ctaExpr()        {}
 // arithmetic operator over two of them (ctaArith, ctaFacade.computes), and a
 // call to an F&O string or sequence function over them (ctaMatch,
 // ctaUnaryString, ctaPresence, ctaDistinctValues, ctaStringFunction;
-// ctaFacade.callsLibrary). Every branch answers readsChild and counted on
-// ctaExpr's terms.
+// ctaFacade.callsLibrary), the assertion façade's `.` over simple content
+// (ctaContextAtom, ctaFacade.contextItem), and an integer sequence
+// (ctaIntegerRanges, ctaFacade.constructsSequences). Every branch answers
+// readsChild and counted on ctaExpr's terms.
 type ctaValue interface {
 	ctaValue()
 	readsChild(name xsd.QName) bool
@@ -588,8 +595,9 @@ type ctaTypedChild struct {
 // children, so a child of a type that declines there declines here — or the
 // empty sequence for a ·nilled· child (xpath-datamodel §6.2.4). The value is
 // the evaluation's ctaEnv.candidate. Only ctaPredicateFacade.contextItem
-// compiles it, in a value predicate's scope (ctaParser.valuePredicate): every
-// other façade declines `.` or raises over it.
+// compiles it, in a value predicate's scope (ctaParser.valuePredicate): the
+// assertion façade reads `.` outside a predicate as E's string value
+// (ctaContextAtom), and every other façade declines `.` or raises over it.
 type ctaCandidate struct{ st *xsd.SimpleType }
 
 // ctaNoDocumentRoot is a path opening with "/" or "//", which begins at the
@@ -632,15 +640,16 @@ type ctaValueVar struct {
 // (cvc-assertion clause 2.3.2): the empty sequence, decided at compile time,
 // so the evaluation's [ValueBinding] is never read. It is also the node of
 // arithmetic over such a `$value` (ctaTypes.arithmetic), whose result §3.4
-// makes the empty sequence at compile time all the same, and of the empty
-// sequence `()` written as a library call's argument (ctaParser.argument).
+// makes the empty sequence at compile time all the same, of the empty sequence
+// `()` written as a library call's argument (ctaParser.argument), and of an
+// integer sequence holding no item, `(1 to 0)` (ctaParser.integerSequence).
 type ctaEmptyValue struct{}
 
 // ctaUntypedValue is `$value` over a simple {content type} whose {simple type
 // definition} is ·special· (cvc-assertion clause 2.3.1): its XDM representation
 // is E's [schema normalized value] as one xs:untypedAtomic value (Datatypes
 // dt-xdmrep clause 1), read from the [ValueBinding] as an [Untyped] value, or
-// the empty sequence where the binding is the zero one (clause 2.3.2). It is an
+// the empty sequence where the binding's `$value` is nil (clause 2.3.2). It is an
 // arm of its own and not a ctaValueVar with a flag, because it holds no type:
 // its operand's static type is xs:untypedAtomic, as an untyped attribute's is.
 type ctaUntypedValue struct{}
@@ -1392,14 +1401,14 @@ func (ctaUntypedAtomic) ctaStatic() {}
 func (ctaTyped) ctaStatic()         {}
 func (ctaEmptySequence) ctaStatic() {}
 
-// ctaStaticOf reports the static type of one [14] ta-ValueExpr. ctaAttr and
-// ctaUntypedValue are the untyped arms, and so is an fn:distinct-values call
-// over either, whose static type is its operand's; so are ctaNoDocumentRoot and
-// ctaNoContextItem: each raises before any item exists, so its static type
-// decides only whether a comparison over it compiles, never an answer. A
-// ctaChildPath or ctaSelectedElements never reaches here: ctaParser.childPath
-// and ctaParser.selectedElements build them only where no static type is
-// asked.
+// ctaStaticOf reports the static type of one [14] ta-ValueExpr. ctaAttr,
+// ctaUntypedValue and ctaContextAtom are the untyped arms, and so is an
+// fn:distinct-values call over one, whose static type is its operand's; so
+// are ctaNoDocumentRoot and ctaNoContextItem: each raises before any item
+// exists, so its static type decides only whether a comparison over it
+// compiles, never an answer. A ctaChildPath or ctaSelectedElements never
+// reaches here: ctaParser.childPath and ctaParser.selectedElements build them
+// only where no static type is asked.
 func ctaStaticOf(v ctaValue) ctaStatic {
 	switch n := v.(type) {
 	case ctaLiteral:
@@ -1903,10 +1912,13 @@ func ctaValidated(i ctaItem) (value.Value, bool) {
 //   - an UNTYPED attribute is xs:untypedAtomic, which §3.5.2's casting rules
 //     cast STRAIGHT to c (clause 1's xs:string, or clause 2's type chosen from
 //     the other operand). No intermediate type exists to cast through.
+//   - `.` over simple content is E's string value as xs:untypedAtomic, cast
+//     straight to c as an untyped attribute is.
 //   - a TYPED attribute, each typed child, a LITERAL, an fn:count call's
-//     xs:integer and each item of `$value` carry their own type and are
-//     converted to c, which is a no-op wherever the two coincide; the
-//     statically empty `$value` yields nothing to convert.
+//     xs:integer, each item of an integer sequence and each item of `$value`
+//     carry their own type and are converted to c, which is a no-op wherever
+//     the two coincide; the statically empty `$value` yields nothing to
+//     convert.
 //   - an F&O string or sequence function's result is of its own result type
 //     — an fn:distinct-values call's items of the type it compares them in —
 //     and converted to c on the typed operands' terms, once the function has
@@ -1995,7 +2007,7 @@ func ctaContextAtomItem(c *xsd.SimpleType, env ctaEnv) ctaItem {
 
 // ctaUntypedValueItem casts `$value`'s [Untyped] binding into c, which
 // §3.5.2's casting rules — and §3.5.1 step 4's — do to an xs:untypedAtomic
-// operand, on ctaAttrItem's terms. The zero [ValueBinding] is the empty
+// operand, on ctaAttrItem's terms. A nil `$value` binding is the empty
 // sequence (cvc-assertion clause 2.3.2).
 //
 // The input is ctaTypedInput by construction (ctaInput); the other arm binds
@@ -2014,7 +2026,7 @@ func ctaUntypedValueItem(c *xsd.SimpleType, env ctaEnv) ctaItem {
 
 // ctaUntypedBoolean is fn:boolean over `$value`'s [Untyped] binding: xpath20.md
 // §2.4.3 rule 4 makes an xs:untypedAtomic value false iff it has zero length,
-// and rule 1 makes the empty sequence — the zero [ValueBinding] — false. A
+// and rule 1 makes the empty sequence — a nil `$value` binding — false. A
 // [Typed] binding is ctaError, on ctaUntypedValueItem's terms.
 func ctaUntypedBoolean(env ctaEnv) ctaAnswer {
 	lexical, bound, ok := ctaUntypedBinding(env)
@@ -2025,7 +2037,7 @@ func ctaUntypedBoolean(env ctaEnv) ctaAnswer {
 }
 
 // ctaUntypedBinding reads `$value`'s binding as an [Untyped] value: its
-// lexical, with bound false for the zero [ValueBinding], and ok false for a
+// lexical, with bound false for a nil `$value` binding, and ok false for a
 // binding of the other arm, which breaks the obligation [BindValue] states.
 func ctaUntypedBinding(env ctaEnv) (lexical string, bound, ok bool) {
 	in, typed := env.input.(ctaTypedInput)
@@ -2040,7 +2052,7 @@ func ctaUntypedBinding(env ctaEnv) (lexical string, bound, ok bool) {
 }
 
 // ctaValueItem converts `$value`'s binding into c on ctaTypedAttrItem's terms
-// (ctaPromote). The zero [ValueBinding] is the empty sequence (cvc-assertion
+// (ctaPromote). A nil `$value` binding is the empty sequence (cvc-assertion
 // clause 2.3.2). A listed n ranges the bound value's [value.Listed] items in
 // order, each of type n.atom — the flattened sequence Datatypes dt-xdmrep makes
 // a list value's XDM representation, so an empty list is the empty sequence and
