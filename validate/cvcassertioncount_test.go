@@ -181,10 +181,13 @@ func TestAssertionCountsInvalidAndLaxElements(t *testing.T) {
 // its own depth, so `count(e1)` does not count the e1 inside y, with the
 // attributes each carries — xsi:type among them, never assessed, so its bogus
 // QName charges nothing — and no ·defaulted attribute·, so y's declared d,
-// which ·skipped· y is not governed by, counts only where carried. Every
-// table row is declined instead, and fails, with assertionAncestry.skipped
-// recording a lackingCount for each counting ancestor; the charged rows are
-// satisfied instead with tallySkipped reporting nothing below y.
+// which ·skipped· y is not governed by, counts only where carried; `count(s:y)`
+// counts a ·skipped· y child and not the y inside it. Every table row is
+// declined instead, and fails, with assertionAncestry.skipped recording a
+// lackingCount for each counting ancestor; the first two charged rows are
+// satisfied instead with tallySkipped reporting nothing below y. With
+// tallySkipped counting every element one level deeper than it stands, the
+// y-child row is charged; one level shallower, its charged twin is satisfied.
 func TestAssertionCountsAcrossASkippedElement(t *testing.T) {
 	e1, y, a, d := local("e1"), xsd.QName{Space: "urn:skip", Local: "y"}, local("a"), local("d")
 	xsiType := ccAttr(xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: "type"}, "no:such", 4)
@@ -201,6 +204,10 @@ func TestAssertionCountsAcrossASkippedElement(t *testing.T) {
 			ccRoot(nil, ccNode(y, 2, nil, ccNode(y, 3, nil))), false},
 		{"the e1 inside y is no child", "count(e1) eq 1",
 			ccRoot(nil, ccNode(e1, 2, nil), ccNode(y, 3, nil, ccNode(e1, 4, nil))), false},
+		{"a y child, not the y inside it", "count(s:y) eq 1",
+			ccRoot(nil, ccNode(y, 2, nil, ccNode(y, 3, nil))), false},
+		{"two y children, not the y inside one", "count(s:y) eq 1",
+			ccRoot(nil, ccNode(y, 2, nil), ccNode(y, 3, nil, ccNode(y, 4, nil))), true},
 		{"y's own @a and its child's", "count(.//@a) eq 2",
 			ccRoot(nil, ccNode(y, 2, []Attribute{ccAttr(a, "1", 2)}, ccNode(e1, 3, []Attribute{ccAttr(a, "2", 3)}))), false},
 		{"y's own @a and its child's, one too many", "count(.//@a) eq 1",
@@ -261,6 +268,42 @@ func TestSourceFaultInASkippedCountedSubtreeStopsTheWalk(t *testing.T) {
 		t.Errorf("Violations() = %v, Unevaluated() = %v, want both empty: the walk stopped", res.Violations(), messages(res.Unevaluated()))
 	}
 	wantSatisfied(t, aAssess(t, ccSchema(t, "@a = 'v'"), tree()), "a non-counting assertion over a faulting ·skipped· subtree")
+}
+
+// A ·skipped· subtree below a counting element that is not the ·validation
+// root· is counted at its depth below THAT element: <inner> counts the y child
+// a skip wildcard ·skipped· and not the y inside it, while <root> above it
+// counts both. Two y children of <inner> are charged at <inner> alone. The
+// satisfied row is charged at <inner> instead with tallySkipped measuring
+// depth from the ·validation root· rather than from each counting ancestor.
+func TestNestedCountsAcrossASkippedElement(t *testing.T) {
+	schema := parsedSchema(t, map[string]string{"main.xsd": `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:s="urn:skip">
+  <xs:complexType name="IType">
+    <xs:sequence><xs:any namespace="urn:skip" processContents="skip" minOccurs="0" maxOccurs="unbounded"/></xs:sequence>
+    <xs:assert test="count(s:y) eq 1"/>
+  </xs:complexType>
+  <xs:complexType name="RType">
+    <xs:sequence><xs:element name="inner" type="IType"/></xs:sequence>
+    <xs:assert test="count(.//s:y) eq 2"/>
+  </xs:complexType>
+  <xs:element name="root" type="RType"/>
+</xs:schema>`})
+	y, inner := xsd.QName{Space: "urn:skip", Local: "y"}, local("inner")
+	root := func(kids ...Child) *testElement {
+		return &testElement{name: local("root"), kids: []Child{ccNode(inner, 2, nil, kids...)}, loc: loc(1, 1)}
+	}
+	wantSatisfied(t, aAssess(t, schema, root(ccNode(y, 3, nil, ccNode(y, 4, nil)))), "a y child of inner and the y inside it")
+	res := aAssess(t, schema, root(ccNode(y, 3, nil), ccNode(y, 4, nil)))
+	if got := res.Unevaluated(); len(got) != 0 {
+		t.Fatalf("Unevaluated() = %v, want none", messages(got))
+	}
+	got := res.Violations()
+	if len(got) != 1 || got[0].Rule != ruleCvcAssertion || got[0].Loc != loc(2, 3) {
+		t.Fatalf("Violations() = %v, want one cvc-assertion charge at %s", got, loc(2, 3))
+	}
+	if want := `the element inner is not ·valid· with respect to assertion 1 of 1 in the {assertions} of the ·governing type definition· IType, whose {test} is "count(s:y) eq 1",`; !strings.HasPrefix(got[0].Msg, want) {
+		t.Errorf("Msg = %q, want it to open %q", got[0].Msg, want)
+	}
 }
 
 // ccDecided fails unless res recorded no cvc-assertion decline, and charged
