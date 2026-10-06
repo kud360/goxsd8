@@ -2099,35 +2099,48 @@ func ctaTypedAttrItem(n ctaTypedAttr, c *xsd.SimpleType, env ctaEnv) ctaItem {
 	return ctaPromoted(matched, n.st, c, env)
 }
 
-// ctaMatchedChildren is the typed values of E's element [[children]] n's
-// NameTest selects, in the DOCUMENT ORDER [ChildElements] yields them in, each
-// of type n.st by the caller's obligation that type states; and nodes, how
-// many children it selects — a ·nilled· one included, which is a node with no
-// value. ok is false where a selected child's value is neither [Typed] nor
-// nil, which breaks that obligation and which every reader raises on.
+// ctaEachChild hands each of E's element [[children]] named name, in the
+// DOCUMENT ORDER [ChildElements] yields them in, to each as its typed value:
+// one value, or none for a ·nilled· child, which is a node with no value. It
+// reports false, and stops, where each does, and where a child's value is
+// neither [Typed] nor nil, which breaks the obligation [ChildElements] states
+// and which every reader raises on.
 //
 // The input is ctaTypedInput by construction (ctaInput); the other arm carries
-// no children and is unreachable.
-func ctaMatchedChildren(n ctaTypedChild, env ctaEnv) (vs []value.Value, nodes int, ok bool) {
+// no children, so each is never called, and is unreachable.
+func ctaEachChild(name xsd.QName, env ctaEnv, each func(vs []value.Value) bool) bool {
 	in, typed := env.input.(ctaTypedInput)
 	if !typed {
-		return nil, 0, true
+		return true
 	}
-	ok = true
+	ok := true
 	in.children(func(c ChildElement) bool {
-		if c.name != n.name {
+		if c.name != name {
 			return true
 		}
-		nodes++
 		if c.v == nil {
-			return true
+			ok = each(nil)
+			return ok
 		}
 		tv, isTyped := c.v.(tvTyped)
 		if !isTyped {
 			ok = false
 			return false
 		}
-		vs = append(vs, tv.v)
+		ok = each([]value.Value{tv.v})
+		return ok
+	})
+	return ok
+}
+
+// ctaMatchedChildren is the typed values of E's element [[children]] n's
+// NameTest selects (ctaEachChild), each of type n.st by the caller's
+// obligation that type states; and nodes, how many children it selects — a
+// ·nilled· one included. ok is false where ctaEachChild reports false.
+func ctaMatchedChildren(n ctaTypedChild, env ctaEnv) (vs []value.Value, nodes int, ok bool) {
+	ok = ctaEachChild(n.name, env, func(child []value.Value) bool {
+		nodes++
+		vs = append(vs, child...)
 		return true
 	})
 	return vs, nodes, ok
