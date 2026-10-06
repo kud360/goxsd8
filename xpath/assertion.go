@@ -411,7 +411,12 @@ type AssertionTest struct{ root ctaExpr }
 //     outside the xs:string family, to a target that operand's type is neither
 //     nor derived from by restriction (F&O §17.4, §17.1, §17.5) — so
 //     `xs:integer(@d)` over an xs:decimal @d declines and `xs:decimal(@i)`
-//     over an xs:int @i, §17.3's cast, does not;
+//     over an xs:int @i, §17.3's cast, does not — and a cast of an xs:float
+//     or xs:double operand, a DoubleLiteral or (as fn:string's argument) a
+//     cast to either, to any target but its own type (F&O §17.1.2, §17.1.3
+//     and §17.1.6 over the value where §17.1's casting table marks the target
+//     Y or M, §17.1's err:XPTY0004 where it marks N), so `xs:string(1.5e0)`
+//     and `xs:date(1.5e0)` decline and `xs:double(1.5e0)` does not;
 //   - an arithmetic operand whose {primitive type definition} is not
 //     xs:decimal, xs:float or xs:double — so the duration and date/time
 //     arithmetic B.2 defines declines, and so does the err:XPTY0004 of any
@@ -431,8 +436,7 @@ type AssertionTest struct{ root ctaExpr }
 //     outside the xs:string family, which is the cast to xs:string the bullet
 //     above declines, and fn:string over any argument whose {primitive type
 //     definition} is xs:float or xs:double, a literal or a cast included,
-//     which §17.1.2 renders as an xs:decimal where its ·canonical
-//     representation· is not one.
+//     which is the cast to xs:string that bullet's floating clause declines.
 //
 // An xs:string? argument — of every function above but fn:empty, fn:exists and
 // fn:string — of any type outside the xs:string and xs:anyURI families is not a

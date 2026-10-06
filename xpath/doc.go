@@ -8,28 +8,27 @@
 //
 // # Growth tiers
 //
-//  1. The CTA restricted subset (the `test` attribute of
-//     xs:alternative) — M6. SHIPPED: CompileCTATest parses Structures
-//     §3.12.6's productions [8] ta-Test through [18]
-//     ta-ConstructorFunction and CTATest.Evaluate decides one against
-//     an element's attributes, casts included: [15] ta-CastExpr's
-//     `cast as` tail and [18] ta-ConstructorFunction are one node,
-//     evaluated through value's facet pipeline, which is what
-//     xpath-functions.md §17.1.1 makes a cast. [17] ta-AttrName's
-//     NameTest is xpath20.md's [36] whole, wildcards included, so
-//     `@*`, `@p:*` and `@*:n` select a sequence of E's attributes and
-//     a comparison over one is §3.5.2's existential. TWO shapes inside
-//     that grammar compile-time-DECLINE rather than evaluating: a cast
-//     whose target's primitive is xs:QName, whose lexical mapping
-//     needs a static context this engine has no value for (#888); and
-//     a comparison needing xpath20.md B.1 rule 1.1's
-//     xs:float-to-xs:double promotion, which value exposes no
-//     widening for (#889). So does a cast whose TARGET is not a
-//     builtin datatype, which is the required subset's own boundary
-//     (§3.12.6 clause 4) rather than a construct of the grammar.
-//     CTATestStaticError reports the XPath STATIC errors of the same
-//     grammar over the same traversal, which is a different question
-//     with a different owner — see below.
+//  1. The CTA restricted subset (the `test` attribute of xs:alternative) — M6.
+//     SHIPPED: CompileCTATest parses Structures §3.12.6's productions [8] ta-Test
+//     through [18] ta-ConstructorFunction and CTATest.Evaluate decides one against an
+//     element's attributes, casts included: [15] ta-CastExpr's `cast as` tail and [18]
+//     ta-ConstructorFunction are one node, evaluated through value's facet pipeline,
+//     which is what xpath-functions.md §17.1.1 makes a cast. [17] ta-AttrName's
+//     NameTest is xpath20.md's [36] whole, wildcards included, so `@*`, `@p:*` and
+//     `@*:n` select a sequence of E's attributes and a comparison over one is §3.5.2's
+//     existential. THREE shapes inside that grammar compile-time-DECLINE rather than
+//     evaluating: a cast whose target's primitive is xs:QName, whose lexical mapping
+//     needs a static context this engine has no value for (#888); a cast of an
+//     xs:float or xs:double operand, such as `1.5e0`, to a target other than its own
+//     type or an ancestor of it, which F&O §17.1.2, §17.1.3 and §17.1.6 define over the
+//     value and not over its canonical lexical where §17.1's casting table marks the
+//     target Y or M, and §17.1 makes err:XPTY0004 where it marks N (#1042); and a
+//     comparison needing xpath20.md B.1 rule 1.1's xs:float-to-xs:double promotion,
+//     which value exposes no widening for (#889). So does a cast whose TARGET is not a
+//     builtin datatype, which is the required subset's own boundary (§3.12.6 clause 4)
+//     rather than a construct of the grammar. CTATestStaticError reports the XPath
+//     STATIC errors of the same grammar over the same traversal, which is a different
+//     question with a different owner — see below.
 //  2. Assertion essentials: axes, predicates, quantified expressions, typed comparisons, the F&O
 //     function core — M6. FIRST SLICES SHIPPED: CompileAssertionTest compiles an assertion {test}
 //     written in tier 1's grammar over the element's TYPED attributes (AttributeTypes;
@@ -67,7 +66,8 @@
 //     child or `$value` outside the xs:string family to a type it is not derived from (F&O §17.2
 //     case 4's identity cast and §17.3's cast up the hierarchy are admitted), fn:string over any
 //     of those or over a typed count, arithmetic or function result, or a cast of one, outside
-//     that family, fn:string over an xs:float or xs:double argument, a collation argument, a
+//     that family, a cast of an xs:float or xs:double operand to a target other than its own
+//     type or an ancestor of it, fn:string over such an operand, a collation argument, a
 //     function call of the wrong arity, the zero-argument string functions, whose implicit
 //     argument reads `.`, an arithmetic operand that is not numeric, an xs:float one against
 //     xs:double (#889), a unary sign, and a `$value` whose {simple type definition} is classified

@@ -1104,19 +1104,11 @@ func (p *ctaParser) stringCall() (ctaValue, bool) {
 // string. A node's string-value is the same string wherever castsFrom admits
 // the node: the string-value of an attribute or of an element of simple type is
 // its [schema normalized value] (xpath-datamodel :1562, :1307), which for the
-// xs:string family is its typed value; every other typed node declines under
+// xs:string family is its typed value; every other typed node, and every
+// xs:float or xs:double argument, a literal included, declines under
 // castsFrom's GAP(xpath).
-//
-// GAP(xpath): an argument whose {primitive type definition} is xs:float or
-// xs:double declines. Its cast to xs:string is not its ·canonical
-// representation·: xpath-functions.md §17.1.2 renders a value of absolute value
-// in [0.000001, 1000000) as an xs:decimal, so fn:string(1.5e0) is "1.5" where
-// ctaPromote would render "1.5E0", and an assertion comparing the two strings
-// would be charged false (cvc-assertion). The assertion is declined, never
-// charged and never satisfied — the withhold [CompileAssertionTest] reports.
-// (#1042)
 func (p *ctaParser) stringOf(arg ctaValue) (ctaValue, bool) {
-	if !p.types.castsFrom(arg, p.types.str) || p.types.floating(arg) {
+	if !p.types.castsFrom(arg, p.types.str) {
 		return nil, false
 	}
 	return ctaStringFunction{cast: ctaCast{operand: arg, target: p.types.str, allowsEmpty: true}}, true
