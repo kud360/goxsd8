@@ -424,7 +424,13 @@ type AssertionTest struct{ root ctaExpr }
 //     cast to either, to any target but its own type (F&O §17.1.2, §17.1.3
 //     and §17.1.6 over the value where §17.1's casting table marks the target
 //     Y or M, §17.1's err:XPTY0004 where it marks N), so `xs:string(1.5e0)`
-//     and `xs:date(1.5e0)` decline and `xs:double(1.5e0)` does not;
+//     and `xs:date(1.5e0)` decline and `xs:double(1.5e0)` does not — and a
+//     cast of an IntegerLiteral or a DecimalLiteral to any target but one
+//     whose primitive is xs:string, xs:float or xs:double, xs:decimal, and for
+//     an IntegerLiteral xs:integer's branch (F&O §17.1.3.4 and §17.1.6 over
+//     the value, §17.1's err:XPTY0004), so `xs:integer(1.5)`,
+//     `xs:boolean(2)` and `xs:anyURI(1.5)` decline and `xs:integer(2)` and
+//     `xs:string(1.5)` do not;
 //   - an arithmetic operand whose {primitive type definition} is not
 //     xs:decimal, xs:float or xs:double — so the duration and date/time
 //     arithmetic B.2 defines declines, and so does the err:XPTY0004 of any

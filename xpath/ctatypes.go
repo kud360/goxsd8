@@ -1,6 +1,10 @@
 package xpath
 
-import "github.com/kud360/goxsd8/xsd"
+import (
+	"strings"
+
+	"github.com/kud360/goxsd8/xsd"
+)
 
 // This file is the COMPILE-TIME type knowledge of the §3.12.6 subset: which
 // builtin datatype a Literal carries, which type a comparison's two operands
@@ -202,9 +206,11 @@ func (t ctaTypes) castTarget(name xsd.QName) (*xsd.SimpleType, bool) {
 }
 
 // castsFrom reports whether this engine casts the operand v to target, a type
-// castTarget admitted, at all. It is false for exactly two shapes, each an
-// operand whose {primitive type definition} is not xs:string and whose type is
-// neither target nor derived from it:
+// castTarget admitted, at all. A literal reaches castsFrom under either cast
+// spelling and any target, and literalCastsTo judges it. Of every other
+// operand, it is false for exactly two shapes, each an operand whose {primitive
+// type definition} is not xs:string and whose type is neither target nor
+// derived from it:
 //
 //   - a TYPED operand read off the instance or computed from it — an attribute
 //     (ctaTypedAttr), a child element (ctaTypedChild), `$value` (ctaValueVar,
@@ -214,18 +220,14 @@ func (t ctaTypes) castTarget(name xsd.QName) (*xsd.SimpleType, bool) {
 //     xs:boolean; ctaUnaryString, xs:integer or xs:string; ctaStringFunction,
 //     xs:string), or a cast of one of them, or of an operand the second shape
 //     names, that is not in the string family (castSource, its target);
-//   - an operand of any other shape whose static type is xs:float or
-//     xs:double (floatingSource): a DoubleLiteral such as `1.5e0` (xpath20.md
-//     [73]), or a cast to either over an untyped operand, a string-family one
-//     or a literal other than a DoubleLiteral, as in
+//   - a cast of any other shape whose target is xs:float or xs:double
+//     (floatingSource): a cast to either over an untyped operand, a
+//     string-family one or a literal other than a DoubleLiteral, as in
 //     `string(xs:float('1.5'))` or `string(xs:double(@s))` over an xs:string
 //     @s.
 //
 // Every other operand casts as [CompileCTATest] states, the statically empty
-// `$value` (ctaEmptyValue) among them: it holds no item to convert. So does
-// every other literal, an fn:true() or fn:false() among them, whose xs:boolean
-// only fn:string casts, to xs:string, where its ·canonical representation· is
-// the string F&O §17.1.2 casts it to.
+// `$value` (ctaEmptyValue) among them: it holds no item to convert.
 //
 // Two typed operands are admitted:
 //
@@ -250,44 +252,118 @@ func (t ctaTypes) castTarget(name xsd.QName) (*xsd.SimpleType, bool) {
 // Both cast spellings take a [16] ta-SimpleValue operand, so a count, an
 // arithmetic or function result and a cast reach castsFrom only as fn:string's
 // argument (ctaParser.stringOf), whose target is xs:string: of those, the
-// second rule admits exactly what the first does. A literal reaches castsFrom
-// under either spelling and any target, and a DoubleLiteral is admitted by the
-// second rule alone, which leaves it xs:double itself — `xs:double(1.5e0)`,
-// §17.2 case 4's identity cast. xs:double's two simple ancestors are never a
-// target: castTarget excludes xs:anyAtomicType by name, and xs:anySimpleType,
-// xs:anyAtomicType's {base type definition} (xmlschema11-2 §4.1.6), through its
-// ·absent· {primitive type definition}.
+// second rule admits exactly what the first does.
 //
-// GAP(xpath): a cast from any OTHER typed operand is declined — §17.4's cast
-// within a branch of the hierarchy that is not to an ancestor, and §17.1's and
-// §17.5's casts across primitives — because xpath-functions.md §17 defines
-// those over the VALUE, not over a re-validated canonical lexical: xs:decimal
-// to xs:integer truncates (§17.1.3.4) where the round-trip ctaPromote would
-// perform raises err:FORG0001 for "3.5", and an assertion a raised cast makes
-// false is a charge (cvc-assertion), so the round-trip would fabricate one.
-// An xs:float or xs:double operand, a literal included, is the same case:
-// §17.1.2 renders a value of absolute value in [0.000001, 1000000) as an
-// xs:decimal, so `xs:string(1.5e0)` is "1.5" where ctaPromote would render
-// "1.5E0", and §17.1.3 casts it to xs:decimal or xs:integer by its value,
-// which the canonical "1.5E0" fails to validate as. Those value-defined casts
-// are to the targets F&O §17.1's casting table marks Y or M from xs:float and
-// xs:double: xs:untypedAtomic, xs:string, the numerics and xs:boolean
+// GAP(xpath): a cast from any OTHER typed operand, a literal aside, is
+// declined — §17.4's cast within a branch of the hierarchy that is not to an
+// ancestor, and §17.1's and §17.5's casts across primitives — because
+// xpath-functions.md §17 defines those over the VALUE, not over a re-validated
+// canonical lexical: xs:decimal to xs:integer truncates (§17.1.3.4) where the
+// round-trip ctaPromote would perform raises err:FORG0001 for "3.5", and an
+// assertion a raised cast makes false is a charge (cvc-assertion), so the
+// round-trip would fabricate one. An xs:float or xs:double operand, a
+// DoubleLiteral included (literalCastsTo), is the same case: §17.1.2 renders a
+// value of absolute value in [0.000001,
+// 1000000) as an xs:decimal, so `xs:string(1.5e0)` is "1.5" where ctaPromote
+// would render "1.5E0", and §17.1.3 casts it to xs:decimal or xs:integer by its
+// value, which the canonical "1.5E0" fails to validate as. Those value-defined
+// casts are to the targets F&O §17.1's casting table marks Y or M from xs:float
+// and xs:double: xs:untypedAtomic, xs:string, the numerics and xs:boolean
 // (§17.1.6). To every target it marks N — the durations, the date/time and g*
-// types, the binaries and xs:anyURI — §17.1 makes the cast err:XPTY0004, a
-// type error with no value defined, and it declines too: a withhold where the
+// types, the binaries and xs:anyURI — §17.1 makes the cast err:XPTY0004, a type
+// error with no value defined, and it declines too: a withhold where the
 // round-trip had decided it, raising for `xs:date(1.5e0)` and succeeding for
 // `xs:anyURI(1.5e0)`, "1.5E0" being an xs:anyURI lexical. fn:string over such an
 // operand, a node of such a type included, is that cast to xs:string and
 // declines with it. The direction is the withhold [CompileAssertionTest]
-// reports: the assertion is declined, never charged and never satisfied.
-// (#1042)
+// reports: the assertion is declined, never charged and never satisfied. (#1042)
 func (t ctaTypes) castsFrom(v ctaValue, target *xsd.SimpleType) bool {
+	if lit, isLiteral := v.(ctaLiteral); isLiteral {
+		return t.literalCastsTo(lit, target)
+	}
 	st, judged := t.castSource(v)
 	if !judged || t.stringSource(st) {
 		return true
 	}
 	at, err := t.ancestor(st, target.Name())
 	return err == nil && at != nil
+}
+
+// literalCastsTo is castsFrom's answer for a literal: a StringLiteral, a
+// NumericLiteral (xpath20.md [43]) or the xs:boolean an fn:true or fn:false
+// call returns (constantCall). ctaPromote casts one by re-validating its
+// ·canonical representation· as target, which is the cast F&O §17 defines in
+// exactly these cases, and a literal is admitted in them alone:
+//
+//   - a StringLiteral, to any target: §17.1.1, castsFrom's string-family rule;
+//   - to the literal's own type or an ancestor of it: §17.2 case 4 and §17.3,
+//     castsFrom's ancestor rule. It is the one rule that admits a
+//     DoubleLiteral, and it leaves that xs:double itself — `xs:double(1.5e0)`,
+//     §17.2 case 4's identity cast: xs:double's two simple ancestors are never
+//     a target, castTarget excluding xs:anyAtomicType by name and
+//     xs:anySimpleType, xs:anyAtomicType's {base type definition}
+//     (xmlschema11-2 §4.1.6), through its ·absent· {primitive type
+//     definition};
+//   - an IntegerLiteral or a DecimalLiteral, typed xs:decimal here (literal),
+//     to a target whose {primitive type definition} is xs:string — §17.1.2
+//     renders an xs:decimal by its canonical form, an integer-valued one as
+//     an xs:integer, which is xs:decimal's ·canonical representation· — or is
+//     xs:float or xs:double, which §17.1.3.1 and §17.1.3.2 define as "TV is
+//     xs:double(SV cast as xs:string)";
+//   - an IntegerLiteral, whose value xpath20.md §3.1.1 makes an xs:integer, to
+//     xs:integer or a type derived from it: §17.1.3.4's "TV is SV" and §17.4's
+//     cast down the branch, which checks the value against the target's facets
+//     and its pattern against the source's canonical lexical — the round trip;
+//   - an fn:true or fn:false, to a target whose primitive is xs:string:
+//     §17.1.2's "In all other cases, TV is the ... canonical representation of
+//     SV".
+//
+// GAP(xpath): every other cast of a literal is declined, because F&O §17
+// defines it over the VALUE and not over a re-validated canonical lexical:
+// a DecimalLiteral to xs:integer discards the fractional part (§17.1.3.4),
+// where the round trip raises err:FORG0001 for "1.5" and so decides
+// `xs:integer(1.5) = 1` false; a numeric literal to xs:boolean is true for
+// every non-zero value (§17.1.6), where "2" fails to validate as an
+// xs:boolean; and a DoubleLiteral to any target but its own type or an
+// ancestor is castsFrom's GAP(xpath) case (floatingSource). To a target
+// §17.1's casting table marks N from xs:decimal or xs:integer — the
+// durations, the date/time and g* types, the binaries and xs:anyURI — the
+// cast is err:XPTY0004, a type error with no value defined, where the round
+// trip succeeds for `xs:anyURI(1.5)`, "1.5" being an xs:anyURI lexical, and it
+// declines too. A DecimalLiteral to a type derived from xs:integer declines
+// with the cast to xs:integer itself. The direction is castsFrom's: the
+// assertion is withheld, never charged and never satisfied. (#1042)
+func (t ctaTypes) literalCastsTo(lit ctaLiteral, target *xsd.SimpleType) bool {
+	if t.stringSource(lit.st) {
+		return true
+	}
+	at, err := t.ancestor(lit.st, target.Name())
+	if err != nil {
+		return false
+	}
+	if at != nil {
+		return true
+	}
+	source, sourceResolved := t.primitive(lit.st)
+	tp, targetResolved := t.primitive(target)
+	if !sourceResolved || !targetResolved {
+		return false
+	}
+	switch source.Name() {
+	case ctaBuiltin("decimal"):
+		switch tp.Name() {
+		case ctaBuiltin("string"), ctaBuiltin("float"), ctaBuiltin("double"):
+			return true
+		}
+		if strings.ContainsRune(lit.text, '.') {
+			return false
+		}
+		integer, err := t.ancestor(target, ctaBuiltin("integer"))
+		return err == nil && integer != nil
+	case ctaBuiltin("boolean"):
+		return tp.Name() == ctaBuiltin("string")
+	}
+	return false
 }
 
 // castSource is the type castsFrom judges a cast from v by — the static type
@@ -297,7 +373,9 @@ func (t ctaTypes) castsFrom(v ctaValue, target *xsd.SimpleType) bool {
 // operand's, under a new annotation, and casting it on is a cast from a typed
 // instance value as much as the first one, so `xs:integer(xs:decimal(@d))`
 // over an xs:decimal @d is §17.4's truncation and declines with
-// `xs:integer(@d)`.
+// `xs:integer(@d)`. A literal is not such an operand: castsFrom judges one by
+// literalCastsTo, and as a cast's operand it leaves the cast judged by its
+// target alone (floatingSource), the cast literalCastsTo admitted.
 func (t ctaTypes) castSource(v ctaValue) (*xsd.SimpleType, bool) {
 	switch n := v.(type) {
 	case ctaTypedAttr:
@@ -325,27 +403,23 @@ func (t ctaTypes) castSource(v ctaValue) (*xsd.SimpleType, bool) {
 		}
 		return n.target, true
 	}
-	return t.floatingSource(v)
+	return nil, false
 }
 
-// floatingSource is castSource's answer for an operand that casts whatever
-// the target unless its static type (ctaStaticOf) is atomic with a {primitive
-// type definition} of xs:float or xs:double — a literal such as `1.5e0`, or a
-// cast to either over an operand castSource does not judge or judges into the
-// string family — which it reports as judged, so castsFrom admits it only to
-// its own type or an ancestor of it. A static type whose primitive does not
-// resolve is judged the same way, and castsFrom's ancestor rule declines it:
-// castTarget admits no target whose primitive does not resolve.
-func (t ctaTypes) floatingSource(v ctaValue) (*xsd.SimpleType, bool) {
-	s, typed := ctaStaticOf(v).(ctaTyped)
-	if !typed {
-		return nil, false
-	}
-	p, resolved := t.primitive(s.st)
+// floatingSource is castSource's answer for a cast n over an operand castSource
+// does not judge or judges into the string family: n casts whatever the target
+// unless its own target has a {primitive type definition} of xs:float or
+// xs:double, as in `string(xs:float('1.5'))`, which it reports as judged, so
+// castsFrom admits it only to its own type or an ancestor of it. A target
+// whose primitive does not resolve is judged the same way, and castsFrom's
+// ancestor rule declines it: castTarget admits no target whose primitive does
+// not resolve.
+func (t ctaTypes) floatingSource(n ctaCast) (*xsd.SimpleType, bool) {
+	p, resolved := t.primitive(n.target)
 	if resolved && p.Name() != ctaBuiltin("float") && p.Name() != ctaBuiltin("double") {
 		return nil, false
 	}
-	return s.st, true
+	return n.target, true
 }
 
 // stringSource reports whether st's {primitive type definition} is xs:string,

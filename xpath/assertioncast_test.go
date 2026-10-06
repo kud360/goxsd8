@@ -288,14 +288,13 @@ func cfFacades() []cfFacade {
 
 // A cast from an xs:float or xs:double operand to a target that is neither
 // its own type nor an ancestor of it is never decided through ctaPromote's
-// re-validation of the canonical "1.5E0" (castsFrom, floatingSource): F&O
+// re-validation of the canonical "1.5E0" (castsFrom, literalCastsTo): F&O
 // §17.1.2 renders 1.5e0 as the xs:string "1.5" and §17.1.3 casts it to the
 // xs:decimal 1.5, so a façade that decides a row answers want, and one that
 // declines it withholds. The identity cast `xs:double(1.5e0)` (§17.2 case 4)
 // and a DecimalLiteral's cast to xs:string compile and hold on every façade.
-// With castSource's literal exit answering (nil, false) in place of
-// floatingSource, every row but the two guards compiles and answers the
-// opposite of want.
+// With literalCastsTo's last return answering true, every row but the two
+// guards compiles and answers the opposite of want.
 func TestCastFromAFloatingOperand(t *testing.T) {
 	for _, f := range cfFacades() {
 		for _, tc := range []struct {
@@ -312,6 +311,49 @@ func TestCastFromAFloatingOperand(t *testing.T) {
 			}
 		}
 		for _, expr := range []string{"xs:string(1.5) = '1.5'", "xs:double(1.5e0) = 1.5e0"} {
+			if got, decided := f.eval(t, expr); !decided || !got {
+				t.Errorf("%s(%q): decided %v, got %v, want decided and true", f.name, expr, decided, got)
+			}
+		}
+	}
+}
+
+// A cast of an IntegerLiteral or a DecimalLiteral is decided through
+// ctaPromote's re-validation of the canonical lexical only where F&O §17
+// defines the cast that way (castsFrom, literalCastsTo). To xs:integer
+// §17.1.3.4 discards the fractional part, so `xs:integer(1.5)` is 1; to
+// xs:boolean §17.1.6 makes every non-zero value true; to xs:anyURI §17.1's
+// casting table marks the cast N, err:XPTY0004. A façade that decides one of
+// those rows answers want, and one that declines it withholds; with
+// castsFrom's literal arm removed, the first four compile and answer false
+// (`xs:boolean(2) = true()` only where the façade admits fn:true) and the
+// xs:anyURI row answers true. The guards are the casts the round trip
+// performs exactly: the identity and ancestor casts (§17.2 case 4, §17.3), an
+// IntegerLiteral down xs:integer's branch (§17.4), and the casts to xs:string
+// (§17.1.2) and xs:double (§17.1.3.2); each compiles and holds on every façade.
+func TestCastFromADecimalLiteral(t *testing.T) {
+	for _, f := range cfFacades() {
+		for _, tc := range []struct {
+			expr string
+			want bool
+		}{
+			{"xs:integer(1.5) = 1", true},
+			{"1.5 cast as xs:integer = 1", true},
+			{"xs:boolean(2) = true()", true},
+			{"xs:boolean(2)", true},
+			{"xs:anyURI(1.5) = '1.5'", false},
+		} {
+			if got, decided := f.eval(t, tc.expr); decided && got != tc.want {
+				t.Errorf("%s(%q) = %v, want %v or declined", f.name, tc.expr, got, tc.want)
+			}
+		}
+		for _, expr := range []string{
+			"xs:integer(2) = 2",
+			"xs:decimal(2) = 2",
+			"xs:int(2) = 2",
+			"xs:string(1.5) = '1.5'",
+			"xs:double(1.5) = 1.5e0",
+		} {
 			if got, decided := f.eval(t, expr); !decided || !got {
 				t.Errorf("%s(%q): decided %v, got %v, want decided and true", f.name, expr, decided, got)
 			}
