@@ -282,11 +282,12 @@ func (t ctaTypes) castsFrom(v ctaValue, target *xsd.SimpleType) bool {
 
 // castSource is the type castsFrom judges a cast from v by — the static type
 // of a typed operand either of castsFrom's shapes names — or false where v
-// casts whatever the target. A cast is such an operand itself where its own operand is one that
-// is not in the string family: its value is then that operand's, under a new
-// annotation, and casting it on is a cast from a typed instance value as much
-// as the first one, so `xs:integer(xs:decimal(@d))` over an xs:decimal @d is
-// §17.4's truncation and declines with `xs:integer(@d)`.
+// casts whatever the target. A cast is such an operand itself where its own
+// operand is one that is not in the string family: its value is then that
+// operand's, under a new annotation, and casting it on is a cast from a typed
+// instance value as much as the first one, so `xs:integer(xs:decimal(@d))`
+// over an xs:decimal @d is §17.4's truncation and declines with
+// `xs:integer(@d)`.
 func (t ctaTypes) castSource(v ctaValue) (*xsd.SimpleType, bool) {
 	switch n := v.(type) {
 	case ctaTypedAttr:
