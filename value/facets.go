@@ -862,7 +862,7 @@ func (p patternFacet) CheckLexical(normalized string) error {
 		quoted[i] = `"` + patternMemberEscaper.Replace(v) + `"`
 	}
 	return xsderr.New(ruleCvcPatternValid, xsderr.Loc{},
-		"value %q matches no member of the pattern facet of %s, whose {value} holds %s (cvc-pattern-valid, §4.3.4.4)",
+		"%q matches no member of the pattern facet of %s, whose {value} holds %s, but cvc-pattern-valid requires one to match",
 		normalized, simpleTypeLabel(p.ef.Declaring()), strings.Join(quoted, ", "))
 }
 
@@ -997,7 +997,7 @@ func (e enumFacet) CheckValue(v Value) error {
 		}
 	}
 	return xsderr.New(ruleCvcEnumerationValid, xsderr.Loc{},
-		"value is not equal or identical to any enumeration member (cvc-enumeration-valid, §4.3.5.4)")
+		"value is not equal or identical to any enumeration member, but cvc-enumeration-valid requires it to be equal or identical to one")
 }
 
 // enumMatch reports the "equal or identical" relation cvc-enumeration-valid
@@ -1023,7 +1023,11 @@ func enumMatch(candidate, member Value) bool {
 // panicking.
 type boundFacet struct {
 	limit Ordered
-	kind  xsd.FacetKind
+	// lexical is the facet's {value} as the document wrote it, which a rejection
+	// names; limit is its parsed form and cannot render it, since parsing drops
+	// the spelling ("+007" and "7" are one limit).
+	lexical string
+	kind    xsd.FacetKind
 }
 
 // newBoundFacet parses the single bound {value} via the declaring type's
@@ -1052,9 +1056,9 @@ func newBoundFacet(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, ef xsd.Eff
 	ord, ok := v.(Ordered)
 	if !ok {
 		return boundFacet{}, facetPrecondition(ruleCosApplicableFacets, st.Loc(),
-			"value: %s facet value %q is not Ordered, so the facet is not applicable to %s (cos-applicable-facets §4.1.5)", kind, values[0], st.Name())
+			"value: %s facet value %q is not Ordered, so the facet is not applicable to %s, which cos-applicable-facets requires", kind, values[0], st.Name())
 	}
-	return boundFacet{limit: ord, kind: kind}, nil
+	return boundFacet{limit: ord, lexical: values[0], kind: kind}, nil
 }
 
 // CheckValue rejects a candidate that violates the bound (§4.3.7–4.3.10).
@@ -1062,7 +1066,7 @@ func (bf boundFacet) CheckValue(v Value) error {
 	cand, ok := v.(Ordered)
 	if !ok {
 		return facetPrecondition(ruleCosApplicableFacets, xsderr.Loc{},
-			"value: candidate %T under a %s facet is not Ordered, so the facet is not applicable to its type (cos-applicable-facets §4.1.5)", v, bf.kind)
+			"value: candidate %T under a %s facet is not Ordered, so the facet is not applicable to its type, which cos-applicable-facets requires", v, bf.kind)
 	}
 	ord := cand.Cmp(bf.limit)
 	if ord == Incomparable {
@@ -1071,11 +1075,13 @@ func (bf boundFacet) CheckValue(v Value) error {
 		// NaN candidate against a numeric bound, or any candidate when the bound
 		// value is itself NaN (the restricted space is then empty).
 		return xsderr.New(boundRule(bf.kind), xsderr.Loc{},
-			"value is incomparable with the %s facet bound, so it is excluded from the restricted value space (%s, §4.3.7–4.3.10)", bf.kind, boundRule(bf.kind))
+			"value is incomparable with the %s facet's {value} %q, so it is excluded from the restricted value space, but %s requires a value %s it",
+			bf.kind, bf.lexical, boundRule(bf.kind), boundRelation(bf.kind))
 	}
 	if bf.violates(ord) {
 		return xsderr.New(boundRule(bf.kind), xsderr.Loc{},
-			"value violates the %s facet (%s, §4.3.7–4.3.10)", bf.kind, boundRule(bf.kind))
+			"value violates the %s facet, whose {value} is %q, but %s requires a value %s it",
+			bf.kind, bf.lexical, boundRule(bf.kind), boundRelation(bf.kind))
 	}
 	return nil
 }
@@ -1093,6 +1099,27 @@ func (bf boundFacet) violates(ord Ordering) bool {
 		return ord == Less || ord == Equal
 	default:
 		panic(fmt.Sprintf("value: violates: %s is not a bound facet", bf.kind))
+	}
+}
+
+// boundRelation is the order relation each bound facet's Validation Rule
+// requires of a value against the facet's {value}, in that rule's own words:
+// cvc-maxInclusive-valid "less than or equal to", cvc-maxExclusive-valid "less
+// than", cvc-minInclusive-valid "greater than or equal to" and
+// cvc-minExclusive-valid "greater than". It renders a rejection only; violates
+// is the decision.
+func boundRelation(k xsd.FacetKind) string {
+	switch k {
+	case xsd.FacetMaxInclusive:
+		return "less than or equal to"
+	case xsd.FacetMaxExclusive:
+		return "less than"
+	case xsd.FacetMinInclusive:
+		return "greater than or equal to"
+	case xsd.FacetMinExclusive:
+		return "greater than"
+	default:
+		panic(fmt.Sprintf("value: boundRelation: %s is not a bound facet", k))
 	}
 }
 
@@ -1138,7 +1165,7 @@ func (df digitsFacet) CheckValue(v Value) error {
 	dc, ok := v.(DigitCounted)
 	if !ok {
 		return facetPrecondition(ruleCosApplicableFacets, xsderr.Loc{},
-			"value: candidate %T under a %s facet is not DigitCounted, so the facet is not applicable to its type (cos-applicable-facets §4.1.5)", v, df.kind)
+			"value: candidate %T under a %s facet is not DigitCounted, so the facet is not applicable to its type, which cos-applicable-facets requires", v, df.kind)
 	}
 	got := dc.TotalDigits()
 	if df.kind == xsd.FacetFractionDigits {
@@ -1146,7 +1173,7 @@ func (df digitsFacet) CheckValue(v Value) error {
 	}
 	if df.limit.cmpInt(got) < 0 {
 		return xsderr.New(digitsRule(df.kind), xsderr.Loc{},
-			"value has %d %s, exceeds facet limit %s (%s)", got, df.kind, df.limit, digitsRule(df.kind))
+			"value has %d %s, exceeds facet limit %s, which %s forbids", got, df.kind, df.limit, digitsRule(df.kind))
 	}
 	return nil
 }
@@ -1246,11 +1273,11 @@ func (lf lengthFacet) CheckValue(v Value) error {
 	l, ok := v.(Lengthed)
 	if !ok {
 		return facetPrecondition(ruleCosApplicableFacets, xsderr.Loc{},
-			"value: candidate %T under a %s facet is not Lengthed, so the facet is not applicable to its type (cos-applicable-facets §4.1.5)", v, lf.kind)
+			"value: candidate %T under a %s facet is not Lengthed, so the facet is not applicable to its type, which cos-applicable-facets requires", v, lf.kind)
 	}
 	if lf.violates(l.Len()) {
 		return xsderr.New(lengthRule(lf.kind), xsderr.Loc{},
-			"value length %d violates the %s facet limit %s (%s)", l.Len(), lf.kind, lf.limit, lengthRule(lf.kind))
+			"value length %d violates the %s facet limit %s, which %s forbids", l.Len(), lf.kind, lf.limit, lengthRule(lf.kind))
 	}
 	return nil
 }
@@ -1323,7 +1350,7 @@ func newExplicitTimezoneFacet(f xsd.Facet) (explicitTimezoneFacet, error) {
 		return explicitTimezoneFacet{requirement: tzOptional}, nil
 	}
 	return explicitTimezoneFacet{}, xsderr.New(ruleCvcExplicitTimezoneValid, xsderr.Loc{},
-		"explicitTimezone facet value %q is not one of required/prohibited/optional (§4.3.14.1)", values[0])
+		"explicitTimezone facet value %q is not one of required/prohibited/optional", values[0])
 }
 
 // CheckValue enforces cvc-explicitTimezone-valid (§4.3.14.3): required demands a
@@ -1341,15 +1368,15 @@ func (tf explicitTimezoneFacet) CheckValue(v Value) error {
 	ta, ok := v.(TimezoneAware)
 	if !ok {
 		return facetPrecondition(ruleCosApplicableFacets, xsderr.Loc{},
-			"value: candidate %T under an explicitTimezone facet is not TimezoneAware, so the facet is not applicable to its type (cos-applicable-facets §4.1.5)", v)
+			"value: candidate %T under an explicitTimezone facet is not TimezoneAware, so the facet is not applicable to its type, which cos-applicable-facets requires", v)
 	}
 	if tf.requirement == tzRequired && !ta.HasTimezone() {
 		return xsderr.New(ruleCvcExplicitTimezoneValid, xsderr.Loc{},
-			"value has no explicit timezone but the explicitTimezone facet is required (cvc-explicitTimezone-valid, §4.3.14.3)")
+			"value has no explicit timezone, but cvc-explicitTimezone-valid clause 1 requires one where the explicitTimezone facet is required")
 	}
 	if tf.requirement == tzProhibited && ta.HasTimezone() {
 		return xsderr.New(ruleCvcExplicitTimezoneValid, xsderr.Loc{},
-			"value has an explicit timezone but the explicitTimezone facet prohibits one (cvc-explicitTimezone-valid, §4.3.14.3)")
+			"value has an explicit timezone, but cvc-explicitTimezone-valid clause 2 forbids one where the explicitTimezone facet is prohibited")
 	}
 	return nil
 }
@@ -1397,7 +1424,7 @@ func (sf scaleFacet) CheckValue(v Value) error {
 	sc, ok := v.(Scaled)
 	if !ok {
 		return facetPrecondition(ruleCosApplicableFacets, xsderr.Loc{},
-			"value: candidate %T under a %s facet is not Scaled, so the facet is not applicable to its type (cos-applicable-facets §4.1.5)", v, sf.kind)
+			"value: candidate %T under a %s facet is not Scaled, so the facet is not applicable to its type, which cos-applicable-facets requires", v, sf.kind)
 	}
 	scale, ok := sc.Scale()
 	if !ok {
@@ -1405,7 +1432,7 @@ func (sf scaleFacet) CheckValue(v Value) error {
 	}
 	if sf.violates(scale) {
 		return xsderr.New(scaleRule(sf.kind), xsderr.Loc{},
-			"value scale %d violates the %s facet limit %s (%s)", scale, sf.kind, sf.limit, scaleRule(sf.kind))
+			"value scale %d violates the %s facet limit %s, which %s forbids", scale, sf.kind, sf.limit, scaleRule(sf.kind))
 	}
 	return nil
 }
