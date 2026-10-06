@@ -232,7 +232,11 @@ func strayInToken(src string) bool {
 }
 
 // token reads one token of replacement text, whose source is raw, into c.
-// depth is the number of elements open where the inclusion began.
+// depth is the number of elements open where the inclusion began. A comment
+// and a processing instruction add nothing; one targeting "xml" in any case
+// ([17] PITarget) and any directive are RuleXMLWellFormed faults at loc, the
+// reference, since replacement text included in content must match [43]
+// content (XML 1.0 §4.3.2).
 func (c *content) token(tok xml.Token, raw string, at func(int) int64, depth int, loc xsderr.Loc, open []string) error {
 	switch t := tok.(type) {
 	case xml.StartElement:
@@ -261,6 +265,12 @@ func (c *content) token(tok xml.Token, raw string, at func(int) int64, depth int
 			return nil
 		}
 		return c.chars(raw, at, false, open)
+	case xml.ProcInst:
+		if strings.EqualFold(t.Target, "xml") {
+			return xsderr.New(xsderr.RuleXMLWellFormed, loc, "processing instruction target %q in the replacement text of entity %s, a name XML 1.0 [17] PITarget excludes", t.Target, open[len(open)-1])
+		}
+	case xml.Directive:
+		return xsderr.New(xsderr.RuleXMLWellFormed, loc, "directive %q in the replacement text of entity %s, where XML 1.0 [43] content admits no directive", directiveName(raw), open[len(open)-1])
 	}
 	return nil
 }
