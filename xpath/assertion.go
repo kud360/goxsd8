@@ -36,16 +36,18 @@ import (
 // cvc-assertion clause 1.2's partial ·PSVI· holds; and a path opening with "/"
 // or "//" over one child or attribute step, which raises err:XPDY0050 over
 // that instance (§3.2); a relative path of two or more such child steps (§3.2,
-// [26] RelativePathExpr) as the whole operand of fn:exists, fn:empty or an
-// ·effective boolean value·, whether it selects a node of E's subtree being
-// what a [Tally] carries (ctaFacade.childPath); an fn:count call
-// (xpath-functions.md §15.4.1) in [14] ta-ValueExpr's position, over one
-// counted path of E's subtree, whose counts a [Tally] carries; and, in the
-// same position, a call to one of the F&O string and sequence functions
-// [CompileAssertionTest] lists (ctaFacade.callsLibrary, ctafunc.go), whose
-// argument may also be the empty sequence `()`. It also admits xpath20.md
-// §3.4's binary arithmetic operators over numeric operands
-// (ctaFacade.computes), in each comparison operand's position.
+// [26] RelativePathExpr), or one element step `N`, `./N` or `.//N` (§3.2.4),
+// as the whole operand of fn:exists, fn:empty or an ·effective boolean value·,
+// whether it selects a node of E's subtree being what a [Tally] carries
+// whatever the selected elements' types (ctaFacade.childPath,
+// ctaFacade.elements); an fn:count call (xpath-functions.md §15.4.1) in [14]
+// ta-ValueExpr's position, over one counted path of E's subtree, whose counts
+// a [Tally] carries; and, in the same position, a call to one of the F&O
+// string and sequence functions [CompileAssertionTest] lists
+// (ctaFacade.callsLibrary, ctafunc.go), whose argument may also be the empty
+// sequence `()`. It also admits xpath20.md §3.4's binary arithmetic operators
+// over numeric operands (ctaFacade.computes), in each comparison operand's
+// position.
 
 // AttributeTypes answers, for the element information item E whose assertions
 // are being compiled, the {type definition} an attribute of E with the
@@ -110,8 +112,9 @@ func Child(name xsd.QName, v TypedValue) ChildElement { return ChildElement{name
 //
 // It carries the children whose typed values a compiled step reads and nothing
 // below them. A node a {test} only counts — a child, a descendant, an
-// attribute — or only asks the existence of through a child path, `a/b`, is
-// reported to the [Tally] instead, and never yielded here for that sake.
+// attribute — or only asks the existence of through a path, `a`, `.//a` or
+// `a/b`, is reported to the [Tally] instead, and never yielded here for that
+// sake.
 type ChildElements func(yield func(ChildElement) bool)
 
 // TypedValue is the typed value of one attribute node, of one element node of
@@ -360,18 +363,19 @@ type AssertionTest struct{ root ctaExpr }
 // The grammar is [CompileCTATest]'s with the value comparisons, `$value`, an
 // abbreviated child-axis step, a "/" or "//" opening one child or attribute
 // step, a relative path of two or more abbreviated child-axis steps with QName
-// NameTests, `a/b`, standing as the whole operand of fn:exists, fn:empty or an
-// ·effective boolean value· (xpath20.md §3.2, §2.4.3), an fn:count call, the
-// binary arithmetic operators `+`, `-`, `*`, `div`, `idiv` and `mod`
-// (xpath20.md §3.4), and a call to one of the F&O string and sequence functions
-// — fn:contains, fn:starts-with and fn:ends-with with two arguments,
-// fn:string-length, fn:normalize-space and fn:string with one, fn:empty and
-// fn:exists with one, and fn:true and fn:false with none (xpath-functions.md
-// §7.5.1–7.5.3, §7.4.4, §7.4.5, §2.3, §15.1.4, §15.1.5, §9.1.1, §9.1.2), any
-// argument of which may be the empty sequence `()` — added, and every decline
-// [CompileCTATest] states is this one's too, under the same static context
-// (xpath-valid clause 2.2) augmented with `$value` (cvc-assertion clause 2.2),
-// plus these, each of which is the same withhold:
+// NameTests, `a/b`, or one element step, `a`, `./a` or `.//a`, standing as the
+// whole operand of fn:exists, fn:empty or an ·effective boolean value·
+// (xpath20.md §3.2, §3.2.4, §2.4.3), an fn:count call, the binary arithmetic
+// operators `+`, `-`, `*`, `div`, `idiv` and `mod` (xpath20.md §3.4), and a
+// call to one of the F&O string and sequence functions — fn:contains,
+// fn:starts-with and fn:ends-with with two arguments, fn:string-length,
+// fn:normalize-space and fn:string with one, fn:empty and fn:exists with one,
+// and fn:true and fn:false with none (xpath-functions.md §7.5.1–7.5.3, §7.4.4,
+// §7.4.5, §2.3, §15.1.4, §15.1.5, §9.1.1, §9.1.2), any argument of which may be
+// the empty sequence `()` — added, and every decline [CompileCTATest] states is
+// this one's too, under the same static context (xpath-valid clause 2.2)
+// augmented with `$value` (cvc-assertion clause 2.2), plus these, each of which
+// is the same withhold:
 //
 //   - an attribute NameTest that is not a QName: a [37] Wildcard can match an
 //     attribute ·attributed to· an {attribute wildcard}, whose type is not
@@ -391,12 +395,15 @@ type AssertionTest struct{ root ctaExpr }
 //   - any variable but `$value`, which is not in the static context at all
 //     (err:XPST0008);
 //   - a child-axis step whose NameTest is not a QName, or spells its axis out,
-//     or names a child for which elems reports false;
-//   - a child whose type elems answers is not a simple type the bullets above
-//     admit as an attribute's, nor a complex type whose simple {content type}
-//     is one: a ·special· type declines, because an xsi:type can give the
-//     child a typed value where the compile read an xs:untypedAtomic one, and
-//     so does every mixed, element-only and empty {content type};
+//     and, where the step's value is read — anywhere but as the whole operand
+//     of fn:exists, fn:empty or an ·effective boolean value· — one naming a
+//     child for which elems reports false;
+//   - a child read for its value whose type elems answers is not a simple type
+//     the bullets above admit as an attribute's, nor a complex type whose
+//     simple {content type} is one: a ·special· type declines, because an
+//     xsi:type can give the child a typed value where the compile read an
+//     xs:untypedAtomic one, and so does every mixed, element-only and empty
+//     {content type};
 //   - a path of more than one step anywhere but as the whole operand of
 //     fn:exists, fn:empty or an ·effective boolean value·, and there any step
 //     on another axis, with a wildcard, a predicate or a kind test, and any
@@ -405,8 +412,9 @@ type AssertionTest struct{ root ctaExpr }
 //     "/" with no step after it;
 //   - an fn:count argument that is not one QName step — `N`, `@N`, either of
 //     them behind `./` or `.//`, or a rooted one — so a wildcard, a longer
-//     path, a predicate, a bare `.` and `$value` decline, and so does a `.//`
-//     step outside an fn:count call;
+//     path, a predicate, a bare `.` and `$value` decline, and so does a step
+//     behind `./` or `.//` anywhere but in an fn:count call or as the whole
+//     operand of fn:exists, fn:empty or an ·effective boolean value·;
 //   - a cast whose operand is a typed attribute, a typed child or `$value`
 //     outside the xs:string family, to a target that operand's type is neither
 //     nor derived from by restriction (F&O §17.4, §17.1, §17.5) — so
@@ -443,11 +451,13 @@ type AssertionTest struct{ root ctaExpr }
 // A counted step consults neither attrs nor elems: fn:count does not atomize
 // its argument (xpath-functions.md §15.4.1, `$arg as item()*`), so the step's
 // type decides nothing and a node of any type, or matched by a wildcard,
-// counts. Nor does a child path of two or more steps, on the same terms:
-// fn:exists and fn:empty take `item()*` (§15.1.4, §15.1.5) and an ·effective
-// boolean value· asks only whether the first item is a node (xpath20.md §2.4.3
-// rule 2), so a node of any type, ·nilled· or not, is selected. What the
-// {test} counts is read off the [Tally] its evaluation carries
+// counts. Nor does a child path of two or more steps, or one element step, as
+// the whole operand of fn:exists, fn:empty or an ·effective boolean value·, on
+// the same terms: fn:exists and fn:empty take `item()*` (§15.1.4, §15.1.5) and
+// an ·effective boolean value· asks only whether the first item is a node
+// (xpath20.md §2.4.3 rule 2), so a node of any type, ·nilled· or not, is
+// selected — `a` over an element-only a is decided where `a = 1` declines. What
+// the {test} counts is read off the [Tally] its evaluation carries
 // ([AssertionTest.Tally]).
 //
 // An XPath STATIC error is declined too and never reported: the
@@ -464,8 +474,9 @@ type AssertionTest struct{ root ctaExpr }
 // required subset to stop at — §3.13 admits full XPath 2.0 — so every decline
 // above is this engine's limit and not the spec's license: paths of more than
 // one step outside fn:exists, fn:empty and an ·effective boolean value·, axes
-// beyond the attribute step, one child step, the child steps of such a path
-// and the one counted step, children whose type is not one simple type,
+// beyond the attribute step, one child step, the child steps of such a path,
+// the one element step whose existence is asked and the one counted step,
+// children read for their value whose type is not one simple type,
 // arithmetic outside the numeric operands and the binary operators, the
 // collation argument, and every F&O function but fn:count and those listed
 // above among them. The direction is the withhold: the caller records the
@@ -524,11 +535,12 @@ func (t AssertionTest) Evaluate(b value.Backend, types xsd.TypeResolver, attrs T
 
 // Tally is a fresh, empty [Tally] for one evaluation of t, holding one counter
 // for each distinct relative path an fn:count call in t counts over and each
-// distinct child path of two or more steps whose existence t asks (fn:exists,
-// fn:empty, an ·effective boolean value·), or nil where t counts over none — a
-// {test} with neither, or one whose every fn:count argument is rooted and
-// raises. t itself is not changed, so one compiled test serves any number of
-// evaluations, each with its own Tally.
+// distinct path — one element step or a child path of two or more steps —
+// whose existence t asks (fn:exists, fn:empty, an ·effective boolean value·),
+// one counter serving a path both counted and asked, or nil where t counts
+// over none — a {test} with neither, or one whose every fn:count argument is
+// rooted and raises. t itself is not changed, so one compiled test serves any
+// number of evaluations, each with its own Tally.
 //
 // Its consumer is validate's walk (validate/cvcassertion.go), which reads the
 // nil as its gate: only an element one of whose {test}s has a Tally reports its
@@ -546,9 +558,9 @@ func (t AssertionTest) Tally() *Tally {
 	return c
 }
 
-// countedPaths is each distinct path t counts over — an fn:count argument or a
-// child path whose existence it asks — in written order, read off the tree
-// itself.
+// countedPaths is each distinct path t counts over — an fn:count argument, or
+// an element step or child path whose existence it asks — in written order,
+// read off the tree itself.
 func (t AssertionTest) countedPaths() []ctaTallied {
 	if t.root == nil {
 		// The zero AssertionTest, which no successful CompileAssertionTest
@@ -579,8 +591,8 @@ func ctaHoldsPath(paths []ctaTallied, path ctaTallied) bool {
 // [AssertionTest.Evaluate]'s [ChildElements] must yield. Its consumer is
 // validate's walk, which keeps a child's value only where some {test} of its
 // parent reads it. An fn:count call reads no value and is no read here, nor is
-// a child path of two or more steps, whose first step names a child only on
-// the way to the nodes whose existence is asked: what each counts is
+// an element step or a child path of two or more steps whose existence alone
+// is asked, whatever the type of the child it names: what each counts is
 // [AssertionTest.Tally]'s. The answer is read off the tree itself.
 func (t AssertionTest) ReadsChild(name xsd.QName) bool {
 	if t.root == nil {
@@ -652,7 +664,7 @@ func (n ctaMatch) readsChild(name xsd.QName) bool {
 func (n ctaUnaryString) readsChild(name xsd.QName) bool { return n.arg.operand.readsChild(name) }
 
 // readsChild reports whether the operand holds a ctaTypedChild naming name:
-// fn:exists over a child step reads which children exist off [ChildElements].
+// fn:exists over a cast of a child step reads its value off [ChildElements].
 func (n ctaPresence) readsChild(name xsd.QName) bool { return n.operand.readsChild(name) }
 
 // readsChild reports whether the cast fn:string is holds a ctaTypedChild naming
@@ -870,6 +882,10 @@ func (f ctaAssertionFacade) attribute(test ctaNameTest, types ctaTypes) (ctaValu
 //     error), or empty (its typed value is the empty sequence) — each read the
 //     way xpath-datamodel §6.2.4 says, but by its own node this engine does not
 //     build.
+//
+// A step standing as the whole operand of fn:exists, fn:empty or an ·effective
+// boolean value· never reaches here: its value is not read, and elements
+// builds its node whatever the type.
 func (f ctaAssertionFacade) child(test ctaNameTest, types ctaTypes) (ctaValue, bool) {
 	exact, isExact := test.(ctaExactName)
 	if !isExact {

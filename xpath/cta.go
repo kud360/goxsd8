@@ -22,7 +22,8 @@ import (
 // step naming one of E's element [[children]] (ctaTypedChild), and a "/" or
 // "//" opening a path, which raises (ctaNoDocumentRoot); the whole operand of
 // fn:exists, fn:empty or an ·effective boolean value· also takes a relative
-// path of two or more such steps (ctaChildPath); and [14] ValueExpr
+// path of two or more such steps (ctaChildPath) and one element step `N`,
+// `./N` or `.//N` whatever N's type (ctaSelectedElements); and [14] ValueExpr
 // also takes an fn:count call over one counted path (ctaCount) and a call to
 // one of the F&O string and sequence functions, evaluated in ctafunc.go; and
 // each comparison operand may be xpath20.md [13] AdditiveExpr over [14]
@@ -33,11 +34,11 @@ import (
 // err:XPDY0002 an assertions facet's absent context item raises
 // (ctaNoContextItem). It is not a stage of a general XPath 2.0 evaluator: the
 // productions below reach no axis but attribute, one child step, the
-// child-step paths whose existence is asked and the descendant steps fn:count
-// counts over, no predicate, no variable but `$value` and no function but
-// fn:not, fn:count and the ten ctaParser.libraryCall names, so evaluating them
-// directly is exact where a fail-open delegation to a general engine would be a
-// guess.
+// child-step paths and the one descendant step whose existence is asked and
+// the descendant steps fn:count counts over, no predicate, no variable but
+// `$value` and no function but fn:not, fn:count and the ten
+// ctaParser.libraryCall names, so evaluating them directly is exact where a
+// fail-open delegation to a general engine would be a guess.
 //
 //	[8]  Test                ::= OrExpr
 //	[9]  OrExpr              ::= AndExpr ( 'or' AndExpr )*
@@ -489,15 +490,16 @@ func (ctaTypeError) ctaExpr()        {}
 // ta-SimpleValue — its AttrName arm in the untyped and the typed form
 // (ctaFacade.attribute), its Literal arm, and the assertion façade's `$value`
 // in its three static forms (ctaFacade.variable), child-axis step
-// (ctaFacade.child), child path (ctaFacade.childPath) and rooted path
-// (ctaFacade.rooted), and the facet façade's read of an absent context item
-// (ctaNoContextItem) — the cast that [15] ta-CastExpr's tail and [18]
-// ta-ConstructorFunction both build over one of them, the assertion façade's
-// fn:count call (ctaFacade.count), a binary arithmetic operator over two of
-// them (ctaArith, ctaFacade.computes), and a call to an F&O string or
-// sequence function over them (ctaMatch, ctaUnaryString, ctaPresence,
-// ctaStringFunction; ctaFacade.callsLibrary). Every branch answers readsChild
-// and counted on ctaExpr's terms.
+// (ctaFacade.child), child path (ctaFacade.childPath), element step whose
+// existence is asked (ctaFacade.elements) and rooted path (ctaFacade.rooted),
+// and the facet façade's read of an absent context item (ctaNoContextItem) —
+// the cast that [15] ta-CastExpr's tail and [18] ta-ConstructorFunction both
+// build over one of them, the assertion façade's fn:count call
+// (ctaFacade.count), a binary arithmetic operator over two of them (ctaArith,
+// ctaFacade.computes), and a call to an F&O string or sequence function over
+// them (ctaMatch, ctaUnaryString, ctaPresence, ctaStringFunction;
+// ctaFacade.callsLibrary). Every branch answers readsChild and counted on
+// ctaExpr's terms.
 type ctaValue interface {
 	ctaValue()
 	readsChild(name xsd.QName) bool
@@ -540,9 +542,10 @@ type ctaTypedAttr struct {
 // §3.3.1.2).
 //
 // A ·nilled· child is a node of the sequence whose typed value is the empty
-// sequence (xpath-datamodel §6.2.4): it counts for the step's ·effective
-// boolean value·, which is node existence, and contributes no atom when the
-// sequence is atomized.
+// sequence (xpath-datamodel §6.2.4): it counts for the step's node existence
+// (ctaStep.nodes), and contributes no atom when the sequence is atomized. A
+// step standing where its existence alone is asked is ctaSelectedElements and
+// never this node.
 //
 // It is a node of its own and not a ctaTypedAttr with a flag: the two read
 // different inputs, and an element step matches any number of nodes where an
@@ -1392,19 +1395,20 @@ func ctaSingletonOperand(v ctaValue, c *xsd.SimpleType, env ctaEnv) (value.Value
 // eval decides the ·effective boolean value· of a bare ValueExpr (xpath20.md
 // §2.4.3, the fn:boolean rules quoted there).
 //
-// An AttrName, untyped or typed, a child-axis step and a child path evaluate
-// to a sequence of NODES rather than to atomic values, so each takes rule 2
-// ("a sequence whose first item is a node") whenever its NameTest matches at
-// all and rule 1 (the empty sequence) when it matches nothing, and no type of
-// its own is involved — a ·nilled· child is a node all the same. Rule 2 holds
-// whatever the sequence's LENGTH, which is what a wildcard NameTest and a
-// repeated child make observable. A rooted path raises err:XPDY0050, and a read
-// of an absent context item err:XPDY0002. ctaStep.nodes is that reading, which
-// fn:empty and fn:exists share. `$value` is atomic values and no node: the
-// statically empty one is rule 1's false, the bound typed one is decided by
-// ctaBoolean, a list of two or more items included, and the untyped one by rule
-// 4 (ctaUntypedBoolean). Every other operand is a singleton atomic value or the
-// empty sequence, which ctaBoolean decides.
+// An AttrName, untyped or typed, a child-axis or element step and a child path
+// evaluate to a sequence of NODES rather than to atomic values, so each takes
+// rule 2 ("a sequence whose first item is a node") whenever its NameTest
+// matches at all and rule 1 (the empty sequence) when it matches nothing, and
+// no type of its own is involved — a ·nilled· child is a node all the same.
+// Rule 2 holds whatever the sequence's LENGTH, which is what a wildcard
+// NameTest and a repeated child make observable. A rooted path raises
+// err:XPDY0050, and a read of an absent context item err:XPDY0002.
+// ctaStep.nodes is that reading, which fn:empty and fn:exists share. `$value`
+// is atomic values and no node: the statically empty one is rule 1's false, the
+// bound typed one is decided by ctaBoolean, a list of two or more items
+// included, and the untyped one by rule 4 (ctaUntypedBoolean). Every other
+// operand is a singleton atomic value or the empty sequence, which ctaBoolean
+// decides.
 func (e ctaEffectiveBoolean) eval(env ctaEnv) ctaAnswer {
 	if step, isStep := e.operand.(ctaStep); isStep {
 		nodes, ok := step.nodes(env)

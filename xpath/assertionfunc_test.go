@@ -114,12 +114,12 @@ func TestAssertionStringFunctions(t *testing.T) {
 
 // fn:empty and fn:exists test their `item()*` argument for the empty sequence
 // without atomizing it (§15.1.4, §15.1.5): an attribute present or absent, a
-// cast of a child present or absent, `$value` over
-// non-simple content — which assert019 reads — and over simple content bound
-// and unbound. A rooted path raises err:XPDY0050 under either, which fn:not
-// propagates. fn:true() and fn:false() compile, and are constants whatever E
-// carries. Every row is declined at CompileAssertionTest, and fails, with
-// ctaFacade.callsLibrary false on the assertion façade.
+// cast of a child present or absent, `$value` over non-simple content — which
+// assert019 reads — and over simple content bound and unbound. A rooted path
+// raises err:XPDY0050 under either, which fn:not propagates. fn:true() and
+// fn:false() compile, and are constants whatever E carries. Every row is
+// declined at CompileAssertionTest, and fails, with ctaFacade.callsLibrary
+// false on the assertion façade.
 func TestAssertionPresenceFunctions(t *testing.T) {
 	s := []asTyped{{uq("s"), "string", "x"}}
 	for _, tc := range []struct {

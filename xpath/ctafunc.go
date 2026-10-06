@@ -267,7 +267,8 @@ func ctaSequenceLength(v ctaValue, env ctaEnv) (int, bool) {
 
 // ctaStep is a ctaValue that evaluates to a sequence of NODES rather than of
 // atomic values: an attribute step, untyped (ctaAttr) or typed (ctaTypedAttr),
-// a child-axis step (ctaTypedChild), a path of child steps (ctaChildPath), and
+// a child-axis step (ctaTypedChild), an element step whose existence is asked
+// (ctaSelectedElements), a path of child steps (ctaChildPath), and
 // the two steps that raise before they select a node, a rooted path
 // (ctaNoDocumentRoot) and a read of an absent context item (ctaNoContextItem).
 // Its nodes method is the ONE reading of node existence, which the ·effective
@@ -280,8 +281,8 @@ type ctaStep interface {
 	// node, reporting false where it raises: a rooted path (err:XPDY0050), a
 	// read of an absent context item (err:XPDY0002), a matched value breaking
 	// the caller's obligation ([TypedAttributes], [ChildElements]), and a
-	// [Tally] holding no counter for a child path, which [AssertionTest.Evaluate]
-	// refuses before the tree is read.
+	// [Tally] holding no counter for an element step or a child path, which
+	// [AssertionTest.Evaluate] refuses before the tree is read.
 	nodes(env ctaEnv) (int, bool)
 }
 

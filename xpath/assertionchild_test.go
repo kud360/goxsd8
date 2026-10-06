@@ -103,14 +103,15 @@ func asChildTypes(t *testing.T) ElementTypes {
 // A child-axis step reads E's element [[children]] (cvc-assertion clause 1.2)
 // TYPED, under the simple type the child's ·locally declared type· has its
 // value in (xpath-datamodel §6.2.4). `e1 = 'present'` holds over
-// <e1>present</e1> and is false over <e1>absent</e1>. The values are typed: `n > 9` over n = 10 holds as xs:int, where an
-// xs:string comparison would not. Two children of one name are a sequence: a
-// general comparison is existential over it and a value comparison is
-// err:XPTY0004 (§3.5.1 step 3), false under fn:not too. A ·nilled· child has
-// no atom, so `e1 = 'present'` and `e1 = ”` are false and the first one's
-// fn:not true. A step whose existence alone is asked, `a and b`, reads the
-// [Tally] instead (assertionstep_test.go). Every row declines at
-// CompileAssertionTest, and so fails, with ctaAssertionFacade.child declining.
+// <e1>present</e1> and is false over <e1>absent</e1>. The values are typed: `n
+// > 9` over n = 10 holds as xs:int, where an xs:string comparison would not.
+// Two children of one name are a sequence: a general comparison is existential
+// over it and a value comparison is err:XPTY0004 (§3.5.1 step 3), false under
+// fn:not too. A ·nilled· child has no atom, so `e1 = 'present'` and `e1 = ”`
+// are false and the first one's fn:not true. A step whose existence alone is
+// asked, `a and b`, reads the [Tally] instead (assertionstep_test.go). Every
+// row declines at CompileAssertionTest, and so fails, with
+// ctaAssertionFacade.child declining.
 func TestAssertionReadsChildElements(t *testing.T) {
 	elems := asChildTypes(t)
 	present := asChild{uq("e1"), "string", "present", false}
