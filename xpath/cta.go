@@ -888,10 +888,10 @@ type ctaCast struct {
 // none — so a counted step is never typed and reads no value: what it selects
 // is read off the [Tally] the evaluation carries, which the caller fills with
 // E's subtree, and never off [TypedAttributes]. The path argument that reads a
-// value is a child step filtered by a predicate over it
-// (ctaMatchingChildren), which atomizes each candidate inside the predicate
-// and is counted over [ChildElements] instead; an argument that is no path,
-// such as `$value`, is counted off its own items (ctaCountedItems).
+// value is a child step filtered by a predicate over it (ctaMatchingChildren),
+// which atomizes each candidate inside the predicate and is counted over
+// [ChildElements] instead; an argument that is no path, such as `$value`, is
+// counted off its own items (ctaCountedItems).
 type ctaCount struct {
 	arg ctaCounted
 	st  *xsd.SimpleType

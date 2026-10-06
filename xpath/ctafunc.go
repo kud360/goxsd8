@@ -17,9 +17,9 @@ import (
 // (§15.1.4, §15.1.5, ctaPresence), fn:distinct-values (§15.1.6,
 // ctaDistinctValues), and fn:string (§2.3, ctaStringFunction) — and fn:count
 // over an argument that is no path (§15.4.1, ctaCountedItems), whose items are
-// counted as fn:empty and fn:exists count them.
-// fn:true and fn:false (§9.1.1, §9.1.2) are constants, which compile to the
-// ctaLiteral of their xs:boolean (ctaParser.constantCall).
+// counted as fn:empty and fn:exists count them. fn:true and fn:false (§9.1.1,
+// §9.1.2) are constants, which compile to the ctaLiteral of their xs:boolean
+// (ctaParser.constantCall).
 //
 // An argument whose parameter is xs:string? is converted by xpath20.md
 // §3.1.5's function conversion rules, as far as the static type settles them,

@@ -22,7 +22,8 @@ type vcCase struct {
 // vcAssertion compiles tc.expr for an E whose simple {content type} is tc.st,
 // failing the case where it declines — a decline would read as false and pass
 // every false row vacuously — and evaluates it with `$value` bound to
-// tc.lexical. A declined case is reported here alone, and answers tc.want. The test counts no path, so it has no Tally to hand over.
+// tc.lexical. A declined case is reported here alone, and answers tc.want.
+// The test counts no path, so it has no Tally to hand over.
 func vcAssertion(t *testing.T, types xsd.TypeResolver, tc vcCase) bool {
 	t.Helper()
 	test, ok := CompileAssertionTest(asRecord(tc.expr), types, xsd.SimpleContent{SimpleType: tc.st}, asUses(t, nil), asNoElems)
@@ -98,8 +99,8 @@ func TestCountAndDistinctValuesOverValue(t *testing.T) {
 // one xs:double, 1 and 1.0 one xs:decimal, NaN and NaN one item although
 // `NaN eq NaN` is false (the NaN rows fail with ctaNaN answering false), a
 // date without a timezone equals the same date at Z, the implicit timezone,
-// and no other — over a user restriction of xs:date too, whose rows fail with
-// ctaHoldsPair asked in that item type rather than its primitive, a name
+// and no other — over a user restriction of xs:date too, whose Z row fails
+// with ctaHoldsPair asked in that item type rather than its primitive, a name
 // ctaDateTimeFamily does not hold — and strings under the codepoint collation,
 // so "a" and "A" are two.
 func TestDistinctValuesComparesByEq(t *testing.T) {
@@ -126,8 +127,9 @@ func TestDistinctValuesComparesByEq(t *testing.T) {
 // reads: a general comparison is existential over it, its ·effective boolean
 // value· is fn:boolean's over the items kept — true for one non-zero number,
 // false for zero, err:FORG0006 for two or more, which fn:not propagates — and
-// fn:string over one item is that item. The ·effective boolean value· rows
-// fail with the ctaDistinctValues arm of ctaEffectiveBoolean.eval removed.
+// fn:string over one item is that item. The `1 1` row and the fn:not row over
+// `1 2` fail with the ctaDistinctValues arm of ctaEffectiveBoolean.eval
+// removed, which reads every call as false.
 func TestDistinctValuesResult(t *testing.T) {
 	list := asList(t, "IntList", ctaBuiltin("int"))
 	strs := asList(t, "StringList", ctaBuiltin("string"))
@@ -147,8 +149,10 @@ func TestDistinctValuesResult(t *testing.T) {
 // value, or none for the zero binding (cvc-assertion clause 2.3.2), and over
 // any {content type} that is not simple the empty sequence: fn:count counts 1,
 // 0 and 0, and fn:distinct-values keeps the one item, compared as xs:string
-// (§15.1.6). The untyped rows fail with ctaSequenceLength's ctaDistinctValues
-// arm removed, which counts an untyped operand as statically empty.
+// (§15.1.6). The `count(distinct-values($value)) eq 1` row fails with
+// ctaSequenceLength's ctaDistinctValues arm removed, which counts an untyped
+// operand as statically empty, and the ·effective boolean value· row over "x"
+// with ctaEffectiveBoolean.eval's.
 func TestCountValueOverSpecialAndNonSimpleContent(t *testing.T) {
 	anySimple := xsd.SimpleContent{SimpleType: asBuiltin(t, "anySimpleType")}
 	for _, tc := range []struct {
@@ -160,6 +164,7 @@ func TestCountValueOverSpecialAndNonSimpleContent(t *testing.T) {
 		{"count($value) eq 1", anySimple, BindValue(Untyped("x")), true},
 		{"count(distinct-values($value)) eq 1", anySimple, BindValue(Untyped("x")), true},
 		{"distinct-values($value) = 'x'", anySimple, BindValue(Untyped("x")), true},
+		{"distinct-values($value)", anySimple, BindValue(Untyped("x")), true},
 		{"distinct-values($value)", anySimple, BindValue(Untyped("")), false},
 		{"count($value) eq 0", anySimple, ValueBinding{}, true},
 		{"count(distinct-values($value)) eq 0", anySimple, ValueBinding{}, true},
@@ -193,7 +198,9 @@ func TestCountValueOverAUnionFacet(t *testing.T) {
 // fn:count over an argument that is no path counts its items whatever they
 // are: a count of a count is one item, whose own path the Tally keys. Its
 // counted operand reads a child's value where it holds a value step, so
-// ReadsChild reports it; `count($value)` reads none.
+// ReadsChild reports it; `count($value)` reads none. The count-of-a-count rows
+// fail with ctaCountedItems.counted appending nothing, and the ReadsChild row
+// with ctaCountedItems.readsChild answering false.
 func TestCountOfAnOperandKeysWhatItCounts(t *testing.T) {
 	acDecides(t, "count(count(e1)) eq 1", true)
 	acCounters(t, "count(count(e1)) eq 1", 1)
