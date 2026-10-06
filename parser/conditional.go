@@ -404,8 +404,9 @@ func supportedFacet(qn xsd.QName) bool {
 // list and {item type definition} = xs:QName".
 //
 // Items are split by xmlSpaceFields, on XML white space alone, the list
-// separator §3.16.4's list mapping uses, which subsumes the whiteSpace = collapse xs:QName carries: an empty or
-// all-whitespace value is the empty list, the case §4.2.2 calls out.
+// separator §3.16.4's list mapping uses, which subsumes the whiteSpace =
+// collapse xs:QName carries: an empty or all-whitespace value is the empty
+// list, the case §4.2.2 calls out.
 //
 // Two faults are charged, and both are String Valid failures against xs:QName
 // rather than anything src-resolve governs: an item outside the ·lexical space·
