@@ -530,16 +530,28 @@ func instanceHints(uri, base string, r io.Reader) ([]parser.Root, io.Reader) {
 // xsi:schemaLocation pairs a namespace with a location; xsi:noNamespaceSchema-
 // Location names a location whose document has no target namespace, which is
 // parser.HintAt's absent namespace "".
+//
+// xsi:schemaLocation's type is a list of xs:anyURI (§3.2.7.3), so its items
+// are delimited on XML white space alone (xmlSpaceFields).
+// xsi:noNamespaceSchemaLocation's is ONE xs:anyURI (§3.2.7.4), not a list: its
+// ·actual value· is the whiteSpace = collapse normalization (Datatypes §4.3.6)
+// and names one location however many spaces it holds. xs:anyURI admits every
+// XML Char, so neither a U+00A0 inside a schemaLocation item nor a #x20 inside
+// a noNamespaceSchemaLocation value splits the location it is part of.
 func hintsOf(start *xmltree.StartElement, base string) []parser.Root {
 	var hints []parser.Root
 	for _, a := range start.Attributes() {
 		if a.Name().Space() != xsd.XMLSchemaInstanceNS {
 			continue
 		}
-		fields := strings.Fields(a.Value())
+		fields := xmlSpaceFields(a.Value())
 		switch a.Name().Local() {
 		case "noNamespaceSchemaLocation":
-			for _, location := range fields {
+			// An empty value is dropped, as it was when this attribute was
+			// read as a list, rather than resolved to base, the instance itself:
+			// §4.3.2 clause 3 obliges no processor to dereference a hint.
+			if len(fields) > 0 {
+				location := strings.Join(fields, " ") // the collapsed ·actual value·
 				hints = append(hints, parser.HintAt("", schemaloc.Resolve(base, location)))
 			}
 		case "schemaLocation":
@@ -551,4 +563,13 @@ func hintsOf(start *xmltree.StartElement, base string) []parser.Root {
 		}
 	}
 	return hints
+}
+
+// xmlSpaceFields splits s into the maximal runs of characters outside the XML
+// S production (xml.md [3]: #x20, #x9, #xD, #xA), the only characters a list
+// value is delimited on (cvc-datatype-valid, Datatypes §4.1.4 clause 2.2) or
+// whiteSpace = collapse normalizes (§4.3.6). strings.Fields is not this split:
+// it also breaks on U+00A0, U+2028 and the other Unicode spaces.
+func xmlSpaceFields(s string) []string {
+	return strings.FieldsFunc(s, func(r rune) bool { return strings.ContainsRune(" \t\r\n", r) })
 }

@@ -384,8 +384,14 @@ func (w *walk) declineID(owner Element, loc xsderr.Loc, format string, args ...a
 // space· (Datatypes §3.4.7) under the collapse whiteSpace its ancestor xs:token
 // fixes. Every caller has already run String Valid clauses 1 and 2 over the
 // lexical, so a value reaching here is one that mapping accepted.
+//
+// Items are delimited on XML white space alone (isXMLSpace): a list value is
+// split on #x20 (cvc-datatype-valid, Datatypes §4.1.4 clause 2.2) after
+// whiteSpace = collapse has mapped #x9, #xA and #xD to it (§4.3.6).
+// strings.Fields would also break on U+1680, an NCName character, splitting one
+// valid ID or IDREF in two.
 func valueTokens(lexical string, list bool) []string {
-	fields := strings.Fields(lexical)
+	fields := strings.FieldsFunc(lexical, isXMLSpace)
 	if list || len(fields) < 2 {
 		return fields
 	}

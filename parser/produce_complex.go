@@ -3715,7 +3715,7 @@ func (p *producer) namespaceVarietyAndSet(ns string, hasNS bool, notNS string, h
 		variety = xsd.NamespaceConstraintNot
 	}
 	var set []xsd.Namespace
-	for _, tok := range strings.Fields(list) {
+	for _, tok := range xmlSpaceFields(list) {
 		switch tok {
 		case "##targetNamespace":
 			set = append(set, xsd.NamespaceName(p.target))
@@ -3765,7 +3765,7 @@ func (p *producer) disallowedNames(el *Element) ([]xsd.QName, []xsd.DisallowedNa
 	attributeWildcard := el.Name().Local() == "anyAttribute"
 	var names []xsd.QName
 	var keywords []xsd.DisallowedNameKeyword
-	for _, tok := range strings.Fields(notQName) {
+	for _, tok := range xmlSpaceFields(notQName) {
 		if strings.HasPrefix(tok, "##") {
 			kw, err := disallowedNameKeywordOf(tok, attributeWildcard, el.Loc())
 			if err != nil {

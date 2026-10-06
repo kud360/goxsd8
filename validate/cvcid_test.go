@@ -665,3 +665,28 @@ func TestAResolvingDescendantOfALaxlyAssessedElementIsStrictlyAssessed(t *testin
 			ElementChild(icElem(xsd.QName{Local: "other"}, 3, nil, ElementChild(idText("num", 4, "abc"))))))))
 	wantContentCharge(t, got, "cvc-type", "3.1.3", loc(4, 1))
 }
+
+// IDREFS items are delimited on XML white space alone (cvc-datatype-valid,
+// Datatypes §4.1.4 clause 2.2). U+1680 is an NCName character, so the IDREFS
+// value a<U+1680>b is ONE ·IDREF value·, naming the ID a<U+1680>b; split at
+// the U+1680 it would name the undeclared a and b, charged cvc-id clause 1.
+func TestIDREFSItemsSplitOnXMLSpaceAlone(t *testing.T) {
+	schema := idSchema(t)
+
+	icWantCharges(t, icAssess(t, schema,
+		icRoot(idItem(2, "xid", "a b"), idItem(3, "refs", "a b"))))
+}
+
+// valueTokens splits on XML white space alone. A U+00A0 or U+2028 inside an
+// item cannot reach it end to end — xs:NCName's String Valid check rejects
+// the item first — so these rows sit here.
+func TestValueTokensSplitOnXMLSpaceAlone(t *testing.T) {
+	for _, lexical := range []string{"a b", "a b", "a b"} {
+		if got := valueTokens(lexical, true); len(got) != 1 || got[0] != lexical {
+			t.Errorf("valueTokens(%q, true) = %q, want the one token %q", lexical, got, lexical)
+		}
+	}
+	if got := valueTokens("a\tb\nc\rd e", true); len(got) != 5 {
+		t.Errorf("valueTokens over the four S characters = %q, want 5 tokens", got)
+	}
+}
