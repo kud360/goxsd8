@@ -268,13 +268,14 @@ func ctaSequenceLength(v ctaValue, env ctaEnv) (int, bool) {
 // ctaStep is a ctaValue that evaluates to a sequence of NODES rather than of
 // atomic values: an attribute step, untyped (ctaAttr) or typed (ctaTypedAttr),
 // a child-axis step (ctaTypedChild), an element step whose existence is asked
-// (ctaSelectedElements), a path of child steps (ctaChildPath), and
-// the two steps that raise before they select a node, a rooted path
-// (ctaNoDocumentRoot) and a read of an absent context item (ctaNoContextItem).
-// Its nodes method is the ONE reading of node existence, which the ·effective
-// boolean value· of a step (ctaEffectiveBoolean.eval) and fn:empty and
-// fn:exists (ctaSequenceLength) both take; every other operand's items are
-// atomic values the caller reads its own way.
+// (ctaSelectedElements), a path of child steps (ctaChildPath), the candidate
+// `.` inside a value predicate (ctaCandidate), and the two steps that raise
+// before they select a node, a rooted path (ctaNoDocumentRoot) and a read of
+// an absent context item (ctaNoContextItem). Its nodes method is the ONE
+// reading of node existence, which the ·effective boolean value· of a step
+// (ctaEffectiveBoolean.eval) and fn:empty and fn:exists (ctaSequenceLength)
+// both take; every other operand's items are atomic values the caller reads
+// its own way.
 type ctaStep interface {
 	ctaValue
 	// nodes is how many nodes the step selects, a ·nilled· child counting as a
@@ -301,25 +302,58 @@ func (s ctaTypedChild) nodes(env ctaEnv) (int, bool) {
 	return nodes, ok
 }
 
-// nodes is the counter the evaluation's [Tally] holds for s, which the caller
-// filled with E's subtree. The input is ctaTypedInput by construction
-// (ctaInput); the other arm holds no Tally and raises, unreachably.
-func (s ctaChildPath) nodes(env ctaEnv) (int, bool) {
-	in, typed := env.input.(ctaTypedInput)
-	if !typed {
-		return 0, false
-	}
-	return in.counts.count(s)
+// nodes is the counter the evaluation's [Tally] holds for s (ctaTalliedNodes).
+func (s ctaChildPath) nodes(env ctaEnv) (int, bool) { return ctaTalliedNodes(s, env) }
+
+// nodes is the counter the evaluation's [Tally] holds for s's path
+// (ctaTalliedNodes).
+func (s ctaSelectedElements) nodes(env ctaEnv) (int, bool) { return ctaTalliedNodes(s.path, env) }
+
+// nodes is the counter the evaluation's [Tally] holds for p (ctaTalliedNodes),
+// which is how many nodes fn:count over p counts.
+func (p ctaCountPath) nodes(env ctaEnv) (int, bool) { return ctaTalliedNodes(p, env) }
+
+// nodes is ctaCountPath.nodes'.
+func (f ctaFilteredChildren) nodes(env ctaEnv) (int, bool) { return ctaTalliedNodes(f, env) }
+
+// nodes is ctaCountPath.nodes'.
+func (u ctaUnion) nodes(env ctaEnv) (int, bool) { return ctaTalliedNodes(u, env) }
+
+// nodes is how many of E's children named m.name its predicate is true for,
+// each child in document order the context item (ctaEnv.candidate): its typed
+// value, or none for a ·nilled· one (ctaEachChild). A predicate that raises
+// over any child raises for the whole count, and so does a yielded value
+// breaking the obligation [ChildElements] states.
+func (m ctaMatchingChildren) nodes(env ctaEnv) (int, bool) {
+	n := 0
+	ok := ctaEachChild(m.name, env, func(vs []value.Value) bool {
+		inner := env
+		inner.candidate = vs
+		switch ctaEval(m.pred, inner) {
+		case ctaTrue:
+			n++
+		case ctaError:
+			return false
+		case ctaFalse:
+		}
+		return true
+	})
+	return n, ok
 }
 
-// nodes is the counter the evaluation's [Tally] holds for s's path, on
-// ctaChildPath's terms.
-func (s ctaSelectedElements) nodes(env ctaEnv) (int, bool) {
+// nodes is 1: the candidate is one node, ·nilled· or not.
+func (ctaCandidate) nodes(ctaEnv) (int, bool) { return 1, true }
+
+// ctaTalliedNodes is the counter the evaluation's [Tally] holds for key, which
+// the caller filled with E's subtree. The input is ctaTypedInput by
+// construction (ctaInput); the other arm holds no Tally and raises,
+// unreachably.
+func ctaTalliedNodes(key ctaTallied, env ctaEnv) (int, bool) {
 	in, typed := env.input.(ctaTypedInput)
 	if !typed {
 		return 0, false
 	}
-	return in.counts.count(s.path)
+	return in.counts.count(key)
 }
 
 func (ctaNoDocumentRoot) nodes(ctaEnv) (int, bool) { return 0, false } // err:XPDY0050

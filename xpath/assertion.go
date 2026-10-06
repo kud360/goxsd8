@@ -25,7 +25,7 @@ import (
 // assertion reads untyped too: its typed value is xs:untypedAtomic
 // (xpath-datamodel §3.3.1.2), so both façades build the same node for it.
 //
-// The assertion façade widens the grammar by SEVEN productions the Type
+// The assertion façade widens the grammar by NINE productions the Type
 // Alternative façade declines: the eq/ne/lt/le/gt/ge value comparisons
 // (xpath20.md §3.5.1, [23] ValueComp), in [11] ta-BooleanExpr's comparator
 // position; three more arms of [16] ta-SimpleValue — the variable reference
@@ -42,7 +42,11 @@ import (
 // whatever the selected elements' types (ctaFacade.childPath,
 // ctaFacade.elements); an fn:count call (xpath-functions.md §15.4.1) in [14]
 // ta-ValueExpr's position, over one counted path of E's subtree, whose counts
-// a [Tally] carries; and, in the same position, a call to one of the F&O
+// a [Tally] carries; inside that call's argument, xpath20.md [40] Predicate,
+// one on a child step, testing the existence of the child's attributes, which
+// the Tally reads too, or comparing the child's own value, read off
+// [ChildElements] (§3.2.2); and [21] UnionExpr over such operands (§3.3.3),
+// each node counted once; and, in [14]'s position, a call to one of the F&O
 // string and sequence functions [CompileAssertionTest] lists
 // (ctaFacade.callsLibrary, ctafunc.go), whose argument may also be the empty
 // sequence `()`. It also admits xpath20.md §3.4's binary arithmetic operators
@@ -111,10 +115,12 @@ func Child(name xsd.QName, v TypedValue) ChildElement { return ChildElement{name
 // it, which [AssertionTest.Evaluate] answers false.
 //
 // It carries the children whose typed values a compiled step reads and nothing
-// below them. A node a {test} only counts — a child, a descendant, an
-// attribute — or only asks the existence of through a path, `a`, `.//a` or
-// `a/b`, is reported to the [Tally] instead, and never yielded here for that
-// sake.
+// below them: those a value step names, and those an fn:count argument filters
+// by a predicate over their value, `count(N[. = 'x'])`, which is counted over
+// them here. A node a {test} only counts — a child, a descendant, an
+// attribute, a child filtered by its attributes' existence — or only asks the
+// existence of through a path, `a`, `.//a` or `a/b`, is reported to the
+// [Tally] instead, and never yielded here for that sake.
 type ChildElements func(yield func(ChildElement) bool)
 
 // TypedValue is the typed value of one attribute node, of one element node of
@@ -202,36 +208,38 @@ func BindValue(v TypedValue) ValueBinding { return ValueBinding{v: v} }
 
 // Tally is the node-count input of ONE evaluation of ONE [AssertionTest] over
 // the element E: for each relative path the {test} counts over with fn:count
-// (xpath-functions.md §15.4.1), or asks the existence of with fn:exists,
-// fn:empty or an ·effective boolean value· (§15.1.4, §15.1.5, xpath20.md
-// §2.4.3), how many nodes of E's subtree it selects. [AssertionTest.Tally]
-// makes one, the caller reports E's subtree to it while that subtree streams
-// past, and [AssertionTest.Evaluate] reads it. It keeps one counter per
-// distinct path and no node, so what the caller holds for a count is one
-// integer per path whatever the subtree's size.
+// (xpath-functions.md §15.4.1) — a step, a child step filtered by the
+// existence of its attributes, or a union of those (xpath20.md §3.2.2,
+// §3.3.3) — or asks the existence of with fn:exists, fn:empty or an ·effective
+// boolean value· (§15.1.4, §15.1.5, xpath20.md §2.4.3), how many nodes of E's
+// subtree it selects. A child step filtered by its VALUE is not among them:
+// [ChildElements] answers it. [AssertionTest.Tally] makes one, the caller
+// reports E's subtree to it while that subtree streams past, and
+// [AssertionTest.Evaluate] reads it. It keeps one counter per distinct path
+// and no node, so what the caller holds for a count is one integer per path
+// whatever the subtree's size.
 //
 // The caller's obligation is to report EVERY node of E's subtree in the data
-// model instance cvc-assertion clause 1 builds, exactly once, in any order:
-//
-//   - each element below E, by the chain of ·expanded names· from E's child
-//     down to it, whatever its validity, whether it is ·nilled·, and whether it
-//     was ·strictly· or ·laxly assessed· or ·skipped· ([Tally.Element]);
-//   - each attribute of E and of each element below it, at the depth of the
-//     element it belongs to ([Tally.Attribute]): those the element carries,
-//     xsi:type and the other xsi attributes among them, and its ·defaulted
-//     attributes· (key-dflt-att), which the partial ·PSVI· clause 1.2 builds
-//     from holds too; never a namespace declaration, which is not an attribute
-//     node.
+// model instance cvc-assertion clause 1 builds, exactly once, in any order, by
+// one [Tally.Element] call per element, E itself included: the element, by the
+// chain of ·expanded names· from E's child down to it — the empty chain for E —
+// whatever its validity, whether it is ·nilled·, and whether it was ·strictly·
+// or ·laxly assessed· or ·skipped·, with the names of ALL its attribute nodes:
+// those it carries, xsi:type and the other xsi attributes among them, and its
+// ·defaulted attributes· (key-dflt-att), which the partial ·PSVI· clause 1.2
+// builds from holds too; never a namespace declaration, which is not an
+// attribute node.
 //
 // A ·skipped· element and everything below it is governed by no type
 // (key-skipped, key-governing-type-elem item 5), so it has no ·defaulted
 // attribute·: its attribute nodes are exactly those it carries, xsi ones
 // included. An element whose ·governing type definition· the caller could not
-// determine has ·defaulted attributes· it cannot know, and may go unreported
-// as attributes only at a depth where [Tally.CountsAttributesAt] is false; a
-// caller that cannot report a subtree exactly otherwise declines the assertion
-// itself, on the terms [ValueBinding] states for an undecided `$value`.
-// Under-reporting would make a count too small and could fabricate a charge.
+// determine has ·defaulted attributes· it cannot know, and may be reported
+// with no attribute names only at a depth where [Tally.CountsAttributesAt] is
+// false; a caller that cannot report a subtree exactly otherwise declines the
+// assertion itself, on the terms [ValueBinding] states for an undecided
+// `$value`. Under-reporting would make a count too small and could fabricate a
+// charge.
 //
 // Its consumer is validate's cvc-assertion site (validate/cvcassertion.go),
 // which reports each element it walks, and each element of a ·skipped· subtree
@@ -245,52 +253,57 @@ type ctaCounter struct {
 	n    int
 }
 
-// Element reports one element node below E, by path: the ·expanded names· of
-// the elements from E's child down to the reported node inclusive, so
-// len(path) is its depth below E — 1 for a child, 2 for a grandchild, and so
-// on. path is read during the call and never retained. Every path the {test}
-// counts selecting such a node counts it — `N` where path is [N], `.//N`
-// where path ends in N at any depth, since xpath20.md §3.2.4 makes `.//N`
-// `./descendant-or-self::node()/child::N`, which never selects E itself, and
-// `N1/N2/…` where path is exactly its steps (§3.2). An empty path is E
-// itself and selects nothing, and so does every report to a nil Tally.
-func (c *Tally) Element(path []xsd.QName) {
+// Element reports one element of E's subtree, by path, and its attribute
+// nodes, by attrs. path is the ·expanded names· of the elements from E's child
+// down to the reported one inclusive, so len(path) is its depth below E — 0
+// for E itself, 1 for a child, 2 for a grandchild, and so on. attrs is the
+// names of ALL its attribute nodes, carried or ·defaulted·, on the terms
+// [Tally] states. Neither slice is retained: both are read during the call.
+//
+// Every path the {test} counts selecting the element counts it — `N` where
+// path is [N], `.//N` where path ends in N at any depth, since xpath20.md
+// §3.2.4 makes `.//N` `./descendant-or-self::node()/child::N`, which never
+// selects E itself, and `N1/N2/…` where path is exactly its steps (§3.2) — and
+// every path selecting one of its attribute nodes counts that node: `@N` at
+// depth 0 only, and `.//@N` at every depth, E's own included, since §3.2.4
+// makes `.//@N` `./descendant-or-self::node()/attribute::N`. The empty path
+// is E, whose element node no path selects. Every report to a nil Tally
+// selects nothing.
+func (c *Tally) Element(path []xsd.QName, attrs []xsd.QName) {
 	if c == nil {
 		return
 	}
 	for i := range c.counters {
-		if c.counters[i].path.selectsElement(path) {
-			c.counters[i].n++
-		}
+		c.counters[i].n += ctaSelected(c.counters[i].path, path, attrs)
 	}
 }
 
-// Attribute reports one attribute node named name, carried or ·defaulted·,
-// belonging to the element depth levels below E: 0 for E's own. Every counted
-// path selecting such a node counts it — `@N` at depth 0 only, and `.//@N` at
-// every depth, E's own included, since §3.2.4 makes `.//@N`
-// `./descendant-or-self::node()/attribute::N`. A depth below 0 selects
-// nothing, and so does every report to a nil Tally.
-func (c *Tally) Attribute(depth int, name xsd.QName) {
-	if c == nil {
-		return
+// ctaSelected is how many of the nodes one [Tally.Element] report carries — the
+// element at path, and its attribute nodes attrs — key selects, each node
+// counted once.
+func ctaSelected(key ctaTallied, path, attrs []xsd.QName) int {
+	n := 0
+	if key.selectsElement(path, attrs) {
+		n++
 	}
-	for i := range c.counters {
-		if c.counters[i].path.selectsAttribute(depth, name) {
-			c.counters[i].n++
+	for _, a := range attrs {
+		if key.selectsAttribute(len(path), a) {
+			n++
 		}
 	}
+	return n
 }
 
-// CountsAttributesAt reports whether some path c counts selects an attribute
-// node of the element depth levels below E, 0 being E: `@N` at depth 0 only,
-// and `.//@N` at every depth from 0. It is false for a nil Tally and for a
-// depth below 0, which no [Tally.Attribute] report counts at either.
+// CountsAttributesAt reports whether the attribute names reported for an
+// element depth levels below E, 0 being E, can change any count c holds: `@N`
+// selects attribute nodes at depth 0 only, and `.//@N` at every depth from 0.
+// It is false for a nil Tally and for a depth below 0, where no [Tally.Element]
+// report stands.
 //
 // Its consumer is validate's walk (validate/cvcassertion.go), which asks it of
 // an element whose ·defaulted attributes· it cannot know: where it is false,
-// no report of that element's attributes could change any count, and the
-// element node is reported alone.
+// no attribute name reported for that element could change any count, and the
+// element is reported with none.
 func (c *Tally) CountsAttributesAt(depth int) bool {
 	if c == nil {
 		return false
@@ -365,7 +378,9 @@ type AssertionTest struct{ root ctaExpr }
 // step, a relative path of two or more abbreviated child-axis steps with QName
 // NameTests, `a/b`, or one element step, `a`, `./a` or `.//a`, standing as the
 // whole operand of fn:exists, fn:empty or an ·effective boolean value·
-// (xpath20.md §3.2, §3.2.4, §2.4.3), an fn:count call, the binary arithmetic
+// (xpath20.md §3.2, §3.2.4, §2.4.3), an fn:count call, whose argument may
+// filter a child step by one predicate or join operands with `|` or `union`
+// (§3.2.2, §3.3.3; the bullets below bound both), the binary arithmetic
 // operators `+`, `-`, `*`, `div`, `idiv` and `mod` (xpath20.md §3.4), and a
 // call to one of the F&O string and sequence functions — fn:contains,
 // fn:starts-with and fn:ends-with with two arguments, fn:string-length,
@@ -411,10 +426,25 @@ type AssertionTest struct{ root ctaExpr }
 //     `a//b` and `a/*` decline — a rooted path of more than one step, and a
 //     "/" with no step after it;
 //   - an fn:count argument that is not one QName step — `N`, `@N`, either of
-//     them behind `./` or `.//`, or a rooted one — so a wildcard, a longer
-//     path, a predicate, a bare `.` and `$value` decline, and so does a step
-//     behind `./` or `.//` anywhere but in an fn:count call or as the whole
-//     operand of fn:exists, fn:empty or an ·effective boolean value·;
+//     them behind `./` or `.//`, or a rooted one — nor such a child step `N`
+//     or `./N` filtered by one predicate the next two bullets admit, nor a `|`
+//     or `union` of relative such operands — so a wildcard, a longer path, a
+//     bare `.`, `$value`, a predicate on any other step, a second predicate,
+//     and a union operand that is rooted or filtered by its value decline, and
+//     so does a step behind `./` or `.//` anywhere but in an fn:count call or
+//     as the whole operand of fn:exists, fn:empty or an ·effective boolean
+//     value·, and a predicate or a union anywhere but in an fn:count argument;
+//   - a predicate that is not a conjunction of attribute-existence tests with
+//     QName NameTests, `N[@A]` or `N[@A1 and @A2 …]`, nor a comparison, or
+//     and, or and fn:not over comparisons, of the candidate `.`, literals,
+//     casts and arithmetic — so `N[@a or @b]`, `N[not(@a)]`, `N[@*]`, an
+//     attribute atomized or beside `.`, any other node, `$value`, fn:count and
+//     every other function call decline — and a predicate whose root is a bare
+//     value, `N[1]`, `N[1 + 0]` or `N[.]`, which a numeric value would make
+//     positional (§3.2.2); position() and last() are no library function here;
+//   - a predicate over a child whose type elems answers is not one a child
+//     read for its value is admitted under, on that bullet's terms, unless the
+//     predicate tests attribute existence alone;
 //   - a cast whose operand is a typed attribute, a typed child or `$value`
 //     outside the xs:string family, to a target that operand's type is neither
 //     nor derived from by restriction (F&O §17.4, §17.1, §17.5) — so
@@ -466,9 +496,14 @@ type AssertionTest struct{ root ctaExpr }
 // the same terms: fn:exists and fn:empty take `item()*` (§15.1.4, §15.1.5) and
 // an ·effective boolean value· asks only whether the first item is a node
 // (xpath20.md §2.4.3 rule 2), so a node of any type, ·nilled· or not, is
-// selected — `a` over an element-only a is decided where `a = 1` declines. What
-// the {test} counts is read off the [Tally] its evaluation carries
-// ([AssertionTest.Tally]).
+// selected — `a` over an element-only a is decided where `a = 1` declines. Nor
+// does an attribute-existence predicate, whose ·effective boolean value· asks
+// only whether the attribute node exists (§2.4.3 rule 2), so `c[@a]` counts a
+// c carrying an empty a. What the {test} counts is read off the [Tally] its
+// evaluation carries ([AssertionTest.Tally]). A predicate reading `.` is the
+// one counted argument elems types: it atomizes each candidate child, typed as
+// a child step naming it is, and counts over [ChildElements]; a dynamic or
+// type error over any candidate raises for the whole count.
 //
 // An XPath STATIC error is declined too and never reported: the
 // static-error question about an assertion is the schema assembler's, and
@@ -486,12 +521,13 @@ type AssertionTest struct{ root ctaExpr }
 // one step outside fn:exists, fn:empty and an ·effective boolean value·, axes
 // beyond the attribute step, one child step, the child steps of such a path,
 // the one element step whose existence is asked and the one counted step,
-// children read for their value whose type is not one simple type,
-// arithmetic outside the numeric operands and the binary operators, the
-// collation argument, and every F&O function but fn:count and those listed
-// above among them. The direction is the withhold: the caller records the
-// assertion as unevaluated and neither charges it nor shows it satisfied
-// (PRINCIPLES 20). (#1042)
+// predicates beyond the two kinds on a counted child step, positional ones
+// among them, unions outside fn:count or over other operands, children read
+// for their value whose type is not one simple type, arithmetic outside the
+// numeric operands and the binary operators, the collation argument, and
+// every F&O function but fn:count and those listed above among them. The
+// direction is the withhold: the caller records the assertion as unevaluated
+// and neither charges it nor shows it satisfied (PRINCIPLES 20). (#1042)
 //
 // types is read as [CompileCTATest] reads it and stored nowhere.
 func CompileAssertionTest(expr xsd.XPathExpression, types xsd.TypeResolver, content xsd.ContentType, attrs AttributeTypes, elems ElementTypes) (AssertionTest, bool) {
@@ -544,13 +580,16 @@ func (t AssertionTest) Evaluate(b value.Backend, types xsd.TypeResolver, attrs T
 }
 
 // Tally is a fresh, empty [Tally] for one evaluation of t, holding one counter
-// for each distinct relative path an fn:count call in t counts over and each
+// for each distinct relative path an fn:count call in t counts over — a step,
+// a child step filtered by attribute existence, or a union, one counter
+// serving `c[@a and @b]` and `c[@b and @a]`, and `e | e` and `e` — and each
 // distinct path — one element step or a child path of two or more steps —
 // whose existence t asks (fn:exists, fn:empty, an ·effective boolean value·),
 // one counter serving a path both counted and asked, or nil where t counts
 // over none — a {test} with neither, or one whose every fn:count argument is
-// rooted and raises. t itself is not changed, so one compiled test serves any
-// number of evaluations, each with its own Tally.
+// rooted and raises or is a child step filtered by its value, which
+// [ChildElements] answers. t itself is not changed, so one compiled test
+// serves any number of evaluations, each with its own Tally.
 //
 // Its consumer is validate's walk (validate/cvcassertion.go), which reads the
 // nil as its gate: only an element one of whose {test}s has a Tally reports its
@@ -598,12 +637,15 @@ func ctaHoldsPath(paths []ctaTallied, path ctaTallied) bool {
 
 // ReadsChild reports whether the compiled {test} holds a child-axis step that
 // selects a child element named name for its VALUE, which is what
-// [AssertionTest.Evaluate]'s [ChildElements] must yield. Its consumer is
-// validate's walk, which keeps a child's value only where some {test} of its
-// parent reads it. An fn:count call reads no value and is no read here, nor is
-// an element step or a child path of two or more steps whose existence alone
-// is asked, whatever the type of the child it names: what each counts is
-// [AssertionTest.Tally]'s. The answer is read off the tree itself.
+// [AssertionTest.Evaluate]'s [ChildElements] must yield: a value step, or a
+// child step an fn:count argument filters by a predicate over its value,
+// `count(N[. = 'x'])`, which is counted over the children yielded. Its
+// consumer is validate's walk, which keeps a child's value only where some
+// {test} of its parent reads it. Any other fn:count argument reads no value
+// and is no read here, nor is an element step or a child path of two or more
+// steps whose existence alone is asked, whatever the type of the child it
+// names: what each counts is [AssertionTest.Tally]'s. The answer is read off
+// the tree itself.
 func (t AssertionTest) ReadsChild(name xsd.QName) bool {
 	if t.root == nil {
 		// The zero AssertionTest, which no successful CompileAssertionTest
@@ -692,9 +734,23 @@ func (ctaValueVar) readsChild(xsd.QName) bool       { return false }
 func (ctaEmptyValue) readsChild(xsd.QName) bool     { return false }
 func (ctaUntypedValue) readsChild(xsd.QName) bool   { return false }
 
-// readsChild is false: an fn:count call reads no child's value, and what it
-// counts is the [Tally]'s.
-func (ctaCount) readsChild(xsd.QName) bool { return false }
+// readsChild reports whether the call's argument reads the value of a child
+// named name.
+func (n ctaCount) readsChild(name xsd.QName) bool { return n.arg.readsChild(name) }
+
+// readsChild is false for each of these: a counted path reads no child's
+// value, and what it counts is the [Tally]'s.
+func (ctaCountPath) readsChild(xsd.QName) bool        { return false }
+func (ctaFilteredChildren) readsChild(xsd.QName) bool { return false }
+func (ctaUnion) readsChild(xsd.QName) bool            { return false }
+
+// readsChild reports whether m filters children named name, whose values its
+// predicate reads: they are counted over [ChildElements], never the [Tally].
+func (m ctaMatchingChildren) readsChild(name xsd.QName) bool { return m.name == name }
+
+// readsChild is false: the candidate's value is the enclosing
+// ctaMatchingChildren's read, which reports its name.
+func (ctaCandidate) readsChild(xsd.QName) bool { return false }
 
 // readsChild is false, on ctaCount's terms: a child path reads no node's value,
 // and how many nodes it selects is the [Tally]'s.
@@ -754,15 +810,20 @@ func (n ctaStringFunction) counted(into []ctaTallied) []ctaTallied {
 	return n.cast.counted(into)
 }
 
-// counted appends the call's path where it is relative; a rooted argument
-// raises before it selects a node and counts nothing.
-func (n ctaCount) counted(into []ctaTallied) []ctaTallied {
-	path, relative := n.arg.(ctaCountPath)
-	if !relative {
-		return into
-	}
-	return append(into, path)
-}
+// counted appends the path the call's argument counts over, if any.
+func (n ctaCount) counted(into []ctaTallied) []ctaTallied { return n.arg.counted(into) }
+
+// counted appends the key itself: the [Tally] counts the nodes it selects.
+func (p ctaCountPath) counted(into []ctaTallied) []ctaTallied        { return append(into, p) }
+func (f ctaFilteredChildren) counted(into []ctaTallied) []ctaTallied { return append(into, f) }
+func (u ctaUnion) counted(into []ctaTallied) []ctaTallied            { return append(into, u) }
+
+// counted appends nothing: m is counted over [ChildElements], never keyed in
+// the [Tally], and its predicate counts nothing (ctaPredicateFacade.count).
+func (ctaMatchingChildren) counted(into []ctaTallied) []ctaTallied { return into }
+
+// counted appends nothing: the candidate is no fn:count call.
+func (ctaCandidate) counted(into []ctaTallied) []ctaTallied { return into }
 
 // counted appends the path itself: the [Tally] counts the nodes it selects.
 func (n ctaChildPath) counted(into []ctaTallied) []ctaTallied { return append(into, n) }
