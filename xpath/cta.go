@@ -1380,7 +1380,7 @@ func ctaStaticOf(v ctaValue) ctaStatic {
 	case ctaTypedChild:
 		return ctaTyped{st: n.st}
 	case ctaCandidate:
-		return ctaTyped{st: n.st}
+		return ctaTyped(n)
 	case ctaCount:
 		return ctaTyped{st: n.st}
 	case ctaArith:
