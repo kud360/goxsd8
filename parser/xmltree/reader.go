@@ -45,21 +45,16 @@ type Reader struct {
 	eof bool
 
 	// entities maps each general entity name the DOCTYPE's internal subset
-	// declares to that name's FIRST declaration, which binds (XML 1.0 §4.2):
-	// a later NDATA declaration of a name already declared parsed declares no
-	// unparsed entity, and a later literal gives an internal entity no second
-	// replacement text. That declaration's inPE alone is not the first's: it
-	// is cleared by any declaration of the name outside every parameter
-	// entity, since WFC Entity Declared counts every such declaration, not
-	// only the binding one (see Reader.reference). It is a lookup index only,
-	// never iterated. dec.Entity names to the decoder, which otherwise
-	// refuses a reference to any of them (see included), the internal
-	// entities among them and, in a standalone="yes" document, those whose
-	// binding declaration stands in a parameter entity, so that Reader.reference
-	// charges WFC Entity Declared on a reference to an external one too; a
-	// name stays named once a later declaration clears inPE, and
-	// Reader.reference then refuses it if it is not internal.
-	entities map[string]entityDecl
+	// declares to that name's binding declaration and whether a declaration
+	// of it stands outside every parameter entity (see boundEntity). It is a
+	// lookup index only, never iterated. dec.Entity names to the decoder,
+	// which otherwise refuses a reference to any of them (see included), the
+	// internal entities among them and, in a standalone="yes" document, those
+	// whose binding declaration stands in a parameter entity, so that
+	// Reader.reference charges WFC Entity Declared on a reference to an
+	// external one too; a name stays named once a later declaration clears
+	// onlyInPE, and Reader.reference then refuses it if it is not internal.
+	entities map[string]boundEntity
 	// tokenized maps each (element type, attribute) name pair an <!ATTLIST>
 	// of the internal subset defines, as the declaration spells them, to
 	// whether the pair's FIRST definition, which binds (XML 1.0 §3.3), gives
@@ -81,6 +76,21 @@ type Reader struct {
 	// standalone records the XML declaration's standalone="yes" (XML 1.0
 	// §2.9), which the DOCTYPE after it is read under.
 	standalone bool
+}
+
+// boundEntity is what the reader knows of one general entity name. binding is
+// the name's FIRST declaration, which binds (XML 1.0 §4.2): a later NDATA
+// declaration of a name already declared parsed declares no unparsed entity,
+// and a later literal gives an internal entity no second replacement text;
+// binding.inPE is where that declaration stands, and so whether a reference
+// its replacement text holds occurs within a parameter entity (see
+// Reader.withinPE). onlyInPE reports that every declaration of the name read
+// so far stands in a parameter entity's replacement text: WFC Entity Declared
+// counts every declaration outside every parameter entity, not only the
+// binding one (see Reader.reference).
+type boundEntity struct {
+	binding  entityDecl
+	onlyInPE bool
 }
 
 // attName is an attribute name and the element type name it is defined on,
@@ -269,9 +279,9 @@ func (r *Reader) checkChars(raw string, off int64) error {
 
 // declareEntities records the general entity declarations and the <!ATTLIST>
 // attribute definitions of a DOCTYPE directive at the document level, keeping
-// the first declaration of each entity name, less its inPE once a declaration
-// of the name outside every parameter entity is read, and the first definition
-// of each attribute of an element type (XML 1.0 §4.2, §3.3), and whether any
+// for each entity name its first declaration and whether one outside every
+// parameter entity is read (boundEntity), the first definition of each
+// attribute of an element type (XML 1.0 §4.2, §3.3), and whether any
 // declaration went unread. raw is the directive's source, "<!"
 // through '>': the subset is read from it rather than from the decoder's
 // Directive token, which replaces each comment with one space, so that a
@@ -304,16 +314,16 @@ func (r *Reader) declareEntities(raw string, loc xsderr.Loc) error {
 	}
 	for _, decl := range decls {
 		if bound, ok := r.entities[decl.name]; ok {
-			if bound.inPE && !decl.inPE {
-				bound.inPE = false
+			if bound.onlyInPE && !decl.inPE {
+				bound.onlyInPE = false
 				r.entities[decl.name] = bound
 			}
 			continue
 		}
 		if r.entities == nil {
-			r.entities = make(map[string]entityDecl)
+			r.entities = make(map[string]boundEntity)
 		}
-		r.entities[decl.name] = decl
+		r.entities[decl.name] = boundEntity{binding: decl, onlyInPE: decl.inPE}
 		if named := decl.value.readable || r.standalone && decl.inPE; !named {
 			continue
 		}
@@ -343,7 +353,7 @@ func (r *Reader) declareEntities(raw string, loc xsderr.Loc) error {
 // 1.0 §5.1). An unparsed entity declared only where the reader did not read
 // is reported false, and AllDeclarationsProcessed then reports false too.
 func (r *Reader) HasUnparsedEntity(name string) bool {
-	return r.entities[name].unparsed
+	return r.entities[name].binding.unparsed
 }
 
 // AllDeclarationsProcessed reports the document information item's [all

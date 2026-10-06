@@ -109,19 +109,21 @@
 //     name no general entity declaration before the <!ATTLIST> declares, or
 //     through another entity's replacement text a name no declaration
 //     declares, a declaration in a parameter entity's replacement text
-//     counting for neither) or, directly or through other entities'
-//     replacement text, WFC: Parsed Entity, No Recursion, No External Entity
-//     References or No < in Attribute Values, or a '&' in such replacement
-//     text that begins no Reference (§4.4.5, [67]), whether or not the
-//     default is ever applied — a validity constraint on either declaration is
-//     no fault; replacement text ending inside a comment, processing
-//     instruction or markup declaration; and a '<' in the DOCTYPE header, a
-//     subset no ']' closes, or text other than S between that ']' and '>'
-//     ([28] doctypedecl). A processing instruction between the subset's declarations
-//     runs to the "?>" that alone closes it ([16] PI), whatever '>', '<' or
-//     quote it holds (internal/xmltok), and one no "?>" closes fails as the
-//     decoder's syntax error at the end of input. The external subset is never
-//     read, by design (#1668), nor is an external parameter entity; after a
+//     counting for neither, and a reference in the replacement text of an
+//     entity whose binding declaration stands in one occurring within it)
+//     or, directly or through other entities' replacement text, WFC: Parsed
+//     Entity, No Recursion, No External Entity References or No < in
+//     Attribute Values, or a '&' in such replacement text that begins no
+//     Reference (§4.4.5, [67]), whether or not the default is ever applied —
+//     a validity constraint on either declaration is no fault; replacement
+//     text ending inside a comment, processing instruction or markup
+//     declaration; and a '<' in the DOCTYPE header, a subset no ']' closes,
+//     or text other than S between that ']' and '>' ([28] doctypedecl). A
+//     processing instruction between the subset's declarations runs to the
+//     "?>" that alone closes it ([16] PI), whatever '>', '<' or quote it
+//     holds (internal/xmltok), and one no "?>" closes fails as the decoder's
+//     syntax error at the end of input. The external subset is never read,
+//     by design (#1668), nor is an external parameter entity; after a
 //     parameter-entity reference that is not read, unless standalone="yes",
 //     the rest of the internal subset is checked for well-formedness alone,
 //     binding no parameter entity, declaring no general entity, defining no
@@ -156,11 +158,14 @@
 //     replacement text that is not balanced content, and, in a
 //     standalone="yes" document, a reference to an entity declared only in a
 //     parameter entity's replacement text, internal, external or unparsed
-//     (WFC: Entity Declared), are RuleXMLWellFormed faults. A reference past
-//     the reader's bound on nesting depth or on replacement text included per
-//     document is refused, as is any other reference to an entity that is not
-//     internal or whose declaration the reader did not read, wrapping a cause:
-//     the reader does not decide whether the document is well-formed.
+//     (WFC: Entity Declared), are RuleXMLWellFormed faults; a reference in
+//     the replacement text of an entity whose binding declaration (§4.2)
+//     stands in a parameter entity occurs within it, and is not charged. A
+//     reference past the reader's bound on nesting depth or on replacement
+//     text included per document is refused, as is any other reference to an
+//     entity that is not internal or whose declaration the reader did not
+//     read, wrapping a cause: the reader does not decide whether the document
+//     is well-formed.
 //   - Every error the reader returns but io.EOF is a RuleXMLWellFormed
 //     *xsderr.Error, and whether it wraps a cause says what it decides. One wrapping no
 //     cause is a charge the reader makes itself and a definite fault whatever

@@ -219,16 +219,31 @@ func TestEntityReferenceRefusedUnread(t *testing.T) {
 // every parameter entity), as a fault the reader charges itself, whether the
 // entity is internal, external or unparsed: the clause keys on where the
 // declaration stands, so the decoder's refusal of an entity that is not
-// internal does not answer first. Each control is a fault row's document less
-// one difference: no standalone="yes", where the parameter-entity reference
-// read lifts the constraint, or a second declaration of the name outside every
-// parameter entity, after the first or before it. Each refused row is such a
-// control for an external entity, which the reader does not read: refused,
-// wrapping a cause, and charging no Entity Declared.
+// internal does not answer first. A reference in replacement text is charged
+// only where the binding declaration (§4.2) of the innermost entity whose text
+// holds it stands outside every parameter entity: through f, bound in one, to
+// g, declared outside, the reference to x in g's text is charged. Each control
+// is a fault row's document less one difference: no standalone="yes", where
+// the parameter-entity reference read lifts the constraint, or a second
+// declaration of the name outside every parameter entity, after the first or
+// before it. Two more read a reference to x, declared only in a parameter
+// entity, in the replacement text of f, whose binding declaration stands in
+// that parameter entity though a later one of f stands outside, so the
+// reference occurs within a parameter entity and is not charged (#2365), in
+// content and in an attribute value. Each refused row is such a control for an
+// external entity, which the reader does not read: refused, wrapping a cause,
+// and charging no Entity Declared; the last two are those two controls with x
+// external.
 func TestEntityDeclaredOnlyInParameterEntity(t *testing.T) {
 	const alone = `<?xml version="1.0" standalone="yes"?>`
 	const pe = `<!ENTITY % p "<!ENTITY e 'x'>">%p;`
 	const xpe = `<!ENTITY % p "<!ENTITY x SYSTEM 'x.ent'>">%p;`
+	// f's binding declaration (§4.2) stands in %p;, so a reference f's
+	// replacement text holds occurs within a parameter entity; g's stands
+	// outside every one, so one g's holds does not, though f references g.
+	const peBound = `<!ENTITY % p "<!ENTITY f '[&x;]'><!ENTITY x 'y'>">%p;<!ENTITY f "z">`
+	const peBoundExt = `<!ENTITY % p "<!ENTITY f '[&x;]'><!ENTITY x SYSTEM 'x.ent'>">%p;<!ENTITY f "z">`
+	const viaG = `<!ENTITY % p "<!ENTITY f '&g;'><!ENTITY x 'y'>">%p;<!ENTITY f "z"><!ENTITY g "[&x;]">`
 	const msg = `[xml-wf] reference to entity &%s; in a standalone="yes" document, where no general entity declaration outside every parameter entity declares it (XML 1.0 WFC Entity Declared)`
 	for _, tc := range []struct {
 		subset, root, want string
@@ -239,6 +254,8 @@ func TestEntityDeclaredOnlyInParameterEntity(t *testing.T) {
 		{xpe, `<r>&x;</r>`, `d.xml:1:102: ` + fmt.Sprintf(msg, "x")},
 		{xpe, `<r a="&x;"/>`, `d.xml:1:99: ` + fmt.Sprintf(msg, "x")},
 		{`<!NOTATION n SYSTEM 'n'><!ENTITY % p "<!ENTITY x SYSTEM 'x.ent' NDATA n>">%p;`, `<r>&x;</r>`, `d.xml:1:134: ` + fmt.Sprintf(msg, "x")},
+		{viaG, `<r>&f;</r>`, `d.xml:1:142: ` + fmt.Sprintf(msg, "x")},
+		{viaG, `<r a="&f;"/>`, `d.xml:1:139: ` + fmt.Sprintf(msg, "x")},
 	} {
 		t.Run(tc.subset+tc.root, func(t *testing.T) {
 			_, err := collect(t, "d.xml", alone+`<!DOCTYPE r [`+tc.subset+`]>`+tc.root)
@@ -258,6 +275,8 @@ func TestEntityDeclaredOnlyInParameterEntity(t *testing.T) {
 		{`<?xml version="1.0"?>`, pe, `<r a="&e;">&e;</r>`, `<r a="x">"x"</r>`},
 		{alone, pe + `<!ENTITY e "y">`, `<r a="&e;">&e;</r>`, `<r a="x">"x"</r>`},
 		{alone, `<!ENTITY e "y">` + pe, `<r a="&e;">&e;</r>`, `<r a="y">"y"</r>`},
+		{alone, peBound, `<r>&f;</r>`, `<r>"[y]"</r>`},
+		{alone, peBound, `<r a="&f;"/>`, `<r a="[y]"></r>`},
 	} {
 		t.Run(tc.decl+tc.subset+tc.root, func(t *testing.T) {
 			nodes, err := collect(t, "d.xml", tc.decl+`<!DOCTYPE r [`+tc.subset+`]>`+tc.root)
@@ -270,14 +289,16 @@ func TestEntityDeclaredOnlyInParameterEntity(t *testing.T) {
 		})
 	}
 	for _, tc := range []struct {
-		decl, subset string
+		decl, subset, root string
 	}{
-		{alone, `<!ENTITY x SYSTEM 'x.ent'>`},
-		{`<?xml version="1.0"?>`, xpe},
-		{alone, xpe + `<!ENTITY x SYSTEM 'y.ent'>`},
+		{alone, `<!ENTITY x SYSTEM 'x.ent'>`, `<r>&x;</r>`},
+		{`<?xml version="1.0"?>`, xpe, `<r>&x;</r>`},
+		{alone, xpe + `<!ENTITY x SYSTEM 'y.ent'>`, `<r>&x;</r>`},
+		{alone, peBoundExt, `<r>&f;</r>`},
+		{alone, peBoundExt, `<r a="&f;"/>`},
 	} {
-		t.Run(tc.decl+tc.subset, func(t *testing.T) {
-			_, err := collect(t, "d.xml", tc.decl+`<!DOCTYPE r [`+tc.subset+`]><r>&x;</r>`)
+		t.Run(tc.decl+tc.subset+tc.root, func(t *testing.T) {
+			_, err := collect(t, "d.xml", tc.decl+`<!DOCTYPE r [`+tc.subset+`]>`+tc.root)
 			wantWellFormednessError(t, err)
 			var e *xsderr.Error
 			if !errors.As(err, &e) || e.Err == nil {
