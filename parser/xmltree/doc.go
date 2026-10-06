@@ -68,12 +68,26 @@
 //   - Outside the document element only Misc — comments, processing
 //     instructions and white space — may appear, and before it an XML
 //     declaration and a DOCTYPE too (XML 1.0 [1] document, [22] prolog,
-//     [27] Misc). Rejected as RuleXMLWellFormed: a character-data run
-//     before the document element, or after it, whose source is
-//     anything but S, a character reference or CDATA section decoding to
-//     white space and a U+FEFF after the encoding signature among it, at
-//     the run's start, the character after the preceding markup; and a
-//     second top-level element, at its start tag.
+//     [27] Misc). A character-data run before or after the document
+//     element must be literal S in the source, or it is rejected as
+//     RuleXMLWellFormed at the run's start, the character after the
+//     preceding markup. A character reference, a CDATA section or a
+//     U+FEFF after the encoding signature is not S, whatever it decodes
+//     to. Also rejected as RuleXMLWellFormed: a second top-level element,
+//     at its start tag; a DOCTYPE after the document element or after
+//     another DOCTYPE, at the directive, declaring nothing ([22] admits
+//     one, before the element); and a processing instruction whose target
+//     is "xml" in any case anywhere but as the XML declaration, spelled in
+//     lower case at the document's first character, after no white space,
+//     comment or other declaration ([17] PITarget, [23] XMLDecl), at the
+//     instruction, so a misplaced standalone="yes" is never read.
+//   - Inside the document element, and in the replacement text of an
+//     internal entity referenced there (§4.3.2), a directive and a
+//     processing instruction whose target is "xml" in any case are
+//     rejected as RuleXMLWellFormed ([43] content, [17] PITarget), at the
+//     token or, in replacement text, at the reference. Replacement text
+//     never referenced is not checked for them. An external parsed entity
+//     is never read, so its TextDecl is never charged.
 //   - The DOCTYPE's internal subset is read for its general entity
 //     declarations, the first declaration of a name binding (XML 1.0 §4.2),
 //     and for its attribute-list declarations' attribute types (see the
