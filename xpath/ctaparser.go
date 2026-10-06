@@ -24,8 +24,8 @@ import (
 // in it (predicate) or a [21] UnionExpr of such paths (countArgument), a call
 // to one of the F&O string and sequence functions (libraryCall) whose arguments
 // are additive expressions or `()`, the binary operators of [13] AdditiveExpr
-// and [14] MultiplicativeExpr, and [47] ContextItemExpr `.`, which only the
-// facet façade admits, and which a value predicate reads as its candidate
+// and [14] MultiplicativeExpr, and [47] ContextItemExpr `.`, which the facet
+// façade admits, and the predicate façade reads as its candidate
 // (valuePredicate) — each behind the façade (ctaFacade.comparesValues,
 // ctaFacade.variable, ctaFacade.child, ctaFacade.childPath, ctaFacade.elements,
 // ctaFacade.rooted, ctaFacade.count, ctaFacade.callsLibrary,
@@ -266,7 +266,7 @@ const (
 	ctaSlashTok
 	ctaSlashSlashTok
 	// ctaDotTok is a '.' that opens no NumericLiteral: the [47]
-	// ContextItemExpr, which only the facet façade admits
+	// ContextItemExpr, which the facet and predicate façades admit
 	// (ctaFacade.contextItem), or the context item an fn:count argument's or
 	// an element step's `./` or `.//` opens with (ctaParser.countPath).
 	// '..', the abbreviated parent step, is not tokenized at all.
@@ -601,9 +601,6 @@ type ctaParser struct {
 	// returns. It lives here rather than on ctaNames because a value receiver
 	// cannot keep it.
 	defect ctaDefect
-	// candidate is the context item `.` reads inside a value predicate
-	// (valuePredicate), and nil everywhere else, where `.` is the façade's.
-	candidate *ctaCandidate
 }
 
 // peek reports the token at offset ahead of the cursor, or the EOF sentinel.
@@ -1317,10 +1314,10 @@ func (p *ctaParser) valuePredicate(name xsd.QName) (ctaCounted, bool) {
 	if !typed || !isChild {
 		return nil, false
 	}
-	outer, enclosing := p.facade, p.candidate
-	p.facade, p.candidate = ctaPredicateFacade{}, &ctaCandidate{st: child.st}
+	outer := p.facade
+	p.facade = ctaPredicateFacade{candidate: ctaCandidate{st: child.st}}
 	pred, parsed := p.orExpr()
-	p.facade, p.candidate = outer, enclosing
+	p.facade = outer
 	if !parsed || !p.at(ctaRBracketTok) || !ctaComparisonRooted(pred) {
 		return nil, false
 	}
@@ -1329,13 +1326,13 @@ func (p *ctaParser) valuePredicate(name xsd.QName) (ctaCounted, bool) {
 }
 
 // ctaPredicateFacade is the façade a value predicate's own expression parses
-// under (ctaParser.valuePredicate): its context item is the candidate child,
-// which the parser builds itself, so every production that reads another node
+// under (ctaParser.valuePredicate): its context item is candidate, the child
+// the predicate filters, so every production that reads another node
 // declines — an attribute of the candidate would need its own type, a step
 // below it a subtree this engine does not keep — and so does `$value`, an
 // fn:count call, and every F&O function. Comparisons and arithmetic are
 // admitted over what remains, the candidate, literals and casts.
-type ctaPredicateFacade struct{}
+type ctaPredicateFacade struct{ candidate ctaCandidate }
 
 func (ctaPredicateFacade) ctaFacade() {}
 
@@ -1354,9 +1351,8 @@ func (ctaPredicateFacade) elements(ctaCountPath) (ctaValue, bool) { return nil, 
 
 func (ctaPredicateFacade) rooted() (ctaValue, bool) { return nil, false }
 
-// contextItem declines: `.` in predicate scope is the parser's
-// (ctaParser.simpleValue), and never reaches the façade.
-func (ctaPredicateFacade) contextItem() (ctaValue, bool) { return nil, false }
+// contextItem compiles `.` to the candidate child (ctaCandidate).
+func (f ctaPredicateFacade) contextItem() (ctaValue, bool) { return f.candidate, true }
 
 func (ctaPredicateFacade) count(ctaCounted, ctaTypes) (ctaValue, bool) { return nil, false }
 
@@ -1514,9 +1510,9 @@ func (p *ctaParser) constructorFunction() (ctaValue, bool) {
 
 // simpleValue parses [16] ta-SimpleValue's two arms, the arms the assertion
 // façade adds — [44] VarRef (varRef), a child-axis step (childStep), and a
-// rooted path (rootedPath) — and [47] ContextItemExpr, which the facet façade
-// adds. A name opens the unabbreviated attribute axis only where `::` follows
-// the name `attribute`, and a child-axis step otherwise.
+// rooted path (rootedPath) — and [47] ContextItemExpr, which the facet and
+// predicate façades add. A name opens the unabbreviated attribute axis only
+// where `::` follows the name `attribute`, and a child-axis step otherwise.
 func (p *ctaParser) simpleValue() (ctaValue, bool) {
 	switch p.peek(0).kind {
 	case ctaAtTok:
@@ -1532,9 +1528,6 @@ func (p *ctaParser) simpleValue() (ctaValue, bool) {
 		return p.varRef()
 	case ctaDotTok:
 		p.advance()
-		if p.candidate != nil {
-			return *p.candidate, true
-		}
 		return p.facade.contextItem()
 	case ctaStringTok:
 		text := p.peek(0).text

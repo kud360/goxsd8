@@ -586,8 +586,9 @@ type ctaTypedChild struct {
 // ctaAssertionFacade.child reads off the ·locally declared type· of the step's
 // children, so a child of a type that declines there declines here — or the
 // empty sequence for a ·nilled· child (xpath-datamodel §6.2.4). The value is
-// the evaluation's ctaEnv.candidate. The parser builds it in predicate scope
-// alone (ctaParser.valuePredicate): `.` anywhere else is the façade's.
+// the evaluation's ctaEnv.candidate. Only ctaPredicateFacade.contextItem
+// compiles it, in a value predicate's scope (ctaParser.valuePredicate): every
+// other façade declines `.` or raises over it.
 type ctaCandidate struct{ st *xsd.SimpleType }
 
 // ctaNoDocumentRoot is a path opening with "/" or "//", which begins at the
