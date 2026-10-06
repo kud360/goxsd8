@@ -563,21 +563,19 @@ never the pattern-facet flavor.
 
 **Status: ships whole — the grammar, the two SCCs over it and the streaming
 matcher.** `go doc ./icpath` renders the exported inventory; read it there.
-Its top-level exports are `CompileSelector` / `CompileField` and the opaque
-`Expr`, `Live` and `Selection` the matcher runs on, plus `SelectorViolation` /
-`FieldViolation`. It owns §3.11.6.2 and
-§3.11.6.3 — the ·selector subset· and the ·field subset·, a path grammar over
-the child and attribute axes — and imports `xsd`, `xsderr` and `regex` (the
-NCName class its lexer scans with).
+It owns §3.11.6.2 and §3.11.6.3 — the ·selector subset· and the ·field
+subset·, a path grammar over the child and attribute axes — and imports `xsd`,
+`xsderr` and `regex` (the NCName class its lexer scans with).
 
 Two consumers in two phases, the shape `xpath` has for §3.12.6's `ta-Test`:
 `parser` calls the two `Violation` entry points at schema construction,
 charging `c-selector-xpath` / `c-fields-xpaths` at the offending
-`<selector>`/`<field>`, and `validate` compiles and advances the same
-`{expression}` at ·assessment· time for `cvc-identity-constraint`. It is NOT
-part of `xpath`: this grammar is not a stage of XPath 2.0 — its lexer borrows
-XPath 2.0's closed axis vocabulary and `node()` only to classify a step head,
-and its matcher evaluates the child and attribute axes alone — and
+`<selector>`/`<field>`, and `validate` compiles the same `{expression}` with
+`CompileSelector`/`CompileField` and advances the opaque
+`Expr`/`Live`/`Selection` at ·assessment· time for `cvc-identity-constraint`.
+It is NOT part of `xpath`: this grammar is not a stage of XPath 2.0 — its
+lexer borrows XPath 2.0's closed axis vocabulary and `node()` only to classify
+a step head, and its matcher evaluates the child and attribute axes alone — and
 `validate/doc.go` states these paths are evaluated "directly and never through
 the XPath engine".
 
