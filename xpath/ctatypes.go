@@ -212,13 +212,14 @@ func (t ctaTypes) castTarget(name xsd.QName) (*xsd.SimpleType, bool) {
 //     the result of arithmetic (ctaArith, its B.2 result type,
 //     arithmeticResult) or of an F&O function call (ctaMatch and ctaPresence,
 //     xs:boolean; ctaUnaryString, xs:integer or xs:string; ctaStringFunction,
-//     xs:string), or a cast of one of them that is not in the string family
-//     (castSource, its target);
+//     xs:string), or a cast of one of them, or of an operand the second shape
+//     names, that is not in the string family (castSource, its target);
 //   - an operand of any other shape whose static type is xs:float or
 //     xs:double (floatingSource): a DoubleLiteral such as `1.5e0` (xpath20.md
-//     [73]), or a cast to either over an operand the first shape does not
-//     name, as in `string(xs:float('1.5'))` or `string(xs:double(@s))` over
-//     an xs:string @s.
+//     [73]), or a cast to either over an untyped operand, a string-family one
+//     or a literal other than a DoubleLiteral, as in
+//     `string(xs:float('1.5'))` or `string(xs:double(@s))` over an xs:string
+//     @s.
 //
 // Every other operand casts as [CompileCTATest] states, the statically empty
 // `$value` (ctaEmptyValue) among them: it holds no item to convert. So does
@@ -252,8 +253,10 @@ func (t ctaTypes) castTarget(name xsd.QName) (*xsd.SimpleType, bool) {
 // second rule admits exactly what the first does. A literal reaches castsFrom
 // under either spelling and any target, and a DoubleLiteral is admitted by the
 // second rule alone, which leaves it xs:double itself — `xs:double(1.5e0)`,
-// §17.2 case 4's identity cast — castTarget excluding xs:anyAtomicType, its one
-// ancestor, by name.
+// §17.2 case 4's identity cast. xs:double's two simple ancestors are never a
+// target: castTarget excludes xs:anyAtomicType by name, and xs:anySimpleType,
+// xs:anyAtomicType's {base type definition} (xmlschema11-2 §4.1.6), through its
+// ·absent· {primitive type definition}.
 //
 // GAP(xpath): a cast from any OTHER typed operand is declined — §17.4's cast
 // within a branch of the hierarchy that is not to an ancestor, and §17.1's and
@@ -266,7 +269,14 @@ func (t ctaTypes) castTarget(name xsd.QName) (*xsd.SimpleType, bool) {
 // §17.1.2 renders a value of absolute value in [0.000001, 1000000) as an
 // xs:decimal, so `xs:string(1.5e0)` is "1.5" where ctaPromote would render
 // "1.5E0", and §17.1.3 casts it to xs:decimal or xs:integer by its value,
-// which the canonical "1.5E0" fails to validate as. fn:string over such an
+// which the canonical "1.5E0" fails to validate as. Those value-defined casts
+// are to the targets F&O §17.1's casting table marks Y or M from xs:float and
+// xs:double: xs:untypedAtomic, xs:string, the numerics and xs:boolean
+// (§17.1.6). To every target it marks N — the durations, the date/time and g*
+// types, the binaries and xs:anyURI — §17.1 makes the cast err:XPTY0004, a
+// type error with no value defined, and it declines too: a withhold where the
+// round-trip had decided it, raising for `xs:date(1.5e0)` and succeeding for
+// `xs:anyURI(1.5e0)`, "1.5E0" being an xs:anyURI lexical. fn:string over such an
 // operand, a node of such a type included, is that cast to xs:string and
 // declines with it. The direction is the withhold [CompileAssertionTest]
 // reports: the assertion is declined, never charged and never satisfied.
@@ -321,11 +331,11 @@ func (t ctaTypes) castSource(v ctaValue) (*xsd.SimpleType, bool) {
 // floatingSource is castSource's answer for an operand that casts whatever
 // the target unless its static type (ctaStaticOf) is atomic with a {primitive
 // type definition} of xs:float or xs:double — a literal such as `1.5e0`, or a
-// cast to either over an operand castSource does not judge — which it reports
-// as judged, so castsFrom admits it only to its own type or an ancestor of it.
-// A static type whose primitive does not resolve is judged the same way, and
-// castsFrom's ancestor rule declines it: castTarget admits no target whose
-// primitive does not resolve.
+// cast to either over an operand castSource does not judge or judges into the
+// string family — which it reports as judged, so castsFrom admits it only to
+// its own type or an ancestor of it. A static type whose primitive does not
+// resolve is judged the same way, and castsFrom's ancestor rule declines it:
+// castTarget admits no target whose primitive does not resolve.
 func (t ctaTypes) floatingSource(v ctaValue) (*xsd.SimpleType, bool) {
 	s, typed := ctaStaticOf(v).(ctaTyped)
 	if !typed {
