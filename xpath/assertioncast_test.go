@@ -278,6 +278,8 @@ func cfFacades() []cfFacade {
 				return true, true
 			case value.AssertionFails:
 				return false, true
+			case value.AssertionDeclined:
+				return false, false
 			}
 			return false, false
 		}},
