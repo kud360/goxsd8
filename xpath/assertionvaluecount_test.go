@@ -223,10 +223,10 @@ func TestCountOfAnOperandKeysWhatItCounts(t *testing.T) {
 
 // The forms outside this slice still decline: fn:distinct-values with a
 // collation argument (§7.3.1) or none, `count(.)`, fn:string over an xs:double
-// fn:distinct-values call, and each of the new forms
-// under a Type Alternative's {test}, whose grammar holds no fn:count
-// (§3.12.6 clause 3) — and on the facet, the paths fn:count counts off a
-// Tally (TestCountDeclinesOutsideTheAssertionFacade).
+// fn:distinct-values call, and each of the new forms under a Type
+// Alternative's {test}, whose grammar holds no fn:count (§3.12.6 clause 3) —
+// and on the facet, the paths fn:count counts off a Tally
+// (TestCountDeclinesOutsideTheAssertionFacade).
 func TestCountAndDistinctValuesDecline(t *testing.T) {
 	list := asList(t, "IntList", ctaBuiltin("int"))
 	types := asTypesWith(list)
