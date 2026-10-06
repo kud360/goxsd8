@@ -378,7 +378,7 @@ func asBind(t *testing.T, st *xsd.SimpleType, lexical string) ValueBinding {
 	if err != nil {
 		t.Fatalf("mapping %q against %s: %v", lexical, st.Name(), err)
 	}
-	return BindValue(Typed(v))
+	return BindValue(lexical, Typed(v))
 }
 
 // `$value` over a SIMPLE {content type} is E's ·actual value· under its {simple
@@ -481,7 +481,7 @@ func TestAssertionValueOverListContent(t *testing.T) {
 		if err != nil {
 			t.Fatalf("mapping %q against the list: %v", tc.lexical, err)
 		}
-		if got := test.Evaluate(backend(), types, asValues(t), asNoChildren, nil, BindValue(Typed(v))); got != tc.want {
+		if got := test.Evaluate(backend(), types, asValues(t), asNoChildren, nil, BindValue("", Typed(v))); got != tc.want {
 			t.Errorf("Evaluate(%q) over %q = %v, want %v", tc.expr, tc.lexical, got, tc.want)
 		}
 	}
@@ -508,23 +508,23 @@ func TestAssertionValueOverSpecialContent(t *testing.T) {
 			bound ValueBinding
 			want  bool
 		}{
-			{"$value eq 'x'", BindValue(Untyped("x")), true},
-			{"$value eq 'x'", BindValue(Untyped(" x")), false},
-			{"$value = 5", BindValue(Untyped("5.0")), true},
-			{"$value eq 5", BindValue(Untyped("5")), false},
-			{"not($value eq 5)", BindValue(Untyped("5")), false},
-			{"$value = 5", BindValue(Untyped("five")), false},
-			{"not($value = 5)", BindValue(Untyped("five")), false},
-			{"$value cast as xs:integer eq 5", BindValue(Untyped(" 5 ")), true},
-			{"$value", BindValue(Untyped("0")), true},
-			{"$value", BindValue(Untyped("")), false},
-			{"not($value)", BindValue(Untyped("")), true},
+			{"$value eq 'x'", BindValue("x", Untyped("x")), true},
+			{"$value eq 'x'", BindValue(" x", Untyped(" x")), false},
+			{"$value = 5", BindValue("5.0", Untyped("5.0")), true},
+			{"$value eq 5", BindValue("5", Untyped("5")), false},
+			{"not($value eq 5)", BindValue("5", Untyped("5")), false},
+			{"$value = 5", BindValue("five", Untyped("five")), false},
+			{"not($value = 5)", BindValue("five", Untyped("five")), false},
+			{"$value cast as xs:integer eq 5", BindValue(" 5 ", Untyped(" 5 ")), true},
+			{"$value", BindValue("0", Untyped("0")), true},
+			{"$value", BindValue("", Untyped("")), false},
+			{"not($value)", BindValue("", Untyped("")), true},
 			{"$value eq 'x'", ValueBinding{}, false},
 			{"not($value eq 'x')", ValueBinding{}, true},
 			{"$value", ValueBinding{}, false},
-			{"$value eq 'x'", BindValue(Typed(five)), false},
-			{"not($value eq 'x')", BindValue(Typed(five)), false},
-			{"not($value)", BindValue(Typed(five)), false},
+			{"$value eq 'x'", BindValue("", Typed(five)), false},
+			{"not($value eq 'x')", BindValue("", Typed(five)), false},
+			{"not($value)", BindValue("", Typed(five)), false},
 		} {
 			t.Run(special+" "+tc.expr, func(t *testing.T) {
 				got := asCompileFor(t, tc.expr, content, asUses(t, nil)).Evaluate(backend(), seededTypes, asValues(t), asNoChildren, nil, tc.bound)

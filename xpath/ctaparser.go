@@ -700,7 +700,24 @@ func (p *ctaParser) andExpr() (ctaExpr, bool) {
 // one child step leaves a '/' after it a token no production takes, and
 // declines, and so does a `.` before a '/' or '//'; one step is childStep's,
 // whose value is read.
+//
+// A left operand that is an integer sequence (integerSequenceLength) is read
+// as one where a general comparator follows it, ahead of the `(` arm, which
+// would read its parenthesis as a boolean one.
+//
+// GAP(xpath): the context item `.` with its Comparator absent declines, so `.`
+// and `not(.)` do: there it is a node, whose ·effective boolean value· is
+// rule 2's (xpath20.md §2.4.3), and never that of the atom ctaContextAtom
+// reads. The direction is the withhold [CompileAssertionTest] reports. (#1042)
 func (p *ctaParser) booleanExpr() (ctaExpr, bool) {
+	if n := p.integerSequenceLength(0); n > 0 && p.peek(n).kind == ctaCompTok {
+		left, ok := p.integerSequence(n)
+		if !ok {
+			return nil, false
+		}
+		op, _ := p.comparator()
+		return p.generalComparison(op, left)
+	}
 	if p.at(ctaLParen) {
 		p.advance()
 		x, ok := p.orExpr()
@@ -739,9 +756,21 @@ func (p *ctaParser) booleanExpr() (ctaExpr, bool) {
 	}
 	op, compared := p.comparator()
 	if !compared {
+		if _, isContext := left.(ctaContextAtom); isContext {
+			return nil, false
+		}
 		return ctaEffectiveBoolean{operand: left}, true
 	}
-	right, ok := p.additiveExpr()
+	return p.generalComparison(op, left)
+}
+
+// generalComparison parses the right operand of a general comparison
+// (xpath20.md §3.5.2) whose left operand and operator are already read —
+// an integer sequence or an additiveExpr (generalOperand) — and builds its
+// node, typed by ctaTypes.comparison: a type it cannot be compared in is the
+// err:XPTY0004 ctaTypeError, and a declined one declines.
+func (p *ctaParser) generalComparison(op ctaComparator, left ctaValue) (ctaExpr, bool) {
+	right, ok := p.generalOperand()
 	if !ok {
 		return nil, false
 	}
@@ -1155,9 +1184,17 @@ func (p *ctaParser) stringOf(arg ctaValue) (ctaValue, bool) {
 // `item()*` argument (xpath-functions.md §15.1.4, §15.1.5), which is not
 // atomized (presenceArgument), and whose result is xs:boolean. A boolean that
 // does not resolve declines.
+//
+// GAP(xpath): the context item `.` as the whole argument declines: there it is
+// a node, E, which fn:exists and fn:empty do not atomize, and never the atom
+// ctaContextAtom reads. The direction is the withhold [CompileAssertionTest]
+// reports. (#1042)
 func (p *ctaParser) presenceCall(op ctaPresenceOp) (ctaValue, bool) {
 	operand, ok := p.presenceArgument()
 	if !ok {
+		return nil, false
+	}
+	if _, isContext := operand.(ctaContextAtom); isContext {
 		return nil, false
 	}
 	boolean, resolved := p.types.simple(ctaBuiltin("boolean"))
@@ -1420,6 +1457,11 @@ func (ctaPredicateFacade) computes() bool { return true }
 // constructorFunction, so `string-length(.)` and position() and last(), which
 // the library holds none of, never reach a node.
 func (ctaPredicateFacade) callsLibrary() bool { return false }
+
+// constructsSequences is false: a value predicate compares the candidate
+// against literals, casts and arithmetic alone, and `N[. = (1 to 3)]` declines
+// with every other predicate outside that shape (ctaParser.predicate).
+func (ctaPredicateFacade) constructsSequences() bool { return false }
 
 // existenceLength is how many tokens at the cursor spell a conjunction of
 // attribute-existence tests, `'@' QName ('and' '@' QName)*`, and 0 where they

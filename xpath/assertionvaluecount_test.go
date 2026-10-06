@@ -38,7 +38,7 @@ func vcAssertion(t *testing.T, types xsd.TypeResolver, tc vcCase) bool {
 	if err != nil {
 		t.Fatalf("mapping %q against %s: %v", tc.lexical, tc.st.Name().Local, err)
 	}
-	return test.Evaluate(backend(), types, asValues(t), asNoChildren, nil, BindValue(Typed(v)))
+	return test.Evaluate(backend(), types, asValues(t), asNoChildren, nil, BindValue("", Typed(v)))
 }
 
 // vcFacet decides tc.expr as an assertions facet's {test} over tc.lexical
@@ -161,11 +161,11 @@ func TestCountValueOverSpecialAndNonSimpleContent(t *testing.T) {
 		bound   ValueBinding
 		want    bool
 	}{
-		{"count($value) eq 1", anySimple, BindValue(Untyped("x")), true},
-		{"count(distinct-values($value)) eq 1", anySimple, BindValue(Untyped("x")), true},
-		{"distinct-values($value) = 'x'", anySimple, BindValue(Untyped("x")), true},
-		{"distinct-values($value)", anySimple, BindValue(Untyped("x")), true},
-		{"distinct-values($value)", anySimple, BindValue(Untyped("")), false},
+		{"count($value) eq 1", anySimple, BindValue("x", Untyped("x")), true},
+		{"count(distinct-values($value)) eq 1", anySimple, BindValue("x", Untyped("x")), true},
+		{"distinct-values($value) = 'x'", anySimple, BindValue("x", Untyped("x")), true},
+		{"distinct-values($value)", anySimple, BindValue("x", Untyped("x")), true},
+		{"distinct-values($value)", anySimple, BindValue("", Untyped("")), false},
 		{"count($value) eq 0", anySimple, ValueBinding{}, true},
 		{"count(distinct-values($value)) eq 0", anySimple, ValueBinding{}, true},
 		{"count($value) eq 0", xsd.ElementContent{}, ValueBinding{}, true},

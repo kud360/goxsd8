@@ -171,7 +171,7 @@ func TestAssertionPresenceFunctions(t *testing.T) {
 	if !ok {
 		t.Fatal("CompileAssertionTest(exists($value)) over ·special· content: declined, want compiled")
 	}
-	if !untyped.Evaluate(backend(), seededTypes, asValues(t), asNoChildren, nil, BindValue(Untyped(""))) {
+	if !untyped.Evaluate(backend(), seededTypes, asValues(t), asNoChildren, nil, BindValue("", Untyped(""))) {
 		t.Error("Evaluate(exists($value)) over an xs:untypedAtomic $value = false, want true")
 	}
 	if untyped.Evaluate(backend(), seededTypes, asValues(t), asNoChildren, nil, ValueBinding{}) {
@@ -261,7 +261,7 @@ func TestAssertionStringArgumentTypeErrors(t *testing.T) {
 		if err != nil {
 			t.Fatalf("mapping %q against the list: %v", tc.lexical, err)
 		}
-		if got := test.Evaluate(backend(), types, asValues(t), asNoChildren, nil, BindValue(Typed(v))); got != tc.want {
+		if got := test.Evaluate(backend(), types, asValues(t), asNoChildren, nil, BindValue("", Typed(v))); got != tc.want {
 			t.Errorf("Evaluate(%q) over %q = %v, want %v", tc.expr, tc.lexical, got, tc.want)
 		}
 	}
@@ -371,16 +371,16 @@ func TestStringFunctionsReadTheirArguments(t *testing.T) {
 
 // What stays declined: a function outside the eleven, the three-argument
 // collation form of fn:contains and its kin (never read as the two-argument
-// form), every other arity, the zero-argument string forms — whose implicit
-// argument is E's string value, which `.` on the assertion façade does not
-// supply — and fn:string over a typed node or value outside the xs:string
-// family (castsFrom), or over an xs:float or xs:double, a literal
-// (literalCastsTo) or a cast to either over a string-family operand
+// form), every other arity, and fn:string over a typed node or value outside
+// the xs:string family (castsFrom), or over an xs:float or xs:double, a
+// literal (literalCastsTo) or a cast to either over a string-family operand
 // (castsFrom's floatingSource shape) included, whose cast to xs:string §17.1.2
 // does not render canonically — an xs:decimal and an xs:boolean literal still
-// compile. With matchCall admitting three arguments the collation row
-// compiles, with ctaAssertionFacade.contextItem admitting `.` the
-// zero-argument rows do, with literalCastsTo's last return answering true the
+// compile. The zero-argument string forms compile over simple content, whose
+// implicit argument is E's string value `.` reads
+// (TestAssertionContextItemIsTheStringValue evaluates them). With matchCall
+// admitting three arguments the collation row compiles, with
+// literalCastsTo's last return answering true the
 // `string(1.5e0)` row does, and with castSource's ctaCast exit answering
 // (nil, false) in place of floatingSource the two rows over a cast to
 // xs:float or xs:double do; with literalCastsTo's xs:decimal or xs:boolean
@@ -398,9 +398,6 @@ func TestCompileAssertionTestDeclinesFunctions(t *testing.T) {
 		"true(1)",
 		"string(@s, @s) = ''",
 		"string-length(@s, @s) = 0",
-		"string-length() > 0",
-		"normalize-space() = ''",
-		"string() = ''",
 		"string(@i) = '5'",
 		"string(n) = '5'",
 		"string(c) = '5'",

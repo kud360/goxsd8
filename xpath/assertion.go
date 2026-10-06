@@ -182,30 +182,63 @@ func Untyped(lexical string) TypedValue { return tvUntyped{lexical: lexical} }
 // from outside E.
 type TypedAttributes func(yield func(name xsd.QName, v TypedValue) bool)
 
-// ValueBinding is the value cvc-assertion clause 2.3 binds to `$value` for one
-// evaluation. The zero ValueBinding is the empty sequence — clause 2.3.2's
-// value, for an E whose [validity] in the partial ·PSVI· is invalid, whose
-// [nil] is true, or whose ·governing type definition· has a {content
-// type}.{variety} other than simple.
+// ValueBinding is what one evaluation reads of E itself, two independent facts
+// [BindValue] binds: E's string value, which the [47] ContextItemExpr `.`
+// atomizes to under an [xsd.SimpleContent], and the value cvc-assertion clause
+// 2.3 binds to `$value`.
+//
+// The string value is always one xs:untypedAtomic value: E's annotation in the
+// partial ·PSVI· cvc-assertion clause 1.2 builds is xs:anyType
+// (xpath-datamodel §3.3.1.1, [validation attempted] partial), a complex type
+// with mixed content, whose typed value is its string value as xs:untypedAtomic
+// (xpath20.md §2.5.2) — "its atomized value will be a single atomic value of
+// type untypedAtomic", as clause 2.3.1's Note says, whatever the {simple type
+// definition}'s variety. It has no absent
+// state: a ·nilled· or empty E's string value is the zero-length string
+// (xpath-datamodel §6.2.4), which is xs:untypedAtomic "" and never the empty
+// sequence.
+//
+// `$value`'s part of the zero ValueBinding is the empty sequence — clause
+// 2.3.2's value, for an E whose [validity] in the partial ·PSVI· is invalid,
+// whose [nil] is true, or whose ·governing type definition· has a {content
+// type}.{variety} other than simple — and its string value is "". So the zero
+// ValueBinding is BindValue("", nil), what a ·nilled· E binds.
 //
 // It has no third state for an E whose value is UNDECIDED: [AssertionTest.Evaluate]
 // always decides, so a caller that cannot tell which of clause 2.3's cases E is
 // in declines the assertion itself, as it does an attribute with no ·actual
 // value·.
-type ValueBinding struct{ v TypedValue }
+type ValueBinding struct {
+	text string
+	v    TypedValue
+}
 
-// BindValue binds `$value` to the typed value v of E's [schema actual value]
-// (cvc-assertion clause 2.3.1), whose arm and type the {simple type definition}
-// of the [xsd.SimpleContent] the [AssertionTest] was compiled for fixes, on the
-// terms [TypedAttributes] states for an attribute's value: [Untyped] of E's
-// [schema normalized value] where it is ·special·, and [Typed] of a value of
-// exactly it otherwise. A list {simple type definition}'s value must carry
-// [value.Listed], whose items are the flattened sequence Datatypes dt-xdmrep
-// makes its XDM representation.
+// BindValue binds E's string value text, which `.` reads, and `$value`'s
+// value v, on the terms [ValueBinding] states. Each fact is the caller's to
+// supply, and neither is derived from the other.
 //
-// BindValue(nil) is the zero ValueBinding, the empty sequence, so the empty
-// sequence has one encoding.
-func BindValue(v TypedValue) ValueBinding { return ValueBinding{v: v} }
+// text is E's string value as the data model instance holds it: the
+// concatenation of its text node children (xpath-datamodel §6.2.4), which
+// Appendix J.2's children rule builds from
+// the character [[children]] of E in document order — its ·initial value· —
+// or, where cvc-elt clause 5.1 supplied a default because E has
+// neither element nor character [[children]], the {value constraint}'s
+// {lexical form}, the one text node the data model builds for a defaulted
+// element. It is never re-normalized under the {simple type definition}'s
+// whiteSpace: `.` over xs:integer content "0030" is "0030", where `$value` is
+// 30. An invalid E has a string value all the same, so text is bound where v
+// is nil.
+//
+// v is the typed value of E's [schema actual value] (cvc-assertion clause
+// 2.3.1), whose arm and type the {simple type definition} of the
+// [xsd.SimpleContent] the [AssertionTest] was compiled for fixes, on the terms
+// [TypedAttributes] states for an attribute's value: [Untyped] of E's [schema
+// normalized value] where it is ·special·, and [Typed] of a value of exactly
+// it otherwise. A list {simple type definition}'s value must carry
+// [value.Listed], whose items are the flattened sequence Datatypes dt-xdmrep
+// makes its XDM representation. A nil v is the empty sequence of clause 2.3.2,
+// so the empty sequence has one encoding.
+func BindValue(text string, v TypedValue) ValueBinding { return ValueBinding{text: text, v: v} }
 
 // Tally is the node-count input of ONE evaluation of ONE [AssertionTest] over
 // the element E: for each relative path the {test} counts over with fn:count
@@ -756,6 +789,7 @@ func (ctaLiteral) readsChild(xsd.QName) bool        { return false }
 func (ctaValueVar) readsChild(xsd.QName) bool       { return false }
 func (ctaEmptyValue) readsChild(xsd.QName) bool     { return false }
 func (ctaUntypedValue) readsChild(xsd.QName) bool   { return false }
+func (ctaContextAtom) readsChild(xsd.QName) bool    { return false }
 
 // readsChild reports whether the call's argument reads the value of a child
 // named name.
@@ -891,6 +925,7 @@ func (ctaLiteral) counted(into []ctaTallied) []ctaTallied        { return into }
 func (ctaValueVar) counted(into []ctaTallied) []ctaTallied       { return into }
 func (ctaEmptyValue) counted(into []ctaTallied) []ctaTallied     { return into }
 func (ctaUntypedValue) counted(into []ctaTallied) []ctaTallied   { return into }
+func (ctaContextAtom) counted(into []ctaTallied) []ctaTallied    { return into }
 
 // ctaAssertionFacade is the assertion façade compileCTATest parses for: its
 // attribute nodes are typed by attrs, its child element nodes by elems, its
@@ -916,6 +951,10 @@ func (ctaAssertionFacade) computes() bool { return true }
 // callsLibrary is true, on comparesValues' terms: the F&O function library is
 // in full XPath 2.0.
 func (ctaAssertionFacade) callsLibrary() bool { return true }
+
+// constructsSequences is true, on comparesValues' terms: §3.3.1's sequence
+// expressions are in full XPath 2.0.
+func (ctaAssertionFacade) constructsSequences() bool { return true }
 
 // ctaValueName is the ·expanded name· of the one variable an assertion's
 // static context holds (cvc-assertion clause 2.3): "no namespace URI and ...
@@ -1081,10 +1120,20 @@ func ctaCountOf(arg ctaCounted, types ctaTypes) (ctaValue, bool) {
 	return ctaCount{arg: arg, st: integer}, true
 }
 
-// contextItem declines `.`. The context item is E (cvc-xpath), an element node
-// whose typed value this engine builds no node for, so the [47]
-// ContextItemExpr is outside what [CompileAssertionTest] admits, on child's
-// terms.
-func (ctaAssertionFacade) contextItem() (ctaValue, bool) {
-	return nil, false
+// contextItem compiles the [47] ContextItemExpr `.` to ctaContextAtom where
+// content is an [xsd.SimpleContent]. The context item is E (cvc-xpath clause
+// 1), annotated xs:anyType in the partial ·PSVI· (cvc-assertion clause 1.2),
+// so `.` atomizes to one xs:untypedAtomic value, E's string value — under a
+// list or union {simple type definition} as under an atomic one, the variety
+// deciding `$value`'s type alone.
+//
+// GAP(xpath): under every other {content type}, and a nil one, `.` declines:
+// E's string value is then the text of its descendants (xpath-datamodel
+// §6.2.4), which is not an [AssertionTest.Evaluate] input. The direction is
+// the withhold [CompileAssertionTest] reports. (#1042)
+func (f ctaAssertionFacade) contextItem() (ctaValue, bool) {
+	if _, simple := f.content.(xsd.SimpleContent); !simple {
+		return nil, false
+	}
+	return ctaContextAtom{}, true
 }

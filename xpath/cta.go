@@ -645,6 +645,23 @@ type ctaEmptyValue struct{}
 // its operand's static type is xs:untypedAtomic, as an untyped attribute's is.
 type ctaUntypedValue struct{}
 
+// ctaContextAtom is the [47] ContextItemExpr `.` over E, an element whose
+// ·governing type definition· has a simple {content type}
+// (ctaAssertionFacade.contextItem), ATOMIZED (xpath20.md §2.4.2): one
+// xs:untypedAtomic value holding E's string value, read from the
+// [ValueBinding] the evaluation carries — never `$value`'s typed value, and
+// never the empty sequence ([ValueBinding] states why). It is an arm of its
+// own and not a ctaUntypedValue, because the two read different facts of the
+// binding: `$value` over a ·special· type is the empty sequence where E is
+// invalid or ·nilled·, and `.` is E's string value there too.
+//
+// It stands only where it is atomized. As the whole operand of an ·effective
+// boolean value·, fn:exists or fn:empty `.` is a NODE, and
+// ctaParser.booleanExpr and ctaParser.presenceCall decline it there rather
+// than read the atom; fn:count over it is a path, which ctaParser.countPath
+// declines.
+type ctaContextAtom struct{}
+
 // ctaFacade is the sealed sum of the façades compileCTATest parses for — one
 // value, so the attribute node a façade builds and the comparisons it admits
 // can never come from two different façades (STYLE T1). The grammar's three
@@ -707,6 +724,12 @@ type ctaFacade interface {
 	// [18] ta-ConstructorFunction (constructors alone), and an fn:count
 	// argument that is no path (ctaParser.countCall).
 	callsLibrary() bool
+	// constructsSequences reports whether the façade admits, as an operand of
+	// a general comparison, xpath20.md [11] RangeExpr `to` and the
+	// parenthesized comma sequence of §3.3.1 over IntegerLiterals
+	// (ctaParser.integerSequence), which §3.12.6's grammar has no production
+	// for.
+	constructsSequences() bool
 }
 
 // ctaTypeAlternativeFacade is a Type Alternative's façade: every attribute
@@ -777,6 +800,10 @@ func (ctaTypeAlternativeFacade) computes() bool { return false }
 // fn:not or to a constructor, so every other name reaches
 // ctaParser.constructorFunction and declines there.
 func (ctaTypeAlternativeFacade) callsLibrary() bool { return false }
+
+// constructsSequences is false, on comparesValues' terms: ta-props-correct
+// clause 2's grammar has no RangeExpr and no comma.
+func (ctaTypeAlternativeFacade) constructsSequences() bool { return false }
 
 // ctaNameTest is the sealed sum of [36] NameTest's arms as [17] ta-AttrName
 // and a child-axis step reach them, matching one ·expanded name· at a time.
@@ -1331,6 +1358,7 @@ func (ctaCount) ctaValue()            {}
 func (ctaValueVar) ctaValue()         {}
 func (ctaEmptyValue) ctaValue()       {}
 func (ctaUntypedValue) ctaValue()     {}
+func (ctaContextAtom) ctaValue()      {}
 
 // ctaStatic is one operand's static type, which is what xpath20.md §3.5.2's
 // casting rules dispatch on. It is a sealed sum of the three states this
@@ -1404,6 +1432,10 @@ func ctaStaticOf(v ctaValue) ctaStatic {
 		return ctaEmptySequence{}
 	case ctaUntypedValue:
 		return ctaUntypedAtomic{}
+	case ctaContextAtom:
+		return ctaUntypedAtomic{}
+	case ctaIntegerRanges:
+		return ctaTyped{st: n.st}
 	default:
 		return ctaUntypedAtomic{}
 	}
@@ -1937,9 +1969,28 @@ func ctaItemOf(v ctaValue, c *xsd.SimpleType, env ctaEnv) ctaItem {
 		return ctaAtoms{}
 	case ctaUntypedValue:
 		return ctaUntypedValueItem(c, env)
+	case ctaContextAtom:
+		return ctaContextAtomItem(c, env)
+	case ctaIntegerRanges:
+		return ctaIntegerRangesItem(n, c, env)
 	default:
 		return ctaAtoms{}
 	}
+}
+
+// ctaContextAtomItem casts E's string value, the [ValueBinding]'s text, into c,
+// which §3.5.2's casting rules — and §3.5.1 step 4's, and §3.4's for an
+// arithmetic operand — do to an xs:untypedAtomic operand, on ctaAttrItem's
+// terms: one item, whatever `$value` is bound to.
+//
+// The input is ctaTypedInput by construction (ctaInput); the other arm binds
+// nothing and is unreachable, and raises.
+func ctaContextAtomItem(c *xsd.SimpleType, env ctaEnv) ctaItem {
+	in, typed := env.input.(ctaTypedInput)
+	if !typed {
+		return ctaRaised{}
+	}
+	return ctaValidate(in.value.text, c, env)
 }
 
 // ctaUntypedValueItem casts `$value`'s [Untyped] binding into c, which
