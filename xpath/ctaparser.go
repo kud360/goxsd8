@@ -695,6 +695,13 @@ func (p *ctaParser) booleanExpr() (ctaExpr, bool) {
 		}
 		return ctaEffectiveBoolean{operand: path}, true
 	}
+	if n := p.selectedStepLength(0); n > 0 && p.closesBoolean(n) {
+		step, ok := p.selectedElements()
+		if !ok {
+			return nil, false
+		}
+		return ctaEffectiveBoolean{operand: step}, true
+	}
 	left, ok := p.additiveExpr()
 	if !ok {
 		return nil, false
@@ -1151,6 +1158,13 @@ func (p *ctaParser) presenceArgument() (ctaValue, bool) {
 		p.advance() // ')'
 		return path, ok
 	}
+	if n := p.selectedStepLength(2); n > 0 && p.peek(2+n).kind == ctaRParen {
+		p.advance() // the function name
+		p.advance() // '('
+		step, ok := p.selectedElements()
+		p.advance() // ')'
+		return step, ok
+	}
 	args, ok := p.arguments()
 	if !ok || len(args) != 1 {
 		return nil, false
@@ -1445,6 +1459,48 @@ func (p *ctaParser) childPath(n int) (ctaValue, bool) {
 		steps = append(steps, p.elementName(p.peek(0).text))
 	}
 	return p.facade.childPath(steps)
+}
+
+// selectedStepLength is how many tokens, from offset at ahead of the cursor,
+// spell one of countArgument's element steps — a QName, `N`, alone or behind
+// `./` or `.//` — and 0 where they spell none. Nothing is consumed, and nothing
+// after the name is read: a name followed by '(' or '::' is a function call or
+// an axis spelled out, which the caller's check that the token after the step
+// closes the operand turns away.
+func (p *ctaParser) selectedStepLength(at int) int {
+	n := 0
+	if p.peek(at).kind == ctaDotTok {
+		if next := p.peek(at + 1).kind; next != ctaSlashTok && next != ctaSlashSlashTok {
+			return 0
+		}
+		n = 2
+	}
+	if p.peek(at+n).kind != ctaNameTok {
+		return 0
+	}
+	return n + 1
+}
+
+// selectedElements parses the step selectedStepLength measured at the cursor
+// on countArgument's grammar — `N` and `./N` the element children of E named
+// N, `.//N` every element below E so named (xpath20.md §3.2.4) — into the node
+// p.facade builds for it (ctaFacade.elements), which may decline it. It is the
+// ONE place a ctaSelectedElements is built, reached from childPath's two
+// positions alone and on its terms: the ·effective boolean value· arm of
+// booleanExpr and fn:exists or fn:empty's argument (presenceArgument), where
+// the step is the whole operand, whatever type the step's name has. Everywhere
+// else a step is childStep's, whose value is read, and `./N` and `.//N`
+// decline.
+func (p *ctaParser) selectedElements() (ctaValue, bool) {
+	arg, ok := p.countArgument()
+	if !ok {
+		return nil, false
+	}
+	path, relative := arg.(ctaCountPath)
+	if !relative {
+		return nil, false
+	}
+	return p.facade.elements(path)
 }
 
 // rootedPath parses xpath20.md [25] PathExpr's two rooted arms, "/"

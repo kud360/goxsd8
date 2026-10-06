@@ -636,6 +636,12 @@ type ctaFacade interface {
 	// (ctaParser.childPath), into its node, reporting false where the façade
 	// declines it, on attribute's terms. No step is typed: none is atomized.
 	childPath(steps []xsd.QName) (ctaValue, bool)
+	// elements compiles one element step, `N`, `./N` or `.//N`, whose QName
+	// NameTest resolved into path, standing as the whole operand of fn:exists,
+	// fn:empty or an ·effective boolean value· (ctaParser.selectedElements),
+	// into its node, reporting false where the façade declines it, on
+	// attribute's terms. The step is not typed, on childPath's terms.
+	elements(path ctaCountPath) (ctaValue, bool)
 	// rooted compiles a path opening with "/" or "//" into its node, reporting
 	// false where the façade declines it, on attribute's terms.
 	rooted() (ctaValue, bool)
@@ -693,6 +699,11 @@ func (ctaTypeAlternativeFacade) child(ctaNameTest, ctaTypes) (ctaValue, bool) {
 
 // childPath declines every path of child steps, on child's terms.
 func (ctaTypeAlternativeFacade) childPath([]xsd.QName) (ctaValue, bool) {
+	return nil, false
+}
+
+// elements declines every element step, on child's terms.
+func (ctaTypeAlternativeFacade) elements(ctaCountPath) (ctaValue, bool) {
 	return nil, false
 }
 
@@ -893,7 +904,8 @@ func (ctaNoDocumentRoot) ctaCounted() {}
 // declines.
 //
 // Its one constructor is ctaChildPathOf, which admits two or more steps: a
-// one-step path is ctaTypedChild or, counted, ctaCountPath.
+// one-step path is ctaTypedChild where its value is read, ctaSelectedElements
+// where only its existence is, and ctaCountPath where it is counted.
 type ctaChildPath struct{ steps []xsd.QName }
 
 // ctaChildPathOf is the ctaChildPath over steps, false where steps holds fewer
@@ -903,6 +915,33 @@ func ctaChildPathOf(steps []xsd.QName) (ctaChildPath, bool) {
 		return ctaChildPath{}, false
 	}
 	return ctaChildPath{steps: steps}, true
+}
+
+// ctaSelectedElements is one element step, `N`, `./N` or `.//N` with a QName
+// NameTest (xpath20.md §3.2.1.1, §3.2.4), which only the assertion façade
+// admits (ctaFacade.elements) and only as the whole operand of fn:exists,
+// fn:empty or an ·effective boolean value· (ctaParser.selectedElements): the
+// element children of E named N, or every element below E named N and never E
+// itself, as path's axis says. Like ctaChildPath it is never atomized
+// (fn:exists, fn:empty `item()*`, §2.4.3 rule 2), so the step is never typed,
+// a node of any type, ·nilled· or not, is selected, and how many there are is
+// read off the [Tally] — under path itself, so `count(a) ge 1 and a` keeps one
+// counter for both. It is not a counter key of its own (ctaTallied): path is.
+//
+// Its one constructor is ctaSelectedElementsOf, which refuses an attribute
+// axis: an attribute step in those positions is ctaAttr or ctaTypedAttr.
+type ctaSelectedElements struct{ path ctaCountPath }
+
+// ctaSelectedElementsOf is the ctaSelectedElements over p, false where p's axis
+// selects attributes.
+func ctaSelectedElementsOf(p ctaCountPath) (ctaSelectedElements, bool) {
+	switch p.axis {
+	case ctaCountChildren, ctaCountDescendants:
+		return ctaSelectedElements{path: p}, true
+	case ctaCountOwnAttributes, ctaCountSubtreeAttributes:
+		return ctaSelectedElements{}, false
+	}
+	return ctaSelectedElements{}, false
 }
 
 // ctaTallied is the sealed sum of the keys a [Tally] keeps a counter under: an
@@ -1002,18 +1041,19 @@ func (p ctaChildPath) same(other ctaTallied) bool {
 	return isChild && slices.Equal(o.steps, p.steps)
 }
 
-func (ctaAttr) ctaValue()           {}
-func (ctaTypedAttr) ctaValue()      {}
-func (ctaTypedChild) ctaValue()     {}
-func (ctaChildPath) ctaValue()      {}
-func (ctaNoDocumentRoot) ctaValue() {}
-func (ctaNoContextItem) ctaValue()  {}
-func (ctaLiteral) ctaValue()        {}
-func (ctaCast) ctaValue()           {}
-func (ctaCount) ctaValue()          {}
-func (ctaValueVar) ctaValue()       {}
-func (ctaEmptyValue) ctaValue()     {}
-func (ctaUntypedValue) ctaValue()   {}
+func (ctaAttr) ctaValue()             {}
+func (ctaTypedAttr) ctaValue()        {}
+func (ctaTypedChild) ctaValue()       {}
+func (ctaChildPath) ctaValue()        {}
+func (ctaSelectedElements) ctaValue() {}
+func (ctaNoDocumentRoot) ctaValue()   {}
+func (ctaNoContextItem) ctaValue()    {}
+func (ctaLiteral) ctaValue()          {}
+func (ctaCast) ctaValue()             {}
+func (ctaCount) ctaValue()            {}
+func (ctaValueVar) ctaValue()         {}
+func (ctaEmptyValue) ctaValue()       {}
+func (ctaUntypedValue) ctaValue()     {}
 
 // ctaStatic is one operand's static type, which is what xpath20.md §3.5.2's
 // casting rules dispatch on. It is a sealed sum of the three states this
@@ -1051,8 +1091,9 @@ func (ctaEmptySequence) ctaStatic() {}
 // ctaUntypedValue are the untyped arms, and so are ctaNoDocumentRoot and
 // ctaNoContextItem: each raises before any item exists, so its static type
 // decides only whether a comparison over it compiles, never an answer. A
-// ctaChildPath never reaches here: ctaParser.childPath builds it only where no
-// static type is asked.
+// ctaChildPath or ctaSelectedElements never reaches here: ctaParser.childPath
+// and ctaParser.selectedElements build them only where no static type is
+// asked.
 func ctaStaticOf(v ctaValue) ctaStatic {
 	switch n := v.(type) {
 	case ctaLiteral:
@@ -1573,6 +1614,10 @@ func ctaItemOf(v ctaValue, c *xsd.SimpleType, env ctaEnv) ctaItem {
 	case ctaChildPath:
 		// Never reached: ctaParser.childPath builds the node only where its
 		// nodes are counted and no item is read (ctaStep.nodes).
+		return ctaRaised{}
+	case ctaSelectedElements:
+		// Never reached, on ctaChildPath's terms
+		// (ctaParser.selectedElements).
 		return ctaRaised{}
 	case ctaNoDocumentRoot:
 		return ctaRaised{} // err:XPDY0050

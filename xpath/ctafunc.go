@@ -311,5 +311,15 @@ func (s ctaChildPath) nodes(env ctaEnv) (int, bool) {
 	return in.counts.count(s)
 }
 
+// nodes is the counter the evaluation's [Tally] holds for s's path, on
+// ctaChildPath's terms.
+func (s ctaSelectedElements) nodes(env ctaEnv) (int, bool) {
+	in, typed := env.input.(ctaTypedInput)
+	if !typed {
+		return 0, false
+	}
+	return in.counts.count(s.path)
+}
+
 func (ctaNoDocumentRoot) nodes(ctaEnv) (int, bool) { return 0, false } // err:XPDY0050
 func (ctaNoContextItem) nodes(ctaEnv) (int, bool)  { return 0, false } // err:XPDY0002

@@ -678,6 +678,9 @@ func (ctaCount) readsChild(xsd.QName) bool { return false }
 // and how many nodes it selects is the [Tally]'s.
 func (ctaChildPath) readsChild(xsd.QName) bool { return false }
 
+// readsChild is false, on ctaChildPath's terms.
+func (ctaSelectedElements) readsChild(xsd.QName) bool { return false }
+
 // counted appends each path any of operands counts over.
 func (n ctaOr) counted(into []ctaTallied) []ctaTallied { return ctaAnyCounted(n.operands, into) }
 
@@ -741,6 +744,12 @@ func (n ctaCount) counted(into []ctaTallied) []ctaTallied {
 
 // counted appends the path itself: the [Tally] counts the nodes it selects.
 func (n ctaChildPath) counted(into []ctaTallied) []ctaTallied { return append(into, n) }
+
+// counted appends the step's path, the key an fn:count over the same step
+// counts under too.
+func (n ctaSelectedElements) counted(into []ctaTallied) []ctaTallied {
+	return append(into, n.path)
+}
 
 // ctaAnyCounted is counted over each of operands, in written order.
 func ctaAnyCounted(operands []ctaExpr, into []ctaTallied) []ctaTallied {
@@ -890,6 +899,20 @@ func (ctaAssertionFacade) childPath(steps []xsd.QName) (ctaValue, bool) {
 		return nil, false
 	}
 	return path, true
+}
+
+// elements compiles one element step, `N`, `./N` or `.//N`, to a
+// ctaSelectedElements over path, consulting neither attrs nor elems, on
+// childPath's terms: the step stands only where its existence is asked, so N's
+// type decides nothing — an element-only, mixed, empty or ·special· one is
+// selected as a simple one is — and what it selects is read off the [Tally].
+// An attribute axis declines; the parser builds none here.
+func (ctaAssertionFacade) elements(path ctaCountPath) (ctaValue, bool) {
+	selected, admitted := ctaSelectedElementsOf(path)
+	if !admitted {
+		return nil, false
+	}
+	return selected, true
 }
 
 // ctaChildValueType is the simple type the typed value of an element of type
