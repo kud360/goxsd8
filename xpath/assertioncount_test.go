@@ -16,12 +16,15 @@ import (
 // attribute node where attribute is true, named name and depth levels below E.
 // An element node is reported by its chain below E: path where it is non-nil,
 // and otherwise depth-1 ancestors named acFiller above name, the empty chain —
-// E itself — at a depth below 1.
+// E itself — at a depth below 1; with attrs, the names of its attribute nodes.
+// An attribute node is reported alone on an element whose chain is depth
+// acFiller names, the empty chain — E itself — at depth 0.
 type acNode struct {
 	attribute bool
 	depth     int
 	name      xsd.QName
 	path      []xsd.QName
+	attrs     []xsd.QName
 }
 
 // acFiller names the ancestors acTally invents for an element reported by
@@ -34,6 +37,12 @@ func (n acNode) chain() []xsd.QName {
 		return n.path
 	}
 	var path []xsd.QName
+	if n.attribute {
+		for range n.depth {
+			path = append(path, acFiller)
+		}
+		return path
+	}
 	for range n.depth - 1 {
 		path = append(path, acFiller)
 	}
@@ -41,6 +50,14 @@ func (n acNode) chain() []xsd.QName {
 		path = append(path, n.name)
 	}
 	return path
+}
+
+// reported is the attribute names n is reported with.
+func (n acNode) reported() []xsd.QName {
+	if n.attribute {
+		return []xsd.QName{n.name}
+	}
+	return n.attrs
 }
 
 // acPath is an element node reported by the chain of locals below E, each in no
@@ -66,11 +83,7 @@ func acAt(depth int, local string) acNode {
 func acTally(test AssertionTest, nodes ...acNode) *Tally {
 	c := test.Tally()
 	for _, n := range nodes {
-		if n.attribute {
-			c.Attribute(n.depth, n.name)
-			continue
-		}
-		c.Element(n.chain())
+		c.Element(n.chain(), n.reported())
 	}
 	return c
 }
@@ -239,21 +252,19 @@ func TestAssertionEvaluateRefusesAMismatchedTally(t *testing.T) {
 // AssertionTest.Tally is nil for a test that counts nothing and fresh on every
 // call otherwise, so filling one Tally leaves the next untouched and the
 // compiled test immutable. Tally's methods are total: an empty element chain
-// and an attribute depth below 0 select nothing, and a nil Tally takes any
-// report.
+// selects no element, and a nil Tally takes any report.
 func TestAssertionTallyIsFreshAndTotal(t *testing.T) {
 	if c := acCompile(t, asRecord("@length eq 1")).Tally(); c != nil {
 		t.Errorf("Tally() of a test with no fn:count = %v, want nil", c)
 	}
 	test := acCompile(t, asRecord("count(.//e1) eq 0 and count(.//@a) eq 0"))
 	acTally(test, acEl(1, "e1"), acAt(0, "a"))
-	fresh := acTally(test, acEl(0, "e1"), acEl(-1, "e1"), acAt(-1, "a"))
+	fresh := acTally(test, acEl(0, "e1"), acEl(-1, "e1"))
 	if !test.Evaluate(backend(), seededTypes, asValues(t), asNoChildren, fresh, ValueBinding{}) {
 		t.Error("Evaluate over a fresh Tally given only out-of-range depths = false, want true")
 	}
 	var none *Tally
-	none.Element([]xsd.QName{uq("e1")})
-	none.Attribute(0, uq("a"))
+	none.Element([]xsd.QName{uq("e1")}, []xsd.QName{uq("a")})
 }
 
 // CountsAttributesAt answers per counted path: `@a` selects attributes of E

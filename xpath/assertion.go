@@ -211,27 +211,26 @@ func BindValue(v TypedValue) ValueBinding { return ValueBinding{v: v} }
 // integer per path whatever the subtree's size.
 //
 // The caller's obligation is to report EVERY node of E's subtree in the data
-// model instance cvc-assertion clause 1 builds, exactly once, in any order:
-//
-//   - each element below E, by the chain of ·expanded names· from E's child
-//     down to it, whatever its validity, whether it is ·nilled·, and whether it
-//     was ·strictly· or ·laxly assessed· or ·skipped· ([Tally.Element]);
-//   - each attribute of E and of each element below it, at the depth of the
-//     element it belongs to ([Tally.Attribute]): those the element carries,
-//     xsi:type and the other xsi attributes among them, and its ·defaulted
-//     attributes· (key-dflt-att), which the partial ·PSVI· clause 1.2 builds
-//     from holds too; never a namespace declaration, which is not an attribute
-//     node.
+// model instance cvc-assertion clause 1 builds, exactly once, in any order, by
+// one [Tally.Element] call per element, E itself included: the element, by the
+// chain of ·expanded names· from E's child down to it — the empty chain for E —
+// whatever its validity, whether it is ·nilled·, and whether it was ·strictly·
+// or ·laxly assessed· or ·skipped·, with the names of ALL its attribute nodes:
+// those it carries, xsi:type and the other xsi attributes among them, and its
+// ·defaulted attributes· (key-dflt-att), which the partial ·PSVI· clause 1.2
+// builds from holds too; never a namespace declaration, which is not an
+// attribute node.
 //
 // A ·skipped· element and everything below it is governed by no type
 // (key-skipped, key-governing-type-elem item 5), so it has no ·defaulted
 // attribute·: its attribute nodes are exactly those it carries, xsi ones
 // included. An element whose ·governing type definition· the caller could not
-// determine has ·defaulted attributes· it cannot know, and may go unreported
-// as attributes only at a depth where [Tally.CountsAttributesAt] is false; a
-// caller that cannot report a subtree exactly otherwise declines the assertion
-// itself, on the terms [ValueBinding] states for an undecided `$value`.
-// Under-reporting would make a count too small and could fabricate a charge.
+// determine has ·defaulted attributes· it cannot know, and may be reported
+// with no attribute names only at a depth where [Tally.CountsAttributesAt] is
+// false; a caller that cannot report a subtree exactly otherwise declines the
+// assertion itself, on the terms [ValueBinding] states for an undecided
+// `$value`. Under-reporting would make a count too small and could fabricate a
+// charge.
 //
 // Its consumer is validate's cvc-assertion site (validate/cvcassertion.go),
 // which reports each element it walks, and each element of a ·skipped· subtree
@@ -245,52 +244,57 @@ type ctaCounter struct {
 	n    int
 }
 
-// Element reports one element node below E, by path: the ·expanded names· of
-// the elements from E's child down to the reported node inclusive, so
-// len(path) is its depth below E — 1 for a child, 2 for a grandchild, and so
-// on. path is read during the call and never retained. Every path the {test}
-// counts selecting such a node counts it — `N` where path is [N], `.//N`
-// where path ends in N at any depth, since xpath20.md §3.2.4 makes `.//N`
-// `./descendant-or-self::node()/child::N`, which never selects E itself, and
-// `N1/N2/…` where path is exactly its steps (§3.2). An empty path is E
-// itself and selects nothing, and so does every report to a nil Tally.
-func (c *Tally) Element(path []xsd.QName) {
+// Element reports one element of E's subtree, by path, and its attribute
+// nodes, by attrs. path is the ·expanded names· of the elements from E's child
+// down to the reported one inclusive, so len(path) is its depth below E — 0
+// for E itself, 1 for a child, 2 for a grandchild, and so on. attrs is the
+// names of ALL its attribute nodes, carried or ·defaulted·, on the terms
+// [Tally] states. Neither slice is retained: both are read during the call.
+//
+// Every path the {test} counts selecting the element counts it — `N` where
+// path is [N], `.//N` where path ends in N at any depth, since xpath20.md
+// §3.2.4 makes `.//N` `./descendant-or-self::node()/child::N`, which never
+// selects E itself, and `N1/N2/…` where path is exactly its steps (§3.2) — and
+// every path selecting one of its attribute nodes counts that node: `@N` at
+// depth 0 only, and `.//@N` at every depth, E's own included, since §3.2.4
+// makes `.//@N` `./descendant-or-self::node()/attribute::N`. The empty path
+// is E, whose element node no path selects. Every report to a nil Tally
+// selects nothing.
+func (c *Tally) Element(path []xsd.QName, attrs []xsd.QName) {
 	if c == nil {
 		return
 	}
 	for i := range c.counters {
-		if c.counters[i].path.selectsElement(path) {
-			c.counters[i].n++
-		}
+		c.counters[i].n += ctaSelected(c.counters[i].path, path, attrs)
 	}
 }
 
-// Attribute reports one attribute node named name, carried or ·defaulted·,
-// belonging to the element depth levels below E: 0 for E's own. Every counted
-// path selecting such a node counts it — `@N` at depth 0 only, and `.//@N` at
-// every depth, E's own included, since §3.2.4 makes `.//@N`
-// `./descendant-or-self::node()/attribute::N`. A depth below 0 selects
-// nothing, and so does every report to a nil Tally.
-func (c *Tally) Attribute(depth int, name xsd.QName) {
-	if c == nil {
-		return
+// ctaSelected is how many of the nodes one [Tally.Element] report carries — the
+// element at path, and its attribute nodes attrs — key selects, each node
+// counted once.
+func ctaSelected(key ctaTallied, path, attrs []xsd.QName) int {
+	n := 0
+	if key.selectsElement(path) {
+		n++
 	}
-	for i := range c.counters {
-		if c.counters[i].path.selectsAttribute(depth, name) {
-			c.counters[i].n++
+	for _, a := range attrs {
+		if key.selectsAttribute(len(path), a) {
+			n++
 		}
 	}
+	return n
 }
 
-// CountsAttributesAt reports whether some path c counts selects an attribute
-// node of the element depth levels below E, 0 being E: `@N` at depth 0 only,
-// and `.//@N` at every depth from 0. It is false for a nil Tally and for a
-// depth below 0, which no [Tally.Attribute] report counts at either.
+// CountsAttributesAt reports whether the attribute names reported for an
+// element depth levels below E, 0 being E, can change any count c holds: `@N`
+// selects attribute nodes at depth 0 only, and `.//@N` at every depth from 0.
+// It is false for a nil Tally and for a depth below 0, where no [Tally.Element]
+// report stands.
 //
 // Its consumer is validate's walk (validate/cvcassertion.go), which asks it of
 // an element whose ·defaulted attributes· it cannot know: where it is false,
-// no report of that element's attributes could change any count, and the
-// element node is reported alone.
+// no attribute name reported for that element could change any count, and the
+// element is reported with none.
 func (c *Tally) CountsAttributesAt(depth int) bool {
 	if c == nil {
 		return false

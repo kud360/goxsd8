@@ -57,34 +57,33 @@
 //     which a Type Alternative's {test} still declines. AssertionTest.ReadsChild reports which
 //     children a compiled {test} reads for their values, so its caller keeps no other; neither
 //     fn:count nor a path whose existence is asked reads a value, and AssertionTest.Tally makes
-//     the Tally its caller reports E's subtree to — each element by its chain of names below E
-//     (Tally.Element), each attribute by its element's depth (Tally.Attribute),
-//     Tally.CountsAttributesAt telling it at which depths an attribute counts — and Evaluate reads
-//     the counts off, so no counted node is kept. It declines what tier 1 declines, plus a
-//     wildcard NameTest, an attribute with no fixed atomic type that is not ·special· (a list, a
-//     union, an xs:QName or xs:NOTATION primitive), a child read for its value whose ·locally
-//     declared type· is ·absent·, ·special·, or neither a simple type an attribute's would be
-//     admitted as nor simple content over one, a path of more than one step in any other position
-//     or with any other step — so `a/b = 1`, `count(a/b)`, `a/@b`, `a//b` and `a/*` decline — an
-//     fn:count argument of any other shape, a cast from a typed attribute, child or `$value`
-//     outside the xs:string family to a type it is not derived from (F&O §17.2 case 4's identity
-//     cast and §17.3's cast up the hierarchy are admitted), fn:string over any of those or over a
-//     typed count, arithmetic or function result, or a cast of one, outside that family, a cast of
-//     an xs:float or xs:double operand to a target other than its own type or an ancestor of it,
-//     fn:string over such an operand, a collation argument, a function call of the wrong arity,
-//     the zero-argument string functions, whose implicit argument reads `.`, an arithmetic operand
-//     that is not numeric, an xs:float one against xs:double (#889), a unary sign, and a `$value`
-//     whose {simple type definition} is classified as such an attribute's type would be, or is a
-//     list of a type that would be; a `$value` over ·special· content is xs:untypedAtomic, as such
-//     an attribute is. FacetAssertions is the value.AssertionEvaluator for an assertions facet's
-//     {test} (Datatypes §4.3.13.3, cvc-assertions-valid), over the same grammar plus [47]
-//     ContextItemExpr: `$value` is bound to the value under the facet's type, or under its ·active
-//     basic member· where that type is a union (dt-xdmrep clause 4), and there is no context item,
-//     so `.`, an attribute or child step, an element step, a child path, a rooted path and a
-//     zero-argument string function each raise err:XPDY0002 and fail the facet; an fn:count call
-//     declines. `.` declines everywhere else. Longer paths in other positions, the other axes,
-//     predicates, quantified expressions, the collation arguments and every other F&O function are
-//     PLANNED (#1042).
+//     the Tally its caller reports E's subtree to — each element by its chain of names below E,
+//     with the names of its attribute nodes (Tally.Element), Tally.CountsAttributesAt telling it
+//     at which depths those names can change a count — and Evaluate reads the counts off, so no
+//     counted node is kept. It declines what tier 1 declines, plus a wildcard NameTest, an
+//     attribute with no fixed atomic type that is not ·special· (a list, a union, an xs:QName or
+//     xs:NOTATION primitive), a child read for its value whose ·locally declared type· is
+//     ·absent·, ·special·, or neither a simple type an attribute's would be admitted as nor simple
+//     content over one, a path of more than one step in any other position or with any other step
+//     — so `a/b = 1`, `count(a/b)`, `a/@b`, `a//b` and `a/*` decline — an fn:count argument of any
+//     other shape, a cast from a typed attribute, child or `$value` outside the xs:string family
+//     to a type it is not derived from (F&O §17.2 case 4's identity cast and §17.3's cast up the
+//     hierarchy are admitted), fn:string over any of those or over a typed count, arithmetic or
+//     function result, or a cast of one, outside that family, a cast of an xs:float or xs:double
+//     operand to a target other than its own type or an ancestor of it, fn:string over such an
+//     operand, a collation argument, a function call of the wrong arity, the zero-argument string
+//     functions, whose implicit argument reads `.`, an arithmetic operand that is not numeric, an
+//     xs:float one against xs:double (#889), a unary sign, and a `$value` whose {simple type
+//     definition} is classified as such an attribute's type would be, or is a list of a type that
+//     would be; a `$value` over ·special· content is xs:untypedAtomic, as such an attribute is.
+//     FacetAssertions is the value.AssertionEvaluator for an assertions facet's {test} (Datatypes
+//     §4.3.13.3, cvc-assertions-valid), over the same grammar plus [47] ContextItemExpr: `$value`
+//     is bound to the value under the facet's type, or under its ·active basic member· where that
+//     type is a union (dt-xdmrep clause 4), and there is no context item, so `.`, an attribute or
+//     child step, an element step, a child path, a rooted path and a zero-argument string function
+//     each raise err:XPDY0002 and fail the facet; an fn:count call declines. `.` declines
+//     everywhere else. Longer paths in other positions, the other axes, predicates, quantified
+//     expressions, the collation arguments and every other F&O function are PLANNED (#1042).
 //  3. The full grammar (docs/specs/md/xpath20.md) and function library
 //     (docs/specs/md/xpath-functions.md) — M7 onward, ratcheted.
 //     PLANNED.

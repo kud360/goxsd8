@@ -181,19 +181,15 @@ func (c *assertionCheck) countsAttributesAt(depth int) bool {
 	return false
 }
 
-// tally reports one element of c's element's subtree to each test's Tally:
-// the element node by path, the names of the elements from c's element's
-// child down to it inclusive, and each of attrs, the names of its attribute
-// nodes, at its depth, len(path). The empty path is c's own element, whose
-// element node selects nothing ([xpath.Tally.Element]) and whose attributes
-// alone count. A test with no Tally takes nothing ([xpath.Tally]'s nil
-// receiver).
+// tally reports one element of c's element's subtree to each test's Tally, in
+// one [xpath.Tally.Element] call: by path, the names of the elements from c's
+// element's child down to it inclusive, with attrs, the names of its attribute
+// nodes. The empty path is c's own element, whose element node selects
+// nothing and whose attributes alone count. A test with no Tally takes nothing
+// ([xpath.Tally]'s nil receiver).
 func (c *assertionCheck) tally(path []xsd.QName, attrs []xsd.QName) {
 	for _, t := range c.tests {
-		t.tally.Element(path)
-		for _, a := range attrs {
-			t.tally.Attribute(len(path), a)
-		}
+		t.tally.Element(path, attrs)
 	}
 }
 
