@@ -136,7 +136,7 @@ func TestAssertionCastsAListedValue(t *testing.T) {
 		if err != nil {
 			t.Fatalf("mapping %q against the list: %v", tc.lexical, err)
 		}
-		if got := test.Evaluate(backend(), types, asValues(t), asNoChildren, nil, BindValue(Typed(v))); got != tc.want {
+		if got := test.Evaluate(backend(), types, asValues(t), asNoChildren, nil, BindValue("", Typed(v))); got != tc.want {
 			t.Errorf("Evaluate(%q) over %q = %v, want %v", tc.expr, tc.lexical, got, tc.want)
 		}
 	}

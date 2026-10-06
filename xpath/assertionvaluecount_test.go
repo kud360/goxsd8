@@ -38,7 +38,7 @@ func vcAssertion(t *testing.T, types xsd.TypeResolver, tc vcCase) bool {
 	if err != nil {
 		t.Fatalf("mapping %q against %s: %v", tc.lexical, tc.st.Name().Local, err)
 	}
-	return test.Evaluate(backend(), types, asValues(t), asNoChildren, nil, BindValue(Typed(v)))
+	return test.Evaluate(backend(), types, asValues(t), asNoChildren, nil, BindValue("", Typed(v)))
 }
 
 // vcFacet decides tc.expr as an assertions facet's {test} over tc.lexical
@@ -146,13 +146,13 @@ func TestDistinctValuesResult(t *testing.T) {
 }
 
 // `$value` over a ·special· {simple type definition} is one xs:untypedAtomic
-// value, or none for the zero binding (cvc-assertion clause 2.3.2), and over
-// any {content type} that is not simple the empty sequence: fn:count counts 1,
-// 0 and 0, and fn:distinct-values keeps the one item, compared as xs:string
-// (§15.1.6). The `count(distinct-values($value)) eq 1` row fails with
-// ctaSequenceLength's ctaDistinctValues arm removed, which counts an untyped
-// operand as statically empty, and the ·effective boolean value· row over "x"
-// with ctaEffectiveBoolean.eval's.
+// value, or none for the zero binding's nil `$value` (cvc-assertion clause
+// 2.3.2), and over any {content type} that is not simple the empty sequence:
+// fn:count counts 1, 0 and 0, and fn:distinct-values keeps the one item,
+// compared as xs:string (§15.1.6). The `count(distinct-values($value)) eq 1`
+// row fails with ctaSequenceLength's ctaDistinctValues arm removed, which
+// counts an untyped operand as statically empty, and the ·effective boolean
+// value· row over "x" with ctaEffectiveBoolean.eval's.
 func TestCountValueOverSpecialAndNonSimpleContent(t *testing.T) {
 	anySimple := xsd.SimpleContent{SimpleType: asBuiltin(t, "anySimpleType")}
 	for _, tc := range []struct {
@@ -161,11 +161,11 @@ func TestCountValueOverSpecialAndNonSimpleContent(t *testing.T) {
 		bound   ValueBinding
 		want    bool
 	}{
-		{"count($value) eq 1", anySimple, BindValue(Untyped("x")), true},
-		{"count(distinct-values($value)) eq 1", anySimple, BindValue(Untyped("x")), true},
-		{"distinct-values($value) = 'x'", anySimple, BindValue(Untyped("x")), true},
-		{"distinct-values($value)", anySimple, BindValue(Untyped("x")), true},
-		{"distinct-values($value)", anySimple, BindValue(Untyped("")), false},
+		{"count($value) eq 1", anySimple, BindValue("x", Untyped("x")), true},
+		{"count(distinct-values($value)) eq 1", anySimple, BindValue("x", Untyped("x")), true},
+		{"distinct-values($value) = 'x'", anySimple, BindValue("x", Untyped("x")), true},
+		{"distinct-values($value)", anySimple, BindValue("x", Untyped("x")), true},
+		{"distinct-values($value)", anySimple, BindValue("", Untyped("")), false},
 		{"count($value) eq 0", anySimple, ValueBinding{}, true},
 		{"count(distinct-values($value)) eq 0", anySimple, ValueBinding{}, true},
 		{"count($value) eq 0", xsd.ElementContent{}, ValueBinding{}, true},

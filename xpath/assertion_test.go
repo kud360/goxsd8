@@ -378,14 +378,14 @@ func asBind(t *testing.T, st *xsd.SimpleType, lexical string) ValueBinding {
 	if err != nil {
 		t.Fatalf("mapping %q against %s: %v", lexical, st.Name(), err)
 	}
-	return BindValue(Typed(v))
+	return BindValue(lexical, Typed(v))
 }
 
 // `$value` over a SIMPLE {content type} is E's ·actual value· under its {simple
 // type definition} (cvc-assertion clause 2.3.1), typed — so `$value eq 5`
-// compares xs:int values and "+05" is 5 — and the zero ValueBinding is the
-// empty sequence clause 2.3.2 gives an invalid or ·nilled· E, false under a
-// value comparison and true under fn:not of one.
+// compares xs:int values and "+05" is 5 — and `$value` in the zero
+// ValueBinding is the empty sequence clause 2.3.2 gives an invalid or ·nilled·
+// E, false under a value comparison and true under fn:not of one.
 func TestAssertionValueOverSimpleContent(t *testing.T) {
 	content := xsd.SimpleContent{SimpleType: asBuiltin(t, "int")}
 	uses := asUses(t, map[string]string{"max": "int"})
@@ -481,7 +481,7 @@ func TestAssertionValueOverListContent(t *testing.T) {
 		if err != nil {
 			t.Fatalf("mapping %q against the list: %v", tc.lexical, err)
 		}
-		if got := test.Evaluate(backend(), types, asValues(t), asNoChildren, nil, BindValue(Typed(v))); got != tc.want {
+		if got := test.Evaluate(backend(), types, asValues(t), asNoChildren, nil, BindValue("", Typed(v))); got != tc.want {
 			t.Errorf("Evaluate(%q) over %q = %v, want %v", tc.expr, tc.lexical, got, tc.want)
 		}
 	}
@@ -491,11 +491,10 @@ func TestAssertionValueOverListContent(t *testing.T) {
 // value] as one xs:untypedAtomic value (Datatypes dt-xdmrep clause 1), cast as
 // an untyped attribute is: to xs:string under a value comparison (xpath20.md
 // §3.5.1 step 4), to xs:double against a numeric under a general comparison
-// (§3.5.2 clause 2.1), raising err:FORG0001 where it does not cast; its
-// effective boolean value is false only for the zero-length string (§2.4.3 rule
-// 4). The zero ValueBinding is the empty sequence, and a [Typed] binding breaks
-// [BindValue]'s obligation and raises. Each row fails with ctaTypes.valueVariable
-// declining a ·special· type.
+// (§3.5.2 clause 2.1), raising err:FORG0001 where it does not cast; its effective boolean
+// value is false only for the zero-length string (§2.4.3 rule 4). `$value` in the zero
+// ValueBinding is the empty sequence, and a [Typed] binding breaks [BindValue]'s obligation
+// and raises. Each row fails with ctaTypes.valueVariable declining a ·special· type.
 func TestAssertionValueOverSpecialContent(t *testing.T) {
 	five, err := value.ValidateLexical(backend(), seededTypes, asBuiltin(t, "integer"), "5", nil, FacetAssertions())
 	if err != nil {
@@ -508,23 +507,23 @@ func TestAssertionValueOverSpecialContent(t *testing.T) {
 			bound ValueBinding
 			want  bool
 		}{
-			{"$value eq 'x'", BindValue(Untyped("x")), true},
-			{"$value eq 'x'", BindValue(Untyped(" x")), false},
-			{"$value = 5", BindValue(Untyped("5.0")), true},
-			{"$value eq 5", BindValue(Untyped("5")), false},
-			{"not($value eq 5)", BindValue(Untyped("5")), false},
-			{"$value = 5", BindValue(Untyped("five")), false},
-			{"not($value = 5)", BindValue(Untyped("five")), false},
-			{"$value cast as xs:integer eq 5", BindValue(Untyped(" 5 ")), true},
-			{"$value", BindValue(Untyped("0")), true},
-			{"$value", BindValue(Untyped("")), false},
-			{"not($value)", BindValue(Untyped("")), true},
+			{"$value eq 'x'", BindValue("x", Untyped("x")), true},
+			{"$value eq 'x'", BindValue(" x", Untyped(" x")), false},
+			{"$value = 5", BindValue("5.0", Untyped("5.0")), true},
+			{"$value eq 5", BindValue("5", Untyped("5")), false},
+			{"not($value eq 5)", BindValue("5", Untyped("5")), false},
+			{"$value = 5", BindValue("five", Untyped("five")), false},
+			{"not($value = 5)", BindValue("five", Untyped("five")), false},
+			{"$value cast as xs:integer eq 5", BindValue(" 5 ", Untyped(" 5 ")), true},
+			{"$value", BindValue("0", Untyped("0")), true},
+			{"$value", BindValue("", Untyped("")), false},
+			{"not($value)", BindValue("", Untyped("")), true},
 			{"$value eq 'x'", ValueBinding{}, false},
 			{"not($value eq 'x')", ValueBinding{}, true},
 			{"$value", ValueBinding{}, false},
-			{"$value eq 'x'", BindValue(Typed(five)), false},
-			{"not($value eq 'x')", BindValue(Typed(five)), false},
-			{"not($value)", BindValue(Typed(five)), false},
+			{"$value eq 'x'", BindValue("", Typed(five)), false},
+			{"not($value eq 'x')", BindValue("", Typed(five)), false},
+			{"not($value)", BindValue("", Typed(five)), false},
 		} {
 			t.Run(special+" "+tc.expr, func(t *testing.T) {
 				got := asCompileFor(t, tc.expr, content, asUses(t, nil)).Evaluate(backend(), seededTypes, asValues(t), asNoChildren, nil, tc.bound)
