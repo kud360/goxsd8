@@ -162,8 +162,10 @@ func TestElementAndAttlistDeclAreWellFormed(t *testing.T) {
 // parameter entity's replacement text, and one declared nowhere that another
 // entity's replacement text references, even where a default value in a
 // parameter entity, which the constraint does not bind, has walked that entity
-// first (XML 1.0 WFC: Entity Declared, which a standalone="yes" document is
-// bound by after a parameter-entity reference); an unparsed entity, directly,
+// first, or where that entity, declared outside every parameter entity, is
+// reached through one whose binding declaration stands in a parameter entity
+// (XML 1.0 WFC: Entity Declared, which a standalone="yes" document is bound by
+// after a parameter-entity reference); an unparsed entity, directly,
 // after a parameter-entity reference read and in one's replacement text (WFC:
 // Parsed Entity); an entity reaching itself in one step or two (WFC: No
 // Recursion); an external entity, directly, through another entity and
@@ -192,7 +194,11 @@ func TestElementAndAttlistDeclAreWellFormed(t *testing.T) {
 // entity's replacement text in a standalone="yes" document, which it does not
 // reach; the standalone="yes" row whose entity is declared only in a parameter
 // entity, without standalone="yes", where the reference read lifts the
-// constraint; an entity whose replacement text references a name declared
+// constraint; a standalone="yes" default value referencing f, declared outside
+// every parameter entity but bound (§4.2) by its first declaration, in one,
+// whose replacement text references x, declared only in that parameter
+// entity, a reference that occurs within a parameter entity (#2365); an entity
+// whose replacement text references a name declared
 // nowhere, which no default value references; and an entity whose replacement
 // text holds a '&' that begins no Reference, which no default value references
 // either.
@@ -204,6 +210,8 @@ func TestAttlistDefaultEntityReferencesAreWellFormed(t *testing.T) {
 	const ext = `<!ENTITY % ext SYSTEM "x.ent"> %ext; `
 	const read = `<!ENTITY % p ""> %p; `
 	const peDeclared = `<!ENTITY % p "<!ENTITY e 'x'>">%p;<!ATTLIST r a CDATA "&e;">`
+	const peBound = `<!ENTITY % p "<!ENTITY f '[&x;]'><!ENTITY x 'y'>">%p;<!ENTITY f "z">`
+	const peBoundViaG = `<!ENTITY % p "<!ENTITY f '&g;'><!ENTITY x 'y'>">%p;<!ENTITY f "z"><!ENTITY g "[&x;]">`
 	laughs := `<!ENTITY l0 "lol">`
 	for i := 1; i <= 9; i++ {
 		laughs += fmt.Sprintf(`<!ENTITY l%d "%s">`, i, strings.Repeat(fmt.Sprintf("&l%d;", i-1), 10))
@@ -243,6 +251,7 @@ func TestAttlistDefaultEntityReferencesAreWellFormed(t *testing.T) {
 		{alone + head + peDeclared + tail, value + declared("e")},
 		{decl + head + `<!ENTITY f "&u;"><!ATTLIST r a CDATA "&f;">` + tail, value + undeclared("f", "u")},
 		{alone + head + `<!ENTITY f "&u;"><!ENTITY % q "<!ATTLIST r b CDATA '&f;'>"> %q;<!ATTLIST r a CDATA "&f;">` + tail, value + undeclared("f", "u")},
+		{alone + head + peBoundViaG + `<!ATTLIST r a CDATA "&f;">` + tail, value + undeclared("g", "x")},
 		{decl + head + `<!ATTLIST r a CDATA "&pic;">` + tail, value + parsed("pic")},
 		{decl + head + read + `<!ATTLIST r a CDATA "&pic;">` + tail, value + parsed("pic")},
 		{decl + head + `<!ENTITY % q "<!ATTLIST r a CDATA '&pic;'>"> %q;` + tail, inPE + parsed("pic")},
@@ -295,6 +304,7 @@ func TestAttlistDefaultEntityReferencesAreWellFormed(t *testing.T) {
 		`<!DOCTYPE r SYSTEM "r.dtd" [<!ATTLIST r a CDATA "&u;">]><r/>`,
 		alone + `<!DOCTYPE r [<!ENTITY % q "<!ATTLIST r a CDATA '&u;'>"> %q;]><r/>`,
 		decl + head + peDeclared + tail,
+		alone + head + peBound + `<!ATTLIST r a CDATA "&f;">` + tail,
 		decl + head + `<!ENTITY f "&u;"><!ATTLIST r a CDATA "x">` + tail,
 		decl + head + `<!ENTITY f "a&#38;b"><!ATTLIST r a CDATA "x">` + tail,
 	} {
