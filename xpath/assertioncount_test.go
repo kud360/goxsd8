@@ -301,10 +301,11 @@ func TestTallyCountsAttributesAt(t *testing.T) {
 	}
 }
 
-// fn:count's argument is one QName step, or a rooted one: every other argument
-// declines, and so does `.//` or `./` in a comparison operand, and a cast from
-// a count, which [16] ta-SimpleValue, the operand of both cast spellings, does
-// not admit.
+// fn:count's argument is one QName step, a rooted one, a child step filtered
+// by one predicate, or a union (the predicate and union rows below): every
+// other argument declines, a positional predicate among them, and so does
+// `.//` or `./` in a comparison operand, and a cast from a count, which [16]
+// ta-SimpleValue, the operand of both cast spellings, does not admit.
 func TestCompileAssertionTestDeclinesCounts(t *testing.T) {
 	for _, tc := range []struct{ expr, why string }{
 		{"count(*) = 0", "a wildcard NameTest"},
@@ -318,7 +319,7 @@ func TestCompileAssertionTestDeclinesCounts(t *testing.T) {
 		{"count(.) = 1", "the context item alone"},
 		{"count(..) = 1", "the parent step"},
 		{"count($value) = 1", "a variable"},
-		{"count(e1[1]) = 1", "a predicate"},
+		{"count(e1[1]) = 1", "a positional predicate"},
 		{"count(child::e1) = 1", "the unabbreviated child axis"},
 		{"count(attribute::a) = 1", "the unabbreviated attribute axis"},
 		{"count() = 0", "no argument"},

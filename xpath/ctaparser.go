@@ -907,9 +907,9 @@ func (p *ctaParser) additiveOperator() (ctaArithOp, bool) {
 // multiplicativeExpr parses xpath20.md [14] MultiplicativeExpr, `UnionExpr (
 // ("*" | "div" | "idiv" | "mod") UnionExpr )*`, on additiveExpr's terms. Each
 // operand is a [14] ta-ValueExpr: the productions between UnionExpr and
-// ValueExpr are reached only through their one-operand arms, so a union, a
-// `treat`, an `instance of` and a unary sign leave a token no production takes
-// and decline.
+// ValueExpr are reached only through their one-operand arms, so a union — but
+// in an fn:count argument (countArgument) — a `treat`, an `instance of` and a
+// unary sign leave a token no production takes and decline.
 func (p *ctaParser) multiplicativeExpr() (ctaValue, bool) {
 	left, ok := p.valueExpr()
 	if !ok {
