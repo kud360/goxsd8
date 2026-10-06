@@ -39,11 +39,16 @@ func WithURI(uri string) Option {
 // Validate assesses the XML instance in r against v's schema and reports
 // what the assessment found.
 //
-// The two error channels split on whether the assessment ran at all: it
-// returns (nil, err) only when it never did — v or r is nil, or the
-// document is malformed before its document element — and (result, nil) in
-// every case where the walk began, with a source fault that stopped the
-// walk mid-document living in [validate.Result.Err] alone and never also
+// The two error channels split on whether an assessment stands: it returns
+// (nil, err) when none does — v or r is nil, the document is malformed
+// before its document element, or the walk finished and the rest of the
+// stream, which Validate then reads to its end, is malformed: a subtree the
+// walk did not descend into, or what follows the document element, where
+// only Misc may stand (XML 1.0 [1] document, [27] Misc), so that character
+// data that is not literal white space and a second top-level element there are
+// reported. A document that is not well-formed has no infoset to assess. It
+// returns (result, nil) in every other case, with a source fault that stopped
+// the walk mid-document living in [validate.Result.Err] alone and never also
 // returned here.
 //
 // A nil argument yields a plain error rather than an [xsderr.Error], on
@@ -63,12 +68,16 @@ func Validate(v *validate.Validator, r io.Reader, opts ...Option) (*validate.Res
 	if err != nil {
 		return nil, err
 	}
-	// GAP(xml): content OUTSIDE the document element is not inspected.
-	// Character data before it is dropped (see root), and anything after its
-	// end tag is never read: Assess returns there, so trailing character
-	// content and a second document element alike go unreported. XML 1.0
-	// §2.1 admits only Misc in either position. Tracked by #753.
-	return v.Assess(root), nil
+	res := v.Assess(root)
+	// A walk that stopped on a fault has it in res.Err already, and the
+	// stream it stopped in is not read on.
+	if w.err == nil {
+		err = w.drain()
+	}
+	if err != nil {
+		return nil, err
+	}
+	return res, nil
 }
 
 // walker is the one token stream a whole assessment pulls from: a single
@@ -116,9 +125,9 @@ func (w *walker) next() (xmltree.Node, int, error) {
 }
 
 // root advances to the document element. Character data at the document
-// level belongs to no element, so it is dropped rather than yielded to one
-// — whatever it holds: nothing here asks whether it is the whitespace XML
-// 1.0 §2.1 allows there, which is the GAP(xml) Validate marks.
+// level belongs to no element, so it is dropped rather than yielded to one;
+// the reader has already refused any such run that is not S (XML 1.0 [1]
+// document, [22] prolog, [27] Misc), so nothing the document holds is lost.
 func (w *walker) root() (*element, error) {
 	for {
 		node, at, err := w.next()
@@ -133,5 +142,22 @@ func (w *walker) root() (*element, error) {
 			continue
 		}
 		return &element{w: w, start: start, depth: at + 1, n: w.n}, nil
+	}
+}
+
+// drain reads the stream from wherever the walk left it to its end and returns
+// the first source fault it meets: in a subtree the walk did not descend into,
+// or after the document element's end tag, where the reader refuses all but
+// Misc (XML 1.0 [1] document, [27] Misc) — character data that is not S, or a
+// second top-level element.
+func (w *walker) drain() error {
+	for {
+		_, _, err := w.next()
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
 	}
 }

@@ -275,11 +275,11 @@ func TestCursorStaysExhausted(t *testing.T) {
 	}
 }
 
-// TestPrologCharDataIsDropped covers the depth-0 rule alone: character data
+// TestPrologCharDataIsDropped covers the depth-0 rule alone: white space
 // read before the document element belongs to no element, so the root scan
 // drops it rather than yielding it to one. Character data after the document
-// element's end tag is a different mechanism — never read at all, which is
-// Validate's GAP(xml) — and is deliberately not in this fixture.
+// element's end tag is read by Validate's drain, not the root scan, and is
+// deliberately not in this fixture (TestValidateRejectsFaultsPastTheWalk).
 func TestPrologCharDataIsDropped(t *testing.T) {
 	root := rootOf(t, "\n \n<r>in</r>")
 	got := trace(t, root)
@@ -394,6 +394,7 @@ func TestValidateRejectsDocumentsWithNoRoot(t *testing.T) {
 		{name: "empty", doc: ""},
 		{name: "whitespace only", doc: "  \n  "},
 		{name: "malformed before the root", doc: "</oops>"},
+		{name: "text before the root", doc: "junk<r/>"},
 		{name: "unbound prefix on the root", doc: `<p:r/>`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -415,20 +416,65 @@ func TestValidateRejectsDocumentsWithNoRoot(t *testing.T) {
 	}
 }
 
+// TestValidateRejectsFaultsPastTheWalk pins that Validate reads the stream to
+// its end once the walk returns, and returns the fault it meets there, with no
+// Result: after the document element only Misc may stand (XML 1.0 [1]
+// document, [27] Misc), and a subtree the walk did not descend into — under a
+// root with no declaration, which Assess charges before it reads a child — is
+// read too. The last row is the control: Misc after the root reads clean.
+func TestValidateRejectsFaultsPastTheWalk(t *testing.T) {
+	declared := xsd.QName{Local: "r"}
+	for _, tc := range []struct {
+		name, doc string
+		roots     []xsd.QName
+		want      string // the error's opening; "" when the document reads clean
+	}{
+		{"text after the root", "<r/>junk", []xsd.QName{declared}, "instance.xml:1:5: [xml-wf] character data after the document element"},
+		{"a second root", "<r><a/></r>\n<r/>", []xsd.QName{declared}, "instance.xml:2:1: [xml-wf] element <r> after the document element"},
+		{"a second root after an undescended one", "<u><x/></u><b/>", nil, "instance.xml:1:12: [xml-wf] element <b> after the document element"},
+		{"a fault in an undescended subtree", "<u><x></y></u>", nil, "instance.xml:1:7: [xml-wf] end tag </y> does not match open element x"},
+		{"Misc after the root", "<r/>\n<!-- c -->\n<?pi?>\n", []xsd.QName{declared}, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			res, err := Validate(validatorFor(t, tc.roots...), strings.NewReader(tc.doc), WithURI(fixtureURI))
+			if tc.want == "" {
+				if err != nil || res.Err() != nil {
+					t.Fatalf("Validate = %v, Err() = %v, want the document read clean", err, res.Err())
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("Validate = nil error, want one opening %q", tc.want)
+			}
+			if !strings.HasPrefix(err.Error(), tc.want) {
+				t.Errorf("error = %q, want it to open %q", err, tc.want)
+			}
+			if res != nil {
+				t.Errorf("Validate returned a %T, want nil: a document that is not well-formed has no assessment", res)
+			}
+		})
+	}
+}
+
 // TestValidateReportsMidWalkFaultsInTheResult covers the other side of the
 // split: the walk began, so the source fault is the Result's incompleteness
-// and not Validate's error.
+// and not Validate's error. The mismatched tag faults again on the token after
+// it, so the row fails if Validate reads on past a walk that stopped.
 func TestValidateReportsMidWalkFaultsInTheResult(t *testing.T) {
-	res, err := Validate(validatorFor(t, xsd.QName{Local: "r"}), strings.NewReader("<r><a>text"), WithURI(fixtureURI))
-	if err != nil {
-		t.Fatalf("Validate = %v, want the fault in the Result alone", err)
-	}
-	if res.Err() == nil {
-		t.Fatal("Err() = nil, want the truncated document's fault")
-	}
-	rule, ok := xsderr.RuleOf(res.Err())
-	if !ok || rule != xsderr.RuleXMLWellFormed {
-		t.Errorf("Err() = %v: rule = %q (ok=%v), want %q", res.Err(), rule, ok, xsderr.RuleXMLWellFormed)
+	for _, doc := range []string{"<r><a>text", "<r><a></b></r>"} {
+		t.Run(doc, func(t *testing.T) {
+			res, err := Validate(validatorFor(t, xsd.QName{Local: "r"}), strings.NewReader(doc), WithURI(fixtureURI))
+			if err != nil {
+				t.Fatalf("Validate = %v, want the fault in the Result alone", err)
+			}
+			if res.Err() == nil {
+				t.Fatal("Err() = nil, want the document's fault")
+			}
+			rule, ok := xsderr.RuleOf(res.Err())
+			if !ok || rule != xsderr.RuleXMLWellFormed {
+				t.Errorf("Err() = %v: rule = %q (ok=%v), want %q", res.Err(), rule, ok, xsderr.RuleXMLWellFormed)
+			}
+		})
 	}
 }
 

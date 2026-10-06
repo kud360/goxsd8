@@ -248,11 +248,12 @@ func (vn *validation) one(instance string, stdout, stderr io.Writer) int {
 
 	result, err := xmlsrc.Validate(v, src, xmlsrc.WithURI(instance))
 	if err != nil {
-		// The assessment never ran: the document is malformed before its
-		// document element, or holds none at all. That is a verdict about the
-		// instance in the same rendering a violation gets, so it lands on
-		// stdout with them and counts as invalid — nothing in the document was
-		// shown valid.
+		// No assessment stands: the document is malformed before its document
+		// element, holds none at all, or is malformed in what the walk left
+		// unread, what follows the document element included. That is a
+		// verdict about the instance in the same rendering a violation gets,
+		// so it lands on stdout with them and counts as invalid — nothing in
+		// the document was shown valid.
 		return reportLines(stdout, stderr, instance, []string{violationLine(err)}, exitInvalid)
 	}
 	lines, code := assessmentLines(result)

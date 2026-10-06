@@ -36,8 +36,9 @@
 // could only be there is rejected with a message saying the DTD was not fully
 // read, rather than that the name is undeclared.
 //
-//   - GAP(xml): content OUTSIDE the document element is not inspected:
-//     character data before it is dropped, and anything after its end tag
-//     is never read, so trailing character content and a second document
-//     element alike go unreported. Tracked by #753.
+// Validate reads the stream to its end once the walk returns, so a fault
+// outside the document element reaches the caller as the reader's own
+// *xsderr.Error: before the document element, character data that is not
+// literal white space; after it, that and a second top-level element (XML 1.0
+// [1] document, [27] Misc).
 package xmlsrc

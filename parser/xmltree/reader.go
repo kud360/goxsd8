@@ -1,7 +1,6 @@
 package xmltree
 
 import (
-	"bytes"
 	"encoding/xml"
 	"errors"
 	"io"
@@ -39,7 +38,8 @@ type Reader struct {
 	// their starts and nested elements resolve against the right scope.
 	stack []frame
 	// ended records that the document element's end tag has been read, after
-	// which only Misc may appear (see trailerFault).
+	// which only Misc may appear: no start tag (see classify), and no character
+	// data but S (see outsideRootFault).
 	ended bool
 	// eof latches io.EOF so repeated Token calls keep returning it.
 	eof bool
@@ -197,6 +197,9 @@ func (r *Reader) classify(tok xml.Token, off int64) (Node, bool, error) {
 	loc := r.locAt(off)
 	switch t := tok.(type) {
 	case xml.StartElement:
+		if r.ended {
+			return nil, false, xsderr.New(xsderr.RuleXMLWellFormed, loc, "element <%s> after the document element: only comments, processing instructions and white space may follow it (XML 1.0 [1] document, [27] Misc)", rawName(t.Name))
+		}
 		attrs, err := r.expandAttrs(t, r.source(off), true, loc, nil)
 		if err != nil {
 			return nil, false, err
@@ -219,8 +222,8 @@ func (r *Reader) classify(tok xml.Token, off int64) (Node, bool, error) {
 				return r.included(raw, off, loc)
 			}
 		}
-		if r.ended {
-			if err := trailerFault(t, loc); err != nil {
+		if len(r.stack) == 0 {
+			if err := r.outsideRootFault(r.source(off), loc); err != nil {
 				return nil, false, err
 			}
 		}
@@ -455,18 +458,24 @@ func (r *Reader) endElement(t xml.EndElement, loc xsderr.Loc) (*EndElement, erro
 	return &EndElement{name: got, loc: loc}, nil
 }
 
-// trailerFault enforces XML 1.0 §2.1's well-formedness clause 1 for the text
-// after the document element: [1] document ::= prolog element Misc*, and [27]
-// Misc ::= Comment | PI | S, so character data there must be white space
-// (declSpace). text is one character-data token read after the document
-// element's end tag, starting at loc. The fault is located at loc, the token's
-// own start: text is decoded — line ends normalized (§2.11), references
-// replaced — so no index into it is an offset into the source.
-func trailerFault(text []byte, loc xsderr.Loc) error {
-	if len(bytes.TrimLeft(text, declSpace)) == 0 {
+// outsideRootFault enforces XML 1.0 §2.1's well-formedness clause 1 for the
+// character data outside the document element: [1] document ::= prolog element
+// Misc*, [22] prolog ::= XMLDecl? Misc* (doctypedecl Misc*)?, and [27] Misc ::=
+// Comment | PI | S, so character data before or after it must be S [3]. raw is
+// the SOURCE of one character-data token read at the document level, starting
+// at loc, and the test reads raw, never the decoded text: a character
+// reference and a CDATA section are content [43] and match no Misc, whatever
+// they decode to, and a U+FEFF past the encoding signature (§4.3.3) is no S.
+// The fault is located at loc, the token's own start, before the document
+// element or after its end tag (r.ended), each with its own message.
+func (r *Reader) outsideRootFault(raw string, loc xsderr.Loc) error {
+	if strings.Trim(raw, declSpace) == "" {
 		return nil
 	}
-	return xsderr.New(xsderr.RuleXMLWellFormed, loc, "character data after the document element: only comments, processing instructions and white space may follow it (XML 1.0 [1] document, [27] Misc)")
+	if r.ended {
+		return xsderr.New(xsderr.RuleXMLWellFormed, loc, "character data after the document element: only comments, processing instructions and white space may follow it (XML 1.0 [1] document, [27] Misc)")
+	}
+	return xsderr.New(xsderr.RuleXMLWellFormed, loc, "character data before the document element: only an XML declaration, a DOCTYPE, comments, processing instructions and white space may precede it (XML 1.0 [1] document, [22] prolog, [27] Misc)")
 }
 
 // currentScope is the scope in force for the innermost open element, or nil
