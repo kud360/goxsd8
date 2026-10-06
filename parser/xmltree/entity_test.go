@@ -301,7 +301,9 @@ func TestEntityDeclaredOnlyInParameterEntity(t *testing.T) {
 // to '<' or to '&', or an EntityRef to a declared entity, and one inside a
 // comment or a CDATA section. An EntityRef so spelled to an undeclared entity
 // is the reader's refusal, wrapping a cause, as TestEntityReferenceRefusedUnread
-// refuses one.
+// refuses one. A '&' in a comment, a processing instruction or an end tag the
+// decoder fails to read is no such charge: the decoder's own syntax error is
+// wrapped as the cause.
 func TestEntityAmpersandBeginsNoReference(t *testing.T) {
 	const msg = "[xml-wf] the replacement text of entity %s holds a '&' that begins no Reference, '&' Name ';' or a character reference (XML 1.0 §4.4.2, [67] Reference, [68] EntityRef, [66] CharRef)"
 	for _, tc := range []struct {
@@ -352,6 +354,24 @@ func TestEntityAmpersandBeginsNoReference(t *testing.T) {
 			wantWellFormednessError(t, err)
 			if errors.Unwrap(err) == nil || !strings.Contains(fmt.Sprint(err), "&b;") {
 				t.Errorf("error %v: want the refusal of &b;, wrapping its cause", err)
+			}
+		})
+	}
+	for _, tc := range []struct {
+		subset, cause string
+	}{
+		{`<!ENTITY e "<!-- -- 'a&#38;b' -->">`, `invalid sequence "--" not allowed in comments`},
+		{`<!ENTITY e "<?xml version='a&#38;b'?>">`, `unsupported version "a&b"`},
+		{`<!ENTITY e "<b></b x='a&#38;b'>">`, `invalid characters between </b and >`},
+	} {
+		t.Run(tc.subset+"<r>&e;</r>", func(t *testing.T) {
+			_, err := collect(t, "d.xml", `<!DOCTYPE r [`+tc.subset+`]><r>&e;</r>`)
+			wantWellFormednessError(t, err)
+			if strings.Contains(fmt.Sprint(err), "begins no Reference") {
+				t.Errorf("error %v charges a '&' that begins no Reference in a comment, processing instruction or end tag", err)
+			}
+			if cause := errors.Unwrap(err); cause == nil || !strings.Contains(cause.Error(), tc.cause) {
+				t.Errorf("error %v: want it to wrap the decoder's cause %q", err, tc.cause)
 			}
 		})
 	}
