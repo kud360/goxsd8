@@ -773,14 +773,14 @@ fail-open answer is distinguishable from a real pass, and both of this
 milestone's fail-open channels — the assertion sites #719 collects and the CTA
 withhold #56 records — now reach the same slice under their own rule IDs.
 
-**Its first consequence is a documentation defect, not a code one, and it is
-filed.** `validate/doc.go:101-104` states that an empty `Violations()` beside a
-non-empty `Unevaluated()` is not a pass; `README.md:217-219` — the module's only
-working validation snippet, since `validate` ships no runnable `Example` (#1088)
-— still names `res.Err()` as the sole incompleteness signal and never mentions
-`Unevaluated` at all. #56's landing is what made that reachable on an ordinary
-conditionally-typed document rather than only on one carrying an assertion.
-**#1122** owns it.
+**Its first consequence was a documentation defect, not a code one.**
+`validate/doc.go`'s Contract states that an empty `Violations()` beside a
+non-empty `Unevaluated()` is not a pass, while README's validation snippet — the
+module's only working one, since `validate` ships no runnable `Example` (#1088)
+— named `res.Err()` as the sole incompleteness signal. #56's landing is what
+made that reachable on an ordinary conditionally-typed document rather than only
+on one carrying an assertion. **#1122** landed the fix at `a458893`; the
+snippet's remaining wording is #1292's.
 
 ### M7 — XPath 2.0 growth
 
