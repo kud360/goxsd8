@@ -775,11 +775,10 @@ var (
 	s4sSimpleDerivationSet = s4sDerivationSet{"xs:simpleDerivationSet", []xsd.DerivationMethod{xsd.DerivationList, xsd.DerivationUnion, xsd.DerivationRestriction, xsd.DerivationExtension}}
 )
 
-// admits reports whether lexical is in s's ·lexical space·. Tokens are split on
-// the four characters §4.3.6 is whitespace for (xmlSpace) and on nothing else,
-// so a U+00A0 inside a value leaves one token that is no member.
+// admits reports whether lexical is in s's ·lexical space·. Tokens are split by
+// xmlSpaceFields, so a U+00A0 inside a value leaves one token that is no member.
 func (s s4sDerivationSet) admits(lexical string) bool {
-	items := strings.FieldsFunc(lexical, func(r rune) bool { return strings.ContainsRune(xmlSpace, r) })
+	items := xmlSpaceFields(lexical)
 	if len(items) == 1 && items[0] == "#all" {
 		return true
 	}
@@ -2615,7 +2614,7 @@ func (p *producer) constructUnionType(name xsd.QName, elem, union *Element) (*xs
 // charged once, at finalize.
 func (p *producer) unionMembers(union *Element) ([]xsd.SimpleTypeOrRef, error) {
 	memberLex, _ := union.Attr("memberTypes")
-	items := strings.Fields(memberLex)
+	items := xmlSpaceFields(memberLex)
 	inlines := childElements(union, xsd.XMLSchemaNS, "simpleType")
 	if len(items) == 0 && len(inlines) == 0 {
 		return nil, xsderr.New(ruleSrcSimpleType, union.Loc(),
@@ -3175,7 +3174,7 @@ func (p *producer) substitutionGroupAffiliations(elem *Element) ([]xsd.QName, er
 		return nil, nil
 	}
 	var heads []xsd.QName
-	for _, item := range strings.Fields(lexical) {
+	for _, item := range xmlSpaceFields(lexical) {
 		head, err := p.resolveQName(elem, item, "substitutionGroup")
 		if err != nil {
 			return nil, err
@@ -3271,7 +3270,7 @@ func (p *producer) substitutionGroupHeadType(head xsd.QName) (xsd.TypeDefinition
 		if !has {
 			return xsd.TypeDefinitionRef{Name: anyTypeName}, nil // the head's own {type definition} is case 4
 		}
-		items := strings.Fields(lexHeads)
+		items := xmlSpaceFields(lexHeads)
 		if len(items) == 0 {
 			return xsd.TypeDefinitionRef{Name: anyTypeName}, nil
 		}
@@ -4037,7 +4036,7 @@ func childElements(el *Element, space, local string) []*Element {
 // with interior whitespace nor its R lexically — but neither names a declared
 // component, since every declared name is an NCName.
 // [producer.namespaceVarietyAndSet] also splits its trimmed value into tokens,
-// and strings.Fields splits a value identically with or without its ends
+// and xmlSpaceFields splits a value identically with or without its ends
 // trimmed.
 func collapseTrim(lexical string) string {
 	return strings.Trim(lexical, xmlSpace)
@@ -4046,6 +4045,18 @@ func collapseTrim(lexical string) string {
 // xmlSpace is the four characters §4.3.6's whiteSpace facet is whitespace for:
 // #x9, #xA, #xD, #x20.
 const xmlSpace = "\x09\x0A\x0D\x20"
+
+// xmlSpaceFields splits a list-typed lexical into its items: the maximal runs
+// of characters outside xmlSpace, the XML S production (xml.md [3]). A list
+// value is delimited on #x20 (cvc-datatype-valid, Datatypes §4.1.4 clause 2.2)
+// after whiteSpace = collapse has mapped #x9, #xA and #xD to it (§4.3.6), and on
+// nothing else. strings.Fields is not this split: it also breaks on U+0085,
+// U+00A0, U+1680, U+2028, U+3000 and the other Unicode spaces, so it can cut one
+// valid item in two (U+1680 is an NCName character) or two invalid halves out
+// of one invalid item.
+func xmlSpaceFields(lexical string) []string {
+	return strings.FieldsFunc(lexical, func(r rune) bool { return strings.ContainsRune(xmlSpace, r) })
+}
 
 // facetCountValue checks a length or digits facet element's value attribute
 // against the type the schema for schema documents declares for it:
