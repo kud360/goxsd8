@@ -252,8 +252,9 @@ func TestAssertionOverANonSubstitutableChildIsDeclined(t *testing.T) {
 // and 4 and is charged over 3 and 3, which compares xs:int values; a ·nilled·
 // <e1> has no value, so `count(e1[. = 'x']) eq 0` holds over it. A ·skipped·
 // second <e1> under a value predicate declines through lackingChild, as a
-// value step's does. Every row is declined instead, and fails, with
-// ctaMatchingChildren.readsChild false, which keeps no child's value.
+// value step's does. With ctaMatchingChildren.readsChild false, which keeps no
+// child's value, the first and last rows are charged and the ·skipped· row is
+// evaluated instead.
 func TestAssertionCountsChildrenFilteredByValue(t *testing.T) {
 	nilled := &testAttribute{name: xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: "nil"}, value: "true", loc: loc(2, 6)}
 	for _, tc := range []struct {

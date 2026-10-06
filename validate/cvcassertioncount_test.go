@@ -405,9 +405,10 @@ func TestNestedCountsTakeTheirOwnDepth(t *testing.T) {
 // is counted by the attributes it carries and no ·defaulted· one: `s:y[@a and
 // @b]` counts a y carrying both and not one carrying a alone, and `s:y[@d]`
 // none, its declared default never taken. A union counts each node once. The
-// two ·defaulted· rows are charged instead with walk.attributeNodes adding no
-// ·defaulted attribute·; the "a alone" row is satisfied instead with
-// assertionAncestry.tallySkipped reporting a y's attributes on its child.
+// first three rows are charged instead with walk.attributeNodes adding no
+// ·defaulted attribute·; the "a and b" row with assertionAncestry.tallySkipped
+// reporting no attribute names; the union row with the Tally summing a union's
+// operands.
 func TestAssertionCountsChildrenFilteredByAttributes(t *testing.T) {
 	e1, y, a, b, d := local("e1"), xsd.QName{Space: "urn:skip", Local: "y"}, local("a"), local("b"), local("d")
 	for _, tc := range []struct {

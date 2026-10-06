@@ -272,9 +272,10 @@ func TestAssertionTallyIsFreshAndTotal(t *testing.T) {
 // and the child path `e1/e1` select none at any depth. `c[@a]` reads the
 // attribute names of E's children, at depth 1 alone, and a union reads them
 // wherever an operand does. A test that counts nothing has a nil Tally, which
-// answers false, and so does every Tally at a depth below 0. The `c[@a]` rows
-// fail at depth 1 with ctaFilteredChildren.selectsAttributesAt false, and the
-// union rows with ctaUnion.selectsAttributesAt asking its first operand alone.
+// answers false, and so does every Tally at a depth below 0. The two `c[@a]`
+// rows fail at depth 1 with ctaFilteredChildren.selectsAttributesAt false, and
+// the `c | @a` row at depth 0 with ctaUnion.selectsAttributesAt asking its
+// first operand alone.
 func TestTallyCountsAttributesAt(t *testing.T) {
 	for _, tc := range []struct {
 		expr string
@@ -416,9 +417,9 @@ func acCounters(t *testing.T, expr string, want int) {
 // conjunction names them in, and a name written twice is required once.
 // `c[@n]` is node-valued, so it is the existence test and not a positional
 // one. Every row declines, and fails, with ctaParser.predicate declining every
-// predicate; the "only @a" and "required whole" rows are satisfied instead
-// with ctaFilteredChildren.selectsElement asking for any one required name
-// rather than all.
+// predicate; the "only @a", "required whole" and "one of two children" rows
+// fail with ctaFilteredChildren.selectsElement asking for any one required
+// name rather than all.
 func TestAssertionCountsChildrenFilteredByAttributes(t *testing.T) {
 	for _, tc := range []struct {
 		why   string
@@ -497,9 +498,9 @@ func TestAssertionCountsAUnionOnce(t *testing.T) {
 // A union keeps one counter per distinct operand SET: `e | e` is `e` itself and
 // shares its counter, `@a | @b` and `@b | @a` are one, `e | @a | e` is `@a |
 // e`; no operand is read for what it selects, so `e | .//e` and `.//e` keep
-// two. The first four rows hold a counter more with ctaUnionOf keeping a
-// repeated operand or not collapsing to a single one, or with ctaUnion.same
-// reading its operands in order.
+// two. Rows hold a counter more with ctaUnionOf keeping a repeated operand
+// (the first and third), not collapsing to a single one (the first), or with
+// ctaUnion.same reading its operands in order (the second to fourth).
 func TestAssertionUnionCounters(t *testing.T) {
 	acCounters(t, "count(e | e) = 1 and count(e) = 1", 1)
 	acCounters(t, "count(@a | @b) = 1 and count(@b | @a) = 1", 1)
@@ -577,9 +578,11 @@ func vpWhite(typ, lexical string) asChild { return asChild{uq("white"), typ, lex
 // for it and its fn:not true, no error raised. and, or, fn:not, a value
 // comparison, arithmetic and a cast are admitted over the candidate. Every
 // row declines, and fails, with ctaParser.predicate declining a predicate that
-// is not an attribute-existence conjunction; the "two oo" and "one of two"
-// rows answer each other's value with ctaMatchingChildren.nodes counting
-// every candidate rather than those its predicate is true for.
+// is not an attribute-existence conjunction, and so does the ReadsChild check
+// with ctaMatchingChildren.readsChild false; every row whose predicate is
+// false for some candidate — "one of two", the ·nilled· rows, or, and, the
+// value comparison, the arithmetic and "beside a counted step" — fails with
+// ctaMatchingChildren.nodes counting every candidate.
 func TestAssertionCountsChildrenFilteredByValue(t *testing.T) {
 	str := asBuiltin(t, "string")
 	nilled := asChild{name: uq("white"), nilled: true}
@@ -669,7 +672,11 @@ func TestAssertionValuePredicateErrorRaisesTheCount(t *testing.T) {
 // outside the admitted shape: one not directly on a child step, outside
 // fn:count, in a union, mixing `.` with an attribute, reading another node,
 // `$value` or an fn:count, calling a library function, or whose root is not a
-// comparison, which may be numeric and so positional (guard).
+// comparison, which may be numeric and so positional. The type rows and `zz`
+// compile, and fail, with ctaParser.valuePredicate reading `.` as xs:string
+// where the child step declines; the five bare-value rows but the library
+// call's with ctaComparisonRooted admitting ctaEffectiveBoolean; the two union
+// rows with ctaUnionOf admitting a value-filtered operand. The rest are guards.
 func TestCompileAssertionTestDeclinesValuePredicates(t *testing.T) {
 	str := asBuiltin(t, "string")
 	for _, tc := range []struct {
@@ -680,11 +687,11 @@ func TestCompileAssertionTestDeclinesValuePredicates(t *testing.T) {
 		{"mixed", asComplex(t, "Mixed", asElementContent(t, true))},
 		{"empty", asComplex(t, "Empty", xsd.EmptyContent{})},
 		{"·special·", asBuiltin(t, "anySimpleType")},
-		{"a list", asList(t, "Ints", ctaBuiltin("int"))},
-		{"a union", asUnion(t)},
+		{"list", asList(t, "Ints", ctaBuiltin("int"))},
+		{"union", asUnion(t)},
 	} {
 		if _, ok := vpCompile(t, "count(white[. = 'oo']) lt 2", tc.white); ok {
-			t.Errorf("CompileAssertionTest over a %s white: compiled, want declined", tc.why)
+			t.Errorf("CompileAssertionTest over the %s white: compiled, want declined", tc.why)
 		}
 	}
 	for _, tc := range []struct{ expr, why string }{
