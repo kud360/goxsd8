@@ -20,15 +20,18 @@
 //     evaluating: a cast whose target's primitive is xs:QName, whose lexical mapping
 //     needs a static context this engine has no value for (#888); a cast of an
 //     xs:float or xs:double operand, such as `1.5e0`, to a target other than its own
-//     type or an ancestor of it, which F&O §17.1.2, §17.1.3 and §17.1.6 define over the
-//     value and not over its canonical lexical where §17.1's casting table marks the
-//     target Y or M, and §17.1 makes err:XPTY0004 where it marks N (#1042); and a
-//     comparison needing xpath20.md B.1 rule 1.1's xs:float-to-xs:double promotion,
-//     which value exposes no widening for (#889). So does a cast whose TARGET is not a
-//     builtin datatype, which is the required subset's own boundary (§3.12.6 clause 4)
-//     rather than a construct of the grammar. CTATestStaticError reports the XPath
-//     STATIC errors of the same grammar over the same traversal, which is a different
-//     question with a different owner — see below.
+//     type or an ancestor of it, or of an IntegerLiteral or DecimalLiteral to a target
+//     outside the xs:string family, xs:float, xs:double, xs:decimal and, for an
+//     IntegerLiteral, xs:integer's branch, such as `xs:integer(1.5)`, which F&O
+//     §17.1.2, §17.1.3 and §17.1.6 define over the value and not over its canonical
+//     lexical where §17.1's casting table marks the target Y or M, and §17.1 makes
+//     err:XPTY0004 where it marks N (#1042); and a comparison needing xpath20.md B.1
+//     rule 1.1's xs:float-to-xs:double promotion, which value exposes no widening for
+//     (#889). So does a cast whose TARGET is not a builtin datatype, which is the
+//     required subset's own boundary (§3.12.6 clause 4) rather than a construct of the
+//     grammar. CTATestStaticError reports the XPath STATIC errors of the same grammar
+//     over the same traversal, which is a different question with a different owner —
+//     see below.
 //  2. Assertion essentials: axes, predicates, quantified expressions, typed comparisons, the F&O
 //     function core — M6. FIRST SLICES SHIPPED: CompileAssertionTest compiles an assertion {test}
 //     written in tier 1's grammar over the element's TYPED attributes (AttributeTypes;
