@@ -555,8 +555,8 @@ assertion `{test}` outside it is declined the same way, and its caller
 records it as unevaluated.
 Dynamic errors (type mismatch, bad pattern) make an assertion definitively
 unsatisfied and a CTA `{test}` definitively false (`key-cta-ta-select`
-clause 2) — they are NOT fail-open (PRINCIPLES 20). `$value` binds a typed
-atom `{Lexical, Kind}`. F&O regex functions use `regex`'s F&O flavor,
+clause 2) — they are NOT fail-open (PRINCIPLES 20). PRINCIPLES 17 owns
+how `$value` binds. F&O regex functions use `regex`'s F&O flavor,
 never the pattern-facet flavor.
 
 ## Identity-constraint paths (`icpath`)
