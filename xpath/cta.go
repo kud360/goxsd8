@@ -22,7 +22,8 @@ import (
 // step naming one of E's element [[children]] (ctaTypedChild), and a "/" or
 // "//" opening a path, which raises (ctaNoDocumentRoot); the whole operand of
 // fn:exists, fn:empty or an ·effective boolean value· also takes a relative
-// path of two or more such steps (ctaChildPath); and [14] ValueExpr
+// path of two or more such steps (ctaChildPath) and one element step `N`,
+// `./N` or `.//N` whatever N's type (ctaSelectedElements); and [14] ValueExpr
 // also takes an fn:count call over one counted path (ctaCount) and a call to
 // one of the F&O string and sequence functions, evaluated in ctafunc.go; and
 // each comparison operand may be xpath20.md [13] AdditiveExpr over [14]
@@ -33,11 +34,11 @@ import (
 // err:XPDY0002 an assertions facet's absent context item raises
 // (ctaNoContextItem). It is not a stage of a general XPath 2.0 evaluator: the
 // productions below reach no axis but attribute, one child step, the
-// child-step paths whose existence is asked and the descendant steps fn:count
-// counts over, no predicate, no variable but `$value` and no function but
-// fn:not, fn:count and the ten ctaParser.libraryCall names, so evaluating them
-// directly is exact where a fail-open delegation to a general engine would be a
-// guess.
+// child-step paths and the one descendant step whose existence is asked and
+// the descendant steps fn:count counts over, no predicate, no variable but
+// `$value` and no function but fn:not, fn:count and the ten
+// ctaParser.libraryCall names, so evaluating them directly is exact where a
+// fail-open delegation to a general engine would be a guess.
 //
 //	[8]  Test                ::= OrExpr
 //	[9]  OrExpr              ::= AndExpr ( 'or' AndExpr )*
@@ -498,15 +499,16 @@ func (ctaTypeError) ctaExpr()        {}
 // ta-SimpleValue — its AttrName arm in the untyped and the typed form
 // (ctaFacade.attribute), its Literal arm, and the assertion façade's `$value`
 // in its three static forms (ctaFacade.variable), child-axis step
-// (ctaFacade.child), child path (ctaFacade.childPath) and rooted path
-// (ctaFacade.rooted), and the facet façade's read of an absent context item
-// (ctaNoContextItem) — the cast that [15] ta-CastExpr's tail and [18]
-// ta-ConstructorFunction both build over one of them, the assertion façade's
-// fn:count call (ctaFacade.count), a binary arithmetic operator over two of
-// them (ctaArith, ctaFacade.computes), and a call to an F&O string or
-// sequence function over them (ctaMatch, ctaUnaryString, ctaPresence,
-// ctaStringFunction; ctaFacade.callsLibrary). Every branch answers readsChild
-// and counted on ctaExpr's terms.
+// (ctaFacade.child), child path (ctaFacade.childPath), element step whose
+// existence is asked (ctaFacade.elements) and rooted path (ctaFacade.rooted),
+// and the facet façade's read of an absent context item (ctaNoContextItem) —
+// the cast that [15] ta-CastExpr's tail and [18] ta-ConstructorFunction both
+// build over one of them, the assertion façade's fn:count call
+// (ctaFacade.count), a binary arithmetic operator over two of them (ctaArith,
+// ctaFacade.computes), and a call to an F&O string or sequence function over
+// them (ctaMatch, ctaUnaryString, ctaPresence, ctaStringFunction;
+// ctaFacade.callsLibrary). Every branch answers readsChild and counted on
+// ctaExpr's terms.
 type ctaValue interface {
 	ctaValue()
 	readsChild(name xsd.QName) bool
@@ -549,9 +551,10 @@ type ctaTypedAttr struct {
 // §3.3.1.2).
 //
 // A ·nilled· child is a node of the sequence whose typed value is the empty
-// sequence (xpath-datamodel §6.2.4): it counts for the step's ·effective
-// boolean value·, which is node existence, and contributes no atom when the
-// sequence is atomized.
+// sequence (xpath-datamodel §6.2.4): it counts for the step's node existence
+// (ctaStep.nodes), and contributes no atom when the sequence is atomized. A
+// step standing where its existence alone is asked is ctaSelectedElements and
+// never this node.
 //
 // It is a node of its own and not a ctaTypedAttr with a flag: the two read
 // different inputs, and an element step matches any number of nodes where an
@@ -645,6 +648,12 @@ type ctaFacade interface {
 	// (ctaParser.childPath), into its node, reporting false where the façade
 	// declines it, on attribute's terms. No step is typed: none is atomized.
 	childPath(steps []xsd.QName) (ctaValue, bool)
+	// elements compiles one element step, `N`, `./N` or `.//N`, whose QName
+	// NameTest resolved into path, standing as the whole operand of fn:exists,
+	// fn:empty or an ·effective boolean value· (ctaParser.selectedElements),
+	// into its node, reporting false where the façade declines it, on
+	// attribute's terms. The step is not typed, on childPath's terms.
+	elements(path ctaCountPath) (ctaValue, bool)
 	// rooted compiles a path opening with "/" or "//" into its node, reporting
 	// false where the façade declines it, on attribute's terms.
 	rooted() (ctaValue, bool)
@@ -702,6 +711,11 @@ func (ctaTypeAlternativeFacade) child(ctaNameTest, ctaTypes) (ctaValue, bool) {
 
 // childPath declines every path of child steps, on child's terms.
 func (ctaTypeAlternativeFacade) childPath([]xsd.QName) (ctaValue, bool) {
+	return nil, false
+}
+
+// elements declines every element step, on child's terms.
+func (ctaTypeAlternativeFacade) elements(ctaCountPath) (ctaValue, bool) {
 	return nil, false
 }
 
@@ -902,7 +916,8 @@ func (ctaNoDocumentRoot) ctaCounted() {}
 // declines.
 //
 // Its one constructor is ctaChildPathOf, which admits two or more steps: a
-// one-step path is ctaTypedChild or, counted, ctaCountPath.
+// one-step path is ctaTypedChild where its value is read, ctaSelectedElements
+// where only its existence is, and ctaCountPath where it is counted.
 type ctaChildPath struct{ steps []xsd.QName }
 
 // ctaChildPathOf is the ctaChildPath over steps, false where steps holds fewer
@@ -912,6 +927,33 @@ func ctaChildPathOf(steps []xsd.QName) (ctaChildPath, bool) {
 		return ctaChildPath{}, false
 	}
 	return ctaChildPath{steps: steps}, true
+}
+
+// ctaSelectedElements is one element step, `N`, `./N` or `.//N` with a QName
+// NameTest (xpath20.md §3.2.1.1, §3.2.4), which only the assertion façade
+// admits (ctaFacade.elements) and only as the whole operand of fn:exists,
+// fn:empty or an ·effective boolean value· (ctaParser.selectedElements): the
+// element children of E named N, or every element below E named N and never E
+// itself, as path's axis says. Like ctaChildPath it is never atomized
+// (fn:exists, fn:empty `item()*`, §2.4.3 rule 2), so the step is never typed,
+// a node of any type, ·nilled· or not, is selected, and how many there are is
+// read off the [Tally] — under path itself, so `count(a) ge 1 and a` keeps one
+// counter for both. It is not a counter key of its own (ctaTallied): path is.
+//
+// Its one constructor is ctaSelectedElementsOf, which refuses an attribute
+// axis: an attribute step in those positions is ctaAttr or ctaTypedAttr.
+type ctaSelectedElements struct{ path ctaCountPath }
+
+// ctaSelectedElementsOf is the ctaSelectedElements over p, false where p's axis
+// selects attributes.
+func ctaSelectedElementsOf(p ctaCountPath) (ctaSelectedElements, bool) {
+	switch p.axis {
+	case ctaCountChildren, ctaCountDescendants:
+		return ctaSelectedElements{path: p}, true
+	case ctaCountOwnAttributes, ctaCountSubtreeAttributes:
+		return ctaSelectedElements{}, false
+	}
+	return ctaSelectedElements{}, false
 }
 
 // ctaTallied is the sealed sum of the keys a [Tally] keeps a counter under: an
@@ -1011,18 +1053,19 @@ func (p ctaChildPath) same(other ctaTallied) bool {
 	return isChild && slices.Equal(o.steps, p.steps)
 }
 
-func (ctaAttr) ctaValue()           {}
-func (ctaTypedAttr) ctaValue()      {}
-func (ctaTypedChild) ctaValue()     {}
-func (ctaChildPath) ctaValue()      {}
-func (ctaNoDocumentRoot) ctaValue() {}
-func (ctaNoContextItem) ctaValue()  {}
-func (ctaLiteral) ctaValue()        {}
-func (ctaCast) ctaValue()           {}
-func (ctaCount) ctaValue()          {}
-func (ctaValueVar) ctaValue()       {}
-func (ctaEmptyValue) ctaValue()     {}
-func (ctaUntypedValue) ctaValue()   {}
+func (ctaAttr) ctaValue()             {}
+func (ctaTypedAttr) ctaValue()        {}
+func (ctaTypedChild) ctaValue()       {}
+func (ctaChildPath) ctaValue()        {}
+func (ctaSelectedElements) ctaValue() {}
+func (ctaNoDocumentRoot) ctaValue()   {}
+func (ctaNoContextItem) ctaValue()    {}
+func (ctaLiteral) ctaValue()          {}
+func (ctaCast) ctaValue()             {}
+func (ctaCount) ctaValue()            {}
+func (ctaValueVar) ctaValue()         {}
+func (ctaEmptyValue) ctaValue()       {}
+func (ctaUntypedValue) ctaValue()     {}
 
 // ctaStatic is one operand's static type, which is what xpath20.md §3.5.2's
 // casting rules dispatch on. It is a sealed sum of the three states this
@@ -1060,8 +1103,9 @@ func (ctaEmptySequence) ctaStatic() {}
 // ctaUntypedValue are the untyped arms, and so are ctaNoDocumentRoot and
 // ctaNoContextItem: each raises before any item exists, so its static type
 // decides only whether a comparison over it compiles, never an answer. A
-// ctaChildPath never reaches here: ctaParser.childPath builds it only where no
-// static type is asked.
+// ctaChildPath or ctaSelectedElements never reaches here: ctaParser.childPath
+// and ctaParser.selectedElements build them only where no static type is
+// asked.
 func ctaStaticOf(v ctaValue) ctaStatic {
 	switch n := v.(type) {
 	case ctaLiteral:
@@ -1360,19 +1404,20 @@ func ctaSingletonOperand(v ctaValue, c *xsd.SimpleType, env ctaEnv) (value.Value
 // eval decides the ·effective boolean value· of a bare ValueExpr (xpath20.md
 // §2.4.3, the fn:boolean rules quoted there).
 //
-// An AttrName, untyped or typed, a child-axis step and a child path evaluate
-// to a sequence of NODES rather than to atomic values, so each takes rule 2
-// ("a sequence whose first item is a node") whenever its NameTest matches at
-// all and rule 1 (the empty sequence) when it matches nothing, and no type of
-// its own is involved — a ·nilled· child is a node all the same. Rule 2 holds
-// whatever the sequence's LENGTH, which is what a wildcard NameTest and a
-// repeated child make observable. A rooted path raises err:XPDY0050, and a read
-// of an absent context item err:XPDY0002. ctaStep.nodes is that reading, which
-// fn:empty and fn:exists share. `$value` is atomic values and no node: the
-// statically empty one is rule 1's false, the bound typed one is decided by
-// ctaBoolean, a list of two or more items included, and the untyped one by rule
-// 4 (ctaUntypedBoolean). Every other operand is a singleton atomic value or the
-// empty sequence, which ctaBoolean decides.
+// An AttrName, untyped or typed, a child-axis or element step and a child path
+// evaluate to a sequence of NODES rather than to atomic values, so each takes
+// rule 2 ("a sequence whose first item is a node") whenever its NameTest
+// matches at all and rule 1 (the empty sequence) when it matches nothing, and
+// no type of its own is involved — a ·nilled· child is a node all the same.
+// Rule 2 holds whatever the sequence's LENGTH, which is what a wildcard
+// NameTest and a repeated child make observable. A rooted path raises
+// err:XPDY0050, and a read of an absent context item err:XPDY0002.
+// ctaStep.nodes is that reading, which fn:empty and fn:exists share. `$value`
+// is atomic values and no node: the statically empty one is rule 1's false, the
+// bound typed one is decided by ctaBoolean, a list of two or more items
+// included, and the untyped one by rule 4 (ctaUntypedBoolean). Every other
+// operand is a singleton atomic value or the empty sequence, which ctaBoolean
+// decides.
 func (e ctaEffectiveBoolean) eval(env ctaEnv) ctaAnswer {
 	if step, isStep := e.operand.(ctaStep); isStep {
 		nodes, ok := step.nodes(env)
@@ -1582,6 +1627,10 @@ func ctaItemOf(v ctaValue, c *xsd.SimpleType, env ctaEnv) ctaItem {
 	case ctaChildPath:
 		// Never reached: ctaParser.childPath builds the node only where its
 		// nodes are counted and no item is read (ctaStep.nodes).
+		return ctaRaised{}
+	case ctaSelectedElements:
+		// Never reached, on ctaChildPath's terms
+		// (ctaParser.selectedElements).
 		return ctaRaised{}
 	case ctaNoDocumentRoot:
 		return ctaRaised{} // err:XPDY0050
