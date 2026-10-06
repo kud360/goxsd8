@@ -220,7 +220,8 @@ func (r *Result) Err() error { return r.err }
 // should not have to scrape a message for a rule ID; and taking one argument
 // is what stops the two from naming different errors.
 //
-// format therefore stops at the delegating rule's own sentence — the ": " and
+// format therefore stops at the delegating rule's own sentence, which leads
+// with its own fact and closes on its own citation (STYLE E5) — the ": " and
 // the cause's own rendering are this function's to append. A cause that is
 // itself an *xsderr.Error with the zero Loc renders from its fields as
 // "[rule] msg", since its Error() would print the unknown position as "?: "
