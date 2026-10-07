@@ -345,8 +345,9 @@ func (c ctaCountedItems) nodes(env ctaEnv) (int, bool) { return ctaSequenceLengt
 // boolean value·; `$value` over ·special· content is one xs:untypedAtomic value
 // or, unbound, none (ctaUntypedBinding); an fn:distinct-values call is the
 // items it keeps, whatever its static type (ctaDistinctValues.eval); the
-// statically empty sequence is none; and every other operand is the length of
-// its items in its own static type, which converts none of them.
+// context item `.` (ctaContextAtom) is one item, though it is statically
+// untyped; the statically empty sequence is none; and every other operand is
+// the length of its items in its own static type, which converts none of them.
 func ctaSequenceLength(v ctaValue, env ctaEnv) (int, bool) {
 	if step, isStep := v.(ctaStep); isStep {
 		return step.nodes(env)
@@ -361,6 +362,9 @@ func ctaSequenceLength(v ctaValue, env ctaEnv) (int, bool) {
 			return 0, ok
 		}
 		return 1, ok
+	}
+	if _, isContext := v.(ctaContextAtom); isContext {
+		return 1, true
 	}
 	typed, isTyped := ctaStaticOf(v).(ctaTyped)
 	if !isTyped {

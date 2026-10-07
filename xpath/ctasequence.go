@@ -27,10 +27,11 @@ const ctaMaxSequenceLength = 1 << 12
 // ctaIntegerRanges is a sequence of xs:integer values built by §3.3.1's
 // operators from IntegerLiterals: the concatenation, in written order, of
 // each range's integers from lo to hi inclusive — "a sequence containing two
-// or more consecutive integers ... in increasing order", one integer where lo
-// is hi, and none where hi is less than lo. st is xs:integer, the type a
-// RangeExpr's items have and an IntegerLiteral's value is (xpath20.md §3.1.1),
-// which is the operand's static type (ctaStaticOf).
+// or more consecutive integers ... in increasing order", or one integer where
+// lo is hi. Each range is non-empty: integerSequence stores none whose hi is
+// less than its lo. st is xs:integer, the type a RangeExpr's items have and an
+// IntegerLiteral's value is (xpath20.md §3.1.1), which is the operand's static
+// type (ctaStaticOf).
 //
 // Its one constructor is ctaParser.integerSequence, which holds at least one
 // item and at most ctaMaxSequenceLength: a sequence of none is the statically
@@ -40,8 +41,8 @@ type ctaIntegerRanges struct {
 	st     *xsd.SimpleType
 }
 
-// ctaIntegerRange is one member of a ctaIntegerRanges: `lo to hi`, or one
-// IntegerLiteral, where lo is hi.
+// ctaIntegerRange is one non-empty member of a ctaIntegerRanges: `lo to hi`,
+// lo at most hi, or one IntegerLiteral, where lo is hi.
 type ctaIntegerRange struct{ lo, hi int64 }
 
 func (ctaIntegerRanges) ctaValue() {}
@@ -179,13 +180,14 @@ func (p *ctaParser) integerSequence(n int) (ctaValue, bool) {
 			p.advance() // 'to'
 		}
 		p.advance() // the last IntegerLiteral
-		if hi >= lo {
-			// Neither literal is negative, so hi-lo cannot overflow.
-			if hi-lo >= ctaMaxSequenceLength-total {
-				return nil, false
-			}
-			total += hi - lo + 1
+		if hi < lo {
+			continue // an empty range, which contributes no item
 		}
+		// Neither literal is negative, so hi-lo cannot overflow.
+		if hi-lo >= ctaMaxSequenceLength-total {
+			return nil, false
+		}
+		total += hi - lo + 1
 		ranges = append(ranges, ctaIntegerRange{lo: lo, hi: hi})
 	}
 	if total == 0 {

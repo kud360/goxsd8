@@ -87,16 +87,18 @@ const ruleCvcAssertionsValid xsderr.Rule = "cvc-assertions-valid"
 // and every assertion of an e one of whose attributes matching an {attribute
 // use}, carried or ·defaulted·, has no ·actual value·, one of whose element
 // [[children]] a {test} reads has no typed value this package reads
-// ([walk.keepChild]), whose `$value` is undecided ([walk.assertionValues]), or
-// one of whose {test}s counts the attribute nodes of, or filters children by
-// the attribute names of, an element of its subtree whose ·governing type
-// definition· this package could not determine, so that its ·defaulted
-// attributes· are unknown ([walk.tallyElement]); a ·skipped· subtree is
-// counted, by name ([assertionAncestry.tallySkipped]). Fail-open: the withheld
-// value is clause 6's own verdict, whose whole consumer set inside this
-// package is w.res.violations and its one reader [Result.Violations], which
-// charge on a violation PRESENT, so a decline can only cost a rejection and
-// can manufacture none. (#1042)
+// ([walk.keepChild]), whose `$value` is undecided ([walk.assertionValues]),
+// whose string value was not gathered because it has simple content and
+// element [[children]] ([walk.assertionValue]), or one of whose {test}s counts
+// the attribute nodes of, or filters children by the attribute names of, an
+// element of its subtree whose ·governing type definition· this package could
+// not determine, so that its ·defaulted attributes· are unknown
+// ([walk.tallyElement]); a ·skipped· subtree is counted, by name
+// ([assertionAncestry.tallySkipped]). Fail-open: the withheld value is clause
+// 6's own verdict, whose whole consumer set inside this package is
+// w.res.violations and its one reader [Result.Violations], which charge on a
+// violation PRESENT, so a decline can only cost a rejection and can
+// manufacture none. (#1042)
 func (w *walk) elementAssertions(e Element, asserts *assertionCheck, content *contentCheck, invalid bool) {
 	if asserts == nil {
 		return
@@ -671,6 +673,11 @@ type lackingDefault struct{ u xsd.AttributeUse }
 // ([walk.assertionValue]).
 type lackingValue struct{}
 
+// lackingText is a simple {content type} over an element with element
+// [[children]], whose string value, which `.` reads, this walk did not gather
+// ([walk.assertionValue]).
+type lackingText struct{}
+
 // lackingChild is an element [[child]], named name at loc, that a {test} reads
 // and that has no typed value this package reads, for the reason why
 // ([walk.childValue]).
@@ -705,6 +712,10 @@ func (l lackingCount) declined(e xsd.QName) string {
 
 func (l lackingChild) declined(e xsd.QName) string {
 	return fmt.Sprintf("the child element %s of the element %s at %s, which a {test} reads, has no typed value for the data model instance cvc-assertion clause 1 builds: %s", l.name, e, l.loc, l.why)
+}
+
+func (lackingText) declined(e xsd.QName) string {
+	return fmt.Sprintf("the element %s has simple content and element [[children]], which cvc-complex-type clause 1.2 charged, so its string value, the text of all its descendants, was not gathered", e)
 }
 
 func (lackingValue) declined(e xsd.QName) string {
@@ -775,9 +786,9 @@ func (w *walk) assertionValues(e Element, attrs []Attribute, asserts *assertionC
 	if asserts.lack != nil {
 		return assertionInput{}, asserts.lack
 	}
-	bound, decided := w.assertionValue(e, ct, content, invalid)
-	if !decided {
-		return assertionInput{}, lackingValue{}
+	bound, lack := w.assertionValue(e, ct, content, invalid)
+	if lack != nil {
+		return assertionInput{}, lack
 	}
 	in.value = bound
 	return in, nil
@@ -819,27 +830,25 @@ func (w *walk) assertionTyped(u xsd.AttributeUse, lexical string, ctx value.Cont
 
 // assertionValue is what e's assertions read of e itself — its string value,
 // which `.` atomizes to, and the value cvc-assertion clause 2.3 binds to
-// `$value` ([xpath.BindValue]) — reporting false where `$value` is undecided.
+// `$value` ([xpath.BindValue]) — or the lack that leaves either undecided.
 //
 // The string value is the ·initial value· [contentCheck.assessed] answers, or
 // the {value constraint}'s {lexical form} cvc-elt clause 5.1 substitutes for an
 // empty e, the one text node the data model instance holds for it
 // (xpath-datamodel Appendix J.2), unnormalized. It is bound whatever `$value`
-// is, an invalid e's included: `.` is E's string value whatever its [validity].
-// A ·nilled· e and one whose {content type} is not simple bind the zero
-// [xpath.ValueBinding] — the zero-length string, which is a ·nilled· e's
-// string value (xpath-datamodel §6.2.4), and a string value no {test} compiled
-// for content that is not simple reads, `.` declining there
+// is, an invalid e's included, but for the e below: `.` is E's string value
+// whatever its [validity]. A ·nilled· e and one whose {content type} is not
+// simple bind the zero [xpath.ValueBinding] — the zero-length string, which is
+// a ·nilled· e's string value (xpath-datamodel §6.2.4), and a string value no
+// {test} compiled for content that is not simple reads, `.` declining there
 // ([xpath.CompileAssertionTest]).
 //
-// GAP(validate): an e under simple content that has element [[children]] —
-// which cvc-complex-type clause 1.2 has charged, so invalid is true — binds the
-// text gathered before that charge, which is not its string value: the text of
-// its descendants is never gathered, nor is a run after the charge
-// ([contentCheck.text]). The {test}'s answer over it is not E's. It decides
-// nothing about the document: e is already invalid, so [Result.Violations],
-// the one reader of what the assertion charges, is non-empty whatever it
-// answers. (#1042)
+// An e under simple content that has element [[children]] — which
+// cvc-complex-type clause 1.2 charged as the first arrived, so invalid is true
+// — has a string value this walk never gathered: the text of its descendants,
+// and every run after that charge ([contentCheck.text]). Its assertions are
+// declined ([lackingText]) on the terms [walk.elementAssertions] states, never
+// evaluated over the partial text.
 //
 // Clause 2.3.2's empty sequence — a nil `$value` — is decided from three facts
 // this walk holds: ct's {content type} is not simple, e is ·nilled· (clause
@@ -867,30 +876,33 @@ func (w *walk) assertionTyped(u xsd.AttributeUse, lexical string, ctx value.Cont
 // between invalid and notKnown, and the actual value is bound all the same:
 // were e invalid, e is rejected whatever its assertions answer, so no answer
 // they give turns a valid document invalid or an invalid one valid.
-func (w *walk) assertionValue(e Element, ct xsd.ComplexType, content *contentCheck, invalid bool) (xpath.ValueBinding, bool) {
+func (w *walk) assertionValue(e Element, ct xsd.ComplexType, content *contentCheck, invalid bool) (xpath.ValueBinding, assertionLack) {
 	simple, isSimple := ct.ContentType().(xsd.SimpleContent)
 	if !isSimple || content.nilled {
-		return xpath.ValueBinding{}, true
+		return xpath.ValueBinding{}, nil
+	}
+	if content.sawElement {
+		return xpath.ValueBinding{}, lackingText{}
 	}
 	lexical, ctx := content.assessed()
 	if invalid {
-		return xpath.BindValue(lexical, nil), true
+		return xpath.BindValue(lexical, nil), nil
 	}
 	if simple.SimpleType.IsSpecial() {
-		return xpath.BindValue(lexical, xpath.Untyped(lexical)), true
+		return xpath.BindValue(lexical, xpath.Untyped(lexical)), nil
 	}
 	decided, verdict := w.stringValid(simple.SimpleType, lexical, ctx, e.Loc())
 	if !decided {
-		return xpath.ValueBinding{}, false
+		return xpath.ValueBinding{}, lackingValue{}
 	}
 	if verdict != nil {
-		return xpath.BindValue(lexical, nil), true
+		return xpath.BindValue(lexical, nil), nil
 	}
 	v, err := value.ValidateLexical(w.backend, w.schema, simple.SimpleType, lexical, ctx, xpath.FacetAssertions())
 	if err != nil {
-		return xpath.ValueBinding{}, false
+		return xpath.ValueBinding{}, lackingValue{}
 	}
-	return xpath.BindValue(lexical, xpath.Typed(v)), true
+	return xpath.BindValue(lexical, xpath.Typed(v)), nil
 }
 
 // declineAssertions records err, the non-verdict [walk.stringValid] withheld a
