@@ -95,7 +95,7 @@ func TestAssertionChildPathExistence(t *testing.T) {
 				record = asRecord(tc.expr)
 			}
 			test := apCompile(t, record)
-			got := test.Evaluate(backend(), seededTypes, asValues(t, tc.attrs...), asNoChildren, acTally(test, tc.nodes...), ValueBinding{}, time.Time{})
+			got := test.Evaluate(backend(), seededTypes, asElem, asValues(t, tc.attrs...), asNoChildren, acTally(test, tc.nodes...), ValueBinding{}, time.Time{})
 			if got != tc.holds {
 				t.Errorf("Evaluate(%q) over %v = %v, want %v", record.Expression(), tc.nodes, got, tc.holds)
 			}
@@ -109,7 +109,7 @@ func TestAssertionChildPathExistence(t *testing.T) {
 // names, and no value is read.
 func TestAssertionChildPathCountsNilledNodes(t *testing.T) {
 	test := apCompile(t, asRecord("exists(a/b)"))
-	if !test.Evaluate(backend(), seededTypes, asValues(t), asNoChildren, acTally(test, acPath("a"), acPath("a", "b")), ValueBinding{}, time.Time{}) {
+	if !test.Evaluate(backend(), seededTypes, asElem, asValues(t), asNoChildren, acTally(test, acPath("a"), acPath("a", "b")), ValueBinding{}, time.Time{}) {
 		t.Error("Evaluate(exists(a/b)) over a reported a/b = false, want true")
 	}
 }
@@ -143,7 +143,7 @@ func TestAssertionChildPathKeepsOneCounter(t *testing.T) {
 	if c := twice.Tally(); c == nil || len(c.counters) != 1 {
 		t.Errorf("(exists(a/b) and not(empty(a/b))).Tally() holds %d counters, want 1", len(c.counters))
 	}
-	if !twice.Evaluate(backend(), seededTypes, asValues(t), asNoChildren, acTally(twice, acPath("a", "b")), ValueBinding{}, time.Time{}) {
+	if !twice.Evaluate(backend(), seededTypes, asElem, asValues(t), asNoChildren, acTally(twice, acPath("a", "b")), ValueBinding{}, time.Time{}) {
 		t.Error("Evaluate over its own Tally with a/b reported = false, want true")
 	}
 	for _, tc := range []struct {
@@ -158,7 +158,7 @@ func TestAssertionChildPathKeepsOneCounter(t *testing.T) {
 	} {
 		other := apCompile(t, asRecord(tc.other))
 		counts := acTally(other, acPath("a", "b"), acPath("a", "c"), acPath("b"), acPath("b", "a"), acPath("a", "b", "c"))
-		if apCompile(t, asRecord("exists(a/b)")).Evaluate(backend(), seededTypes, asValues(t), asNoChildren, counts, ValueBinding{}, time.Time{}) {
+		if apCompile(t, asRecord("exists(a/b)")).Evaluate(backend(), seededTypes, asElem, asValues(t), asNoChildren, counts, ValueBinding{}, time.Time{}) {
 			t.Errorf("%s: Evaluate(exists(a/b)) = true, want false", tc.why)
 		}
 	}
@@ -281,7 +281,7 @@ func TestAssertionRootedChildPath(t *testing.T) {
 		if !ok {
 			t.Fatalf("CompileAssertionTest(%q): declined, want compiled", expr)
 		}
-		if test.Evaluate(backend(), seededTypes, asValues(t), asNoChildren, nil, ValueBinding{}, time.Time{}) {
+		if test.Evaluate(backend(), seededTypes, asElem, asValues(t), asNoChildren, nil, ValueBinding{}, time.Time{}) {
 			t.Errorf("Evaluate(%q) = true, want false: the leading slash raises err:XPDY0050", expr)
 		}
 	}

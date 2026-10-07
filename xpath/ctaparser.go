@@ -24,7 +24,10 @@ import (
 // in it (predicate) or a [21] UnionExpr of such paths (countArgument), or over
 // an operand a library call takes as its argument (countCall), a call
 // to one of the F&O string and sequence functions (libraryCall) whose arguments
-// are additive expressions or `()`, the binary operators of [13] AdditiveExpr
+// are additive expressions or `()`, a call to fn:namespace-uri over `.` or
+// with no argument (namespaceURICall) and, as an operand of `=` against string
+// literals, to fn:in-scope-prefixes over `.` (prefixMember), each `.` there E
+// as a node (contextNodeArgument), the binary operators of [13] AdditiveExpr
 // and [14] MultiplicativeExpr, [47] ContextItemExpr `.`, which the assertion
 // and facet façades admit, and the predicate façade reads as its candidate
 // (valuePredicate), [7] IfExpr wherever an ExprSingle stands whole in a
@@ -37,20 +40,21 @@ import (
 // ctasequence.go) — each behind the façade (ctaFacade.comparesValues,
 // ctaFacade.variable, ctaFacade.child, ctaFacade.childPath, ctaFacade.elements,
 // ctaFacade.rooted, ctaFacade.count, ctaFacade.callsLibrary,
-// ctaFacade.computes, ctaFacade.contextItem, ctaFacade.conditional,
-// ctaFacade.constructsSequences, ctaFacade.castable, ctaFacade.instanceOf), so
-// a Type Alternative's {test} reaches none of them. Every method below is named
-// for the production it parses, and the whole grammar is both reached and
-// evaluated: no method here is a stub, and the production-level declines are
-// those fourteen façade methods'. xpath/doc.go owns the enumeration of what
-// declines; every other decline reaching this file is ctaTypes answering
-// ctaTypeDeclined for a comparison type, a cast target or a cast operand it
-// will not serve, ctaTypes.arithmetic declining an operand pair,
-// ctaTypes.instanceItem and ctaTypes.itemMatches declining an `instance of`
-// operand or AtomicType, a library call of an arity its function does not have,
-// a predicate or a union operand outside the shapes predicate, valuePredicate
-// and ctaUnionOf admit, `.` or another node standing as a node (booleanExpr,
-// presenceCall, instanceofExpr), a sequence sequenceLength does not measure or
+// ctaFacade.computes, ctaFacade.contextItem, ctaFacade.contextNode,
+// ctaFacade.focus, ctaFacade.conditional, ctaFacade.constructsSequences,
+// ctaFacade.castable, ctaFacade.instanceOf), so a Type Alternative's {test}
+// reaches none of them. Every method below is named for the production it
+// parses, and the whole grammar is both reached and evaluated: no method here
+// is a stub, and the production-level declines are those sixteen façade
+// methods'. xpath/doc.go owns the enumeration of what declines; every other
+// decline reaching this file is ctaTypes answering ctaTypeDeclined for a
+// comparison type, a cast target or a cast operand it will not serve,
+// ctaTypes.arithmetic declining an operand pair, ctaTypes.instanceItem and
+// ctaTypes.itemMatches declining an `instance of` operand or AtomicType, a
+// library call of an arity its function does not have, a predicate or a union
+// operand outside the shapes predicate, valuePredicate and ctaUnionOf admit,
+// `.` or another node standing as a node (booleanExpr, presenceCall,
+// instanceofExpr), a sequence sequenceLength does not measure or
 // integerSequence does not build, or the façade declining a NameTest, a
 // variable's type or a settled comparison type, which the production that asked
 // propagates unchanged.
@@ -76,6 +80,11 @@ var ctaCountFunction = xsd.QName{Space: ctaFunctionNS, Local: "count"}
 // and facet façades call as the operand of `instance of` and nowhere else
 // (ctaParser.dataInstanceOf).
 var ctaDataFunction = xsd.QName{Space: ctaFunctionNS, Local: "data"}
+
+// ctaInScopePrefixesFunction is fn:in-scope-prefixes (xpath-functions.md
+// §11.2.6), which the assertion and facet façades call over `.` as one operand
+// of `=` and nowhere else (ctaParser.prefixMember).
+var ctaInScopePrefixesFunction = xsd.QName{Space: ctaFunctionNS, Local: "in-scope-prefixes"}
 
 // ctaNames holds the {namespace bindings} and the {default namespace} of one
 // XPath Expression property record, the bindings indexed by prefix. The map is
@@ -773,13 +782,18 @@ func (p *ctaParser) andExpr() (ctaExpr, bool) {
 //
 // A left operand that is an integer or string sequence (sequenceLength) is read
 // as one where a general comparator follows it, ahead of the `(` arm, which
-// would read its parenthesis as a boolean one.
+// would read its parenthesis as a boolean one. Ahead of both, a comparison of
+// fn:in-scope-prefixes against string literals is prefixMember's, whose left
+// operand may be such a sequence.
 //
 // GAP(xpath): the context item `.` with its Comparator absent declines, so `.`
 // and `not(.)` do: there it is a node, whose ·effective boolean value· is
 // rule 2's (xpath20.md §2.4.3), and never that of the atom ctaContextAtom
 // reads. The direction is the withhold [CompileAssertionTest] reports. (#1042)
 func (p *ctaParser) booleanExpr() (ctaExpr, bool) {
+	if p.prefixMemberLength() > 0 {
+		return p.prefixMember()
+	}
 	if n := p.sequenceLength(0); n > 0 && p.peek(n).kind == ctaCompTok {
 		left, ok := p.sequence(n)
 		if !ok {
@@ -1257,6 +1271,8 @@ func (p *ctaParser) libraryCall(local string) (ctaValue, bool) {
 		return p.currentDateCall()
 	case "position", "last":
 		return p.focusCall()
+	case "namespace-uri":
+		return p.namespaceURICall()
 	}
 	return p.constructorFunction()
 }
@@ -1532,6 +1548,160 @@ func (p *ctaParser) focusCall() (ctaValue, bool) {
 	return p.facade.focus(integer)
 }
 
+// namespaceURICall parses a call to fn:namespace-uri over `.` or with no
+// argument, which "defaults to the context node (.)" (xpath-functions.md
+// §14.3), into its ctaNamespaceURI over the node the façade compiles `.` to
+// (contextNodeArgument), whose result is xs:anyURI. An xs:anyURI that does not
+// resolve declines.
+//
+// GAP(xpath): any other argument declines — a path such as `@a` or `a`, a
+// variable, `()`, and `.` written any other way, `(.)` or `./self::node()` —
+// rather than reading the namespace name of the node it selects. The
+// direction is the withhold [CompileAssertionTest] reports. (#1042)
+func (p *ctaParser) namespaceURICall() (ctaValue, bool) {
+	node, ok := p.contextNodeArgument(true)
+	if !ok {
+		return nil, false
+	}
+	anyURI, resolved := p.types.simple(ctaBuiltin("anyURI"))
+	if !resolved {
+		return nil, false
+	}
+	return ctaNamespaceURI{context: node, st: anyURI}, true
+}
+
+// contextNodeArgument parses the argument list of the call whose name the
+// cursor is on where it is `(.)`, or `()` where admitsNone, into the node the
+// façade compiles `.` to as a NODE (ctaFacade.contextNode) — never through
+// ctaFacade.contextItem, whose atom a node parameter does not take, so the
+// call records no read of E's string value ([AssertionTest.ReadsContextItem]).
+// Every other list declines.
+func (p *ctaParser) contextNodeArgument(admitsNone bool) (ctaValue, bool) {
+	n := p.contextNodeCallLength(0, admitsNone)
+	if n == 0 {
+		return nil, false
+	}
+	p.pos += n
+	return p.facade.contextNode()
+}
+
+// contextNodeCallLength is how many tokens, from offset at ahead of the cursor
+// where a function name stands, spell a call whose argument list is `(.)` —
+// or `()` where admitsNone — and 0 where they spell none. Nothing is consumed.
+func (p *ctaParser) contextNodeCallLength(at int, admitsNone bool) int {
+	if p.peek(at+1).kind != ctaLParen {
+		return 0
+	}
+	if p.peek(at+2).kind == ctaDotTok && p.peek(at+3).kind == ctaRParen {
+		return 4
+	}
+	if admitsNone && p.peek(at+2).kind == ctaRParen {
+		return 3
+	}
+	return 0
+}
+
+// prefixMemberLength is how many tokens at the cursor spell a general
+// comparison by `=` of a call to fn:in-scope-prefixes over `.`,
+// `in-scope-prefixes(.)`, against a StringLiteral or a parenthesized sequence
+// of them (stringOperandLength), the call on either side, and 0 where they
+// spell none or the façade calls no library function (ctaFacade.callsLibrary).
+// Nothing is consumed.
+func (p *ctaParser) prefixMemberLength() int {
+	if !p.facade.callsLibrary() {
+		return 0
+	}
+	if call := p.prefixesCallLength(0); call > 0 {
+		literals := p.stringOperandLength(call + 1)
+		if literals == 0 || !p.equalsAt(call) {
+			return 0
+		}
+		return call + 1 + literals
+	}
+	literals := p.stringOperandLength(0)
+	if literals == 0 || !p.equalsAt(literals) {
+		return 0
+	}
+	call := p.prefixesCallLength(literals + 1)
+	if call == 0 {
+		return 0
+	}
+	return literals + 1 + call
+}
+
+// prefixesCallLength is how many tokens, from offset at ahead of the cursor,
+// spell `in-scope-prefixes(.)`, the name resolved in the function namespace
+// (functionName), and 0 where they spell anything else.
+func (p *ctaParser) prefixesCallLength(at int) int {
+	tok := p.peek(at)
+	if tok.kind != ctaNameTok || p.peek(at+1).kind != ctaLParen || p.functionName(tok.text) != ctaInScopePrefixesFunction {
+		return 0
+	}
+	return p.contextNodeCallLength(at, false)
+}
+
+// equalsAt reports whether the token at offset at ahead of the cursor is the
+// general comparator `=`.
+func (p *ctaParser) equalsAt(at int) bool {
+	tok := p.peek(at)
+	return tok.kind == ctaCompTok && tok.text == "="
+}
+
+// stringOperandLength is how many tokens, from offset at ahead of the cursor,
+// spell a StringLiteral or a parenthesized sequence of them
+// (stringSequenceLength), and 0 where they spell neither.
+func (p *ctaParser) stringOperandLength(at int) int {
+	if p.peek(at).kind == ctaStringTok {
+		return 1
+	}
+	return p.stringSequenceLength(at)
+}
+
+// prefixMember parses the comparison prefixMemberLength measured at the cursor
+// into its ctaPrefixMember (xpath-functions.md §11.2.6, xpath20.md §3.5.2):
+// the call's `.` compiled as a node (contextNodeArgument), and the literals in
+// written order. A token after it that ends no [11] ta-BooleanExpr, as in
+// `in-scope-prefixes(.) = 'a' cast as xs:string`, is left to the enclosing
+// production, which takes none and declines.
+//
+// GAP(xpath): fn:in-scope-prefixes in every other shape declines — a
+// free-standing call, `count(in-scope-prefixes(.))`, an operator but `=`,
+// `!=` and `eq` among them, an operand that is neither a StringLiteral nor a
+// parenthesized sequence of them, and any argument but `.` — because
+// evaluating it there needs the sequence of E's prefixes, which only a
+// listing of E's [in-scope namespaces] builds, and [ContextElement] answers
+// one prefix at a time as validate.Element's LookupPrefix does. The direction
+// is the withhold [CompileAssertionTest] reports. (#1042)
+func (p *ctaParser) prefixMember() (ctaExpr, bool) {
+	if p.prefixesCallLength(0) > 0 {
+		node, ok := p.contextNodeArgument(false)
+		if !ok {
+			return nil, false
+		}
+		p.advance() // '='
+		return ctaPrefixMember{context: node, literals: p.stringOperand()}, true
+	}
+	literals := p.stringOperand()
+	p.advance() // '='
+	node, ok := p.contextNodeArgument(false)
+	if !ok {
+		return nil, false
+	}
+	return ctaPrefixMember{context: node, literals: literals}, true
+}
+
+// stringOperand parses the StringLiteral, or the parenthesized sequence of
+// them, stringOperandLength measured at the cursor into their values, in
+// written order.
+func (p *ctaParser) stringOperand() []string {
+	if p.at(ctaStringTok) {
+		text := p.peek(0).text
+		p.advance()
+		return []string{text}
+	}
+	return p.stringSequence(p.stringSequenceLength(0)).texts
+}
+
 // countCall parses an fn:count call, xpath20.md [48] FunctionCall with one
 // argument, whose name the caller has already resolved to fn:count. Where the
 // façade calls the library (ctaFacade.callsLibrary) and the argument opens as
@@ -1705,6 +1875,10 @@ func (ctaPredicateFacade) rooted() (ctaValue, bool) { return nil, false }
 func (f ctaPredicateFacade) contextItem() (ctaValue, bool) { return f.candidate, true }
 
 func (ctaPredicateFacade) count(ctaCounted, ctaTypes) (ctaValue, bool) { return nil, false }
+
+// contextNode declines: inside a predicate `.` is the candidate child and not
+// E. It is never reached, callsLibrary being false.
+func (ctaPredicateFacade) contextNode() (ctaValue, bool) { return nil, false }
 
 // focus declines. It is never reached: callsLibrary is false, so `position()`
 // and `last()` in a predicate reach constructorFunction and decline there,

@@ -52,12 +52,14 @@ import (
 // each node counted once; and, in [14]'s position, a call to one of the F&O
 // string and sequence functions [CompileAssertionTest] lists
 // (ctaFacade.callsLibrary, ctafunc.go), whose argument may also be the empty
-// sequence `()`. It also admits xpath20.md §3.4's binary arithmetic operators
-// over numeric operands (ctaFacade.computes), in each comparison operand's
-// position; §3.8's [7] IfExpr wherever an ExprSingle stands whole in a boolean
-// position (ctaFacade.conditional); [47] ContextItemExpr `.`, as E's string
-// value (ctaAssertionFacade.contextItem); and, as a general comparison's
-// operand, §3.3.1's integer and string sequences
+// sequence `()`, or to fn:namespace-uri, and fn:in-scope-prefixes as an
+// operand of `=`, each over E as a node ([ContextElement],
+// ctaAssertionFacade.contextNode). It also admits xpath20.md §3.4's binary
+// arithmetic operators over numeric operands (ctaFacade.computes), in each
+// comparison operand's position; §3.8's [7] IfExpr wherever an ExprSingle stands
+// whole in a boolean position (ctaFacade.conditional); [47] ContextItemExpr `.`,
+// as E's string value (ctaAssertionFacade.contextItem); and, as a general
+// comparison's operand, §3.3.1's integer and string sequences
 // (ctaFacade.constructsSequences).
 
 // AttributeTypes answers, for the element information item E whose assertions
@@ -270,6 +272,22 @@ type ValueBinding struct {
 // so the empty sequence has one encoding.
 func BindValue(text string, v TypedValue) ValueBinding { return ValueBinding{text: text, v: v} }
 
+// ContextElement is E, the element information item cvc-xpath makes the
+// context item of an assertion's {test}, as the functions that take `.` as a
+// NODE read it: fn:namespace-uri reads its [namespace name] off Name, and
+// fn:in-scope-prefixes asks LookupPrefix whether a prefix is in E's [in-scope
+// namespaces]. It must be non-nil. validate.Element satisfies it as it stands.
+type ContextElement interface {
+	// Name is E's ·expanded name·; its Space is E's [namespace name], "" for
+	// none.
+	Name() xsd.QName
+	// LookupPrefix resolves prefix against E's [in-scope namespaces], the
+	// bindings E inherits included: the empty prefix asks for the default
+	// namespace, where a zero-length uri means none is in scope whatever ok
+	// reports, and ok false means prefix is unbound.
+	LookupPrefix(prefix string) (uri string, ok bool)
+}
+
 // Tally is the node-count input of ONE evaluation of ONE [AssertionTest] over
 // the element E: for each relative path the {test} counts over with fn:count
 // (xpath-functions.md §15.4.1) — a step, a child step filtered by the
@@ -442,7 +460,9 @@ type AssertionTest struct {
 // `.`: under every {content type} it is E's string value, one xs:untypedAtomic
 // value [BindValue] binds beside `$value`, whatever the {simple type
 // definition}'s variety, and a nil content declines it. Whether the compiled
-// {test} reads `.` is [AssertionTest.ReadsContextItem]'s answer.
+// {test} reads `.` is [AssertionTest.ReadsContextItem]'s answer. `.` as the
+// node fn:namespace-uri and fn:in-scope-prefixes take is E itself, which
+// [AssertionTest.Evaluate] is handed, under every content, a nil one included.
 //
 // The grammar is [CompileCTATest]'s with the value comparisons, `$value`, an
 // abbreviated child-axis step, a "/" or "//" opening one child or attribute
@@ -461,34 +481,39 @@ type AssertionTest struct {
 // fn:distinct-values with one, and fn:true, fn:false and fn:current-date with
 // none (xpath-functions.md §7.5.1–7.5.3, §7.4.4, §7.4.5, §2.3, §15.1.4,
 // §15.1.5, §15.1.6, §9.1.1, §9.1.2, §16.4), any argument of which may be the
-// empty sequence `()` — the conditional `if (Expr) then ExprSingle else
-// ExprSingle` (xpath20.md §3.8) as the whole {test}, inside parentheses, as
-// fn:not's argument or as an operand of another, whose test's ·effective
-// boolean value· selects the one branch evaluated, so a dynamic error in the
-// other is never raised, and both of whose branches are compiled, so a decline
-// in either declines the {test}; the [47] ContextItemExpr `.`, atomized
-// (§3.1.4, §2.4.2); [18] CastableExpr's `castable as` tail over a [16] ta-SimpleValue,
-// `$value castable as xs:double`, an xs:boolean true exactly where the same `cast as`
-// yields a value and false where that cast raises — the empty sequence without `?`, two
-// or more items, a lexical or facet mismatch — while an error evaluating its operand
-// raises (§3.10.3), and which declines wherever that cast does; [16] InstanceofExpr's
-// `instance of` tail with an atomic SequenceType, a builtin [53] AtomicType or
-// xs:untypedAtomic and an optional `?`, `*` or `+` (§3.10.1), over an operand that is no
-// node or over an fn:data call, `data(@d) instance of xs:date*`, whose argument it
-// atomizes (xpath-functions.md §2.4) — true where the item count is one the indicator
-// admits and each item's type derives from the AtomicType (§2.5.4), never casting, so
-// `data(.) instance of xs:untypedAtomic` holds over every {content type} and `$value
-// instance of xs:date` over an xs:date `$value`, while an error evaluating its operand
-// raises; and, as an operand of a general comparison, an integer sequence: [11] RangeExpr
-// `I to J` over two IntegerLiterals, bare or parenthesized, or a parenthesized comma
-// sequence of IntegerLiterals and such ranges, `(1 to 10, 20, 30)` (§3.3.1), or a string
-// sequence, a parenthesized comma sequence of StringLiterals, `('a', 'b')`. A string
-// sequence's items are xs:string. Against a typed operand outside the xs:string family,
-// an xs:integer `$value` or child among them, xpath20.md §B.2 defines no comparison and
-// it raises err:XPTY0004, while `.`, which is not typed, casts to xs:string (§3.5.2 rule
-// 2.4) — added, and every decline [CompileCTATest] states is this one's too, under the
-// same static context (xpath-valid clause 2.2) augmented with `$value` (cvc-assertion
-// clause 2.2), plus these, each of which is the same withhold:
+// empty sequence `()`, and fn:namespace-uri with `.` or no argument (§14.3),
+// E's [namespace name] as one xs:anyURI, the zero-length one for no namespace,
+// and fn:in-scope-prefixes with `.` (§11.2.6) as one operand of `=` whose
+// other is a StringLiteral or a parenthesized comma sequence of them, on
+// either side, true where one of those is a prefix of E's [in-scope namespaces] (`xml`
+// always, the zero-length string where a default namespace is in scope, never `xmlns`),
+// each `.` there E as a node — the conditional `if (Expr) then ExprSingle else
+// ExprSingle` (xpath20.md §3.8) as the whole {test}, inside parentheses, as fn:not's
+// argument or as an operand of another, whose test's ·effective boolean value· selects
+// the one branch evaluated, so a dynamic error in the other is never raised, and both of
+// whose branches are compiled, so a decline in either declines the {test}; the [47]
+// ContextItemExpr `.`, atomized (§3.1.4, §2.4.2); [18] CastableExpr's `castable as` tail
+// over a [16] ta-SimpleValue, `$value castable as xs:double`, an xs:boolean true exactly
+// where the same `cast as` yields a value and false where that cast raises — the empty
+// sequence without `?`, two or more items, a lexical or facet mismatch — while an error
+// evaluating its operand raises (§3.10.3), and which declines wherever that cast does;
+// [16] InstanceofExpr's `instance of` tail with an atomic SequenceType, a builtin [53]
+// AtomicType or xs:untypedAtomic and an optional `?`, `*` or `+` (§3.10.1), over an
+// operand that is no node or over an fn:data call, `data(@d) instance of xs:date*`, whose
+// argument it atomizes (xpath-functions.md §2.4) — true where the item count is one the
+// indicator admits and each item's type derives from the AtomicType (§2.5.4), never
+// casting, so `data(.) instance of xs:untypedAtomic` holds over every {content type} and
+// `$value instance of xs:date` over an xs:date `$value`, while an error evaluating its
+// operand raises; and, as an operand of a general comparison, an integer sequence: [11]
+// RangeExpr `I to J` over two IntegerLiterals, bare or parenthesized, or a parenthesized
+// comma sequence of IntegerLiterals and such ranges, `(1 to 10, 20, 30)` (§3.3.1), or a
+// string sequence, a parenthesized comma sequence of StringLiterals, `('a', 'b')`. A
+// string sequence's items are xs:string. Against a typed operand outside the xs:string
+// family, an xs:integer `$value` or child among them, xpath20.md §B.2 defines no
+// comparison and it raises err:XPTY0004, while `.`, which is not typed, casts to
+// xs:string (§3.5.2 rule 2.4) — added, and every decline [CompileCTATest] states is this
+// one's too, under the same static context (xpath-valid clause 2.2) augmented with
+// `$value` (cvc-assertion clause 2.2), plus these, each of which is the same withhold:
 //
 //   - an attribute NameTest that is not a QName: a [37] Wildcard can match an
 //     attribute ·attributed to· an {attribute wildcard}, whose type is not
@@ -585,11 +610,18 @@ type AssertionTest struct {
 //     collation argument, or to fn:distinct-values with a second (§7.3.1),
 //     which is never read as the form without it, and a call to any of the
 //     functions above with an arity it does not have (err:XPST0017);
-//   - `.` under a nil content, and `.` as the whole operand of an ·effective
+//   - `.` under a nil content, but as the argument of fn:namespace-uri or
+//     fn:in-scope-prefixes, and `.` as the whole operand of an ·effective
 //     boolean value·, fn:not over one, fn:exists, fn:empty or fn:count, where it
 //     is a node and not the atom it is read as elsewhere — so `.`, `not(.)`,
 //     `exists(.)` and `count(.)` decline — and fn:string-length,
 //     fn:normalize-space and fn:string with no argument wherever `.` declines;
+//   - fn:namespace-uri with any argument but `.` — a path, a variable, `()`,
+//     `(.)` — and fn:in-scope-prefixes over any argument but `.`, or anywhere
+//     but as one operand of `=` against a StringLiteral or a parenthesized
+//     comma sequence of them — so `in-scope-prefixes(.)`,
+//     `count(in-scope-prefixes(.))`, `in-scope-prefixes(.) != 'a'`,
+//     `in-scope-prefixes(.) eq 'a'` and `in-scope-prefixes(.) = @a` decline;
 //   - an integer or string sequence anywhere but as a general comparison's
 //     operand — `. eq (1 to 3)`, `(1 to 3) + 1`, `exists(('a', 'b'))` — a
 //     range operand that is not an IntegerLiteral, `1 to .`, a member that is
@@ -679,13 +711,18 @@ type AssertionTest struct {
 // predicate over a mixed child, arithmetic outside the numeric operands and
 // the binary operators, conditionals whose value is read as an item rather
 // than for its ·effective boolean value·, `.` under a nil content or where it
-// is a node, sequence expressions beyond the integer and string
-// sequences of a general comparison's operand, `castable as` over any operand
-// but a [16] ta-SimpleValue or inside a value predicate, `instance of` beyond
-// an atomic SequenceType over the operands above, the collation argument, and
-// every F&O function but fn:count and those listed above among them. The
-// direction is the withhold: the caller records the assertion as unevaluated
-// and neither charges it nor shows it satisfied (PRINCIPLES 20). (#1042)
+// is a node, but as the argument of the two functions below, sequence
+// expressions beyond the integer and string sequences of a general
+// comparison's operand, `castable as` over any operand but a [16]
+// ta-SimpleValue or inside a value predicate, `instance of` beyond an atomic
+// SequenceType over the operands above, the collation argument, and every F&O
+// function but fn:count, those listed above, fn:namespace-uri over `.` or with
+// no argument, and fn:in-scope-prefixes over `.` only as an operand of `=`,
+// among them — fn:in-scope-prefixes elsewhere because its sequence needs a
+// listing of E's [in-scope namespaces], a capability validate.Element lacks,
+// [ContextElement] answering one prefix at a time. The direction is the
+// withhold: the caller records the assertion as unevaluated and neither
+// charges it nor shows it satisfied (PRINCIPLES 20). (#1042)
 //
 // types is read as [CompileCTATest] reads it and stored nowhere.
 func CompileAssertionTest(expr xsd.XPathExpression, types xsd.TypeResolver, content xsd.ContentType, attrs AttributeTypes, elems ElementTypes) (AssertionTest, bool) {
@@ -705,7 +742,10 @@ func CompileAssertionTest(expr xsd.XPathExpression, types xsd.TypeResolver, cont
 // only `$value`, attributes or children, whose evaluation reads no text of
 // the [ValueBinding]. A `.` inside an fn:count argument's predicate is the
 // candidate child and no read here; that child's value is
-// [AssertionTest.ReadsChild]'s.
+// [AssertionTest.ReadsChild]'s. Nor is the `.` fn:namespace-uri or
+// fn:in-scope-prefixes takes, which is E as a node and reads E's name and
+// bindings ([ContextElement]), never its string value, so a {test} whose only
+// `.` is such an argument reports false.
 //
 // The answer is recorded as the compile admits each `.`, not read back off the
 // tree, so it may over-report — a `.` admitted on a parse the compile then
@@ -763,11 +803,20 @@ func (t AssertionTest) ReadsContextItem() bool { return t.readsContextItem }
 // and Evaluate answers false for it whatever the tree holds. A Tally made by
 // another test counting the same paths cannot be told from t's own and is read
 // as one; handing over the one filled for this E is the caller's part.
-func (t AssertionTest) Evaluate(b value.Backend, types xsd.TypeResolver, attrs TypedAttributes, children ChildElements, counts *Tally, v ValueBinding, now time.Time) bool {
+//
+// e is E itself, the context item cvc-xpath clause 1 names, and must be
+// non-nil. It is read only by the two functions that take `.` as a NODE and
+// not atomized: fn:namespace-uri, over `.` or with no argument, reads E's
+// [namespace name] off e.Name, and fn:in-scope-prefixes, over `.` as an
+// operand of `=` ([CompileAssertionTest]), asks e.LookupPrefix about each
+// prefix the other operand names. The compiled tree holds no element, so one
+// [AssertionTest] serves every E its governing type governs.
+func (t AssertionTest) Evaluate(b value.Backend, types xsd.TypeResolver, e ContextElement, attrs TypedAttributes, children ChildElements, counts *Tally, v ValueBinding, now time.Time) bool {
 	if !counts.fits(t.countedPaths()) {
 		return false
 	}
-	return ctaEval(t.root, ctaEnv{backend: b, types: types, input: ctaTypedInput{attrs: attrs, children: children, counts: counts, value: v, now: now}}) == ctaTrue
+	in := ctaTypedInput{node: e, attrs: attrs, children: children, counts: counts, value: v, now: now}
+	return ctaEval(t.root, ctaEnv{backend: b, types: types, input: in}) == ctaTrue
 }
 
 // Tally is a fresh, empty [Tally] for one evaluation of t, holding one counter
@@ -937,7 +986,7 @@ func (n ctaStringFunction) readsChild(name xsd.QName) bool { return n.cast.reads
 func (n ctaDistinctValues) readsChild(name xsd.QName) bool { return n.operand.readsChild(name) }
 
 // readsChild is false for each of these: none is a child-axis step or holds an
-// operand.
+// operand but the node E is, which no child is.
 func (ctaAttr) readsChild(xsd.QName) bool           { return false }
 func (ctaTypedAttr) readsChild(xsd.QName) bool      { return false }
 func (ctaNoDocumentRoot) readsChild(xsd.QName) bool { return false }
@@ -949,6 +998,9 @@ func (ctaUntypedValue) readsChild(xsd.QName) bool   { return false }
 func (ctaCurrentDate) readsChild(xsd.QName) bool    { return false }
 func (ctaNoFocus) readsChild(xsd.QName) bool        { return false }
 func (ctaContextAtom) readsChild(xsd.QName) bool    { return false }
+func (ctaContextNode) readsChild(xsd.QName) bool    { return false }
+func (ctaNamespaceURI) readsChild(xsd.QName) bool   { return false }
+func (ctaPrefixMember) readsChild(xsd.QName) bool   { return false }
 
 // readsChild reports whether the call's argument reads the value of a child
 // named name.
@@ -1085,7 +1137,7 @@ func ctaAnyCounted(operands []ctaExpr, into []ctaTallied) []ctaTallied {
 }
 
 // counted appends nothing for each of these: none is an fn:count call or holds
-// an operand.
+// an operand but the node E is, which counts nothing.
 func (ctaTypeError) counted(into []ctaTallied) []ctaTallied      { return into }
 func (ctaAttr) counted(into []ctaTallied) []ctaTallied           { return into }
 func (ctaTypedAttr) counted(into []ctaTallied) []ctaTallied      { return into }
@@ -1100,6 +1152,9 @@ func (ctaUntypedValue) counted(into []ctaTallied) []ctaTallied   { return into }
 func (ctaContextAtom) counted(into []ctaTallied) []ctaTallied    { return into }
 func (ctaCurrentDate) counted(into []ctaTallied) []ctaTallied    { return into }
 func (ctaNoFocus) counted(into []ctaTallied) []ctaTallied        { return into }
+func (ctaContextNode) counted(into []ctaTallied) []ctaTallied    { return into }
+func (ctaNamespaceURI) counted(into []ctaTallied) []ctaTallied   { return into }
+func (ctaPrefixMember) counted(into []ctaTallied) []ctaTallied   { return into }
 
 // ctaAssertionFacade is the assertion façade compileCTATest parses for: its
 // attribute nodes are typed by attrs, its child element nodes by elems, its
@@ -1344,6 +1399,17 @@ func (f ctaAssertionFacade) contextItem() (ctaValue, bool) {
 	}
 	*f.readsContextItem = true
 	return ctaContextAtom{}, true
+}
+
+// contextNode compiles `.` as the node fn:namespace-uri and
+// fn:in-scope-prefixes take to ctaContextNode, E itself (cvc-xpath clause 1),
+// under every {content type} and under a nil one: E's name and in-scope
+// namespaces are E's own whatever its governing type, and neither function
+// reads E's string value, so contextNode records no read of it
+// (f.readsContextItem) and [AssertionTest.ReadsContextItem] stays false for a
+// {test} whose only `.` is such an argument.
+func (ctaAssertionFacade) contextNode() (ctaValue, bool) {
+	return ctaContextNode{}, true
 }
 
 // focus declines every call to fn:position and fn:last. The focus is

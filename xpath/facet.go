@@ -13,10 +13,12 @@ import (
 // one value, which Assertions Valid (§4.3.13.3, cvc-assertions-valid) asks of
 // it. It differs from the assertion façade in the one way the rule's
 // conditions differ from cvc-assertion's: there is no context item (clause
-// 1.2), so every expression that reads one — [47] ContextItemExpr `.`, an
-// attribute or child-axis step, a "/" or "//" opening a path, and the implicit
-// argument of fn:string, fn:string-length and fn:normalize-space called with
-// none — raises err:XPDY0002 (ctaNoContextItem), and no context position or
+// 1.2), so every expression that reads one — [47] ContextItemExpr `.`, the
+// node fn:namespace-uri and fn:in-scope-prefixes take among them
+// (ctaFacetFacade.contextNode), an attribute or child-axis step, a "/" or "//"
+// opening a path, and the implicit argument of fn:string, fn:string-length,
+// fn:normalize-space and fn:namespace-uri called with none — raises
+// err:XPDY0002 (ctaNoContextItem), and no context position or
 // size (clause 1.3), so fn:position and fn:last raise it too (ctaNoFocus); and
 // `$value`, bound to the XDM representation of the value under the facet's
 // type, or under its ·active basic member· where that type is a union (clause
@@ -194,6 +196,14 @@ func (ctaFacetFacade) rooted() (ctaValue, bool) {
 
 // contextItem compiles `.` to ctaNoContextItem (xpath20.md §3.1.4).
 func (ctaFacetFacade) contextItem() (ctaValue, bool) {
+	return ctaNoContextItem{}, true
+}
+
+// contextNode compiles `.` as the node fn:namespace-uri and
+// fn:in-scope-prefixes take to ctaNoContextItem, on contextItem's terms: the
+// call raises err:XPDY0002 (xpath-functions.md §14.3), so `namespace-uri() =
+// ""` fails the facet rather than declining or holding.
+func (ctaFacetFacade) contextNode() (ctaValue, bool) {
 	return ctaNoContextItem{}, true
 }
 

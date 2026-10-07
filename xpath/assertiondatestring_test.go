@@ -89,7 +89,7 @@ func TestStringOfATypedDateAttribute(t *testing.T) {
 			if !ok {
 				t.Fatalf("CompileAssertionTest(%q): declined, want compiled", tc.expr)
 			}
-			got := test.Evaluate(backend(), seededTypes, asValues(t, tc.attrs...), asNoChildren, nil, ValueBinding{}, time.Time{})
+			got := test.Evaluate(backend(), seededTypes, asElem, asValues(t, tc.attrs...), asNoChildren, nil, ValueBinding{}, time.Time{})
 			if got != tc.want {
 				t.Errorf("Evaluate(%q) over %v = %v, want %v", tc.expr, tc.attrs, got, tc.want)
 			}
