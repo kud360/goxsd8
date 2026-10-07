@@ -36,7 +36,7 @@ var bigTen = big.NewInt(10)
 func parseDecimal(lexical string, _ value.Context) (value.Value, error) {
 	if !decimalLexical.MatchString(lexical) {
 		return nil, xsderr.New(ruleDatatypeValid, xsderr.Loc{},
-			"decimal: %q is not in the lexical space (decimal-lexical-representation, §3.3.3.1)", lexical)
+			"%q is not in the lexical space of decimal, which cvc-datatype-valid requires it to be in", lexical)
 	}
 
 	neg := false
@@ -59,7 +59,7 @@ func parseDecimal(lexical string, _ value.Context) (value.Value, error) {
 	unscaled, ok := new(big.Int).SetString(intPart+fracPart, 10)
 	if !ok {
 		return nil, xsderr.New(ruleDatatypeValid, xsderr.Loc{},
-			"decimal: %q has no digits (decimal-lexical-representation, §3.3.3.1)", lexical)
+			"%q has no digits, so it is not in the lexical space of decimal, which cvc-datatype-valid requires it to be in", lexical)
 	}
 	if neg {
 		unscaled.Neg(unscaled)

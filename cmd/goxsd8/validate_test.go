@@ -104,6 +104,32 @@ func TestValidateRendersDelegatedVerdictWithoutPlaceholder(t *testing.T) {
 	}
 }
 
+// TestValidateRendersALexicalSpaceFaultWhole pins the whole line validate
+// prints for <amount>12,50</amount> against an element of type xs:decimal:
+// the cvc-datatype-valid cause the strict backend builds opens with the
+// lexical and the type and closes with its rule inline (STYLE E5), with no
+// trailing production-and-section parenthetical (#2371). The outer cvc-type
+// sentence is pinned as validate renders it today; #2370 owns its wording.
+func TestValidateRendersALexicalSpaceFaultWhole(t *testing.T) {
+	dir := t.TempDir()
+	schema := filepath.Join(dir, "s.xsd")
+	instance := filepath.Join(dir, "a.xml")
+	if err := os.WriteFile(schema, []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="amount" type="xs:decimal"/></xs:schema>`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(instance, []byte(`<amount>12,50</amount>`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"validate", "-schema", schema, instance}, &stdout, &stderr); code != exitInvalid {
+		t.Fatalf("code = %d, want %d (stdout %q, stderr %q)", code, exitInvalid, stdout.String(), stderr.String())
+	}
+	want := instance + `:1:1: [cvc-type] the ·initial value· of the element amount is not ·valid· with respect to its ·governing type definition· {http://www.w3.org/2001/XMLSchema}decimal, which cvc-type clause 3.1.3 requires as per String Valid (§3.16.4): [cvc-datatype-valid] "12,50" is not in the lexical space of decimal, which cvc-datatype-valid requires it to be in` + "\n"
+	if got := stdout.String(); got != want {
+		t.Errorf("stdout =\n%s\nwant\n%s", got, want)
+	}
+}
+
 // runIntPattern validates <n>x3</n> against an element of type xs:int, a
 // lexical outside xs:integer's built-in pattern, which xs:int inherits
 // (Datatypes integer.pattern), and returns the instance path and the run's

@@ -99,7 +99,7 @@ type precisionDecimalVal struct {
 func parsePrecisionDecimal(lexical string, _ value.Context) (value.Value, error) {
 	if !precisionDecimalLexical.MatchString(lexical) {
 		return nil, xsderr.New(ruleDatatypeValid, xsderr.Loc{},
-			"precisionDecimal: %q is not in the lexical space (pDecimalRep, §3.2)", lexical)
+			"%q is not in the lexical space of precisionDecimal, which cvc-datatype-valid requires it to be in", lexical)
 	}
 
 	// specialRepValue (step 1, otherwise clause): only these four literals.
@@ -128,7 +128,7 @@ func parsePrecisionDecimal(lexical string, _ value.Context) (value.Value, error)
 	if i := strings.IndexAny(body, "Ee"); i >= 0 {
 		if _, ok := exp.SetString(body[i+1:], 10); !ok {
 			return nil, xsderr.New(ruleDatatypeValid, xsderr.Loc{},
-				"precisionDecimal: %q has no exponent digits (pDecimalRep, §3.2)", lexical)
+				"%q has no exponent digits, so it is not in the lexical space of precisionDecimal, which cvc-datatype-valid requires it to be in", lexical)
 		}
 		body = body[:i]
 	}
@@ -144,7 +144,7 @@ func parsePrecisionDecimal(lexical string, _ value.Context) (value.Value, error)
 	coeff, ok := new(big.Int).SetString(intPart+fracPart, 10)
 	if !ok {
 		return nil, xsderr.New(ruleDatatypeValid, xsderr.Loc{},
-			"precisionDecimal: %q has no digits (pDecimalRep, §3.2)", lexical)
+			"%q has no digits, so it is not in the lexical space of precisionDecimal, which cvc-datatype-valid requires it to be in", lexical)
 	}
 
 	// ·scale· (step 2): decimalPtPrecision (len fracPart) for a plain numeral,
@@ -414,7 +414,7 @@ func (p precisionDecimalVal) zeroCanonical() (string, error) {
 		return "0.0E0", nil
 	}
 	if p.scale.Cmp(big.NewInt(maxZeroCanonicalScale)) > 0 {
-		return "", fmt.Errorf("%w (zero of ·scale· %s, above the bound %d; xmlschema11-2 §5.4)",
+		return "", fmt.Errorf("%w: a zero of ·scale· %s, above the bound %d",
 			errPrecisionDecimalCapacity, p.scale, maxZeroCanonicalScale)
 	}
 	return "0.0" + strings.Repeat("0", int(p.scale.Int64())-1) + "E0", nil

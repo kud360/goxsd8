@@ -21,7 +21,7 @@ func parseBoolean(lexical string, _ value.Context) (value.Value, error) {
 		return boolVal(false), nil
 	}
 	return nil, xsderr.New(ruleDatatypeValid, xsderr.Loc{},
-		"boolean: %q is not in the lexical space (boolean-lexical-mapping, §3.3.2.1)", lexical)
+		"%q is not in the lexical space of boolean, which cvc-datatype-valid requires it to be in", lexical)
 }
 
 // canonicalBoolean is the Mapping.Canonical wrapper: it rejects a foreign value
