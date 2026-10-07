@@ -28,26 +28,30 @@ import (
 // and [14] MultiplicativeExpr, [47] ContextItemExpr `.`, which the assertion
 // and facet façades admit, and the predicate façade reads as its candidate
 // (valuePredicate), [7] IfExpr wherever an ExprSingle stands whole in a
-// boolean position (exprSingle), and, as a general comparison's operand, an
-// integer sequence, [11] RangeExpr or §3.3.1's comma sequence over
-// IntegerLiterals (integerSequence, ctasequence.go) — each behind the façade
-// (ctaFacade.comparesValues, ctaFacade.variable, ctaFacade.child,
-// ctaFacade.childPath, ctaFacade.elements, ctaFacade.rooted, ctaFacade.count,
-// ctaFacade.callsLibrary, ctaFacade.computes, ctaFacade.contextItem,
-// ctaFacade.conditional, ctaFacade.constructsSequences), so a Type
-// Alternative's {test} reaches none of them. Every method below is named for
-// the production it parses, and the whole grammar is both reached and
+// boolean position (exprSingle), [18] CastableExpr's `castable as` tail
+// (castableTail), [16] InstanceofExpr's `instance of` tail with an atomic
+// SequenceType, over an fn:data call among others (instanceofExpr), and, as a
+// general comparison's operand, an integer sequence, [11] RangeExpr or
+// §3.3.1's comma sequence over IntegerLiterals (integerSequence,
+// ctasequence.go) — each behind the façade (ctaFacade.comparesValues,
+// ctaFacade.variable, ctaFacade.child, ctaFacade.childPath, ctaFacade.elements,
+// ctaFacade.rooted, ctaFacade.count, ctaFacade.callsLibrary,
+// ctaFacade.computes, ctaFacade.contextItem, ctaFacade.conditional,
+// ctaFacade.constructsSequences, ctaFacade.castable, ctaFacade.instanceOf), so
+// a Type Alternative's {test} reaches none of them. Every method below is named
+// for the production it parses, and the whole grammar is both reached and
 // evaluated: no method here is a stub, and the production-level declines are
-// those twelve façade methods'. xpath/doc.go owns the enumeration of what
+// those fourteen façade methods'. xpath/doc.go owns the enumeration of what
 // declines; every other decline reaching this file is ctaTypes answering
 // ctaTypeDeclined for a comparison type, a cast target or a cast operand it
-// will not serve, ctaTypes.arithmetic declining an operand pair, a library call
-// of an arity its function does not have, a predicate or a union operand
-// outside the shapes predicate, valuePredicate and ctaUnionOf admit, `.`
-// standing as a node (booleanExpr, presenceCall), an integer sequence
-// integerSequence does not build, or the façade declining a NameTest, a
-// variable's type or a settled comparison type, which the production that asked
-// propagates unchanged.
+// will not serve, ctaTypes.arithmetic declining an operand pair,
+// ctaTypes.instanceItem and ctaTypes.itemMatches declining an `instance of`
+// operand or AtomicType, a library call of an arity its function does not have,
+// a predicate or a union operand outside the shapes predicate, valuePredicate
+// and ctaUnionOf admit, `.` or another node standing as a node (booleanExpr,
+// presenceCall, instanceofExpr), an integer sequence integerSequence does not
+// build, or the façade declining a NameTest, a variable's type or a settled
+// comparison type, which the production that asked propagates unchanged.
 
 // ctaFunctionNS is the default function namespace of a {test}'s static context
 // (xpath-valid clause 2.2.4, §3.13.6.2), which an unprefixed [12]

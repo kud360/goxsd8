@@ -460,13 +460,20 @@ type AssertionTest struct{ root ctaExpr }
 // true exactly where the same `cast as` yields a value and false where that
 // cast raises — the empty sequence without `?`, two or more items, a lexical
 // or facet mismatch — while an error evaluating its operand raises (§3.10.3),
-// and which declines wherever that cast does; and, as an operand of a general
-// comparison, an integer sequence: [11] RangeExpr `I to J` over two
-// IntegerLiterals, bare or parenthesized, or a parenthesized comma sequence of
-// IntegerLiterals and such ranges, `(1 to 10, 20, 30)` (§3.3.1) — added, and
-// every decline [CompileCTATest] states is this one's too, under the same
-// static context (xpath-valid clause 2.2) augmented with `$value`
-// (cvc-assertion clause 2.2), plus these, each of which is the same withhold:
+// and which declines wherever that cast does; [16] InstanceofExpr's `instance
+// of` tail with an atomic SequenceType, a builtin [53] AtomicType or xs:untypedAtomic and
+// an optional `?`, `*` or `+` (§3.10.1), over an operand that is no node or over an
+// fn:data call, `data(@d) instance of xs:date*`, whose argument it atomizes
+// (xpath-functions.md §2.4) — true where the item count is one the indicator admits and
+// each item's type derives from the AtomicType (§2.5.4), never casting, so `data(.)
+// instance of xs:untypedAtomic` holds over simple content and `$value instance of
+// xs:date` over an xs:date `$value`, while an error evaluating its operand raises; and,
+// as an operand of a general comparison, an integer sequence: [11] RangeExpr `I to J`
+// over two IntegerLiterals, bare or parenthesized, or a parenthesized comma sequence of
+// IntegerLiterals and such ranges, `(1 to 10, 20, 30)` (§3.3.1) — added, and every
+// decline [CompileCTATest] states is this one's too, under the same static context
+// (xpath-valid clause 2.2) augmented with `$value` (cvc-assertion clause 2.2), plus
+// these, each of which is the same withhold:
 //
 //   - an attribute NameTest that is not a QName: a [37] Wildcard can match an
 //     attribute ·attributed to· an {attribute wildcard}, whose type is not
@@ -582,7 +589,14 @@ type AssertionTest struct{ root ctaExpr }
 //   - a `castable as` tail over any operand but a [16] ta-SimpleValue — so
 //     `@d cast as xs:string castable as xs:date` and `xs:string(@d) castable
 //     as xs:date` decline — and one inside a value predicate, and every
-//     `castable as T` whose `cast as T` the bullets above decline.
+//     `castable as T` whose `cast as T` the bullets above decline;
+//   - an `instance of` tail whose SequenceType is not atomic — a KindTest
+//     such as `attribute(*, xs:dateTime)`, `item()`, `empty-sequence()` —
+//     or whose AtomicType is user-defined or no atomic type at all (a list,
+//     xs:anySimpleType, err:XPST0051), one over a node, `@d instance of
+//     xs:date`, or over a numeric literal or an arithmetic result, whose
+//     static type here is not its dynamic one, one inside a value predicate,
+//     and fn:data anywhere but as the operand of `instance of`.
 //
 // An xs:string? argument — of every function above but fn:empty, fn:exists,
 // fn:distinct-values and fn:string — of any type outside the xs:string and
@@ -645,8 +659,9 @@ type AssertionTest struct{ root ctaExpr }
 // than for its ·effective boolean value·, `.` where E's string value is not an
 // input or `.` is a node, sequence expressions beyond the integer sequences of
 // a general comparison's operand, `castable as` over any operand but a [16]
-// ta-SimpleValue or inside a value predicate, the collation argument, and
-// every F&O function but fn:count and those listed above among them. The
+// ta-SimpleValue or inside a value predicate, `instance of` beyond an atomic
+// SequenceType over the operands above, the collation argument, and every F&O
+// function but fn:count and those listed above among them. The
 // direction is the withhold: the caller records the assertion as unevaluated
 // and neither charges it nor shows it satisfied (PRINCIPLES 20). (#1042)
 //

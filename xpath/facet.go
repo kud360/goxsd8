@@ -21,9 +21,9 @@ import (
 // basic member· where that type is a union (clause 1.4, dt-xdmrep clause 4),
 // is the whole of what a {test} can read, arithmetic and the F&O string and
 // sequence functions over it included (ctaFacetFacade.computes,
-// ctaFacetFacade.callsLibrary), `castable as` over it
-// (ctaFacetFacade.castable), and fn:count over it or over any other operand
-// that is no path. An fn:count call over a path declines
+// ctaFacetFacade.callsLibrary), `castable as` and `instance of` over it
+// (ctaFacetFacade.castable, ctaFacetFacade.instanceOf), and fn:count over it or
+// over any other operand that is no path. An fn:count call over a path declines
 // (ctaFacetFacade.count).
 
 // FacetAssertions is the [value.AssertionEvaluator] for an assertions facet's
@@ -39,10 +39,10 @@ import (
 //   - [value.AssertionHolds], where it evaluates to true;
 //   - [value.AssertionFails], where it evaluates to false or raises a dynamic or
 //     type error, which cvc-assertions-valid treats alike — err:XPDY0002 for a
-//     read of the absent context item among them, arithmetic and `castable
-//     as` over one and fn:string, fn:string-length and fn:normalize-space with
-//     no argument included, and the err:FOAR0001 and err:FOAR0002 of arithmetic
-//     ([AssertionTest.Evaluate] lists them);
+//     read of the absent context item among them, arithmetic, `castable as`
+//     and fn:data under `instance of` over one and fn:string, fn:string-length
+//     and fn:normalize-space with no argument included, and the err:FOAR0001 and
+//     err:FOAR0002 of arithmetic ([AssertionTest.Evaluate] lists them);
 //   - [value.AssertionDeclined], where this engine does not evaluate it: a
 //     {test} [CompileAssertionTest] would decline over a simple {content type}
 //     of the same type, on that function's terms — the grammar is the same and

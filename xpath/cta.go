@@ -556,14 +556,13 @@ func (ctaIf) ctaExpr()               {}
 // arithmetic operator over two of them (ctaArith, ctaFacade.computes), the
 // `castable as` tail over one of them (ctaCastable, ctaFacade.castable), the
 // `instance of` tail over one of them or over an fn:data call (ctaInstanceOf,
-// ctaFacade.instanceOf), and a
-// call to an F&O string or sequence function over them (ctaMatch,
-// ctaUnaryString, ctaPresence, ctaDistinctValues, ctaStringFunction;
-// ctaFacade.callsLibrary) or to fn:current-date (ctaCurrentDate), the
-// assertion façade's `.` over simple content (ctaContextAtom,
-// ctaFacade.contextItem), and an integer sequence (ctaIntegerRanges,
-// ctaFacade.constructsSequences). Every branch answers readsChild and counted
-// on ctaExpr's terms.
+// ctaFacade.instanceOf), and a call to an F&O string or sequence function
+// over them (ctaMatch, ctaUnaryString, ctaPresence, ctaDistinctValues,
+// ctaStringFunction; ctaFacade.callsLibrary) or to fn:current-date
+// (ctaCurrentDate), the assertion façade's `.` over simple content
+// (ctaContextAtom, ctaFacade.contextItem), and an integer sequence
+// (ctaIntegerRanges, ctaFacade.constructsSequences). Every branch answers
+// readsChild and counted on ctaExpr's terms.
 type ctaValue interface {
 	ctaValue()
 	readsChild(name xsd.QName) bool
@@ -1538,11 +1537,10 @@ type ctaUntypedAtomic struct{}
 
 // ctaTyped is an operand carrying a datatype: a Literal, the result of a cast,
 // a constructor function, a castable or an instance-of expression, a typed
-// attribute, an
-// fn:count call, an arithmetic result, the result of an F&O string or sequence
-// function or of fn:current-date, or each item of `$value`. It carries the
-// COMPONENT alone — st.Name() is the name, and storing both would be two
-// encodings of one fact (STYLE D3).
+// attribute, an fn:count call, an arithmetic result, the result of an F&O
+// string or sequence function or of fn:current-date, or each item of `$value`.
+// It carries the COMPONENT alone — st.Name() is the name, and storing both
+// would be two encodings of one fact (STYLE D3).
 type ctaTyped struct{ st *xsd.SimpleType }
 
 // ctaEmptySequence is the statically empty operand, ctaEmptyValue: it yields
