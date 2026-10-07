@@ -29,10 +29,19 @@ var errNoYearMonthCanonical = errors.New("yearMonthDuration: zero value has no c
 // of ·durationMap· to the year-month half. It gates the narrower lexical space
 // itself (the pattern facet may not have run — value/backend.go), then reuses
 // duration's field extraction and ·duYearMonthFragmentMap· math verbatim.
+//
+// It reads the literal against the two clauses of cvc-datatype-valid in turn:
+// first the lexical space of the primitive, duration (clause 2.1), then the
+// builtin pattern facet [^DT]* (clause 1). A duration literal that misses
+// yearMonthDurationLexical carries a D or T, so it is the pattern it fails.
 func parseYearMonthDuration(lexical string, _ value.Context) (value.Value, error) {
+	if !durationLexical.MatchString(lexical) {
+		return nil, xsderr.New(ruleDatatypeValid, xsderr.Loc{},
+			"%q is not in the lexical space of duration, the primitive of yearMonthDuration, which cvc-datatype-valid clause 2.1 requires it to be in", lexical)
+	}
 	if !yearMonthDurationLexical.MatchString(lexical) {
 		return nil, xsderr.New(ruleDatatypeValid, xsderr.Loc{},
-			"%q is not in the lexical space of yearMonthDuration, which cvc-datatype-valid requires it to be in", lexical)
+			"%q has a day or time field, so it does not match yearMonthDuration's pattern facet [^DT]*, which cvc-datatype-valid clause 1 requires it to match", lexical)
 	}
 	f := durationFields.FindStringSubmatch(lexical)
 	// f[1]=sign, f[2]=years, f[3]=months; the day/time groups are always empty

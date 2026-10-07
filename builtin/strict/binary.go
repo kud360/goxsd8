@@ -52,7 +52,7 @@ type base64BinaryVal []byte
 func parseHexBinary(lexical string, _ value.Context) (value.Value, error) {
 	if !hexBinaryLexical.MatchString(lexical) {
 		return nil, xsderr.New(ruleDatatypeValid, xsderr.Loc{},
-			"%q is not in the lexical space of hexBinary, an even count of [0-9a-fA-F], which cvc-datatype-valid requires it to be in", lexical)
+			"%q is not in the lexical space of hexBinary, an even count of [0-9a-fA-F], which cvc-datatype-valid clause 2.1 requires it to be in", lexical)
 	}
 	octets, err := hex.DecodeString(lexical)
 	if err != nil {
@@ -71,7 +71,7 @@ func parseHexBinary(lexical string, _ value.Context) (value.Value, error) {
 func parseBase64Binary(lexical string, _ value.Context) (value.Value, error) {
 	if !base64BinaryLexical.MatchString(lexical) {
 		return nil, xsderr.New(ruleDatatypeValid, xsderr.Loc{},
-			"%q is not in the lexical space of base64Binary, which cvc-datatype-valid requires it to be in", lexical)
+			"%q is not in the lexical space of base64Binary, which cvc-datatype-valid clause 2.1 requires it to be in", lexical)
 	}
 	octets, err := base64.StdEncoding.DecodeString(strings.ReplaceAll(lexical, " ", ""))
 	if err != nil {

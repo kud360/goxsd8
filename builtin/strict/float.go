@@ -66,7 +66,7 @@ func parseDouble(lexical string, _ value.Context) (value.Value, error) {
 func parseFloating(lexical string, bitSize int, name string) (float64, error) {
 	if !floatingLexical.MatchString(lexical) {
 		return 0, xsderr.New(ruleDatatypeValid, xsderr.Loc{},
-			"%q is not in the lexical space of %s, which cvc-datatype-valid requires it to be in", lexical, name)
+			"%q is not in the lexical space of %s, which cvc-datatype-valid clause 2.1 requires it to be in", lexical, name)
 	}
 
 	// specialRepValue (f-specRepVal): INF/+INF → +∞, -INF → −∞, NaN → NaN.
@@ -93,7 +93,7 @@ func parseFloating(lexical string, bitSize int, name string) (float64, error) {
 			return f, nil
 		}
 		return 0, xsderr.New(ruleDatatypeValid, xsderr.Loc{},
-			"%q is not in the lexical space of %s, which cvc-datatype-valid requires it to be in", lexical, name)
+			"%q is not in the lexical space of %s, which cvc-datatype-valid clause 2.1 requires it to be in", lexical, name)
 	}
 	return f, nil
 }

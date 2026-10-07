@@ -90,7 +90,7 @@ func resolveQNameLexical(lexical string, ctx value.Context, typ string) (space, 
 	// for an unprefixed name; reject cleanly rather than dereferencing nil.
 	if ctx == nil {
 		return "", "", xsderr.New(ruleDatatypeValid, xsderr.Loc{},
-			"%q has no namespace bindings in scope to resolve it against, so it maps to no %s value, but cvc-datatype-valid requires it to map to one", lexical, typ)
+			"%q has no namespace bindings in scope to resolve it against, so it maps to no %s value, but cvc-datatype-valid clause 2.1 requires it to map to one", lexical, typ)
 	}
 	// Resolve the prefix (empty prefix = default namespace, §3.3.18): the
 	// context models "no namespace in scope" as an ok binding to the empty
@@ -99,7 +99,7 @@ func resolveQNameLexical(lexical string, ctx value.Context, typ string) (space, 
 	space, ok := ctx.LookupNamespace(prefix)
 	if !ok {
 		return "", "", xsderr.New(ruleDatatypeValid, xsderr.Loc{},
-			"%q has the prefix %q, which no namespace binding in scope declares, so it maps to no %s value, but cvc-datatype-valid requires it to map to one", lexical, prefix, typ)
+			"%q has the prefix %q, which no namespace binding in scope declares, so it maps to no %s value, but cvc-datatype-valid clause 2.1 requires it to map to one", lexical, prefix, typ)
 	}
 	return space, local, nil
 }
@@ -115,14 +115,14 @@ func splitQName(lexical, typ string) (prefix, local string, err error) {
 	if idx < 0 {
 		if !ncNameRE.MatchString(lexical) {
 			return "", "", xsderr.New(ruleDatatypeValid, xsderr.Loc{},
-				"%q is not an NCName, so it is not in the lexical space of %s, which cvc-datatype-valid requires it to be in", lexical, typ)
+				"%q is not an NCName, so it is not in the lexical space of %s, which cvc-datatype-valid clause 2.1 requires it to be in", lexical, typ)
 		}
 		return "", lexical, nil
 	}
 	prefix, local = lexical[:idx], lexical[idx+1:]
 	if !ncNameRE.MatchString(prefix) || !ncNameRE.MatchString(local) {
 		return "", "", xsderr.New(ruleDatatypeValid, xsderr.Loc{},
-			"%q does not split at its colon into a prefix and a local part that are each an NCName, so it is not in the lexical space of %s, which cvc-datatype-valid requires it to be in", lexical, typ)
+			"%q does not split at its colon into a prefix and a local part that are each an NCName, so it is not in the lexical space of %s, which cvc-datatype-valid clause 2.1 requires it to be in", lexical, typ)
 	}
 	return prefix, local, nil
 }

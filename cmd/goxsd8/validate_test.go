@@ -124,7 +124,7 @@ func TestValidateRendersALexicalSpaceFaultWhole(t *testing.T) {
 	if code := run([]string{"validate", "-schema", schema, instance}, &stdout, &stderr); code != exitInvalid {
 		t.Fatalf("code = %d, want %d (stdout %q, stderr %q)", code, exitInvalid, stdout.String(), stderr.String())
 	}
-	want := instance + `:1:1: [cvc-type] the ·initial value· of the element amount is not ·valid· with respect to its ·governing type definition· {http://www.w3.org/2001/XMLSchema}decimal, which cvc-type clause 3.1.3 requires as per String Valid (§3.16.4): [cvc-datatype-valid] "12,50" is not in the lexical space of decimal, which cvc-datatype-valid requires it to be in` + "\n"
+	want := instance + `:1:1: [cvc-type] the ·initial value· of the element amount is not ·valid· with respect to its ·governing type definition· {http://www.w3.org/2001/XMLSchema}decimal, which cvc-type clause 3.1.3 requires as per String Valid (§3.16.4): [cvc-datatype-valid] "12,50" is not in the lexical space of decimal, which cvc-datatype-valid clause 2.1 requires it to be in` + "\n"
 	if got := stdout.String(); got != want {
 		t.Errorf("stdout =\n%s\nwant\n%s", got, want)
 	}

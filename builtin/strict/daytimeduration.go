@@ -22,10 +22,20 @@ var dayTimeDurationLexical = regexp.MustCompile(`^-?P((([0-9]+D)(T(([0-9]+H)([0-
 // ·durationMap· to the day-time half. It gates the narrower lexical space itself
 // (the pattern facet may not have run — value/backend.go), then reuses duration's
 // field extraction and ·duDayTimeFragmentMap· math verbatim.
+//
+// It reads the literal against the two clauses of cvc-datatype-valid in turn:
+// first the lexical space of the primitive, duration (clause 2.1), then the
+// builtin pattern facet [^YM]*(T.*)? (clause 1). A duration literal that misses
+// dayTimeDurationLexical carries a Y or a pre-'T' M, so it is the pattern it
+// fails.
 func parseDayTimeDuration(lexical string, _ value.Context) (value.Value, error) {
+	if !durationLexical.MatchString(lexical) {
+		return nil, xsderr.New(ruleDatatypeValid, xsderr.Loc{},
+			"%q is not in the lexical space of duration, the primitive of dayTimeDuration, which cvc-datatype-valid clause 2.1 requires it to be in", lexical)
+	}
 	if !dayTimeDurationLexical.MatchString(lexical) {
 		return nil, xsderr.New(ruleDatatypeValid, xsderr.Loc{},
-			"%q is not in the lexical space of dayTimeDuration, which cvc-datatype-valid requires it to be in", lexical)
+			"%q has a year or month field, so it does not match dayTimeDuration's pattern facet [^YM]*(T.*)?, which cvc-datatype-valid clause 1 requires it to match", lexical)
 	}
 	f := durationFields.FindStringSubmatch(lexical)
 	// f[1]=sign, f[4]=days, f[5]=hours, f[6]=minutes, f[7]=seconds; the
