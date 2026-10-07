@@ -96,8 +96,9 @@ type ChildElement struct {
 
 // Child is the child element named name whose typed value is v, on the terms
 // [ChildElements] states. Child(name, nil) is a ·nilled· child, whose typed
-// value is the empty sequence (xpath-datamodel §6.2.4): a node all the same,
-// which a {test} naming it finds.
+// value is the empty sequence whatever its type (xpath-datamodel §3.3.1.2;
+// xpath20.md §2.5.2 item 4.1 for mixed content): a node all the same, which a
+// {test} naming it finds.
 func Child(name xsd.QName, v TypedValue) ChildElement { return ChildElement{name: name, v: v} }
 
 // ChildElements yields E's element [[children]] a compiled {test} reads, in
@@ -105,15 +106,21 @@ func Child(name xsd.QName, v TypedValue) ChildElement { return ChildElement{name
 // a yield reporting false ends the walk. A child no compiled step names need
 // not be yielded: [AssertionTest.ReadsChild] reports which names one reads.
 //
-// Each value is [Typed] of a value of EXACTLY the simple type the compile read
-// off the type [ElementTypes] answered for its name — that type itself, or the
-// {simple type definition} of its simple {content type} — or nil for a
-// ·nilled· child. That agreement is the caller's obligation, on the terms
-// [TypedAttributes] states for an attribute's value: validate produces the
-// value from the child's [schema normalized value] under the child's OWN
-// ·governing type definition·, then maps it under that simple type. A value
-// breaking it — the [Untyped] arm — is a dynamic error wherever the tree reads
-// it, which [AssertionTest.Evaluate] answers false.
+// Each value's arm is fixed by the type [ElementTypes] answered for its name
+// when the [AssertionTest] being evaluated was compiled; a ·nilled· child's is
+// nil whatever that type. A complex type whose {content type}.{variety} is
+// mixed — xs:anyType among them — gives [Untyped] of the child's string-value
+// (xpath-datamodel §6.2.4), which spans the text of all its descendants and
+// not only its own. Any other type gives [Typed] of a value of EXACTLY the
+// simple type the compile read off it — that type itself, or the {simple type
+// definition} of its simple {content type}. That agreement is the caller's
+// obligation, on the terms [TypedAttributes] states for an attribute's value:
+// validate maps the child's [schema normalized value] under its OWN
+// ·governing type definition· into that simple type, takes a string-value only
+// where that governing type has mixed content too, and withholds the
+// assertion where the child's own type cannot give the arm the compile read.
+// A value breaking it — the other arm — is a dynamic error wherever the tree
+// reads it, which [AssertionTest.Evaluate] answers false.
 //
 // It carries the children whose typed values a compiled step reads and nothing
 // below them: those a value step names, and those an fn:count argument filters
@@ -125,20 +132,21 @@ func Child(name xsd.QName, v TypedValue) ChildElement { return ChildElement{name
 type ChildElements func(yield func(ChildElement) bool)
 
 // TypedValue is the typed value of one attribute node, of one element node of
-// simple type or simple content (xpath-datamodel §6.2.4), or of `$value`, in
-// the data model instance cvc-assertion clause 1 builds, as xpath-datamodel
-// §3.3.1.2 (Typed Value Determination) computes it: an ·actual value· of a type
-// fixed at compile time ([Typed]), or a [schema normalized value] "as an
-// instance of xs:untypedAtomic" ([Untyped]), which is the typed value under
-// xs:anySimpleType and xs:anyAtomicType there and in Datatypes dt-xdmrep
-// clause 1. It is a sealed sum of exactly those two arms, so no value carries
-// both a lexical and a typed value (STYLE T1).
+// simple type, simple content or mixed content (xpath-datamodel §6.2.4), or of
+// `$value`, in the data model instance cvc-assertion clause 1 builds: an
+// ·actual value· of a type fixed at compile time ([Typed]), or an
+// xs:untypedAtomic value ([Untyped]) — the [schema normalized value] under
+// xs:anySimpleType or xs:anyAtomicType (xpath-datamodel §3.3.1.2), or an
+// element's string-value under mixed content (§6.2.4). Datatypes dt-xdmrep
+// clause 1 gives a ·special· type's value that dynamic type. It is a sealed
+// sum of exactly those two arms, so no value carries both a lexical and a
+// typed value (STYLE T1).
 type TypedValue interface{ typedValue() }
 
 // tvTyped is [Typed]'s arm: an ·actual value· of the type the tree holds.
 type tvTyped struct{ v value.Value }
 
-// tvUntyped is [Untyped]'s arm: a [schema normalized value], xs:untypedAtomic.
+// tvUntyped is [Untyped]'s arm: an xs:untypedAtomic value, by its lexical.
 type tvUntyped struct{ lexical string }
 
 func (tvTyped) typedValue()   {}
@@ -154,9 +162,11 @@ func Typed(v value.Value) TypedValue {
 	return tvTyped{v: v}
 }
 
-// Untyped is lexical as an instance of xs:untypedAtomic, which lexical must be
-// the [schema normalized value] of: xpath-datamodel §3.3.1.2 makes that the
-// typed value of a node whose type is xs:anySimpleType or xs:anyAtomicType.
+// Untyped is lexical as an instance of xs:untypedAtomic. lexical must be what
+// the data model makes that typed value of: the [schema normalized value] of
+// an attribute, an element or `$value` whose type is xs:anySimpleType or
+// xs:anyAtomicType (xpath-datamodel §3.3.1.2), or the string-value of an
+// element whose type is a complex type with mixed content (§6.2.4).
 func Untyped(lexical string) TypedValue { return tvUntyped{lexical: lexical} }
 
 // TypedAttributes yields E's attributes that matched an {attribute use} of its
@@ -198,8 +208,10 @@ type ValueBinding struct{ v TypedValue }
 // (cvc-assertion clause 2.3.1), whose arm and type the {simple type definition}
 // of the [xsd.SimpleContent] the [AssertionTest] was compiled for fixes, on the
 // terms [TypedAttributes] states for an attribute's value: [Untyped] of E's
-// [schema normalized value] where it is ·special·, and [Typed] of a value of
-// exactly it otherwise. A list {simple type definition}'s value must carry
+// [schema normalized value] where it is ·special· — the representation of that
+// value xpath-datamodel §3.3.1.2 fixes, a ·special· type's lexical mapping not
+// being a function (Datatypes §3.2.1.2) — and [Typed] of a value of exactly it
+// otherwise. A list {simple type definition}'s value must carry
 // [value.Listed], whose items are the flattened sequence Datatypes dt-xdmrep
 // makes its XDM representation.
 //
@@ -416,12 +428,15 @@ type AssertionTest struct{ root ctaExpr }
 //     and, where the step's value is read — anywhere but as the whole operand
 //     of fn:exists, fn:empty or an ·effective boolean value· — one naming a
 //     child for which elems reports false;
-//   - a child read for its value whose type elems answers is not a simple type
-//     the bullets above admit as an attribute's, nor a complex type whose
-//     simple {content type} is one: a ·special· type declines, because an
-//     xsi:type can give the child a typed value where the compile read an
-//     xs:untypedAtomic one, and so does every mixed, element-only and empty
-//     {content type};
+//   - a child read for its value whose type elems answers is none of: a simple
+//     type the bullets above admit as an attribute's, a complex type whose
+//     simple {content type} is one, or a complex type whose {content
+//     type}.{variety} is mixed — xs:anyType among them — which is read as
+//     xs:untypedAtomic. A ·special· simple type declines, because an xsi:type
+//     can give the child a typed value where the compile read an
+//     xs:untypedAtomic one; a mixed one does not, because the caller withholds
+//     a child whose own type has no mixed content ([ChildElements]). Every
+//     element-only and empty {content type} declines;
 //   - a path of more than one step anywhere but as the whole operand of
 //     fn:exists, fn:empty or an ·effective boolean value·, and there any step
 //     on another axis, with a wildcard, a predicate or a kind test, and any
@@ -448,8 +463,9 @@ type AssertionTest struct{ root ctaExpr }
 //     value, `N[1]`, `N[1 + 0]` or `N[.]`, which a numeric value would make
 //     positional (§3.2.2); position() and last() are no library function here;
 //   - a predicate over a child whose type elems answers is not one a child
-//     read for its value is admitted under, on that bullet's terms, unless the
-//     predicate tests attribute existence alone;
+//     read for its value is admitted under as a TYPED value, on that bullet's
+//     terms — so a predicate over a mixed child, `count(body[. = 'x'])`,
+//     declines — unless the predicate tests attribute existence alone;
 //   - a cast whose operand is a typed attribute, a typed child or `$value`
 //     outside the xs:string family, to a target that operand's type is neither
 //     nor derived from by restriction (F&O §17.4, §17.1, §17.5) — so
@@ -508,12 +524,13 @@ type AssertionTest struct{ root ctaExpr }
 // c carrying an empty a. What the {test} counts is read off the [Tally] its
 // evaluation carries ([AssertionTest.Tally]). A predicate reading `.` is the
 // one counted argument elems types: it atomizes each candidate child, typed as
-// a child step naming it is, and counts over [ChildElements]; a dynamic or
-// type error over any candidate raises for the whole count. An argument that is
-// no path is counted off its own items, never the [Tally], on fn:exists'
-// terms: `count($value)` is the number of items of `$value` — one for an
-// atomic or ·special· value, each item of a list (Datatypes dt-xdmrep clause
-// 3), and none for an empty list or the empty sequence clause 2.3.2 binds.
+// a child step naming it reads a TYPED value, and counts over [ChildElements];
+// a dynamic or type error over any candidate raises for the whole count. An
+// argument that is no path is counted off its own items, never the [Tally], on
+// fn:exists' terms: `count($value)` is the number of items of `$value` — one
+// for an atomic or ·special· value, each item of a list (Datatypes dt-xdmrep
+// clause 3), and none for an empty list or the empty sequence clause 2.3.2
+// binds.
 //
 // fn:distinct-values atomizes its argument and drops each item eq to an
 // earlier one (xpath-functions.md §15.1.6), compared in the items' {primitive
@@ -541,11 +558,12 @@ type AssertionTest struct{ root ctaExpr }
 // the one element step whose existence is asked and the one counted step,
 // predicates beyond the two kinds on a counted child step, positional ones
 // among them, unions outside fn:count or over other operands, children read
-// for their value whose type is not one simple type, arithmetic outside the
-// numeric operands and the binary operators, the collation argument, and
-// every F&O function but fn:count and those listed above among them. The
-// direction is the withhold: the caller records the assertion as unevaluated
-// and neither charges it nor shows it satisfied (PRINCIPLES 20). (#1042)
+// for their value whose type is element-only, empty or ·special·, a value
+// predicate over a mixed child, arithmetic outside the numeric operands and
+// the binary operators, the collation argument, and every F&O function but
+// fn:count and those listed above among them. The direction is the withhold:
+// the caller records the assertion as unevaluated and neither charges it nor
+// shows it satisfied (PRINCIPLES 20). (#1042)
 //
 // types is read as [CompileCTATest] reads it and stored nowhere.
 func CompileAssertionTest(expr xsd.XPathExpression, types xsd.TypeResolver, content xsd.ContentType, attrs AttributeTypes, elems ElementTypes) (AssertionTest, bool) {
@@ -675,17 +693,17 @@ func (t AssertionTest) ReadsChild(name xsd.QName) bool {
 	return t.root.readsChild(name)
 }
 
-// readsChild reports whether any of operands holds a ctaTypedChild naming
+// readsChild reports whether any of operands holds a child value step naming
 // name, at any depth.
 func (n ctaOr) readsChild(name xsd.QName) bool { return ctaAnyReadsChild(n.operands, name) }
 
 // readsChild is ctaOr.readsChild's.
 func (n ctaAnd) readsChild(name xsd.QName) bool { return ctaAnyReadsChild(n.operands, name) }
 
-// readsChild reports whether the operand holds a ctaTypedChild naming name.
+// readsChild reports whether the operand holds a child value step naming name.
 func (n ctaNot) readsChild(name xsd.QName) bool { return n.operand.readsChild(name) }
 
-// readsChild reports whether either operand is, or casts, a ctaTypedChild
+// readsChild reports whether either operand is, or casts, a child value step
 // naming name.
 func (n ctaCompare) readsChild(name xsd.QName) bool {
 	return n.left.readsChild(name) || n.right.readsChild(name)
@@ -696,8 +714,8 @@ func (n ctaValueCompare) readsChild(name xsd.QName) bool {
 	return n.left.readsChild(name) || n.right.readsChild(name)
 }
 
-// readsChild reports whether the operand is, or casts, a ctaTypedChild naming
-// name.
+// readsChild reports whether the operand is, or casts, a child value step
+// naming name.
 func (n ctaEffectiveBoolean) readsChild(name xsd.QName) bool { return n.operand.readsChild(name) }
 
 // readsChild is false: the node holds no operand.
@@ -713,37 +731,41 @@ func ctaAnyReadsChild(operands []ctaExpr, name xsd.QName) bool {
 	return false
 }
 
-// readsChild reports whether the step selects children named name.
+// readsChild reports whether the step selects children named name. It and
+// ctaUntypedChild are the child value steps every readsChild here looks for.
 func (n ctaTypedChild) readsChild(name xsd.QName) bool { return n.name == name }
 
-// readsChild reports whether the cast's operand is a ctaTypedChild naming
+// readsChild is ctaTypedChild.readsChild's.
+func (n ctaUntypedChild) readsChild(name xsd.QName) bool { return n.name == name }
+
+// readsChild reports whether the cast's operand is a child value step naming
 // name.
 func (n ctaCast) readsChild(name xsd.QName) bool { return n.operand.readsChild(name) }
 
 // readsChild reports whether either operand of the arithmetic holds a
-// ctaTypedChild naming name.
+// child value step naming name.
 func (n ctaArith) readsChild(name xsd.QName) bool {
 	return n.left.readsChild(name) || n.right.readsChild(name)
 }
 
-// readsChild reports whether either argument holds a ctaTypedChild naming
+// readsChild reports whether either argument holds a child value step naming
 // name.
 func (n ctaMatch) readsChild(name xsd.QName) bool {
 	return n.left.operand.readsChild(name) || n.right.operand.readsChild(name)
 }
 
-// readsChild reports whether the argument holds a ctaTypedChild naming name.
+// readsChild reports whether the argument holds a child value step naming name.
 func (n ctaUnaryString) readsChild(name xsd.QName) bool { return n.arg.operand.readsChild(name) }
 
-// readsChild reports whether the operand holds a ctaTypedChild naming name:
+// readsChild reports whether the operand holds a child value step naming name:
 // fn:exists over a cast of a child step reads its value off [ChildElements].
 func (n ctaPresence) readsChild(name xsd.QName) bool { return n.operand.readsChild(name) }
 
-// readsChild reports whether the cast fn:string is holds a ctaTypedChild naming
-// name.
+// readsChild reports whether the cast fn:string is holds a child value step
+// naming name.
 func (n ctaStringFunction) readsChild(name xsd.QName) bool { return n.cast.readsChild(name) }
 
-// readsChild reports whether the argument holds a ctaTypedChild naming name.
+// readsChild reports whether the argument holds a child value step naming name.
 func (n ctaDistinctValues) readsChild(name xsd.QName) bool { return n.operand.readsChild(name) }
 
 // readsChild is false for each of these: none is a child-axis step or holds an
@@ -767,8 +789,8 @@ func (ctaCountPath) readsChild(xsd.QName) bool        { return false }
 func (ctaFilteredChildren) readsChild(xsd.QName) bool { return false }
 func (ctaUnion) readsChild(xsd.QName) bool            { return false }
 
-// readsChild reports whether the counted operand holds a ctaTypedChild naming
-// name: `count($value)` reads none.
+// readsChild reports whether the counted operand holds a child value step
+// naming name: `count($value)` reads none.
 func (c ctaCountedItems) readsChild(name xsd.QName) bool { return c.operand.readsChild(name) }
 
 // readsChild reports whether m filters children named name, whose values its
@@ -885,6 +907,7 @@ func (ctaTypeError) counted(into []ctaTallied) []ctaTallied      { return into }
 func (ctaAttr) counted(into []ctaTallied) []ctaTallied           { return into }
 func (ctaTypedAttr) counted(into []ctaTallied) []ctaTallied      { return into }
 func (ctaTypedChild) counted(into []ctaTallied) []ctaTallied     { return into }
+func (ctaUntypedChild) counted(into []ctaTallied) []ctaTallied   { return into }
 func (ctaNoDocumentRoot) counted(into []ctaTallied) []ctaTallied { return into }
 func (ctaNoContextItem) counted(into []ctaTallied) []ctaTallied  { return into }
 func (ctaLiteral) counted(into []ctaTallied) []ctaTallied        { return into }
@@ -946,11 +969,11 @@ func (f ctaAssertionFacade) variable(name xsd.QName, types ctaTypes) (ctaValue, 
 // attribute compiles a QName NameTest whose name attrs types with a ·special·
 // type ([xsd.SimpleType.IsSpecial]) to a ctaAttr, the untyped attribute node a Type
 // Alternative builds — the typed value of such an attribute is its [schema
-// normalized value] as xs:untypedAtomic (xpath-datamodel §3.3.1.2, Datatypes
-// dt-xdmrep clause 1), which §3.5.2 casts as it casts an untyped one. A name
-// attrs types with a type this engine reads as one atomic value
-// (ctaTypes.typedAtomic) compiles to a ctaTypedAttr, and every other NameTest
-// declines.
+// normalized value] as xs:untypedAtomic (xpath-datamodel §3.3.1.2; Datatypes
+// dt-xdmrep clause 1 for that dynamic type), which §3.5.2 casts as it casts an
+// untyped one. A name attrs types with a type this engine reads as one atomic
+// value (ctaTypes.typedAtomic) compiles to a ctaTypedAttr, and every other
+// NameTest declines.
 //
 // An unbound prefix's ctaUnresolvedName reaches attrs like any other name; no
 // attribute use can carry it, so the façade declines it and the parse ends
@@ -979,17 +1002,22 @@ func (f ctaAssertionFacade) attribute(test ctaNameTest, types ctaTypes) (ctaValu
 // value in (ctaChildValueType): xpath-datamodel §6.2.4 makes the typed value
 // of an element whose type is a simple type, or a complex type with simple
 // content, the one §3.3.1.2 computes for that simple type. The simple type
-// must be one ctaTypes.typedAtomic reads as one atomic value; every other
-// NameTest declines, and so does every other type:
+// must be one ctaTypes.typedAtomic reads as one atomic value. A name elems
+// types with a complex type whose {content type}.{variety} is mixed —
+// xs:anyType among them, never singled out by name — compiles to a
+// ctaUntypedChild instead: §6.2.4 makes such an element's typed value its
+// string-value as xs:untypedAtomic. Every other NameTest declines, and so does
+// every other type:
 //
 //   - a ·special· simple type, or simple content over one: the compiled type is
 //     static, and an xsi:type can make the child's own type a typed one, so
-//     reading it as xs:untypedAtomic could charge a valid child;
-//   - a complex type whose {content type} is mixed (its typed value is its
-//     string value as xs:untypedAtomic), element-only (atomizing it is a type
-//     error), or empty (its typed value is the empty sequence) — each read the
-//     way xpath-datamodel §6.2.4 says, but by its own node this engine does not
-//     build.
+//     reading it as xs:untypedAtomic could charge a valid child. A mixed type
+//     carries no such hazard: the caller withholds a child whose own type has
+//     no mixed content ([ChildElements]);
+//   - a complex type whose {content type} is element-only (atomizing it is a
+//     type error) or empty (its typed value is the empty sequence) — each read
+//     the way xpath-datamodel §6.2.4 says, but by its own node this engine does
+//     not build.
 //
 // A step standing as the whole operand of fn:exists, fn:empty or an ·effective
 // boolean value· never reaches here: its value is not read, and elements
@@ -1002,6 +1030,9 @@ func (f ctaAssertionFacade) child(test ctaNameTest, types ctaTypes) (ctaValue, b
 	td, typed := f.elems(exact.name)
 	if !typed {
 		return nil, false
+	}
+	if ctaMixedType(td) {
+		return ctaUntypedChild(exact), true
 	}
 	st, simple := ctaChildValueType(td)
 	if !simple || st.IsSpecial() || !types.typedAtomic(st) {
@@ -1054,6 +1085,15 @@ func ctaChildValueType(td xsd.TypeDefinition) (*xsd.SimpleType, bool) {
 		return sc.SimpleType, simple
 	}
 	return nil, false
+}
+
+// ctaMixedType reports whether td is a complex type whose {content
+// type}.{variety} is mixed, whose element's typed value is its string-value as
+// xs:untypedAtomic (xpath-datamodel §6.2.4) — xs:anyType among them, whose
+// {variety} is mixed (§3.4.7), and which is not told apart by its name.
+func ctaMixedType(td xsd.TypeDefinition) bool {
+	ct, isComplex := td.(xsd.ComplexType)
+	return isComplex && ct.ContentType().Variety() == xsd.ContentMixed
 }
 
 // rooted compiles a path opening with "/" or "//" to ctaNoDocumentRoot: E is

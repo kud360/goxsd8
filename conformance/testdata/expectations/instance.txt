@@ -125,7 +125,7 @@ Assert/assert_002/instance/assert_002_3 pass
 Assert/assert_003/instance/assert_003_2 pass
 Assert/assert_004/instance/assert_004_2 pass
 Assert/assert_005/instance/assert_005_2 pass
-Assert/assert_006/instance/assert_006_2 fail
+Assert/assert_006/instance/assert_006_2 pass
 Assert/assert_007/instance/assert_007_2 pass
 Assert/assert_008/instance/assert_008_2 pass
 Assert/assert_009/instance/assert_009_2 pass
@@ -25888,7 +25888,7 @@ assertion/d4_3_15v02/instance/d4_3_15v02i pass
 assertion/d4_3_15v03/instance/d4_3_15v03i pass
 assertion/d4_3_15v04/instance/d4_3_15v04i pass
 assertion/d4_3_15v05/instance/d4_3_15v05i pass
-assertion/d4_3_15v06/instance/d4_3_15v06i fail
+assertion/d4_3_15v06/instance/d4_3_15v06i pass
 assertion/d4_3_15v07/instance/d4_3_15v07i pass
 assertion/d4_3_15v08/instance/d4_3_15v08i pass
 assertion/d4_3_15v09/instance/d4_3_15v09i pass

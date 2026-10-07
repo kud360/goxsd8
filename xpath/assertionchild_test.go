@@ -228,7 +228,8 @@ func TestAssertionChildStepReadsTheDefaultNamespace(t *testing.T) {
 }
 
 // A child-axis step DECLINES where the child's type is not fixed at compile
-// time or is not one simple type this engine reads (ctaAssertionFacade.child),
+// time, or is neither one simple type this engine reads nor of mixed content
+// (ctaAssertionFacade.child; assertionmixed_test.go reads the mixed one),
 // and every path but one step, rooted or not, declines in the grammar in a
 // comparison's position — the one position a child path of two or more steps
 // is admitted in is the whole operand of fn:exists, fn:empty or an ·effective
@@ -246,7 +247,6 @@ func TestCompileAssertionTestDeclinesChildSteps(t *testing.T) {
 		uq("q"):     asBuiltin(t, "QName"),
 		uq("sc"):    asComplex(t, "SpecialContent", xsd.SimpleContent{SimpleType: asBuiltin(t, "anySimpleType")}),
 		uq("eo"):    asComplex(t, "ElementOnly", asElementContent(t, false)),
-		uq("mixed"): asComplex(t, "Mixed", asElementContent(t, true)),
 		uq("empty"): asComplex(t, "Empty", xsd.EmptyContent{}),
 	})
 	for _, tc := range []struct{ expr, why string }{
@@ -262,7 +262,6 @@ func TestCompileAssertionTestDeclinesChildSteps(t *testing.T) {
 		{"u = 'a'", "a union's value takes its validating member's type"},
 		{"q = 'a'", "an xs:QName value has no canonical representation"},
 		{"eo = 'a'", "element-only content, whose atomization is a type error"},
-		{"mixed = 'a'", "mixed content, an xs:untypedAtomic this engine does not build"},
 		{"empty = 'a'", "empty content"},
 		{"n cast as xs:string = '5'", "a cast from a typed non-string child"},
 		{"child::e1 = 'a'", "the unabbreviated child axis"},

@@ -1359,10 +1359,12 @@ func (p *ctaParser) predicate(name xsd.QName) (ctaCounted, bool) {
 // (ctaMatchingChildren): an [8] ta-Test production read with `.` the child
 // (ctaCandidate), typed as p.facade types a child step naming name, so a child
 // that step would decline — the Type Alternative's and the facet's every one,
-// and an assertion's of no single simple typed value — declines here too.
-// Every other production reads ctaPredicateFacade, which declines each read
-// of a node — an attribute, a child or element step, a path, `$value` — an
-// fn:count call and every F&O function. The root must be a comparison, or
+// and an assertion's of no single simple typed value — declines here too, and
+// so does one that step reads untyped, a child of mixed content
+// (ctaUntypedChild): a candidate is typed, and an untyped one would need an arm
+// of its own. Every other production reads ctaPredicateFacade, which declines
+// each read of a node — an attribute, a child or element step, a path, `$value`
+// — an fn:count call and every F&O function. The root must be a comparison, or
 // and, or and fn:not over comparisons (ctaComparisonRooted): a bare value may
 // be numeric, which selects by position.
 func (p *ctaParser) valuePredicate(name xsd.QName) (ctaCounted, bool) {
