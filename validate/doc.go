@@ -413,18 +413,22 @@
 // that type has mixed content (xpath-datamodel §6.2.4) — the counts of the
 // nodes of its subtree, reported to each counting {test}'s xpath.Tally as the
 // walk passes them, each element by its chain of names below the counting
-// element, a ·skipped· subtree's by name alone, and its simple content's string
-// value and ·actual value· — is evaluated over those values and charged where
-// it is false or raises a dynamic or type error. A member xpath declines, and
-// every member of an element one of whose use-matched or ·defaulted· attributes
-// has no ·actual value·, one of whose read children is not known ·valid· or not
-// ·validly substitutable· for its ·locally declared type·, or, read for its
-// string-value, has no mixed content of its own or spans a ·skipped· element,
-// one of simple content or of a type not determined, or a mixed one that took
-// its {value constraint} default, whose counted subtree holds an element whose
+// element, a ·skipped· subtree's by name alone, its own string value — its
+// ·initial value· under simple content, and the text of its subtree under any
+// other {content type} — and its simple content's ·actual value· — is
+// evaluated over those values and charged where it is false or raises a
+// dynamic or type error. A member xpath declines, and every member of an
+// element one of whose use-matched or ·defaulted· attributes has no ·actual
+// value·, one of whose read children is not known ·valid· or not ·validly
+// substitutable· for its ·locally declared type·, or, read for its
+// string-value, has no mixed content of its own, a string-value of which —
+// a read child's, or its own a {test} reads — spans a ·skipped· element, one of
+// simple content whose raw characters are not its [schema normalized value],
+// one of a type not determined, or a mixed one that took its {value
+// constraint} default, whose counted subtree holds an element whose
 // ·governing type definition· was not determined and whose attribute nodes a
 // {test} counts, whose simple content's ·actual value· is undecided, or whose
-// simple content's string value was not gathered because it has element
+// string value was not gathered because it has simple content and element
 // [[children]] or is ·nilled· and has any [[children]], are recorded as
 // [Unevaluated] under cvc-assertion instead (cvcassertion.go).
 //
