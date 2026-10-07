@@ -433,7 +433,7 @@ func TestValueAssertionOverAnInvalidElementIsEmpty(t *testing.T) {
 // value, while `$value` is the empty sequence (cvc-assertion clause 2.3.2), so
 // `. = 5 and empty($value)` holds over "5". An empty element its declaration
 // defaults reads the default's {lexical form}, the text node xpath-datamodel
-// Appendix J.2 "may" build for it, and so `. = ''` is charged there: that is
+// Appendix J.2 "may" build for it, and so `. = ""` is charged there: that is
 // the processor's choice walk.assertionValue's GAP(xpath) marks, §6.2.4 giving
 // an empty element "" instead. The invalid row is charged with
 // walk.assertionValue binding "" for an invalid element, and the defaulted
@@ -534,7 +534,7 @@ func TestValueAssertionOverANilledElementIsEmpty(t *testing.T) {
 // satisfies, and `. = 'x'` over <x/>, which it does not. Both rows are charged
 // under cvc-assertion with walk.assertionValue binding "" for every ·nilled·
 // element in place of declining. The guard: with no [[children]] `.` is the
-// zero-length string, and `. = ''` holds.
+// zero-length string, and `. = ""` holds.
 func TestContextItemAssertionOverANilledElementWithChildrenDeclines(t *testing.T) {
 	nilled := func(kids ...string) *testElement {
 		root := cRoot(kids...)
