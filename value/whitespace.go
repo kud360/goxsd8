@@ -179,7 +179,7 @@ func effectiveWhiteSpace(r xsd.TypeResolver, st *xsd.SimpleType) (whiteSpace, er
 		return 0, nil
 	}
 	return 0, facetPrecondition(xsderr.RuleComponentInvariant, st.Loc(),
-		"value: type %s has no whiteSpace {value} in force that is exactly one of preserve/replace/collapse", st.Name())
+		"%s has no whiteSpace {value} in force that is exactly one of preserve/replace/collapse", simpleTypeLabel(st.Name()))
 }
 
 // noFacetsApplicable reports whether cos-applicable-facets (§4.1.5) makes NO
