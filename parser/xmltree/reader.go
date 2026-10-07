@@ -50,13 +50,12 @@ type Reader struct {
 	// entities maps each general entity name the DOCTYPE's internal subset
 	// declares to that name's binding declaration and whether a declaration
 	// of it stands outside every parameter entity (see boundEntity). It is a
-	// lookup index only, never iterated. dec.Entity names to the decoder,
-	// which otherwise refuses a reference to any of them (see included), the
-	// internal entities among them and, in a standalone="yes" document, those
-	// whose binding declaration stands in a parameter entity, so that
-	// Reader.reference charges WFC Entity Declared on a reference to an
-	// external one too; a name stays named once a later declaration clears
-	// onlyInPE, and Reader.reference then refuses it if it is not internal.
+	// lookup index only, never iterated. dec.Entity names every one of them
+	// to the decoder, which refuses a reference to any other name (see
+	// included), so that Reader.reference decides a reference to an external
+	// or unparsed one: it charges WFC Entity Declared in a standalone="yes"
+	// document, then, in an attribute value, WFC Parsed Entity or No External
+	// Entity References, and refuses any other.
 	entities map[string]boundEntity
 	// tokenized maps each (element type, attribute) name pair an <!ATTLIST>
 	// of the internal subset defines, as the declaration spells them, to
@@ -375,9 +374,6 @@ func (r *Reader) declareEntities(raw string, loc xsderr.Loc) error {
 			r.entities = make(map[string]boundEntity)
 		}
 		r.entities[decl.name] = boundEntity{binding: decl, onlyInPE: decl.inPE}
-		if named := decl.value.readable || r.standalone && decl.inPE; !named {
-			continue
-		}
 		if r.dec.Entity == nil {
 			r.dec.Entity = make(map[string]string)
 		}

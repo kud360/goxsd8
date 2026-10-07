@@ -112,7 +112,8 @@ func TestIncludedNodesAreLocatedAtTheReference(t *testing.T) {
 // recursive pair (WFC No Recursion), in content and in an attribute value; a
 // '<' in replacement text an attribute value includes, at any depth (WFC No <
 // in Attribute Values); replacement text that is not balanced content (§4.3.2);
-// and a reference outside the document element.
+// and a reference outside the document element, to an internal entity or to an
+// external one, which the decoder does not refuse first.
 func TestEntityInclusionFaults(t *testing.T) {
 	for _, tc := range []struct {
 		name, subset, root, msg string
@@ -124,6 +125,7 @@ func TestEntityInclusionFaults(t *testing.T) {
 		{"element left open", `<!ENTITY e "<b>">`, `<r>&e;</r>`, "element b opened in the replacement text of entity e does not close"},
 		{"element closed outside", `<!ENTITY e "</r>">`, `<r>&e;</r>`, "closes an element the entity did not open"},
 		{"reference after the document element", `<!ENTITY e "x">`, `<r/>&e;`, "entity reference outside the document element"},
+		{"external reference after the document element", `<!ENTITY x SYSTEM "x.ent">`, `<r/>&x;`, "entity reference outside the document element"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := collect(t, "doc.xml", `<!DOCTYPE r [`+tc.subset+`]>`+tc.root)
@@ -147,8 +149,9 @@ func TestEntityInclusionFaults(t *testing.T) {
 // with no unread parameter-entity reference or a standalone one), so the
 // refusal is the reader's policy and names no constraint; the standalone row of
 // TestInternalEntityIsIncluded reads the same subset. A reference in replacement
-// text to an entity that is not internal, and one past the expansion bounds,
-// are refused alike.
+// text included in content to an entity that is not internal, and one past the
+// expansion bounds, are refused alike; one in replacement text an attribute
+// value includes is TestAttributeValueExternalEntity's fault.
 func TestEntityReferenceRefusedUnread(t *testing.T) {
 	laughs := `<!ENTITY l0 "lol">`
 	for i := 1; i <= 9; i++ {
@@ -170,8 +173,7 @@ func TestEntityReferenceRefusedUnread(t *testing.T) {
 		name, subset, root, msg string
 	}{
 		{"declared after an unread parameter entity", `<!ENTITY % p SYSTEM "p.ent"> %p; <!ENTITY e "x">`, `<r>&e;</r>`, "invalid character entity &e;"},
-		{"external entity in replacement text", `<!ENTITY x SYSTEM "x.ent"><!ENTITY e "&x;">`, `<r>&e;</r>`, "invalid character entity &x;"},
-		{"external entity in an attribute value", `<!ENTITY x SYSTEM "x.ent"><!ENTITY e "&x;">`, `<r v="&e;"/>`, "entity &x;, which is not an internal entity"},
+		{"external entity in replacement text", `<!ENTITY x SYSTEM "x.ent"><!ENTITY e "&x;">`, `<r>&e;</r>`, "entity &x;, which is not an internal entity"},
 		{"billion laughs in content", laughs, `<r>&l9;</r>`, "expansion bound"},
 		{"billion laughs in an attribute value", laughs, `<r v="&l9;"/>`, "expansion bound"},
 		{"nesting past the depth bound", chain(64), `<r>&c0;</r>`, "expansion bound"},
@@ -231,9 +233,10 @@ func TestEntityReferenceRefusedUnread(t *testing.T) {
 // that parameter entity though a later one of f stands outside, so the
 // reference occurs within a parameter entity and is not charged (#2365), in
 // content and in an attribute value. Each refused row is such a control for an
-// external entity, which the reader does not read: refused, wrapping a cause,
-// and charging no Entity Declared; the last two are those two controls with x
-// external.
+// external entity, referenced in content, which the reader does not read:
+// refused, wrapping a cause, and charging no Entity Declared; the last is the
+// content control with x external, whose attribute-value twin breaks WFC No
+// External Entity References (TestAttributeValueExternalEntity).
 func TestEntityDeclaredOnlyInParameterEntity(t *testing.T) {
 	const alone = `<?xml version="1.0" standalone="yes"?>`
 	const pe = `<!ENTITY % p "<!ENTITY e 'x'>">%p;`
@@ -295,7 +298,6 @@ func TestEntityDeclaredOnlyInParameterEntity(t *testing.T) {
 		{`<?xml version="1.0"?>`, xpe, `<r>&x;</r>`},
 		{alone, xpe + `<!ENTITY x SYSTEM 'y.ent'>`, `<r>&x;</r>`},
 		{alone, peBoundExt, `<r>&f;</r>`},
-		{alone, peBoundExt, `<r a="&f;"/>`},
 	} {
 		t.Run(tc.decl+tc.subset+tc.root, func(t *testing.T) {
 			_, err := collect(t, "d.xml", tc.decl+`<!DOCTYPE r [`+tc.subset+`]>`+tc.root)
@@ -306,6 +308,76 @@ func TestEntityDeclaredOnlyInParameterEntity(t *testing.T) {
 			}
 			if strings.Contains(fmt.Sprint(err), "Entity Declared") {
 				t.Errorf("error %v names WFC Entity Declared, which the document does not break", err)
+			}
+		})
+	}
+}
+
+// TestAttributeValueExternalEntity charges a reference in an attribute value,
+// directly or through replacement text, to an external entity whose
+// declaration the reader read (XML 1.0 WFC No External Entity References) as
+// a fault the reader charges itself, wrapping no cause and located at the
+// start tag: outside a standalone document, in one whose external entity is
+// declared in a parameter entity (the constraint keys on neither), in the
+// replacement text of an entity bound in a parameter entity, where WFC Entity
+// Declared is not charged (#2365), and in an attribute of an element
+// replacement text included in content opens, located at that reference. A
+// reference to an unparsed entity there is WFC Parsed Entity, checked first as
+// entityGraph's walk of a default value checks it. Each guard is refused,
+// wrapping a cause and naming neither constraint: the same external entity
+// referenced in content, where §4.4.3 lets the reader decline to include it,
+// an unparsed one referenced in content, and an external one declared after a
+// parameter-entity reference the reader did not read (§5.1), referenced in an
+// attribute value directly and through an entity declared before that
+// reference, which reaches the charge with no declaration recorded.
+func TestAttributeValueExternalEntity(t *testing.T) {
+	const alone = `<?xml version="1.0" standalone="yes"?>`
+	const plain = `<?xml version="1.0"?>`
+	const ext = `<!ENTITY x SYSTEM 'x.ent'>`
+	const ndata = `<!NOTATION n SYSTEM 'n'><!ENTITY u SYSTEM 'u.bin' NDATA n>`
+	const peBoundExt = `<!ENTITY % p "<!ENTITY f '[&x;]'><!ENTITY x SYSTEM 'x.ent'>">%p;<!ENTITY f "z">`
+	const noExt = `[xml-wf] attribute value that references, directly or indirectly, the external entity x (XML 1.0 WFC: No External Entity References)`
+	const parsed = `[xml-wf] attribute value that references, directly or indirectly, the unparsed entity u (XML 1.0 WFC: Parsed Entity)`
+	for _, tc := range []struct {
+		decl, subset, root, want string
+	}{
+		{plain, ext, `<r a="&x;"/>`, `d.xml:1:63: ` + noExt},
+		{plain, ext + `<!ENTITY e "&x;">`, `<r a="&e;"/>`, `d.xml:1:80: ` + noExt},
+		{plain, `<!ENTITY % p "` + ext + `">%p;`, `<r a="&x;"/>`, `d.xml:1:82: ` + noExt},
+		{alone, peBoundExt, `<r a="&f;"/>`, `d.xml:1:133: ` + noExt},
+		{plain, ext + `<!ENTITY b "<b a='&x;'/>">`, `<r>&b;</r>`, `d.xml:1:92: ` + noExt},
+		{plain, ndata, `<r a="&u;"/>`, `d.xml:1:95: ` + parsed},
+		{plain, ndata + `<!ENTITY e "&u;">`, `<r a="&e;"/>`, `d.xml:1:112: ` + parsed},
+	} {
+		t.Run(tc.decl+tc.subset+tc.root, func(t *testing.T) {
+			_, err := collect(t, "d.xml", tc.decl+`<!DOCTYPE r [`+tc.subset+`]>`+tc.root)
+			wantWellFormednessError(t, err)
+			var e *xsderr.Error
+			if !errors.As(err, &e) || e.Err != nil {
+				t.Errorf("error %v: want a charge wrapping no cause", err)
+			}
+			if fmt.Sprint(err) != tc.want {
+				t.Errorf("error = %q, want %q", err, tc.want)
+			}
+		})
+	}
+	for _, tc := range []struct {
+		subset, root string
+	}{
+		{ext, `<r>&x;</r>`},
+		{ndata, `<r>&u;</r>`},
+		{`<!ENTITY % q SYSTEM "q.ent"> %q; ` + ext, `<r a="&x;"/>`},
+		{`<!ENTITY e "&x;"><!ENTITY % q SYSTEM "q.ent"> %q; ` + ext, `<r a="&e;"/>`},
+	} {
+		t.Run(tc.subset+tc.root, func(t *testing.T) {
+			_, err := collect(t, "d.xml", plain+`<!DOCTYPE r [`+tc.subset+`]>`+tc.root)
+			wantWellFormednessError(t, err)
+			var e *xsderr.Error
+			if !errors.As(err, &e) || e.Err == nil {
+				t.Errorf("error %v: want a refusal wrapping its cause", err)
+			}
+			if s := fmt.Sprint(err); strings.Contains(s, "No External Entity References") || strings.Contains(s, "Parsed Entity") {
+				t.Errorf("error %v names a constraint the reader does not decide", err)
 			}
 		})
 	}

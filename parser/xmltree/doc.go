@@ -179,11 +179,15 @@
 //     (WFC: Entity Declared), are RuleXMLWellFormed faults; a reference in
 //     the replacement text of an entity whose binding declaration (§4.2)
 //     stands in a parameter entity occurs within it, and is not charged. A
-//     reference past the reader's bound on nesting depth or on replacement
-//     text included per document is refused, as is any other reference to an
-//     entity that is not internal or whose declaration the reader did not
-//     read, wrapping a cause: the reader does not decide whether the document
-//     is well-formed.
+//     reference in an attribute value, directly or through replacement text,
+//     to an unparsed entity (WFC: Parsed Entity) or an external one (WFC: No
+//     External Entity References) whose declaration the reader read is a
+//     RuleXMLWellFormed fault too. A reference past the reader's bound on
+//     nesting depth or on replacement text included per document is refused,
+//     as is any other reference to an entity that is not internal — in
+//     content, an external one the reader does not include (§4.4.3) — or
+//     whose declaration the reader did not read, wrapping a cause: the reader
+//     does not decide whether the document is well-formed.
 //   - Every error the reader returns but io.EOF is a RuleXMLWellFormed
 //     *xsderr.Error, and whether it wraps a cause says what it decides. One wrapping no
 //     cause is a charge the reader makes itself and a definite fault whatever
