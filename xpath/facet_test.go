@@ -28,7 +28,10 @@ func fcValue(t *testing.T, st *xsd.SimpleType, lexical string) value.Value {
 // declines with the ctaFacetFacade method that builds its node answering
 // false; `not(.)` and `not(@a)` hold with the ctaNoContextItem arm of
 // ctaEffectiveBoolean.eval removed, and `not(. = 'x')` with the one of
-// ctaItemOf removed.
+// ctaItemOf removed. fn:position and fn:last raise it too, there being no
+// context position or size (clause 1.3): `position() le 50` and `last() le
+// 50` fail, and so do they under fn:not, which a call evaluating to false
+// would make hold.
 func TestFacetAssertionsDecideTheValue(t *testing.T) {
 	intType, str := asBuiltin(t, "int"), asBuiltin(t, "string")
 	for _, tc := range []struct {
@@ -51,6 +54,10 @@ func TestFacetAssertionsDecideTheValue(t *testing.T) {
 		{"/root = 'present'", str, "x", value.AssertionFails},
 		{"//root", str, "x", value.AssertionFails},
 		{"$value = 'x' or .", str, "x", value.AssertionHolds},
+		{"position() le 50", str, "x", value.AssertionFails},
+		{"not(position() le 50)", str, "x", value.AssertionFails},
+		{"last() le 50", str, "x", value.AssertionFails},
+		{"not(last() le 50)", str, "x", value.AssertionFails},
 	} {
 		got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, tc.st, ctaExprRecord(tc.test, ""), fcValue(t, tc.st, tc.lexical))
 		if got != tc.want {
@@ -179,6 +186,44 @@ func TestContextItemDeclinesOutsideTheFacet(t *testing.T) {
 		}
 	}
 	for _, expr := range []string{".", "not(.)"} {
+		if _, ok := CompileAssertionTest(ctaExprRecord(expr, ""), seededTypes, xsd.SimpleContent{SimpleType: asBuiltin(t, "string")}, asUses(t, nil), asNoElems); ok {
+			t.Errorf("CompileAssertionTest(%q): compiled, want declined", expr)
+		}
+	}
+}
+
+// fn:position and fn:last over the facet's absent focus compile to an
+// xs:integer that raises err:XPDY0002 (ctaNoFocus): `position() le 50` is a
+// value comparison of that operand with 50, not the err:XPTY0004 ctaTypeError
+// an untyped operand compared with an xs:integer would compile to.
+func TestFacetFocusIsAnIntegerThatRaises(t *testing.T) {
+	str := asBuiltin(t, "string")
+	for _, expr := range []string{"position() le 50", "last() le 50"} {
+		root, defect := compileCTATest(ctaExprRecord(expr, ""), seededTypes, ctaFacetFacade{st: str})
+		if defect.kind != ctaNoDefect {
+			t.Fatalf("compileCTATest(%q): declined, want compiled", expr)
+		}
+		compare, isCompare := root.(ctaValueCompare)
+		if !isCompare {
+			t.Fatalf("compileCTATest(%q) = %T, want ctaValueCompare", expr, root)
+		}
+		if _, isFocus := compare.left.(ctaNoFocus); !isFocus {
+			t.Errorf("compileCTATest(%q): left operand %T, want ctaNoFocus", expr, compare.left)
+		}
+	}
+}
+
+// fn:position and fn:last raise on the facet façade alone (guard): an
+// assertion's focus is defined — E, position and size 1 (cvc-xpath) — and a
+// Type Alternative's {test} calls no library function, so each declines
+// there, and neither ever compiles to E's value.
+func TestFocusDeclinesOutsideTheFacet(t *testing.T) {
+	for _, expr := range []string{"position() = 1", "last() = 1"} {
+		if _, ok := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); ok {
+			t.Errorf("CompileCTATest(%q): compiled, want declined", expr)
+		}
+	}
+	for _, expr := range []string{"position() le 50", "last() le 50", "not(position() le 50)", "position() = '1'"} {
 		if _, ok := CompileAssertionTest(ctaExprRecord(expr, ""), seededTypes, xsd.SimpleContent{SimpleType: asBuiltin(t, "string")}, asUses(t, nil), asNoElems); ok {
 			t.Errorf("CompileAssertionTest(%q): compiled, want declined", expr)
 		}

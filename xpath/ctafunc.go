@@ -21,7 +21,9 @@ import (
 // counted as fn:empty and fn:exists count them. fn:true and fn:false (§9.1.1,
 // §9.1.2) are constants, which compile to the ctaLiteral of their xs:boolean
 // (ctaParser.constantCall). fn:current-date (§16.4) reads the dynamic
-// context's current dateTime (ctaCurrentDate).
+// context's current dateTime (ctaCurrentDate), and fn:position and fn:last
+// (§16.1, §16.2) its focus, which only the facet façade compiles, to the
+// err:XPDY0002 of an absent one (ctaNoFocus, ctaFacade.focus).
 //
 // An argument whose parameter is xs:string? is converted by xpath20.md
 // §3.1.5's function conversion rules, as far as the static type settles them,
@@ -137,12 +139,24 @@ type ctaCountedItems struct{ operand ctaValue }
 // returns the same date (§16.4 "stable"; cvc-xpath clause 6).
 type ctaCurrentDate struct{ st *xsd.SimpleType }
 
+// ctaNoFocus is a call to fn:position or fn:last with no argument
+// (xpath-functions.md §16.1, §16.2), whose result is st, xs:integer, where
+// the focus is absent — an assertions facet's {test}, which has no context
+// item, context position or context size (cvc-assertions-valid clauses 1.2
+// and 1.3). Each function raises err:XPDY0002 "If the context item is
+// undefined", so evaluating the node raises whichever it calls; its static
+// type is the xs:integer either would return, so `position() le 50` compiles
+// to a comparison that raises and not to the err:XPTY0004 an untyped operand
+// would make of it. Only the facet façade builds it (ctaFacetFacade.focus).
+type ctaNoFocus struct{ st *xsd.SimpleType }
+
 func (ctaMatch) ctaValue()          {}
 func (ctaUnaryString) ctaValue()    {}
 func (ctaPresence) ctaValue()       {}
 func (ctaStringFunction) ctaValue() {}
 func (ctaDistinctValues) ctaValue() {}
 func (ctaCurrentDate) ctaValue()    {}
+func (ctaNoFocus) ctaValue()        {}
 
 // resultType is the ·expanded name· of the type op returns.
 func (op ctaUnaryStringOp) resultType() xsd.QName {
