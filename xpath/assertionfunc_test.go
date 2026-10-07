@@ -374,16 +374,16 @@ func TestStringFunctionsReadTheirArguments(t *testing.T) {
 // form), every other arity, the zero-argument string forms — whose implicit
 // argument is E's string value, which `.` on the assertion façade does not
 // supply — and fn:string over a typed node or value outside the xs:string
-// family (castsFrom), or over an xs:float or xs:double, a literal
-// (literalCastsTo) or a cast to either over a string-family operand
-// (castsFrom's floatingSource shape) included, whose cast to xs:string §17.1.2
-// does not render canonically — an xs:decimal and an xs:boolean literal still
-// compile. With matchCall admitting three arguments the collation row
-// compiles, with ctaAssertionFacade.contextItem admitting `.` the
-// zero-argument rows do, with literalCastsTo's last return answering true the
-// `string(1.5e0)` row does, and with castSource's ctaCast exit answering
-// (nil, false) in place of floatingSource the two rows over a cast to
-// xs:float or xs:double do; with literalCastsTo's xs:decimal or xs:boolean
+// family and the date/time primitives (castsFrom), or over an xs:float or
+// xs:double, a literal (literalCastsTo) or a cast to either over a
+// string-family operand (castsFrom's floatingSource shape) included, whose
+// cast to xs:string §17.1.2 does not render canonically — an xs:decimal and an
+// xs:boolean literal still compile. With matchCall admitting three arguments
+// the collation row compiles, with ctaAssertionFacade.contextItem admitting
+// `.` the zero-argument rows do, with literalCastsTo's last return answering
+// true the `string(1.5e0)` row does, and with castSource's ctaCast exit
+// answering (nil, false) in place of floatingSource the two rows over a cast
+// to xs:float or xs:double do; with literalCastsTo's xs:decimal or xs:boolean
 // arm answering false, `string(1.5)` or `string(true())` declines.
 func TestCompileAssertionTestDeclinesFunctions(t *testing.T) {
 	str := asBuiltin(t, "string")
