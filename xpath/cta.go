@@ -32,7 +32,10 @@ import (
 // whose `.` is ctaCandidate), and two or more such paths joined by [21]
 // UnionExpr (ctaUnion) — or over an operand that is no path, such as
 // `$value`, whose items it counts (ctaCountedItems), and a call to one of the
-// F&O string and sequence functions, evaluated in ctafunc.go; and each
+// F&O string and sequence functions or to fn:namespace-uri over E
+// (ctaNamespaceURI), evaluated in ctafunc.go, and [11] ta-BooleanExpr a
+// comparison by `=` of fn:in-scope-prefixes over E against string literals
+// (ctaPrefixMember), whose `.` is E as a node (ctaContextNode); and each
 // comparison operand may be xpath20.md [13] AdditiveExpr over [14]
 // MultiplicativeExpr, whose operators are evaluated in ctaarith.go (ctaArith);
 // [47] ContextItemExpr `.`, atomized to E's string value (ctaContextAtom);
@@ -52,8 +55,9 @@ import (
 // paths and the one descendant step whose existence is asked and the descendant
 // steps fn:count counts over, no predicate or union but those in an fn:count
 // argument, no variable but `$value` and no function but fn:not, fn:count, the
-// twelve ctaParser.libraryCall names and fn:data as the operand of `instance
-// of` (ctaParser.instanceofExpr), so evaluating them directly is exact where a
+// ctaParser.libraryCall names, fn:in-scope-prefixes as an operand of `=`
+// (ctaParser.prefixMember) and fn:data as the operand of `instance of`
+// (ctaParser.instanceofExpr), so evaluating them directly is exact where a
 // fail-open delegation to a general engine would be a guess.
 //
 //	[8]  Test                ::= OrExpr
@@ -430,15 +434,19 @@ type ctaInput interface{ ctaInput() }
 // ctaLexicalInput is a Type Alternative's attribute input.
 type ctaLexicalInput struct{ attrs Attributes }
 
-// ctaTypedInput is an assertion's input: its typed attributes, its element
-// [[children]], the counts of the nodes its fn:count calls select, E's
-// string value and the value cvc-assertion clause 2.3 binds to `$value`
-// ([ValueBinding]), and now, the dynamic context's current dateTime
-// (xpath20.md §2.1.2) fn:current-date reads (ctaCurrentDate). The children,
-// the counts, the binding and the instant live here and on no other arm, so a
-// Type Alternative's evaluation cannot carry any of them. counts is nil where
-// the tree counts nothing, which a facet evaluation's never does.
+// ctaTypedInput is an assertion's input: E itself as the functions taking `.`
+// as a node read it ([ContextElement], ctaContextElementOf), its typed
+// attributes, its element [[children]], the counts of the nodes its fn:count
+// calls select, E's string value and the value cvc-assertion clause 2.3 binds
+// to `$value` ([ValueBinding]), and now, the dynamic context's current dateTime
+// (xpath20.md §2.1.2) fn:current-date reads (ctaCurrentDate). The element, the
+// children, the counts, the binding and the instant live here and on no other
+// arm, so a Type Alternative's evaluation cannot carry any of them. counts is
+// nil where the tree counts nothing, which a facet evaluation's never does,
+// and node is nil in a facet evaluation, whose tree compiles `.` to
+// ctaNoContextItem and so never reads it.
 type ctaTypedInput struct {
+	node     ContextElement
 	attrs    TypedAttributes
 	children ChildElements
 	counts   *Tally
@@ -561,10 +569,12 @@ func (ctaIf) ctaExpr()               {}
 // over them (ctaMatch, ctaUnaryString, ctaPresence, ctaDistinctValues,
 // ctaStringFunction; ctaFacade.callsLibrary), to fn:current-date
 // (ctaCurrentDate) or, over an absent focus, to fn:position or fn:last
-// (ctaNoFocus, ctaFacade.focus), the assertion façade's `.` (ctaContextAtom,
-// ctaFacade.contextItem), and an integer or string sequence
-// (ctaIntegerRanges, ctaStringSequence, ctaFacade.constructsSequences). Every
-// branch answers readsChild and counted on ctaExpr's terms.
+// (ctaNoFocus, ctaFacade.focus), or to fn:namespace-uri (ctaNamespaceURI), the
+// assertion façade's `.` (ctaContextAtom, ctaFacade.contextItem) and `.` as
+// the node those two functions take (ctaContextNode, ctaFacade.contextNode),
+// and an integer or string sequence (ctaIntegerRanges, ctaStringSequence,
+// ctaFacade.constructsSequences). Every branch answers readsChild and counted
+// on ctaExpr's terms.
 type ctaValue interface {
 	ctaValue()
 	readsChild(name xsd.QName) bool
@@ -718,7 +728,8 @@ type ctaUntypedValue struct{}
 // boolean value·, fn:exists or fn:empty `.` is a NODE, and
 // ctaParser.booleanExpr and ctaParser.presenceCall decline it there rather
 // than read the atom; fn:count over it is a path, which ctaParser.countPath
-// declines.
+// declines; and as the argument of fn:namespace-uri or fn:in-scope-prefixes
+// it is ctaContextNode, never this.
 type ctaContextAtom struct{}
 
 // ctaFacade is the sealed sum of the façades compileCTATest parses for — one
@@ -766,6 +777,13 @@ type ctaFacade interface {
 	// contextItem compiles the [47] ContextItemExpr `.` into its node,
 	// reporting false where the façade declines it, on attribute's terms.
 	contextItem() (ctaValue, bool)
+	// contextNode compiles the [47] ContextItemExpr `.` as the NODE the
+	// argument of fn:namespace-uri and fn:in-scope-prefixes takes, never
+	// atomized (ctaParser.contextNodeArgument), into its node, reporting false
+	// where the façade declines it, on attribute's terms. Only a façade that
+	// calls the library reaches it (ctaParser.libraryCall,
+	// ctaParser.prefixMember).
+	contextNode() (ctaValue, bool)
 	// focus compiles a call to fn:position or fn:last with no argument
 	// (xpath-functions.md §16.1, §16.2), a read of the context position or
 	// size whose result is st, xs:integer, into its node, reporting false
@@ -785,10 +803,12 @@ type ctaFacade interface {
 	// functions ctaParser.libraryCall parses — fn:contains, fn:starts-with,
 	// fn:ends-with, fn:string-length, fn:normalize-space, fn:string, fn:empty,
 	// fn:exists, fn:distinct-values, fn:true, fn:false, fn:current-date,
-	// fn:position and fn:last (ctaFacade.focus) — at all, which §3.12.6 clause
-	// 3 pins out of [12] ta-BooleanFunction (fn:not alone) and [18]
-	// ta-ConstructorFunction (constructors alone), and an fn:count argument
-	// that is no path (ctaParser.countCall).
+	// fn:position and fn:last (ctaFacade.focus) and fn:namespace-uri
+	// (ctaFacade.contextNode) — and fn:in-scope-prefixes as an operand of `=`
+	// (ctaParser.prefixMember) at all, which §3.12.6 clause 3 pins out of [12]
+	// ta-BooleanFunction (fn:not alone) and [18] ta-ConstructorFunction
+	// (constructors alone), and an fn:count argument that is no path
+	// (ctaParser.countCall).
 	callsLibrary() bool
 	// conditional reports whether the façade admits xpath20.md [7] IfExpr at
 	// all (ctaParser.ifExpr), which §3.12.6's grammar has no production for.
@@ -867,6 +887,14 @@ func (ctaTypeAlternativeFacade) contextItem() (ctaValue, bool) {
 // every [18] ta-ConstructorFunction a constructor for a built-in datatype, and
 // no other function but fn:not is in the grammar.
 func (ctaTypeAlternativeFacade) count(ctaCounted, ctaTypes) (ctaValue, bool) {
+	return nil, false
+}
+
+// contextNode declines, on contextItem's terms. It is never reached:
+// callsLibrary is false, so `namespace-uri(.)` reaches
+// ctaParser.constructorFunction and declines there, and
+// `in-scope-prefixes(.) = 'a'` is never read as ctaParser.prefixMember's.
+func (ctaTypeAlternativeFacade) contextNode() (ctaValue, bool) {
 	return nil, false
 }
 
@@ -1610,6 +1638,8 @@ func ctaStaticOf(v ctaValue) ctaStatic {
 		return ctaTyped(n)
 	case ctaNoFocus:
 		return ctaTyped(n)
+	case ctaNamespaceURI:
+		return ctaTyped{st: n.st}
 	case ctaDistinctValues:
 		return ctaStaticOf(n.operand)
 	case ctaValueVar:
@@ -1711,6 +1741,8 @@ func ctaEval(x ctaExpr, env ctaEnv) ctaAnswer {
 	case ctaTypeError:
 		return ctaError
 	case ctaIf:
+		return n.eval(env)
+	case ctaPrefixMember:
 		return n.eval(env)
 	default:
 		return ctaFalse
@@ -1966,6 +1998,8 @@ func (e ctaEffectiveBoolean) eval(env ctaEnv) ctaAnswer {
 		return ctaBoolean(e.operand, n.st, env)
 	case ctaNoFocus:
 		return ctaBoolean(e.operand, n.st, env)
+	case ctaNamespaceURI:
+		return ctaBoolean(e.operand, n.st, env)
 	case ctaDistinctValues:
 		return ctaBoolean(e.operand, n.st, env)
 	case ctaValueVar:
@@ -2130,8 +2164,8 @@ func ctaValidated(i ctaItem) (value.Value, bool) {
 //     `$value` carry their own type and are converted to c, which is a no-op
 //     wherever the two coincide; the statically empty `$value` yields nothing
 //     to convert.
-//   - an F&O string or sequence function's result is of its own result type
-//     — an fn:distinct-values call's items of the type it compares them in —
+//   - an F&O function's result is of its own result type — an
+//     fn:distinct-values call's items of the type it compares them in —
 //     and converted to c on the typed operands' terms, once the function has
 //     been applied to its arguments (ctafunc.go).
 //   - a rooted path raises err:XPDY0050 before it yields anything, and a read
@@ -2200,6 +2234,12 @@ func ctaItemOf(v ctaValue, c *xsd.SimpleType, env ctaEnv) ctaItem {
 		return ctaStringFunctionItem(n, c, env)
 	case ctaCurrentDate:
 		return ctaCurrentDateItem(n, c, env)
+	case ctaNamespaceURI:
+		return ctaNamespaceURIItem(n, c, env)
+	case ctaContextNode:
+		// Never reached: ctaParser.contextNodeArgument builds the node only as
+		// the argument ctaContextElementOf reads, and no item is read of it.
+		return ctaRaised{}
 	case ctaDistinctValues:
 		return ctaDistinctValuesItem(n, c, env)
 	case ctaValueVar:

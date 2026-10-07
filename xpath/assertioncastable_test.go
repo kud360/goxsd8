@@ -41,7 +41,7 @@ func TestAssertionCastableOverValue(t *testing.T) {
 			t.Errorf("CompileAssertionTest(%q): declined, want compiled", tc.expr)
 			continue
 		}
-		if got := test.Evaluate(backend(), seededTypes, asValues(t), asNoChildren, nil, asBind(t, str, tc.lexical), time.Time{}); got != tc.want {
+		if got := test.Evaluate(backend(), seededTypes, asElem, asValues(t), asNoChildren, nil, asBind(t, str, tc.lexical), time.Time{}); got != tc.want {
 			t.Errorf("Evaluate(%q) over %q = %v, want %v", tc.expr, tc.lexical, got, tc.want)
 		}
 	}
@@ -74,7 +74,7 @@ func TestAssertionCastableOverAnUntypedAttribute(t *testing.T) {
 		{"@a castable as xs:date?", nil, true},
 		{"@a castable as xs:date?", at("2008-13-01"), false},
 	} {
-		got := asCompile(t, tc.expr, uses).Evaluate(backend(), seededTypes, asValues(t, tc.attrs...), asNoChildren, nil, ValueBinding{}, time.Time{})
+		got := asCompile(t, tc.expr, uses).Evaluate(backend(), seededTypes, asElem, asValues(t, tc.attrs...), asNoChildren, nil, ValueBinding{}, time.Time{})
 		if got != tc.want {
 			t.Errorf("Evaluate(%q) over %v = %v, want %v", tc.expr, tc.attrs, got, tc.want)
 		}
@@ -107,7 +107,7 @@ func TestAssertionCastableOverAListedValue(t *testing.T) {
 		if err != nil {
 			t.Fatalf("mapping %q against the list: %v", tc.lexical, err)
 		}
-		if got := test.Evaluate(backend(), types, asValues(t), asNoChildren, nil, BindValue("", Typed(v)), time.Time{}); got != tc.want {
+		if got := test.Evaluate(backend(), types, asElem, asValues(t), asNoChildren, nil, BindValue("", Typed(v)), time.Time{}); got != tc.want {
 			t.Errorf("Evaluate(%q) over %q = %v, want %v", tc.expr, tc.lexical, got, tc.want)
 		}
 	}

@@ -63,7 +63,7 @@ func TestAssertionStringSequences(t *testing.T) {
 			if !ok {
 				t.Fatalf("CompileAssertionTest(%q): declined, want compiled", tc.expr)
 			}
-			if got := test.Evaluate(backend(), seededTypes, asValues(t), asChildren(t, tc.children...), nil, ValueBinding{}, time.Time{}); got != tc.want {
+			if got := test.Evaluate(backend(), seededTypes, asElem, asValues(t), asChildren(t, tc.children...), nil, ValueBinding{}, time.Time{}); got != tc.want {
 				t.Errorf("Evaluate(%q) over %v = %v, want %v", tc.expr, tc.children, got, tc.want)
 			}
 		})
