@@ -46,11 +46,8 @@ func aiInts(kv ...string) []asChild {
 // sequence, whose ·effective boolean value· is false (§2.4.3), so the else
 // branch decides. The three test12.xsd {test}s (assert_012) decide the shape
 // they guard and pass every other: `not(d)` in a then-branch is the existence
-// of d. `if (@t eq 'x') then a else false()` asks whether a exists, which a
-// zero value does not change: with closesBoolean not ending a step at 'else',
-// `a` is read for its value, whose ·effective boolean value· over 0 is false,
-// and that row fails. Every row fails with ctaAssertionFacade.conditional
-// answering false, at the compile.
+// of d, and so is `a` before an 'else', whatever its value. Every row fails
+// with ctaAssertionFacade.conditional answering false, at the compile.
 func TestAssertionIfExpr(t *testing.T) {
 	x, y := asTyped{uq("t"), "string", "x"}, asTyped{uq("t"), "string", "y"}
 	const square = "if (@t eq 'square') then (a = b and b = c and c = d) else true()"
@@ -99,6 +96,27 @@ func TestAssertionIfExpr(t *testing.T) {
 	}
 }
 
+// An element step whose existence alone a then-branch asks ends at the 'else'
+// (ctaParser.closesBoolean) and is decided off the [Tally] whatever its type,
+// so `p`, of an element-only type no value step reads, compiles there and holds
+// exactly where a p child is reported. With 'else' not closing a
+// BooleanExpr, `p` is read for its value and the compile declines.
+func TestAssertionIfExprBranchAsksExistence(t *testing.T) {
+	elems := asElems(map[xsd.QName]xsd.TypeDefinition{uq("p"): asComplex(t, "POnly", asElementContent(t, false))})
+	const expr = "if (@t eq 'x') then p else false()"
+	test, ok := CompileAssertionTest(asRecord(expr), seededTypes, xsd.ElementContent{}, asUses(t, map[string]string{"t": "string"}), elems)
+	if !ok {
+		t.Fatalf("CompileAssertionTest(%q): declined, want compiled", expr)
+	}
+	x := asValues(t, asTyped{uq("t"), "string", "x"})
+	if !test.Evaluate(backend(), seededTypes, x, asNoChildren, acTally(test, acPath("p")), ValueBinding{}) {
+		t.Errorf("Evaluate(%q) over a p child = false, want true", expr)
+	}
+	if test.Evaluate(backend(), seededTypes, x, asNoChildren, acTally(test), ValueBinding{}) {
+		t.Errorf("Evaluate(%q) with no p child = true, want false", expr)
+	}
+}
+
 // Only the selected branch is evaluated (xpath20.md §3.8: the expression
 // "ignores (does not raise) any dynamic errors encountered in the
 // else-expression"), so err:FOAR0001 of an xs:integer `1 div 0` in the other
@@ -107,7 +125,8 @@ func TestAssertionIfExpr(t *testing.T) {
 // inverting: each fn:not row is false, not true. An xs:date test has no
 // ·effective boolean value· and raises err:FORG0006 (§2.4.3). With ctaIf.eval
 // evaluating both branches and raising for either, the first two rows fail;
-// with it reading a raised test as false, the test-error rows fail.
+// with it reading a raised test as false, the last two rows fail; with it
+// reading a raised then-branch as false, the fn:not row over that branch fails.
 func TestAssertionIfExprEvaluatesOneBranch(t *testing.T) {
 	for _, tc := range []struct {
 		expr string
@@ -118,8 +137,8 @@ func TestAssertionIfExprEvaluatesOneBranch(t *testing.T) {
 		{"if (true()) then (1 div 0 = 0) else true()", false},
 		{"not(if (true()) then (1 div 0 = 0) else true())", false},
 		{"not(if (false()) then true() else (1 div 0 = 0))", false},
-		{"not(if (1 div 0 = 0) then true() else true())", false},
-		{"not(if (xs:date('2000-01-01')) then true() else true())", false},
+		{"not(if (1 div 0 = 0) then true() else false())", false},
+		{"not(if (xs:date('2000-01-01')) then true() else false())", false},
 	} {
 		if got := aiCompile(t, tc.expr).Evaluate(backend(), seededTypes, asValues(t), asNoChildren, nil, ValueBinding{}); got != tc.want {
 			t.Errorf("Evaluate(%q) = %v, want %v", tc.expr, got, tc.want)
