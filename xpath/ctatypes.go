@@ -271,16 +271,14 @@ func (t ctaTypes) castTarget(name xsd.QName) (*xsd.SimpleType, bool) {
 //
 // GAP(xpath): a cast from any OTHER typed operand, a literal aside, is
 // declined — §17.4's cast within a branch of the hierarchy that is not to an
-// ancestor, and §17.1's and §17.5's casts across primitives, a date/time
-// operand's to a target derived from xs:string (§17.5) and an xs:gYearMonth,
-// xs:gYear, xs:gMonthDay, xs:gDay or xs:gMonth operand's to xs:string among
-// them — because xpath-functions.md §17 defines those over the VALUE, not over
-// a re-validated canonical lexical: xs:decimal to xs:integer truncates
-// (§17.1.3.4) where the round-trip ctaPromote would perform raises
-// err:FORG0001 for "3.5", and an assertion a raised cast makes false is a
-// charge (cvc-assertion), so the round-trip would fabricate one. An xs:float
-// or xs:double operand, a DoubleLiteral included (literalCastsTo), is the same
-// case: §17.1.2 renders a value of absolute value in [0.000001,
+// ancestor, and §17.1's and §17.5's casts across primitives — because
+// xpath-functions.md §17 defines those over the VALUE, not over a re-validated
+// canonical lexical: xs:decimal to xs:integer truncates (§17.1.3.4) where the
+// round-trip ctaPromote would perform raises err:FORG0001 for "3.5", and an
+// assertion a raised cast makes false is a charge (cvc-assertion), so the
+// round-trip would fabricate one. An xs:float or xs:double operand, a
+// DoubleLiteral included (literalCastsTo), is the same case: §17.1.2 renders a
+// value of absolute value in [0.000001,
 // 1000000) as an xs:decimal, so `xs:string(1.5e0)` is "1.5" where ctaPromote
 // would render "1.5E0", and §17.1.3 casts it to xs:decimal or xs:integer by its
 // value, which the canonical "1.5E0" fails to validate as. Those value-defined
@@ -292,8 +290,13 @@ func (t ctaTypes) castTarget(name xsd.QName) (*xsd.SimpleType, bool) {
 // round-trip had decided it, raising for `xs:date(1.5e0)` and succeeding for
 // `xs:anyURI(1.5e0)`, "1.5E0" being an xs:anyURI lexical. fn:string over such an
 // operand, a node of such a type included, is that cast to xs:string and
-// declines with it. The direction is the withhold [CompileAssertionTest]
-// reports: the assertion is declined, never charged and never satisfied. (#1042)
+// declines with it. A date/time operand's cast to a target derived from
+// xs:string, and a g* or duration operand's cast to xs:string, are withheld
+// only for scope: §17.5 and §17.1.2 define each over the canonical
+// representation ctaPromote renders, and admitting them is a widening of
+// localValueSource's set or of its target test, not a new renderer (#1042).
+// The direction is the withhold [CompileAssertionTest] reports: the assertion is
+// declined, never charged and never satisfied. (#1042)
 func (t ctaTypes) castsFrom(v ctaValue, target *xsd.SimpleType) bool {
 	if lit, isLiteral := v.(ctaLiteral); isLiteral {
 		return t.literalCastsTo(lit, target)
