@@ -247,7 +247,7 @@ func (t ctaTypes) instanceItem(v ctaValue) (item ctaStatic, derived, ok bool) {
 		return ctaStaticOf(v), true, true
 	case ctaAttr, ctaTypedAttr, ctaUntypedChild, ctaValueVar, ctaUntypedValue, ctaEmptyValue,
 		ctaContextAtom, ctaNoContextItem, ctaNoDocumentRoot, ctaCast, ctaCastable, ctaInstanceOf, ctaCount,
-		ctaMatch, ctaUnaryString, ctaPresence, ctaStringFunction, ctaCurrentDate:
+		ctaMatch, ctaUnaryString, ctaPresence, ctaStringFunction, ctaCurrentDate, ctaNoFocus:
 		return ctaStaticOf(v), false, true
 	}
 	return nil, false, false
@@ -329,7 +329,10 @@ func (t ctaTypes) itemMatches(item ctaStatic, name xsd.QName) (matches, admitted
 //     @s.
 //
 // Every other operand casts as [CompileCTATest] states, the statically empty
-// `$value` (ctaEmptyValue) among them: it holds no item to convert. So do the
+// `$value` (ctaEmptyValue) among them: it holds no item to convert. So does
+// fn:position or fn:last over an absent focus (ctaNoFocus), which raises
+// err:XPDY0002 before it yields one (xpath-functions.md §16.1, §16.2), so
+// `string(position())` fails an assertions facet. So do the
 // xs:untypedAtomic operands — an attribute (ctaAttr) or `$value`
 // (ctaUntypedValue) of ·special· type, and a child of mixed content
 // (ctaUntypedChild) — each item of which a cast to any target validates as a
