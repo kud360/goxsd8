@@ -164,10 +164,10 @@ func parseTime(lexical string, _ value.Context) (value.Value, error) {
 	m := timeLexical.FindStringSubmatch(lexical)
 	if m == nil {
 		return nil, xsderr.New(ruleDatatypeValid, xsderr.Loc{},
-			"time: %q is not in the lexical space (timeLexicalRep, §3.3.8.2)", lexical)
+			"%q is not in the lexical space of time, which cvc-datatype-valid clause 2.1 requires it to be in", lexical)
 	}
 	tz := matchTimezone(m[6])
-	if m[5] != "" { // endOfDayFrag → midnight (§3.3.8.2 Note)
+	if m[5] != "" { // endOfDayFrag → midnight (timeLexicalRep's Note)
 		return timeVal{hour: 0, minute: 0, second: new(big.Rat), tzOffset: tz}, nil
 	}
 	hour, _ := strconv.Atoi(m[1])
@@ -184,14 +184,14 @@ func parseDate(lexical string, _ value.Context) (value.Value, error) {
 	m := dateLexical.FindStringSubmatch(lexical)
 	if m == nil {
 		return nil, xsderr.New(ruleDatatypeValid, xsderr.Loc{},
-			"date: %q is not in the lexical space (dateLexicalRep, §3.3.9.2)", lexical)
+			"%q is not in the lexical space of date, which cvc-datatype-valid clause 2.1 requires it to be in", lexical)
 	}
 	year, _ := new(big.Int).SetString(m[1], 10)
 	month, _ := strconv.Atoi(m[2])
 	day, _ := strconv.Atoi(m[3])
 	if day > daysInMonth(year, month) {
 		return nil, xsderr.New(ruleDatatypeValid, xsderr.Loc{},
-			"date: %q has day %d out of range for month %d of year %s (con-date-dayValue, §3.3.9.1)",
+			"%q has day %d, beyond the last day of month %d of year %s, so it is not in the lexical space of date, which cvc-datatype-valid clause 2.1 requires it to be in",
 			lexical, day, month, year)
 	}
 	return dateVal{year: year, month: month, day: day, tzOffset: matchTimezone(m[4])}, nil
@@ -203,7 +203,7 @@ func parseGYearMonth(lexical string, _ value.Context) (value.Value, error) {
 	m := gYearMonthLexical.FindStringSubmatch(lexical)
 	if m == nil {
 		return nil, xsderr.New(ruleDatatypeValid, xsderr.Loc{},
-			"gYearMonth: %q is not in the lexical space (gYearMonthLexicalRep, §3.3.10.2)", lexical)
+			"%q is not in the lexical space of gYearMonth, which cvc-datatype-valid clause 2.1 requires it to be in", lexical)
 	}
 	year, _ := new(big.Int).SetString(m[1], 10)
 	month, _ := strconv.Atoi(m[2])
@@ -216,7 +216,7 @@ func parseGYear(lexical string, _ value.Context) (value.Value, error) {
 	m := gYearLexical.FindStringSubmatch(lexical)
 	if m == nil {
 		return nil, xsderr.New(ruleDatatypeValid, xsderr.Loc{},
-			"gYear: %q is not in the lexical space (gYearLexicalRep, §3.3.11.2)", lexical)
+			"%q is not in the lexical space of gYear, which cvc-datatype-valid clause 2.1 requires it to be in", lexical)
 	}
 	year, _ := new(big.Int).SetString(m[1], 10)
 	return gYearVal{year: year, tzOffset: matchTimezone(m[2])}, nil
@@ -229,13 +229,13 @@ func parseGMonthDay(lexical string, _ value.Context) (value.Value, error) {
 	m := gMonthDayLexical.FindStringSubmatch(lexical)
 	if m == nil {
 		return nil, xsderr.New(ruleDatatypeValid, xsderr.Loc{},
-			"gMonthDay: %q is not in the lexical space (gMonthDayLexicalRep, §3.3.12.2)", lexical)
+			"%q is not in the lexical space of gMonthDay, which cvc-datatype-valid clause 2.1 requires it to be in", lexical)
 	}
 	month, _ := strconv.Atoi(m[1])
 	day, _ := strconv.Atoi(m[2])
 	if day > gMonthDayMaxDay(month) {
 		return nil, xsderr.New(ruleDatatypeValid, xsderr.Loc{},
-			"gMonthDay: %q has day %d out of range for month %d (con-gMonthDay-dayValue, §3.3.12.1)",
+			"%q has day %d, beyond the last day of month %d, so it is not in the lexical space of gMonthDay, which cvc-datatype-valid clause 2.1 requires it to be in",
 			lexical, day, month)
 	}
 	return gMonthDayVal{month: month, day: day, tzOffset: matchTimezone(m[3])}, nil
@@ -248,7 +248,7 @@ func parseGDay(lexical string, _ value.Context) (value.Value, error) {
 	m := gDayLexical.FindStringSubmatch(lexical)
 	if m == nil {
 		return nil, xsderr.New(ruleDatatypeValid, xsderr.Loc{},
-			"gDay: %q is not in the lexical space (gDayLexicalRep, §3.3.13.2)", lexical)
+			"%q is not in the lexical space of gDay, which cvc-datatype-valid clause 2.1 requires it to be in", lexical)
 	}
 	day, _ := strconv.Atoi(m[1])
 	return gDayVal{day: day, tzOffset: matchTimezone(m[2])}, nil
@@ -260,7 +260,7 @@ func parseGMonth(lexical string, _ value.Context) (value.Value, error) {
 	m := gMonthLexical.FindStringSubmatch(lexical)
 	if m == nil {
 		return nil, xsderr.New(ruleDatatypeValid, xsderr.Loc{},
-			"gMonth: %q is not in the lexical space (gMonthLexicalRep, §3.3.14.2)", lexical)
+			"%q is not in the lexical space of gMonth, which cvc-datatype-valid clause 2.1 requires it to be in", lexical)
 	}
 	month, _ := strconv.Atoi(m[1])
 	return gMonthVal{month: month, tzOffset: matchTimezone(m[2])}, nil
