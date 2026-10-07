@@ -54,11 +54,13 @@ const selfCharged = "the element root is not ·valid· with respect to assertion
 // `$value` to the empty sequence.
 //
 // With walk.assertionValue binding the zero ValueBinding under element-only
-// content, every satisfied row reading `.` but the nilled one is charged
-// instead; with the run of E's own frame owner dropped as an element-only
-// one's, the own-white-space row is charged; with every run appended to every
-// frame whatever its element's content, the element-only-descendant row is
-// charged.
+// content, every satisfied row is charged instead but assert017's, which
+// holds over any string, and the nilled one; with the run of E's own frame
+// owner dropped as an element-only one's, the own-white-space row is charged;
+// with every run appended to every frame whatever its element's content, the
+// element-only-descendant row is charged; and with a simple descendant's run
+// dropped, every satisfied row whose `.` spans a d or an n is charged but
+// assert017's.
 func TestAssertionReadsElementOnlyStringValue(t *testing.T) {
 	for _, tc := range []struct {
 		why, test string
