@@ -3,6 +3,7 @@ package xpath
 import (
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/kud360/goxsd8/value"
@@ -284,16 +285,29 @@ func ctaStringFunctionItem(n ctaStringFunction, c *xsd.SimpleType, env ctaEnv) c
 const ctaCurrentDateLayout = "2006-01-02Z07:00"
 
 // ctaCurrentDateItem evaluates n — the date of the evaluation's current
-// dateTime, rendered by ctaCurrentDateLayout — and converts it into c on
-// ctaMatchItem's terms. The input is ctaTypedInput by construction: only the
-// assertion and facet façades call the library (ctaFacade.callsLibrary), and
-// the other arm holds no instant and raises, unreachably.
+// dateTime, as ctaCurrentDateInstant settles its offset, rendered by
+// ctaCurrentDateLayout — and converts it into c on ctaMatchItem's terms. The
+// input is ctaTypedInput by construction: only the assertion and facet
+// façades call the library (ctaFacade.callsLibrary), and the other arm holds
+// no instant and raises, unreachably.
 func ctaCurrentDateItem(n ctaCurrentDate, c *xsd.SimpleType, env ctaEnv) ctaItem {
 	in, typed := env.input.(ctaTypedInput)
 	if !typed {
 		return ctaRaised{}
 	}
-	return ctaConvert(in.now.Format(ctaCurrentDateLayout), n.st, c, env)
+	return ctaConvert(ctaCurrentDateInstant(in.now).Format(ctaCurrentDateLayout), n.st, c, env)
+}
+
+// ctaCurrentDateInstant is now where a timezoneFrag spells its offset — a whole
+// number of minutes from -14:00 to +14:00 (xmlschema11-2 timezoneFrag) — and
+// now.UTC() otherwise, so an unspellable offset renders no wrong or invalid
+// lexical.
+func ctaCurrentDateInstant(now time.Time) time.Time {
+	_, off := now.Zone()
+	if off%60 != 0 || off > 14*3600 || off < -14*3600 {
+		return now.UTC()
+	}
+	return now
 }
 
 // ctaDistinctValuesItem evaluates n (ctaDistinctValues.eval) and converts

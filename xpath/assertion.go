@@ -679,11 +679,13 @@ func CompileAssertionTest(expr xsd.XPathExpression, types xsd.TypeResolver, cont
 // now is the dynamic context's current dateTime (xpath20.md §2.1.2), which
 // fn:current-date reads as the xs:date of now in now's own UTC offset
 // (xpath-functions.md §16.4, §17.1.5); the implicit timezone stays Z whatever
-// now's offset is. cvc-xpath clause 6 makes the current dateTime constant
-// during an assessment episode, so the caller hands every evaluation of one
-// episode the same instant. Its consumer is validate, which reads the clock
-// once per Validator.Assess and passes that instant here and to
-// [FacetAssertions].
+// now's offset is. An offset no timezoneFrag can spell — not a whole number of
+// minutes, or outside -14:00 to +14:00 (xmlschema11-2 timezoneFrag) — is
+// replaced by UTC: the date is that of now.UTC(), with timezone Z. cvc-xpath
+// clause 6 makes the current dateTime constant during an assessment episode,
+// so the caller hands every evaluation of one episode the same instant. Its
+// consumer is validate, which reads the clock once per Validator.Assess and
+// passes that instant here and to [FacetAssertions].
 //
 // counts is the [Tally] t.Tally() made for this evaluation, filled with E's
 // subtree on the terms that type states, and nil exactly where t.Tally() is

@@ -34,8 +34,9 @@ func cdEval(t *testing.T, expr string, now time.Time) bool {
 // 2026-10-07 at Z, so it is less. Two calls in one {test} return the same date
 // (§16.4 "stable"; cvc-xpath clause 6). Every row declines with the
 // "current-date" arm of ctaParser.libraryCall removed; the two `eq
-// xs:date(...)` rows, the string row and the last row fail with
-// ctaCurrentDateItem rendering in.now.UTC().
+// xs:date(...)` rows and the string row fail with ctaCurrentDateItem rendering
+// in.now.UTC(). The last row survives that mutation, 2026-10-06Z being less
+// than 2026-10-07 too: it pins the implicit timezone Z, not the offset.
 func TestAssertionCurrentDate(t *testing.T) {
 	for _, tc := range []struct {
 		expr string
@@ -70,11 +71,37 @@ func TestAssertionCurrentDateReadsTheInstantHandedIn(t *testing.T) {
 	}
 }
 
+// An instant whose offset no timezoneFrag spells — not a whole number of
+// minutes, or beyond ±14:00 — is read in UTC: 2026-10-07T00:30 at +01:00:30 or
+// +15:00 is 2026-10-06 in UTC, dated 2026-10-06Z. With ctaCurrentDateItem
+// formatting in.now unsettled, the +01:00:30 row renders 2026-10-07+01:00, a
+// different date, and the +15:00 row renders an invalid lexical and raises.
+// ±14:00 is spelled, keeping its own date and offset: the last two rows fail
+// with the bound tested as >= 14*3600.
+func TestAssertionCurrentDateUnspellableOffset(t *testing.T) {
+	for _, tc := range []struct {
+		offset int
+		expr   string
+	}{
+		{3600 + 30, "current-date() eq xs:date('2026-10-06Z')"},
+		{15 * 3600, "current-date() eq xs:date('2026-10-06Z')"},
+		{14 * 3600, "string(current-date()) = '2026-10-07+14:00'"},
+		{-14 * 3600, "string(current-date()) = '2026-10-07-14:00'"},
+	} {
+		now := time.Date(2026, time.October, 7, 0, 30, 0, 0, time.FixedZone("", tc.offset))
+		if !cdEval(t, tc.expr, now) {
+			t.Errorf("Evaluate(%q) at %v = false, want true", tc.expr, now)
+		}
+	}
+}
+
 // An assertions facet reads the instant [FacetAssertions] was built with:
 // `$value lt current-date()` holds for a past date and fails for a future one,
 // and `$value gt current-date()` the reverse. Every row declines with the
-// "current-date" arm of ctaParser.libraryCall removed, and the holding rows
-// fail with facetAssertions.Evaluate dropping f.now.
+// "current-date" arm of ctaParser.libraryCall removed. With
+// facetAssertions.Evaluate dropping f.now, the two rows over 2000-01-01 flip,
+// the zero instant 0001-01-01 preceding 2000-01-01; the rows over 2080-01-01
+// answer as before.
 func TestFacetCurrentDate(t *testing.T) {
 	date := asBuiltin(t, "date")
 	for _, tc := range []struct {

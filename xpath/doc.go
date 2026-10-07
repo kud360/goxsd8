@@ -213,7 +213,8 @@
 // FacetAssertions), which validate reads off the clock once per
 // Validator.Assess, constant for the assessment episode (cvc-xpath clause 6).
 // fn:current-date is its date in its own UTC offset (F&O §16.4, §17.1.5), not
-// in the implicit timezone. A Type Alternative's evaluation carries none: its
+// in the implicit timezone, or in UTC where no timezoneFrag spells that offset
+// (ctaCurrentDateInstant). A Type Alternative's evaluation carries none: its
 // grammar calls no function that reads one.
 //
 // An xs:decimal quotient that does not terminate is rounded to
