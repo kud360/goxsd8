@@ -379,7 +379,7 @@ func (rc restrictionCheck) boundLimit(f xsd.Facet, rule xsderr.Rule) (limit Orde
 	values := f.Values()
 	if len(values) != 1 {
 		return nil, false, xsderr.New(rule, rc.owner.Loc(),
-			"%s facet must carry exactly one value, has %d", f.Kind(), len(values))
+			"the %s facet carries %d values rather than one, so %s cannot be decided for it", f.Kind(), len(values), rule)
 	}
 	v, err := facetValue(rc.mapping, rc.whiteSpace, values[0], nil)
 	if err != nil {

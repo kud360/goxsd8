@@ -75,10 +75,16 @@ var errAssertionDeclined = errors.New("value: an assertions-facet {test} was not
 // in the {value} of the assertions facet effective on st, whose {test} is test,
 // that the evaluator declined. It is the ONE construction site of the class
 // (STYLE T4): `grep assertionDeclined(` enumerates every decline.
+// errAssertionDeclined is set as the error's Err, so it rides the chain for
+// IsAssertionDeclined while Msg opens with the assertion, never with the
+// sentinel's text (STYLE E5).
 func assertionDeclined(st *xsd.SimpleType, i, n int, test xsd.XPathExpression) error {
-	return xsderr.Wrap(ruleCvcAssertionsValid, xsderr.Loc{}, fmt.Errorf(
-		"%w: assertion %d of %d in the {value} of the assertions facet of %s, whose {test} is %q: it is undecided whether the value is facet-valid with respect to it, which cvc-assertions-valid requires",
-		errAssertionDeclined, i+1, n, simpleTypeLabel(st.Name()), test.Expression()))
+	return &xsderr.Error{
+		Rule: ruleCvcAssertionsValid,
+		Msg: fmt.Sprintf("assertion %d of %d in the {value} of the assertions facet of %s, whose {test} is %q, was not evaluated, so it is undecided whether the value is facet-valid with respect to it, which cvc-assertions-valid requires",
+			i+1, n, simpleTypeLabel(st.Name()), test.Expression()),
+		Err: errAssertionDeclined,
+	}
 }
 
 // simpleTypeLabel names the simple type whose {name} is name for a facet-stage

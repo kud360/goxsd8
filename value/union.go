@@ -65,7 +65,7 @@ func validateUnion(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexical
 	}
 	if !governed {
 		return nil, nil, typeFault(xsderr.New(ruleCvcDatatypeValid, xsderr.Loc{},
-			"value: no backend mapping governs type %s", st.Name()))
+			"%s has no governing backend mapping, so the backend cannot decide cvc-datatype-valid for it", simpleTypeLabel(st.Name())))
 	}
 	lexFacets, valFacets, assertFacets, err := compile(b, r, st, a)
 	if err != nil {
@@ -231,7 +231,7 @@ func activeBasicMember(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLex
 		return m, nil
 	}
 	return nil, typeFault(xsderr.New(ruleCvcDatatypeValid, xsderr.Loc{},
-		"value %q identifies no active member among the union's %d {member type definitions}, though validateUnion already accepted it",
+		"the literal %q is Datatype Valid against none of the union's %d {member type definitions}, though validateUnion already accepted it, so it has no ·active basic member·, which cvc-datatype-valid clause 2.3 requires",
 		rawLexical, len(members)))
 }
 
@@ -274,7 +274,7 @@ func unionMapping(b Backend, r xsd.TypeResolver, members []*xsd.SimpleType, a As
 // that still says "valid"), or reject outright when no other member accepts.
 // Reporting the whole union ungoverned instead keeps an unmapped type a BACKEND
 // gap rather than a validity verdict about instance data: it surfaces as
-// ValidateLexical's "no backend mapping governs" cvc-datatype-valid error and as a
+// ValidateLexical's "has no governing backend mapping" cvc-datatype-valid error and as a
 // skipped CheckFacetRestriction, the same way an ungoverned atomic type does.
 //
 // An EMPTY membership is vacuously governed, which is right for xs:error
