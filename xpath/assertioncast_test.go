@@ -211,18 +211,20 @@ func TestFacetAssertionsCastTheValue(t *testing.T) {
 // target nor derived from it — §17.4's cast down or across a branch and §17.1's
 // and §17.5's casts between primitives — keyed on the operand's type BELOW the
 // target: `xs:integer(@d)` over an xs:decimal shares its primitive and is
-// related by derivation the other way, and `xs:int(@x)` and
-// `xs:dateTimeStamp(@dt)` are casts down. An operand [16] ta-SimpleValue does
-// not admit — an fn:count call, an arithmetic or function result, a cast —
-// reaches a cast only as fn:string's argument, a cast to xs:string, which
-// nothing outside the string family is derived from. A cast of a cast is judged
-// by the inner cast's target (castSource), so fn:string over an xs:decimal cast
-// of a typed operand declines, while one over a cast of the string family
-// compiles as it did before castSource judged a cast. Each of the first four
-// rows compiles with castsFrom keyed on a shared primitive, and with it
-// admitting either direction; the fn:string row over `xs:decimal(@d)` compiles
-// with castSource's ctaCast arm removed, and the last row declines with that
-// arm judging a cast of the string family too.
+// related by derivation the other way, and `xs:int(@x)` and `xs:dateTimeStamp(@dt)`
+// are casts down. An operand [16] ta-SimpleValue does not admit — an fn:count call,
+// an arithmetic or function result, a cast — reaches a cast only as fn:string's
+// argument, a cast to xs:string, which nothing outside the string family is derived
+// from, and which castsFrom admits from a date/time primitive alone besides
+// (TestStringOfATypedDateAttribute). A cast of a cast is judged by the inner cast's
+// target (castSource), so fn:string over an xs:decimal cast of a typed operand
+// declines, while one over a cast of the string family compiles as it did before
+// castSource judged a cast. Each of the first four rows compiles with castsFrom
+// keyed on a shared primitive, and with it admitting either direction; the fn:string
+// row over `xs:decimal(@d)` compiles with castSource's ctaCast arm removed, and the
+// `xs:decimal(@s)` row declines with that arm judging a cast of the string family
+// too. The `xs:date(@s)` row does not: castsFrom admits a cast from xs:date to
+// xs:string whichever way castSource judges it.
 func TestCompileAssertionTestDeclinesCastsDownOrAcross(t *testing.T) {
 	for _, tc := range []struct{ expr, why string }{
 		{"xs:integer(@d) eq 5", "xs:integer is derived from xs:decimal, not the reverse"},
@@ -243,6 +245,9 @@ func TestCompileAssertionTestDeclinesCastsDownOrAcross(t *testing.T) {
 	}
 	if !afEval(t, "string(xs:date(@s)) eq '2000-01-01'", []asTyped{{uq("s"), "string", " 2000-01-01 "}}) {
 		t.Error("Evaluate(string(xs:date(@s)) eq '2000-01-01') over s=' 2000-01-01 ' = false, want true")
+	}
+	if !afEval(t, "string(xs:decimal(@s)) eq '5'", []asTyped{{uq("s"), "string", " 5.0 "}}) {
+		t.Error("Evaluate(string(xs:decimal(@s)) eq '5') over s=' 5.0 ' = false, want true")
 	}
 }
 

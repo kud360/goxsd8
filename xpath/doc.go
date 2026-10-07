@@ -77,22 +77,24 @@
 //     and a value predicate over a child read under no type a child step would read a TYPED value under, a
 //     mixed one among them, a cast from a typed attribute, child or `$value` outside the xs:string family to
 //     a type it is not derived from (F&O §17.2 case 4's identity cast and §17.3's cast up the hierarchy are
-//     admitted), fn:string over any of those or over a typed count, arithmetic or function result, or a cast
-//     of one, outside that family, a cast of an xs:float or xs:double operand to a target other than its own
-//     type or an ancestor of it, fn:string over such an operand, a collation argument, a function call of
-//     the wrong arity, the zero-argument string functions, whose implicit argument reads `.`, an arithmetic
-//     operand that is not numeric, an xs:float one against xs:double (#889), a unary sign, and a `$value`
-//     whose {simple type definition} is classified as such an attribute's type would be, or is a list of a
-//     type that would be; a `$value` over ·special· content is xs:untypedAtomic, as such an attribute is.
-//     FacetAssertions is the value.AssertionEvaluator for an assertions facet's {test} (Datatypes §4.3.13.3,
-//     cvc-assertions-valid), over the same grammar plus [47] ContextItemExpr: `$value` is bound to the value
-//     under the facet's type, or under its ·active basic member· where that type is a union (dt-xdmrep
-//     clause 4), and there is no context item, so `.`, an attribute or child step, an element step, a child
-//     path, a rooted path and a zero-argument string function each raise err:XPDY0002 and fail the facet; an
-//     fn:count call over a path declines. `.` declines everywhere else but inside a value predicate. Longer
-//     paths in other positions, the other axes, predicates in other positions or of other shapes, positional
-//     ones among them, unions outside fn:count, quantified expressions, the collation arguments and every
-//     other F&O function are PLANNED (#1042).
+//     admitted, and so is §17.1.2's cast of an xs:date, xs:dateTime or xs:time operand to xs:string itself,
+//     fn:string over one included), fn:string over any of those or over a typed count, arithmetic or
+//     function result, or a cast of one, outside that family, a cast of an xs:float or xs:double operand to
+//     a target other than its own type or an ancestor of it, fn:string over such an operand, a collation
+//     argument, a function call of the wrong arity, the zero-argument string functions, whose implicit
+//     argument reads `.`, an arithmetic operand that is not numeric, an xs:float one against xs:double
+//     (#889), a unary sign, and a `$value` whose {simple type definition} is classified as such an
+//     attribute's type would be, or is a list of a type that would be; a `$value` over ·special· content is
+//     xs:untypedAtomic, as such an attribute is. FacetAssertions is the value.AssertionEvaluator for an
+//     assertions facet's {test} (Datatypes §4.3.13.3, cvc-assertions-valid), over the same grammar plus [47]
+//     ContextItemExpr: `$value` is bound to the value under the facet's type, or under its ·active basic
+//     member· where that type is a union (dt-xdmrep clause 4), and there is no context item, so `.`, an
+//     attribute or child step, an element step, a child path, a rooted path and a zero-argument string
+//     function each raise err:XPDY0002 and fail the facet; an fn:count call over a path declines. `.`
+//     declines everywhere else but inside a value predicate. Longer paths in other positions, the other
+//     axes, predicates in other positions or of other shapes, positional ones among them, unions outside
+//     fn:count, quantified expressions, the collation arguments and every other F&O function are PLANNED
+//     (#1042).
 //  3. The full grammar (docs/specs/md/xpath20.md) and function library
 //     (docs/specs/md/xpath-functions.md) — M7 onward, ratcheted.
 //     PLANNED.

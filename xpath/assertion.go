@@ -470,7 +470,9 @@ type AssertionTest struct{ root ctaExpr }
 //     outside the xs:string family, to a target that operand's type is neither
 //     nor derived from by restriction (F&O §17.4, §17.1, §17.5) — so
 //     `xs:integer(@d)` over an xs:decimal @d declines and `xs:decimal(@i)`
-//     over an xs:int @i, §17.3's cast, does not — and a cast of an xs:float
+//     over an xs:int @i, §17.3's cast, does not, nor does a cast of an
+//     xs:date, xs:dateTime or xs:time operand to xs:string itself, §17.1.2's
+//     local value, while one to xs:token declines — and a cast of an xs:float
 //     or xs:double operand, a DoubleLiteral or (as fn:string's argument) a
 //     cast to either, to any target but its own type (F&O §17.1.2, §17.1.3
 //     and §17.1.6 over the value where §17.1's casting table marks the target
@@ -498,8 +500,9 @@ type AssertionTest struct{ root ctaExpr }
 //     engine builds no node for;
 //   - fn:string over a typed attribute, a typed child, an fn:count call, an
 //     arithmetic result, `$value`, a function result or a cast of one of them
-//     outside the xs:string family, which is the cast to xs:string the bullet
-//     above declines, and fn:string over any argument whose {primitive type
+//     outside the xs:string family and the xs:date, xs:dateTime and xs:time
+//     primitives, which is the cast to xs:string the bullet above declines,
+//     and fn:string over any argument whose {primitive type
 //     definition} is xs:float or xs:double, a literal or a cast included,
 //     which is the cast to xs:string that bullet's floating clause declines.
 //
