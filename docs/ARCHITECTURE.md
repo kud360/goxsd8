@@ -371,10 +371,9 @@ from position. `Loc` is provenance, not identity.
 `resolve.go`, `contentrestricts.go`, `complexextension.go`,
 `particleattribution.go`, the two attribute folds and the shared descent
 beneath them, and a dozen more — export **nothing at all**. The exact count
-is not maintained here and no audit should update it: it has only grown,
-and a figure in prose is a second encoding of something `go doc` and a file
-census answer better (#665). That looks like a candidate for an
-`xsd/finalize` sub-package. **It is not; do not propose the split.**
+is not maintained here and no audit should update it (STYLE D3, #665). That
+looks like a candidate for an `xsd/finalize` sub-package. **It is not; do
+not propose the split.**
 
 The constraint machinery reads and writes the components' *unexported*
 fields — `attributeusefold.go` reads `ComplexType.prohibitedAttributeNames`
