@@ -119,9 +119,11 @@ const ruleCvcComplexContent xsderr.Rule = "cvc-complex-content"
 // gathering elsewhere would hold the whole of an element's text for nothing.
 //
 // sawElement and sawText record which kinds of [[children]] arrived, which is
-// what cvc-elt clause 5's case split and clause 5.2.2.1 quantify over. They are
-// not derivable from initial, which is gathered conditionally and holds nothing
-// for the elements whose text no clause reads.
+// what cvc-elt clause 5's case split and clause 5.2.2.1 quantify over, and, for
+// a ·nilled· element, whether it has any [[children]] at all, which
+// [walk.assertionValue] reads. They are not derivable from initial, which is
+// gathered conditionally and holds nothing for the elements whose text no
+// clause reads.
 type contentCheck struct {
 	e          Element
 	g          governance
@@ -199,20 +201,17 @@ func (c *contentCheck) contentClause() string {
 // both quantify over.
 //
 // It is read off sawElement and sawText and not off initial, which is gathered
-// conditionally. The answer is correct for an element that is not ·nilled·, and
-// for one that is it reports true whatever the [[children]] were — which is why
-// both readers settle ·nilled· BEFORE they ask (elementDefault takes it as its
-// own parameter, fixedValue returns on c.nilled), and why a third must too.
-//
-// The asymmetry is in text and element: on the non-·nilled· path each sets its
-// flag before any charge those same [[children]] provoke, so a later run or item
-// arriving after the element is charged leaves the flags untouched and the one
-// that did the charging has already set one of them. On the ·nilled· path both
-// charge cvc-elt clause 3.2.3.1 and return BEFORE the write, so a ·nilled·
-// element carrying [[children]] leaves both clear. Nothing reads a wrong answer
-// out of that today, and clause 5's case split excludes a ·nilled· element from
-// clause 5.1 in any case, but the flags are a record of what the CHARGES saw and
-// not of what the [[children]] held.
+// conditionally. The answer is correct whether or not the element is ·nilled·:
+// text and element each set their flag before any charge those same
+// [[children]] provoke — cvc-elt clause 3.2.3.1's on the ·nilled· path among
+// them — so a later run or item arriving after the element is charged leaves
+// the flags untouched and the one that did the charging has already set one of
+// them. The flags therefore say whether ANY [[child]] arrived, and which kind
+// came first, but not every kind that arrived after a charge. A ·nilled· element
+// is excluded from clause 5.1 and from clause 5.2.2 all the same
+// (elementDefault takes it as its own parameter, fixedValue returns on
+// c.nilled); [walk.assertionValue] asks it of a ·nilled· element to withhold
+// its assertions where it has [[children]].
 func (c *contentCheck) empty() bool {
 	return !c.sawElement && !c.sawText
 }
@@ -335,13 +334,13 @@ func (c *contentCheck) text(w *walk, t Text) {
 	if c.charged || t.Data() == "" {
 		return
 	}
+	c.sawText = true
 	if c.nilled {
 		c.charge(w, ruleCvcElt, "3.2.3.1", t.Loc(),
 			"the element %s has xsi:nil = true, so it is ·nilled·, but it has a character information item [[child]], and cvc-elt clause 3.2.3.1 admits no character or element information item [[children]] on a ·nilled· element",
 			c.e.Name())
 		return
 	}
-	c.sawText = true
 	if c.gathers() {
 		c.initial.WriteString(t.Data())
 	}
@@ -407,13 +406,13 @@ func (c *contentCheck) element(w *walk, child Element) (a xsd.Attribution, undec
 	if c.charged {
 		return nil, c.g.typeUndetermined()
 	}
+	c.sawElement = true
 	if c.nilled {
 		c.charge(w, ruleCvcElt, "3.2.3.1", child.Loc(),
 			"the element %s has xsi:nil = true, so it is ·nilled·, but it has the element information item %s among its [[children]], and cvc-elt clause 3.2.3.1 admits no character or element information item [[children]] on a ·nilled· element",
 			c.e.Name(), child.Name())
 		return nil, c.g.typeUndetermined()
 	}
-	c.sawElement = true
 	if st := c.g.simpleType(); st != nil {
 		c.charge(w, ruleCvcType, "3.1.2", child.Loc(),
 			"the element %s has the element information item %s among its [[children]], but its ·governing type definition· %s is a Simple Type Definition, and cvc-type clause 3.1.2 admits no element information item [[children]] on such an element",
