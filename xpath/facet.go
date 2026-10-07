@@ -117,6 +117,9 @@ func (ctaFacetFacade) computes() bool { return true }
 // `string-length() > 0` fails the facet rather than declining.
 func (ctaFacetFacade) callsLibrary() bool { return true }
 
+// conditional is true, on ctaAssertionFacade.conditional's terms.
+func (ctaFacetFacade) conditional() bool { return true }
+
 // variable compiles `$value` (clause 1.1: "no namespace URI and ... 'value' as
 // the local name") against st as ctaTypes.valueVariable classifies it, the XDM
 // representation of a value of st (dt-xdmrep), and declines every other name,

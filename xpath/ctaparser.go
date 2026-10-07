@@ -27,13 +27,15 @@ import (
 // are additive expressions or `()`, the binary operators of [13] AdditiveExpr
 // and [14] MultiplicativeExpr, and [47] ContextItemExpr `.`, which the facet
 // façade admits, and the predicate façade reads as its candidate
-// (valuePredicate) — each behind the façade (ctaFacade.comparesValues,
-// ctaFacade.variable, ctaFacade.child, ctaFacade.childPath, ctaFacade.elements,
-// ctaFacade.rooted, ctaFacade.count, ctaFacade.callsLibrary,
-// ctaFacade.computes, ctaFacade.contextItem), so a Type Alternative's {test}
-// reaches none of them. Every method below is named for the production it
-// parses, and the whole grammar is both reached and evaluated: no method here
-// is a stub, and the production-level declines are those ten façade methods'.
+// (valuePredicate), and [7] IfExpr wherever an ExprSingle stands whole in a
+// boolean position (exprSingle) — each behind the façade
+// (ctaFacade.comparesValues, ctaFacade.variable, ctaFacade.child,
+// ctaFacade.childPath, ctaFacade.elements, ctaFacade.rooted, ctaFacade.count,
+// ctaFacade.callsLibrary, ctaFacade.computes, ctaFacade.contextItem,
+// ctaFacade.conditional), so a Type Alternative's {test} reaches none of them.
+// Every method below is named for the production it parses, and the whole
+// grammar is both reached and evaluated: no method here is a stub, and the
+// production-level declines are those eleven façade methods'.
 // xpath/doc.go owns the enumeration of what declines; every other decline
 // reaching this file is ctaTypes answering ctaTypeDeclined for a comparison
 // type, a cast target or a cast operand it will not serve, ctaTypes.arithmetic
@@ -630,7 +632,7 @@ func (p *ctaParser) advance() { p.pos++ }
 // test parses [8] ta-Test, which is one OrExpr and then the end of the
 // expression: trailing tokens are not a Test, however well the prefix parsed.
 func (p *ctaParser) test() (ctaExpr, bool) {
-	x, ok := p.orExpr()
+	x, ok := p.exprSingle()
 	if !ok {
 		return nil, false
 	}
@@ -638,6 +640,54 @@ func (p *ctaParser) test() (ctaExpr, bool) {
 		return nil, false
 	}
 	return x, true
+}
+
+// exprSingle parses xpath20.md [3] ExprSingle in each position it stands whole
+// in a boolean position: the {test} itself, a parenthesized expression, fn:not's
+// argument, and the test and branches of an IfExpr (ctaIf). Its [7] IfExpr arm
+// opens with the unprefixed name `if` followed by '(' — a reserved function
+// name (xpath20.md A.3), so that pair never opens a call — and every other opening
+// is [9] ta-OrExpr's. The comma of [2] Expr is no token this grammar takes, so
+// an Expr of two or more ExprSingles declines.
+func (p *ctaParser) exprSingle() (ctaExpr, bool) {
+	if p.atName("if") && p.peek(1).kind == ctaLParen {
+		return p.ifExpr()
+	}
+	return p.orExpr()
+}
+
+// ifExpr parses xpath20.md [7] IfExpr, `"if" "(" Expr ")" "then" ExprSingle
+// "else" ExprSingle`, whose `if (` the cursor is on, where the façade admits it
+// (ctaFacade.conditional), so a Type Alternative's {test} declines it as
+// outside its required subset. Both branches are parsed whatever the test
+// will select, so a construct this engine declines in either declines the
+// {test}, and a static error in the branch evaluation never selects still
+// applies (xpath20.md §2.3.4: an expression is not rewritten to remove one).
+func (p *ctaParser) ifExpr() (ctaExpr, bool) {
+	if !p.facade.conditional() {
+		return nil, false
+	}
+	p.advance() // 'if'
+	p.advance() // '('
+	test, ok := p.exprSingle()
+	if !ok || !p.at(ctaRParen) {
+		return nil, false
+	}
+	p.advance()
+	if !p.atName("then") {
+		return nil, false
+	}
+	p.advance()
+	then, ok := p.exprSingle()
+	if !ok || !p.atName("else") {
+		return nil, false
+	}
+	p.advance()
+	otherwise, ok := p.exprSingle()
+	if !ok {
+		return nil, false
+	}
+	return ctaIf{test: test, then: then, otherwise: otherwise}, true
 }
 
 // orExpr parses [9] ta-OrExpr. A single operand yields that operand rather
@@ -683,7 +733,11 @@ func (p *ctaParser) andExpr() (ctaExpr, bool) {
 	return ctaAnd{operands: operands}, true
 }
 
-// booleanExpr parses [11] ta-BooleanExpr's three arms.
+// booleanExpr parses [11] ta-BooleanExpr's three arms. The first arm's
+// parenthesized OrExpr is read as an ExprSingle (exprSingle), so an IfExpr
+// stands inside the parentheses where the façade admits one; an `if (` in
+// this production's own position is no ExprSingle and reaches
+// constructorFunction, which declines it.
 //
 // The second and third arms both admit `QName '('` — [12] ta-BooleanFunction
 // and [18] ta-ConstructorFunction — and §3.12.6 clause 3's Note resolves that
@@ -703,7 +757,7 @@ func (p *ctaParser) andExpr() (ctaExpr, bool) {
 func (p *ctaParser) booleanExpr() (ctaExpr, bool) {
 	if p.at(ctaLParen) {
 		p.advance()
-		x, ok := p.orExpr()
+		x, ok := p.exprSingle()
 		if !ok {
 			return nil, false
 		}
@@ -756,11 +810,12 @@ func (p *ctaParser) booleanExpr() (ctaExpr, bool) {
 }
 
 // booleanFunction parses [12] ta-BooleanFunction, whose name the caller has
-// already resolved to fn:not.
+// already resolved to fn:not. Its argument is an ExprSingle (exprSingle), as
+// xpath20.md [48] FunctionCall's is.
 func (p *ctaParser) booleanFunction() (ctaExpr, bool) {
 	p.advance() // the function name
 	p.advance() // '('
-	arg, ok := p.orExpr()
+	arg, ok := p.exprSingle()
 	if !ok {
 		return nil, false
 	}
@@ -1430,6 +1485,10 @@ func (ctaPredicateFacade) computes() bool { return true }
 // the library holds none of, never reach a node.
 func (ctaPredicateFacade) callsLibrary() bool { return false }
 
+// conditional is false: a branch may be a bare value, which a predicate's root
+// may not be (ctaComparisonRooted).
+func (ctaPredicateFacade) conditional() bool { return false }
+
 // existenceLength is how many tokens at the cursor spell a conjunction of
 // attribute-existence tests, `'@' QName ('and' '@' QName)*`, and 0 where they
 // spell none. Nothing is consumed.
@@ -1667,13 +1726,16 @@ func (p *ctaParser) childPathLength(at int) int {
 
 // closesBoolean reports whether the token at offset at ahead of the cursor ends
 // a [11] ta-BooleanExpr: the end of the expression, the ')' of a parenthesized
-// OrExpr or of fn:not, or the 'and' or 'or' of the expression enclosing it.
+// OrExpr, of fn:not or of an IfExpr's test, the 'and' or 'or' of the expression
+// enclosing it, or the 'else' ending an IfExpr's then-branch (ifExpr). An
+// 'else' outside an IfExpr is a token no production takes, so the parse ends
+// unsupported after the path as it would before it.
 func (p *ctaParser) closesBoolean(at int) bool {
 	tok := p.peek(at)
 	if tok.kind == ctaEOF || tok.kind == ctaRParen {
 		return true
 	}
-	return tok.kind == ctaNameTok && (tok.text == "and" || tok.text == "or")
+	return tok.kind == ctaNameTok && (tok.text == "and" || tok.text == "or" || tok.text == "else")
 }
 
 // childPath parses the n tokens childPathLength measured at the cursor as

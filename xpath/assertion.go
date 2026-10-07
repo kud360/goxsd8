@@ -724,6 +724,12 @@ func (n ctaEffectiveBoolean) readsChild(name xsd.QName) bool { return n.operand.
 // readsChild is false: the node holds no operand.
 func (ctaTypeError) readsChild(xsd.QName) bool { return false }
 
+// readsChild reports whether the test or either branch holds a child value
+// step naming name: which branch is evaluated is not known until E is.
+func (n ctaIf) readsChild(name xsd.QName) bool {
+	return n.test.readsChild(name) || n.then.readsChild(name) || n.otherwise.readsChild(name)
+}
+
 // ctaAnyReadsChild is readsChild over each of operands.
 func ctaAnyReadsChild(operands []ctaExpr, name xsd.QName) bool {
 	for _, o := range operands {
@@ -835,6 +841,12 @@ func (n ctaEffectiveBoolean) counted(into []ctaTallied) []ctaTallied {
 	return n.operand.counted(into)
 }
 
+// counted appends each path the test, then either branch, counts over, on
+// readsChild's terms.
+func (n ctaIf) counted(into []ctaTallied) []ctaTallied {
+	return n.otherwise.counted(n.then.counted(n.test.counted(into)))
+}
+
 // counted appends each path the cast's operand counts over.
 func (n ctaCast) counted(into []ctaTallied) []ctaTallied { return n.operand.counted(into) }
 
@@ -942,6 +954,10 @@ func (ctaAssertionFacade) computes() bool { return true }
 // callsLibrary is true, on comparesValues' terms: the F&O function library is
 // in full XPath 2.0.
 func (ctaAssertionFacade) callsLibrary() bool { return true }
+
+// conditional is true, on comparesValues' terms: §3.8's IfExpr is in full
+// XPath 2.0.
+func (ctaAssertionFacade) conditional() bool { return true }
 
 // ctaValueName is the ·expanded name· of the one variable an assertion's
 // static context holds (cvc-assertion clause 2.3): "no namespace URI and ...
