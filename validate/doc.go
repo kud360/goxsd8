@@ -395,7 +395,8 @@
 // element whose ·governing type definition· is a complex type with
 // {assertions}, once its [[children]] are exhausted: each member whose {test}
 // xpath compiles when the element is entered — the §3.12.6 grammar plus the
-// value comparisons, `$value`, a one-step child-axis path, a "/"-rooted one,
+// value comparisons, `$value`, `.` over simple content, an integer sequence as
+// a general comparison's operand, a one-step child-axis path, a "/"-rooted one,
 // arithmetic, the F&O string and sequence functions xpath.CompileAssertionTest
 // lists, fn:count over a one-step child, descendant or attribute path or over
 // `$value`, and fn:exists, fn:empty or the ·effective boolean value· of a
@@ -408,18 +409,20 @@
 // mixed content (xpath-datamodel §6.2.4) — the counts of the nodes of its
 // subtree, reported to each counting {test}'s xpath.Tally as the walk passes
 // them, each element by its chain of names below the counting element, a
-// ·skipped· subtree's by name alone, and its simple content's ·actual value· —
-// is evaluated over those values and charged where it is false or raises a
-// dynamic or type error. A member xpath declines, and every member of an
-// element one of whose use-matched or ·defaulted· attributes has no ·actual
-// value·, one of whose read children is not known ·valid· or not ·validly
-// substitutable· for its ·locally declared type·, or, read for its
+// ·skipped· subtree's by name alone, and its simple content's string value and
+// ·actual value· — is evaluated over those values and charged where it is false
+// or raises a dynamic or type error. A member xpath declines, and every member
+// of an element one of whose use-matched or ·defaulted· attributes has no
+// ·actual value·, one of whose read children is not known ·valid· or not
+// ·validly substitutable· for its ·locally declared type·, or, read for its
 // string-value, has no mixed content of its own or spans a ·skipped· element,
 // one of simple content or of a type not determined, or a mixed one that took
 // its {value constraint} default, whose counted subtree holds an element whose
 // ·governing type definition· was not determined and whose attribute nodes a
-// {test} counts, or whose simple content's ·actual value· is undecided, are
-// recorded as [Unevaluated] under cvc-assertion instead (cvcassertion.go).
+// {test} counts, whose simple content's ·actual value· is undecided, or whose
+// simple content's string value was not gathered because it has element
+// [[children]], are recorded as [Unevaluated] under cvc-assertion instead
+// (cvcassertion.go).
 //
 // The rest of the cvc- decisions land on the walk [Validator.Assess]
 // already makes. Non-fatal warnings get an accessor of their own the day

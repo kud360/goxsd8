@@ -167,13 +167,17 @@ func TestFacetAssertionsOverAUnionBindTheActiveBasicMember(t *testing.T) {
 	}
 }
 
-// `.` is the facet façade's alone: a Type Alternative's {test} and an
-// assertion's still decline it, where the context item is E.
+// `.` raises on the facet façade alone: a Type Alternative's {test} declines
+// it, and an assertion's, whose context item is E, declines it as a node — `.`
+// and `not(.)` — and reads it as E's string value where it is atomized,
+// `. = 'x'` (TestAssertionContextItemIsTheStringValue).
 func TestContextItemDeclinesOutsideTheFacet(t *testing.T) {
 	for _, expr := range []string{".", ". = 'x'", "not(.)"} {
 		if _, ok := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); ok {
 			t.Errorf("CompileCTATest(%q): compiled, want declined", expr)
 		}
+	}
+	for _, expr := range []string{".", "not(.)"} {
 		if _, ok := CompileAssertionTest(ctaExprRecord(expr, ""), seededTypes, xsd.SimpleContent{SimpleType: asBuiltin(t, "string")}, asUses(t, nil), asNoElems); ok {
 			t.Errorf("CompileAssertionTest(%q): compiled, want declined", expr)
 		}

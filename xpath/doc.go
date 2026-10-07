@@ -55,16 +55,21 @@
 //     one, each node counted once (§3.3.3), or over an operand that is no path, whose items it counts
 //     (`count($value)`, a list's items), xpath20.md §3.4's binary arithmetic (`+`, `-`, `*`, `div`, `idiv`,
 //     `mod`) over numeric operands, whose dynamic errors err:FOAR0001 and err:FOAR0002 are charged like any
-//     other, and F&O's string and sequence core — fn:contains, fn:starts-with and fn:ends-with under the
+//     other, F&O's string and sequence core — fn:contains, fn:starts-with and fn:ends-with under the
 //     codepoint collation, fn:string-length, fn:normalize-space, fn:string, fn:empty, fn:exists,
 //     fn:distinct-values (§15.1.6, by eq, one NaN surviving), fn:true and fn:false, `()` admitted as an
 //     argument, whose xs:string? arguments raise err:XPTY0004 for an item of another type or for two or more
-//     items, and §3.8's `if (Expr) then ExprSingle else ExprSingle` wherever an ExprSingle stands whole in
-//     a boolean position, evaluating only the branch its test's ·effective boolean value· selects — all of
-//     which a Type Alternative's {test} still declines. AssertionTest.ReadsChild reports which children a
-//     compiled {test} reads for their values — a value predicate's children among them, counted over
-//     ChildElements — so its caller keeps no other; neither any other fn:count argument nor a path whose
-//     existence is asked reads a value, and AssertionTest.Tally makes the Tally its caller reports E's
+//     items, [47] ContextItemExpr `.` over simple content, atomized to one xs:untypedAtomic holding E's
+//     string value (cvc-assertion clause 2.3.1's Note) — never `$value` — which ValueBinding carries beside
+//     `$value` and which the zero-argument fn:string, fn:string-length and fn:normalize-space read, as a
+//     general comparison's operand, an integer sequence: [11] RangeExpr over IntegerLiterals, bare or
+//     parenthesized, or a parenthesized comma sequence of IntegerLiterals and such ranges, `(1 to 10, 20,
+//     30)` (§3.3.1), and §3.8's `if (Expr) then ExprSingle else ExprSingle` wherever an ExprSingle stands
+//     whole in a boolean position, evaluating only the branch its test's ·effective boolean value· selects —
+//     all of which a Type Alternative's {test} still declines. AssertionTest.ReadsChild reports which
+//     children a compiled {test} reads for their values — a value predicate's children among them, counted
+//     over ChildElements — so its caller keeps no other; neither any other fn:count argument nor a path
+//     whose existence is asked reads a value, and AssertionTest.Tally makes the Tally its caller reports E's
 //     subtree to — each element by its chain of names below E, with the names of its attribute nodes
 //     (Tally.Element), Tally.CountsAttributesAt telling it at which depths those names can change a count —
 //     and Evaluate reads the counts off, so no counted node is kept. It declines what tier 1 declines, plus
@@ -83,20 +88,23 @@
 //     over one included), fn:string over any of those or over a typed count, arithmetic or function result,
 //     or a cast of one, outside that family and those primitives, a cast of an xs:float or xs:double operand
 //     to a target other than its own type or an ancestor of it, fn:string over such an operand, a collation
-//     argument, a function call of the wrong arity, the zero-argument string functions, whose implicit
-//     argument reads `.`, an arithmetic operand that is not numeric, an xs:float one against xs:double
-//     (#889), a unary sign, and a `$value` whose {simple type definition} is classified as such an
-//     attribute's type would be, or is a list of a type that would be; a `$value` over ·special· content is
-//     xs:untypedAtomic, as such an attribute is. FacetAssertions is the value.AssertionEvaluator for an
-//     assertions facet's {test} (Datatypes §4.3.13.3, cvc-assertions-valid), over the same grammar plus [47]
-//     ContextItemExpr: `$value` is bound to the value under the facet's type, or under its ·active basic
-//     member· where that type is a union (dt-xdmrep clause 4), and there is no context item, so `.`, an
-//     attribute or child step, an element step, a child path, a rooted path and a zero-argument string
-//     function each raise err:XPDY0002 and fail the facet; an fn:count call over a path declines. `.`
-//     declines everywhere else but inside a value predicate. Longer paths in other positions, the other
-//     axes, predicates in other positions or of other shapes, positional ones among them, unions outside
-//     fn:count, quantified expressions, a conditional read as an item rather than for its ·effective boolean
-//     value·, the collation arguments and every other F&O function are PLANNED (#1042).
+//     argument, a function call of the wrong arity, `.` under content that is not simple or where it is a
+//     node — the whole operand of an ·effective boolean value·, fn:not, fn:exists, fn:empty or fn:count —
+//     and the zero-argument string functions wherever `.` declines, an integer sequence in any other
+//     position or over any other operand, or longer than ctaMaxSequenceLength, an arithmetic operand that
+//     is not numeric, an xs:float one against xs:double (#889), a unary sign, and a `$value` whose {simple
+//     type definition} is classified as such an attribute's type would be, or is a list of a type that
+//     would be; a `$value` over ·special· content is xs:untypedAtomic, as such an attribute is.
+//     FacetAssertions is the value.AssertionEvaluator for an assertions facet's {test} (Datatypes
+//     §4.3.13.3, cvc-assertions-valid), over the same grammar: `$value` is bound to the value under the
+//     facet's type, or under its ·active basic member· where that type is a union (dt-xdmrep clause 4), and
+//     there is no context item, so `.`, an attribute or child step, an element step, a child path, a rooted
+//     path and a zero-argument string function each raise err:XPDY0002 and fail the facet; an fn:count call
+//     over a path declines. A Type Alternative's {test} declines `.` everywhere. Longer paths in other
+//     positions, the other axes, predicates in other positions or of other shapes, positional ones among
+//     them, unions outside fn:count, quantified expressions, a conditional read as an item rather than for
+//     its ·effective boolean value·, the collation arguments and every other F&O function are PLANNED
+//     (#1042).
 //  3. The full grammar (docs/specs/md/xpath20.md) and function library
 //     (docs/specs/md/xpath-functions.md) — M7 onward, ratcheted.
 //     PLANNED.
@@ -165,6 +173,9 @@
 //     holds the {simple type definition} it is of, which every comparison and cast
 //     reads — or, over a ·special· {simple type definition}, an xs:untypedAtomic
 //     value (Datatypes dt-xdmrep clause 1), which XPath's own casting rules type.
+//     Beside it ValueBinding carries E's string value, which `.` reads as one
+//     xs:untypedAtomic whatever `$value` is: the context item is E, annotated
+//     xs:anyType in the partial ·PSVI· (cvc-assertion clause 1.2).
 //     It is an ASSERTION binding: ta-props-correct adds no variable, so no CTA
 //     {test} sees one.
 //   - xpathDefaultNamespace supplies the default ELEMENT/TYPE namespace

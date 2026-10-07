@@ -25,23 +25,27 @@ import (
 // an operand a library call takes as its argument (countCall), a call
 // to one of the F&O string and sequence functions (libraryCall) whose arguments
 // are additive expressions or `()`, the binary operators of [13] AdditiveExpr
-// and [14] MultiplicativeExpr, and [47] ContextItemExpr `.`, which the facet
-// façade admits, and the predicate façade reads as its candidate
-// (valuePredicate), and [7] IfExpr wherever an ExprSingle stands whole in a
-// boolean position (exprSingle) — each behind the façade
+// and [14] MultiplicativeExpr, [47] ContextItemExpr `.`, which the assertion
+// and facet façades admit, and the predicate façade reads as its candidate
+// (valuePredicate), [7] IfExpr wherever an ExprSingle stands whole in a
+// boolean position (exprSingle), and, as a general comparison's operand, an
+// integer sequence, [11] RangeExpr or §3.3.1's comma sequence over
+// IntegerLiterals (integerSequence, ctasequence.go) — each behind the façade
 // (ctaFacade.comparesValues, ctaFacade.variable, ctaFacade.child,
 // ctaFacade.childPath, ctaFacade.elements, ctaFacade.rooted, ctaFacade.count,
 // ctaFacade.callsLibrary, ctaFacade.computes, ctaFacade.contextItem,
-// ctaFacade.conditional), so a Type Alternative's {test} reaches none of them.
-// Every method below is named for the production it parses, and the whole
-// grammar is both reached and evaluated: no method here is a stub, and the
-// production-level declines are those eleven façade methods'.
-// xpath/doc.go owns the enumeration of what declines; every other decline
-// reaching this file is ctaTypes answering ctaTypeDeclined for a comparison
-// type, a cast target or a cast operand it will not serve, ctaTypes.arithmetic
-// declining an operand pair, a library call of an arity its function does not
-// have, a predicate or a union operand outside the shapes predicate,
-// valuePredicate and ctaUnionOf admit, or the façade declining a NameTest, a
+// ctaFacade.conditional, ctaFacade.constructsSequences), so a Type
+// Alternative's {test} reaches none of them. Every method below is named for
+// the production it parses, and the whole grammar is both reached and
+// evaluated: no method here is a stub, and the production-level declines are
+// those twelve façade methods'. xpath/doc.go owns the enumeration of what
+// declines; every other decline reaching this file is ctaTypes answering
+// ctaTypeDeclined for a comparison type, a cast target or a cast operand it
+// will not serve, ctaTypes.arithmetic declining an operand pair, a library call
+// of an arity its function does not have, a predicate or a union operand
+// outside the shapes predicate, valuePredicate and ctaUnionOf admit, `.`
+// standing as a node (booleanExpr, presenceCall), an integer sequence
+// integerSequence does not build, or the façade declining a NameTest, a
 // variable's type or a settled comparison type, which the production that asked
 // propagates unchanged.
 
@@ -271,7 +275,7 @@ const (
 	ctaSlashTok
 	ctaSlashSlashTok
 	// ctaDotTok is a '.' that opens no NumericLiteral: the [47]
-	// ContextItemExpr, which the facet and predicate façades admit
+	// ContextItemExpr, which the assertion, facet and predicate façades admit
 	// (ctaFacade.contextItem), or the context item an fn:count argument's or
 	// an element step's `./` or `.//` opens with (ctaParser.countPath).
 	// '..', the abbreviated parent step, is not tokenized at all.
@@ -283,8 +287,9 @@ const (
 	ctaPlusTok
 	ctaMinusTok
 	// ctaCommaTok is ',', which separates the arguments of a call to one of the
-	// F&O functions the façade admits (ctaParser.arguments) and is read nowhere
-	// else, so a comma in any other position is a token no production takes.
+	// F&O functions the façade admits (ctaParser.arguments) and the members of
+	// an integer sequence (ctaParser.integerSequence), and is read nowhere else,
+	// so a comma in any other position is a token no production takes.
 	ctaCommaTok
 	// ctaLBracketTok is '[' and ctaRBracketTok is ']', which open and close
 	// xpath20.md [40] Predicate, read only after a child step of an fn:count
@@ -754,7 +759,27 @@ func (p *ctaParser) andExpr() (ctaExpr, bool) {
 // one child step leaves a '/' after it a token no production takes, and
 // declines, and so does a `.` before a '/' or '//'; one step is childStep's,
 // whose value is read.
+//
+// A left operand that is an integer sequence (integerSequenceLength) is read
+// as one where a general comparator follows it, ahead of the `(` arm, which
+// would read its parenthesis as a boolean one.
+//
+// GAP(xpath): the context item `.` with its Comparator absent declines, so `.`
+// and `not(.)` do: there it is a node, whose ·effective boolean value· is
+// rule 2's (xpath20.md §2.4.3), and never that of the atom ctaContextAtom
+// reads. The direction is the withhold [CompileAssertionTest] reports. (#1042)
 func (p *ctaParser) booleanExpr() (ctaExpr, bool) {
+	if n := p.integerSequenceLength(0); n > 0 && p.peek(n).kind == ctaCompTok {
+		left, ok := p.integerSequence(n)
+		if !ok {
+			return nil, false
+		}
+		op, compared := p.comparator()
+		if !compared {
+			return nil, false
+		}
+		return p.generalComparison(op, left)
+	}
 	if p.at(ctaLParen) {
 		p.advance()
 		x, ok := p.exprSingle()
@@ -793,9 +818,21 @@ func (p *ctaParser) booleanExpr() (ctaExpr, bool) {
 	}
 	op, compared := p.comparator()
 	if !compared {
+		if _, isContext := left.(ctaContextAtom); isContext {
+			return nil, false
+		}
 		return ctaEffectiveBoolean{operand: left}, true
 	}
-	right, ok := p.additiveExpr()
+	return p.generalComparison(op, left)
+}
+
+// generalComparison parses the right operand of a general comparison
+// (xpath20.md §3.5.2) whose left operand and operator are already read —
+// an integer sequence or an additiveExpr (generalOperand) — and builds its
+// node, typed by ctaTypes.comparison: a type it cannot be compared in is the
+// err:XPTY0004 ctaTypeError, and a declined one declines.
+func (p *ctaParser) generalComparison(op ctaComparator, left ctaValue) (ctaExpr, bool) {
+	right, ok := p.generalOperand()
 	if !ok {
 		return nil, false
 	}
@@ -1166,7 +1203,8 @@ func (p *ctaParser) unaryStringCall(op ctaUnaryStringOp) (ctaValue, bool) {
 
 // argumentOrDot is the one argument args holds, or, where it holds none, the
 // context item `.`, which is p.facade's (ctaFacade.contextItem): the assertion
-// façade declines it, and the facet façade's raises err:XPDY0002.
+// façade's is E's string value over simple content and declines otherwise,
+// and the facet façade's raises err:XPDY0002.
 func (p *ctaParser) argumentOrDot(args []ctaValue) (ctaValue, bool) {
 	if len(args) == 1 {
 		return args[0], true
@@ -1217,9 +1255,17 @@ func (p *ctaParser) stringOf(arg ctaValue) (ctaValue, bool) {
 // `item()*` argument (xpath-functions.md §15.1.4, §15.1.5), which is not
 // atomized (presenceArgument), and whose result is xs:boolean. A boolean that
 // does not resolve declines.
+//
+// GAP(xpath): the context item `.` as the whole argument declines: there it is
+// a node, E, which fn:exists and fn:empty do not atomize, and never the atom
+// ctaContextAtom reads. The direction is the withhold [CompileAssertionTest]
+// reports. (#1042)
 func (p *ctaParser) presenceCall(op ctaPresenceOp) (ctaValue, bool) {
 	operand, ok := p.presenceArgument()
 	if !ok {
+		return nil, false
+	}
+	if _, isContext := operand.(ctaContextAtom); isContext {
 		return nil, false
 	}
 	boolean, resolved := p.types.simple(ctaBuiltin("boolean"))
@@ -1489,6 +1535,11 @@ func (ctaPredicateFacade) callsLibrary() bool { return false }
 // may not be (ctaComparisonRooted).
 func (ctaPredicateFacade) conditional() bool { return false }
 
+// constructsSequences is false: a value predicate compares the candidate
+// against literals, casts and arithmetic alone, and `N[. = (1 to 3)]` declines
+// with every other predicate outside that shape (ctaParser.predicate).
+func (ctaPredicateFacade) constructsSequences() bool { return false }
+
 // existenceLength is how many tokens at the cursor spell a conjunction of
 // attribute-existence tests, `'@' QName ('and' '@' QName)*`, and 0 where they
 // spell none. Nothing is consumed.
@@ -1635,8 +1686,8 @@ func (p *ctaParser) constructorFunction() (ctaValue, bool) {
 
 // simpleValue parses [16] ta-SimpleValue's two arms, the arms the assertion
 // façade adds — [44] VarRef (varRef), a child-axis step (childStep), and a
-// rooted path (rootedPath) — and [47] ContextItemExpr, which the facet and
-// predicate façades add. A name opens the unabbreviated attribute axis only
+// rooted path (rootedPath) — and [47] ContextItemExpr, which the assertion,
+// facet and predicate façades add. A name opens the unabbreviated attribute axis only
 // where `::` follows the name `attribute`, and a child-axis step otherwise.
 func (p *ctaParser) simpleValue() (ctaValue, bool) {
 	switch p.peek(0).kind {

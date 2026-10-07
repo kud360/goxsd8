@@ -72,7 +72,9 @@ func (facetAssertions) Evaluate(b value.Backend, r xsd.TypeResolver, st *xsd.Sim
 	if defect.kind != ctaNoDefect {
 		return value.AssertionDeclined
 	}
-	in := ctaTypedInput{attrs: noTypedAttributes, children: noChildElements, value: BindValue(Typed(v))}
+	// No string value is bound: the facet tree never reads one, since `.`
+	// compiles to ctaNoContextItem (cvc-assertions-valid clause 1.2).
+	in := ctaTypedInput{attrs: noTypedAttributes, children: noChildElements, value: BindValue("", Typed(v))}
 	if ctaEval(root, ctaEnv{backend: b, types: r, input: in}) != ctaTrue {
 		return value.AssertionFails
 	}
@@ -119,6 +121,10 @@ func (ctaFacetFacade) callsLibrary() bool { return true }
 
 // conditional is true, on ctaAssertionFacade.conditional's terms.
 func (ctaFacetFacade) conditional() bool { return true }
+
+// constructsSequences is true, on ctaAssertionFacade.constructsSequences'
+// terms.
+func (ctaFacetFacade) constructsSequences() bool { return true }
 
 // variable compiles `$value` (clause 1.1: "no namespace URI and ... 'value' as
 // the local name") against st as ctaTypes.valueVariable classifies it, the XDM
