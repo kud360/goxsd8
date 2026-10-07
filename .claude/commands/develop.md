@@ -227,8 +227,9 @@ counts.
    accept it runs and banks the ratchet as its agent file requires, and its
    bank commit comes onto `wip/issue-<N>` under the same hand-off clause as
    mason's (#1812). On reject: one repair round by mason, briefed from the
-   whole posted verdict — never from a partial finding set, and never
-   before the verdict is posted (#1426) — then re-judge in full. On a
+   whole posted verdict, each defect class's site list carried whole with
+   the sites it rules sound (#2449) — never from a partial finding set, and
+   never before the verdict is posted (#1426) — then re-judge in full. On a
    second reject: park per WORKFLOW, then go to step 6's log entry and
    stop. On accept, dispose of the verdict's remaining findings per
    WORKFLOW's **After the verdict** before step 6.

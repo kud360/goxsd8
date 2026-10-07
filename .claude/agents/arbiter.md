@@ -90,6 +90,12 @@ FINDINGS:
 - [STYLE-ID or spec-rule] file:line — problem, one line each
 ```
 
+A finding against one arm or site of a mechanism states the condition that
+makes it wrong, and the verdict rules every other arm or site where that
+condition can hold: each unsound one is a FINDINGS line of its own, and the
+sound ones are named on the line of the finding whose condition they clear
+(#2449).
+
 A verdict missing `RATCHET-STATE` is incomplete, not merely short a
 paragraph. Say each thing once: a count, summary or inventory in a verdict
 is derived from its FINDINGS, never written ahead of them (#641). A
