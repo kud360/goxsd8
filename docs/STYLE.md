@@ -120,7 +120,11 @@ This binds prose as well as fields. A fact stated in a doc comment, a test
 comment or a package doc is stated once and the other sites point at it — a
 paraphrase is a second encoding, so a verdict that corrects one copy leaves
 the reviewer no text to grep for the rest, and the copy that survives
-longest is the one inside the test that pins the behaviour (#925).
+longest is the one inside the test that pins the behaviour (#925). Leave a
+package's export inventory to `go doc`: a count of its exported identifiers,
+or a list that reads as all of them ("Its top-level exports are …"), is a
+second encoding, and prose names an exported identifier only where it states
+the consumer that uses it.
 
 **D4. No cycle checks — build in phases.** Structure construction so cycles
 cannot exist at traversal time: parse into raw documents, resolve references
