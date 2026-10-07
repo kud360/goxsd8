@@ -19,11 +19,14 @@ push the heartbeat WORKFLOW's lease invariant requires before a round.
 **A brief carries the issue and never narrows the delegate's own file.**
 Paste the body's `## Goal`, `## Spec` and `## Acceptance` and every thread
 comment that declares itself normative into the request verbatim: the
-oracle has no tool that reads GitHub (#2142). A brief names the gate only
-as CLAUDE.md's gate, whole (#1959); never bars or reshapes a duty the
-delegate's agent file assigns it, the arbiter's ratchet run on accept above
-all (#1812); never asks a subagent to push, since its commits leave its
-worktree only through WORKFLOW's hand-off (#2133); and never names a
+oracle has no tool that reads GitHub (#2142). A judge round's brief also
+pastes the `GROUNDING:` comment and the latest `MASON:` account whole, and
+a round-2 judge brief the round-1 verdict whole, so the arbiter states its
+outcome with no GitHub read of the thread (#2449). A brief names the gate
+only as CLAUDE.md's gate, whole (#1959); never bars or reshapes a duty the
+delegate's agent file assigns it, the arbiter's ratchet run on accept
+above all (#1812); never asks a subagent to push, since its commits leave
+its worktree only through WORKFLOW's hand-off (#2133); and never names a
 `Co-Authored-By` model — each commit names the model that wrote it
 (#1996).
 
