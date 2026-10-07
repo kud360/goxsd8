@@ -145,6 +145,12 @@ func (ctaFacetFacade) constructsSequences() bool { return true }
 // dynamic error, the castable expression as a whole fails" (ctaCastableItem).
 func (ctaFacetFacade) castable() bool { return true }
 
+// instanceOf is true, on ctaAssertionFacade.instanceOf's terms. fn:data over
+// a read of the absent context item raises its ctaNoContextItem's
+// err:XPDY0002, so `data(.) instance of xs:untypedAtomic` fails the facet
+// rather than answering (ctaInstanceOfItem).
+func (ctaFacetFacade) instanceOf() bool { return true }
+
 // variable compiles `$value` (clause 1.1: "no namespace URI and ... 'value' as
 // the local name") against st as ctaTypes.valueVariable classifies it, the XDM
 // representation of a value of st (dt-xdmrep), and declines every other name,

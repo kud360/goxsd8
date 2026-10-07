@@ -66,6 +66,11 @@ var ctaNotFunction = xsd.QName{Space: ctaFunctionNS, Local: "not"}
 // ctaParser.libraryCall's.
 var ctaCountFunction = xsd.QName{Space: ctaFunctionNS, Local: "count"}
 
+// ctaDataFunction is fn:data (xpath-functions.md §2.4), which the assertion
+// and facet façades call as the operand of `instance of` and nowhere else
+// (ctaParser.dataInstanceOf).
+var ctaDataFunction = xsd.QName{Space: ctaFunctionNS, Local: "data"}
+
 // ctaNames holds the {namespace bindings} and the {default namespace} of one
 // XPath Expression property record, the bindings indexed by prefix. The map is
 // internal and never iterated into output (STYLE D2) — it is read by prefix and
@@ -998,12 +1003,13 @@ func (p *ctaParser) additiveOperator() (ctaArithOp, bool) {
 
 // multiplicativeExpr parses xpath20.md [14] MultiplicativeExpr, `UnionExpr (
 // ("*" | "div" | "idiv" | "mod") UnionExpr )*`, on additiveExpr's terms. Each
-// operand is a [14] ta-ValueExpr: the productions between UnionExpr and
-// ValueExpr are reached only through their one-operand arms, so a union — but
-// in an fn:count argument (countArgument) — a `treat`, an `instance of` and a
-// unary sign leave a token no production takes and decline.
+// operand is a [16] InstanceofExpr (instanceofExpr): the productions between
+// UnionExpr and InstanceofExpr are reached only through their one-operand
+// arms, so a union — but in an fn:count argument (countArgument) — an
+// `intersect`, an `except`, a `treat` and a unary sign leave a token no
+// production takes and decline.
 func (p *ctaParser) multiplicativeExpr() (ctaValue, bool) {
-	left, ok := p.valueExpr()
+	left, ok := p.instanceofExpr()
 	if !ok {
 		return nil, false
 	}
@@ -1012,7 +1018,7 @@ func (p *ctaParser) multiplicativeExpr() (ctaValue, bool) {
 		if !isOp {
 			return left, true
 		}
-		right, ok := p.valueExpr()
+		right, ok := p.instanceofExpr()
 		if !ok {
 			return nil, false
 		}
@@ -1043,6 +1049,133 @@ func (p *ctaParser) multiplicativeOperator() (ctaArithOp, bool) {
 	}
 	p.advance()
 	return op, true
+}
+
+// instanceofExpr parses xpath20.md [16] InstanceofExpr, `TreatExpr (
+// "instance" "of" SequenceType )?`, whose TreatExpr is reached through its
+// one-operand arm down to a [14] ta-ValueExpr (valueExpr), where the façade
+// admits the tail (ctaFacade.instanceOf), so a Type Alternative's {test}
+// declines it as outside its required subset. A call to fn:data opening it is
+// dataInstanceOf's. The operand is matched ATOMIZED (ctaInstanceOf), so an
+// operand that is a node — an attribute or child step, a path, `.` — is
+// matched only as fn:data's argument; a node itself never matches an
+// AtomicType (§2.5.4.2).
+//
+// GAP(xpath): a node operand under `instance of` without fn:data, `@d
+// instance of xs:date`, declines rather than answering for the node (false
+// over a node, true for the empty sequence under `?` or `*`). The direction is
+// the withhold [CompileAssertionTest] reports. (#1042)
+func (p *ctaParser) instanceofExpr() (ctaValue, bool) {
+	if p.facade.instanceOf() && p.at(ctaNameTok) && p.peek(1).kind == ctaLParen && p.functionName(p.peek(0).text) == ctaDataFunction {
+		return p.dataInstanceOf()
+	}
+	v, ok := p.valueExpr()
+	if !ok {
+		return nil, false
+	}
+	if !p.atName("instance") {
+		return v, true
+	}
+	if !p.facade.instanceOf() {
+		return nil, false
+	}
+	if _, isStep := v.(ctaStep); isStep {
+		return nil, false
+	}
+	if _, isContext := v.(ctaContextAtom); isContext {
+		return nil, false
+	}
+	return p.instanceTail(v)
+}
+
+// dataInstanceOf parses a call to fn:data with its one `item()*` argument
+// (xpath-functions.md §2.4), whose name the cursor is on, as the operand of
+// the `instance of` tail that must follow it (instanceTail): fn:data returns
+// "the result of atomizing a sequence" (xpath20.md §2.4.2), which is the
+// sequence ctaInstanceOf matches, so the call is no node of its own and its
+// argument is the tail's operand. Every other arity declines (err:XPST0017).
+//
+// GAP(xpath): fn:data anywhere but as the operand of `instance of` declines,
+// so `data(@d) = 1` and `string(data(.))` do: elsewhere a node operand is read
+// atomized already, and its ·effective boolean value· and fn:exists would
+// still read the node, which fn:data does not return. The direction is the
+// withhold [CompileAssertionTest] reports. (#1042)
+func (p *ctaParser) dataInstanceOf() (ctaValue, bool) {
+	args, ok := p.arguments()
+	if !ok || len(args) != 1 || !p.atName("instance") {
+		return nil, false
+	}
+	return p.instanceTail(args[0])
+}
+
+// instanceTail parses the `"instance" "of" SequenceType` tail over v, whose
+// `instance` the cursor is on, into its node, reporting false where v's static
+// type is not its items' dynamic type (ctaTypes.instanceItem) or the
+// SequenceType declines (sequenceType). An absent indicator, `?`, `*` and `+`
+// are xpath20.md [51] OccurrenceIndicator; xpath20.md A.1.2's
+// occurrence-indicators constraint makes a `*` or `+` after the AtomicType an
+// indicator and never an operator.
+func (p *ctaParser) instanceTail(v ctaValue) (ctaValue, bool) {
+	p.advance() // 'instance'
+	if !p.atName("of") {
+		return nil, false
+	}
+	p.advance()
+	item, exact := p.types.instanceItem(v)
+	if !exact {
+		return nil, false
+	}
+	matches, ok := p.sequenceType(item)
+	if !ok {
+		return nil, false
+	}
+	occurrence := p.occurrenceIndicator()
+	boolean, resolved := p.types.simple(ctaBuiltin("boolean"))
+	if !resolved {
+		return nil, false
+	}
+	read := p.types.str
+	if typed, isTyped := item.(ctaTyped); isTyped {
+		read = typed.st
+	}
+	return ctaInstanceOf{operand: v, read: read, matches: matches, occurrence: occurrence, st: boolean}, true
+}
+
+// sequenceType parses the ItemType of xpath20.md [50] SequenceType where it is
+// [53] AtomicType, a QName resolved as a TYPE name on singleType's terms, and
+// reports whether an item of type item matches it (ctaTypes.itemMatches).
+//
+// GAP(xpath): every other SequenceType declines — [54] KindTest, such as
+// assert013's `attribute(*, xs:dateTime)`, `item()` and `empty-sequence()`,
+// each a name followed by '(' — and so does an AtomicType itemMatches does not
+// admit. The direction is the withhold [CompileAssertionTest] reports. (#1042)
+func (p *ctaParser) sequenceType(item ctaStatic) (matches, ok bool) {
+	if !p.at(ctaNameTok) || p.peek(1).kind == ctaLParen {
+		return false, false
+	}
+	name := p.typeName(p.peek(0).text)
+	p.advance()
+	return p.types.itemMatches(item, name)
+}
+
+// occurrenceIndicator reads an optional xpath20.md [51] OccurrenceIndicator,
+// consuming it, or reports ctaExactlyOne where the cursor is on none. A `*`
+// is a bare ctaWildcardTok, on multiplicativeOperator's terms.
+func (p *ctaParser) occurrenceIndicator() ctaOccurrence {
+	tok := p.peek(0)
+	var o ctaOccurrence
+	switch {
+	case tok.kind == ctaQuestionTok:
+		o = ctaZeroOrOne
+	case tok.kind == ctaWildcardTok && tok.text == "*":
+		o = ctaZeroOrMore
+	case tok.kind == ctaPlusTok:
+		o = ctaOneOrMore
+	default:
+		return ctaExactlyOne
+	}
+	p.advance()
+	return o
 }
 
 // arithmetic builds the node of one binary arithmetic operator over two
@@ -1561,6 +1694,10 @@ func (ctaPredicateFacade) constructsSequences() bool { return false }
 // castable is false, on constructsSequences' terms: `N[. castable as xs:int
 // = 'true']` declines with every other predicate outside that shape.
 func (ctaPredicateFacade) castable() bool { return false }
+
+// instanceOf is false, on castable's terms: `N[. instance of xs:int]`
+// declines with every other predicate outside that shape.
+func (ctaPredicateFacade) instanceOf() bool { return false }
 
 // existenceLength is how many tokens at the cursor spell a conjunction of
 // attribute-existence tests, `'@' QName ('and' '@' QName)*`, and 0 where they
