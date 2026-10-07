@@ -35,14 +35,14 @@ import (
 // F&O string and sequence functions, evaluated in ctafunc.go; and each
 // comparison operand may be xpath20.md [13] AdditiveExpr over [14]
 // MultiplicativeExpr, whose operators are evaluated in ctaarith.go (ctaArith);
-// [47] ContextItemExpr `.` over simple content, atomized to E's string value
-// (ctaContextAtom); xpath20.md [18] CastableExpr's `castable as` tail in
-// place of [15]'s `cast as` one (ctaCastable); xpath20.md [16]
-// InstanceofExpr's `instance of` tail with an atomic SequenceType over a [14]
-// ta-ValueExpr or an fn:data call (ctaInstanceOf); and a general comparison's
-// operand may be an integer sequence, xpath20.md [11] RangeExpr or §3.3.1's
-// comma sequence over IntegerLiterals, or a string sequence, §3.3.1's comma
-// sequence over StringLiterals, evaluated in ctasequence.go (ctaIntegerRanges,
+// [47] ContextItemExpr `.`, atomized to E's string value (ctaContextAtom);
+// xpath20.md [18] CastableExpr's `castable as` tail in place of [15]'s `cast
+// as` one (ctaCastable); xpath20.md [16] InstanceofExpr's `instance of` tail
+// with an atomic SequenceType over a [14] ta-ValueExpr or an fn:data call
+// (ctaInstanceOf); and a general comparison's operand may be an integer
+// sequence, xpath20.md [11] RangeExpr or §3.3.1's comma sequence over
+// IntegerLiterals, or a string sequence, §3.3.1's comma sequence over
+// StringLiterals, evaluated in ctasequence.go (ctaIntegerRanges,
 // ctaStringSequence). The facet façade (ctaFacetFacade) takes the assertion
 // façade's grammar but fn:count over a path, and compiles every read of the
 // context item — `.`, an attribute or child step, a rooted path — to the
@@ -53,8 +53,8 @@ import (
 // steps fn:count counts over, no predicate or union but those in an fn:count
 // argument, no variable but `$value` and no function but fn:not, fn:count, the
 // twelve ctaParser.libraryCall names and fn:data as the operand of `instance
-// of` (ctaParser.instanceofExpr), so evaluating them directly is exact
-// where a fail-open delegation to a general engine would be a guess.
+// of` (ctaParser.instanceofExpr), so evaluating them directly is exact where a
+// fail-open delegation to a general engine would be a guess.
 //
 //	[8]  Test                ::= OrExpr
 //	[9]  OrExpr              ::= AndExpr ( 'or' AndExpr )*
@@ -560,8 +560,8 @@ func (ctaIf) ctaExpr()               {}
 // ctaFacade.instanceOf), and a call to an F&O string or sequence function
 // over them (ctaMatch, ctaUnaryString, ctaPresence, ctaDistinctValues,
 // ctaStringFunction; ctaFacade.callsLibrary) or to fn:current-date
-// (ctaCurrentDate), the assertion façade's `.` over simple content
-// (ctaContextAtom, ctaFacade.contextItem), and an integer or string sequence
+// (ctaCurrentDate), the assertion façade's `.` (ctaContextAtom,
+// ctaFacade.contextItem), and an integer or string sequence
 // (ctaIntegerRanges, ctaStringSequence, ctaFacade.constructsSequences). Every
 // branch answers readsChild and counted on ctaExpr's terms.
 type ctaValue interface {
@@ -704,7 +704,7 @@ type ctaEmptyValue struct{}
 type ctaUntypedValue struct{}
 
 // ctaContextAtom is the [47] ContextItemExpr `.` over E, an element whose
-// ·governing type definition· has a simple {content type}
+// ·governing type definition· has any {content type}
 // (ctaAssertionFacade.contextItem), ATOMIZED (xpath20.md §2.4.2): one
 // xs:untypedAtomic value holding E's string value, read from the
 // [ValueBinding] the evaluation carries — never `$value`'s typed value, and
@@ -2104,7 +2104,7 @@ func ctaValidated(i ctaItem) (value.Value, bool) {
 //     xs:untypedAtomic, which §3.5.2's casting rules cast STRAIGHT to c
 //     (clause 1's xs:string, or clause 2's type chosen from the other
 //     operand). No intermediate type exists to cast through.
-//   - `.` over simple content is E's string value as xs:untypedAtomic, cast
+//   - `.` is E's string value as xs:untypedAtomic, cast
 //     straight to c as an untyped attribute is.
 //   - a TYPED attribute, each typed child, a LITERAL, an fn:count call's
 //     xs:integer, each item of an integer or string sequence and each item of

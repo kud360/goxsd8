@@ -1352,8 +1352,8 @@ func (p *ctaParser) unaryStringCall(op ctaUnaryStringOp) (ctaValue, bool) {
 
 // argumentOrDot is the one argument args holds, or, where it holds none, the
 // context item `.`, which is p.facade's (ctaFacade.contextItem): the assertion
-// façade's is E's string value over simple content and declines otherwise,
-// and the facet façade's raises err:XPDY0002.
+// façade's is E's string value under every non-nil {content type} and
+// declines under a nil one, and the facet façade's raises err:XPDY0002.
 func (p *ctaParser) argumentOrDot(args []ctaValue) (ctaValue, bool) {
 	if len(args) == 1 {
 		return args[0], true

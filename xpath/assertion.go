@@ -55,9 +55,9 @@ import (
 // sequence `()`. It also admits xpath20.md §3.4's binary arithmetic operators
 // over numeric operands (ctaFacade.computes), in each comparison operand's
 // position; §3.8's [7] IfExpr wherever an ExprSingle stands whole in a boolean
-// position (ctaFacade.conditional); [47] ContextItemExpr `.` over simple
-// content, as E's string value (ctaAssertionFacade.contextItem); and, as a
-// general comparison's operand, §3.3.1's integer and string sequences
+// position (ctaFacade.conditional); [47] ContextItemExpr `.`, as E's string
+// value (ctaAssertionFacade.contextItem); and, as a general comparison's
+// operand, §3.3.1's integer and string sequences
 // (ctaFacade.constructsSequences).
 
 // AttributeTypes answers, for the element information item E whose assertions
@@ -203,20 +203,20 @@ type TypedAttributes func(yield func(name xsd.QName, v TypedValue) bool)
 
 // ValueBinding is what one evaluation reads of E itself, two independent facts
 // [BindValue] binds: E's string value, which the [47] ContextItemExpr `.`
-// atomizes to under an [xsd.SimpleContent], and the value cvc-assertion clause
+// atomizes to under every {content type}, and the value cvc-assertion clause
 // 2.3 binds to `$value`.
 //
 // The string value is always one xs:untypedAtomic value: E's annotation in the
-// partial ·PSVI· cvc-assertion clause 1.2 builds is xs:anyType
-// (xpath-datamodel §3.3.1.1, [validation attempted] partial), a complex type
-// with mixed content, whose typed value is its string value as xs:untypedAtomic
-// (xpath20.md §2.5.2) — "its atomized value will be a single atomic value of
-// type untypedAtomic", as clause 2.3.1's Note says, whatever the {simple type
-// definition}'s variety. It has no absent state: an empty E's string value is
-// the zero-length string (xpath-datamodel §6.2.4), which is xs:untypedAtomic ""
-// and never the empty sequence. A ·nilled· E is no exception either way:
-// dm:nilled is false in the partial ·PSVI·, whose [validity] is never valid, so
-// a ·nilled· E with [[children]] has their text as its string value, not "".
+// partial ·PSVI· cvc-assertion clause 1.2 builds is xs:anyType (xpath-datamodel §3.3.1.1,
+// [validation attempted] partial), a complex type with mixed content, whose typed value is
+// its string value as xs:untypedAtomic (xpath20.md §2.5.2) — "its atomized value will be a
+// single atomic value of type untypedAtomic", as clause 2.3.1's Note says, whatever E's
+// {content type} — element-only, empty and mixed as well as simple, whatever the {simple
+// type definition}'s variety. It has no absent state: an empty E's string value is the
+// zero-length string (xpath-datamodel §6.2.4), which is xs:untypedAtomic "" and never the
+// empty sequence. A ·nilled· E is no exception either way: dm:nilled is false in the
+// partial ·PSVI·, whose [validity] is never valid, so a ·nilled· E with [[children]] has
+// their text as its string value, not "".
 //
 // A nil `$value` is clause 2.3.2's empty sequence — for an E that is invalid
 // in the partial ·PSVI·, ·nilled·, or under a {content type} that is not
@@ -226,8 +226,8 @@ type TypedAttributes func(yield func(name xsd.QName, v TypedValue) bool)
 //
 // It has no third state for an E whose value is UNDECIDED: [AssertionTest.Evaluate]
 // always decides, so a caller that cannot tell which of clause 2.3's cases E is
-// in declines the assertion itself, as it does an attribute with no ·actual
-// value·.
+// in, or what E's string value is, declines the assertion itself, as it does
+// an attribute with no ·actual value·.
 type ValueBinding struct {
 	text string
 	v    TypedValue
@@ -248,8 +248,14 @@ type ValueBinding struct {
 // validate's caller makes it (the GAP(xpath) at its cvc-assertion site,
 // validate/cvcassertion.go). It is never re-normalized under the {simple type
 // definition}'s whiteSpace: `.` over xs:integer content "0030" is "0030",
-// where `$value` is 30. An invalid E has a string value all the same, so text
-// is bound where v is nil.
+// where `$value` is 30. Under every other {content type} it is the
+// concatenation of the string values of all E's Text Node descendants in
+// document order (xpath-datamodel.md:1304): each character [[child]] of E,
+// white space alone included — E is annotated xs:anyType, whose content is
+// mixed (cvc-assertion clause 1.2) — and each of a descendant, except a run
+// that is white space alone under a descendant whose {content type} is not
+// mixed, which is no Text Node (:2202). An invalid E has a string value all
+// the same, so text is bound where v is nil.
 //
 // v is the typed value of E's [schema actual value] (cvc-assertion clause
 // 2.3.1), whose arm and type the {simple type definition} of the
@@ -430,10 +436,11 @@ type AssertionTest struct{ root ctaExpr }
 // definition}, whose value [BindValue] binds at evaluation; under every other
 // {content type} it is the empty sequence (clause 2.3.2), whatever the binding.
 // A nil content declines every {test} naming `$value`. content also decides
-// `.`: under an [xsd.SimpleContent] it is E's string value, one xs:untypedAtomic
+// `.`: under every {content type} it is E's string value, one xs:untypedAtomic
 // value [BindValue] binds beside `$value`, whatever the {simple type
-// definition}'s variety, and under every other {content type}, and a nil one,
-// it declines.
+// definition}'s variety, and a nil content declines it. content decides
+// nothing else: a {test} compiling under a nil content reads neither `.` nor
+// `$value`, and compiles to the same tree under every other.
 //
 // The grammar is [CompileCTATest]'s with the value comparisons, `$value`, an
 // abbreviated child-axis step, a "/" or "//" opening one child or attribute
@@ -457,29 +464,29 @@ type AssertionTest struct{ root ctaExpr }
 // fn:not's argument or as an operand of another, whose test's ·effective
 // boolean value· selects the one branch evaluated, so a dynamic error in the
 // other is never raised, and both of whose branches are compiled, so a decline
-// in either declines the {test}; the [47] ContextItemExpr `.` over simple
-// content, atomized (§3.1.4, §2.4.2); [18] CastableExpr's `castable as` tail
-// over a [16] ta-SimpleValue, `$value castable as xs:double`, an xs:boolean
-// true exactly where the same `cast as` yields a value and false where that
-// cast raises — the empty sequence without `?`, two or more items, a lexical
-// or facet mismatch — while an error evaluating its operand raises (§3.10.3),
-// and which declines wherever that cast does; [16] InstanceofExpr's `instance
-// of` tail with an atomic SequenceType, a builtin [53] AtomicType or xs:untypedAtomic and
-// an optional `?`, `*` or `+` (§3.10.1), over an operand that is no node or over an
-// fn:data call, `data(@d) instance of xs:date*`, whose argument it atomizes
-// (xpath-functions.md §2.4) — true where the item count is one the indicator admits and
-// each item's type derives from the AtomicType (§2.5.4), never casting, so `data(.)
-// instance of xs:untypedAtomic` holds over simple content and `$value instance of
-// xs:date` over an xs:date `$value`, while an error evaluating its operand raises; and,
-// as an operand of a general comparison, an integer sequence: [11] RangeExpr `I to J`
-// over two IntegerLiterals, bare or parenthesized, or a parenthesized comma sequence of
-// IntegerLiterals and such ranges, `(1 to 10, 20, 30)` (§3.3.1), or a string sequence,
-// a parenthesized comma sequence of StringLiterals, `('a', 'b')`, whose items are
-// xs:string, so against a typed operand B.2 does not compare with xs:string, an
-// xs:integer `$value` among them, the comparison is err:XPTY0004 — added, and every
-// decline [CompileCTATest] states is this one's too, under the same static context
-// (xpath-valid clause 2.2) augmented with `$value` (cvc-assertion clause 2.2), plus
-// these, each of which is the same withhold:
+// in either declines the {test}; the [47] ContextItemExpr `.`, atomized
+// (§3.1.4, §2.4.2); [18] CastableExpr's `castable as` tail over a [16] ta-SimpleValue,
+// `$value castable as xs:double`, an xs:boolean true exactly where the same `cast as`
+// yields a value and false where that cast raises — the empty sequence without `?`, two
+// or more items, a lexical or facet mismatch — while an error evaluating its operand
+// raises (§3.10.3), and which declines wherever that cast does; [16] InstanceofExpr's
+// `instance of` tail with an atomic SequenceType, a builtin [53] AtomicType or
+// xs:untypedAtomic and an optional `?`, `*` or `+` (§3.10.1), over an operand that is no
+// node or over an fn:data call, `data(@d) instance of xs:date*`, whose argument it
+// atomizes (xpath-functions.md §2.4) — true where the item count is one the indicator
+// admits and each item's type derives from the AtomicType (§2.5.4), never casting, so
+// `data(.) instance of xs:untypedAtomic` holds over every {content type} and `$value
+// instance of xs:date` over an xs:date `$value`, while an error evaluating its operand
+// raises; and, as an operand of a general comparison, an integer sequence: [11] RangeExpr
+// `I to J` over two IntegerLiterals, bare or parenthesized, or a parenthesized comma
+// sequence of IntegerLiterals and such ranges, `(1 to 10, 20, 30)` (§3.3.1), or a string
+// sequence, a parenthesized comma sequence of StringLiterals, `('a', 'b')`. A string
+// sequence's items are xs:string. Against a typed operand outside the xs:string family,
+// an xs:integer `$value` or child among them, xpath20.md §B.2 defines no comparison and
+// it raises err:XPTY0004, while `.`, which is not typed, casts to xs:string (§3.5.2 rule
+// 2.4) — added, and every decline [CompileCTATest] states is this one's too, under the
+// same static context (xpath-valid clause 2.2) augmented with `$value` (cvc-assertion
+// clause 2.2), plus these, each of which is the same withhold:
 //
 //   - an attribute NameTest that is not a QName: a [37] Wildcard can match an
 //     attribute ·attributed to· an {attribute wildcard}, whose type is not
@@ -574,8 +581,7 @@ type AssertionTest struct{ root ctaExpr }
 //     collation argument, or to fn:distinct-values with a second (§7.3.1),
 //     which is never read as the form without it, and a call to any of the
 //     functions above with an arity it does not have (err:XPST0017);
-//   - `.` under a {content type} that is not simple, whose string value is the
-//     text of E's descendants, and `.` as the whole operand of an ·effective
+//   - `.` under a nil content, and `.` as the whole operand of an ·effective
 //     boolean value·, fn:not over one, fn:exists, fn:empty or fn:count, where it
 //     is a node and not the atom it is read as elsewhere — so `.`, `not(.)`,
 //     `exists(.)` and `count(.)` decline — and fn:string-length,
@@ -668,8 +674,8 @@ type AssertionTest struct{ root ctaExpr }
 // for their value whose type is element-only, empty or ·special·, a value
 // predicate over a mixed child, arithmetic outside the numeric operands and
 // the binary operators, conditionals whose value is read as an item rather
-// than for its ·effective boolean value·, `.` where E's string value is not an
-// input or `.` is a node, sequence expressions beyond the integer and string
+// than for its ·effective boolean value·, `.` under a nil content or where it
+// is a node, sequence expressions beyond the integer and string
 // sequences of a general comparison's operand, `castable as` over any operand
 // but a [16] ta-SimpleValue or inside a value predicate, `instance of` beyond
 // an atomic SequenceType over the operands above, the collation argument, and
@@ -710,8 +716,9 @@ func CompileAssertionTest(expr xsd.XPathExpression, types xsd.TypeResolver, cont
 // The dynamic context is cvc-xpath's — context item E, position and size 1 —
 // with the one variable cvc-assertion clause 2.3 adds to it, `$value`, bound
 // to v's typed value; `.` atomizes to v's string value. A tree compiled for a
-// {content type} that is not simple never reads v. b and types are read as
-// [CTATest.Evaluate] reads them.
+// {content type} that is not simple never reads v's typed value, `$value`
+// being the empty sequence there. b and types are read as [CTATest.Evaluate]
+// reads them.
 //
 // now is the dynamic context's current dateTime (xpath20.md §2.1.2), which
 // fn:current-date reads as the xs:date of now in now's own UTC offset
@@ -1070,7 +1077,7 @@ func (ctaCurrentDate) counted(into []ctaTallied) []ctaTallied    { return into }
 
 // ctaAssertionFacade is the assertion façade compileCTATest parses for: its
 // attribute nodes are typed by attrs, its child element nodes by elems, its
-// `$value` by content, which also decides whether `.` is read, and it declines
+// `$value` by content, a nil one of which also declines `.`, and it declines
 // the comparison types it cannot yet decide.
 type ctaAssertionFacade struct {
 	content xsd.ContentType
@@ -1290,19 +1297,20 @@ func ctaCountOf(arg ctaCounted, types ctaTypes) (ctaValue, bool) {
 	return ctaCount{arg: arg, st: integer}, true
 }
 
-// contextItem compiles the [47] ContextItemExpr `.` to ctaContextAtom where
-// content is an [xsd.SimpleContent]. The context item is E (cvc-xpath clause
-// 1), annotated xs:anyType in the partial ·PSVI· (cvc-assertion clause 1.2),
-// so `.` atomizes to one xs:untypedAtomic value, E's string value — under a
+// contextItem compiles the [47] ContextItemExpr `.` to ctaContextAtom under
+// every {content type}. The context item is E (cvc-xpath clause 1), annotated
+// xs:anyType in the partial ·PSVI· (cvc-assertion clause 1.2; the suite's
+// saxonMeta/Assert.testSet:692 reads it so), so `.` atomizes to one
+// xs:untypedAtomic value, E's string value (xpath-datamodel.md:488, :1327) —
+// under element-only, empty and mixed content as under simple, and under a
 // list or union {simple type definition} as under an atomic one, the variety
-// deciding `$value`'s type alone.
+// deciding `$value`'s type alone. Which text that string value is, is
+// [BindValue]'s caller's to supply.
 //
-// GAP(xpath): under every other {content type}, and a nil one, `.` declines:
-// E's string value is then the text of its descendants (xpath-datamodel
-// §6.2.4), which is not an [AssertionTest.Evaluate] input. The direction is
-// the withhold [CompileAssertionTest] reports. (#1042)
+// GAP(xpath): a nil content, whose governing type was not determined, declines
+// `.`. The direction is the withhold [CompileAssertionTest] reports. (#1042)
 func (f ctaAssertionFacade) contextItem() (ctaValue, bool) {
-	if _, simple := f.content.(xsd.SimpleContent); !simple {
+	if f.content == nil {
 		return nil, false
 	}
 	return ctaContextAtom{}, true

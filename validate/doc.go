@@ -399,7 +399,7 @@
 // element whose ·governing type definition· is a complex type with
 // {assertions}, once its [[children]] are exhausted: each member whose {test}
 // xpath compiles when the element is entered — the §3.12.6 grammar plus the
-// value comparisons, `$value`, `.` over simple content, an integer or string
+// value comparisons, `$value`, `.` under every {content type}, an integer or string
 // sequence as a general comparison's operand, a one-step child-axis path, a
 // "/"-rooted one, arithmetic, the F&O string and sequence functions
 // xpath.CompileAssertionTest lists, fn:count over a one-step child, descendant
