@@ -23,7 +23,7 @@ func cdEval(t *testing.T, expr string, now time.Time) bool {
 	if !ok {
 		t.Fatalf("CompileAssertionTest(%q): declined, want compiled", expr)
 	}
-	return test.Evaluate(backend(), seededTypes, asValues(t), asNoChildren, nil, ValueBinding{}, now)
+	return test.Evaluate(backend(), seededTypes, asElem, asValues(t), asNoChildren, nil, ValueBinding{}, now)
 }
 
 // fn:current-date is xs:date(fn:current-dateTime()) (xpath-functions.md §16.4)

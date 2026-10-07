@@ -402,7 +402,9 @@
 // value comparisons, `$value`, `.` under every {content type}, an integer or string
 // sequence as a general comparison's operand, a one-step child-axis path, a
 // "/"-rooted one, arithmetic, the F&O string and sequence functions
-// xpath.CompileAssertionTest lists, fn:count over a one-step child, descendant
+// xpath.CompileAssertionTest lists, fn:namespace-uri and fn:in-scope-prefixes
+// over the element itself, which xpath reads its name and in-scope namespaces
+// off as an xpath.ContextElement, fn:count over a one-step child, descendant
 // or attribute path or over `$value`, and fn:exists, fn:empty or the ·effective
 // boolean value· of a child path `a/b` or of one child or descendant step, `a`
 // or `.//a`, whatever a's type, over the element's attributes, carried or

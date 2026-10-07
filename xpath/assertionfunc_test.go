@@ -35,7 +35,7 @@ func afEval(t *testing.T, expr string, attrs []asTyped, children ...asChild) boo
 	if !ok {
 		t.Fatalf("CompileAssertionTest(%q): declined, want compiled", expr)
 	}
-	return test.Evaluate(backend(), seededTypes, asValues(t, attrs...), asChildren(t, children...), nil, ValueBinding{}, time.Time{})
+	return test.Evaluate(backend(), seededTypes, asElem, asValues(t, attrs...), asChildren(t, children...), nil, ValueBinding{}, time.Time{})
 }
 
 // afEvalValue compiles expr for an E with simple content of type st, or fails
@@ -46,7 +46,7 @@ func afEvalValue(t *testing.T, expr string, st *xsd.SimpleType, lexical string) 
 	if !ok {
 		t.Fatalf("CompileAssertionTest(%q): declined, want compiled", expr)
 	}
-	return test.Evaluate(backend(), seededTypes, asValues(t), asNoChildren, nil, asBind(t, st, lexical), time.Time{})
+	return test.Evaluate(backend(), seededTypes, asElem, asValues(t), asNoChildren, nil, asBind(t, st, lexical), time.Time{})
 }
 
 // Each string function decides both ways over an attribute, `$value` and a
@@ -163,7 +163,7 @@ func TestAssertionPresenceFunctions(t *testing.T) {
 		{asBind(t, str, ""), true},
 		{ValueBinding{}, false},
 	} {
-		if got := test.Evaluate(backend(), seededTypes, asValues(t), asNoChildren, nil, tc.bound, time.Time{}); got != tc.want {
+		if got := test.Evaluate(backend(), seededTypes, asElem, asValues(t), asNoChildren, nil, tc.bound, time.Time{}); got != tc.want {
 			t.Errorf("Evaluate(exists($value)) over %v = %v, want %v", tc.bound, got, tc.want)
 		}
 	}
@@ -172,10 +172,10 @@ func TestAssertionPresenceFunctions(t *testing.T) {
 	if !ok {
 		t.Fatal("CompileAssertionTest(exists($value)) over ·special· content: declined, want compiled")
 	}
-	if !untyped.Evaluate(backend(), seededTypes, asValues(t), asNoChildren, nil, BindValue("", Untyped("")), time.Time{}) {
+	if !untyped.Evaluate(backend(), seededTypes, asElem, asValues(t), asNoChildren, nil, BindValue("", Untyped("")), time.Time{}) {
 		t.Error("Evaluate(exists($value)) over an xs:untypedAtomic $value = false, want true")
 	}
-	if untyped.Evaluate(backend(), seededTypes, asValues(t), asNoChildren, nil, ValueBinding{}, time.Time{}) {
+	if untyped.Evaluate(backend(), seededTypes, asElem, asValues(t), asNoChildren, nil, ValueBinding{}, time.Time{}) {
 		t.Error("Evaluate(exists($value)) over the unbound xs:untypedAtomic $value = true, want false")
 	}
 }
@@ -262,7 +262,7 @@ func TestAssertionStringArgumentTypeErrors(t *testing.T) {
 		if err != nil {
 			t.Fatalf("mapping %q against the list: %v", tc.lexical, err)
 		}
-		if got := test.Evaluate(backend(), types, asValues(t), asNoChildren, nil, BindValue("", Typed(v)), time.Time{}); got != tc.want {
+		if got := test.Evaluate(backend(), types, asElem, asValues(t), asNoChildren, nil, BindValue("", Typed(v)), time.Time{}); got != tc.want {
 			t.Errorf("Evaluate(%q) over %q = %v, want %v", tc.expr, tc.lexical, got, tc.want)
 		}
 	}
@@ -365,7 +365,7 @@ func TestStringFunctionsReadTheirArguments(t *testing.T) {
 		}
 	}
 	counted := acCompile(t, asRecord("exists(count(inner))"))
-	if !counted.Evaluate(backend(), seededTypes, asValues(t), asNoChildren, acTally(counted, acEl(1, "inner")), ValueBinding{}, time.Time{}) {
+	if !counted.Evaluate(backend(), seededTypes, asElem, asValues(t), asNoChildren, acTally(counted, acEl(1, "inner")), ValueBinding{}, time.Time{}) {
 		t.Error("Evaluate(exists(count(inner))) = false, want true")
 	}
 }

@@ -87,20 +87,20 @@ const ruleCvcAssertionsValid xsderr.Rule = "cvc-assertions-valid"
 // recorded as an [Unevaluated] under cvc-assertion at e through
 // [walk.decline], never charged and never shown satisfied. The residue is: a
 // {test} xpath declines, whose GAP(xpath) markers name the grammar and type
-// residue (paths, the function library beyond its string and sequence core);
-// and every assertion of an e one of whose attributes matching an {attribute
-// use}, carried or ·defaulted·, has no ·actual value·, one of whose element
-// [[children]] a {test} reads has no typed value this package reads
+// residue (paths, the function library beyond what [xpath.CompileAssertionTest]
+// lists); and every assertion of an e one of whose attributes matching an
+// {attribute use}, carried or ·defaulted·, has no ·actual value·, one of whose
+// element [[children]] a {test} reads has no typed value this package reads
 // ([walk.keepChild]) — a child of mixed content among them whose string-value
 // spans a descendant whose contribution is undecided
 // ([stringValueFrame.lacking]) — whose `$value` is undecided
-// ([walk.assertionValues]), whose own string value, which `.` reads, spans
-// such a descendant, or was not gathered because e has simple content and
-// element [[children]], or is ·nilled· and has [[children]] and simple content
-// or a {test} reading `.` ([walk.assertionValue]), or one of whose {test}s
-// counts the attribute nodes of, or filters children by the attribute names of,
-// an element of its subtree whose ·governing type definition· this package
-// could not determine, so that its ·defaulted attributes· are unknown
+// ([walk.assertionValues]), whose own string value, which `.` reads, spans such
+// a descendant, or was not gathered because e has simple content and element
+// [[children]], or is ·nilled· and has [[children]] and simple content or a
+// {test} reading `.` ([walk.assertionValue]), or one of whose {test}s counts
+// the attribute nodes of, or filters children by the attribute names of, an
+// element of its subtree whose ·governing type definition· this package could
+// not determine, so that its ·defaulted attributes· are unknown
 // ([walk.tallyElement]); a ·skipped· subtree is counted, by name
 // ([assertionAncestry.tallySkipped]). Fail-open: the withheld value is clause
 // 6's own verdict, whose whole consumer set inside this package is
@@ -129,7 +129,7 @@ func (w *walk) elementAssertions(e Element, asserts *assertionCheck, content *co
 				site, e.Name())
 			continue
 		}
-		if test.Evaluate(w.backend, w.schema, in.yield, asserts.yieldChildren, c.tally, in.value, w.now) {
+		if test.Evaluate(w.backend, w.schema, e, in.yield, asserts.yieldChildren, c.tally, in.value, w.now) {
 			w.logDecision("assessing element", e.Name(), e.Loc(), ruleCvcAssertion, "", "satisfied")
 			continue
 		}

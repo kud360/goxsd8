@@ -21,7 +21,7 @@ func ioEval(t *testing.T, expr string, types xsd.TypeResolver, content xsd.Conte
 	if !ok {
 		t.Fatalf("CompileAssertionTest(%q): declined, want compiled", expr)
 	}
-	return test.Evaluate(backend(), types, attrs, children, nil, bound, time.Time{})
+	return test.Evaluate(backend(), types, asElem, attrs, children, nil, bound, time.Time{})
 }
 
 // `$value instance of T` matches `$value`'s XDM representation against T
@@ -75,7 +75,7 @@ func TestAssertionInstanceOfValue(t *testing.T) {
 			t.Errorf("CompileAssertionTest(%q) over %s: declined, want compiled", tc.expr, tc.st.Name().Local)
 			continue
 		}
-		if got := test.Evaluate(backend(), types, asValues(t), asNoChildren, nil, bound, time.Time{}); got != tc.want {
+		if got := test.Evaluate(backend(), types, asElem, asValues(t), asNoChildren, nil, bound, time.Time{}); got != tc.want {
 			t.Errorf("Evaluate(%q) over %s %q = %v, want %v", tc.expr, tc.st.Name().Local, tc.lexical, got, tc.want)
 		}
 	}

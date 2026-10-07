@@ -106,7 +106,7 @@ func TestAssertionReadsMixedChildUntyped(t *testing.T) {
 	} {
 		t.Run(tc.expr, func(t *testing.T) {
 			test := amCompile(t, tc.expr)
-			if got := test.Evaluate(backend(), seededTypes, asValues(t), amChildren(tc.children...), nil, ValueBinding{}, time.Time{}); got != tc.want {
+			if got := test.Evaluate(backend(), seededTypes, asElem, asValues(t), amChildren(tc.children...), nil, ValueBinding{}, time.Time{}); got != tc.want {
 				t.Errorf("Evaluate(%q) over %v = %v, want %v", tc.expr, tc.children, got, tc.want)
 			}
 		})
@@ -126,7 +126,7 @@ func TestAssertionRaisesOnATypedMixedChild(t *testing.T) {
 	}
 	children := amChildren(Child(uq("body"), Typed(v)))
 	for _, expr := range []string{"string-length(body) ge 0", "not(string-length(body) ge 0)", "body = 'x'", "not(body = 'x')"} {
-		if amCompile(t, expr).Evaluate(backend(), seededTypes, asValues(t), children, nil, ValueBinding{}, time.Time{}) {
+		if amCompile(t, expr).Evaluate(backend(), seededTypes, asElem, asValues(t), children, nil, ValueBinding{}, time.Time{}) {
 			t.Errorf("Evaluate(%q) over a Typed mixed child = true, want false: the read raises", expr)
 		}
 	}
