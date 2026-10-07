@@ -1333,10 +1333,10 @@ const (
 	tzOptional
 )
 
-// String renders the requirement as its {value} token: the one spelling of each
+// token renders the requirement as its {value} token: the one spelling of each
 // token, which newExplicitTimezoneFacet reads the facet's {value} against and a
 // facet-stage message names.
-func (t tzRequirement) String() string {
+func (t tzRequirement) token() string {
 	switch t {
 	case tzRequired:
 		return "required"
@@ -1345,7 +1345,7 @@ func (t tzRequirement) String() string {
 	case tzOptional:
 		return "optional"
 	default:
-		panic(fmt.Sprintf("value: tzRequirement.String: %d is not a requirement", int(t)))
+		panic(fmt.Sprintf("value: tzRequirement.token: %d is not a requirement", int(t)))
 	}
 }
 
@@ -1369,7 +1369,7 @@ func newExplicitTimezoneFacet(f xsd.Facet) (explicitTimezoneFacet, error) {
 			"the explicitTimezone facet carries %d values rather than one, so cvc-explicitTimezone-valid cannot be decided against its {value}", len(values))
 	}
 	for _, req := range []tzRequirement{tzRequired, tzProhibited, tzOptional} {
-		if values[0] == req.String() {
+		if values[0] == req.token() {
 			return explicitTimezoneFacet{requirement: req}, nil
 		}
 	}
@@ -1394,7 +1394,7 @@ func (tf explicitTimezoneFacet) CheckValue(v Value) error {
 	if !ok {
 		return facetPrecondition(ruleCosApplicableFacets, xsderr.Loc{},
 			"the explicitTimezone facet, whose {value} is %q, is not applicable to the type of a candidate that is not TimezoneAware (%T), but cos-applicable-facets allows in {facets} only the facets applicable to the type",
-			tf.requirement, v)
+			tf.requirement.token(), v)
 	}
 	if tf.requirement == tzRequired && !ta.HasTimezone() {
 		return xsderr.New(ruleCvcExplicitTimezoneValid, xsderr.Loc{},
