@@ -31,7 +31,11 @@ func fcValue(t *testing.T, st *xsd.SimpleType, lexical string) value.Value {
 // ctaItemOf removed. fn:position and fn:last raise it too, there being no
 // context position or size (clause 1.3): `position() le 50` and `last() le
 // 50` fail, and so do they under fn:not, which a call evaluating to false
-// would make hold.
+// would make hold, and so do `position()` and `last()` read for their
+// ·effective boolean value·, bare or under fn:not, and under `instance of
+// xs:integer`. `not(position())` and `not(last())` hold with the ctaNoFocus
+// arm of ctaEffectiveBoolean.eval removed, and the two `instance of` rows
+// decline with ctaNoFocus removed from ctaTypes.instanceItem.
 func TestFacetAssertionsDecideTheValue(t *testing.T) {
 	intType, str := asBuiltin(t, "int"), asBuiltin(t, "string")
 	for _, tc := range []struct {
@@ -58,8 +62,14 @@ func TestFacetAssertionsDecideTheValue(t *testing.T) {
 		{"not(position() le 50)", str, "x", value.AssertionFails},
 		{"last() le 50", str, "x", value.AssertionFails},
 		{"not(last() le 50)", str, "x", value.AssertionFails},
+		{"position()", str, "x", value.AssertionFails},
+		{"not(position())", str, "x", value.AssertionFails},
+		{"last()", str, "x", value.AssertionFails},
+		{"not(last())", str, "x", value.AssertionFails},
+		{"position() instance of xs:integer", str, "x", value.AssertionFails},
+		{"last() instance of xs:integer", str, "x", value.AssertionFails},
 	} {
-		got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, tc.st, ctaExprRecord(tc.test, ""), fcValue(t, tc.st, tc.lexical))
+		got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, tc.st, ctaExprRecord(tc.test, "", "xs", xsd.XMLSchemaNS), fcValue(t, tc.st, tc.lexical))
 		if got != tc.want {
 			t.Errorf("Evaluate(%q, %q) = %d, want %d", tc.test, tc.lexical, got, tc.want)
 		}
