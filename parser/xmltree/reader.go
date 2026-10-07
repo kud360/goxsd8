@@ -54,8 +54,9 @@ type Reader struct {
 	// to the decoder, which refuses a reference to any other name (see
 	// included), so that Reader.reference decides a reference to an external
 	// or unparsed one: it charges WFC Entity Declared in a standalone="yes"
-	// document, then, in an attribute value, WFC Parsed Entity or No External
-	// Entity References, and refuses any other.
+	// document, then WFC Parsed Entity, in content or in an attribute value,
+	// and, in an attribute value, No External Entity References, and refuses
+	// any other.
 	entities map[string]boundEntity
 	// tokenized maps each (element type, attribute) name pair an <!ATTLIST>
 	// of the internal subset defines, as the declaration spells them, to
