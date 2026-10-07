@@ -253,9 +253,9 @@ type ValueBinding struct {
 // document order (xpath-datamodel.md:1304): each character [[child]] of E,
 // white space alone included — E is annotated xs:anyType, whose content is
 // mixed (cvc-assertion clause 1.2) — and each of a descendant, except a run
-// that is white space alone under a descendant whose {content type} is not
-// mixed, which is no Text Node (:2202). An invalid E has a string value all
-// the same, so text is bound where v is nil.
+// that is white space alone under a descendant whose {content type} is
+// element-only or empty, which is no Text Node (:2202). An invalid E has a
+// string value all the same, so text is bound where v is nil.
 //
 // v is the typed value of E's [schema actual value] (cvc-assertion clause
 // 2.3.1), whose arm and type the {simple type definition} of the
