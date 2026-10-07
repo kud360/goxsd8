@@ -51,58 +51,56 @@
 //     node counted once (§3.3.3), or over an operand that is no path, whose items it counts (`count($value)`, a list's items),
 //     xpath20.md §3.4's binary arithmetic (`+`, `-`, `*`, `div`, `idiv`, `mod`) over numeric operands, whose dynamic errors
 //     err:FOAR0001 and err:FOAR0002 are charged like any other, F&O's string and sequence core — fn:contains, fn:starts-with and
-//     fn:ends-with under the codepoint collation, fn:string-length, fn:normalize-space, fn:string, fn:empty, fn:exists,
-//     fn:distinct-values (§15.1.6, by eq, one NaN surviving), fn:true and fn:false — and fn:current-date (§16.4), the date of the
-//     current dateTime the caller hands Evaluate and FacetAssertions, `()` admitted as an argument, whose xs:string? arguments raise
-//     err:XPTY0004 for an item of another type or for two or more items, [47] ContextItemExpr `.`, atomized to one xs:untypedAtomic
-//     holding E's string value (cvc-assertion clause 2.3.1's Note) — never `$value` — which ValueBinding carries beside `$value` and
-//     which the zero-argument fn:string, fn:string-length and fn:normalize-space read, as a general comparison's operand, an integer
-//     sequence: [11] RangeExpr over IntegerLiterals, bare or parenthesized, or a parenthesized comma sequence of IntegerLiterals and
-//     such ranges, `(1 to 10, 20, 30)` (§3.3.1), or a string sequence, a parenthesized comma sequence of StringLiterals, `('a', 'b')`,
-//     whose items are xs:string, and §3.8's `if (Expr) then ExprSingle else ExprSingle` wherever an ExprSingle stands whole in a
-//     boolean position, evaluating only the branch its test's ·effective boolean value· selects, and §3.10.3's `castable as` over a
-//     [16] ta-SimpleValue, true exactly where the same `cast as` yields a value and false where that cast raises, an error evaluating
-//     its operand raising, and §3.10.1's `instance of` with a builtin atomic SequenceType and an optional occurrence indicator over an
-//     operand that is no node or over an fn:data call (xpath-functions.md §2.4), which atomizes its argument, true where the item
-//     count is one the indicator admits and each item's type derives from it (§2.5.4), never casting — all of which a Type
-//     Alternative's {test} still declines, each outside §3.12.6's subset. AssertionTest.ReadsChild reports which children a compiled
-//     {test} reads for their values — a value predicate's children among them, counted over ChildElements — so its caller keeps no
-//     other; neither any other fn:count argument nor a path whose existence is asked reads a value, and AssertionTest.Tally makes the
-//     Tally its caller reports E's subtree to — each element by its chain of names below E, with the names of its attribute nodes
-//     (Tally.Element), Tally.CountsAttributesAt telling it at which depths those names can change a count — and Evaluate reads the
-//     counts off, so no counted node is kept. It declines what tier 1 declines, plus a wildcard NameTest, an attribute with no fixed
-//     atomic type that is not ·special· (a list, a union, an xs:QName or xs:NOTATION primitive), a child read for its value whose
-//     ·locally declared type· is ·absent·, ·special·, element-only or empty, or a simple type, or simple content over one, an
-//     attribute's would not be admitted as, a path of more than one step in any other position or with any other step — so `a/b = 1`,
-//     `count(a/b)`, `a/@b`, `a//b` and `a/*` decline — an fn:count argument of any other shape, a predicate or a union anywhere else,
-//     a predicate of any other shape — `or`, fn:not or a wildcard over an attribute test, an attribute atomized or beside `.`, any
-//     other node, a function call, or a bare value such as `N[1]`, which a numeric value would make positional — and a value predicate
-//     over a child read under no type a child step would read a TYPED value under, a mixed one among them, a cast from a typed
-//     attribute, child or `$value` outside the xs:string family to a type it is not derived from (F&O §17.2 case 4's identity cast and
-//     §17.3's cast up the hierarchy are admitted, and so is §17.1.2's cast of an xs:date, xs:dateTime or xs:time operand to xs:string
-//     itself, fn:string over one included), fn:string over any of those or over a typed count, arithmetic or function result, or a
-//     cast of one, outside that family and those primitives, a cast of an xs:float or xs:double operand to a target other than its own
-//     type or an ancestor of it, fn:string over such an operand, a collation argument, a function call of the wrong arity, `.` outside
-//     a value predicate under a nil content or where it is a node — the whole operand of an ·effective boolean value·, fn:not,
-//     fn:exists, fn:empty or fn:count — and the zero-argument string functions wherever `.` declines, an integer or string sequence in
-//     any other position or over any other operand — a member of another kind, a mix of StringLiterals with the other two, a nested or
-//     empty parenthesis, a misplaced comma — or longer than ctaMaxSequenceLength, an arithmetic operand that is not numeric, an
-//     xs:float one against xs:double (#889), a unary sign, a `castable as` whose cast declines, over any operand but a SimpleValue or
-//     in a value predicate, an `instance of` whose SequenceType is a KindTest, `item()`, `empty-sequence()` or a user-defined or
-//     non-atomic type, over a node without fn:data, over a numeric literal or an arithmetic result, over a typed child —
-//     fn:distinct-values over one included — against an atomic type its ·locally declared type· does not derive from, which an
-//     xsi:type can make the child's own type derive from, or in a value predicate, fn:data anywhere but as the operand of `instance
-//     of`, and a `$value` whose {simple type definition} is classified as such an attribute's type would be, or is a list of a type
-//     that would be; a `$value` over ·special· content is xs:untypedAtomic, as such an attribute is. FacetAssertions is the
-//     value.AssertionEvaluator for an assertions facet's {test} (Datatypes §4.3.13.3, cvc-assertions-valid), over the same grammar:
-//     `$value` is bound to the value under the facet's type, or under its ·active basic member· where that type is a union (dt-xdmrep
-//     clause 4), and there is no context item, so `.`, an attribute or child step, an element step, a child path, a rooted path and a
-//     zero-argument string function each raise err:XPDY0002 and fail the facet, and so do `castable as` and fn:data under `instance
-//     of` over one of them; an fn:count call over a path declines. A Type Alternative's {test} declines `.` everywhere. Longer paths
-//     in other positions, the other axes, predicates in other positions or of other shapes, positional ones among them, unions outside
-//     fn:count, quantified expressions, a conditional read as an item rather than for its ·effective boolean value·, `castable as`
-//     over other operands, `instance of` beyond an atomic SequenceType over those operands, the collation arguments and every other
-//     F&O function are PLANNED (#1042).
+//     fn:ends-with under the codepoint collation, fn:string-length, fn:normalize-space, fn:string, fn:empty, fn:exists, fn:distinct-values
+//     (§15.1.6, by eq, one NaN surviving), fn:true and fn:false — and fn:current-date (§16.4), the date of the current dateTime the caller
+//     hands Evaluate and FacetAssertions, `()` admitted as an argument, whose xs:string? arguments raise err:XPTY0004 for an item of another
+//     type or for two or more items, [47] ContextItemExpr `.`, atomized to one xs:untypedAtomic holding E's string value (cvc-assertion
+//     clause 2.3.1's Note) — never `$value` — which ValueBinding carries beside `$value` and which the zero-argument fn:string,
+//     fn:string-length and fn:normalize-space read, AssertionTest.ReadsContextItem reporting whether a compiled {test} reads it, so its
+//     caller gathers E's string value for no other, as a general comparison's operand, an integer sequence: [11] RangeExpr over
+//     IntegerLiterals, bare or parenthesized, or a parenthesized comma sequence of IntegerLiterals and such ranges, `(1 to 10, 20, 30)`
+//     (§3.3.1), or a string sequence, a parenthesized comma sequence of StringLiterals, `('a', 'b')`, whose items are xs:string, and §3.8's
+//     `if (Expr) then ExprSingle else ExprSingle` wherever an ExprSingle stands whole in a boolean position, evaluating only the branch its
+//     test's ·effective boolean value· selects, and §3.10.3's `castable as` over a [16] ta-SimpleValue, true exactly where the same `cast
+//     as` yields a value and false where that cast raises, an error evaluating its operand raising, and §3.10.1's `instance of` with a
+//     builtin atomic SequenceType and an optional occurrence indicator over an operand that is no node or over an fn:data call
+//     (xpath-functions.md §2.4), which atomizes its argument, true where the item count is one the indicator admits and each item's type
+//     derives from it (§2.5.4), never casting — all of which a Type Alternative's {test} still declines, each outside §3.12.6's subset.
+//     AssertionTest.ReadsChild reports which children a compiled {test} reads for their values — a value predicate's children among them,
+//     counted over ChildElements — so its caller keeps no other; neither any other fn:count argument nor a path whose existence is asked
+//     reads a value, and AssertionTest.Tally makes the Tally its caller reports E's subtree to — each element by its chain of names below E,
+//     with the names of its attribute nodes (Tally.Element), Tally.CountsAttributesAt telling it at which depths those names can change a
+//     count — and Evaluate reads the counts off, so no counted node is kept. It declines what tier 1 declines, plus a wildcard NameTest, an
+//     attribute with no fixed atomic type that is not ·special· (a list, a union, an xs:QName or xs:NOTATION primitive), a child read for
+//     its value whose ·locally declared type· is ·absent·, ·special·, element-only or empty, or a simple type, or simple content over one,
+//     an attribute's would not be admitted as, a path of more than one step in any other position or with any other step — so `a/b = 1`,
+//     `count(a/b)`, `a/@b`, `a//b` and `a/*` decline — an fn:count argument of any other shape, a predicate or a union anywhere else, a
+//     predicate of any other shape — `or`, fn:not or a wildcard over an attribute test, an attribute atomized or beside `.`, any other node,
+//     a function call, or a bare value such as `N[1]`, which a numeric value would make positional — and a value predicate over a child read
+//     under no type a child step would read a TYPED value under, a mixed one among them, a cast from a typed attribute, child or `$value`
+//     outside the xs:string family to a type it is not derived from (F&O §17.2 case 4's identity cast and §17.3's cast up the hierarchy are
+//     admitted, and so is §17.1.2's cast of an xs:date, xs:dateTime or xs:time operand to xs:string itself, fn:string over one included),
+//     fn:string over any of those or over a typed count, arithmetic or function result, or a cast of one, outside that family and those
+//     primitives, a cast of an xs:float or xs:double operand to a target other than its own type or an ancestor of it, fn:string over such
+//     an operand, a collation argument, a function call of the wrong arity, `.` outside a value predicate under a nil content or where it is
+//     a node — the whole operand of an ·effective boolean value·, fn:not, fn:exists, fn:empty or fn:count — and the zero-argument string
+//     functions wherever `.` declines, an integer or string sequence in any other position or over any other operand — a member of another
+//     kind, a mix of StringLiterals with the other two, a nested or empty parenthesis, a misplaced comma — or longer than
+//     ctaMaxSequenceLength, an arithmetic operand that is not numeric, an xs:float one against xs:double (#889), a unary sign, a `castable
+//     as` whose cast declines, over any operand but a SimpleValue or in a value predicate, an `instance of` whose SequenceType is a
+//     KindTest, `item()`, `empty-sequence()` or a user-defined or non-atomic type, over a node without fn:data, over a numeric literal or an
+//     arithmetic result, over a typed child — fn:distinct-values over one included — against an atomic type its ·locally declared type· does
+//     not derive from, which an xsi:type can make the child's own type derive from, or in a value predicate, fn:data anywhere but as the
+//     operand of `instance of`, and a `$value` whose {simple type definition} is classified as such an attribute's type would be, or is a
+//     list of a type that would be; a `$value` over ·special· content is xs:untypedAtomic, as such an attribute is. FacetAssertions is the
+//     value.AssertionEvaluator for an assertions facet's {test} (Datatypes §4.3.13.3, cvc-assertions-valid), over the same grammar: `$value`
+//     is bound to the value under the facet's type, or under its ·active basic member· where that type is a union (dt-xdmrep clause 4), and
+//     there is no context item, so `.`, an attribute or child step, an element step, a child path, a rooted path and a zero-argument string
+//     function each raise err:XPDY0002 and fail the facet, and so do `castable as` and fn:data under `instance of` over one of them; an
+//     fn:count call over a path declines. A Type Alternative's {test} declines `.` everywhere. Longer paths in other positions, the other
+//     axes, predicates in other positions or of other shapes, positional ones among them, unions outside fn:count, quantified expressions, a
+//     conditional read as an item rather than for its ·effective boolean value·, `castable as` over other operands, `instance of` beyond an
+//     atomic SequenceType over those operands, the collation arguments and every other F&O function are PLANNED (#1042).
 //  3. The full grammar (docs/specs/md/xpath20.md) and function library
 //     (docs/specs/md/xpath-functions.md) — M7 onward, ratcheted.
 //     PLANNED.

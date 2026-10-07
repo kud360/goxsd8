@@ -171,6 +171,55 @@ func TestAssertionContextItemOverEveryContentType(t *testing.T) {
 	}
 }
 
+// ReadsContextItem is true for a {test} that reads `.` — written, under a
+// cast, castable, fn:data or arithmetic, or implicit in a zero-argument
+// fn:string, fn:string-length or fn:normalize-space — and false for one
+// reading `$value`, attributes or children alone, a predicate's candidate `.`
+// among them, which is the child and not E; every {content type} compiling the
+// {test} answers alike. The true rows fail with contextItem not setting
+// f.readsContextItem, and the false rows with it set unconditionally in
+// CompileAssertionTest.
+func TestAssertionReadsContextItem(t *testing.T) {
+	elems := asChildTypes(t)
+	for _, content := range []xsd.ContentType{
+		xsd.SimpleContent{SimpleType: asBuiltin(t, "string")},
+		xsd.EmptyContent{},
+		asElementContent(t, false),
+		asElementContent(t, true),
+	} {
+		for _, tc := range []struct {
+			expr string
+			want bool
+		}{
+			{". = 'x'", true},
+			{"string() = 'x'", true},
+			{"string-length() = 1", true},
+			{"normalize-space() = 'x'", true},
+			{"string(.) = 'x'", true},
+			{". castable as xs:date", true},
+			{"data(.) instance of xs:untypedAtomic", true},
+			{"xs:integer(.) + 1 = 2", true},
+			{"if (@a) then . = 'x' else true()", true},
+			{"empty($value)", false},
+			{"count($value) = 0", false},
+			{"string(@a) = 'x'", false},
+			{"e1 = 'x'", false},
+			{"exists(./a)", false},
+			{"count(.//a) = 1", false},
+			{"count(a[. = 'x']) = 1", false},
+		} {
+			test, ok := CompileAssertionTest(asRecord(tc.expr), seededTypes, content, asUses(t, map[string]string{"a": "string"}), elems)
+			if !ok {
+				t.Errorf("CompileAssertionTest(%q) over %T: declined, want compiled", tc.expr, content)
+				continue
+			}
+			if got := test.ReadsContextItem(); got != tc.want {
+				t.Errorf("CompileAssertionTest(%q) over %T: ReadsContextItem() = %v, want %v", tc.expr, content, got, tc.want)
+			}
+		}
+	}
+}
+
 // `.` declines where it is a node rather than an atom — the whole operand of
 // an ·effective boolean value·, fn:not over one, fn:exists, fn:empty and
 // fn:count (the last a path, ctaParser.countPath) — and under a nil {content

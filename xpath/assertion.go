@@ -421,7 +421,10 @@ func (c *Tally) fits(paths []ctaTallied) bool {
 // element types. It is a distinct type from [CTATest] so a tree typed for an
 // assertion can never be evaluated over a Type Alternative's [Attributes],
 // nor a Type Alternative tree over [TypedAttributes].
-type AssertionTest struct{ root ctaExpr }
+type AssertionTest struct {
+	root             ctaExpr
+	readsContextItem bool
+}
 
 // CompileAssertionTest compiles an assertion's {test} (§3.13.1, an
 // [xsd.XPathExpression] property record) for the element whose ·governing
@@ -438,9 +441,8 @@ type AssertionTest struct{ root ctaExpr }
 // A nil content declines every {test} naming `$value`. content also decides
 // `.`: under every {content type} it is E's string value, one xs:untypedAtomic
 // value [BindValue] binds beside `$value`, whatever the {simple type
-// definition}'s variety, and a nil content declines it. content decides
-// nothing else: a {test} compiling under a nil content reads neither `.` nor
-// `$value`, and compiles to the same tree under every other.
+// definition}'s variety, and a nil content declines it. Whether the compiled
+// {test} reads `.` is [AssertionTest.ReadsContextItem]'s answer.
 //
 // The grammar is [CompileCTATest]'s with the value comparisons, `$value`, an
 // abbreviated child-axis step, a "/" or "//" opening one child or attribute
@@ -685,12 +687,32 @@ type AssertionTest struct{ root ctaExpr }
 //
 // types is read as [CompileCTATest] reads it and stored nowhere.
 func CompileAssertionTest(expr xsd.XPathExpression, types xsd.TypeResolver, content xsd.ContentType, attrs AttributeTypes, elems ElementTypes) (AssertionTest, bool) {
-	root, defect := compileCTATest(expr, types, ctaAssertionFacade{content: content, attrs: attrs, elems: elems})
+	var readsContextItem bool
+	root, defect := compileCTATest(expr, types, ctaAssertionFacade{content: content, attrs: attrs, elems: elems, readsContextItem: &readsContextItem})
 	if defect.kind != ctaNoDefect {
 		return AssertionTest{}, false
 	}
-	return AssertionTest{root: root}, true
+	return AssertionTest{root: root, readsContextItem: readsContextItem}, true
 }
+
+// ReadsContextItem reports whether the compiled {test} reads E's string value,
+// which the [47] ContextItemExpr `.` atomizes to and [BindValue]'s text
+// supplies: true wherever the compile admitted `.`, written or implicit — the
+// zero-argument fn:string, fn:string-length and fn:normalize-space read it
+// (xpath-functions.md §2.3, §7.4.4, §7.4.5) — and false for a {test} reading
+// only `$value`, attributes or children, whose evaluation reads no text of
+// the [ValueBinding]. A `.` inside an fn:count argument's predicate is the
+// candidate child and no read here; that child's value is
+// [AssertionTest.ReadsChild]'s.
+//
+// The answer is recorded as the compile admits each `.`, so it may
+// over-report — a `.` the parser admitted inside a production the {test} then
+// declined in, were the {test} compiled at all — and never under-reports: a
+// {test} for which it is false evaluates to the same answer over every
+// binding's text. Its consumer is validate's walk, which gathers E's string
+// value under a {content type} that is not simple only for an element one of
+// whose {test}s reads it, and binds the zero-length string otherwise.
+func (t AssertionTest) ReadsContextItem() bool { return t.readsContextItem }
 
 // Evaluate reports whether the compiled {test} evaluates to true for the
 // element whose attributes attrs yields, whose element [[children]] children
@@ -1078,11 +1100,13 @@ func (ctaCurrentDate) counted(into []ctaTallied) []ctaTallied    { return into }
 // ctaAssertionFacade is the assertion façade compileCTATest parses for: its
 // attribute nodes are typed by attrs, its child element nodes by elems, its
 // `$value` by content, a nil one of which also declines `.`, and it declines
-// the comparison types it cannot yet decide.
+// the comparison types it cannot yet decide. readsContextItem, never nil, is
+// set each time contextItem admits `.` ([AssertionTest.ReadsContextItem]).
 type ctaAssertionFacade struct {
-	content xsd.ContentType
-	attrs   AttributeTypes
-	elems   ElementTypes
+	content          xsd.ContentType
+	attrs            AttributeTypes
+	elems            ElementTypes
+	readsContextItem *bool
 }
 
 func (ctaAssertionFacade) ctaFacade() {}
@@ -1305,7 +1329,8 @@ func ctaCountOf(arg ctaCounted, types ctaTypes) (ctaValue, bool) {
 // under element-only, empty and mixed content as under simple, and under a
 // list or union {simple type definition} as under an atomic one, the variety
 // deciding `$value`'s type alone. Which text that string value is, is
-// [BindValue]'s caller's to supply.
+// [BindValue]'s caller's to supply, and contextItem records that it is read
+// (f.readsContextItem), which [AssertionTest.ReadsContextItem] answers.
 //
 // GAP(xpath): a nil content, whose governing type was not determined, declines
 // `.`. The direction is the withhold [CompileAssertionTest] reports. (#1042)
@@ -1313,5 +1338,6 @@ func (f ctaAssertionFacade) contextItem() (ctaValue, bool) {
 	if f.content == nil {
 		return nil, false
 	}
+	*f.readsContextItem = true
 	return ctaContextAtom{}, true
 }
