@@ -208,8 +208,9 @@ func TestAssertionIntegerSequences(t *testing.T) {
 
 // What stays declined (ctaParser.integerSequence's GAP(xpath)): a sequence in
 // any position but a general comparison's operand, a range whose operand is
-// not an IntegerLiteral, a nested or empty parenthesis, a member of another
-// kind, an IntegerLiteral beyond int64, and a sequence longer than
+// not an IntegerLiteral, a nested or empty parenthesis, an IntegerLiteral
+// member beside a StringLiteral one (assertionstringsequence_test.go has the
+// string counterparts), an IntegerLiteral beyond int64, and a sequence longer than
 // ctaMaxSequenceLength. A Type Alternative's {test} declines every sequence,
 // and an assertions facet's evaluates one, `$value = (1 to 10, 20)` holding on
 // 20 and failing on 15. The two rows longer than ctaMaxSequenceLength compile
