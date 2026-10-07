@@ -36,20 +36,21 @@ import (
 // comparison operand may be xpath20.md [13] AdditiveExpr over [14]
 // MultiplicativeExpr, whose operators are evaluated in ctaarith.go (ctaArith);
 // [47] ContextItemExpr `.` over simple content, atomized to E's string value
-// (ctaContextAtom); and a general comparison's operand may be an integer
-// sequence, xpath20.md [11] RangeExpr or §3.3.1's comma sequence over
-// IntegerLiterals, evaluated in ctasequence.go (ctaIntegerRanges).
-// The facet façade (ctaFacetFacade) takes the assertion façade's grammar but
-// fn:count over a path, and compiles every read of the context item — `.`, an
-// attribute or child step, a rooted path — to the err:XPDY0002 an assertions
-// facet's absent context item raises (ctaNoContextItem). It is not a stage of
-// a general XPath 2.0 evaluator: the productions below reach no axis but
-// attribute, one child step, the child-step paths and the one descendant step
-// whose existence is asked and the descendant steps fn:count counts over, no
-// predicate or union but those in an fn:count argument, no variable but
-// `$value` and no function but fn:not, fn:count and the twelve
-// ctaParser.libraryCall names, so evaluating them directly is exact where a
-// fail-open delegation to a general engine would be a guess.
+// (ctaContextAtom); xpath20.md [18] CastableExpr's `castable as` tail in
+// place of [15]'s `cast as` one (ctaCastable); and a general comparison's
+// operand may be an integer sequence, xpath20.md [11] RangeExpr or §3.3.1's
+// comma sequence over IntegerLiterals, evaluated in ctasequence.go
+// (ctaIntegerRanges). The facet façade (ctaFacetFacade) takes the assertion
+// façade's grammar but fn:count over a path, and compiles every read of the
+// context item — `.`, an attribute or child step, a rooted path — to the
+// err:XPDY0002 an assertions facet's absent context item raises
+// (ctaNoContextItem). It is not a stage of a general XPath 2.0 evaluator: the
+// productions below reach no axis but attribute, one child step, the child-step
+// paths and the one descendant step whose existence is asked and the descendant
+// steps fn:count counts over, no predicate or union but those in an fn:count
+// argument, no variable but `$value` and no function but fn:not, fn:count and
+// the twelve ctaParser.libraryCall names, so evaluating them directly is exact
+// where a fail-open delegation to a general engine would be a guess.
 //
 //	[8]  Test                ::= OrExpr
 //	[9]  OrExpr              ::= AndExpr ( 'or' AndExpr )*
@@ -549,7 +550,8 @@ func (ctaIf) ctaExpr()               {}
 // and the facet façade's read of an absent context item (ctaNoContextItem) —
 // the cast that [15] ta-CastExpr's tail and [18] ta-ConstructorFunction both
 // build over one of them, an fn:count call (ctaFacade.count), a binary
-// arithmetic operator over two of them (ctaArith, ctaFacade.computes), and a
+// arithmetic operator over two of them (ctaArith, ctaFacade.computes), the
+// `castable as` tail over one of them (ctaCastable, ctaFacade.castable), and a
 // call to an F&O string or sequence function over them (ctaMatch,
 // ctaUnaryString, ctaPresence, ctaDistinctValues, ctaStringFunction;
 // ctaFacade.callsLibrary) or to fn:current-date (ctaCurrentDate), the
@@ -784,6 +786,10 @@ type ctaFacade interface {
 	// (ctaParser.integerSequence), which §3.12.6's grammar has no production
 	// for.
 	constructsSequences() bool
+	// castable reports whether the façade admits xpath20.md [18]
+	// CastableExpr's `castable as` tail at all (ctaParser.castableTail), which
+	// §3.12.6's grammar has no production for.
+	castable() bool
 }
 
 // ctaTypeAlternativeFacade is a Type Alternative's façade: every attribute
@@ -863,6 +869,10 @@ func (ctaTypeAlternativeFacade) conditional() bool { return false }
 // constructsSequences is false, on comparesValues' terms: ta-props-correct
 // clause 2's grammar has no RangeExpr and no comma.
 func (ctaTypeAlternativeFacade) constructsSequences() bool { return false }
+
+// castable is false, on comparesValues' terms: ta-props-correct clause 2's
+// [15] ta-CastExpr has a `cast as` tail and no `castable as` one.
+func (ctaTypeAlternativeFacade) castable() bool { return false }
 
 // ctaNameTest is the sealed sum of [36] NameTest's arms as [17] ta-AttrName
 // and a child-axis step reach them, matching one ·expanded name· at a time.
@@ -966,6 +976,19 @@ type ctaCast struct {
 	operand     ctaValue
 	target      *xsd.SimpleType
 	allowsEmpty bool
+}
+
+// ctaCastable is xpath20.md [18] CastableExpr's `castable as SingleType` tail,
+// `E castable as T`, whose result is st, xs:boolean: §3.10.3 makes it true
+// exactly where `E cast as T` succeeds, so it holds that cast itself and
+// evaluates it (ctaCastableItem) — one node, the cast's, decides both, and no
+// second casting rule exists to disagree with it (STYLE D3). A cast's own
+// failure — the empty sequence without `?`, two or more items, a lexical or
+// facet mismatch — is false; an error evaluating E is the castable
+// expression's error.
+type ctaCastable struct {
+	cast ctaCast
+	st   *xsd.SimpleType
 }
 
 // ctaCount is an fn:count call (xpath-functions.md §15.4.1, `fn:count($arg as
@@ -1419,6 +1442,7 @@ func (ctaNoDocumentRoot) ctaValue()   {}
 func (ctaNoContextItem) ctaValue()    {}
 func (ctaLiteral) ctaValue()          {}
 func (ctaCast) ctaValue()             {}
+func (ctaCastable) ctaValue()         {}
 func (ctaCount) ctaValue()            {}
 func (ctaValueVar) ctaValue()         {}
 func (ctaEmptyValue) ctaValue()       {}
@@ -1441,12 +1465,12 @@ type ctaStatic interface{ ctaStatic() }
 // untypedAtomic"; xpath-datamodel §3.3.1.2 for a ·special· type).
 type ctaUntypedAtomic struct{}
 
-// ctaTyped is an operand carrying a datatype: a Literal, the result of a cast
-// or a constructor function, a typed attribute, an fn:count call, an arithmetic
-// result, the result of an F&O string or sequence function or of
-// fn:current-date, or each item of `$value`. It carries the COMPONENT alone —
-// st.Name() is the name, and storing both would be two encodings of one fact
-// (STYLE D3).
+// ctaTyped is an operand carrying a datatype: a Literal, the result of a cast,
+// a constructor function or a castable expression, a typed attribute, an
+// fn:count call, an arithmetic result, the result of an F&O string or sequence
+// function or of fn:current-date, or each item of `$value`. It carries the
+// COMPONENT alone — st.Name() is the name, and storing both would be two
+// encodings of one fact (STYLE D3).
 type ctaTyped struct{ st *xsd.SimpleType }
 
 // ctaEmptySequence is the statically empty operand, ctaEmptyValue: it yields
@@ -1472,6 +1496,8 @@ func ctaStaticOf(v ctaValue) ctaStatic {
 		return ctaTyped{st: n.st}
 	case ctaCast:
 		return ctaTyped{st: n.target}
+	case ctaCastable:
+		return ctaTyped{st: n.st}
 	case ctaTypedAttr:
 		return ctaTyped{st: n.st}
 	case ctaTypedChild:
@@ -1826,6 +1852,8 @@ func (e ctaEffectiveBoolean) eval(env ctaEnv) ctaAnswer {
 		return ctaBoolean(e.operand, n.st, env)
 	case ctaCast:
 		return ctaBoolean(e.operand, n.target, env)
+	case ctaCastable:
+		return ctaBoolean(e.operand, n.st, env)
 	case ctaCount:
 		return ctaBoolean(e.operand, n.st, env)
 	case ctaArith:
@@ -2018,6 +2046,9 @@ func ctaValidated(i ctaItem) (value.Value, bool) {
 //     err:FORG0001, and only then converts the result to c. Evaluating it
 //     straight into c instead would let `@n cast as xs:integer` accept "3.5"
 //     whenever the comparison happened to run in xs:double.
+//   - a CASTABLE expression evaluates its cast in the target type, as a cast
+//     does, and converts the xs:boolean of whether it raised to c
+//     (ctaCastableItem).
 //
 // The default arm is unreachable: every branch of the ctaValue sum is named.
 func ctaItemOf(v ctaValue, c *xsd.SimpleType, env ctaEnv) ctaItem {
@@ -2048,6 +2079,8 @@ func ctaItemOf(v ctaValue, c *xsd.SimpleType, env ctaEnv) ctaItem {
 		return ctaConvert(n.text, n.st, c, env)
 	case ctaCast:
 		return ctaCastItem(n, c, env)
+	case ctaCastable:
+		return ctaCastableItem(n, c, env)
 	case ctaCount:
 		return ctaCountItem(n, c, env)
 	case ctaArith:
@@ -2475,6 +2508,23 @@ func ctaCastItem(n ctaCast, c *xsd.SimpleType, env ctaEnv) ctaItem {
 		return ctaRaised{}
 	}
 	return ctaPromote(inner.vs[0], n.target, c, env)
+}
+
+// ctaCastableItem evaluates `E castable as T` (xpath20.md §3.10.3) and
+// converts the xs:boolean it returns into c on ctaMatchItem's terms. E is
+// evaluated first, uncast (ctaSequenceLength), and an error there raises: "If
+// evaluation of E fails with a dynamic error, the castable expression as a
+// whole fails" — so `. castable as xs:date` in an assertions facet raises the
+// err:XPDY0002 its ctaNoContextItem does. Otherwise the result is whether n's
+// cast yields a value rather than raising (ctaCastItem): the empty sequence
+// with `?` is true, without it err:XPTY0004 and false, as are two or more
+// items and a lexical or facet mismatch, err:FORG0001.
+func ctaCastableItem(n ctaCastable, c *xsd.SimpleType, env ctaEnv) ctaItem {
+	if _, ok := ctaSequenceLength(n.cast.operand, env); !ok {
+		return ctaRaised{}
+	}
+	_, raised := ctaCastItem(n.cast, n.cast.target, env).(ctaRaised)
+	return ctaConvert(strconv.FormatBool(!raised), n.st, c, env)
 }
 
 // ctaConvert casts lexical, a value of type from, into type to.
