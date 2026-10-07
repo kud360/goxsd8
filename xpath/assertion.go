@@ -199,11 +199,10 @@ type TypedAttributes func(yield func(name xsd.QName, v TypedValue) bool)
 // value is the zero-length string (xpath-datamodel §6.2.4), which is
 // xs:untypedAtomic "" and never the empty sequence.
 //
-// `$value`'s part of the zero ValueBinding is the empty sequence — clause
-// 2.3.2's value, for an E whose [validity] in the partial ·PSVI· is invalid,
-// whose [nil] is true, or whose ·governing type definition· has a {content
-// type}.{variety} other than simple — and its string value is "". So the zero
-// ValueBinding is BindValue("", nil), what a ·nilled· E binds.
+// A nil `$value` is clause 2.3.2's empty sequence — for an E that is invalid
+// in the partial ·PSVI·, ·nilled·, or under a {content type} that is not
+// simple. The zero ValueBinding is BindValue("", nil), what a ·nilled· E binds;
+// an invalid E binds its string value beside a nil `$value`.
 //
 // It has no third state for an E whose value is UNDECIDED: [AssertionTest.Evaluate]
 // always decides, so a caller that cannot tell which of clause 2.3's cases E is
@@ -225,10 +224,9 @@ type ValueBinding struct {
 // supplied a default because E has neither element nor character
 // [[children]], the {value constraint}'s {lexical form}, the one text node
 // the data model builds for a defaulted element. It is never re-normalized
-// under the {simple type definition}'s whiteSpace: `.` over xs:integer
-// content "0030" is "0030", where `$value` is
-// 30. An invalid E has a string value all the same, so text is bound where v
-// is nil.
+// under the {simple type definition}'s whiteSpace: `.` over xs:integer content
+// "0030" is "0030", where `$value` is 30. An invalid E has a string value all
+// the same, so text is bound where v is nil.
 //
 // v is the typed value of E's [schema actual value] (cvc-assertion clause
 // 2.3.1), whose arm and type the {simple type definition} of the

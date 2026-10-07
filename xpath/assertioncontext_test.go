@@ -264,3 +264,48 @@ func TestIntegerSequencesDecline(t *testing.T) {
 		}
 	}
 }
+
+// The context item `.` is one item whatever its static type, which is
+// untyped (ctaSequenceLength): with the ctaContextAtom arm removed it reaches
+// the statically-empty fallthrough and answers 0.
+func TestContextItemSequenceLengthIsOne(t *testing.T) {
+	env := ctaEnv{backend: backend(), types: seededTypes}
+	if n, ok := ctaSequenceLength(ctaContextAtom{}, env); n != 1 || !ok {
+		t.Errorf("ctaSequenceLength(.) = %d, %v, want 1, true", n, ok)
+	}
+}
+
+// integerSequence stores no empty range: `(1 to 0, 5)` holds the one range
+// 5 to 5, and `(3 to 1, 1 to 2)` the one range 1 to 2. With the hi < lo skip
+// removed each stores its empty range first.
+func TestIntegerSequenceStoresNoEmptyRange(t *testing.T) {
+	simple := xsd.SimpleContent{SimpleType: asBuiltin(t, "integer")}
+	for _, tc := range []struct {
+		expr string
+		want []ctaIntegerRange
+	}{
+		{". = (1 to 0, 5)", []ctaIntegerRange{{lo: 5, hi: 5}}},
+		{". = (3 to 1, 1 to 2)", []ctaIntegerRange{{lo: 1, hi: 2}}},
+	} {
+		test, ok := CompileAssertionTest(asRecord(tc.expr), seededTypes, simple, asUses(t, nil), asNoElems)
+		if !ok {
+			t.Fatalf("CompileAssertionTest(%q): declined, want compiled", tc.expr)
+		}
+		cmp, isCompare := test.root.(ctaCompare)
+		if !isCompare {
+			t.Fatalf("CompileAssertionTest(%q).root = %T, want ctaCompare", tc.expr, test.root)
+		}
+		seq, isSeq := cmp.right.(ctaIntegerRanges)
+		if !isSeq {
+			t.Fatalf("CompileAssertionTest(%q) right operand = %T, want ctaIntegerRanges", tc.expr, cmp.right)
+		}
+		if len(seq.ranges) != len(tc.want) {
+			t.Fatalf("CompileAssertionTest(%q) ranges = %v, want %v", tc.expr, seq.ranges, tc.want)
+		}
+		for i, r := range seq.ranges {
+			if r != tc.want[i] {
+				t.Errorf("CompileAssertionTest(%q) ranges[%d] = %v, want %v", tc.expr, i, r, tc.want[i])
+			}
+		}
+	}
+}

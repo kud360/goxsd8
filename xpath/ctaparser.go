@@ -720,7 +720,10 @@ func (p *ctaParser) booleanExpr() (ctaExpr, bool) {
 		if !ok {
 			return nil, false
 		}
-		op, _ := p.comparator()
+		op, compared := p.comparator()
+		if !compared {
+			return nil, false
+		}
 		return p.generalComparison(op, left)
 	}
 	if p.at(ctaLParen) {

@@ -837,11 +837,10 @@ func (w *walk) assertionTyped(u xsd.AttributeUse, lexical string, ctx value.Cont
 // empty e, the one text node the data model instance holds for it
 // (xpath-datamodel Appendix J.2), unnormalized. It is bound whatever `$value`
 // is, an invalid e's included, but for the e below: `.` is E's string value
-// whatever its [validity].
-// A ·nilled· e and one whose {content type} is not simple bind the zero
-// [xpath.ValueBinding] — the zero-length string, which is a ·nilled· e's
-// string value (xpath-datamodel §6.2.4), and a string value no {test} compiled
-// for content that is not simple reads, `.` declining there
+// whatever its [validity]. A ·nilled· e and one whose {content type} is not
+// simple bind the zero [xpath.ValueBinding] — the zero-length string, which is
+// a ·nilled· e's string value (xpath-datamodel §6.2.4), and a string value no
+// {test} compiled for content that is not simple reads, `.` declining there
 // ([xpath.CompileAssertionTest]).
 //
 // An e under simple content that has element [[children]] — which
