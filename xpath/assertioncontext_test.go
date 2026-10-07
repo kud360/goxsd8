@@ -20,7 +20,7 @@ func cxEval(t *testing.T, expr string, types xsd.TypeResolver, st *xsd.SimpleTyp
 	if !ok {
 		t.Fatalf("CompileAssertionTest(%q) over %s content: declined, want compiled", expr, st.Name().Local)
 	}
-	return test.Evaluate(backend(), types, asValues(t), asNoChildren, nil, bound, time.Time{})
+	return test.Evaluate(backend(), types, asElem, asValues(t), asNoChildren, nil, bound, time.Time{})
 }
 
 // `.` over simple content atomizes to ONE xs:untypedAtomic value, E's string
@@ -164,7 +164,7 @@ func TestAssertionContextItemOverEveryContentType(t *testing.T) {
 				t.Errorf("CompileAssertionTest(%q) over %s content: declined, want compiled", row.expr, tc.why)
 				continue
 			}
-			if got := test.Evaluate(backend(), seededTypes, asValues(t), asNoChildren, nil, BindValue(row.text, nil), time.Time{}); got != row.want {
+			if got := test.Evaluate(backend(), seededTypes, asElem, asValues(t), asNoChildren, nil, BindValue(row.text, nil), time.Time{}); got != row.want {
 				t.Errorf("Evaluate(%q) over %s content whose string value is %q = %v, want %v", row.expr, tc.why, row.text, got, row.want)
 			}
 		}

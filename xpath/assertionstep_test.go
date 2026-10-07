@@ -86,7 +86,7 @@ func TestAssertionElementStepExistence(t *testing.T) {
 	} {
 		t.Run(tc.expr, func(t *testing.T) {
 			test := esCompile(t, tc.expr)
-			if got := test.Evaluate(backend(), seededTypes, asValues(t), asNoChildren, acTally(test, tc.nodes...), ValueBinding{}, time.Time{}); got != tc.holds {
+			if got := test.Evaluate(backend(), seededTypes, asElem, asValues(t), asNoChildren, acTally(test, tc.nodes...), ValueBinding{}, time.Time{}); got != tc.holds {
 				t.Errorf("Evaluate(%q) over %v = %v, want %v", tc.expr, tc.nodes, got, tc.holds)
 			}
 		})
@@ -142,7 +142,7 @@ func TestAssertionValueStepStillReadsChildElements(t *testing.T) {
 		want    bool
 	}{{"x", true}, {"y", false}} {
 		children := asChildren(t, asChild{uq("d"), "string", tc.lexical, false})
-		if got := test.Evaluate(backend(), seededTypes, asValues(t), children, nil, ValueBinding{}, time.Time{}); got != tc.want {
+		if got := test.Evaluate(backend(), seededTypes, asElem, asValues(t), children, nil, ValueBinding{}, time.Time{}); got != tc.want {
 			t.Errorf("Evaluate(d = 'x') over d %q = %v, want %v", tc.lexical, got, tc.want)
 		}
 	}

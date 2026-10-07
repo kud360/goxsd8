@@ -90,7 +90,7 @@ func TestAssertionIfExpr(t *testing.T) {
 		for _, c := range tc.children {
 			nodes = append(nodes, acPath(c.name.Local))
 		}
-		got := test.Evaluate(backend(), seededTypes, asValues(t, tc.attrs...), asChildren(t, tc.children...), acTally(test, nodes...), ValueBinding{}, time.Time{})
+		got := test.Evaluate(backend(), seededTypes, asElem, asValues(t, tc.attrs...), asChildren(t, tc.children...), acTally(test, nodes...), ValueBinding{}, time.Time{})
 		if got != tc.want {
 			t.Errorf("Evaluate(%q) over %v, %v = %v, want %v", tc.expr, tc.attrs, tc.children, got, tc.want)
 		}
@@ -110,10 +110,10 @@ func TestAssertionIfExprBranchAsksExistence(t *testing.T) {
 		t.Fatalf("CompileAssertionTest(%q): declined, want compiled", expr)
 	}
 	x := asValues(t, asTyped{uq("t"), "string", "x"})
-	if !test.Evaluate(backend(), seededTypes, x, asNoChildren, acTally(test, acPath("p")), ValueBinding{}, time.Time{}) {
+	if !test.Evaluate(backend(), seededTypes, asElem, x, asNoChildren, acTally(test, acPath("p")), ValueBinding{}, time.Time{}) {
 		t.Errorf("Evaluate(%q) over a p child = false, want true", expr)
 	}
-	if test.Evaluate(backend(), seededTypes, x, asNoChildren, acTally(test), ValueBinding{}, time.Time{}) {
+	if test.Evaluate(backend(), seededTypes, asElem, x, asNoChildren, acTally(test), ValueBinding{}, time.Time{}) {
 		t.Errorf("Evaluate(%q) with no p child = true, want false", expr)
 	}
 }
@@ -141,7 +141,7 @@ func TestAssertionIfExprEvaluatesOneBranch(t *testing.T) {
 		{"not(if (1 div 0 = 0) then true() else false())", false},
 		{"not(if (xs:date('2000-01-01')) then true() else false())", false},
 	} {
-		if got := aiCompile(t, tc.expr).Evaluate(backend(), seededTypes, asValues(t), asNoChildren, nil, ValueBinding{}, time.Time{}); got != tc.want {
+		if got := aiCompile(t, tc.expr).Evaluate(backend(), seededTypes, asElem, asValues(t), asNoChildren, nil, ValueBinding{}, time.Time{}); got != tc.want {
 			t.Errorf("Evaluate(%q) = %v, want %v", tc.expr, got, tc.want)
 		}
 	}

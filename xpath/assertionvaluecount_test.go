@@ -39,7 +39,7 @@ func vcAssertion(t *testing.T, types xsd.TypeResolver, tc vcCase) bool {
 	if err != nil {
 		t.Fatalf("mapping %q against %s: %v", tc.lexical, tc.st.Name().Local, err)
 	}
-	return test.Evaluate(backend(), types, asValues(t), asNoChildren, nil, BindValue("", Typed(v)), time.Time{})
+	return test.Evaluate(backend(), types, asElem, asValues(t), asNoChildren, nil, BindValue("", Typed(v)), time.Time{})
 }
 
 // vcFacet decides tc.expr as an assertions facet's {test} over tc.lexical
@@ -176,7 +176,7 @@ func TestCountValueOverSpecialAndNonSimpleContent(t *testing.T) {
 		if !ok {
 			t.Fatalf("CompileAssertionTest(%q): declined, want compiled", tc.expr)
 		}
-		if got := test.Evaluate(backend(), seededTypes, asValues(t), asNoChildren, nil, tc.bound, time.Time{}); got != tc.want {
+		if got := test.Evaluate(backend(), seededTypes, asElem, asValues(t), asNoChildren, nil, tc.bound, time.Time{}); got != tc.want {
 			t.Errorf("Evaluate(%q) = %v, want %v", tc.expr, got, tc.want)
 		}
 	}
