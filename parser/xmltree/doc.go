@@ -199,9 +199,14 @@
 //     <!ATTLIST can default the namespace declaration that binds the prefix
 //     (§3.3.2), a non-validating processor must supply that default from the
 //     internal subset (§5.1), and the reader applies no attribute default.
-//     One wrapping a cause — an encoding/xml syntax error, among them its
-//     refusal of an encoding declaration the reader does not decode, an I/O
-//     fault, or one of the refusals above — may be a limit of this reader.
+//     A WFC Parsed Entity charge against an unparsed entity declared after a
+//     reference to a parameter entity the reader did not read, which may
+//     have held an overriding declaration, is made only in a standalone="yes" document,
+//     and is definite there: "when `standalone="yes"`, processors MUST process these
+//     declarations" (§5.1), so that declaration binds (§4.2; #2459). One wrapping a
+//     cause — an encoding/xml syntax error, among them its refusal of an encoding
+//     declaration the reader does not decode, an I/O fault, or one of the refusals
+//     above — may be a limit of this reader.
 //
 // Fuzz targets guard the reader against panics on malformed input
 // (PRINCIPLES 24); malformed XML is an error value, never a crash.
