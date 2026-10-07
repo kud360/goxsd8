@@ -88,22 +88,22 @@
 //     over one included), fn:string over any of those or over a typed count, arithmetic or function result,
 //     or a cast of one, outside that family and those primitives, a cast of an xs:float or xs:double operand
 //     to a target other than its own type or an ancestor of it, fn:string over such an operand, a collation
-//     argument, a function call of the wrong arity, `.` under content that is not simple or where it is a
-//     node — the whole operand of an ·effective boolean value·, fn:not, fn:exists, fn:empty or fn:count —
-//     and the zero-argument string functions wherever `.` declines, an integer sequence in any other
-//     position or over any other operand, or longer than ctaMaxSequenceLength, an arithmetic operand that
-//     is not numeric, an xs:float one against xs:double (#889), a unary sign, and a `$value` whose {simple
-//     type definition} is classified as such an attribute's type would be, or is a list of a type that
-//     would be; a `$value` over ·special· content is xs:untypedAtomic, as such an attribute is.
-//     FacetAssertions is the value.AssertionEvaluator for an assertions facet's {test} (Datatypes
-//     §4.3.13.3, cvc-assertions-valid), over the same grammar: `$value` is bound to the value under the
-//     facet's type, or under its ·active basic member· where that type is a union (dt-xdmrep clause 4), and
-//     there is no context item, so `.`, an attribute or child step, an element step, a child path, a rooted
-//     path and a zero-argument string function each raise err:XPDY0002 and fail the facet; an fn:count call
-//     over a path declines. A Type Alternative's {test} declines `.` everywhere. Longer paths in other
-//     positions, the other axes, predicates in other positions or of other shapes, positional ones among
-//     them, unions outside fn:count, quantified expressions, a conditional read as an item rather than for
-//     its ·effective boolean value·, the collation arguments and every other F&O function are PLANNED
+//     argument, a function call of the wrong arity, `.` outside a value predicate under content that is not
+//     simple or where it is a node — the whole operand of an ·effective boolean value·, fn:not, fn:exists,
+//     fn:empty or fn:count — and the zero-argument string functions wherever `.` declines, an integer
+//     sequence in any other position or over any other operand, or longer than ctaMaxSequenceLength, an
+//     arithmetic operand that is not numeric, an xs:float one against xs:double (#889), a unary sign, and a
+//     `$value` whose {simple type definition} is classified as such an attribute's type would be, or is a
+//     list of a type that would be; a `$value` over ·special· content is xs:untypedAtomic, as such an
+//     attribute is. FacetAssertions is the value.AssertionEvaluator for an assertions facet's {test}
+//     (Datatypes §4.3.13.3, cvc-assertions-valid), over the same grammar: `$value` is bound to the value
+//     under the facet's type, or under its ·active basic member· where that type is a union (dt-xdmrep
+//     clause 4), and there is no context item, so `.`, an attribute or child step, an element step, a child
+//     path, a rooted path and a zero-argument string function each raise err:XPDY0002 and fail the facet; an
+//     fn:count call over a path declines. A Type Alternative's {test} declines `.` everywhere. Longer paths
+//     in other positions, the other axes, predicates in other positions or of other shapes, positional ones
+//     among them, unions outside fn:count, quantified expressions, a conditional read as an item rather than
+//     for its ·effective boolean value·, the collation arguments and every other F&O function are PLANNED
 //     (#1042).
 //  3. The full grammar (docs/specs/md/xpath20.md) and function library
 //     (docs/specs/md/xpath-functions.md) — M7 onward, ratcheted.

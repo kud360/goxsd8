@@ -72,8 +72,8 @@ func (facetAssertions) Evaluate(b value.Backend, r xsd.TypeResolver, st *xsd.Sim
 	if defect.kind != ctaNoDefect {
 		return value.AssertionDeclined
 	}
-	// No string value is bound: the facet tree never reads one, since `.`
-	// compiles to ctaNoContextItem (cvc-assertions-valid clause 1.2).
+	// The string value bound is "" and unread: the facet tree compiles `.` to
+	// ctaNoContextItem (cvc-assertions-valid clause 1.2).
 	in := ctaTypedInput{attrs: noTypedAttributes, children: noChildElements, value: BindValue("", Typed(v))}
 	if ctaEval(root, ctaEnv{backend: b, types: r, input: in}) != ctaTrue {
 		return value.AssertionFails
