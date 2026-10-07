@@ -240,8 +240,8 @@ func TestAssertionNodeFunctionsDeclineOtherShapes(t *testing.T) {
 // so either function over `.` raises err:XPDY0002 and fails the facet — never
 // declined, and never the answer a fabricated element would give, which for
 // `namespace-uri() = ""` and `in-scope-prefixes(.) = 'xml'` holds. With
-// ctaContextElementOf reading the evaluation's element whatever the context
-// node, the first row reads the facet's absent element and panics; with
+// ctaContextElementOf's ctaAbsentNode arm reading the evaluation's element,
+// the first row reads the facet's absent element and panics; with
 // ctaFacetFacade.contextNode declining, every row is declined.
 func TestFacetNodeFunctionsRaise(t *testing.T) {
 	str := asBuiltin(t, "string")

@@ -1000,7 +1000,6 @@ func (ctaUntypedValue) readsChild(xsd.QName) bool   { return false }
 func (ctaCurrentDate) readsChild(xsd.QName) bool    { return false }
 func (ctaNoFocus) readsChild(xsd.QName) bool        { return false }
 func (ctaContextAtom) readsChild(xsd.QName) bool    { return false }
-func (ctaContextNode) readsChild(xsd.QName) bool    { return false }
 func (ctaNamespaceURI) readsChild(xsd.QName) bool   { return false }
 func (ctaPrefixMember) readsChild(xsd.QName) bool   { return false }
 
@@ -1154,7 +1153,6 @@ func (ctaUntypedValue) counted(into []ctaTallied) []ctaTallied   { return into }
 func (ctaContextAtom) counted(into []ctaTallied) []ctaTallied    { return into }
 func (ctaCurrentDate) counted(into []ctaTallied) []ctaTallied    { return into }
 func (ctaNoFocus) counted(into []ctaTallied) []ctaTallied        { return into }
-func (ctaContextNode) counted(into []ctaTallied) []ctaTallied    { return into }
 func (ctaNamespaceURI) counted(into []ctaTallied) []ctaTallied   { return into }
 func (ctaPrefixMember) counted(into []ctaTallied) []ctaTallied   { return into }
 
@@ -1410,7 +1408,7 @@ func (f ctaAssertionFacade) contextItem() (ctaValue, bool) {
 // reads E's string value, so contextNode records no read of it
 // (f.readsContextItem) and [AssertionTest.ReadsContextItem] stays false for a
 // {test} whose only `.` is such an argument.
-func (ctaAssertionFacade) contextNode() (ctaValue, bool) {
+func (ctaAssertionFacade) contextNode() (ctaNodeArg, bool) {
 	return ctaContextNode{}, true
 }
 

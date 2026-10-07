@@ -1576,7 +1576,7 @@ func (p *ctaParser) namespaceURICall() (ctaValue, bool) {
 // ctaFacade.contextItem, whose atom a node parameter does not take, so the
 // call records no read of E's string value ([AssertionTest.ReadsContextItem]).
 // Every other list declines.
-func (p *ctaParser) contextNodeArgument(admitsNone bool) (ctaValue, bool) {
+func (p *ctaParser) contextNodeArgument(admitsNone bool) (ctaNodeArg, bool) {
 	n := p.contextNodeCallLength(0, admitsNone)
 	if n == 0 {
 		return nil, false
@@ -1878,7 +1878,7 @@ func (ctaPredicateFacade) count(ctaCounted, ctaTypes) (ctaValue, bool) { return 
 
 // contextNode declines: inside a predicate `.` is the candidate child and not
 // E. It is never reached, callsLibrary being false.
-func (ctaPredicateFacade) contextNode() (ctaValue, bool) { return nil, false }
+func (ctaPredicateFacade) contextNode() (ctaNodeArg, bool) { return nil, false }
 
 // focus declines. It is never reached: callsLibrary is false, so `position()`
 // and `last()` in a predicate reach constructorFunction and decline there,
