@@ -559,8 +559,9 @@ func (ctaIf) ctaExpr()               {}
 // `instance of` tail over one of them or over an fn:data call (ctaInstanceOf,
 // ctaFacade.instanceOf), and a call to an F&O string or sequence function
 // over them (ctaMatch, ctaUnaryString, ctaPresence, ctaDistinctValues,
-// ctaStringFunction; ctaFacade.callsLibrary) or to fn:current-date
-// (ctaCurrentDate), the assertion façade's `.` (ctaContextAtom,
+// ctaStringFunction; ctaFacade.callsLibrary), to fn:current-date
+// (ctaCurrentDate) or, over an absent focus, to fn:position or fn:last
+// (ctaNoFocus, ctaFacade.focus), the assertion façade's `.` (ctaContextAtom,
 // ctaFacade.contextItem), and an integer or string sequence
 // (ctaIntegerRanges, ctaStringSequence, ctaFacade.constructsSequences). Every
 // branch answers readsChild and counted on ctaExpr's terms.
@@ -765,6 +766,12 @@ type ctaFacade interface {
 	// contextItem compiles the [47] ContextItemExpr `.` into its node,
 	// reporting false where the façade declines it, on attribute's terms.
 	contextItem() (ctaValue, bool)
+	// focus compiles a call to fn:position or fn:last with no argument
+	// (xpath-functions.md §16.1, §16.2), a read of the context position or
+	// size whose result is st, xs:integer, into its node, reporting false
+	// where the façade declines it, on attribute's terms. Only a façade that
+	// calls the library reaches it (ctaParser.libraryCall).
+	focus(st *xsd.SimpleType) (ctaValue, bool)
 	// count compiles an fn:count call over a path, compiled to arg, into its
 	// node, reporting false where the façade declines it, on attribute's
 	// terms. An argument that is no path never reaches it: ctaParser.countCall
@@ -777,10 +784,11 @@ type ctaFacade interface {
 	// callsLibrary reports whether the façade admits a call to the F&O
 	// functions ctaParser.libraryCall parses — fn:contains, fn:starts-with,
 	// fn:ends-with, fn:string-length, fn:normalize-space, fn:string, fn:empty,
-	// fn:exists, fn:distinct-values, fn:true, fn:false and fn:current-date —
-	// at all, which §3.12.6 clause 3 pins out of [12] ta-BooleanFunction
-	// (fn:not alone) and [18] ta-ConstructorFunction (constructors alone), and
-	// an fn:count argument that is no path (ctaParser.countCall).
+	// fn:exists, fn:distinct-values, fn:true, fn:false, fn:current-date,
+	// fn:position and fn:last (ctaFacade.focus) — at all, which §3.12.6 clause
+	// 3 pins out of [12] ta-BooleanFunction (fn:not alone) and [18]
+	// ta-ConstructorFunction (constructors alone), and an fn:count argument
+	// that is no path (ctaParser.countCall).
 	callsLibrary() bool
 	// conditional reports whether the façade admits xpath20.md [7] IfExpr at
 	// all (ctaParser.ifExpr), which §3.12.6's grammar has no production for.
@@ -859,6 +867,13 @@ func (ctaTypeAlternativeFacade) contextItem() (ctaValue, bool) {
 // every [18] ta-ConstructorFunction a constructor for a built-in datatype, and
 // no other function but fn:not is in the grammar.
 func (ctaTypeAlternativeFacade) count(ctaCounted, ctaTypes) (ctaValue, bool) {
+	return nil, false
+}
+
+// focus declines, on count's terms. It is never reached: callsLibrary is
+// false, so `position()` and `last()` reach ctaParser.constructorFunction and
+// decline there.
+func (ctaTypeAlternativeFacade) focus(*xsd.SimpleType) (ctaValue, bool) {
 	return nil, false
 }
 
@@ -1593,6 +1608,8 @@ func ctaStaticOf(v ctaValue) ctaStatic {
 		return ctaTyped{st: n.cast.target}
 	case ctaCurrentDate:
 		return ctaTyped(n)
+	case ctaNoFocus:
+		return ctaTyped(n)
 	case ctaDistinctValues:
 		return ctaStaticOf(n.operand)
 	case ctaValueVar:
@@ -1947,6 +1964,8 @@ func (e ctaEffectiveBoolean) eval(env ctaEnv) ctaAnswer {
 		return ctaBoolean(e.operand, n.cast.target, env)
 	case ctaCurrentDate:
 		return ctaBoolean(e.operand, n.st, env)
+	case ctaNoFocus:
+		return ctaBoolean(e.operand, n.st, env)
 	case ctaDistinctValues:
 		return ctaBoolean(e.operand, n.st, env)
 	case ctaValueVar:
@@ -2116,7 +2135,8 @@ func ctaValidated(i ctaItem) (value.Value, bool) {
 //     and converted to c on the typed operands' terms, once the function has
 //     been applied to its arguments (ctafunc.go).
 //   - a rooted path raises err:XPDY0050 before it yields anything, and a read
-//     of an absent context item err:XPDY0002.
+//     of an absent context item, or of an absent focus by fn:position or
+//     fn:last, err:XPDY0002.
 //   - an ARITHMETIC result is of its own result type and converted to c on
 //     the typed operands' terms, once its operands have been converted into
 //     its operation type and computed (ctaArithItem).
@@ -2155,6 +2175,8 @@ func ctaItemOf(v ctaValue, c *xsd.SimpleType, env ctaEnv) ctaItem {
 	case ctaNoDocumentRoot:
 		return ctaRaised{} // err:XPDY0050
 	case ctaNoContextItem:
+		return ctaRaised{} // err:XPDY0002
+	case ctaNoFocus:
 		return ctaRaised{} // err:XPDY0002
 	case ctaLiteral:
 		return ctaConvert(n.text, n.st, c, env)

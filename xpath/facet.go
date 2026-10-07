@@ -16,15 +16,16 @@ import (
 // 1.2), so every expression that reads one — [47] ContextItemExpr `.`, an
 // attribute or child-axis step, a "/" or "//" opening a path, and the implicit
 // argument of fn:string, fn:string-length and fn:normalize-space called with
-// none — raises err:XPDY0002 (ctaNoContextItem), and `$value`, bound to the XDM
-// representation of the value under the facet's type, or under its ·active
-// basic member· where that type is a union (clause 1.4, dt-xdmrep clause 4),
-// is the whole of what a {test} can read, arithmetic and the F&O string and
-// sequence functions over it included (ctaFacetFacade.computes,
-// ctaFacetFacade.callsLibrary), `castable as` and `instance of` over it
-// (ctaFacetFacade.castable, ctaFacetFacade.instanceOf), and fn:count over it or
-// over any other operand that is no path. An fn:count call over a path declines
-// (ctaFacetFacade.count).
+// none — raises err:XPDY0002 (ctaNoContextItem), and no context position or
+// size (clause 1.3), so fn:position and fn:last raise it too (ctaNoFocus); and
+// `$value`, bound to the XDM representation of the value under the facet's
+// type, or under its ·active basic member· where that type is a union (clause
+// 1.4, dt-xdmrep clause 4), is the whole of what a {test} can read, arithmetic
+// and the F&O string and sequence functions over it included
+// (ctaFacetFacade.computes, ctaFacetFacade.callsLibrary), `castable as` and
+// `instance of` over it (ctaFacetFacade.castable, ctaFacetFacade.instanceOf),
+// and fn:count over it or over any other operand that is no path. An fn:count
+// call over a path declines (ctaFacetFacade.count).
 
 // FacetAssertions is the [value.AssertionEvaluator] for an assertions facet's
 // {test}s: it compiles the {test} under the facet's static context and
@@ -41,7 +42,8 @@ import (
 //     type error, which cvc-assertions-valid treats alike — err:XPDY0002 for a
 //     read of the absent context item among them, arithmetic, `castable as`
 //     and fn:data under `instance of` over one and fn:string, fn:string-length
-//     and fn:normalize-space with no argument included, and the err:FOAR0001 and
+//     and fn:normalize-space with no argument included, and of the absent
+//     focus by fn:position and fn:last, and the err:FOAR0001 and
 //     err:FOAR0002 of arithmetic ([AssertionTest.Evaluate] lists them);
 //   - [value.AssertionDeclined], where this engine does not evaluate it: a
 //     {test} [CompileAssertionTest] would decline over a simple {content type}
@@ -193,6 +195,15 @@ func (ctaFacetFacade) rooted() (ctaValue, bool) {
 // contextItem compiles `.` to ctaNoContextItem (xpath20.md §3.1.4).
 func (ctaFacetFacade) contextItem() (ctaValue, bool) {
 	return ctaNoContextItem{}, true
+}
+
+// focus compiles a call to fn:position or fn:last to ctaNoFocus, typed st:
+// there is no context position or size (cvc-assertions-valid clause 1.3) and
+// no context item (clause 1.2), so the call raises err:XPDY0002
+// (xpath-functions.md §16.1, §16.2) and `position() le 50` fails the facet
+// rather than declining.
+func (ctaFacetFacade) focus(st *xsd.SimpleType) (ctaValue, bool) {
+	return ctaNoFocus{st: st}, true
 }
 
 // count declines every fn:count call over a path, which reads the absent

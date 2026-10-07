@@ -1255,6 +1255,8 @@ func (p *ctaParser) libraryCall(local string) (ctaValue, bool) {
 		return p.constantCall(local)
 	case "current-date":
 		return p.currentDateCall()
+	case "position", "last":
+		return p.focusCall()
 	}
 	return p.constructorFunction()
 }
@@ -1514,6 +1516,22 @@ func (p *ctaParser) currentDateCall() (ctaValue, bool) {
 	return ctaCurrentDate{st: date}, true
 }
 
+// focusCall parses a call to fn:position or fn:last with no argument
+// (xpath-functions.md §16.1, §16.2), whose result is xs:integer, into the node
+// the façade compiles a read of its focus to (ctaFacade.focus). An argument
+// declines (err:XPST0017), and so does an xs:integer that does not resolve.
+func (p *ctaParser) focusCall() (ctaValue, bool) {
+	args, ok := p.arguments()
+	if !ok || len(args) != 0 {
+		return nil, false
+	}
+	integer, resolved := p.types.simple(ctaBuiltin("integer"))
+	if !resolved {
+		return nil, false
+	}
+	return p.facade.focus(integer)
+}
+
 // countCall parses an fn:count call, xpath20.md [48] FunctionCall with one
 // argument, whose name the caller has already resolved to fn:count. Where the
 // façade calls the library (ctaFacade.callsLibrary) and the argument opens as
@@ -1688,12 +1706,17 @@ func (f ctaPredicateFacade) contextItem() (ctaValue, bool) { return f.candidate,
 
 func (ctaPredicateFacade) count(ctaCounted, ctaTypes) (ctaValue, bool) { return nil, false }
 
+// focus declines. It is never reached: callsLibrary is false, so `position()`
+// and `last()` in a predicate reach constructorFunction and decline there,
+// under ctaParser.predicate's GAP(xpath).
+func (ctaPredicateFacade) focus(*xsd.SimpleType) (ctaValue, bool) { return nil, false }
+
 // computes is true, on ctaAssertionFacade.computes' terms.
 func (ctaPredicateFacade) computes() bool { return true }
 
 // callsLibrary is false: a library call in a predicate declines at
-// constructorFunction, so `string-length(.)` and position() and last(), which
-// the library holds none of, never reach a node.
+// constructorFunction, so `string-length(.)`, position() and last() never
+// reach a node.
 func (ctaPredicateFacade) callsLibrary() bool { return false }
 
 // conditional is false: a branch may be a bare value, which a predicate's root
