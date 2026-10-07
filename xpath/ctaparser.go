@@ -778,8 +778,8 @@ func (p *ctaParser) andExpr() (ctaExpr, bool) {
 // rule 2's (xpath20.md §2.4.3), and never that of the atom ctaContextAtom
 // reads. The direction is the withhold [CompileAssertionTest] reports. (#1042)
 func (p *ctaParser) booleanExpr() (ctaExpr, bool) {
-	if n := p.integerSequenceLength(0); n > 0 && p.peek(n).kind == ctaCompTok {
-		left, ok := p.integerSequence(n)
+	if n := p.sequenceLength(0); n > 0 && p.peek(n).kind == ctaCompTok {
+		left, ok := p.sequence(n)
 		if !ok {
 			return nil, false
 		}

@@ -1606,6 +1606,8 @@ func ctaStaticOf(v ctaValue) ctaStatic {
 		return ctaUntypedAtomic{}
 	case ctaIntegerRanges:
 		return ctaTyped{st: n.st}
+	case ctaStringSequence:
+		return ctaTyped{st: n.st}
 	default:
 		return ctaUntypedAtomic{}
 	}
@@ -2187,6 +2189,8 @@ func ctaItemOf(v ctaValue, c *xsd.SimpleType, env ctaEnv) ctaItem {
 		return ctaContextAtomItem(c, env)
 	case ctaIntegerRanges:
 		return ctaIntegerRangesItem(n, c, env)
+	case ctaStringSequence:
+		return ctaStringSequenceItem(n, c, env)
 	default:
 		return ctaAtoms{}
 	}
