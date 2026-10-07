@@ -55,8 +55,8 @@ func TestAssertionCastableOverValue(t *testing.T) {
 // select are out of reach here (ctaAssertionFacade declines a wildcard), so the
 // sequence of two is `$value`'s below. Every row declines with
 // ctaParser.castExpr's `castable` arm removed; the absent row under `?` is
-// false, and the absent row without it true, with ctaCastable dropping its
-// cast's allowsEmpty.
+// false with castableTail forcing its cast's allowsEmpty false, and the
+// absent rows without `?` flip with it forced true.
 func TestAssertionCastableOverAnUntypedAttribute(t *testing.T) {
 	uses := asUses(t, map[string]string{"a": "anySimpleType"})
 	at := func(lexical string) []asTyped { return []asTyped{{uq("a"), "anySimpleType", lexical}} }

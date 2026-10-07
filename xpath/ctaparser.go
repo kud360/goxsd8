@@ -231,9 +231,9 @@ const (
 	// one, and ctaParser.peek synthesizes it.
 	ctaEOF ctaKind = iota
 	// ctaNameTok is an NCName or a prefixed QName, whose text is as written.
-	// The keywords 'or', 'and', 'cast', 'castable', 'as' and the 'attribute' axis name are
-	// this kind too: XPath has no reserved words, so what a name means is the
-	// parser's to decide from position.
+	// The keywords 'or', 'and', 'cast', 'castable', 'as' and the 'attribute'
+	// axis name are this kind too: XPath has no reserved words, so what a name
+	// means is the parser's to decide from position.
 	ctaNameTok
 	// ctaWildcardTok is one [37] Wildcard — `*`, `NCName ':' '*'` or
 	// `'*' ':' NCName` — whose text is as written. It is its own kind and not a
@@ -625,8 +625,8 @@ func (p *ctaParser) peek(ahead int) ctaToken {
 func (p *ctaParser) at(k ctaKind) bool { return p.peek(0).kind == k }
 
 // atName reports whether the cursor sits on the unprefixed name text, which is
-// how the keywords 'or', 'and', 'cast', 'castable', 'as' and the 'attribute' axis are
-// recognized.
+// how the keywords 'or', 'and', 'cast', 'castable', 'as' and the 'attribute'
+// axis are recognized.
 func (p *ctaParser) atName(text string) bool {
 	return p.peek(0).kind == ctaNameTok && p.peek(0).text == text
 }
@@ -896,8 +896,8 @@ func (p *ctaParser) comparator() (ctaComparator, bool) {
 //
 // The six spellings are NCNames, and XPath has no reserved words, so what makes
 // one an operator is its position: right after a [14] ta-ValueExpr no other
-// production opens with a name but 'cast', 'castable', 'and' and 'or', none of which is
-// spelled like one.
+// production opens with a name but 'cast', 'castable', 'and' and 'or', none
+// of which is spelled like one.
 func (p *ctaParser) valueComparator() (ctaComparator, bool) {
 	if !p.at(ctaNameTok) {
 		return ctaEqual, false
