@@ -1576,7 +1576,7 @@ func (p *ctaParser) namespaceURICall() (ctaValue, bool) {
 // ctaFacade.contextItem, whose atom a node parameter does not take, so the
 // call records no read of E's string value ([AssertionTest.ReadsContextItem]).
 // Every other list declines.
-func (p *ctaParser) contextNodeArgument(admitsNone bool) (ctaValue, bool) {
+func (p *ctaParser) contextNodeArgument(admitsNone bool) (ctaNodeArg, bool) {
 	n := p.contextNodeCallLength(0, admitsNone)
 	if n == 0 {
 		return nil, false
@@ -1606,7 +1606,9 @@ func (p *ctaParser) contextNodeCallLength(at int, admitsNone bool) int {
 // `in-scope-prefixes(.)`, against a StringLiteral or a parenthesized sequence
 // of them (stringOperandLength), the call on either side, and 0 where they
 // spell none or the façade calls no library function (ctaFacade.callsLibrary).
-// Nothing is consumed.
+// Nothing is consumed, and the lookahead records only the err:XPST0081 of an
+// unbound prefix that the parse itself records at the same token
+// (prefixesCallLength).
 func (p *ctaParser) prefixMemberLength() int {
 	if !p.facade.callsLibrary() {
 		return 0
@@ -1631,7 +1633,11 @@ func (p *ctaParser) prefixMemberLength() int {
 
 // prefixesCallLength is how many tokens, from offset at ahead of the cursor,
 // spell `in-scope-prefixes(.)`, the name resolved in the function namespace
-// (functionName), and 0 where they spell anything else.
+// (functionName), and 0 where they spell anything else. Nothing is consumed,
+// but functionName records the err:XPST0081 of an unbound prefix; that is
+// only the one the parse itself records at the same token, since a prefixed
+// name followed by `(` is a FunctionCall whatever this answers and the parser
+// never backtracks.
 func (p *ctaParser) prefixesCallLength(at int) int {
 	tok := p.peek(at)
 	if tok.kind != ctaNameTok || p.peek(at+1).kind != ctaLParen || p.functionName(tok.text) != ctaInScopePrefixesFunction {
@@ -1878,7 +1884,7 @@ func (ctaPredicateFacade) count(ctaCounted, ctaTypes) (ctaValue, bool) { return 
 
 // contextNode declines: inside a predicate `.` is the candidate child and not
 // E. It is never reached, callsLibrary being false.
-func (ctaPredicateFacade) contextNode() (ctaValue, bool) { return nil, false }
+func (ctaPredicateFacade) contextNode() (ctaNodeArg, bool) { return nil, false }
 
 // focus declines. It is never reached: callsLibrary is false, so `position()`
 // and `last()` in a predicate reach constructorFunction and decline there,

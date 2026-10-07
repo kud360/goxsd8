@@ -50,15 +50,16 @@ import (
 // façade's grammar but fn:count over a path, and compiles every read of the
 // context item — `.`, an attribute or child step, a rooted path — to the
 // err:XPDY0002 an assertions facet's absent context item raises
-// (ctaNoContextItem). It is not a stage of a general XPath 2.0 evaluator: the
-// productions below reach no axis but attribute, one child step, the child-step
-// paths and the one descendant step whose existence is asked and the descendant
-// steps fn:count counts over, no predicate or union but those in an fn:count
-// argument, no variable but `$value` and no function but fn:not, fn:count, the
-// ctaParser.libraryCall names, fn:in-scope-prefixes as an operand of `=`
-// (ctaParser.prefixMember) and fn:data as the operand of `instance of`
-// (ctaParser.instanceofExpr), so evaluating them directly is exact where a
-// fail-open delegation to a general engine would be a guess.
+// (ctaNoContextItem; ctaAbsentNode for `.` as a node). It is not a stage of a
+// general XPath 2.0 evaluator: the productions below reach no axis but
+// attribute, one child step, the child-step paths and the one descendant step
+// whose existence is asked and the descendant steps fn:count counts over, no
+// predicate or union but those in an fn:count argument, no variable but
+// `$value` and no function but fn:not, fn:count, the ctaParser.libraryCall
+// names, fn:in-scope-prefixes as an operand of `=` (ctaParser.prefixMember) and
+// fn:data as the operand of `instance of` (ctaParser.instanceofExpr), so
+// evaluating them directly is exact where a fail-open delegation to a general
+// engine would be a guess.
 //
 //	[8]  Test                ::= OrExpr
 //	[9]  OrExpr              ::= AndExpr ( 'or' AndExpr )*
@@ -444,7 +445,7 @@ type ctaLexicalInput struct{ attrs Attributes }
 // arm, so a Type Alternative's evaluation cannot carry any of them. counts is
 // nil where the tree counts nothing, which a facet evaluation's never does,
 // and node is nil in a facet evaluation, whose tree compiles `.` to
-// ctaNoContextItem and so never reads it.
+// ctaNoContextItem, and to ctaAbsentNode as a node, and so never reads it.
 type ctaTypedInput struct {
 	node     ContextElement
 	attrs    TypedAttributes
@@ -570,11 +571,12 @@ func (ctaIf) ctaExpr()               {}
 // ctaStringFunction; ctaFacade.callsLibrary), to fn:current-date
 // (ctaCurrentDate) or, over an absent focus, to fn:position or fn:last
 // (ctaNoFocus, ctaFacade.focus), or to fn:namespace-uri (ctaNamespaceURI), the
-// assertion façade's `.` (ctaContextAtom, ctaFacade.contextItem) and `.` as
-// the node those two functions take (ctaContextNode, ctaFacade.contextNode),
-// and an integer or string sequence (ctaIntegerRanges, ctaStringSequence,
-// ctaFacade.constructsSequences). Every branch answers readsChild and counted
-// on ctaExpr's terms.
+// assertion façade's `.` (ctaContextAtom, ctaFacade.contextItem), and an
+// integer or string sequence (ctaIntegerRanges, ctaStringSequence,
+// ctaFacade.constructsSequences). `.` as the node fn:namespace-uri and
+// fn:in-scope-prefixes take is no branch: it is ctaNodeArg
+// (ctaFacade.contextNode). Every branch answers readsChild and counted on
+// ctaExpr's terms.
 type ctaValue interface {
 	ctaValue()
 	readsChild(name xsd.QName) bool
@@ -783,7 +785,7 @@ type ctaFacade interface {
 	// where the façade declines it, on attribute's terms. Only a façade that
 	// calls the library reaches it (ctaParser.libraryCall,
 	// ctaParser.prefixMember).
-	contextNode() (ctaValue, bool)
+	contextNode() (ctaNodeArg, bool)
 	// focus compiles a call to fn:position or fn:last with no argument
 	// (xpath-functions.md §16.1, §16.2), a read of the context position or
 	// size whose result is st, xs:integer, into its node, reporting false
@@ -894,7 +896,7 @@ func (ctaTypeAlternativeFacade) count(ctaCounted, ctaTypes) (ctaValue, bool) {
 // callsLibrary is false, so `namespace-uri(.)` reaches
 // ctaParser.constructorFunction and declines there, and
 // `in-scope-prefixes(.) = 'a'` is never read as ctaParser.prefixMember's.
-func (ctaTypeAlternativeFacade) contextNode() (ctaValue, bool) {
+func (ctaTypeAlternativeFacade) contextNode() (ctaNodeArg, bool) {
 	return nil, false
 }
 
@@ -2236,10 +2238,6 @@ func ctaItemOf(v ctaValue, c *xsd.SimpleType, env ctaEnv) ctaItem {
 		return ctaCurrentDateItem(n, c, env)
 	case ctaNamespaceURI:
 		return ctaNamespaceURIItem(n, c, env)
-	case ctaContextNode:
-		// Never reached: ctaParser.contextNodeArgument builds the node only as
-		// the argument ctaContextElementOf reads, and no item is read of it.
-		return ctaRaised{}
 	case ctaDistinctValues:
 		return ctaDistinctValuesItem(n, c, env)
 	case ctaValueVar:

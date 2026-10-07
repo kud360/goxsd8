@@ -72,20 +72,22 @@ func TestAssertionNamespaceURIIsTheNamespaceName(t *testing.T) {
 // binds it, inherited bindings being E's own; `xml` always, whatever E binds;
 // the zero-length string exactly where a default namespace is in scope — not
 // for an E with none, nor for one whose `xmlns=""` the adapter answers ok
-// for; never `xmlns`, nor a string that is no NCName, whatever the adapter
-// would answer, and neither is asked of it.
+// for; no other prefix whose XML 1.1 `xmlns:p=""` undeclaration the adapter
+// answers ok for either; never `xmlns`, nor a string that is no NCName,
+// whatever the adapter would answer, and neither is asked of it.
 //
 // With ctaEval's ctaPrefixMember arm removed every row answering true fails,
 // and so does the fn:not row; with booleanExpr not reading prefixMember the
 // first row declines; with the literal-left form unread, the first such row
 // declines, and with the parenthesized sequence unread, the first sequence
 // row; with ctaInScopePrefix's "xml" arm removed the two xml rows fail; with
-// its "" arm reading ok instead of the uri, the `= ""` rows over no default
-// namespace and over `xmlns=""` fail.
+// it reading ok instead of the uri, the `= ""` rows over no default namespace
+// and over `xmlns=""` and the `= 'p'` row over `xmlns:p=""` fail.
 func TestAssertionInScopePrefixesAreEsBindings(t *testing.T) {
 	bindsA := asElement{name: uq("x"), bindings: map[string]string{"": "http://www.example.org", "a": "http://test"}}
 	bindsNone := asElement{name: uq("x")}
 	undeclared := asElement{name: uq("x"), bindings: map[string]string{"": ""}}
+	undeclaredP := asElement{name: uq("x"), bindings: map[string]string{"p": ""}}
 	for _, tc := range []struct {
 		expr string
 		e    asElement
@@ -103,6 +105,7 @@ func TestAssertionInScopePrefixesAreEsBindings(t *testing.T) {
 		{"in-scope-prefixes(.) = ''", bindsA, true},
 		{"in-scope-prefixes(.) = ''", bindsNone, false},
 		{"in-scope-prefixes(.) = ''", undeclared, false},
+		{"in-scope-prefixes(.) = 'p'", undeclaredP, false},
 		{"not(in-scope-prefixes(.) = 'a')", bindsA, false},
 		{"in-scope-prefixes(.) = 'a' and namespace-uri(.) = ''", bindsA, true},
 		{"(in-scope-prefixes(.) = 'a')", bindsA, true},
@@ -237,8 +240,8 @@ func TestAssertionNodeFunctionsDeclineOtherShapes(t *testing.T) {
 // so either function over `.` raises err:XPDY0002 and fails the facet — never
 // declined, and never the answer a fabricated element would give, which for
 // `namespace-uri() = ""` and `in-scope-prefixes(.) = 'xml'` holds. With
-// ctaContextElementOf reading the evaluation's element whatever the context
-// node, the first row reads the facet's absent element and panics; with
+// ctaContextElementOf's ctaAbsentNode arm reading the evaluation's element,
+// the first row reads the facet's absent element and panics; with
 // ctaFacetFacade.contextNode declining, every row is declined.
 func TestFacetNodeFunctionsRaise(t *testing.T) {
 	str := asBuiltin(t, "string")

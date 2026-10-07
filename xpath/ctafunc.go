@@ -155,13 +155,27 @@ type ctaCurrentDate struct{ st *xsd.SimpleType }
 // would make of it. Only the facet façade builds it (ctaFacetFacade.focus).
 type ctaNoFocus struct{ st *xsd.SimpleType }
 
-// ctaContextNode is the [47] ContextItemExpr `.` over E taken as a NODE, never
-// atomized: the argument of fn:namespace-uri and fn:in-scope-prefixes, whose
-// parameter is node() and element() (xpath-functions.md §14.3, §11.2.6), and
-// the only place the assertion façade builds it (ctaFacade.contextNode). It is
-// no operand of anything else, and reads nothing but the evaluation's
-// [ContextElement], through ctaContextElementOf.
+// ctaNodeArg is the sealed sum of what the [47] ContextItemExpr `.` compiles
+// to as the NODE argument of fn:namespace-uri and fn:in-scope-prefixes, whose
+// parameter is node() and element() (xpath-functions.md §14.3, §11.2.6), never
+// atomized (ctaFacade.contextNode): E itself (ctaContextNode) or an assertions
+// facet's absent context item (ctaAbsentNode). It is no ctaValue: no item is
+// ever read of it, and ctaContextElementOf is its one reader.
+type ctaNodeArg interface{ ctaNodeArg() }
+
+// ctaContextNode is `.` over E taken as a node, which only the assertion
+// façade builds (ctaAssertionFacade.contextNode). ctaContextElementOf reads it
+// as the evaluation's [ContextElement].
 type ctaContextNode struct{}
+
+// ctaAbsentNode is `.` taken as a node where there is no context item, which
+// only the facet façade builds (ctaFacetFacade.contextNode): either function
+// over it raises err:XPDY0002 (xpath20.md §3.1.4; cvc-assertions-valid clause
+// 1.2), on ctaNoContextItem's terms.
+type ctaAbsentNode struct{}
+
+func (ctaContextNode) ctaNodeArg() {}
+func (ctaAbsentNode) ctaNodeArg()  {}
 
 // ctaNamespaceURI is a call to fn:namespace-uri over E (xpath-functions.md
 // §14.3), written `namespace-uri(.)` or `namespace-uri()`, whose argument
@@ -169,10 +183,10 @@ type ctaContextNode struct{}
 // [namespace name] — for an E in no namespace "the xs:anyURI corresponding to
 // the zero-length string", never the empty sequence. context is what the
 // façade compiles `.` to as a node (ctaFacade.contextNode): ctaContextNode,
-// or an assertions facet's ctaNoContextItem, over which the call raises
+// or an assertions facet's ctaAbsentNode, over which the call raises
 // err:XPDY0002.
 type ctaNamespaceURI struct {
-	context ctaValue
+	context ctaNodeArg
 	st      *xsd.SimpleType
 }
 
@@ -183,7 +197,6 @@ func (ctaStringFunction) ctaValue() {}
 func (ctaDistinctValues) ctaValue() {}
 func (ctaCurrentDate) ctaValue()    {}
 func (ctaNoFocus) ctaValue()        {}
-func (ctaContextNode) ctaValue()    {}
 func (ctaNamespaceURI) ctaValue()   {}
 
 // ctaPrefixMember is a general comparison by `=` (xpath20.md §3.5.2) one of
@@ -200,7 +213,7 @@ func (ctaNamespaceURI) ctaValue()   {}
 // sequence the call returns is never built: [ContextElement] answers whether
 // one prefix is bound and lists none.
 type ctaPrefixMember struct {
-	context  ctaValue
+	context  ctaNodeArg
 	literals []string
 }
 
@@ -228,43 +241,45 @@ func (n ctaPrefixMember) eval(env ctaEnv) ctaAnswer {
 //
 //   - "xml" always: it is in every element's [in-scope namespaces], answered
 //     here and never asked of e;
-//   - the zero-length string where a default namespace is in scope, which is a
-//     non-empty namespace name for the empty prefix — `xmlns=""` declares
-//     none, and [ContextElement.LookupPrefix] may answer ok over it, so ok is
-//     not read;
-//   - "xmlns" never, nor any other string that is no NCName, neither of which
-//     a binding can be under; e is not asked about either;
-//   - any other NCName where e binds it.
+//   - "xmlns" never, nor any other non-empty string that is no NCName, neither
+//     of which a binding can be under; e is not asked about either;
+//   - any other prefix, the zero-length one (the default namespace) included,
+//     where e answers it a non-empty namespace name. No prefix is ever bound
+//     to a zero-length one — `xmlns=""` and XML 1.1's `xmlns:p=""` undeclare
+//     — and [ContextElement.LookupPrefix] may answer ok over an undeclaration,
+//     so ok is not read.
 func ctaInScopePrefix(e ContextElement, p string) bool {
 	switch {
 	case p == "xml":
 		return true
-	case p == "":
-		uri, _ := e.LookupPrefix("")
-		return uri != ""
 	case p == "xmlns" || ctaScanNCName(p, 0) != len(p):
 		return false
 	}
-	_, bound := e.LookupPrefix(p)
-	return bound
+	uri, _ := e.LookupPrefix(p)
+	return uri != ""
 }
 
 // ctaContextElementOf is E as fn:namespace-uri and fn:in-scope-prefixes read
 // it: the evaluation's [ContextElement] where context is ctaContextNode, and
-// false — err:XPDY0002 — where it is an assertions facet's ctaNoContextItem,
+// false — err:XPDY0002 — where it is an assertions facet's ctaAbsentNode,
 // whose evaluation holds no element. The input is ctaTypedInput by
 // construction: only the assertion and facet façades call the library
 // (ctaFacade.callsLibrary), and the other arm holds no element and raises,
-// unreachably.
-func ctaContextElementOf(context ctaValue, env ctaEnv) (ContextElement, bool) {
-	if _, isNode := context.(ctaContextNode); !isNode {
-		return nil, false // ctaNoContextItem: err:XPDY0002
-	}
-	in, typed := env.input.(ctaTypedInput)
-	if !typed {
+// unreachably. The default arm is unreachable, ctaNodeArg being sealed over
+// the two arms named, and raises.
+func ctaContextElementOf(context ctaNodeArg, env ctaEnv) (ContextElement, bool) {
+	switch context.(type) {
+	case ctaContextNode:
+		in, typed := env.input.(ctaTypedInput)
+		if !typed {
+			return nil, false
+		}
+		return in.node, true
+	case ctaAbsentNode:
+		return nil, false // err:XPDY0002
+	default:
 		return nil, false
 	}
-	return in.node, true
 }
 
 // ctaNamespaceURIItem is n's xs:anyURI, E's [namespace name], converted into c
