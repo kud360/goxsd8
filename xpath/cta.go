@@ -19,7 +19,8 @@ import (
 // | 'le' | 'gt' | 'ge'), evaluated as §3.5.1's value comparison
 // (ctaValueCompare), and [16] SimpleValue also takes [44] VarRef ('$' VarName),
 // of which only `$value` is in scope (cvc-assertion clause 2.2), a child-axis
-// step naming one of E's element [[children]] (ctaTypedChild), and a "/" or
+// step naming one of E's element [[children]] (ctaTypedChild, or
+// ctaUntypedChild for a child of mixed content), and a "/" or
 // "//" opening a path, which raises (ctaNoDocumentRoot); the whole operand of
 // fn:exists, fn:empty or an ·effective boolean value· also takes a relative
 // path of two or more such steps (ctaChildPath) and one element step `N`,
@@ -580,12 +581,29 @@ type ctaTypedChild struct {
 	st   *xsd.SimpleType
 }
 
+// ctaUntypedChild is an abbreviated child-axis step over an assertion's
+// instance whose children under the ·expanded name· name have a ·locally
+// declared type· — the one [ElementTypes] answered at compile time — that is a
+// complex type whose {content type}.{variety} is mixed, xs:anyType among them
+// (ctaAssertionFacade.child): the sequence of E's element [[children]] under
+// that name, in document order ([ChildElements]), the typed value of each of
+// which is its string-value as one xs:untypedAtomic value (xpath-datamodel
+// §6.2.4), so the operand's static type is xs:untypedAtomic, as a ctaAttr's is.
+// A ·nilled· child is a node whose typed value is the empty sequence, on
+// ctaTypedChild's terms (xpath20.md §2.5.2 item 4.1).
+//
+// It is a node of its own and not a ctaTypedChild with a flag: it holds no
+// type, and it reads the [Untyped] arm of [ChildElements] where ctaTypedChild
+// reads the [Typed] one.
+type ctaUntypedChild struct{ name xsd.QName }
+
 // ctaCandidate is the [47] ContextItemExpr `.` inside a predicate that filters
 // a child step (ctaMatchingChildren): the child the predicate is evaluated for
 // (xpath20.md §3.2.2: "the context item is the item currently being tested
 // against the predicate"), one node whose typed value is of type st — the type
 // ctaAssertionFacade.child reads off the ·locally declared type· of the step's
-// children, so a child of a type that declines there declines here — or the
+// children, so a child of a type that declines there declines here, and so
+// does a child of mixed content, which that step reads untyped — or the
 // empty sequence for a ·nilled· child (xpath-datamodel §6.2.4). The value is
 // the evaluation's ctaEnv.candidate. Only ctaPredicateFacade.contextItem
 // compiles it, in a value predicate's scope (ctaParser.valuePredicate): every
@@ -1094,8 +1112,9 @@ func ctaUnionOf(operands []ctaCounted) (ctaCounted, bool) {
 // declines.
 //
 // Its one constructor is ctaChildPathOf, which admits two or more steps: a
-// one-step path is ctaTypedChild where its value is read, ctaSelectedElements
-// where only its existence is, and ctaCountPath where it is counted.
+// one-step path is ctaTypedChild or ctaUntypedChild where its value is
+// read, ctaSelectedElements where only its existence is, and ctaCountPath
+// where it is counted.
 type ctaChildPath struct{ steps []xsd.QName }
 
 // ctaChildPathOf is the ctaChildPath over steps, false where steps holds fewer
@@ -1320,6 +1339,7 @@ func (u ctaUnion) same(other ctaTallied) bool {
 func (ctaAttr) ctaValue()             {}
 func (ctaTypedAttr) ctaValue()        {}
 func (ctaTypedChild) ctaValue()       {}
+func (ctaUntypedChild) ctaValue()     {}
 func (ctaCandidate) ctaValue()        {}
 func (ctaChildPath) ctaValue()        {}
 func (ctaSelectedElements) ctaValue() {}
@@ -1364,14 +1384,14 @@ func (ctaUntypedAtomic) ctaStatic() {}
 func (ctaTyped) ctaStatic()         {}
 func (ctaEmptySequence) ctaStatic() {}
 
-// ctaStaticOf reports the static type of one [14] ta-ValueExpr. ctaAttr and
-// ctaUntypedValue are the untyped arms, and so is an fn:distinct-values call
-// over either, whose static type is its operand's; so are ctaNoDocumentRoot and
-// ctaNoContextItem: each raises before any item exists, so its static type
-// decides only whether a comparison over it compiles, never an answer. A
-// ctaChildPath or ctaSelectedElements never reaches here: ctaParser.childPath
-// and ctaParser.selectedElements build them only where no static type is
-// asked.
+// ctaStaticOf reports the static type of one [14] ta-ValueExpr. ctaAttr,
+// ctaUntypedChild and ctaUntypedValue are the untyped arms, and so is an
+// fn:distinct-values call over one, whose static type is its operand's; so
+// are ctaNoDocumentRoot and ctaNoContextItem: each raises before any item
+// exists, so its static type decides only whether a comparison over it
+// compiles, never an answer. A ctaChildPath or ctaSelectedElements never
+// reaches here: ctaParser.childPath and ctaParser.selectedElements build them
+// only where no static type is asked.
 func ctaStaticOf(v ctaValue) ctaStatic {
 	switch n := v.(type) {
 	case ctaLiteral:
@@ -1403,6 +1423,8 @@ func ctaStaticOf(v ctaValue) ctaStatic {
 	case ctaEmptyValue:
 		return ctaEmptySequence{}
 	case ctaUntypedValue:
+		return ctaUntypedAtomic{}
+	case ctaUntypedChild:
 		return ctaUntypedAtomic{}
 	default:
 		return ctaUntypedAtomic{}
@@ -1868,9 +1890,10 @@ func ctaValidated(i ctaItem) (value.Value, bool) {
 //
 // The arms are the ways an item acquires a type:
 //
-//   - an UNTYPED attribute is xs:untypedAtomic, which §3.5.2's casting rules
-//     cast STRAIGHT to c (clause 1's xs:string, or clause 2's type chosen from
-//     the other operand). No intermediate type exists to cast through.
+//   - an UNTYPED attribute, and each child of mixed content, is
+//     xs:untypedAtomic, which §3.5.2's casting rules cast STRAIGHT to c
+//     (clause 1's xs:string, or clause 2's type chosen from the other
+//     operand). No intermediate type exists to cast through.
 //   - a TYPED attribute, each typed child, a LITERAL, an fn:count call's
 //     xs:integer and each item of `$value` carry their own type and are
 //     converted to c, which is a no-op wherever the two coincide; the
@@ -1899,6 +1922,8 @@ func ctaItemOf(v ctaValue, c *xsd.SimpleType, env ctaEnv) ctaItem {
 		return ctaTypedAttrItem(n, c, env)
 	case ctaTypedChild:
 		return ctaTypedChildItem(n, c, env)
+	case ctaUntypedChild:
+		return ctaUntypedChildItem(n, c, env)
 	case ctaCandidate:
 		return ctaPromoted(env.candidate, n.st, c, env)
 	case ctaChildPath:
@@ -2168,6 +2193,65 @@ func ctaTypedChildItem(n ctaTypedChild, c *xsd.SimpleType, env ctaEnv) ctaItem {
 	return ctaPromoted(matched, n.st, c, env)
 }
 
+// ctaEachUntypedChild is ctaEachChild for a child of mixed content
+// (ctaUntypedChild): it hands each of E's element [[children]] named name, in
+// the DOCUMENT ORDER [ChildElements] yields them in, to each as the lexical of
+// its string-value: one, or none for a ·nilled· child. It reports false, and
+// stops, where each does, and where a child's value is neither [Untyped] nor
+// nil — a [Typed] one breaks the obligation [ChildElements] states, on
+// ctaMatchedAttributes' terms for a typed input, and every reader raises on it.
+//
+// The input is ctaTypedInput by construction (ctaInput); the other arm carries
+// no children, so each is never called, and is unreachable.
+func ctaEachUntypedChild(name xsd.QName, env ctaEnv, each func(lexicals []string) bool) bool {
+	in, typed := env.input.(ctaTypedInput)
+	if !typed {
+		return true
+	}
+	ok := true
+	in.children(func(c ChildElement) bool {
+		if c.name != name {
+			return true
+		}
+		if c.v == nil {
+			ok = each(nil)
+			return ok
+		}
+		untyped, isUntyped := c.v.(tvUntyped)
+		if !isUntyped {
+			ok = false
+			return false
+		}
+		ok = each([]string{untyped.lexical})
+		return ok
+	})
+	return ok
+}
+
+// ctaMatchedUntypedChildren is the string-values of E's element [[children]]
+// n's NameTest selects (ctaEachUntypedChild), and nodes, how many children it
+// selects — a ·nilled· one included. ok is false where ctaEachUntypedChild
+// reports false.
+func ctaMatchedUntypedChildren(n ctaUntypedChild, env ctaEnv) (lexicals []string, nodes int, ok bool) {
+	ok = ctaEachUntypedChild(n.name, env, func(child []string) bool {
+		nodes++
+		lexicals = append(lexicals, child...)
+		return true
+	})
+	return lexicals, nodes, ok
+}
+
+// ctaUntypedChildItem atomizes the selected children (xpath20.md §2.4.2), each
+// to its string-value as xs:untypedAtomic in document order, a ·nilled· child
+// contributing none, and casts the atoms into c on ctaAttrItem's terms.
+func ctaUntypedChildItem(n ctaUntypedChild, c *xsd.SimpleType, env ctaEnv) ctaItem {
+	matched, _, ok := ctaMatchedUntypedChildren(n, env)
+	if !ok {
+		return ctaRaised{}
+	}
+	return ctaUntypedItems(matched, c, env)
+}
+
 // ctaPromoted converts each of vs, values of type from, into c on ctaPromote's
 // terms, in order, raising for the whole sequence where one does not convert.
 func ctaPromoted(vs []value.Value, from, c *xsd.SimpleType, env ctaEnv) ctaItem {
@@ -2221,8 +2305,14 @@ func ctaAttrItem(n ctaAttr, c *xsd.SimpleType, env ctaEnv) ctaItem {
 	if !ok {
 		return ctaRaised{}
 	}
-	vs := make([]value.Value, 0, len(matched))
-	for _, lexical := range matched {
+	return ctaUntypedItems(matched, c, env)
+}
+
+// ctaUntypedItems casts each of lexicals, the lexicals of a sequence of
+// xs:untypedAtomic values in order, into c on ctaAttrItem's eager terms.
+func ctaUntypedItems(lexicals []string, c *xsd.SimpleType, env ctaEnv) ctaItem {
+	vs := make([]value.Value, 0, len(lexicals))
+	for _, lexical := range lexicals {
 		v, validated := ctaValidated(ctaValidate(lexical, c, env))
 		if !validated {
 			return ctaRaised{}
