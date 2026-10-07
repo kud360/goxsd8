@@ -131,7 +131,7 @@ Assert/assert_008/instance/assert_008_2 pass
 Assert/assert_009/instance/assert_009_2 pass
 Assert/assert_010/instance/assert_010_2 pass
 Assert/assert_011/instance/assert_011_2 pass
-Assert/assert_012/instance/assert_012_2 fail
+Assert/assert_012/instance/assert_012_2 pass
 Assert/assert_013/instance/assert_013_2 pass
 Assert/assert_014/instance/assert_014_2 pass
 Assert/assert_015/instance/assert_015_2 fail
@@ -317,7 +317,7 @@ CTA/cta0041/instance/cta0041.v01 pass
 CTA/cta0042/instance/cta0042.v01 fail
 CTA/cta0044/instance/cta0044.n01 pass
 CTA/cta0044/instance/cta0044.v01 pass
-CTA/typeAlternatives_001/instance/typeAlternatives_001_2 fail
+CTA/typeAlternatives_001/instance/typeAlternatives_001_2 pass
 CTA/typeAlternatives_002/instance/typeAlternatives_002_2 pass
 CTA/typeAlternatives_003/instance/typeAlternatives_003_2 pass
 CTA/typeAlternatives_004/instance/typeAlternatives_004_2 pass

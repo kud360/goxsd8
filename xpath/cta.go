@@ -504,6 +504,24 @@ type ctaEffectiveBoolean struct{ operand ctaValue }
 // decline and not a node-local false.
 type ctaTypeError struct{}
 
+// ctaIf is xpath20.md [7] IfExpr, `if (Expr) then ExprSingle else ExprSingle`
+// (§3.8), which only the assertion and facet façades admit
+// (ctaFacade.conditional): the ·effective boolean value· of test selects then
+// or otherwise, and only the selected branch is evaluated (ctaIf.eval).
+//
+// Its branches are boolean nodes and not item-valued ones because the
+// parser builds it only where an ExprSingle stands whole in a boolean
+// position (ctaParser.exprSingle) — the {test} itself, a parenthesized
+// expression, fn:not's argument, and the three operands of another IfExpr —
+// whose consumer takes the ·effective boolean value· of the IfExpr's value,
+// which is the ·effective boolean value· of the selected branch. A branch that
+// is a bare value is a ctaEffectiveBoolean over it, as it is at the root.
+type ctaIf struct {
+	test      ctaExpr
+	then      ctaExpr
+	otherwise ctaExpr
+}
+
 func (ctaOr) ctaExpr()               {}
 func (ctaAnd) ctaExpr()              {}
 func (ctaNot) ctaExpr()              {}
@@ -511,6 +529,7 @@ func (ctaCompare) ctaExpr()          {}
 func (ctaValueCompare) ctaExpr()     {}
 func (ctaEffectiveBoolean) ctaExpr() {}
 func (ctaTypeError) ctaExpr()        {}
+func (ctaIf) ctaExpr()               {}
 
 // ctaValue is the sealed sum of the ITEM-valued nodes: the arms of [16]
 // ta-SimpleValue — its AttrName arm in the untyped and the typed form
@@ -725,6 +744,9 @@ type ctaFacade interface {
 	// [18] ta-ConstructorFunction (constructors alone), and an fn:count
 	// argument that is no path (ctaParser.countCall).
 	callsLibrary() bool
+	// conditional reports whether the façade admits xpath20.md [7] IfExpr at
+	// all (ctaParser.ifExpr), which §3.12.6's grammar has no production for.
+	conditional() bool
 }
 
 // ctaTypeAlternativeFacade is a Type Alternative's façade: every attribute
@@ -795,6 +817,11 @@ func (ctaTypeAlternativeFacade) computes() bool { return false }
 // fn:not or to a constructor, so every other name reaches
 // ctaParser.constructorFunction and declines there.
 func (ctaTypeAlternativeFacade) callsLibrary() bool { return false }
+
+// conditional is false, on comparesValues' terms: ta-props-correct clause 2's
+// grammar ([8]–[18]) has no IfExpr, and §3.12.6's Note licenses a processor to
+// decline a {test} outside it.
+func (ctaTypeAlternativeFacade) conditional() bool { return false }
 
 // ctaNameTest is the sealed sum of [36] NameTest's arms as [17] ta-AttrName
 // and a child-axis step reach them, matching one ·expanded name· at a time.
@@ -1004,6 +1031,10 @@ func ctaComparisonRooted(x ctaExpr) bool {
 	case ctaNot:
 		return ctaComparisonRooted(n.operand)
 	case ctaEffectiveBoolean:
+		return false
+	case ctaIf:
+		// A branch may be a bare value, and ctaPredicateFacade.conditional
+		// declines every IfExpr before one is built.
 		return false
 	}
 	return false
@@ -1510,9 +1541,30 @@ func ctaEval(x ctaExpr, env ctaEnv) ctaAnswer {
 		return n.eval(env)
 	case ctaTypeError:
 		return ctaError
+	case ctaIf:
+		return n.eval(env)
 	default:
 		return ctaFalse
 	}
+}
+
+// eval decides a conditional expression on xpath20.md §3.8's terms: the
+// ·effective boolean value· of the test selects the branch whose value is the
+// expression's, and the other branch is NOT evaluated, so a dynamic error it
+// would raise is never raised ("the conditional expression ignores (does not
+// raise) any dynamic errors encountered in the else-expression"). An error
+// the test raises — err:FORG0006 among them (§2.4.3) — or the selected branch
+// raises is the expression's, which the enclosing operators carry on
+// ctaAnswer's terms.
+func (n ctaIf) eval(env ctaEnv) ctaAnswer {
+	test := ctaEval(n.test, env)
+	if test == ctaError {
+		return ctaError
+	}
+	if test == ctaTrue {
+		return ctaEval(n.then, env)
+	}
+	return ctaEval(n.otherwise, env)
 }
 
 // eval decides an or-expression against xpath20.md §3.6's or-table, read with

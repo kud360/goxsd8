@@ -52,7 +52,8 @@ import (
 // (ctaFacade.callsLibrary, ctafunc.go), whose argument may also be the empty
 // sequence `()`. It also admits xpath20.md §3.4's binary arithmetic operators
 // over numeric operands (ctaFacade.computes), in each comparison operand's
-// position.
+// position, and §3.8's [7] IfExpr wherever an ExprSingle stands whole in a
+// boolean position (ctaFacade.conditional).
 
 // AttributeTypes answers, for the element information item E whose assertions
 // are being compiled, the {type definition} an attribute of E with the
@@ -402,7 +403,12 @@ type AssertionTest struct{ root ctaExpr }
 // one, fn:empty, fn:exists and fn:distinct-values with one, and fn:true and
 // fn:false with none (xpath-functions.md §7.5.1–7.5.3, §7.4.4, §7.4.5, §2.3,
 // §15.1.4, §15.1.5, §15.1.6, §9.1.1, §9.1.2), any argument of which may be the
-// empty sequence `()` — added, and every decline [CompileCTATest] states is
+// empty sequence `()`, and the conditional `if (Expr) then ExprSingle else
+// ExprSingle` (xpath20.md §3.8) as the whole {test}, inside parentheses, as
+// fn:not's argument or as an operand of another — whose test's ·effective
+// boolean value· selects the one branch evaluated, so a dynamic error in the
+// other is never raised, and both of whose branches are compiled, so a decline
+// in either declines the {test} — added, and every decline [CompileCTATest] states is
 // this one's too, under the same static context (xpath-valid clause 2.2)
 // augmented with `$value` (cvc-assertion clause 2.2), plus these, each of which
 // is the same withhold:
@@ -491,6 +497,11 @@ type AssertionTest struct{ root ctaExpr }
 //     xs:untypedAtomic one, which needs B.1 rule 1.1 (#889); a unary `+` or
 //     `-`, and a parenthesized operand, which [11]'s `(` arm reads as a
 //     boolean expression;
+//   - a conditional anywhere but in the positions listed above — so a
+//     function's argument, `contains(if (@a) then 'x' else 'y', 'x')`, and
+//     a parenthesized comparison or arithmetic operand,
+//     `(if (@a) then 1 else 2) = 1`, decline — and a conditional inside a
+//     predicate;
 //   - a call to fn:contains, fn:starts-with or fn:ends-with with a third,
 //     collation argument, or to fn:distinct-values with a second (§7.3.1),
 //     which is never read as the form without it, and a call to any of the
@@ -563,10 +574,11 @@ type AssertionTest struct{ root ctaExpr }
 // among them, unions outside fn:count or over other operands, children read
 // for their value whose type is element-only, empty or ·special·, a value
 // predicate over a mixed child, arithmetic outside the numeric operands and
-// the binary operators, the collation argument, and every F&O function but
-// fn:count and those listed above among them. The direction is the withhold:
-// the caller records the assertion as unevaluated and neither charges it nor
-// shows it satisfied (PRINCIPLES 20). (#1042)
+// the binary operators, conditionals whose value is read as an item rather
+// than for its ·effective boolean value·, the collation argument, and every
+// F&O function but fn:count and those listed above among them. The direction
+// is the withhold: the caller records the assertion as unevaluated and
+// neither charges it nor shows it satisfied (PRINCIPLES 20). (#1042)
 //
 // types is read as [CompileCTATest] reads it and stored nowhere.
 func CompileAssertionTest(expr xsd.XPathExpression, types xsd.TypeResolver, content xsd.ContentType, attrs AttributeTypes, elems ElementTypes) (AssertionTest, bool) {
@@ -724,6 +736,12 @@ func (n ctaEffectiveBoolean) readsChild(name xsd.QName) bool { return n.operand.
 // readsChild is false: the node holds no operand.
 func (ctaTypeError) readsChild(xsd.QName) bool { return false }
 
+// readsChild reports whether the test or either branch holds a child value
+// step naming name: which branch is evaluated is not known until E is.
+func (n ctaIf) readsChild(name xsd.QName) bool {
+	return n.test.readsChild(name) || n.then.readsChild(name) || n.otherwise.readsChild(name)
+}
+
 // ctaAnyReadsChild is readsChild over each of operands.
 func ctaAnyReadsChild(operands []ctaExpr, name xsd.QName) bool {
 	for _, o := range operands {
@@ -835,6 +853,12 @@ func (n ctaEffectiveBoolean) counted(into []ctaTallied) []ctaTallied {
 	return n.operand.counted(into)
 }
 
+// counted appends each path the test, then either branch, counts over, on
+// readsChild's terms.
+func (n ctaIf) counted(into []ctaTallied) []ctaTallied {
+	return n.otherwise.counted(n.then.counted(n.test.counted(into)))
+}
+
 // counted appends each path the cast's operand counts over.
 func (n ctaCast) counted(into []ctaTallied) []ctaTallied { return n.operand.counted(into) }
 
@@ -942,6 +966,10 @@ func (ctaAssertionFacade) computes() bool { return true }
 // callsLibrary is true, on comparesValues' terms: the F&O function library is
 // in full XPath 2.0.
 func (ctaAssertionFacade) callsLibrary() bool { return true }
+
+// conditional is true, on comparesValues' terms: §3.8's IfExpr is in full
+// XPath 2.0.
+func (ctaAssertionFacade) conditional() bool { return true }
 
 // ctaValueName is the ·expanded name· of the one variable an assertion's
 // static context holds (cvc-assertion clause 2.3): "no namespace URI and ...
