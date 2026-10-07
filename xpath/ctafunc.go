@@ -228,25 +228,22 @@ func (n ctaPrefixMember) eval(env ctaEnv) ctaAnswer {
 //
 //   - "xml" always: it is in every element's [in-scope namespaces], answered
 //     here and never asked of e;
-//   - the zero-length string where a default namespace is in scope, which is a
-//     non-empty namespace name for the empty prefix — `xmlns=""` declares
-//     none, and [ContextElement.LookupPrefix] may answer ok over it, so ok is
-//     not read;
-//   - "xmlns" never, nor any other string that is no NCName, neither of which
-//     a binding can be under; e is not asked about either;
-//   - any other NCName where e binds it.
+//   - "xmlns" never, nor any other non-empty string that is no NCName, neither
+//     of which a binding can be under; e is not asked about either;
+//   - any other prefix, the zero-length one (the default namespace) included,
+//     where e answers it a non-empty namespace name. No prefix is ever bound
+//     to a zero-length one — `xmlns=""` and XML 1.1's `xmlns:p=""` undeclare
+//     — and [ContextElement.LookupPrefix] may answer ok over an undeclaration,
+//     so ok is not read.
 func ctaInScopePrefix(e ContextElement, p string) bool {
 	switch {
 	case p == "xml":
 		return true
-	case p == "":
-		uri, _ := e.LookupPrefix("")
-		return uri != ""
 	case p == "xmlns" || ctaScanNCName(p, 0) != len(p):
 		return false
 	}
-	_, bound := e.LookupPrefix(p)
-	return bound
+	uri, _ := e.LookupPrefix(p)
+	return uri != ""
 }
 
 // ctaContextElementOf is E as fn:namespace-uri and fn:in-scope-prefixes read

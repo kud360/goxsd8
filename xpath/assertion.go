@@ -282,9 +282,11 @@ type ContextElement interface {
 	// none.
 	Name() xsd.QName
 	// LookupPrefix resolves prefix against E's [in-scope namespaces], the
-	// bindings E inherits included: the empty prefix asks for the default
-	// namespace, where a zero-length uri means none is in scope whatever ok
-	// reports, and ok false means prefix is unbound.
+	// bindings E inherits included; the empty prefix asks for the default
+	// namespace. For every prefix, the empty one included, a zero-length uri
+	// means the prefix is not in scope, whatever ok reports: no prefix is ever
+	// bound to a zero-length namespace name, and `xmlns=""` or `xmlns:p=""`
+	// undeclares.
 	LookupPrefix(prefix string) (uri string, ok bool)
 }
 
