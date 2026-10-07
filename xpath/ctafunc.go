@@ -372,7 +372,8 @@ func ctaSequenceLength(v ctaValue, env ctaEnv) (int, bool) {
 
 // ctaStep is a ctaValue that evaluates to a sequence of NODES rather than of
 // atomic values: an attribute step, untyped (ctaAttr) or typed (ctaTypedAttr),
-// a child-axis step (ctaTypedChild), an element step whose existence is asked
+// a child-axis step, typed (ctaTypedChild) or over children of mixed content
+// (ctaUntypedChild), an element step whose existence is asked
 // (ctaSelectedElements), a path of child steps (ctaChildPath), the candidate
 // `.` inside a value predicate (ctaCandidate), and the two steps that raise
 // before they select a node, a rooted path (ctaNoDocumentRoot) and a read of
@@ -404,6 +405,11 @@ func (s ctaTypedAttr) nodes(env ctaEnv) (int, bool) {
 
 func (s ctaTypedChild) nodes(env ctaEnv) (int, bool) {
 	_, nodes, ok := ctaMatchedChildren(s, env)
+	return nodes, ok
+}
+
+func (s ctaUntypedChild) nodes(env ctaEnv) (int, bool) {
+	_, nodes, ok := ctaMatchedUntypedChildren(s, env)
 	return nodes, ok
 }
 

@@ -1014,7 +1014,10 @@ func (c elementContext) LookupNamespace(prefix string) (string, bool) {
 // (assertionAncestry.below). e is reported to every counting ancestor's
 // Tallies on entry, its own attributes to its own ([walk.tallyElement]), and
 // e hands its parent's state its typed value last, once everything that can
-// find e invalid has run ([walk.keepChild]): cvc-assertion clause 1.1
+// find e invalid has run ([walk.keepChild]) — a value of mixed content the
+// string-value e's frame collected from its subtree as it streamed past,
+// opened on entry ([walk.stringValue]) and closed into any enclosing frame
+// just before ([assertionAncestry.closeStringValue]): cvc-assertion clause 1.1
 // validates the parent's [[children]] "in the usual way" before any {test} of
 // the parent reads them.
 func (w *walk) element(e Element, g governance, parent *icCheck, up assertionAncestry, inherited []inheritedAttribute) {
@@ -1032,7 +1035,9 @@ func (w *walk) element(e Element, g governance, parent *icCheck, up assertionAnc
 	content := w.contentCheck(e, g, isNilled)
 	asserts := w.compileAssertions(g)
 	w.tallyElement(e, g, up, asserts)
-	w.children(e, content, id, up.below(e.Name(), asserts), w.handedDown(e, g, inherited))
+	up.collectElement(e, g, isNilled)
+	frame := w.stringValue(e, g, isNilled, up)
+	w.children(e, content, id, up.below(e.Name(), asserts, frame), w.handedDown(e, g, inherited))
 	if w.res.err != nil {
 		// A walk that stopped on a source fault never settles §3.11.4 or
 		// §3.17.5.2 for this element, on [contentCheck.end]'s grounds: the
@@ -1046,7 +1051,8 @@ func (w *walk) element(e Element, g governance, parent *icCheck, up assertionAnc
 	id.substitute(content)
 	w.idElement(id)
 	w.identityExit(id)
-	w.keepChild(up.parent, e, g, content,
+	up.closeStringValue(e, frame, g, content)
+	w.keepChild(up.parent, e, g, content, frame,
 		len(w.res.violations) > violationsBefore || len(w.res.unevaluated) > unevaluatedBefore)
 }
 
@@ -1599,5 +1605,6 @@ func (w *walk) child(c Child, content *contentCheck, id *icCheck, up assertionAn
 	}
 	content.text(w, t)
 	id.text(t)
+	up.collectText(content, t)
 	w.text(t)
 }
