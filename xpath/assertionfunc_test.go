@@ -2,6 +2,7 @@ package xpath
 
 import (
 	"testing"
+	"time"
 
 	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
@@ -34,7 +35,7 @@ func afEval(t *testing.T, expr string, attrs []asTyped, children ...asChild) boo
 	if !ok {
 		t.Fatalf("CompileAssertionTest(%q): declined, want compiled", expr)
 	}
-	return test.Evaluate(backend(), seededTypes, asValues(t, attrs...), asChildren(t, children...), nil, ValueBinding{})
+	return test.Evaluate(backend(), seededTypes, asValues(t, attrs...), asChildren(t, children...), nil, ValueBinding{}, time.Time{})
 }
 
 // afEvalValue compiles expr for an E with simple content of type st, or fails
@@ -45,7 +46,7 @@ func afEvalValue(t *testing.T, expr string, st *xsd.SimpleType, lexical string) 
 	if !ok {
 		t.Fatalf("CompileAssertionTest(%q): declined, want compiled", expr)
 	}
-	return test.Evaluate(backend(), seededTypes, asValues(t), asNoChildren, nil, asBind(t, st, lexical))
+	return test.Evaluate(backend(), seededTypes, asValues(t), asNoChildren, nil, asBind(t, st, lexical), time.Time{})
 }
 
 // Each string function decides both ways over an attribute, `$value` and a
@@ -162,7 +163,7 @@ func TestAssertionPresenceFunctions(t *testing.T) {
 		{asBind(t, str, ""), true},
 		{ValueBinding{}, false},
 	} {
-		if got := test.Evaluate(backend(), seededTypes, asValues(t), asNoChildren, nil, tc.bound); got != tc.want {
+		if got := test.Evaluate(backend(), seededTypes, asValues(t), asNoChildren, nil, tc.bound, time.Time{}); got != tc.want {
 			t.Errorf("Evaluate(exists($value)) over %v = %v, want %v", tc.bound, got, tc.want)
 		}
 	}
@@ -171,10 +172,10 @@ func TestAssertionPresenceFunctions(t *testing.T) {
 	if !ok {
 		t.Fatal("CompileAssertionTest(exists($value)) over ·special· content: declined, want compiled")
 	}
-	if !untyped.Evaluate(backend(), seededTypes, asValues(t), asNoChildren, nil, BindValue("", Untyped(""))) {
+	if !untyped.Evaluate(backend(), seededTypes, asValues(t), asNoChildren, nil, BindValue("", Untyped("")), time.Time{}) {
 		t.Error("Evaluate(exists($value)) over an xs:untypedAtomic $value = false, want true")
 	}
-	if untyped.Evaluate(backend(), seededTypes, asValues(t), asNoChildren, nil, ValueBinding{}) {
+	if untyped.Evaluate(backend(), seededTypes, asValues(t), asNoChildren, nil, ValueBinding{}, time.Time{}) {
 		t.Error("Evaluate(exists($value)) over the unbound xs:untypedAtomic $value = true, want false")
 	}
 }
@@ -257,11 +258,11 @@ func TestAssertionStringArgumentTypeErrors(t *testing.T) {
 		if !ok {
 			t.Fatalf("CompileAssertionTest(%q) over a list: declined, want compiled", tc.expr)
 		}
-		v, err := value.ValidateLexical(backend(), types, list, tc.lexical, nil, FacetAssertions())
+		v, err := value.ValidateLexical(backend(), types, list, tc.lexical, nil, FacetAssertions(time.Time{}))
 		if err != nil {
 			t.Fatalf("mapping %q against the list: %v", tc.lexical, err)
 		}
-		if got := test.Evaluate(backend(), types, asValues(t), asNoChildren, nil, BindValue("", Typed(v))); got != tc.want {
+		if got := test.Evaluate(backend(), types, asValues(t), asNoChildren, nil, BindValue("", Typed(v)), time.Time{}); got != tc.want {
 			t.Errorf("Evaluate(%q) over %q = %v, want %v", tc.expr, tc.lexical, got, tc.want)
 		}
 	}
@@ -364,12 +365,12 @@ func TestStringFunctionsReadTheirArguments(t *testing.T) {
 		}
 	}
 	counted := acCompile(t, asRecord("exists(count(inner))"))
-	if !counted.Evaluate(backend(), seededTypes, asValues(t), asNoChildren, acTally(counted, acEl(1, "inner")), ValueBinding{}) {
+	if !counted.Evaluate(backend(), seededTypes, asValues(t), asNoChildren, acTally(counted, acEl(1, "inner")), ValueBinding{}, time.Time{}) {
 		t.Error("Evaluate(exists(count(inner))) = false, want true")
 	}
 }
 
-// What stays declined: a function outside the eleven, the three-argument
+// What stays declined: a function outside the twelve, the three-argument
 // collation form of fn:contains and its kin (never read as the two-argument
 // form), every other arity, and fn:string over a typed node or value outside
 // the xs:string family and the date/time primitives (castsFrom), or over an
@@ -388,7 +389,6 @@ func TestStringFunctionsReadTheirArguments(t *testing.T) {
 func TestCompileAssertionTestDeclinesFunctions(t *testing.T) {
 	str := asBuiltin(t, "string")
 	for _, expr := range []string{
-		"current-date() = current-date()",
 		"concat(@s, 'x') = 'x'",
 		"contains(@s, 'x', 'http://www.w3.org/2005/xpath-functions/collation/codepoint')",
 		"starts-with(@s, 'x', 'http://www.w3.org/2005/xpath-functions/collation/codepoint')",
@@ -423,7 +423,7 @@ func TestCompileAssertionTestDeclinesFunctions(t *testing.T) {
 	}
 }
 
-// A Type Alternative's {test} declines every one of the eleven functions — the
+// A Type Alternative's {test} declines every one of the twelve functions — the
 // CTA grammar admits fn:not alone (§3.12.6 clause 3) — which CompileCTATest
 // itself shows, CTATestStaticError answering nil for a decline and a pass
 // alike; `not(@a = 'x')` still compiles. With ctaTypeAlternativeFacade
@@ -433,6 +433,7 @@ func TestCompileCTATestDeclinesLibraryFunctions(t *testing.T) {
 		"contains(@a, 'x')", "starts-with(@a, 'x')", "ends-with(@a, 'x')",
 		"string-length(@a) > 0", "normalize-space(@a) = 'x'", "string(@a) = 'x'",
 		"empty(@a)", "exists(@a)", "distinct-values(@a) = 'x'", "true()", "false()", "not(true())",
+		"current-date() = current-date()",
 	} {
 		if _, ok := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); ok {
 			t.Errorf("CompileCTATest(%q): compiled, want declined", expr)
@@ -456,7 +457,7 @@ func TestFacetStringFunctions(t *testing.T) {
 	types := asTypesWith(list)
 	listValue := func(lexical string) value.Value {
 		t.Helper()
-		v, err := value.ValidateLexical(backend(), types, list, lexical, nil, FacetAssertions())
+		v, err := value.ValidateLexical(backend(), types, list, lexical, nil, FacetAssertions(time.Time{}))
 		if err != nil {
 			t.Fatalf("mapping %q against the list: %v", lexical, err)
 		}
@@ -482,7 +483,7 @@ func TestFacetStringFunctions(t *testing.T) {
 		{"exists(@a)", str, fcValue(t, str, "x"), value.AssertionFails},
 		{"not(empty(.))", str, fcValue(t, str, "x"), value.AssertionFails},
 	} {
-		if got := FacetAssertions().Evaluate(backend(), types, tc.st, ctaExprRecord(tc.test, ""), tc.v); got != tc.want {
+		if got := FacetAssertions(time.Time{}).Evaluate(backend(), types, tc.st, ctaExprRecord(tc.test, ""), tc.v); got != tc.want {
 			t.Errorf("Evaluate(%q over %s) = %d, want %d", tc.test, tc.st.Name(), got, tc.want)
 		}
 	}

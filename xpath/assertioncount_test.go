@@ -2,6 +2,7 @@ package xpath
 
 import (
 	"testing"
+	"time"
 
 	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
@@ -180,7 +181,7 @@ func TestAssertionCountsSubtreeNodes(t *testing.T) {
 				attrs = asValues(t)
 			}
 			test := acCompile(t, record)
-			if got := test.Evaluate(backend(), seededTypes, attrs, asNoChildren, acTally(test, tc.nodes...), ValueBinding{}); got != tc.holds {
+			if got := test.Evaluate(backend(), seededTypes, attrs, asNoChildren, acTally(test, tc.nodes...), ValueBinding{}, time.Time{}); got != tc.holds {
 				t.Errorf("Evaluate(%q) over %v = %v, want %v", record.Expression(), tc.nodes, got, tc.holds)
 			}
 		})
@@ -210,7 +211,7 @@ func TestAssertionRootedCountRaises(t *testing.T) {
 		if c := test.Tally(); c != nil {
 			t.Errorf("(%q).Tally() = %v, want nil: a rooted path counts nothing", expr, c)
 		}
-		if test.Evaluate(backend(), seededTypes, attrs, children, nil, ValueBinding{}) {
+		if test.Evaluate(backend(), seededTypes, attrs, children, nil, ValueBinding{}, time.Time{}) {
 			t.Errorf("Evaluate(%q) = true, want false: the leading slash raises err:XPDY0050", expr)
 		}
 	}
@@ -243,7 +244,7 @@ func TestAssertionEvaluateRefusesAMismatchedTally(t *testing.T) {
 		{"a Tally where it counts nothing", plain, counting.Tally(), false},
 		{"a zero-value Tally where it counts nothing", plain, &Tally{}, false},
 	} {
-		if got := tc.test.Evaluate(backend(), seededTypes, asValues(t), asNoChildren, tc.counts, ValueBinding{}); got != tc.holds {
+		if got := tc.test.Evaluate(backend(), seededTypes, asValues(t), asNoChildren, tc.counts, ValueBinding{}, time.Time{}); got != tc.holds {
 			t.Errorf("%s: Evaluate = %v, want %v", tc.why, got, tc.holds)
 		}
 	}
@@ -260,7 +261,7 @@ func TestAssertionTallyIsFreshAndTotal(t *testing.T) {
 	test := acCompile(t, asRecord("count(.//e1) eq 0 and count(.//@a) eq 0"))
 	acTally(test, acEl(1, "e1"), acAt(0, "a"))
 	fresh := acTally(test, acEl(0, "e1"), acEl(-1, "e1"))
-	if !test.Evaluate(backend(), seededTypes, asValues(t), asNoChildren, fresh, ValueBinding{}) {
+	if !test.Evaluate(backend(), seededTypes, asValues(t), asNoChildren, fresh, ValueBinding{}, time.Time{}) {
 		t.Error("Evaluate over a fresh Tally given only out-of-range depths = false, want true")
 	}
 	var none *Tally
@@ -362,7 +363,7 @@ func TestCountDeclinesOutsideTheAssertionFacade(t *testing.T) {
 		{"count(//e1) = 0", value.AssertionDeclined},
 		{"//@a = 'x'", value.AssertionFails},
 	} {
-		if got := FacetAssertions().Evaluate(backend(), seededTypes, str, ctaExprRecord(tc.test, ""), fcValue(t, str, "x")); got != tc.want {
+		if got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, str, ctaExprRecord(tc.test, ""), fcValue(t, str, "x")); got != tc.want {
 			t.Errorf("FacetAssertions().Evaluate(%q) = %d, want %d", tc.test, got, tc.want)
 		}
 	}
@@ -393,7 +394,7 @@ func acE(attrs ...string) acNode {
 func acDecides(t *testing.T, expr string, want bool, nodes ...acNode) {
 	t.Helper()
 	test := acCompile(t, asRecord(expr))
-	if got := test.Evaluate(backend(), seededTypes, asValues(t), asNoChildren, acTally(test, nodes...), ValueBinding{}); got != want {
+	if got := test.Evaluate(backend(), seededTypes, asValues(t), asNoChildren, acTally(test, nodes...), ValueBinding{}, time.Time{}); got != want {
 		t.Errorf("Evaluate(%q) over %v = %v, want %v", expr, nodes, got, want)
 	}
 }
@@ -615,7 +616,7 @@ func TestAssertionCountsChildrenFilteredByValue(t *testing.T) {
 			for _, c := range tc.children {
 				counts.Element([]xsd.QName{c.name}, nil)
 			}
-			if got := test.Evaluate(backend(), seededTypes, asValues(t), asChildren(t, tc.children...), counts, ValueBinding{}); got != tc.holds {
+			if got := test.Evaluate(backend(), seededTypes, asValues(t), asChildren(t, tc.children...), counts, ValueBinding{}, time.Time{}); got != tc.holds {
 				t.Errorf("Evaluate(%q) over %v = %v, want %v", tc.expr, tc.children, got, tc.holds)
 			}
 		})
@@ -658,7 +659,7 @@ func TestAssertionValuePredicateErrorRaisesTheCount(t *testing.T) {
 			if !ok {
 				t.Fatalf("CompileAssertionTest(%q): declined, want compiled", tc.expr)
 			}
-			if got := test.Evaluate(backend(), seededTypes, asValues(t), asChildren(t, tc.children...), nil, ValueBinding{}); got != tc.holds {
+			if got := test.Evaluate(backend(), seededTypes, asValues(t), asChildren(t, tc.children...), nil, ValueBinding{}, time.Time{}); got != tc.holds {
 				t.Errorf("Evaluate(%q) over %v = %v, want %v", tc.expr, tc.children, got, tc.holds)
 			}
 		})
@@ -735,7 +736,7 @@ func TestPredicatesDeclineOutsideTheAssertionFacade(t *testing.T) {
 		if _, ok := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); ok {
 			t.Errorf("CompileCTATest(%q): compiled, want declined", expr)
 		}
-		if got := FacetAssertions().Evaluate(backend(), seededTypes, str, ctaExprRecord(expr, ""), fcValue(t, str, "x")); got != value.AssertionDeclined {
+		if got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, str, ctaExprRecord(expr, ""), fcValue(t, str, "x")); got != value.AssertionDeclined {
 			t.Errorf("FacetAssertions().Evaluate(%q) = %d, want %d", expr, got, value.AssertionDeclined)
 		}
 	}

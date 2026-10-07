@@ -335,7 +335,7 @@ func (w *walk) idRecord(st *xsd.SimpleType, lexical string, owner Element, ctx v
 	if !candidate {
 		return
 	}
-	if _, err := value.ValidateLexical(w.backend, w.schema, st, lexical, ctx, xpath.FacetAssertions()); err != nil {
+	if _, err := value.ValidateLexical(w.backend, w.schema, st, lexical, ctx, xpath.FacetAssertions(w.now)); err != nil {
 		if !value.IsDatatypeVerdict(err) {
 			w.declineID(owner, loc,
 				"an item of the element %s was not read into the ID/IDREF table: the value backend reported a fault of its type %s rather than a verdict about the lexical, so cvc-id clause 1 is undecided",
@@ -612,7 +612,7 @@ func (w *walk) itemRoleValues(item *xsd.SimpleType, lexical string, ctx value.Co
 // of one dispatch and not a fact about the document. Both decline identically
 // here.
 func (w *walk) validatingType(st *xsd.SimpleType, lexical string, ctx value.Context) (*xsd.SimpleType, bool) {
-	t, _, err := value.ValidatingType(w.backend, w.schema, st, lexical, ctx, xpath.FacetAssertions())
+	t, _, err := value.ValidatingType(w.backend, w.schema, st, lexical, ctx, xpath.FacetAssertions(w.now))
 	if err != nil {
 		return nil, false
 	}

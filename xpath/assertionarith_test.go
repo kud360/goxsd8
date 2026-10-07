@@ -2,6 +2,7 @@ package xpath
 
 import (
 	"testing"
+	"time"
 
 	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
@@ -23,7 +24,7 @@ func aaUses(t *testing.T) AttributeTypes {
 // evaluates it over attrs, or fails the test.
 func aaEval(t *testing.T, expr string, attrs ...asTyped) bool {
 	t.Helper()
-	return asCompile(t, expr, aaUses(t)).Evaluate(backend(), seededTypes, asValues(t, attrs...), asNoChildren, nil, ValueBinding{})
+	return asCompile(t, expr, aaUses(t)).Evaluate(backend(), seededTypes, asValues(t, attrs...), asNoChildren, nil, ValueBinding{}, time.Time{})
 }
 
 // `$value mod 2 = 0` holds on an even value and is false — charged — on an odd
@@ -42,11 +43,11 @@ func TestArithmeticModOverValue(t *testing.T) {
 		{"5", value.AssertionFails, false},
 		{"-6", value.AssertionHolds, true},
 	} {
-		if got := FacetAssertions().Evaluate(backend(), seededTypes, intType, ctaExprRecord("$value mod 2 = 0", ""), fcValue(t, intType, tc.lexical)); got != tc.facet {
+		if got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, intType, ctaExprRecord("$value mod 2 = 0", ""), fcValue(t, intType, tc.lexical)); got != tc.facet {
 			t.Errorf("FacetAssertions over %s = %d, want %d", tc.lexical, got, tc.facet)
 		}
 		test := asCompileFor(t, "$value mod 2 = 0", xsd.SimpleContent{SimpleType: intType}, asUses(t, nil))
-		if got := test.Evaluate(backend(), seededTypes, asValues(t), asNoChildren, nil, asBind(t, intType, tc.lexical)); got != tc.holds {
+		if got := test.Evaluate(backend(), seededTypes, asValues(t), asNoChildren, nil, asBind(t, intType, tc.lexical), time.Time{}); got != tc.holds {
 			t.Errorf("CompileAssertionTest over %s: Evaluate = %v, want %v", tc.lexical, got, tc.holds)
 		}
 	}
@@ -211,7 +212,7 @@ func TestArithmeticReadsItsOperands(t *testing.T) {
 	if !test.ReadsChild(uq("n")) {
 		t.Error("(n + 1 = 3).ReadsChild(n) = false, want true")
 	}
-	if !test.Evaluate(backend(), seededTypes, asValues(t), asChildren(t, asChild{name: uq("n"), typ: "int", lexical: "2"}), nil, ValueBinding{}) {
+	if !test.Evaluate(backend(), seededTypes, asValues(t), asChildren(t, asChild{name: uq("n"), typ: "int", lexical: "2"}), nil, ValueBinding{}, time.Time{}) {
 		t.Error("Evaluate(n + 1 = 3) over n=2 = false, want true")
 	}
 
@@ -223,7 +224,7 @@ func TestArithmeticReadsItsOperands(t *testing.T) {
 		{[]acNode{acEl(1, "inner"), acEl(1, "inner")}, true},
 		{[]acNode{acEl(1, "inner"), acEl(1, "inner"), acEl(1, "inner")}, false},
 	} {
-		got := counted.Evaluate(backend(), seededTypes, asValues(t), asNoChildren, acTally(counted, tc.nodes...), ValueBinding{})
+		got := counted.Evaluate(backend(), seededTypes, asValues(t), asNoChildren, acTally(counted, tc.nodes...), ValueBinding{}, time.Time{})
 		if got != tc.want {
 			t.Errorf("Evaluate(count(inner) mod 2 = 0) over %d inner = %v, want %v", len(tc.nodes), got, tc.want)
 		}
@@ -240,7 +241,7 @@ func TestFacetArithmeticRaises(t *testing.T) {
 	types := asTypesWith(list)
 	listValue := func(lexical string) value.Value {
 		t.Helper()
-		v, err := value.ValidateLexical(backend(), types, list, lexical, nil, FacetAssertions())
+		v, err := value.ValidateLexical(backend(), types, list, lexical, nil, FacetAssertions(time.Time{}))
 		if err != nil {
 			t.Fatalf("mapping %q against the list: %v", lexical, err)
 		}
@@ -258,7 +259,7 @@ func TestFacetArithmeticRaises(t *testing.T) {
 		{"$value + 1 = 2", list, listValue("1 2"), value.AssertionFails},
 		{"not($value + 1 = 2)", list, listValue("1 2"), value.AssertionFails},
 	} {
-		if got := FacetAssertions().Evaluate(backend(), types, tc.st, ctaExprRecord(tc.test, ""), tc.v); got != tc.want {
+		if got := FacetAssertions(time.Time{}).Evaluate(backend(), types, tc.st, ctaExprRecord(tc.test, ""), tc.v); got != tc.want {
 			t.Errorf("Evaluate(%q over %s) = %d, want %d", tc.test, tc.st.Name(), got, tc.want)
 		}
 	}

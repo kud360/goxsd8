@@ -2,6 +2,7 @@ package xpath
 
 import (
 	"testing"
+	"time"
 
 	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
@@ -11,7 +12,7 @@ import (
 // fcValue maps lexical against st, or fails the test.
 func fcValue(t *testing.T, st *xsd.SimpleType, lexical string) value.Value {
 	t.Helper()
-	v, err := value.ValidateLexical(backend(), seededTypes, st, lexical, nil, FacetAssertions())
+	v, err := value.ValidateLexical(backend(), seededTypes, st, lexical, nil, FacetAssertions(time.Time{}))
 	if err != nil {
 		t.Fatalf("mapping %q against %s: %v", lexical, st.Name(), err)
 	}
@@ -51,7 +52,7 @@ func TestFacetAssertionsDecideTheValue(t *testing.T) {
 		{"//root", str, "x", value.AssertionFails},
 		{"$value = 'x' or .", str, "x", value.AssertionHolds},
 	} {
-		got := FacetAssertions().Evaluate(backend(), seededTypes, tc.st, ctaExprRecord(tc.test, ""), fcValue(t, tc.st, tc.lexical))
+		got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, tc.st, ctaExprRecord(tc.test, ""), fcValue(t, tc.st, tc.lexical))
 		if got != tc.want {
 			t.Errorf("Evaluate(%q, %q) = %d, want %d", tc.test, tc.lexical, got, tc.want)
 		}
@@ -66,7 +67,7 @@ func TestFacetAssertionsDecline(t *testing.T) {
 	str := asBuiltin(t, "string")
 	for _, test := range []string{"$value mod 2 = 0", "upper-case($value) = 'X'", "$other = 'x'", ".. = 'x'"} {
 		v := fcValue(t, str, "x")
-		if got := FacetAssertions().Evaluate(backend(), seededTypes, str, ctaExprRecord(test, ""), v); got != value.AssertionDeclined {
+		if got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, str, ctaExprRecord(test, ""), v); got != value.AssertionDeclined {
 			t.Errorf("Evaluate(%q over %s) = %d, want declined", test, str.Name(), got)
 		}
 	}
@@ -160,7 +161,7 @@ func TestFacetAssertionsOverAUnionBindTheActiveBasicMember(t *testing.T) {
 		{dateOrInt, []xsd.QName{date, integer}, "upper-case($value) = 'X'", "5", value.AssertionDeclined},
 	} {
 		st := fcAssertedUnion(t, tc.base, tc.test, tc.members...)
-		_, err := value.ValidateLexical(backend(), asTypesWith(dateOrInt, nested), st, tc.lexical, nil, FacetAssertions())
+		_, err := value.ValidateLexical(backend(), asTypesWith(dateOrInt, nested), st, tc.lexical, nil, FacetAssertions(time.Time{}))
 		if got := fcOutcome(t, err); got != tc.want {
 			t.Errorf("%s over %q against a restriction of %s = %d, want %d (err %v)", tc.test, tc.lexical, tc.base.Name().Local, got, tc.want, err)
 		}

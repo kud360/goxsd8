@@ -2,6 +2,7 @@ package xpath
 
 import (
 	"testing"
+	"time"
 
 	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
@@ -105,7 +106,7 @@ func TestAssertionReadsMixedChildUntyped(t *testing.T) {
 	} {
 		t.Run(tc.expr, func(t *testing.T) {
 			test := amCompile(t, tc.expr)
-			if got := test.Evaluate(backend(), seededTypes, asValues(t), amChildren(tc.children...), nil, ValueBinding{}); got != tc.want {
+			if got := test.Evaluate(backend(), seededTypes, asValues(t), amChildren(tc.children...), nil, ValueBinding{}, time.Time{}); got != tc.want {
 				t.Errorf("Evaluate(%q) over %v = %v, want %v", tc.expr, tc.children, got, tc.want)
 			}
 		})
@@ -119,13 +120,13 @@ func TestAssertionReadsMixedChildUntyped(t *testing.T) {
 // the Typed arm as its canonical lexical, `string-length(body) ge 0` holds
 // instead.
 func TestAssertionRaisesOnATypedMixedChild(t *testing.T) {
-	v, err := value.ValidateLexical(backend(), seededTypes, asBuiltin(t, "string"), "x", nil, FacetAssertions())
+	v, err := value.ValidateLexical(backend(), seededTypes, asBuiltin(t, "string"), "x", nil, FacetAssertions(time.Time{}))
 	if err != nil {
 		t.Fatalf("mapping x: %v", err)
 	}
 	children := amChildren(Child(uq("body"), Typed(v)))
 	for _, expr := range []string{"string-length(body) ge 0", "not(string-length(body) ge 0)", "body = 'x'", "not(body = 'x')"} {
-		if amCompile(t, expr).Evaluate(backend(), seededTypes, asValues(t), children, nil, ValueBinding{}) {
+		if amCompile(t, expr).Evaluate(backend(), seededTypes, asValues(t), children, nil, ValueBinding{}, time.Time{}) {
 			t.Errorf("Evaluate(%q) over a Typed mixed child = true, want false: the read raises", expr)
 		}
 	}
@@ -174,7 +175,7 @@ func TestUntypedChildNodes(t *testing.T) {
 	if n, ok := ctaSequenceLength(step, ctaEnv{backend: backend(), types: seededTypes, input: in}); n != 2 || !ok {
 		t.Errorf("ctaSequenceLength(body) = %d, %v, want 2, true", n, ok)
 	}
-	v, err := value.ValidateLexical(backend(), seededTypes, asBuiltin(t, "string"), "x", nil, FacetAssertions())
+	v, err := value.ValidateLexical(backend(), seededTypes, asBuiltin(t, "string"), "x", nil, FacetAssertions(time.Time{}))
 	if err != nil {
 		t.Fatalf("mapping x: %v", err)
 	}

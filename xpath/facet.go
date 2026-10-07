@@ -1,6 +1,8 @@
 package xpath
 
 import (
+	"time"
+
 	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
 )
@@ -58,23 +60,31 @@ import (
 // the withhold: the caller declines the value's Datatype Valid verdict, never
 // charging it and never showing it satisfied. (#1042)
 //
+// now is the dynamic context's current dateTime, which every {test} the
+// evaluator decides reads on [AssertionTest.Evaluate]'s terms: fn:current-date
+// is the xs:date of now in now's own UTC offset. validate builds one evaluator
+// per call site from the one instant it reads at the start of each
+// Validator.Assess, so every facet of one assessment episode sees the same
+// current dateTime (cvc-xpath clause 6).
+//
 // Nothing is cached: each call compiles its {test} afresh (STYLE D3), and b and
 // r are read as [AssertionTest.Evaluate] reads them and stored nowhere.
-func FacetAssertions() value.AssertionEvaluator { return facetAssertions{} }
+func FacetAssertions(now time.Time) value.AssertionEvaluator { return facetAssertions{now: now} }
 
 // facetAssertions is [FacetAssertions]' implementation, fusing the compile and
-// the evaluation so no compiled facet tree crosses the package boundary.
-type facetAssertions struct{}
+// the evaluation so no compiled facet tree crosses the package boundary. now
+// is the current dateTime it was built with.
+type facetAssertions struct{ now time.Time }
 
 // Evaluate decides test against v, a value of st, on [FacetAssertions]' terms.
-func (facetAssertions) Evaluate(b value.Backend, r xsd.TypeResolver, st *xsd.SimpleType, test xsd.XPathExpression, v value.Value) value.AssertionOutcome {
+func (f facetAssertions) Evaluate(b value.Backend, r xsd.TypeResolver, st *xsd.SimpleType, test xsd.XPathExpression, v value.Value) value.AssertionOutcome {
 	root, defect := compileCTATest(test, r, ctaFacetFacade{st: st})
 	if defect.kind != ctaNoDefect {
 		return value.AssertionDeclined
 	}
 	// The string value bound is "" and unread: the facet tree compiles `.` to
 	// ctaNoContextItem (cvc-assertions-valid clause 1.2).
-	in := ctaTypedInput{attrs: noTypedAttributes, children: noChildElements, value: BindValue("", Typed(v))}
+	in := ctaTypedInput{attrs: noTypedAttributes, children: noChildElements, value: BindValue("", Typed(v)), now: f.now}
 	if ctaEval(root, ctaEnv{backend: b, types: r, input: in}) != ctaTrue {
 		return value.AssertionFails
 	}

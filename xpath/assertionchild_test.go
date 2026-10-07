@@ -2,6 +2,7 @@ package xpath
 
 import (
 	"testing"
+	"time"
 
 	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
@@ -73,7 +74,7 @@ func asChildren(t *testing.T, children ...asChild) ChildElements {
 			out = append(out, Child(c.name, nil))
 			continue
 		}
-		v, err := value.ValidateLexical(backend(), seededTypes, asBuiltin(t, c.typ), c.lexical, nil, FacetAssertions())
+		v, err := value.ValidateLexical(backend(), seededTypes, asBuiltin(t, c.typ), c.lexical, nil, FacetAssertions(time.Time{}))
 		if err != nil {
 			t.Fatalf("mapping %q as xs:%s: %v", c.lexical, c.typ, err)
 		}
@@ -145,7 +146,7 @@ func TestAssertionReadsChildElements(t *testing.T) {
 			if !ok {
 				t.Fatalf("CompileAssertionTest(%q): declined, want compiled", tc.expr)
 			}
-			if got := test.Evaluate(backend(), seededTypes, asValues(t), asChildren(t, tc.children...), nil, ValueBinding{}); got != tc.want {
+			if got := test.Evaluate(backend(), seededTypes, asValues(t), asChildren(t, tc.children...), nil, ValueBinding{}, time.Time{}); got != tc.want {
 				t.Errorf("Evaluate(%q) over %v = %v, want %v", tc.expr, tc.children, got, tc.want)
 			}
 		})
@@ -162,7 +163,7 @@ func TestAssertionRaisesOnAnUntypedChild(t *testing.T) {
 		if !ok {
 			t.Fatalf("CompileAssertionTest(%q): declined, want compiled", expr)
 		}
-		if test.Evaluate(backend(), seededTypes, asValues(t), children, nil, ValueBinding{}) {
+		if test.Evaluate(backend(), seededTypes, asValues(t), children, nil, ValueBinding{}, time.Time{}) {
 			t.Errorf("Evaluate(%q) over an Untyped child = true, want false: the read raises", expr)
 		}
 	}
@@ -183,7 +184,7 @@ func TestAssertionRootedPathRaises(t *testing.T) {
 			t.Fatalf("CompileAssertionTest(%q): declined, want compiled", expr)
 		}
 		for _, e1 := range []string{"present", "absent"} {
-			if test.Evaluate(backend(), seededTypes, asValues(t), asChildren(t, asChild{uq("e1"), "string", e1, false}), nil, ValueBinding{}) {
+			if test.Evaluate(backend(), seededTypes, asValues(t), asChildren(t, asChild{uq("e1"), "string", e1, false}), nil, ValueBinding{}, time.Time{}) {
 				t.Errorf("Evaluate(%q) over <e1>%s</e1> = true, want false: the leading slash raises err:XPDY0050", expr, e1)
 			}
 		}
@@ -200,7 +201,7 @@ func TestAssertionChildStepReadsTheDefaultNamespace(t *testing.T) {
 	str := asBuiltin(t, "string")
 	tns, local := xsd.QName{Space: "urn:t", Local: "e1"}, uq("e1")
 	elems := asElems(map[xsd.QName]xsd.TypeDefinition{tns: str, local: str})
-	present, err := value.ValidateLexical(backend(), seededTypes, str, "present", nil, FacetAssertions())
+	present, err := value.ValidateLexical(backend(), seededTypes, str, "present", nil, FacetAssertions(time.Time{}))
 	if err != nil {
 		t.Fatalf("mapping present: %v", err)
 	}
@@ -221,7 +222,7 @@ func TestAssertionChildStepReadsTheDefaultNamespace(t *testing.T) {
 			t.Fatalf("%s: CompileAssertionTest(%q) declined, want compiled", tc.why, tc.record.Expression())
 		}
 		children := func(yield func(ChildElement) bool) { yield(Child(tc.childName, Typed(present))) }
-		if got := test.Evaluate(backend(), seededTypes, asValues(t), children, nil, ValueBinding{}); got != tc.want {
+		if got := test.Evaluate(backend(), seededTypes, asValues(t), children, nil, ValueBinding{}, time.Time{}); got != tc.want {
 			t.Errorf("%s: Evaluate = %v, want %v", tc.why, got, tc.want)
 		}
 	}

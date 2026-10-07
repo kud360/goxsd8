@@ -127,7 +127,7 @@ func (w *walk) elementAssertions(e Element, asserts *assertionCheck, content *co
 				site, e.Name())
 			continue
 		}
-		if test.Evaluate(w.backend, w.schema, in.yield, asserts.yieldChildren, c.tally, in.value) {
+		if test.Evaluate(w.backend, w.schema, in.yield, asserts.yieldChildren, c.tally, in.value, w.now) {
 			w.logDecision("assessing element", e.Name(), e.Loc(), ruleCvcAssertion, "", "satisfied")
 			continue
 		}
@@ -810,7 +810,7 @@ func (w *walk) childValue(ct xsd.ComplexType, e Element, g governance, content *
 	if !ok {
 		return lacking("its ·initial value· has no [schema normalized value] under its own type")
 	}
-	v, err := value.ValidateLexical(w.backend, w.schema, answered, normalized, ctx, xpath.FacetAssertions())
+	v, err := value.ValidateLexical(w.backend, w.schema, answered, normalized, ctx, xpath.FacetAssertions(w.now))
 	if err != nil {
 		return lacking(fmt.Sprintf("its [schema normalized value] has no ·actual value· under %s", typeName(answered)))
 	}
@@ -1023,7 +1023,7 @@ func (w *walk) assertionTyped(u xsd.AttributeUse, lexical string, ctx value.Cont
 	if st.IsSpecial() {
 		return xpath.Untyped(lexical), true
 	}
-	v, err := value.ValidateLexical(w.backend, w.schema, st, lexical, ctx, xpath.FacetAssertions())
+	v, err := value.ValidateLexical(w.backend, w.schema, st, lexical, ctx, xpath.FacetAssertions(w.now))
 	if err != nil {
 		return nil, false
 	}
@@ -1128,7 +1128,7 @@ func (w *walk) assertionValue(e Element, ct xsd.ComplexType, content *contentChe
 	if verdict != nil {
 		return xpath.BindValue(lexical, nil), nil
 	}
-	v, err := value.ValidateLexical(w.backend, w.schema, simple.SimpleType, lexical, ctx, xpath.FacetAssertions())
+	v, err := value.ValidateLexical(w.backend, w.schema, simple.SimpleType, lexical, ctx, xpath.FacetAssertions(w.now))
 	if err != nil {
 		return xpath.ValueBinding{}, lackingValue{}
 	}

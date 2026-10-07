@@ -97,7 +97,11 @@
 //     comparison (cvc-attribute clause 4, cvc-au, cvc-elt clause 5.2.2.2.2,
 //     value.ConstraintMatches), where a {test} it declines or fails leaves
 //     that clause's own [Unevaluated]. No unevaluated site is ever reported as
-//     satisfied (PRINCIPLES 12, cvcassertion.go).
+//     satisfied (PRINCIPLES 12, cvcassertion.go). Every {test} of one
+//     [Validator.Assess] call, of either kind, is evaluated at one current
+//     dateTime, which fn:current-date reads: the clock is read once, at the
+//     start of the call, and held constant for the assessment episode
+//     (cvc-xpath clause 6, §3.13.4.2).
 //   - A *Validator is safe for concurrent use by multiple goroutines: [New]
 //     builds it once from an already-finalized [xsd.Schema] and a
 //     [value.Backend], and every [Validator.Assess] call builds and drops
