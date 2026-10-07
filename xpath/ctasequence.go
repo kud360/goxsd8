@@ -180,10 +180,11 @@ func ctaIntegerLiteral(tok ctaToken) bool {
 // and `1 + 1 to 3`, a member that is none of an IntegerLiteral, such a range
 // and a StringLiteral, a sequence mixing StringLiterals with the other two, as
 // `('a', 1)` does — integerSequenceLength and stringSequenceLength both answer
-// 0 and additiveExpr meets the comma — a nested or empty parenthesis, a
-// misplaced comma, as in `('a',)`, an IntegerLiteral beyond int64, and a
-// sequence of more than ctaMaxSequenceLength items. The direction is the withhold
-// [CompileAssertionTest] and [FacetAssertions] report. (#1042)
+// 0, and no other production takes that parenthesis and comma — a nested or
+// empty parenthesis, a misplaced comma, as in `('a',)`, an IntegerLiteral
+// beyond int64, and a sequence of more than ctaMaxSequenceLength items. The
+// direction is the withhold [CompileAssertionTest] and [FacetAssertions]
+// report. (#1042)
 func (p *ctaParser) integerSequence(n int) (ctaValue, bool) {
 	end := p.pos + n
 	var ranges []ctaIntegerRange

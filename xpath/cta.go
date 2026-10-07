@@ -41,8 +41,9 @@ import (
 // InstanceofExpr's `instance of` tail with an atomic SequenceType over a [14]
 // ta-ValueExpr or an fn:data call (ctaInstanceOf); and a general comparison's
 // operand may be an integer sequence, xpath20.md [11] RangeExpr or §3.3.1's
-// comma sequence over IntegerLiterals, evaluated in ctasequence.go
-// (ctaIntegerRanges). The facet façade (ctaFacetFacade) takes the assertion
+// comma sequence over IntegerLiterals, or a string sequence, §3.3.1's comma
+// sequence over StringLiterals, evaluated in ctasequence.go (ctaIntegerRanges,
+// ctaStringSequence). The facet façade (ctaFacetFacade) takes the assertion
 // façade's grammar but fn:count over a path, and compiles every read of the
 // context item — `.`, an attribute or child step, a rooted path — to the
 // err:XPDY0002 an assertions facet's absent context item raises
@@ -560,9 +561,9 @@ func (ctaIf) ctaExpr()               {}
 // over them (ctaMatch, ctaUnaryString, ctaPresence, ctaDistinctValues,
 // ctaStringFunction; ctaFacade.callsLibrary) or to fn:current-date
 // (ctaCurrentDate), the assertion façade's `.` over simple content
-// (ctaContextAtom, ctaFacade.contextItem), and an integer sequence
-// (ctaIntegerRanges, ctaFacade.constructsSequences). Every branch answers
-// readsChild and counted on ctaExpr's terms.
+// (ctaContextAtom, ctaFacade.contextItem), and an integer or string sequence
+// (ctaIntegerRanges, ctaStringSequence, ctaFacade.constructsSequences). Every
+// branch answers readsChild and counted on ctaExpr's terms.
 type ctaValue interface {
 	ctaValue()
 	readsChild(name xsd.QName) bool
@@ -786,9 +787,9 @@ type ctaFacade interface {
 	conditional() bool
 	// constructsSequences reports whether the façade admits, as an operand of
 	// a general comparison, xpath20.md [11] RangeExpr `to` and the
-	// parenthesized comma sequence of §3.3.1 over IntegerLiterals
-	// (ctaParser.integerSequence), which §3.12.6's grammar has no production
-	// for.
+	// parenthesized comma sequence of §3.3.1 over IntegerLiterals or over
+	// StringLiterals (ctaParser.sequence), which §3.12.6's grammar has no
+	// production for.
 	constructsSequences() bool
 	// castable reports whether the façade admits xpath20.md [18]
 	// CastableExpr's `castable as` tail at all (ctaParser.castableTail), which
@@ -2106,10 +2107,10 @@ func ctaValidated(i ctaItem) (value.Value, bool) {
 //   - `.` over simple content is E's string value as xs:untypedAtomic, cast
 //     straight to c as an untyped attribute is.
 //   - a TYPED attribute, each typed child, a LITERAL, an fn:count call's
-//     xs:integer, each item of an integer sequence and each item of `$value`
-//     carry their own type and are converted to c, which is a no-op wherever
-//     the two coincide; the statically empty `$value` yields nothing to
-//     convert.
+//     xs:integer, each item of an integer or string sequence and each item of
+//     `$value` carry their own type and are converted to c, which is a no-op
+//     wherever the two coincide; the statically empty `$value` yields nothing
+//     to convert.
 //   - an F&O string or sequence function's result is of its own result type
 //     — an fn:distinct-values call's items of the type it compares them in —
 //     and converted to c on the typed operands' terms, once the function has

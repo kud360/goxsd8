@@ -58,7 +58,8 @@
 //     one xs:untypedAtomic holding E's string value (cvc-assertion clause 2.3.1's Note) — never `$value` — which ValueBinding
 //     carries beside `$value` and which the zero-argument fn:string, fn:string-length and fn:normalize-space read, as a general
 //     comparison's operand, an integer sequence: [11] RangeExpr over IntegerLiterals, bare or parenthesized, or a parenthesized
-//     comma sequence of IntegerLiterals and such ranges, `(1 to 10, 20, 30)` (§3.3.1), and §3.8's `if (Expr) then ExprSingle else
+//     comma sequence of IntegerLiterals and such ranges, `(1 to 10, 20, 30)` (§3.3.1), or a string sequence, a parenthesized comma
+//     sequence of StringLiterals, `('a', 'b')`, whose items are xs:string, and §3.8's `if (Expr) then ExprSingle else
 //     ExprSingle` wherever an ExprSingle stands whole in a boolean position, evaluating only the branch its test's ·effective
 //     boolean value· selects, and §3.10.3's `castable as` over a [16] ta-SimpleValue, true exactly where the same `cast as` yields a
 //     value and false where that cast raises, an error evaluating its operand raising, and §3.10.1's `instance of` with a builtin
@@ -84,8 +85,9 @@
 //     those primitives, a cast of an xs:float or xs:double operand to a target other than its own type or an ancestor of it,
 //     fn:string over such an operand, a collation argument, a function call of the wrong arity, `.` outside a value predicate under
 //     content that is not simple or where it is a node — the whole operand of an ·effective boolean value·, fn:not, fn:exists,
-//     fn:empty or fn:count — and the zero-argument string functions wherever `.` declines, an integer sequence in any other position
-//     or over any other operand, or longer than ctaMaxSequenceLength, an arithmetic operand that is not numeric, an xs:float one
+//     fn:empty or fn:count — and the zero-argument string functions wherever `.` declines, an integer or string sequence in any other
+//     position or over any other operand — a member of another kind, a mix of StringLiterals with the other two, a nested or empty
+//     parenthesis, a misplaced comma — or longer than ctaMaxSequenceLength, an arithmetic operand that is not numeric, an xs:float one
 //     against xs:double (#889), a unary sign, a `castable as` whose cast declines, over any operand but a SimpleValue or in a value
 //     predicate, an `instance of` whose SequenceType is a KindTest, `item()`, `empty-sequence()` or a user-defined or non-atomic
 //     type, over a node without fn:data, over a numeric literal or an arithmetic result, over a typed child — fn:distinct-values
