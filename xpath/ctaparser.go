@@ -231,9 +231,9 @@ const (
 	// one, and ctaParser.peek synthesizes it.
 	ctaEOF ctaKind = iota
 	// ctaNameTok is an NCName or a prefixed QName, whose text is as written.
-	// The keywords 'or', 'and', 'cast', 'as' and the 'attribute' axis name are
-	// this kind too: XPath has no reserved words, so what a name means is the
-	// parser's to decide from position.
+	// The keywords 'or', 'and', 'cast', 'castable', 'as' and the 'attribute'
+	// axis name are this kind too: XPath has no reserved words, so what a name
+	// means is the parser's to decide from position.
 	ctaNameTok
 	// ctaWildcardTok is one [37] Wildcard — `*`, `NCName ':' '*'` or
 	// `'*' ':' NCName` — whose text is as written. It is its own kind and not a
@@ -625,8 +625,8 @@ func (p *ctaParser) peek(ahead int) ctaToken {
 func (p *ctaParser) at(k ctaKind) bool { return p.peek(0).kind == k }
 
 // atName reports whether the cursor sits on the unprefixed name text, which is
-// how the keywords 'or', 'and', 'cast', 'as' and the 'attribute' axis are
-// recognized.
+// how the keywords 'or', 'and', 'cast', 'castable', 'as' and the 'attribute'
+// axis are recognized.
 func (p *ctaParser) atName(text string) bool {
 	return p.peek(0).kind == ctaNameTok && p.peek(0).text == text
 }
@@ -896,8 +896,8 @@ func (p *ctaParser) comparator() (ctaComparator, bool) {
 //
 // The six spellings are NCNames, and XPath has no reserved words, so what makes
 // one an operator is its position: right after a [14] ta-ValueExpr no other
-// production opens with a name but 'cast', 'and' and 'or', none of which is
-// spelled like one.
+// production opens with a name but 'cast', 'castable', 'and' and 'or', none
+// of which is spelled like one.
 func (p *ctaParser) valueComparator() (ctaComparator, bool) {
 	if !p.at(ctaNameTok) {
 		return ctaEqual, false
@@ -1558,6 +1558,10 @@ func (ctaPredicateFacade) conditional() bool { return false }
 // with every other predicate outside that shape (ctaParser.predicate).
 func (ctaPredicateFacade) constructsSequences() bool { return false }
 
+// castable is false, on constructsSequences' terms: `N[. castable as xs:int
+// = 'true']` declines with every other predicate outside that shape.
+func (ctaPredicateFacade) castable() bool { return false }
+
 // existenceLength is how many tokens at the cursor spell a conjunction of
 // attribute-existence tests, `'@' QName ('and' '@' QName)*`, and 0 where they
 // spell none. Nothing is consumed.
@@ -1628,7 +1632,9 @@ func (p *ctaParser) countStep(elements, attributes ctaCountAxis) (ctaCounted, bo
 	return ctaCountPath{axis: elements, name: name}, true
 }
 
-// castExpr parses [15] ta-CastExpr: a SimpleValue and an optional cast tail.
+// castExpr parses [15] ta-CastExpr: a SimpleValue and an optional cast tail —
+// or, in its place, xpath20.md [18] CastableExpr's `castable as` tail
+// (castableTail).
 //
 // The tail's QName is resolved as a TYPE name and classified before the node
 // is built, so a target this engine does not cast to declines the whole
@@ -1636,21 +1642,66 @@ func (p *ctaParser) countStep(elements, attributes ctaCountAxis) (ctaCounted, bo
 // (ctaTypes.castTarget). §3.12.6 clause 4 fixes what an admitted one is: "Any
 // explicit casts (i.e. any strings which match the optional "cast as" QName in
 // the CastExpr production) are casts to built-in datatypes."
+//
+// GAP(xpath): a `castable as` tail after a `cast as` one, `E cast as T
+// castable as U`, which [18]'s CastExpr operand admits, leaves `castable` a
+// token no production takes, and declines; so does a `castable as` tail over
+// any operand but a [16] ta-SimpleValue, such as `xs:date(@d) castable as
+// xs:string`. The direction is the withhold [CompileAssertionTest] reports.
+// (#1042)
 func (p *ctaParser) castExpr() (ctaValue, bool) {
 	v, ok := p.simpleValue()
 	if !ok {
 		return nil, false
 	}
+	if p.atName("castable") {
+		return p.castableTail(v)
+	}
 	if !p.atName("cast") {
 		return v, true
 	}
 	p.advance()
-	if !p.atName("as") {
+	cast, ok := p.singleType(v)
+	if !ok {
 		return nil, false
+	}
+	return cast, true
+}
+
+// castableTail parses xpath20.md [18] CastableExpr's `"castable" "as"
+// SingleType` tail over v, whose `castable` the cursor is on, where the façade
+// admits it (ctaFacade.castable), so a Type Alternative's {test} declines it
+// as outside its required subset. It holds the cast `v cast as` the same
+// SingleType builds (singleType), so a target or operand castTarget or
+// castsFrom declines for the cast declines for `castable` too, and no second
+// casting rule exists to disagree with the cast's (ctaCastable).
+func (p *ctaParser) castableTail(v ctaValue) (ctaValue, bool) {
+	if !p.facade.castable() {
+		return nil, false
+	}
+	p.advance() // 'castable'
+	cast, ok := p.singleType(v)
+	if !ok {
+		return nil, false
+	}
+	boolean, resolved := p.types.simple(ctaBuiltin("boolean"))
+	if !resolved {
+		return nil, false
+	}
+	return ctaCastable{cast: cast, st: boolean}, true
+}
+
+// singleType parses the `'as' QName '?'?` following a `cast` or `castable`
+// keyword — xpath20.md [49] SingleType — into the cast of v to the type the
+// QName names, reporting false where the tail is malformed, castTarget does
+// not admit the target or castsFrom does not admit the cast.
+func (p *ctaParser) singleType(v ctaValue) (ctaCast, bool) {
+	if !p.atName("as") {
+		return ctaCast{}, false
 	}
 	p.advance()
 	if !p.at(ctaNameTok) {
-		return nil, false
+		return ctaCast{}, false
 	}
 	text := p.peek(0).text
 	p.advance()
@@ -1661,7 +1712,7 @@ func (p *ctaParser) castExpr() (ctaValue, bool) {
 	}
 	target, admitted := p.types.castTarget(p.typeName(text))
 	if !admitted || !p.types.castsFrom(v, target) {
-		return nil, false
+		return ctaCast{}, false
 	}
 	return ctaCast{operand: v, target: target, allowsEmpty: allowsEmpty}, true
 }

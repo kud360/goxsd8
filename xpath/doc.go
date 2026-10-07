@@ -66,8 +66,10 @@
 //     general comparison's operand, an integer sequence: [11] RangeExpr over IntegerLiterals, bare or
 //     parenthesized, or a parenthesized comma sequence of IntegerLiterals and such ranges, `(1 to 10, 20,
 //     30)` (§3.3.1), and §3.8's `if (Expr) then ExprSingle else ExprSingle` wherever an ExprSingle stands
-//     whole in a boolean position, evaluating only the branch its test's ·effective boolean value· selects —
-//     all of which a Type Alternative's {test} still declines. AssertionTest.ReadsChild reports which
+//     whole in a boolean position, evaluating only the branch its test's ·effective boolean value· selects,
+//     and §3.10.3's `castable as` over a [16] ta-SimpleValue, true exactly where the same `cast as` yields a
+//     value and false where that cast raises, an error evaluating its operand raising — all of which a Type
+//     Alternative's {test} still declines, each outside §3.12.6's subset. AssertionTest.ReadsChild reports which
 //     children a compiled {test} reads for their values — a value predicate's children among them, counted
 //     over ChildElements — so its caller keeps no other; neither any other fn:count argument nor a path
 //     whose existence is asked reads a value, and AssertionTest.Tally makes the Tally its caller reports E's
@@ -93,18 +95,20 @@
 //     simple or where it is a node — the whole operand of an ·effective boolean value·, fn:not, fn:exists,
 //     fn:empty or fn:count — and the zero-argument string functions wherever `.` declines, an integer
 //     sequence in any other position or over any other operand, or longer than ctaMaxSequenceLength, an
-//     arithmetic operand that is not numeric, an xs:float one against xs:double (#889), a unary sign, and a
+//     arithmetic operand that is not numeric, an xs:float one against xs:double (#889), a unary sign, a
+//     `castable as` whose cast declines, over any operand but a SimpleValue or in a value predicate, and a
 //     `$value` whose {simple type definition} is classified as such an attribute's type would be, or is a
 //     list of a type that would be; a `$value` over ·special· content is xs:untypedAtomic, as such an
 //     attribute is. FacetAssertions is the value.AssertionEvaluator for an assertions facet's {test}
 //     (Datatypes §4.3.13.3, cvc-assertions-valid), over the same grammar: `$value` is bound to the value
 //     under the facet's type, or under its ·active basic member· where that type is a union (dt-xdmrep
 //     clause 4), and there is no context item, so `.`, an attribute or child step, an element step, a child
-//     path, a rooted path and a zero-argument string function each raise err:XPDY0002 and fail the facet; an
-//     fn:count call over a path declines. A Type Alternative's {test} declines `.` everywhere. Longer paths
-//     in other positions, the other axes, predicates in other positions or of other shapes, positional ones
-//     among them, unions outside fn:count, quantified expressions, a conditional read as an item rather than
-//     for its ·effective boolean value·, the collation arguments and every other F&O function are PLANNED
+//     path, a rooted path and a zero-argument string function each raise err:XPDY0002 and fail the facet,
+//     and so does `castable as` over one of them; an fn:count call over a path declines. A Type
+//     Alternative's {test} declines `.` everywhere. Longer paths in other positions, the other axes,
+//     predicates in other positions or of other shapes, positional ones among them, unions outside fn:count,
+//     quantified expressions, a conditional read as an item rather than for its ·effective boolean value·,
+//     `castable as` over other operands, the collation arguments and every other F&O function are PLANNED
 //     (#1042).
 //  3. The full grammar (docs/specs/md/xpath20.md) and function library
 //     (docs/specs/md/xpath-functions.md) — M7 onward, ratcheted.

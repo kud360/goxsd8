@@ -455,7 +455,12 @@ type AssertionTest struct{ root ctaExpr }
 // boolean value· selects the one branch evaluated, so a dynamic error in the
 // other is never raised, and both of whose branches are compiled, so a decline
 // in either declines the {test}; the [47] ContextItemExpr `.` over simple
-// content, atomized (§3.1.4, §2.4.2); and, as an operand of a general
+// content, atomized (§3.1.4, §2.4.2); [18] CastableExpr's `castable as` tail
+// over a [16] ta-SimpleValue, `$value castable as xs:double`, an xs:boolean
+// true exactly where the same `cast as` yields a value and false where that
+// cast raises — the empty sequence without `?`, two or more items, a lexical
+// or facet mismatch — while an error evaluating its operand raises (§3.10.3),
+// and which declines wherever that cast does; and, as an operand of a general
 // comparison, an integer sequence: [11] RangeExpr `I to J` over two
 // IntegerLiterals, bare or parenthesized, or a parenthesized comma sequence of
 // IntegerLiterals and such ranges, `(1 to 10, 20, 30)` (§3.3.1) — added, and
@@ -573,7 +578,11 @@ type AssertionTest struct{ root ctaExpr }
 //     primitives, which is the cast to xs:string the bullet above declines,
 //     and fn:string over any argument whose {primitive type
 //     definition} is xs:float or xs:double, a literal or a cast included,
-//     which is the cast to xs:string that bullet's floating clause declines.
+//     which is the cast to xs:string that bullet's floating clause declines;
+//   - a `castable as` tail over any operand but a [16] ta-SimpleValue — so
+//     `@d cast as xs:string castable as xs:date` and `xs:string(@d) castable
+//     as xs:date` decline — and one inside a value predicate, and every
+//     `castable as T` whose `cast as T` the bullets above decline.
 //
 // An xs:string? argument — of every function above but fn:empty, fn:exists,
 // fn:distinct-values and fn:string — of any type outside the xs:string and
@@ -635,10 +644,11 @@ type AssertionTest struct{ root ctaExpr }
 // the binary operators, conditionals whose value is read as an item rather
 // than for its ·effective boolean value·, `.` where E's string value is not an
 // input or `.` is a node, sequence expressions beyond the integer sequences of
-// a general comparison's operand, the collation argument, and every F&O
-// function but fn:count and those listed above among them. The direction is
-// the withhold: the caller records the assertion as unevaluated and neither
-// charges it nor shows it satisfied (PRINCIPLES 20). (#1042)
+// a general comparison's operand, `castable as` over any operand but a [16]
+// ta-SimpleValue or inside a value predicate, the collation argument, and
+// every F&O function but fn:count and those listed above among them. The
+// direction is the withhold: the caller records the assertion as unevaluated
+// and neither charges it nor shows it satisfied (PRINCIPLES 20). (#1042)
 //
 // types is read as [CompileCTATest] reads it and stored nowhere.
 func CompileAssertionTest(expr xsd.XPathExpression, types xsd.TypeResolver, content xsd.ContentType, attrs AttributeTypes, elems ElementTypes) (AssertionTest, bool) {
@@ -835,6 +845,9 @@ func (n ctaUntypedChild) readsChild(name xsd.QName) bool { return n.name == name
 // name.
 func (n ctaCast) readsChild(name xsd.QName) bool { return n.operand.readsChild(name) }
 
+// readsChild is its cast's.
+func (n ctaCastable) readsChild(name xsd.QName) bool { return n.cast.readsChild(name) }
+
 // readsChild reports whether either operand of the arithmetic holds a
 // child value step naming name.
 func (n ctaArith) readsChild(name xsd.QName) bool {
@@ -935,6 +948,9 @@ func (n ctaIf) counted(into []ctaTallied) []ctaTallied {
 
 // counted appends each path the cast's operand counts over.
 func (n ctaCast) counted(into []ctaTallied) []ctaTallied { return n.operand.counted(into) }
+
+// counted is its cast's.
+func (n ctaCastable) counted(into []ctaTallied) []ctaTallied { return n.cast.counted(into) }
 
 // counted appends each path either operand of the arithmetic counts over, the
 // left one first.
@@ -1050,6 +1066,10 @@ func (ctaAssertionFacade) conditional() bool { return true }
 // constructsSequences is true, on comparesValues' terms: §3.3.1's sequence
 // expressions are in full XPath 2.0.
 func (ctaAssertionFacade) constructsSequences() bool { return true }
+
+// castable is true, on comparesValues' terms: §3.10.3's CastableExpr is in
+// full XPath 2.0.
+func (ctaAssertionFacade) castable() bool { return true }
 
 // ctaValueName is the ·expanded name· of the one variable an assertion's
 // static context holds (cvc-assertion clause 2.3): "no namespace URI and ...

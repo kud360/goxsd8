@@ -21,7 +21,8 @@ import (
 // basic member· where that type is a union (clause 1.4, dt-xdmrep clause 4),
 // is the whole of what a {test} can read, arithmetic and the F&O string and
 // sequence functions over it included (ctaFacetFacade.computes,
-// ctaFacetFacade.callsLibrary), and fn:count over it or over any other operand
+// ctaFacetFacade.callsLibrary), `castable as` over it
+// (ctaFacetFacade.castable), and fn:count over it or over any other operand
 // that is no path. An fn:count call over a path declines
 // (ctaFacetFacade.count).
 
@@ -38,9 +39,9 @@ import (
 //   - [value.AssertionHolds], where it evaluates to true;
 //   - [value.AssertionFails], where it evaluates to false or raises a dynamic or
 //     type error, which cvc-assertions-valid treats alike — err:XPDY0002 for a
-//     read of the absent context item among them, arithmetic over one and
-//     fn:string, fn:string-length and fn:normalize-space with no argument
-//     included, and the err:FOAR0001 and err:FOAR0002 of arithmetic
+//     read of the absent context item among them, arithmetic and `castable
+//     as` over one and fn:string, fn:string-length and fn:normalize-space with
+//     no argument included, and the err:FOAR0001 and err:FOAR0002 of arithmetic
 //     ([AssertionTest.Evaluate] lists them);
 //   - [value.AssertionDeclined], where this engine does not evaluate it: a
 //     {test} [CompileAssertionTest] would decline over a simple {content type}
@@ -136,6 +137,13 @@ func (ctaFacetFacade) conditional() bool { return true }
 // constructsSequences is true, on ctaAssertionFacade.constructsSequences'
 // terms.
 func (ctaFacetFacade) constructsSequences() bool { return true }
+
+// castable is true, on ctaAssertionFacade.castable's terms. An operand that
+// reads the absent context item is ctaNoContextItem, whose err:XPDY0002
+// evaluating it raises, so `. castable as xs:date` fails the facet rather than
+// answering false: xpath20.md §3.10.3's "If evaluation of E fails with a
+// dynamic error, the castable expression as a whole fails" (ctaCastableItem).
+func (ctaFacetFacade) castable() bool { return true }
 
 // variable compiles `$value` (clause 1.1: "no namespace URI and ... 'value' as
 // the local name") against st as ctaTypes.valueVariable classifies it, the XDM
