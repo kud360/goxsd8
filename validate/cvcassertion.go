@@ -70,7 +70,8 @@ const ruleCvcAssertionsValid xsderr.Rule = "cvc-assertions-valid"
 // invalid says whether e is known to be invalid in the partial ·PSVI· by now (clause
 // 2.3.1.1) — the caller's count of the violations recorded since e was entered — and
 // content is e's own content check, exhausted, which holds the ·initial value· and
-// the ·nilled· answer.
+// the ·nilled· answer, and own is e's own string-value frame ([ownStringValue]),
+// nil where e opened none.
 //
 // Each assertion takes exactly one of three outcomes: DECLINED, where
 // [xpath.CompileAssertionTest] reported false or e's attributes, the children
@@ -92,25 +93,25 @@ const ruleCvcAssertionsValid xsderr.Rule = "cvc-assertions-valid"
 // [[children]] a {test} reads has no typed value this package reads
 // ([walk.keepChild]) — a child of mixed content among them whose string-value
 // spans a descendant whose contribution is undecided
-// ([assertionAncestry.collectElement]) — whose `$value` is undecided
-// ([walk.assertionValues]), whose string value was not gathered because it has
-// simple content and element [[children]], or is ·nilled· with simple content
-// and any [[children]] ([walk.assertionValue]), or one of whose {test}s counts
-// the attribute nodes of, or filters children by the attribute names of, an
-// element of its subtree whose ·governing type definition· this package could
-// not determine, so that its ·defaulted attributes· are unknown
-// ([walk.tallyElement]); a ·skipped· subtree is counted, by name
-// ([assertionAncestry.tallySkipped]). Fail-open: the withheld value is clause
-// 6's own verdict, whose whole consumer set inside this package is
-// w.res.violations and its one reader [Result.Violations], which charge on a
-// violation PRESENT, so a decline can only cost a rejection and can manufacture
-// none. (#1042)
-func (w *walk) elementAssertions(e Element, asserts *assertionCheck, content *contentCheck, invalid bool) {
+// ([stringValueFrame.lacking]) — whose `$value` is undecided
+// ([walk.assertionValues]), whose own string value, which `.` reads, spans
+// such a descendant, or was not gathered because e has simple content and
+// element [[children]], or is ·nilled· and has [[children]]
+// ([walk.assertionValue]), or one of whose {test}s counts the attribute nodes
+// of, or filters children by the attribute names of, an element of its subtree
+// whose ·governing type definition· this package could not determine, so that
+// its ·defaulted attributes· are unknown ([walk.tallyElement]); a ·skipped·
+// subtree is counted, by name ([assertionAncestry.tallySkipped]). Fail-open:
+// the withheld value is clause 6's own verdict, whose whole consumer set inside
+// this package is w.res.violations and its one reader [Result.Violations],
+// which charge on a violation PRESENT, so a decline can only cost a rejection
+// and can manufacture none. (#1042)
+func (w *walk) elementAssertions(e Element, asserts *assertionCheck, content *contentCheck, own *stringValueFrame, invalid bool) {
 	if asserts == nil {
 		return
 	}
 	attrs := e.Attributes()
-	in, lack := w.assertionValues(e, attrs, asserts, content, invalid)
+	in, lack := w.assertionValues(e, attrs, asserts, content, own, invalid)
 	for i, c := range asserts.tests {
 		site := fmt.Sprintf("assertion %d of %d in the {assertions} of the ·governing type definition· %s, whose {test} is %q,",
 			i+1, len(asserts.tests), typeName(asserts.ct), c.a.Test().Expression())
@@ -205,6 +206,22 @@ func (c *assertionCheck) tally(path []xsd.QName, attrs []xsd.QName) {
 	}
 }
 
+// readsValue reports whether some compiled test of c reads E itself, `.` or
+// `$value`, under a {content type} that is not simple
+// ([walk.compileAssertion]). A nil c — an element with no {assertions} — reads
+// neither.
+func (c *assertionCheck) readsValue() bool {
+	if c == nil {
+		return false
+	}
+	for _, t := range c.tests {
+		if t.readsValue {
+			return true
+		}
+	}
+	return false
+}
+
 // reads reports whether some compiled test of c reads a child element named
 // name ([xpath.AssertionTest.ReadsChild]). A nil c — an element with no
 // {assertions} — reads none.
@@ -236,15 +253,16 @@ func (c *assertionCheck) lacking(l assertionLack) {
 // parent has no {assertions}, which reads its typed value ([walk.keepChild]);
 // counting, the nearest ancestor at any depth one of whose {test}s counts nodes
 // of its subtree, which is told of the element ([walk.tallyElement]);
-// collecting, the nearest ancestor at any depth whose string-value a {test} of
-// its own parent reads, which the element's text runs and its own frame's
-// text are appended to ([stringValueFrame]); and path, the ·expanded names· of
-// the element's ancestors from the ·validation root· down, the root included,
-// so len(path) is the element's depth below the root, 0 at the root.
+// collecting, the innermost open string-value frame among its ancestors — an
+// ancestor whose string-value a {test} of its own parent, or of its own, reads
+// — to every open frame of which the element's text runs are appended
+// ([stringValueFrame]); and path, the ·expanded names· of the element's
+// ancestors from the ·validation root· down, the root included, so len(path)
+// is the element's depth below the root, 0 at the root.
 //
-// It holds O(depth) frames, one per counting ancestor and one per collecting
-// one, O(depth) names, the text of each collecting ancestor's subtree so far,
-// and no node.
+// It holds O(depth) frames, one per counting ancestor and up to two per
+// collecting one, O(depth) names, the text of each collecting ancestor's
+// subtree so far, and no node.
 //
 // Every element's path shares its parent's backing array: below appends the
 // element's own name in place, so a later sibling's name overwrites an earlier
@@ -268,24 +286,32 @@ type tallyFrame struct {
 	outer *tallyFrame
 }
 
-// stringValueFrame is one element [[child]], named name at loc, whose
-// string-value (xpath-datamodel §6.2.4) a {test} of its parent reads, whose
-// clause 6 state is reader: a child whose ·locally declared type· and own
-// ·governing type definition· both have mixed content, and which is not
-// ·nilled· ([walk.stringValue]). text collects, bottom-up, the concatenation
-// of every Text Node of its subtree in document order: a character run
-// arrives in the innermost open frame ([assertionAncestry.collectText]), and a
-// frame's text is appended to its outer one's when its element closes
-// ([assertionAncestry.closeStringValue]). outer is the next such child
-// enclosing it, nil where there is none.
+// stringValueFrame is the string-value (xpath-datamodel §6.2.4) of the element
+// whose content check is owner, which a {test} reads, whose clause 6 state is
+// reader. It is one of two kinds. A CHILD frame (own false) is an element
+// [[child]] a {test} of its parent reads, reader being the parent's: a child
+// whose ·locally declared type· and own ·governing type definition· both have
+// mixed content, and which is not ·nilled· ([walk.stringValue]). An OWN frame
+// (own true) is E's string value, which `.` atomizes to and which reader, E's
+// own clause 6 state, reads: an E whose {content type} is not simple, which is
+// not ·nilled·, and one of whose compiled {test}s reads `.` or `$value`
+// ([ownStringValue], [walk.compileAssertion]).
+//
+// text collects the concatenation of every Text Node of owner's subtree in
+// document order, as the partial ·PSVI· cvc-assertion clause 1.2 builds them:
+// each character run arrives in every open frame
+// ([assertionAncestry.collectText]) — whole where it is the owner's own, the
+// owner being annotated xs:anyType there if E and mixed if a read child, and
+// as xpath-datamodel §6.7.4 builds the Text Node of a descendant otherwise.
+// outer is the next open frame enclosing it, nil where there is none.
 //
 // It holds the text of one subtree while that subtree is walked, the only
 // data a string-value is made of, and nothing else of it.
 type stringValueFrame struct {
 	text   strings.Builder
+	owner  *contentCheck
 	reader *assertionCheck
-	name   xsd.QName
-	loc    xsderr.Loc
+	own    bool
 	outer  *stringValueFrame
 }
 
@@ -294,23 +320,30 @@ type stringValueFrame struct {
 // undecided leaves every string-value spanning it undecided too.
 func (f *stringValueFrame) lacking(why string) {
 	for ; f != nil; f = f.outer {
-		f.reader.lacking(lackingChild{name: f.name, loc: f.loc, why: why})
+		f.reader.lacking(f.lack(why))
 	}
+}
+
+// lack is what f's reader lacks for the reason why: E's own string value for
+// an own frame ([lackingStringValue]), and a read child's typed value for a
+// child frame ([lackingChild]).
+func (f *stringValueFrame) lack(why string) assertionLack {
+	if f.own {
+		return lackingStringValue{why: why}
+	}
+	return lackingChild{name: f.owner.e.Name(), loc: f.owner.e.Loc(), why: why}
 }
 
 // below is the ancestry of each element [[child]] of the element named name
 // whose ancestry is up and whose own clause 6 state is own: own is their
 // parent, name ends their ancestors' path, the counting ancestors are up's,
 // with own's element innermost where some test of own counts, and the
-// innermost open string-value frame is frame, the element's own, where it
-// opened one, and up's otherwise.
-func (up assertionAncestry) below(name xsd.QName, own *assertionCheck, frame *stringValueFrame) assertionAncestry {
-	next := assertionAncestry{parent: own, counting: up.counting, collecting: up.collecting, path: append(up.path, name)}
+// innermost open string-value frame is inner, the innermost the element
+// itself opened or up's where it opened none ([walk.element]).
+func (up assertionAncestry) below(name xsd.QName, own *assertionCheck, inner *stringValueFrame) assertionAncestry {
+	next := assertionAncestry{parent: own, counting: up.counting, collecting: inner, path: append(up.path, name)}
 	if own.counts() {
 		next.counting = &tallyFrame{check: own, depth: len(up.path), outer: up.counting}
-	}
-	if frame != nil {
-		next.collecting = frame
 	}
 	return next
 }
@@ -322,16 +355,32 @@ func (up assertionAncestry) below(name xsd.QName, own *assertionCheck, frame *st
 // the lookup [walk.assertionElementTypes] answers the compile — has mixed
 // content, its own ·governing type definition· does too, and it is not
 // ·nilled·. Every other read child's value is [walk.childValue]'s to decide,
-// which lacks or reads it with no string-value.
-func (w *walk) stringValue(e Element, g governance, nilled bool, up assertionAncestry) *stringValueFrame {
-	if nilled || !mixedContent(g.typ) || !up.parent.reads(e.Name()) {
+// which lacks or reads it with no string-value. content is e's content check.
+func (w *walk) stringValue(e Element, g governance, content *contentCheck, up assertionAncestry) *stringValueFrame {
+	if content.nilled || !mixedContent(g.typ) || !up.parent.reads(e.Name()) {
 		return nil
 	}
 	ldt, local := w.schema.LocallyDeclaredElementType(up.parent.ct, e.Name())
 	if !local || !mixedContent(ldt) {
 		return nil
 	}
-	return &stringValueFrame{reader: up.parent, name: e.Name(), loc: e.Loc(), outer: up.collecting}
+	return &stringValueFrame{owner: content, reader: up.parent, outer: up.collecting}
+}
+
+// ownStringValue opens the own string-value frame of the element whose clause
+// 6 state is asserts and whose content check is content — the frame
+// [walk.assertionValue] binds `.` from — inside outer, the innermost frame
+// open around its [[children]] otherwise; it is nil where the element opens
+// none. It opens one exactly where the element is not ·nilled· and some
+// compiled {test} reads `.` or `$value` under a {content type} that is not
+// simple ([assertionCheck.readsValue]): under simple content `.` is the
+// ·initial value· the content check gathers, and a ·nilled· element binds `.`
+// without its [[children]]'s text.
+func ownStringValue(asserts *assertionCheck, content *contentCheck, outer *stringValueFrame) *stringValueFrame {
+	if content.nilled || !asserts.readsValue() {
+		return nil
+	}
+	return &stringValueFrame{owner: content, reader: asserts, own: true, outer: outer}
 }
 
 // mixedContent reports whether td is a complex type whose {content
@@ -346,83 +395,139 @@ func mixedContent(td xsd.TypeDefinition) bool {
 // collectElement settles what e, an element whose ancestry is up, governed by g
 // and ·nilled· where nilled is true, contributes to the string-value of every
 // open frame enclosing it, before its own [[children]] arrive: a ·nilled· one
-// contributes nothing and has no Text Node (xpath-datamodel §6.2.4), and an
-// element-only, empty, mixed or ·laxly assessed· one contributes its
-// descendants' text, which [assertionAncestry.collectText] reads off each run.
+// contributes nothing and has no Text Node (xpath-datamodel §6.2.4), and every
+// other one contributes its text runs as [assertionAncestry.collectText] reads
+// them off, and what [collectEnd] settles once they are exhausted.
 //
-// GAP(xpath): an element of simple type or simple content, not ·nilled·,
-// declines the reader of every frame enclosing it — xpath-datamodel §6.2.4
-// lets its Text Node hold the raw characters or the [schema normalized value]
-// (:1259, "may"), so the string-value spanning it is not fixed — and so does an
-// element whose ·governing type definition· this package could not determine,
-// which may be either. The direction is the withhold: the assertion is
-// recorded as unevaluated, never charged and never shown satisfied. (#1042)
+// GAP(xpath): an element whose ·governing type definition· this package could
+// not determine declines the reader of every frame enclosing it: it may have
+// simple content, element-only content or mixed content, each of which builds
+// its Text Nodes differently (§6.7.4). The direction is the withhold: the
+// assertion is recorded as unevaluated, never charged and never shown
+// satisfied. (#1042)
 func (up assertionAncestry) collectElement(e Element, g governance, nilled bool) {
-	if up.collecting == nil || nilled {
+	if up.collecting == nil || nilled || !g.typeUndetermined() {
 		return
 	}
-	if g.typeUndetermined() {
-		up.collecting.lacking(fmt.Sprintf("the element %s at %s below it has a ·governing type definition· that was not determined, so what its text contributes to the string-value is undecided", e.Name(), e.Loc()))
-		return
-	}
-	if g.valueType() != nil {
-		up.collecting.lacking(fmt.Sprintf("the element %s at %s below it has simple content, whose Text Node the data model lets hold its raw characters or its [schema normalized value], so the string-value is undecided", e.Name(), e.Loc()))
-	}
+	up.collecting.lacking(fmt.Sprintf("the element %s at %s below it has a ·governing type definition· that was not determined, so what its text contributes to the string-value is undecided", e.Name(), e.Loc()))
 }
 
 // collectText appends t, one character run [[child]] of the element whose
-// content check is content, to the innermost open string-value frame of up,
-// by that element's governance, on the terms xpath-datamodel §6.2.4 and §6.7.4
-// build its Text Nodes: under mixed content, or ·laxly assessed· and so
-// annotated xs:anyType, the raw run; under element-only or empty content
-// nothing — a run that is white space alone is no Text Node there, and any
-// other run is a violation recorded at that element, which declines its
-// reader in [walk.childValue] — and under a ·nilled· element nothing, its run
-// a violation too. An element of simple type or simple content contributes
-// nothing here, having declined every frame on entry
-// ([assertionAncestry.collectElement]).
+// content check is content, to every open string-value frame of up. To a frame
+// whose owner that element is, the run is appended whole: E is annotated
+// xs:anyType in the partial ·PSVI· (cvc-assertion clause 1.2), and a read
+// child's frame is opened only over mixed content, so neither drops a run of
+// white space. To every other frame it is appended as the Text Node
+// xpath-datamodel §6.7.4 builds from it under that element's governance
+// (descendantRun): under mixed content, or ·laxly assessed· and so annotated
+// xs:anyType, the raw run; under simple content the raw run as well, which
+// [collectEnd] declines where it is not the [schema normalized value]; under
+// element-only or empty content nothing — a run that is white space alone is
+// no Text Node there, and any other run is a violation recorded at that
+// element, which declines its reader in [walk.childValue] — and under a
+// ·nilled· element nothing, its run a violation too.
 //
-// GAP(xpath): a run of an element whose ·governing type definition· this
-// package could not determine declines the reader of every enclosing frame,
-// fail-open on [assertionAncestry.collectElement]'s terms. (#1042)
+// GAP(xpath): a run that is white space alone under simple content declines
+// the reader of every frame, being no Text Node where the data model reads the
+// raw characters and part of one where it reads the [schema normalized value]
+// (xpath-datamodel Appendix J.2, "may"); so does a run of an element whose
+// ·governing type definition· this package could not determine, on
+// [assertionAncestry.collectElement]'s terms. The direction is the withhold:
+// the assertion is recorded as unevaluated, never charged and never shown
+// satisfied. (#1042)
 func (up assertionAncestry) collectText(content *contentCheck, t Text) {
-	if up.collecting == nil || content.nilled {
+	if up.collecting == nil || content.nilled || t.Data() == "" {
 		return
 	}
-	if content.g.typeUndetermined() {
-		up.collecting.lacking(fmt.Sprintf("a character run at %s below it is in an element whose ·governing type definition· was not determined", t.Loc()))
+	run, why := descendantRun(content.g, t)
+	if why != "" {
+		up.collecting.lacking(why)
 		return
 	}
-	if content.g.laxlyAssessed() || mixedContent(content.g.typ) {
-		up.collecting.text.WriteString(t.Data())
+	for f := up.collecting; f != nil; f = f.outer {
+		if f.owner == content {
+			f.text.WriteString(t.Data())
+			continue
+		}
+		f.text.WriteString(run)
 	}
 }
 
-// closeStringValue settles e's own frame, frame, nil where e opened none, once
-// e's [[children]] are exhausted, e being an element whose ancestry is up,
-// governed by g, with the content check content: frame's text is appended to
-// its outer frame's whatever e's reader goes on to decide, so a string-value
-// spanning e holds e's text even where e's own value is lacked.
+// descendantRun is what t, a character run [[child]] of a non-·nilled·
+// element governed by g, contributes to the string-value of an ancestor, on
+// [assertionAncestry.collectText]'s terms, or why that is undecided.
+func descendantRun(g governance, t Text) (run, why string) {
+	if g.typeUndetermined() {
+		return "", fmt.Sprintf("a character run at %s below it is in an element whose ·governing type definition· was not determined", t.Loc())
+	}
+	if g.laxlyAssessed() || mixedContent(g.typ) {
+		return t.Data(), ""
+	}
+	if g.valueType() == nil {
+		return "", ""
+	}
+	if isXMLWhitespace(t.Data()) {
+		return "", fmt.Sprintf("a character run at %s below it is white space alone in an element of simple content, which the data model makes no Text Node of where it reads the raw characters and part of one where it reads the [schema normalized value], so the string-value is undecided", t.Loc())
+	}
+	return t.Data(), ""
+}
+
+// collectEnd settles what e, an element governed by g with the content check
+// content, contributes to the string-value of every open frame around its
+// [[children]] — inner being the innermost, e's own among them, nil where none
+// is open — once those [[children]] are exhausted, beyond the runs
+// [assertionAncestry.collectText] appended. A ·nilled· e contributes nothing.
+// r resolves the whiteSpace facet of e's simple type.
 //
-// GAP(xpath): an element of mixed content inside an open frame — e's own or
-// one enclosing it — whose ·initial value· cvc-elt clause 5.1 substituted
-// from its {value constraint} declines the reader of every enclosing frame:
-// xpath-datamodel §6.2.4 (:1265) lets a processor add a Text Node for the
-// default, not requiring it, so the string-value spanning it is not fixed.
-// (#1042)
-func (up assertionAncestry) closeStringValue(e Element, frame *stringValueFrame, g governance, content *contentCheck) {
-	inner := up.collecting
-	if frame != nil {
-		inner = frame
+// GAP(xpath): two contributions are a processor's choice the data model leaves
+// open, and each declines the reader of every frame from inner out rather
+// than guess. An element of mixed content whose ·initial value· cvc-elt clause
+// 5.1 substituted from its {value constraint}: xpath-datamodel §6.2.4 (:1265)
+// lets a processor add a Text Node for the default, not requiring it. And an
+// element of simple type or simple content whose raw characters are not its
+// [schema normalized value], which Appendix J.2 lets its Text Node hold
+// instead (:1259, "may"): one with element [[children]], which cvc-complex-type
+// clause 1.2 or cvc-type clause 3.1.2 charged; one that took a non-empty
+// default of its {value constraint}, of which J.2 makes a Text Node no raw
+// character holds; and one whose ·initial value· its whiteSpace facet
+// changes, or whose facet this package does not read (normalizedLexical).
+// Where the raw characters are the [schema normalized value], both readings
+// build the one Text Node collectText appended. The direction is the
+// withhold: the assertion is recorded as unevaluated, never charged and never
+// shown satisfied. (#1042)
+func collectEnd(r xsd.TypeResolver, e Element, inner *stringValueFrame, g governance, content *contentCheck) {
+	if inner == nil || content.nilled {
+		return
 	}
-	if inner != nil && mixedContent(g.typ) && !content.nilled {
-		if _, defaulted := content.defaulted(); defaulted {
-			inner.lacking(fmt.Sprintf("the element %s at %s, of mixed content, took the default of its {value constraint}, which the data model may or may not make a Text Node", e.Name(), e.Loc()))
-		}
+	if why := undecidedContribution(r, e, g, content); why != "" {
+		inner.lacking(why)
 	}
-	if frame != nil && frame.outer != nil {
-		frame.outer.text.WriteString(frame.text.String())
+}
+
+// undecidedContribution is why what e, governed by g with the content check
+// content and not ·nilled·, contributes to a string-value spanning it is
+// undecided, on [collectEnd]'s terms, and "" where it is decided.
+func undecidedContribution(r xsd.TypeResolver, e Element, g governance, content *contentCheck) string {
+	vc, defaulted := content.defaulted()
+	if mixedContent(g.typ) && defaulted {
+		return fmt.Sprintf("the element %s at %s, of mixed content, took the default of its {value constraint}, which the data model may or may not make a Text Node", e.Name(), e.Loc())
 	}
+	st := g.valueType()
+	if st == nil {
+		return ""
+	}
+	if content.sawElement {
+		return fmt.Sprintf("the element %s at %s below it has simple content and element [[children]], so what its text contributes to the string-value is undecided", e.Name(), e.Loc())
+	}
+	if defaulted && vc.LexicalForm() != "" {
+		return fmt.Sprintf("the element %s at %s below it, of simple content, took the default %q of its {value constraint}, which the data model makes a Text Node where it reads the [schema normalized value] and not where it reads the raw characters, so the string-value is undecided", e.Name(), e.Loc(), vc.LexicalForm())
+	}
+	lexical, _ := content.assessed()
+	normalized, ok := normalizedLexical(r, st, lexical)
+	if !ok || normalized != lexical {
+		return fmt.Sprintf("the element %s at %s below it has simple content whose raw characters %q are not its [schema normalized value], and the data model lets its Text Node hold either, so the string-value is undecided", e.Name(), e.Loc(), lexical)
+	}
+	return ""
 }
 
 // skipped hands e, an element [[child]] ·skipped· by key-sva clause 3.2 and
@@ -590,11 +695,15 @@ func (c *assertionCheck) yieldChildren(yield func(xpath.ChildElement) bool) {
 // assertionTest is one member of ct.{assertions}, its {test} as
 // [xpath.CompileAssertionTest] compiled it, nil where that declined, and the
 // [xpath.Tally] that test's evaluation reads ([xpath.AssertionTest.Tally]),
-// nil where it counts nothing.
+// nil where it counts nothing. readsValue reports, under a {content type} that
+// is not simple, whether the compiled test reads E itself — `.`, E's string
+// value, or `$value` — on [walk.compileAssertion]'s terms; it is false under a
+// simple one, whose string value is not collected by frame.
 type assertionTest struct {
-	a     xsd.Assertion
-	test  *xpath.AssertionTest
-	tally *xpath.Tally
+	a          xsd.Assertion
+	test       *xpath.AssertionTest
+	tally      *xpath.Tally
+	readsValue bool
 }
 
 // compileAssertions compiles every assertion of g's complex ·governing type
@@ -615,8 +724,8 @@ type assertionTest struct {
 // because the instance it reads is e's as T types it: a restriction that
 // narrows an attribute's type narrows it for the base's assertions too, and
 // against T's {content type}, which fixes `$value`'s static type
-// (cvc-assertion clause 2.3.1.3) and whether `.` is read. Each is compiled per
-// element and cached nowhere.
+// (cvc-assertion clause 2.3.1.3). Each is compiled per element and cached
+// nowhere.
 func (w *walk) compileAssertions(g governance) *assertionCheck {
 	ct := g.complexType()
 	if ct == nil || len(ct.Assertions()) == 0 {
@@ -624,14 +733,41 @@ func (w *walk) compileAssertions(g governance) *assertionCheck {
 	}
 	check := &assertionCheck{ct: *ct}
 	for _, a := range ct.Assertions() {
-		c := assertionTest{a: a}
-		if test, compiled := xpath.CompileAssertionTest(a.Test(), w.schema, ct.ContentType(), w.assertionTypes(*ct), w.assertionElementTypes(*ct)); compiled {
-			c.test = &test
-			c.tally = test.Tally()
-		}
-		check.tests = append(check.tests, c)
+		check.tests = append(check.tests, w.compileAssertion(a, *ct))
 	}
 	return check
+}
+
+// compileAssertion compiles a's {test} for an element whose ·governing type
+// definition· is ct, on [walk.compileAssertions]' terms.
+//
+// Under a {content type} that is not simple it first compiles the {test} with
+// no {content type} at all: [xpath.CompileAssertionTest] reads the {content
+// type} for `.` and `$value` alone, and declines both under a nil one, so a
+// {test} that compiles there reads neither and its tree is the one ct's own
+// {content type} would compile. One that does not is compiled again under
+// ct's, and where that admits it, it reads `.` or `$value` (readsValue), and
+// E's own string value is collected for it ([ownStringValue]). `$value`
+// is the empty sequence there whatever E holds (clause 2.3.2), so a {test}
+// reading `$value` alone has E's string value collected for nothing — a cost,
+// and a withhold where that value is undecided, never a fabricated verdict.
+func (w *walk) compileAssertion(a xsd.Assertion, ct xsd.ComplexType) assertionTest {
+	c := assertionTest{a: a}
+	attrs, elems := w.assertionTypes(ct), w.assertionElementTypes(ct)
+	_, simple := ct.ContentType().(xsd.SimpleContent)
+	if !simple {
+		if test, compiled := xpath.CompileAssertionTest(a.Test(), w.schema, nil, attrs, elems); compiled {
+			c.test = &test
+			c.tally = test.Tally()
+			return c
+		}
+	}
+	if test, compiled := xpath.CompileAssertionTest(a.Test(), w.schema, ct.ContentType(), attrs, elems); compiled {
+		c.test = &test
+		c.tally = test.Tally()
+		c.readsValue = !simple
+	}
+	return c
 }
 
 // assertionType is the {type definition} of the {attribute declaration} of
@@ -871,10 +1007,14 @@ type lackingValue struct{}
 // ([walk.assertionValue]).
 type lackingText struct{}
 
-// lackingNilledText is a simple {content type} over a ·nilled· element with
-// [[children]], whose string value, which `.` reads, this walk did not gather
-// ([walk.assertionValue]).
+// lackingNilledText is a ·nilled· element with [[children]], whose string
+// value, which `.` reads, this walk did not gather ([walk.assertionValue]).
 type lackingNilledText struct{}
+
+// lackingStringValue is an element whose string value, which `.` reads, spans
+// a descendant whose contribution to it is undecided, for the reason why
+// ([stringValueFrame.lacking]).
+type lackingStringValue struct{ why string }
 
 // lackingChild is an element [[child]], named name at loc, that a {test} reads
 // and that has no typed value this package reads, for the reason why
@@ -920,6 +1060,10 @@ func (lackingNilledText) declined(e xsd.QName) string {
 	return fmt.Sprintf("the element %s has xsi:nil = true and [[children]], which cvc-elt clause 3.2.3.1 charged, so its string value, the text of its descendants and never the zero-length string while dm:nilled is false in the partial ·PSVI·, was not gathered", e)
 }
 
+func (l lackingStringValue) declined(e xsd.QName) string {
+	return fmt.Sprintf("the string value of the element %s, which `.` reads in the data model instance cvc-assertion clause 1 builds, is undecided: %s", e, l.why)
+}
+
 func (lackingValue) declined(e xsd.QName) string {
 	return fmt.Sprintf("the element %s has simple content whose [schema actual value], which cvc-assertion clause 2.3.1 binds to $value, is undecided: String Valid over its ·initial value· was withheld", e)
 }
@@ -949,8 +1093,10 @@ func (lackingValue) declined(e xsd.QName) string {
 // keeps no ·actual values·. Omitting such an attribute instead would make `@a`
 // the empty sequence and could fabricate a charge. After the attributes it
 // reports asserts' own lack: an element [[child]] a {test} reads that has no
-// typed value ([walk.keepChild]), or a node of e's subtree a {test} counts that
-// its Tally could not be told of ([walk.tallyElement]).
+// typed value ([walk.keepChild]), a node of e's subtree a {test} counts that
+// its Tally could not be told of ([walk.tallyElement]), or a descendant whose
+// contribution to e's own string value, which own collected, is undecided
+// ([stringValueFrame.lacking]).
 //
 // An attribute matching no use is not read: no {test}
 // [xpath.CompileAssertionTest] admits can name it ([walk.assertionTypes]), so
@@ -960,7 +1106,7 @@ func (lackingValue) declined(e xsd.QName) string {
 // what is lacking: whether a {test} reads `$value` is not something the
 // compiled test reports, and a child's lack, like a count's, is kept per
 // element and not per {test}.
-func (w *walk) assertionValues(e Element, attrs []Attribute, asserts *assertionCheck, content *contentCheck, invalid bool) (assertionInput, assertionLack) {
+func (w *walk) assertionValues(e Element, attrs []Attribute, asserts *assertionCheck, content *contentCheck, own *stringValueFrame, invalid bool) (assertionInput, assertionLack) {
 	ct := asserts.ct
 	var in assertionInput
 	for _, a := range attrs {
@@ -988,7 +1134,7 @@ func (w *walk) assertionValues(e Element, attrs []Attribute, asserts *assertionC
 	if asserts.lack != nil {
 		return assertionInput{}, asserts.lack
 	}
-	bound, lack := w.assertionValue(e, ct, content, invalid)
+	bound, lack := w.assertionValue(e, ct, content, own, invalid)
 	if lack != nil {
 		return assertionInput{}, lack
 	}
@@ -1034,13 +1180,24 @@ func (w *walk) assertionTyped(u xsd.AttributeUse, lexical string, ctx value.Cont
 // which `.` atomizes to, and the value cvc-assertion clause 2.3 binds to
 // `$value` ([xpath.BindValue]) — or the lack that leaves either undecided.
 //
-// The string value is the ·initial value· [contentCheck.assessed] answers, or
-// the {value constraint}'s {lexical form} cvc-elt clause 5.1 substitutes for an
-// empty e, unnormalized. It is bound whatever `$value` is, an invalid e's
-// included, but for the e below: `.` is E's string value whatever its
-// [validity]. An e whose {content type} is not simple binds the zero
-// [xpath.ValueBinding], a string value no {test} compiled for that content
-// reads, `.` declining there ([xpath.CompileAssertionTest]).
+// Under a {content type} that is not simple, the string value is the text own
+// collected ([ownStringValue]): the concatenation of the string-values of all
+// e's Text Node descendants in document order (xpath-datamodel §6.2.4, :1304)
+// — every character [[child]] of e, white space alone included, e being
+// annotated xs:anyType in the partial ·PSVI· (cvc-assertion clause 1.2), and
+// each Text Node of a descendant as [assertionAncestry.collectText] builds it,
+// a descendant whose contribution is undecided having lacked e's check
+// already ([stringValueFrame.lacking]). An invalid e has a string value all
+// the same, so it is bound beside clause 2.3.2's empty `$value`. own is nil
+// there only where no compiled {test} reads `.` or `$value`
+// ([walk.compileAssertion]), and the binding is the zero [xpath.ValueBinding],
+// which no {test} evaluated over it reads.
+//
+// Under simple content, the string value is the ·initial value·
+// [contentCheck.assessed] answers, or the {value constraint}'s {lexical form}
+// cvc-elt clause 5.1 substitutes for an empty e, unnormalized. It is bound
+// whatever `$value` is, an invalid e's included, but for the e below: `.` is
+// E's string value whatever its [validity].
 //
 // GAP(xpath): E's string value under simple content is a processor's choice
 // the data model leaves open, and this walk makes one reading of it (#2455).
@@ -1100,16 +1257,19 @@ func (w *walk) assertionTyped(u xsd.AttributeUse, lexical string, ctx value.Cont
 // between invalid and notKnown, and the actual value is bound all the same:
 // were e invalid, e is rejected whatever its assertions answer, so no answer
 // they give turns a valid document invalid or an invalid one valid.
-func (w *walk) assertionValue(e Element, ct xsd.ComplexType, content *contentCheck, invalid bool) (xpath.ValueBinding, assertionLack) {
-	simple, isSimple := ct.ContentType().(xsd.SimpleContent)
-	if !isSimple {
-		return xpath.ValueBinding{}, nil
-	}
+func (w *walk) assertionValue(e Element, ct xsd.ComplexType, content *contentCheck, own *stringValueFrame, invalid bool) (xpath.ValueBinding, assertionLack) {
 	if content.nilled && !content.empty() {
 		return xpath.ValueBinding{}, lackingNilledText{}
 	}
 	if content.nilled {
 		return xpath.ValueBinding{}, nil
+	}
+	simple, isSimple := ct.ContentType().(xsd.SimpleContent)
+	if !isSimple && own == nil {
+		return xpath.ValueBinding{}, nil
+	}
+	if !isSimple {
+		return xpath.BindValue(own.text.String(), nil), nil
 	}
 	if content.sawElement {
 		return xpath.ValueBinding{}, lackingText{}
