@@ -143,7 +143,7 @@ func listMapping(b Backend, r xsd.TypeResolver, item *xsd.SimpleType, a Assertio
 // against the item type, so with no mapping for that type there is no token the
 // list could decide and no value it could build. Reporting the list ungoverned
 // keeps an unmapped type a BACKEND gap rather than a validity verdict about
-// instance data: it surfaces as ValidateLexical's "no backend mapping governs"
+// instance data: it surfaces as ValidateLexical's "has no governing backend mapping"
 // cvc-datatype-valid error, the same way an ungoverned atomic type does.
 //
 // This is ONE delegation, not a walk or a recursion: the {item type definition}
