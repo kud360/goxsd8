@@ -210,7 +210,8 @@ func (t ctaTypes) castTarget(name xsd.QName) (*xsd.SimpleType, bool) {
 // spelling and any target, and literalCastsTo judges it. Of every other
 // operand, it is false for exactly two shapes, each an operand whose {primitive
 // type definition} is not xs:string and whose type is neither target nor
-// derived from it:
+// derived from it, nor an xs:date, xs:dateTime or xs:time one whose target is
+// xs:string:
 //
 //   - a TYPED operand read off the instance or computed from it — an attribute
 //     (ctaTypedAttr), a child element (ctaTypedChild), `$value` (ctaValueVar,
@@ -234,7 +235,7 @@ func (t ctaTypes) castTarget(name xsd.QName) (*xsd.SimpleType, bool) {
 // (ctaUntypedChild) — each item of which a cast to any target validates as a
 // lexical of that target (F&O §17.1.1).
 //
-// Two typed operands are admitted:
+// Three typed operands are admitted:
 //
 //   - the string family, to any target, because xpath-functions.md §17.1.1
 //     makes a cast from xs:string one datatype validation of the value's own
@@ -252,12 +253,21 @@ func (t ctaTypes) castTarget(name xsd.QName) (*xsd.SimpleType, bool) {
 //     castTarget has already excluded xs:NOTATION, xs:anyAtomicType and every
 //     non-atomic target, the exclusions §17.3 and §3.10.2 make. The relation is
 //     the operand's type below the target and never the reverse, nor a shared
-//     primitive: `xs:integer(@d)` over an xs:decimal @d is §17.4's, not §17.3's.
+//     primitive: `xs:integer(@d)` over an xs:decimal @d is §17.4's, not §17.3's;
+//   - an operand whose {primitive type definition} is xs:date, xs:dateTime or
+//     xs:time (localValueSource), to xs:string itself: §17.1.2 makes TV "the
+//     local value", its components rendered with the timezone "if present",
+//     which is the ·canonical representation· ctaPromote renders — offset 0 as
+//     `Z`, any other as its signed hh:mm (timezoneCanonicalFragmentMap), never
+//     UTC-shifted, no trailing fractional zeros, and midnight as 00:00:00,
+//     never "24".
 //
 // Both cast spellings take a [16] ta-SimpleValue operand, so a count, an
 // arithmetic or function result and a cast reach castsFrom only as fn:string's
 // argument (ctaParser.stringOf), whose target is xs:string: of those, the
-// second rule admits exactly what the first does.
+// second rule admits nothing the first does not, and the third admits one
+// whose type has a date/time primitive, as `string(xs:date(@d))` and
+// fn:distinct-values over a typed date/time operand do.
 //
 // GAP(xpath): a cast from any OTHER typed operand, a literal aside, is
 // declined — §17.4's cast within a branch of the hierarchy that is not to an
@@ -280,14 +290,22 @@ func (t ctaTypes) castTarget(name xsd.QName) (*xsd.SimpleType, bool) {
 // round-trip had decided it, raising for `xs:date(1.5e0)` and succeeding for
 // `xs:anyURI(1.5e0)`, "1.5E0" being an xs:anyURI lexical. fn:string over such an
 // operand, a node of such a type included, is that cast to xs:string and
-// declines with it. The direction is the withhold [CompileAssertionTest]
-// reports: the assertion is declined, never charged and never satisfied. (#1042)
+// declines with it. A date/time operand's cast to a target derived from
+// xs:string, and a g* or duration operand's cast to xs:string, are withheld
+// only for scope: §17.5 and §17.1.2 define each over the canonical
+// representation ctaPromote renders, and admitting them is a widening of
+// localValueSource's set or of its target test, not a new renderer (#1042).
+// The direction is the withhold [CompileAssertionTest] reports: the assertion is
+// declined, never charged and never satisfied. (#1042)
 func (t ctaTypes) castsFrom(v ctaValue, target *xsd.SimpleType) bool {
 	if lit, isLiteral := v.(ctaLiteral); isLiteral {
 		return t.literalCastsTo(lit, target)
 	}
 	st, judged := t.castSource(v)
 	if !judged || t.stringSource(st) {
+		return true
+	}
+	if t.localValueSource(st) && target.Name() == ctaBuiltin("string") {
 		return true
 	}
 	at, err := t.ancestor(st, target.Name())
@@ -437,6 +455,24 @@ func (t ctaTypes) floatingSource(n ctaCast) (*xsd.SimpleType, bool) {
 func (t ctaTypes) stringSource(st *xsd.SimpleType) bool {
 	p, resolved := t.primitive(st)
 	return resolved && p.Name() == ctaBuiltin("string")
+}
+
+// localValueSource reports whether st's {primitive type definition} is
+// xs:date, xs:dateTime or xs:time, a primitive §17.1.2 renders by its
+// canonical representation: its cast to xs:string is the local value, which
+// is the ·canonical representation· Datatypes dateCanonicalMap,
+// dateTimeCanonicalMap and timeCanonicalMap give it. castsFrom admits a cast
+// from such a type to xs:string itself.
+func (t ctaTypes) localValueSource(st *xsd.SimpleType) bool {
+	p, resolved := t.primitive(st)
+	if !resolved {
+		return false
+	}
+	switch p.Name() {
+	case ctaBuiltin("date"), ctaBuiltin("dateTime"), ctaBuiltin("time"):
+		return true
+	}
+	return false
 }
 
 // stringArgument converts v, one argument of an F&O function whose parameter

@@ -1141,9 +1141,16 @@ func (p *ctaParser) stringCall() (ctaValue, bool) {
 // string. A node's string-value is the same string wherever castsFrom admits
 // the node: the string-value of an attribute or of an element of simple type is
 // its [schema normalized value] (xpath-datamodel :1562, :1307), which for the
-// xs:string family is its typed value; every other typed node, and every
-// xs:float or xs:double argument, a literal included, declines under
-// castsFrom's GAP(xpath).
+// xs:string family is its typed value. For an xs:date, xs:dateTime or xs:time
+// node this engine takes it to be the ·canonical representation· of the typed
+// value, which castsFrom's third rule admits: this engine's TypedValue holds
+// the typed value alone (tvTyped, xpath/assertion.go), so the data model's
+// licence condition is met — "If an implementation stores only the typed value
+// of an attribute, it may use any valid lexical representation of the typed
+// value for the string-value property" (xpath-datamodel §6.3.4 :1567, and
+// §6.2.4 :1309 for an element). Every other typed node, and every xs:float or
+// xs:double argument, a literal included, declines under castsFrom's
+// GAP(xpath).
 func (p *ctaParser) stringOf(arg ctaValue) (ctaValue, bool) {
 	if !p.types.castsFrom(arg, p.types.str) {
 		return nil, false
