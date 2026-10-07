@@ -50,7 +50,13 @@ the blocks — and the bars you rule are the ones your own verdict will
 apply. Post them headed as yours in the `GROUNDING:` comment, never as a
 `VERDICT:` block: an `unsatisfiable` read as a verdict is one of the two
 rejections the cap counts (#1087). Where the code goes is not yours to
-settle there.
+settle there. Quote the owner, never paraphrase it, in a bar resting on
+what another document says — a spec, a package `doc.go`, STYLE,
+ARCHITECTURE: its sentence verbatim, located by file and heading or
+identifier, as WORKFLOW's "Claims that outlive the session" requires
+(#2323). A bar on a cited rule's structure, such as an E4 citation bar
+naming its clauses, quotes that rule's clause list from
+`docs/specs/md/`, whether or not the issue has a `## Spec` (#2371).
 
 **The ratchet prediction.** A bullet asserting a prediction or another
 claim about the current tree — a corpus census, a banked count, a
