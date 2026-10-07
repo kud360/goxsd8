@@ -1557,10 +1557,11 @@ func ctaEval(x ctaExpr, env ctaEnv) ctaAnswer {
 // raises is the expression's, which the enclosing operators carry on
 // ctaAnswer's terms.
 func (n ctaIf) eval(env ctaEnv) ctaAnswer {
-	switch ctaEval(n.test, env) {
-	case ctaError:
+	test := ctaEval(n.test, env)
+	if test == ctaError {
 		return ctaError
-	case ctaTrue:
+	}
+	if test == ctaTrue {
 		return ctaEval(n.then, env)
 	}
 	return ctaEval(n.otherwise, env)
