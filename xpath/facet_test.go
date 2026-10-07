@@ -35,7 +35,10 @@ func fcValue(t *testing.T, st *xsd.SimpleType, lexical string) value.Value {
 // ·effective boolean value·, bare or under fn:not, and under `instance of
 // xs:integer`. `not(position())` and `not(last())` hold with the ctaNoFocus
 // arm of ctaEffectiveBoolean.eval removed, and the two `instance of` rows
-// decline with ctaNoFocus removed from ctaTypes.instanceItem.
+// decline with ctaNoFocus removed from ctaTypes.instanceItem. fn:string over
+// either fails too, the call raising before there is a value to cast
+// (castsFrom): `string(position()) = '1'` and `string(last()) = '1'` decline
+// with a ctaNoFocus arm returning st, true added to ctaTypes.castSource.
 func TestFacetAssertionsDecideTheValue(t *testing.T) {
 	intType, str := asBuiltin(t, "int"), asBuiltin(t, "string")
 	for _, tc := range []struct {
@@ -68,6 +71,8 @@ func TestFacetAssertionsDecideTheValue(t *testing.T) {
 		{"not(last())", str, "x", value.AssertionFails},
 		{"position() instance of xs:integer", str, "x", value.AssertionFails},
 		{"last() instance of xs:integer", str, "x", value.AssertionFails},
+		{"string(position()) = '1'", str, "x", value.AssertionFails},
+		{"string(last()) = '1'", str, "x", value.AssertionFails},
 	} {
 		got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, tc.st, ctaExprRecord(tc.test, "", "xs", xsd.XMLSchemaNS), fcValue(t, tc.st, tc.lexical))
 		if got != tc.want {
