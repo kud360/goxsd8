@@ -705,13 +705,13 @@ func CompileAssertionTest(expr xsd.XPathExpression, types xsd.TypeResolver, cont
 // candidate child and no read here; that child's value is
 // [AssertionTest.ReadsChild]'s.
 //
-// The answer is recorded as the compile admits each `.`, so it may
-// over-report — a `.` the parser admitted inside a production the {test} then
-// declined in, were the {test} compiled at all — and never under-reports: a
-// {test} for which it is false evaluates to the same answer over every
-// binding's text. Its consumer is validate's walk, which gathers E's string
-// value under a {content type} that is not simple only for an element one of
-// whose {test}s reads it, and binds the zero-length string otherwise.
+// The answer is recorded as the compile admits each `.`, not read back off the
+// tree, so it may over-report — a `.` admitted on a parse the compile then
+// abandoned — and never under-reports: a {test} for which it is false
+// evaluates to the same answer over every binding's text. Its consumer is
+// validate's walk, which gathers E's string value under a {content type} that
+// is not simple only for an element one of whose {test}s reads it, and binds
+// the zero-length string otherwise.
 func (t AssertionTest) ReadsContextItem() bool { return t.readsContextItem }
 
 // Evaluate reports whether the compiled {test} evaluates to true for the
