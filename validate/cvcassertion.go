@@ -1043,7 +1043,7 @@ func (w *walk) assertionTyped(u xsd.AttributeUse, lexical string, ctx value.Cont
 // reads, `.` declining there ([xpath.CompileAssertionTest]).
 //
 // GAP(xpath): E's string value under simple content is a processor's choice
-// the data model leaves open, and this walk makes one reading of it.
+// the data model leaves open, and this walk makes one reading of it (#2455).
 // xpath-datamodel Appendix J.2's children rule builds a Text Node from the
 // character [[children]], and also says a processor "may" build instead one
 // Text Node from the [schema normalized value]; §6.2.4's string-value gives an
