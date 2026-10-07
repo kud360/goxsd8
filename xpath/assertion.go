@@ -835,6 +835,9 @@ func (n ctaUntypedChild) readsChild(name xsd.QName) bool { return n.name == name
 // name.
 func (n ctaCast) readsChild(name xsd.QName) bool { return n.operand.readsChild(name) }
 
+// readsChild is its cast's.
+func (n ctaCastable) readsChild(name xsd.QName) bool { return n.cast.readsChild(name) }
+
 // readsChild reports whether either operand of the arithmetic holds a
 // child value step naming name.
 func (n ctaArith) readsChild(name xsd.QName) bool {
@@ -935,6 +938,9 @@ func (n ctaIf) counted(into []ctaTallied) []ctaTallied {
 
 // counted appends each path the cast's operand counts over.
 func (n ctaCast) counted(into []ctaTallied) []ctaTallied { return n.operand.counted(into) }
+
+// counted is its cast's.
+func (n ctaCastable) counted(into []ctaTallied) []ctaTallied { return n.cast.counted(into) }
 
 // counted appends each path either operand of the arithmetic counts over, the
 // left one first.
@@ -1050,6 +1056,10 @@ func (ctaAssertionFacade) conditional() bool { return true }
 // constructsSequences is true, on comparesValues' terms: §3.3.1's sequence
 // expressions are in full XPath 2.0.
 func (ctaAssertionFacade) constructsSequences() bool { return true }
+
+// castable is true, on comparesValues' terms: §3.10.3's CastableExpr is in
+// full XPath 2.0.
+func (ctaAssertionFacade) castable() bool { return true }
 
 // ctaValueName is the ·expanded name· of the one variable an assertion's
 // static context holds (cvc-assertion clause 2.3): "no namespace URI and ...

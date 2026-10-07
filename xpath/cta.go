@@ -784,6 +784,10 @@ type ctaFacade interface {
 	// (ctaParser.integerSequence), which §3.12.6's grammar has no production
 	// for.
 	constructsSequences() bool
+	// castable reports whether the façade admits xpath20.md [18]
+	// CastableExpr's `castable as` tail at all (ctaParser.castableTail), which
+	// §3.12.6's grammar has no production for.
+	castable() bool
 }
 
 // ctaTypeAlternativeFacade is a Type Alternative's façade: every attribute
@@ -863,6 +867,10 @@ func (ctaTypeAlternativeFacade) conditional() bool { return false }
 // constructsSequences is false, on comparesValues' terms: ta-props-correct
 // clause 2's grammar has no RangeExpr and no comma.
 func (ctaTypeAlternativeFacade) constructsSequences() bool { return false }
+
+// castable is false, on comparesValues' terms: ta-props-correct clause 2's
+// [15] ta-CastExpr has a `cast as` tail and no `castable as` one.
+func (ctaTypeAlternativeFacade) castable() bool { return false }
 
 // ctaNameTest is the sealed sum of [36] NameTest's arms as [17] ta-AttrName
 // and a child-axis step reach them, matching one ·expanded name· at a time.
@@ -966,6 +974,19 @@ type ctaCast struct {
 	operand     ctaValue
 	target      *xsd.SimpleType
 	allowsEmpty bool
+}
+
+// ctaCastable is xpath20.md [18] CastableExpr's `castable as SingleType` tail,
+// `E castable as T`, whose result is st, xs:boolean: §3.10.3 makes it true
+// exactly where `E cast as T` succeeds, so it holds that cast itself and
+// evaluates it (ctaCastableItem) — one node, the cast's, decides both, and no
+// second casting rule exists to disagree with it (STYLE D3). A cast's own
+// failure — the empty sequence without `?`, two or more items, a lexical or
+// facet mismatch — is false; an error evaluating E is the castable
+// expression's error.
+type ctaCastable struct {
+	cast ctaCast
+	st   *xsd.SimpleType
 }
 
 // ctaCount is an fn:count call (xpath-functions.md §15.4.1, `fn:count($arg as
@@ -1419,6 +1440,7 @@ func (ctaNoDocumentRoot) ctaValue()   {}
 func (ctaNoContextItem) ctaValue()    {}
 func (ctaLiteral) ctaValue()          {}
 func (ctaCast) ctaValue()             {}
+func (ctaCastable) ctaValue()         {}
 func (ctaCount) ctaValue()            {}
 func (ctaValueVar) ctaValue()         {}
 func (ctaEmptyValue) ctaValue()       {}
@@ -1472,6 +1494,8 @@ func ctaStaticOf(v ctaValue) ctaStatic {
 		return ctaTyped{st: n.st}
 	case ctaCast:
 		return ctaTyped{st: n.target}
+	case ctaCastable:
+		return ctaTyped{st: n.st}
 	case ctaTypedAttr:
 		return ctaTyped{st: n.st}
 	case ctaTypedChild:
@@ -1826,6 +1850,8 @@ func (e ctaEffectiveBoolean) eval(env ctaEnv) ctaAnswer {
 		return ctaBoolean(e.operand, n.st, env)
 	case ctaCast:
 		return ctaBoolean(e.operand, n.target, env)
+	case ctaCastable:
+		return ctaBoolean(e.operand, n.st, env)
 	case ctaCount:
 		return ctaBoolean(e.operand, n.st, env)
 	case ctaArith:
@@ -2048,6 +2074,8 @@ func ctaItemOf(v ctaValue, c *xsd.SimpleType, env ctaEnv) ctaItem {
 		return ctaConvert(n.text, n.st, c, env)
 	case ctaCast:
 		return ctaCastItem(n, c, env)
+	case ctaCastable:
+		return ctaCastableItem(n, c, env)
 	case ctaCount:
 		return ctaCountItem(n, c, env)
 	case ctaArith:
@@ -2475,6 +2503,23 @@ func ctaCastItem(n ctaCast, c *xsd.SimpleType, env ctaEnv) ctaItem {
 		return ctaRaised{}
 	}
 	return ctaPromote(inner.vs[0], n.target, c, env)
+}
+
+// ctaCastableItem evaluates `E castable as T` (xpath20.md §3.10.3) and
+// converts the xs:boolean it returns into c on ctaMatchItem's terms. E is
+// evaluated first, uncast (ctaSequenceLength), and an error there raises: "If
+// evaluation of E fails with a dynamic error, the castable expression as a
+// whole fails" — so `. castable as xs:date` in an assertions facet raises the
+// err:XPDY0002 its ctaNoContextItem does. Otherwise the result is whether n's
+// cast yields a value rather than raising (ctaCastItem): the empty sequence
+// with `?` is true, without it err:XPTY0004 and false, as are two or more
+// items and a lexical or facet mismatch, err:FORG0001.
+func ctaCastableItem(n ctaCastable, c *xsd.SimpleType, env ctaEnv) ctaItem {
+	if _, ok := ctaSequenceLength(n.cast.operand, env); !ok {
+		return ctaRaised{}
+	}
+	_, raised := ctaCastItem(n.cast, n.cast.target, env).(ctaRaised)
+	return ctaConvert(strconv.FormatBool(!raised), n.st, c, env)
 }
 
 // ctaConvert casts lexical, a value of type from, into type to.

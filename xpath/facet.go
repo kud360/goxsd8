@@ -137,6 +137,13 @@ func (ctaFacetFacade) conditional() bool { return true }
 // terms.
 func (ctaFacetFacade) constructsSequences() bool { return true }
 
+// castable is true, on ctaAssertionFacade.castable's terms. An operand that
+// reads the absent context item is ctaNoContextItem, whose err:XPDY0002
+// evaluating it raises, so `. castable as xs:date` fails the facet rather than
+// answering false: xpath20.md §3.10.3's "If evaluation of E fails with a
+// dynamic error, the castable expression as a whole fails" (ctaCastableItem).
+func (ctaFacetFacade) castable() bool { return true }
+
 // variable compiles `$value` (clause 1.1: "no namespace URI and ... 'value' as
 // the local name") against st as ctaTypes.valueVariable classifies it, the XDM
 // representation of a value of st (dt-xdmrep), and declines every other name,

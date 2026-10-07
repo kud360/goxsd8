@@ -217,8 +217,8 @@ func (t ctaTypes) castTarget(name xsd.QName) (*xsd.SimpleType, bool) {
 //     (ctaTypedAttr), a child element (ctaTypedChild), `$value` (ctaValueVar,
 //     each item of a listed one), a count of its nodes (ctaCount, xs:integer),
 //     the result of arithmetic (ctaArith, its B.2 result type,
-//     arithmeticResult) or of an F&O function call (ctaMatch and ctaPresence,
-//     xs:boolean; ctaUnaryString, xs:integer or xs:string; ctaStringFunction,
+//     arithmeticResult), of a castable expression (ctaCastable, xs:boolean) or
+//     of an F&O function call (ctaMatch and ctaPresence, xs:boolean; ctaUnaryString, xs:integer or xs:string; ctaStringFunction,
 //     xs:string; ctaDistinctValues, its typed operand's type, a literal's
 //     included; ctaCurrentDate, xs:date), or a cast of one of them, or of an
 //     operand the second shape names, that is not in the string family
@@ -263,8 +263,9 @@ func (t ctaTypes) castTarget(name xsd.QName) (*xsd.SimpleType, bool) {
 //     UTC-shifted, no trailing fractional zeros, and midnight as 00:00:00,
 //     never "24".
 //
-// Both cast spellings take a [16] ta-SimpleValue operand, so a count, an
-// arithmetic or function result and a cast reach castsFrom only as fn:string's
+// Both cast spellings, and `castable as`, take a [16] ta-SimpleValue operand,
+// so a count, an arithmetic, castable or function result and a cast reach
+// castsFrom only as fn:string's
 // argument (ctaParser.stringOf), whose target is xs:string: of those, the
 // second rule admits nothing the first does not, and the third admits one
 // whose type has a date/time primitive, as `string(xs:date(@d))` and
@@ -417,6 +418,8 @@ func (t ctaTypes) castSource(v ctaValue) (*xsd.SimpleType, bool) {
 	case ctaUnaryString:
 		return n.st, true
 	case ctaPresence:
+		return n.st, true
+	case ctaCastable:
 		return n.st, true
 	case ctaStringFunction:
 		return n.cast.target, true
