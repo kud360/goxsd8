@@ -2,6 +2,7 @@ package xpath
 
 import (
 	"testing"
+	"time"
 
 	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
@@ -34,22 +35,22 @@ func vcAssertion(t *testing.T, types xsd.TypeResolver, tc vcCase) bool {
 	if test.Tally() != nil {
 		t.Errorf("(%q).Tally() = non-nil, want nil: `$value` is counted off its items", tc.expr)
 	}
-	v, err := value.ValidateLexical(backend(), types, tc.st, tc.lexical, nil, FacetAssertions())
+	v, err := value.ValidateLexical(backend(), types, tc.st, tc.lexical, nil, FacetAssertions(time.Time{}))
 	if err != nil {
 		t.Fatalf("mapping %q against %s: %v", tc.lexical, tc.st.Name().Local, err)
 	}
-	return test.Evaluate(backend(), types, asValues(t), asNoChildren, nil, BindValue("", Typed(v)))
+	return test.Evaluate(backend(), types, asValues(t), asNoChildren, nil, BindValue("", Typed(v)), time.Time{})
 }
 
 // vcFacet decides tc.expr as an assertions facet's {test} over tc.lexical
 // under tc.st, failing the case where it declines, on vcAssertion's terms.
 func vcFacet(t *testing.T, types xsd.TypeResolver, tc vcCase) bool {
 	t.Helper()
-	v, err := value.ValidateLexical(backend(), types, tc.st, tc.lexical, nil, FacetAssertions())
+	v, err := value.ValidateLexical(backend(), types, tc.st, tc.lexical, nil, FacetAssertions(time.Time{}))
 	if err != nil {
 		t.Fatalf("mapping %q against %s: %v", tc.lexical, tc.st.Name().Local, err)
 	}
-	got := FacetAssertions().Evaluate(backend(), types, tc.st, asRecord(tc.expr), v)
+	got := FacetAssertions(time.Time{}).Evaluate(backend(), types, tc.st, asRecord(tc.expr), v)
 	if got == value.AssertionDeclined {
 		t.Errorf("FacetAssertions().Evaluate(%q) over %s: declined, want decided", tc.expr, tc.st.Name().Local)
 		return tc.want
@@ -175,7 +176,7 @@ func TestCountValueOverSpecialAndNonSimpleContent(t *testing.T) {
 		if !ok {
 			t.Fatalf("CompileAssertionTest(%q): declined, want compiled", tc.expr)
 		}
-		if got := test.Evaluate(backend(), seededTypes, asValues(t), asNoChildren, nil, tc.bound); got != tc.want {
+		if got := test.Evaluate(backend(), seededTypes, asValues(t), asNoChildren, nil, tc.bound, time.Time{}); got != tc.want {
 			t.Errorf("Evaluate(%q) = %v, want %v", tc.expr, got, tc.want)
 		}
 	}
@@ -188,7 +189,7 @@ func TestCountValueOverAUnionFacet(t *testing.T) {
 	dateOrInt := fcUnion(t, "DateOrInt", date, integer)
 	for _, lexical := range []string{"5", "2008-01-01"} {
 		st := fcAssertedUnion(t, dateOrInt, "count($value) eq 1 and count(distinct-values($value)) eq 1", date, integer)
-		_, err := value.ValidateLexical(backend(), asTypesWith(dateOrInt), st, lexical, nil, FacetAssertions())
+		_, err := value.ValidateLexical(backend(), asTypesWith(dateOrInt), st, lexical, nil, FacetAssertions(time.Time{}))
 		if got := fcOutcome(t, err); got != value.AssertionHolds {
 			t.Errorf("count($value) over %q against a union = %d, want holds (err %v)", lexical, got, err)
 		}
@@ -239,7 +240,7 @@ func TestCountAndDistinctValuesDecline(t *testing.T) {
 			t.Errorf("CompileAssertionTest(%q): compiled, want declined", expr)
 		}
 		v := fcValue(t, list, "1 2")
-		if got := FacetAssertions().Evaluate(backend(), types, list, asRecord(expr), v); got != value.AssertionDeclined {
+		if got := FacetAssertions(time.Time{}).Evaluate(backend(), types, list, asRecord(expr), v); got != value.AssertionDeclined {
 			t.Errorf("FacetAssertions().Evaluate(%q) = %d, want declined", expr, got)
 		}
 	}
@@ -255,7 +256,7 @@ func TestCountAndDistinctValuesDecline(t *testing.T) {
 			t.Errorf("CompileAssertionTest(%q) over a double list: compiled, want declined", expr)
 		}
 		v := fcValue(t, doubles, "1")
-		if got := FacetAssertions().Evaluate(backend(), dtypes, doubles, asRecord(expr), v); got != value.AssertionDeclined {
+		if got := FacetAssertions(time.Time{}).Evaluate(backend(), dtypes, doubles, asRecord(expr), v); got != value.AssertionDeclined {
 			t.Errorf("FacetAssertions().Evaluate(%q) over a double list = %d, want declined", expr, got)
 		}
 	}

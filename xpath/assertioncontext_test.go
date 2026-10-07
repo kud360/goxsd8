@@ -2,6 +2,7 @@ package xpath
 
 import (
 	"testing"
+	"time"
 
 	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
@@ -19,7 +20,7 @@ func cxEval(t *testing.T, expr string, types xsd.TypeResolver, st *xsd.SimpleTyp
 	if !ok {
 		t.Fatalf("CompileAssertionTest(%q) over %s content: declined, want compiled", expr, st.Name().Local)
 	}
-	return test.Evaluate(backend(), types, asValues(t), asNoChildren, nil, bound)
+	return test.Evaluate(backend(), types, asValues(t), asNoChildren, nil, bound, time.Time{})
 }
 
 // `.` over simple content atomizes to ONE xs:untypedAtomic value, E's string
@@ -100,7 +101,7 @@ func TestAssertionContextItemOverEveryBinding(t *testing.T) {
 	}
 	list := asList(t, "IntList", ctaBuiltin("int"))
 	types := asTypesWith(list)
-	lv, err := value.ValidateLexical(backend(), types, list, "1 2", nil, FacetAssertions())
+	lv, err := value.ValidateLexical(backend(), types, list, "1 2", nil, FacetAssertions(time.Time{}))
 	if err != nil {
 		t.Fatalf("mapping 1 2 against the list: %v", err)
 	}
@@ -259,7 +260,7 @@ func TestIntegerSequencesDecline(t *testing.T) {
 		{"20", value.AssertionHolds},
 		{"15", value.AssertionFails},
 	} {
-		if got := FacetAssertions().Evaluate(backend(), seededTypes, intType, ctaExprRecord("$value = (1 to 10, 20)", ""), fcValue(t, intType, tc.lexical)); got != tc.want {
+		if got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, intType, ctaExprRecord("$value = (1 to 10, 20)", ""), fcValue(t, intType, tc.lexical)); got != tc.want {
 			t.Errorf("FacetAssertions().Evaluate($value = (1 to 10, 20)) over %s = %d, want %d", tc.lexical, got, tc.want)
 		}
 	}

@@ -678,7 +678,7 @@ func (w *walk) keyMember(st *xsd.SimpleType, lexical string, ctx value.Context, 
 	if st.IsSpecial() {
 		return icKeyMember{st: st, lexical: lexical, ctx: ctx, element: element, nillable: nillable}, true, true
 	}
-	v, err := value.ValidateLexical(w.backend, w.schema, st, lexical, ctx, xpath.FacetAssertions())
+	v, err := value.ValidateLexical(w.backend, w.schema, st, lexical, ctx, xpath.FacetAssertions(w.now))
 	if err != nil {
 		return icKeyMember{}, false, value.IsDatatypeVerdict(err)
 	}
@@ -1268,7 +1268,7 @@ func (w *walk) primitiveItem(st *xsd.SimpleType, lexical string, ctx value.Conte
 	if err != nil || primitive == nil {
 		return icPrimitiveItem{}, false
 	}
-	v, err := value.ValidateLexical(w.backend, w.schema, primitive, lexical, ctx, xpath.FacetAssertions())
+	v, err := value.ValidateLexical(w.backend, w.schema, primitive, lexical, ctx, xpath.FacetAssertions(w.now))
 	if err != nil {
 		return icPrimitiveItem{}, false
 	}

@@ -3,6 +3,7 @@ package xpath
 import (
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/kud360/goxsd8/value"
@@ -19,7 +20,8 @@ import (
 // over an argument that is no path (§15.4.1, ctaCountedItems), whose items are
 // counted as fn:empty and fn:exists count them. fn:true and fn:false (§9.1.1,
 // §9.1.2) are constants, which compile to the ctaLiteral of their xs:boolean
-// (ctaParser.constantCall).
+// (ctaParser.constantCall). fn:current-date (§16.4) reads the dynamic
+// context's current dateTime (ctaCurrentDate).
 //
 // An argument whose parameter is xs:string? is converted by xpath20.md
 // §3.1.5's function conversion rules, as far as the static type settles them,
@@ -125,11 +127,22 @@ type ctaDistinctValues struct {
 // [Tally], so it keys only what its operand counts.
 type ctaCountedItems struct{ operand ctaValue }
 
+// ctaCurrentDate is a call to fn:current-date with no argument
+// (xpath-functions.md §16.4), whose result is st, xs:date: "xs:date(
+// fn:current-dateTime())", the date of the dynamic context's current dateTime
+// (xpath20.md §2.1.2) in that dateTime's own timezone, which the cast keeps
+// (§17.1.5) — never the implicit timezone, which F&O §10.4 assumes only on a
+// compared operand that has none. The instant is ctaTypedInput.now, so every
+// call in one evaluation, and every evaluation handed the same instant,
+// returns the same date (§16.4 "stable"; cvc-xpath clause 6).
+type ctaCurrentDate struct{ st *xsd.SimpleType }
+
 func (ctaMatch) ctaValue()          {}
 func (ctaUnaryString) ctaValue()    {}
 func (ctaPresence) ctaValue()       {}
 func (ctaStringFunction) ctaValue() {}
 func (ctaDistinctValues) ctaValue() {}
+func (ctaCurrentDate) ctaValue()    {}
 
 // resultType is the ·expanded name· of the type op returns.
 func (op ctaUnaryStringOp) resultType() xsd.QName {
@@ -264,6 +277,37 @@ func ctaStringFunctionItem(n ctaStringFunction, c *xsd.SimpleType, env ctaEnv) c
 		return ctaConvert("", n.cast.target, c, env)
 	}
 	return ctaPromote(cast.vs[0], n.cast.target, c, env)
+}
+
+// ctaCurrentDateLayout renders a [time.Time] as the xs:date lexical of its
+// date in its own UTC offset: the timezoneFrag is Z for the zero offset and
+// ±hh:mm otherwise, which is §17.1.5's cast of an xs:dateTime to xs:date.
+const ctaCurrentDateLayout = "2006-01-02Z07:00"
+
+// ctaCurrentDateItem evaluates n — the date of the evaluation's current
+// dateTime, as ctaCurrentDateInstant settles its offset, rendered by
+// ctaCurrentDateLayout — and converts it into c on ctaMatchItem's terms. The
+// input is ctaTypedInput by construction: only the assertion and facet
+// façades call the library (ctaFacade.callsLibrary), and the other arm holds
+// no instant and raises, unreachably.
+func ctaCurrentDateItem(n ctaCurrentDate, c *xsd.SimpleType, env ctaEnv) ctaItem {
+	in, typed := env.input.(ctaTypedInput)
+	if !typed {
+		return ctaRaised{}
+	}
+	return ctaConvert(ctaCurrentDateInstant(in.now).Format(ctaCurrentDateLayout), n.st, c, env)
+}
+
+// ctaCurrentDateInstant is now where a timezoneFrag spells its offset — a whole
+// number of minutes from -14:00 to +14:00 (xmlschema11-2 timezoneFrag) — and
+// now.UTC() otherwise, so an unspellable offset renders no wrong or invalid
+// lexical.
+func ctaCurrentDateInstant(now time.Time) time.Time {
+	_, off := now.Zone()
+	if off%60 != 0 || off > 14*3600 || off < -14*3600 {
+		return now.UTC()
+	}
+	return now
 }
 
 // ctaDistinctValuesItem evaluates n (ctaDistinctValues.eval) and converts

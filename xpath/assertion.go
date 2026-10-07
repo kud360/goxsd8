@@ -1,6 +1,8 @@
 package xpath
 
 import (
+	"time"
+
 	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
 )
@@ -444,22 +446,22 @@ type AssertionTest struct{ root ctaExpr }
 // string and sequence functions — fn:contains, fn:starts-with and fn:ends-with
 // with two arguments, fn:string-length, fn:normalize-space and fn:string with
 // one or none, the implicit argument being `.`, fn:empty, fn:exists and
-// fn:distinct-values with one, and fn:true and fn:false with none
-// (xpath-functions.md §7.5.1–7.5.3, §7.4.4, §7.4.5, §2.3, §15.1.4, §15.1.5,
-// §15.1.6, §9.1.1, §9.1.2), any argument of which may be the empty sequence
-// `()` — the conditional `if (Expr) then ExprSingle else ExprSingle`
-// (xpath20.md §3.8) as the whole {test}, inside parentheses, as fn:not's
-// argument or as an operand of another, whose test's ·effective boolean value·
-// selects the one branch evaluated, so a dynamic error in the other is never
-// raised, and both of whose branches are compiled, so a decline in either
-// declines the {test}; the [47] ContextItemExpr `.` over simple content,
-// atomized (§3.1.4, §2.4.2); and, as an operand of a general comparison, an
-// integer sequence: [11] RangeExpr `I to J` over two IntegerLiterals, bare or
-// parenthesized, or a parenthesized comma sequence of IntegerLiterals and such
-// ranges, `(1 to 10, 20, 30)` (§3.3.1) — added, and every decline
-// [CompileCTATest] states is this one's too, under the same static context
-// (xpath-valid clause 2.2) augmented with `$value` (cvc-assertion clause 2.2),
-// plus these, each of which is the same withhold:
+// fn:distinct-values with one, and fn:true, fn:false and fn:current-date with
+// none (xpath-functions.md §7.5.1–7.5.3, §7.4.4, §7.4.5, §2.3, §15.1.4,
+// §15.1.5, §15.1.6, §9.1.1, §9.1.2, §16.4), any argument of which may be the
+// empty sequence `()` — the conditional `if (Expr) then ExprSingle else
+// ExprSingle` (xpath20.md §3.8) as the whole {test}, inside parentheses, as
+// fn:not's argument or as an operand of another, whose test's ·effective
+// boolean value· selects the one branch evaluated, so a dynamic error in the
+// other is never raised, and both of whose branches are compiled, so a decline
+// in either declines the {test}; the [47] ContextItemExpr `.` over simple
+// content, atomized (§3.1.4, §2.4.2); and, as an operand of a general
+// comparison, an integer sequence: [11] RangeExpr `I to J` over two
+// IntegerLiterals, bare or parenthesized, or a parenthesized comma sequence of
+// IntegerLiterals and such ranges, `(1 to 10, 20, 30)` (§3.3.1) — added, and
+// every decline [CompileCTATest] states is this one's too, under the same
+// static context (xpath-valid clause 2.2) augmented with `$value`
+// (cvc-assertion clause 2.2), plus these, each of which is the same withhold:
 //
 //   - an attribute NameTest that is not a QName: a [37] Wildcard can match an
 //     attribute ·attributed to· an {attribute wildcard}, whose type is not
@@ -674,6 +676,17 @@ func CompileAssertionTest(expr xsd.XPathExpression, types xsd.TypeResolver, cont
 // {content type} that is not simple never reads v. b and types are read as
 // [CTATest.Evaluate] reads them.
 //
+// now is the dynamic context's current dateTime (xpath20.md §2.1.2), which
+// fn:current-date reads as the xs:date of now in now's own UTC offset
+// (xpath-functions.md §16.4, §17.1.5); the implicit timezone stays Z whatever
+// now's offset is. An offset no timezoneFrag can spell — not a whole number of
+// minutes, or outside -14:00 to +14:00 (xmlschema11-2 timezoneFrag) — is
+// replaced by UTC: the date is that of now.UTC(), with timezone Z. cvc-xpath
+// clause 6 makes the current dateTime constant during an assessment episode,
+// so the caller hands every evaluation of one episode the same instant. Its
+// consumer is validate, which reads the clock once per Validator.Assess and
+// passes that instant here and to [FacetAssertions].
+//
 // counts is the [Tally] t.Tally() made for this evaluation, filled with E's
 // subtree on the terms that type states, and nil exactly where t.Tally() is
 // nil. Any other counts — a nil one where t counts, a non-nil one where it
@@ -682,11 +695,11 @@ func CompileAssertionTest(expr xsd.XPathExpression, types xsd.TypeResolver, cont
 // and Evaluate answers false for it whatever the tree holds. A Tally made by
 // another test counting the same paths cannot be told from t's own and is read
 // as one; handing over the one filled for this E is the caller's part.
-func (t AssertionTest) Evaluate(b value.Backend, types xsd.TypeResolver, attrs TypedAttributes, children ChildElements, counts *Tally, v ValueBinding) bool {
+func (t AssertionTest) Evaluate(b value.Backend, types xsd.TypeResolver, attrs TypedAttributes, children ChildElements, counts *Tally, v ValueBinding, now time.Time) bool {
 	if !counts.fits(t.countedPaths()) {
 		return false
 	}
-	return ctaEval(t.root, ctaEnv{backend: b, types: types, input: ctaTypedInput{attrs: attrs, children: children, counts: counts, value: v}}) == ctaTrue
+	return ctaEval(t.root, ctaEnv{backend: b, types: types, input: ctaTypedInput{attrs: attrs, children: children, counts: counts, value: v, now: now}}) == ctaTrue
 }
 
 // Tally is a fresh, empty [Tally] for one evaluation of t, holding one counter
@@ -858,6 +871,7 @@ func (ctaLiteral) readsChild(xsd.QName) bool        { return false }
 func (ctaValueVar) readsChild(xsd.QName) bool       { return false }
 func (ctaEmptyValue) readsChild(xsd.QName) bool     { return false }
 func (ctaUntypedValue) readsChild(xsd.QName) bool   { return false }
+func (ctaCurrentDate) readsChild(xsd.QName) bool    { return false }
 func (ctaContextAtom) readsChild(xsd.QName) bool    { return false }
 
 // readsChild reports whether the call's argument reads the value of a child
@@ -1002,6 +1016,7 @@ func (ctaValueVar) counted(into []ctaTallied) []ctaTallied       { return into }
 func (ctaEmptyValue) counted(into []ctaTallied) []ctaTallied     { return into }
 func (ctaUntypedValue) counted(into []ctaTallied) []ctaTallied   { return into }
 func (ctaContextAtom) counted(into []ctaTallied) []ctaTallied    { return into }
+func (ctaCurrentDate) counted(into []ctaTallied) []ctaTallied    { return into }
 
 // ctaAssertionFacade is the assertion façade compileCTATest parses for: its
 // attribute nodes are typed by attrs, its child element nodes by elems, its

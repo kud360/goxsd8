@@ -2,6 +2,7 @@ package xpath
 
 import (
 	"testing"
+	"time"
 
 	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
@@ -48,7 +49,7 @@ func TestFacetAssertionsStringOfADateOrDateTime(t *testing.T) {
 		{"2008-01-01T00:00:00", value.AssertionHolds},
 		{"2009-01-01", value.AssertionFails},
 	} {
-		_, err := value.ValidateLexical(backend(), asTypesWith(union), st, tc.lexical, nil, FacetAssertions())
+		_, err := value.ValidateLexical(backend(), asTypesWith(union), st, tc.lexical, nil, FacetAssertions(time.Time{}))
 		if got := fcOutcome(t, err); got != tc.want {
 			t.Errorf("%s over %q = %d, want %d (err %v)", test, tc.lexical, got, tc.want, err)
 		}
@@ -88,7 +89,7 @@ func TestStringOfATypedDateAttribute(t *testing.T) {
 			if !ok {
 				t.Fatalf("CompileAssertionTest(%q): declined, want compiled", tc.expr)
 			}
-			got := test.Evaluate(backend(), seededTypes, asValues(t, tc.attrs...), asNoChildren, nil, ValueBinding{})
+			got := test.Evaluate(backend(), seededTypes, asValues(t, tc.attrs...), asNoChildren, nil, ValueBinding{}, time.Time{})
 			if got != tc.want {
 				t.Errorf("Evaluate(%q) over %v = %v, want %v", tc.expr, tc.attrs, got, tc.want)
 			}

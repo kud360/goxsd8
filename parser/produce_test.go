@@ -4,6 +4,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/kud360/goxsd8/builtin/strict"
 	"github.com/kud360/goxsd8/parser"
@@ -208,11 +209,11 @@ func TestProduceSiblingPatternsFoldIntoOneFacet(t *testing.T) {
 	}
 
 	for _, lex := range []string{"abc", "123"} {
-		if _, err := value.ValidateLexical(strict.New(), sch, st, lex, nil, xpath.FacetAssertions()); err != nil {
+		if _, err := value.ValidateLexical(strict.New(), sch, st, lex, nil, xpath.FacetAssertions(time.Time{})); err != nil {
 			t.Errorf("ValidateLexical(%q) = %v, want accept (matches one same-step pattern)", lex, err)
 		}
 	}
-	if _, err := value.ValidateLexical(strict.New(), sch, st, "a1", nil, xpath.FacetAssertions()); err == nil {
+	if _, err := value.ValidateLexical(strict.New(), sch, st, "a1", nil, xpath.FacetAssertions(time.Time{})); err == nil {
 		t.Error(`ValidateLexical("a1") = nil, want a cvc-pattern-valid rejection (matches neither branch)`)
 	}
 }
@@ -231,10 +232,10 @@ func TestProduceSinglePatternUnchanged(t *testing.T) {
 	if got := facets[0].Values(); !slices.Equal(got, []string{"[a-z]+"}) {
 		t.Fatalf("pattern {value} = %q, want [[a-z]+]", got)
 	}
-	if _, err := value.ValidateLexical(strict.New(), sch, st, "abc", nil, xpath.FacetAssertions()); err != nil {
+	if _, err := value.ValidateLexical(strict.New(), sch, st, "abc", nil, xpath.FacetAssertions(time.Time{})); err != nil {
 		t.Errorf(`ValidateLexical("abc") = %v, want accept`, err)
 	}
-	if _, err := value.ValidateLexical(strict.New(), sch, st, "ABC", nil, xpath.FacetAssertions()); err == nil {
+	if _, err := value.ValidateLexical(strict.New(), sch, st, "ABC", nil, xpath.FacetAssertions(time.Time{})); err == nil {
 		t.Error(`ValidateLexical("ABC") = nil, want a cvc-pattern-valid rejection`)
 	}
 }
@@ -262,15 +263,15 @@ func TestProduceCrossStepPatternsStillANDed(t *testing.T) {
 	if patterns != 2 {
 		t.Fatalf("effective pattern facets = %d, want 2 (one per derivation step)", patterns)
 	}
-	if _, err := value.ValidateLexical(strict.New(), sch, st, "abc", nil, xpath.FacetAssertions()); err != nil {
+	if _, err := value.ValidateLexical(strict.New(), sch, st, "abc", nil, xpath.FacetAssertions(time.Time{})); err != nil {
 		t.Errorf(`ValidateLexical("abc") = %v, want accept (matches both steps)`, err)
 	}
 	// "ab" satisfies the base step's OR-set but not the derived step's .{3}.
-	if _, err := value.ValidateLexical(strict.New(), sch, st, "ab", nil, xpath.FacetAssertions()); err == nil {
+	if _, err := value.ValidateLexical(strict.New(), sch, st, "ab", nil, xpath.FacetAssertions(time.Time{})); err == nil {
 		t.Error(`ValidateLexical("ab") = nil, want rejection: cross-step patterns are ANDed`)
 	}
 	// "A1c" satisfies the derived step but neither base branch.
-	if _, err := value.ValidateLexical(strict.New(), sch, st, "A1c", nil, xpath.FacetAssertions()); err == nil {
+	if _, err := value.ValidateLexical(strict.New(), sch, st, "A1c", nil, xpath.FacetAssertions(time.Time{})); err == nil {
 		t.Error(`ValidateLexical("A1c") = nil, want rejection: the base step's patterns still apply`)
 	}
 }
@@ -964,10 +965,10 @@ func TestProduceCrossStepEnumerationReplaces(t *testing.T) {
 	if got := enums[0].Values(); !slices.Equal(got, []string{"a"}) {
 		t.Fatalf("effective enumeration {value} = %v, want [a] — a union with the base's would carry b and c", got)
 	}
-	if _, err := value.ValidateLexical(strict.New(), sch, st, "a", nil, xpath.FacetAssertions()); err != nil {
+	if _, err := value.ValidateLexical(strict.New(), sch, st, "a", nil, xpath.FacetAssertions(time.Time{})); err != nil {
 		t.Errorf(`ValidateLexical("a") = %v, want accept`, err)
 	}
-	if _, err := value.ValidateLexical(strict.New(), sch, st, "b", nil, xpath.FacetAssertions()); err == nil {
+	if _, err := value.ValidateLexical(strict.New(), sch, st, "b", nil, xpath.FacetAssertions(time.Time{})); err == nil {
 		t.Error(`ValidateLexical("b") = nil, want a cvc-enumeration-valid rejection: the base's member is not the derived's`)
 	}
 }

@@ -2,6 +2,7 @@ package xpath
 
 import (
 	"testing"
+	"time"
 
 	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
@@ -89,7 +90,7 @@ func TestAssertionIfExpr(t *testing.T) {
 		for _, c := range tc.children {
 			nodes = append(nodes, acPath(c.name.Local))
 		}
-		got := test.Evaluate(backend(), seededTypes, asValues(t, tc.attrs...), asChildren(t, tc.children...), acTally(test, nodes...), ValueBinding{})
+		got := test.Evaluate(backend(), seededTypes, asValues(t, tc.attrs...), asChildren(t, tc.children...), acTally(test, nodes...), ValueBinding{}, time.Time{})
 		if got != tc.want {
 			t.Errorf("Evaluate(%q) over %v, %v = %v, want %v", tc.expr, tc.attrs, tc.children, got, tc.want)
 		}
@@ -109,10 +110,10 @@ func TestAssertionIfExprBranchAsksExistence(t *testing.T) {
 		t.Fatalf("CompileAssertionTest(%q): declined, want compiled", expr)
 	}
 	x := asValues(t, asTyped{uq("t"), "string", "x"})
-	if !test.Evaluate(backend(), seededTypes, x, asNoChildren, acTally(test, acPath("p")), ValueBinding{}) {
+	if !test.Evaluate(backend(), seededTypes, x, asNoChildren, acTally(test, acPath("p")), ValueBinding{}, time.Time{}) {
 		t.Errorf("Evaluate(%q) over a p child = false, want true", expr)
 	}
-	if test.Evaluate(backend(), seededTypes, x, asNoChildren, acTally(test), ValueBinding{}) {
+	if test.Evaluate(backend(), seededTypes, x, asNoChildren, acTally(test), ValueBinding{}, time.Time{}) {
 		t.Errorf("Evaluate(%q) with no p child = true, want false", expr)
 	}
 }
@@ -140,7 +141,7 @@ func TestAssertionIfExprEvaluatesOneBranch(t *testing.T) {
 		{"not(if (1 div 0 = 0) then true() else false())", false},
 		{"not(if (xs:date('2000-01-01')) then true() else false())", false},
 	} {
-		if got := aiCompile(t, tc.expr).Evaluate(backend(), seededTypes, asValues(t), asNoChildren, nil, ValueBinding{}); got != tc.want {
+		if got := aiCompile(t, tc.expr).Evaluate(backend(), seededTypes, asValues(t), asNoChildren, nil, ValueBinding{}, time.Time{}); got != tc.want {
 			t.Errorf("Evaluate(%q) = %v, want %v", tc.expr, got, tc.want)
 		}
 	}
@@ -223,7 +224,7 @@ func TestFacetIfExpr(t *testing.T) {
 		{test, "-3", value.AssertionHolds},
 		{"if ($value > 0) then true() else nosuch()", "4", value.AssertionDeclined},
 	} {
-		if got := FacetAssertions().Evaluate(backend(), seededTypes, intType, ctaExprRecord(tc.test, ""), fcValue(t, intType, tc.lexical)); got != tc.want {
+		if got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, intType, ctaExprRecord(tc.test, ""), fcValue(t, intType, tc.lexical)); got != tc.want {
 			t.Errorf("FacetAssertions(%q) over %s = %d, want %d", tc.test, tc.lexical, got, tc.want)
 		}
 	}

@@ -57,7 +57,8 @@
 //     `mod`) over numeric operands, whose dynamic errors err:FOAR0001 and err:FOAR0002 are charged like any
 //     other, F&O's string and sequence core — fn:contains, fn:starts-with and fn:ends-with under the
 //     codepoint collation, fn:string-length, fn:normalize-space, fn:string, fn:empty, fn:exists,
-//     fn:distinct-values (§15.1.6, by eq, one NaN surviving), fn:true and fn:false, `()` admitted as an
+//     fn:distinct-values (§15.1.6, by eq, one NaN surviving), fn:true and fn:false — and fn:current-date
+//     (§16.4), the date of the current dateTime the caller hands Evaluate and FacetAssertions, `()` admitted as an
 //     argument, whose xs:string? arguments raise err:XPTY0004 for an item of another type or for two or more
 //     items, [47] ContextItemExpr `.` over simple content, atomized to one xs:untypedAtomic holding E's
 //     string value (cvc-assertion clause 2.3.1's Note) — never `$value` — which ValueBinding carries beside
@@ -206,6 +207,15 @@
 // either façade (cvc-xpath clause 7 leaves it ·implementation-defined·);
 // ctaImplicitTimezone holds it, and F&O §10.4 assumes it on whichever operand
 // of a date/time comparison has no timezone of its own.
+//
+// The current dateTime (xpath20.md §2.1.2) is the caller's: an assertion or
+// facet evaluation is handed it as a time.Time (AssertionTest.Evaluate,
+// FacetAssertions), which validate reads off the clock once per
+// Validator.Assess, constant for the assessment episode (cvc-xpath clause 6).
+// fn:current-date is its date in its own UTC offset (F&O §16.4, §17.1.5), not
+// in the implicit timezone, or in UTC where no timezoneFrag spells that offset
+// (ctaCurrentDateInstant). A Type Alternative's evaluation carries none: its
+// grammar calls no function that reads one.
 //
 // An xs:decimal quotient that does not terminate is rounded to
 // ctaDecimalDivisionDigits fractional digits, the precision F&O §6.2 leaves

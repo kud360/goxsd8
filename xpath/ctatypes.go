@@ -220,8 +220,9 @@ func (t ctaTypes) castTarget(name xsd.QName) (*xsd.SimpleType, bool) {
 //     arithmeticResult) or of an F&O function call (ctaMatch and ctaPresence,
 //     xs:boolean; ctaUnaryString, xs:integer or xs:string; ctaStringFunction,
 //     xs:string; ctaDistinctValues, its typed operand's type, a literal's
-//     included), or a cast of one of them, or of an operand the second shape
-//     names, that is not in the string family (castSource, its target);
+//     included; ctaCurrentDate, xs:date), or a cast of one of them, or of an
+//     operand the second shape names, that is not in the string family
+//     (castSource, its target);
 //   - a cast of any other shape whose target is xs:float or xs:double
 //     (floatingSource): a cast to either over an untyped operand, a
 //     string-family one or a literal other than a DoubleLiteral, as in
@@ -419,6 +420,8 @@ func (t ctaTypes) castSource(v ctaValue) (*xsd.SimpleType, bool) {
 		return n.st, true
 	case ctaStringFunction:
 		return n.cast.target, true
+	case ctaCurrentDate:
+		return n.st, true
 	case ctaDistinctValues:
 		typed, isTyped := ctaStaticOf(n).(ctaTyped)
 		return typed.st, isTyped

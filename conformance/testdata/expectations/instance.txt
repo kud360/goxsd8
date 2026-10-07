@@ -52,8 +52,8 @@ All/all314/instance/all314.n04.xml pass
 All/all314/instance/all314.v01.xml pass
 All/all314/instance/all314.v02.xml pass
 All/all314/instance/all314.v05.xml pass
-Assert/assert-simple001/instance/assert-simple001.n1.xml fail
-Assert/assert-simple001/instance/assert-simple001.v1.xml fail
+Assert/assert-simple001/instance/assert-simple001.n1.xml pass
+Assert/assert-simple001/instance/assert-simple001.v1.xml pass
 Assert/assert-simple003/instance/assert-simple003.n1.xml fail
 Assert/assert-simple003/instance/assert-simple003.v1.xml fail
 Assert/assert-simple004/instance/assert-simple004.n1.xml fail
@@ -157,10 +157,10 @@ Assert/assert_031/instance/assert_031_2 pass
 Assert/assert_031/instance/assert_031_3 pass
 Assert/assert_031/instance/assert_031_4 pass
 Assert/assert_031/instance/assert_031_5 pass
-Assert/assert_032/instance/assert_032_2 fail
-Assert/assert_032/instance/assert_032_3 fail
+Assert/assert_032/instance/assert_032_2 pass
+Assert/assert_032/instance/assert_032_3 pass
 Assert/assert_033/instance/assert_033_2 pass
-Assert/assert_034/instance/assert_034_3 fail
+Assert/assert_034/instance/assert_034_3 pass
 Assert/assert_035/instance/assert_035_2 fail
 Assert/assert_035/instance/assert_035_3 fail
 AttrDecl/ad_annotation00101m1/instance/Positive pass
@@ -25864,9 +25864,9 @@ assertion/d4_3_15ii04/instance/d4_3_15ii04i pass
 assertion/d4_3_15ii06/instance/d4_3_15ii06i pass
 assertion/d4_3_15ii08/instance/d4_3_15ii08i pass
 assertion/d4_3_15ii10/instance/d4_3_15ii10i pass
-assertion/d4_3_15ii11/instance/d4_3_15ii11i fail
+assertion/d4_3_15ii11/instance/d4_3_15ii11i pass
 assertion/d4_3_15ii12/instance/d4_3_15ii12i pass
-assertion/d4_3_15ii13/instance/d4_3_15ii13i fail
+assertion/d4_3_15ii13/instance/d4_3_15ii13i pass
 assertion/d4_3_15ii14/instance/d4_3_15ii14i pass
 assertion/d4_3_15ii15/instance/d4_3_15ii15i pass
 assertion/d4_3_15ii17/instance/d4_3_15ii17i pass
@@ -25893,8 +25893,8 @@ assertion/d4_3_15v07/instance/d4_3_15v07i pass
 assertion/d4_3_15v08/instance/d4_3_15v08i pass
 assertion/d4_3_15v09/instance/d4_3_15v09i pass
 assertion/d4_3_15v10/instance/d4_3_15v10i pass
-assertion/d4_3_15v11/instance/d4_3_15v11i fail
-assertion/d4_3_15v13/instance/d4_3_15v13i fail
+assertion/d4_3_15v11/instance/d4_3_15v11i pass
+assertion/d4_3_15v13/instance/d4_3_15v13i pass
 assertion/d4_3_15v14/instance/d4_3_15v14i pass
 assertion/d4_3_15v15/instance/d4_3_15v15i pass
 assertion/d4_3_15v18/instance/d4_3_15v18i pass

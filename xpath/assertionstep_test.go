@@ -2,6 +2,7 @@ package xpath
 
 import (
 	"testing"
+	"time"
 
 	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
@@ -85,7 +86,7 @@ func TestAssertionElementStepExistence(t *testing.T) {
 	} {
 		t.Run(tc.expr, func(t *testing.T) {
 			test := esCompile(t, tc.expr)
-			if got := test.Evaluate(backend(), seededTypes, asValues(t), asNoChildren, acTally(test, tc.nodes...), ValueBinding{}); got != tc.holds {
+			if got := test.Evaluate(backend(), seededTypes, asValues(t), asNoChildren, acTally(test, tc.nodes...), ValueBinding{}, time.Time{}); got != tc.holds {
 				t.Errorf("Evaluate(%q) over %v = %v, want %v", tc.expr, tc.nodes, got, tc.holds)
 			}
 		})
@@ -141,7 +142,7 @@ func TestAssertionValueStepStillReadsChildElements(t *testing.T) {
 		want    bool
 	}{{"x", true}, {"y", false}} {
 		children := asChildren(t, asChild{uq("d"), "string", tc.lexical, false})
-		if got := test.Evaluate(backend(), seededTypes, asValues(t), children, nil, ValueBinding{}); got != tc.want {
+		if got := test.Evaluate(backend(), seededTypes, asValues(t), children, nil, ValueBinding{}, time.Time{}); got != tc.want {
 			t.Errorf("Evaluate(d = 'x') over d %q = %v, want %v", tc.lexical, got, tc.want)
 		}
 	}
@@ -191,7 +192,7 @@ func TestElementStepOutsideTheAssertionFacade(t *testing.T) {
 	}
 	str := asBuiltin(t, "string")
 	for _, test := range []string{"a", "not(a)", "exists(a)", "empty(a)", ".//a", "not(.//a)", "exists(.//a)", "./a"} {
-		if got := FacetAssertions().Evaluate(backend(), seededTypes, str, ctaExprRecord(test, ""), fcValue(t, str, "x")); got != value.AssertionFails {
+		if got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, str, ctaExprRecord(test, ""), fcValue(t, str, "x")); got != value.AssertionFails {
 			t.Errorf("FacetAssertions().Evaluate(%q) = %d, want Fails (%d): never Holds", test, got, value.AssertionFails)
 		}
 	}

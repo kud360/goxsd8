@@ -4,6 +4,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
@@ -46,7 +47,7 @@ import (
 // attribute, one child step, the child-step paths and the one descendant step
 // whose existence is asked and the descendant steps fn:count counts over, no
 // predicate or union but those in an fn:count argument, no variable but
-// `$value` and no function but fn:not, fn:count and the eleven
+// `$value` and no function but fn:not, fn:count and the twelve
 // ctaParser.libraryCall names, so evaluating them directly is exact where a
 // fail-open delegation to a general engine would be a guess.
 //
@@ -387,11 +388,12 @@ func (t CTATest) Evaluate(b value.Backend, types xsd.TypeResolver, attrs Attribu
 // `$value` cvc-assertion clause 2.3 adds — and of that only `$value`, the
 // context item's string value, its own attributes and element [[children]],
 // and the counts of the nodes of its subtree fn:count selects are reachable in
-// this grammar, so the attributes, the children, the counts, the
-// [ValueBinding], the value spaces and the type knowledge the casts need are
-// the whole of what evaluation reads. A facet {test} [FacetAssertions]
-// evaluates has no context item at all (cvc-assertions-valid clause 1.2), so
-// it reads nothing of its input but `$value`.
+// this grammar, beside the current dateTime fn:current-date reads (xpath20.md
+// §2.1.2), so the attributes, the children, the counts, the [ValueBinding],
+// the instant, the value spaces and the type knowledge the casts need are the
+// whole of what evaluation reads. A facet {test} [FacetAssertions] evaluates
+// has no context item at all (cvc-assertions-valid clause 1.2), so it reads
+// nothing of its input but `$value` and the instant.
 //
 // candidate is the typed value of the context item inside a predicate — the
 // child ctaMatchingChildren.nodes evaluates its predicate for, one value or
@@ -424,17 +426,19 @@ type ctaInput interface{ ctaInput() }
 type ctaLexicalInput struct{ attrs Attributes }
 
 // ctaTypedInput is an assertion's input: its typed attributes, its element
-// [[children]], the counts of the nodes its fn:count calls select, and E's
+// [[children]], the counts of the nodes its fn:count calls select, E's
 // string value and the value cvc-assertion clause 2.3 binds to `$value`
-// ([ValueBinding]). The children, the counts and the binding live here and on
-// no other arm, so a Type Alternative's evaluation cannot carry any of them.
-// counts is nil where the tree counts nothing, which a facet evaluation's
-// never does.
+// ([ValueBinding]), and now, the dynamic context's current dateTime
+// (xpath20.md §2.1.2) fn:current-date reads (ctaCurrentDate). The children,
+// the counts, the binding and the instant live here and on no other arm, so a
+// Type Alternative's evaluation cannot carry any of them. counts is nil where
+// the tree counts nothing, which a facet evaluation's never does.
 type ctaTypedInput struct {
 	attrs    TypedAttributes
 	children ChildElements
 	counts   *Tally
 	value    ValueBinding
+	now      time.Time
 }
 
 func (ctaLexicalInput) ctaInput() {}
@@ -548,10 +552,11 @@ func (ctaIf) ctaExpr()               {}
 // arithmetic operator over two of them (ctaArith, ctaFacade.computes), and a
 // call to an F&O string or sequence function over them (ctaMatch,
 // ctaUnaryString, ctaPresence, ctaDistinctValues, ctaStringFunction;
-// ctaFacade.callsLibrary), the assertion façade's `.` over simple content
-// (ctaContextAtom, ctaFacade.contextItem), and an integer sequence
-// (ctaIntegerRanges, ctaFacade.constructsSequences). Every branch answers
-// readsChild and counted on ctaExpr's terms.
+// ctaFacade.callsLibrary) or to fn:current-date (ctaCurrentDate), the
+// assertion façade's `.` over simple content (ctaContextAtom,
+// ctaFacade.contextItem), and an integer sequence (ctaIntegerRanges,
+// ctaFacade.constructsSequences). Every branch answers readsChild and counted
+// on ctaExpr's terms.
 type ctaValue interface {
 	ctaValue()
 	readsChild(name xsd.QName) bool
@@ -765,10 +770,10 @@ type ctaFacade interface {
 	// callsLibrary reports whether the façade admits a call to the F&O
 	// functions ctaParser.libraryCall parses — fn:contains, fn:starts-with,
 	// fn:ends-with, fn:string-length, fn:normalize-space, fn:string, fn:empty,
-	// fn:exists, fn:distinct-values, fn:true and fn:false — at all, which
-	// §3.12.6 clause 3 pins out of [12] ta-BooleanFunction (fn:not alone) and
-	// [18] ta-ConstructorFunction (constructors alone), and an fn:count
-	// argument that is no path (ctaParser.countCall).
+	// fn:exists, fn:distinct-values, fn:true, fn:false and fn:current-date —
+	// at all, which §3.12.6 clause 3 pins out of [12] ta-BooleanFunction
+	// (fn:not alone) and [18] ta-ConstructorFunction (constructors alone), and
+	// an fn:count argument that is no path (ctaParser.countCall).
 	callsLibrary() bool
 	// conditional reports whether the façade admits xpath20.md [7] IfExpr at
 	// all (ctaParser.ifExpr), which §3.12.6's grammar has no production for.
@@ -1438,9 +1443,10 @@ type ctaUntypedAtomic struct{}
 
 // ctaTyped is an operand carrying a datatype: a Literal, the result of a cast
 // or a constructor function, a typed attribute, an fn:count call, an arithmetic
-// result, the result of an F&O string or sequence function, or each item of
-// `$value`. It carries the COMPONENT alone — st.Name() is the name, and storing
-// both would be two encodings of one fact (STYLE D3).
+// result, the result of an F&O string or sequence function or of
+// fn:current-date, or each item of `$value`. It carries the COMPONENT alone —
+// st.Name() is the name, and storing both would be two encodings of one fact
+// (STYLE D3).
 type ctaTyped struct{ st *xsd.SimpleType }
 
 // ctaEmptySequence is the statically empty operand, ctaEmptyValue: it yields
@@ -1484,6 +1490,8 @@ func ctaStaticOf(v ctaValue) ctaStatic {
 		return ctaTyped{st: n.st}
 	case ctaStringFunction:
 		return ctaTyped{st: n.cast.target}
+	case ctaCurrentDate:
+		return ctaTyped(n)
 	case ctaDistinctValues:
 		return ctaStaticOf(n.operand)
 	case ctaValueVar:
@@ -1830,6 +1838,8 @@ func (e ctaEffectiveBoolean) eval(env ctaEnv) ctaAnswer {
 		return ctaBoolean(e.operand, n.st, env)
 	case ctaStringFunction:
 		return ctaBoolean(e.operand, n.cast.target, env)
+	case ctaCurrentDate:
+		return ctaBoolean(e.operand, n.st, env)
 	case ctaDistinctValues:
 		return ctaBoolean(e.operand, n.st, env)
 	case ctaValueVar:
@@ -2050,6 +2060,8 @@ func ctaItemOf(v ctaValue, c *xsd.SimpleType, env ctaEnv) ctaItem {
 		return ctaPresenceItem(n, c, env)
 	case ctaStringFunction:
 		return ctaStringFunctionItem(n, c, env)
+	case ctaCurrentDate:
+		return ctaCurrentDateItem(n, c, env)
 	case ctaDistinctValues:
 		return ctaDistinctValuesItem(n, c, env)
 	case ctaValueVar:
@@ -2599,8 +2611,19 @@ func ctaCanonical(v value.Value, from *xsd.SimpleType, env ctaEnv) (string, bool
 // verdict; it is the one xpath-functions.md §17 gives an ST/TT pair this
 // processor cannot cast between at all, err:XPTY0004. key-cta-ta-select
 // clause 2 makes the {test} false for both.
+//
+// An assertions facet of st is decided by [FacetAssertions] at the
+// evaluation's own current dateTime, ctaTypedInput.now, so a cast inside an
+// assertion and the assertion itself read one instant (cvc-xpath clause 6). A
+// Type Alternative's input holds no instant and passes the zero [time.Time],
+// which no facet reads: its casts target builtins alone (ctaTypes.castTarget),
+// and no builtin has an assertions facet.
 func ctaValidate(lexical string, st *xsd.SimpleType, env ctaEnv) ctaItem {
-	v, err := value.ValidateLexical(env.backend, env.types, st, lexical, nil, FacetAssertions())
+	var now time.Time
+	if in, typed := env.input.(ctaTypedInput); typed {
+		now = in.now
+	}
+	v, err := value.ValidateLexical(env.backend, env.types, st, lexical, nil, FacetAssertions(now))
 	if err == nil {
 		return ctaSingleton(v)
 	}

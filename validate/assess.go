@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
@@ -148,7 +149,7 @@ func (v *Validator) Assess(root Element) *Result {
 	entities, _ := root.(UnparsedEntities) // nil: the source supports no [unparsedEntities]
 	processed, told := root.(DeclarationsProcessed)
 	w := walk{log: v.log, schema: v.schema, backend: v.backend, values: value.NewValueSpace(v.backend), entities: entities,
-		declsUnread: told && !processed.AllDeclarationsProcessed()}
+		declsUnread: told && !processed.AllDeclarationsProcessed(), now: time.Now().UTC()}
 	var g governance
 	d, found := v.Schema().Element(root.Name())
 	if found {
@@ -920,7 +921,12 @@ func (w *walk) localGovernance(e Element, ldt xsd.TypeDefinition) governance {
 // encoding, and String Valid clause 3 reads it (cvcsimpletype.go). declsUnread
 // is the root's [DeclarationsProcessed] answer, read once at the same point and
 // inverted: true only where the source implements the capability and reports
-// false, which is all clause 3's diagnostic needs.
+// false, which is all clause 3's diagnostic needs. now is the current dateTime
+// of the XPath dynamic context (xpath20.md §2.1.2), read off the clock once, at
+// the top of the call, which cvc-xpath clause 6 (§3.13.4.2) makes constant
+// during an assessment episode: every assertion and every assertions facet the
+// walk evaluates is handed this one instant, so fn:current-date answers one
+// date across the whole episode.
 type walk struct {
 	log         *slog.Logger
 	schema      *xsd.Schema
@@ -931,6 +937,7 @@ type walk struct {
 	nodes       int
 	ids         idTable
 	res         Result
+	now         time.Time
 }
 
 // elementContext is the [value.Context] an instance lexical is mapped under:
