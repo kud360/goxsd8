@@ -323,13 +323,14 @@ func TestEntityDeclaredOnlyInParameterEntity(t *testing.T) {
 // Declared is not charged (#2365), and in an attribute of an element
 // replacement text included in content opens, located at that reference. A
 // reference to an unparsed entity there is WFC Parsed Entity, checked first as
-// entityGraph's walk of a default value checks it. Each guard is refused,
-// wrapping a cause and naming neither constraint: the same external entity
-// referenced in content, where §4.4.3 lets the reader decline to include it,
-// an unparsed one referenced in content, and an external one declared after a
-// parameter-entity reference the reader did not read (§5.1), referenced in an
-// attribute value directly and through an entity declared before that
-// reference, which reaches the charge with no declaration recorded.
+// entityGraph's walk of a default value checks it; one in content is
+// TestContentUnparsedEntity's fault. Each guard is refused, wrapping a cause
+// and naming neither constraint: the same external entity referenced in
+// content, where §4.4.3 lets the reader decline to include it, and an external
+// one declared after a parameter-entity reference the reader did not read
+// (§5.2), referenced in an attribute value directly and through an entity
+// declared before that reference, which reaches the charge with no declaration
+// recorded.
 func TestAttributeValueExternalEntity(t *testing.T) {
 	const alone = `<?xml version="1.0" standalone="yes"?>`
 	const plain = `<?xml version="1.0"?>`
@@ -365,7 +366,6 @@ func TestAttributeValueExternalEntity(t *testing.T) {
 		subset, root string
 	}{
 		{ext, `<r>&x;</r>`},
-		{ndata, `<r>&u;</r>`},
 		{`<!ENTITY % q SYSTEM "q.ent"> %q; ` + ext, `<r a="&x;"/>`},
 		{`<!ENTITY e "&x;"><!ENTITY % q SYSTEM "q.ent"> %q; ` + ext, `<r a="&e;"/>`},
 	} {
@@ -381,6 +381,67 @@ func TestAttributeValueExternalEntity(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestContentUnparsedEntity charges a reference in content, directly or through
+// replacement text, to an unparsed entity whose declaration the reader read
+// (XML 1.0 WFC Parsed Entity) as a fault the reader charges itself, wrapping no
+// cause and located at the outermost reference: outside a standalone document,
+// declared in a parameter entity the reader read, declared before an internal
+// entity of the same name, which does not bind (§4.2), and whatever its
+// notation, whose declaration is a validity constraint (VC Notation Declared).
+// §4.4.3, which lets the reader decline to include an external parsed entity,
+// does not cover an unparsed one. Each guard keeps its answer: an unparsed
+// entity declared after a parameter-entity reference the reader did not read
+// is refused, wrapping a cause and naming no constraint (§5.2), and an
+// EntityValue that references one is well-formed where nothing includes it
+// (§4.4.4).
+func TestContentUnparsedEntity(t *testing.T) {
+	const plain = `<?xml version="1.0"?>`
+	const ndata = `<!NOTATION n SYSTEM 'n'><!ENTITY u SYSTEM 'u.bin' NDATA n>`
+	const parsed = `[xml-wf] content references, directly or through replacement text, the unparsed entity u, which XML 1.0 WFC Parsed Entity forbids`
+	for _, tc := range []struct {
+		subset, root, want string
+	}{
+		{ndata, `<r>&u;</r>`, `d.xml:1:98: ` + parsed},
+		{ndata + `<!ENTITY e "&u;">`, `<r>&e;</r>`, `d.xml:1:115: ` + parsed},
+		{ndata + `<!ENTITY b "<b>&u;</b>">`, `<r>&b;</r>`, `d.xml:1:122: ` + parsed},
+		{`<!NOTATION n SYSTEM 'n'><!ENTITY % p "<!ENTITY u SYSTEM 'u.bin' NDATA n>">%p;`, `<r>&u;</r>`, `d.xml:1:117: ` + parsed},
+		{ndata + `<!ENTITY u "x">`, `<r>&u;</r>`, `d.xml:1:113: ` + parsed},
+		{`<!ENTITY u SYSTEM 'u.bin' NDATA n>`, `<r>&u;</r>`, `d.xml:1:74: ` + parsed},
+	} {
+		t.Run(tc.subset+tc.root, func(t *testing.T) {
+			_, err := collect(t, "d.xml", plain+`<!DOCTYPE r [`+tc.subset+`]>`+tc.root)
+			wantWellFormednessError(t, err)
+			var e *xsderr.Error
+			if !errors.As(err, &e) || e.Err != nil {
+				t.Errorf("error %v: want a charge wrapping no cause", err)
+			}
+			if fmt.Sprint(err) != tc.want {
+				t.Errorf("error = %q, want %q", err, tc.want)
+			}
+		})
+	}
+	t.Run("declared after an unread parameter entity", func(t *testing.T) {
+		_, err := collect(t, "d.xml", plain+`<!DOCTYPE r [<!ENTITY % q SYSTEM "q.ent"> %q; `+ndata+`]><r>&u;</r>`)
+		wantWellFormednessError(t, err)
+		var e *xsderr.Error
+		if !errors.As(err, &e) || e.Err == nil {
+			t.Errorf("error %v: want a refusal wrapping its cause", err)
+		}
+		if strings.Contains(fmt.Sprint(err), "Parsed Entity") {
+			t.Errorf("error %v names WFC Parsed Entity, which the reader does not decide", err)
+		}
+	})
+	t.Run("referenced only in an EntityValue", func(t *testing.T) {
+		nodes, err := collect(t, "d.xml", plain+`<!DOCTYPE r [`+ndata+`<!ENTITY e "&u;">]><r/>`)
+		if err != nil {
+			t.Fatalf("Token: %v", err)
+		}
+		if got, want := render(nodes), `<r></r>`; got != want {
+			t.Errorf("read %s, want %s", got, want)
+		}
+	})
 }
 
 // TestEntityAmpersandBeginsNoReference charges a '&' in included replacement

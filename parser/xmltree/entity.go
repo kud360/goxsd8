@@ -322,11 +322,16 @@ var errExpansionBound = errors.New("general-entity expansion bound reached")
 // is charged before readability is asked, for an external entity, an unparsed
 // one among them, as for an internal one. Outside a standalone document an
 // internal subset that declares one has referenced a parameter entity, which
-// lifts that constraint. Next, in an attribute value (attr), a reference to an
-// unparsed or external entity whose declaration the reader read is charged
-// (attrEntityFault). Any other name that resolves to no replacement text — an
-// undeclared entity, an external or unparsed one referenced in content outside
-// the Entity Declared charge, one declared where the reader did not read — is
+// lifts that constraint. Next, a reference to an entity whose declaration the
+// reader read is charged if its binding declaration forbids it where it stands
+// (declaredEntityFault): an unparsed entity in content (attr false) or in an
+// attribute value (attr true), an external one in an attribute value. Only a
+// recorded declaration grounds that charge, never the zero boundEntity of an
+// unrecorded name: Parsed Entity is among the constraints a non-validating
+// processor need not detect where it did not read the declaration (XML 1.0
+// §5.2). Any other name that resolves to no replacement text — an undeclared
+// entity, an external parsed one referenced in content, which §4.4.3 lets the
+// reader decline to include, one declared where the reader did not read — is
 // refused, wrapping a cause, as the decoder refuses a name no recorded
 // declaration names (see Reader.entities).
 func (r *Reader) reference(name string, loc xsderr.Loc, open []string, attr bool) (text string, entity bool, err error) {
@@ -344,8 +349,8 @@ func (r *Reader) reference(name string, loc xsderr.Loc, open []string, attr bool
 	if r.standalone && bound.onlyInPE && !r.withinPE(open) {
 		return "", false, xsderr.New(xsderr.RuleXMLWellFormed, loc, "reference to entity &%s; in a standalone=\"yes\" document, where no general entity declaration outside every parameter entity declares it (XML 1.0 WFC Entity Declared)", name)
 	}
-	if attr && declared {
-		if err := attrEntityFault(bound.binding, loc); err != nil {
+	if declared {
+		if err := declaredEntityFault(bound.binding, attr, loc); err != nil {
 			return "", false, err
 		}
 	}
@@ -355,19 +360,26 @@ func (r *Reader) reference(name string, loc xsderr.Loc, open []string, attr bool
 	return bound.binding.value.text, true, nil
 }
 
-// attrEntityFault charges a reference in an attribute value, directly or
-// through replacement text, to the entity whose binding declaration (XML 1.0
-// §4.2) is d, located at loc, if an attribute value may not reference it, in
-// the order entityGraph.enter checks the two: an unparsed entity (WFC: Parsed
-// Entity) or an external one (WFC: No External Entity References). Neither
-// constraint keys on standalone or on where d stands, but d must be a
-// declaration the reader read: a name declared only where it did not read has
-// no binding to decide them (XML 1.0 §5.1).
-func attrEntityFault(d entityDecl, loc xsderr.Loc) error {
+// declaredEntityFault charges a reference, directly or through replacement
+// text, to the entity whose binding declaration (XML 1.0 §4.2) is d, located
+// at loc, if it may not stand where it does, in the order entityGraph.enter
+// checks the two: in content or in an attribute value (attr), to an unparsed
+// entity (WFC: Parsed Entity); in an attribute value, to an external one (WFC:
+// No External Entity References). Neither constraint keys on standalone or on
+// where d stands, but d must be a declaration the reader read: a name declared
+// only where it did not read has no binding to decide them (XML 1.0 §5.2). A
+// reference to an unparsed entity in an EntityValue is charged here, where the
+// entity whose replacement text holds it is included, and never where it is
+// declared: §4.4.4 excepts it from the fatal errors, and §4.4's table, whose
+// cell reads "Error", makes it an error (§4.4.9), which a processor may leave
+// unreported.
+func declaredEntityFault(d entityDecl, attr bool, loc xsderr.Loc) error {
 	switch {
-	case d.unparsed:
+	case d.unparsed && attr:
 		return xsderr.New(xsderr.RuleXMLWellFormed, loc, "attribute value that references, directly or indirectly, the unparsed entity %s (XML 1.0 WFC: Parsed Entity)", d.name)
-	case !d.value.readable:
+	case d.unparsed:
+		return xsderr.New(xsderr.RuleXMLWellFormed, loc, "content references, directly or through replacement text, the unparsed entity %s, which XML 1.0 WFC Parsed Entity forbids", d.name)
+	case attr && !d.value.readable:
 		return xsderr.New(xsderr.RuleXMLWellFormed, loc, "attribute value that references, directly or indirectly, the external entity %s (XML 1.0 WFC: No External Entity References)", d.name)
 	}
 	return nil

@@ -179,19 +179,21 @@
 //     (WFC: Entity Declared), are RuleXMLWellFormed faults; a reference in
 //     the replacement text of an entity whose binding declaration (§4.2)
 //     stands in a parameter entity occurs within it, and is not charged. A
-//     reference in an attribute value, directly or through replacement text,
-//     to an unparsed entity (WFC: Parsed Entity) or an external one (WFC: No
-//     External Entity References) whose declaration the reader read is a
-//     RuleXMLWellFormed fault too. A reference past the reader's bound on
-//     nesting depth or on replacement text included per document is refused,
-//     as is any other reference to an entity that is not internal — in
-//     content, an external one the reader does not include (§4.4.3) — or
-//     whose declaration the reader did not read, wrapping a cause: the reader
-//     does not decide whether the document is well-formed.
+//     reference, directly or through replacement text, to an unparsed entity
+//     whose declaration the reader read (WFC: Parsed Entity), in content or
+//     in an attribute value, and a reference in an attribute value to an
+//     external entity whose declaration the reader read (WFC: No External
+//     Entity References) are RuleXMLWellFormed faults too. A reference past
+//     the reader's bound on nesting depth or on replacement text included per
+//     document is refused, as are a reference in content to an external
+//     parsed entity, which the reader does not include (§4.4.3), and a
+//     reference to an entity whose declaration the reader did not read,
+//     wrapping a cause: the reader does not decide whether the document is
+//     well-formed.
 //   - Every error the reader returns but io.EOF is a RuleXMLWellFormed
 //     *xsderr.Error, and whether it wraps a cause says what it decides. One wrapping no
 //     cause is a charge the reader makes itself and a definite fault whatever
-//     the document's DTD declares — an entity it includes is one whose
+//     the document's DTD declares — an entity it includes or charges is one whose
 //     internal-subset declaration it read, which binds before the external
 //     subset's (XML 1.0 §2.8, §4.2) — except the unbound-prefix charge: an
 //     <!ATTLIST can default the namespace declaration that binds the prefix
