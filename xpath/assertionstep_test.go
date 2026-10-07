@@ -43,10 +43,12 @@ func esCompile(t *testing.T, expr string) AssertionTest {
 // content are selected as well. `.//d` selects a grandchild and never E itself,
 // reported as the empty chain, so `not(.//d)` is false over a d grandchild and
 // true with none or with only E named d. `./a` is `a`. A ·nilled· element is a
-// node, which the caller reports like any other. Every row declines at
-// CompileAssertionTest, and fails, with ctaParser.selectedElements' two call
-// sites removed (ctaAssertionFacade.child declining the element-only, mixed and
-// empty types, and `./` and `.//` taking no production outside fn:count).
+// node, which the caller reports like any other. Every row fails with
+// ctaParser.selectedElements' two call sites removed: each declines at
+// CompileAssertionTest (ctaAssertionFacade.child declining the element-only and
+// empty types, and `./` and `.//` taking no production outside fn:count) but
+// `exists(mixed)`, which compiles to a value step over the mixed child
+// (ctaUntypedChild) and reads [ChildElements], which hold no child here.
 func TestAssertionElementStepExistence(t *testing.T) {
 	for _, tc := range []struct {
 		expr  string

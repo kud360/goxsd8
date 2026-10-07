@@ -673,9 +673,10 @@ func TestAssertionValuePredicateErrorRaisesTheCount(t *testing.T) {
 // `$value` or an fn:count, calling a library function, or whose root is not a
 // comparison, which may be numeric and so positional. The type rows and `zz`
 // compile, and fail, with ctaParser.valuePredicate reading `.` as xs:string
-// where the child step declines; the five bare-value rows but the library
-// call's with ctaComparisonRooted admitting ctaEffectiveBoolean; the two union
-// rows with ctaUnionOf admitting a value-filtered operand. The rest are guards.
+// where the child step declines or reads the child untyped, as a mixed one; the
+// five bare-value rows but the library call's with ctaComparisonRooted
+// admitting ctaEffectiveBoolean; the two union rows with ctaUnionOf admitting a
+// value-filtered operand. The rest are guards.
 func TestCompileAssertionTestDeclinesValuePredicates(t *testing.T) {
 	str := asBuiltin(t, "string")
 	for _, tc := range []struct {
