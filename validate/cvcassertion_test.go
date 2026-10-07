@@ -739,6 +739,7 @@ func aFacetTypes(t *testing.T) []*xsd.SimpleType {
 		aRestriction(t, "InRange", integerType(), "$value = 1 to $value"),
 		aRestriction(t, "UpperX", icBuiltin("string"), "upper-case($value) = 'AX'"),
 		aRestriction(t, "EntityX", icBuiltin("ENTITY"), "$value = 'x'"),
+		aRestriction(t, "PastDate", icBuiltin("date"), "$value lt current-date()"),
 		aUnion(t, "EntityXOrString", local("EntityX"), icBuiltin("string")),
 	)
 }
@@ -794,6 +795,23 @@ func TestAttributeAssertionsFacetIsEvaluated(t *testing.T) {
 // fails.
 func TestFacetAssertionReadingTheContextItemIsCharged(t *testing.T) {
 	wantFacetCharge(t, aAttributeAssessed(t, "Dot", "x"), "cvc-attribute", "Dot over x")
+}
+
+// fn:current-date is EVALUATED at the date of the instant Validator.Assess
+// reads off the clock (cvc-xpath clauses 5 and 6): over an xs:date attribute a
+// complex type's `@n lt current-date()` holds for 2000-01-01 and is charged
+// under cvc-assertion for 9999-12-31, and the assertions facet `$value lt
+// current-date()` holds and is charged under cvc-attribute alike. With the
+// "current-date" arm of xpath's ctaParser.libraryCall removed, every row
+// records an Unevaluated instead and fails.
+func TestCurrentDateAssertionsAreEvaluated(t *testing.T) {
+	schema := aTyped(t, []string{"n", "date"}, "@n lt current-date()")
+	wantSatisfied(t, aAssess(t, schema, valuedRoot("n", "2000-01-01")), "@n lt current-date() over 2000-01-01")
+	wantAssertionCharge(t, aAssess(t, schema, valuedRoot("n", "9999-12-31")),
+		`the element root is not ·valid· with respect to assertion 1 of 1 in the {assertions} of the ·governing type definition· RootType, whose {test} is "@n lt current-date()",`)
+
+	wantSatisfied(t, aAttributeAssessed(t, "PastDate", "2000-01-01"), "PastDate over 2000-01-01")
+	wantFacetCharge(t, aAttributeAssessed(t, "PastDate", "9999-12-31"), "cvc-attribute", "PastDate over 9999-12-31")
 }
 
 // cvc-complex-type clause 1.2 reaches the same facet over an element's

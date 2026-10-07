@@ -2,6 +2,7 @@ package xpath
 
 import (
 	"testing"
+	"time"
 
 	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
@@ -66,7 +67,7 @@ func TestAssertionCastsToItsOwnTypeOrAnAncestor(t *testing.T) {
 		{"not(@x cast as xs:integer eq 5)", nil, false},
 	} {
 		t.Run(tc.expr, func(t *testing.T) {
-			got := asCompile(t, tc.expr, csUses(t)).Evaluate(backend(), seededTypes, asValues(t, tc.attrs...), asNoChildren, nil, ValueBinding{})
+			got := asCompile(t, tc.expr, csUses(t)).Evaluate(backend(), seededTypes, asValues(t, tc.attrs...), asNoChildren, nil, ValueBinding{}, time.Time{})
 			if got != tc.want {
 				t.Errorf("Evaluate(%q) over %v = %v, want %v", tc.expr, tc.attrs, got, tc.want)
 			}
@@ -86,7 +87,7 @@ func TestAssertionCastsToItsOwnTypeOrAnAncestor(t *testing.T) {
 			t.Errorf("CompileAssertionTest($value gt xs:date(@start)): declined, want compiled")
 			continue
 		}
-		got := test.Evaluate(backend(), seededTypes, asValues(t, asTyped{uq("start"), "date", tc.start}), asNoChildren, nil, asBind(t, date, tc.value))
+		got := test.Evaluate(backend(), seededTypes, asValues(t, asTyped{uq("start"), "date", tc.start}), asNoChildren, nil, asBind(t, date, tc.value), time.Time{})
 		if got != tc.want {
 			t.Errorf("Evaluate($value gt xs:date(@start)) over %s, %s = %v, want %v", tc.value, tc.start, got, tc.want)
 		}
@@ -99,7 +100,7 @@ func TestAssertionCastsToItsOwnTypeOrAnAncestor(t *testing.T) {
 			continue
 		}
 		children := asChildren(t, asChild{uq("n"), "int", "5", false}, asChild{uq("c"), "int", "5", false})
-		if !test.Evaluate(backend(), seededTypes, asValues(t), children, nil, ValueBinding{}) {
+		if !test.Evaluate(backend(), seededTypes, asValues(t), children, nil, ValueBinding{}, time.Time{}) {
 			t.Errorf("Evaluate(%q) over n=5, c=5 = false, want true", expr)
 		}
 	}
@@ -132,11 +133,11 @@ func TestAssertionCastsAListedValue(t *testing.T) {
 		if !ok {
 			t.Fatalf("CompileAssertionTest(%q) over a list: declined, want compiled", tc.expr)
 		}
-		v, err := value.ValidateLexical(backend(), types, list, tc.lexical, nil, FacetAssertions())
+		v, err := value.ValidateLexical(backend(), types, list, tc.lexical, nil, FacetAssertions(time.Time{}))
 		if err != nil {
 			t.Fatalf("mapping %q against the list: %v", tc.lexical, err)
 		}
-		if got := test.Evaluate(backend(), types, asValues(t), asNoChildren, nil, BindValue("", Typed(v))); got != tc.want {
+		if got := test.Evaluate(backend(), types, asValues(t), asNoChildren, nil, BindValue("", Typed(v)), time.Time{}); got != tc.want {
 			t.Errorf("Evaluate(%q) over %q = %v, want %v", tc.expr, tc.lexical, got, tc.want)
 		}
 	}
@@ -164,7 +165,7 @@ func TestAssertionCastUpTheHierarchyRendersNothing(t *testing.T) {
 	lexicals := map[xsd.QName]string{uq("ym"): "P0M", uq("p"): "0E-99999999999"}
 	attrs := func(yield func(xsd.QName, TypedValue) bool) {
 		for _, name := range []xsd.QName{uq("ym"), uq("p")} {
-			v, err := value.ValidateLexical(backend(), types, typed[name], lexicals[name], nil, FacetAssertions())
+			v, err := value.ValidateLexical(backend(), types, typed[name], lexicals[name], nil, FacetAssertions(time.Time{}))
 			if err != nil {
 				t.Fatalf("mapping %q against %s: %v", lexicals[name], typed[name].Name(), err)
 			}
@@ -182,7 +183,7 @@ func TestAssertionCastUpTheHierarchyRendersNothing(t *testing.T) {
 		if !ok {
 			t.Fatalf("CompileAssertionTest(%q): declined, want compiled", expr)
 		}
-		if !test.Evaluate(backend(), types, attrs, asNoChildren, nil, ValueBinding{}) {
+		if !test.Evaluate(backend(), types, attrs, asNoChildren, nil, ValueBinding{}, time.Time{}) {
 			t.Errorf("Evaluate(%q) = false, want true", expr)
 		}
 	}
@@ -200,7 +201,7 @@ func TestFacetAssertionsCastTheValue(t *testing.T) {
 		{"2010-01-02", value.AssertionHolds},
 		{"2009-12-31", value.AssertionFails},
 	} {
-		got := FacetAssertions().Evaluate(backend(), seededTypes, date, asRecord("xs:date($value) gt xs:date('2010-01-01')"), fcValue(t, date, tc.lexical))
+		got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, date, asRecord("xs:date($value) gt xs:date('2010-01-01')"), fcValue(t, date, tc.lexical))
 		if got != tc.want {
 			t.Errorf("Evaluate(xs:date($value) gt xs:date('2010-01-01'), %q) = %d, want %d", tc.lexical, got, tc.want)
 		}
@@ -267,7 +268,7 @@ func cfFacades() []cfFacade {
 			if !ok {
 				return false, false
 			}
-			return test.Evaluate(backend(), seededTypes, asValues(t), asNoChildren, nil, ValueBinding{}), true
+			return test.Evaluate(backend(), seededTypes, asValues(t), asNoChildren, nil, ValueBinding{}, time.Time{}), true
 		}},
 		{"CompileCTATest", func(t *testing.T, expr string) (bool, bool) {
 			test, ok := CompileCTATest(asRecord(expr), seededTypes)
@@ -278,7 +279,7 @@ func cfFacades() []cfFacade {
 		}},
 		{"FacetAssertions", func(t *testing.T, expr string) (bool, bool) {
 			str := asBuiltin(t, "string")
-			switch FacetAssertions().Evaluate(backend(), seededTypes, str, asRecord(expr), fcValue(t, str, "x")) {
+			switch FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, str, asRecord(expr), fcValue(t, str, "x")) {
 			case value.AssertionHolds:
 				return true, true
 			case value.AssertionFails:

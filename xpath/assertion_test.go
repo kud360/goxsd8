@@ -2,6 +2,7 @@ package xpath
 
 import (
 	"testing"
+	"time"
 
 	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
@@ -62,7 +63,7 @@ func asValues(t *testing.T, attrs ...asTyped) TypedAttributes {
 			vs = append(vs, Untyped(a.lexical))
 			continue
 		}
-		v, err := value.ValidateLexical(backend(), seededTypes, st, a.lexical, nil, FacetAssertions())
+		v, err := value.ValidateLexical(backend(), seededTypes, st, a.lexical, nil, FacetAssertions(time.Time{}))
 		if err != nil {
 			t.Fatalf("mapping %q as xs:%s: %v", a.lexical, a.typ, err)
 		}
@@ -133,7 +134,7 @@ func TestAssertionEvaluatesTypedAttributes(t *testing.T) {
 		{"@s cast as xs:integer > 3", []asTyped{{uq("s"), "string", " 5 "}}, true},
 		{"xs:integer(@s) = 5", []asTyped{{uq("s"), "string", "5"}}, true},
 	} {
-		got := asCompile(t, tc.expr, uses).Evaluate(backend(), seededTypes, asValues(t, tc.attrs...), asNoChildren, nil, ValueBinding{})
+		got := asCompile(t, tc.expr, uses).Evaluate(backend(), seededTypes, asValues(t, tc.attrs...), asNoChildren, nil, ValueBinding{}, time.Time{})
 		if got != tc.want {
 			t.Errorf("Evaluate(%q) over %v = %v, want %v", tc.expr, tc.attrs, got, tc.want)
 		}
@@ -151,13 +152,13 @@ func TestAssertionTypeErrorIsFalse(t *testing.T) {
 	uses := asUses(t, map[string]string{"b": "boolean"})
 	attrs := asValues(t, asTyped{uq("b"), "boolean", "true"})
 
-	if asCompile(t, "@b = 'true'", uses).Evaluate(backend(), seededTypes, attrs, asNoChildren, nil, ValueBinding{}) {
+	if asCompile(t, "@b = 'true'", uses).Evaluate(backend(), seededTypes, attrs, asNoChildren, nil, ValueBinding{}, time.Time{}) {
 		t.Error("Evaluate(@b = 'true') over a typed xs:boolean = true, want false: the comparison raises err:XPTY0004")
 	}
-	if asCompile(t, "not(@b = 'true')", uses).Evaluate(backend(), seededTypes, attrs, asNoChildren, nil, ValueBinding{}) {
+	if asCompile(t, "not(@b = 'true')", uses).Evaluate(backend(), seededTypes, attrs, asNoChildren, nil, ValueBinding{}, time.Time{}) {
 		t.Error("Evaluate(not(@b = 'true')) = true, want false: fn:not propagates the raised error, and the {test} raised")
 	}
-	if !asCompile(t, "@b = @b", uses).Evaluate(backend(), seededTypes, attrs, asNoChildren, nil, ValueBinding{}) {
+	if !asCompile(t, "@b = @b", uses).Evaluate(backend(), seededTypes, attrs, asNoChildren, nil, ValueBinding{}, time.Time{}) {
 		t.Error("Evaluate(@b = @b) = false, want true: two xs:boolean operands are B.2-comparable")
 	}
 }
@@ -226,7 +227,7 @@ func TestAssertionReadsSpecialAttributesUntyped(t *testing.T) {
 		{"@atom = 'a'", []asTyped{{uq("atom"), "anyAtomicType", "a"}}, true},
 	} {
 		t.Run(tc.expr, func(t *testing.T) {
-			got := asCompile(t, tc.expr, uses).Evaluate(backend(), seededTypes, asValues(t, tc.attrs...), asNoChildren, nil, ValueBinding{})
+			got := asCompile(t, tc.expr, uses).Evaluate(backend(), seededTypes, asValues(t, tc.attrs...), asNoChildren, nil, ValueBinding{}, time.Time{})
 			if got != tc.want {
 				t.Errorf("Evaluate(%q) over %v = %v, want %v", tc.expr, tc.attrs, got, tc.want)
 			}
@@ -240,7 +241,7 @@ func TestAssertionReadsSpecialAttributesUntyped(t *testing.T) {
 // false and its fn:not false too.
 func TestAssertionRaisesOnWrongArm(t *testing.T) {
 	uses := asUses(t, map[string]string{"x": "anySimpleType", "i": "integer"})
-	v, err := value.ValidateLexical(backend(), seededTypes, asBuiltin(t, "integer"), "5", nil, FacetAssertions())
+	v, err := value.ValidateLexical(backend(), seededTypes, asBuiltin(t, "integer"), "5", nil, FacetAssertions(time.Time{}))
 	if err != nil {
 		t.Fatalf("mapping 5: %v", err)
 	}
@@ -258,7 +259,7 @@ func TestAssertionRaisesOnWrongArm(t *testing.T) {
 	} {
 		attrs := func(yield func(xsd.QName, TypedValue) bool) { yield(tc.name, tc.v) }
 		t.Run(tc.expr, func(t *testing.T) {
-			if asCompile(t, tc.expr, uses).Evaluate(backend(), seededTypes, attrs, asNoChildren, nil, ValueBinding{}) {
+			if asCompile(t, tc.expr, uses).Evaluate(backend(), seededTypes, attrs, asNoChildren, nil, ValueBinding{}, time.Time{}) {
 				t.Errorf("Evaluate(%q) over the wrong arm = true, want false: the read raises", tc.expr)
 			}
 		})
@@ -339,7 +340,7 @@ func TestAssertionEvaluatesValueComparisons(t *testing.T) {
 		{"not(@dur lt @dur)", []asTyped{{uq("dur"), "duration", "P1D"}}, false},
 		{"@dur eq @dur", []asTyped{{uq("dur"), "duration", "P1D"}}, true},
 	} {
-		got := asCompile(t, tc.expr, uses).Evaluate(backend(), seededTypes, asValues(t, tc.attrs...), asNoChildren, nil, ValueBinding{})
+		got := asCompile(t, tc.expr, uses).Evaluate(backend(), seededTypes, asValues(t, tc.attrs...), asNoChildren, nil, ValueBinding{}, time.Time{})
 		if got != tc.want {
 			t.Errorf("Evaluate(%q) over %v = %v, want %v", tc.expr, tc.attrs, got, tc.want)
 		}
@@ -374,7 +375,7 @@ func asTypesWith(extra ...*xsd.SimpleType) ctaTestTypes {
 // asBind maps lexical against st and binds it to $value, or fails the test.
 func asBind(t *testing.T, st *xsd.SimpleType, lexical string) ValueBinding {
 	t.Helper()
-	v, err := value.ValidateLexical(backend(), seededTypes, st, lexical, nil, FacetAssertions())
+	v, err := value.ValidateLexical(backend(), seededTypes, st, lexical, nil, FacetAssertions(time.Time{}))
 	if err != nil {
 		t.Fatalf("mapping %q against %s: %v", lexical, st.Name(), err)
 	}
@@ -408,7 +409,7 @@ func TestAssertionValueOverSimpleContent(t *testing.T) {
 		{"not($value eq 5)", ValueBinding{}, nil, true},
 		{"$value", ValueBinding{}, nil, false},
 	} {
-		got := asCompileFor(t, tc.expr, content, uses).Evaluate(backend(), seededTypes, asValues(t, tc.attrs...), asNoChildren, nil, tc.bound)
+		got := asCompileFor(t, tc.expr, content, uses).Evaluate(backend(), seededTypes, asValues(t, tc.attrs...), asNoChildren, nil, tc.bound, time.Time{})
 		if got != tc.want {
 			t.Errorf("Evaluate(%q) = %v, want %v", tc.expr, got, tc.want)
 		}
@@ -440,7 +441,7 @@ func TestAssertionValueOverNonSimpleContent(t *testing.T) {
 		} {
 			test := asCompileFor(t, tc.expr, content, asUses(t, nil))
 			for _, bound := range []ValueBinding{{}, stray} {
-				if got := test.Evaluate(backend(), seededTypes, asValues(t), asNoChildren, nil, bound); got != tc.want {
+				if got := test.Evaluate(backend(), seededTypes, asValues(t), asNoChildren, nil, bound, time.Time{}); got != tc.want {
 					t.Errorf("Evaluate(%q) under %s content = %v, want %v", tc.expr, content.Variety(), got, tc.want)
 				}
 			}
@@ -477,11 +478,11 @@ func TestAssertionValueOverListContent(t *testing.T) {
 		if !ok {
 			t.Fatalf("CompileAssertionTest(%q) over a list: declined, want compiled", tc.expr)
 		}
-		v, err := value.ValidateLexical(backend(), types, list, tc.lexical, nil, FacetAssertions())
+		v, err := value.ValidateLexical(backend(), types, list, tc.lexical, nil, FacetAssertions(time.Time{}))
 		if err != nil {
 			t.Fatalf("mapping %q against the list: %v", tc.lexical, err)
 		}
-		if got := test.Evaluate(backend(), types, asValues(t), asNoChildren, nil, BindValue("", Typed(v))); got != tc.want {
+		if got := test.Evaluate(backend(), types, asValues(t), asNoChildren, nil, BindValue("", Typed(v)), time.Time{}); got != tc.want {
 			t.Errorf("Evaluate(%q) over %q = %v, want %v", tc.expr, tc.lexical, got, tc.want)
 		}
 	}
@@ -496,7 +497,7 @@ func TestAssertionValueOverListContent(t *testing.T) {
 // ValueBinding is the empty sequence, and a [Typed] binding breaks [BindValue]'s obligation
 // and raises. Each row fails with ctaTypes.valueVariable declining a ·special· type.
 func TestAssertionValueOverSpecialContent(t *testing.T) {
-	five, err := value.ValidateLexical(backend(), seededTypes, asBuiltin(t, "integer"), "5", nil, FacetAssertions())
+	five, err := value.ValidateLexical(backend(), seededTypes, asBuiltin(t, "integer"), "5", nil, FacetAssertions(time.Time{}))
 	if err != nil {
 		t.Fatalf("mapping 5: %v", err)
 	}
@@ -526,7 +527,7 @@ func TestAssertionValueOverSpecialContent(t *testing.T) {
 			{"not($value)", BindValue("", Typed(five)), false},
 		} {
 			t.Run(special+" "+tc.expr, func(t *testing.T) {
-				got := asCompileFor(t, tc.expr, content, asUses(t, nil)).Evaluate(backend(), seededTypes, asValues(t), asNoChildren, nil, tc.bound)
+				got := asCompileFor(t, tc.expr, content, asUses(t, nil)).Evaluate(backend(), seededTypes, asValues(t), asNoChildren, nil, tc.bound, time.Time{})
 				if got != tc.want {
 					t.Errorf("Evaluate(%q) over %s content = %v, want %v", tc.expr, special, got, tc.want)
 				}
@@ -650,7 +651,7 @@ func TestAssertionDecidesDateTimeComparisons(t *testing.T) {
 		{"not(@x eq xs:date('2000-01-01Z'))", []asTyped{{uq("x"), "anySimpleType", "2000-01-01"}}, false},
 	} {
 		t.Run(tc.expr, func(t *testing.T) {
-			got := asCompile(t, tc.expr, uses).Evaluate(backend(), seededTypes, asValues(t, tc.attrs...), asNoChildren, nil, ValueBinding{})
+			got := asCompile(t, tc.expr, uses).Evaluate(backend(), seededTypes, asValues(t, tc.attrs...), asNoChildren, nil, ValueBinding{}, time.Time{})
 			if got != tc.want {
 				t.Errorf("Evaluate(%q) over %v = %v, want %v", tc.expr, tc.attrs, got, tc.want)
 			}
@@ -662,7 +663,7 @@ func TestAssertionDecidesDateTimeComparisons(t *testing.T) {
 // with it appended validates, and the value it maps to carries a timezone —
 // which is the range check §3.3.7's timezoneFrag makes, so none is written here.
 func TestImplicitTimezoneIsATimezone(t *testing.T) {
-	v, err := value.ValidateLexical(backend(), seededTypes, asBuiltin(t, "date"), "2000-01-01"+ctaImplicitTimezone, nil, FacetAssertions())
+	v, err := value.ValidateLexical(backend(), seededTypes, asBuiltin(t, "date"), "2000-01-01"+ctaImplicitTimezone, nil, FacetAssertions(time.Time{}))
 	if err != nil {
 		t.Fatalf("validating 2000-01-01%s as xs:date: %v", ctaImplicitTimezone, err)
 	}

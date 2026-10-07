@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/kud360/goxsd8/builtin"
 	"github.com/kud360/goxsd8/builtin/strict"
@@ -283,10 +284,10 @@ func TestDatatypesFacetsWideStringFamily(t *testing.T) {
 	if ncname == nil {
 		t.Fatal("xs:NCName not seeded")
 	}
-	if _, verr := value.ValidateLexical(backend, noSchema{}, ncname, "abc", nil, xpath.FacetAssertions()); verr != nil {
+	if _, verr := value.ValidateLexical(backend, noSchema{}, ncname, "abc", nil, xpath.FacetAssertions(time.Time{})); verr != nil {
 		t.Errorf("NCName should accept %q: %v", "abc", verr)
 	}
-	_, verr := value.ValidateLexical(backend, noSchema{}, ncname, "a:b", nil, xpath.FacetAssertions())
+	_, verr := value.ValidateLexical(backend, noSchema{}, ncname, "a:b", nil, xpath.FacetAssertions(time.Time{}))
 	if verr == nil {
 		t.Fatal("NCName must reject a colon-bearing value via its intrinsic pattern")
 	}
@@ -969,7 +970,7 @@ func TestDatatypesLexicalDateTimeStampTimezone(t *testing.T) {
 
 	// The rejection reason is cvc-explicitTimezone-valid, not a lexical failure —
 	// proving the value-based facet, not Parse, decides the tz-absent literal.
-	_, verr := value.ValidateLexical(backend, noSchema{}, dts, "2002-10-10T12:00:00", nil, xpath.FacetAssertions())
+	_, verr := value.ValidateLexical(backend, noSchema{}, dts, "2002-10-10T12:00:00", nil, xpath.FacetAssertions(time.Time{}))
 	if verr == nil {
 		t.Fatal("tz-absent dateTimeStamp must be rejected via value.ValidateLexical, got nil")
 	}
@@ -1062,7 +1063,7 @@ func TestDatatypesLexicalIntegerFamily(t *testing.T) {
 		{"5.0", "cvc-pattern-valid"}, // the pattern gate runs before the value facets
 	}
 	for _, r := range rules {
-		_, verr := value.ValidateLexical(backend, noSchema{}, byteType, r.lexical, nil, xpath.FacetAssertions())
+		_, verr := value.ValidateLexical(backend, noSchema{}, byteType, r.lexical, nil, xpath.FacetAssertions(time.Time{}))
 		if verr == nil {
 			t.Fatalf("xs:byte %q must be rejected via value.ValidateLexical, got nil", r.lexical)
 		}
@@ -1185,7 +1186,7 @@ func TestDatatypesLexicalIntXFamily(t *testing.T) {
 		{"integer", "+0.0", "cvc-pattern-valid"},
 	}
 	for _, r := range rules {
-		_, verr := value.ValidateLexical(backend, noSchema{}, seeded(r.local), r.lexical, nil, xpath.FacetAssertions())
+		_, verr := value.ValidateLexical(backend, noSchema{}, seeded(r.local), r.lexical, nil, xpath.FacetAssertions(time.Time{}))
 		if verr == nil {
 			t.Fatalf("xs:%s %q must be rejected via value.ValidateLexical, got nil", r.local, r.lexical)
 		}
@@ -1199,7 +1200,7 @@ func TestDatatypesLexicalIntXFamily(t *testing.T) {
 	// bound is being spuriously inherited from a narrowing sibling and the family
 	// really is arbitrary precision (builtin/strict/doc.go).
 	for _, lex := range []string{"2147483648", "-2147483649", "12345678901234567890123456789"} {
-		if _, verr := value.ValidateLexical(backend, noSchema{}, seeded("integer"), lex, nil, xpath.FacetAssertions()); verr != nil {
+		if _, verr := value.ValidateLexical(backend, noSchema{}, seeded("integer"), lex, nil, xpath.FacetAssertions(time.Time{})); verr != nil {
 			t.Errorf("xs:integer %q must be accepted (it carries no bounds, §3.4.13.3), got %v", lex, verr)
 		}
 	}
@@ -1347,7 +1348,7 @@ func TestDatatypesLexicalHalfBoundedIntegerFamily(t *testing.T) {
 		{"positiveInteger", "0", "cvc-minInclusive-valid"},
 	}
 	for _, r := range rules {
-		_, verr := value.ValidateLexical(backend, noSchema{}, seeded(r.local), r.lexical, nil, xpath.FacetAssertions())
+		_, verr := value.ValidateLexical(backend, noSchema{}, seeded(r.local), r.lexical, nil, xpath.FacetAssertions(time.Time{}))
 		if verr == nil {
 			t.Fatalf("xs:%s %q must be rejected via value.ValidateLexical, got nil", r.local, r.lexical)
 		}
@@ -1371,7 +1372,7 @@ func TestDatatypesLexicalHalfBoundedIntegerFamily(t *testing.T) {
 		{"positiveInteger", "12345678901234567890123456789"},
 	}
 	for _, a := range accepts {
-		if _, verr := value.ValidateLexical(backend, noSchema{}, seeded(a.local), a.lexical, nil, xpath.FacetAssertions()); verr != nil {
+		if _, verr := value.ValidateLexical(backend, noSchema{}, seeded(a.local), a.lexical, nil, xpath.FacetAssertions(time.Time{})); verr != nil {
 			t.Errorf("xs:%s %q must be accepted (29 digits, and the type is unbounded on that side), got %v", a.local, a.lexical, verr)
 		}
 	}
@@ -1856,7 +1857,7 @@ func restrictDecimal(t *testing.T, decimal *xsd.SimpleType, local string, f xsd.
 func TestCheckLiteralPanicsOnAPrecondition(t *testing.T) {
 	backend, decimal := seededDecimal(t)
 	inapplicable := restrictDecimal(t, decimal, "inapplicable", xsd.NewFacet(xsd.FacetLength, []string{"2"}, false))
-	_, verr := value.ValidateLexical(backend, noSchema{}, inapplicable, "7", nil, xpath.FacetAssertions())
+	_, verr := value.ValidateLexical(backend, noSchema{}, inapplicable, "7", nil, xpath.FacetAssertions(time.Time{}))
 	if !value.IsFacetPrecondition(verr) {
 		t.Fatalf("premise: ValidateLexical(inapplicable, %q) = %v, want a facet-pipeline precondition fault", "7", verr)
 	}

@@ -3,6 +3,7 @@ package strict_test
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/kud360/goxsd8/builtin"
 	"github.com/kud360/goxsd8/builtin/strict"
@@ -105,11 +106,11 @@ func TestYearMonthDurationZeroNoCanonical(t *testing.T) {
 func TestYearMonthDurationSeededPattern(t *testing.T) {
 	st := seededType(t, "yearMonthDuration")
 
-	if _, err := value.ValidateLexical(strict.New(), noSchema{}, st, "P1Y2M", nil, xpath.FacetAssertions()); err != nil {
+	if _, err := value.ValidateLexical(strict.New(), noSchema{}, st, "P1Y2M", nil, xpath.FacetAssertions(time.Time{})); err != nil {
 		t.Fatalf("year-month yearMonthDuration should validate: %v", err)
 	}
 
-	_, err := value.ValidateLexical(strict.New(), noSchema{}, st, "P1DT2H", nil, xpath.FacetAssertions())
+	_, err := value.ValidateLexical(strict.New(), noSchema{}, st, "P1DT2H", nil, xpath.FacetAssertions(time.Time{}))
 	if err == nil {
 		t.Fatal("day-time literal must be rejected for yearMonthDuration, got nil")
 	}

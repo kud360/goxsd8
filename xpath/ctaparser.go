@@ -1106,6 +1106,8 @@ func (p *ctaParser) libraryCall(local string) (ctaValue, bool) {
 		return p.distinctValuesCall()
 	case "true", "false":
 		return p.constantCall(local)
+	case "current-date":
+		return p.currentDateCall()
 	}
 	return p.constructorFunction()
 }
@@ -1347,6 +1349,22 @@ func (p *ctaParser) constantCall(local string) (ctaValue, bool) {
 		return nil, false
 	}
 	return ctaLiteral{text: local, st: boolean}, true
+}
+
+// currentDateCall parses a call to fn:current-date with no argument
+// (xpath-functions.md §16.4) into its ctaCurrentDate, whose result is
+// xs:date. An argument declines (err:XPST0017), and so does an xs:date that
+// does not resolve.
+func (p *ctaParser) currentDateCall() (ctaValue, bool) {
+	args, ok := p.arguments()
+	if !ok || len(args) != 0 {
+		return nil, false
+	}
+	date, resolved := p.types.simple(ctaBuiltin("date"))
+	if !resolved {
+		return nil, false
+	}
+	return ctaCurrentDate{st: date}, true
 }
 
 // countCall parses an fn:count call, xpath20.md [48] FunctionCall with one

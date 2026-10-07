@@ -324,7 +324,7 @@ func (w *walk) instanceTypeLexical(a Attribute, e Element) bool {
 			e.Name())
 		return true
 	}
-	_, err := value.ValidateLexical(w.backend, w.schema, st, a.Value(), elementContext{owner: e}, xpath.FacetAssertions())
+	_, err := value.ValidateLexical(w.backend, w.schema, st, a.Value(), elementContext{owner: e}, xpath.FacetAssertions(w.now))
 	if err == nil {
 		w.logAttribute(a, ruleCvcAttribute, "3", "satisfied")
 		return true
@@ -407,7 +407,7 @@ type fixedConstraint struct {
 // FinalizeWith, so cos-valid-simple-default never charges it. The comparison
 // declines here until #667 routes those defaults through ValidDefault.
 func (w *walk) fixedAgreement(a Attribute, e Element, st *xsd.SimpleType, f fixedConstraint) {
-	same, decided := value.ConstraintMatches(w.backend, w.schema, st, a.Value(), elementContext{owner: e}, f.vc, xpath.FacetAssertions())
+	same, decided := value.ConstraintMatches(w.backend, w.schema, st, a.Value(), elementContext{owner: e}, f.vc, xpath.FacetAssertions(w.now))
 	if !decided {
 		w.declineAttribute(a, f.rule, f.clause,
 			"the ·actual value· of the attribute %s was not compared with the {value} of the fixed {value constraint} %q on its %s: value.ConstraintMatches could not decide the comparison, a fault of the type or of the value backend, two literals of a ·special· type that some member of its lexical mapping cannot compare, an assertions-facet {test} not evaluated on either side or failed by the {value}, or a NOTATION {value} naming no declared notation, which no assembly judges yet (#667), rather than a verdict about the value, so %s is undecided",

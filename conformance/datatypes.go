@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/kud360/goxsd8/builtin"
 	"github.com/kud360/goxsd8/builtin/strict"
@@ -1819,8 +1820,12 @@ const (
 //
 // It is named for the act, checking one literal, so it cannot be mistaken for
 // decideLexicalByFacets, which is a case executor and one of its callers.
+//
+// The literal's assertions facets are evaluated at the clock's current
+// dateTime, read per call: each literal is its own validation, which is the
+// episode cvc-xpath clause 6 holds the instant constant over.
 func checkLiteral(backend value.Backend, st *xsd.SimpleType, lexical string, ctx value.Context, c caseSpec) literalOutcome {
-	_, err := value.ValidateLexical(backend, noSchema{}, st, lexical, ctx, xpath.FacetAssertions())
+	_, err := value.ValidateLexical(backend, noSchema{}, st, lexical, ctx, xpath.FacetAssertions(time.Now().UTC()))
 	if err == nil {
 		return literalValid
 	}
