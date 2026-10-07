@@ -89,8 +89,9 @@ func TestAssertionInstanceOfValue(t *testing.T) {
 // ValueBinding is the empty sequence clause 2.3.2 gives an invalid E, and so is
 // `$value` under a {content type} that is not simple. The two-item rows under
 // the bare type and `?`, and the empty rows under it and `+`, are true with
-// ctaInstanceOfItem's occurrence check removed; every `?`, `*` and `+` row
-// declines with sequenceType reading no indicator.
+// ctaInstanceOfItem's occurrence check removed. With occurrenceIndicator
+// reading none, an indicator is a token no production takes, and the first
+// row carrying one declines, failing the test.
 func TestAssertionInstanceOfOccurrence(t *testing.T) {
 	list := asList(t, "IntList", ctaBuiltin("int"))
 	types := asTypesWith(list)
@@ -148,10 +149,11 @@ func TestAssertionInstanceOfOccurrence(t *testing.T) {
 // `.` over simple content one xs:untypedAtomic, E's string value, whatever
 // `$value` is (cvc-assertion clause 2.3.1's Note) — so assert014's
 // `not(data(.) instance of xs:date)` holds over xs:date content. Every row
-// declines with instanceofExpr not reading fn:data; the `.` rows over xs:date
-// content flip with dataInstanceOf compiling `data(.)` to `$value`'s
-// ctaValueVar; the ·nilled· rows flip with the count taken over nodes
-// (ctaSequenceLength) instead of atoms.
+// calls fn:data, and with instanceofExpr not reading it the first row declines,
+// failing the test; the three `data(.)` rows flip with dataInstanceOf
+// compiling `data(.)` to `$value`'s ctaValueVar; the bare-type rows over a
+// ·nilled· child flip with the count taken over nodes (ctaSequenceLength)
+// instead of atoms.
 func TestAssertionInstanceOfData(t *testing.T) {
 	uses := asUses(t, map[string]string{"d": "date", "u": "anySimpleType"})
 	elems := asElems(map[xsd.QName]xsd.TypeDefinition{uq("e"): asBuiltin(t, "date")})
@@ -234,7 +236,14 @@ func TestFacetAssertionsInstanceOf(t *testing.T) {
 // type, a name resolving to nothing. A node operand without fn:data — `@d`,
 // `.`, a child step — declines, and so does an operand whose static type is
 // not its dynamic one, a numeric literal and arithmetic; fn:data anywhere but
-// as the operand of `instance of`, or with two arguments, declines.
+// as the operand of `instance of`, or with two arguments, declines. The
+// fn:data row compiles for a Type Alternative with
+// ctaTypeAlternativeFacade.instanceOf answering true, the value predicate
+// comparing `.` with an `instance of` compiles with
+// ctaPredicateFacade.instanceOf answering true, the three node rows compile
+// without instanceofExpr's node check, the IntegerLiteral row without
+// instanceItem's literal check, and the arithmetic row with instanceItem
+// admitting ctaArith.
 func TestInstanceOfDeclines(t *testing.T) {
 	for _, expr := range []string{"@a instance of xs:string", "not(@a instance of xs:string)", "data(@a) instance of xs:untypedAtomic"} {
 		if _, ok := CompileCTATest(ctaExprRecord(expr, "", "xs", xsd.XMLSchemaNS), seededTypes); ok {
@@ -261,11 +270,12 @@ func TestInstanceOfDeclines(t *testing.T) {
 		". instance of xs:untypedAtomic",
 		"e instance of xs:date",
 		"1 instance of xs:integer",
-		"$value + 1 instance of xs:date",
+		"data(count(e) + count(e)) instance of xs:integer",
 		"data(@d) = xs:date('2008-01-01')",
 		"data(@d, @d) instance of xs:date",
 		"$value instance of xs:date instance of xs:boolean",
 		"count(n[. instance of xs:int]) = 1",
+		"count(n[. = 1 and . = 'a' instance of xs:string]) = 1",
 	} {
 		if _, ok := CompileAssertionTest(asRecord(expr), types, xsd.SimpleContent{SimpleType: date}, uses, elems); ok {
 			t.Errorf("CompileAssertionTest(%q): compiled, want declined", expr)
