@@ -166,7 +166,7 @@ func checkAtomicApplicableFacets(r xsd.TypeResolver, t *xsd.SimpleType) error {
 			continue
 		}
 		return xsderr.New(ruleCosSTRestricts, t.Loc(),
-			"simple type {facets} carries %s, which is not applicable to the {primitive type definition} xs:%s (cos-st-restricts clause 1.3.1 via cos-applicable-facets §4.1.5)",
+			"the simple type's {facets} carries %s, not applicable to its {primitive type definition} xs:%s, which cos-st-restricts clause 1.3.1 forbids via cos-applicable-facets",
 			kind, spec.Name)
 	}
 	return nil
@@ -183,7 +183,7 @@ func rejectAnyFacet(r xsd.TypeResolver, t *xsd.SimpleType, subject string) error
 		return nil
 	}
 	return xsderr.New(ruleCosSTRestricts, t.Loc(),
-		"simple type {facets} carries %s, but no facet is applicable to %s (cos-st-restricts clause 1.3.1 via cos-applicable-facets §4.1.5)",
+		"the simple type's {facets} carries %s although no facet is applicable to %s, which cos-st-restricts clause 1.3.1 forbids via cos-applicable-facets",
 		eff[0].Facet().Kind(), subject)
 }
 

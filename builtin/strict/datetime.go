@@ -61,7 +61,7 @@ func parseDateTime(lexical string, _ value.Context) (value.Value, error) {
 	m := dateTimeLexical.FindStringSubmatch(lexical)
 	if m == nil {
 		return nil, xsderr.New(ruleDatatypeValid, xsderr.Loc{},
-			"dateTime: %q is not in the lexical space (dateTimeLexicalRep, §3.3.7.2)", lexical)
+			"%q is not in the lexical space of dateTime, which cvc-datatype-valid requires it to be in", lexical)
 	}
 	year, _ := new(big.Int).SetString(m[1], 10) // regex guarantees a valid integer numeral
 	month, _ := strconv.Atoi(m[2])
@@ -72,7 +72,7 @@ func parseDateTime(lexical string, _ value.Context) (value.Value, error) {
 	// as outside the lexical space.
 	if day > daysInMonth(year, month) {
 		return nil, xsderr.New(ruleDatatypeValid, xsderr.Loc{},
-			"dateTime: %q has day %d out of range for month %d of year %s (con-dateTime-dayValue, §3.3.7.1)",
+			"%q has day %d, beyond the last day of month %d of year %s, so it is not in the lexical space of dateTime, which cvc-datatype-valid requires it to be in",
 			lexical, day, month, year)
 	}
 

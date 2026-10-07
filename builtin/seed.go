@@ -286,7 +286,7 @@ func interposeListBase(spec TypeSpec, derivation xsd.SimpleTypeDerivation, base 
 		return base, derivation, nil
 	}
 	if spec.Base != "anySimpleType" {
-		return nil, nil, fmt.Errorf("builtin: list type %q has base %q, but a list row's first derivation step must restrict anySimpleType (§3.16.2.1 map.std.common case 2)", spec.Name, spec.Base)
+		return nil, nil, fmt.Errorf("builtin: list type %q has base %q, but a list row's first derivation step must restrict anySimpleType", spec.Name, spec.Base)
 	}
 	node, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{}, derivation, xsd.OwnedSimpleType{Definition: xsd.AnySimpleType()},
 		[]xsd.Facet{xsd.NewFacet(xsd.FacetWhiteSpace, []string{"collapse"}, true)}, nil)

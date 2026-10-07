@@ -25,7 +25,7 @@ var dayTimeDurationLexical = regexp.MustCompile(`^-?P((([0-9]+D)(T(([0-9]+H)([0-
 func parseDayTimeDuration(lexical string, _ value.Context) (value.Value, error) {
 	if !dayTimeDurationLexical.MatchString(lexical) {
 		return nil, xsderr.New(ruleDatatypeValid, xsderr.Loc{},
-			"dayTimeDuration: %q is not in the lexical space (dayTimeDurationLexicalRep, §3.4.27.1)", lexical)
+			"%q is not in the lexical space of dayTimeDuration, which cvc-datatype-valid requires it to be in", lexical)
 	}
 	f := durationFields.FindStringSubmatch(lexical)
 	// f[1]=sign, f[4]=days, f[5]=hours, f[6]=minutes, f[7]=seconds; the

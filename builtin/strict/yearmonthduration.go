@@ -32,7 +32,7 @@ var errNoYearMonthCanonical = errors.New("yearMonthDuration: zero value has no c
 func parseYearMonthDuration(lexical string, _ value.Context) (value.Value, error) {
 	if !yearMonthDurationLexical.MatchString(lexical) {
 		return nil, xsderr.New(ruleDatatypeValid, xsderr.Loc{},
-			"yearMonthDuration: %q is not in the lexical space (yearMonthDurationLexicalRep, §3.4.26.1)", lexical)
+			"%q is not in the lexical space of yearMonthDuration, which cvc-datatype-valid requires it to be in", lexical)
 	}
 	f := durationFields.FindStringSubmatch(lexical)
 	// f[1]=sign, f[2]=years, f[3]=months; the day/time groups are always empty
@@ -71,7 +71,7 @@ func canonicalYearMonthDuration(v value.Value) (string, error) {
 			"yearMonthDuration canonical: value of type %T is not a strict yearMonthDuration", v)
 	}
 	if d.months.Sign() == 0 {
-		return "", fmt.Errorf("%w (·months·=0; duration's 'PT0S' is outside [^DT]*, §3.4.26.1 Note, dt-canonical-mapping)", errNoYearMonthCanonical)
+		return "", fmt.Errorf("%w: its ·months· is 0, and duration's canonical \"PT0S\" is outside yearMonthDuration's [^DT]* lexical space", errNoYearMonthCanonical)
 	}
 	sgn := ""
 	if d.negative {
