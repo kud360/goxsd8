@@ -747,12 +747,9 @@ casts now decline), **#2321** (`747b425`, +3, existence EBV), **#2383**
 (`cb842d0`, +2, `count($value)` and `distinct-values`), **#2387** (`c473241`,
 +2, a mixed child's string-value), **#2358** (`610f599`, +2, `fn:string` over a
 typed date/time) and **#2341** (`5b18339`, +2, `if` in a boolean position).
-#2332 (`.` and `to`) parked after two rejects and is replaced by **#2448**. Open:
-**#2448**, **#2442** (`fn:concat` and a function-call cast operand), **#2445**
-(wildcard steps and element-existence predicates as an EBV), **#2446** (`fn:sum`
-over an attribute path) and **#2319** (quantifiers and the sibling and reverse
-axes). `fn:data`, `instance of`, `castable as` and `position()`/`last()` are
-filed when the slices before them land; #1042's `## Depends on` keeps the list.
+#2332 (`.` and `to`) parked after two rejects and is replaced by **#2448**.
+#1042's `## Depends on` lists the open slices and the residue not yet filed;
+this paragraph does not repeat them.
 
 **#56 LANDED on 2026-08-28 at `3160813`**, ten days after #719 unblocked it and
 `Ratchet: unchanged` as its body predicted. It records the CTA compile-time
