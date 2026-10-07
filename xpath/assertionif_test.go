@@ -180,7 +180,10 @@ func TestAssertionIfExprReadsEveryBranch(t *testing.T) {
 // branch never selected decline the {test} as they would anywhere — never a
 // true one. A bare comma between ExprSingles is no branch (XPST0003), nor is a
 // missing `then` or `else`. Inside a value predicate an IfExpr declines
-// (ctaPredicateFacade.conditional). Guard: these decline today.
+// (ctaPredicateFacade.conditional), and so does one read as an item — a
+// function argument or a parenthesized comparison operand — or standing as an
+// AndExpr operand, which XPath's grammar does not admit. Guard: these decline
+// today.
 func TestAssertionIfExprDeclines(t *testing.T) {
 	for _, expr := range []string{
 		"if (true()) then true() else nosuch()",
@@ -193,6 +196,8 @@ func TestAssertionIfExprDeclines(t *testing.T) {
 		"if (true(), true()) then true() else true()",
 		"count(a[if (. = 1) then true() else false()]) = 0",
 		"a = 1 and if (true()) then true() else true()",
+		"contains(if (@t) then 'x' else 'y', 'x')",
+		"(if (@t) then 1 else 2) = 1",
 	} {
 		if _, ok := CompileAssertionTest(asRecord(expr), seededTypes, xsd.ElementContent{}, asUses(t, map[string]string{"t": "string"}), aiElems(t)); ok {
 			t.Errorf("CompileAssertionTest(%q): compiled, want declined", expr)
