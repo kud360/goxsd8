@@ -206,16 +206,22 @@ func (c *assertionCheck) tally(path []xsd.QName, attrs []xsd.QName) {
 	}
 }
 
-// readsValue reports whether some compiled test of c reads E itself, `.` or
-// `$value`, under a {content type} that is not simple
-// ([walk.compileAssertion]). A nil c — an element with no {assertions} — reads
-// neither.
-func (c *assertionCheck) readsValue() bool {
+// readsContextItem reports whether some compiled test of c reads E's string
+// value, which `.` atomizes to ([xpath.AssertionTest.ReadsContextItem]),
+// under a {content type} that is not simple, whose string value is collected
+// by frame ([ownStringValue]); under a simple one it is the ·initial value·
+// and is never collected. A {test} reading `$value` alone reads none of it:
+// `$value` is the empty sequence there (clause 2.3.2). A nil c — an element
+// with no {assertions} — reads nothing.
+func (c *assertionCheck) readsContextItem() bool {
 	if c == nil {
 		return false
 	}
+	if _, simple := c.ct.ContentType().(xsd.SimpleContent); simple {
+		return false
+	}
 	for _, t := range c.tests {
-		if t.readsValue {
+		if t.test != nil && t.test.ReadsContextItem() {
 			return true
 		}
 	}
@@ -294,8 +300,8 @@ type tallyFrame struct {
 // mixed content, and which is not ·nilled· ([walk.stringValue]). An OWN frame
 // (own true) is E's string value, which `.` atomizes to and which reader, E's
 // own clause 6 state, reads: an E whose {content type} is not simple, which is
-// not ·nilled·, and one of whose compiled {test}s reads `.` or `$value`
-// ([ownStringValue], [walk.compileAssertion]).
+// not ·nilled·, and one of whose compiled {test}s reads `.`
+// ([ownStringValue], [assertionCheck.readsContextItem]).
 //
 // text collects the concatenation of every Text Node of owner's subtree in
 // document order, as the partial ·PSVI· cvc-assertion clause 1.2 builds them:
@@ -372,12 +378,12 @@ func (w *walk) stringValue(e Element, g governance, content *contentCheck, up as
 // [walk.assertionValue] binds `.` from — inside outer, the innermost frame
 // open around its [[children]] otherwise; it is nil where the element opens
 // none. It opens one exactly where the element is not ·nilled· and some
-// compiled {test} reads `.` or `$value` under a {content type} that is not
-// simple ([assertionCheck.readsValue]): under simple content `.` is the
+// compiled {test} reads `.` under a {content type} that is not simple
+// ([assertionCheck.readsContextItem]): under simple content `.` is the
 // ·initial value· the content check gathers, and a ·nilled· element binds `.`
 // without its [[children]]'s text.
 func ownStringValue(asserts *assertionCheck, content *contentCheck, outer *stringValueFrame) *stringValueFrame {
-	if content.nilled || !asserts.readsValue() {
+	if content.nilled || !asserts.readsContextItem() {
 		return nil
 	}
 	return &stringValueFrame{owner: content, reader: asserts, own: true, outer: outer}
@@ -695,15 +701,11 @@ func (c *assertionCheck) yieldChildren(yield func(xpath.ChildElement) bool) {
 // assertionTest is one member of ct.{assertions}, its {test} as
 // [xpath.CompileAssertionTest] compiled it, nil where that declined, and the
 // [xpath.Tally] that test's evaluation reads ([xpath.AssertionTest.Tally]),
-// nil where it counts nothing. readsValue reports, under a {content type} that
-// is not simple, whether the compiled test reads E itself — `.`, E's string
-// value, or `$value` — on [walk.compileAssertion]'s terms; it is false under a
-// simple one, whose string value is not collected by frame.
+// nil where it counts nothing.
 type assertionTest struct {
-	a          xsd.Assertion
-	test       *xpath.AssertionTest
-	tally      *xpath.Tally
-	readsValue bool
+	a     xsd.Assertion
+	test  *xpath.AssertionTest
+	tally *xpath.Tally
 }
 
 // compileAssertions compiles every assertion of g's complex ·governing type
@@ -739,33 +741,16 @@ func (w *walk) compileAssertions(g governance) *assertionCheck {
 }
 
 // compileAssertion compiles a's {test} for an element whose ·governing type
-// definition· is ct, on [walk.compileAssertions]' terms.
-//
-// Under a {content type} that is not simple it first compiles the {test} with
-// no {content type} at all: [xpath.CompileAssertionTest] reads the {content
-// type} for `.` and `$value` alone, and declines both under a nil one, so a
-// {test} that compiles there reads neither and its tree is the one ct's own
-// {content type} would compile. One that does not is compiled again under
-// ct's, and where that admits it, it reads `.` or `$value` (readsValue), and
-// E's own string value is collected for it ([ownStringValue]). `$value`
-// is the empty sequence there whatever E holds (clause 2.3.2), so a {test}
-// reading `$value` alone has E's string value collected for nothing — a cost,
-// and a withhold where that value is undecided, never a fabricated verdict.
+// definition· is ct, on [walk.compileAssertions]' terms, under ct's {content
+// type}. Whether the compiled {test} reads `.`, and so has E's own string value
+// collected for it ([ownStringValue]), is
+// [xpath.AssertionTest.ReadsContextItem]'s answer, which
+// [assertionCheck.readsContextItem] reads.
 func (w *walk) compileAssertion(a xsd.Assertion, ct xsd.ComplexType) assertionTest {
 	c := assertionTest{a: a}
-	attrs, elems := w.assertionTypes(ct), w.assertionElementTypes(ct)
-	_, simple := ct.ContentType().(xsd.SimpleContent)
-	if !simple {
-		if test, compiled := xpath.CompileAssertionTest(a.Test(), w.schema, nil, attrs, elems); compiled {
-			c.test = &test
-			c.tally = test.Tally()
-			return c
-		}
-	}
-	if test, compiled := xpath.CompileAssertionTest(a.Test(), w.schema, ct.ContentType(), attrs, elems); compiled {
+	if test, compiled := xpath.CompileAssertionTest(a.Test(), w.schema, ct.ContentType(), w.assertionTypes(ct), w.assertionElementTypes(ct)); compiled {
 		c.test = &test
 		c.tally = test.Tally()
-		c.readsValue = !simple
 	}
 	return c
 }
@@ -1189,9 +1174,11 @@ func (w *walk) assertionTyped(u xsd.AttributeUse, lexical string, ctx value.Cont
 // a descendant whose contribution is undecided having lacked e's check
 // already ([stringValueFrame.lacking]). An invalid e has a string value all
 // the same, so it is bound beside clause 2.3.2's empty `$value`. own is nil
-// there only where no compiled {test} reads `.` or `$value`
-// ([walk.compileAssertion]), and the binding is the zero [xpath.ValueBinding],
-// which no {test} evaluated over it reads.
+// there only where no compiled {test} reads `.`
+// ([assertionCheck.readsContextItem]), and the binding is then the zero
+// [xpath.ValueBinding]: [xpath.AssertionTest.ReadsContextItem] never
+// under-reports, so no {test} evaluated over that binding reads its text, and
+// its `$value` is clause 2.3.2's empty sequence whatever the binding.
 //
 // Under simple content, the string value is the ·initial value·
 // [contentCheck.assessed] answers, or the {value constraint}'s {lexical form}

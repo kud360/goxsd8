@@ -100,10 +100,13 @@ func TestAssertionReadsElementOnlyStringValue(t *testing.T) {
 // default, which J.2 makes a Text Node the raw characters do not hold. A
 // ·nilled· E with [[children]] has their text as its string value, which the
 // walk does not gather (lackingNilledText). Each row is evaluated instead with
-// its decline removed, and fails. The guard: a {test} that reads neither `.`
-// nor `$value` is evaluated over the ·skipped· descendant all the same, and
-// is declined with walk.compileAssertion's nil-content compile removed, so
-// that every {test} opens E's own frame.
+// its decline removed, and fails. The guard: a {test} that does not read `.`
+// is evaluated over the ·skipped· descendant all the same — `count(d) = 0`,
+// and `empty($value)`, which reads `$value` alone, the empty sequence under
+// element-only content (cvc-assertion clause 2.3.2). Both are declined with
+// assertionCheck.readsContextItem answering true for every compiled {test},
+// and the `$value` row alone with ctaAssertionFacade.variable recording a
+// read of `.` for `$value`.
 func TestAssertionOverAnUndecidedOwnStringValueIsDeclined(t *testing.T) {
 	skipped := ElementChild(&testElement{name: xsd.QName{Space: "urn:other", Local: "z"}, loc: loc(3, 3),
 		kids: []Child{mxText("y", 3)}})
@@ -129,5 +132,7 @@ func TestAssertionOverAnUndecidedOwnStringValueIsDeclined(t *testing.T) {
 			acDeclined(t, aAssess(t, selfSchema(t, tc.test), tc.root), tc.want)
 		})
 	}
-	wantSatisfied(t, aAssess(t, selfSchema(t, "count(d) = 0"), acRoot(skipped)), "count(d) = 0 over a skipped descendant")
+	for _, test := range []string{"count(d) = 0", "empty($value)"} {
+		wantSatisfied(t, aAssess(t, selfSchema(t, test), acRoot(skipped)), test+" over a skipped descendant")
+	}
 }
