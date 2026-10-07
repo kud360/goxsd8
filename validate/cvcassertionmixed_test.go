@@ -76,11 +76,13 @@ const mxCharged = "the element root is not ·valid· with respect to assertion 1
 // walk.childValue reading no type as mixed, every row but `no body` declines
 // instead, and fails; with assertionAncestry.below handing a frame to the read
 // child's own runs alone, the descendant, element-only and cast rows fail;
-// with assertionAncestry.closeStringValue not appending a frame's text to its
-// outer one's, the user-mixed row, whose i hands its text up, fails; with
-// assertionAncestry.collectText appending every run whatever its element's
-// content, the element-only row fails; and with a ·nilled· mixed child bound
-// as Untyped(""), the `body = ”` row over one is satisfied instead.
+// with assertionAncestry.collectText appending a run to the innermost open
+// frame alone, the user-mixed row, whose i's frame is innermost, fails; with
+// it appending every run whatever its element's content, the element-only row
+// fails; and with a ·nilled· mixed child bound as Untyped(""), the `body = ”`
+// row over one is satisfied instead. An s of simple type whose raw characters
+// are its [schema normalized value] contributes them (collectEnd): with that
+// run dropped, the simple-descendant row is charged.
 func TestAssertionReadsMixedChildStringValue(t *testing.T) {
 	for _, tc := range []struct {
 		why, test string
@@ -100,6 +102,7 @@ func TestAssertionReadsMixedChildStringValue(t *testing.T) {
 		{"a user mixed type", "um = 'abcd'", []Child{mxEl("um", 2, nil, mxText("ab", 2), mxEl("i", 3, nil, mxText("cd", 3)))}, false},
 		{"element-only content inside", "um = 'abc'", []Child{mxEl("um", 2, nil, mxText("a", 2),
 			mxEl("eo", 3, nil, mxText("\n  ", 3), mxEl("i", 4, nil, mxText("b", 4)), mxText("\n", 5)), mxText("c", 6))}, false},
+		{"a simple descendant", "um = 'x5'", []Child{mxEl("um", 2, nil, mxText("x", 2), mxEl("s", 3, nil, mxText("5", 3)))}, false},
 		{"a cast", "xs:integer(body) eq 42", []Child{mxEl("body", 2, nil, mxText(" 4", 2), mxEl("b", 3, nil, mxText("2 ", 3)))}, false},
 		{"fn:string", "string(body) eq 'hello'", []Child{mxEl("body", 2, nil, mxText("hello", 2))}, false},
 		{"a nilled body's length", "string-length(body) eq 0", []Child{mxEl("body", 2, []Attribute{mxNil})}, false},
@@ -121,14 +124,16 @@ func TestAssertionReadsMixedChildStringValue(t *testing.T) {
 // assertion of <root>, never charged and never satisfied: a body an xsi:type
 // gives a type with no mixed content — xs:int, or the element-only EO — whose
 // typed value is not the string-value the compile read (walk.childValue); a um
-// holding a ·skipped· element (assertionAncestry.skipped), an s of simple type,
-// whose Text Node may hold its raw or its normalized value (xpath-datamodel
-// §6.2.4), or a dm that took its {value constraint} default (cvc-elt clause
-// 5.1), which the data model may or may not make a Text Node. Each row's {test}
-// is one the value would satisfy were it read as the text alone. The xsi:type
-// rows are guards: with walk.childValue's no-mixed-content check removed they
-// still decline, through its nil-frame branch, and fail on the message alone.
-// The other three are satisfied instead with their decline removed.
+// holding a ·skipped· element (assertionAncestry.skipped), an s of simple type
+// whose raw characters " 5" are not its [schema normalized value] "5", or whose
+// one run is white space alone, either of which its Text Node may hold
+// (xpath-datamodel Appendix J.2) (collectEnd, descendantRun), or a dm that took
+// its {value constraint} default (cvc-elt clause 5.1), which the data model
+// may or may not make a Text Node. Each row's {test} is one the value would
+// satisfy were it read as the text alone. The xsi:type rows are guards: with
+// walk.childValue's no-mixed-content check removed they still decline, through
+// its nil-frame branch, and fail on the message alone. The other four are
+// satisfied instead with their decline removed.
 func TestAssertionOverAnUnreadableMixedChildIsDeclined(t *testing.T) {
 	skipped := ElementChild(&testElement{name: xsd.QName{Space: "urn:other", Local: "z"}, loc: loc(3, 3),
 		kids: []Child{mxText("y", 3)}})
@@ -143,8 +148,10 @@ func TestAssertionOverAnUnreadableMixedChildIsDeclined(t *testing.T) {
 			"its ·governing type definition· EO has no mixed content"},
 		{"a skipped descendant", "um = 'x'", []Child{mxEl("um", 2, nil, mxText("x", 2), skipped)},
 			"the element {urn:other}z at instance.xml:3:3 below it is ·skipped·"},
-		{"a simple descendant", "um = 'x'", []Child{mxEl("um", 2, nil, mxText("x", 2), mxEl("s", 3, nil, mxText("5", 3)))},
-			"the element s at instance.xml:3:3 below it has simple content"},
+		{"a simple descendant", "um = 'x'", []Child{mxEl("um", 2, nil, mxText("x", 2), mxEl("s", 3, nil, mxText(" 5", 3)))},
+			`the element s at instance.xml:3:3 below it has simple content whose raw characters " 5" are not its [schema normalized value]`},
+		{"a simple descendant's white space", "um = 'x'", []Child{mxEl("um", 2, nil, mxText("x", 2), mxEl("s", 3, nil, mxText(" ", 3)))},
+			"a character run at instance.xml:3:9 below it is white space alone in an element of simple content"},
 		{"a defaulted mixed child", "dm = ''", []Child{mxEl("dm", 2, nil)},
 			"the element dm at instance.xml:2:3, of mixed content, took the default of its {value constraint}"},
 	} {

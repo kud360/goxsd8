@@ -1023,10 +1023,13 @@ func (c elementContext) LookupNamespace(prefix string) (string, bool) {
 // e hands its parent's state its typed value last, once everything that can
 // find e invalid has run ([walk.keepChild]) — a value of mixed content the
 // string-value e's frame collected from its subtree as it streamed past,
-// opened on entry ([walk.stringValue]) and closed into any enclosing frame
-// just before ([assertionAncestry.closeStringValue]): cvc-assertion clause 1.1
-// validates the parent's [[children]] "in the usual way" before any {test} of
-// the parent reads them.
+// opened on entry ([walk.stringValue]): cvc-assertion clause 1.1 validates the
+// parent's [[children]] "in the usual way" before any {test} of the parent
+// reads them. e's own string value, which its own {test}s read as `.`, is
+// collected the same way into a frame of its own ([ownStringValue]), and what
+// e contributes to every open frame beyond its text runs is settled once its
+// [[children]] are exhausted, before its own {test}s are evaluated
+// ([collectEnd]).
 func (w *walk) element(e Element, g governance, parent *icCheck, up assertionAncestry, inherited []inheritedAttribute) {
 	if w.log.Enabled(context.Background(), slog.LevelDebug) {
 		w.log.Debug("assessing element", slog.Any("name", e.Name()), slog.Any("loc", e.Loc()))
@@ -1043,8 +1046,16 @@ func (w *walk) element(e Element, g governance, parent *icCheck, up assertionAnc
 	asserts := w.compileAssertions(g)
 	w.tallyElement(e, g, up, asserts)
 	up.collectElement(e, g, isNilled)
-	frame := w.stringValue(e, g, isNilled, up)
-	w.children(e, content, id, up.below(e.Name(), asserts, frame), w.handedDown(e, g, inherited))
+	frame := w.stringValue(e, g, content, up)
+	inner := up.collecting
+	if frame != nil {
+		inner = frame
+	}
+	own := ownStringValue(asserts, content, inner)
+	if own != nil {
+		inner = own
+	}
+	w.children(e, content, id, up.below(e.Name(), asserts, inner), w.handedDown(e, g, inherited))
 	if w.res.err != nil {
 		// A walk that stopped on a source fault never settles §3.11.4 or
 		// §3.17.5.2 for this element, on [contentCheck.end]'s grounds: the
@@ -1054,11 +1065,11 @@ func (w *walk) element(e Element, g governance, parent *icCheck, up assertionAnc
 		// ·PSVI· (cvc-assertion clause 1.2) those [[children]] are part of.
 		return
 	}
-	w.elementAssertions(e, asserts, content, len(w.res.violations) > violationsBefore)
+	collectEnd(w.schema, e, inner, g, content)
+	w.elementAssertions(e, asserts, content, own, len(w.res.violations) > violationsBefore)
 	id.substitute(content)
 	w.idElement(id)
 	w.identityExit(id)
-	up.closeStringValue(e, frame, g, content)
 	w.keepChild(up.parent, e, g, content, frame,
 		len(w.res.violations) > violationsBefore || len(w.res.unevaluated) > unevaluatedBefore)
 }

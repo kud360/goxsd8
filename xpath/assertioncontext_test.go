@@ -8,9 +8,9 @@ import (
 	"github.com/kud360/goxsd8/xsd"
 )
 
-// The fixtures below drive the context item `.` of an assertion over simple
-// content (ctaContextAtom) and the integer sequences a general comparison's
-// operand may be (ctaIntegerRanges).
+// The fixtures below drive the context item `.` of an assertion under every
+// {content type} (ctaContextAtom) and the integer sequences a general
+// comparison's operand may be (ctaIntegerRanges).
 
 // cxEval compiles expr for an E with simple content of type st, read through
 // types, or fails the test, and evaluates it under bound.
@@ -125,35 +125,122 @@ func TestAssertionContextItemOverEveryBinding(t *testing.T) {
 	}
 }
 
-// `.` declines where it is a node rather than an atom — the whole operand of
-// an ·effective boolean value·, fn:not over one, fn:exists, fn:empty and
-// fn:count (the last a path, ctaParser.countPath) — and under every {content
-// type} that is not simple, whose string value is its descendants' text. A
-// Type Alternative's {test} declines it whatever its position. The
-// non-simple-content rows compile with ctaAssertionFacade.contextItem
-// answering ctaContextAtom under any content; the node-position rows but
-// count(.)'s compile with the ctaContextAtom checks in ctaParser.booleanExpr
-// and ctaParser.presenceCall removed.
-func TestAssertionContextItemDeclines(t *testing.T) {
-	simple := xsd.SimpleContent{SimpleType: asBuiltin(t, "string")}
-	for _, expr := range []string{".", "not(.)", "exists(.)", "empty(.)", "not(exists(.))", "count(.) eq 1", ". and true()"} {
-		if _, ok := CompileAssertionTest(asRecord(expr), seededTypes, simple, asUses(t, nil), asNoElems); ok {
-			t.Errorf("CompileAssertionTest(%q) over simple content: compiled, want declined", expr)
-		}
-	}
+// `.` under element-only, empty and mixed content is E's string value as
+// one xs:untypedAtomic, as under simple content: E is annotated xs:anyType in
+// the partial ·PSVI· (cvc-assertion clause 1.2), so atomizing it is no
+// err:FOTY0012 whatever its {content type}. `. castable as xs:date` holds over
+// a string value "2008-07-01" and is false over "x" (assert016.v1); `data(.)
+// instance of xs:untypedAtomic` holds (assert017.v1); `. = 'ab'` holds over
+// "ab"; the zero-argument fn:string, fn:string-length and fn:normalize-space
+// read the same string, white space and all; and `$value` stays the empty
+// sequence (clause 2.3.2), whatever the binding's text. Every row reading `.`
+// declines with ctaAssertionFacade.contextItem declining every {content type}
+// but a simple one.
+func TestAssertionContextItemOverEveryContentType(t *testing.T) {
 	for _, tc := range []struct {
 		content xsd.ContentType
 		why     string
 	}{
-		{nil, "no"},
 		{xsd.EmptyContent{}, "empty"},
 		{asElementContent(t, false), "element-only"},
 		{asElementContent(t, true), "mixed"},
 	} {
-		for _, expr := range []string{". = 'x'", "string-length() = 0", "string(.) = ''"} {
-			if _, ok := CompileAssertionTest(asRecord(expr), seededTypes, tc.content, asUses(t, nil), asNoElems); ok {
-				t.Errorf("CompileAssertionTest(%q) over %s content: compiled, want declined", expr, tc.why)
+		for _, row := range []struct {
+			expr, text string
+			want       bool
+		}{
+			{". castable as xs:date", "2008-07-01", true},
+			{". castable as xs:date", "x", false},
+			{"data(.) instance of xs:untypedAtomic", "2008-07-01", true},
+			{". = 'ab'", "ab", true},
+			{". = 'ab'", "a", false},
+			{"string() = ' a  b '", " a  b ", true},
+			{"string-length() = 6", " a  b ", true},
+			{"normalize-space() = 'a b'", " a  b ", true},
+			{"empty($value) and . = 'ab'", "ab", true},
+		} {
+			test, ok := CompileAssertionTest(asRecord(row.expr), seededTypes, tc.content, asUses(t, nil), asNoElems)
+			if !ok {
+				t.Errorf("CompileAssertionTest(%q) over %s content: declined, want compiled", row.expr, tc.why)
+				continue
 			}
+			if got := test.Evaluate(backend(), seededTypes, asValues(t), asNoChildren, nil, BindValue(row.text, nil), time.Time{}); got != row.want {
+				t.Errorf("Evaluate(%q) over %s content whose string value is %q = %v, want %v", row.expr, tc.why, row.text, got, row.want)
+			}
+		}
+	}
+}
+
+// ReadsContextItem is true for a {test} that reads `.` — written, under a
+// cast, castable, fn:data or arithmetic, or implicit in a zero-argument
+// fn:string, fn:string-length or fn:normalize-space — and false for one
+// reading `$value`, attributes or children alone, a predicate's candidate `.`
+// among them, which is the child and not E; every {content type} compiling the
+// {test} answers alike. The true rows fail with contextItem not setting
+// f.readsContextItem, and the false rows with it set unconditionally in
+// CompileAssertionTest.
+func TestAssertionReadsContextItem(t *testing.T) {
+	elems := asChildTypes(t)
+	for _, content := range []xsd.ContentType{
+		xsd.SimpleContent{SimpleType: asBuiltin(t, "string")},
+		xsd.EmptyContent{},
+		asElementContent(t, false),
+		asElementContent(t, true),
+	} {
+		for _, tc := range []struct {
+			expr string
+			want bool
+		}{
+			{". = 'x'", true},
+			{"string() = 'x'", true},
+			{"string-length() = 1", true},
+			{"normalize-space() = 'x'", true},
+			{"string(.) = 'x'", true},
+			{". castable as xs:date", true},
+			{"data(.) instance of xs:untypedAtomic", true},
+			{"xs:integer(.) + 1 = 2", true},
+			{"if (@a) then . = 'x' else true()", true},
+			{"empty($value)", false},
+			{"count($value) = 0", false},
+			{"string(@a) = 'x'", false},
+			{"e1 = 'x'", false},
+			{"exists(./a)", false},
+			{"count(.//a) = 1", false},
+			{"count(a[. = 'x']) = 1", false},
+		} {
+			test, ok := CompileAssertionTest(asRecord(tc.expr), seededTypes, content, asUses(t, map[string]string{"a": "string"}), elems)
+			if !ok {
+				t.Errorf("CompileAssertionTest(%q) over %T: declined, want compiled", tc.expr, content)
+				continue
+			}
+			if got := test.ReadsContextItem(); got != tc.want {
+				t.Errorf("CompileAssertionTest(%q) over %T: ReadsContextItem() = %v, want %v", tc.expr, content, got, tc.want)
+			}
+		}
+	}
+}
+
+// `.` declines where it is a node rather than an atom — the whole operand of
+// an ·effective boolean value·, fn:not over one, fn:exists, fn:empty and
+// fn:count (the last a path, ctaParser.countPath) — and under a nil {content
+// type}, whose governing type was not determined, under which the
+// zero-argument string functions decline too. A Type Alternative's {test}
+// declines it whatever its position. The nil-content rows compile with
+// ctaAssertionFacade.contextItem answering ctaContextAtom under any content;
+// the node-position rows but count(.)'s compile with the ctaContextAtom checks
+// in ctaParser.booleanExpr and ctaParser.presenceCall removed.
+func TestAssertionContextItemDeclines(t *testing.T) {
+	simple := xsd.SimpleContent{SimpleType: asBuiltin(t, "string")}
+	for _, content := range []xsd.ContentType{simple, asElementContent(t, false)} {
+		for _, expr := range []string{".", "not(.)", "exists(.)", "empty(.)", "not(exists(.))", "count(.) eq 1", ". and true()"} {
+			if _, ok := CompileAssertionTest(asRecord(expr), seededTypes, content, asUses(t, nil), asNoElems); ok {
+				t.Errorf("CompileAssertionTest(%q) over %T: compiled, want declined", expr, content)
+			}
+		}
+	}
+	for _, expr := range []string{". = 'x'", "string-length() = 0", "string(.) = ''", "normalize-space() = ''", "string() = ''"} {
+		if _, ok := CompileAssertionTest(asRecord(expr), seededTypes, nil, asUses(t, nil), asNoElems); ok {
+			t.Errorf("CompileAssertionTest(%q) over no content: compiled, want declined", expr)
 		}
 	}
 	for _, expr := range []string{". = 'x'", "string-length(.) = 1"} {
