@@ -432,10 +432,13 @@ func TestValueAssertionOverAnInvalidElementIsEmpty(t *testing.T) {
 // missing required attribute, cvc-complex-type clause 3 — still has its string
 // value, while `$value` is the empty sequence (cvc-assertion clause 2.3.2), so
 // `. = 5 and empty($value)` holds over "5". An empty element its declaration
-// defaults reads the default's {lexical form}, the text node the data model
-// builds for it (xpath-datamodel Appendix J.2). The invalid row is charged with
-// walk.assertionValue binding "" for an invalid element, and the defaulted row
-// with it binding the ·initial value· in place of [contentCheck.assessed]'s.
+// defaults reads the default's {lexical form}, the text node xpath-datamodel
+// Appendix J.2 "may" build for it, and so `. = ''` is charged there: that is
+// the processor's choice walk.assertionValue's GAP(xpath) marks, §6.2.4 giving
+// an empty element "" instead. The invalid row is charged with
+// walk.assertionValue binding "" for an invalid element, and the defaulted
+// rows' verdicts swap with it binding the ·initial value· in place of
+// [contentCheck.assessed]'s.
 func TestContextItemAssertionReadsTheStringValue(t *testing.T) {
 	schema := aSimple(t, "integer", false, nil, "string-length(.) = 4 and $value = 30")
 	wantSatisfied(t, aAssess(t, schema, cRoot("#0030")), "string-length(.) = 4 over 0030")
@@ -451,8 +454,17 @@ func TestContextItemAssertionReadsTheStringValue(t *testing.T) {
 		t.Errorf("Unevaluated() = %v, want none", messages(got))
 	}
 
+	wantSatisfied(t, aAssess(t, aDefaultedContent(t, ". = '007' and $value = 7"), cRoot()), ". = '007' over an element defaulted to 007")
+	wantAssertionCharge(t, aAssess(t, aDefaultedContent(t, ". = ''"), cRoot()),
+		`the element root is not ·valid· with respect to assertion 1 of 1 in the {assertions} of the ·governing type definition· RootType, whose {test} is ". = ''",`)
+}
+
+// aDefaultedContent is a schema whose root element declaration defaults its
+// xs:integer simple content to "007", under the one assertion test.
+func aDefaultedContent(t *testing.T, test string) *xsd.Schema {
+	t.Helper()
 	td, _ := builtinType(t, "integer")
-	ct := aComplexType(t, nil, xsd.SimpleContent{SimpleType: td}, aAssertions(". = '007' and $value = 7"))
+	ct := aComplexType(t, nil, xsd.SimpleContent{SimpleType: td}, aAssertions(test))
 	dflt := xsd.NewValueConstraint(xsd.ValueDefault, "007", nil, nil)
 	e, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "root"},
 		xsd.TypeDefinitionRef{Name: ct.Name()}, nil, xsd.NewGlobalScope(), &dflt, false, nil, nil, nil, false, nil)
@@ -467,7 +479,7 @@ func TestContextItemAssertionReadsTheStringValue(t *testing.T) {
 	if err != nil {
 		t.Fatalf("finalizing the schema: %v", err)
 	}
-	wantSatisfied(t, aAssess(t, defaulted, cRoot()), ". = '007' over an element defaulted to 007")
+	return defaulted
 }
 
 // An element under simple content with an element [[child]] — charged under
@@ -512,6 +524,46 @@ func TestValueAssertionOverANilledElementIsEmpty(t *testing.T) {
 
 	wantSatisfied(t, aAssess(t, aSimple(t, "string", true, nil, "not($value eq '')"), root), "not($value eq '') over a ·nilled· element")
 	wantAssertionCharge(t, aAssess(t, aSimple(t, "string", true, nil, "$value eq ''"), root), "the element root is not ·valid· with respect to assertion 1 of 1")
+}
+
+// A ·nilled· element is dm:nilled false in the partial ·PSVI· (xpath-datamodel
+// §6.2.4 nilled), so its string value is its descendants' text, never "" while
+// it has [[children]]: under cvc-elt clause 3.2.3.1's charge its assertions are
+// recorded Unevaluated and never evaluated over a string value this walk did
+// not gather — `. = 'abc'` over the text abc, which that string value
+// satisfies, and `. = 'x'` over <x/>, which it does not. Both rows are charged
+// under cvc-assertion with walk.assertionValue binding "" for every ·nilled·
+// element in place of declining. The guard: with no [[children]] `.` is the
+// zero-length string, and `. = ''` holds.
+func TestContextItemAssertionOverANilledElementWithChildrenDeclines(t *testing.T) {
+	nilled := func(kids ...string) *testElement {
+		root := cRoot(kids...)
+		root.attrs = []Attribute{&testAttribute{
+			name: xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: "nil"}, value: "true", loc: loc(1, 10)}}
+		return root
+	}
+	for _, tc := range []struct {
+		test string
+		root *testElement
+	}{
+		{". = 'abc'", nilled("#abc")},
+		{". = 'x'", nilled("x")},
+	} {
+		t.Run(tc.test, func(t *testing.T) {
+			res := aAssess(t, aSimple(t, "string", true, nil, tc.test), tc.root)
+			if got := res.Violations(); len(got) != 1 || got[0].Rule != "cvc-elt" {
+				t.Fatalf("Violations() = %v, want the cvc-elt clause 3.2.3.1 charge alone", got)
+			}
+			got := res.Unevaluated()
+			if len(got) != 1 || got[0].Rule() != "cvc-assertion" || got[0].Loc() != loc(1, 1) {
+				t.Fatalf("Unevaluated() = %v, want one cvc-assertion record at %s", messages(got), loc(1, 1))
+			}
+			if want := "the element root has xsi:nil = true and [[children]]"; !strings.Contains(got[0].Msg(), want) {
+				t.Errorf("Msg = %q, want it to name %q", got[0].Msg(), want)
+			}
+		})
+	}
+	wantSatisfied(t, aAssess(t, aSimple(t, "string", true, nil, ". = ''"), nilled()), ". = '' over a ·nilled· element with no [[children]]")
 }
 
 // Where String Valid over the ·initial value· is WITHHELD, `$value` is

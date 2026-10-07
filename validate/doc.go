@@ -421,8 +421,8 @@
 // ·governing type definition· was not determined and whose attribute nodes a
 // {test} counts, whose simple content's ·actual value· is undecided, or whose
 // simple content's string value was not gathered because it has element
-// [[children]], are recorded as [Unevaluated] under cvc-assertion instead
-// (cvcassertion.go).
+// [[children]] or is ·nilled· and has any [[children]], are recorded as
+// [Unevaluated] under cvc-assertion instead (cvcassertion.go).
 //
 // The rest of the cvc- decisions land on the walk [Validator.Assess]
 // already makes. Non-fatal warnings get an accessor of their own the day

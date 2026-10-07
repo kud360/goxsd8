@@ -94,14 +94,15 @@ const ruleCvcAssertionsValid xsderr.Rule = "cvc-assertions-valid"
 // spans a descendant whose contribution is undecided
 // ([assertionAncestry.collectElement]) — whose `$value` is undecided
 // ([walk.assertionValues]), whose string value was not gathered because it has
-// simple content and element [[children]] ([walk.assertionValue]), or one of
-// whose {test}s counts the attribute nodes of, or filters children by the
-// attribute names of, an element of its subtree whose ·governing type
-// definition· this package could not determine, so that its ·defaulted
-// attributes· are unknown ([walk.tallyElement]); a ·skipped· subtree is
-// counted, by name ([assertionAncestry.tallySkipped]). Fail-open: the withheld
-// value is clause 6's own verdict, whose whole consumer set inside this package
-// is w.res.violations and its one reader [Result.Violations], which charge on a
+// simple content and element [[children]], or is ·nilled· with simple content
+// and any [[children]] ([walk.assertionValue]), or one of whose {test}s counts
+// the attribute nodes of, or filters children by the attribute names of, an
+// element of its subtree whose ·governing type definition· this package could
+// not determine, so that its ·defaulted attributes· are unknown
+// ([walk.tallyElement]); a ·skipped· subtree is counted, by name
+// ([assertionAncestry.tallySkipped]). Fail-open: the withheld value is clause
+// 6's own verdict, whose whole consumer set inside this package is
+// w.res.violations and its one reader [Result.Violations], which charge on a
 // violation PRESENT, so a decline can only cost a rejection and can manufacture
 // none. (#1042)
 func (w *walk) elementAssertions(e Element, asserts *assertionCheck, content *contentCheck, invalid bool) {
@@ -870,6 +871,11 @@ type lackingValue struct{}
 // ([walk.assertionValue]).
 type lackingText struct{}
 
+// lackingNilledText is a simple {content type} over a ·nilled· element with
+// [[children]], whose string value, which `.` reads, this walk did not gather
+// ([walk.assertionValue]).
+type lackingNilledText struct{}
+
 // lackingChild is an element [[child]], named name at loc, that a {test} reads
 // and that has no typed value this package reads, for the reason why
 // ([walk.childValue]).
@@ -908,6 +914,10 @@ func (l lackingChild) declined(e xsd.QName) string {
 
 func (lackingText) declined(e xsd.QName) string {
 	return fmt.Sprintf("the element %s has simple content and element [[children]], which cvc-complex-type clause 1.2 charged, so its string value, the text of all its descendants, was not gathered", e)
+}
+
+func (lackingNilledText) declined(e xsd.QName) string {
+	return fmt.Sprintf("the element %s has xsi:nil = true and [[children]], which cvc-elt clause 3.2.3.1 charged, so its string value, the text of its descendants and never the zero-length string while dm:nilled is false in the partial ·PSVI·, was not gathered", e)
 }
 
 func (lackingValue) declined(e xsd.QName) string {
@@ -1026,14 +1036,36 @@ func (w *walk) assertionTyped(u xsd.AttributeUse, lexical string, ctx value.Cont
 //
 // The string value is the ·initial value· [contentCheck.assessed] answers, or
 // the {value constraint}'s {lexical form} cvc-elt clause 5.1 substitutes for an
-// empty e, the one text node the data model instance holds for it
-// (xpath-datamodel Appendix J.2), unnormalized. It is bound whatever `$value`
-// is, an invalid e's included, but for the e below: `.` is E's string value
-// whatever its [validity]. A ·nilled· e and one whose {content type} is not
-// simple bind the zero [xpath.ValueBinding] — the zero-length string, which is
-// a ·nilled· e's string value (xpath-datamodel §6.2.4), and a string value no
-// {test} compiled for content that is not simple reads, `.` declining there
-// ([xpath.CompileAssertionTest]).
+// empty e, unnormalized. It is bound whatever `$value` is, an invalid e's
+// included, but for the e below: `.` is E's string value whatever its
+// [validity]. An e whose {content type} is not simple binds the zero
+// [xpath.ValueBinding], a string value no {test} compiled for that content
+// reads, `.` declining there ([xpath.CompileAssertionTest]).
+//
+// GAP(xpath): E's string value under simple content is a processor's choice
+// the data model leaves open, and this walk makes one reading of it.
+// xpath-datamodel Appendix J.2's children rule builds a Text Node from the
+// character [[children]], and also says a processor "may" build instead one
+// Text Node from the [schema normalized value]; §6.2.4's string-value gives an
+// EMPTY element the zero-length string. This walk binds the raw ·initial value·
+// for an e with character [[children]], J.2's first reading, which the
+// xs:anyType annotation of the partial ·PSVI· points at, and the {value
+// constraint}'s {lexical form} for a defaulted e with none — the [schema
+// normalized value] cvc-elt clause 5.1 supplies, J.2's "may" — and not the
+// zero-length string §6.2.4 gives an empty element. The direction is
+// unestablished: a {test} reading `.` can be charged or satisfied under either
+// reading.
+//
+// A ·nilled· e binds the zero [xpath.ValueBinding] where it has no [[children]]
+// ([contentCheck.empty]): the zero-length string, an empty element's string
+// value (xpath-datamodel §6.2.4), and the empty `$value` of clause 2.3.1.2.
+// dm:nilled is false in the partial ·PSVI· — [validity] is never valid there —
+// so a ·nilled· e WITH [[children]], which cvc-elt clause 3.2.3.1 charged as
+// the first arrived, has the text of its descendants as its string value, and
+// this walk gathers none of it ([contentCheck.gathers]). Its assertions are
+// declined ([lackingNilledText]) on the terms [walk.elementAssertions] states,
+// a {test} reading only `$value` among them, since the lack is kept per element
+// and not per {test}.
 //
 // An e under simple content that has element [[children]] — which
 // cvc-complex-type clause 1.2 charged as the first arrived, so invalid is true
@@ -1070,7 +1102,13 @@ func (w *walk) assertionTyped(u xsd.AttributeUse, lexical string, ctx value.Cont
 // they give turns a valid document invalid or an invalid one valid.
 func (w *walk) assertionValue(e Element, ct xsd.ComplexType, content *contentCheck, invalid bool) (xpath.ValueBinding, assertionLack) {
 	simple, isSimple := ct.ContentType().(xsd.SimpleContent)
-	if !isSimple || content.nilled {
+	if !isSimple {
+		return xpath.ValueBinding{}, nil
+	}
+	if content.nilled && !content.empty() {
+		return xpath.ValueBinding{}, lackingNilledText{}
+	}
+	if content.nilled {
 		return xpath.ValueBinding{}, nil
 	}
 	if content.sawElement {

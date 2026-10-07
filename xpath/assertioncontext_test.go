@@ -69,16 +69,16 @@ func TestAssertionContextItemIsTheStringValue(t *testing.T) {
 
 // `.` reads the binding's string value whatever `$value` is: an invalid E,
 // whose `$value` is the empty sequence (cvc-assertion clause 2.3.2), still has
-// its string value, so `. = 5` holds where `$value = 5` fails; a ·nilled· E,
-// the zero ValueBinding, has the zero-length string, which is one item and
-// never the empty sequence (xpath-datamodel §6.2.4), so `.` equals the
-// zero-length string literal and `$value`'s general comparison against it,
-// over no item, fails. Over a list `.` is one item, the whole string "1 2",
-// where `$value` is two; over a union, whose `$value` declines, `.` compiles
-// and reads the string. With ctaContextAtomItem reading `$value`'s binding
-// instead, `. = 5` and `not(. = 5)` over the invalid E, `.` against the
-// zero-length string over the ·nilled· one, the list's `. = '1 2'` and
-// string-length rows and the union row fail.
+// its string value, so `. = 5` holds where `$value = 5` fails; a ·nilled· E
+// with no [[children]], the zero ValueBinding, has the zero-length string,
+// which is one item and never the empty sequence (xpath-datamodel §6.2.4), so
+// `.` equals the zero-length string literal and `$value`'s general comparison
+// against it, over no item, fails. Over a list `.` is one item, the whole
+// string "1 2", where `$value` is two; over a union, whose `$value` declines,
+// `.` compiles and reads the string. With ctaContextAtomItem reading
+// `$value`'s binding instead, `. = 5` and `not(. = 5)` over the invalid E, `.`
+// against the zero-length string over the ·nilled· one, the list's `. = '1 2'`
+// and string-length rows and the union row fail.
 func TestAssertionContextItemOverEveryBinding(t *testing.T) {
 	integer := asBuiltin(t, "integer")
 	for _, tc := range []struct {

@@ -207,14 +207,17 @@ type TypedAttributes func(yield func(name xsd.QName, v TypedValue) bool)
 // with mixed content, whose typed value is its string value as xs:untypedAtomic
 // (xpath20.md §2.5.2) — "its atomized value will be a single atomic value of
 // type untypedAtomic", as clause 2.3.1's Note says, whatever the {simple type
-// definition}'s variety. It has no absent state: a ·nilled· or empty E's string
-// value is the zero-length string (xpath-datamodel §6.2.4), which is
-// xs:untypedAtomic "" and never the empty sequence.
+// definition}'s variety. It has no absent state: an empty E's string value is
+// the zero-length string (xpath-datamodel §6.2.4), which is xs:untypedAtomic ""
+// and never the empty sequence. A ·nilled· E is no exception either way:
+// dm:nilled is false in the partial ·PSVI·, whose [validity] is never valid, so
+// a ·nilled· E with [[children]] has their text as its string value, not "".
 //
 // A nil `$value` is clause 2.3.2's empty sequence — for an E that is invalid
 // in the partial ·PSVI·, ·nilled·, or under a {content type} that is not
-// simple. The zero ValueBinding is BindValue("", nil), what a ·nilled· E binds;
-// an invalid E binds its string value beside a nil `$value`.
+// simple. The zero ValueBinding is BindValue("", nil), what a ·nilled· E with
+// no [[children]] binds; an invalid E binds its string value beside a nil
+// `$value`.
 //
 // It has no third state for an E whose value is UNDECIDED: [AssertionTest.Evaluate]
 // always decides, so a caller that cannot tell which of clause 2.3's cases E is
@@ -235,10 +238,13 @@ type ValueBinding struct {
 // document order — its ·initial value· — or, where cvc-elt clause 5.1
 // supplied a default because E has neither element nor character
 // [[children]], the {value constraint}'s {lexical form}, the one text node
-// the data model builds for a defaulted element. It is never re-normalized
-// under the {simple type definition}'s whiteSpace: `.` over xs:integer content
-// "0030" is "0030", where `$value` is 30. An invalid E has a string value all
-// the same, so text is bound where v is nil.
+// J.2's "may" lets the data model build from the [schema normalized value] of
+// a defaulted element. Each is a processor's choice J.2 leaves open, and
+// validate's caller makes it (the GAP(xpath) at its cvc-assertion site,
+// validate/cvcassertion.go). It is never re-normalized under the {simple type
+// definition}'s whiteSpace: `.` over xs:integer content "0030" is "0030",
+// where `$value` is 30. An invalid E has a string value all the same, so text
+// is bound where v is nil.
 //
 // v is the typed value of E's [schema actual value] (cvc-assertion clause
 // 2.3.1), whose arm and type the {simple type definition} of the
