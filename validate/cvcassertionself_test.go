@@ -1,6 +1,7 @@
 package validate
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/kud360/goxsd8/xsd"
@@ -13,7 +14,7 @@ import (
 // §6.2.4). RootType's children are any number of d of xs:date, as in the
 // suite's assert016; an n of xs:int; an eo of the element-only type EO,
 // holding one d; an m of xs:anyType; a dflt of xs:string defaulting to "x";
-// and a skip wildcard over other namespaces.
+// a nillable nl of xs:string; and a skip wildcard over other namespaces.
 
 // selfSchema builds the schema whose RootType asserts test.
 func selfSchema(t *testing.T, test string) *xsd.Schema {
@@ -29,6 +30,7 @@ func selfSchema(t *testing.T, test string) *xsd.Schema {
       <xs:element name="eo" type="EO" minOccurs="0"/>
       <xs:element name="m" minOccurs="0"/>
       <xs:element name="dflt" type="xs:string" default="x" minOccurs="0"/>
+      <xs:element name="nl" type="xs:string" nillable="true" minOccurs="0"/>
       <xs:any namespace="##other" processContents="skip" minOccurs="0"/>
     </xs:sequence>
     <xs:assert test="` + test + `"/>
@@ -99,14 +101,17 @@ func TestAssertionReadsElementOnlyStringValue(t *testing.T) {
 // (collectEnd, descendantRun); and a dflt that took its {value constraint}
 // default, which J.2 makes a Text Node the raw characters do not hold. A
 // ·nilled· E with [[children]] has their text as its string value, which the
-// walk does not gather (lackingNilledText). Each row is evaluated instead with
-// its decline removed, and fails. The guard: a {test} that does not read `.`
-// is evaluated over the ·skipped· descendant all the same — `count(d) = 0`,
-// and `empty($value)`, which reads `$value` alone, the empty sequence under
-// element-only content (cvc-assertion clause 2.3.2). Both are declined with
-// assertionCheck.readsContextItem answering true for every compiled {test},
-// and the `$value` row alone with ctaAssertionFacade.variable recording a
-// read of `.` for `$value`.
+// walk does not gather (lackingNilledText). A run that is not white space alone
+// in an element-only eo, and any run in a ·nilled· nl, is a Text Node of E's
+// subtree the walk does not read into the string-value (collectText,
+// descendantRun). Each row is evaluated instead with its decline removed, and
+// fails: the last two are satisfied, their run dropped. The guard: a {test}
+// that does not read `.` is evaluated over the ·skipped· descendant all the
+// same — `count(d) = 0`, and `empty($value)`, which reads `$value` alone, the
+// empty sequence under element-only content (cvc-assertion clause 2.3.2). Both
+// are declined with assertionCheck.readsContextItem answering true for every
+// compiled {test}, and the `$value` row alone with ctaAssertionFacade.variable
+// recording a read of `.` for `$value`.
 func TestAssertionOverAnUndecidedOwnStringValueIsDeclined(t *testing.T) {
 	skipped := ElementChild(&testElement{name: xsd.QName{Space: "urn:other", Local: "z"}, loc: loc(3, 3),
 		kids: []Child{mxText("y", 3)}})
@@ -127,6 +132,11 @@ func TestAssertionOverAnUndecidedOwnStringValueIsDeclined(t *testing.T) {
 		{"a nilled E with children", ". = ''", &testElement{name: local("root"), attrs: []Attribute{mxNil}, loc: loc(1, 1),
 			kids: []Child{mxEl("d", 2, nil, mxText("2008-07-01", 2))}},
 			"the element root has xsi:nil = true and [[children]]"},
+		{"an element-only descendant's text", ". = '2008-07-01'",
+			acRoot(mxEl("eo", 2, nil, mxText("X", 2), mxEl("d", 3, nil, mxText("2008-07-01", 3)))),
+			own + "a character run at instance.xml:2:9 below it is not white space alone in an element of element-only or empty content"},
+		{"a nilled descendant's text", ". = ''", acRoot(mxEl("nl", 2, []Attribute{mxNil}, mxText("X", 2))),
+			own + "a character run at instance.xml:2:9 below it is in a ·nilled· element"},
 	} {
 		t.Run(tc.why, func(t *testing.T) {
 			acDeclined(t, aAssess(t, selfSchema(t, tc.test), tc.root), tc.want)
@@ -134,5 +144,42 @@ func TestAssertionOverAnUndecidedOwnStringValueIsDeclined(t *testing.T) {
 	}
 	for _, test := range []string{"count(d) = 0", "empty($value)"} {
 		wantSatisfied(t, aAssess(t, selfSchema(t, test), acRoot(skipped)), test+" over a skipped descendant")
+	}
+}
+
+// A ·nilled· E of element-only content with [[children]], which cvc-elt clause
+// 3.2.3.1 charges, has their text as its string value, which the walk does not
+// gather; a {test} that does not read `.` is EVALUATED over it all the same,
+// `$value` being the empty sequence under element-only content (cvc-assertion
+// clause 2.3.2): `count(d) = 1` holds and `count(d) = 0` is charged. With
+// walk.assertionValue declining every ·nilled· E with [[children]] whatever
+// its {test}s read, both are declined instead.
+func TestAssertionOverANilledElementNotReadingItsStringValue(t *testing.T) {
+	for _, tc := range []struct {
+		test    string
+		charged bool
+	}{{"count(d) = 1", false}, {"count(d) = 0", true}} {
+		root := &testElement{name: local("root"), attrs: []Attribute{mxNil}, loc: loc(1, 1),
+			kids: []Child{mxEl("d", 2, nil, mxText("2008-07-01", 2))}}
+		res := aAssess(t, selfSchema(t, tc.test), root)
+		if got := res.Unevaluated(); len(got) != 0 {
+			t.Errorf("%s: Unevaluated() = %v, want none: a {test} not reading `.` is evaluated", tc.test, messages(got))
+			continue
+		}
+		var charges []string
+		for _, v := range res.Violations() {
+			if v.Rule == ruleCvcAssertion {
+				charges = append(charges, v.Msg)
+			}
+		}
+		if !tc.charged {
+			if len(charges) != 0 {
+				t.Errorf("%s: cvc-assertion charges = %q, want none", tc.test, charges)
+			}
+			continue
+		}
+		if len(charges) != 1 || !strings.HasPrefix(charges[0], selfCharged+`"`+tc.test+`",`) {
+			t.Errorf("%s: cvc-assertion charges = %q, want one opening %q", tc.test, charges, selfCharged)
+		}
 	}
 }

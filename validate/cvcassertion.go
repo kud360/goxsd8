@@ -96,16 +96,17 @@ const ruleCvcAssertionsValid xsderr.Rule = "cvc-assertions-valid"
 // ([stringValueFrame.lacking]) — whose `$value` is undecided
 // ([walk.assertionValues]), whose own string value, which `.` reads, spans
 // such a descendant, or was not gathered because e has simple content and
-// element [[children]], or is ·nilled· and has [[children]]
-// ([walk.assertionValue]), or one of whose {test}s counts the attribute nodes
-// of, or filters children by the attribute names of, an element of its subtree
-// whose ·governing type definition· this package could not determine, so that
-// its ·defaulted attributes· are unknown ([walk.tallyElement]); a ·skipped·
-// subtree is counted, by name ([assertionAncestry.tallySkipped]). Fail-open:
-// the withheld value is clause 6's own verdict, whose whole consumer set inside
-// this package is w.res.violations and its one reader [Result.Violations],
-// which charge on a violation PRESENT, so a decline can only cost a rejection
-// and can manufacture none. (#1042)
+// element [[children]], or is ·nilled· and has [[children]] and simple content
+// or a {test} reading `.` ([walk.assertionValue]), or one of whose {test}s
+// counts the attribute nodes of, or filters children by the attribute names of,
+// an element of its subtree whose ·governing type definition· this package
+// could not determine, so that its ·defaulted attributes· are unknown
+// ([walk.tallyElement]); a ·skipped· subtree is counted, by name
+// ([assertionAncestry.tallySkipped]). Fail-open: the withheld value is clause
+// 6's own verdict, whose whole consumer set inside this package is
+// w.res.violations and its one reader [Result.Violations], which charge on a
+// violation PRESENT, so a decline can only cost a rejection and can manufacture
+// none. (#1042)
 func (w *walk) elementAssertions(e Element, asserts *assertionCheck, content *contentCheck, own *stringValueFrame, invalid bool) {
 	if asserts == nil {
 		return
@@ -401,9 +402,10 @@ func mixedContent(td xsd.TypeDefinition) bool {
 // collectElement settles what e, an element whose ancestry is up, governed by g
 // and ·nilled· where nilled is true, contributes to the string-value of every
 // open frame enclosing it, before its own [[children]] arrive: a ·nilled· one
-// contributes nothing and has no Text Node (xpath-datamodel §6.2.4), and every
-// other one contributes its text runs as [assertionAncestry.collectText] reads
-// them off, and what [collectEnd] settles once they are exhausted.
+// contributes nothing of its own, whatever its type, and a run among its
+// [[children]] declines every such frame ([assertionAncestry.collectText]);
+// every other one contributes its text runs as collectText reads them off, and
+// what [collectEnd] settles once they are exhausted.
 //
 // GAP(xpath): an element whose ·governing type definition· this package could
 // not determine declines the reader of every frame enclosing it: it may have
@@ -427,22 +429,31 @@ func (up assertionAncestry) collectElement(e Element, g governance, nilled bool)
 // xpath-datamodel §6.7.4 builds from it under that element's governance
 // (descendantRun): under mixed content, or ·laxly assessed· and so annotated
 // xs:anyType, the raw run; under simple content the raw run as well, which
-// [collectEnd] declines where it is not the [schema normalized value]; under
-// element-only or empty content nothing — a run that is white space alone is
-// no Text Node there, and any other run is a violation recorded at that
-// element, which declines its reader in [walk.childValue] — and under a
-// ·nilled· element nothing, its run a violation too.
+// [collectEnd] declines where it is not the [schema normalized value]; and
+// under element-only or empty content nothing for a run that is white space
+// alone, which is no Text Node there.
 //
-// GAP(xpath): a run that is white space alone under simple content declines
-// the reader of every frame, being no Text Node where the data model reads the
-// raw characters and part of one where it reads the [schema normalized value]
-// (xpath-datamodel Appendix J.2, "may"); so does a run of an element whose
-// ·governing type definition· this package could not determine, on
-// [assertionAncestry.collectElement]'s terms. The direction is the withhold:
-// the assertion is recorded as unevaluated, never charged and never shown
-// satisfied. (#1042)
+// GAP(xpath): a run whose Text Node a frame would not hold whole declines the
+// reader of every frame instead. A run that is white space alone under simple
+// content is no Text Node where the data model reads the raw characters and
+// part of one where it reads the [schema normalized value] (xpath-datamodel
+// Appendix J.2, "may"). Any other run under element-only or empty content is a
+// Text Node of its own (§6.7.4) that cvc-complex-type clause 1.1 or 1.3
+// charged; and a run of a ·nilled· element, which cvc-elt clause 3.2.3.1
+// charged, leaves dm:nilled false (§6.2.4), so it stands in the string-value as
+// a Text Node built under that element's {content type}. This walk reads
+// neither into the string-value: a read child's frame spanning one is declined
+// in [walk.childValue] all the same, and an own frame has no such guard. A run
+// of an element whose ·governing type definition· this package could not
+// determine declines too, on [assertionAncestry.collectElement]'s terms. The
+// direction is the withhold: the assertion is recorded as unevaluated, never
+// charged and never shown satisfied. (#1042)
 func (up assertionAncestry) collectText(content *contentCheck, t Text) {
-	if up.collecting == nil || content.nilled || t.Data() == "" {
+	if up.collecting == nil || t.Data() == "" {
+		return
+	}
+	if content.nilled {
+		up.collecting.lacking(fmt.Sprintf("a character run at %s below it is in a ·nilled· element, which cvc-elt clause 3.2.3.1 charged, so its Text Node is not read into the string-value", t.Loc()))
 		return
 	}
 	run, why := descendantRun(content.g, t)
@@ -469,8 +480,11 @@ func descendantRun(g governance, t Text) (run, why string) {
 	if g.laxlyAssessed() || mixedContent(g.typ) {
 		return t.Data(), ""
 	}
-	if g.valueType() == nil {
+	if g.valueType() == nil && isXMLWhitespace(t.Data()) {
 		return "", ""
+	}
+	if g.valueType() == nil {
+		return "", fmt.Sprintf("a character run at %s below it is not white space alone in an element of element-only or empty content, which cvc-complex-type clause 1.1 or 1.3 charged, so its Text Node is not read into the string-value", t.Loc())
 	}
 	if isXMLWhitespace(t.Data()) {
 		return "", fmt.Sprintf("a character run at %s below it is white space alone in an element of simple content, which the data model makes no Text Node of where it reads the raw characters and part of one where it reads the [schema normalized value], so the string-value is undecided", t.Loc())
@@ -1119,7 +1133,7 @@ func (w *walk) assertionValues(e Element, attrs []Attribute, asserts *assertionC
 	if asserts.lack != nil {
 		return assertionInput{}, asserts.lack
 	}
-	bound, lack := w.assertionValue(e, ct, content, own, invalid)
+	bound, lack := w.assertionValue(e, asserts, content, own, invalid)
 	if lack != nil {
 		return assertionInput{}, lack
 	}
@@ -1207,9 +1221,13 @@ func (w *walk) assertionTyped(u xsd.AttributeUse, lexical string, ctx value.Cont
 // so a ·nilled· e WITH [[children]], which cvc-elt clause 3.2.3.1 charged as
 // the first arrived, has the text of its descendants as its string value, and
 // this walk gathers none of it ([contentCheck.gathers]). Its assertions are
-// declined ([lackingNilledText]) on the terms [walk.elementAssertions] states,
-// a {test} reading only `$value` among them, since the lack is kept per element
-// and not per {test}.
+// declined ([lackingNilledText]) on the terms [walk.elementAssertions] states
+// under simple content, a {test} reading only `$value` among them, since the
+// lack is kept per element and not per {test}; and under any other {content
+// type} where some compiled {test} reads `.`
+// ([assertionCheck.readsContextItem]). Where none does, the binding is the zero
+// [xpath.ValueBinding] as for an e that opened no own frame, whose `$value` is
+// clause 2.3.2's empty sequence.
 //
 // An e under simple content that has element [[children]] — which
 // cvc-complex-type clause 1.2 charged as the first arrived, so invalid is true
@@ -1244,14 +1262,14 @@ func (w *walk) assertionTyped(u xsd.AttributeUse, lexical string, ctx value.Cont
 // between invalid and notKnown, and the actual value is bound all the same:
 // were e invalid, e is rejected whatever its assertions answer, so no answer
 // they give turns a valid document invalid or an invalid one valid.
-func (w *walk) assertionValue(e Element, ct xsd.ComplexType, content *contentCheck, own *stringValueFrame, invalid bool) (xpath.ValueBinding, assertionLack) {
-	if content.nilled && !content.empty() {
+func (w *walk) assertionValue(e Element, asserts *assertionCheck, content *contentCheck, own *stringValueFrame, invalid bool) (xpath.ValueBinding, assertionLack) {
+	simple, isSimple := asserts.ct.ContentType().(xsd.SimpleContent)
+	if content.nilled && !content.empty() && (isSimple || asserts.readsContextItem()) {
 		return xpath.ValueBinding{}, lackingNilledText{}
 	}
 	if content.nilled {
 		return xpath.ValueBinding{}, nil
 	}
-	simple, isSimple := ct.ContentType().(xsd.SimpleContent)
 	if !isSimple && own == nil {
 		return xpath.ValueBinding{}, nil
 	}
