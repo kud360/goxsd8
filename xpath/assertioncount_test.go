@@ -513,7 +513,8 @@ func TestAssertionUnionCounters(t *testing.T) {
 // step: every other one declines, and so does a union operand that is rooted
 // or a path of two steps, and a predicate or a union outside fn:count. A
 // numeric predicate is positional, which an order-free Tally cannot decide,
-// and position() and last() are not in the library (guard).
+// and position() and last() decline in a predicate, whose façade calls no
+// library function (guard).
 func TestCompileAssertionTestDeclinesPredicatesAndUnions(t *testing.T) {
 	for _, tc := range []struct{ expr, why string }{
 		{"count(c[@a or @b]) = 1", "a disjunction"},

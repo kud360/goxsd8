@@ -544,7 +544,9 @@ type AssertionTest struct {
 //     attribute atomized or beside `.`, any other node, `$value`, fn:count and
 //     every other function call decline — and a predicate whose root is a bare
 //     value, `N[1]`, `N[1 + 0]` or `N[.]`, which a numeric value would make
-//     positional (§3.2.2); position() and last() are no library function here;
+//     positional (§3.2.2); position() and last() decline here, the predicate
+//     calling no library function (ctaPredicateFacade.callsLibrary), and
+//     outside a predicate too (ctaAssertionFacade.focus);
 //   - a predicate over a child whose type elems answers is not one a child
 //     read for its value is admitted under as a TYPED value, on that bullet's
 //     terms — so a predicate over a mixed child, `count(body[. = 'x'])`,
@@ -945,6 +947,7 @@ func (ctaValueVar) readsChild(xsd.QName) bool       { return false }
 func (ctaEmptyValue) readsChild(xsd.QName) bool     { return false }
 func (ctaUntypedValue) readsChild(xsd.QName) bool   { return false }
 func (ctaCurrentDate) readsChild(xsd.QName) bool    { return false }
+func (ctaNoFocus) readsChild(xsd.QName) bool        { return false }
 func (ctaContextAtom) readsChild(xsd.QName) bool    { return false }
 
 // readsChild reports whether the call's argument reads the value of a child
@@ -1096,6 +1099,7 @@ func (ctaEmptyValue) counted(into []ctaTallied) []ctaTallied     { return into }
 func (ctaUntypedValue) counted(into []ctaTallied) []ctaTallied   { return into }
 func (ctaContextAtom) counted(into []ctaTallied) []ctaTallied    { return into }
 func (ctaCurrentDate) counted(into []ctaTallied) []ctaTallied    { return into }
+func (ctaNoFocus) counted(into []ctaTallied) []ctaTallied        { return into }
 
 // ctaAssertionFacade is the assertion façade compileCTATest parses for: its
 // attribute nodes are typed by attrs, its child element nodes by elems, its
@@ -1340,4 +1344,16 @@ func (f ctaAssertionFacade) contextItem() (ctaValue, bool) {
 	}
 	*f.readsContextItem = true
 	return ctaContextAtom{}, true
+}
+
+// focus declines every call to fn:position and fn:last. The focus is
+// defined — context item E, context position and context size 1 (cvc-xpath
+// clauses 1–3) — so each call has an answer, and it neither raises
+// err:XPDY0002 nor reads E's value, which contextItem's ctaContextAtom is.
+//
+// GAP(xpath): `position()` and `last()` outside a predicate decline rather
+// than evaluating to 1. The direction is the withhold [CompileAssertionTest]
+// reports. (#1042)
+func (ctaAssertionFacade) focus(*xsd.SimpleType) (ctaValue, bool) {
+	return nil, false
 }

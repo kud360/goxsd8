@@ -96,7 +96,8 @@
 //     value.AssertionEvaluator for an assertions facet's {test} (Datatypes §4.3.13.3, cvc-assertions-valid), over the same grammar: `$value`
 //     is bound to the value under the facet's type, or under its ·active basic member· where that type is a union (dt-xdmrep clause 4), and
 //     there is no context item, so `.`, an attribute or child step, an element step, a child path, a rooted path and a zero-argument string
-//     function each raise err:XPDY0002 and fail the facet, and so do `castable as` and fn:data under `instance of` over one of them; an
+//     function each raise err:XPDY0002 and fail the facet, and so do `castable as` and fn:data under `instance of` over one of them, and
+//     fn:position and fn:last, there being no context position or size either (clause 1.3), which every other façade declines; an
 //     fn:count call over a path declines. A Type Alternative's {test} declines `.` everywhere. Longer paths in other positions, the other
 //     axes, predicates in other positions or of other shapes, positional ones among them, unions outside fn:count, quantified expressions, a
 //     conditional read as an item rather than for its ·effective boolean value·, `castable as` over other operands, `instance of` beyond an
