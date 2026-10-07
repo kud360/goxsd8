@@ -32,7 +32,8 @@ import (
 // (castableTail), [16] InstanceofExpr's `instance of` tail with an atomic
 // SequenceType, over an fn:data call among others (instanceofExpr), and, as a
 // general comparison's operand, an integer sequence, [11] RangeExpr or
-// §3.3.1's comma sequence over IntegerLiterals (integerSequence,
+// §3.3.1's comma sequence over IntegerLiterals (integerSequence), or a string
+// sequence, §3.3.1's comma sequence over StringLiterals (stringSequence;
 // ctasequence.go) — each behind the façade (ctaFacade.comparesValues,
 // ctaFacade.variable, ctaFacade.child, ctaFacade.childPath, ctaFacade.elements,
 // ctaFacade.rooted, ctaFacade.count, ctaFacade.callsLibrary,
@@ -49,9 +50,10 @@ import (
 // operand or AtomicType, a library call of an arity its function does not have,
 // a predicate or a union operand outside the shapes predicate, valuePredicate
 // and ctaUnionOf admit, `.` or another node standing as a node (booleanExpr,
-// presenceCall, instanceofExpr), an integer sequence integerSequence does not
-// build, or the façade declining a NameTest, a variable's type or a settled
-// comparison type, which the production that asked propagates unchanged.
+// presenceCall, instanceofExpr), a sequence sequenceLength does not measure or
+// integerSequence does not build, or the façade declining a NameTest, a
+// variable's type or a settled comparison type, which the production that asked
+// propagates unchanged.
 
 // ctaFunctionNS is the default function namespace of a {test}'s static context
 // (xpath-valid clause 2.2.4, §3.13.6.2), which an unprefixed [12]
@@ -297,8 +299,8 @@ const (
 	ctaMinusTok
 	// ctaCommaTok is ',', which separates the arguments of a call to one of the
 	// F&O functions the façade admits (ctaParser.arguments) and the members of
-	// an integer sequence (ctaParser.integerSequence), and is read nowhere else,
-	// so a comma in any other position is a token no production takes.
+	// an integer or string sequence (ctaParser.sequence), and is read nowhere
+	// else, so a comma in any other position is a token no production takes.
 	ctaCommaTok
 	// ctaLBracketTok is '[' and ctaRBracketTok is ']', which open and close
 	// xpath20.md [40] Predicate, read only after a child step of an fn:count
@@ -769,7 +771,7 @@ func (p *ctaParser) andExpr() (ctaExpr, bool) {
 // declines, and so does a `.` before a '/' or '//'; one step is childStep's,
 // whose value is read.
 //
-// A left operand that is an integer sequence (integerSequenceLength) is read
+// A left operand that is an integer or string sequence (sequenceLength) is read
 // as one where a general comparator follows it, ahead of the `(` arm, which
 // would read its parenthesis as a boolean one.
 //
@@ -778,8 +780,8 @@ func (p *ctaParser) andExpr() (ctaExpr, bool) {
 // rule 2's (xpath20.md §2.4.3), and never that of the atom ctaContextAtom
 // reads. The direction is the withhold [CompileAssertionTest] reports. (#1042)
 func (p *ctaParser) booleanExpr() (ctaExpr, bool) {
-	if n := p.integerSequenceLength(0); n > 0 && p.peek(n).kind == ctaCompTok {
-		left, ok := p.integerSequence(n)
+	if n := p.sequenceLength(0); n > 0 && p.peek(n).kind == ctaCompTok {
+		left, ok := p.sequence(n)
 		if !ok {
 			return nil, false
 		}
@@ -837,7 +839,7 @@ func (p *ctaParser) booleanExpr() (ctaExpr, bool) {
 
 // generalComparison parses the right operand of a general comparison
 // (xpath20.md §3.5.2) whose left operand and operator are already read —
-// an integer sequence or an additiveExpr (generalOperand) — and builds its
+// an integer or string sequence or an additiveExpr (generalOperand) — and builds its
 // node, typed by ctaTypes.comparison: a type it cannot be compared in is the
 // err:XPTY0004 ctaTypeError, and a declined one declines.
 func (p *ctaParser) generalComparison(op ctaComparator, left ctaValue) (ctaExpr, bool) {

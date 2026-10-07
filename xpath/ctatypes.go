@@ -918,7 +918,7 @@ func ctaIsEmpty(v ctaValue) bool {
 // over ·special· content, a child of mixed content, `.` over simple content,
 // or the rooted path, which raises before it is compared) or typed (a Literal,
 // a cast, a constructor function, a typed attribute, a typed child element, a
-// typed `$value`, an integer sequence):
+// typed `$value`, an integer or string sequence):
 //
 //   - BOTH xs:untypedAtomic: clause 1, "the values are cast to the type
 //     xs:string".

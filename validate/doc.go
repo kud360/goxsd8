@@ -399,25 +399,25 @@
 // element whose ·governing type definition· is a complex type with
 // {assertions}, once its [[children]] are exhausted: each member whose {test}
 // xpath compiles when the element is entered — the §3.12.6 grammar plus the
-// value comparisons, `$value`, `.` over simple content, an integer sequence as
-// a general comparison's operand, a one-step child-axis path, a "/"-rooted one,
-// arithmetic, the F&O string and sequence functions xpath.CompileAssertionTest
-// lists, fn:count over a one-step child, descendant or attribute path or over
-// `$value`, and fn:exists, fn:empty or the ·effective boolean value· of a
-// child path `a/b` or of one child or descendant step, `a` or `.//a`, whatever
-// a's type, over the element's attributes, carried or ·defaulted·, read TYPED
-// by their {attribute uses}' types (as xs:untypedAtomic where that type is
-// ·special·), the element [[children]] a {test} names, read TYPED by their
-// ·locally declared types· once each child's own assessment is over — as the
-// string-value of the child's subtree, xs:untypedAtomic, where that type has
-// mixed content (xpath-datamodel §6.2.4) — the counts of the nodes of its
-// subtree, reported to each counting {test}'s xpath.Tally as the walk passes
-// them, each element by its chain of names below the counting element, a
-// ·skipped· subtree's by name alone, and its simple content's string value and
-// ·actual value· — is evaluated over those values and charged where it is false
-// or raises a dynamic or type error. A member xpath declines, and every member
-// of an element one of whose use-matched or ·defaulted· attributes has no
-// ·actual value·, one of whose read children is not known ·valid· or not
+// value comparisons, `$value`, `.` over simple content, an integer or string
+// sequence as a general comparison's operand, a one-step child-axis path, a
+// "/"-rooted one, arithmetic, the F&O string and sequence functions
+// xpath.CompileAssertionTest lists, fn:count over a one-step child, descendant
+// or attribute path or over `$value`, and fn:exists, fn:empty or the ·effective
+// boolean value· of a child path `a/b` or of one child or descendant step, `a`
+// or `.//a`, whatever a's type, over the element's attributes, carried or
+// ·defaulted·, read TYPED by their {attribute uses}' types (as xs:untypedAtomic
+// where that type is ·special·), the element [[children]] a {test} names, read
+// TYPED by their ·locally declared types· once each child's own assessment is
+// over — as the string-value of the child's subtree, xs:untypedAtomic, where
+// that type has mixed content (xpath-datamodel §6.2.4) — the counts of the
+// nodes of its subtree, reported to each counting {test}'s xpath.Tally as the
+// walk passes them, each element by its chain of names below the counting
+// element, a ·skipped· subtree's by name alone, and its simple content's string
+// value and ·actual value· — is evaluated over those values and charged where
+// it is false or raises a dynamic or type error. A member xpath declines, and
+// every member of an element one of whose use-matched or ·defaulted· attributes
+// has no ·actual value·, one of whose read children is not known ·valid· or not
 // ·validly substitutable· for its ·locally declared type·, or, read for its
 // string-value, has no mixed content of its own or spans a ·skipped· element,
 // one of simple content or of a type not determined, or a mixed one that took
