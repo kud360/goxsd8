@@ -57,7 +57,7 @@ import (
 // position; §3.8's [7] IfExpr wherever an ExprSingle stands whole in a boolean
 // position (ctaFacade.conditional); [47] ContextItemExpr `.` over simple
 // content, as E's string value (ctaAssertionFacade.contextItem); and, as a
-// general comparison's operand, §3.3.1's integer sequences
+// general comparison's operand, §3.3.1's integer and string sequences
 // (ctaFacade.constructsSequences).
 
 // AttributeTypes answers, for the element information item E whose assertions
@@ -473,7 +473,10 @@ type AssertionTest struct{ root ctaExpr }
 // xs:date` over an xs:date `$value`, while an error evaluating its operand raises; and,
 // as an operand of a general comparison, an integer sequence: [11] RangeExpr `I to J`
 // over two IntegerLiterals, bare or parenthesized, or a parenthesized comma sequence of
-// IntegerLiterals and such ranges, `(1 to 10, 20, 30)` (§3.3.1) — added, and every
+// IntegerLiterals and such ranges, `(1 to 10, 20, 30)` (§3.3.1), or a string sequence,
+// a parenthesized comma sequence of StringLiterals, `('a', 'b')`, whose items are
+// xs:string, so against a typed operand B.2 does not compare with xs:string, an
+// xs:integer `$value` among them, the comparison is err:XPTY0004 — added, and every
 // decline [CompileCTATest] states is this one's too, under the same static context
 // (xpath-valid clause 2.2) augmented with `$value` (cvc-assertion clause 2.2), plus
 // these, each of which is the same withhold:
@@ -577,11 +580,13 @@ type AssertionTest struct{ root ctaExpr }
 //     is a node and not the atom it is read as elsewhere — so `.`, `not(.)`,
 //     `exists(.)` and `count(.)` decline — and fn:string-length,
 //     fn:normalize-space and fn:string with no argument wherever `.` declines;
-//   - an integer sequence anywhere but as a general comparison's operand —
-//     `. eq (1 to 3)`, `(1 to 3) + 1` — a range operand that is not an
-//     IntegerLiteral, `1 to .`, a member that is neither, a nested or empty
-//     parenthesis, an IntegerLiteral beyond int64, and a sequence of more than
-//     ctaMaxSequenceLength items;
+//   - an integer or string sequence anywhere but as a general comparison's
+//     operand — `. eq (1 to 3)`, `(1 to 3) + 1`, `exists(('a', 'b'))` — a
+//     range operand that is not an IntegerLiteral, `1 to .`, a member that is
+//     none of an IntegerLiteral, such a range and a StringLiteral, a sequence
+//     mixing StringLiterals with the other two, `('a', 1)`, a nested or empty
+//     parenthesis, a misplaced comma, `('a',)`, an IntegerLiteral beyond
+//     int64, and a sequence of more than ctaMaxSequenceLength items;
 //   - fn:string over a typed attribute, a typed child, an fn:count call, an
 //     arithmetic result, `$value`, a function result or a cast of one of them
 //     outside the xs:string family and the xs:date, xs:dateTime and xs:time
@@ -664,11 +669,11 @@ type AssertionTest struct{ root ctaExpr }
 // predicate over a mixed child, arithmetic outside the numeric operands and
 // the binary operators, conditionals whose value is read as an item rather
 // than for its ·effective boolean value·, `.` where E's string value is not an
-// input or `.` is a node, sequence expressions beyond the integer sequences of
-// a general comparison's operand, `castable as` over any operand but a [16]
-// ta-SimpleValue or inside a value predicate, `instance of` beyond an atomic
-// SequenceType over the operands above, the collation argument, and every F&O
-// function but fn:count and those listed above among them. The
+// input or `.` is a node, sequence expressions beyond the integer and string
+// sequences of a general comparison's operand, `castable as` over any operand
+// but a [16] ta-SimpleValue or inside a value predicate, `instance of` beyond
+// an atomic SequenceType over the operands above, the collation argument, and
+// every F&O function but fn:count and those listed above among them. The
 // direction is the withhold: the caller records the assertion as unevaluated
 // and neither charges it nor shows it satisfied (PRINCIPLES 20). (#1042)
 //
