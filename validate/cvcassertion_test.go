@@ -470,6 +470,37 @@ func TestContextItemAssertionReadsTheStringValue(t *testing.T) {
 	wantSatisfied(t, aAssess(t, defaulted, cRoot()), ". = '007' over an element defaulted to 007")
 }
 
+// An element under simple content with an element [[child]] — charged under
+// cvc-complex-type clause 1.2 — has a string value the walk never gathers, so
+// its assertions are recorded Unevaluated and never evaluated over the text
+// gathered before the charge: `. = 'ab'` over a<x/>b, whose string value "ab"
+// satisfies it and whose gathered "a" does not, and `. = 'x'` over <x/>, false
+// over either. Both rows are charged under cvc-assertion with
+// walk.assertionValue binding the gathered text in place of declining.
+func TestContextItemAssertionOverElementChildrenDeclines(t *testing.T) {
+	for _, tc := range []struct {
+		test string
+		root *testElement
+	}{
+		{". = 'ab'", cRoot("#a", "x", "#b")},
+		{". = 'x'", cRoot("x")},
+	} {
+		t.Run(tc.test, func(t *testing.T) {
+			res := aAssess(t, aSimple(t, "string", false, nil, tc.test), tc.root)
+			if got := res.Violations(); len(got) != 1 || got[0].Rule != "cvc-complex-type" {
+				t.Fatalf("Violations() = %v, want the cvc-complex-type clause 1.2 charge alone", got)
+			}
+			got := res.Unevaluated()
+			if len(got) != 1 || got[0].Rule() != "cvc-assertion" || got[0].Loc() != loc(1, 1) {
+				t.Fatalf("Unevaluated() = %v, want one cvc-assertion record at %s", messages(got), loc(1, 1))
+			}
+			if want := "the element root has simple content and element [[children]]"; !strings.Contains(got[0].Msg(), want) {
+				t.Errorf("Msg = %q, want it to name %q", got[0].Msg(), want)
+			}
+		})
+	}
+}
+
 // A ·nilled· element binds `$value` to the empty sequence (cvc-assertion clause
 // 2.3.1.2), whatever its type's {content type}. Over xs:string the case is
 // discriminating: the empty ·initial value· a ·nilled· element carries is a
