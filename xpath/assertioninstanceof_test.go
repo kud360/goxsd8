@@ -235,15 +235,17 @@ func TestFacetAssertionsInstanceOf(t *testing.T) {
 // list or xs:anySimpleType (err:XPST0051), a complex type, a user-defined
 // type, a name resolving to nothing. A node operand without fn:data — `@d`,
 // `.`, a child step — declines, and so does an operand whose static type is
-// not its dynamic one, a numeric literal and arithmetic; fn:data anywhere but
-// as the operand of `instance of`, or with two arguments, declines. The
-// fn:data row compiles for a Type Alternative with
+// not its dynamic one, a numeric literal and arithmetic, and a typed child,
+// directly or through fn:distinct-values, against an AtomicType its compiled
+// type does not derive from: an xsi:type can make an xs:int child an
+// xs:short; fn:data anywhere but as the operand of `instance of`, or with two
+// arguments, declines. The fn:data row compiles for a Type Alternative with
 // ctaTypeAlternativeFacade.instanceOf answering true, the value predicate
 // comparing `.` with an `instance of` compiles with
 // ctaPredicateFacade.instanceOf answering true, the three node rows compile
-// without instanceofExpr's node check, the IntegerLiteral row without
-// instanceItem's literal check, and the arithmetic row with instanceItem
-// admitting ctaArith.
+// without instanceofExpr's node check, the three typed-child rows without
+// instanceTail's derived check, the IntegerLiteral row without instanceItem's
+// literal check, and the arithmetic row with instanceItem admitting ctaArith.
 func TestInstanceOfDeclines(t *testing.T) {
 	for _, expr := range []string{"@a instance of xs:string", "not(@a instance of xs:string)", "data(@a) instance of xs:untypedAtomic"} {
 		if _, ok := CompileCTATest(ctaExprRecord(expr, "", "xs", xsd.XMLSchemaNS), seededTypes); ok {
@@ -269,6 +271,9 @@ func TestInstanceOfDeclines(t *testing.T) {
 		"@d instance of xs:date",
 		". instance of xs:untypedAtomic",
 		"e instance of xs:date",
+		"data(n) instance of xs:short",
+		"not(data(n) instance of xs:short)",
+		"distinct-values(n) instance of xs:short",
 		"1 instance of xs:integer",
 		"data(count(e) + count(e)) instance of xs:integer",
 		"data(@d) = xs:date('2008-01-01')",

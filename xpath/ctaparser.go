@@ -1114,7 +1114,7 @@ func (p *ctaParser) dataInstanceOf() (ctaValue, bool) {
 
 // instanceTail parses the `"instance" "of" SequenceType` tail over v, whose
 // `instance` the cursor is on, into its node, reporting false where v's static
-// type is not its items' dynamic type (ctaTypes.instanceItem) or the
+// type does not decide its items' dynamic type (ctaTypes.instanceItem) or the
 // SequenceType declines (sequenceType). An absent indicator, `?`, `*` and `+`
 // are xpath20.md [51] OccurrenceIndicator; xpath20.md A.1.2's
 // occurrence-indicators constraint makes a `*` or `+` after the AtomicType an
@@ -1125,12 +1125,20 @@ func (p *ctaParser) instanceTail(v ctaValue) (ctaValue, bool) {
 		return nil, false
 	}
 	p.advance()
-	item, exact := p.types.instanceItem(v)
-	if !exact {
+	item, derived, decides := p.types.instanceItem(v)
+	if !decides {
 		return nil, false
 	}
 	matches, ok := p.sequenceType(item)
 	if !ok {
+		return nil, false
+	}
+	// GAP(xpath): over a typed child, an AtomicType its compiled type does not
+	// derive from may still match the child's own type annotation, derived
+	// from it by an xsi:type (ctaTypes.instanceItem), so the tail declines
+	// rather than answer false. The direction is the withhold
+	// [CompileAssertionTest] reports. (#1042)
+	if derived && !matches {
 		return nil, false
 	}
 	occurrence := p.occurrenceIndicator()

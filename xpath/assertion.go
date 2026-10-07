@@ -124,9 +124,12 @@ func Child(name xsd.QName, v TypedValue) ChildElement { return ChildElement{name
 // validate maps the child's [schema normalized value] under its OWN
 // ·governing type definition· into that simple type, takes a string-value only
 // where that governing type has mixed content too, and withholds the
-// assertion where the child's own type cannot give the arm the compile read.
-// A value breaking it — the other arm — is a dynamic error wherever the tree
-// reads it, which [AssertionTest.Evaluate] answers false.
+// assertion where the child's own type cannot give the arm the compile read
+// or is neither the compiled type nor validly derived from it — which an
+// `instance of` over the child relies on, matching an AtomicType the compiled
+// type derives from without reading the child's own type. A value breaking it
+// — the other arm — is a dynamic error wherever the tree reads it, which
+// [AssertionTest.Evaluate] answers false.
 //
 // It carries the children whose typed values a compiled step reads and nothing
 // below them: those a value step names, and those an fn:count argument filters
@@ -595,8 +598,12 @@ type AssertionTest struct{ root ctaExpr }
 //     or whose AtomicType is user-defined or no atomic type at all (a list,
 //     xs:anySimpleType, err:XPST0051), one over a node, `@d instance of
 //     xs:date`, or over a numeric literal or an arithmetic result, whose
-//     static type here is not its dynamic one, one inside a value predicate,
-//     and fn:data anywhere but as the operand of `instance of`.
+//     static type here is not its dynamic one, one over a typed child, or
+//     fn:distinct-values over one, whose AtomicType the child's ·locally
+//     declared type· does not derive from — `data(e) instance of xs:token`
+//     over an xs:string e, which an xsi:type can make an xs:token — one
+//     inside a value predicate, and fn:data anywhere but as the operand of
+//     `instance of`.
 //
 // An xs:string? argument — of every function above but fn:empty, fn:exists,
 // fn:distinct-values and fn:string — of any type outside the xs:string and

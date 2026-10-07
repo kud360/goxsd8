@@ -1016,7 +1016,9 @@ type ctaCastable struct {
 // AtomicType matches an atomic value whose actual type is AT if
 // derives-from(AT, AtomicType) is true" (§2.5.4.2) — is settled at compile
 // time from the operand's static type, which the parser admits only where it
-// is every item's dynamic type (ctaTypes.instanceItem), so matches holds that
+// decides every item's match (ctaTypes.instanceItem): it is every item's
+// dynamic type, or, over a typed child, the type every item's dynamic type is
+// or derives from and T is one it derives from too. So matches holds that
 // answer and the evaluation counts the items alone (ctaInstanceOfItem). read is
 // the type the items are read in to be counted: the operand's own type, or
 // xs:string for an xs:untypedAtomic operand, as ctaDistinctValues reads one.

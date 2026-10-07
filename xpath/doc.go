@@ -88,18 +88,20 @@
 //     or over any other operand, or longer than ctaMaxSequenceLength, an arithmetic operand that is not numeric, an xs:float one
 //     against xs:double (#889), a unary sign, a `castable as` whose cast declines, over any operand but a SimpleValue or in a value
 //     predicate, an `instance of` whose SequenceType is a KindTest, `item()`, `empty-sequence()` or a user-defined or non-atomic
-//     type, over a node without fn:data, over a numeric literal or an arithmetic result, or in a value predicate, fn:data anywhere
-//     but as the operand of `instance of`, and a `$value` whose {simple type definition} is classified as such an attribute's type
-//     would be, or is a list of a type that would be; a `$value` over ·special· content is xs:untypedAtomic, as such an attribute
-//     is. FacetAssertions is the value.AssertionEvaluator for an assertions facet's {test} (Datatypes §4.3.13.3,
-//     cvc-assertions-valid), over the same grammar: `$value` is bound to the value under the facet's type, or under its ·active
-//     basic member· where that type is a union (dt-xdmrep clause 4), and there is no context item, so `.`, an attribute or child
-//     step, an element step, a child path, a rooted path and a zero-argument string function each raise err:XPDY0002 and fail the
-//     facet, and so do `castable as` and fn:data under `instance of` over one of them; an fn:count call over a path declines. A Type
-//     Alternative's {test} declines `.` everywhere. Longer paths in other positions, the other axes, predicates in other positions
-//     or of other shapes, positional ones among them, unions outside fn:count, quantified expressions, a conditional read as an item
-//     rather than for its ·effective boolean value·, `castable as` over other operands, `instance of` beyond an atomic SequenceType
-//     over those operands, the collation arguments and every other F&O function are PLANNED (#1042).
+//     type, over a node without fn:data, over a numeric literal or an arithmetic result, over a typed child — fn:distinct-values
+//     over one included — against an atomic type its ·locally declared type· does not derive from, which an xsi:type can make the
+//     child's own type derive from, or in a value predicate, fn:data anywhere but as the operand of `instance of`, and a `$value`
+//     whose {simple type definition} is classified as such an attribute's type would be, or is a list of a type that would be; a
+//     `$value` over ·special· content is xs:untypedAtomic, as such an attribute is. FacetAssertions is the value.AssertionEvaluator
+//     for an assertions facet's {test} (Datatypes §4.3.13.3, cvc-assertions-valid), over the same grammar: `$value` is bound to the
+//     value under the facet's type, or under its ·active basic member· where that type is a union (dt-xdmrep clause 4), and there is
+//     no context item, so `.`, an attribute or child step, an element step, a child path, a rooted path and a zero-argument string
+//     function each raise err:XPDY0002 and fail the facet, and so do `castable as` and fn:data under `instance of` over one of them;
+//     an fn:count call over a path declines. A Type Alternative's {test} declines `.` everywhere. Longer paths in other positions,
+//     the other axes, predicates in other positions or of other shapes, positional ones among them, unions outside fn:count,
+//     quantified expressions, a conditional read as an item rather than for its ·effective boolean value·, `castable as` over other
+//     operands, `instance of` beyond an atomic SequenceType over those operands, the collation arguments and every other F&O
+//     function are PLANNED (#1042).
 //  3. The full grammar (docs/specs/md/xpath20.md) and function library
 //     (docs/specs/md/xpath-functions.md) — M7 onward, ratcheted.
 //     PLANNED.
