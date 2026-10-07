@@ -205,6 +205,104 @@ func (t ctaTypes) castTarget(name xsd.QName) (*xsd.SimpleType, bool) {
 	return st, true
 }
 
+// instanceItem is the static type of v's items (ctaStaticOf) as far as it
+// decides the "actual type" xpath20.md §2.5.4.2 matches an AtomicType
+// against — reporting ok false where it decides nothing, which declines an
+// `instance of` over v ([CompileAssertionTest]'s withhold). It is each item's
+// DYNAMIC type, and derived false, for an untyped read (xs:untypedAtomic: an
+// attribute or `$value` whose type is ·special·, a mixed child, `.`), a typed
+// attribute (its type annotation: no xsi:type reaches an attribute, so its
+// {attribute use}'s type is its own), `$value` (Datatypes dt-xdmrep clause 2
+// makes its dynamic type the ·nearest built-in datatype· T2, and every
+// AtomicType itemMatches admits is builtin, so T2 and the {simple type
+// definition} derive from it alike), a cast (its target), fn:count, an F&O
+// function result and a castable or instance-of expression (each its result
+// type), a StringLiteral, and the statically empty `$value`; and for a read of
+// an absent context item or a rooted path, which raises before any item
+// exists. An fn:distinct-values call answers as its operand does, each item
+// keeping its own type (xpath-functions.md §15.1.6).
+//
+// For a typed child, through fn:distinct-values too, derived is true: each
+// item's dynamic type is item's or derived from it, and need not be item's. A
+// child's annotation is its own ·governing type definition·'s (cvc-assertion
+// clause 1.2 defines E's [[children]]' properties "in the usual way"), which
+// an xsi:type can make a type derived from the ·locally declared type· the
+// step was compiled against, and [ChildElements] carries a child only where
+// its own simple type is that one or validly derived from it. So an
+// AtomicType the compiled type derives from matches every item, and one it
+// does not derive from decides nothing (instanceTail).
+//
+// GAP(xpath): a numeric literal and an arithmetic result decline. An
+// IntegerLiteral is xs:integer (xpath20.md §3.1.1) where ctaTypes.literal
+// types it xs:decimal, and arithmetic's result type is B.2's over those
+// operand types, so `1 instance of xs:integer` would answer false. The
+// direction is the withhold [CompileAssertionTest] reports. (#1042)
+func (t ctaTypes) instanceItem(v ctaValue) (item ctaStatic, derived, ok bool) {
+	switch n := v.(type) {
+	case ctaLiteral:
+		return ctaStaticOf(v), false, n.st == t.str
+	case ctaDistinctValues:
+		return t.instanceItem(n.operand)
+	case ctaTypedChild:
+		return ctaStaticOf(v), true, true
+	case ctaAttr, ctaTypedAttr, ctaUntypedChild, ctaValueVar, ctaUntypedValue, ctaEmptyValue,
+		ctaContextAtom, ctaNoContextItem, ctaNoDocumentRoot, ctaCast, ctaCastable, ctaInstanceOf, ctaCount,
+		ctaMatch, ctaUnaryString, ctaPresence, ctaStringFunction, ctaCurrentDate:
+		return ctaStaticOf(v), false, true
+	}
+	return nil, false, false
+}
+
+// itemMatches reports whether an item whose dynamic type is item matches the
+// AtomicType name (xpath20.md §2.5.4.2): "An AtomicType AtomicType matches an
+// atomic value whose actual type is AT if derives-from(AT, AtomicType) is
+// true", walked up item's {base type definition} chain (ancestor) — so an
+// xs:integer matches xs:decimal, an xs:untypedAtomic matches only
+// xs:untypedAtomic and xs:anyAtomicType, and nothing is cast. admitted is
+// false where name is no builtin atomic type. xs:untypedAtomic, which XPath
+// puts in the in-scope schema types (xpath20.md §2.1.1) and no resolver
+// holds, is one; a name resolving to nothing, to a complex type, a list or
+// xs:anySimpleType — err:XPST0051, the name is not "an atomic type that is in
+// the in-scope schema types" (§2.5.4.2) — or to a user-defined type is not.
+// item is ctaEmptySequence only for an operand with no item to match, whose
+// answer is never read.
+//
+// GAP(xpath): a user-defined AtomicType declines, though it is in the
+// in-scope schema types: `$value` carries its {simple type definition}'s
+// nearest builtin as its dynamic type (dt-xdmrep clause 2) where a typed
+// attribute carries its own type annotation, so the two answer such a name
+// differently, and instanceItem keeps no record of which it read. The
+// XPST0051 arm is folded into the same withhold, as castTarget folds it.
+// (#1042)
+func (t ctaTypes) itemMatches(item ctaStatic, name xsd.QName) (matches, admitted bool) {
+	if name == ctaBuiltin("untypedAtomic") {
+		_, untyped := item.(ctaUntypedAtomic)
+		return untyped, true
+	}
+	if name.Space != xsd.XMLSchemaNS {
+		return false, false
+	}
+	st, declared := t.simple(name)
+	if !declared {
+		return false, false
+	}
+	if _, atomic := t.primitive(st); !atomic && name != ctaBuiltin("anyAtomicType") {
+		return false, false
+	}
+	switch s := item.(type) {
+	case ctaTyped:
+		at, err := t.ancestor(s.st, name)
+		if err != nil {
+			return false, false
+		}
+		return at != nil, true
+	case ctaUntypedAtomic:
+		return name == ctaBuiltin("anyAtomicType"), true
+	default:
+		return false, true
+	}
+}
+
 // castsFrom reports whether this engine casts the operand v to target, a type
 // castTarget admitted, at all. A literal reaches castsFrom under either cast
 // spelling and any target, and literalCastsTo judges it. Of every other
@@ -217,13 +315,13 @@ func (t ctaTypes) castTarget(name xsd.QName) (*xsd.SimpleType, bool) {
 //     (ctaTypedAttr), a child element (ctaTypedChild), `$value` (ctaValueVar,
 //     each item of a listed one), a count of its nodes (ctaCount, xs:integer),
 //     the result of arithmetic (ctaArith, its B.2 result type,
-//     arithmeticResult), of a castable expression (ctaCastable, xs:boolean) or
-//     of an F&O function call (ctaMatch and ctaPresence, xs:boolean;
-//     ctaUnaryString, xs:integer or xs:string; ctaStringFunction, xs:string;
-//     ctaDistinctValues, its typed operand's type, a literal's included;
-//     ctaCurrentDate, xs:date), or a cast of one of them, or of an operand the
-//     second shape names, that is not in the string family (castSource, its
-//     target);
+//     arithmeticResult), of a castable or instance-of expression (ctaCastable,
+//     ctaInstanceOf, xs:boolean) or of an F&O function call (ctaMatch and
+//     ctaPresence, xs:boolean; ctaUnaryString, xs:integer or xs:string;
+//     ctaStringFunction, xs:string; ctaDistinctValues, its typed operand's
+//     type, a literal's included; ctaCurrentDate, xs:date), or a cast of one
+//     of them, or of an operand the second shape names, that is not in the
+//     string family (castSource, its target);
 //   - a cast of any other shape whose target is xs:float or xs:double
 //     (floatingSource): a cast to either over an untyped operand, a
 //     string-family one or a literal other than a DoubleLiteral, as in
@@ -421,6 +519,8 @@ func (t ctaTypes) castSource(v ctaValue) (*xsd.SimpleType, bool) {
 	case ctaPresence:
 		return n.st, true
 	case ctaCastable:
+		return n.st, true
+	case ctaInstanceOf:
 		return n.st, true
 	case ctaStringFunction:
 		return n.cast.target, true

@@ -279,3 +279,50 @@ func TestAssertionCountsChildrenFilteredByValue(t *testing.T) {
 	acDeclined(t, aAssess(t, acSchema(t, "count(e1[. = 'x']) le 2"), acRoot(acKid("e1", 2, "x"), acKid("e1", 3, "x"))),
 		"the child element e1 of the element root at instance.xml:3:3, which a {test} reads, has no typed value for the data model instance cvc-assertion clause 1 builds: it is ·skipped·")
 }
+
+// An `instance of` over a typed child matches the child's OWN type annotation
+// (xpath20.md §2.5.4.2), its ·governing type definition·'s (cvc-assertion
+// clause 1.2: E's [[children]]' properties "are defined in the usual way"),
+// where xpath compiles it against the ·locally declared type·. <e1> is
+// declared xs:string and carries xsi:type xs:token, so `data(e1) instance of
+// xs:string` and `distinct-values(e1) instance of xs:string` hold — an
+// xs:token is an xs:string — while every `instance of xs:token` over it,
+// directly, under fn:not, through fn:distinct-values or fn:data over one,
+// DECLINES: the ·locally declared type· does not decide it. With xpath's
+// instanceTail answering where derived holds and matches does not, or
+// ctaTypes.instanceItem's ctaTypedChild arm reporting derived false, the
+// first, third, fourth and fifth declined rows are charged and the second is
+// satisfied; with its ctaDistinctValues arm dropping derived, the last three
+// are. With the ctaTypedChild arm declining outright, the two xs:string rows
+// decline too.
+func TestAssertionInstanceOfReadsTheChildsOwnType(t *testing.T) {
+	token := xsiTypeAttr("xs:token")
+	for _, tc := range []struct {
+		expr     string
+		declined bool
+	}{
+		{"data(e1) instance of xs:string", false},
+		{"distinct-values(e1) instance of xs:string", false},
+		{"data(e1) instance of xs:token", true},
+		{"not(data(e1) instance of xs:token)", true},
+		{"distinct-values(e1) instance of xs:token", true},
+		{"data(distinct-values(e1)) instance of xs:token", true},
+		{"not(distinct-values(e1) instance of xs:token)", true},
+	} {
+		t.Run(tc.expr, func(t *testing.T) {
+			schema := parsedSchema(t, map[string]string{"main.xsd": `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="RootType">
+    <xs:sequence><xs:element name="e1" type="xs:string"/></xs:sequence>
+    <xs:assert test="` + tc.expr + `"/>
+  </xs:complexType>
+  <xs:element name="root" type="RootType"/>
+</xs:schema>`})
+			res := aAssess(t, schema, acRoot(acKid("e1", 2, "present", token)))
+			if !tc.declined {
+				wantSatisfied(t, res, tc.expr)
+				return
+			}
+			acDeclined(t, res, tc.expr)
+		})
+	}
+}
