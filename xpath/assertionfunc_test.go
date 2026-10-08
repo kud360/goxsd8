@@ -377,9 +377,11 @@ func TestStringFunctionsReadTheirArguments(t *testing.T) {
 // "ax" over s="a" and "x" over an absent @s, an xs:untypedAtomic @w is cast
 // like any other, and `()` is an argument. A constructor function over the
 // call casts its xs:string (§5, §17.1.1), so `xs:date(concat('2008-01-0',
-// '1'))` is that date. Every row declines at CompileAssertionTest, and fails,
-// without libraryCall's concat arm; the constructor row also with
-// constructorFunction parsing simpleValue alone.
+// '1'))` is that date, and one over an fn:count call casts its xs:integer, the
+// identity cast castsFrom's ancestor rule admits. Without libraryCall's concat
+// arm the first row declines at CompileAssertionTest, which stops the test;
+// with constructorFunction parsing simpleValue alone the xs:date row declines,
+// and with that row removed the fn:count one does.
 func TestAssertionConcat(t *testing.T) {
 	a := []asTyped{{uq("s"), "string", "a"}}
 	for _, tc := range []struct {
@@ -398,14 +400,24 @@ func TestAssertionConcat(t *testing.T) {
 			t.Errorf("Evaluate(%q) over %v = %v, want %v", tc.expr, tc.attrs, got, tc.want)
 		}
 	}
+	counted := acCompile(t, asRecord("xs:integer(count(inner)) eq 1"))
+	if !counted.Evaluate(backend(), seededTypes, asElem, asValues(t), asNoChildren, acTally(counted, acEl(1, "inner")), ValueBinding{}, time.Time{}) {
+		t.Error("Evaluate(xs:integer(count(inner)) eq 1) over one inner = false, want true")
+	}
 }
 
 // ctaConcat answers in each switch over the ctaValue sum, its static type
 // xs:string. The static row compares the result with a numeric literal, a
 // B.2 mismatch, err:XPTY0004 — false — where an xs:untypedAtomic reading
 // would cast "1" to the number and hold; the instance row asks its static
-// type; the item row reads its string; the bare row is its ·effective boolean
-// value·; the ReadsChild and Tally rows ask what its arguments read.
+// type; the item row reads its string; the bare rows are its ·effective
+// boolean value·; the ReadsChild and Tally rows ask what its arguments read.
+// With the ctaConcat arm deleted from ctaCarriedType the static and instance
+// rows fail; from ctaTypes.instanceItem the instance row declines; from
+// ctaEffectiveBoolean.eval `concat('a', 'b')` fails; from ctaItemOf the
+// instance, item and `concat('a', 'b')` rows fail; with ctaConcat.readsChild
+// answering false the ReadsChild row fails, and with ctaConcat.counted
+// appending nothing the Tally row does.
 func TestConcatArmsInEverySwitch(t *testing.T) {
 	for _, tc := range []struct {
 		expr string
@@ -436,20 +448,20 @@ func TestConcatArmsInEverySwitch(t *testing.T) {
 // What stays declined: a function libraryCall does not name, the three-argument
 // collation form of fn:contains and its kin (never read as the two-argument
 // form), every other arity — fn:concat with fewer than two arguments among
-// them (§7.4.1) — and fn:string, or an fn:concat argument, over a typed node or value outside
-// the xs:string family and the date/time primitives (castsFrom), or over an
-// xs:float or xs:double, a literal (literalCastsTo) or a cast to either over a
-// string-family operand (castsFrom's floatingSource shape) included, whose
-// cast to xs:string §17.1.2 does not render canonically — an xs:decimal and an
-// xs:boolean literal still compile. The zero-argument string forms compile
-// over simple content, whose implicit argument is E's string value `.` reads
-// (TestAssertionContextItemIsTheStringValue evaluates them). With matchCall
-// admitting three arguments the collation row compiles, with literalCastsTo's
-// last return answering true the `string(1.5e0)` row does, and with
-// castSource's ctaCast exit answering (nil, false) in place of floatingSource
-// the two rows over a cast to xs:float or xs:double do; with literalCastsTo's
-// xs:decimal or xs:boolean arm answering false, `string(1.5)` or
-// `string(true())` declines.
+// them (§7.4.1) — and fn:string, or an fn:concat argument, over a typed node or
+// value outside the xs:string family and the date/time primitives (castsFrom),
+// or over an xs:float or xs:double, a literal (literalCastsTo) or a cast to
+// either over a string-family operand (castsFrom's floatingSource shape)
+// included, whose cast to xs:string §17.1.2 does not render canonically — an
+// xs:decimal and an xs:boolean literal still compile. The zero-argument string
+// forms compile over simple content, whose implicit argument is E's string
+// value `.` reads (TestAssertionContextItemIsTheStringValue evaluates them).
+// With matchCall admitting three arguments the collation row compiles, with
+// literalCastsTo's last return answering true the `string(1.5e0)` row does, and
+// with castSource's ctaCast exit answering (nil, false) in place of
+// floatingSource the two rows over a cast to xs:float or xs:double do; with
+// literalCastsTo's xs:decimal or xs:boolean arm answering false, `string(1.5)`
+// or `string(true())` declines.
 func TestCompileAssertionTestDeclinesFunctions(t *testing.T) {
 	str := asBuiltin(t, "string")
 	for _, expr := range []string{
@@ -497,7 +509,8 @@ func TestCompileAssertionTestDeclinesFunctions(t *testing.T) {
 // ta-SimpleValue alone ([18]), so a constructor over a function call or
 // another constructor declines too; `xs:string(@a) = 'x'` still compiles.
 // With ctaTypeAlternativeFacade answering callsLibrary true, every declined
-// row compiles.
+// row compiles; with constructorOperand parsing an argument on every façade,
+// `xs:string(xs:string(@a)) = 'x'` does.
 func TestCompileCTATestDeclinesLibraryFunctions(t *testing.T) {
 	for _, expr := range []string{
 		"contains(@a, 'x')", "starts-with(@a, 'x')", "ends-with(@a, 'x')",
@@ -523,11 +536,14 @@ func TestCompileCTATestDeclinesLibraryFunctions(t *testing.T) {
 
 // An assertions facet calls the same functions over `$value`
 // (cvc-assertions-valid): `ends-with($value, 'xyz')` holds and fails, a list
-// `$value` of two items is err:XPTY0004 under an xs:string? parameter, and the
-// zero-argument string forms read the absent context item and raise
-// err:XPDY0002 — failing the facet, under fn:not too, rather than declining
-// (clause 1.2's Note). With ctaFacetFacade.callsLibrary false every row
-// declines.
+// `$value` of two items is err:XPTY0004 under an xs:string? parameter and as an
+// fn:concat argument, which casts it (§7.4.1), and the zero-argument string
+// forms read the absent context item and raise err:XPDY0002 — failing the
+// facet, under fn:not too, rather than declining (clause 1.2's Note) — as
+// fn:position does as an fn:concat argument. With ctaFacetFacade.callsLibrary
+// false every row declines; with ctaConcatItem reading a raising argument as
+// the zero-length string, `concat($value, "") = ""` over "a b" and the
+// fn:position row hold.
 func TestFacetStringFunctions(t *testing.T) {
 	str := asBuiltin(t, "string")
 	list := asList(t, "StringList", ctaBuiltin("string"))
@@ -552,6 +568,10 @@ func TestFacetStringFunctions(t *testing.T) {
 		{"contains($value, 'a')", list, listValue("a"), value.AssertionHolds},
 		{"contains($value, 'a')", list, listValue("a b"), value.AssertionFails},
 		{"not(contains($value, 'a'))", list, listValue("a b"), value.AssertionFails},
+		{"concat($value, '') = 'a'", list, listValue("a"), value.AssertionHolds},
+		{"concat($value, '') = ''", list, listValue("a b"), value.AssertionFails},
+		{"not(concat($value, '') = '')", list, listValue("a b"), value.AssertionFails},
+		{"concat('x', position()) = 'x'", str, fcValue(t, str, "x"), value.AssertionFails},
 		{"string-length() > 0", str, fcValue(t, str, "x"), value.AssertionFails},
 		{"not(string-length() > 0)", str, fcValue(t, str, "x"), value.AssertionFails},
 		{"normalize-space() = 'x'", str, fcValue(t, str, "x"), value.AssertionFails},

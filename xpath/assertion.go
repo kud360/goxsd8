@@ -479,43 +479,45 @@ type AssertionTest struct {
 // `div`, `idiv` and `mod` (xpath20.md §3.4), and a call to one of the F&O
 // string and sequence functions — fn:contains, fn:starts-with and fn:ends-with
 // with two arguments, fn:string-length, fn:normalize-space and fn:string with
-// one or none, the implicit argument being `.`, fn:empty, fn:exists and
-// fn:distinct-values with one, and fn:true, fn:false and fn:current-date with
-// none (xpath-functions.md §7.5.1–7.5.3, §7.4.4, §7.4.5, §2.3, §15.1.4,
-// §15.1.5, §15.1.6, §9.1.1, §9.1.2, §16.4), any argument of which may be the
-// empty sequence `()`, and fn:namespace-uri with `.` or no argument (§14.3),
-// E's [namespace name] as one xs:anyURI, the zero-length one for no namespace,
-// and fn:in-scope-prefixes with `.` (§11.2.6) as one operand of `=` whose
-// other is a StringLiteral or a parenthesized comma sequence of them, on
-// either side, true where one of those is a prefix of E's [in-scope namespaces] (`xml`
-// always, the zero-length string where a default namespace is in scope, never `xmlns`),
-// each `.` there E as a node — the conditional `if (Expr) then ExprSingle else
-// ExprSingle` (xpath20.md §3.8) as the whole {test}, inside parentheses, as fn:not's
-// argument or as an operand of another, whose test's ·effective boolean value· selects
-// the one branch evaluated, so a dynamic error in the other is never raised, and both of
-// whose branches are compiled, so a decline in either declines the {test}; the [47]
-// ContextItemExpr `.`, atomized (§3.1.4, §2.4.2); [18] CastableExpr's `castable as` tail
-// over a [16] ta-SimpleValue, `$value castable as xs:double`, an xs:boolean true exactly
-// where the same `cast as` yields a value and false where that cast raises — the empty
-// sequence without `?`, two or more items, a lexical or facet mismatch — while an error
-// evaluating its operand raises (§3.10.3), and which declines wherever that cast does;
-// [16] InstanceofExpr's `instance of` tail with an atomic SequenceType, a builtin [53]
-// AtomicType or xs:untypedAtomic and an optional `?`, `*` or `+` (§3.10.1), over an
-// operand that is no node or over an fn:data call, `data(@d) instance of xs:date*`, whose
-// argument it atomizes (xpath-functions.md §2.4) — true where the item count is one the
-// indicator admits and each item's type derives from the AtomicType (§2.5.4), never
-// casting, so `data(.) instance of xs:untypedAtomic` holds over every {content type} and
-// `$value instance of xs:date` over an xs:date `$value`, while an error evaluating its
-// operand raises; and, as an operand of a general comparison, an integer sequence: [11]
-// RangeExpr `I to J` over two IntegerLiterals, bare or parenthesized, or a parenthesized
-// comma sequence of IntegerLiterals and such ranges, `(1 to 10, 20, 30)` (§3.3.1), or a
-// string sequence, a parenthesized comma sequence of StringLiterals, `('a', 'b')`. A
-// string sequence's items are xs:string. Against a typed operand outside the xs:string
-// family, an xs:integer `$value` or child among them, xpath20.md §B.2 defines no
-// comparison and it raises err:XPTY0004, while `.`, which is not typed, casts to
-// xs:string (§3.5.2 rule 2.4) — added, and every decline [CompileCTATest] states is this
-// one's too, under the same static context (xpath-valid clause 2.2) augmented with
-// `$value` (cvc-assertion clause 2.2), plus these, each of which is the same withhold:
+// one or none, the implicit argument being `.`, fn:concat with two or more,
+// each cast to xs:string, fn:empty, fn:exists and fn:distinct-values with
+// one, and fn:true, fn:false and fn:current-date with none (xpath-functions.md
+// §7.5.1–7.5.3, §7.4.4, §7.4.5, §2.3, §7.4.1, §15.1.4, §15.1.5, §15.1.6, §9.1.1, §9.1.2,
+// §16.4), any argument of which may be the empty sequence `()`, and any of which a
+// constructor function may take as its operand, as it may any other argument (xpath20.md
+// §3.1.5), and fn:namespace-uri with `.` or no argument (§14.3), E's [namespace name] as
+// one xs:anyURI, the zero-length one for no namespace, and fn:in-scope-prefixes with `.`
+// (§11.2.6) as one operand of `=` whose other is a StringLiteral or a parenthesized comma
+// sequence of them, on either side, true where one of those is a prefix of E's [in-scope
+// namespaces] (`xml` always, the zero-length string where a default namespace is in
+// scope, never `xmlns`), each `.` there E as a node — the conditional `if (Expr) then
+// ExprSingle else ExprSingle` (xpath20.md §3.8) as the whole {test}, inside parentheses,
+// as fn:not's argument or as an operand of another, whose test's ·effective boolean
+// value· selects the one branch evaluated, so a dynamic error in the other is never
+// raised, and both of whose branches are compiled, so a decline in either declines the
+// {test}; the [47] ContextItemExpr `.`, atomized (§3.1.4, §2.4.2); [18] CastableExpr's
+// `castable as` tail over a [16] ta-SimpleValue, `$value castable as xs:double`, an
+// xs:boolean true exactly where the same `cast as` yields a value and false where that
+// cast raises — the empty sequence without `?`, two or more items, a lexical or facet
+// mismatch — while an error evaluating its operand raises (§3.10.3), and which declines
+// wherever that cast does; [16] InstanceofExpr's `instance of` tail with an atomic
+// SequenceType, a builtin [53] AtomicType or xs:untypedAtomic and an optional `?`, `*` or
+// `+` (§3.10.1), over an operand that is no node or over an fn:data call, `data(@d)
+// instance of xs:date*`, whose argument it atomizes (xpath-functions.md §2.4) — true
+// where the item count is one the indicator admits and each item's type derives from the
+// AtomicType (§2.5.4), never casting, so `data(.) instance of xs:untypedAtomic` holds
+// over every {content type} and `$value instance of xs:date` over an xs:date `$value`,
+// while an error evaluating its operand raises; and, as an operand of a general
+// comparison, an integer sequence: [11] RangeExpr `I to J` over two IntegerLiterals, bare
+// or parenthesized, or a parenthesized comma sequence of IntegerLiterals and such ranges,
+// `(1 to 10, 20, 30)` (§3.3.1), or a string sequence, a parenthesized comma sequence of
+// StringLiterals, `('a', 'b')`. A string sequence's items are xs:string. Against a typed
+// operand outside the xs:string family, an xs:integer `$value` or child among them,
+// xpath20.md §B.2 defines no comparison and it raises err:XPTY0004, while `.`, which is
+// not typed, casts to xs:string (§3.5.2 rule 2.4) — added, and every decline
+// [CompileCTATest] states is this one's too, under the same static context (xpath-valid
+// clause 2.2) augmented with `$value` (cvc-assertion clause 2.2), plus these, each of
+// which is the same withhold:
 //
 //   - an attribute NameTest that is not a QName: a [37] Wildcard can match an
 //     attribute ·attributed to· an {attribute wildcard}, whose type is not
@@ -578,9 +580,10 @@ type AssertionTest struct {
 //     read for its value is admitted under as a TYPED value, on that bullet's
 //     terms — so a predicate over a mixed child, `count(body[. = 'x'])`,
 //     declines — unless the predicate tests attribute existence alone;
-//   - a cast whose operand is a typed attribute, a typed child or `$value`
-//     outside the xs:string family, to a target that operand's type is neither
-//     nor derived from by restriction (F&O §17.4, §17.1, §17.5) — so
+//   - a cast whose operand is a typed attribute, a typed child, `$value` or,
+//     under the constructor spelling, a typed count, arithmetic or function
+//     result outside the xs:string family, to a target that operand's type is
+//     neither nor derived from by restriction (F&O §17.4, §17.1, §17.5) — so
 //     `xs:integer(@d)` over an xs:decimal @d declines and `xs:decimal(@i)`
 //     over an xs:int @i, §17.3's cast, does not, nor does a cast of an
 //     xs:date, xs:dateTime or xs:time operand to xs:string itself, §17.1.2's
@@ -631,13 +634,14 @@ type AssertionTest struct {
 //     mixing StringLiterals with the other two, `('a', 1)`, a nested or empty
 //     parenthesis, a misplaced comma, `('a',)`, an IntegerLiteral beyond
 //     int64, and a sequence of more than ctaMaxSequenceLength items;
-//   - fn:string over a typed attribute, a typed child, an fn:count call, an
-//     arithmetic result, `$value`, a function result or a cast of one of them
-//     outside the xs:string family and the xs:date, xs:dateTime and xs:time
-//     primitives, which is the cast to xs:string the bullet above declines,
-//     and fn:string over any argument whose {primitive type
-//     definition} is xs:float or xs:double, a literal or a cast included,
-//     which is the cast to xs:string that bullet's floating clause declines;
+//   - fn:string, and an fn:concat argument, over a typed attribute, a typed
+//     child, an fn:count call, an arithmetic result, `$value`, a function
+//     result or a cast of one of them outside the xs:string family and the
+//     xs:date, xs:dateTime and xs:time primitives, which is the cast to
+//     xs:string the bullet above declines, and fn:string over any argument
+//     whose {primitive type definition} is xs:float or xs:double, a literal
+//     or a cast included, which is the cast to xs:string that bullet's
+//     floating clause declines;
 //   - a `castable as` tail over any operand but a [16] ta-SimpleValue — so
 //     `@d cast as xs:string castable as xs:date` and `xs:string(@d) castable
 //     as xs:date` decline — and one inside a value predicate, and every
@@ -655,11 +659,11 @@ type AssertionTest struct {
 //     `instance of`.
 //
 // An xs:string? argument — of every function above but fn:empty, fn:exists,
-// fn:distinct-values and fn:string — of any type outside the xs:string and
-// xs:anyURI families is not a decline: xpath20.md §3.1.5's function conversion
-// raises err:XPTY0004 for each item it yields, an absent attribute's empty
-// sequence being the zero-length string, and so does a `$value` of two or more
-// items.
+// fn:distinct-values, fn:string and fn:concat — of any type outside the
+// xs:string and xs:anyURI families is not a decline: xpath20.md §3.1.5's
+// function conversion raises err:XPTY0004 for each item it yields, an absent
+// attribute's empty sequence being the zero-length string, and so does a
+// `$value` of two or more items.
 //
 // A counted step consults neither attrs nor elems: fn:count does not atomize
 // its argument (xpath-functions.md §15.4.1, `$arg as item()*`), so the step's

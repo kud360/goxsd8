@@ -179,9 +179,9 @@ func TestArithmeticPromotion(t *testing.T) {
 
 // The arithmetic façades decline what they do not compute: an operand outside
 // the numeric primitives (B.2's duration and date/time rows, and the
-// err:XPTY0004 of every other type), a unary sign, and a cast from an
-// arithmetic result, which [16] ta-SimpleValue, the operand of both cast
-// spellings, does not admit. A Type Alternative's {test} declines every
+// err:XPTY0004 of every other type), a unary sign, and a constructor
+// function's cast of an xs:decimal arithmetic result to xs:integer, a cast
+// down castsFrom declines. A Type Alternative's {test} declines every
 // arithmetic operator, word and symbol spellings alike: with
 // ctaTypeAlternativeFacade.computes answering true, both CompileCTATest rows
 // compile.

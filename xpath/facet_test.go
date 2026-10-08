@@ -40,7 +40,8 @@ func fcValue(t *testing.T, st *xsd.SimpleType, lexical string) value.Value {
 // (castsFrom): `string(position()) = '1'` and `string(last()) = '1'` decline
 // with ctaNoFocus dropped from ctaTypes.castSource's unjudged arm. A
 // constructor function over either fails as fn:string does, the cast's
-// operand raising: `xs:integer(position())` and `xs:string(position()) = '1'`.
+// operand raising: `xs:integer(position())` and `xs:string(position()) = '1'`,
+// each of which declines with constructorFunction parsing simpleValue alone.
 func TestFacetAssertionsDecideTheValue(t *testing.T) {
 	intType, str := asBuiltin(t, "int"), asBuiltin(t, "string")
 	for _, tc := range []struct {
@@ -278,8 +279,10 @@ func TestFocusDeclinesOutsideTheFacet(t *testing.T) {
 // (xpath-functions.md §5, §7.4.1): over an xs:date `$value`, assert-simple007's
 // `xs:date(concat(string($value), '!!!'))` is no xs:date lexical, so the cast
 // raises err:FORG0001 and the facet fails (cvc-assertions-valid), while the
-// same cast over `concat(string($value), '')` decides by the date, and a
-// constructor over a concat of literals is that date.
+// same cast over `concat(string($value), "")` decides by the date, and a
+// constructor over a concat of literals is that date. Every row declines
+// without libraryCall's concat arm, and with constructorFunction parsing
+// simpleValue alone.
 func TestFacetAssertionsCastAFunctionResult(t *testing.T) {
 	date := asBuiltin(t, "date")
 	for _, tc := range []struct {

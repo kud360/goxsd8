@@ -24,7 +24,8 @@ import (
 // in it (predicate) or a [21] UnionExpr of such paths (countArgument), or over
 // an operand a library call takes as its argument (countCall), a call
 // to one of the F&O string and sequence functions (libraryCall) whose arguments
-// are additive expressions or `()`, a call to fn:namespace-uri over `.` or
+// are additive expressions or `()`, a constructor function whose operand is
+// such an argument (constructorOperand), a call to fn:namespace-uri over `.` or
 // with no argument (namespaceURICall) and, as an operand of `=` against string
 // literals, to fn:in-scope-prefixes over `.` (prefixMember), each `.` there E
 // as a node (contextNodeArgument), the binary operators of [13] AdditiveExpr

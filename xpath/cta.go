@@ -33,7 +33,8 @@ import (
 // UnionExpr (ctaUnion) — or over an operand that is no path, such as
 // `$value`, whose items it counts (ctaCountedItems), and a call to one of the
 // F&O string and sequence functions or to fn:namespace-uri over E
-// (ctaNamespaceURI), evaluated in ctafunc.go, and [11] ta-BooleanExpr a
+// (ctaNamespaceURI), evaluated in ctafunc.go, and [18]'s operand any argument
+// of such a call (ctaParser.constructorOperand), and [11] ta-BooleanExpr a
 // comparison by `=` of fn:in-scope-prefixes over E against string literals
 // (ctaPrefixMember), whose `.` is E as a node (ctaContextNode); and each
 // comparison operand may be xpath20.md [13] AdditiveExpr over [14]
@@ -562,21 +563,22 @@ func (ctaIf) ctaExpr()               {}
 // existence is asked (ctaFacade.elements) and rooted path (ctaFacade.rooted),
 // and the facet façade's read of an absent context item (ctaNoContextItem) —
 // the cast that [15] ta-CastExpr's tail and [18] ta-ConstructorFunction both
-// build over one of them, an fn:count call (ctaFacade.count), a binary
-// arithmetic operator over two of them (ctaArith, ctaFacade.computes), the
-// `castable as` tail over one of them (ctaCastable, ctaFacade.castable), the
-// `instance of` tail over one of them or over an fn:data call (ctaInstanceOf,
-// ctaFacade.instanceOf), and a call to an F&O string or sequence function
-// over them (ctaMatch, ctaUnaryString, ctaPresence, ctaDistinctValues,
-// ctaStringFunction; ctaFacade.callsLibrary), to fn:current-date
-// (ctaCurrentDate) or, over an absent focus, to fn:position or fn:last
-// (ctaNoFocus, ctaFacade.focus), or to fn:namespace-uri (ctaNamespaceURI), the
-// assertion façade's `.` (ctaContextAtom, ctaFacade.contextItem), and an
-// integer or string sequence (ctaIntegerRanges, ctaStringSequence,
-// ctaFacade.constructsSequences). `.` as the node fn:namespace-uri and
-// fn:in-scope-prefixes take is no branch: it is ctaNodeArg
-// (ctaFacade.contextNode). Every branch answers readsChild and counted on
-// ctaExpr's terms.
+// build over one of them — the latter, on a façade that calls the library,
+// over any other branch an argument parses too — an fn:count call
+// (ctaFacade.count), a binary arithmetic operator over two of them (ctaArith,
+// ctaFacade.computes), the `castable as` tail over one of them (ctaCastable,
+// ctaFacade.castable), the `instance of` tail over one of them or over an
+// fn:data call (ctaInstanceOf, ctaFacade.instanceOf), and a call to an F&O
+// string or sequence function over them (ctaMatch, ctaUnaryString,
+// ctaPresence, ctaDistinctValues, ctaStringFunction, ctaConcat;
+// ctaFacade.callsLibrary), to fn:current-date (ctaCurrentDate) or, over an
+// absent focus, to fn:position or fn:last (ctaNoFocus, ctaFacade.focus), or to
+// fn:namespace-uri (ctaNamespaceURI), the assertion façade's `.`
+// (ctaContextAtom, ctaFacade.contextItem), and an integer or string sequence
+// (ctaIntegerRanges, ctaStringSequence, ctaFacade.constructsSequences). `.` as
+// the node fn:namespace-uri and fn:in-scope-prefixes take is no branch: it is
+// ctaNodeArg (ctaFacade.contextNode). Every branch answers readsChild and
+// counted on ctaExpr's terms.
 type ctaValue interface {
 	ctaValue()
 	readsChild(name xsd.QName) bool
@@ -803,14 +805,15 @@ type ctaFacade interface {
 	computes() bool
 	// callsLibrary reports whether the façade admits a call to the F&O
 	// functions ctaParser.libraryCall parses — fn:contains, fn:starts-with,
-	// fn:ends-with, fn:string-length, fn:normalize-space, fn:string, fn:empty,
-	// fn:exists, fn:distinct-values, fn:true, fn:false, fn:current-date,
-	// fn:position and fn:last (ctaFacade.focus) and fn:namespace-uri
-	// (ctaFacade.contextNode) — and fn:in-scope-prefixes as an operand of `=`
-	// (ctaParser.prefixMember) at all, which §3.12.6 clause 3 pins out of [12]
-	// ta-BooleanFunction (fn:not alone) and [18] ta-ConstructorFunction
-	// (constructors alone), and an fn:count argument that is no path
-	// (ctaParser.countCall).
+	// fn:ends-with, fn:string-length, fn:normalize-space, fn:string,
+	// fn:concat, fn:empty, fn:exists, fn:distinct-values, fn:true, fn:false,
+	// fn:current-date, fn:position and fn:last (ctaFacade.focus) and
+	// fn:namespace-uri (ctaFacade.contextNode) — and fn:in-scope-prefixes as an
+	// operand of `=` (ctaParser.prefixMember) at all, which §3.12.6 clause 3
+	// pins out of [12] ta-BooleanFunction (fn:not alone) and [18]
+	// ta-ConstructorFunction (constructors alone), an fn:count argument that is
+	// no path (ctaParser.countCall), and a constructor function's operand
+	// beyond [18]'s [16] ta-SimpleValue (ctaParser.constructorOperand).
 	callsLibrary() bool
 	// conditional reports whether the façade admits xpath20.md [7] IfExpr at
 	// all (ctaParser.ifExpr), which §3.12.6's grammar has no production for.
@@ -913,7 +916,8 @@ func (ctaTypeAlternativeFacade) computes() bool { return false }
 
 // callsLibrary is false: §3.12.6 clause 3 makes every function call a call to
 // fn:not or to a constructor, so every other name reaches
-// ctaParser.constructorFunction and declines there.
+// ctaParser.constructorFunction and declines there, and [18] makes a
+// constructor's operand a [16] ta-SimpleValue.
 func (ctaTypeAlternativeFacade) callsLibrary() bool { return false }
 
 // conditional is false, on comparesValues' terms: ta-props-correct clause 2's

@@ -17,10 +17,10 @@ import (
 // fn:normalize-space (§7.4.4, §7.4.5, ctaUnaryString), fn:empty and fn:exists
 // (§15.1.4, §15.1.5, ctaPresence), fn:distinct-values (§15.1.6,
 // ctaDistinctValues), fn:string (§2.3, ctaStringFunction) and fn:concat
-// (§7.4.1, ctaConcat) — and fn:count
-// over an argument that is no path (§15.4.1, ctaCountedItems), whose items are
-// counted as fn:empty and fn:exists count them. fn:true and fn:false (§9.1.1,
-// §9.1.2) are constants, which compile to the ctaLiteral of their xs:boolean
+// (§7.4.1, ctaConcat) — and fn:count over an argument that is no path
+// (§15.4.1, ctaCountedItems), whose items are counted as fn:empty and
+// fn:exists count them. fn:true and fn:false (§9.1.1, §9.1.2) are constants,
+// which compile to the ctaLiteral of their xs:boolean
 // (ctaParser.constantCall). fn:current-date (§16.4) reads the dynamic
 // context's current dateTime (ctaCurrentDate), and fn:position and fn:last
 // (§16.1, §16.2) its focus, which only the facet façade compiles, to the
