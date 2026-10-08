@@ -15,7 +15,8 @@ import (
 var datedCorrection = regexp.MustCompile(`(?i)\bcorrected (in place )?\d{4}-\d{2}-\d{2}\b`)
 
 // hunkHeader is a unified diff hunk header; groups 1 and 2 are the base
-// side's start line and optional line count.
+// side's start line and optional line count, group 3 the head side's
+// optional line count.
 var hunkHeader = regexp.MustCompile(`^@@ -(\d+)(?:,(\d+))? \+\d+(?:,(\d+))? @@`)
 
 // logFileDiff is one docs/LOG/ file's part of a -U0 diff.
