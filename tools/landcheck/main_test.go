@@ -303,6 +303,15 @@ func TestAddedLinesEmptyDiff(t *testing.T) {
 // change what the fixture builds.
 func gitIn(t *testing.T, dir string, args ...string) {
 	t.Helper()
+	out, err := fixtureGit(dir, args...).CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
+	}
+}
+
+// fixtureGit is the command gitIn runs, for a caller that expects git to
+// fail.
+func fixtureGit(dir string, args ...string) *exec.Cmd {
 	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
 	cmd.Env = append(os.Environ(),
 		"GIT_CONFIG_GLOBAL="+os.DevNull,
@@ -311,10 +320,7 @@ func gitIn(t *testing.T, dir string, args ...string) {
 		"GIT_COMMITTER_NAME=landcheck test", "GIT_COMMITTER_EMAIL=landcheck@example.invalid",
 		"GIT_TERMINAL_PROMPT=0",
 	)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
-	}
+	return cmd
 }
 
 // commitLog appends line to docs/LOG/2026-09.md in dir and commits it.
@@ -348,7 +354,7 @@ func newPushedBranch(t *testing.T) string {
 	if err := os.MkdirAll(work+"/docs/LOG", 0o755); err != nil {
 		t.Fatalf("creating docs/LOG: %v", err)
 	}
-	commitLog(t, work, "base entry (#1)")
+	commitLog(t, work, "## base entry (#1)")
 	gitIn(t, work, "push", "-q", "-u", "origin", "main")
 	gitIn(t, work, "checkout", "-q", "-b", "wip/issue-1499")
 	gitIn(t, work, "commit", "-q", "--allow-empty", "-m", "implementation")
@@ -360,7 +366,7 @@ func newPushedBranch(t *testing.T) string {
 // clean one holds a LOG entry naming #1499 at local HEAD, which checkLanding
 // alone would pass, so each non-zero outcome is the pushed-head check's.
 func TestRunPushedHead(t *testing.T) {
-	const entry = "landed (#1499)"
+	const entry = "## landed (#1499)"
 	tests := []struct {
 		name string
 		// arrange takes the repo from newPushedBranch's state to the case's.
@@ -411,7 +417,7 @@ func TestRunPushedHead(t *testing.T) {
 			name: "HEAD one behind its upstream: operational",
 			arrange: func(t *testing.T, dir string) {
 				commitLog(t, dir, entry)
-				commitLog(t, dir, "later note")
+				commitLog(t, dir, "## later note")
 				gitIn(t, dir, "push", "-q")
 				gitIn(t, dir, "reset", "-q", "--hard", "HEAD~1")
 			},
@@ -485,7 +491,8 @@ func TestRunClosingKeywords(t *testing.T) {
 			args: func(t *testing.T) []string {
 				return append([]string{"-issue", "1499"}, textArgs(t, "landed (#1499)\n\nCloses #1499.\n", "Closes #1499.\n")...)
 			},
-			wantOutput: "landcheck: docs/LOG/ names #1499: landed (#1499)\n" +
+			wantOutput: "landcheck: docs/LOG/ names #1499: ## landed (#1499)\n" +
+				"landcheck: docs/LOG/ keeps every line of origin/main in place\n" +
 				"landcheck: squash text: closing keywords bind #1499\n" +
 				"landcheck: PR description: closing keywords bind #1499\n",
 		},
@@ -495,7 +502,8 @@ func TestRunClosingKeywords(t *testing.T) {
 				return append([]string{"-issue", "1499"}, textArgs(t, "landed (#1499)\n\nCloses #1499, #1500.\n", "Closes #1499.\n")...)
 			},
 			wantCode: 1,
-			wantOutput: "landcheck: docs/LOG/ names #1499: landed (#1499)\n" +
+			wantOutput: "landcheck: docs/LOG/ names #1499: ## landed (#1499)\n" +
+				"landcheck: docs/LOG/ keeps every line of origin/main in place\n" +
 				"landcheck: squash text: \"Closes #1499\" is the comma form: a further reference follows #1499, and the keyword closes only #1499\n" +
 				"landcheck: PR description: closing keywords bind #1499\n",
 		},
@@ -504,7 +512,8 @@ func TestRunClosingKeywords(t *testing.T) {
 			args: func(t *testing.T) []string {
 				return append([]string{"-no-issue"}, textArgs(t, "meta: backlog 2026-09-26\n", "Names and leaves open #345.\n")...)
 			},
-			wantOutput: "landcheck: squash text: closing keywords bind nothing\n" +
+			wantOutput: "landcheck: docs/LOG/ keeps every line of origin/main in place\n" +
+				"landcheck: squash text: closing keywords bind nothing\n" +
 				"landcheck: PR description: closing keywords bind nothing\n",
 		},
 		{
@@ -513,7 +522,8 @@ func TestRunClosingKeywords(t *testing.T) {
 				return append([]string{"-no-issue"}, textArgs(t, "meta: backlog 2026-09-25\n", "- Fixes #345's stale premise.\n")...)
 			},
 			wantCode: 1,
-			wantOutput: "landcheck: squash text: closing keywords bind nothing\n" +
+			wantOutput: "landcheck: docs/LOG/ keeps every line of origin/main in place\n" +
+				"landcheck: squash text: closing keywords bind nothing\n" +
 				"landcheck: PR description: \"Fixes #345\" binds #345 in a PR that closes no issue\n",
 		},
 		{
@@ -553,7 +563,7 @@ func TestRunClosingKeywords(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := newPushedBranch(t)
-			commitLog(t, dir, "landed (#1499)")
+			commitLog(t, dir, "## landed (#1499)")
 			gitIn(t, dir, "push", "-q")
 			args := tc.args(t)
 			t.Chdir(dir)
