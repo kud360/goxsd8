@@ -64,7 +64,7 @@ const fixtureFetchTimeout = 60 * time.Second
 // are already in the object store.
 func requireFixtures(t *testing.T, dir, base, head string) {
 	t.Helper()
-	unusable := fixtureUsable(dir, base, head)
+	unusable := checkFixtureUsable(dir, base, head)
 	if unusable == nil {
 		return
 	}
@@ -74,34 +74,37 @@ func requireFixtures(t *testing.T, dir, base, head string) {
 			"every recovery path here goes through origin, so check this environment's access to it first",
 			base, head, unusable, base, head, err, out, recoveryHint(dir))
 	}
-	if remaining := fixtureUsable(dir, base, head); remaining != nil {
+	if remaining := checkFixtureUsable(dir, base, head); remaining != nil {
 		t.Fatalf("fixture pair %s..%s is still unusable after git fetch origin reported success: %v\n%s%s"+
 			"origin served these objects but not the history linking them; re-run, or fetch the two hashes by hand",
 			base, head, remaining, out, recoveryHint(dir))
 	}
 }
 
-// fixtureUsable reports what stops checkLanding from running against the
-// pair, or nil when nothing does. Object presence is not the bar: a commit
-// fetched at --depth=1 resolves while its parent links do not, and the pair
-// then fails precondition 2 as a stale base — a defect verdict pinned on
-// what is really a fixture problem.
-func fixtureUsable(dir, base, head string) error {
+// checkFixtureUsable reports what stops checkLanding from running against
+// the pair, or nil when nothing does. Object presence is not the bar: a
+// commit fetched at --depth=1 resolves while its parent links do not. The
+// history is probed with gitDiffLog itself, the command checkLanding needs:
+// `git merge-base --is-ancestor` exits 0 over truncated history the diff
+// then dies on with `no merge base` (#1400).
+func checkFixtureUsable(dir, base, head string) error {
 	for _, sha := range []string{base, head} {
 		if err := exec.Command("git", "-C", dir, "rev-parse", "--verify", "--quiet", sha+"^{commit}").Run(); err != nil {
 			return fmt.Errorf("commit %s does not resolve in this checkout: %w", sha, err)
 		}
 	}
-	if err := exec.Command("git", "-C", dir, "merge-base", "--is-ancestor", base, head).Run(); err != nil {
-		return fmt.Errorf("commit %s is not visible as an ancestor of %s, so the history between them is truncated here: %w", base, head, err)
+	if _, err := gitDiffLog(dir, base, head); err != nil {
+		return fmt.Errorf("the history between %s and %s is truncated here: %w", base, head, err)
 	}
 	return nil
 }
 
 // fetchCommits asks origin for these two commits by hash. The fetch carries
-// no --depth on purpose: --depth=1 returns the objects without their parent
-// links, leaving the pair resolvable and still unusable, and on a complete
-// clone any --depth would newly truncate history the developer had (#1359).
+// no --depth on purpose: a depth-limited fetch leaves the pair unusable as
+// checkFixtureUsable says, and on a complete clone any --depth would newly
+// truncate history the developer had (#1359). It writes to the checkout's
+// own .git — objects added and FETCH_HEAD rewritten — and leaves the work
+// tree alone.
 func fetchCommits(dir, base, head string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), fixtureFetchTimeout)
 	defer cancel()
