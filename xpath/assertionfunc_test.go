@@ -275,10 +275,12 @@ func TestAssertionStringArgumentTypeErrors(t *testing.T) {
 // the result as xs:untypedAtomic would cast the other operand and hold; the
 // bare rows are each result's effective boolean value; the cast rows decline
 // fn:string over a non-string result and admit it over fn:normalize-space's.
-// Removing one arm's case from ctaStaticOf, ctaItemOf or
-// ctaEffectiveBoolean.eval fails that arm's row of the matching table, and from
-// castsFrom the arm's decline row; ctaStringFunction's castsFrom case answers
-// what the default does, so no row tells it apart.
+// Removing one arm's case from ctaItemOf or ctaEffectiveBoolean.eval fails
+// that arm's row of the matching table. Removing it from ctaCarriedType, the
+// static type ctaStaticOf and castsFrom both read, fails the arm's static row
+// and, for the three non-string results, its item and decline rows;
+// castsFrom's answer for ctaStringFunction's xs:string is what it gives an
+// unjudged operand, so no row tells that part apart.
 func TestStringFunctionArmsInEverySwitch(t *testing.T) {
 	s := []asTyped{{uq("s"), "string", "1"}}
 	for _, tc := range []struct {

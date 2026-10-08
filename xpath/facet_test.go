@@ -38,7 +38,7 @@ func fcValue(t *testing.T, st *xsd.SimpleType, lexical string) value.Value {
 // decline with ctaNoFocus removed from ctaTypes.instanceItem. fn:string over
 // either fails too, the call raising before there is a value to cast
 // (castsFrom): `string(position()) = '1'` and `string(last()) = '1'` decline
-// with a ctaNoFocus arm returning st, true added to ctaTypes.castSource.
+// with ctaNoFocus dropped from ctaTypes.castSource's unjudged arm.
 func TestFacetAssertionsDecideTheValue(t *testing.T) {
 	intType, str := asBuiltin(t, "int"), asBuiltin(t, "string")
 	for _, tc := range []struct {
@@ -77,6 +77,30 @@ func TestFacetAssertionsDecideTheValue(t *testing.T) {
 		got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, tc.st, ctaExprRecord(tc.test, "", "xs", xsd.XMLSchemaNS), fcValue(t, tc.st, tc.lexical))
 		if got != tc.want {
 			t.Errorf("Evaluate(%q, %q) = %d, want %d", tc.test, tc.lexical, got, tc.want)
+		}
+	}
+}
+
+// A castable or instance-of expression is an xs:boolean and an integer
+// sequence a sequence of xs:integer (ctaCarriedType), never an
+// xs:untypedAtomic: xpath20.md §3.5.2 casts only an untypedAtomic operand to
+// the other's type, so each comparison with an xs:string is a B.2 mismatch,
+// err:XPTY0004, and fails the facet, and fn:string over the xs:boolean is a
+// cast across primitives castsFrom declines.
+func TestFacetAssertionsStaticTypeOfAResult(t *testing.T) {
+	str := asBuiltin(t, "string")
+	for _, tc := range []struct {
+		test string
+		want value.AssertionOutcome
+	}{
+		{"$value castable as xs:double = 'false'", value.AssertionFails},
+		{"$value instance of xs:string = 'true'", value.AssertionFails},
+		{"(1 to 3) = '2'", value.AssertionFails},
+		{"string($value castable as xs:double) = 'false'", value.AssertionDeclined},
+	} {
+		got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, str, ctaExprRecord(tc.test, "", "xs", xsd.XMLSchemaNS), fcValue(t, str, "x"))
+		if got != tc.want {
+			t.Errorf("Evaluate(%q, %q) = %d, want %d", tc.test, "x", got, tc.want)
 		}
 	}
 }

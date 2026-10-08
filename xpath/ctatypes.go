@@ -494,48 +494,25 @@ func (t ctaTypes) literalCastsTo(lit ctaLiteral, target *xsd.SimpleType) bool {
 }
 
 // castSource is the type castsFrom judges a cast from v by — the static type
-// of a typed operand either of castsFrom's shapes names — or false where v
-// casts whatever the target. A cast is such an operand itself where its own
-// operand is one that is not in the string family: its value is then that
-// operand's, under a new annotation, and casting it on is a cast from a typed
-// instance value as much as the first one, so `xs:integer(xs:decimal(@d))`
-// over an xs:decimal @d is §17.4's truncation and declines with
-// `xs:integer(@d)`. A literal is not such an operand: castsFrom judges one by
-// literalCastsTo, and as a cast's operand it leaves the cast judged by its
-// target alone (floatingSource), the cast literalCastsTo admitted.
+// of a typed operand either of castsFrom's shapes names, the type it carries
+// (ctaCarriedType) — or false where v casts whatever the target. A cast is
+// such an operand itself where its own operand is one that is not in the
+// string family: its value is then that operand's, under a new annotation, and
+// casting it on is a cast from a typed instance value as much as the first
+// one, so `string(xs:decimal(@d))` over an xs:decimal @d is §17.1.2's cast
+// across primitives, from xs:decimal to xs:string, and declines under
+// castsFrom's GAP(xpath) with `string(@d)`. A literal is not such an operand:
+// castsFrom judges one by literalCastsTo, and as a cast's operand it leaves
+// the cast judged by its target alone (floatingSource), the cast
+// literalCastsTo admitted. Nor is fn:position or fn:last over an absent focus
+// (ctaNoFocus), which raises before it yields an item to cast.
 func (t ctaTypes) castSource(v ctaValue) (*xsd.SimpleType, bool) {
 	switch n := v.(type) {
-	case ctaTypedAttr:
-		return n.st, true
-	case ctaTypedChild:
-		return n.st, true
-	case ctaCandidate:
-		return n.st, true
-	case ctaCount:
-		return n.st, true
-	case ctaArith:
-		return n.st, true
-	case ctaMatch:
-		return n.st, true
-	case ctaUnaryString:
-		return n.st, true
-	case ctaPresence:
-		return n.st, true
-	case ctaCastable:
-		return n.st, true
-	case ctaInstanceOf:
-		return n.st, true
-	case ctaStringFunction:
-		return n.cast.target, true
-	case ctaCurrentDate:
-		return n.st, true
-	case ctaNamespaceURI:
-		return n.st, true
+	case ctaLiteral, ctaNoFocus:
+		return nil, false
 	case ctaDistinctValues:
 		typed, isTyped := ctaStaticOf(n).(ctaTyped)
 		return typed.st, isTyped
-	case ctaValueVar:
-		return n.atom, true
 	case ctaCast:
 		inner, judged := t.castSource(n.operand)
 		if !judged || t.stringSource(inner) {
@@ -543,7 +520,7 @@ func (t ctaTypes) castSource(v ctaValue) (*xsd.SimpleType, bool) {
 		}
 		return n.target, true
 	}
-	return nil, false
+	return ctaCarriedType(v)
 }
 
 // floatingSource is castSource's answer for a cast n over an operand castSource
