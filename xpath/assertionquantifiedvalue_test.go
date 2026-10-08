@@ -90,7 +90,10 @@ func TestAssertionQuantifiedOverNilValue(t *testing.T) {
 // $x` raises err:FOAR0001 for the 0 item. `some` over `0 2` is true, and over
 // `0 3` raises, so fn:not over it is false where false would make it true;
 // `every` over `0 3` is false, so fn:not over it is true, and over `0 2`
-// raises, so fn:not over it is false.
+// raises, so fn:not over it is false. With the first raised binding deciding
+// the quantifier, the rows `some` over "0 2" and fn:not over `every` over "0 3"
+// fail; with a raised binding read as false, the rows fn:not over `some` over
+// "0 3" and `every` over "0 2" fail.
 func TestAssertionQuantifiedOverValueErrors(t *testing.T) {
 	list := asList(t, "IntegerList", ctaBuiltin("integer"))
 	const some = "some $x in data($value) satisfies 4 mod $x = 0"
@@ -116,10 +119,11 @@ func TestAssertionQuantifiedOverValueErrors(t *testing.T) {
 // (ctaCarriedType) and is read as an atomic value, never a node: `$x = '2'`
 // over an xs:integer is xpath20.md §B.2's err:XPTY0004 — read untyped, it
 // would cast to xs:string and hold — and `$x`'s ·effective boolean value· is
-// fn:boolean's over the integer (§2.4.3 rule 5), false for 0. The `= '2'` row
-// holds with ctaCarriedType's ctaRangeItem arm removed, the `0 1` row is false
-// with ctaEffectiveBoolean.eval's removed, and the `2 4 6` rows of
-// TestAssertionQuantifiedOverValue fail with ctaItemOf's removed.
+// fn:boolean's over the integer (§2.4.3 rule 5), false for 0. With the
+// ctaRangeItem arm of ctaCarriedType removed the `= '2'` row holds, among
+// other failures; with ctaEffectiveBoolean.eval's removed the "0 1" and the
+// `every` rows are false; with ctaItemOf's removed the `2 4 6` rows of
+// TestAssertionQuantifiedOverValue fail, among others.
 func TestAssertionQuantifiedRangeItem(t *testing.T) {
 	list := asList(t, "IntegerList", ctaBuiltin("integer"))
 	for _, tc := range []vcCase{
@@ -139,7 +143,9 @@ func TestAssertionQuantifiedRangeItem(t *testing.T) {
 // The quantifier keys nothing of its own and reads no child or `.`: its Tally,
 // ReadsChild and ReadsContextItem are its body's. A body over `count(c)` keys
 // c's counter and decides off it; one comparing a child's value reads that
-// child; one reading `.` reads E's string value.
+// child; one reading `.` reads E's string value. The Tally row fails with
+// ctaQuantifiedValue.counted appending nothing, and the ReadsChild(c) row with
+// ctaQuantifiedValue.readsChild answering false.
 func TestAssertionQuantifiedOverValueReads(t *testing.T) {
 	list := asList(t, "IntegerList", ctaBuiltin("integer"))
 	types := asTypesWith(list)
@@ -197,11 +203,14 @@ func asBindIn(t *testing.T, types xsd.TypeResolver, st *xsd.SimpleType, lexical 
 // quantifier in either direction, a binding over a `$value` that is
 // statically empty or ·special· (no static type for the range variable), a
 // path or `instance of` over the range variable, and fn:data in any other
-// position. The scope rows compile with ctaRangeFacade's swap left in place
-// after the body; the nested rows with ctaRangeFacade.quantified or
-// ctaRangeFacade.rangeScope admitting; the empty and ·special· rows with
-// valueBinding admitting any `$value`; the `instance of` row with ctaRangeItem
-// added to ctaTypes.instanceItem.
+// position. The two "outside its body" rows compile with p.facade left as
+// the range scope after the body; the "not naming $x" row with
+// ctaRangeFacade.rangeScope admitting a scope over the assertion façade, which
+// the rows naming `$x` still decline under, the inner scope dropping `$x`; the
+// "over a child step in the body" row with ctaRangeFacade.quantified
+// admitting; the first statically empty row panics with valueBinding admitting
+// any `$value`; the `instance of` row compiles with ctaRangeItem added to
+// ctaTypes.instanceItem.
 func TestAssertionQuantifiedOverValueDeclines(t *testing.T) {
 	list := asList(t, "IntegerList", ctaBuiltin("integer"))
 	types := asTypesWith(list)
@@ -216,6 +225,7 @@ func TestAssertionQuantifiedOverValueDeclines(t *testing.T) {
 		{"(some $x in data($value) satisfies $x gt 0) and $x", simpleList, "the variable outside its body, bare"},
 		{"every $x in data($value) satisfies some $y in data($value) satisfies $y gt $x", simpleList, "a nested quantifier over $value"},
 		{"every $x in data($value) satisfies (some $y in data($value) satisfies $y gt $x)", simpleList, "a parenthesized nested quantifier over $value"},
+		{"every $x in data($value) satisfies (some $y in data($value) satisfies $y gt 0)", simpleList, "a nested quantifier over $value not naming $x"},
 		{"every $x in data($value) satisfies (every $c in c satisfies $c/@a)", simpleList, "a quantifier over a child step in the body"},
 		{"every $x in data($value) satisfies $x gt 0", asElementContent(t, false), "a statically empty $value"},
 		{"every $x in data($value) satisfies $x gt 0", xsd.EmptyContent{}, "a statically empty $value, empty content"},
