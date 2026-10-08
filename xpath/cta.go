@@ -379,7 +379,11 @@ const (
 // written without `?` or operand types the operator does not accept
 // (err:XPTY0004) — is a dynamic or type error, which clause 2 makes a false
 // rather than an error or a decline. The declines all happened at
-// [CompileCTATest].
+// [CompileCTATest] but one.
+//
+// GAP(xpath): an assertions facet on a cast's target is declined at evaluation
+// (ctaValidate), and the decline reads as false like an error, where clause 2
+// makes only an error false (#2533).
 //
 // Clause 2's subject is "the {test}", not the sub-expression that raised, so
 // this is the ONE place the substitution happens: a raised error travels up

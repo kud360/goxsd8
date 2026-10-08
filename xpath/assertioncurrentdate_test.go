@@ -151,9 +151,8 @@ func TestCastValidatesAtTheEvaluationInstant(t *testing.T) {
 // A Type Alternative's cast validates with ctaAssertionsDeclined: its input
 // holds no current dateTime, so an assertions facet the target carries is
 // declined, not decided at an instant nothing supplied, and the decline maps to
-// ctaRaised (ctaValidate's GAP(xpath)). FutureDate asserts
-// `$value gt current-date()`, which 2000-01-01 satisfies at the zero instant,
-// 0001-01-01.
+// ctaRaised (ctaValidate's GAP(xpath)). FutureDate asserts `$value gt
+// current-date()`, which 2000-01-01 satisfies at the zero instant, 0001-01-01.
 func TestTypeAlternativeCastDeclinesAssertions(t *testing.T) {
 	test := asRecord("$value gt current-date()")
 	facets := []xsd.Facet{xsd.NewAssertionsFacet([]xsd.Assertion{xsd.NewAssertion(test)})}
