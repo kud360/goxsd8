@@ -247,7 +247,7 @@ func (t ctaTypes) instanceItem(v ctaValue) (item ctaStatic, derived, ok bool) {
 		return ctaStaticOf(v), true, true
 	case ctaAttr, ctaTypedAttr, ctaUntypedChild, ctaValueVar, ctaUntypedValue, ctaEmptyValue,
 		ctaContextAtom, ctaNoContextItem, ctaNoDocumentRoot, ctaCast, ctaCastable, ctaInstanceOf, ctaCount,
-		ctaMatch, ctaUnaryString, ctaPresence, ctaStringFunction, ctaCurrentDate, ctaNoFocus, ctaNamespaceURI:
+		ctaMatch, ctaUnaryString, ctaPresence, ctaStringFunction, ctaConcat, ctaCurrentDate, ctaNoFocus, ctaNamespaceURI:
 		return ctaStaticOf(v), false, true
 	}
 	return nil, false, false
@@ -318,10 +318,11 @@ func (t ctaTypes) itemMatches(item ctaStatic, name xsd.QName) (matches, admitted
 //     arithmeticResult), of a castable or instance-of expression (ctaCastable,
 //     ctaInstanceOf, xs:boolean) or of an F&O function call (ctaMatch and
 //     ctaPresence, xs:boolean; ctaUnaryString, xs:integer or xs:string;
-//     ctaStringFunction, xs:string; ctaDistinctValues, its typed operand's
-//     type, a literal's included; ctaCurrentDate, xs:date; ctaNamespaceURI,
-//     xs:anyURI), or a cast of one of them, or of an operand the second shape
-//     names, that is not in the string family (castSource, its target);
+//     ctaStringFunction and ctaConcat, xs:string; ctaDistinctValues, its typed
+//     operand's type, a literal's included; ctaCurrentDate, xs:date;
+//     ctaNamespaceURI, xs:anyURI), or a cast of one of them, or of an operand
+//     the second shape names, that is not in the string family (castSource,
+//     its target);
 //   - a cast of any other shape whose target is xs:float or xs:double
 //     (floatingSource): a cast to either over an untyped operand, a
 //     string-family one or a literal other than a DoubleLiteral, as in
@@ -365,13 +366,18 @@ func (t ctaTypes) itemMatches(item ctaStatic, name xsd.QName) (matches, admitted
 //     UTC-shifted, no trailing fractional zeros, and midnight as 00:00:00,
 //     never "24".
 //
-// Both cast spellings, and `castable as`, take a [16] ta-SimpleValue operand,
-// so a count, an arithmetic, castable or function result and a cast reach
-// castsFrom only as fn:string's argument (ctaParser.stringOf), whose target
-// is xs:string: of those, the second rule admits nothing the first does not,
-// and the third admits one whose type has a date/time primitive, as
-// `string(xs:date(@d))` and fn:distinct-values over a typed date/time operand
-// do.
+// The cast spelling and `castable as` take a [16] ta-SimpleValue operand, and
+// so does the constructor spelling on a façade that calls no library function;
+// elsewhere a constructor's operand is any argument a library call takes
+// (ctaParser.constructorOperand). So a count, an arithmetic, castable or
+// function result and a cast reach castsFrom as fn:string's argument or an
+// fn:concat argument (ctaParser.stringOf), whose target is xs:string — of
+// those, the second rule admits nothing the first does not, and the third
+// admits one whose type has a date/time primitive, as `string(xs:date(@d))`
+// and fn:distinct-values over a typed date/time operand do — and as a
+// constructor's operand, to any target: `xs:date(concat(string($value),
+// '!!!'))` by the first rule, its fn:concat result being an xs:string, and
+// `xs:integer(count(e))` by the second.
 //
 // GAP(xpath): a cast from any OTHER typed operand, a literal aside, is
 // declined — §17.4's cast within a branch of the hierarchy that is not to an
