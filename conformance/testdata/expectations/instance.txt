@@ -161,8 +161,8 @@ Assert/assert_032/instance/assert_032_2 pass
 Assert/assert_032/instance/assert_032_3 pass
 Assert/assert_033/instance/assert_033_2 pass
 Assert/assert_034/instance/assert_034_3 pass
-Assert/assert_035/instance/assert_035_2 fail
-Assert/assert_035/instance/assert_035_3 fail
+Assert/assert_035/instance/assert_035_2 pass
+Assert/assert_035/instance/assert_035_3 pass
 AttrDecl/ad_annotation00101m1/instance/Positive pass
 AttrDecl/ad_annotation00101m2/instance/Positive pass
 AttrDecl/ad_name00101m1/instance/Negative pass

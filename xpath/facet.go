@@ -28,8 +28,9 @@ import (
 // as` and `instance of` over it (ctaFacetFacade.castable,
 // ctaFacetFacade.instanceOf), and fn:count over it or over any other operand
 // that is no path. An fn:count call over a path declines
-// (ctaFacetFacade.count), and so does a quantified expression, which ranges
-// over a child step (ctaFacetFacade.quantified).
+// (ctaFacetFacade.count), and so does a quantified expression, over a child
+// step (ctaFacetFacade.quantified) or over `$value`
+// (ctaFacetFacade.rangeScope).
 
 // FacetAssertions is the [value.AssertionEvaluator] for an assertions facet's
 // {test}s: it compiles the {test} under the facet's static context and
@@ -54,8 +55,8 @@ import (
 //     of the same type, on that function's terms — the grammar is the same and
 //     so is every decline it states — a {test} calling fn:count over a
 //     path, `count(@a)`, which `count($value)` is not, and one holding a
-//     quantified expression, `every $c in c satisfies $c/@a`, which ranges
-//     over a child step.
+//     quantified expression, over a child step, `every $c in c satisfies
+//     $c/@a`, or over `$value`, `every $x in data($value) satisfies $x gt 0`.
 //
 // A union's own assertions facet is evaluated like any other: the pipeline
 // hands this evaluator the union's ·active basic member· as st, the type under
@@ -66,7 +67,8 @@ import (
 // GAP(xpath): an fn:count call over a path is declined, whose argument would
 // raise err:XPDY0002 over the absent context item (ctaFacetFacade.count), and
 // so is a quantified expression, whose binding step would raise it
-// (ctaFacetFacade.quantified). Every other decline is
+// (ctaFacetFacade.quantified), and one over `$value`, which would not
+// (ctaFacetFacade.rangeScope). Every other decline is
 // [CompileAssertionTest]'s, under its GAP(xpath). The direction is the
 // withhold: the caller declines the value's Datatype Valid verdict, never
 // charging it and never showing it satisfied. (#1042)
@@ -211,6 +213,13 @@ func (ctaFacetFacade) elements(ctaCountPath) (ctaValue, bool) {
 // body is counted off a [Tally] the facet evaluation has none of; that decline
 // is [FacetAssertions]' withhold, under its GAP(xpath), on count's terms.
 func (ctaFacetFacade) quantified(ctaQuantifier, ctaRangeKey) (ctaExpr, bool) {
+	return nil, false
+}
+
+// rangeScope declines every quantifier over `$value`, although `$value` is
+// bound here and §3.13 admits full XPath 2.0 in a facet's {test}: the decline
+// is [FacetAssertions]' withhold, under its GAP(xpath). (#1042)
+func (ctaFacetFacade) rangeScope(xsd.QName, ctaValueVar) (ctaFacade, bool) {
 	return nil, false
 }
 
