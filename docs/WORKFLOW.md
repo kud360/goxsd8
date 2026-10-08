@@ -348,9 +348,12 @@ is anyone else's to volunteer:
    stamp, a `/backlog` run — has no number to grep for: its entry is due
    by the same rule and this check has nothing to say about it. `go tool
    landcheck -issue <N> -squash <file> -pr-body <file>` runs this
-   precondition, precondition 2's merge-base-current requirement and the
-   closing-keyword check above (#963) — exit 0 clean, 1 if the grep or the
-   keyword check fails, 2 if the base is stale or the tool cannot run.
+   precondition, its history check — the same diff deletes no line
+   `origin/main`'s `docs/LOG/` carries and inserts only whole entries
+   between base entries, a dated correction exempt (#2506) — precondition
+   2's merge-base-current requirement and the closing-keyword check above
+   (#963) — exit 0 clean, 1 if the grep, the history check or the keyword
+   check fails, 2 if the base is stale or the tool cannot run.
    It reads the pushed head, not the local `HEAD`: it exits 1 while
    `git rev-list @{u}..HEAD` is non-empty and 2 when `HEAD` is behind its
    upstream or has none, and a hand-run of the grep runs that `rev-list`
@@ -399,9 +402,10 @@ is anyone else's to volunteer:
 which verifies and states these preconditions in the orchestrating
 session's place — the cartographer for its own `post-land` PR.
 Precondition 1 already says what it has to say here. `go tool landcheck
--no-issue -squash <file> -pr-body <file>` checks the pushed head and
-precondition 2 as above, and exits 1 on every bound closing keyword in
-either text, since a PR of this shape closes nothing (#1178).
+-no-issue -squash <file> -pr-body <file>` checks the pushed head,
+precondition 2 and precondition 1's history check as above, and exits 1
+when the history check fails or on every bound closing keyword in either
+text, since a PR of this shape closes nothing (#1178).
 Precondition 2 binds with nothing keyed on a verdict: `git log
 HEAD..origin/main` is empty, and a branch that is behind merges forward
 and re-runs the gate.
