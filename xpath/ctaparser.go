@@ -24,7 +24,8 @@ import (
 // in it (predicate) or a [21] UnionExpr of such paths (countArgument), or over
 // an operand a library call takes as its argument (countCall), a call
 // to one of the F&O string and sequence functions (libraryCall) whose arguments
-// are additive expressions or `()`, a call to fn:namespace-uri over `.` or
+// are additive expressions or `()`, a constructor function whose operand is
+// such an argument (constructorOperand), a call to fn:namespace-uri over `.` or
 // with no argument (namespaceURICall) and, as an operand of `=` against string
 // literals, to fn:in-scope-prefixes over `.` (prefixMember), each `.` there E
 // as a node (contextNodeArgument), the binary operators of [13] AdditiveExpr
@@ -1259,6 +1260,8 @@ func (p *ctaParser) libraryCall(local string) (ctaValue, bool) {
 		return p.unaryStringCall(ctaNormalizeSpace)
 	case "string":
 		return p.stringCall()
+	case "concat":
+		return p.concatCall()
 	case "empty":
 		return p.presenceCall(ctaEmptyTest)
 	case "exists":
@@ -1411,11 +1414,34 @@ func (p *ctaParser) stringCall() (ctaValue, bool) {
 // §6.2.4 :1309 for an element). Every other typed node, and every xs:float or
 // xs:double argument, a literal included, declines under castsFrom's
 // GAP(xpath).
-func (p *ctaParser) stringOf(arg ctaValue) (ctaValue, bool) {
+func (p *ctaParser) stringOf(arg ctaValue) (ctaStringFunction, bool) {
 	if !p.types.castsFrom(arg, p.types.str) {
-		return nil, false
+		return ctaStringFunction{}, false
 	}
 	return ctaStringFunction{cast: ctaCast{operand: arg, target: p.types.str, allowsEmpty: true}}, true
+}
+
+// concatCall parses a call to fn:concat with two or more `xs:anyAtomicType?`
+// arguments (xpath-functions.md §7.4.1), whose result is xs:string: each
+// argument is "cast to xs:string" and the empty sequence "is treated as the
+// zero-length string", which is fn:string's reading of an atomic argument, so
+// each is held as the fn:string call stringOf builds over it and an argument
+// stringOf declines declines the call. Fewer than two arguments match no
+// signature (err:XPST0017, xpath20.md §3.1.5) and decline.
+func (p *ctaParser) concatCall() (ctaValue, bool) {
+	args, ok := p.arguments()
+	if !ok || len(args) < 2 {
+		return nil, false
+	}
+	parts := make([]ctaStringFunction, 0, len(args))
+	for _, arg := range args {
+		part, admitted := p.stringOf(arg)
+		if !admitted {
+			return nil, false
+		}
+		parts = append(parts, part)
+	}
+	return ctaConcat{args: parts, st: p.types.str}, true
 }
 
 // presenceCall parses a call to fn:empty or fn:exists (op) with its one
@@ -2088,11 +2114,19 @@ func (p *ctaParser) singleType(v ctaValue) (ctaCast, bool) {
 // equivalence however [18]'s own production is written — so a constructor call
 // over an absent attribute is the empty sequence where the same cast written
 // without `?` would be err:XPTY0004.
+//
+// The operand is a [16] ta-SimpleValue on a façade that calls no library
+// function, the Type Alternative's and a value predicate's, and otherwise any
+// argument a library call takes (argument): xpath20.md §3.1.5 makes a
+// constructor function's argument an ExprSingle, and [18]'s `SimpleValue`
+// restricts the Type Alternative subset alone (§3.12.6), so on the assertion
+// and facet façades `xs:date(concat(string($value), '!!!'))` is the cast of a
+// function result, judged by castsFrom on its static type.
 func (p *ctaParser) constructorFunction() (ctaValue, bool) {
 	name := p.functionName(p.peek(0).text)
 	p.advance() // the function name
 	p.advance() // '('
-	arg, ok := p.simpleValue()
+	arg, ok := p.constructorOperand()
 	if !ok {
 		return nil, false
 	}
@@ -2105,6 +2139,16 @@ func (p *ctaParser) constructorFunction() (ctaValue, bool) {
 		return nil, false
 	}
 	return ctaCast{operand: arg, target: target, allowsEmpty: true}, true
+}
+
+// constructorOperand parses the operand of [18] ta-ConstructorFunction on
+// constructorFunction's terms: argument where the façade calls the library
+// (ctaFacade.callsLibrary), and simpleValue where it does not.
+func (p *ctaParser) constructorOperand() (ctaValue, bool) {
+	if p.facade.callsLibrary() {
+		return p.argument()
+	}
+	return p.simpleValue()
 }
 
 // simpleValue parses [16] ta-SimpleValue's two arms, the arms the assertion

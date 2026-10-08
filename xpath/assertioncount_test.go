@@ -306,7 +306,7 @@ func TestTallyCountsAttributesAt(t *testing.T) {
 // filtered by one predicate, or a union (the predicate and union rows below):
 // every other path declines, a positional predicate among them, and so does
 // `.//` or `./` in a comparison operand, and a cast from a count, which [16]
-// ta-SimpleValue, the operand of both cast spellings, does not admit.
+// ta-SimpleValue, the operand of the cast spelling, does not admit.
 func TestCompileAssertionTestDeclinesCounts(t *testing.T) {
 	for _, tc := range []struct{ expr, why string }{
 		{"count(*) = 0", "a wildcard NameTest"},
