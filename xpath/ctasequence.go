@@ -53,7 +53,7 @@ func (ctaIntegerRanges) ctaValue() {}
 func (ctaIntegerRanges) readsChild(xsd.QName) bool { return false }
 
 // counted appends nothing: the sequence is no fn:count call.
-func (ctaIntegerRanges) counted(into []ctaTallied) []ctaTallied { return into }
+func (ctaIntegerRanges) counted(into []ctaKey) []ctaKey { return into }
 
 // ctaIntegerRangesItem is n's integers in written order, each converted into
 // c on ctaTypedAttrItem's terms through the lexical of that integer, which is a
@@ -245,7 +245,7 @@ func (ctaStringSequence) ctaValue() {}
 func (ctaStringSequence) readsChild(xsd.QName) bool { return false }
 
 // counted appends nothing: the sequence is no fn:count call.
-func (ctaStringSequence) counted(into []ctaTallied) []ctaTallied { return into }
+func (ctaStringSequence) counted(into []ctaKey) []ctaKey { return into }
 
 // ctaStringSequenceItem is n's strings in written order, each converted into c
 // as a ctaLiteral's text is (ctaConvert): the comparison type

@@ -644,9 +644,13 @@ func (up assertionAncestry) tallySkipped(e Element) error {
 // attribute name it could miss changes.
 //
 // It runs on every element [walk.element] enters — invalid, ·nilled·, ·laxly
-// assessed· or undecided alike — once, so each node is reported exactly once,
-// as [xpath.Tally] obliges. A ·skipped· element is not entered, and
-// [assertionAncestry.tallySkipped] reports it and its subtree in its place.
+// assessed· or undecided alike — once, on entry and before [walk.element]
+// walks e's [[children]], which is the number and order of reports
+// [xpath.Tally] obliges its caller to. A ·skipped· element is not entered,
+// and [assertionAncestry.tallySkipped] reports it and its subtree in its
+// place. The reports withheld from an ancestor that takes the lack instead
+// can leave that ancestor's Tally out of that order; its assertions are
+// declined on the lack, and that Tally is never read.
 func (w *walk) tallyElement(e Element, g governance, up assertionAncestry, own *assertionCheck) {
 	if up.counting == nil && !own.counts() {
 		return

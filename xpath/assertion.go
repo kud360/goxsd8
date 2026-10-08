@@ -1,6 +1,7 @@
 package xpath
 
 import (
+	"slices"
 	"time"
 
 	"github.com/kud360/goxsd8/value"
@@ -38,28 +39,30 @@ import (
 // cvc-assertion clause 1.2's partial ·PSVI· holds; and a path opening with "/"
 // or "//" over one child or attribute step, which raises err:XPDY0050 over
 // that instance (§3.2); a relative path of two or more such child steps (§3.2,
-// [26] RelativePathExpr), or one element step `N`, `./N` or `.//N` (§3.2.4),
-// as the whole operand of fn:exists, fn:empty or an ·effective boolean value·,
-// whether it selects a node of E's subtree being what a [Tally] carries
-// whatever the selected elements' types (ctaFacade.childPath,
-// ctaFacade.elements); an fn:count call (xpath-functions.md §15.4.1) in [14]
-// ta-ValueExpr's position, over one counted path of E's subtree, whose counts
-// a [Tally] carries, or over an operand that is no path, such as `$value`,
-// whose items it counts; inside that call's argument, xpath20.md [40] Predicate,
-// one on a child step, testing the existence of the child's attributes, which
-// the Tally reads too, or comparing the child's own value, read off
-// [ChildElements] (§3.2.2); and [21] UnionExpr over such operands (§3.3.3),
-// each node counted once; and, in [14]'s position, a call to one of the F&O
-// string and sequence functions [CompileAssertionTest] lists
-// (ctaFacade.callsLibrary, ctafunc.go), whose argument may also be the empty
-// sequence `()`, or to fn:namespace-uri, and fn:in-scope-prefixes as an
-// operand of `=`, each over E as a node ([ContextElement],
-// ctaAssertionFacade.contextNode). It also admits xpath20.md §3.4's binary
-// arithmetic operators over numeric operands (ctaFacade.computes), in each
-// comparison operand's position; §3.8's [7] IfExpr wherever an ExprSingle stands
-// whole in a boolean position (ctaFacade.conditional); [47] ContextItemExpr `.`,
-// as E's string value (ctaAssertionFacade.contextItem); and, as a general
-// comparison's operand, §3.3.1's integer and string sequences
+// [26] RelativePathExpr), the last of which may be the [37] Wildcard `*`
+// (§3.2.1.2), one element step `N`, `./N` or `.//N` (§3.2.4), or one child
+// step filtered by a [40] Predicate that is a conjunction of child steps,
+// `N[a and b]` (§3.2.2), as the whole operand of fn:exists, fn:empty or an
+// ·effective boolean value·, whether it selects a node of E's subtree being
+// what a [Tally] carries whatever the selected elements' types
+// (ctaFacade.childPath, ctaFacade.elements, ctaFacade.childrenHaving); an
+// fn:count call (xpath-functions.md §15.4.1) in [14] ta-ValueExpr's position,
+// over one counted path of E's subtree, whose counts a [Tally] carries, or over
+// an operand that is no path, such as `$value`, whose items it counts; inside
+// that call's argument, xpath20.md [40] Predicate, one on a child step, testing
+// the existence of the child's attributes, which the Tally reads too, or
+// comparing the child's own value, read off [ChildElements] (§3.2.2); and [21]
+// UnionExpr over such operands (§3.3.3), each node counted once; and, in [14]'s
+// position, a call to one of the F&O string and sequence functions
+// [CompileAssertionTest] lists (ctaFacade.callsLibrary, ctafunc.go), whose
+// argument may also be the empty sequence `()`, or to fn:namespace-uri, and
+// fn:in-scope-prefixes as an operand of `=`, each over E as a node
+// ([ContextElement], ctaAssertionFacade.contextNode). It also admits xpath20.md
+// §3.4's binary arithmetic operators over numeric operands (ctaFacade.computes),
+// in each comparison operand's position; §3.8's [7] IfExpr wherever an
+// ExprSingle stands whole in a boolean position (ctaFacade.conditional); [47]
+// ContextItemExpr `.`, as E's string value (ctaAssertionFacade.contextItem);
+// and, as a general comparison's operand, §3.3.1's integer and string sequences
 // (ctaFacade.constructsSequences).
 
 // AttributeTypes answers, for the element information item E whose assertions
@@ -138,8 +141,8 @@ func Child(name xsd.QName, v TypedValue) ChildElement { return ChildElement{name
 // by a predicate over their value, `count(N[. = 'x'])`, which is counted over
 // them here. A node a {test} only counts — a child, a descendant, an
 // attribute, a child filtered by its attributes' existence — or only asks the
-// existence of through a path, `a`, `.//a` or `a/b`, is reported to the
-// [Tally] instead, and never yielded here for that sake.
+// existence of through a path, `a`, `.//a`, `a/b`, `a/*` or `a[b]`, is
+// reported to the [Tally] instead, and never yielded here for that sake.
 type ChildElements func(yield func(ChildElement) bool)
 
 // TypedValue is the typed value of one attribute node, of one element node of
@@ -295,24 +298,39 @@ type ContextElement interface {
 // (xpath-functions.md §15.4.1) — a step, a child step filtered by the
 // existence of its attributes, or a union of those (xpath20.md §3.2.2,
 // §3.3.3) — or asks the existence of with fn:exists, fn:empty or an ·effective
-// boolean value· (§15.1.4, §15.1.5, xpath20.md §2.4.3), how many nodes of E's
+// boolean value· (§15.1.4, §15.1.5, xpath20.md §2.4.3) — among them a child
+// step filtered by the existence of its own children — how many nodes of E's
 // subtree it selects. A child step filtered by its VALUE is not among them:
 // [ChildElements] answers it. [AssertionTest.Tally] makes one, the caller
 // reports E's subtree to it while that subtree streams past, and
 // [AssertionTest.Evaluate] reads it. It keeps one counter per distinct path
-// and no node, so what the caller holds for a count is one integer per path
-// whatever the subtree's size.
+// and no node: what the caller holds for a count is one integer per path, the
+// chain of names of the latest report, which is O(depth), and, for a child
+// step filtered by its children's existence, which of those children the
+// latest child named by the step has shown so far — whatever the subtree's
+// size.
 //
 // The caller's obligation is to report EVERY node of E's subtree in the data
-// model instance cvc-assertion clause 1 builds, exactly once, in any order, by
-// one [Tally.Element] call per element, E itself included: the element, by the
-// chain of ·expanded names· from E's child down to it — the empty chain for E —
-// whatever its validity, whether it is ·nilled·, and whether it was ·strictly·
-// or ·laxly assessed· or ·skipped·, with the names of ALL its attribute nodes:
-// those it carries, xsi:type and the other xsi attributes among them, and its
-// ·defaulted attributes· (key-dflt-att), which the partial ·PSVI· clause 1.2
-// builds from holds too; never a namespace declaration, which is not an
-// attribute node.
+// model instance cvc-assertion clause 1 builds, exactly once, by one
+// [Tally.Element] call per element, E itself included, in PRE-ORDER DOCUMENT
+// ORDER: E first, then every element of E's subtree, each before its
+// [[children]] and those in document order, so that each report at a depth
+// of one or more below E belongs to the latest earlier report one level up.
+// Each element is reported by the chain of ·expanded names· from E's child
+// down to it — the empty chain for E — whatever its validity, whether it is
+// ·nilled·, and whether it was ·strictly· or ·laxly assessed· or ·skipped·,
+// with the names of ALL its attribute nodes: those it carries, xsi:type and
+// the other xsi attributes among them, and its ·defaulted attributes·
+// (key-dflt-att), which the partial ·PSVI· clause 1.2 builds from holds too;
+// never a namespace declaration, which is not an attribute node.
+//
+// A report the order rules out — one at depth d of one or more whose chain's
+// first d−1 names are not the first d−1 names of the report before it, a
+// grandchild before its parent among them — breaks that obligation, on the
+// terms [TypedAttributes] states for an attribute's value: the Tally drops
+// every counter, and [AssertionTest.Evaluate] answers false for it. A subtree
+// reported short, or an element reported under a wrong name in an order that
+// still nests, is not detected, and yields a wrong count.
 //
 // A ·skipped· element and everything below it is governed by no type
 // (key-skipped, key-governing-type-elem item 5), so it has no ·defaulted
@@ -328,13 +346,101 @@ type ContextElement interface {
 // Its consumer is validate's cvc-assertion site (validate/cvcassertion.go),
 // which reports each element it walks, and each element of a ·skipped· subtree
 // by name, to the Tally of every enclosing element's {assertions} that has one.
-type Tally struct{ counters []ctaCounter }
+type Tally struct {
+	counters []ctaCounter
+	chain    []xsd.QName
+}
 
-// ctaCounter is one counter of a [Tally]: the path it counts and how many of
-// the nodes reported so far that path selects.
-type ctaCounter struct {
-	path ctaTallied
-	n    int
+// ctaCounter is the sealed sum of the counters a [Tally] keeps, one per key
+// (ctaKey.counter): ctaReportCount, which adds what each report selects, and
+// ctaInstanceCount, which counts the children of E whose own children the
+// reports after them show. The keys close the set (STYLE T2's
+// schema-closed-set exception). Each arm is a pointer, which element updates in
+// place.
+type ctaCounter interface {
+	ctaCounter()
+	// key is the key the counter counts under.
+	key() ctaKey
+	// element takes one [Tally.Element] report, already checked to follow the
+	// report before it in pre-order (ctaNests).
+	element(path, attrs []xsd.QName)
+	// count is how many nodes the key selects among the reports taken so far.
+	count() int
+}
+
+// ctaReportCount counts a key each report decides alone (ctaTallied): n is how
+// many of the nodes reported so far tallied selects.
+type ctaReportCount struct {
+	tallied ctaTallied
+	n       int
+}
+
+// ctaInstanceCount counts a ctaChildrenHaving key, `N[a and b]`: n is how many
+// children of E named N, among those whose instance is closed — a later child
+// of E has been reported — have shown a child named each required name; open
+// reports whether the latest child of E reported is named N; and shown holds,
+// in required's written order, which of the required names that child's own
+// children reported so far carry, all false where open is false.
+type ctaInstanceCount struct {
+	having ctaChildrenHaving
+	n      int
+	open   bool
+	shown  []bool
+}
+
+func (*ctaReportCount) ctaCounter()   {}
+func (*ctaInstanceCount) ctaCounter() {}
+
+func (r *ctaReportCount) key() ctaKey   { return r.tallied }
+func (i *ctaInstanceCount) key() ctaKey { return i.having }
+
+// element adds the nodes the report carries that tallied selects
+// (ctaSelected).
+func (r *ctaReportCount) element(path, attrs []xsd.QName) {
+	r.n += ctaSelected(r.tallied, path, attrs)
+}
+
+// count is n.
+func (r *ctaReportCount) count() int { return r.n }
+
+// element reads a report of a child of E as the start of the next instance,
+// closing the open one — counted where satisfied — and opening one where the
+// child is named N; and a report of a grandchild of E, whose parent the
+// pre-order makes the latest child of E, as showing the required name it
+// carries. Every other report decides nothing.
+func (i *ctaInstanceCount) element(path, _ []xsd.QName) {
+	switch len(path) {
+	case 1:
+		if i.satisfied() {
+			i.n++
+		}
+		i.open = path[0] == i.having.name
+		clear(i.shown)
+	case 2:
+		if !i.open {
+			return
+		}
+		for k, r := range i.having.required {
+			if path[1] == r {
+				i.shown[k] = true
+			}
+		}
+	}
+}
+
+// count is n, plus one where the open instance is satisfied: no later report
+// takes back a required name it has shown.
+func (i *ctaInstanceCount) count() int {
+	if i.satisfied() {
+		return i.n + 1
+	}
+	return i.n
+}
+
+// satisfied reports whether an instance is open and has shown every required
+// name.
+func (i *ctaInstanceCount) satisfied() bool {
+	return i.open && !slices.Contains(i.shown, false)
 }
 
 // Element reports one element of E's subtree, by path, and its attribute
@@ -342,24 +448,44 @@ type ctaCounter struct {
 // down to the reported one inclusive, so len(path) is its depth below E — 0
 // for E itself, 1 for a child, 2 for a grandchild, and so on. attrs is the
 // names of ALL its attribute nodes, carried or ·defaulted·, on the terms
-// [Tally] states. Neither slice is retained: both are read during the call.
+// [Tally] states, which also fix the order the reports come in. Neither slice
+// is retained: both are read during the call, and path is copied.
 //
 // Every path the {test} counts selecting the element counts it — `N` where
 // path is [N], `.//N` where path ends in N at any depth, since xpath20.md
 // §3.2.4 makes `.//N` `./descendant-or-self::node()/child::N`, which never
-// selects E itself, and `N1/N2/…` where path is exactly its steps (§3.2) — and
-// every path selecting one of its attribute nodes counts that node: `@N` at
-// depth 0 only, and `.//@N` at every depth, E's own included, since §3.2.4
-// makes `.//@N` `./descendant-or-self::node()/attribute::N`. The empty path
+// selects E itself, `N1/N2/…` where path is exactly its steps (§3.2), and
+// `N1/…/*` where path is the steps before the `*` followed by any one name,
+// `*` on the child axis matching every element (§3.2.1.2) — and every path
+// selecting one of its attribute nodes counts that node: `@N` at depth 0
+// only, and `.//@N` at every depth, E's own included, since §3.2.4 makes
+// `.//@N` `./descendant-or-self::node()/attribute::N`. `N[a and …]` counts a
+// child named N once the reports at depth 2 that follow it, before the next
+// report at depth 1, include one named each of a, … (§3.2.2). The empty path
 // is E, whose element node no path selects. Every report to a nil Tally
 // selects nothing.
 func (c *Tally) Element(path []xsd.QName, attrs []xsd.QName) {
 	if c == nil {
 		return
 	}
-	for i := range c.counters {
-		c.counters[i].n += ctaSelected(c.counters[i].path, path, attrs)
+	if !ctaNests(c.chain, path) {
+		c.counters = nil
 	}
+	c.chain = append(c.chain[:0], path...)
+	for _, counter := range c.counters {
+		counter.element(path, attrs)
+	}
+}
+
+// ctaNests reports whether a report by path may follow one by prev in the
+// pre-order [Tally] obliges: E's report, the empty path, at any point, and a
+// report at depth d of one or more where prev's first d−1 names are path's.
+func ctaNests(prev, path []xsd.QName) bool {
+	d := len(path)
+	if d == 0 {
+		return true
+	}
+	return len(prev) >= d-1 && slices.Equal(prev[:d-1], path[:d-1])
 }
 
 // ctaSelected is how many of the nodes one [Tally.Element] report carries — the
@@ -393,43 +519,44 @@ func (c *Tally) CountsAttributesAt(depth int) bool {
 		return false
 	}
 	for _, counter := range c.counters {
-		if counter.path.selectsAttributesAt(depth) {
+		if counter.key().selectsAttributesAt(depth) {
 			return true
 		}
 	}
 	return false
 }
 
-// count is the counter c holds for path, false where it holds none.
-func (c *Tally) count(path ctaTallied) (int, bool) {
+// count is the count c holds for key, false where it holds no counter for it.
+func (c *Tally) count(key ctaKey) (int, bool) {
 	if c == nil {
 		return 0, false
 	}
 	for _, counter := range c.counters {
-		if counter.path.same(path) {
-			return counter.n, true
+		if counter.key().same(key) {
+			return counter.count(), true
 		}
 	}
 	return 0, false
 }
 
-// fits reports whether c holds exactly one counter for each of paths, in that
-// order — which a Tally [AssertionTest.Tally] made from the test paths was
-// read off holds — and is nil where paths is empty, since a test that counts
-// nothing has no Tally and any non-nil c given to it is a breach.
-func (c *Tally) fits(paths []ctaTallied) bool {
-	if len(paths) == 0 {
+// fits reports whether c holds exactly one counter for each of keys, in that
+// order — which a Tally [AssertionTest.Tally] made from the test's keys holds
+// until a report breaks the order [Tally] obliges — and is nil where keys is
+// empty, since a test that counts nothing has no Tally and any non-nil c given
+// to it is a breach.
+func (c *Tally) fits(keys []ctaKey) bool {
+	if len(keys) == 0 {
 		return c == nil
 	}
 	var held []ctaCounter
 	if c != nil {
 		held = c.counters
 	}
-	if len(held) != len(paths) {
+	if len(held) != len(keys) {
 		return false
 	}
 	for i, counter := range held {
-		if !counter.path.same(paths[i]) {
+		if !counter.key().same(keys[i]) {
 			return false
 		}
 	}
@@ -469,55 +596,57 @@ type AssertionTest struct {
 // The grammar is [CompileCTATest]'s with the value comparisons, `$value`, an
 // abbreviated child-axis step, a "/" or "//" opening one child or attribute
 // step, a relative path of two or more abbreviated child-axis steps with QName
-// NameTests, `a/b`, or one element step, `a`, `./a` or `.//a`, standing as the
-// whole operand of fn:exists, fn:empty or an ·effective boolean value·
-// (xpath20.md §3.2, §3.2.4, §2.4.3), an fn:count call, whose argument may
-// filter a child step by one predicate or join operands with `|` or `union`
-// (§3.2.2, §3.3.3; the bullets below bound both), or be an operand that is no
-// path — `$value`, `()`, a literal or a function call, read as any argument of
-// the functions below is — the binary arithmetic operators `+`, `-`, `*`,
-// `div`, `idiv` and `mod` (xpath20.md §3.4), and a call to one of the F&O
-// string and sequence functions — fn:contains, fn:starts-with and fn:ends-with
-// with two arguments, fn:string-length, fn:normalize-space and fn:string with
-// one or none, the implicit argument being `.`, fn:concat with two or more,
-// each cast to xs:string, fn:empty, fn:exists and fn:distinct-values with
-// one, and fn:true, fn:false and fn:current-date with none (xpath-functions.md
-// §7.5.1–7.5.3, §7.4.4, §7.4.5, §2.3, §7.4.1, §15.1.4, §15.1.5, §15.1.6, §9.1.1, §9.1.2,
-// §16.4), any argument of which may be the empty sequence `()`, and any of which a
-// constructor function may take as its operand, as it may any other argument (xpath20.md
-// §3.1.5), and fn:namespace-uri with `.` or no argument (§14.3), E's [namespace name] as
-// one xs:anyURI, the zero-length one for no namespace, and fn:in-scope-prefixes with `.`
-// (§11.2.6) as one operand of `=` whose other is a StringLiteral or a parenthesized comma
-// sequence of them, on either side, true where one of those is a prefix of E's [in-scope
-// namespaces] (`xml` always, the zero-length string where a default namespace is in
-// scope, never `xmlns`), each `.` there E as a node — the conditional `if (Expr) then
-// ExprSingle else ExprSingle` (xpath20.md §3.8) as the whole {test}, inside parentheses,
-// as fn:not's argument or as an operand of another, whose test's ·effective boolean
-// value· selects the one branch evaluated, so a dynamic error in the other is never
-// raised, and both of whose branches are compiled, so a decline in either declines the
-// {test}; the [47] ContextItemExpr `.`, atomized (§3.1.4, §2.4.2); [18] CastableExpr's
-// `castable as` tail over a [16] ta-SimpleValue, `$value castable as xs:double`, an
-// xs:boolean true exactly where the same `cast as` yields a value and false where that
-// cast raises — the empty sequence without `?`, two or more items, a lexical or facet
-// mismatch — while an error evaluating its operand raises (§3.10.3), and which declines
-// wherever that cast does; [16] InstanceofExpr's `instance of` tail with an atomic
-// SequenceType, a builtin [53] AtomicType or xs:untypedAtomic and an optional `?`, `*` or
-// `+` (§3.10.1), over an operand that is no node or over an fn:data call, `data(@d)
-// instance of xs:date*`, whose argument it atomizes (xpath-functions.md §2.4) — true
-// where the item count is one the indicator admits and each item's type derives from the
-// AtomicType (§2.5.4), never casting, so `data(.) instance of xs:untypedAtomic` holds
-// over every {content type} and `$value instance of xs:date` over an xs:date `$value`,
-// while an error evaluating its operand raises; and, as an operand of a general
-// comparison, an integer sequence: [11] RangeExpr `I to J` over two IntegerLiterals, bare
-// or parenthesized, or a parenthesized comma sequence of IntegerLiterals and such ranges,
-// `(1 to 10, 20, 30)` (§3.3.1), or a string sequence, a parenthesized comma sequence of
-// StringLiterals, `('a', 'b')`. A string sequence's items are xs:string. Against a typed
-// operand outside the xs:string family, an xs:integer `$value` or child among them,
-// xpath20.md §B.2 defines no comparison and it raises err:XPTY0004, while `.`, which is
-// not typed, casts to xs:string (§3.5.2 rule 2.4) — added, and every decline
-// [CompileCTATest] states is this one's too, under the same static context (xpath-valid
-// clause 2.2) augmented with `$value` (cvc-assertion clause 2.2), plus these, each of
-// which is the same withhold:
+// NameTests, `a/b`, the last of which may instead be the wildcard `*`, `a/*`,
+// which selects every element child (§3.2.1.2), one element step, `a`, `./a`
+// or `.//a`, or a child step filtered by one predicate that is a conjunction
+// of child steps with QName NameTests, `a[b and c]`, which selects each child
+// a that has a child of each name (§3.2.2), standing as the whole operand of
+// fn:exists, fn:empty or an ·effective boolean value· (xpath20.md §3.2,
+// §3.2.4, §2.4.3), an fn:count call, whose argument may filter a child step by one
+// predicate or join operands with `|` or `union` (§3.2.2, §3.3.3; the bullets below bound
+// both), or be an operand that is no path — `$value`, `()`, a literal or a function call,
+// read as any argument of the functions below is — the binary arithmetic operators `+`,
+// `-`, `*`, `div`, `idiv` and `mod` (xpath20.md §3.4), and a call to one of the F&O
+// string and sequence functions — fn:contains, fn:starts-with and fn:ends-with with two
+// arguments, fn:string-length, fn:normalize-space and fn:string with one or none, the
+// implicit argument being `.`, fn:concat with two or more, each cast to xs:string,
+// fn:empty, fn:exists and fn:distinct-values with one, and fn:true, fn:false and
+// fn:current-date with none (xpath-functions.md §7.5.1–7.5.3, §7.4.4, §7.4.5, §2.3,
+// §7.4.1, §15.1.4, §15.1.5, §15.1.6, §9.1.1, §9.1.2, §16.4), any argument of which may be
+// the empty sequence `()`, and any of which a constructor function may take as its
+// operand, as it may any other argument (xpath20.md §3.1.5), and fn:namespace-uri with
+// `.` or no argument (§14.3), E's [namespace name] as one xs:anyURI, the zero-length one
+// for no namespace, and fn:in-scope-prefixes with `.` (§11.2.6) as one operand of `=`
+// whose other is a StringLiteral or a parenthesized comma sequence of them, on either
+// side, true where one of those is a prefix of E's [in-scope namespaces] (`xml` always,
+// the zero-length string where a default namespace is in scope, never `xmlns`), each `.`
+// there E as a node — the conditional `if (Expr) then ExprSingle else ExprSingle`
+// (xpath20.md §3.8) as the whole {test}, inside parentheses, as fn:not's argument or as
+// an operand of another, whose test's ·effective boolean value· selects the one branch
+// evaluated, so a dynamic error in the other is never raised, and both of whose branches
+// are compiled, so a decline in either declines the {test}; the [47] ContextItemExpr `.`,
+// atomized (§3.1.4, §2.4.2); [18] CastableExpr's `castable as` tail over a [16]
+// ta-SimpleValue, `$value castable as xs:double`, an xs:boolean true exactly where the
+// same `cast as` yields a value and false where that cast raises — the empty sequence
+// without `?`, two or more items, a lexical or facet mismatch — while an error evaluating
+// its operand raises (§3.10.3), and which declines wherever that cast does; [16]
+// InstanceofExpr's `instance of` tail with an atomic SequenceType, a builtin [53]
+// AtomicType or xs:untypedAtomic and an optional `?`, `*` or `+` (§3.10.1), over an
+// operand that is no node or over an fn:data call, `data(@d) instance of xs:date*`, whose
+// argument it atomizes (xpath-functions.md §2.4) — true where the item count is one the
+// indicator admits and each item's type derives from the AtomicType (§2.5.4), never
+// casting, so `data(.) instance of xs:untypedAtomic` holds over every {content type} and
+// `$value instance of xs:date` over an xs:date `$value`, while an error evaluating its
+// operand raises; and, as an operand of a general comparison, an integer sequence: [11]
+// RangeExpr `I to J` over two IntegerLiterals, bare or parenthesized, or a parenthesized
+// comma sequence of IntegerLiterals and such ranges, `(1 to 10, 20, 30)` (§3.3.1), or a
+// string sequence, a parenthesized comma sequence of StringLiterals, `('a', 'b')`. A
+// string sequence's items are xs:string. Against a typed operand outside the xs:string
+// family, an xs:integer `$value` or child among them, xpath20.md §B.2 defines no
+// comparison and it raises err:XPTY0004, while `.`, which is not typed, casts to
+// xs:string (§3.5.2 rule 2.4) — added, and every decline [CompileCTATest] states is this
+// one's too, under the same static context (xpath-valid clause 2.2) augmented with
+// `$value` (cvc-assertion clause 2.2), plus these, each of which is the same withhold:
 //
 //   - an attribute NameTest that is not a QName: a [37] Wildcard can match an
 //     attribute ·attributed to· an {attribute wildcard}, whose type is not
@@ -536,10 +665,11 @@ type AssertionTest struct {
 //     ·special· one is read as xs:untypedAtomic and is admitted;
 //   - any variable but `$value`, which is not in the static context at all
 //     (err:XPST0008);
-//   - a child-axis step whose NameTest is not a QName, or spells its axis out,
-//     and, where the step's value is read — anywhere but as the whole operand
-//     of fn:exists, fn:empty or an ·effective boolean value· — one naming a
-//     child for which elems reports false;
+//   - a child-axis step whose NameTest is not a QName — but the `*` ending a
+//     child path whose existence is asked — or spells its axis out, and, where
+//     the step's value is read — anywhere but as the whole operand of
+//     fn:exists, fn:empty or an ·effective boolean value· — one naming a child
+//     for which elems reports false;
 //   - a child read for its value whose type elems answers is none of: a simple
 //     type the bullets above admit as an attribute's, a complex type whose
 //     simple {content type} is one, or a complex type whose {content
@@ -551,9 +681,10 @@ type AssertionTest struct {
 //     element-only and empty {content type} declines;
 //   - a path of more than one step anywhere but as the whole operand of
 //     fn:exists, fn:empty or an ·effective boolean value·, and there any step
-//     on another axis, with a wildcard, a predicate or a kind test, and any
-//     "//" between steps — so `a/b = 1`, `count(a/b)`, `string(a/b)`, `a/@b`,
-//     `a//b` and `a/*` decline — a rooted path of more than one step, and a
+//     on another axis, with a wildcard but a bare `*` on the last step, with a
+//     predicate or a kind test, and any "//" between steps — so `a/b = 1`,
+//     `count(a/b)`, `string(a/b)`, `a/@b`, `a//b`, `a/* = 1`, `a/*/b`,
+//     `a/*:b` and `a/p:*` decline — a rooted path of more than one step, and a
 //     "/" with no step after it;
 //   - an fn:count argument that is not one QName step — `N`, `@N`, either of
 //     them behind `./` or `.//`, or a rooted one — nor such a child step `N`
@@ -565,17 +696,25 @@ type AssertionTest struct {
 //     and a union operand that is rooted or filtered by its value decline, and
 //     so does a step behind `./` or `.//` anywhere but in an fn:count call or
 //     as the whole operand of fn:exists, fn:empty or an ·effective boolean
-//     value·, and a predicate or a union anywhere but in an fn:count argument;
-//   - a predicate that is not a conjunction of attribute-existence tests with
-//     QName NameTests, `N[@A]` or `N[@A1 and @A2 …]`, nor a comparison, or
-//     and, or and fn:not over comparisons, of the candidate `.`, literals,
-//     casts and arithmetic — so `N[@a or @b]`, `N[not(@a)]`, `N[@*]`, an
-//     attribute atomized or beside `.`, any other node, `$value`, fn:count and
-//     every other function call decline — and a predicate whose root is a bare
-//     value, `N[1]`, `N[1 + 0]` or `N[.]`, which a numeric value would make
-//     positional (§3.2.2); position() and last() decline here, the predicate
-//     calling no library function (ctaPredicateFacade.callsLibrary), and
-//     outside a predicate too (ctaAssertionFacade.focus);
+//     value·, and a predicate or a union anywhere but in an fn:count argument,
+//     but the child-existence predicate the next bullet admits;
+//   - outside an fn:count argument, a predicate on any step but one child
+//     step standing as the whole operand of fn:exists, fn:empty or an
+//     ·effective boolean value·, and there one that is not a conjunction of
+//     child steps with QName NameTests, `N[a]` or `N[a1 and a2 …]` — so
+//     `N[a or b]`, `N[not(a)]`, `N[a/b]`, `N[*]`, `N[@a and b]`, `N[a][b]`,
+//     `N[a]/b`, `N[a] = 1` and `N[1]` decline;
+//   - in an fn:count argument, a predicate that is not a conjunction of
+//     attribute-existence tests with QName NameTests, `N[@A]` or `N[@A1 and
+//     @A2 …]`, nor a comparison, or and, or and fn:not over comparisons, of the
+//     candidate `.`, literals, casts and arithmetic — so `count(N[a])`,
+//     `N[@a or @b]`, `N[not(@a)]`, `N[@*]`, an attribute atomized or beside
+//     `.`, any other node, `$value`, fn:count and every other function call
+//     decline — and a predicate whose root is a bare value, `N[1]`, `N[1 + 0]`
+//     or `N[.]`, which a numeric value would make positional (§3.2.2);
+//     position() and last() decline here, the predicate calling no library
+//     function (ctaPredicateFacade.callsLibrary), and outside a predicate too
+//     (ctaAssertionFacade.focus);
 //   - a predicate over a child whose type elems answers is not one a child
 //     read for its value is admitted under as a TYPED value, on that bullet's
 //     terms — so a predicate over a mixed child, `count(body[. = 'x'])`,
@@ -668,7 +807,8 @@ type AssertionTest struct {
 // A counted step consults neither attrs nor elems: fn:count does not atomize
 // its argument (xpath-functions.md §15.4.1, `$arg as item()*`), so the step's
 // type decides nothing and a node of any type, or matched by a wildcard,
-// counts. Nor does a child path of two or more steps, or one element step, as
+// counts. Nor does a child path of two or more steps, `*` ending it or not, one
+// element step, or a child step filtered by the existence of its children, as
 // the whole operand of fn:exists, fn:empty or an ·effective boolean value·, on
 // the same terms: fn:exists and fn:empty take `item()*` (§15.1.4, §15.1.5) and
 // an ·effective boolean value· asks only whether the first item is a node
@@ -711,15 +851,17 @@ type AssertionTest struct {
 // one step outside fn:exists, fn:empty and an ·effective boolean value·, axes
 // beyond the attribute step, one child step, the child steps of such a path,
 // the one element step whose existence is asked and the one counted step,
-// predicates beyond the two kinds on a counted child step, positional ones
-// among them, unions outside fn:count or over other operands, children read
-// for their value whose type is element-only, empty or ·special·, a value
-// predicate over a mixed child, arithmetic outside the numeric operands and
-// the binary operators, conditionals whose value is read as an item rather
-// than for its ·effective boolean value·, `.` under a nil content or where it
-// is a node, but as the argument of the two functions below, sequence
-// expressions beyond the integer and string sequences of a general
-// comparison's operand, `castable as` over any operand but a [16]
+// wildcards but a `*` ending a child path whose existence is asked,
+// predicates beyond the two kinds on a counted child step and the
+// child-existence conjunction on a child step whose existence is asked,
+// positional ones among them, unions outside fn:count or over other operands,
+// children read for their value whose type is element-only, empty or
+// ·special·, a value predicate over a mixed child, arithmetic outside the
+// numeric operands and the binary operators, conditionals whose value is read
+// as an item rather than for its ·effective boolean value·, `.` under a nil
+// content or where it is a node, but as the argument of the two functions
+// below, sequence expressions beyond the integer and string sequences of a
+// general comparison's operand, `castable as` over any operand but a [16]
 // ta-SimpleValue or inside a value predicate, `instance of` beyond an atomic
 // SequenceType over the operands above, the collation argument, and every F&O
 // function but fn:count, those listed above, fn:namespace-uri over `.` or with
@@ -829,53 +971,55 @@ func (t AssertionTest) Evaluate(b value.Backend, types xsd.TypeResolver, e Conte
 // for each distinct relative path an fn:count call in t counts over — a step,
 // a child step filtered by attribute existence, or a union, one counter
 // serving `c[@a and @b]` and `c[@b and @a]`, and `e | e` and `e` — and each
-// distinct path — one element step or a child path of two or more steps —
-// whose existence t asks (fn:exists, fn:empty, an ·effective boolean value·),
-// one counter serving a path both counted and asked, or nil where t counts
-// over none — a {test} with neither, or one whose every fn:count argument is
-// rooted and raises, is a child step filtered by its value, which
-// [ChildElements] answers, or is no path and counts none, as `count($value)`
-// counts the items of `$value`. t itself is not changed, so one compiled test
-// serves any number of evaluations, each with its own Tally.
+// distinct path — one element step, a child path of two or more steps, its
+// last step a QName or `*`, or a child step filtered by its children's
+// existence, one counter serving `N[a and b]` and `N[b and a]` — whose
+// existence t asks (fn:exists, fn:empty, an ·effective boolean value·), one
+// counter serving a path both counted and asked, or nil where t counts over
+// none — a {test} with neither, or one whose every fn:count argument is rooted
+// and raises, is a child step filtered by its value, which [ChildElements]
+// answers, or is no path and counts none, as `count($value)` counts the items
+// of `$value`. t itself is not changed, so one compiled test serves any number
+// of evaluations, each with its own Tally.
 //
 // Its consumer is validate's walk (validate/cvcassertion.go), which reads the
 // nil as its gate: only an element one of whose {test}s has a Tally reports its
 // subtree to one, and which children a value step reads stays
 // [AssertionTest.ReadsChild]'s answer alone.
 func (t AssertionTest) Tally() *Tally {
-	paths := t.countedPaths()
-	if len(paths) == 0 {
+	keys := t.countedPaths()
+	if len(keys) == 0 {
 		return nil
 	}
-	c := &Tally{counters: make([]ctaCounter, len(paths))}
-	for i, path := range paths {
-		c.counters[i].path = path
+	c := &Tally{counters: make([]ctaCounter, len(keys))}
+	for i, key := range keys {
+		c.counters[i] = key.counter()
 	}
 	return c
 }
 
-// countedPaths is each distinct path t counts over — an fn:count argument, or
-// an element step or child path whose existence it asks — in written order,
-// read off the tree itself.
-func (t AssertionTest) countedPaths() []ctaTallied {
+// countedPaths is each distinct key t counts under — an fn:count argument, or
+// an element step, child path or filtered child step whose existence it asks —
+// in written order, read off the tree itself.
+func (t AssertionTest) countedPaths() []ctaKey {
 	if t.root == nil {
 		// The zero AssertionTest, which no successful CompileAssertionTest
 		// produces, holds nothing.
 		return nil
 	}
-	var distinct []ctaTallied
-	for _, path := range t.root.counted(nil) {
-		if !ctaHoldsPath(distinct, path) {
-			distinct = append(distinct, path)
+	var distinct []ctaKey
+	for _, key := range t.root.counted(nil) {
+		if !ctaHoldsPath(distinct, key) {
+			distinct = append(distinct, key)
 		}
 	}
 	return distinct
 }
 
-// ctaHoldsPath reports whether paths holds a key the same as path.
-func ctaHoldsPath(paths []ctaTallied, path ctaTallied) bool {
-	for _, p := range paths {
-		if p.same(path) {
+// ctaHoldsPath reports whether keys holds a key the same as key.
+func ctaHoldsPath[K ctaKey](keys []K, key ctaKey) bool {
+	for _, k := range keys {
+		if k.same(key) {
 			return true
 		}
 	}
@@ -890,10 +1034,10 @@ func ctaHoldsPath(paths []ctaTallied, path ctaTallied) bool {
 // consumer is validate's walk, which keeps a child's value only where some
 // {test} of its parent reads it. Any other fn:count path reads no value and is
 // no read here — an argument that is no path reads what its operand reads,
-// `count($value)` nothing — nor is an element step or a child path of two or more
-// steps whose existence alone is asked, whatever the type of the child it
-// names: what each counts is [AssertionTest.Tally]'s. The answer is read off
-// the tree itself.
+// `count($value)` nothing — nor is an element step, a child path of two or more
+// steps or a child step filtered by its children's existence whose existence
+// alone is asked, whatever the type of the child it names: what each counts is
+// [AssertionTest.Tally]'s. The answer is read off the tree itself.
 func (t AssertionTest) ReadsChild(name xsd.QName) bool {
 	if t.root == nil {
 		// The zero AssertionTest, which no successful CompileAssertionTest
@@ -1047,71 +1191,75 @@ func (ctaChildPath) readsChild(xsd.QName) bool { return false }
 // readsChild is false, on ctaChildPath's terms.
 func (ctaSelectedElements) readsChild(xsd.QName) bool { return false }
 
+// readsChild is false, on ctaChildPath's terms: neither the child step nor a
+// step of its predicate reads a value.
+func (ctaChildrenHaving) readsChild(xsd.QName) bool { return false }
+
 // counted appends each path any of operands counts over.
-func (n ctaOr) counted(into []ctaTallied) []ctaTallied { return ctaAnyCounted(n.operands, into) }
+func (n ctaOr) counted(into []ctaKey) []ctaKey { return ctaAnyCounted(n.operands, into) }
 
 // counted is ctaOr.counted's.
-func (n ctaAnd) counted(into []ctaTallied) []ctaTallied { return ctaAnyCounted(n.operands, into) }
+func (n ctaAnd) counted(into []ctaKey) []ctaKey { return ctaAnyCounted(n.operands, into) }
 
 // counted appends each path the operand counts over.
-func (n ctaNot) counted(into []ctaTallied) []ctaTallied { return n.operand.counted(into) }
+func (n ctaNot) counted(into []ctaKey) []ctaKey { return n.operand.counted(into) }
 
 // counted appends each path either operand counts over, the left one first.
-func (n ctaCompare) counted(into []ctaTallied) []ctaTallied {
+func (n ctaCompare) counted(into []ctaKey) []ctaKey {
 	return n.right.counted(n.left.counted(into))
 }
 
 // counted is ctaCompare.counted's.
-func (n ctaValueCompare) counted(into []ctaTallied) []ctaTallied {
+func (n ctaValueCompare) counted(into []ctaKey) []ctaKey {
 	return n.right.counted(n.left.counted(into))
 }
 
 // counted appends each path the operand counts over.
-func (n ctaEffectiveBoolean) counted(into []ctaTallied) []ctaTallied {
+func (n ctaEffectiveBoolean) counted(into []ctaKey) []ctaKey {
 	return n.operand.counted(into)
 }
 
 // counted appends each path the test, then either branch, counts over, on
 // readsChild's terms.
-func (n ctaIf) counted(into []ctaTallied) []ctaTallied {
+func (n ctaIf) counted(into []ctaKey) []ctaKey {
 	return n.otherwise.counted(n.then.counted(n.test.counted(into)))
 }
 
 // counted appends each path the cast's operand counts over.
-func (n ctaCast) counted(into []ctaTallied) []ctaTallied { return n.operand.counted(into) }
+func (n ctaCast) counted(into []ctaKey) []ctaKey { return n.operand.counted(into) }
 
 // counted is its cast's.
-func (n ctaCastable) counted(into []ctaTallied) []ctaTallied { return n.cast.counted(into) }
+func (n ctaCastable) counted(into []ctaKey) []ctaKey { return n.cast.counted(into) }
 
 // counted is its operand's.
-func (n ctaInstanceOf) counted(into []ctaTallied) []ctaTallied { return n.operand.counted(into) }
+func (n ctaInstanceOf) counted(into []ctaKey) []ctaKey { return n.operand.counted(into) }
 
 // counted appends each path either operand of the arithmetic counts over, the
 // left one first.
-func (n ctaArith) counted(into []ctaTallied) []ctaTallied {
+func (n ctaArith) counted(into []ctaKey) []ctaKey {
 	return n.right.counted(n.left.counted(into))
 }
 
 // counted appends each path either argument counts over, the left one first.
-func (n ctaMatch) counted(into []ctaTallied) []ctaTallied {
+func (n ctaMatch) counted(into []ctaKey) []ctaKey {
 	return n.right.operand.counted(n.left.operand.counted(into))
 }
 
 // counted appends each path the argument counts over.
-func (n ctaUnaryString) counted(into []ctaTallied) []ctaTallied {
+func (n ctaUnaryString) counted(into []ctaKey) []ctaKey {
 	return n.arg.operand.counted(into)
 }
 
 // counted appends each path the operand counts over.
-func (n ctaPresence) counted(into []ctaTallied) []ctaTallied { return n.operand.counted(into) }
+func (n ctaPresence) counted(into []ctaKey) []ctaKey { return n.operand.counted(into) }
 
 // counted appends each path the cast fn:string is counts over.
-func (n ctaStringFunction) counted(into []ctaTallied) []ctaTallied {
+func (n ctaStringFunction) counted(into []ctaKey) []ctaKey {
 	return n.cast.counted(into)
 }
 
 // counted appends each path any argument counts over, in written order.
-func (n ctaConcat) counted(into []ctaTallied) []ctaTallied {
+func (n ctaConcat) counted(into []ctaKey) []ctaKey {
 	for _, arg := range n.args {
 		into = arg.counted(into)
 	}
@@ -1119,41 +1267,44 @@ func (n ctaConcat) counted(into []ctaTallied) []ctaTallied {
 }
 
 // counted appends each path the argument counts over.
-func (n ctaDistinctValues) counted(into []ctaTallied) []ctaTallied {
+func (n ctaDistinctValues) counted(into []ctaKey) []ctaKey {
 	return n.operand.counted(into)
 }
 
 // counted appends the path the call's argument counts over, if any.
-func (n ctaCount) counted(into []ctaTallied) []ctaTallied { return n.arg.counted(into) }
+func (n ctaCount) counted(into []ctaKey) []ctaKey { return n.arg.counted(into) }
 
 // counted appends the key itself: the [Tally] counts the nodes it selects.
-func (p ctaCountPath) counted(into []ctaTallied) []ctaTallied        { return append(into, p) }
-func (f ctaFilteredChildren) counted(into []ctaTallied) []ctaTallied { return append(into, f) }
-func (u ctaUnion) counted(into []ctaTallied) []ctaTallied            { return append(into, u) }
+func (p ctaCountPath) counted(into []ctaKey) []ctaKey        { return append(into, p) }
+func (f ctaFilteredChildren) counted(into []ctaKey) []ctaKey { return append(into, f) }
+func (u ctaUnion) counted(into []ctaKey) []ctaKey            { return append(into, u) }
 
 // counted appends each path the counted operand counts over, and never c
 // itself: its items are read off the operand, so `count($value)` keys nothing
 // in the [Tally].
-func (c ctaCountedItems) counted(into []ctaTallied) []ctaTallied { return c.operand.counted(into) }
+func (c ctaCountedItems) counted(into []ctaKey) []ctaKey { return c.operand.counted(into) }
 
 // counted appends nothing: m is counted over [ChildElements], never keyed in
 // the [Tally], and its predicate counts nothing (ctaPredicateFacade.count).
-func (ctaMatchingChildren) counted(into []ctaTallied) []ctaTallied { return into }
+func (ctaMatchingChildren) counted(into []ctaKey) []ctaKey { return into }
 
 // counted appends nothing: the candidate is no fn:count call.
-func (ctaCandidate) counted(into []ctaTallied) []ctaTallied { return into }
+func (ctaCandidate) counted(into []ctaKey) []ctaKey { return into }
 
 // counted appends the path itself: the [Tally] counts the nodes it selects.
-func (n ctaChildPath) counted(into []ctaTallied) []ctaTallied { return append(into, n) }
+func (n ctaChildPath) counted(into []ctaKey) []ctaKey { return append(into, n) }
+
+// counted appends the key itself, on ctaChildPath's terms.
+func (n ctaChildrenHaving) counted(into []ctaKey) []ctaKey { return append(into, n) }
 
 // counted appends the step's path, the key an fn:count over the same step
 // counts under too.
-func (n ctaSelectedElements) counted(into []ctaTallied) []ctaTallied {
+func (n ctaSelectedElements) counted(into []ctaKey) []ctaKey {
 	return append(into, n.path)
 }
 
 // ctaAnyCounted is counted over each of operands, in written order.
-func ctaAnyCounted(operands []ctaExpr, into []ctaTallied) []ctaTallied {
+func ctaAnyCounted(operands []ctaExpr, into []ctaKey) []ctaKey {
 	for _, o := range operands {
 		into = o.counted(into)
 	}
@@ -1162,22 +1313,22 @@ func ctaAnyCounted(operands []ctaExpr, into []ctaTallied) []ctaTallied {
 
 // counted appends nothing for each of these: none is an fn:count call or holds
 // an operand but the node E is, which counts nothing.
-func (ctaTypeError) counted(into []ctaTallied) []ctaTallied      { return into }
-func (ctaAttr) counted(into []ctaTallied) []ctaTallied           { return into }
-func (ctaTypedAttr) counted(into []ctaTallied) []ctaTallied      { return into }
-func (ctaTypedChild) counted(into []ctaTallied) []ctaTallied     { return into }
-func (ctaUntypedChild) counted(into []ctaTallied) []ctaTallied   { return into }
-func (ctaNoDocumentRoot) counted(into []ctaTallied) []ctaTallied { return into }
-func (ctaNoContextItem) counted(into []ctaTallied) []ctaTallied  { return into }
-func (ctaLiteral) counted(into []ctaTallied) []ctaTallied        { return into }
-func (ctaValueVar) counted(into []ctaTallied) []ctaTallied       { return into }
-func (ctaEmptyValue) counted(into []ctaTallied) []ctaTallied     { return into }
-func (ctaUntypedValue) counted(into []ctaTallied) []ctaTallied   { return into }
-func (ctaContextAtom) counted(into []ctaTallied) []ctaTallied    { return into }
-func (ctaCurrentDate) counted(into []ctaTallied) []ctaTallied    { return into }
-func (ctaNoFocus) counted(into []ctaTallied) []ctaTallied        { return into }
-func (ctaNamespaceURI) counted(into []ctaTallied) []ctaTallied   { return into }
-func (ctaPrefixMember) counted(into []ctaTallied) []ctaTallied   { return into }
+func (ctaTypeError) counted(into []ctaKey) []ctaKey      { return into }
+func (ctaAttr) counted(into []ctaKey) []ctaKey           { return into }
+func (ctaTypedAttr) counted(into []ctaKey) []ctaKey      { return into }
+func (ctaTypedChild) counted(into []ctaKey) []ctaKey     { return into }
+func (ctaUntypedChild) counted(into []ctaKey) []ctaKey   { return into }
+func (ctaNoDocumentRoot) counted(into []ctaKey) []ctaKey { return into }
+func (ctaNoContextItem) counted(into []ctaKey) []ctaKey  { return into }
+func (ctaLiteral) counted(into []ctaKey) []ctaKey        { return into }
+func (ctaValueVar) counted(into []ctaKey) []ctaKey       { return into }
+func (ctaEmptyValue) counted(into []ctaKey) []ctaKey     { return into }
+func (ctaUntypedValue) counted(into []ctaKey) []ctaKey   { return into }
+func (ctaContextAtom) counted(into []ctaKey) []ctaKey    { return into }
+func (ctaCurrentDate) counted(into []ctaKey) []ctaKey    { return into }
+func (ctaNoFocus) counted(into []ctaKey) []ctaKey        { return into }
+func (ctaNamespaceURI) counted(into []ctaKey) []ctaKey   { return into }
+func (ctaPrefixMember) counted(into []ctaKey) []ctaKey   { return into }
 
 // ctaAssertionFacade is the assertion façade compileCTATest parses for: its
 // attribute nodes are typed by attrs, its child element nodes by elems, its
@@ -1324,18 +1475,32 @@ func (f ctaAssertionFacade) child(test ctaNameTest, types ctaTypes) (ctaValue, b
 }
 
 // childPath compiles a relative path of two or more child-axis steps to a
-// ctaChildPath over steps, consulting neither attrs nor elems: the path stands
-// only where fn:exists, fn:empty or an ·effective boolean value· asks whether
-// it selects a node, none of which atomizes it (xpath-functions.md §15.1.4,
-// §15.1.5, `$arg as item()*`; xpath20.md §2.4.3 rule 2), so no step's type
-// decides anything and a node of any type, ·nilled· or not, is selected — on
-// count's terms. What the path selects is read off the [Tally].
-func (ctaAssertionFacade) childPath(steps []xsd.QName) (ctaValue, bool) {
-	path, admitted := ctaChildPathOf(steps)
+// ctaChildPath over parents and last, consulting neither attrs nor elems: the
+// path stands only where fn:exists, fn:empty or an ·effective boolean value·
+// asks whether it selects a node, none of which atomizes it
+// (xpath-functions.md §15.1.4, §15.1.5, `$arg as item()*`; xpath20.md §2.4.3
+// rule 2), so no step's type decides anything and a node of any type, ·nilled·
+// or not, is selected — on count's terms. What the path selects is read off
+// the [Tally].
+func (ctaAssertionFacade) childPath(parents []xsd.QName, last ctaElementTest) (ctaValue, bool) {
+	path, admitted := ctaChildPathOf(parents, last)
 	if !admitted {
 		return nil, false
 	}
 	return path, true
+}
+
+// childrenHaving compiles a child step filtered by a conjunction of child
+// steps to a ctaChildrenHaving over name and required, consulting neither
+// attrs nor elems, on childPath's terms: each step's ·effective boolean value·
+// asks only whether it selects a node (xpath20.md §2.4.3 rule 2). What the
+// step selects is read off the [Tally].
+func (ctaAssertionFacade) childrenHaving(name xsd.QName, required []xsd.QName) (ctaValue, bool) {
+	having, admitted := ctaChildrenHavingOf(name, required)
+	if !admitted {
+		return nil, false
+	}
+	return having, true
 }
 
 // elements compiles one element step, `N`, `./N` or `.//N`, to a
