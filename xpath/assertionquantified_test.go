@@ -227,8 +227,8 @@ func TestAssertionQuantifiedVariableNames(t *testing.T) {
 }
 
 // Every QuantifiedExpr outside the admitted shapes declines, and so does the
-// range variable outside its body (err:XPST0008). The `preceding::` row
-// belongs to #2522.
+// range variable outside its body (err:XPST0008). The two `preceding::` rows
+// stand outside the child-step predicate #2522 admits and belong to #1042.
 func TestAssertionQuantifiedDeclines(t *testing.T) {
 	for _, tc := range []struct{ expr, why string }{
 		{"every $value in c satisfies $value/@a", "a range variable named $value"},
@@ -267,8 +267,8 @@ func TestAssertionQuantifiedDeclines(t *testing.T) {
 		{"every $c in c satisfies $c/self::c", "self:: outside a predicate"},
 		{"every $c in c satisfies $c/following-sibling::*[1][self::c] or $c/@a", "or after the sibling body"},
 		{"every $c in c satisfies $c/preceding-sibling::*[1][self::c]", "preceding-sibling::"},
-		{"every $c in c satisfies $c/preceding::*[1][self::c]", "preceding:: (#2522)"},
-		{"preceding::c", "preceding:: alone (#2522)"},
+		{"every $c in c satisfies $c/preceding::*[1][self::c]", "preceding:: in a body (#1042)"},
+		{"preceding::c", "preceding:: off E (#1042)"},
 		{"count(every $c in c satisfies $c/@a) = 1", "a quantifier as a value"},
 		{"every $c in c satisfies $c/following-sibling::*[1][self::c] and count(c) = 1", "a body followed by and"},
 	} {

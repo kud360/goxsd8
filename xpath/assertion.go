@@ -42,10 +42,11 @@ import (
 // [26] RelativePathExpr), the last of which may be the [37] Wildcard `*`
 // (§3.2.1.2), one element step `N`, `./N` or `.//N` (§3.2.4), or one child
 // step filtered by a [40] Predicate that is a conjunction of child steps,
-// `N[a and b]` (§3.2.2), as the whole operand of fn:exists, fn:empty or an
-// ·effective boolean value·, whether it selects a node of E's subtree being
-// what a [Tally] carries whatever the selected elements' types
-// (ctaFacade.childPath, ctaFacade.elements, ctaFacade.childrenHaving); an
+// `N[a and b]` (§3.2.2), or one `preceding::` step, `N[preceding::M[not(P)]]`
+// (§3.2.1.1), as the whole operand of fn:exists, fn:empty or an ·effective
+// boolean value·, whether it selects a node of E's subtree being what a
+// [Tally] carries whatever the selected elements' types (ctaFacade.childPath,
+// ctaFacade.elements, ctaFacade.childrenHaving, ctaFacade.childrenPreceded); an
 // fn:count call (xpath-functions.md §15.4.1) in [14] ta-ValueExpr's position,
 // over one counted path of E's subtree, whose counts a [Tally] carries, or over
 // an operand that is no path, such as `$value`, whose items it counts; inside
@@ -302,19 +303,24 @@ type ContextElement interface {
 // existence of its attributes, or a union of those (xpath20.md §3.2.2,
 // §3.3.3) — or asks the existence of with fn:exists, fn:empty or an ·effective
 // boolean value· (§15.1.4, §15.1.5, xpath20.md §2.4.3) — among them a child
-// step filtered by the existence of its own children — or a quantified
-// expression ranges over (§3.9) — the children it binds, and those its body
-// holds for: those carrying an attribute, or followed by a sibling element of
-// a name — how many nodes of E's subtree it selects. A child step filtered by
-// its VALUE is not among them: [ChildElements] answers it.
-// [AssertionTest.Tally] makes one, the caller reports E's subtree to it while
-// that subtree streams past, and [AssertionTest.Evaluate] reads it. It keeps
-// one counter per distinct path and no node: what the caller holds for a count
-// is one integer per path, the chain of names of the latest report, which is
-// O(depth), for a child step filtered by its children's existence, which of
-// those children the latest child named by the step has shown so far, and, for
-// the children followed by a sibling of a name, whether the latest child of E
-// reported bears the name they are drawn from — whatever the subtree's size.
+// step filtered by the existence of its own children, and one filtered by a
+// `preceding::` step (§3.2.1.1) — or a quantified expression ranges over
+// (§3.9) — the children it binds, and those its body holds for: those carrying
+// an attribute, or followed by a sibling element of a name — how many nodes of
+// E's subtree it selects. A child step filtered by its VALUE is not among
+// them: [ChildElements] answers it. [AssertionTest.Tally] makes one, the
+// caller reports E's subtree to it while that subtree streams past, and
+// [AssertionTest.Evaluate] reads it. It keeps one counter per distinct path
+// and no node: what the caller holds for a count is one integer per path, the
+// chain of names of the latest report, which is O(depth), for a child step
+// filtered by its children's existence, which of those children the latest
+// child named by the step has shown so far, for one filtered by a
+// `preceding::` step, whether an element it keeps has been reported and, for
+// each element of the latest report's chain, whether it bears the preceding
+// step's name and has shown the child its filter names, which is O(depth)
+// too, and, for the children followed by a sibling of a name, whether the
+// latest child of E reported bears the name they are drawn from — whatever the
+// subtree's size.
 //
 // The caller's obligation is to report EVERY node of E's subtree in the data
 // model instance cvc-assertion clause 1 builds, exactly once, by one
@@ -360,10 +366,12 @@ type Tally struct {
 // ctaCounter is the sealed sum of the counters a [Tally] keeps, one per key
 // (ctaKey.counter): ctaReportCount, which adds what each report selects,
 // ctaInstanceCount, which counts the children of E whose own children the
-// reports after them show, and ctaSuccessionCount, which counts the children
-// of E whose next sibling element the next report at depth 1 names. The keys
-// close the set (STYLE T2's schema-closed-set exception). Each arm is a
-// pointer, which element updates in place.
+// reports after them show, ctaPrecedenceCount, which counts the children of E
+// some element reported before which the reports after it kept, and
+// ctaSuccessionCount, which counts the children of E whose next sibling
+// element the next report at depth 1 names. The keys close the set (STYLE
+// T2's schema-closed-set exception). Each arm is a pointer, which element
+// updates in place.
 type ctaCounter interface {
 	ctaCounter()
 	// key is the key the counter counts under.
@@ -406,13 +414,71 @@ type ctaSuccessionCount struct {
 	latestIsName bool
 }
 
+// ctaPrecedenceCount counts a ctaChildrenPreceded key, `N[preceding::M[…]]`:
+// n is how many children of E named N have been reported after an element
+// named M that the key's test keeps; kept reports whether such an element has
+// closed — a report at its own depth or above has followed it — so far; and
+// open holds, for each element of the latest report's chain from E's child
+// down, whether it is named M and whether a child the test marks has been
+// reported below it. Only a closed element is decided, and every element
+// reported before a child of E is closed by that child's report: the
+// pre-order [Tally] obliges makes its chain the child alone.
+type ctaPrecedenceCount struct {
+	preceded ctaChildrenPreceded
+	n        int
+	kept     bool
+	open     []ctaOpenElement
+}
+
+// ctaOpenElement is one element of a ctaPrecedenceCount's open chain: named
+// reports whether it is named M, and shown whether a child its key's test
+// marks has been reported below it.
+type ctaOpenElement struct {
+	named bool
+	shown bool
+}
+
 func (*ctaReportCount) ctaCounter()     {}
 func (*ctaInstanceCount) ctaCounter()   {}
+func (*ctaPrecedenceCount) ctaCounter() {}
 func (*ctaSuccessionCount) ctaCounter() {}
 
 func (r *ctaReportCount) key() ctaKey     { return r.tallied }
 func (i *ctaInstanceCount) key() ctaKey   { return i.having }
+func (p *ctaPrecedenceCount) key() ctaKey { return p.preceded }
 func (s *ctaSuccessionCount) key() ctaKey { return s.followed }
+
+// element closes every open element at the report's depth or below it,
+// noting whether the test keeps one named M; counts a report of a child of E
+// named N where one was kept before it, every element reported before it
+// being closed and none its ancestor (xpath20.md §3.2.1.1); marks the
+// report's parent where the test marks the report's name; and opens the
+// report. A report at depth 0, E itself, closes everything and opens nothing:
+// E is the ancestor of every element and never preceding.
+func (p *ctaPrecedenceCount) element(path, _ []xsd.QName) {
+	d := len(path)
+	stays := max(d-1, 0)
+	for _, closed := range p.open[stays:] {
+		if closed.named && p.preceded.test.keeps(closed.shown) {
+			p.kept = true
+		}
+	}
+	p.open = p.open[:stays]
+	if d == 0 {
+		return
+	}
+	if d == 1 && p.kept && path[0] == p.preceded.name {
+		p.n++
+	}
+	if d >= 2 && p.preceded.test.marks(path[d-1]) {
+		p.open[d-2].shown = true
+	}
+	p.open = append(p.open, ctaOpenElement{named: path[d-1] == p.preceded.preceding})
+}
+
+// count is n: whether a child of E is selected is decided at its own report,
+// which closes every element before it.
+func (p *ctaPrecedenceCount) count() int { return p.n }
 
 // element reads a report of a child of E as the next sibling element of the
 // child reported before it, counting that one where it is named N and this
@@ -502,6 +568,11 @@ func (i *ctaInstanceCount) satisfied() bool {
 // `.//@N` `./descendant-or-self::node()/attribute::N`. `N[a and …]` counts a
 // child named N once the reports at depth 2 that follow it, before the next
 // report at depth 1, include one named each of a, … (§3.2.2).
+// `N[preceding::M]` counts a child named N where some report before it but
+// E's is named M, at any depth — `N[preceding::M[P]]` where that M's reports
+// at the next depth down, before a report at its own depth or above, include
+// one named P, and `N[preceding::M[not(P)]]` where they include none
+// (§3.2.1.1, §3.2.2; cvc-assertion clause 1.3 roots the tree at E).
 // `$v/following-sibling::*[1][self::M]`, over each child named N a quantifier
 // binds to `$v`, counts a child named N once the next report at depth 1 after
 // it, its next sibling element, is named M (§3.2.1.1, §3.2.2), whatever is
@@ -645,7 +716,12 @@ type AssertionTest struct {
 // which selects every element child (§3.2.1.2), one element step, `a`, `./a`
 // or `.//a`, or a child step filtered by one predicate that is a conjunction
 // of child steps with QName NameTests, `a[b and c]`, which selects each child
-// a that has a child of each name (§3.2.2), standing as the whole operand of
+// a that has a child of each name (§3.2.2), or by one predicate that is one
+// `preceding::` step with a QName NameTest, unfiltered or filtered by one
+// QName child step or fn:not over one, `a[preceding::a]`, `a[preceding::a[b]]`
+// or `a[preceding::a[not(b)]]`, which selects each child a with an element so
+// named and so filtered before it in E's subtree, at any depth, E never among
+// them (§3.2.1.1, cvc-assertion clause 1.3), standing as the whole operand of
 // fn:exists, fn:empty or an ·effective boolean value· (xpath20.md §3.2,
 // §3.2.4, §2.4.3), an fn:count call, whose argument may filter a child step by one
 // predicate or join operands with `|` or `union` (§3.2.2, §3.3.3; the bullets below bound
@@ -762,13 +838,20 @@ type AssertionTest struct {
 //     so does a step behind `./` or `.//` anywhere but in an fn:count call or
 //     as the whole operand of fn:exists, fn:empty or an ·effective boolean
 //     value·, and a predicate or a union anywhere but in an fn:count argument,
-//     but the child-existence predicate the next bullet admits;
+//     but the child-existence and `preceding::` predicates the next bullet
+//     admits;
 //   - outside an fn:count argument, a predicate on any step but one child
 //     step standing as the whole operand of fn:exists, fn:empty or an
-//     ·effective boolean value·, and there one that is not a conjunction of
-//     child steps with QName NameTests, `N[a]` or `N[a1 and a2 …]` — so
-//     `N[a or b]`, `N[not(a)]`, `N[a/b]`, `N[*]`, `N[@a and b]`, `N[a][b]`,
-//     `N[a]/b`, `N[a] = 1` and `N[1]` decline;
+//     ·effective boolean value·, and there one that is neither a conjunction
+//     of child steps with QName NameTests, `N[a]` or `N[a1 and a2 …]`, nor one
+//     `preceding::` step with a QName NameTest, `N[preceding::M]`, filtered by
+//     at most one QName child step or fn:not over one, `N[preceding::M[P]]` or
+//     `N[preceding::M[not(P)]]` — so `N[a or b]`, `N[not(a)]`, `N[a/b]`,
+//     `N[*]`, `N[@a and b]`, `N[a][b]`, `N[a]/b`, `N[a] = 1`, `N[1]`, every
+//     other axis — `N[ancestor::M]`, `N[preceding-sibling::M]`,
+//     `N[following::M]` — `N[preceding::*]`, `N[preceding::M[@P]]`,
+//     `N[preceding::M[not(P) and Q]]`, `N[preceding::M[P][Q]]` and
+//     `count(N[preceding::M])` decline;
 //   - in an fn:count argument, a predicate that is not a conjunction of
 //     attribute-existence tests with QName NameTests, `N[@A]` or `N[@A1 and
 //     @A2 …]`, nor a comparison, or and, or and fn:not over comparisons, of the
@@ -873,27 +956,27 @@ type AssertionTest struct {
 // its argument (xpath-functions.md §15.4.1, `$arg as item()*`), so the step's
 // type decides nothing and a node of any type, or matched by a wildcard,
 // counts. Nor does a child path of two or more steps, `*` ending it or not, one
-// element step, or a child step filtered by the existence of its children, as
-// the whole operand of fn:exists, fn:empty or an ·effective boolean value·, on
-// the same terms: fn:exists and fn:empty take `item()*` (§15.1.4, §15.1.5) and
-// an ·effective boolean value· asks only whether the first item is a node
-// (xpath20.md §2.4.3 rule 2), so a node of any type, ·nilled· or not, is
-// selected — `a` over an element-only a is decided where `a = 1` declines. Nor
-// does an attribute-existence predicate, whose ·effective boolean value· asks
-// only whether the attribute node exists (§2.4.3 rule 2), so `c[@a]` counts a
-// c carrying an empty a, and neither does a quantified expression, whose
-// binding step is never atomized and whose body asks only whether its step
-// selects a node, so a child of any type is bound and `$v/@a` holds for a `$v`
-// carrying an empty a. What the {test} counts is read off the [Tally] its
-// evaluation carries ([AssertionTest.Tally]). A predicate reading `.` is the
-// one counted argument elems types: it atomizes each candidate child, typed as
-// a child step naming it reads a TYPED value, and counts over [ChildElements];
-// a dynamic or type error over any candidate raises for the whole count. An
-// argument that is no path is counted off its own items, never the [Tally], on
-// fn:exists' terms: `count($value)` is the number of items of `$value` — one
-// for an atomic or ·special· value, each item of a list (Datatypes dt-xdmrep
-// clause 3), and none for an empty list or the empty sequence clause 2.3.2
-// binds.
+// element step, or a child step filtered by the existence of its children or
+// by a `preceding::` step, as the whole operand of fn:exists, fn:empty or an
+// ·effective boolean value·, on the same terms: fn:exists and fn:empty take
+// `item()*` (§15.1.4, §15.1.5) and an ·effective boolean value· asks only
+// whether the first item is a node (xpath20.md §2.4.3 rule 2), so a node of any
+// type, ·nilled· or not, is selected — `a` over an element-only a is decided
+// where `a = 1` declines. Nor does an attribute-existence predicate, whose
+// ·effective boolean value· asks only whether the attribute node exists (§2.4.3
+// rule 2), so `c[@a]` counts a c carrying an empty a, and neither does a
+// quantified expression, whose binding step is never atomized and whose body
+// asks only whether its step selects a node, so a child of any type is bound
+// and `$v/@a` holds for a `$v` carrying an empty a. What the {test} counts is
+// read off the [Tally] its evaluation carries ([AssertionTest.Tally]). A
+// predicate reading `.` is the one counted argument elems types: it atomizes
+// each candidate child, typed as a child step naming it reads a TYPED value,
+// and counts over [ChildElements]; a dynamic or type error over any candidate
+// raises for the whole count. An argument that is no path is counted off its
+// own items, never the [Tally], on fn:exists' terms: `count($value)` is the
+// number of items of `$value` — one for an atomic or ·special· value, each item
+// of a list (Datatypes dt-xdmrep clause 3), and none for an empty list or the
+// empty sequence clause 2.3.2 binds.
 //
 // fn:distinct-values atomizes its argument and drops each item eq to an
 // earlier one (xpath-functions.md §15.1.6), compared in the items' {primitive
@@ -918,29 +1001,32 @@ type AssertionTest struct {
 // above is this engine's limit and not the spec's license: paths of more than
 // one step outside fn:exists, fn:empty and an ·effective boolean value·, axes
 // beyond the attribute step, one child step, the child steps of such a path,
-// the one element step whose existence is asked, the one counted step and the
-// following-sibling and self steps of a quantifier's sibling body, quantified
-// expressions beyond one child-step in-clause and the two body forms,
-// wildcards but a `*` ending a child path whose existence is asked,
-// predicates beyond the two kinds on a counted child step and the
-// child-existence conjunction on a child step whose existence is asked,
-// positional ones among them, unions outside fn:count or over other operands,
-// children read for their value whose type is element-only, empty or
-// ·special·, a value predicate over a mixed child, arithmetic outside the
-// numeric operands and the binary operators, conditionals whose value is read
-// as an item rather than for its ·effective boolean value·, `.` under a nil
-// content or where it is a node, but as the argument of the two functions
-// below, sequence expressions beyond the integer and string sequences of a
-// general comparison's operand, `castable as` over any operand but a [16]
-// ta-SimpleValue or inside a value predicate, `instance of` beyond an atomic
-// SequenceType over the operands above, the collation argument, and every F&O
-// function but fn:count, those listed above, fn:namespace-uri over `.` or with
-// no argument, and fn:in-scope-prefixes over `.` only as an operand of `=`,
-// among them — fn:in-scope-prefixes elsewhere because its sequence needs a
-// listing of E's [in-scope namespaces], a capability validate.Element lacks,
-// [ContextElement] answering one prefix at a time. The direction is the
-// withhold: the caller records the assertion as unevaluated and neither
-// charges it nor shows it satisfied (PRINCIPLES 20). (#1042)
+// the one element step whose existence is asked, the one counted step, the
+// preceding step and its child step in a predicate on a child step whose
+// existence is asked — `ancestor::` and `preceding-sibling::` among the axes
+// beyond them — and the following-sibling and self steps of a quantifier's
+// sibling body, quantified expressions beyond one child-step in-clause and the
+// two body forms, wildcards but a `*` ending a child path whose existence is
+// asked, predicates beyond the two kinds on a counted child step and the
+// child-existence conjunction and the `preceding::` step on a child step whose
+// existence is asked, positional ones among them, unions outside fn:count or
+// over other operands, children read for their value whose type is
+// element-only, empty or ·special·, a value predicate over a mixed child,
+// arithmetic outside the numeric operands and the binary operators,
+// conditionals whose value is read as an item rather than for its ·effective
+// boolean value·, `.` under a nil content or where it is a node, but as the
+// argument of the two functions below, sequence expressions beyond the integer
+// and string sequences of a general comparison's operand, `castable as` over
+// any operand but a [16] ta-SimpleValue or inside a value predicate, `instance
+// of` beyond an atomic SequenceType over the operands above, the collation
+// argument, and every F&O function but fn:count, those listed above,
+// fn:namespace-uri over `.` or with no argument, and fn:in-scope-prefixes over
+// `.` only as an operand of `=`, among them — fn:in-scope-prefixes elsewhere
+// because its sequence needs a listing of E's [in-scope namespaces], a
+// capability validate.Element lacks, [ContextElement] answering one prefix at
+// a time. The direction is the withhold: the caller records the assertion as
+// unevaluated and neither charges it nor shows it satisfied (PRINCIPLES 20).
+// (#1042)
 //
 // types is read as [CompileCTATest] reads it and stored nowhere.
 func CompileAssertionTest(expr xsd.XPathExpression, types xsd.TypeResolver, content xsd.ContentType, attrs AttributeTypes, elems ElementTypes) (AssertionTest, bool) {
@@ -1042,8 +1128,9 @@ func (t AssertionTest) Evaluate(b value.Backend, types xsd.TypeResolver, e Conte
 // a child step filtered by attribute existence, or a union, one counter
 // serving `c[@a and @b]` and `c[@b and @a]`, and `e | e` and `e` — and each
 // distinct path — one element step, a child path of two or more steps, its
-// last step a QName or `*`, or a child step filtered by its children's
-// existence, one counter serving `N[a and b]` and `N[b and a]` — whose
+// last step a QName or `*`, a child step filtered by its children's
+// existence, one counter serving `N[a and b]` and `N[b and a]`, or one
+// filtered by a `preceding::` step, `N[preceding::M[not(P)]]` — whose
 // existence t asks (fn:exists, fn:empty, an ·effective boolean value·), one
 // counter serving a path both counted and asked — and, for each quantified
 // expression, the children satisfying its body, `N[@A]` or the N followed by
@@ -1108,9 +1195,10 @@ func ctaHoldsPath[K ctaKey](keys []K, key ctaKey) bool {
 // {test} of its parent reads it. Any other fn:count path reads no value and is
 // no read here — an argument that is no path reads what its operand reads,
 // `count($value)` nothing — nor is an element step, a child path of two or more
-// steps or a child step filtered by its children's existence whose existence
-// alone is asked, whatever the type of the child it names: what each counts is
-// [AssertionTest.Tally]'s. The answer is read off the tree itself.
+// steps or a child step filtered by its children's existence or by a
+// `preceding::` step whose existence alone is asked, whatever the type of the
+// child it names: what each counts is [AssertionTest.Tally]'s. The answer is
+// read off the tree itself.
 func (t AssertionTest) ReadsChild(name xsd.QName) bool {
 	if t.root == nil {
 		// The zero AssertionTest, which no successful CompileAssertionTest
@@ -1272,6 +1360,9 @@ func (ctaSelectedElements) readsChild(xsd.QName) bool { return false }
 // step of its predicate reads a value.
 func (ctaChildrenHaving) readsChild(xsd.QName) bool { return false }
 
+// readsChild is false, on ctaChildrenHaving's terms.
+func (ctaChildrenPreceded) readsChild(xsd.QName) bool { return false }
+
 // counted appends each path any of operands counts over.
 func (n ctaOr) counted(into []ctaKey) []ctaKey { return ctaAnyCounted(n.operands, into) }
 
@@ -1373,6 +1464,9 @@ func (n ctaChildPath) counted(into []ctaKey) []ctaKey { return append(into, n) }
 
 // counted appends the key itself, on ctaChildPath's terms.
 func (n ctaChildrenHaving) counted(into []ctaKey) []ctaKey { return append(into, n) }
+
+// counted appends the key itself, on ctaChildPath's terms.
+func (n ctaChildrenPreceded) counted(into []ctaKey) []ctaKey { return append(into, n) }
 
 // counted appends the key counting the bindings that satisfy the body, and,
 // for `every`, the key counting every binding, the one `count(N)` counts under
@@ -1589,6 +1683,13 @@ func (ctaAssertionFacade) childrenHaving(name xsd.QName, required []xsd.QName) (
 		return nil, false
 	}
 	return having, true
+}
+
+// childrenPreceded compiles a child step filtered by a `preceding::` step to
+// preceded itself, consulting neither attrs nor elems, on childrenHaving's
+// terms. What it selects is read off the [Tally].
+func (ctaAssertionFacade) childrenPreceded(preceded ctaChildrenPreceded) (ctaValue, bool) {
+	return preceded, true
 }
 
 // elements compiles one element step, `N`, `./N` or `.//N`, to a
