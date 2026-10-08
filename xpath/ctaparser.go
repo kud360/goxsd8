@@ -259,10 +259,12 @@ const (
 	// ctaWildcardTok is one [37] Wildcard — `*`, `NCName ':' '*'` or
 	// `'*' ':' NCName` — whose text is as written. It is its own kind and not a
 	// ctaNameTok carrying a `*`, because ctaNameTok also carries the keywords and
-	// the axis name and a wildcard reaches none of those positions. Two
-	// productions read it: attrName as a NameTest, and multiplicativeOperator
-	// as the `*` operator where a bare `*` follows a complete operand, which is
-	// a position no NameTest can take.
+	// the axis name and a wildcard reaches none of those positions. Four
+	// productions read it: attrName as a NameTest, childPathLength as the bare
+	// `*` NameTest of a child path's last step, after a '/', and
+	// multiplicativeOperator and occurrenceIndicator as a bare `*` following a
+	// complete operand or a SequenceType's ItemType, positions no NameTest can
+	// take.
 	ctaWildcardTok
 	// ctaStringTok is a StringLiteral, whose text is its VALUE — quotes
 	// stripped, doubled quotes folded to one.
@@ -773,8 +775,10 @@ func (p *ctaParser) andExpr() (ctaExpr, bool) {
 // which an unknown name is its own error.
 //
 // The third arm with its Comparator absent also takes a child path
-// (childPath) or one element step (selectedElements), whose ·effective boolean
-// value· is whether it selects a node, where the path is the WHOLE ValueExpr:
+// (childPath), a child step filtered by its children's existence
+// (childrenHaving) or one element step (selectedElements), whose ·effective
+// boolean value· is whether it selects a node, where the path is the WHOLE
+// ValueExpr:
 // the token after it ends the BooleanExpr (closesBoolean). Followed by anything
 // else — a comparator, an operator, a cast — it is left to additiveExpr, whose
 // one child step leaves a '/' after it a token no production takes, and
@@ -827,6 +831,13 @@ func (p *ctaParser) booleanExpr() (ctaExpr, bool) {
 			return nil, false
 		}
 		return ctaEffectiveBoolean{operand: path}, true
+	}
+	if n := p.childrenHavingLength(0); n > 0 && p.closesBoolean(n) {
+		having, ok := p.childrenHaving()
+		if !ok {
+			return nil, false
+		}
+		return ctaEffectiveBoolean{operand: having}, true
 	}
 	if n := p.selectedStepLength(0); n > 0 && p.closesBoolean(n) {
 		step, ok := p.selectedElements()
@@ -1469,7 +1480,8 @@ func (p *ctaParser) presenceCall(op ctaPresenceOp) (ctaValue, bool) {
 }
 
 // presenceArgument parses the parenthesized argument list of the fn:empty or
-// fn:exists call whose name the cursor is on: a child path (childPath) or one
+// fn:exists call whose name the cursor is on: a child path (childPath), a
+// child step filtered by its children's existence (childrenHaving) or one
 // element step (selectedElements) where it is the whole list, closed by the
 // call's ')', and otherwise the list arguments parses, of which exactly one
 // argument is admitted — every other arity declines (err:XPST0017).
@@ -1480,6 +1492,13 @@ func (p *ctaParser) presenceArgument() (ctaValue, bool) {
 		path, ok := p.childPath(n)
 		p.advance() // ')'
 		return path, ok
+	}
+	if n := p.childrenHavingLength(2); n > 0 && p.peek(2+n).kind == ctaRParen {
+		p.advance() // the function name
+		p.advance() // '('
+		having, ok := p.childrenHaving()
+		p.advance() // ')'
+		return having, ok
 	}
 	if n := p.selectedStepLength(2); n > 0 && p.peek(2+n).kind == ctaRParen {
 		p.advance() // the function name
@@ -1897,7 +1916,13 @@ func (ctaPredicateFacade) variable(xsd.QName, ctaTypes) (ctaValue, bool) { retur
 
 func (ctaPredicateFacade) child(ctaNameTest, ctaTypes) (ctaValue, bool) { return nil, false }
 
-func (ctaPredicateFacade) childPath([]xsd.QName) (ctaValue, bool) { return nil, false }
+func (ctaPredicateFacade) childPath([]xsd.QName, ctaElementTest) (ctaValue, bool) {
+	return nil, false
+}
+
+func (ctaPredicateFacade) childrenHaving(xsd.QName, []xsd.QName) (ctaValue, bool) {
+	return nil, false
+}
 
 func (ctaPredicateFacade) elements(ctaCountPath) (ctaValue, bool) { return nil, false }
 
@@ -2215,11 +2240,13 @@ func (p *ctaParser) childStep() (ctaValue, bool) {
 }
 
 // childPathLength is how many tokens, from offset at ahead of the cursor,
-// spell a relative path of two or more abbreviated child-axis steps with QName
-// NameTests, `QName ('/' QName)+`, and 0 where they spell none. A name
-// followed by '(' or '::' is a function call or an axis spelled out, never
-// such a step, and so is a '/' followed by anything but a name: each answers
-// 0, as does one step alone, which is childStep's. Nothing is consumed.
+// spell a relative path of two or more abbreviated child-axis steps, each but
+// the last with a QName NameTest and the last with a QName or the bare [37]
+// Wildcard `*`, `QName ('/' QName)* '/' (QName | '*')`, and 0 where they spell
+// none. A name followed by '(' or '::' is a function call or an axis spelled
+// out, never such a step, and so is a '/' followed by anything but a name or
+// `*`: each answers 0, as does one step alone, which is childStep's. A `*` ends
+// the path, and `*:N` and `p:*` are no `*` here. Nothing is consumed.
 func (p *ctaParser) childPathLength(at int) int {
 	n := 0
 	for {
@@ -2235,6 +2262,10 @@ func (p *ctaParser) childPathLength(at int) int {
 			break
 		}
 		n++
+		if tok := p.peek(at + n); tok.kind == ctaWildcardTok && tok.text == "*" {
+			n++
+			break
+		}
 	}
 	if n < 3 {
 		return 0
@@ -2260,27 +2291,89 @@ func (p *ctaParser) closesBoolean(at int) bool {
 // xpath20.md [26] RelativePathExpr, `StepExpr ("/" StepExpr)+`, each step an
 // abbreviated child-axis step (§3.2.1.1, §3.2.4) whose QName NameTest is
 // resolved on elementName's terms, so an unprefixed one takes the {default
-// namespace}. It is the ONE place a ctaChildPath is built, and it is reached
-// from two positions alone: the ·effective boolean value· arm of booleanExpr
-// and fn:exists or fn:empty's argument (presenceArgument), each where the path
-// is the whole operand — the three positions that ask only whether the path
-// selects a node, and never atomize it. simpleValue and additiveExpr never
-// reach it, so no comparison, operator, cast or other call takes one, and
-// childStep stays one step; one step in the same positions is
-// selectedElements'. The node is p.facade's, which may decline it.
+// namespace}, and whose last step may instead be the [37] Wildcard `*`, which
+// on the child axis matches every element (ctaAnyName, §3.2.1.2). It is the
+// ONE place a ctaChildPath is built, and it is reached from two positions
+// alone: the ·effective boolean value· arm of booleanExpr and fn:exists or
+// fn:empty's argument (presenceArgument), each where the path is the whole
+// operand — the three positions that ask only whether the path selects a
+// node, and never atomize it. simpleValue and additiveExpr never reach it, so
+// no comparison, operator, cast or other call takes one, and childStep stays
+// one step; one step in the same positions is selectedElements'. The node is
+// p.facade's, which may decline it.
 //
-// GAP(xpath): a path in any other position, or with a wildcard, a predicate,
-// an axis spelled out, a '//' between steps or an attribute step, declines;
-// the direction is the withhold [CompileAssertionTest] reports. (#1042)
+// GAP(xpath): a path in any other position, or with a wildcard on a step but
+// the last or a `*:N` or `p:*` one on any step, a predicate, an axis spelled
+// out, a '//' between steps or an attribute step, declines; the direction is
+// the withhold [CompileAssertionTest] reports. (#1042)
 func (p *ctaParser) childPath(n int) (ctaValue, bool) {
-	var steps []xsd.QName
-	for end := p.pos + n; p.pos < end; p.advance() {
+	var parents []xsd.QName
+	end := p.pos + n - 1
+	for ; p.pos < end; p.advance() {
 		if p.at(ctaSlashTok) {
 			continue
 		}
-		steps = append(steps, p.elementName(p.peek(0).text))
+		parents = append(parents, p.elementName(p.peek(0).text))
 	}
-	return p.facade.childPath(steps)
+	var last ctaElementTest = ctaAnyName{}
+	if p.at(ctaNameTok) {
+		last = ctaExactName{name: p.elementName(p.peek(0).text)}
+	}
+	p.advance()
+	return p.facade.childPath(parents, last)
+}
+
+// childrenHavingLength is how many tokens, from offset at ahead of the cursor,
+// spell a child step with a QName NameTest filtered by one [40] Predicate that
+// is a conjunction of child steps with QName NameTests, `QName '[' QName ('and'
+// QName)* ']'`, and 0 where they spell none. A name inside the brackets
+// followed by anything but 'and' or ']' — a '/', a '(', a '::', a comparator —
+// spells none. Nothing is consumed.
+func (p *ctaParser) childrenHavingLength(at int) int {
+	if p.peek(at).kind != ctaNameTok || p.peek(at+1).kind != ctaLBracketTok {
+		return 0
+	}
+	n := 2
+	for {
+		if p.peek(at+n).kind != ctaNameTok {
+			return 0
+		}
+		n++
+		tok := p.peek(at + n)
+		if tok.kind == ctaRBracketTok {
+			return n + 1
+		}
+		if tok.kind != ctaNameTok || tok.text != "and" {
+			return 0
+		}
+		n++
+	}
+}
+
+// childrenHaving parses the tokens childrenHavingLength measured at the cursor
+// as a child step filtered by xpath20.md [40] Predicate, `N[a and b …]`, each
+// name resolved on elementName's terms, into the node p.facade builds for it
+// (ctaFacade.childrenHaving), which may decline it. The predicate is no number,
+// so it filters each child named N by its ·effective boolean value· (§3.2.2),
+// and each conjunct is a child step of that child, whose ·effective boolean
+// value· is whether it selects a node (§2.4.3 rule 2). It is the ONE place a
+// ctaChildrenHaving is built, reached from childPath's two positions alone and
+// on its terms.
+func (p *ctaParser) childrenHaving() (ctaValue, bool) {
+	name := p.elementName(p.peek(0).text)
+	p.advance() // the step's name
+	p.advance() // '['
+	required := []xsd.QName{p.elementName(p.peek(0).text)}
+	p.advance()
+	// childrenHavingLength measured a name after each 'and', and ']' after the
+	// last name.
+	for p.atName("and") {
+		p.advance()
+		required = append(required, p.elementName(p.peek(0).text))
+		p.advance()
+	}
+	p.advance() // ']'
+	return p.facade.childrenHaving(name, required)
 }
 
 // selectedStepLength is how many tokens, from offset at ahead of the cursor,
@@ -2366,8 +2459,9 @@ func (p *ctaParser) rootedStepName(attribute bool, text string) {
 //
 // BOTH arms of [36] NameTest are admitted, in both spellings: the QName one,
 // and xpath20.md's [37] Wildcard, which [17] reaches because it names NameTest
-// rather than a QName. ctaWildcardTok is accepted HERE and by no other
-// production, so no other position in this grammar admits a `*`.
+// rather than a QName. ctaWildcardTok is accepted as a NameTest HERE and as
+// the bare `*` ending a child path (childPathLength), and in no other NameTest
+// position.
 //
 // The node the resolved NameTest becomes is p.facade's, which may decline it.
 func (p *ctaParser) attrName() (ctaValue, bool) {

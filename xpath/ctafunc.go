@@ -599,7 +599,8 @@ func ctaSequenceLength(v ctaValue, env ctaEnv) (int, bool) {
 // atomic values: an attribute step, untyped (ctaAttr) or typed (ctaTypedAttr),
 // a child-axis step, typed (ctaTypedChild) or over children of mixed content
 // (ctaUntypedChild), an element step whose existence is asked
-// (ctaSelectedElements), a path of child steps (ctaChildPath), the candidate
+// (ctaSelectedElements), a path of child steps (ctaChildPath), a child step
+// filtered by its children's existence (ctaChildrenHaving), the candidate
 // `.` inside a value predicate (ctaCandidate), and the two steps that raise
 // before they select a node, a rooted path (ctaNoDocumentRoot) and a read of
 // an absent context item (ctaNoContextItem). Its nodes method is the ONE
@@ -640,6 +641,9 @@ func (s ctaUntypedChild) nodes(env ctaEnv) (int, bool) {
 
 // nodes is the counter the evaluation's [Tally] holds for s (ctaTalliedNodes).
 func (s ctaChildPath) nodes(env ctaEnv) (int, bool) { return ctaTalliedNodes(s, env) }
+
+// nodes is the counter the evaluation's [Tally] holds for h (ctaTalliedNodes).
+func (h ctaChildrenHaving) nodes(env ctaEnv) (int, bool) { return ctaTalliedNodes(h, env) }
 
 // nodes is the counter the evaluation's [Tally] holds for s's path
 // (ctaTalliedNodes).
@@ -684,7 +688,7 @@ func (ctaCandidate) nodes(ctaEnv) (int, bool) { return 1, true }
 // the caller filled with E's subtree. The input is ctaTypedInput by
 // construction (ctaInput); the other arm holds no Tally and raises,
 // unreachably.
-func ctaTalliedNodes(key ctaTallied, env ctaEnv) (int, bool) {
+func ctaTalliedNodes(key ctaKey, env ctaEnv) (int, bool) {
 	in, typed := env.input.(ctaTypedInput)
 	if !typed {
 		return 0, false

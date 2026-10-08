@@ -177,7 +177,14 @@ func (ctaFacetFacade) child(ctaNameTest, ctaTypes) (ctaValue, bool) {
 
 // childPath compiles any path of child steps to ctaNoContextItem, on
 // attribute's terms: its first step's context node is the absent context item.
-func (ctaFacetFacade) childPath([]xsd.QName) (ctaValue, bool) {
+func (ctaFacetFacade) childPath([]xsd.QName, ctaElementTest) (ctaValue, bool) {
+	return ctaNoContextItem{}, true
+}
+
+// childrenHaving compiles any child step filtered by its children's existence
+// to ctaNoContextItem, on childPath's terms: the step its predicate filters
+// reads the absent context item before the predicate is evaluated.
+func (ctaFacetFacade) childrenHaving(xsd.QName, []xsd.QName) (ctaValue, bool) {
 	return ctaNoContextItem{}, true
 }
 
