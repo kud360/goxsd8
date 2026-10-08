@@ -41,7 +41,8 @@ func fcValue(t *testing.T, st *xsd.SimpleType, lexical string) value.Value {
 // with ctaNoFocus dropped from ctaTypes.castSource's unjudged arm. A
 // constructor function over either fails as fn:string does, the cast's
 // operand raising: `xs:integer(position())` and `xs:string(position()) = '1'`,
-// each of which declines with constructorFunction parsing simpleValue alone.
+// each of which declines with constructorFunction parsing simpleValue alone,
+// and the second with ctaNoFocus dropped from castSource's unjudged arm.
 func TestFacetAssertionsDecideTheValue(t *testing.T) {
 	intType, str := asBuiltin(t, "int"), asBuiltin(t, "string")
 	for _, tc := range []struct {
