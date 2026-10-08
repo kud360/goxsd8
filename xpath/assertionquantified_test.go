@@ -226,9 +226,11 @@ func TestAssertionQuantifiedVariableNames(t *testing.T) {
 	}
 }
 
-// Every QuantifiedExpr outside the admitted shapes declines, and so does the
-// range variable outside its body (err:XPST0008). The two `preceding::` rows
-// stand outside the child-step predicate #2522 admits and belong to #1042.
+// Every QuantifiedExpr over a child step outside the admitted shapes declines,
+// and so does the range variable outside its body (err:XPST0008). The two
+// `preceding::` rows stand outside the child-step predicate #2522 admits and
+// belong to #1042. A binding over `$value` is
+// TestAssertionQuantifiedOverValueDeclines'.
 func TestAssertionQuantifiedDeclines(t *testing.T) {
 	for _, tc := range []struct{ expr, why string }{
 		{"every $value in c satisfies $value/@a", "a range variable named $value"},
@@ -238,7 +240,6 @@ func TestAssertionQuantifiedDeclines(t *testing.T) {
 		{"every $c in .//c satisfies $c/@a", "a descendant binding"},
 		{"every $c in @x satisfies $c/@a", "an attribute binding"},
 		{"every $c in . satisfies $c/@a", "the context item as binding"},
-		{"every $c in $value satisfies $c/@a", "$value as binding"},
 		{"every $c in c[@a] satisfies $c/@a", "a filtered binding"},
 		{"every $c in c satisfies some $d in d satisfies $d/@a", "a nested quantifier"},
 		{"every $c in c satisfies $c/@a or $c/@b", "a disjunctive body"},
@@ -278,19 +279,25 @@ func TestAssertionQuantifiedDeclines(t *testing.T) {
 	}
 }
 
-// A Type Alternative's {test} has no quantifier, child step or axis beyond
-// attribute in its grammar (ta-props-correct clause 2), so each form
+// A Type Alternative's {test} has no quantifier, child step, variable or axis
+// beyond attribute in its grammar (ta-props-correct clause 2), so each form
 // declines there; an assertions facet's binding step would read the absent
-// context item and is declined there (FacetAssertions' GAP(xpath)), never
-// Holds or Fails. The Type Alternative rows fail with
-// ctaTypeAlternativeFacade.quantified admitting the node, and the facet rows
-// with ctaFacetFacade.quantified admitting it.
+// context item and is declined there, and so is a quantifier over `$value`,
+// which the facet binds (FacetAssertions' GAP(xpath)), never Holds or Fails.
+// The Type Alternative rows over a child step fail with
+// ctaTypeAlternativeFacade.quantified admitting the node, and those over
+// `$value` decline at ctaTypeAlternativeFacade.variable before rangeScope is
+// asked; the facet rows over a child step fail with ctaFacetFacade.quantified
+// admitting the node, and those over `$value`, which hold over "x" where
+// compiled, with ctaFacetFacade.rangeScope admitting the body's scope.
 func TestAssertionQuantifiedOutsideTheAssertionFacade(t *testing.T) {
 	forms := []string{
 		"every $c in c satisfies $c/@a",
 		"some $c in c satisfies $c/@a",
 		"every $w in white satisfies not($w/following-sibling::*[1][self::white])",
 		"some $w in white satisfies $w/following-sibling::*[1][self::white]",
+		"every $x in data($value) satisfies $x = 'x'",
+		"some $x in $value satisfies $x = 'x'",
 	}
 	str := asBuiltin(t, "string")
 	for _, expr := range forms {

@@ -607,7 +607,8 @@ func ctaSequenceLength(v ctaValue, env ctaEnv) (int, bool) {
 // (ctaNoContextItem). Its nodes method is the ONE reading of node existence,
 // which the ·effective boolean value· of a step (ctaEffectiveBoolean.eval) and
 // fn:empty and fn:exists (ctaSequenceLength) both take; every other operand's
-// items are atomic values the caller reads its own way.
+// items are atomic values the caller reads its own way. A quantifier's range
+// variable over `$value` (ctaRangeItem) is one such atomic value and no step.
 type ctaStep interface {
 	ctaValue
 	// nodes is how many nodes the step selects, a ·nilled· child counting as a
