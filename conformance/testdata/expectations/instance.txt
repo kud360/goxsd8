@@ -62,7 +62,7 @@ Assert/assert-simple005/instance/assert-simple005.n1.xml pass
 Assert/assert-simple005/instance/assert-simple005.v1.xml pass
 Assert/assert-simple006/instance/assert-simple006.n1.xml pass
 Assert/assert-simple006/instance/assert-simple006.v1.xml pass
-Assert/assert-simple007/instance/assert-simple007.n1.xml fail
+Assert/assert-simple007/instance/assert-simple007.n1.xml pass
 Assert/assert-simple008/instance/assert-simple007.n1.xml pass
 Assert/assert-simple009/instance/assert-simple007.n1.xml pass
 Assert/assert-simple010/instance/assert-simple007.n1.xml pass
