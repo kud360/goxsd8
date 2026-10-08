@@ -1475,7 +1475,7 @@ func TestPromotePrecisionDecimalZeroBeyondCapacity(t *testing.T) {
 	// ctaPromoteAllocBound is far above the walk's and the error's own
 	// allocations and far below the 100 GB the padded form needs.
 	const ctaPromoteAllocBound = 1 << 20
-	env := ctaEnv{backend: backend(), types: seededTypes}
+	env := ctaEnv{backend: backend(), types: seededTypes, input: ctaLexicalInput{}}
 	types := compileTypes(t)
 	from, _ := types.castTarget(ctaBuiltin("precisionDecimal"))
 	to, _ := types.castTarget(ctaBuiltin("string"))

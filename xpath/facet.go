@@ -106,6 +106,20 @@ func (f facetAssertions) Evaluate(b value.Backend, r xsd.TypeResolver, st *xsd.S
 	return value.AssertionHolds
 }
 
+// ctaAssertionsDeclined is the [value.AssertionEvaluator] a Type
+// Alternative's casts validate with (ctaLexicalInput.facets). It declines every
+// {test}: a Type Alternative's evaluation holds no current dateTime for
+// fn:current-date to read, and deciding at a made-up one would answer from a
+// value nothing supplied. It twins value's unexported assertionsUndecided,
+// which this package cannot name; ctaValidate's GAP(xpath) owns what a
+// decline costs.
+type ctaAssertionsDeclined struct{}
+
+// Evaluate declines every {test}.
+func (ctaAssertionsDeclined) Evaluate(value.Backend, xsd.TypeResolver, *xsd.SimpleType, xsd.XPathExpression, value.Value) value.AssertionOutcome {
+	return value.AssertionDeclined
+}
+
 // noTypedAttributes and noChildElements are the empty inputs a facet
 // evaluation carries: a facet tree holds no attribute or child step to read
 // either, since ctaFacetFacade compiles each to ctaNoContextItem.
