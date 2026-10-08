@@ -1608,59 +1608,68 @@ func (ctaEmptySequence) ctaStatic() {}
 // comparison over it compiles, never an answer. A ctaChildPath or
 // ctaSelectedElements never reaches here: ctaParser.childPath and
 // ctaParser.selectedElements build them only where no static type is asked.
+// Every other operand is typed by the type it carries (ctaCarriedType).
 func ctaStaticOf(v ctaValue) ctaStatic {
 	switch n := v.(type) {
-	case ctaLiteral:
-		return ctaTyped{st: n.st}
-	case ctaCast:
-		return ctaTyped{st: n.target}
-	case ctaCastable:
-		return ctaTyped{st: n.st}
-	case ctaInstanceOf:
-		return ctaTyped{st: n.st}
-	case ctaTypedAttr:
-		return ctaTyped{st: n.st}
-	case ctaTypedChild:
-		return ctaTyped{st: n.st}
-	case ctaCandidate:
-		return ctaTyped(n)
-	case ctaCount:
-		return ctaTyped{st: n.st}
-	case ctaArith:
-		return ctaTyped{st: n.st}
-	case ctaMatch:
-		return ctaTyped{st: n.st}
-	case ctaUnaryString:
-		return ctaTyped{st: n.st}
-	case ctaPresence:
-		return ctaTyped{st: n.st}
-	case ctaStringFunction:
-		return ctaTyped{st: n.cast.target}
-	case ctaCurrentDate:
-		return ctaTyped(n)
-	case ctaNoFocus:
-		return ctaTyped(n)
-	case ctaNamespaceURI:
-		return ctaTyped{st: n.st}
 	case ctaDistinctValues:
 		return ctaStaticOf(n.operand)
-	case ctaValueVar:
-		return ctaTyped{st: n.atom}
 	case ctaEmptyValue:
 		return ctaEmptySequence{}
-	case ctaUntypedValue:
-		return ctaUntypedAtomic{}
-	case ctaUntypedChild:
-		return ctaUntypedAtomic{}
-	case ctaContextAtom:
-		return ctaUntypedAtomic{}
-	case ctaIntegerRanges:
-		return ctaTyped{st: n.st}
-	case ctaStringSequence:
-		return ctaTyped{st: n.st}
-	default:
-		return ctaUntypedAtomic{}
 	}
+	if st, typed := ctaCarriedType(v); typed {
+		return ctaTyped{st: st}
+	}
+	return ctaUntypedAtomic{}
+}
+
+// ctaCarriedType is the simple type a typed operand carries — its static type,
+// which ctaStaticOf reports and ctaTypes.castSource judges a cast by — or false
+// for one that carries none: an untyped or statically empty operand, and an
+// fn:distinct-values call, whose static type is its operand's. A cast carries
+// its target, an fn:string call its cast's, and `$value` the type of each of
+// its items.
+func ctaCarriedType(v ctaValue) (*xsd.SimpleType, bool) {
+	switch n := v.(type) {
+	case ctaLiteral:
+		return n.st, true
+	case ctaCast:
+		return n.target, true
+	case ctaCastable:
+		return n.st, true
+	case ctaInstanceOf:
+		return n.st, true
+	case ctaTypedAttr:
+		return n.st, true
+	case ctaTypedChild:
+		return n.st, true
+	case ctaCandidate:
+		return n.st, true
+	case ctaCount:
+		return n.st, true
+	case ctaArith:
+		return n.st, true
+	case ctaMatch:
+		return n.st, true
+	case ctaUnaryString:
+		return n.st, true
+	case ctaPresence:
+		return n.st, true
+	case ctaStringFunction:
+		return n.cast.target, true
+	case ctaCurrentDate:
+		return n.st, true
+	case ctaNoFocus:
+		return n.st, true
+	case ctaNamespaceURI:
+		return n.st, true
+	case ctaValueVar:
+		return n.atom, true
+	case ctaIntegerRanges:
+		return n.st, true
+	case ctaStringSequence:
+		return n.st, true
+	}
+	return nil, false
 }
 
 // ctaComparator is one of the six comparison operators: a [13] ta-Comparator
