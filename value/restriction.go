@@ -353,12 +353,13 @@ func (rc restrictionCheck) checkBoundAgainstBase(r xsd.TypeResolver, own xsd.Fac
 		if !ordered {
 			continue
 		}
-		if !boundRestrictionViolates(own.Kind(), baseF.Kind(), ownV.Cmp(baseV)) {
+		clause, violates := boundRestrictionViolates(own.Kind(), baseF.Kind(), ownV.Cmp(baseV))
+		if !violates {
 			continue
 		}
 		return xsderr.New(rule, rc.owner.Loc(),
-			"simple type restriction's own %s {value} %q is not a valid restriction of the {base type definition}'s %s {value} %q, which %s requires",
-			own.Kind(), boundLexical(own), baseF.Kind(), boundLexical(baseF), rule)
+			"simple type restriction's own %s {value} %q is not a valid restriction of the {base type definition}'s %s {value} %q, which %s clause %d requires",
+			own.Kind(), boundLexical(own), baseF.Kind(), boundLexical(baseF), rule, clause)
 	}
 	return nil
 }
@@ -394,14 +395,18 @@ func (rc restrictionCheck) boundLimit(f xsd.Facet, rule xsderr.Rule) (limit Orde
 
 // boundRestrictionViolates reports whether a derived bound facet of kind derived
 // violates its valid-restriction SCC against a base bound facet of kind base,
-// given ord — the ·ordering· of the DERIVED {value} relative to the BASE {value}.
+// given ord — the ·ordering· of the DERIVED {value} relative to the BASE {value}
+// — and the number of the SCC's clause the (derived, base) pair falls under. The
+// clause is a function of the pair alone and ord decides only whether it is
+// violated; both come from one switch arm, so the message's clause and the
+// verdict cannot disagree. A kind outside the four bounds answers clause 0.
 //
 // Incomparable never violates: every numbered condition is a "greater than" /
 // "less than" test, and on a partially ordered primitive (float/double) an
 // incomparable pair satisfies none of them. That is the same reading facets.go's
 // boundFacet.violates applies at instance time, where Incomparable is handled by
 // its own separate clause rather than folded into the ordering tests.
-func boundRestrictionViolates(derived, base xsd.FacetKind, ord Ordering) bool {
+func boundRestrictionViolates(derived, base xsd.FacetKind, ord Ordering) (clause int, violates bool) {
 	switch derived {
 	case xsd.FacetMaxInclusive:
 		return maxInclusiveRestrictionViolates(base, ord)
@@ -415,7 +420,7 @@ func boundRestrictionViolates(derived, base xsd.FacetKind, ord Ordering) bool {
 		// Unreachable: every caller filters on isBoundKind first. Reported as
 		// "no violation" rather than a panic because this is a predicate on
 		// user-supplied schema data, not a capability assertion.
-		return false
+		return 0, false
 	}
 }
 
@@ -423,18 +428,18 @@ func boundRestrictionViolates(derived, base xsd.FacetKind, ord Ordering) bool {
 // clause by clause: 1 {value} greater than the base's maxInclusive; 2 {value}
 // greater than or equal to the base's maxExclusive; 3 {value} less than the
 // base's minInclusive; 4 {value} less than or equal to the base's minExclusive.
-func maxInclusiveRestrictionViolates(base xsd.FacetKind, ord Ordering) bool {
+func maxInclusiveRestrictionViolates(base xsd.FacetKind, ord Ordering) (clause int, violates bool) {
 	switch base {
 	case xsd.FacetMaxInclusive:
-		return ord == Greater
+		return 1, ord == Greater
 	case xsd.FacetMaxExclusive:
-		return ord == Greater || ord == Equal
+		return 2, ord == Greater || ord == Equal
 	case xsd.FacetMinInclusive:
-		return ord == Less
+		return 3, ord == Less
 	case xsd.FacetMinExclusive:
-		return ord == Less || ord == Equal
+		return 4, ord == Less || ord == Equal
 	default:
-		return false
+		return 0, false
 	}
 }
 
@@ -446,18 +451,18 @@ func maxInclusiveRestrictionViolates(base xsd.FacetKind, ord Ordering) bool {
 // exclusive upper bound EQUAL to the base's inclusive lower bound leaves an
 // empty space and is an error, whereas the inclusive/inclusive pairing at
 // maxInclusive clause 3 is not.
-func maxExclusiveRestrictionViolates(base xsd.FacetKind, ord Ordering) bool {
+func maxExclusiveRestrictionViolates(base xsd.FacetKind, ord Ordering) (clause int, violates bool) {
 	switch base {
 	case xsd.FacetMaxExclusive:
-		return ord == Greater
+		return 1, ord == Greater
 	case xsd.FacetMaxInclusive:
-		return ord == Greater
+		return 2, ord == Greater
 	case xsd.FacetMinInclusive:
-		return ord == Less || ord == Equal
+		return 3, ord == Less || ord == Equal
 	case xsd.FacetMinExclusive:
-		return ord == Less || ord == Equal
+		return 4, ord == Less || ord == Equal
 	default:
-		return false
+		return 0, false
 	}
 }
 
@@ -465,18 +470,18 @@ func maxExclusiveRestrictionViolates(base xsd.FacetKind, ord Ordering) bool {
 // clause by clause: 1 {value} less than the base's minExclusive; 2 {value} less
 // than the base's minInclusive; 3 {value} greater than or equal to the base's
 // maxInclusive; 4 {value} greater than or equal to the base's maxExclusive.
-func minExclusiveRestrictionViolates(base xsd.FacetKind, ord Ordering) bool {
+func minExclusiveRestrictionViolates(base xsd.FacetKind, ord Ordering) (clause int, violates bool) {
 	switch base {
 	case xsd.FacetMinExclusive:
-		return ord == Less
+		return 1, ord == Less
 	case xsd.FacetMinInclusive:
-		return ord == Less
+		return 2, ord == Less
 	case xsd.FacetMaxInclusive:
-		return ord == Greater || ord == Equal
+		return 3, ord == Greater || ord == Equal
 	case xsd.FacetMaxExclusive:
-		return ord == Greater || ord == Equal
+		return 4, ord == Greater || ord == Equal
 	default:
-		return false
+		return 0, false
 	}
 }
 
@@ -486,18 +491,18 @@ func minExclusiveRestrictionViolates(base xsd.FacetKind, ord Ordering) bool {
 // that maxInclusive" is missing a "than"); 3 {value} less than or equal to the
 // base's minExclusive; 4 {value} greater than or equal to the base's
 // maxExclusive.
-func minInclusiveRestrictionViolates(base xsd.FacetKind, ord Ordering) bool {
+func minInclusiveRestrictionViolates(base xsd.FacetKind, ord Ordering) (clause int, violates bool) {
 	switch base {
 	case xsd.FacetMinInclusive:
-		return ord == Less
+		return 1, ord == Less
 	case xsd.FacetMaxInclusive:
-		return ord == Greater
+		return 2, ord == Greater
 	case xsd.FacetMinExclusive:
-		return ord == Less || ord == Equal
+		return 3, ord == Less || ord == Equal
 	case xsd.FacetMaxExclusive:
-		return ord == Greater || ord == Equal
+		return 4, ord == Greater || ord == Equal
 	default:
-		return false
+		return 0, false
 	}
 }
 
