@@ -60,7 +60,6 @@ func TestAssertionChildPathExistence(t *testing.T) {
 		{why: "b under c", expr: "exists(a/b)", nodes: []acNode{acPath("c"), acPath("c", "b")}},
 		{why: "b below a's b", expr: "exists(a/b)", nodes: []acNode{acPath("a", "c", "b")}},
 		{why: "b as a child", expr: "exists(a/b)", nodes: []acNode{acPath("b")}},
-		{why: "a child of a/b", expr: "exists(a/b)", nodes: []acNode{acPath("a", "b", "c")}},
 		{why: "two b under a are one answer", expr: "exists(a/b)", nodes: []acNode{ab, ab}, holds: true},
 		{why: "empty, b under a", expr: "empty(a/b)", nodes: []acNode{ab}},
 		{why: "empty, a lacking b", expr: "empty(a/b)", nodes: []acNode{acPath("a")}, holds: true},
@@ -165,18 +164,19 @@ func TestAssertionChildPathKeepsOneCounter(t *testing.T) {
 }
 
 // ctaTallied's arms select on their own terms: a child path the chain equal to
-// its steps and never an attribute; `N` the chain [N] alone; `.//N` any
-// non-empty chain ending in N. Nothing selects through an empty chain, which is
-// E itself.
+// its steps, `a/*` any chain of a and one name, and never an attribute; `N`
+// the chain [N] alone; `.//N` any non-empty chain ending in N. Nothing selects
+// through an empty chain, which is E itself.
 func TestTalliedSelects(t *testing.T) {
 	a, b, c := uq("a"), uq("b"), uq("c")
-	ab, ok := ctaChildPathOf([]xsd.QName{a, b})
+	ab, ok := ctaChildPathOf([]xsd.QName{a}, ctaExactName{name: b})
 	if !ok {
-		t.Fatal("ctaChildPathOf([a b]) = false, want a path")
+		t.Fatal("ctaChildPathOf([a], b) = false, want a path")
 	}
-	if _, ok := ctaChildPathOf([]xsd.QName{a}); ok {
-		t.Error("ctaChildPathOf([a]) = true, want false: one step is ctaTypedChild's")
+	if _, ok := ctaChildPathOf(nil, ctaExactName{name: a}); ok {
+		t.Error("ctaChildPathOf([], a) = true, want false: one step is ctaTypedChild's")
 	}
+	aAny, _ := ctaChildPathOf([]xsd.QName{a}, ctaAnyName{})
 	child := ctaCountPath{axis: ctaCountChildren, name: b}
 	desc := ctaCountPath{axis: ctaCountDescendants, name: b}
 	for _, tc := range []struct {
@@ -192,6 +192,12 @@ func TestTalliedSelects(t *testing.T) {
 		{"a/b misses [a b c]", ab, []xsd.QName{a, b, c}, false},
 		{"a/b misses [c a b]", ab, []xsd.QName{c, a, b}, false},
 		{"a/b misses []", ab, nil, false},
+		{"a/* selects [a b]", aAny, []xsd.QName{a, b}, true},
+		{"a/* selects [a a]", aAny, []xsd.QName{a, a}, true},
+		{"a/* misses [a]", aAny, []xsd.QName{a}, false},
+		{"a/* misses [c b]", aAny, []xsd.QName{c, b}, false},
+		{"a/* misses [a b c]", aAny, []xsd.QName{a, b, c}, false},
+		{"a/* misses []", aAny, nil, false},
 		{"b selects [b]", child, []xsd.QName{b}, true},
 		{"b misses [a b]", child, []xsd.QName{a, b}, false},
 		{"b misses []", child, nil, false},
@@ -207,8 +213,10 @@ func TestTalliedSelects(t *testing.T) {
 	if ab.selectsAttribute(1, b) || ab.selectsAttribute(2, b) {
 		t.Error("a/b selects an attribute, want none")
 	}
-	again, _ := ctaChildPathOf([]xsd.QName{a, b})
-	ac, _ := ctaChildPathOf([]xsd.QName{a, c})
+	again, _ := ctaChildPathOf([]xsd.QName{a}, ctaExactName{name: b})
+	ac, _ := ctaChildPathOf([]xsd.QName{a}, ctaExactName{name: c})
+	aAnyAgain, _ := ctaChildPathOf([]xsd.QName{a}, ctaAnyName{})
+	cAny, _ := ctaChildPathOf([]xsd.QName{c}, ctaAnyName{})
 	for _, tc := range []struct {
 		why  string
 		x, y ctaTallied
@@ -216,6 +224,10 @@ func TestTalliedSelects(t *testing.T) {
 	}{
 		{"a/b same as a/b", ab, again, true},
 		{"a/b not a/c", ab, ac, false},
+		{"a/* same as a/*", aAny, aAnyAgain, true},
+		{"a/* not a/b", aAny, ab, false},
+		{"a/b not a/*", ab, aAny, false},
+		{"a/* not c/*", aAny, cAny, false},
 		{"a/b not b", ab, child, false},
 		{"b not a/b", child, ab, false},
 		{"b same as b", child, ctaCountPath{axis: ctaCountChildren, name: b}, true},
@@ -228,8 +240,9 @@ func TestTalliedSelects(t *testing.T) {
 }
 
 // A child path stands only as the whole operand of fn:exists, fn:empty or an
-// ·effective boolean value·, and only as QName child steps: every other
-// position, axis, wildcard and separator declines.
+// ·effective boolean value·, and only as QName child steps, the last of which
+// may be `*` (TestAssertionWildcardChildPath): every other position, axis,
+// wildcard and separator declines.
 func TestCompileAssertionTestDeclinesChildPaths(t *testing.T) {
 	elems := asElems(map[xsd.QName]xsd.TypeDefinition{uq("a"): asBuiltin(t, "string"), uq("b"): asBuiltin(t, "int")})
 	uses := asUses(t, map[string]string{"y": "anySimpleType"})
@@ -250,8 +263,8 @@ func TestCompileAssertionTestDeclinesChildPaths(t *testing.T) {
 		{"exists(a/@b)", "an attribute step inside fn:exists"},
 		{"a//b", "descendant-or-self between steps"},
 		{"exists(a//b)", "descendant-or-self inside fn:exists"},
-		{"a/*", "a wildcard step"},
-		{"exists(a/*)", "a wildcard step inside fn:exists"},
+		{"a/*/b", "a wildcard step before the last"},
+		{"exists(a/*:b)", "a *:N wildcard step inside fn:exists"},
 		{"exists(a/child::b)", "the unabbreviated child axis"},
 		{"exists(a/b[1])", "a predicate"},
 		{"exists(a/text())", "a kind test"},

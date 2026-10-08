@@ -80,13 +80,36 @@ func acAt(depth int, local string) acNode {
 	return acNode{attribute: true, depth: depth, name: uq(local)}
 }
 
-// acTally is test's Tally with nodes reported to it, in the order written.
+// acTally is test's Tally with nodes reported to it, in the order written,
+// each after the ancestors of its chain the reports before it leave unopened —
+// those below the longest prefix its parent's chain shares with the chain
+// reported last — reported with no attribute names, so the sequence is one
+// pre-order of a tree, as [Tally] obliges: a chain a node shares with the
+// report before it, or extends by one name, opens nothing. A second instance
+// of an element already open, a sibling of the same name, is written as a node
+// of its own.
 func acTally(test AssertionTest, nodes ...acNode) *Tally {
 	c := test.Tally()
+	var last []xsd.QName
 	for _, n := range nodes {
-		c.Element(n.chain(), n.reported())
+		chain := n.chain()
+		for k := acSharedPrefix(last, chain) + 1; k < len(chain); k++ {
+			c.Element(chain[:k], nil)
+		}
+		c.Element(chain, n.reported())
+		last = chain
 	}
 	return c
+}
+
+// acSharedPrefix is how many leading names chain's parent chain, all of chain
+// but its last name, shares with last.
+func acSharedPrefix(last, chain []xsd.QName) int {
+	k := 0
+	for k < len(last) && k < len(chain)-1 && last[k] == chain[k] {
+		k++
+	}
+	return k
 }
 
 // acCompile compiles expr for an E with element-only content whose attribute
