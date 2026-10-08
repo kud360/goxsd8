@@ -247,7 +247,7 @@ func (t ctaTypes) instanceItem(v ctaValue) (item ctaStatic, derived, ok bool) {
 		return ctaStaticOf(v), true, true
 	case ctaAttr, ctaTypedAttr, ctaUntypedChild, ctaValueVar, ctaUntypedValue, ctaEmptyValue,
 		ctaContextAtom, ctaNoContextItem, ctaNoDocumentRoot, ctaCast, ctaCastable, ctaInstanceOf, ctaCount,
-		ctaMatch, ctaUnaryString, ctaPresence, ctaStringFunction, ctaCurrentDate, ctaNoFocus, ctaNamespaceURI:
+		ctaMatch, ctaUnaryString, ctaPresence, ctaStringFunction, ctaConcat, ctaCurrentDate, ctaNoFocus, ctaNamespaceURI:
 		return ctaStaticOf(v), false, true
 	}
 	return nil, false, false

@@ -38,7 +38,9 @@ func fcValue(t *testing.T, st *xsd.SimpleType, lexical string) value.Value {
 // decline with ctaNoFocus removed from ctaTypes.instanceItem. fn:string over
 // either fails too, the call raising before there is a value to cast
 // (castsFrom): `string(position()) = '1'` and `string(last()) = '1'` decline
-// with ctaNoFocus dropped from ctaTypes.castSource's unjudged arm.
+// with ctaNoFocus dropped from ctaTypes.castSource's unjudged arm. A
+// constructor function over either fails as fn:string does, the cast's
+// operand raising: `xs:integer(position())` and `xs:string(position()) = '1'`.
 func TestFacetAssertionsDecideTheValue(t *testing.T) {
 	intType, str := asBuiltin(t, "int"), asBuiltin(t, "string")
 	for _, tc := range []struct {
@@ -73,6 +75,8 @@ func TestFacetAssertionsDecideTheValue(t *testing.T) {
 		{"last() instance of xs:integer", str, "x", value.AssertionFails},
 		{"string(position()) = '1'", str, "x", value.AssertionFails},
 		{"string(last()) = '1'", str, "x", value.AssertionFails},
+		{"xs:integer(position())", str, "x", value.AssertionFails},
+		{"xs:string(position()) = '1'", str, "x", value.AssertionFails},
 	} {
 		got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, tc.st, ctaExprRecord(tc.test, "", "xs", xsd.XMLSchemaNS), fcValue(t, tc.st, tc.lexical))
 		if got != tc.want {
@@ -255,16 +259,42 @@ func TestFacetFocusIsAnIntegerThatRaises(t *testing.T) {
 // fn:position and fn:last raise on the facet façade alone (guard): an
 // assertion's focus is defined — E, position and size 1 (cvc-xpath) — and a
 // Type Alternative's {test} calls no library function, so each declines
-// there, and neither ever compiles to E's value.
+// there, under a constructor function too, and neither ever compiles to E's
+// value.
 func TestFocusDeclinesOutsideTheFacet(t *testing.T) {
 	for _, expr := range []string{"position() = 1", "last() = 1"} {
 		if _, ok := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); ok {
 			t.Errorf("CompileCTATest(%q): compiled, want declined", expr)
 		}
 	}
-	for _, expr := range []string{"position() le 50", "last() le 50", "not(position() le 50)", "position() = '1'"} {
-		if _, ok := CompileAssertionTest(ctaExprRecord(expr, ""), seededTypes, xsd.SimpleContent{SimpleType: asBuiltin(t, "string")}, asUses(t, nil), asNoElems); ok {
+	for _, expr := range []string{"position() le 50", "last() le 50", "not(position() le 50)", "position() = '1'", "xs:integer(position())", "xs:string(position()) = '1'"} {
+		if _, ok := CompileAssertionTest(asRecord(expr), seededTypes, xsd.SimpleContent{SimpleType: asBuiltin(t, "string")}, asUses(t, nil), asNoElems); ok {
 			t.Errorf("CompileAssertionTest(%q): compiled, want declined", expr)
+		}
+	}
+}
+
+// An assertions facet casts a function result by a constructor function
+// (xpath-functions.md §5, §7.4.1): over an xs:date `$value`, assert-simple007's
+// `xs:date(concat(string($value), '!!!'))` is no xs:date lexical, so the cast
+// raises err:FORG0001 and the facet fails (cvc-assertions-valid), while the
+// same cast over `concat(string($value), '')` decides by the date, and a
+// constructor over a concat of literals is that date.
+func TestFacetAssertionsCastAFunctionResult(t *testing.T) {
+	date := asBuiltin(t, "date")
+	for _, tc := range []struct {
+		test, lexical string
+		want          value.AssertionOutcome
+	}{
+		{"xs:date(concat(string($value), '!!!')) gt xs:date('1900-01-01')", "2001-01-01", value.AssertionFails},
+		{"xs:date(concat(string($value), '!!!')) gt xs:date('1900-01-01')", "1999-11-16+01:00", value.AssertionFails},
+		{"xs:date(concat(string($value), '')) gt xs:date('1900-01-01')", "2001-01-01", value.AssertionHolds},
+		{"xs:date(concat(string($value), '')) gt xs:date('1900-01-01')", "1066-03-03", value.AssertionFails},
+		{"xs:date(concat('2008-01-0', '1')) eq xs:date('2008-01-01')", "2001-01-01", value.AssertionHolds},
+	} {
+		got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, date, asRecord(tc.test), fcValue(t, date, tc.lexical))
+		if got != tc.want {
+			t.Errorf("Evaluate(%q, %q) = %d, want %d", tc.test, tc.lexical, got, tc.want)
 		}
 	}
 }

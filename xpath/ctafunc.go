@@ -16,7 +16,8 @@ import (
 // (xpath-functions.md §7.5.1–7.5.3, ctaMatch), fn:string-length and
 // fn:normalize-space (§7.4.4, §7.4.5, ctaUnaryString), fn:empty and fn:exists
 // (§15.1.4, §15.1.5, ctaPresence), fn:distinct-values (§15.1.6,
-// ctaDistinctValues), and fn:string (§2.3, ctaStringFunction) — and fn:count
+// ctaDistinctValues), fn:string (§2.3, ctaStringFunction) and fn:concat
+// (§7.4.1, ctaConcat) — and fn:count
 // over an argument that is no path (§15.4.1, ctaCountedItems), whose items are
 // counted as fn:empty and fn:exists count them. fn:true and fn:false (§9.1.1,
 // §9.1.2) are constants, which compile to the ctaLiteral of their xs:boolean
@@ -110,6 +111,16 @@ type ctaPresence struct {
 // sequence mapped to the zero-length string. Its static type is cast.target.
 type ctaStringFunction struct{ cast ctaCast }
 
+// ctaConcat is a call to fn:concat with two or more arguments
+// (xpath-functions.md §7.4.1, ctaParser.concatCall), whose result is st,
+// xs:string: the strings of args, in written order, each argument held as
+// the fn:string call over it, which casts it to xs:string and maps the empty
+// sequence to the zero-length string.
+type ctaConcat struct {
+	args []ctaStringFunction
+	st   *xsd.SimpleType
+}
+
 // ctaDistinctValues is a call to fn:distinct-values with its one
 // `xs:anyAtomicType*` argument (xpath-functions.md §15.1.6): the atomized
 // operand with every item eq to an earlier one dropped (ctaDistinctValues.eval).
@@ -194,6 +205,7 @@ func (ctaMatch) ctaValue()          {}
 func (ctaUnaryString) ctaValue()    {}
 func (ctaPresence) ctaValue()       {}
 func (ctaStringFunction) ctaValue() {}
+func (ctaConcat) ctaValue()         {}
 func (ctaDistinctValues) ctaValue() {}
 func (ctaCurrentDate) ctaValue()    {}
 func (ctaNoFocus) ctaValue()        {}
@@ -425,6 +437,23 @@ func ctaStringFunctionItem(n ctaStringFunction, c *xsd.SimpleType, env ctaEnv) c
 		return ctaConvert("", n.cast.target, c, env)
 	}
 	return ctaPromote(cast.vs[0], n.cast.target, c, env)
+}
+
+// ctaConcatItem evaluates n and converts the xs:string it returns into c on
+// ctaMatchItem's terms: each argument's string, read by ctaStringOf from the
+// fn:string call it is held as, joined in written order. An argument that
+// raises — err:XPTY0004 for two or more items, the error of its own operand —
+// is the error, and the arguments after it are not evaluated.
+func ctaConcatItem(n ctaConcat, c *xsd.SimpleType, env ctaEnv) ctaItem {
+	var b strings.Builder
+	for _, arg := range n.args {
+		s, ok := ctaStringOf(ctaStringArgument{operand: arg}, env)
+		if !ok {
+			return ctaRaised{}
+		}
+		b.WriteString(s)
+	}
+	return ctaConvert(b.String(), n.st, c, env)
 }
 
 // ctaCurrentDateLayout renders a [time.Time] as the xs:date lexical of its

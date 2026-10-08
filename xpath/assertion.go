@@ -984,6 +984,17 @@ func (n ctaPresence) readsChild(name xsd.QName) bool { return n.operand.readsChi
 // naming name.
 func (n ctaStringFunction) readsChild(name xsd.QName) bool { return n.cast.readsChild(name) }
 
+// readsChild reports whether any argument holds a child value step naming
+// name.
+func (n ctaConcat) readsChild(name xsd.QName) bool {
+	for _, arg := range n.args {
+		if arg.readsChild(name) {
+			return true
+		}
+	}
+	return false
+}
+
 // readsChild reports whether the argument holds a child value step naming name.
 func (n ctaDistinctValues) readsChild(name xsd.QName) bool { return n.operand.readsChild(name) }
 
@@ -1093,6 +1104,14 @@ func (n ctaPresence) counted(into []ctaTallied) []ctaTallied { return n.operand.
 // counted appends each path the cast fn:string is counts over.
 func (n ctaStringFunction) counted(into []ctaTallied) []ctaTallied {
 	return n.cast.counted(into)
+}
+
+// counted appends each path any argument counts over, in written order.
+func (n ctaConcat) counted(into []ctaTallied) []ctaTallied {
+	for _, arg := range n.args {
+		into = arg.counted(into)
+	}
+	return into
 }
 
 // counted appends each path the argument counts over.

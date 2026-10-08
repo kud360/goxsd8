@@ -1656,6 +1656,8 @@ func ctaCarriedType(v ctaValue) (*xsd.SimpleType, bool) {
 		return n.st, true
 	case ctaStringFunction:
 		return n.cast.target, true
+	case ctaConcat:
+		return n.st, true
 	case ctaCurrentDate:
 		return n.st, true
 	case ctaNoFocus:
@@ -2005,6 +2007,8 @@ func (e ctaEffectiveBoolean) eval(env ctaEnv) ctaAnswer {
 		return ctaBoolean(e.operand, n.st, env)
 	case ctaStringFunction:
 		return ctaBoolean(e.operand, n.cast.target, env)
+	case ctaConcat:
+		return ctaBoolean(e.operand, n.st, env)
 	case ctaCurrentDate:
 		return ctaBoolean(e.operand, n.st, env)
 	case ctaNoFocus:
@@ -2243,6 +2247,8 @@ func ctaItemOf(v ctaValue, c *xsd.SimpleType, env ctaEnv) ctaItem {
 		return ctaPresenceItem(n, c, env)
 	case ctaStringFunction:
 		return ctaStringFunctionItem(n, c, env)
+	case ctaConcat:
+		return ctaConcatItem(n, c, env)
 	case ctaCurrentDate:
 		return ctaCurrentDateItem(n, c, env)
 	case ctaNamespaceURI:

@@ -372,9 +372,71 @@ func TestStringFunctionsReadTheirArguments(t *testing.T) {
 	}
 }
 
-// What stays declined: a function outside the twelve, the three-argument
+// fn:concat casts each argument to xs:string and reads the empty sequence as
+// the zero-length string (xpath-functions.md §7.4.1): `concat(@s, 'x')` is
+// "ax" over s="a" and "x" over an absent @s, an xs:untypedAtomic @w is cast
+// like any other, and `()` is an argument. A constructor function over the
+// call casts its xs:string (§5, §17.1.1), so `xs:date(concat('2008-01-0',
+// '1'))` is that date. Every row declines at CompileAssertionTest, and fails,
+// without libraryCall's concat arm; the constructor row also with
+// constructorFunction parsing simpleValue alone.
+func TestAssertionConcat(t *testing.T) {
+	a := []asTyped{{uq("s"), "string", "a"}}
+	for _, tc := range []struct {
+		expr  string
+		attrs []asTyped
+		want  bool
+	}{
+		{"concat(@s, 'x') = 'ax'", a, true},
+		{"concat(@s, 'x') = 'x'", a, false},
+		{"concat(@s, 'x') = 'x'", nil, true},
+		{"concat(@s, 'x') = 'ax'", nil, false},
+		{"concat('<', @w, '>', ()) = '<v>'", []asTyped{{uq("w"), "anySimpleType", "v"}}, true},
+		{"xs:date(concat('2008-01-0', '1')) eq xs:date('2008-01-01')", nil, true},
+	} {
+		if got := afEval(t, tc.expr, tc.attrs); got != tc.want {
+			t.Errorf("Evaluate(%q) over %v = %v, want %v", tc.expr, tc.attrs, got, tc.want)
+		}
+	}
+}
+
+// ctaConcat answers in each switch over the ctaValue sum, its static type
+// xs:string. The static row compares the result with a numeric literal, a
+// B.2 mismatch, err:XPTY0004 — false — where an xs:untypedAtomic reading
+// would cast "1" to the number and hold; the instance row asks its static
+// type; the item row reads its string; the bare row is its ·effective boolean
+// value·; the ReadsChild and Tally rows ask what its arguments read.
+func TestConcatArmsInEverySwitch(t *testing.T) {
+	for _, tc := range []struct {
+		expr string
+		want bool
+	}{
+		{"concat('1', '') = 1", false},
+		{"concat('a', 'b') instance of xs:string", true},
+		{"concat('a', 'b') eq 'ab'", true},
+		{"concat('a', 'b')", true},
+		{"concat((), ())", false},
+	} {
+		if got := afEval(t, tc.expr, nil); got != tc.want {
+			t.Errorf("Evaluate(%q) = %v, want %v", tc.expr, got, tc.want)
+		}
+	}
+	test, ok := afCompile(t, "concat('x', e1) = 'x'", xsd.EmptyContent{})
+	if !ok {
+		t.Fatal("CompileAssertionTest(concat('x', e1) = 'x'): declined, want compiled")
+	}
+	if !test.ReadsChild(uq("e1")) {
+		t.Error("(concat('x', e1) = 'x').ReadsChild(e1) = false, want true")
+	}
+	if acCompile(t, asRecord("concat('', normalize-space(count(inner))) = ''")).Tally() == nil {
+		t.Error("(concat('', normalize-space(count(inner))) = '').Tally() = nil, want a counter for inner")
+	}
+}
+
+// What stays declined: a function libraryCall does not name, the three-argument
 // collation form of fn:contains and its kin (never read as the two-argument
-// form), every other arity, and fn:string over a typed node or value outside
+// form), every other arity — fn:concat with fewer than two arguments among
+// them (§7.4.1) — and fn:string, or an fn:concat argument, over a typed node or value outside
 // the xs:string family and the date/time primitives (castsFrom), or over an
 // xs:float or xs:double, a literal (literalCastsTo) or a cast to either over a
 // string-family operand (castsFrom's floatingSource shape) included, whose
@@ -391,8 +453,11 @@ func TestStringFunctionsReadTheirArguments(t *testing.T) {
 func TestCompileAssertionTestDeclinesFunctions(t *testing.T) {
 	str := asBuiltin(t, "string")
 	for _, expr := range []string{
-		"concat(@s, 'x') = 'x'",
-		"contains(@s, 'x', 'http://www.w3.org/2005/xpath-functions/collation/codepoint')",
+		"upper-case(@s) = 'X'",
+		"concat(@s) = 'x'",
+		"concat() = ''",
+		"concat(@i, 'x') = '5x'",
+		"contains(@s, 'x','http://www.w3.org/2005/xpath-functions/collation/codepoint')",
 		"starts-with(@s, 'x', 'http://www.w3.org/2005/xpath-functions/collation/codepoint')",
 		"contains(@s)",
 		"empty()",
@@ -425,24 +490,34 @@ func TestCompileAssertionTestDeclinesFunctions(t *testing.T) {
 	}
 }
 
-// A Type Alternative's {test} declines every one of the twelve functions — the
+// A Type Alternative's {test} declines every function libraryCall names — the
 // CTA grammar admits fn:not alone (§3.12.6 clause 3) — which CompileCTATest
 // itself shows, CTATestStaticError answering nil for a decline and a pass
-// alike; `not(@a = 'x')` still compiles. With ctaTypeAlternativeFacade
-// answering callsLibrary true, every declined row compiles.
+// alike; `not(@a = 'x')` still compiles. Its constructor function takes a [16]
+// ta-SimpleValue alone ([18]), so a constructor over a function call or
+// another constructor declines too; `xs:string(@a) = 'x'` still compiles.
+// With ctaTypeAlternativeFacade answering callsLibrary true, every declined
+// row compiles.
 func TestCompileCTATestDeclinesLibraryFunctions(t *testing.T) {
 	for _, expr := range []string{
 		"contains(@a, 'x')", "starts-with(@a, 'x')", "ends-with(@a, 'x')",
 		"string-length(@a) > 0", "normalize-space(@a) = 'x'", "string(@a) = 'x'",
 		"empty(@a)", "exists(@a)", "distinct-values(@a) = 'x'", "true()", "false()", "not(true())",
-		"current-date() = current-date()",
+		"current-date() = current-date()", "concat(@a, 'x') = 'ax'",
 	} {
 		if _, ok := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); ok {
 			t.Errorf("CompileCTATest(%q): compiled, want declined", expr)
 		}
 	}
-	if _, ok := CompileCTATest(ctaExprRecord("not(@a = 'x')", ""), seededTypes); !ok {
-		t.Error("CompileCTATest(not(@a = 'x')): declined, want compiled")
+	for _, expr := range []string{"xs:string(xs:string(@a)) = 'x'", "xs:date(concat(@a, '')) = xs:date('2008-01-01')"} {
+		if _, ok := CompileCTATest(asRecord(expr), seededTypes); ok {
+			t.Errorf("CompileCTATest(%q): compiled, want declined", expr)
+		}
+	}
+	for _, expr := range []string{"not(@a = 'x')", "xs:string(@a) = 'x'"} {
+		if _, ok := CompileCTATest(asRecord(expr), seededTypes); !ok {
+			t.Errorf("CompileCTATest(%q): declined, want compiled", expr)
+		}
 	}
 }
 
