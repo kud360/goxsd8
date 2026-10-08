@@ -30,7 +30,7 @@ func anEval(t *testing.T, expr string, e ContextElement) bool {
 // compares with an xs:string by B.1's promotion, in a value comparison too.
 //
 // With libraryCall's namespace-uri arm removed the first row declines. With
-// ctaNamespaceURI's arm removed from ctaStaticOf, the exists, count and
+// ctaNamespaceURI's arm removed from ctaCarriedType, the exists, count and
 // instance-of rows answer false; from ctaEffectiveBoolean.eval, the bare row
 // over urn:x answers false; from ctaTypes.instanceItem, the instance-of row
 // declines; with the call reading E's local name, both `= 'urn:x'` rows over
@@ -191,9 +191,9 @@ func TestAssertionNodeArgumentsReadNoStringValue(t *testing.T) {
 // and fn:string over fn:namespace-uri, whose xs:anyURI castsFrom declines as
 // it does a typed xs:anyURI attribute's — and both decline in a Type
 // Alternative's {test} and inside a value predicate. These rows hold without
-// the change too. With ctaNamespaceURI's arm removed from ctaTypes.castSource
-// the `string(namespace-uri(.))` row compiles, and with equalsAt reading every
-// general comparator as `=` the `!=` row does.
+// the change too. With ctaNamespaceURI's arm removed from ctaCarriedType, which
+// ctaTypes.castSource reads, the `string(namespace-uri(.))` row compiles, and
+// with equalsAt reading every general comparator as `=` the `!=` row does.
 func TestAssertionNodeFunctionsDeclineOtherShapes(t *testing.T) {
 	uses := asUses(t, map[string]string{"a": "string"})
 	elems := func(name xsd.QName) (xsd.TypeDefinition, bool) {

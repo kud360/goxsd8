@@ -30,7 +30,7 @@ func ssElems(t *testing.T) ElementTypes {
 // holds over xs:integer content 1 and is false over 3. Every row compiles
 // first, so a decline cannot pass a false row. Every row declines with
 // sequenceLength answering integerSequenceLength alone; the two type error
-// rows without fn:not hold with ctaStaticOf's ctaStringSequence arm removed,
+// rows without fn:not hold with ctaCarriedType's ctaStringSequence arm removed,
 // and every row that holds but `not(r = ('a', 'b'))` fails with the item
 // switch's arm removed.
 func TestAssertionStringSequences(t *testing.T) {

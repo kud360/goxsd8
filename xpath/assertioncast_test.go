@@ -366,3 +366,28 @@ func TestCastFromADecimalLiteral(t *testing.T) {
 		}
 	}
 }
+
+// fn:string over a cast of a numeric literal is the cast literalCastsTo
+// admitted followed by §17.1.2's cast to xs:string, and the two compose to the
+// round trip of the literal's own canonical lexical: castSource leaves such a
+// cast judged by its target alone (floatingSource), so each row compiles and
+// holds on every façade that calls fn:string — CompileCTATest's calls no
+// library function. With castSource judging a literal by the type it carries,
+// the nested cast is judged xs:decimal or xs:integer, and every row declines on
+// both façades.
+func TestStringOfACastLiteral(t *testing.T) {
+	for _, f := range cfFacades() {
+		if f.name == "CompileCTATest" {
+			continue
+		}
+		for _, expr := range []string{
+			"string(xs:decimal(5)) = '5'",
+			"string(xs:integer(5)) = '5'",
+			"string(xs:decimal(1.5)) = '1.5'",
+		} {
+			if got, decided := f.eval(t, expr); !decided || !got {
+				t.Errorf("%s(%q): decided %v, got %v, want decided and true", f.name, expr, decided, got)
+			}
+		}
+	}
+}
