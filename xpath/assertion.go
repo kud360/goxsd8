@@ -1240,6 +1240,10 @@ func (ctaTypeError) readsChild(xsd.QName) bool { return false }
 // the body reads a value, and what each counts is the [Tally]'s.
 func (ctaQuantified) readsChild(xsd.QName) bool { return false }
 
+// readsChild reports whether the body holds a child value step naming name:
+// the binding sequence, `$value`, reads no child.
+func (n ctaQuantifiedValue) readsChild(name xsd.QName) bool { return n.body.readsChild(name) }
+
 // readsChild reports whether the test or either branch holds a child value
 // step naming name: which branch is evaluated is not known until E is.
 func (n ctaIf) readsChild(name xsd.QName) bool {
@@ -1348,6 +1352,9 @@ func (m ctaMatchingChildren) readsChild(name xsd.QName) bool { return m.name == 
 // readsChild is false: the candidate's value is the enclosing
 // ctaMatchingChildren's read, which reports its name.
 func (ctaCandidate) readsChild(xsd.QName) bool { return false }
+
+// readsChild is false: the range variable is an item of `$value`, no child.
+func (ctaRangeItem) readsChild(xsd.QName) bool { return false }
 
 // readsChild is false, on ctaCount's terms: a child path reads no node's value,
 // and how many nodes it selects is the [Tally]'s.
@@ -1459,6 +1466,9 @@ func (ctaMatchingChildren) counted(into []ctaKey) []ctaKey { return into }
 // counted appends nothing: the candidate is no fn:count call.
 func (ctaCandidate) counted(into []ctaKey) []ctaKey { return into }
 
+// counted appends nothing: the range variable is no fn:count call.
+func (ctaRangeItem) counted(into []ctaKey) []ctaKey { return into }
+
 // counted appends the path itself: the [Tally] counts the nodes it selects.
 func (n ctaChildPath) counted(into []ctaKey) []ctaKey { return append(into, n) }
 
@@ -1478,6 +1488,10 @@ func (n ctaQuantified) counted(into []ctaKey) []ctaKey {
 	}
 	return append(into, n.satisfying.bound())
 }
+
+// counted appends each path the body counts over: the binding sequence,
+// `$value`, keys nothing, and the quantifier none of its own.
+func (n ctaQuantifiedValue) counted(into []ctaKey) []ctaKey { return n.body.counted(into) }
 
 // counted appends the step's path, the key an fn:count over the same step
 // counts under too.
@@ -1714,6 +1728,53 @@ func (ctaAssertionFacade) elements(path ctaCountPath) (ctaValue, bool) {
 // each counts is read off the [Tally].
 func (ctaAssertionFacade) quantified(q ctaQuantifier, satisfying ctaRangeKey) (ctaExpr, bool) {
 	return ctaQuantified{q: q, satisfying: satisfying}, true
+}
+
+// rangeScope is f with variable in scope as the range variable over the items
+// of over (ctaRangeFacade), each of over's item type: the body of a
+// quantifier over a typed `$value` parses under it.
+func (f ctaAssertionFacade) rangeScope(variable xsd.QName, over ctaValueVar) (ctaFacade, bool) {
+	return ctaRangeFacade{ctaAssertionFacade: f, name: variable, item: ctaRangeItem{st: over.atom}}, true
+}
+
+// ctaRangeFacade is the façade the body of an assertion's quantifier over a
+// typed `$value` parses under (ctaParser.quantifiedExpr): the assertion
+// façade, with the range variable, whose ·expanded name· is name, added to
+// its in-scope variables (xpath20.md §3.9), compiled to item. It embeds the concrete
+// ctaAssertionFacade, so no other façade's scope can hold a range variable,
+// and every production it does not override is the assertion's own — a `.`
+// in the body records its read through the embedded readsContextItem.
+//
+// Its scope is the body alone: the parser swaps it in for the body and the
+// outer façade back after, so `$x` beyond the body is the err:XPST0008 the
+// outer façade declines.
+type ctaRangeFacade struct {
+	ctaAssertionFacade
+	name xsd.QName
+	item ctaRangeItem
+}
+
+// variable compiles the range variable, name, to item, and every other name as the
+// assertion façade does, `$value` among them.
+func (f ctaRangeFacade) variable(name xsd.QName, types ctaTypes) (ctaValue, bool) {
+	if name == f.name {
+		return f.item, true
+	}
+	return f.ctaAssertionFacade.variable(name, types)
+}
+
+// quantified declines a quantifier over a child step inside the body.
+//
+// GAP(xpath): a nested quantifier declines, here and in rangeScope. The
+// direction is the withhold [CompileAssertionTest] reports. (#1042)
+func (ctaRangeFacade) quantified(ctaQuantifier, ctaRangeKey) (ctaExpr, bool) {
+	return nil, false
+}
+
+// rangeScope declines a quantifier over `$value` inside the body, under
+// quantified's GAP(xpath).
+func (ctaRangeFacade) rangeScope(xsd.QName, ctaValueVar) (ctaFacade, bool) {
+	return nil, false
 }
 
 // ctaChildValueType is the simple type the typed value of an element of type
