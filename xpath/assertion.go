@@ -360,8 +360,10 @@ type Tally struct {
 // ctaCounter is the sealed sum of the counters a [Tally] keeps, one per key
 // (ctaKey.counter): ctaReportCount, which adds what each report selects,
 // ctaInstanceCount, which counts the children of E whose own children the
-// reports after them show, and ctaSuccessionCount, which counts the children
-// of E whose next sibling element the next report at depth 1 names. The keys
+// reports after them show, ctaPrecedenceCount, which counts the children of E
+// some element reported before which the reports after it kept, and
+// ctaSuccessionCount, which counts the children of E whose next sibling
+// element the next report at depth 1 names. The keys
 // close the set (STYLE T2's schema-closed-set exception). Each arm is a
 // pointer, which element updates in place.
 type ctaCounter interface {
@@ -406,13 +408,71 @@ type ctaSuccessionCount struct {
 	latestIsName bool
 }
 
+// ctaPrecedenceCount counts a ctaChildrenPreceded key, `N[preceding::M[…]]`:
+// n is how many children of E named N have been reported after an element
+// named M that the key's test keeps; kept reports whether such an element has
+// closed — a report at its own depth or above has followed it — so far; and
+// open holds, for each element of the latest report's chain from E's child
+// down, whether it is named M and whether a child the test marks has been
+// reported below it. Only a closed element is decided, and every element
+// reported before a child of E is closed by that child's report: the
+// pre-order [Tally] obliges makes its chain the child alone.
+type ctaPrecedenceCount struct {
+	preceded ctaChildrenPreceded
+	n        int
+	kept     bool
+	open     []ctaOpenElement
+}
+
+// ctaOpenElement is one element of a ctaPrecedenceCount's open chain: named
+// reports whether it is named M, and shown whether a child its key's test
+// marks has been reported below it.
+type ctaOpenElement struct {
+	named bool
+	shown bool
+}
+
 func (*ctaReportCount) ctaCounter()     {}
 func (*ctaInstanceCount) ctaCounter()   {}
+func (*ctaPrecedenceCount) ctaCounter() {}
 func (*ctaSuccessionCount) ctaCounter() {}
 
 func (r *ctaReportCount) key() ctaKey     { return r.tallied }
 func (i *ctaInstanceCount) key() ctaKey   { return i.having }
+func (p *ctaPrecedenceCount) key() ctaKey { return p.preceded }
 func (s *ctaSuccessionCount) key() ctaKey { return s.followed }
+
+// element closes every open element at the report's depth or below it,
+// noting whether the test keeps one named M; counts a report of a child of E
+// named N where one was kept before it, every element reported before it
+// being closed and none its ancestor (xpath20.md §3.2.1.1); marks the
+// report's parent where the test marks the report's name; and opens the
+// report. A report at depth 0, E itself, closes everything and opens nothing:
+// E is the ancestor of every element and never preceding.
+func (p *ctaPrecedenceCount) element(path, _ []xsd.QName) {
+	d := len(path)
+	stays := max(d-1, 0)
+	for _, closed := range p.open[stays:] {
+		if closed.named && p.preceded.test.keeps(closed.shown) {
+			p.kept = true
+		}
+	}
+	p.open = p.open[:stays]
+	if d == 0 {
+		return
+	}
+	if d == 1 && p.kept && path[0] == p.preceded.name {
+		p.n++
+	}
+	if d >= 2 && p.preceded.test.marks(path[d-1]) {
+		p.open[d-2].shown = true
+	}
+	p.open = append(p.open, ctaOpenElement{named: path[d-1] == p.preceded.preceding})
+}
+
+// count is n: whether a child of E is selected is decided at its own report,
+// which closes every element before it.
+func (p *ctaPrecedenceCount) count() int { return p.n }
 
 // element reads a report of a child of E as the next sibling element of the
 // child reported before it, counting that one where it is named N and this
@@ -1272,6 +1332,9 @@ func (ctaSelectedElements) readsChild(xsd.QName) bool { return false }
 // step of its predicate reads a value.
 func (ctaChildrenHaving) readsChild(xsd.QName) bool { return false }
 
+// readsChild is false, on ctaChildrenHaving's terms.
+func (ctaChildrenPreceded) readsChild(xsd.QName) bool { return false }
+
 // counted appends each path any of operands counts over.
 func (n ctaOr) counted(into []ctaKey) []ctaKey { return ctaAnyCounted(n.operands, into) }
 
@@ -1373,6 +1436,9 @@ func (n ctaChildPath) counted(into []ctaKey) []ctaKey { return append(into, n) }
 
 // counted appends the key itself, on ctaChildPath's terms.
 func (n ctaChildrenHaving) counted(into []ctaKey) []ctaKey { return append(into, n) }
+
+// counted appends the key itself, on ctaChildPath's terms.
+func (n ctaChildrenPreceded) counted(into []ctaKey) []ctaKey { return append(into, n) }
 
 // counted appends the key counting the bindings that satisfy the body, and,
 // for `every`, the key counting every binding, the one `count(N)` counts under
@@ -1589,6 +1655,13 @@ func (ctaAssertionFacade) childrenHaving(name xsd.QName, required []xsd.QName) (
 		return nil, false
 	}
 	return having, true
+}
+
+// childrenPreceded compiles a child step filtered by a `preceding::` step to
+// preceded itself, consulting neither attrs nor elems, on childrenHaving's
+// terms. What it selects is read off the [Tally].
+func (ctaAssertionFacade) childrenPreceded(preceded ctaChildrenPreceded) (ctaValue, bool) {
+	return preceded, true
 }
 
 // elements compiles one element step, `N`, `./N` or `.//N`, to a

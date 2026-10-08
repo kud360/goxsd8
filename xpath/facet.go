@@ -193,6 +193,12 @@ func (ctaFacetFacade) childrenHaving(xsd.QName, []xsd.QName) (ctaValue, bool) {
 	return ctaNoContextItem{}, true
 }
 
+// childrenPreceded compiles any child step filtered by a `preceding::` step to
+// ctaNoContextItem, on childrenHaving's terms.
+func (ctaFacetFacade) childrenPreceded(ctaChildrenPreceded) (ctaValue, bool) {
+	return ctaNoContextItem{}, true
+}
+
 // elements compiles any element step, `N`, `./N` or `.//N`, to
 // ctaNoContextItem, on childPath's terms: `N` is a child step of the absent
 // context item, and `./N` and `.//N` open with a read of it, `.`.

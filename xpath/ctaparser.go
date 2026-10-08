@@ -1034,6 +1034,13 @@ func (p *ctaParser) booleanExpr() (ctaExpr, bool) {
 		}
 		return ctaEffectiveBoolean{operand: having}, true
 	}
+	if n := p.childrenPrecededLength(0); n > 0 && p.closesBoolean(n) {
+		preceded, ok := p.childrenPreceded()
+		if !ok {
+			return nil, false
+		}
+		return ctaEffectiveBoolean{operand: preceded}, true
+	}
 	if n := p.selectedStepLength(0); n > 0 && p.closesBoolean(n) {
 		step, ok := p.selectedElements()
 		if !ok {
@@ -1695,6 +1702,13 @@ func (p *ctaParser) presenceArgument() (ctaValue, bool) {
 		p.advance() // ')'
 		return having, ok
 	}
+	if n := p.childrenPrecededLength(2); n > 0 && p.peek(2+n).kind == ctaRParen {
+		p.advance() // the function name
+		p.advance() // '('
+		preceded, ok := p.childrenPreceded()
+		p.advance() // ')'
+		return preceded, ok
+	}
 	if n := p.selectedStepLength(2); n > 0 && p.peek(2+n).kind == ctaRParen {
 		p.advance() // the function name
 		p.advance() // '('
@@ -2118,6 +2132,10 @@ func (ctaPredicateFacade) childPath([]xsd.QName, ctaElementTest) (ctaValue, bool
 }
 
 func (ctaPredicateFacade) childrenHaving(xsd.QName, []xsd.QName) (ctaValue, bool) {
+	return nil, false
+}
+
+func (ctaPredicateFacade) childrenPreceded(ctaChildrenPreceded) (ctaValue, bool) {
 	return nil, false
 }
 
@@ -2573,6 +2591,102 @@ func (p *ctaParser) childrenHaving() (ctaValue, bool) {
 	}
 	p.advance() // ']'
 	return p.facade.childrenHaving(name, required)
+}
+
+// childrenPrecededLength is how many tokens, from offset at ahead of the
+// cursor, spell a child step with a QName NameTest filtered by one [40]
+// Predicate that is one `preceding::` step with a QName NameTest, itself
+// filtered by at most one predicate that is a QName child step or a call of
+// one name over one, `QName '[' 'preceding' '::' QName ( '[' QName ']' | '['
+// QName '(' QName ')' ']' )? ']'`, and 0 where they spell none. Nothing is
+// consumed, and the called name is not resolved: childrenPreceded declines
+// any but fn:not.
+func (p *ctaParser) childrenPrecededLength(at int) int {
+	if p.peek(at).kind != ctaNameTok || p.peek(at+1).kind != ctaLBracketTok {
+		return 0
+	}
+	if tok := p.peek(at + 2); tok.kind != ctaNameTok || tok.text != "preceding" {
+		return 0
+	}
+	if p.peek(at+3).kind != ctaAxisTok || p.peek(at+4).kind != ctaNameTok {
+		return 0
+	}
+	n := 5
+	if p.peek(at+n).kind == ctaLBracketTok {
+		n += p.precedingFilterLength(at + n)
+	}
+	if p.peek(at+n).kind != ctaRBracketTok {
+		return 0
+	}
+	return n + 1
+}
+
+// precedingFilterLength is how many tokens, from offset at ahead of the cursor
+// where a '[' stands, spell `'[' QName ']'` or `'[' QName '(' QName ')' ']'`,
+// and 0 where they spell neither.
+func (p *ctaParser) precedingFilterLength(at int) int {
+	if p.peek(at+1).kind != ctaNameTok {
+		return 0
+	}
+	if p.peek(at+2).kind == ctaRBracketTok {
+		return 3
+	}
+	called := p.peek(at+2).kind == ctaLParen && p.peek(at+3).kind == ctaNameTok &&
+		p.peek(at+4).kind == ctaRParen && p.peek(at+5).kind == ctaRBracketTok
+	if !called {
+		return 0
+	}
+	return 6
+}
+
+// childrenPreceded parses the tokens childrenPrecededLength measured at the
+// cursor as a child step filtered by xpath20.md [40] Predicate,
+// `N[preceding::M]`, `N[preceding::M[P]]` or `N[preceding::M[not(P)]]`, each
+// name resolved on elementName's terms — the preceding axis's principal node
+// kind is element (§3.2.1.2) — and the called name as a function's, into the
+// node p.facade builds for it (ctaFacade.childrenPreceded), which may decline
+// it. Each predicate is no number, so it filters by its ·effective boolean
+// value· (§3.2.2): the outer one whether the preceding step selects a node, the
+// inner one whether M has a child named P, or, under fn:not, has none (§2.4.3
+// rule 2). It is the ONE place a ctaChildrenPreceded is built, reached from
+// childPath's two positions alone and on its terms.
+//
+// GAP(xpath): every other step in such a predicate declines — `ancestor::`,
+// `ancestor-or-self::`, `preceding-sibling::`, `following::`,
+// `following-sibling::`, `descendant::` and every other axis spelled out, a
+// wildcard or kind test on the preceding step, a predicate on it that is no
+// QName child step or fn:not over one — `[not(b) and c]`, `[b/c]`, `[@b]`,
+// `[*]`, `[1]` — a second predicate on it, a step after it, and a call of any
+// function but fn:not; so does a preceding step on `./N`, `.//N` or a longer
+// path, under fn:count, or read for its value. The direction is the withhold
+// [CompileAssertionTest] reports. (#1042)
+func (p *ctaParser) childrenPreceded() (ctaValue, bool) {
+	name := p.elementName(p.peek(0).text)
+	p.advance() // the step's name
+	p.advance() // '['
+	p.advance() // 'preceding'
+	p.advance() // '::'
+	preceded := ctaChildrenPreceded{name: name, preceding: p.elementName(p.peek(0).text), test: ctaAnyPreceding{}}
+	p.advance()
+	if p.at(ctaLBracketTok) {
+		p.advance() // '['
+		negated := p.peek(1).kind == ctaLParen
+		if negated {
+			if p.functionName(p.peek(0).text) != ctaNotFunction {
+				return nil, false
+			}
+			p.advance() // 'not'
+			p.advance() // '('
+		}
+		preceded.test = ctaPrecedingChild{child: p.elementName(p.peek(0).text), negated: negated}
+		p.advance()
+		if negated {
+			p.advance() // ')'
+		}
+		p.advance() // ']'
+	}
+	p.advance() // ']'
+	return p.facade.childrenPreceded(preceded)
 }
 
 // selectedStepLength is how many tokens, from offset at ahead of the cursor,

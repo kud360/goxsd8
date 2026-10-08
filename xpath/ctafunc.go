@@ -600,7 +600,8 @@ func ctaSequenceLength(v ctaValue, env ctaEnv) (int, bool) {
 // a child-axis step, typed (ctaTypedChild) or over children of mixed content
 // (ctaUntypedChild), an element step whose existence is asked
 // (ctaSelectedElements), a path of child steps (ctaChildPath), a child step
-// filtered by its children's existence (ctaChildrenHaving), the candidate
+// filtered by its children's existence (ctaChildrenHaving) or by a
+// `preceding::` step (ctaChildrenPreceded), the candidate
 // `.` inside a value predicate (ctaCandidate), and the two steps that raise
 // before they select a node, a rooted path (ctaNoDocumentRoot) and a read of
 // an absent context item (ctaNoContextItem). Its nodes method is the ONE
@@ -644,6 +645,9 @@ func (s ctaChildPath) nodes(env ctaEnv) (int, bool) { return ctaTalliedNodes(s, 
 
 // nodes is the counter the evaluation's [Tally] holds for h (ctaTalliedNodes).
 func (h ctaChildrenHaving) nodes(env ctaEnv) (int, bool) { return ctaTalliedNodes(h, env) }
+
+// nodes is the counter the evaluation's [Tally] holds for p (ctaTalliedNodes).
+func (p ctaChildrenPreceded) nodes(env ctaEnv) (int, bool) { return ctaTalliedNodes(p, env) }
 
 // nodes is the counter the evaluation's [Tally] holds for s's path
 // (ctaTalliedNodes).
