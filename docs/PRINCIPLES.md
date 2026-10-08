@@ -103,15 +103,22 @@ codified as rules in docs/STYLE.md.
     must not leak back into the overriding document under mutual/circular
     overrides.
 
-17. **XPath variables are typed atoms.** `$value` binds an
+17. **`$value` binds typed atoms; `.` binds one xs:untypedAtomic.** E's
+    string value, which `.` reads, is a second fact of the same binding
+    and normally atomizes to one xs:untypedAtomic, because E's partial
+    PSVI normally annotates it anyType (the Note under cvc-assertion
+    clause 2.3.1, resting on clause 1.2). `$value` binds an
     `xpath.ValueBinding` over an `xpath.TypedValue`: `Typed`, a
     `value.Value` of the {simple type definition} the compiled tree holds,
     or, for a ·special· type, `Untyped`, an xs:untypedAtomic. A list
     type's value binds as its flattened items, each one typed; a nil
     `$value` is the empty sequence. Never bind a bare string with a kind
-    tag: comparisons and casts read the type from the tree. E's string
-    value, which `.` reads, is a second fact of the same binding, always
-    one xs:untypedAtomic.
+    tag: comparisons and casts read the type from the tree. A violation
+    the walk charges removes nothing from E's XDM instance: a ·nilled·
+    element with [[children]] (cvc-elt 3.2.3.1 charged) contributes its
+    text, because dm:nilled is false, and a run that is not white space
+    alone under element-only or empty content (cvc-complex-type 1.3 or
+    1.1 charged) is a Text Node.
 
 18. **precisionDecimal values keep their scale.** The value is a
     (coefficient, scale, sign) identity — `3`, `3.0`, `3.00` are distinct
