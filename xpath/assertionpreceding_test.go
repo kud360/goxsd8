@@ -21,9 +21,12 @@ import (
 // subtree before it: every a child but the first where all are children, the
 // one a child after an a nested in an earlier sibling, and none where the only
 // a children come before every other a. The counts are read off the Tally the
-// reports filled. Every row fails with ctaPrecedenceCount.element counting the
-// first a child (kept tested after the child opens instead of before); the
-// nested and ancestor rows fail with it closing only the elements at depth 1.
+// reports filled. With ctaPrecedenceCount.element counting every child named
+// N whatever was kept, the rows "one a", "three a", "x, a", "a, then an a
+// nested in a later sibling" and both "an a whose own child is an a" rows
+// fail; with it closing only the element at the report's own depth, the two
+// rows nesting an a in an earlier sibling fail; with it counting a report
+// named N at any depth, the later-sibling row fails.
 func TestPrecedingSelectsEachLaterChild(t *testing.T) {
 	key := ctaChildrenPreceded{name: uq("a"), preceding: uq("a"), test: ctaAnyPreceding{}}
 	a, x := acPath("a"), acPath("x")
@@ -58,8 +61,12 @@ func TestPrecedingSelectsEachLaterChild(t *testing.T) {
 // counts only where it is a child of E. The positive filter `[b]` and the
 // unfiltered step run beside it, as an ·effective boolean value·, under
 // fn:exists and fn:empty, and as an `and` operand. Every row declines at
-// CompileAssertionTest, and so fails, with booleanExpr's and
-// presenceArgument's childrenPreceded arms removed.
+// CompileAssertionTest, and so fails, with childrenPrecededLength measuring
+// nothing, which removes booleanExpr's and presenceArgument's
+// childrenPreceded arms; the "b one level too deep" row fails with
+// ctaPrecedenceCount.element marking every open element instead of the
+// report's parent, and the "nested in an earlier sibling, lacking b" row with
+// it closing only the element at the report's own depth.
 func TestPrecedingWithAChildFilter(t *testing.T) {
 	const assert005 = "not(a[preceding::a[not(b)]])"
 	a, ab, x := acPath("a"), acPath("a", "b"), acPath("x")
@@ -101,8 +108,9 @@ func TestPrecedingWithAChildFilter(t *testing.T) {
 
 // Every name resolves on elementName's terms, so under a default namespace an
 // unprefixed name is in it and a no-namespace element is no match; a prefixed
-// name takes its binding. The rows fail with childrenPreceded resolving the
-// preceding or filter name on attributeName's terms.
+// name takes its binding. The first check fails with childrenPreceded resolving
+// the preceding name on attributeName's terms, and the second with it
+// resolving the filter name so.
 func TestPrecedingResolvesNames(t *testing.T) {
 	d := func(local string) xsd.QName { return xsd.QName{Space: "urn:d", Local: local} }
 	da := acNode{path: []xsd.QName{d("a")}}
@@ -125,7 +133,10 @@ func TestPrecedingResolvesNames(t *testing.T) {
 }
 
 // The step reads no child's value, and the same key written twice keeps one
-// counter; the positive and the negated filter keep two.
+// counter; the positive and the negated filter keep two, and so do the
+// unfiltered step and a filtered one. The ReadsChild rows fail with
+// ctaChildrenPreceded.readsChild true, and the two-counter rows with
+// ctaChildrenPreceded.same comparing the child step's name alone.
 func TestPrecedingCounters(t *testing.T) {
 	test := awCompile(t, asRecord("not(a[preceding::a[not(b)]])"))
 	for _, name := range []string{"a", "b"} {
@@ -151,9 +162,10 @@ func TestPrecedingCounters(t *testing.T) {
 // other axes, `ancestor::` and `preceding-sibling::` among them, under
 // childrenPreceded's GAP(xpath) (#1042) — and a Type Alternative's {test},
 // whose instance has no [children] (key-cta-ta-select clause 1.2), declines
-// even the admitted ones. Guard: the assertion rows pass today; the Type
+// even the admitted ones. The assertion rows are guards. The first two Type
 // Alternative rows fail with ctaTypeAlternativeFacade.childrenPreceded
-// admitting the node.
+// admitting the node; the fn:exists row is a guard, a Type Alternative
+// calling no library function.
 func TestPrecedingStillDeclines(t *testing.T) {
 	for _, expr := range []string{"not(a[preceding::a[not(b)]])", "a[preceding::a]", "exists(a[preceding::a[b]])"} {
 		if _, ok := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); ok {
@@ -197,7 +209,7 @@ func TestPrecedingStillDeclines(t *testing.T) {
 
 // An assertions facet's {test} has no context item, so the step reads the
 // absent one and Fails, never Holds (ctaFacetFacade.childrenPreceded,
-// err:XPDY0002), fn:not over it included. The rows fail with
+// err:XPDY0002), fn:not over it included. Every row fails with
 // ctaFacetFacade.childrenPreceded declining instead.
 func TestPrecedingInAFacet(t *testing.T) {
 	str := asBuiltin(t, "string")
