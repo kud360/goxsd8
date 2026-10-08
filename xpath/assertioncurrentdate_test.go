@@ -148,6 +148,31 @@ func TestCastValidatesAtTheEvaluationInstant(t *testing.T) {
 	}
 }
 
+// A Type Alternative's cast validates with ctaAssertionsDeclined: its input
+// holds no current dateTime, so an assertions facet the target carries is
+// declined, not decided at an instant nothing supplied, and the decline maps to
+// ctaRaised (ctaValidate's GAP(xpath)). FutureDate asserts
+// `$value gt current-date()`, which 2000-01-01 satisfies at the zero instant,
+// 0001-01-01.
+func TestTypeAlternativeCastDeclinesAssertions(t *testing.T) {
+	test := asRecord("$value gt current-date()")
+	facets := []xsd.Facet{xsd.NewAssertionsFacet([]xsd.Assertion{xsd.NewAssertion(test)})}
+	future, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: ctaUserNS, Local: "FutureDate"},
+		xsd.RestrictionDerivation{}, xsd.SimpleTypeRef{Name: ctaBuiltin("date")}, facets, nil)
+	if err != nil {
+		t.Fatalf("building FutureDate: %v", err)
+	}
+	types := asTypesWith(future)
+	env := ctaEnv{backend: backend(), types: types, input: ctaLexicalInput{}}
+	if _, validated := ctaValidated(ctaValidate("2000-01-01", future, env)); validated {
+		t.Errorf("ctaValidate(2000-01-01 against FutureDate) on a Type Alternative's input validated, want raised")
+	}
+	date := asBuiltin(t, "date")
+	if got := (ctaAssertionsDeclined{}).Evaluate(backend(), types, date, test, fcValue(t, date, "2000-01-01")); got != value.AssertionDeclined {
+		t.Errorf("ctaAssertionsDeclined.Evaluate = %d, want AssertionDeclined", got)
+	}
+}
+
 // fn:current-date takes no argument: one is the wrong arity (err:XPST0017),
 // declined. A Type Alternative's {test} declines the call outright, its
 // grammar admitting fn:not and constructors alone (§3.12.6 clause 3,

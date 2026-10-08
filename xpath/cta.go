@@ -440,7 +440,13 @@ type ctaEnv struct {
 // yields, or each [Untyped] value a ctaTypedInput yields, whose other arm is a
 // breach of [TypedAttributes]' obligation that the node raises on
 // (ctaMatchedAttributes).
-type ctaInput interface{ ctaInput() }
+//
+// Each arm answers facets, the [value.AssertionEvaluator] a cast it makes
+// validates an assertions facet with (ctaValidate).
+type ctaInput interface {
+	ctaInput()
+	facets() value.AssertionEvaluator
+}
 
 // ctaLexicalInput is a Type Alternative's attribute input.
 type ctaLexicalInput struct{ attrs Attributes }
@@ -467,6 +473,12 @@ type ctaTypedInput struct {
 
 func (ctaLexicalInput) ctaInput() {}
 func (ctaTypedInput) ctaInput()   {}
+
+// facets is ctaAssertionsDeclined: the input holds no current dateTime.
+func (ctaLexicalInput) facets() value.AssertionEvaluator { return ctaAssertionsDeclined{} }
+
+// facets is [FacetAssertions] at the evaluation's own instant, now.
+func (in ctaTypedInput) facets() value.AssertionEvaluator { return FacetAssertions(in.now) }
 
 // ctaExpr is the sealed sum of the BOOLEAN-valued nodes of the compiled tree.
 // The grammar closes the set (STYLE T2's schema-closed-set exception), so
@@ -3355,29 +3367,41 @@ func ctaCanonical(v value.Value, from *xsd.SimpleType, env ctaEnv) (string, bool
 // A failure is ctaRaised either way, and the branch is what says WHICH error
 // it is (STYLE E2). A [value.IsDatatypeVerdict] error is a verdict about the
 // lexical — err:FORG0001, "it is not possible to cast the input value into
-// the value space of the target type". Anything else is a fault of the type
+// the value space of the target type". Anything else but a declined facet
+// assertion ([value.IsAssertionDeclined], the gap below) is a fault of the type
 // or of the backend and says nothing about the lexical, so it is not that
 // verdict; it is the one xpath-functions.md §17 gives an ST/TT pair this
 // processor cannot cast between at all, err:XPTY0004. key-cta-ta-select
 // clause 2 makes the {test} false for both.
 //
-// An assertions facet of st is decided by [FacetAssertions] at the
-// evaluation's own current dateTime, ctaTypedInput.now, so a cast inside an
-// assertion and the assertion itself read one instant (cvc-xpath clause 6). A
-// Type Alternative's input holds no instant and passes the zero [time.Time],
-// which no facet reads: its casts target builtins alone (ctaTypes.castTarget),
-// and no builtin has an assertions facet.
+// An assertions facet of st is decided by the evaluator env.input supplies
+// (ctaInput.facets). An assertion's is [FacetAssertions] at the evaluation's
+// own current dateTime, ctaTypedInput.now, so a cast inside an assertion and
+// the assertion itself read one instant (cvc-xpath clause 6). A Type
+// Alternative's input holds no instant, and its evaluator,
+// ctaAssertionsDeclined, decides no {test} rather than read one at an instant
+// it would have to make up.
+//
+// GAP(xpath): a declined facet assertion is not an XPath error, yet it maps to
+// ctaRaised like one, so the {test} reads false where key-cta-ta-select
+// clause 2 makes only a dynamic or type error false: that false is this
+// repo's choice and not the spec's, and withholding instead needs a three-way
+// [CTATest.Evaluate] (#2533). Its readers, validate's
+// walk.conditionallySelected and conformance's subtree-root evaluation, then
+// try the next alternative or the {default type definition}, so the direction
+// at the instance is unestablished. It is unreached today: a Type
+// Alternative's casts target builtins alone (ctaTypes.castTarget), and no
+// builtin has an assertions facet.
 func ctaValidate(lexical string, st *xsd.SimpleType, env ctaEnv) ctaItem {
-	var now time.Time
-	if in, typed := env.input.(ctaTypedInput); typed {
-		now = in.now
-	}
-	v, err := value.ValidateLexical(env.backend, env.types, st, lexical, nil, FacetAssertions(now))
+	v, err := value.ValidateLexical(env.backend, env.types, st, lexical, nil, env.input.facets())
 	if err == nil {
 		return ctaSingleton(v)
 	}
 	if value.IsDatatypeVerdict(err) {
 		return ctaRaised{} // err:FORG0001
+	}
+	if value.IsAssertionDeclined(err) {
+		return ctaRaised{} // declined, not an error: the gap above
 	}
 	return ctaRaised{} // err:XPTY0004
 }
