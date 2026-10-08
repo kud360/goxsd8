@@ -36,7 +36,8 @@ import (
 // predicate façade reads as its candidate (valuePredicate), [7] IfExpr wherever
 // an ExprSingle stands whole in a boolean position (exprSingle), [6]
 // QuantifiedExpr over one child step whose body tests the bound child's
-// attributes or next sibling element, in the same positions (quantifiedExpr),
+// attributes or next sibling element, or over the items of a typed `$value`
+// whose body is any ExprSingle, in the same positions (quantifiedExpr),
 // [18] CastableExpr's `castable as` tail (castableTail), [16] InstanceofExpr's
 // `instance of` tail with an atomic SequenceType, over an fn:data call among
 // others (instanceofExpr), and, as a general comparison's operand, an integer
@@ -45,26 +46,27 @@ import (
 // StringLiterals (stringSequence; ctasequence.go) — each behind the façade
 // (ctaFacade.comparesValues, ctaFacade.variable, ctaFacade.child,
 // ctaFacade.childPath, ctaFacade.childrenHaving, ctaFacade.childrenPreceded,
-// ctaFacade.elements, ctaFacade.quantified, ctaFacade.rooted, ctaFacade.count,
-// ctaFacade.callsLibrary, ctaFacade.computes, ctaFacade.contextItem,
-// ctaFacade.contextNode, ctaFacade.focus, ctaFacade.conditional,
-// ctaFacade.constructsSequences, ctaFacade.castable, ctaFacade.instanceOf), so
-// a Type Alternative's {test} reaches none of them. Every method below is named
-// for the production it parses, and the whole grammar is both reached and
-// evaluated: no method here is a stub, and the production-level declines are
-// those nineteen façade methods'. xpath/doc.go owns the enumeration of what
-// declines; every other decline reaching this file is ctaTypes answering
-// ctaTypeDeclined for a comparison type, a cast target or a cast operand it
-// will not serve, ctaTypes.arithmetic declining an operand pair,
-// ctaTypes.instanceItem and ctaTypes.itemMatches declining an `instance of`
-// operand or AtomicType, a library call of an arity its function does not have,
-// a predicate or a union operand outside the shapes predicate, valuePredicate,
-// childrenHaving, childrenPreceded and ctaUnionOf admit, a quantified
-// expression outside the shapes quantifiedExpr admits, `.` or another node
-// standing as a node (booleanExpr, presenceCall, instanceofExpr), a sequence
-// sequenceLength does not measure or integerSequence does not build, or the
-// façade declining a NameTest, a variable's type or a settled comparison type,
-// which the production that asked propagates unchanged.
+// ctaFacade.elements, ctaFacade.quantified, ctaFacade.rangeScope,
+// ctaFacade.rooted, ctaFacade.count, ctaFacade.callsLibrary,
+// ctaFacade.computes, ctaFacade.contextItem, ctaFacade.contextNode,
+// ctaFacade.focus, ctaFacade.conditional, ctaFacade.constructsSequences,
+// ctaFacade.castable, ctaFacade.instanceOf), so a Type Alternative's {test}
+// reaches none of them. Every method below is named for the production it
+// parses, and the whole grammar is both reached and evaluated: no method here
+// is a stub, and the production-level declines are those twenty façade
+// methods'. xpath/doc.go owns the enumeration of what declines; every other
+// decline reaching this file is ctaTypes answering ctaTypeDeclined for a
+// comparison type, a cast target or a cast operand it will not serve,
+// ctaTypes.arithmetic declining an operand pair, ctaTypes.instanceItem and
+// ctaTypes.itemMatches declining an `instance of` operand or AtomicType, a
+// library call of an arity its function does not have, a predicate or a union
+// operand outside the shapes predicate, valuePredicate, childrenHaving,
+// childrenPreceded and ctaUnionOf admit, a quantified expression outside the
+// shapes quantifiedExpr admits, `.` or another node standing as a node
+// (booleanExpr, presenceCall, instanceofExpr), a sequence sequenceLength does
+// not measure or integerSequence does not build, or the façade declining a
+// NameTest, a variable's type or a settled comparison type, which the
+// production that asked propagates unchanged.
 
 // ctaFunctionNS is the default function namespace of a {test}'s static context
 // (xpath-valid clause 2.2.4, §3.13.6.2), which an unprefixed [12]
@@ -84,8 +86,9 @@ var ctaNotFunction = xsd.QName{Space: ctaFunctionNS, Local: "not"}
 var ctaCountFunction = xsd.QName{Space: ctaFunctionNS, Local: "count"}
 
 // ctaDataFunction is fn:data (xpath-functions.md §2.4), which the assertion
-// and facet façades call as the operand of `instance of` and nowhere else
-// (ctaParser.dataInstanceOf).
+// and facet façades call as the operand of `instance of`
+// (ctaParser.dataInstanceOf), and over `$value` as a quantifier's binding
+// sequence (ctaParser.valueBinding), and nowhere else.
 var ctaDataFunction = xsd.QName{Space: ctaFunctionNS, Local: "data"}
 
 // ctaInScopePrefixesFunction is fn:in-scope-prefixes (xpath-functions.md
@@ -296,7 +299,9 @@ const (
 	// assertion and facet façades' `$value` reaches (ctaFacade.variable), and
 	// which opens an fn:count argument that is no path (ctaParser.countsItems),
 	// and a quantifier's range variable, where it is bound and where its body
-	// names it (ctaParser.quantifiedExpr).
+	// names it (ctaParser.quantifiedExpr) — through the façade inside a body
+	// over `$value` (ctaRangeFacade.variable) — and `$value` as such a
+	// quantifier's binding sequence (ctaParser.valueBinding).
 	ctaDollarTok
 	// ctaSlashTok is '/' and ctaSlashSlashTok is '//'. Each is read only where
 	// it opens a [25] PathExpr (ctaParser.rootedPath) or follows the `.`
@@ -1406,8 +1411,9 @@ func (p *ctaParser) instanceofExpr() (ctaValue, bool) {
 // sequence ctaInstanceOf matches, so the call is no node of its own and its
 // argument is the tail's operand. Every other arity declines (err:XPST0017).
 //
-// GAP(xpath): fn:data anywhere but as the operand of `instance of` declines,
-// so `data(@d) = 1` and `string(data(.))` do: elsewhere a node operand is read
+// GAP(xpath): fn:data anywhere but as the operand of `instance of`, or over
+// `$value` as a quantifier's binding sequence (valueBinding), declines, so
+// `data(@d) = 1` and `string(data(.))` do: elsewhere a node operand is read
 // atomized already, and its ·effective boolean value· and fn:exists would
 // still read the node, which fn:data does not return. The direction is the
 // withhold [CompileAssertionTest] reports. (#1042)
