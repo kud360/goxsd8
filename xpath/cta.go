@@ -24,8 +24,10 @@ import (
 // ctaUntypedChild for a child of mixed content), and a "/" or
 // "//" opening a path, which raises (ctaNoDocumentRoot); the whole operand of
 // fn:exists, fn:empty or an ·effective boolean value· also takes a relative
-// path of two or more such steps (ctaChildPath) and one element step `N`,
-// `./N` or `.//N` whatever N's type (ctaSelectedElements); and [14] ValueExpr
+// path of two or more such steps, the last of which may be `*`
+// (ctaChildPath), one element step `N`, `./N` or `.//N` whatever N's type
+// (ctaSelectedElements), and one child step filtered by a conjunction of
+// child steps, `N[a and b]` (ctaChildrenHaving); and [14] ValueExpr
 // also takes an fn:count call over one counted path (ctaCount) — a child step
 // in it filtered by one [40] Predicate testing attribute existence
 // (ctaFilteredChildren) or comparing the child's value (ctaMatchingChildren,
@@ -982,7 +984,8 @@ type ctaExactName struct{ name xsd.QName }
 
 // ctaAnyName is [37] Wildcard's `*` arm: "a node test * is true for any node of
 // the principal node kind of the step axis" (xpath20.md §3.2.1.2), which on the
-// attribute axis is every attribute of E.
+// attribute axis is every attribute of E, and on the child axis, ending a child
+// path (ctaElementTest), every element child of the step's context node.
 type ctaAnyName struct{}
 
 // ctaAnyLocal is [37]'s `NCName ':' '*'` arm, whose prefix is ALREADY resolved
@@ -1748,8 +1751,8 @@ func (ctaEmptySequence) ctaStatic() {}
 // comparison over it compiles, never an answer. A ctaChildPath,
 // ctaChildrenHaving or ctaSelectedElements never reaches here:
 // ctaParser.childPath, ctaParser.childrenHaving and ctaParser.selectedElements
-// build them only where no static type is asked.
-// Every other operand is typed by the type it carries (ctaCarriedType).
+// build them only where no static type is asked. Every other operand is typed
+// by the type it carries (ctaCarriedType).
 func ctaStaticOf(v ctaValue) ctaStatic {
 	switch n := v.(type) {
 	case ctaDistinctValues:

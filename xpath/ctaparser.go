@@ -17,9 +17,11 @@ import (
 // {test} reaches: xpath20.md [23] ValueComp, [44] VarRef, an abbreviated
 // child-axis step whose NodeTest is a QName ([31] AbbrevForwardStep, §3.2.1.1),
 // a "/" or "//" opening [25] PathExpr over one such step or one attribute step,
-// a [26] RelativePathExpr of two or more such steps, or one element step `N`,
-// `./N` or `.//N`, standing as the whole operand of fn:exists, fn:empty or an
-// ·effective boolean value· (childPath, selectedElements), an fn:count call
+// a [26] RelativePathExpr of two or more such steps, the last of which may be
+// the [37] Wildcard `*`, one element step `N`, `./N` or `.//N`, or a child step
+// filtered by a [40] Predicate that is a conjunction of child steps, standing
+// as the whole operand of fn:exists, fn:empty or an ·effective boolean value·
+// (childPath, selectedElements, childrenHaving), an fn:count call
 // ([48] FunctionCall) over one counted path, a [40] Predicate on a child step
 // in it (predicate) or a [21] UnionExpr of such paths (countArgument), or over
 // an operand a library call takes as its argument (countCall), a call
@@ -39,26 +41,26 @@ import (
 // §3.3.1's comma sequence over IntegerLiterals (integerSequence), or a string
 // sequence, §3.3.1's comma sequence over StringLiterals (stringSequence;
 // ctasequence.go) — each behind the façade (ctaFacade.comparesValues,
-// ctaFacade.variable, ctaFacade.child, ctaFacade.childPath, ctaFacade.elements,
-// ctaFacade.rooted, ctaFacade.count, ctaFacade.callsLibrary,
-// ctaFacade.computes, ctaFacade.contextItem, ctaFacade.contextNode,
-// ctaFacade.focus, ctaFacade.conditional, ctaFacade.constructsSequences,
-// ctaFacade.castable, ctaFacade.instanceOf), so a Type Alternative's {test}
-// reaches none of them. Every method below is named for the production it
-// parses, and the whole grammar is both reached and evaluated: no method here
-// is a stub, and the production-level declines are those sixteen façade
-// methods'. xpath/doc.go owns the enumeration of what declines; every other
-// decline reaching this file is ctaTypes answering ctaTypeDeclined for a
-// comparison type, a cast target or a cast operand it will not serve,
-// ctaTypes.arithmetic declining an operand pair, ctaTypes.instanceItem and
-// ctaTypes.itemMatches declining an `instance of` operand or AtomicType, a
-// library call of an arity its function does not have, a predicate or a union
-// operand outside the shapes predicate, valuePredicate and ctaUnionOf admit,
-// `.` or another node standing as a node (booleanExpr, presenceCall,
-// instanceofExpr), a sequence sequenceLength does not measure or
-// integerSequence does not build, or the façade declining a NameTest, a
-// variable's type or a settled comparison type, which the production that asked
-// propagates unchanged.
+// ctaFacade.variable, ctaFacade.child, ctaFacade.childPath,
+// ctaFacade.childrenHaving, ctaFacade.elements, ctaFacade.rooted,
+// ctaFacade.count, ctaFacade.callsLibrary, ctaFacade.computes,
+// ctaFacade.contextItem, ctaFacade.contextNode, ctaFacade.focus,
+// ctaFacade.conditional, ctaFacade.constructsSequences, ctaFacade.castable,
+// ctaFacade.instanceOf), so a Type Alternative's {test} reaches none of them.
+// Every method below is named for the production it parses, and the whole
+// grammar is both reached and evaluated: no method here is a stub, and the
+// production-level declines are those seventeen façade methods'. xpath/doc.go
+// owns the enumeration of what declines; every other decline reaching this file
+// is ctaTypes answering ctaTypeDeclined for a comparison type, a cast target or
+// a cast operand it will not serve, ctaTypes.arithmetic declining an operand
+// pair, ctaTypes.instanceItem and ctaTypes.itemMatches declining an `instance
+// of` operand or AtomicType, a library call of an arity its function does not
+// have, a predicate or a union operand outside the shapes predicate,
+// valuePredicate, childrenHaving and ctaUnionOf admit, `.` or another node
+// standing as a node (booleanExpr, presenceCall, instanceofExpr), a sequence
+// sequenceLength does not measure or integerSequence does not build, or the
+// façade declining a NameTest, a variable's type or a settled comparison type,
+// which the production that asked propagates unchanged.
 
 // ctaFunctionNS is the default function namespace of a {test}'s static context
 // (xpath-valid clause 2.2.4, §3.13.6.2), which an unprefixed [12]
@@ -778,12 +780,11 @@ func (p *ctaParser) andExpr() (ctaExpr, bool) {
 // (childPath), a child step filtered by its children's existence
 // (childrenHaving) or one element step (selectedElements), whose ·effective
 // boolean value· is whether it selects a node, where the path is the WHOLE
-// ValueExpr:
-// the token after it ends the BooleanExpr (closesBoolean). Followed by anything
-// else — a comparator, an operator, a cast — it is left to additiveExpr, whose
-// one child step leaves a '/' after it a token no production takes, and
-// declines, and so does a `.` before a '/' or '//'; one step is childStep's,
-// whose value is read.
+// ValueExpr: the token after it ends the BooleanExpr (closesBoolean). Followed
+// by anything else — a comparator, an operator, a cast — it is left to
+// additiveExpr, whose one child step leaves a '/' after it a token no
+// production takes, and declines, and so does a `.` before a '/' or '//'; one
+// step is childStep's, whose value is read.
 //
 // A left operand that is an integer or string sequence (sequenceLength) is read
 // as one where a general comparator follows it, ahead of the `(` arm, which
@@ -1847,8 +1848,10 @@ func (p *ctaParser) countOperand() (ctaCounted, bool) {
 //
 // GAP(xpath): every other predicate declines — an attribute test in a
 // disjunction, under fn:not, with a wildcard or atomized (`c[@a = 1]`), a
-// numeric one (`c[1]`), and any predicate outside an fn:count argument. The
-// direction is the withhold [CompileAssertionTest] reports. (#1042)
+// numeric one (`c[1]`), and any predicate outside an fn:count argument but the
+// conjunction of child steps childrenHaving parses where a child step's
+// existence is asked. The direction is the withhold [CompileAssertionTest]
+// reports. (#1042)
 func (p *ctaParser) predicate(name xsd.QName) (ctaCounted, bool) {
 	p.advance() // '['
 	n := p.existenceLength()

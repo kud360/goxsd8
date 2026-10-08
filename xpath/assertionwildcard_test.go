@@ -93,9 +93,11 @@ func TestAssertionWildcardChildPath(t *testing.T) {
 // that N the context item), so two N children that split the names between
 // them select nothing — where the hoisted `N/a and N/b`, which the split row
 // also pins, is true. The rows run the operand as an ·effective boolean
-// value·, as an IfExpr branch and under fn:exists and fn:empty. Every row
-// declines at CompileAssertionTest, and so fails, with booleanExpr's and
-// presenceArgument's childrenHaving arms removed.
+// value·, as an IfExpr branch and under fn:exists and fn:empty. Every row but
+// the hoisted one declines at CompileAssertionTest, and so fails, with
+// booleanExpr's and presenceArgument's childrenHaving arms removed; the split
+// row and the fn:empty row fail with ctaInstanceCount.element keeping the
+// shown names across N children.
 func TestAssertionChildrenHaving(t *testing.T) {
 	const all = "billing-address[street1 and city and country]"
 	ba := acPath("billing-address")
@@ -266,7 +268,8 @@ func TestTallyRefusesAnOutOfOrderReport(t *testing.T) {
 // over either, a wildcard step read for its value, `*:N` and `a:*` (a prefix
 // asRecord binds), a wildcard before the last step, a numeric predicate in an
 // ·effective boolean value· and in an fn:count argument, and a predicate of any
-// other shape. Each row compiles with the shape admitted.
+// other shape. The Type Alternative rows fail with
+// ctaTypeAlternativeFacade.childPath and childrenHaving admitting the path.
 func TestWildcardAndHavingStillDecline(t *testing.T) {
 	for _, expr := range []string{"a/*", "not(a/*)", "a[b and c]", "a[b] and @x"} {
 		if _, ok := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); ok {
