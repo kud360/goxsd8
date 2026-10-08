@@ -27,42 +27,41 @@ import (
 // (ctaChildPath), one element step `N`, `./N` or `.//N` whatever N's type
 // (ctaSelectedElements), one child step filtered by a conjunction of child steps, `N[a
 // and b]` (ctaChildrenHaving), and one child step filtered by one `preceding::` step,
-// `N[preceding::M[not(P)]]` (ctaChildrenPreceded); an ExprSingle standing whole in a boolean position also
-// takes [6] QuantifiedExpr over one child step, whose body tests the bound child's
-// attributes or its next sibling element (ctaQuantified); and [14] ValueExpr also takes an
-// fn:count call over one counted path (ctaCount) — a child step in it filtered by one [40]
-// Predicate testing attribute existence (ctaFilteredChildren) or comparing the child's
-// value (ctaMatchingChildren, whose `.` is ctaCandidate), and two or more such paths joined
-// by [21] UnionExpr (ctaUnion) — or over an operand that is no path, such as `$value`,
-// whose items it counts (ctaCountedItems), and a call to one of the F&O string and sequence
-// functions or to fn:namespace-uri over E (ctaNamespaceURI), evaluated in ctafunc.go, and
-// [18]'s operand any argument of such a call (ctaParser.constructorOperand), and [11]
-// ta-BooleanExpr a comparison by `=` of fn:in-scope-prefixes over E against string literals
-// (ctaPrefixMember), whose `.` is E as a node (ctaContextNode); and each comparison operand
-// may be xpath20.md [13] AdditiveExpr over [14] MultiplicativeExpr, whose operators are
-// evaluated in ctaarith.go (ctaArith); [47] ContextItemExpr `.`, atomized to E's string
-// value (ctaContextAtom); xpath20.md [18] CastableExpr's `castable as` tail in place of
-// [15]'s `cast as` one (ctaCastable); xpath20.md [16] InstanceofExpr's `instance of` tail
-// with an atomic SequenceType over a [14] ta-ValueExpr or an fn:data call (ctaInstanceOf);
-// and a general comparison's operand may be an integer sequence, xpath20.md [11] RangeExpr
-// or §3.3.1's comma sequence over IntegerLiterals, or a string sequence, §3.3.1's comma
-// sequence over StringLiterals, evaluated in ctasequence.go (ctaIntegerRanges,
-// ctaStringSequence). The facet façade (ctaFacetFacade) takes the assertion façade's
-// grammar but fn:count over a path, and compiles every read of the context item — `.`, an
-// attribute or child step, a rooted path — to the err:XPDY0002 an assertions facet's absent
-// context item raises (ctaNoContextItem; ctaAbsentNode for `.` as a node). It is not a
-// stage of a general XPath 2.0 evaluator: the productions below reach no axis but
-// attribute, one child step, the child-step paths and the one descendant step whose
-// existence is asked, the descendant steps fn:count counts over, the preceding step of
-// ctaChildrenPreceded and the child step filtering it, and the following-sibling and self
-// steps of a quantifier's body, no predicate or union but those in an fn:count argument,
-// the child-existence conjunction, the two of ctaChildrenPreceded and the two of that body,
-// no variable but
-// `$value` and a quantifier's range variable inside its body, and no function but fn:not,
-// fn:count, the ctaParser.libraryCall names, fn:in-scope-prefixes as an operand of `=`
-// (ctaParser.prefixMember) and fn:data as the operand of `instance of`
-// (ctaParser.instanceofExpr), so evaluating them directly is exact where a fail-open
-// delegation to a general engine would be a guess.
+// `N[preceding::M[not(P)]]` (ctaChildrenPreceded); an ExprSingle standing whole in a
+// boolean position also takes [6] QuantifiedExpr over one child step, whose body tests the
+// bound child's attributes or its next sibling element (ctaQuantified); and [14] ValueExpr
+// also takes an fn:count call over one counted path (ctaCount) — a child step in it
+// filtered by one [40] Predicate testing attribute existence (ctaFilteredChildren) or
+// comparing the child's value (ctaMatchingChildren, whose `.` is ctaCandidate), and two or
+// more such paths joined by [21] UnionExpr (ctaUnion) — or over an operand that is no path,
+// such as `$value`, whose items it counts (ctaCountedItems), and a call to one of the F&O
+// string and sequence functions or to fn:namespace-uri over E (ctaNamespaceURI), evaluated
+// in ctafunc.go, and [18]'s operand any argument of such a call
+// (ctaParser.constructorOperand), and [11] ta-BooleanExpr a comparison by `=` of
+// fn:in-scope-prefixes over E against string literals (ctaPrefixMember), whose `.` is E as
+// a node (ctaContextNode); and each comparison operand may be xpath20.md [13] AdditiveExpr
+// over [14] MultiplicativeExpr, whose operators are evaluated in ctaarith.go (ctaArith);
+// [47] ContextItemExpr `.`, atomized to E's string value (ctaContextAtom); xpath20.md [18]
+// CastableExpr's `castable as` tail in place of [15]'s `cast as` one (ctaCastable);
+// xpath20.md [16] InstanceofExpr's `instance of` tail with an atomic SequenceType over a
+// [14] ta-ValueExpr or an fn:data call (ctaInstanceOf); and a general comparison's operand
+// may be an integer sequence, xpath20.md [11] RangeExpr or §3.3.1's comma sequence over
+// IntegerLiterals, or a string sequence, §3.3.1's comma sequence over StringLiterals,
+// evaluated in ctasequence.go (ctaIntegerRanges, ctaStringSequence). The facet façade
+// (ctaFacetFacade) takes the assertion façade's grammar but fn:count over a path, and
+// compiles every read of the context item — `.`, an attribute or child step, a rooted path
+// — to the err:XPDY0002 an assertions facet's absent context item raises (ctaNoContextItem;
+// ctaAbsentNode for `.` as a node). It is not a stage of a general XPath 2.0 evaluator: the
+// productions below reach no axis but attribute, one child step, the child-step paths and
+// the one descendant step whose existence is asked, the descendant steps fn:count counts
+// over, the preceding step of ctaChildrenPreceded and the child step filtering it, and the
+// following-sibling and self steps of a quantifier's body, no predicate or union but those
+// in an fn:count argument, the child-existence conjunction, the two of ctaChildrenPreceded
+// and the two of that body, no variable but `$value` and a quantifier's range variable
+// inside its body, and no function but fn:not, fn:count, the ctaParser.libraryCall names,
+// fn:in-scope-prefixes as an operand of `=` (ctaParser.prefixMember) and fn:data as the
+// operand of `instance of` (ctaParser.instanceofExpr), so evaluating them directly is exact
+// where a fail-open delegation to a general engine would be a guess.
 //
 //	[8]  Test                ::= OrExpr
 //	[9]  OrExpr              ::= AndExpr ( 'or' AndExpr )*
@@ -1659,10 +1658,9 @@ func ctaSelectedElementsOf(p ctaCountPath) (ctaSelectedElements, bool) {
 // below the child decide, a child step filtered by a `preceding::` step
 // (ctaChildrenPreceded), which the reports before the child decide, and the
 // children followed by a sibling of a name (ctaChildrenFollowedBy), which the
-// report of the next child decides. The
-// grammar closes the set (STYLE T2's schema-closed-set exception). Two keys
-// are compared by same and never with ==, which a slice-holding arm cannot
-// take.
+// report of the next child decides. The grammar closes the set (STYLE T2's
+// schema-closed-set exception). Two keys are compared by same and never with
+// ==, which a slice-holding arm cannot take.
 type ctaKey interface {
 	ctaKey()
 	// selectsAttributesAt reports whether the key selects an attribute node of
