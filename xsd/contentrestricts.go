@@ -994,6 +994,13 @@ func (s *Schema) contentTypeRestricts(tct, bct ContentType, scope contentRestric
 // rejection anywhere in the state is reached before the maxProductStates giveup
 // can provisionally accept it.
 //
+// An R wildcard position whose {namespace constraint} admits no namespace — an
+// empty enumeration, namespace="" — takes no transition. No expanded name
+// satisfies cvc-wildcard clause 1 (cvc-wildcard-namespace clause 3) against
+// it, so no sequence locally valid with respect to R contains an item
+// ·attributed· to it, and neither clause of cos-content-act-restrict
+// quantifies over one. keywordSubsumes' exact refusals rely on this (#2546).
+//
 // The visited set keys on R's FUTURE rather than on its position
 // (futureClasses): two R-states with the same ·follow· set and the same
 // acceptance continue identically against any B-set, so once one of them has
@@ -1038,6 +1045,9 @@ func (s *Schema) contentModelRestricts(r, b contentAutomaton, scope contentRestr
 		target := map[int][]int{}
 		var edges []productState
 		for _, p := range r.live(cur.r) {
+			if w, ok := r.positions[p].term.(Wildcard); ok && !admitsSomeNamespace(w.NamespaceConstraint()) {
+				continue // no item is ·attributed· to a wildcard admitting no name
+			}
 			ids, decided := target[r.positions[p].particleID]
 			if !decided {
 				successors := s.matchPositions(r.positions[p], b, live)
@@ -1687,20 +1697,22 @@ func (s *Schema) someBindingSubsumes(b contentAutomaton, matched []int, p positi
 // contain defined — is fail-open by ruling. Both reads of this function are in
 // someBindingSubsumes, as bindingSubsumes' general and specific arguments, and
 // its one consumer, contentModelRestricts, charges clause 2 on a false answer
-// and on nothing else. A keyword on the specific side meets another keyword,
-// and there keywordSubsumes answers a remainder keyword at least as permissively
-// as bindingSubsumes answers the case-1 Element Declaration in its place, on
-// either side, so reporting the keyword can only miss a charge. It also meets an
-// Element Declaration, in a set coveringWildcardUnion splits off for one name a
-// live ·element particle· admits, and there a keyword is never subsumed, so the
-// remainder keyword would manufacture the charge: that set is marked governable
-// and not charged instead, the GAP(xsd) at elementCoveredSet (#1954).
-//
-// This ruling does not cover a strict general keyword against a skip or a
-// ##defined lax specific one: both specific keywords are exact here, so
-// loc-testSubP clause 3 decides that pairing statically, and keywordSubsumes
-// refuses it (W3C suite wildZ008 is the skip pairing) — reading the ##defined
-// fact from the binding's disallowsDefined field (#1748).
+// and on nothing else. As the general argument, keywordSubsumes answers a
+// remainder keyword at least as permissively as bindingSubsumes answers the
+// case-1 Element Declaration in its place, so reporting the keyword can only
+// miss a charge. As the specific argument against a general keyword it does
+// the same in every pairing but one: a strict G refuses a lax S where it would
+// accept an Element Declaration. That refusal is exact rather than
+// manufactured. The pairing is met either at a set matching R's wildcard over a
+// namespace — matchPositions' direct match or a coveringWildcardUnion part — so
+// some item there has no ·governing element declaration· in any episode
+// (keywordSubsumes' doc, #2546), or at a set split off for one name that
+// ·resolves· to no top-level declaration, where the keyword is exact. The
+// specific keyword also meets an Element Declaration, in a set
+// coveringWildcardUnion splits off for one name a live ·element particle·
+// admits, and there a keyword is never subsumed, so the remainder keyword would
+// manufacture the charge: that set is marked governable and not charged
+// instead, the GAP(xsd) at elementCoveredSet (#1954).
 //
 // Every subset returns the same wildcardKeywordBinding, so nothing here branches
 // on which one applies (STYLE D3); what differs is only whether that value is
@@ -1710,7 +1722,7 @@ func elementPositionBinding(p position) defaultBinding {
 	case ElementDeclaration:
 		return elementDeclarationBinding{decl: t} // case 1
 	case Wildcard:
-		return newWildcardKeywordBinding(t) // cases 4/5/6
+		return wildcardKeywordBinding{keyword: t.ProcessContents()} // cases 4/5/6
 	default:
 		panic("xsd: elementPositionBinding: position {term} is neither an element declaration nor a wildcard")
 	}
