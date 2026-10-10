@@ -378,8 +378,9 @@ func wildcardsOverlap(a, b Wildcard) (bool, error) {
 // admitsSomeNamespace reports whether c admits at least one namespace name:
 // {variety} any, or {variety} not, or {variety} enumeration with a non-empty
 // {namespaces}. It is the emptiness half of wildcardsOverlap's test, shared with
-// coveringWildcardUnion (contentrestricts.go), which asks it of the
-// intersections it splits a restriction wildcard into. {disallowed names} does
+// contentrestricts.go: coveringWildcardUnion asks it of the intersections it
+// splits a restriction wildcard into, and contentModelRestricts of each
+// restriction wildcard before taking its transition. {disallowed names} does
 // not enter: its QNames, and the names its defined and sibling keywords resolve
 // to in a finite schema, are finitely many, while an admitted namespace holds
 // infinitely many local names.
