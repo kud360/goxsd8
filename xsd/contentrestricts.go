@@ -715,16 +715,20 @@ func positionsKey(states []int) string {
 //   - 2026-10-01 (#1609 with #2000, wip/issue-2000 at 378418a, main f1353a0
 //     plus #2000's local-particle guard): walkEntries=1673 ceilingHits=0
 //     maxVisited=1188, in the future-class unit.
+//   - 2026-10-10 (#1609 with #2546, main 22da9e2 plus #2546's strict-over-lax
+//     charge and empty-wildcard skip): walkEntries=1629 ceilingHits=0
+//     maxVisited=1188, in the future-class unit; main 22da9e2 alone read
+//     walkEntries=1635 ceilingHits=0 maxVisited=1188.
 //
 // Read both halves of that. No walk has ever reached the ceiling, so the bound
 // is inert on every content model the suite contains and the incompleteness it
 // guards is latent. But the deepest walk visits 1188 of the 4096 states it is
-// allowed at the latest point (2026-10-01) — a factor of 3.4 below the ceiling
+// allowed at the latest point (2026-10-10) — a factor of 3.4 below the ceiling
 // where it was a factor of 273 on 2026-08-04 — and between the first two points
 // maxVisited grew 66.8× while the walk entries grew only 2.9×, so the walks that
 // reached this code went DEEPER rather than merely happening more often. From
 // 2026-09-19 to 4ef04a9 maxVisited did not move and walkEntries only fell, to
-// 1740, and it has fallen again since, to 1687, 1674 and 1673. A single future
+// 1740, and it has fallen again since, to 1687, 1674, 1673 and 1629. A single future
 // content model, not a wider population, is enough to cross. What drove either
 // movement is not established here: each window holds lane-widening landings,
 // and no causal claim is made from a correlation nobody checked.
@@ -1147,7 +1151,7 @@ func (s *Schema) contentModelRestricts(r, b contentAutomaton, scope contentRestr
 				// The review trigger is a RE-MEASUREMENT rather than a breach, because
 				// a breach is the one warning that arrives too late: the high-water
 				// mark moved 66.8× in six and a half weeks (2026-08-04 to 2026-09-19),
-				// and at the series' latest point (2026-10-01) it stands at under a
+				// and at the series' latest point (2026-10-10) it stands at under a
 				// third of the ceiling. Re-run the three counters maxProductStates' doc
 				// names and reopen this ruling on EITHER ceilingHits > 0 or maxVisited
 				// at 2048, half the ceiling. Half is what #499's two measurements
