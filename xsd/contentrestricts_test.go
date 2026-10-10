@@ -163,15 +163,15 @@ func TestContentRestrictsWildcardNarrowed(t *testing.T) {
 
 // TestContentRestrictsProcessContentsSubsumption pins loc-testSubP clauses 1-3
 // through cos-content-act-restrict clause 2 (ctr-child-type-subsumption): a lax
-// base wildcard does not subsume a skip restriction wildcard, a strict one does
-// not subsume a skip one or a lax one whose {disallowed names} contains defined
-// (cvc-wildcard clause 2.1 makes that keyword exact), while a skip base subsumes
-// anything. Strict over a plain lax is #345's fail-open acceptance. The
-// transition itself is compatible in every row — the specific wildcard's
-// {namespace constraint} is the general's, plus at most the defined keyword,
-// which cos-ns-subset lets a subset add — so only cos-content-act-restrict
-// clause 2 can be deciding the verdict. The strict-over-skip row is W3C suite
-// wildZ008's shape.
+// base wildcard does not subsume a skip restriction wildcard, a strict one
+// subsumes neither a skip one nor a lax one, with or without defined in its
+// {disallowed names}, while a skip base subsumes anything and a lax one
+// anything but skip. The transition itself is compatible in every row — the
+// specific wildcard's {namespace constraint} is the general's, plus at most
+// the defined keyword, which cos-ns-subset lets a subset add — so only
+// cos-content-act-restrict clause 2 can be deciding the verdict. The
+// strict-over-skip row is W3C suite wildZ008's shape, the strict-over-lax row
+// MS-Errata10 errC008's, and the lax-over-strict row MS-Wildcards wildZ009b's.
 func TestContentRestrictsProcessContentsSubsumption(t *testing.T) {
 	defined := []DisallowedNameKeyword{DisallowedNameDefined}
 	for _, tc := range []struct {
@@ -182,12 +182,14 @@ func TestContentRestrictsProcessContentsSubsumption(t *testing.T) {
 		wantRestricted   bool
 	}{
 		{name: "skip over lax", general: ProcessSkip, specific: ProcessLax, wantRestricted: true},
+		{name: "skip over strict", general: ProcessSkip, specific: ProcessStrict, wantRestricted: true},
 		{name: "lax over strict", general: ProcessLax, specific: ProcessStrict, wantRestricted: true},
+		{name: "lax over lax", general: ProcessLax, specific: ProcessLax, wantRestricted: true},
 		{name: "lax over skip", general: ProcessLax, specific: ProcessSkip, wantRestricted: false},
 		{name: "strict over strict", general: ProcessStrict, specific: ProcessStrict, wantRestricted: true},
 		{name: "strict over skip", general: ProcessStrict, specific: ProcessSkip, wantRestricted: false},
 		{name: "strict over ##defined lax", general: ProcessStrict, specific: ProcessLax, specificKeywords: defined, wantRestricted: false},
-		{name: "strict over plain lax", general: ProcessStrict, specific: ProcessLax, wantRestricted: true},
+		{name: "strict over lax", general: ProcessStrict, specific: ProcessLax, wantRestricted: false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			err := cRestricts(t,
@@ -199,6 +201,81 @@ func TestContentRestrictsProcessContentsSubsumption(t *testing.T) {
 			if !tc.wantRestricted {
 				expectRule(t, err, ruleDerivationOKRestriction)
 			}
+		})
+	}
+}
+
+// TestContentRestrictsStrictOverLaxNamespaces pins the W3C suite MS-Particles
+// particlesOb001-Ob009 shapes #2546 charges: a strict ##any base wildcard
+// restricted by a lax one, in a choice, in each namespace form those schemas
+// spell and with ranges clause 1 accepts. Every such R wildcard admits a name
+// no declaration governs, bound strict under B and lax under R, and
+// loc-testSubP has no clause for that pairing (ctr-child-type-subsumption).
+// Two twins per row guard against charging the shape for anything but that
+// pairing: R's wildcard made strict, and B's made lax, are both accepted.
+func TestContentRestrictsStrictOverLaxNamespaces(t *testing.T) {
+	absent := NamespaceName("")
+	wild := func(o Occurs, variety NamespaceConstraintVariety, namespaces []Namespace, pc ProcessContents) ModelGroup {
+		return uGroup(t, CompositorChoice, uParticle(t, o, ResolvedTerm{Term: uWildcard(t, variety, namespaces, pc)}))
+	}
+	for _, tc := range []struct {
+		name             string
+		bOccurs, rOccurs Occurs
+		variety          NamespaceConstraintVariety
+		namespaces       []Namespace
+	}{
+		{name: "Ob001 ##any", bOccurs: uOccurs(t, 1, 1), rOccurs: uOccurs(t, 1, 1), variety: NamespaceConstraintAny},
+		{name: "Ob004 ##local, 1..1 under 0..2", bOccurs: uOccurs(t, 0, 2), rOccurs: uOccurs(t, 1, 1),
+			variety: NamespaceConstraintEnumeration, namespaces: []Namespace{absent}},
+		{name: "Ob008 target and local, 2..3 under 1..5", bOccurs: uOccurs(t, 1, 5), rOccurs: uOccurs(t, 2, 3),
+			variety: NamespaceConstraintEnumeration, namespaces: []Namespace{NamespaceName(uns), absent}},
+		{name: "Ob009 a URI list, unbounded", bOccurs: uUnbounded(t, 1), rOccurs: uUnbounded(t, 1),
+			variety: NamespaceConstraintEnumeration, namespaces: []Namespace{NamespaceName("foo"), absent, NamespaceName("bar")}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			strictBase := wild(tc.bOccurs, NamespaceConstraintAny, nil, ProcessStrict)
+			expectRule(t, cRestricts(t, strictBase, wild(tc.rOccurs, tc.variety, tc.namespaces, ProcessLax)), ruleDerivationOKRestriction)
+			if err := cRestricts(t, strictBase, wild(tc.rOccurs, tc.variety, tc.namespaces, ProcessStrict)); err != nil {
+				t.Fatalf("strict over strict with the same ranges and namespaces was rejected: %v", err)
+			}
+			laxBase := wild(tc.bOccurs, NamespaceConstraintAny, nil, ProcessLax)
+			if err := cRestricts(t, laxBase, wild(tc.rOccurs, tc.variety, tc.namespaces, ProcessLax)); err != nil {
+				t.Fatalf("lax over lax with the same ranges and namespaces was rejected: %v", err)
+			}
+		})
+	}
+}
+
+// TestContentRestrictsEmptyWildcard pins contentModelRestricts' skip of an R
+// wildcard admitting no namespace (namespace=""): no item is ·attributed· to
+// it, so it adds nothing to either clause of cos-content-act-restrict. Under a
+// strict base wildcard an optional empty one is accepted at every non-strict
+// {process contents}, where clause 2 would otherwise refuse the keyword, and
+// under a base holding one optional element particle it is accepted too, where
+// clause 1 would otherwise find no base particle admitting it. Each row's
+// control gives the same wildcard the absent namespace and is rejected.
+func TestContentRestrictsEmptyWildcard(t *testing.T) {
+	optionalAny := func(namespaces []Namespace, pc ProcessContents) Particle {
+		return uParticle(t, uOccurs(t, 0, 1), ResolvedTerm{Term: uWildcard(t, NamespaceConstraintEnumeration, namespaces, pc)})
+	}
+	strictBase := uGroup(t, CompositorSequence,
+		uParticle(t, uOccurs(t, 0, 1), ResolvedTerm{Term: uWildcard(t, NamespaceConstraintAny, nil, ProcessStrict)}))
+	elementBase := uGroup(t, CompositorSequence, cElem(t, "a", 0, 1))
+	for _, tc := range []struct {
+		name string
+		base ModelGroup
+		pc   ProcessContents
+	}{
+		{name: "lax under a strict wildcard", base: strictBase, pc: ProcessLax},
+		{name: "skip under a strict wildcard", base: strictBase, pc: ProcessSkip},
+		{name: "lax under an element particle", base: elementBase, pc: ProcessLax},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := cRestricts(t, tc.base, uGroup(t, CompositorSequence, optionalAny(nil, tc.pc))); err != nil {
+				t.Fatalf("a wildcard admitting no name was charged: %v", err)
+			}
+			local := uGroup(t, CompositorSequence, optionalAny([]Namespace{NamespaceName("")}, tc.pc))
+			expectRule(t, cRestricts(t, tc.base, local), ruleDerivationOKRestriction)
 		})
 	}
 }
@@ -574,6 +651,31 @@ func TestContentRestrictsAllGroupBaseDecided(t *testing.T) {
 		t.Fatalf("restricting an ·all· base to one of its members was rejected: %v", err)
 	}
 	expectRule(t, cRestricts(t, base, uGroup(t, CompositorSequence, cElem(t, "b", 1, 1))), ruleDerivationOKRestriction)
+}
+
+// TestContentRestrictsOptionalAllGroupUnderSequence pins W3C suite
+// MS-Particles particlesK006's shape as ACCEPTED, guarding against
+// over-charging it: B is all(a0?, a1, a2?) with the ·all· particle itself
+// minOccurs="0", and R is sequence(a1?). pt-actual-restriction clause 1 is
+// language containment, and R's {(), (a1)} is within B's, () through the
+// ·all·'s minOccurs 0; nothing compares R's a1 0..1 with B's 1..1 per
+// particle. Clause 2 holds by loc-testSubP clause 4. #2546 records the suite's
+// invalid expectation as a 1.0-era divergence. The control makes the ·all·
+// particle required, which leaves () outside B's language.
+func TestContentRestrictsOptionalAllGroupUnderSequence(t *testing.T) {
+	restricts := func(allMin int) error {
+		return dFinalize(t, func(b *SchemaBuilder) {
+			all := uGroup(t, CompositorAll, cElem(t, "a0", 0, 1), cElem(t, "a1", 1, 1), cElem(t, "a2", 0, 1))
+			base := ElementContent{Particle: uParticle(t, uOccurs(t, allMin, 1), ResolvedTerm{Term: all})}
+			b.AddType(dType(t, uq("base"), anyTypeName, base, nil, nil))
+			derived := dElementContent(t, false, uGroup(t, CompositorSequence, cElem(t, "a1", 0, 1)))
+			b.AddType(dType(t, uq("derived"), uq("base"), derived, nil, nil))
+		})
+	}
+	if err := restricts(0); err != nil {
+		t.Fatalf("an optional member restricting an optional ·all· was rejected: %v", err)
+	}
+	expectRule(t, restricts(1), ruleDerivationOKRestriction)
 }
 
 // TestContentRestrictsNestedAllGroup pins addInterleave's composition: an ·all·
