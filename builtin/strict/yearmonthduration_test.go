@@ -1,11 +1,14 @@
 package strict_test
 
 import (
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/kud360/goxsd8/builtin"
 	"github.com/kud360/goxsd8/builtin/strict"
 	"github.com/kud360/goxsd8/value"
+	"github.com/kud360/goxsd8/xpath"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
 )
@@ -42,23 +45,30 @@ func TestYearMonthDurationParseAndCanonical(t *testing.T) {
 	}
 }
 
-// TestYearMonthDurationReject pins the narrower lexical space (cvc-datatype-valid,
-// §3.4.26.1): duration lexicals carrying the day-time half — the exact literals a
-// verbatim parseDuration alias would wrongly accept as a yearMonthDuration — are
-// rejected here, alongside the shared duration grammar traps.
+// TestYearMonthDurationReject pins the narrower lexical space (§3.4.26.1) and
+// the cvc-datatype-valid clause each rejection cites: a literal outside
+// duration's lexical space fails clause 2.1, and a duration literal carrying the
+// day-time half — the exact literals a verbatim parseDuration alias would wrongly
+// accept as a yearMonthDuration — fails the [^DT]* pattern facet, clause 1.
 func TestYearMonthDurationReject(t *testing.T) {
 	m := mappingFor(t, "yearMonthDuration")
-	for _, lex := range []string{
-		"P1D", "PT5H", "PT5M", "P1DT2H", "P1Y1D", "PT0S", "P0DT0S",
-		"P", "PT", "", "-P", "1Y", "P1.5Y", "p1y", " P1Y", "P1Y ",
+	pattern := `%q has a day or time field, so it does not match yearMonthDuration's pattern facet [^DT]*, which cvc-datatype-valid clause 1 requires it to match`
+	primitive := `%q is not in the lexical space of duration, the primitive of yearMonthDuration, which cvc-datatype-valid clause 2.1 requires it to be in`
+	for _, c := range []struct{ lex, msg string }{
+		{"P1D", pattern}, {"PT5H", pattern}, {"PT5M", pattern}, {"P1DT2H", pattern},
+		{"P1Y1D", pattern}, {"PT0S", pattern}, {"P0DT0S", pattern},
+		{"P", primitive}, {"PT", primitive}, {"", primitive}, {"-P", primitive},
+		{"1Y", primitive}, {"P1.5Y", primitive}, {"p1y", primitive},
+		{" P1Y", primitive}, {"P1Y ", primitive},
 	} {
-		_, err := m.Parse(lex, nil)
+		_, err := m.Parse(c.lex, nil)
 		if err == nil {
-			t.Errorf("Parse(%q): want lexical-space error, got nil", lex)
+			t.Errorf("Parse(%q): want lexical-space error, got nil", c.lex)
 			continue
 		}
-		if rule, ok := xsderr.RuleOf(err); !ok || rule != "cvc-datatype-valid" {
-			t.Errorf("Parse(%q): rule = %q (ok=%v), want cvc-datatype-valid", lex, rule, ok)
+		want := "?: [cvc-datatype-valid] " + fmt.Sprintf(c.msg, c.lex)
+		if err.Error() != want {
+			t.Errorf("Parse(%q) = %q, want %q", c.lex, err.Error(), want)
 		}
 	}
 }
@@ -96,11 +106,11 @@ func TestYearMonthDurationZeroNoCanonical(t *testing.T) {
 func TestYearMonthDurationSeededPattern(t *testing.T) {
 	st := seededType(t, "yearMonthDuration")
 
-	if _, err := value.ValidateLexical(strict.New(), noSchema{}, st, "P1Y2M", nil); err != nil {
+	if _, err := value.ValidateLexical(strict.New(), noSchema{}, st, "P1Y2M", nil, xpath.FacetAssertions(time.Time{})); err != nil {
 		t.Fatalf("year-month yearMonthDuration should validate: %v", err)
 	}
 
-	_, err := value.ValidateLexical(strict.New(), noSchema{}, st, "P1DT2H", nil)
+	_, err := value.ValidateLexical(strict.New(), noSchema{}, st, "P1DT2H", nil, xpath.FacetAssertions(time.Time{}))
 	if err == nil {
 		t.Fatal("day-time literal must be rejected for yearMonthDuration, got nil")
 	}

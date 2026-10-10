@@ -1,7 +1,6 @@
 package xmltree
 
 import (
-	"bytes"
 	"encoding/xml"
 	"errors"
 	"io"
@@ -9,6 +8,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/kud360/goxsd8/internal/xmlchar"
 	"github.com/kud360/goxsd8/internal/xmldecl"
 	"github.com/kud360/goxsd8/internal/xmlenc"
 	"github.com/kud360/goxsd8/internal/xmltok"
@@ -38,19 +38,33 @@ type Reader struct {
 	// their starts and nested elements resolve against the right scope.
 	stack []frame
 	// ended records that the document element's end tag has been read, after
-	// which only Misc may appear (see trailerFault).
+	// which only Misc may appear: no start tag (see classify), no character
+	// data but S (see outsideRootFault), and no DOCTYPE (see declareEntities).
 	ended bool
+	// doctype records that the DOCTYPE has been read, after which no other may
+	// appear (see declareEntities).
+	doctype bool
 	// eof latches io.EOF so repeated Token calls keep returning it.
 	eof bool
 
 	// entities maps each general entity name the DOCTYPE's internal subset
-	// declares to that name's FIRST declaration, which binds (XML 1.0 §4.2):
-	// a later NDATA declaration of a name already declared parsed declares no
-	// unparsed entity, and a later literal gives an internal entity no second
-	// replacement text. It is a lookup index only, never iterated. dec.Entity
-	// names the internal entities among them to the decoder, which otherwise
-	// refuses a reference to any of them (see included).
-	entities map[string]entityDecl
+	// declares to that name's binding declaration and whether a declaration
+	// of it stands outside every parameter entity (see boundEntity). It is a
+	// lookup index only, never iterated. dec.Entity names every one of them
+	// to the decoder, which refuses a reference to any other name (see
+	// included), so that Reader.reference decides a reference to an external
+	// or unparsed one: it charges WFC Entity Declared in a standalone="yes"
+	// document, then WFC Parsed Entity, in content or in an attribute value,
+	// and, in an attribute value, No External Entity References, and refuses
+	// any other.
+	entities map[string]boundEntity
+	// tokenized maps each (element type, attribute) name pair an <!ATTLIST>
+	// of the internal subset defines, as the declaration spells them, to
+	// whether the pair's FIRST definition, which binds (XML 1.0 §3.3), gives
+	// an AttType other than CDATA: an attribute it maps to true has its
+	// normalized value trimmed and collapsed (see expandAttrs). It is a lookup
+	// index only, never iterated.
+	tokenized map[attName]bool
 	// spent counts the bytes of replacement text included so far, against
 	// maxGEExpansion.
 	spent int
@@ -63,8 +77,32 @@ type Reader struct {
 	// zero value — no DOCTYPE at all — is the right answer.
 	declsUnread bool
 	// standalone records the XML declaration's standalone="yes" (XML 1.0
-	// §2.9), which the DOCTYPE after it is read under.
+	// §2.9), which the DOCTYPE after it is read under. Only the declaration
+	// at the document's first character sets it: a processing instruction
+	// targeting "xml" anywhere else is a fault (see xmlDeclFault).
 	standalone bool
+}
+
+// boundEntity is what the reader knows of one general entity name. binding is
+// the name's FIRST declaration, which binds (XML 1.0 §4.2): a later NDATA
+// declaration of a name already declared parsed declares no unparsed entity,
+// and a later literal gives an internal entity no second replacement text;
+// binding.inPE is where that declaration stands, and so whether a reference
+// its replacement text holds occurs within a parameter entity (see
+// Reader.withinPE). onlyInPE reports that every declaration of the name read
+// so far stands in a parameter entity's replacement text: WFC Entity Declared
+// counts every declaration outside every parameter entity, not only the
+// binding one (see Reader.reference).
+type boundEntity struct {
+	binding  entityDecl
+	onlyInPE bool
+}
+
+// attName is an attribute name and the element type name it is defined on,
+// each as raw source spells it, prefix included: the key an <!ATTLIST>
+// definition and a start tag's attribute meet on, before any prefix resolves.
+type attName struct {
+	elem, name string
 }
 
 // frame is one open element: its resolved name (to match the end tag), the
@@ -108,11 +146,16 @@ func NewReader(uri string, r io.Reader) *Reader {
 // Token advances to the next element or character-data node and returns it.
 // It returns io.EOF at the end of a well-formed document. Comments, processing
 // instructions, and the DOCTYPE directive are skipped, once checked for
-// ill-formed UTF-8 (checkUTF8); its entity declarations are read on the way past
-// (see HasUnparsedEntity), and a reference to an internal entity one declares is
-// replaced by the nodes its replacement text parses to (see included). Malformed
-// input, unbound namespace prefixes, and mismatched or unclosed tags are returned
-// as errors carrying an xsderr.Loc — never as a panic (see the fuzz target).
+// ill-formed UTF-8 and for characters outside [2] Char (checkChars) and then
+// for their place: a processing instruction targeting "xml" in any case
+// anywhere but as the XML declaration at the document's first character (see
+// xmlDeclFault), a directive inside the document element, and a DOCTYPE after
+// it or after another are errors. The DOCTYPE's entity declarations are read on
+// the way past (see HasUnparsedEntity), and a reference to an internal entity
+// one declares is replaced by the nodes its replacement text parses to (see
+// included). Malformed input, unbound namespace prefixes, and mismatched or
+// unclosed tags are returned as errors carrying an xsderr.Loc — never as a panic
+// (see the fuzz target).
 func (r *Reader) Token() (Node, error) {
 	if len(r.pending) > 0 {
 		node := r.pending[0]
@@ -163,13 +206,14 @@ func (r *Reader) classify(tok xml.Token, off int64) (Node, bool, error) {
 	loc := r.locAt(off)
 	switch t := tok.(type) {
 	case xml.StartElement:
-		if r.dec.Entity != nil {
-			attrs, err := r.expandAttrs(t.Attr, r.source(off), true, loc, nil)
-			if err != nil {
-				return nil, false, err
-			}
-			t.Attr = attrs
+		if r.ended {
+			return nil, false, xsderr.New(xsderr.RuleXMLWellFormed, loc, "element <%s> after the document element: only comments, processing instructions and white space may follow it (XML 1.0 [1] document, [27] Misc)", rawName(t.Name))
 		}
+		attrs, err := r.expandAttrs(t, r.source(off), true, loc, nil)
+		if err != nil {
+			return nil, false, err
+		}
+		t.Attr = attrs
 		node, err := r.startElement(t, loc)
 		if err != nil {
 			return nil, false, err
@@ -187,88 +231,150 @@ func (r *Reader) classify(tok xml.Token, off int64) (Node, bool, error) {
 				return r.included(raw, off, loc)
 			}
 		}
-		if r.ended {
-			if err := trailerFault(t, loc); err != nil {
+		if len(r.stack) == 0 {
+			if err := r.outsideRootFault(r.source(off), loc); err != nil {
 				return nil, false, err
 			}
 		}
 		return &CharData{data: string(t), offset: off, loc: loc}, true, nil
 	case xml.ProcInst:
-		if err := r.checkUTF8(r.source(off), off); err != nil {
+		if err := r.checkChars(r.source(off), off); err != nil {
 			return nil, false, err
 		}
-		if t.Target == "xml" {
-			r.standalone = pseudoAttr(string(t.Inst), "standalone") == "yes"
+		if !strings.EqualFold(t.Target, "xml") {
+			return nil, false, nil
 		}
+		if err := xmlDeclFault(t.Target, off, loc); err != nil {
+			return nil, false, err
+		}
+		r.standalone = pseudoAttr(string(t.Inst), "standalone") == "yes"
 		return nil, false, r.checkDeclaration(t, loc)
 	case xml.Directive:
 		raw := r.source(off)
-		if err := r.checkUTF8(raw, off); err != nil {
+		if err := r.checkChars(raw, off); err != nil {
 			return nil, false, err
+		}
+		if len(r.stack) > 0 {
+			return nil, false, xsderr.New(xsderr.RuleXMLWellFormed, loc, "directive %q inside element %s, where XML 1.0 [43] content admits no directive", directiveName(raw), qname(r.stack[len(r.stack)-1].name))
 		}
 		return nil, false, r.declareEntities(raw, loc)
 	default:
 		// xml.Comment: not part of the element/character-data stream the
 		// parser consumes.
-		return nil, false, r.checkUTF8(r.source(off), off)
+		return nil, false, r.checkChars(r.source(off), off)
 	}
 }
 
-// checkUTF8 checks raw, the source of a comment, processing instruction or
-// directive whose first byte is at offset off, for an ill-formed UTF-8 code
-// unit sequence, which XML 1.0 §4.3.3 makes a fatal error in an entity encoded
-// in UTF-8: a RuleXMLWellFormed fault located at the sequence's first byte.
-// The decoder checks character data, attribute values and names itself and
-// the bodies of these three tokens never. The check is UTF-8 validity, not a
-// byte value: a byte decodes as utf8.RuneError of width 1 exactly where
-// utf8.ValidString fails. A well-formed sequence encoding no Char ([2]) is not
-// this check's.
-func (r *Reader) checkUTF8(raw string, off int64) error {
-	for i, c := range raw {
-		if c != utf8.RuneError {
-			continue
-		}
-		if _, n := utf8.DecodeRuneInString(raw[i:]); n != 1 {
-			continue
-		}
-		return xsderr.New(xsderr.RuleXMLWellFormed, r.locAt(off+int64(i)), "ill-formed UTF-8 byte sequence in markup (XML 1.0 §4.3.3)")
+// xmlDeclFault charges a processing instruction whose target, target, is
+// "xml" in some case, located at loc and offset off, as RuleXMLWellFormed
+// unless it is the XML declaration: [17] PITarget excludes the name in every
+// case, and [23] XMLDecl, which spells it in lower case, stands only first in
+// [22] prolog, at the document entity's first character. That is offset 0 of
+// the decoded stream, a byte-order mark having been dropped as the encoding
+// signature it is (XML 1.0 §4.3.3), so white space, a comment or another
+// declaration before it makes it no XMLDecl.
+func xmlDeclFault(target string, off int64, loc xsderr.Loc) error {
+	if target != "xml" {
+		return xsderr.New(xsderr.RuleXMLWellFormed, loc, "processing instruction target %q is \"xml\" in another case, which XML 1.0 [17] PITarget excludes", target)
+	}
+	if off != 0 {
+		return xsderr.New(xsderr.RuleXMLWellFormed, loc, "processing instruction target \"xml\" after the document's first character, which XML 1.0 [17] PITarget excludes everywhere but in the [23] XMLDecl that opens [22] prolog")
 	}
 	return nil
 }
 
-// declareEntities records the general entity declarations of a DOCTYPE
-// directive at the document level, keeping the first declaration of each name,
-// and whether any declaration went unread. raw is the directive's source, "<!"
-// through '>': the subset is read from it rather than from the decoder's
-// Directive token, which replaces each comment with one space, so that a
-// comment's own grammar can be checked (XML 1.0 [15] Comment). A directive
-// inside an element is no DOCTYPE and declares nothing. At the document level,
-// a directive that is no doctypedecl, and a DOCTYPE that is not well-formed
-// where doctypeEntities checks it, is a RuleXMLWellFormed fault at loc.
-func (r *Reader) declareEntities(raw string, loc xsderr.Loc) error {
-	if len(r.stack) > 0 {
-		return nil
-	}
+// directiveName is the keyword of raw, a directive's source "<!" through '>',
+// as doctypeEntities quotes it: "<!" and the excerpt of what follows.
+func directiveName(raw string) string {
 	body, _ := strings.CutPrefix(raw, "<!")
 	body, _ = strings.CutSuffix(body, ">")
-	decls, unread, err := doctypeEntities(body, r.standalone, loc)
+	return "<!" + excerpt(body)
+}
+
+// checkChars checks raw, the source of a comment, processing instruction or
+// directive whose first byte is at offset off, and returns a RuleXMLWellFormed
+// fault located at the first offending sequence's first byte. The decoder
+// checks character data, attribute values and names itself and the bodies of
+// these three tokens never. It charges two faults, each with its own message:
+//
+//   - An ill-formed UTF-8 code unit sequence, which XML 1.0 §4.3.3 makes a
+//     fatal error in an entity encoded in UTF-8. The test is UTF-8 validity,
+//     not a byte value: a byte decodes as utf8.RuneError of width 1 exactly
+//     where utf8.ValidString fails. It is a test of its own because U+FFFD
+//     is itself a Char: the Char test alone would pass the byte.
+//   - A well-formed sequence encoding no [2] Char. A parsed entity is a
+//     sequence of characters (§2.2), [15] Comment and [16] PI are built from
+//     Char, and the internal subset, its entity value literals included, is
+//     text of the document entity, so the document is not well-formed
+//     (dt-wellformed). No WFC names this fault: WFC: Legal Character covers
+//     character references only.
+func (r *Reader) checkChars(raw string, off int64) error {
+	for i := 0; i < len(raw); {
+		c, n := utf8.DecodeRuneInString(raw[i:])
+		if c == utf8.RuneError && n == 1 {
+			return xsderr.New(xsderr.RuleXMLWellFormed, r.locAt(off+int64(i)), "ill-formed UTF-8 byte sequence in markup (XML 1.0 §4.3.3)")
+		}
+		if !xmlchar.IsChar(c) {
+			return xsderr.New(xsderr.RuleXMLWellFormed, r.locAt(off+int64(i)), "character U+%04X in markup is no Char (XML 1.0 [2] Char, §2.2)", c)
+		}
+		i += n
+	}
+	return nil
+}
+
+// declareEntities records the general entity declarations and the <!ATTLIST>
+// attribute definitions of a DOCTYPE directive at the document level, keeping
+// for each entity name its first declaration and whether one outside every
+// parameter entity is read (boundEntity), the first definition of each
+// attribute of an element type (XML 1.0 §4.2, §3.3), and whether any
+// declaration went unread. raw is the directive's source, "<!"
+// through '>': the subset is read from it rather than from the decoder's
+// Directive token, which replaces each comment with one space, so that a
+// comment's own grammar can be checked (XML 1.0 [15] Comment). The directive
+// stands at the document level, classify having charged one inside an element.
+// A directive that is no doctypedecl, a DOCTYPE that is not well-formed where
+// doctypeEntities checks it, and a DOCTYPE after the document element or after
+// another DOCTYPE, which [22] prolog admits once and only before the document
+// element, is a RuleXMLWellFormed fault at loc that declares nothing.
+func (r *Reader) declareEntities(raw string, loc xsderr.Loc) error {
+	body, _ := strings.CutPrefix(raw, "<!")
+	body, _ = strings.CutSuffix(body, ">")
+	decls, atts, unread, err := doctypeEntities(body, r.standalone, loc)
 	if err != nil {
 		return err
 	}
+	if r.ended {
+		return xsderr.New(xsderr.RuleXMLWellFormed, loc, "DOCTYPE after the document element, where XML 1.0 [27] Misc admits none")
+	}
+	if r.doctype {
+		return xsderr.New(xsderr.RuleXMLWellFormed, loc, "second DOCTYPE, where XML 1.0 [22] prolog admits only one")
+	}
+	r.doctype = true
 	if unread {
 		r.declsUnread = true
 	}
+	for _, att := range atts {
+		key := attName{elem: att.elem, name: att.name}
+		if _, bound := r.tokenized[key]; bound {
+			continue
+		}
+		if r.tokenized == nil {
+			r.tokenized = make(map[attName]bool)
+		}
+		r.tokenized[key] = att.tokenized
+	}
 	for _, decl := range decls {
-		if _, bound := r.entities[decl.name]; bound {
+		if bound, ok := r.entities[decl.name]; ok {
+			if bound.onlyInPE && !decl.inPE {
+				bound.onlyInPE = false
+				r.entities[decl.name] = bound
+			}
 			continue
 		}
 		if r.entities == nil {
-			r.entities = make(map[string]entityDecl)
+			r.entities = make(map[string]boundEntity)
 		}
-		r.entities[decl.name] = decl
-		if !decl.value.readable {
-			continue
-		}
+		r.entities[decl.name] = boundEntity{binding: decl, onlyInPE: decl.inPE}
 		if r.dec.Entity == nil {
 			r.dec.Entity = make(map[string]string)
 		}
@@ -295,7 +401,7 @@ func (r *Reader) declareEntities(raw string, loc xsderr.Loc) error {
 // 1.0 §5.1). An unparsed entity declared only where the reader did not read
 // is reported false, and AllDeclarationsProcessed then reports false too.
 func (r *Reader) HasUnparsedEntity(name string) bool {
-	return r.entities[name].unparsed
+	return r.entities[name].binding.unparsed
 }
 
 // AllDeclarationsProcessed reports the document information item's [all
@@ -318,11 +424,9 @@ func (r *Reader) AllDeclarationsProcessed() bool {
 //
 // It catches the direction the XML decoder cannot: a declaration naming UTF-8
 // is the decoder's default and never reaches the mark's CharsetReader, so a
-// UTF-16 mark contradicting it would otherwise pass unnoticed.
+// UTF-16 mark contradicting it would otherwise pass unnoticed. pi is the
+// document's XML declaration (see xmlDeclFault).
 func (r *Reader) checkDeclaration(pi xml.ProcInst, loc xsderr.Loc) error {
-	if pi.Target != "xml" {
-		return nil
-	}
 	name := pseudoAttr(string(pi.Inst), "encoding")
 	if name == "" || r.bom.AgreesWith(name) {
 		return nil
@@ -397,18 +501,24 @@ func (r *Reader) endElement(t xml.EndElement, loc xsderr.Loc) (*EndElement, erro
 	return &EndElement{name: got, loc: loc}, nil
 }
 
-// trailerFault enforces XML 1.0 §2.1's well-formedness clause 1 for the text
-// after the document element: [1] document ::= prolog element Misc*, and [27]
-// Misc ::= Comment | PI | S, so character data there must be white space
-// (declSpace). text is one character-data token read after the document
-// element's end tag, starting at loc. The fault is located at loc, the token's
-// own start: text is decoded — line ends normalized (§2.11), references
-// replaced — so no index into it is an offset into the source.
-func trailerFault(text []byte, loc xsderr.Loc) error {
-	if len(bytes.TrimLeft(text, declSpace)) == 0 {
+// outsideRootFault enforces XML 1.0 §2.1's well-formedness clause 1 for the
+// character data outside the document element: [1] document ::= prolog element
+// Misc*, [22] prolog ::= XMLDecl? Misc* (doctypedecl Misc*)?, and [27] Misc ::=
+// Comment | PI | S, so character data before or after it must be S [3]. raw is
+// the SOURCE of one character-data token read at the document level, starting
+// at loc, and the test reads raw, never the decoded text: a character
+// reference and a CDATA section are content [43] and match no Misc, whatever
+// they decode to, and a U+FEFF past the encoding signature (§4.3.3) is no S.
+// The fault is located at loc, the token's own start, before the document
+// element or after its end tag (r.ended), each with its own message.
+func (r *Reader) outsideRootFault(raw string, loc xsderr.Loc) error {
+	if strings.Trim(raw, declSpace) == "" {
 		return nil
 	}
-	return xsderr.New(xsderr.RuleXMLWellFormed, loc, "character data after the document element: only comments, processing instructions and white space may follow it (XML 1.0 [1] document, [27] Misc)")
+	if r.ended {
+		return xsderr.New(xsderr.RuleXMLWellFormed, loc, "character data after the document element: only comments, processing instructions and white space may follow it (XML 1.0 [1] document, [27] Misc)")
+	}
+	return xsderr.New(xsderr.RuleXMLWellFormed, loc, "character data before the document element: only an XML declaration, a DOCTYPE, comments, processing instructions and white space may precede it (XML 1.0 [1] document, [22] prolog, [27] Misc)")
 }
 
 // currentScope is the scope in force for the innermost open element, or nil

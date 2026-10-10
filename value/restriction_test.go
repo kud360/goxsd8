@@ -148,6 +148,57 @@ func TestBoundRestrictionFourWayCrossCheck(t *testing.T) {
 	}
 }
 
+// TestBoundRestrictionMessageNamesClause pins the whole Msg of every one of the
+// sixteen (derived kind, base kind) rejections, so its close names the clause of
+// the derived facet's valid-restriction SCC (§4.3.7.4–§4.3.10.4) that the base
+// kind falls under. The clause column is read off the four SCCs in
+// xmlschema11-2.md, not off the predicates' doc comments.
+func TestBoundRestrictionMessageNamesClause(t *testing.T) {
+	cases := []struct {
+		derivedKnd xsd.FacetKind
+		derivedVal string
+		baseKind   xsd.FacetKind
+		clause     int
+	}{
+		{xsd.FacetMaxInclusive, "11", xsd.FacetMaxInclusive, 1},
+		{xsd.FacetMaxInclusive, "10", xsd.FacetMaxExclusive, 2},
+		{xsd.FacetMaxInclusive, "9", xsd.FacetMinInclusive, 3},
+		{xsd.FacetMaxInclusive, "10", xsd.FacetMinExclusive, 4},
+
+		{xsd.FacetMaxExclusive, "11", xsd.FacetMaxExclusive, 1},
+		{xsd.FacetMaxExclusive, "11", xsd.FacetMaxInclusive, 2},
+		{xsd.FacetMaxExclusive, "10", xsd.FacetMinInclusive, 3},
+		{xsd.FacetMaxExclusive, "10", xsd.FacetMinExclusive, 4},
+
+		{xsd.FacetMinExclusive, "9", xsd.FacetMinExclusive, 1},
+		{xsd.FacetMinExclusive, "9", xsd.FacetMinInclusive, 2},
+		{xsd.FacetMinExclusive, "10", xsd.FacetMaxInclusive, 3},
+		{xsd.FacetMinExclusive, "10", xsd.FacetMaxExclusive, 4},
+
+		{xsd.FacetMinInclusive, "9", xsd.FacetMinInclusive, 1},
+		{xsd.FacetMinInclusive, "11", xsd.FacetMaxInclusive, 2},
+		{xsd.FacetMinInclusive, "10", xsd.FacetMinExclusive, 3},
+		{xsd.FacetMinInclusive, "10", xsd.FacetMaxExclusive, 4},
+	}
+	for _, c := range cases {
+		t.Run(c.derivedKnd.String()+" under base "+c.baseKind.String(), func(t *testing.T) {
+			base, b := restrictionBase(t, bound(c.baseKind, "10"))
+			err := restrict(t, b, base, bound(c.derivedKnd, c.derivedVal))
+			var xe *xsderr.Error
+			if !errors.As(err, &xe) {
+				t.Fatalf("want an *xsderr.Error rejection, got %v", err)
+			}
+			want := "simple type restriction's own " + c.derivedKnd.String() + " {value} \"" + c.derivedVal +
+				"\" is not a valid restriction of the {base type definition}'s " + c.baseKind.String() +
+				" {value} \"10\", which " + string(boundRestrictionRule(c.derivedKnd)) +
+				" clause " + strconv.Itoa(c.clause) + " requires"
+			if xe.Msg != want {
+				t.Errorf("Msg = %q\nwant  %q", xe.Msg, want)
+			}
+		})
+	}
+}
+
 // TestBoundRestrictionFacetValueNormalized proves a facet's lexical {value} is
 // whiteSpace-normalized through the BASE type's mode before it is parsed: the
 // XML mapping interprets the value attribute through the base's lexical mapping,
@@ -253,7 +304,7 @@ func TestBoundRestrictionViolatesIncomparable(t *testing.T) {
 	}
 	for _, derived := range kinds {
 		for _, base := range kinds {
-			if boundRestrictionViolates(derived, base, Incomparable) {
+			if _, violates := boundRestrictionViolates(derived, base, Incomparable); violates {
 				t.Errorf("boundRestrictionViolates(%s, %s, Incomparable) = true, want false", derived, base)
 			}
 		}
@@ -452,7 +503,7 @@ func TestFacetValueNormalizedAtConstruction(t *testing.T) {
 		t.Fatalf("NewSimpleType: %v", err)
 	}
 
-	v, err := ValidateLexical(b, noSchema{}, st, " 7 ", nil)
+	v, err := ValidateLexical(b, noSchema{}, st, " 7 ", nil, assertionsUndecided{})
 	if err != nil {
 		t.Fatalf("ValidateLexical(\" 7 \") = %v, want the enumeration member 7 to match", err)
 	}
@@ -462,7 +513,7 @@ func TestFacetValueNormalizedAtConstruction(t *testing.T) {
 
 	// The bound really is 9, not an unparsed string: 8 is enumerated and under
 	// the bound, so only the enumeration can reject it, and it does not.
-	if _, err := ValidateLexical(b, noSchema{}, st, "8", nil); err != nil {
+	if _, err := ValidateLexical(b, noSchema{}, st, "8", nil, assertionsUndecided{}); err != nil {
 		t.Errorf("ValidateLexical(\"8\") = %v, want valid under maxInclusive \" 9 \"", err)
 	}
 
@@ -486,7 +537,7 @@ func TestFacetValueNotNormalizedUnderPreserve(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSimpleType: %v", err)
 	}
-	if _, err := ValidateLexical(b, noSchema{}, st, "7", nil); err == nil {
+	if _, err := ValidateLexical(b, noSchema{}, st, "7", nil, assertionsUndecided{}); err == nil {
 		t.Error("ValidateLexical under a preserve base with maxInclusive \" 9 \" = nil error, want the padded facet {value} to be rejected")
 	}
 }

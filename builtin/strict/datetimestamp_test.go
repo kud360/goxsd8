@@ -2,10 +2,12 @@ package strict_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/kud360/goxsd8/builtin"
 	"github.com/kud360/goxsd8/builtin/strict"
 	"github.com/kud360/goxsd8/value"
+	"github.com/kud360/goxsd8/xpath"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
 )
@@ -70,11 +72,11 @@ func TestDateTimeStampSeededExplicitTimezone(t *testing.T) {
 		t.Fatal("Seed did not return the xs:dateTimeStamp component")
 	}
 
-	if _, err := value.ValidateLexical(strict.New(), noSchema{}, dts, "2002-10-10T12:00:00Z", nil); err != nil {
+	if _, err := value.ValidateLexical(strict.New(), noSchema{}, dts, "2002-10-10T12:00:00Z", nil, xpath.FacetAssertions(time.Time{})); err != nil {
 		t.Fatalf("tz-bearing dateTimeStamp should validate: %v", err)
 	}
 
-	_, err = value.ValidateLexical(strict.New(), noSchema{}, dts, "2002-10-10T12:00:00", nil)
+	_, err = value.ValidateLexical(strict.New(), noSchema{}, dts, "2002-10-10T12:00:00", nil, xpath.FacetAssertions(time.Time{}))
 	if err == nil {
 		t.Fatal("tz-absent dateTimeStamp must be rejected, got nil")
 	}

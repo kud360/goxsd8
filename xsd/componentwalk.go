@@ -70,6 +70,10 @@ type componentWalk struct {
 	// elementDeclaration is charged on an Element Declaration, global or local; it
 	// retains its own Loc, so it takes neither loc nor owner.
 	elementDeclaration func(e ElementDeclaration) error
+	// attributeDeclaration is charged on an Attribute Declaration, global or local,
+	// after its {type definition} slot; like elementDeclaration it takes neither
+	// loc nor owner.
+	attributeDeclaration func(a AttributeDeclaration) error
 	// simpleType is handed every *SimpleType the tree OWNS — an inline {type
 	// definition}, an inline {base type definition}, SimpleContent's {simple type
 	// definition}. The simple-type graph below it is a different tree with a
@@ -156,8 +160,8 @@ func (w componentWalk) walkTypeDefinition(ref TypeDefinitionOrRef, loc xsderr.Lo
 }
 
 // enterTypeDefinition is walkTypeDefinition's descent half, split out for the
-// one site that must charge something between the slot's own verdict and the
-// component below it (walkElementDeclaration).
+// two sites that must charge something between the slot's own verdict and the
+// component below it (walkElementDeclaration, walkAttributeDeclaration).
 func (w componentWalk) enterTypeDefinition(ref TypeDefinitionOrRef) error {
 	inline, ok := ref.(InlineTypeDefinition)
 	if !ok {
@@ -200,15 +204,28 @@ func (w componentWalk) walkAttributeUse(u AttributeUse, loc xsderr.Loc, owner st
 	return w.walkAttributeDeclaration(d.Declaration)
 }
 
-// walkAttributeDeclaration descends an Attribute Declaration's one nesting slot,
-// its {type definition}. The declaration retains its own Loc, so the slot is
-// charged there rather than at whatever reached it. An attribute's type is always
-// a simple type (§3.2.1), so the slot's inline arm reaches simpleType and its
-// by-name arm is a kind-specific lookup that rejects a same-name non-type as
-// dangling.
+// walkAttributeDeclaration charges one Attribute Declaration's {type definition}
+// slot, then the declaration itself, then enters the slot's inline arm. The
+// declaration retains its own Loc, so both are charged there rather than at
+// whatever reached it. An attribute's type is always a simple type (§3.2.1): the
+// inline arm can hold nothing else (NewAttributeDeclaration rejects a complex
+// one) and reaches simpleType, but typeDefinitionSlot's by-name arm answers for
+// every slot and accepts either kind, so a type= naming a complex type is the
+// attributeDeclaration charge's to reject.
 func (w componentWalk) walkAttributeDeclaration(a AttributeDeclaration) error {
-	return w.walkTypeDefinition(a.TypeDefinition(), a.Loc(),
-		"attribute declaration "+a.Name().String()+" {type definition}")
+	ref := a.TypeDefinition()
+	if w.typeDefinitionSlot != nil {
+		if err := w.typeDefinitionSlot(ref, a.Loc(),
+			"attribute declaration "+a.Name().String()+" {type definition}"); err != nil {
+			return err
+		}
+	}
+	if w.attributeDeclaration != nil {
+		if err := w.attributeDeclaration(a); err != nil {
+			return err
+		}
+	}
+	return w.enterTypeDefinition(ref)
 }
 
 // walkElementDeclaration charges one Element Declaration and then enters its

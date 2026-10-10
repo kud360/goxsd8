@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 	"unicode/utf16"
+	"unicode/utf8"
 
 	"github.com/kud360/goxsd8/parser/xmltree"
 	"github.com/kud360/goxsd8/xsderr"
@@ -562,7 +563,9 @@ func TestMalformedXMLIsErrorNotPanic(t *testing.T) {
 // character data after the document element is a well-formedness fault located
 // where its character-data token starts in the source — across CRLF line ends
 // and character references the decoder replaces — while white space, a comment
-// and a PI there are accepted.
+// and a PI there are accepted. S is the source's own characters: a CDATA
+// section, empty or not, and a character reference are content [43] and no
+// Misc, though each decodes to white space (#2089).
 func TestOnlyMiscFollowsTheDocumentElement(t *testing.T) {
 	for _, tc := range []struct {
 		name, doc string
@@ -573,6 +576,11 @@ func TestOnlyMiscFollowsTheDocumentElement(t *testing.T) {
 		{"text after a comment", "<a/>\n<!-- c -->\nx", xsderr.Loc{URI: "t.xml", Line: 2, Col: 11}},
 		{"text after a line-feed reference", "<a/>&#10;x", xsderr.Loc{URI: "t.xml", Line: 1, Col: 5}},
 		{"text after a space reference", "<a/>&#32;x", xsderr.Loc{URI: "t.xml", Line: 1, Col: 5}},
+		{"CDATA section holding a space", "<a/><![CDATA[ ]]>", xsderr.Loc{URI: "t.xml", Line: 1, Col: 5}},
+		{"empty CDATA section", "<a/>\n<![CDATA[]]>", xsderr.Loc{URI: "t.xml", Line: 2, Col: 1}},
+		{"space reference", "<a/>&#32;", xsderr.Loc{URI: "t.xml", Line: 1, Col: 5}},
+		{"line-feed reference", "<a/>&#10;", xsderr.Loc{URI: "t.xml", Line: 1, Col: 5}},
+		{"tab reference after white space", "<a/>\n &#x9;", xsderr.Loc{URI: "t.xml", Line: 1, Col: 5}},
 		{"white space", "<a/>\r\n \t\n", xsderr.Loc{}},
 		{"comment", "<a/>\n<!-- c -->\n", xsderr.Loc{}},
 		{"processing instruction", "<a/>\n<?pi data?>\n", xsderr.Loc{}},
@@ -592,6 +600,70 @@ func TestOnlyMiscFollowsTheDocumentElement(t *testing.T) {
 			want := fmt.Sprintf("t.xml:%d:%d: [xml-wf] character data after the document element", tc.at.Line, tc.at.Col)
 			if !strings.HasPrefix(err.Error(), want) {
 				t.Errorf("error = %q, want it to open %q", err, want)
+			}
+		})
+	}
+}
+
+// TestOnlyMiscPrecedesTheDocumentElement pins XML 1.0 [1] document ::= prolog
+// element Misc*, with [22] prolog ::= XMLDecl? Misc* (doctypedecl Misc*)? and
+// [27] Misc ::= Comment | PI | S: character data before the document element
+// that is not the source's own S — text, a character reference or CDATA
+// section decoding to white space, or a U+FEFF after the encoding signature —
+// is a well-formedness fault located where its character-data token starts.
+// White space, comments, PIs, an XML declaration and a DOCTYPE there, one
+// whose internal subset holds a PI with a '>' among them, are accepted.
+func TestOnlyMiscPrecedesTheDocumentElement(t *testing.T) {
+	const mark = "\xEF\xBB\xBF"
+	for _, tc := range []struct {
+		name, doc string
+		at        xsderr.Loc // zero: accepted
+	}{
+		{"text", "junk<r/>", xsderr.Loc{URI: "t.xml", Line: 1, Col: 1}},
+		{"text after a DOCTYPE", "<!DOCTYPE r>junk<r/>", xsderr.Loc{URI: "t.xml", Line: 1, Col: 13}},
+		{"text after an XML declaration", "<?xml version=\"1.0\"?>\r\n x\r\n<r/>", xsderr.Loc{URI: "t.xml", Line: 1, Col: 22}},
+		{"space reference", "&#32;<r/>", xsderr.Loc{URI: "t.xml", Line: 1, Col: 1}},
+		{"CDATA section holding a space", "\n<![CDATA[ ]]><r/>", xsderr.Loc{URI: "t.xml", Line: 2, Col: 1}},
+		{"a second byte-order mark", mark + mark + "<r/>", xsderr.Loc{URI: "t.xml", Line: 1, Col: 1}},
+		{"white space, comments and PIs", "\r\n \t<!-- c -->\n<?pi data?>\n<r/>", xsderr.Loc{}},
+		{"XML declaration and DOCTYPE", "<?xml version=\"1.0\"?>\n<!DOCTYPE r>\n<r/>", xsderr.Loc{}},
+		{"one byte-order mark", mark + "<r/>", xsderr.Loc{}},
+		{"internal subset holding a PI with a '>'", "<!DOCTYPE r [<?x a > b?><!NOTATION n SYSTEM 'x'><!ENTITY pic SYSTEM 'u' NDATA n>]><r/>", xsderr.Loc{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := collect(t, "t.xml", tc.doc)
+			if tc.at == (xsderr.Loc{}) {
+				if err != nil {
+					t.Fatalf("collect: %v, want the document accepted", err)
+				}
+				return
+			}
+			wantWellFormednessError(t, err)
+			want := fmt.Sprintf("t.xml:%d:%d: [xml-wf] character data before the document element", tc.at.Line, tc.at.Col)
+			if !strings.HasPrefix(err.Error(), want) {
+				t.Errorf("error = %q, want it to open %q", err, want)
+			}
+		})
+	}
+}
+
+// TestNoElementFollowsTheDocumentElement pins XML 1.0 [1] document ::= prolog
+// element Misc*: a start tag after the document element's end tag is a
+// well-formedness fault located at that tag, charged before any fault of the
+// tag's own attributes, whatever Misc stands between.
+func TestNoElementFollowsTheDocumentElement(t *testing.T) {
+	for _, tc := range []struct {
+		name, doc, want string
+	}{
+		{"adjacent", "<a/><b/>", "t.xml:1:5: [xml-wf] element <b> after the document element"},
+		{"after Misc", "<a></a>\n<!-- c -->\n<?pi?> <b>x</b>", "t.xml:3:8: [xml-wf] element <b> after the document element"},
+		{"unbound element and attribute prefixes", "<a/><p:b q:c='1'/>", "t.xml:1:5: [xml-wf] element <p:b> after the document element"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := collect(t, "t.xml", tc.doc)
+			wantWellFormednessError(t, err)
+			if !strings.HasPrefix(err.Error(), tc.want) {
+				t.Errorf("error = %q, want it to open %q", err, tc.want)
 			}
 		})
 	}
@@ -660,6 +732,75 @@ func TestIllFormedUTF8InMarkupIsError(t *testing.T) {
 				t.Errorf("HasUnparsedEntity(%q) = true after the fault, want false", "bad")
 			}
 		})
+	}
+}
+
+// TestNonCharInMarkupIsError pins XML 1.0 §2.2 with [2] Char, [15] Comment and
+// [16] PI: a well-formed UTF-8 sequence encoding no Char in a comment,
+// processing instruction or directive — the DOCTYPE's internal subset, an
+// entity value and an ATTLIST default included — is a well-formedness fault
+// located at the sequence's first byte, with a message of its own, not
+// §4.3.3's. The boundaries of Char and the white space it admits read.
+func TestNonCharInMarkupIsError(t *testing.T) {
+	for _, tc := range []struct {
+		name, doc string
+		bad       string // the offending character; "" when the document reads
+	}{
+		{"comment before the document element", "<!-- \x01 --><r/>", "\x01"},
+		{"PI before the document element", "<?pi \x01?><r/>", "\x01"},
+		{"comment in content", "<r><!-- \x01 --></r>", "\x01"},
+		{"PI in content", "<r><?pi \x01?></r>", "\x01"},
+		{"comment in the subset", "<!DOCTYPE r [<!-- \x01 -->]><r/>", "\x01"},
+		{"PI in the subset", "<!DOCTYPE r [<?pi \x01?>]><r/>", "\x01"},
+		{"entity value", "<!DOCTYPE r [<!ENTITY e \"\x01\">]><r/>", "\x01"},
+		{"ATTLIST default", "<!DOCTYPE r [<!ATTLIST r a CDATA \"\x01\">]><r/>", "\x01"},
+		{"U+FFFE in a comment", "<!-- ￾ --><r/>", "￾"},
+		{"U+FFFF in a PI", "<?pi ￿?><r/>", "￿"},
+		{"line ends in a comment", "<!--\t\n\r\n --><r/>", ""},
+		{"line ends in a PI", "<?pi \t\n\r\n?><r/>", ""},
+		{"Char boundaries in a comment", "<!-- ퟿�\U00010000\U0010FFFF --><r/>", ""},
+		{"Char boundaries in a PI", "<?pi ퟿�\U00010000\U0010FFFF?><r/>", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := xmltree.NewReader("t.xml", strings.NewReader(tc.doc))
+			var err error
+			for err == nil {
+				_, err = r.Token()
+			}
+			if tc.bad == "" {
+				if !errors.Is(err, io.EOF) {
+					t.Fatalf("Token: %v, want the document read to io.EOF", err)
+				}
+				return
+			}
+			wantWellFormednessError(t, err)
+			at := strings.Index(tc.doc, tc.bad)
+			if loc, _ := xsderr.LocOf(err); loc != (xsderr.Loc{URI: "t.xml", Line: 1, Col: at + 1}) {
+				t.Errorf("fault at %v, want t.xml:1:%d, the character's first byte", loc, at+1)
+			}
+			c, _ := utf8.DecodeRuneInString(tc.bad)
+			want := fmt.Sprintf("t.xml:1:%d: [xml-wf] character %U in markup is no Char", at+1, c)
+			if !strings.HasPrefix(err.Error(), want) {
+				t.Errorf("error = %q, want it to open %q", err, want)
+			}
+		})
+	}
+}
+
+// TestNonCharInContentIsDecoderFault pins that a non-Char in character data
+// stays the decoder's charge, located where the decoder stops.
+func TestNonCharInContentIsDecoderFault(t *testing.T) {
+	r := xmltree.NewReader("t.xml", strings.NewReader("<r>\x01</r>"))
+	var err error
+	for err == nil {
+		_, err = r.Token()
+	}
+	wantWellFormednessError(t, err)
+	if loc, _ := xsderr.LocOf(err); loc != (xsderr.Loc{URI: "t.xml", Line: 1, Col: 5}) {
+		t.Errorf("fault at %v, want t.xml:1:5", loc)
+	}
+	if !strings.Contains(err.Error(), "illegal character code U+0001") {
+		t.Errorf("error = %q, want the decoder's %q", err, "illegal character code U+0001")
 	}
 }
 

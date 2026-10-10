@@ -19,11 +19,14 @@ push the heartbeat WORKFLOW's lease invariant requires before a round.
 **A brief carries the issue and never narrows the delegate's own file.**
 Paste the body's `## Goal`, `## Spec` and `## Acceptance` and every thread
 comment that declares itself normative into the request verbatim: the
-oracle has no tool that reads GitHub (#2142). A brief names the gate only
-as CLAUDE.md's gate, whole (#1959); never bars or reshapes a duty the
-delegate's agent file assigns it, the arbiter's ratchet run on accept above
-all (#1812); never asks a subagent to push, since its commits leave its
-worktree only through WORKFLOW's hand-off (#2133); and never names a
+oracle has no tool that reads GitHub (#2142). A judge round's brief also
+pastes the `GROUNDING:` comment and the latest `MASON:` account whole, and
+a round-2 judge brief the round-1 verdict whole, so the arbiter states its
+outcome with no GitHub read of the thread (#2449). A brief names the gate
+only as CLAUDE.md's gate, whole (#1959); never bars or reshapes a duty the
+delegate's agent file assigns it, the arbiter's ratchet run on accept
+above all (#1812); never asks a subagent to push, since its commits leave
+its worktree only through WORKFLOW's hand-off (#2133); and never names a
 `Co-Authored-By` model — each commit names the model that wrote it
 (#1996).
 
@@ -227,8 +230,9 @@ counts.
    accept it runs and banks the ratchet as its agent file requires, and its
    bank commit comes onto `wip/issue-<N>` under the same hand-off clause as
    mason's (#1812). On reject: one repair round by mason, briefed from the
-   whole posted verdict — never from a partial finding set, and never
-   before the verdict is posted (#1426) — then re-judge in full. On a
+   whole posted verdict, each defect class's site list carried whole with
+   the sites it rules sound (#2449) — never from a partial finding set, and
+   never before the verdict is posted (#1426) — then re-judge in full. On a
    second reject: park per WORKFLOW, then go to step 6's log entry and
    stop. On accept, dispose of the verdict's remaining findings per
    WORKFLOW's **After the verdict** before step 6.

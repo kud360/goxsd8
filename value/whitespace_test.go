@@ -209,13 +209,13 @@ func TestEffectiveWhiteSpaceNoFacetsApplicable(t *testing.T) {
 // TestValidateLexicalSpecialDatatypesDoNotFault drives the two ·special· datatypes
 // through the exported pipeline to prove the whiteSpace stage no longer faults on
 // them (it runs BEFORE the governing-mapping gate, so they cannot be filtered out
-// earlier). The expected outcome is the ordinary "no backend mapping governs"
+// earlier). The expected outcome is the ordinary "has no governing backend mapping"
 // cvc-datatype-valid error — no backend maps a ·special· (§4.1) — and NOT a facet
 // precondition fault, which valueSpace.ValidDefault would have to answer undecided and
 // a naive caller would read as a false reject.
 func TestValidateLexicalSpecialDatatypesDoNotFault(t *testing.T) {
 	for _, st := range []*xsd.SimpleType{xsd.AnySimpleType(), xsd.AnyAtomicType()} {
-		_, err := ValidateLexical(emptyBackend{}, noSchema{}, st, "  raw  literal  ", nil)
+		_, err := ValidateLexical(emptyBackend{}, noSchema{}, st, "  raw  literal  ", nil, assertionsUndecided{})
 		if err == nil {
 			t.Errorf("ValidateLexical(%s) = nil error, want the ungoverned cvc-datatype-valid error", st.Name())
 			continue
@@ -224,7 +224,7 @@ func TestValidateLexicalSpecialDatatypesDoNotFault(t *testing.T) {
 			t.Errorf("ValidateLexical(%s) reported a facet precondition fault: %v", st.Name(), err)
 		}
 		if r, _ := xsderr.RuleOf(err); r != "cvc-datatype-valid" {
-			t.Errorf("ValidateLexical(%s) charged %s, want cvc-datatype-valid (no backend mapping governs)", st.Name(), r)
+			t.Errorf("ValidateLexical(%s) charged %s, want cvc-datatype-valid (has no governing backend mapping)", st.Name(), r)
 		}
 	}
 }
@@ -260,7 +260,7 @@ func TestValidateLexicalUnionWhiteSpaceStageNoPanic(t *testing.T) {
 	union := unionType(t)
 	// emptyBackend maps nothing, so no member of the union is governed and
 	// ValidateLexical returns its normal cvc-datatype-valid error.
-	v, err := ValidateLexical(emptyBackend{}, noSchema{}, union, "  raw  literal  ", nil)
+	v, err := ValidateLexical(emptyBackend{}, noSchema{}, union, "  raw  literal  ", nil, assertionsUndecided{})
 	if err == nil {
 		t.Fatalf("ValidateLexical(union) = (%v, nil), want a real error (no governing mapping)", v)
 	}

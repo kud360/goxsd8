@@ -19,14 +19,9 @@ func (noSchema) Type(xsd.QName) (xsd.TypeDefinition, bool) { return nil, false }
 
 // newCheckedSimpleType is [xsd.NewSimpleType] followed by
 // [xsd.SimpleType.CheckDerivation] over an OWNED base — the pairing that used to
-// be NewSimpleType alone. A nil base still means "this type IS
-// xs:anySimpleType", the nil slot.
+// be NewSimpleType alone.
 func newCheckedSimpleType(loc xsderr.Loc, name xsd.QName, derivation xsd.SimpleTypeDerivation, base *xsd.SimpleType, ownFacets []xsd.Facet, final []xsd.DerivationMethod) (*xsd.SimpleType, error) {
-	var slot xsd.SimpleTypeOrRef
-	if base != nil {
-		slot = xsd.OwnedSimpleType{Definition: base}
-	}
-	st, err := xsd.NewSimpleType(loc, name, derivation, slot, ownFacets, final)
+	st, err := xsd.NewSimpleType(loc, name, derivation, xsd.OwnedSimpleType{Definition: base}, ownFacets, final)
 	if err != nil {
 		return nil, err
 	}

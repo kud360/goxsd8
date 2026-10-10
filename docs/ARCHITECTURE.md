@@ -35,8 +35,9 @@ Value implementations, parsing, validation, and generation live above them.
                                     [4a] NameChar, which regex's \i/\c and
                                     parser/xmltree's DOCTYPE name checks both read.
                                   - internal/xmlchar, XML 1.0 [2] Char, which
-                                    parser/xmltree's character-reference check and
-                                    internal/xmltok's text check both read.
+                                    parser/xmltree's character-reference and
+                                    markup checks and internal/xmltok's text
+                                    check read.
                                   - internal/xmltok, encoding/xml's strict tokenizer
                                     forked to check names against internal/xmlname's
                                     5e tables, which parser/xmltree's reader and
@@ -136,7 +137,7 @@ sets and `parser/xmltree`'s DOCTYPE name checks; a further Name check
 (#1765, #2187) reads the same leaf. Whether that table is generated is
 #989's question, asked of `internal/xmlname`. [2] `Char` lives in
 `internal/xmlchar`, read by `parser/xmltree`'s character-reference check and
-`internal/xmltok`'s text check (#2187).
+markup check and `internal/xmltok`'s text check (#2187, #2265).
 
 `cmd/goxsd8` is a library CONSUMER, not a place to grow capability. A
 capability the CLI needs and the library does not export is a library gap to
@@ -370,10 +371,9 @@ from position. `Loc` is provenance, not identity.
 `resolve.go`, `contentrestricts.go`, `complexextension.go`,
 `particleattribution.go`, the two attribute folds and the shared descent
 beneath them, and a dozen more — export **nothing at all**. The exact count
-is not maintained here and no audit should update it: it has only grown,
-and a figure in prose is a second encoding of something `go doc` and a file
-census answer better (#665). That looks like a candidate for an
-`xsd/finalize` sub-package. **It is not; do not propose the split.**
+is not maintained here and no audit should update it (STYLE D3, #665). That
+looks like a candidate for an `xsd/finalize` sub-package. **It is not; do
+not propose the split.**
 
 The constraint machinery reads and writes the components' *unexported*
 fields — `attributeusefold.go` reads `ComplexType.prohibitedAttributeNames`
@@ -509,22 +509,26 @@ otherwise stdlib.
 ## XPath (`xpath`)
 
 **Status: the CTA required subset ships, and over the same grammar the
-first slice of assertion evaluation; the rest is the destination.**
-`go doc` renders ten identifiers. Four — `CompileCTATest`, `CTATest`,
-`Attributes` and `CTATestStaticError` — compile, evaluate and
-statically check §3.12.6's `ta-Test` grammar for a Type Alternative's
-`{test}`. They have two consumers in two phases: `parser` calls
+first slices of assertion evaluation; the rest is the destination.**
+`xpath/doc.go` owns the exported inventory and the grammar each tier admits;
+read it there. Two consumers take the exports in two phases. `parser` calls
 `CTATestStaticError` at schema construction, charging `ta-props-correct`
-clause 2 over `xpath-valid` clause 2 for a `{test}` with an XPath static
-error — wrapping the `*xsderr.Error` this package returns, which carries
-the XPath code (`err:XPST0081`) as its own rule — and `validate` compiles
-and evaluates the same `{test}` at ·assessment· time. Six more —
-`CompileAssertionTest`, `AssertionTest`, `AttributeTypes`,
-`TypedAttributes`, `ValueBinding` and `BindValue` — compile and evaluate
-an assertion `{test}` written in that grammar plus the value comparisons
-and `$value`, over the element's TYPED attributes and its simple
-content's ·actual value·, for `validate`'s `cvc-assertion` charge. Read the tiers below as "does" for tier 1 and for
-tier 2's first slice, and "will" for the rest.
+clause 2 over `xpath-valid` clause 2 for a Type Alternative `{test}` with an
+XPath static error — wrapping the `*xsderr.Error` this package returns,
+which carries the XPath code (`err:XPST0081`) as its own rule. `validate`
+takes the rest at ·assessment· time: it compiles and evaluates the same
+`{test}` against §3.12.6's `ta-Test` grammar; it compiles and evaluates an
+assertion `{test}` over the typed values of the element's attributes, of its
+element children and of its simple content for `cvc-assertion`, keeping only
+the children the compiled test reads; for a test that counts nodes it walks
+the element's subtree in `validate/cvcassertion.go`, reporting each element
+and attribute to the test's `Tally` and asking `CountsAttributesAt` at which
+depths an element whose ·governing type definition· was not determined
+leaves the count lacking; and it injects `FacetAssertions`, the
+`value.AssertionEvaluator` for an assertions facet's `{test}`
+(`cvc-assertions-valid`), into `value.ValidateLexical`/`ValidatingType`.
+Read the tiers below as "does" for tier 1 and for tier 2's first slices,
+and "will" for the rest.
 
 Full XPath 2.0 is the destination; the engine grows outward from the
 XSD-required subset:
@@ -533,10 +537,10 @@ XSD-required subset:
    shipped, less the shapes that compile-time-decline, which `xpath/doc.go`
    enumerates,
 2. assertion essentials — axes, predicates, quantified expressions, typed
-   comparisons, the F&O function core; its first slice, tier 1's grammar
-   plus the value comparisons and `$value` over typed attributes and
-   simple content, ships, and `xpath/doc.go` enumerates what it
-   declines,
+   comparisons, the F&O function core; its first slices ship, and
+   `xpath/doc.go`'s tier 2 enumerates the grammar they admit — `fn:count`
+   among it, over `N` or `@N`, bare or behind `./` or `.//`, or over a
+   rooted step — and what they decline,
 3. the full grammar and function library, tracked by its own conformance
    lane.
 
@@ -550,28 +554,27 @@ assertion `{test}` outside it is declined the same way, and its caller
 records it as unevaluated.
 Dynamic errors (type mismatch, bad pattern) make an assertion definitively
 unsatisfied and a CTA `{test}` definitively false (`key-cta-ta-select`
-clause 2) — they are NOT fail-open (PRINCIPLES 20). `$value` binds a typed
-atom `{Lexical, Kind}`. F&O regex functions use `regex`'s F&O flavor,
+clause 2) — they are NOT fail-open (PRINCIPLES 20). PRINCIPLES 17 owns
+how `$value` binds. F&O regex functions use `regex`'s F&O flavor,
 never the pattern-facet flavor.
 
 ## Identity-constraint paths (`icpath`)
 
 **Status: ships whole — the grammar, the two SCCs over it and the streaming
-matcher.** `go doc` renders thirteen identifiers: `CompileSelector` /
-`CompileField` and the opaque `Expr`, `Live` and `Selection` the matcher runs
-on, plus `SelectorViolation` / `FieldViolation`. It owns §3.11.6.2 and
-§3.11.6.3 — the ·selector subset· and the ·field subset·, a path grammar over
-the child and attribute axes — and imports `xsd`, `xsderr` and `regex` (the
-NCName class its lexer scans with).
+matcher.** `go doc ./icpath` renders the exported inventory; read it there.
+It owns §3.11.6.2 and §3.11.6.3 — the ·selector subset· and the ·field
+subset·, a path grammar over the child and attribute axes — and imports `xsd`,
+`xsderr` and `regex` (the NCName class its lexer scans with).
 
 Two consumers in two phases, the shape `xpath` has for §3.12.6's `ta-Test`:
 `parser` calls the two `Violation` entry points at schema construction,
 charging `c-selector-xpath` / `c-fields-xpaths` at the offending
-`<selector>`/`<field>`, and `validate` compiles and advances the same
-`{expression}` at ·assessment· time for `cvc-identity-constraint`. It is NOT
-part of `xpath`: this grammar is not a stage of XPath 2.0 — its lexer borrows
-XPath 2.0's closed axis vocabulary and `node()` only to classify a step head,
-and its matcher evaluates the child and attribute axes alone — and
+`<selector>`/`<field>`, and `validate` compiles the same `{expression}` with
+`CompileSelector`/`CompileField` and advances the opaque
+`Expr`/`Live`/`Selection` at ·assessment· time for `cvc-identity-constraint`.
+It is NOT part of `xpath`: this grammar is not a stage of XPath 2.0 — its
+lexer borrows XPath 2.0's closed axis vocabulary and `node()` only to classify
+a step head, and its matcher evaluates the child and attribute axes alone — and
 `validate/doc.go` states these paths are evaluated "directly and never through
 the XPath engine".
 

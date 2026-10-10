@@ -124,7 +124,8 @@ func (a attribute) Name() xsd.QName { return qname(a.a.Name()) }
 
 // Value reports A.[[normalized value]] as the source produced it. XML 1.0
 // §3.3.3 normalization is an infoset precondition (Appendix D), already
-// applied upstream, and this layer applies nothing further.
+// applied by parser/xmltree (Attribute.Value), and this layer applies nothing
+// further.
 func (a attribute) Value() string { return a.a.Value() }
 
 func (a attribute) Loc() xsderr.Loc { return a.a.Loc() }
@@ -134,9 +135,9 @@ func (a attribute) Loc() xsderr.Loc { return a.a.Loc() }
 //
 // The cursor does not trust the engine to descend into every element it is
 // handed: an element child the engine takes and never calls Children on (a
-// processContents="skip" wildcard match) leaves its whole subtree in the
-// stream, and those tokens are discarded here rather than reported to this
-// element as further children.
+// processContents="skip" wildcard match no assertion of an ancestor counts
+// across) leaves its whole subtree in the stream, and those tokens are
+// discarded here rather than reported to this element as further children.
 type children struct {
 	w     *walker
 	depth int

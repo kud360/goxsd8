@@ -71,6 +71,17 @@
 // typeless attribute (xs:anySimpleType, Structures §3.2.2.2) would otherwise be
 // rejected by every processor that trusted the ID.
 //
+// The last stage is the one this package cannot run itself: an assertions
+// facet's {test}s are XPath 2.0 (cvc-assertions-valid, §4.3.13.3), and package
+// xpath imports this one. [ValidateLexical] and [ValidatingType] therefore take
+// an [AssertionEvaluator], which answers each {test} with an [AssertionOutcome]:
+// a failed one is an ordinary verdict under cvc-assertions-valid, and a declined
+// one is the third non-verdict, which [IsAssertionDeclined] reports and
+// [IsDatatypeVerdict] excludes. GAP(value): this package's own callers of the
+// pipeline that are handed no evaluator — [CheckFacetRestriction] and the
+// [xsd.ValueSpace] [NewValueSpace] returns — decline every {test}, each
+// fail-open on the terms its own marker states. (#1042)
+//
 // One member of that class has a predicate of its own, because two sites need to
 // know WHICH fault: a type may reach [ValidateLexical] carrying a facet that is not
 // applicable to it at all (cos-applicable-facets §4.1.5) — a bound facet on an
@@ -88,17 +99,21 @@
 // (a list of xs:byte, whose mapping is xs:decimal's) reject an out-of-range item
 // — and then its own facets over the resulting sequence. A union has no
 // whiteSpace facet at all: it hands the RAW literal to its member types in
-// order, and the first one that is itself datatype-valid supplies both the value
-// and the whiteSpace normalization its own pattern facet then matches against —
+// order, and the first one that is itself datatype-valid supplies the value, the
+// whiteSpace normalization its own pattern facet then matches against, and the
+// type its own assertions facet binds `$value` under (dt-xdmrep clause 4): that
+// ·active basic member·, never the union, is the st the evaluator is handed —
 // so a union's value is always some member's value, never a wrapper of its own.
 // [ValidatingType] names that member (key-vtype §3.16.4 cl.1, the ·validating
 // type·): st itself, or the ·active basic member· a union dispatched to. Its
 // own member-identification scan applies a WIDER fault test than the dispatch
 // above does — it declines on any member error that is not [IsDatatypeVerdict],
-// where the dispatch folds anything short of [IsFacetPrecondition] into
-// "rejected" and keeps scanning (dv_union's own #462 gap) — so the two can
-// disagree on which members fault; ValidatingType's doc comment is the
-// authority on why.
+// where the dispatch folds anything short of [IsFacetPrecondition] or
+// [IsAssertionDeclined] into "rejected" and keeps scanning (dv_union's own #462
+// gap) — so the two can disagree on which members fault; ValidatingType's doc
+// comment is the authority on why. Both run each member's assertions facets, so
+// a member one of whose {test}s fails is passed over for a later one
+// (dt-active-member).
 //
 // A facet's OWN {value} goes through the same whiteSpace normalization before it
 // is parsed, once at construction: a facet's {value} property is "a value from
@@ -158,11 +173,12 @@
 // Schema-less graph — one assembled entirely from live components, as
 // builtin.Seed produces — passes a resolver that resolves nothing, which is total
 // there because such a graph holds no by-name reference to look up.
-// [CheckFacetRestriction] also reads the resolver as the current schema's
-// {notation declarations}, NOTATION's value space (§3.3.19), through a Notations
-// method as *xsd.Schema has; against a resolver without one that value space
-// cannot be judged, so a NOTATION-valued member is held only to NOTATION's
-// lexical mapping and never rejected as undeclared.
+// [ValidateLexical] and [ValidatingType] also read the resolver as the current
+// schema's {notation declarations}, NOTATION's value space (§3.3.19), through a
+// Notations method as *xsd.Schema has, and so does [CheckFacetRestriction]
+// through them; against a resolver without one that value space cannot be
+// judged, so a NOTATION value is held only to its mapping and facets and never
+// rejected as undeclared.
 //
 // An UNRESOLVABLE reference surfaces as the src-resolve error xsd.SimpleType.Base
 // and its siblings produce. It is not a validity verdict about the literal — it says
@@ -172,18 +188,27 @@
 // # Value-constraint validity and comparison (the xsd.ValueSpace seam)
 //
 //	func NewValueSpace(b Backend) xsd.ValueSpace
-//	func ConstraintMatches(b Backend, r xsd.TypeResolver, t *xsd.SimpleType, lexical string, ctx Context, vc xsd.ValueConstraint) (same, decided bool)
+//	func ConstraintMatches(b Backend, r xsd.TypeResolver, t *xsd.SimpleType, lexical string, ctx Context, vc xsd.ValueConstraint, a AssertionEvaluator) (same, decided bool)
+//	func ConstraintContext(vc xsd.ValueConstraint) Context
 //
 // [ConstraintMatches] is the INSTANCE-time half, and is not part of the
 // xsd.ValueSpace interface: an instance literal is not a Value Constraint, and the
 // rule reading the answer (cvc-attribute §3.2.4.1 clause 4, cvc-au §3.5.4) belongs
 // to the validator, not to schema assembly. It maps both an instance literal and a
 // fixed constraint's {lexical form} through one type's pipeline — each under its
-// own namespace context, the instance's and the schema document's — and compares
+// own namespace context, the instance's and the schema document's, and each
+// through the caller's [AssertionEvaluator] at the assertions stage — and compares
 // the ·actual values· under the same equal-or-identical union, answering undecided
 // on the same fail-open terms as everything below; a ·special· type
 // (xs:anySimpleType, xs:anyAtomicType) skips the pipeline and is decided over its
 // mapping union, as [ConstraintMatches] states.
+//
+// [ConstraintContext] is that schema document's context for one Value
+// Constraint, the one every comparison here maps a {lexical form} under. It is
+// exported for the validator, which maps a default's {lexical form} itself
+// wherever the instance takes one on — a ·defaulted attribute· (cvc-complex-type
+// §3.4.4.2 clause 4) or an element default (cvc-elt §3.3.4.3 clause 5.1.2) — and
+// must never map it under the instance's bindings.
 //
 // [NewValueSpace] is what lets package xsd — a pure leaf that cannot import this
 // one — decide the Structures constraints that reach into a value space. Two

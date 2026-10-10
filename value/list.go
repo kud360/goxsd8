@@ -57,7 +57,8 @@ var (
 // definition}", which is the whole rule: clause 1 (dv_pattern, the item type's
 // own ·lexical· facets), clause 2.1 (dv_atomic, the lexical mapping of the item
 // type's {primitive type definition}) AND clause 3 (dv_vfacets, the item type's
-// OWN ·value-based· facets). For an item type that IS its own {primitive type
+// OWN ·value-based· facets, its assertions facet through the evaluator a among
+// them). For an item type that IS its own {primitive type
 // definition} (boolean, float, anyURI, …) those coincide, so the item mapping
 // alone sufficed; for a DERIVED item type they do not. xs:byte's {primitive
 // type definition} is xs:decimal, so the mapping accepts every decimal literal
@@ -88,7 +89,7 @@ var (
 // Canonical is deliberately nil: no current cohort needs a canonical list form,
 // and per the Mapping doc a nil Canonical means "this whole type has no
 // canonical form", which callers must treat as such rather than an error.
-func listMapping(b Backend, r xsd.TypeResolver, item *xsd.SimpleType) Mapping {
+func listMapping(b Backend, r xsd.TypeResolver, item *xsd.SimpleType, a AssertionEvaluator) Mapping {
 	return Mapping{
 		Parse: func(lexical string, ctx Context) (Value, error) {
 			// This split is the only point at which the ITEM type's whiteSpace mode
@@ -120,7 +121,7 @@ func listMapping(b Backend, r xsd.TypeResolver, item *xsd.SimpleType) Mapping {
 			tokens := strings.FieldsFunc(lexical, func(r rune) bool { return r == ' ' })
 			items := make([]Value, 0, len(tokens))
 			for _, tok := range tokens {
-				v, _, err := validateLexical(b, r, item, tok, ctx)
+				v, _, err := validateLexical(b, r, item, tok, ctx, a)
 				if err != nil {
 					return nil, err
 				}
@@ -142,7 +143,7 @@ func listMapping(b Backend, r xsd.TypeResolver, item *xsd.SimpleType) Mapping {
 // against the item type, so with no mapping for that type there is no token the
 // list could decide and no value it could build. Reporting the list ungoverned
 // keeps an unmapped type a BACKEND gap rather than a validity verdict about
-// instance data: it surfaces as ValidateLexical's "no backend mapping governs"
+// instance data: it surfaces as ValidateLexical's "has no governing backend mapping"
 // cvc-datatype-valid error, the same way an ungoverned atomic type does.
 //
 // This is ONE delegation, not a walk or a recursion: the {item type definition}
@@ -153,8 +154,8 @@ func listMapping(b Backend, r xsd.TypeResolver, item *xsd.SimpleType) Mapping {
 // constraint on {member type definitions}, so a union nests arbitrarily deep. This
 // predicate RELIES ON the list invariant rather than enforcing it — nothing here
 // re-checks the item type's {variety}.
-func listGoverned(b Backend, r xsd.TypeResolver, item *xsd.SimpleType) (bool, error) {
-	_, ok, err := governingMapping(b, r, item)
+func listGoverned(b Backend, r xsd.TypeResolver, item *xsd.SimpleType, a AssertionEvaluator) (bool, error) {
+	_, ok, err := governingMapping(b, r, item, a)
 	return ok, err
 }
 

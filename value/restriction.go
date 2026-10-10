@@ -139,7 +139,7 @@ func CheckFacetRestriction(b Backend, r xsd.TypeResolver, t *xsd.SimpleType) err
 		// carries no facets of its own (§3.16.1).
 		return nil
 	}
-	m, ok, err := governingMapping(b, r, base)
+	m, ok, err := governingMapping(b, r, base, assertionsUndecided{})
 	if err != nil {
 		return err
 	}
@@ -243,7 +243,7 @@ func (rc restrictionCheck) checkBoundConsistency() error {
 				continue
 			}
 			return xsderr.New(rule, rc.owner.Loc(),
-				"simple type restriction's own %s {value} %q and %s {value} %q leave an empty value space (%s)",
+				"simple type restriction's own %s {value} %q and %s {value} %q leave an empty value space, which %s forbids",
 				low.Kind(), boundLexical(low), up.Kind(), boundLexical(up), rule)
 		}
 	}
@@ -353,12 +353,13 @@ func (rc restrictionCheck) checkBoundAgainstBase(r xsd.TypeResolver, own xsd.Fac
 		if !ordered {
 			continue
 		}
-		if !boundRestrictionViolates(own.Kind(), baseF.Kind(), ownV.Cmp(baseV)) {
+		clause, violates := boundRestrictionViolates(own.Kind(), baseF.Kind(), ownV.Cmp(baseV))
+		if !violates {
 			continue
 		}
 		return xsderr.New(rule, rc.owner.Loc(),
-			"simple type restriction's own %s {value} %q is not a valid restriction of the {base type definition}'s %s {value} %q (%s)",
-			own.Kind(), boundLexical(own), baseF.Kind(), boundLexical(baseF), rule)
+			"simple type restriction's own %s {value} %q is not a valid restriction of the {base type definition}'s %s {value} %q, which %s clause %d requires",
+			own.Kind(), boundLexical(own), baseF.Kind(), boundLexical(baseF), rule, clause)
 	}
 	return nil
 }
@@ -379,7 +380,7 @@ func (rc restrictionCheck) boundLimit(f xsd.Facet, rule xsderr.Rule) (limit Orde
 	values := f.Values()
 	if len(values) != 1 {
 		return nil, false, xsderr.New(rule, rc.owner.Loc(),
-			"%s facet must carry exactly one value, has %d", f.Kind(), len(values))
+			"the %s facet carries %d values rather than one, so %s cannot be decided for it", f.Kind(), len(values), rule)
 	}
 	v, err := facetValue(rc.mapping, rc.whiteSpace, values[0], nil)
 	if err != nil {
@@ -394,14 +395,18 @@ func (rc restrictionCheck) boundLimit(f xsd.Facet, rule xsderr.Rule) (limit Orde
 
 // boundRestrictionViolates reports whether a derived bound facet of kind derived
 // violates its valid-restriction SCC against a base bound facet of kind base,
-// given ord — the ·ordering· of the DERIVED {value} relative to the BASE {value}.
+// given ord — the ·ordering· of the DERIVED {value} relative to the BASE {value}
+// — and the number of the SCC's clause the (derived, base) pair falls under. The
+// clause is a function of the pair alone and ord decides only whether it is
+// violated; both come from one switch arm, so the message's clause and the
+// verdict cannot disagree. A kind outside the four bounds answers clause 0.
 //
 // Incomparable never violates: every numbered condition is a "greater than" /
 // "less than" test, and on a partially ordered primitive (float/double) an
 // incomparable pair satisfies none of them. That is the same reading facets.go's
 // boundFacet.violates applies at instance time, where Incomparable is handled by
 // its own separate clause rather than folded into the ordering tests.
-func boundRestrictionViolates(derived, base xsd.FacetKind, ord Ordering) bool {
+func boundRestrictionViolates(derived, base xsd.FacetKind, ord Ordering) (clause int, violates bool) {
 	switch derived {
 	case xsd.FacetMaxInclusive:
 		return maxInclusiveRestrictionViolates(base, ord)
@@ -415,7 +420,7 @@ func boundRestrictionViolates(derived, base xsd.FacetKind, ord Ordering) bool {
 		// Unreachable: every caller filters on isBoundKind first. Reported as
 		// "no violation" rather than a panic because this is a predicate on
 		// user-supplied schema data, not a capability assertion.
-		return false
+		return 0, false
 	}
 }
 
@@ -423,18 +428,18 @@ func boundRestrictionViolates(derived, base xsd.FacetKind, ord Ordering) bool {
 // clause by clause: 1 {value} greater than the base's maxInclusive; 2 {value}
 // greater than or equal to the base's maxExclusive; 3 {value} less than the
 // base's minInclusive; 4 {value} less than or equal to the base's minExclusive.
-func maxInclusiveRestrictionViolates(base xsd.FacetKind, ord Ordering) bool {
+func maxInclusiveRestrictionViolates(base xsd.FacetKind, ord Ordering) (clause int, violates bool) {
 	switch base {
 	case xsd.FacetMaxInclusive:
-		return ord == Greater
+		return 1, ord == Greater
 	case xsd.FacetMaxExclusive:
-		return ord == Greater || ord == Equal
+		return 2, ord == Greater || ord == Equal
 	case xsd.FacetMinInclusive:
-		return ord == Less
+		return 3, ord == Less
 	case xsd.FacetMinExclusive:
-		return ord == Less || ord == Equal
+		return 4, ord == Less || ord == Equal
 	default:
-		return false
+		return 0, false
 	}
 }
 
@@ -446,18 +451,18 @@ func maxInclusiveRestrictionViolates(base xsd.FacetKind, ord Ordering) bool {
 // exclusive upper bound EQUAL to the base's inclusive lower bound leaves an
 // empty space and is an error, whereas the inclusive/inclusive pairing at
 // maxInclusive clause 3 is not.
-func maxExclusiveRestrictionViolates(base xsd.FacetKind, ord Ordering) bool {
+func maxExclusiveRestrictionViolates(base xsd.FacetKind, ord Ordering) (clause int, violates bool) {
 	switch base {
 	case xsd.FacetMaxExclusive:
-		return ord == Greater
+		return 1, ord == Greater
 	case xsd.FacetMaxInclusive:
-		return ord == Greater
+		return 2, ord == Greater
 	case xsd.FacetMinInclusive:
-		return ord == Less || ord == Equal
+		return 3, ord == Less || ord == Equal
 	case xsd.FacetMinExclusive:
-		return ord == Less || ord == Equal
+		return 4, ord == Less || ord == Equal
 	default:
-		return false
+		return 0, false
 	}
 }
 
@@ -465,18 +470,18 @@ func maxExclusiveRestrictionViolates(base xsd.FacetKind, ord Ordering) bool {
 // clause by clause: 1 {value} less than the base's minExclusive; 2 {value} less
 // than the base's minInclusive; 3 {value} greater than or equal to the base's
 // maxInclusive; 4 {value} greater than or equal to the base's maxExclusive.
-func minExclusiveRestrictionViolates(base xsd.FacetKind, ord Ordering) bool {
+func minExclusiveRestrictionViolates(base xsd.FacetKind, ord Ordering) (clause int, violates bool) {
 	switch base {
 	case xsd.FacetMinExclusive:
-		return ord == Less
+		return 1, ord == Less
 	case xsd.FacetMinInclusive:
-		return ord == Less
+		return 2, ord == Less
 	case xsd.FacetMaxInclusive:
-		return ord == Greater || ord == Equal
+		return 3, ord == Greater || ord == Equal
 	case xsd.FacetMaxExclusive:
-		return ord == Greater || ord == Equal
+		return 4, ord == Greater || ord == Equal
 	default:
-		return false
+		return 0, false
 	}
 }
 
@@ -486,18 +491,18 @@ func minExclusiveRestrictionViolates(base xsd.FacetKind, ord Ordering) bool {
 // that maxInclusive" is missing a "than"); 3 {value} less than or equal to the
 // base's minExclusive; 4 {value} greater than or equal to the base's
 // maxExclusive.
-func minInclusiveRestrictionViolates(base xsd.FacetKind, ord Ordering) bool {
+func minInclusiveRestrictionViolates(base xsd.FacetKind, ord Ordering) (clause int, violates bool) {
 	switch base {
 	case xsd.FacetMinInclusive:
-		return ord == Less
+		return 1, ord == Less
 	case xsd.FacetMaxInclusive:
-		return ord == Greater
+		return 2, ord == Greater
 	case xsd.FacetMinExclusive:
-		return ord == Less || ord == Equal
+		return 3, ord == Less || ord == Equal
 	case xsd.FacetMaxExclusive:
-		return ord == Greater || ord == Equal
+		return 4, ord == Greater || ord == Equal
 	default:
-		return false
+		return 0, false
 	}
 }
 
@@ -530,11 +535,10 @@ func minInclusiveRestrictionViolates(base xsd.FacetKind, ord Ordering) bool {
 // rather than a restrictionCheck field because only this check needs it, and its
 // caller has already established that b governs the base (an unmapped base
 // returns early there), so ValidateLexical's no-mapping error is unreachable from
-// here. Where r answers notationDeclarer, members run through b as
-// declaredNotationBackend narrows it, because NOTATION's value space is the
-// notations r's schema declares (§3.3.19), which b's leaf mapping cannot see: a
-// member naming none is outside the base's value space and charged here. Where r
-// does not, members run through b un-narrowed.
+// here. ValidateLexical holds a NOTATION member to the notations r declares
+// where r answers notationDeclarer (§3.3.19), so a member naming none is outside
+// the base's value space and charged here; this is the same predicate as
+// enumeration-required-notation (§3.3.19), charged under §4.3.5.5.
 //
 // A facet-pipeline PRECONDITION fault in the BASE type's own facets is SKIPPED, not
 // charged (IsFacetPrecondition, ValidateLexical) — the same "skip, don't
@@ -546,11 +550,18 @@ func minInclusiveRestrictionViolates(base xsd.FacetKind, ord Ordering) bool {
 // and re-charging it here as enumeration-valid-restriction against the DERIVED type
 // would name a constraint with nothing to say about it and reject a schema whose
 // enumeration may be perfectly valid.
+//
+// An assertions-facet DECLINE in the base is SKIPPED on the same terms
+// (IsAssertionDeclined): this check holds no XPath engine (assertionsUndecided),
+// so a member every other facet of the base accepts reaches the base's
+// assertions undecided, and charging that would reject every enumeration on a
+// base carrying an assertions facet. GAP(value): a member the base's
+// assertions would reject is therefore never charged under §4.3.5.5. The
+// withheld value is this function's error, whose one reader is
+// builtin's checkSimpleTypeRestriction, the xsd.SimpleTypeRestrictionChecker
+// xsd's finalize charges on an error PRESENT, so the decline can only cost a
+// schema rejection and the direction is fail-open. (#1042)
 func (rc restrictionCheck) checkEnumerationRestriction(b Backend, r xsd.TypeResolver) error {
-	memberBackend := b
-	if s, ok := r.(notationDeclarer); ok {
-		memberBackend = declaredNotationBackend{inner: b, declared: s.Notations()}
-	}
 	for _, own := range rc.owner.OwnFacets() {
 		if own.Kind() != xsd.FacetEnumeration {
 			continue
@@ -559,8 +570,8 @@ func (rc restrictionCheck) checkEnumerationRestriction(b Backend, r xsd.TypeReso
 		// ok=true; the second result is discarded deliberately.
 		members, _ := own.EnumerationMembers()
 		for _, em := range members {
-			_, err := ValidateLexical(memberBackend, r, rc.base, em.Lexical(), newMemberContext(em))
-			if IsFacetPrecondition(err) {
+			_, err := ValidateLexical(b, r, rc.base, em.Lexical(), newMemberContext(em), assertionsUndecided{})
+			if IsFacetPrecondition(err) || IsAssertionDeclined(err) {
 				continue
 			}
 			if err != nil {
@@ -573,73 +584,80 @@ func (rc restrictionCheck) checkEnumerationRestriction(b Backend, r xsd.TypeReso
 
 // notationDeclarer is the capability of a resolver that holds the current
 // schema's {notation declarations} (§3.17.1): *xsd.Schema answers it, and it is
-// the resolver the finalize pass hands CheckFacetRestriction. Against a
-// resolver that does not answer it, NOTATION's ·value space· cannot be judged,
-// so checkEnumerationRestriction runs members through the backend un-narrowed.
+// the resolver the finalize pass hands CheckFacetRestriction and the validator
+// hands ValidateLexical. Against a resolver that does not answer it, NOTATION's
+// ·value space· cannot be judged, so declaredNotation rejects nothing.
 type notationDeclarer interface {
 	Notations() []xsd.Notation
 }
 
-// The build pins notationDeclarer to the resolver finalize passes: a renamed or
-// re-typed Schema.Notations would otherwise stop the probe matching silently,
-// and every NOTATION member would go unchecked.
+// The build pins notationDeclarer to the resolver finalize and the validator
+// pass: a renamed or re-typed Schema.Notations would otherwise stop the probe
+// matching silently, and every NOTATION value would go unchecked.
 var _ notationDeclarer = (*xsd.Schema)(nil)
 
-// declaredNotationBackend is inner with xs:NOTATION's mapping narrowed to
-// NOTATION's ·value space·, "the set of QNames of notations declared in the
-// current schema" (Datatypes §3.3.19), which a leaf mapping holding no schema
-// cannot decide: a lexical inner's NOTATION mapping accepts is still rejected
-// where its prefix is unbound or its QName names none of declared.
-// checkEnumerationRestriction runs every member through it against a
-// notationDeclarer resolver, so enumeration valid restriction (§4.3.5.5)
-// rejects an undeclared member of a NOTATION-derived base whether NOTATION
-// governs the base itself, its list item or a union member, since each is
-// decided by xs:NOTATION's mapping. The instance-time counterpart is
-// validate's walk.notationsDeclared.
+// declaredNotation is the one decider of NOTATION's ·value space·, "the set of
+// QNames of notations declared in the current schema" (Datatypes §3.3.19),
+// which a leaf mapping holding no schema cannot decide: validateLexical asks it
+// of every atomic literal its mapping and value facets accepted, so a literal
+// whose {primitive type definition} is NOTATION is rejected where its prefix is
+// unbound or its QName names none of r's notations — whether NOTATION governs
+// the type itself, a list item or a union member, each of which is an atomic
+// validateLexical of its own. That is the instance-time verdict under
+// cvc-datatype-valid, and, for an enumeration member, enumeration valid
+// restriction (§4.3.5.5, checkEnumerationRestriction). It answers nil against
+// an r that is no notationDeclarer, and for a variety that is not atomic.
 //
-// declared is the whole assembled set, so a notation from an included,
+// It runs after the value facets, so a literal outside an atomic NOTATION
+// type's enumeration is that facet's cvc-enumeration-valid verdict; every
+// member such an enumeration admits names a declared notation, finalize having
+// charged one that does not. A list or union type's own enumeration runs after
+// its items or members, so an undeclared item or member is this verdict first.
+// It runs before the assertions stage, so an undeclared literal is this
+// verdict, never an assertion's verdict or decline.
+//
+// r.Notations is the whole assembled set, so a notation from an included,
 // imported or overriding document counts wherever it sits in document order
-// (sch-props-correct, Structures §3.17.6.1).
-type declaredNotationBackend struct {
-	inner    Backend
-	declared []xsd.Notation
-}
-
-// Mapping implements [Backend]: inner's mapping for typ, with xs:NOTATION's
-// Parse held to the declared set.
-func (d declaredNotationBackend) Mapping(typ xsd.QName) (Mapping, bool) {
-	m, ok := d.inner.Mapping(typ)
-	if !ok || typ != notationName {
-		return m, ok
+// (sch-props-correct, Structures §3.17.6.1). Only a NOTATION literal reads it.
+func declaredNotation(r xsd.TypeResolver, st *xsd.SimpleType, variety xsd.Variety, lexical string, ctx Context) error {
+	s, ok := r.(notationDeclarer)
+	if !ok {
+		return nil
 	}
-	parse := m.Parse
-	m.Parse = func(lexical string, ctx Context) (Value, error) {
-		v, err := parse(lexical, ctx)
-		if err != nil {
-			return nil, err
-		}
-		name, ok := resolveNotationLexical(lexical, ctx)
-		if !ok {
-			return nil, xsderr.New(ruleCvcDatatypeValid, xsderr.Loc{},
-				"the NOTATION value %q has a prefix no in-scope namespace binding declares, so it resolves to no QName and is outside the ·value space· of NOTATION (Datatypes §3.3.18, §3.3.19)",
-				lexical)
-		}
-		if slices.ContainsFunc(d.declared, func(n xsd.Notation) bool { return n.Name() == name }) {
-			return v, nil
-		}
-		return nil, xsderr.New(ruleCvcDatatypeValid, xsderr.Loc{},
-			"the NOTATION value %q resolves to the QName %s, which names no notation declaration of the schema, so it is outside the ·value space· of NOTATION, \"the set of QNames of notations declared in the current schema\" (Datatypes §3.3.19)",
-			lexical, name)
+	if _, atomic := variety.(xsd.Atomic); !atomic {
+		return nil
 	}
-	return m, true
+	primitive, err := st.Primitive(r)
+	if err != nil {
+		return typeFault(err)
+	}
+	if primitive == nil || primitive.Name() != notationName {
+		return nil
+	}
+	name, ok := resolveNotationLexical(lexical, ctx)
+	if !ok {
+		return xsderr.New(ruleCvcDatatypeValid, xsderr.Loc{},
+			"the NOTATION value %q has a prefix no in-scope namespace binding declares, so it resolves to no QName and is outside the ·value space· of NOTATION, which cvc-datatype-valid clause 2.1 requires it to be in",
+			lexical)
+	}
+	if slices.ContainsFunc(s.Notations(), func(n xsd.Notation) bool { return n.Name() == name }) {
+		return nil
+	}
+	return xsderr.New(ruleCvcDatatypeValid, xsderr.Loc{},
+		"the NOTATION value %q resolves to the QName %s, which names no notation declaration of the schema, so it is outside the ·value space· of NOTATION, \"the set of QNames of notations declared in the current schema\", which cvc-datatype-valid clause 2.1 requires it to be in",
+		lexical, name)
 }
 
 // resolveNotationLexical is the expanded name a NOTATION lexical denotes: its
 // prefix, or the empty prefix of an unprefixed name, resolved against ctx
-// (§3.3.18). It reports false where ctx binds no namespace to the prefix: an
-// inner NOTATION mapping that does not itself reject an unbound prefix must not
-// turn p:n into the no-namespace n.
+// (§3.3.18). It reports false where ctx binds no namespace to the prefix: a
+// NOTATION mapping that does not itself reject an unbound prefix must not turn
+// p:n into the no-namespace n. A nil ctx binds nothing, the empty prefix
+// included.
 func resolveNotationLexical(lexical string, ctx Context) (xsd.QName, bool) {
+	if ctx == nil {
+		return xsd.QName{}, false
+	}
 	prefix, local, prefixed := strings.Cut(lexical, ":")
 	if !prefixed {
 		prefix, local = "", lexical
@@ -738,7 +756,7 @@ func CheckPatternSyntax(t *xsd.SimpleType) error {
 				continue
 			}
 			return xsderr.New(ruleSrcPatternValue, t.Loc(),
-				"pattern facet value %q is not a regular expression: %s (src-pattern-value, §4.3.4.3 via Datatypes Appendix G)",
+				"pattern facet value %q is not a regular expression as Datatypes Appendix G defines one, which src-pattern-value requires: %s",
 				p, patternDetail(err))
 		}
 	}

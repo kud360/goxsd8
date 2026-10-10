@@ -403,9 +403,10 @@ func supportedFacet(qn xsd.QName) bool {
 // "locally ·valid· with respect to a simple type definition with {variety} =
 // list and {item type definition} = xs:QName".
 //
-// Items are split on whitespace, the list separator §3.16.4's list mapping
-// uses, which subsumes the whiteSpace = collapse xs:QName carries: an empty or
-// all-whitespace value is the empty list, the case §4.2.2 calls out.
+// Items are split by xmlSpaceFields, on XML white space alone, the list
+// separator §3.16.4's list mapping uses, which subsumes the whiteSpace =
+// collapse xs:QName carries: an empty or all-whitespace value is the empty
+// list, the case §4.2.2 calls out.
 //
 // Two faults are charged, and both are String Valid failures against xs:QName
 // rather than anything src-resolve governs: an item outside the ·lexical space·
@@ -426,7 +427,7 @@ func supportedFacet(qn xsd.QName) bool {
 // document's targetNamespace, and no chameleon coercion is applied: §4.2.2 runs
 // before §F.1's transformation has been applied to anything.
 func conditionalQNames(el *Element, attr, lexical string) ([]xsd.QName, error) {
-	items := strings.Fields(lexical)
+	items := xmlSpaceFields(lexical)
 	names := make([]xsd.QName, 0, len(items))
 	for _, item := range items {
 		prefix, local, fault := qnameLexical(item)

@@ -11,12 +11,13 @@ import (
 	"github.com/kud360/goxsd8/xsderr"
 )
 
-// These fixtures drive the declared-notation half of String Valid clause 2
-// ([walk.notationsDeclared]): NOTATION's ·value space· is "the set of QNames of
-// notations declared in the current schema" (Datatypes §3.3.19), so a value
-// the backend's QName mapping accepts is still not Datatype Valid where its
-// QName names no notation declaration. The schemas are parsed from documents,
-// because a notation declaration and an <override> are what the check reads.
+// These fixtures drive the declared-notation half of String Valid clause 2,
+// which value.ValidateLexical decides against the schema: NOTATION's ·value
+// space· is "the set of QNames of notations declared in the current schema"
+// (Datatypes §3.3.19), so a value the backend's QName mapping accepts is
+// still not Datatype Valid where its QName names no notation declaration. The
+// schemas are parsed from documents, because a notation declaration and an
+// <override> are what the check reads.
 
 // notationSchema declares the notations foo and bar in no namespace, an
 // enumeration subtype of NOTATION listing both, and a root carrying an
@@ -44,8 +45,10 @@ const notationSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   </xs:element>
 </xs:schema>`
 
-// xsdNOTATION is how a charge names the built-in xs:NOTATION.
-const xsdNOTATION = "{" + xsd.XMLSchemaNS + "}NOTATION"
+// ruleCvcDatatypeValid is Datatype Valid (Datatypes §4.1.4,
+// cvc-datatype-valid), the rule value.ValidateLexical charges an undeclared
+// NOTATION value under.
+const ruleCvcDatatypeValid xsderr.Rule = "cvc-datatype-valid"
 
 // parsedSchema assembles the schema rooted at main.xsd among docs.
 func parsedSchema(t *testing.T, docs map[string]string) *xsd.Schema {
@@ -71,8 +74,9 @@ func notationRoot(name xsd.QName, attr, lexical string, bindings map[string]stri
 
 // wantUndeclaredNotation fails unless got is exactly one cvc-attribute charge
 // at the attribute's 3:5 whose wrapped cause is the cvc-datatype-valid verdict
-// notationsDeclared words for value resolving to name against the type typ.
-func wantUndeclaredNotation(t *testing.T, got []*xsderr.Error, value string, name xsd.QName, typ string) {
+// value.ValidateLexical words for value resolving to name. The verdict carries
+// no Loc of its own, the charge wrapping it being what locates it.
+func wantUndeclaredNotation(t *testing.T, got []*xsderr.Error, value string, name xsd.QName) {
 	t.Helper()
 	viol := onlyCharge(t, got, ruleCvcAttribute)
 	if viol.Loc != loc(3, 5) {
@@ -85,11 +89,11 @@ func wantUndeclaredNotation(t *testing.T, got []*xsderr.Error, value string, nam
 	if cause.Rule != ruleCvcDatatypeValid {
 		t.Fatalf("wrapped Rule = %q, want %q", cause.Rule, ruleCvcDatatypeValid)
 	}
-	if cause.Loc != loc(3, 5) {
-		t.Errorf("wrapped Loc = %s, want the attribute's %s", cause.Loc, loc(3, 5))
+	if cause.Loc != (xsderr.Loc{}) {
+		t.Errorf("wrapped Loc = %s, want none", cause.Loc)
 	}
 	prefix := `the NOTATION value "` + value + `" resolves to the QName ` + name.String() + `, which names no notation declaration`
-	suffix := "not Datatype Valid against " + typ
+	suffix := `"the set of QNames of notations declared in the current schema", which cvc-datatype-valid clause 2.1 requires it to be in`
 	if !strings.HasPrefix(cause.Msg, prefix) || !strings.HasSuffix(cause.Msg, suffix) {
 		t.Fatalf("wrapped Msg = %q, want it to open %q and close %q", cause.Msg, prefix, suffix)
 	}
@@ -102,10 +106,10 @@ func causeRule(viol *xsderr.Error) xsderr.Rule {
 }
 
 // A value of an enumeration subtype of NOTATION, and a value of xs:NOTATION
-// itself, is ·valid· where it names a declared notation. A value of
-// xs:NOTATION naming none is charged cvc-attribute clause 3 with a
-// cvc-datatype-valid cause at the attribute — bez passes the backend's QName
-// mapping and still names no declaration, so the charge is this check's.
+// itself, is ·valid· where it names a declared notation. A value of xs:NOTATION naming
+// none is charged cvc-attribute clause 3 at the attribute, with a cvc-datatype-valid
+// cause — bez passes the backend's QName mapping and still names no declaration, so the
+// charge is the declared-notation check's.
 func TestANotationValueMustNameADeclaredNotation(t *testing.T) {
 	schema := parsedSchema(t, map[string]string{"main.xsd": notationSchema})
 	root := xsd.QName{Local: "root"}
@@ -118,12 +122,12 @@ func TestANotationValueMustNameADeclaredNotation(t *testing.T) {
 		})
 	}
 	got, _ := assessRecorded(t, schema, notationRoot(root, "direct", "bez", nil))
-	wantUndeclaredNotation(t, got, "bez", xsd.QName{Local: "bez"}, xsdNOTATION)
+	wantUndeclaredNotation(t, got, "bez", xsd.QName{Local: "bez"})
 }
 
 // An enumeration miss stays the backend's charge: baz is outside FooBar's
-// enumeration, so the cause is cvc-enumeration-valid and not this check's
-// cvc-datatype-valid.
+// enumeration, so the cause is cvc-enumeration-valid and not the
+// declared-notation check's cvc-datatype-valid.
 func TestAnEnumerationMissIsNotANotationCharge(t *testing.T) {
 	schema := parsedSchema(t, map[string]string{"main.xsd": notationSchema})
 	got, _ := assessRecorded(t, schema, notationRoot(xsd.QName{Local: "root"}, "enum", "baz", nil))
@@ -156,9 +160,9 @@ func TestANotationValueResolvesAgainstTheInScopeNamespaces(t *testing.T) {
 	wantSilence(t, got, "foo takes the default namespace urn:n")
 
 	got, _ = assessRecorded(t, schema, notationRoot(root, "direct", "foo", nil))
-	wantUndeclaredNotation(t, got, "foo", xsd.QName{Local: "foo"}, xsdNOTATION)
+	wantUndeclaredNotation(t, got, "foo", xsd.QName{Local: "foo"})
 	got, _ = assessRecorded(t, schema, notationRoot(root, "direct", "p:bar", map[string]string{"p": "urn:n"}))
-	wantUndeclaredNotation(t, got, "p:bar", xsd.QName{Space: "urn:n", Local: "bar"}, xsdNOTATION)
+	wantUndeclaredNotation(t, got, "p:bar", xsd.QName{Space: "urn:n", Local: "bar"})
 }
 
 // The declared set is the assembled schema's {notation declarations}, an
@@ -212,7 +216,7 @@ func TestAnOverrideHostsNotationIsDeclared(t *testing.T) {
 		}
 	}
 	got, _ := assessRecorded(t, schema, notationRoot(root, "direct", "qux", nil))
-	wantUndeclaredNotation(t, got, "qux", xsd.QName{Local: "qux"}, xsdNOTATION)
+	wantUndeclaredNotation(t, got, "qux", xsd.QName{Local: "qux"})
 }
 
 // An element's ·initial value· is held to the same check under cvc-type clause

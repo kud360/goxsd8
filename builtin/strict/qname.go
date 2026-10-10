@@ -63,9 +63,9 @@ func parseQName(lexical string, ctx value.Context) (value.Value, error) {
 // grammar+resolution as QName (§3.3.19: "the lexical mapping rules for NOTATION
 // are as given for QName"). It accepts a QName whether or not it names a
 // notation declared in the current schema, which NOTATION's lexical and value
-// spaces require (§3.3.19): a leaf mapping holds no schema, so the instance
-// check is validate's walk.notationsDeclared, and an enumeration member's is
-// value's declaredNotationBackend, each over a lexical this mapping accepted.
+// spaces require (§3.3.19): a leaf mapping holds no schema, so that check is
+// value.ValidateLexical's, over a lexical this mapping accepted, wherever its
+// resolver holds the schema.
 func parseNOTATION(lexical string, ctx value.Context) (value.Value, error) {
 	space, local, err := resolveQNameLexical(lexical, ctx, "NOTATION")
 	if err != nil {
@@ -90,7 +90,7 @@ func resolveQNameLexical(lexical string, ctx value.Context, typ string) (space, 
 	// for an unprefixed name; reject cleanly rather than dereferencing nil.
 	if ctx == nil {
 		return "", "", xsderr.New(ruleDatatypeValid, xsderr.Loc{},
-			"%s: %q cannot be resolved without namespace bindings in scope (§3.3.18.2)", typ, lexical)
+			"%q has no namespace bindings in scope to resolve it against, so it maps to no %s value, but cvc-datatype-valid clause 2.1 requires it to map to one", lexical, typ)
 	}
 	// Resolve the prefix (empty prefix = default namespace, §3.3.18): the
 	// context models "no namespace in scope" as an ok binding to the empty
@@ -99,7 +99,7 @@ func resolveQNameLexical(lexical string, ctx value.Context, typ string) (space, 
 	space, ok := ctx.LookupNamespace(prefix)
 	if !ok {
 		return "", "", xsderr.New(ruleDatatypeValid, xsderr.Loc{},
-			"%s: prefix %q of %q is not bound to any namespace in scope (§3.3.18.2)", typ, prefix, lexical)
+			"%q has the prefix %q, which no namespace binding in scope declares, so it maps to no %s value, but cvc-datatype-valid clause 2.1 requires it to map to one", lexical, prefix, typ)
 	}
 	return space, local, nil
 }
@@ -115,14 +115,14 @@ func splitQName(lexical, typ string) (prefix, local string, err error) {
 	if idx < 0 {
 		if !ncNameRE.MatchString(lexical) {
 			return "", "", xsderr.New(ruleDatatypeValid, xsderr.Loc{},
-				"%s: %q is not in the lexical space (not an NCName; [Namespaces in XML] QName production)", typ, lexical)
+				"%q is not an NCName, so it is not in the lexical space of %s, which cvc-datatype-valid clause 2.1 requires it to be in", lexical, typ)
 		}
 		return "", lexical, nil
 	}
 	prefix, local = lexical[:idx], lexical[idx+1:]
 	if !ncNameRE.MatchString(prefix) || !ncNameRE.MatchString(local) {
 		return "", "", xsderr.New(ruleDatatypeValid, xsderr.Loc{},
-			"%s: %q is not in the lexical space (prefix and local part must each be an NCName; [Namespaces in XML] QName production)", typ, lexical)
+			"%q does not split at its colon into a prefix and a local part that are each an NCName, so it is not in the lexical space of %s, which cvc-datatype-valid clause 2.1 requires it to be in", lexical, typ)
 	}
 	return prefix, local, nil
 }

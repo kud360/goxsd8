@@ -31,6 +31,15 @@ func (s stringAs) Mapping(typ xsd.QName) (value.Mapping, bool) {
 	return value.Mapping{Parse: s.parse}, true
 }
 
+// declineEvery is a non-nil [value.AssertionEvaluator] that declines every
+// {test}: ConstraintMatches requires one, and a ·special· type, which has no
+// facets, never hands it any.
+type declineEvery struct{}
+
+func (declineEvery) Evaluate(value.Backend, xsd.TypeResolver, *xsd.SimpleType, xsd.XPathExpression, value.Value) value.AssertionOutcome {
+	return value.AssertionDeclined
+}
+
 // TestConstraintMatchesSpecialTypesUnderStrict pins the ·special· branch
 // against a backend that maps every primitive (#2040): NOT-same exactly where
 // every member of the mapping union — each primitive, and for xs:anySimpleType
@@ -70,7 +79,7 @@ func TestConstraintMatchesSpecialTypesUnderStrict(t *testing.T) {
 		{"a doubled #x20 is no list literal", ast, "01  2", inst, "1  2", false, true},
 	} {
 		t.Run(tc.t.Name().Local+"/"+tc.name, func(t *testing.T) {
-			same, decided := value.ConstraintMatches(b, nil, tc.t, tc.lexical, tc.ctx, fixed(tc.fixed))
+			same, decided := value.ConstraintMatches(b, nil, tc.t, tc.lexical, tc.ctx, fixed(tc.fixed), declineEvery{})
 			if same != tc.wantSame || decided != tc.decided {
 				t.Errorf("ConstraintMatches(%q, %q) = (%t, %t), want (%t, %t)",
 					tc.lexical, tc.fixed, same, decided, tc.wantSame, tc.decided)
@@ -95,7 +104,7 @@ func TestConstraintMatchesSpecialMemberFaultsAreUndecided(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			b := value.Override(strict.New(), stringAs{parse: tc.parse})
 			vc := xsd.NewValueConstraint(xsd.ValueFixed, "36", nil, nil)
-			if same, decided := value.ConstraintMatches(b, nil, xsd.AnyAtomicType(), "37", inst, vc); decided {
+			if same, decided := value.ConstraintMatches(b, nil, xsd.AnyAtomicType(), "37", inst, vc, declineEvery{}); decided {
 				t.Errorf("ConstraintMatches = (%t, %t), want undecided", same, decided)
 			}
 		})

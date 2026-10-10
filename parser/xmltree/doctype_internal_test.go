@@ -23,7 +23,7 @@ func TestSubsetEndingInsideMarkupIsAFault(t *testing.T) {
 		{`DOCTYPE r [<!ENTITY e 'v'`, `t.xml:1:1: [xml-wf] DOCTYPE internal subset leaves "<!ENTITY"` + rule},
 	} {
 		t.Run(tc.directive, func(t *testing.T) {
-			_, unread, err := doctypeEntities(tc.directive, false, loc)
+			_, _, unread, err := doctypeEntities(tc.directive, false, loc)
 			if err == nil || err.Error() != tc.want {
 				t.Fatalf("doctypeEntities(%q) error = %v, want %q", tc.directive, err, tc.want)
 			}

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/kud360/goxsd8/value"
+	"github.com/kud360/goxsd8/xpath"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
 )
@@ -96,7 +97,9 @@ func TestPrecisionDecimalFacetsHugeExponent(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			st := derive(t, "huge", pd, c.facet)
 			var err error
-			withinDeadline(t, func() { _, err = value.ValidateLexical(New(), noSchema{}, st, c.lexical, nil) })
+			withinDeadline(t, func() {
+				_, err = value.ValidateLexical(New(), noSchema{}, st, c.lexical, nil, xpath.FacetAssertions(time.Time{}))
+			})
 			wantRule(t, err, c.rule)
 		})
 	}
@@ -117,7 +120,7 @@ func TestPrecisionDecimalUnboundedExponent(t *testing.T) {
 	pd := newPrim(t, "precisionDecimal")
 	for _, c := range cases {
 		t.Run(c.lexical, func(t *testing.T) {
-			if _, err := value.ValidateLexical(New(), noSchema{}, pd, c.lexical, nil); err != nil {
+			if _, err := value.ValidateLexical(New(), noSchema{}, pd, c.lexical, nil, xpath.FacetAssertions(time.Time{})); err != nil {
 				t.Fatalf("ValidateLexical(xs:precisionDecimal, %q) = %v, want accept", c.lexical, err)
 			}
 			got, ok := pdValue(t, c.lexical).Scale()
@@ -165,7 +168,7 @@ func TestPrecisionDecimalFacetsUnboundedScale(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			st := derive(t, "scaled", pd, c.facet)
-			_, err := value.ValidateLexical(New(), noSchema{}, st, c.lexical, nil)
+			_, err := value.ValidateLexical(New(), noSchema{}, st, c.lexical, nil, xpath.FacetAssertions(time.Time{}))
 			if c.rule == "" {
 				wantAccept(t, err)
 				return

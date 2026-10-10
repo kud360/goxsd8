@@ -77,7 +77,7 @@ func TestGoverningMappingListResolves(t *testing.T) {
 	item := primType(t, "myitem", "collapse")
 	lst := listType(t, item)
 
-	m, ok, gerr := governingMapping(stubItemBackend{item: item.Name()}, noSchema{}, lst)
+	m, ok, gerr := governingMapping(stubItemBackend{item: item.Name()}, noSchema{}, lst, assertionsUndecided{})
 	if gerr != nil {
 		t.Fatalf("governingMapping(list): %v", gerr)
 	}
@@ -99,7 +99,7 @@ func TestGoverningMappingListResolves(t *testing.T) {
 	// An item type the backend does not map leaves the list ungoverned — the
 	// listGoverned half of the branch, pinned through governingMapping exactly as
 	// TestGoverningMappingUnionRequiresEveryMember pins unionGoverned.
-	if _, ok, gerr := governingMapping(emptyBackend{}, noSchema{}, lst); gerr != nil || ok {
+	if _, ok, gerr := governingMapping(emptyBackend{}, noSchema{}, lst, assertionsUndecided{}); gerr != nil || ok {
 		t.Error("governingMapping(list, ungoverned item) ok = true, want false")
 	}
 }
@@ -156,7 +156,7 @@ func TestListValueItemsInOrder(t *testing.T) {
 		lexical string
 		items   int
 	}{{"aa bb ccc", 3}, {"", 0}} {
-		v, err := ValidateLexical(b, noSchema{}, leaf, tc.lexical, nil)
+		v, err := ValidateLexical(b, noSchema{}, leaf, tc.lexical, nil, assertionsUndecided{})
 		if err != nil {
 			t.Fatalf("ValidateLexical(%q) = %v, want accept", tc.lexical, err)
 		}
@@ -185,7 +185,7 @@ func TestValidateLexicalListItemErrorPropagates(t *testing.T) {
 	leaf := listType(t, item)
 	b := stubItemBackend{item: item.Name()}
 
-	v, err := ValidateLexical(b, noSchema{}, leaf, "aa bb ccc", nil)
+	v, err := ValidateLexical(b, noSchema{}, leaf, "aa bb ccc", nil, assertionsUndecided{})
 	if err != nil {
 		t.Fatalf("ValidateLexical(valid list) = %v, want accept", err)
 	}
@@ -193,7 +193,7 @@ func TestValidateLexicalListItemErrorPropagates(t *testing.T) {
 		t.Fatalf("ValidateLexical(valid list) value %T does not implement Lengthed", v)
 	}
 
-	_, err = ValidateLexical(b, noSchema{}, leaf, "aa bad", nil)
+	_, err = ValidateLexical(b, noSchema{}, leaf, "aa bad", nil, assertionsUndecided{})
 	if err == nil {
 		t.Fatal("ValidateLexical(list with invalid item token) = nil, want the item's Parse error")
 	}
@@ -223,7 +223,7 @@ func TestValidateLexicalListSplitsOnXMLSpaceOnly(t *testing.T) {
 		{"ABC\fDEF", 1},
 	}
 	for _, tc := range cases {
-		v, err := ValidateLexical(b, noSchema{}, leaf, tc.lexical, nil)
+		v, err := ValidateLexical(b, noSchema{}, leaf, tc.lexical, nil, assertionsUndecided{})
 		if err != nil {
 			t.Fatalf("ValidateLexical(%q) = %v, want accept", tc.lexical, err)
 		}
@@ -265,11 +265,11 @@ func TestValidateLexicalListItemTypeFacetsApply(t *testing.T) {
 	}
 	leaf := listType(t, item)
 
-	if _, err := ValidateLexical(b, noSchema{}, leaf, "aa bb", nil); err != nil {
+	if _, err := ValidateLexical(b, noSchema{}, leaf, "aa bb", nil, assertionsUndecided{}); err != nil {
 		t.Fatalf("ValidateLexical(list of enumerated items) = %v, want accept", err)
 	}
 
-	_, err = ValidateLexical(b, noSchema{}, leaf, "aa ccc", nil)
+	_, err = ValidateLexical(b, noSchema{}, leaf, "aa ccc", nil, assertionsUndecided{})
 	if err == nil {
 		t.Fatal("ValidateLexical(list with out-of-enumeration item) = nil, want the item type's own facet rejection (dv_list → dv_vfacets)")
 	}
@@ -315,10 +315,10 @@ func TestValidateLexicalListUnionItemTypeOwnFacetsApply(t *testing.T) {
 	// by the enumeration the union itself declares.
 	enumItem := unionRestriction(t, "enumItem", base, []xsd.Facet{enumOf("7")})
 	enumList := listType(t, enumItem)
-	if _, err := ValidateLexical(b, noSchema{}, enumList, "7 7", nil); err != nil {
+	if _, err := ValidateLexical(b, noSchema{}, enumList, "7 7", nil, assertionsUndecided{}); err != nil {
 		t.Fatalf("ValidateLexical(list of enumerated union items, %q) = %v, want accept", "7 7", err)
 	}
-	_, err := ValidateLexical(b, noSchema{}, enumList, "7 8", nil)
+	_, err := ValidateLexical(b, noSchema{}, enumList, "7 8", nil, assertionsUndecided{})
 	if err == nil {
 		t.Fatal("ValidateLexical(list, noSchema{}, token outside the union item type's enumeration) = nil, want the item type's own clause-3 rejection (dv_list → dv_vfacets)")
 	}
@@ -332,10 +332,10 @@ func TestValidateLexicalListUnionItemTypeOwnFacetsApply(t *testing.T) {
 	patItem := unionRestriction(t, "patItem", base,
 		[]xsd.Facet{xsd.NewFacet(xsd.FacetPattern, []string{"[0-9]+"}, false)})
 	patList := listType(t, patItem)
-	if _, err := ValidateLexical(b, noSchema{}, patList, "7 42", nil); err != nil {
+	if _, err := ValidateLexical(b, noSchema{}, patList, "7 42", nil, assertionsUndecided{}); err != nil {
 		t.Fatalf("ValidateLexical(list of pattern-matching union items, %q) = %v, want accept", "7 42", err)
 	}
-	_, err = ValidateLexical(b, noSchema{}, patList, "7 abc", nil)
+	_, err = ValidateLexical(b, noSchema{}, patList, "7 abc", nil, assertionsUndecided{})
 	if err == nil {
 		t.Fatal("ValidateLexical(list, noSchema{}, token violating the union item type's pattern) = nil, want the item type's own clause-1 rejection (dv_list → dv_pattern)")
 	}
@@ -387,10 +387,10 @@ func TestListEnumerationResolvesThroughAnonymousBase(t *testing.T) {
 		t.Fatalf("NewSimpleType(user restriction of xs:NMTOKENS): %v", err)
 	}
 
-	if _, err := ValidateLexical(b, noSchema{}, leaf, "aa bb", nil); err != nil {
+	if _, err := ValidateLexical(b, noSchema{}, leaf, "aa bb", nil, assertionsUndecided{}); err != nil {
 		t.Fatalf("ValidateLexical(enumerated list value) = %v, want accept", err)
 	}
-	_, err = ValidateLexical(b, noSchema{}, leaf, "aa ccc", nil)
+	_, err = ValidateLexical(b, noSchema{}, leaf, "aa ccc", nil, assertionsUndecided{})
 	if err == nil {
 		t.Fatal("ValidateLexical(out-of-enumeration list) = nil, want the enumeration's rejection")
 	}

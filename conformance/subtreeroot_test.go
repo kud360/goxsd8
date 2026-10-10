@@ -153,7 +153,7 @@ func TestInstanceExecutorDecidesAssessedSubtreeRoot(t *testing.T) {
 		// The NOTATION rows, one per value-type site the gate reads and one
 		// through the lax {attribute wildcard}, name a declared notation the
 		// enumeration admits: String Valid is the walk's (#1904), NOTATION's
-		// ·value space· decided by walk.notationsDeclared (Datatypes §3.3.19).
+		// ·value space· decided by value.ValidateLexical (Datatypes §3.3.19).
 		// TestInstanceExecutorChargesNotation holds the undeclared values.
 		{"a NOTATION enumeration as the root's value type", notationN + `<xs:element name="known" type="N"/>`, `<known>n</known>`},
 		{
@@ -1528,18 +1528,19 @@ func TestInstanceExecutorChargesAbstractComplexType(t *testing.T) {
 // TestInstanceExecutorDeclinesUnevaluatedRoot proves a root the gate admits
 // whose walk RECORDED a check it did not perform declines rather than reading
 // the empty violation list as "valid": an identity constraint whose
-// {selector} icpath does not compile, an assertions facet, whose {test}
-// validate records and never evaluates, and a complex type's {assertions}
-// (cvc-complex-type clause 6) whose {test} true() — a function call — is
+// {selector} icpath does not compile, an assertions facet whose {test} calls
+// fn:upper-case — a function outside the string and sequence core xpath
+// evaluates — validate's facet evaluator declines, and a complex type's
+// {assertions} (cvc-complex-type clause 6) whose {test} calls it too is
 // outside what validate's XPath evaluator compiles, so elementAssertions
-// declines it. Each refusal names the rules of the records behind it (#2106):
-// the first three cases differ only in the Unevaluated rule they record, and
-// the last records cvc-assertions-valid, cvc-assertion, cvc-assertions-valid
-// in document order, so its token names each rule once, in first-occurrence
-// order rather than sorted.
+// declines it. Each refusal names the rules of the records
+// behind it (#2106): the first three cases differ only in the Unevaluated
+// rule they record, and the last records cvc-assertions-valid, cvc-assertion,
+// cvc-assertions-valid in document order, so its token names each rule once,
+// in first-occurrence order rather than sorted.
 func TestInstanceExecutorDeclinesUnevaluatedRoot(t *testing.T) {
 	const assertedString = `<xs:simpleType name="A"><xs:restriction base="xs:string">` +
-		`<xs:assertion test="true()"/></xs:restriction></xs:simpleType>`
+		`<xs:assertion test="upper-case('a') = 'A'"/></xs:restriction></xs:simpleType>`
 	for _, tc := range []struct {
 		why, schemaBody, instance string
 		want                      refusal
@@ -1561,14 +1562,14 @@ func TestInstanceExecutorDeclinesUnevaluatedRoot(t *testing.T) {
 		},
 		{
 			"an unevaluated {assertions} member on a content-less root",
-			`<xs:element name="known"><xs:complexType><xs:assert test="true()"/></xs:complexType></xs:element>`,
+			`<xs:element name="known"><xs:complexType><xs:assert test="upper-case('a') = 'A'"/></xs:complexType></xs:element>`,
 			`<known/>`,
 			"unevaluated:cvc-assertion",
 		},
 		{
 			"an assertions facet, an {assertions} member, and the facet again, in document order",
 			`<xs:element name="known"><xs:complexType><xs:sequence>` +
-				`<xs:element name="a" type="A"/><xs:element name="b"><xs:complexType><xs:assert test="true()"/></xs:complexType></xs:element>` +
+				`<xs:element name="a" type="A"/><xs:element name="b"><xs:complexType><xs:assert test="upper-case('a') = 'A'"/></xs:complexType></xs:element>` +
 				`<xs:element name="c" type="A"/></xs:sequence></xs:complexType></xs:element>` + assertedString,
 			`<known><a>x</a><b/><c>y</c></known>`,
 			"unevaluated:cvc-assertions-valid,cvc-assertion",
@@ -1691,7 +1692,8 @@ type fixture struct{ name, content string }
 // (cvc-elt clause 4) — at the gate itself, since it is a precondition in its
 // own right and not a restatement of those charges. No executor row can see
 // them, so the gate is called directly, with the declared root, with content
-// and without, as the controls. A decoder error is refused too. An abstract
+// and without, as the controls. A decoder error is refused too, and so is
+// character data before the root that is not white space (rootStart). An abstract
 // declaration (cvc-elt clause 2) is admitted: the walk charges it at every
 // element, so the gate refuses it nowhere (#2127).
 //
@@ -1727,6 +1729,9 @@ func TestAssessedSubtreeRootRootConditions(t *testing.T) {
 		{"an xsi:type that does not ·override· the declared type", `<known ` + xsiXS + ` xsi:type="xs:int">1</known>`, refuseXsiTypeNotOverride},
 		{"a malformed document", `<known>`, refuseDecode},
 		{"a directive after the root", `<known>x</known><!DOCTYPE known>`, refuseEpilogDirective},
+		{"text before the root", "<!-- c -->\njunk<known>x</known>", refuseProlog},
+		{"a second byte-order mark before the root", "\xEF\xBB\xBF\xEF\xBB\xBF<known>x</known>", refuseProlog},
+		{"white space, a comment and a PI before the root", "\r\n<!-- c --> <?pi?>\n<known>x</known>", ""},
 	} {
 		c := instanceCase(t, schemaBody, tc.instance, true)
 		schema, report, decidable, err := assembleCase(strict.New(), c.schemaDoc, nil)

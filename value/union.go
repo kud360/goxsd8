@@ -38,9 +38,10 @@ import (
 // validateUnion decides a union-variety st end to end per cvc-datatype-valid
 // (§4.1.4): clause 2.3 (dv_union) dispatches the literal to st's {member type
 // definitions}, clause 1 checks st's OWN ·lexical· facets (pattern) and clause 3
-// its own ·value-based· facets (enumeration) — the only two constraining facets
-// besides assertions that are applicable to a union at all (cos-applicable-facets
-// §4.1.5), which is also why no whiteSpace stage runs here.
+// its own ·value-based· facets (enumeration, then assertions through a) — the
+// only three constraining facets applicable to a union at all
+// (cos-applicable-facets §4.1.5), which is also why no whiteSpace stage runs
+// here.
 //
 // The dispatch runs FIRST, before st's own pattern check, even though the pattern
 // is clause 1 and the dispatch clause 2.3. That is not a reordering of the
@@ -53,26 +54,30 @@ import (
 // active: clause 2.3 fixes B from member validity alone, so a literal that its
 // active member accepts but st's own pattern or enumeration rejects is a
 // rejection, never a retry against a later member.
-func validateUnion(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexical string, ctx Context) (Value, whiteSpace, error) {
+func validateUnion(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexical string, ctx Context, a AssertionEvaluator) (Value, *xsd.SimpleType, error) {
 	members, err := st.Members(r)
 	if err != nil {
-		return nil, 0, typeFault(err)
+		return nil, nil, typeFault(err)
 	}
-	governed, err := unionGoverned(b, r, members)
+	governed, err := unionGoverned(b, r, members, a)
 	if err != nil {
-		return nil, 0, typeFault(err)
+		return nil, nil, typeFault(err)
 	}
 	if !governed {
-		return nil, 0, typeFault(xsderr.New(ruleCvcDatatypeValid, xsderr.Loc{},
-			"value: no backend mapping governs type %s", st.Name()))
+		return nil, nil, typeFault(xsderr.New(ruleCvcDatatypeValid, xsderr.Loc{},
+			"%s has no governing backend mapping, so the backend cannot decide cvc-datatype-valid for it", simpleTypeLabel(st.Name())))
 	}
-	lexFacets, valFacets, err := compile(b, r, st)
+	lexFacets, valFacets, assertFacets, err := compile(b, r, st, a)
 	if err != nil {
-		return nil, 0, typeFault(err)
+		return nil, nil, typeFault(err)
 	}
-	v, ws, err := dispatchUnion(b, r, members, rawLexical, ctx)
+	v, member, err := dispatchUnion(b, r, members, rawLexical, ctx, a)
 	if err != nil {
-		return nil, 0, err
+		return nil, nil, err
+	}
+	ws, err := effectiveWhiteSpace(r, member)
+	if err != nil {
+		return nil, nil, typeFault(err)
 	}
 
 	// clause 1 (cvc-pattern-valid, §4.3.4.4) on the literal as the active basic
@@ -81,9 +86,10 @@ func validateUnion(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexical
 	// means the ·active basic member· is itself a type §4.1.5 makes facet-less: a
 	// member whose {variety} is ·absent·, §4.1.5's FIRST no-applicable-facets case
 	// (noFacetsApplicable's `case nil`). cos-st-restricts clause 3.1 admits such a
-	// member because it rejects only the two ·special· ANCHOR nodes by identity, not
-	// every caller-built type in their shape — one with no declared derivation and no
-	// {base type definition} derives no {variety} at all. Nothing normalizes there, so
+	// member because it rejects only the two ·special· ANCHOR nodes by identity: a
+	// ·restriction· of xs:anySimpleType inherits its ·absent· {variety}, and
+	// st-props-correct clause 1 is charged by that member's own CheckDerivation,
+	// which a union's does not re-run over its members. Nothing normalizes there, so
 	// the raw literal is what clause 1 tests — the same `if ws != 0` guard
 	// validateLexical and facetValue apply.
 	lexical := rawLexical
@@ -92,7 +98,7 @@ func validateUnion(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexical
 	}
 	for _, lf := range lexFacets {
 		if err := lf.CheckLexical(lexical); err != nil {
-			return nil, 0, err
+			return nil, nil, err
 		}
 	}
 
@@ -102,10 +108,19 @@ func validateUnion(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexical
 	// member has fixed the value space.
 	for _, vf := range valFacets {
 		if err := vf.CheckValue(v); err != nil {
-			return nil, 0, err
+			return nil, nil, err
 		}
 	}
-	return v, ws, nil
+
+	// clause 3 (cvc-assertions-valid, §4.3.13.3) on V, st's OWN assertions facet,
+	// last, as validateLexical runs it. `$value` is V's XDM representation under
+	// the ·active basic member· (dt-xdmrep clause 4, cvc-assertions-valid clause
+	// 1.4), so the evaluator is handed member, never st; st names the facet in a
+	// message.
+	if err := checkAssertions(b, r, st, member, v, assertFacets, a); err != nil {
+		return nil, nil, err
+	}
+	return v, member, nil
 }
 
 // dispatchUnion is cvc-datatype-valid clause dv_union (§4.1.4 cl.2.3): a literal
@@ -116,8 +131,9 @@ func validateUnion(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexical
 // members in order which accepts the instance as valid" (Datatypes Terminology),
 // so order is load-bearing and the scan short-circuits rather than looking for a
 // best match. A member that is itself a union recurses through validateLexical,
-// so the whiteSpace returned is always the ·active basic member·'s: the non-union
-// type at the bottom of that chain.
+// so the type returned beside V is always the ·active basic member·: the non-union
+// type at the bottom of that chain (dt-active-basic-member), in one return with V
+// so the two cannot come apart.
 //
 // Each member is handed the RAW literal. A union carries no whiteSpace facet of
 // its own (cos-applicable-facets §4.1.5, §4.3.6: "for all datatypes ·constructed·
@@ -132,35 +148,39 @@ func validateUnion(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexical
 // returned here, which names every member's reason in membership order
 // (deterministic, STYLE D2).
 //
-// A facet-pipeline PRECONDITION fault is the ONE error class that must NOT be
-// collected, and it aborts the scan (IsFacetPrecondition, ValidateLexical). It is
-// not a verdict about the literal, so folding it in would report member i as having
+// A facet-pipeline PRECONDITION fault and an assertions-facet DECLINE are the two
+// error classes that must NOT be collected, and each aborts the scan
+// (IsFacetPrecondition, IsAssertionDeclined, ValidateLexical). Neither is a
+// verdict about the literal, so folding one in would report member i as having
 // REJECTED a literal it never decided — and since a later member may well accept,
 // the union would be reported VALID off a member the dispatch was never entitled to
-// reach, with that member's value as V. That is a false accept produced by
-// swallowing a caller's construction fault, the worst of the outcomes available
-// here, so the fault propagates and the union is decided by nobody.
+// reach, with that member's value as V. For a precondition fault that is a false
+// accept produced by swallowing a caller's construction fault; for a decline it
+// is a later member made the ·active member type· where the spec may make member
+// i so (dt-active-member). Either way the error propagates and the union is
+// decided by nobody. A member whose assertions facet FAILS is an ordinary
+// rejection and the scan goes on, which is how a later member becomes active.
 //
 // A union whose {member type definitions} is EMPTY — xs:error (Structures
 // §3.16.7.3), whose value and lexical spaces are both empty — falls out of the
 // loop with zero candidates and so rejects every literal including "", with no
 // special case.
-func dispatchUnion(b Backend, r xsd.TypeResolver, members []*xsd.SimpleType, rawLexical string, ctx Context) (Value, whiteSpace, error) {
+func dispatchUnion(b Backend, r xsd.TypeResolver, members []*xsd.SimpleType, rawLexical string, ctx Context, a AssertionEvaluator) (Value, *xsd.SimpleType, error) {
 	// Left nil so the common case — an early member accepts — allocates nothing;
 	// the slice only materializes on the path that actually reports rejections.
 	var rejections []string
 	for i, m := range members {
-		v, ws, err := validateLexical(b, r, m, rawLexical, ctx)
+		v, basic, err := validateLexical(b, r, m, rawLexical, ctx, a)
 		if err == nil {
-			return v, ws, nil
+			return v, basic, nil
 		}
-		if IsFacetPrecondition(err) {
-			return nil, 0, err
+		if IsFacetPrecondition(err) || IsAssertionDeclined(err) {
+			return nil, nil, err
 		}
 		rejections = append(rejections, fmt.Sprintf("member %d (%s): %v", i, m.Name(), err))
 	}
-	return nil, 0, xsderr.New(ruleCvcDatatypeValid, xsderr.Loc{},
-		"value %q is Datatype Valid with respect to no member of the union's %d {member type definitions} (cvc-datatype-valid clause 2.3, §4.1.4): %s",
+	return nil, nil, xsderr.New(ruleCvcDatatypeValid, xsderr.Loc{},
+		"value %q is Datatype Valid with respect to no member of the union's %d {member type definitions}, but cvc-datatype-valid clause 2.3 requires it to be valid with respect to at least one: %s",
 		rawLexical, len(members), strings.Join(rejections, "; "))
 }
 
@@ -188,13 +208,13 @@ func dispatchUnion(b Backend, r xsd.TypeResolver, members []*xsd.SimpleType, raw
 // disagreement between this scan's narrower fault tolerance and
 // validateUnion's, not a fact about the document, so it is reported as a
 // fault of the scan rather than a verdict about rawLexical.
-func activeBasicMember(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexical string, ctx Context) (*xsd.SimpleType, error) {
+func activeBasicMember(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexical string, ctx Context, a AssertionEvaluator) (*xsd.SimpleType, error) {
 	members, err := st.Members(r)
 	if err != nil {
 		return nil, typeFault(err)
 	}
 	for _, m := range members {
-		_, _, err := validateLexical(b, r, m, rawLexical, ctx)
+		_, _, err := validateLexical(b, r, m, rawLexical, ctx, a)
 		if err != nil {
 			if !IsDatatypeVerdict(err) {
 				return nil, err
@@ -206,12 +226,12 @@ func activeBasicMember(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLex
 			return nil, typeFault(err)
 		}
 		if _, ok := variety.(xsd.Union); ok {
-			return activeBasicMember(b, r, m, rawLexical, ctx)
+			return activeBasicMember(b, r, m, rawLexical, ctx, a)
 		}
 		return m, nil
 	}
 	return nil, typeFault(xsderr.New(ruleCvcDatatypeValid, xsderr.Loc{},
-		"value %q identifies no active member among the union's %d {member type definitions}, though validateUnion already accepted it (dt-active-member, Datatypes §4.1.4 Terminology)",
+		"the literal %q is Datatype Valid against none of the union's %d {member type definitions}, though validateUnion already accepted it, so it has no ·active basic member·, which cvc-datatype-valid clause 2.3 requires",
 		rawLexical, len(members)))
 }
 
@@ -234,10 +254,10 @@ func activeBasicMember(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLex
 // is the active member's, which this mapping cannot name having dropped the member
 // it dispatched to. Per the Mapping doc a nil Canonical means "this type has no
 // canonical form", which callers must treat as such rather than as an error.
-func unionMapping(b Backend, r xsd.TypeResolver, members []*xsd.SimpleType) Mapping {
+func unionMapping(b Backend, r xsd.TypeResolver, members []*xsd.SimpleType, a AssertionEvaluator) Mapping {
 	return Mapping{
 		Parse: func(lexical string, ctx Context) (Value, error) {
-			v, _, err := dispatchUnion(b, r, members, lexical, ctx)
+			v, _, err := dispatchUnion(b, r, members, lexical, ctx, a)
 			return v, err
 		},
 	}
@@ -254,15 +274,15 @@ func unionMapping(b Backend, r xsd.TypeResolver, members []*xsd.SimpleType) Mapp
 // that still says "valid"), or reject outright when no other member accepts.
 // Reporting the whole union ungoverned instead keeps an unmapped type a BACKEND
 // gap rather than a validity verdict about instance data: it surfaces as
-// ValidateLexical's "no backend mapping governs" cvc-datatype-valid error and as a
+// ValidateLexical's "has no governing backend mapping" cvc-datatype-valid error and as a
 // skipped CheckFacetRestriction, the same way an ungoverned atomic type does.
 //
 // An EMPTY membership is vacuously governed, which is right for xs:error
 // (§3.16.7.3): its value space is empty, so its mapping's whole job is to reject
 // every literal — what dispatchUnion does with zero candidates.
-func unionGoverned(b Backend, r xsd.TypeResolver, members []*xsd.SimpleType) (bool, error) {
+func unionGoverned(b Backend, r xsd.TypeResolver, members []*xsd.SimpleType, a AssertionEvaluator) (bool, error) {
 	for _, m := range members {
-		ok, err := governingMappingExists(b, r, m)
+		ok, err := governingMappingExists(b, r, m, a)
 		if err != nil || !ok {
 			return false, err
 		}
@@ -273,7 +293,7 @@ func unionGoverned(b Backend, r xsd.TypeResolver, members []*xsd.SimpleType) (bo
 // governingMappingExists is unionGoverned's per-member question, split out only
 // so the loop reads as one decision per member rather than three results
 // unpacked inline.
-func governingMappingExists(b Backend, r xsd.TypeResolver, m *xsd.SimpleType) (bool, error) {
-	_, ok, err := governingMapping(b, r, m)
+func governingMappingExists(b Backend, r xsd.TypeResolver, m *xsd.SimpleType, a AssertionEvaluator) (bool, error) {
+	_, ok, err := governingMapping(b, r, m, a)
 	return ok, err
 }

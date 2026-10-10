@@ -3684,28 +3684,38 @@ func (p *producer) namespaceConstraint(el *Element) (xsd.NamespaceConstraint, er
 //   - namespace="##other" → not, {·absent·} plus the target namespace if present;
 //   - otherwise (a namespace/notNamespace token list) → enumeration for namespace
 //     or not for notNamespace, with ##targetNamespace/##local substituted.
+//
+// It takes namespace's ·actual value· once, through collapseTrim, and uses that
+// one value for both the keyword test and the token split. The mapping's
+// ##any/##other clauses do not themselves say ·actual value·: the reading comes
+// from the attribute's type, xs:namespaceList (Appendix A), whose
+// specialNamespaceList member restricts xs:token (whiteSpace collapse), so
+// namespace=" ##any " is ##any and namespace=" ##other " is ##other. The test is
+// case-sensitive ("##Any" is an enumeration member), and an empty or
+// whitespace-only value is an enumeration of the empty set, not a keyword.
 func (p *producer) namespaceVarietyAndSet(ns string, hasNS bool, notNS string, hasNotNS bool) (xsd.NamespaceConstraintVariety, []xsd.Namespace) {
 	if !hasNS && !hasNotNS {
 		return xsd.NamespaceConstraintAny, nil
 	}
-	if hasNS && ns == "##any" {
+	nsValue := collapseTrim(ns)
+	if hasNS && nsValue == "##any" {
 		return xsd.NamespaceConstraintAny, nil
 	}
-	if hasNS && ns == "##other" {
+	if hasNS && nsValue == "##other" {
 		set := []xsd.Namespace{xsd.NamespaceName("")}
 		if p.target != "" {
 			set = append(set, xsd.NamespaceName(p.target))
 		}
 		return xsd.NamespaceConstraintNot, set
 	}
-	list := ns
+	list := nsValue
 	variety := xsd.NamespaceConstraintEnumeration
 	if hasNotNS {
 		list = notNS
 		variety = xsd.NamespaceConstraintNot
 	}
 	var set []xsd.Namespace
-	for _, tok := range strings.Fields(list) {
+	for _, tok := range xmlSpaceFields(list) {
 		switch tok {
 		case "##targetNamespace":
 			set = append(set, xsd.NamespaceName(p.target))
@@ -3755,7 +3765,7 @@ func (p *producer) disallowedNames(el *Element) ([]xsd.QName, []xsd.DisallowedNa
 	attributeWildcard := el.Name().Local() == "anyAttribute"
 	var names []xsd.QName
 	var keywords []xsd.DisallowedNameKeyword
-	for _, tok := range strings.Fields(notQName) {
+	for _, tok := range xmlSpaceFields(notQName) {
 		if strings.HasPrefix(tok, "##") {
 			kw, err := disallowedNameKeywordOf(tok, attributeWildcard, el.Loc())
 			if err != nil {

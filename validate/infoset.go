@@ -1,6 +1,7 @@
 package validate
 
 import (
+	"github.com/kud360/goxsd8/xpath"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
 )
@@ -53,6 +54,11 @@ type Element interface {
 	// Loc reports where the element begins in its source document.
 	Loc() xsderr.Loc
 }
+
+// An Element is the [xpath.ContextElement] an assertion's {test} reads E's
+// name and in-scope namespaces off (cvc-xpath clause 1), so a source adapter
+// implements nothing further for fn:namespace-uri and fn:in-scope-prefixes.
+var _ xpath.ContextElement = Element(nil)
 
 // UnparsedEntities is the optional capability through which a source presents
 // the [unparsedEntities] property of the document information item (Appendix
