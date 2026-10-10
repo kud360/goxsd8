@@ -12,13 +12,19 @@
 // being landed, as a whole `#<N>` or `issues/<N>` token — `#820` must not
 // match inside `#8201` (#820's own diff contains both, `311ada8`).
 //
+// Precondition 1's second half reads the same three-dot range for what the
+// branch takes away: no line a `docs/LOG/` file carries on base is deleted or
+// displaced, which a forward merge's positional resolution can do with no
+// `-` line at all (#2506). checkLogHistory owns the rule and its exemption.
+//
 // Precondition 2 — the base is current — is verified first, because the
 // added-lines form is only sound when `merge-base(base, HEAD) == base`:
 // against a stale base the merge-base is older than intended, a forward
 // merge's entries reappear as added lines, and only the issue-number filter
-// still separates them from the branch's own. A stale base is reported as an
-// operational error (exit 2), not a defect (exit 1): the check did not run
-// to a verdict, it declined to run at all.
+// still separates them from the branch's own; the second half would number
+// its hunks against that merge-base while reading base's file. A stale base
+// is reported as an operational error (exit 2), not a defect (exit 1): the
+// check did not run to a verdict, it declined to run at all.
 //
 // Before either, HEAD must be the head the PR will merge, since every check
 // above reads HEAD: a LOG commit that exists only in this checkout reads
@@ -37,8 +43,9 @@
 // the check rejects.
 //
 // -no-issue replaces -issue for a PR that closes no issue, a /backlog or
-// post-land pass: precondition 1 has no number to look for and is skipped,
-// and the closing-keyword check runs in its closes-no-issue mode.
+// post-land pass: precondition 1's first half has no number to look for and
+// is skipped, its second half runs, and the closing-keyword check runs in
+// its closes-no-issue mode.
 //
 // Usage:
 //
@@ -47,9 +54,10 @@
 //	go tool landcheck -no-issue -squash squash.txt -pr-body pr.md
 //
 // Exit codes mirror tools/lint, not the report-only survey tools: 0 for a
-// clean run (HEAD matches its upstream, the entry is found, the base is
-// current and no closing keyword is rejected), 1 for a defect (HEAD has
-// unpushed commits, no matching added line, or a rejected closing keyword),
+// clean run (HEAD matches its upstream, the entry is found, no base LOG line
+// is lost or displaced, the base is current and no closing keyword is
+// rejected), 1 for a defect (HEAD has unpushed commits, no matching added
+// line, a base LOG line deleted or displaced, or a rejected closing keyword),
 // 2 for an operational error (a missing or unreadable text, HEAD behind its
 // upstream, no upstream or a detached HEAD, a stale base, a bad git ref, or
 // git failing to run at all).
@@ -79,8 +87,8 @@ func main() {
 // run is main's testable body: parse flags, read the two landing texts,
 // resolve the repo root so the check gives the same answer from any working
 // directory, verify HEAD is the pushed head, delegate to checkLanding
-// against it — checkBaseCurrent alone under -no-issue — and then to
-// checkClosingKeywords. The pushed-head check lives here rather than in
+// against it — checkBaseCurrent and checkLogHistory under -no-issue — and
+// then to checkClosingKeywords. The pushed-head check lives here rather than in
 // checkLanding because checkLanding also runs against historical commits,
 // which have no upstream.
 func run(args []string, stdout io.Writer) (int, error) {
@@ -125,6 +133,10 @@ func run(args []string, stdout io.Writer) (int, error) {
 	if *noIssue {
 		if err := checkBaseCurrent(root, *base, "HEAD"); err != nil {
 			return 0, err
+		}
+		code, err := checkLogHistory(root, *base, "HEAD", stdout)
+		if err != nil || code != 0 {
+			return code, err
 		}
 		return checkClosingKeywords(texts, true, stdout)
 	}
@@ -173,15 +185,25 @@ func checkPushed(dir string, stdout io.Writer) (int, error) {
 }
 
 // checkLanding verifies precondition 2 (base is current) and, only once that
-// holds, precondition 1 (the added lines under docs/LOG/ name issue) between
-// base and head in the git repository at dir. head is a parameter rather
-// than a literal "HEAD" so tests can point it at a historical commit instead
-// of the checkout's current branch tip.
+// holds, both halves of precondition 1 between base and head in the git
+// repository at dir: the added lines under docs/LOG/ name issue
+// (checkLogEntry), and no base docs/LOG/ line is lost or displaced
+// (checkLogHistory). Both report before it returns the worse code. head is a
+// parameter rather than a literal "HEAD" so tests can point it at a
+// historical commit instead of the checkout's current branch tip.
 func checkLanding(dir, base, head string, issue int, stdout io.Writer) (int, error) {
 	if err := checkBaseCurrent(dir, base, head); err != nil {
 		return 0, err
 	}
-	return checkLogEntry(dir, base, head, issue, stdout)
+	entry, err := checkLogEntry(dir, base, head, issue, stdout)
+	if err != nil {
+		return 0, err
+	}
+	history, err := checkLogHistory(dir, base, head, stdout)
+	if err != nil {
+		return 0, err
+	}
+	return max(entry, history), nil
 }
 
 // checkBaseCurrent verifies docs/WORKFLOW.md's landing precondition 2:

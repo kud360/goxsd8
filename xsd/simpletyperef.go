@@ -162,9 +162,9 @@ func checkSimpleTypeOrRefPresent(loc xsderr.Loc, ref SimpleTypeOrRef, slot strin
 //   - OwnedSimpleType IS the component; it is in no by-name symbol table, so a
 //     lookup would miss it.
 //   - SimpleTypeRef is the r.Type lookup. BOTH a miss and a wrong-kind hit (the
-//     name resolves to a ComplexType) are charged src-resolve clause 1.1: they
-//     are the same failure seen twice — the kind-specific lookup simply misses —
-//     which is the argument ruleSrcResolve's own doc already makes.
+//     name resolves to a ComplexType) are charged src-resolve: a miss fails
+//     clause 1.1, and a wrong-kind hit fails the rule's "specified kind"
+//     instead, as ruleSrcResolve's own doc records.
 //
 // It returns an ERROR rather than a comma-ok, because an unresolvable base is
 // exactly the silently short chain a resolver-threaded reader must never
@@ -195,7 +195,7 @@ func simpleTypeOfRef(r TypeResolver, ref SimpleTypeOrRef, loc xsderr.Loc, ctx st
 		st, ok := t.(*SimpleType)
 		if !ok {
 			return nil, xsderr.New(ruleSrcResolve, loc,
-				"%s references simple type %s, but that expanded name is a complex type definition, so the simple-type lookup finds nothing (src-resolve clause 1.1)", ctx, b.Name)
+				"%s references simple type %s, but that expanded name is a complex type definition, and src-resolve requires it to resolve to a simple type definition", ctx, b.Name)
 		}
 		return st, nil
 	default:

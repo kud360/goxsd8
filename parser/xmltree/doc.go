@@ -65,11 +65,29 @@
 //     is rejected as RuleXMLWellFormed in any other document, which is XML
 //     1.0 (nsc-NoPrefixUndecl). The default declaration xmlns="" is legal
 //     in both.
-//   - After the document element only comments, processing instructions
-//     and white space may appear (XML 1.0 [1] document, [27] Misc):
-//     a character-data run there holding anything but white space is
-//     rejected as RuleXMLWellFormed at the run's start, the character
-//     after the preceding markup.
+//   - Outside the document element only Misc — comments, processing
+//     instructions and white space — may appear, and before it an XML
+//     declaration and a DOCTYPE too (XML 1.0 [1] document, [22] prolog,
+//     [27] Misc). A character-data run before or after the document
+//     element must be literal S in the source, or it is rejected as
+//     RuleXMLWellFormed at the run's start, the character after the
+//     preceding markup. A character reference, a CDATA section or a
+//     U+FEFF after the encoding signature is not S, whatever it decodes
+//     to. Also rejected as RuleXMLWellFormed: a second top-level element,
+//     at its start tag; a DOCTYPE after the document element or after
+//     another DOCTYPE, at the directive, declaring nothing ([22] admits
+//     one, before the element); and a processing instruction whose target
+//     is "xml" in any case anywhere but as the XML declaration, spelled in
+//     lower case at the document's first character, after no white space,
+//     comment or other declaration ([17] PITarget, [23] XMLDecl), at the
+//     instruction, so a misplaced standalone="yes" is never read.
+//   - Inside the document element, and in the replacement text of an
+//     internal entity referenced there (§4.3.2), a directive and a
+//     processing instruction whose target is "xml" in any case are
+//     rejected as RuleXMLWellFormed ([43] content, [17] PITarget), at the
+//     token or, in replacement text, at the reference. Replacement text
+//     never referenced is not checked for them. An external parsed entity
+//     is never read, so its TextDecl is never charged.
 //   - The DOCTYPE's internal subset is read for its general entity
 //     declarations, the first declaration of a name binding (XML 1.0 §4.2),
 //     and for its attribute-list declarations' attribute types (see the
@@ -109,19 +127,21 @@
 //     name no general entity declaration before the <!ATTLIST> declares, or
 //     through another entity's replacement text a name no declaration
 //     declares, a declaration in a parameter entity's replacement text
-//     counting for neither) or, directly or through other entities'
-//     replacement text, WFC: Parsed Entity, No Recursion, No External Entity
-//     References or No < in Attribute Values, or a '&' in such replacement
-//     text that begins no Reference (§4.4.5, [67]), whether or not the
-//     default is ever applied — a validity constraint on either declaration is
-//     no fault; replacement text ending inside a comment, processing
-//     instruction or markup declaration; and a '<' in the DOCTYPE header, a
-//     subset no ']' closes, or text other than S between that ']' and '>'
-//     ([28] doctypedecl). A processing instruction between the subset's declarations
-//     runs to the "?>" that alone closes it ([16] PI), whatever '>', '<' or
-//     quote it holds (internal/xmltok), and one no "?>" closes fails as the
-//     decoder's syntax error at the end of input. The external subset is never
-//     read, by design (#1668), nor is an external parameter entity; after a
+//     counting for neither, and a reference in the replacement text of an
+//     entity whose binding declaration stands in one occurring within it)
+//     or, directly or through other entities' replacement text, WFC: Parsed
+//     Entity, No Recursion, No External Entity References or No < in
+//     Attribute Values, or a '&' in such replacement text that begins no
+//     Reference (§4.4.5, [67]), whether or not the default is ever applied —
+//     a validity constraint on either declaration is no fault; replacement
+//     text ending inside a comment, processing instruction or markup
+//     declaration; and a '<' in the DOCTYPE header, a subset no ']' closes,
+//     or text other than S between that ']' and '>' ([28] doctypedecl). A
+//     processing instruction between the subset's declarations runs to the
+//     "?>" that alone closes it ([16] PI), whatever '>', '<' or quote it
+//     holds (internal/xmltok), and one no "?>" closes fails as the decoder's
+//     syntax error at the end of input. The external subset is never read,
+//     by design (#1668), nor is an external parameter entity; after a
 //     parameter-entity reference that is not read, unless standalone="yes",
 //     the rest of the internal subset is checked for well-formedness alone,
 //     binding no parameter entity, declaring no general entity, defining no
@@ -155,24 +175,38 @@
 //     Reference (a literal's `&#38;` puts one there; §4.4.2, [67]),
 //     replacement text that is not balanced content, and, in a
 //     standalone="yes" document, a reference to an entity declared only in a
-//     parameter entity's replacement text (WFC: Entity Declared) are
-//     RuleXMLWellFormed faults. A reference past the reader's bound on
-//     nesting depth or on replacement text included per document is refused,
-//     as is a reference to an entity that is not internal or whose
-//     declaration the reader did not read, wrapping a cause: the reader does
-//     not decide whether the document is well-formed.
+//     parameter entity's replacement text, internal, external or unparsed
+//     (WFC: Entity Declared), are RuleXMLWellFormed faults; a reference in
+//     the replacement text of an entity whose binding declaration (§4.2)
+//     stands in a parameter entity occurs within it, and is not charged. A
+//     reference, directly or through replacement text, to an unparsed entity
+//     whose declaration the reader read (WFC: Parsed Entity), in content or
+//     in an attribute value, and a reference in an attribute value to an
+//     external entity whose declaration the reader read (WFC: No External
+//     Entity References) are RuleXMLWellFormed faults too. A reference past
+//     the reader's bound on nesting depth or on replacement text included per
+//     document is refused, as are a reference in content to an external
+//     parsed entity, which the reader does not include (§4.4.3), and a
+//     reference to an entity whose declaration the reader did not read,
+//     wrapping a cause: the reader does not decide whether the document is
+//     well-formed.
 //   - Every error the reader returns but io.EOF is a RuleXMLWellFormed
 //     *xsderr.Error, and whether it wraps a cause says what it decides. One wrapping no
 //     cause is a charge the reader makes itself and a definite fault whatever
-//     the document's DTD declares — an entity it includes is one whose
+//     the document's DTD declares — an entity it includes or charges is one whose
 //     internal-subset declaration it read, which binds before the external
 //     subset's (XML 1.0 §2.8, §4.2) — except the unbound-prefix charge: an
 //     <!ATTLIST can default the namespace declaration that binds the prefix
 //     (§3.3.2), a non-validating processor must supply that default from the
 //     internal subset (§5.1), and the reader applies no attribute default.
-//     One wrapping a cause — an encoding/xml syntax error, among them its
-//     refusal of an encoding declaration the reader does not decode, an I/O
-//     fault, or one of the refusals above — may be a limit of this reader.
+//     A WFC Parsed Entity charge against an unparsed entity declared after a
+//     reference to a parameter entity the reader did not read, which may
+//     have held an overriding declaration, is made only in a standalone="yes" document,
+//     and is definite there: "when `standalone="yes"`, processors MUST process these
+//     declarations" (§5.1), so that declaration binds (§4.2; #2459). One wrapping a
+//     cause — an encoding/xml syntax error, among them its refusal of an encoding
+//     declaration the reader does not decode, an I/O fault, or one of the refusals
+//     above — may be a limit of this reader.
 //
 // Fuzz targets guard the reader against panics on malformed input
 // (PRINCIPLES 24); malformed XML is an error value, never a crash.

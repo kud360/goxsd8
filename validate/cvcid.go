@@ -335,7 +335,7 @@ func (w *walk) idRecord(st *xsd.SimpleType, lexical string, owner Element, ctx v
 	if !candidate {
 		return
 	}
-	if _, err := value.ValidateLexical(w.backend, w.schema, st, lexical, ctx, xpath.FacetAssertions()); err != nil {
+	if _, err := value.ValidateLexical(w.backend, w.schema, st, lexical, ctx, xpath.FacetAssertions(w.now)); err != nil {
 		if !value.IsDatatypeVerdict(err) {
 			w.declineID(owner, loc,
 				"an item of the element %s was not read into the ID/IDREF table: the value backend reported a fault of its type %s rather than a verdict about the lexical, so cvc-id clause 1 is undecided",
@@ -384,8 +384,14 @@ func (w *walk) declineID(owner Element, loc xsderr.Loc, format string, args ...a
 // space· (Datatypes §3.4.7) under the collapse whiteSpace its ancestor xs:token
 // fixes. Every caller has already run String Valid clauses 1 and 2 over the
 // lexical, so a value reaching here is one that mapping accepted.
+//
+// Items are delimited on XML white space alone (isXMLSpace): a list value is
+// split on #x20 (cvc-datatype-valid, Datatypes §4.1.4 clause 2.2) after
+// whiteSpace = collapse has mapped #x9, #xA and #xD to it (§4.3.6).
+// strings.Fields would also break on U+1680, an NCName character, splitting one
+// valid ID or IDREF in two.
 func valueTokens(lexical string, list bool) []string {
-	fields := strings.Fields(lexical)
+	fields := strings.FieldsFunc(lexical, isXMLSpace)
 	if list || len(fields) < 2 {
 		return fields
 	}
@@ -606,7 +612,7 @@ func (w *walk) itemRoleValues(item *xsd.SimpleType, lexical string, ctx value.Co
 // of one dispatch and not a fact about the document. Both decline identically
 // here.
 func (w *walk) validatingType(st *xsd.SimpleType, lexical string, ctx value.Context) (*xsd.SimpleType, bool) {
-	t, _, err := value.ValidatingType(w.backend, w.schema, st, lexical, ctx, xpath.FacetAssertions())
+	t, _, err := value.ValidatingType(w.backend, w.schema, st, lexical, ctx, xpath.FacetAssertions(w.now))
 	if err != nil {
 		return nil, false
 	}

@@ -135,9 +135,9 @@ func (a attribute) Loc() xsderr.Loc { return a.a.Loc() }
 //
 // The cursor does not trust the engine to descend into every element it is
 // handed: an element child the engine takes and never calls Children on (a
-// processContents="skip" wildcard match) leaves its whole subtree in the
-// stream, and those tokens are discarded here rather than reported to this
-// element as further children.
+// processContents="skip" wildcard match no assertion of an ancestor counts
+// across) leaves its whole subtree in the stream, and those tokens are
+// discarded here rather than reported to this element as further children.
 type children struct {
 	w     *walker
 	depth int

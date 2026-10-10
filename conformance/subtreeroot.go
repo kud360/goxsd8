@@ -1043,13 +1043,18 @@ func (g *subtreeGate) onChain(t xsd.ComplexType, holds func(xsd.ComplexType) boo
 
 // rootStart reads dec up to the document element's start tag. It refuses
 // (refuseDoctype) a DOCTYPE whose DTD could default an attribute the reader
-// does not see (defaultsNoAttribute), and any other directive, and a decoder
-// error before that tag (refuseDecode). The directive refusal also
-// covers a DOCTYPE encoding/xml delimits short of its real end, as a quote
-// inside a processing instruction can make it: every markup declaration left
-// over arrives as a directive of its own, and a parameter-entity reference left
-// over needs a declaration, which carries a '%' either inside the DOCTYPE or in
-// a directive left over too.
+// does not see (defaultsNoAttribute), and any other directive, character data
+// before that tag that is not white space (refuseProlog), and a decoder error
+// before that tag (refuseDecode). XML 1.0 [22] prolog admits only S as
+// character data, and a second U+FEFF after the mark rawDecoder drops is none.
+// A CDATA section or character reference whose text is white space reads as
+// white space here, since encoding/xml marks neither in what it delivers;
+// parser/xmltree refuses both, and no verdict rests on this read without that
+// one (rawDecoder). The directive refusal also covers a DOCTYPE encoding/xml
+// delimits short of its real end, as a quote inside a processing instruction
+// can make it: every markup declaration left over arrives as a directive of its
+// own, and a parameter-entity reference left over needs a declaration, which
+// carries a '%' either inside the DOCTYPE or in a directive left over too.
 //
 // The DOCTYPE that survives declares, in its internal subset alone, general
 // entities, notations, element types, comments and processing instructions.
@@ -1074,6 +1079,10 @@ func rootStart(dec *xmltok.Decoder) (xml.StartElement, refusal) {
 		case xml.Directive:
 			if !defaultsNoAttribute(t) {
 				return xml.StartElement{}, refuseDoctype
+			}
+		case xml.CharData:
+			if strings.Trim(string(t), " \t\r\n") != "" {
+				return xml.StartElement{}, refuseProlog
 			}
 		case xml.StartElement:
 			return t, ""

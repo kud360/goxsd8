@@ -51,7 +51,7 @@ type durationVal struct {
 func parseDuration(lexical string, _ value.Context) (value.Value, error) {
 	if !durationLexical.MatchString(lexical) {
 		return nil, xsderr.New(ruleDatatypeValid, xsderr.Loc{},
-			"duration: %q is not in the lexical space (durationLexicalRep, §3.3.6.2)", lexical)
+			"%q is not in the lexical space of duration, which cvc-datatype-valid clause 2.1 requires it to be in", lexical)
 	}
 	f := durationFields.FindStringSubmatch(lexical)
 	// f[1]=sign, f[2]=years, f[3]=months, f[4]=days, f[5]=hours, f[6]=minutes,

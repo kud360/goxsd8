@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/kud360/goxsd8/builtin"
 	"github.com/kud360/goxsd8/builtin/strict"
@@ -249,10 +250,11 @@ import (
 // ValidateLexical's facet PRECONDITION is never violated. A case pairing an
 // inapplicable facet with a primitive (a schema-construction error, not an instance
 // validity case) is declined rather than fed through. That ownership is EXECUTED, not
-// merely documented: every ValidateLexical call site in this file routes its error
-// through mustNotBePreconditionOrDecline, which fails the run rather than let a
+// merely documented, and enforced by construction: checkLiteral is this file's one
+// ValidateLexical call, and it routes every error through
+// mustNotBePreconditionOrDecline, which fails the run rather than let a
 // precondition fault or an assertions-facet decline be scored as an instance
-// rejection.
+// rejection. A type fault is declined there instead (scoreLiterals).
 //
 // # The precisionDecimal cohort (issue #135)
 //
@@ -949,18 +951,13 @@ func fixesTimezone(st *xsd.SimpleType) bool {
 // nil value.Context suffices. The instance is valid iff every tested value
 // validates, mirroring the parseOK path's whole-instance polarity.
 func decideLexicalByFacets(backend value.Backend, st *xsd.SimpleType, values []string, c caseSpec) Status {
-	observedValid := true
+	observed := literalValid
 	for _, v := range values {
-		if _, err := value.ValidateLexical(backend, noSchema{}, st, v, nil, xpath.FacetAssertions()); err != nil {
-			mustNotBePreconditionOrDecline(err, c, v)
-			observedValid = false
+		if observed = checkLiteral(backend, st, v, nil, c); observed != literalValid {
 			break
 		}
 	}
-	if observedValid == c.expect.wantsValid() {
-		return Pass()
-	}
-	return Fail()
+	return scoreLiterals(c, observed)
 }
 
 // isContextDependent reports whether prim's lexical→value mapping depends on the
@@ -1099,7 +1096,7 @@ func execListCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c ca
 	if !ok {
 		return Fail()
 	}
-	observedValid := true
+	observed := literalValid
 	for _, lt := range tests {
 		qn := xsd.QName{Space: xsd.XMLSchemaNS, Local: lt.itemType}
 		item, seeded := sym[qn]
@@ -1125,20 +1122,15 @@ func execListCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c ca
 			return Fail()
 		}
 		for _, v := range lt.values {
-			if _, verr := value.ValidateLexical(backend, noSchema{}, leaf, v, nil, xpath.FacetAssertions()); verr != nil {
-				mustNotBePreconditionOrDecline(verr, c, v)
-				observedValid = false
+			if observed = checkLiteral(backend, leaf, v, nil, c); observed != literalValid {
 				break
 			}
 		}
-		if !observedValid {
+		if observed != literalValid {
 			break
 		}
 	}
-	if observedValid == c.expect.wantsValid() {
-		return Pass()
-	}
-	return Fail()
+	return scoreLiterals(c, observed)
 }
 
 // constructedListFacets is the {facets} of a CONSTRUCTED list — the
@@ -1220,13 +1212,7 @@ func execFacetsCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c 
 	if err != nil {
 		return Fail()
 	}
-	_, verr := value.ValidateLexical(backend, noSchema{}, leaf, raw, ctx, xpath.FacetAssertions())
-	mustNotBePreconditionOrDecline(verr, c, raw)
-	observedValid := verr == nil
-	if observedValid == c.expect.wantsValid() {
-		return Pass()
-	}
-	return Fail()
+	return scoreLiterals(c, checkLiteral(backend, leaf, raw, ctx, c))
 }
 
 // execNotationFacetsCase decides a NOTATION Facets-cohort case (issue #153). The
@@ -1291,13 +1277,7 @@ func execNotationFacetsCase(backend value.Backend, sym map[xsd.QName]*xsd.Simple
 	if err != nil {
 		return Fail()
 	}
-	_, verr := value.ValidateLexical(backend, noSchema{}, leaf, raw, ctx, xpath.FacetAssertions())
-	mustNotBePreconditionOrDecline(verr, c, raw)
-	observedValid := verr == nil
-	if observedValid == c.expect.wantsValid() {
-		return Pass()
-	}
-	return Fail()
+	return scoreLiterals(c, checkLiteral(backend, leaf, raw, ctx, c))
 }
 
 // execPDecimalCase decides a Saxon PDecimal cohort case (issue #135): every
@@ -1416,18 +1396,13 @@ func execPDecimalCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, 
 	}
 	// precisionDecimal maps context-free (§3.2), so a nil value.Context suffices —
 	// unlike the QName cohort, no prefix resolution is involved.
-	observedValid := true
+	observed := literalValid
 	for _, v := range values {
-		if _, verr := value.ValidateLexical(backend, noSchema{}, leaf, v, nil, xpath.FacetAssertions()); verr != nil {
-			mustNotBePreconditionOrDecline(verr, c, v)
-			observedValid = false
+		if observed = checkLiteral(backend, leaf, v, nil, c); observed != literalValid {
 			break
 		}
 	}
-	if observedValid == c.expect.wantsValid() {
-		return Pass()
-	}
-	return Fail()
+	return scoreLiterals(c, observed)
 }
 
 // execD34Case decides an IBM D3_3_4 precisionDecimal cohort case (issue #162,
@@ -1471,18 +1446,13 @@ func execD34Case(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c cas
 	}
 	// Every type in this cohort maps context-free (precisionDecimal §3.2, string,
 	// integer), so a nil value.Context suffices — no prefix resolution is involved.
-	observedValid := true
+	observed := literalValid
 	for _, e := range elems {
-		if _, verr := value.ValidateLexical(backend, noSchema{}, leaves[e.typeKey], e.value, nil, xpath.FacetAssertions()); verr != nil {
-			mustNotBePreconditionOrDecline(verr, c, e.value)
-			observedValid = false
+		if observed = checkLiteral(backend, leaves[e.typeKey], e.value, nil, c); observed != literalValid {
 			break
 		}
 	}
-	if observedValid == c.expect.wantsValid() {
-		return Pass()
-	}
-	return Fail()
+	return scoreLiterals(c, observed)
 }
 
 // buildD34Types turns the schema's simple-type declarations into real
@@ -1814,14 +1784,68 @@ func execAnyURIShapeCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleTyp
 	// stage applies anyURI's fixed collapse (§4.3.6), which anyURI_b005 turns on —
 	// its "http://a/x  y" collapses to "http://a/x y", still not the enumeration's
 	// "http://a/x%20y" (§3.3.17.2 Note: no percent-decoding), so the case is invalid.
-	observedValid := true
+	observed := literalValid
 	for _, l := range leaves {
-		if _, verr := value.ValidateLexical(backend, noSchema{}, synth[l.typeName], l.value, nil, xpath.FacetAssertions()); verr != nil {
-			mustNotBePreconditionOrDecline(verr, c, l.value)
-			observedValid = false
+		if observed = checkLiteral(backend, synth[l.typeName], l.value, nil, c); observed != literalValid {
 			break
 		}
 	}
+	return scoreLiterals(c, observed)
+}
+
+// literalOutcome is what a value.ValidateLexical call means to this lane's
+// scoring executors: the literal is Datatype Valid, it is not (a verdict,
+// cvc-datatype-valid §4.1.4), or the case is declined because the call reported
+// a type fault rather than a verdict. An executor folding several literals into
+// one whole-instance observation keeps the first outcome that is not
+// literalValid, so the same three values describe the instance.
+type literalOutcome uint8
+
+const (
+	// literalValid is a nil error from value.ValidateLexical.
+	literalValid literalOutcome = iota
+	// literalInvalid is an error value.IsDatatypeVerdict reads as a verdict.
+	literalInvalid
+	// literalDeclined is a type fault: an error that is neither a verdict nor
+	// one of the two non-verdicts mustNotBePreconditionOrDecline panics on.
+	literalDeclined
+)
+
+// checkLiteral is this file's ONE value.ValidateLexical call: it validates
+// lexical against st under ctx and classifies the result, routing every error
+// through mustNotBePreconditionOrDecline first. Because no executor calls
+// value.ValidateLexical itself, the guard and the type-fault decline hold for
+// every executor by construction, not by each site remembering them. It takes
+// the error whatever it is, nil included, so no caller pre-checks anything.
+//
+// It is named for the act, checking one literal, so it cannot be mistaken for
+// decideLexicalByFacets, which is a case executor and one of its callers.
+//
+// The literal's assertions facets are evaluated at the clock's current
+// dateTime, read per call: each literal is its own validation, which is the
+// episode cvc-xpath clause 6 holds the instant constant over.
+func checkLiteral(backend value.Backend, st *xsd.SimpleType, lexical string, ctx value.Context, c caseSpec) literalOutcome {
+	_, err := value.ValidateLexical(backend, noSchema{}, st, lexical, ctx, xpath.FacetAssertions(time.Now().UTC()))
+	if err == nil {
+		return literalValid
+	}
+	mustNotBePreconditionOrDecline(err, c, lexical)
+	if !value.IsDatatypeVerdict(err) {
+		return literalDeclined
+	}
+	return literalInvalid
+}
+
+// scoreLiterals scores the whole-instance outcome an executor folded from
+// checkLiteral. A declined outcome is Fail() before c.expect is read, which is
+// what makes it a decline (declines.go) and why it can never be a pass under
+// either expected validity; otherwise the instance is valid iff every literal
+// was, compared once against the suite's declared outcome.
+func scoreLiterals(c caseSpec, observed literalOutcome) Status {
+	if observed == literalDeclined {
+		return Fail()
+	}
+	observedValid := observed == literalValid
 	if observedValid == c.expect.wantsValid() {
 		return Pass()
 	}
@@ -1835,7 +1859,9 @@ func execAnyURIShapeCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleTyp
 // (value.IsAssertionDeclined). nil and a verdict pass, and so does a type
 // fault, the third non-verdict class value.IsDatatypeVerdict excludes: a
 // construction-stage failure such as a suite pattern regex.Translate cannot
-// express is not a harness bug, and this guard does not decide how it scores.
+// express (src-pattern-value, Datatypes §4.3.4.3) is not a harness bug, but it
+// is not a cvc-datatype-valid verdict about the literal either, so checkLiteral
+// reports it literalDeclined and scoreLiterals declines the case.
 //
 // Every leaf reaching value.ValidateLexical here is synthesized through
 // buildOwnFacets, which declines a case pairing a facet with a primitive the

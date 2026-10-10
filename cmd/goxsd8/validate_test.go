@@ -98,9 +98,35 @@ func TestValidateRendersDelegatedVerdictWithoutPlaceholder(t *testing.T) {
 	if code := run([]string{"validate", "-schema", orderSchema, invalidInstance}, &stdout, &stderr); code != exitInvalid {
 		t.Fatalf("code = %d, want %d (stderr %q)", code, exitInvalid, stderr.String())
 	}
-	const want = invalidInstance + `:5:3: [cvc-attribute] the ·initial value· of the attribute sku is not ·valid· with respect to its declaration's {type definition} {http://example.com/order}Sku, which cvc-attribute clause 3 requires as per String Valid (§3.16.4): [cvc-pattern-valid] value "nope" matches no member of the pattern facet of the simple type {http://example.com/order}Sku, whose {value} holds "[A-Z]{3}-[0-9]{4}" (cvc-pattern-valid, §4.3.4.4)`
+	const want = invalidInstance + `:5:3: [cvc-attribute] the ·initial value· of the attribute sku is not ·valid· with respect to its declaration's {type definition} {http://example.com/order}Sku, which cvc-attribute clause 3 requires as per String Valid (§3.16.4): [cvc-pattern-valid] "nope" matches no member of the pattern facet of the simple type {http://example.com/order}Sku, whose {value} holds "[A-Z]{3}-[0-9]{4}", but cvc-pattern-valid requires one to match`
 	if line, _, _ := strings.Cut(stdout.String(), "\n"); line != want {
 		t.Errorf("first line =\n%s\nwant\n%s", line, want)
+	}
+}
+
+// TestValidateRendersALexicalSpaceFaultWhole pins the whole line validate
+// prints for <amount>12,50</amount> against an element of type xs:decimal:
+// the cvc-datatype-valid cause the strict backend builds opens with the
+// lexical and the type and closes with its rule inline (STYLE E5), with no
+// trailing production-and-section parenthetical (#2371). The outer cvc-type
+// sentence is pinned as validate renders it today; #2370 owns its wording.
+func TestValidateRendersALexicalSpaceFaultWhole(t *testing.T) {
+	dir := t.TempDir()
+	schema := filepath.Join(dir, "s.xsd")
+	instance := filepath.Join(dir, "a.xml")
+	if err := os.WriteFile(schema, []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="amount" type="xs:decimal"/></xs:schema>`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(instance, []byte(`<amount>12,50</amount>`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"validate", "-schema", schema, instance}, &stdout, &stderr); code != exitInvalid {
+		t.Fatalf("code = %d, want %d (stdout %q, stderr %q)", code, exitInvalid, stdout.String(), stderr.String())
+	}
+	want := instance + `:1:1: [cvc-type] the ·initial value· of the element amount is not ·valid· with respect to its ·governing type definition· {http://www.w3.org/2001/XMLSchema}decimal, which cvc-type clause 3.1.3 requires as per String Valid (§3.16.4): [cvc-datatype-valid] "12,50" is not in the lexical space of decimal, which cvc-datatype-valid clause 2.1 requires it to be in` + "\n"
+	if got := stdout.String(); got != want {
+		t.Errorf("stdout =\n%s\nwant\n%s", got, want)
 	}
 }
 
@@ -133,7 +159,7 @@ func TestValidateNamesTheBuiltinPatternAndItsDeclaringType(t *testing.T) {
 	if code != exitInvalid {
 		t.Fatalf("code = %d, want %d (stdout %q, stderr %q)", code, exitInvalid, stdout, stderr)
 	}
-	const want = `[cvc-pattern-valid] value "x3" matches no member of the pattern facet of the simple type {http://www.w3.org/2001/XMLSchema}integer, whose {value} holds "[\-+]?[0-9]+" (cvc-pattern-valid, §4.3.4.4)`
+	const want = `[cvc-pattern-valid] "x3" matches no member of the pattern facet of the simple type {http://www.w3.org/2001/XMLSchema}integer, whose {value} holds "[\-+]?[0-9]+", but cvc-pattern-valid requires one to match`
 	if !strings.Contains(stdout, want) {
 		t.Errorf("stdout =\n%s\nwant it to carry\n%s", stdout, want)
 	}
@@ -157,7 +183,7 @@ func TestValidateIntPatternRuleAndExitCode(t *testing.T) {
 	if prefix := instance + ":1:1: [cvc-type] "; !strings.HasPrefix(line, prefix) {
 		t.Errorf("first line = %q, want it to open %q", line, prefix)
 	}
-	if !strings.Contains(line, `: [cvc-pattern-valid] value "x3" `) {
+	if !strings.Contains(line, `: [cvc-pattern-valid] "x3" `) {
 		t.Errorf("first line = %q, want the cvc-type charge to wrap a cvc-pattern-valid verdict on \"x3\"", line)
 	}
 }
@@ -889,6 +915,18 @@ func TestValidateSchemaFlagIsRepeatable(t *testing.T) {
 // them collapse into one line.
 func TestValidateUsageErrors(t *testing.T) {
 	dir := t.TempDir()
+	xmlDir := filepath.Join(dir, "d.xml")
+	forcedDir := filepath.Join(dir, "forced")
+	plainDir := filepath.Join(dir, "plain")
+	linkDir := filepath.Join(dir, "link.xml")
+	for _, d := range []string{xmlDir, forcedDir, plainDir} {
+		if err := os.Mkdir(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Symlink(xmlDir, linkDir); err != nil {
+		t.Fatal(err)
+	}
 	cases := []struct {
 		name string
 		args []string
@@ -906,7 +944,19 @@ func TestValidateUsageErrors(t *testing.T) {
 		{"schema is a directory", []string{"validate", "-schema", dir, validInstance}, "is a directory"},
 		{"schema from stdin", []string{"validate", "-schema", "-", validInstance}, "standard input is not a schema location"},
 		{"missing instance", []string{"validate", "-schema", orderSchema, "testdata/nosuch.xml"}, "no such file or directory"},
-		{"stdin needs -format", []string{"validate", "-schema", orderSchema, "-"}, "carries no extension to name a source format"},
+		// - defaults to xml only while json and ber are reserved: a forced
+		// reserved token still answers before standard input is read (#2403).
+		{"stdin forced json is reserved", []string{"validate", "-format", "json", "-schema", orderSchema, "-"}, "-: -format json is reserved by the contract"},
+		// A directory instance is charged as a directory before formatOf reads
+		// its extension, whatever its name and whatever -format forced (#2403):
+		// "." and the extension-less directory answered with the extension
+		// message without the check, and the .xml-named and forced ones with an
+		// exit-1 [xml-wf] read failure.
+		{"instance is .", []string{"validate", "-schema", orderSchema, "."}, "goxsd8: validate: open .: is a directory"},
+		{"instance is a directory", []string{"validate", "-schema", orderSchema, plainDir}, "goxsd8: validate: open " + plainDir + ": is a directory"},
+		{"instance is a directory named .xml", []string{"validate", "-schema", orderSchema, xmlDir}, "goxsd8: validate: open " + xmlDir + ": is a directory"},
+		{"instance is a directory under -format", []string{"validate", "-format", "xml", "-schema", orderSchema, forcedDir}, "goxsd8: validate: open " + forcedDir + ": is a directory"},
+		{"instance is a link to a directory", []string{"validate", "-schema", orderSchema, linkDir}, "goxsd8: validate: open " + linkDir + ": is a directory"},
 		// -help=true is not one of the three help spellings, at any position
 		// (doc.go's argument vocabulary); after a subcommand it is a flag whose
 		// value that subcommand does not accept.
@@ -988,7 +1038,6 @@ func TestValidateAdversarialArguments(t *testing.T) {
 		{"validate", "-out"},
 		{"validate", "-no-hints"},
 		{"validate", "-schema", orderSchema, ""},
-		{"validate", "-schema", orderSchema, "-"},
 		{"validate", "-schema", orderSchema, "\x00\x01.xml"},
 		{"validate", "-schema", strings.Repeat("a/", 200) + "x.xsd", validInstance},
 		{"validate", "-schema", orderSchema, strings.Repeat("a/", 200) + "x.xml"},

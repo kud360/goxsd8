@@ -64,7 +64,7 @@ const fixtureFetchTimeout = 60 * time.Second
 // are already in the object store.
 func requireFixtures(t *testing.T, dir, base, head string) {
 	t.Helper()
-	unusable := fixtureUsable(dir, base, head)
+	unusable := checkFixtureUsable(dir, base, head)
 	if unusable == nil {
 		return
 	}
@@ -74,34 +74,37 @@ func requireFixtures(t *testing.T, dir, base, head string) {
 			"every recovery path here goes through origin, so check this environment's access to it first",
 			base, head, unusable, base, head, err, out, recoveryHint(dir))
 	}
-	if remaining := fixtureUsable(dir, base, head); remaining != nil {
+	if remaining := checkFixtureUsable(dir, base, head); remaining != nil {
 		t.Fatalf("fixture pair %s..%s is still unusable after git fetch origin reported success: %v\n%s%s"+
 			"origin served these objects but not the history linking them; re-run, or fetch the two hashes by hand",
 			base, head, remaining, out, recoveryHint(dir))
 	}
 }
 
-// fixtureUsable reports what stops checkLanding from running against the
-// pair, or nil when nothing does. Object presence is not the bar: a commit
-// fetched at --depth=1 resolves while its parent links do not, and the pair
-// then fails precondition 2 as a stale base — a defect verdict pinned on
-// what is really a fixture problem.
-func fixtureUsable(dir, base, head string) error {
+// checkFixtureUsable reports what stops checkLanding from running against
+// the pair, or nil when nothing does. Object presence is not the bar: a
+// commit fetched at --depth=1 resolves while its parent links do not. The
+// history is probed with gitDiffLog itself, the command checkLanding needs:
+// `git merge-base --is-ancestor` exits 0 over truncated history the diff
+// then dies on with `no merge base` (#1400).
+func checkFixtureUsable(dir, base, head string) error {
 	for _, sha := range []string{base, head} {
 		if err := exec.Command("git", "-C", dir, "rev-parse", "--verify", "--quiet", sha+"^{commit}").Run(); err != nil {
 			return fmt.Errorf("commit %s does not resolve in this checkout: %w", sha, err)
 		}
 	}
-	if err := exec.Command("git", "-C", dir, "merge-base", "--is-ancestor", base, head).Run(); err != nil {
-		return fmt.Errorf("commit %s is not visible as an ancestor of %s, so the history between them is truncated here: %w", base, head, err)
+	if _, err := gitDiffLog(dir, base, head); err != nil {
+		return fmt.Errorf("the history between %s and %s is truncated here: %w", base, head, err)
 	}
 	return nil
 }
 
 // fetchCommits asks origin for these two commits by hash. The fetch carries
-// no --depth on purpose: --depth=1 returns the objects without their parent
-// links, leaving the pair resolvable and still unusable, and on a complete
-// clone any --depth would newly truncate history the developer had (#1359).
+// no --depth on purpose: a depth-limited fetch leaves the pair unusable as
+// checkFixtureUsable says, and on a complete clone any --depth would newly
+// truncate history the developer had (#1359). It writes to the checkout's
+// own .git — objects added and FETCH_HEAD rewritten — and leaves the work
+// tree alone.
 func fetchCommits(dir, base, head string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), fixtureFetchTimeout)
 	defer cancel()
@@ -303,6 +306,15 @@ func TestAddedLinesEmptyDiff(t *testing.T) {
 // change what the fixture builds.
 func gitIn(t *testing.T, dir string, args ...string) {
 	t.Helper()
+	out, err := fixtureGit(dir, args...).CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
+	}
+}
+
+// fixtureGit is the command gitIn runs, for a caller that expects git to
+// fail.
+func fixtureGit(dir string, args ...string) *exec.Cmd {
 	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
 	cmd.Env = append(os.Environ(),
 		"GIT_CONFIG_GLOBAL="+os.DevNull,
@@ -311,10 +323,7 @@ func gitIn(t *testing.T, dir string, args ...string) {
 		"GIT_COMMITTER_NAME=landcheck test", "GIT_COMMITTER_EMAIL=landcheck@example.invalid",
 		"GIT_TERMINAL_PROMPT=0",
 	)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
-	}
+	return cmd
 }
 
 // commitLog appends line to docs/LOG/2026-09.md in dir and commits it.
@@ -348,7 +357,7 @@ func newPushedBranch(t *testing.T) string {
 	if err := os.MkdirAll(work+"/docs/LOG", 0o755); err != nil {
 		t.Fatalf("creating docs/LOG: %v", err)
 	}
-	commitLog(t, work, "base entry (#1)")
+	commitLog(t, work, "## base entry (#1)")
 	gitIn(t, work, "push", "-q", "-u", "origin", "main")
 	gitIn(t, work, "checkout", "-q", "-b", "wip/issue-1499")
 	gitIn(t, work, "commit", "-q", "--allow-empty", "-m", "implementation")
@@ -360,7 +369,7 @@ func newPushedBranch(t *testing.T) string {
 // clean one holds a LOG entry naming #1499 at local HEAD, which checkLanding
 // alone would pass, so each non-zero outcome is the pushed-head check's.
 func TestRunPushedHead(t *testing.T) {
-	const entry = "landed (#1499)"
+	const entry = "## landed (#1499)"
 	tests := []struct {
 		name string
 		// arrange takes the repo from newPushedBranch's state to the case's.
@@ -411,7 +420,7 @@ func TestRunPushedHead(t *testing.T) {
 			name: "HEAD one behind its upstream: operational",
 			arrange: func(t *testing.T, dir string) {
 				commitLog(t, dir, entry)
-				commitLog(t, dir, "later note")
+				commitLog(t, dir, "## later note")
 				gitIn(t, dir, "push", "-q")
 				gitIn(t, dir, "reset", "-q", "--hard", "HEAD~1")
 			},
@@ -485,7 +494,8 @@ func TestRunClosingKeywords(t *testing.T) {
 			args: func(t *testing.T) []string {
 				return append([]string{"-issue", "1499"}, textArgs(t, "landed (#1499)\n\nCloses #1499.\n", "Closes #1499.\n")...)
 			},
-			wantOutput: "landcheck: docs/LOG/ names #1499: landed (#1499)\n" +
+			wantOutput: "landcheck: docs/LOG/ names #1499: ## landed (#1499)\n" +
+				"landcheck: docs/LOG/ keeps every line of origin/main in place\n" +
 				"landcheck: squash text: closing keywords bind #1499\n" +
 				"landcheck: PR description: closing keywords bind #1499\n",
 		},
@@ -495,7 +505,8 @@ func TestRunClosingKeywords(t *testing.T) {
 				return append([]string{"-issue", "1499"}, textArgs(t, "landed (#1499)\n\nCloses #1499, #1500.\n", "Closes #1499.\n")...)
 			},
 			wantCode: 1,
-			wantOutput: "landcheck: docs/LOG/ names #1499: landed (#1499)\n" +
+			wantOutput: "landcheck: docs/LOG/ names #1499: ## landed (#1499)\n" +
+				"landcheck: docs/LOG/ keeps every line of origin/main in place\n" +
 				"landcheck: squash text: \"Closes #1499\" is the comma form: a further reference follows #1499, and the keyword closes only #1499\n" +
 				"landcheck: PR description: closing keywords bind #1499\n",
 		},
@@ -504,7 +515,8 @@ func TestRunClosingKeywords(t *testing.T) {
 			args: func(t *testing.T) []string {
 				return append([]string{"-no-issue"}, textArgs(t, "meta: backlog 2026-09-26\n", "Names and leaves open #345.\n")...)
 			},
-			wantOutput: "landcheck: squash text: closing keywords bind nothing\n" +
+			wantOutput: "landcheck: docs/LOG/ keeps every line of origin/main in place\n" +
+				"landcheck: squash text: closing keywords bind nothing\n" +
 				"landcheck: PR description: closing keywords bind nothing\n",
 		},
 		{
@@ -513,7 +525,8 @@ func TestRunClosingKeywords(t *testing.T) {
 				return append([]string{"-no-issue"}, textArgs(t, "meta: backlog 2026-09-25\n", "- Fixes #345's stale premise.\n")...)
 			},
 			wantCode: 1,
-			wantOutput: "landcheck: squash text: closing keywords bind nothing\n" +
+			wantOutput: "landcheck: docs/LOG/ keeps every line of origin/main in place\n" +
+				"landcheck: squash text: closing keywords bind nothing\n" +
 				"landcheck: PR description: \"Fixes #345\" binds #345 in a PR that closes no issue\n",
 		},
 		{
@@ -553,7 +566,7 @@ func TestRunClosingKeywords(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := newPushedBranch(t)
-			commitLog(t, dir, "landed (#1499)")
+			commitLog(t, dir, "## landed (#1499)")
 			gitIn(t, dir, "push", "-q")
 			args := tc.args(t)
 			t.Chdir(dir)

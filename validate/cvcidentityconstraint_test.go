@@ -413,13 +413,13 @@ func TestFieldSelectsADefaultedAttribute(t *testing.T) {
 		clause(t, got, "4.3")
 		icWantCharges(t, icAssess(t, schema, icRoot(icDItem(2, "2"), dref)))
 	})
-	// A ·defaulted attribute· whose declaration's {type definition} is not
-	// simple has no [schema actual value] this processor can read, so the key
-	// declines at its owner rather than charging clause 4.2.1 for a short
-	// sequence (the GAP on icCheck.fieldDefaultedAttributes).
-	t.Run("defaulted attribute with a complex type declines", func(t *testing.T) {
-		complexKey := icDef(t, "C", xsd.IdentityConstraintKey, "ditem", nil, "", "@dc")
-		got, undecided := assessRecorded(t, icDefaultedAttrSchema(t, []xsd.IdentityConstraint{complexKey}), icRoot(icDItem(2)))
+	// A ·defaulted attribute· whose declaration's {type definition} is absent
+	// has no [schema actual value] this processor can read, so the key declines
+	// at its owner rather than charging clause 4.2.1 for a short sequence (the
+	// GAP on icCheck.fieldDefaultedAttributes).
+	t.Run("defaulted attribute with an absent type declines", func(t *testing.T) {
+		typelessKey := icDef(t, "C", xsd.IdentityConstraintKey, "ditem", nil, "", "@dc")
+		got, undecided := assessRecorded(t, icDefaultedAttrSchema(t, []xsd.IdentityConstraint{typelessKey}), icRoot(icDItem(2)))
 		wantSilence(t, got, "a declined field charges nothing")
 		wantDeclines(t, icDeclines(undecided),
 			Unevaluated{rule: ruleCvcIdentityConstraint, loc: loc(2, 1), msg: "clauses 3 and 4 are undecided"})

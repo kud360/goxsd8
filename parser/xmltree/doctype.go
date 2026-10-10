@@ -714,15 +714,18 @@ func (sc *subsetScan) attValueFault(what, lit string) error {
 // names no external subset and whose internal subset references no parameter
 // entity. There each EntityRef ([68]) the default value holds directly must
 // name a general entity declared before the <!ATTLIST>, and each one the
-// replacement text of an entity it reaches holds — recognized where that text
-// is included in the default value (XML 1.0 §4.4.2, §4.4.5), so not within a
-// parameter entity — must name one declared before the <!ATTLIST> or after it,
-// an indirect reference to an entity declared after it being VC: Entity
-// Declared's alone. Either way the constraint counts only a declaration
-// outside every parameter entity's replacement text (entityDecl.inPE), and
-// never asks a predefined name (amp, lt, gt, apos, quot; §4.6) to be declared.
-// So under standalone="yes" an entity declared only in a parameter entity is
-// declared for none of these references, and an entity whose replacement text
+// replacement text of an entity it reaches holds must name one declared before
+// the <!ATTLIST> or after it, an indirect reference to an entity declared after
+// it being VC: Entity Declared's alone — unless the binding declaration (§4.2)
+// of the entity whose replacement text holds it stands in a parameter entity's
+// replacement text, where the reference occurs within that parameter entity
+// and the constraint does not bind it, as Reader.withinPE reads a reference
+// in included replacement text (#2365). Either way the constraint counts only
+// a declaration outside every parameter entity's replacement text
+// (entityDecl.inPE), and never asks a predefined name (amp, lt, gt, apos,
+// quot; §4.6) to be declared. So under standalone="yes" an entity declared
+// only in a parameter entity is declared for none of these references, and an
+// entity declared outside every parameter entity whose replacement text
 // references a name declared nowhere breaks the constraint once a default value
 // references it, though its declaration alone does not. Where the constraint
 // does not bind, a reference to a name declared nowhere is passed over.
@@ -843,10 +846,12 @@ type walkFrame struct {
 // entity it reaches, and returns the fault of the first it finds: an entity
 // enter refuses, a reference to one already on the path (XML 1.0 WFC: No
 // Recursion), or, where declared, a reference to a name no declaration outside
-// every parameter entity declares (WFC: Entity Declared). The path is a slice,
-// not the call stack, so entities nested as deeply as the subset can declare
-// them cost no recursion and no bound. A predefined name is passed over, and
-// so, unless declared, is one declared nowhere.
+// every parameter entity declares, in the replacement text of an entity whose
+// binding declaration stands outside every parameter entity too (WFC: Entity
+// Declared; see defaultsFault). The path is a slice, not the call stack, so
+// entities nested as deeply as the subset can declare them cost no recursion
+// and no bound. A predefined name is passed over, and so, unless declared, is
+// one declared nowhere.
 func (g *entityGraph) fault(about, name string) error {
 	if g.state[name] == walked {
 		return nil
@@ -867,7 +872,7 @@ func (g *entityGraph) fault(about, name string) error {
 		if _, builtin := predefined[ref]; builtin {
 			continue
 		}
-		if _, counted := g.outside[ref]; g.declared && !counted {
+		if _, counted := g.outside[ref]; g.declared && !counted && !g.decls[g.first[top.name]].inPE {
 			return xsderr.New(xsderr.RuleXMLWellFormed, g.loc, "%s that references, directly or indirectly, entity %s, whose replacement text references entity %s, which no general entity declaration outside every parameter entity declares (XML 1.0 WFC: Entity Declared)", about, top.name, ref)
 		}
 		if _, known := g.first[ref]; !known {
@@ -1427,8 +1432,8 @@ func isLiteral(t string) bool {
 }
 
 // declSpace is XML 1.0's S production: the white space that separates the
-// tokens of a markup declaration, and the only character data that may follow
-// the document element (see trailerFault).
+// tokens of a markup declaration, and the only character data that may precede
+// or follow the document element (see outsideRootFault).
 const declSpace = " \t\r\n"
 
 // declTokens splits a markup declaration body on white space, keeping each

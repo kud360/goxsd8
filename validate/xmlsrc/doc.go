@@ -36,8 +36,6 @@
 // could only be there is rejected with a message saying the DTD was not fully
 // read, rather than that the name is undeclared.
 //
-//   - GAP(xml): content OUTSIDE the document element is not inspected:
-//     character data before it is dropped, and anything after its end tag
-//     is never read, so trailing character content and a second document
-//     element alike go unreported. Tracked by #753.
+// Validate's doc comment owns which of its two error channels a source fault
+// reaches.
 package xmlsrc

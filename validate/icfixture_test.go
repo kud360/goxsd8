@@ -584,15 +584,14 @@ func icTabledE(line int, wid string) *testElement {
 // xs:integer attributes whose declarations carry a default, so an element that
 // omits one has a ·defaulted attribute· (key-dflt-att) for a `@NameTest` field
 // to select. @dw is one no fixture's field selects, so offering it would fill
-// a slot twice. @dc's declaration names a COMPLEX {type definition}, which
-// only an assembly that reaches no a-props-correct check admits, so a field
-// selecting it has no simple type to read a value through. @dq and <dqe> are
-// xs:QName defaults of "p:a" whose {value constraint} alone binds p (to
-// urn:a), which no instance here declares.
+// a slot twice. @dc's declaration has an ABSENT {type definition} (aUse), so
+// a field selecting it has no simple type to read a value through. @dq and
+// <dqe> are xs:QName defaults of "p:a" whose {value constraint} alone binds p
+// (to urn:a), which no instance here declares.
 //
 //	root   RootType   sequence( ditem*, dref* )
 //	ditem  DItemType  sequence( dqe? ), @dv xs:integer default "1",
-//	                  @dw default "9", @dc DRefType default "c",
+//	                  @dw default "9", @dc (no type) default "c",
 //	                  @dq xs:QName default "p:a"
 //	dqe               xs:QName default "p:a"
 //	dref   DRefType   empty, @dr xs:integer default "2"
@@ -603,6 +602,7 @@ func icDefaultedAttrSchema(t *testing.T, rootICs []xsd.IdentityConstraint) *xsd.
 		return typedUse(t, local, typ, false, &vc, nil)
 	}
 	integer := icBuiltin("integer")
+	dcDefault := xsd.NewValueConstraint(xsd.ValueDefault, "c", nil, nil)
 	qnameDefault := xsd.NewValueConstraint(xsd.ValueDefault, "p:a",
 		[]xsd.NamespaceBinding{xsd.NewNamespaceBinding("p", "urn:a")}, nil)
 	scope, err := xsd.NewLocalScope(xsderr.Loc{}, xsd.ComplexTypeScopeParent{Name: xsd.QName{Local: "DItemType"}})
@@ -617,7 +617,7 @@ func icDefaultedAttrSchema(t *testing.T, rootICs []xsd.IdentityConstraint) *xsd.
 	dItemType := icComplex(t, "DItemType", []xsd.AttributeUse{
 		defaulted("dv", integer, "1"),
 		defaulted("dw", integer, "9"),
-		defaulted("dc", xsd.QName{Local: "DRefType"}, "c"),
+		aUse(t, "dc", false, &dcDefault),
 		typedUse(t, "dq", icBuiltin("QName"), false, &qnameDefault, nil),
 	}, icContent(t, icOptional(t, dqe)))
 	dRefType := icComplex(t, "DRefType", []xsd.AttributeUse{defaulted("dr", integer, "2")}, xsd.EmptyContent{})

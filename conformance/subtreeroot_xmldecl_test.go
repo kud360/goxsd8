@@ -21,8 +21,10 @@ import (
 // included (XML 1.0 §2.8 Note, §4.3.3). The marked 1.1 and 1.10 rows fail when
 // rawDecoder hands As10 the mark: As10 then meets no '<?xml', and encoding/xml
 // stops on the unrewritten label with `unsupported version`. The doubled-mark
-// 1.1 row fails if the mark is read past more than once: xmltree drops one
-// mark and refuses that document.
+// rows fail if the mark is read past more than once: xmltree drops one mark
+// and refuses the second as character data before the document element that
+// is no S ([22] prolog, [27] Misc), which rawDecoder's readers refuse in
+// rootStart.
 func TestRawReadsAdmitTheLabelXmltreeAdmits(t *testing.T) {
 	const mark = "\xEF\xBB\xBF"
 	const body = `<known>x</known>`
@@ -36,8 +38,9 @@ func TestRawReadsAdmitTheLabelXmltreeAdmits(t *testing.T) {
 		{mark + `<?xml version="1.0"?>`, true},
 		{mark + `<?xml version="1.1"?>`, true},
 		{mark + `<?xml version='1.10' standalone='no'?>`, true},
-		{mark + mark + `<?xml version="1.0"?>`, true},
+		{mark + mark + `<?xml version="1.0"?>`, false},
 		{mark + mark + `<?xml version="1.1"?>`, false},
+		{mark + mark, false},
 		{`<?xml version="2.1"?>`, false},
 	} {
 		doc := tc.prolog + body

@@ -99,8 +99,10 @@
 // (a list of xs:byte, whose mapping is xs:decimal's) reject an out-of-range item
 // — and then its own facets over the resulting sequence. A union has no
 // whiteSpace facet at all: it hands the RAW literal to its member types in
-// order, and the first one that is itself datatype-valid supplies both the value
-// and the whiteSpace normalization its own pattern facet then matches against —
+// order, and the first one that is itself datatype-valid supplies the value, the
+// whiteSpace normalization its own pattern facet then matches against, and the
+// type its own assertions facet binds `$value` under (dt-xdmrep clause 4): that
+// ·active basic member·, never the union, is the st the evaluator is handed —
 // so a union's value is always some member's value, never a wrapper of its own.
 // [ValidatingType] names that member (key-vtype §3.16.4 cl.1, the ·validating
 // type·): st itself, or the ·active basic member· a union dispatched to. Its

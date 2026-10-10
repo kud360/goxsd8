@@ -2,6 +2,7 @@ package xpath
 
 import (
 	"testing"
+	"time"
 
 	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
@@ -73,7 +74,7 @@ func asChildren(t *testing.T, children ...asChild) ChildElements {
 			out = append(out, Child(c.name, nil))
 			continue
 		}
-		v, err := value.ValidateLexical(backend(), seededTypes, asBuiltin(t, c.typ), c.lexical, nil, FacetAssertions())
+		v, err := value.ValidateLexical(backend(), seededTypes, asBuiltin(t, c.typ), c.lexical, nil, FacetAssertions(time.Time{}))
 		if err != nil {
 			t.Fatalf("mapping %q as xs:%s: %v", c.lexical, c.typ, err)
 		}
@@ -103,21 +104,20 @@ func asChildTypes(t *testing.T) ElementTypes {
 // A child-axis step reads E's element [[children]] (cvc-assertion clause 1.2)
 // TYPED, under the simple type the child's ·locally declared type· has its
 // value in (xpath-datamodel §6.2.4). `e1 = 'present'` holds over
-// <e1>present</e1> and is false over <e1>absent</e1>; `a and b` is false with b
-// absent, the empty node sequence's effective boolean value (xpath20.md §2.4.3
-// rule 1). The values are typed: `n > 9` over n = 10 holds as xs:int, where an
-// xs:string comparison would not. Two children of one name are a sequence: a
-// general comparison is existential over it and a value comparison is
-// err:XPTY0004 (§3.5.1 step 3), false under fn:not too. A ·nilled· child is a
-// node — `e1` holds — with no atom, so `e1 = 'present'` and `e1 = ”` are
-// false and the first one's fn:not true. Every row declines at
-// CompileAssertionTest, and so fails, with ctaAssertionFacade.child declining.
+// <e1>present</e1> and is false over <e1>absent</e1>. The values are typed: `n
+// > 9` over n = 10 holds as xs:int, where an xs:string comparison would not.
+// Two children of one name are a sequence: a general comparison is existential
+// over it and a value comparison is err:XPTY0004 (§3.5.1 step 3), false under
+// fn:not too. A ·nilled· child has no atom, so `e1 = 'present'` and `e1 = ”`
+// are false and the first one's fn:not true. A step whose existence alone is
+// asked, `a and b`, reads the [Tally] instead (assertionstep_test.go). Every
+// row declines at CompileAssertionTest, and so fails, with
+// ctaAssertionFacade.child declining.
 func TestAssertionReadsChildElements(t *testing.T) {
 	elems := asChildTypes(t)
 	present := asChild{uq("e1"), "string", "present", false}
 	absent := asChild{uq("e1"), "string", "absent", false}
 	nilled := asChild{name: uq("e1"), nilled: true}
-	a, b, d := asChild{uq("a"), "string", "", false}, asChild{uq("b"), "string", "", false}, asChild{uq("d"), "string", "", false}
 	two := asChild{uq("n"), "int", "2", false}
 	for _, tc := range []struct {
 		expr     string
@@ -129,17 +129,12 @@ func TestAssertionReadsChildElements(t *testing.T) {
 		{"e1 = 'present'", nil, false},
 		{"e1 eq 'present'", []asChild{present}, true},
 		{"not(e1 = 'present')", []asChild{absent}, true},
-		{"a and b", []asChild{a, b}, true},
-		{"a and b", []asChild{a}, false},
-		{"a and b and d", []asChild{a, b, d}, true},
-		{"a and b and d", []asChild{a, d}, false},
 		{"n > 9", []asChild{{uq("n"), "int", "10", false}}, true},
 		{"n = 2", []asChild{{uq("n"), "int", "1", false}, two}, true},
 		{"n eq 2", []asChild{two, two}, false},
 		{"not(n eq 2)", []asChild{two, two}, false},
 		{"c = 5", []asChild{{uq("c"), "int", "+5", false}}, true},
 		{"e1 cast as xs:token = 'present'", []asChild{present}, true},
-		{"e1", []asChild{nilled}, true},
 		{"e1 = 'present'", []asChild{nilled}, false},
 		{"not(e1 = 'present')", []asChild{nilled}, true},
 		{"e1 = ''", []asChild{nilled}, false},
@@ -151,7 +146,7 @@ func TestAssertionReadsChildElements(t *testing.T) {
 			if !ok {
 				t.Fatalf("CompileAssertionTest(%q): declined, want compiled", tc.expr)
 			}
-			if got := test.Evaluate(backend(), seededTypes, asValues(t), asChildren(t, tc.children...), nil, ValueBinding{}); got != tc.want {
+			if got := test.Evaluate(backend(), seededTypes, asElem, asValues(t), asChildren(t, tc.children...), nil, ValueBinding{}, time.Time{}); got != tc.want {
 				t.Errorf("Evaluate(%q) over %v = %v, want %v", tc.expr, tc.children, got, tc.want)
 			}
 		})
@@ -160,15 +155,15 @@ func TestAssertionReadsChildElements(t *testing.T) {
 
 // A child's value of the wrong arm breaks the obligation [ChildElements]
 // states, and every node reading it raises: an [Untyped] value under a typed
-// name makes `e1 = 'present'`, its fn:not, and `e1` itself false.
+// name makes `e1 = 'present'`, its fn:not, and a cast of `e1` false.
 func TestAssertionRaisesOnAnUntypedChild(t *testing.T) {
 	children := func(yield func(ChildElement) bool) { yield(Child(uq("e1"), Untyped("present"))) }
-	for _, expr := range []string{"e1 = 'present'", "not(e1 = 'present')", "e1"} {
+	for _, expr := range []string{"e1 = 'present'", "not(e1 = 'present')", "e1 cast as xs:string"} {
 		test, ok := CompileAssertionTest(asRecord(expr), seededTypes, xsd.ElementContent{}, asUses(t, nil), asChildTypes(t))
 		if !ok {
 			t.Fatalf("CompileAssertionTest(%q): declined, want compiled", expr)
 		}
-		if test.Evaluate(backend(), seededTypes, asValues(t), children, nil, ValueBinding{}) {
+		if test.Evaluate(backend(), seededTypes, asElem, asValues(t), children, nil, ValueBinding{}, time.Time{}) {
 			t.Errorf("Evaluate(%q) over an Untyped child = true, want false: the read raises", expr)
 		}
 	}
@@ -189,7 +184,7 @@ func TestAssertionRootedPathRaises(t *testing.T) {
 			t.Fatalf("CompileAssertionTest(%q): declined, want compiled", expr)
 		}
 		for _, e1 := range []string{"present", "absent"} {
-			if test.Evaluate(backend(), seededTypes, asValues(t), asChildren(t, asChild{uq("e1"), "string", e1, false}), nil, ValueBinding{}) {
+			if test.Evaluate(backend(), seededTypes, asElem, asValues(t), asChildren(t, asChild{uq("e1"), "string", e1, false}), nil, ValueBinding{}, time.Time{}) {
 				t.Errorf("Evaluate(%q) over <e1>%s</e1> = true, want false: the leading slash raises err:XPDY0050", expr, e1)
 			}
 		}
@@ -206,7 +201,7 @@ func TestAssertionChildStepReadsTheDefaultNamespace(t *testing.T) {
 	str := asBuiltin(t, "string")
 	tns, local := xsd.QName{Space: "urn:t", Local: "e1"}, uq("e1")
 	elems := asElems(map[xsd.QName]xsd.TypeDefinition{tns: str, local: str})
-	present, err := value.ValidateLexical(backend(), seededTypes, str, "present", nil, FacetAssertions())
+	present, err := value.ValidateLexical(backend(), seededTypes, str, "present", nil, FacetAssertions(time.Time{}))
 	if err != nil {
 		t.Fatalf("mapping present: %v", err)
 	}
@@ -227,14 +222,15 @@ func TestAssertionChildStepReadsTheDefaultNamespace(t *testing.T) {
 			t.Fatalf("%s: CompileAssertionTest(%q) declined, want compiled", tc.why, tc.record.Expression())
 		}
 		children := func(yield func(ChildElement) bool) { yield(Child(tc.childName, Typed(present))) }
-		if got := test.Evaluate(backend(), seededTypes, asValues(t), children, nil, ValueBinding{}); got != tc.want {
+		if got := test.Evaluate(backend(), seededTypes, asElem, asValues(t), children, nil, ValueBinding{}, time.Time{}); got != tc.want {
 			t.Errorf("%s: Evaluate = %v, want %v", tc.why, got, tc.want)
 		}
 	}
 }
 
 // A child-axis step DECLINES where the child's type is not fixed at compile
-// time or is not one simple type this engine reads (ctaAssertionFacade.child),
+// time, or is neither one simple type this engine reads nor of mixed content
+// (ctaAssertionFacade.child; assertionmixed_test.go reads the mixed one),
 // and every path but one step, rooted or not, declines in the grammar in a
 // comparison's position — the one position a child path of two or more steps
 // is admitted in is the whole operand of fn:exists, fn:empty or an ·effective
@@ -252,7 +248,6 @@ func TestCompileAssertionTestDeclinesChildSteps(t *testing.T) {
 		uq("q"):     asBuiltin(t, "QName"),
 		uq("sc"):    asComplex(t, "SpecialContent", xsd.SimpleContent{SimpleType: asBuiltin(t, "anySimpleType")}),
 		uq("eo"):    asComplex(t, "ElementOnly", asElementContent(t, false)),
-		uq("mixed"): asComplex(t, "Mixed", asElementContent(t, true)),
 		uq("empty"): asComplex(t, "Empty", xsd.EmptyContent{}),
 	})
 	for _, tc := range []struct{ expr, why string }{
@@ -268,8 +263,7 @@ func TestCompileAssertionTestDeclinesChildSteps(t *testing.T) {
 		{"u = 'a'", "a union's value takes its validating member's type"},
 		{"q = 'a'", "an xs:QName value has no canonical representation"},
 		{"eo = 'a'", "element-only content, whose atomization is a type error"},
-		{"mixed = 'a'", "mixed content, an xs:untypedAtomic this engine does not build"},
-		{"empty", "empty content"},
+		{"empty = 'a'", "empty content"},
 		{"n cast as xs:string = '5'", "a cast from a typed non-string child"},
 		{"child::e1 = 'a'", "the unabbreviated child axis"},
 		{"e1/e1 = 'a'", "a path of two steps"},
@@ -287,8 +281,9 @@ func TestCompileAssertionTestDeclinesChildSteps(t *testing.T) {
 
 // ReadsChild reports a child-axis step naming the name, wherever the tree
 // holds it — under a comparison, a cast, fn:not, and/or — and nothing else: an
-// attribute-only test, `$value`, and a rooted path, which raises before it
-// takes a step, read no child.
+// attribute-only test, `$value`, a rooted path, which raises before it takes a
+// step, and a step whose existence alone is asked, `a` in `a and …`, read no
+// child.
 func TestAssertionTestReadsChild(t *testing.T) {
 	elems := asChildTypes(t)
 	content := xsd.SimpleContent{SimpleType: asBuiltin(t, "int")}
@@ -298,7 +293,8 @@ func TestAssertionTestReadsChild(t *testing.T) {
 		reads []string
 	}{
 		{"e1 = 'present'", []string{"e1"}},
-		{"@x = 1 or not(a and b cast as xs:string = 'b')", []string{"a", "b"}},
+		{"@x = 1 or not(a and b cast as xs:string = 'b')", []string{"b"}},
+		{"e1 and exists(n)", nil},
 		{"$value eq n", []string{"n"}},
 		{"@x = 1", nil},
 		{"$value eq 1", nil},

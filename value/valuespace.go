@@ -476,15 +476,17 @@ func (vs valueSpace) values(r xsd.TypeResolver, ta *xsd.SimpleType, a xsd.ValueC
 // ConstraintContext is the [Context] vc.{lexical form} is mapped under: the
 // namespace bindings in scope at the schema-document element that wrote it
 // (§3.3.18, fixed there by cos-valid-simple-default clause 2), never the
-// instance's. Pass it as [ValidateLexical]'s or [ValidatingType]'s ctx wherever
-// the literal is a value constraint's {lexical form} supplied at assessment
-// time — a ·defaulted attribute· (key-dflt-att) or an element default (cvc-elt
-// clause 5.1.2). The prefix "xml" is always bound, to the XML namespace; the
-// empty prefix resolves to vc's {default namespace} where it has one and to no
-// namespace otherwise; every other prefix, "xmlns" included, resolves only
-// through a binding vc carries, and no schema document can declare "xmlns"
-// (Namespaces in XML §3). A vc that captured no bindings still yields a total,
-// non-nil context.
+// instance's. vc comes from [xsd.ElementDeclaration.ValueConstraint],
+// [xsd.AttributeDeclaration.ValueConstraint] or [xsd.AttributeUse.ValueConstraint],
+// or, for a ·defaulted attribute·, from [xsd.Schema.EffectiveValueConstraint]. Pass
+// it as [ValidateLexical]'s or [ValidatingType]'s ctx wherever the literal is a
+// value constraint's {lexical form} supplied at assessment time — a ·defaulted
+// attribute· (key-dflt-att) or an element default (cvc-elt clause 5.1.2). The
+// prefix "xml" is always bound, to the XML namespace; the empty prefix resolves to
+// vc's {default namespace} where it has one and to no namespace otherwise; every
+// other prefix, "xmlns" included, resolves only through a binding vc carries, and
+// no schema document can declare "xmlns" (Namespaces in XML §3). A vc that captured
+// no bindings still yields a total, non-nil context.
 func ConstraintContext(vc xsd.ValueConstraint) Context {
 	ns, ok := vc.DefaultNamespace()
 	return newNSContext(vc.NamespaceBindings(), ns, ok)

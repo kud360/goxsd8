@@ -2,6 +2,7 @@ package xpath
 
 import (
 	"testing"
+	"time"
 
 	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
@@ -34,7 +35,7 @@ func afEval(t *testing.T, expr string, attrs []asTyped, children ...asChild) boo
 	if !ok {
 		t.Fatalf("CompileAssertionTest(%q): declined, want compiled", expr)
 	}
-	return test.Evaluate(backend(), seededTypes, asValues(t, attrs...), asChildren(t, children...), nil, ValueBinding{})
+	return test.Evaluate(backend(), seededTypes, asElem, asValues(t, attrs...), asChildren(t, children...), nil, ValueBinding{}, time.Time{})
 }
 
 // afEvalValue compiles expr for an E with simple content of type st, or fails
@@ -45,7 +46,7 @@ func afEvalValue(t *testing.T, expr string, st *xsd.SimpleType, lexical string) 
 	if !ok {
 		t.Fatalf("CompileAssertionTest(%q): declined, want compiled", expr)
 	}
-	return test.Evaluate(backend(), seededTypes, asValues(t), asNoChildren, nil, asBind(t, st, lexical))
+	return test.Evaluate(backend(), seededTypes, asElem, asValues(t), asNoChildren, nil, asBind(t, st, lexical), time.Time{})
 }
 
 // Each string function decides both ways over an attribute, `$value` and a
@@ -114,12 +115,12 @@ func TestAssertionStringFunctions(t *testing.T) {
 
 // fn:empty and fn:exists test their `item()*` argument for the empty sequence
 // without atomizing it (§15.1.4, §15.1.5): an attribute present or absent, a
-// child present, absent or ·nilled· (a node with no value), `$value` over
-// non-simple content — which assert019 reads — and over simple content bound
-// and unbound. A rooted path raises err:XPDY0050 under either, which fn:not
-// propagates. fn:true() and fn:false() compile, and are constants whatever E
-// carries. Every row is declined at CompileAssertionTest, and fails, with
-// ctaFacade.callsLibrary false on the assertion façade.
+// cast of a child present or absent, `$value` over non-simple content — which
+// assert019 reads — and over simple content bound and unbound. A rooted path
+// raises err:XPDY0050 under either, which fn:not propagates. fn:true() and
+// fn:false() compile, and are constants whatever E carries. Every row is
+// declined at CompileAssertionTest, and fails, with ctaFacade.callsLibrary
+// false on the assertion façade.
 func TestAssertionPresenceFunctions(t *testing.T) {
 	s := []asTyped{{uq("s"), "string", "x"}}
 	for _, tc := range []struct {
@@ -132,10 +133,9 @@ func TestAssertionPresenceFunctions(t *testing.T) {
 		{"exists(@s)", nil, nil, false},
 		{"empty(@s)", s, nil, false},
 		{"empty(@s)", nil, nil, true},
-		{"exists(e1)", nil, []asChild{{uq("e1"), "string", "", false}}, true},
-		{"exists(e1)", nil, nil, false},
-		{"exists(e1)", nil, []asChild{{name: uq("e1"), nilled: true}}, true},
-		{"empty(e1)", nil, []asChild{{name: uq("e1"), nilled: true}}, false},
+		{"exists(e1 cast as xs:string)", nil, []asChild{{uq("e1"), "string", "", false}}, true},
+		{"exists(e1 cast as xs:string)", nil, nil, false},
+		{"empty(xs:string(e1))", nil, []asChild{{uq("e1"), "string", "", false}}, false},
 		{"exists(/r)", nil, nil, false},
 		{"not(exists(/r))", nil, nil, false},
 		{"not(empty(//@s))", s, nil, false},
@@ -163,7 +163,7 @@ func TestAssertionPresenceFunctions(t *testing.T) {
 		{asBind(t, str, ""), true},
 		{ValueBinding{}, false},
 	} {
-		if got := test.Evaluate(backend(), seededTypes, asValues(t), asNoChildren, nil, tc.bound); got != tc.want {
+		if got := test.Evaluate(backend(), seededTypes, asElem, asValues(t), asNoChildren, nil, tc.bound, time.Time{}); got != tc.want {
 			t.Errorf("Evaluate(exists($value)) over %v = %v, want %v", tc.bound, got, tc.want)
 		}
 	}
@@ -172,10 +172,10 @@ func TestAssertionPresenceFunctions(t *testing.T) {
 	if !ok {
 		t.Fatal("CompileAssertionTest(exists($value)) over ·special· content: declined, want compiled")
 	}
-	if !untyped.Evaluate(backend(), seededTypes, asValues(t), asNoChildren, nil, BindValue(Untyped(""))) {
+	if !untyped.Evaluate(backend(), seededTypes, asElem, asValues(t), asNoChildren, nil, BindValue("", Untyped("")), time.Time{}) {
 		t.Error("Evaluate(exists($value)) over an xs:untypedAtomic $value = false, want true")
 	}
-	if untyped.Evaluate(backend(), seededTypes, asValues(t), asNoChildren, nil, ValueBinding{}) {
+	if untyped.Evaluate(backend(), seededTypes, asElem, asValues(t), asNoChildren, nil, ValueBinding{}, time.Time{}) {
 		t.Error("Evaluate(exists($value)) over the unbound xs:untypedAtomic $value = true, want false")
 	}
 }
@@ -258,11 +258,11 @@ func TestAssertionStringArgumentTypeErrors(t *testing.T) {
 		if !ok {
 			t.Fatalf("CompileAssertionTest(%q) over a list: declined, want compiled", tc.expr)
 		}
-		v, err := value.ValidateLexical(backend(), types, list, tc.lexical, nil, FacetAssertions())
+		v, err := value.ValidateLexical(backend(), types, list, tc.lexical, nil, FacetAssertions(time.Time{}))
 		if err != nil {
 			t.Fatalf("mapping %q against the list: %v", tc.lexical, err)
 		}
-		if got := test.Evaluate(backend(), types, asValues(t), asNoChildren, nil, BindValue(Typed(v))); got != tc.want {
+		if got := test.Evaluate(backend(), types, asElem, asValues(t), asNoChildren, nil, BindValue("", Typed(v)), time.Time{}); got != tc.want {
 			t.Errorf("Evaluate(%q) over %q = %v, want %v", tc.expr, tc.lexical, got, tc.want)
 		}
 	}
@@ -275,10 +275,12 @@ func TestAssertionStringArgumentTypeErrors(t *testing.T) {
 // the result as xs:untypedAtomic would cast the other operand and hold; the
 // bare rows are each result's effective boolean value; the cast rows decline
 // fn:string over a non-string result and admit it over fn:normalize-space's.
-// Removing one arm's case from ctaStaticOf, ctaItemOf or
-// ctaEffectiveBoolean.eval fails that arm's row of the matching table, and from
-// castsFrom the arm's decline row; ctaStringFunction's castsFrom case answers
-// what the default does, so no row tells it apart.
+// Removing one arm's case from ctaItemOf or ctaEffectiveBoolean.eval fails
+// that arm's row of the matching table. Removing it from ctaCarriedType, the
+// static type ctaStaticOf and castsFrom both read, fails the arm's static row
+// and, for the three non-string results, its item and decline rows;
+// castsFrom's answer for ctaStringFunction's xs:string is what it gives an
+// unjudged operand, so no row tells that part apart.
 func TestStringFunctionArmsInEverySwitch(t *testing.T) {
 	s := []asTyped{{uq("s"), "string", "1"}}
 	for _, tc := range []struct {
@@ -345,12 +347,12 @@ func TestStringArgumentNamesEveryStaticArm(t *testing.T) {
 }
 
 // A new node reads what its arguments read: a typed child under each is
-// reported by ReadsChild — fn:exists reads which children exist off
+// reported by ReadsChild — fn:exists over a cast of one reads its value off
 // ChildElements — and an fn:count call under one is counted by the Tally, so
 // `exists(count(inner))` holds. With an arm's readsChild or counted answering
 // nothing for its arguments, that arm's row fails.
 func TestStringFunctionsReadTheirArguments(t *testing.T) {
-	for _, expr := range []string{"contains('x', e1)", "string-length(e1) = 0", "exists(e1)", "string(e1) = ''"} {
+	for _, expr := range []string{"contains('x', e1)", "string-length(e1) = 0", "exists(e1 cast as xs:string)", "string(e1) = ''", "distinct-values(e1) = ''"} {
 		test, ok := afCompile(t, expr, xsd.EmptyContent{})
 		if !ok {
 			t.Fatalf("CompileAssertionTest(%q): declined, want compiled", expr)
@@ -359,34 +361,115 @@ func TestStringFunctionsReadTheirArguments(t *testing.T) {
 			t.Errorf("(%s).ReadsChild(e1) = false, want true", expr)
 		}
 	}
-	for _, expr := range []string{"exists(count(inner))", "contains('1', count(inner))", "string-length(count(inner)) = 1", "string(normalize-space(count(inner))) = ''"} {
+	for _, expr := range []string{"exists(count(inner))", "contains('1', count(inner))", "string-length(count(inner)) = 1", "string(normalize-space(count(inner))) = ''", "distinct-values(count(inner)) = 1"} {
 		if acCompile(t, asRecord(expr)).Tally() == nil {
 			t.Errorf("(%s).Tally() = nil, want a counter for inner", expr)
 		}
 	}
 	counted := acCompile(t, asRecord("exists(count(inner))"))
-	if !counted.Evaluate(backend(), seededTypes, asValues(t), asNoChildren, acTally(counted, acEl(1, "inner")), ValueBinding{}) {
+	if !counted.Evaluate(backend(), seededTypes, asElem, asValues(t), asNoChildren, acTally(counted, acEl(1, "inner")), ValueBinding{}, time.Time{}) {
 		t.Error("Evaluate(exists(count(inner))) = false, want true")
 	}
 }
 
-// What stays declined: a function outside the ten, the three-argument
+// fn:concat casts each argument to xs:string and reads the empty sequence as
+// the zero-length string (xpath-functions.md §7.4.1): `concat(@s, 'x')` is
+// "ax" over s="a" and "x" over an absent @s, an xs:untypedAtomic @w is cast
+// like any other, and `()` is an argument. A constructor function over the
+// call casts its xs:string (§5, §17.1.1), so `xs:date(concat('2008-01-0',
+// '1'))` is that date, and one over an fn:count call casts its xs:integer, the
+// identity cast castsFrom's ancestor rule admits. Without libraryCall's concat
+// arm the first row declines at CompileAssertionTest, which stops the test;
+// with constructorFunction parsing simpleValue alone the xs:date row declines,
+// and with that row removed the fn:count one does.
+func TestAssertionConcat(t *testing.T) {
+	a := []asTyped{{uq("s"), "string", "a"}}
+	for _, tc := range []struct {
+		expr  string
+		attrs []asTyped
+		want  bool
+	}{
+		{"concat(@s, 'x') = 'ax'", a, true},
+		{"concat(@s, 'x') = 'x'", a, false},
+		{"concat(@s, 'x') = 'x'", nil, true},
+		{"concat(@s, 'x') = 'ax'", nil, false},
+		{"concat('<', @w, '>', ()) = '<v>'", []asTyped{{uq("w"), "anySimpleType", "v"}}, true},
+		{"xs:date(concat('2008-01-0', '1')) eq xs:date('2008-01-01')", nil, true},
+	} {
+		if got := afEval(t, tc.expr, tc.attrs); got != tc.want {
+			t.Errorf("Evaluate(%q) over %v = %v, want %v", tc.expr, tc.attrs, got, tc.want)
+		}
+	}
+	counted := acCompile(t, asRecord("xs:integer(count(inner)) eq 1"))
+	if !counted.Evaluate(backend(), seededTypes, asElem, asValues(t), asNoChildren, acTally(counted, acEl(1, "inner")), ValueBinding{}, time.Time{}) {
+		t.Error("Evaluate(xs:integer(count(inner)) eq 1) over one inner = false, want true")
+	}
+}
+
+// ctaConcat answers in each switch over the ctaValue sum, its static type
+// xs:string. The static row compares the result with a numeric literal, a
+// B.2 mismatch, err:XPTY0004 — false — where an xs:untypedAtomic reading
+// would cast "1" to the number and hold; the instance row asks its static
+// type; the item row reads its string; the bare rows are its ·effective
+// boolean value·; the ReadsChild and Tally rows ask what its arguments read.
+// With the ctaConcat arm deleted from ctaCarriedType the static and instance
+// rows fail; from ctaTypes.instanceItem the instance row declines; from
+// ctaEffectiveBoolean.eval `concat('a', 'b')` fails; from ctaItemOf the
+// instance, item and `concat('a', 'b')` rows fail; with ctaConcat.readsChild
+// answering false the ReadsChild row fails, and with ctaConcat.counted
+// appending nothing the Tally row does.
+func TestConcatArmsInEverySwitch(t *testing.T) {
+	for _, tc := range []struct {
+		expr string
+		want bool
+	}{
+		{"concat('1', '') = 1", false},
+		{"concat('a', 'b') instance of xs:string", true},
+		{"concat('a', 'b') eq 'ab'", true},
+		{"concat('a', 'b')", true},
+		{"concat((), ())", false},
+	} {
+		if got := afEval(t, tc.expr, nil); got != tc.want {
+			t.Errorf("Evaluate(%q) = %v, want %v", tc.expr, got, tc.want)
+		}
+	}
+	test, ok := afCompile(t, "concat('x', e1) = 'x'", xsd.EmptyContent{})
+	if !ok {
+		t.Fatal("CompileAssertionTest(concat('x', e1) = 'x'): declined, want compiled")
+	}
+	if !test.ReadsChild(uq("e1")) {
+		t.Error("(concat('x', e1) = 'x').ReadsChild(e1) = false, want true")
+	}
+	if acCompile(t, asRecord("concat('', normalize-space(count(inner))) = ''")).Tally() == nil {
+		t.Error("(concat('', normalize-space(count(inner))) = '').Tally() = nil, want a counter for inner")
+	}
+}
+
+// What stays declined: a function libraryCall does not name, the three-argument
 // collation form of fn:contains and its kin (never read as the two-argument
-// form), every other arity, the zero-argument string forms — whose implicit
-// argument is E's string value, which `.` on the assertion façade does not
-// supply — and fn:string over a typed node or value outside the xs:string
-// family (castsFrom), or over an xs:float or xs:double, whose cast to xs:string
-// §17.1.2 does not render canonically (ctaTypes.floating) — an xs:decimal
-// still compiles. With matchCall admitting three arguments the collation row
-// compiles, with ctaAssertionFacade.contextItem admitting `.` the
-// zero-argument rows do, and with stringOf not asking floating the two
-// floating rows do.
+// form), every other arity — fn:concat with fewer than two arguments among
+// them (§7.4.1) — and fn:string, or an fn:concat argument, over a typed node or
+// value outside the xs:string family and the date/time primitives (castsFrom),
+// or over an xs:float or xs:double, a literal (literalCastsTo) or a cast to
+// either over a string-family operand (castsFrom's floatingSource shape)
+// included, whose cast to xs:string §17.1.2 does not render canonically — an
+// xs:decimal and an xs:boolean literal still compile. The zero-argument string
+// forms compile over simple content, whose implicit argument is E's string
+// value `.` reads (TestAssertionContextItemIsTheStringValue evaluates them).
+// With matchCall admitting three arguments the collation row compiles, with
+// literalCastsTo's last return answering true the `string(1.5e0)` row does, and
+// with castSource's ctaCast exit answering (nil, false) in place of
+// floatingSource the two rows over a cast to xs:float or xs:double do; with
+// literalCastsTo's xs:decimal or xs:boolean arm answering false, `string(1.5)`
+// or `string(true())` declines.
 func TestCompileAssertionTestDeclinesFunctions(t *testing.T) {
 	str := asBuiltin(t, "string")
 	for _, expr := range []string{
-		"current-date() = current-date()",
-		"concat(@s, 'x') = 'x'",
-		"contains(@s, 'x', 'http://www.w3.org/2005/xpath-functions/collation/codepoint')",
+		"upper-case(@s) = 'X'",
+		"concat(@s) = 'x'",
+		"concat() = ''",
+		"concat(@i, 'x') = '5x'",
+		"contains(@s, 'x','http://www.w3.org/2005/xpath-functions/collation/codepoint')",
 		"starts-with(@s, 'x', 'http://www.w3.org/2005/xpath-functions/collation/codepoint')",
 		"contains(@s)",
 		"empty()",
@@ -394,15 +477,13 @@ func TestCompileAssertionTestDeclinesFunctions(t *testing.T) {
 		"true(1)",
 		"string(@s, @s) = ''",
 		"string-length(@s, @s) = 0",
-		"string-length() > 0",
-		"normalize-space() = ''",
-		"string() = ''",
 		"string(@i) = '5'",
 		"string(n) = '5'",
 		"string(c) = '5'",
 		"string($value) = '5'",
 		"string(1.5e0) = '1.5'",
 		"string(xs:float('1.5')) = '1.5'",
+		"string(xs:double(@s)) = '1.5'",
 		"exists(a/@b)",
 		"exists(a/b, a/b)",
 		"contains(@s, ('x'))",
@@ -414,45 +495,62 @@ func TestCompileAssertionTestDeclinesFunctions(t *testing.T) {
 	if _, ok := afCompile(t, "string($value) = 'x'", xsd.SimpleContent{SimpleType: str}); !ok {
 		t.Error("CompileAssertionTest(string($value) = 'x') over xs:string content: declined, want compiled")
 	}
-	if _, ok := afCompile(t, "string(1.5) = '1.5'", xsd.SimpleContent{SimpleType: str}); !ok {
-		t.Error("CompileAssertionTest(string(1.5) = '1.5'): declined, want compiled")
+	for _, expr := range []string{"string(1.5) = '1.5'", "string(true()) = 'true'"} {
+		if _, ok := afCompile(t, expr, xsd.SimpleContent{SimpleType: str}); !ok {
+			t.Errorf("CompileAssertionTest(%s): declined, want compiled", expr)
+		}
 	}
 }
 
-// A Type Alternative's {test} declines every one of the ten functions — the
+// A Type Alternative's {test} declines every function libraryCall names — the
 // CTA grammar admits fn:not alone (§3.12.6 clause 3) — which CompileCTATest
 // itself shows, CTATestStaticError answering nil for a decline and a pass
-// alike; `not(@a = 'x')` still compiles. With ctaTypeAlternativeFacade
-// answering callsLibrary true, every declined row compiles.
+// alike; `not(@a = 'x')` still compiles. Its constructor function takes a [16]
+// ta-SimpleValue alone ([18]), so a constructor over a function call or
+// another constructor declines too; `xs:string(@a) = 'x'` still compiles.
+// With ctaTypeAlternativeFacade answering callsLibrary true, every declined
+// row compiles; with constructorOperand parsing an argument on every façade,
+// `xs:string(xs:string(@a)) = 'x'` does.
 func TestCompileCTATestDeclinesLibraryFunctions(t *testing.T) {
 	for _, expr := range []string{
 		"contains(@a, 'x')", "starts-with(@a, 'x')", "ends-with(@a, 'x')",
 		"string-length(@a) > 0", "normalize-space(@a) = 'x'", "string(@a) = 'x'",
-		"empty(@a)", "exists(@a)", "true()", "false()", "not(true())",
+		"empty(@a)", "exists(@a)", "distinct-values(@a) = 'x'", "true()", "false()", "not(true())",
+		"current-date() = current-date()", "concat(@a, 'x') = 'ax'",
 	} {
 		if _, ok := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); ok {
 			t.Errorf("CompileCTATest(%q): compiled, want declined", expr)
 		}
 	}
-	if _, ok := CompileCTATest(ctaExprRecord("not(@a = 'x')", ""), seededTypes); !ok {
-		t.Error("CompileCTATest(not(@a = 'x')): declined, want compiled")
+	for _, expr := range []string{"xs:string(xs:string(@a)) = 'x'", "xs:date(concat(@a, '')) = xs:date('2008-01-01')"} {
+		if _, ok := CompileCTATest(asRecord(expr), seededTypes); ok {
+			t.Errorf("CompileCTATest(%q): compiled, want declined", expr)
+		}
+	}
+	for _, expr := range []string{"not(@a = 'x')", "xs:string(@a) = 'x'"} {
+		if _, ok := CompileCTATest(asRecord(expr), seededTypes); !ok {
+			t.Errorf("CompileCTATest(%q): declined, want compiled", expr)
+		}
 	}
 }
 
 // An assertions facet calls the same functions over `$value`
 // (cvc-assertions-valid): `ends-with($value, 'xyz')` holds and fails, a list
-// `$value` of two items is err:XPTY0004 under an xs:string? parameter, and the
-// zero-argument string forms read the absent context item and raise
-// err:XPDY0002 — failing the facet, under fn:not too, rather than declining
-// (clause 1.2's Note). With ctaFacetFacade.callsLibrary false every row
-// declines.
+// `$value` of two items is err:XPTY0004 under an xs:string? parameter and as an
+// fn:concat argument, which casts it (§7.4.1), and the zero-argument string
+// forms read the absent context item and raise err:XPDY0002 — failing the
+// facet, under fn:not too, rather than declining (clause 1.2's Note) — as
+// fn:position does as an fn:concat argument. With ctaFacetFacade.callsLibrary
+// false every row declines; with ctaConcatItem reading a raising argument as
+// the zero-length string, `concat($value, "") = ""` over "a b" and the
+// fn:position row hold.
 func TestFacetStringFunctions(t *testing.T) {
 	str := asBuiltin(t, "string")
 	list := asList(t, "StringList", ctaBuiltin("string"))
 	types := asTypesWith(list)
 	listValue := func(lexical string) value.Value {
 		t.Helper()
-		v, err := value.ValidateLexical(backend(), types, list, lexical, nil, FacetAssertions())
+		v, err := value.ValidateLexical(backend(), types, list, lexical, nil, FacetAssertions(time.Time{}))
 		if err != nil {
 			t.Fatalf("mapping %q against the list: %v", lexical, err)
 		}
@@ -470,6 +568,10 @@ func TestFacetStringFunctions(t *testing.T) {
 		{"contains($value, 'a')", list, listValue("a"), value.AssertionHolds},
 		{"contains($value, 'a')", list, listValue("a b"), value.AssertionFails},
 		{"not(contains($value, 'a'))", list, listValue("a b"), value.AssertionFails},
+		{"concat($value, '') = 'a'", list, listValue("a"), value.AssertionHolds},
+		{"concat($value, '') = ''", list, listValue("a b"), value.AssertionFails},
+		{"not(concat($value, '') = '')", list, listValue("a b"), value.AssertionFails},
+		{"concat('x', position()) = 'x'", str, fcValue(t, str, "x"), value.AssertionFails},
 		{"string-length() > 0", str, fcValue(t, str, "x"), value.AssertionFails},
 		{"not(string-length() > 0)", str, fcValue(t, str, "x"), value.AssertionFails},
 		{"normalize-space() = 'x'", str, fcValue(t, str, "x"), value.AssertionFails},
@@ -478,7 +580,7 @@ func TestFacetStringFunctions(t *testing.T) {
 		{"exists(@a)", str, fcValue(t, str, "x"), value.AssertionFails},
 		{"not(empty(.))", str, fcValue(t, str, "x"), value.AssertionFails},
 	} {
-		if got := FacetAssertions().Evaluate(backend(), types, tc.st, ctaExprRecord(tc.test, ""), tc.v); got != tc.want {
+		if got := FacetAssertions(time.Time{}).Evaluate(backend(), types, tc.st, ctaExprRecord(tc.test, ""), tc.v); got != tc.want {
 			t.Errorf("Evaluate(%q over %s) = %d, want %d", tc.test, tc.st.Name(), got, tc.want)
 		}
 	}

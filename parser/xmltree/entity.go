@@ -67,13 +67,15 @@ func (r *Reader) source(off int64) string {
 // produces, located where its first character is, or, for a character inside
 // replacement text, where the outermost reference to it is.
 //
-// The decoder has already read raw, and charged every reference in it that
-// names no internal entity this reader read the declaration of: one declared
-// after a parameter-entity reference the reader did not read, outside a
-// standalone document, among them. That refusal is the reader's policy and no
-// well-formedness verdict, since an entity the reader did not read may be
-// declared (XML 1.0 §5.1, WFC Entity Declared). A reference outside the
-// document element is no content at all (XML 1.0 [1] document).
+// The decoder has already read raw, and refused every reference in it that
+// names no entity this reader read a declaration of — one declared after a
+// parameter-entity reference the reader did not read, outside a standalone
+// document, among them; Reader.reference charges or refuses a reference to any
+// other entity that is not internal (see Reader.entities). The decoder's
+// refusal is the reader's policy and no well-formedness verdict, since an
+// entity the reader did not read may be declared (XML 1.0 §5.1, WFC Entity
+// Declared). A reference outside the document element is no content at all
+// (XML 1.0 [1] document).
 func (r *Reader) included(raw string, off int64, loc xsderr.Loc) (Node, bool, error) {
 	if len(r.stack) == 0 {
 		return nil, false, xsderr.New(xsderr.RuleXMLWellFormed, loc, "entity reference outside the document element: only element content may reference a general entity (XML 1.0 [1] document, [43] content)")
@@ -154,7 +156,7 @@ func (c *content) chars(s string, at func(int) int64, src bool, open []string) e
 			return noReference(loc, open)
 		}
 		name := s[i+1 : i+end]
-		text, entity, err := c.r.reference(name, loc)
+		text, entity, err := c.r.reference(name, loc, open, false)
 		if err != nil {
 			return err
 		}
@@ -230,7 +232,11 @@ func strayInToken(src string) bool {
 }
 
 // token reads one token of replacement text, whose source is raw, into c.
-// depth is the number of elements open where the inclusion began.
+// depth is the number of elements open where the inclusion began. A comment
+// and a processing instruction add nothing; one targeting "xml" in any case
+// ([17] PITarget) and any directive are RuleXMLWellFormed faults at loc, the
+// reference, since replacement text included in content must match [43]
+// content (XML 1.0 §4.3.2).
 func (c *content) token(tok xml.Token, raw string, at func(int) int64, depth int, loc xsderr.Loc, open []string) error {
 	switch t := tok.(type) {
 	case xml.StartElement:
@@ -259,6 +265,12 @@ func (c *content) token(tok xml.Token, raw string, at func(int) int64, depth int
 			return nil
 		}
 		return c.chars(raw, at, false, open)
+	case xml.ProcInst:
+		if strings.EqualFold(t.Target, "xml") {
+			return xsderr.New(xsderr.RuleXMLWellFormed, loc, "processing instruction target %q in the replacement text of entity %s, a name XML 1.0 [17] PITarget excludes", t.Target, open[len(open)-1])
+		}
+	case xml.Directive:
+		return xsderr.New(xsderr.RuleXMLWellFormed, loc, "directive %q in the replacement text of entity %s, where XML 1.0 [43] content admits no directive", directiveName(raw), open[len(open)-1])
 	}
 	return nil
 }
@@ -299,17 +311,30 @@ func noReference(loc xsderr.Loc, open []string) error {
 var errExpansionBound = errors.New("general-entity expansion bound reached")
 
 // reference resolves the name a reference spells between '&' and ';', read at
-// loc. A character reference and a predefined entity resolve to the character
-// they name; a general entity to its replacement text, with entity set. A
-// name that resolves to neither — an undeclared entity, an external or
-// unparsed one, one declared where the reader did not read — is refused, as
-// the decoder refuses it; a malformed character reference is not well-formed
-// (WFC Legal Character), and so, in a standalone="yes" document, is a
-// reference to an entity declared only in a parameter entity's replacement
-// text, which WFC Entity Declared does not count (XML 1.0 wf-entdeclared).
-// Outside a standalone document an internal subset that declares one has
-// referenced a parameter entity, which lifts that constraint.
-func (r *Reader) reference(name string, loc xsderr.Loc) (text string, entity bool, err error) {
+// loc inside the inclusions open, outermost first. A character reference and a
+// predefined entity resolve to the character they name; a general entity to
+// its replacement text, with entity set. A malformed character reference is
+// not well-formed (WFC Legal Character), and so, in a standalone="yes"
+// document, is a reference that does not occur within a parameter entity
+// (withinPE) to an entity declared only in a parameter entity's replacement
+// text, which WFC Entity Declared does not count (XML 1.0 wf-entdeclared): the
+// clause keys on where the declaration stands, not on what it declares, so it
+// is charged before readability is asked, for an external entity, an unparsed
+// one among them, as for an internal one. Outside a standalone document an
+// internal subset that declares one has referenced a parameter entity, which
+// lifts that constraint. Next, a reference to an entity whose declaration the
+// reader read is charged if its binding declaration forbids it where it stands
+// (declaredEntityFault): an unparsed entity in content (attr false) or in an
+// attribute value (attr true), an external one in an attribute value. Only a
+// recorded declaration grounds that charge, never the zero boundEntity of an
+// unrecorded name: Parsed Entity is among the constraints a non-validating
+// processor need not detect where it did not read the declaration (XML 1.0
+// §5.2). Any other name that resolves to no replacement text — an undeclared
+// entity, an external parsed one referenced in content, which §4.4.3 lets the
+// reader decline to include, one declared where the reader did not read — is
+// refused, wrapping a cause, as the decoder refuses a name no recorded
+// declaration names (see Reader.entities).
+func (r *Reader) reference(name string, loc xsderr.Loc, open []string, attr bool) (text string, entity bool, err error) {
 	if digits, ok := strings.CutPrefix(name, "#"); ok {
 		c, legal := charRef(digits)
 		if !legal {
@@ -320,14 +345,59 @@ func (r *Reader) reference(name string, loc xsderr.Loc) (text string, entity boo
 	if c, ok := predefined[name]; ok {
 		return c, false, nil
 	}
-	decl := r.entities[name]
-	if !decl.value.readable {
-		return "", false, xsderr.Wrap(xsderr.RuleXMLWellFormed, loc, fmt.Errorf("reference to entity &%s;, which is not an internal entity the reader read the declaration of", name))
-	}
-	if r.standalone && decl.inPE {
+	bound, declared := r.entities[name]
+	if r.standalone && bound.onlyInPE && !r.withinPE(open) {
 		return "", false, xsderr.New(xsderr.RuleXMLWellFormed, loc, "reference to entity &%s; in a standalone=\"yes\" document, where no general entity declaration outside every parameter entity declares it (XML 1.0 WFC Entity Declared)", name)
 	}
-	return decl.value.text, true, nil
+	if declared {
+		if err := declaredEntityFault(bound.binding, attr, loc); err != nil {
+			return "", false, err
+		}
+	}
+	if !bound.binding.value.readable {
+		return "", false, xsderr.Wrap(xsderr.RuleXMLWellFormed, loc, fmt.Errorf("reference to entity &%s;, which is not an internal entity the reader read the declaration of", name))
+	}
+	return bound.binding.value.text, true, nil
+}
+
+// declaredEntityFault charges a reference, directly or through replacement
+// text, to the entity whose binding declaration (XML 1.0 §4.2) is d, located
+// at loc, if it may not stand where it does, in the order entityGraph.enter
+// checks the two: in content or in an attribute value (attr), to an unparsed
+// entity (WFC: Parsed Entity); in an attribute value, to an external one (WFC:
+// No External Entity References). Neither constraint keys on standalone or on
+// where d stands, but d must be a declaration the reader read: a name declared
+// only where it did not read has no binding to decide them (XML 1.0 §5.2). A
+// reference to an unparsed entity in an EntityValue is charged here, where the
+// entity whose replacement text holds it is included, and never where it is
+// declared: §4.4.4 excepts it from the fatal errors, and §4.4's table, whose
+// cell reads "Error", makes it an error (§4.4.9), which a processor may leave
+// unreported.
+func declaredEntityFault(d entityDecl, attr bool, loc xsderr.Loc) error {
+	switch {
+	case d.unparsed && attr:
+		return xsderr.New(xsderr.RuleXMLWellFormed, loc, "attribute value that references, directly or indirectly, the unparsed entity %s (XML 1.0 WFC: Parsed Entity)", d.name)
+	case d.unparsed:
+		return xsderr.New(xsderr.RuleXMLWellFormed, loc, "content references, directly or through replacement text, the unparsed entity %s, which XML 1.0 WFC Parsed Entity forbids", d.name)
+	case attr && !d.value.readable:
+		return xsderr.New(xsderr.RuleXMLWellFormed, loc, "attribute value that references, directly or indirectly, the external entity %s (XML 1.0 WFC: No External Entity References)", d.name)
+	}
+	return nil
+}
+
+// withinPE reports whether a reference inside the inclusions open, outermost
+// first, occurs within a parameter entity, where WFC Entity Declared does not
+// bind it (XML 1.0 wf-entdeclared): whether the binding declaration (§4.2) of
+// the innermost entity, whose replacement text holds the reference, stands in
+// a parameter entity's replacement text. XML 1.0 does not say where a
+// reference nested in replacement text occurs; this reading (#2365) declines
+// to charge as a definite fault what the text leaves open. Only the innermost
+// entity counts: a reference in the text of an entity declared outside every
+// parameter entity occurs outside them, though that entity is itself
+// referenced in the text of one declared in a parameter entity. A reference in
+// document source is inside no inclusion and within none.
+func (r *Reader) withinPE(open []string) bool {
+	return len(open) > 0 && r.entities[open[len(open)-1]].binding.inPE
 }
 
 // expandAttrs returns the attributes of t, the start tag whose source is raw,
@@ -419,7 +489,7 @@ func (r *Reader) attrValue(b *strings.Builder, s string, src bool, loc xsderr.Lo
 			}
 			name := s[i+1 : i+end]
 			i += end
-			text, entity, err := r.reference(name, loc)
+			text, entity, err := r.reference(name, loc, open, true)
 			if err != nil {
 				return err
 			}

@@ -41,7 +41,7 @@ func (w *walk) stringValid(st *xsd.SimpleType, lexical string, ctx value.Context
 	if st.IsSpecial() {
 		return w.entitiesDeclared(st, lexical, ctx, loc)
 	}
-	_, err = value.ValidateLexical(w.backend, w.schema, st, lexical, ctx, xpath.FacetAssertions())
+	_, err = value.ValidateLexical(w.backend, w.schema, st, lexical, ctx, xpath.FacetAssertions(w.now))
 	if err != nil && !value.IsDatatypeVerdict(err) {
 		return false, err
 	}

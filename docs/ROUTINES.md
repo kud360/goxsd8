@@ -121,8 +121,8 @@ translate the local times above and mind DST drift. Keep develop slots
   command whose exit the same turn waits for. A turn — a subagent's
   included — that ends "waiting for" a run has produced nothing and costs
   the whole dispatch (#1047, #1698).
-- **The permission layer refuses some command shapes and some writes;
-  neither is a wall.**
+- **The permission layer refuses some command shapes, some writes and some
+  reads; none is a wall.**
   - **Run one plain command per call.** The worktree-isolation guard
     refuses a command line it calls too complex to verify: `&&` or `;`
     chains, a pipe into or out of `gh` or `git`, a loop, a heredoc, a
@@ -135,13 +135,33 @@ translate the local times above and mind DST drift. Keep develop slots
     the Survey input walk among them, as a script file invoked as a bare
     `python3 /abs/path` or `bash /abs/path` that does its own `cd`, or as
     one literal command per page (#2047).
-  - **A refused write or test run that a procedure assigns is reported,
-    not dropped.** The refusing agent — an arbiter's bank commit, a
+  - **A refused command that a procedure assigns — a write, a test run or
+    a read — is reported, and is never a reason to end the turn without a
+    report.** The refusing agent — an arbiter's bank commit, a
     cartographer's body PATCH, a mason's mutation probe — states the exact
-    write or probe in its account, marked unapplied or unverified. The
-    orchestrator applies the write after checking it against that report,
-    or has the arbiter run the probe at the verdict; whatever nobody could
-    apply, the post-land pass records on the thread as owed (#1791).
+    command in its account, marked unapplied or unverified, with what its
+    result would have decided, and posts the account. An arbiter whose
+    outcome checks (`git status`, `git diff` on
+    `conformance/testdata/expectations/`, a grep of its ratchet log) are
+    refused still posts its VERDICT, or a partial account marked
+    incomplete. The orchestrator applies a refused write after checking it
+    against that report, runs a refused read itself, has the arbiter run a
+    refused probe at the verdict, or dispatches a round for only what
+    nobody could establish; whatever nobody could apply, the post-land
+    pass records on the thread as owed (#1791).
+  - **The environment must permit the arbiter's ratchet run** (CLAUDE.md,
+    "Other commands"). Only the arbiter runs it, so no other agent stands
+    in for a refused one. No spelling the classifier admits is
+    established: ratchet mode is read from the environment alone, and
+    whether an allow prefix matches a leading `VAR=1` is unmeasured. A
+    refused ratchet run ends the session. The arbiter posts a partial
+    account marked incomplete, not a VERDICT; the orchestrator posts a
+    `RESUME:` that quotes the refusal, calls it a refusal and not a lost
+    round (WORKFLOW **Parking** counts lost rounds), and names the
+    human-owned setting that would admit the run — a `permissions.allow`
+    entry in `.claude/settings.json`, or the permission mode the
+    dispatching session gives the arbiter. A session holding that setting
+    takes over (#2433).
 - **`www.w3.org` is egress-denied from cloud containers** (a 403 on the
   CONNECT tunnel), so `go tool fetchspecs` cannot run there and the
   committed `docs/specs/` is the only source; a schema or document the suite

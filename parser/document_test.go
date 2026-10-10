@@ -163,6 +163,28 @@ func TestReadDocumentMalformed(t *testing.T) {
 	}
 }
 
+// TestReadDocumentRefusesAllButMiscOutsideTheRoot pins that ReadDocument
+// surfaces the reader's XML 1.0 [1] document fault rather than reading past
+// it: a second top-level element is an error, not a replacement of the root
+// it follows, and character data before the root that is not S is an error,
+// not text the tree drops.
+func TestReadDocumentRefusesAllButMiscOutsideTheRoot(t *testing.T) {
+	for _, tc := range []struct{ name, doc, want string }{
+		{"second top-level element", "<a/>\n<b/>", docURI + ":2:1: [xml-wf] element <b> after the document element"},
+		{"text before the root", "<!-- c -->junk<a/>", docURI + ":1:11: [xml-wf] character data before the document element"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			d, err := parser.ReadDocument(docURI, strings.NewReader(tc.doc))
+			if err == nil {
+				t.Fatalf("ReadDocument = root %s, want an error", d.Root().Name().Local())
+			}
+			if !strings.HasPrefix(err.Error(), tc.want) {
+				t.Errorf("error = %q, want it to open %q", err, tc.want)
+			}
+		})
+	}
+}
+
 // failFirstReader fails on its very first Read and reports end-of-input on
 // every one after — the source shape whose failure a dropped byte-order-mark
 // peek error would replace with a clean end-of-document.
