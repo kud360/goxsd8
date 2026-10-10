@@ -156,7 +156,7 @@ func (w *walk) declaredAttribute(a Attribute, e Element, d xsd.AttributeDeclarat
 			a.Name())
 		return nil, false
 	}
-	decided, verdict := w.stringValid(st, a.Value(), e, a.Loc())
+	decided, verdict := w.stringValid(st, a.Value(), elementContext{owner: e}, a.Loc())
 	if !decided {
 		if w.declineAssertions(verdict, "assessing attribute", a.Name(), a.Loc(), "cvc-attribute clause 3") {
 			return nil, false
@@ -324,7 +324,7 @@ func (w *walk) instanceTypeLexical(a Attribute, e Element) bool {
 			e.Name())
 		return true
 	}
-	_, err := value.ValidateLexical(w.backend, w.schema, st, a.Value(), elementContext{owner: e}, xpath.FacetAssertions())
+	_, err := value.ValidateLexical(w.backend, w.schema, st, a.Value(), elementContext{owner: e}, xpath.FacetAssertions(w.now))
 	if err == nil {
 		w.logAttribute(a, ruleCvcAttribute, "3", "satisfied")
 		return true
@@ -366,6 +366,10 @@ type fixedConstraint struct {
 // under the schema document's, so "1" and "01" agree as one xs:integer and
 // "a:x" and "b:x" agree exactly when both prefixes name one namespace.
 //
+// Each side's assertions facets are evaluated through [xpath.FacetAssertions]
+// (cvc-assertions-valid via cvc-datatype-valid clause 3), so an assertions
+// facet in st's closure decides the comparison rather than declining it.
+//
 // A ·special· st, whose lexical mapping is not a function (Datatypes §3.2.1.2),
 // is decided over that mapping's union of primitive and list mappings, as
 // [value.ConstraintMatches] states.
@@ -385,6 +389,17 @@ type fixedConstraint struct {
 // FinalizeWith carries an undecided value space, so that check may never have
 // run; the instance walk has no sound verdict to give in its place.
 //
+// GAP(xpath): a {test} the evaluator declines on either side is undecided too;
+// it charges nothing and is recorded as above, on the terms
+// [value.ConstraintMatches] states. (#1042)
+//
+// A {lexical form} that fails one of st's {test}s charges nothing and is
+// recorded as above as well: the ValidDefault of the [xsd.ValueSpace]
+// [value.NewValueSpace] returns runs the pipeline with no evaluator of its own
+// and declines every {test} (its gate 2's GAP(value)), so such a {lexical form}
+// is charged by no assembly, and is undecided here rather than NOT-same all the
+// same.
+//
 // GAP(value): a NOTATION {lexical form} naming no declared notation, tracked by
 // #667. [value.ConstraintMatches] answers it undecided, not NOT-same, because no
 // assembly ever judges it: [xsd.ValueSpace]'s ValidDefault refuses every
@@ -392,10 +407,10 @@ type fixedConstraint struct {
 // FinalizeWith, so cos-valid-simple-default never charges it. The comparison
 // declines here until #667 routes those defaults through ValidDefault.
 func (w *walk) fixedAgreement(a Attribute, e Element, st *xsd.SimpleType, f fixedConstraint) {
-	same, decided := value.ConstraintMatches(w.backend, w.schema, st, a.Value(), elementContext{owner: e}, f.vc)
+	same, decided := value.ConstraintMatches(w.backend, w.schema, st, a.Value(), elementContext{owner: e}, f.vc, xpath.FacetAssertions(w.now))
 	if !decided {
 		w.declineAttribute(a, f.rule, f.clause,
-			"the ·actual value· of the attribute %s was not compared with the {value} of the fixed {value constraint} %q on its %s: value.ConstraintMatches could not decide the comparison, a fault of the type or of the value backend, two literals of a ·special· type that some member of its lexical mapping cannot compare, or a NOTATION {value} naming no declared notation, which no assembly judges yet (#667), rather than a verdict about the value, so %s is undecided",
+			"the ·actual value· of the attribute %s was not compared with the {value} of the fixed {value constraint} %q on its %s: value.ConstraintMatches could not decide the comparison, a fault of the type or of the value backend, two literals of a ·special· type that some member of its lexical mapping cannot compare, an assertions-facet {test} not evaluated on either side or failed by the {value}, or a NOTATION {value} naming no declared notation, which no assembly judges yet (#667), rather than a verdict about the value, so %s is undecided",
 			a.Name(), f.vc.LexicalForm(), f.owner, citation(f.rule, f.clause))
 		return
 	}
@@ -467,7 +482,9 @@ func citation(rule xsderr.Rule, clause string) string {
 // cos-valid-simple-default (§3.2.6.2) against the same {lexical form}, under
 // a-props-correct clause 2 or au-props-correct clause 2, so only a schema
 // assembled through [xsd.SchemaBuilder.Finalize] — which installs none —
-// reaches this clause with an invalid default still in it.
+// reaches this clause with an invalid default still in it, or one whose type's
+// closure reaches QName or NOTATION, which [xsd.ValueSpace]'s ValidDefault
+// leaves undecided at assembly (#667) and this clause decides.
 func (w *walk) defaultedAttributes(e Element, attrs []Attribute, governing xsd.ComplexType) {
 	for _, u := range governing.AttributeUses() {
 		vc, defaulted := w.defaultedConstraint(u, attrs)
@@ -507,35 +524,26 @@ func (w *walk) defaultedConstraint(u xsd.AttributeUse, attrs []Attribute) (xsd.V
 // is read off A.{attribute declaration}.{type definition} and never off the
 // use, which the clause is explicit about.
 //
-// The question is Datatype Valid over one {lexical form} against one type,
-// which is what [xsd.ValueSpace]'s ValidDefault decides — the same decision
-// a-props-correct clause 2 and au-props-correct clause 2 charge at assembly, and
-// reached here through the same seam rather than re-derived, over the one value
-// space [Validator.Assess] built for this walk. Its undecided answer carries the
-// whole fail-open gate: an ungoverned type, a context-dependent one, a
-// construction-stage facet failure and a facet-pipeline precondition fault each
-// charge nothing, and are recorded as an [Unevaluated] at the element
-// ([walk.declineDefaulted]), as are a {type definition} that is absent or
-// complex and an undecidable ·validating type· for clause 3. A ·special· type
-// is not asked at all: Datatype Valid holds for every literal against one
-// ([xsd.SimpleType.IsSpecial]), so its {lexical form} passes to clause 3. A
-// decided rejection hands back the Datatype Valid verdict itself, which the
-// charge carries as its wrapped cause (validate.go's causedBy).
+// The question is String Valid (§3.16.4) over one {lexical form} against one
+// type, asked through [walk.stringValid] — the same check cvc-attribute clause
+// 3 runs over a carried attribute — under [value.ConstraintContext]: the
+// {lexical form} is a literal of the schema document, so a QName- or
+// NOTATION-valued one resolves its prefix against the bindings in scope where
+// the schema wrote it (cos-valid-simple-default clause 2, Datatypes §3.3.18),
+// never against e's. Against w.schema, value.ValidateLexical also judges whether
+// a NOTATION default names a declared notation (Datatypes §3.3.19), and an
+// ·ENTITY value· in the default is a ·declared entity name· or not by the
+// DOCUMENT's [unparsedEntities] ([walk.entitiesDeclared]). A decided rejection
+// hands back the verdict itself, which the charge carries as its wrapped cause
+// (validate.go's causedBy).
 //
-// ValidDefault answers String Valid clauses 1 and 2 only, being a question the
-// schema alone settles, so clause 3 is asked here of a {lexical form} it
-// accepts: whether each ·ENTITY value· in it is a ·declared entity name· is the
-// DOCUMENT's to say ([walk.entitiesDeclared]), and a rejection there is the
-// wrapped cause on the same terms. NOTATION's declared-notation condition is
-// never asked of one: ValidDefault declines every {lexical form} whose type's
-// closure reaches NOTATION, so none reaches here accepted (#667).
-//
-// GAP(validate): ValidDefault runs the value pipeline with no assertion
-// evaluator of this package's (the xsd.ValueSpace seam takes none), so a
-// {lexical form} every other facet of the type accepts is UNDECIDED wherever
-// the type's closure carries an assertions facet, and declines here under
-// cvc-complex-type clause 4 rather than being evaluated. Fail-open, on
-// [walk.declineAssertions]' terms. (#1042)
+// A withheld verdict charges nothing and is recorded as an [Unevaluated] at the
+// element: an assertions-facet decline under cvc-assertions-valid
+// ([walk.declineAssertions]), and any other — an ungoverned type, a
+// construction-stage facet failure, a facet-pipeline precondition fault, an
+// undecidable ·validating type· for clause 3 — under clause 4
+// ([walk.declineDefaulted]), on [walk.declaredAttribute]'s terms; so is a
+// {type definition} that is absent or complex.
 func (w *walk) defaultedAttribute(e Element, u xsd.AttributeUse, vc xsd.ValueConstraint) {
 	d, resolved := w.schema.ResolvedAttributeDeclaration(u)
 	if !resolved {
@@ -550,30 +558,20 @@ func (w *walk) defaultedAttribute(e Element, u xsd.AttributeUse, vc xsd.ValueCon
 			vc.LexicalForm(), u.DeclarationName(), e.Name())
 		return
 	}
-	var cause error
-	decided := true
-	if !st.IsSpecial() {
-		cause, decided = w.values.ValidDefault(w.schema, st, vc)
-	}
+	decided, verdict := w.stringValid(st, vc.LexicalForm(), value.ConstraintContext(vc), e.Loc())
 	if !decided {
+		if w.declineAssertions(verdict, "assessing attribute use", u.DeclarationName(), e.Loc(), "cvc-complex-type clause 4") {
+			return
+		}
 		w.declineDefaulted(e, u,
-			"the {lexical form} %q of the ·effective value constraint· of the ·defaulted attribute· %s of the element %s was not decided against that declaration's {type definition} %s: the value space could not decide Datatype Valid, a fault of the type or of the value backend rather than a verdict about the lexical, or an assertions facet it does not evaluate, so cvc-complex-type clause 4 is undecided",
+			"the {lexical form} %q of the ·effective value constraint· of the ·defaulted attribute· %s of the element %s was not decided against that declaration's {type definition} %s: String Valid (§3.16.4) was withheld, the value backend reporting a fault of the type rather than a verdict about the lexical or the ·validating type· of an ·ENTITY value· being undecidable, so cvc-complex-type clause 4 is undecided",
 			vc.LexicalForm(), u.DeclarationName(), e.Name(), st.Name())
 		return
 	}
-	if cause == nil {
-		decided, cause = w.entitiesDeclared(st, vc.LexicalForm(), e, e.Loc())
-	}
-	if !decided {
-		w.declineDefaulted(e, u,
-			"the {lexical form} %q of the ·effective value constraint· of the ·defaulted attribute· %s of the element %s was not decided against String Valid clause 3: the ·validating type· of its ·ENTITY values· is undecidable, so cvc-complex-type clause 4 is undecided",
-			vc.LexicalForm(), u.DeclarationName(), e.Name())
+	if verdict == nil {
 		return
 	}
-	if cause == nil {
-		return
-	}
-	w.res.violations = append(w.res.violations, causedBy(ruleCvcComplexType, e.Loc(), cause,
+	w.res.violations = append(w.res.violations, causedBy(ruleCvcComplexType, e.Loc(), verdict,
 		"the element %s carries no attribute information item named %s, and the {lexical form} %q of the ·effective value constraint· of the ·defaulted attribute· it would supply is not ·valid· with respect to that declaration's {type definition} %s, which cvc-complex-type clause 4 requires as per String Valid (§3.16.4)",
 		e.Name(), u.DeclarationName(), vc.LexicalForm(), st.Name()))
 }

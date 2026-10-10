@@ -563,7 +563,9 @@ func TestMalformedXMLIsErrorNotPanic(t *testing.T) {
 // character data after the document element is a well-formedness fault located
 // where its character-data token starts in the source — across CRLF line ends
 // and character references the decoder replaces — while white space, a comment
-// and a PI there are accepted.
+// and a PI there are accepted. S is the source's own characters: a CDATA
+// section, empty or not, and a character reference are content [43] and no
+// Misc, though each decodes to white space (#2089).
 func TestOnlyMiscFollowsTheDocumentElement(t *testing.T) {
 	for _, tc := range []struct {
 		name, doc string
@@ -574,6 +576,11 @@ func TestOnlyMiscFollowsTheDocumentElement(t *testing.T) {
 		{"text after a comment", "<a/>\n<!-- c -->\nx", xsderr.Loc{URI: "t.xml", Line: 2, Col: 11}},
 		{"text after a line-feed reference", "<a/>&#10;x", xsderr.Loc{URI: "t.xml", Line: 1, Col: 5}},
 		{"text after a space reference", "<a/>&#32;x", xsderr.Loc{URI: "t.xml", Line: 1, Col: 5}},
+		{"CDATA section holding a space", "<a/><![CDATA[ ]]>", xsderr.Loc{URI: "t.xml", Line: 1, Col: 5}},
+		{"empty CDATA section", "<a/>\n<![CDATA[]]>", xsderr.Loc{URI: "t.xml", Line: 2, Col: 1}},
+		{"space reference", "<a/>&#32;", xsderr.Loc{URI: "t.xml", Line: 1, Col: 5}},
+		{"line-feed reference", "<a/>&#10;", xsderr.Loc{URI: "t.xml", Line: 1, Col: 5}},
+		{"tab reference after white space", "<a/>\n &#x9;", xsderr.Loc{URI: "t.xml", Line: 1, Col: 5}},
 		{"white space", "<a/>\r\n \t\n", xsderr.Loc{}},
 		{"comment", "<a/>\n<!-- c -->\n", xsderr.Loc{}},
 		{"processing instruction", "<a/>\n<?pi data?>\n", xsderr.Loc{}},
@@ -593,6 +600,70 @@ func TestOnlyMiscFollowsTheDocumentElement(t *testing.T) {
 			want := fmt.Sprintf("t.xml:%d:%d: [xml-wf] character data after the document element", tc.at.Line, tc.at.Col)
 			if !strings.HasPrefix(err.Error(), want) {
 				t.Errorf("error = %q, want it to open %q", err, want)
+			}
+		})
+	}
+}
+
+// TestOnlyMiscPrecedesTheDocumentElement pins XML 1.0 [1] document ::= prolog
+// element Misc*, with [22] prolog ::= XMLDecl? Misc* (doctypedecl Misc*)? and
+// [27] Misc ::= Comment | PI | S: character data before the document element
+// that is not the source's own S — text, a character reference or CDATA
+// section decoding to white space, or a U+FEFF after the encoding signature —
+// is a well-formedness fault located where its character-data token starts.
+// White space, comments, PIs, an XML declaration and a DOCTYPE there, one
+// whose internal subset holds a PI with a '>' among them, are accepted.
+func TestOnlyMiscPrecedesTheDocumentElement(t *testing.T) {
+	const mark = "\xEF\xBB\xBF"
+	for _, tc := range []struct {
+		name, doc string
+		at        xsderr.Loc // zero: accepted
+	}{
+		{"text", "junk<r/>", xsderr.Loc{URI: "t.xml", Line: 1, Col: 1}},
+		{"text after a DOCTYPE", "<!DOCTYPE r>junk<r/>", xsderr.Loc{URI: "t.xml", Line: 1, Col: 13}},
+		{"text after an XML declaration", "<?xml version=\"1.0\"?>\r\n x\r\n<r/>", xsderr.Loc{URI: "t.xml", Line: 1, Col: 22}},
+		{"space reference", "&#32;<r/>", xsderr.Loc{URI: "t.xml", Line: 1, Col: 1}},
+		{"CDATA section holding a space", "\n<![CDATA[ ]]><r/>", xsderr.Loc{URI: "t.xml", Line: 2, Col: 1}},
+		{"a second byte-order mark", mark + mark + "<r/>", xsderr.Loc{URI: "t.xml", Line: 1, Col: 1}},
+		{"white space, comments and PIs", "\r\n \t<!-- c -->\n<?pi data?>\n<r/>", xsderr.Loc{}},
+		{"XML declaration and DOCTYPE", "<?xml version=\"1.0\"?>\n<!DOCTYPE r>\n<r/>", xsderr.Loc{}},
+		{"one byte-order mark", mark + "<r/>", xsderr.Loc{}},
+		{"internal subset holding a PI with a '>'", "<!DOCTYPE r [<?x a > b?><!NOTATION n SYSTEM 'x'><!ENTITY pic SYSTEM 'u' NDATA n>]><r/>", xsderr.Loc{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := collect(t, "t.xml", tc.doc)
+			if tc.at == (xsderr.Loc{}) {
+				if err != nil {
+					t.Fatalf("collect: %v, want the document accepted", err)
+				}
+				return
+			}
+			wantWellFormednessError(t, err)
+			want := fmt.Sprintf("t.xml:%d:%d: [xml-wf] character data before the document element", tc.at.Line, tc.at.Col)
+			if !strings.HasPrefix(err.Error(), want) {
+				t.Errorf("error = %q, want it to open %q", err, want)
+			}
+		})
+	}
+}
+
+// TestNoElementFollowsTheDocumentElement pins XML 1.0 [1] document ::= prolog
+// element Misc*: a start tag after the document element's end tag is a
+// well-formedness fault located at that tag, charged before any fault of the
+// tag's own attributes, whatever Misc stands between.
+func TestNoElementFollowsTheDocumentElement(t *testing.T) {
+	for _, tc := range []struct {
+		name, doc, want string
+	}{
+		{"adjacent", "<a/><b/>", "t.xml:1:5: [xml-wf] element <b> after the document element"},
+		{"after Misc", "<a></a>\n<!-- c -->\n<?pi?> <b>x</b>", "t.xml:3:8: [xml-wf] element <b> after the document element"},
+		{"unbound element and attribute prefixes", "<a/><p:b q:c='1'/>", "t.xml:1:5: [xml-wf] element <p:b> after the document element"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := collect(t, "t.xml", tc.doc)
+			wantWellFormednessError(t, err)
+			if !strings.HasPrefix(err.Error(), tc.want) {
+				t.Errorf("error = %q, want it to open %q", err, tc.want)
 			}
 		})
 	}

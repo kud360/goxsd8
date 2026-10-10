@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/kud360/goxsd8/value"
+	"github.com/kud360/goxsd8/xpath"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
 )
@@ -118,9 +119,11 @@ const ruleCvcComplexContent xsderr.Rule = "cvc-complex-content"
 // gathering elsewhere would hold the whole of an element's text for nothing.
 //
 // sawElement and sawText record which kinds of [[children]] arrived, which is
-// what cvc-elt clause 5's case split and clause 5.2.2.1 quantify over. They are
-// not derivable from initial, which is gathered conditionally and holds nothing
-// for the elements whose text no clause reads.
+// what cvc-elt clause 5's case split and clause 5.2.2.1 quantify over, and, for
+// a ·nilled· element, whether it has any [[children]] at all, which
+// [walk.assertionValue] reads. They are not derivable from initial, which is
+// gathered conditionally and holds nothing for the elements whose text no
+// clause reads.
 type contentCheck struct {
 	e          Element
 	g          governance
@@ -198,20 +201,17 @@ func (c *contentCheck) contentClause() string {
 // both quantify over.
 //
 // It is read off sawElement and sawText and not off initial, which is gathered
-// conditionally. The answer is correct for an element that is not ·nilled·, and
-// for one that is it reports true whatever the [[children]] were — which is why
-// both readers settle ·nilled· BEFORE they ask (elementDefault takes it as its
-// own parameter, fixedValue returns on c.nilled), and why a third must too.
-//
-// The asymmetry is in text and element: on the non-·nilled· path each sets its
-// flag before any charge those same [[children]] provoke, so a later run or item
-// arriving after the element is charged leaves the flags untouched and the one
-// that did the charging has already set one of them. On the ·nilled· path both
-// charge cvc-elt clause 3.2.3.1 and return BEFORE the write, so a ·nilled·
-// element carrying [[children]] leaves both clear. Nothing reads a wrong answer
-// out of that today, and clause 5's case split excludes a ·nilled· element from
-// clause 5.1 in any case, but the flags are a record of what the CHARGES saw and
-// not of what the [[children]] held.
+// conditionally. The answer is correct whether or not the element is ·nilled·:
+// text and element each set their flag before any charge those same
+// [[children]] provoke — cvc-elt clause 3.2.3.1's on the ·nilled· path among
+// them — so a later run or item arriving after the element is charged leaves
+// the flags untouched and the one that did the charging has already set one of
+// them. The flags therefore say whether ANY [[child]] arrived, and which kind
+// came first, but not every kind that arrived after a charge. A ·nilled· element
+// is excluded from clause 5.1 and from clause 5.2.2 all the same
+// (elementDefault takes it as its own parameter, fixedValue returns on
+// c.nilled); [walk.assertionValue] asks it of a ·nilled· element to withhold
+// its assertions where it has [[children]].
 func (c *contentCheck) empty() bool {
 	return !c.sawElement && !c.sawText
 }
@@ -231,14 +231,19 @@ func (c *contentCheck) defaulted() (xsd.ValueConstraint, bool) {
 }
 
 // assessed is the ·initial value· cvc-elt clause 5 leaves this element assessed
-// on: D.{value constraint}.{lexical form} on clause 5.1's arm, and the ·initial
-// value· E actually carries on clause 5.2's. It is [icCheck.assessed]'s twin, one
-// per state the [[children]] are read into.
-func (c *contentCheck) assessed() string {
+// on, paired with the namespace context it is mapped under: D.{value
+// constraint}.{lexical form} under [value.ConstraintContext] on clause 5.1's
+// arm, the bindings in scope where the schema document wrote it
+// (cos-valid-simple-default clause 2, Datatypes §3.3.18), and the ·initial
+// value· E actually carries under E's own bindings (elementContext) on clause
+// 5.2's. The two travel together so no reader can map a default under the
+// instance's bindings. It is [icCheck.assessed]'s twin, one per state the
+// [[children]] are read into.
+func (c *contentCheck) assessed() (lexical string, ctx value.Context) {
 	if vc, defaulted := c.defaulted(); defaulted {
-		return vc.LexicalForm()
+		return vc.LexicalForm(), value.ConstraintContext(vc)
 	}
-	return c.initial.String()
+	return c.initial.String(), elementContext{owner: c.e}
 }
 
 // defaultValid settles cvc-elt clause 5.1.1: where clause 5.1's arm is live and
@@ -266,10 +271,10 @@ func (c *contentCheck) assessed() string {
 // as the cause of.
 //
 // The value space handed to it is the WALK's ([walk.values]) and not the one the
-// schema was finalized with, on [walk.defaultedAttribute]'s terms and for the
-// same reason: a schema assembled through [xsd.SchemaBuilder.Finalize] carries
-// undecidedValueSpace, which answers every question undecided, so reading its
-// would leave this charge permanently undecidable for such a schema.
+// schema was finalized with: a schema assembled through
+// [xsd.SchemaBuilder.Finalize] carries undecidedValueSpace, which answers every
+// question undecided, so reading its would leave this charge permanently
+// undecidable for such a schema.
 func (c *contentCheck) defaultValid(w *walk) {
 	if c.charged || !c.g.instance || c.g.typ == nil {
 		return
@@ -329,13 +334,13 @@ func (c *contentCheck) text(w *walk, t Text) {
 	if c.charged || t.Data() == "" {
 		return
 	}
+	c.sawText = true
 	if c.nilled {
 		c.charge(w, ruleCvcElt, "3.2.3.1", t.Loc(),
 			"the element %s has xsi:nil = true, so it is ·nilled·, but it has a character information item [[child]], and cvc-elt clause 3.2.3.1 admits no character or element information item [[children]] on a ·nilled· element",
 			c.e.Name())
 		return
 	}
-	c.sawText = true
 	if c.gathers() {
 		c.initial.WriteString(t.Data())
 	}
@@ -401,13 +406,13 @@ func (c *contentCheck) element(w *walk, child Element) (a xsd.Attribution, undec
 	if c.charged {
 		return nil, c.g.typeUndetermined()
 	}
+	c.sawElement = true
 	if c.nilled {
 		c.charge(w, ruleCvcElt, "3.2.3.1", child.Loc(),
 			"the element %s has xsi:nil = true, so it is ·nilled·, but it has the element information item %s among its [[children]], and cvc-elt clause 3.2.3.1 admits no character or element information item [[children]] on a ·nilled· element",
 			c.e.Name(), child.Name())
 		return nil, c.g.typeUndetermined()
 	}
-	c.sawElement = true
 	if st := c.g.simpleType(); st != nil {
 		c.charge(w, ruleCvcType, "3.1.2", child.Loc(),
 			"the element %s has the element information item %s among its [[children]], but its ·governing type definition· %s is a Simple Type Definition, and cvc-type clause 3.1.2 admits no element information item [[children]] on such an element",
@@ -586,15 +591,19 @@ func (c *contentCheck) fixedLexical(w *walk, f xsd.ValueConstraint) {
 // {content type} — the ·actual value· of E is equal or identical to
 // D.{value constraint}.{value}.
 //
-// A governing type that is neither leaves clause 5.2.2.2 with no applicable case
-// and charges nothing. A ·special· governing type is decided over its mapping
-// union ([value.ConstraintMatches]). An undecided comparison charges nothing, on
-// [walk.fixedAgreement]'s terms and for the same reasons: an ungoverned type, a
-// ·special· one whose literals some member of that union cannot compare, or a
-// {lexical form} outside its own type's lexical space is a gap in this processor
-// or a schema fault cos-valid-default charges at assembly, not the instance's.
-// It is recorded as an [Unevaluated] instead ([contentCheck.decline]), the
-// clause having been reached and not performed.
+// A governing type that is neither leaves clause 5.2.2.2 with no applicable
+// case and charges nothing. A ·special· governing type is decided over its
+// mapping union ([value.ConstraintMatches]), and an assertions facet in an
+// ordinary one's closure through [xpath.FacetAssertions]. An undecided
+// comparison charges nothing, on [walk.fixedAgreement]'s terms and for the
+// same reasons: an ungoverned type, a ·special· one whose literals some member
+// of that union cannot compare, and a {lexical form} outside its own type's
+// lexical space or failing one of its {test}s are a gap in this processor or a
+// schema fault, not the instance's. It is recorded as an [Unevaluated] instead
+// ([contentCheck.decline]), the clause having been reached and not performed.
+//
+// GAP(xpath): a {test} the evaluator declines on either side is undecided too,
+// and declines here on [walk.fixedAgreement]'s terms. (#1042)
 //
 // GAP(value): a NOTATION {lexical form} naming no declared notation, tracked by
 // #667, declines here on [walk.fixedAgreement]'s terms: ValidDefault's gate 1
@@ -605,10 +614,10 @@ func (c *contentCheck) fixedActualValue(w *walk, f xsd.ValueConstraint) {
 	if st == nil {
 		return
 	}
-	same, decided := value.ConstraintMatches(w.backend, w.schema, st, c.initial.String(), elementContext{owner: c.e}, f)
+	same, decided := value.ConstraintMatches(w.backend, w.schema, st, c.initial.String(), elementContext{owner: c.e}, f, xpath.FacetAssertions(w.now))
 	if !decided {
 		c.decline(w, c.e.Name(), c.e.Loc(), ruleCvcElt, "5.2.2.2.2",
-			"the ·actual value· of the element %s was not compared with the {value} of the fixed {value constraint} %q of its ·governing element declaration·: value.ConstraintMatches could not decide the comparison, a fault of the type or of the value backend, two literals of a ·special· type that some member of its lexical mapping cannot compare, or a NOTATION {value} naming no declared notation, which no assembly judges yet (#667), rather than a verdict about the value, so cvc-elt clause 5.2.2.2.2 is undecided",
+			"the ·actual value· of the element %s was not compared with the {value} of the fixed {value constraint} %q of its ·governing element declaration·: value.ConstraintMatches could not decide the comparison, a fault of the type or of the value backend, two literals of a ·special· type that some member of its lexical mapping cannot compare, an assertions-facet {test} not evaluated on either side or failed by the {value}, or a NOTATION {value} naming no declared notation, which no assembly judges yet (#667), rather than a verdict about the value, so cvc-elt clause 5.2.2.2.2 is undecided",
 			c.e.Name(), f.LexicalForm())
 		return
 	}
@@ -624,10 +633,8 @@ func (c *contentCheck) fixedActualValue(w *walk, f xsd.ValueConstraint) {
 // stringValid runs String Valid (§3.16.4) over this element's ·initial value· —
 // the string composed, in order, of the [[character code]] of each character
 // information item in E.[[children]] (Glossary, ·initial value·) — against st,
-// and reports the verdict on [walk.stringValid]'s terms: decided false where
-// this package withholds one, and otherwise a nil verdict for a ·valid· value
-// and the rejection — Datatype Valid's, or String Valid clause 3's — for an
-// invalid one.
+// and reports decided and err on [walk.stringValid]'s terms, the rejection
+// where there is one being Datatype Valid's or String Valid clause 3's.
 //
 // Two clauses ask it of the same string, and the CHARGE is each caller's own
 // because each names a different property as the simple type: cvc-type clause
@@ -669,8 +676,9 @@ func (c *contentCheck) fixedActualValue(w *walk, f xsd.ValueConstraint) {
 // decided false with that decline as the error, which each caller records under
 // cvc-assertions-valid ([walk.declineAssertions], cvcassertion.go) in place of
 // its own clause's decline.
-func (c *contentCheck) stringValid(w *walk, st *xsd.SimpleType) (decided bool, verdict error) {
-	return w.stringValid(st, c.assessed(), c.e, c.e.Loc())
+func (c *contentCheck) stringValid(w *walk, st *xsd.SimpleType) (decided bool, err error) {
+	lexical, ctx := c.assessed()
+	return w.stringValid(st, lexical, ctx, c.e.Loc())
 }
 
 // simpleTypeValue settles cvc-type clause 3.1.3: where E is not ·nilled·, its

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/big"
 	"regexp"
+	"strings"
 
 	"github.com/kud360/goxsd8/regex"
 	"github.com/kud360/goxsd8/xsd"
@@ -163,8 +164,11 @@ func typeFault(err error) error {
 // facetPrecondition builds the *xsderr.Error for a facet-pipeline PRECONDITION
 // fault: rule attributes it (ruleCosApplicableFacets for a facet paired with an
 // incapable value, xsderr.RuleComponentInvariant for the whiteSpace representation
-// invariant), and the wrapped errFacetPrecondition makes it discriminable through
-// IsFacetPrecondition without any caller parsing a message.
+// invariant), and errFacetPrecondition, set as its Err, makes it discriminable
+// through IsFacetPrecondition without any caller parsing a message. The sentinel
+// rides the chain only: Msg is the formatted fact alone, opening with the
+// offending item, never with the sentinel's text (STYLE E5), which xsderr.Wrap
+// would copy in.
 //
 // It is the ONE construction site of the class (STYLE T4), which is also what keeps
 // the cohort greppable now that the sites no longer share a marker STRING: `grep
@@ -180,7 +184,7 @@ func typeFault(err error) error {
 // class is ABOUT a component: the fix is to carry the declaring type's Loc on each
 // checker, not to invent one at the check site.
 func facetPrecondition(rule xsderr.Rule, loc xsderr.Loc, format string, args ...any) *xsderr.Error {
-	return xsderr.Wrap(rule, loc, fmt.Errorf("%w: %s", errFacetPrecondition, fmt.Sprintf(format, args...)))
+	return &xsderr.Error{Rule: rule, Loc: loc, Msg: fmt.Sprintf(format, args...), Err: errFacetPrecondition}
 }
 
 // IsFacetPrecondition reports whether err is a facet-pipeline PRECONDITION fault
@@ -215,8 +219,9 @@ func IsFacetPrecondition(err error) bool {
 //     error as a verdict rejects every typeless attribute in existence.
 //   - a construction-stage failure in the type's OWN facets: a pattern
 //     [regex.Translate] cannot express (src-pattern-value), an enumeration or
-//     bound facet whose DECLARING type the backend does not map
-//     (src-enumeration-value). Neither says anything about the literal.
+//     bound facet whose DECLARING type the backend does not map (charged under
+//     cvc-enumeration-valid or the bound's own cvc-*-valid rule, which cannot
+//     be decided without it). Neither says anything about the literal.
 //   - a facet-pipeline precondition fault ([IsFacetPrecondition], the narrower
 //     question "which fault"), which would report the same error for EVERY
 //     literal.
@@ -427,25 +432,26 @@ func ValidatingType(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexica
 }
 
 // validateLexical is ValidateLexical's internal form: the same verdict, plus the
-// whiteSpace mode of the ·basic member· that actually decided the literal — st's
-// own for the atomic and list varieties, the ·active basic member·'s for a union,
-// which validateUnion reaches by recursing here per member (§4.1.4 cl.2.3).
+// ·basic member· that actually decided the literal — st itself for the atomic and
+// list varieties, the ·active basic member· for a union, which validateUnion
+// reaches by recursing here per member (§4.1.4 cl.2.3, dt-active-basic-member).
 //
-// That third result exists for exactly one consumer, validateUnion: a union's own
-// pattern facet must be matched against the literal as normalized by the member
-// that validated it ("in the case of unions the ·pre-lexical· facets to use are
-// those associated with B in clause 2.3", the dv_vfacets note; PRINCIPLES 11),
-// and only the callee knows which member that was. No caller outside this package
-// needs it, so the exported wrapper drops it rather than widening the API
-// (STYLE T5).
-func validateLexical(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexical string, ctx Context, a AssertionEvaluator) (Value, whiteSpace, error) {
+// That third result exists for exactly one consumer, validateUnion, which needs
+// the member twice: a union's own pattern facet must be matched against the
+// literal as normalized by that member's whiteSpace ("in the case of unions the
+// ·pre-lexical· facets to use are those associated with B in clause 2.3", the
+// dv_vfacets note; PRINCIPLES 11), and the union's own assertions bind `$value`
+// under that member (dt-xdmrep clause 4) — and only the callee knows which member
+// that was. No caller outside this package needs it, so the exported wrapper
+// drops it rather than widening the API (STYLE T5).
+func validateLexical(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexical string, ctx Context, a AssertionEvaluator) (Value, *xsd.SimpleType, error) {
 	// {variety} dispatch, cvc-datatype-valid clause 2 (§4.1.4): a union takes
 	// clause 2.3's member dispatch (union.go), which composes st's own facets
 	// around the dispatched member's verdict rather than around st's own mapping.
 	// Atomic (cl.2.1) and list (cl.2.2) share the path below.
 	variety, err := st.Variety(r)
 	if err != nil {
-		return nil, 0, typeFault(err)
+		return nil, nil, typeFault(err)
 	}
 	if _, ok := variety.(xsd.Union); ok {
 		return validateUnion(b, r, st, rawLexical, ctx, a)
@@ -453,7 +459,7 @@ func validateLexical(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexic
 
 	lexFacets, valFacets, assertFacets, err := compile(b, r, st, a)
 	if err != nil {
-		return nil, 0, typeFault(err)
+		return nil, nil, typeFault(err)
 	}
 
 	// whiteSpace stage (§4.3.6): normalize using st's effective whiteSpace facet,
@@ -465,7 +471,7 @@ func validateLexical(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexic
 	// facetValue applies to a facet's own {value}.
 	ws, err := effectiveWhiteSpace(r, st)
 	if err != nil {
-		return nil, 0, typeFault(err)
+		return nil, nil, typeFault(err)
 	}
 	lexical := rawLexical
 	if ws != 0 {
@@ -476,7 +482,7 @@ func validateLexical(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexic
 	// whiteSpace-normalized lexical, before the value even exists.
 	for _, lf := range lexFacets {
 		if err := lf.CheckLexical(lexical); err != nil {
-			return nil, 0, err
+			return nil, nil, err
 		}
 	}
 
@@ -485,33 +491,33 @@ func validateLexical(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexic
 	// governs facet {value}s, not the application-facing candidate).
 	m, ok, err := governingMapping(b, r, st, a)
 	if err != nil {
-		return nil, 0, typeFault(err)
+		return nil, nil, typeFault(err)
 	}
 	if !ok {
-		return nil, 0, typeFault(xsderr.New(ruleCvcDatatypeValid, xsderr.Loc{},
-			"value: no backend mapping governs type %s", st.Name()))
+		return nil, nil, typeFault(xsderr.New(ruleCvcDatatypeValid, xsderr.Loc{},
+			"%s has no governing backend mapping, so the backend cannot decide cvc-datatype-valid for it", simpleTypeLabel(st.Name())))
 	}
 	v, err := m.Parse(lexical, ctx)
 	if err != nil {
-		return nil, 0, err
+		return nil, nil, err
 	}
 
 	// value-facet stage: enumeration/bounds/digits/length on the parsed value.
 	for _, vf := range valFacets {
 		if err := vf.CheckValue(v); err != nil {
-			return nil, 0, err
+			return nil, nil, err
 		}
 	}
 	if err := declaredNotation(r, st, variety, lexical, ctx); err != nil {
-		return nil, 0, err
+		return nil, nil, err
 	}
 
 	// assertions stage (cvc-assertions-valid, §4.3.13.3), last: every other
 	// value facet has accepted v (cvc-datatype-valid clause 3).
-	if err := checkAssertions(b, r, st, v, assertFacets, a); err != nil {
-		return nil, 0, err
+	if err := checkAssertions(b, r, st, st, v, assertFacets, a); err != nil {
+		return nil, nil, err
 	}
-	return v, ws, nil
+	return v, st, nil
 }
 
 // compile builds the pattern (lexical) and value facet checkers for st from its
@@ -558,7 +564,7 @@ func compile(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, a AssertionEvalu
 		case xsd.FacetWhiteSpace:
 			// Consumed by the whiteSpace normalize stage, not a checker.
 		case xsd.FacetPattern:
-			pf, err := newPatternFacet(ef.Facet())
+			pf, err := newPatternFacet(ef)
 			if err != nil {
 				return nil, nil, nil, err
 			}
@@ -804,16 +810,19 @@ func facetValue(m Mapping, ws whiteSpace, raw string, ctx Context) (Value, error
 // patternFacet per such EffectiveFacet, and ValidateLexical requires EVERY one
 // to pass (AND-across-steps); within a single patternFacet a literal is
 // pattern-valid if it matches ANY member (the same-step OR-set). The RE2
-// regexes are compiled once at construction.
+// regexes are compiled once at construction; ef is kept so a rejection names
+// the step that failed — its literals and the type that declares them.
 type patternFacet struct {
+	ef  xsd.EffectiveFacet
 	res []*regexp.Regexp
 }
 
-// newPatternFacet translates each XSD-flavor pattern value to RE2 and compiles
-// it (regex.FlavorXSD is implicitly whole-string anchored; ^ and $ are literal
-// characters, not anchors). A bad pattern surfaces here, not mid-validation.
-func newPatternFacet(f xsd.Facet) (patternFacet, error) {
-	values := f.Values()
+// newPatternFacet translates each XSD-flavor pattern value of ef to RE2 and
+// compiles it (regex.FlavorXSD is implicitly whole-string anchored; ^ and $ are
+// literal characters, not anchors). A bad pattern surfaces here, not
+// mid-validation.
+func newPatternFacet(ef xsd.EffectiveFacet) (patternFacet, error) {
+	values := ef.Facet().Values()
 	res := make([]*regexp.Regexp, 0, len(values))
 	for _, p := range values {
 		goRE, err := regex.Translate(p, regex.FlavorXSD, "")
@@ -826,19 +835,39 @@ func newPatternFacet(f xsd.Facet) (patternFacet, error) {
 		}
 		res = append(res, re)
 	}
-	return patternFacet{res: res}, nil
+	return patternFacet{ef: ef, res: res}, nil
 }
 
+// patternMemberEscaper renders one pattern {value} member for a
+// cvc-pattern-valid message, between the double quotes CheckLexical adds:
+// `&`, `"`, LF and CR become the XML character references `&amp;`, `&quot;`,
+// `&#10;` and `&#13;`, so a quote inside a member never reads as the end of
+// one, the `", "` joining members never appears inside one, and a line break
+// never splits the message (#2350). Every other character stays as written —
+// a backslash in particular is never doubled, so `[\-+]?[0-9]+` prints as the
+// Datatypes spec spells it.
+var patternMemberEscaper = strings.NewReplacer(`&`, "&amp;", `"`, "&quot;", "\n", "&#10;", "\r", "&#13;")
+
 // CheckLexical accepts the normalized literal iff it matches at least one
-// pattern in the OR-set (cvc-pattern-valid, §4.3.4.4).
+// pattern in the OR-set (cvc-pattern-valid, §4.3.4.4). A rejection names the
+// whole OR-set of the failed step — every member, never a single `|` branch,
+// rendered by patternMemberEscaper — and the type on the base chain that
+// declares it, which is derived provenance, not a spec property
+// (simpleTypeLabel renders the zero QName of an anonymous one).
 func (p patternFacet) CheckLexical(normalized string) error {
 	for _, re := range p.res {
 		if re.MatchString(normalized) {
 			return nil
 		}
 	}
+	values := p.ef.Facet().Values()
+	quoted := make([]string, len(values))
+	for i, v := range values {
+		quoted[i] = `"` + patternMemberEscaper.Replace(v) + `"`
+	}
 	return xsderr.New(ruleCvcPatternValid, xsderr.Loc{},
-		"value %q matches no member of the pattern facet (cvc-pattern-valid, §4.3.4.4)", normalized)
+		"%q matches no member of the pattern facet of %s, whose {value} holds %s, but cvc-pattern-valid requires one to match",
+		normalized, simpleTypeLabel(p.ef.Declaring()), strings.Join(quoted, ", "))
 }
 
 // enumFacet is the enumeration value-facet stage (cvc-enumeration-valid,
@@ -871,7 +900,8 @@ func newEnumFacet(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, ef xsd.Effe
 	}
 	if !ok {
 		return enumFacet{}, xsderr.New(ruleCvcEnumerationValid, xsderr.Loc{},
-			"enumeration: no backend mapping governs declaring type %s", ef.Declaring())
+			"%s, which declares the enumeration facet, has no governing backend mapping, so cvc-enumeration-valid cannot be decided against the facet's {value}",
+			simpleTypeLabel(ef.Declaring()))
 	}
 	// compile() routes only FacetEnumeration facets here, so EnumerationMembers
 	// always reports ok=true; the second result is discarded deliberately.
@@ -889,7 +919,7 @@ func newEnumFacet(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, ef xsd.Effe
 
 // xmlNamespaceURI is the single reserved, implicitly-bound XML namespace prefix
 // (Namespaces in XML §3): "xml" is bound by definition with no declaration.
-// "xmlns" is deliberately NOT a resolvable prefix — it names
+// "xmlns" deliberately gets no implicit binding — it names
 // namespace-declaration attributes, not a binding (WG ruling, bugzilla 4053).
 const xmlNamespaceURI = "http://www.w3.org/XML/1998/namespace"
 
@@ -898,12 +928,14 @@ const xmlNamespaceURI = "http://www.w3.org/XML/1998/namespace"
 // captured set of namespace bindings so a prefixed literal resolves against the
 // bindings in scope WHERE IT WAS WRITTEN — an enumeration facet member's
 // <enumeration> element (newMemberContext), a value constraint's
-// <element>/<attribute> element (constraintContext, valuespace.go). Its
+// <element>/<attribute> element ([ConstraintContext], valuespace.go). Its
 // reserved-prefix rules match conformance.nsContext exactly (value cannot import
 // the test-only conformance package, so this is a small second implementation of
-// the same logic): "xml" is always bound, "xmlns" is never bindable, and the
-// empty prefix resolves to the {default namespace} if one is in scope
-// (element-name semantics) else to no namespace.
+// the same logic): "xml" is always bound, "xmlns" gets no case of its own —
+// bound only where the captured bindings carry it, which no schema document
+// can declare (Namespaces in XML §3) — and the empty prefix resolves to the
+// {default namespace} if one is in scope (element-name semantics) else to no
+// namespace.
 //
 // It is a value type, so every caller has a usable context and there is no
 // nil-Context path to reason about. The map is an internal lookup, never ranged
@@ -937,14 +969,14 @@ func newMemberContext(m xsd.EnumerationMember) nsContext {
 }
 
 // LookupNamespace resolves prefix per §3.3.18. The reserved prefix "xml" is
-// always bound (Namespaces in XML §3); "xmlns" is never bound (it falls through
-// to the unbound branch). The empty prefix (an unprefixed literal) binds to the
-// {default namespace} if in scope, else to no namespace (ok=true, "") —
-// element-name semantics, so an unprefixed literal is never rejected as unbound.
-// A declared non-empty prefix resolves to its binding; any other non-empty prefix
-// is genuinely unbound (ok=false), which the mapping's Parse turns into a
-// rejection — remapped to src-enumeration-value (§4.3.5.3) for a facet member,
-// and read as undecided for a value constraint (valuespace.go).
+// always bound (Namespaces in XML §3); "xmlns" has no case of its own, so it is
+// bound only where the captured bindings carry it. The empty prefix (an
+// unprefixed literal) binds to the {default namespace} if in scope, else to no
+// namespace (ok=true, "") — element-name semantics, so an unprefixed literal is
+// never rejected as unbound. A declared non-empty prefix resolves to its binding;
+// any other non-empty prefix is genuinely unbound (ok=false), which the mapping's
+// Parse turns into a rejection — remapped to src-enumeration-value (§4.3.5.3) for
+// a facet member, and read as undecided for a value constraint (valuespace.go).
 func (c nsContext) LookupNamespace(prefix string) (namespace string, ok bool) {
 	if prefix == "xml" {
 		return xmlNamespaceURI, true
@@ -970,7 +1002,7 @@ func (e enumFacet) CheckValue(v Value) error {
 		}
 	}
 	return xsderr.New(ruleCvcEnumerationValid, xsderr.Loc{},
-		"value is not equal or identical to any enumeration member (cvc-enumeration-valid, §4.3.5.4)")
+		"value is not equal or identical to any enumeration member, but cvc-enumeration-valid requires it to be equal or identical to one")
 }
 
 // enumMatch reports the "equal or identical" relation cvc-enumeration-valid
@@ -996,7 +1028,11 @@ func enumMatch(candidate, member Value) bool {
 // panicking.
 type boundFacet struct {
 	limit Ordered
-	kind  xsd.FacetKind
+	// lexical is the facet's {value} as the document wrote it, which a rejection
+	// names; limit is its parsed form and cannot render it, since parsing drops
+	// the spelling ("+007" and "7" are one limit).
+	lexical string
+	kind    xsd.FacetKind
 }
 
 // newBoundFacet parses the single bound {value} via the declaring type's
@@ -1011,12 +1047,14 @@ func newBoundFacet(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, ef xsd.Eff
 	}
 	if !ok {
 		return boundFacet{}, xsderr.New(rule, xsderr.Loc{},
-			"%s: no backend mapping governs declaring type %s", kind, ef.Declaring())
+			"%s, which declares the %s facet, has no governing backend mapping, so %s cannot be decided against the facet's {value}",
+			simpleTypeLabel(ef.Declaring()), kind, rule)
 	}
 	values := ef.Facet().Values()
 	if len(values) != 1 {
 		return boundFacet{}, xsderr.New(rule, xsderr.Loc{},
-			"%s facet must carry exactly one value, has %d", kind, len(values))
+			"the %s facet of %s carries %d values rather than one, so %s cannot be decided against its {value}",
+			kind, simpleTypeLabel(st.Name()), len(values), rule)
 	}
 	v, err := facetValue(m, ws, values[0], nil)
 	if err != nil {
@@ -1025,9 +1063,10 @@ func newBoundFacet(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, ef xsd.Eff
 	ord, ok := v.(Ordered)
 	if !ok {
 		return boundFacet{}, facetPrecondition(ruleCosApplicableFacets, st.Loc(),
-			"value: %s facet value %q is not Ordered, so the facet is not applicable to %s (cos-applicable-facets §4.1.5)", kind, values[0], st.Name())
+			"the %s facet of %s, whose {value} %q parses to a %T that is not Ordered, is not applicable to that type, but cos-applicable-facets allows in {facets} only the facets applicable to the type",
+			kind, simpleTypeLabel(st.Name()), values[0], v)
 	}
-	return boundFacet{limit: ord, kind: kind}, nil
+	return boundFacet{limit: ord, lexical: values[0], kind: kind}, nil
 }
 
 // CheckValue rejects a candidate that violates the bound (§4.3.7–4.3.10).
@@ -1035,7 +1074,8 @@ func (bf boundFacet) CheckValue(v Value) error {
 	cand, ok := v.(Ordered)
 	if !ok {
 		return facetPrecondition(ruleCosApplicableFacets, xsderr.Loc{},
-			"value: candidate %T under a %s facet is not Ordered, so the facet is not applicable to its type (cos-applicable-facets §4.1.5)", v, bf.kind)
+			"the %s facet, whose {value} is %q, is not applicable to the type of a candidate that is not Ordered (%T), but cos-applicable-facets allows in {facets} only the facets applicable to the type",
+			bf.kind, bf.lexical, v)
 	}
 	ord := cand.Cmp(bf.limit)
 	if ord == Incomparable {
@@ -1044,11 +1084,13 @@ func (bf boundFacet) CheckValue(v Value) error {
 		// NaN candidate against a numeric bound, or any candidate when the bound
 		// value is itself NaN (the restricted space is then empty).
 		return xsderr.New(boundRule(bf.kind), xsderr.Loc{},
-			"value is incomparable with the %s facet bound, so it is excluded from the restricted value space (%s, §4.3.7–4.3.10)", bf.kind, boundRule(bf.kind))
+			"value is incomparable with the %s facet's {value} %q, so it is excluded from the restricted value space, but %s requires a value %s it",
+			bf.kind, bf.lexical, boundRule(bf.kind), boundRelation(bf.kind))
 	}
 	if bf.violates(ord) {
 		return xsderr.New(boundRule(bf.kind), xsderr.Loc{},
-			"value violates the %s facet (%s, §4.3.7–4.3.10)", bf.kind, boundRule(bf.kind))
+			"value violates the %s facet, whose {value} is %q, but %s requires a value %s it",
+			bf.kind, bf.lexical, boundRule(bf.kind), boundRelation(bf.kind))
 	}
 	return nil
 }
@@ -1066,6 +1108,27 @@ func (bf boundFacet) violates(ord Ordering) bool {
 		return ord == Less || ord == Equal
 	default:
 		panic(fmt.Sprintf("value: violates: %s is not a bound facet", bf.kind))
+	}
+}
+
+// boundRelation is the order relation each bound facet's Validation Rule
+// requires of a value against the facet's {value}, in that rule's own words:
+// cvc-maxInclusive-valid "less than or equal to", cvc-maxExclusive-valid "less
+// than", cvc-minInclusive-valid "greater than or equal to" and
+// cvc-minExclusive-valid "greater than". It renders a rejection only; violates
+// is the decision.
+func boundRelation(k xsd.FacetKind) string {
+	switch k {
+	case xsd.FacetMaxInclusive:
+		return "less than or equal to"
+	case xsd.FacetMaxExclusive:
+		return "less than"
+	case xsd.FacetMinInclusive:
+		return "greater than or equal to"
+	case xsd.FacetMinExclusive:
+		return "greater than"
+	default:
+		panic(fmt.Sprintf("value: boundRelation: %s is not a bound facet", k))
 	}
 }
 
@@ -1111,7 +1174,8 @@ func (df digitsFacet) CheckValue(v Value) error {
 	dc, ok := v.(DigitCounted)
 	if !ok {
 		return facetPrecondition(ruleCosApplicableFacets, xsderr.Loc{},
-			"value: candidate %T under a %s facet is not DigitCounted, so the facet is not applicable to its type (cos-applicable-facets §4.1.5)", v, df.kind)
+			"the %s facet, whose {value} is %q, is not applicable to the type of a candidate that is not DigitCounted (%T), but cos-applicable-facets allows in {facets} only the facets applicable to the type",
+			df.kind, df.limit, v)
 	}
 	got := dc.TotalDigits()
 	if df.kind == xsd.FacetFractionDigits {
@@ -1119,7 +1183,7 @@ func (df digitsFacet) CheckValue(v Value) error {
 	}
 	if df.limit.cmpInt(got) < 0 {
 		return xsderr.New(digitsRule(df.kind), xsderr.Loc{},
-			"value has %d %s, exceeds facet limit %s (%s)", got, df.kind, df.limit, digitsRule(df.kind))
+			"value has %d %s, exceeds facet limit %s, which %s forbids", got, df.kind, df.limit, digitsRule(df.kind))
 	}
 	return nil
 }
@@ -1219,11 +1283,12 @@ func (lf lengthFacet) CheckValue(v Value) error {
 	l, ok := v.(Lengthed)
 	if !ok {
 		return facetPrecondition(ruleCosApplicableFacets, xsderr.Loc{},
-			"value: candidate %T under a %s facet is not Lengthed, so the facet is not applicable to its type (cos-applicable-facets §4.1.5)", v, lf.kind)
+			"the %s facet, whose {value} is %q, is not applicable to the type of a candidate that is not Lengthed (%T), but cos-applicable-facets allows in {facets} only the facets applicable to the type",
+			lf.kind, lf.limit, v)
 	}
 	if lf.violates(l.Len()) {
 		return xsderr.New(lengthRule(lf.kind), xsderr.Loc{},
-			"value length %d violates the %s facet limit %s (%s)", l.Len(), lf.kind, lf.limit, lengthRule(lf.kind))
+			"value length %d violates the %s facet limit %s, which %s forbids", l.Len(), lf.kind, lf.limit, lengthRule(lf.kind))
 	}
 	return nil
 }
@@ -1268,6 +1333,22 @@ const (
 	tzOptional
 )
 
+// token renders the requirement as its {value} token: the one spelling of each
+// token, which newExplicitTimezoneFacet reads the facet's {value} against and a
+// facet-stage message names.
+func (t tzRequirement) token() string {
+	switch t {
+	case tzRequired:
+		return "required"
+	case tzProhibited:
+		return "prohibited"
+	case tzOptional:
+		return "optional"
+	default:
+		panic(fmt.Sprintf("value: tzRequirement.token: %d is not a requirement", int(t)))
+	}
+}
+
 // explicitTimezoneFacet is the explicitTimezone value-facet stage
 // (cvc-explicitTimezone-valid, §4.3.14.3), applicable to the date/time family
 // only (cos-applicable-facets §4.1.5). Its {value} is one of required/prohibited/
@@ -1285,18 +1366,16 @@ func newExplicitTimezoneFacet(f xsd.Facet) (explicitTimezoneFacet, error) {
 	values := f.Values()
 	if len(values) != 1 {
 		return explicitTimezoneFacet{}, xsderr.New(ruleCvcExplicitTimezoneValid, xsderr.Loc{},
-			"explicitTimezone facet must carry exactly one value, has %d", len(values))
+			"the explicitTimezone facet carries %d values rather than one, so cvc-explicitTimezone-valid cannot be decided against its {value}", len(values))
 	}
-	switch values[0] {
-	case "required":
-		return explicitTimezoneFacet{requirement: tzRequired}, nil
-	case "prohibited":
-		return explicitTimezoneFacet{requirement: tzProhibited}, nil
-	case "optional":
-		return explicitTimezoneFacet{requirement: tzOptional}, nil
+	for _, req := range []tzRequirement{tzRequired, tzProhibited, tzOptional} {
+		if values[0] == req.token() {
+			return explicitTimezoneFacet{requirement: req}, nil
+		}
 	}
 	return explicitTimezoneFacet{}, xsderr.New(ruleCvcExplicitTimezoneValid, xsderr.Loc{},
-		"explicitTimezone facet value %q is not one of required/prohibited/optional (§4.3.14.1)", values[0])
+		"the explicitTimezone facet's {value} %q is not required, prohibited or optional, the only three values cvc-explicitTimezone-valid clauses 1 to 3 decide",
+		values[0])
 }
 
 // CheckValue enforces cvc-explicitTimezone-valid (§4.3.14.3): required demands a
@@ -1314,15 +1393,16 @@ func (tf explicitTimezoneFacet) CheckValue(v Value) error {
 	ta, ok := v.(TimezoneAware)
 	if !ok {
 		return facetPrecondition(ruleCosApplicableFacets, xsderr.Loc{},
-			"value: candidate %T under an explicitTimezone facet is not TimezoneAware, so the facet is not applicable to its type (cos-applicable-facets §4.1.5)", v)
+			"the explicitTimezone facet, whose {value} is %q, is not applicable to the type of a candidate that is not TimezoneAware (%T), but cos-applicable-facets allows in {facets} only the facets applicable to the type",
+			tf.requirement.token(), v)
 	}
 	if tf.requirement == tzRequired && !ta.HasTimezone() {
 		return xsderr.New(ruleCvcExplicitTimezoneValid, xsderr.Loc{},
-			"value has no explicit timezone but the explicitTimezone facet is required (cvc-explicitTimezone-valid, §4.3.14.3)")
+			"value has no explicit timezone, but cvc-explicitTimezone-valid clause 1 requires one where the explicitTimezone facet is required")
 	}
 	if tf.requirement == tzProhibited && ta.HasTimezone() {
 		return xsderr.New(ruleCvcExplicitTimezoneValid, xsderr.Loc{},
-			"value has an explicit timezone but the explicitTimezone facet prohibits one (cvc-explicitTimezone-valid, §4.3.14.3)")
+			"value has an explicit timezone, but cvc-explicitTimezone-valid clause 2 forbids one where the explicitTimezone facet is prohibited")
 	}
 	return nil
 }
@@ -1370,7 +1450,8 @@ func (sf scaleFacet) CheckValue(v Value) error {
 	sc, ok := v.(Scaled)
 	if !ok {
 		return facetPrecondition(ruleCosApplicableFacets, xsderr.Loc{},
-			"value: candidate %T under a %s facet is not Scaled, so the facet is not applicable to its type (cos-applicable-facets §4.1.5)", v, sf.kind)
+			"the %s facet, whose {value} is %q, is not applicable to the type of a candidate that is not Scaled (%T), but cos-applicable-facets allows in {facets} only the facets applicable to the type",
+			sf.kind, sf.limit, v)
 	}
 	scale, ok := sc.Scale()
 	if !ok {
@@ -1378,7 +1459,7 @@ func (sf scaleFacet) CheckValue(v Value) error {
 	}
 	if sf.violates(scale) {
 		return xsderr.New(scaleRule(sf.kind), xsderr.Loc{},
-			"value scale %d violates the %s facet limit %s (%s)", scale, sf.kind, sf.limit, scaleRule(sf.kind))
+			"value scale %d violates the %s facet limit %s, which %s forbids", scale, sf.kind, sf.limit, scaleRule(sf.kind))
 	}
 	return nil
 }
@@ -1420,11 +1501,11 @@ func facetInt(f xsd.Facet, rule xsderr.Rule) (integerLiteral, error) {
 	values := f.Values()
 	if len(values) != 1 {
 		return "", xsderr.New(rule, xsderr.Loc{},
-			"%s facet must carry exactly one value, has %d", f.Kind(), len(values))
+			"the %s facet carries %d values rather than one, so %s cannot be decided against its {value}", f.Kind(), len(values), rule)
 	}
 	if _, ok := new(big.Int).SetString(values[0], 10); !ok {
 		return "", xsderr.New(rule, xsderr.Loc{},
-			"%s facet value %q is not an integer", f.Kind(), values[0])
+			"the %s facet's {value} %q is not an integer, so %s cannot be decided against it", f.Kind(), values[0], rule)
 	}
 	return integerLiteral(values[0]), nil
 }
@@ -1438,12 +1519,12 @@ func facetCount(f xsd.Facet, rule xsderr.Rule) (integerLiteral, error) {
 	values := f.Values()
 	if len(values) != 1 {
 		return "", xsderr.New(rule, xsderr.Loc{},
-			"%s facet must carry exactly one value, has %d", f.Kind(), len(values))
+			"the %s facet carries %d values rather than one, so %s cannot be decided against its {value}", f.Kind(), len(values), rule)
 	}
 	n, ok := new(big.Int).SetString(values[0], 10)
 	if !ok || n.Sign() < 0 {
 		return "", xsderr.New(rule, xsderr.Loc{},
-			"%s facet value %q is not a nonNegativeInteger", f.Kind(), values[0])
+			"the %s facet's {value} %q is not a nonNegativeInteger, so %s cannot be decided against it", f.Kind(), values[0], rule)
 	}
 	return integerLiteral(values[0]), nil
 }

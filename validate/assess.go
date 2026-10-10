@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
@@ -148,7 +149,7 @@ func (v *Validator) Assess(root Element) *Result {
 	entities, _ := root.(UnparsedEntities) // nil: the source supports no [unparsedEntities]
 	processed, told := root.(DeclarationsProcessed)
 	w := walk{log: v.log, schema: v.schema, backend: v.backend, values: value.NewValueSpace(v.backend), entities: entities,
-		declsUnread: told && !processed.AllDeclarationsProcessed()}
+		declsUnread: told && !processed.AllDeclarationsProcessed(), now: time.Now().UTC()}
 	var g governance
 	d, found := v.Schema().Element(root.Name())
 	if found {
@@ -164,7 +165,7 @@ func (v *Validator) Assess(root Element) *Result {
 		}
 		g = typed
 	}
-	w.element(root, g, nil, nil, nil)
+	w.element(root, g, nil, assertionAncestry{}, nil)
 	w.ids.charge(&w, root)
 	return &w.res
 }
@@ -903,26 +904,29 @@ func (w *walk) localGovernance(e Element, ldt xsd.TypeDefinition) governance {
 // written here.
 //
 // values is [value.NewValueSpace] over that same backend, built once per
-// assessment for the two charges that ask a value-constraint question of the
-// SCHEMA rather than of the instance: cvc-complex-type clause 4
-// ([walk.defaultedAttribute]) and cvc-elt clause 5.1.1
-// ([contentCheck.defaultValid], which reads this seam on the first one's
-// terms). It is not derived state to be re-derived per call: the constructor is
-// total on a non-nil backend and the result is immutable, so building it per
-// ·defaulted attribute· would allocate once per use per element to reach the
-// same object. nodes counts the element information items the walk has entered,
-// and the count doubles as each one's IDENTITY: §3.11.5's conflict resolution
-// turns on "the same key-sequence but distinct nodes" and §3.17.5.2's [binding]
-// is a SET of elements, and an [Element] is an interface whose == compares
-// whatever an adapter's dynamic type compares. ids is the [ID/IDREF table] those
-// ordinals bind into, assembled across the whole walk and read once, at the
-// ·validation root· (cvcid.go). entities is the root narrowed to
-// [UnparsedEntities] once, at the top of the call, and nil where the source does
-// not support [unparsedEntities] — the nil is that fact's only encoding, and
-// String Valid clause 3 reads it (cvcsimpletype.go). declsUnread is the root's
-// [DeclarationsProcessed] answer, read once at the same point and inverted: true
-// only where the source implements the capability and reports false, which is
-// all clause 3's diagnostic needs.
+// assessment for the charge that asks a value-constraint question of the SCHEMA
+// rather than of the instance: cvc-elt clause 5.1.1
+// ([contentCheck.defaultValid]). It is not derived state to be re-derived per
+// call: the constructor is total on a non-nil backend and the result is
+// immutable, so building it on that arm would allocate once per element
+// reaching it to reach the same object. nodes counts the element information
+// items the walk has entered, and the count doubles as each one's IDENTITY:
+// §3.11.5's conflict resolution turns on "the same key-sequence but distinct
+// nodes" and §3.17.5.2's [binding] is a SET of elements, and an [Element] is an
+// interface whose == compares whatever an adapter's dynamic type compares. ids
+// is the [ID/IDREF table] those ordinals bind into, assembled across the whole
+// walk and read once, at the ·validation root· (cvcid.go). entities is the root
+// narrowed to [UnparsedEntities] once, at the top of the call, and nil where the
+// source does not support [unparsedEntities] — the nil is that fact's only
+// encoding, and String Valid clause 3 reads it (cvcsimpletype.go). declsUnread
+// is the root's [DeclarationsProcessed] answer, read once at the same point and
+// inverted: true only where the source implements the capability and reports
+// false, which is all clause 3's diagnostic needs. now is the current dateTime
+// of the XPath dynamic context (xpath20.md §2.1.2), read off the clock once, at
+// the top of the call, which cvc-xpath clause 6 (§3.13.4.2) makes constant
+// during an assessment episode: every assertion and every assertions facet the
+// walk evaluates is handed this one instant, so fn:current-date answers one
+// date across the whole episode.
 type walk struct {
 	log         *slog.Logger
 	schema      *xsd.Schema
@@ -933,6 +937,7 @@ type walk struct {
 	nodes       int
 	ids         idTable
 	res         Result
+	now         time.Time
 }
 
 // elementContext is the [value.Context] an instance lexical is mapped under:
@@ -940,7 +945,9 @@ type walk struct {
 // QName- or NOTATION-valued lexical resolves its prefix (Datatypes §3.3.18,
 // §3.3.19, PRINCIPLES 19). The owner is the attribute's element for an
 // attribute's lexical (cvc-attribute clause 3) and the element itself for its
-// ·initial value· (cvc-complex-type clause 1.2).
+// ·initial value· (cvc-complex-type clause 1.2). A {value constraint}'s {lexical
+// form} — a ·defaulted attribute·'s or an element default's — is never mapped
+// under it: [value.ConstraintContext] is that literal's context.
 //
 // It exists so no site passes a nil Context. A nil one makes a backend reject
 // every prefixed QName lexical for want of bindings, which is a false reject of
@@ -1009,13 +1016,21 @@ func (c elementContext) LookupNamespace(prefix string) (string, bool) {
 // reads the ·attribution· of e's attributes to e's ·governing type definition·
 // ([walk.handedDown]).
 //
-// asserting is the enclosing element's clause 6 state, nil at the ·validation
-// root· and wherever the enclosing element has no {assertions}, and it travels
-// down beside parent as e's own state travels to e's [[children]]. e hands it
-// its typed value last, once everything that can find e invalid has run
-// ([walk.keepChild]): cvc-assertion clause 1.1 validates the parent's
-// [[children]] "in the usual way" before any {test} of the parent reads them.
-func (w *walk) element(e Element, g governance, parent *icCheck, asserting *assertionCheck, inherited []inheritedAttribute) {
+// up is what e's ancestors' clause 6 states read of e ([assertionAncestry]),
+// and it travels down beside parent as e's own travels to e's [[children]]
+// (assertionAncestry.below). e is reported to every counting ancestor's
+// Tallies on entry, its own attributes to its own ([walk.tallyElement]), and
+// e hands its parent's state its typed value last, once everything that can
+// find e invalid has run ([walk.keepChild]) — a value of mixed content the
+// string-value e's frame collected from its subtree as it streamed past,
+// opened on entry ([walk.stringValue]): cvc-assertion clause 1.1 validates the
+// parent's [[children]] "in the usual way" before any {test} of the parent
+// reads them. e's own string value, which its own {test}s read as `.`, is
+// collected the same way into a frame of its own ([ownStringValue]), and what
+// e contributes to every open frame beyond its text runs is settled once its
+// [[children]] are exhausted, before its own {test}s are evaluated
+// ([collectEnd]).
+func (w *walk) element(e Element, g governance, parent *icCheck, up assertionAncestry, inherited []inheritedAttribute) {
 	if w.log.Enabled(context.Background(), slog.LevelDebug) {
 		w.log.Debug("assessing element", slog.Any("name", e.Name()), slog.Any("loc", e.Loc()))
 	}
@@ -1029,7 +1044,18 @@ func (w *walk) element(e Element, g governance, parent *icCheck, asserting *asse
 	w.attributes(e, g)
 	content := w.contentCheck(e, g, isNilled)
 	asserts := w.compileAssertions(g)
-	w.children(e, content, id, asserts, w.handedDown(e, g, inherited))
+	w.tallyElement(e, g, up, asserts)
+	up.collectElement(e, g, isNilled)
+	frame := w.stringValue(e, g, content, up)
+	inner := up.collecting
+	if frame != nil {
+		inner = frame
+	}
+	own := ownStringValue(asserts, content, inner)
+	if own != nil {
+		inner = own
+	}
+	w.children(e, content, id, up.below(e.Name(), asserts, inner), w.handedDown(e, g, inherited))
 	if w.res.err != nil {
 		// A walk that stopped on a source fault never settles §3.11.4 or
 		// §3.17.5.2 for this element, on [contentCheck.end]'s grounds: the
@@ -1039,11 +1065,12 @@ func (w *walk) element(e Element, g governance, parent *icCheck, asserting *asse
 		// ·PSVI· (cvc-assertion clause 1.2) those [[children]] are part of.
 		return
 	}
-	w.elementAssertions(e, asserts, content, len(w.res.violations) > violationsBefore)
+	collectEnd(w.schema, e, inner, g, content)
+	w.elementAssertions(e, asserts, content, own, len(w.res.violations) > violationsBefore)
 	id.substitute(content)
 	w.idElement(id)
 	w.identityExit(id)
-	w.keepChild(asserting, e, g, content,
+	w.keepChild(up.parent, e, g, content, frame,
 		len(w.res.violations) > violationsBefore || len(w.res.unevaluated) > unevaluatedBefore)
 }
 
@@ -1382,7 +1409,7 @@ func (w *walk) declineAttribute(a Attribute, rule xsderr.Rule, clause, format st
 // [walk.element] is never reached for it, so its "assessing element" line —
 // which every other element gets, whatever was or was not decided about it
 // (STYLE L1) — has nowhere else to come from, and it carries the outcome that
-// says the subtree below is unvisited rather than merely undecided.
+// says the subtree below is unassessed rather than merely undecided.
 func (w *walk) logSkipped(e Element) {
 	if !w.log.Enabled(context.Background(), slog.LevelDebug) {
 		return
@@ -1458,16 +1485,17 @@ func (w *walk) text(t Text) {
 // would have satisfied.
 //
 // inherited is the [inherited attributes] each element [[child]] gets, the
-// same for all of them ([walk.handedDown]), and asserts is e's clause 6 state,
-// which each of them hands its typed value to ([walk.keepChild]).
-func (w *walk) children(e Element, content *contentCheck, id *icCheck, asserts *assertionCheck, inherited []inheritedAttribute) {
+// same for all of them ([walk.handedDown]), and below is their
+// [assertionAncestry], whose parent is e's clause 6 state, which each of them
+// hands its typed value to ([walk.keepChild]).
+func (w *walk) children(e Element, content *contentCheck, id *icCheck, below assertionAncestry, inherited []inheritedAttribute) {
 	kids := e.Children()
 	for {
 		c, ok := kids.Next()
 		if !ok {
 			break
 		}
-		w.child(c, content, id, asserts, inherited)
+		w.child(c, content, id, below, inherited)
 		if w.res.err != nil {
 			return
 		}
@@ -1491,17 +1519,21 @@ func (w *walk) children(e Element, content *contentCheck, id *icCheck, asserts *
 //
 // A ·skipped· child stops here and not one level down, which is what makes it
 // the whole SUBTREE that is not ·assessed· (key-sva clause 3.2, cvc-assess-elt
-// clause 2): [walk.element] is the only path to a child's own [[children]], so
-// declining to call it leaves every element below the skipped one unvisited,
-// whatever its own attribution would have been. It is also what keeps
-// inherited, the child's [inherited attributes], from reaching a child
-// e-inherited_attributes gives none: one attributed to a skip Wildcard.
+// clause 2): [walk.element] is the only path that assesses a child's own
+// [[children]], so declining to call it leaves every element below the skipped
+// one unassessed, whatever its own attribution would have been. It is also
+// what keeps inherited, the child's [inherited attributes], from reaching a
+// child e-inherited_attributes gives none: one attributed to a skip Wildcard.
+// The one read of a ·skipped· subtree is [assertionAncestry.skipped]'s, and
+// only where an ancestor's {test} counts nodes of it: the names of its elements
+// and their attributes, for the Tally, and nothing assessed. A fault in the
+// source met there stops the walk as one met here would.
 //
 // A child [contentCheck.element] reports undecided never reaches
 // [walk.childGoverning]: it takes [governance]'s undecided shape here, and
 // clause 5 ([walk.locallyDeclaredType]), which an undecided child's absent
 // ·governing type definition· makes vacuous, is not consulted for it.
-func (w *walk) child(c Child, content *contentCheck, id *icCheck, asserts *assertionCheck, inherited []inheritedAttribute) {
+func (w *walk) child(c Child, content *contentCheck, id *icCheck, up assertionAncestry, inherited []inheritedAttribute) {
 	if e, ok := c.Element(); ok {
 		a, undecided := content.element(w, e)
 		if a == nil && content.g.laxlyAssessed() {
@@ -1513,7 +1545,7 @@ func (w *walk) child(c Child, content *contentCheck, id *icCheck, asserts *asser
 			// assessed· where one resolves, ·laxly assessed· again where none
 			// does, and never invalid for the want of one — the wildcard is lax,
 			// so e-validity clause 1.1.3 is not live (#1823).
-			w.element(e, w.resolvedGovernance(e, inherited), id, asserts, inherited)
+			w.element(e, w.resolvedGovernance(e, inherited), id, up, inherited)
 			return
 		}
 		if undecided {
@@ -1557,7 +1589,11 @@ func (w *walk) child(c Child, content *contentCheck, id *icCheck, asserts *asser
 			// [walk.abstractType], [walk.attribute], [contentCheck.element] and
 			// [walk.idElement] nothing to decide, [icCheck.fill] declines any field slot
 			// the child would fill, and [walk.locallyDeclaredType] is not consulted
-			// (above).
+			// (above). [walk.tallyElement] declines the {assertions} of every
+			// ancestor one of whose {test}s counts attribute nodes, or filters
+			// children by their attributes, at the child's depth, whose Tallies
+			// cannot be told of its ·defaulted attributes·, fail-open; any other
+			// ancestor counts its element node.
 			//
 			// It records no [Unevaluated] of its own. A clause 1.4 the matcher
 			// declined is content.element's cvc-complex-content record, and a
@@ -1565,18 +1601,20 @@ func (w *walk) child(c Child, content *contentCheck, id *icCheck, asserts *asser
 			// [walk.localGovernance] record or sits below one, so a record here
 			// would restate one decline per child.
 			w.ids.declined = true
-			w.element(e, governance{undecided: true}, id, asserts, inherited)
+			w.element(e, governance{undecided: true}, id, up, inherited)
 			return
 		}
 		g, assess := w.childGoverning(e, a, content.g.complexType(), inherited)
 		if !assess {
-			asserts.skipped(e)
 			w.logSkipped(e)
+			if err := up.skipped(e); err != nil {
+				w.res.err = err
+			}
 			return
 		}
 		w.unresolvedStrictWildcardChild(content, e, a, g)
 		w.locallyDeclaredType(content, e, g)
-		w.element(e, g, id, asserts, inherited)
+		w.element(e, g, id, up, inherited)
 		return
 	}
 	t, ok := c.Text()
@@ -1585,5 +1623,6 @@ func (w *walk) child(c Child, content *contentCheck, id *icCheck, asserts *asser
 	}
 	content.text(w, t)
 	id.text(t)
+	up.collectText(content, t)
 	w.text(t)
 }

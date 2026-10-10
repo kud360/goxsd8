@@ -89,11 +89,11 @@ func aVarietyTypes(t *testing.T) []*xsd.SimpleType {
 	t.Helper()
 	return []*xsd.SimpleType{
 		aRestriction(t, "AssertedInt", integerType(), "$value > 0"),
-		aRestriction(t, "AssertedStr", icBuiltin("string"), "string-length($value) > 0"),
+		aRestriction(t, "AssertedStr", icBuiltin("string"), "upper-case($value) != ''"),
 		aList(t, "PlainList", local("AssertedInt")),
-		aRestriction(t, "AssertedList", local("PlainList"), "count($value) > 1"),
+		aRestriction(t, "AssertedList", local("PlainList"), "sum($value) > 1"),
 		aUnion(t, "PlainUnion", local("AssertedInt"), local("AssertedStr")),
-		aRestriction(t, "AssertedUnion", local("PlainUnion"), "$value != 'x'"),
+		aRestriction(t, "AssertedUnion", local("PlainUnion"), "upper-case($value) != ''"),
 	}
 }
 
@@ -425,6 +425,94 @@ func TestValueAssertionOverAnInvalidElementIsEmpty(t *testing.T) {
 	wantSatisfied(t, aAssess(t, aSimple(t, "int", false, nil, "$value eq 5"), cRoot("#5")), "$value eq 5 over a valid 5")
 }
 
+// `.` over simple content is the element's string value, its ·initial value·
+// unnormalized and as xs:untypedAtomic, and never `$value` ([xpath.BindValue]):
+// over xs:integer content "0030" `string-length(.) = 4` holds where `$value` is
+// 30, and over "30" it is charged. An element already known to be invalid — a
+// missing required attribute, cvc-complex-type clause 3 — still has its string
+// value, while `$value` is the empty sequence (cvc-assertion clause 2.3.2), so
+// `. = 5 and empty($value)` holds over "5". An empty element its declaration
+// defaults reads the default's {lexical form}, the text node xpath-datamodel
+// Appendix J.2 "may" build for it, and so `. = ""` is charged there: that is
+// the processor's choice walk.assertionValue's GAP(xpath) marks, §6.2.4 giving
+// an empty element "" instead. The invalid row is charged with
+// walk.assertionValue binding "" for an invalid element, and the defaulted
+// rows' verdicts swap with it binding the ·initial value· in place of
+// [contentCheck.assessed]'s.
+func TestContextItemAssertionReadsTheStringValue(t *testing.T) {
+	schema := aSimple(t, "integer", false, nil, "string-length(.) = 4 and $value = 30")
+	wantSatisfied(t, aAssess(t, schema, cRoot("#0030")), "string-length(.) = 4 over 0030")
+	wantAssertionCharge(t, aAssess(t, schema, cRoot("#30")),
+		`the element root is not ·valid· with respect to assertion 1 of 1 in the {assertions} of the ·governing type definition· RootType, whose {test} is "string-length(.) = 4 and $value = 30",`)
+
+	uses := []xsd.AttributeUse{typedUse(t, "r", icBuiltin("string"), true, nil, nil)}
+	res := aAssess(t, aSimple(t, "int", false, uses, ". = 5 and empty($value)"), cRoot("#5"))
+	if got := res.Violations(); len(got) != 1 || got[0].Rule != "cvc-complex-type" {
+		t.Fatalf("Violations() = %v, want the cvc-complex-type clause 3 charge alone: `.` reads 5 while $value is empty", got)
+	}
+	if got := res.Unevaluated(); len(got) != 0 {
+		t.Errorf("Unevaluated() = %v, want none", messages(got))
+	}
+
+	wantSatisfied(t, aAssess(t, aDefaultedContent(t, ". = '007' and $value = 7"), cRoot()), ". = '007' over an element defaulted to 007")
+	wantAssertionCharge(t, aAssess(t, aDefaultedContent(t, ". = ''"), cRoot()),
+		`the element root is not ·valid· with respect to assertion 1 of 1 in the {assertions} of the ·governing type definition· RootType, whose {test} is ". = ''",`)
+}
+
+// aDefaultedContent is a schema whose root element declaration defaults its
+// xs:integer simple content to "007", under the one assertion test.
+func aDefaultedContent(t *testing.T, test string) *xsd.Schema {
+	t.Helper()
+	td, _ := builtinType(t, "integer")
+	ct := aComplexType(t, nil, xsd.SimpleContent{SimpleType: td}, aAssertions(test))
+	dflt := xsd.NewValueConstraint(xsd.ValueDefault, "007", nil, nil)
+	e, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "root"},
+		xsd.TypeDefinitionRef{Name: ct.Name()}, nil, xsd.NewGlobalScope(), &dflt, false, nil, nil, nil, false, nil)
+	if err != nil {
+		t.Fatalf("building the root element declaration: %v", err)
+	}
+	b := xsd.NewSchemaBuilder()
+	aTypes(t, b)
+	b.AddType(ct)
+	b.AddElement(e)
+	defaulted, err := b.Finalize()
+	if err != nil {
+		t.Fatalf("finalizing the schema: %v", err)
+	}
+	return defaulted
+}
+
+// An element under simple content with an element [[child]] — charged under
+// cvc-complex-type clause 1.2 — has a string value the walk never gathers, so
+// its assertions are recorded Unevaluated and never evaluated over the text
+// gathered before the charge: `. = 'ab'` over a<x/>b, whose string value "ab"
+// satisfies it and whose gathered "a" does not, and `. = 'x'` over <x/>, false
+// over either. Both rows are charged under cvc-assertion with
+// walk.assertionValue binding the gathered text in place of declining.
+func TestContextItemAssertionOverElementChildrenDeclines(t *testing.T) {
+	for _, tc := range []struct {
+		test string
+		root *testElement
+	}{
+		{". = 'ab'", cRoot("#a", "x", "#b")},
+		{". = 'x'", cRoot("x")},
+	} {
+		t.Run(tc.test, func(t *testing.T) {
+			res := aAssess(t, aSimple(t, "string", false, nil, tc.test), tc.root)
+			if got := res.Violations(); len(got) != 1 || got[0].Rule != "cvc-complex-type" {
+				t.Fatalf("Violations() = %v, want the cvc-complex-type clause 1.2 charge alone", got)
+			}
+			got := res.Unevaluated()
+			if len(got) != 1 || got[0].Rule() != "cvc-assertion" || got[0].Loc() != loc(1, 1) {
+				t.Fatalf("Unevaluated() = %v, want one cvc-assertion record at %s", messages(got), loc(1, 1))
+			}
+			if want := "the element root has simple content and element [[children]]"; !strings.Contains(got[0].Msg(), want) {
+				t.Errorf("Msg = %q, want it to name %q", got[0].Msg(), want)
+			}
+		})
+	}
+}
+
 // A ·nilled· element binds `$value` to the empty sequence (cvc-assertion clause
 // 2.3.1.2), whatever its type's {content type}. Over xs:string the case is
 // discriminating: the empty ·initial value· a ·nilled· element carries is a
@@ -436,6 +524,46 @@ func TestValueAssertionOverANilledElementIsEmpty(t *testing.T) {
 
 	wantSatisfied(t, aAssess(t, aSimple(t, "string", true, nil, "not($value eq '')"), root), "not($value eq '') over a ·nilled· element")
 	wantAssertionCharge(t, aAssess(t, aSimple(t, "string", true, nil, "$value eq ''"), root), "the element root is not ·valid· with respect to assertion 1 of 1")
+}
+
+// A ·nilled· element is dm:nilled false in the partial ·PSVI· (xpath-datamodel
+// §6.2.4 nilled), so its string value is its descendants' text, never "" while
+// it has [[children]]: under cvc-elt clause 3.2.3.1's charge its assertions are
+// recorded Unevaluated and never evaluated over a string value this walk did
+// not gather — `. = 'abc'` over the text abc, which that string value
+// satisfies, and `. = 'x'` over <x/>, which it does not. Both rows are charged
+// under cvc-assertion with walk.assertionValue binding "" for every ·nilled·
+// element in place of declining. The guard: with no [[children]] `.` is the
+// zero-length string, and `. = ""` holds.
+func TestContextItemAssertionOverANilledElementWithChildrenDeclines(t *testing.T) {
+	nilled := func(kids ...string) *testElement {
+		root := cRoot(kids...)
+		root.attrs = []Attribute{&testAttribute{
+			name: xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: "nil"}, value: "true", loc: loc(1, 10)}}
+		return root
+	}
+	for _, tc := range []struct {
+		test string
+		root *testElement
+	}{
+		{". = 'abc'", nilled("#abc")},
+		{". = 'x'", nilled("x")},
+	} {
+		t.Run(tc.test, func(t *testing.T) {
+			res := aAssess(t, aSimple(t, "string", true, nil, tc.test), tc.root)
+			if got := res.Violations(); len(got) != 1 || got[0].Rule != "cvc-elt" {
+				t.Fatalf("Violations() = %v, want the cvc-elt clause 3.2.3.1 charge alone", got)
+			}
+			got := res.Unevaluated()
+			if len(got) != 1 || got[0].Rule() != "cvc-assertion" || got[0].Loc() != loc(1, 1) {
+				t.Fatalf("Unevaluated() = %v, want one cvc-assertion record at %s", messages(got), loc(1, 1))
+			}
+			if want := "the element root has xsi:nil = true and [[children]]"; !strings.Contains(got[0].Msg(), want) {
+				t.Errorf("Msg = %q, want it to name %q", got[0].Msg(), want)
+			}
+		})
+	}
+	wantSatisfied(t, aAssess(t, aSimple(t, "string", true, nil, ". = ''"), nilled()), ". = '' over a ·nilled· element with no [[children]]")
 }
 
 // Where String Valid over the ·initial value· is WITHHELD, `$value` is
@@ -552,6 +680,37 @@ func TestAssertionOverAnUndecidedDefaultedAttributeIsDeclined(t *testing.T) {
 	}
 }
 
+// A ·defaulted attribute·'s ·actual value· is mapped under the namespace
+// bindings its {value constraint} captured (value.ConstraintContext), never
+// the element's: an xs:QName x defaulting to "p:a", p bound to urn:a on the
+// constraint alone, reaches `not(@y)` as a value whether the element binds no p
+// or binds it elsewhere, and the assertion is evaluated and satisfied, with
+// cvc-complex-type clause 4 decided beside it. With the default mapped under
+// elementContext the first row declines the assertion for x's missing ·actual
+// value·; the second guards against declining every QName-governed default
+// outright, which would decline it as well.
+func TestAssertionReadsADefaultUnderItsOwnBindings(t *testing.T) {
+	dflt := xsd.NewValueConstraint(xsd.ValueDefault, "p:a", []xsd.NamespaceBinding{xsd.NewNamespaceBinding("p", "urn:a")}, nil)
+	uses := []xsd.AttributeUse{
+		typedUse(t, "x", icBuiltin("QName"), false, &dflt, nil),
+		typedUse(t, "y", icBuiltin("integer"), false, nil, nil),
+	}
+	schema := aSchema(t, aComplexType(t, uses, xsd.EmptyContent{}, aAssertions("not(@y)")))
+	elsewhere := aRoot()
+	elsewhere.bindings = map[string]string{"p": "urn:other"}
+	for _, tc := range []struct {
+		name string
+		root *testElement
+	}{
+		{"p unbound in the instance", aRoot()},
+		{"p bound elsewhere in the instance", elsewhere},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			wantSatisfied(t, aAssess(t, schema, tc.root), "not(@y) evaluated over x's ·actual value·")
+		})
+	}
+}
+
 // A complex type with no {assertions} records nothing: the visit is per
 // assertion, not per element.
 func TestElementWithoutAssertionsRecordsNothing(t *testing.T) {
@@ -567,7 +726,9 @@ func TestElementWithoutAssertionsRecordsNothing(t *testing.T) {
 // aFacetTypes is aVarietyTypes plus the facets the evaluation tests read: two
 // whose {test} the facet evaluator admits (`$value eq 100` over xs:integer,
 // `$value = 'x'` over xs:string), one reading the absent context item, two it
-// declines (arithmetic, #2269, and a function call), and a union whose first
+// declines (a range expression whose upper operand is not an IntegerLiteral,
+// and an fn:upper-case call, a function outside the string and sequence core
+// xpath.CompileAssertionTest calls), and a union whose first
 // member restricts xs:ENTITY with `$value = 'x'` ahead of xs:string.
 func aFacetTypes(t *testing.T) []*xsd.SimpleType {
 	t.Helper()
@@ -575,9 +736,10 @@ func aFacetTypes(t *testing.T) []*xsd.SimpleType {
 		aRestriction(t, "EqHundred", integerType(), "$value eq 100"),
 		aRestriction(t, "IsX", icBuiltin("string"), "$value = 'x'"),
 		aRestriction(t, "Dot", icBuiltin("string"), ". = 'x'"),
-		aRestriction(t, "Even", integerType(), "$value mod 2 = 0"),
-		aRestriction(t, "EndsX", icBuiltin("string"), "ends-with($value, 'x')"),
+		aRestriction(t, "InRange", integerType(), "$value = 1 to $value"),
+		aRestriction(t, "UpperX", icBuiltin("string"), "upper-case($value) = 'AX'"),
 		aRestriction(t, "EntityX", icBuiltin("ENTITY"), "$value = 'x'"),
+		aRestriction(t, "PastDate", icBuiltin("date"), "$value lt current-date()"),
 		aUnion(t, "EntityXOrString", local("EntityX"), icBuiltin("string")),
 	)
 }
@@ -635,6 +797,23 @@ func TestFacetAssertionReadingTheContextItemIsCharged(t *testing.T) {
 	wantFacetCharge(t, aAttributeAssessed(t, "Dot", "x"), "cvc-attribute", "Dot over x")
 }
 
+// fn:current-date is EVALUATED at the date of the instant Validator.Assess
+// reads off the clock (cvc-xpath clauses 5 and 6): over an xs:date attribute a
+// complex type's `@n lt current-date()` holds for 2000-01-01 and is charged
+// under cvc-assertion for 9999-12-31, and the assertions facet `$value lt
+// current-date()` holds and is charged under cvc-attribute alike. With the
+// "current-date" arm of xpath's ctaParser.libraryCall removed, every row
+// records an Unevaluated instead and fails.
+func TestCurrentDateAssertionsAreEvaluated(t *testing.T) {
+	schema := aTyped(t, []string{"n", "date"}, "@n lt current-date()")
+	wantSatisfied(t, aAssess(t, schema, valuedRoot("n", "2000-01-01")), "@n lt current-date() over 2000-01-01")
+	wantAssertionCharge(t, aAssess(t, schema, valuedRoot("n", "9999-12-31")),
+		`the element root is not ·valid· with respect to assertion 1 of 1 in the {assertions} of the ·governing type definition· RootType, whose {test} is "@n lt current-date()",`)
+
+	wantSatisfied(t, aAttributeAssessed(t, "PastDate", "2000-01-01"), "PastDate over 2000-01-01")
+	wantFacetCharge(t, aAttributeAssessed(t, "PastDate", "9999-12-31"), "cvc-attribute", "PastDate over 9999-12-31")
+}
+
 // cvc-complex-type clause 1.2 reaches the same facet over an element's
 // ·initial value·, and charges a value its {test} is false of at the
 // CONTAINING element's location — the value is assembled from every character
@@ -680,11 +859,12 @@ func TestUnionMemberFailingItsFacetYieldsTheValidatingType(t *testing.T) {
 // records nothing while the list's own declined facet is recorded; a union
 // records only the member the dispatch REACHED — 42 is decided by AssertedInt,
 // whose facet holds, so AssertedStr's is never asked, where "abc" reaches it —
-// and then its own facet, which is declined whatever its {test} (dt-xdmrep
-// clause 4). The two declined {test}s Even and EndsX are the guard: with
-// [walk.declineAssertions] reporting false they record under cvc-attribute
-// instead, and with the evaluator answering AssertionFails for a decline they
-// are charged.
+// and then its own facet, compiled with `$value` typed by that ·active basic
+// member· (dt-xdmrep clause 4), whose fn:upper-case call declines there as it
+// would over AssertedInt itself. The two declined {test}s InRange and UpperX
+// are the guard: with [walk.declineAssertions] reporting false they record
+// under cvc-attribute instead, and with the evaluator answering AssertionFails
+// for a decline they are charged.
 func TestDeclinedFacetAssertionsAreRecorded(t *testing.T) {
 	for _, c := range []struct {
 		name    string
@@ -692,8 +872,8 @@ func TestDeclinedFacetAssertionsAreRecorded(t *testing.T) {
 		lexical string
 		want    []string
 	}{
-		{"arithmetic", "Even", "4", []string{"Even"}},
-		{"a function call", "EndsX", "ax", []string{"EndsX"}},
+		{"a range expression", "InRange", "4", []string{"InRange"}},
+		{"a function call", "UpperX", "ax", []string{"UpperX"}},
 		{"atomic", "AssertedStr", "abc", []string{"AssertedStr"}},
 		{"a list item evaluated", "PlainList", "1 2", nil},
 		{"the list's own", "AssertedList", "1 2", []string{"AssertedList"}},
@@ -786,20 +966,26 @@ func TestWildcardAttributeAssertionsAreRecorded(t *testing.T) {
 	}
 }
 
-// cvc-complex-type clause 4 validates a ·defaulted attribute·'s {lexical form}
-// through xsd.ValueSpace's ValidDefault, which evaluates no assertion: the
-// {lexical form} of a type carrying an assertions facet is undecided, and the
-// clause is declined at the ELEMENT's location — the residue
-// [walk.defaultedAttribute]'s GAP(validate) names — even for a {test} the facet
-// evaluator would have admitted.
-func TestDefaultedAttributeAssertionsFacetDeclines(t *testing.T) {
-	dflt := xsd.NewValueConstraint(xsd.ValueDefault, "42", nil, nil)
-	uses := []xsd.AttributeUse{typedUse(t, "n", local("AssertedInt"), false, nil, &dflt)}
-	schema := aSchema(t, aComplexType(t, uses, xsd.EmptyContent{}, nil), aFacetTypes(t)...)
+// cvc-complex-type clause 4's String Valid over a ·defaulted attribute·'s
+// {lexical form} EVALUATES the assertions facets of the declaration's {type
+// definition} (walk.stringValid, xpath.FacetAssertions): `$value > 0` holds for
+// a default of "42" and is charged under clause 4, its cause the
+// cvc-assertions-valid verdict, for "0"; a {test} the facet evaluator declines
+// (`$value = 1 to $value`) is recorded under cvc-assertions-valid at the
+// ELEMENT's location, the attribute being absent. With the default decided
+// through xsd.ValueSpace's ValidDefault, which evaluates no assertion, all
+// three rows record a cvc-complex-type clause 4 decline instead.
+func TestDefaultedAttributeAssertionsFacetIsEvaluated(t *testing.T) {
+	assess := func(typ, lexical string) *Result {
+		dflt := xsd.NewValueConstraint(xsd.ValueDefault, lexical, nil, nil)
+		uses := []xsd.AttributeUse{typedUse(t, "n", local(typ), false, nil, &dflt)}
+		schema := aSchema(t, aComplexType(t, uses, xsd.EmptyContent{}, nil), aFacetTypes(t)...)
+		return aAssess(t, schema, &testElement{name: local("root"), loc: loc(1, 1)})
+	}
 
-	res := aAssess(t, schema, &testElement{name: local("root"), loc: loc(1, 1)})
-
-	wantRecords(t, res, "cvc-complex-type", loc(1, 1), "an assertions facet it does not evaluate")
+	wantSatisfied(t, assess("AssertedInt", "42"), "AssertedInt over a default of 42")
+	wantFacetCharge(t, assess("AssertedInt", "0"), "cvc-complex-type", "AssertedInt over a default of 0")
+	wantRecords(t, assess("InRange", "42"), "cvc-assertions-valid", loc(1, 1), "InRange")
 }
 
 func TestResultUnevaluatedIsCopied(t *testing.T) {
@@ -831,5 +1017,112 @@ func TestUnevaluatedIsNotAnError(t *testing.T) {
 	// violation list, which is the same false reject by another route.
 	if _, isError := any(&u).(error); isError {
 		t.Fatal("*Unevaluated satisfies error; it must carry no Error method on either receiver")
+	}
+}
+
+// aFixedTypes is the pair the fixed-value comparisons read: NonNegative
+// restricts xs:integer with `$value ge 0`, which the facet evaluator admits,
+// and InRange with `$value = 1 to $value`, which it declines: a range over a
+// non-literal operand.
+func aFixedTypes(t *testing.T) []*xsd.SimpleType {
+	t.Helper()
+	return []*xsd.SimpleType{
+		aRestriction(t, "NonNegative", integerType(), "$value ge 0"),
+		aRestriction(t, "InRange", integerType(), "$value = 1 to $value"),
+	}
+}
+
+// aFixedAttributeAssessed assesses <root n="lexical"/>, n declared of type typ
+// with the fixed {value constraint} fixed.
+func aFixedAttributeAssessed(t *testing.T, typ, fixed, lexical string) *Result {
+	t.Helper()
+	vc := xsd.NewValueConstraint(xsd.ValueFixed, fixed, nil, nil)
+	uses := []xsd.AttributeUse{typedUse(t, "n", local(typ), false, &vc, nil)}
+	schema := aSchema(t, aComplexType(t, uses, xsd.EmptyContent{}, nil), aFixedTypes(t)...)
+	return aAssess(t, schema, valuedRoot("n", lexical))
+}
+
+// aFixedElementAssessed assesses <root>lexical</root>, root declared of type
+// typ with the fixed {value constraint} fixed.
+func aFixedElementAssessed(t *testing.T, typ, fixed, lexical string) *Result {
+	t.Helper()
+	b := xsd.NewSchemaBuilder()
+	aTypes(t, b, aFixedTypes(t)...)
+	vc := xsd.NewValueConstraint(xsd.ValueFixed, fixed, nil, nil)
+	d, err := xsd.NewElementDeclaration(xsderr.Loc{}, local("root"),
+		xsd.TypeDefinitionRef{Name: local(typ)}, nil, xsd.NewGlobalScope(),
+		&vc, false, nil, nil, nil, false, nil)
+	if err != nil {
+		t.Fatalf("building the root element declaration: %v", err)
+	}
+	b.AddElement(d)
+	schema, err := b.Finalize()
+	if err != nil {
+		t.Fatalf("finalizing the fixed-element schema: %v", err)
+	}
+	return aAssess(t, schema, cRoot("#"+lexical))
+}
+
+// wantFixedCharge fails unless res charged exactly one violation under rule,
+// its message opening with prefix and naming clause, and recorded nothing as
+// unevaluated.
+func wantFixedCharge(t *testing.T, res *Result, rule xsderr.Rule, prefix, clause, why string) {
+	t.Helper()
+	got := res.Violations()
+	if len(got) != 1 || got[0].Rule != rule {
+		t.Fatalf("%s: Violations() = %v, want one %s charge", why, got, rule)
+	}
+	if !strings.HasPrefix(got[0].Msg, prefix) || !strings.Contains(got[0].Msg, clause) {
+		t.Errorf("%s: Msg = %q, want it to open %q and name %s", why, got[0].Msg, prefix, clause)
+	}
+	if u := res.Unevaluated(); len(u) != 0 {
+		t.Errorf("%s: Unevaluated() = %v, want none", why, messages(u))
+	}
+}
+
+// cvc-attribute clause 4 compares the attribute's ·actual value· with the fixed
+// {value} through the type's whole pipeline, assertions facet included
+// (cvc-datatype-valid clause 3, value.ConstraintMatches): "+7" and a fixed "7"
+// are one xs:integer, so nothing is charged or recorded, and "5" — valid under
+// `$value ge 0`, so cvc-attribute clause 3 is satisfied — is a different value,
+// charged under clause 4 alone. With value.ConstraintMatches handed an
+// evaluator that declines every {test}, both comparisons are undecided, each
+// row records a clause 4 Unevaluated and charges nothing, and both fail.
+func TestFixedAttributeComparesThroughItsAssertionsFacet(t *testing.T) {
+	wantSatisfied(t, aFixedAttributeAssessed(t, "NonNegative", "7", "+7"), "+7 against a fixed 7")
+	wantFixedCharge(t, aFixedAttributeAssessed(t, "NonNegative", "7", "5"), "cvc-attribute",
+		`the ·actual value· of the attribute n is neither equal nor identical to the {value} of the fixed {value constraint} "7" on its attribute declaration`,
+		"cvc-attribute clause 4", "5 against a fixed 7")
+}
+
+// cvc-elt clause 5.2.2.2.2 makes the same comparison for an element whose
+// ·governing type definition· is simple: "+7" agrees with a fixed "7", and "5"
+// is charged under clause 5.2.2.2.2 alone, cvc-type clause 3.1.3 being
+// satisfied by `$value ge 0`. With value.ConstraintMatches handed an evaluator
+// that declines every {test}, the "5" row records a 5.2.2.2.2 Unevaluated and
+// charges nothing, and fails.
+func TestFixedElementComparesThroughItsAssertionsFacet(t *testing.T) {
+	wantSatisfied(t, aFixedElementAssessed(t, "NonNegative", "7", "+7"), "+7 against a fixed 7")
+	wantFixedCharge(t, aFixedElementAssessed(t, "NonNegative", "7", "5"), "cvc-elt",
+		`the ·actual value· of the element root is neither equal nor identical to the {value} of the fixed {value constraint} "7"`,
+		"cvc-elt clause 5.2.2.2.2", "5 against a fixed 7")
+}
+
+// The guard: a {test} the facet evaluator declines leaves the fixed-value
+// comparison undecided, and nothing is charged. "4" against a fixed "7" is a
+// NOT-same pair, so a decided comparison would charge cvc-elt clause
+// 5.2.2.2.2; instead clause 3.1.3 records the declined InRange facet under
+// cvc-assertions-valid and the comparison records its own clause 5.2.2.2.2
+// decline. With FacetAssertions answering AssertionHolds where it declines,
+// the row is charged and fails.
+func TestFixedElementWithADeclinedAssertionIsUndecided(t *testing.T) {
+	res := aFixedElementAssessed(t, "InRange", "7", "4")
+	if got := res.Violations(); len(got) != 0 {
+		t.Fatalf("Violations() = %v, want none: a declined {test} decides nothing", got)
+	}
+	got := res.Unevaluated()
+	if len(got) != 2 || got[0].Rule() != "cvc-assertions-valid" || got[1].Rule() != "cvc-elt" ||
+		!strings.Contains(got[1].Msg(), "cvc-elt clause 5.2.2.2.2 is undecided") {
+		t.Errorf("Unevaluated() = %v, want the InRange facet's cvc-assertions-valid record then the cvc-elt clause 5.2.2.2.2 decline", messages(got))
 	}
 }

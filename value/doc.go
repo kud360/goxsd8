@@ -78,9 +78,9 @@
 // a failed one is an ordinary verdict under cvc-assertions-valid, and a declined
 // one is the third non-verdict, which [IsAssertionDeclined] reports and
 // [IsDatatypeVerdict] excludes. GAP(value): this package's own callers of the
-// pipeline that are handed no evaluator — [CheckFacetRestriction], the
-// [xsd.ValueSpace] [NewValueSpace] returns, [ConstraintMatches] — decline every
-// {test}, each fail-open on the terms its own marker states. (#1042)
+// pipeline that are handed no evaluator — [CheckFacetRestriction] and the
+// [xsd.ValueSpace] [NewValueSpace] returns — decline every {test}, each
+// fail-open on the terms its own marker states. (#1042)
 //
 // One member of that class has a predicate of its own, because two sites need to
 // know WHICH fault: a type may reach [ValidateLexical] carrying a facet that is not
@@ -99,8 +99,10 @@
 // (a list of xs:byte, whose mapping is xs:decimal's) reject an out-of-range item
 // — and then its own facets over the resulting sequence. A union has no
 // whiteSpace facet at all: it hands the RAW literal to its member types in
-// order, and the first one that is itself datatype-valid supplies both the value
-// and the whiteSpace normalization its own pattern facet then matches against —
+// order, and the first one that is itself datatype-valid supplies the value, the
+// whiteSpace normalization its own pattern facet then matches against, and the
+// type its own assertions facet binds `$value` under (dt-xdmrep clause 4): that
+// ·active basic member·, never the union, is the st the evaluator is handed —
 // so a union's value is always some member's value, never a wrapper of its own.
 // [ValidatingType] names that member (key-vtype §3.16.4 cl.1, the ·validating
 // type·): st itself, or the ·active basic member· a union dispatched to. Its
@@ -186,18 +188,27 @@
 // # Value-constraint validity and comparison (the xsd.ValueSpace seam)
 //
 //	func NewValueSpace(b Backend) xsd.ValueSpace
-//	func ConstraintMatches(b Backend, r xsd.TypeResolver, t *xsd.SimpleType, lexical string, ctx Context, vc xsd.ValueConstraint) (same, decided bool)
+//	func ConstraintMatches(b Backend, r xsd.TypeResolver, t *xsd.SimpleType, lexical string, ctx Context, vc xsd.ValueConstraint, a AssertionEvaluator) (same, decided bool)
+//	func ConstraintContext(vc xsd.ValueConstraint) Context
 //
 // [ConstraintMatches] is the INSTANCE-time half, and is not part of the
 // xsd.ValueSpace interface: an instance literal is not a Value Constraint, and the
 // rule reading the answer (cvc-attribute §3.2.4.1 clause 4, cvc-au §3.5.4) belongs
 // to the validator, not to schema assembly. It maps both an instance literal and a
 // fixed constraint's {lexical form} through one type's pipeline — each under its
-// own namespace context, the instance's and the schema document's — and compares
+// own namespace context, the instance's and the schema document's, and each
+// through the caller's [AssertionEvaluator] at the assertions stage — and compares
 // the ·actual values· under the same equal-or-identical union, answering undecided
 // on the same fail-open terms as everything below; a ·special· type
 // (xs:anySimpleType, xs:anyAtomicType) skips the pipeline and is decided over its
 // mapping union, as [ConstraintMatches] states.
+//
+// [ConstraintContext] is that schema document's context for one Value
+// Constraint, the one every comparison here maps a {lexical form} under. It is
+// exported for the validator, which maps a default's {lexical form} itself
+// wherever the instance takes one on — a ·defaulted attribute· (cvc-complex-type
+// §3.4.4.2 clause 4) or an element default (cvc-elt §3.3.4.3 clause 5.1.2) — and
+// must never map it under the instance's bindings.
 //
 // [NewValueSpace] is what lets package xsd — a pure leaf that cannot import this
 // one — decide the Structures constraints that reach into a value space. Two

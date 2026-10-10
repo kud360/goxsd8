@@ -389,16 +389,15 @@ import (
 //     handed the schema, rejects a value naming no declared notation under
 //     cvc-datatype-valid, at every depth; a value outside a NOTATION type's
 //     enumeration is the backend's cvc-enumeration-valid verdict (Datatypes
-//     §4.3.5.4), which Datatype Valid entails. A ·defaulted attribute· of a
-//     NOTATION-derived type is recorded, never decided
-//     (walk.defaultedAttribute). The gate therefore reads no simple type's
-//     closure: finalize's src-resolve pass (xsd's resolveSimpleType) resolves
-//     every {base type definition}, {item type definition} and {member type
-//     definitions} reference of every simple type a Schema holds, so no
-//     closure the walk reads is unreadable, and a String Valid the backend
-//     withholds is recorded by the callers above. Each use's declaration must
-//     resolve to a simple type (recordedAttributeType), so an unresolvable
-//     {attribute declaration} is refused.
+//     §4.3.5.4), which Datatype Valid entails, a ·defaulted attribute·'s
+//     {lexical form} included (walk.defaultedAttribute). The gate therefore
+//     reads no simple type's closure: finalize's src-resolve pass (xsd's
+//     resolveSimpleType) resolves every {base type definition}, {item type
+//     definition} and {member type definitions} reference of every simple type
+//     a Schema holds, so no closure the walk reads is unreadable, and a String
+//     Valid the backend withholds is recorded by the callers above. Each use's
+//     declaration must resolve to a simple type (recordedAttributeType), so an
+//     unresolvable {attribute declaration} is refused.
 //   - cvc-complex-type clause 2: every attribute beyond namespace declarations
 //     and the four xsi: names matches an attribute use (2.1) or is
 //     ·attributed to· the {attribute wildcard} (2.2, cvc-wildcard §3.10.4.1)
@@ -599,6 +598,7 @@ const (
 	refuseHintAssembly    refusal = "hint-assembly"        // assembleHints: assemblyDeclined refused the outcome
 	refuseHintUndeclared  refusal = "hint-undeclared-root" // assembleHints: no top-level declaration for the root
 	refuseDoctype         refusal = "doctype"              // rootStart: a directive defaultsNoAttribute refuses
+	refuseProlog          refusal = "prolog-text"          // rootStart: character data before the root that is not white space
 	refuseDecode          refusal = "decode"               // an internal/xmltok decoder error, at any re-read site
 
 	// builtinsSchema (instancehints.go): no group schema, and the instance
@@ -742,7 +742,8 @@ func unevaluatedRefusal(records []validate.Unevaluated) refusal {
 // or declines, naming the refusal. It declines on three conditions, none of
 // which is a verdict about the document: a document that will not resolve or
 // that the reader rejects for any reason, a caller fault or a document
-// malformed before its document element (xmlsrc.Validate's own error channel),
+// malformed before its document element or in what the walk left unread, what
+// follows the document element included (xmlsrc.Validate's own error channel),
 // and a walk that STOPPED on a source fault mid-document (validate.Result.Err),
 // whose empty violation list records how far the walk got rather than what the
 // document holds.

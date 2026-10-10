@@ -15,17 +15,17 @@ import (
 const ruleCvcSimpleType xsderr.Rule = "cvc-simple-type"
 
 // stringValid runs String Valid (§3.16.4) over lexical against st, for the
-// item at loc whose element is owner: clauses 1 and 2 through
+// item at loc, mapping lexical under ctx: clauses 1 and 2 through
 // value.ValidateLexical, which against w.schema also rejects a NOTATION value
 // naming no notation declared in the schema (Datatypes §3.3.19), then clause 3
 // ([walk.entitiesDeclared]) over the ·actual value· value.ValidateLexical
-// accepted. It reports decided false where this package withholds a verdict,
-// and otherwise a nil verdict for a ·valid· lexical and the rejection for an
-// invalid one, which the caller charges under its own rule with the verdict as
-// the wrapped cause. Where decided is false, verdict is instead the
-// value.ValidateLexical error that withheld it, nil where clause 3 did — which
-// [walk.declineAssertions] reads to decline an assertions facet under its own
-// rule.
+// accepted. decided is false where this package withholds a verdict. err is
+// the verdict where decided is true — nil for a ·valid· lexical, the rejection
+// for an invalid one, which the caller charges under its own rule as the
+// wrapped cause — and the withholding cause where decided is false: the
+// value.ValidateLexical error that withheld it, which [walk.declineAssertions]
+// reads to decline an assertions facet under its own rule, or nil where clause
+// 3's ·validating type· is undecidable.
 //
 // A ·special· st ([xsd.SimpleType.IsSpecial]) passes clause 2 without asking
 // ValidateLexical, which no backend answers for one: no clause 1 normalization
@@ -37,18 +37,18 @@ const ruleCvcSimpleType xsderr.Rule = "cvc-simple-type"
 // withholds one; each caller states that decline's GAP on its own terms. The
 // pipeline evaluates st's assertions facets, and those of every type it
 // recurses into, through [xpath.FacetAssertions].
-func (w *walk) stringValid(st *xsd.SimpleType, lexical string, owner Element, loc xsderr.Loc) (decided bool, verdict error) {
+func (w *walk) stringValid(st *xsd.SimpleType, lexical string, ctx value.Context, loc xsderr.Loc) (decided bool, err error) {
 	if st.IsSpecial() {
-		return w.entitiesDeclared(st, lexical, owner, loc)
+		return w.entitiesDeclared(st, lexical, ctx, loc)
 	}
-	_, err := value.ValidateLexical(w.backend, w.schema, st, lexical, elementContext{owner: owner}, xpath.FacetAssertions())
+	_, err = value.ValidateLexical(w.backend, w.schema, st, lexical, ctx, xpath.FacetAssertions(w.now))
 	if err != nil && !value.IsDatatypeVerdict(err) {
 		return false, err
 	}
 	if err != nil {
 		return true, err
 	}
-	return w.entitiesDeclared(st, lexical, owner, loc)
+	return w.entitiesDeclared(st, lexical, ctx, loc)
 }
 
 // entitiesDeclared settles String Valid clause 3 — "Let V be the ·actual value·
@@ -80,7 +80,7 @@ func (w *walk) stringValid(st *xsd.SimpleType, lexical string, owner Element, lo
 // table]. RULED permanent by #774 (STYLE P3b), on the terms of
 // [walk.declaredAttribute]'s ungoverned-type decline: a candidacy or member scan
 // that errors is backend or type-scan coverage, not this package's.
-func (w *walk) entitiesDeclared(st *xsd.SimpleType, lexical string, owner Element, loc xsderr.Loc) (decided bool, verdict error) {
+func (w *walk) entitiesDeclared(st *xsd.SimpleType, lexical string, ctx value.Context, loc xsderr.Loc) (decided bool, verdict error) {
 	candidate, decided := w.candidate(st, valueRole.isEntity)
 	if !decided {
 		return false, nil
@@ -88,7 +88,7 @@ func (w *walk) entitiesDeclared(st *xsd.SimpleType, lexical string, owner Elemen
 	if !candidate {
 		return true, nil
 	}
-	values, decided := w.roleValues(st, lexical, owner)
+	values, decided := w.roleValues(st, lexical, ctx)
 	if !decided {
 		return false, nil
 	}

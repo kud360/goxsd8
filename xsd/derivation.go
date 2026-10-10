@@ -161,7 +161,7 @@ const (
 //   - st-props-correct clause 1 for the property tableau's {variety} clause
 //     (Datatypes §4.1.1 dc-defn: "Required for all Simple Type Definitions
 //     except ·xs:anySimpleType·, in which it is ·absent·"): only the type that
-//     IS xs:anySimpleType — the one with an absent {base type definition} — may
+//     IS xs:anySimpleType — the anchor, by identity (IsAnySimpleType) — may
 //     carry an absent {variety}. This is what rejects a user-defined type on
 //     xs:anySimpleType (#480): the XML mapping gives a ·restriction· the
 //     {variety} of its {base type definition} (§3.16.2.1), so such a type
@@ -353,16 +353,17 @@ func checkFacetsSupported(loc xsderr.Loc, facets []Facet) error {
 // never t's {primitive type definition}, which self-references on a primitive
 // datatype (§3.16.1) and so cannot drive a terminating base walk.
 //
-// The two rejections above the #480 site — an absent base, and a non-atomic one
-// — are no longer reachable through this package's EXPORTED constructors now
-// that {variety} is derived: a RestrictionDerivation reports atomic only when
-// its base already does, and the two arms that mint atomic on their own fix
-// their base (NewPrimitiveType to the anchor) or are the anchor. They are kept
-// rather than deleted because CheckDerivation runs on any *SimpleType, including
-// the struct-literal receivers this package builds directly (both anchors are
-// literals), and because the clause-1.1 test below dereferences base — the same
+// The non-atomic-base rejection above the #480 site is no longer reachable
+// through this package's EXPORTED constructors now that {variety} is derived: a
+// RestrictionDerivation reports atomic only when its base already does, and the
+// two arms that mint atomic on their own fix their base (NewPrimitiveType to the
+// anchor) or are the anchor. It is kept rather than deleted because
+// CheckDerivation runs on any *SimpleType, including the struct-literal
+// receivers this package builds directly (both anchors are literals) — the same
 // reason checkFacetsSupported keeps its own expected-unreachable rejection
-// instead of dropping it.
+// instead of dropping it. base is never nil here: Base answers nil only for the
+// xs:anySimpleType anchor, whose {variety} is absent, and charges any other
+// absent base before CheckDerivation dispatches on {variety}.
 //
 // base is t's already-resolved {base type definition}, passed down rather than
 // re-resolved: CheckDerivation resolves it once per type so a by-name base costs
@@ -370,10 +371,6 @@ func checkFacetsSupported(loc xsderr.Loc, facets []Facet) error {
 func checkAtomicGraph(r TypeResolver, t, base *SimpleType) error {
 	if t == anyAtomicType {
 		return nil
-	}
-	if base == nil {
-		return xsderr.New(ruleSTPropsCorrect, t.loc,
-			"atomic simple type has an absent {base type definition} (st-props-correct clause 1)")
 	}
 	baseVariety, err := base.Variety(r)
 	if err != nil {
@@ -441,10 +438,6 @@ func checkListGraph(r TypeResolver, t, base *SimpleType) error {
 			"list {item type definition} %s has a {variety} that is neither atomic nor union (cos-st-restricts clause 2.1)", item.name)
 	}
 
-	if base == nil {
-		return xsderr.New(ruleSTPropsCorrect, t.loc,
-			"list simple type has an absent {base type definition} (st-props-correct clause 1)")
-	}
 	if base == anySimpleType {
 		if finalContains(item.final, DerivationList) {
 			return xsderr.New(ruleCosSTRestricts, t.loc,
@@ -559,10 +552,6 @@ func checkUnionGraph(r TypeResolver, t, base *SimpleType) error {
 		}
 	}
 
-	if base == nil {
-		return xsderr.New(ruleSTPropsCorrect, t.loc,
-			"union simple type has an absent {base type definition} (st-props-correct clause 1)")
-	}
 	if base == anySimpleType {
 		for _, m := range members {
 			if finalContains(m.final, DerivationUnion) {

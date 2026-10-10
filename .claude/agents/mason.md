@@ -93,7 +93,10 @@ imagined** — the worktree is isolated so you can break the line, watch
 the test, and put it back. A mutation you describe and did not execute is
 the one the arbiter runs (#472). A test comment claiming a case
 discriminates a path — "this fails without X" — is such a mutation, and
-your account names it and its result (#642). Mutate the message too: two
+your account names it and its result (#642). A comment that says which
+rows a mutation fails is written from that run's output and names those
+rows and no others; a comment written before the run names no outcome
+(#2463). Mutate the message too: two
 arguments swapped inside one `fmt.Errorf` changes no branch and leaves
 every asserted substring present, so an assertion pins a subject only by
 pinning the opening `parser: <subject> at <loc>` as a prefix (#1048). A

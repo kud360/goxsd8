@@ -26,8 +26,7 @@ func (noSchema) Type(QName) (TypeDefinition, bool) { return nil, false }
 // newCheckedSimpleType is NewSimpleType followed by CheckDerivation — the
 // pairing that used to be NewSimpleType alone — over an OWNED base. It takes the
 // base as a live *SimpleType, so a fixture reads exactly as it did before the
-// split, and a nil base still means "this type IS xs:anySimpleType" (the nil
-// slot, never an OwnedSimpleType wrapping nil, which NewSimpleType rejects).
+// split.
 //
 // Either half's error is returned verbatim, so a test asserting a rule ID gets
 // the same one whichever half charges it.
@@ -56,12 +55,8 @@ func newCheckedPrimitiveType(loc xsderr.Loc, name QName, ownFacets []Facet, fina
 }
 
 // ownedBase maps a live base pointer to the {base type definition} slot value it
-// belongs in: nil stays the nil slot (·absent·, i.e. xs:anySimpleType), and
-// anything else is the owned arm.
+// belongs in: the owned arm.
 func ownedBase(base *SimpleType) SimpleTypeOrRef {
-	if base == nil {
-		return nil
-	}
 	return OwnedSimpleType{Definition: base}
 }
 

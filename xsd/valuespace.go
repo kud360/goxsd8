@@ -42,9 +42,9 @@ package xsd
 // e-props-correct cl.2; checkAttributeUseValueConstraint
 // (valueconstraintvalid.go) reads Identical for au-props-correct cl.3; and
 // defaultbinding.go reads EqualOrIdentical for loc-testSubP cl.4.2 and cl.5.2.2 —
-// all four charge a SCHEMA rejection. But validate/cvcattribute.go's
-// defaultedAttribute also reads ValidDefault, for cvc-complex-type cl.4, and
-// charges an INSTANCE violation during document assessment instead. Either way a
+// all four charge a SCHEMA rejection. But validate's cvc-elt cl.5.1.1 charge
+// also reads ValidDefault, through Schema.ElementDefaultValid, and charges an
+// INSTANCE violation during document assessment instead. Either way a
 // decided negative is refused, never let through (PRINCIPLES 20's direction,
 // applied to value spaces).
 //

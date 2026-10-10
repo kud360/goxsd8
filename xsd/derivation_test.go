@@ -476,3 +476,51 @@ func TestDerivedOKSimple(t *testing.T) {
 		})
 	}
 }
+
+// TestCheckDerivationOverZeroValue pins that the zero value &SimpleType{} — the
+// one SimpleType with an absent {base type definition} that is not the
+// xs:anySimpleType anchor, since NewSimpleType rejects a nil base — is an error
+// out of CheckDerivation wherever it is the type being checked or a hop a check
+// follows, never a panic and never an accept. Base charges it
+// xsderr.RuleComponentInvariant before CheckDerivation reads base.name
+// (st-props-correct clause 1) or stRestrictionUnblocked reads base.final
+// (cos-st-derived-ok clause 2.1).
+//
+// A container does not re-certify its members: a union constructed from the
+// anchor accepts a zero-value member by its own clauses (cos-st-restricts 3.1
+// and 3.2.1 read the member's identity and {final} only), and the member's own
+// CheckDerivation — the first row — is what rejects it.
+func TestCheckDerivationOverZeroValue(t *testing.T) {
+	zero := &SimpleType{}
+	baseUnion := mustST(t, "baseUnion", unionOf(mustPrim(t, "decimal")), anySimpleType, nil, nil)
+	cases := []struct {
+		name string
+		st   *SimpleType
+		want xsderr.Rule // empty: CheckDerivation accepts
+	}{
+		{"the zero value itself", zero, xsderr.RuleComponentInvariant},
+		{"a list whose item is the zero value (cos-st-restricts 2.1)", &SimpleType{name: QName{Local: "L"}, derivation: listOf(zero),
+			base: OwnedSimpleType{Definition: anySimpleType}, ownFacets: constructedListFacets()}, ruleCosSTRestricts},
+		{"a union restricting a real union, member the zero value (3.2.2.3)", &SimpleType{name: QName{Local: "U"}, derivation: unionOf(zero),
+			base: OwnedSimpleType{Definition: baseUnion}}, xsderr.RuleComponentInvariant},
+		{"a union constructed from the anchor, member the zero value (3.2.1)", &SimpleType{name: QName{Local: "C"}, derivation: unionOf(zero),
+			base: OwnedSimpleType{Definition: anySimpleType}}, ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			err := c.st.CheckDerivation(noSchema{})
+			if c.want == "" {
+				if err != nil {
+					t.Fatalf("CheckDerivation = %v, want nil", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("CheckDerivation = nil, want a %s rejection", c.want)
+			}
+			if r, _ := xsderr.RuleOf(err); r != c.want {
+				t.Fatalf("CheckDerivation rule = %q, want %q (%v)", r, c.want, err)
+			}
+		})
+	}
+}

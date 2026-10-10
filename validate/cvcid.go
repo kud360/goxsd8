@@ -188,7 +188,7 @@ func (w *walk) idAttributes(c *icCheck) {
 	for _, a := range attrs {
 		st, typed := w.attributeType(c.g, a)
 		if typed {
-			w.idRecord(st, a.Value(), c.e, c.node, a.Loc())
+			w.idRecord(st, a.Value(), c.e, elementContext{owner: c.e}, c.node, a.Loc())
 		}
 	}
 	if ct != nil {
@@ -236,7 +236,7 @@ func (w *walk) idDefaultedAttributes(c *icCheck, attrs []Attribute, ct xsd.Compl
 				u.DeclarationName(), c.e.Name())
 			continue
 		}
-		w.idRecord(st, vc.LexicalForm(), c.e, c.node, c.e.Loc())
+		w.idRecord(st, vc.LexicalForm(), c.e, value.ConstraintContext(vc), c.node, c.e.Loc())
 	}
 }
 
@@ -295,7 +295,8 @@ func (w *walk) idElement(c *icCheck) {
 	if c.parent != nil {
 		node = c.parent.node
 	}
-	w.idRecord(st, c.assessed(), c.e, node, c.e.Loc())
+	lexical, ctx := c.assessed()
+	w.idRecord(st, lexical, c.e, ctx, node, c.e.Loc())
 }
 
 // idRecord adds whatever one item contributes to the table. node is the element
@@ -323,7 +324,7 @@ func (w *walk) idElement(c *icCheck) {
 // The class also holds an assertions-facet decline (value.IsAssertionDeclined),
 // which is not permanent: it is [walk.declineAssertions]' residue (#1042).
 // Each decline is recorded as an [Unevaluated] at the item ([walk.declineID]).
-func (w *walk) idRecord(st *xsd.SimpleType, lexical string, owner Element, node int, loc xsderr.Loc) {
+func (w *walk) idRecord(st *xsd.SimpleType, lexical string, owner Element, ctx value.Context, node int, loc xsderr.Loc) {
 	candidate, decided := w.idCandidate(st)
 	if !decided {
 		w.declineID(owner, loc,
@@ -334,7 +335,7 @@ func (w *walk) idRecord(st *xsd.SimpleType, lexical string, owner Element, node 
 	if !candidate {
 		return
 	}
-	if _, err := value.ValidateLexical(w.backend, w.schema, st, lexical, elementContext{owner: owner}, xpath.FacetAssertions()); err != nil {
+	if _, err := value.ValidateLexical(w.backend, w.schema, st, lexical, ctx, xpath.FacetAssertions(w.now)); err != nil {
 		if !value.IsDatatypeVerdict(err) {
 			w.declineID(owner, loc,
 				"an item of the element %s was not read into the ID/IDREF table: the value backend reported a fault of its type %s rather than a verdict about the lexical, so cvc-id clause 1 is undecided",
@@ -342,7 +343,7 @@ func (w *walk) idRecord(st *xsd.SimpleType, lexical string, owner Element, node 
 		}
 		return
 	}
-	values, decided := w.roleValues(st, lexical, owner)
+	values, decided := w.roleValues(st, lexical, ctx)
 	if !decided {
 		w.declineID(owner, loc,
 			"an item of the element %s was not read into the ID/IDREF table: the ·validating type· of its value under %s could not be decided, so cvc-id clause 1 is undecided",
@@ -383,8 +384,14 @@ func (w *walk) declineID(owner Element, loc xsderr.Loc, format string, args ...a
 // space· (Datatypes §3.4.7) under the collapse whiteSpace its ancestor xs:token
 // fixes. Every caller has already run String Valid clauses 1 and 2 over the
 // lexical, so a value reaching here is one that mapping accepted.
+//
+// Items are delimited on XML white space alone (isXMLSpace): a list value is
+// split on #x20 (cvc-datatype-valid, Datatypes §4.1.4 clause 2.2) after
+// whiteSpace = collapse has mapped #x9, #xA and #xD to it (§4.3.6).
+// strings.Fields would also break on U+1680, an NCName character, splitting one
+// valid ID or IDREF in two.
 func valueTokens(lexical string, list bool) []string {
-	fields := strings.Fields(lexical)
+	fields := strings.FieldsFunc(lexical, isXMLSpace)
 	if list || len(fields) < 2 {
 		return fields
 	}
@@ -523,8 +530,8 @@ func (w *walk) namedRole(st *xsd.SimpleType) (role valueRole, list, decided bool
 // makes each member scan below find a member at all: the same dispatch accepted
 // it (§4.1.4 cl.2.3). A scan that finds none is a decline, on validatingType's
 // terms.
-func (w *walk) roleValues(st *xsd.SimpleType, lexical string, owner Element) ([]roleValue, bool) {
-	t, decided := w.validatingType(st, lexical, owner)
+func (w *walk) roleValues(st *xsd.SimpleType, lexical string, ctx value.Context) ([]roleValue, bool) {
+	t, decided := w.validatingType(st, lexical, ctx)
 	if !decided {
 		return nil, false
 	}
@@ -551,7 +558,7 @@ func (w *walk) roleValues(st *xsd.SimpleType, lexical string, owner Element) ([]
 	if err != nil || item == nil {
 		return nil, false
 	}
-	return w.itemRoleValues(item, lexical, owner)
+	return w.itemRoleValues(item, lexical, ctx)
 }
 
 // itemRoleValues is key-vtype clause 2 over one list value: each item of it gets
@@ -565,10 +572,10 @@ func (w *walk) roleValues(st *xsd.SimpleType, lexical string, owner Element) ([]
 // union with "no types whose {variety} is list among the union's transitive
 // membership", so no item of a list is itself a list and there is no second
 // split to make.
-func (w *walk) itemRoleValues(item *xsd.SimpleType, lexical string, owner Element) ([]roleValue, bool) {
+func (w *walk) itemRoleValues(item *xsd.SimpleType, lexical string, ctx value.Context) ([]roleValue, bool) {
 	var values []roleValue
 	for _, f := range valueTokens(lexical, true) {
-		t, decided := w.validatingType(item, f, owner)
+		t, decided := w.validatingType(item, f, ctx)
 		if !decided {
 			return nil, false
 		}
@@ -604,8 +611,8 @@ func (w *walk) itemRoleValues(item *xsd.SimpleType, lexical string, owner Elemen
 // Valid the caller already ran, so it is a disagreement between two readings
 // of one dispatch and not a fact about the document. Both decline identically
 // here.
-func (w *walk) validatingType(st *xsd.SimpleType, lexical string, owner Element) (*xsd.SimpleType, bool) {
-	t, _, err := value.ValidatingType(w.backend, w.schema, st, lexical, elementContext{owner: owner}, xpath.FacetAssertions())
+func (w *walk) validatingType(st *xsd.SimpleType, lexical string, ctx value.Context) (*xsd.SimpleType, bool) {
+	t, _, err := value.ValidatingType(w.backend, w.schema, st, lexical, ctx, xpath.FacetAssertions(w.now))
 	if err != nil {
 		return nil, false
 	}

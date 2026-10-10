@@ -97,7 +97,7 @@ type relation func(a, b Value) (same, decided bool)
 // Every other pair is mapped into one value space by values and compared there.
 func (vs valueSpace) compare(r xsd.TypeResolver, ta *xsd.SimpleType, a xsd.ValueConstraint, tb *xsd.SimpleType, b xsd.ValueConstraint, rel relation) (same, decided bool) {
 	if ta.IsSpecial() && tb.IsSpecial() {
-		return specialMatches(vs.b, ta, tb, a.LexicalForm(), constraintContext(a), b.LexicalForm(), constraintContext(b), rel)
+		return specialMatches(vs.b, ta, tb, a.LexicalForm(), ConstraintContext(a), b.LexicalForm(), ConstraintContext(b), rel)
 	}
 	av, bv, ok := vs.values(r, ta, a, tb, b)
 	if !ok {
@@ -144,11 +144,10 @@ func (vs valueSpace) compare(r xsd.TypeResolver, ta *xsd.SimpleType, a xsd.Value
 //     GAP(value): this package holds no XPath engine, so the pipeline runs
 //     with assertionsUndecided and every {lexical form} the other facets of t
 //     accept is undecided wherever t's closure carries an assertions facet.
-//     The readers of the withheld verdict are xsd's Schema.checkSimpleDefault
-//     (a-props-correct and au-props-correct clause 2) and validate's
-//     walk.defaultedAttribute (cvc-complex-type clause 4), each of which
-//     charges only a decided cause and declines or accepts an undecided one,
-//     so the direction is fail-open. (#1042)
+//     The reader of the withheld verdict is xsd's Schema.checkSimpleDefault
+//     (a-props-correct and au-props-correct clause 2), which charges only a
+//     decided cause and accepts an undecided one, so the direction is
+//     fail-open. (#1042)
 //
 // One residue is recorded rather than papered over. GAP(value): union member
 // facet compilation. dispatchUnion folds every member's rejection into one
@@ -244,36 +243,50 @@ func (vs valueSpace) ValidDefault(r xsd.TypeResolver, t *xsd.SimpleType, vc xsd.
 // point: ctx is the instance's, resolving a QName lexical against the namespace
 // bindings in scope where the attribute was written, while vc carries the bindings
 // in scope where its own {lexical form} was written in the schema document
-// (§3.3.18, constraintContext). One shared context would decide a QName agreement
+// (§3.3.18, [ConstraintContext]). One shared context would decide a QName agreement
 // wrongly in both directions.
 //
+// a decides each {test} of an assertions facet the pipeline reaches on either
+// side (cvc-assertions-valid via cvc-datatype-valid clause 3, Datatypes
+// §4.1.4), on [ValidateLexical]'s terms, and MUST be non-nil — even for a
+// ·special· t, which never reads it.
+//
 // For a t that is not ·special·, a side that fails to validate is undecided,
-// never a mismatch. GAP(value): that includes every side an assertions facet in
-// t's closure reaches, which this function runs with assertionsUndecided — it is
-// handed no [AssertionEvaluator] — and so declines (IsAssertionDeclined). Its
-// readers, validate's walk.fixedAgreement (cvc-attribute clause 4, cvc-au) and
+// never a mismatch: a {test} a FAILS on either side is such a failure like any
+// other. For the instance side that is not a lost verdict: a literal that is
+// not Datatype Valid against t — outside its lexical space, or failing one of
+// its facets, assertions included — already fails cvc-attribute clause 3 or
+// cvc-elt clause 5.2.1, which the caller charges in its own right, and
+// reporting "not the same value" for what is really "not a value of t at all"
+// would charge the agreement clause as well for one defect. For vc's side it is
+// the schema's own cos-valid-simple-default obligation (§3.2.6.2), charged at
+// finalize — except an assertions facet's: the ValidDefault of the
+// [xsd.ValueSpace] [NewValueSpace] returns runs the pipeline with no evaluator
+// of its own and declines every {test} (its gate 2's GAP(value)), so a
+// vc.{lexical form} failing a {test} is charged by no assembly, and is
+// undecided here rather than NOT-same all the same.
+//
+// GAP(xpath): a {test} a DECLINES ([IsAssertionDeclined]) is undecided too;
+// which {test}s the evaluator validate passes declines is stated at
+// xpath.FacetAssertions' own marker. This function's readers, validate's
+// walk.fixedAgreement (cvc-attribute clause 4, cvc-au) and
 // contentCheck.fixedActualValue (cvc-elt clause 5.2.2.2.2), charge only a
 // decided NOT-same and decline an undecided answer, so the direction is
-// fail-open. (#1042) For the instance side that is not a lost verdict: a
-// literal outside t's lexical space already fails cvc-attribute clause 3,
-// which the caller charges in its own right, and reporting "not the same
-// value" for what is really "not a value at all" would charge clause 4 as well
-// for one defect. For vc's side it is the schema's own cos-valid-simple-default
-// obligation (§3.2.6.2), already charged at finalize.
+// fail-open. (#1042)
 //
 // GAP(value): a NOTATION vc.{lexical form} naming no declared notation, tracked
 // by #667. ValidDefault's gate 1 (needsContext) refuses every NOTATION-governed
 // default, so no finalize judges such a value, and it is undecided here, never
 // NOT-same, until #667 routes those defaults through ValidDefault.
-func ConstraintMatches(b Backend, r xsd.TypeResolver, t *xsd.SimpleType, lexical string, ctx Context, vc xsd.ValueConstraint) (same, decided bool) {
+func ConstraintMatches(b Backend, r xsd.TypeResolver, t *xsd.SimpleType, lexical string, ctx Context, vc xsd.ValueConstraint, a AssertionEvaluator) (same, decided bool) {
 	if t.IsSpecial() {
-		return specialMatches(b, t, t, lexical, ctx, vc.LexicalForm(), constraintContext(vc), equalOrIdentical)
+		return specialMatches(b, t, t, lexical, ctx, vc.LexicalForm(), ConstraintContext(vc), equalOrIdentical)
 	}
-	av, err := ValidateLexical(b, r, t, lexical, ctx, assertionsUndecided{})
+	av, err := ValidateLexical(b, r, t, lexical, ctx, a)
 	if err != nil {
 		return false, false
 	}
-	cv, err := ValidateLexical(b, r, t, vc.LexicalForm(), constraintContext(vc), assertionsUndecided{})
+	cv, err := ValidateLexical(b, r, t, vc.LexicalForm(), ConstraintContext(vc), a)
 	if err != nil {
 		return false, false
 	}
@@ -449,22 +462,32 @@ func (vs valueSpace) values(r xsd.TypeResolver, ta *xsd.SimpleType, a xsd.ValueC
 	if aws == 0 || bws == 0 {
 		return nil, nil, false
 	}
-	av, err := m.Parse(normalizeWhiteSpace(a.LexicalForm(), aws), constraintContext(a))
+	av, err := m.Parse(normalizeWhiteSpace(a.LexicalForm(), aws), ConstraintContext(a))
 	if err != nil {
 		return nil, nil, false
 	}
-	bv, err := m.Parse(normalizeWhiteSpace(b.LexicalForm(), bws), constraintContext(b))
+	bv, err := m.Parse(normalizeWhiteSpace(b.LexicalForm(), bws), ConstraintContext(b))
 	if err != nil {
 		return nil, nil, false
 	}
 	return av, bv, true
 }
 
-// constraintContext is the [Context] a value constraint's {lexical form} is
-// parsed under: the namespace bindings captured at the schema-document element
-// that wrote it (§3.3.18, fixed there by cos-valid-simple-default clause 2), on
-// the ONE nsContext this package resolves prefixes with (facets.go).
-func constraintContext(vc xsd.ValueConstraint) nsContext {
+// ConstraintContext is the [Context] vc.{lexical form} is mapped under: the
+// namespace bindings in scope at the schema-document element that wrote it
+// (§3.3.18, fixed there by cos-valid-simple-default clause 2), never the
+// instance's. vc comes from [xsd.ElementDeclaration.ValueConstraint],
+// [xsd.AttributeDeclaration.ValueConstraint] or [xsd.AttributeUse.ValueConstraint],
+// or, for a ·defaulted attribute·, from [xsd.Schema.EffectiveValueConstraint]. Pass
+// it as [ValidateLexical]'s or [ValidatingType]'s ctx wherever the literal is a
+// value constraint's {lexical form} supplied at assessment time — a ·defaulted
+// attribute· (key-dflt-att) or an element default (cvc-elt clause 5.1.2). The
+// prefix "xml" is always bound, to the XML namespace; the empty prefix resolves to
+// vc's {default namespace} where it has one and to no namespace otherwise; every
+// other prefix, "xmlns" included, resolves only through a binding vc carries, and
+// no schema document can declare "xmlns" (Namespaces in XML §3). A vc that captured
+// no bindings still yields a total, non-nil context.
+func ConstraintContext(vc xsd.ValueConstraint) Context {
 	ns, ok := vc.DefaultNamespace()
 	return newNSContext(vc.NamespaceBindings(), ns, ok)
 }

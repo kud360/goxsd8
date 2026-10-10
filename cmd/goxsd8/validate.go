@@ -224,6 +224,9 @@ type validation struct {
 
 // one assesses a single instance argument and reports its exit code.
 func (vn *validation) one(instance string, stdout, stderr io.Writer) int {
+	if err := refuseDirectory(instance); err != nil {
+		return usageError(stderr, fmt.Sprintf("goxsd8: validate: %v", err))
+	}
 	format, err := formatOf(instance, vn.forced)
 	if err != nil {
 		return usageError(stderr, fmt.Sprintf("goxsd8: validate: %v", err))
@@ -248,11 +251,12 @@ func (vn *validation) one(instance string, stdout, stderr io.Writer) int {
 
 	result, err := xmlsrc.Validate(v, src, xmlsrc.WithURI(instance))
 	if err != nil {
-		// The assessment never ran: the document is malformed before its
-		// document element, or holds none at all. That is a verdict about the
-		// instance in the same rendering a violation gets, so it lands on
-		// stdout with them and counts as invalid — nothing in the document was
-		// shown valid.
+		// No assessment stands: the document is malformed before its document
+		// element, holds none at all, or is malformed in what the walk left
+		// unread, what follows the document element included. That is a
+		// verdict about the instance in the same rendering a violation gets,
+		// so it lands on stdout with them and counts as invalid — nothing in
+		// the document was shown valid.
 		return reportLines(stdout, stderr, instance, []string{violationLine(err)}, exitInvalid)
 	}
 	lines, code := assessmentLines(result)
@@ -406,6 +410,27 @@ func reportLines(stdout, stderr io.Writer, instance string, lines []string, code
 	return code
 }
 
+// refuseDirectory charges an instance argument naming a directory as
+// unreadable, in rootLocation's words. It answers before formatOf, so a
+// directory is diagnosed as a directory whatever its name's extension and
+// whatever -format forced, rather than as an extension problem or as malformed
+// XML.
+//
+// The stat follows symbolic links, so a link to a directory is refused too; a
+// FIFO or a device is not a directory and passes on to be read. stdinArg is
+// never stat'ed: it names standard input, not a file. A stat that fails decides
+// nothing here: openInstance reports that argument's fault in the operating
+// system's own words, after formatOf has had its say on the extension.
+func refuseDirectory(instance string) error {
+	if instance == stdinArg {
+		return nil
+	}
+	if info, err := os.Stat(instance); err == nil && info.IsDir() {
+		return fmt.Errorf("open %s: is a directory", instance)
+	}
+	return nil
+}
+
 // openInstance opens one instance argument for reading and returns the reader
 // together with the close its caller owes. stdinArg names standard input,
 // which this process does not own and therefore does not close.
@@ -439,15 +464,19 @@ func forcedFormat(token string) (sourceFormat, error) {
 // formatOf reports the source format of one instance argument: the -format
 // value where the flag was given, and otherwise the format its extension names.
 //
-// An argument whose extension names none of them — including stdinArg, which
-// has no extension at all — is a usage error rather than a guess, so that no
-// document is ever read in a format nothing in the invocation asked for.
+// stdinArg has no extension, and without -format it is read as formatXML: xml
+// is the only format assessed today, json and ber being reserved, so no other
+// reading of standard input could be meant. That default lasts only while xml
+// stands alone — once a second format is assessed, stdinArg needs -format
+// again, as the contract states (#2403). Any other argument whose extension
+// names no source format is a usage error rather than a guess, so that no file
+// is ever read in a format nothing in the invocation asked for.
 func formatOf(instance string, forced sourceFormat) (sourceFormat, error) {
 	if forced != "" {
 		return forced, nil
 	}
 	if instance == stdinArg {
-		return "", fmt.Errorf("%s names standard input, which carries no extension to name a source format; pass -format %s", stdinArg, formatVocabulary())
+		return formatXML, nil
 	}
 	ext := filepath.Ext(instance)
 	for _, f := range sourceFormats {
@@ -530,16 +559,28 @@ func instanceHints(uri, base string, r io.Reader) ([]parser.Root, io.Reader) {
 // xsi:schemaLocation pairs a namespace with a location; xsi:noNamespaceSchema-
 // Location names a location whose document has no target namespace, which is
 // parser.HintAt's absent namespace "".
+//
+// xsi:schemaLocation's type is a list of xs:anyURI (§3.2.7.3), so its items
+// are delimited on XML white space alone (xmlSpaceFields).
+// xsi:noNamespaceSchemaLocation's is ONE xs:anyURI (§3.2.7.4), not a list: its
+// ·actual value· is the whiteSpace = collapse normalization (Datatypes §4.3.6)
+// and names one location however many spaces it holds. xs:anyURI admits every
+// XML Char, so neither a U+00A0 inside a schemaLocation item nor a #x20 inside
+// a noNamespaceSchemaLocation value splits the location it is part of.
 func hintsOf(start *xmltree.StartElement, base string) []parser.Root {
 	var hints []parser.Root
 	for _, a := range start.Attributes() {
 		if a.Name().Space() != xsd.XMLSchemaInstanceNS {
 			continue
 		}
-		fields := strings.Fields(a.Value())
+		fields := xmlSpaceFields(a.Value())
 		switch a.Name().Local() {
 		case "noNamespaceSchemaLocation":
-			for _, location := range fields {
+			// An empty value is dropped, as it was when this attribute was
+			// read as a list, rather than resolved to base, the instance itself:
+			// §4.3.2 clause 3 obliges no processor to dereference a hint.
+			if len(fields) > 0 {
+				location := strings.Join(fields, " ") // the collapsed ·actual value·
 				hints = append(hints, parser.HintAt("", schemaloc.Resolve(base, location)))
 			}
 		case "schemaLocation":
@@ -551,4 +592,13 @@ func hintsOf(start *xmltree.StartElement, base string) []parser.Root {
 		}
 	}
 	return hints
+}
+
+// xmlSpaceFields splits s into the maximal runs of characters outside the XML
+// S production (xml.md [3]: #x20, #x9, #xD, #xA), the only characters a list
+// value is delimited on (cvc-datatype-valid, Datatypes §4.1.4 clause 2.2) or
+// whiteSpace = collapse normalizes (§4.3.6). strings.Fields is not this split:
+// it also breaks on U+00A0, U+2028 and the other Unicode spaces.
+func xmlSpaceFields(s string) []string {
+	return strings.FieldsFunc(s, func(r rune) bool { return strings.ContainsRune(" \t\r\n", r) })
 }

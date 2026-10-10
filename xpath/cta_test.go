@@ -191,13 +191,14 @@ func TestCompileDeclines(t *testing.T) {
 		// the err:XPST0081 row below and not a decline for the wildcard's shape.
 		{"@p:* = 'x'", "a prefixed wildcard NameTest whose prefix has no binding is err:XPST0081"},
 		{"* = 'x'", "a wildcard reaches this grammar only through [17] ta-AttrName"},
-		{"1 * 2 = 2", "and no multiplicative production admits one either"},
+		{"1 * 2 = 2", "and a Type Alternative's façade admits no arithmetic operator"},
 		{"@kind = 'x' extra", "trailing tokens are not part of a Test"},
 		{"@kind = ", "a Comparator with no right operand"},
 		{"(@kind = 'x'", "an unclosed parenthesis"},
 		{"@kind = 'x", "an unclosed string literal"},
 		{"(: unclosed", "an unclosed comment"},
 		{"@n = -1", "no unary minus production reaches a Literal"},
+		{"@n - 1 = 2", "a Type Alternative's façade admits no arithmetic operator"},
 		{"@a = 'x' or", "an 'or' with no right operand"},
 		// B.1 rule 1.1's xs:float to xs:double promotion, which this engine
 		// withholds rather than answering through a canonical round-trip that
@@ -1474,7 +1475,7 @@ func TestPromotePrecisionDecimalZeroBeyondCapacity(t *testing.T) {
 	// ctaPromoteAllocBound is far above the walk's and the error's own
 	// allocations and far below the 100 GB the padded form needs.
 	const ctaPromoteAllocBound = 1 << 20
-	env := ctaEnv{backend: backend(), types: seededTypes}
+	env := ctaEnv{backend: backend(), types: seededTypes, input: ctaLexicalInput{}}
 	types := compileTypes(t)
 	from, _ := types.castTarget(ctaBuiltin("precisionDecimal"))
 	to, _ := types.castTarget(ctaBuiltin("string"))

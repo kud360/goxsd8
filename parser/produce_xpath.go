@@ -48,9 +48,12 @@ func (p *producer) buildXPathExpression(hostElem *Element, exprAttr string) xsd.
 // (§3.13.2): let D be the xpathDefaultNamespace of the host element if present,
 // else that of the <schema> ancestor, else ##local (<schema>'s own default,
 // §3.17.2). Then ##local is absent (nil), ##defaultNamespace is the default
-// namespace in scope at the host element, ##targetNamespace is the schema's
-// target namespace (absent when <schema> carries no targetNamespace), and any
-// other value is a literal xs:anyURI taken as-is.
+// namespace in scope at the host element, ##targetNamespace is the document's
+// EFFECTIVE target namespace, p.target, and any other value is a literal
+// xs:anyURI taken as-is. A chameleon-<include>d document therefore reads the
+// includer's namespace (§F.1 adds it to the coerced <schema>), and ·absent· holds
+// only where p.target is "" — the sentinel for no target namespace, which a
+// literal targetNamespace="" also arrives as (checkNoSelfImport).
 //
 // The ##defaultNamespace case follows clause 1 exactly: the [[namespace name]]
 // of the host element's in-scope-namespaces entry whose [[prefix]] is absent
@@ -79,7 +82,7 @@ func (p *producer) xpathDefaultNamespace(hostElem *Element) *string {
 		}
 		return &uri
 	case "##targetNamespace":
-		if _, hasTarget := p.schemaElem.Attr("targetNamespace"); !hasTarget {
+		if p.target == "" {
 			return nil
 		}
 		target := p.target

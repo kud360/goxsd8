@@ -5,7 +5,9 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/kud360/goxsd8/builtin"
 	"github.com/kud360/goxsd8/builtin/strict"
@@ -282,10 +284,10 @@ func TestDatatypesFacetsWideStringFamily(t *testing.T) {
 	if ncname == nil {
 		t.Fatal("xs:NCName not seeded")
 	}
-	if _, verr := value.ValidateLexical(backend, noSchema{}, ncname, "abc", nil, xpath.FacetAssertions()); verr != nil {
+	if _, verr := value.ValidateLexical(backend, noSchema{}, ncname, "abc", nil, xpath.FacetAssertions(time.Time{})); verr != nil {
 		t.Errorf("NCName should accept %q: %v", "abc", verr)
 	}
-	_, verr := value.ValidateLexical(backend, noSchema{}, ncname, "a:b", nil, xpath.FacetAssertions())
+	_, verr := value.ValidateLexical(backend, noSchema{}, ncname, "a:b", nil, xpath.FacetAssertions(time.Time{}))
 	if verr == nil {
 		t.Fatal("NCName must reject a colon-bearing value via its intrinsic pattern")
 	}
@@ -968,7 +970,7 @@ func TestDatatypesLexicalDateTimeStampTimezone(t *testing.T) {
 
 	// The rejection reason is cvc-explicitTimezone-valid, not a lexical failure —
 	// proving the value-based facet, not Parse, decides the tz-absent literal.
-	_, verr := value.ValidateLexical(backend, noSchema{}, dts, "2002-10-10T12:00:00", nil, xpath.FacetAssertions())
+	_, verr := value.ValidateLexical(backend, noSchema{}, dts, "2002-10-10T12:00:00", nil, xpath.FacetAssertions(time.Time{}))
 	if verr == nil {
 		t.Fatal("tz-absent dateTimeStamp must be rejected via value.ValidateLexical, got nil")
 	}
@@ -1061,7 +1063,7 @@ func TestDatatypesLexicalIntegerFamily(t *testing.T) {
 		{"5.0", "cvc-pattern-valid"}, // the pattern gate runs before the value facets
 	}
 	for _, r := range rules {
-		_, verr := value.ValidateLexical(backend, noSchema{}, byteType, r.lexical, nil, xpath.FacetAssertions())
+		_, verr := value.ValidateLexical(backend, noSchema{}, byteType, r.lexical, nil, xpath.FacetAssertions(time.Time{}))
 		if verr == nil {
 			t.Fatalf("xs:byte %q must be rejected via value.ValidateLexical, got nil", r.lexical)
 		}
@@ -1184,7 +1186,7 @@ func TestDatatypesLexicalIntXFamily(t *testing.T) {
 		{"integer", "+0.0", "cvc-pattern-valid"},
 	}
 	for _, r := range rules {
-		_, verr := value.ValidateLexical(backend, noSchema{}, seeded(r.local), r.lexical, nil, xpath.FacetAssertions())
+		_, verr := value.ValidateLexical(backend, noSchema{}, seeded(r.local), r.lexical, nil, xpath.FacetAssertions(time.Time{}))
 		if verr == nil {
 			t.Fatalf("xs:%s %q must be rejected via value.ValidateLexical, got nil", r.local, r.lexical)
 		}
@@ -1198,7 +1200,7 @@ func TestDatatypesLexicalIntXFamily(t *testing.T) {
 	// bound is being spuriously inherited from a narrowing sibling and the family
 	// really is arbitrary precision (builtin/strict/doc.go).
 	for _, lex := range []string{"2147483648", "-2147483649", "12345678901234567890123456789"} {
-		if _, verr := value.ValidateLexical(backend, noSchema{}, seeded("integer"), lex, nil, xpath.FacetAssertions()); verr != nil {
+		if _, verr := value.ValidateLexical(backend, noSchema{}, seeded("integer"), lex, nil, xpath.FacetAssertions(time.Time{})); verr != nil {
 			t.Errorf("xs:integer %q must be accepted (it carries no bounds, §3.4.13.3), got %v", lex, verr)
 		}
 	}
@@ -1346,7 +1348,7 @@ func TestDatatypesLexicalHalfBoundedIntegerFamily(t *testing.T) {
 		{"positiveInteger", "0", "cvc-minInclusive-valid"},
 	}
 	for _, r := range rules {
-		_, verr := value.ValidateLexical(backend, noSchema{}, seeded(r.local), r.lexical, nil, xpath.FacetAssertions())
+		_, verr := value.ValidateLexical(backend, noSchema{}, seeded(r.local), r.lexical, nil, xpath.FacetAssertions(time.Time{}))
 		if verr == nil {
 			t.Fatalf("xs:%s %q must be rejected via value.ValidateLexical, got nil", r.local, r.lexical)
 		}
@@ -1370,7 +1372,7 @@ func TestDatatypesLexicalHalfBoundedIntegerFamily(t *testing.T) {
 		{"positiveInteger", "12345678901234567890123456789"},
 	}
 	for _, a := range accepts {
-		if _, verr := value.ValidateLexical(backend, noSchema{}, seeded(a.local), a.lexical, nil, xpath.FacetAssertions()); verr != nil {
+		if _, verr := value.ValidateLexical(backend, noSchema{}, seeded(a.local), a.lexical, nil, xpath.FacetAssertions(time.Time{})); verr != nil {
 			t.Errorf("xs:%s %q must be accepted (29 digits, and the type is unbounded on that side), got %v", a.local, a.lexical, verr)
 		}
 	}
@@ -1763,4 +1765,153 @@ func TestDatatypesD34Cohort(t *testing.T) {
 	if got := mustPrimitive(derived).Name().Local; got != "precisionDecimal" {
 		t.Errorf("decMaxExclusive_MinInclusive.Primitive() = %q, want precisionDecimal", got)
 	}
+}
+
+// declineEvery is the value.AssertionEvaluator that declines every {test}, so
+// any type carrying an assertions facet comes back from value.ValidateLexical
+// with a value.IsAssertionDeclined error.
+type declineEvery struct{}
+
+func (declineEvery) Evaluate(value.Backend, xsd.TypeResolver, *xsd.SimpleType, xsd.XPathExpression, value.Value) value.AssertionOutcome {
+	return value.AssertionDeclined
+}
+
+// TestMustNotBePreconditionOrDeclinePanicsOnADecline pins the guard's assertions
+// half: an assertions-facet decline is a non-verdict no type this lane
+// synthesizes can produce, so handing it one fails the run rather than letting an
+// .nK case score it as an agreement. A verdict, nil and a type fault (a pattern
+// naming an unrecognized category, which regex.Translate cannot express and
+// value.IsDatatypeVerdict also excludes) pass through: the guard refuses exactly
+// its two classes.
+func TestMustNotBePreconditionOrDeclinePanicsOnADecline(t *testing.T) {
+	backend, decimal := seededDecimal(t)
+	asserting := restrictDecimal(t, decimal, "asserting", xsd.NewAssertionsFacet([]xsd.Assertion{
+		xsd.NewAssertion(xsd.NewXPathExpression("$value ge 0", nil, nil, nil)),
+	}))
+	unexpressible := restrictDecimal(t, decimal, "unexpressible", xsd.NewFacet(xsd.FacetPattern, []string{`\p{Zz}`}, false))
+	c := caseSpec{id: "probe/mustNotBePreconditionOrDecline"}
+	for _, tc := range []struct {
+		name      string
+		st        *xsd.SimpleType
+		lexical   string
+		typeFault bool
+		wantPanic string
+	}{
+		{name: "an assertions decline", st: asserting, lexical: "7",
+			wantPanic: "conformance: case probe/mustNotBePreconditionOrDecline: value.ValidateLexical reported an assertions-facet decline on \"7\""},
+		{name: "a verdict", st: asserting, lexical: "seven"},
+		{name: "nil", st: decimal, lexical: "7"},
+		{name: "a type fault", st: unexpressible, lexical: "7", typeFault: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, verr := value.ValidateLexical(backend, noSchema{}, tc.st, tc.lexical, nil, declineEvery{})
+			if tc.wantPanic != "" && !value.IsAssertionDeclined(verr) {
+				t.Fatalf("premise: ValidateLexical(%s, %q) = %v, want an assertions decline", tc.st.Name().Local, tc.lexical, verr)
+			}
+			if tc.typeFault && (verr == nil || value.IsDatatypeVerdict(verr) || value.IsFacetPrecondition(verr) || value.IsAssertionDeclined(verr)) {
+				t.Fatalf("premise: ValidateLexical(%s, %q) = %v, want a type fault", tc.st.Name().Local, tc.lexical, verr)
+			}
+			got := panicOf(func() { mustNotBePreconditionOrDecline(verr, c, tc.lexical) })
+			if tc.wantPanic == "" && got != "" {
+				t.Fatalf("mustNotBePreconditionOrDecline(%v) panicked: %s", verr, got)
+			}
+			if !strings.HasPrefix(got, tc.wantPanic) {
+				t.Errorf("mustNotBePreconditionOrDecline(%v) panic = %q, want prefix %q", verr, got, tc.wantPanic)
+			}
+		})
+	}
+}
+
+// seededDecimal seeds the strict backend and returns it with its xs:decimal.
+func seededDecimal(t *testing.T) (value.Backend, *xsd.SimpleType) {
+	t.Helper()
+	backend := strict.New()
+	types, err := builtin.Seed(backend)
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	for _, ty := range types {
+		if ty.Name() == (xsd.QName{Space: xsd.XMLSchemaNS, Local: "decimal"}) {
+			return backend, ty
+		}
+	}
+	t.Fatal("xs:decimal not seeded")
+	return nil, nil
+}
+
+// restrictDecimal synthesizes a one-step restriction of decimal carrying f.
+func restrictDecimal(t *testing.T, decimal *xsd.SimpleType, local string, f xsd.Facet) *xsd.SimpleType {
+	t.Helper()
+	st, err := synthSimpleType(xsd.QName{Local: local}, xsd.RestrictionDerivation{}, decimal, []xsd.Facet{f})
+	if err != nil {
+		t.Fatalf("synthSimpleType(%s): %v", local, err)
+	}
+	return st
+}
+
+// TestCheckLiteralPanicsOnAPrecondition pins that the seam cannot be passed
+// silently: a synthesized type pairing a facet with a primitive it does not
+// apply to (cos-applicable-facets §4.1.5, length on xs:decimal) reaches
+// checkLiteral's one value.ValidateLexical call as a facet-pipeline precondition
+// fault, and the seam fails the run instead of returning an outcome to score.
+func TestCheckLiteralPanicsOnAPrecondition(t *testing.T) {
+	backend, decimal := seededDecimal(t)
+	inapplicable := restrictDecimal(t, decimal, "inapplicable", xsd.NewFacet(xsd.FacetLength, []string{"2"}, false))
+	_, verr := value.ValidateLexical(backend, noSchema{}, inapplicable, "7", nil, xpath.FacetAssertions(time.Time{}))
+	if !value.IsFacetPrecondition(verr) {
+		t.Fatalf("premise: ValidateLexical(inapplicable, %q) = %v, want a facet-pipeline precondition fault", "7", verr)
+	}
+	c := caseSpec{id: "probe/checkLiteral", expect: expectInvalid()}
+	want := "conformance: case probe/checkLiteral: value.ValidateLexical reported a facet-pipeline precondition fault on \"7\""
+	got := panicOf(func() { checkLiteral(backend, inapplicable, "7", nil, c) })
+	if !strings.HasPrefix(got, want) {
+		t.Errorf("checkLiteral(inapplicable, %q) panic = %q, want prefix %q", "7", got, want)
+	}
+}
+
+// TestTypeFaultDeclinesBothPolarities pins #2345's ruling through a scoring
+// path: a type fault (a pattern regex.Translate cannot express,
+// src-pattern-value §4.3.4.3, which value.IsDatatypeVerdict excludes) is not a
+// cvc-datatype-valid verdict, so decideLexicalByFacets declines it, Fail under
+// either expected validity, where scoring it invalid would pass the .n
+// polarity. A verdict over the same base still decides, so the .n polarity
+// passes and the valid one fails. decideLexicalByFacets reaches the outcome
+// through checkLiteral and scoreLiterals, the pair every executor in
+// datatypes.go scores through.
+func TestTypeFaultDeclinesBothPolarities(t *testing.T) {
+	backend, decimal := seededDecimal(t)
+	unexpressible := restrictDecimal(t, decimal, "unexpressible", xsd.NewFacet(xsd.FacetPattern, []string{`\p{Zz}`}, false))
+	for _, tc := range []struct {
+		name    string
+		st      *xsd.SimpleType
+		lexical string
+		// wantPass is whether the case passes under expectValid, then under
+		// expectInvalid.
+		wantPass [2]bool
+	}{
+		{name: "a type fault declines", st: unexpressible, lexical: "7", wantPass: [2]bool{false, false}},
+		{name: "a verdict decides", st: decimal, lexical: "seven", wantPass: [2]bool{false, true}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			for i, valid := range []bool{true, false} {
+				c := caseSpec{id: "probe/typeFault", expect: expectValidity(valid)}
+				got := decideLexicalByFacets(backend, tc.st, []string{tc.lexical}, c)
+				if got.IsPass() != tc.wantPass[i] {
+					t.Errorf("decideLexicalByFacets(%s, %q) under expectValid=%v: pass=%v, want %v", tc.st.Name().Local, tc.lexical, valid, got.IsPass(), tc.wantPass[i])
+				}
+			}
+		})
+	}
+}
+
+// panicOf runs f and returns what it panicked with, rendered, or "" if it
+// returned normally.
+func panicOf(f func()) (msg string) {
+	defer func() {
+		if r := recover(); r != nil {
+			msg = fmt.Sprint(r)
+		}
+	}()
+	f()
+	return ""
 }

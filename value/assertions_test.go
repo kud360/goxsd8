@@ -167,6 +167,40 @@ func TestUnionMemberFailingItsAssertionsYields(t *testing.T) {
 	}
 }
 
+// TestUnionOwnAssertionsGetTheActiveBasicMember pins what a union's OWN
+// assertions facet hands the evaluator as st: the ·active basic member· that
+// identified v, under which `$value` is v's XDM representation (dt-xdmrep
+// clause 4, cvc-assertions-valid clause 1.4), never the union — through a
+// nested union down to its basic member (dt-active-basic-member). Every row
+// fails with validateUnion handing checkAssertions st in place of member.
+func TestUnionOwnAssertionsGetTheActiveBasicMember(t *testing.T) {
+	num := primType(t, "numeric", "collapse")
+	text := primType(t, "text", "preserve")
+	b := memberBackend{num.Name(): allDigits, text.Name(): func(string) bool { return true }}
+	hold := []xsd.Facet{xsd.NewAssertionsFacet([]xsd.Assertion{xsd.NewAssertion(xsd.NewXPathExpression("hold", nil, nil, nil))})}
+	flat := unionRestriction(t, "flat", unionType2(t, "u", num, text), hold)
+	nested := unionRestriction(t, "nested", unionType2(t, "outer", unionType2(t, "inner", num, text)), hold)
+	for _, tc := range []struct {
+		name    string
+		st      *xsd.SimpleType
+		lexical string
+		want    *xsd.SimpleType
+	}{
+		{"the first member", flat, "7", num},
+		{"a later member", flat, "x", text},
+		{"a nested union's first member", nested, "7", num},
+		{"a nested union's later member", nested, "x", text},
+	} {
+		var calls []assertionCall
+		if _, err := ValidateLexical(b, noSchema{}, tc.st, tc.lexical, nil, scripted(&calls)); err != nil {
+			t.Fatalf("%s: ValidateLexical(%q) = %v, want accept", tc.name, tc.lexical, err)
+		}
+		if len(calls) != 1 || calls[0].st != tc.want {
+			t.Errorf("%s: Evaluate calls %v, want one handed %s", tc.name, calls, tc.want.Name())
+		}
+	}
+}
+
 // ruleOf is the rule err carries, empty where it carries none.
 func ruleOf(err error) xsderr.Rule {
 	rule, _ := xsderr.RuleOf(err)

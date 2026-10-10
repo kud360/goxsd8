@@ -112,7 +112,7 @@ func TestConstraintMatchesComparesInTheValueSpace(t *testing.T) {
 		{"different values", "2", "1", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			same, decided := ConstraintMatches(b, noSchema{}, prim, tc.lexical, nil, vsFixed(tc.fixed))
+			same, decided := ConstraintMatches(b, noSchema{}, prim, tc.lexical, nil, vsFixed(tc.fixed), assertionsUndecided{})
 			if !decided {
 				t.Fatalf("ConstraintMatches = (%t, false), want a decided answer", same)
 			}
@@ -141,7 +141,7 @@ func TestConstraintMatchesFailsOpen(t *testing.T) {
 		{"an ungoverned type", emptyBackend{}, "1", "1"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if same, decided := ConstraintMatches(tc.backend, noSchema{}, prim, tc.lexical, nil, vsFixed(tc.fixed)); decided {
+			if same, decided := ConstraintMatches(tc.backend, noSchema{}, prim, tc.lexical, nil, vsFixed(tc.fixed), assertionsUndecided{}); decided {
 				t.Errorf("ConstraintMatches = (%t, %t), want undecided (fail-open)", same, decided)
 			}
 		})
@@ -186,7 +186,7 @@ func TestConstraintMatchesSpecialTypesAgreeOnIdenticalLiterals(t *testing.T) {
 				{"literals differing only in whitespace", " 1 ", "1", false, false},
 			} {
 				t.Run(st.Name().Local+"/"+bc.name+"/"+tc.name, func(t *testing.T) {
-					same, decided := ConstraintMatches(b, noSchema{}, st, tc.lexical, nil, vsFixed(tc.fixed))
+					same, decided := ConstraintMatches(b, noSchema{}, st, tc.lexical, nil, vsFixed(tc.fixed), assertionsUndecided{})
 					if same != tc.wantSame || decided != tc.decided {
 						t.Errorf("ConstraintMatches(%q, %q) = (%t, %t), want (%t, %t)",
 							tc.lexical, tc.fixed, same, decided, tc.wantSame, tc.decided)
@@ -207,7 +207,7 @@ func TestConstraintMatchesShortcutIsSpecialOnly(t *testing.T) {
 	instance := nsContext{bindings: map[string]string{"p": "urn:one"}}
 
 	same, decided := ConstraintMatches(b, noSchema{}, qname, "p:x", instance,
-		vsFixedIn("p:x", nil, binding("p", "urn:two")))
+		vsFixedIn("p:x", nil, binding("p", "urn:two")), assertionsUndecided{})
 	if !decided || same {
 		t.Errorf("ConstraintMatches = (%t, %t), want (false, true): one literal, two namespaces", same, decided)
 	}
@@ -224,13 +224,13 @@ func TestConstraintMatchesResolvesEachSideInItsOwnContext(t *testing.T) {
 	instance := nsContext{bindings: map[string]string{"i": "urn:one"}}
 
 	same, decided := ConstraintMatches(b, noSchema{}, qname, "i:x", instance,
-		vsFixedIn("s:x", nil, binding("s", "urn:one")))
+		vsFixedIn("s:x", nil, binding("s", "urn:one")), assertionsUndecided{})
 	if !decided || !same {
 		t.Errorf("ConstraintMatches = (%t, %t), want (true, true): both prefixes name urn:one", same, decided)
 	}
 
 	same, decided = ConstraintMatches(b, noSchema{}, qname, "i:x", instance,
-		vsFixedIn("s:x", nil, binding("s", "urn:two")))
+		vsFixedIn("s:x", nil, binding("s", "urn:two")), assertionsUndecided{})
 	if !decided || same {
 		t.Errorf("ConstraintMatches = (%t, %t), want (false, true): the two prefixes name different namespaces", same, decided)
 	}

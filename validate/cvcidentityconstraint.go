@@ -252,15 +252,15 @@ const (
 // lexical names no one ·actual value·: v is nil, and lexical alone is compared
 // ([sameSpecialMember]).
 //
-// lexical and owner are the lexical v was read off and the element whose
-// namespace bindings were in scope for it. They are read only where the two
-// members of a pair were validated against different simple types, or against
-// one whose values lie in more than one value space, which
-// [walk.primitiveItems] answers by re-reading lexical in the ·primitive· value
-// space of its ·validating type·; v alone cannot answer it, since a backend may
-// map a derived type into a space of its own. st stays the declared type, a
-// union included: the ·validating type· is identified per comparison, so a
-// failure to identify it declines that comparison and never the member.
+// lexical and ctx are the lexical v was read off and the namespace context it
+// was mapped under. They are read only where the two members of a pair were
+// validated against different simple types, or against one whose values lie in
+// more than one value space, which [walk.primitiveItems] answers by re-reading
+// lexical in the ·primitive· value space of its ·validating type·; v alone
+// cannot answer it, since a backend may map a derived type into a space of its
+// own. st stays the declared type, a union included: the ·validating type· is
+// identified per comparison, so a failure to identify it declines that
+// comparison and never the member.
 //
 // element and nillable travel with it for clause 4.2.3 alone, which asks
 // whether an ELEMENT member "was assessed as ·valid· by reference to an element
@@ -271,7 +271,7 @@ type icKeyMember struct {
 	st       *xsd.SimpleType
 	v        value.Value
 	lexical  string
-	owner    Element
+	ctx      value.Context
 	element  bool
 	nillable bool
 }
@@ -451,7 +451,7 @@ func (c *icCheck) fieldAttributes(w *walk, t *icTarget, i int, sel icpath.Select
 			t.decline(w, i, a.Name(), a.Loc(), "its ·governing type definition· could not be determined")
 			continue
 		}
-		m, present, decided := w.keyMember(st, a.Value(), c.e, false, false)
+		m, present, decided := w.keyMember(st, a.Value(), elementContext{owner: c.e}, false, false)
 		t.offer(w, i, a.Name(), a.Loc(), m, present, decided)
 	}
 	if ct := c.g.complexType(); ct != nil {
@@ -502,7 +502,7 @@ func (c *icCheck) fieldDefaultedAttributes(w *walk, t *icTarget, i int, sel icpa
 			t.decline(w, i, u.DeclarationName(), c.e.Loc(), "it is a ·defaulted attribute· whose declaration's {type definition} is absent or not a simple type definition")
 			continue
 		}
-		m, present, decided := w.keyMember(st, vc.LexicalForm(), c.e, false, false)
+		m, present, decided := w.keyMember(st, vc.LexicalForm(), value.ConstraintContext(vc), false, false)
 		t.offer(w, i, u.DeclarationName(), c.e.Loc(), m, present, decided)
 	}
 }
@@ -532,18 +532,20 @@ func (c *icCheck) substitute(content *contentCheck) {
 
 // assessed is the ·initial value· cvc-elt clause 5 leaves this element assessed
 // on, which is what §3.11.4 clause 3 and §3.17.5.2 both read a [schema actual
-// value] off: D.{value constraint}.{lexical form} on clause 5.1's arm, and the
-// gathered ·initial value· on clause 5.2's.
+// value] off, paired with the namespace context it is mapped under, on
+// [contentCheck.assessed]'s terms: D.{value constraint}.{lexical form} under
+// [value.ConstraintContext] on clause 5.1's arm, and the gathered ·initial
+// value· under E's own bindings (elementContext) on clause 5.2's.
 //
 // §3.11.4's own Note is why the substituted one reaches here and not just
 // cvc-type: "the use of [schema actual value] in the definition of ·key sequence·
 // above means that default or fixed value constraints may play a part in
 // ·key-sequences·", and §3.17.5.2's Note says the same of the ·eligible item set·.
-func (c *icCheck) assessed() string {
+func (c *icCheck) assessed() (lexical string, ctx value.Context) {
 	if c.hasDefault {
-		return c.defaulted.LexicalForm()
+		return c.defaulted.LexicalForm(), value.ConstraintContext(c.defaulted)
 	}
-	return c.initial.String()
+	return c.initial.String(), elementContext{owner: c.e}
 }
 
 // identityExit settles everything about one element that only its exhausted
@@ -630,13 +632,17 @@ func (w *walk) elementKeyMember(c *icCheck) (icKeyMember, bool, bool) {
 		return icKeyMember{}, false, true
 	}
 	nillable := c.g.hasDecl && c.g.decl.Nillable()
-	return w.keyMember(st, c.assessed(), c.e, true, nillable)
+	lexical, ctx := c.assessed()
+	return w.keyMember(st, lexical, ctx, true, nillable)
 }
 
 // keyMember maps one field node's lexical to the ·actual value· that is its
 // [schema actual value], through the same String Valid (§3.16.4) pipeline the
-// attribute charges run (value.ValidateLexical, under the namespace bindings in
-// scope at the node that owns the lexical — elementContext).
+// attribute charges run (value.ValidateLexical, under ctx: the namespace
+// bindings in scope at the node that owns the lexical, elementContext, for a
+// lexical the instance carries, and [value.ConstraintContext] for a {value
+// constraint}'s {lexical form} — a ·defaulted attribute·'s or an element
+// default's).
 //
 // The three answers are the three the rule distinguishes. present=true is a
 // non-absent [schema actual value]. present=false with decided=true is an
@@ -665,18 +671,18 @@ func (w *walk) elementKeyMember(c *icCheck) (icKeyMember, bool, bool) {
 // [sameSpecialMember] decides a pair on it only where both lexicals are
 // byte-identical, declining every other pair it is in, RULED permanent by #2124
 // (STYLE P3b).
-func (w *walk) keyMember(st *xsd.SimpleType, lexical string, owner Element, element, nillable bool) (icKeyMember, bool, bool) {
+func (w *walk) keyMember(st *xsd.SimpleType, lexical string, ctx value.Context, element, nillable bool) (icKeyMember, bool, bool) {
 	if st == nil {
 		return icKeyMember{}, false, false
 	}
 	if st.IsSpecial() {
-		return icKeyMember{st: st, lexical: lexical, owner: owner, element: element, nillable: nillable}, true, true
+		return icKeyMember{st: st, lexical: lexical, ctx: ctx, element: element, nillable: nillable}, true, true
 	}
-	v, err := value.ValidateLexical(w.backend, w.schema, st, lexical, elementContext{owner: owner}, xpath.FacetAssertions())
+	v, err := value.ValidateLexical(w.backend, w.schema, st, lexical, ctx, xpath.FacetAssertions(w.now))
 	if err != nil {
 		return icKeyMember{}, false, value.IsDatatypeVerdict(err)
 	}
-	return icKeyMember{st: st, v: v, lexical: lexical, owner: owner, element: element, nillable: nillable}, true, true
+	return icKeyMember{st: st, v: v, lexical: lexical, ctx: ctx, element: element, nillable: nillable}, true, true
 }
 
 // offer takes one candidate field node's answer — the node named name at loc —
@@ -1189,15 +1195,14 @@ type icPrimitiveItem struct {
 // whose whiteSpace is preserve, would read a different value. A list's
 // whiteSpace is collapse (§4.3.6.1), so its items are its normalized lexical's
 // tokens, which hold no white space for an item type's own normalization to
-// change. The namespace bindings are m's owner's, as [walk.keyMember] read
-// them.
+// change. The namespace context is m's own, the one [walk.keyMember] mapped
+// its lexical under.
 //
 // ok is false where a resolution or the re-reading fails: on a lexical m's own
 // type accepted, that is a fault of the type or of the backend and not a
 // verdict about the lexical ([walk.sameKeyMember]'s GAP).
 func (w *walk) primitiveItems(m icKeyMember) ([]icPrimitiveItem, bool) {
-	ctx := elementContext{owner: m.owner}
-	st, ok := w.basicType(m.st, m.lexical, m.owner)
+	st, ok := w.basicType(m.st, m.lexical, m.ctx)
 	if !ok {
 		return nil, false
 	}
@@ -1211,7 +1216,7 @@ func (w *walk) primitiveItems(m icKeyMember) ([]icPrimitiveItem, bool) {
 		if !ok {
 			return nil, false
 		}
-		item, ok := w.primitiveItem(st, normalized, ctx)
+		item, ok := w.primitiveItem(st, normalized, m.ctx)
 		return []icPrimitiveItem{item}, ok
 	case xsd.List:
 		itemType, err := st.Item(w.schema)
@@ -1221,11 +1226,11 @@ func (w *walk) primitiveItems(m icKeyMember) ([]icPrimitiveItem, bool) {
 		tokens := strings.FieldsFunc(m.lexical, isXMLSpace)
 		items := make([]icPrimitiveItem, 0, len(tokens))
 		for _, token := range tokens {
-			basic, ok := w.basicType(itemType, token, m.owner)
+			basic, ok := w.basicType(itemType, token, m.ctx)
 			if !ok {
 				return nil, false
 			}
-			item, ok := w.primitiveItem(basic, token, ctx)
+			item, ok := w.primitiveItem(basic, token, m.ctx)
 			if !ok {
 				return nil, false
 			}
@@ -1243,7 +1248,7 @@ func (w *walk) primitiveItems(m icKeyMember) ([]icPrimitiveItem, bool) {
 // false where st's chain does not resolve or the identification fails, which
 // declines only the comparison that asked: keyMember's slot decision never
 // runs through here, so a slot it decided stays decided.
-func (w *walk) basicType(st *xsd.SimpleType, lexical string, owner Element) (*xsd.SimpleType, bool) {
+func (w *walk) basicType(st *xsd.SimpleType, lexical string, ctx value.Context) (*xsd.SimpleType, bool) {
 	variety, err := st.Variety(w.schema)
 	if err != nil {
 		return nil, false
@@ -1251,7 +1256,7 @@ func (w *walk) basicType(st *xsd.SimpleType, lexical string, owner Element) (*xs
 	if _, isUnion := variety.(xsd.Union); !isUnion {
 		return st, true
 	}
-	return w.validatingType(st, lexical, owner)
+	return w.validatingType(st, lexical, ctx)
 }
 
 // primitiveItem reads one normalized atomic lexical, accepted by st, in the value
@@ -1263,7 +1268,7 @@ func (w *walk) primitiveItem(st *xsd.SimpleType, lexical string, ctx value.Conte
 	if err != nil || primitive == nil {
 		return icPrimitiveItem{}, false
 	}
-	v, err := value.ValidateLexical(w.backend, w.schema, primitive, lexical, ctx, xpath.FacetAssertions())
+	v, err := value.ValidateLexical(w.backend, w.schema, primitive, lexical, ctx, xpath.FacetAssertions(w.now))
 	if err != nil {
 		return icPrimitiveItem{}, false
 	}

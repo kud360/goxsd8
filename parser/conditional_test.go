@@ -358,3 +358,32 @@ func TestConditionalInclusionLeavesAnUnmarkedDocumentAlone(t *testing.T) {
 		t.Fatalf("element e not found")
 	}
 }
+
+// TestConditionalQNamesSplitOnXMLSpace pins conditionalQNames' split of the
+// availability lists on XML white space alone (cvc-datatype-valid, Datatypes
+// §4.1.4 clause 2.2; xml.md [3] S). Two QNames joined by U+00A0 or U+2028 are
+// one item with two colons, which src-cip charges. U+1680 is an NCName
+// character, so xs:int&#x1680;string is ONE QName, {XSD}int&#x1680;string,
+// naming no available type, and the declaration is ignored; split at the
+// U+1680 it would read as xs:int and string — xs:string under the default
+// namespace bound on the element — both available, and be retained.
+func TestConditionalQNamesSplitOnXMLSpace(t *testing.T) {
+	for _, sp := range []string{"&#xA0;", "&#x2028;"} {
+		t.Run("two QNames joined by "+sp+" are one item, no QName", func(t *testing.T) {
+			_, err := produce(t, markedDeclaration(`vc:typeAvailable="xs:string`+sp+`xs:int"`))
+			var xerr *xsderr.Error
+			if !errors.As(err, &xerr) {
+				t.Fatalf("Produce error = %v, want an *xsderr.Error", err)
+			}
+			if xerr.Rule != "src-cip" || !strings.Contains(xerr.Error(), "xs:QName") {
+				t.Fatalf("Produce error = %v, want src-cip naming xs:QName", xerr)
+			}
+		})
+	}
+	t.Run("a U+1680 inside a name is one item", func(t *testing.T) {
+		marked := `xmlns="http://www.w3.org/2001/XMLSchema" vc:typeAvailable="xs:int&#x1680;string"`
+		if declarationRetained(t, markedDeclaration(marked)) {
+			t.Errorf("the declaration was retained, so the one item {XSD}int\\u1680string was read as two available types")
+		}
+	})
+}
