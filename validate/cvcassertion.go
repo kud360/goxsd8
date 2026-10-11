@@ -925,6 +925,18 @@ func (w *walk) tallyValue(e Element, g governance, content *contentCheck, up ass
 //     chain's. The relation is tested on e's own type directly, never through
 //     the ·locally declared type· within its parent's own type;
 //   - its [schema normalized value] under its own type does not map under T.
+//
+// GAP(validate): recorded misses a cvc-elt clause 4 violation (an xsi:type
+// not validly derived from the declared type), which [walk.childGoverning]
+// records before [walk.element] takes the marks recorded counts from;
+// e is then read under the declared type it fell back to, where the partial
+// ·PSVI· annotates it xs:anyType and the value should be lacked (#2555). The
+// value feeds [xpath.AssertionTest.Evaluate] for an ancestor's {assertions},
+// whose cvc-assertion entry lands in w.res.violations, read by
+// [Result.Violations], or nowhere, where it should land in w.res.unevaluated,
+// read by [Result.Unevaluated]: the assertion is shown satisfied or charged
+// where it should be declined. The document's verdict cannot flip, because
+// w.res.violations already carries the cvc-elt clause 4 charge at e.
 func (w *walk) elementBelow(ct xsd.ComplexType, path []xsd.QName, e Element, g governance, content *contentCheck, recorded bool) (xpath.TypedValue, string) {
 	if recorded {
 		return nil, "a violation or an unevaluated check was recorded for it or below it, so it is not known to be ·valid·"
@@ -1228,6 +1240,18 @@ func (w *walk) keepChild(parent *assertionCheck, e Element, g governance, conten
 // whiteSpace (normalizedLexical) — an extension keeps it and a restriction
 // never weakens it — and mapped under the answered type, in the namespace
 // context assessed pairs it with.
+//
+// GAP(validate): recorded misses a cvc-elt clause 4 violation (an xsi:type
+// not validly derived from the declared type), which [walk.childGoverning]
+// records before [walk.element] takes the marks recorded counts from;
+// e is then read under the declared type it fell back to, where the partial
+// ·PSVI· annotates it xs:anyType and the value should be lacked (#2555). The
+// value feeds [xpath.AssertionTest.Evaluate] for the parent's {assertions},
+// whose cvc-assertion entry lands in w.res.violations, read by
+// [Result.Violations], or nowhere, where it should land in w.res.unevaluated,
+// read by [Result.Unevaluated]: the assertion is shown satisfied or charged
+// where it should be declined. The document's verdict cannot flip, because
+// w.res.violations already carries the cvc-elt clause 4 charge at e.
 func (w *walk) childValue(ct xsd.ComplexType, e Element, g governance, content *contentCheck, frame *stringValueFrame, recorded bool) (xpath.ChildElement, assertionLack) {
 	lacking := func(why string) (xpath.ChildElement, assertionLack) {
 		return xpath.ChildElement{}, lackingChild{name: e.Name(), loc: e.Loc(), why: why}

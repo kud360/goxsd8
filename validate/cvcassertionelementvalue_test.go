@@ -173,6 +173,29 @@ func TestAssertionReadsGrandchildValues(t *testing.T) {
 	}
 }
 
+// GAP(validate): a d whose xsi:type, xs:string, is not validly derived from
+// its declared xs:date is charged under cvc-elt clause 4, and is then read
+// under xs:date as if ·valid·, so `data(event/d) instance of xs:date*` is
+// shown satisfied. This asserts today's behaviour, and that verdict is wrong:
+// d is not ·valid·, so the assertion should be declined (#2555). The
+// document's verdict is right either way, through the cvc-elt charge. With
+// walk.tallyValue not called, the assertion is charged too, and this fails;
+// with walk.elementBelow lacking a d whose cvc-elt charge is the latest
+// violation, it is declined, and this fails.
+func TestAssertionReadsAGrandchildInvalidByXsiType(t *testing.T) {
+	const test = "data(event/d) instance of xs:date*"
+	str := ccAttr(xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: "type"}, "xs:string", 3)
+	res := aAssess(t, evSchema(t, test), evTemp("event", nil, evD(3, "2008-07-01", str)))
+	vs := res.Violations()
+	if len(vs) != 1 || vs[0].Rule != ruleCvcElt || vs[0].Loc != loc(3, 5) ||
+		!strings.HasPrefix(vs[0].Msg, "the xsi:type attribute of the element d ") || !strings.Contains(vs[0].Msg, "cvc-elt clause 4") {
+		t.Errorf("Violations() = %v, want the one cvc-elt clause 4 charge at %s", vs, loc(3, 5))
+	}
+	if len(res.Unevaluated()) != 0 {
+		t.Errorf("Unevaluated() = %v, want none today (#2555 makes it a cvc-assertion decline)", messages(res.Unevaluated()))
+	}
+}
+
 // A d the {test} reads that has no typed value under the type it was compiled
 // to read declines the assertion, which is never charged, naming why: one the
 // skip wildcard of <skips> ·skipped·, whose typed value is xs:untypedAtomic;
