@@ -92,21 +92,23 @@ const ruleCvcAssertionsValid xsderr.Rule = "cvc-assertions-valid"
 // {attribute use}, carried or ·defaulted·, has no ·actual value·, one of whose
 // element [[children]] a {test} reads has no typed value this package reads
 // ([walk.keepChild]) — a child of mixed content among them whose string-value
-// spans a descendant whose contribution is undecided
-// ([stringValueFrame.lacking]) — whose `$value` is undecided
-// ([walk.assertionValues]), whose own string value, which `.` reads, spans such
-// a descendant, or was not gathered because e has simple content and element
-// [[children]], or is ·nilled· and has [[children]] and simple content or a
-// {test} reading `.` ([walk.assertionValue]), or one of whose {test}s counts
-// the attribute nodes of, or filters children by the attribute names of, an
-// element of its subtree whose ·governing type definition· this package could
-// not determine, so that its ·defaulted attributes· are unknown
-// ([walk.tallyElement]); a ·skipped· subtree is counted, by name
-// ([assertionAncestry.tallySkipped]). Fail-open: the withheld value is clause
-// 6's own verdict, whose whole consumer set inside this package is
-// w.res.violations and its one reader [Result.Violations], which charge on a
-// violation PRESENT, so a decline can only cost a rejection and can manufacture
-// none. (#1042)
+// spans a descendant whose contribution is undecided ([stringValueFrame.lacking])
+// — whose `$value` is undecided ([walk.assertionValues]), whose own string value,
+// which `.` reads, spans such a descendant, or was not gathered because e has
+// simple content and element [[children]], or is ·nilled· and has [[children]] and
+// simple content or a {test} reading `.` ([walk.assertionValue]), or one of whose
+// {test}s counts the attribute nodes of, filters children by the attribute names
+// of, or reads the attribute values of, an element of its subtree whose ·governing
+// type definition· this package could not determine, so that its ·defaulted
+// attributes· are unknown ([walk.tallyElement]), or reads through a path the typed
+// value of an attribute below e that has none under the type the {test} was
+// compiled to read — its element ·skipped·, its own {attribute use}'s type neither
+// that type nor validly derived from it, no use matching it, or no ·actual value·
+// ([walk.tallyAttributes]); a ·skipped· subtree is counted, by name
+// ([assertionAncestry.tallySkipped]). Fail-open: the withheld value is clause 6's
+// own verdict, whose whole consumer set inside this package is w.res.violations
+// and its one reader [Result.Violations], which charge on a violation PRESENT, so
+// a decline can only cost a rejection and can manufacture none. (#1042)
 func (w *walk) elementAssertions(e Element, asserts *assertionCheck, content *contentCheck, own *stringValueFrame, invalid bool) {
 	if asserts == nil {
 		return
@@ -155,11 +157,15 @@ func (w *walk) elementAssertions(e Element, asserts *assertionCheck, content *co
 // contribution to its string-value is undecided ([stringValueFrame.lacking]) —
 // or the first element of the element's subtree a test's [xpath.Tally] cannot
 // be told of exactly: one whose ·governing type definition· was not
-// determined, at whose depth some test's count reads attribute names
-// ([assertionCheck.countsAttributesAt], [walk.tallyElement]). The lack is the
-// whole check's, never one test's. Each test's Tally collects the counts from
-// the whole subtree as it is walked — a ·skipped· part of it by name
-// ([assertionAncestry.tallySkipped]) — and no node of it is kept.
+// determined, at whose depth some test reads attribute names or values
+// ([assertionCheck.readsAttributesAt], [walk.tallyElement]), or one carrying
+// an attribute whose typed value a test reads and which has none under the
+// type the test was compiled to read ([walk.tallyAttributes],
+// [assertionAncestry.tallySkipped]). The lack is the whole check's, never one
+// test's. Each test's Tally collects the counts, and the typed values of the
+// attributes a path to an attribute reads, from the whole subtree as it is
+// walked — a ·skipped· part of it by name ([assertionAncestry.tallySkipped]) —
+// and no node of it is kept.
 type assertionCheck struct {
 	ct       xsd.ComplexType
 	tests    []assertionTest
@@ -773,10 +779,10 @@ func (w *walk) tallyAttributes(c *assertionCheck, path []xsd.QName, e Element, g
 // element reads it through a path to the attribute, or why it has none. u is
 // the attribute's own {attribute use}, within its element's own ·governing
 // type definition·; lexical is its [schema normalized value], read at loc and
-// mapped under ctx. The value is mapped under T, the type
-// [walk.assertionTypes] answers for (path, u's name) — the one closure the
-// {test} was compiled against, so the compiled type and the mapped type cannot
-// disagree, which [xpath.Tally.Attribute] makes the caller's obligation — on
+// mapped under ctx. The value is mapped under T, the type [walk.assertionTypes]
+// answers for (path, u's name) — the one closure the {test} was compiled
+// against, so the compiled type and the mapped type cannot disagree, which
+// [xpath.Tally.Attribute] makes the caller's obligation — on
 // [walk.childValue]'s pattern: normalized under u's own type T′ and mapped
 // under T. It reports why instead where:
 //

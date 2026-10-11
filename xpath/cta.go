@@ -2120,15 +2120,14 @@ func (ctaEmptySequence) ctaStatic() {}
 // ctaStaticOf reports the static type of one [14] ta-ValueExpr. ctaAttr,
 // ctaUntypedChild, ctaUntypedValue, ctaContextAtom and a ctaAttributePath over
 // a ·special· type are the untyped arms, and so is an fn:distinct-values call
-// over one, whose static type is its
-// operand's; so are ctaNoDocumentRoot and ctaNoContextItem: each raises
-// before any item exists, so its static type decides only whether a
-// comparison over it compiles, never an answer. A ctaChildPath,
-// ctaChildrenHaving, ctaChildrenPreceded or ctaSelectedElements never reaches
-// here: ctaParser.childPath, ctaParser.childrenHaving,
+// over one, whose static type is its operand's; so are ctaNoDocumentRoot and
+// ctaNoContextItem: each raises before any item exists, so its static type
+// decides only whether a comparison over it compiles, never an answer. A
+// ctaChildPath, ctaChildrenHaving, ctaChildrenPreceded or ctaSelectedElements
+// never reaches here: ctaParser.childPath, ctaParser.childrenHaving,
 // ctaParser.childrenPreceded and ctaParser.selectedElements build them only
-// where no static type is asked. Every other operand is typed
-// by the type it carries (ctaCarriedType).
+// where no static type is asked. Every other operand is typed by the type it
+// carries (ctaCarriedType).
 func ctaStaticOf(v ctaValue) ctaStatic {
 	switch n := v.(type) {
 	case ctaDistinctValues:

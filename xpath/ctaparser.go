@@ -1429,8 +1429,8 @@ func (p *ctaParser) dataInstanceOf() (ctaValue, bool) {
 // `instance` the cursor is on, into its node, reporting false where v's static
 // type does not decide its items' dynamic type (ctaTypes.instanceItem) or the
 // SequenceType declines (sequenceType). An fn:sum call, whose dynamic type its
-// static type does not decide, is sumInstanceTail's. An absent indicator, `?`, `*` and `+`
-// are xpath20.md [51] OccurrenceIndicator; xpath20.md A.1.2's
+// static type does not decide, is sumInstanceTail's. An absent indicator, `?`,
+// `*` and `+` are xpath20.md [51] OccurrenceIndicator; xpath20.md A.1.2's
 // occurrence-indicators constraint makes a `*` or `+` after the AtomicType an
 // indicator and never an operator.
 func (p *ctaParser) instanceTail(v ctaValue) (ctaValue, bool) {
