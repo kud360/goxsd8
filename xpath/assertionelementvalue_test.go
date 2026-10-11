@@ -157,7 +157,8 @@ func TestAssertionElementPathInstanceOf(t *testing.T) {
 // one it does not derive from, xs:integer, decides nothing and declines rather
 // than answering false (ctaTypes.instanceItem's derived). With
 // ctaTypes.instanceItem reporting a ctaElementPath with derived false, the
-// xs:integer* row compiles, and fails.
+// xs:integer* row compiles, and fails; with dataInstanceOf routing no path to
+// dataElementPath, the two xs:decimal* rows decline, and fail.
 func TestAssertionElementPathDerivedDeclines(t *testing.T) {
 	if _, ok := evCompileAs(t, "data(a/b) instance of xs:integer*", "decimal"); ok {
 		t.Error("data(a/b) instance of xs:integer* over xs:decimal b: compiled, want declined")
@@ -177,8 +178,11 @@ func TestAssertionElementPathDerivedDeclines(t *testing.T) {
 // element-only or empty one, whose fn:data raises err:FOTY0012 or yields
 // nothing and is no node here, a ·special· one, a wildcard last step, a longer
 // path's own decline, and the forms beyond fn:data under `instance of`. A last
-// step of simple content over xs:date compiles. The guards — `a/b = 1`,
-// `count(a/b) = 1`, `string(a/b)` — declined before this slice and still do.
+// step of simple content over xs:date compiles. The xs:string* row compiles,
+// and fails, with ctaTypes.instanceItem reporting a ctaElementPath with
+// derived false, and the simple-content row declines, and fails, with
+// dataInstanceOf routing no path to dataElementPath; every other row is a
+// guard, `a/b = 1`, `count(a/b) = 1` and `string(a/b)` among them.
 func TestAssertionElementPathDeclines(t *testing.T) {
 	for _, expr := range []string{
 		"data(a/q) instance of xs:date*",
@@ -211,7 +215,9 @@ func TestAssertionElementPathDeclines(t *testing.T) {
 // A Type Alternative's {test} declines the path, fn:data being outside its
 // grammar (§3.12.6), and an assertions facet's raises err:XPDY0002 over it, its
 // first step reading the absent context item, so the facet fails rather than
-// declining (ctaFacetFacade.elementPath).
+// declining (ctaFacetFacade.elementPath). The facet row declines, and fails,
+// with dataInstanceOf routing no path to dataElementPath; the Type Alternative
+// row is a guard.
 func TestAssertionElementPathOtherFacades(t *testing.T) {
 	if _, ok := CompileCTATest(asRecord("data(a/b) instance of xs:int*"), seededTypes); ok {
 		t.Error("CompileCTATest(data(a/b) instance of xs:int*): compiled, want declined")
@@ -227,8 +233,7 @@ func TestAssertionElementPathOtherFacades(t *testing.T) {
 // [a, c], not [b, a] — no attribute name at any depth, and neither a nor b is
 // a child read; the {test} whose only read below E is `data(a/b)` has a Tally.
 // A nil Tally reads nothing and takes nothing. With ctaElementPath.reads
-// matching any path of its length the [a, c] and [b, a] rows fail, and with
-// ReadsElementValue admitting a one-step path the [a] row does.
+// matching any path of its length, the [a, c] and [b, a] rows fail.
 func TestTallyReadsElementValues(t *testing.T) {
 	test := evCompile(t, "data(a/b) instance of xs:date*")
 	c := test.Tally()
@@ -270,8 +275,12 @@ func TestTallyReadsElementValues(t *testing.T) {
 // for one b, a value while an attribute value of the latest report is owed, a
 // report at b's depth or above while b owes its value, and Evaluate over a
 // Tally still owing one. A value after the reports of b's own subtree is in
-// order. Each breach row holds with its own check removed from
-// Tally.ElementValue, Tally.Element or Tally.settled.
+// order. With Tally.ElementValue returning, not breaching, where nothing is
+// owed, the before-any-report, after-E's, after-a's and twice rows hold; with
+// its owed-attribute check removed, the value-while-the-attribute-is-owed row
+// holds; with Tally.Element's owing-depth check removed, the second-b and
+// an-a rows hold; and with Tally.settled ignoring the values owed, the
+// owing-at-Evaluate row holds.
 func TestTallyElementValueBreaches(t *testing.T) {
 	d := evDate(t, "2008-07-01")
 	b := evPath
@@ -354,8 +363,9 @@ func TestTallyElementValueBreaches(t *testing.T) {
 
 // A value of the [Untyped] arm where the path was compiled TYPED breaks
 // [Tally.ElementValue]'s obligation, and the tree raises on it: false where the
-// [Typed] value holds. The Untyped row holds with ctaElementPathItem skipping a
-// value of the wrong arm as it skips nil.
+// [Typed] value holds, even under `*`, which no item count fails. The Untyped
+// row holds with ctaElementPathItem skipping a value of the wrong arm as it
+// skips nil.
 func TestAssertionElementPathRaisesOnWrongArm(t *testing.T) {
 	for _, tc := range []struct {
 		v     TypedValue
@@ -364,7 +374,7 @@ func TestAssertionElementPathRaisesOnWrongArm(t *testing.T) {
 		{evDate(t, "2008-07-01"), true},
 		{Untyped("2008-07-01"), false},
 	} {
-		test := evCompile(t, "data(a/b) instance of xs:date")
+		test := evCompile(t, "data(a/b) instance of xs:date*")
 		if got := evEval(t, test, evTally(test, true, tc.v)); got != tc.holds {
 			t.Errorf("b reported as %#v: Evaluate = %v, want %v", tc.v, got, tc.holds)
 		}
@@ -375,9 +385,10 @@ func TestAssertionElementPathRaisesOnWrongArm(t *testing.T) {
 // path reads E's grandchildren there as it does outside: in a body over a typed
 // `$value` (ctaRangeFacade) and in one over a typed child step
 // (ctaChildRangeFacade), each inheriting ctaAssertionFacade.elementPath. Over
-// one b the body holds and over two `instance of xs:date` does not. Each row
-// declines at CompileAssertionTest, and so fails, with the façade of its kind
-// overriding elementPath to decline.
+// one b the body holds and over two `instance of xs:date` does not. The two
+// `some $x` rows decline at CompileAssertionTest, and so fail, with
+// ctaRangeFacade overriding elementPath to decline, and the two `every $v`
+// rows with ctaChildRangeFacade overriding it.
 func TestAssertionElementPathInQuantifierBodies(t *testing.T) {
 	list := asList(t, "IntegerList", ctaBuiltin("integer"))
 	types := asTypesWith(list)
