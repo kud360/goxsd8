@@ -1703,7 +1703,7 @@ func ctaChildPathOf(parents []xsd.QName, last ctaElementTest) (ctaChildPath, boo
 // xs:untypedAtomic where st is ·special· (xpath-datamodel §3.3.1.2).
 //
 // The values are read off the [Tally] the evaluation carries, which is why
-// the node is a counter key (ctaKey) whose counter collects them
+// the node is a collected key (ctaCollectedKey) whose collector keeps them
 // (ctaAttributeCollector) rather than reading [TypedAttributes] or
 // [ChildElements], neither of which reaches below E's children.
 type ctaAttributePath struct {
@@ -1908,17 +1908,18 @@ func ctaSelectedElementsOf(p ctaCountPath) (ctaSelectedElements, bool) {
 	return ctaSelectedElements{}, false
 }
 
-// ctaKey is the sealed sum of the keys a [Tally] keeps a counter under: the
-// keys one [Tally.Element] report decides alone (ctaTallied), a child step
+// ctaKey is the sealed sum of the keys a [Tally] keeps a counter
+// (ctaCountedKey) or a collector (ctaCollectedKey) under: the keys one
+// [Tally.Element] report decides alone (ctaTallied), a child step
 // filtered by its children's existence (ctaChildrenHaving), which the reports
 // below the child decide, a child step filtered by a `preceding::` step
 // (ctaChildrenPreceded), which the reports before the child decide, the
 // children followed by a sibling of a name (ctaChildrenFollowedBy), which the
 // report of the next child decides, and a path to an attribute
-// (ctaAttributePath), whose values the [Tally.Attribute] calls after each
-// report bring. The grammar closes the set (STYLE T2's schema-closed-set
-// exception). Two keys are compared by same and never with ==, which a
-// slice-holding arm cannot take.
+// (ctaAttributePath), the one collected key, whose values the
+// [Tally.Attribute] calls after each report bring. The grammar closes the set
+// (STYLE T2's schema-closed-set exception). Two keys are compared by same and
+// never with ==, which a slice-holding arm cannot take.
 type ctaKey interface {
 	ctaKey()
 	// selectsAttributesAt reports whether the key selects, or reads the value
@@ -1926,10 +1927,24 @@ type ctaKey interface {
 	// being E ([Tally.ReadsAttributesAt]).
 	selectsAttributesAt(depth int) bool
 	// same reports whether the key and other select the same nodes, which is
-	// what makes one counter serve both.
+	// what makes one counter or collector serve both.
 	same(other ctaKey) bool
+}
+
+// ctaCountedKey is a ctaKey a [Tally] keeps a ctaCounter under: every arm but
+// ctaAttributePath. No arm is also a ctaCollectedKey.
+type ctaCountedKey interface {
+	ctaKey
 	// counter is a fresh counter for the key, which has counted nothing.
 	counter() ctaCounter
+}
+
+// ctaCollectedKey is a ctaKey a [Tally] keeps a ctaCollector under, whose
+// values [AssertionTest.Evaluate] reads rather than a count: ctaAttributePath.
+type ctaCollectedKey interface {
+	ctaKey
+	// collector is a fresh collector for the key, which holds no value.
+	collector() ctaCollector
 }
 
 // ctaTallied is the sealed sum of the keys whose every [Tally.Element] report
@@ -2078,8 +2093,8 @@ func (p ctaCountPath) same(other ctaKey) bool {
 	return isCount && o == p
 }
 
-// counter is a fresh ctaAttributeCollector over p, which holds no value.
-func (p ctaAttributePath) counter() ctaCounter { return &ctaAttributeCollector{read: p} }
+// collector is a fresh ctaAttributeCollector over p, which holds no value.
+func (p ctaAttributePath) collector() ctaCollector { return &ctaAttributeCollector{read: p} }
 
 // selectsAttributesAt is true at the depth of the elements p's steps select,
 // whose attribute names decide which values p reads, and false at every other.

@@ -386,11 +386,12 @@ type ContextElement interface {
 // first d−1 names are not the first d−1 names of the report before it, a
 // grandchild before its parent among them — breaks that obligation, on the
 // terms [TypedAttributes] states for an attribute's value: the Tally drops
-// every counter, and [AssertionTest.Evaluate] answers false for it. So do the
-// breaches of [Tally.Attribute]'s ordering that call states, an attribute
-// value a read named in the latest report never got among them. A subtree
-// reported short, or an element reported under a wrong name in an order that
-// still nests, is not detected, and yields a wrong count.
+// every counter and collector, and [AssertionTest.Evaluate] answers false
+// for it. So do the breaches of [Tally.Attribute]'s ordering that call
+// states, an attribute value a read named in the latest report never got
+// among them. A subtree reported short, or an element reported under a wrong
+// name in an order that still nests, is not detected, and yields a wrong
+// count.
 //
 // A ·skipped· element and everything below it is governed by no type
 // (key-skipped, key-governing-type-elem item 5), so it has no ·defaulted
@@ -409,26 +410,28 @@ type ContextElement interface {
 // which reports each element it walks, and each element of a ·skipped· subtree
 // by name, to the Tally of every enclosing element's {assertions} that has one.
 //
+// counters holds one counter per counted key and collectors one collector per
+// collected key, each in the order [AssertionTest.Tally] made them (fits).
 // pending is the names, in the latest report's order, of the attribute nodes
 // of the latest report whose value a path reads and which have not had their
 // [Tally.Attribute] call yet: a slice, never a map, so no state is read in an
 // order the reports did not give it.
 type Tally struct {
-	counters []ctaCounter
-	chain    []xsd.QName
-	pending  []xsd.QName
+	counters   []ctaCounter
+	collectors []ctaCollector
+	chain      []xsd.QName
+	pending    []xsd.QName
 }
 
-// ctaCounter is the sealed sum of the counters a [Tally] keeps, one per key
-// (ctaKey.counter): ctaReportCount, which adds what each report selects,
-// ctaInstanceCount, which counts the children of E whose own children the
-// reports after them show, ctaPrecedenceCount, which counts the children of E
-// some element reported before which the reports after it kept,
-// ctaSuccessionCount, which counts the children of E whose next sibling
-// element the next report at depth 1 names, and ctaAttributeCollector, which
-// keeps the typed values of the attribute nodes a path to an attribute
-// selects. The keys close the set (STYLE T2's schema-closed-set exception).
-// Each arm is a pointer, which element updates in place.
+// ctaCounter is the sealed sum of the counters a [Tally] keeps, one per
+// counted key (ctaCountedKey.counter): ctaReportCount, which adds what each
+// report selects, ctaInstanceCount, which counts the children of E whose own
+// children the reports after them show, ctaPrecedenceCount, which counts the
+// children of E some element reported before which the reports after it
+// kept, and ctaSuccessionCount, which counts the children of E whose next
+// sibling element the next report at depth 1 names. The keys close the set
+// (STYLE T2's schema-closed-set exception). Each arm is a pointer, which
+// element updates in place. No arm is also a ctaCollector.
 type ctaCounter interface {
 	ctaCounter()
 	// key is the key the counter counts under.
@@ -440,27 +443,35 @@ type ctaCounter interface {
 	count() int
 }
 
+// ctaCollector is the sealed sum of the collectors a [Tally] keeps, one per
+// collected key (ctaCollectedKey.collector): ctaAttributeCollector, which
+// keeps the typed values of the attribute nodes a path to an attribute
+// selects. The keys close the set (STYLE T2's schema-closed-set exception).
+// Each arm is a pointer, which the value intake updates in place; the intake
+// reaches its own arm by a switch over this sum. No arm is also a ctaCounter.
+type ctaCollector interface {
+	ctaCollector()
+	// key is the key the collector collects under.
+	key() ctaKey
+	// collected is the typed values collected so far, in the order they were
+	// reported.
+	collected() []TypedValue
+}
+
 // ctaAttributeCollector keeps, for a ctaAttributePath key, the typed value of
 // each attribute node it selects, in the order [Tally.Attribute] reported
-// them. The values arrive by [Tally.Attribute] and never by element: an
-// element report names its attribute nodes and carries none of their values.
+// them. The values arrive by [Tally.Attribute] alone: an element report names
+// its attribute nodes and carries none of their values.
 type ctaAttributeCollector struct {
 	read   ctaAttributePath
 	values []TypedValue
 }
 
-func (*ctaAttributeCollector) ctaCounter() {}
+func (*ctaAttributeCollector) ctaCollector() {}
 
 func (a *ctaAttributeCollector) key() ctaKey { return a.read }
 
-// element takes nothing: which attribute nodes of the report a value is owed
-// for is [Tally.Element]'s to note (Tally.pending), and the values arrive by
-// [Tally.Attribute].
-func (*ctaAttributeCollector) element(_, _ []xsd.QName) {}
-
-// count is how many attribute nodes the path has selected so far, one per
-// value collected.
-func (a *ctaAttributeCollector) count() int { return len(a.values) }
+func (a *ctaAttributeCollector) collected() []TypedValue { return a.values }
 
 // ctaReportCount counts a key each report decides alone (ctaTallied): n is how
 // many of the nodes reported so far tallied selects.
@@ -668,7 +679,7 @@ func (c *Tally) Element(path []xsd.QName, attrs []xsd.QName) {
 		return
 	}
 	if len(c.pending) != 0 || !ctaNests(c.chain, path) {
-		c.counters = nil
+		c.breach()
 	}
 	c.chain = append(c.chain[:0], path...)
 	for _, counter := range c.counters {
@@ -697,8 +708,8 @@ func (c *Tally) ReadsAttribute(path []xsd.QName, name xsd.QName) bool {
 	if c == nil || len(path) == 0 {
 		return false
 	}
-	for _, counter := range c.counters {
-		if collector, collects := counter.(*ctaAttributeCollector); collects && collector.read.reads(path, name) {
+	for _, collector := range c.collectors {
+		if a, isAttribute := collector.(*ctaAttributeCollector); isAttribute && a.read.reads(path, name) {
 			return true
 		}
 	}
@@ -737,15 +748,23 @@ func (c *Tally) Attribute(name xsd.QName, v TypedValue) {
 	}
 	owed := slices.Index(c.pending, name)
 	if owed < 0 {
-		c.counters = nil
+		c.breach()
 		return
 	}
 	c.pending = slices.Delete(c.pending, owed, owed+1)
-	for _, counter := range c.counters {
-		if collector, collects := counter.(*ctaAttributeCollector); collects && collector.read.reads(c.chain, name) {
-			collector.values = append(collector.values, v)
+	for _, collector := range c.collectors {
+		if a, isAttribute := collector.(*ctaAttributeCollector); isAttribute && a.read.reads(c.chain, name) {
+			a.values = append(a.values, v)
 		}
 	}
+}
+
+// breach drops every counter and collector c holds: a report or value breaking
+// [Tally]'s obligation, which [AssertionTest.Evaluate] then answers false for
+// (fits). It is the one site of that drop.
+func (c *Tally) breach() {
+	c.counters = nil
+	c.collectors = nil
 }
 
 // settled reports whether c owes no [Tally.Attribute] call for the latest
@@ -754,14 +773,14 @@ func (c *Tally) Attribute(name xsd.QName, v TypedValue) {
 func (c *Tally) settled() bool { return c == nil || len(c.pending) == 0 }
 
 // values is the typed values c collected for key, false where it holds no
-// collector for it.
-func (c *Tally) values(key ctaAttributePath) ([]TypedValue, bool) {
+// collector for it. It reads collectors alone: no count is a value.
+func (c *Tally) values(key ctaKey) ([]TypedValue, bool) {
 	if c == nil {
 		return nil, false
 	}
-	for _, counter := range c.counters {
-		if collector, collects := counter.(*ctaAttributeCollector); collects && collector.read.same(key) {
-			return collector.values, true
+	for _, collector := range c.collectors {
+		if collector.key().same(key) {
+			return collector.collected(), true
 		}
 	}
 	return nil, false
@@ -816,10 +835,16 @@ func (c *Tally) ReadsAttributesAt(depth int) bool {
 			return true
 		}
 	}
+	for _, collector := range c.collectors {
+		if collector.key().selectsAttributesAt(depth) {
+			return true
+		}
+	}
 	return false
 }
 
 // count is the count c holds for key, false where it holds no counter for it.
+// It reads counters alone: no collector counts.
 func (c *Tally) count(key ctaKey) (int, bool) {
 	if c == nil {
 		return 0, false
@@ -832,24 +857,26 @@ func (c *Tally) count(key ctaKey) (int, bool) {
 	return 0, false
 }
 
-// fits reports whether c holds exactly one counter for each of keys, in that
-// order — which a Tally [AssertionTest.Tally] made from the test's keys holds
-// until a report breaks the order [Tally] obliges — and is nil where keys is
-// empty, since a test that counts nothing has no Tally and any non-nil c given
-// to it is a breach.
-func (c *Tally) fits(keys []ctaKey) bool {
-	if len(keys) == 0 {
+// fits reports whether c holds exactly one counter for each of counted and one
+// collector for each of collected, each in that order — which a Tally
+// [AssertionTest.Tally] made from the test's keys holds until a report breaks
+// the order [Tally] obliges — and is nil where both are empty, since a test
+// that neither counts nor collects has no Tally and any non-nil c given to it
+// is a breach.
+func (c *Tally) fits(counted []ctaCountedKey, collected []ctaCollectedKey) bool {
+	if len(counted) == 0 && len(collected) == 0 {
 		return c == nil
 	}
-	var held []ctaCounter
-	if c != nil {
-		held = c.counters
-	}
-	if len(held) != len(keys) {
+	if c == nil || len(c.counters) != len(counted) || len(c.collectors) != len(collected) {
 		return false
 	}
-	for i, counter := range held {
-		if !counter.key().same(keys[i]) {
+	for i, counter := range c.counters {
+		if !counter.key().same(counted[i]) {
+			return false
+		}
+	}
+	for i, collector := range c.collectors {
+		if !collector.key().same(collected[i]) {
 			return false
 		}
 	}
@@ -1369,35 +1396,46 @@ func (t AssertionTest) Evaluate(b value.Backend, types xsd.TypeResolver, e Conte
 // subtree to one, and which children a value step reads stays
 // [AssertionTest.ReadsChild]'s answer alone.
 func (t AssertionTest) Tally() *Tally {
-	keys := t.countedPaths()
-	if len(keys) == 0 {
+	counted, collected := t.countedPaths()
+	if len(counted) == 0 && len(collected) == 0 {
 		return nil
 	}
-	c := &Tally{counters: make([]ctaCounter, len(keys))}
-	for i, key := range keys {
+	c := &Tally{counters: make([]ctaCounter, len(counted)), collectors: make([]ctaCollector, len(collected))}
+	for i, key := range counted {
 		c.counters[i] = key.counter()
+	}
+	for i, key := range collected {
+		c.collectors[i] = key.collector()
 	}
 	return c
 }
 
 // countedPaths is each distinct key t counts under — an fn:count argument, an
 // element step, child path or filtered child step whose existence it asks,
-// the keys of a quantified expression over a child step read off the Tally,
-// or a path to an attribute whose values it reads — in written order, read
-// off the tree itself.
-func (t AssertionTest) countedPaths() []ctaKey {
+// the keys of a quantified expression over a child step read off the Tally —
+// and, apart, each distinct key it collects values under — a path to an
+// attribute whose values it reads — each in written order, read off the tree
+// itself. The split is a switch over the sealed ctaKey sum, every arm of which
+// is exactly one of the two; the default arm is unreachable.
+func (t AssertionTest) countedPaths() (counted []ctaCountedKey, collected []ctaCollectedKey) {
 	if t.root == nil {
 		// The zero AssertionTest, which no successful CompileAssertionTest
 		// produces, holds nothing.
-		return nil
+		return nil, nil
 	}
-	var distinct []ctaKey
 	for _, key := range t.root.counted(nil) {
-		if !ctaHoldsPath(distinct, key) {
-			distinct = append(distinct, key)
+		switch k := key.(type) {
+		case ctaCountedKey:
+			if !ctaHoldsPath(counted, k) {
+				counted = append(counted, k)
+			}
+		case ctaCollectedKey:
+			if !ctaHoldsPath(collected, k) {
+				collected = append(collected, k)
+			}
 		}
 	}
-	return distinct
+	return counted, collected
 }
 
 // ctaHoldsPath reports whether keys holds a key the same as key.
