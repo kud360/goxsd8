@@ -1025,10 +1025,10 @@ type AssertionTest struct {
 // CompileAssertionTest compiles an assertion's {test} (§3.13.1, an
 // [xsd.XPathExpression] property record) for the element whose ·governing
 // type definition· has the {content type} content, whose attribute types
-// attrs answers and whose child element types elems answers, reporting ok
-// false for a {test} this engine cannot evaluate. Its consumer is
-// validate's cvc-assertion site (validate/cvcassertion.go), which declines
-// the assertion on ok false.
+// attrs answers and the types of whose child elements, and of the elements
+// below them, elems answers by path, reporting ok false for a {test} this
+// engine cannot evaluate. Its consumer is validate's cvc-assertion site
+// (validate/cvcassertion.go), which declines the assertion on ok false.
 //
 // content fixes `$value`'s static type, which is what cvc-assertion clause
 // 2.3.1.3 reads: under an [xsd.SimpleContent] it is the {simple type
@@ -2115,13 +2115,13 @@ func (f ctaAssertionFacade) attributePath(steps []xsd.QName, test ctaNameTest, t
 	return ctaAttributePath{steps: steps, name: exact.name, st: st}, true
 }
 
-// child compiles a QName NameTest on the child axis whose name elems types to
-// a ctaTypedChild, over the simple type a child of that type has its typed
-// value in (ctaChildValueType): xpath-datamodel §6.2.4 makes the typed value
-// of an element whose type is a simple type, or a complex type with simple
-// content, the one §3.3.1.2 computes for that simple type. The simple type
-// must be one ctaTypes.typedAtomic reads as one atomic value. A name elems
-// types with a complex type whose {content type}.{variety} is mixed —
+// child compiles a QName NameTest on the child axis whose one-step path elems
+// types to a ctaTypedChild, over the simple type a child of that type has its
+// typed value in (ctaChildValueType): xpath-datamodel §6.2.4 makes the typed
+// value of an element whose type is a simple type, or a complex type with
+// simple content, the one §3.3.1.2 computes for that simple type. The simple
+// type must be one ctaTypes.typedAtomic reads as one atomic value. A name
+// elems types with a complex type whose {content type}.{variety} is mixed —
 // xs:anyType among them, never singled out by name — compiles to a
 // ctaUntypedChild instead: §6.2.4 makes such an element's typed value its
 // string-value as xs:untypedAtomic. Every other NameTest declines, and so does
