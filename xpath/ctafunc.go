@@ -255,6 +255,21 @@ func (n ctaSum) floating() bool {
 	return n.st.Name() == ctaBuiltin("float") || n.st.Name() == ctaBuiltin("double")
 }
 
+// ctaFloatingSum is the fn:sum call whose static type v takes, where that call
+// is floating (ctaSum.floating): v itself, or the operand of an
+// fn:distinct-values call over one, which keeps its operand's static type
+// (ctaStaticOf) and so its operand's xs:integer 0 over an empty argument. It
+// is false for every other v.
+func ctaFloatingSum(v ctaValue) (ctaSum, bool) {
+	switch n := v.(type) {
+	case ctaSum:
+		return n, n.floating()
+	case ctaDistinctValues:
+		return ctaFloatingSum(n.operand)
+	}
+	return ctaSum{}, false
+}
+
 // total evaluates n (xpath-functions.md §15.4.5): its value and that value's
 // dynamic type, or false where it raises. The argument's items are read in
 // n.item — so an xs:untypedAtomic item is cast to xs:double, and one that

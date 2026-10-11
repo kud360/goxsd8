@@ -729,14 +729,15 @@ func (t ctaTypes) arithmetic(op ctaArithOp, l, r ctaValue) (ctaValue, bool) {
 // not numeric or does not resolve.
 //
 // GAP(xpath): an fn:sum call whose static type is xs:float or xs:double
-// declines (ctaSum.floating): over an empty argument it returns the xs:integer
-// 0, which is not of that type, so the operation type B.1 settles from it
-// would be wrong for that one value — `sum(a/@u) + 0.1 + 0.2 = 0.3` computed
-// in xs:double where XPath computes it in xs:decimal, `sum(a/@u) div 0` NaN
-// where XPath raises err:FOAR0001. The direction is the withhold
-// [CompileAssertionTest] reports. (#1042)
+// declines (ctaSum.floating), and so does an fn:distinct-values call over one,
+// which takes its static type (ctaFloatingSum): over an empty argument it
+// returns the xs:integer 0, which is not of that type, so the operation type
+// B.1 settles from it would be wrong for that one value — `sum(a/@u) + 0.1 +
+// 0.2 = 0.3` computed in xs:double where XPath computes it in xs:decimal,
+// `sum(a/@u) div 0` NaN where XPath raises err:FOAR0001. The direction is the
+// withhold [CompileAssertionTest] reports. (#1042)
 func (t ctaTypes) arithmeticOperand(v ctaValue) (*xsd.SimpleType, bool) {
-	if sum, isSum := v.(ctaSum); isSum && sum.floating() {
+	if _, floating := ctaFloatingSum(v); floating {
 		return nil, false
 	}
 	typed, isTyped := ctaStaticOf(v).(ctaTyped)
@@ -929,20 +930,22 @@ func (t ctaTypes) valueComparison(op ctaComparator, l, r ctaValue) (*xsd.SimpleT
 // sumCompares reports whether a comparison of v against other is decided in
 // the comparison type B.1 settles from their static types for every value v
 // can take, which is false for one case alone: v is an fn:sum call whose
-// static type is xs:float or xs:double (ctaSum.floating) and other is typed
-// with an xs:decimal {primitive type definition}. Over an empty argument v is
-// the xs:integer 0, which XPath compares with an xs:decimal in xs:decimal and
-// this engine would compare in v's floating type, where a non-zero decimal of
-// tiny magnitude rounds to zero: `sum(a/@u) = $tiny` would hold. A
-// DecimalLiteral or IntegerLiteral other is admitted where its value is zero
-// exactly when its rounding to v's type is, which settles every comparison of
-// it with 0 alike in both types; every other such operand is not.
+// static type is xs:float or xs:double (ctaSum.floating), or an
+// fn:distinct-values call over one, which takes its static type
+// (ctaFloatingSum), and other is typed with an xs:decimal {primitive type
+// definition}. Over an empty argument v is the xs:integer 0, which XPath
+// compares with an xs:decimal in xs:decimal and this engine would compare in
+// v's floating type, where a non-zero decimal of tiny magnitude rounds to
+// zero: `sum(a/@u) = $tiny` would hold. A DecimalLiteral or IntegerLiteral
+// other is admitted where its value is zero exactly when its rounding to v's
+// type is, which settles every comparison of it with 0 alike in both types;
+// every other such operand is not.
 //
 // GAP(xpath): such a comparison declines. The direction is the withhold
 // [CompileAssertionTest] reports. (#1042)
 func (t ctaTypes) sumCompares(v, other ctaValue) bool {
-	sum, isSum := v.(ctaSum)
-	if !isSum || !sum.floating() {
+	sum, floating := ctaFloatingSum(v)
+	if !floating {
 		return true
 	}
 	typed, isTyped := ctaStaticOf(other).(ctaTyped)

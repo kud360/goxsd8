@@ -143,6 +143,7 @@ func TestAssertionSumDecimalExact(t *testing.T) {
 		{"sum(a/b/@p) = 5", []smB{smP("2"), {}, smP("3")}, nil, true},
 		{"sum(a/b/@p)", []smB{smP("5")}, nil, true},
 		{"sum(a/b/@p)", []smB{smP("0")}, nil, false},
+		{"c = distinct-values(sum(a/b/@p))", []smB{smP("0.1"), smP("0.2")}, []asChild{smDec("c", "0.3")}, true},
 	} {
 		test := smCompile(t, tc.expr, "decimal")
 		if got := smEval(t, test, smTally(t, test, "decimal", tc.bs...), tc.children...); got != tc.holds {
@@ -417,7 +418,9 @@ func TestAssertionSumInsideAQuantifierBody(t *testing.T) {
 // compile with ctaTypes.arithmeticOperand's fn:sum arm removed; the two c rows
 // and the tiny-literal row with ctaTypes.sumCompares answering true, the tiny one
 // alone with ctaZeroAlike answering true; and the two duration rows with
-// ctaTypes.sum's duration test removed.
+// ctaTypes.sum's duration test removed. An fn:distinct-values call over such
+// a sum takes its static type and declines with it: its four rows compile
+// with ctaFloatingSum not looking through fn:distinct-values.
 func TestCompileAssertionTestDeclinesSums(t *testing.T) {
 	for _, tc := range []struct{ expr, typ string }{
 		{"sum(a/b/@p, 0) = 0", "decimal"},
@@ -440,6 +443,10 @@ func TestCompileAssertionTestDeclinesSums(t *testing.T) {
 		{"c = sum(a/b/@p)", "anySimpleType"},
 		{"sum(a/b/@p) eq c", "double"},
 		{"sum(a/b/@p) = 0." + zeros(400) + "1", "anySimpleType"},
+		{"distinct-values(sum(a/b/@p)) = 0." + zeros(400) + "1", "anySimpleType"},
+		{"distinct-values(sum(a/b/@p)) = c", "anySimpleType"},
+		{"not(distinct-values(sum(a/b/@p)) div 0 = 1)", "double"},
+		{"distinct-values(sum(a/b/@p)) + 0.1 + 0.2 = 0.3", "anySimpleType"},
 	} {
 		if _, ok := CompileAssertionTest(asRecord(tc.expr), seededTypes, asElementContent(t, false), smUses(t, tc.typ), smElems(t)); ok {
 			t.Errorf("CompileAssertionTest(%q) over xs:%s p: compiled, want declined", tc.expr, tc.typ)

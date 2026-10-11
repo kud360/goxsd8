@@ -1013,10 +1013,10 @@ type AssertionTest struct {
 //     list or union type or of a type whose {primitive type definition} is a
 //     duration, and one whose items are xs:float, xs:double or
 //     xs:untypedAtomic, whose empty value, the xs:integer 0, is not of its
-//     static type, as an arithmetic operand, or compared with an operand
-//     typed with an xs:decimal primitive but a DecimalLiteral or
-//     IntegerLiteral that is zero exactly where its rounding to that type is;
-//     and a call to fn:avg, fn:min or fn:max;
+//     static type, bare or under fn:distinct-values, as an arithmetic
+//     operand, or compared with an operand typed with an xs:decimal primitive
+//     but a DecimalLiteral or IntegerLiteral that is zero exactly where its
+//     rounding to that type is; and a call to fn:avg, fn:min or fn:max;
 //   - an fn:count argument that is not one QName step — `N`, `@N`, either of
 //     them behind `./` or `.//`, or a rooted one — nor such a child step `N`
 //     or `./N` filtered by one predicate the next two bullets admit, nor a `|`
@@ -1211,15 +1211,16 @@ type AssertionTest struct {
 // ta-SimpleValue or inside a value predicate, `instance of` beyond an atomic
 // SequenceType over the operands above, the collation argument, fn:sum with
 // two arguments, over any argument but a path to an attribute below E, over
-// duration items, or over floating items as an arithmetic operand or against
-// an xs:decimal operand, fn:avg, fn:min and fn:max, and every F&O function but
-// fn:count, those listed above, fn:namespace-uri over `.` or with no argument,
-// and fn:in-scope-prefixes over `.` only as an operand of `=`, among them —
-// fn:in-scope-prefixes elsewhere because its sequence needs a listing of E's
-// [in-scope namespaces], a capability validate.Element lacks, [ContextElement]
-// answering one prefix at a time. The direction is the withhold: the caller
-// records the assertion as unevaluated and neither charges it nor shows it
-// satisfied (PRINCIPLES 20). (#1042)
+// duration items, or over floating items, bare or under fn:distinct-values, as
+// an arithmetic operand or against an xs:decimal operand, fn:avg, fn:min and
+// fn:max, and every F&O function but fn:count, those listed above,
+// fn:namespace-uri over `.` or with no argument, and fn:in-scope-prefixes over
+// `.` only as an operand of `=`, among them — fn:in-scope-prefixes elsewhere
+// because its sequence needs a listing of E's [in-scope namespaces], a
+// capability validate.Element lacks, [ContextElement] answering one prefix at
+// a time. The direction is the withhold: the caller records the assertion as
+// unevaluated and neither charges it nor shows it satisfied (PRINCIPLES 20).
+// (#1042)
 //
 // types is read as [CompileCTATest] reads it and stored nowhere.
 func CompileAssertionTest(expr xsd.XPathExpression, types xsd.TypeResolver, content xsd.ContentType, attrs AttributeTypes, elems ElementTypes) (AssertionTest, bool) {
