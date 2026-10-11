@@ -1776,11 +1776,13 @@ func ctaSelectedElementsOf(p ctaCountPath) (ctaSelectedElements, bool) {
 // keys one [Tally.Element] report decides alone (ctaTallied), a child step
 // filtered by its children's existence (ctaChildrenHaving), which the reports
 // below the child decide, a child step filtered by a `preceding::` step
-// (ctaChildrenPreceded), which the reports before the child decide, and the
+// (ctaChildrenPreceded), which the reports before the child decide, the
 // children followed by a sibling of a name (ctaChildrenFollowedBy), which the
-// report of the next child decides. The grammar closes the set (STYLE T2's
-// schema-closed-set exception). Two keys are compared by same and never with
-// ==, which a slice-holding arm cannot take.
+// report of the next child decides, and a path to an attribute
+// (ctaAttributePath), whose values the [Tally.Attribute] calls after each
+// report bring. The grammar closes the set (STYLE T2's schema-closed-set
+// exception). Two keys are compared by same and never with ==, which a
+// slice-holding arm cannot take.
 type ctaKey interface {
 	ctaKey()
 	// selectsAttributesAt reports whether the key selects, or reads the value
