@@ -1974,6 +1974,10 @@ type ctaKey interface {
 	// same reports whether the key and other select the same nodes, which is
 	// what makes one counter or collector serve both.
 	same(other ctaKey) bool
+	// file adds the key to into's slice its own type fits — counted for a
+	// ctaCountedKey, collected for a ctaCollectedKey — unless a key the same
+	// as it is already there ([AssertionTest.countedPaths]).
+	file(into *ctaKeys)
 }
 
 // ctaCountedKey is a ctaKey a [Tally] keeps a ctaCounter under: every arm but
@@ -2022,6 +2026,16 @@ func (ctaChildrenFollowedBy) ctaKey() {}
 
 func (ctaAttributePath) ctaKey() {}
 func (ctaElementPath) ctaKey()   {}
+
+func (p ctaCountPath) file(into *ctaKeys)          { into.count(p) }
+func (f ctaFilteredChildren) file(into *ctaKeys)   { into.count(f) }
+func (u ctaUnion) file(into *ctaKeys)              { into.count(u) }
+func (p ctaChildPath) file(into *ctaKeys)          { into.count(p) }
+func (h ctaChildrenHaving) file(into *ctaKeys)     { into.count(h) }
+func (p ctaChildrenPreceded) file(into *ctaKeys)   { into.count(p) }
+func (s ctaChildrenFollowedBy) file(into *ctaKeys) { into.count(s) }
+func (p ctaAttributePath) file(into *ctaKeys)      { into.collect(p) }
+func (p ctaElementPath) file(into *ctaKeys)        { into.collect(p) }
 
 func (ctaCountPath) ctaTallied()        {}
 func (ctaFilteredChildren) ctaTallied() {}

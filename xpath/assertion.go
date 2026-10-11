@@ -986,26 +986,26 @@ func (c *Tally) count(key ctaKey) (int, bool) {
 	return 0, false
 }
 
-// fits reports whether c holds exactly one counter for each of counted and one
-// collector for each of collected, each in that order — which a Tally
+// fits reports whether c holds exactly one counter for each of keys.counted and
+// one collector for each of keys.collected, each in that order — which a Tally
 // [AssertionTest.Tally] made from the test's keys holds until a report breaks
 // the order [Tally] obliges — and is nil where both are empty, since a test
 // that neither counts nor collects has no Tally and any non-nil c given to it
 // is a breach.
-func (c *Tally) fits(counted []ctaCountedKey, collected []ctaCollectedKey) bool {
-	if len(counted) == 0 && len(collected) == 0 {
+func (c *Tally) fits(keys ctaKeys) bool {
+	if len(keys.counted) == 0 && len(keys.collected) == 0 {
 		return c == nil
 	}
-	if c == nil || len(c.counters) != len(counted) || len(c.collectors) != len(collected) {
+	if c == nil || len(c.counters) != len(keys.counted) || len(c.collectors) != len(keys.collected) {
 		return false
 	}
 	for i, counter := range c.counters {
-		if !counter.key().same(counted[i]) {
+		if !counter.key().same(keys.counted[i]) {
 			return false
 		}
 	}
 	for i, collector := range c.collectors {
-		if !collector.key().same(collected[i]) {
+		if !collector.key().same(keys.collected[i]) {
 			return false
 		}
 	}
@@ -1538,15 +1538,15 @@ func (t AssertionTest) Evaluate(b value.Backend, types xsd.TypeResolver, e Conte
 // subtree to one, and which children a value step reads stays
 // [AssertionTest.ReadsChild]'s answer alone.
 func (t AssertionTest) Tally() *Tally {
-	counted, collected := t.countedPaths()
-	if len(counted) == 0 && len(collected) == 0 {
+	keys := t.countedPaths()
+	if len(keys.counted) == 0 && len(keys.collected) == 0 {
 		return nil
 	}
-	c := &Tally{counters: make([]ctaCounter, len(counted)), collectors: make([]ctaCollector, len(collected))}
-	for i, key := range counted {
+	c := &Tally{counters: make([]ctaCounter, len(keys.counted)), collectors: make([]ctaCollector, len(keys.collected))}
+	for i, key := range keys.counted {
 		c.counters[i] = key.counter()
 	}
-	for i, key := range collected {
+	for i, key := range keys.collected {
 		c.collectors[i] = key.collector()
 	}
 	return c
@@ -1557,27 +1557,41 @@ func (t AssertionTest) Tally() *Tally {
 // the keys of a quantified expression over a child step read off the Tally —
 // and, apart, each distinct key it collects values under — a path to an
 // attribute whose values it reads — each in written order, read off the tree
-// itself. The split is a switch over the sealed ctaKey sum, every arm of which
-// is exactly one of the two; the default arm is unreachable.
-func (t AssertionTest) countedPaths() (counted []ctaCountedKey, collected []ctaCollectedKey) {
+// itself. Each key files itself ([ctaKey].file), so the split is total by
+// construction.
+func (t AssertionTest) countedPaths() ctaKeys {
+	var keys ctaKeys
 	if t.root == nil {
 		// The zero AssertionTest, which no successful CompileAssertionTest
 		// produces, holds nothing.
-		return nil, nil
+		return keys
 	}
 	for _, key := range t.root.counted(nil) {
-		switch k := key.(type) {
-		case ctaCountedKey:
-			if !ctaHoldsPath(counted, k) {
-				counted = append(counted, k)
-			}
-		case ctaCollectedKey:
-			if !ctaHoldsPath(collected, k) {
-				collected = append(collected, k)
-			}
-		}
+		key.file(&keys)
 	}
-	return counted, collected
+	return keys
+}
+
+// ctaKeys is the distinct keys of one compiled test, split by what a [Tally]
+// keeps under each: counted under a ctaCounter, collected under a
+// ctaCollector, each in written order.
+type ctaKeys struct {
+	counted   []ctaCountedKey
+	collected []ctaCollectedKey
+}
+
+// count appends key to k.counted unless a key the same as it is there.
+func (k *ctaKeys) count(key ctaCountedKey) {
+	if !ctaHoldsPath(k.counted, key) {
+		k.counted = append(k.counted, key)
+	}
+}
+
+// collect appends key to k.collected unless a key the same as it is there.
+func (k *ctaKeys) collect(key ctaCollectedKey) {
+	if !ctaHoldsPath(k.collected, key) {
+		k.collected = append(k.collected, key)
+	}
 }
 
 // ctaHoldsPath reports whether keys holds a key the same as key.
