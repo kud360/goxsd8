@@ -239,9 +239,10 @@ type ctaSum struct {
 
 // ctaSumInstance is `E instance of T` (xpath20.md §3.10.1) over an fn:sum
 // call sum (ctaParser.sumInstanceTail), whose result is st, xs:boolean: true
-// where the DYNAMIC type of the call's one item (ctaSum.total) is atomic or
-// derives from it (§2.5.4.2), which only the evaluation decides. Every
-// occurrence indicator admits the one item, so none is kept.
+// where the DYNAMIC type of the call's one item (ctaSum.total) is the
+// AtomicType named atomic or derives from it (§2.5.4.2), which only the
+// evaluation decides. Every occurrence indicator admits the one item, so none
+// is kept.
 type ctaSumInstance struct {
 	sum    ctaSum
 	atomic xsd.QName
