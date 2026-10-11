@@ -89,8 +89,9 @@ func TestAttributeDefaultBindingCases(t *testing.T) {
 }
 
 // TestBindingSubsumesKeywords covers loc-testSubP clauses 1-3 plus the
-// documented fail-open on a strict G. The two complex types are only message
-// context here, so a pair of trivial ones is enough.
+// documented fail-open on a strict G, which reaches an Attribute Use S and
+// never a keyword one (#2546). The two complex types are only message context
+// here, so a pair of trivial ones is enough.
 func TestBindingSubsumesKeywords(t *testing.T) {
 	s := bSchema(t, nil)
 	tt := dType(t, uq("t"), anyTypeName, EmptyContent{}, nil, nil)
@@ -122,11 +123,15 @@ func TestBindingSubsumesKeywords(t *testing.T) {
 		{"clause 3: strict does NOT subsume skip",
 			strict, wildcardKeywordBinding{keyword: ProcessSkip}, false,
 			"but {urn:upa}b binds attribute {urn:upa}a to a strict wildcard while the restriction binds it to a skip wildcard, and loc-testSubP clause 3 "},
-		{"clause 3: strict does NOT subsume a lax from a ##defined wildcard",
-			strict, wildcardKeywordBinding{keyword: ProcessLax, disallowsDefined: true}, false,
-			"but {urn:upa}b binds attribute {urn:upa}a to a strict wildcard while the restriction binds it to a lax wildcard whose {disallowed names} contains defined, and loc-testSubP clause 3 "},
-		{"strict over a plain lax is the documented fail-open",
-			strict, wildcardKeywordBinding{keyword: ProcessLax}, true, ""},
+		{"clause 3: strict does NOT subsume lax",
+			strict, wildcardKeywordBinding{keyword: ProcessLax}, false,
+			"but {urn:upa}b binds attribute {urn:upa}a to a strict wildcard while the restriction binds it to a lax wildcard, and loc-testSubP clause 3 "},
+		{"clause 1: skip subsumes lax",
+			wildcardKeywordBinding{keyword: ProcessSkip}, wildcardKeywordBinding{keyword: ProcessLax}, true, ""},
+		{"clause 2: lax subsumes lax",
+			wildcardKeywordBinding{keyword: ProcessLax}, wildcardKeywordBinding{keyword: ProcessLax}, true, ""},
+		{"clause 2: lax subsumes strict",
+			wildcardKeywordBinding{keyword: ProcessLax}, strict, true, ""},
 		{"strict over an attribute use is the documented fail-open",
 			strict, use, true, ""},
 		{"an Element Declaration does not subsume an Attribute Use",
