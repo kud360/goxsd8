@@ -2303,28 +2303,38 @@ func ctaEval(x ctaExpr, env ctaEnv) ctaAnswer {
 
 // eval decides a quantified expression over `$value` on xpath20.md §3.9's
 // terms, binding the range variable to each item of the binding sequence in
-// sequence order (ctaEnv.rangeItem) and evaluating the body for it. A binding
-// sequence that raises is the error.
-//
-// The answer is §3.6's over the bindings' answers, `some` on ctaOr.eval's
-// terms and `every` on ctaAnd.eval's: a decisive binding — true for `some`,
-// false for `every` — decides the whole and stops the walk, whether or not an
-// earlier binding raised, and otherwise an error survives to the end. §3.9
-// leaves the evaluation order and so which of an error and a decisive answer
-// wins implementation-dependent, and this policy answers the same whatever the
-// order (STYLE D1). Over no binding — an empty list, or the nil `$value`
-// cvc-assertion clause 2.3.2 binds — `every` is true and `some` false.
+// sequence order (ctaEnv.rangeItem) and evaluating the body for it, the
+// answers aggregated by ctaQuantify. A binding sequence that raises is the
+// error. Over no binding — an empty list, or the nil `$value` cvc-assertion
+// clause 2.3.2 binds — `every` is true and `some` false.
 func (n ctaQuantifiedValue) eval(env ctaEnv) ctaAnswer {
 	items, bound := ctaItemOf(n.over, n.over.atom, env).(ctaAtoms)
 	if !bound {
 		return ctaError
 	}
-	decisive := ctaAnswerOf(n.q == ctaSome)
-	answer := decisive.negated()
-	for _, item := range items.vs {
+	return ctaQuantify(n.q, len(items.vs), func(i int) ctaAnswer {
 		inner := env
-		inner.rangeItem = item
-		got := ctaEval(n.body, inner)
+		inner.rangeItem = items.vs[i]
+		return ctaEval(n.body, inner)
+	})
+}
+
+// ctaQuantify is the answer of a quantifier q over bindings bindings, each(i)
+// being the body's answer for the i-th, walked in binding order.
+//
+// The answer is xpath20.md §3.6's over the bindings' answers, `some` on
+// ctaOr.eval's terms and `every` on ctaAnd.eval's: a decisive binding — true
+// for `some`, false for `every` — decides the whole and stops the walk,
+// whether or not an earlier binding raised, and otherwise an error survives to
+// the end. §3.9 leaves the evaluation order and so which of an error and a
+// decisive answer wins implementation-dependent, and this policy answers the
+// same whatever the order (STYLE D1). Over no binding `every` is true and
+// `some` false.
+func ctaQuantify(q ctaQuantifier, bindings int, each func(i int) ctaAnswer) ctaAnswer {
+	decisive := ctaAnswerOf(q == ctaSome)
+	answer := decisive.negated()
+	for i := range bindings {
+		got := each(i)
 		if got == decisive {
 			return decisive
 		}
