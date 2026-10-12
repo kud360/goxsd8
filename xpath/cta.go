@@ -2407,7 +2407,8 @@ func ctaStaticOf(v ctaValue) ctaStatic {
 }
 
 // ctaCarriedType is the simple type a typed operand carries — its static type,
-// which ctaStaticOf reports and ctaTypes.castSource judges a cast by — or false
+// which ctaStaticOf reports, ctaTypes.castSource judges a cast by and
+// ctaEffectiveBoolean.eval decides a bare operand under — or false
 // for one that carries none: an untyped or statically empty operand, and an
 // fn:distinct-values call, whose static type is its operand's. A cast carries
 // its target, an fn:string call its cast's, `$value` the type of each of its
