@@ -19,8 +19,11 @@ import (
 // admitted spelling. Rows beside an element step read the [Tally] that step
 // counts, which the comment step leaves alone. Every row fails with the
 // comment branch of ctaParser.selectedStepLength removed, each declining at
-// CompileAssertionTest, and every row but the four `exists(.//d)` ones fails
-// with ctaAssertionFacade.comments returning ctaNoContextItem.
+// CompileAssertionTest, and with ctaAssertionFacade.comments returning a
+// ctaSelectedElements over the descendants named a. With it returning
+// ctaNoContextItem the six rows true over some subtree fail — the four
+// fn:empty rows and the two fn:not rows — and the other seven pass, an error
+// reading false and `exists(.//d)` deciding the `or` row alone.
 func TestAssertionCommentStepSelectsNothing(t *testing.T) {
 	subtrees := [][]acNode{
 		nil,
@@ -57,9 +60,10 @@ func TestAssertionCommentStepSelectsNothing(t *testing.T) {
 }
 
 // A comment step reads nothing: no `.`, no child, and no [Tally] counter of
-// its own, so `empty(.//comment())` alone makes no Tally at all. With
-// ctaAssertionFacade.comments returning ctaSelectedElements over a child named
-// comment the Tally row fails.
+// its own, so `empty(.//comment())` alone makes no Tally at all. Every row
+// fails with the comment branch of ctaParser.selectedStepLength removed, and
+// with ctaAssertionFacade.comments returning a ctaSelectedElements over the
+// descendants named a.
 func TestAssertionCommentStepReadsNothing(t *testing.T) {
 	for _, expr := range []string{"empty(.//comment())", "comment()", "exists(./comment())"} {
 		t.Run(expr, func(t *testing.T) {
@@ -91,14 +95,15 @@ func TestAssertionCommentStepElsewhereDeclines(t *testing.T) {
 }
 
 // A comment step is the assertion façade's alone. A Type Alternative's {test}
-// declines it in every spelling and position (ctaTypeAlternativeFacade.comments),
-// and the declines hold with ctaTypeAlternativeFacade.comments returning
-// ctaEmptyValue for the three spellings standing whole. An assertions facet's
-// reads its absent context item and Fails, never Holds (ctaFacetFacade.comments,
-// err:XPDY0002, cvc-assertions-valid clause 1.2), fn:not over it included;
-// every facet row is declined with the comment branch of
-// ctaParser.selectedStepLength removed, and the fn:empty and fn:not rows Hold
-// with ctaFacetFacade.comments returning ctaEmptyValue.
+// declines it in every spelling and position (ctaTypeAlternativeFacade.comments):
+// with that method returning ctaEmptyValue every Type Alternative row but
+// `empty(.//comment())` compiles, which declines at the call, the façade
+// calling no library function. An assertions facet's reads its absent context
+// item and Fails, never Holds (ctaFacetFacade.comments, err:XPDY0002,
+// cvc-assertions-valid clause 1.2), fn:not over it included: every facet row
+// is declined with the comment branch of ctaParser.selectedStepLength removed,
+// and the three fn:empty and fn:not rows Hold with ctaFacetFacade.comments
+// returning ctaEmptyValue.
 func TestCommentStepOutsideTheAssertionFacade(t *testing.T) {
 	for _, expr := range []string{"comment()", "./comment()", ".//comment()", "not(.//comment())", "empty(.//comment())"} {
 		if _, ok := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); ok {
@@ -110,5 +115,31 @@ func TestCommentStepOutsideTheAssertionFacade(t *testing.T) {
 		if got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, str, ctaExprRecord(test, ""), fcValue(t, str, "x")); got != value.AssertionFails {
 			t.Errorf("FacetAssertions().Evaluate(%q) = %d, want Fails (%d): never Holds", test, got, value.AssertionFails)
 		}
+	}
+}
+
+// A quantifier's body over a typed child step parses under a façade embedding
+// the assertion's (ctaChildRangeFacade), where `.` is still E — xpath20.md §3.9
+// binds the range variable and leaves the focus alone — so a comment step there
+// selects nothing too: over one b child, `some` with fn:empty over it holds and
+// with fn:exists does not. Every row fails with the comment branch of
+// ctaParser.selectedStepLength removed, and the two rows that hold fail with
+// ctaAssertionFacade.comments returning ctaNoContextItem.
+func TestAssertionCommentStepInQuantifierBody(t *testing.T) {
+	children := asChildren(t, asChild{uq("b"), "string", "x", false})
+	for _, tc := range []struct {
+		expr  string
+		holds bool
+	}{
+		{"some $v in b satisfies empty(.//comment())", true},
+		{"some $v in b satisfies $v = 'x' and exists(comment())", false},
+		{"some $v in b satisfies $v = 'x' and not(./comment())", true},
+	} {
+		t.Run(tc.expr, func(t *testing.T) {
+			test := esCompile(t, tc.expr)
+			if got := test.Evaluate(backend(), seededTypes, asElem, asValues(t), children, test.Tally(), ValueBinding{}, time.Time{}); got != tc.holds {
+				t.Errorf("Evaluate(%q) over one b = %v, want %v", tc.expr, got, tc.holds)
+			}
+		})
 	}
 }

@@ -958,7 +958,9 @@ type ctaValueVar struct {
 // arithmetic over such a `$value` (ctaTypes.arithmetic), whose result §3.4
 // makes the empty sequence at compile time all the same, of the empty sequence
 // `()` written as a library call's argument (ctaParser.argument), and of an
-// integer sequence holding no item, `(1 to 0)` (ctaParser.integerSequence).
+// integer sequence holding no item, `(1 to 0)` (ctaParser.integerSequence),
+// and of a comment step over E, which selects no node because cvc-assertion
+// clause 1.2 leaves none in E's subtree (ctaAssertionFacade.comments).
 type ctaEmptyValue struct{}
 
 // ctaUntypedValue is `$value` over a simple {content type} whose {simple type
