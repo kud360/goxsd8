@@ -18,8 +18,8 @@ import (
 // result, numerically, so "10" is above "9". A string no xs:double lexical
 // spells, an absent attribute and `()` are NaN, under which `lt`, `ge` and `eq`
 // are all false and fn:not over one true: NaN is a value, never an error and
-// never empty (§6.3.2). Every row declines with the "number" arm of
-// ctaParser.libraryCall removed.
+// never empty (§6.3.2). With the "number" arm of ctaParser.libraryCall
+// removed, the first row declines and the test fails there.
 func TestAssertionNumber(t *testing.T) {
 	for _, tc := range []struct {
 		expr  string
@@ -93,8 +93,9 @@ func TestAssertionNumberOfTwoItems(t *testing.T) {
 // first occurrence of its second, under the codepoint collation: "12" of
 // "val12", "" where the needle is missing or the first argument is empty or
 // absent, the first argument whole under a zero-length needle, and the text
-// after the FIRST occurrence where there are two. Every row declines with the
-// "substring-after" arm of ctaParser.libraryCall removed.
+// after the FIRST occurrence where there are two. With the "substring-after"
+// arm of ctaParser.libraryCall removed, the first row declines and the test
+// fails there.
 func TestAssertionSubstringAfter(t *testing.T) {
 	for _, tc := range []struct {
 		expr  string
