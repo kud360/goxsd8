@@ -2771,6 +2771,8 @@ func (ctaPredicateFacade) childrenPreceded(ctaChildrenPreceded) (ctaValue, bool)
 
 func (ctaPredicateFacade) elements(ctaCountPath) (ctaValue, bool) { return nil, false }
 
+func (ctaPredicateFacade) comments() (ctaValue, bool) { return nil, false }
+
 func (ctaPredicateFacade) quantified(ctaQuantifier, ctaRangeKey) (ctaExpr, bool) { return nil, false }
 
 // rangeScope declines, on quantified's terms. It is never reached: variable
@@ -3387,22 +3389,42 @@ func (p *ctaParser) childrenPreceded() (ctaValue, bool) {
 
 // selectedStepLength is how many tokens, from offset at ahead of the cursor,
 // spell one of countPath's element steps — a QName, `N`, alone or behind
-// `./` or `.//` — and 0 where they spell none. Nothing is consumed, and nothing
-// after the name is read: a name followed by '(' or '::' is a function call or
-// an axis spelled out, which the caller's check that the token after the step
-// closes the operand turns away.
+// `./` or `.//` — or a comment step in the same places, `comment()`
+// (commentTestAt), and 0 where they spell none. Nothing is consumed, and
+// nothing after the step is read: a name followed by '(' or '::' is a function
+// call or an axis spelled out, which the caller's check that the token after
+// the step closes the operand turns away.
 func (p *ctaParser) selectedStepLength(at int) int {
-	n := 0
-	if p.peek(at).kind == ctaDotTok {
-		if next := p.peek(at + 1).kind; next != ctaSlashTok && next != ctaSlashSlashTok {
-			return 0
-		}
-		n = 2
+	n := p.selectedPrefixLength(at)
+	if p.commentTestAt(at + n) {
+		return n + 3
 	}
 	if p.peek(at+n).kind != ctaNameTok {
 		return 0
 	}
 	return n + 1
+}
+
+// selectedPrefixLength is 2 where the tokens from offset at ahead of the
+// cursor spell `./` or `.//`, and 0 otherwise. Nothing is consumed.
+func (p *ctaParser) selectedPrefixLength(at int) int {
+	if p.peek(at).kind != ctaDotTok {
+		return 0
+	}
+	if next := p.peek(at + 1).kind; next != ctaSlashTok && next != ctaSlashSlashTok {
+		return 0
+	}
+	return 2
+}
+
+// commentTestAt reports whether the tokens from offset at ahead of the cursor
+// spell xpath20.md [58] CommentTest, `"comment" "(" ")"`. The name is matched
+// unprefixed and is never a function call: `comment` is a reserved function
+// name (xpath20.md A.3). Nothing is consumed.
+func (p *ctaParser) commentTestAt(at int) bool {
+	name := p.peek(at)
+	return name.kind == ctaNameTok && name.text == "comment" &&
+		p.peek(at+1).kind == ctaLParen && p.peek(at+2).kind == ctaRParen
 }
 
 // selectedElements parses the step selectedStepLength measured at the cursor
@@ -3414,8 +3436,11 @@ func (p *ctaParser) selectedStepLength(at int) int {
 // booleanExpr and fn:exists or fn:empty's argument (presenceArgument), where
 // the step is the whole operand, whatever type the step's name has. Everywhere
 // else a step is childStep's, whose value is read, and `./N` and `.//N`
-// decline.
+// decline. A comment step measured there is commentStep's.
 func (p *ctaParser) selectedElements() (ctaValue, bool) {
+	if n := p.selectedPrefixLength(0); p.commentTestAt(n) {
+		return p.commentStep(n)
+	}
 	arg, ok := p.countPath()
 	if !ok {
 		return nil, false
@@ -3425,6 +3450,28 @@ func (p *ctaParser) selectedElements() (ctaValue, bool) {
 		return nil, false
 	}
 	return p.facade.elements(path)
+}
+
+// commentStep parses one step whose NodeTest is xpath20.md [58] CommentTest,
+// a [54] KindTest, behind the prefix tokens of `./` or `.//` or none —
+// `comment()`, `./comment()` or `.//comment()`, the comment children of E or
+// the comments below it (§3.2.1.2, §3.2.4) — into the node p.facade builds for
+// it (ctaFacade.comments), which may decline it. It is reached from
+// selectedElements alone, so the step stands only as the whole operand of
+// fn:exists, fn:empty or an ·effective boolean value·.
+//
+// GAP(xpath): every other KindTest declines, [59] PITest
+// `processing-instruction()` among them, which cvc-assertion clause 1.2
+// excludes on comment()'s terms but whose NCName or StringLiteral argument
+// raises err:XPTY0004 where its normalized value is no NCName (§3.2.1.2) and
+// is not parsed here; so does a comment step under fn:count, behind an axis
+// spelled out, `child::comment()`, in a predicate, or read for its value. The
+// direction is the withhold [CompileAssertionTest] reports. (#1042)
+func (p *ctaParser) commentStep(prefix int) (ctaValue, bool) {
+	for range prefix + 3 {
+		p.advance()
+	}
+	return p.facade.comments()
 }
 
 // rootedPath parses xpath20.md [25] PathExpr's two rooted arms, "/"

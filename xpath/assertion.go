@@ -2316,6 +2316,17 @@ func (ctaAssertionFacade) elements(path ctaCountPath) (ctaValue, bool) {
 	return selected, true
 }
 
+// comments compiles one comment step, `comment()`, `./comment()` or
+// `.//comment()`, to ctaEmptyValue, consulting neither attrs nor elems:
+// cvc-assertion clause 1.2 excludes comments from the partial ·PSVI· clause
+// 1.3 builds the data model instance from, retaining them only ·at user
+// option·, which this engine offers none of, so E's subtree holds no comment
+// node and the step selects the empty sequence whatever E carries. Nothing is
+// counted and nothing read.
+func (ctaAssertionFacade) comments() (ctaValue, bool) {
+	return ctaEmptyValue{}, true
+}
+
 // quantified compiles a quantified expression over one child step to its
 // ctaQuantified, consulting neither attrs nor elems, on childPath's terms:
 // neither the binding step nor the body is atomized — the body's ·effective

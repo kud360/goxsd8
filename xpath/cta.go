@@ -1058,6 +1058,11 @@ type ctaFacade interface {
 	// into its node, reporting false where the façade declines it, on
 	// attribute's terms. The step is not typed, on childPath's terms.
 	elements(path ctaCountPath) (ctaValue, bool)
+	// comments compiles one comment step, xpath20.md [58] CommentTest, a [54]
+	// KindTest, `comment()`, `./comment()` or `.//comment()`, standing where
+	// elements' step stands (ctaParser.commentStep), into its node, reporting
+	// false where the façade declines it, on attribute's terms.
+	comments() (ctaValue, bool)
 	// quantified compiles xpath20.md [6] QuantifiedExpr over one child step,
 	// and only that form, `some|every $v in N satisfies B`, quantifier q, whose
 	// body B the parser desugared to the key counting the children satisfying
@@ -1223,6 +1228,14 @@ func (ctaTypeAlternativeFacade) childrenPreceded(ctaChildrenPreceded) (ctaValue,
 
 // elements declines every element step, on child's terms.
 func (ctaTypeAlternativeFacade) elements(ctaCountPath) (ctaValue, bool) {
+	return nil, false
+}
+
+// comments declines every comment step, on childPath's terms: the instance
+// key-cta-ta-select clause 1.2 gives has no [children], so the step would
+// select nothing there, and ta-props-correct clause 2's grammar has no
+// KindTest.
+func (ctaTypeAlternativeFacade) comments() (ctaValue, bool) {
 	return nil, false
 }
 
