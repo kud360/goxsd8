@@ -2794,7 +2794,8 @@ func (f ctaPredicateFacade) contextItem() (ctaValue, bool) { return f.candidate,
 func (ctaPredicateFacade) count(ctaCounted, ctaTypes) (ctaValue, bool) { return nil, false }
 
 // contextNode declines: inside a predicate `.` is the candidate child and not
-// E. It is never reached, callsLibrary being false.
+// E. Only ctaParser.ownAttribute reaches it, callsLibrary being false, so
+// `./@a` in a predicate declines.
 func (ctaPredicateFacade) contextNode() (ctaNodeArg, bool) { return nil, false }
 
 // focus declines. It is never reached: callsLibrary is false, so `position()`
@@ -3043,7 +3044,8 @@ func (p *ctaParser) constructorOperand() (ctaValue, bool) {
 // simpleValue parses [16] ta-SimpleValue's two arms, the arms the assertion
 // façade adds — [44] VarRef (varRef), a child-axis step (childStep), and a
 // rooted path (rootedPath) — and [47] ContextItemExpr, which the assertion,
-// facet and predicate façades add. A name opens the unabbreviated attribute axis only
+// facet and predicate façades add, and an attribute step behind it, `./@N`
+// (ownAttribute). A name opens the unabbreviated attribute axis only
 // where `::` follows the name `attribute`, and a child-axis step otherwise.
 func (p *ctaParser) simpleValue() (ctaValue, bool) {
 	switch p.peek(0).kind {
@@ -3062,6 +3064,9 @@ func (p *ctaParser) simpleValue() (ctaValue, bool) {
 		}
 		return p.varRef()
 	case ctaDotTok:
+		if p.attributeStepLength() > 0 {
+			return p.ownAttribute()
+		}
 		p.advance()
 		return p.facade.contextItem()
 	case ctaStringTok:
@@ -3075,6 +3080,23 @@ func (p *ctaParser) simpleValue() (ctaValue, bool) {
 	default:
 		return nil, false
 	}
+}
+
+// ownAttribute parses an attribute step behind `./`, `./@N` or
+// `./attribute::N` (attributeStepLength), which steps from the context node
+// `.` (xpath20.md §3.2, §3.2.4): where p.facade compiles `.` as a node
+// (ctaFacade.contextNode), the step is compiled on attrName's terms, so the
+// assertion façade's `./@N` is E's own attribute `@N` and the facet façade's
+// raises the err:XPDY0002 its absent context item does. A façade with no node
+// for `.` declines it: a Type Alternative's grammar has no ContextItemExpr,
+// and a predicate's `.` is the candidate child, not E.
+func (p *ctaParser) ownAttribute() (ctaValue, bool) {
+	if _, ok := p.facade.contextNode(); !ok {
+		return nil, false
+	}
+	p.advance() // '.'
+	p.advance() // '/'
+	return p.attrName()
 }
 
 // varRef parses xpath20.md [44] VarRef, `'$' VarName`, whose [45] VarName is a

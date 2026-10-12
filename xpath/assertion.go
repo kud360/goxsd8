@@ -1058,27 +1058,27 @@ type AssertionTest struct {
 // [AssertionTest.Evaluate] is handed, under every content, a nil one included.
 //
 // The grammar is [CompileCTATest]'s with the value comparisons, `$value`, an
-// abbreviated child-axis step, a "/" or "//" opening one child or attribute
-// step, a relative path of two or more abbreviated child-axis steps with QName
-// NameTests, `a/b`, the last of which may instead be the wildcard `*`, `a/*`,
-// which selects every element child (§3.2.1.2), one element step, `a`, `./a`
-// or `.//a`, or a child step filtered by one predicate that is a conjunction
-// of child steps with QName NameTests, `a[b and c]`, which selects each child
-// a that has a child of each name (§3.2.2), or by one predicate that is one
-// `preceding::` step with a QName NameTest, unfiltered or filtered by one QName child step or
-// fn:not over one, `a[preceding::a]`, `a[preceding::a[b]]` or `a[preceding::a[not(b)]]`, which
-// selects each child a with an element so named and so filtered before it in E's subtree, at
-// any depth, E never among them (§3.2.1.1, cvc-assertion clause 1.3), standing as the whole
-// operand of fn:exists, fn:empty or an ·effective boolean value· (xpath20.md §3.2, §3.2.4,
-// §2.4.3), an fn:count call, whose argument may filter a child step by one predicate or join
-// operands with `|` or `union` (§3.2.2, §3.3.3; the bullets below bound both), or be an
-// operand that is no path — `$value`, `()`, a literal or a function call, read as any argument
-// of the functions below is — the binary arithmetic operators `+`, `-`, `*`, `div`, `idiv` and
-// `mod` (xpath20.md §3.4), and a call to one of the F&O string and sequence functions —
-// fn:contains, fn:starts-with and fn:ends-with with two arguments, fn:string-length,
-// fn:normalize-space and fn:string with one or none, the implicit argument being `.`,
-// fn:concat with two or more, each cast to xs:string, fn:empty, fn:exists and
-// fn:distinct-values with one, fn:true, fn:false and fn:current-date with none, and fn:doc
+// abbreviated child-axis step, an attribute step behind `./`, `./@a` or `./attribute::a`,
+// which steps from `.`, E, and is E's attribute `@a` (xpath20.md §3.2, §3.2.4), a "/" or "//"
+// opening one child or attribute step, a relative path of two or more abbreviated child-axis
+// steps with QName NameTests, `a/b`, the last of which may instead be the wildcard `*`, `a/*`,
+// which selects every element child (§3.2.1.2), one element step, `a`, `./a` or `.//a`, or a
+// child step filtered by one predicate that is a conjunction of child steps with QName
+// NameTests, `a[b and c]`, which selects each child a that has a child of each name (§3.2.2),
+// or by one predicate that is one `preceding::` step with a QName NameTest, unfiltered or
+// filtered by one QName child step or fn:not over one, `a[preceding::a]`, `a[preceding::a[b]]`
+// or `a[preceding::a[not(b)]]`, which selects each child a with an element so named and so
+// filtered before it in E's subtree, at any depth, E never among them (§3.2.1.1, cvc-assertion
+// clause 1.3), standing as the whole operand of fn:exists, fn:empty or an ·effective boolean
+// value· (xpath20.md §3.2, §3.2.4, §2.4.3), an fn:count call, whose argument may filter a
+// child step by one predicate or join operands with `|` or `union` (§3.2.2, §3.3.3; the
+// bullets below bound both), or be an operand that is no path — `$value`, `()`, a literal or a
+// function call, read as any argument of the functions below is — the binary arithmetic
+// operators `+`, `-`, `*`, `div`, `idiv` and `mod` (xpath20.md §3.4), and a call to one of the
+// F&O string and sequence functions — fn:contains, fn:starts-with and fn:ends-with with two
+// arguments, fn:string-length, fn:normalize-space and fn:string with one or none, the implicit
+// argument being `.`, fn:concat with two or more, each cast to xs:string, fn:empty, fn:exists
+// and fn:distinct-values with one, fn:true, fn:false and fn:current-date with none, and fn:doc
 // with one that is a StringLiteral or statically empty, either followed by a relative path of
 // QName child or attribute steps (xpath-functions.md §7.5.1–7.5.3, §7.4.4, §7.4.5, §2.3,
 // §7.4.1, §15.1.4, §15.1.5, §15.1.6, §9.1.1, §9.1.2, §16.4, §15.5.4), any argument of which
@@ -1239,9 +1239,10 @@ type AssertionTest struct {
 //     and a union operand that is rooted or filtered by its value decline, and
 //     so does a step behind `./` or `.//` anywhere but in an fn:count call or
 //     as the whole operand of fn:exists, fn:empty or an ·effective boolean
-//     value·, and a predicate or a union anywhere but in an fn:count argument,
-//     but the child-existence and `preceding::` predicates the next bullet
-//     admits;
+//     value· — but an attribute step behind `./`, `./@N`, which is `@N`
+//     wherever an attribute step stands — and a predicate or a union anywhere
+//     but in an fn:count argument, but the child-existence and `preceding::`
+//     predicates the next bullet admits;
 //   - outside an fn:count argument, a predicate on any step but one child
 //     step standing as the whole operand of fn:exists, fn:empty or an
 //     ·effective boolean value·, or as fn:data's whole argument under

@@ -21,7 +21,8 @@ import (
 // (ctaValueCompare), and [16] SimpleValue also takes [44] VarRef ('$' VarName),
 // of which only `$value` is in scope (cvc-assertion clause 2.2), a child-axis
 // step naming one of E's element [[children]] (ctaTypedChild, or ctaUntypedChild for a
-// child of mixed content), and a "/" or "//" opening a path, which raises (ctaNoDocumentRoot);
+// child of mixed content), an attribute step behind `./`, `./@N`, which is E's `@N`
+// (ctaParser.ownAttribute), and a "/" or "//" opening a path, which raises (ctaNoDocumentRoot);
 // the whole operand of fn:exists, fn:empty or an ·effective boolean value· also takes a
 // relative path of two or more such steps, the last of which may be `*` (ctaChildPath), one
 // element step `N`, `./N` or `.//N` whatever N's type (ctaSelectedElements), one child step
@@ -1096,8 +1097,10 @@ type ctaFacade interface {
 	// argument of fn:namespace-uri and fn:in-scope-prefixes takes, never
 	// atomized (ctaParser.contextNodeArgument), into its node, reporting false
 	// where the façade declines it, on attribute's terms. Only a façade that
-	// calls the library reaches it (ctaParser.libraryCall,
-	// ctaParser.prefixMember).
+	// calls the library reaches it there (ctaParser.libraryCall,
+	// ctaParser.prefixMember); every façade is asked it for the node an
+	// attribute step behind `./` steps from (ctaParser.ownAttribute), which a
+	// decline declines.
 	contextNode() (ctaNodeArg, bool)
 	// focus compiles a call to fn:position or fn:last with no argument
 	// (xpath-functions.md §16.1, §16.2), a read of the context position or
@@ -1268,10 +1271,11 @@ func (ctaTypeAlternativeFacade) count(ctaCounted, ctaTypes) (ctaValue, bool) {
 	return nil, false
 }
 
-// contextNode declines, on contextItem's terms. It is never reached:
-// callsLibrary is false, so `namespace-uri(.)` reaches
-// ctaParser.constructorFunction and declines there, and
-// `in-scope-prefixes(.) = 'a'` is never read as ctaParser.prefixMember's.
+// contextNode declines, on contextItem's terms, so `./@a` declines
+// (ctaParser.ownAttribute). The library never reaches it: callsLibrary is
+// false, so `namespace-uri(.)` reaches ctaParser.constructorFunction and
+// declines there, and `in-scope-prefixes(.) = 'a'` is never read as
+// ctaParser.prefixMember's.
 func (ctaTypeAlternativeFacade) contextNode() (ctaNodeArg, bool) {
 	return nil, false
 }

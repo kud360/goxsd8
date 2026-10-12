@@ -44,31 +44,32 @@
 //     tier 1 casts an untyped one. Its grammar is tier 1's plus xpath20.md's value comparisons
 //     (§3.5.1, eq/ne/lt/le/gt/ge), `$value` (cvc-assertion clause 2.3; ValueBinding), an
 //     abbreviated child-axis step with a QName NameTest (§3.2.1.1), whose unprefixed name takes the
-//     {default namespace}, a "/" or "//" opening one or an attribute step, which raises
-//     err:XPDY0050 because the instance's root is E and not a document node (§3.2), a relative path
-//     of two or more such child steps, `a/b` (§3.2), whose last step may be `*`, `a/*`, every
-//     element child (§3.2.1.2), one element step, `a`, `./a` or `.//a` (§3.2.4), or a child step
-//     filtered by a conjunction of child steps, `a[b and c]`, each a one of whose children is named
-//     each conjunct, so two a splitting the names select nothing (§3.2.2), or by one `preceding::`
-//     step, unfiltered or filtered by one child step or fn:not over one, `a[preceding::a[not(b)]]`,
-//     each a with an a lacking a b child before it in E's subtree, at any depth, E never among them
-//     (§3.2.1.1, cvc-assertion clause 1.3), as the whole operand of fn:exists, fn:empty or an
-//     ·effective boolean value·, whose steps are never typed and which selects any node, ·nilled·
-//     or not, of any type, at the end of that chain of names, an fn:count call (xpath-functions.md
-//     §15.4.1) over `N`, `@N`, either behind `./` or `.//`, or a rooted step, a child step `N` or
-//     `./N` in it filtered by one predicate (§3.2.2) — a conjunction of attribute-existence tests,
-//     `N[@a and @b]`, or a comparison, or and, or and fn:not over comparisons, of the child's own
-//     typed value `.`, `N[. = 'x']`, whose dynamic or type error over any child makes the count
-//     raise — and a `|` or `union` of those relative operands but a value-filtered one, each node
-//     counted once (§3.3.3), or over an operand that is no path, whose items it counts
-//     (`count($value)`, a list's items), xpath20.md §3.4's binary arithmetic (`+`, `-`, `*`, `div`,
-//     `idiv`, `mod`) over numeric operands, whose dynamic errors err:FOAR0001 and err:FOAR0002 are
-//     charged like any other, F&O's string and sequence core — fn:contains, fn:starts-with and
-//     fn:ends-with under the codepoint collation, fn:string-length, fn:normalize-space, fn:string,
-//     fn:concat (§7.4.1, each argument cast to xs:string), fn:empty, fn:exists, fn:distinct-values
-//     (§15.1.6, by eq, one NaN surviving), fn:true and fn:false — fn:sum over a path through child
-//     steps to an attribute below E, `sum(a/b/@p)` (§15.4.5), its attribute typed by AttributeTypes
-//     at that path, the static type of the element it ends at, and its values carried by the Tally
+//     {default namespace}, an attribute step behind `./`, `./@a`, E's own `@a` (§3.2.4), a "/"
+//     or "//" opening one or an attribute step, which raises err:XPDY0050 because the instance's
+//     root is E and not a document node (§3.2), a relative path of two or more such child steps,
+//     `a/b` (§3.2), whose last step may be `*`, `a/*`, every element child (§3.2.1.2), one element
+//     step, `a`, `./a` or `.//a` (§3.2.4), or a child step filtered by a conjunction of child
+//     steps, `a[b and c]`, each a one of whose children is named each conjunct, so two a splitting
+//     the names select nothing (§3.2.2), or by one `preceding::` step, unfiltered or filtered by
+//     one child step or fn:not over one, `a[preceding::a[not(b)]]`, each a with an a lacking a b
+//     child before it in E's subtree, at any depth, E never among them (§3.2.1.1, cvc-assertion
+//     clause 1.3), as the whole operand of fn:exists, fn:empty or an ·effective boolean value·,
+//     whose steps are never typed and which selects any node, ·nilled· or not, of any type, at the
+//     end of that chain of names, an fn:count call (xpath-functions.md §15.4.1) over `N`, `@N`,
+//     either behind `./` or `.//`, or a rooted step, a child step `N` or `./N` in it filtered by
+//     one predicate (§3.2.2) — a conjunction of attribute-existence tests, `N[@a and @b]`, or a
+//     comparison, or and, or and fn:not over comparisons, of the child's own typed value `.`, `N[.
+//     = 'x']`, whose dynamic or type error over any child makes the count raise — and a `|` or
+//     `union` of those relative operands but a value-filtered one, each node counted once (§3.3.3),
+//     or over an operand that is no path, whose items it counts (`count($value)`, a list's items),
+//     xpath20.md §3.4's binary arithmetic (`+`, `-`, `*`, `div`, `idiv`, `mod`) over numeric
+//     operands, whose dynamic errors err:FOAR0001 and err:FOAR0002 are charged like any other,
+//     F&O's string and sequence core — fn:contains, fn:starts-with and fn:ends-with under the
+//     codepoint collation, fn:string-length, fn:normalize-space, fn:string, fn:concat (§7.4.1, each
+//     argument cast to xs:string), fn:empty, fn:exists, fn:distinct-values (§15.1.6, by eq, one NaN
+//     surviving), fn:true and fn:false — fn:sum over a path through child steps to an attribute
+//     below E, `sum(a/b/@p)` (§15.4.5), its attribute typed by AttributeTypes at that path, the
+//     static type of the element it ends at, and its values carried by the Tally
 //     (Tally.ReadsAttribute, Tally.Attribute), the xs:integer 0 over none, exact over xs:decimal
 //     items, and its `instance of` read off the type of the value it returns, and fn:current-date
 //     (§16.4), the date of the current dateTime the caller hands Evaluate and FacetAssertions,
