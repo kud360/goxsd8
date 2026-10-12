@@ -16,13 +16,13 @@ import (
 //
 // want is the message text from the rule onward, naming T, then B, then G,
 // then S, then the clause, so a message that swaps either pair fails; an empty
-// want is a row the clause accepts. The namespace="" rows bind nothing (an empty enumeration has
-// no item ·attributed· to it), and neither does the row whose ·complete
-// wildcard· is the empty intersection of an <attributeGroup ref>'s urn:p with
-// R's own urn:q. The two xs:anyType rows assert the GAP(xsd) in
-// checkRestrictionAttributes (complexderivation.go), RULED permanent by #2548:
-// loc-testSubP clause 2 read to the letter refuses anyType's lax wildcard over
-// a skip one.
+// want is a row the clause accepts. The namespace="" rows bind nothing (an
+// empty enumeration has no item ·attributed· to it), and neither does the row
+// whose ·complete wildcard· is the empty intersection of an <attributeGroup
+// ref>'s urn:p with R's own urn:q. The two xs:anyType rows assert the GAP(xsd)
+// in checkRestrictionAttributes (complexderivation.go), RULED permanent by
+// #2548: loc-testSubP clause 2 read to the letter refuses anyType's lax
+// wildcard over a skip one.
 func TestRestrictionAttributeWildcardKeyword(t *testing.T) {
 	restriction := func(children string) string {
 		return `<xs:complexType name="R"><xs:complexContent><xs:restriction base="tns:B">` +
