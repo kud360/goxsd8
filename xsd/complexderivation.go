@@ -411,7 +411,24 @@ func restrictionVarietyPairOK(tct, bct ContentType) bool {
 // charging C for it would be a FALSE REJECT. In the charge direction the fold on
 // B is what makes checkAttributeRestrictionRequired see a required attribute T
 // inherits from higher up the chain rather than only the ones B declares itself.
+//
+// GAP(xsd): a b that is ·xs:anyType· is not compared at all. Its {attribute
+// uses} are empty and its {attribute wildcard} is ##any lax with no {disallowed
+// names} (§3.4.7), so the one obligation checkAttributeRestriction can charge
+// over it is checkAttributeRestrictionWildcard's keyword comparison: loc-testSubP
+// clause 2 refuses a lax G against a skip S, and read to the letter that rejects
+// every complex type whose own <anyAttribute processContents="skip"/> restricts
+// xs:anyType, implicitly or explicitly. The oracle ruled that pairing accepted;
+// RULED permanent by #2548. Skipping is FAIL-OPEN against this function's one
+// reader, checkDerivationOKRestriction, whose two callers —
+// checkComplexTypeRestriction and checkExtensionTwoStepDerivable — each charge
+// on a non-nil error only. The second never passes ·xs:anyType· as b: its M
+// carries the {name} of an ancestor whose own base is ·xs:anyType·
+// (newCollapsedExtension).
 func (s *Schema) checkRestrictionAttributes(t, b ComplexType) error {
+	if b.Name() == anyTypeName {
+		return nil
+	}
 	return s.checkAttributeRestriction(complexTypeAttributeRestriction(t, b))
 }
 
