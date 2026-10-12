@@ -1319,7 +1319,7 @@ type AssertionTest struct {
 //     none of an IntegerLiteral, such a range and a StringLiteral, a sequence
 //     mixing StringLiterals with the other two, `('a', 1)`, a nested or empty
 //     parenthesis, a misplaced comma, `('a',)`, an IntegerLiteral beyond
-//     int64, and a sequence of more than ctaMaxSequenceLength items;
+//     int64, and a sequence of more than 4096 items;
 //   - fn:string, and an fn:concat argument, over a typed attribute, a typed
 //     child, an fn:count call, an arithmetic result, `$value`, a function
 //     result or a cast of one of them outside the xs:string family and the
