@@ -219,10 +219,96 @@ func TestFacetAssertionsInstanceOf(t *testing.T) {
 		{"$value instance of xs:date", value.AssertionFails},
 		{"data(.) instance of xs:untypedAtomic", value.AssertionFails},
 		{"not(data(.) instance of xs:date)", value.AssertionFails},
+		{"@d instance of attribute()", value.AssertionDeclined},
+		{"not(./@d instance of attribute(*, xs:string))", value.AssertionDeclined},
 	} {
 		got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, str, ctaExprRecord(tc.test, "", "xs", xsd.XMLSchemaNS), fcValue(t, str, "abc"))
 		if got != tc.want {
 			t.Errorf("Evaluate(%q) = %d, want %d", tc.test, got, tc.want)
+		}
+	}
+}
+
+// An [60] AttributeTest matches the attribute NODE one attribute step of E
+// selects (xpath20.md §2.5.4.5): `attribute()` and `attribute(*)` any,
+// `attribute(N)` one named N whatever its type, and a TypeName one whose type
+// annotation — its {attribute use}'s type — derives from it, walked up a
+// user-defined type's chain too; `./@d` and `attribute::d` decide as `@d` does.
+// An absent attribute is the empty sequence, false without an occurrence
+// indicator and true under `?` (§2.5.4.1). A ·special·-typed attribute is
+// annotated by its type, xs:anySimpleType or xs:anyAtomicType, and only its
+// typed value is xs:untypedAtomic (xpath-datamodel §3.3.1.1, §3.3.1.2), so
+// `attribute(*, xs:untypedAtomic)` matches it no more than `attribute(*,
+// xs:dateTime)` does. `@d` in the body of a quantifier over `$value` is E's
+// attribute too.
+func TestAssertionInstanceOfAttributeTest(t *testing.T) {
+	myDate := csRestriction(t, "MyDate", ctaBuiltin("date"))
+	types := asTypesWith(myDate)
+	builtin := asUses(t, map[string]string{"d": "dateTime", "s": "string", "u": "anySimpleType", "a": "anyAtomicType"})
+	uses := func(path []xsd.QName, name xsd.QName) (*xsd.SimpleType, bool) {
+		if len(path) == 0 && name == uq("m") {
+			return myDate, true
+		}
+		return builtin(path, name)
+	}
+	m, err := value.ValidateLexical(backend(), types, myDate, "2008-01-01", nil, FacetAssertions(time.Time{}))
+	if err != nil {
+		t.Fatalf("mapping 2008-01-01 against MyDate: %v", err)
+	}
+	carried := asValues(t, asTyped{uq("d"), "dateTime", "2008-01-01T00:00:00"}, asTyped{uq("s"), "string", "x"},
+		asTyped{uq("u"), "anySimpleType", "x"}, asTyped{uq("a"), "anyAtomicType", "x"})
+	present := TypedAttributes(func(yield func(xsd.QName, TypedValue) bool) {
+		for name, v := range carried {
+			if !yield(name, v) {
+				return
+			}
+		}
+		yield(uq("m"), Typed(m))
+	})
+	absent := asValues(t)
+	date := asBuiltin(t, "date")
+	for _, tc := range []struct {
+		expr  string
+		attrs TypedAttributes
+		want  bool
+	}{
+		{"@d instance of attribute(*, xs:dateTime)", present, true},
+		{"@s instance of attribute(*, xs:dateTime)", present, false},
+		{"@d instance of attribute(*, xs:dateTime)", absent, false},
+		{"@d instance of attribute(*, xs:dateTime)?", absent, true},
+		{"@d instance of attribute(*, xs:dateTime)?", present, true},
+		{"@d instance of attribute(*, xs:dateTime)+", absent, false},
+		{"not(@d instance of attribute(*, xs:dateTime))", present, false},
+		{"./@d instance of attribute(*, xs:dateTime)", present, true},
+		{"./@s instance of attribute(*, xs:dateTime)", present, false},
+		{"./@d instance of attribute(*, xs:dateTime)", absent, false},
+		{"attribute::d instance of attribute(*, xs:dateTime)", present, true},
+		{"@d instance of attribute()", present, true},
+		{"@s instance of attribute()", present, true},
+		{"@d instance of attribute()", absent, false},
+		{"@d instance of attribute(*)", present, true},
+		{"@d instance of attribute(d)", present, true},
+		{"@s instance of attribute(s)", present, true},
+		{"@d instance of attribute(s)", present, false},
+		{"@d instance of attribute(d, xs:dateTime)", present, true},
+		{"@d instance of attribute(d, xs:string)", present, false},
+		{"@d instance of attribute(s, xs:dateTime)", present, false},
+		{"@d instance of attribute(*, xs:anyAtomicType)", present, true},
+		{"@d instance of attribute(*, xs:anySimpleType)", present, true},
+		{"@d instance of attribute(*, xs:untypedAtomic)", present, false},
+		{"@d instance of attribute(*, xs:date)", present, false},
+		{"@m instance of attribute(*, xs:date)", present, true},
+		{"@m instance of attribute(*, xs:dateTime)", present, false},
+		{"@u instance of attribute()", present, true},
+		{"@u instance of attribute(*, xs:untypedAtomic)", present, false},
+		{"@u instance of attribute(*, xs:dateTime)", present, false},
+		{"@u instance of attribute(*, xs:anySimpleType)", present, true},
+		{"@a instance of attribute(*, xs:anySimpleType)", present, true},
+		{"@a instance of attribute(*, xs:untypedAtomic)", present, false},
+		{"some $x in data($value) satisfies @d instance of attribute(*, xs:dateTime)", present, true},
+	} {
+		if got := ioEval(t, tc.expr, types, xsd.SimpleContent{SimpleType: date}, uses, asNoElems, tc.attrs, asNoChildren, asBind(t, date, "2008-01-01")); got != tc.want {
+			t.Errorf("Evaluate(%q) = %v, want %v", tc.expr, got, tc.want)
 		}
 	}
 }
@@ -247,7 +333,7 @@ func TestFacetAssertionsInstanceOf(t *testing.T) {
 // instanceTail's derived check, the IntegerLiteral row without instanceItem's
 // literal check, and the arithmetic row with instanceItem admitting ctaArith.
 func TestInstanceOfDeclines(t *testing.T) {
-	for _, expr := range []string{"@a instance of xs:string", "not(@a instance of xs:string)", "data(@a) instance of xs:untypedAtomic"} {
+	for _, expr := range []string{"@a instance of xs:string", "not(@a instance of xs:string)", "data(@a) instance of xs:untypedAtomic", "@a instance of attribute()"} {
 		if _, ok := CompileCTATest(ctaExprRecord(expr, "", "xs", xsd.XMLSchemaNS), seededTypes); ok {
 			t.Errorf("CompileCTATest(%q): compiled, want declined", expr)
 		}
@@ -255,11 +341,28 @@ func TestInstanceOfDeclines(t *testing.T) {
 	myDate := csRestriction(t, "MyDate", ctaBuiltin("date"))
 	types := asTypesWith(myDate)
 	date := asBuiltin(t, "date")
-	uses := asUses(t, map[string]string{"event": "dateTime", "d": "date"})
+	uses := asUses(t, map[string]string{"event": "dateTime", "d": "date", "u": "anySimpleType"})
 	elems := asElems(map[xsd.QName]xsd.TypeDefinition{uq("e"): date, uq("n"): asBuiltin(t, "int")})
 	for _, expr := range []string{
-		"./@event instance of attribute(*, xs:dateTime)",
 		"data(@event) instance of attribute(*, xs:dateTime)",
+		"data(@d) instance of attribute()",
+		"distinct-values(@d) instance of attribute()",
+		"data(n) instance of attribute()",
+		"data(n[1]) instance of attribute()",
+		"$value instance of attribute()",
+		"some $x in data($value) satisfies $x instance of attribute()",
+		"some $v in n satisfies $v instance of attribute()",
+		"some $v in n satisfies $v/following-sibling::n[1] instance of attribute()",
+		"count(n[@d instance of attribute()]) = 1",
+		"@* instance of attribute()",
+		"@d instance of element()",
+		"@d instance of node()",
+		"@d instance of item()",
+		"@d instance of attribute(*, xs:date?)",
+		"@d instance of attribute(*, a:MyDate)",
+		"@d instance of attribute(*, xs:anyType)",
+		"@d instance of attribute(*, xs:nonesuch)",
+		"@u instance of attribute(*, xs:anyAtomicType)",
 		"$value instance of element()",
 		"$value instance of item()",
 		"$value instance of empty-sequence()",
