@@ -242,13 +242,15 @@ func (t ctaTypes) castTarget(name xsd.QName) (*xsd.SimpleType, bool) {
 // its own type is that one or validly derived from it.
 //
 // GAP(xpath): a numeric literal, an arithmetic result, a quantifier's range
-// variable over `$value` (ctaRangeItem), and one over a typed child step and
-// `$v/following-sibling::M[1]` over it (ctaBoundChild, ctaBoundSibling)
-// decline. An IntegerLiteral is xs:integer (xpath20.md §3.1.1) where
-// ctaTypes.literal types it xs:decimal, and arithmetic's result type is
-// B.2's over those operand types, so `1 instance of xs:integer` would answer
-// false; the range variables are left out until a {test} needs them. The
-// direction is the withhold [CompileAssertionTest] reports. (#1042)
+// variable over `$value` (ctaRangeItem), and one over a typed child step,
+// `$v/following-sibling::M[1]` over it and an attribute step over either, a
+// function call ending it or not (ctaBoundChild, ctaBoundSibling,
+// ctaBoundAttribute, ctaBoundAttributeCall), decline. An IntegerLiteral is
+// xs:integer (xpath20.md §3.1.1) where ctaTypes.literal types it xs:decimal,
+// and arithmetic's result type is B.2's over those operand types, so `1
+// instance of xs:integer` would answer false; the range variables are left
+// out until a {test} needs them. The direction is the withhold
+// [CompileAssertionTest] reports. (#1042)
 func (t ctaTypes) instanceItem(v ctaValue) (item ctaStatic, derived, ok bool) {
 	switch n := v.(type) {
 	case ctaLiteral:

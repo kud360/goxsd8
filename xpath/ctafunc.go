@@ -811,14 +811,15 @@ func ctaSequenceLength(v ctaValue, env ctaEnv) (int, bool) {
 // `preceding::` step (ctaChildrenPreceded), the candidate `.` inside a value
 // predicate (ctaCandidate), the range variable of a quantifier over a typed
 // child step and `$v/following-sibling::M[1]` over it (ctaBoundChild,
-// ctaBoundSibling), and the three that raise before they select a node, a
-// rooted path (ctaNoDocumentRoot), a read of an absent context item
-// (ctaNoContextItem) and an fn:doc call (ctaNoDocument). Its nodes method is
-// the ONE reading of node existence, which the ·effective boolean value· of a
-// step (ctaEffectiveBoolean.eval) and fn:empty and fn:exists
-// (ctaSequenceLength) both take; every other operand's items are atomic values
-// the caller reads its own way. A quantifier's range variable over `$value`
-// (ctaRangeItem) is one such atomic value and no step.
+// ctaBoundSibling), an attribute step over either (ctaBoundAttribute), and the
+// three that raise before they select a node, a rooted path
+// (ctaNoDocumentRoot), a read of an absent context item (ctaNoContextItem) and
+// an fn:doc call (ctaNoDocument). Its nodes method is the ONE reading of node
+// existence, which the ·effective boolean value· of a step
+// (ctaEffectiveBoolean.eval) and fn:empty and fn:exists (ctaSequenceLength)
+// both take; every other operand's items are atomic values the caller reads
+// its own way. A quantifier's range variable over `$value` (ctaRangeItem) is
+// one such atomic value and no step.
 type ctaStep interface {
 	ctaValue
 	// nodes is how many nodes the step selects, a ·nilled· child counting as a
@@ -906,6 +907,14 @@ func (ctaBoundChild) nodes(env ctaEnv) (int, bool) { return ctaBoundNodes(env.ra
 // (ctaBoundNodes).
 func (s ctaBoundSibling) nodes(env ctaEnv) (int, bool) {
 	return ctaBoundNodes(env.rangeChild.next(s.step.name))
+}
+
+// nodes is 1 where the child the owner selects has the attribute, and 0 where
+// the owner selects none or the child has none so named
+// (ctaBoundAttributeValues).
+func (s ctaBoundAttribute) nodes(env ctaEnv) (int, bool) {
+	vs, ok := ctaBoundAttributeValues(s, env)
+	return len(vs), ok
 }
 
 // ctaTalliedNodes is the counter the evaluation's [Tally] holds for key, which

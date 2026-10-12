@@ -41,17 +41,18 @@ import (
 // position (exprSingle), [6] QuantifiedExpr over one child step whose body tests
 // the bound child's attributes or next sibling element, over one typed child
 // step, filtered by `[position() lt last()]` or not (rangeBinding), whose body
-// is any ExprSingle reading the bound child and `$v/following-sibling::M[1]`
-// (childQuantified, boundSibling), or over the items of a typed `$value` whose
-// body is any ExprSingle, in the same positions (quantifiedExpr), [18]
-// CastableExpr's `castable as` tail (castableTail), [16] InstanceofExpr's
-// `instance of` tail with an atomic SequenceType, over an fn:data call among
-// others (instanceofExpr), or with an AttributeTest over one attribute step
-// (attributeInstanceOf), and, as a general comparison's operand, an integer
-// sequence, [11] RangeExpr or §3.3.1's comma sequence over IntegerLiterals
-// (integerSequence), or a string sequence, §3.3.1's comma sequence over
-// StringLiterals (stringSequence; ctasequence.go) — each behind the façade
-// (ctaFacade.comparesValues, ctaFacade.variable, ctaFacade.child,
+// is any ExprSingle reading the bound child, `$v/following-sibling::M[1]`
+// and an attribute step over either, a function call ending it or not
+// (childQuantified, boundSibling, boundAttributeStep), or over the items of a
+// typed `$value` whose body is any ExprSingle, in the same positions
+// (quantifiedExpr), [18] CastableExpr's `castable as` tail (castableTail), [16]
+// InstanceofExpr's `instance of` tail with an atomic SequenceType, over an
+// fn:data call among others (instanceofExpr), or with an AttributeTest over one
+// attribute step (attributeInstanceOf), and, as a general comparison's operand,
+// an integer sequence, [11] RangeExpr or §3.3.1's comma sequence over
+// IntegerLiterals (integerSequence), or a string sequence, §3.3.1's comma
+// sequence over StringLiterals (stringSequence; ctasequence.go) — each behind
+// the façade (ctaFacade.comparesValues, ctaFacade.variable, ctaFacade.child,
 // ctaFacade.childPath, ctaFacade.childrenHaving, ctaFacade.childrenPreceded,
 // ctaFacade.elements, ctaFacade.comments, ctaFacade.quantified,
 // ctaFacade.rangeScope, ctaFacade.childScope, ctaFacade.boundSibling,
@@ -311,7 +312,8 @@ const (
 	// names it (ctaParser.quantifiedExpr) — through the façade inside a body
 	// over `$value` or a typed child step (ctaRangeFacade.variable,
 	// ctaChildRangeFacade.variable), and opening `$v/following-sibling::M[1]`
-	// there (ctaParser.boundSibling) — and `$value` as such a quantifier's
+	// and an attribute step over either there (ctaParser.boundSibling,
+	// ctaParser.variablePath) — and `$value` as such a quantifier's
 	// binding sequence (ctaParser.valueBinding).
 	ctaDollarTok
 	// ctaSlashTok is '/' and ctaSlashSlashTok is '//'. Each is read only where
@@ -319,7 +321,9 @@ const (
 	// opening an fn:count argument or an element step whose existence is
 	// asked (ctaParser.countPath), and a '/' also between the steps of a
 	// child path (ctaParser.childPath) and after a quantifier's range variable
-	// in its body (ctaParser.variableStep, ctaParser.boundSibling); anywhere
+	// in its body (ctaParser.variableStep, ctaParser.boundSibling,
+	// ctaParser.boundAttributeStep), and before the attribute step and the
+	// function call after it there (ctaParser.boundAttributeStep); anywhere
 	// else it is a token no production takes, so `a//b`, and `a/b` outside a
 	// child path's three positions, are not expressions here.
 	ctaSlashTok
@@ -765,10 +769,11 @@ func (p *ctaParser) exprSingle() (ctaExpr, bool) {
 // a binding or `following-sibling::M[1]` child of mixed content, ·special·,
 // list, union or no declared type, which no typed node reads
 // (ctaFacade.child), and a path over the range variable other than
-// `following-sibling::M[1]`; over `$value`, a body the range scope declines,
-// a path over the range variable and `instance of` over it among them; and a
-// nested quantifier in any body. The direction is the withhold
-// [CompileAssertionTest] reports. (#1042)
+// `following-sibling::M[1]` and the attribute steps boundAttributeStep parses;
+// over `$value`, a body the range scope declines, a path over the range
+// variable and `instance of` over it among them; and a nested quantifier in
+// any body. The direction is the withhold [CompileAssertionTest] reports.
+// (#1042)
 func (p *ctaParser) quantifiedExpr() (ctaExpr, bool) {
 	q := ctaSome
 	if p.atName("every") {
@@ -2797,8 +2802,9 @@ func (ctaPredicateFacade) childPath([]xsd.QName, ctaElementTest) (ctaValue, bool
 	return nil, false
 }
 
-// attributePath declines. It is never reached: callsLibrary is false, so
-// `sum(…)` in a predicate reaches constructorFunction and declines there.
+// attributePath declines. In a predicate it is never reached: callsLibrary is
+// false, so `sum(…)` reaches constructorFunction and declines there. Under
+// ctaStepFacade, which calls the library, it declines `sum(a/@p)`.
 func (ctaPredicateFacade) attributePath([]xsd.QName, ctaNameTest, ctaTypes) (ctaValue, bool) {
 	return nil, false
 }
@@ -2832,6 +2838,11 @@ func (ctaPredicateFacade) rangeScope(xsd.QName, ctaValueVar) (ctaFacade, bool) {
 // declines the binding step before the body's scope is asked for.
 func (ctaPredicateFacade) childScope(xsd.QName, ctaTypedChild) (ctaFacade, bool) { return nil, false }
 
+// boundAttribute declines, on variable's terms: no variable is in scope.
+func (ctaPredicateFacade) boundAttribute(ctaValue, ctaNameTest, ctaTypes) (ctaBoundAttribute, bool) {
+	return ctaBoundAttribute{}, false
+}
+
 // boundSibling declines, on variable's terms: no variable is in scope.
 func (ctaPredicateFacade) boundSibling(xsd.QName, ctaNameTest, ctaTypes) (ctaValue, bool) {
 	return nil, false
@@ -2845,17 +2856,20 @@ func (f ctaPredicateFacade) contextItem() (ctaValue, bool) { return f.candidate,
 func (ctaPredicateFacade) count(ctaCounted, ctaTypes) (ctaValue, bool) { return nil, false }
 
 // contextNode declines: inside a predicate `.` is the candidate child and not
-// E. Only ctaParser.ownAttribute reaches it, callsLibrary being false, so
-// `./@a` in a predicate declines.
+// E, and under ctaStepFacade the attribute node. In a predicate only
+// ctaParser.ownAttribute reaches it, callsLibrary being false, so `./@a`
+// declines; under ctaStepFacade fn:namespace-uri reaches it too, and
+// declines.
 func (ctaPredicateFacade) contextNode() (ctaNodeArg, bool) { return nil, false }
 
-// focus declines. It is never reached: callsLibrary is false, so `position()`
-// and `last()` in a predicate reach constructorFunction and decline there,
-// under ctaParser.predicate's GAP(xpath).
+// focus declines. In a predicate it is never reached: callsLibrary is false,
+// so `position()` and `last()` reach constructorFunction and decline there,
+// under ctaParser.predicate's GAP(xpath). Under ctaStepFacade it declines them
+// under that façade's GAP(xpath).
 func (ctaPredicateFacade) focus(*xsd.SimpleType) (ctaValue, bool) { return nil, false }
 
-// document declines, on focus' terms: callsLibrary is false, so `doc('x')` in
-// a predicate reaches constructorFunction and declines there.
+// document declines, on focus' terms: in a predicate callsLibrary is false, so
+// `doc('x')` reaches constructorFunction and declines there.
 func (ctaPredicateFacade) document() (ctaValue, bool) { return nil, false }
 
 // computes is true, on ctaAssertionFacade.computes' terms.
@@ -2882,6 +2896,24 @@ func (ctaPredicateFacade) castable() bool { return false }
 // instanceOf is false, on castable's terms: `N[. instance of xs:int]`
 // declines with every other predicate outside that shape.
 func (ctaPredicateFacade) instanceOf() bool { return false }
+
+// ctaStepFacade is the façade the [48] FunctionCall ending a path over a
+// quantifier's range variable parses under, `$v/@A/F(…)`
+// (ctaParser.boundAttributeStep): ctaPredicateFacade's, its context item the
+// attribute node the step before selects (ctaCandidate), with the F&O
+// functions ctaParser.libraryCall parses admitted over it. So every read of
+// another node declines in the call — a child or attribute step, which from an
+// attribute node selects nothing, `$value`, the range variable — and so do
+// fn:position and fn:last, fn:namespace-uri, fn:sum over a path and fn:doc,
+// whose productions ctaPredicateFacade declines.
+//
+// GAP(xpath): each of those declines rather than evaluating over the
+// attribute. The direction is the withhold [CompileAssertionTest] reports.
+// (#1042)
+type ctaStepFacade struct{ ctaPredicateFacade }
+
+// callsLibrary is true: the call after the step is an F&O function call.
+func (ctaStepFacade) callsLibrary() bool { return true }
 
 // existenceLength is how many tokens at the cursor spell a conjunction of
 // attribute-existence tests, `'@' QName ('and' '@' QName)*`, and 0 where they
@@ -3110,10 +3142,7 @@ func (p *ctaParser) simpleValue() (ctaValue, bool) {
 	case ctaSlashTok, ctaSlashSlashTok:
 		return p.rootedPath()
 	case ctaDollarTok:
-		if p.atBoundSibling() {
-			return p.boundSibling()
-		}
-		return p.varRef()
+		return p.variablePath()
 	case ctaDotTok:
 		if p.attributeStepLength() > 0 {
 			return p.ownAttribute()
@@ -3164,6 +3193,60 @@ func (p *ctaParser) varRef() (ctaValue, bool) {
 	text := p.peek(0).text
 	p.advance()
 	return p.facade.variable(p.attributeName(text), p.types)
+}
+
+// variablePath parses a [44] VarRef (varRef), or `$v/following-sibling::M[1]`
+// where atBoundSibling finds it at the cursor (boundSibling), and an attribute
+// step over either where `'/' '@' QName` follows it (boundAttributeStep).
+func (p *ctaParser) variablePath() (ctaValue, bool) {
+	parse := p.varRef
+	if p.atBoundSibling() {
+		parse = p.boundSibling
+	}
+	owner, ok := parse()
+	if !ok || p.peek(0).kind != ctaSlashTok || p.peek(1).kind != ctaAtTok || p.peek(2).kind != ctaNameTok {
+		return owner, ok
+	}
+	return p.boundAttributeStep(owner)
+}
+
+// boundAttributeStep parses the abbreviated attribute step `'/' '@' QName`
+// over owner, the node `$v` or `$v/following-sibling::M[1]` compiled to, the
+// QName resolved on attributeName's terms, into the node p.facade compiles it
+// to (ctaFacade.boundAttribute), which may decline it; and, where `'/' QName
+// '('` follows, the [48] FunctionCall ending the path (xpath20.md [27]
+// StepExpr's FilterExpr arm, §3.2), parsed by valueExpr under ctaStepFacade,
+// whose context item is the attribute node, into ctaBoundAttributeCall.
+//
+// GAP(xpath): a call carrying no type (ctaCarriedType) declines —
+// fn:distinct-values, whose static type is its operand's, and a call that is
+// statically empty — and so does any other step after the attribute step,
+// which no production takes. The direction is the withhold
+// [CompileAssertionTest] reports. (#1042)
+func (p *ctaParser) boundAttributeStep(owner ctaValue) (ctaValue, bool) {
+	p.advance() // '/'
+	p.advance() // '@'
+	test := ctaExactName{name: p.attributeName(p.peek(0).text)}
+	p.advance()
+	attr, ok := p.facade.boundAttribute(owner, test, p.types)
+	if !ok {
+		return nil, false
+	}
+	if !p.at(ctaSlashTok) || p.peek(1).kind != ctaNameTok || p.peek(2).kind != ctaLParen {
+		return attr, true
+	}
+	p.advance() // '/'
+	outer := p.facade
+	p.facade = ctaStepFacade{ctaPredicateFacade{candidate: ctaCandidate{st: attr.st}}}
+	call, parsed := p.valueExpr()
+	p.facade = outer
+	if !parsed {
+		return nil, false
+	}
+	if _, typed := ctaCarriedType(call); !typed {
+		return nil, false
+	}
+	return ctaBoundAttributeCall{attr: attr, call: call}, true
 }
 
 // atBoundSibling reports whether the tokens at the cursor spell
