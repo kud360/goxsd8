@@ -308,31 +308,21 @@ func (c *assertionCheck) reads(name xsd.QName) bool {
 	return false
 }
 
-// readsChildAttributes reports whether some compiled test of c reads an
-// attribute of a child element named name through a range variable bound to
-// it ([xpath.AssertionTest.ReadsChildAttributes]). A nil c reads none.
-func (c *assertionCheck) readsChildAttributes(name xsd.QName) bool {
+// childAttributesRead is the names of the attributes of a child element named
+// name that some compiled test of c reads through a range variable bound to it
+// ([xpath.AssertionTest.ReadsChildAttributes]), the union over c's tests, each
+// name possibly more than once. A nil c reads none.
+func (c *assertionCheck) childAttributesRead(name xsd.QName) []xsd.QName {
 	if c == nil {
-		return false
+		return nil
 	}
+	var names []xsd.QName
 	for _, t := range c.tests {
-		if t.test != nil && len(t.test.ReadsChildAttributes(name)) > 0 {
-			return true
+		if t.test != nil {
+			names = append(names, t.test.ReadsChildAttributes(name)...)
 		}
 	}
-	return false
-}
-
-// readsChildAttribute reports whether some compiled test of c reads the
-// attribute named attr of a child element named child through a range
-// variable bound to it ([xpath.AssertionTest.ReadsChildAttributes]).
-func (c *assertionCheck) readsChildAttribute(child, attr xsd.QName) bool {
-	for _, t := range c.tests {
-		if t.test != nil && slices.Contains(t.test.ReadsChildAttributes(child), attr) {
-			return true
-		}
-	}
-	return false
+	return names
 }
 
 // lacking records l as c's lack where c has none yet, so the first lack the
@@ -794,51 +784,58 @@ func (w *walk) tallyElement(e Element, g governance, up assertionAncestry, own *
 
 // tallyAttributes tells the Tallies of c, an ancestor's clause 6 state to which
 // e was just reported at path ([assertionCheck.tally]), the typed value of each
-// attribute node of e one of them reads ([assertionCheck.readsAttribute]):
-// each attribute e carries, in document order, then each ·defaulted
-// attribute· under g's complex ·governing type definition·, in {attribute
-// uses} order, the order [walk.attributeNodes] names them in. Each value is
-// [walk.attributeBelow]'s. Where one has none, c takes the lack instead
+// attribute node of e one of them reads ([assertionCheck.readsAttribute]), on
+// [walk.attributesRead]'s terms. Where one has none, c takes the lack instead
 // ([lackingAttributeBelow]) and nothing more is told: its assertions are
 // declined, and its Tallies, left owing a value, are never read.
 func (w *walk) tallyAttributes(c *assertionCheck, path []xsd.QName, e Element, g governance) {
+	reads := func(name xsd.QName) bool { return c.readsAttribute(path, name) }
+	tell := func(name xsd.QName, v xpath.TypedValue) { c.attribute(path, name, v) }
+	if lack := w.attributesRead(c.ct, path, e, g, reads, tell); lack != nil {
+		c.lacking(lack)
+	}
+}
+
+// attributesRead hands sink, in order, the typed value of each attribute node
+// of e that reads reports a {test} of the element whose ·governing type
+// definition· is ct reads at path below it: each attribute e carries, in
+// document order, then each ·defaulted attribute· under g's complex
+// ·governing type definition·, in {attribute uses} order, the order
+// [walk.attributeNodes] names them in. Each value is [walk.attributeBelow]'s.
+// It stops at the first that has none and returns that lack
+// ([lackingAttributeBelow]), sink having been handed only those before it.
+func (w *walk) attributesRead(ct xsd.ComplexType, path []xsd.QName, e Element, g governance, reads func(xsd.QName) bool, sink func(xsd.QName, xpath.TypedValue)) assertionLack {
 	attrs := e.Attributes()
-	own := g.complexType()
+	var uses []xsd.AttributeUse
+	if own := g.complexType(); own != nil {
+		uses = own.AttributeUses()
+	}
 	for _, a := range attrs {
-		if !c.readsAttribute(path, a.Name()) {
+		if !reads(a.Name()) {
 			continue
-		}
-		var uses []xsd.AttributeUse
-		if own != nil {
-			uses = own.AttributeUses()
 		}
 		u, matched := attributeUseNamed(uses, a.Name())
 		if !matched {
-			c.lacking(lackingAttributeBelow{attr: a.Name(), name: e.Name(), loc: e.Loc(), why: "no {attribute use} of its element's ·governing type definition· matches it, so its type is not the one the {test} was compiled to read"})
-			return
+			return lackingAttributeBelow{attr: a.Name(), name: e.Name(), loc: e.Loc(), why: "no {attribute use} of its element's ·governing type definition· matches it, so its type is not the one the {test} was compiled to read"}
 		}
-		v, why := w.attributeBelow(c.ct, path, u, a.Value(), elementContext{owner: e}, a.Loc())
+		v, why := w.attributeBelow(ct, path, u, a.Value(), elementContext{owner: e}, a.Loc())
 		if why != "" {
-			c.lacking(lackingAttributeBelow{attr: a.Name(), name: e.Name(), loc: e.Loc(), why: why})
-			return
+			return lackingAttributeBelow{attr: a.Name(), name: e.Name(), loc: e.Loc(), why: why}
 		}
-		c.attribute(path, a.Name(), v)
+		sink(a.Name(), v)
 	}
-	if own == nil {
-		return
-	}
-	for _, u := range own.AttributeUses() {
+	for _, u := range uses {
 		vc, defaulted := w.defaultedConstraint(u, attrs)
-		if !defaulted || !c.readsAttribute(path, u.DeclarationName()) {
+		if !defaulted || !reads(u.DeclarationName()) {
 			continue
 		}
-		v, why := w.attributeBelow(c.ct, path, u, vc.LexicalForm(), value.ConstraintContext(vc), e.Loc())
+		v, why := w.attributeBelow(ct, path, u, vc.LexicalForm(), value.ConstraintContext(vc), e.Loc())
 		if why != "" {
-			c.lacking(lackingAttributeBelow{attr: u.DeclarationName(), name: e.Name(), loc: e.Loc(), why: why})
-			return
+			return lackingAttributeBelow{attr: u.DeclarationName(), name: e.Name(), loc: e.Loc(), why: why}
 		}
-		c.attribute(path, u.DeclarationName(), v)
+		sink(u.DeclarationName(), v)
 	}
+	return nil
 }
 
 // attributeBelow is the typed value of an attribute of an element at path below
@@ -1223,7 +1220,8 @@ func (w *walk) assertionElementTypes(ct xsd.ComplexType) xpath.ElementTypes {
 // instead ([walk.tallyElement]), and the child never comes through here for it.
 func (w *walk) keepChild(parent *assertionCheck, e Element, g governance, content *contentCheck, frame *stringValueFrame, recorded bool) {
 	valued := parent.reads(e.Name())
-	if !valued && !parent.readsChildAttributes(e.Name()) {
+	names := parent.childAttributesRead(e.Name())
+	if !valued && len(names) == 0 {
 		return
 	}
 	var v xpath.TypedValue
@@ -1234,7 +1232,7 @@ func (w *walk) keepChild(parent *assertionCheck, e Element, g governance, conten
 			return
 		}
 	}
-	attrs, lack := w.childAttributes(parent, e, g)
+	attrs, lack := w.childAttributes(parent, names, e, g)
 	if lack != nil {
 		parent.lacking(lack)
 		return
@@ -1244,54 +1242,25 @@ func (w *walk) keepChild(parent *assertionCheck, e Element, g governance, conten
 
 // childAttributes is the typed value of each attribute of e, an element
 // [[child]] of the element whose clause 6 state is parent, that some {test}
-// of the parent reads through a range variable bound to e
-// ([assertionCheck.readsChildAttribute]), on [walk.tallyAttributes]' pattern:
-// each attribute e carries, in document order, then each ·defaulted
-// attribute· under g's complex ·governing type definition·, in {attribute
-// uses} order, each mapped by [walk.attributeBelow] at the one-step path of
-// e's name, which is the lookup the {test} was compiled against
-// ([xpath.ChildElements]). An attribute e does not have is not among them. It
-// reports the lack instead where one has no typed value under that type, or
-// where g's type was not determined, so that which uses default is unknown.
-func (w *walk) childAttributes(parent *assertionCheck, e Element, g governance) ([]assertionValue, assertionLack) {
-	if !parent.readsChildAttributes(e.Name()) {
+// of the parent reads through a range variable bound to e (names,
+// [assertionCheck.childAttributesRead]), on [walk.attributesRead]'s terms at
+// the one-step path of e's name, which is the lookup the {test} was compiled
+// against ([xpath.ChildElements]). An attribute e does not have is not among
+// them. It reports the lack instead where one has no typed value under that
+// type, or where g's type was not determined, so that which uses default is
+// unknown.
+func (w *walk) childAttributes(parent *assertionCheck, names []xsd.QName, e Element, g governance) ([]assertionValue, assertionLack) {
+	if len(names) == 0 {
 		return nil, nil
 	}
 	if g.typeUndetermined() {
 		return nil, lackingChild{name: e.Name(), loc: e.Loc(), why: "its ·governing type definition· was not determined, so its ·defaulted attributes·, whose values a {test} reads, are unknown"}
 	}
-	path := []xsd.QName{e.Name()}
-	attrs := e.Attributes()
-	own := g.complexType()
-	var uses []xsd.AttributeUse
-	if own != nil {
-		uses = own.AttributeUses()
-	}
 	var read []assertionValue
-	for _, a := range attrs {
-		if !parent.readsChildAttribute(e.Name(), a.Name()) {
-			continue
-		}
-		u, matched := attributeUseNamed(uses, a.Name())
-		if !matched {
-			return nil, lackingAttributeBelow{attr: a.Name(), name: e.Name(), loc: e.Loc(), why: "no {attribute use} of its element's ·governing type definition· matches it, so its type is not the one the {test} was compiled to read"}
-		}
-		v, why := w.attributeBelow(parent.ct, path, u, a.Value(), elementContext{owner: e}, a.Loc())
-		if why != "" {
-			return nil, lackingAttributeBelow{attr: a.Name(), name: e.Name(), loc: e.Loc(), why: why}
-		}
-		read = append(read, assertionValue{name: a.Name(), v: v})
-	}
-	for _, u := range uses {
-		vc, defaulted := w.defaultedConstraint(u, attrs)
-		if !defaulted || !parent.readsChildAttribute(e.Name(), u.DeclarationName()) {
-			continue
-		}
-		v, why := w.attributeBelow(parent.ct, path, u, vc.LexicalForm(), value.ConstraintContext(vc), e.Loc())
-		if why != "" {
-			return nil, lackingAttributeBelow{attr: u.DeclarationName(), name: e.Name(), loc: e.Loc(), why: why}
-		}
-		read = append(read, assertionValue{name: u.DeclarationName(), v: v})
+	reads := func(name xsd.QName) bool { return slices.Contains(names, name) }
+	keep := func(name xsd.QName, v xpath.TypedValue) { read = append(read, assertionValue{name: name, v: v}) }
+	if lack := w.attributesRead(parent.ct, []xsd.QName{e.Name()}, e, g, reads, keep); lack != nil {
+		return nil, lack
 	}
 	return read, nil
 }
