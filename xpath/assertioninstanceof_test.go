@@ -207,7 +207,10 @@ func TestAssertionInstanceOfReadsChild(t *testing.T) {
 // err:XPDY0002 (cvc-assertions-valid clause 1.2's Note), failing the facet
 // under fn:not too, which an `instance of` answering false would make hold.
 // The fn:not row holds with ctaInstanceOfItem answering false where its
-// operand raises.
+// operand raises. An AttributeTest over an attribute step declines, the step
+// reading no attribute node (ctaFacetFacade.instanceOf's GAP(xpath)): with
+// attributeInstanceOf admitting any operand, the `@d instance of attribute()`
+// row fails the facet instead.
 func TestFacetAssertionsInstanceOf(t *testing.T) {
 	str := asBuiltin(t, "string")
 	for _, tc := range []struct {
@@ -240,7 +243,14 @@ func TestFacetAssertionsInstanceOf(t *testing.T) {
 // typed value is xs:untypedAtomic (xpath-datamodel §3.3.1.1, §3.3.1.2), so
 // `attribute(*, xs:untypedAtomic)` matches it no more than `attribute(*,
 // xs:dateTime)` does. `@d` in the body of a quantifier over `$value` is E's
-// attribute too.
+// attribute too. With instanceofExpr not dispatching to attributeInstanceOf
+// the first row declines, failing the test; with attributeKindTest's name
+// check removed the `attribute(s)` and `attribute(s, xs:dateTime)` rows over
+// @d hold; with a ctaAttr read as annotated xs:untypedAtomic the four @u and @a
+// rows naming xs:untypedAtomic or xs:anySimpleType flip; and with
+// annotationDerives comparing the annotation for equality instead of walking
+// its chain the @d xs:anyAtomicType and xs:anySimpleType rows and the @m
+// xs:date row are false.
 func TestAssertionInstanceOfAttributeTest(t *testing.T) {
 	myDate := csRestriction(t, "MyDate", ctaBuiltin("date"))
 	types := asTypesWith(myDate)
@@ -317,19 +327,37 @@ func TestAssertionInstanceOfAttributeTest(t *testing.T) {
 // Type Alternative's {test} declines it — §3.12.6's grammar has no
 // InstanceofExpr — and so does a value predicate. In an assertion, a KindTest,
 // `item()` and `empty-sequence()` SequenceType decline under sequenceType's
-// GAP(xpath) (#1042), and so does a name that is no builtin atomic type: a
-// list or xs:anySimpleType (err:XPST0051), a complex type, a user-defined
-// type, a name resolving to nothing. A node operand without fn:data — `@d`,
-// `.`, a child step — declines, and so does an operand whose static type is
-// not its dynamic one, a numeric literal and arithmetic, and a typed child,
-// directly or through fn:distinct-values, against an AtomicType its compiled
-// type does not derive from: an xsi:type can make an xs:int child an
-// xs:short; fn:data anywhere but as the operand of `instance of`, or with two
-// arguments, declines. The fn:data row compiles for a Type Alternative with
-// ctaTypeAlternativeFacade.instanceOf answering true, the value predicate
-// comparing `.` with an `instance of` compiles with
-// ctaPredicateFacade.instanceOf answering true, the three node rows compile
-// without instanceofExpr's node check, the three typed-child rows without
+// GAP(xpath) (#1042) — an AttributeTest is read over one attribute step alone,
+// never over an atomized operand, fn:data's or fn:distinct-values' argument, a
+// child read for its value, `$value` or a range variable — and so does a name
+// that is no builtin atomic type: a list or xs:anySimpleType (err:XPST0051), a
+// complex type, a user-defined type, a name resolving to nothing. Over an
+// attribute step, every SequenceType but an AttributeTest declines, an
+// AtomicType and `element()`, `node()` and `item()` among them, and so does an
+// AttributeTest whose TypeName is user-defined (err:XPST0008), xs:anyType or
+// resolves to nothing, or is xs:anyAtomicType over a ·special· attribute. A
+// node operand without fn:data — `.`, a child step — declines, and so does an
+// operand whose static type is not its dynamic one, a numeric literal and
+// arithmetic, and a typed child, directly or through fn:distinct-values,
+// against an AtomicType its compiled type does not derive from: an xsi:type
+// can make an xs:int child an xs:short; fn:data anywhere but as the operand of
+// `instance of`, or with two arguments, declines. The fn:data row compiles for
+// a Type Alternative with ctaTypeAlternativeFacade.instanceOf answering true,
+// and the AttributeTest row there with instanceofExpr's AttributeTest arm not
+// asking the façade; the value predicate comparing `.` with an `instance of`
+// compiles with ctaPredicateFacade.instanceOf answering true; the `.` and
+// child-step rows compile without instanceofExpr's node check, and `@d
+// instance of xs:date` with attributeInstanceOf handing its tail to
+// instanceTail; the `data(@event)` and `data(@d)` rows compile with an
+// AttributeTest arm in instanceTail over a ctaTypedAttr operand, and the six
+// rows from `data(@event)` to `$value` with sequenceType admitting
+// `attribute(...)`; the `$x` row compiles with an AttributeTest arm before
+// instanceItem, and the two `$v` rows only with instanceofExpr's node check
+// removed too; the `element()`, `node()` and `item()` rows over @d compile
+// with attributeKindTest admitting any name before '('; the a:MyDate,
+// xs:anyType and xs:nonesuch rows with annotationDerives admitting any
+// TypeName, and the xs:anyAtomicType row over @u with annotationDerives
+// answering it over a ctaAttr; the three typed-child rows compile without
 // instanceTail's derived check, the IntegerLiteral row without instanceItem's
 // literal check, and the arithmetic row with instanceItem admitting ctaArith.
 func TestInstanceOfDeclines(t *testing.T) {
