@@ -1026,6 +1026,12 @@ func (c *Tally) fits(keys ctaKeys) bool {
 // element types. It is a distinct type from [CTATest] so a tree typed for an
 // assertion can never be evaluated over a Type Alternative's [Attributes],
 // nor a Type Alternative tree over [TypedAttributes].
+//
+// The zero AssertionTest, which [CompileAssertionTest] returns with ok false,
+// holds no {test} and is safe to use: [AssertionTest.ReadsContextItem] is
+// false, [AssertionTest.ReadsChild] is false for every name,
+// [AssertionTest.Tally] is nil, and [AssertionTest.Evaluate] answers false for
+// every non-nil e.
 type AssertionTest struct {
 	root             ctaExpr
 	readsContextItem bool
@@ -1543,7 +1549,7 @@ func (t AssertionTest) Evaluate(b value.Backend, types xsd.TypeResolver, e Conte
 	return ctaEval(t.root, ctaEnv{backend: b, types: types, input: in}) == ctaTrue
 }
 
-// Tally is a fresh, empty [Tally] for one evaluation of t, holding one counter
+// Tally returns a fresh, empty [Tally] for one evaluation of t, holding one counter
 // for each distinct relative path an fn:count call in t counts over — a step,
 // a child step filtered by attribute existence, or a union, one counter serving `c[@a and @b]`
 // and `c[@b and @a]`, and `e | e` and `e` — and each distinct path — one element step, a child
