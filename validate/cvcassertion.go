@@ -3,6 +3,7 @@ package validate
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/kud360/goxsd8/value"
@@ -92,27 +93,29 @@ const ruleCvcAssertionsValid xsderr.Rule = "cvc-assertions-valid"
 // has no ·actual value·, one of whose element [[children]] a {test} reads has no
 // typed value this package reads ([walk.keepChild]) — a child of mixed content
 // among them whose string-value spans a descendant whose contribution is undecided
-// ([stringValueFrame.lacking]) — whose `$value` is undecided
-// ([walk.assertionValues]), whose own string value, which `.` reads, spans such a
-// descendant, or was not gathered because e has simple content and element
-// [[children]], or is ·nilled· and has [[children]] and simple content or a {test}
-// reading `.` ([walk.assertionValue]), or one of whose {test}s counts the attribute
-// nodes of, filters children by the attribute names of, or reads the attribute
-// values of, an element of its subtree whose ·governing type definition· this
-// package could not determine, so that its ·defaulted attributes· are unknown
-// ([walk.tallyElement]), or reads through a path the typed value of an attribute
-// below e that has none under the type the {test} was compiled to read — its
-// element ·skipped·, its own {attribute use}'s type neither that type nor validly
-// derived from it, no use matching it, or no ·actual value·
-// ([walk.tallyAttributes]) — or the typed value of an element below e, read through
-// a path of child steps, that has none under that type: the element ·skipped·, not
-// known ·valid·, governed by no type or by one neither that type nor validly
-// derived from it, or its value not mapping under it ([walk.tallyValue]); a
-// ·skipped· subtree is counted, by name ([assertionAncestry.tallySkipped]).
-// Fail-open: the withheld value is clause 6's own verdict, whose whole consumer set
-// inside this package is w.res.violations and its one reader [Result.Violations],
-// which charge on a violation PRESENT, so a decline can only cost a rejection and
-// can manufacture none. (#1042)
+// ([stringValueFrame.lacking]) — or one of whose attributes a {test} reads
+// through a range variable bound to that child has none under the type the
+// {test} was compiled to read, or whose ·defaulted attributes· are unknown
+// ([walk.childAttributes]), whose `$value` is undecided ([walk.assertionValues]),
+// whose own string value, which `.` reads, spans such a descendant, or was not
+// gathered because e has simple content and element [[children]], or is ·nilled·
+// and has [[children]] and simple content or a {test} reading `.`
+// ([walk.assertionValue]), or one of whose {test}s counts the attribute nodes of,
+// filters children by the attribute names of, or reads the attribute values of, an
+// element of its subtree whose ·governing type definition· this package could not
+// determine, so that its ·defaulted attributes· are unknown ([walk.tallyElement]),
+// or reads through a path the typed value of an attribute below e that has none
+// under the type the {test} was compiled to read — its element ·skipped·, its own
+// {attribute use}'s type neither that type nor validly derived from it, no use
+// matching it, or no ·actual value· ([walk.tallyAttributes]) — or the typed value
+// of an element below e, read through a path of child steps, that has none under
+// that type: the element ·skipped·, not known ·valid·, governed by no type or by
+// one neither that type nor validly derived from it, or its value not mapping under
+// it ([walk.tallyValue]); a ·skipped· subtree is counted, by name
+// ([assertionAncestry.tallySkipped]). Fail-open: the withheld value is clause 6's
+// own verdict, whose whole consumer set inside this package is w.res.violations and
+// its one reader [Result.Violations], which charge on a violation PRESENT, so a
+// decline can only cost a rejection and can manufacture none. (#1042)
 func (w *walk) elementAssertions(e Element, asserts *assertionCheck, content *contentCheck, own *stringValueFrame, invalid bool) {
 	if asserts == nil {
 		return
@@ -158,13 +161,15 @@ func (w *walk) elementAssertions(e Element, asserts *assertionCheck, content *co
 // arrival order, which is document order (STYLE D1); and lack is the first such
 // child that has no typed value this package reads, nil while there is none —
 // a read child of mixed content taking it as well from a descendant whose
-// contribution to its string-value is undecided ([stringValueFrame.lacking]) —
-// or the first element of the element's subtree a test's [xpath.Tally] cannot
-// be told of exactly: one whose ·governing type definition· was not
-// determined, at whose depth some test reads attribute names or values
-// ([assertionCheck.readsAttributesAt], [walk.tallyElement]), or one carrying
-// an attribute whose typed value a test reads and which has none under the
-// type the test was compiled to read ([walk.tallyAttributes],
+// contribution to its string-value is undecided ([stringValueFrame.lacking]),
+// and a child read through a range variable taking it from an attribute a test
+// reads that has no typed value under the type the test was compiled to read
+// ([walk.childAttributes]) — or the first element of the element's subtree a
+// test's [xpath.Tally] cannot be told of exactly: one whose ·governing type
+// definition· was not determined, at whose depth some test reads attribute
+// names or values ([assertionCheck.readsAttributesAt], [walk.tallyElement]), or
+// one carrying an attribute whose typed value a test reads and which has none
+// under the type the test was compiled to read ([walk.tallyAttributes],
 // [assertionAncestry.tallySkipped]), or one whose own typed value a test reads
 // through a path of child steps and which has none under that type
 // ([walk.tallyValue]). The lack is the whole check's, never one test's. Each
@@ -297,6 +302,33 @@ func (c *assertionCheck) reads(name xsd.QName) bool {
 	}
 	for _, t := range c.tests {
 		if t.test != nil && t.test.ReadsChild(name) {
+			return true
+		}
+	}
+	return false
+}
+
+// readsChildAttributes reports whether some compiled test of c reads an
+// attribute of a child element named name through a range variable bound to
+// it ([xpath.AssertionTest.ReadsChildAttributes]). A nil c reads none.
+func (c *assertionCheck) readsChildAttributes(name xsd.QName) bool {
+	if c == nil {
+		return false
+	}
+	for _, t := range c.tests {
+		if t.test != nil && len(t.test.ReadsChildAttributes(name)) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// readsChildAttribute reports whether some compiled test of c reads the
+// attribute named attr of a child element named child through a range
+// variable bound to it ([xpath.AssertionTest.ReadsChildAttributes]).
+func (c *assertionCheck) readsChildAttribute(child, attr xsd.QName) bool {
+	for _, t := range c.tests {
+		if t.test != nil && slices.Contains(t.test.ReadsChildAttributes(child), attr) {
 			return true
 		}
 	}
@@ -1167,35 +1199,101 @@ func (w *walk) assertionElementTypes(ct xsd.ComplexType) xpath.ElementTypes {
 
 // keepChild hands e, an element [[child]] of the element whose clause 6 state
 // is parent, to that state once e's own assessment is over, where some {test}
-// of the parent reads e's name: one [xpath.ChildElement] carrying e's typed
-// value ([walk.childValue]), or the lack that declines the parent's
-// assertions. frame is e's string-value frame, nil where e opened none
-// ([walk.stringValue]). recorded reports whether any violation or
-// [Unevaluated] was recorded since e was entered — in e itself or anywhere
-// below it.
+// of the parent reads e's value or, through a range variable bound to e, its
+// attributes: one [xpath.ChildElement] carrying e's typed value ([walk.childValue])
+// where a {test} reads it and nil where none does, and the typed values of the
+// attributes a {test} reads ([walk.childAttributes]), or the lack that declines the
+// parent's assertions. A child read for its attributes alone is never asked its value,
+// so a value childValue could not give declines nothing there. frame is e's
+// string-value frame, nil where e opened none ([walk.stringValue]). recorded reports
+// whether any violation or [Unevaluated] was recorded since e was entered — in e itself
+// or anywhere below it.
 //
 // A child no {test} reads is kept nowhere, and a child that is read is kept as
-// ONE value, never a subtree: no value step xpath compiles reaches below a
-// child but through the string-value of a child of mixed content, which its
-// frame collected as the subtree streamed past and which is one string here,
-// so the walk holds at most one value per element [[child]] of an element
-// whose {assertions} read it, for the data model instance cvc-assertion clause
+// ONE value and the values of the attributes of its own a {test} reads, never a
+// subtree: no value step xpath compiles reaches below a child but through the
+// string-value of a child of mixed content, which its frame collected as the
+// subtree streamed past and which is one string here, so the walk holds at
+// most one value, and one per read attribute, per element [[child]] of an
+// element whose {assertions} read it, for the data model instance cvc-assertion clause
 // 1 builds from the parent; an fn:count over a child step filtered by a
 // predicate over its value reads it here too, and counts the kept values. A
 // {test} that only counts a child, filtered by its attributes or not, or only
-// asks its existence or that of a child path through it, reads its
-// [xpath.Tally] instead ([walk.tallyElement]), and the child never comes
-// through here for it.
+// asks its existence or that of a child path through it, reads its [xpath.Tally]
+// instead ([walk.tallyElement]), and the child never comes through here for it.
 func (w *walk) keepChild(parent *assertionCheck, e Element, g governance, content *contentCheck, frame *stringValueFrame, recorded bool) {
-	if !parent.reads(e.Name()) {
+	valued := parent.reads(e.Name())
+	if !valued && !parent.readsChildAttributes(e.Name()) {
 		return
 	}
-	child, lack := w.childValue(parent.ct, e, g, content, frame, recorded)
+	var v xpath.TypedValue
+	if valued {
+		var lack assertionLack
+		if v, lack = w.childValue(parent.ct, e, g, content, frame, recorded); lack != nil {
+			parent.lacking(lack)
+			return
+		}
+	}
+	attrs, lack := w.childAttributes(parent, e, g)
 	if lack != nil {
 		parent.lacking(lack)
 		return
 	}
-	parent.children = append(parent.children, child)
+	parent.children = append(parent.children, xpath.ChildWithAttributes(e.Name(), v, assertionInput{attrs: attrs}.yield))
+}
+
+// childAttributes is the typed value of each attribute of e, an element
+// [[child]] of the element whose clause 6 state is parent, that some {test}
+// of the parent reads through a range variable bound to e
+// ([assertionCheck.readsChildAttribute]), on [walk.tallyAttributes]' pattern:
+// each attribute e carries, in document order, then each ·defaulted
+// attribute· under g's complex ·governing type definition·, in {attribute
+// uses} order, each mapped by [walk.attributeBelow] at the one-step path of
+// e's name, which is the lookup the {test} was compiled against
+// ([xpath.ChildElements]). An attribute e does not have is not among them. It
+// reports the lack instead where one has no typed value under that type, or
+// where g's type was not determined, so that which uses default is unknown.
+func (w *walk) childAttributes(parent *assertionCheck, e Element, g governance) ([]assertionValue, assertionLack) {
+	if !parent.readsChildAttributes(e.Name()) {
+		return nil, nil
+	}
+	if g.typeUndetermined() {
+		return nil, lackingChild{name: e.Name(), loc: e.Loc(), why: "its ·governing type definition· was not determined, so its ·defaulted attributes·, whose values a {test} reads, are unknown"}
+	}
+	path := []xsd.QName{e.Name()}
+	attrs := e.Attributes()
+	own := g.complexType()
+	var uses []xsd.AttributeUse
+	if own != nil {
+		uses = own.AttributeUses()
+	}
+	var read []assertionValue
+	for _, a := range attrs {
+		if !parent.readsChildAttribute(e.Name(), a.Name()) {
+			continue
+		}
+		u, matched := attributeUseNamed(uses, a.Name())
+		if !matched {
+			return nil, lackingAttributeBelow{attr: a.Name(), name: e.Name(), loc: e.Loc(), why: "no {attribute use} of its element's ·governing type definition· matches it, so its type is not the one the {test} was compiled to read"}
+		}
+		v, why := w.attributeBelow(parent.ct, path, u, a.Value(), elementContext{owner: e}, a.Loc())
+		if why != "" {
+			return nil, lackingAttributeBelow{attr: a.Name(), name: e.Name(), loc: e.Loc(), why: why}
+		}
+		read = append(read, assertionValue{name: a.Name(), v: v})
+	}
+	for _, u := range uses {
+		vc, defaulted := w.defaultedConstraint(u, attrs)
+		if !defaulted || !parent.readsChildAttribute(e.Name(), u.DeclarationName()) {
+			continue
+		}
+		v, why := w.attributeBelow(parent.ct, path, u, vc.LexicalForm(), value.ConstraintContext(vc), e.Loc())
+		if why != "" {
+			return nil, lackingAttributeBelow{attr: u.DeclarationName(), name: e.Name(), loc: e.Loc(), why: why}
+		}
+		read = append(read, assertionValue{name: u.DeclarationName(), v: v})
+	}
+	return read, nil
 }
 
 // childValue is e's typed value (xpath-datamodel §6.2.4) as a {test} of its
@@ -1231,8 +1329,8 @@ func (w *walk) keepChild(parent *assertionCheck, e Element, g governance, conten
 //     element-only type — so e's typed value is not the string-value the
 //     {test} was compiled to read.
 //
-// A ·nilled· e is [xpath.Child] of nil, the empty sequence, whatever its type
-// (xpath20.md §2.5.2 item 4.1). A mixed one is [xpath.Untyped] of frame's text,
+// A ·nilled· e's is nil, the empty sequence, whatever its type (xpath20.md
+// §2.5.2 item 4.1). A mixed one's is [xpath.Untyped] of frame's text,
 // in which a descendant whose contribution is undecided has already lacked the
 // parent ([stringValueFrame.lacking]). Otherwise the value is e's ·initial
 // value· ([contentCheck.assessed], the {value constraint}'s {lexical form}
@@ -1252,9 +1350,9 @@ func (w *walk) keepChild(parent *assertionCheck, e Element, g governance, conten
 // read by [Result.Unevaluated]: the assertion is shown satisfied or charged
 // where it should be declined. The document's verdict cannot flip, because
 // w.res.violations already carries the cvc-elt clause 4 charge at e.
-func (w *walk) childValue(ct xsd.ComplexType, e Element, g governance, content *contentCheck, frame *stringValueFrame, recorded bool) (xpath.ChildElement, assertionLack) {
-	lacking := func(why string) (xpath.ChildElement, assertionLack) {
-		return xpath.ChildElement{}, lackingChild{name: e.Name(), loc: e.Loc(), why: why}
+func (w *walk) childValue(ct xsd.ComplexType, e Element, g governance, content *contentCheck, frame *stringValueFrame, recorded bool) (xpath.TypedValue, assertionLack) {
+	lacking := func(why string) (xpath.TypedValue, assertionLack) {
+		return nil, lackingChild{name: e.Name(), loc: e.Loc(), why: why}
 	}
 	if recorded {
 		return lacking("a violation or an unevaluated check was recorded for it or below it, so it is not known to be ·valid·")
@@ -1275,7 +1373,7 @@ func (w *walk) childValue(ct xsd.ComplexType, e Element, g governance, content *
 		}
 	}
 	if content.nilled {
-		return xpath.Child(e.Name(), nil), nil
+		return nil, nil
 	}
 	if mixed {
 		if !mixedContent(g.typ) {
@@ -1288,7 +1386,7 @@ func (w *walk) childValue(ct xsd.ComplexType, e Element, g governance, content *
 			// ([walk.stringValue]).
 			return lacking("its string-value was not collected")
 		}
-		return xpath.Child(e.Name(), xpath.Untyped(frame.text.String())), nil
+		return xpath.Untyped(frame.text.String()), nil
 	}
 	own := g.valueType()
 	if own == nil {
@@ -1303,7 +1401,7 @@ func (w *walk) childValue(ct xsd.ComplexType, e Element, g governance, content *
 	if err != nil {
 		return lacking(fmt.Sprintf("its [schema normalized value] has no ·actual value· under %s", typeName(answered)))
 	}
-	return xpath.Child(e.Name(), xpath.Typed(v)), nil
+	return xpath.Typed(v), nil
 }
 
 // assertionValue is one attribute's typed value as an assertion {test} reads
@@ -1476,7 +1574,8 @@ func (lackingValue) declined(e xsd.QName) string {
 // keeps no ·actual values·. Omitting such an attribute instead would make `@a`
 // the empty sequence and could fabricate a charge. After the attributes it
 // reports asserts' own lack: an element [[child]] a {test} reads that has no
-// typed value ([walk.keepChild]), a node of e's subtree a {test} counts that
+// typed value, or an attribute of it a {test} reads that has none
+// ([walk.keepChild]), a node of e's subtree a {test} counts that
 // its Tally could not be told of ([walk.tallyElement]), or a descendant whose
 // contribution to e's own string value, which own collected, is undecided
 // ([stringValueFrame.lacking]).
