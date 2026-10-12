@@ -20,9 +20,11 @@ import (
 // empty enumeration has no item ·attributed· to it), and neither does the row
 // whose ·complete wildcard· is the empty intersection of an <attributeGroup
 // ref>'s urn:p with R's own urn:q. The two xs:anyType rows assert the GAP(xsd)
-// in checkRestrictionAttributes (complexderivation.go), RULED permanent by
-// #2548: loc-testSubP clause 2 read to the letter refuses anyType's lax
-// wildcard over a skip one.
+// in checkRestrictionAttributes (complexderivation.go), a deliberate divergence
+// from derivation-ok-restriction clause 3 for the conformance suite's sake, not
+// a spec reading: loc-testSubP clause 2 refuses anyType's lax wildcard over a
+// skip one, and the RULING at #2548 issuecomment-6134245663 accepts the pairing
+// anyway.
 func TestRestrictionAttributeWildcardKeyword(t *testing.T) {
 	restriction := func(children string) string {
 		return `<xs:complexType name="R"><xs:complexContent><xs:restriction base="tns:B">` +
