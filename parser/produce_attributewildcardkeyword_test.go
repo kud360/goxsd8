@@ -14,9 +14,9 @@ import (
 // ·subsume· the restriction's (loc-testSubP clauses 1-3), charged by
 // checkAttributeRestrictionWildcard to the restricting type R.
 //
-// want is the message text naming the base, then G, then S, then the clause, so
-// a message that swaps the two keywords fails; an empty want is a row the
-// clause accepts. The namespace="" rows bind nothing (an empty enumeration has
+// want is the message text from the rule onward, naming T, then B, then G,
+// then S, then the clause, so a message that swaps either pair fails; an empty
+// want is a row the clause accepts. The namespace="" rows bind nothing (an empty enumeration has
 // no item ·attributed· to it), and neither does the row whose ·complete
 // wildcard· is the empty intersection of an <attributeGroup ref>'s urn:p with
 // R's own urn:q. The two xs:anyType rows assert the GAP(xsd) in
@@ -28,7 +28,7 @@ func TestRestrictionAttributeWildcardKeyword(t *testing.T) {
 		return `<xs:complexType name="R"><xs:complexContent><xs:restriction base="tns:B">` +
 			children + `</xs:restriction></xs:complexContent></xs:complexType>`
 	}
-	const subject = "but {urn:x}B binds an attribute both {attribute wildcard}s admit and no declaration governs to a "
+	const subject = "[derivation-ok-restriction] complex type {urn:x}R restricts {urn:x}B, but {urn:x}B binds an attribute both {attribute wildcard}s admit and no declaration governs to a "
 	for _, tc := range []struct {
 		name  string
 		base  string // B's attribute children

@@ -1188,7 +1188,7 @@ func TestParseRedefineAttributeGroupClause722Rejected(t *testing.T) {
 		{"a lax wildcard over a strict one",
 			`<xs:anyAttribute processContents="lax"/>`,
 			`<xs:anyAttribute/>`,
-			"binds an attribute both {attribute wildcard}s admit and no declaration governs to a strict wildcard while the restriction binds it to a lax wildcard, and loc-testSubP clause 3 "},
+			"the redefining attribute group {urn:a}ag must restrict the original attribute group {urn:a}ag, but the original attribute group {urn:a}ag binds an attribute both {attribute wildcard}s admit and no declaration governs to a strict wildcard while the restriction binds it to a lax wildcard, and loc-testSubP clause 3 "},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := parseMap(t, "main.xsd", map[string]string{
