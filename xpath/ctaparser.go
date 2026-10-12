@@ -56,24 +56,25 @@ import (
 // ctaFacade.childPath, ctaFacade.childrenHaving, ctaFacade.childrenPreceded,
 // ctaFacade.elements, ctaFacade.comments, ctaFacade.quantified,
 // ctaFacade.rangeScope, ctaFacade.childScope, ctaFacade.boundSibling,
-// ctaFacade.rooted, ctaFacade.count, ctaFacade.callsLibrary, ctaFacade.computes,
-// ctaFacade.contextItem, ctaFacade.contextNode, ctaFacade.focus,
-// ctaFacade.conditional, ctaFacade.constructsSequences, ctaFacade.castable,
-// ctaFacade.instanceOf), so a Type Alternative's {test} reaches none of them.
-// Every method below is named for the production it parses, and the whole
-// grammar is both reached and evaluated: no method here is a stub, and the
-// production-level declines are those twenty-three façade methods'. xpath/doc.go
-// owns the enumeration of what declines; every other decline reaching this file
-// is ctaTypes answering ctaTypeDeclined for a comparison type, a cast target or
-// a cast operand it will not serve, ctaTypes.arithmetic declining an operand
-// pair, ctaTypes.instanceItem and ctaTypes.itemMatches declining an `instance
-// of` operand or AtomicType, ctaTypes.annotationDerives an AttributeTest's
-// TypeName, a library call of an arity its function does not have, a predicate
-// or a union operand outside the shapes predicate, valuePredicate,
-// childrenHaving, childrenPreceded and ctaUnionOf admit, a quantified expression
-// outside the shapes quantifiedExpr admits, `.` or another node standing as a
-// node (booleanExpr, presenceCall, instanceofExpr), a sequence sequenceLength
-// does not measure or integerSequence does not build, or the façade declining a
+// ctaFacade.boundAttribute, ctaFacade.rooted, ctaFacade.count,
+// ctaFacade.callsLibrary, ctaFacade.computes, ctaFacade.contextItem,
+// ctaFacade.contextNode, ctaFacade.focus, ctaFacade.conditional,
+// ctaFacade.constructsSequences, ctaFacade.castable, ctaFacade.instanceOf), so a
+// Type Alternative's {test} reaches none of them. Every method below is named
+// for the production it parses, and the whole grammar is both reached and
+// evaluated: no method here is a stub, and the production-level declines are
+// those twenty-three façade methods'. xpath/doc.go owns the enumeration of what
+// declines; every other decline reaching this file is ctaTypes answering
+// ctaTypeDeclined for a comparison type, a cast target or a cast operand it will
+// not serve, ctaTypes.arithmetic declining an operand pair,
+// ctaTypes.instanceItem and ctaTypes.itemMatches declining an `instance of`
+// operand or AtomicType, ctaTypes.annotationDerives an AttributeTest's TypeName,
+// a library call of an arity its function does not have, a predicate or a union
+// operand outside the shapes predicate, valuePredicate, childrenHaving,
+// childrenPreceded and ctaUnionOf admit, a quantified expression outside the
+// shapes quantifiedExpr admits, `.` or another node standing as a node
+// (booleanExpr, presenceCall, instanceofExpr), a sequence sequenceLength does
+// not measure or integerSequence does not build, or the façade declining a
 // NameTest, a variable's type or a settled comparison type, which the production
 // that asked propagates unchanged.
 

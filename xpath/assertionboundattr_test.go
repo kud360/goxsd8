@@ -225,19 +225,20 @@ func TestAssertionBoundAttributesBreach(t *testing.T) {
 // is nil. With ctaQuantifiedChildren.readsChild back to `n.over.name == name
 // || n.body.readsChild(name)`, ReadsChild(x) fails in the test15 row and the
 // `@c` row; with ctaBoundChild.readsChild answering false, it fails in the
-// `$x = …` row.
+// `$x = …` row; with AssertionTest.ReadsChildAttributes keeping a name twice,
+// ReadsChildAttributes(x) fails in the test15 row and the `@c` row.
 func TestAssertionBoundAttributesReads(t *testing.T) {
 	for _, tc := range []struct {
 		expr     string
 		reads    []string
 		notReads []string
-		attrs    map[string][]string
+		ofX, ofY []string
 	}{
-		{baTest15, nil, []string{"x", "y"}, map[string][]string{"x": {"a"}, "y": nil}},
-		{"every $x in x satisfies $x = number($x/@a)", []string{"x"}, []string{"y"}, map[string][]string{"x": {"a"}}},
-		{"every $x in x satisfies number($x/@c) lt number($x/@a) and number($x/@c) gt 0", nil, []string{"x"}, map[string][]string{"x": {"c", "a"}}},
-		{"every $x in x satisfies number($x/following-sibling::y[1]/@b) lt 3", []string{"x"}, []string{"y"}, map[string][]string{"x": nil, "y": {"b"}}},
-		{"every $x in x satisfies $x/following-sibling::z[1] = 'v'", []string{"x", "z"}, nil, map[string][]string{"x": nil, "z": nil}},
+		{baTest15, nil, []string{"x", "y"}, []string{"a"}, nil},
+		{"every $x in x satisfies $x = number($x/@a)", []string{"x"}, []string{"y"}, []string{"a"}, nil},
+		{"every $x in x satisfies number($x/@c) lt number($x/@a) and number($x/@c) gt 0", nil, []string{"x"}, []string{"c", "a"}, nil},
+		{"every $x in x satisfies number($x/following-sibling::y[1]/@b) lt 3", []string{"x"}, []string{"y"}, nil, []string{"b"}},
+		{"every $x in x satisfies $x/following-sibling::z[1] = 'v'", []string{"x", "z"}, nil, nil, nil},
 	} {
 		test, ok := baCompile(t, tc.expr)
 		if !ok {
@@ -253,13 +254,16 @@ func TestAssertionBoundAttributesReads(t *testing.T) {
 				t.Errorf("(%s).ReadsChild(%s) = true, want false", tc.expr, name)
 			}
 		}
-		for name, want := range tc.attrs {
+		for _, c := range []struct {
+			name string
+			want []string
+		}{{"x", tc.ofX}, {"y", tc.ofY}} {
 			var got []string
-			for _, a := range test.ReadsChildAttributes(uq(name)) {
+			for _, a := range test.ReadsChildAttributes(uq(c.name)) {
 				got = append(got, a.Local)
 			}
-			if !slices.Equal(got, want) {
-				t.Errorf("(%s).ReadsChildAttributes(%s) = %v, want %v", tc.expr, name, got, want)
+			if !slices.Equal(got, c.want) {
+				t.Errorf("(%s).ReadsChildAttributes(%s) = %v, want %v", tc.expr, c.name, got, c.want)
 			}
 		}
 		if test.Tally() != nil {
