@@ -1975,8 +1975,62 @@ func (p *ctaParser) libraryCall(local string) (ctaValue, bool) {
 		return p.namespaceURICall()
 	case "sum":
 		return p.sumCall()
+	case "doc":
+		return p.docCall()
 	}
 	return p.constructorFunction()
+}
+
+// docCall parses a call to fn:doc with its one xs:string? argument
+// (xpath-functions.md §15.5.4) and the relative path after it, if any
+// (documentSteps), into the empty sequence where the argument is statically
+// empty — "If $uri is the empty sequence, the result is an empty sequence",
+// which no available document decides — and, where it is a StringLiteral, into
+// the node the façade compiles the call to (ctaFacade.document), which raises
+// err:FODC0005 under cvc-xpath clause 8's empty available documents. Either
+// way the path after the call selects nothing that is ever read: it steps from
+// the empty sequence, or from a call that raises first. So the path is
+// resolved and discarded, and no document node is built.
+//
+// GAP(xpath): any other argument declines — an attribute or child step,
+// `$value` over simple content, a cast, a function result — and so does any
+// arity but one (err:XPST0017). The direction is the withhold
+// [CompileAssertionTest] reports. (#1042)
+func (p *ctaParser) docCall() (ctaValue, bool) {
+	args, ok := p.arguments()
+	if !ok || len(args) != 1 || !p.documentSteps() {
+		return nil, false
+	}
+	if ctaIsEmpty(args[0]) {
+		return ctaEmptyValue{}, true
+	}
+	literal, isLiteral := args[0].(ctaLiteral)
+	if !isLiteral || literal.st != p.types.str {
+		return nil, false
+	}
+	return p.facade.document()
+}
+
+// documentSteps parses the relative path after an fn:doc call, xpath20.md
+// [27] RelativePathExpr's `("/" | "//") StepExpr` repeated, each StepExpr an
+// abbreviated child or attribute step with a QName NameTest, `N` or `'@' N`,
+// resolved on rootedStepName's terms and discarded, reporting false where a "/"
+// or "//" is followed by no such step. A wildcard, an axis spelled out and a
+// predicate leave a token no production takes, and decline.
+func (p *ctaParser) documentSteps() bool {
+	for p.at(ctaSlashTok) || p.at(ctaSlashSlashTok) {
+		p.advance()
+		attribute := p.at(ctaAtTok)
+		if attribute {
+			p.advance()
+		}
+		if !p.at(ctaNameTok) {
+			return false
+		}
+		p.rootedStepName(attribute, p.peek(0).text)
+		p.advance()
+	}
+	return true
 }
 
 // sumCall parses a call to fn:sum with its one `xs:anyAtomicType*` argument
@@ -2747,6 +2801,10 @@ func (ctaPredicateFacade) contextNode() (ctaNodeArg, bool) { return nil, false }
 // and `last()` in a predicate reach constructorFunction and decline there,
 // under ctaParser.predicate's GAP(xpath).
 func (ctaPredicateFacade) focus(*xsd.SimpleType) (ctaValue, bool) { return nil, false }
+
+// document declines, on focus' terms: callsLibrary is false, so `doc('x')` in
+// a predicate reaches constructorFunction and declines there.
+func (ctaPredicateFacade) document() (ctaValue, bool) { return nil, false }
 
 // computes is true, on ctaAssertionFacade.computes' terms.
 func (ctaPredicateFacade) computes() bool { return true }
