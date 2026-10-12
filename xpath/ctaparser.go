@@ -1960,6 +1960,10 @@ func (p *ctaParser) libraryCall(local string) (ctaValue, bool) {
 		return p.stringCall()
 	case "concat":
 		return p.concatCall()
+	case "substring-after":
+		return p.substringAfterCall()
+	case "number":
+		return p.numberCall()
 	case "empty":
 		return p.presenceCall(ctaEmptyTest)
 	case "exists":
@@ -2268,6 +2272,50 @@ func (p *ctaParser) concatCall() (ctaValue, bool) {
 		parts = append(parts, part)
 	}
 	return ctaConcat{args: parts, st: p.types.str}, true
+}
+
+// substringAfterCall parses a call to fn:substring-after with its two
+// xs:string? arguments (xpath-functions.md §7.5.5), whose result is xs:string.
+// Every other arity declines (err:XPST0017, withheld on [CompileAssertionTest]'s
+// terms).
+//
+// GAP(xpath): the three-argument form, whose third argument names a collation
+// (§7.3.1), declines rather than being evaluated, on matchCall's terms. The
+// direction is the withhold [CompileAssertionTest] reports. (#1042)
+func (p *ctaParser) substringAfterCall() (ctaValue, bool) {
+	args, ok := p.arguments()
+	if !ok || len(args) != 2 {
+		return nil, false
+	}
+	return ctaSubstringAfter{left: p.types.stringArgument(args[0]), right: p.types.stringArgument(args[1]), st: p.types.str}, true
+}
+
+// numberCall parses a call to fn:number with its one `xs:anyAtomicType?`
+// argument, or with none, which is the context item `.` (xpath-functions.md
+// §14.4), whose `.` is argumentOrDot's, so the facet façade's raises
+// err:XPDY0002 as §14.4 states. The result is xs:double. Two or more
+// arguments decline.
+//
+// GAP(xpath): an argument whose cast to xs:double castsFrom declines declines
+// the call — a typed operand outside the xs:string family that is neither
+// xs:double nor derived from it, an xs:decimal or xs:boolean one among them,
+// whose cast §17.1.3.2 defines over the value, and one of a type that cannot
+// be cast to xs:double at all, which §14.4 makes NaN. The direction is the
+// withhold [CompileAssertionTest] reports. (#1042)
+func (p *ctaParser) numberCall() (ctaValue, bool) {
+	args, ok := p.arguments()
+	if !ok || len(args) > 1 {
+		return nil, false
+	}
+	arg, ok := p.argumentOrDot(args)
+	if !ok || !p.types.castsFrom(arg, p.types.double) {
+		return nil, false
+	}
+	read := p.types.str
+	if typed, isTyped := ctaStaticOf(arg).(ctaTyped); isTyped {
+		read = typed.st
+	}
+	return ctaNumber{operand: arg, read: read, st: p.types.double}, true
 }
 
 // presenceCall parses a call to fn:empty or fn:exists (op) with its one

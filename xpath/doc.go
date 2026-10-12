@@ -68,7 +68,9 @@
 //     arithmetic (`+`, `-`, `*`, `div`, `idiv`, `mod`) over numeric operands, whose dynamic errors
 //     err:FOAR0001 and err:FOAR0002 are charged like any other, F&O's string and sequence core —
 //     fn:contains, fn:starts-with and fn:ends-with under the codepoint collation, fn:string-length,
-//     fn:normalize-space, fn:string, fn:concat (§7.4.1, each argument cast to xs:string), fn:empty,
+//     fn:normalize-space, fn:string, fn:concat (§7.4.1, each argument cast to xs:string),
+//     fn:substring-after (§7.5.5), fn:number (§14.4, NaN over no item or one whose cast to
+//     xs:double fails, over an operand whose cast to xs:double is admitted), fn:empty,
 //     fn:exists, fn:distinct-values (§15.1.6, by eq, one NaN surviving), fn:true and fn:false —
 //     fn:sum over a path through child steps to an attribute below E, `sum(a/b/@p)` (§15.4.5), its
 //     attribute typed by AttributeTypes at that path, the static type of the element it ends at, and

@@ -259,7 +259,8 @@ func (t ctaTypes) instanceItem(v ctaValue) (item ctaStatic, derived, ok bool) {
 		return ctaStaticOf(v), true, true
 	case ctaAttr, ctaTypedAttr, ctaUntypedChild, ctaValueVar, ctaUntypedValue, ctaEmptyValue,
 		ctaContextAtom, ctaNoContextItem, ctaNoDocumentRoot, ctaCast, ctaCastable, ctaInstanceOf, ctaCount,
-		ctaMatch, ctaUnaryString, ctaPresence, ctaStringFunction, ctaConcat, ctaCurrentDate, ctaNoFocus, ctaNamespaceURI:
+		ctaMatch, ctaUnaryString, ctaPresence, ctaStringFunction, ctaConcat, ctaSubstringAfter, ctaNumber, ctaCurrentDate,
+		ctaNoFocus, ctaNamespaceURI:
 		return ctaStaticOf(v), false, true
 	}
 	return nil, false, false
@@ -375,11 +376,11 @@ func (t ctaTypes) annotationDerives(v ctaValue, name xsd.QName) (derives, decide
 //     arithmeticResult), of a castable or instance-of expression (ctaCastable,
 //     ctaInstanceOf, xs:boolean) or of an F&O function call (ctaMatch and
 //     ctaPresence, xs:boolean; ctaUnaryString, xs:integer or xs:string;
-//     ctaStringFunction and ctaConcat, xs:string; ctaDistinctValues, its typed
-//     operand's type, a literal's included; ctaCurrentDate, xs:date;
-//     ctaNamespaceURI, xs:anyURI), or a cast of one of them, or of an operand
-//     the second shape names, that is not in the string family (castSource,
-//     its target);
+//     ctaStringFunction, ctaConcat and ctaSubstringAfter, xs:string;
+//     ctaNumber, xs:double; ctaDistinctValues, its typed operand's type, a
+//     literal's included; ctaCurrentDate, xs:date; ctaNamespaceURI,
+//     xs:anyURI), or a cast of one of them, or of an operand the second shape
+//     names, that is not in the string family (castSource, its target);
 //   - a cast of any other shape whose target is xs:float or xs:double
 //     (floatingSource): a cast to either over an untyped operand, a
 //     string-family one or a literal other than a DoubleLiteral, as in

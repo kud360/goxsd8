@@ -744,20 +744,20 @@ func (ctaQuantifiedChildren) ctaExpr() {}
 // ctaFacade.castable), the `instance of` tail over one of them or over an
 // fn:data call (ctaInstanceOf, ctaFacade.instanceOf), and a call to an F&O
 // string or sequence function over them (ctaMatch, ctaUnaryString,
-// ctaPresence, ctaDistinctValues, ctaStringFunction, ctaConcat;
-// ctaFacade.callsLibrary), to fn:current-date (ctaCurrentDate) or, over an
-// absent focus, to fn:position or fn:last (ctaNoFocus, ctaFacade.focus), or to
-// fn:namespace-uri (ctaNamespaceURI), the assertion façade's `.`
-// (ctaContextAtom, ctaFacade.contextItem), and an integer or string sequence
-// (ctaIntegerRanges, ctaStringSequence, ctaFacade.constructsSequences), and
-// the range variable of a quantifier over `$value` inside its body
-// (ctaRangeItem, ctaFacade.rangeScope), and the range variable of a quantifier
-// over a typed child step inside its body and `$v/following-sibling::M[1]`
-// over it (ctaBoundChild, ctaBoundSibling; ctaFacade.childScope,
-// ctaFacade.boundSibling). `.` as the node fn:namespace-uri and
-// fn:in-scope-prefixes take is no branch: it is ctaNodeArg
-// (ctaFacade.contextNode). Every branch answers readsChild and counted on
-// ctaExpr's terms.
+// ctaPresence, ctaDistinctValues, ctaStringFunction, ctaConcat,
+// ctaSubstringAfter, ctaNumber; ctaFacade.callsLibrary), to fn:current-date
+// (ctaCurrentDate) or, over an absent focus, to fn:position or fn:last
+// (ctaNoFocus, ctaFacade.focus), or to fn:namespace-uri (ctaNamespaceURI), the
+// assertion façade's `.` (ctaContextAtom, ctaFacade.contextItem), and an
+// integer or string sequence (ctaIntegerRanges, ctaStringSequence,
+// ctaFacade.constructsSequences), and the range variable of a quantifier over
+// `$value` inside its body (ctaRangeItem, ctaFacade.rangeScope), and the range
+// variable of a quantifier over a typed child step inside its body and
+// `$v/following-sibling::M[1]` over it (ctaBoundChild, ctaBoundSibling;
+// ctaFacade.childScope, ctaFacade.boundSibling). `.` as the node
+// fn:namespace-uri and fn:in-scope-prefixes take is no branch: it is
+// ctaNodeArg (ctaFacade.contextNode). Every branch answers readsChild and
+// counted on ctaExpr's terms.
 type ctaValue interface {
 	ctaValue()
 	readsChild(name xsd.QName) bool
@@ -1132,15 +1132,15 @@ type ctaFacade interface {
 	// callsLibrary reports whether the façade admits a call to the F&O
 	// functions ctaParser.libraryCall parses — fn:contains, fn:starts-with,
 	// fn:ends-with, fn:string-length, fn:normalize-space, fn:string,
-	// fn:concat, fn:empty, fn:exists, fn:distinct-values, fn:true, fn:false,
-	// fn:current-date, fn:position and fn:last (ctaFacade.focus),
-	// fn:namespace-uri (ctaFacade.contextNode) and fn:doc (ctaFacade.document)
-	// — and fn:in-scope-prefixes as an operand of `=` (ctaParser.prefixMember)
-	// at all, which §3.12.6 clause 3 pins out of [12] ta-BooleanFunction
-	// (fn:not alone) and [18] ta-ConstructorFunction (constructors alone), an
-	// fn:count argument that is no path (ctaParser.countCall), and a
-	// constructor function's operand beyond [18]'s [16] ta-SimpleValue
-	// (ctaParser.constructorOperand).
+	// fn:concat, fn:substring-after, fn:number, fn:empty, fn:exists,
+	// fn:distinct-values, fn:true, fn:false, fn:current-date, fn:position and
+	// fn:last (ctaFacade.focus), fn:namespace-uri (ctaFacade.contextNode) and
+	// fn:doc (ctaFacade.document) — and fn:in-scope-prefixes as an operand of
+	// `=` (ctaParser.prefixMember) at all, which §3.12.6 clause 3 pins out of
+	// [12] ta-BooleanFunction (fn:not alone) and [18] ta-ConstructorFunction
+	// (constructors alone), an fn:count argument that is no path
+	// (ctaParser.countCall), and a constructor function's operand beyond
+	// [18]'s [16] ta-SimpleValue (ctaParser.constructorOperand).
 	callsLibrary() bool
 	// conditional reports whether the façade admits xpath20.md [7] IfExpr at
 	// all (ctaParser.ifExpr), which §3.12.6's grammar has no production for.
@@ -2513,6 +2513,10 @@ func ctaCarriedType(v ctaValue) (*xsd.SimpleType, bool) {
 		return n.cast.target, true
 	case ctaConcat:
 		return n.st, true
+	case ctaSubstringAfter:
+		return n.st, true
+	case ctaNumber:
+		return n.st, true
 	case ctaCurrentDate:
 		return n.st, true
 	case ctaNoFocus:
@@ -3265,6 +3269,10 @@ func ctaItemOf(v ctaValue, c *xsd.SimpleType, env ctaEnv) ctaItem {
 		return ctaStringFunctionItem(n, c, env)
 	case ctaConcat:
 		return ctaConcatItem(n, c, env)
+	case ctaSubstringAfter:
+		return ctaSubstringAfterItem(n, c, env)
+	case ctaNumber:
+		return ctaNumberItem(n, c, env)
 	case ctaCurrentDate:
 		return ctaCurrentDateItem(n, c, env)
 	case ctaNamespaceURI:
