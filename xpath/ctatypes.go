@@ -225,7 +225,8 @@ func (t ctaTypes) castTarget(name xsd.QName) (*xsd.SimpleType, bool) {
 // exists. An fn:distinct-values call answers as its operand does, each item
 // keeping its own type (xpath-functions.md §15.1.6).
 //
-// For a typed child, through fn:distinct-values too, derived is true: each
+// For a typed child, through fn:distinct-values too, and for the k-th of them
+// (ctaChildAt), derived is true: each
 // item's dynamic type is item's or derived from it, and need not be item's. A
 // child's annotation is its own ·governing type definition·'s (cvc-assertion
 // clause 1.2 defines E's [[children]]' properties "in the usual way"), which
@@ -254,7 +255,7 @@ func (t ctaTypes) instanceItem(v ctaValue) (item ctaStatic, derived, ok bool) {
 		return ctaStaticOf(v), false, n.st == t.str
 	case ctaDistinctValues:
 		return t.instanceItem(n.operand)
-	case ctaTypedChild, ctaElementPath:
+	case ctaTypedChild, ctaChildAt, ctaElementPath:
 		return ctaStaticOf(v), true, true
 	case ctaAttr, ctaTypedAttr, ctaUntypedChild, ctaValueVar, ctaUntypedValue, ctaEmptyValue,
 		ctaContextAtom, ctaNoContextItem, ctaNoDocumentRoot, ctaCast, ctaCastable, ctaInstanceOf, ctaCount,

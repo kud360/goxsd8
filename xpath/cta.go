@@ -882,6 +882,25 @@ type ctaBoundChild struct{ st *xsd.SimpleType }
 // It is a ctaStep: it selects zero or one node, on ctaBoundChild's terms.
 type ctaBoundSibling struct{ step ctaTypedChild }
 
+// ctaChildAt is a typed child step filtered by a numeric [40] Predicate, `N[k]`
+// or `child::N[k]`, as fn:data's argument (ctaParser.dataChildStep): the k-th
+// of the children step selects, counted from 1 in document order
+// ([ChildElements]), or nothing where step selects fewer than k or k is 0
+// (xpath20.md §3.2.2: a numeric predicate is true where it equals the context
+// position, and on the forward child axis the context positions of the step's
+// own result run in document order). Its typed value is of type step.st, or
+// the empty sequence for a ·nilled· child, on ctaTypedChild's terms.
+//
+// position is the IntegerLiteral's value; one too large for an int is
+// math.MaxInt, which no child's position reaches, so it selects nothing as the
+// literal does. It is a node of its own and not a ctaTypedChild with a
+// position: a quantifier's binding step and a value predicate's filtered step
+// are ctaTypedChild, and neither takes a position.
+type ctaChildAt struct {
+	step     ctaTypedChild
+	position int
+}
+
 // ctaNoDocumentRoot is a path opening with "/" or "//", which begins at the
 // root of the tree containing the context node through `(fn:root(self::node())
 // treat as document-node())` (xpath20.md §3.2) — and the root of the data
@@ -2301,6 +2320,7 @@ func (ctaCandidate) ctaValue()        {}
 func (ctaRangeItem) ctaValue()        {}
 func (ctaBoundChild) ctaValue()       {}
 func (ctaBoundSibling) ctaValue()     {}
+func (ctaChildAt) ctaValue()          {}
 func (ctaChildPath) ctaValue()        {}
 func (ctaAttributePath) ctaValue()    {}
 func (ctaElementPath) ctaValue()      {}
@@ -2383,7 +2403,8 @@ func ctaStaticOf(v ctaValue) ctaStatic {
 // its target, an fn:string call its cast's, `$value` the type of each of its
 // items, and a range variable over `$value` that same type (ctaRangeItem); a
 // range variable over a typed child step carries the step's type (ctaBoundChild),
-// and `$v/following-sibling::M[1]` M's (ctaBoundSibling). A path to an attribute
+// and `$v/following-sibling::M[1]` M's (ctaBoundSibling), as `N[k]` behind fn:data
+// does N's (ctaChildAt). A path to an attribute
 // carries its compiled type, unless that type is ·special· and its values
 // xs:untypedAtomic, and a path of child steps read for its elements' values carries
 // its compiled type; an fn:sum call carries its static type (ctaSum), and `instance
@@ -2420,6 +2441,8 @@ func ctaCarriedType(v ctaValue) (*xsd.SimpleType, bool) {
 	case ctaBoundChild:
 		return n.st, true
 	case ctaBoundSibling:
+		return n.step.st, true
+	case ctaChildAt:
 		return n.step.st, true
 	case ctaCount:
 		return n.st, true
@@ -3170,6 +3193,8 @@ func ctaItemOf(v ctaValue, c *xsd.SimpleType, env ctaEnv) ctaItem {
 		return ctaBoundItem(env.rangeChild.bound(), n.st, c, env)
 	case ctaBoundSibling:
 		return ctaBoundItem(env.rangeChild.next(n.step.name), n.step.st, c, env)
+	case ctaChildAt:
+		return ctaChildAtItem(n, c, env)
 	case ctaChildPath:
 		// Never reached: ctaParser.childPath builds the node only where its
 		// nodes are counted and no item is read (ctaStep.nodes).
@@ -3557,6 +3582,27 @@ func ctaTypedChildItem(n ctaTypedChild, c *xsd.SimpleType, env ctaEnv) ctaItem {
 		return ctaRaised{}
 	}
 	return ctaPromoted(matched, n.st, c, env)
+}
+
+// ctaChildAtItem atomizes the one child n selects, the n.position-th of those
+// its step selects in document order, or none, and converts the atoms into c on
+// ctaTypedChildItem's terms. Every child the step selects is read, so one
+// breaking [ChildElements]' obligation raises wherever it stands, as it does
+// under the step unfiltered.
+func ctaChildAtItem(n ctaChildAt, c *xsd.SimpleType, env ctaEnv) ctaItem {
+	var selected []value.Value
+	position := 0
+	ok := ctaEachChild(n.step.name, env, func(child []value.Value) bool {
+		position++
+		if position == n.position {
+			selected = child
+		}
+		return true
+	})
+	if !ok {
+		return ctaRaised{}
+	}
+	return ctaPromoted(selected, n.step.st, c, env)
 }
 
 // ctaEachUntypedChild is ctaEachChild for a child of mixed content

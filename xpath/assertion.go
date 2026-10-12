@@ -1796,6 +1796,10 @@ func (ctaBoundChild) readsChild(xsd.QName) bool { return false }
 // [ChildElements] beside the bound one.
 func (n ctaBoundSibling) readsChild(name xsd.QName) bool { return n.step.name == name }
 
+// readsChild reports whether the filtered step selects children named name:
+// which of them is the k-th is read off [ChildElements], so each is yielded.
+func (n ctaChildAt) readsChild(name xsd.QName) bool { return n.step.readsChild(name) }
+
 // readsChild is false, on ctaCount's terms: a child path reads no node's value,
 // and how many nodes it selects is the [Tally]'s.
 func (ctaChildPath) readsChild(xsd.QName) bool { return false }
@@ -1927,6 +1931,7 @@ func (ctaRangeItem) counted(into []ctaKey) []ctaKey { return into }
 // never keyed in the [Tally].
 func (ctaBoundChild) counted(into []ctaKey) []ctaKey   { return into }
 func (ctaBoundSibling) counted(into []ctaKey) []ctaKey { return into }
+func (ctaChildAt) counted(into []ctaKey) []ctaKey      { return into }
 
 // counted appends the path itself: the [Tally] counts the nodes it selects.
 func (n ctaChildPath) counted(into []ctaKey) []ctaKey { return append(into, n) }
