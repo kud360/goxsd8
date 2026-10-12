@@ -916,12 +916,16 @@ type ctaBoundSibling struct{ step ctaTypedChild }
 // grammar closes the set (STYLE T2's schema-closed-set exception).
 type ctaBoundOwner interface {
 	ctaStep
+	ctaBoundOwner()
 	// element is the ·expanded name· of the children the node selects.
 	element() xsd.QName
 	// selected is the zero or one child the node selects in env
 	// (ctaChildBinding).
 	selected(env ctaEnv) []ChildElement
 }
+
+func (ctaBoundChild) ctaBoundOwner()   {}
+func (ctaBoundSibling) ctaBoundOwner() {}
 
 func (n ctaBoundChild) element() xsd.QName   { return n.name }
 func (n ctaBoundSibling) element() xsd.QName { return n.step.name }

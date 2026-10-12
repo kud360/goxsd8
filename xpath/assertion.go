@@ -183,7 +183,8 @@ func ChildWithAttributes(name xsd.QName, v TypedValue, attrs TypedAttributes) Ch
 // DOCUMENT ORDER (STYLE D1), each as a [ChildElement]. It must be non-nil, and
 // a yield reporting false ends the walk. A child no compiled step names need
 // not be yielded: [AssertionTest.ReadsChild] reports which names one reads for
-// their values, and [AssertionTest.ReadsChildAttributes] which attributes of a
+// their values, or binds for their places alone, and
+// [AssertionTest.ReadsChildAttributes] which attributes of a
 // child of a name one reads through a range variable bound to it. Every child
 // of a name either reports — true, or a non-empty slice — must be yielded,
 // once, in its document-order place among the others yielded: a quantifier
