@@ -1501,6 +1501,13 @@ func (t AssertionTest) ReadsContextItem() bool { return t.readsContextItem }
 // expression as having evaluated to false" (cvc-xpath, §3.13.4.2). Every
 // decline happened at [CompileAssertionTest].
 //
+// The bool carries no diagnostic; validate makes the one its caller reads. It
+// charges a false answer as an entry of validate's Result.Violations() under
+// cvc-assertion, at E's location. An assertion it does not evaluate — one whose
+// {test} [CompileAssertionTest] declined, or one validate itself declines —
+// never reaches Evaluate, and is an entry of Result.Unevaluated() under
+// cvc-assertion instead.
+//
 // The dynamic context is cvc-xpath's — context item E, position and size 1 —
 // with the one variable cvc-assertion clause 2.3 adds to it, `$value`, bound
 // to v's typed value; `.` atomizes to v's string value. A tree compiled for a
@@ -1517,7 +1524,10 @@ func (t AssertionTest) ReadsContextItem() bool { return t.readsContextItem }
 // clause 6 makes the current dateTime constant during an assessment episode,
 // so the caller hands every evaluation of one episode the same instant. Its
 // consumer is validate, which reads the clock once per Validator.Assess and
-// passes that instant here and to [FacetAssertions].
+// passes that instant here and to [FacetAssertions]. This package reads no
+// clock: the zero [time.Time] is the instant 0001-01-01T00:00:00Z like any
+// other and never stands for the current time, so fn:current-date over it is
+// 0001-01-01Z.
 //
 // counts is the [Tally] t.Tally() made for this evaluation, filled with E's
 // subtree on the terms that type states, and nil exactly where t.Tally() is
