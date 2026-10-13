@@ -47,10 +47,12 @@ import (
 // # Case IDs
 //
 // A case ID is `<testSet-name>/<testGroup-name>/<kind>/<test-name>` where kind
-// is "schema" or "instance". The kind segment keeps a group's schemaTest and
-// instanceTest of the same name distinct; IDs are asserted unique across the
-// whole suite (parseSuite errors on a collision) so an expectation-file line
-// maps to exactly one case. Discovery output is sorted by ID (STYLE D1/D2).
+// is "schema" or "instance" — or "json" for a curated JSON case, which
+// parseSuite never produces (jsoncases.go). The kind segment keeps a group's
+// schemaTest and instanceTest of the same name distinct; IDs are asserted
+// unique across the whole suite (parseSuite errors on a collision) so an
+// expectation-file line maps to exactly one case. Discovery output is sorted
+// by ID (STYLE D1/D2).
 
 // suiteModulePath is the pinned W3C submodule directory as written from the
 // module root (conformance/doc.go) — the path `git submodule update --init`
@@ -176,14 +178,16 @@ func (e expectation) wantsValid() bool { return e.outcome == outcomeValid }
 func (e expectation) isIndeterminate() bool { return e.outcome == outcomeIndeterminate }
 
 // caseKind is a case's kind, the closed set of what a case asserts (STYLE T1):
-// a schemaTest asserts schema-document validity, an instanceTest an instance
-// document's validity against its schema. The zero caseKind is no kind, which
-// no lane's selector claims and caseID refuses to render.
+// a suite schemaTest asserts schema-document validity, a suite instanceTest an
+// XML instance document's validity against its schema, and a curated json
+// case a JSON instance's (jsoncases.go). The zero caseKind is no kind, which no
+// lane's selector claims and caseID refuses to render.
 type caseKind uint8
 
 const (
 	kindSchema caseKind = iota + 1
 	kindInstance
+	kindJSON
 )
 
 // segment is the kind's segment of a case ID (see "Case IDs" above).
@@ -193,6 +197,8 @@ func (k caseKind) segment() string {
 		return "schema"
 	case kindInstance:
 		return "instance"
+	case kindJSON:
+		return "json"
 	}
 	panic(fmt.Sprintf("conformance: caseKind %d has no case-ID segment", k))
 }
@@ -262,9 +268,10 @@ func selectsKind(k caseKind) func(caseSpec) bool {
 }
 
 // defaultLanes is the committed lane table, one lane per expectation file in
-// conformance/doc.go order. datatypes, schema and instance claim cases today;
-// xpath, json and ber stay inert (selectsNone) until their milestone gives
-// them a selector and executor here.
+// conformance/doc.go order. datatypes, schema, instance and json claim cases
+// today, json the curated corpus alone (jsoncases.go); xpath and ber stay
+// inert (selectsNone) until their milestone gives them a selector and
+// executor here.
 //
 // Lane order carries no routing meaning: every lane is offered the full case
 // list, so inserting a narrower lane ADDS a second scoring of its cases rather
@@ -275,7 +282,7 @@ func defaultLanes() []lane {
 		{name: "schema", selects: selectsKind(kindSchema), exec: namesNoRefusal(newSchemaExec()), charge: newSchemaCharge()},
 		{name: "instance", selects: selectsKind(kindInstance), exec: newInstanceExec()},
 		{name: "xpath", selects: selectsNone, exec: namesNoRefusal(stubFail)},
-		{name: "json", selects: selectsNone, exec: namesNoRefusal(stubFail)},
+		{name: "json", selects: selectsKind(kindJSON), exec: newJSONExec()},
 		{name: "ber", selects: selectsNone, exec: namesNoRefusal(stubFail)},
 	}
 }
@@ -864,7 +871,7 @@ func caseID(setName, groupName string, kind caseKind, testName string) string {
 // than refusing it; a change to which declarations a kind names belongs in
 // both.
 func caseDocs(kind caseKind, t validityTest, setDir string) (doc string, extra []string, err error) {
-	if kind == kindInstance {
+	if kind != kindSchema {
 		return resolveDoc(setDir, t.InstanceDoc.Href), nil, nil
 	}
 	doc, extra, ok := resolveDocs(t.SchemaDocs, setDir)
@@ -891,7 +898,7 @@ func caseDocs(kind caseKind, t validityTest, setDir string) (doc string, extra [
 // It yields nothing for a schemaTest either: that case's own doc and extraDocs
 // are its schema documents already (STYLE D3).
 func groupSchemaDocs(kind caseKind, g testGroup, setDir string) (doc string, extra []string) {
-	if kind != kindInstance || len(g.SchemaTests) != 1 {
+	if kind == kindSchema || len(g.SchemaTests) != 1 {
 		return "", nil
 	}
 	doc, extra, ok := resolveDocs(g.SchemaTests[0].SchemaDocs, setDir)
