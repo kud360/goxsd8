@@ -891,9 +891,9 @@ type ctaRangeItem struct{ st *xsd.SimpleType }
 // ctaBoundChild is the range variable `$v` of a quantifier over a typed child
 // step (ctaQuantifiedChildren) inside its body: one child of E, the evaluation's
 // ctaEnv.rangeChild, named name, whose typed value is of type st — the binding
-// step's ctaTypedChild.name and .st, copied at the one site building this node
-// (ctaAssertionFacade.childScope) — or the empty sequence for a ·nilled· one
-// (xpath-datamodel §6.2.4). Only ctaChildRangeFacade.variable compiles it.
+// step's ctaTypedChild.name and .st — or the empty sequence for a ·nilled· one
+// (xpath-datamodel §6.2.4). ctaAssertionFacade.childScope builds it, and
+// ctaChildRangeFacade.variable is the one site returning it.
 //
 // It is a ctaStep and no ctaRangeItem: `$v` is a NODE, so its ·effective
 // boolean value· is true whatever its value, a ·nilled· child's included

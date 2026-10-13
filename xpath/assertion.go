@@ -2776,9 +2776,9 @@ func (f ctaChildRangeFacade) variable(name xsd.QName, types ctaTypes) (ctaValue,
 // name, to the ctaBoundSibling over the step M as the assertion façade's child
 // compiles it, so its typed value is of the type M's ·locally declared type·
 // gives it. Every other variable declines, and so does an M that child does
-// not compile to a ctaTypedChild — a type child declines, and mixed content, whose
-// untyped values no bound node reads — under ctaParser.quantifiedExpr's
-// GAP(xpath).
+// not compile to a ctaTypedChild — one whose type child declines, or one of
+// mixed content, whose untyped value no bound node reads — under
+// ctaParser.quantifiedExpr's GAP(xpath).
 func (f ctaChildRangeFacade) boundSibling(variable xsd.QName, next ctaNameTest, types ctaTypes) (ctaValue, bool) {
 	if variable != f.name {
 		return nil, false
