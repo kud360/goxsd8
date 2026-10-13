@@ -93,12 +93,31 @@ func New(schema *xsd.Schema, backend value.Backend, opts ...Option) (*Validator,
 	return &Validator{schema: schema, backend: backend, log: cfg.log.WithGroup("validate")}, nil
 }
 
-// Schema returns the read-only view of the compiled schema an adapter needs
-// to resolve a root element declaration by expanded name, and nothing else
-// (STYLE T3). The walk reads the *xsd.Schema itself and not this narrowing, so
-// widening the accessor is the job of a CALLER that needs more, never of a rule
-// inside the package.
-func (v *Validator) Schema() xsd.ElementResolver { return v.schema }
+// SchemaView is the read-only view of the compiled schema a source adapter
+// reads to build the infoset it hands [Validator.Assess] (STYLE T3): a root
+// element declaration resolved by expanded name, the top-level declarations
+// to choose one from when the source names a root by local name alone, a
+// declaration's {type definition} resolved to its component, and the
+// declarations a complex type's content model contains, against which an
+// adapter whose source spells no namespace classifies a child by local name.
+// validate/jsonsrc reads all four; validate/xmlsrc reads none.
+//
+// Each method is the [xsd.Schema] method of the same name and answers on its
+// terms.
+type SchemaView interface {
+	xsd.ElementResolver
+	Elements() []xsd.ElementDeclaration
+	ResolvedType(ref xsd.TypeDefinitionOrRef) (xsd.TypeDefinition, bool)
+	ContainedElementDeclarations(within xsd.ComplexType) []xsd.ElementDeclaration
+}
+
+var _ SchemaView = (*xsd.Schema)(nil)
+
+// Schema returns the [SchemaView] of the compiled schema v assesses against.
+// The walk reads the *xsd.Schema itself and not this narrowing, so widening
+// the view is the job of a CALLER that needs more, never of a rule inside the
+// package.
+func (v *Validator) Schema() SchemaView { return v.schema }
 
 // Result is the outcome of one [Validator.Assess] call.
 type Result struct {
