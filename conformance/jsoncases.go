@@ -91,22 +91,35 @@ func newJSONExec() laneExecutor {
 //     epilog-directive): unrepresentable, jsonsrc building no DOCTYPE, prolog
 //     or epilog, and refusing an instance that will not open
 //     (refuseJSONUnresolved) or will not map (refuseJSONDeclined);
-//   - those an instance attribute reaches (nil-lexical, type-table-whitespace,
-//     the three xsi-type ones, simple-attribute, attribute-unadmitted,
-//     strict-attribute-unresolved, attribute-ldt): unrepresentable, jsonsrc
-//     presenting no attribute;
+//   - those an xsi: attribute reaches (nil-lexical and the three xsi-type
+//     ones): unrepresentable, jsonsrc presenting no xsi: attribute — it
+//     declines a null, a "$type" member and a key naming an attribute use in
+//     the xsi namespace;
+//   - type-table-whitespace: unrepresentable while jsonsrc declines a matched
+//     declaration carrying a {type table}. A wildcard's child that a top-level
+//     declaration governs in its place has none either: cos-element-
+//     consistent's wildcard condition gives the two equivalent {type table}s;
+//   - strict-attribute-unresolved and attribute-ldt: refused here on a "valid"
+//     reading, through attributeGovernanceDiverges, which says why no other
+//     element reaches them;
 //   - undeclared-root: unrepresentable, jsonsrc naming the root only by a
 //     top-level declaration;
 //   - recorded in Result.Unevaluated by the walk: type-table-undecided
 //     (key-cta-ta-select), type-unresolved (cvc-elt clause 1, charged
 //     instead for an ·absent· substitution group head), attribute-type
-//     (cvc-complex-type clause 4 for a ·defaulted attribute·, the one use whose
-//     absent attribute's type the walk reads), and content-matcher
-//     (cvc-complex-content, at each unmatched element [[child]] or, with none,
-//     at the element: validate's contentCheck.sequenceEnd);
+//     (cvc-complex-type clause 4 for a ·defaulted attribute·, the one use
+//     whose absent attribute's type the walk reads, and cvc-attribute clause
+//     3 for a present attribute, validate's walk.declaredAttribute, which no
+//     schema document reaches: §3.2.2.2 types a typeless declaration
+//     xs:anySimpleType, and src-resolve refuses a type= naming a complex
+//     type), and content-matcher (cvc-complex-content, at each unmatched element
+//     [[child]] or, with none, at the element: validate's
+//     contentCheck.sequenceEnd);
 //   - charged by the walk: error-type (cvc-type clause 3.1.3, no element being
 //     ·nilled· without an xsi:nil), element-child (cvc-type clause 3.1.2,
-//     cvc-complex-type clauses 1.1 and 1.2), content-incomplete and
+//     cvc-complex-type clauses 1.1 and 1.2), simple-attribute (cvc-type clause
+//     3.1.1), attribute-unadmitted (cvc-complex-type clause 2.2.1 or 2.2.2,
+//     validate's walk.unmatchedAttribute), content-incomplete and
 //     content-rejected (cvc-complex-content);
 //   - unreachable on a finalized Schema: attribute-use-unresolved,
 //     member-unresolved and any-type; and type-kind, content-type and

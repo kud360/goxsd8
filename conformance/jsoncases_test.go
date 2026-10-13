@@ -12,6 +12,8 @@ import (
 	"github.com/kud360/goxsd8/builtin/strict"
 	"github.com/kud360/goxsd8/validate"
 	"github.com/kud360/goxsd8/validate/jsonsrc"
+	"github.com/kud360/goxsd8/value"
+	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
 )
 
@@ -272,4 +274,119 @@ func TestJSONExecutorRefusesDivergentAttributeGovernance(t *testing.T) {
 			}
 		})
 	}
+}
+
+// walkOwnedSchema reaches the attribute refusals of assessedSubtreeRoot that
+// the walk, not execJSONCase, answers for. r and s take a lax wildcard and
+// then a local child of type base, so the first of two such children is
+// governed by the top-level declaration of its name: a, of type narrow, which
+// prohibits base's n and has no {attribute wildcard}; b, of type xs:string.
+const walkOwnedSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="urn:t" xmlns:t="urn:t" elementFormDefault="qualified">
+  <xs:complexType name="base">
+    <xs:attribute name="n" type="xs:string"/>
+  </xs:complexType>
+  <xs:complexType name="narrow">
+    <xs:complexContent>
+      <xs:restriction base="t:base">
+        <xs:attribute name="n" use="prohibited"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="r">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:any processContents="lax" namespace="##targetNamespace"/>
+        <xs:element name="a" type="t:base"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="a" type="t:narrow"/>
+  <xs:element name="s">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:any processContents="lax" namespace="##targetNamespace"/>
+        <xs:element name="b" type="t:base"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="b" type="xs:string"/>
+</xs:schema>`
+
+// TestJSONExecutorReadsWalkOwnedAttributeRefusals pins the attribute refusals
+// of assessedSubtreeRoot an attribute jsonsrc presents reaches and the walk
+// charges: each JSON document's XML twin is refused as one, and execJSONCase
+// reads the JSON as "not valid", the walk charging the rules the row names.
+func TestJSONExecutorReadsWalkOwnedAttributeRefusals(t *testing.T) {
+	dir := t.TempDir()
+	schemaDoc := filepath.Join(dir, "walkowned.xsd")
+	if err := os.WriteFile(schemaDoc, []byte(walkOwnedSchema), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	backend := strict.New()
+	schema, report, _, perr := assembleCase(backend, schemaDoc, nil)
+	if perr != nil {
+		t.Fatalf("assembling walkOwnedSchema: %v", perr)
+	}
+	for _, tc := range []struct {
+		name, json, xml string
+		gate            refusal
+		charges         []xsderr.Rule
+	}{
+		{"attribute-unadmitted", `{"r":{"a":{"n":"x"},"a":{}}}`,
+			`<r xmlns="urn:t"><a n="x"/><a/></r>`, refuseAttributeUnadmitted, []xsderr.Rule{"cvc-complex-type"}},
+		{"simple-attribute", `{"s":{"b":{"n":"x"},"b":{}}}`,
+			`<s xmlns="urn:t"><b n="x"/><b/></s>`, refuseSimpleAttribute, []xsderr.Rule{"cvc-type", "cvc-complex-type"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			doc, twin := filepath.Join(dir, tc.name+".json"), filepath.Join(dir, tc.name+".xml")
+			if err := os.WriteFile(doc, []byte(tc.json), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(twin, []byte(tc.xml), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if why := assessedSubtreeRoot(backend, schema, report, twin); why != tc.gate {
+				t.Fatalf("assessedSubtreeRoot(%s) = %q, want %q: the twin does not have the shape the test claims", tc.xml, why, tc.gate)
+			}
+			c := caseSpec{id: tc.name, kind: kindJSON, doc: doc, schemaDoc: schemaDoc, expect: expectValid()}
+			if got, _ := newJSONExec()(c); got.IsPass() {
+				t.Fatalf("execJSONCase = pass on a \"valid\" expectation")
+			}
+			c.expect = expectValidity(false)
+			if got, why := newJSONExec()(c); !got.IsPass() {
+				t.Fatalf("execJSONCase = %v (refusal %q) on an \"invalid\" expectation, want pass", got, why)
+			}
+			charged := chargedRules(t, schema, backend, doc)
+			for _, r := range tc.charges {
+				if !slices.Contains(charged, r) {
+					t.Errorf("charged %v, want %s among them", charged, r)
+				}
+			}
+		})
+	}
+}
+
+// chargedRules is the rule IDs jsonsrc.Validate's assessment of doc against
+// schema charges.
+func chargedRules(t *testing.T, schema *xsd.Schema, backend value.Backend, doc string) []xsderr.Rule {
+	t.Helper()
+	v, err := validate.New(schema, backend)
+	if err != nil {
+		t.Fatalf("validate.New: %v", err)
+	}
+	f, err := os.Open(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = f.Close() }() // read-only handle: close error cannot affect the test
+	res, err := jsonsrc.Validate(v, f, jsonsrc.WithURI(doc))
+	if err != nil {
+		t.Fatalf("jsonsrc.Validate: %v", err)
+	}
+	var out []xsderr.Rule
+	for _, e := range res.Violations() {
+		out = append(out, e.Rule)
+	}
+	return out
 }
