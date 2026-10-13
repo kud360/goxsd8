@@ -427,12 +427,14 @@ func TestJSONExecutorDeclinesNilledErrorType(t *testing.T) {
 
 // TestNillableErrorType pins where nillableErrorType finds a {nillable}
 // declaration of ·xs:error·: at the top level, below a top-level
-// declaration's anonymous type, in a named type, in a named model group, and
-// below the anonymous type of a group's declaration; and that it finds none
-// where xs:error or {nillable} is missing. The two recursive rows end: a named
-// type reached again by reference is not an ownership edge, and a group's
-// declaration whose type holds the group again is refused rather than
-// followed.
+// declaration's anonymous type, in a named type, in a named model group and
+// its inner model group, below the anonymous type of a group's declaration,
+// and below a redefined type's declaration (its inline {base type
+// definition}); and that it finds none where xs:error or {nillable} is
+// missing. The two recursive rows end without a visited set: a named type
+// reached again by reference, and a group reached again by <group ref>, are no
+// ownership edge. Each row writes base.xsd beside its schema document;
+// only the redefine row reads it.
 func TestNillableErrorType(t *testing.T) {
 	const (
 		local     = `<xs:element name="k" type="xs:error" nillable="true" minOccurs="0"/>`
@@ -457,6 +459,7 @@ func TestNillableErrorType(t *testing.T) {
 		{"two anonymous types down", root(inner("a", inner("b", local))), true},
 		{"in a named type", `<xs:complexType name="T"><xs:sequence>` + inner("a", local) + `</xs:sequence></xs:complexType>`, true},
 		{"in a named group", `<xs:group name="G"><xs:sequence>` + local + `</xs:sequence></xs:group>` + root(`<xs:group ref="G"/>`), true},
+		{"in a named group's inner choice", `<xs:group name="G"><xs:sequence><xs:choice>` + local + `</xs:choice></xs:sequence></xs:group>`, true},
 		{"below a group's declaration", `<xs:group name="G"><xs:sequence>` + inner("a", local) + `</xs:sequence></xs:group>` + root(`<xs:group ref="G"/>`), true},
 		{
 			"below a named base's declaration, under an anonymous extension",
@@ -471,13 +474,22 @@ func TestNillableErrorType(t *testing.T) {
 			false,
 		},
 		{
-			"a group's declaration whose type holds the group again",
+			"a group's declaration whose type holds the group again, without xs:error",
 			`<xs:group name="G"><xs:sequence>` + inner("a", `<xs:group ref="G" minOccurs="0"/>`) + `</xs:sequence></xs:group>` +
 				root(`<xs:group ref="G"/>`),
+			false,
+		},
+		{
+			"below the redefined type's declaration, under its redefining extension",
+			`<xs:redefine schemaLocation="base.xsd"><xs:complexType name="T"><xs:complexContent>` +
+				`<xs:extension base="T"/></xs:complexContent></xs:complexType></xs:redefine>`,
 			true,
 		},
 	} {
 		c := jsonFixture(t, tc.schemaBody, `{}`, true)
+		writeFixture(t, filepath.Join(filepath.Dir(c.schemaDoc), "base.xsd"),
+			`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:complexType name="T"><xs:sequence>`+
+				inner("a", local)+`</xs:sequence></xs:complexType></xs:schema>`)
 		schema, _, decidable, err := assembleCase(strict.New(), c.schemaDoc, nil)
 		if err != nil || !decidable {
 			t.Fatalf("%s: assembling the schema: decidable %v, err %v", tc.why, decidable, err)

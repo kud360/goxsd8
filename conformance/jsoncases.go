@@ -173,9 +173,9 @@ func execJSONCase(backend value.Backend, c caseSpec) (Status, refusal) {
 	return decideAgreement(true, c.expect.wantsValid()), ""
 }
 
-// nillableErrorType reports whether schema has an element declaration D that
-// jsonsrc can map an element under — a top-level one, or one the content model
-// of a Complex Type Definition reached below contains — whose {nillable} is
+// nillableErrorType reports whether schema has an element declaration D — a
+// top-level one, one a named model group owns, or one the content model of a
+// Complex Type Definition reached below contains — whose {nillable} is
 // true and whose {type definition} is ·xs:error·. It is the condition, over
 // the schema alone, without which refuseErrorType cannot arise in an infoset
 // jsonsrc builds: §3.16.7.3 says an item ·xs:error· governs "will be invalid",
@@ -188,27 +188,63 @@ func execJSONCase(backend value.Backend, c caseSpec) (Status, refusal) {
 // attributeGovernanceDiverges does.
 //
 // The types visited are every named one (Schema.Types) and every anonymous
-// one an ownership edge reaches from them or from a top-level declaration: the
-// inline {type definition} of a declaration whose {scope}.{parent} is the type
-// being visited, and an inline {base type definition} (src-expredef clause
-// 1.1). Those edges form a tree, so the walk needs no visited set (STYLE D4).
-// A declaration a named model group owns is no type's: reached from a named
-// or top-level type, its inline type is visited once per such type; reached
-// from an anonymous one, its inline type could hold the same group again, and
-// the walk answers true there rather than follow it, refusing in the
-// withholding direction.
+// one an ownership edge reaches from them, from a top-level declaration, or
+// from a declaration a named model group owns (Schema.ModelGroups): the inline
+// {type definition} of a declaration whose {scope}.{parent} is the type being
+// visited, and an inline {base type definition} (src-expredef clause 1.1).
+// Each anonymous type has one owner, so those edges form a tree rooted at the
+// top-level components and the walk needs no visited set (STYLE D4).
 func nillableErrorType(schema *xsd.Schema) bool {
 	for _, d := range schema.Elements() {
-		if nilledError(schema, d) {
-			return true
-		}
-		if t, ok := ownedComplexType(d.TypeDefinition()); ok && containsNillableErrorType(schema, t, true) {
+		if declaresNillableErrorType(schema, d) {
 			return true
 		}
 	}
 	for _, td := range schema.Types() {
-		if t, ok := td.(xsd.ComplexType); ok && containsNillableErrorType(schema, t, true) {
+		if t, ok := td.(xsd.ComplexType); ok && containsNillableErrorType(schema, t) {
 			return true
+		}
+	}
+	for _, g := range schema.ModelGroups() {
+		if groupOwnsNillableErrorType(schema, g.ModelGroup()) {
+			return true
+		}
+	}
+	return false
+}
+
+// declaresNillableErrorType reports whether d is nillable under ·xs:error·, or
+// the walk below d's inline Complex Type Definition answers true.
+func declaresNillableErrorType(schema *xsd.Schema, d xsd.ElementDeclaration) bool {
+	if nilledError(schema, d) {
+		return true
+	}
+	t, ok := ownedComplexType(d.TypeDefinition())
+	return ok && containsNillableErrorType(schema, t)
+}
+
+// groupOwnsNillableErrorType is nillableErrorType's walk over the declarations
+// a named model group's {model group} g owns: its inline element particles,
+// through its inline model groups. A reference by name is no ownership edge:
+// an <element ref> names a top-level declaration and a <group ref> a model
+// group definition, each visited from its own loop in nillableErrorType.
+func groupOwnsNillableErrorType(schema *xsd.Schema, g xsd.ModelGroup) bool {
+	for _, p := range g.Particles() {
+		resolved, ok := p.Term().(xsd.ResolvedTerm)
+		if !ok {
+			continue // an ElementDeclarationRef or a ModelGroupRef
+		}
+		switch term := resolved.Term.(type) {
+		case xsd.ElementDeclaration:
+			if declaresNillableErrorType(schema, term) {
+				return true
+			}
+		case xsd.ModelGroup:
+			if groupOwnsNillableErrorType(schema, term) {
+				return true
+			}
+		case xsd.Wildcard:
+			// declares nothing
 		}
 	}
 	return false
@@ -217,10 +253,8 @@ func nillableErrorType(schema *xsd.Schema) bool {
 // containsNillableErrorType is nillableErrorType's walk below the Complex Type
 // Definition t: true if a declaration t's content model contains is nillable
 // under ·xs:error·, or if the walk down an ownership edge from t answers true.
-// named says t is a named type, a top-level declaration's own, or the inline
-// base of one: only there is a model group's declaration followed.
-func containsNillableErrorType(schema *xsd.Schema, t xsd.ComplexType, named bool) bool {
-	if base, ok := ownedComplexType(t.Base()); ok && containsNillableErrorType(schema, base, named) {
+func containsNillableErrorType(schema *xsd.Schema, t xsd.ComplexType) bool {
+	if base, ok := ownedComplexType(t.Base()); ok && containsNillableErrorType(schema, base) {
 		return true
 	}
 	for _, d := range schema.ContainedElementDeclarations(t) {
@@ -236,16 +270,14 @@ func containsNillableErrorType(schema *xsd.Schema, t xsd.ComplexType, named bool
 		case nil:
 			// A top-level declaration: nillableErrorType visits its type.
 		case xsd.ModelGroupScopeParent:
-			if !named || containsNillableErrorType(schema, inner, false) {
-				return true
-			}
+			// A named model group's: visited from schema.ModelGroups().
 		case xsd.ComplexTypeScopeParent:
-			if p.Name == t.Name() && containsNillableErrorType(schema, inner, false) {
+			if p.Name == t.Name() && containsNillableErrorType(schema, inner) {
 				return true
 			}
 		case xsd.AnonymousComplexTypeScopeParent:
 			ctx, ok := t.Context()
-			if ok && ctx.ID() == p.Owner && containsNillableErrorType(schema, inner, false) {
+			if ok && ctx.ID() == p.Owner && containsNillableErrorType(schema, inner) {
 				return true
 			}
 		default:
