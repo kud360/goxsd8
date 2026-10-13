@@ -68,7 +68,10 @@
 // # Declines
 //
 // An input the implemented arms do not map is an error from [Validate]
-// naming the arm it is not — never a silent drop and never a guessed mapping:
+// naming the arm it is not — never a silent drop and never a guessed mapping.
+// The GAP(jsonsrc) markers at classify, useNamed and members.key track the
+// first, second, fourth and fifth entries, the attribute member after a child
+// member in the third, and the attribute-use half of the NAMESPACE TRAP:
 //
 //   - a key no contained declaration and no attribute use carries, which could
 //     be a wildcard's element or attribute; a key an element wildcard or an
