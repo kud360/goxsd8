@@ -574,7 +574,7 @@ applied before filing and again before grounding something already filed:
   It says to remove the marker where the landing closes the gap, and
   names a separate open tracker for any part left open; `Tracked by
   #<this issue>` is a dead end the moment the issue closes (STYLE P3,
-  #2308).
+  deliberate gaps are tracked; #2308).
 - **An `## Acceptance` bullet is ruled before anything is implemented
   against it** — `/develop` step 3, which owns the questions that ruling
   asks and the shape it is posted in. Writing the bullet correctly at

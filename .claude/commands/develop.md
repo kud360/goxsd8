@@ -32,13 +32,14 @@ its worktree only through WORKFLOW's hand-off (#2133); and never names a
 text belongs sends nothing (#2513).
 
 **Lost rounds.** A delegated round — mason's, the arbiter's, any agent's —
-is lost when it ends without its report: the agent returned without one
-— a placeholder is none — or the session that delegated it is gone.
+is lost when it ends without its report: the agent returned without one,
+a placeholder counting as none, or the session that delegated it is gone.
 Elapsed time is not a signature; a round still running is not lost
-however long it takes (#1426). An interim notice that the agent is
+however long it takes (#1426), and an interim notice that the agent is
 waiting on its own background work is neither its report nor a loss:
-wait for the report (#2250). Re-delegate a lost round from the thread as it stands, never
-re-grounding: a mason round from the `GROUNDING:` comment, naming the dead
+wait for the report (#2250). Re-delegate a lost round from the thread as
+it stands, never re-grounding: a mason round from the `GROUNDING:`
+comment, naming the dead
 worktree in the new prompt if it is still on disk with commits so the
 round resumes from them; a judge round from the tree it was judging.
 **Every re-delegation after a loss posts a `RESUME:` or `TAKEOVER:`
