@@ -237,6 +237,19 @@ type member struct {
 // no text; and a key neither carries, whatever an {attribute wildcard} or an
 // element wildcard of the type would admit, a wildcard match being the arm this
 // slice does not take.
+//
+// GAP(jsonsrc): a key no child element declaration and no attribute use
+// carries declines, the wildcard member arm not being implemented. That covers
+// a key an element wildcard of the type admits (cvc-accept), and a key its
+// {attribute wildcard} admits, whose attribute cvc-complex-type clause 2.2
+// would match to that wildcard.
+//
+// GAP(jsonsrc): a key both a child element declaration and an attribute use
+// carry declines. RULED permanent by #2613: no spec rule decides between them,
+// and the mapping has no warning channel to report a choice through.
+//
+// The xsi-namespace, two-expanded-name and simple-content declines among the
+// uses are useNamed's, under its GAP(jsonsrc) markers.
 func (w *walker) classify(o *object, key string, loc xsderr.Loc) (member, error) {
 	if isReserved(key) {
 		return member{}, w.reserved(key, loc)
@@ -287,6 +300,19 @@ func (w *walker) childNamed(o *object, key string, loc xsderr.Loc) (xsd.ElementD
 // useNamed is the member of o.uses whose {attribute declaration}'s local name
 // is key. It declines a key uses of two expanded names carry, a use in the xsi
 // namespace, and a use of a type with simple content.
+//
+// GAP(jsonsrc): a key attribute uses of two expanded names carry declines:
+// cvc-complex-type clause 2.1 matches an attribute to a use by expanded name,
+// and a JSON key carries no namespace to choose between them.
+//
+// GAP(jsonsrc): an attribute use in the xsi namespace declines. xsi:nil and
+// xsi:type are presented only by the null and "$type" arms, owned by #2614 and
+// #2615.
+//
+// GAP(jsonsrc): an attribute use of a type whose {content type} is simple
+// declines. RULED permanent by #2613: the XML twin, simple content beside
+// attributes, is valid under cvc-complex-type clauses 1.2 and 2, and the
+// mapping spells no text beside attribute members.
 func (w *walker) useNamed(o *object, key string, loc xsderr.Loc) (xsd.AttributeUse, bool, error) {
 	var first xsd.AttributeUse
 	found := false
@@ -422,7 +448,8 @@ func (w *walker) object(decl xsd.ElementDeclaration, loc xsderr.Loc) (*object, e
 // [[children]], and again after them, so they must be whole and unchanged
 // from the first read. Reading the leading run as the element is built makes
 // them so without holding any of the document (STYLE P4); an attribute member
-// after a child member therefore declines (members.next).
+// after a child member therefore declines, under members.key's GAP(jsonsrc)
+// marker.
 //
 // Each attribute is named by its use's {attribute declaration}'s expanded name
 // and located at its key. Its [[normalized value]] is its scalar's lexical

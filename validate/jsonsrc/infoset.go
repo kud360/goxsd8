@@ -238,6 +238,11 @@ func (m *members) next() (*element, error) {
 // the head the attribute run ended on, then from the stream. A key naming an
 // attribute use there DECLINES: it follows a child member, and the owner's
 // [[attributes]] were read whole before its first child (walker.attributes).
+//
+// GAP(jsonsrc): an attribute member after a child member declines, where its
+// XML twin, attribute order being insignificant, carries the attribute.
+// Presenting it would mean holding the owner's members until its close, and
+// the walk holds none of the document (STYLE P4).
 func (m *members) key() (peeked, error) {
 	if h := m.head; h != nil {
 		m.head = nil
