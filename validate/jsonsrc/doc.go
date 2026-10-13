@@ -46,7 +46,12 @@
 // which map in member order like any other members. The NAMESPACE TRAP: a key
 // is a local name, while cvc-accept matches expanded names; the namespace
 // comes from the matched declaration, so a key two expanded names in one
-// content model carry declines.
+// content model carry declines. A member is classified under its matched
+// declaration's type, which need not be the child's ·governing type
+// definition·: where the engine attributes the child to a wildcard instead,
+// that type is the engine's to determine — through the top-level declaration
+// the child's name resolves to, for one — and it assesses the infoset built
+// under the matched declaration.
 //
 // # Declines
 //

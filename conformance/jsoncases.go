@@ -79,14 +79,35 @@ func newJSONExec() laneExecutor {
 // Result with nothing in Result.Unevaluated is "valid".
 //
 // That second reading is wider than the instance lane's, which also holds the
-// document to assessedSubtreeRoot's shape, and is sound for the infoset
-// jsonsrc builds alone. Every refusal of that gate an empty, fully evaluated
-// Result can reach turns on what jsonsrc never presents — an attribute, an
-// xsi:type or xsi:nil, an undeclared root, a declaration with a {type table},
-// a DOCTYPE — or on an assembly touched by a version condition, which this
-// executor refuses as the gate does (closureVersioned). Every other condition
-// the gate names it names as the walk's, decided or recorded in
-// Result.Unevaluated.
+// document to assessedSubtreeRoot's shape. It is sound for the infoset jsonsrc
+// builds alone, because each refusal of that gate is enforced here, by the
+// walk, or unrepresentable in that infoset:
+//
+//   - versioned: refused here, through closureVersioned as the gate does;
+//   - the raw re-read's (gate-unresolved, decode, doctype, prolog-text,
+//     epilog-directive): unrepresentable, jsonsrc building no DOCTYPE, prolog
+//     or epilog, and refusing an instance that will not open
+//     (refuseJSONUnresolved) or will not map (refuseJSONDeclined);
+//   - those an instance attribute reaches (nil-lexical, type-table-whitespace,
+//     the three xsi-type ones, simple-attribute, attribute-unadmitted,
+//     strict-attribute-unresolved, attribute-ldt): unrepresentable, jsonsrc
+//     presenting no attribute;
+//   - undeclared-root: unrepresentable, jsonsrc naming the root only by a
+//     top-level declaration;
+//   - recorded in Result.Unevaluated by the walk: type-table-undecided
+//     (key-cta-ta-select), type-unresolved (cvc-elt clause 1, charged
+//     instead for an ·absent· substitution group head), attribute-type
+//     (cvc-complex-type clause 4 for a ·defaulted attribute·, the one use whose
+//     absent attribute's type the walk reads), and content-matcher
+//     (cvc-complex-content, at each unmatched element [[child]] or, with none,
+//     at the element: validate's contentCheck.sequenceEnd);
+//   - charged by the walk: error-type (cvc-type clause 3.1.3, no element being
+//     ·nilled· without an xsi:nil), element-child (cvc-type clause 3.1.2,
+//     cvc-complex-type clauses 1.1 and 1.2), content-incomplete and
+//     content-rejected (cvc-complex-content);
+//   - unreachable on a finalized Schema: attribute-use-unresolved,
+//     member-unresolved and any-type; and type-kind, content-type and
+//     attribution, each the default of a sealed sum.
 //
 // jsonsrc's error channel is a decline here, never a verdict: Validate returns
 // (nil, err) for malformed JSON and for every input its arms do not map, and
