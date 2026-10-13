@@ -557,8 +557,10 @@ XSD-required subset:
 
 One lexer, one parser, one AST — the evaluator walks the same tree the
 static analyzer sees. The one other grammar is a tree-less recognizer for
-the full xpath20.md Appendix A grammar, which only tells a `{test}` outside
-XPath 2.0 (`err:XPST0003`) from one the parser declines. **Fail-open**: an unsupported construct can never
+the full xpath20.md Appendix A grammar: it accepts exactly that language, a
+superset of the parser's, and is consulted only once the parser declines a
+`{test}`, to tell one outside XPath 2.0 (`err:XPST0003`) from legal XPath the
+subset merely declines. **Fail-open**: an unsupported construct can never
 cause a false rejection; every fallback site is a greppable
 `// GAP(xpath): …`. A CTA `{test}` outside the implemented subset is
 declined at COMPILE time, and its caller withholds the element's

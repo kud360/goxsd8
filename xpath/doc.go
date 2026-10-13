@@ -395,8 +395,10 @@
 // and evaluation (instance-time). There is never a second, lenient
 // parser (STYLE T4). Beside it stands one RECOGNIZER for the full
 // xpath20.md Appendix A grammar, which builds no tree and answers only
-// whether a text the parser declined is XPath 2.0 at all (err:XPST0003);
-// it is stricter than the parser, never more lenient, and shares its
+// whether a text the parser declined is XPath 2.0 at all (err:XPST0003).
+// It accepts exactly A.1's language, a superset of what the parser
+// admits, and is no T4 lenient parser: it is consulted only on a
+// decline, and its acceptance compiles nothing. It shares the parser's
 // lexical scanners.
 //
 // # The fail-open contract (PRINCIPLES 20)
