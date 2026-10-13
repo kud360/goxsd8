@@ -594,7 +594,7 @@ type ctaReportCount struct {
 // of E has been reported — have shown a child named each required name; open
 // reports whether the latest child of E reported is named N; and shown holds,
 // in required's written order, which of the required names that child's own
-// children reported so far carry, all false where open is false.
+// children reported so far carry.
 type ctaInstanceCount struct {
 	having ctaChildrenHaving
 	n      int
@@ -722,9 +722,6 @@ func (i *ctaInstanceCount) element(path, _ []xsd.QName) {
 		i.open = path[0] == i.having.name
 		clear(i.shown)
 	case 2:
-		if !i.open {
-			return
-		}
 		for k, r := range i.having.required {
 			if path[1] == r {
 				i.shown[k] = true
