@@ -73,8 +73,9 @@ func qnUses(t *testing.T) AttributeTypes {
 	return asUses(t, map[string]string{"name": "QName", "other": "QName", "s": "string", "u": "anySimpleType"})
 }
 
-// The instance's prefixes, none of them the expression's xsd: q is bound to
-// the XSD namespace and r to another one.
+// The instance's prefixes, none of them the expression's xsd: qnXSD binds q to
+// the XSD namespace, qnOther binds q to urn:other, and qnBoth binds q and r
+// both to the XSD namespace.
 var (
 	qnXSD   = map[string]string{"q": xsd.XMLSchemaNS}
 	qnOther = map[string]string{"q": "urn:other"}
