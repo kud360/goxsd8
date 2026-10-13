@@ -305,10 +305,12 @@ func (w *walker) childNamed(o *object, key string, loc xsderr.Loc) (xsd.ElementD
 // cvc-complex-type clause 2.1 matches an attribute to a use by expanded name,
 // and a JSON key carries no namespace to choose between them.
 //
-// GAP(jsonsrc): a key naming an attribute use in the xsi namespace declines.
-// For xsi:type it is the "$type" arm's to present, owned by #2615; for
-// xsi:schemaLocation and xsi:noNamespaceSchemaLocation no arm is planned and
-// no open issue owns one.
+// GAP(jsonsrc): a key naming an xsi:type attribute use declines: it is the
+// "$type" arm's to present, owned by #2615.
+//
+// GAP(jsonsrc): a key naming an xsi:schemaLocation or
+// xsi:noNamespaceSchemaLocation attribute use declines, owned by #2627, which
+// rules it a permanent decline or gives it a key spelling.
 //
 // GAP(jsonsrc): a key naming an xsi:nil attribute use declines. RULED
 // permanent by #2614: a null value is xsi:nil's one spelling (walker.nilled),

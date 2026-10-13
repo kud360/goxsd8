@@ -94,7 +94,9 @@
 //   - an attribute member after a child member, a repeated attribute member,
 //     and an attribute member whose value is null, an object or an array;
 //   - an attribute use in the xsi namespace: xsi:nil is spelled by a null
-//     value alone, and xsi:type is the planned "$type" arm's below;
+//     value alone, xsi:type is the planned "$type" arm's below, and
+//     xsi:schemaLocation and xsi:noNamespaceSchemaLocation await #2627's
+//     ruling on a key spelling;
 //   - an attribute member of an element whose type has simple content: the
 //     mapping spells no text beside attribute members, so an object value
 //     carries no simple content and a scalar value no attribute;
