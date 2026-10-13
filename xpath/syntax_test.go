@@ -1,16 +1,18 @@
 package xpath
 
 import (
+	"bytes"
 	"encoding/xml"
 	"errors"
-	"fmt"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-	"unicode/utf16"
+
+	"github.com/kud360/goxsd8/internal/xmldecl"
+	"github.com/kud360/goxsd8/internal/xmlenc"
 )
 
 // TestXPathSyntaxAccepts pins texts A.1's grammar derives, the hard lexical
@@ -268,65 +270,28 @@ func suiteAttr(el xml.StartElement, local string) string {
 	return ""
 }
 
-// suiteDecode returns raw as UTF-8 text, transcoding a document that opens
-// with a UTF-16 byte-order mark (XML 1.0 App. F.1) and passing any other
-// through for encoding/xml to read under its declaration.
-func suiteDecode(raw []byte) string {
-	littleEndian := len(raw) >= 2 && raw[0] == 0xFF && raw[1] == 0xFE
-	bigEndian := len(raw) >= 2 && raw[0] == 0xFE && raw[1] == 0xFF
-	if !littleEndian && !bigEndian {
-		return string(raw)
-	}
-	units := make([]uint16, 0, len(raw)/2)
-	for i := 2; i+1 < len(raw); i += 2 {
-		if littleEndian {
-			units = append(units, uint16(raw[i])|uint16(raw[i+1])<<8)
-			continue
-		}
-		units = append(units, uint16(raw[i])<<8|uint16(raw[i+1]))
-	}
-	return string(utf16.Decode(units))
-}
-
-// suiteCharsetReader serves the encoding declarations the suite's schema
-// documents carry: UTF-16, already transcoded by suiteDecode, and ISO-8859-1,
-// whose bytes are the code points they name.
-func suiteCharsetReader(label string, in io.Reader) (io.Reader, error) {
-	switch strings.ToLower(label) {
-	case "utf-16":
-		return in, nil
-	case "iso-8859-1", "latin1":
-		raw, err := io.ReadAll(in)
-		if err != nil {
-			return nil, err
-		}
-		runes := make([]rune, len(raw))
-		for i, b := range raw {
-			runes[i] = rune(b)
-		}
-		return strings.NewReader(string(runes)), nil
-	}
-	return nil, fmt.Errorf("no reader for encoding %q", label)
-}
-
 // alternativeTests returns the test attribute of every XSD alternative
-// element in the schema document at path, in document order.
+// element in the schema document at path, in document order. It reads the
+// document as parser/xmltree does: internal/xmlenc drops a byte-order mark and
+// transcodes UTF-16, and internal/xmldecl reads a 1.x declaration as 1.0. A
+// document declaring any other encoding, ISO-8859-1 among them, is xmlenc's
+// limit (#361) and fails this read loudly, never silently, but only once it
+// carries "alternative", which no suite-valid document at suite 7bc3365 does.
 func alternativeTests(path string) ([]string, error) {
-	raw, err := os.ReadFile(path)
+	file, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	text := suiteDecode(raw)
-	if !strings.Contains(text, "alternative") {
+	body, mark := xmlenc.Decode(bytes.NewReader(file))
+	raw, err := io.ReadAll(body)
+	if err != nil {
+		return nil, err
+	}
+	if !strings.Contains(string(raw), "alternative") {
 		return nil, nil // no element can be named alternative
 	}
-	// encoding/xml reads no XML 1.1 declaration; the label changes nothing
-	// an attribute value of an alternative element is read under.
-	if decl, rest, ok := strings.Cut(text, "?>"); ok && strings.HasPrefix(decl, "<?xml") {
-		text = strings.Replace(decl, "1.1", "1.0", 1) + "?>" + rest
-	}
-	dec := xml.NewDecoder(strings.NewReader(text))
-	dec.CharsetReader = suiteCharsetReader
+	dec := xml.NewDecoder(xmldecl.As10(bytes.NewReader(raw)))
+	dec.CharsetReader = mark.CharsetReader
 	var out []string
 	for {
 		tok, err := dec.Token()
