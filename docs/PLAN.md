@@ -21,9 +21,9 @@ one — appending is what this replaces.
 
 **North star: stand up the `json` lane (#2607, M8).** Both measured lanes stand
 at what rulings leave, so this stamp follows the twelfth `/retro` (`4cfc520`) and
-names a north star that creates measurement. M8 is chosen over M7 because the
-tree holds a case source for it, the curated corpus `conformance/doc.go` names,
-while no XPath suite is vendored and `www.w3.org` is egress-denied. **Lean:
+names a north star that creates measurement. M8 is chosen over M7 because its
+cases can be curated in-tree (`conformance/doc.go` plans `json.txt` as curated;
+no corpus exists yet), while no XPath suite is vendored and `www.w3.org` is egress-denied. **Lean:
 product, toward measurement.** M7 still gets its first measured slice, #2608: an
 XPath 2.0 syntax recognizer whose `schema` bound is +3, the
 `TypeAlternativeTests` cases the last stamp left unowned. Lane-less slices are
@@ -191,7 +191,7 @@ other waits or is absorbed.
 
 | # | issue | why here |
 |---|---|---|
-| 1 | #2607 | **The north star.** `jsonsrc.Validate` over the planned mapping's core arms, a curated corpus in the suite's own catalog format, and a real `json` row in `defaultLanes`. It takes the `json` lane from 0 cases to the corpus size. The grounding's first question is the steward's: how a second catalog root stays off the `instance` lane. |
+| 1 | #2607 | **The north star.** `jsonsrc.Validate` over the planned mapping's core arms, a curated corpus (its catalog format is #2607's proposal), and a real `json` row in `defaultLanes`. It takes the `json` lane from 0 cases to the corpus size. The grounding's first question is the steward's: how a second catalog root stays off the `instance` lane. |
 | 2 | #2608 | **M7's first measured slice, `schema` bound +3.** A full XPath 2.0 syntax recognizer lets `CTATestStaticError` charge err:XPST0003. `s3_12si04`, `si05` and `si06` are decided `(accepted)` today. |
 | 3 | #894 | **`schema` bound +1, a hypothesis.** `s3_12ii06` casts to a schema-defined complex type, which is err:XPST0051 under `xpath-valid` 2.2.5. Its body's "no suite case" premise is corrected this pass. |
 
