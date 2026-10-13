@@ -138,8 +138,9 @@ func (c *scalarChildren) Err() error { return nil }
 func (c *scalarChildren) drain() { c.done = true }
 
 // members is a cursor over an object-valued element's [[children]]: one
-// element per scalar- or object-valued member, and one per item of an
-// array-valued member, in member order.
+// element per scalar- or object-valued child member, and one per item of an
+// array-valued one, in member order, past the leading attribute members
+// walker.attributes read.
 type members struct {
 	w *walker
 	// object is what the owner's members are classified against, read once

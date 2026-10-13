@@ -48,14 +48,17 @@ func WithURI(uri string) Option {
 // or followed by further content; and every input the mapping DECLINES —
 // a top level that is not an object with exactly one member naming a
 // top-level element declaration, and, anywhere in the document, a member the
-// implemented arms do not map (a key no child element declaration carries, a
-// key two expanded names carry, a "$"-prefixed reserved member, a null, a
-// nested array, a declaration with a {type table}). A decline names the arm it
-// is not, and is never a silent drop or a guessed mapping: a member that would
-// map to an attribute, to xsi:nil or to xsi:type is not part of the document
-// the assessment saw, so its result is discarded rather than returned. The
-// whole document is read either way, so a fault after the point the
-// assessment stopped at is still reported.
+// implemented arms do not map (a key no child element declaration and no
+// attribute use carries, a key two expanded names carry, a key both a child
+// declaration and an attribute use carry, an attribute member after a child
+// member or repeated, a "$"-prefixed reserved member, a null, a nested array,
+// a declaration with a {type table}; the package doc lists them all). A
+// decline names the arm it is not, and is never a silent drop or a guessed
+// mapping: a member that would map to a wildcard's element or attribute, to
+// xsi:nil or to xsi:type is not part of the document the assessment saw, so
+// its result is discarded rather than returned. The whole document is read
+// either way, so a fault after the point the assessment stopped at is still
+// reported.
 //
 // Every error is a plain one, prefixed "jsonsrc: " and, past the nil checks,
 // the location of the construct it names. None is an [xsderr.Error]: none is a
@@ -315,8 +318,9 @@ func (w *walker) useNamed(o *object, key string, loc xsderr.Loc) (xsd.AttributeU
 }
 
 // typeTable declines a declaration carrying a {type table}: which type governs
-// its element turns on the element's attributes (§3.12.4), and this mapping
-// presents none, so the content it classifies by would be a guess.
+// its element turns on the element's attributes (§3.12.4), xsi: ones included,
+// and this mapping does not present those, so the content it classifies by
+// would be a guess.
 func (w *walker) typeTable(d xsd.ElementDeclaration, loc xsderr.Loc) error {
 	if _, ok := d.TypeTable(); ok {
 		return w.declinef(loc, "element %s carries a {type table}; conditional type assignment is not implemented", d.Name())
