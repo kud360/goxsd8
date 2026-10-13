@@ -1889,9 +1889,10 @@ type ctaChildPath struct {
 }
 
 // ctaChildPathOf is the ctaChildPath over parents and last, false where
-// parents is empty. parents is held, not copied: the parser builds it fresh.
+// parents is empty or last is nil. parents is held, not copied: the parser
+// builds it fresh.
 func ctaChildPathOf(parents []xsd.QName, last ctaElementTest) (ctaChildPath, bool) {
-	if len(parents) == 0 {
+	if len(parents) == 0 || last == nil {
 		return ctaChildPath{}, false
 	}
 	return ctaChildPath{parents: parents, last: last}, true
