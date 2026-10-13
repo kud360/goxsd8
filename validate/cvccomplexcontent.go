@@ -499,7 +499,8 @@ func (c *contentCheck) match(w *walk, child Element) (xsd.Attribution, bool) {
 //
 //   - simple: clause 1.2's ·initial value· half, over the same gathered runs.
 //   - element-only and mixed: clause 1.4, for a sequence that ran out with a
-//     particle its {min occurs} left open.
+//     particle its {min occurs} left open, or, under a nil matcher, its
+//     decline for a sequence with no element information item.
 //
 // An empty {content type} settles nothing here. Clause 1.1 quantifies over the
 // [[children]] PRESENT, every one of which was already decided as it arrived.
