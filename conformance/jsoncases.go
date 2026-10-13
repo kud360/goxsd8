@@ -64,6 +64,8 @@ const (
 	refuseJSONDeclined   refusal = "json-declined"   // execJSONCase: jsonsrc.Validate returned an error
 	// execJSONCase: attributeGovernanceDiverges, on a "valid" reading
 	refuseJSONAttributeGovernance refusal = "json-attribute-governance"
+	// execJSONCase: nillableErrorType, on a "valid" reading
+	refuseJSONNilledErrorType refusal = "json-nilled-error-type"
 )
 
 // newJSONExec builds the json lane's executor over the strict backend, built
@@ -91,10 +93,17 @@ func newJSONExec() laneExecutor {
 //     epilog-directive): unrepresentable, jsonsrc building no DOCTYPE, prolog
 //     or epilog, and refusing an instance that will not open
 //     (refuseJSONUnresolved) or will not map (refuseJSONDeclined);
-//   - those an xsi: attribute reaches (nil-lexical and the three xsi-type
-//     ones): unrepresentable, jsonsrc presenting no xsi: attribute — it
-//     declines a null, a "$type" member and a key naming an attribute use in
-//     the xsi namespace;
+//   - nil-lexical: unrepresentable, the one xsi: attribute jsonsrc presents
+//     being a null's xsi:nil with the lexical form true, which has an ·actual
+//     value· (jsonsrc's walker.nilled), and a key naming an attribute use in
+//     the xsi namespace declining (walker.useNamed);
+//   - the three xsi-type ones: unrepresentable, jsonsrc presenting no
+//     xsi:type — it declines a "$type" member and a key naming an attribute
+//     use in the xsi namespace;
+//   - error-type: refused here on a "valid" reading, through
+//     nillableErrorType, which says why no other route reaches it; the walk
+//     charges cvc-type clause 3.1.3 for an element ·xs:error· governs that is
+//     not ·nilled·;
 //   - type-table-whitespace: unrepresentable while jsonsrc declines a matched
 //     declaration carrying a {type table}. A wildcard's child that a top-level
 //     declaration governs in its place has none either: cos-element-
@@ -115,8 +124,7 @@ func newJSONExec() laneExecutor {
 //     type), and content-matcher (cvc-complex-content, at each unmatched element
 //     [[child]] or, with none, at the element: validate's
 //     contentCheck.sequenceEnd);
-//   - charged by the walk: error-type (cvc-type clause 3.1.3, no element being
-//     ·nilled· without an xsi:nil), element-child (cvc-type clause 3.1.2,
+//   - charged by the walk: element-child (cvc-type clause 3.1.2,
 //     cvc-complex-type clauses 1.1 and 1.2), simple-attribute (cvc-type clause
 //     3.1.1), attribute-unadmitted (cvc-complex-type clause 2.2.1 or 2.2.2,
 //     validate's walk.unmatchedAttribute), content-incomplete and
@@ -159,7 +167,116 @@ func execJSONCase(backend value.Backend, c caseSpec) (Status, refusal) {
 	if attributeGovernanceDiverges(schema) {
 		return Fail(), refuseJSONAttributeGovernance
 	}
+	if nillableErrorType(schema) {
+		return Fail(), refuseJSONNilledErrorType
+	}
 	return decideAgreement(true, c.expect.wantsValid()), ""
+}
+
+// nillableErrorType reports whether schema has an element declaration D that
+// jsonsrc can map an element under — a top-level one, or one the content model
+// of a Complex Type Definition reached below contains — whose {nillable} is
+// true and whose {type definition} is ·xs:error·. It is the condition, over
+// the schema alone, without which refuseErrorType cannot arise in an infoset
+// jsonsrc builds: §3.16.7.3 says an item ·xs:error· governs "will be invalid",
+// and the walk charges that as cvc-type clause 3.1.3 only for an element that
+// is not ·nilled·, while a JSON null presents xsi:nil="true" (key-nilled
+// needs D.{nillable} too). The other routes to ·xs:error· stay closed: jsonsrc
+// declines a declaration carrying a {type table} and presents no xsi:type, and
+// a wildcard's child governed by a top-level declaration is governed by one of
+// those visited here. It refuses whether or not the document reaches D, as
+// attributeGovernanceDiverges does.
+//
+// The types visited are every named one (Schema.Types) and every anonymous
+// one an ownership edge reaches from them or from a top-level declaration: the
+// inline {type definition} of a declaration whose {scope}.{parent} is the type
+// being visited, and an inline {base type definition} (src-expredef clause
+// 1.1). Those edges form a tree, so the walk needs no visited set (STYLE D4).
+// A declaration a named model group owns is no type's: reached from a named
+// or top-level type, its inline type is visited once per such type; reached
+// from an anonymous one, its inline type could hold the same group again, and
+// the walk answers true there rather than follow it, refusing in the
+// withholding direction.
+func nillableErrorType(schema *xsd.Schema) bool {
+	for _, d := range schema.Elements() {
+		if nilledError(schema, d) {
+			return true
+		}
+		if t, ok := ownedComplexType(d.TypeDefinition()); ok && containsNillableErrorType(schema, t, true) {
+			return true
+		}
+	}
+	for _, td := range schema.Types() {
+		if t, ok := td.(xsd.ComplexType); ok && containsNillableErrorType(schema, t, true) {
+			return true
+		}
+	}
+	return false
+}
+
+// containsNillableErrorType is nillableErrorType's walk below the Complex Type
+// Definition t: true if a declaration t's content model contains is nillable
+// under ·xs:error·, or if the walk down an ownership edge from t answers true.
+// named says t is a named type, a top-level declaration's own, or the inline
+// base of one: only there is a model group's declaration followed.
+func containsNillableErrorType(schema *xsd.Schema, t xsd.ComplexType, named bool) bool {
+	if base, ok := ownedComplexType(t.Base()); ok && containsNillableErrorType(schema, base, named) {
+		return true
+	}
+	for _, d := range schema.ContainedElementDeclarations(t) {
+		if nilledError(schema, d) {
+			return true
+		}
+		inner, ok := ownedComplexType(d.TypeDefinition())
+		if !ok {
+			continue
+		}
+		parent, _ := d.Scope().Parent()
+		switch p := parent.(type) {
+		case nil:
+			// A top-level declaration: nillableErrorType visits its type.
+		case xsd.ModelGroupScopeParent:
+			if !named || containsNillableErrorType(schema, inner, false) {
+				return true
+			}
+		case xsd.ComplexTypeScopeParent:
+			if p.Name == t.Name() && containsNillableErrorType(schema, inner, false) {
+				return true
+			}
+		case xsd.AnonymousComplexTypeScopeParent:
+			ctx, ok := t.Context()
+			if ok && ctx.ID() == p.Owner && containsNillableErrorType(schema, inner, false) {
+				return true
+			}
+		default:
+			// An ElementScopeParent arm this walk does not know: refuse rather
+			// than leave its declarations unvisited.
+			return true
+		}
+	}
+	return false
+}
+
+// nilledError reports whether d's {nillable} is true and its {type
+// definition} is ·xs:error·.
+func nilledError(schema *xsd.Schema, d xsd.ElementDeclaration) bool {
+	if !d.Nillable() {
+		return false
+	}
+	td, ok := schema.ResolvedType(d.TypeDefinition())
+	return ok && td.Name() == errorTypeName
+}
+
+// ownedComplexType is the anonymous Complex Type Definition ref owns (its
+// InlineTypeDefinition arm), and false for a reference by name, an ·absent·
+// slot or a simple type.
+func ownedComplexType(ref xsd.TypeDefinitionOrRef) (xsd.ComplexType, bool) {
+	inline, ok := ref.(xsd.InlineTypeDefinition)
+	if !ok {
+		return xsd.ComplexType{}, false
+	}
+	t, ok := inline.Definition.(xsd.ComplexType)
+	return t, ok
 }
 
 // attributeGovernanceDiverges reports whether schema has a top-level element

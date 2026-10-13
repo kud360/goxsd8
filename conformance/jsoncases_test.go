@@ -390,3 +390,100 @@ func chargedRules(t *testing.T, schema *xsd.Schema, backend value.Backend, doc s
 	}
 	return out
 }
+
+// jsonFixture writes the schema document whose body is schemaBody and the
+// JSON instance doc into a fresh directory, and returns their case.
+func jsonFixture(t *testing.T, schemaBody, doc string, valid bool) caseSpec {
+	t.Helper()
+	dir := t.TempDir()
+	schemaDoc, instance := filepath.Join(dir, "s.xsd"), filepath.Join(dir, "i.json")
+	writeFixture(t, schemaDoc, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">`+schemaBody+`</xs:schema>`)
+	writeFixture(t, instance, doc)
+	return caseSpec{id: "fixture", kind: kindJSON, doc: instance, schemaDoc: schemaDoc, expect: expectValidity(valid)}
+}
+
+// knownError declares a {nillable} top-level known whose {type definition} is
+// ·xs:error·.
+const knownError = `<xs:element name="known" type="xs:error" nillable="true"/>`
+
+// TestJSONExecutorDeclinesNilledErrorType pins refuseJSONNilledErrorType, as
+// TestInstanceExecutorDeclinesNilledErrorType pins refuseErrorType for the
+// instance lane: ·xs:error· "has no valid instances" (§3.16.7.3, key-error),
+// and the walk charges cvc-type clause 3.1.3 for an element it governs that is
+// not ·nilled· — the control row, decided INVALID — but nothing for the
+// ·nilled· element {"known":null} maps to, which clause 3.1.3 does not reach.
+func TestJSONExecutorDeclinesNilledErrorType(t *testing.T) {
+	exec := newJSONExec()
+	if st, why := exec(jsonFixture(t, knownError, `{"known":""}`, false)); !st.IsPass() {
+		t.Errorf("an empty element ·xs:error· governs: the walk charges cvc-type clause 3.1.3; the executor must agree with an invalid case (refusal %q)", why)
+	}
+	for _, valid := range []bool{true, false} {
+		st, why := exec(jsonFixture(t, knownError, `{"known":null}`, valid))
+		if st.IsPass() || why != refuseJSONNilledErrorType {
+			t.Errorf("a ·nilled· element ·xs:error· governs, expectValid=%v: %v (refusal %q), want a fail refused as %q", valid, st, why, refuseJSONNilledErrorType)
+		}
+	}
+}
+
+// TestNillableErrorType pins where nillableErrorType finds a {nillable}
+// declaration of ·xs:error·: at the top level, below a top-level
+// declaration's anonymous type, in a named type, in a named model group, and
+// below the anonymous type of a group's declaration; and that it finds none
+// where xs:error or {nillable} is missing. The two recursive rows end: a named
+// type reached again by reference is not an ownership edge, and a group's
+// declaration whose type holds the group again is refused rather than
+// followed.
+func TestNillableErrorType(t *testing.T) {
+	const (
+		local     = `<xs:element name="k" type="xs:error" nillable="true" minOccurs="0"/>`
+		notNil    = `<xs:element name="k" type="xs:error" minOccurs="0"/>`
+		stringNil = `<xs:element name="k" type="xs:string" nillable="true" minOccurs="0"/>`
+	)
+	root := func(seq string) string {
+		return `<xs:element name="r"><xs:complexType><xs:sequence>` + seq + `</xs:sequence></xs:complexType></xs:element>`
+	}
+	inner := func(name, seq string) string {
+		return `<xs:element name="` + name + `" minOccurs="0"><xs:complexType><xs:sequence>` + seq + `</xs:sequence></xs:complexType></xs:element>`
+	}
+	for _, tc := range []struct {
+		why, schemaBody string
+		want            bool
+	}{
+		{"top level", knownError, true},
+		{"top level, not nillable", `<xs:element name="known" type="xs:error"/>`, false},
+		{"local, in a top-level declaration's type", root(local), true},
+		{"local, not nillable", root(notNil), false},
+		{"local, nillable but not xs:error", root(stringNil), false},
+		{"two anonymous types down", root(inner("a", inner("b", local))), true},
+		{"in a named type", `<xs:complexType name="T"><xs:sequence>` + inner("a", local) + `</xs:sequence></xs:complexType>`, true},
+		{"in a named group", `<xs:group name="G"><xs:sequence>` + local + `</xs:sequence></xs:group>` + root(`<xs:group ref="G"/>`), true},
+		{"below a group's declaration", `<xs:group name="G"><xs:sequence>` + inner("a", local) + `</xs:sequence></xs:group>` + root(`<xs:group ref="G"/>`), true},
+		{
+			"below a named base's declaration, under an anonymous extension",
+			`<xs:complexType name="B"><xs:sequence>` + inner("x", local) + `</xs:sequence></xs:complexType>` +
+				`<xs:element name="r"><xs:complexType><xs:complexContent><xs:extension base="B"/></xs:complexContent></xs:complexType></xs:element>`,
+			true,
+		},
+		{
+			"a named type holding itself by reference",
+			`<xs:complexType name="B"><xs:sequence>` + inner("x", `<xs:element name="y" type="B" minOccurs="0"/>`+stringNil) +
+				`</xs:sequence></xs:complexType><xs:element name="r" type="B"/>`,
+			false,
+		},
+		{
+			"a group's declaration whose type holds the group again",
+			`<xs:group name="G"><xs:sequence>` + inner("a", `<xs:group ref="G" minOccurs="0"/>`) + `</xs:sequence></xs:group>` +
+				root(`<xs:group ref="G"/>`),
+			true,
+		},
+	} {
+		c := jsonFixture(t, tc.schemaBody, `{}`, true)
+		schema, _, decidable, err := assembleCase(strict.New(), c.schemaDoc, nil)
+		if err != nil || !decidable {
+			t.Fatalf("%s: assembling the schema: decidable %v, err %v", tc.why, decidable, err)
+		}
+		if got := nillableErrorType(schema); got != tc.want {
+			t.Errorf("%s: nillableErrorType = %v, want %v", tc.why, got, tc.want)
+		}
+	}
+}
