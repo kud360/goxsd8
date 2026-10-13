@@ -128,16 +128,21 @@ type members struct {
 	owner xsd.QName
 	// contained is what the owner's type contains, read once per element.
 	contained []xsd.ElementDeclaration
-	// array is the declaration of the member whose array the stream stands
-	// inside, with key its key; inArray says whether it does.
-	array   xsd.ElementDeclaration
-	key     string
-	inArray bool
+	// run is the array-valued member the stream stands inside, and nil
+	// outside one.
+	run *arrayRun
 	// last is the element Next yielded last, finished before the stream
 	// moves on: the engine may not have descended into it.
 	last *element
 	// done latches the owner's closing brace.
 	done bool
+}
+
+// arrayRun is one array-valued member: the declaration its key matched, and
+// the key, which each of its items is an element under.
+type arrayRun struct {
+	decl xsd.ElementDeclaration
+	key  string
 }
 
 func (m *members) Next() (validate.Child, bool) {
@@ -168,16 +173,16 @@ func (m *members) Next() (validate.Child, bool) {
 // closing brace, which it reports as a nil element.
 func (m *members) next() (*element, error) {
 	for {
-		if m.inArray {
+		if m.run != nil {
 			tok, loc, err := m.w.token()
 			if err != nil {
 				return nil, unexpectedEOF(err, loc)
 			}
 			if tok == json.Delim(']') {
-				m.inArray = false
+				m.run = nil
 				continue
 			}
-			return m.w.element(m.array, loc, m.key, tok, loc)
+			return m.w.element(m.run.decl, loc, m.run.key, tok, loc)
 		}
 		tok, loc, err := m.w.token()
 		if err != nil {
@@ -197,7 +202,7 @@ func (m *members) next() (*element, error) {
 			return nil, unexpectedEOF(err, vloc)
 		}
 		if vtok == json.Delim('[') {
-			m.array, m.key, m.inArray = decl, key, true
+			m.run = &arrayRun{decl: decl, key: key}
 			continue
 		}
 		return m.w.element(decl, loc, key, vtok, vloc)

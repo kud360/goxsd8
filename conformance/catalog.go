@@ -243,14 +243,17 @@ func catalogEntry(setName string, kind caseKind, t validityTest, g testGroup, se
 // which entries name a path must still describe the entry that names none,
 // and such an entry matches no path, so nothing is admitted by it.
 func catalogDocs(kind caseKind, t validityTest, setDir, suiteDir string) ([]string, error) {
-	if kind != kindSchema {
+	switch kind {
+	case kindInstance, kindJSON:
 		return suiteRelative(suiteDir, []string{resolveDoc(setDir, t.InstanceDoc.Href)})
+	case kindSchema:
+		doc, extra, ok := resolveDocs(t.SchemaDocs, setDir)
+		if !ok {
+			return nil, nil
+		}
+		return suiteRelative(suiteDir, append([]string{doc}, extra...))
 	}
-	doc, extra, ok := resolveDocs(t.SchemaDocs, setDir)
-	if !ok {
-		return nil, nil
-	}
-	return suiteRelative(suiteDir, append([]string{doc}, extra...))
+	panic(fmt.Sprintf("conformance: caseKind %d names no document under test", kind))
 }
 
 // groupCatalogSchemaDocs is the schema documents an instance entry is assessed

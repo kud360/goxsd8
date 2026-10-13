@@ -100,7 +100,6 @@ func New(schema *xsd.Schema, backend value.Backend, opts ...Option) (*Validator,
 // declaration's {type definition} resolved to its component, and the
 // declarations a complex type's content model contains, against which an
 // adapter whose source spells no namespace classifies a child by local name.
-// validate/jsonsrc reads all four; validate/xmlsrc reads none.
 //
 // Each method is the [xsd.Schema] method of the same name and answers on its
 // terms.

@@ -871,14 +871,17 @@ func caseID(setName, groupName string, kind caseKind, testName string) string {
 // than refusing it; a change to which declarations a kind names belongs in
 // both.
 func caseDocs(kind caseKind, t validityTest, setDir string) (doc string, extra []string, err error) {
-	if kind != kindSchema {
+	switch kind {
+	case kindInstance, kindJSON:
 		return resolveDoc(setDir, t.InstanceDoc.Href), nil, nil
+	case kindSchema:
+		doc, extra, ok := resolveDocs(t.SchemaDocs, setDir)
+		if !ok {
+			return "", nil, fmt.Errorf("schemaTest declares no schemaDocument")
+		}
+		return doc, extra, nil
 	}
-	doc, extra, ok := resolveDocs(t.SchemaDocs, setDir)
-	if !ok {
-		return "", nil, fmt.Errorf("schemaTest declares no schemaDocument")
-	}
-	return doc, extra, nil
+	panic(fmt.Sprintf("conformance: caseKind %d names no document under test", kind))
 }
 
 // groupSchemaDocs resolves the schema documents an instanceTest is assessed
@@ -898,14 +901,20 @@ func caseDocs(kind caseKind, t validityTest, setDir string) (doc string, extra [
 // It yields nothing for a schemaTest either: that case's own doc and extraDocs
 // are its schema documents already (STYLE D3).
 func groupSchemaDocs(kind caseKind, g testGroup, setDir string) (doc string, extra []string) {
-	if kind == kindSchema || len(g.SchemaTests) != 1 {
+	switch kind {
+	case kindSchema:
 		return "", nil
+	case kindInstance, kindJSON:
+		if len(g.SchemaTests) != 1 {
+			return "", nil
+		}
+		doc, extra, ok := resolveDocs(g.SchemaTests[0].SchemaDocs, setDir)
+		if !ok {
+			return "", nil
+		}
+		return doc, extra
 	}
-	doc, extra, ok := resolveDocs(g.SchemaTests[0].SchemaDocs, setDir)
-	if !ok {
-		return "", nil
-	}
-	return doc, extra
+	panic(fmt.Sprintf("conformance: caseKind %d names no group schema documents", kind))
 }
 
 // resolveDocs resolves an ordered <schemaDocument> list against the test set's
