@@ -1721,20 +1721,20 @@ type ctaKeys struct {
 
 // count appends key to k.counted unless a key the same as it is there.
 func (k *ctaKeys) count(key ctaCountedKey) {
-	if !ctaHoldsPath(k.counted, key) {
+	if !ctaHoldsKey(k.counted, key) {
 		k.counted = append(k.counted, key)
 	}
 }
 
 // collect appends key to k.collected unless a key the same as it is there.
 func (k *ctaKeys) collect(key ctaCollectedKey) {
-	if !ctaHoldsPath(k.collected, key) {
+	if !ctaHoldsKey(k.collected, key) {
 		k.collected = append(k.collected, key)
 	}
 }
 
-// ctaHoldsPath reports whether keys holds a key the same as key.
-func ctaHoldsPath[K ctaKey](keys []K, key ctaKey) bool {
+// ctaHoldsKey reports whether keys holds a key the same as key.
+func ctaHoldsKey[K ctaKey](keys []K, key ctaKey) bool {
 	for _, k := range keys {
 		if k.same(key) {
 			return true

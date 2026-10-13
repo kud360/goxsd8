@@ -1838,7 +1838,7 @@ type ctaUnion struct{ operands []ctaTallied }
 func ctaUnionOf(operands []ctaCounted) (ctaCounted, bool) {
 	var distinct []ctaTallied
 	add := func(k ctaTallied) {
-		if !ctaHoldsPath(distinct, k) {
+		if !ctaHoldsKey(distinct, k) {
 			distinct = append(distinct, k)
 		}
 	}
@@ -2479,7 +2479,7 @@ func (u ctaUnion) same(other ctaKey) bool {
 		return false
 	}
 	for _, k := range u.operands {
-		if !ctaHoldsPath(o.operands, k) {
+		if !ctaHoldsKey(o.operands, k) {
 			return false
 		}
 	}
