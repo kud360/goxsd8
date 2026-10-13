@@ -19,12 +19,12 @@ one — appending is what this replaces.
 
 ## Status — 2026-10-13 (`/backlog`, on `main` at `ddf6c8f`)
 
-**North star: stand up the `json` lane (#JSONLANE, M8).** Both measured lanes stand
+**North star: stand up the `json` lane (#2607, M8).** Both measured lanes stand
 at what rulings leave, so this stamp follows the twelfth `/retro` (`4cfc520`) and
 names a north star that creates measurement. M8 is chosen over M7 because the
 tree holds a case source for it, the curated corpus `conformance/doc.go` names,
 while no XPath suite is vendored and `www.w3.org` is egress-denied. **Lean:
-product, toward measurement.** M7 still gets its first measured slice, #XPST3: an
+product, toward measurement.** M7 still gets its first measured slice, #2608: an
 XPath 2.0 syntax recognizer whose `schema` bound is +3, the
 `TypeAlternativeTests` cases the last stamp left unowned. Lane-less slices are
 banded only where a wrong verdict or an unconsumed persona finding pays for them.
@@ -84,7 +84,7 @@ measurement's (on `6f714c3`).
 - **`TypeAlternativeTests`' 4 now have owners.** All four are decided
   `(accepted)` against `invalid`. `s3_12si04`, `s3_12si05` and `s3_12si06` carry
   `{test}`s that are no XPath 2.0 at all (`AND` for `and`, `xs1::double` as a
-  cast target, `)(`), which the subset parser withholds as unsupported: #XPST3,
+  cast target, `)(`), which the subset parser withholds as unsupported: #2608,
   filed this pass. `s3_12ii06` casts to a schema-defined complex type, which is
   err:XPST0051: #894, whose body this pass corrects.
 - **The smaller `schema` `(accepted)` clusters that print no open issue** are
@@ -144,7 +144,7 @@ GitHub's own milestone listing.
 | M7–M12 | 0 | 0 | not started |
 
 M3's one open issue is #2566, a `value.Context` doc defect; it is follow-up, not
-milestone scope. The walk predates #JSONLANE (M8) and #XPST3 (M7), filed by this
+milestone scope. The walk predates #2607 (M8) and #2608 (M7), filed by this
 pass, the first issues either milestone carries.
 
 The open issues are **309 `ready`, 14 `blocked`, 0 `needs-replan` and 2
@@ -191,8 +191,8 @@ other waits or is absorbed.
 
 | # | issue | why here |
 |---|---|---|
-| 1 | #JSONLANE | **The north star.** `jsonsrc.Validate` over the planned mapping's core arms, a curated corpus in the suite's own catalog format, and a real `json` row in `defaultLanes`. It takes the `json` lane from 0 cases to the corpus size. The grounding's first question is the steward's: how a second catalog root stays off the `instance` lane. |
-| 2 | #XPST3 | **M7's first measured slice, `schema` bound +3.** A full XPath 2.0 syntax recognizer lets `CTATestStaticError` charge err:XPST0003. `s3_12si04`, `si05` and `si06` are decided `(accepted)` today. |
+| 1 | #2607 | **The north star.** `jsonsrc.Validate` over the planned mapping's core arms, a curated corpus in the suite's own catalog format, and a real `json` row in `defaultLanes`. It takes the `json` lane from 0 cases to the corpus size. The grounding's first question is the steward's: how a second catalog root stays off the `instance` lane. |
+| 2 | #2608 | **M7's first measured slice, `schema` bound +3.** A full XPath 2.0 syntax recognizer lets `CTATestStaticError` charge err:XPST0003. `s3_12si04`, `si05` and `si06` are decided `(accepted)` today. |
 | 3 | #894 | **`schema` bound +1, a hypothesis.** `s3_12ii06` casts to a schema-defined complex type, which is err:XPST0051 under `xpath-valid` 2.2.5. Its body's "no suite case" premise is corrected this pass. |
 
 **Tier B: wrong verdicts and the persona findings.** No row touches `jsonsrc`,
