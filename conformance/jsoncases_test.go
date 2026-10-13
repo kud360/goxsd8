@@ -64,7 +64,7 @@ func TestCuratedJSONCorpus(t *testing.T) {
 			t.Errorf("%s: passes declared the other way too", c.id)
 		}
 	}
-	for _, group := range []string{"scalar", "child", "array", "attribute"} {
+	for _, group := range []string{"scalar", "child", "array", "attribute", "nil"} {
 		if p := polarity[group]; p[0] == 0 || p[1] == 0 {
 			t.Errorf("group %s holds %d valid and %d invalid cases, want at least one of each", group, p[0], p[1])
 		}
