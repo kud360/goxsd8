@@ -194,3 +194,82 @@ func TestJSONExecutorRefusesAnUndecidedEmptySequence(t *testing.T) {
 		t.Fatalf("execJSONCase = %v (refusal %q), want a fail refused as %q", got, why, want)
 	}
 }
+
+// divergentSchema gives a wildcard's child a governing type lacking an
+// attribute use of the declaration jsonsrc classifies it by. r's sequence
+// takes a lax wildcard and then a local a of type base, so the first of two a
+// children is ·attributed to· the wildcard and governed by the top-level a, of
+// type narrow: a restriction of base prohibiting its uses n (unqualified,
+// resolving no top-level declaration) and {urn:t}m (resolving one), with a
+// strict {attribute wildcard} admitting both.
+const divergentSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="urn:t" xmlns:t="urn:t" elementFormDefault="qualified">
+  <xs:complexType name="base">
+    <xs:attribute name="n" type="xs:string"/>
+    <xs:attribute ref="t:m"/>
+    <xs:anyAttribute processContents="strict"/>
+  </xs:complexType>
+  <xs:complexType name="narrow">
+    <xs:complexContent>
+      <xs:restriction base="t:base">
+        <xs:attribute name="n" use="prohibited"/>
+        <xs:attribute ref="t:m" use="prohibited"/>
+        <xs:anyAttribute processContents="strict"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:attribute name="m" type="xs:string"/>
+  <xs:element name="r">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:any processContents="lax" namespace="##targetNamespace"/>
+        <xs:element name="a" type="t:base"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="a" type="t:narrow"/>
+</xs:schema>`
+
+// TestJSONExecutorRefusesDivergentAttributeGovernance pins that execJSONCase
+// banks no "valid" where an attribute jsonsrc presents under one type is
+// assessed under another (attributeGovernanceDiverges): each JSON document's
+// assessment is an empty Result, and its XML twin is one assessedSubtreeRoot
+// refuses, as strict-attribute-unresolved and as attribute-ldt.
+func TestJSONExecutorRefusesDivergentAttributeGovernance(t *testing.T) {
+	dir := t.TempDir()
+	schemaDoc := filepath.Join(dir, "divergent.xsd")
+	if err := os.WriteFile(schemaDoc, []byte(divergentSchema), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	backend := strict.New()
+	schema, report, _, perr := assembleCase(backend, schemaDoc, nil)
+	if perr != nil {
+		t.Fatalf("assembling divergentSchema: %v", perr)
+	}
+	for _, tc := range []struct {
+		name, json, xml string
+		gate            refusal
+	}{
+		{"strict wildcard, no declaration", `{"r":{"a":{"n":"x"},"a":{}}}`,
+			`<r xmlns="urn:t"><a n="x"/><a/></r>`, refuseStrictAttribute},
+		{"locally declared attribute type", `{"r":{"a":{"m":"x"},"a":{}}}`,
+			`<r xmlns="urn:t" xmlns:t="urn:t"><a t:m="x"/><a/></r>`, refuseAttributeLDT},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			doc, twin := filepath.Join(dir, tc.name+".json"), filepath.Join(dir, tc.name+".xml")
+			if err := os.WriteFile(doc, []byte(tc.json), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(twin, []byte(tc.xml), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if why := assessedSubtreeRoot(backend, schema, report, twin); why != tc.gate {
+				t.Fatalf("assessedSubtreeRoot(%s) = %q, want %q: the twin does not have the shape the test claims", tc.xml, why, tc.gate)
+			}
+			c := caseSpec{id: "divergent", kind: kindJSON, doc: doc, schemaDoc: schemaDoc, expect: expectValid()}
+			if got, why := newJSONExec()(c); got.IsPass() || why != refuseJSONAttributeGovernance {
+				t.Fatalf("execJSONCase = %v (refusal %q), want a fail refused as %q", got, why, refuseJSONAttributeGovernance)
+			}
+		})
+	}
+}
