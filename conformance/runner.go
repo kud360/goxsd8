@@ -125,7 +125,7 @@ func checkSuitePresent(index string) error {
 // schemaTest — see groupSchemaDocs.
 type caseSpec struct {
 	id              string
-	kind            string
+	kind            caseKind
 	doc             string
 	extraDocs       []string
 	schemaDoc       string
@@ -175,12 +175,27 @@ func (e expectation) wantsValid() bool { return e.outcome == outcomeValid }
 // isIndeterminate reports whether the suite left this case undecided.
 func (e expectation) isIndeterminate() bool { return e.outcome == outcomeIndeterminate }
 
-// The two case kinds. A schemaTest asserts schema-document validity; an
-// instanceTest asserts an instance document's validity against its schema.
+// caseKind is a case's kind, the closed set of what a case asserts (STYLE T1):
+// a schemaTest asserts schema-document validity, an instanceTest an instance
+// document's validity against its schema. The zero caseKind is no kind, which
+// no lane's selector claims and caseID refuses to render.
+type caseKind uint8
+
 const (
-	kindSchema   = "schema"
-	kindInstance = "instance"
+	kindSchema caseKind = iota + 1
+	kindInstance
 )
+
+// segment is the kind's segment of a case ID (see "Case IDs" above).
+func (k caseKind) segment() string {
+	switch k {
+	case kindSchema:
+		return "schema"
+	case kindInstance:
+		return "instance"
+	}
+	panic(fmt.Sprintf("conformance: caseKind %d has no case-ID segment", k))
+}
 
 // executor runs one case and reports whether this processor's observed outcome
 // agrees with the suite's declared expectation (Pass) or not (Fail). A real
@@ -242,7 +257,7 @@ func stubFail(caseSpec) Status { return Fail() }
 func selectsNone(caseSpec) bool { return false }
 
 // selectsKind claims every case of the given kind.
-func selectsKind(k string) func(caseSpec) bool {
+func selectsKind(k caseKind) func(caseSpec) bool {
 	return func(c caseSpec) bool { return c.kind == k }
 }
 
@@ -534,7 +549,7 @@ type discovery struct {
 // casesFromSet are these recorders' only callers. The landing order was
 // deliberate — the ratchet had to know how to bank a sanctioned removal, under
 // the arbiter's asserted count, before discovery was allowed to make one.
-func (d *discovery) withholdTest(setName, groupName, kind, testName string) {
+func (d *discovery) withholdTest(setName, groupName string, kind caseKind, testName string) {
 	d.withheld = append(d.withheld, caseID(setName, groupName, kind, testName))
 }
 
@@ -803,7 +818,7 @@ func casesFromSet(set testSet, setDir string, seen map[string]struct{}) (discove
 // The enclosing group is passed whole rather than beside its own name (STYLE
 // D3): g.Name IS the group name, and an instance case needs the group's
 // schemaTests anyway.
-func makeCase(setName, kind string, t validityTest, g testGroup, setDir string, seen map[string]struct{}) (caseSpec, error) {
+func makeCase(setName string, kind caseKind, t validityTest, g testGroup, setDir string, seen map[string]struct{}) (caseSpec, error) {
 	id := caseID(setName, g.Name, kind, t.Name)
 	if _, dup := seen[id]; dup {
 		return caseSpec{}, fmt.Errorf("duplicate case id %q", id)
@@ -834,8 +849,8 @@ func makeCase(setName, kind string, t validityTest, g testGroup, setDir string, 
 // ONE construction (STYLE D3): makeCase stamps a produced case with it and
 // discovery.withholdTest stamps a withheld one, so the produced and withheld
 // sets Compare partitions are comparable by exact string.
-func caseID(setName, groupName, kind, testName string) string {
-	return setName + "/" + groupName + "/" + kind + "/" + testName
+func caseID(setName, groupName string, kind caseKind, testName string) string {
+	return setName + "/" + groupName + "/" + kind.segment() + "/" + testName
 }
 
 // caseDocs returns the resolved path of the document under test and those of any
@@ -848,7 +863,7 @@ func caseID(setName, groupName, kind, testName string) string {
 // catalog READER, and differs only in reporting that malformed entry rather
 // than refusing it; a change to which declarations a kind names belongs in
 // both.
-func caseDocs(kind string, t validityTest, setDir string) (doc string, extra []string, err error) {
+func caseDocs(kind caseKind, t validityTest, setDir string) (doc string, extra []string, err error) {
 	if kind == kindInstance {
 		return resolveDoc(setDir, t.InstanceDoc.Href), nil, nil
 	}
@@ -875,7 +890,7 @@ func caseDocs(kind string, t validityTest, setDir string) (doc string, extra []s
 //
 // It yields nothing for a schemaTest either: that case's own doc and extraDocs
 // are its schema documents already (STYLE D3).
-func groupSchemaDocs(kind string, g testGroup, setDir string) (doc string, extra []string) {
+func groupSchemaDocs(kind caseKind, g testGroup, setDir string) (doc string, extra []string) {
 	if kind != kindInstance || len(g.SchemaTests) != 1 {
 		return "", nil
 	}
