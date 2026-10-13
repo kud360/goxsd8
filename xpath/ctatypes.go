@@ -711,7 +711,9 @@ func (t ctaTypes) stringArgument(v ctaValue) ctaStringArgument {
 // GAP(xpath): the list and union varieties decline the whole assertion, never
 // charge it and never satisfy it — the withhold [CompileAssertionTest]
 // reports — and so does an xs:NOTATION primitive, which is not admitted on
-// xs:QName's terms until a {test} needs it. (#1042)
+// xs:QName's terms until a {test} needs it. An admitted xs:QName operand still
+// declines wherever it is cast to another type, fn:string included, under
+// castsFrom's marker. (#1042)
 func (t ctaTypes) typedAtomic(st *xsd.SimpleType) bool {
 	if st == nil {
 		return false

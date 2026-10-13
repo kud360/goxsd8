@@ -95,10 +95,9 @@ var (
 //   - castTarget declining an xs:QName target again: every row declines;
 //     ctaTypes.typedAtomic declining xs:QName: every row but the two castable
 //     ones declines.
-//   - LookupNamespace answering a prefix as its own namespace, a comparison
-//     reading the literal's prefix: the eq row over q:element bound to the XSD
-//     namespace, the ne row over the same, the padded literal, the cast
-//     spelling and the xsd:QName(@name) row fail.
+//   - LookupNamespace answering a prefix as its own namespace: the eq row over
+//     q:element bound to the XSD namespace, the ne row over the same, the
+//     padded literal, the cast spelling and the xsd:QName(@name) row fail.
 //   - xs:QName's value equality reading the local part alone: the eq and ne
 //     rows over q bound to urn:other and the unprefixed literal with no
 //     {default namespace} fail; reading the namespace alone: the q:attribute
