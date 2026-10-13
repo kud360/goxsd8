@@ -138,10 +138,13 @@ already done, and the commit body says so.
    by REPLACEMENT: paste `go tool lanestatus` verbatim for the lane
    table — never hand-count an expectations file — read the milestone and
    queue counts from GitHub, rewrite the section from those numbers, and
-   stamp it with today's date. Never append a dated paragraph beside the old
-   text and never correct a number in place — the whole section is
-   replaced or it is not touched, and nothing edits it between stamps: a
-   row whose issue closed waits for the next stamp, and a falsified
+   stamp it with today's date. Splice from the line opening `## Status` to
+   the next line opening `## `, matched at line start: `## Milestones` is
+   also a substring of `### Milestones and queue`. Never append a dated
+   paragraph beside the old text and never correct a number in place —
+   the whole section is replaced or it is not touched, and nothing edits
+   it between stamps: a row whose issue closed waits for the next stamp,
+   and a falsified
    premise is corrected in the issue's body (#1630). PLAN.md is status —
    the lane table, the queue counts, the band and the next action — while
    `docs/LOG` is history and GitHub is the queue, so the section carries
