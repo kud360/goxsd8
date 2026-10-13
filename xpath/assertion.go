@@ -410,21 +410,20 @@ type ContextElement interface {
 // `preceding::` step (§3.2.1.1) — or a quantified expression over a child step
 // ranges over (§3.9) — the children it binds, and those its body holds for:
 // those carrying an attribute, or followed by a sibling element of a name —
-// how many nodes of E's subtree it selects. A child step filtered by its VALUE
-// is not among them: [ChildElements] answers it. A quantifier reading its
-// bindings' values is not among them: [ChildElements] answers it.
-// [AssertionTest.Tally] makes one, the caller reports E's subtree to it while
-// that subtree streams past, and [AssertionTest.Evaluate] reads it. It keeps
-// one counter per distinct path and no node: what the caller holds for a count
-// is one integer per path, the chain of names of the latest report, which is
-// O(depth), for a child step filtered by its children's existence, which of
-// those children the latest child named by the step has shown so far, for one
-// filtered by a `preceding::` step, whether an element it keeps has been
-// reported and, for each element of the latest report's chain, whether it
-// bears the preceding step's name and has shown the child its filter names,
-// which is O(depth) too, and, for the children followed by a sibling of a
-// name, whether the latest child of E reported bears the name they are drawn
-// from — whatever the subtree's size.
+// how many nodes of E's subtree it selects. A child step filtered by its VALUE,
+// and a quantifier reading its bindings' values, are not among them:
+// [ChildElements] answers both. [AssertionTest.Tally] makes one, the caller
+// reports E's subtree to it while that subtree streams past, and
+// [AssertionTest.Evaluate] reads it. It keeps one counter per distinct path and
+// no node: what the caller holds for a count is one integer per path, the chain
+// of names of the latest report, which is O(depth), for a child step filtered
+// by its children's existence, which of those children the latest child named
+// by the step has shown so far, for one filtered by a `preceding::` step,
+// whether an element it keeps has been reported and, for each element of the
+// latest report's chain, whether it bears the preceding step's name and has
+// shown the child its filter names, which is O(depth) too, and, for the
+// children followed by a sibling of a name, whether the latest child of E
+// reported bears the name they are drawn from — whatever the subtree's size.
 //
 // It also carries, for each path to an attribute whose values the {test}
 // reads — fn:sum's argument `N1/…/@A` (xpath-functions.md §15.4.5, xpath20.md
@@ -497,22 +496,24 @@ type ContextElement interface {
 // Its consumer is validate's cvc-assertion site (validate/cvcassertion.go),
 // which reports each element it walks, and each element of a ·skipped· subtree
 // by name, to the Tally of every enclosing element's {assertions} that has one.
-//
-// counters holds one counter per counted key and collectors one collector per
-// collected key, each in the order [AssertionTest.Tally] made them (fits).
-// pending is the names, in the latest report's order, of the attribute nodes
-// of the latest report whose value a path reads and which have not had their
-// [Tally.Attribute] call yet: a slice, never a map, so no state is read in an
-// order the reports did not give it. owed is the depths of the reported
-// elements whose value a path reads and which have not had their
-// [Tally.ElementValue] call yet, innermost last: each is an element of the
-// latest report's chain, so it is O(depth).
 type Tally struct {
-	counters   []ctaCounter
+	// counters holds one counter per counted key, in the order
+	// [AssertionTest.Tally] made them (fits).
+	counters []ctaCounter
+	// collectors holds one collector per collected key, in the order
+	// [AssertionTest.Tally] made them (fits).
 	collectors []ctaCollector
 	chain      []xsd.QName
-	pending    []xsd.QName
-	owed       []int
+	// pending is the names, in the latest report's order, of the attribute
+	// nodes of the latest report whose value a path reads and which have not
+	// had their [Tally.Attribute] call yet: a slice, never a map, so no state
+	// is read in an order the reports did not give it.
+	pending []xsd.QName
+	// owed is the depths of the reported elements whose value a path reads
+	// and which have not had their [Tally.ElementValue] call yet, innermost
+	// last: each is an element of the latest report's chain, so it is
+	// O(depth).
+	owed []int
 }
 
 // ctaCounter is the sealed sum of the counters a [Tally] keeps, one per
