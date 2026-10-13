@@ -3,6 +3,7 @@ package conformance
 import (
 	"encoding/xml"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -153,5 +154,43 @@ func TestJSONCorpusChargesItsNamedRules(t *testing.T) {
 		if !slices.Contains(charged, xsderr.Rule(rule)) {
 			t.Errorf("%s: expects %s, charged %v", c.id, rule, charged)
 		}
+	}
+}
+
+// declinedSchema declares root over a {content type} xsd.Schema.ContentMatcher
+// declines: two repeating sibling groups, over a and c, around a required b,
+// past the matcher's region ceiling (xsd.maxPartitionStates). b's {min occurs}
+// of 1 makes the empty sequence not ·valid·.
+const declinedSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:sequence maxOccurs="1000"><xs:element name="a" maxOccurs="unbounded"/></xs:sequence>
+        <xs:element name="b"/>
+        <xs:sequence maxOccurs="1000"><xs:element name="c" maxOccurs="unbounded"/></xs:sequence>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+
+// TestJSONExecutorRefusesAnUndecidedEmptySequence pins that execJSONCase banks
+// no "valid" for an object-valued element with no members under a {content
+// type} ContentMatcher declines: {"root":{}} is not valid against
+// declinedSchema, the walk decides nothing about its empty sequence, and the
+// executor refuses on the Unevaluated validate records for it (cvc-complex-type
+// clause 1.4, validate's contentCheck.sequenceEnd).
+func TestJSONExecutorRefusesAnUndecidedEmptySequence(t *testing.T) {
+	dir := t.TempDir()
+	schemaDoc, doc := filepath.Join(dir, "declined.xsd"), filepath.Join(dir, "root.json")
+	if err := os.WriteFile(schemaDoc, []byte(declinedSchema), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(doc, []byte(`{"root":{}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c := caseSpec{id: "declined", kind: kindJSON, doc: doc, schemaDoc: schemaDoc, expect: expectValid()}
+	want := refuseUnevaluated + ":cvc-complex-content"
+	if got, why := newJSONExec()(c); got.IsPass() || why != want {
+		t.Fatalf("execJSONCase = %v (refusal %q), want a fail refused as %q", got, why, want)
 	}
 }

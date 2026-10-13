@@ -165,9 +165,10 @@ func (r *Result) Violations() []*xsderr.Error {
 //     ·locally declared type· (key-sva (§3.3.4.6) clause 1.2);
 //   - content (cvccomplexcontent.go): String Valid (§3.16.4) over an element's
 //     ·initial value· (cvc-type clause 3.1.3, cvc-complex-type clause 1.2), a
-//     fixed {value constraint} comparison (cvc-elt clause 5.2.2.2.2), and an
-//     element [[child]] left unmatched because xsd.Schema.ContentMatcher does
-//     not decide its parent's {content type} (cvc-complex-content);
+//     fixed {value constraint} comparison (cvc-elt clause 5.2.2.2.2), and,
+//     where xsd.Schema.ContentMatcher does not decide an element's {content
+//     type}, each element [[child]] left unmatched, or the element itself where
+//     it has none (cvc-complex-content);
 //   - attributes (cvcattribute.go): cvc-attribute clauses 3, 4 and 5, cvc-au,
 //     and a ·defaulted attribute·'s {lexical form} (cvc-complex-type clause 4);
 //   - the ID/IDREF table (cvcid.go): each item that could have been in the
