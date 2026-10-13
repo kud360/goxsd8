@@ -230,7 +230,7 @@ func TestOutOfSliceInputDeclines(t *testing.T) {
 		says       string // the arm or shape it names
 	}{
 		{"member matching no child declaration", `{"r":{"x":"1"}}`,
-			"jsonsrc: instance.json:1:7: ", `member "x" names no child element declaration of the type of {urn:t}r; the attribute and wildcard member arms are not implemented`},
+			"jsonsrc: instance.json:1:7: ", `member "x" names no child element declaration and no attribute use of the type of {urn:t}r; the wildcard member arm is not implemented`},
 		{"member a wildcard would admit", `{"r":{"w":"1"}}`,
 			"jsonsrc: instance.json:1:7: ", `member "w" names no child element declaration`},
 		{"null", `{"r":{"s":null}}`,
@@ -248,7 +248,7 @@ func TestOutOfSliceInputDeclines(t *testing.T) {
 		{"nested array", `{"r":{"s":[["x"]]}}`,
 			"jsonsrc: instance.json:1:12: ", `an array is an item of the array of member "s"`},
 		{"member of a simple-typed element", `{"r":{"s":{"x":1}}}`,
-			"jsonsrc: instance.json:1:12: ", `member "x" names no child element declaration of the type of s;`},
+			"jsonsrc: instance.json:1:12: ", `member "x" names no child element declaration and no attribute use of the type of s;`},
 		{"decline after a mapped sibling", `{"r":{"s":"1","a":"1"}}`,
 			"jsonsrc: instance.json:1:15: ", `member "a" names child element declarations of two expanded names`},
 		{"second member after an assessed root", `{"r":{"c":{"s":"1"}},"x":null}`,
