@@ -339,15 +339,15 @@ func TestCTATestStaticErrorIsSilentForUnsupported(t *testing.T) {
 func TestCTATestStaticErrorReportsSyntaxError(t *testing.T) {
 	str := asBuiltin(t, "string")
 	for _, tc := range []struct{ expr, msg string }{
-		{")(", `")(" is not an XPath 2.0 expression: the grammar (xpath20.md A.1) takes nothing at byte offset 0`},
-		{">", `">" is not an XPath 2.0 expression: the grammar (xpath20.md A.1) takes nothing at byte offset 0`},
-		{"((7>=6)", `"((7>=6)" is not an XPath 2.0 expression: the grammar (xpath20.md A.1) needs more than its end`},
-		{"@6='hi'", `"@6='hi'" is not an XPath 2.0 expression: the grammar (xpath20.md A.1) takes nothing at byte offset 1`},
-		{"@numberOfChildren < 5 AND @numberOfChildren > 0", `"@numberOfChildren < 5 AND @numberOfChildren > 0" is not an XPath 2.0 expression: the grammar (xpath20.md A.1) takes nothing at byte offset 22`},
-		{"(@type cast as xs1::double)='double'", `"(@type cast as xs1::double)='double'" is not an XPath 2.0 expression: the grammar (xpath20.md A.1) takes nothing at byte offset 18`},
-		{"@p:kind = 'x' extra", `"@p:kind = 'x' extra" is not an XPath 2.0 expression: the grammar (xpath20.md A.1) takes nothing at byte offset 14`},
-		{"@p:kind = ", `"@p:kind = " is not an XPath 2.0 expression: the grammar (xpath20.md A.1) needs more than its end`},
-		{"", `"" is not an XPath 2.0 expression: the grammar (xpath20.md A.1) needs more than its end`},
+		{")(", `")(" is not an XPath 2.0 expression: the grammar takes nothing at byte offset 0, which err:XPST0003 forbids`},
+		{">", `">" is not an XPath 2.0 expression: the grammar takes nothing at byte offset 0, which err:XPST0003 forbids`},
+		{"((7>=6)", `"((7>=6)" is not an XPath 2.0 expression: the grammar needs more than its end, which err:XPST0003 forbids`},
+		{"@6='hi'", `"@6='hi'" is not an XPath 2.0 expression: the grammar takes nothing at byte offset 1, which err:XPST0003 forbids`},
+		{"@numberOfChildren < 5 AND @numberOfChildren > 0", `"@numberOfChildren < 5 AND @numberOfChildren > 0" is not an XPath 2.0 expression: the grammar takes nothing at byte offset 22, which err:XPST0003 forbids`},
+		{"(@type cast as xs1::double)='double'", `"(@type cast as xs1::double)='double'" is not an XPath 2.0 expression: the grammar takes nothing at byte offset 18, which err:XPST0003 forbids`},
+		{"@p:kind = 'x' extra", `"@p:kind = 'x' extra" is not an XPath 2.0 expression: the grammar takes nothing at byte offset 14, which err:XPST0003 forbids`},
+		{"@p:kind = ", `"@p:kind = " is not an XPath 2.0 expression: the grammar needs more than its end, which err:XPST0003 forbids`},
+		{"", `"" is not an XPath 2.0 expression: the grammar needs more than its end, which err:XPST0003 forbids`},
 	} {
 		record := ctaExprRecord(tc.expr, "", "a", "http://example.com/a", "xs", xsd.XMLSchemaNS)
 		err := CTATestStaticError(record, seededTypes)

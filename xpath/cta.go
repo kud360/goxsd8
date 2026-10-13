@@ -307,7 +307,7 @@ const ruleXPST0081 xsderr.Rule = "err:XPST0081"
 //
 // naming the FIRST unbound prefix in expression order (STYLE D2), or as
 //
-//	?: [err:XPST0003] ")(" is not an XPath 2.0 expression: the grammar (xpath20.md A.1) takes nothing at byte offset 0
+//	?: [err:XPST0003] ")(" is not an XPath 2.0 expression: the grammar takes nothing at byte offset 0, which err:XPST0003 forbids
 //
 // The [xsderr.Loc] is the zero one, which renders as that `?`: this package
 // reads no schema document and so has no position to report — the real one is

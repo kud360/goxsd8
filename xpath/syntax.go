@@ -99,7 +99,7 @@ func syntaxError(expr string) *xsderr.Error {
 		where = "needs more than its end"
 	}
 	return xsderr.New(ruleXPST0003, xsderr.Loc{},
-		"%q is not an XPath 2.0 expression: the grammar (xpath20.md A.1) %s", expr, where)
+		"%q is not an XPath 2.0 expression: the grammar %s, which err:XPST0003 forbids", expr, where)
 }
 
 // xpathSyntaxError reports whether s is NOT an XPath 2.0 expression — no
