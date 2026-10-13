@@ -26,7 +26,8 @@ import (
 // Its lexical pieces are the subset lexer's own where the two read the same
 // terminal (STYLE T4): ctaScanNCName for [79] NCName, ctaScanString for [74]
 // StringLiteral, ctaScanNumber for [71]-[73] NumericLiteral, ctaSkipComment for
-// [77] Comment and ctaScanWildcardTail for [37]'s `'*' ':' NCName`. White space
+// [77] Comment, ctaScanNameTest for [78] QName and [37]'s `NCName ':' '*'`, and
+// ctaScanWildcardTail for [37]'s `'*' ':' NCName`. White space
 // is XML's S, #x20 #x9 #xD #xA (A.2.4.1), and nothing else.
 
 // syntaxKind identifies one terminal of A.2's lexical structure as the
@@ -191,9 +192,15 @@ func syntaxTokenize(s string) ([]syntaxToken, int, bool) {
 				i++
 				continue
 			}
-			tok, j, ok := syntaxScanName(s, i)
-			if !ok {
+			// A ':' the NameTest scanner leaves behind — `p:` with no NCName or
+			// '*' after it — reaches this arm next and fails here, at the ':'.
+			nameKind, j := ctaScanNameTest(s, i)
+			if j == i {
 				return nil, i, false
+			}
+			tok := syntaxToken{kind: syntaxName, text: s[i:j], at: i}
+			if nameKind == ctaWildcardTok {
+				tok = syntaxToken{kind: syntaxWildcard, at: i}
 			}
 			toks = append(toks, tok)
 			i = j
@@ -245,29 +252,6 @@ func syntaxComparatorLen(s string) int {
 		}
 	}
 	return 0
-}
-
-// syntaxScanName reads the [78] QName or the [37] `NCName ':' '*'` Wildcard
-// starting at i. A ':' after the first NCName belongs to the name only when an
-// NCName or a '*' follows it at once (xgc: xml-version — `p : n` is no QName);
-// a '::' is left for the axis token; any other ':' is no terminal at all.
-func syntaxScanName(s string, i int) (syntaxToken, int, bool) {
-	j := ctaScanNCName(s, i)
-	if j == i {
-		return syntaxToken{}, 0, false
-	}
-	tok := syntaxToken{kind: syntaxName, text: s[i:j], at: i}
-	if j >= len(s) || s[j] != ':' || strings.HasPrefix(s[j:], "::") {
-		return tok, j, true
-	}
-	if j+1 < len(s) && s[j+1] == '*' {
-		return syntaxToken{kind: syntaxWildcard, at: i}, j + 2, true
-	}
-	k := ctaScanNCName(s, j+1)
-	if k == j+1 {
-		return syntaxToken{}, 0, false
-	}
-	return syntaxToken{kind: syntaxName, text: s[i:k], at: i}, k, true
 }
 
 // syntaxRecognizer is the recursive descent over A.1, one method per
