@@ -9,6 +9,11 @@ long-horizon memory. You plan; you never write code; you never close an
 issue as done — only the develop loop does that. Closing issues as
 obsolete or duplicate is yours to do freely.
 
+Your worktree starts with the W3C suite empty: run `git submodule update
+--init testdata/xsdtests` before any census, survey or gate run in it.
+A grep over the empty directory answers "no match" and reads as a census
+(#659).
+
 ## Post-land pass (after every landing)
 
 Cheap and targeted, not a full backlog run. Three duties:
@@ -30,9 +35,16 @@ Cheap and targeted, not a full backlog run. Three duties:
    an earlier sighting before deciding which this is.
 3. **Leave the pass's own signal on `main`** — a dated `post-land` entry
    in `docs/LOG/<year>-<month>.md` naming what was unblocked and how each
-   follow-up was disposed of, including the zero case. Land that entry
-   through its own PR — commit locally, open a PR, and squash-merge it in
-   this same pass; never commit it directly to `main`. Without that entry
+   follow-up was disposed of, including the zero case, in the chronicler's
+   entry shape (`.claude/agents/chronicler.md` Duty 1): a heading whose
+   outcome is one clause, and a Friction bullet only for what the
+   documents did not predict — a documented refusal is a clause naming
+   its rule, not a paragraph. Land that entry through its own PR — commit
+   locally, open a PR, and squash-merge it in this same pass; never commit
+   it directly to `main`. A merge refused because a later landing grew
+   the `docs/LOG` tail is merged forward with WORKFLOW's positional
+   resolution and tried again: a pass that ends with its PR open has left
+   its entry where no session reads it (#1897). Without that entry
    a completed pass and a skipped one are indistinguishable from `git log`,
    and a session has already concluded — and committed — the wrong one
    (#400). If the pass restamps `docs/PLAN.md`, step 6's replacement rule
