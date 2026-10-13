@@ -70,12 +70,13 @@ const (
 )
 
 // syntaxToken is one terminal: its kind, its source spelling for a name, and
-// the byte offset it starts at, which is what a failure reports.
+// the byte offset it starts at, which is what a failure reports. A name is
+// prefixed exactly when its text holds a ':', so no keyword list below — none
+// of whose words holds one — ever matches a prefixed name.
 type syntaxToken struct {
-	kind     syntaxKind
-	text     string
-	prefixed bool // a syntaxName spelled `NCName ':' NCName`
-	at       int
+	kind syntaxKind
+	text string
+	at   int
 }
 
 // ruleXPST0003 is the XPath static error a text outside A.1's grammar is
@@ -177,7 +178,7 @@ func syntaxTokenize(s string) ([]syntaxToken, int, bool) {
 		case c == '*':
 			j := ctaScanWildcardTail(s, i+1)
 			if j > i+1 {
-				toks = append(toks, syntaxToken{kind: syntaxWildcard, at: i})
+				emit(syntaxWildcard, i)
 				i = j
 				continue
 			}
@@ -266,7 +267,7 @@ func syntaxScanName(s string, i int) (syntaxToken, int, bool) {
 	if k == j+1 {
 		return syntaxToken{}, 0, false
 	}
-	return syntaxToken{kind: syntaxName, text: s[i:k], prefixed: true, at: i}, k, true
+	return syntaxToken{kind: syntaxName, text: s[i:k], at: i}, k, true
 }
 
 // syntaxRecognizer is the recursive descent over A.1, one method per
@@ -304,7 +305,7 @@ func (r *syntaxRecognizer) accept(kind syntaxKind) bool {
 // isKeyword reports whether t is the unprefixed name word, which is how every
 // keyword is spelled (A.2: keywords are case sensitive).
 func isKeyword(t syntaxToken, word string) bool {
-	return t.kind == syntaxName && !t.prefixed && t.text == word
+	return t.kind == syntaxName && t.text == word
 }
 
 func (r *syntaxRecognizer) acceptKeyword(word string) bool {
@@ -533,8 +534,9 @@ func opensRelativePath(t syntaxToken) bool {
 	case syntaxName, syntaxWildcard, syntaxStar, syntaxAt, syntaxDotDot, syntaxDot,
 		syntaxDollar, syntaxLParen, syntaxNumber, syntaxString:
 		return true
+	default:
+		return false
 	}
-	return false
 }
 
 // relativePathExpr is [26] RelativePathExpr.
@@ -550,7 +552,7 @@ func (r *syntaxRecognizer) relativePathExpr() bool {
 // FunctionCall when A.3 reserves it, and a FunctionCall otherwise.
 func (r *syntaxRecognizer) stepExpr() bool {
 	t, next := r.peek(), r.peekAfter()
-	ok := false
+	var ok bool
 	switch {
 	case t.kind == syntaxDotDot:
 		r.pos++
@@ -581,9 +583,6 @@ func (r *syntaxRecognizer) advance(n int) bool {
 
 // isAxis reports whether t names a [30] ForwardAxis or [33] ReverseAxis.
 func isAxis(t syntaxToken) bool {
-	if t.prefixed {
-		return false
-	}
 	switch t.text {
 	case "child", "descendant", "attribute", "self", "descendant-or-self",
 		"following-sibling", "following", "namespace",
@@ -596,9 +595,6 @@ func isAxis(t syntaxToken) bool {
 // isKindTestName reports whether t is the keyword opening one of [54]
 // KindTest's nine arms.
 func isKindTestName(t syntaxToken) bool {
-	if t.prefixed {
-		return false
-	}
 	switch t.text {
 	case "document-node", "element", "attribute", "schema-element", "schema-attribute",
 		"processing-instruction", "comment", "text", "node":
@@ -611,9 +607,6 @@ func isKindTestName(t syntaxToken) bool {
 // FunctionCall may use (xgc: reserved-function-names). It is the whole list;
 // stepExpr reads the KindTest names among it as a KindTest first.
 func isReservedFunctionName(t syntaxToken) bool {
-	if t.prefixed {
-		return false
-	}
 	switch t.text {
 	case "empty-sequence", "if", "item", "typeswitch":
 		return true
@@ -655,8 +648,9 @@ func (r *syntaxRecognizer) primaryExpr() bool {
 			return true
 		}
 		return r.expr() && r.accept(syntaxRParen)
+	default:
+		return false
 	}
-	return false
 }
 
 // functionCall is [48] FunctionCall.
@@ -750,7 +744,7 @@ func (r *syntaxRecognizer) kindTest() bool {
 		}
 	case "processing-instruction":
 		// [59]: an NCName or a StringLiteral, or nothing.
-		if !r.peek().prefixed {
+		if !strings.Contains(r.peek().text, ":") {
 			_ = r.accept(syntaxName) || r.accept(syntaxString)
 		}
 	}

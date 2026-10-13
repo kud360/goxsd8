@@ -41,6 +41,8 @@ func TestXPathSyntaxAccepts(t *testing.T) {
 		{"foo -foo", "a QName, the minus operator, a QName"},
 		{"foo(: c :)- foo", "a Comment separates a name from '-'"},
 		{"p:if(x)", "a prefixed FunctionCall may use a reserved local name"},
+		{"p:element(1, 2)", "a prefixed KindTest keyword is a FunctionCall"},
+		{"child::p:x", "a prefixed NameTest after an axis"},
 		{"if (@a) then 1 else 2", "[7] IfExpr"},
 		{"some $x in @a satisfies $x = 1", "[6] QuantifiedExpr"},
 		{"every $x in (1, 2), $y in 3 satisfies $x lt $y", "QuantifiedExpr with two bindings"},
@@ -128,6 +130,8 @@ func TestXPathSyntaxRejects(t *testing.T) {
 		{"element(*:a)", 8, "an ElementTest takes '*' or a QName, never '*:n'"},
 		{"/ union /", 9, "'union' after a slash is a NameTest, so the second '/' needs a step"},
 		{"(1, )", 4, "a comma needs an ExprSingle after it"},
+		{"processing-instruction(p:x)", 23, "a PITest takes an NCName, never a prefixed QName"},
+		{"p:child::x", 0, "an axis name is never prefixed"},
 		{"a[1", 3, "an unclosed predicate"},
 	} {
 		at, bad := xpathSyntaxError(tc.expr)
@@ -207,12 +211,11 @@ const suiteTSNamespace = "http://www.w3.org/XML/2004/xml-schema-test-suite/"
 // schemaDocuments of every schemaTest with an <expected validity="valid"/>,
 // in document order.
 func suiteValidSchemaDocuments(path string) ([]string, error) {
-	f, err := os.Open(path)
+	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
-	dec := xml.NewDecoder(f)
+	dec := xml.NewDecoder(strings.NewReader(string(raw)))
 	var out, pending []string
 	valid, inSchemaTest := false, false
 	for {
@@ -265,12 +268,14 @@ func suiteAttr(el xml.StartElement, local string) string {
 // with a UTF-16 byte-order mark (XML 1.0 App. F.1) and passing any other
 // through for encoding/xml to read under its declaration.
 func suiteDecode(raw []byte) string {
-	if len(raw) < 2 || !(raw[0] == 0xFF && raw[1] == 0xFE || raw[0] == 0xFE && raw[1] == 0xFF) {
+	littleEndian := len(raw) >= 2 && raw[0] == 0xFF && raw[1] == 0xFE
+	bigEndian := len(raw) >= 2 && raw[0] == 0xFE && raw[1] == 0xFF
+	if !littleEndian && !bigEndian {
 		return string(raw)
 	}
 	units := make([]uint16, 0, len(raw)/2)
 	for i := 2; i+1 < len(raw); i += 2 {
-		if raw[0] == 0xFF {
+		if littleEndian {
 			units = append(units, uint16(raw[i])|uint16(raw[i+1])<<8)
 			continue
 		}
