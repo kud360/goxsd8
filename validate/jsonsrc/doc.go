@@ -57,9 +57,19 @@
 //     (cvc-wildcard), and so is a {process contents}, as for the XML twin. A
 //     name the wildcards reject is soundly invalid: every other namespace is
 //     outside every wildcard of that kind, and no declaration or use carries
-//     the key. A declaration or use carrying the key takes precedence over
-//     every wildcard, as cvc-accept's Note and the Note after
-//     cvc-complex-type clause 6 give it.
+//     the key. A key a declaration or use carries is named by it and never
+//     by a wildcard: that is the mapping's own rule, as the NAMESPACE TRAP
+//     below says, and no spec text makes it in general. The spec makes the
+//     same choice for one item matched both ways, which here is where the
+//     wildcard's one namespace is the declaration's or the use's own: the
+//     Note under cvc-accept matches an element information item "accepted
+//     by either a Wildcard or an Element Declaration" against the Element
+//     Declaration, and the Note after cvc-complex-type clause 4 gives an
+//     attribute use "whose name and target namespace match" precedence
+//     over the {attribute wildcard}. Neither Note chooses between two
+//     expanded names, the declaration's or use's and the (N,key) a
+//     wildcard would give, nor across kinds, a declaration over an
+//     {attribute wildcard} or a use over an element wildcard.
 //   - A scalar value is the element's simple content: {"size":10} ≡
 //     <size>10</size>. Its lexical form is the token's source text — a
 //     number's own digits, never a float64 round trip; a string's decoded
@@ -109,7 +119,8 @@
 // The GAP(jsonsrc) markers at classify, wildcardMember, useNamed and
 // members.key track the first, second, fourth and fifth entries, the
 // attribute member after a child member in the third, and the attribute-use
-// half of the NAMESPACE TRAP:
+// half of the NAMESPACE TRAP; one more at classify tracks the mapping's own
+// choice of a declaration or use over a wildcard, under "The mapping":
 //
 //   - a key no contained declaration and no attribute use carries, where the
 //     model does not fix its namespace: a wildcard of variety any or not

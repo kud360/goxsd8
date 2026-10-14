@@ -729,7 +729,7 @@ func TestNilledAttribute(t *testing.T) {
 // strict ##targetNamespace {open content}; att, a lax ##targetNamespace
 // {attribute wildcard} over element-only content; pre and preatt, the strict
 // element and lax attribute wildcards beside an unqualified local w and use p
-// of xs:string, which take precedence; ref and def, whose wildcards reject p
+// of xs:string, which name the key instead; ref and def, whose wildcards reject p
 // and w by name; and the shapes the arm declines — mix, a skip urn:x wildcard
 // beside box's; ocmix, a ##local {open content} beside it; any, of
 // xs:anyType; both, with a ##targetNamespace element wildcard and {attribute
@@ -888,12 +888,13 @@ func TestWildcardMember(t *testing.T) {
 	}
 }
 
-// TestDeclarationBeatsWildcard pins precedence: a key a contained declaration
-// or an attribute use carries maps to it and not to the wildcard that would
-// also admit it (cvc-accept's Note; the Note after cvc-complex-type clause 6).
-// Each row's declaration or use is the unqualified one of xs:string, where the
-// wildcard would name urn:w's xs:integer, so "x" is valid only by precedence.
-func TestDeclarationBeatsWildcard(t *testing.T) {
+// TestDeclarationNamesKey pins the mapping's own rule that a key a contained
+// declaration or an attribute use carries is named by it and never by a
+// wildcard of the type (package doc, "The mapping"). Each row's declaration or
+// use is the unqualified one of xs:string, where the wildcard would name
+// urn:w's xs:integer: two expanded names, between which no spec Note chooses,
+// and "x" is valid only under the declaration's or use's.
+func TestDeclarationNamesKey(t *testing.T) {
 	v := validatorOver(t, wildcardSchema)
 	for _, tc := range []struct {
 		name, json, xml string

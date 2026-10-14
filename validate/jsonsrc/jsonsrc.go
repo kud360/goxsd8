@@ -288,11 +288,13 @@ func (b bareElement) object(*walker, xsderr.Loc) (*object, error) {
 // use among o.uses whose {attribute declaration}'s local name it is
 // (cvc-complex-type clause 2.1 then matches the attribute to that use by
 // expanded name), and, where neither carries it, to the element or attribute
-// a wildcard of the type names (wildcardMember). A declaration or a use takes
-// precedence over a wildcard, as cvc-accept's Note and the Note after
-// cvc-complex-type clause 6 give it. The first declaration of the name stands
-// for every other (xsd.Schema.ContainedElementDeclarations says why that is
-// sound).
+// a wildcard of the type names (wildcardMember). A key a declaration or a use
+// carries never reaches a wildcard: the mapping's own rule, which the spec
+// shares only where the wildcard's one namespace is the declaration's or the
+// use's own, so that both name one item (the Note under cvc-accept; the Note
+// after cvc-complex-type clause 4; package doc, "The mapping"). The first
+// declaration of the name stands for every other
+// (xsd.Schema.ContainedElementDeclarations says why that is sound).
 //
 // It DECLINES a reserved key; a key two expanded names carry among the
 // declarations, or among the uses; a key both a declaration and a use carry,
@@ -304,6 +306,12 @@ func (b bareElement) object(*walker, xsderr.Loc) (*object, error) {
 // GAP(jsonsrc): a key both a child element declaration and an attribute use
 // carry declines. RULED permanent by #2613: no spec rule decides between them,
 // and the mapping has no warning channel to report a choice through.
+//
+// GAP(jsonsrc): a key a declaration or use carries maps under its name even
+// where a wildcard of the type would name the key (N,key) in another namespace
+// N, or as the other kind. No spec rule makes that choice, and it is
+// observable by an ancestor's identity-constraint paths and assertions, as the
+// representative name of #2634's residue is; #2634 owns it.
 //
 // The xsi-namespace, two-expanded-name and simple-content declines among the
 // uses are useNamed's, under its GAP(jsonsrc) markers.
