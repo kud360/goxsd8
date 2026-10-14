@@ -57,9 +57,33 @@
 //   - An array value is one child per item under the member's key, in item
 //     order: an object, scalar or null item is a child as a member value
 //     would be, and an empty array is no child.
+//   - A "$xmlns" member leading an object binds prefixes for the element and
+//     its descendants: its value is an object of strings, {prefix: uri}, the
+//     bindings of an xmlns:prefix="uri" on the element. Each element's
+//     bindings are its own object's "$xmlns", else its parent's, through an
+//     immutable parent-linked scope chain, the innermost binding of a prefix
+//     winning. They are what QName-valued content and "$type" resolve
+//     against: {"names":{"$xmlns":{"t":"urn:t"},"q":"t:foo"}} ≡ <names
+//     xmlns:t="urn:t"><q>t:foo</q></names>.
+//   - A "$type" member, after any "$xmlns" and before every other member, is
+//     the element's xsi:type, its string value the attribute's [[normalized
+//     value]]: {"item":{"$type":"t:Derived",…}} ≡ <item
+//     xsi:type="t:Derived">…</item>. The engine resolves it and charges
+//     cvc-attribute (clause 3 or 5) where it names no type and cvc-elt clause
+//     4 where the type it names does not ·override· the declared one. The
+//     members after it are classified under the type it names, wherever that
+//     resolves — whether or not it overrides — and under the declared type
+//     otherwise; it is resolved as the engine resolves it (cvc-resolve-instance,
+//     §3.17.6.3), so the two agree on the type. A "$type" rides an object
+//     value only: a scalar or null element carries no xsi:type.
+//   - No DTD-shaped declaration exists in JSON, so the adapter does not
+//     implement [validate.UnparsedEntities] and every ·ENTITY value· fails
+//     cvc-simple-type clause 3, as that interface's doc states.
 //
 // The element's default (empty-prefix) namespace is its declaration's target
-// namespace, and "xml" is bound; no other prefix is.
+// namespace, and deliberately shadows any "$xmlns" binding of "": an
+// unprefixed QName, in content or in "$type", takes that namespace. "xml" is
+// bound; any other prefix is bound by a "$xmlns" in scope or not at all.
 //
 // Three shapes are not expressible, and the mapping does not reorder to reach
 // the first two. The ORDER TRAP: an array's items are contiguous repeats, so
@@ -72,11 +96,13 @@
 // NILLED ATTRIBUTES shape: a null carries no members, so no input spells a
 // ·nilled· element with other attributes, <e a="1" xsi:nil="true"/>; this is a
 // limit of the notation, not a decline. A member is classified under its
-// matched declaration's type, which need not be the child's ·governing type
-// definition·: where the engine attributes the child to a wildcard instead,
-// that type is the engine's to determine — through the top-level declaration
-// the child's name resolves to, for one — and it assesses the infoset built
-// under the matched declaration, attributes included.
+// matched declaration's type, or the type its object's "$type" names, which
+// need not be the child's ·governing type definition·: where the engine
+// attributes the child to a wildcard instead, or the "$type" does not
+// ·override·, that type is the engine's to determine — through the top-level
+// declaration the child's name resolves to, for one — and it assesses the
+// infoset built under the type the mapping classified by, attributes
+// included.
 //
 // # Declines
 //
@@ -94,31 +120,31 @@
 //   - an attribute member after a child member, a repeated attribute member,
 //     and an attribute member whose value is null, an object or an array;
 //   - an attribute use in the xsi namespace: xsi:nil is spelled by a null
-//     value alone, xsi:type is the planned "$type" arm's below, and
+//     value alone, xsi:type by a "$type" member alone, and
 //     xsi:schemaLocation and xsi:noNamespaceSchemaLocation await #2627's
 //     ruling on a key spelling;
 //   - an attribute member of an element whose type has simple content: the
 //     mapping spells no text beside attribute members, so an object value
 //     carries no simple content and a scalar value no attribute;
-//   - a "$"-prefixed reserved member;
+//   - a "$xmlns" or "$type" out of its place — "$type" before "$xmlns",
+//     either repeated, either after another member, either as the top-level
+//     object's member — which no spec text orders, so none is charged; a
+//     "$type" whose value is not a string; a "$xmlns" whose value is not an
+//     object of strings, which binds a prefix twice, binds "xml" or "xmlns",
+//     or binds a non-empty prefix to "";
+//   - any other "$"-prefixed reserved member;
 //   - an array item that is itself an array;
-//   - a matched declaration carrying a {type table}: which type governs its
-//     element turns on its attributes, the xsi: ones included, which this
-//     mapping does not all present;
+//   - a matched declaration carrying a {type table}: members are classified
+//     under the declared type or the one "$type" names, and the element's
+//     ·selected type definition· is neither — it turns on the element's
+//     attributes and is computed only inside validate. Lifting this is the
+//     successor filed by #2615's post-land pass;
 //   - a {type definition} that does not resolve, under an object value.
 //
 // # Locations
 //
 // Every Loc is a line and a byte column from 1, at the member's key for an
-// element (at the item for an array's item) and for an attribute member, at
-// the scalar token for its text, and at the null token for a null value's
-// xsi:nil, which has no key of its own.
-//
-// # Planned arms (later M8 slices — not yet implemented)
-//
-//   - Reserved members: "$type" ⇒ xsi:type; "$xmlns" ⇒ {prefix: uri}
-//     bindings for QName-valued content, inherited by descendants through an
-//     immutable parent-linked scope chain; the element's default
-//     (empty-prefix) namespace stays its matched declaration's target
-//     namespace and deliberately shadows any "$xmlns" override of "".
+// element (at the item for an array's item), for an attribute member and for
+// a "$type" member's xsi:type, at the scalar token for its text, and at the
+// null token for a null value's xsi:nil, which has no key of its own.
 package jsonsrc

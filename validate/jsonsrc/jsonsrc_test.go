@@ -244,6 +244,8 @@ func TestOutOfSliceInputDeclines(t *testing.T) {
 			"jsonsrc: instance.json:1:7: ", `member "a" names child element declarations of two expanded names in the type of {urn:t}r (a and {urn:t}a)`},
 		{"declaration with a type table", `{"r":{"tt":"1"}}`,
 			"jsonsrc: instance.json:1:7: ", `element tt carries a {type table}; conditional type assignment is not implemented`},
+		{"declaration with a type table, under a $type", `{"r":{"tt":{"$type":"xs:string","k":"x"}}}`,
+			"jsonsrc: instance.json:1:7: ", `element tt carries a {type table}`},
 		{"nested array", `{"r":{"s":[["x"]]}}`,
 			"jsonsrc: instance.json:1:12: ", `an array is an item of the array of member "s"`},
 		{"member of a simple-typed element", `{"r":{"s":{"x":1}}}`,
