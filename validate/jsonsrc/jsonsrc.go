@@ -340,10 +340,10 @@ func (b bareElement) object(*walker, *element, *attribute, xsderr.Loc) (*object,
 // object; a key two expanded names carry among the declarations, or among the
 // uses; a key both a declaration and a use carry, which no spec rule decides
 // between; a use in the xsi namespace, xsi:nil being the null arm's to
-// present, xsi:type the "$type" member's, and
-// xsi:schemaLocation and xsi:noNamespaceSchemaLocation hints a JSON instance
-// carries none of; an attribute use of a type with simple content, beside
-// which the mapping spells no text; and every key wildcardMember declines.
+// present, xsi:type the "$type" member's, and xsi:schemaLocation and
+// xsi:noNamespaceSchemaLocation hints a JSON instance carries none of; an
+// attribute use of a type with simple content, beside which the mapping
+// spells no text; and every key wildcardMember declines.
 //
 // GAP(jsonsrc): a key both a child element declaration and an attribute use
 // carry declines. RULED permanent by #2613: no spec rule decides between them,

@@ -162,15 +162,16 @@
 // Each entry below whose XML twin the engine assesses is tracked by a
 // GAP(jsonsrc) marker at the function that declines it — rootDeclaration,
 // wildcardMember, classify, members.key, useNamed, reserved, typeTable,
-// localType and classifyingType — and so are the NAMESPACE TRAP's declines among a type's
-// child declarations and among its attribute uses, at childNamed and useNamed;
-// one more at classify tracks the mapping's own choice of a declaration or use
-// over a wildcard, under "The mapping". A repeated attribute member, an
-// attribute member whose value is null, an object or an array, an array item
-// that is itself an array, a repeated "$xmlns" or "$type", a reserved member
-// other than those two or at the top level, the malformed "$xmlns" and
-// "$type" values below, and the top-level shapes and array root value that
-// "The validation root" declines have no XML twin, and no marker:
+// localType and classifyingType — and so are the NAMESPACE TRAP's declines
+// among a type's child declarations and among its attribute uses, at
+// childNamed and useNamed; one more at classify tracks the mapping's own
+// choice of a declaration or use over a wildcard, under "The mapping". A
+// repeated attribute member, an attribute member whose value is null, an
+// object or an array, an array item that is itself an array, a repeated
+// "$xmlns" or "$type", a reserved member other than those two or at the top
+// level, the malformed "$xmlns" and "$type" values below, and the top-level
+// shapes and array root value that "The validation root" declines have no XML
+// twin, and no marker:
 //
 //   - a root key no top-level declaration carries, or that top-level
 //     declarations of two expanded names carry;
