@@ -446,9 +446,9 @@ const ctaUserNS = "http://example.com/a"
 
 // ctaFixtureTypes is the seeded builtins plus a user-defined ATOMIC simple type
 // and a COMPLEX type, both in ctaUserNS. Neither is a legal cast target, and
-// the two are illegal for different reasons the classification keeps apart:
-// a:Kind is valid XPath outside §3.12.6's required subset, a:Box is
-// err:XPST0051.
+// both are err:XPST0051 even where the resolver holds them, as validate's
+// does: xpath-valid clause 2.2.5 puts only the built-ins in the in-scope
+// schema definitions (#894).
 func ctaFixtureTypes(t *testing.T) ctaTestTypes {
 	t.Helper()
 	types := make(ctaTestTypes, len(seededTypes)+2)
@@ -474,19 +474,20 @@ func ctaFixtureTypes(t *testing.T) ctaTestTypes {
 	return types
 }
 
-// TestCompileClassifiesCastTargets pins the THREE-way split §3.12.6 clause 4
-// and xpath20.md §3.10.2 make of a cast target, over both spellings:
+// TestCompileClassifiesCastTargets pins the split §3.12.6 clause 4 and
+// xpath20.md §3.10.2 make of a cast target, over both spellings, against a
+// resolver that holds the user-defined types as validate's does:
 //
 //   - (a) a builtin atomic datatype is the required subset's own case and
 //     compiles;
-//   - (b) another in-scope atomic type is valid XPath outside the required
-//     subset, which §3.12.6's Note licenses declining;
+//   - (b) a user-defined atomic type is outside xpath-valid clause 2.2.5's
+//     in-scope schema definitions, and so err:XPST0051 (#894);
 //   - (c) an unresolvable, complex, non-atomic or excluded target is
-//     err:XPST0051/err:XPST0080, a STATIC error, which shares (b)'s decline
-//     because it shares its consequence at the caller.
+//     err:XPST0051/err:XPST0080.
 //
-// The two declines are one encoding on purpose; what this test pins is that
-// every member of both lands in it and that (a) does not.
+// CompileCTATest declines (b) and (c) alike, and CTATestStaticError reports
+// the code of each cast spelling; the constructor spelling and a cast
+// castsFrom declines report none.
 func TestCompileClassifiesCastTargets(t *testing.T) {
 	types := ctaFixtureTypes(t)
 	bindings := []string{"a", ctaUserNS, "xs", xsd.XMLSchemaNS}
@@ -500,20 +501,31 @@ func TestCompileClassifiesCastTargets(t *testing.T) {
 			t.Errorf("CompileCTATest(%q): declined, want compiled — (a) is a builtin atomic datatype", expr)
 		}
 	}
-	for _, tc := range []struct{ expr, why string }{
-		{"@k cast as a:Kind", "(b) a user-defined atomic type is outside the required subset"},
-		{"a:Kind(@k)", "(b) in the constructor spelling too"},
-		{"@k cast as a:Box", "(c) a complex type is no atomic type: err:XPST0051"},
-		{"@k cast as xs:nosuchtype", "(c) an unresolvable target: err:XPST0051"},
-		{"@k cast as xs:anySimpleType", "(c) an ·absent· {variety}: err:XPST0051"},
-		{"@k cast as xs:IDREFS", "(c) a list builtin is no atomic type: err:XPST0051"},
-		{"@k cast as xs:anyAtomicType", "(c) excluded by name: err:XPST0080"},
-		{"@k cast as xs:NOTATION", "(c) excluded by name: err:XPST0080"},
-		{"@k cast as xs:QName", "an xs:untypedAtomic operand to xs:QName is err:XPTY0004 (F&O §17.1), declined under castsFrom's marker"},
-		{"@k cast as Kind", "an unprefixed target is in the {default namespace}, which declares none"},
+	for _, tc := range []struct{ expr, rule, why string }{
+		{"@k cast as a:Kind", "err:XPST0051", "(b) a user-defined atomic type is outside clause 2.2.5's in-scope types"},
+		{"a:Kind(@k)", "", "(b) in the constructor spelling, which names a function and is never charged"},
+		{"@k cast as a:Box", "err:XPST0051", "(c) a complex type is no atomic type"},
+		{"@k cast as xs:nosuchtype", "err:XPST0051", "(c) an unresolvable target"},
+		{"@k cast as xs:anySimpleType", "err:XPST0051", "(c) an ·absent· {variety}"},
+		{"@k cast as xs:IDREFS", "err:XPST0051", "(c) a list builtin is no atomic type"},
+		{"@k cast as xs:anyAtomicType", "err:XPST0080", "(c) excluded by name"},
+		{"@k cast as xs:NOTATION", "err:XPST0080", "(c) excluded by name"},
+		{"@k cast as xs:QName", "", "an xs:untypedAtomic operand to xs:QName is err:XPTY0004 (F&O §17.1), declined under castsFrom's marker"},
+		{"@k cast as Kind", "err:XPST0051", "an unprefixed target is in the {default namespace}, which declares none"},
 	} {
-		if _, ok := CompileCTATest(ctaExprRecord(tc.expr, "", bindings...), types); ok {
+		record := ctaExprRecord(tc.expr, "", bindings...)
+		if _, ok := CompileCTATest(record, types); ok {
 			t.Errorf("CompileCTATest(%q): compiled, want declined (%s)", tc.expr, tc.why)
+		}
+		err := CTATestStaticError(record, types)
+		if tc.rule == "" {
+			if err != nil {
+				t.Errorf("CTATestStaticError(%q) = %v, want nil (%s)", tc.expr, err, tc.why)
+			}
+			continue
+		}
+		if rule, ok := xsderr.RuleOf(err); !ok || string(rule) != tc.rule {
+			t.Errorf("CTATestStaticError(%q) = %v, want rule %s (%s)", tc.expr, err, tc.rule, tc.why)
 		}
 	}
 }

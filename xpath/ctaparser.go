@@ -3105,9 +3105,9 @@ func (p *ctaParser) castableTail(v ctaValue) (ctaValue, bool) {
 // errors" (the oracle's #894 ruling). The node built in its place is a
 // STAND-IN, a cast of v to xs:string that castsFrom is not asked about: no
 // façade evaluates a tree whose defect is not ctaNoDefect, so its one job is
-// to let the productions after it parse, and xs:string is the target that
-// makes no comparison over it decline (ctaTypes.comparison declines only an
-// xs:float operand), which a static-error-carrying expression may not be.
+// to let the productions after it parse, and xs:string is a target no
+// comparison over it declines: ctaTypes.comparison declines a pair only over
+// a numeric operand (untypedAgainst, ctaWider, sumCompares).
 func (p *ctaParser) singleType(v ctaValue) (ctaCast, bool) {
 	if !p.atName("as") {
 		return ctaCast{}, false
