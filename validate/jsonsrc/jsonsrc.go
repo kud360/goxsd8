@@ -234,9 +234,9 @@ func (w *walker) rootDeclaration(key string, loc xsderr.Loc) (xsd.ElementDeclara
 // read once per element from the type walker.classifyingType chose — its
 // declaration's {type definition}, or the type its "$type" names: the owner's
 // expanded name, the child element declarations the type contains, the type's
-// {attribute uses}, its element wildcards and {attribute wildcard}, and
-// whether its {content type} is simple. A simple type contains none and has
-// none.
+// {attribute uses}, its element wildcards and {attribute wildcard}, whether
+// its {content type} is simple, and the type itself where its {open content}
+// is not skip. A simple type contains none and has none.
 type object struct {
 	owner     xsd.QName
 	contained []xsd.ElementDeclaration
@@ -255,6 +255,11 @@ type object struct {
 	// names whose expanded name no top-level declaration carries (bareElement),
 	// which has no type to classify a member against.
 	undeclared bool
+	// open is the type, where its {content type} has an {open content} whose
+	// {wildcard}'s {process contents} is not skip, and nil otherwise: a child
+	// that {open content} may take carries no "$type" where its name has a
+	// ·locally declared type· within the type (walker.localType).
+	open *xsd.ComplexType
 }
 
 // member is one key's classification, a closed sum of two arms: an
@@ -669,7 +674,7 @@ func (w *walker) element(m elementMember, loc xsderr.Loc, key string, tok json.T
 			// where a value is due.
 			return nil, w.declinef(tokLoc, "an array is an item of the array of member %q; only an object or a scalar maps to one element", key)
 		}
-		return w.objectElement(m, loc, tokLoc, parent)
+		return w.objectElement(m, loc, tokLoc, in, parent)
 	}
 	lexical, ok := scalarLexical(tok)
 	if !ok {
@@ -678,15 +683,21 @@ func (w *walker) element(m elementMember, loc xsderr.Loc, key string, tok json.T
 	return w.scalar(m.elementName(), loc, lexical, tokLoc, parent), nil
 }
 
-// objectElement builds an object-valued element whose '{' is at tokLoc: its
-// leading reserved members (lead), then its attribute members (attributes),
-// each classified under the type its members are (elementMember.object), and
-// a cursor over the rest.
-func (w *walker) objectElement(m elementMember, loc, tokLoc xsderr.Loc, parent *scope) (*element, error) {
+// objectElement builds an object-valued element whose '{' is at tokLoc, in
+// the parent's members cursor in (nil for the root) and scope parent: its
+// leading reserved members (lead), a "$type" among them vetted by localType,
+// then its attribute members (attributes), each classified under the type its
+// members are (elementMember.object), and a cursor over the rest.
+func (w *walker) objectElement(m elementMember, loc, tokLoc xsderr.Loc, in *members, parent *scope) (*element, error) {
 	e := &element{w: w, name: m.elementName(), loc: loc, scope: parent}
 	typ, tok, tokAt, err := w.lead(e)
 	if err != nil {
 		return nil, err
+	}
+	if typ != nil && in != nil {
+		if err := w.localType(in.object, e, typ); err != nil {
+			return nil, err
+		}
 	}
 	o, err := m.object(w, e, typ, tokLoc)
 	if err != nil {
@@ -807,11 +818,11 @@ func (w *walker) xmlns(owner xsd.QName) ([]binding, error) {
 // lexical names a type (instanceType), that ·instance-specified type
 // definition·. The second is taken whether or not it ·overrides· the type the
 // engine would otherwise assess e under: where it does not, the engine
-// assesses the members under that type — charging cvc-elt clause 4 where a
-// ·governing element declaration· supplies it, and nothing where e, ·attributed
-// to· an {open content}, has none and a ·locally declared type· supplies it
-// (key-governing-type-elem clause 7) — and they are still the members of the
-// type "$type" names.
+// assesses the members under that type and charges cvc-elt clause 4, a
+// ·governing element declaration· having supplied it, and they are still the
+// members of the type "$type" names. A ·locally declared type· that would
+// supply it instead, uncharged (key-governing-type-elem clause 7), is never
+// met here: localType declined the "$type" first.
 //
 // It DECLINES a {type definition} that does not resolve.
 //
@@ -852,6 +863,61 @@ func (w *walker) instanceType(e *element, lexical string) (xsd.TypeDefinition, b
 		return nil, false
 	}
 	return w.schema.ResolvedType(xsd.TypeDefinitionRef{Name: xsd.QName{Space: space, Local: local}})
+}
+
+// anyTypeName is ·xs:anyType·'s expanded name, where a {base type definition}
+// chain ends (key-ldt-elem case 1).
+var anyTypeName = xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"}
+
+// localType vets the xsi:type typ of e, a child of the object parent. It
+// DECLINES typ, whatever it names, where parent's type P has an {open content}
+// whose {wildcard} is not skip (parent.open) and e's expanded name has a
+// ·locally declared type· within P: a type on P's {base type definition}
+// chain, short of ·xs:anyType·, contains a declaration of that name
+// (key-ldt-elem cases 2 and 3). A base that does not resolve declines too.
+//
+// Such an e may be ·attributed to· that {open content}, which the mapping
+// cannot tell from a particle without running the content model. It then has
+// no ·governing element declaration· (key-governing-ed clause 4.3), and the
+// ·locally declared type· L governs it unless the type typ names ·overrides·
+// L (key-governing-type-elem clauses 6 and 7), with no cvc-elt clause 4
+// charge. The mapping classifies e's members under the type typ names
+// (classifyingType), so where that type does not ·override· L, e's attributes
+// and its descendants would be classified under one type and assessed under
+// another, uncharged; validate.SchemaView cannot ask ·override·.
+//
+// P is the type the parent's members are classified under, which governs the
+// parent wherever the parent's verdict can stand: where the parent's own
+// "$type" does not ·override· the type a ·governing element declaration·
+// supplies, the walk charges cvc-elt clause 4 at the parent, and where a
+// ·locally declared type· would supply it, this decline met the parent first.
+//
+// GAP(jsonsrc): a "$type" on an element a non-skip {open content} may take,
+// whose name has a ·locally declared type· within the type, declines, where
+// the engine assesses its XML twin under that type or the xsi:type that
+// ·overrides· it. Owned by #2647, the lift that classifies under the
+// ·governing type definition·.
+func (w *walker) localType(parent *object, e *element, typ *attribute) error {
+	if parent.open == nil {
+		return nil
+	}
+	t := *parent.open
+	for t.Name() != anyTypeName {
+		if slices.ContainsFunc(w.schema.ContainedElementDeclarations(t), func(d xsd.ElementDeclaration) bool { return d.Name() == e.name }) {
+			return w.declinef(typ.loc, "the \"$type\" member of %s: the {open content} of the type of %s may take it, and its name has a ·locally declared type· there, which governs it unless the type \"$type\" names ·overrides· it (key-governing-type-elem clauses 6 and 7); the mapping does not ask ·override·",
+				e.name, parent.owner)
+		}
+		base, ok := w.schema.ResolvedType(t.Base())
+		if !ok {
+			return w.declinef(typ.loc, "the \"$type\" member of %s: the {open content} of the type of %s may take it, and that type's {base type definition} chain does not resolve", e.name, parent.owner)
+		}
+		next, ok := base.(xsd.ComplexType)
+		if !ok {
+			return nil
+		}
+		t = next
+	}
+	return nil
 }
 
 // scalarLexical is the lexical form of a scalar token — a string's decoded
@@ -913,6 +979,9 @@ func (w *walker) object(owner xsd.QName, td xsd.TypeDefinition) *object {
 		case xsd.ElementContent:
 			if ct.OpenContent != nil {
 				o.elementWildcards = append(o.elementWildcards, ct.OpenContent.Wildcard())
+				if ct.OpenContent.Wildcard().ProcessContents() != xsd.ProcessSkip {
+					o.open = &t
+				}
 			}
 		}
 		if aw, ok := t.AttributeWildcard(); ok {

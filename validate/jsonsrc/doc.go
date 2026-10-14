@@ -113,17 +113,15 @@
 //     the element's xsi:type, its string value the attribute's [[normalized
 //     value]]: {"item":{"$type":"t:Derived",…}} ≡ <item
 //     xsi:type="t:Derived">…</item>. The engine resolves it and charges
-//     cvc-attribute (clause 3 or 5) where it names no type. Where the type it
-//     names does not ·override· the one the element would otherwise be
-//     assessed under, the engine charges cvc-elt clause 4 if a ·governing
-//     element declaration· supplied that type, and nothing if the element,
-//     ·attributed to· an {open content}, has none and its ·locally declared
-//     type· supplied it (key-governing-type-elem clause 7). The members after
-//     it are classified under the type it names, wherever that resolves —
-//     whether or not it overrides — and under the declared type otherwise; it
-//     is resolved through the engine's own resolver (cvc-resolve-instance,
-//     §3.17.6.3), so the two agree on the type. A "$type" rides an object
-//     value only: a scalar or null element carries no xsi:type.
+//     cvc-attribute (clause 3 or 5) where it names no type, and cvc-elt clause
+//     4 where the type it names does not ·override· the one a ·governing
+//     element declaration· supplied. The members after it are classified under
+//     the type it names, wherever that resolves — whether or not it overrides
+//     — and under the declared type otherwise; it is resolved through the
+//     engine's own resolver (cvc-resolve-instance, §3.17.6.3), so the two
+//     agree on the type. A "$type" rides an object value only: a scalar or
+//     null element carries no xsi:type. It declines where a ·locally declared
+//     type· could govern the element instead, uncharged (Declines).
 //   - No DTD-shaped declaration exists in JSON, so the adapter does not
 //     implement [validate.UnparsedEntities] and every ·ENTITY value· fails
 //     cvc-simple-type clause 3, as that interface's doc states.
@@ -163,8 +161,8 @@
 // naming the arm it is not — never a silent drop and never a guessed mapping.
 // Each entry below whose XML twin the engine assesses is tracked by a
 // GAP(jsonsrc) marker at the function that declines it — rootDeclaration,
-// wildcardMember, classify, members.key, useNamed, reserved, typeTable and
-// classifyingType — and so are the NAMESPACE TRAP's declines among a type's
+// wildcardMember, classify, members.key, useNamed, reserved, typeTable,
+// localType and classifyingType — and so are the NAMESPACE TRAP's declines among a type's
 // child declarations and among its attribute uses, at childNamed and useNamed;
 // one more at classify tracks the mapping's own choice of a declaration or use
 // over a wildcard, under "The mapping". A repeated attribute member, an
@@ -219,6 +217,16 @@
 //     object of strings, which binds a non-empty prefix that is no NCName (no
 //     xmlns:prefix attribute declares one), binds a prefix twice, binds "xml"
 //     or "xmlns", or binds a non-empty prefix to "";
+//   - a "$type" on an element whose parent's members are classified under a
+//     type P with an {open content} whose {wildcard} is not skip, where the
+//     element's expanded name has a ·locally declared type· L within P
+//     (key-ldt-elem: a declaration of that name a type on P's {base type
+//     definition} chain contains), whatever the "$type" names. That {open
+//     content} may take the element, which then has no ·governing element
+//     declaration·, and L governs it unless the "$type"'s type ·overrides· L
+//     (key-governing-type-elem clauses 6 and 7), uncharged; the members would
+//     be classified under the "$type"'s type, and [validate.SchemaView] cannot
+//     ask ·override·. Lifting this is #2647's;
 //   - any other "$"-prefixed reserved member, "$" being no XML NameStartChar;
 //   - an array item that is itself an array;
 //   - a matched declaration carrying a {type table}, the top-level one of a

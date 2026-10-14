@@ -200,3 +200,109 @@ func TestReservedMemberDeclines(t *testing.T) {
 		})
 	}
 }
+
+// openContentSchema gives x, of type dt, a ·locally declared type· under four
+// parents: p, whose lax {open content} may take an x its sequence does not;
+// r, a restriction whose own content model contains no x but whose base B's
+// does (key-ldt-elem case 3), opened by a lax {open content} of the target
+// namespace; s, whose {open content} is skip; and q, which has none. dt holds
+// an optional c of type ct, and both dt and ct have a strict {attribute
+// wildcard}; other, unrelated to dt, holds a c of type oc and the attribute
+// foo, which oc carries too.
+const openContentSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="urn:t" xmlns:t="urn:t" elementFormDefault="qualified">
+  <xs:complexType name="ct"><xs:anyAttribute processContents="strict"/></xs:complexType>
+  <xs:complexType name="oc"><xs:attribute name="foo" type="xs:string"/></xs:complexType>
+  <xs:complexType name="dt">
+    <xs:sequence><xs:element name="c" type="t:ct" minOccurs="0"/></xs:sequence>
+    <xs:anyAttribute processContents="strict"/>
+  </xs:complexType>
+  <xs:complexType name="other">
+    <xs:sequence><xs:element name="c" type="t:oc" minOccurs="0"/></xs:sequence>
+    <xs:attribute name="foo" type="xs:string"/>
+  </xs:complexType>
+  <xs:complexType name="B">
+    <xs:sequence>
+      <xs:element name="x" type="t:dt" minOccurs="0"/>
+      <xs:any processContents="lax" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:element name="p">
+    <xs:complexType>
+      <xs:openContent mode="interleave"><xs:any processContents="lax"/></xs:openContent>
+      <xs:sequence><xs:element name="x" type="t:dt" minOccurs="0"/></xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="r">
+    <xs:complexType>
+      <xs:complexContent>
+        <xs:restriction base="t:B">
+          <xs:openContent mode="interleave"><xs:any namespace="##targetNamespace" processContents="lax"/></xs:openContent>
+          <xs:sequence/>
+        </xs:restriction>
+      </xs:complexContent>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="s">
+    <xs:complexType>
+      <xs:openContent mode="interleave"><xs:any processContents="skip"/></xs:openContent>
+      <xs:sequence><xs:element name="x" type="t:dt" minOccurs="0"/></xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="q">
+    <xs:complexType>
+      <xs:sequence><xs:element name="x" type="t:dt" minOccurs="0"/></xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+
+// TestOpenContentTypeDeclines pins walker.localType: a "$type" on an element a
+// non-skip {open content} may take, whose name has a ·locally declared type·
+// there, declines whatever it names. The first two rows are #2615's two
+// reproductions, where other does not ·override· dt; the third names dt
+// itself; the fourth finds dt on r's base chain alone.
+func TestOpenContentTypeDeclines(t *testing.T) {
+	v := validatorOver(t, openContentSchema)
+	const says = `the {open content} of the type of`
+	for _, tc := range []struct {
+		name, json string
+		prefix     string
+	}{
+		{"its own attribute", `{"p":{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:other","foo":"1"}]}}`,
+			"jsonsrc: instance.json:1:39: "},
+		{"its descendant", `{"p":{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:other","c":{"foo":"1"}}]}}`,
+			"jsonsrc: instance.json:1:39: "},
+		{"whatever it names", `{"p":{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:dt"}]}}`,
+			"jsonsrc: instance.json:1:39: "},
+		{"declared on the base chain alone", `{"r":{"x":{"$xmlns":{"t":"urn:t"},"$type":"t:other"}}}`,
+			"jsonsrc: instance.json:1:35: "},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			res, err := Validate(v, strings.NewReader(tc.json), WithURI(jsonURI))
+			if err == nil {
+				t.Fatalf("Validate(%s) = %v violations, %d unevaluated, nil error; want the decline", tc.json, rules(res), len(res.Unevaluated()))
+			}
+			if res != nil {
+				t.Errorf("Validate(%s) returned a result beside its error", tc.json)
+			}
+			if !strings.HasPrefix(err.Error(), tc.prefix+`the "$type" member of {urn:t}x: `) || !strings.Contains(err.Error(), says) {
+				t.Errorf("Validate(%s) = %q, want it to open %q and say %q", tc.json, err, tc.prefix, says)
+			}
+		})
+	}
+}
+
+// TestOpenContentTypeMaps pins localType's limit: the same "$type" maps under
+// a parent with no {open content} and under one whose {open content} is
+// skip, and the engine charges cvc-elt clause 4 there, as for the XML twin.
+func TestOpenContentTypeMaps(t *testing.T) {
+	v := validatorOver(t, openContentSchema)
+	for _, tc := range []struct{ name, json, xml string }{
+		{"no open content", `{"q":{"x":{"$xmlns":{"t":"urn:t"},"$type":"t:other","foo":"1"}}}`,
+			`<q xmlns="urn:t" ` + xsiDecl + ` xmlns:t="urn:t"><x xsi:type="t:other" foo="1"/></q>`},
+		{"skip open content", `{"s":{"x":{"$xmlns":{"t":"urn:t"},"$type":"t:other","foo":"1"}}}`,
+			`<s xmlns="urn:t" ` + xsiDecl + ` xmlns:t="urn:t"><x xsi:type="t:other" foo="1"/></s>`},
+	} {
+		t.Run(tc.name, func(t *testing.T) { twin(t, v, tc.json, tc.xml, elt) })
+	}
+}
