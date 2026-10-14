@@ -682,15 +682,17 @@ func TestProduceTypeTableCastTargetStaticErrorIsCharged(t *testing.T) {
 		{"@k cast as q:Missing = 't'", "err:XPST0081"},
 		{"@p:k cast as xs:anyAtomicType = 't'", "err:XPST0081"},
 	} {
-		_, err := produce(t, wrap("", typeTableTypes+`
-		<xs:element name="e" type="B">
-		  <xs:alternative test="`+tc.test+`" type="T"/>
-		  <xs:alternative type="V"/>
-		</xs:element>`))
-		assertRule(t, err, "ta-props-correct")
-		if rule, ok := xsderr.RuleOf(errors.Unwrap(err)); !ok || string(rule) != tc.rule {
-			t.Errorf("test=%q: wrapped cause of %v carries rule %q (found %t), want %s", tc.test, err, rule, ok, tc.rule)
-		}
+		t.Run(tc.test, func(t *testing.T) {
+			_, err := produce(t, wrap("", typeTableTypes+`
+			<xs:element name="e" type="B">
+			  <xs:alternative test="`+tc.test+`" type="T"/>
+			  <xs:alternative type="V"/>
+			</xs:element>`))
+			assertRule(t, err, "ta-props-correct")
+			if rule, ok := xsderr.RuleOf(errors.Unwrap(err)); !ok || string(rule) != tc.rule {
+				t.Errorf("wrapped cause of %v carries rule %q (found %t), want %s", err, rule, ok, tc.rule)
+			}
+		})
 	}
 }
 
