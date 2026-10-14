@@ -64,7 +64,7 @@
 //     Attribute members lead the object, before its first child member: the
 //     engine reads an element's attributes whole at its entry.
 //   - A member whose key neither carries, of a type with a wildcard, is named
-//     by a wildcard of the type where the model fixes its namespace, and only
+//     by a wildcard of the type where the key or the model fixes its namespace, and only
 //     there. Element kind: every element wildcard of the type — each Wildcard
 //     {term} its content model contains ([xsd.Schema.ContainedWildcards]),
 //     whatever its {process contents}, and its {open content} wildcard —
@@ -91,18 +91,16 @@
 //     a prefixed key it only chooses the kind, the declaration's or use's
 //     expanded name being the one it spells; it is RULED permanent by #2634
 //     because the spec is silent between the two names, and because a decline
-//     instead would refuse inputs it maps, the curated json cases
-//     wildcard-attribute.v and .i among them. The spec makes the same choice
-//     for one item matched both ways, which here is where the wildcard's one
-//     namespace is the declaration's or the use's own: the Note under
-//     cvc-accept matches an element information item "accepted by either a
-//     Wildcard or an Element Declaration" against the Element Declaration, and
-//     the Note after cvc-complex-type clause 4 gives an attribute use "whose
-//     name and target namespace match" precedence over the {attribute
-//     wildcard}. Neither Note chooses between two expanded names, the
-//     declaration's or use's and the (N,key) a wildcard would give, nor across
-//     kinds, a declaration over an {attribute wildcard} or a use over an
-//     element wildcard.
+//     instead would refuse inputs it maps, the curated json cases wildcard-attribute.v
+//     and .i among them. The spec makes the same choice for one item matched both ways,
+//     which here is where the wildcard's one namespace is the declaration's or the use's
+//     own: the Note under cvc-accept matches an element information item "accepted by
+//     either a Wildcard or an Element Declaration" against the Element Declaration, and
+//     the Note after cvc-complex-type clause 4 gives an attribute use "whose name and
+//     target namespace match" precedence over the {attribute wildcard}. Neither Note
+//     chooses between two expanded names, the declaration's or use's and the (N,key) a
+//     wildcard would give, nor across kinds, a declaration over an {attribute wildcard}
+//     or a use over an element wildcard.
 //   - A member whose key neither carries, of a type with no wildcard of either
 //     kind — a simple type included — is the child a prefixed key spells, or
 //     (O,key), O the enclosing element's own namespace name, under the
