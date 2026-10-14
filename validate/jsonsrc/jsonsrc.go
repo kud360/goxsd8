@@ -382,9 +382,10 @@ func (w *walker) wildcardMember(o *object, key string, loc xsderr.Loc) (member, 
 			key, o.owner)
 	}
 	if elemental {
-		ns, err := w.fixedNamespace(o.elementWildcards, "element wildcard", o, key, loc)
-		if err != nil {
-			return nil, err
+		ns, why, ok := fixedNamespace(o.elementWildcards)
+		if !ok {
+			return nil, w.declinef(loc, "member %q names no child element declaration and no attribute use of the type of %s, and its element wildcard set %s",
+				key, o.owner, why)
 		}
 		name := xsd.QName{Space: ns, Local: key}
 		d, ok := w.schema.Element(name)
@@ -401,28 +402,28 @@ func (w *walker) wildcardMember(o *object, key string, loc xsderr.Loc) (member, 
 		return nil, w.declinef(loc, "member %q names only the {attribute wildcard} of the type of %s, whose {content type} is simple; the mapping spells no text beside attribute members",
 			key, o.owner)
 	}
-	ns, err := w.fixedNamespace([]xsd.Wildcard{*o.attributeWildcard}, "{attribute wildcard}", o, key, loc)
-	if err != nil {
-		return nil, err
+	ns, why, ok := fixedNamespace([]xsd.Wildcard{*o.attributeWildcard})
+	if !ok {
+		return nil, w.declinef(loc, "member %q names no child element declaration and no attribute use of the type of %s, and its {attribute wildcard} set %s",
+			key, o.owner, why)
 	}
 	return attributeMember{name: xsd.QName{Space: ns, Local: key}}, nil
 }
 
 // fixedNamespace is the one namespace name every wildcard of wildcards
-// enumerates, read in document order, and declines where one is of variety
-// any or not, where they enumerate more than one, and where the one is the
-// xsi or the xml namespace. kind names the wildcards' kind in the decline:
-// "element wildcard" or "{attribute wildcard}".
+// enumerates, read in document order, and ok. It is not ok where one is of
+// variety any or not, where they enumerate more than one namespace, and where
+// the one is the xsi or the xml namespace; why then completes the caller's
+// decline, after the wildcards' noun.
 //
 // {variety} and {namespaces} are read here to name the key, not to admit it:
 // admission stays cvc-wildcard's, the engine's (wildcardMember).
-func (w *walker) fixedNamespace(wildcards []xsd.Wildcard, kind string, o *object, key string, loc xsderr.Loc) (string, error) {
+func fixedNamespace(wildcards []xsd.Wildcard) (uri, why string, ok bool) {
 	var fixed []xsd.Namespace
 	for _, wc := range wildcards {
 		nc := wc.NamespaceConstraint()
 		if nc.Variety() != xsd.NamespaceConstraintEnumeration {
-			return "", w.declinef(loc, "member %q names no child element declaration and no attribute use of the type of %s, and an %s of variety %s fixes no namespace for it",
-				key, o.owner, kind, nc.Variety())
+			return "", fmt.Sprintf("includes one of variety %s, which fixes no namespace for it", nc.Variety()), false
 		}
 		for _, n := range nc.Namespaces() {
 			if !slices.Contains(fixed, n) {
@@ -431,15 +432,13 @@ func (w *walker) fixedNamespace(wildcards []xsd.Wildcard, kind string, o *object
 		}
 	}
 	if len(fixed) != 1 {
-		return "", w.declinef(loc, "member %q names no child element declaration and no attribute use of the type of %s, and its %s set enumerates %d namespaces; a JSON key carries no namespace to choose between them",
-			key, o.owner, kind, len(fixed))
+		return "", fmt.Sprintf("enumerates %d namespaces; a JSON key carries no namespace to choose between them", len(fixed)), false
 	}
-	uri, _ := fixed[0].URI() // "" for ·absent·, a QName's no-namespace Space
+	uri, _ = fixed[0].URI() // "" for ·absent·, a QName's no-namespace Space
 	if uri == xsd.XMLSchemaInstanceNS || uri == xmlNamespace {
-		return "", w.declinef(loc, "member %q names no child element declaration and no attribute use of the type of %s, and its %s set enumerates the namespace %s alone; the mapping names no key in the xsi or xml namespace",
-			key, o.owner, kind, uri)
+		return "", fmt.Sprintf("enumerates the namespace %s alone; the mapping names no key in the xsi or xml namespace", uri), false
 	}
-	return uri, nil
+	return uri, "", true
 }
 
 // childNamed is the first of o.contained whose local name is key, declining
