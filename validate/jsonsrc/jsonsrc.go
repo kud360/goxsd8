@@ -54,8 +54,9 @@ func WithURI(uri string) Option {
 // makes no QName or whose prefix no "$xmlns" in scope binds; a key no child
 // element declaration and no attribute use carries whose namespace neither a
 // prefix nor the type's wildcards fix, or whose kind a type with both an
-// element wildcard and an {attribute wildcard} leaves open, or which a prefix
-// or a wildcard puts in the xsi or xml namespace; a member of an object under
+// element wildcard and an {attribute wildcard} leaves open, or which a
+// wildcard puts in the xsi or xml namespace, or a prefix in the xsi namespace
+// or, as a child element, in the xml namespace; a member of an object under
 // a child no contained and no top-level declaration names; an unprefixed key
 // two expanded names carry, a key both a child declaration and an
 // attribute use carry, an attribute member after a child member or repeated,
@@ -505,8 +506,9 @@ func (w *walker) classify(o *object, key string, sc *scope, loc xsderr.Loc) (mem
 // wildcards of both kinds for (xs:anyType has); for an unprefixed key, a
 // wildcard of variety any or not, an enumeration of more than one namespace,
 // or element wildcards whose namespaces differ; a name it would give in the
-// xsi or the xml namespace, N, M or a prefixed key's; and a key a
-// simple-content type's {attribute wildcard} alone admits.
+// xsi or the xml namespace, N or M; a prefixed key's in the xsi namespace,
+// and its child element's in the xml namespace; and a key a simple-content
+// type's {attribute wildcard} alone admits.
 //
 // GAP(jsonsrc): a wildcard-only key whose namespace or kind the model does
 // not fix declines: for an unprefixed key, a wildcard of variety any or not,
@@ -524,13 +526,16 @@ func (w *walker) classify(o *object, key string, sc *scope, loc xsderr.Loc) (mem
 //
 // GAP(jsonsrc): a key a wildcard's single namespace, of either kind, puts in
 // the xml or the xsi namespace declines, and so does a prefixed key no
-// declaration or use carries that spells a name in either. RULED permanent by
-// #2635: an element in the xml namespace would bind the default namespace to
-// it, which no XML twin has, and the attribute kind is ruled with it; the four
-// xsi attributes cvc-complex-type clause 2 excepts must keep declining,
-// xsi:nil and xsi:type having their own spellings, and the rest of the xsi
-// namespace is not worth a half-arm. A prefix spells the namespace, not the
-// kind, so it keeps the decline.
+// declaration or use carries that spells a name in the xsi namespace, or a
+// child element's in the xml namespace, under an element wildcard or no
+// wildcard. RULED permanent by #2635: an element in the xml namespace would
+// bind the default namespace to it, which no XML twin has, and the attribute
+// kind is ruled with it; the four xsi attributes cvc-complex-type clause 2
+// excepts must keep declining, xsi:nil and xsi:type having their own
+// spellings, and the rest of the xsi namespace is not worth a half-arm. A
+// prefixed key in the xml namespace under a type with only an {attribute
+// wildcard} maps, to the attribute it spells: an attribute binds no default
+// namespace, so the element's reason does not reach it.
 //
 // GAP(jsonsrc): a key a simple-content type's {attribute wildcard} alone
 // admits declines, on the ground useNamed's simple-content marker states for
@@ -551,11 +556,14 @@ func (w *walker) wildcardMember(o *object, key string, k keyName, loc xsderr.Loc
 			key, o.owner)
 	}
 	if k.prefixed {
-		if k.name.Space == xsd.XMLSchemaInstanceNS || k.name.Space == xmlNamespace {
-			return nil, w.declinef(loc, "member %q names no child element declaration and no attribute use of the type of %s, and its prefix puts it in the namespace %s; the mapping names no key in the xsi or xml namespace", key, o.owner, k.name.Space)
+		if k.name.Space == xsd.XMLSchemaInstanceNS {
+			return nil, w.declinef(loc, "member %q names no child element declaration and no attribute use of the type of %s, and its prefix puts it in the namespace %s; the mapping names no key in the xsi namespace", key, o.owner, k.name.Space)
 		}
 		if o.attributeWildcard != nil {
 			return attributeMember{name: k.name}, nil
+		}
+		if k.name.Space == xmlNamespace {
+			return nil, w.declinef(loc, "member %q names no child element declaration and no attribute use of the type of %s, and its prefix puts it in the namespace %s; the mapping names no child element in the xml namespace", key, o.owner, k.name.Space)
 		}
 		return w.namedChild(k.name, loc)
 	}

@@ -218,31 +218,32 @@
 //     key either meaning;
 //   - a key no contained declaration and no attribute use carries, where the
 //     key and the type's wildcards do not fix its namespace or kind: for an
-//     unprefixed key, a wildcard of variety any or not (xs:anyType's
-//     included), or several enumerated namespaces; a key a wildcard's single
-//     namespace, of either kind, puts in the xsi or the xml namespace, and a
-//     prefixed key no declaration or use carries that spells a name in either;
-//     a key of a type with both an element wildcard and an {attribute
-//     wildcard}, whose kind the key does not say, prefixed or not; and a
-//     member of an object under a child no contained and no top-level
-//     declaration names. The xsi- and xml-namespace class is RULED permanent
-//     by #2635: an element in the xml namespace would bind the default
-//     namespace to it, which no XML twin has, and the attribute kind is ruled
-//     with it; the four xsi attributes cvc-complex-type clause 2 excepts must
-//     keep declining, xsi:nil and xsi:type having their own spellings, and the
-//     rest of the xsi namespace is not worth a half-arm; a prefix spells the
-//     namespace, not the kind, so it keeps the decline. The others are RULED
-//     permanent by #2634, and a prefix lifts the namespace ones but not the
-//     kind ones: whichever (N,key) the mapping chose, its verdict depends on N
-//     through declaration lookup, attribution and an ancestor's
-//     identity-constraint paths and assertions. Conditions under which the
-//     verdict is the same for every admitted N exist — no {disallowed names}
-//     entry of the key's local name and ##defined and ##definedSibling
-//     inert for it, skip or no global declaration of it in an admitted
-//     namespace, one particle accepting every (N,key), no ancestor-or-self
-//     assertion, identity constraint or {type table} — and they are unbuilt by
-//     decision, not by oversight: testing the last needs a census of every
-//     ancestor, which the walker does not keep;
+//     unprefixed key, a wildcard of variety any or not (xs:anyType's included),
+//     or several enumerated namespaces; a key a wildcard's single namespace, of
+//     either kind, puts in the xsi or the xml namespace, and a prefixed key no
+//     declaration or use carries that spells a name in the xsi namespace, or a
+//     child element's in the xml namespace; a key of a type with both an
+//     element wildcard and an {attribute wildcard}, whose kind the key does not
+//     say, prefixed or not; and a member of an object under a child no
+//     contained and no top-level declaration names. The xsi- and xml-namespace
+//     class is RULED permanent by #2635: an element in the xml namespace would
+//     bind the default namespace to it, which no XML twin has, and the
+//     attribute kind is ruled with it; the four xsi attributes cvc-complex-type
+//     clause 2 excepts must keep declining, xsi:nil and xsi:type having their
+//     own spellings, and the rest of the xsi namespace is not worth a half-arm;
+//     a prefixed key in the xml namespace under a type with only an {attribute
+//     wildcard} maps, to the attribute it spells, which binds no default
+//     namespace. The others are RULED permanent by #2634, and a prefix lifts
+//     the namespace ones but not the kind ones: whichever (N,key) the mapping
+//     chose, its verdict depends on N through declaration lookup, attribution
+//     and an ancestor's identity-constraint paths and assertions. Conditions
+//     under which the verdict is the same for every admitted N exist — no
+//     {disallowed names} entry of the key's local name and ##defined and
+//     ##definedSibling inert for it, skip or no global declaration of it in an
+//     admitted namespace, one particle accepting every (N,key), no
+//     ancestor-or-self assertion, identity constraint or {type table} — and
+//     they are unbuilt by decision, not by oversight: testing the last needs a
+//     census of every ancestor, which the walker does not keep;
 //   - a key both a contained declaration and an attribute use carry, which no
 //     spec rule decides between;
 //   - an attribute member after a child member, a repeated attribute member,

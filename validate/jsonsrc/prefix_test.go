@@ -16,14 +16,16 @@ import (
 // prefixSchema declares, in urn:p, the top-level doc, whose type holds k, a
 // nillable xs:integer, then any number of references to urn:o's k, and the
 // attributes a, a qualified xs:integer, and a reference to urn:o's a; and the
-// empty type empty. Every key of doc, unprefixed, is carried by two expanded
-// names, and so is doc at the root. any holds a lax ##any element wildcard,
-// local a lax ##local one, att an empty sequence and a lax ##any {attribute
-// wildcard}, both wildcards of both kinds, and plain no wildcard; w is a
-// top-level xs:integer.
+// empty type empty; it imports the xml namespace, whose four attribute
+// declarations the parser supplies. Every key of doc, unprefixed, is carried
+// by two expanded names, and so is doc at the root. any holds a lax ##any
+// element wildcard, local a lax ##local one, att an empty sequence and a lax
+// ##any {attribute wildcard}, both wildcards of both kinds, and plain no
+// wildcard; w is a top-level xs:integer.
 const prefixSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
     targetNamespace="urn:p" xmlns:p="urn:p" xmlns:o="urn:o" elementFormDefault="qualified">
   <xs:import namespace="urn:o" schemaLocation="o.xsd"/>
+  <xs:import namespace="http://www.w3.org/XML/1998/namespace"/>
   <xs:element name="doc">
     <xs:complexType>
       <xs:sequence>
@@ -100,7 +102,9 @@ const pXML = `<p:doc xmlns:p="urn:p" xmlns:o="urn:o"`
 // attribute rows each choose between two expanded names an unprefixed key
 // declines between (TestPrefixedKeyDeclines). The undeclared-root rows are
 // rootMember's: an element no top-level declaration names, in a prefixed key's
-// namespace or, unprefixed, in none. Each row agrees with its XML twin.
+// namespace or, unprefixed, in none. The xml-namespace rows are the attribute
+// an {attribute wildcard} alone admits, assessed against the xml:lang
+// declaration the parser supplies. Each row agrees with its XML twin.
 func TestPrefixedKey(t *testing.T) {
 	v := prefixValidator(t)
 	const xsi = ` ` + xsiDecl
@@ -150,6 +154,10 @@ func TestPrefixedKey(t *testing.T) {
 			`<p:local xmlns:p="urn:p" xmlns:z="urn:z"><z:q>x</z:q></p:local>`, content},
 		{"##any attribute wildcard", `{"p:att":{"$xmlns":{"p":"urn:p","z":"urn:z"},"z:q":"x"}}`,
 			`<p:att xmlns:p="urn:p" xmlns:z="urn:z" z:q="x"/>`, none},
+		{"##any attribute wildcard, the xml namespace", `{"p:att":{"$xmlns":{"p":"urn:p"},"xml:lang":"en"}}`,
+			`<p:att xmlns:p="urn:p" xml:lang="en"/>`, none},
+		{"##any attribute wildcard, the xml namespace's declaration", `{"p:att":{"$xmlns":{"p":"urn:p"},"xml:lang":"not a language"}}`,
+			`<p:att xmlns:p="urn:p" xml:lang="not a language"/>`, attr},
 		{"no wildcard", `{"p:plain":{"$xmlns":{"p":"urn:p","z":"urn:z"},"z:s":"x"}}`,
 			`<p:plain xmlns:p="urn:p" xmlns:z="urn:z"><z:s>x</z:s></p:plain>`, content},
 		{"no wildcard, an unprefixed key keeps its parent's namespace", `{"p:plain":{"$xmlns":{"p":"urn:p"},"s":"x"}}`,
@@ -196,8 +204,8 @@ func TestPrefixedKeyName(t *testing.T) {
 // QName has and an unbound prefix have no XML twin (walker.keyName); an
 // unprefixed key two expanded names carry is RULED permanent by #2623
 // (rootMember, childNamed, useNamed); a prefix keeps the kind-unfixed declines
-// RULED permanent by #2634 and the xsi- and xml-namespace ones RULED permanent
-// by #2635 (wildcardMember).
+// RULED permanent by #2634, and the xsi-namespace ones and the xml-namespace
+// child element RULED permanent by #2635 (wildcardMember).
 func TestPrefixedKeyDeclines(t *testing.T) {
 	v := prefixValidator(t)
 	for _, tc := range []struct {
@@ -243,10 +251,10 @@ func TestPrefixedKeyDeclines(t *testing.T) {
 			"jsonsrc: instance.json:1:35: ", `member "p:w" of {urn:p}none, an element no contained and no top-level element declaration names`},
 		{"the xsi namespace under a wildcard", `{"p:any":{"$xmlns":{"p":"urn:p","i":"http://www.w3.org/2001/XMLSchema-instance"},"i:type":"p:empty"}}`,
 			"jsonsrc: instance.json:1:82: ", `member "i:type" names no child element declaration and no attribute use of the type of {urn:p}any, and its prefix puts it in the namespace http://www.w3.org/2001/XMLSchema-instance`},
-		{"the xml namespace under a wildcard", `{"p:att":{"$xmlns":{"p":"urn:p"},"xml:lang":"en"}}`,
-			"jsonsrc: instance.json:1:34: ", `member "xml:lang" names no child element declaration and no attribute use of the type of {urn:p}att, and its prefix puts it in the namespace http://www.w3.org/XML/1998/namespace`},
+		{"the xml namespace under an element wildcard", `{"p:any":{"$xmlns":{"p":"urn:p"},"xml:lang":"en"}}`,
+			"jsonsrc: instance.json:1:34: ", `member "xml:lang" names no child element declaration and no attribute use of the type of {urn:p}any, and its prefix puts it in the namespace http://www.w3.org/XML/1998/namespace; the mapping names no child element in the xml namespace`},
 		{"the xml namespace with no wildcard", `{"p:plain":{"$xmlns":{"p":"urn:p"},"xml:lang":"en"}}`,
-			"jsonsrc: instance.json:1:36: ", `and its prefix puts it in the namespace http://www.w3.org/XML/1998/namespace`},
+			"jsonsrc: instance.json:1:36: ", `and its prefix puts it in the namespace http://www.w3.org/XML/1998/namespace; the mapping names no child element in the xml namespace`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			res, err := Validate(v, strings.NewReader(tc.json), WithURI(jsonURI))
