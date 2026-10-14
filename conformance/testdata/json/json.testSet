@@ -251,6 +251,13 @@
       <instanceDocument xlink:href="wildcard-prefixed.i.json"/>
       <expected validity="invalid"/>
     </instanceTest>
+    <instanceTest name="wildcard-prefixed-xml.i">
+      <annotation>
+        <documentation>expects cvc-complex-type: the prefixed key xml:lang is the attribute {http://www.w3.org/XML/1998/namespace}lang, att's {attribute wildcard} being its only wildcard, and its ##targetNamespace wildcard does not admit it (clause 2.2.2, cvc-wildcard).</documentation>
+      </annotation>
+      <instanceDocument xlink:href="wildcard-prefixed-xml.i.json"/>
+      <expected validity="invalid"/>
+    </instanceTest>
   </testGroup>
   <testGroup name="prefix">
     <annotation>
