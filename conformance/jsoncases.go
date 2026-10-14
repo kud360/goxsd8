@@ -107,10 +107,11 @@ func newJSONExec() laneExecutor {
 //     walk declines either clause; xsi-type-not-overriding charged by the
 //     walk, cvc-elt clause 4 (walk.instanceOverride, the json case
 //     type/type-unrelated.i); and xsi-type-undecided recorded in
-//     Result.Unevaluated by walk.instanceOverride, which no finalized Schema
-//     reaches (#2174). Where the xsi:type governs, jsonsrc has classified
-//     the element's members under the type it names, resolved as the walk
-//     resolves it (jsonsrc's walker.instanceType);
+//     Result.Unevaluated by walk.instanceOverride and walk.localGovernance,
+//     which no finalized Schema reaches (#2174). Where the xsi:type governs,
+//     jsonsrc has classified the element's members under the type it names,
+//     resolved through the walk's own resolver (internal/xmlqname, from
+//     jsonsrc's walker.instanceType);
 //   - error-type: refused here on a "valid" reading, through
 //     nillableErrorType, which says why no other route reaches it; the walk
 //     charges cvc-type clause 3.1.3 for an element ·xs:error· governs that is
@@ -197,111 +198,20 @@ func execJSONCase(backend value.Backend, c caseSpec) (Status, refusal) {
 // by a top-level declaration is governed by one of those visited here; and an
 // xsi:type naming ·xs:error· is presented only by a "$type" member, which
 // rides an object value and never a null, so its element carries no xsi:nil,
-// is never ·nilled·, and is charged cvc-type clause 3.1.3 where ·xs:error·
-// governs it (jsonsrc's TestTypeMember row "xs:error is not nilled") and
-// cvc-elt clause 4 where it does not ·override·. It refuses whether or not the
-// document reaches D, as attributeGovernanceDiverges does.
+// is never ·nilled·, and is charged cvc-type clause 3.1.3 wherever ·xs:error·
+// governs it (jsonsrc's TestTypeMember row "xs:error is not nilled"); where it
+// does not govern — it does not ·override· the type a declaration or a
+// ·locally declared type· supplies — another type does, and no ·xs:error· item
+// arises from it. It refuses whether or not the document reaches D, as
+// attributeGovernanceDiverges does.
 //
-// The types visited are every named one (Schema.Types) and every anonymous
-// one an ownership edge reaches from them, from a top-level declaration, or
-// from a declaration a named model group owns (Schema.ModelGroups): the inline
-// {type definition} of a declaration whose {scope}.{parent} is the type being
-// visited, and an inline {base type definition} (src-expredef clause 1.1).
-// Each anonymous type has one owner, so those edges form a tree rooted at the
-// top-level components and the walk needs no visited set (STYLE D4).
+// The declarations visited are ownership's.
 func nillableErrorType(schema *xsd.Schema) bool {
-	for _, d := range schema.Elements() {
-		if declaresNillableErrorType(schema, d) {
-			return true
-		}
-	}
-	for _, td := range schema.Types() {
-		if t, ok := td.(xsd.ComplexType); ok && containsNillableErrorType(schema, t) {
-			return true
-		}
-	}
-	for _, g := range schema.ModelGroups() {
-		if groupOwnsNillableErrorType(schema, g.ModelGroup()) {
-			return true
-		}
-	}
-	return false
-}
-
-// declaresNillableErrorType reports whether d is nillable under ·xs:error·, or
-// the walk below d's inline Complex Type Definition answers true.
-func declaresNillableErrorType(schema *xsd.Schema, d xsd.ElementDeclaration) bool {
-	if nilledError(schema, d) {
-		return true
-	}
-	t, ok := ownedComplexType(d.TypeDefinition())
-	return ok && containsNillableErrorType(schema, t)
-}
-
-// groupOwnsNillableErrorType is nillableErrorType's walk over the declarations
-// a named model group's {model group} g owns: its inline element particles,
-// through its inline model groups. A reference by name is no ownership edge:
-// an <element ref> names a top-level declaration and a <group ref> a model
-// group definition, each visited from its own loop in nillableErrorType.
-func groupOwnsNillableErrorType(schema *xsd.Schema, g xsd.ModelGroup) bool {
-	for _, p := range g.Particles() {
-		resolved, ok := p.Term().(xsd.ResolvedTerm)
-		if !ok {
-			continue // an ElementDeclarationRef or a ModelGroupRef
-		}
-		switch term := resolved.Term.(type) {
-		case xsd.ElementDeclaration:
-			if declaresNillableErrorType(schema, term) {
-				return true
-			}
-		case xsd.ModelGroup:
-			if groupOwnsNillableErrorType(schema, term) {
-				return true
-			}
-		case xsd.Wildcard:
-			// declares nothing
-		}
-	}
-	return false
-}
-
-// containsNillableErrorType is nillableErrorType's walk below the Complex Type
-// Definition t: true if a declaration t's content model contains is nillable
-// under ·xs:error·, or if the walk down an ownership edge from t answers true.
-func containsNillableErrorType(schema *xsd.Schema, t xsd.ComplexType) bool {
-	if base, ok := ownedComplexType(t.Base()); ok && containsNillableErrorType(schema, base) {
-		return true
-	}
-	for _, d := range schema.ContainedElementDeclarations(t) {
-		if nilledError(schema, d) {
-			return true
-		}
-		inner, ok := ownedComplexType(d.TypeDefinition())
-		if !ok {
-			continue
-		}
-		parent, _ := d.Scope().Parent()
-		switch p := parent.(type) {
-		case nil:
-			// A top-level declaration: nillableErrorType visits its type.
-		case xsd.ModelGroupScopeParent:
-			// A named model group's: visited from schema.ModelGroups().
-		case xsd.ComplexTypeScopeParent:
-			if p.Name == t.Name() && containsNillableErrorType(schema, inner) {
-				return true
-			}
-		case xsd.AnonymousComplexTypeScopeParent:
-			ctx, ok := t.Context()
-			if ok && ctx.ID() == p.Owner && containsNillableErrorType(schema, inner) {
-				return true
-			}
-		default:
-			// An ElementScopeParent arm this walk does not know: refuse rather
-			// than leave its declarations unvisited.
-			return true
-		}
-	}
-	return false
+	return ownership{
+		schema: schema,
+		decl:   func(d xsd.ElementDeclaration) bool { return nilledError(schema, d) },
+		typ:    func(xsd.ComplexType) bool { return false },
+	}.any()
 }
 
 // nilledError reports whether d's {nillable} is true and its {type
@@ -312,6 +222,127 @@ func nilledError(schema *xsd.Schema, d xsd.ElementDeclaration) bool {
 	}
 	td, ok := schema.ResolvedType(d.TypeDefinition())
 	return ok && td.Name() == errorTypeName
+}
+
+// ownership is a walk over schema's element declarations and Complex Type
+// Definitions, for the json lane's schema-only refusal predicates: any reports
+// whether decl answers true for a declaration it visits or typ for a type.
+//
+// The types visited are every named one (Schema.Types) and every anonymous
+// one an ownership edge reaches from them, from a top-level declaration, or
+// from a declaration a named model group owns (Schema.ModelGroups): the inline
+// {type definition} of a declaration whose {scope}.{parent} is the type being
+// visited, and an inline {base type definition} (src-expredef clause 1.1).
+// Each anonymous type has one owner, so those edges form a tree rooted at the
+// top-level components and the walk needs no visited set (STYLE D4). The
+// declarations visited are the top-level ones, those a named model group owns,
+// and those each visited type's content model contains
+// (Schema.ContainedElementDeclarations), a declaration reached on two paths
+// being visited twice.
+//
+// A declaration whose {scope}.{parent} is an arm the walk does not know
+// answers true, refusing rather than leaving its declarations unvisited.
+type ownership struct {
+	schema *xsd.Schema
+	decl   func(xsd.ElementDeclaration) bool
+	typ    func(xsd.ComplexType) bool
+}
+
+// any runs the walk from the top-level components.
+func (o ownership) any() bool {
+	for _, d := range o.schema.Elements() {
+		if o.declares(d) {
+			return true
+		}
+	}
+	for _, td := range o.schema.Types() {
+		if t, ok := td.(xsd.ComplexType); ok && o.contains(t) {
+			return true
+		}
+	}
+	for _, g := range o.schema.ModelGroups() {
+		if o.groupOwns(g.ModelGroup()) {
+			return true
+		}
+	}
+	return false
+}
+
+// declares visits d, and the walk below d's inline Complex Type Definition.
+func (o ownership) declares(d xsd.ElementDeclaration) bool {
+	if o.decl(d) {
+		return true
+	}
+	t, ok := ownedComplexType(d.TypeDefinition())
+	return ok && o.contains(t)
+}
+
+// groupOwns is the walk over the declarations a named model group's {model
+// group} g owns: its inline element particles, through its inline model
+// groups. A reference by name is no ownership edge: an <element ref> names a
+// top-level declaration and a <group ref> a model group definition, each
+// visited from its own loop in any.
+func (o ownership) groupOwns(g xsd.ModelGroup) bool {
+	for _, p := range g.Particles() {
+		resolved, ok := p.Term().(xsd.ResolvedTerm)
+		if !ok {
+			continue // an ElementDeclarationRef or a ModelGroupRef
+		}
+		switch term := resolved.Term.(type) {
+		case xsd.ElementDeclaration:
+			if o.declares(term) {
+				return true
+			}
+		case xsd.ModelGroup:
+			if o.groupOwns(term) {
+				return true
+			}
+		case xsd.Wildcard:
+			// declares nothing
+		}
+	}
+	return false
+}
+
+// contains visits t, the declarations t's content model contains, and the
+// walk down each ownership edge from t.
+func (o ownership) contains(t xsd.ComplexType) bool {
+	if o.typ(t) {
+		return true
+	}
+	if base, ok := ownedComplexType(t.Base()); ok && o.contains(base) {
+		return true
+	}
+	for _, d := range o.schema.ContainedElementDeclarations(t) {
+		if o.decl(d) {
+			return true
+		}
+		inner, ok := ownedComplexType(d.TypeDefinition())
+		if !ok {
+			continue
+		}
+		parent, _ := d.Scope().Parent()
+		switch p := parent.(type) {
+		case nil:
+			// A top-level declaration: any visits its type.
+		case xsd.ModelGroupScopeParent:
+			// A named model group's: visited from schema.ModelGroups().
+		case xsd.ComplexTypeScopeParent:
+			if p.Name == t.Name() && o.contains(inner) {
+				return true
+			}
+		case xsd.AnonymousComplexTypeScopeParent:
+			ctx, ok := t.Context()
+			if ok && ctx.ID() == p.Owner && o.contains(inner) {
+				return true
+			}
+		default:
+			// An ElementScopeParent arm this walk does not know: refuse rather
+			// than leave its declarations unvisited.
+			return true
+		}
+	}
+	return false
 }
 
 // ownedComplexType is the anonymous Complex Type Definition ref owns (its
@@ -326,14 +357,26 @@ func ownedComplexType(ref xsd.TypeDefinitionOrRef) (xsd.ComplexType, bool) {
 	return t, ok
 }
 
-// attributeGovernanceDiverges reports whether schema has a top-level element
-// declaration G whose {type definition} T is a Complex Type Definition with a
-// strict or lax {attribute wildcard} and lacks an attribute use some type on
-// its {base type definition} chain carries (subtreeGate.onChain, which answers
-// true for a base that does not resolve, as this does for a G whose type does
-// not). It is the condition, over the schema alone, without which neither
-// refuseStrictAttribute nor refuseAttributeLDT can arise in an infoset
-// jsonsrc builds:
+// attributeGovernanceDiverges reports whether an attribute jsonsrc presents
+// under one type can be assessed under another that admits it through its
+// {attribute wildcard} alone. It is the condition, over the schema alone,
+// without which neither refuseStrictAttribute nor refuseAttributeLDT can arise
+// in an infoset jsonsrc builds, and it holds where either of these does:
+//
+//  1. a top-level element declaration G has a {type definition} T that is a
+//     Complex Type Definition with a strict or lax {attribute wildcard} and
+//     lacks an attribute use some type on its {base type definition} chain
+//     carries (subtreeGate.onChain, which answers true for a base that does
+//     not resolve, as this does for a G whose type does not);
+//  2. a Complex Type Definition P (ownership's walk) has an {open content}
+//     whose {wildcard} is strict or lax, and a ·locally declared type· L
+//     within P (key-ldt-elem: the {type definition} of a declaration the
+//     content model of a type on P's {base type definition} chain contains)
+//     has a strict or lax {attribute wildcard} and lacks an attribute use some
+//     named Complex Type Definition X carries that does not ·override· L
+//     (localGovernanceDiverges).
+//
+// Why those two and no other:
 //
 //   - jsonsrc presents an attribute only under a use of the type its element's
 //     members are classified under — the one its "$type" member names where
@@ -341,20 +384,29 @@ func ownedComplexType(ref xsd.TypeDefinitionOrRef) (xsd.ComplexType, bool) {
 //     its element's key matched (jsonsrc's walker.classifyingType) — so the
 //     attribute matches no use (cvc-complex-type clause 2.2, where both
 //     refusals sit) only where some other type governs the element;
-//   - where a "$type" names a type, that type governs wherever it ·overrides·
-//     (or stands in for an ·absent· declaration), and the walk charges cvc-elt
-//     clause 4 wherever it does not; where it names none, the walk charges
+//   - where a "$type" names a type X, X governs wherever it ·overrides· the
+//     type a ·governing element declaration· or a ·locally declared type·
+//     supplies, and wherever there is neither (key-governing-type-elem clause
+//     8). Where X does not ·override· a declaration's type, the walk charges
+//     cvc-elt clause 4 (walk.instanceOverride). Where it does not ·override· a
+//     non-·absent· ·locally declared type· L — a child ·attributed to· an
+//     {open content}, which then has no ·governing element declaration·
+//     (key-governing-ed clause 4.3) — L governs (key-governing-type-elem
+//     clause 7) and nothing is charged (walk.localGovernance), which is
+//     condition 2. Where the "$type" names none, the walk charges
 //     cvc-attribute or records it unevaluated (execJSONCase's xsi-type
 //     bullet);
 //   - with no "$type", D's type governs at the root and under an element
 //     particle D governs (cos-element-consistent gives same-named contained
 //     declarations one type), and under an {open content} the ·locally
 //     declared type· does, which is D's type;
-//   - which leaves a child with no "$type" ·attributed to· a strict or lax
-//     Wildcard, governed by the top-level G its name ·resolves· to. The walk
-//     charges cvc-complex-type clause 5 unless T is ·validly substitutable·
-//     for D's type, which carries the use T lacks, and a skip {attribute
-//     wildcard} or none admits nothing either refusal reads.
+//   - which leaves a child ·attributed to· a strict or lax Wildcard, or to an
+//     {open content} with an ·absent· ·locally declared type·, and governed by
+//     the top-level G its name ·resolves· to, its members classified under
+//     D's type: condition 1. The walk charges cvc-complex-type clause 5 unless
+//     T is ·validly substitutable· for D's type, which carries the use T
+//     lacks, and a skip {attribute wildcard} or none admits nothing either
+//     refusal reads.
 //
 // The walk charges and records nothing for either shape (subtreeGate's
 // wildcardAttribute), so a "valid" reading is refused wherever the condition
@@ -367,24 +419,74 @@ func attributeGovernanceDiverges(schema *xsd.Schema) bool {
 			return true
 		}
 		t, ok := td.(xsd.ComplexType)
-		if !ok {
+		if !ok || !admitsByWildcard(t) {
 			continue
 		}
-		wild, ok := t.AttributeWildcard()
-		if !ok || wild.ProcessContents() == xsd.ProcessSkip {
+		if g.onChain(t, func(c xsd.ComplexType) bool { return lacksUseOf(t, c) }) {
+			return true
+		}
+	}
+	return ownership{
+		schema: schema,
+		decl:   func(xsd.ElementDeclaration) bool { return false },
+		typ:    func(p xsd.ComplexType) bool { return localGovernanceDiverges(g, p) },
+	}.any()
+}
+
+// localGovernanceDiverges is attributeGovernanceDiverges's condition 2 for the
+// Complex Type Definition p. A declaration on p's chain whose {type
+// definition} does not resolve answers true, as onChain does for a base.
+func localGovernanceDiverges(g subtreeGate, p xsd.ComplexType) bool {
+	content, ok := p.ContentType().(xsd.ElementContent)
+	if !ok || content.OpenContent == nil || content.OpenContent.Wildcard().ProcessContents() == xsd.ProcessSkip {
+		return false
+	}
+	return g.onChain(p, func(c xsd.ComplexType) bool {
+		return slices.ContainsFunc(g.schema.ContainedElementDeclarations(c), func(d xsd.ElementDeclaration) bool {
+			ldt, ok := g.schema.ResolvedType(d.TypeDefinition())
+			if !ok {
+				return true
+			}
+			l, ok := ldt.(xsd.ComplexType)
+			return ok && admitsByWildcard(l) && strayUse(g.schema, l)
+		})
+	})
+}
+
+// strayUse reports whether a named Complex Type Definition x carries an
+// attribute use l lacks and does not ·override· l: ·validly substitutable·
+// for it ·without limitation· (key-overrides clause 2, the empty set of
+// blocking keywords, as walk.localGovernance asks). An error from
+// ValidlySubstitutable, unreachable on a finalized Schema, answers true.
+func strayUse(schema *xsd.Schema, l xsd.ComplexType) bool {
+	for _, td := range schema.Types() {
+		x, ok := td.(xsd.ComplexType)
+		if !ok || !lacksUseOf(l, x) {
 			continue
 		}
-		own := t.AttributeUses()
-		lacks := func(c xsd.ComplexType) bool {
-			return slices.ContainsFunc(c.AttributeUses(), func(u xsd.AttributeUse) bool {
-				return !slices.ContainsFunc(own, func(o xsd.AttributeUse) bool { return o.DeclarationName() == u.DeclarationName() })
-			})
-		}
-		if g.onChain(t, lacks) {
+		overrides, err := schema.ValidlySubstitutable(x, l, nil)
+		if err != nil || !overrides {
 			return true
 		}
 	}
 	return false
+}
+
+// admitsByWildcard reports whether t has a strict or lax {attribute
+// wildcard}: a skip one or none admits nothing refuseStrictAttribute or
+// refuseAttributeLDT reads.
+func admitsByWildcard(t xsd.ComplexType) bool {
+	wild, ok := t.AttributeWildcard()
+	return ok && wild.ProcessContents() != xsd.ProcessSkip
+}
+
+// lacksUseOf reports whether c carries an attribute use whose {attribute
+// declaration}'s expanded name none of t's {attribute uses} carries.
+func lacksUseOf(t, c xsd.ComplexType) bool {
+	own := t.AttributeUses()
+	return slices.ContainsFunc(c.AttributeUses(), func(u xsd.AttributeUse) bool {
+		return !slices.ContainsFunc(own, func(o xsd.AttributeUse) bool { return o.DeclarationName() == u.DeclarationName() })
+	})
 }
 
 // assessJSON opens the JSON instance at doc and assesses it against v, or

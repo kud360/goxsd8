@@ -360,8 +360,7 @@ func (w *walker) useNamed(o *object, key string, loc xsderr.Loc) (xsd.AttributeU
 // member, and such an element's ·selected type definition· is neither — it
 // turns on the element's attributes (§3.12.4, key-selected-type clause 1), xsi:
 // ones included, and is computed only inside validate, so the content
-// classified would be a guess. Lifting the decline is the successor filed by
-// #2615's post-land pass.
+// classified would be a guess. Lifting the decline is #2630's.
 func (w *walker) typeTable(d xsd.ElementDeclaration, loc xsderr.Loc) error {
 	if _, ok := d.TypeTable(); ok {
 		return w.declinef(loc, "element %s carries a {type table}; conditional type assignment is not implemented", d.Name())
@@ -540,9 +539,13 @@ func (w *walker) xmlns(owner xsd.QName) ([]binding, error) {
 // tokLoc locating its object: the declaration's {type definition}, which must
 // resolve, or, where e carries an xsi:type typ whose lexical names a type
 // (instanceType), that ·instance-specified type definition·. The second is
-// taken whether or not it ·overrides· the declared one: where it does not, the
-// engine charges cvc-elt clause 4 and assesses the members under the declared
-// type, and they are still the members of the type "$type" names.
+// taken whether or not it ·overrides· the type the engine would otherwise
+// assess e under: where it does not, the engine assesses the members under
+// that type — charging cvc-elt clause 4 where a ·governing element
+// declaration· supplies it, and nothing where e, ·attributed to· an {open
+// content}, has none and a ·locally declared type· supplies it
+// (key-governing-type-elem clause 7) — and they are still the members of the
+// type "$type" names.
 func (w *walker) classifyingType(e *element, typ *attribute, tokLoc xsderr.Loc) (xsd.TypeDefinition, error) {
 	declared, ok := w.schema.ResolvedType(e.decl.TypeDefinition())
 	if !ok {

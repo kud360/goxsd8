@@ -69,11 +69,15 @@
 //     the element's xsi:type, its string value the attribute's [[normalized
 //     value]]: {"item":{"$type":"t:Derived",…}} ≡ <item
 //     xsi:type="t:Derived">…</item>. The engine resolves it and charges
-//     cvc-attribute (clause 3 or 5) where it names no type and cvc-elt clause
-//     4 where the type it names does not ·override· the declared one. The
-//     members after it are classified under the type it names, wherever that
-//     resolves — whether or not it overrides — and under the declared type
-//     otherwise; it is resolved as the engine resolves it (cvc-resolve-instance,
+//     cvc-attribute (clause 3 or 5) where it names no type. Where the type it
+//     names does not ·override· the one the element would otherwise be
+//     assessed under, the engine charges cvc-elt clause 4 if a ·governing
+//     element declaration· supplied that type, and nothing if the element,
+//     ·attributed to· an {open content}, has none and its ·locally declared
+//     type· supplied it (key-governing-type-elem clause 7). The members after
+//     it are classified under the type it names, wherever that resolves —
+//     whether or not it overrides — and under the declared type otherwise; it
+//     is resolved through the engine's own resolver (cvc-resolve-instance,
 //     §3.17.6.3), so the two agree on the type. A "$type" rides an object
 //     value only: a scalar or null element carries no xsi:type.
 //   - No DTD-shaped declaration exists in JSON, so the adapter does not
@@ -138,8 +142,8 @@
 //   - a matched declaration carrying a {type table}: members are classified
 //     under the declared type or the one "$type" names, and the element's
 //     ·selected type definition· is neither — it turns on the element's
-//     attributes and is computed only inside validate. Lifting this is the
-//     successor filed by #2615's post-land pass;
+//     attributes and is computed only inside validate. Lifting this is
+//     #2630's;
 //   - a {type definition} that does not resolve, under an object value.
 //
 // # Locations
