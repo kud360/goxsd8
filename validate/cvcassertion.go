@@ -70,10 +70,9 @@ const ruleCvcAssertionsValid xsderr.Rule = "cvc-assertions-valid"
 // test is evaluated with the binding [walk.assertionValue] gives `.` and `$value`:
 // invalid says whether e is known to be invalid in the partial ·PSVI· by now (clause
 // 2.3.1.1) — a violation recorded for e, the deciding of its governance included, or
-// below it ([walk.element]'s mark) — and
-// content is e's own content check, exhausted, which holds the ·initial value· and
-// the ·nilled· answer, and own is e's own string-value frame ([ownStringValue]),
-// nil where e opened none.
+// below it ([walk.element]'s mark) — and content is e's own content check, exhausted,
+// which holds the ·initial value· and the ·nilled· answer, and own is e's own
+// string-value frame ([ownStringValue]), nil where e opened none.
 //
 // Each assertion takes exactly one of three outcomes: DECLINED, where
 // [xpath.CompileAssertionTest] reported false or e's attributes, the children
@@ -909,10 +908,10 @@ func (w *walk) attributeBelow(ct xsd.ComplexType, path []xsd.QName, u xsd.Attrib
 // and its own assessment is over ([xpath.Tally.ElementValue] is owed after the
 // reports of e's subtree). g is e's governance, content its content check, and
 // recorded whether any violation or [Unevaluated] was recorded for e, the
-// deciding of its governance included, or below it ([walk.element]'s mark). Each value is [walk.elementBelow]'s; where e has
-// none, the ancestor takes the lack instead ([lackingElementBelow]) and is told
-// nothing, so its assertions are declined and its Tallies, left owing the
-// value, are never read.
+// deciding of its governance included, or below it ([walk.element]'s mark).
+// Each value is [walk.elementBelow]'s; where e has none, the ancestor takes the
+// lack instead ([lackingElementBelow]) and is told nothing, so its assertions
+// are declined and its Tallies, left owing the value, are never read.
 func (w *walk) tallyValue(e Element, g governance, content *contentCheck, up assertionAncestry, recorded bool) {
 	// chain is on [walk.tallyElement]'s shared-array terms: e's subtree, which
 	// wrote the slots after e's, is walked, and e's own slot still holds its

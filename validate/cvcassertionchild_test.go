@@ -159,12 +159,12 @@ func TestAssertionRootedPathIsCharged(t *testing.T) {
 // xs:string, does not ·override· its declared xs:int (cvc-elt clause 4), which
 // is still read under xs:int, the row that is satisfied instead with
 // walk.child's main arm taking <n>'s mark after walk.childGoverning; a second
-// <e1> is ·skipped· by the
-// wildcard, which is satisfied instead with assertionCheck.skipped removed. A
-// child no {test} reads declines nothing, which is the retention gate
-// (assertionCheck.reads): `@x = 1` and `e1 = 'present'` are each evaluated
-// beside an invalid <n>, which only its own charge reports. With reads
-// answering true for every name, both of those rows decline instead.
+// <e1> is ·skipped· by the wildcard, which is satisfied instead with
+// assertionCheck.skipped removed. A child no {test} reads declines nothing,
+// which is the retention gate (assertionCheck.reads): `@x = 1` and `e1 =
+// 'present'` are each evaluated beside an invalid <n>, which only its own
+// charge reports. With reads answering true for every name, both of those rows
+// decline instead.
 func TestAssertionOverAnUnreadableChildIsDeclined(t *testing.T) {
 	x := &testAttribute{name: local("x"), value: "1", loc: loc(1, 10)}
 	for _, tc := range []struct {
