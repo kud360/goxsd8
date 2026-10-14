@@ -387,7 +387,7 @@ func (w *walker) classify(o *object, key string, loc xsderr.Loc) (member, error)
 // beside attribute members.
 func (w *walker) wildcardMember(o *object, key string, loc xsderr.Loc) (member, error) {
 	if o.undeclared {
-		return nil, w.declinef(loc, "member %q of %s, a wildcard's element no top-level element declaration governs; only an empty object maps under it",
+		return nil, w.declinef(loc, "member %q of %s, an element no contained and no top-level element declaration names; only an empty object maps under it",
 			key, o.owner)
 	}
 	elemental := len(o.elementWildcards) > 0
@@ -401,16 +401,10 @@ func (w *walker) wildcardMember(o *object, key string, loc xsderr.Loc) (member, 
 			return nil, w.declinef(loc, "member %q names no child element declaration and no attribute use of the type of %s, and its element wildcard set %s",
 				key, o.owner, why)
 		}
-		name := xsd.QName{Space: ns, Local: key}
-		d, ok := w.schema.Element(name)
-		if !ok {
-			return bareElement{name: name}, nil
-		}
-		return declaredElement{decl: d}, w.typeTable(d, loc)
+		return w.namedChild(xsd.QName{Space: ns, Local: key}, loc)
 	}
 	if o.attributeWildcard == nil {
-		return nil, w.declinef(loc, "member %q names no child element declaration, no attribute use and no wildcard of the type of %s",
-			key, o.owner)
+		return w.namedChild(xsd.QName{Space: o.owner.Space, Local: key}, loc)
 	}
 	if o.simpleContent {
 		return nil, w.declinef(loc, "member %q names only the {attribute wildcard} of the type of %s, whose {content type} is simple; the mapping spells no text beside attribute members",
@@ -422,6 +416,18 @@ func (w *walker) wildcardMember(o *object, key string, loc xsderr.Loc) (member, 
 			key, o.owner, why)
 	}
 	return attributeMember{name: xsd.QName{Space: ns, Local: key}}, nil
+}
+
+// namedChild is the child element name, which no declaration the enclosing
+// type contains carries: under the top-level declaration of that name where
+// there is one (declaredElement, which typeTable vets), and as a bareElement
+// where there is none.
+func (w *walker) namedChild(name xsd.QName, loc xsderr.Loc) (member, error) {
+	d, ok := w.schema.Element(name)
+	if !ok {
+		return bareElement{name: name}, nil
+	}
+	return declaredElement{decl: d}, w.typeTable(d, loc)
 }
 
 // fixedNamespace is the one namespace name every wildcard of wildcards
