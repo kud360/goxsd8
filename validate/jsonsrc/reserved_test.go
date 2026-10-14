@@ -306,3 +306,25 @@ func TestOpenContentTypeMaps(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) { twin(t, v, tc.json, tc.xml, elt) })
 	}
 }
+
+// TestTypeOnUndeclaredElement pins a "$type" on an element a wildcard names
+// with no declaration: it maps to the element's xsi:type, as its XML twin
+// carries one, and the members after it decline as every member of such an
+// element does, whatever type it names.
+func TestTypeOnUndeclaredElement(t *testing.T) {
+	v := validatorOver(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="urn:t" xmlns:t="urn:t" elementFormDefault="qualified">
+  <xs:complexType name="holder"><xs:sequence><xs:element name="x" type="xs:string" form="unqualified"/></xs:sequence></xs:complexType>
+  <xs:element name="bag">
+    <xs:complexType><xs:sequence><xs:any namespace="##local" processContents="lax"/></xs:sequence></xs:complexType>
+  </xs:element>
+</xs:schema>`)
+	twin(t, v, `{"bag":{"q":{"$xmlns":{"t":"urn:t"},"$type":"t:holder"}}}`,
+		`<bag xmlns="urn:t" xmlns:t="urn:t" `+xsiDecl+`><q xmlns="" xsi:type="t:holder"/></bag>`, []xsderr.Rule{"cvc-complex-content"})
+	const doc = `{"bag":{"q":{"$xmlns":{"t":"urn:t"},"$type":"t:holder","x":"1"}}}`
+	_, err := Validate(v, strings.NewReader(doc), WithURI(jsonURI))
+	const want = `jsonsrc: instance.json:1:56: member "x" of q, an element no contained and no top-level element declaration names`
+	if err == nil || !strings.HasPrefix(err.Error(), want) {
+		t.Fatalf("Validate(%s) = %v, want it to open %q", doc, err, want)
+	}
+}

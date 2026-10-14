@@ -117,11 +117,12 @@
 //     4 where the type it names does not ·override· the one a ·governing
 //     element declaration· supplied. The members after it are classified under
 //     the type it names, wherever that resolves — whether or not it overrides
-//     — and under the declared type otherwise; it is resolved through the
-//     engine's own resolver (cvc-resolve-instance, §3.17.6.3), so the two
-//     agree on the type. A "$type" rides an object value only: a scalar or
-//     null element carries no xsi:type. It declines where a ·locally declared
-//     type· could govern the element instead, uncharged (Declines).
+//     — and under the declared type otherwise, and under an element with no
+//     declaration they decline as every member there does; it is resolved
+//     through the engine's own resolver (cvc-resolve-instance, §3.17.6.3), so
+//     the two agree on the type. A "$type" rides an object value only: a
+//     scalar or null element carries no xsi:type. It declines where a ·locally
+//     declared type· could govern the element instead, uncharged (Declines).
 //   - No DTD-shaped declaration exists in JSON, so the adapter does not
 //     implement [validate.UnparsedEntities] and every ·ENTITY value· fails
 //     cvc-simple-type clause 3, as that interface's doc states.
