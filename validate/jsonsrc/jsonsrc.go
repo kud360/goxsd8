@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"io"
 	"slices"
-	"strings"
 
+	"github.com/kud360/goxsd8/internal/xmlqname"
 	"github.com/kud360/goxsd8/validate"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
@@ -552,35 +552,21 @@ func (w *walker) classifyingType(e *element, typ *attribute, tokLoc xsderr.Loc) 
 }
 
 // instanceType is the top-level type definition an xsi:type of e whose value
-// is lexical names, resolved as validate's walk resolves it
-// (cvc-resolve-instance, §3.17.6.3, there resolveInstanceQName), and false
-// where it names none. The lexical is collapsed, xs:QName's whiteSpace being
-// collapse (Datatypes §3.3.18), and split at its colon; its prefix is looked
-// up at e (e.LookupPrefix, so an unprefixed name takes the declaration's
-// target namespace), and the name among the schema's top-level type
-// definitions. An empty lexical, an empty prefix or local part, a second
-// colon and an unbound prefix name none, as for the engine, which charges
-// cvc-attribute there (clause 3 or 5) and assesses e under its declared type.
+// is lexical names, and false where it names none. The lexical is resolved
+// against e's bindings (e.LookupPrefix, so an unprefixed name takes the
+// declaration's target namespace) by [xmlqname.Resolve], the one encoding
+// validate's walk resolves an xsi:type through too (cvc-resolve-instance,
+// §3.17.6.3, there resolveInstanceQName; STYLE T4), and the name is looked up
+// among the schema's top-level type definitions. Where it names none, the
+// engine charges cvc-attribute (clause 3 or 5) and assesses e under its
+// declared type.
 func (w *walker) instanceType(e *element, lexical string) (xsd.TypeDefinition, bool) {
-	collapsed := strings.Join(strings.FieldsFunc(lexical, isXMLSpace), " ")
-	prefix, local, prefixed := strings.Cut(collapsed, ":")
-	if !prefixed {
-		prefix, local = "", collapsed
-	}
-	if local == "" || (prefixed && prefix == "") || strings.Contains(local, ":") {
-		return nil, false
-	}
-	space, bound := e.LookupPrefix(prefix)
-	if !bound {
+	space, local, ok := xmlqname.Resolve(lexical, e.LookupPrefix)
+	if !ok {
 		return nil, false
 	}
 	return w.schema.ResolvedType(xsd.TypeDefinitionRef{Name: xsd.QName{Space: space, Local: local}})
 }
-
-// isXMLSpace reports whether r is white space to whiteSpace = collapse
-// (Datatypes §4.3.6): a space, tab, carriage return or line feed, and not a
-// vertical tab, which unicode.IsSpace would admit.
-func isXMLSpace(r rune) bool { return strings.ContainsRune(" \t\r\n", r) }
 
 // scalarLexical is the lexical form of a scalar token — a string's decoded
 // characters; a number's source text, never a float64 round trip; true or
