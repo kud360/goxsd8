@@ -167,7 +167,7 @@
     </schemaTest>
     <instanceTest name="type.v">
       <annotation>
-        <documentation>Derived overrides Base (cvc-elt clause 4), and b, Derived's own child, is classified under it.</documentation>
+        <documentation>Derived overrides Base (cvc-elt clause 4), and d and b, Derived's own attribute and child, are classified under it: under Base, which has neither and no wildcard, d would be a child element ahead of a.</documentation>
       </annotation>
       <instanceDocument xlink:href="type.v.json"/>
       <expected validity="valid"/>

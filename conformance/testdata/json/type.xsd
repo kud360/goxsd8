@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- The type group's schema, for the validate/jsonsrc "$type" and "$xmlns"
-     arms. Base holds a; Derived extends it with b; Other, unrelated to
-     Base, holds c. item is of type Base. names holds an optional xs:QName
-     q, its prefix resolved against the "$xmlns" bindings in scope. Local
+     arms. Base holds a; Derived extends it with b and the attribute d;
+     Other, unrelated to Base, holds c. item is of type Base. names holds
+     an optional xs:QName q, its prefix resolved against the "$xmlns"
+     bindings in scope. Local
      declarations are qualified, so a JSON key's namespace comes from its
      declaration. -->
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
@@ -19,6 +20,7 @@
         <xs:sequence>
           <xs:element name="b" type="xs:string"/>
         </xs:sequence>
+        <xs:attribute name="d" type="xs:integer"/>
       </xs:extension>
     </xs:complexContent>
   </xs:complexType>
