@@ -236,11 +236,10 @@ type member struct {
 // object; a key two expanded names carry among the declarations, or among the
 // uses; a key both a declaration and a use carry, which no spec rule decides
 // between; a use in the xsi namespace, xsi:nil being the null arm's to present
-// and xsi:type the "$type" member's; an
-// attribute use of a type with simple content, beside which the mapping spells
-// no text; and a key neither carries, whatever an {attribute wildcard} or an
-// element wildcard of the type would admit, a wildcard match being the arm this
-// slice does not take.
+// and xsi:type the "$type" member's; an attribute use of a type with simple
+// content, beside which the mapping spells no text; and a key neither carries,
+// whatever an {attribute wildcard} or an element wildcard of the type would
+// admit, a wildcard match being the arm this slice does not take.
 //
 // GAP(jsonsrc): a key no child element declaration and no attribute use
 // carries declines, the wildcard member arm not being implemented. That covers

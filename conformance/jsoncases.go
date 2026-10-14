@@ -93,13 +93,24 @@ func newJSONExec() laneExecutor {
 //     epilog-directive): unrepresentable, jsonsrc building no DOCTYPE, prolog
 //     or epilog, and refusing an instance that will not open
 //     (refuseJSONUnresolved) or will not map (refuseJSONDeclined);
-//   - nil-lexical: unrepresentable, the one xsi: attribute jsonsrc presents
-//     being a null's xsi:nil with the lexical form true, which has an ·actual
-//     value· (jsonsrc's walker.nilled), and a key naming an attribute use in
-//     the xsi namespace declining (walker.useNamed);
-//   - the three xsi-type ones: unrepresentable, jsonsrc presenting no
-//     xsi:type — it declines a "$type" member and a key naming an attribute
-//     use in the xsi namespace;
+//   - nil-lexical: unrepresentable, the one xsi:nil jsonsrc presents being a
+//     null's, with the lexical form true, which has an ·actual value·
+//     (jsonsrc's walker.nilled): a "$type" member presents xsi:type alone
+//     (walker.lead), and a key naming an attribute use in the xsi namespace
+//     declines (walker.useNamed);
+//   - the three xsi-type ones, at the xsi:type a "$type" member presents:
+//     xsi-type-unresolved charged by the walk, cvc-attribute clause 5 for a
+//     name no type definition carries (validate's walk.instanceTypeResolves,
+//     the json case type/type-unresolved.i) and clause 3 for a lexical with
+//     no ·actual value· (walk.instanceTypeLexical, jsonsrc's TestTypeMember
+//     row "unbound prefix"), and recorded in Result.Unevaluated where the
+//     walk declines either clause; xsi-type-not-overriding charged by the
+//     walk, cvc-elt clause 4 (walk.instanceOverride, the json case
+//     type/type-unrelated.i); and xsi-type-undecided recorded in
+//     Result.Unevaluated by walk.instanceOverride, which no finalized Schema
+//     reaches (#2174). Where the xsi:type governs, jsonsrc has classified
+//     the element's members under the type it names, resolved as the walk
+//     resolves it (jsonsrc's walker.instanceType);
 //   - error-type: refused here on a "valid" reading, through
 //     nillableErrorType, which says why no other route reaches it; the walk
 //     charges cvc-type clause 3.1.3 for an element ·xs:error· governs that is
@@ -182,10 +193,14 @@ func execJSONCase(backend value.Backend, c caseSpec) (Status, refusal) {
 // and the walk charges that as cvc-type clause 3.1.3 only for an element that
 // is not ·nilled·, while a JSON null presents xsi:nil="true" (key-nilled
 // needs D.{nillable} too). The other routes to ·xs:error· stay closed: jsonsrc
-// declines a declaration carrying a {type table} and presents no xsi:type, and
-// a wildcard's child governed by a top-level declaration is governed by one of
-// those visited here. It refuses whether or not the document reaches D, as
-// attributeGovernanceDiverges does.
+// declines a declaration carrying a {type table}; a wildcard's child governed
+// by a top-level declaration is governed by one of those visited here; and an
+// xsi:type naming ·xs:error· is presented only by a "$type" member, which
+// rides an object value and never a null, so its element carries no xsi:nil,
+// is never ·nilled·, and is charged cvc-type clause 3.1.3 where ·xs:error·
+// governs it (jsonsrc's TestTypeMember row "xs:error is not nilled") and
+// cvc-elt clause 4 where it does not ·override·. It refuses whether or not the
+// document reaches D, as attributeGovernanceDiverges does.
 //
 // The types visited are every named one (Schema.Types) and every anonymous
 // one an ownership edge reaches from them, from a top-level declaration, or
@@ -320,19 +335,26 @@ func ownedComplexType(ref xsd.TypeDefinitionOrRef) (xsd.ComplexType, bool) {
 // refuseStrictAttribute nor refuseAttributeLDT can arise in an infoset
 // jsonsrc builds:
 //
-//   - jsonsrc presents an attribute only under a use of the {type definition}
-//     of the declaration D its element's key matched, so the attribute
-//     matches no use (cvc-complex-type clause 2.2, where both refusals sit)
-//     only where some other type governs the element;
-//   - at the root and under an element particle D governs (cos-element-
-//     consistent gives same-named contained declarations one type), and under
-//     an {open content} the ·locally declared type· does, which is D's type;
-//   - which leaves a child ·attributed to· a strict or lax Wildcard, governed
-//     by the top-level G its name ·resolves· to, jsonsrc presenting no
-//     xsi:type. The walk charges cvc-complex-type clause 5 unless T is
-//     ·validly substitutable· for D's type, which carries the use T lacks,
-//     and a skip {attribute wildcard} or none admits nothing either refusal
-//     reads.
+//   - jsonsrc presents an attribute only under a use of the type its element's
+//     members are classified under — the one its "$type" member names where
+//     that resolves, and otherwise the {type definition} of the declaration D
+//     its element's key matched (jsonsrc's walker.classifyingType) — so the
+//     attribute matches no use (cvc-complex-type clause 2.2, where both
+//     refusals sit) only where some other type governs the element;
+//   - where a "$type" names a type, that type governs wherever it ·overrides·
+//     (or stands in for an ·absent· declaration), and the walk charges cvc-elt
+//     clause 4 wherever it does not; where it names none, the walk charges
+//     cvc-attribute or records it unevaluated (execJSONCase's xsi-type
+//     bullet);
+//   - with no "$type", D's type governs at the root and under an element
+//     particle D governs (cos-element-consistent gives same-named contained
+//     declarations one type), and under an {open content} the ·locally
+//     declared type· does, which is D's type;
+//   - which leaves a child with no "$type" ·attributed to· a strict or lax
+//     Wildcard, governed by the top-level G its name ·resolves· to. The walk
+//     charges cvc-complex-type clause 5 unless T is ·validly substitutable·
+//     for D's type, which carries the use T lacks, and a skip {attribute
+//     wildcard} or none admits nothing either refusal reads.
 //
 // The walk charges and records nothing for either shape (subtreeGate's
 // wildcardAttribute), so a "valid" reading is refused wherever the condition
