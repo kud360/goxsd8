@@ -940,8 +940,8 @@ func TestWildcardMember(t *testing.T) {
 // strayChildSchema declares, in urn:n, the root r, whose types carry no
 // wildcard of either kind: r's element-only content holds s, of xs:integer,
 // e, of empty content, m, of simple content, and u, an unqualified local of
-// element-only content; g is a top-level xs:integer declaration no type
-// contains.
+// element-only content; g, of xs:integer, t, holding y, and tt, carrying a
+// {type table}, are top-level declarations no type contains.
 const strayChildSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
     targetNamespace="urn:n" xmlns="urn:n" elementFormDefault="qualified">
   <xs:element name="r">
@@ -969,6 +969,16 @@ const strayChildSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
     </xs:complexType>
   </xs:element>
   <xs:element name="g" type="xs:integer"/>
+  <xs:element name="t">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="y" type="xs:integer"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="tt" type="xs:anyType">
+    <xs:alternative test="@k" type="xs:string"/>
+  </xs:element>
 </xs:schema>`
 
 // TestStrayChildMember pins the no-wildcard arm: a key no contained
@@ -987,6 +997,8 @@ func TestStrayChildMember(t *testing.T) {
 			`<r xmlns="urn:n"><s>1</s><x>v</x></r>`, content},
 		{"element-only content, a top-level declaration's name", `{"r":{"g":"five"}}`,
 			`<r xmlns="urn:n"><g>five</g></r>`, []xsderr.Rule{"cvc-complex-content", "cvc-type"}},
+		{"element-only content, a top-level declaration's object", `{"r":{"t":{"y":"five"}}}`,
+			`<r xmlns="urn:n"><t><y>five</y></t></r>`, []xsderr.Rule{"cvc-complex-content", "cvc-type"}},
 		{"null value", `{"r":{"x":null}}`,
 			`<r xmlns="urn:n" ` + xsiDecl + `><x xsi:nil="true"/></r>`, content},
 		{"empty object value", `{"r":{"x":{}}}`,
@@ -1004,21 +1016,33 @@ func TestStrayChildMember(t *testing.T) {
 	}
 }
 
-// TestStrayChildDeclines pins that a stray child the no-wildcard arm names, and
-// no top-level declaration carries the name of, is a bareElement: its object
-// value maps only empty, and a member of it declines, as a wildcard's
-// undeclared child's does (RULED permanent by #2634).
+// TestStrayChildDeclines pins the no-wildcard arm's declines: a stray child no
+// top-level declaration carries the name of is a bareElement, whose object
+// value maps only empty, so a member of it declines, as a wildcard's
+// undeclared child's does (RULED permanent by #2634); and a top-level
+// declaration of the child's name carrying a {type table} declines, as under
+// a wildcard.
 func TestStrayChildDeclines(t *testing.T) {
 	v := validatorOver(t, strayChildSchema)
-	const doc = `{"r":{"x":{"y":1}}}`
-	res, err := Validate(v, strings.NewReader(doc), WithURI(jsonURI))
-	if err == nil {
-		t.Fatalf("Validate(%s) = %v violations, nil error; want the decline", doc, rules(res))
-	}
-	const prefix = "jsonsrc: instance.json:1:12: "
-	const says = `member "y" of {urn:n}x, an element no contained and no top-level element declaration names; only an empty object maps under it`
-	if !strings.HasPrefix(err.Error(), prefix) || !strings.Contains(err.Error(), says) {
-		t.Errorf("Validate(%s) = %q, want it to open %q and say %q", doc, err, prefix, says)
+	for _, tc := range []struct {
+		name, json string
+		prefix     string
+		says       string
+	}{
+		{"member of an undeclared stray child", `{"r":{"x":{"y":1}}}`,
+			"jsonsrc: instance.json:1:12: ", `member "y" of {urn:n}x, an element no contained and no top-level element declaration names; only an empty object maps under it`},
+		{"top-level declaration with a type table", `{"r":{"tt":"1"}}`,
+			"jsonsrc: instance.json:1:7: ", `element {urn:n}tt carries a {type table}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			res, err := Validate(v, strings.NewReader(tc.json), WithURI(jsonURI))
+			if err == nil {
+				t.Fatalf("Validate(%s) = %v violations, nil error; want the decline", tc.json, rules(res))
+			}
+			if !strings.HasPrefix(err.Error(), tc.prefix) || !strings.Contains(err.Error(), tc.says) {
+				t.Errorf("Validate(%s) = %q, want it to open %q and say %q", tc.json, err, tc.prefix, tc.says)
+			}
+		})
 	}
 }
 
