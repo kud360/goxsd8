@@ -451,11 +451,12 @@
 // every static error that parse met; and, in a complete ta-Test, the
 // first in expression order of err:XPST0081 for an unbound prefix and
 // err:XPST0051 or err:XPST0080 for a `cast as` target that is no builtin
-// atomic type — the schema's own types included, since xpath-valid
-// clause 2.2.5 puts only the built-ins in scope. The parse runs past a
-// failed target on a stand-in cast to xs:string (ctaParser.singleType).
-// Only CTATestStaticError reports any of them: CompileAssertionTest and
-// FacetAssertions decline every one like any other defect.
+// atomic type, xs:untypedAtomic aside — the schema's own types included,
+// since xpath-valid clause 2.2.5 puts only the built-ins in scope. The
+// parse runs past a failed target on a stand-in cast to xs:string
+// (ctaParser.singleType). Only CTATestStaticError reports any of them:
+// CompileAssertionTest and FacetAssertions decline every one like any
+// other defect.
 //
 // A constructor call naming such a type is withheld, never charged: it
 // names a function, not a cast target. So is err:FONS0004, an unbound

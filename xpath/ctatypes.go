@@ -161,9 +161,10 @@ func (t ctaTypes) ancestor(st *xsd.SimpleType, name xsd.QName) (*xsd.SimpleType,
 //     err:XPST0081 the parser recorded first — a name outside the XSD
 //     namespace, a complex type, and a non-atomic builtin (xs:anySimpleType,
 //     and the list builtins xs:IDREFS, xs:NMTOKENS, xs:ENTITIES).
-//   - xs:untypedAtomic declines, a ctaUnsupported defect: XPath puts it in
-//     the in-scope schema types (xpath20.md §2.1.1) and clause 2.2.5's list
-//     does not, and the ruling leaves it uncharged.
+//   - xs:untypedAtomic declines, a ctaUnsupported defect, and is not
+//     charged: XPath's predefined types include it (xpath20.md §2.1.1) where
+//     clause 2.2.5's list does not, and the ruling holds the target to no
+//     static error.
 //
 // A base chain this resolver cannot walk declines too, and is no verdict.
 //
