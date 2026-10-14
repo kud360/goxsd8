@@ -313,16 +313,75 @@ func TestCTATestStaticErrorIsSilentForUnsupported(t *testing.T) {
 		{"self::message", "an axis step the grammar has no production for"},
 		{"@kind = 'book'", "a complete Test whose every name resolved"},
 		{"@a:kind = 'book'", "a complete Test whose prefix is bound"},
-		// The cast-target static conditions the engine does not prove: the
-		// target declines, the parse dies at the tail, and the defect the
-		// unbound prefix recorded on the way in dies with it.
-		{"@p:kind cast as q:Missing", "an unbound prefix on the cast target itself"},
-		{"@p:kind cast as xs:Missing", "err:XPST0051, folded into the withhold"},
-		{"@p:kind cast as xs:anyAtomicType", "err:XPST0080, folded into the withhold"},
+		// A cast-target static error recorded on the way dies with a parse a
+		// later construct declines.
+		{"@kind cast as xs:Missing = 'x' and count(//a:x) > 1", "err:XPST0051 inside an expression a later construct declines"},
+		// The constructor spelling names a FUNCTION: err:XPST0051 and
+		// err:XPST0080 are cast-target errors, and a name with no constructor
+		// is err:XPST0017 at most, whose signatures xpath-valid clause 2.2.8
+		// leaves implementation-defined (#894).
+		{"string(@kind) = 'x'", "fn:string as a constructor name, which castTarget finds no type for"},
+		{"xs:anyAtomicType(@kind) = 'x'", "the constructor spelling of an err:XPST0080 target"},
+		{"xs:Missing(@kind) = 'x'", "the constructor spelling of an err:XPST0051 target"},
+		// xs:untypedAtomic is in XPath's predefined types and not in clause
+		// 2.2.5's list; the #894 ruling leaves it uncharged.
+		{"@kind cast as xs:untypedAtomic = 'x'", "a cast to xs:untypedAtomic"},
 	} {
 		bindings := []string{"a", "http://example.com/a", "xs", xsd.XMLSchemaNS}
 		if err := CTATestStaticError(ctaExprRecord(tc.expr, "", bindings...), seededTypes); err != nil {
 			t.Errorf("CTATestStaticError(%q) = %v, want nil (%s)", tc.expr, err, tc.why)
+		}
+	}
+}
+
+// TestCTATestStaticErrorReportsCastTarget pins the cast-target static errors
+// of xpath20.md §3.10.2 in a complete ta-Test, over the oracle's #894 classes:
+// err:XPST0051 for a target that is no atomic type in the in-scope schema
+// types, err:XPST0080 for xs:anyAtomicType and xs:NOTATION, and err:XPST0081
+// for an unbound prefix — the FIRST static error in expression order. The
+// parse runs past the failed target through what follows it, so CompileCTATest
+// still declines every row.
+func TestCTATestStaticErrorReportsCastTarget(t *testing.T) {
+	for _, tc := range []struct{ expr, rule, msg string }{
+		{"@kind cast as xs:Missing = 'x'", "err:XPST0051", `the cast target "{http://www.w3.org/2001/XMLSchema}Missing" is no simple type in the in-scope schema types`},
+		{"@kind cast as a:Missing", "err:XPST0051", `the cast target "{http://example.com/a}Missing" is no simple type in the in-scope schema types`},
+		{"@kind cast as Missing = 'x'", "err:XPST0051", `the cast target "Missing" is no simple type in the in-scope schema types`},
+		{"@kind cast as xs:anyType = 'x'", "err:XPST0051", `the cast target "{http://www.w3.org/2001/XMLSchema}anyType" is no simple type in the in-scope schema types`},
+		{"@kind cast as xs:anySimpleType = 'x'", "err:XPST0051", `the cast target "{http://www.w3.org/2001/XMLSchema}anySimpleType" is no atomic type`},
+		{"@kind cast as xs:NMTOKENS? = 'x'", "err:XPST0051", `the cast target "{http://www.w3.org/2001/XMLSchema}NMTOKENS" is no atomic type`},
+		{"@kind cast as xs:anyAtomicType = 'x'", "err:XPST0080", `the cast target "{http://www.w3.org/2001/XMLSchema}anyAtomicType" is xs:NOTATION or xs:anyAtomicType, which no cast may target`},
+		{"@kind cast as xs:NOTATION", "err:XPST0080", `the cast target "{http://www.w3.org/2001/XMLSchema}NOTATION" is xs:NOTATION or xs:anyAtomicType, which no cast may target`},
+		// The stand-in lets every comparison after it settle: against an
+		// xs:float operand, a DoubleLiteral and an untyped attribute, and inside
+		// a conjunction.
+		{"@kind cast as xs:Missing = @f cast as xs:float", "err:XPST0051", ""},
+		{"@kind cast as xs:Missing = 1e0", "err:XPST0051", ""},
+		{"@a = @kind cast as xs:Missing", "err:XPST0051", ""},
+		{"@a = 'y' and not(@kind cast as xs:anyAtomicType = 'x')", "err:XPST0080", ""},
+		// castsFrom is not asked about the stand-in: a DoubleLiteral it declines
+		// for every target but xs:double still reaches the charge.
+		{"1e0 cast as xs:Missing = 'x'", "err:XPST0051", ""},
+		// The first static error in expression order wins, either way round.
+		{"@kind cast as q:Missing = 'x'", "err:XPST0081", `no statically-known namespace binding for prefix "q"`},
+		{"@p:kind cast as xs:Missing", "err:XPST0081", `no statically-known namespace binding for prefix "p"`},
+		{"@p:kind cast as xs:anyAtomicType = 'x'", "err:XPST0081", `no statically-known namespace binding for prefix "p"`},
+		{"@kind cast as xs:Missing = 'x' or @p:kind = 'y'", "err:XPST0051", ""},
+	} {
+		record := ctaExprRecord(tc.expr, "", "a", "http://example.com/a", "xs", xsd.XMLSchemaNS)
+		err := CTATestStaticError(record, seededTypes)
+		var verdict *xsderr.Error
+		if !errors.As(err, &verdict) {
+			t.Errorf("CTATestStaticError(%q) = %v, want an *xsderr.Error carrying %s", tc.expr, err, tc.rule)
+			continue
+		}
+		if string(verdict.Rule) != tc.rule {
+			t.Errorf("CTATestStaticError(%q) reports rule %q, want %q", tc.expr, verdict.Rule, tc.rule)
+		}
+		if tc.msg != "" && verdict.Msg != tc.msg {
+			t.Errorf("CTATestStaticError(%q).Msg = %q, want %q", tc.expr, verdict.Msg, tc.msg)
+		}
+		if _, ok := CompileCTATest(record, seededTypes); ok {
+			t.Errorf("CompileCTATest(%q) compiled; a tree holding a stand-in cast must never reach Evaluate", tc.expr)
 		}
 	}
 }
@@ -1170,8 +1229,8 @@ func TestNumericLiteralType(t *testing.T) {
 // TYPED operand other than a Literal reaches a comparison.
 func castNode(t *testing.T, known ctaTypes, local string) ctaValue {
 	t.Helper()
-	target, admitted := known.castTarget(ctaBuiltin(local))
-	if !admitted {
+	target, defect := known.castTarget(ctaBuiltin(local))
+	if defect.kind != ctaNoDefect {
 		t.Fatalf("castTarget(xs:%s): declined, want admitted", local)
 	}
 	return ctaCast{operand: ctaAttr{test: ctaExactName{name: uq("a")}}, target: target}
