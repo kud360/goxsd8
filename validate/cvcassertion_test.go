@@ -426,8 +426,9 @@ func TestValueAssertionOverAnInvalidElementIsEmpty(t *testing.T) {
 }
 
 // ivSchemaText declares s of S, simple content extending xs:date and asserting
-// `$value instance of xs:date`; holder, whose content model names s; and lax,
-// whose content is one lax wildcard.
+// `$value instance of xs:date`; holder, whose content model names s; lax,
+// whose content is one lax wildcard; and odd, a local s of xs:string and then a
+// strict wildcard the global s governs.
 const ivSchemaText = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:complexType name="S">
     <xs:simpleContent>
@@ -446,9 +447,16 @@ const ivSchemaText = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
       <xs:any processContents="lax"/>
     </xs:sequence>
   </xs:complexType>
+  <xs:complexType name="Odd">
+    <xs:sequence>
+      <xs:element name="s" type="xs:string"/>
+      <xs:any namespace="##local" processContents="strict"/>
+    </xs:sequence>
+  </xs:complexType>
   <xs:element name="s" type="S"/>
   <xs:element name="holder" type="Holder"/>
   <xs:element name="lax" type="Lax"/>
+  <xs:element name="odd" type="Odd"/>
 </xs:schema>`
 
 // An element invalid by its own xsi:type — xs:string, which does not
@@ -489,6 +497,27 @@ func TestValueAssertionOverAnElementInvalidByXsiTypeIsEmpty(t *testing.T) {
 				t.Errorf("Violations() = %v, want the cvc-elt clause 4 charge and then the cvc-assertion charge, both at %s", vs, tc.at)
 			}
 		})
+	}
+}
+
+// A cvc-complex-type clause 5 charge walk.child records at a child is the
+// PARENT's invalidity, not the child's: the second s of odd, governed by the
+// global s's S, which is not ·validly substitutable· for its ·locally declared
+// type· xs:string, is charged against odd, while its own `$value` is its date
+// and `$value instance of xs:date` holds.
+func TestValueAssertionIgnoresAChargeAgainstTheParent(t *testing.T) {
+	schema := parsedSchema(t, map[string]string{"main.xsd": ivSchemaText})
+	s := func(line int) Child {
+		return ElementChild(&testElement{name: local("s"), loc: loc(line, 3),
+			kids: []Child{TextChild(&testText{data: "2008-07-01", loc: loc(line, 6)})}})
+	}
+	res := aAssess(t, schema, &testElement{name: local("odd"), loc: loc(1, 1), kids: []Child{s(2), s(3)}})
+	if got := res.Unevaluated(); len(got) != 0 {
+		t.Errorf("Unevaluated() = %v, want none", messages(got))
+	}
+	if vs := res.Violations(); len(vs) != 1 || vs[0].Rule != ruleCvcComplexType || vs[0].Loc != loc(3, 3) ||
+		!strings.HasPrefix(vs[0].Msg, "the element s is a child of odd, and its ·governing type definition· S is neither the same as nor ·validly substitutable·") {
+		t.Errorf("Violations() = %v, want the one cvc-complex-type clause 5 charge at %s", vs, loc(3, 3))
 	}
 }
 
