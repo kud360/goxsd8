@@ -425,6 +425,73 @@ func TestValueAssertionOverAnInvalidElementIsEmpty(t *testing.T) {
 	wantSatisfied(t, aAssess(t, aSimple(t, "int", false, nil, "$value eq 5"), cRoot("#5")), "$value eq 5 over a valid 5")
 }
 
+// ivSchemaText declares s of S, simple content extending xs:date and asserting
+// `$value instance of xs:date`; holder, whose content model names s; and lax,
+// whose content is one lax wildcard.
+const ivSchemaText = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="S">
+    <xs:simpleContent>
+      <xs:extension base="xs:date">
+        <xs:assert test="$value instance of xs:date"/>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:complexType name="Holder">
+    <xs:sequence>
+      <xs:element ref="s"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="Lax">
+    <xs:sequence>
+      <xs:any processContents="lax"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:element name="s" type="S"/>
+  <xs:element name="holder" type="Holder"/>
+  <xs:element name="lax" type="Lax"/>
+</xs:schema>`
+
+// An element invalid by its own xsi:type — xs:string, which does not
+// ·override· its declared S (cvc-elt clause 4) — is still governed by S, and
+// is known to be invalid when S's assertion is evaluated, so `$value` is the
+// empty sequence (cvc-assertion clauses 2.3.1.1 and 2.3.2) and `$value
+// instance of xs:date` is CHARGED beside the cvc-elt charge: where s is the
+// ·validation root·, a child holder's content model names, and a child of an
+// undeclared w that lax's wildcard leaves ·laxly assessed·, which s's name
+// ·resolves· against.
+func TestValueAssertionOverAnElementInvalidByXsiTypeIsEmpty(t *testing.T) {
+	schema := parsedSchema(t, map[string]string{"main.xsd": ivSchemaText})
+	s := func(line int) *testElement {
+		return &testElement{name: local("s"), loc: loc(line, 1),
+			attrs:    []Attribute{ccAttr(xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: "type"}, "xs:string", line)},
+			bindings: map[string]string{"xs": xsd.XMLSchemaNS},
+			kids:     []Child{TextChild(&testText{data: "2008-07-01", loc: loc(line, 30)})}}
+	}
+	for _, tc := range []struct {
+		why  string
+		root *testElement
+		at   xsderr.Loc
+	}{
+		{"the validation root", s(1), loc(1, 1)},
+		{"a child the content model names", &testElement{name: local("holder"), loc: loc(1, 1), kids: []Child{ElementChild(s(2))}}, loc(2, 1)},
+		{"a child of a ·laxly assessed· element", &testElement{name: local("lax"), loc: loc(1, 1),
+			kids: []Child{ElementChild(&testElement{name: local("w"), loc: loc(2, 1), kids: []Child{ElementChild(s(3))}})}}, loc(3, 1)},
+	} {
+		t.Run(tc.why, func(t *testing.T) {
+			res := aAssess(t, schema, tc.root)
+			if got := res.Unevaluated(); len(got) != 0 {
+				t.Errorf("Unevaluated() = %v, want none", messages(got))
+			}
+			vs := res.Violations()
+			if len(vs) != 2 || vs[0].Rule != ruleCvcElt || vs[0].Loc != tc.at || !strings.Contains(vs[0].Msg, "cvc-elt clause 4") ||
+				vs[1].Rule != ruleCvcAssertion || vs[1].Loc != tc.at ||
+				!strings.HasPrefix(vs[1].Msg, `the element s is not ·valid· with respect to assertion 1 of 1 in the {assertions} of the ·governing type definition· S, whose {test} is "$value instance of xs:date",`) {
+				t.Errorf("Violations() = %v, want the cvc-elt clause 4 charge and then the cvc-assertion charge, both at %s", vs, tc.at)
+			}
+		})
+	}
+}
+
 // `.` over simple content is the element's string value, its ·initial value·
 // unnormalized and as xs:untypedAtomic, and never `$value` ([xpath.BindValue]):
 // over xs:integer content "0030" `string-length(.) = 4` holds where `$value` is
