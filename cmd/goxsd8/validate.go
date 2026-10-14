@@ -78,8 +78,9 @@ func formatVocabulary() string {
 // runValidate implements `goxsd8 validate`: it compiles the -schema arguments
 // into ONE schema set and assesses every positional argument against it,
 // writing each violation, and each check the assessment declined, to stdout as
-// the contract's "<loc>: [<rule>] <message>". args excludes the subcommand
-// name itself.
+// the contract's "<loc>: [<rule>] <message>", and a JSON instance jsonsrc
+// could not assess as jsonsrc's own error line (assessJSON). args excludes the
+// subcommand name itself.
 //
 // Every instance is assessed, in argument order: a violation in one never
 // stops the next, so a script gets the whole report from one run. The exit
@@ -216,8 +217,9 @@ type validation struct {
 	// forced is the -format value, empty when the flag was not given and the
 	// format is derived per instance from its extension.
 	forced sourceFormat
-	// hints reports whether xsi:schemaLocation hints augment the set, which
-	// -no-hints turns off.
+	// hints reports whether an XML instance's xsi:schemaLocation hints augment
+	// the set, which -no-hints turns off. A JSON instance carries none
+	// (assessJSON).
 	hints bool
 	// log is the debug logger -v installed, nil when it was not given.
 	log *slog.Logger
