@@ -700,19 +700,23 @@ func TestProduceTypeTableCastTargetStaticErrorIsCharged(t *testing.T) {
 // and err:XPST0080 are cast-target errors, and a name with no constructor
 // signature is err:XPST0017 at most, which xpath-valid clause 2.2.8 leaves
 // implementation-defined. So neither call is charged, and both are withheld
-// at ·assessment· (#894).
+// at ·assessment· (#894). Each row is its own document, so a charge of the
+// first does not hide the second.
 func TestProduceTypeTableConstructorTargetIsNotCharged(t *testing.T) {
-	tt, present := typeTableOf(t, wrap("", typeTableTypes+`
-	<xs:element name="e" type="B">
-	  <xs:alternative test="string(@k) = 't'" type="T"/>
-	  <xs:alternative test="xs:anyAtomicType(@k) = 't'" type="U"/>
-	  <xs:alternative type="V"/>
-	</xs:element>`), xsd.QName{Local: "e"})
-	if !present {
-		t.Fatal("{type table} is ·absent·, want present")
-	}
-	if got := altTypeNames(t, tt.Alternatives()); !slices.Equal(got, []string{"T", "U"}) {
-		t.Fatalf("{alternatives} = %v, want [T U]", got)
+	for _, test := range []string{"string(@k) = 't'", "xs:anyAtomicType(@k) = 't'"} {
+		t.Run(test, func(t *testing.T) {
+			tt, present := typeTableOf(t, wrap("", typeTableTypes+`
+			<xs:element name="e" type="B">
+			  <xs:alternative test="`+test+`" type="T"/>
+			  <xs:alternative type="V"/>
+			</xs:element>`), xsd.QName{Local: "e"})
+			if !present {
+				t.Fatal("{type table} is ·absent·, want present")
+			}
+			if got := altTypeNames(t, tt.Alternatives()); !slices.Equal(got, []string{"T"}) {
+				t.Fatalf("{alternatives} = %v, want [T]", got)
+			}
+		})
 	}
 }
 
