@@ -276,144 +276,6 @@ func TestJSONExecutorRefusesDivergentAttributeGovernance(t *testing.T) {
 	}
 }
 
-// openContentSchema gives a child ·attributed to· an {open content} a
-// ·locally declared type·, dt, with a strict {attribute wildcard}: p's
-// sequence takes one optional x of type dt and its lax {open content} takes
-// the rest, so the second of two x children has no ·governing element
-// declaration· and dt governs it unless its xsi:type ·overrides· dt. The type
-// other, which an xsi:type names, carries the use foo dt lacks; otherDecl is
-// its declaration, unrelated to dt or an extension of it.
-func openContentSchema(otherDecl string) string {
-	return `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
-    targetNamespace="urn:t" xmlns:t="urn:t" elementFormDefault="qualified">
-  <xs:complexType name="dt">
-    <xs:anyAttribute processContents="strict"/>
-  </xs:complexType>
-  ` + otherDecl + `
-  <xs:element name="p">
-    <xs:complexType>
-      <xs:openContent mode="interleave">
-        <xs:any processContents="lax"/>
-      </xs:openContent>
-      <xs:sequence>
-        <xs:element name="x" type="t:dt" minOccurs="0"/>
-      </xs:sequence>
-    </xs:complexType>
-  </xs:element>
-</xs:schema>`
-}
-
-// TestJSONExecutorRefusesOpenContentGovernance pins attributeGovernanceDiverges's
-// condition 2. The second x's "$type" names other, whose use foo jsonsrc
-// presents. Where other is unrelated to dt it does not ·override· it, dt
-// governs, foo matches dt's strict {attribute wildcard} and resolves to no
-// declaration, and the walk charges and records nothing (key-governing-type-elem
-// clause 7, no cvc-elt clause 4): the executor must refuse the "valid" reading.
-// Where other extends dt it ·overrides· it, other governs, foo matches its use,
-// and "valid" is banked.
-func TestJSONExecutorRefusesOpenContentGovernance(t *testing.T) {
-	const doc = `{"p":{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:other","foo":"1"}]}}`
-	for _, tc := range []struct {
-		name, otherDecl string
-		why             refusal
-	}{
-		{"not overriding", `<xs:complexType name="other"><xs:attribute name="foo" type="xs:string"/></xs:complexType>`,
-			refuseJSONAttributeGovernance},
-		{"overriding", `<xs:complexType name="other"><xs:complexContent><xs:extension base="t:dt">` +
-			`<xs:attribute name="foo" type="xs:string"/></xs:extension></xs:complexContent></xs:complexType>`, ""},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			dir := t.TempDir()
-			schemaDoc, instance := filepath.Join(dir, "oc.xsd"), filepath.Join(dir, "oc.json")
-			writeFixture(t, schemaDoc, openContentSchema(tc.otherDecl))
-			writeFixture(t, instance, doc)
-			backend := strict.New()
-			schema, _, _, perr := assembleCase(backend, schemaDoc, nil)
-			if perr != nil {
-				t.Fatalf("assembling openContentSchema: %v", perr)
-			}
-			v, err := validate.New(schema, backend)
-			if err != nil {
-				t.Fatalf("validate.New: %v", err)
-			}
-			res, why := assessJSON(v, instance)
-			if why != "" {
-				t.Fatalf("assessJSON refused %q", why)
-			}
-			if len(res.Violations()) != 0 || len(res.Unevaluated()) != 0 {
-				t.Fatalf("assessment: %d violations, %d unevaluated; the row needs an empty Result", len(res.Violations()), len(res.Unevaluated()))
-			}
-			c := caseSpec{id: "open-content", kind: kindJSON, doc: instance, schemaDoc: schemaDoc, expect: expectValid()}
-			got, why := newJSONExec()(c)
-			if why != tc.why || got.IsPass() != (tc.why == "") {
-				t.Fatalf("execJSONCase = %v (refusal %q), want refusal %q", got, why, tc.why)
-			}
-		})
-	}
-}
-
-// TestAttributeGovernanceDivergesOnOpenContent pins where condition 2 finds a
-// ·locally declared type· an {open content} child takes: in a top-level
-// declaration's anonymous type, in a named type, in the base an extension
-// adding the {open content} contains, and on the {base type definition} chain
-// of a restriction whose own content model contains no declaration (key-ldt-elem
-// case 3, the one row a walk reading p's own declarations alone fails); and that it
-// finds none where the {open content} is skip, where the ·locally declared
-// type· has no {attribute wildcard} or a skip one, or where every type
-// carrying a use it lacks ·overrides· it.
-func TestAttributeGovernanceDivergesOnOpenContent(t *testing.T) {
-	const (
-		strictDT = `<xs:complexType name="dt"><xs:anyAttribute processContents="strict"/></xs:complexType>`
-		other    = `<xs:complexType name="other"><xs:attribute name="foo" type="xs:string"/></xs:complexType>`
-		lax      = `<xs:openContent><xs:any processContents="lax"/></xs:openContent>`
-		x        = `<xs:element name="x" type="dt" minOccurs="0"/>`
-	)
-	anon := func(open, seq string) string {
-		return `<xs:element name="p"><xs:complexType>` + open + `<xs:sequence>` + seq + `</xs:sequence></xs:complexType></xs:element>`
-	}
-	for _, tc := range []struct {
-		why, schemaBody string
-		want            bool
-	}{
-		{"anonymous type", strictDT + other + anon(lax, x), true},
-		{"named type", strictDT + other + `<xs:complexType name="P">` + lax + `<xs:sequence>` + x + `</xs:sequence></xs:complexType>`, true},
-		{
-			"declared by the base, opened by the extension",
-			strictDT + other + `<xs:complexType name="B"><xs:sequence>` + x + `</xs:sequence></xs:complexType>` +
-				`<xs:complexType name="P"><xs:complexContent><xs:extension base="B">` + lax +
-				`</xs:extension></xs:complexContent></xs:complexType>`,
-			true,
-		},
-		{
-			"declared by the base only, opened by a restriction",
-			strictDT + other + `<xs:complexType name="B"><xs:sequence>` + x +
-				`<xs:any processContents="lax" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType>` +
-				`<xs:complexType name="P"><xs:complexContent><xs:restriction base="B">` + lax +
-				`<xs:sequence/></xs:restriction></xs:complexContent></xs:complexType>`,
-			true,
-		},
-		{"no open content", strictDT + other + anon("", x), false},
-		{"skip open content", strictDT + other + anon(`<xs:openContent><xs:any processContents="skip"/></xs:openContent>`, x), false},
-		{"no attribute wildcard", `<xs:complexType name="dt"/>` + other + anon(lax, x), false},
-		{"skip attribute wildcard", `<xs:complexType name="dt"><xs:anyAttribute processContents="skip"/></xs:complexType>` + other + anon(lax, x), false},
-		{
-			"every stray use overrides",
-			strictDT + `<xs:complexType name="other"><xs:complexContent><xs:extension base="dt">` +
-				`<xs:attribute name="foo" type="xs:string"/></xs:extension></xs:complexContent></xs:complexType>` + anon(lax, x),
-			false,
-		},
-	} {
-		c := jsonFixture(t, tc.schemaBody, `{}`, true)
-		schema, _, decidable, err := assembleCase(strict.New(), c.schemaDoc, nil)
-		if err != nil || !decidable {
-			t.Fatalf("%s: assembling the schema: decidable %v, err %v", tc.why, decidable, err)
-		}
-		if got := attributeGovernanceDiverges(schema); got != tc.want {
-			t.Errorf("%s: attributeGovernanceDiverges = %v, want %v", tc.why, got, tc.want)
-		}
-	}
-}
-
 // walkOwnedSchema reaches the attribute refusals of assessedSubtreeRoot that
 // the walk, not execJSONCase, answers for. r and s take a lax wildcard and
 // then a local child of type base, so the first of two such children is
@@ -635,5 +497,124 @@ func TestNillableErrorType(t *testing.T) {
 		if got := nillableErrorType(schema); got != tc.want {
 			t.Errorf("%s: nillableErrorType = %v, want %v", tc.why, got, tc.want)
 		}
+	}
+}
+
+// wildcardAttributeSchemas give a wildcard-named attribute jsonsrc presents at
+// a LOCAL element its own declaration governs each attribute refusal of
+// assessedSubtreeRoot. Each is r with one optional local child, under a
+// ##targetNamespace {attribute wildcard}: in ldt, c of type narrow, a
+// restriction of base prohibiting base's use of the top-level {urn:t}m, the
+// wildcard lax; in strict, s, the wildcard strict, and q resolving no
+// top-level declaration; in unadmitted, e, the wildcard lax and rejecting
+// {urn:t}p by name.
+var wildcardAttributeSchemas = map[string]string{
+	"ldt": `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="urn:t" xmlns:t="urn:t" elementFormDefault="qualified">
+  <xs:complexType name="base">
+    <xs:attribute ref="t:m"/>
+    <xs:anyAttribute namespace="##targetNamespace" processContents="lax"/>
+  </xs:complexType>
+  <xs:complexType name="narrow">
+    <xs:complexContent>
+      <xs:restriction base="t:base">
+        <xs:attribute ref="t:m" use="prohibited"/>
+        <xs:anyAttribute namespace="##targetNamespace" processContents="lax"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:attribute name="m" type="xs:string"/>
+  <xs:element name="r">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="c" type="t:narrow" minOccurs="0"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`,
+	"strict": `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="urn:t" xmlns:t="urn:t" elementFormDefault="qualified">
+  <xs:element name="r">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="s" minOccurs="0">
+          <xs:complexType>
+            <xs:anyAttribute namespace="##targetNamespace" processContents="strict"/>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`,
+	"unadmitted": `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="urn:t" xmlns:t="urn:t" elementFormDefault="qualified">
+  <xs:element name="r">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="e" minOccurs="0">
+          <xs:complexType>
+            <xs:anyAttribute namespace="##targetNamespace" notQName="t:p" processContents="lax"/>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:attribute name="p" type="xs:string"/>
+</xs:schema>`,
+}
+
+// TestJSONExecutorReadsWildcardAttributes pins the attribute refusals of
+// assessedSubtreeRoot a wildcard-named attribute reaches at an element its own
+// local declaration governs: each JSON document's XML twin is refused as the
+// row's gate, and execJSONCase either refuses a "valid" reading as
+// json-attribute-governance (no charges: the walk charges nothing for
+// strict-attribute-unresolved or attribute-ldt) or reads "not valid" off the
+// rules the walk charges (attribute-unadmitted).
+func TestJSONExecutorReadsWildcardAttributes(t *testing.T) {
+	backend := strict.New()
+	for _, tc := range []struct {
+		schema, json, xml string
+		gate              refusal
+		charges           []xsderr.Rule
+	}{
+		{"ldt", `{"r":{"c":{"m":"x"}}}`,
+			`<r xmlns="urn:t" xmlns:t="urn:t"><c t:m="x"/></r>`, refuseAttributeLDT, nil},
+		{"strict", `{"r":{"s":{"q":"x"}}}`,
+			`<r xmlns="urn:t" xmlns:t="urn:t"><s t:q="x"/></r>`, refuseStrictAttribute, nil},
+		{"unadmitted", `{"r":{"e":{"p":"x"}}}`,
+			`<r xmlns="urn:t" xmlns:t="urn:t"><e t:p="x"/></r>`, refuseAttributeUnadmitted, []xsderr.Rule{"cvc-complex-type"}},
+	} {
+		t.Run(tc.schema, func(t *testing.T) {
+			dir := t.TempDir()
+			schemaDoc, doc, twin := filepath.Join(dir, "s.xsd"), filepath.Join(dir, "i.json"), filepath.Join(dir, "i.xml")
+			writeFixture(t, schemaDoc, wildcardAttributeSchemas[tc.schema])
+			writeFixture(t, doc, tc.json)
+			writeFixture(t, twin, tc.xml)
+			schema, report, _, perr := assembleCase(backend, schemaDoc, nil)
+			if perr != nil {
+				t.Fatalf("assembling %s: %v", tc.schema, perr)
+			}
+			if why := assessedSubtreeRoot(backend, schema, report, twin); why != tc.gate {
+				t.Fatalf("assessedSubtreeRoot(%s) = %q, want %q: the twin does not have the shape the test claims", tc.xml, why, tc.gate)
+			}
+			if charged := chargedRules(t, schema, backend, doc); !slices.Equal(charged, tc.charges) {
+				t.Fatalf("jsonsrc.Validate charges %v, want %v", charged, tc.charges)
+			}
+			c := caseSpec{id: tc.schema, kind: kindJSON, doc: doc, schemaDoc: schemaDoc, expect: expectValid()}
+			got, why := newJSONExec()(c)
+			if got.IsPass() {
+				t.Fatalf("execJSONCase = pass on a \"valid\" expectation")
+			}
+			if tc.charges == nil && why != refuseJSONAttributeGovernance {
+				t.Fatalf("execJSONCase refusal = %q, want %q", why, refuseJSONAttributeGovernance)
+			}
+			if tc.charges == nil {
+				return
+			}
+			c.expect = expectValidity(false)
+			if got, why := newJSONExec()(c); !got.IsPass() {
+				t.Fatalf("execJSONCase = %v (refusal %q) on an \"invalid\" expectation, want pass", got, why)
+			}
+		})
 	}
 }

@@ -5,6 +5,7 @@ goxsd8-json/attribute/json/attribute-missing.i pass
 goxsd8-json/attribute/json/attribute-type.i pass
 goxsd8-json/attribute/json/attribute.v pass
 goxsd8-json/child/json/child-content.i pass
+goxsd8-json/child/json/child-stray.i pass
 goxsd8-json/child/json/child.i pass
 goxsd8-json/child/json/child.v pass
 goxsd8-json/nil/json/nil-fixed.i pass
@@ -13,3 +14,8 @@ goxsd8-json/nil/json/nil.v pass
 goxsd8-json/scalar/json/scalar-integer.v pass
 goxsd8-json/scalar/json/scalar.i pass
 goxsd8-json/scalar/json/scalar.v pass
+goxsd8-json/wildcard/json/wildcard-attribute.i pass
+goxsd8-json/wildcard/json/wildcard-attribute.v pass
+goxsd8-json/wildcard/json/wildcard-element.i pass
+goxsd8-json/wildcard/json/wildcard-element.v pass
+goxsd8-json/wildcard/json/wildcard-local.v pass
