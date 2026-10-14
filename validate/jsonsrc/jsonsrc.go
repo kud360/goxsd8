@@ -356,16 +356,18 @@ func (w *walker) classify(o *object, key string, loc xsderr.Loc) (member, error)
 // one namespace, or element wildcards whose namespaces differ; N or M the xsi
 // or the xml namespace; and an attribute key of a type with simple content.
 //
-// GAP(jsonsrc): a wildcard-only key whose namespace the model does not fix
-// declines (#2634): a wildcard of variety any or not, xs:anyType's included,
-// an enumeration of several namespaces, element wildcards enumerating
-// different ones, and a type with no wildcard of the key's kind. So does a key
-// whose kind the type leaves open, having wildcards of both kinds, and a key a
-// wildcard's single namespace puts in the xsi or xml namespace, whose
-// attributes have their own spellings (#2627). The representative name a
-// mapping would pick is observable by an ancestor's identity-constraint paths
-// and assertions. A bareElement's members are classified against nothing,
-// which is xs:anyType's wildcards, the same residue.
+// GAP(jsonsrc): a wildcard-only key whose namespace or kind the model does
+// not fix declines, owned by #2634: a wildcard of variety any or not,
+// xs:anyType's included, an enumeration of several namespaces, element
+// wildcards enumerating different ones, and a type with wildcards of both
+// kinds. The representative name a mapping would pick is observable by an
+// ancestor's identity-constraint paths and assertions. A bareElement's members
+// are classified against nothing, which is xs:anyType's wildcards, the same
+// residue.
+//
+// GAP(jsonsrc): a key of a type with no wildcard at all, so none of the key's
+// kind, declines, and so does a key a wildcard's single namespace, of either
+// kind, puts in the xml or the xsi namespace; #2635 owns all three.
 //
 // GAP(jsonsrc): a key a simple-content type's {attribute wildcard} alone
 // admits declines, on the ground useNamed's simple-content marker states for
