@@ -178,6 +178,8 @@ func TestAssertionReadsGrandchildValues(t *testing.T) {
 // type then governs it, so it has no typed value under xs:date in the partial
 // ·PSVI· (cvc-assertion clause 1.2) and `data(event/d) instance of xs:date*` is
 // declined, never shown satisfied; the cvc-elt charge stays the one violation.
+// With walk.child's main arm taking d's mark after walk.childGoverning, the
+// assertion is shown satisfied, and this fails.
 func TestAssertionReadsAGrandchildInvalidByXsiType(t *testing.T) {
 	const test = "data(event/d) instance of xs:date*"
 	str := ccAttr(xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: "type"}, "xs:string", 3)

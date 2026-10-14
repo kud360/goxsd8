@@ -466,7 +466,9 @@ const ivSchemaText = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
 // instance of xs:date` is CHARGED beside the cvc-elt charge: where s is the
 // ·validation root·, a child holder's content model names, and a child of an
 // undeclared w that lax's wildcard leaves ·laxly assessed·, which s's name
-// ·resolves· against.
+// ·resolves· against. Each row's assertion is satisfied instead, and that row
+// alone fails, with its caller — Validator.Assess, walk.child's main arm,
+// walk.child's lax arm — taking s's mark after s's governance is decided.
 func TestValueAssertionOverAnElementInvalidByXsiTypeIsEmpty(t *testing.T) {
 	schema := parsedSchema(t, map[string]string{"main.xsd": ivSchemaText})
 	s := func(line int) *testElement {
@@ -504,7 +506,9 @@ func TestValueAssertionOverAnElementInvalidByXsiTypeIsEmpty(t *testing.T) {
 // PARENT's invalidity, not the child's: the second s of odd, governed by the
 // global s's S, which is not ·validly substitutable· for its ·locally declared
 // type· xs:string, is charged against odd, while its own `$value` is its date
-// and `$value instance of xs:date` holds.
+// and `$value instance of xs:date` holds. With walk.child's main arm passing
+// its mark without skipping the parent's charges, the assertion is charged
+// too, and this fails.
 func TestValueAssertionIgnoresAChargeAgainstTheParent(t *testing.T) {
 	schema := parsedSchema(t, map[string]string{"main.xsd": ivSchemaText})
 	s := func(line int) Child {

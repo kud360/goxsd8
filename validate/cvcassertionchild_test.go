@@ -157,7 +157,9 @@ func TestAssertionRootedPathIsCharged(t *testing.T) {
 // none of (cvc-type clause 3.1.1) — the row that is satisfied instead with
 // childValue's recorded check removed — and so is an <n> whose xsi:type,
 // xs:string, does not ·override· its declared xs:int (cvc-elt clause 4), which
-// is still read under xs:int; a second <e1> is ·skipped· by the
+// is still read under xs:int, the row that is satisfied instead with
+// walk.child's main arm taking <n>'s mark after walk.childGoverning; a second
+// <e1> is ·skipped· by the
 // wildcard, which is satisfied instead with assertionCheck.skipped removed. A
 // child no {test} reads declines nothing, which is the retention gate
 // (assertionCheck.reads): `@x = 1` and `e1 = 'present'` are each evaluated
