@@ -502,7 +502,8 @@ func (w *walker) childNamed(o *object, key string, loc xsderr.Loc) (xsd.ElementD
 //
 // GAP(jsonsrc): a key attribute uses of two expanded names carry declines:
 // cvc-complex-type clause 2.1 matches an attribute to a use by expanded name,
-// and a JSON key carries no namespace to choose between them.
+// and a JSON key carries no namespace to choose between them. Owned by #2623,
+// the NAMESPACE TRAP.
 //
 // GAP(jsonsrc): a key naming an xsi:type attribute use declines: it is the
 // "$type" arm's to present, owned by #2615.
