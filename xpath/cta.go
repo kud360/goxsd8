@@ -303,7 +303,9 @@ const ruleXPST0080 xsderr.Rule = "err:XPST0080"
 // subset of XPath"), and it answers nil: `count(//p:a) > 1` with p unbound is
 // one, and reading its unbound prefix in isolation would turn that decline
 // into the rejection of a conforming schema. Under-charging is a rejection
-// this engine can take later; over-charging is a false reject now.
+// this engine can take later; over-charging is a false reject now. A
+// cast-target err:XPST0051 or err:XPST0080 the parse proved before such a
+// decline is under-charged with it, under compileCTATest's GAP(xpath) (#2631).
 //
 // types is the IN-SCOPE SCHEMA DEFINITIONS of the static context this question
 // is asked in, which xpath-valid clause 2.2.5 fixes as "those components that
@@ -316,11 +318,11 @@ const ruleXPST0080 xsderr.Rule = "err:XPST0080"
 // The rule is the XPath error code and the message is the fact, so the result
 // renders as
 //
-//	?: [err:XPST0081] no statically-known namespace binding for prefix "p"
+//	?: [err:XPST0081] no statically-known namespace binding for prefix "p", which err:XPST0081 forbids
 //
 // naming the FIRST unbound prefix in expression order (STYLE D2), or as
 //
-//	?: [err:XPST0051] the cast target "{http://www.w3.org/2001/XMLSchema}Missing" is no simple type in the in-scope schema types
+//	?: [err:XPST0051] the cast target "{http://www.w3.org/2001/XMLSchema}Missing" is no simple type in the in-scope schema types, which err:XPST0051 forbids
 //
 // or as
 //
@@ -358,7 +360,8 @@ func CTATestStaticError(expr xsd.XPathExpression, types xsd.TypeResolver) error 
 // A static error never fails a parse — an unbound prefix or a `cast as` target
 // castTarget finds static records it and carries on (ctaParser.record) — so a
 // parse that failed at all failed for another reason, and is ctaUnsupported
-// with whatever was recorded along the way DISCARDED. That is where
+// with whatever was recorded along the way DISCARDED — the GAP(xpath) at the
+// discard says what that under-charges (#2631). That is where
 // "unsupported dominates static" is enforced, once, for every façade. Whether
 // such a declined text is XPath at all is asked by [CTATestStaticError] alone,
 // of the full grammar (syntaxError), and never here: the assertion and facet
@@ -382,6 +385,12 @@ func compileCTATest(expr xsd.XPathExpression, types xsd.TypeResolver, facade cta
 	p := ctaParser{toks: toks, names: names, types: known, facade: facade}
 	root, ok := p.test()
 	if !ok {
+		// GAP(xpath): a recorded err:XPST0051 or err:XPST0080 dies here with
+		// the parse a later construct declines, though castTarget proved it:
+		// §3.12.6 clause 2's Note licenses declining only an expression
+		// containing no static errors, so `@kind cast as xs:Missing = 'x' and
+		// count(//a:x) > 1` is under-charged. The direction is the withhold.
+		// (#2631)
 		return nil, ctaDefect{kind: ctaUnsupported}
 	}
 	return root, p.defect

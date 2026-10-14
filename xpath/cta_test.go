@@ -265,7 +265,7 @@ func TestCTATestStaticErrorReportsUnboundPrefix(t *testing.T) {
 		if verdict.Rule != ruleXPST0081 {
 			t.Errorf("CTATestStaticError(%q) reports rule %q, want %q", tc.expr, verdict.Rule, ruleXPST0081)
 		}
-		if want := `no statically-known namespace binding for prefix "` + tc.prefix + `"`; verdict.Msg != want {
+		if want := `no statically-known namespace binding for prefix "` + tc.prefix + `", which err:XPST0081 forbids`; verdict.Msg != want {
 			t.Errorf("CTATestStaticError(%q).Msg = %q, want %q", tc.expr, verdict.Msg, want)
 		}
 		if verdict.Loc != (xsderr.Loc{}) {
@@ -314,7 +314,8 @@ func TestCTATestStaticErrorIsSilentForUnsupported(t *testing.T) {
 		{"@kind = 'book'", "a complete Test whose every name resolved"},
 		{"@a:kind = 'book'", "a complete Test whose prefix is bound"},
 		// A cast-target static error recorded on the way dies with a parse a
-		// later construct declines.
+		// later construct declines: an under-charge, pinned as the withhold
+		// under compileCTATest's GAP(xpath) (#2631).
 		{"@kind cast as xs:Missing = 'x' and count(//a:x) > 1", "err:XPST0051 inside an expression a later construct declines"},
 		// The constructor spelling names a FUNCTION: err:XPST0051 and
 		// err:XPST0080 are cast-target errors, and a name with no constructor
@@ -343,14 +344,14 @@ func TestCTATestStaticErrorIsSilentForUnsupported(t *testing.T) {
 // still declines every row.
 func TestCTATestStaticErrorReportsCastTarget(t *testing.T) {
 	for _, tc := range []struct{ expr, rule, msg string }{
-		{"@kind cast as xs:Missing = 'x'", "err:XPST0051", `the cast target "{http://www.w3.org/2001/XMLSchema}Missing" is no simple type in the in-scope schema types`},
-		{"@kind cast as a:Missing", "err:XPST0051", `the cast target "{http://example.com/a}Missing" is no simple type in the in-scope schema types`},
-		{"@kind cast as Missing = 'x'", "err:XPST0051", `the cast target "Missing" is no simple type in the in-scope schema types`},
-		{"@kind cast as xs:anyType = 'x'", "err:XPST0051", `the cast target "{http://www.w3.org/2001/XMLSchema}anyType" is no simple type in the in-scope schema types`},
-		{"@kind cast as xs:anySimpleType = 'x'", "err:XPST0051", `the cast target "{http://www.w3.org/2001/XMLSchema}anySimpleType" is no atomic type`},
-		{"@kind cast as xs:NMTOKENS? = 'x'", "err:XPST0051", `the cast target "{http://www.w3.org/2001/XMLSchema}NMTOKENS" is no atomic type`},
-		{"@kind cast as xs:anyAtomicType = 'x'", "err:XPST0080", `the cast target "{http://www.w3.org/2001/XMLSchema}anyAtomicType" is xs:NOTATION or xs:anyAtomicType, which no cast may target`},
-		{"@kind cast as xs:NOTATION", "err:XPST0080", `the cast target "{http://www.w3.org/2001/XMLSchema}NOTATION" is xs:NOTATION or xs:anyAtomicType, which no cast may target`},
+		{"@kind cast as xs:Missing = 'x'", "err:XPST0051", `the cast target "{http://www.w3.org/2001/XMLSchema}Missing" is no simple type in the in-scope schema types, which err:XPST0051 forbids`},
+		{"@kind cast as a:Missing", "err:XPST0051", `the cast target "{http://example.com/a}Missing" is no simple type in the in-scope schema types, which err:XPST0051 forbids`},
+		{"@kind cast as Missing = 'x'", "err:XPST0051", `the cast target "Missing" is no simple type in the in-scope schema types, which err:XPST0051 forbids`},
+		{"@kind cast as xs:anyType = 'x'", "err:XPST0051", `the cast target "{http://www.w3.org/2001/XMLSchema}anyType" is no simple type in the in-scope schema types, which err:XPST0051 forbids`},
+		{"@kind cast as xs:anySimpleType = 'x'", "err:XPST0051", `the cast target "{http://www.w3.org/2001/XMLSchema}anySimpleType" is no atomic type, which err:XPST0051 forbids`},
+		{"@kind cast as xs:NMTOKENS? = 'x'", "err:XPST0051", `the cast target "{http://www.w3.org/2001/XMLSchema}NMTOKENS" is no atomic type, which err:XPST0051 forbids`},
+		{"@kind cast as xs:anyAtomicType = 'x'", "err:XPST0080", `the cast target "{http://www.w3.org/2001/XMLSchema}anyAtomicType" is xs:NOTATION or xs:anyAtomicType, which err:XPST0080 forbids`},
+		{"@kind cast as xs:NOTATION", "err:XPST0080", `the cast target "{http://www.w3.org/2001/XMLSchema}NOTATION" is xs:NOTATION or xs:anyAtomicType, which err:XPST0080 forbids`},
 		// The stand-in lets every comparison after it settle: against an
 		// xs:float operand, a DoubleLiteral and an untyped attribute, and inside
 		// a conjunction.
@@ -362,9 +363,9 @@ func TestCTATestStaticErrorReportsCastTarget(t *testing.T) {
 		// for every target but xs:double still reaches the charge.
 		{"1e0 cast as xs:Missing = 'x'", "err:XPST0051", ""},
 		// The first static error in expression order wins, either way round.
-		{"@kind cast as q:Missing = 'x'", "err:XPST0081", `no statically-known namespace binding for prefix "q"`},
-		{"@p:kind cast as xs:Missing", "err:XPST0081", `no statically-known namespace binding for prefix "p"`},
-		{"@p:kind cast as xs:anyAtomicType = 'x'", "err:XPST0081", `no statically-known namespace binding for prefix "p"`},
+		{"@kind cast as q:Missing = 'x'", "err:XPST0081", `no statically-known namespace binding for prefix "q", which err:XPST0081 forbids`},
+		{"@p:kind cast as xs:Missing", "err:XPST0081", `no statically-known namespace binding for prefix "p", which err:XPST0081 forbids`},
+		{"@p:kind cast as xs:anyAtomicType = 'x'", "err:XPST0081", `no statically-known namespace binding for prefix "p", which err:XPST0081 forbids`},
 		{"@kind cast as xs:Missing = 'x' or @p:kind = 'y'", "err:XPST0051", ""},
 	} {
 		record := ctaExprRecord(tc.expr, "", "a", "http://example.com/a", "xs", xsd.XMLSchemaNS)

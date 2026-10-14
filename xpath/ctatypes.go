@@ -176,11 +176,11 @@ func (t ctaTypes) castTarget(name xsd.QName) (*xsd.SimpleType, ctaDefect) {
 		return nil, ctaDefect{kind: ctaUnsupported}
 	}
 	if name == ctaBuiltin("anyAtomicType") || name == ctaBuiltin("NOTATION") {
-		return nil, ctaStaticDefect(ruleXPST0080, "the cast target %q is xs:NOTATION or xs:anyAtomicType, which no cast may target", name)
+		return nil, ctaStaticDefect(ruleXPST0080, "the cast target %q is xs:NOTATION or xs:anyAtomicType, which err:XPST0080 forbids", name)
 	}
 	st, declared := t.simple(name)
 	if !declared || name.Space != xsd.XMLSchemaNS {
-		return nil, ctaStaticDefect(ruleXPST0051, "the cast target %q is no simple type in the in-scope schema types", name)
+		return nil, ctaStaticDefect(ruleXPST0051, "the cast target %q is no simple type in the in-scope schema types, which err:XPST0051 forbids", name)
 	}
 	// §3.10.2's "the target type must be an atomic type" is decided on the
 	// {primitive type definition} and not on the {variety}, because the
@@ -192,7 +192,7 @@ func (t ctaTypes) castTarget(name xsd.QName) (*xsd.SimpleType, ctaDefect) {
 		return nil, ctaDefect{kind: ctaUnsupported}
 	}
 	if p == nil {
-		return nil, ctaStaticDefect(ruleXPST0051, "the cast target %q is no atomic type", name)
+		return nil, ctaStaticDefect(ruleXPST0051, "the cast target %q is no atomic type, which err:XPST0051 forbids", name)
 	}
 	return st, ctaDefect{}
 }

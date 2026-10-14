@@ -288,7 +288,7 @@ func (p *ctaParser) prefixedSpace(prefix string) (string, bool) {
 // namespace prefix that cannot be expanded into a namespace URI") on record's
 // terms. The code is the recorded verdict's own rule (ruleXPST0081).
 func (p *ctaParser) recordUnbound(prefix string) {
-	p.record(ctaStaticDefect(ruleXPST0081, "no statically-known namespace binding for prefix %q", prefix))
+	p.record(ctaStaticDefect(ruleXPST0081, "no statically-known namespace binding for prefix %q, which err:XPST0081 forbids", prefix))
 }
 
 // record records the ctaStaticError defect d and lets the parse go on: an

@@ -456,7 +456,9 @@
 // parse runs past a failed target on a stand-in cast to xs:string
 // (ctaParser.singleType). Only CTATestStaticError reports any of them:
 // CompileAssertionTest and FacetAssertions decline every one like any
-// other defect.
+// other defect. A cast-target err:XPST0051 or err:XPST0080 the parse
+// proved before a later construct declines is withheld with that decline,
+// under the GAP(xpath) at compileCTATest's discard (#2631).
 //
 // A constructor call naming such a type is withheld, never charged: it
 // names a function, not a cast target. So is err:FONS0004, an unbound
