@@ -121,8 +121,9 @@
 //     declaration they decline as every member there does; it is resolved
 //     through the engine's own resolver (cvc-resolve-instance, §3.17.6.3), so
 //     the two agree on the type. A "$type" rides an object value only: a
-//     scalar or null element carries no xsi:type. It declines where a ·locally
-//     declared type· could govern the element instead, uncharged (Declines).
+//     scalar or null element carries no xsi:type. It declines wherever the
+//     mapping cannot rule out that a ·locally declared type· governs the
+//     element instead, uncharged (Declines).
 //   - No DTD-shaped declaration exists in JSON, so the adapter does not
 //     implement [validate.UnparsedEntities] and every ·ENTITY value· fails
 //     cvc-simple-type clause 3, as that interface's doc states.
@@ -228,7 +229,15 @@
 //     declaration·, and L governs it unless the "$type"'s type ·overrides· L
 //     (key-governing-type-elem clauses 6 and 7), uncharged; the members would
 //     be classified under the "$type"'s type, and [validate.SchemaView] cannot
-//     ask ·override·. Lifting this is #2647's;
+//     ask ·override·. So does a "$type" on an element whose parent's
+//     classifying type may not be the parent's ·governing type definition·,
+//     because the one that governs may have such an {open content}: a parent
+//     matched to a declaration its own parent's type contains, where that type
+//     has a non-skip element wildcard and a top-level declaration of the name
+//     exists (key-governing-ed clause 3); a parent a wildcard names whose name
+//     has a ·locally declared type· under a non-skip {open content}
+//     (key-governing-ed clause 4.3); and any element below such a parent.
+//     Lifting this is #2647's;
 //   - any other "$"-prefixed reserved member, "$" being no XML NameStartChar;
 //   - an array item that is itself an array;
 //   - a matched declaration carrying a {type table}, the top-level one of a

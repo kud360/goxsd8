@@ -328,3 +328,164 @@ func TestTypeOnUndeclaredElement(t *testing.T) {
 		t.Fatalf("Validate(%s) = %v, want it to open %q", doc, err, want)
 	}
 }
+
+// governanceSchema builds parents whose classifying type may not govern them.
+// w's sequence takes one optional y of type Td and then a lax wildcard, and
+// the top-level y is of type Tg, so a second y is ·attributed to· the
+// wildcard and governed by Tg (key-governing-ed clause 3), which extends Td
+// with a lax {open content}. Tg2 instead restricts Td2, giving v the type vr,
+// which restricts vt's wildcard to the declaration x, and w2 takes a y2 as w
+// takes a y. r restricts B, which declares u, and opens to the target
+// namespace, so a u under r is governed by its ·locally declared type· ub,
+// which has a lax {open content}, while the top-level u is of type ug, which
+// has none. sg holds the head h, which m, of type mt, a type with a lax {open
+// content}, substitutes for; z holds a zt under a lax wildcard, with no
+// top-level z. dt holds an optional k, and other, unrelated to dt, has the
+// attribute k.
+const governanceSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="urn:t" xmlns:t="urn:t" elementFormDefault="qualified">
+  <xs:complexType name="dt"><xs:sequence><xs:element name="k" type="xs:string" minOccurs="0"/></xs:sequence></xs:complexType>
+  <xs:complexType name="other"><xs:attribute name="k" type="xs:string"/></xs:complexType>
+  <xs:complexType name="Td"><xs:sequence><xs:element name="x" type="t:dt" minOccurs="0"/></xs:sequence></xs:complexType>
+  <xs:complexType name="Tg">
+    <xs:complexContent>
+      <xs:extension base="t:Td">
+        <xs:openContent mode="interleave"><xs:any processContents="lax"/></xs:openContent>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="y" type="t:Tg"/>
+  <xs:element name="w">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="y" type="t:Td" minOccurs="0"/>
+        <xs:any processContents="lax" minOccurs="0" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name="vt">
+    <xs:openContent mode="interleave"><xs:any namespace="##targetNamespace" processContents="lax"/></xs:openContent>
+    <xs:sequence><xs:any namespace="##targetNamespace" processContents="lax" minOccurs="0"/></xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="vr">
+    <xs:complexContent>
+      <xs:restriction base="t:vt">
+        <xs:openContent mode="interleave"><xs:any namespace="##targetNamespace" processContents="lax"/></xs:openContent>
+        <xs:sequence><xs:element name="x" type="t:dt" minOccurs="0"/></xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="x" type="t:dt"/>
+  <xs:complexType name="Td2"><xs:sequence><xs:element name="v" type="t:vt" minOccurs="0"/></xs:sequence></xs:complexType>
+  <xs:complexType name="Tg2">
+    <xs:complexContent>
+      <xs:restriction base="t:Td2">
+        <xs:sequence><xs:element name="v" type="t:vr" minOccurs="0"/></xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="y2" type="t:Tg2"/>
+  <xs:element name="w2">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="y2" type="t:Td2" minOccurs="0"/>
+        <xs:any processContents="lax" minOccurs="0" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name="ub">
+    <xs:openContent mode="interleave"><xs:any processContents="lax"/></xs:openContent>
+    <xs:sequence><xs:element name="x" type="t:dt" minOccurs="0"/></xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="ug"><xs:sequence><xs:element name="x" type="t:dt" minOccurs="0"/></xs:sequence></xs:complexType>
+  <xs:element name="u" type="t:ug"/>
+  <xs:complexType name="B">
+    <xs:sequence>
+      <xs:element name="u" type="t:ub" minOccurs="0"/>
+      <xs:any processContents="lax" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:element name="r">
+    <xs:complexType>
+      <xs:complexContent>
+        <xs:restriction base="t:B">
+          <xs:openContent mode="interleave"><xs:any namespace="##targetNamespace" processContents="lax"/></xs:openContent>
+          <xs:sequence/>
+        </xs:restriction>
+      </xs:complexContent>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="h" type="t:dt" abstract="true"/>
+  <xs:complexType name="mt">
+    <xs:complexContent>
+      <xs:extension base="t:dt">
+        <xs:openContent mode="interleave"><xs:any processContents="lax"/></xs:openContent>
+        <xs:sequence><xs:element name="x" type="t:dt" minOccurs="0"/></xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="m" type="t:mt" substitutionGroup="t:h"/>
+  <xs:element name="sg"><xs:complexType><xs:sequence><xs:element ref="t:h"/></xs:sequence></xs:complexType></xs:element>
+  <xs:complexType name="zt"><xs:sequence><xs:element name="x" type="t:dt" minOccurs="0"/></xs:sequence></xs:complexType>
+  <xs:element name="zw">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="z" type="t:zt" minOccurs="0"/>
+        <xs:any processContents="lax" minOccurs="0" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+
+// TestUngovernedParentTypeDeclines pins walker.governs: a "$type" declines
+// under a parent whose classifying type may not govern it. The first row is
+// the round-3 reproduction: the second y is matched to w's declaration of
+// type Td but governed by the top-level y's Tg, whose lax {open content}
+// leaves the second x to its ·locally declared type· dt, uncharged. The
+// second row carries that doubt one level down, to v, where Tg2's vr, not
+// Td2's vt, declares x. The third row's u is named by r's {open content} and
+// governed by its ·locally declared type· ub, not by the top-level u's ug.
+// The fourth row reaches mt through the substitution group of h, and
+// declines on mt's own {open content}.
+func TestUngovernedParentTypeDeclines(t *testing.T) {
+	v := validatorOver(t, governanceSchema)
+	const (
+		ungoverned = `may not govern it`
+		open       = `the {open content} of the type of`
+	)
+	for _, tc := range []struct {
+		name, json string
+		prefix     string
+		says       string
+	}{
+		{"a wildcard's top-level declaration governs the parent", `{"w":{"y":[{},{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:other","k":"zz"}]}]}}`,
+			"jsonsrc: instance.json:1:48: ", ungoverned},
+		{"a grandparent's", `{"w2":{"y2":[{},{"v":{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:other","k":"zz"}]}}]}}`,
+			"jsonsrc: instance.json:1:55: ", ungoverned},
+		{"a locally declared type governs the parent", `{"r":{"u":{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:other","k":"zz"}]}}}`,
+			"jsonsrc: instance.json:1:44: ", ungoverned},
+		{"a substitution group member's open content", `{"sg":{"m":{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:other","k":"zz"}]}}}`,
+			"jsonsrc: instance.json:1:45: ", open},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			res, err := Validate(v, strings.NewReader(tc.json), WithURI(jsonURI))
+			if err == nil {
+				t.Fatalf("Validate(%s) = %v violations, %d unevaluated, nil error; want the decline", tc.json, rules(res), len(res.Unevaluated()))
+			}
+			if !strings.HasPrefix(err.Error(), tc.prefix+`the "$type" member of {urn:t}x: `) || !strings.Contains(err.Error(), tc.says) {
+				t.Errorf("Validate(%s) = %q, want it to open %q and say %q", tc.json, err, tc.prefix, tc.says)
+			}
+		})
+	}
+}
+
+// TestGovernedParentTypeMaps pins walker.governs' limit: under a lax wildcard
+// no top-level declaration of z can govern z in its declaration's place, so
+// a "$type" on z's child maps, and the engine charges cvc-elt clause 4 as
+// for the XML twin.
+func TestGovernedParentTypeMaps(t *testing.T) {
+	v := validatorOver(t, governanceSchema)
+	twin(t, v, `{"zw":{"z":{"x":{"$xmlns":{"t":"urn:t"},"$type":"t:other","k":"zz"}}}}`,
+		`<zw xmlns="urn:t" xmlns:t="urn:t" `+xsiDecl+`><z><x xsi:type="t:other" k="zz"/></z></zw>`,
+		[]xsderr.Rule{"cvc-elt", "cvc-complex-type"})
+}

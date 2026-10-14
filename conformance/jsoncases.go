@@ -130,8 +130,11 @@ func newJSONExec() laneExecutor {
 //     governs the parent; where X does not ·override· the type a ·governing
 //     element declaration· supplies, the walk charges cvc-elt clause 4 at the
 //     parent, so no "valid" reading stands on what the child's governing
-//     declaration selects; and where a ·locally declared type· would supply
-//     it, jsonsrc declines the "$type" (walker.localType);
+//     declaration selects; and jsonsrc declines the "$type" wherever a
+//     ·locally declared type· could supply it uncharged — where the type the
+//     parent's members are classified under has a non-skip {open content}
+//     under which the child's name has one, and where that type may not
+//     govern the parent at all (walker.localType, walker.governs);
 //   - strict-attribute-unresolved and attribute-ldt: refused here on a "valid"
 //     reading, through attributeGovernanceDiverges, which says why no other
 //     element reaches them;
@@ -384,11 +387,13 @@ func ownedComplexType(ref xsd.TypeDefinitionOrRef) (xsd.ComplexType, bool) {
 //     clause 8); where X does not ·override· a declaration's type, the walk
 //     charges cvc-elt clause 4 (walk.instanceOverride), and no "valid"
 //     reading stands, whatever the element's descendants are classified
-//     under; and where a non-·absent· ·locally declared type· would govern
-//     instead (clauses 6 and 7), jsonsrc declines the "$type"
-//     (walker.localType). Where the "$type" names none, the walk charges
-//     cvc-attribute or records it unevaluated (execJSONCase's xsi-type
-//     bullet), and the members are classified under D's type, which governs;
+//     under; and jsonsrc declines the "$type" wherever a non-·absent·
+//     ·locally declared type· could govern instead (clauses 6 and 7): under
+//     a non-skip {open content} of the parent's classifying type where the
+//     name has one, and under a parent that type may not govern (walker.localType,
+//     walker.governs). Where the "$type" names none, the walk charges cvc-attribute or
+//     records it unevaluated (execJSONCase's xsi-type bullet), and the members are
+//     classified under D's type, which governs;
 //   - with no "$type", D's type governs the root, a child under an element particle
 //     (cos-element-consistent gives same-named contained declarations one
 //     type), and a child jsonsrc names, under a wildcard or a type with none,
