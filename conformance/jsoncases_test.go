@@ -354,8 +354,10 @@ func TestJSONExecutorRefusesOpenContentGovernance(t *testing.T) {
 
 // TestAttributeGovernanceDivergesOnOpenContent pins where condition 2 finds a
 // ·locally declared type· an {open content} child takes: in a top-level
-// declaration's anonymous type, in a named type, and on the {base type
-// definition} chain of an extension adding the {open content}; and that it
+// declaration's anonymous type, in a named type, in the base an extension
+// adding the {open content} contains, and on the {base type definition} chain
+// of a restriction whose own content model contains no declaration (key-ldt-elem
+// case 3, the one row a walk reading p's own declarations alone fails); and that it
 // finds none where the {open content} is skip, where the ·locally declared
 // type· has no {attribute wildcard} or a skip one, or where every type
 // carrying a use it lacks ·overrides· it.
@@ -380,6 +382,14 @@ func TestAttributeGovernanceDivergesOnOpenContent(t *testing.T) {
 			strictDT + other + `<xs:complexType name="B"><xs:sequence>` + x + `</xs:sequence></xs:complexType>` +
 				`<xs:complexType name="P"><xs:complexContent><xs:extension base="B">` + lax +
 				`</xs:extension></xs:complexContent></xs:complexType>`,
+			true,
+		},
+		{
+			"declared by the base only, opened by a restriction",
+			strictDT + other + `<xs:complexType name="B"><xs:sequence>` + x +
+				`<xs:any processContents="lax" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType>` +
+				`<xs:complexType name="P"><xs:complexContent><xs:restriction base="B">` + lax +
+				`<xs:sequence/></xs:restriction></xs:complexContent></xs:complexType>`,
 			true,
 		},
 		{"no open content", strictDT + other + anon("", x), false},
