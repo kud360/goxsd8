@@ -1,6 +1,7 @@
 package jsonsrc
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -8,6 +9,7 @@ import (
 	"github.com/kud360/goxsd8/loader"
 	"github.com/kud360/goxsd8/parser"
 	"github.com/kud360/goxsd8/validate"
+	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
 )
 
@@ -154,6 +156,37 @@ func TestPrefixedKey(t *testing.T) {
 			`<p:plain xmlns:p="urn:p"><p:s>x</p:s></p:plain>`, none},
 	} {
 		t.Run(tc.name, func(t *testing.T) { twin(t, v, tc.json, tc.xml, tc.want) })
+	}
+}
+
+// TestPrefixedKeyName pins the expanded name a prefixed key gives a child no
+// declaration carries under a type with no wildcard, which TestPrefixedKey's
+// verdicts cannot tell from (O,key): every XML twin of such a key is invalid
+// alike (walker.wildcardMember).
+func TestPrefixedKeyName(t *testing.T) {
+	v := prefixValidator(t)
+	w := newWalker(jsonURI, strings.NewReader(`{"p:plain":{"$xmlns":{"p":"urn:p","z":"urn:z"},"z:s":"x","s":"y"}}`), v.Schema())
+	root, err := w.root()
+	if err != nil {
+		t.Fatalf("root: %v", err)
+	}
+	var got []xsd.QName
+	kids := root.Children()
+	for {
+		c, ok := kids.Next()
+		if !ok {
+			break
+		}
+		if e, ok := c.Element(); ok {
+			got = append(got, e.Name())
+		}
+	}
+	if err := kids.Err(); err != nil {
+		t.Fatalf("children: %v", err)
+	}
+	want := []xsd.QName{{Space: "urn:z", Local: "s"}, {Space: "urn:p", Local: "s"}}
+	if !slices.Equal(got, want) {
+		t.Fatalf("children's names = %v, want %v", got, want)
 	}
 }
 
