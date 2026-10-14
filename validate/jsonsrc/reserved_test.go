@@ -276,6 +276,8 @@ func TestOpenContentTypeDeclines(t *testing.T) {
 			"jsonsrc: instance.json:1:39: "},
 		{"declared on the base chain alone", `{"r":{"x":{"$xmlns":{"t":"urn:t"},"$type":"t:other"}}}`,
 			"jsonsrc: instance.json:1:35: "},
+		{"prefixed keys", `{"t:p":{"$xmlns":{"t":"urn:t"},"t:x":[{},{"$type":"t:other","foo":"1"}]}}`,
+			"jsonsrc: instance.json:1:43: "},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			res, err := Validate(v, strings.NewReader(tc.json), WithURI(jsonURI))
@@ -302,6 +304,8 @@ func TestOpenContentTypeMaps(t *testing.T) {
 			`<q xmlns="urn:t" ` + xsiDecl + ` xmlns:t="urn:t"><x xsi:type="t:other" foo="1"/></q>`},
 		{"skip open content", `{"s":{"x":{"$xmlns":{"t":"urn:t"},"$type":"t:other","foo":"1"}}}`,
 			`<s xmlns="urn:t" ` + xsiDecl + ` xmlns:t="urn:t"><x xsi:type="t:other" foo="1"/></s>`},
+		{"no open content, prefixed keys", `{"t:q":{"$xmlns":{"t":"urn:t"},"t:x":{"$type":"t:other","foo":"1"}}}`,
+			`<t:q ` + xsiDecl + ` xmlns:t="urn:t"><t:x xsi:type="t:other" foo="1"/></t:q>`},
 	} {
 		t.Run(tc.name, func(t *testing.T) { twin(t, v, tc.json, tc.xml, elt) })
 	}
@@ -460,6 +464,8 @@ func TestUngovernedParentTypeDeclines(t *testing.T) {
 	}{
 		{"a wildcard's top-level declaration governs the parent", `{"w":{"y":[{},{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:other","k":"zz"}]}]}}`,
 			"jsonsrc: instance.json:1:48: ", ungoverned},
+		{"prefixed keys", `{"t:w":{"$xmlns":{"t":"urn:t"},"t:y":[{},{"t:x":[{},{"$type":"t:other","k":"zz"}]}]}}`,
+			"jsonsrc: instance.json:1:54: ", ungoverned},
 		{"a grandparent's", `{"w2":{"y2":[{},{"v":{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:other","k":"zz"}]}}]}}`,
 			"jsonsrc: instance.json:1:55: ", ungoverned},
 		{"a locally declared type governs the parent", `{"r":{"u":{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:other","k":"zz"}]}}}`,

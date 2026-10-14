@@ -28,7 +28,7 @@ const xmlNamespace = "http://www.w3.org/XML/1998/namespace"
 
 // xsiNil is the expanded name of the xsi:nil attribute a null value presents
 // (walker.nilled), and xsiType that of the xsi:type attribute a "$type"
-// member presents (walker.lead).
+// member presents (walker.typeMember).
 var (
 	xsiNil  = xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: "nil"}
 	xsiType = xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: "type"}
@@ -88,9 +88,10 @@ type cursor interface {
 type element struct {
 	w *walker
 	// name is the element's [namespace name] and [local name]: the matched
-	// declaration's expanded name, or the one a wildcard's single enumerated
-	// namespace, or the namespace of a parent whose type has no wildcard, gives
-	// the key (walker.wildcardMember).
+	// declaration's expanded name, the one a prefixed key spells
+	// (walker.keyName), or the one a wildcard's single enumerated namespace,
+	// the namespace of a parent whose type has no wildcard, or, at the root,
+	// none gives the key (walker.wildcardMember, walker.rootMember).
 	name xsd.QName
 	// loc is where the member's key, or the array item, begins.
 	loc xsderr.Loc
@@ -111,10 +112,10 @@ type element struct {
 	finished bool
 }
 
-// Name is the matched declaration's expanded name, or the one a wildcard's
-// single enumerated namespace gives the key: a JSON key is a local name, and
-// its namespace is the declaration's or the wildcard's (package doc, "The
-// mapping" and its NAMESPACE TRAP).
+// Name is the matched declaration's expanded name, the one a prefixed key
+// spells, or the one a wildcard's single enumerated namespace gives the key:
+// an unprefixed key is a local name, and its namespace is the declaration's or
+// the wildcard's (package doc, "The mapping" and its NAMESPACE TRAP).
 func (e *element) Name() xsd.QName { return e.name }
 
 // Attributes is the element's xsi:type, where its object carries "$type",

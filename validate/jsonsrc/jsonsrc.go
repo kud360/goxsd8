@@ -49,14 +49,15 @@ func WithURI(uri string) Option {
 // and (result, nil) otherwise; a result it returns never carries
 // [validate.Result.Err]. The faults are: a nil v or r; JSON that is malformed,
 // or followed by further content; and every input the mapping DECLINES —
-// a top level that is not an object with exactly one member naming a
-// top-level element declaration, and, anywhere in the document, a member the
-// implemented arms do not map (a key no child element declaration and no
-// attribute use carries whose namespace the type's wildcards fix no one of, or
-// whose kind a type with both an element wildcard and an {attribute wildcard}
-// leaves open, or which a wildcard puts in the xsi or xml namespace; a member
-// of an object under a child no contained and no top-level declaration names; a
-// key two expanded names carry, a key both a child declaration and an
+// a top level that is not an object with exactly one member, and, anywhere in
+// the document, a member the implemented arms do not map (a key whose colon
+// makes no QName or whose prefix no "$xmlns" in scope binds; a key no child
+// element declaration and no attribute use carries whose namespace neither a
+// prefix nor the type's wildcards fix, or whose kind a type with both an
+// element wildcard and an {attribute wildcard} leaves open, or which a prefix
+// or a wildcard puts in the xsi or xml namespace; a member of an object under
+// a child no contained and no top-level declaration names; an unprefixed key
+// two expanded names carry, a key both a child declaration and an
 // attribute use carry, an attribute member after a child member or repeated,
 // an attribute member whose value is null, an object or an array, a "$type"
 // or "$xmlns" member out of its leading place or of the wrong shape, a
@@ -148,16 +149,15 @@ func (w *walker) declinef(loc xsderr.Loc, format string, args ...any) error {
 // root reads the top-level object up to the value of its one member and
 // returns the element that member names: the validation root.
 //
-// The root is named by the member's key, matched by local name against the
-// top-level element declarations; exactly one must carry it, and its expanded
-// name is the root's (package doc, "The validation root"). The key's declines
-// are rootDeclaration's, under its GAP(jsonsrc) markers.
+// The root is named by the member's key, read through its own "$xmlns" once
+// walker.value has read it (package doc, "The validation root"). The key's
+// declines are rootMember's, under its GAP(jsonsrc) markers.
 //
 // It DECLINES an input holding no JSON value, a top-level value that is not an
-// object, a top-level object with no member, and a root member whose value is
-// an array. None has an XML twin, so none carries a marker: an XML document
-// has exactly one document element (XML 1.0 §2.1 [1]), and each of these
-// spells none or several.
+// object, a top-level object with no member, a reserved root key, and a root
+// member whose value is an array. None has an XML twin, so none carries a
+// marker: an XML document has exactly one document element (XML 1.0 §2.1
+// [1]), and each of these spells none or several, or a name no XML Name is.
 func (w *walker) root() (*element, error) {
 	tok, loc, err := w.token()
 	if errors.Is(err, io.EOF) {
@@ -221,8 +221,9 @@ func (w *walker) root() (*element, error) {
 // verdict turns on which (cvc-elt clause 1, cvc-assess-elt); a prefixed key
 // "p:local" spells each one in a namespace, and one in no namespace beside one
 // in a namespace is spelled by no key, since no prefix is bound to the absent
-// namespace (Namespaces in XML §3, walker.xmlns), which the mapping declines
-// rather than give the unprefixed key either meaning.
+// namespace (Namespaces in XML §5, NSC: No Prefix Undeclaring; walker.xmlns),
+// which the mapping declines rather than give the unprefixed key either
+// meaning.
 func (w *walker) rootMember(key string, sc *scope, loc xsderr.Loc) (elementMember, error) {
 	k, err := w.keyName(key, sc, loc)
 	if err != nil {
@@ -611,7 +612,7 @@ func fixedNamespace(wildcards []xsd.Wildcard) (uri, why string, ok bool) {
 		}
 	}
 	if len(fixed) != 1 {
-		return "", fmt.Sprintf("enumerates %d namespaces; a JSON key carries no namespace to choose between them", len(fixed)), false
+		return "", fmt.Sprintf("enumerates %d namespaces; an unprefixed key does not choose between them", len(fixed)), false
 	}
 	uri, _ = fixed[0].URI() // "" for ·absent·, a QName's no-namespace Space
 	if uri == xsd.XMLSchemaInstanceNS || uri == xmlNamespace {
@@ -630,9 +631,9 @@ func fixedNamespace(wildcards []xsd.Wildcard) (uri, why string, ok bool) {
 // which (cvc-accept clause 2.3.1 matches an element to a declaration by
 // expanded name); a prefixed key "p:local" spells each one in a namespace, and
 // one in no namespace beside one in a namespace is spelled by no key, since no
-// prefix is bound to the absent namespace (Namespaces in XML §3,
-// walker.xmlns), which the mapping declines rather than give the unprefixed
-// key either meaning.
+// prefix is bound to the absent namespace (Namespaces in XML §5, NSC: No
+// Prefix Undeclaring; walker.xmlns), which the mapping declines rather than
+// give the unprefixed key either meaning.
 func (w *walker) childNamed(o *object, key string, k keyName, loc xsderr.Loc) (xsd.ElementDeclaration, bool, error) {
 	var first xsd.ElementDeclaration
 	found := false
@@ -663,15 +664,15 @@ func (w *walker) childNamed(o *object, key string, k keyName, loc xsderr.Loc) (x
 // (cvc-complex-type clause 2.1 matches an attribute to a use by expanded
 // name); a prefixed key "p:local" spells each one in a namespace, and one in
 // no namespace beside one in a namespace is spelled by no key, since no prefix
-// is bound to the absent namespace (Namespaces in XML §3, walker.xmlns), which
-// the mapping declines rather than give the unprefixed key either meaning,
-// though an unprefixed XML attribute name has no namespace (§6.2): an
-// unprefixed key is matched by local name, the rule that maps a key one use
-// of a namespace carries.
+// is bound to the absent namespace (Namespaces in XML §5, NSC: No Prefix
+// Undeclaring; walker.xmlns), which the mapping declines rather than give the
+// unprefixed key either meaning. The absent namespace an unprefixed XML
+// attribute name has (§6.2) does not decide it: an unprefixed key is matched
+// by local name, the rule that maps a key one use in a namespace carries.
 //
 // GAP(jsonsrc): a key naming an xsi:type attribute use declines. RULED
 // permanent by #2615: a "$type" member is xsi:type's one spelling
-// (walker.lead), and a second would let one object present it twice.
+// (walker.typeMember), and a second would let one object present it twice.
 //
 // GAP(jsonsrc): a key naming an xsi:schemaLocation or
 // xsi:noNamespaceSchemaLocation attribute use declines. RULED permanent by
@@ -735,7 +736,7 @@ func (w *walker) typeTable(d xsd.ElementDeclaration, loc xsderr.Loc) error {
 	return nil
 }
 
-// The two reserved members the mapping reads (walker.lead).
+// The two reserved members the mapping reads (walker.value, walker.typeMember).
 const (
 	memberXmlns = "$xmlns"
 	memberType  = "$type"
@@ -743,15 +744,15 @@ const (
 
 // isReserved reports whether key is a reserved member name: every
 // "$"-prefixed one. "$xmlns" and "$type" are mapped where they lead an object
-// (walker.lead), and every other one is held.
+// (walker.value, walker.typeMember), and every other one is held.
 func isReserved(key string) bool { return len(key) > 0 && key[0] == '$' }
 
-// reserved declines the reserved member key at loc, which walker.lead did not
-// read: a "$xmlns" or "$type" out of its place, or any other reserved name.
-// Any other "$" name, and a repeated "$xmlns" or "$type", has no XML twin, so
-// no marker tracks it: "$" is not an XML NameStartChar (XML 1.0 §2.3 [4]), and
-// an element carries one attribute of each expanded name (XML 1.0 §3.1, Unique
-// Att Spec).
+// reserved declines the reserved member key at loc, which walker.value and
+// walker.typeMember did not read: a "$xmlns" or "$type" out of its place, or
+// any other reserved name. Any other "$" name, and a repeated "$xmlns" or
+// "$type", has no XML twin, so no marker tracks it: "$" is not an XML
+// NameStartChar (XML 1.0 §2.3 [4]), and an element carries one attribute of
+// each expanded name (XML 1.0 §3.1, Unique Att Spec).
 //
 // GAP(jsonsrc): a "$xmlns" or "$type" out of its leading place — "$type"
 // before "$xmlns", or either after an attribute or child member — declines,
