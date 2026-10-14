@@ -231,9 +231,9 @@ func TestOutOfSliceInputDeclines(t *testing.T) {
 		says       string // the arm or shape it names
 	}{
 		{"member matching no child declaration, under a ##any wildcard", `{"r":{"x":"1"}}`,
-			"jsonsrc: instance.json:1:7: ", `member "x" names no child element declaration and no attribute use of the type of {urn:t}r, and an element wildcard of variety any fixes no namespace for it`},
+			"jsonsrc: instance.json:1:7: ", `member "x" names no child element declaration and no attribute use of the type of {urn:t}r, and its element wildcard set includes one of variety any, which fixes no namespace for it`},
 		{"member a ##any wildcard admits under a top-level declaration", `{"r":{"w":"1"}}`,
-			"jsonsrc: instance.json:1:7: ", `member "w" names no child element declaration and no attribute use of the type of {urn:t}r, and an element wildcard of variety any fixes no namespace for it`},
+			"jsonsrc: instance.json:1:7: ", `member "w" names no child element declaration and no attribute use of the type of {urn:t}r, and its element wildcard set includes one of variety any, which fixes no namespace for it`},
 		{"reserved member", `{"r":{"$type":"t:x"}}`,
 			"jsonsrc: instance.json:1:7: ", `reserved member "$type"; the "$type" and "$xmlns" reserved-member arms are not implemented`},
 		{"reserved root member", `{"$xmlns":{}}`,
@@ -568,7 +568,7 @@ func TestAttributeMemberDeclines(t *testing.T) {
 		{"uses of two expanded names", `{"r":{"k":"1"}}`,
 			"jsonsrc: instance.json:1:7: ", `member "k" names attribute uses of two expanded names in the type of {urn:t}r (k and {urn:t}k)`},
 		{"a key the ##any attribute wildcard alone admits", `{"r":{"w":"1"}}`,
-			"jsonsrc: instance.json:1:7: ", `member "w" names no child element declaration and no attribute use of the type of {urn:t}r, and an {attribute wildcard} of variety any fixes no namespace for it`},
+			"jsonsrc: instance.json:1:7: ", `member "w" names no child element declaration and no attribute use of the type of {urn:t}r, and its {attribute wildcard} set includes one of variety any, which fixes no namespace for it`},
 		{"a use of a simple-content type", `{"r":{"price":{"currency":"EUR"}}}`,
 			"jsonsrc: instance.json:1:16: ", `member "currency" names an attribute use of the type of {urn:t}price, whose {content type} is simple`},
 		{"a use in the xsi namespace", `{"r":{"x":{"type":"t:r"}}}`,
@@ -729,7 +729,7 @@ func TestNilledAttribute(t *testing.T) {
 // strict ##targetNamespace {open content}; att, a lax ##targetNamespace
 // {attribute wildcard} over element-only content; pre and preatt, the strict
 // element and lax attribute wildcards beside an unqualified local w and use p
-// of xs:string, which take precedence; ref and def, whose wildcards reject p
+// of xs:string, which name the key instead; ref and def, whose wildcards reject p
 // and w by name; and the shapes the arm declines — mix, a skip urn:x wildcard
 // beside box's; ocmix, a ##local {open content} beside it; any, of
 // xs:anyType; both, with a ##targetNamespace element wildcard and {attribute
@@ -888,12 +888,13 @@ func TestWildcardMember(t *testing.T) {
 	}
 }
 
-// TestDeclarationBeatsWildcard pins precedence: a key a contained declaration
-// or an attribute use carries maps to it and not to the wildcard that would
-// also admit it (cvc-accept's Note; the Note after cvc-complex-type clause 6).
-// Each row's declaration or use is the unqualified one of xs:string, where the
-// wildcard would name urn:w's xs:integer, so "x" is valid only by precedence.
-func TestDeclarationBeatsWildcard(t *testing.T) {
+// TestDeclarationNamesKey pins the mapping's own rule that a key a contained
+// declaration or an attribute use carries is named by it and never by a
+// wildcard of the type (package doc, "The mapping"). Each row's declaration or
+// use is the unqualified one of xs:string, where the wildcard would name
+// urn:w's xs:integer: two expanded names, between which no spec Note chooses,
+// and "x" is valid only under the declaration's or use's.
+func TestDeclarationNamesKey(t *testing.T) {
 	v := validatorOver(t, wildcardSchema)
 	for _, tc := range []struct {
 		name, json, xml string

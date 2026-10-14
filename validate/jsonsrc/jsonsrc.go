@@ -288,11 +288,13 @@ func (b bareElement) object(*walker, xsderr.Loc) (*object, error) {
 // use among o.uses whose {attribute declaration}'s local name it is
 // (cvc-complex-type clause 2.1 then matches the attribute to that use by
 // expanded name), and, where neither carries it, to the element or attribute
-// a wildcard of the type names (wildcardMember). A declaration or a use takes
-// precedence over a wildcard, as cvc-accept's Note and the Note after
-// cvc-complex-type clause 6 give it. The first declaration of the name stands
-// for every other (xsd.Schema.ContainedElementDeclarations says why that is
-// sound).
+// a wildcard of the type names (wildcardMember). A key a declaration or a use
+// carries never reaches a wildcard: the mapping's own rule, which the spec
+// shares only where the wildcard's one namespace is the declaration's or the
+// use's own, so that both name one item (the Note under cvc-accept; the Note
+// after cvc-complex-type clause 4; package doc, "The mapping"). The first
+// declaration of the name stands for every other
+// (xsd.Schema.ContainedElementDeclarations says why that is sound).
 //
 // It DECLINES a reserved key; a key two expanded names carry among the
 // declarations, or among the uses; a key both a declaration and a use carry,
@@ -304,6 +306,12 @@ func (b bareElement) object(*walker, xsderr.Loc) (*object, error) {
 // GAP(jsonsrc): a key both a child element declaration and an attribute use
 // carry declines. RULED permanent by #2613: no spec rule decides between them,
 // and the mapping has no warning channel to report a choice through.
+//
+// GAP(jsonsrc): a key a declaration or use carries maps under its name even
+// where a wildcard of the type would name the key (N,key) in another namespace
+// N, or as the other kind. No spec rule makes that choice, and it is
+// observable by an ancestor's identity-constraint paths and assertions, as the
+// representative name of #2634's residue is; #2634 owns it.
 //
 // The xsi-namespace, two-expanded-name and simple-content declines among the
 // uses are useNamed's, under its GAP(jsonsrc) markers.
@@ -356,16 +364,18 @@ func (w *walker) classify(o *object, key string, loc xsderr.Loc) (member, error)
 // one namespace, or element wildcards whose namespaces differ; N or M the xsi
 // or the xml namespace; and an attribute key of a type with simple content.
 //
-// GAP(jsonsrc): a wildcard-only key whose namespace the model does not fix
-// declines (#2634): a wildcard of variety any or not, xs:anyType's included,
-// an enumeration of several namespaces, element wildcards enumerating
-// different ones, and a type with no wildcard of the key's kind. So does a key
-// whose kind the type leaves open, having wildcards of both kinds, and a key a
-// wildcard's single namespace puts in the xsi or xml namespace, whose
-// attributes have their own spellings (#2627). The representative name a
-// mapping would pick is observable by an ancestor's identity-constraint paths
-// and assertions. A bareElement's members are classified against nothing,
-// which is xs:anyType's wildcards, the same residue.
+// GAP(jsonsrc): a wildcard-only key whose namespace or kind the model does
+// not fix declines, owned by #2634: a wildcard of variety any or not,
+// xs:anyType's included, an enumeration of several namespaces, element
+// wildcards enumerating different ones, and a type with wildcards of both
+// kinds. The representative name a mapping would pick is observable by an
+// ancestor's identity-constraint paths and assertions. A bareElement's members
+// are classified against nothing, which is xs:anyType's wildcards, the same
+// residue.
+//
+// GAP(jsonsrc): a key of a type with no wildcard at all, so none of the key's
+// kind, declines, and so does a key a wildcard's single namespace, of either
+// kind, puts in the xml or the xsi namespace; #2635 owns all three.
 //
 // GAP(jsonsrc): a key a simple-content type's {attribute wildcard} alone
 // admits declines, on the ground useNamed's simple-content marker states for
@@ -382,9 +392,10 @@ func (w *walker) wildcardMember(o *object, key string, loc xsderr.Loc) (member, 
 			key, o.owner)
 	}
 	if elemental {
-		ns, err := w.fixedNamespace(o.elementWildcards, "element wildcard", o, key, loc)
-		if err != nil {
-			return nil, err
+		ns, why, ok := fixedNamespace(o.elementWildcards)
+		if !ok {
+			return nil, w.declinef(loc, "member %q names no child element declaration and no attribute use of the type of %s, and its element wildcard set %s",
+				key, o.owner, why)
 		}
 		name := xsd.QName{Space: ns, Local: key}
 		d, ok := w.schema.Element(name)
@@ -401,28 +412,28 @@ func (w *walker) wildcardMember(o *object, key string, loc xsderr.Loc) (member, 
 		return nil, w.declinef(loc, "member %q names only the {attribute wildcard} of the type of %s, whose {content type} is simple; the mapping spells no text beside attribute members",
 			key, o.owner)
 	}
-	ns, err := w.fixedNamespace([]xsd.Wildcard{*o.attributeWildcard}, "{attribute wildcard}", o, key, loc)
-	if err != nil {
-		return nil, err
+	ns, why, ok := fixedNamespace([]xsd.Wildcard{*o.attributeWildcard})
+	if !ok {
+		return nil, w.declinef(loc, "member %q names no child element declaration and no attribute use of the type of %s, and its {attribute wildcard} set %s",
+			key, o.owner, why)
 	}
 	return attributeMember{name: xsd.QName{Space: ns, Local: key}}, nil
 }
 
 // fixedNamespace is the one namespace name every wildcard of wildcards
-// enumerates, read in document order, and declines where one is of variety
-// any or not, where they enumerate more than one, and where the one is the
-// xsi or the xml namespace. kind names the wildcards' kind in the decline:
-// "element wildcard" or "{attribute wildcard}".
+// enumerates, read in document order, and ok. It is not ok where one is of
+// variety any or not, where they enumerate more than one namespace, and where
+// the one is the xsi or the xml namespace; why then completes the caller's
+// decline, after the wildcards' noun.
 //
 // {variety} and {namespaces} are read here to name the key, not to admit it:
 // admission stays cvc-wildcard's, the engine's (wildcardMember).
-func (w *walker) fixedNamespace(wildcards []xsd.Wildcard, kind string, o *object, key string, loc xsderr.Loc) (string, error) {
+func fixedNamespace(wildcards []xsd.Wildcard) (uri, why string, ok bool) {
 	var fixed []xsd.Namespace
 	for _, wc := range wildcards {
 		nc := wc.NamespaceConstraint()
 		if nc.Variety() != xsd.NamespaceConstraintEnumeration {
-			return "", w.declinef(loc, "member %q names no child element declaration and no attribute use of the type of %s, and an %s of variety %s fixes no namespace for it",
-				key, o.owner, kind, nc.Variety())
+			return "", fmt.Sprintf("includes one of variety %s, which fixes no namespace for it", nc.Variety()), false
 		}
 		for _, n := range nc.Namespaces() {
 			if !slices.Contains(fixed, n) {
@@ -431,15 +442,13 @@ func (w *walker) fixedNamespace(wildcards []xsd.Wildcard, kind string, o *object
 		}
 	}
 	if len(fixed) != 1 {
-		return "", w.declinef(loc, "member %q names no child element declaration and no attribute use of the type of %s, and its %s set enumerates %d namespaces; a JSON key carries no namespace to choose between them",
-			key, o.owner, kind, len(fixed))
+		return "", fmt.Sprintf("enumerates %d namespaces; a JSON key carries no namespace to choose between them", len(fixed)), false
 	}
-	uri, _ := fixed[0].URI() // "" for ·absent·, a QName's no-namespace Space
+	uri, _ = fixed[0].URI() // "" for ·absent·, a QName's no-namespace Space
 	if uri == xsd.XMLSchemaInstanceNS || uri == xmlNamespace {
-		return "", w.declinef(loc, "member %q names no child element declaration and no attribute use of the type of %s, and its %s set enumerates the namespace %s alone; the mapping names no key in the xsi or xml namespace",
-			key, o.owner, kind, uri)
+		return "", fmt.Sprintf("enumerates the namespace %s alone; the mapping names no key in the xsi or xml namespace", uri), false
 	}
-	return uri, nil
+	return uri, "", true
 }
 
 // childNamed is the first of o.contained whose local name is key, declining
