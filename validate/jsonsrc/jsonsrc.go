@@ -7,6 +7,7 @@ import (
 	"io"
 	"slices"
 
+	"github.com/kud360/goxsd8/internal/xmlname"
 	"github.com/kud360/goxsd8/internal/xmlqname"
 	"github.com/kud360/goxsd8/validate"
 	"github.com/kud360/goxsd8/xsd"
@@ -486,11 +487,13 @@ func (w *walker) lead(e *element) (*attribute, json.Token, xsderr.Loc, error) {
 // xmlns reads the value of a "$xmlns" member of owner's object: an object
 // whose every member binds its key, a prefix, to its string value, a namespace
 // name. It declines any other value; a member whose value is not a string; a
-// prefix bound twice; the prefixes "xml" and "xmlns", which Namespaces in XML
-// §3 reserves, "xml" being bound already (element.LookupPrefix); and a
-// non-empty prefix bound to the empty string, which would undeclare it. The
-// empty prefix may be bound, and is shadowed: the element's default namespace
-// stays its declaration's target namespace (package doc).
+// non-empty prefix that is no NCName, which no xmlns:prefix attribute can
+// declare (Namespaces in XML [2] PrefixedAttName); a prefix bound twice; the
+// prefixes "xml" and "xmlns", which Namespaces in XML §3 reserves, "xml" being
+// bound already (element.LookupPrefix); and a non-empty prefix bound to the
+// empty string, which would undeclare it. The empty prefix may be bound, and
+// is shadowed: the element's default namespace stays its declaration's target
+// namespace (package doc).
 func (w *walker) xmlns(owner xsd.QName) ([]binding, error) {
 	tok, loc, err := w.token()
 	if err != nil {
@@ -516,6 +519,9 @@ func (w *walker) xmlns(owner xsd.QName) ([]binding, error) {
 		uri, ok := vtok.(string)
 		if !ok {
 			return nil, w.declinef(vloc, "the \"$xmlns\" member of %s binds %q to a value that is not a string; a namespace name is a string", owner, prefix)
+		}
+		if prefix != "" && !xmlname.IsNCName(prefix) {
+			return nil, w.declinef(loc, "the \"$xmlns\" member of %s binds %q, which is not an NCName; no xmlns:prefix attribute declares it", owner, prefix)
 		}
 		if prefix == "xml" || prefix == "xmlns" {
 			return nil, w.declinef(loc, "the \"$xmlns\" member of %s binds the reserved prefix %q", owner, prefix)

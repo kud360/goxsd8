@@ -130,8 +130,9 @@
 //     either repeated, either after another member, either as the top-level
 //     object's member — which no spec text orders, so none is charged; a
 //     "$type" whose value is not a string; a "$xmlns" whose value is not an
-//     object of strings, which binds a prefix twice, binds "xml" or "xmlns",
-//     or binds a non-empty prefix to "";
+//     object of strings, which binds a non-empty prefix that is no NCName (no
+//     xmlns:prefix attribute declares one), binds a prefix twice, binds "xml"
+//     or "xmlns", or binds a non-empty prefix to "";
 //   - any other "$"-prefixed reserved member;
 //   - an array item that is itself an array;
 //   - a matched declaration carrying a {type table}: members are classified

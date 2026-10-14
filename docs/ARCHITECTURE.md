@@ -34,7 +34,10 @@ Value implementations, parsing, validation, and generation live above them.
                                   - internal/xmlname, XML 1.0 5e [4] NameStartChar and
                                     [4a] NameChar, which regex's \i/\c,
                                     parser/xmltree's DOCTYPE name checks and
-                                    internal/xmltok's name checks read.
+                                    internal/xmltok's name checks read, and
+                                    Namespaces in XML [4] NCName over them,
+                                    which validate/jsonsrc's "$xmlns" check
+                                    reads.
                                   - internal/xmlchar, XML 1.0 [2] Char, which
                                     parser/xmltree's character-reference and
                                     markup checks and internal/xmltok's text
@@ -108,7 +111,7 @@ backend: `New` takes the `value.Backend` as a required parameter, so
 `parser/xmltree`, `validate`, `xsd` and `xsderr` — and neither `loader` nor
 `parser`, which an imports test pins; `validate/jsonsrc` exports
 `Validate`/`Option`/`WithURI`, imports `validate`, `xsd`, `xsderr`,
-`internal/xmlqname` and `encoding/json`, and reads the schema through `validate.SchemaView`, the
+`internal/xmlname`, `internal/xmlqname` and `encoding/json`, and reads the schema through `validate.SchemaView`, the
 view `Validator.Schema` returns, to name the root and classify members;
 `validate/bersrc` is a destination, on `[1]`'s terms.
 
