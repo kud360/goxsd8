@@ -714,6 +714,20 @@ func TestCompileClassifiesCastTargets(t *testing.T) {
 	}
 }
 
+// TestCTATestStaticErrorKindTestTypeNameIgnoresTheSchemasOwnTypes pins that a
+// KindTest TypeName naming a schema's own type is err:XPST0008 even where the
+// resolver holds it, as validate's does: xpath-valid clause 2.2.5 puts only the
+// built-ins in the in-scope schema types (ctaTypes.inScopeType).
+func TestCTATestStaticErrorKindTestTypeNameIgnoresTheSchemasOwnTypes(t *testing.T) {
+	types := ctaFixtureTypes(t)
+	for _, expr := range []string{". instance of element(*, a:Box)", "@k instance of attribute(*, a:Kind)"} {
+		err := CTATestStaticError(ctaExprRecord(expr, "", "a", ctaUserNS), types)
+		if rule, ok := xsderr.RuleOf(err); !ok || rule != ruleXPST0008 {
+			t.Errorf("CTATestStaticError(%q) = %v, want rule %s", expr, err, ruleXPST0008)
+		}
+	}
+}
+
 // TestCompileResolvesCastTargetInDefaultNamespace pins xpath20.md §3.10.2's
 // one use of the {default namespace} in this grammar: "if the target type has
 // no namespace prefix, it is considered to be in the default element/type
