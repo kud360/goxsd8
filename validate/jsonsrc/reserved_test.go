@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kud360/goxsd8/validate"
+	"github.com/kud360/goxsd8/validate/xmlsrc"
 	"github.com/kud360/goxsd8/xsderr"
 )
 
@@ -56,8 +58,9 @@ const typeSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
 
 // TestTypeMember pins the "$type" arm: a "$type" member is the element's
 // xsi:type, resolved against the "$xmlns" bindings in scope, and the members
-// after it are classified under the type it names wherever that resolves.
-// Each row agrees with its XML twin.
+// after it are classified under the type it names wherever that resolves and
+// the element is the root, which its declaration governs
+// (walker.instanceGoverned). Each row agrees with its XML twin.
 func TestTypeMember(t *testing.T) {
 	v := validatorOver(t, typeSchema)
 	const x = `xmlns="urn:t" ` + xsiDecl
@@ -256,47 +259,69 @@ const openContentSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema
   </xs:element>
 </xs:schema>`
 
-// TestOpenContentTypeDeclines pins walker.localType: a "$type" on an element a
-// non-skip {open content} may take, whose name has a ·locally declared type·
-// there, declines whatever it names. The first two rows are #2615's two
-// reproductions, where other does not ·override· dt; the third names dt
-// itself; the fourth finds dt on r's base chain alone.
-func TestOpenContentTypeDeclines(t *testing.T) {
+// TestOpenContentType pins walker.instanceUnder's {open content} arm: a
+// "$type" on an element a non-skip {open content} may take, whose name has a
+// ·locally declared type· dt within the type, classifies the element's
+// members under dt where the type it names does not ·override· dt, and under
+// that type where it does, as the engine governs it. The second x of a "x"
+// array is the {open content}'s, the sequence taking one x at most. Each row
+// agrees with its XML twin.
+func TestOpenContentType(t *testing.T) {
 	v := validatorOver(t, openContentSchema)
-	const says = `the {open content} of the type of`
+	const x = `xmlns="urn:t" xmlns:t="urn:t" ` + xsiDecl
+	for _, tc := range []struct {
+		name, json, xml string
+		want            []xsderr.Rule
+	}{
+		{"naming the locally declared type", `{"p":{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:dt"}]}}`,
+			`<p ` + x + `><x/><x xsi:type="t:dt"/></p>`, none},
+		{"declared on the base chain alone", `{"r":{"x":{"$xmlns":{"t":"urn:t"},"$type":"t:other"}}}`,
+			`<r ` + x + `><x xsi:type="t:other"/></r>`, none},
+		{"not overriding, a child of the locally declared type", `{"p":{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:other","c":{}}]}}`,
+			`<p ` + x + `><x/><x xsi:type="t:other"><c/></x></p>`, none},
+	} {
+		t.Run(tc.name, func(t *testing.T) { twin(t, v, tc.json, tc.xml, tc.want) })
+	}
+}
+
+// TestOpenContentTypeKeyDeclines pins #2615's two reproductions, where other
+// does not ·override· dt: the members of x are classified under dt, which
+// governs it, and the key foo, which no use of dt or of ct carries, declines
+// under their strict {attribute wildcard} of variety any, as wildcardMember's
+// #2634 marker rules: an unprefixed key does not say its namespace. The XML
+// twins, <x xsi:type="t:other" foo="1"/> and <c foo="1"/> under the second x,
+// are valid; no key spells foo in no namespace.
+func TestOpenContentTypeKeyDeclines(t *testing.T) {
+	v := validatorOver(t, openContentSchema)
 	for _, tc := range []struct {
 		name, json string
 		prefix     string
+		owner      string
 	}{
 		{"its own attribute", `{"p":{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:other","foo":"1"}]}}`,
-			"jsonsrc: instance.json:1:39: "},
+			"jsonsrc: instance.json:1:57: ", "{urn:t}x"},
 		{"its descendant", `{"p":{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:other","c":{"foo":"1"}}]}}`,
-			"jsonsrc: instance.json:1:39: "},
-		{"whatever it names", `{"p":{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:dt"}]}}`,
-			"jsonsrc: instance.json:1:39: "},
-		{"declared on the base chain alone", `{"r":{"x":{"$xmlns":{"t":"urn:t"},"$type":"t:other"}}}`,
-			"jsonsrc: instance.json:1:35: "},
+			"jsonsrc: instance.json:1:62: ", "{urn:t}c"},
 		{"prefixed keys", `{"t:p":{"$xmlns":{"t":"urn:t"},"t:x":[{},{"$type":"t:other","foo":"1"}]}}`,
-			"jsonsrc: instance.json:1:43: "},
+			"jsonsrc: instance.json:1:61: ", "{urn:t}x"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			res, err := Validate(v, strings.NewReader(tc.json), WithURI(jsonURI))
 			if err == nil {
 				t.Fatalf("Validate(%s) = %v violations, %d unevaluated, nil error; want the decline", tc.json, rules(res), len(res.Unevaluated()))
 			}
-			if res != nil {
-				t.Errorf("Validate(%s) returned a result beside its error", tc.json)
-			}
-			if !strings.HasPrefix(err.Error(), tc.prefix+`the "$type" member of {urn:t}x: `) || !strings.Contains(err.Error(), says) {
-				t.Errorf("Validate(%s) = %q, want it to open %q and say %q", tc.json, err, tc.prefix, says)
+			want := tc.prefix + `member "foo" names no child element declaration and no attribute use of the type of ` + tc.owner + `, and its {attribute wildcard} set includes one of variety any`
+			if !strings.HasPrefix(err.Error(), want) {
+				t.Errorf("Validate(%s) = %q, want it to open %q", tc.json, err, want)
 			}
 		})
 	}
 }
 
-// TestOpenContentTypeMaps pins localType's limit: the same "$type" maps under
-// a parent with no {open content} and under one whose {open content} is
-// skip, and the engine charges cvc-elt clause 4 there, as for the XML twin.
+// TestOpenContentTypeMaps pins instanceUnder's limit: the same "$type" is
+// classified under the type it names under a parent with no {open content}
+// and under one whose {open content} is skip, where the engine charges cvc-elt
+// clause 4, as for the XML twin.
 func TestOpenContentTypeMaps(t *testing.T) {
 	v := validatorOver(t, openContentSchema)
 	for _, tc := range []struct{ name, json, xml string }{
@@ -308,6 +333,92 @@ func TestOpenContentTypeMaps(t *testing.T) {
 			`<t:q ` + xsiDecl + ` xmlns:t="urn:t"><t:x xsi:type="t:other" foo="1"/></t:q>`},
 	} {
 		t.Run(tc.name, func(t *testing.T) { twin(t, v, tc.json, tc.xml, elt) })
+	}
+}
+
+// governedSchema gives x the ·locally declared type· L, an optional child k
+// and an attribute a, under p's lax {open content}, and under pb's, where the
+// declaration blocks extension. Xe extends L with the attribute b; Xo
+// restricts L, dropping k; X, unrelated to L, has the attribute k. Each row
+// of TestGovernedType that a curated json case mirrors names it.
+const governedSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="urn:t" xmlns:t="urn:t" elementFormDefault="qualified">
+  <xs:complexType name="L">
+    <xs:sequence><xs:element name="k" type="xs:string" minOccurs="0"/></xs:sequence>
+    <xs:attribute name="a" type="xs:string"/>
+  </xs:complexType>
+  <xs:complexType name="Xe">
+    <xs:complexContent><xs:extension base="t:L"><xs:attribute name="b" type="xs:string"/></xs:extension></xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="Xo">
+    <xs:complexContent><xs:restriction base="t:L"><xs:sequence/></xs:restriction></xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="X"><xs:attribute name="k" type="xs:string"/></xs:complexType>
+  <xs:element name="p">
+    <xs:complexType>
+      <xs:openContent mode="interleave"><xs:any processContents="lax"/></xs:openContent>
+      <xs:sequence><xs:element name="x" type="t:L" minOccurs="0"/></xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="pb">
+    <xs:complexType>
+      <xs:openContent mode="interleave"><xs:any processContents="lax"/></xs:openContent>
+      <xs:sequence><xs:element name="x" type="t:L" minOccurs="0" block="extension"/></xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+
+// TestGovernedType pins walker.instanceUnder against governedSchema: the
+// members of the second x are classified under the type its "$type" names
+// where that type ·overrides· L ·without limitation·, and under L where it
+// does not, uncharged (key-governing-type-elem clauses 6 and 7). The
+// non-overriding row's k is a child of L and an attribute of X, so it fails
+// where the members are classified under the type "$type" names. The blocked
+// rows ask ·override· with no blocking keyword on the {open content}'s x and
+// under the declaration's {disallowed substitutions} on the particle's.
+// Each row agrees with its XML twin.
+func TestGovernedType(t *testing.T) {
+	v := validatorOver(t, governedSchema)
+	const x = `xmlns="urn:t" xmlns:t="urn:t" ` + xsiDecl
+	for _, tc := range []struct {
+		name, json, xml string
+		want            []xsderr.Rule
+	}{
+		{"overriding (governed-overriding.v)", `{"p":{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:Xe","b":"1","k":"z"}]}}`,
+			`<p ` + x + `><x/><x xsi:type="t:Xe" b="1"><k>z</k></x></p>`, none},
+		{"not overriding (governed-local.v)", `{"p":{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:X","k":"z"}]}}`,
+			`<p ` + x + `><x/><x xsi:type="t:X"><k>z</k></x></p>`, none},
+		{"overriding, members that do not fit (governed-overriding.i)", `{"p":{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:Xo","k":"z"}]}}`,
+			`<p ` + x + `><x/><x xsi:type="t:Xo"><k>z</k></x></p>`, complexType},
+		{"not overriding, prefixed keys", `{"t:p":{"$xmlns":{"t":"urn:t"},"t:x":[{},{"$type":"t:X","t:k":"z"}]}}`,
+			`<t:p ` + xsiDecl + ` xmlns:t="urn:t"><t:x/><t:x xsi:type="t:X"><t:k>z</t:k></t:x></t:p>`, none},
+		{"blocked, open content", `{"pb":{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:Xe","b":"1"}]}}`,
+			`<pb ` + x + `><x/><x xsi:type="t:Xe" b="1"/></pb>`, none},
+		{"blocked, particle", `{"pb":{"x":{"$xmlns":{"t":"urn:t"},"$type":"t:Xe","b":"1"}}}`,
+			`<pb ` + x + `><x xsi:type="t:Xe" b="1"/></pb>`, []xsderr.Rule{"cvc-elt", "cvc-complex-type"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) { twin(t, v, tc.json, tc.xml, tc.want) })
+	}
+}
+
+// viewOnly is a schema view without the governor capability.
+type viewOnly struct{ validate.SchemaView }
+
+// TestTypeWithoutGovernor pins the governor capability's fail-closed arm:
+// under a schema view without it, the root's "$type" maps and a "$type" below
+// the root declines, whatever it names.
+func TestTypeWithoutGovernor(t *testing.T) {
+	v := validatorOver(t, governedSchema)
+	const doc = `{"p":{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:Xe","b":"1"}]}}`
+	w := newWalker(jsonURI, strings.NewReader(doc), viewOnly{v.Schema()})
+	root, err := w.root()
+	if err != nil {
+		t.Fatalf("root: %v", err)
+	}
+	v.Assess(root)
+	const want = `jsonsrc: instance.json:1:39: the "$type" member of {urn:t}x: the mapping determines no type that governs {urn:t}p`
+	if w.err == nil || !strings.HasPrefix(w.err.Error(), want) {
+		t.Fatalf("walking %s latched %v, want it to open %q", doc, w.err, want)
 	}
 }
 
@@ -441,54 +552,292 @@ const governanceSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
   </xs:element>
 </xs:schema>`
 
-// TestUngovernedParentTypeDeclines pins walker.governs: a "$type" declines
-// under a parent whose classifying type may not govern it. The first row is
-// the round-3 reproduction: the second y is matched to w's declaration of
-// type Td but governed by the top-level y's Tg, whose lax {open content}
-// leaves the second x to its ·locally declared type· dt, uncharged. The
-// second row carries that doubt one level down, to v, where Tg2's vr, not
-// Td2's vt, declares x. The third row's u is named by r's {open content} and
-// governed by its ·locally declared type· ub, not by the top-level u's ug.
-// The fourth row reaches mt through the substitution group of h, and
-// declines on mt's own {open content}.
-func TestUngovernedParentTypeDeclines(t *testing.T) {
+// TestUngovernedParentType pins walker.governing and walker.instanceGoverned
+// under a parent whose classifying type is not the one that governs it: the
+// "$type" on x is settled under the type the parent's ·attribution· gives it,
+// on which dt governs the second x, other not ·overriding· it. The first row
+// is #2615's round-3 reproduction: the second y is matched to w's declaration
+// of type Td but ·attributed to· the lax wildcard and governed by the
+// top-level y's Tg (key-governing-ed clause 3), whose lax {open content}
+// leaves the second x to dt, uncharged. The third carries it one level down:
+// under Tg2, v is governed by vr, which declares x, where Td2's vt does not.
+// The fourth row's u is taken by r's {open content} and governed by its
+// ·locally declared type· ub, not by the top-level u's ug. The fifth reaches
+// mt through the substitution group of h (cvc-accept clause 2.3.2). Each row
+// agrees with its XML twin.
+func TestUngovernedParentType(t *testing.T) {
 	v := validatorOver(t, governanceSchema)
-	const (
-		ungoverned = `may not govern it`
-		open       = `the {open content} of the type of`
-	)
-	for _, tc := range []struct {
-		name, json string
-		prefix     string
-		says       string
-	}{
+	const x = `xmlns="urn:t" xmlns:t="urn:t" ` + xsiDecl
+	for _, tc := range []struct{ name, json, xml string }{
 		{"a wildcard's top-level declaration governs the parent", `{"w":{"y":[{},{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:other","k":"zz"}]}]}}`,
-			"jsonsrc: instance.json:1:48: ", ungoverned},
-		{"prefixed keys", `{"t:w":{"$xmlns":{"t":"urn:t"},"t:y":[{},{"t:x":[{},{"$type":"t:other","k":"zz"}]}]}}`,
-			"jsonsrc: instance.json:1:54: ", ungoverned},
+			`<w ` + x + `><y/><y><x/><x xsi:type="t:other"><k>zz</k></x></y></w>`},
+		{"prefixed keys", `{"t:w":{"$xmlns":{"t":"urn:t"},"t:y":[{},{"t:x":[{},{"$type":"t:other","t:k":"zz"}]}]}}`,
+			`<t:w xmlns:t="urn:t" ` + xsiDecl + `><t:y/><t:y><t:x/><t:x xsi:type="t:other"><t:k>zz</t:k></t:x></t:y></t:w>`},
 		{"a grandparent's", `{"w2":{"y2":[{},{"v":{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:other","k":"zz"}]}}]}}`,
-			"jsonsrc: instance.json:1:55: ", ungoverned},
+			`<w2 ` + x + `><y2/><y2><v><x/><x xsi:type="t:other"><k>zz</k></x></v></y2></w2>`},
 		{"a locally declared type governs the parent", `{"r":{"u":{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:other","k":"zz"}]}}}`,
-			"jsonsrc: instance.json:1:44: ", ungoverned},
+			`<r ` + x + `><u><x/><x xsi:type="t:other"><k>zz</k></x></u></r>`},
 		{"a substitution group member's open content", `{"sg":{"m":{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:other","k":"zz"}]}}}`,
-			"jsonsrc: instance.json:1:45: ", open},
+			`<sg ` + x + `><m><x/><x xsi:type="t:other"><k>zz</k></x></m></sg>`},
+	} {
+		t.Run(tc.name, func(t *testing.T) { twin(t, v, tc.json, tc.xml, none) })
+	}
+}
+
+// ancestrySchema builds parents whose members are classified under one type
+// and governed by another, for walker.governing and walker.instanceGoverned. w
+// takes one optional y of type Ta and then a lax wildcard, and the top-level y
+// is of type Tb, which restricts Ta, narrowing x's type from L to Lr; both
+// have a lax {open content}. w6 takes one optional u of type A, which declares
+// e of type Ta, and then a lax wildcard, and the top-level u is of type B,
+// which has a lax {open content} and declares nothing. zw takes one optional z
+// of type zt and then a lax wildcard, with no top-level z, so a second z is
+// ·laxly assessed·; zt declares g, and the top-level g carries a {type table}.
+// pp is of the empty type D, which Q extends with a lax {open content} and x.
+// ws takes one optional v of type Ta and then a skip wildcard, and the
+// top-level v is of the empty type Tz; wo takes one optional v of type Ta
+// and has a skip suffix {open content}; nb takes one optional v of type Ta, a
+// required b and then a lax wildcard. wt takes a yt as w takes a y, and the
+// top-level yt is of type Tt, which restricts Ta and whose x carries a {type
+// table}. big's {content type} is one xsd.Schema.ContentMatcher declines (its
+// GAP(xsd) ceiling), holding a of type Ta. X, unrelated to L, has the
+// attribute k; there is no top-level x.
+const ancestrySchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="urn:t" xmlns:t="urn:t" elementFormDefault="qualified">
+  <xs:complexType name="L"><xs:sequence><xs:element name="k" type="xs:string" minOccurs="0"/></xs:sequence></xs:complexType>
+  <xs:complexType name="Lr">
+    <xs:complexContent><xs:restriction base="t:L"><xs:sequence><xs:element name="k" type="xs:string" minOccurs="0"/></xs:sequence></xs:restriction></xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="X"><xs:attribute name="k" type="xs:string"/></xs:complexType>
+  <xs:complexType name="Ta">
+    <xs:openContent mode="interleave"><xs:any processContents="lax"/></xs:openContent>
+    <xs:sequence><xs:element name="x" type="t:L" minOccurs="0"/></xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="Tb">
+    <xs:complexContent>
+      <xs:restriction base="t:Ta">
+        <xs:openContent mode="interleave"><xs:any processContents="lax"/></xs:openContent>
+        <xs:sequence><xs:element name="x" type="t:Lr" minOccurs="0"/></xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="y" type="t:Tb"/>
+  <xs:element name="w">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="y" type="t:Ta" minOccurs="0"/>
+        <xs:any processContents="lax" minOccurs="0" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="g" type="t:Ta">
+    <xs:alternative test="@a" type="t:Ta"/>
+  </xs:element>
+  <xs:complexType name="zt"><xs:sequence><xs:element name="g" type="t:Ta" minOccurs="0"/></xs:sequence></xs:complexType>
+  <xs:element name="zw">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="z" type="t:zt" minOccurs="0"/>
+        <xs:any processContents="lax" minOccurs="0" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name="A"><xs:sequence><xs:element name="e" type="t:Ta" minOccurs="0"/></xs:sequence></xs:complexType>
+  <xs:complexType name="B">
+    <xs:openContent mode="interleave"><xs:any processContents="lax"/></xs:openContent>
+    <xs:sequence/>
+  </xs:complexType>
+  <xs:element name="u" type="t:B"/>
+  <xs:element name="w6">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="u" type="t:A" minOccurs="0"/>
+        <xs:any processContents="lax" minOccurs="0" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name="D"/>
+  <xs:complexType name="Q">
+    <xs:complexContent>
+      <xs:extension base="t:D">
+        <xs:openContent mode="interleave"><xs:any processContents="lax"/></xs:openContent>
+        <xs:sequence><xs:element name="x" type="t:L" minOccurs="0"/></xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="pp" type="t:D"/>
+  <xs:complexType name="Tz"/>
+  <xs:element name="v" type="t:Tz"/>
+  <xs:element name="ws">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="v" type="t:Ta" minOccurs="0"/>
+        <xs:any processContents="skip" minOccurs="0" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="wo">
+    <xs:complexType>
+      <xs:openContent mode="suffix"><xs:any processContents="skip"/></xs:openContent>
+      <xs:sequence><xs:element name="v" type="t:Ta" minOccurs="0"/></xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="nb">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="v" type="t:Ta" minOccurs="0"/>
+        <xs:element name="b" type="xs:string"/>
+        <xs:any processContents="lax" minOccurs="0" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name="Tt">
+    <xs:complexContent>
+      <xs:restriction base="t:Ta">
+        <xs:openContent mode="interleave"><xs:any processContents="lax"/></xs:openContent>
+        <xs:sequence><xs:element name="x" type="t:Lr" minOccurs="0"><xs:alternative test="@a" type="t:Lr"/></xs:element></xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="yt" type="t:Tt"/>
+  <xs:element name="wt">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="yt" type="t:Ta" minOccurs="0"/>
+        <xs:any processContents="lax" minOccurs="0" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="big">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:sequence maxOccurs="1000"><xs:element name="a" type="t:Ta" maxOccurs="unbounded"/></xs:sequence>
+        <xs:element name="b" type="xs:string"/>
+        <xs:sequence maxOccurs="1000"><xs:element name="c" maxOccurs="unbounded"/></xs:sequence>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+
+// TestAncestryTypeDeclines pins the GAP(jsonsrc) {type table} remainder: a
+// "$type" declines where the declaration an ·attribution· gives its parent
+// carries a {type table}, the mapping then determining no type that governs
+// the parent, though the engine assesses each XML twin. In the first row the
+// second z is ·attributed to· zw's lax wildcard and, no top-level z
+// existing, ·laxly assessed·, so g is attributed to xs:anyType's wildcard and
+// governed through the top-level g's {type table} (walker.resolvedType's
+// marker, #2669). In the second the second yt is governed by the top-level
+// yt's Tt, whose element particle x carries one (walker.declarationType's
+// marker, #2630); its members are classified under Ta, whose x carries none.
+func TestAncestryTypeDeclines(t *testing.T) {
+	v := validatorOver(t, ancestrySchema)
+	const x = `xmlns="urn:t" xmlns:t="urn:t" ` + xsiDecl
+	for _, tc := range []struct {
+		name, json, xml string
+		want            []xsderr.Rule
+		opens           string
+	}{
+		{"a wildcard's type table", `{"zw":{"z":[{},{"g":{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:X","k":"zz"}]}}]}}`,
+			`<zw ` + x + `><z/><z><g><x/><x xsi:type="t:X"><k>zz</k></x></g></z></zw>`, none,
+			`jsonsrc: instance.json:1:54: the "$type" member of {urn:t}x: the mapping determines no type that governs {urn:t}g`},
+		{"an element particle's type table", `{"wt":{"yt":[{},{"x":{"k":{"$xmlns":{"xs":"http://www.w3.org/2001/XMLSchema"},"$type":"xs:string"}}}]}}`,
+			`<wt ` + x + ` xmlns:xs="http://www.w3.org/2001/XMLSchema"><yt/><yt><x><k xsi:type="xs:string"/></x></yt></wt>`, none,
+			`jsonsrc: instance.json:1:79: the "$type" member of {urn:t}k: the mapping determines no type that governs {urn:t}x`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			xres, err := xmlsrc.Validate(v, strings.NewReader(tc.xml), xmlsrc.WithURI("instance.xml"))
+			if err != nil {
+				t.Fatalf("xmlsrc.Validate(%s): %v", tc.xml, err)
+			}
+			if got := rules(xres); !slices.Equal(got, tc.want) || len(xres.Unevaluated()) > 0 {
+				t.Fatalf("XML twin %s charges %v, %d unevaluated; want %v", tc.xml, got, len(xres.Unevaluated()), tc.want)
+			}
 			res, err := Validate(v, strings.NewReader(tc.json), WithURI(jsonURI))
 			if err == nil {
 				t.Fatalf("Validate(%s) = %v violations, %d unevaluated, nil error; want the decline", tc.json, rules(res), len(res.Unevaluated()))
 			}
-			if !strings.HasPrefix(err.Error(), tc.prefix+`the "$type" member of {urn:t}x: `) || !strings.Contains(err.Error(), tc.says) {
-				t.Errorf("Validate(%s) = %q, want it to open %q and say %q", tc.json, err, tc.prefix, tc.says)
+			if !strings.HasPrefix(err.Error(), tc.opens) {
+				t.Errorf("Validate(%s) = %q, want it to open %q", tc.json, err, tc.opens)
 			}
 		})
 	}
 }
 
-// TestGovernedParentTypeMaps pins walker.governs' limit: under a lax wildcard
-// no top-level declaration of z can govern z in its declaration's place, so
-// a "$type" on z's child maps, and the engine charges cvc-elt clause 4 as
-// for the XML twin.
+// TestUnattributedParentTypeDeclines pins instanceGoverned's GAP(jsonsrc)
+// marker for a content model xsd.Schema.ContentMatcher declines: big's
+// children are not ·attributed·, so no type is determined to govern a, and
+// the "$type" on its x declines. The engine walks a undecided, recording
+// cvc-complex-content as Unevaluated against it.
+func TestUnattributedParentTypeDeclines(t *testing.T) {
+	v := validatorOver(t, ancestrySchema)
+	const xml = `<big xmlns="urn:t" xmlns:t="urn:t" ` + xsiDecl + `><a><x/><x xsi:type="t:X"><k>zz</k></x></a><b/></big>`
+	xres, err := xmlsrc.Validate(v, strings.NewReader(xml), xmlsrc.WithURI("instance.xml"))
+	if err != nil {
+		t.Fatalf("xmlsrc.Validate(%s): %v", xml, err)
+	}
+	if len(xres.Unevaluated()) == 0 {
+		t.Fatalf("XML twin %s charges %v and leaves nothing unevaluated; want big's content model undecided", xml, rules(xres))
+	}
+	const doc = `{"big":{"a":{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:X","k":"zz"}]},"b":""}}`
+	_, err = Validate(v, strings.NewReader(doc), WithURI(jsonURI))
+	const want = `jsonsrc: instance.json:1:46: the "$type" member of {urn:t}x: the mapping determines no type that governs {urn:t}a`
+	if err == nil || !strings.HasPrefix(err.Error(), want) {
+		t.Fatalf("Validate(%s) = %v, want it to open %q", doc, err, want)
+	}
+}
+
+// TestAncestryTypeMaps pins walker.governing's arms: a "$type" is settled
+// under the one type that governs its parent, read off the parent's
+// ·attribution·, whatever type the parent's members are classified under.
+// Under pp's "$type" Q, x takes L, where under pp's declared D it would take
+// X. The second y of w is ·attributed to· the lax wildcard and governed by
+// the top-level y's Tb, under whose {open content} the second x takes Lr,
+// which X does not ·override·, so k is a child of Lr (key-governing-ed clause
+// 3, key-governing-type-elem clause 7); its members are classified under Ta,
+// the contained declaration's. The second u of w6 is governed by the top-level
+// u's B, whose {open content} takes e with no ·locally declared type·, so e is
+// ·laxly assessed· and X governs the second x (key-governing-type-elem clause
+// 8), of which k is an attribute; B is charged cvc-complex-type clause 5
+// against u's A. A skip wildcard leaves the second v of ws ·skipped·, as a
+// skip {open content} does the second v of wo, and the declared Ta stands for
+// each. The second v of nb, rejected because b must follow the first, and the v
+// after the rejected t:c, which validate attributes to nothing once its
+// matcher rejected, are governed by their ·locally declared type· Ta, where
+// the top-level v's Tz would make k an attribute. Each row agrees with its XML
+// twin.
+func TestAncestryTypeMaps(t *testing.T) {
+	v := validatorOver(t, ancestrySchema)
+	const x = `xmlns="urn:t" xmlns:t="urn:t" ` + xsiDecl
+	for _, tc := range []struct {
+		name, json, xml string
+		want            []xsderr.Rule
+	}{
+		{"under a $type", `{"pp":{"$xmlns":{"t":"urn:t"},"$type":"t:Q","x":[{},{"$type":"t:X","k":"zz"}]}}`,
+			`<pp ` + x + ` xsi:type="t:Q"><x/><x xsi:type="t:X"><k>zz</k></x></pp>`, none},
+		{"a wildcard's top-level declaration governs the parent", `{"w":{"y":[{},{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:X","k":"zz"}]}]}}`,
+			`<w ` + x + `><y/><y><x/><x xsi:type="t:X"><k>zz</k></x></y></w>`, none},
+		{"an open content's resolution", `{"w6":{"u":[{},{"e":{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:X","k":"zz"}]}}]}}`,
+			`<w6 ` + x + `><u/><u><e><x/><x xsi:type="t:X" k="zz"/></e></u></w6>`, complexType},
+		{"under an element particle before a skip wildcard", `{"ws":{"v":{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:X","k":"zz"}]}}}`,
+			`<ws ` + x + `><v><x/><x xsi:type="t:X"><k>zz</k></x></v></ws>`, none},
+		{"skipped", `{"ws":{"v":[{},{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:X","k":"zz"}]}]}}`,
+			`<ws ` + x + `><v/><v><x/><x xsi:type="t:X"><k>zz</k></x></v></ws>`, none},
+		{"skipped by an open content", `{"wo":{"v":[{},{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:X","k":"zz"}]}]}}`,
+			`<wo ` + x + `><v/><v><x/><x xsi:type="t:X"><k>zz</k></x></v></wo>`, none},
+		{"rejected", `{"nb":{"v":[{},{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:X","k":"zz"}]}],"b":""}}`,
+			`<nb ` + x + `><v/><v><x/><x xsi:type="t:X"><k>zz</k></x></v><b/></nb>`, content},
+		{"after a rejected sibling", `{"nb":{"$xmlns":{"t":"urn:t"},"v":{},"t:c":"1","b":"","v":{"x":[{},{"$type":"t:X","k":"zz"}]}}}`,
+			`<nb ` + x + `><v/><t:c>1</t:c><b/><v><x/><x xsi:type="t:X"><k>zz</k></x></v></nb>`, content},
+	} {
+		t.Run(tc.name, func(t *testing.T) { twin(t, v, tc.json, tc.xml, tc.want) })
+	}
+}
+
+// TestGovernedParentTypeMaps pins walker.instanceGoverned where the type that
+// governs the parent charges the child: the one z is ·attributed to· zw's
+// element particle and governed by zt, which has no {open content}, and other
+// does not ·override· x's dt there, so the members are classified under other,
+// and the engine charges cvc-elt clause 4 as for the XML twin.
 func TestGovernedParentTypeMaps(t *testing.T) {
 	v := validatorOver(t, governanceSchema)
 	twin(t, v, `{"zw":{"z":{"x":{"$xmlns":{"t":"urn:t"},"$type":"t:other","k":"zz"}}}}`,

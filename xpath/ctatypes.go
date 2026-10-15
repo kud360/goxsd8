@@ -178,9 +178,59 @@ func (t ctaTypes) castTarget(name xsd.QName) (*xsd.SimpleType, ctaDefect) {
 	if name == ctaBuiltin("anyAtomicType") || name == ctaBuiltin("NOTATION") {
 		return nil, ctaStaticDefect(ruleXPST0080, "the cast target %q is xs:NOTATION or xs:anyAtomicType, which err:XPST0080 forbids", name)
 	}
+	return t.atomicType("the cast target", name)
+}
+
+// sequenceAtomicType reports the static error the AtomicType name of an
+// `instance of` or `treat as` SequenceType is, or the zero ctaDefect: "If a
+// QName that is used as an AtomicType is not defined as an atomic type in the
+// in-scope schema types, a static error is raised [err:XPST0051]" (xpath20.md
+// §2.5.4.2). It reads the in-scope schema types on castTarget's terms, but
+// excludes no type by name: §3.10.2's err:XPST0080 is a cast-target rule, so
+// xs:anyAtomicType and xs:NOTATION are AtomicTypes like any other, and
+// xs:untypedAtomic is held to no static error, as castTarget holds it.
+//
+// Only the full-grammar static pass asks it (syntaxStatic): the subset parse
+// resolves no SequenceType of a Type Alternative's {test}.
+func (t ctaTypes) sequenceAtomicType(name xsd.QName) ctaDefect {
+	if name == ctaBuiltin("untypedAtomic") || name == ctaBuiltin("anyAtomicType") {
+		return ctaDefect{}
+	}
+	_, defect := t.atomicType("the AtomicType", name)
+	return defect
+}
+
+// inScopeType reports whether name, the TypeName of an ElementTest or an
+// AttributeTest, is in the in-scope schema types, whose absence is
+// err:XPST0008 (xpath20.md §2.5.4.3, §2.5.4.5). It holds xs:anyType — §3.4.7's
+// Built-in Complex Type Definition, which xpath-valid clause 2.2.5 puts in
+// scope and builtin.Seed does not produce — and XPath's predefined
+// xs:untyped and xs:untypedAtomic (xpath20.md §2.5.1) by name, and asks the
+// resolver for every other name in the XSD namespace only, on atomicType's
+// namespace guard: a schema's own types are never in scope (the oracle's #894
+// ruling). Unlike an AtomicType, a TypeName may be any type, so xs:anySimpleType,
+// a list builtin and xs:NOTATION are all in scope.
+func (t ctaTypes) inScopeType(name xsd.QName) bool {
+	switch name {
+	case ctaBuiltin("anyType"), ctaBuiltin("untyped"), ctaBuiltin("untypedAtomic"):
+		return true
+	}
+	if name.Space != xsd.XMLSchemaNS {
+		return false
+	}
+	_, declared := t.resolver.Type(name)
+	return declared
+}
+
+// atomicType resolves name to a builtin ATOMIC simple type in the in-scope
+// schema types, or reports err:XPST0051 for a name that is none, naming it as
+// role in the message — castTarget's err:XPST0051 arm, which
+// sequenceAtomicType shares. A base chain this resolver cannot walk declines,
+// a ctaUnsupported defect.
+func (t ctaTypes) atomicType(role string, name xsd.QName) (*xsd.SimpleType, ctaDefect) {
 	st, declared := t.simple(name)
 	if !declared || name.Space != xsd.XMLSchemaNS {
-		return nil, ctaStaticDefect(ruleXPST0051, "the cast target %q is no simple type in the in-scope schema types, which err:XPST0051 forbids", name)
+		return nil, ctaStaticDefect(ruleXPST0051, "%s %q is no simple type in the in-scope schema types, which err:XPST0051 forbids", role, name)
 	}
 	// §3.10.2's "the target type must be an atomic type" is decided on the
 	// {primitive type definition} and not on the {variety}, because the
@@ -192,7 +242,7 @@ func (t ctaTypes) castTarget(name xsd.QName) (*xsd.SimpleType, ctaDefect) {
 		return nil, ctaDefect{kind: ctaUnsupported}
 	}
 	if p == nil {
-		return nil, ctaStaticDefect(ruleXPST0051, "the cast target %q is no atomic type, which err:XPST0051 forbids", name)
+		return nil, ctaStaticDefect(ruleXPST0051, "%s %q is no atomic type, which err:XPST0051 forbids", role, name)
 	}
 	return st, ctaDefect{}
 }
@@ -210,17 +260,17 @@ func (t ctaTypes) qnameTarget(target *xsd.SimpleType) bool {
 // against — reporting ok false where it decides nothing, which declines an
 // `instance of` over v ([CompileAssertionTest]'s withhold). It is each item's
 // DYNAMIC type, and derived false, for an untyped read (xs:untypedAtomic: an
-// attribute or `$value` whose type is ·special·, a mixed child, `.`), a typed
-// attribute (its type annotation: no xsi:type reaches an attribute, so its
-// {attribute use}'s type is its own), `$value` (Datatypes dt-xdmrep clause 2
-// makes its dynamic type the ·nearest built-in datatype· T2, and every
-// AtomicType itemMatches admits is builtin, so T2 and the {simple type
-// definition} derive from it alike), a cast (its target), fn:count, an F&O
-// function result and a castable or instance-of expression (each its result
-// type), a StringLiteral, and the statically empty `$value`; and for a read of
-// an absent context item or a rooted path, which raises before any item
-// exists. An fn:distinct-values call answers as its operand does, each item
-// keeping its own type (xpath-functions.md §15.1.6).
+// attribute annotated ·special·, a ·special· `$value`, a mixed child, `.`), a
+// typed attribute (its type annotation: no xsi:type reaches an attribute, so
+// the type [AttributeTypes] answered is its own), `$value` (Datatypes
+// dt-xdmrep clause 2 makes its dynamic type the ·nearest built-in datatype·
+// T2, and every AtomicType itemMatches admits is builtin, so T2 and the
+// {simple type definition} derive from it alike), a cast (its target),
+// fn:count, an F&O function result and a castable or instance-of expression
+// (each its result type), a StringLiteral, and the statically empty `$value`;
+// and for a read of an absent context item or a rooted path, which raises
+// before any item exists. An fn:distinct-values call answers as its operand
+// does, each item keeping its own type (xpath-functions.md §15.1.6).
 //
 // For a typed child, through fn:distinct-values too, and for the k-th of them
 // (ctaChildAt), derived is true: each item's dynamic type is item's or derived
@@ -317,17 +367,18 @@ func (t ctaTypes) itemMatches(item ctaStatic, name xsd.QName) (matches, admitted
 // annotationDerives reports derives-from(AT, name) (xpath20.md §2.5.4) for AT
 // the type annotation of the attribute node v, which an [60] AttributeTest's
 // TypeName asks (§2.5.4.5). v is an attribute of E's typed instance
-// (ctaParser.attributeInstanceOf), whose annotation is its {attribute use}'s
-// type, no xsi:type reaching an attribute: a ctaTypedAttr's st, or for a
-// ctaAttr the ·special· type itself, xs:anySimpleType or xs:anyAtomicType —
-// only its typed value is xs:untypedAtomic (xpath-datamodel §3.3.1.2). So no
-// such attribute is annotated xs:untypedAtomic, the annotation of a
-// skip-assessed one: [TypedAttributes] carries only attributes that matched an
-// {attribute use}. derives-from walks AT's {base type definition} chain
-// (ancestor), a user-defined AT's too, which is §2.5.4's
-// implementation-dependent mechanism for an AT outside the in-scope schema
-// definitions; neither ·special· type derives from any name but
-// xs:anySimpleType and, for xs:anyAtomicType, itself.
+// (ctaParser.attributeInstanceOf), whose annotation is the type attrs answered
+// for it ([AttributeTypes]), no xsi:type reaching an attribute: a
+// ctaTypedAttr's st, or for a ctaAttr the ·special· type itself,
+// xs:anySimpleType or xs:anyAtomicType — xs:anySimpleType for one invalid in
+// the partial ·PSVI· (xpath-datamodel §3.3.1.1) — only its typed value is
+// xs:untypedAtomic (§3.3.1.2). So no such attribute is annotated
+// xs:untypedAtomic, the annotation of a skip-assessed one: [TypedAttributes]
+// carries only attributes that matched an {attribute use}. derives-from walks
+// AT's {base type definition} chain (ancestor), a user-defined AT's too, which
+// is §2.5.4's implementation-dependent mechanism for an AT outside the
+// in-scope schema definitions; neither ·special· type derives from any name
+// but xs:anySimpleType and, for xs:anyAtomicType, itself.
 //
 // decided is false where name is neither xs:untypedAtomic nor a simple type in
 // the XSD namespace — a user-defined type, which xpath-valid clause 2.2.5 keeps
@@ -988,7 +1039,7 @@ func (t ctaTypes) comparison(op ctaComparator, l, r ctaValue) (*xsd.SimpleType, 
 //
 // Only the two façades whose ctaFacade.comparesValues is true reach here, the
 // assertion façade (ctaAssertionFacade) and the facet façade (ctaFacetFacade).
-// The untyped operands they build are an attribute whose type is ·special·
+// The untyped operands they build are an attribute annotated ·special·
 // (ctaAssertionFacade.attribute), `$value` over a ·special· type
 // (ctaUntypedValue), a child of mixed content (ctaUntypedChild), `.`
 // (ctaContextAtom), and three that raise before they are compared: the rooted

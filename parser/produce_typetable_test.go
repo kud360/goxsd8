@@ -696,11 +696,74 @@ func TestProduceTypeTableCastTargetStaticErrorIsCharged(t *testing.T) {
 	}
 }
 
+// A static error a {test} this engine declines carries is charged all the
+// same, wherever in the text it sits: §3.12.6 clause 2's Note licenses
+// declining only an expression "containing no static errors", so
+// ta-props-correct clause 2 is charged over the declined text exactly as over
+// a complete ta-Test (#2631) — before the construct the decline is at, past
+// it, in a text the subset's tokenizer never reads (`..`), err:XPST0008 for
+// `$value` (xpath-valid clause 2.2.6 leaves the in-scope variables empty), and
+// err:XPST0051 for the AtomicType of an `instance of` or `treat as` and the
+// SingleType of a `castable as`, and err:XPST0008 for a KindTest TypeName
+// ctaStaticTypes does not hold, a schema-element name, and a schema-attribute
+// name no §3.2.7 declaration carries.
+func TestProduceTypeTableStaticErrorBeforeADeclineIsCharged(t *testing.T) {
+	for _, tc := range []struct{ test, rule string }{
+		{"count(//p:x) &gt; 1", "err:XPST0081"},
+		{"@k cast as xs:Missing = 't' and count(//x) &gt; 1", "err:XPST0051"},
+		{"count(//x) &gt; 1 and @k cast as xs:Missing = 't'", "err:XPST0051"},
+		{".. and @k cast as xs:Missing = 't'", "err:XPST0051"},
+		{"$value = 't'", "err:XPST0008"},
+		{"@k instance of xs:Missing", "err:XPST0051"},
+		{"@k treat as xs:Missing = 't'", "err:XPST0051"},
+		{"@k castable as xs:Missing", "err:XPST0051"},
+		{". instance of element(*, xs:Missing)", "err:XPST0008"},
+		{"@k instance of attribute(*, xs:Missing)", "err:XPST0008"},
+		{". instance of schema-element(e)", "err:XPST0008"},
+		{"@k instance of schema-attribute(k)", "err:XPST0008"},
+	} {
+		t.Run(tc.test, func(t *testing.T) {
+			_, err := produce(t, wrap("", typeTableTypes+`
+			<xs:element name="e" type="B">
+			  <xs:alternative test="`+tc.test+`" type="T"/>
+			  <xs:alternative type="V"/>
+			</xs:element>`))
+			assertRule(t, err, "ta-props-correct")
+			if rule, ok := xsderr.RuleOf(errors.Unwrap(err)); !ok || string(rule) != tc.rule {
+				t.Errorf("wrapped cause of %v carries rule %q (found %t), want %s", err, rule, ok, tc.rule)
+			}
+		})
+	}
+}
+
+// A KindTest TypeName in the in-scope schema types is no err:XPST0008, through
+// the production resolver ctaStaticTypes too: xs:anyType is §3.4.7's built-in,
+// which ctaStaticTypes answers false for because builtin.Seed produces no
+// complex type, and xs:untyped is XPath's predefined type (xpath20.md §2.5.1),
+// in no resolver at all. Each row is its own document.
+func TestProduceTypeTableInScopeKindTestTypeIsNotCharged(t *testing.T) {
+	for _, test := range []string{". instance of element(*, xs:anyType)", ". instance of element(*, xs:untyped)"} {
+		t.Run(test, func(t *testing.T) {
+			tt, present := typeTableOf(t, wrap("", typeTableTypes+`
+			<xs:element name="e" type="B">
+			  <xs:alternative test="`+test+`" type="T"/>
+			  <xs:alternative type="V"/>
+			</xs:element>`), xsd.QName{Local: "e"})
+			if !present {
+				t.Fatal("{type table} is ·absent·, want present")
+			}
+			if got := altTypeNames(t, tt.Alternatives()); !slices.Equal(got, []string{"T"}) {
+				t.Fatalf("{alternatives} = %v, want [T]", got)
+			}
+		})
+	}
+}
+
 // The CONSTRUCTOR spelling names a function, not a cast target: err:XPST0051
 // and err:XPST0080 are cast-target errors, and a name with no constructor
 // signature is err:XPST0017 at most, which xpath-valid clause 2.2.8 leaves
 // implementation-defined. So neither call is charged, and both are withheld
-// at ·assessment· (#894). Each row is its own document, so a charge of the
+// at ·assessment· pending #2690. Each row is its own document, so a charge of the
 // first does not hide the second.
 func TestProduceTypeTableConstructorTargetIsNotCharged(t *testing.T) {
 	for _, test := range []string{"string(@k) = 't'", "xs:anyAtomicType(@k) = 't'"} {
@@ -725,14 +788,10 @@ func TestProduceTypeTableConstructorTargetIsNotCharged(t *testing.T) {
 // charging one would reject a conforming schema. The withhold that decline
 // costs is validate's, at ·assessment· time, and is not this producer's
 // business.
-//
-// The expression carries an unbound p: too, so this pins the dominance end to
-// end — an unsupported construct is declined and never charged, whatever its
-// names resolve to.
 func TestProduceTypeTableUnsupportedTestIsNotCharged(t *testing.T) {
 	tt, present := typeTableOf(t, wrap("", typeTableTypes+`
 	<xs:element name="e" type="B">
-	  <xs:alternative test="count(//p:x) &gt; 1" type="T"/>
+	  <xs:alternative test="count(//x) &gt; 1" type="T"/>
 	  <xs:alternative type="V"/>
 	</xs:element>`), xsd.QName{Local: "e"})
 	if !present {

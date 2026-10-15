@@ -300,27 +300,51 @@ func TestCompileAdmitsCasts(t *testing.T) {
 	}
 }
 
-// TestCTATestStaticErrorIsSilentForUnsupported pins UNSUPPORTED DOMINATES
-// STATIC. Every expression here is legal XPath 2.0 syntax (xpath20.md A.1),
-// and none of them is a schema fault the engine proves: the subset ones
-// compile, and charging one outside the subset would reject a schema
-// §3.12.6 clause 2's Note says a processor may decline but must not refuse.
+// TestCTATestStaticErrorIsSilentForUnsupported pins what stays uncharged: a
+// {test} this engine declines while proving no static error in it, and the
+// subset constructs whose every name resolved. Every expression here is legal
+// XPath 2.0 syntax (xpath20.md A.1), and charging one outside the subset would
+// reject a schema §3.12.6 clause 2's Note lets a processor decline.
 func TestCTATestStaticErrorIsSilentForUnsupported(t *testing.T) {
 	for _, tc := range []struct{ expr, why string }{
-		{"@p:a = 'x' and count(@b) > 1", "a complete-looking prefix inside an expression a later constructor call declines"},
-		{"p:not(@kind = 'x')", "a constructor call whose argument is no SimpleValue — a prefixed name is never fn:not"},
-		{"count(//p:a) > 1", "full XPath 2.0, outside the subset"},
+		{"count(//a:x) > 1", "full XPath 2.0, outside the subset, whose prefix is bound"},
 		{"self::message", "an axis step the grammar has no production for"},
 		{"@kind = 'book'", "a complete Test whose every name resolved"},
 		{"@a:kind = 'book'", "a complete Test whose prefix is bound"},
-		// A cast-target static error recorded on the way dies with a parse a
-		// later construct declines: an under-charge, pinned as the withhold
-		// under compileCTATest's GAP(xpath) (#2631).
-		{"@kind cast as xs:Missing = 'x' and count(//a:x) > 1", "err:XPST0051 inside an expression a later construct declines"},
+		// The full-grammar static pass binds a ForExpr's or QuantifiedExpr's own
+		// variables, and resolves an AtomicType or SingleType that names a
+		// builtin atomic type.
+		{"some $x in @a satisfies $x = 'x'", "a range variable referenced inside its own binding"},
+		{"for $x in @a, $y in $x return $y = 'x'", "a range variable referenced by the binding after it"},
+		{"@kind instance of xs:string", "a builtin atomic AtomicType"},
+		{"@kind instance of xs:anyAtomicType", "err:XPST0080 is a cast-target rule, not an AtomicType one"},
+		{"@kind instance of xs:NOTATION", "the same for xs:NOTATION"},
+		{"@kind instance of xs:untypedAtomic", "xs:untypedAtomic is held to no static error, as a cast target is"},
+		{"@kind castable as xs:string", "a builtin atomic SingleType"},
+		{"xs:QName('p:ppp') = @kind", "err:FONS0004 in a StringLiteral is withheld under ctaParser.cast's marker"},
+		{"a:f(.) = node-name(.)", "a function under a bound prefix: err:XPST0017 at most, withheld (#2690)"},
+		// A KindTest TypeName in the in-scope schema types, and a
+		// schema-attribute name among the in-scope attribute declarations, is
+		// no err:XPST0008 (ctaTypes.inScopeType, ctaInScopeAttribute):
+		// xs:untyped and xs:untypedAtomic are XPath's predefined types
+		// (xpath20.md §2.5.1; the suite's cta0018, cta0019, cta0022), xs:anyType
+		// is §3.4.7's built-in though builtin.Seed holds none, and the four xsi
+		// declarations are §3.2.7's. An ElementName or AttributeName in an
+		// ElementTest or AttributeTest is exempt from it by name.
+		{". instance of element(*, xs:untyped)", "xs:untyped, an XPath predefined type"},
+		{"@kind instance of attribute(*, xs:untypedAtomic)", "xs:untypedAtomic in an AttributeTest"},
+		{". instance of element(*, xs:anyType)", "xs:anyType, which builtin.Seed does not produce"},
+		{"@kind instance of attribute(*, xs:anyType)", "xs:anyType in an AttributeTest"},
+		{". instance of element(*, xs:anySimpleType)", "a non-atomic builtin, which a TypeName may name"},
+		{". instance of element(*, xs:string)", "a builtin atomic type"},
+		{". instance of element(a:missing)", "an undeclared ElementName, exempt"},
+		{"@kind instance of attribute(a:missing)", "an undeclared AttributeName, exempt"},
+		{"@xsi:type instance of schema-attribute(xsi:type)", "xsi:type, a §3.2.7 built-in declaration"},
+		{"@xsi:nil instance of schema-attribute(xsi:nil)", "xsi:nil, another of them"},
 		// The constructor spelling names a FUNCTION: err:XPST0051 and
 		// err:XPST0080 are cast-target errors, and a name with no constructor
 		// is err:XPST0017 at most, whose signatures xpath-valid clause 2.2.8
-		// leaves implementation-defined (#894).
+		// leaves implementation-defined, withheld pending #2690.
 		{"string(@kind) = 'x'", "fn:string as a constructor name, which castTarget finds no type for"},
 		{"xs:anyAtomicType(@kind) = 'x'", "the constructor spelling of an err:XPST0080 target"},
 		{"xs:Missing(@kind) = 'x'", "the constructor spelling of an err:XPST0051 target"},
@@ -328,9 +352,166 @@ func TestCTATestStaticErrorIsSilentForUnsupported(t *testing.T) {
 		// 2.2.5's list; the #894 ruling leaves it uncharged.
 		{"@kind cast as xs:untypedAtomic = 'x'", "a cast to xs:untypedAtomic"},
 	} {
-		bindings := []string{"a", "http://example.com/a", "xs", xsd.XMLSchemaNS}
+		bindings := []string{"a", "http://example.com/a", "xs", xsd.XMLSchemaNS, "xsi", xsd.XMLSchemaInstanceNS}
 		if err := CTATestStaticError(ctaExprRecord(tc.expr, "", bindings...), seededTypes); err != nil {
 			t.Errorf("CTATestStaticError(%q) = %v, want nil (%s)", tc.expr, err, tc.why)
+		}
+	}
+}
+
+// TestCTATestStaticErrorBeforeADeclineIsCharged pins a static error the subset
+// parse proves BEFORE a later construct declines the text: §3.12.6 clause 2's
+// Note licenses declining only an expression "containing no static errors",
+// and xpath-valid clause 2 ("X does not produce any static error") reads the
+// whole text, so the decline does not excuse what the walk already proved.
+// Every row is legal XPath 2.0 syntax, so err:XPST0003 does not answer first,
+// and every façade still declines it.
+func TestCTATestStaticErrorBeforeADeclineIsCharged(t *testing.T) {
+	str := asBuiltin(t, "string")
+	for _, tc := range []struct{ expr, rule, msg string }{
+		{"@kind cast as xs:Missing = 'x' and count(//a:x) > 1", "err:XPST0051", `the cast target "{http://www.w3.org/2001/XMLSchema}Missing" is no simple type in the in-scope schema types, which err:XPST0051 forbids`},
+		{"@kind cast as xs:anyAtomicType = 'x' and count(//a:x) > 1", "err:XPST0080", `the cast target "{http://www.w3.org/2001/XMLSchema}anyAtomicType" is xs:NOTATION or xs:anyAtomicType, which err:XPST0080 forbids`},
+		{"@p:a = 'x' and count(@b) > 1", "err:XPST0081", `no statically-known namespace binding for prefix "p", which err:XPST0081 forbids`},
+		{"p:not(@kind = 'x')", "err:XPST0081", `no statically-known namespace binding for prefix "p", which err:XPST0081 forbids`},
+		{"count(//p:a) > 1", "err:XPST0081", `no statically-known namespace binding for prefix "p", which err:XPST0081 forbids`},
+	} {
+		record := ctaExprRecord(tc.expr, "", "a", "http://example.com/a", "xs", xsd.XMLSchemaNS)
+		var verdict *xsderr.Error
+		if err := CTATestStaticError(record, seededTypes); !errors.As(err, &verdict) {
+			t.Errorf("CTATestStaticError(%q) = %v, want an *xsderr.Error carrying %s", tc.expr, err, tc.rule)
+			continue
+		}
+		if string(verdict.Rule) != tc.rule {
+			t.Errorf("CTATestStaticError(%q) reports rule %q, want %q", tc.expr, verdict.Rule, tc.rule)
+		}
+		if verdict.Msg != tc.msg {
+			t.Errorf("CTATestStaticError(%q).Msg = %q, want %q", tc.expr, verdict.Msg, tc.msg)
+		}
+		if _, ok := CompileCTATest(record, seededTypes); ok {
+			t.Errorf("CompileCTATest(%q) compiled, want declined", tc.expr)
+		}
+		if _, ok := CompileAssertionTest(record, seededTypes, xsd.EmptyContent{}, asUses(t, nil), asNoElems); ok {
+			t.Errorf("CompileAssertionTest(%q) compiled, want declined", tc.expr)
+		}
+		if got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, str, record, fcValue(t, str, "x")); got != value.AssertionDeclined {
+			t.Errorf("FacetAssertions.Evaluate(%q) = %d, want AssertionDeclined", tc.expr, got)
+		}
+	}
+}
+
+// TestCTATestStaticErrorTheSubsetNeverReachesIsCharged pins the static errors
+// of a {test} the subset parse declines with none proved, which the
+// full-grammar static pass (ctaFullStaticError) proves wherever in the text
+// they sit: past the construct the parse declines at, in a text ctaTokenize
+// never reads (`..`), err:XPST0008 for a VarRef no range variable binds —
+// xpath-valid clause 2.2.6 leaves the in-scope variables empty, `$value`
+// included — and err:XPST0051 for the AtomicType of an `instance of` or
+// `treat as`, err:XPST0051 or err:XPST0080 for the SingleType of a
+// `castable as`, and err:XPST0008 for a KindTest TypeName, schema-element name
+// or schema-attribute name outside the static context. The first in expression
+// order wins, err:XPST0081 included, and CompileCTATest still declines every
+// row.
+func TestCTATestStaticErrorTheSubsetNeverReachesIsCharged(t *testing.T) {
+	const (
+		missingTarget = `the cast target "{http://www.w3.org/2001/XMLSchema}Missing" is no simple type in the in-scope schema types, which err:XPST0051 forbids`
+		missingAtomic = `the AtomicType "{http://www.w3.org/2001/XMLSchema}Missing" is no simple type in the in-scope schema types, which err:XPST0051 forbids`
+	)
+	for _, tc := range []struct{ expr, rule, msg string }{
+		{"count(//a:x) > 1 and @kind cast as xs:Missing = 'x'", "err:XPST0051", missingTarget},
+		{".. and @kind cast as xs:Missing = 'x'", "err:XPST0051", missingTarget},
+		{"$value = 1", "err:XPST0008", `the variable reference $value names no in-scope variable, which err:XPST0008 forbids`},
+		{"@kind = $value", "err:XPST0008", `the variable reference $value names no in-scope variable, which err:XPST0008 forbids`},
+		{"some $x in @a satisfies $x = $y", "err:XPST0008", `the variable reference $y names no in-scope variable, which err:XPST0008 forbids`},
+		{"(some $x in @a satisfies $x = 'x') and $x = 'y'", "err:XPST0008", `the variable reference $x names no in-scope variable, which err:XPST0008 forbids`},
+		{"for $x in $x return $x = 'x'", "err:XPST0008", `the variable reference $x names no in-scope variable, which err:XPST0008 forbids`},
+		{"@kind instance of xs:Missing", "err:XPST0051", missingAtomic},
+		{"@kind treat as xs:Missing = 'x'", "err:XPST0051", missingAtomic},
+		{"@kind instance of a:Kind", "err:XPST0051", `the AtomicType "{http://example.com/a}Kind" is no simple type in the in-scope schema types, which err:XPST0051 forbids`},
+		{"@kind instance of xs:NMTOKENS+", "err:XPST0051", `the AtomicType "{http://www.w3.org/2001/XMLSchema}NMTOKENS" is no atomic type, which err:XPST0051 forbids`},
+		{"@kind castable as xs:Missing", "err:XPST0051", missingTarget},
+		{"@kind castable as xs:anyAtomicType", "err:XPST0080", `the cast target "{http://www.w3.org/2001/XMLSchema}anyAtomicType" is xs:NOTATION or xs:anyAtomicType, which err:XPST0080 forbids`},
+		// The first static error in expression order wins.
+		{"$value = 1 and @kind instance of xs:Missing", "err:XPST0008", `the variable reference $value names no in-scope variable, which err:XPST0008 forbids`},
+		{"@kind instance of xs:Missing and $value = 1", "err:XPST0051", missingAtomic},
+		{"@kind instance of q:Missing", "err:XPST0081", `no statically-known namespace binding for prefix "q", which err:XPST0081 forbids`},
+		{"$q:v = 1", "err:XPST0081", `no statically-known namespace binding for prefix "q", which err:XPST0081 forbids`},
+		{". instance of element(*, q:T)", "err:XPST0081", `no statically-known namespace binding for prefix "q", which err:XPST0081 forbids`},
+		// err:XPST0008 for a KindTest name outside the static context
+		// (xpath20.md §2.5.4.3–§2.5.4.6): a TypeName outside the in-scope
+		// schema types, a schema's own type included, every schema-element
+		// name, and a schema-attribute name no §3.2.7 declaration carries.
+		{". instance of element(*, xs:Missing)", "err:XPST0008", `the KindTest TypeName "{http://www.w3.org/2001/XMLSchema}Missing" is no type in the in-scope schema types, which err:XPST0008 forbids`},
+		{"@kind instance of attribute(*, xs:Missing)", "err:XPST0008", `the KindTest TypeName "{http://www.w3.org/2001/XMLSchema}Missing" is no type in the in-scope schema types, which err:XPST0008 forbids`},
+		{". instance of element(*, a:T)", "err:XPST0008", `the KindTest TypeName "{http://example.com/a}T" is no type in the in-scope schema types, which err:XPST0008 forbids`},
+		{". instance of schema-element(a:x)", "err:XPST0008", `the schema-element name "{http://example.com/a}x" is no in-scope element declaration, which err:XPST0008 forbids`},
+		{"@kind instance of schema-attribute(a:kind)", "err:XPST0008", `the schema-attribute name "{http://example.com/a}kind" is no in-scope attribute declaration, which err:XPST0008 forbids`},
+		{"@kind instance of schema-attribute(xs:type)", "err:XPST0008", `the schema-attribute name "{http://www.w3.org/2001/XMLSchema}type" is no in-scope attribute declaration, which err:XPST0008 forbids`},
+		{"self::q:* and $value", "err:XPST0081", `no statically-known namespace binding for prefix "q", which err:XPST0081 forbids`},
+		{".. and q:f(.)", "err:XPST0081", `no statically-known namespace binding for prefix "q", which err:XPST0081 forbids`},
+	} {
+		record := ctaExprRecord(tc.expr, "", "a", "http://example.com/a", "xs", xsd.XMLSchemaNS)
+		var verdict *xsderr.Error
+		if err := CTATestStaticError(record, seededTypes); !errors.As(err, &verdict) {
+			t.Errorf("CTATestStaticError(%q) = %v, want an *xsderr.Error carrying %s", tc.expr, err, tc.rule)
+			continue
+		}
+		if string(verdict.Rule) != tc.rule {
+			t.Errorf("CTATestStaticError(%q) reports rule %q, want %q", tc.expr, verdict.Rule, tc.rule)
+		}
+		if verdict.Msg != tc.msg {
+			t.Errorf("CTATestStaticError(%q).Msg = %q, want %q", tc.expr, verdict.Msg, tc.msg)
+		}
+		if _, ok := CompileCTATest(record, seededTypes); ok {
+			t.Errorf("CompileCTATest(%q) compiled, want declined", tc.expr)
+		}
+	}
+}
+
+// TestCTATestStaticErrorTypeNameTakesTheDefaultNamespace pins that the
+// full-grammar static pass resolves an unprefixed AtomicType or SingleType in
+// the {default namespace} (xpath-valid clause 2.2.3): `string` is xs:string
+// under an XSD default and err:XPST0051 under none.
+func TestCTATestStaticErrorTypeNameTakesTheDefaultNamespace(t *testing.T) {
+	for _, expr := range []string{
+		"@kind instance of string",
+		"@kind castable as string",
+		"count(//x) > 1 and @kind cast as string = 'x'",
+	} {
+		if err := CTATestStaticError(ctaExprRecord(expr, xsd.XMLSchemaNS), seededTypes); err != nil {
+			t.Errorf("CTATestStaticError(%q) under an XSD default namespace = %v, want nil", expr, err)
+		}
+		if rule, ok := xsderr.RuleOf(CTATestStaticError(ctaExprRecord(expr, ""), seededTypes)); !ok || rule != ruleXPST0051 {
+			t.Errorf("CTATestStaticError(%q) under no default namespace carries rule %q (found %t), want %s", expr, rule, ok, ruleXPST0051)
+		}
+	}
+}
+
+// TestCTATestStaticErrorKindTestNameTakesTheDefaultNamespace pins that the
+// full-grammar static pass resolves an unprefixed KindTest TypeName and an
+// unprefixed schema-element name in the {default namespace} (xpath-valid
+// clause 2.2.3; xpath20.md §2.5.4: QNames in a sequence type take the default
+// element/type namespace "where applicable"), and an unprefixed
+// schema-attribute name in no namespace ("An unprefixed attribute QName is in
+// no namespace"). The message names the resolved name, so the namespace is
+// observed, not inferred.
+func TestCTATestStaticErrorKindTestNameTakesTheDefaultNamespace(t *testing.T) {
+	const ns = "http://example.com/d"
+	for _, tc := range []struct{ expr, space, msg string }{
+		{". instance of element(*, string)", xsd.XMLSchemaNS, ""},
+		{". instance of element(*, string)", "", `the KindTest TypeName "string" is no type in the in-scope schema types, which err:XPST0008 forbids`},
+		{". instance of schema-element(x)", ns, `the schema-element name "{http://example.com/d}x" is no in-scope element declaration, which err:XPST0008 forbids`},
+		{"@type instance of schema-attribute(type)", ns, `the schema-attribute name "type" is no in-scope attribute declaration, which err:XPST0008 forbids`},
+	} {
+		err := CTATestStaticError(ctaExprRecord(tc.expr, tc.space), seededTypes)
+		if tc.msg == "" {
+			if err != nil {
+				t.Errorf("CTATestStaticError(%q) under default namespace %q = %v, want nil", tc.expr, tc.space, err)
+			}
+			continue
+		}
+		var verdict *xsderr.Error
+		if !errors.As(err, &verdict) || verdict.Rule != ruleXPST0008 || verdict.Msg != tc.msg {
+			t.Errorf("CTATestStaticError(%q) under default namespace %q = %v, want [%s] %s", tc.expr, tc.space, err, ruleXPST0008, tc.msg)
 		}
 	}
 }
@@ -391,8 +572,9 @@ func TestCTATestStaticErrorReportsCastTarget(t *testing.T) {
 // derivation of xpath20.md A.1's grammar covers is a static error, so
 // xpath-valid clause 2 fails and ta-props-correct clause 2 is charged over it.
 // The first six rows are the suite's s3_12si04, s3_12si05 and s3_12si06
-// expressions; the precedence row carries an unbound prefix the subset parse
-// records before it dies, and reports err:XPST0003 over it.
+// expressions; the precedence rows carry a static error the subset parse
+// records before it dies — an unbound prefix, and a cast target that is
+// err:XPST0051 — and report err:XPST0003 over it.
 //
 // The assertion and facet façades share the traversal and must still DECLINE
 // each one, never charge it: only CTATestStaticError asks the grammar.
@@ -407,6 +589,7 @@ func TestCTATestStaticErrorReportsSyntaxError(t *testing.T) {
 		{"(@type cast as xs1::double)='double'", `"(@type cast as xs1::double)='double'" is not an XPath 2.0 expression: the grammar takes nothing at byte offset 18, which err:XPST0003 forbids`},
 		{"@p:kind = 'x' extra", `"@p:kind = 'x' extra" is not an XPath 2.0 expression: the grammar takes nothing at byte offset 14, which err:XPST0003 forbids`},
 		{"@p:kind = ", `"@p:kind = " is not an XPath 2.0 expression: the grammar needs more than its end, which err:XPST0003 forbids`},
+		{"@kind cast as xs:Missing = 'x' and (", `"@kind cast as xs:Missing = 'x' and (" is not an XPath 2.0 expression: the grammar needs more than its end, which err:XPST0003 forbids`},
 		{"", `"" is not an XPath 2.0 expression: the grammar needs more than its end, which err:XPST0003 forbids`},
 	} {
 		record := ctaExprRecord(tc.expr, "", "a", "http://example.com/a", "xs", xsd.XMLSchemaNS)
@@ -527,6 +710,20 @@ func TestCompileClassifiesCastTargets(t *testing.T) {
 		}
 		if rule, ok := xsderr.RuleOf(err); !ok || string(rule) != tc.rule {
 			t.Errorf("CTATestStaticError(%q) = %v, want rule %s (%s)", tc.expr, err, tc.rule, tc.why)
+		}
+	}
+}
+
+// TestCTATestStaticErrorKindTestTypeNameIgnoresTheSchemasOwnTypes pins that a
+// KindTest TypeName naming a schema's own type is err:XPST0008 even where the
+// resolver holds it, as validate's does: xpath-valid clause 2.2.5 puts only the
+// built-ins in the in-scope schema types (ctaTypes.inScopeType).
+func TestCTATestStaticErrorKindTestTypeNameIgnoresTheSchemasOwnTypes(t *testing.T) {
+	types := ctaFixtureTypes(t)
+	for _, expr := range []string{". instance of element(*, a:Box)", "@k instance of attribute(*, a:Kind)"} {
+		err := CTATestStaticError(ctaExprRecord(expr, "", "a", ctaUserNS), types)
+		if rule, ok := xsderr.RuleOf(err); !ok || rule != ruleXPST0008 {
+			t.Errorf("CTATestStaticError(%q) = %v, want rule %s", expr, err, ruleXPST0008)
 		}
 	}
 }

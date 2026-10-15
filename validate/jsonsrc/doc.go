@@ -145,14 +145,26 @@
 //     cvc-attribute (clause 3 or 5) where it names no type, and cvc-elt clause
 //     4 where the type it names does not ·override· the one a ·governing
 //     element declaration· supplied. The members after it are classified under
-//     the type it names, wherever that resolves — whether or not it overrides
-//     — and under the declared type otherwise, and under an element with no
-//     declaration they decline as every member there does; it is resolved
-//     through the engine's own resolver (cvc-resolve-instance, §3.17.6.3), so
-//     the two agree on the type. A "$type" rides an object value only: a
-//     scalar or null element carries no xsi:type. It declines wherever the
-//     mapping cannot rule out that a ·locally declared type· governs the
-//     element instead, uncharged (Declines).
+//     the type that governs the element wherever its verdict stands
+//     uncharged: where the type it names resolves, that type where it
+//     ·overrides· the element's ·locally declared type· ·without limitation·,
+//     or where the element has none, and the ·locally declared type· where it
+//     does not and an {open content} may take the element, which leaves it no
+//     ·governing element declaration· to charge cvc-elt clause 4 against
+//     (key-governing-type-elem clauses 6 to 8), and the type it names again
+//     where every reading charges the element; and the declared type where it
+//     names none. That is read under the parent's ·governing type definition·,
+//     which the mapping determines as the engine does, from the type the
+//     parent's own ·attribution· gives it — its parent's content model run
+//     over the siblings before it ([xsd.Schema.ContentMatcher]) — and not
+//     from the declaration its members are classified under; the root takes
+//     the type it names, which ·overrides· its declaration's or is charged.
+//     Under an element with no declaration the members decline as every
+//     member there does. The type is resolved through the engine's own
+//     resolver (cvc-resolve-instance, §3.17.6.3), so the two agree on it. A
+//     "$type" rides an object value only: a scalar or null element carries no
+//     xsi:type. On an element with a declaration it declines where the
+//     mapping determines no type governing the parent (Declines).
 //   - No DTD-shaped declaration exists in JSON, so the adapter does not
 //     implement [validate.UnparsedEntities] and every ·ENTITY value· fails
 //     cvc-simple-type clause 3, as that interface's doc states.
@@ -181,15 +193,16 @@
 // namespace beside one of its local name in a namespace. The NILLED
 // ATTRIBUTES shape: a null carries no members, so no input spells a ·nilled·
 // element with other attributes, <e a="1" xsi:nil="true"/>; this is a limit of
-// the notation, not a decline. A member is classified under its matched
-// declaration's type, or the type its object's "$type" names, which need not
-// be the child's ·governing type definition·: where the engine attributes the
-// child to a wildcard instead, or the "$type" does not ·override·, that type
-// is the engine's to determine — through the top-level declaration the child's
-// name resolves to, for one, or, under an {open content}, the ·locally
-// declared type· a base's declaration of the name gives it — and it assesses
-// the infoset built under the type the mapping classified by, attributes
-// included.
+// the notation, not a decline. A member with no "$type" is classified under
+// its matched declaration's type, which need not be the child's ·governing
+// type definition·: where the engine attributes the child to a wildcard
+// instead, it is governed through the top-level declaration the child's name
+// resolves to, for one, or, under an {open content}, the ·locally declared
+// type· a base's declaration of the name gives it — the type a "$type" below
+// it is settled under — and the engine assesses the infoset built under the
+// type the mapping classified by, attributes included. One with a "$type" is
+// classified under the type that governs it wherever its verdict stands
+// uncharged, as "The mapping" says.
 //
 // # Declines
 //
@@ -198,15 +211,15 @@
 // Each entry below whose XML twin the engine assesses is tracked by a
 // GAP(jsonsrc) marker at the function that declines it — rootMember,
 // childNamed, useNamed, wildcardMember, classify, members.key, reserved,
-// typeTable, localType and classifyingType; one more at classify tracks the
-// mapping's own choice of a declaration or use over a wildcard, under "The
-// mapping". A repeated attribute member, an attribute member whose value is
-// null, an object or an array, an array item that is itself an array, a key
-// whose colon makes no QName, a prefix no "$xmlns" in scope binds, a repeated
-// "$xmlns" or "$type", a reserved member other than those two or at the top
-// level, the malformed "$xmlns" and "$type" values below, and the top-level
-// shapes and array root value that "The validation root" declines have no XML
-// twin, and no marker:
+// typeTable, instanceGoverned, resolvedType, declarationType and declaredType;
+// one more at classify tracks the mapping's own choice of a declaration or use
+// over a wildcard, under "The mapping". A repeated attribute member, an
+// attribute member whose value is null, an object or an array, an array item
+// that is itself an array, a key whose colon makes no QName, a prefix no
+// "$xmlns" in scope binds, a repeated "$xmlns" or "$type", a reserved member
+// other than those two or at the top level, the malformed "$xmlns" and "$type"
+// values below, and the top-level shapes and array root value that "The
+// validation root" declines have no XML twin, and no marker:
 //
 //   - an unprefixed key two expanded names carry: among the top-level
 //     declarations at the root, among the declarations a type contains, or
@@ -264,24 +277,14 @@
 //     object of strings, which binds a non-empty prefix that is no NCName (no
 //     xmlns:prefix attribute declares one), binds a prefix twice, binds "xml"
 //     or "xmlns", or binds a non-empty prefix to "";
-//   - a "$type" on an element whose parent's members are classified under a
-//     type P with an {open content} whose {wildcard} is not skip, where the
-//     element's expanded name has a ·locally declared type· L within P
-//     (key-ldt-elem: a declaration of that name a type on P's {base type
-//     definition} chain contains), whatever the "$type" names. That {open
-//     content} may take the element, which then has no ·governing element
-//     declaration·, and L governs it unless the "$type"'s type ·overrides· L
-//     (key-governing-type-elem clauses 6 and 7), uncharged; the members would
-//     be classified under the "$type"'s type, and [validate.SchemaView] cannot
-//     ask ·override·. So does a "$type" on an element whose parent's
-//     classifying type may not be the parent's ·governing type definition·,
-//     because the one that governs may have such an {open content}: a parent
-//     matched to a declaration its own parent's type contains, where that type
-//     has a non-skip element wildcard and a top-level declaration of the name
-//     exists (key-governing-ed clause 3); a parent a wildcard names whose name
-//     has a ·locally declared type· under a non-skip {open content}
-//     (key-governing-ed clause 4.3); and any element below such a parent.
-//     Lifting this is #2647's;
+//   - a "$type" naming a type, below the root, whose parent's ·governing type
+//     definition· the mapping does not determine: where the declaration an
+//     ·attribution· of the parent or of an ancestor gives carries a {type
+//     table}, the top-level one a wildcard or an {open content} resolves the
+//     name to (#2669) or an element particle's under a governing type other
+//     than the one the members are classified under (#2630), and where
+//     [xsd.Schema.ContentMatcher] declines the content model the parent is
+//     attributed by, whose engine twin is walked undecided;
 //   - any other "$"-prefixed reserved member, "$" being no XML NameStartChar;
 //   - an array item that is itself an array;
 //   - a matched declaration carrying a {type table}, the top-level one of a
