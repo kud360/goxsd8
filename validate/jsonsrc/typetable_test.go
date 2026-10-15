@@ -8,7 +8,8 @@ import (
 	"github.com/kud360/goxsd8/xsderr"
 )
 
-// typeTableSchema declares, in urn:c, the top-level m of xs:string; T, empty
+// typeTableSchema declares, in urn:c, the top-level m of xs:string and k of
+// an anonymous type with the attribute b; T, empty
 // content with the attribute a; S, which extends T with a required reference
 // to m; and U, which extends T with the attribute m. tt is of type T and
 // selects S where its a is "m", or where its xsi:type is spelled "p:T"; tu is
@@ -24,6 +25,7 @@ const typeTableSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     targetNamespace="urn:c" xmlns:c="urn:c" elementFormDefault="qualified">
   <xs:element name="m" type="xs:string"/>
+  <xs:element name="k"><xs:complexType><xs:attribute name="b"/></xs:complexType></xs:element>
   <xs:complexType name="T"><xs:attribute name="a" type="xs:string"/></xs:complexType>
   <xs:complexType name="S">
     <xs:complexContent><xs:extension base="c:T"><xs:sequence><xs:element ref="c:m"/></xs:sequence></xs:extension></xs:complexContent>
@@ -127,8 +129,10 @@ func TestTypeTable(t *testing.T) {
 
 // TestTypeTableDeclines pins the {type table} decline of a member the declared
 // type and a selectable type classify differently (walker.classify's
-// GAP(jsonsrc) marker, #2696): m is the child m under T and the attribute m
-// under U, though the engine assesses the XML twin.
+// GAP(jsonsrc) marker, #2696), though the engine assesses each XML twin: m is
+// the child m under T and the attribute m under U; and k, an object, is under
+// V's local declaration of one anonymous type and, W containing no k, under
+// the top-level k of another, whose {context}s differ (oneType).
 func TestTypeTableDeclines(t *testing.T) {
 	v := validatorOver(t, typeTableSchema)
 	for _, tc := range []struct {
@@ -138,6 +142,9 @@ func TestTypeTableDeclines(t *testing.T) {
 		{"a key classified as a child under one type and an attribute under another", `{"tu":{"a":"u","m":"x"}}`,
 			`<tu xmlns="urn:c" a="u" m="x"/>`,
 			`jsonsrc: instance.json:1:16: member "m" of {urn:c}tu is not classified alike under its declaration's {type definition} and every type its {type table} can select`},
+		{"a child under declarations of two anonymous types", `{"tv":{"k":{}}}`,
+			`<tv xmlns="urn:c"><k/></tv>`,
+			`jsonsrc: instance.json:1:8: member "k" of {urn:c}tv is not classified alike`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			xres, err := xmlsrc.Validate(v, strings.NewReader(tc.xml), xmlsrc.WithURI("instance.xml"))
