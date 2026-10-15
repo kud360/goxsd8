@@ -62,8 +62,8 @@ func WithURI(uri string) Option {
 // attribute use carry, an attribute member after a child member or repeated,
 // an attribute member whose value is null, an object or an array, a "$type"
 // or "$xmlns" member out of its leading place or of the wrong shape, a
-// "$type" on an element an {open content} may take where its name has a
-// ·locally declared type·, any other "$"-prefixed reserved member, a nested
+// "$type" whose element's ·governing type definition· the types that may
+// govern its parent do not settle, any other "$"-prefixed reserved member, a nested
 // array, a declaration with a {type table}; the package doc lists them all).
 // A decline names the arm it is not, and is never a silent drop or a guessed
 // mapping: a member the mapping cannot name is not part of the document the
@@ -402,7 +402,9 @@ func (d declaredElement) object(w *walker, e *element, typ *attribute, parent *o
 // object is the empty object a bareElement's value classifies against: {}
 // maps, and every member declines (walker.wildcardMember), those after a
 // "$type" included — whatever type it names, the element has no declaration
-// for it to stand beside.
+// for it to stand beside. No member being classified under any type, its
+// "$type" is settled against none (walker.instanceGoverned), and no type is
+// bounded for it to govern (object.governing).
 func (b bareElement) object(*walker, *element, *attribute, *object, xsderr.Loc) (*object, error) {
 	return &object{owner: b.name, undeclared: true}, nil
 }
@@ -772,7 +774,7 @@ func isReserved(key string) bool { return len(key) > 0 && key[0] == '$' }
 // namespace declarations or the xsi:type. RULED permanent by #2615: no spec
 // text orders an element's attributes, so the decline is never a charge, and
 // reading the two first is what lets the members after them be classified
-// under the type "$type" names, resolved through the bindings "$xmlns" makes,
+// under the type the "$type" decides, resolved through the bindings "$xmlns" makes,
 // without holding the object (STYLE P4), as members.key's marker says of an
 // attribute member after a child.
 func (w *walker) reserved(key string, loc xsderr.Loc) error {
@@ -919,7 +921,7 @@ func (w *walker) objectElement(m elementMember, loc xsderr.Loc, v value, in *mem
 // the token after it, a key or the object's close, and its location.
 //
 // Reading the two first is what lets the members after them be classified
-// under the type "$type" names, and "$type" resolve against the bindings
+// under the type the "$type" decides, and "$type" resolve against the bindings
 // "$xmlns" makes, without holding any of the document (STYLE P4). A "$type"
 // before a "$xmlns", a repeat of either, and either after another member are
 // left to walker.entry, which declines them (walker.reserved): no spec text
@@ -1205,8 +1207,8 @@ func sameType(a, b xsd.TypeDefinition) bool {
 // — settle on two ·governing type definitions· for it, and where the mapping
 // bounds no such type, an ancestor a wildcard may ·attribute· to a top-level
 // declaration carrying a {type table}; the engine assesses the XML twin under
-// the type the actual ·attribution· gives. Its owner is the issue filed for
-// this remainder.
+// the type the actual ·attribution· gives. Owned by <NEW-ISSUE>, the issue
+// filed for this remainder.
 func (w *walker) instanceGoverned(e *element, typ *attribute, instance xsd.TypeDefinition, parent *object) (xsd.TypeDefinition, error) {
 	if parent == nil {
 		return instance, nil
