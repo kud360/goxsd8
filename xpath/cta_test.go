@@ -332,7 +332,7 @@ func TestCTATestStaticErrorIsSilentForUnsupported(t *testing.T) {
 		// GAP(xpath): a KindTest TypeName no in-scope schema type holds, and a
 		// schema-element name no in-scope declaration holds, are err:XPST0008
 		// (xpath20.md §2.5.4.3–§2.5.4.6), withheld: ctaFullStaticError's
-		// GAP(xpath) states the direction.
+		// GAP(xpath) states the direction (#2681).
 		{"@kind instance of attribute(*, xs:Missing)", "err:XPST0008 for an undefined KindTest TypeName, withheld"},
 		{". instance of schema-element(a:x)", "err:XPST0008 for an undeclared schema-element name, withheld"},
 		// The constructor spelling names a FUNCTION: err:XPST0051 and

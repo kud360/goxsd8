@@ -326,7 +326,7 @@ type syntaxStatic struct {
 // there, are err:XPST0008 (xpath20.md §2.5.4.3, §2.5.4.4, §2.5.4.5, §2.5.4.6)
 // and are not charged: XPath's predefined xs:untyped and xs:untypedAtomic are
 // not in clause 2.2.5's list, so the TypeName check as written would charge
-// the suite's `element(*, xs:untyped)`. The direction is the withhold:
+// the suite's `element(*, xs:untyped)` (#2681). The direction is the withhold:
 // [CTATestStaticError] answers nil for a text carrying nothing else. An
 // unknown function name, err:XPST0017, is withheld on the #894 ruling.
 func ctaFullStaticError(expr xsd.XPathExpression, types xsd.TypeResolver) *xsderr.Error {
