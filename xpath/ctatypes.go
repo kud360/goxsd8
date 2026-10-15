@@ -989,7 +989,7 @@ func (t ctaTypes) comparison(op ctaComparator, l, r ctaValue) (*xsd.SimpleType, 
 //
 // Only the two façades whose ctaFacade.comparesValues is true reach here, the
 // assertion façade (ctaAssertionFacade) and the facet façade (ctaFacetFacade).
-// The untyped operands they build are an attribute whose type is ·special·
+// The untyped operands they build are an attribute annotated ·special·
 // (ctaAssertionFacade.attribute), `$value` over a ·special· type
 // (ctaUntypedValue), a child of mixed content (ctaUntypedChild), `.`
 // (ctaContextAtom), and three that raise before they are compared: the rooted

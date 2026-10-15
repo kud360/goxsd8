@@ -105,7 +105,7 @@ import (
 // not resolve — and [CompileAssertionTest] declines a {test} naming it.
 //
 // The answer for the empty path is per E: it depends on the [validity] of the
-// attribute E carries, which is why the compile is per E. It does not depend on
+// attribute E carries, so its caller compiles per E. It does not depend on
 // whether E carries the attribute, or a ·defaulted attribute· (key-dflt-att)
 // stands in for it, both of which [TypedAttributes] yields. The answer for a
 // non-empty path is STATIC in the sense the compile needs: it does not depend

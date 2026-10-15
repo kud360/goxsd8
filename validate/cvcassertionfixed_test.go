@@ -234,8 +234,10 @@ func fxA(line int, lexical string) Child {
 // xs:anySimpleType, which that tree cannot read, so every assertion of <root>
 // is DECLINED, beside the cvc-attribute clause 4 charge, rather than read p as
 // an xs:decimal; a p of 5 is read and the assertion holds. With
-// walk.attributesRead's verdict check removed, both mismatch rows are
-// evaluated and satisfied, and fail.
+// walk.attributesRead's verdict check removed, both mismatch rows fail and
+// neither match row; with walk.tallyAttributes handed no verdicts, the sum
+// mismatch row alone fails; and with walk.childAttributes handed none, the
+// `$v/@p` mismatch row alone fails.
 func TestAssertionBelowAFixedValueInvalidAttributeDeclines(t *testing.T) {
 	const why = "cvc-attribute charged or declined its fixed-value agreement, so it is not known ·valid·"
 	for _, test := range []string{
