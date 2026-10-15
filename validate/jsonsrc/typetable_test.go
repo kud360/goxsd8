@@ -102,6 +102,8 @@ func TestTypeTable(t *testing.T) {
 			`<tx ` + c + `a="x"><n>y</n></tx>`, none},
 		{"a scalar child under declarations of two types", `{"tv":{"n":"x"}}`,
 			`<tv ` + c + `><n>x</n></tv>`, none},
+		{"a scalar array item under declarations of two types", `{"tv":{"n":["x"]}}`,
+			`<tv ` + c + `><n>x</n></tv>`, none},
 		{"selected: a null child under a declaration the selected type's is not nillable as", `{"tv":{"a":"w","n":null}}`,
 			`<tv ` + c + xsiDecl + ` a="w"><n xsi:nil="true"/></tv>`, []xsderr.Rule{"cvc-elt"}},
 		{"a null child under the declared type's nillable declaration", `{"tv":{"n":null}}`,
