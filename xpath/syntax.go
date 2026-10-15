@@ -78,9 +78,9 @@ const (
 // syntaxToken is one terminal: its kind, its source spelling for a name and for
 // an `NCName ':' '*'` wildcard — the one wildcard spelling whose prefix the
 // static pass resolves — and the byte offset it starts at, which is what a
-// failure reports. A name is
-// prefixed exactly when its text holds a ':', so no keyword list below — none
-// of whose words holds one — ever matches a prefixed name.
+// failure reports. A name is prefixed exactly when its text holds a ':', so no
+// keyword list below — none of whose words holds one — ever matches a prefixed
+// name.
 type syntaxToken struct {
 	kind syntaxKind
 	text string
