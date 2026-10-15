@@ -1261,8 +1261,7 @@ func openContent(t xsd.ComplexType) bool {
 // permanent there), so the parent's ·attribution· is not computed; validate
 // walks the parent undecided (its GAP(validate) marker in walk.child), so the
 // engine assigns the twin's subtree no ·governing type definition· either.
-// UNTRACKED: no issue owns this decline yet; the landing that added it asks
-// for one to be filed and cited here.
+// Owned by #2670, which retires with #1601's ruling.
 func (w *walker) instanceGoverned(e *element, typ *attribute, instance xsd.TypeDefinition, parent *object) (xsd.TypeDefinition, error) {
 	if parent == nil {
 		return instance, nil
