@@ -41,10 +41,11 @@ const typeTableSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
 // TestTypeTable pins an element whose declaration carries a {type table}: its
 // members are classified under its declared {type definition}, and alike
 // under every type the table can select (walker.classify), and the engine
-// assesses it under the type the table selects. Each row says what it pins:
-// the rows marked "selected" discriminate the selection, reading otherwise
-// under the schema with tt's {type table} removed; every row declined before
-// the {type table} decline was lifted.
+// assesses it under the type the table selects. The rows marked "selected"
+// discriminate the selection: under typeTableSchema with its <xs:alternative>s
+// removed, the first and the particle's first charge cvc-complex-type, and the
+// other three charge nothing. The rest pin behaviour that schema shares. Every
+// row declined before walker.typeTable's decline was lifted.
 func TestTypeTable(t *testing.T) {
 	v := validatorOver(t, typeTableSchema)
 	const c = `xmlns="urn:c" `
@@ -64,9 +65,9 @@ func TestTypeTable(t *testing.T) {
 			`<tt ` + c + `xmlns:p="urn:c" ` + xsiDecl + ` xsi:type="p:T"/>`, []xsderr.Rule{"cvc-elt", "cvc-complex-content"}},
 		{"a scalar value", `{"tt":"1"}`,
 			`<tt ` + c + `>1</tt>`, complexType},
-		{"an element particle's declaration", `{"r":{"tt":{"a":"m","m":"x"}}}`,
+		{"selected: an element particle's declaration", `{"r":{"tt":{"a":"m","m":"x"}}}`,
 			`<r ` + c + `><tt a="m"><m>x</m></tt></r>`, none},
-		{"an element particle's declaration, selecting a type that rejects", `{"r":{"tt":{"a":"m"}}}`,
+		{"selected: an element particle's declaration, selecting a type that rejects", `{"r":{"tt":{"a":"m"}}}`,
 			`<r ` + c + `><tt a="m"/></r>`, content},
 		{"a key every selectable type classifies alike", `{"tu":{"a":"u"}}`,
 			`<tu ` + c + `a="u"/>`, none},
