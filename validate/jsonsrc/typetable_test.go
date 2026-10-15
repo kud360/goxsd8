@@ -14,7 +14,11 @@ import (
 // selects S where its a is "m", or where its xsi:type is spelled "p:T"; tu is
 // of type T and selects U where its a is "u"; r holds an optional reference to
 // tt. Under T a key "m" is the child m (no wildcard: walker.namedChild), as it
-// is under S (a contained reference), and the attribute m under U.
+// is under S (a contained reference), and the attribute m under U. V holds an
+// optional n of xs:string and an optional k of an anonymous type; W restricts
+// V, its n of xs:token and no k; X extends V, adding nothing, so it contains
+// V's own n and k. tv is of type V and selects W where its a is "w"; tx is of
+// type V and selects X where its a is "x".
 const typeTableSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     targetNamespace="urn:c" xmlns:c="urn:c" elementFormDefault="qualified">
@@ -35,6 +39,25 @@ const typeTableSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
   </xs:element>
   <xs:element name="r">
     <xs:complexType><xs:sequence><xs:element ref="c:tt" minOccurs="0"/></xs:sequence></xs:complexType>
+  </xs:element>
+  <xs:complexType name="V">
+    <xs:sequence>
+      <xs:element name="n" type="xs:string" minOccurs="0"/>
+      <xs:element name="k" minOccurs="0"><xs:complexType><xs:attribute name="b"/></xs:complexType></xs:element>
+    </xs:sequence>
+    <xs:attribute name="a" type="xs:string"/>
+  </xs:complexType>
+  <xs:complexType name="W">
+    <xs:complexContent>
+      <xs:restriction base="c:V"><xs:sequence><xs:element name="n" type="xs:token" minOccurs="0"/></xs:sequence></xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="X"><xs:complexContent><xs:extension base="c:V"/></xs:complexContent></xs:complexType>
+  <xs:element name="tv" type="c:V">
+    <xs:alternative test="@a = 'w'" type="c:W"/>
+  </xs:element>
+  <xs:element name="tx" type="c:V">
+    <xs:alternative test="@a = 'x'" type="c:X"/>
   </xs:element>
 </xs:schema>`
 
@@ -71,6 +94,8 @@ func TestTypeTable(t *testing.T) {
 			`<r ` + c + `><tt a="m"/></r>`, content},
 		{"a key every selectable type classifies alike", `{"tu":{"a":"u"}}`,
 			`<tu ` + c + `a="u"/>`, none},
+		{"a child whose declaration every selectable type shares, of a named type", `{"tx":{"a":"x","n":"y"}}`,
+			`<tx ` + c + `a="x"><n>y</n></tx>`, none},
 	} {
 		t.Run(tc.name, func(t *testing.T) { twin(t, v, tc.json, tc.xml, tc.want) })
 	}
@@ -79,9 +104,12 @@ func TestTypeTable(t *testing.T) {
 // TestTypeTableDeclines pins the {type table} declines: a member the declared
 // type and a selectable type classify differently (walker.classify's
 // GAP(jsonsrc) marker, #2693) — m is the child m under T and the attribute m
-// under U — and a "$type" on a child of a tabled element, whose ·governing
-// type definition· the mapping does not determine (walker.declarationType's
-// GAP(jsonsrc) marker, #2693), though the engine assesses each XML twin.
+// under U; n is under V's declaration of xs:string and W's of xs:token; and k
+// is under V's one declaration in V and X both, which alike reads no identity
+// of, its type being anonymous — and a "$type" on a child of a tabled
+// element, whose ·governing type definition· the mapping does not determine
+// (walker.declarationType's GAP(jsonsrc) marker, #2693), though the engine
+// assesses each XML twin.
 func TestTypeTableDeclines(t *testing.T) {
 	v := validatorOver(t, typeTableSchema)
 	for _, tc := range []struct {
@@ -91,6 +119,12 @@ func TestTypeTableDeclines(t *testing.T) {
 		{"a key classified as a child under one type and an attribute under another", `{"tu":{"a":"u","m":"x"}}`,
 			`<tu xmlns="urn:c" a="u" m="x"/>`,
 			`jsonsrc: instance.json:1:16: member "m" of {urn:c}tu is not classified alike under its declaration's {type definition} and every type its {type table} can select`},
+		{"a child under declarations of two types", `{"tv":{"n":"x"}}`,
+			`<tv xmlns="urn:c"><n>x</n></tv>`,
+			`jsonsrc: instance.json:1:8: member "n" of {urn:c}tv is not classified alike`},
+		{"a child under one declaration of an anonymous type", `{"tx":{"k":{}}}`,
+			`<tx xmlns="urn:c"><k/></tx>`,
+			`jsonsrc: instance.json:1:8: member "k" of {urn:c}tx is not classified alike`},
 		{"a \"$type\" on a child of the root", `{"tt":{"a":"m","m":{"$xmlns":{"xs":"http://www.w3.org/2001/XMLSchema"},"$type":"xs:string"}}}`,
 			`<tt xmlns="urn:c" a="m" ` + xsiDecl + ` xmlns:xs="http://www.w3.org/2001/XMLSchema"><m xsi:type="xs:string"/></tt>`,
 			`jsonsrc: instance.json:1:72: the "$type" member of {urn:c}m: the mapping determines no type that governs {urn:c}tt`},
