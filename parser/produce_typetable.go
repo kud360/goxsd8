@@ -120,9 +120,8 @@ func (t ctaStaticTypes) Type(name xsd.QName) (xsd.TypeDefinition, bool) {
 // xsderr.RuleOf — the engine mints XPath's code, never this schema rule. An
 // {expression} that engine merely cannot EVALUATE, and in which it proves no
 // static error, is charged nothing and passes straight through, on the terms
-// xpath/cta.go argues (PRINCIPLES 20). The type
-// knowledge it is asked against is ctaStaticTypes, clause 2.2.5's set and not
-// this schema's.
+// xpath/cta.go argues (PRINCIPLES 20). The type knowledge it is asked against
+// is ctaStaticTypes, clause 2.2.5's set and not this schema's.
 func (p *producer) typeTableOf(el *Element, edID xsd.ComponentID, declaredType xsd.TypeDefinitionOrRef) (*xsd.TypeTable, error) {
 	alternatives := childElements(el, xsd.XMLSchemaNS, "alternative")
 	if len(alternatives) == 0 {

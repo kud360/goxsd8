@@ -316,7 +316,7 @@ func TestCTATestStaticErrorIsSilentForUnsupported(t *testing.T) {
 		// §3.12.6 clause 2's Note licenses declining only an expression
 		// "containing no static errors", and the parse stops at count(//a:x)
 		// before it reads the cast target. The direction is the withhold.
-		// (#TRACKER)
+		// (#2673)
 		{"count(//a:x) > 1 and @kind cast as xs:Missing = 'x'", "err:XPST0051 past the construct the parse declines at"},
 		// The constructor spelling names a FUNCTION: err:XPST0051 and
 		// err:XPST0080 are cast-target errors, and a name with no constructor
