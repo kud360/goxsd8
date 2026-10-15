@@ -82,10 +82,10 @@ type Backend interface {
 	// "Current coverage" section names, so it answers false for xs:integer. The
 	// zero Mapping returned beside ok == false has a nil Parse.
 	//
-	// [ValidateLexical] reaches the value of such a type: an atomic type's
-	// through the governing mapping the [Backend] doc names, a list's through
-	// its {item type definition}, and a union's through its {member type
-	// definitions}.
+	// [ValidateLexical] reaches the value of such a type that is not ·special·
+	// (§4.1): an atomic type's through the governing mapping the [Backend] doc
+	// names, a list's through its {item type definition}, and a union's through
+	// its {member type definitions}.
 	Mapping(typ xsd.QName) (Mapping, bool)
 }
 
