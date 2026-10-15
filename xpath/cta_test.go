@@ -449,6 +449,25 @@ func TestCTATestStaticErrorTheSubsetNeverReachesIsCharged(t *testing.T) {
 	}
 }
 
+// TestCTATestStaticErrorTypeNameTakesTheDefaultNamespace pins that the
+// full-grammar static pass resolves an unprefixed AtomicType or SingleType in
+// the {default namespace} (xpath-valid clause 2.2.3): `string` is xs:string
+// under an XSD default and err:XPST0051 under none.
+func TestCTATestStaticErrorTypeNameTakesTheDefaultNamespace(t *testing.T) {
+	for _, expr := range []string{
+		"@kind instance of string",
+		"@kind castable as string",
+		"count(//x) > 1 and @kind cast as string = 'x'",
+	} {
+		if err := CTATestStaticError(ctaExprRecord(expr, xsd.XMLSchemaNS), seededTypes); err != nil {
+			t.Errorf("CTATestStaticError(%q) under an XSD default namespace = %v, want nil", expr, err)
+		}
+		if rule, ok := xsderr.RuleOf(CTATestStaticError(ctaExprRecord(expr, ""), seededTypes)); !ok || rule != ruleXPST0051 {
+			t.Errorf("CTATestStaticError(%q) under no default namespace carries rule %q (found %t), want %s", expr, rule, ok, ruleXPST0051)
+		}
+	}
+}
+
 // TestCTATestStaticErrorReportsCastTarget pins the cast-target static errors
 // of xpath20.md §3.10.2 in a complete ta-Test, over the oracle's #894 classes:
 // err:XPST0051 for a target that is no atomic type in the in-scope schema
