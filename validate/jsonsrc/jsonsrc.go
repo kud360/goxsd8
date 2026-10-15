@@ -1163,6 +1163,13 @@ func withType(types []xsd.TypeDefinition, t xsd.TypeDefinition) []xsd.TypeDefini
 // identity an anonymous complex type has — validate's sameType reading. Two
 // anonymous simple types are never reported the same, which only adds
 // declines (walker.instanceGoverned).
+//
+// It is the third copy of one identity predicate, with validate's sameType and
+// xsd's sameDeclaredType: check the other two when editing any one. Its
+// operands are a declaration's {type definition} or a named instance type —
+// {type table}s decline — so it carries sameDeclaredType's precondition, not
+// validate's weaker one. It is not unified, because an export would have this
+// package as its only consumer.
 func sameType(a, b xsd.TypeDefinition) bool {
 	if a.Name() != (xsd.QName{}) || b.Name() != (xsd.QName{}) {
 		return a.Name() == b.Name()
