@@ -1402,13 +1402,16 @@ func (w *walker) instanceGoverned(e *element, typ *attribute, instance xsd.TypeD
 //     content}'s child (walk.localGovernance). An element particle's
 //     declaration has L's type, and instance ·overrides· it under the
 //     declaration's {disallowed substitutions} too or cvc-elt clause 4 is
-//     charged; a ·wildcard particle·'s top-level declaration is ·overridden·
-//     by instance or clause 4 is charged. Where instance does not ·override·
-//     L: L under a non-skip {open content} (key-governing-ed clause 4.3 leaves
-//     no declaration to charge clause 4 against, key-governing-type-elem
-//     clause 7), and false otherwise — an element particle charges cvc-elt
-//     clause 4, and a ·wildcard particle· clause 4 or, where instance governs,
-//     cvc-complex-type clause 5;
+//     charged; where that declaration carries a {type table}, instance
+//     ·overrides· the type it selects or clause 4 is charged, and governs
+//     where it does. A ·wildcard particle·'s top-level declaration is
+//     ·overridden· by instance or clause 4 is charged. Where instance does not
+//     ·override· L: L under a non-skip {open content} (key-governing-ed clause
+//     4.3 leaves no declaration to charge clause 4 against,
+//     key-governing-type-elem clause 7), and false otherwise — an element
+//     particle charges cvc-elt clause 4, and a ·wildcard particle· clause 4,
+//     or, wherever instance governs, a tabled element particle's included,
+//     cvc-complex-type clause 5 is charged against L;
 //   - with L ·absent·: false where the name ·resolves· to a top-level
 //     declaration with no {type table}, whose {type definition} instance does
 //     not ·override· under its {disallowed substitutions} — a wildcard's

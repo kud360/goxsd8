@@ -448,11 +448,18 @@ func ownedComplexType(ref xsd.TypeDefinitionOrRef) (xsd.ComplexType, bool) {
 //     where that is non-·absent·: that declaration is visited here too, and
 //     the child carries attributes presented under the top-level D its name
 //     resolves to, or none. Where D carries a {type table}, the type it
-//     selects, visited here, governs instead, and a child jsonsrc matched to
-//     a declaration D's type contains is governed, under an element particle,
+//     selects, visited here, governs in place of D's type wherever D is the
+//     ·governing element declaration·, and a child jsonsrc matched to a
+//     declaration D's type contains is governed, under an element particle,
 //     by the declaration of its name the selected type contains, visited here
 //     (anyDeclaration), whose {type definition} is the named type D's own
-//     declaration of it refers to (jsonsrc's alike);
+//     declaration of it refers to (jsonsrc's alike); the ·locally declared
+//     type· an {open content} gives is D's {type definition} still;
+//   - which leaves a child with no "$type" that jsonsrc matched to a
+//     contained D carrying a {type table} but ·attributed to· a strict or lax
+//     Wildcard, governed by the top-level G its name ·resolves· to:
+//     cos-element-consistent gives G a {type table} ·equivalent· to D's,
+//     which selects the type D's would, one visited here;
 //   - which leaves a child with no "$type" that jsonsrc matched to a
 //     contained D but ·attributed to· a strict or lax Wildcard, governed by
 //     the top-level G its name ·resolves· to. The walk charges
