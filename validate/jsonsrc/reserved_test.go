@@ -553,24 +553,23 @@ const governanceSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
 </xs:schema>`
 
 // TestUngovernedParentType pins walker.governing and walker.instanceGoverned
-// under a parent whose classifying type may not govern it: the "$type" on x
-// is settled under every type that may govern the parent, and each row's
-// types settle on dt, which governs the second x where other does not
-// ·override· it. The first row is #2615's round-3 reproduction: the second y
-// is matched to w's declaration of type Td but may be governed by the
-// top-level y's Tg, whose lax {open content} leaves the second x to dt,
-// uncharged; under Td, with no {open content}, other is charged. The third
-// carries the doubt one level down, to v, where Tg2's vr declares x and Td2's
-// vt does not: under vt the name ·resolves· to the top-level x of type dt,
-// which other does not ·override·, so cvc-elt clause 4 is charged there. The
-// fourth row's u is named by r's {open content} and governed by its ·locally
-// declared type· ub, not by the top-level u's ug. The fifth reaches mt
-// through the substitution group of h. Each row agrees with its XML twin.
+// under a parent whose classifying type is not the one that governs it: the
+// "$type" on x is settled under the type the parent's ·attribution· gives it,
+// on which dt governs the second x, other not ·overriding· it. The first row
+// is #2615's round-3 reproduction: the second y is matched to w's declaration
+// of type Td but ·attributed to· the lax wildcard and governed by the
+// top-level y's Tg (key-governing-ed clause 3), whose lax {open content}
+// leaves the second x to dt, uncharged. The third carries it one level down:
+// under Tg2, v is governed by vr, which declares x, where Td2's vt does not.
+// The fourth row's u is taken by r's {open content} and governed by its
+// ·locally declared type· ub, not by the top-level u's ug. The fifth reaches
+// mt through the substitution group of h (cvc-accept clause 2.3.2). Each row
+// agrees with its XML twin.
 func TestUngovernedParentType(t *testing.T) {
 	v := validatorOver(t, governanceSchema)
 	const x = `xmlns="urn:t" xmlns:t="urn:t" ` + xsiDecl
 	for _, tc := range []struct{ name, json, xml string }{
-		{"a wildcard's top-level declaration may govern the parent", `{"w":{"y":[{},{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:other","k":"zz"}]}]}}`,
+		{"a wildcard's top-level declaration governs the parent", `{"w":{"y":[{},{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:other","k":"zz"}]}]}}`,
 			`<w ` + x + `><y/><y><x/><x xsi:type="t:other"><k>zz</k></x></y></w>`},
 		{"prefixed keys", `{"t:w":{"$xmlns":{"t":"urn:t"},"t:y":[{},{"t:x":[{},{"$type":"t:other","t:k":"zz"}]}]}}`,
 			`<t:w xmlns:t="urn:t" ` + xsiDecl + `><t:y/><t:y><t:x/><t:x xsi:type="t:other"><t:k>zz</t:k></t:x></t:y></t:w>`},
@@ -823,13 +822,12 @@ func TestAncestryTypeMaps(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) { twin(t, v, tc.json, tc.xml, tc.want) })
 	}
 }
-// TestGovernedParentTypeMaps pins walker.instanceGoverned where every type
-// that may govern the parent charges the child: z may be governed by zt or,
-// ·attributed to· the lax wildcard with no top-level z, ·laxly assessed·
-// against xs:anyType (walker.resolvedType). other does not ·override· x's dt
-// under zt, which has no {open content}, nor the top-level x's dt under
-// xs:anyType, so the members are classified under other, and the engine
-// charges cvc-elt clause 4 as for the XML twin.
+
+// TestGovernedParentTypeMaps pins walker.instanceGoverned where the type that
+// governs the parent charges the child: the one z is ·attributed to· zw's
+// element particle and governed by zt, which has no {open content}, and other
+// does not ·override· x's dt there, so the members are classified under other,
+// and the engine charges cvc-elt clause 4 as for the XML twin.
 func TestGovernedParentTypeMaps(t *testing.T) {
 	v := validatorOver(t, governanceSchema)
 	twin(t, v, `{"zw":{"z":{"x":{"$xmlns":{"t":"urn:t"},"$type":"t:other","k":"zz"}}}}`,

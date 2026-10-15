@@ -62,8 +62,8 @@ func WithURI(uri string) Option {
 // attribute use carry, an attribute member after a child member or repeated,
 // an attribute member whose value is null, an object or an array, a "$type"
 // or "$xmlns" member out of its leading place or of the wrong shape, a
-// "$type" whose element's ·governing type definition· the types that may
-// govern its parent do not settle, any other "$"-prefixed reserved member, a nested
+// "$type" whose parent's ·governing type definition· the mapping does not
+// determine, any other "$"-prefixed reserved member, a nested
 // array, a declaration with a {type table}; the package doc lists them all).
 // A decline names the arm it is not, and is never a silent drop or a guessed
 // mapping: a member the mapping cannot name is not part of the document the
@@ -299,8 +299,8 @@ func (w *walker) keyName(key string, sc *scope, loc xsderr.Loc) (keyName, error)
 // walker.instanceGoverned settles: the owner's expanded name, the child
 // element declarations the type contains, the type's {attribute uses}, its
 // element wildcards and {attribute wildcard}, whether its {content type} is
-// simple, and the types that may govern the owner. A simple type contains
-// none and has none.
+// simple, and the type that governs the owner, with the matcher its children
+// are ·attributed· by. A simple type contains none and has none.
 type object struct {
 	owner     xsd.QName
 	contained []xsd.ElementDeclaration
@@ -1260,9 +1260,9 @@ func openContent(t xsd.ComplexType) bool {
 // declines (its GAP(xsd) marker, the maxPartitionStates ceiling RULED
 // permanent there), so the parent's ·attribution· is not computed; validate
 // walks the parent undecided (its GAP(validate) marker in walk.child), so the
-// engine assigns the twin's subtree no ·governing type definition· either. No
-// tracker owns this decline yet: the #2666 implementation account asks for
-// one.
+// engine assigns the twin's subtree no ·governing type definition· either.
+// UNTRACKED: no issue owns this decline yet; the landing that added it asks
+// for one to be filed and cited here.
 func (w *walker) instanceGoverned(e *element, typ *attribute, instance xsd.TypeDefinition, parent *object) (xsd.TypeDefinition, error) {
 	if parent == nil {
 		return instance, nil
