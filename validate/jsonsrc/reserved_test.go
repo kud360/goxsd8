@@ -605,7 +605,11 @@ func TestUngovernedParentType(t *testing.T) {
 // no {open content}, and the top-level gd is of type Ta and selects Tn where
 // it has an attribute a. Le extends L with the attribute a; ht holds an
 // optional x of type L that selects Lr where its a is present, and the
-// top-level hr is of type L and selects Lr likewise.
+// top-level hr is of type L and selects Lr likewise. Gw takes one optional q
+// of type L and then a lax wildcard, Gq restricts it to the q alone, and the
+// top-level gw is of type Gw and selects Gq where it has an attribute a; the
+// top-level q is of type Qo, which has a lax {open content} and declares k of
+// xs:string.
 const ancestrySchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
     targetNamespace="urn:t" xmlns:t="urn:t" elementFormDefault="qualified">
   <xs:complexType name="L"><xs:sequence><xs:element name="k" type="xs:string" minOccurs="0"/></xs:sequence></xs:complexType>
@@ -740,6 +744,25 @@ const ancestrySchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
   <xs:element name="hr" type="t:L">
     <xs:alternative test="@a" type="t:Lr"/>
   </xs:element>
+  <xs:complexType name="Qo">
+    <xs:openContent mode="interleave"><xs:any processContents="lax"/></xs:openContent>
+    <xs:sequence><xs:element name="k" type="xs:string" minOccurs="0"/></xs:sequence>
+  </xs:complexType>
+  <xs:element name="q" type="t:Qo"/>
+  <xs:complexType name="Gw">
+    <xs:sequence>
+      <xs:element name="q" type="t:L" minOccurs="0"/>
+      <xs:any processContents="lax" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="Gq">
+    <xs:complexContent>
+      <xs:restriction base="t:Gw"><xs:sequence><xs:element name="q" type="t:L" minOccurs="0"/></xs:sequence></xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="gw" type="t:Gw">
+    <xs:alternative test="@a" type="t:Gq"/>
+  </xs:element>
 </xs:schema>`
 
 // TestAncestryTypeDeclines pins the GAP(jsonsrc) {type table} remainder: a
@@ -750,7 +773,13 @@ const ancestrySchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
 // ·attributed to· the {open content}, and t:X not ·overriding· x's L there, L
 // governs it, of which k is a child; under Tn it is rejected, and t:X governs
 // it, of which k is an attribute. The engine selects Ta, gd having no a, and
-// assesses the twin with k a child of L; the mapping does not choose.
+// assesses the twin with k a child of L; the mapping does not choose. gw may
+// be governed by Gq, which rejects its second q, so that q's ·locally declared
+// type· L governs it, or by Gw, which ·attributes· it to the lax wildcard, so
+// that the top-level q's Qo does (walker.governing): t:X ·overrides· k's
+// xs:string under neither, so under L, with no {open content}, it is charged
+// and t:X classifies k's members, and under Qo, whose {open content} may take
+// k, xs:string does.
 func TestAncestryTypeDeclines(t *testing.T) {
 	v := validatorOver(t, ancestrySchema)
 	const x = `xmlns="urn:t" xmlns:t="urn:t" ` + xsiDecl
@@ -762,6 +791,9 @@ func TestAncestryTypeDeclines(t *testing.T) {
 		{"a type table's types settling a child's $type differently", `{"gd":{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:X","k":"zz"}]}}`,
 			`<gd ` + x + `><x/><x xsi:type="t:X"><k>zz</k></x></gd>`, none,
 			`jsonsrc: instance.json:1:40: the "$type" member of {urn:t}x: the types the {type table} of {urn:t}gd or of an ancestor can select settle the type governing {urn:t}x differently`},
+		{"a type table's types governing a child differently", `{"gw":{"q":[{},{"k":{"$xmlns":{"t":"urn:t"},"$type":"t:X"}}]}}`,
+			`<gw ` + x + `><q/><q><k xsi:type="t:X"/></q></gw>`, []xsderr.Rule{"cvc-complex-type", "cvc-elt"},
+			`jsonsrc: instance.json:1:45: the "$type" member of {urn:t}k: the types the {type table} of {urn:t}q or of an ancestor can select settle the type governing {urn:t}k differently`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			xres, err := xmlsrc.Validate(v, strings.NewReader(tc.xml), xmlsrc.WithURI("instance.xml"))

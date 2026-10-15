@@ -9,18 +9,18 @@ import (
 )
 
 // typeTableSchema declares, in urn:c, the top-level m of xs:string and k of
-// an anonymous type with the attribute b; T, empty
-// content with the attribute a; S, which extends T with a required reference
-// to m; and U, which extends T with the attribute m. tt is of type T and
-// selects S where its a is "m", or where its xsi:type is spelled "p:T"; tu is
-// of type T and selects U where its a is "u"; r holds an optional reference to
-// tt. Under T a key "m" is the child m (no wildcard: walker.namedChild), as it
-// is under S (a contained reference), and the attribute m under U. V holds an
-// optional, nillable n of xs:string, an optional k of an anonymous type and an
-// optional j of xs:string carrying a {type table}; W restricts V, its n of
-// xs:token and not nillable, and no k or j; X extends V, adding nothing, so it
-// contains V's own n, k and j. tv is of type V and selects W where its a is
-// "w"; tx is of type V and selects X where its a is "x".
+// an anonymous type with the attribute b; T, empty content with the attribute
+// a; S, which extends T with a required reference to m; and U, which extends T
+// with the attribute m. tt is of type T and selects S where its a is "m", or
+// where its xsi:type is spelled "p:T"; tu is of type T and selects U where its
+// a is "u"; r holds an optional reference to tt. Under T a key "m" is the
+// child m (no wildcard: walker.namedChild), as it is under S (a contained
+// reference), and the attribute m under U. V holds an optional, nillable n of
+// xs:string, an optional k of an anonymous type and an optional j of xs:string
+// carrying a {type table}; W restricts V, its n of xs:token and not nillable,
+// and no k or j; X extends V, adding nothing, so it contains V's own n, k and
+// j. tv is of type V and selects W where its a is "w"; tx is of type V and
+// selects X where its a is "x".
 const typeTableSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     targetNamespace="urn:c" xmlns:c="urn:c" elementFormDefault="qualified">
