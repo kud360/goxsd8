@@ -130,9 +130,10 @@ func fxRoot(lexical string) *testElement {
 // With walk.annotations answering the static closure whatever the verdict, the
 // rows reading a mismatched globalref and restriction @d fail and no other;
 // with fixedAgreement's charge reporting attributeValid, the same rows fail;
-// and with matchedAttribute returning the cvc-au call's outcome as the
-// verdict, the rows reading a mismatched localfixed and reffixedonuse @d fail
-// and no other.
+// with matchedAttribute returning the cvc-au call's outcome as the verdict, the
+// rows reading a mismatched localfixed and reffixedonuse @d fail and no other;
+// and with walk.annotations overriding every name but the invalid ones, every
+// row fails.
 func TestAssertionReadsAFixedValueInvalidAttributeAsAnySimpleType(t *testing.T) {
 	tests := []struct {
 		test     string
@@ -200,4 +201,63 @@ func TestAssertionOverAnUndecidedFixedValueIsDeclined(t *testing.T) {
 	wantDeclines(t, undecided,
 		Unevaluated{rule: ruleCvcAttribute, loc: loc(1, 10), msg: "cvc-attribute clause 4"},
 		Unevaluated{rule: ruleCvcAssertion, loc: loc(1, 1), msg: "the attribute n of the element root is not known to be ·valid· or invalid"})
+}
+
+// fxBelowSchemaText is <root>, of Root, over <a> children of A, which has
+// simple content over xs:integer and refs p, an xs:decimal whose DECLARATION
+// fixes it to 5, with TEST as Root's one assertion.
+const fxBelowSchemaText = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:attribute name="p" type="xs:decimal" fixed="5"/>
+  <xs:complexType name="A">
+    <xs:simpleContent>
+      <xs:extension base="xs:integer"><xs:attribute ref="p"/></xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:complexType name="Root">
+    <xs:sequence><xs:element name="a" type="A" maxOccurs="unbounded"/></xs:sequence>
+    <xs:assert test="TEST"/>
+  </xs:complexType>
+  <xs:element name="root" type="Root"/>
+</xs:schema>`
+
+// fxA is an <a> at line holding 1 and carrying p of lexical.
+func fxA(line int, lexical string) Child {
+	return ccNode(local("a"), line, []Attribute{ccAttr(local("p"), lexical, line)},
+		TextChild(&testText{data: "1", loc: loc(line, 9)}))
+}
+
+// A {test} reading p below <root> — through a path, `sum(a/@p)` (the Tally,
+// walk.tallyAttributes), or through a range variable bound to each a,
+// `$v/@p` (walk.childAttributes) — is compiled against p's STATIC type, and
+// one compiled tree reads every a's p. An a whose p differs from its
+// declaration's fixed 5 is invalid in the partial ·PSVI·, annotated
+// xs:anySimpleType, which that tree cannot read, so every assertion of <root>
+// is DECLINED, beside the cvc-attribute clause 4 charge, rather than read p as
+// an xs:decimal; a p of 5 is read and the assertion holds. With
+// walk.attributesRead's verdict check removed, both mismatch rows are
+// evaluated and satisfied, and fail.
+func TestAssertionBelowAFixedValueInvalidAttributeDeclines(t *testing.T) {
+	const why = "cvc-attribute charged or declined its fixed-value agreement, so it is not known ·valid·"
+	for _, test := range []string{
+		"sum(a/@p) ge 0",
+		"every $v in a satisfies 0 le $v/@p",
+	} {
+		escaped := strings.NewReplacer("&", "&amp;", "<", "&lt;", `"`, "&quot;").Replace(test)
+		schema := parsedSchema(t, map[string]string{"main.xsd": strings.Replace(fxBelowSchemaText, "TEST", escaped, 1)})
+		t.Run(test+"/mismatch", func(t *testing.T) {
+			res := aAssess(t, schema, ccRootNamed("root", fxA(2, "5"), fxA(3, "6")))
+			smDeclined(t, res, "the attribute p of the element a at "+loc(3, 3).String()+", in the subtree of the element root, whose typed value a {test} reads, has no typed value for the data model instance cvc-assertion clause 1 builds: "+why)
+			if got := fxRules(res); len(got) != 1 || got[0] != ruleCvcAttribute {
+				t.Errorf("Violations() = %v, want the cvc-attribute clause 4 charge alone", res.Violations())
+			}
+		})
+		t.Run(test+"/match", func(t *testing.T) {
+			wantSatisfied(t, aAssess(t, schema, ccRootNamed("root", fxA(2, "5"), fxA(3, "5"))), test)
+		})
+	}
+}
+
+// ccRootNamed is the validation root named name at 1:1 over kids.
+func ccRootNamed(name string, kids ...Child) *testElement {
+	return &testElement{name: local(name), loc: loc(1, 1), kids: kids}
 }

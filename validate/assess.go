@@ -1055,7 +1055,7 @@ func (w *walk) element(e Element, g governance, mark resultMark, parent *icCheck
 	verdicts := w.attributes(e, g)
 	content := w.contentCheck(e, g, isNilled)
 	asserts := w.compileAssertions(g, verdicts)
-	w.tallyElement(e, g, up, asserts)
+	w.tallyElement(e, g, verdicts, up, asserts)
 	up.collectElement(e, g, isNilled)
 	frame := w.stringValue(e, g, content, up)
 	inner := up.collecting
@@ -1082,7 +1082,7 @@ func (w *walk) element(e Element, g governance, mark resultMark, parent *icCheck
 	w.idElement(id)
 	w.identityExit(id)
 	recorded := w.res.recordedSince(mark)
-	w.keepChild(up.parent, e, g, content, frame, recorded)
+	w.keepChild(up.parent, e, g, verdicts, content, frame, recorded)
 	w.tallyValue(e, g, content, up, recorded)
 }
 
