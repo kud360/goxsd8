@@ -1207,7 +1207,7 @@ func sameType(a, b xsd.TypeDefinition) bool {
 // — settle on two ·governing type definitions· for it, and where the mapping
 // bounds no such type, an ancestor a wildcard may ·attribute· to a top-level
 // declaration carrying a {type table}; the engine assesses the XML twin under
-// the type the actual ·attribution· gives. Owned by <NEW-ISSUE>, the issue
+// the type the actual ·attribution· gives. Owned by #2666, the issue
 // filed for this remainder.
 func (w *walker) instanceGoverned(e *element, typ *attribute, instance xsd.TypeDefinition, parent *object) (xsd.TypeDefinition, error) {
 	if parent == nil {
