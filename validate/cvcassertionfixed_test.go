@@ -203,6 +203,29 @@ func TestAssertionOverAnUndecidedFixedValueIsDeclined(t *testing.T) {
 		Unevaluated{rule: ruleCvcAssertion, loc: loc(1, 1), msg: "the attribute n of the element root is not known to be ·valid· or invalid"})
 }
 
+// An @d of a union type whose value differs from its declaration's fixed one
+// is invalid by cvc-attribute clause 4 and has an ·actual value·, but the
+// union carries no single whiteSpace facet, so its [schema normalized value],
+// the xs:untypedAtomic the {test} reads it as, is one this package does not
+// read (walk.assertionTyped): the assertion is DECLINED for that reason, never
+// for a missing ·actual value·, beside the clause 4 charge, which stands.
+func TestAssertionOverAnInvalidUnionAttributeDeclines(t *testing.T) {
+	schema := parsedSchema(t, map[string]string{"main.xsd": `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="U"><xs:union memberTypes="xs:dateTime xs:date"/></xs:simpleType>
+  <xs:attribute name="d" type="U" fixed="2008-01-01T00:00:00"/>
+  <xs:complexType name="Root">
+    <xs:attribute ref="d"/>
+    <xs:assert test="not(data(@d) instance of xs:dateTime)"/>
+  </xs:complexType>
+  <xs:element name="root" type="Root"/>
+</xs:schema>`})
+	res := aAssess(t, schema, fxRoot("2009-01-01T00:00:00"))
+	smDeclined(t, res, "the attribute d of the element root is invalid by cvc-attribute clause 4, so the data model instance cvc-assertion clause 1 builds annotates it xs:anySimpleType with its [schema normalized value] as typed value, which this package does not read: its declaration's {type definition} has no single whiteSpace facet this package reads")
+	if got := fxRules(res); len(got) != 1 || got[0] != ruleCvcAttribute || !strings.HasPrefix(res.Violations()[0].Msg, "the ·actual value· of the attribute d is neither equal nor identical to the {value} of the fixed {value constraint} \"2008-01-01T00:00:00\" on its attribute declaration, which cvc-attribute clause 4 requires") {
+		t.Errorf("Violations() = %v, want the cvc-attribute clause 4 charge over d alone", res.Violations())
+	}
+}
+
 // fxBelowSchemaText is <root>, of Root, over <a> children of A, which has
 // simple content over xs:integer and refs p, an xs:decimal whose DECLARATION
 // fixes it to 5, with TEST as Root's one assertion.
