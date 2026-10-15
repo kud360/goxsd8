@@ -15,9 +15,10 @@ import (
 // of type T and selects U where its a is "u"; r holds an optional reference to
 // tt. Under T a key "m" is the child m (no wildcard: walker.namedChild), as it
 // is under S (a contained reference), and the attribute m under U. V holds an
-// optional n of xs:string and an optional k of an anonymous type; W restricts
-// V, its n of xs:token and no k; X extends V, adding nothing, so it contains
-// V's own n and k. tv is of type V and selects W where its a is "w"; tx is of
+// optional n of xs:string, an optional k of an anonymous type and an optional
+// j of xs:string carrying a {type table}; W restricts V, its n of xs:token
+// and no k or j; X extends V, adding nothing, so it contains V's own n, k and
+// j. tv is of type V and selects W where its a is "w"; tx is of
 // type V and selects X where its a is "x".
 const typeTableSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -44,6 +45,7 @@ const typeTableSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
     <xs:sequence>
       <xs:element name="n" type="xs:string" minOccurs="0"/>
       <xs:element name="k" minOccurs="0"><xs:complexType><xs:attribute name="b"/></xs:complexType></xs:element>
+      <xs:element name="j" type="xs:string" minOccurs="0"><xs:alternative test="@b" type="xs:token"/></xs:element>
     </xs:sequence>
     <xs:attribute name="a" type="xs:string"/>
   </xs:complexType>
@@ -106,10 +108,10 @@ func TestTypeTable(t *testing.T) {
 // GAP(jsonsrc) marker, #2693) — m is the child m under T and the attribute m
 // under U; n is under V's declaration of xs:string and W's of xs:token; and k
 // is under V's one declaration in V and X both, which alike reads no identity
-// of, its type being anonymous — and a "$type" on a child of a tabled
-// element, whose ·governing type definition· the mapping does not determine
-// (walker.declarationType's GAP(jsonsrc) marker, #2693), though the engine
-// assesses each XML twin.
+// of, its type being anonymous, as j is, its declaration carrying a {type
+// table} — and a "$type" on a child of a tabled element, whose ·governing
+// type definition· the mapping does not determine (walker.declarationType's
+// GAP(jsonsrc) marker, #2693), though the engine assesses each XML twin.
 func TestTypeTableDeclines(t *testing.T) {
 	v := validatorOver(t, typeTableSchema)
 	for _, tc := range []struct {
@@ -125,6 +127,9 @@ func TestTypeTableDeclines(t *testing.T) {
 		{"a child under one declaration of an anonymous type", `{"tx":{"k":{}}}`,
 			`<tx xmlns="urn:c"><k/></tx>`,
 			`jsonsrc: instance.json:1:8: member "k" of {urn:c}tx is not classified alike`},
+		{"a child under one declaration carrying a {type table}", `{"tx":{"j":"y"}}`,
+			`<tx xmlns="urn:c"><j>y</j></tx>`,
+			`jsonsrc: instance.json:1:8: member "j" of {urn:c}tx is not classified alike`},
 		{"a \"$type\" on a child of the root", `{"tt":{"a":"m","m":{"$xmlns":{"xs":"http://www.w3.org/2001/XMLSchema"},"$type":"xs:string"}}}`,
 			`<tt xmlns="urn:c" a="m" ` + xsiDecl + ` xmlns:xs="http://www.w3.org/2001/XMLSchema"><m xsi:type="xs:string"/></tt>`,
 			`jsonsrc: instance.json:1:72: the "$type" member of {urn:c}m: the mapping determines no type that governs {urn:c}tt`},
