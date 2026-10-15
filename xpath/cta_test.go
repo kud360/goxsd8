@@ -429,6 +429,7 @@ func TestCTATestStaticErrorTheSubsetNeverReachesIsCharged(t *testing.T) {
 		{"$q:v = 1", "err:XPST0081", `no statically-known namespace binding for prefix "q", which err:XPST0081 forbids`},
 		{". instance of element(*, q:T)", "err:XPST0081", `no statically-known namespace binding for prefix "q", which err:XPST0081 forbids`},
 		{"self::q:* and $value", "err:XPST0081", `no statically-known namespace binding for prefix "q", which err:XPST0081 forbids`},
+		{".. and q:f(.)", "err:XPST0081", `no statically-known namespace binding for prefix "q", which err:XPST0081 forbids`},
 	} {
 		record := ctaExprRecord(tc.expr, "", "a", "http://example.com/a", "xs", xsd.XMLSchemaNS)
 		var verdict *xsderr.Error
