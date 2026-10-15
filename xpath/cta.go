@@ -333,10 +333,11 @@ const ruleXPST0080 xsderr.Rule = "err:XPST0080"
 // the <alternative>'s, attached by the assembler that charges over this.
 func CTATestStaticError(expr xsd.XPathExpression, types xsd.TypeResolver) error {
 	_, defect := compileCTATest(expr, types, ctaTypeAlternativeFacade{})
-	if defect.kind == ctaUnsupported {
-		if syntax := syntaxError(expr.Expression()); syntax != nil {
-			return syntax
-		}
+	if defect.kind == ctaNoDefect {
+		return nil
+	}
+	if syntax := syntaxError(expr.Expression()); syntax != nil {
+		return syntax
 	}
 	if defect.kind != ctaStaticError {
 		// An untyped nil, never a nil *xsderr.Error in an error interface: a
@@ -384,16 +385,13 @@ func compileCTATest(expr xsd.XPathExpression, types xsd.TypeResolver, facade cta
 	}
 	p := ctaParser{toks: toks, names: names, types: known, facade: facade}
 	root, ok := p.test()
-	if !ok {
-		// GAP(xpath): a recorded err:XPST0051 or err:XPST0080 dies here with
-		// the parse a later construct declines, though castTarget proved it:
-		// §3.12.6 clause 2's Note licenses declining only an expression
-		// containing no static errors, so `@kind cast as xs:Missing = 'x' and
-		// count(//a:x) > 1` is under-charged. The direction is the withhold.
-		// (#2631)
-		return nil, ctaDefect{kind: ctaUnsupported}
+	if ok {
+		return root, p.defect
 	}
-	return root, p.defect
+	if p.defect.kind != ctaNoDefect {
+		return nil, p.defect
+	}
+	return nil, ctaDefect{kind: ctaUnsupported}
 }
 
 // ctaDefect is what compileCTATest found wrong with an {expression}. The three
