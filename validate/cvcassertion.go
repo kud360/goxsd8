@@ -92,7 +92,7 @@ const ruleCvcAssertionsValid xsderr.Rule = "cvc-assertions-valid"
 // an e one of whose attributes matching an {attribute use}, carried or ·defaulted·,
 // has no ·actual value·, or, carried, has a [validity] this package did not decide
 // ([lackingValidity]) or is invalid by cvc-attribute clause 4 with a [schema
-// normalized value] this package does not read ([walk.assertionTyped]), one of
+// normalized value] this package does not read ([lackingNormalized]), one of
 // whose element [[children]] a {test} reads has no typed value this package reads
 // ([walk.keepChild]) — a child of mixed content among them whose string-value spans
 // a descendant whose contribution is undecided ([stringValueFrame.lacking]) — or
@@ -1457,8 +1457,20 @@ type assertionLack interface {
 }
 
 // lackingAttribute is an attribute of the instance, matching an {attribute
-// use}, that has no ·actual value· ([walk.assertionValues]).
+// use}, that has no ·actual value· on [walk.assertionTyped]'s terms; one that
+// cvc-attribute clause 4 made invalid has one, and is [lackingNormalized]
+// instead.
 type lackingAttribute struct{ a Attribute }
+
+// lackingNormalized is an attribute of the instance, named attr, that
+// cvc-attribute clause 4 made invalid, so the partial ·PSVI· annotates it
+// xs:anySimpleType and its typed value is its [schema normalized value] as
+// xs:untypedAtomic (xpath-datamodel §3.3.1.2), which this package does not read
+// because its declaration's {type definition} carries no single whiteSpace
+// facet it reads, a union's among them ([walk.assertionTyped],
+// normalizedLexical). The attribute has an ·actual value·; only the normalized
+// lexical is unread.
+type lackingNormalized struct{ attr xsd.QName }
 
 // lackingValidity is an attribute of the instance, matching an {attribute
 // use}, whose [validity] this package did not decide: it declined
@@ -1503,6 +1515,10 @@ type lackingChild struct {
 
 func (l lackingAttribute) declined(e xsd.QName) string {
 	return fmt.Sprintf("the attribute %s of the element %s has no ·actual value· for the data model instance cvc-assertion clause 1 builds", l.a.Name(), e)
+}
+
+func (l lackingNormalized) declined(e xsd.QName) string {
+	return fmt.Sprintf("the attribute %s of the element %s is invalid by cvc-attribute clause 4, so the data model instance cvc-assertion clause 1 builds annotates it xs:anySimpleType with its [schema normalized value] as typed value, which this package does not read: its declaration's {type definition} has no single whiteSpace facet this package reads", l.attr, e)
 }
 
 func (l lackingValidity) declined(e xsd.QName) string {
@@ -1598,22 +1614,24 @@ func (lackingValue) declined(e xsd.QName) string {
 // instead could fabricate a charge.
 //
 // It reports the lack, carrying the first attribute lacking one, where any
-// such attribute has no ·actual value·: its declaration or {type definition}
-// does not resolve, or String Valid ([walk.stringValid]) over its lexical is
-// rejected or withheld — charged or declined by cvc-attribute clause 3 for a
-// carried attribute and by cvc-complex-type clause 4 for a defaulted one
-// ([walk.defaultedAttribute]), the same check re-run here because the walk
-// keeps no ·actual values· — or, for a carried attribute cvc-attribute clause
-// 4 made invalid, its [schema normalized value] is one this package does not
-// read ([walk.assertionTyped]). Omitting such an attribute instead would make
-// `@a` the empty sequence and could fabricate a charge. After the attributes it
-// reports asserts' own lack: a carried attribute whose [validity] this package
-// did not decide ([lackingValidity], taken at compile, [walk.compileAssertions]),
-// an element [[child]] a {test} reads that has no typed value, or an attribute of
-// it a {test} reads that has none ([walk.keepChild]), a node of e's subtree a
-// {test} counts that its Tally could not be told of ([walk.tallyElement]), or a
-// descendant whose contribution to e's own string value, which own collected, is
-// undecided ([stringValueFrame.lacking]).
+// such attribute has no typed value this package reads: it has no ·actual
+// value·, because its declaration or {type definition} does not resolve, or
+// String Valid ([walk.stringValid]) over its lexical is rejected or withheld —
+// charged or declined by cvc-attribute clause 3 for a carried attribute and by
+// cvc-complex-type clause 4 for a defaulted one ([walk.defaultedAttribute]), the
+// same check re-run here because the walk keeps no ·actual values· — or, for a
+// carried attribute cvc-attribute clause 4 made invalid, which has one, where its
+// [schema normalized value] is one this package does not read
+// ([lackingNormalized], [walk.assertionTyped]). Omitting such an attribute
+// instead would make `@a` the empty sequence and could fabricate a charge. After
+// the attributes it reports asserts' own lack: a carried attribute whose
+// [validity] this package did not decide ([lackingValidity], taken at compile,
+// [walk.compileAssertions]), an element [[child]] a {test} reads that has no
+// typed value, or an attribute of it a {test} reads that has none
+// ([walk.keepChild]), a node of e's subtree a {test} counts that its Tally could
+// not be told of ([walk.tallyElement]), or a descendant whose contribution to e's
+// own string value, which own collected, is undecided
+// ([stringValueFrame.lacking]).
 //
 // An attribute matching no use is not read: no {test}
 // [xpath.CompileAssertionTest] admits can name it ([walk.assertionTypes]), so
@@ -1632,9 +1650,9 @@ func (w *walk) assertionValues(e Element, attrs []Attribute, asserts *assertionC
 		if !matched {
 			continue
 		}
-		v, read := w.assertionTyped(u, annotations, a.Value(), elementContext{owner: e}, a.Loc())
-		if !read {
-			return assertionInput{}, lackingAttribute{a: a}
+		v, lack := w.assertionTyped(u, annotations, a.Value(), elementContext{owner: e}, a.Loc(), lackingAttribute{a: a})
+		if lack != nil {
+			return assertionInput{}, lack
 		}
 		in.attrs = append(in.attrs, assertionValue{name: a.Name(), v: v})
 	}
@@ -1643,9 +1661,9 @@ func (w *walk) assertionValues(e Element, attrs []Attribute, asserts *assertionC
 		if !defaulted {
 			continue
 		}
-		v, read := w.assertionTyped(u, annotations, vc.LexicalForm(), value.ConstraintContext(vc), e.Loc())
-		if !read {
-			return assertionInput{}, lackingDefault{u: u}
+		v, lack := w.assertionTyped(u, annotations, vc.LexicalForm(), value.ConstraintContext(vc), e.Loc(), lackingDefault{u: u})
+		if lack != nil {
+			return assertionInput{}, lack
 		}
 		in.attrs = append(in.attrs, assertionValue{name: u.DeclarationName(), v: v})
 	}
@@ -1663,7 +1681,7 @@ func (w *walk) assertionValues(e Element, attrs []Attribute, asserts *assertionC
 // assertionTyped is the typed value of an attribute of the use u whose
 // ·initial value· is lexical, read at loc and mapped under ctx, as the {test}s
 // compiled against annotations ([walk.annotations]) read it at the empty path,
-// reporting false where it has no ·actual value·: u's declaration or {type
+// reporting absent where it has no ·actual value·: u's declaration or {type
 // definition} does not resolve ([walk.assertionType]), annotations answers no
 // type for it, String Valid ([walk.stringValid]) over lexical under the
 // declaration's type is rejected or withheld, or the mapping errors. A
@@ -1682,37 +1700,38 @@ func (w *walk) assertionValues(e Element, attrs []Attribute, asserts *assertionC
 // cvc-attribute clause 4 made invalid, which annotations annotates
 // xs:anySimpleType (xpath-datamodel §3.3.1.1) — it is lexical normalized under
 // that type's whiteSpace facet (normalizedLexical), clause 3 having found it
-// ·valid· there, and false where this package does not read that facet. The
-// value is [xpath.Typed] of the ·actual value· mapped under the type otherwise,
-// which is then the declaration's.
-func (w *walk) assertionTyped(u xsd.AttributeUse, annotations xpath.AttributeTypes, lexical string, ctx value.Context, loc xsderr.Loc) (xpath.TypedValue, bool) {
+// ·valid· there, and [lackingNormalized] where this package does not read that
+// facet: the attribute has an ·actual value· then, and only its [schema
+// normalized value] is unread. The value is [xpath.Typed] of the ·actual value·
+// mapped under the type otherwise, which is then the declaration's.
+func (w *walk) assertionTyped(u xsd.AttributeUse, annotations xpath.AttributeTypes, lexical string, ctx value.Context, loc xsderr.Loc, absent assertionLack) (xpath.TypedValue, assertionLack) {
 	st, resolved := w.assertionType(u)
 	if !resolved {
-		return nil, false
+		return nil, absent
 	}
 	annotated, typed := annotations(nil, u.DeclarationName())
 	if !typed {
-		return nil, false
+		return nil, absent
 	}
 	decided, verdict := w.stringValid(st, lexical, ctx, loc)
 	if !decided || verdict != nil {
-		return nil, false
+		return nil, absent
 	}
 	if st.IsSpecial() {
-		return xpath.Untyped(lexical), true
+		return xpath.Untyped(lexical), nil
 	}
 	if annotated.IsSpecial() {
 		normalized, ok := normalizedLexical(w.schema, st, lexical)
 		if !ok {
-			return nil, false
+			return nil, lackingNormalized{attr: u.DeclarationName()}
 		}
-		return xpath.Untyped(normalized), true
+		return xpath.Untyped(normalized), nil
 	}
 	v, err := value.ValidateLexical(w.backend, w.schema, st, lexical, ctx, xpath.FacetAssertions(w.now))
 	if err != nil {
-		return nil, false
+		return nil, absent
 	}
-	return xpath.Typed(v), true
+	return xpath.Typed(v), nil
 }
 
 // assertionValue is what e's assertions read of e itself — its string value,

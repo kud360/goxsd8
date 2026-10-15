@@ -420,23 +420,25 @@
 // value· — is evaluated over those values and charged where it is false or raises a
 // dynamic or type error. A member xpath declines, and every member of an element one
 // of whose use-matched or ·defaulted· attributes has no ·actual value·, or, carried,
-// a [validity] this package did not decide, one of whose read children is not known
-// ·valid· or not ·validly substitutable· for its ·locally declared type·, or, read
-// for its string-value, has no mixed content of its own, a string-value of which — a
-// read child's, or its own a {test} reads — spans a ·skipped· element, one of simple
-// content whose raw characters are not its [schema normalized value] or that holds a
-// run of white space alone, one of a type not determined, a mixed one that took its
-// {value constraint} default, a ·nilled· one with character [[children]], or a run
-// that is not white space alone in one of element-only or empty content, whose
-// counted subtree holds an element whose ·governing type definition· was not
-// determined and whose attribute nodes a {test} counts or reads, or an attribute, or
-// an element, a {test} reads through a path, or an attribute of a read child a {test}
-// reads through a range variable, that has no typed value under the type it was
-// compiled to read — an attribute cvc-attribute did not settle ·valid· among them —
-// whose simple content's ·actual value· is undecided, or whose string value was not
-// gathered because it has simple content and element [[children]] or is ·nilled· and
-// has any [[children]] under simple content or a {test} reading `.`, are recorded as
-// [Unevaluated] under cvc-assertion instead (cvcassertion.go).
+// a [validity] this package did not decide or, made invalid by cvc-attribute clause
+// 4, a [schema normalized value] this package does not read, one of whose read
+// children is not known ·valid· or not ·validly substitutable· for its ·locally
+// declared type·, or, read for its string-value, has no mixed content of its own, a
+// string-value of which — a read child's, or its own a {test} reads — spans a
+// ·skipped· element, one of simple content whose raw characters are not its [schema
+// normalized value] or that holds a run of white space alone, one of a type not
+// determined, a mixed one that took its {value constraint} default, a ·nilled· one
+// with character [[children]], or a run that is not white space alone in one of
+// element-only or empty content, whose counted subtree holds an element whose
+// ·governing type definition· was not determined and whose attribute nodes a {test}
+// counts or reads, or an attribute, or an element, a {test} reads through a path, or
+// an attribute of a read child a {test} reads through a range variable, that has no
+// typed value under the type it was compiled to read — an attribute cvc-attribute did
+// not settle ·valid· among them — whose simple content's ·actual value· is undecided,
+// or whose string value was not gathered because it has simple content and element
+// [[children]] or is ·nilled· and has any [[children]] under simple content or a
+// {test} reading `.`, are recorded as [Unevaluated] under cvc-assertion instead
+// (cvcassertion.go).
 //
 // The rest of the cvc- decisions land on the walk [Validator.Assess]
 // already makes. Non-fatal warnings get an accessor of their own the day
