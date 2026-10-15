@@ -938,7 +938,9 @@ func (r *syntaxRecognizer) schemaAttributeName(t syntaxToken) {
 // Declarations of Structures §3.2.7, xsi:type, xsi:nil, xsi:schemaLocation and
 // xsi:noNamespaceSchemaLocation. The parser's seedInstanceAttributes builds
 // the same four as components and validate's isInstanceAttribute excepts them
-// by name; neither is importable here, and the set is fixed by the spec.
+// by name. Both packages import this one, so neither encoding is reachable
+// from here, and the set is fixed by the spec (STYLE T4's accepted third
+// encoding).
 func ctaInScopeAttribute(name xsd.QName) bool {
 	if name.Space != xsd.XMLSchemaInstanceNS {
 		return false
