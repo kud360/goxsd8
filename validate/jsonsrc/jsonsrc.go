@@ -1461,8 +1461,10 @@ func tableAlternatives(table xsd.TypeTable) []xsd.TypeAlternative {
 }
 
 // appendTypes appends to types each of ts no member of types is the same
-// named type as (sameNamed). An anonymous type is appended however often it
-// recurs, so a set holding one is never narrowed to a single type by it.
+// named type as (sameNamed), so that a set of types that may govern an
+// element holds each named type once however deeply {type table}s nest above
+// it. An anonymous type is appended however often it recurs. Every reader
+// settles its answer under each member alike, so a repeat changes no answer.
 func appendTypes(types, ts []xsd.TypeDefinition) []xsd.TypeDefinition {
 	for _, t := range ts {
 		if !slices.ContainsFunc(types, func(u xsd.TypeDefinition) bool { return sameNamed(t, u) }) {

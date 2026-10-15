@@ -838,7 +838,7 @@ func TestUnattributedParentTypeDeclines(t *testing.T) {
 }
 
 // TestAncestryTypeMaps pins walker.governing's arms: a "$type" is settled
-// under the one type that governs its parent, read off the parent's
+// under each type that may govern its parent, read off the parent's
 // ·attribution·, whatever type the parent's members are classified under.
 // Under pp's "$type" Q, x takes L, where under pp's declared D it would take
 // X. The second y of w is ·attributed to· the lax wildcard and governed by
