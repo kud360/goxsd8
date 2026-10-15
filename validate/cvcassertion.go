@@ -90,32 +90,35 @@ const ruleCvcAssertionsValid xsderr.Rule = "cvc-assertions-valid"
 // whose GAP(xpath) markers name the grammar and type residue (paths, the function
 // library beyond what [xpath.CompileAssertionTest] lists); and every assertion of
 // an e one of whose attributes matching an {attribute use}, carried or ·defaulted·,
-// has no ·actual value·, one of whose element [[children]] a {test} reads has no
-// typed value this package reads ([walk.keepChild]) — a child of mixed content
-// among them whose string-value spans a descendant whose contribution is undecided
-// ([stringValueFrame.lacking]) — or one of whose attributes a {test} reads
-// through a range variable bound to that child has none under the type the
-// {test} was compiled to read, or whose ·defaulted attributes· are unknown
-// ([walk.childAttributes]), whose `$value` is undecided ([walk.assertionValues]),
-// whose own string value, which `.` reads, spans such a descendant, or was not
-// gathered because e has simple content and element [[children]], or is ·nilled·
-// and has [[children]] and simple content or a {test} reading `.`
-// ([walk.assertionValue]), or one of whose {test}s counts the attribute nodes of,
-// filters children by the attribute names of, or reads the attribute values of, an
-// element of its subtree whose ·governing type definition· this package could not
-// determine, so that its ·defaulted attributes· are unknown ([walk.tallyElement]),
-// or reads through a path the typed value of an attribute below e that has none
-// under the type the {test} was compiled to read — its element ·skipped·, its own
-// {attribute use}'s type neither that type nor validly derived from it, no use
-// matching it, or no ·actual value· ([walk.tallyAttributes]) — or the typed value
-// of an element below e, read through a path of child steps, that has none under
-// that type: the element ·skipped·, not known ·valid·, governed by no type or by
-// one neither that type nor validly derived from it, or its value not mapping under
-// it ([walk.tallyValue]); a ·skipped· subtree is counted, by name
-// ([assertionAncestry.tallySkipped]). Fail-open: the withheld value is clause 6's
-// own verdict, whose whole consumer set inside this package is w.res.violations and
-// its one reader [Result.Violations], which charge on a violation PRESENT, so a
-// decline can only cost a rejection and can manufacture none. (#1042)
+// has no ·actual value·, or, carried, has a [validity] this package did not decide
+// ([lackingValidity]) or is invalid by cvc-attribute clause 4 with a [schema
+// normalized value] this package does not read ([walk.assertionTyped]), one of
+// whose element [[children]] a {test} reads has no typed value this package reads
+// ([walk.keepChild]) — a child of mixed content among them whose string-value spans
+// a descendant whose contribution is undecided ([stringValueFrame.lacking]) — or
+// one of whose attributes a {test} reads through a range variable bound to that
+// child has none under the type the {test} was compiled to read, or whose
+// ·defaulted attributes· are unknown ([walk.childAttributes]), whose `$value` is
+// undecided ([walk.assertionValues]), whose own string value, which `.` reads,
+// spans such a descendant, or was not gathered because e has simple content and
+// element [[children]], or is ·nilled· and has [[children]] and simple content or a
+// {test} reading `.` ([walk.assertionValue]), or one of whose {test}s counts the
+// attribute nodes of, filters children by the attribute names of, or reads the
+// attribute values of, an element of its subtree whose ·governing type definition·
+// this package could not determine, so that its ·defaulted attributes· are unknown
+// ([walk.tallyElement]), or reads through a path the typed value of an attribute
+// below e that has none under the type the {test} was compiled to read — its
+// element ·skipped·, its own {attribute use}'s type neither that type nor validly
+// derived from it, no use matching it, or no ·actual value·
+// ([walk.tallyAttributes]) — or the typed value of an element below e, read through
+// a path of child steps, that has none under that type: the element ·skipped·, not
+// known ·valid·, governed by no type or by one neither that type nor validly
+// derived from it, or its value not mapping under it ([walk.tallyValue]); a
+// ·skipped· subtree is counted, by name ([assertionAncestry.tallySkipped]).
+// Fail-open: the withheld value is clause 6's own verdict, whose whole consumer set
+// inside this package is w.res.violations and its one reader [Result.Violations],
+// which charge on a violation PRESENT, so a decline can only cost a rejection and
+// can manufacture none. (#1042)
 func (w *walk) elementAssertions(e Element, asserts *assertionCheck, content *contentCheck, own *stringValueFrame, invalid bool) {
 	if asserts == nil {
 		return
@@ -153,7 +156,10 @@ func (w *walk) elementAssertions(e Element, asserts *assertionCheck, content *co
 // the element is entered ([walk.compileAssertions]) and settled once its
 // [[children]] are exhausted ([walk.elementAssertions]): the ·governing type
 // definition· ct whose {assertions} are evaluated, and each of them with its
-// compiled {test}, in {assertions} order.
+// compiled {test}, in {assertions} order; and invalid, the ·expanded names· of
+// the attributes the element carries that matched an {attribute use} and that
+// cvc-attribute charged, invalid in the partial ·PSVI· cvc-assertion clause 1.2
+// builds, which [walk.annotations] annotates xs:anySimpleType.
 //
 // Between the two it collects, from the element's own [[children]] as each is
 // exhausted ([walk.keepChild]), what the compiled tests read of them: children
@@ -180,6 +186,7 @@ func (w *walk) elementAssertions(e Element, asserts *assertionCheck, content *co
 type assertionCheck struct {
 	ct       xsd.ComplexType
 	tests    []assertionTest
+	invalid  []xsd.QName
 	children []xpath.ChildElement
 	lack     assertionLack
 }
@@ -844,8 +851,9 @@ func (w *walk) attributesRead(ct xsd.ComplexType, path []xsd.QName, e Element, g
 // the attribute's own {attribute use}, within its element's own ·governing
 // type definition·; lexical is its [schema normalized value], read at loc and
 // mapped under ctx. The value is mapped under T, the type [walk.assertionTypes]
-// answers for (path, u's name) — the one closure the {test} was compiled
-// against, so the compiled type and the mapped type cannot disagree, which
+// answers for (path, u's name) — the answer the {test} was compiled against,
+// [walk.annotations] delegating every non-empty path to it, and path is never
+// empty here — so the compiled type and the mapped type cannot disagree, which
 // [xpath.Tally.Attribute] makes the caller's obligation — on
 // [walk.childValue]'s pattern: normalized under u's own type T′ and mapped
 // under T. It reports why instead where:
@@ -1042,12 +1050,21 @@ type assertionTest struct {
 // compileAssertions compiles every assertion of g's complex ·governing type
 // definition· when e is entered, and is nil where there is none to compile: g
 // is not complex, or its {assertions} is empty. Every input a compile reads is
-// STATIC — the {test}, T's {content type}, T's {attribute uses} and the
-// ·locally declared types· within T ([walk.assertionElementTypes]) — so
-// nothing the [[children]] carry can change a compiled tree, and compiling
-// before they arrive is what lets the walk know which of them a {test} reads
+// either STATIC — the {test}, T's {content type}, T's {attribute uses} and the
+// ·locally declared types· within T ([walk.assertionElementTypes]) — or e's
+// own attribute verdicts, which [walk.attributes] settled before this runs
+// and which are e's [[attributes]]' and never its [[children]]': so nothing
+// the [[children]] carry can change a compiled tree, and compiling before
+// they arrive is what lets the walk know which of them a {test} reads
 // ([assertionCheck.reads]) and which {test}s count nodes of e's subtree, each
 // of which gets its Tally here, fresh for e ([assertionCheck.counts]).
+//
+// verdicts is e's attributes that matched an {attribute use} and that
+// cvc-attribute did not settle valid ([walk.attributes]). An invalid one is
+// read as the partial ·PSVI· annotates it, xs:anySimpleType
+// ([walk.annotations]); one whose [validity] this package did not decide
+// declines every assertion of e ([lackingValidity]), since reading it under
+// either annotation would be a guess.
 //
 // {assertions} is read whole and its base chain is never walked: cos-ct-extends
 // clause 1.7 and derivation-ok-restriction clause 5 both make B.{assertions} a
@@ -1059,40 +1076,74 @@ type assertionTest struct {
 // against T's {content type}, which fixes `$value`'s static type
 // (cvc-assertion clause 2.3.1.3). Each is compiled per element and cached
 // nowhere.
-func (w *walk) compileAssertions(g governance) *assertionCheck {
+func (w *walk) compileAssertions(g governance, verdicts []attributeVerdict) *assertionCheck {
 	ct := g.complexType()
 	if ct == nil || len(ct.Assertions()) == 0 {
 		return nil
 	}
 	check := &assertionCheck{ct: *ct}
+	for _, v := range verdicts {
+		switch v.validity {
+		case attributeInvalid:
+			check.invalid = append(check.invalid, v.a.Name())
+		case attributeNotKnown:
+			check.lacking(lackingValidity{a: v.a})
+		case attributeValid:
+			// Never among verdicts ([walk.attributes]); the type the use declares
+			// stands.
+		}
+	}
 	for _, a := range ct.Assertions() {
-		check.tests = append(check.tests, w.compileAssertion(a, *ct))
+		check.tests = append(check.tests, w.compileAssertion(a, check))
 	}
 	return check
 }
 
-// compileAssertion compiles a's {test} for an element whose ·governing type
-// definition· is ct, on [walk.compileAssertions]' terms, under ct's {content
-// type}. Whether the compiled {test} reads `.`, and so has E's own string value
-// collected for it ([ownStringValue]), is
+// compileAssertion compiles a's {test} for the element whose clause 6 state is
+// c, on [walk.compileAssertions]' terms, under c.ct's {content type} and
+// against [walk.annotations]. Whether the compiled {test} reads `.`, and so has
+// E's own string value collected for it ([ownStringValue]), is
 // [xpath.AssertionTest.ReadsContextItem]'s answer, which
 // [assertionCheck.readsContextItem] reads.
-func (w *walk) compileAssertion(a xsd.Assertion, ct xsd.ComplexType) assertionTest {
-	c := assertionTest{a: a}
-	if test, compiled := xpath.CompileAssertionTest(a.Test(), w.schema, ct.ContentType(), w.assertionTypes(ct), w.assertionElementTypes(ct)); compiled {
-		c.test = &test
-		c.tally = test.Tally()
+func (w *walk) compileAssertion(a xsd.Assertion, c *assertionCheck) assertionTest {
+	t := assertionTest{a: a}
+	if test, compiled := xpath.CompileAssertionTest(a.Test(), w.schema, c.ct.ContentType(), w.annotations(c), w.assertionElementTypes(c.ct)); compiled {
+		t.test = &test
+		t.tally = test.Tally()
 	}
-	return c
+	return t
+}
+
+// annotations is the [xpath.AttributeTypes] the {test}s of the element whose
+// clause 6 state is c are compiled against: for the empty path, the type
+// annotation the element's attribute so named carries in the partial ·PSVI·
+// cvc-assertion clause 1.2 builds (xpath-datamodel §3.3.1.1) — xs:anySimpleType
+// for one cvc-attribute charged (c.invalid), whose [validity] is invalid there
+// (sic-a-outcome), and otherwise the type of its use's declaration — and, for a
+// non-empty path, [walk.assertionTypes]' STATIC answer, which no verdict of the
+// element changes. A name the static closure answers false for answers false
+// here too. It is the ONE lookup the compile and [walk.assertionValues] share,
+// so the type a {test} is compiled against and the arm its values are yielded
+// under cannot disagree, which [xpath.TypedAttributes] makes the caller's
+// obligation; [walk.attributeBelow] reads the static closure, since no path it
+// maps is empty.
+func (w *walk) annotations(c *assertionCheck) xpath.AttributeTypes {
+	static := w.assertionTypes(c.ct)
+	return func(path []xsd.QName, name xsd.QName) (*xsd.SimpleType, bool) {
+		st, typed := static(path, name)
+		if !typed || len(path) != 0 || !slices.Contains(c.invalid, name) {
+			return st, typed
+		}
+		return xsd.AnySimpleType(), true
+	}
 }
 
 // assertionType is the {type definition} of the {attribute declaration} of
-// the use u, which an assertion {test} reads that use's attribute as. resolved
-// is false where the declaration or the type does not resolve to a simple
-// type. It is the ONE lookup [walk.assertionTypes] and [walk.assertionValues]
-// share, so the type a {test} is compiled against and the arm and type its
-// values are yielded under cannot disagree, which [xpath.TypedAttributes] makes
-// the caller's obligation.
+// the use u, which an assertion {test} reads that use's attribute as wherever
+// the attribute is ·valid· in the partial ·PSVI·, and which a value is mapped
+// under. resolved is false where the declaration or the type does not resolve
+// to a simple type. [walk.assertionTypes] answers it, and
+// [walk.assertionTyped] maps an attribute's value under it.
 func (w *walk) assertionType(u xsd.AttributeUse) (st *xsd.SimpleType, resolved bool) {
 	d, resolved := w.schema.ResolvedAttributeDeclaration(u)
 	if !resolved {
@@ -1119,8 +1170,10 @@ func (w *walk) assertionType(u xsd.AttributeUse) (st *xsd.SimpleType, resolved b
 // partial ·PSVI· cvc-assertion clause 1.2 builds from, and both are yielded
 // ([walk.assertionValues]) or, below the element, reported
 // ([walk.tallyAttributes]); a use neither carried nor defaulted is absent, and
-// the empty sequence is what the {test} reads. It is the one closure the
-// compile and [walk.attributeBelow]'s mapping both read.
+// the empty sequence is what the {test} reads. Nor does it depend on the
+// attribute's [validity]: [walk.annotations] wraps it with the per-element
+// answer for the empty path, which the compile reads, and
+// [walk.attributeBelow]'s mapping reads it unwrapped, for a non-empty path.
 func (w *walk) assertionTypes(ct xsd.ComplexType) xpath.AttributeTypes {
 	return func(path []xsd.QName, name xsd.QName) (*xsd.SimpleType, bool) {
 		owner, static := w.staticTypeBelow(ct, path)
@@ -1389,6 +1442,14 @@ type assertionLack interface {
 // use}, that has no ·actual value· ([walk.assertionValues]).
 type lackingAttribute struct{ a Attribute }
 
+// lackingValidity is an attribute of the instance, matching an {attribute
+// use}, whose [validity] this package did not decide: it declined
+// cvc-attribute clause 3 or 4 over it ([attributeNotKnown]), so whether the
+// partial ·PSVI· annotates it with its declaration's type or with
+// xs:anySimpleType (xpath-datamodel §3.3.1.1) is undecided
+// ([walk.compileAssertions]).
+type lackingValidity struct{ a Attribute }
+
 // lackingDefault is a ·defaulted attribute·, which has no attribute of the
 // instance to carry, whose use's ·effective value constraint· has no ·actual
 // value· ([walk.assertionValues]). The use is the whole of it: the name is its
@@ -1424,6 +1485,10 @@ type lackingChild struct {
 
 func (l lackingAttribute) declined(e xsd.QName) string {
 	return fmt.Sprintf("the attribute %s of the element %s has no ·actual value· for the data model instance cvc-assertion clause 1 builds", l.a.Name(), e)
+}
+
+func (l lackingValidity) declined(e xsd.QName) string {
+	return fmt.Sprintf("the attribute %s of the element %s is not known to be ·valid· or invalid, cvc-attribute having been declined over it, so the type annotation it carries in the data model instance cvc-assertion clause 1 builds — its declaration's {type definition}, or xs:anySimpleType where it is invalid — is undecided", l.a.Name(), e)
 }
 
 func (l lackingDefault) declined(e xsd.QName) string {
@@ -1499,8 +1564,10 @@ func (lackingValue) declined(e xsd.QName) string {
 // ([walk.assertionTyped]) of each attribute of attrs that matches an {attribute
 // use} of ct, in document order, then of each ·defaulted attribute· of e
 // ([walk.defaultedConstraint], key-dflt-att) in the order of ct.{attribute
-// uses}, each under the type [walk.assertionType] resolves for its use, and
-// the binding of `.` and `$value` ([walk.assertionValue]).
+// uses}, each as [walk.annotations] annotates it, which is the type
+// [walk.assertionType] resolves for its use or, for an attribute cvc-attribute
+// made invalid, xs:anySimpleType; and the binding of `.` and `$value`
+// ([walk.assertionValue]).
 //
 // A ·defaulted attribute· is read as its use's ·effective value constraint·
 // supplies it: its {lexical form} is the [schema normalized value], and the
@@ -1517,14 +1584,17 @@ func (lackingValue) declined(e xsd.QName) string {
 // rejected or withheld — charged or declined by cvc-attribute clause 3 for a
 // carried attribute and by cvc-complex-type clause 4 for a defaulted one
 // ([walk.defaultedAttribute]), the same check re-run here because the walk
-// keeps no ·actual values·. Omitting such an attribute instead would make `@a`
-// the empty sequence and could fabricate a charge. After the attributes it
-// reports asserts' own lack: an element [[child]] a {test} reads that has no
-// typed value, or an attribute of it a {test} reads that has none
-// ([walk.keepChild]), a node of e's subtree a {test} counts that
-// its Tally could not be told of ([walk.tallyElement]), or a descendant whose
-// contribution to e's own string value, which own collected, is undecided
-// ([stringValueFrame.lacking]).
+// keeps no ·actual values· — or, for a carried attribute cvc-attribute clause
+// 4 made invalid, its [schema normalized value] is one this package does not
+// read ([walk.assertionTyped]). Omitting such an attribute instead would make
+// `@a` the empty sequence and could fabricate a charge. After the attributes it
+// reports asserts' own lack: a carried attribute whose [validity] this package
+// did not decide ([lackingValidity], taken at compile, [walk.compileAssertions]),
+// an element [[child]] a {test} reads that has no typed value, or an attribute of
+// it a {test} reads that has none ([walk.keepChild]), a node of e's subtree a
+// {test} counts that its Tally could not be told of ([walk.tallyElement]), or a
+// descendant whose contribution to e's own string value, which own collected, is
+// undecided ([stringValueFrame.lacking]).
 //
 // An attribute matching no use is not read: no {test}
 // [xpath.CompileAssertionTest] admits can name it ([walk.assertionTypes]), so
@@ -1536,13 +1606,14 @@ func (lackingValue) declined(e xsd.QName) string {
 // element and not per {test}.
 func (w *walk) assertionValues(e Element, attrs []Attribute, asserts *assertionCheck, content *contentCheck, own *stringValueFrame, invalid bool) (assertionInput, assertionLack) {
 	ct := asserts.ct
+	annotations := w.annotations(asserts)
 	var in assertionInput
 	for _, a := range attrs {
 		u, matched := attributeUseNamed(ct.AttributeUses(), a.Name())
 		if !matched {
 			continue
 		}
-		v, read := w.assertionTyped(u, a.Value(), elementContext{owner: e}, a.Loc())
+		v, read := w.assertionTyped(u, annotations, a.Value(), elementContext{owner: e}, a.Loc())
 		if !read {
 			return assertionInput{}, lackingAttribute{a: a}
 		}
@@ -1553,7 +1624,7 @@ func (w *walk) assertionValues(e Element, attrs []Attribute, asserts *assertionC
 		if !defaulted {
 			continue
 		}
-		v, read := w.assertionTyped(u, vc.LexicalForm(), value.ConstraintContext(vc), e.Loc())
+		v, read := w.assertionTyped(u, annotations, vc.LexicalForm(), value.ConstraintContext(vc), e.Loc())
 		if !read {
 			return assertionInput{}, lackingDefault{u: u}
 		}
@@ -1571,23 +1642,37 @@ func (w *walk) assertionValues(e Element, attrs []Attribute, asserts *assertionC
 }
 
 // assertionTyped is the typed value of an attribute of the use u whose
-// [schema normalized value] is lexical, read at loc and mapped under ctx,
+// ·initial value· is lexical, read at loc and mapped under ctx, as the {test}s
+// compiled against annotations ([walk.annotations]) read it at the empty path,
 // reporting false where it has no ·actual value·: u's declaration or {type
-// definition} does not resolve ([walk.assertionType]), String Valid
-// ([walk.stringValid]) over lexical is rejected or withheld, or the mapping
-// errors.
+// definition} does not resolve ([walk.assertionType]), annotations answers no
+// type for it, String Valid ([walk.stringValid]) over lexical under the
+// declaration's type is rejected or withheld, or the mapping errors. A
+// cvc-attribute clause 3 charge is the second of those, so an attribute it
+// made invalid is never read here, whatever annotations answers for it: its
+// [schema normalized value] is absent (Structures §3.2.5.4), and
+// [xpath.Untyped] would have no lexical to carry.
 //
-// The value is [xpath.Untyped] of lexical where the type is ·special·
+// The value is [xpath.Untyped] where the annotation is ·special·
 // ([xsd.SimpleType.IsSpecial]): xpath-datamodel §3.3.1.2 makes it the [schema
-// normalized value] as xs:untypedAtomic. A carried attribute's [[normalized
-// value]] is that value unchanged, because key-nv normalizes under
-// xs:anySimpleType "as in the preserve case" and xs:anyAtomicType carries no
-// whiteSpace facet either; a defaulted one's {lexical form} is it by
-// key-dflt-att. The value is [xpath.Typed] of the ·actual value· mapped under
-// the type otherwise.
-func (w *walk) assertionTyped(u xsd.AttributeUse, lexical string, ctx value.Context, loc xsderr.Loc) (xpath.TypedValue, bool) {
+// normalized value] as xs:untypedAtomic. Where the declaration's type is
+// ·special· too, that value is lexical unchanged, because key-nv normalizes
+// under xs:anySimpleType "as in the preserve case" and xs:anyAtomicType carries
+// no whiteSpace facet either; a defaulted one's {lexical form} is it by
+// key-dflt-att. Where the declaration's type is not — an attribute
+// cvc-attribute clause 4 made invalid, which annotations annotates
+// xs:anySimpleType (xpath-datamodel §3.3.1.1) — it is lexical normalized under
+// that type's whiteSpace facet (normalizedLexical), clause 3 having found it
+// ·valid· there, and false where this package does not read that facet. The
+// value is [xpath.Typed] of the ·actual value· mapped under the type otherwise,
+// which is then the declaration's.
+func (w *walk) assertionTyped(u xsd.AttributeUse, annotations xpath.AttributeTypes, lexical string, ctx value.Context, loc xsderr.Loc) (xpath.TypedValue, bool) {
 	st, resolved := w.assertionType(u)
 	if !resolved {
+		return nil, false
+	}
+	annotated, typed := annotations(nil, u.DeclarationName())
+	if !typed {
 		return nil, false
 	}
 	decided, verdict := w.stringValid(st, lexical, ctx, loc)
@@ -1596,6 +1681,13 @@ func (w *walk) assertionTyped(u xsd.AttributeUse, lexical string, ctx value.Cont
 	}
 	if st.IsSpecial() {
 		return xpath.Untyped(lexical), true
+	}
+	if annotated.IsSpecial() {
+		normalized, ok := normalizedLexical(w.schema, st, lexical)
+		if !ok {
+			return nil, false
+		}
+		return xpath.Untyped(normalized), true
 	}
 	v, err := value.ValidateLexical(w.backend, w.schema, st, lexical, ctx, xpath.FacetAssertions(w.now))
 	if err != nil {
