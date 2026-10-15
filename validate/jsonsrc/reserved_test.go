@@ -595,7 +595,8 @@ func TestUngovernedParentType(t *testing.T) {
 // ·laxly assessed·; zt declares g, and the top-level g carries a {type table}.
 // pp is of the empty type D, which Q extends with a lax {open content} and x.
 // ws takes one optional v of type Ta and then a skip wildcard, and the
-// top-level v is of the empty type Tz; nb takes one optional v of type Ta, a
+// top-level v is of the empty type Tz; wo takes one optional v of type Ta
+// and has a skip suffix {open content}; nb takes one optional v of type Ta, a
 // required b and then a lax wildcard. wt takes a yt as w takes a y, and the
 // top-level yt is of type Tt, which restricts Ta and whose x carries a {type
 // table}. big's {content type} is one xsd.Schema.ContentMatcher declines (its
@@ -673,6 +674,12 @@ const ancestrySchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
         <xs:element name="v" type="t:Ta" minOccurs="0"/>
         <xs:any processContents="skip" minOccurs="0" maxOccurs="unbounded"/>
       </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="wo">
+    <xs:complexType>
+      <xs:openContent mode="suffix"><xs:any processContents="skip"/></xs:openContent>
+      <xs:sequence><xs:element name="v" type="t:Ta" minOccurs="0"/></xs:sequence>
     </xs:complexType>
   </xs:element>
   <xs:element name="nb">
@@ -791,12 +798,13 @@ func TestUnattributedParentTypeDeclines(t *testing.T) {
 // u's B, whose {open content} takes e with no ·locally declared type·, so e is
 // ·laxly assessed· and X governs the second x (key-governing-type-elem clause
 // 8), of which k is an attribute; B is charged cvc-complex-type clause 5
-// against u's A. A skip wildcard leaves the second v of ws ·skipped·, and its
-// declared Ta stands for it. The second v of nb, rejected because b must
-// follow the first, and the v after the rejected t:c, which validate
-// attributes to nothing once its matcher rejected, are governed by their
-// ·locally declared type· Ta, where the top-level v's Tz would make k an
-// attribute. Each row agrees with its XML twin.
+// against u's A. A skip wildcard leaves the second v of ws ·skipped·, as a
+// skip {open content} does the second v of wo, and the declared Ta stands for
+// each. The second v of nb, rejected because b must follow the first, and the v
+// after the rejected t:c, which validate attributes to nothing once its
+// matcher rejected, are governed by their ·locally declared type· Ta, where
+// the top-level v's Tz would make k an attribute. Each row agrees with its XML
+// twin.
 func TestAncestryTypeMaps(t *testing.T) {
 	v := validatorOver(t, ancestrySchema)
 	const x = `xmlns="urn:t" xmlns:t="urn:t" ` + xsiDecl
@@ -814,6 +822,8 @@ func TestAncestryTypeMaps(t *testing.T) {
 			`<ws ` + x + `><v><x/><x xsi:type="t:X"><k>zz</k></x></v></ws>`, none},
 		{"skipped", `{"ws":{"v":[{},{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:X","k":"zz"}]}]}}`,
 			`<ws ` + x + `><v/><v><x/><x xsi:type="t:X"><k>zz</k></x></v></ws>`, none},
+		{"skipped by an open content", `{"wo":{"v":[{},{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:X","k":"zz"}]}]}}`,
+			`<wo ` + x + `><v/><v><x/><x xsi:type="t:X"><k>zz</k></x></v></wo>`, none},
 		{"rejected", `{"nb":{"v":[{},{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:X","k":"zz"}]}],"b":""}}`,
 			`<nb ` + x + `><v/><v><x/><x xsi:type="t:X"><k>zz</k></x></v><b/></nb>`, content},
 		{"after a rejected sibling", `{"nb":{"$xmlns":{"t":"urn:t"},"v":{},"t:c":"1","b":"","v":{"x":[{},{"$type":"t:X","k":"zz"}]}}}`,
