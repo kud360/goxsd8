@@ -66,12 +66,11 @@ func WithURI(uri string) Option {
 // determine, any other "$"-prefixed reserved member, a nested
 // array, a member of an element whose declaration carries a {type table} that
 // its declared {type definition} and a type the table can select classify
-// differently; the package doc lists them all).
-// A decline names the arm it is not, and is never a silent drop or a guessed
-// mapping: a member the mapping cannot name is not part of the document the
-// assessment saw, so its result is discarded rather than returned. The whole
-// document is read either way, so a fault after the point the assessment
-// stopped at is still reported.
+// differently; the package doc lists them all). A decline names the arm it is
+// not, and is never a silent drop or a guessed mapping: a member the mapping
+// cannot name is not part of the document the assessment saw, so its result is
+// discarded rather than returned. The whole document is read either way, so a
+// fault after the point the assessment stopped at is still reported.
 //
 // Every error is a plain one, prefixed "jsonsrc: " and, past the nil checks,
 // the location of the construct it names. None is an [xsderr.Error]: none is a
@@ -205,11 +204,10 @@ func (w *walker) root() (*element, error) {
 // sc, the scope its own "$xmlns" makes (walker.keyName): the top-level element
 // declaration of the expanded name a prefixed key spells, or the one whose
 // local name an unprefixed key is, where one carries it (declaredElement);
-// and otherwise the element that name — the absent
-// namespace's, for an unprefixed key — with no declaration (bareElement). The
-// mapping does not test admission: an undeclared root is the engine's to
-// assess, laxly or under its xsi:type (cvc-assess-elt clauses 1.2 and 3,
-// §5.2).
+// and otherwise the element that name — the absent namespace's, for an
+// unprefixed key — with no declaration (bareElement). The mapping does not
+// test admission: an undeclared root is the engine's to assess, laxly or under
+// its xsi:type (cvc-assess-elt clauses 1.2 and 3, §5.2).
 //
 // It DECLINES a key keyName declines and an unprefixed key top-level
 // declarations of two expanded names carry. A reserved key, which walker.root
@@ -579,9 +577,8 @@ func (w *walker) memberOf(o *object, key string, k keyName, loc xsderr.Loc) (mem
 // {type definition}s refer to one named type and neither of which carries a
 // {type table}, so that the child's own members are classified alike too,
 // under that type (declaredElement.object). A declaration of an anonymous
-// type is alike no other: the mapping
-// reads no identity of an anonymous type, and the decline that leaves is
-// classify's GAP(jsonsrc) marker's.
+// type is alike no other: the mapping reads no identity of an anonymous
+// type, and the decline that leaves is classify's GAP(jsonsrc) marker's.
 func alike(a, b member) bool {
 	switch x := a.(type) {
 	case attributeMember:
@@ -623,17 +620,17 @@ func namedType(d xsd.ElementDeclaration) xsd.QName {
 // child of the expanded name a prefixed key spells, or, for an unprefixed key,
 // the child (N,key), where every such wildcard enumerates the one namespace N;
 // either is under the top-level declaration of that name where there is one
-// (declaredElement) and a bareElement where there is none. Attribute kind: the type has only an {attribute wildcard}, and the key
-// is the attribute a prefixed key spells, or (M,key), where it enumerates the
-// one namespace M. No wildcard of either kind: the key is the child a prefixed
-// key spells, or (O,key), O the owner's own namespace name, named as an
-// element wildcard's child is (namedChild); every XML twin of the key, of
-// whatever name and kind, is invalid — an element under cvc-complex-content,
-// cvc-complex-type clause 1.1 or 1.2, or cvc-type clause 3.1.2 under a simple
-// type, an attribute under cvc-complex-type clause 2.2.1 or cvc-type clause
-// 3.1.1 — but the four xsi attributes cvc-complex-type clause 2 excepts, so
-// the name decides no validity, and O keeps the child's default namespace its
-// parent's.
+// (declaredElement) and a bareElement where there is none. Attribute kind: the
+// type has only an {attribute wildcard}, and the key is the attribute a
+// prefixed key spells, or (M,key), where it enumerates the one namespace M. No
+// wildcard of either kind: the key is the child a prefixed key spells, or
+// (O,key), O the owner's own namespace name, named as an element wildcard's
+// child is (namedChild); every XML twin of the key, of whatever name and kind,
+// is invalid — an element under cvc-complex-content, cvc-complex-type clause
+// 1.1 or 1.2, or cvc-type clause 3.1.2 under a simple type, an attribute under
+// cvc-complex-type clause 2.2.1 or cvc-type clause 3.1.1 — but the four xsi
+// attributes cvc-complex-type clause 2 excepts, so the name decides no
+// validity, and O keeps the child's default namespace its parent's.
 //
 // It does not test admission: a {disallowed names} entry, ##defined and
 // ##definedSibling are the engine's to charge (cvc-wildcard clauses 1 to 3),
@@ -1231,13 +1228,12 @@ func (w *walker) govern(o *object, t xsd.TypeDefinition) {
 }
 
 // governing is the ·governing type definition· of an element that carries no
-// "$type" naming a type, as validate's walk determines it
-// (walk.childGoverning), given d, the declaration its members are classified
-// by, named as the element is, declared, d's {type definition}, and at, where
-// it stands among its parent's members. The root's is d's, walker.declarationType:
-// d is its ·governing element declaration·. Below the root it
-// is read off what the parent's governing type P ·attributes· it to (at.a,
-// object.attribute):
+// "$type" naming a type, as validate's walk determines it (walk.childGoverning),
+// given d, the declaration its members are classified by, named as the element is,
+// declared, d's {type definition}, and at, where it stands among its parent's
+// members. The root's is d's, walker.declarationType: d is its ·governing element
+// declaration·. Below the root it is read off what the parent's governing type P
+// ·attributes· it to (at.a, object.attribute):
 //
 //   - an ·element particle·'s declaration D: D's {type definition} where the
 //     element's name is D's (key-governing-ed clause 2), and otherwise the
