@@ -262,6 +262,12 @@ const ruleXPST0051 xsderr.Rule = "err:XPST0051"
 // xs:anyAtomicType"), carried on ruleXPST0081's terms (ctaTypes.castTarget).
 const ruleXPST0080 xsderr.Rule = "err:XPST0080"
 
+// ruleXPST0008 is the XPath static error a reference to a variable not in
+// scope is (xpath20.md §3.1.2: "It is a static error [err:XPST0008] to
+// reference a variable that is not in scope"), carried on ruleXPST0081's terms
+// (ctaFullStaticError).
+const ruleXPST0008 xsderr.Rule = "err:XPST0008"
+
 // CTATestStaticError reports the XPath STATIC error the {test} of a Type
 // Alternative carries, and nil for every other {expression} — including one
 // this engine merely cannot evaluate.
@@ -337,12 +343,15 @@ func CTATestStaticError(expr xsd.XPathExpression, types xsd.TypeResolver) error 
 	if syntax := syntaxError(expr.Expression()); syntax != nil {
 		return syntax
 	}
-	if defect.kind != ctaStaticError {
-		// An untyped nil, never a nil *xsderr.Error in an error interface: a
-		// caller's `!= nil` must mean what it says.
-		return nil
+	if defect.kind == ctaStaticError {
+		return defect.static
 	}
-	return defect.static
+	if static := ctaFullStaticError(expr, types); static != nil {
+		return static
+	}
+	// An untyped nil, never a nil *xsderr.Error in an error interface: a
+	// caller's `!= nil` must mean what it says.
+	return nil
 }
 
 // compileCTATest is the ONE traversal the entry points above and
@@ -386,14 +395,7 @@ func compileCTATest(expr xsd.XPathExpression, types xsd.TypeResolver, facade cta
 	if !ok {
 		return nil, ctaDefect{kind: ctaUnsupported}
 	}
-	names := ctaNames{prefixes: make(map[string]string)}
-	for _, b := range expr.NamespaceBindings() {
-		names.prefixes[b.Prefix()] = b.Namespace()
-	}
-	if defaultNS, present := expr.DefaultNamespace(); present {
-		names.defaultNamespace = defaultNS
-	}
-	p := ctaParser{toks: toks, names: names, types: known, facade: facade}
+	p := ctaParser{toks: toks, names: ctaNamesOf(expr), types: known, facade: facade}
 	root, ok := p.test()
 	if ok {
 		return root, p.defect
