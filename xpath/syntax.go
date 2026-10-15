@@ -326,10 +326,12 @@ type syntaxStatic struct {
 //     (schemaAttributeName), xpath20.md §2.5.4.3–§2.5.4.6. An ElementName or
 //     AttributeName in an ElementTest or AttributeTest is exempt (testName).
 //
-// GAP(xpath): an unknown function name, err:XPST0017, is not charged, on the
-// #894 ruling that xpath-valid clause 2.2.8 leaves the function signatures
-// implementation-defined; [CTATestStaticError] answers nil for a text carrying
-// nothing else.
+// GAP(xpath): a function name or arity no signature has, err:XPST0017, is not
+// charged; [CTATestStaticError] answers nil for a text carrying nothing else.
+// xpath-valid clause 2.2.8 leaves the function signatures
+// ·implementation-defined·, and #2690 decides whether that charges or
+// permanently withholds it. The oracle's #894 ruling, on clause 2.2.5's
+// in-scope schema types, states that it does not extend to 2.2.8.
 func ctaFullStaticError(expr xsd.XPathExpression, types xsd.TypeResolver) *xsderr.Error {
 	toks, _, ok := syntaxTokenize(expr.Expression())
 	if !ok {

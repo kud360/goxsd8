@@ -763,7 +763,7 @@ func TestProduceTypeTableInScopeKindTestTypeIsNotCharged(t *testing.T) {
 // and err:XPST0080 are cast-target errors, and a name with no constructor
 // signature is err:XPST0017 at most, which xpath-valid clause 2.2.8 leaves
 // implementation-defined. So neither call is charged, and both are withheld
-// at ·assessment· (#894). Each row is its own document, so a charge of the
+// at ·assessment· pending #2690. Each row is its own document, so a charge of the
 // first does not hide the second.
 func TestProduceTypeTableConstructorTargetIsNotCharged(t *testing.T) {
 	for _, test := range []string{"string(@k) = 't'", "xs:anyAtomicType(@k) = 't'"} {
