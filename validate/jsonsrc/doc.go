@@ -32,8 +32,8 @@
 //     top-level object.
 //   - A scalar is the element's simple content, null is xsi:nil="true", and an
 //     array is one child per item, for repeated children.
-//   - An input the mapping declines is an error from [Validate], not a
-//     verdict: it returns no [validate.Result].
+//   - An input the mapping declines is a [*DeclineError] from [Validate], not
+//     a verdict: it returns no [validate.Result].
 //
 // Against a schema declaring {urn:o}order with an attribute kind and a
 // repeated child item, this instance maps to <o:order xmlns:o="urn:o"
@@ -61,7 +61,8 @@
 // strictly under the xsi:type a "$type" presents (cvc-assess-elt clauses 1.2
 // and 3), and its object's other members decline as every member of an
 // element with no declaration does. Its value is the root's, as any member's
-// value is its element's. A top level of any other shape, an unprefixed key
+// value is its element's. A document holding no JSON value is malformed, not
+// declined. A top level of any other shape, an unprefixed key
 // top-level declarations of two expanded names carry, and an array root value
 // decline, as "Declines" below says. A null root value maps as any member's
 // null does, below.
@@ -270,8 +271,11 @@
 //
 // # Declines
 //
-// An input the implemented arms do not map is an error from [Validate]
-// naming the arm it is not — never a silent drop and never a guessed mapping.
+// An input the implemented arms do not map is a [*DeclineError] from
+// [Validate], which [errors.As] matches, naming the arm it is not — never a
+// silent drop and never a guessed mapping. Malformed or absent JSON, content
+// after the top-level object and a fault reading the input are no declines,
+// and no error but a decline is a DeclineError.
 // Each entry below whose XML twin the engine assesses is tracked by a
 // GAP(jsonsrc) marker at the function that declines it — rootMember,
 // childNamed, useNamed, wildcardMember, classify, members.key, reserved,
