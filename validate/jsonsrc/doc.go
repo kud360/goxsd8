@@ -304,8 +304,10 @@
 //	wildcard-only key, namespace unfixed  prefix it
 //	wildcard-only key, kind unfixed       none: a permanent limitation
 //	key in the xsi or xml namespace       null for xsi:nil, "$type" for
-//	                                        xsi:type; else none: a permanent
-//	                                        limitation
+//	                                        xsi:type; prefix it xml: for an
+//	                                        attribute under an {attribute
+//	                                        wildcard} alone; else none: a
+//	                                        permanent limitation
 //	member under an undeclared child      declare the child
 //	key a declaration and a use carry     none: a permanent limitation
 //	attribute member after a child        move attribute members first
