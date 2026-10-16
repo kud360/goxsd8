@@ -332,9 +332,8 @@ type syntaxStatic struct {
 // (issuecomment-6221903995): ta-props-correct clause 2 requires only fn:not
 // and the built-in constructors, and xpath-valid clause 2.2.8 leaves every
 // further signature ·implementation-defined·, so no name or arity is outside
-// every conforming set and STYLE 9's fail-open governs an unknown name, a
-// constructor for a non-built-in type and an F&O function this engine does
-// not implement alike.
+// every conforming set, and an unknown name, a constructor for a non-built-in
+// type and an F&O function this engine does not implement are withheld alike.
 func ctaFullStaticError(expr xsd.XPathExpression, types xsd.TypeResolver) *xsderr.Error {
 	toks, _, ok := syntaxTokenize(expr.Expression())
 	if !ok {
