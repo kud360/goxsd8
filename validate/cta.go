@@ -186,14 +186,21 @@ func (w *walk) conditionallySelected(e Element, table xsd.TypeTable, inherited [
 // Each {test} reads E's attributes, then each of inherited whose ·expanded
 // name· no member of attributes has (key-cta-ta-select clauses 1.1.2 and
 // 1.1.3); inherited is required, and nil only where E has no [inherited
-// attributes]. It is the selection [Validator.Assess] makes for E, by the same
-// scan: a dynamic or type error inside a {test} counts as false
-// (key-cta-ta-select clause 2), and ok is false exactly where Assess withholds
-// E's ·selected type definition· — an alternative tried before any succeeds
-// has a {test} this engine's §3.12.6 compiler declines — never where no
-// alternative succeeds. The one consumer is validate/jsonsrc, which settles
-// which members of a JSON object are attributes by the type their selection
-// gives.
+// attributes], as at the validation root (§3.3.5.6, key-p-inherited clause 1).
+// It is the selection [Validator.Assess] makes for E, by the same scan: a
+// dynamic or type error inside a {test} counts as false (key-cta-ta-select
+// clause 2), and ok is false exactly where that scan withholds the selection —
+// an alternative tried before any succeeds has a {test} this engine's §3.12.6
+// compiler declines — never where no alternative succeeds.
+//
+// ok true does not promise a type: the slot may resolve to none (nil, or a
+// substitution-group head that names no declaration or whose own slot does
+// not resolve), where ResolvedType answers false. Assess, resolving that same
+// slot, then withholds E's ·selected type definition· under cvc-elt clause 1,
+// or charges that clause where the head is ·absent· (§5.3).
+//
+// The one consumer is validate/jsonsrc, which settles which members of a JSON
+// object are attributes by the type their selection gives.
 func (v *Validator) ConditionallySelected(table xsd.TypeTable, attributes, inherited []Attribute) (xsd.TypeDefinitionOrRef, bool) {
 	copied := make([]inheritedAttribute, 0, len(inherited))
 	for _, a := range inherited {
