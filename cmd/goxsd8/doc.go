@@ -273,9 +273,11 @@
 // as *jsonsrc.DeclineError, but the line names no class, and nothing tells a
 // shape the mapping rejects from an arm it does not implement, so charging 1
 // would charge every decline as invalid: all of them are undecided — unlike
-// malformed XML, and an I/O fault reading an XML instance, which exit 1. The
-// line is <loc>: [jsonsrc] <message>, on stdout with the report, and it
-// aggregates like any 4: beside an invalid instance the run exits 1.
+// malformed XML, and an I/O fault reading an XML instance, which exit 1. It
+// aggregates like any 4: beside an invalid instance the run exits 1. Its line
+// is on stdout with the report, in the shape Diagnostic lines below states:
+//
+//	<loc>: [jsonsrc] <message>
 //
 // validate assesses its instances in argument order. An instance argument
 // spelled - is standard input, which has no extension to name a source format,
@@ -352,10 +354,13 @@
 // ID. validate renders its violations the way parse renders a schema error,
 // the no-rule-to-cite exception included, which on validate's path is the line
 // naming the source fault that stopped the walk. A JSON instance on
-// validate/jsonsrc's error channel is no exception: its line is
-// <loc>: [jsonsrc] <message>, where jsonsrc is no rule ID but the name of the
-// source that raised the error, standing where <rule> stands, so the line
-// splits like every other. A decimal element holding "12,50" prints:
+// validate/jsonsrc's error channel is no exception: jsonsrc, the source that
+// raised the error and no rule ID, stands where <rule> stands, so the line
+// splits like every other:
+//
+//	<loc>: [jsonsrc] <message>
+//
+// A decimal element holding "12,50" prints:
 //
 //	order.xml:3:3: [cvc-type] the ·initial value· of the element amount is not ·valid· with respect to its ·governing type definition· {http://www.w3.org/2001/XMLSchema}decimal, which cvc-type clause 3.1.3 requires as per String Valid (§3.16.4): [cvc-datatype-valid] decimal: "12,50" is not in the lexical space (decimal-lexical-representation, §3.3.3.1)
 //
