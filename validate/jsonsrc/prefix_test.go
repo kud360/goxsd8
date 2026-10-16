@@ -235,6 +235,8 @@ func TestPrefixedKeyDeclines(t *testing.T) {
 			"jsonsrc: instance.json:1:46: ", `member "p:1k" is no QName`},
 		{"unprefixed root of two expanded names", `{"doc":{}}`,
 			"jsonsrc: instance.json:1:2: ", `root member "doc" names top-level element declarations of 2 expanded names ({urn:p}doc and {urn:o}doc); an unprefixed key does not choose between them, and a prefixed one, "p:doc", names one`},
+		{"unprefixed scalar root of two expanded names", `{"doc":"x"}`,
+			"jsonsrc: instance.json:1:2: ", `root member "doc" names top-level element declarations of 2 expanded names ({urn:p}doc and {urn:o}doc); an unprefixed key does not choose between them, and a prefixed one, "p:doc", is bound only by a "$xmlns" member leading an object value, which a root whose value is a scalar or null has not, so no key names either root with this value`},
 		{"unprefixed child of two expanded names", pDoc + `"k":1}}`,
 			"jsonsrc: instance.json:1:46: ", `member "k" names child element declarations of two expanded names in the type of {urn:p}doc ({urn:p}k and {urn:o}k); an unprefixed key does not choose between them`},
 		{"unprefixed attribute of two expanded names", pDoc + `"a":1}}`,

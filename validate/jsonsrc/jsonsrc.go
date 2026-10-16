@@ -251,6 +251,10 @@ func (w *walker) rootMember(key string, sc *scope, scalar bool, loc xsderr.Loc) 
 	case 1:
 		return declaredElement{decl: match[0]}, nil
 	}
+	if scalar {
+		return nil, w.declinef(loc, "root member %q names top-level element declarations of %d expanded names (%s and %s); an unprefixed key does not choose between them, and a prefixed one, \"p:%s\", is bound only by a \"$xmlns\" member leading an object value, which a root whose value is a scalar or null has not, so no key names either root with this value",
+			key, len(match), match[0].Name(), match[1].Name(), key)
+	}
 	return nil, w.declinef(loc, "root member %q names top-level element declarations of %d expanded names (%s and %s); an unprefixed key does not choose between them, and a prefixed one, \"p:%s\", names one",
 		key, len(match), match[0].Name(), match[1].Name(), key)
 }
