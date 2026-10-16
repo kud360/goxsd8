@@ -237,7 +237,7 @@ func TestOutOfSliceInputDeclines(t *testing.T) {
 		{"reserved root member", `{"$xmlns":{}}`,
 			"jsonsrc: instance.json:1:2: ", `root member "$xmlns" is a reserved member; the top-level object's one member names the validation root, and neither "$xmlns" nor "$type" is a member of the top-level object: move it into the root element's own object, which it leads, {"<root>":{"$xmlns":...}}`},
 		{"reserved root member $type", `{"$type":"r"}`,
-			"jsonsrc: instance.json:1:2: ", `root member "$type" is a reserved member; the top-level object's one member names the validation root, and neither "$xmlns" nor "$type" is a member of the top-level object: move it into the root element's own object, which it leads, {"<root>":{"$type":...}}`},
+			"jsonsrc: instance.json:1:2: ", `root member "$type" is a reserved member; the top-level object's one member names the validation root, and neither "$xmlns" nor "$type" is a member of the top-level object: move it into the root element's own object, after any "$xmlns" and before every other member, {"<root>":{"$xmlns":...,"$type":...}}`},
 		{"reserved root member, neither $xmlns nor $type", `{"$r":{}}`,
 			"jsonsrc: instance.json:1:2: ", `root member "$r" is a reserved member; the top-level object's one member names the validation root, keyed by the root element's own name, which takes no "$"`},
 		{"key of two expanded names", `{"r":{"a":"1"}}`,

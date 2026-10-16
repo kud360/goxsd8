@@ -182,7 +182,10 @@ func (w *walker) root() (*element, error) {
 	if !ok {
 		return nil, w.declinef(loc, "the top-level object has no member; its one member names the validation root")
 	}
-	if key == memberXmlns || key == memberType {
+	if key == memberType {
+		return nil, w.declinef(loc, "root member %q is a reserved member; the top-level object's one member names the validation root, and neither \"$xmlns\" nor \"$type\" is a member of the top-level object: move it into the root element's own object, after any \"$xmlns\" and before every other member, {\"<root>\":{\"$xmlns\":...,%q:...}}", key, key)
+	}
+	if key == memberXmlns {
 		return nil, w.declinef(loc, "root member %q is a reserved member; the top-level object's one member names the validation root, and neither \"$xmlns\" nor \"$type\" is a member of the top-level object: move it into the root element's own object, which it leads, {\"<root>\":{%q:...}}", key, key)
 	}
 	if isReserved(key) {
@@ -195,7 +198,7 @@ func (w *walker) root() (*element, error) {
 	if v.tok == json.Delim('[') {
 		return nil, w.declinef(v.loc, "the value of root member %q is an array; the validation root is one element, so give it an object, a scalar or null", key)
 	}
-	m, err := w.rootMember(key, v.scope, loc)
+	m, err := w.rootMember(key, v.scope, v.tok != json.Delim('{'), loc)
 	if err != nil {
 		return nil, err
 	}
@@ -207,7 +210,8 @@ func (w *walker) root() (*element, error) {
 }
 
 // rootMember names the validation root by the root member's key, read through
-// sc, the scope its own "$xmlns" makes (walker.keyName): the top-level element
+// sc, the scope its own "$xmlns" makes (walker.keyName), scalar when its value
+// is a scalar or null and so carries no "$xmlns": the top-level element
 // declaration of the expanded name a prefixed key spells, or the one whose
 // local name an unprefixed key is, where one carries it (declaredElement);
 // and otherwise the element that name — the absent namespace's, for an
@@ -230,8 +234,8 @@ func (w *walker) root() (*element, error) {
 // namespace (Namespaces in XML §5, NSC: No Prefix Undeclaring; walker.xmlns),
 // which the mapping declines rather than give the unprefixed key either
 // meaning.
-func (w *walker) rootMember(key string, sc *scope, loc xsderr.Loc) (elementMember, error) {
-	k, err := w.keyName(key, sc, loc)
+func (w *walker) rootMember(key string, sc *scope, scalar bool, loc xsderr.Loc) (elementMember, error) {
+	k, err := w.keyName(key, sc, scalar, loc)
 	if err != nil {
 		return nil, err
 	}
@@ -282,8 +286,13 @@ func (k keyName) carries(n xsd.QName) bool {
 // NCName, a second colon among them, and a prefix sc does not bind, "xmlns"
 // included. None has an XML twin, so no marker tracks them: such a name is not
 // namespace-well-formed (Namespaces in XML §7), and an xmlns:p attribute is a
-// namespace declaration, which a "$xmlns" member spells.
-func (w *walker) keyName(key string, sc *scope, loc xsderr.Loc) (keyName, error) {
+// namespace declaration, which a "$xmlns" member spells. The unbound-prefix
+// decline names the "$xmlns" member that would bind the prefix, except under
+// scalarRoot, a root whose value is a scalar or null: such a root has no
+// object of its own and no ancestor, so no "$xmlns" scopes it, and the decline
+// names the unprefixed key instead (rootMember), the one key that gives such a
+// root a namespace.
+func (w *walker) keyName(key string, sc *scope, scalarRoot bool, loc xsderr.Loc) (keyName, error) {
 	prefix, local, prefixed := strings.Cut(key, ":")
 	if !prefixed {
 		return keyName{name: xsd.QName{Local: key}}, nil
@@ -293,7 +302,10 @@ func (w *walker) keyName(key string, sc *scope, loc xsderr.Loc) (keyName, error)
 	}
 	space, local, ok := xmlqname.Resolve(key, sc.bound)
 	if !ok && prefix == "xmlns" {
-		return keyName{}, w.declinef(loc, "member %q: no \"$xmlns\" in scope binds its prefix %q; a namespace declaration is a \"$xmlns\" member, {%q:\"<namespace name>\"}, and never an xmlns: key", key, prefix, key[len(prefix)+1:])
+		return keyName{}, w.declinef(loc, "member %q: no \"$xmlns\" in scope binds its prefix %q; a namespace declaration is a \"$xmlns\" member, {%q:\"<namespace name>\"}, leading the object of the element it scopes, and never an xmlns: key", key, prefix, key[len(prefix)+1:])
+	}
+	if !ok && scalarRoot {
+		return keyName{}, w.declinef(loc, "member %q: no \"$xmlns\" in scope binds its prefix %q, and a root whose value is a scalar or null has no object for a \"$xmlns\" member to lead; key it by its local name alone, {%q:...}, which names the top-level element declaration of that local name where exactly one carries it, since no other key gives such a root a namespace", key, prefix, key[len(prefix)+1:])
 	}
 	if !ok {
 		return keyName{}, w.declinef(loc, "member %q: no \"$xmlns\" in scope binds its prefix %q; a prefixed key names the expanded name its prefix's binding gives it, so bind %q in a \"$xmlns\" member, {%q:\"<namespace name>\"}, leading the object of the element the key names or is an attribute of, or of an ancestor", key, prefix, prefix, prefix)
@@ -557,7 +569,7 @@ func (b bareElement) object(*walker, *element, *attribute, placement, xsderr.Loc
 // the xsi-namespace, two-expanded-name and simple-content declines among the
 // uses useNamed's, each under its function's GAP(jsonsrc) markers.
 func (w *walker) classify(o *object, key string, sc *scope, loc xsderr.Loc, scalar bool) (member, error) {
-	k, err := w.keyName(key, sc, loc)
+	k, err := w.keyName(key, sc, false, loc)
 	if err != nil {
 		return nil, err
 	}
