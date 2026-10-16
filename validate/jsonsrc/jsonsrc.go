@@ -703,12 +703,12 @@ func (w *walker) notAlike(o *object, key string, loc xsderr.Loc) error {
 
 // undetermined declines the member key, at loc, of o's object, the attribute
 // run of a root whose {type table} the mapping reads the selection of
-// (walker.attributes), which a type the table can select declines while
-// another still reads attributes: the selection reads the whole run
+// (walker.attributes), which a live candidate other than the first declines,
+// the first classifying it: the selection reads the whole run
 // (key-cta-ta-select clause 1.1.2), so it turns on a member the mapping does
 // not map, and walker.attributes' GAP(jsonsrc) marker tracks the decline.
 func (w *walker) undetermined(o *object, key string, loc xsderr.Loc) error {
-	return w.declinef(loc, "member %q of %s is declined under a type its {type table} can select, while another reads the attribute members before it; the type the table ·conditionally selects· reads the whole run of them, so the mapping declines rather than drop that type",
+	return w.declinef(loc, "member %q of %s is declined under a type its {type table} can select and classified under another; the type the table ·conditionally selects· reads the whole run of attribute members, so the mapping declines rather than drop the type that declines it",
 		key, o.owner)
 }
 
